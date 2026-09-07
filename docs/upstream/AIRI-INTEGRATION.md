@@ -9,14 +9,16 @@
 
 ## 0. STATUS — M0-A
 
-**M0-A EM VALIDAÇÃO NA MÁQUINA REAL — instalação OK · typecheck 56/57 · lint/build/runtime pendentes**
+**M0-A EM VALIDAÇÃO NA MÁQUINA REAL — instalação ✅ · typecheck 56/57 ⚠️ · build:web ✅ · runtime desktop ✅ · lint pendente**
 
 - O source do AIRI está **vendado dentro do repositório** (`airi/`, `git subtree --squash`, commit `2c1e223c…`); remotes corretos.
-- Validação **real** iniciada na máquina de desenvolvimento (Ryzen 5 5500 · RX 580 8 GB · 16 GB RAM):
+- Validação **real** concluída na máquina de desenvolvimento (Ryzen 5 5500 · RX 580 8 GB · 16 GB RAM):
   - ✅ `pnpm install` **concluído** (2647 pacotes, postinstall ok, ~5m10s).
   - ✅ toolchain Node 26.8.1 + pnpm 11.24.0.
-  - ⚠️ `pnpm typecheck` **56/57** — única falha isolada em `packages/stage-ui-live2d/.test.ts`, **já corrigida upstream** (`d8e62f12`, "remove incomplete release tests #2407", 30/08/2026).
-  - ⏳ `pnpm lint`, `pnpm build:web`, `pnpm dev:tamagotchi` — **pendentes** (próximos passos na máquina real).
+  - ⚠️ `pnpm typecheck` **56/57** — única falha isolada em `packages/stage-ui-live2d/.test.ts`, **já corrigida upstream** (`d8e62f12`, 30/08/2026).
+  - ✅ `pnpm build:web` **concluído** — Tasks 22/22 successful, `✓ built in 44.27s`, PWA (681 entradas) gerado.
+  - ✅ `pnpm dev:tamagotchi` **rodou** — main+preload+renderer do Electron buildados; **a janela do app abriu** (usuario confirmou); DI (`injeca`) inicializou todos os módulos/janelas/tray; `server-runtime` subiu em `ws://127.0.0.1:6121`; WebSocket com peers conectados. → **"O AIRI original roda dentro do repositório da Lia."**
+  - ⏳ `pnpm lint` — **único item pendente** (não bloqueante para a conclusão da validação de baseline).
 
 ---
 
@@ -144,10 +146,29 @@ packages/stage-ui-live2d typecheck: src/utils/live2d-zip-loader.test.ts(280,21):
 - No `main` atual, o arquivo **não usa mais** `settings.expressions`/`settings.motions` (as ocorrências restantes de "motions/expressions" são só literais de caminho `*.motion3.json`/`*.exp3.json`).
 - **Conclusão:** é seguro e isolado portar essa correção (remoção de um teste incompleto) para o baseline, OU esperar uma release nova. Nada mais no repo depende dele.
 
-### 7.3 Em aberto (NÃO VALIDADO ainda)
-- `pnpm lint` — NÃO executado ainda.
-- `pnpm build:web` — NÃO executado ainda.
-- `pnpm dev:tamagotchi` / runtime desktop — NÃO executado ainda.
+### 7.3 Build web — `pnpm build:web` → **VALIDADO (SUCESSO)**
+- `turbo run build -F @proj-airi/stage-web` · **Tasks: 22 successful, 22 total** (21 cached) · **Time: 1m31s**.
+- `@proj-airi/stage-web:build` (vite 8.2.2): baixou/usou Cubism SDK + avatares VRM + fontes; `✓ 5171 modules transformed`; `✓ built in 44.27s`; PWA gerado (681 entradas, ~154 MB precache).
+- Warnings (benignos/esperados): `inlineDynamicImports`/`external` deprecados; `[SOURCEMAP_BROKEN]` de unplugin-yaml; duckdb sourcemap fora do pacote; alguns chunks >500 kB. Nenhum erro.
+
+### 7.4 Desktop / runtime — `pnpm dev:tamagotchi` → **VALIDADO (RODOU)**
+- Electron main process + preload + renderer buildados; dev server em `http://localhost:5173/`.
+- `starting electron app...` → DI (`injeca`) `PROVIDE` + `RUN` de todos os módulos/janelas: `windows:main`, `chat`, `settings`, `widgets`, `onboarding`, `tray`, `spotlight`, `editor`, `about`, `notice`, `caption`, `beat-sync`, `godot-stage-manager`, `mcp-stdio-manager`, `plugin-host`, `auto-updater`, `channel-server`, `server-runtime`, `artistry-bridge`, etc.
+- `@proj-airi/server-runtime started on ws://127.0.0.1:6121` · `WebSocket server started` · peers conectados.
+- **A janela do app abriu** (confirmado pelo usuário). Logs de sessão em `%APPDATA%\@proj-airi\stage-tamagotchi\logs\airi-tamagotchi-*.log`.
+- Observação: auto-updater apontou para o feed do **upstream** (`github-release-lane:beta` → `moeru-ai/airi` v0.12.0-beta.5) — esperado no baseline; será redirecionado quando a Lia tiver identidade própria.
+- Warnings (benignos): sourcemaps duckdb/arrow fora do pacote; unocss "unmatched utility"; `@proj-airi/plugin-sdk is working in progress`.
+
+### 7.5 Lint — `pnpm lint` → **NÃO executado** (pendente, não bloqueante).
+
+### 7.6 Resultado consolidado
+| Validação | Resultado |
+|---|---|
+| `pnpm install` | ✅ VALIDADO |
+| `pnpm typecheck` | ⚠️ 56/57 (falha isolada, corrigida upstream `d8e62f12`) |
+| `pnpm build:web` | ✅ VALIDADO |
+| `pnpm dev:tamagotchi` (runtime desktop) | ✅ VALIDADO (janela abriu) |
+| `pnpm lint` | ⏳ pendente |
 
 ---
 
@@ -187,13 +208,13 @@ git remote -v                                # origin=Lia, upstream=airi
 | [x] | toolchain correta | VALIDADO (Node 26.8.1 + pnpm 11.24.0) |
 | [x] | dependencies instaladas | VALIDADO (pnpm install OK, 2647 pacotes) |
 | [~] | typecheck validado | **PARCIAL — 56/57** (1 falha isolada em `.test.ts`, já corrigida upstream `d8e62f12`) |
-| [ ] | lint validado | NÃO VALIDADO (próximo passo) |
-| [ ] | build validado | NÃO VALIDADO (próximo passo) |
-| [ ] | desktop/runtime validado | NÃO VALIDADO (próximo passo) |
+| [~] | lint validado | NÃO EXECUTADO (pendente, não bloqueante) |
+| [x] | build validado | VALIDADO (`pnpm build:web` — Tasks 22/22) |
+| [x] | desktop/runtime validado | VALIDADO (`pnpm dev:tamagotchi` — janela abriu) |
 | [x] | documentação atualizada | VALIDADO |
 | [x] | limitações documentadas | VALIDADO |
 
-**Status: instalação + toolchain validados; typecheck 56/57 (falha isolada identificada como já corrigida upstream); lint/build/runtime pendentes.**
+**Status: AIRI original integrado, instalado, buildado e EXECUTADO dentro do repositório da Lia. O objetivo da M0-A ("o AIRI roda dentro do repo da Lia") está cumprido.** `pnpm lint` permanece pendente como item de saneamento, sem bloquear a conclusão do baseline.
 
 ---
 
@@ -205,5 +226,6 @@ git remote -v                                # origin=Lia, upstream=airi
 | 07/09/2026 | `devkit.json` | `airi/` em `ignore_dirs` (baseline vendado fora do escopo de validação/commit do DevKit) |
 | 07/09/2026 | `docs/upstream/AIRI-INTEGRATION.md` | Atualizado com método, estrutura, verificações e procedimento |
 | 07/09/2026 | `docs/upstream/AIRI-INTEGRATION.md` | Registrados resultados reais (install OK, typecheck 56/57, achado upstream `d8e62f12`) |
+| 07/09/2026 | `docs/upstream/AIRI-INTEGRATION.md` | Registrados `build:web` OK (22/22) e `dev:tamagotchi` OK (janela abriu) → **baseline AIRI validado no runtime desktop** |
 
 Nenhum código do AIRI foi modificado; nenhuma feature/UI/provider/installer da Lia foi iniciada; nenhuma dependência instalada nesta etapa.
