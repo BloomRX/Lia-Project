@@ -9,9 +9,14 @@
 
 ## 0. STATUS — M0-A
 
-**M0-A COMPLETE (estrutura integrada) — BUILD AINDA NÃO VALIDADO NA MÁQUINA REAL**
+**M0-A EM VALIDAÇÃO NA MÁQUINA REAL — instalação OK · typecheck 56/57 · lint/build/runtime pendentes**
 
-O **source do AIRI foi vendado dentro do repositório** (método `git subtree --squash`, prefix `airi/`), os remotes estão corretos e a estrutura foi verificada. A **validação de instalação/build/execução** ainda precisa ser feita no **ambiente de desenvolvimento real** (Ryzen 5 5500 · RX 580 8 GB · 16 GB RAM), pois este ambiente de execução não possui Node 26.7.0/pnpm e não pode rodar o monorepo. Nada abaixo deve ser lido como "AIRI buildado/executado".
+- O source do AIRI está **vendado dentro do repositório** (`airi/`, `git subtree --squash`, commit `2c1e223c…`); remotes corretos.
+- Validação **real** iniciada na máquina de desenvolvimento (Ryzen 5 5500 · RX 580 8 GB · 16 GB RAM):
+  - ✅ `pnpm install` **concluído** (2647 pacotes, postinstall ok, ~5m10s).
+  - ✅ toolchain Node 26.8.1 + pnpm 11.24.0.
+  - ⚠️ `pnpm typecheck` **56/57** — única falha isolada em `packages/stage-ui-live2d/.test.ts`, **já corrigida upstream** (`d8e62f12`, "remove incomplete release tests #2407", 30/08/2026).
+  - ⏳ `pnpm lint`, `pnpm build:web`, `pnpm dev:tamagotchi` — **pendentes** (próximos passos na máquina real).
 
 ---
 
@@ -95,46 +100,54 @@ Lia-Project/
 
 ---
 
-## 6. Toolchain esperada (pinada pelo AIRI)
+## 6. Toolchain (VALIDADO na máquina real)
 
-| Ferramenta | Versão exigida | Onde declarado |
-|---|---|---|
-| Node.js | **26.7.0** | `airi/.tool-versions` |
-| pnpm | **11.24.0** | `airi/package.json` → `packageManager` |
+| Ferramenta | Exigida | Real usada | Status |
+|---|---|---|---|
+| Node.js | 26.7.0 | **26.8.1** (canal current) | VALIDADO (linha Node 26; ver nota) |
+| pnpm | 11.24.0 | **11.24.0** | VALIDADO |
 
-**Não adaptar para Node 22/24.** A validação de build usa Node 26.7.0 + pnpm 11.24.0.
+**Nota de toolchain (honestidade):** o usuário instalou o binário oficial do canal *current* do Node, que publica **26.8.1** (patche/minor dentro do release-train 26; o `.tool-versions` do AIRI pina 26.7.0). Isto **não** é a divergência proibida (Node 22/24) — é Node 26, apenas um patch à frente. O `mise` também tem o `26.7.0` exato disponível (`mise exec -- node -v` = 26.7.0) caso seja necessário. pnpm `11.24.0` confere com o pinado.
 
 ---
 
-## 7. Procedimento de validação na máquina real (a executar)
+## 7. Resultados de validação na máquina real (Ryzen 5 5500 · RX 580 · 16 GB)
 
-> Executar **dentro da pasta raiz do monorepo AIRI**, ou seja, em `airi/`, **com a toolchain pinada**. Ajustar conforme S.O. (PowerShell vs bash). Este passo **ainda não foi executado/validado** (ver STATUS §0).
+### 7.1 Installation — `pnpm install` → **VALIDADO (SUCESSO)**
+- **2647 pacotes** instalados; store em `J:\.pnpm-store\v11`.
+- `postinstall` rodou: `simple-git-hooks` + `build:packages` → **32 tasks successful, 32 total** (~54s).
+- `electron-builder install-app-deps` concluído (electron 43.4.1, native deps).
+- Downloads de assets locais (MediaPipe tasks, etc.) concluídos.
+- **Tempo:** ~5m10s.
+- **Warnings (benignos):**
+  1. `Failed to create bin ... arrow2csv / cap-vite / server-runtime ... ENOENT ... .EXE` — links `.bin` de pacotes cujos `dist/` são criados no `build:packages`; não impede instalação/build.
+  2. `WARNING no output files found for @proj-airi/*#build` — pacotes sem step de build real ("No build step required"); aviso padrão do turbo.
+  3. `Xcode version is below 26` no electron-builder — aviso de macOS aparecendo no Windows; inofensivo aqui.
+  4. `Update available 11.24.0 → 12.3.4` — apenas sugestão do pnpm; mantemos 11.24.0 (pinado).
 
-```bash
-# 0) pré-requisito: Node 26.7.0 + pnpm 11.24.0 ativos
-node -v        # esperado v26.7.0
-pnpm -v        # esperado 11.24.0
+### 7.2 Typecheck — `pnpm typecheck` → **PARCIAL (56/57 passaram)**
 
-# 1) dentro do source do AIRI (prefixo airi/)
-cd airi
-
-# 2) instalar dependências (postinstall roda simple-git-hooks + build:packages)
-pnpm install
-
-# 3) Electron ≥42: prover binário se o dev não o fizer
-pnpm exec install-electron   # se necessário
-
-# 4) checks e build
-pnpm typecheck
-pnpm lint
-pnpm build:web               # build do app web (validação mais leve)
-
-# 5) desktop/runtime (prova principal)
-pnpm dev                     # executa stage-web
-pnpm dev:tamagotchi          # desktop Electron (exige display/GPU no host)
+**Resultado:** 56 de 57 projetos de workspace type-checkaram com sucesso. Falhou **apenas** `packages/stage-ui-live2d`, com 2 erros **em arquivo de teste** (não em código de produção):
+```
+packages/stage-ui-live2d typecheck: src/utils/live2d-zip-loader.test.ts(277,21): error TS2339: Property 'expressions' does not exist on type 'ModelSettings'.
+packages/stage-ui-live2d typecheck: src/utils/live2d-zip-loader.test.ts(280,21): error TS2339: Property 'motions' does not exist on type 'ModelSettings'.
 ```
 
-**Resultados esperados de retorno para este registro:** installation result, typecheck result, lint result, build result, runtime result, problemas, warnings, tempo. Ainda **UNKNOWN** até execução real.
+**Diagnóstico (não é problema do nosso ambiente):**
+- O arquivo de teste está **idêntico ao upstream** no nosso baseline (`2c1e223c…`); o vendoring é fiel.
+- `ModelSettings` vem de `pixi-live2d-display/cubism4` (lib externa `pixi-live2d-display@0.4.0`, patchada no repo). A tipagem dessa versão **não expõe** `.expressions`/`.motions` como o teste assume.
+- `skipLibCheck: true` → o erro é do **uso no `.test.ts`**, não da lib.
+- Trata-se de uma falha de tipagem real **dentro do baseline da tag beta** `v0.12.0-beta.5`.
+
+**Verificação upstream — JÁ CORRIGIDO NO MAIN:**
+- Commit **`d8e62f12` "fix(ci): remove incomplete release tests (#2407)"** no `main` do `moeru-ai/airi` (publicado 30/08/2026, **1 dia após** a nossa tag 29/08/2026) **removeu exatamente esse teste** (`-48` linhas em `live2d-zip-loader.test.ts`).
+- No `main` atual, o arquivo **não usa mais** `settings.expressions`/`settings.motions` (as ocorrências restantes de "motions/expressions" são só literais de caminho `*.motion3.json`/`*.exp3.json`).
+- **Conclusão:** é seguro e isolado portar essa correção (remoção de um teste incompleto) para o baseline, OU esperar uma release nova. Nada mais no repo depende dele.
+
+### 7.3 Em aberto (NÃO VALIDADO ainda)
+- `pnpm lint` — NÃO executado ainda.
+- `pnpm build:web` — NÃO executado ainda.
+- `pnpm dev:tamagotchi` / runtime desktop — NÃO executado ainda.
 
 ---
 
@@ -171,16 +184,16 @@ git remote -v                                # origin=Lia, upstream=airi
 | [x] | origin configurado | VALIDADO |
 | [x] | upstream configurado | VALIDADO |
 | [x] | source presente no repositório (subtree) | VALIDADO |
-| [ ] | toolchain correta validada | NÃO VALIDADO (máquina real) |
-| [ ] | dependencies instaladas | NÃO VALIDADO (máquina real) |
-| [ ] | typecheck validado | NÃO VALIDADO |
-| [ ] | lint validado | NÃO VALIDADO |
-| [ ] | build validado | NÃO VALIDADO |
-| [ ] | desktop/runtime validado | NÃO VALIDADO |
+| [x] | toolchain correta | VALIDADO (Node 26.8.1 + pnpm 11.24.0) |
+| [x] | dependencies instaladas | VALIDADO (pnpm install OK, 2647 pacotes) |
+| [~] | typecheck validado | **PARCIAL — 56/57** (1 falha isolada em `.test.ts`, já corrigida upstream `d8e62f12`) |
+| [ ] | lint validado | NÃO VALIDADO (próximo passo) |
+| [ ] | build validado | NÃO VALIDADO (próximo passo) |
+| [ ] | desktop/runtime validado | NÃO VALIDADO (próximo passo) |
 | [x] | documentação atualizada | VALIDADO |
 | [x] | limitações documentadas | VALIDADO |
 
-**Status: estrutura integrada e verificada; build/runtime pendentes de validação real.**
+**Status: instalação + toolchain validados; typecheck 56/57 (falha isolada identificada como já corrigida upstream); lint/build/runtime pendentes.**
 
 ---
 
@@ -189,6 +202,8 @@ git remote -v                                # origin=Lia, upstream=airi
 | Data | Arquivo/item | Mudança |
 |---|---|---|
 | 07/09/2026 | `airi/` (subtree) | Integrado AIRI v0.12.0-beta.5 (commit `2c1e223c…`) via `git subtree add --squash` |
+| 07/09/2026 | `devkit.json` | `airi/` em `ignore_dirs` (baseline vendado fora do escopo de validação/commit do DevKit) |
 | 07/09/2026 | `docs/upstream/AIRI-INTEGRATION.md` | Atualizado com método, estrutura, verificações e procedimento |
+| 07/09/2026 | `docs/upstream/AIRI-INTEGRATION.md` | Registrados resultados reais (install OK, typecheck 56/57, achado upstream `d8e62f12`) |
 
 Nenhum código do AIRI foi modificado; nenhuma feature/UI/provider/installer da Lia foi iniciada; nenhuma dependência instalada nesta etapa.
