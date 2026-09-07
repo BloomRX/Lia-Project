@@ -2435,5 +2435,48 @@ Lia é o produto.
 
 
 ==================================================
+97. THIRD-PARTY ATTRIBUTION
+==================================================
+
+O projeto Lia utiliza bibliotecas, frameworks, engines, modelos,
+
+assets e outros projetos de terceiros.
+
+Sempre que uma nova tecnologia, biblioteca, modelo ou asset for
+
+introduzido no projeto, a Agent deve verificar:
+
+1. nome;
+
+2. repository/site oficial;
+
+3. versão utilizada;
+
+4. licença;
+
+5. finalidade;
+
+6. possibilidade de redistribuição;
+
+7. necessidade de attribution/notice.
+
+Nunca introduzir um componente de terceiros sem verificar sua licença
+
+quando ele fizer parte da aplicação distribuída.
+
+README.md deve conter uma seção resumida de Credits / Third-party projects.
+
+docs/licenses/THIRD-PARTY-NOTICES.md deve conter a relação detalhada
+
+de componentes relevantes.
+
+docs/licenses/ASSET-LICENSES.md deve registrar assets e modelos
+
+distribuídos com a aplicação.
+
+Não colocar secrets ou informações privadas nesses arquivos.
+
+
+==================================================
 END OF MASTER PROMPT
 ==================================================
