@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""DevKit do Sprite Livre: Git seguro, sem template Godot ou credenciais embutidas.
+"""DevKit universal: Git seguro para qualquer projeto, sem templates ou credenciais embutidas.
+
+Cole o DevKit.bat e a pasta tools/ na raiz de qualquer projeto e ele funciona.
+Um devkit.json opcional na raiz ajusta nome exibido, branch base, pastas
+ignoradas e suítes de teste do --full.
 
 A validação normal só verifica sintaxe/estrutura; não executa notebooks, instala
 pacotes, inicia servidores nem baixa modelos. GitHub CLI é necessário somente
@@ -20,23 +24,39 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import unicodedata
 
 KIT = Path(__file__).resolve().parent.parent
 REMOTE = "origin"
-BASE = "main"
-PROTECTED = {"main", "master"}
+PROTECTED_BASE = {"main", "master"}
 MAX_FILE = 95 * 1024 * 1024  # abaixo do limite de arquivo do GitHub
 MAX_TEXT_SCAN = 8 * 1024 * 1024
 SKIP_DIRS = {
     ".git", "node_modules", ".venv", "venv", "__pycache__", ".cache", ".npm",
     ".next", ".nuxt", ".pytest_cache", ".mypy_cache", ".ruff_cache", ".godot", ".ipynb_checkpoints",
-    "dist", "build", "coverage", ".tox", ".turbo", "comfyui", "models", "checkpoints", "outputs", "resultados",
+    "dist", "build", "coverage", ".tox", ".turbo", "target", "comfyui", "models", "checkpoints", "outputs", "resultados",
 }
 WEIGHT_EXTS = {".gguf", ".safetensors", ".ckpt", ".pt", ".pth", ".onnx"}
-TEXT_EXTS = {".py", ".js", ".mjs", ".cjs", ".json", ".ipynb", ".html", ".md", ".txt", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".bat", ".gd", ".godot", ".css"}
+TEXT_EXTS = {".py", ".js", ".mjs", ".cjs", ".json", ".ipynb", ".html", ".md", ".txt", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".bat", ".gd", ".godot", ".css", ".ts", ".vue", ".rs", ".go", ".java", ".cs", ".rb", ".php", ".sh", ".ps1", ".lua", ".kt", ".swift"}
+# Marcadores universais de projeto: se qualquer deles existir na pasta, o DevKit aceita o local.
+PROJECT_MARKERS = {
+    "package.json", "pyproject.toml", "requirements.txt", "setup.py", "setup.cfg",
+    "project.godot", "Cargo.toml", "go.mod", "pom.xml", "build.gradle", "build.gradle.kts",
+    "composer.json", "Gemfile", "CMakeLists.txt", "Makefile", "Dockerfile", "docker-compose.yml",
+    "readme.md", "index.html", "tsconfig.json", ".gitignore", "license", "licence",
+}
+PROJECT_DIRS = ("src", "source", "lib", "app", "tests", "test")
+SOURCE_EXTS = {".py", ".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".gd", ".rs", ".go", ".java", ".cs", ".cpp", ".c", ".h", ".hpp", ".rb", ".php", ".vue", ".svelte", ".html", ".css", ".scss", ".sh", ".ps1", ".lua", ".kt", ".swift"}
+# Arquivos do próprio kit: não transformam uma pasta qualquer em "projeto".
+KIT_FILES = {"devkit.bat", "devkit.json", "devkit.example.json"}
+# Configuração opcional por projeto (devkit.json na raiz, ao lado do DevKit.bat).
+CONFIG_NAME = "devkit.json"
+CONFIG_KEYS = {"project", "repo_description", "base_branch", "ignore_dirs", "ignore_pairs", "full_tests"}
+CONFIG_MAX = 65536
 KEY_RE = re.compile(
     r"(?<![A-Za-z0-9])(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}"
-    r"|hf_[A-Za-z0-9]{20,}|sk-(?:proj-|svcacct-)?[A-Za-z0-9_-]{20,}"
+    r"|glpat_[A-Za-z0-9_-]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}"
+    r"|hf_[A-Za-z0-9]{20,}|sk-(?:proj-|svcacct-|ant-)?[A-Za-z0-9_-]{20,}"
     r"|AKIA[0-9A-Z]{16})(?![A-Za-z0-9])"
 )
 PRIVATE_KEY_RE = re.compile(r"-----BEGIN (?:RSA |EC |DSA |OPENSSH |ENCRYPTED )?PRIVATE KEY-----")
@@ -44,7 +64,7 @@ PRIVATE_KEY_RE = re.compile(r"-----BEGIN (?:RSA |EC |DSA |OPENSSH |ENCRYPTED )?P
 # NÃO são confundidos com segredos. Uma credencial literal ainda é sinalizada.
 ASSIGN_RE = re.compile(
     r'''(?ix)(?<![\w]) ["']?
-    (?:(?:github|gitlab|openai|godmode|fal|hf|access|auth|secret)[_-])?
+    (?:(?:github|gitlab|openai|anthropic|google|gemini|xai|groq|deepseek|aws|azure|hf|huggingface|access|auth|secret)[_-])?
     (?:api[_-]?key|api[_-]?token|access[_-]?token|auth[_-]?token|secret[_-]?key|token|password|passwd|client[_-]?secret)
     ["']? \s* [=:] \s* (["']) ([^\r\n"']{6,}) \1'''
 )
@@ -100,16 +120,174 @@ def branch(p):
     return b
 
 
+# ---------------------------------------------------------------------------
+# Configuração opcional por projeto (devkit.json)
+# ---------------------------------------------------------------------------
+
+def _valid_config_segment(value):
+    return isinstance(value, str) and re.fullmatch(r"[A-Za-z0-9._-]{1,64}", value) and value not in {".", ".."}
+
+
+def _valid_config_branch(name):
+    return (isinstance(name, str) and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/-]{0,99}", name)
+            and ".." not in name and "@{" not in name and "//" not in name
+            and not name.endswith(("/", ".lock")) and name.upper() != "HEAD")
+
+
+def load_config():
+    """Lê devkit.json na raiz do kit. Falha fechado com mensagem clara se inválido."""
+    path = KIT / CONFIG_NAME
+    if not path.exists(): return {}
+    try:
+        if path.is_symlink() or path.stat().st_size > CONFIG_MAX: raise ValueError()
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(data, dict): raise ValueError()
+    except (ValueError, TypeError, OSError, json.JSONDecodeError):
+        raise RuntimeError(f"{CONFIG_NAME} inválido na raiz do projeto (JSON objeto de até {CONFIG_MAX // 1024} KiB). Corrija ou remova o arquivo; nada foi executado.") from None
+    unknown = set(data) - CONFIG_KEYS
+    if unknown:
+        raise RuntimeError(f"{CONFIG_NAME}: chave(s) desconhecida(s): " + ", ".join(sorted(unknown)) + ". Consulte tools/README.md.")
+    if "project" in data and not (isinstance(data["project"], str) and 1 <= len(data["project"].strip()) <= 64):
+        raise RuntimeError(f"{CONFIG_NAME}: 'project' deve ser um texto de 1 a 64 caracteres.")
+    if "repo_description" in data and not (isinstance(data["repo_description"], str) and len(data["repo_description"]) <= 200):
+        raise RuntimeError(f"{CONFIG_NAME}: 'repo_description' deve ser um texto de até 200 caracteres.")
+    if "base_branch" in data and not _valid_config_branch(data["base_branch"]):
+        raise RuntimeError(f"{CONFIG_NAME}: 'base_branch' inválido (ex.: main, trunk, develop).")
+    if "ignore_dirs" in data:
+        value = data["ignore_dirs"]
+        if not isinstance(value, list) or len(value) > 64 or not all(_valid_config_segment(x) for x in value):
+            raise RuntimeError(f"{CONFIG_NAME}: 'ignore_dirs' deve ser uma lista de nomes de pasta (sem barras).")
+    if "ignore_pairs" in data:
+        value = data["ignore_pairs"]
+        ok = isinstance(value, list) and len(value) <= 64
+        ok = ok and all(isinstance(pair, list) and len(pair) == 2 and all(_valid_config_segment(x) for x in pair) for pair in value)
+        if not ok:
+            raise RuntimeError(f"{CONFIG_NAME}: 'ignore_pairs' deve ser uma lista de pares [pasta, subpasta].")
+    if "full_tests" in data:
+        value = data["full_tests"]
+        ok = isinstance(value, list) and 1 <= len(value) <= 16
+        ok = ok and all(isinstance(argv, list) and 1 <= len(argv) <= 32
+                        and all(isinstance(x, str) and 1 <= len(x) <= 200 and "\x00" not in x for x in argv)
+                        and not argv[0].startswith("-") for argv in value)
+        if not ok:
+            raise RuntimeError(f"{CONFIG_NAME}: 'full_tests' deve ser uma lista de comandos, cada um uma lista de argumentos (ex.: [[\"npm\",\"test\"]]).")
+    return data
+
+
+def project_display_name():
+    config = load_config()
+    name = config.get("project")
+    if name is not None:
+        name = name.strip()
+        if name: return name
+    return KIT.name or "projeto"
+
+
+def repo_description():
+    config = load_config()
+    description = config.get("repo_description")
+    if description and description.strip(): return description.strip()
+    return f"{project_display_name()} — projeto pessoal"
+
+
+def base_branch():
+    return load_config().get("base_branch", "main")
+
+
+def protected_branches():
+    return PROTECTED_BASE | {base_branch()}
+
+
+def default_repo_name():
+    """Slug derivado do nome da pasta (ou 'project' do devkit.json)."""
+    text = unicodedata.normalize("NFKD", project_display_name())
+    text = text.encode("ascii", "ignore").decode("ascii").lower()
+    text = re.sub(r"[^a-z0-9._-]+", "-", text).strip("-.")
+    return text or "meu-projeto"
+
+
+def extra_ignore_dirs():
+    return {x.lower() for x in load_config().get("ignore_dirs", [])}
+
+
+def extra_ignore_pairs():
+    return {tuple(x.lower() for x in pair) for pair in load_config().get("ignore_pairs", [])}
+
+
+def configured_full_tests():
+    commands = load_config().get("full_tests")
+    return [list(argv) for argv in commands] if commands else None
+
+
+# ---------------------------------------------------------------------------
+# Detecção universal de projeto
+# ---------------------------------------------------------------------------
+
+def looks_like_project(directory):
+    """Aceita qualquer projeto comum: marcador na raiz, pasta de código conhecida
+    ou pelo menos um arquivo-fonte fora do próprio DevKit."""
+    directory = Path(directory)
+    if not directory.is_dir(): return False
+    try: entries = list(directory.iterdir())
+    except OSError: return False
+    # Comparações em minúsculas: README.md/readme.md e LICENSE/licence valem igual.
+    file_names = {x.name.lower() for x in entries if x.is_file()}
+    dir_names = {x.name.lower() for x in entries if x.is_dir()}
+    if file_names & {m.lower() for m in PROJECT_MARKERS}: return True
+    if dir_names & set(PROJECT_DIRS): return True
+    for dirpath, dirs, files in os.walk(directory, followlinks=False):
+        rel_root = Path(dirpath)
+        try: rel_root = rel_root.relative_to(directory)
+        except ValueError: continue
+        parts = rel_root.parts
+        if parts and parts[0].lower() == "tools":
+            dirs[:] = []  # o kit em si não caracteriza o projeto
+            continue
+        dirs[:] = [d for d in dirs if d.lower() not in SKIP_DIRS and d != ".git" and not (rel_root / d).is_symlink()]
+        for name in files:
+            if not parts and name.lower() in KIT_FILES: continue
+            if Path(name).suffix.lower() in SOURCE_EXTS: return True
+    return False
+
+
+def kit_only_folder(directory):
+    """True quando a pasta contém apenas o DevKit (projeto novo recém-criado)."""
+    directory = Path(directory)
+    for dirpath, dirs, files in os.walk(directory, followlinks=False):
+        rel_root = Path(dirpath)
+        try: rel_root = rel_root.relative_to(directory)
+        except ValueError: continue
+        parts = rel_root.parts
+        if parts and parts[0].lower() == "tools":
+            dirs[:] = []
+            continue
+        dirs[:] = [d for d in dirs if d != ".git" and not (rel_root / d).is_symlink()]
+        for name in files:
+            if not parts and name.lower() in KIT_FILES: continue
+            return False
+    return True
+
+
 def ensure_project(p):
-    # Funciona com os fontes ou apenas com os entregáveis do kit, inclusive
-    # quando o diretório sprite-livre foi mantido dentro do repositório.
-    candidates = [KIT, p, p / "sprite-livre", p / "Sprite Livre"]
-    for candidate in dict.fromkeys(candidates):
-        if not candidate.is_dir(): continue
-        if any((candidate / x).is_file() for x in ("package.json", "Sprite Livre.html", "Sprite_Livre_Colab.ipynb", "project.godot")):
+    """Funciona em qualquer projeto: usa a pasta do kit, a raiz Git ou, se o kit
+    estiver na raiz e o projeto em subpasta, a única subpasta reconhecível."""
+    candidates = []
+    for candidate in (KIT, p):
+        if candidate.is_dir() and candidate not in candidates: candidates.append(candidate)
+    for candidate in candidates:
+        if looks_like_project(candidate): return candidate
+    # Kit na raiz do repositório e projeto dentro de uma única subpasta.
+    if p.is_dir():
+        subs = [child for child in sorted(p.iterdir())
+                if child.is_dir() and not child.is_symlink()
+                and child.name.lower() not in SKIP_DIRS and child.name.lower() != "tools"
+                and looks_like_project(child)]
+        if len(subs) == 1: return subs[0]
+    for candidate in candidates:
+        if kit_only_folder(candidate):
+            print("Aviso: até agora só há o DevKit nesta pasta. Ele pode ser o primeiro commit de um projeto novo.")
             return candidate
-        if (candidate / "src" / "app.mjs").is_file(): return candidate
-    raise RuntimeError("Projeto não reconhecido. Esperado package.json, Sprite Livre.html ou notebook do Sprite Livre. project.godot NÃO é obrigatório.")
+    raise RuntimeError("Projeto não reconhecido: nenhum marcador comum (package.json, pyproject.toml, project.godot, Cargo.toml, go.mod, src/, tests/…) nem arquivo-fonte fora de tools/. Confira se o DevKit está na raiz correta.")
 
 
 def git_busy(p):
@@ -132,8 +310,10 @@ def git_names(p, args):
 def ignored_path(name):
     parts = Path(name).parts
     lower = tuple(part.lower() for part in parts)
-    if any(part in SKIP_DIRS for part in lower): return True
-    if any(lower[i:i+2] in (("tests", "artifacts"), ("colab", "comfyui"), ("colab", "resultados")) for i in range(max(0, len(lower)-1))): return True
+    skip = SKIP_DIRS | extra_ignore_dirs()
+    if any(part in skip for part in lower): return True
+    pairs = extra_ignore_pairs() | {("tests", "artifacts")}
+    if any(lower[i:i+2] in pairs for i in range(max(0, len(lower)-1))): return True
     return Path(name).suffix.lower() in WEIGHT_EXTS
 
 
@@ -240,22 +420,39 @@ def validate(p=None, full=False):
     print(f"Validação leve OK: {python_count} Python, {js_count} JS (incluindo inline), {html_count} HTML, {json_count} JSON, {notebooks} notebooks.")
     if js_missing: print("AVISO: Node.js não encontrado; a sintaxe JavaScript NÃO foi verificada. Isso não impede o Git.")
     if magic_count: print(f"AVISO: {magic_count} célula(s) IPython com comandos especiais tiveram apenas estrutura JSON verificada.")
-    print("Não executei a IA, os notebooks, o build, o Godot nem instalações.")
+    print("Não executei builds, instalações, notebooks nem IA.")
     if not full: return
-    count = 0
-    test = project / "tests" / "core.test.mjs"
-    if test.exists():
-        node = require("node")
-        if not (project / "node_modules" / "fflate").exists():
-            raise RuntimeError("Para os testes completos, rode npm ci na pasta do package.json. Não instalo dependências automaticamente.")
-        run([node, "--test", str(test)], cwd=project); count += 1
-    test = project / "tests" / "configuration_test.py"
-    if test.exists(): run([sys.executable, str(test)], cwd=project); count += 1
-    checker = project / "tools" / "checkgd.py"
-    if (project / "project.godot").exists() and checker.exists():
-        run([sys.executable, str(checker)], cwd=project); count += 1
+    count = run_full_tests(project)
     if not count: print("Aviso: nenhuma suíte local reconhecida para --full.")
-    print("Testes locais finalizados. Inferência em GPU e teste dentro do motor NÃO estão incluídos.")
+    print("Testes locais finalizados. Suítes que exigem rede, GPU ou motor NÃO estão incluídas.")
+
+
+def run_full_tests(project):
+    """Descobre e roda suítes convencionais sem instalar nada."""
+    count = 0
+    commands = configured_full_tests()
+    if commands is not None:
+        for argv in commands:
+            print(f"[full] {' '.join(argv)}")
+            run(argv, cwd=project); count += 1
+        return count
+    tests_dir = project / "tests"
+    node = shutil.which("node")
+    if node and tests_dir.is_dir():
+        node_tests = sorted({*tests_dir.glob("*.test.mjs"), *tests_dir.glob("*.test.js"), *tests_dir.glob("test-*.mjs"), *tests_dir.glob("test-*.js")})
+        if node_tests:
+            if (project / "package.json").is_file() and not (project / "node_modules").is_dir():
+                print("AVISO: package.json presente sem node_modules; testes Node foram pulados. Rode a instalação do projeto manualmente.")
+            else:
+                for test in node_tests:
+                    run([node, "--test", str(test)], cwd=project); count += 1
+    if tests_dir.is_dir():
+        for test in sorted({*tests_dir.glob("test_*.py"), *tests_dir.glob("*_test.py")}):
+            run([sys.executable, str(test)], cwd=project); count += 1
+    checker = project / "tools" / "checkgd.py"
+    if (project / "project.godot").is_file() and checker.is_file():
+        run([sys.executable, str(checker)], cwd=project); count += 1
+    return count
 
 
 def placeholder(value):
@@ -334,7 +531,7 @@ def stage_project(p):
                 skipped.append(rel); continue
             # Remover um arquivo antes rastreado continua sendo permitido.
         if path.is_dir() and not path.is_symlink():
-            raise RuntimeError(f"Submódulo/repositório aninhado com alteração: {rel}. Gerencie-o manualmente; não vou adicioná-lo como se fosse um arquivo do Sprite Livre.")
+            raise RuntimeError(f"Submódulo/repositório aninhado com alteração: {rel}. Gerencie-o manualmente; não vou adicioná-lo como se fosse um arquivo do projeto.")
         if path.is_file() and not path.is_symlink() and path.stat().st_size > MAX_FILE:
             raise RuntimeError(f"Arquivo acima de 95 MiB: {rel}. Nenhum arquivo foi apagado.")
         selected.append(rel)
@@ -385,9 +582,10 @@ def normalize_branch(name):
 def sync(message=None, push=True):
     p = root(); ensure_project(p); ensure_idle(p)
     b = branch(p)
+    protected = protected_branches()
     destination = target_branch(p, b) if push else b
-    if push and (b in PROTECTED or destination in PROTECTED):
-        raise RuntimeError("Push direto para main/master bloqueado ANTES de alterar o projeto. Crie uma branch: DevKit.bat new-branch ajustes/sprite-livre. Depois use sync e pr.")
+    if push and (b in protected or destination in protected):
+        raise RuntimeError("Push direto para branch protegida (" + ", ".join(sorted(protected)) + ") bloqueado ANTES de alterar o projeto. Crie uma branch: DevKit.bat new-branch trabalho/" + default_repo_name() + ". Depois use sync e pr.")
     if push: ensure_remote(p)
     print(f"Branch: {b}" + (f" → {REMOTE}/{destination}" if push else " (somente commit local)"))
     validate(p)
@@ -395,7 +593,7 @@ def sync(message=None, push=True):
     status = run(["git", "diff", "--cached", "--quiet"], cwd=p, check=False, capture=True).returncode
     if status not in (0, 1): raise RuntimeError("Não foi possível verificar o stage.")
     if status == 1:
-        msg = message or "chore: sincroniza Sprite Livre " + dt.datetime.now().strftime("%Y-%m-%d %H:%M")
+        msg = message or "chore: sincroniza " + project_display_name() + " " + dt.datetime.now().strftime("%Y-%m-%d %H:%M")
         run(["git", "diff", "--cached", "--stat"], cwd=p)
         run(["git", "commit", "-m", msg], cwd=p)
         print("Alterações salvas em commit LOCAL. Ainda não confirmei o envio.")
@@ -418,7 +616,7 @@ def sync(message=None, push=True):
     outgoing_secrets(p)
     print(f"Enviando somente HEAD para {REMOTE}/{destination}…")
     run(["git", "push", "--set-upstream", REMOTE, f"HEAD:refs/heads/{destination}"], cwd=p)
-    print("Sincronização concluída: push confirmado pelo Git. A main não foi atualizada; use Pull Request.")
+    print(f"Sincronização concluída: push confirmado pelo Git. A {base_branch()} não foi atualizada; use Pull Request.")
 
 
 def pull():
@@ -462,7 +660,7 @@ def checkout(name):
         if blocked_tracked:
             raise RuntimeError("Há arquivos gerados/sensíveis rastreados com alterações. Revise-os manualmente antes de trocar de branch: " + ", ".join(blocked_tracked[:8]))
         if any((p / n).is_dir() and not (p / n).is_symlink() for n in eligible):
-            raise RuntimeError("Há submódulo/repositório aninhado com alterações. Um stash comum não garante guardar seu conteúdo; trate-o manualmente antes de trocar de branch.")
+            raise RuntimeError("Há submódulo/repositório aninhado com alteração. Um stash comum não garante guardar seu conteúdo; trate-o manualmente antes de trocar de branch.")
         if eligible:
             print("\nHá alterações locais. [1] Guardar em stash e trocar  [2] Mostrar status  [3] Cancelar")
             while True:
@@ -497,21 +695,22 @@ def checkout(name):
 def new_branch(name):
     p = root(); ensure_project(p); ensure_idle(p)
     name = normalize_branch(name)
-    if name in PROTECTED: raise RuntimeError("Escolha um nome de trabalho, por exemplo ajustes/sprite-livre.")
+    if name in protected_branches(): raise RuntimeError("Escolha um nome de trabalho, por exemplo trabalho/" + default_repo_name() + ".")
     if has_ref(p, f"refs/heads/{name}"): raise RuntimeError("A branch local já existe. Use checkout.")
     # --no-track evita herdar upstream=origin/main da branch de origem.
     run(["git", "switch", "--no-track", "-c", name], cwd=p)
-    print(f"Branch criada: {name}. Alterações locais foram mantidas. Nenhum commit ou push foi feito.")
+    print("Branch criada: " + name + ". Alterações locais foram mantidas. Nenhum commit ou push foi feito.")
 
 
 def pr():
     require("gh"); p = root(); ensure_idle(p)
     b = branch(p); destination = target_branch(p, b)
-    if b in PROTECTED or destination in PROTECTED: raise RuntimeError("Abra uma branch de trabalho para criar o PR.")
+    protected = protected_branches()
+    if b in protected or destination in protected: raise RuntimeError("Abra uma branch de trabalho para criar o PR.")
     if b != destination: raise RuntimeError("O upstream tem outro nome. Crie esse PR manualmente no GitHub para não selecionar a branch errada.")
     if not has_ref(p, f"refs/remotes/{REMOTE}/{b}"): raise RuntimeError("Faça sync primeiro para publicar esta branch.")
-    run(["gh", "pr", "create", "--base", BASE, "--head", b, "--fill"], cwd=p)
-    print("PR solicitado. Esse comando não faz merge nem atualiza a main automaticamente.")
+    run(["gh", "pr", "create", "--base", base_branch(), "--head", b, "--fill"], cwd=p)
+    print("PR solicitado. Esse comando não faz merge nem atualiza a base automaticamente.")
 
 
 # O registro fica no diretório comum do Git, fora dos arquivos versionados.
@@ -717,7 +916,7 @@ def expected_origin(p, data, add=False):
 def confirm_target(verb, data, extra):
     target = f"{data['owner']}/{data['name']}"
     print(f"\nConta: {data['owner']} | Repositório: {data['name']} | Visibilidade: PRIVADO")
-    print(f"Pasta: {KIT}\nPrimeira branch remota: {BASE}")
+    print(f"Pasta: {KIT}\nPrimeira branch remota: {base_branch()}")
     print(extra)
     expected = f"{verb} {target}"
     if input(f"Digite exatamente {expected} para confirmar (Enter cancela):\n> ").strip() != expected:
@@ -727,18 +926,19 @@ def confirm_target(verb, data, extra):
 
 def prepare_first_commit(p):
     ensure_idle(p)
+    base = base_branch()
     current = branch(p)
-    if current != BASE:
-        if has_ref(p, f"refs/heads/{BASE}"):
-            raise RuntimeError("Já existe uma main local, mas outra branch está aberta. Selecione a main desejada antes da criação; não vou escolher/trocar seu histórico automaticamente.")
+    if current != base:
+        if has_ref(p, f"refs/heads/{base}"):
+            raise RuntimeError(f"Já existe uma {base} local, mas outra branch está aberta. Selecione a branch base desejada antes da criação; não vou escolher/trocar seu histórico automaticamente.")
         # Parte do HEAD atual, mantendo a branch anterior e as edições no disco.
-        run(["git", "switch", "--no-track", "-c", BASE], cwd=p)
+        run(["git", "switch", "--no-track", "-c", base], cwd=p)
     stage_project(p)
     changed = run(["git", "diff", "--cached", "--quiet"], cwd=p, capture=True, check=False).returncode
-    if changed not in (0, 1): raise RuntimeError("Não consegui verificar o stage para o primeiro commit.")
+    if changed not in (0, 1): raise RuntimeError("Não foi possível verificar o stage para o primeiro commit.")
     if changed:
         run(["git", "diff", "--cached", "--stat"], cwd=p)
-        run(["git", "commit", "-m", "chore: inicia Sprite Livre"], cwd=p)
+        run(["git", "commit", "-m", "chore: inicia " + project_display_name()], cwd=p)
     head = run(["git", "rev-parse", "--verify", "HEAD"], cwd=p, capture=True, check=False)
     if head.returncode: raise RuntimeError("Não há arquivos/commit elegíveis para publicar. Nada foi criado no GitHub.")
     outgoing_secrets(p)  # examina também o histórico local anterior ao wizard
@@ -758,22 +958,23 @@ def remote_heads(p, url):
 
 def finish_first_push(p, data):
     """Nunca cria outro repo; publica só o commit registrado e nunca força push."""
+    base = base_branch()
     info = github_repo_info(data)
     data["repo_id"] = info["id"]
     if data["phase"] == "attempted": data["phase"] = "created"
     save_creation(p, data)
     url = expected_origin(p, data, add=True)
     refs = remote_heads(p, url)
-    main_ref = f"refs/heads/{BASE}"
+    base_ref = f"refs/heads/{base}"
     if refs:
-        if main_ref not in refs:
-            raise RuntimeError("O destino já tem conteúdo diferente, sem a main inicial esperada. Não fiz push nem sobrescrevi o repositório.")
+        if base_ref not in refs:
+            raise RuntimeError("O destino já tem conteúdo diferente, sem a branch base inicial esperada. Não fiz push nem sobrescrevi o repositório.")
         # Recupera o caso: o push funcionou, mas faltou gravar a confirmação
         # local. Commits remotos posteriores não são sobrescritos.
-        run(["git", "fetch", "--no-tags", "--recurse-submodules=no", url, f"+refs/heads/{BASE}:refs/remotes/{REMOTE}/{BASE}"], cwd=p)
+        run(["git", "fetch", "--no-tags", "--recurse-submodules=no", url, f"+refs/heads/{base}:refs/remotes/{REMOTE}/{base}"], cwd=p)
         done = False
-        if main_ref in refs and has_ref(p, f"refs/remotes/{REMOTE}/{BASE}"):
-            result = run(["git", "merge-base", "--is-ancestor", data["head"], f"refs/remotes/{REMOTE}/{BASE}"], cwd=p, capture=True, check=False)
+        if base_ref in refs and has_ref(p, f"refs/remotes/{REMOTE}/{base}"):
+            result = run(["git", "merge-base", "--is-ancestor", data["head"], f"refs/remotes/{REMOTE}/{base}"], cwd=p, capture=True, check=False)
             done = result.returncode == 0
         if not done:
             raise RuntimeError("O destino já tem conteúdo diferente do primeiro commit registrado. Não fiz push nem sobrescrevi o repositório. Revise-o manualmente.")
@@ -781,34 +982,34 @@ def finish_first_push(p, data):
     else:
         if data["phase"] == "pushed":
             raise RuntimeError("O registro diz que já houve envio, mas o destino agora está vazio. Não recriarei conteúdo automaticamente.")
-        if branch(p) != BASE or run(["git", "rev-parse", "HEAD"], cwd=p, capture=True).stdout.strip() != data["head"]:
+        if branch(p) != base or run(["git", "rev-parse", "HEAD"], cwd=p, capture=True).stdout.strip() != data["head"]:
             raise RuntimeError("A branch/commit local mudou desde o início. O envio foi interrompido para não publicar outra versão sem confirmação. Preserve seu trabalho e revise o diagnóstico.")
         outgoing_secrets(p)
         github_repo_info(data)  # reconfirma ID, conta e privacidade antes do envio
-        print("Enviando o primeiro commit registrado para main (exceção única de inicialização)…")
+        print(f"Enviando o primeiro commit registrado para {base} (exceção única de inicialização)…")
         # URL efetiva verificada + SHA fixo: não segue um pushurl inesperado e
         # não inclui edições/commits feitos depois do início da criação.
-        run(["git", "push", "--no-follow-tags", url, f"{data['head']}:{main_ref}"], cwd=p)
-        if remote_heads(p, url).get(main_ref) != data["head"]:
+        run(["git", "push", "--no-follow-tags", url, f"{data['head']}:{base_ref}"], cwd=p)
+        if remote_heads(p, url).get(base_ref) != data["head"]:
             raise RuntimeError("O Git terminou o envio, mas não consegui confirmar o commit remoto. Use Retomar; não crie outro repo.")
         data["phase"] = "pushed"; save_creation(p, data)
-        if info.get("default_branch") != BASE:
-            gh_run(["repo", "edit", f"{data['owner']}/{data['name']}", "--default-branch", BASE], cwd=p)
-        run(["git", "fetch", "--no-tags", "--recurse-submodules=no", url, f"+refs/heads/{BASE}:refs/remotes/{REMOTE}/{BASE}"], cwd=p)
+        if info.get("default_branch") != base:
+            gh_run(["repo", "edit", f"{data['owner']}/{data['name']}", "--default-branch", base], cwd=p)
+        run(["git", "fetch", "--no-tags", "--recurse-submodules=no", url, f"+refs/heads/{base}:refs/remotes/{REMOTE}/{base}"], cwd=p)
     # Só altera o vínculo local depois de conferir novamente o destino.
     expected_origin(p, data)
-    run(["git", "branch", f"--set-upstream-to={REMOTE}/{BASE}", BASE], cwd=p)
+    run(["git", "branch", f"--set-upstream-to={REMOTE}/{base}", base], cwd=p)
     data["phase"] = "complete"; save_creation(p, data)
     print(f"\nRepositório privado pronto: https://github.com/{data['owner']}/{data['name']}")
     print("Primeiro envio confirmado. A opção Criar repositório não aparecerá mais para este projeto.")
-    print("Próximas alterações: new-branch, sync e pr. Push normal para main/master continua bloqueado.")
+    print(f"Próximas alterações: new-branch, sync e pr. Push normal para {base}/main/master continua bloqueado.")
 
 
 def request_repository(p, data):
     # OWNER/NAME fixo, sem --source, --clone ou --push: só a criação remota.
     # O registro 'attempted' JÁ deve estar no disco antes de entrar aqui.
     check_creation_account(data)
-    gh_run(["repo", "create", f"{data['owner']}/{data['name']}", "--private", "--description", "Sprite Livre — ferramenta pessoal de animações 2D"], cwd=p)
+    gh_run(["repo", "create", f"{data['owner']}/{data['name']}", "--private", "--description", repo_description()], cwd=p)
     finish_first_push(p, data)
 
 
@@ -816,19 +1017,20 @@ def create_repo(name=None):
     require_creation_allowed()
     ensure_project(KIT)
     account = github_identity()
-    if name is None: name = input("Nome do repositório [sprite-livre]: ").strip() or "sprite-livre"
+    default = default_repo_name()
+    if name is None: name = input(f"Nome do repositório [{default}]: ").strip() or default
     name = repository_name(name)
     target = f"{account['login']}/{name}"
     code, _ = github_lookup("repos/" + target)
     if code != 404:
         raise RuntimeError(f"{target} já existe. Não criei outro nome, não vinculei nem sobrescrevi esse repositório. Abra/clone o repo existente ou revise a escolha conscientemente.")
     data = {"version": 1, "owner": account["login"], "owner_id": account["id"], "name": name, "phase": "attempted", "repo_id": None}
-    if not confirm_target("CRIAR", data, "Vou usar os arquivos atuais, criar/usar uma main local, salvar o commit e fazer SOMENTE o primeiro envio. Não apago o projeto nem crio um template Godot."): return
+    if not confirm_target("CRIAR", data, f"Vou usar os arquivos atuais, criar/usar uma {base_branch()} local, salvar o commit e fazer SOMENTE o primeiro envio. Não apago o projeto nem instalo dependências."): return
     require_creation_allowed()  # a configuração pode ter mudado durante o prompt
     validate(KIT)
     status = require_creation_allowed()
     p = KIT.resolve()
-    if status["root"] is None: run(["git", "init", "-b", BASE], cwd=p)
+    if status["root"] is None: run(["git", "init", "-b", base_branch()], cwd=p)
     with creation_lock(p):
         require_creation_allowed(ignore_lock=True)
         data["head"] = prepare_first_commit(p)
@@ -873,7 +1075,7 @@ def resume_repo():
         try:
             if code == 404:
                 if verb != "TENTAR" or data.get("repo_id") is not None: raise RuntimeError("Estado remoto mudou. Não vou criar nada sem uma confirmação específica.")
-                if branch(p) != BASE or run(["git", "rev-parse", "HEAD"], cwd=p, capture=True).stdout.strip() != data["head"]:
+                if branch(p) != base_branch() or run(["git", "rev-parse", "HEAD"], cwd=p, capture=True).stdout.strip() != data["head"]:
                     raise RuntimeError("O commit inicial mudou. Retomada interrompida antes de criar/enviar qualquer coisa.")
                 outgoing_secrets(p)
                 request_repository(p, data)
@@ -887,6 +1089,11 @@ def resume_repo():
 def diagnose():
     print(f"Python: {sys.version.split()[0]} ({sys.executable})")
     for name in ("git", "node", "gh"): print(f"{name}: {shutil.which(name) or 'NÃO ENCONTRADO'}")
+    config_path = KIT / CONFIG_NAME
+    try:
+        print(f"Projeto: {project_display_name()} | Branch base: {base_branch()} | Config: {config_path}" + ("" if config_path.exists() else " (não existe; usando padrões)"))
+    except RuntimeError as exc:
+        print("ERRO:", exc)
     try:
         p = root(); print(f"Repositório: {p}"); print(f"Branch: {branch(p)}")
         r = run(["git", "remote", "get-url", REMOTE], cwd=p, capture=True, check=False)
@@ -903,9 +1110,13 @@ def diagnose():
 
 
 def menu():
+    try:
+        title = project_display_name().upper()
+    except RuntimeError as exc:
+        print("ERRO:", redact(str(exc))); return
     while True:
         status = creation_status()
-        print("\n=== SPRITE LIVRE · DEVKIT ===\n1 Sincronizar: validar, commit, rebase e push\n2 Somente baixar (pull)\n3 Validar sintaxe/estrutura (sem executar IA)\n4 Listar branches\n5 Abrir branch existente\n6 Criar Pull Request para main\n7 Diagnóstico\n8 Criar nova branch de trabalho")
+        print(f"\n=== {title} · DEVKIT ===\n1 Sincronizar: validar, commit, rebase e push\n2 Somente baixar (pull)\n3 Validar sintaxe/estrutura (sem executar)\n4 Listar branches\n5 Abrir branch existente\n6 Criar Pull Request para " + base_branch() + "\n7 Diagnóstico\n8 Criar nova branch de trabalho")
         if status["can_create"]: print("9 Criar repositório PRIVADO no GitHub e fazer o primeiro envio")
         elif status["can_resume"]: print("10 Retomar configuração do MESMO repositório (sem escolher outro nome)")
         print("0 Sair")
@@ -919,7 +1130,7 @@ def menu():
             elif op == "5": checkout(input("Nome da branch: ").strip())
             elif op == "6": pr()
             elif op == "7": diagnose()
-            elif op == "8": new_branch(input("Nova branch (ex.: ajustes/sprite-livre): ").strip())
+            elif op == "8": new_branch(input("Nova branch (ex.: trabalho/" + default_repo_name() + "): ").strip())
             elif op == "9": create_repo()
             elif op == "10": resume_repo()
             elif op == "0": return
@@ -935,7 +1146,7 @@ def main():
         item.add_argument("--message", "-m")
         item.add_argument("--no-push", action="store_true", help="somente commit local; sem acesso ao remote")
     sub.add_parser("pull", help="integra a branch atual; não faz commit das edições nem push")
-    item = sub.add_parser("validate"); item.add_argument("--full", action="store_true", help="executa as suítes locais reconhecidas, nunca a IA")
+    item = sub.add_parser("validate"); item.add_argument("--full", action="store_true", help="executa as suítes locais reconhecidas, nunca IA nem instalações")
     sub.add_parser("branches")
     item = sub.add_parser("checkout"); item.add_argument("name")
     item = sub.add_parser("new-branch"); item.add_argument("name")
