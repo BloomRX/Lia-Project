@@ -1,211 +1,240 @@
-# M0-A — AIRI Bootstrap / Integração com upstream
+# M0-A — AIRI Bootstrap / Baseline no repositório da Lia
 
-> **Fase/Milestone:** M0-A (base reproduzível do AIRI no repositório Lia)
+> **Milestone:** M0-A (base AIRI reproduzível no repositório Lia)
 > **Data:** 07/09/2026 · **Branch:** `arena/01a07b6d-lia-project`
-> **Escopo:** trazer o AIRI como base do repositório, validar toolchain, e **registrar** versão/commit/comandos/limitações. Não implementa a Lia nem refatora o AIRI.
+> **Regras vigentes:** AGENTS.md completo, incl. **§97 THIRD-PARTY ATTRIBUTION** e **§98 INTERNATIONALIZATION**.
+> **Objetivo provar:** "A base AIRI escolhida está corretamente integrada ao repositório da Lia e consegue ser instalada/buildada/executada no ambiente de desenvolvimento real."
+> **Fora de escopo agora:** M1 e todo desenvolvimento da Lia (UI, i18n, personalidade, voz, memória, Discord, Vision, Computer Use, installer, provider routing, Voice Studio, branding, UX).
 
 ---
 
-## 0. STATUS (importante — não inventar sucesso)
+## 0. STATUS — M0-A
 
-**BOOTSTRAP DOCUMENTED — BUILD NOT VALIDATED IN SANDBOX**
+**BOOTSTRAP DOCUMENTED — BUILD NOT VALIDATED**
 
-- A tag/commit do AIRI foi **confirmada contra o upstream real** (não há divergência).
-- O remote `upstream` foi configurado no repositório da Lia.
-- **NÃO** foi feito vendor do source do AIRI (~576 MB / 5.332 arquivos) neste repositório nesta etapa.
-- **NÃO** foi executado build/check do AIRI no sandbox: o sandbox **não possui Node 26.7.0** (tem Node v22.22.3), não possui `pnpm`/`mise`, e possui **apenas ~3,8 GB de RAM** (o monorepo AIRI exige muito mais).
-- Portanto **nada aqui é validação de que o AIRI "roda"**. Build/typecheck/testes reais serão executados na **máquina de desenvolvimento real** (Ryzen 5 5500 · RX 580 8 GB · 16 GB RAM), seguindo os comandos da §5.
+Status permitido pela ETAPA 10, porque esta sessão roda em um ambiente **genuinamente incapaz** de instalar/buildar/executar o monorepo AIRI (detalhes na §8). Nada abaixo deve ser lido como validação de build/execução.
 
 ---
 
-## 1. AIRI upstream, tag e commit confirmados (sem divergência)
+## 1. ETAPA 1 — Base AIRI confirmada (VALIDADO)
 
-Verificação feita contra `https://github.com/moeru-ai/airi` via API GitHub e `git ls-remote`:
+Revalidado nesta execução contra `https://github.com/moeru-ai/airi` via `git ls-remote`:
 
-| Campo | Valor |
-|---|---|
-| **Versão/tag** | `v0.12.0-beta.5` |
-| **Tag object (annotated)** | `6ea680f51486d257f9b0eeda3bdc25db4307d3bb` |
-| **Commit (peeled, alvo do checkout)** | `2c1e223c8dd813d7c74a324d7fd7399fbf47e8bf` |
-| **Release publicado em** | `2026-08-29` |
-| **Branch default upstream** | `main` |
-| **Licença** | MIT (© 2024-PRESENT Neko Ayaka) |
-| **Org / repo** | `moeru-ai/airi` |
-
-**Conclusão:** a documentação atual (`docs/estudo-airi.md`, README, e os documentos de arquitetura) define a tag `v0.12.0-beta.5`, e essa tag **realmente existe** no upstream, apontando para o commit acima. **Não há divergência** entre documentação e upstream.
-
-**Correspondência com o estudo:** o estudo relatou "48 pacotes"; a inspeção real da árvore do tag contou **49** entradas em `packages/` (irrelevante para a escolha da tag — apenas uma correção factual registrada aqui).
-
----
-
-## 2. Remotes configurados
-
-Estado verificado em `git remote -v` no repositório da Lia:
-
-| Nome | URL | Papel |
+| Campo | Valor | Status |
 |---|---|---|
-| `origin` | `https://github.com/BloomRX/Lia-Project.git` | **Repositório da Lia** (produto/documentação/tooling Lia) |
-| `upstream` | `https://github.com/moeru-ai/airi` | **AIRI** (fonte de verdade do runtime/base) |
+| Versão/tag | `v0.12.0-beta.5` | VALIDADO |
+| Tag object (annotated) | `6ea680f51486d257f9b0eeda3bdc25db4307d3bb` | VALIDADO |
+| Commit alvo (peeled) | `2c1e223c8dd813d7c74a324d7fd7399fbf47e8bf` | VALIDADO |
+| Release publicado | 2026-08-29 | VALIDADO |
+| Licença | MIT (© 2024-PRESENT Neko Ayaka) | VALIDADO |
 
-Nenhum remote aponta para outro destino. `origin` permanece o repo da Lia; `upstream` aponta para o AIRI.
+**Divergência:** **nenhuma.** Documentação e upstream concordam. Nenhuma troca silenciosa de versão/commit.
+
+Correção factual registrada: o estudo citou "48 pacotes"; a árvore real do tag contém **49** entradas em `packages/`.
 
 ---
 
-## 3. Proveniência / estrutura adotada
+## 2. ETAPA 2 — Git / remotes (VALIDADO)
 
-### 3.1 Estrutura do repositório da Lia hoje (após esta etapa)
+| Remote | URL | Papel | Status |
+|---|---|---|---|
+| `origin` | https://github.com/BloomRX/Lia-Project.git | repositório da Lia | VALIDADO |
+| `upstream` | https://github.com/moeru-ai/airi | AIRI (fonte de verdade) | VALIDADO |
 
-```
-Lia-Project/                       (= repositório git da Lia)
-├── AGENTS.md                      (master prompt do produto Lia — preservado)
-├── README.md                      (visão + índices — preservado/atualizado)
-├── DevKit.bat  devkit.json  tools/ (DevKit de git da Lia — preservado)
-├── docs/
-│   ├── estudo-airi.md             (estudo original do AIRI)
-│   ├── architecture/
-│   │   ├── AIRI-ANALYSIS.md       (Fase 0)
-│   │   └── LIA-ARCHITECTURE.md    (Fase 0)
-│   └── upstream/
-│       └── AIRI-INTEGRATION.md    (este documento)
-└── (futuro M0 na máquina real) fork AIRI v0.12.0-beta.5 + camada Lia
-```
+- O modelo preserva a **origem** (AIRI como `upstream`), permitindo futuramente `git fetch upstream` e comparação/merge.
+- O histórico Git do AIRI **será preservado** quando o source entrar na máquina real (estratégia §5.2), de modo que o projeto não vira "cópia sem origem".
 
-### 3.2 Modelo de integração escolhido (M0-A, confirmado)
+---
 
-- **Remote-model fork white-label:** `origin` = Lia; `upstream` = AIRI.
-- **Fonte do AIRI NÃO é vendada neste repositório nesta etapa** (decisão do usuário): o source (~576 MB) será obtido/colocado na **máquina de desenvolvimento real**, conforme §5.
-- **Customizações Lia futuras** devem ficar **isoladas/marcadas** e acima do core AIRI, com diffs mínimos (AGENTS §7); registros de integração em `docs/upstream/`.
-- **`AGENTS.md` e a documentação/ferramentas da Lia são preservados** (não foram apagados/sobrescritos). O `AGENTS.md` raiz é o da **Lia**; o `AGENTS.md` interno do AIRI (345 linhas) coexistirá apenas dentro da árvore do AIRI quando ela for trazida (fork), e nunca substituirá o raiz da Lia.
+## 3. ETAPA 3 — Trazer o AIRI (NÃO VALIDADO — vendor adiado)
 
-### 3.3 Terceiros / licença (regra THIRD-PARTY ATTRIBUTION)
+**Estratégia adotada (confirmada pelo usuário na execução anterior):**
+- **Não** fazer vendor do source completo do AIRI (~576 MB / 5.332 arquivos; clone ~919 MB) **neste repositório/sandbox nesta etapa** (decisão explícita + limites de persistência do ambiente).
+- O source real entra na **máquina de desenvolvimento real**, na tag/commit confirmados, **sem refactor** e **sem alterar** source, estrutura de packages/workspace, apps, services, plugins, integrations ou scripts.
 
-O AIRI é o primeiro projeto de terceiros adotado como base (aplicação futuramente distribuída). Registo mínimo aqui; detalhamento futuro em `docs/licenses/`:
-
-| Campo | Valor |
+| DoD (ETAPA 3) | Status |
 |---|---|
-| Nome | Project AIRI |
-| Repositório oficial | https://github.com/moeru-ai/airi |
-| Versão utilizada | `v0.12.0-beta.5` |
-| Licença | **MIT** |
-| Finalidade | runtime/base do produto Lia (companheiro virtual) |
-| Redistribuição | Permitida sob MIT (manter aviso/créditos originais nos arquivos) |
-| Attribution | Obrigatória (MIT) → registrar em README Credits + `docs/licenses/THIRD-PARTY-NOTICES.md` quando a base entrar |
+| Source presente no repositório conforme estratégia | NÃO VALIDADO (na máquina real) |
+| Preservar source / package structure / workspace / apps / packages / services / plugins / integrations / scripts | NÃO VALIDADO (aguarda ingresso) — nenhum arquivo foi tocado |
+| Sem refactor | VALIDADO (nenhum código alterado) |
 
 ---
 
-## 4. Toolchain esperada (pinada pelo AIRI)
+## 4. ETAPA 4 — Toolchain (NÃO VALIDADO no sandbox; bloqueada)
 
-Verificada nos arquivos do tag (`package.json`, `.tool-versions`, `pnpm-workspace.yaml`):
+**Esperado / pinado pelo AIRI:** Node.js **26.7.0** (`.tool-versions`) e pnpm **11.24.0** (`packageManager`), via corepack/mise.
 
-| Ferramenta | Versão exigida | Onde declarado |
+**Verificado neste ambiente:**
+
+| Ferramenta | Necessária | Encontrada no sandbox | Observação |
+|---|---|---|---|
+| Node.js | 26.7.0 | **22.22.3** | indisponível |
+| pnpm | 11.24.0 | **ausente** | indisponível |
+| mise | (leitor de .tool-versions) | **ausente** | indisponível |
+| npm | — | 10.9.8 | não substitui pnpm |
+
+**Tentativa de instalação do Node 26.7.0 (ETAPA 4 — reportar se não instalável):** download do binário oficial `node-v26.7.0-linux-x64.tar.xz` de `nodejs.org` **falhou por erro SSL (curl exit 35)** — o host não é alcançável deste sandbox. Sem Node 26.7.0 e sem pnpm 11.24.0, e com **~3,8 GB de RAM**, a toolchain exigida **não pode ser instalada/executada aqui**.
+
+**Regra respeitada:** NÃO adaptar para Node 22, NÃO usar outra versão para contornar. Per ETAPA 4: como a versão exigida não pode ser instalada neste ambiente, **paro e reporto o problema** (sem fingir instalação).
+
+| DoD (ETAPA 4) | Status |
+|---|---|
+| Toolchain correta | NÃO VALIDADO no sandbox (Node 26.7.0 + pnpm 11.24.0 indisponíveis aqui) |
+
+---
+
+## 5. ETAPA 5 — Dependencies (NÃO VALIDADO)
+
+`pnpm install` **não foi executado**: depende da toolchain da §4, que não existe neste ambiente. Não substituí pnpm por npm/yarn. Quando executado na máquina real, registrar comando, resultado, warnings, erros e tempo.
+
+| DoD (ETAPA 5) | Status |
+|---|---|
+| Dependencies instaladas | NÃO VALIDADO (bloqueado pela toolchain; máquina real) |
+
+---
+
+## 6. ETAPA 6 — Validar AIRI original (NÃO VALIDADO)
+
+Scripts reais confirmados no `package.json` raiz do tag (`@proj-airi/root`): `typecheck`, `lint`, `build:web`, `build:tamagotchi`, `dev:tamagotchi`, `test:run`, `build:packages`, `install-electron` (via scripts dev), etc. **Não inventei scripts.**
+
+Nenhum destes foi executado/validado no sandbox (toolchain ausente). Todos ficam para a máquina real.
+
+| DoD (ETAPA 6) | Status |
+|---|---|
+| typecheck validado | NÃO VALIDADO |
+| lint validado | NÃO VALIDADO |
+| build validado (build:web / desktop) | NÃO VALIDADO |
+| desktop/runtime validado (dev:tamagotchi) | NÃO VALIDADO |
+
+---
+
+## 7. ETAPA 7 — Regra de baseline (VALIDADO)
+
+Nenhuma customização da Lia foi iniciada: sem branding, Home, settings, personality, orchestrator, provider routing, Voice Studio, installer, nem UX. O AIRI permanece intacto.
+
+---
+
+## 8. ETAPA 8 / 10 — Ambiente atual e limitações
+
+| # | Observação | Impacto |
 |---|---|---|
-| Node.js | **26.7.0** | `.tool-versions` |
-| pnpm | **11.24.0** (`packageManager`) | `package.json` |
-| Gerenciador de runtime p/ Node | **mise** (lê `.tool-versions`) ou nvm alternativo | docs/estudo |
-| Git | presente | — |
+| 1 | Sandbox **Node v22.22.3** (exige 26.7.0) | build inválido aqui |
+| 2 | Sandbox **sem pnpm/mise** | pnpm 11.24.0 indisponível |
+| 3 | Sandbox **~3,8 GB RAM** | monorepo (49 packages) não builda |
+| 4 | Download do Node 26.7.0 de `nodejs.org` **SSL-bloqueado** (curl 35) | não é possível instalar toolchain aqui |
+| 5 | Source ~576 MB / 5.332 arquivos | vendor adiado (persistência/estratégia) |
+| 6 | **Sem GPU/áudio/display** (container headless Linux) | runtime desktop Electron e qualquer teste de hardware (RX 580 etc.) impossíveis aqui |
 
-**Não adaptar para Node 22** apenas para "funcionar" neste sandbox. A toolchain pinada pelo AIRI (Node 26.7.0 + pnpm 11.24.0) é o alvo da máquina real.
-
-Estrutura do monorepo AIRI (confirmada): `packages/**`, `plugins/**`, `integrations/**`, `services/**`, `examples/**`, `docs/**`, `engines/**`, `apps/**`, `server/**` (glob do `pnpm-workspace.yaml`). Orquestrador de tasks: `turbo`. Root package: `@proj-airi/root` v0.12.0-beta.5.
+**Hardware-alvo registrado (ambiente real de dev/teste):** Ryzen 5 5500 · AMD RX 580 8 GB · 16 GB RAM. Nenhum fato de comportamento desse hardware pôde ser observado neste ambiente (headless) → **UNKNOWN** até execução real. **Não** se cria solução específica para RX 580 nesta fase; apenas se registram fatos quando houver.
 
 ---
 
-## 5. Comandos para a máquina de desenvolvimento real
+## 9. Resultados por etapa (resumo VALIDADO / NÃO VALIDADO / UNKNOWN)
 
-> Estes comandos reproduzem o fluxo do M0 na máquina real (16 GB, Ryzen 5 5500). **Não foram executados aqui** por limitação do sandbox (§0). Ajustar conforme o S.O. (Windows/PowerShell vs bash).
+| Item | Status |
+|---|---|
+| AIRI tag `v0.12.0-beta.5` confirmada | VALIDADO |
+| AIRI commit `2c1e223c…` confirmado | VALIDADO |
+| `origin` configurado (Lia) | VALIDADO |
+| `upstream` configurado (moeru-ai/airi) | VALIDADO |
+| Source presente no repositório | NÃO VALIDADO (máquina real) |
+| Toolchain correta (Node 26.7.0 + pnpm 11.24.0) | NÃO VALIDADO (indisponível no sandbox) |
+| Dependencies instaladas | NÃO VALIDADO |
+| typecheck | NÃO VALIDADO |
+| lint | NÃO VALIDADO |
+| build (web/desktop) | NÃO VALIDADO |
+| desktop/runtime (dev:tamagotchi) | NÃO VALIDADO |
+| Documentação atualizada | VALIDADO |
+| Limitações documentadas | VALIDADO |
+| Comportamento em Ryzen 5 5500 / RX 580 / 16 GB | UNKNOWN (sem execução real) |
 
-### 5.1 Pré-requisitos
+---
+
+## 10. Comandos exatos — procedimento executável na máquina real
+
+> Reproduz o M0-A no ambiente de desenvolvimento real (16 GB, Ryzen 5 5500). Rodar **sem** pular a toolchain. Ajustes conforme S.O.
+
+### 10.1 Toolchain
 ```bash
-# git presente; instalar mise (leitor de .tool-versions) OU usar nvm
-# Depois: Node 26.7.0 + corepack/pnpm 11.24.0
-mise install            # lê .tool-versions → instala node 26.7.0
-corepack enable         # ativa pnpm da packageManager
+# Linux/macOS (bash)
+curl -fsSL https://mise.jdx.dev/install.sh | sh   # ou use nvm
+mise install                # lê .tool-versions → instala Node 26.7.0
+mise use node@26.7.0        # garante a versão no PATH
+corepack enable             # ativa pnpm da packageManager
+node -v && pnpm -v          # esperado: v26.7.0 e 11.24.0
+
+# Windows (PowerShell, recomendado via mise/nvm-windows)
+#  winget install Node 26.7.0  ;  corepack enable  ;  corepack pnpm@11.24.0 activate
 ```
 
-### 5.2 Obter o AIRI na versão correta (fork na máquina real)
+### 10.2 Trazer o AIRI (preservando histórico)
 ```bash
-# 1) clonar o repositório da Lia
 git clone https://github.com/BloomRX/Lia-Project.git
 cd Lia-Project
+git remote add origin https://github.com/BloomRX/Lia-Project.git   # se ausente
+git remote add upstream https://github.com/moeru-ai/airi           # se ausente
 
-# 2) (se ainda não existirem) adicionar remotes
-git remote add origin https://github.com/BloomRX/Lia-Project.git
-git remote add upstream https://github.com/moeru-ai/airi
-
-# 3) buscar e criar uma branch/baseline a partir do commit exato do AIRI
 git fetch upstream tag v0.12.0-beta.5
-# → resultado esperado: tag v0.12.0-beta.5 → commit 2c1e223c8dd813d7c74a324d7fd7399fbf47e8bf
-
-# (estratégia de ingresso do source será definida no próximo milestone;
-#  preservar histórico Git do AIRI quando viável, ex.: git merge --allow-unrelated-histories
-#  ou abordagem subtree — decisão a documentar quando executarmos.)
+# confirmar:  tag v0.12.0-beta.5  →  commit 2c1e223c8dd813d7c74a324d7fd7399fbf47e8bf
+git rev-parse v0.12.0-beta.5^{commit}
 ```
+**Estratégia de ingresso do source (preservar histórico):** uma das opções abaixo, a definir no commit de execução e registrada aqui:
+- **merge sem histórico comum** (`git merge --allow-unrelated-histories FETCH_HEAD`) criando uma branch de baseline `airi-baseline-v0.12.0-beta.5`; ou
+- abordagem **subtree** (`git subtree add --squash` não preserva histórico) — **evitar** se a prioridade for histórico; preferir a opção de merge/rebase.
+Documentar a opção escolhida e o diff/marcações quando executar.
 
-### 5.3 Instalar dependências e validar base (na máquina real)
+### 10.3 Instalar dependências e validar
 ```bash
-# na raiz do monorepo AIRI:
-pnpm install                      # postinstall roda simple-git-hooks + build:packages
-pnpm dev                          # stage-web (validação mais leve)
-pnpm dev:tamagotchi               # desktop Electron (validação do app principal)
-# Alternativa de validação só de build de um alvo:
-pnpm build:web                    # build do app web
-# checks
+pnpm install                 # postinstall: simple-git-hooks + build:packages
+pnpm exec install-electron   # necessário p/ Electron ≥42 (se o dev não o fizer)
 pnpm typecheck
 pnpm lint
-pnpm test:run                     # testes (mais pesado)
-# desktop packaging
-pnpm build:tamagotchi             # gera o app Electron do desktop
+pnpm build:web               # validação de build leve (web)
+pnpm dev                     # executa stage-web
+# Desktop/runtime (prova principal):
+pnpm dev:tamagotchi          # desktop Electron (exige display/GPU no host)
+# opcional, mais pesado:
+pnpm test:run
+pnpm build:tamagotchi        # packaging do desktop
 ```
 
-**Nota (Electron ≥42):** alguns comandos de dev do Electron exigem `install-electron` antes (`pnpm exec electron` provê o binário); o script dev costuma tratar isso.
+---
+
+## 11. Próximos passos / handoff
+
+1. **Aguardar execução do usuário** na máquina real seguindo §10.
+2. Quando o usuário retornar **logs/resultados** (ETAPA 11): analisar, identificar falhas, corrigir **somente** problemas necessários e atualizar este documento (installation/typecheck/lint/build/runtime results, warnings, problemas, tempo).
+3. Atualizar STATUS (§0) para **M0-A COMPLETE** somente após validação real com execução.
+4. **Não avançar para M1 (Lia Shell)** até o baseline estar validado.
 
 ---
 
-## 6. Problemas encontrados / limitações do ambiente atual
+## 12. Definition of Done — M0-A
 
-| # | Problema/Limitação | Impacto | Tratamento |
-|---|---|---|---|
-| 1 | Sandbox tem **Node v22.22.3**; AIRI exige **Node 26.7.0** | build/typecheck inválido aqui | Não adaptar; rodar na máquina real (Node 26.7.0) |
-| 2 | Sandbox **sem pnpm/mise** | pnpm 11.24.0 indisponível | Instalar via corepack na máquina real |
-| 3 | Sandbox com **~3,8 GB RAM** | monorepo AIRI (49 packages) não builda | Build na máquina real (16 GB) |
-| 4 | Source AIRI ~**576 MB / 5.332 arquivos**; clone pesado | acima do limite de persistência do sandbox | vendor adiado; obter na máquina real |
-| 5 | Estudo dizia "48 pacotes"; real = **49** em `packages/` | apenas fato descritivo | corrigido aqui |
-| 6 | `AGENTS.md` raiz = **Lia**; AIRI tem o próprio `AGENTS.md` interno | não podem colidir | manter o da Lia na raiz; o do AIRI fica dentro da árvore do fork |
-
----
-
-## 7. O que precisará ser executado na máquina de desenvolvimento real (próximos passos)
-
-1. Instalar Node 26.7.0 + pnpm 11.24.0 (§4).
-2. Trazer o source AIRI na tag/commit confirmado (§5.2), preservando histórico Git do AIRI e mantendo `origin`/`upstream` (§2).
-3. `pnpm install` e validar toolchain.
-4. Executar builds/checks relevantes: `pnpm build:web`, `pnpm dev`, e idealmente `pnpm dev:tamagotchi` (desktop) para provar **"o AIRI original roda dentro do repositório da Lia"**.
-5. Registrar o **resultado real do build** e quaisquer **problemas/alteracões necessárias** neste documento (ou em `AIRI-PATCHES.md`), atualizando o STATUS (§0) quando houver validação real.
-6. Só então começar a colocar a camada **Lia** por cima (próximos milestones).
+| [ ] | Item | Estado atual |
+|---|---|---|
+| [x] | AIRI tag confirmada | VALIDADO |
+| [x] | AIRI commit confirmado | VALIDADO |
+| [x] | origin configurado | VALIDADO |
+| [x] | upstream configurado | VALIDADO |
+| [ ] | source presente no repositório | NÃO VALIDADO |
+| [ ] | toolchain correta | NÃO VALIDADO |
+| [ ] | dependencies instaladas | NÃO VALIDADO |
+| [ ] | typecheck validado | NÃO VALIDADO |
+| [ ] | lint validado | NÃO VALIDADO |
+| [ ] | build validado | NÃO VALIDADO |
+| [ ] | desktop/runtime validado | NÃO VALIDADO |
+| [x] | documentação atualizada | VALIDADO |
+| [x] | limitações documentadas | VALIDADO |
 
 ---
 
-## 8. Critérios de sucesso do M0-A (definição de feito)
+## 13. Histórico de mudanças
 
-O M0-A está **verdadeiramente concluído** quando, **na máquina real**, for possível:
+| Data | Arquivo / item | Mudança |
+|---|---|---|
+| 07/09/2026 | `docs/upstream/AIRI-INTEGRATION.md` | Criado (registro inicial M0-A) e expandido para matriz de resultados/ETAPAS |
+| 07/09/2026 | `git remote` | `upstream` → `https://github.com/moeru-ai/airi` |
+| 07/09/2026 | `AGENTS.md` | §§97 (third-party) e 98 (i18n) adicionadas (execuções anteriores) |
 
-- [ ] Reproduzir o AIRI `v0.12.0-beta.5` (commit `2c1e223c…`) dentro do repositório da Lia;
-- [ ] Rodar `pnpm install` sem erros na toolchain pinada;
-- [ ] `pnpm typecheck` e `pnpm lint` verdes (ou com divergências documentadas);
-- [ ] `pnpm build:web` (e idealmente `pnpm dev:tamagotchi`) concluídos;
-- [ ] Resultado/limitações registrados neste documento; STATUS atualizado para validado.
-
-> **Enquanto isso não ocorrer, o STATUS permanece:**
-> **BOOTSTRAP DOCUMENTED — BUILD NOT VALIDATED IN SANDBOX**
-
----
-
-## 9. Histórico de mudanças desta etapa
-
-| Arquivo | Alteração |
-|---|---|
-| `AGENTS.md` | Adicionada a regra **§97 THIRD-PARTY ATTRIBUTION** (conforme ajuste de regras do usuário) |
-| `docs/upstream/AIRI-INTEGRATION.md` | Criado (este documento) — registro do M0-A |
-| Remotes (`git remote`) | Adicionado `upstream` → `moeru-ai/airi` |
-
-Nenhum código do AIRI foi modificado, nenhuma UI da Lia criada, nenhum provider/Orchestrator/Voice Studio/installer implementado, e nenhuma dependência instalada nesta etapa.
+Nenhum código do AIRI foi modificado; nenhuma UI/providers/orchestrator/Voice Studio/installer/i18n da Lia foi iniciado; nenhuma dependência instalada nesta etapa.
