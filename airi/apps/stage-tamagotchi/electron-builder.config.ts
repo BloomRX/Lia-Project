@@ -41,8 +41,11 @@ else {
 }
 
 export default {
-  appId: 'ai.moeru.airi',
-  productName: 'AIRI',
+  // Lia identity patch (M1 Phase 1): product identity only.
+  // Deferred: executableName stays 'airi'; mac/win/linux publish feed + extraMetadata.name
+  // stay as upstream AIRI until the Lia distribution identity phase. See docs/upstream/LIA-IDENTITY-PATCH.md.
+  appId: 'ai.lia.app',
+  productName: 'Lia',
   directories: {
     output: 'dist',
     buildResources: 'build',

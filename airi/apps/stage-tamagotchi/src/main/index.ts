@@ -130,7 +130,9 @@ if (isLinux) {
 }
 
 app.dock?.setIcon(icon)
-electronApp.setAppUserModelId('ai.moeru.airi')
+// Lia identity patch (M1 Phase 1): align Windows AppUserModelID with the Lia appId.
+// Updater cache path / single-instance guard are intentionally left as upstream AIRI.
+electronApp.setAppUserModelId('ai.lia.app')
 
 // Track the real user-facing AIRI window because the process also owns hidden utility windows.
 // The second-instance handler should restore the main UI instead of accidentally surfacing internals.
