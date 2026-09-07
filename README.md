@@ -17,6 +17,9 @@
 | [`docs/estudo-airi.md`](docs/estudo-airi.md) | Estudo completo do Project AIRI: arquitetura, monorepo, stack, versões, providers, riscos e estratégia |
 | [`docs/architecture/AIRI-ANALYSIS.md`](docs/architecture/AIRI-ANALYSIS.md) | Análise da base atual + arquitetura do AIRI (Fase 0) |
 | [`docs/architecture/LIA-ARCHITECTURE.md`](docs/architecture/LIA-ARCHITECTURE.md) | Proposta de arquitetura futura da Lia (Fase 0) |
+| [`docs/product/UX.md`](docs/product/UX.md) | Especificação de experiência do produto Lia (M1) |
+| [`docs/product/M1-SCOPE.md`](docs/product/M1-SCOPE.md) | Recorte e escopo da M1 — Lia Shell / Product Foundation |
+| [`docs/architecture/LIA-INTEGRATION-PLAN.md`](docs/architecture/LIA-INTEGRATION-PLAN.md) | Análise real do AIRI em `airi/` + plano de integração da camada Lia |
 | [`docs/upstream/AIRI-INTEGRATION.md`](docs/upstream/AIRI-INTEGRATION.md) | Registro do M0-A: tag/commit do AIRI, remotes, toolchain, comandos de bootstrap e limitações |
 | [`tools/README.md`](tools/README.md) | DevKit universal: uso, comandos, segurança e configuração por projeto |
 
