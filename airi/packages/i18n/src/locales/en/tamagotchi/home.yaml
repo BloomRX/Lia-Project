@@ -1,0 +1,34 @@
+# Lia launcher Home (M1 Phase 2, product layer)
+greeting: "Finally you're here..."
+status:
+  ready: "All ready"
+  preparing: "Preparing..."
+  detail: "AI, voice and memory are ready. Discord is off."
+  ai: "AI ready"
+  voice: "Voice ready"
+  memory: "Memory ready"
+  discord: "Discord off"
+actions:
+  converse: "Talk with Lia"
+  character: "Character"
+  voice: "Voice"
+  activities: "Activities"
+  settings: "Settings"
+  diagnostics: "Diagnostics"
+logs:
+  label: "Show logs"
+  title: "Logs"
+  close: "Hide logs"
+  empty: "Nothing to report right now."
+  technicalNote: "Detailed technical logs are available in Advanced."
+  viewAdvanced: "Open in Advanced"
+states:
+  loading: "Preparing your companion..."
+  unavailable: "Unavailable right now."
+  comingSoon: "Coming soon"
+  retry: "Try again"
+navigation:
+  home: "Home"
+presence:
+  name: "Lia"
+  role: "Your AI companion"

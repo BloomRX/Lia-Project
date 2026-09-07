@@ -186,7 +186,9 @@ export async function setupMainWindow(params: {
     onboardingWindowManager: params.onboardingWindowManager,
   })
 
-  await load(window, withHashRoute(baseUrl(resolve(getElectronMainDirname(), '..', 'renderer')), '/', {
+  // M1 Phase 2 (Lia): launcher-first. The main window lands on the Lia Home;
+  // "Talk" navigates to the existing Stage at '/' (index.vue).
+  await load(window, withHashRoute(baseUrl(resolve(getElectronMainDirname(), '..', 'renderer')), '/home', {
     query: { 'synced-leader': 'true' },
   }))
 

@@ -1,0 +1,34 @@
+# Lia launcher Home — pt-BR (M1 Phase 2, subconjunto mínimo)
+greeting: "Finalmente você chegou..."
+status:
+  ready: "Tudo pronto"
+  preparing: "Preparando..."
+  detail: "IA, voz e memória prontas. Discord desligado."
+  ai: "IA pronta"
+  voice: "Voz pronta"
+  memory: "Memória pronta"
+  discord: "Discord desligado"
+actions:
+  converse: "Conversar"
+  character: "Personagem"
+  voice: "Voz"
+  activities: "Atividades"
+  settings: "Configurações"
+  diagnostics: "Diagnósticos"
+logs:
+  label: "Mostrar logs"
+  title: "Logs"
+  close: "Ocultar logs"
+  empty: "Nada a reportar no momento."
+  technicalNote: "Logs técnicos detalhados ficam em Avançado."
+  viewAdvanced: "Abrir em Avançado"
+states:
+  loading: "Preparando sua companheira..."
+  unavailable: "Indisponível no momento."
+  comingSoon: "Em breve"
+  retry: "Tentar novamente"
+navigation:
+  home: "Início"
+presence:
+  name: "Lia"
+  role: "Sua companheira virtual"
