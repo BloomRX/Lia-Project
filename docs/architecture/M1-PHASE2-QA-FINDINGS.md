@@ -15,7 +15,15 @@ Aprovação QA recebida — decisões e resultado da aplicação:
 |---|----------|---------|--------|
 | 1 | Dragging | **Opção A** — reutilizar `Window/TitleBar.vue` na Home | ✅ **Implementado** (`03f81a5`) |
 | 2 | Log panel / layout | Corrigir layout só da Home | ✅ **Implementado** (`03f81a5`) |
-| 3 | Initial language | **Não alterar ainda** — aguardar dados da máquina real | ⏸ Pendente (sem código) |
+| 3 | Initial language | **Não alterar** — locale real não confirma problema | ⏸ **Fechado como investigação** (valores registrados abaixo) |
+| 4 | Tamanho da janela Home ↔ Stage | **Novo BLOCKER** — investigação concluída, sem código | 📋 ver `M1-PHASE2-QA-WINDOW-SIZING.md` |
+
+> **Nova rodada QA (máquina real):** além da #3 confirmada, surgiu o blocker #4 (janela única
+> compartilhada entre Home-launcher e Stage, com necessidades de composição diferentes). Ver
+> `docs/architecture/M1-PHASE2-QA-WINDOW-SIZING.md` para a investigação completa (onde o tamanho é
+> definido, mecanismos de resize existentes, rota /home ↔ /, viabilidade de resize contextual,
+> solução de menor risco e arquivos afetados). **Nenhuma solução implementada** — PARE após
+> investigação.
 
 **O que foi implementado em `home.vue` (commit `03f81a5`):**
 - **#1 Dragging:** a Home agora renderiza o `Window/TitleBar.vue` existente no topo (fonte única de
@@ -113,11 +121,18 @@ acessível. Validar resoluções na máquina real (§7).
 
 ---
 
-## 3. INITIAL LANGUAGE (primeira execução em inglês) — ⏸ pendente (não alterar ainda)
+## 3. INITIAL LANGUAGE (primeira execução em inglês) — ⏸ encerrado (sem alteração)
 
-> **Aprovado: NÃO aplicar mudança agora.** Manter a investigação registrada. Decidir somente quando o
-> usuário fornecer (máquina real): idioma de exibição do Windows, `navigator.language` e
-> `navigator.languages`. Nenhum código foi alterado para #3.
+> **Decisão: NÃO alterar o i18n agora.** Os valores da máquina real foram fornecidos e **não**
+> confirmam problema de locale:
+>
+> - idioma de exibição do Windows: *(pendente do usuário confirmar explicitamente; `navigator` indica pt-BR)*
+> - `navigator.language` = **`pt-BR`**
+> - `navigator.languages` = **`['pt-BR']`**
+>
+> Portanto **não há evidência de problema no navegador/renderer locale.** A "primeira abertura em
+> inglês" fica como **investigação**, se ainda for reproduzível, mas **não é o blocker atual**.
+> Nenhum código foi alterado para #3.
 
 ### Fluxo atual (verificado)
 - `renderer/modules/i18n.ts`: locale inicial = `resolveSupportedLocale(localStorage 'settings/language'`
@@ -130,24 +145,26 @@ acessível. Validar resoluções na máquina real (§7).
   escolha persistida.
 - `packages/i18n` agora inclui `pt-BR` registrado e `localeRemap` para `pt`/`pt-BR`/`pt-PT` (Fase 2).
 
-### Causa provável do inglês na 1ª execução
-- Na primeira execução, sem idioma persistido, o idioma efetivo depende **exclusivamente de
-  `navigator.language` do Chromium/Electron** no momento do boot do renderer. Se esse valor não for
-  `pt*` (ex.: reportou `en-US`/`en`, ou o Windows está em inglês com só a **região** em pt-BR), o
-  resultado é `en` — **correto pela regra** ("se SO estiver em inglês → en").
-- **Não é uma regressão do i18n da Home** (as chaves pt-BR/en funcionam; pt-BR↔en foi validado). É um
-  problema de **detecção do idioma do SO no 1º uso**. Precisamos confirmar na máquina real qual valor o
-  `navigator.language` reporta e qual é o idioma de exibição do Windows.
+### Análise com os dados da máquina real
+- Como `navigator.language = 'pt-BR'` e `navigator.languages = ['pt-BR']`, **a hipótese anterior
+  (navegador reportando `en-US`/`en`) NÃO se confirma**: o renderer deveria resolver para `pt-BR` já
+  na 1ª execução (regra `localStorage` → `navigator.language` → `en`).
+- Logo, um "primeiro uso em inglês", se ainda reproduzível, não viria de `navigator.language`.
+  Causas possíveis a manter em investigação: o boot do renderer resolvendo o idioma **antes** de o
+  main restaurar a configuração (`useLanguage.restore()` só roda em `onMounted`), ou o `watch(language)`
+  / `setLocale` persistindo um valor indevido no main (padrão Issue #1658 já comentado no fluxo).
+  Nada disso é **blocker** e nada será alterado agora.
+- **Não é uma regressão do i18n da Home** (as chaves pt-BR/en funcionam; pt-BR↔en foi validado).
 
-### Correção mínima proposta (só se o OS for realmente pt-BR)
-- Tornar a detecção de 1ª execução robusta derivando do **locale do Electron main process**
-  (`app.getLocale()` / `app.getPreferredSystemLanguages()`), que reflete o idioma do SO de forma mais
-  confiável que `navigator.language` do renderer.
+### Correção (apenas se o problema for reproduzido de novo)
+- Ajustar a detecção de 1ª execução para derivar do **locale do Electron main process**
+  (`app.getLocale()` / `app.getPreferredSystemLanguages()`), refletindo o SO de forma mais confiável
+  que `navigator.language` do renderer.
 - Cadeia de prioridade a preservar: **escolha persistida (localStorage/config) > locale do SO (via
   main) > `navigator.language` > `en`**. Não alterar/sobrescrever o que o usuário já escolheu.
-- Antes de implementar: **confirmar na máquina real** (a) idioma de exibição do Windows, (b) o que
-  `navigator.language` retorna, (c) se `pt-BR` está presente nas mensagens em execução (dev usa o src
-  via alias, então sim).
+- **Decisão: NÃO implementar.** Reabrir a investigação somente se o "primeiro uso em inglês" for
+  reproduzível na máquina real, quando então coletaremos: idioma de exibição do Windows + valor
+  persistido de `language` no `config`/localStorage + `navigator.language(s)` no boot.
 
 ---
 
