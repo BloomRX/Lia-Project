@@ -15,7 +15,7 @@ import { defineInvokeHandler } from '@moeru/eventa'
 import { createContext } from '@moeru/eventa/adapters/electron/main'
 import { ipcMain } from 'electron'
 
-import { electronCenterMainWindow, electronOpenChat, electronOpenEditor, electronOpenMainDevtools, electronOpenSettings, noticeWindowEventa } from '../../../../shared/eventa'
+import { electronCenterMainWindow, electronOpenChat, electronOpenEditor, electronOpenMainDevtools, electronOpenSettings, electronSetMainWindowContext, noticeWindowEventa } from '../../../../shared/eventa'
 import { createAuthService } from '../../../services/airi/auth'
 import { createGodotStageService } from '../../../services/airi/godot-stage'
 import { createMcpServersService } from '../../../services/airi/mcp-servers'
@@ -39,6 +39,7 @@ export async function setupMainWindowElectronInvokes(params: {
   mcpStdioManager: McpStdioManager
   i18n: I18n
   onboardingWindowManager: OnboardingWindowManager
+  setMainWindowContext: (mode: 'home' | 'stage') => void
 }) {
   // TODO: once we refactored eventa to support window-namespaced contexts,
   // we can remove the setMaxListeners call below since eventa will be able to dispatch and
@@ -56,6 +57,10 @@ export async function setupMainWindowElectronInvokes(params: {
   createAuthService({ context, window: params.window })
 
   defineInvokeHandler(context, electronCenterMainWindow, () => centerWindowOnDisplay(params.window))
+  defineInvokeHandler(context, electronSetMainWindowContext, payload => {
+    if (payload?.mode)
+      params.setMainWindowContext(payload.mode)
+  })
   defineInvokeHandler(context, electronOpenMainDevtools, () => params.window.webContents.openDevTools({ mode: 'detach' }))
   defineInvokeHandler(context, electronOpenEditor, () => params.editorWindow.openWindow())
   defineInvokeHandler(context, electronOpenSettings, payload => params.settingsWindow.openWindow(payload?.route))

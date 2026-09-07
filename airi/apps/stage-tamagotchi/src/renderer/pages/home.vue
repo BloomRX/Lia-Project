@@ -7,7 +7,7 @@ import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 
-import { electronOpenSettings } from '../../shared/eventa'
+import { electronOpenSettings, electronSetMainWindowContext } from '../../shared/eventa'
 
 import WindowTitleBar from '../components/Window/TitleBar.vue'
 import liaFallbackAsset from '../assets/lia/lia-home.png'
@@ -20,6 +20,7 @@ const router = useRouter()
 const { stageModelSelectedDisplayModel } = storeToRefs(useSettingsStageModel())
 
 const openSettings = useElectronEventaInvoke(electronOpenSettings)
+const setMainWindowContext = useElectronEventaInvoke(electronSetMainWindowContext)
 
 const previewError = ref(false)
 const logsOpen = ref(false)
@@ -46,6 +47,9 @@ const presenceSrc = computed<string>(() => {
 async function goConversar() {
   // Primary destination: the existing Stage (character experience) at '/'.
   // NOT the textual chat window (electronOpenChat stays a secondary AIRI capability).
+  // Resize the window to the Stage preset BEFORE navigating so the Stage mounts
+  // at its intended size (contextual window sizing, M1 Phase 2).
+  await setMainWindowContext({ mode: 'stage' })
   await router.push('/')
 }
 

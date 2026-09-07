@@ -1,8 +1,8 @@
 # M1 Phase 2 — Investigação QA: Tamanho da janela / Home ↔ Stage
 
-> **M1 Phase 2 · Novo achado QA → investigação (sem alteração de código)**
+> **M1 Phase 2 · Novo achado QA → investigação**
 > Data: 07/09/2026 · Branch: `arena/01a07b6d-lia-project` · Commit validado: `ec0caee`
-> **Status:** investigação concluída. **NÃO implementar.** Aguardar aprovação da solução proposta.
+> **Status:** ✅ **Aprovada e implementada** (resize contextual por rota). Ver §7 Implementação.
 
 ---
 
@@ -148,7 +148,7 @@ o renderer navega entre os dois "modos" de janela. **Sem** tocar no renderer do 
 **Por que menor risco:** reusa IPC/helpers existentes, só adiciona um mapeamento de rota no main
 window e presets; confinado a `main/windows/main` + um ponto no renderer; não mexe na cena/avatar.
 
-## 6. Arquivos que seriam alterados (proposta — NÃO implementado)
+## 6. Arquivos alterados (proposta aprovada → implementada)
 
 - `src/shared/eventa/index.ts` — novo eventa/invoke p/ o modo de janela (ex. `electronSetMainWindowContext`).
 - `src/main/windows/main/index.ts` — presets por modo + handler de resize/centralização; **opcional**
@@ -173,8 +173,61 @@ window e presets; confinado a `main/windows/main` + um ponto no renderer; não m
 
 - **Não** criar segunda janela para o Stage.
 - **Não** alterar Stage renderer/câmera/VRM/Live2D/avatar para resolver isto.
-- **Não** escalar a personagem antes do entendimento da janela (agora concluído).
+- **Não** escalar a personagem antes do entendimento da janela (concluído).
 - **Não** desfazer o ajuste do log panel (#2 aprovado).
-- **NÃO implementar** resize contextual ainda. PARE e aguardar aprovação desta proposta.
+- Aprovado: **resize contextual por rota**, reutilizando `electron.window.setBounds`, helpers de
+  work area/`screen` e a infra de persistência (`createConfig`). Sem novo sistema de window management.
 
-*Fim da investigação — proposta pronta para revisão/aprovação.*
+---
+
+## 7. Implementação (aprovada e aplicada)
+
+Commit: `fix(lia): add contextual window sizing` (branch `arena/01a07b6d-lia-project`).
+
+### Presets centralizados (`src/main/windows/main/window-sizing.ts`)
+```ts
+export const HOME_WINDOW_PRESET   = { width: 460, height: 640 }   // launcher compacto
+export const STAGE_WINDOW_PRESET  = { width: 800, height: 1000 }  // cena da personagem (portrait)
+export const MAIN_WINDOW_MIN_SIZE = { width: 360, height: 480 }   // piso p/ resize manual (native min)
+```
+Valores em **coordenadas lógicas (DIP)**, **conservadores** e **não assumem um monitor único**: no
+apply o tamanho é sempre clampado à `workArea` do display ativo e centralizado, então um preset único
+é seguro em 1280×720/1366×768/1920×1080 e DPI/scaling (números finais a confirmar por screenshot).
+
+### Mecanismo
+- `window-sizing.ts`: tipo `MainWindowContext = 'home' | 'stage'`; `resolveContextBounds(...)` (puro,
+  testável) escolhe o tamanho = **override persistido por modo** quando existe, senão **preset**;
+  faz clamp a `[MIN, workArea]`; `recenter` centraliza, senão mantém o topo-esquerdo e só nudge p/ caber.
+  `createMainWindowContextSizing` é o controller do live window (guarda o modo ativo, `setContext`,
+  `captureUserBounds`).
+- `src/main/windows/main/index.ts`: cria config **`lia`/`main-window.json`** (não lê mais o bounds
+  histórico do AIRI em `app`/`config.json`); aplica **Home no arranque** (`setContext('home',{recenter:true})`)
+  — primeira abertura usa o **preset Home**, sem herdar janela antiga; define **`minWidth/minHeight`**
+  no `BrowserWindow`; em `resize` grava o tamanho do **modo ativo** (`captureUserBounds`).
+- `src/shared/eventa/index.ts`: novo invoke `electronSetMainWindowContext` (payload `{mode}`).
+- `src/main/windows/main/rpc/index.electron.ts`: registra o handler → `setMainWindowContext(mode)`.
+- `src/renderer/pages/home.vue`: `goConversar()` chama `setMainWindowContext({mode:'stage'})` **antes**
+  do `router.push('/')` → aplica Stage bounds e depois navega (sem o Stage montar em tamanho errado).
+- Teste unitário: `window-sizing.test.ts` (resolver puro: preset/override/clamp/min/posição).
+
+### Persistência (modo + bounds separados)
+- Guarda **só o tamanho por modo** (`{ home?: {width,height}, stage?: {width,height} }`) em
+  `lia`/`main-window.json`. `resize` no modo Home grava `home`; no Stage grava `stage` → **nenhum modo
+  sobrescreve o outro**.
+- Modo sem override → usa o preset. Primeira execução → preset Home (bounds do AIRI antigo ignorados).
+  A escolha do usuário passa a ser persistida a partir daí.
+- Reabrir/relançar em `/home` → aplica override Home (ou preset) e recentraliza.
+
+### DPI / work area / posição
+- Antes de `setBounds`: `screen.getDisplayMatching(currentBounds).workArea`; tamanho clampado a
+  `[MIN, workArea]`; nunca x/y negativos além da área nem janela maior que a work area nem fora da tela.
+- Troca de modo (Home→Stage) **não** move para outro monitor: usa o display onde a janela está
+  (`getDisplayMatching`), mantém posição e só ajusta p/ caber; arranque recentraliza.
+
+### Validação pendente (máquina real — ver `M1-PHASE2-VALIDATION.md` §Window)
+- Resoluções 1280×720 / 1366×768 / 1920×1080 + DPI + janela pequena.
+- Home→redimensionar→CONVERSAR→Stage e Home→padrão→CONVERSAR→Stage.
+- Verificar: sem espaço absurdo; sem conteúdo cortado; Stage aproveita melhor a janela; personagem
+  visível; janela dentro da tela. **Screenshots** a anexar. Ajustar presets se necessário.
+- **Phase 3:** a restauração do tamanho ao voltar **Stage→Home** será conectada quando a Fase 3
+  implementar a navegação de retorno (o `setContext('home')` já está pronto; não conectado agora).

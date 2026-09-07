@@ -1,6 +1,3 @@
-import type { Rectangle } from 'electron'
-import type { InferOutput } from 'valibot'
-
 import type { I18n } from '../../libs/i18n'
 import type { ServerChannel } from '../../services/airi/channel-server'
 import type { GodotStageManager } from '../../services/airi/godot-stage'
@@ -11,6 +8,7 @@ import type { NoticeWindowManager } from '../notice'
 import type { OnboardingWindowManager } from '../onboarding'
 import type { SettingsWindowManager } from '../settings'
 import type { WidgetsWindowManager } from '../widgets'
+import type { MainWindowContext } from './window-sizing'
 
 import { dirname, join, resolve } from 'node:path'
 import { env } from 'node:process'
@@ -20,10 +18,8 @@ import { is } from '@electron-toolkit/utils'
 import { defineInvokeHandler } from '@moeru/eventa'
 import { createContext } from '@moeru/eventa/adapters/electron/main'
 import { initScreenCaptureForWindow } from '@proj-airi/electron-screen-capture/main'
-import { defu } from 'defu'
 import { BrowserWindow, ipcMain } from 'electron'
 import { isLinux, isMacOS } from 'std-env'
-import { array, number, object, optional, string } from 'valibot'
 
 import icon from '../../../../resources/icon.png?asset'
 
@@ -33,19 +29,12 @@ import { baseUrl, getElectronMainDirname, load, withHashRoute } from '../../libs
 import { createConfig } from '../../libs/electron/persistence'
 import { protectPrivilegedWindowNavigation, setWindowAlwaysOnTop, transparentWindowConfig } from '../shared'
 import { setupMainWindowElectronInvokes } from './rpc/index.electron'
-
-const appConfigSchema = object({
-  windows: optional(array(object({
-    title: optional(string()),
-    tag: string(),
-    x: optional(number()),
-    y: optional(number()),
-    width: optional(number()),
-    height: optional(number()),
-  }))),
-})
-
-type AppConfig = InferOutput<typeof appConfigSchema>
+import {
+  createMainWindowContextSizing,
+  HOME_WINDOW_PRESET,
+  liaMainWindowStateSchema,
+  MAIN_WINDOW_MIN_SIZE,
+} from './window-sizing'
 
 export async function setupMainWindow(params: {
   editorWindow: EditorWindowManager
@@ -61,26 +50,24 @@ export async function setupMainWindow(params: {
   i18n: I18n
   onboardingWindowManager: OnboardingWindowManager
 }) {
-  const {
-    setup: setupConfig,
-    get: getConfigRaw,
-    update: updateConfig,
-  } = createConfig('app', 'config.json', appConfigSchema, {
-    default: { windows: [] },
+  const windowStateConfig = createConfig('lia', 'main-window.json', liaMainWindowStateSchema, {
+    default: {},
     autoHeal: true,
   })
-  const getConfig = (): AppConfig => getConfigRaw() ?? { windows: [] }
 
-  setupConfig()
+  windowStateConfig.setup()
 
-  const mainWindowConfig = getConfig().windows?.find(w => w.title === 'AIRI' && w.tag === 'main')
+  // NOTE (M1 Phase 2 / Lia): contextual window sizing lives here, separated per
+  // mode (home vs stage). We intentionally do NOT read the historical AIRI
+  // single-bounds config ('app'/'config.json' windows[] main entry) so a legacy
+  // oversized window never leaks into the new Lia launcher-first experience.
 
   const window = new BrowserWindow({
     title: 'AIRI',
-    width: mainWindowConfig?.width ?? 450.0,
-    height: mainWindowConfig?.height ?? 600.0,
-    x: mainWindowConfig?.x,
-    y: mainWindowConfig?.y,
+    width: HOME_WINDOW_PRESET.width,
+    height: HOME_WINDOW_PRESET.height,
+    minWidth: MAIN_WINDOW_MIN_SIZE.width,
+    minHeight: MAIN_WINDOW_MIN_SIZE.height,
     show: false,
     icon,
     webPreferences: {
@@ -99,6 +86,23 @@ export async function setupMainWindow(params: {
     params.onWindowCreated(window)
   }
 
+  const sizing = createMainWindowContextSizing({
+    window,
+    config: windowStateConfig,
+  })
+
+  // First open / relaunch always lands on the launcher: apply the Home mode
+  // (persisted Home size or the Home preset) and center it on its display.
+  sizing.setContext('home', { recenter: true })
+
+  // Persist the *active* mode's size on user resize (not the legacy global
+  // bounds), so Home and Stage never overwrite each other silently.
+  window.on('resize', () => sizing.captureUserBounds())
+
+  function setMainWindowContext(mode: MainWindowContext): void {
+    sizing.setContext(mode)
+  }
+
   let allowClose = false
   onAppBeforeQuit(() => {
     allowClose = true
@@ -114,40 +118,6 @@ export async function setupMainWindow(params: {
     }
   }
 
-  function handleNewBounds(newBounds: Rectangle) {
-    const config = getConfig()
-    if (!config.windows || !Array.isArray(config.windows)) {
-      config.windows = []
-    }
-
-    const existingConfigIndex = config.windows.findIndex(w => w.title === 'AIRI' && w.tag === 'main')
-
-    if (existingConfigIndex === -1) {
-      config.windows.push({
-        title: 'AIRI',
-        tag: 'main',
-        x: newBounds.x,
-        y: newBounds.y,
-        width: newBounds.width,
-        height: newBounds.height,
-      })
-    }
-    else {
-      const mainWindowConfig = defu(config.windows[existingConfigIndex], { title: 'AIRI', tag: 'main' })
-
-      mainWindowConfig.x = newBounds.x
-      mainWindowConfig.y = newBounds.y
-      mainWindowConfig.width = newBounds.width
-      mainWindowConfig.height = newBounds.height
-
-      config.windows[existingConfigIndex] = mainWindowConfig
-    }
-
-    updateConfig(config)
-  }
-
-  window.on('resize', () => handleNewBounds(window.getBounds()))
-  window.on('move', () => handleNewBounds(window.getBounds()))
   window.on('close', (event) => {
     if (allowClose) {
       return
@@ -184,6 +154,7 @@ export async function setupMainWindow(params: {
     mcpStdioManager: params.mcpStdioManager,
     i18n: params.i18n,
     onboardingWindowManager: params.onboardingWindowManager,
+    setMainWindowContext,
   })
 
   // M1 Phase 2 (Lia): launcher-first. The main window lands on the Lia Home;

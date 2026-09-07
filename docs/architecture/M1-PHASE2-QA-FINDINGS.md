@@ -16,14 +16,13 @@ Aprovação QA recebida — decisões e resultado da aplicação:
 | 1 | Dragging | **Opção A** — reutilizar `Window/TitleBar.vue` na Home | ✅ **Implementado** (`03f81a5`) |
 | 2 | Log panel / layout | Corrigir layout só da Home | ✅ **Implementado** (`03f81a5`) |
 | 3 | Initial language | **Não alterar** — locale real não confirma problema | ⏸ **Fechado como investigação** (valores registrados abaixo) |
-| 4 | Tamanho da janela Home ↔ Stage | **Novo BLOCKER** — investigação concluída, sem código | 📋 ver `M1-PHASE2-QA-WINDOW-SIZING.md` |
+| 4 | Tamanho da janela Home ↔ Stage | **Novo BLOCKER** — investigação concluída | ✅ **Implementado** (`fix(lia): add contextual window sizing`) |
 
 > **Nova rodada QA (máquina real):** além da #3 confirmada, surgiu o blocker #4 (janela única
-> compartilhada entre Home-launcher e Stage, com necessidades de composição diferentes). Ver
-> `docs/architecture/M1-PHASE2-QA-WINDOW-SIZING.md` para a investigação completa (onde o tamanho é
-> definido, mecanismos de resize existentes, rota /home ↔ /, viabilidade de resize contextual,
-> solução de menor risco e arquivos afetados). **Nenhuma solução implementada** — PARE após
-> investigação.
+> compartilhada entre Home-launcher e Stage, com necessidades de composição diferentes).
+> **Implementado** resize contextual por rota — ver `docs/architecture/M1-PHASE2-QA-WINDOW-SIZING.md`
+> (§7 Implementação: presets Home/Stage, persistência por modo, DPI/work area, arquivos). Validação
+> visual pendente na máquina real.
 
 **O que foi implementado em `home.vue` (commit `03f81a5`):**
 - **#1 Dragging:** a Home agora renderiza o `Window/TitleBar.vue` existente no topo (fonte única de

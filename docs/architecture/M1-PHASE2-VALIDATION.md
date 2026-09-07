@@ -10,9 +10,12 @@
 
 ## 0. Estado do código a validar
 
-- Branch `arena/01a07b6d-lia-project`, commit `af36680` (`feat(lia): add launcher home`).
+- Branch `arena/01a07b6d-lia-project` (série de commits da Fase 2: `feat(lia): add launcher home`,
+  `fix(M1-phase2): add draggable TitleBar + scrollable/theme-safe Home layout`,
+  `fix(lia): add contextual window sizing`).
 - Mudanças da Fase 2 resumidas nos docs/commits (rota `/home` landing; CONVERSAR→Stage `/`;
-  preview do modelo ativo + fallback Lia; status de apresentação; i18n pt-BR/en-US mínimo).
+  preview do modelo ativo + fallback Lia; status de apresentação; i18n pt-BR/en-US mínimo;
+  TitleBar arrastável na Home; layout de logs rolável; **resize contextual Home↔Stage por rota**).
 - **Baseline conhecido:** `pnpm typecheck` = 56/57 (1 falha isolada em
   `stage-ui-live2d .../live2d-zip-loader.test.ts`, já corrigida upstream `d8e62f12` — **não portar,
   não corrigir**).
@@ -121,5 +124,40 @@ corrigir automaticamente** — registrar o problema e informar antes de mexer.
 **Classificação final:** PHASE 2 PASS / PHASE 2 BLOCKED
 (decidir por funcionamento + navegação + visual + i18n + Stage + ausência de regressão crítica —
 não apenas por "compilou").
+
+---
+
+## 9. Contextual window sizing (QA blocker #4 — validação)
+
+Mecânica implementada em `fix(lia): add contextual window sizing` (detalhes em
+`M1-PHASE2-QA-WINDOW-SIZING.md` §7). Presets iniciais: Home `460×640`, Stage `800×1000`, min `360×480`
+(DIP), clampados à work area do display ativo + centralização.
+
+> Rodar em `J:\Lia-Project` com `pnpm dev:tamagotchi`.
+
+**Casos a validar (screenshot de cada):**
+- [ ] Home abre no tamanho launcher (460×640 ou override persistido), centralizado.
+- [ ] Home→redimensionar→CONVERSAR→Stage aplica Stage bounds (sem espaço absurdo, personagem visível).
+- [ ] Home→tamanho padrão→CONVERSAR→Stage aplica Stage bounds.
+- [ ] Stage aproveita melhor a janela; nada cortado.
+- [ ] Janela permanece dentro da tela (sem sair/negativos) ao trocar modo.
+- [ ] **Persistência por modo:** redimensionar a Home (Home fica maior), ir p/ Stage (não herda o
+      tamanho da Home); voltar p/ Home quando a Fase 3 conectar o retorno deve restaurar o tamanho da Home.
+- [ ] Não há regressão: Home e Stage continuam arrastáveis/redimensionáveis; nada quebrado.
+
+**Resoluções/DPI:** 1280×720 · 1366×768 · 1920×1080 · janela pequena · DPI/scaling.
+
+| Item (window) | Resultado | Obs. |
+|---|---|---|
+| Preset Home na abertura | | |
+| Home→Stage aplica Stage preset | | |
+| Sem espaço absurdo no Stage | | |
+| Personagem visível / nada cortado | | |
+| Janela dentro da tela | | |
+| Persistência por modo (sem contaminação) | | |
+| Regressão (arraste/resize) | | |
+
+> Ajustar presets se as screenshots mostrarem tamanho inadequado; **não** alterar Stage renderer/
+> câmera/avatar para resolver. Retorno **Stage→Home** (restauração) será conectado na **Fase 3**.
 
 *Fim do runbook.*
