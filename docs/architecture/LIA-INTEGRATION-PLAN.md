@@ -245,27 +245,31 @@ Leitura concreta e sequenciada (detalhe em `M1-SCOPE.md §4`):
 
 ---
 
-## 6. Onde vive o código Lia (proposta de layout) `[P]`
+## 6. Onde vive o código Lia (DECISÃO aprovada) `[V→P, decidido]`
 
-Recomendação a revisar/decidir (aberta — ver §9): adicionar os novos artefatos Lia **no mesmo
-monorepo**, agrupados e fora do núcleo AIRI, seguindo o padrão de workspaces já existente, ex.:
+**Decisão (aprovada):** a Lia vive **dentro** do monorepo AIRI incorporado em `airi/`, usando os
+**workspaces existentes** do AIRI. **Não** se cria camada externa ao redor de `airi/`, **não** se
+cria `apps/lia-shell`, e **não** se criam dezenas de `packages/lia-*`.
 
+Regra de criação de pacote (aprovada):
 ```
-airi/
-├── apps/lia-shell                      # (ou reuso do fork stage-tamagotchi re-identificado)
-├── packages/lia-config                 # schema versionado + migrações (namespace 'lia')
-├── packages/lia-log                    # log amigável/colapsável
-├── packages/lia-status                 # estado real dos órgãos → status amigável
-├── packages/lia-ui                     # kit Lia sobre stage-ui (design system/Home)
-├── packages/lia-i18n-pt                # locale pt-BR (ou dentro de @proj-airi/i18n via estender)
-├── docs/product · docs/architecture · docs/upstream/PATCHES
-└── tools/ (DevKit)
+reusar package AIRI  >  estender package AIRI  >  criar package Lia SÓ quando justificado
 ```
+Antes de criar `packages/lia-*`, responder: (1) a responsabilidade já existe no AIRI? (2) pode ser
+reutilizada? (3) pode ser estendida? (4) precisa mesmo ser package separado? (5) há dependentes que
+justificam a separação? (6) risco de abstração duplicada?
 
-> Alternativa a decidir: colocar o código Lia numa **camada acima do vendored `airi/`** (não
-> dentro dele) caso se prefira não misturar com o monorepo AIRI. Isso afeta a decisão de repo e
-> precisa de definição **antes de codar** (item 1 de `M1-SCOPE.md §6`). O que **não** muda é a
-> separação lógica de limites (§4).
+**Implicação prática:** a camada Lia em M1 concentra-se majoritariamente **dentro de
+`apps/stage-tamagotchi`** (a mesma Electron app, re-identificada) usando os diretórios que o AIRI já
+estabeleceu para esse padrão:
+- UI nova em `apps/stage-tamagotchi/src/renderer/` (pages/components/stores Lia);
+- contratos IPC da Lia em `apps/stage-tamagotchi/src/shared/` + `preload` (mesmo padrão `eventa`);
+- configuração/estado do produto em `apps/stage-tamagotchi/src/main/` (namespace `lia`, reuso de
+  `createConfig`);
+- i18n pt-BR **estendendo** `packages/i18n` (o único estender de package previsto para M1).
+
+> A árvore final concreta e a lista exata de arquivos criados/modificados estão no documento de
+> implementação: `docs/architecture/M1-IMPLEMENTATION-PLAN.md`.
 
 ---
 
@@ -294,21 +298,30 @@ Etapas de implementação (pós-aprovação), tudo **dentro** do mecanismo AIRI:
 
 ---
 
-## 9. Decisões em aberto / a validar durante a M1 `[?]`
+## 9. Decisões de arquitetura — RESOLVIDAS (M1 Part 1 aprovada)
 
-1. **Layout/repo da camada Lia** (§6): dentro do monorepo AIRI (`apps/lia-*`/`packages/lia-*`) vs
-   camada acima do vendored `airi/`. Bloqueia início de código (não bloqueia a análise).
-2. **Escopo do rebrand do Electron**: o "mínimo" de appId/productName/ícone/metainfo a mudar para
-   parecer Lia sem refatorar o boot — a demarcar como patch de identidade.
-3. **Como e onde montar a Home** sem duplicar: nova rota/destino que abre o chat existente — a
-   definir na implementação após a decisão de layout.
-4. **Modelo de "liderança"** entre a Home e o chat/main (window-context leader/follower) ao abrir
-   a conversa a partir da Home.
-5. **Persistência de idioma/onboarding** já existe (`settings/language`, `onboarding/completed` em
-   localStorage) — confirmar reuso integral sem novo mecanismo.
-6. **pt-BR do conteúdo técnico** (traduzir todo o settings/providers do AIRI vs manter en-US em
-   Advanced no M1). Escopo M1: UI de produto em pt-BR; telas técnicas podem seguir en-US até
-   tradução completa.
+As decisões em aberto foram fechadas. Resumo normativo (fonte: revisão de aprovação da M1 Part 1):
+
+| # | Decisão | Resolução |
+|---|---|---|
+| Layout da Lia | dentro do monorepo AIRI (`airi/`), workspaces existentes, **sem** camada externa, **sem** `apps/lia-shell`, **sem** dezenas de `packages/lia-*`; reusar/estender primeiro (§6). |
+| Desktop app | `apps/stage-tamagotchi` é a **base direta** da Lia; transformação `stage-tamagotchi → reidentificado como Lia`; shell/lifecycle/windows/IPC/runtime reutilizados; **não** duplicar nem renomear diretórios por estética. |
+| Electron rebrand | autorizado apenas o necessário: `appId`, `productName`, ícones, metadados de distribuição, identifiers de branding. **Não** alterar boot/lifecycle/DI/arquitetura IPC/window architecture/runtime AIRI. Tratar como **"Lia identity patch"** documentado em `docs/upstream/`. |
+| Lia boundary | AIRI = runtime/órgãos/engines; Lia = produto/UX/config/orquestração/políticas. Camada **aditiva**. Não modificar core-agent/core-character para a Home. Não duplicar chat/consciousness/speech/hearing/memory/vision/providers/avatar/MCP. |
+| i18n | reutilizar o sistema AIRI; **sem** framework novo; adicionar **pt-BR**, manter en/en-US fallback. Prioridade de tradução: Lia Home/onboarding/settings/dialogs/errors/status/navigation. Advanced pode usar en-US inicialmente. Não quebrar idiomas existentes. |
+| Home | camada de produto **sobre** o stage-tamagotchi; **não** substituir o chat. Home apresenta Lia + avatar + status amigável + ação de conversa + fala (quando disponível) + entretenimento/atalhos futuros + settings + diagnostics + mostrar/ocultar logs. Chat AIRI permanece reutilizado. |
+| Status (M1) | **só apresentação** de status (ex.: ● IA pronta · ● Voz pronta · ● Memória pronta · ○ Discord desligado · 🔒 Controle do PC bloqueado). Detecção detalhada (CPU/GPU/VRAM/RAM/Vulkan/CUDA/ROCm) é **M2**. |
+| Config | reusar `createConfig(...)`; **não** modificar `configs/global.ts`; **namespace Lia** separado; `schemaVersion` + migrações **só se necessário**; Lia config contém apenas estado/config específica do produto Lia (não duplicar todas as configs do AIRI). |
+| Logging | M1 cria base de log **display** + apresentação de erro amigável + status. **Não** criar segunda infra de logging se o AIRI já tiver adequada — **investigar e reutilizar primeiro**. Home tem "[ Mostrar logs ]"; log técnico segue disponível. |
+
+> Micro-decisões restantes (a fechar no início de cada fase de implementação, **não bloqueiam**):
+> ponto exato de montagem da Home no main window (landing padrão vs destino acionável), escopo do
+> reuso do auto-updater feed/single-instance key (não mexer em M1), e grau de pt-BR das telas
+> técnicas (Advanced en-US inicial). Ver `docs/architecture/M1-IMPLEMENTATION-PLAN.md`.
+
+**Ordem de implementação da M1 (aprovada):** Fase 1 Electron identity · 2 Lia shell/Home ·
+3 Navigation · 4 pt-BR+en-US · 5 Lia config · 6 status abstraction · 7 logs/friendly errors ·
+8 settings reorganization · 9 tests · 10 documentation.
 
 ---
 

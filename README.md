@@ -20,6 +20,7 @@
 | [`docs/product/UX.md`](docs/product/UX.md) | Especificação de experiência do produto Lia (M1) |
 | [`docs/product/M1-SCOPE.md`](docs/product/M1-SCOPE.md) | Recorte e escopo da M1 — Lia Shell / Product Foundation |
 | [`docs/architecture/LIA-INTEGRATION-PLAN.md`](docs/architecture/LIA-INTEGRATION-PLAN.md) | Análise real do AIRI em `airi/` + plano de integração da camada Lia |
+| [`docs/architecture/M1-IMPLEMENTATION-PLAN.md`](docs/architecture/M1-IMPLEMENTATION-PLAN.md) | Blueprint M1: árvore final, arquivos criados/modificados/intocados, ordem de commits e riscos |
 | [`docs/upstream/AIRI-INTEGRATION.md`](docs/upstream/AIRI-INTEGRATION.md) | Registro do M0-A: tag/commit do AIRI, remotes, toolchain, comandos de bootstrap e limitações |
 | [`tools/README.md`](tools/README.md) | DevKit universal: uso, comandos, segurança e configuração por projeto |
 

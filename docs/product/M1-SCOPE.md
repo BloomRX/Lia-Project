@@ -139,11 +139,25 @@ já roda (build:web e dev:tamagotchi continuam abrindo).
 
 ## 6. Dependências e ordem
 
-1. Antes de codificar a M1 (após aprovação destes docs): **definir a decisão de layout/repo**
-   (ver `LIA-INTEGRATION-PLAN.md §9/open decisions` — onde vive a camada Lia vs o vendored AIRI).
-2. Identidade/shell e i18n primeiro (são a fundação visível e barata).
-3. Home/navegação/config sobre a fundação.
-4. Status/logs/diagnostics por último (consomem o resto).
+A arquitetura da M1 foi **aprovada** (decisões em `LIA-INTEGRATION-PLAN.md §9`): Lia vive dentro
+do monorepo AIRI (`airi/`), `apps/stage-tamagotchi` é a base direta (re-identificada como Lia),
+sem nova app/pacotes micro, rebrand só de identidade (documentado como "Lia identity patch"),
+i18n estende o AIRI com pt-BR, Home é camada sobre o chat existente.
+
+Ordem de implementação aprovada:
+1. Fase 1 — Electron identity (rebrand).
+2. Fase 2 — Lia application shell / Home.
+3. Fase 3 — Navigation.
+4. Fase 4 — pt-BR + en-US integration.
+5. Fase 5 — Lia configuration (namespace `lia`, reuso `createConfig`).
+6. Fase 6 — status abstraction (apresentação; detecção detalhada é M2).
+7. Fase 7 — logs / friendly errors (investigar/reusar infra do AIRI antes de criar).
+8. Fase 8 — basic settings reorganization (linguagem de produto).
+9. Fase 9 — tests.
+10. Fase 10 — documentation.
+
+> Árvore final, arquivos AIRI a modificar, arquivos Lia novos, arquivos intocados, ordem de commits
+> e riscos: `docs/architecture/M1-IMPLEMENTATION-PLAN.md`.
 
 ---
 
@@ -165,8 +179,9 @@ já roda (build:web e dev:tamagotchi continuam abrindo).
 
 - [ ] UX (`docs/product/UX.md`) — produzido, **aguardando revisão**.
 - [ ] M1-SCOPE (este) — produzido, **aguardando revisão**.
-- [ ] LIA-INTEGRATION-PLAN (`docs/architecture/LIA-INTEGRATION-PLAN.md`) — produzido,
-  **aguardando revisão**.
-- [ ] **PARADA para revisão/aprovação antes de qualquer código.**
+- [x] LIA-INTEGRATION-PLAN (`docs/architecture/LIA-INTEGRATION-PLAN.md`) — **decisões resolvidas**.
+- [x] M1-IMPLEMENTATION-PLAN (`docs/architecture/M1-IMPLEMENTATION-PLAN.md`) — produzido
+  (árvore/arquivos/ordem de commits/riscos), **aguardando revisão**.
+- [ ] **PARADA para revisão/aprovação antes de qualquer código (M1 Part 2).**
 
 *Fim do documento `docs/product/M1-SCOPE.md`.*
