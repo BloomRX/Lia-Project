@@ -7,6 +7,34 @@
 
 ---
 
+## Estado atual (pós-aprovação)
+
+Aprovação QA recebida — decisões e resultado da aplicação:
+
+| # | Correção | Decisão | Status |
+|---|----------|---------|--------|
+| 1 | Dragging | **Opção A** — reutilizar `Window/TitleBar.vue` na Home | ✅ **Implementado** (`03f81a5`) |
+| 2 | Log panel / layout | Corrigir layout só da Home | ✅ **Implementado** (`03f81a5`) |
+| 3 | Initial language | **Não alterar ainda** — aguardar dados da máquina real | ⏸ Pendente (sem código) |
+
+**O que foi implementado em `home.vue` (commit `03f81a5`):**
+- **#1 Dragging:** a Home agora renderiza o `Window/TitleBar.vue` existente no topo (fonte única de
+  `drag-region` + `no-drag` nos controles), título \"Lia\". **Sem** novo sistema de arrasto, **sem**
+  `app-region: drag` no container inteiro, **sem** mudança de arquitetura Electron (conforme Opção A).
+- **#2 Log/layout:** o conteúdo da Home vive num container rolável
+  (`absolute top-11 inset-x-0 bottom-0 overflow-y-auto`, compensando a TitleBar fixa `pt-11`) com
+  `min-h-full` + `my-auto` internos → **centraliza quando cabe / rola quando estoura** (sem cortar o
+  topo). O painel de logs tem `max-h-32 overflow-y-auto` (scroll interno, altura própria) e o botão
+  de logs permanece no fluxo normal, **sempre acessível**. Cores ajustadas para tema claro/escuro
+  (a Home deixou de depender de fundo escuro da antiga barra).
+- **#3 Initial language:** **nada alterado.** Investigação mantida nas seções abaixo; decisão somente
+  após você informar idioma de exibição do Windows + `navigator.language` + `navigator.languages`.
+
+> Próximos passos (máquina real): rodar testes direcionados (§7), `build:web`, `dev:tamagotchi` nas
+> resoluções do QA e janela pequena; registrar BASELINE vs regressões Lia. Não iniciar Phase 3.
+
+---
+
 ## Resumo do processo (regras aplicadas)
 - Não iniciei a Phase 3. Não criei features grandes.
 - Testes upstream com falhas (`cap-vite`, `plugin-sdk`, `ui-server-auth`, `stage-shared`) são tratados
@@ -47,6 +75,11 @@
 > **Recomendação:** **Opção A** por consistência e menor superfície (componente já existente e
 > testado). Confirmar e eu aplico + valido `no-drag` nos controles do slot de ações.
 
+### ✅ Decisão (aprovada) e resultado
+**Opção A implementada** no commit `03f81a5`. A Home passou a renderizar `Window/TitleBar.vue`
+(reuso — `drag-region` + título \"Lia\" + `no-drag` nos controles). A barra é `fixed`; o conteúdo da
+Home roda abaixo dela (`top-11`). Nenhuma alteração em `window.ts`/`windows/main/index.ts`.
+
 ---
 
 ## 2. LOG PANEL (cortado / estoura a janela)
@@ -72,9 +105,19 @@
 - Validar nas 3 resoluções do QA (1280×720, 1366×768, 1920×1080) e em janelas pequenas (a própria
   janela 450×600) + DPI. Mudança **localizada em `home.vue`** apenas.
 
+### ✅ Decisão (aprovada) e resultado
+Aprovado o plano acima; **implementado no commit `03f81a5`** em `home.vue`: conteúdo rolável
+(`top-11` + `overflow-y-auto` + `min-h-full`/`my-auto`) → centra quando cabe, rola quando estoura;
+painel de logs `max-h-32 overflow-y-auto` (scroll interno); botão \"Mostrar/Ocultar logs\" sempre
+acessível. Validar resoluções na máquina real (§7).
+
 ---
 
-## 3. INITIAL LANGUAGE (primeira execução em inglês)
+## 3. INITIAL LANGUAGE (primeira execução em inglês) — ⏸ pendente (não alterar ainda)
+
+> **Aprovado: NÃO aplicar mudança agora.** Manter a investigação registrada. Decidir somente quando o
+> usuário fornecer (máquina real): idioma de exibição do Windows, `navigator.language` e
+> `navigator.languages`. Nenhum código foi alterado para #3.
 
 ### Fluxo atual (verificado)
 - `renderer/modules/i18n.ts`: locale inicial = `resolveSupportedLocale(localStorage 'settings/language'`
@@ -140,13 +183,18 @@ Escopo = mudanças da Phase 2 (stage-tamagotchi + i18n + Home). Sugestões (pnpm
 
 ---
 
-## 8. Alterações necessárias (consolidadas) — todas aprovadas antes de aplicar
-1. **home.vue** — arrastável (Opção A: TitleBar; ou B: faixa top). 
-2. **home.vue** — layout do conteúdo rolável + painel de logs com altura própria (scroll) sem `justify-center` quando exceder.
-3. **i18n 1ª execução** — (condicionado à confirmação do OS/locale na máquina real) detectar locale do SO via main (app.getLocale) com cadeia de fallback preservando escolha persistida. Provável toque em main (novo evento IPC p/ obter locale do sistema) + renderer `modules/i18n.ts`/`general.ts`.
-4. Documentação: atualizar `M1-SCOPE`/runbook com estas decisões e resultado após validação.
+## 8. Alterações (consolidadas) — status de aplicação
+1. **home.vue — arrastável (Opção A: TitleBar)** — ✅ **aplicado** (`03f81a5`).
+2. **home.vue — layout rolável + painel de logs com altura própria (scroll)** — ✅ **aplicado** (`03f81a5`).
+3. **i18n 1ª execução** — ⏸ **não aplicado** (aguardando confirmação do OS/locale na máquina real).
+   Detectaria locale do SO via main (`app.getLocale`) com cadeia de fallback preservando escolha
+   persistida. Provável toque em main (evento IPC p/ obter locale do sistema) + renderer
+   `modules/i18n.ts`/`general.ts`.
+4. Documentação: este documento atualizado com decisões/resultado; atualizar `M1-SCOPE`/runbook após
+   a validação na máquina real.
 
-**Ponto de atenção p/ aprovação:** a correção #3 depende de você confirmar na máquina real o idioma do
-SO e o `navigator.language`. As correções #1/#2 são localizadas e seguras.
+**Próximos passos (máquina real):** validar #1/#2 nas resoluções do QA (§7), rodar testes
+direcionados + `build:web` + `dev:tamagotchi`. Para #3, enviar idioma de exibição do Windows e
+`navigator.language`/`navigator.languages`.
 
-*Fim da investigação — aguardando aprovação para aplicar correções.*
+*Investigação e correções #1/#2 concluídas. #3 permanece pendente de dados da máquina real.*
