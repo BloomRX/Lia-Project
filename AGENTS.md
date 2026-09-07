@@ -2476,7 +2476,365 @@ distribuídos com a aplicação.
 
 Não colocar secrets ou informações privadas nesses arquivos.
 
+==================================================
+98. INTERNATIONALIZATION (i18n) — REQUIRED PRODUCT FEATURE
+==================================================
+
+Internationalization (i18n) is a first-class product requirement.
+
+A aplicação Lia deve suportar múltiplos idiomas de interface desde o início.
+
+Idiomas iniciais suportados:
+
+- Português (Brasil) — pt-BR
+- English — en-US
+
+Não projetar a aplicação assumindo que o inglês é o único idioma.
+
+--------------------------------------------------
+98.1 LANGUAGE SEPARATION
+--------------------------------------------------
+
+Os seguintes conceitos DEVEM permanecer independentes:
+
+- UI Language
+- Character Language
+- LLM Response Language
+- Voice Language
+
+Exemplo:
+
+UI:
+Português (Brasil)
+
+Character:
+Português
+
+LLM:
+English
+
+Voice:
+Português (Brasil)
+
+Estes devem ser configuráveis de forma independente quando tecnicamente possível.
+
+--------------------------------------------------
+98.2 DEFAULT LANGUAGE
+--------------------------------------------------
+
+Durante o primeiro lançamento:
+
+1. Detectar o idioma do sistema operacional.
+2. Se suportado, usar o idioma de UI correspondente da Lia.
+3. Se não suportado, usar fallback para inglês.
+4. Sempre permitir que o usuário mude o idioma manualmente.
+
+Para o Português do Brasil:
+
+pt-BR deve ser tratado como locale distinto.
+
+Não substituir automaticamente por "Português genérico" quando forem necessárias
+strings ou formatações específicas de pt-BR.
+
+--------------------------------------------------
+98.3 UI TRANSLATION
+--------------------------------------------------
+
+NÃO hardcodar texto de UI visível ao usuário dentro de componentes quando evitável.
+
+Usar um sistema de i18n adequado à stack existente (AIRI/Lia).
+
+Todas as strings de UI devem ter chaves de tradução.
+
+Exemplo:
+
+settings.language.title
+settings.language.description
+settings.general.title
+
+Evitar:
+
+"Language"
+
+embutido diretamente em componentes Vue.
+
+--------------------------------------------------
+98.4 TRANSLATION FILES
+--------------------------------------------------
+
+Manter traduções organizadas por locale.
+
+Estrutura conceitual:
+
+locales/
+├── pt-BR/
+│   └── messages.*
+└── en-US/
+    └── messages.*
+
+Adaptar a estrutura exata à arquitetura de i18n existente do AIRI/Lia.
+
+NÃO criar um segundo framework de i18n se o AIRI já oferece um adequado.
+
+--------------------------------------------------
+98.5 PORTUGUESE (BRAZIL)
+--------------------------------------------------
+
+pt-BR é idioma de primeira classe.
+
+Traduções devem usar Português brasileiro natural.
+
+Evitar tradução literal de máquina quando uma expressão mais natural for adequada.
+
+Exemplos:
+
+"Settings" → "Configurações"
+"Save" → "Salvar"
+"Cancel" → "Cancelar"
+"Voice" → "Voz"
+"Memory" → "Memória"
+"Advanced" → "Avançado"
+
+Terminologia técnica deve permanecer compreensível ao usuário brasileiro.
+
+--------------------------------------------------
+98.6 ENGLISH
+--------------------------------------------------
+
+English também é idioma de primeira classe.
+
+Traduções em inglês não devem ser apenas geradas depois do fato.
+
+Novas features de UI devem adicionar AMBAS:
+
+- pt-BR
+- en-US
+
+antes de a feature ser considerada completa.
+
+--------------------------------------------------
+98.7 NO MISSING TRANSLATION STRINGS
+--------------------------------------------------
+
+Uma feature NÃO está completa se um dos locales suportados possui strings ausentes.
+
+Em modo de desenvolvimento, chaves de tradução podem ser exibidas para debugging.
+
+Em produção, deve existir um fallback seguro.
+
+Exemplo:
+
+pt-BR string ausente
+→ fallback para en-US
+
+Nunca exibir:
+
+settings.voice.provider.title
+
+a usuários normais a menos que não exista fallback mais seguro.
+
+--------------------------------------------------
+98.8 LANGUAGE SWITCHING
+--------------------------------------------------
+
+Usuários devem poder mudar o idioma de UI sem reinstalar a aplicação.
+
+Preferir aplicar mudanças de idioma imediatamente.
+
+Se um restart for tecnicamente necessário:
+
+informar claramente o usuário.
+
+--------------------------------------------------
+98.9 PERSISTENCE
+--------------------------------------------------
+
+Armazenar o idioma de UI selecionado no perfil/configuration do usuário.
+
+Não modificar o idioma do sistema operacional.
+
+Mudar o idioma do SO depois não deve sobrescrever silenciosamente um idioma da Lia
+escolhido manualmente.
+
+--------------------------------------------------
+98.10 DATE / NUMBER / FORMAT
+--------------------------------------------------
+
+Usar formatação ciente de locale.
+
+Não hardcodar:
+
+- formatos de data;
+- separadores decimais;
+- separadores de milhar;
+- formatos de hora.
+
+pt-BR e en-US podem diferir.
+
+--------------------------------------------------
+98.11 TEXT EXPANSION
+--------------------------------------------------
+
+Layouts de UI devem tolerar comprimentos de string diferentes.
+
+Não criar layouts que só funcionam porque uma frase em inglês por acaso cabe.
+
+Testar especialmente:
+
+- botões;
+- sidebar;
+- tabs;
+- cards;
+- dialogs;
+- onboarding;
+- notificações;
+- erros.
+
+O texto em português pode ser mais longo que o em inglês.
+
+--------------------------------------------------
+98.12 ACCESSIBILITY
+--------------------------------------------------
+
+Texto traduzido deve preservar:
+
+- labels;
+- descriptions;
+- aria labels;
+- tooltips;
+- navegação por teclado;
+- mensagens de erro.
+
+Não traduzir apenas o texto visível deixando o texto de acessibilidade hardcoded
+em outro idioma.
+
+--------------------------------------------------
+98.13 CHARACTER / SYSTEM PROMPTS
+--------------------------------------------------
+
+Não traduzir automaticamente prompts de personalidade/sistema só porque o idioma
+da UI mudou.
+
+Character language e UI language são configurações separadas.
+
+O sistema de personalidade deve suportar comportamento ciente de idioma.
+
+--------------------------------------------------
+98.14 LLM LANGUAGE
+--------------------------------------------------
+
+O LLM deve receber preferências de idioma explícitas quando apropriado.
+
+Conceitualmente:
+
+UI Language:
+pt-BR
+
+Character Language:
+pt-BR
+
+LLM Response Language:
+pt-BR
+
+Não depender apenas do locale da UI para determinar o idioma de resposta do LLM.
+
+--------------------------------------------------
+98.15 VOICE LANGUAGE
+--------------------------------------------------
+
+A seleção de voz deve permanecer independente.
+
+Por exemplo:
+
+UI:
+pt-BR
+
+LLM:
+pt-BR
+
+Voice:
+English
+
+Isso deve ser tecnicamente possível.
+
+--------------------------------------------------
+98.16 FUTURE LANGUAGES
+--------------------------------------------------
+
+A arquitetura deve permitir adicionar idiomas sem reestruturar a aplicação.
+
+Possibilidades futuras:
+
+- Japanese
+- Spanish
+- French
+- German
+- Korean
+- Chinese
+
+NÃO implementar agora, a menos que explicitamente solicitado.
+
+O objetivo é facilitar a adição futura.
+
+--------------------------------------------------
+98.17 TRANSLATION WORKFLOW
+--------------------------------------------------
+
+Quando uma nova feature de UI for criada:
+
+1. Adicionar chaves de tradução.
+2. Adicionar pt-BR.
+3. Adicionar en-US.
+4. Verificar ambos.
+5. Checar layout.
+6. Checar acessibilidade.
+7. Testar troca de idioma.
+
+Uma feature sem ambos os locales iniciais está incompleta.
+
+--------------------------------------------------
+98.18 AIRI INTEGRATION
+--------------------------------------------------
+
+Antes de adicionar um novo framework de i18n:
+
+1. inspecionar a implementação de i18n existente do AIRI;
+2. determinar se pode ser reutilizada;
+3. determinar se pt-BR pode ser adicionado de forma limpa;
+4. evitar sistemas de tradução duplicados.
+
+Lia deve estender/reutilizar o sistema existente sempre que prático.
+
+--------------------------------------------------
+98.19 UI LANGUAGE MUST BE A PRODUCT FEATURE
+--------------------------------------------------
+
+A seleção de idioma deve aparecer nas configurações normais da Lia.
+
+Não deve exigir:
+
+- editar JSON;
+- editar variáveis de ambiente;
+- linha de comando;
+- reinstalar a aplicação.
+
+--------------------------------------------------
+98.20 DEFINITION OF DONE
+--------------------------------------------------
+
+Toda feature de UI da Lia está completa apenas quando:
+
+- pt-BR existe;
+- en-US existe;
+- nenhum texto óbvio sem tradução permanece;
+- o layout funciona em ambos os idiomas;
+- erros estão traduzidos;
+- estados de loading estão traduzidos;
+- labels de acessibilidade estão traduzidos;
+- a troca de idioma funciona.
+
 
 ==================================================
 END OF MASTER PROMPT
 ==================================================
+
