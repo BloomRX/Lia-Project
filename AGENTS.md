@@ -2163,3 +2163,277 @@ Providers TTS  AIRI  Vision MCP/Tools
    +------------------------------+
    |
 Local / Cloud / Hybrid
+
+A estrutura concreta deve ser baseada no repository real.
+
+87. VOICE IMPLEMENTATION PRIORITY
+==================================================
+
+Não bloquear o projeto principal por causa de voz customizada.
+
+Primeiro:
+
+1. Voice abstraction.
+2. Voice provider.
+3. Fallback voice.
+4. Audio pipeline.
+5. STT.
+6. VAD.
+7. Barge-in.
+
+Depois:
+
+Voice customization.
+
+Depois:
+
+Lia Voice Studio.
+
+Testar AllTalk/XTTS/RVC no hardware real posteriormente.
+
+
+==================================================
+88. CURRENT DEVELOPMENT MACHINE
+==================================================
+
+O ambiente principal de desenvolvimento/teste inicial possui:
+
+CPU:
+Ryzen 5 5500
+
+GPU:
+AMD RX 580 8 GB
+
+RAM:
+16 GB
+
+Essa máquina deve ser utilizada como um importante perfil de compatibilidade.
+
+Porém:
+
+NUNCA otimizar a arquitetura exclusivamente para esse hardware.
+
+A Lia deve continuar agnóstica a:
+
+- AMD;
+- NVIDIA;
+- Intel;
+- CPU-only.
+
+
+==================================================
+89. DEVELOPMENT PHILOSOPHY
+==================================================
+
+A meta não é apenas:
+
+"It works on my PC."
+
+A meta é:
+
+"It works predictably on many PCs."
+
+Prioridades:
+
+1. Robustez
+2. Compatibilidade
+3. UX
+4. Segurança
+5. Manutenção
+6. Performance
+7. Features
+
+
+==================================================
+90. NEVER ASSUME
+==================================================
+
+Nunca assumir que:
+
+- o usuário possui GPU;
+- o usuário possui internet;
+- o usuário possui NVIDIA;
+- o usuário possui AMD;
+- o usuário possui 16 GB RAM;
+- Ollama está instalado;
+- Python existe;
+- Node existe;
+- Git existe;
+- determinado provider continua oferecendo determinado modelo;
+- determinado modelo continua disponível;
+- determinado backend funciona em toda GPU;
+- determinado serviço está online.
+
+Detectar ou oferecer fallback.
+
+
+==================================================
+91. DOCUMENTATION
+==================================================
+
+Toda arquitetura importante deve ser documentada.
+
+Usar:
+
+docs/architecture/
+docs/product/
+docs/compatibility/
+docs/security/
+docs/upstream/
+docs/licenses/
+
+Não colocar decisões arquiteturais importantes apenas em comentários de código.
+
+
+==================================================
+92. DECISION RECORDS
+==================================================
+
+Para decisões arquiteturais importantes, criar ADR quando necessário.
+
+Exemplos:
+
+ADR:
+Why AIRI is the runtime foundation
+
+ADR:
+Why provider abstraction exists
+
+ADR:
+Why Voice Studio is separated
+
+ADR:
+Why local/cloud is abstracted
+
+ADR:
+Why computer permissions exist
+
+
+==================================================
+93. AGENT BEHAVIOR
+==================================================
+
+Você deve ser proativo.
+
+Quando identificar um risco:
+
+- sinalizar;
+- investigar;
+- propor solução;
+- documentar.
+
+Não esconder problemas.
+
+Quando uma informação estiver incerta:
+
+não inventar.
+
+Pesquisar no código, documentação ou fontes relevantes.
+
+
+==================================================
+94. NÃO FAZER
+==================================================
+
+NÃO:
+
+- reescrever AIRI desnecessariamente;
+- criar código duplicado;
+- criar abstrações duplicadas;
+- hardcode da personalidade Tsundere;
+- hardcode de um LLM;
+- hardcode de um provider;
+- hardcode de uma GPU;
+- exigir terminal;
+- exigir Git;
+- exigir instalação manual de dependencies;
+- expor backend na Home;
+- registrar secrets;
+- capturar tela silenciosamente;
+- executar ações perigosas sem permissão;
+- criar telemetria obrigatória;
+- fazer refactors gigantes sem justificativa;
+- marcar suporte sem testar.
+
+
+==================================================
+95. PRIMEIRA EXECUÇÃO DA AGENT
+==================================================
+
+Ao receber este prompt pela primeira vez:
+
+NÃO comece implementando features.
+
+Primeiro:
+
+1. analisar repository;
+2. analisar AIRI;
+3. identificar stack;
+4. identificar build;
+5. identificar package manager;
+6. identificar desktop architecture;
+7. identificar providers;
+8. identificar voice;
+9. identificar memory;
+10. identificar avatar;
+11. identificar integrations;
+12. identificar computer use;
+13. identificar IPC;
+14. identificar packaging;
+15. identificar testes.
+
+Depois criar:
+
+docs/architecture/AIRI-ANALYSIS.md
+
+e:
+
+docs/architecture/LIA-ARCHITECTURE.md
+
+Depois apresentar:
+
+- arquitetura atual;
+- proposta;
+- riscos;
+- dependências;
+- pontos de integração;
+- o que deve ser reutilizado;
+- o que deve ser criado;
+- o que deve ser evitado.
+
+Somente após essa etapa iniciar implementação.
+
+
+==================================================
+96. PRINCÍPIO FINAL
+==================================================
+
+Lia deve esconder complexidade sem esconder poder.
+
+Para usuário comum:
+
+"Instalei e funcionou."
+
+Para usuário intermediário:
+
+"Consigo personalizar minha personagem."
+
+Para usuário avançado:
+
+"Tenho controle total."
+
+Para desenvolvedores:
+
+"A arquitetura é modular, documentada e sustentável."
+
+O produto final deve parecer um aplicativo próprio,
+não uma ferramenta técnica montada em cima de vários engines.
+
+AIRI é uma fundação tecnológica.
+
+Lia é o produto.
+
+
+==================================================
+END OF MASTER PROMPT
+==================================================
