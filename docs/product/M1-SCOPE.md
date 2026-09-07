@@ -177,11 +177,29 @@ Ordem de implementação aprovada:
 
 ## 8. Status
 
-- [ ] UX (`docs/product/UX.md`) — produzido, **aguardando revisão**.
-- [ ] M1-SCOPE (este) — produzido, **aguardando revisão**.
+- [x] UX (`docs/product/UX.md`) — produzido.
+- [x] M1-SCOPE (este) — produzido.
 - [x] LIA-INTEGRATION-PLAN (`docs/architecture/LIA-INTEGRATION-PLAN.md`) — **decisões resolvidas**.
-- [x] M1-IMPLEMENTATION-PLAN (`docs/architecture/M1-IMPLEMENTATION-PLAN.md`) — produzido
-  (árvore/arquivos/ordem de commits/riscos), **aguardando revisão**.
-- [ ] **PARADA para revisão/aprovação antes de qualquer código (M1 Part 2).**
+- [x] M1-IMPLEMENTATION-PLAN (`docs/architecture/M1-IMPLEMENTATION-PLAN.md`) — produzido.
+- [x] **Fase 1 — Electron identity** — implementada (`feat(lia): rebrand electron identity`), validada na máquina real.
+- [~] **Fase 2 — Lia shell / Home** — implementada (`feat(lia): add launcher home`), **validação real PENDENTE** (ver §9).
+
+---
+
+## 9. Fase 2 (Home) — resultado e validação
+
+**Implementado (commits):** `feat(lia): rebrand electron identity` + `feat(lia): add launcher home`.
+Detalhes da Home (rota `/home` landing, CONVERSAR→Stage `/`, preview do modelo ativo com fallback
+Lia, status de apresentação, i18n pt-BR/en-US mínimo da Home) em `LIA-IMPLEMENTATION`/docs de
+commit. Não duplica chat/avatar/runtime; nenhum core AIRI alterado; `d8e62f12` não portado.
+
+**Validação na máquina real — PENDENTE (o sandbox não tem `pnpm`/`node_modules`).**
+Runbook/checklist: `docs/architecture/M1-PHASE2-VALIDATION.md`. Comandos: `pnpm typecheck`,
+`pnpm test`, `pnpm build:web`, `pnpm dev:tamagotchi` em `J:\Lia-Project`. Classificação final
+(§10 da validação): **PHASE 2 PASS** ou **PHASE 2 BLOCKED** — decidir só após essa rodada.
+
+**Limitação conhecida (prevista, não é bug da Fase 2):** não há ainda affordance de **"voltar para a
+Home"** dentro do Stage — a navegação de retorno/Home↔Stage é a **Fase 3 (Navigation)**. Durante a
+validação, o retorno é feito por reabrir/recarregar a janela principal (landing `/home`).
 
 *Fim do documento `docs/product/M1-SCOPE.md`.*
