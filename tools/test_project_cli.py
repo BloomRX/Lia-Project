@@ -13,6 +13,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 CLI = Path(__file__).with_name('project_cli.py').resolve()
 spec = importlib.util.spec_from_file_location('devkit_under_test', CLI)
@@ -36,6 +37,73 @@ class ScannerTests(unittest.TestCase):
         text = 'https://user:' + secret + '@github.com/owner/repo.git'
         self.assertNotIn(secret, kit.redact(text))
         self.assertNotIn('user:', kit.redact(text))
+
+class UniversalKitTests(unittest.TestCase):
+    """O kit funciona em qualquer projeto, sem configuração obrigatória."""
+    def test_folder_name_becomes_default_repo_name(self):
+        with patch.object(kit, 'KIT', Path('/x/Projeto Ação 2')):
+            self.assertEqual(kit.project_display_name(), 'Projeto Ação 2')
+            self.assertEqual(kit.default_repo_name(), 'projeto-acao-2')
+    def test_devkit_json_overrides_and_fail_closed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / 'devkit.json').write_text(json.dumps({
+                'project': 'Meu Jogo', 'base_branch': 'trunk',
+                'ignore_dirs': ['modelos', 'Pesos'],
+                'ignore_pairs': [['tests', 'artifacts']],
+                'full_tests': [['npm', 'test']],
+            }), encoding='utf-8')
+            with patch.object(kit, 'KIT', root):
+                self.assertEqual(kit.project_display_name(), 'Meu Jogo')
+                self.assertEqual(kit.base_branch(), 'trunk')
+                self.assertEqual(kit.default_repo_name(), 'meu-jogo')
+                self.assertEqual(kit.repo_description(), 'Meu Jogo — projeto pessoal')
+                self.assertIn('trunk', kit.protected_branches())
+                self.assertTrue(kit.ignored_path('modelos/nota.txt'))
+                self.assertTrue(kit.ignored_path('Pesos/a.bin'))
+                self.assertTrue(kit.ignored_path('tests/artifacts/x.png'))
+                self.assertFalse(kit.ignored_path('src/app.py'))
+                self.assertEqual(kit.configured_full_tests(), [['npm', 'test']])
+            (root / 'devkit.json').write_text('{"oops": 1}', encoding='utf-8')
+            with patch.object(kit, 'KIT', root):
+                with self.assertRaises(RuntimeError): kit.load_config()
+            (root / 'devkit.json').write_text('{"ignore_dirs": ["a/b"]}', encoding='utf-8')
+            with patch.object(kit, 'KIT', root):
+                with self.assertRaises(RuntimeError): kit.load_config()
+    def test_project_detection_is_universal(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.assertFalse(kit.looks_like_project(root))
+            (root / 'tools').mkdir(); (root / 'tools' / 'project_cli.py').write_text('pass', encoding='utf-8')
+            (root / 'DevKit.bat').write_text('@echo off\r\n', encoding='utf-8')
+            self.assertFalse(kit.looks_like_project(root))  # só o kit ainda não é um projeto
+            self.assertTrue(kit.kit_only_folder(root))      # mas é aceito como projeto novo
+            (root / 'main.py').write_text('print(1)\n', encoding='utf-8')
+            self.assertTrue(kit.looks_like_project(root))
+            self.assertFalse(kit.kit_only_folder(root))
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / 'pyproject.toml').write_text('[project]\n', encoding='utf-8')
+            self.assertTrue(kit.looks_like_project(root))
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / 'contrato.pdf').write_bytes(b'pdf')
+            (root / 'foto.jpg').write_bytes(b'jpg')
+            self.assertFalse(kit.looks_like_project(root))
+            self.assertFalse(kit.kit_only_folder(root))
+    def test_ensure_project_accepts_new_project_and_single_subproject(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            (base / 'tools').mkdir(); (base / 'tools' / 'project_cli.py').write_text('pass', encoding='utf-8')
+            (base / 'DevKit.bat').write_text('@echo off\r\n', encoding='utf-8')
+            with patch.object(kit, 'KIT', base):
+                self.assertEqual(kit.ensure_project(base), base)  # pasta só com o kit = projeto novo
+                sub = base / 'jogo'; sub.mkdir()
+                (sub / 'project.godot').write_text('config', encoding='utf-8')
+                self.assertEqual(kit.ensure_project(base), sub)  # kit na raiz, projeto em subpasta única
+                # Um arquivo-fonte na raiz faz a raiz voltar a ser o projeto (nada de subpasta).
+                (base / 'notas.py').write_text('x = 1\n', encoding='utf-8')
+                self.assertEqual(kit.ensure_project(base), base)
 
 @unittest.skipUnless(shutil.which('git'), 'Git necessário')
 class GitFlowTests(unittest.TestCase):
