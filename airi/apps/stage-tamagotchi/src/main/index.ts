@@ -27,6 +27,7 @@ import { resolveIsWayland } from './app/ozone'
 import { installSingleInstanceGuard } from './app/single-instance'
 import { createArtistryConfig } from './configs/artistry'
 import { createGlobalAppConfig } from './configs/global'
+import { createLiaProductConfig } from './configs/lia'
 import { emitAppBeforeQuit, emitAppReady, emitAppWindowAllClosed } from './libs/bootkit/lifecycle'
 import { setElectronMainDirname } from './libs/electron/location'
 import { createI18n } from './libs/i18n'
@@ -176,6 +177,10 @@ app.whenReady().then(async () => {
 
   const appConfig = injeca.provide('configs:app', () => createGlobalAppConfig())
   const artistryConfig = injeca.provide('configs:artistry', () => createArtistryConfig())
+  // Lia product preferences (namespace `lia`, file `product.json`). Built eagerly
+  // at boot (see the dedicated invoke below) so `schemaVersion` is validated and
+  // the config is ready for later subphases (persona/provider/voice/preferences).
+  const liaProductConfig = injeca.provide('configs:lia-product', () => createLiaProductConfig())
   const electronApp = injeca.provide('host:electron:app', () => app)
   const autoUpdater = injeca.provide('services:auto-updater', {
     dependsOn: { appConfig },
@@ -324,6 +329,15 @@ app.whenReady().then(async () => {
         context,
         artistryConfig: deps.artistryConfig,
       })
+    },
+  })
+
+  // Eagerly build the Lia product config at boot (no consumer yet in 4A) so its
+  // schemaVersion is validated and defaults are initialized for later subphases.
+  injeca.invoke({
+    dependsOn: { liaProductConfig },
+    callback: () => {
+      liaProductConfig.get()
     },
   })
 
