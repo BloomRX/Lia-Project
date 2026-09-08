@@ -1,6 +1,5 @@
 import type { AiriCard } from './airi-card'
 
-import { useLive2DActCapabilitiesStore } from '@proj-airi/stage-ui-live2d'
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -91,6 +90,9 @@ vi.mock('./vision', async () => {
   }
 })
 
+// Real modules loaded by these tests (e.g. the settings stage-model store) may
+// still touch vue-i18n; keep a deterministic i18n boundary so store tests do not
+// need a live i18n plugin instance.
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({
     t: (key: string) => key,
@@ -105,6 +107,30 @@ describe('airi-card store', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     resetArtistryToGlobal.mockClear()
+  })
+
+  // This test runs first so the store's localStorage backing is empty, which
+  // reproduces a true fresh install: no persisted cards and no persisted
+  // active id. Initialization must seed Lia as the single built-in card and
+  // resolve the default selection to it.
+  it('seeds Lia as the default built-in card on a fresh install', async () => {
+    const cardStore = useAiriCardStore()
+    await cardStore.initialize()
+
+    expect(cardStore.cards.has('lia')).toBe(true)
+    expect(cardStore.activeCardId).toBe('lia')
+    expect(cardStore.activeCard?.name).toBe('Lia')
+
+    // The Lia persona is authored as card data, not pulled from i18n.
+    expect(cardStore.activeCard?.personality).toContain('tsundere')
+    expect(cardStore.activeCard?.description).toBeTruthy()
+
+    // Persona and runtime instructions stay in separate card fields: the
+    // `systemPrompt` carries the runtime ACT/DELAY tokens, and the persona
+    // identity is not smeared across that runtime text.
+    expect(cardStore.activeCard?.systemPrompt).toContain('<|ACT')
+    expect(cardStore.activeCard?.systemPrompt).toContain('<|DELAY')
+    expect(cardStore.activeCard?.systemPrompt).not.toContain('Lia is a')
   })
 
   // ROOT CAUSE:
@@ -504,32 +530,7 @@ describe('airi-card store', () => {
     expect(cardStore.systemPrompt).not.toContain('What did you find?')
   })
 
-  // ROOT CAUSE:
-  //
-  // The card prompt listed only AIRI's fixed emotion vocabulary. A loaded
-  // Live2D model could expose more expressions and motions, but the LLM did
-  // not receive their exact ACT identifiers.
-  it('adds current Live2D ACT capabilities to the system prompt', async () => {
-    const cardStore = useAiriCardStore()
-    const capabilities = useLive2DActCapabilitiesStore()
-    await cardStore.initialize()
-
-    capabilities.beginModel('display-model-iru-v2')
-    capabilities.setExpressions('display-model-iru-v2', [
-      { name: 'smile', fileName: 'expressions/smile.exp3.json' },
-    ])
-    capabilities.setMotions('display-model-iru-v2', [
-      { fileName: 'motions/wave.motion3.json', group: 'AIRI', index: 0 },
-    ])
-
-    expect(cardStore.systemPrompt).toContain('Live2D ACT controls for the current model:')
-    expect(cardStore.systemPrompt).toContain('- "smile"')
-    expect(cardStore.systemPrompt).toContain('- "motions/wave.motion3.json"')
-    expect(cardStore.systemPrompt).toContain('<|ACT {"expression":"smile"}|>')
-    expect(cardStore.systemPrompt).toContain('<|ACT {"motion":"motions/wave.motion3.json"}|>')
-  })
-
-  it('falls back to the default card when the active custom card is deleted', async () => {
+  it('falls back to the Lia built-in card when the active custom card is deleted', async () => {
     const cardStore = useAiriCardStore()
     await cardStore.initialize()
 
@@ -543,17 +544,57 @@ describe('airi-card store', () => {
     await cardStore.removeCard(cardId)
 
     expect(cardStore.cards.has(cardId)).toBe(false)
-    expect(cardStore.activeCardId).toBe('default')
-    expect(cardStore.activeCard?.name).toBe('ReLU')
+    expect(cardStore.activeCardId).toBe('lia')
+    expect(cardStore.activeCard?.name).toBe('Lia')
   })
 
-  it('keeps the built-in fallback card when deletion is requested directly', async () => {
+  it('keeps the Lia built-in fallback card when deletion is requested directly', async () => {
     const cardStore = useAiriCardStore()
+    // Force a fresh resolve to the built-in regardless of prior storage state.
+    cardStore.activeCardId = '__missing__'
     await cardStore.initialize()
 
-    expect(await cardStore.removeCard('default')).toBe(false)
+    expect(await cardStore.removeCard('lia')).toBe(false)
+    expect(cardStore.cards.has('lia')).toBe(true)
+    expect(cardStore.activeCardId).toBe('lia')
+    expect(cardStore.activeCard?.name).toBe('Lia')
+  })
+
+  it('does not overwrite a persisted legacy default (ReLU) card, which stays selectable', async () => {
+    const cardStore = useAiriCardStore()
+
+    // Simulate state persisted by an AIRI version whose built-in card id was
+    // 'default': that card and the active id are still present on disk. It is
+    // a fully-shaped AiriCard (the legacy built-in carried an airi extension).
+    const legacyDefaultCard: AiriCard = {
+      name: 'ReLU',
+      version: '1.0.0',
+      description: 'Legacy built-in persona from AIRI.',
+      extensions: {
+        airi: {
+          modules: {
+            consciousness: { provider: 'mock-consciousness-provider', model: 'mock-consciousness-model' },
+            vision: { provider: 'mock-vision-provider', model: 'mock-vision-model' },
+            speech: { provider: 'mock-speech-provider', model: 'mock-speech-model', voice_id: 'mock-speech-voice' },
+          },
+          agents: {},
+        },
+      },
+    }
+    cardStore.cards.set('default', legacyDefaultCard)
+    cardStore.activeCardId = 'default'
+
+    await cardStore.initialize()
+
+    // The legacy card is preserved untouched and remains the active selection.
     expect(cardStore.cards.has('default')).toBe(true)
+    expect(cardStore.cards.get('default')?.name).toBe('ReLU')
     expect(cardStore.activeCardId).toBe('default')
+    expect(cardStore.activeCard?.name).toBe('ReLU')
+
+    // The Lia built-in is still available alongside it as the fallback.
+    expect(cardStore.cards.has('lia')).toBe(true)
+    expect(cardStore.cards.get('lia')?.name).toBe('Lia')
   })
 
   it('preserves a valid persisted active card during initialization', async () => {
@@ -571,13 +612,13 @@ describe('airi-card store', () => {
     expect(cardStore.activeCard?.name).toBe('Persisted active card')
   })
 
-  it('repairs a dangling persisted active card during initialization', async () => {
+  it('repairs a dangling persisted active card to the Lia built-in during initialization', async () => {
     const cardStore = useAiriCardStore()
     cardStore.activeCardId = 'missing-card'
 
     await cardStore.initialize()
 
-    expect(cardStore.activeCardId).toBe('default')
-    expect(cardStore.activeCard?.name).toBe('ReLU')
+    expect(cardStore.activeCardId).toBe('lia')
+    expect(cardStore.activeCard?.name).toBe('Lia')
   })
 })

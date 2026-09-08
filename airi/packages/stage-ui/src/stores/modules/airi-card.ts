@@ -6,10 +6,8 @@ import { useLocalStorageManualReset } from '@proj-airi/stage-shared/composables'
 import { nanoid } from 'nanoid'
 import { defineStore } from 'pinia'
 import { computed } from 'vue'
-import { useI18n } from 'vue-i18n'
 
-import SystemPromptV2 from '../../constants/prompts/system-v2'
-
+import { LIA_BUILT_IN_CARD_ID, LIA_DEFAULT_CARD } from '../../constants/lia-default-card'
 import { DEFAULT_ARTISTRY_WIDGET_SPAWNING_PROMPT } from '../../constants/prompts/character-defaults'
 import { captureAnalyticsEvent } from '../../libs/analytics'
 import { useSettingsStageModel } from '../settings/stage-model'
@@ -38,13 +36,11 @@ function resolveSystemPrompt(card: AiriCard | undefined): string {
 }
 
 export const useAiriCardStore = defineStore('airi-card', () => {
-  const { t } = useI18n()
-
   // Pinia synchronization owns cross-window updates. Local storage only loads
   // and saves this renderer's durable copy; listening to storage events here
   // would create a second cross-window state channel and echo cloned maps.
   const cards = useLocalStorageManualReset<Map<string, AiriCard>>('airi-cards', new Map(), { listenToStorageChanges: false })
-  const activeCardId = useLocalStorageManualReset<string>('airi-card-active-id', 'default', { listenToStorageChanges: false })
+  const activeCardId = useLocalStorageManualReset<string>('airi-card-active-id', LIA_BUILT_IN_CARD_ID, { listenToStorageChanges: false })
   let initialized = false
 
   const activeCard = computed(() => cards.value.get(activeCardId.value))
@@ -73,7 +69,9 @@ export const useAiriCardStore = defineStore('airi-card', () => {
 
   const removeCard = async (id: string) => {
     // The built-in card is the guaranteed fallback for every runtime profile.
-    if (id === 'default')
+    // A persisted legacy 'default' (ReLU) card is not the built-in anymore; it
+    // is ordinary user data and may be deleted like any other card.
+    if (id === LIA_BUILT_IN_CARD_ID)
       return false
 
     const removed = cards.value.delete(id)
@@ -83,7 +81,7 @@ export const useAiriCardStore = defineStore('airi-card', () => {
     // The active id is persisted independently from the card map. Reset it
     // before consumers observe a dangling runtime profile after deletion.
     if (activeCardId.value === id) {
-      activeCardId.value = 'default'
+      activeCardId.value = LIA_BUILT_IN_CARD_ID
       applyActiveCardSettings()
     }
 
@@ -367,21 +365,22 @@ export const useAiriCardStore = defineStore('airi-card', () => {
       return
 
     initialized = true
-    if (!cards.value.has('default')) {
-      cards.value.set('default', newAiriCard({
-        name: 'ReLU',
-        version: '1.0.0',
-        description: SystemPromptV2(
-          t('base.prompt.prefix'),
-          t('base.prompt.suffix'),
-        ).content,
-      }))
+
+    // Seed the Lia built-in card only when it is not present. A persisted
+    // legacy 'default' (ReLU) card or any user/imported card is never
+    // overwritten or removed here — Lia simply occupies the guaranteed
+    // fallback slot, so a fresh install resolves to Lia.
+    if (!cards.value.has(LIA_BUILT_IN_CARD_ID)) {
+      cards.value.set(LIA_BUILT_IN_CARD_ID, newAiriCard(LIA_DEFAULT_CARD))
     }
 
     // The active id and card map are persisted separately. Older versions
-    // could delete the selected card without repairing its stored id.
+    // could delete the selected card without repairing its stored id. A
+    // dangling id falls back to the Lia built-in. A *valid* persisted active
+    // id — including a legacy 'default' (ReLU) card the user kept — is honored
+    // as-is rather than being force-switched back to Lia.
     if (!cards.value.has(activeCardId.value))
-      activeCardId.value = 'default'
+      activeCardId.value = LIA_BUILT_IN_CARD_ID
 
     applyActiveCardSettings()
   }
