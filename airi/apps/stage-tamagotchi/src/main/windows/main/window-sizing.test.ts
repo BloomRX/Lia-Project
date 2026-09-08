@@ -116,8 +116,6 @@ function makeWindowController(initialSize: { width: number, height: number }) {
   return win
 }
 
-type FakeWindow = ReturnType<typeof makeWindowController>
-
 describe('createMainWindowContextSizing persistence', () => {
   function setup(seed?: { home?: { width?: number, height?: number }, stage?: { width?: number, height?: number } }) {
     let state = seed ?? {}

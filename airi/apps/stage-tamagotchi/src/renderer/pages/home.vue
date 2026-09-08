@@ -117,7 +117,7 @@ async function openDiagnostics() {
 }
 
 async function openSettingsGeneric() {
-  await openSettings()
+  await openSettings({})
 }
 
 function toggleLogs() {
