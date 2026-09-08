@@ -8,6 +8,7 @@ import { refDebounced, useIntervalFn } from '@vueuse/core'
 import { storeToRefs } from 'pinia'
 import { computed, reactive, ref, useTemplateRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 
 import StatusIsland from '../status-island/index.vue'
 import ControlButtonTooltip from './control-button-tooltip.vue'
@@ -25,6 +26,7 @@ import {
   electronCenterMainWindow,
   electronOpenChat,
   electronOpenSettings,
+  electronSetMainWindowContext,
   electronStartDraggingWindow,
   electronWindowSetAlwaysOnTop,
 } from '../../../../shared/eventa'
@@ -39,6 +41,7 @@ const emit = defineEmits<Emits>()
 
 const { isDark, toggleDark } = useTheme()
 const { t } = useI18n()
+const router = useRouter()
 const { dock, isLeft, isTop, motionPhase } = useControlsIslandPlacement()
 
 const settingsAudioDeviceStore = useSettingsAudioDevice()
@@ -52,6 +55,7 @@ const isLinux = useElectronEventaInvoke(electron.app.isLinux)
 const quitApp = useElectronEventaInvoke(electronAppQuit)
 const setAlwaysOnTop = useElectronEventaInvoke(electronWindowSetAlwaysOnTop)
 const centerMainWindow = useElectronEventaInvoke(electronCenterMainWindow)
+const setMainWindowContext = useElectronEventaInvoke(electronSetMainWindowContext)
 
 const expanded = ref(false)
 const islandElement = useTemplateRef<HTMLElement>('island')
@@ -196,6 +200,23 @@ function refreshWindow() {
  */
 function resetMainWindowPosition() {
   centerMainWindow().catch(console.error)
+}
+
+/**
+ * Returns to the Lia Home launcher from the Stage: first restore the Home window
+ * context/size in the main process, then navigate on the same window. This is a
+ * product navigation action (the Home launcher is the hub), not a reload — the
+ * running Stage runtime stays alive in App.vue and is not recreated.
+ */
+async function goHome() {
+  try {
+    await setMainWindowContext({ mode: 'home' })
+  }
+  catch {
+    // Restoring the Home window size/position is best-effort; navigation must
+    // still return to the launcher even if the main process call fails.
+  }
+  await router.push('/home')
 }
 </script>
 
@@ -356,6 +377,20 @@ function resetMainWindowPosition() {
 
       <!-- Main Controls -->
       <div :class="mainControlsLayoutClasses">
+        <ControlButtonTooltip side="inward">
+          <ControlButton
+            v-track-button="{ name: 'controls_island_action', action: 'go_home' }"
+            :button-style="adjustStyleClasses.button"
+            :aria-label="t('tamagotchi.stage.controls-island.go-home')"
+            @click="goHome"
+          >
+            <div i-solar:home-smile-outline :class="adjustStyleClasses.icon" text="neutral-800 dark:neutral-300" />
+          </ControlButton>
+          <template #tooltip>
+            {{ t('tamagotchi.stage.controls-island.go-home') }}
+          </template>
+        </ControlButtonTooltip>
+
         <ControlButtonTooltip side="inward">
           <ControlButton
             v-track-button="{
