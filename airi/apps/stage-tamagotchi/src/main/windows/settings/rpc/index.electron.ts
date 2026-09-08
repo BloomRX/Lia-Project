@@ -9,6 +9,7 @@ import type { GlobalShortcutService } from '../../../services/electron/global-sh
 import type { DevtoolsWindowManager } from '../../devtools'
 import type { SpotlightWindowManager } from '../../spotlight'
 import type { WidgetsWindowManager } from '../../widgets'
+import type { MainWindowSizeSettingsController } from '../../main/window-size-settings'
 
 import { defineInvokeHandler } from '@moeru/eventa'
 import { createContext } from '@moeru/eventa/adapters/electron/main'
@@ -16,6 +17,8 @@ import { ipcMain } from 'electron'
 
 import {
   electronCenterMainWindow,
+  electronMainWindowSizeGet,
+  electronMainWindowSizeSet,
   electronOpenDevtoolsWindow,
   electronOpenSettingsDevtools,
   electronSpotlightShortcutGet,
@@ -35,6 +38,7 @@ export async function setupSettingsWindowInvokes(params: {
   autoUpdater: AutoUpdater
   devtoolsWindow: DevtoolsWindowManager
   getMainWindow?: () => BrowserWindow | undefined
+  getMainWindowSizeSettings?: () => MainWindowSizeSettingsController | undefined
   serverChannel: ServerChannel
   godotStageManager: GodotStageManager
   mcpStdioManager: McpStdioManager
@@ -59,6 +63,25 @@ export async function setupSettingsWindowInvokes(params: {
 
   // Register the global shortcut service for the settings window.
   params.globalShortcut.registerWindow({ context, window: params.settingsWindow })
+
+  defineInvokeHandler(context, electronMainWindowSizeGet, () => {
+    const controller = params.getMainWindowSizeSettings?.()
+    if (!controller)
+      throw new Error('Main window size settings are not ready yet')
+    return controller.getSnapshot()
+  })
+
+  defineInvokeHandler(context, electronMainWindowSizeSet, (payload) => {
+    if (!payload || (payload.mode !== 'home' && payload.mode !== 'stage'))
+      throw new TypeError('electronMainWindowSizeSet called with invalid mode')
+    const size = payload.size
+    if (size !== null && (typeof size.width !== 'number' || typeof size.height !== 'number'))
+      throw new TypeError('electronMainWindowSizeSet called with invalid size')
+    const controller = params.getMainWindowSizeSettings?.()
+    if (!controller)
+      throw new Error('Main window size settings are not ready yet')
+    controller.setInitialSize(payload.mode, size)
+  })
 
   defineInvokeHandler(context, electronCenterMainWindow, () => centerWindowOnDisplay(params.getMainWindow?.()))
   defineInvokeHandler(context, electronSpotlightShortcutGet, () => params.spotlightWindow.getShortcutAccelerator())

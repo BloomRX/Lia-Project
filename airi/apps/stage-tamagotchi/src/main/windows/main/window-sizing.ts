@@ -108,6 +108,8 @@ export interface MainWindowContextSizing {
   captureUserBounds(): void
   /** Enables persistence of user resizes (called once the window is shown/settled). */
   armUserResizeCapture(): void
+  /** Read-only: the mode the main window is currently sized for. */
+  getContext(): MainWindowContext
 }
 
 /**
@@ -189,5 +191,9 @@ export function createMainWindowContextSizing(params: {
     userResizeCaptureArmed = true
   }
 
-  return { setContext, captureUserBounds, armUserResizeCapture }
+  function getContext(): MainWindowContext {
+    return currentContext
+  }
+
+  return { setContext, captureUserBounds, armUserResizeCapture, getContext }
 }

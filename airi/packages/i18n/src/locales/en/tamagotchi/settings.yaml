@@ -38,6 +38,26 @@ pages:
       toggle-ignore-mouse-event:
         label: Toggle Ignore Mouse Event
       press-keys: Press Keys...
+    window:
+      title: Window
+      description: Set the default size the Home and Stage windows open at.
+      note: The window opens at this size. Resizing it by hand also updates it — the most recent action wins.
+      custom-note: Currently using a custom size from resizing. Pick a preset or Restore default to change it.
+      home:
+        title: Home
+      stage:
+        title: Stage
+      applies-now: Applies now — this window is currently open.
+      presets:
+        small: Small
+        medium: Medium
+        large: Large
+      pixels: '{width}×{height}'
+      actions:
+        restore-default: Restore default
+      errors:
+        load: Failed to load the window size
+        save: Failed to save the window size
     developer:
       sections:
         section:

@@ -7,6 +7,7 @@ import type { GlobalShortcutService } from '../../services/electron/global-short
 import type { DevtoolsWindowManager } from '../devtools'
 import type { SpotlightWindowManager } from '../spotlight'
 import type { WidgetsWindowManager } from '../widgets'
+import type { MainWindowSizeSettingsController } from '../main/window-size-settings'
 
 import { join, resolve } from 'node:path'
 
@@ -31,6 +32,7 @@ export function setupSettingsWindowReusableFunc(params: {
   autoUpdater: AutoUpdater
   devtoolsWindow: DevtoolsWindowManager
   getMainWindow?: () => BrowserWindow | undefined
+  getMainWindowSizeSettings?: () => MainWindowSizeSettingsController | undefined
   onWindowCreated?: (window: BrowserWindow) => void
   serverChannel: ServerChannel
   godotStageManager: GodotStageManager
@@ -70,6 +72,7 @@ export function setupSettingsWindowReusableFunc(params: {
       autoUpdater: params.autoUpdater,
       devtoolsWindow: params.devtoolsWindow,
       getMainWindow: params.getMainWindow,
+      getMainWindowSizeSettings: params.getMainWindowSizeSettings,
       serverChannel: params.serverChannel,
       godotStageManager: params.godotStageManager,
       mcpStdioManager: params.mcpStdioManager,

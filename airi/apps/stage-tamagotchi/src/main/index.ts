@@ -52,6 +52,7 @@ import { setupMainWindow } from './windows/main'
 import { setupNoticeWindowManager } from './windows/notice'
 import { setupOnboardingWindowManager } from './windows/onboarding'
 import { setupSettingsWindowReusableFunc } from './windows/settings'
+import type { MainWindowSizeSettingsController } from './windows/main/window-size-settings'
 import { setupSpotlightWindowManager } from './windows/spotlight'
 import { setupWidgetsWindowManager } from './windows/widgets'
 
@@ -139,6 +140,11 @@ electronApp.setAppUserModelId('ai.lia.app')
 // The second-instance handler should restore the main UI instead of accidentally surfacing internals.
 let userFacingMainWindow: BrowserWindow | undefined
 const shouldStartMainProcess = installSingleInstanceGuard({ app, getWindow: () => userFacingMainWindow })
+
+// Per-mode main-window size controller, lazily populated once the main window is
+// built (invokes only fire at runtime, so this is safe before then). Read by the
+// Settings window via the getter injected below.
+let userFacingMainWindowSizeSettings: MainWindowSizeSettingsController | undefined
 
 if (shouldStartMainProcess) {
   initScreenCaptureForMain()
@@ -266,6 +272,7 @@ app.whenReady().then(async () => {
       setupSettingsWindowReusableFunc({
         ...dependsOn,
         getMainWindow: () => userFacingMainWindow,
+        getMainWindowSizeSettings: () => userFacingMainWindowSizeSettings,
       }),
   })
 
@@ -275,6 +282,9 @@ app.whenReady().then(async () => {
       ...dependsOn,
       onWindowCreated: (window) => {
         userFacingMainWindow = window
+      },
+      onSizeSettingsReady: (controller) => {
+        userFacingMainWindowSizeSettings = controller
       },
     }),
   })

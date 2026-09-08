@@ -35,6 +35,10 @@ import {
   liaMainWindowStateSchema,
   MAIN_WINDOW_MIN_SIZE,
 } from './window-sizing'
+import {
+  createMainWindowSizeSettingsController,
+  type MainWindowSizeSettingsController,
+} from './window-size-settings'
 
 export async function setupMainWindow(params: {
   editorWindow: EditorWindowManager
@@ -49,6 +53,7 @@ export async function setupMainWindow(params: {
   mcpStdioManager: McpStdioManager
   i18n: I18n
   onboardingWindowManager: OnboardingWindowManager
+  onSizeSettingsReady?: (controller: MainWindowSizeSettingsController) => void
 }) {
   const windowStateConfig = createConfig('lia', 'main-window.json', liaMainWindowStateSchema, {
     default: {},
@@ -90,6 +95,14 @@ export async function setupMainWindow(params: {
     window,
     config: windowStateConfig,
   })
+
+  // Expose per-mode size configuration (used by the Settings window) while
+  // keeping the shared override field + persistence fully inside this module.
+  const sizeSettings = createMainWindowSizeSettingsController({
+    sizing,
+    config: windowStateConfig,
+  })
+  params.onSizeSettingsReady?.(sizeSettings)
 
   // First open / relaunch always lands on the launcher: apply the Home mode
   // (persisted Home size or the Home preset) and center it on its display.

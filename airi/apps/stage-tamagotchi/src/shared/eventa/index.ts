@@ -43,6 +43,27 @@ export const electronStartDraggingWindow = defineInvokeEventa('eventa:invoke:ele
 export const electronOpenMainDevtools = defineInvokeEventa('eventa:invoke:electron:windows:main:devtools:open')
 export const electronCenterMainWindow = defineInvokeEventa<Rectangle>('eventa:invoke:electron:windows:main:center')
 export const electronSetMainWindowContext = defineInvokeEventa<void, { mode: 'home' | 'stage' }>('eventa:invoke:electron:windows:main:set-context')
+
+/**
+ * Per-mode initial window-size configuration (read/written by the Settings
+ * window). Mirrors the main-window's persisted per-mode size override — no new
+ * persistence; `null` means "fall back to the built-in preset".
+ */
+export interface MainWindowSizeRecord {
+  width?: number
+  height?: number
+}
+
+export interface MainWindowSizeSnapshot {
+  activeMode: 'home' | 'stage'
+  home: MainWindowSizeRecord | null
+  stage: MainWindowSizeRecord | null
+}
+
+export type MainWindowSizeInput = { width: number, height: number } | null
+
+export const electronMainWindowSizeGet = defineInvokeEventa<MainWindowSizeSnapshot>('eventa:invoke:electron:windows:main:size:get')
+export const electronMainWindowSizeSet = defineInvokeEventa<void, { mode: 'home' | 'stage', size: MainWindowSizeInput }>('eventa:invoke:electron:windows:main:size:set')
 export const electronGetMainWindowLogs = defineInvokeEventa<MainProcessLogLine[]>('eventa:invoke:electron:main-window:get-logs')
 export const electronMainWindowLogEntry = defineEventa<MainProcessLogLine>('eventa:event:electron:main-window:log')
 export const electronOpenEditor = defineInvokeEventa<void>('eventa:invoke:electron:windows:editor:open')
