@@ -1,7 +1,3 @@
-'home-return':
-  label: Home
-  'aria-label': Return to the Home launcher
-  tooltip: Back to Home
 operations:
   load-models: Load Models
   load-models-status:
@@ -18,6 +14,7 @@ docs:
     disable: Always show
   'open-settings': Open settings
   'open-chat': Open Chat
+  'go-home': Home
   'refresh': Refresh
   'center-main-window': Move to screen center
   'open-hearing-controls': Open hearing Controls

@@ -38,7 +38,6 @@ import { toast } from 'vue-sonner'
 import ControlsIslandRoot from '../components/stage-islands/controls-island/controls-island-root.vue'
 import ControlsIsland from '../components/stage-islands/controls-island/index.vue'
 import ResourceStatusIsland from '../components/stage-islands/resource-status-island/index.vue'
-import StageHomeReturn from '../components/stage-home-return.vue'
 
 import { electronOpenOnboarding } from '../../shared/eventa'
 import { modelSettingsRuntimeSnapshotChannelName } from '../../shared/model-settings-runtime'
@@ -816,7 +815,6 @@ const cursorPosition = computed(() => ({
           'transition-opacity duration-250 ease-in-out',
         ]"
       >
-        <StageHomeReturn />
         <ResourceStatusIsland />
         <WidgetStage
           ref="widgetStageRef"
