@@ -1,19 +1,27 @@
 <script setup lang="ts">
-import { useElectronEventaInvoke } from '@proj-airi/electron-vueuse'
+import { useElectronEventaContext, useElectronEventaInvoke } from '@proj-airi/electron-vueuse'
 import { Button, GhostButton } from '@proj-airi/ui'
 import { useSettingsStageModel } from '@proj-airi/stage-ui/stores/settings/stage-model'
 import { storeToRefs } from 'pinia'
-import { computed, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 
-import { electronOpenSettings, electronSetMainWindowContext } from '../../shared/eventa'
+import type { MainProcessLogLine } from '../../shared/eventa'
+
+import {
+  electronGetMainWindowLogs,
+  electronMainWindowLogEntry,
+  electronOpenSettings,
+  electronSetMainWindowContext,
+} from '../../shared/eventa'
 
 import WindowTitleBar from '../components/Window/TitleBar.vue'
 import liaFallbackAsset from '../assets/lia/lia-home.png'
 
 const { t } = useI18n()
 const router = useRouter()
+const eventaContext = useElectronEventaContext()
 
 // The active stage model is already initialized by App.vue (main window), so this
 // store is ready here. We only READ it — no second runtime, no preview system.
@@ -21,9 +29,17 @@ const { stageModelSelectedDisplayModel } = storeToRefs(useSettingsStageModel())
 
 const openSettings = useElectronEventaInvoke(electronOpenSettings)
 const setMainWindowContext = useElectronEventaInvoke(electronSetMainWindowContext)
+const getMainWindowLogs = useElectronEventaInvoke(electronGetMainWindowLogs)
 
 const previewError = ref(false)
 const logsOpen = ref(false)
+const logsLoading = ref(false)
+
+// Recent main-process logs (already sanitized main-side). Kept newest-last.
+const logs = ref<MainProcessLogLine[]>([])
+const logPanelEl = ref<HTMLElement | null>(null)
+let disposeLogListener: (() => void) | undefined
+const MAX_VIEW_LOGS = 300
 
 type HomeState = 'loading' | 'ready' | 'disabled'
 
@@ -33,6 +49,44 @@ const homeState = computed<HomeState>(() => {
   if (stageModelSelectedDisplayModel.value === undefined)
     return 'loading'
   return 'ready'
+})
+
+function appendLogLines(lines: MainProcessLogLine[]) {
+  const seen = new Set(logs.value.map(line => line.id))
+  const fresh = lines.filter(line => !seen.has(line.id))
+  if (fresh.length === 0)
+    return
+  logs.value = [...logs.value, ...fresh].slice(-MAX_VIEW_LOGS)
+}
+
+async function refreshLogsFromMain() {
+  logsLoading.value = true
+  try {
+    appendLogLines(await getMainWindowLogs() ?? [])
+  }
+  catch {
+    // Keep whatever logs we already have if the snapshot call fails.
+  }
+  finally {
+    logsLoading.value = false
+  }
+}
+
+function subscribeToLogStream() {
+  if (disposeLogListener)
+    return
+  disposeLogListener = eventaContext.value.on(electronMainWindowLogEntry, (event) => {
+    if (event?.body)
+      appendLogLines([event.body])
+  })
+}
+
+// Auto-scroll the panel to the newest entry while it is open.
+watch([() => logs.value.length, logsOpen], async () => {
+  if (logsOpen.value && logPanelEl.value) {
+    await nextTick()
+    logPanelEl.value.scrollTop = logPanelEl.value.scrollHeight
+  }
 })
 
 // Presence asset: prefer the active model's previewImage (AIRI preview infra),
@@ -68,7 +122,19 @@ async function openSettingsGeneric() {
 
 function toggleLogs() {
   logsOpen.value = !logsOpen.value
+  if (logsOpen.value)
+    void refreshLogsFromMain()
 }
+
+onMounted(() => {
+  void refreshLogsFromMain()
+  subscribeToLogStream()
+})
+
+onUnmounted(() => {
+  disposeLogListener?.()
+  disposeLogListener = undefined
+})
 </script>
 
 <template>
@@ -176,10 +242,21 @@ function toggleLogs() {
             </button>
             <div
               v-if="logsOpen"
-              class="mt-1 max-h-32 overflow-y-auto rounded-lg border border-neutral-200/70 bg-neutral-500/5 px-3 py-2 text-left text-xs leading-relaxed text-neutral-600 dark:border-neutral-700 dark:bg-black/20 dark:text-neutral-400"
+              ref="logPanelEl"
+              class="mt-1 max-h-32 overflow-y-auto whitespace-pre-wrap break-words rounded-lg border border-neutral-200/70 bg-neutral-500/5 px-3 py-2 text-left text-xs leading-relaxed text-neutral-600 dark:border-neutral-700 dark:bg-black/20 dark:text-neutral-400"
             >
-              <p>{{ t('tamagotchi.home.logs.empty') }}</p>
-              <p class="mt-1 text-neutral-400 dark:text-neutral-500">{{ t('tamagotchi.home.logs.technicalNote') }}</p>
+              <template v-if="logsLoading && logs.length === 0">
+                <p class="text-neutral-400 dark:text-neutral-500">{{ t('tamagotchi.home.logs.loading') }}</p>
+              </template>
+              <template v-else-if="logs.length === 0">
+                <p>{{ t('tamagotchi.home.logs.empty') }}</p>
+                <p class="mt-1 text-neutral-400 dark:text-neutral-500">{{ t('tamagotchi.home.logs.technicalNote') }}</p>
+              </template>
+              <template v-else>
+                <p v-for="line in logs" :key="line.id" class="py-0.5">
+                  {{ line.text }}
+                </p>
+              </template>
             </div>
           </div>
         </div>

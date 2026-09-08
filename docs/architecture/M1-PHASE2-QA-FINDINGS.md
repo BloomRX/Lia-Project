@@ -17,12 +17,13 @@ Aprovação QA recebida — decisões e resultado da aplicação:
 | 2 | Log panel / layout | Corrigir layout só da Home | ✅ **Implementado** (`03f81a5`) |
 | 3 | Initial language | **Não alterar** — locale real não confirma problema | ⏸ **Fechado como investigação** (valores registrados abaixo) |
 | 4 | Tamanho da janela Home ↔ Stage | **Novo BLOCKER** — investigação concluída | ✅ **Implementado** (`fix(lia): add contextual window sizing`) |
+| 5 | Home bounds persistence (QA final) | Corrigir persistência independente por modo | ✅ **Implementado** (`fix(lia): persist home window bounds`) |
+| 6 | Log viewer vazio (QA final) | Conectar viewer à infra de logs do AIRI | ✅ **Implementado** (`fix(lia): connect home log viewer`) |
 
-> **Nova rodada QA (máquina real):** além da #3 confirmada, surgiu o blocker #4 (janela única
-> compartilhada entre Home-launcher e Stage, com necessidades de composição diferentes).
-> **Implementado** resize contextual por rota — ver `docs/architecture/M1-PHASE2-QA-WINDOW-SIZING.md`
-> (§7 Implementação: presets Home/Stage, persistência por modo, DPI/work area, arquivos). Validação
-> visual pendente na máquina real.
+> **Rodadas de QA (máquina real):** surgiram o blocker #4 (janela única Home↔Stage) e, na validação
+> final, os problemas #5 (Home não restaurava o override) e #6 (painel de logs sem conteúdo). Todos
+> corrigidos — ver `docs/architecture/M1-PHASE2-QA-WINDOW-SIZING.md` (§7) e
+> `docs/architecture/M1-PHASE2-VALIDATION.md` (§9 contextual sizing, §10 correções finais).
 
 **O que foi implementado em `home.vue` (commit `03f81a5`):**
 - **#1 Dragging:** a Home agora renderiza o `Window/TitleBar.vue` existente no topo (fonte única de

@@ -21,6 +21,7 @@ import { isLinux } from 'std-env'
 import icon from '../../resources/icon.png?asset'
 
 import { openDebugger, setupDebugger } from './app/debugger'
+import { ingestMainProcessLog } from './app/main-process-log-bus'
 import { nullFileLoggerHandle, setupFileLogger } from './app/file-logger'
 import { resolveIsWayland } from './app/ozone'
 import { installSingleInstanceGuard } from './app/single-instance'
@@ -156,8 +157,10 @@ app.whenReady().then(async () => {
   // Initialize file logger and register the hook
   fileLogger = await setupFileLogger()
 
-  // Register the global hook for file logging
+  // Register the global hook for logging. This is the single AIRI log hook; it
+  // both writes to the FileLogger and feeds the Lia Home log viewer buffer.
   setGlobalHookPostLog((_, formatted) => {
+    ingestMainProcessLog(formatted)
     if (skipFileLogging || fileLogger.logFileFd === null)
       return
     void fileLogger.appendLog(formatted)

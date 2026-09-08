@@ -20,6 +20,7 @@ logs:
   title: "Logs"
   close: "Hide logs"
   empty: "Nothing to report right now."
+  loading: "Loading logs..."
   technicalNote: "Detailed technical logs are available in Advanced."
   viewAdvanced: "Open in Advanced"
 states:

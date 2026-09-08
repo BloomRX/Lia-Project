@@ -30,12 +30,21 @@ import type { Rectangle } from 'electron'
 
 import { defineEventa, defineInvokeEventa } from '@moeru/eventa'
 
+/** A single sanitized main-process log line streamed to the Lia Home viewer. */
+export interface MainProcessLogLine {
+  id: number
+  timestamp: number
+  text: string
+}
+
 export const electronStartTrackMousePosition = defineInvokeEventa('eventa:invoke:electron:start-tracking-mouse-position')
 export const electronStartDraggingWindow = defineInvokeEventa('eventa:invoke:electron:start-dragging-window')
 
 export const electronOpenMainDevtools = defineInvokeEventa('eventa:invoke:electron:windows:main:devtools:open')
 export const electronCenterMainWindow = defineInvokeEventa<Rectangle>('eventa:invoke:electron:windows:main:center')
 export const electronSetMainWindowContext = defineInvokeEventa<void, { mode: 'home' | 'stage' }>('eventa:invoke:electron:windows:main:set-context')
+export const electronGetMainWindowLogs = defineInvokeEventa<MainProcessLogLine[]>('eventa:invoke:electron:main-window:get-logs')
+export const electronMainWindowLogEntry = defineEventa<MainProcessLogLine>('eventa:event:electron:main-window:log')
 export const electronOpenEditor = defineInvokeEventa<void>('eventa:invoke:electron:windows:editor:open')
 export const electronOpenSettings = defineInvokeEventa<void, { route?: string }>('eventa:invoke:electron:windows:settings:open')
 export const electronSettingsNavigate = defineEventa<{ route: string }>('eventa:event:electron:windows:settings:navigate')

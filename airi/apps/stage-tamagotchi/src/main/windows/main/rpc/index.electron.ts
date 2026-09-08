@@ -15,7 +15,8 @@ import { defineInvokeHandler } from '@moeru/eventa'
 import { createContext } from '@moeru/eventa/adapters/electron/main'
 import { ipcMain } from 'electron'
 
-import { electronCenterMainWindow, electronOpenChat, electronOpenEditor, electronOpenMainDevtools, electronOpenSettings, electronSetMainWindowContext, noticeWindowEventa } from '../../../../shared/eventa'
+import { electronCenterMainWindow, electronGetMainWindowLogs, electronMainWindowLogEntry, electronOpenChat, electronOpenEditor, electronOpenMainDevtools, electronOpenSettings, electronSetMainWindowContext, noticeWindowEventa } from '../../../../shared/eventa'
+import { getMainProcessLogSnapshot, setMainProcessLogEmitter } from '../../../app/main-process-log-bus'
 import { createAuthService } from '../../../services/airi/auth'
 import { createGodotStageService } from '../../../services/airi/godot-stage'
 import { createMcpServersService } from '../../../services/airi/mcp-servers'
@@ -57,10 +58,21 @@ export async function setupMainWindowElectronInvokes(params: {
   createAuthService({ context, window: params.window })
 
   defineInvokeHandler(context, electronCenterMainWindow, () => centerWindowOnDisplay(params.window))
+  defineInvokeHandler(context, electronGetMainWindowLogs, () => getMainProcessLogSnapshot())
   defineInvokeHandler(context, electronSetMainWindowContext, payload => {
     if (payload?.mode)
       params.setMainWindowContext(payload.mode)
   })
+
+  // Stream sanitized main-process logs to this (main) window's renderer so the
+  // Lia Home viewer can show live log entries. The bus buffers everything from
+  // boot; only the main window asks for it, so the emitter targets it.
+  setMainProcessLogEmitter(line => {
+    if (!params.window.isDestroyed()) {
+      context.emit(electronMainWindowLogEntry, line)
+    }
+  })
+  params.window.on('closed', () => setMainProcessLogEmitter(null))
   defineInvokeHandler(context, electronOpenMainDevtools, () => params.window.webContents.openDevTools({ mode: 'detach' }))
   defineInvokeHandler(context, electronOpenEditor, () => params.editorWindow.openWindow())
   defineInvokeHandler(context, electronOpenSettings, payload => params.settingsWindow.openWindow(payload?.route))

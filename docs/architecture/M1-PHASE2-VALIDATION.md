@@ -160,4 +160,85 @@ Mecânica implementada em `fix(lia): add contextual window sizing` (detalhes em
 > Ajustar presets se as screenshots mostrarem tamanho inadequado; **não** alterar Stage renderer/
 > câmera/avatar para resolver. Retorno **Stage→Home** (restauração) será conectado na **Fase 3**.
 
+---
+
+## 10. Correções finais da QA (real machine)
+
+Dois problemas corrigidos nesta rodada. Commits separados:
+- `fix(lia): persist home window bounds`
+- `fix(lia): connect home log viewer`
+
+### 10.1 Home window persistence (cause → fix)
+
+**Causa:** em `src/main/windows/main/index.ts`, o listener `window.on('resize', () =>
+sizing.captureUserBounds())` era registrado imediatamente no arranque. A janela é criada no **preset
+da Home** (`460×640`) e só depois `setContext('home')` aplica o override persistido. Como
+`currentContext` já era `'home'`, um evento `resize` disparado durante o show/settle com a janela
+ainda refletindo o preset de construção fazia `captureUserBounds()` **sobrescrever o override da Home
+com 460×640**. O Stage nunca sofre isso porque só é redimensionado quando o usuário navega via
+CONVERSAR — daí a assimetria (Stage persiste, Home não).
+
+**Correção** (`window-sizing.ts` + `index.ts` + teste): só *resizes de usuário* são persistidos.
+- `captureUserBounds()` ignora resize antes de **armado** e ignora o "rabo" (resize tail) de um
+  `setContext` programático (compara com `programmaticTarget`).
+- `index.ts` chama `sizing.armUserResizeCapture()` **em `ready-to-show`** (após `show()`), quando o
+  arranque já aplicou o tamanho final; nenhum resize transitório de startup pode mais gravar.
+- `window-sizing.test.ts` cobre: não persiste antes de armar; persiste resize de usuário da Home;
+  separa por modo (Home nunca sobrescreve Stage e vice-versa); restaura override no `setContext`.
+
+**Comportamento esperado:** 1ª execução Home 460×640; usuário redimensiona → Home tamanho customizado;
+fechar/abrir → restaura. Stage preserva o dele. Presets **inalterados** (460×640 / 800×1000).
+
+### 10.2 Log viewer vazio (cause → fix)
+
+**Causa:** o painel de logs da Home mostrava um **placeholder estático de i18n** (`logs.empty`) — não
+estava conectado a nenhuma fonte real. O AIRI gera logs no **processo principal** via `@guiiai/logg`
+(`useLogg(scope)`) e os encaminha por um único hook global `setGlobalHookPostLog` → `FileLogger`
+(em `src/main/app/file-logger.ts` e `src/main/index.ts`).
+
+**Fonte de logs reutilizada** (nenhum logger novo, nenhum 2º sistema, sem ler arquivo/polling):
+- `src/main/app/main-process-log-bus.ts` (novo, fino): consome o **mesmo** `setGlobalHookPostLog`;
+  mantém um **ring buffer sanitizado** (200) e emite linhas novas p/ o renderer da main window.
+  Sanitiza **antes** de armazenar/encaminhar: remove ANSI, mascara segredos/tokens comuns
+  (`Bearer`/`Authorization`, `api[_-]?key`, `secret`, `client_secret`, `password`, `token`,
+  `access/refresh_token`), **colapsa stack traces** (mantém erro + 1º frame, descarta o resto da
+  run) e limita o tamanho da linha. Detalhe técnico cru permanece no viewer de diagnóstico/arquivo.
+- `src/shared/eventa/index.ts`: `electronMainWindowLogEntry` (push) e `electronGetMainWindowLogs`
+  (snapshot) + tipo `MainProcessLogLine`.
+- `src/main/windows/main/rpc/index.electron.ts`: registra o invoke (snapshot) e liga o emitter →
+  `context.emit` p/ a main window; limpa no `closed`.
+- `src/renderer/pages/home.vue`: no mount busca o snapshot e assina o stream; `Mostrar logs` abre o
+  painel com as linhas reais; scroll interno, `break-words`, novo log rola ao fim. i18n: adicionada a
+  chave `logs.loading` (pt-BR/en).
+- Teste `main-process-log-bus.test.ts`: sanitizer (ANSI, Bearer/Authorization, api_key/client_secret/
+  password, trim, truncamento).
+
+### 10.3 Testes / build / QA manual
+
+Rodar na máquina real (`J:\Lia-Project`):
+```bash
+pnpm typecheck        # esperado 56/57 (baseline live2d-zip-loader) — separar BASELINE de LIA REGRESSIONS
+pnpm build:web
+pnpm dev:tamagotchi
+```
+Testes direcionados (stage-tamagotchi, Home, window sizing, i18n, logging/viewer): vitest dos
+`window-sizing.test.ts`, `main-process-log-bus.test.ts` e testes i18n existentes.
+
+QA manual — Window:
+- [ ] 1ª Home abre 460×640 (sem override).
+- [ ] Home: redimensionar → fechar → abrir → **tamanho customizado restaurado**.
+- [ ] CONVERSAR → Stage 800×1000 (sem override).
+- [ ] Stage: redimensionar → fechar → abrir (via CONVERSAR) → restaurado.
+- [ ] **Home size ≠ Stage size** e persistências independentes (nenhum modo sobrescreve o outro).
+
+QA manual — Logs:
+- [ ] Home → `Mostrar logs` → logs reais aparecem (FileLogger/services/runtime/server-runtime).
+- [ ] Gerar atividade → viewer atualiza (novo log aparece/rola ao fim).
+- [ ] `Ocultar logs` fecha sem quebrar layout.
+- [ ] Sem API keys/tokens/credenciais/stack traces completos no painel da Home.
+- [ ] 1280×720 · 1366×768 · 1920×1080 · janela pequena.
+
+**Classificação final:** PHASE 2 READY FOR FINAL APPROVAL
+(somente quando ambos os problemas estiverem realmente resolvidos na máquina real).
+
 *Fim do runbook.*

@@ -20,6 +20,7 @@ logs:
   title: "Logs"
   close: "Ocultar logs"
   empty: "Nada a reportar no momento."
+  loading: "Carregando logs..."
   technicalNote: "Logs técnicos detalhados ficam em Avançado."
   viewAdvanced: "Abrir em Avançado"
 states:
