@@ -89,9 +89,18 @@ export const liaProductConfigSchema = object({
 
 export type LiaProductConfig = InferOutput<typeof liaProductConfigSchema>
 
+/**
+ * The product persona defaults to the Lia built-in character card. `'lia'`
+ * mirrors the renderer's built-in card id (airi-card store) and is kept in sync
+ * by hand — per the approved 4B model the main process does not push this to the
+ * renderer; the renderer's own fresh-install state already resolves to `lia`.
+ * A full main → renderer persona bridge is a later phase (4E).
+ */
+const LIA_PRODUCT_PERSONA_DEFAULT_ACTIVE_CARD_ID = 'lia'
+
 export const defaultLiaProductConfig: LiaProductConfig = {
   schemaVersion: LIA_PRODUCT_SCHEMA_VERSION,
-  persona: {},
+  persona: { activeCardId: LIA_PRODUCT_PERSONA_DEFAULT_ACTIVE_CARD_ID },
   provider: {},
   voice: {},
   preferences: {},

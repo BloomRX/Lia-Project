@@ -72,7 +72,7 @@ describe('lia product config', () => {
     expect(mod.LIA_PRODUCT_SCHEMA_VERSION).toBe(1)
     expect(mod.defaultLiaProductConfig).toEqual({
       schemaVersion: 1,
-      persona: {},
+      persona: { activeCardId: 'lia' },
       provider: {},
       voice: {},
       preferences: {},
@@ -116,9 +116,10 @@ describe('lia product config', () => {
     })))
 
     const config = mod.createLiaProductConfig()
-    // Non-supported version is not a valid v1 doc → auto-healed to the default.
+    // Non-supported version is not a valid v1 doc → auto-healed to the default,
+    // whose persona points at the Lia built-in card.
     expect(config.get()?.schemaVersion).toBe(1)
-    expect(config.get()?.persona?.activeCardId).toBeUndefined()
+    expect(config.get()?.persona?.activeCardId).toBe('lia')
     // A backup of the invalid file must be attempted.
     await vi.waitFor(() => {
       expect(fs.copyFile).toHaveBeenCalled()
@@ -160,7 +161,7 @@ describe('lia product config', () => {
 
     // Writing to the window-state config must not affect the product config.
     windowConfig.update({ home: { width: 460, height: 640 } })
-    expect(product.get()?.persona).toEqual({})
+    expect(product.get()?.persona).toEqual({ activeCardId: 'lia' })
     expect(product.get()?.schemaVersion).toBe(1)
   })
 })
