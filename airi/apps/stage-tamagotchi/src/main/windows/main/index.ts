@@ -138,7 +138,13 @@ export async function setupMainWindow(params: {
   }
   setWindowAlwaysOnTop(window, true)
 
-  window.on('ready-to-show', () => window!.show())
+  window.on('ready-to-show', () => {
+    window!.show()
+    // Startup Home bounds (preset or persisted override) are now applied and the
+    // window is visible. Only now may genuine user resizes be persisted, so a
+    // transient startup resize can never overwrite the Home override.
+    sizing.armUserResizeCapture()
+  })
   protectPrivilegedWindowNavigation(window)
 
   await setupMainWindowElectronInvokes({

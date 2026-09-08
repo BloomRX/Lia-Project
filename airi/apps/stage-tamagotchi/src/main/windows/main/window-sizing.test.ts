@@ -1,8 +1,10 @@
-import type { Rectangle } from 'electron'
+import type { BrowserWindow, Rectangle } from 'electron'
 
+import { screen } from 'electron'
 import { describe, expect, it, vi } from 'vitest'
 
 import {
+  createMainWindowContextSizing,
   HOME_WINDOW_PRESET,
   MAIN_WINDOW_MIN_SIZE,
   resolveContextBounds,
@@ -93,5 +95,101 @@ describe('resolveContextBounds', () => {
     expect(bounds.width).toBe(STAGE_WINDOW_PRESET.width)
     expect(bounds.x + bounds.width).toBeLessThanOrEqual(workArea.x + workArea.width)
     expect(bounds.y).toBeGreaterThanOrEqual(workArea.y)
+  })
+})
+
+/** Big work area so the Stage preset (800×1000) is never clamped in these tests. */
+const bigWorkArea: Rectangle = { x: 0, y: 0, width: 1920, height: 1200 }
+
+function makeWindowController(initialSize: { width: number, height: number }) {
+  let bounds: Rectangle = { x: 100, y: 100, width: initialSize.width, height: initialSize.height }
+  const win = {
+    getBounds: (): Rectangle => ({ ...bounds }),
+    setBounds: (next: Rectangle): void => {
+      bounds = { ...next }
+    },
+    // Simulates a user/OS resize producing a window 'resize' event.
+    _forceSize: (width: number, height: number): void => {
+      bounds = { ...bounds, width, height }
+    },
+  }
+  return win
+}
+
+type FakeWindow = ReturnType<typeof makeWindowController>
+
+describe('createMainWindowContextSizing persistence', () => {
+  function setup(seed?: { home?: { width?: number, height?: number }, stage?: { width?: number, height?: number } }) {
+    let state = seed ?? {}
+    const config = {
+      get: () => state,
+      update: (next: unknown) => {
+        state = next as typeof state
+      },
+    }
+    // Mock: any display reports the big work area.
+    vi.mocked(screen.getDisplayMatching).mockImplementation((() => ({ workArea: { ...bigWorkArea } })) as never)
+
+    const win = makeWindowController({ width: HOME_WINDOW_PRESET.width, height: HOME_WINDOW_PRESET.height })
+    const sizing = createMainWindowContextSizing({
+      window: win as unknown as BrowserWindow,
+      config: config as never,
+    })
+    return { sizing, config, win }
+  }
+
+  it('never persists a resize before user-resize capture is armed (startup transient)', () => {
+    const { sizing, config, win } = setup({ home: { width: 520, height: 700 } })
+    // Startup: apply persisted Home override, but do NOT arm yet.
+    sizing.setContext('home', { recenter: true })
+    expect(config.get()).toEqual({ home: { width: 520, height: 700 } })
+
+    // A transient startup resize to the preset must NOT clobber the Home override.
+    win._forceSize(HOME_WINDOW_PRESET.width, HOME_WINDOW_PRESET.height)
+    sizing.captureUserBounds()
+    expect(config.get()).toEqual({ home: { width: 520, height: 700 } })
+  })
+
+  it('persists a Home user resize only once armed', () => {
+    const { sizing, config, win } = setup({ home: { width: 520, height: 700 } })
+    // not armed yet -> no writes
+    win._forceSize(900, 900)
+    sizing.captureUserBounds()
+    expect(config.get()).toEqual({ home: { width: 520, height: 700 } })
+
+    sizing.armUserResizeCapture()
+    win._forceSize(560, 760)
+    sizing.captureUserBounds()
+    expect(config.get().home).toEqual({ width: 560, height: 760 })
+  })
+
+  it('splits per-mode and never lets Stage overwrite Home or vice-versa', () => {
+    const { sizing, config, win } = setup()
+    sizing.armUserResizeCapture()
+
+    // Home: user resizes to 560×760.
+    win._forceSize(560, 760)
+    sizing.captureUserBounds()
+    expect(config.get().home).toEqual({ width: 560, height: 760 })
+
+    // Navigate to Stage: programmatic resize tail is suppressed (no stage override yet).
+    sizing.setContext('stage')
+    sizing.captureUserBounds()
+    expect(config.get().stage).toBeUndefined()
+    expect(config.get().home).toEqual({ width: 560, height: 760 })
+
+    // Stage: user resizes to 900×1100 -> only stage override written.
+    win._forceSize(900, 1100)
+    sizing.captureUserBounds()
+    expect(config.get().stage).toEqual({ width: 900, height: 1100 })
+    expect(config.get().home).toEqual({ width: 560, height: 760 })
+  })
+
+  it('restores the persisted override on setContext', () => {
+    const { sizing, win } = setup({ home: { width: 520, height: 700 } })
+    win._forceSize(HOME_WINDOW_PRESET.width, HOME_WINDOW_PRESET.height)
+    sizing.setContext('home', { recenter: true })
+    expect(win.getBounds().width).toBe(520)
+    expect(win.getBounds().height).toBe(700)
   })
 })

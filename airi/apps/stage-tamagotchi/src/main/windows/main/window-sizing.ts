@@ -106,6 +106,8 @@ export interface MainWindowContextSizing {
   setContext(context: MainWindowContext, options?: { recenter?: boolean }): void
   /** Records the current window size against the active mode (user resize). */
   captureUserBounds(): void
+  /** Enables persistence of user resizes (called once the window is shown/settled). */
+  armUserResizeCapture(): void
 }
 
 /**
@@ -115,12 +117,25 @@ export interface MainWindowContextSizing {
  *   preset), staying on the active display.
  * - `captureUserBounds` stores the current size on the *active* mode only, so
  *   resizing in Home never contaminates the Stage size and vice-versa.
+ *
+ * Only *user* resizes are persisted. Programmatic resizes are never written:
+ * - At startup the window is created at the Home preset and `setContext` applies
+ *   the persisted override; a `resize` event can still fire while the window
+ *   momentarily reflects the construction preset. If we captured unconditionally
+ *   with mode = `home`, that transient would overwrite the saved Home override
+ *   with the preset (Stage never suffers this because it is only resized when the
+ *   user navigates, explaining the original Home-vs-Stage asymmetry). Capture is
+ *   therefore only armed after the window is shown (`armUserResizeCapture`), and
+ *   the resize tails produced by our own `setContext` are suppressed.
  */
 export function createMainWindowContextSizing(params: {
   window: BrowserWindow
   config: Config<typeof liaMainWindowStateSchema>
 }): MainWindowContextSizing {
   let currentContext: MainWindowContext = 'home'
+  /** Bounds our own `setContext` most recently asked for (to ignore its resize tail). */
+  let programmaticTarget: Rectangle | null = null
+  let userResizeCaptureArmed = false
 
   function persistedSize(context: MainWindowContext): LiaWindowSizeRecord | null | undefined {
     const state = params.config.get() ?? {}
@@ -138,11 +153,30 @@ export function createMainWindowContextSizing(params: {
       overrideSize: persistedSize(context),
       recenter,
     })
+    programmaticTarget = bounds
     params.window.setBounds(bounds)
   }
 
   function captureUserBounds(): void {
     const bounds = params.window.getBounds()
+    // Ignore the async resize tail of our own `setContext` so a programmatic
+    // mode switch never writes (or clobbers) an override.
+    if (
+      programmaticTarget
+      && Math.round(bounds.width) === Math.round(programmaticTarget.width)
+      && Math.round(bounds.height) === Math.round(programmaticTarget.height)
+    ) {
+      programmaticTarget = null
+      return
+    }
+    programmaticTarget = null
+
+    // Before the window is shown/settled, resize events may still reflect the
+    // construction preset; never let those persist an override.
+    if (!userResizeCaptureArmed) {
+      return
+    }
+
     const state = params.config.get() ?? {}
     const entry: LiaWindowSizeRecord = {
       width: Math.round(bounds.width),
@@ -151,5 +185,9 @@ export function createMainWindowContextSizing(params: {
     params.config.update(currentContext === 'home' ? { ...state, home: entry } : { ...state, stage: entry })
   }
 
-  return { setContext, captureUserBounds }
+  function armUserResizeCapture(): void {
+    userResizeCaptureArmed = true
+  }
+
+  return { setContext, captureUserBounds, armUserResizeCapture }
 }

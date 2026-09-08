@@ -218,6 +218,15 @@ apply o tamanho é sempre clampado à `workArea` do display ativo e centralizado
   A escolha do usuário passa a ser persistida a partir daí.
 - Reabrir/relançar em `/home` → aplica override Home (ou preset) e recentraliza.
 
+### Follow-up: persistência da Home (QA final)
+Commit `fix(lia): persist home window bounds`. A Home (modo `home`) não restaurava o override porque o
+listener `window.on('resize', captureUserBounds)` era armado no arranque, quando a janela ainda estava
+no preset de construção (`460×640`) — o resize transitório sobrescrevia o override Home gravado (o Stage
+não sofria isso, pois só é redimensionado via navegação). Correção: `captureUserBounds()` só persiste
+**resizes de usuário** — ignora resize antes de `armUserResizeCapture()` (chamado em `ready-to-show`
+após `show()`) e ignora o "rabo" do `setContext` programático (via `programmaticTarget`). Ver
+`M1-PHASE2-VALIDATION.md` §10.1.
+
 ### DPI / work area / posição
 - Antes de `setBounds`: `screen.getDisplayMatching(currentBounds).workArea`; tamanho clampado a
   `[MIN, workArea]`; nunca x/y negativos além da área nem janela maior que a work area nem fora da tela.
