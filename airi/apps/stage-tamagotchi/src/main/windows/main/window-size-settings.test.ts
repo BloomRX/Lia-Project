@@ -1,4 +1,5 @@
-import type { LiaWindowSizeRecord, MainWindowContext, MainWindowContextSizing } from './window-sizing'
+import type { LiaWindowSizeRecord, MainWindowContext, MainWindowContextSizing, liaMainWindowStateSchema } from './window-sizing'
+import type { Config } from '../../libs/electron/persistence'
 
 import { describe, expect, it, vi } from 'vitest'
 
@@ -18,7 +19,7 @@ function setup(seed: SizeState = {}, activeMode: MainWindowContext = 'stage') {
     update: (next: SizeState) => {
       state = next
     },
-  }
+  } as unknown as Config<typeof liaMainWindowStateSchema>
 
   const sizing: MainWindowContextSizing = {
     setContext: vi.fn(() => {
