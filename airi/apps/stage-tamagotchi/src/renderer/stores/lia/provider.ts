@@ -185,6 +185,31 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
   }
 
   /**
+   * Whether the persisted config is genuinely ready to have a conversation.
+   *
+   * Ready requires: a preferred provider + model, the `onboarded` completion
+   * marker, and an API key stored in the secure vault for that provider. The
+   * explicit marker alone (onboarded=true with an invalid config) never reports
+   * ready — readiness is recomputed from the real config every call. No secret
+   * is read here, only its presence.
+   */
+  async function isReadyToChat(): Promise<boolean> {
+    const config = loadedConfig.value ?? (await refreshConfig())
+    const preferred = config.preferred
+    if (!preferred?.providerId || !preferred.modelId)
+      return false
+    if (config.onboarded !== true)
+      return false
+    return secretHas({ scope: preferred.providerId, key: API_KEY_NAME })
+  }
+
+  /** Marks the first-run provider setup as complete for the current config. */
+  async function markOnboarded(): Promise<void> {
+    const config = loadedConfig.value ?? (await refreshConfig())
+    await persistConfig({ ...config, onboarded: true })
+  }
+
+  /**
    * Installs the inert-by-default runtime hooks for the current renderer session.
    * Called once by the Lia Home (main window). Idempotent.
    */
@@ -232,6 +257,8 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
     ensureProviderRecord,
     activateTarget,
     activatePreferred,
+    isReadyToChat,
+    markOnboarded,
     registerRuntimeExtensions,
   }
 })

@@ -14,6 +14,7 @@ actions:
   voice: "Voz"
   activities: "Atividades"
   settings: "Configurações"
+  configure: "Configurar"
   diagnostics: "Diagnósticos"
 logs:
   label: "Mostrar logs"
@@ -33,29 +34,54 @@ navigation:
 presence:
   name: "Lia"
   role: "Sua companheira virtual"
+leds:
+  title: "Status"
+  ai: "IA"
+  voice: "Voz"
+  avatar: "Avatar"
+  fallback: "Fallback"
+  on: "Ligado"
+  off: "Desligado"
+  pending: "Não configurado"
 provider:
-  configure: "Provider de conversa"
   title: "Provider de conversa"
+  subtitle: "Gerencie como a Lia conversa."
+  onboarding:
+    title: "Configure sua Lia"
+    subtitle: "Um passo para deixar a Lia pronta para conversar. Sua chave fica armazenada com segurança neste dispositivo."
   key:
     saved: "Chave salva"
     missing: "Sem chave"
   fields:
     provider:
+      label: "Provider principal"
       placeholder: "Provedor"
     model:
+      label: "Modelo"
       placeholder: "ID do modelo (ex.: llama-3.3-70b-versatile)"
     endpoint:
+      label: "Endpoint"
       placeholder: "URL base (endpoint)"
     key:
+      label: "Chave da API"
       placeholder: "Chave da API"
       replace: "Nova chave da API (deixe em branco para manter)"
+    fallbackProvider:
+      label: "Provider de fallback"
+      placeholder: "Provider reserva (opcional)"
+    fallbackModel:
+      label: "Modelo de fallback"
+      placeholder: "ID do modelo do fallback"
   fallback:
-    label: "Ativar fallback automático"
-  securityNote: "A chave da API é criptografada com o armazenamento seguro do sistema (Electron safeStorage). Nunca é gravada na sua configuração nem nos logs."
+    label: "Fallback automático"
+    hint: "Reserva se o provider principal falhar"
+  securityNote: "Sua chave da API é criptografada com o armazenamento seguro do dispositivo. Nunca é gravada na sua configuração nem nos logs."
   actions:
     save: "Salvar"
     test: "Testar conexão"
     remove: "Remover"
+    back: "Voltar"
+    conclude: "Concluir configuração"
   saved: "Provider salvo"
   removed: "Provider removido"
   connection:
@@ -67,3 +93,4 @@ provider:
     keyStoreUnavailable: "O armazenamento seguro de chaves não está disponível neste dispositivo."
     save: "Não foi possível salvar o provider."
     fillFirst: "Selecione um provider e informe um modelo para testar a conexão."
+    testFirst: "Teste a conexão antes de concluir."

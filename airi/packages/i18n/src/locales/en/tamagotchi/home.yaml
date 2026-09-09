@@ -14,6 +14,7 @@ actions:
   voice: "Voice"
   activities: "Activities"
   settings: "Settings"
+  configure: "Configure"
   diagnostics: "Diagnostics"
 logs:
   label: "Show logs"
@@ -33,29 +34,54 @@ navigation:
 presence:
   name: "Lia"
   role: "Your AI companion"
+leds:
+  title: "Status"
+  ai: "AI"
+  voice: "Voice"
+  avatar: "Avatar"
+  fallback: "Fallback"
+  on: "On"
+  off: "Off"
+  pending: "Not configured"
 provider:
-  configure: "Chat provider"
   title: "Conversation provider"
+  subtitle: "Manage how Lia talks."
+  onboarding:
+    title: "Configure your Lia"
+    subtitle: "One step to get Lia ready to talk. Your key is stored securely on this device."
   key:
     saved: "Key stored"
     missing: "No key"
   fields:
     provider:
+      label: "Main provider"
       placeholder: "Provider"
     model:
+      label: "Model"
       placeholder: "Model id (e.g. llama-3.3-70b-versatile)"
     endpoint:
+      label: "Endpoint"
       placeholder: "Base URL (endpoint)"
     key:
+      label: "API key"
       placeholder: "API key"
       replace: "New API key (leave blank to keep)"
+    fallbackProvider:
+      label: "Fallback provider"
+      placeholder: "Optional backup provider"
+    fallbackModel:
+      label: "Fallback model"
+      placeholder: "Model id for the fallback"
   fallback:
-    label: "Enable automatic fallback"
-  securityNote: "The API key is encrypted with your system's secure storage (Electron safeStorage). It is never written to your config or logs."
+    label: "Automatic fallback"
+    hint: "Backup if the main provider fails"
+  securityNote: "Your API key is encrypted with the device's secure storage. It is never written to your configuration or logs."
   actions:
     save: "Save"
     test: "Test connection"
     remove: "Remove"
+    back: "Back"
+    conclude: "Finish setup"
   saved: "Provider saved"
   removed: "Provider removed"
   connection:
@@ -67,3 +93,4 @@ provider:
     keyStoreUnavailable: "Secure key storage is unavailable on this device."
     save: "Could not save the provider."
     fillFirst: "Select a provider and enter a model to test the connection."
+    testFirst: "Test the connection before finishing."

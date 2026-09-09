@@ -90,6 +90,41 @@ renderer localStorage, `lia/product.json`, or logs.
 - The persona **Lia (pt-BR)** is untouched; switching UI language does not change the
   character language.
 
+## UX correction: first-run setup + clean launcher (product view)
+
+The provider config is **not** a permanent technical panel on Home. It lives in the
+main/launcher window, presented as product setup:
+
+- **First run** (`/home`): the Home route reads the real persisted config
+  (`provider.chat`) on mount. If it is not ready (no preferred provider+model, or
+  not marked `onboarded`, or no stored key), it renders the single onboarding
+  screen (provider, model, API key, automatic fallback + fallback provider/model,
+  Test connection, Finish setup). There is **no `/setup` route** and no change to
+  router/startup/window-context.
+- **Ready check is not a blind boolean.** `provider.chat.onboarded` is an additive
+  completion marker, but readiness always also requires the preferred provider +
+  model to be present and a vault key to exist — so `onboarded=true` with an invalid
+  config never reports the system as ready (falls back to onboarding).
+- **Later runs** open the launcher directly: avatar, a small discrete LED row
+  (IA / Voz / Avatar / Fallback), `CONVERSAR`, and a discreet "Configurar" action
+  that reopens the **same** `LiaProviderConfig` editor in `manage` mode.
+- If the persisted config becomes invalid/incomplete, Home returns to onboarding.
+- Keys stay in the Electron/safeStorage vault (never localStorage,
+  `lia-product.json`, or logs).
+- The launcher was simplified to product-relevant actions (Configurar + Personagem).
+  The AIRI Settings/dev-diagnostics windows remain reachable via the existing
+  character settings entry and the Home log viewer (technical/advanced stays out of
+  the primary launcher).
+- The same `LiaProviderConfig` component is reused for onboarding and later edits
+  (no duplicated provider/secrets logic).
+
+### UX-specific file notes
+- `configs/lia.ts` + `shared/eventa`: additive `provider.chat.onboarded`.
+- `stores/lia/provider.ts`: `isReadyToChat()`, `markOnboarded()`.
+- `components/LiaProviderConfig.vue`: now a reusable editor (`mode: onboarding |
+  manage`) with fallback provider/model + Test connection + Finish setup.
+- `pages/home.vue`: first-run gate within the Home route + clean launcher + LEDs.
+
 ## Real-machine QA checklist (not run in this sandbox)
 
 - `typecheck`, `build:web`, `dev:tamagotchi` pass.

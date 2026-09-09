@@ -29,15 +29,18 @@ const eventaContext = useElectronEventaContext()
 // store is ready here. We only READ it — no second runtime, no preview system.
 const { stageModelSelectedDisplayModel } = storeToRefs(useSettingsStageModel())
 
-const openSettings = useElectronEventaInvoke(electronOpenSettings)
 const setMainWindowContext = useElectronEventaInvoke(electronSetMainWindowContext)
 const getMainWindowLogs = useElectronEventaInvoke(electronGetMainWindowLogs)
+const openSettings = useElectronEventaInvoke(electronOpenSettings)
 
 const liaProviderStore = useLiaProviderStore()
+
+type HomeView = 'loading' | 'onboarding' | 'launcher' | 'settings'
+
+const view = ref<HomeView>('loading')
 const previewError = ref(false)
 const logsOpen = ref(false)
 const logsLoading = ref(false)
-const providerPanelOpen = ref(false)
 
 // Recent main-process logs (already sanitized main-side). Kept newest-last.
 const logs = ref<MainProcessLogLine[]>([])
@@ -45,15 +48,85 @@ const logPanelEl = ref<HTMLElement | null>(null)
 let disposeLogListener: (() => void) | undefined
 const MAX_VIEW_LOGS = 300
 
-type HomeState = 'loading' | 'ready' | 'disabled'
-
-const homeState = computed<HomeState>(() => {
-  if (previewError.value)
-    return 'disabled'
-  if (stageModelSelectedDisplayModel.value === undefined)
-    return 'loading'
-  return 'ready'
+// Presence asset: prefer the active model's previewImage (AIRI preview infra),
+// fall back to the Lia static asset, then the placeholder icon.
+const presenceSrc = computed<string>(() => {
+  const preview = stageModelSelectedDisplayModel.value?.previewImage
+  if (preview && !previewError.value)
+    return preview
+  return liaFallbackAsset
 })
+
+type LedState = 'on' | 'off' | 'pending'
+
+interface HomeLed {
+  key: string
+  label: string
+  state: LedState
+  title: string
+}
+
+const leds = ref<HomeLed[]>([])
+
+function ledClass(state: LedState) {
+  if (state === 'on')
+    return 'bg-green-500 dark:bg-green-400'
+  if (state === 'pending')
+    return 'bg-amber-400 dark:bg-amber-400'
+  return 'bg-neutral-300 dark:bg-neutral-600'
+}
+
+async function computeSummary() {
+  const config = await liaProviderStore.refreshConfig()
+  const aiReady = await liaProviderStore.isReadyToChat()
+  const fallback = config.fallback?.[0]
+  const fallbackConfigured = Boolean(fallback?.providerId && fallback?.modelId)
+  const fallbackEnabled = config.fallbackEnabled !== false
+
+  const statusTitle = (state: LedState, on: string, off: string, pending: string) => {
+    if (state === 'on')
+      return t(on)
+    if (state === 'pending')
+      return t(pending)
+    return t(off)
+  }
+
+  leds.value = [
+    {
+      key: 'ai',
+      label: t('tamagotchi.home.leds.ai'),
+      state: aiReady ? 'on' : 'pending',
+      title: aiReady
+        ? t('tamagotchi.home.status.ai')
+        : t('tamagotchi.home.leds.pending'),
+    },
+    {
+      key: 'voice',
+      label: t('tamagotchi.home.leds.voice'),
+      state: 'off',
+      title: t('tamagotchi.home.leds.off'),
+    },
+    {
+      key: 'avatar',
+      label: t('tamagotchi.home.leds.avatar'),
+      state: previewError.value || stageModelSelectedDisplayModel.value === undefined ? 'off' : 'on',
+      title: stageModelSelectedDisplayModel.value === undefined
+        ? t('tamagotchi.home.leds.off')
+        : t('tamagotchi.home.status.ready'),
+    },
+    {
+      key: 'fallback',
+      label: t('tamagotchi.home.leds.fallback'),
+      state: fallbackEnabled ? (fallbackConfigured ? 'on' : 'pending') : 'off',
+      title: statusTitle(
+        fallbackEnabled ? (fallbackConfigured ? 'on' : 'pending') : 'off',
+        'tamagotchi.home.leds.on',
+        'tamagotchi.home.leds.off',
+        'tamagotchi.home.leds.pending',
+      ),
+    },
+  ]
+}
 
 function appendLogLines(lines: MainProcessLogLine[]) {
   const seen = new Set(logs.value.map(line => line.id))
@@ -93,42 +166,34 @@ watch([() => logs.value.length, logsOpen], async () => {
   }
 })
 
-// Presence asset: prefer the active model's previewImage (AIRI preview infra),
-// fall back to the Lia static asset, then the placeholder icon.
-const presenceSrc = computed<string>(() => {
-  const preview = stageModelSelectedDisplayModel.value?.previewImage
-  if (preview && !previewError.value)
-    return preview
-  return liaFallbackAsset
-})
-
 async function goConversar() {
   // Activate the user's configured Lia chat provider/model before entering the
   // Stage, so the existing AIRI chat streams with the secure (vault-resolved) key.
   await liaProviderStore.activatePreferred()
   // Primary destination: the existing Stage (character experience) at '/'.
-  // NOT the textual chat window (electronOpenChat stays a secondary AIRI capability).
   // Resize the window to the Stage preset BEFORE navigating so the Stage mounts
   // at its intended size (contextual window sizing, M1 Phase 2).
   await setMainWindowContext({ mode: 'stage' })
   await router.push('/')
 }
 
-function toggleProviderPanel() {
-  providerPanelOpen.value = !providerPanelOpen.value
+function openConfigure() {
+  view.value = 'settings'
 }
 
 async function openCharacterSettings() {
   await openSettings({ route: '/settings/models' })
 }
 
-async function openDiagnostics() {
-  // Stand-in until the Phase 7 Advanced/Diagnostics screen exists.
-  await openSettings({ route: '/settings/system/developer' })
+async function onOnboardingComplete() {
+  await computeSummary()
+  view.value = 'launcher'
 }
 
-async function openSettingsGeneric() {
-  await openSettings({})
+async function onSettingsBack() {
+  const ready = await liaProviderStore.isReadyToChat()
+  await computeSummary()
+  view.value = ready ? 'launcher' : 'onboarding'
 }
 
 function toggleLogs() {
@@ -137,12 +202,19 @@ function toggleLogs() {
     void refreshLogsFromMain()
 }
 
-onMounted(() => {
+onMounted(async () => {
   void refreshLogsFromMain()
   subscribeToLogStream()
   // Install the (inert-by-default) chat runtime extensions so the shared AIRI
   // chat can use the secure vault key and fail over on recoverable errors.
   liaProviderStore.registerRuntimeExtensions()
+
+  // First-run gating: derive readiness from the REAL persisted config (preferred
+  // provider + model + onboarded marker + stored key). Onboarding is shown until
+  // the user completes a valid setup; afterwards the launcher opens directly.
+  const ready = await liaProviderStore.isReadyToChat()
+  await computeSummary()
+  view.value = ready ? 'launcher' : 'onboarding'
 })
 
 onUnmounted(() => {
@@ -163,7 +235,23 @@ onUnmounted(() => {
 
     <!-- Scrollable content below the fixed TitleBar: centers when it fits, scrolls when it overflows -->
     <div class="absolute inset-x-0 bottom-0 top-11 z-10 overflow-y-auto">
-      <div class="flex min-h-full w-full flex-col">
+      <!-- Loading -->
+      <div v-if="view === 'loading'" class="flex min-h-full w-full items-center justify-center px-6 py-8 text-sm text-neutral-400 dark:text-neutral-500">
+        {{ t('tamagotchi.home.states.loading') }}
+      </div>
+
+      <!-- First-run setup (reuses the Lia provider editor). -->
+      <div v-else-if="view === 'onboarding'" class="flex min-h-full w-full items-center justify-center px-6 py-10">
+        <LiaProviderConfig mode="onboarding" @complete="onOnboardingComplete" />
+      </div>
+
+      <!-- Later configuration (same editor). -->
+      <div v-else-if="view === 'settings'" class="flex min-h-full w-full items-center justify-center px-6 py-10">
+        <LiaProviderConfig mode="manage" @back="onSettingsBack" />
+      </div>
+
+      <!-- Clean launcher / companion home -->
+      <div v-else class="flex min-h-full w-full flex-col">
         <div class="my-auto flex w-full flex-col items-center justify-center gap-4 px-6 py-8 text-center">
           <div class="relative">
             <div class="size-32 overflow-hidden rounded-2xl shadow-lg ring-1 ring-white/10">
@@ -183,30 +271,20 @@ onUnmounted(() => {
             {{ t('tamagotchi.home.greeting') }}
           </p>
 
-          <div class="flex items-center gap-2">
+          <!-- Discrete status LEDs -->
+          <div class="flex items-center gap-3 text-xs text-neutral-500 dark:text-neutral-400">
             <span
-              :class="[
-                'inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-medium',
-                homeState === 'ready'
-                  ? 'bg-green-500/10 text-green-700 ring-1 ring-green-500/30 dark:text-green-300 dark:ring-green-400/25'
-                  : homeState === 'loading'
-                    ? 'bg-amber-500/10 text-amber-700 ring-1 ring-amber-500/30 dark:text-amber-300 dark:ring-amber-400/25'
-                    : 'bg-neutral-500/10 text-neutral-600 ring-1 ring-neutral-400/30 dark:text-neutral-300 dark:ring-neutral-400/25',
-              ]"
+              v-for="led in leds"
+              :key="led.key"
+              class="inline-flex items-center gap-1.5"
+              :title="led.title"
             >
-              <span
-                :class="[
-                  'size-2 rounded-full',
-                  homeState === 'ready' ? 'bg-green-500 dark:bg-green-400' : homeState === 'loading' ? 'animate-pulse bg-amber-500 dark:bg-amber-400' : 'bg-neutral-400 dark:bg-neutral-500',
-                ]"
-              />
-              <span v-if="homeState === 'ready'">{{ t('tamagotchi.home.status.ready') }}</span>
-              <span v-else-if="homeState === 'loading'">{{ t('tamagotchi.home.status.preparing') }}</span>
-              <span v-else>{{ t('tamagotchi.home.status.unavailable') }}</span>
+              <span :class="ledClass(led.state)" class="size-2 rounded-full" />
+              {{ led.label }}
             </span>
           </div>
 
-          <div class="mt-2 flex w-full max-w-xs flex-col gap-2">
+          <div class="mt-1 flex w-full max-w-xs flex-col gap-2">
             <Button
               color="primary"
               variant="primary"
@@ -220,9 +298,9 @@ onUnmounted(() => {
           <div class="mt-1 flex flex-wrap items-center justify-center gap-2">
             <GhostButton
               size="sm"
-              icon="i-solar:chat-round-call-bold-duotone"
-              :label="t('tamagotchi.home.provider.configure')"
-              @click="toggleProviderPanel"
+              icon="i-solar:settings-minimalistic-bold-duotone"
+              :label="t('tamagotchi.home.actions.configure')"
+              @click="openConfigure"
             />
             <GhostButton
               size="sm"
@@ -230,27 +308,7 @@ onUnmounted(() => {
               :label="t('tamagotchi.home.actions.character')"
               @click="openCharacterSettings"
             />
-            <GhostButton
-              size="sm"
-              icon="i-solar:microphone-3-line-duotone"
-              :label="t('tamagotchi.home.actions.voice')"
-              @click="openSettingsGeneric"
-            />
-            <GhostButton
-              size="sm"
-              icon="i-solar:settings-minimalistic-bold-duotone"
-              :label="t('tamagotchi.home.actions.settings')"
-              @click="openSettingsGeneric"
-            />
-            <GhostButton
-              size="sm"
-              icon="i-solar:chart-2-bold-duotone"
-              :label="t('tamagotchi.home.actions.diagnostics')"
-              @click="openDiagnostics"
-            />
           </div>
-
-          <LiaProviderConfig v-if="providerPanelOpen" />
 
           <div class="w-full max-w-xs">
             <button

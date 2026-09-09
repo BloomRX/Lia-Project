@@ -46,6 +46,14 @@ const chatProviderConfigSchema = object({
   fallback: optional(array(providerTargetSchema), []),
   /** Master switch for provider failover. Defaults to enabled when set. */
   fallbackEnabled: optional(boolean()),
+  /**
+   * Explicit marker that the user completed the first-run provider setup for a
+   * VALID configuration (has preferred provider+model and a stored key). It is
+   * only a hint for the launcher UX — readiness always also checks that the
+   * preferred target + key are actually present, so this flag alone never marks
+   * the system as ready.
+   */
+  onboarded: optional(boolean()),
 })
 
 const providerConfigSchema = object({

@@ -565,6 +565,8 @@ export interface LiaProviderChatConfig {
   fallback?: LiaProviderChatTarget[]
   /** Master switch for provider failover (defaults to enabled when configured). */
   fallbackEnabled?: boolean
+  /** First-run setup completed for a valid config (see readiness rules). */
+  onboarded?: boolean
 }
 
 export const electronLiaProviderChatConfigGet = defineInvokeEventa<LiaProviderChatConfig>('eventa:invoke:lia:provider:chat:config:get')
