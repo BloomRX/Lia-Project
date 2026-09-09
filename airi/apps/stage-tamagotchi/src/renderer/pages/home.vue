@@ -17,7 +17,9 @@ import {
 } from '../../shared/eventa'
 
 import WindowTitleBar from '../components/Window/TitleBar.vue'
+import LiaProviderConfig from '../components/LiaProviderConfig.vue'
 import liaFallbackAsset from '../assets/lia/lia-home.png'
+import { useLiaProviderStore } from '../stores/lia/provider'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -31,9 +33,11 @@ const openSettings = useElectronEventaInvoke(electronOpenSettings)
 const setMainWindowContext = useElectronEventaInvoke(electronSetMainWindowContext)
 const getMainWindowLogs = useElectronEventaInvoke(electronGetMainWindowLogs)
 
+const liaProviderStore = useLiaProviderStore()
 const previewError = ref(false)
 const logsOpen = ref(false)
 const logsLoading = ref(false)
+const providerPanelOpen = ref(false)
 
 // Recent main-process logs (already sanitized main-side). Kept newest-last.
 const logs = ref<MainProcessLogLine[]>([])
@@ -99,12 +103,19 @@ const presenceSrc = computed<string>(() => {
 })
 
 async function goConversar() {
+  // Activate the user's configured Lia chat provider/model before entering the
+  // Stage, so the existing AIRI chat streams with the secure (vault-resolved) key.
+  await liaProviderStore.activatePreferred()
   // Primary destination: the existing Stage (character experience) at '/'.
   // NOT the textual chat window (electronOpenChat stays a secondary AIRI capability).
   // Resize the window to the Stage preset BEFORE navigating so the Stage mounts
   // at its intended size (contextual window sizing, M1 Phase 2).
   await setMainWindowContext({ mode: 'stage' })
   await router.push('/')
+}
+
+function toggleProviderPanel() {
+  providerPanelOpen.value = !providerPanelOpen.value
 }
 
 async function openCharacterSettings() {
@@ -129,6 +140,9 @@ function toggleLogs() {
 onMounted(() => {
   void refreshLogsFromMain()
   subscribeToLogStream()
+  // Install the (inert-by-default) chat runtime extensions so the shared AIRI
+  // chat can use the secure vault key and fail over on recoverable errors.
+  liaProviderStore.registerRuntimeExtensions()
 })
 
 onUnmounted(() => {
@@ -206,6 +220,12 @@ onUnmounted(() => {
           <div class="mt-1 flex flex-wrap items-center justify-center gap-2">
             <GhostButton
               size="sm"
+              icon="i-solar:chat-round-call-bold-duotone"
+              :label="t('tamagotchi.home.provider.configure')"
+              @click="toggleProviderPanel"
+            />
+            <GhostButton
+              size="sm"
               icon="i-solar:user-circle-bold-duotone"
               :label="t('tamagotchi.home.actions.character')"
               @click="openCharacterSettings"
@@ -229,6 +249,8 @@ onUnmounted(() => {
               @click="openDiagnostics"
             />
           </div>
+
+          <LiaProviderConfig v-if="providerPanelOpen" />
 
           <div class="w-full max-w-xs">
             <button

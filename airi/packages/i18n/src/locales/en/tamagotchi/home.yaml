@@ -33,3 +33,37 @@ navigation:
 presence:
   name: "Lia"
   role: "Your AI companion"
+provider:
+  configure: "Chat provider"
+  title: "Conversation provider"
+  key:
+    saved: "Key stored"
+    missing: "No key"
+  fields:
+    provider:
+      placeholder: "Provider"
+    model:
+      placeholder: "Model id (e.g. llama-3.3-70b-versatile)"
+    endpoint:
+      placeholder: "Base URL (endpoint)"
+    key:
+      placeholder: "API key"
+      replace: "New API key (leave blank to keep)"
+  fallback:
+    label: "Enable automatic fallback"
+  securityNote: "The API key is encrypted with your system's secure storage (Electron safeStorage). It is never written to your config or logs."
+  actions:
+    save: "Save"
+    test: "Test connection"
+    remove: "Remove"
+  saved: "Provider saved"
+  removed: "Provider removed"
+  connection:
+    ok: "Connection OK"
+    failed: "Connection failed. Check the provider, model and key."
+  errors:
+    providerRequired: "Select a provider first."
+    modelRequired: "Enter a model id."
+    keyStoreUnavailable: "Secure key storage is unavailable on this device."
+    save: "Could not save the provider."
+    fillFirst: "Select a provider and enter a model to test the connection."

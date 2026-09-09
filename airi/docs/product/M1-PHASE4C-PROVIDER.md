@@ -1,0 +1,104 @@
+# M1 — Phase 4C: Provider/LLM da Lia (secure chat provider + failover)
+
+Status: **implemented** (awaiting real-machine typecheck/build/QA).
+
+Phase 4C lets the user configure the chat provider/model the **Lia** character talks
+through, test the connection, and have a real conversation — reusing the real AIRI
+provider catalog and the existing chat runtime, without a second/parallel LLM
+architecture. Secrets are handled the secure way the M1 architecture approved: they
+live in the Electron **main** process, encrypted with `safeStorage`, never in
+renderer localStorage, `lia/product.json`, or logs.
+
+## Goal / decisions
+
+- **No new provider integrations.** Reuses the real AIRI 58-provider catalog
+  (OpenAI-compatible, Groq, Cerebras, Ollama, LM Studio, OpenAI, Anthropic, xAI,
+  Mistral, OpenRouter, …). Only catalog ids are surfaced in the UI.
+- **`lia/product.json` holds references/metadata only** (`provider.chat.preferred`,
+  ordered `fallback`, `strategy`, new additive `fallbackEnabled`). `schemaVersion`
+  stays `1` (additive/optional only).
+- **Secrets are Electron main-owned.** `services/lia/secrets.ts` stores ciphertext
+  via `safeStorage` at `userData/lia-secrets.json`; refuses to persist when the OS
+  keychain is unavailable; never falls back to plaintext. IPC is minimal
+  (`encryption-available / has / set / get / delete`). The renderer reads a value
+  on demand for one provider build and never persists it.
+- **One additive, inert runtime hook in shared `stage-ui`** (approved): without it
+  (web/pocket/other hosts) behaviour is identical; the Lia desktop opts in by
+  registering a per-use credential resolver and a chat fallback resolver.
+- **Failover** runs in the chat/execution layer: primary → fallback on recoverable
+  errors, bounded by a hard attempt ceiling, disablable, preserves the same
+  session/history/Persona Lia (rolls back only the failed turn — no duplicated
+  messages), and logs sanitized failover (provider ids only; never the secret or
+  the raw error).
+
+## What was implemented
+
+1. `services/lia/secrets.ts` (+ `secrets-service.ts`, + IPC in `shared/eventa`, +
+   `services:lia-secrets` injeca wiring, + isolated unit tests) — secure vault.
+2. `stores/chat/chat-provider-runtime.ts` (stage-ui) — optional registries for a
+   per-use **provider credential resolver** and a **chat fallback resolver**.
+   `provider.ts getProviderInstance` injects the vault key in memory; `chat.ts
+   executeSend` performs the bounded, no-duplicate failover (single attempt when
+   no policy is registered).
+3. `configs/lia.ts` — additive optional `provider.chat.fallbackEnabled`.
+4. `services/lia/provider-config-service.ts` (+ IPC get/set) — persists the Lia
+   `provider.chat` references into `lia/product.json`.
+5. `renderer/stores/lia/provider.ts` — Lia desktop store: chat-config get/save,
+   per-use vault apiKey ops, `testConnection` (reuses AIRI `validateProviderConfig`),
+   provider activation into the existing runtime, and registration of the runtime
+   hooks.
+6. `renderer/components/LiaProviderConfig.vue` + Home wiring + pt-BR/en i18n —
+   minimal setup UI (select provider/model, optional endpoint, API key, Save /
+   Test connection / Remove, fallback toggle).
+
+## Architecture (flow)
+
+1. User picks provider + model (+ optional endpoint for OpenAI-compatible/LM
+   Studio/Ollama) and saves. The **API key** goes to the main safeStorage vault
+   (scope = provider id, key = `apiKey`); only `providerId`/`modelId`/`fallback…`
+   are written to `lia/product.json`. A keyless provider record is ensured in the
+   existing provider-config store (metadata only).
+2. `CONVERSAR` → `activatePreferred()` sets the existing runtime's active
+   provider/model to the Lia preferred target.
+3. When the shared chat builds the provider instance, the registered credential
+   resolver fetches the vault key for that provider **in memory** and merges it into
+   the config passed to `createProvider` (never written to localStorage/logs).
+4. On a **recoverable** stream error, `executeSend` asks the fallback resolver for
+   the next provider/model in the Lia chain, rolls the failed turn back, and
+   retries — bounded, same session/history/persona. Non-recoverable errors surface
+   as a friendly message (no stack trace); `fallbackEnabled:false` disables it.
+
+## Files touched
+
+- `apps/stage-tamagotchi/src/main/services/lia/{secrets.ts,secrets-service.ts,secrets.test.ts,provider-config-service.ts}`
+- `apps/stage-tamagotchi/src/main/{configs/lia.ts,index.ts}`
+- `apps/stage-tamagotchi/src/shared/eventa/index.ts`
+- `apps/stage-tamagotchi/src/renderer/{stores/lia/provider.ts,components/LiaProviderConfig.vue,pages/home.vue}`
+- `packages/stage-ui/src/stores/{chat.ts,chat/chat-provider-runtime.ts,providers/provider.ts}`
+- `packages/i18n/src/locales/{en,pt-BR}/…/home.yaml`
+
+## Notes / decisions
+
+- The fallback is intentionally **Electron-desktop scoped**. Interactive chat sends
+  originate in shared `stage-ui` `ChatArea`; the one approved additive+inert hook
+  is the only point that can (a) inject the vault key into a provider instance the
+  shared runtime builds and (b) fail over on interactive messages — with zero
+  behaviour change for web/pocket (no registration).
+- `baseUrl` for OpenAI-compatible-style providers is kept in the existing keyless
+  provider-config store (metadata); `lia/product.json` stores the Lia refs. No
+  secret/endpoint credential lives in the Lia product file.
+- The persona **Lia (pt-BR)** is untouched; switching UI language does not change the
+  character language.
+
+## Real-machine QA checklist (not run in this sandbox)
+
+- `typecheck`, `build:web`, `dev:tamagotchi` pass.
+- Home opens; provider panel opens in pt-BR; picker/model/endpoint/key fields work.
+- Save stores the key; `lia-product.json` and localStorage contain **no** key/plaintext.
+- "Testar conexão" succeeds/fails with a friendly message (no stack trace, no secret).
+- `CONVERSAR` → Lia replies through the configured provider with the Persona Lia.
+- Kill/turn off primary → conversation fails over to the configured fallback
+  (bounded, no loop, same history), logs show only provider ids.
+- `fallbackEnabled:false` disables failover.
+- Changing the UI language does not change the persona language.
+- Web/pocket chat behaviour is unchanged (hooks unregistered there).
