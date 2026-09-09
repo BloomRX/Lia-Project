@@ -27,6 +27,7 @@ import { useLLM } from './ai/chat-llm/llm'
 import { resolveLlmTools } from './ai/chat-llm/tool-resolver'
 import { useLlmToolsStore } from './ai/chat-llm/tools'
 import { useLlmToolsetPromptsStore } from './ai/chat-llm/toolset-prompts'
+import { CHAT_FALLBACK_MAX_ATTEMPTS, getChatFallbackResolver } from './chat/chat-provider-runtime'
 import { createMinecraftContext } from './chat/context-providers'
 import { useChatContextStore } from './chat/context-store'
 import { useChatSessionStore } from './chat/session-store'
@@ -378,7 +379,7 @@ export const useChatStore = defineStore('chat', () => {
     })
   }
 
-  async function executeSend(payload: ChatSendPayload): Promise<ChatSendResult> {
+  async function executeSendAttempt(payload: ChatSendPayload): Promise<ChatSendResult> {
     const providerId = activeProvider.value
     const modelId = activeModel.value
     if (!providerId || !modelId)
@@ -416,6 +417,80 @@ export const useChatStore = defineStore('chat', () => {
         .map(message => structuredClone(toRaw(message))),
       sessionId: payload.sessionId,
     }
+  }
+
+  /**
+   * Runs one chat send, optionally failing over to another provider/model when a
+   * registered fallback policy decides a failure is recoverable.
+   *
+   * By default (no fallback policy registered — web/pocket/Lia-unconfigured) this
+   * is a single attempt identical to the previous behaviour. When a policy is
+   * present, a *recoverable* failure rolls the failed turn's appended tail back
+   * (so no user message is duplicated and history/persona/session are preserved)
+   * and retries with the policy-chosen provider, bounded by a hard ceiling.
+   */
+  async function executeSend(payload: ChatSendPayload): Promise<ChatSendResult> {
+    const fallbackResolver = getChatFallbackResolver()
+    if (!fallbackResolver)
+      return executeSendAttempt(payload)
+
+    // Snapshot the conversation before the send so a failed attempt can be
+    // rolled back precisely without duplicating messages or touching history.
+    if (!await chatSession.loadSession(payload.sessionId))
+      throw new Error('Failed to load the target chat session')
+    const messageCountBefore = chatSession.getSessionMessages(payload.sessionId).length
+
+    const originalProviderId = activeProvider.value
+    const originalModelId = activeModel.value
+    let switchedProvider = false
+    let lastError: unknown
+
+    for (let attempt = 0; attempt < CHAT_FALLBACK_MAX_ATTEMPTS; attempt += 1) {
+      try {
+        const result = await executeSendAttempt(payload)
+        // A fallback answered this message. Restore the primary provider/model so
+        // the next message still tries the user's preferred provider first.
+        if (switchedProvider) {
+          consciousnessStore.activeProvider = originalProviderId
+          if (originalModelId) {
+            consciousnessStore.activeModel = originalModelId
+          }
+        }
+        return result
+      }
+      catch (error) {
+        lastError = error
+        const next = await fallbackResolver({
+          error,
+          providerId: activeProvider.value,
+          modelId: activeModel.value,
+          attemptIndex: attempt,
+        })
+        if (!next)
+          throw error
+
+        // Remove exactly what this failed attempt appended (the rolled turn), so
+        // the retry re-runs the same user message without duplicating it. If
+        // nothing was appended (e.g. a provider-resolution failure before the
+        // message reached the queue) there is nothing to roll back — retry safe.
+        const current = chatSession.getSessionMessages(payload.sessionId)
+        if (current.length > messageCountBefore) {
+          chatSession.setSessionMessages(payload.sessionId, current.slice(0, messageCountBefore))
+        }
+
+        if (next.providerId) {
+          consciousnessStore.activeProvider = next.providerId
+          switchedProvider = true
+        }
+        if (next.modelId) {
+          consciousnessStore.activeModel = next.modelId
+        }
+      }
+    }
+
+    // All bounded attempts exhausted; surface the last error to the caller
+    // (which appends a friendly, sanitized error for the user).
+    throw lastError ?? new Error('Chat send failed')
   }
 
   /** Sends one serializable chat request through the elected leader. */

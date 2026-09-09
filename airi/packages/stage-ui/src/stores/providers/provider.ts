@@ -31,6 +31,7 @@ import {
   validateProvider as runProviderValidation,
 } from '../../libs/providers'
 import { selectProviderMetadata, selectProvidersMetadata } from '../../libs/providers/metadata'
+import { getProviderCredentialResolver } from '../chat/chat-provider-runtime'
 import { useAuthStore } from '../auth'
 import { useProviderConfigStore } from './config'
 import { normalizeProviderConfigDefaults } from './config-defaults'
@@ -796,8 +797,24 @@ export const useProviderStore = defineStore('provider', () => {
     if (!config && !noCredentials)
       throw new Error(`Provider credentials for ${providerId} not found`)
 
+    // Optional per-use credential resolver (M1 Phase 4C): when registered (by the
+    // Lia desktop), augment the config with a transient secret (e.g. apiKey)
+    // resolved from the secure main-process vault. Absent by default → no change.
+    // The resolved credential is only merged into the in-memory config used to
+    // build this instance; it is never written to localStorage or logged.
+    let effectiveConfig = config || {}
+    if (config) {
+      const resolver = getProviderCredentialResolver()
+      if (resolver) {
+        const extra = await resolver(providerId)
+        if (extra && typeof extra === 'object') {
+          effectiveConfig = { ...effectiveConfig, ...extra }
+        }
+      }
+    }
+
     try {
-      const instance = await definition.createProvider(config || {})
+      const instance = await definition.createProvider(effectiveConfig)
       providerInstanceCache.set(providerId, instance)
       return instance as R
     }
