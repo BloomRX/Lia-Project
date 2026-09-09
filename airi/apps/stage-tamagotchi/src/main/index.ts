@@ -32,6 +32,7 @@ import { emitAppBeforeQuit, emitAppReady, emitAppWindowAllClosed } from './libs/
 import { setElectronMainDirname } from './libs/electron/location'
 import { createI18n } from './libs/i18n'
 import { setupAppleSpeechTranscriptionService } from './services/airi/apple-speech-transcription'
+import { createLiaSecretVault, registerLiaSecretsBridge } from './services/lia/secrets-service'
 import { setupServerChannel } from './services/airi/channel-server'
 import { setupGodotStageManager } from './services/airi/godot-stage'
 import { setupBuiltInServer } from './services/airi/http-server'
@@ -181,6 +182,9 @@ app.whenReady().then(async () => {
   // at boot (see the dedicated invoke below) so `schemaVersion` is validated and
   // the config is ready for later subphases (persona/provider/voice/preferences).
   const liaProductConfig = injeca.provide('configs:lia-product', () => createLiaProductConfig())
+  // Lia secure secret vault (M1 Phase 4C). Provider API keys live encrypted in
+  // the Electron main process, never in renderer localStorage or lia-product.json.
+  const liaSecrets = injeca.provide('services:lia-secrets', () => createLiaSecretVault())
   const electronApp = injeca.provide('host:electron:app', () => app)
   const autoUpdater = injeca.provide('services:auto-updater', {
     dependsOn: { appConfig },
@@ -325,6 +329,15 @@ app.whenReady().then(async () => {
       callback: noop,
     })
   }
+
+  // Register the Lia secure-secret IPC bridge (safeStorage vault) for renderers.
+  injeca.invoke({
+    dependsOn: { liaSecrets },
+    callback: async (deps) => {
+      const { context } = createContext(ipcMain)
+      registerLiaSecretsBridge({ context, vault: deps.liaSecrets })
+    },
+  })
 
   injeca.invoke({
     dependsOn: { mainWindow, tray, serverChannel, airiHttpServer, godotStageManager, pluginHost, mcpStdioManager, onboardingWindow: onboardingWindowManager, widgetsWindow: widgetsManager, spotlightWindow, artistryConfig },

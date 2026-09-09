@@ -528,5 +528,24 @@ export const electronAuthLogout = defineInvokeEventa<void>('eventa:invoke:electr
 export const i18nSetLocale = defineInvokeEventa<void, Locale>('eventa:invoke:electron:i18n:set-locale')
 export const i18nGetLocale = defineInvokeEventa<string | undefined>('eventa:invoke:electron:i18n:get-locale')
 
+// Lia secrets (M1 Phase 4C).
+//
+// Provider API keys / tokens are owned by the Electron main process via a
+// safeStorage vault — NEVER by renderer localStorage or `lia-product.json`.
+// The renderer only ever asks main to store/has/read/delete one secret on
+// demand (read → transient in-memory use), never to persist it itself.
+export interface LiaSecretPayload {
+  /** e.g. a chat provider id. */
+  scope: string
+  /** e.g. `apiKey`. */
+  key: string
+}
+
+export const electronLiaSecretEncryptionAvailable = defineInvokeEventa<boolean>('eventa:invoke:lia:secret:encryption-available')
+export const electronLiaSecretHas = defineInvokeEventa<boolean, LiaSecretPayload>('eventa:invoke:lia:secret:has')
+export const electronLiaSecretSet = defineInvokeEventa<boolean, LiaSecretPayload & { value: string }>('eventa:invoke:lia:secret:set')
+export const electronLiaSecretGet = defineInvokeEventa<string | undefined, LiaSecretPayload>('eventa:invoke:lia:secret:get')
+export const electronLiaSecretDelete = defineInvokeEventa<boolean, LiaSecretPayload>('eventa:invoke:lia:secret:delete')
+
 export { electron } from '@proj-airi/electron-eventa'
 export * from '@proj-airi/electron-eventa/electron-updater'
