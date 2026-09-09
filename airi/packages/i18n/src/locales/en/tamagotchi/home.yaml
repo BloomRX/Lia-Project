@@ -84,6 +84,7 @@ provider:
     remove: "Remove"
     back: "Back"
     conclude: "Finish setup"
+    getKey: "Get API key"
   saved: "Provider saved"
   removed: "Provider removed"
   connection:

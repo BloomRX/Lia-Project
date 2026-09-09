@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { LiaProviderChatConfig, LiaProviderChatTarget } from '../../shared/eventa'
 
-import { onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { toast } from 'vue-sonner'
 
@@ -49,6 +49,11 @@ const isOnboarding = () => props.mode === 'onboarding'
 const primaryOption = () => LIA_CHAT_PROVIDER_OPTIONS.find(option => option.id === providerId.value)
 const needsBaseUrl = () => primaryOption()?.requiresBaseUrl === true
 const primaryNeedsKey = () => store.providerNeedsKey(providerId.value)
+
+// Official API-key pages for the currently selected primary/fallback providers
+// (external links; the main window routes target=_blank to the system browser).
+const getKeyUrl = computed(() => store.providerApiKeyUrl(providerId.value))
+const getFallbackKeyUrl = computed(() => store.providerApiKeyUrl(fallbackProviderId.value))
 
 /**
  * Whether the fallback needs its OWN key field: it is a DIFFERENT provider than
@@ -397,6 +402,15 @@ onMounted(() => {
             <span :class="keySaved ? 'bg-green-500' : 'bg-neutral-300 dark:bg-neutral-600'" class="block size-2 rounded-full" />
           </span>
         </div>
+        <a
+          v-if="getKeyUrl"
+          :href="getKeyUrl"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="self-start text-[11px] font-medium text-primary-600 transition hover:text-primary-700 hover:underline dark:text-primary-400"
+        >
+          {{ tt('actions.getKey') }} ↗
+        </a>
       </div>
 
       <div class="flex items-center justify-between gap-2 rounded-lg bg-neutral-100/60 px-3 py-2 dark:bg-white/5">
@@ -456,6 +470,15 @@ onMounted(() => {
             <span :class="fallbackKeySaved ? 'bg-green-500' : 'bg-neutral-300 dark:bg-neutral-600'" class="block size-2 rounded-full" />
           </span>
         </div>
+        <a
+          v-if="getFallbackKeyUrl"
+          :href="getFallbackKeyUrl"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="self-start text-[11px] font-medium text-primary-600 transition hover:text-primary-700 hover:underline dark:text-primary-400"
+        >
+          {{ tt('actions.getKey') }} ↗
+        </a>
       </div>
 
       <p class="text-[10px] leading-relaxed text-neutral-500 dark:text-neutral-400">

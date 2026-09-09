@@ -126,6 +126,12 @@ main/launcher window, presented as product setup:
   requires the primary credential; `isFallbackConfigured()` requires the credential
   the fallback actually needs. No secret ever touches `lia-product.json`,
   localStorage, or logs.
+- Next to each provider's API-key field there is a subtle **"Get API key ↗"** link
+  that opens that provider's official API-key page in the system browser. Provider
+  URLs are defined centrally in `LIA_CHAT_PROVIDER_OPTIONS.apiKeyUrl` (never
+  hardcoded in the component); providers without a configured page simply show no
+  link. The launcher window already routes `target="_blank"` links to the system
+  browser — no iframe, no in-app embedding.
 
 ### UX-specific file notes
 - `configs/lia.ts` + `shared/eventa`: additive `provider.chat.onboarded`.

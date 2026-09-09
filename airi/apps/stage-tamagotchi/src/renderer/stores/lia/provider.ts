@@ -23,14 +23,32 @@ import {
  * Curated chat provider choices surfaced to the user (real AIRI catalog ids —
  * no new provider integration). Labels are brand names, not translatable UI text.
  */
-export const LIA_CHAT_PROVIDER_OPTIONS: Array<{ id: string, label: string, requiresBaseUrl?: boolean, needsApiKey?: boolean }> = [
-  { id: 'openai', label: 'OpenAI', needsApiKey: true },
-  { id: 'groq', label: 'Groq', needsApiKey: true },
-  { id: 'cerebras-ai', label: 'Cerebras', needsApiKey: true },
-  { id: 'anthropic', label: 'Anthropic', needsApiKey: true },
-  { id: 'xai', label: 'xAI', needsApiKey: true },
-  { id: 'mistral-ai', label: 'Mistral', needsApiKey: true },
-  { id: 'openrouter-ai', label: 'OpenRouter', needsApiKey: true },
+/**
+ * Curated chat provider choices surfaced to the user (real AIRI catalog ids — no
+ * new provider integration). Labels are brand names, not translatable UI text.
+ *
+ * `apiKeyUrl` is the official page where the user can create/manage an API key for
+ * that provider. It is defined centrally here so the UI never hardcodes provider
+ * URLs. Providers without a known page leave it undefined (the "get key" button is
+ * then not shown).
+ */
+export interface LiaChatProviderOption {
+  id: string
+  label: string
+  requiresBaseUrl?: boolean
+  needsApiKey?: boolean
+  /** Official API-key management page (external, opened in the system browser). */
+  apiKeyUrl?: string
+}
+
+export const LIA_CHAT_PROVIDER_OPTIONS: LiaChatProviderOption[] = [
+  { id: 'openai', label: 'OpenAI', needsApiKey: true, apiKeyUrl: 'https://platform.openai.com/api-keys' },
+  { id: 'groq', label: 'Groq', needsApiKey: true, apiKeyUrl: 'https://console.groq.com/keys' },
+  { id: 'cerebras-ai', label: 'Cerebras', needsApiKey: true, apiKeyUrl: 'https://cloud.cerebras.ai/platform/api-keys' },
+  { id: 'anthropic', label: 'Anthropic', needsApiKey: true, apiKeyUrl: 'https://console.anthropic.com/settings/keys' },
+  { id: 'xai', label: 'xAI', needsApiKey: true, apiKeyUrl: 'https://console.x.ai/' },
+  { id: 'mistral-ai', label: 'Mistral', needsApiKey: true, apiKeyUrl: 'https://console.mistral.ai/api-keys/' },
+  { id: 'openrouter-ai', label: 'OpenRouter', needsApiKey: true, apiKeyUrl: 'https://openrouter.ai/keys' },
   { id: 'openai-compatible', label: 'OpenAI-compatible', requiresBaseUrl: true },
   { id: 'lm-studio', label: 'LM Studio', requiresBaseUrl: true, needsApiKey: false },
   { id: 'ollama', label: 'Ollama', requiresBaseUrl: true, needsApiKey: false },
@@ -113,6 +131,11 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
   /** Whether a given provider requires an API key credential (defaults true). */
   function providerNeedsKey(providerId: string): boolean {
     return optionFor(providerId)?.needsApiKey !== false
+  }
+
+  /** Official API-key management page for a provider, if one is configured. */
+  function providerApiKeyUrl(providerId: string): string | undefined {
+    return optionFor(providerId)?.apiKeyUrl
   }
 
   /**
@@ -291,6 +314,7 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
     markOnboarded,
     isFallbackConfigured,
     providerNeedsKey,
+    providerApiKeyUrl,
     registerRuntimeExtensions,
   }
 })

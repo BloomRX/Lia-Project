@@ -84,6 +84,7 @@ provider:
     remove: "Remover"
     back: "Voltar"
     conclude: "Concluir configuração"
+    getKey: "Obter chave da API"
   saved: "Provider salvo"
   removed: "Provider removido"
   connection:
