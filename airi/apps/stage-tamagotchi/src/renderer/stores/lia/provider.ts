@@ -161,6 +161,9 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
   async function activateTarget(target: LiaProviderChatTarget, baseUrl?: string) {
     if (!target?.providerId)
       return
+    // Drop any cached provider instance so the next build re-resolves the vault
+    // key (in case the user updated it since the last build).
+    await providersStore.disposeProviderInstance(target.providerId)
     await ensureProviderRecord(target.providerId, baseUrl)
     // Watcher flushes synchronously on provider change and clears the model, so
     // set provider first, then model (safe, ordered operation).
