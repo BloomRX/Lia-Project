@@ -80,7 +80,7 @@ async function computeSummary() {
   const config = await liaProviderStore.refreshConfig()
   const aiReady = await liaProviderStore.isReadyToChat()
   const fallback = config.fallback?.[0]
-  const fallbackConfigured = Boolean(fallback?.providerId && fallback?.modelId)
+  const fallbackConfigured = await liaProviderStore.isFallbackConfigured()
   const fallbackEnabled = config.fallbackEnabled !== false
 
   const statusTitle = (state: LedState, on: string, off: string, pending: string) => {

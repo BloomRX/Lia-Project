@@ -72,6 +72,8 @@ provider:
     fallbackModel:
       label: "Modelo de fallback"
       placeholder: "ID do modelo do fallback"
+    fallbackKey:
+      label: "Chave do provider de fallback"
   fallback:
     label: "Fallback automático"
     hint: "Reserva se o provider principal falhar"
@@ -87,6 +89,7 @@ provider:
   connection:
     ok: "Conexão OK"
     failed: "Falha na conexão. Verifique o provider, o modelo e a chave."
+    fallbackFailed: "Falha na conexão do fallback. Verifique o provider, o modelo e a chave do fallback."
   errors:
     providerRequired: "Selecione um provider primeiro."
     modelRequired: "Informe um ID de modelo."

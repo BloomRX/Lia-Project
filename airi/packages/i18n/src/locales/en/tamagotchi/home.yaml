@@ -72,6 +72,8 @@ provider:
     fallbackModel:
       label: "Fallback model"
       placeholder: "Model id for the fallback"
+    fallbackKey:
+      label: "Fallback API key"
   fallback:
     label: "Automatic fallback"
     hint: "Backup if the main provider fails"
@@ -87,6 +89,7 @@ provider:
   connection:
     ok: "Connection OK"
     failed: "Connection failed. Check the provider, model and key."
+    fallbackFailed: "Fallback connection failed. Check its provider, model and key."
   errors:
     providerRequired: "Select a provider first."
     modelRequired: "Enter a model id."

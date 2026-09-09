@@ -110,6 +110,11 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
     return LIA_CHAT_PROVIDER_OPTIONS.find(option => option.id === providerId)
   }
 
+  /** Whether a given provider requires an API key credential (defaults true). */
+  function providerNeedsKey(providerId: string): boolean {
+    return optionFor(providerId)?.needsApiKey !== false
+  }
+
   /**
    * Ensures a keyless provider record exists (so the shared provider runtime can
    * build an instance) and records any custom base URL. The apiKey is NOT stored
@@ -210,6 +215,31 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
   }
 
   /**
+   * Whether the configured fallback is genuinely usable: a fallback provider +
+   * model is present AND the credential it needs exists in the vault.
+   *
+   * Credential resolution follows the per-provider secret rule:
+   * - a fallback that does not require a key (e.g. local/no-endpoint) is ready
+   *   as soon as its provider+model exist;
+   * - a fallback on the SAME provider as the primary shares the primary's
+   *   scope/key (no duplicate secret);
+   * - a fallback on a DIFFERENT provider must have its own key stored.
+   */
+  async function isFallbackConfigured(): Promise<boolean> {
+    const config = loadedConfig.value ?? (await refreshConfig())
+    const fb = config.fallback?.[0]
+    if (!fb?.providerId || !fb.modelId)
+      return false
+    if (!providerNeedsKey(fb.providerId))
+      return true
+    const primary = config.preferred
+    const scope = primary?.providerId === fb.providerId
+      ? primary!.providerId
+      : fb.providerId
+    return secretHas({ scope, key: API_KEY_NAME })
+  }
+
+  /**
    * Installs the inert-by-default runtime hooks for the current renderer session.
    * Called once by the Lia Home (main window). Idempotent.
    */
@@ -259,6 +289,8 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
     activatePreferred,
     isReadyToChat,
     markOnboarded,
+    isFallbackConfigured,
+    providerNeedsKey,
     registerRuntimeExtensions,
   }
 })

@@ -25,7 +25,8 @@ const tt = (key: string) => t(`tamagotchi.home.provider.${key}`)
 const store = useLiaProviderStore()
 
 // Provider options usable as a fallback (they are key-based and need no custom
-// endpoint, so the single captured API key / no endpoint model stays coherent).
+// endpoint, so the single-endpoint primary model stays coherent). Each distinct
+// provider keeps its OWN API key in the vault.
 const FALLBACK_PROVIDER_OPTIONS = LIA_CHAT_PROVIDER_OPTIONS.filter(option => option.requiresBaseUrl !== true)
 
 const providerId = ref('')
@@ -37,6 +38,8 @@ const keySaved = ref(false)
 const fallbackEnabled = ref(true)
 const fallbackProviderId = ref('')
 const fallbackModelId = ref('')
+const fallbackApiKey = ref('')
+const fallbackKeySaved = ref(false)
 
 const busy = ref(false)
 const lastTestOk = ref(false)
@@ -45,7 +48,17 @@ const isOnboarding = () => props.mode === 'onboarding'
 
 const primaryOption = () => LIA_CHAT_PROVIDER_OPTIONS.find(option => option.id === providerId.value)
 const needsBaseUrl = () => primaryOption()?.requiresBaseUrl === true
-const primaryNeedsKey = () => primaryOption()?.needsApiKey !== false
+const primaryNeedsKey = () => store.providerNeedsKey(providerId.value)
+
+/**
+ * Whether the fallback needs its OWN key field: it is a DIFFERENT provider than
+ * the primary AND that provider requires a credential. Same-provider fallbacks
+ * reuse the primary's secret (no duplicate); key-less providers need none.
+ */
+const fallbackNeedsOwnKey = () => fallbackEnabled.value
+  && Boolean(fallbackProviderId.value)
+  && fallbackProviderId.value !== providerId.value
+  && store.providerNeedsKey(fallbackProviderId.value)
 
 const canTest = () => Boolean(providerId.value) && Boolean(modelId.value.trim())
 const canConclude = () => Boolean(lastTestOk.value) && canTest()
@@ -55,9 +68,29 @@ async function refreshKeyState() {
     keySaved.value = false
     return
   }
-  keySaved.value = await store.hasApiKey(providerId.value)
+  keySaved.value = store.providerNeedsKey(providerId.value) && await store.hasApiKey(providerId.value)
   if (keySaved.value) {
     apiKey.value = ''
+  }
+}
+
+async function refreshFallbackKeyState() {
+  if (!fallbackEnabled.value || !fallbackProviderId.value) {
+    fallbackKeySaved.value = false
+    fallbackApiKey.value = ''
+    return
+  }
+  // Same provider as primary → shares the primary secret. Key-less → nothing.
+  if (fallbackProviderId.value === providerId.value || !store.providerNeedsKey(fallbackProviderId.value)) {
+    fallbackKeySaved.value = fallbackProviderId.value === providerId.value
+      ? await store.hasApiKey(providerId.value)
+      : true
+    fallbackApiKey.value = ''
+    return
+  }
+  fallbackKeySaved.value = await store.hasApiKey(fallbackProviderId.value)
+  if (fallbackKeySaved.value) {
+    fallbackApiKey.value = ''
   }
 }
 
@@ -83,29 +116,31 @@ async function loadExisting() {
     fallbackModelId.value = fb.modelId
   }
   await refreshKeyState()
+  await refreshFallbackKeyState()
 }
 
 function invalidateTest() {
   lastTestOk.value = false
 }
 
-/** Persists the primary key (+ the same key for a distinct key-based fallback). */
-async function storeKeys(primaryKey: string) {
-  const key = primaryKey.trim()
-  if (!key)
-    return true
-  const storedPrimary = await store.setApiKey(providerId.value, key)
-  if (!storedPrimary) {
-    toast.error(tt('errors.keyStoreUnavailable'))
-    return false
+/** Persists each provider's own key when one was entered for it. */
+async function storeKeys(): Promise<boolean> {
+  const pk = apiKey.value.trim()
+  if (pk) {
+    const ok = await store.setApiKey(providerId.value, pk)
+    if (!ok) {
+      toast.error(tt('errors.keyStoreUnavailable'))
+      return false
+    }
   }
-  // A distinct fallback provider that needs a key reuses the same entered key so
-  // a single-key onboarding stays coherent. Same-provider fallbacks share scope.
-  if (fallbackEnabled.value && fallbackProviderId.value
-    && fallbackProviderId.value !== providerId.value) {
-    const fbOption = LIA_CHAT_PROVIDER_OPTIONS.find(option => option.id === fallbackProviderId.value)
-    if (fbOption?.needsApiKey !== false) {
-      await store.setApiKey(fallbackProviderId.value, key)
+  if (fallbackNeedsOwnKey()) {
+    const fk = fallbackApiKey.value.trim()
+    if (fk) {
+      const ok = await store.setApiKey(fallbackProviderId.value, fk)
+      if (!ok) {
+        toast.error(tt('errors.keyStoreUnavailable'))
+        return false
+      }
     }
   }
   return true
@@ -144,12 +179,16 @@ async function save() {
   }
   busy.value = true
   try {
-    if (!await storeKeys(apiKey.value))
+    if (!await storeKeys())
       return false
     await store.persistConfig(buildConfig())
     await store.ensureProviderRecord(providerId.value, baseUrl.value.trim() || undefined)
     apiKey.value = ''
+    fallbackApiKey.value = ''
     keySaved.value = await store.hasApiKey(providerId.value)
+    if (fallbackEnabled.value && fallbackProviderId.value) {
+      await refreshFallbackKeyState()
+    }
     toast.success(tt('saved'))
     return true
   }
@@ -162,6 +201,16 @@ async function save() {
   }
 }
 
+async function testOne(args: {
+  providerId: string
+  modelId?: string
+  apiKey?: string
+  baseUrl?: string
+}): Promise<boolean> {
+  const result = await store.testConnection(args)
+  return result.ok
+}
+
 async function testConnection() {
   if (!canTest()) {
     toast.error(tt('errors.fillFirst'))
@@ -169,19 +218,32 @@ async function testConnection() {
   }
   busy.value = true
   try {
-    const result = await store.testConnection({
+    let allOk = await testOne({
       providerId: providerId.value,
       modelId: modelId.value.trim(),
       apiKey: apiKey.value.trim() || undefined,
       baseUrl: baseUrl.value.trim() || undefined,
     })
-    if (result.ok) {
-      lastTestOk.value = true
-      toast.success(tt('connection.ok'))
-    }
-    else {
-      lastTestOk.value = false
+    if (!allOk) {
       toast.error(tt('connection.failed'))
+    }
+
+    // A distinct, key-requiring fallback is validated separately with its own key.
+    if (allOk && fallbackEnabled.value && fallbackProviderId.value && fallbackProviderId.value !== providerId.value) {
+      const fbOk = await testOne({
+        providerId: fallbackProviderId.value,
+        modelId: fallbackModelId.value.trim() || undefined,
+        apiKey: fallbackApiKey.value.trim() || undefined,
+      })
+      if (!fbOk) {
+        allOk = false
+        toast.error(tt('connection.fallbackFailed'))
+      }
+    }
+
+    lastTestOk.value = allOk
+    if (allOk) {
+      toast.success(tt('connection.ok'))
     }
   }
   finally {
@@ -212,6 +274,10 @@ async function removeProvider() {
   busy.value = true
   try {
     await store.deleteApiKey(providerId.value)
+    // Also drop a distinct fallback's own key (explicit removal of this setup).
+    if (fallbackProviderId.value && fallbackProviderId.value !== providerId.value) {
+      await store.deleteApiKey(fallbackProviderId.value)
+    }
     const config = store.loadedConfig ?? {}
     await store.persistConfig({
       ...config,
@@ -225,6 +291,8 @@ async function removeProvider() {
     apiKey.value = ''
     fallbackProviderId.value = ''
     fallbackModelId.value = ''
+    fallbackApiKey.value = ''
+    fallbackKeySaved.value = false
     keySaved.value = false
     lastTestOk.value = false
     toast.success(tt('removed'))
@@ -239,10 +307,16 @@ watch(providerId, () => {
     baseUrl.value = ''
   }
   void refreshKeyState()
+  void refreshFallbackKeyState()
   invalidateTest()
 })
 
-watch([modelId, fallbackEnabled, fallbackProviderId, fallbackModelId], () => {
+watch([fallbackEnabled, fallbackProviderId], () => {
+  void refreshFallbackKeyState()
+  invalidateTest()
+})
+
+watch([modelId, fallbackModelId, apiKey, fallbackApiKey], () => {
   invalidateTest()
 })
 
@@ -360,6 +434,28 @@ onMounted(() => {
           :placeholder="tt('fields.model.placeholder')"
           class="w-full rounded-lg border border-neutral-300 bg-white px-2.5 py-2 text-sm text-neutral-800 outline-none focus:border-primary-400 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100"
         >
+      </div>
+
+      <!-- Separate key field ONLY when the fallback is a DIFFERENT key-requiring provider. -->
+      <div v-if="fallbackNeedsOwnKey()" class="flex flex-col gap-1">
+        <label class="text-xs font-medium text-neutral-600 dark:text-neutral-300">
+          {{ tt('fields.fallbackKey.label') }}
+        </label>
+        <div class="relative">
+          <input
+            v-model="fallbackApiKey"
+            type="password"
+            autocomplete="off"
+            :placeholder="fallbackKeySaved ? tt('fields.key.replace') : tt('fields.key.placeholder')"
+            class="w-full rounded-lg border border-neutral-300 bg-white px-2.5 py-2 pr-8 text-sm text-neutral-800 outline-none focus:border-primary-400 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100"
+          >
+          <span
+            :title="fallbackKeySaved ? tt('key.saved') : tt('key.missing')"
+            class="absolute right-2.5 top-1/2 -translate-y-1/2"
+          >
+            <span :class="fallbackKeySaved ? 'bg-green-500' : 'bg-neutral-300 dark:bg-neutral-600'" class="block size-2 rounded-full" />
+          </span>
+        </div>
       </div>
 
       <p class="text-[10px] leading-relaxed text-neutral-500 dark:text-neutral-400">

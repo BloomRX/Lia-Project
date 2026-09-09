@@ -117,6 +117,15 @@ main/launcher window, presented as product setup:
   the primary launcher).
 - The same `LiaProviderConfig` component is reused for onboarding and later edits
   (no duplicated provider/secrets logic).
+- **Each provider owns its own vault secret.** When the fallback is a DIFFERENT
+  provider that needs a credential (e.g. Groq → Cerebras), the onboarding shows a
+  separate key field and stores it under that provider's scope — the primary key is
+  never copied to the fallback. A same-provider fallback reuses the primary secret
+  (no duplicate); key-less providers need none. The "Test connection" validates the
+  primary and, when present, a distinct fallback individually. `isReadyToChat()`
+  requires the primary credential; `isFallbackConfigured()` requires the credential
+  the fallback actually needs. No secret ever touches `lia-product.json`,
+  localStorage, or logs.
 
 ### UX-specific file notes
 - `configs/lia.ts` + `shared/eventa`: additive `provider.chat.onboarded`.
