@@ -5,7 +5,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { toast } from 'vue-sonner'
 
-import { LIA_CHAT_PROVIDER_OPTIONS, useLiaProviderStore } from '../stores/lia/provider'
+import { LIA_CHAT_PROVIDER_OPTIONS, curatedModelsFor, isModelInCatalog, recommendedModelFor, useLiaProviderStore } from '../stores/lia/provider'
 
 const props = withDefaults(defineProps<{
   /** 'onboarding' (first run: must test + conclude) or 'manage' (later edits). */
@@ -48,6 +48,20 @@ const isOnboarding = () => props.mode === 'onboarding'
 
 const primaryOption = () => LIA_CHAT_PROVIDER_OPTIONS.find(option => option.id === providerId.value)
 const needsBaseUrl = () => primaryOption()?.requiresBaseUrl === true
+
+// Model options follow the selected provider (dropdown, never a free "model id"
+// field). Both the primary and the fallback selectors resolve through the same
+// curated catalog, so switching provider always refreshes the options and any
+// model that is no longer offered is replaced by a valid default.
+const primaryModelOptions = computed(() => curatedModelsFor(providerId.value))
+const fallbackModelOptions = computed(() => curatedModelsFor(fallbackProviderId.value))
+
+/** Returns `modelId` when it is still offered, otherwise the recommended one. */
+function coerceModel(pid: string, modelId: string): string {
+  if (isModelInCatalog(pid, modelId))
+    return modelId
+  return recommendedModelFor(pid) ?? ''
+}
 const primaryNeedsKey = () => store.providerNeedsKey(providerId.value)
 
 // Official API-key pages for the currently selected primary/fallback providers
@@ -104,7 +118,10 @@ async function loadExisting() {
   const preferred = config.preferred
   if (preferred?.providerId) {
     providerId.value = preferred.providerId
-    modelId.value = preferred.modelId ?? ''
+    // Preserve the persisted model only while it is still offered for this
+    // provider; otherwise fall back to the provider's recommended model (never
+    // a stale/invalid id and never an empty prompt to type one).
+    modelId.value = coerceModel(providerId.value, preferred.modelId ?? '')
   }
   if (config.fallbackEnabled !== undefined) {
     fallbackEnabled.value = config.fallbackEnabled
@@ -115,10 +132,10 @@ async function loadExisting() {
   const fb = config.fallback?.[0]
   if (fb?.providerId) {
     fallbackProviderId.value = fb.providerId
-    fallbackModelId.value = fb.modelId ?? ''
+    fallbackModelId.value = coerceModel(fallbackProviderId.value, fb.modelId ?? '')
   }
   else if (fb?.modelId) {
-    fallbackModelId.value = fb.modelId
+    fallbackModelId.value = coerceModel(fallbackProviderId.value, fb.modelId)
   }
   await refreshKeyState()
   await refreshFallbackKeyState()
@@ -311,12 +328,18 @@ watch(providerId, () => {
   if (!needsBaseUrl()) {
     baseUrl.value = ''
   }
+  // Provider change refreshes the model options: keep the current model only if
+  // it is still offered by the new provider, otherwise auto-select a valid one.
+  modelId.value = coerceModel(providerId.value, modelId.value)
   void refreshKeyState()
   void refreshFallbackKeyState()
   invalidateTest()
 })
 
 watch([fallbackEnabled, fallbackProviderId], () => {
+  if (fallbackEnabled.value && fallbackProviderId.value) {
+    fallbackModelId.value = coerceModel(fallbackProviderId.value, fallbackModelId.value)
+  }
   void refreshFallbackKeyState()
   invalidateTest()
 })
@@ -363,12 +386,21 @@ onMounted(() => {
         <label class="text-xs font-medium text-neutral-600 dark:text-neutral-300">
           {{ tt('fields.model.label') }}
         </label>
-        <input
+        <!-- Model is a dropdown driven by the selected provider (see the primary
+             provider <select> above). The user only ever picks a friendly name;
+             the technical model id is the option's value. -->
+        <select
           v-model="modelId"
-          type="text"
-          :placeholder="tt('fields.model.placeholder')"
-          class="w-full rounded-lg border border-neutral-300 bg-white px-2.5 py-2 text-sm text-neutral-800 outline-none focus:border-primary-400 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100"
+          :disabled="!providerId || primaryModelOptions.length === 0"
+          class="w-full rounded-lg border border-neutral-300 bg-white px-2.5 py-2 text-sm text-neutral-800 outline-none focus:border-primary-400 disabled:opacity-60 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100"
         >
+          <option value="" disabled>
+            {{ tt('fields.model.placeholder') }}
+          </option>
+          <option v-for="option in primaryModelOptions" :key="option.id" :value="option.id">
+            {{ option.label }}
+          </option>
+        </select>
       </div>
 
       <div v-if="needsBaseUrl()" class="flex flex-col gap-1">
@@ -442,12 +474,19 @@ onMounted(() => {
         <label class="text-xs font-medium text-neutral-600 dark:text-neutral-300">
           {{ tt('fields.fallbackModel.label') }}
         </label>
-        <input
+        <!-- Fallback model is a dropdown mirroring the primary one. -->
+        <select
           v-model="fallbackModelId"
-          type="text"
-          :placeholder="tt('fields.model.placeholder')"
-          class="w-full rounded-lg border border-neutral-300 bg-white px-2.5 py-2 text-sm text-neutral-800 outline-none focus:border-primary-400 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100"
+          :disabled="fallbackModelOptions.length === 0"
+          class="w-full rounded-lg border border-neutral-300 bg-white px-2.5 py-2 text-sm text-neutral-800 outline-none focus:border-primary-400 disabled:opacity-60 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100"
         >
+          <option value="" disabled>
+            {{ tt('fields.model.placeholder') }}
+          </option>
+          <option v-for="option in fallbackModelOptions" :key="option.id" :value="option.id">
+            {{ option.label }}
+          </option>
+        </select>
       </div>
 
       <!-- Separate key field ONLY when the fallback is a DIFFERENT key-requiring provider. -->
@@ -504,7 +543,17 @@ onMounted(() => {
         >
           {{ tt('actions.conclude') }}
         </button>
-        <span v-if="!lastTestOk" class="text-[10px] text-neutral-400 dark:text-neutral-500">
+        <!-- Persistent test result: success stays visible (and Concluir stays
+             enabled) until the user edits the provider/model/key or clicks
+             Concluir. Testing never clears the chosen provider/model/key. -->
+        <span
+          v-if="lastTestOk"
+          class="inline-flex items-center gap-1 text-[11px] font-medium text-green-600 dark:text-green-400"
+        >
+          <span class="i-solar:check-circle-bold-duotone size-3.5" />
+          {{ tt('connection.ok') }}
+        </span>
+        <span v-else class="text-[10px] text-neutral-400 dark:text-neutral-500">
           {{ tt('errors.testFirst') }}
         </span>
       </template>

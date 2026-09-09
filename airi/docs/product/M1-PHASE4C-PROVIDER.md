@@ -135,10 +135,46 @@ main/launcher window, presented as product setup:
 
 ### UX-specific file notes
 - `configs/lia.ts` + `shared/eventa`: additive `provider.chat.onboarded`.
-- `stores/lia/provider.ts`: `isReadyToChat()`, `markOnboarded()`.
+- `stores/lia/provider.ts`: `isReadyToChat()`, `markOnboarded()`, and the curated
+  per-provider model catalog (`LIA_MODEL_CATALOG` + `curatedModelsFor` /
+  `recommendedModelFor` / `isModelInCatalog`).
 - `components/LiaProviderConfig.vue`: now a reusable editor (`mode: onboarding |
   manage`) with fallback provider/model + Test connection + Finish setup.
 - `pages/home.vue`: first-run gate within the Home route + clean launcher + LEDs.
+
+### Final UX correction: model dropdown (no free "model id" field)
+- The model input is a **dropdown**, not a free-text "ID do modelo" field. Options
+  come from `LIA_MODEL_CATALOG` keyed by the selected provider; the UI shows only
+  the friendly label and persists only the technical id (the option's value).
+- Picking a provider auto-selects its `recommended` model. Switching provider
+  refreshes the list and keeps the current model only while it is still offered;
+  otherwise it auto-selects a valid one (a persisted/deprecated model never leaves
+  the user stuck or asks them to type an id).
+- The same logic is applied to the **fallback** provider/model selector.
+- Source note: AIRI ships no static model catalog for OpenAI/Groq/Cerebras/xAI/
+  Mistral/OpenRouter (their models are fetched live once a key exists), and the
+  Lia API key lives only in the main-process vault — never in the provider-config
+  store that AIRI's live fetcher reads — so a live cloud fetch is not reachable
+  from this screen. Therefore the curated list of real ids is the operative
+  dropdown source (Anthropic's entries are copied verbatim from AIRI's own
+  catalog); the "Test connection" step validates the chosen id and the user can
+  switch to another option. Local providers (Ollama/LM Studio/OpenAI-compatible)
+  get a small set of common known models instead of a free field.
+- The persistent "✓ connection OK" indicator stays visible (and "Concluir
+  configuração" stays enabled) until the user edits the provider/model/key or
+  clicks Concluir; running "Testar conexão" never clears the chosen
+  provider/model/API key.
+
+### Runtime fix: `liaProductConfig.get is not a function`
+- The eager-build invoke at boot called `.get()` on the **outer handle** returned
+  by `injeca.provide('configs:lia-product', …)`. That handle is only valid as a
+  `dependsOn` reference; the resolved config instance exists only as the
+  `deps.liaProductConfig` argument to the invoke callback (as every sibling invoke
+  already did). Calling `.get()` on the handle threw
+  `liaProductConfig.get is not a function` immediately after the Artistry bridge
+  logged its init, at startup. Fixed by consuming the resolved instance via the
+  callback's `deps` argument — no optional chaining, no guard, no change to the
+  Artistry bridge or the 4A Lia config shape. Startup no longer throws it.
 
 ## Real-machine QA checklist (not run in this sandbox)
 

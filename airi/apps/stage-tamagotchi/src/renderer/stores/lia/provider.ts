@@ -54,6 +54,127 @@ export const LIA_CHAT_PROVIDER_OPTIONS: LiaChatProviderOption[] = [
   { id: 'ollama', label: 'Ollama', requiresBaseUrl: true, needsApiKey: false },
 ]
 
+/**
+ * One selectable chat model for a provider. `id` is the technical id that is
+ * persisted and sent to the API; `label` is the human-friendly name shown in
+ * the dropdown (never shown to the user to type). `recommended` flags the
+ * default to auto-select when the user first picks the provider (or when the
+ * previously chosen model is no longer offered for it).
+ */
+export interface LiaModelOption {
+  id: string
+  label: string
+  recommended?: boolean
+}
+
+/**
+ * Curated chat model choices per provider (real model ids — not invented).
+ *
+ * Source notes:
+ * - The Anthropic entries are copied verbatim from the real AIRI provider
+ *   catalog (`stage-ui/.../providers/anthropic` `extraMethods.listModels`).
+ * - The other cloud providers (OpenAI, Groq, Cerebras, xAI, Mistral,
+ *   OpenRouter) ship NO static catalog in AIRI — their models are fetched live
+ *   from the provider API once a key exists. Because the Lia API key lives only
+ *   in the main-process vault (never in the provider-config store that AIRI's
+ *   live fetcher reads), those providers can't be live-listed from the vault
+ *   here. So we keep a small, current set of real ids as the always-available
+ *   dropdown source; the "Test connection" step validates the chosen one.
+ * - Local/self-hosted providers (Ollama, LM Studio, OpenAI-compatible) expose
+ *   whatever the user has loaded/serves, so we offer a small set of common
+ *   known models rather than forcing the user to type an id. Providers without
+ *   a curated entry degrade to a single controlled option instead of a free
+ *   field.
+ *
+ * These ids can drift as providers deprecate/rename models; that is handled at
+ * the "Test connection" step (friendly error, model stays selectable/switchable)
+ * and never by asking the user to type an id.
+ */
+export const LIA_MODEL_CATALOG: Record<string, LiaModelOption[]> = {
+  openai: [
+    { id: 'gpt-5.4', label: 'GPT-5.4', recommended: true },
+    { id: 'gpt-5.4-mini', label: 'GPT-5.4 mini' },
+    { id: 'gpt-5', label: 'GPT-5' },
+    { id: 'o3', label: 'OpenAI o3' },
+    { id: 'o4-mini', label: 'OpenAI o4-mini' },
+    { id: 'gpt-oss-120b', label: 'GPT-OSS 120B' },
+  ],
+  groq: [
+    { id: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B', recommended: true },
+    { id: 'meta-llama/llama-4-maverick-17b-128e-instruct', label: 'Llama 4 Maverick 17B' },
+    { id: 'openai/gpt-oss-120b', label: 'GPT-OSS 120B' },
+    { id: 'openai/gpt-oss-20b', label: 'GPT-OSS 20B' },
+    { id: 'qwen/qwen3-32b', label: 'Qwen3 32B' },
+    { id: 'llama-3.1-8b-instant', label: 'Llama 3.1 8B' },
+  ],
+  'cerebras-ai': [
+    { id: 'llama-3.3-70b', label: 'Llama 3.3 70B', recommended: true },
+    { id: 'llama-4-scout-17b-16e-instruct', label: 'Llama 4 Scout 17B' },
+    { id: 'qwen-3-32b', label: 'Qwen3 32B' },
+    { id: 'gpt-oss-120b', label: 'GPT-OSS 120B' },
+    { id: 'llama3.1-8b', label: 'Llama 3.1 8B' },
+  ],
+  anthropic: [
+    { id: 'claude-sonnet-4-5-20250929', label: 'Claude Sonnet 4.5', recommended: true },
+    { id: 'claude-opus-4-1-20250805', label: 'Claude Opus 4.1' },
+    { id: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5' },
+  ],
+  xai: [
+    { id: 'grok-4.5', label: 'Grok 4.5', recommended: true },
+    { id: 'grok-4', label: 'Grok 4' },
+    { id: 'grok-3-mini', label: 'Grok 3 mini' },
+  ],
+  'mistral-ai': [
+    { id: 'mistral-large-latest', label: 'Mistral Large', recommended: true },
+    { id: 'mistral-medium', label: 'Mistral Medium' },
+    { id: 'codestral-latest', label: 'Codestral' },
+  ],
+  'openrouter-ai': [
+    { id: 'meta-llama/llama-3.3-70b-instruct', label: 'Llama 3.3 70B', recommended: true },
+    { id: 'openai/gpt-5', label: 'OpenAI GPT-5' },
+    { id: 'openai/gpt-4o-mini', label: 'OpenAI GPT-4o mini' },
+    { id: 'anthropic/claude-3.5-sonnet', label: 'Claude 3.5 Sonnet' },
+  ],
+  ollama: [
+    { id: 'llama3.1', label: 'Llama 3.1', recommended: true },
+    { id: 'llama3.3', label: 'Llama 3.3' },
+    { id: 'qwen2.5', label: 'Qwen 2.5' },
+    { id: 'mistral', label: 'Mistral' },
+    { id: 'gemma2', label: 'Gemma 2' },
+  ],
+  'lm-studio': [
+    { id: 'llama-3.1-8b-instruct', label: 'Llama 3.1 8B', recommended: true },
+    { id: 'qwen2.5-7b-instruct', label: 'Qwen 2.5 7B' },
+    { id: 'mistral-7b-instruct', label: 'Mistral 7B' },
+  ],
+  'openai-compatible': [
+    { id: 'gpt-4o-mini', label: 'GPT-4o mini (compatible)', recommended: true },
+    { id: 'gpt-4o', label: 'GPT-4o (compatible)' },
+  ],
+}
+
+/** Human models selectable for a provider (falls back to an empty list). */
+export function curatedModelsFor(providerId: string): LiaModelOption[] {
+  return LIA_MODEL_CATALOG[providerId] ?? []
+}
+
+/** Whether `modelId` is offered by the current curated catalog for provider. */
+export function isModelInCatalog(providerId: string, modelId?: string): boolean {
+  if (!modelId)
+    return false
+  return curatedModelsFor(providerId).some(option => option.id === modelId)
+}
+
+/**
+ * The model to auto-select for a provider: its `recommended` entry when one is
+ * flagged, otherwise the first curated entry. Returns undefined only when the
+ * provider has no curated catalog (callers must not open a free field then).
+ */
+export function recommendedModelFor(providerId: string): string | undefined {
+  return curatedModelsFor(providerId).find(option => option.recommended)?.id
+    ?? curatedModelsFor(providerId)[0]?.id
+}
+
 const API_KEY_NAME = 'apiKey'
 
 /** Shallow recoverability heuristic for the technical log / fallback decision. */
@@ -315,6 +436,9 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
     isFallbackConfigured,
     providerNeedsKey,
     providerApiKeyUrl,
+    curatedModelsFor,
+    isModelInCatalog,
+    recommendedModelFor,
     registerRuntimeExtensions,
   }
 })

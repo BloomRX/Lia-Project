@@ -58,7 +58,7 @@ provider:
       placeholder: "Provedor"
     model:
       label: "Modelo"
-      placeholder: "ID do modelo (ex.: llama-3.3-70b-versatile)"
+      placeholder: "Selecione um modelo"
     endpoint:
       label: "Endpoint"
       placeholder: "URL base (endpoint)"
@@ -71,7 +71,7 @@ provider:
       placeholder: "Provider reserva (opcional)"
     fallbackModel:
       label: "Modelo de fallback"
-      placeholder: "ID do modelo do fallback"
+      placeholder: "Selecione um modelo de fallback"
     fallbackKey:
       label: "Chave do provider de fallback"
   fallback:
@@ -93,8 +93,8 @@ provider:
     fallbackFailed: "Falha na conexão do fallback. Verifique o provider, o modelo e a chave do fallback."
   errors:
     providerRequired: "Selecione um provider primeiro."
-    modelRequired: "Informe um ID de modelo."
+    modelRequired: "Selecione um modelo."
     keyStoreUnavailable: "O armazenamento seguro de chaves não está disponível neste dispositivo."
     save: "Não foi possível salvar o provider."
-    fillFirst: "Selecione um provider e informe um modelo para testar a conexão."
+    fillFirst: "Selecione um provider e um modelo para testar a conexão."
     testFirst: "Teste a conexão antes de concluir."

@@ -58,7 +58,7 @@ provider:
       placeholder: "Provider"
     model:
       label: "Model"
-      placeholder: "Model id (e.g. llama-3.3-70b-versatile)"
+      placeholder: "Select a model"
     endpoint:
       label: "Endpoint"
       placeholder: "Base URL (endpoint)"
@@ -71,7 +71,7 @@ provider:
       placeholder: "Optional backup provider"
     fallbackModel:
       label: "Fallback model"
-      placeholder: "Model id for the fallback"
+      placeholder: "Select a fallback model"
     fallbackKey:
       label: "Fallback API key"
   fallback:
@@ -93,8 +93,8 @@ provider:
     fallbackFailed: "Fallback connection failed. Check its provider, model and key."
   errors:
     providerRequired: "Select a provider first."
-    modelRequired: "Enter a model id."
+    modelRequired: "Select a model."
     keyStoreUnavailable: "Secure key storage is unavailable on this device."
     save: "Could not save the provider."
-    fillFirst: "Select a provider and enter a model to test the connection."
+    fillFirst: "Select a provider and a model to test the connection."
     testFirst: "Test the connection before finishing."

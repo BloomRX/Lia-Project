@@ -363,10 +363,12 @@ app.whenReady().then(async () => {
 
   // Eagerly build the Lia product config at boot (no consumer yet in 4A) so its
   // schemaVersion is validated and defaults are initialized for later subphases.
+  // NOTE: the resolved instance only exists as `deps.liaProductConfig` inside the
+  // callback; the outer `liaProductConfig` handle is only valid for `dependsOn`.
   injeca.invoke({
     dependsOn: { liaProductConfig },
-    callback: () => {
-      liaProductConfig.get()
+    callback: (deps) => {
+      deps.liaProductConfig.get()
     },
   })
 
