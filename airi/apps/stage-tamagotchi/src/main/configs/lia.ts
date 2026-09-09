@@ -1,6 +1,6 @@
 import type { InferOutput } from 'valibot'
 
-import { array, literal, object, optional, string, union } from 'valibot'
+import { array, boolean, literal, object, optional, string, union } from 'valibot'
 
 import { createConfig } from '../libs/electron/persistence'
 
@@ -44,6 +44,8 @@ const chatProviderConfigSchema = object({
   preferred: optional(providerTargetSchema),
   /** Ordered fallback list applied when the primary provider fails. */
   fallback: optional(array(providerTargetSchema), []),
+  /** Master switch for provider failover. Defaults to enabled when set. */
+  fallbackEnabled: optional(boolean()),
 })
 
 const providerConfigSchema = object({

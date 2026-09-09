@@ -547,5 +547,28 @@ export const electronLiaSecretSet = defineInvokeEventa<boolean, LiaSecretPayload
 export const electronLiaSecretGet = defineInvokeEventa<string | undefined, LiaSecretPayload>('eventa:invoke:lia:secret:get')
 export const electronLiaSecretDelete = defineInvokeEventa<boolean, LiaSecretPayload>('eventa:invoke:lia:secret:delete')
 
+// Lia chat provider configuration (M1 Phase 4C).
+//
+// Lives in the Lia product config (`userData/lia-product.json`, namespace `lia`)
+// under `provider.chat` and only carries references/metadata: strategy, the
+// user's preferred provider/model, and the ordered fallback list. No secret is
+// ever stored here — API keys live in the main-process secret vault and are
+// merged in per-use at provider-instance build time.
+export interface LiaProviderChatTarget {
+  providerId: string
+  modelId?: string
+}
+
+export interface LiaProviderChatConfig {
+  strategy?: 'auto' | 'manual'
+  preferred?: LiaProviderChatTarget
+  fallback?: LiaProviderChatTarget[]
+  /** Master switch for provider failover (defaults to enabled when configured). */
+  fallbackEnabled?: boolean
+}
+
+export const electronLiaProviderChatConfigGet = defineInvokeEventa<LiaProviderChatConfig>('eventa:invoke:lia:provider:chat:config:get')
+export const electronLiaProviderChatConfigSet = defineInvokeEventa<void, LiaProviderChatConfig>('eventa:invoke:lia:provider:chat:config:set')
+
 export { electron } from '@proj-airi/electron-eventa'
 export * from '@proj-airi/electron-eventa/electron-updater'

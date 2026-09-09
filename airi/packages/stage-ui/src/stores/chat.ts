@@ -469,6 +469,13 @@ export const useChatStore = defineStore('chat', () => {
         if (!next)
           throw error
 
+        // Sanitized technical log: never the error/secret, only provider ids.
+        console.warn('[chat] provider failover', {
+          from: activeProvider.value,
+          to: next.providerId,
+          attempt: attempt + 1,
+        })
+
         // Remove exactly what this failed attempt appended (the rolled turn), so
         // the retry re-runs the same user message without duplicating it. If
         // nothing was appended (e.g. a provider-resolution failure before the
