@@ -1,5 +1,7 @@
 import type { Card } from '@proj-airi/ccc'
 
+import type { LiaPersona } from '../constants/lia-persona'
+
 /**
  * AIRI-specific runtime configuration embedded in a character card.
  *
@@ -65,6 +67,17 @@ export interface AiriExtension {
     prompt: string
     enabled?: boolean
   }>
+
+  /**
+   * Persona estruturada do card (modelo de dados — ex.: `LiaPersona`).
+   *
+   * É a fonte canônica editável da personalidade (a futura tela "Gerenciar
+   * personalidade" grava aqui). Os campos de texto que o runtime lê
+   * (`description`/`personality`/`scenario`) são projeções serializadas deste
+   * objeto. Opcional: cards CCv3 importados/legados não o possuem e continuam
+   * funcionando pelos campos de texto.
+   */
+  persona?: LiaPersona
 }
 
 /** Character card normalized with the AIRI extension required by the runtime. */

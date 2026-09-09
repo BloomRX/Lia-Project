@@ -8,6 +8,7 @@ import { defineStore } from 'pinia'
 import { computed } from 'vue'
 
 import { LIA_BUILT_IN_CARD_ID, LIA_DEFAULT_CARD } from '../../constants/lia-default-card'
+import { LIA_DEFAULT_PERSONA } from '../../constants/lia-persona'
 import { DEFAULT_ARTISTRY_WIDGET_SPAWNING_PROMPT } from '../../constants/prompts/character-defaults'
 import { captureAnalyticsEvent } from '../../libs/analytics'
 import { useSettingsStageModel } from '../settings/stage-model'
@@ -307,6 +308,9 @@ export const useAiriCardStore = defineStore('airi-card', () => {
         },
       },
       agents: existingExtension.agents ?? {},
+      // Carry a stored structured persona forward so a full merge does not
+      // erase it. Cards without one (imported/legacy) simply keep it absent.
+      persona: existingExtension.persona,
     }
   }
 
@@ -371,7 +375,12 @@ export const useAiriCardStore = defineStore('airi-card', () => {
     // overwritten or removed here — Lia simply occupies the guaranteed
     // fallback slot, so a fresh install resolves to Lia.
     if (!cards.value.has(LIA_BUILT_IN_CARD_ID)) {
-      cards.value.set(LIA_BUILT_IN_CARD_ID, newAiriCard(LIA_DEFAULT_CARD))
+      const liaCard = newAiriCard(LIA_DEFAULT_CARD)
+      // Attach the structured persona (v1.0) as the single editable source.
+      // The persona prose fields on the card are projections of this object;
+      // the future "Gerenciar personalidade" screen edits here.
+      liaCard.extensions.airi.persona = LIA_DEFAULT_PERSONA
+      cards.value.set(LIA_BUILT_IN_CARD_ID, liaCard)
     }
 
     // The active id and card map are persisted separately. Older versions

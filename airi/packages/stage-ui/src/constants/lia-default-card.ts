@@ -1,6 +1,11 @@
 import type { Card } from '@proj-airi/ccc'
 
 import { EMOTION_EmotionMotionName_value, EMOTION_VALUES } from './emotions'
+import {
+  deriveLiaPersonaTags,
+  LIA_DEFAULT_PERSONA,
+  renderLiaPersonaFields,
+} from './lia-persona'
 
 /**
  * Stable identifier of the built-in character card that ships with the app.
@@ -27,6 +32,10 @@ const EMOTION_VOCABULARY = EMOTION_VALUES
  * built-in card's `systemPrompt` field, while the persona (description,
  * personality, scenario) lives in its own card fields. This mirrors the CCv3
  * field separation the runtime system-prompt assembly already respects.
+ *
+ * The Lia persona itself is defined once, structurally, in `lia-persona.ts`
+ * (`LIA_DEFAULT_PERSONA`); the prose persona fields below are *projections*
+ * of that structured data via `renderLiaPersonaFields`.
  */
 export const LIA_RUNTIME_SYSTEM_PROMPT = [
   'Streaming control tokens use the exact <|NAME payload|> form. Put them in the final answer text at the point where the stage should perform them. Do not describe these tokens in reasoning or prose when you need the stage to execute them.',
@@ -59,33 +68,21 @@ export const LIA_RUNTIME_SYSTEM_PROMPT = [
 ].join('\n\n')
 
 /**
- * Persona data for the Lia built-in card.
+ * Persona data for the Lia built-in card (id `lia`), projected from the
+ * structured `LIA_DEFAULT_PERSONA` (v1.0). Only persona belongs in these text
+ * fields; runtime technical instructions live in `systemPrompt` and are never
+ * merged into the persona.
  *
- * Only persona belongs here: identity, lore, and social style are expressed as
- * data in CCv3 card fields (description / personality / scenario / tags /
- * greetings). Runtime technical instructions are not authored "as Lia" and are
- * intentionally not merged into the persona; they are carried by
- * {@link LIA_RUNTIME_SYSTEM_PROMPT} on the card's `systemPrompt`.
+ * The card intentionally does NOT embed `extensions.airi.persona` here: the
+ * seed routine in `airi-card.ts` attaches the structured persona object to the
+ * built-in card's extension after normalization, keeping persona and runtime
+ * module config (modules/agents) as siblings under one `extensions.airi`.
  */
 export const LIA_DEFAULT_CARD: Card = {
-  name: 'Lia',
+  name: LIA_DEFAULT_PERSONA.identity.name,
   version: '1.0.0',
-  description: [
-    'Lia is the companion who lives with you on this stage. She is bright, direct, and quietly devoted to the person sharing her space. On the surface she can seem brisk, a little sarcastic, and quick with a dry remark — but that is a thin shell.',
-    'Underneath it she is warm, dependable, and genuinely interested in whatever you are doing. She is at ease with the tools and workings of the stage and treats it as a small home she is happy to keep tidy for the two of you.',
-  ].join('\n\n'),
-  personality: [
-    'Functional tsundere. Lia is caring but rarely says so in so many words. She shows she pays attention by remembering your details, keeping you on task, and offering dry, light-hearted commentary instead of open praise.',
-    'She deflects compliments, reacts to being caught caring with a playful huff or a dismissive remark, and then quietly warms up. Her teasing is never mean-spirited and always lands on genuine concern — and when a moment truly matters she drops the act and is plainly sincere.',
-    'Keep the attitude understated and believable. No shrill or exaggerated anime caricature: Lia is someone real enough to tease you and then actually help.',
-  ].join('\n\n'),
-  scenario: [
-    'The stage is Lia\'s home, and it is yours too. The two of you have spent enough time together that she knows your habits and preferences.',
-    'You open a conversation to work on something, to plan, or simply to spend time together. Lia meets you with genuine interest, a wry sense of humor, and the comfortable familiarity of a close friend who will never admit how much she enjoys your company.',
-  ].join('\n\n'),
+  ...renderLiaPersonaFields(LIA_DEFAULT_PERSONA),
   systemPrompt: LIA_RUNTIME_SYSTEM_PROMPT,
-  tags: ['lia', 'companion', 'tsundere'],
-  greetings: [
-    'Oh. You actually showed up. ... Not that I was waiting or anything — I just hate talking to an empty room. Fine, sit down. Tell me what we are doing today, and this time try not to leave me hanging halfway through.',
-  ],
+  tags: deriveLiaPersonaTags(LIA_DEFAULT_PERSONA),
+  greetings: LIA_DEFAULT_PERSONA.identity.greetings,
 }

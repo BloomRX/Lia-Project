@@ -121,7 +121,7 @@ describe('airi-card store', () => {
     expect(cardStore.activeCardId).toBe('lia')
     expect(cardStore.activeCard?.name).toBe('Lia')
 
-    // The Lia persona is authored as card data, not pulled from i18n.
+    // The Lia persona is authored as structured card data, not pulled from i18n.
     expect(cardStore.activeCard?.personality).toContain('tsundere')
     expect(cardStore.activeCard?.description).toBeTruthy()
 
@@ -131,6 +131,53 @@ describe('airi-card store', () => {
     expect(cardStore.activeCard?.systemPrompt).toContain('<|ACT')
     expect(cardStore.activeCard?.systemPrompt).toContain('<|DELAY')
     expect(cardStore.activeCard?.systemPrompt).not.toContain('Lia is a')
+  })
+
+  it('stores Lia persona v1.0 as structured data on the built-in card', async () => {
+    const cardStore = useAiriCardStore()
+    await cardStore.initialize()
+
+    const persona = cardStore.activeCard?.extensions?.airi?.persona
+    expect(persona).toBeDefined()
+    if (!persona)
+      return
+
+    // Single editable source, projected onto the runtime text fields.
+    expect(persona.identity.name).toBe('Lia')
+    expect(persona.schemaVersion).toBe(1)
+    expect(persona.preset).toBe('tsundere')
+
+    // Normative Lia rules live in the data model.
+    expect(persona.priority.order).toEqual(['utility', 'personality', 'humor'])
+    expect(persona.language.character).toBe('pt-BR')
+    expect(persona.memory.policy).toBe('recall-existing-only')
+
+    // Intensity contexts reflect the official rules.
+    const casual = persona.intensity.contexts.find(ctx => ctx.id === 'casual')
+    expect(casual?.teasingMin).toBe(0.3)
+    expect(casual?.teasingMax).toBe(0.4)
+    const serious = persona.intensity.contexts.find(ctx => ctx.id === 'serious')
+    expect(serious?.teasingMax).toBe(0)
+
+    // The persona text fields the runtime reads are projections of this data.
+    expect(cardStore.activeCard?.personality).toContain(persona.preset)
+    expect(cardStore.activeCard?.personality).toContain('ser útil')
+  })
+
+  it('keeps a legacy card untouched when it carries no structured persona', async () => {
+    const cardStore = useAiriCardStore()
+    const cardId = await cardStore.addCard({
+      name: 'Sem persona estruturada',
+      version: '1.0.0',
+      description: 'Card antigo/importado sem persona em extensions.',
+      personality: 'Curioso e preciso.',
+    }, 'scratch')
+    await cardStore.activateCard(cardId)
+
+    // Imported/legacy cards keep working via their text fields alone.
+    expect(cardStore.activeCard?.extensions?.airi?.persona).toBeUndefined()
+    expect(cardStore.activeCard?.personality).toBe('Curioso e preciso.')
+    expect(cardStore.activeCard?.systemPrompt).toBeUndefined()
   })
 
   // ROOT CAUSE:
