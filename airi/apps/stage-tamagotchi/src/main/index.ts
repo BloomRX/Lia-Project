@@ -199,7 +199,13 @@ app.whenReady().then(async () => {
 
   const i18n = injeca.provide('libs:i18n', {
     dependsOn: { appConfig },
-    build: ({ dependsOn }) => createI18n({ messages, locale: dependsOn.appConfig.get()?.language }),
+    build: ({ dependsOn }) => createI18n({
+      messages,
+      locale: dependsOn.appConfig.get()?.language,
+      // Missing keys in a locale fall back to English (parity with the renderer
+      // i18n) instead of leaking the raw lookup key to the UI.
+      fallbackLocale: 'en',
+    }),
   })
 
   const serverChannel = injeca.provide('modules:channel-server', {
