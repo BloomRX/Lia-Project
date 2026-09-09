@@ -445,59 +445,65 @@ export const useChatStore = defineStore('chat', () => {
     let switchedProvider = false
     let lastError: unknown
 
-    for (let attempt = 0; attempt < CHAT_FALLBACK_MAX_ATTEMPTS; attempt += 1) {
-      try {
-        const result = await executeSendAttempt(payload)
-        // A fallback answered this message. Restore the primary provider/model so
-        // the next message still tries the user's preferred provider first.
-        if (switchedProvider) {
-          consciousnessStore.activeProvider = originalProviderId
-          if (originalModelId) {
-            consciousnessStore.activeModel = originalModelId
+    try {
+      for (let attempt = 0; attempt < CHAT_FALLBACK_MAX_ATTEMPTS; attempt += 1) {
+        try {
+          return await executeSendAttempt(payload)
+        }
+        catch (error) {
+          lastError = error
+          const next = await fallbackResolver({
+            error,
+            providerId: activeProvider.value,
+            modelId: activeModel.value,
+            attemptIndex: attempt,
+          })
+          if (!next)
+            throw error
+
+          // Sanitized technical log: never the error/secret, only provider ids.
+          console.warn('[chat] provider failover', {
+            from: activeProvider.value,
+            to: next.providerId,
+            attempt: attempt + 1,
+          })
+
+          // Remove exactly what this failed attempt appended (the rolled turn), so
+          // the retry re-runs the same user message without duplicating it. If
+          // nothing was appended (e.g. a provider-resolution failure before the
+          // message reached the queue) there is nothing to roll back — retry safe.
+          const current = chatSession.getSessionMessages(payload.sessionId)
+          if (current.length > messageCountBefore) {
+            chatSession.setSessionMessages(payload.sessionId, current.slice(0, messageCountBefore))
+          }
+
+          if (next.providerId) {
+            consciousnessStore.activeProvider = next.providerId
+            switchedProvider = true
+          }
+          if (next.modelId) {
+            consciousnessStore.activeModel = next.modelId
           }
         }
-        return result
       }
-      catch (error) {
-        lastError = error
-        const next = await fallbackResolver({
-          error,
-          providerId: activeProvider.value,
-          modelId: activeModel.value,
-          attemptIndex: attempt,
-        })
-        if (!next)
-          throw error
 
-        // Sanitized technical log: never the error/secret, only provider ids.
-        console.warn('[chat] provider failover', {
-          from: activeProvider.value,
-          to: next.providerId,
-          attempt: attempt + 1,
-        })
-
-        // Remove exactly what this failed attempt appended (the rolled turn), so
-        // the retry re-runs the same user message without duplicating it. If
-        // nothing was appended (e.g. a provider-resolution failure before the
-        // message reached the queue) there is nothing to roll back — retry safe.
-        const current = chatSession.getSessionMessages(payload.sessionId)
-        if (current.length > messageCountBefore) {
-          chatSession.setSessionMessages(payload.sessionId, current.slice(0, messageCountBefore))
-        }
-
-        if (next.providerId) {
-          consciousnessStore.activeProvider = next.providerId
-          switchedProvider = true
-        }
-        if (next.modelId) {
-          consciousnessStore.activeModel = next.modelId
+      // All bounded attempts exhausted; surface the last error to the caller
+      // (which appends a friendly, sanitized error for the user).
+      throw lastError ?? new Error('Chat send failed')
+    }
+    finally {
+      // Whichever path the fallback flow takes (success, no next fallback, or
+      // attempts exhausted), restore the primary provider/model so the next
+      // turn tries the user's preferred provider first. Set the provider before
+      // the model: the consciousness watcher (sync flush) clears the model on
+      // provider change.
+      if (switchedProvider) {
+        consciousnessStore.activeProvider = originalProviderId
+        if (originalModelId) {
+          consciousnessStore.activeModel = originalModelId
         }
       }
     }
-
-    // All bounded attempts exhausted; surface the last error to the caller
-    // (which appends a friendly, sanitized error for the user).
-    throw lastError ?? new Error('Chat send failed')
   }
 
   /** Sends one serializable chat request through the elected leader. */
