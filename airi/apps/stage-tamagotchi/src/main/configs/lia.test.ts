@@ -139,6 +139,34 @@ describe('lia product config', () => {
     expect(config.get()?.persona?.activeCardId).toBe('lia')
   })
 
+  it('preserves a completed onboarding across a restart (chat target + onboarded marker)', async () => {
+    // What "Concluir configuração" leaves on disk. On the next launch `setup()`
+    // re-parses the file through the schema, so anything the schema dropped here
+    // would silently send an onboarded user back to the first-run screen.
+    const { mod } = await loadModules(invalidFileMocks('/tmp/u', JSON.stringify({
+      schemaVersion: 1,
+      persona: { activeCardId: 'lia' },
+      provider: {
+        chat: {
+          strategy: 'manual',
+          preferred: { providerId: 'openai', modelId: 'gpt-5.5' },
+          fallback: [{ providerId: 'groq', modelId: 'llama-3.3-70b-versatile' }],
+          fallbackEnabled: true,
+          onboarded: true,
+        },
+      },
+      voice: {},
+      preferences: {},
+    })))
+    const config = mod.createLiaProductConfig()
+    const chat = config.get()?.provider?.chat
+
+    expect(config.getDiagnostics()?.status).toBe('ok')
+    expect(chat?.onboarded).toBe(true)
+    expect(chat?.preferred).toEqual({ providerId: 'openai', modelId: 'gpt-5.5' })
+    expect(chat?.fallback).toEqual([{ providerId: 'groq', modelId: 'llama-3.3-70b-versatile' }])
+  })
+
   it('persists to a distinct file from the main-window sizing config (lia-product.json vs lia-main-window.json)', async () => {
     const { mod } = await loadModules(missingFileMocks('/tmp/u'))
     const product = mod.createLiaProductConfig()

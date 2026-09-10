@@ -177,6 +177,41 @@ export function recommendedModelFor(providerId: string): string | undefined {
 
 const API_KEY_NAME = 'apiKey'
 
+/**
+ * Rebuilds a chat config as plain, structured-clonable data.
+ *
+ * `loadedConfig` is a `ref`, so every value read back out of it — the nested
+ * `preferred` / `fallback` objects included — is a Vue reactive `Proxy`. The
+ * eventa Electron adapter ships invoke payloads with `ipcRenderer.send(...)`,
+ * i.e. the structured clone algorithm, which cannot clone a `Proxy` and throws
+ * "An object could not be cloned.". A shallow spread of the loaded config keeps
+ * those nested proxies, so it is not enough: the payload has to be rebuilt field
+ * by field. Every write goes through `persistConfig`, so normalizing here keeps
+ * the whole bridge safe regardless of how a caller built its config.
+ */
+function toSerializableTarget(target?: LiaProviderChatTarget): LiaProviderChatTarget | undefined {
+  if (!target?.providerId)
+    return undefined
+
+  return target.modelId === undefined
+    ? { providerId: target.providerId }
+    : { providerId: target.providerId, modelId: target.modelId }
+}
+
+function toSerializableChatConfig(config: LiaProviderChatConfig): LiaProviderChatConfig {
+  const fallback = (config.fallback ?? [])
+    .map(target => toSerializableTarget(target))
+    .filter((target): target is LiaProviderChatTarget => target !== undefined)
+
+  return {
+    strategy: config.strategy,
+    preferred: toSerializableTarget(config.preferred),
+    fallback,
+    fallbackEnabled: config.fallbackEnabled,
+    onboarded: config.onboarded,
+  }
+}
+
 /** Shallow recoverability heuristic for the technical log / fallback decision. */
 function isRecoverableChatError(error: unknown): boolean {
   const text = errorMessageFrom(error) ?? ''
@@ -220,8 +255,9 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
   }
 
   async function persistConfig(config: LiaProviderChatConfig) {
-    await saveChatConfig(config)
-    loadedConfig.value = config
+    const payload = toSerializableChatConfig(config)
+    await saveChatConfig(payload)
+    loadedConfig.value = payload
   }
 
   async function isKeyStoreAvailable(): Promise<boolean> {
