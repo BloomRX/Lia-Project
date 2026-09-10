@@ -45,6 +45,14 @@ async function loadVault(fs: { disk: string }, { encryptionAvailable = true }: {
     filePath: '/tmp/user-data/lia-secrets.json',
     read,
     write,
+    // Inject the encryption capabilities explicitly: each vault is then driven
+    // by the availability/encrypt/decrypt this call controls, closing over this
+    // call's `safeStorage` instead of whichever electron mock the cached module
+    // graph happens to hold. This is what lets a test change `encryptionAvailable`
+    // between two vaults without rebuilding the module registry.
+    encryptionAvailable: () => safeStorage.isEncryptionAvailable(),
+    encrypt: (value: string) => safeStorage.encryptString(value),
+    decrypt: (payload: Buffer) => safeStorage.decryptString(payload),
   })
   // Base64-decode every stored value so we can inspect what was actually put on
   // disk (i.e. encryptString's output) without the transport base64 wrapper.
