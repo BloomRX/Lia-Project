@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { existsSync, readFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { mkdir, rename, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 
@@ -56,17 +56,24 @@ export function createLiaSecretVault(deps: SecretsDeps = {}): LiaSecretVault {
     await rename(tmp, p)
   })
 
+  // The injected `read` is the single source of truth for reading the vault —
+  // existence included. Probing the real filesystem here with `existsSync` would
+  // bypass the injected reader (e.g. in tests / alternate storage backends) and
+  // make a secret that was just written appear absent. A missing/unreadable file
+  // surfaces as a thrown read (default reader: ENOENT) or empty content, both
+  // treated as "no secrets yet".
   const load = (): VaultFile => {
     try {
-      if (!existsSync(path))
+      const raw = read(path)
+      if (!raw)
         return {}
-      const parsed = safeDestr<VaultFile>(read(path))
+      const parsed = safeDestr<VaultFile>(raw)
       return parsed && typeof parsed === 'object' ? parsed : {}
     }
     catch {
-      // A corrupted/legacy file must not brick the app. Treat as empty; the
-      // next successful write recreates it. No secret material is lost that we
-      // can read anyway, and we never log file contents.
+      // A missing or corrupted/legacy file must not brick the app. Treat as
+      // empty; the next successful write recreates it. No secret material is
+      // lost that we can read anyway, and we never log file contents.
       return {}
     }
   }
