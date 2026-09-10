@@ -6,6 +6,8 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import * as yaml from 'yaml'
 
+import { getElectronBuilderConfig } from '../utils'
+
 import { generateManifestFixtures, resolveLatestFilenameForTarget } from './generate-manifest'
 
 describe('generateManifestFixtures', () => {
@@ -30,6 +32,14 @@ describe('generateManifestFixtures', () => {
     const root = await mkdtemp(join(tmpdir(), 'airi-update-test-'))
     roots.push(root)
 
+    // NOTICE: The installer filename is owned by the electron-builder identity
+    // (`productName` + `nsis.artifactName`), so the expectation is derived from the very
+    // same config the production helper reads. Pinning a brand literal here made the test
+    // fail on every platform after the product identity was renamed, and would do so again
+    // on any future rebrand.
+    const { productName } = await getElectronBuilderConfig()
+    const expectedArtifactFilename = `${productName}-9.9.9-test.1-windows-x64-setup.exe`
+
     const result = await generateManifestFixtures({
       rootDir: root,
       channel: 'stable',
@@ -41,16 +51,16 @@ describe('generateManifestFixtures', () => {
 
     expect(result.channelDir).toBe(join(root, 'stable'))
     expect(result.latestFilename).toBe('latest-x64.yml')
-    expect(result.artifactFilename).toBe('AIRI-9.9.9-test.1-windows-x64-setup.exe')
+    expect(result.artifactFilename).toBe(expectedArtifactFilename)
 
     const manifest = yaml.parse(await readFile(result.manifestPath, 'utf8'))
     expect(manifest).toMatchObject({
       version: '9.9.9-test.1',
-      path: 'AIRI-9.9.9-test.1-windows-x64-setup.exe',
+      path: expectedArtifactFilename,
       releaseNotes: 'Mock update for AIRI local updater verification.',
       files: [
         {
-          url: 'AIRI-9.9.9-test.1-windows-x64-setup.exe',
+          url: expectedArtifactFilename,
         },
       ],
     })
