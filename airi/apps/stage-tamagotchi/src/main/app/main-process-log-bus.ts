@@ -55,8 +55,7 @@ export function ingestMainProcessLog(raw: string): void {
 export function sanitizeLogText(raw: string): string {
   let text = raw
     .replace(/\u001b\[[0-9;]*m/g, '') // strip ANSI color/style escape codes
-    .replace(/[\r\n]+$/, '')
-    .replace(/\s+$/g, '')
+    .trim() // drop leading/trailing whitespace, including any trailing newline
 
   text = maskSecrets(text)
 
