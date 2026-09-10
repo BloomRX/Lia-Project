@@ -98,3 +98,4 @@ provider:
     save: "Não foi possível salvar o provider."
     fillFirst: "Selecione um provider e um modelo para testar a conexão."
     testFirst: "Teste a conexão antes de concluir."
+    concludeFailed: "Não foi possível concluir a configuração. Tente novamente."

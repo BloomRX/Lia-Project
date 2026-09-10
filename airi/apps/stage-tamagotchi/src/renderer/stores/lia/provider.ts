@@ -337,10 +337,12 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
    * Whether the persisted config is genuinely ready to have a conversation.
    *
    * Ready requires: a preferred provider + model, the `onboarded` completion
-   * marker, and an API key stored in the secure vault for that provider. The
-   * explicit marker alone (onboarded=true with an invalid config) never reports
-   * ready — readiness is recomputed from the real config every call. No secret
-   * is read here, only its presence.
+   * marker, and — only when that provider actually needs a credential — an API
+   * key stored in the secure vault. A key-less provider (e.g. local Ollama /
+   * LM Studio) is ready as soon as its provider + model + onboarded marker are
+   * present, with no secret. The explicit marker alone (onboarded=true with an
+   * invalid config) never reports ready — readiness is recomputed from the real
+   * config every call. No secret is read here, only its presence.
    */
   async function isReadyToChat(): Promise<boolean> {
     const config = loadedConfig.value ?? (await refreshConfig())
@@ -349,6 +351,8 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
       return false
     if (config.onboarded !== true)
       return false
+    if (!providerNeedsKey(preferred.providerId))
+      return true
     return secretHas({ scope: preferred.providerId, key: API_KEY_NAME })
   }
 
@@ -356,6 +360,10 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
   async function markOnboarded(): Promise<void> {
     const config = loadedConfig.value ?? (await refreshConfig())
     await persistConfig({ ...config, onboarded: true })
+    // Re-read the authoritative config that main actually persisted so the
+    // renderer's reactive state is guaranteed to reflect onboarded=true (no
+    // IPC/rendered race window for the launcher gate that runs right after).
+    loadedConfig.value = await getChatConfig()
   }
 
   /**

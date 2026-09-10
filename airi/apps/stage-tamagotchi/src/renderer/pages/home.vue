@@ -185,16 +185,51 @@ async function openCharacterSettings() {
   await openSettings({ route: '/settings/models' })
 }
 
-async function onOnboardingComplete() {
+/**
+ * Decides launcher-vs-onboarding from the REAL persisted config (fresh read from
+ * main), never from a stale local flag. Both first-run and completion funnel
+ * through here, so onboarding can never outlive a config that has actually
+ * become ready (preferred provider + model + onboarded marker + the credential
+ * it needs) — which is exactly the state "Concluir configuração" persists before
+ * the launcher is shown. While in the manual settings editor we don't yank the
+ * user out of it.
+ */
+async function syncHomeView(options: { force?: boolean } = {}) {
+  const ready = await liaProviderStore.isReadyToChat()
   await computeSummary()
-  view.value = 'launcher'
+  if (options.force || view.value !== 'settings') {
+    view.value = ready ? 'launcher' : 'onboarding'
+  }
+}
+
+async function onOnboardingComplete() {
+  await syncHomeView()
 }
 
 async function onSettingsBack() {
-  const ready = await liaProviderStore.isReadyToChat()
-  await computeSummary()
-  view.value = ready ? 'launcher' : 'onboarding'
+  // Leave the editor explicitly (force) — recompute from persisted truth.
+  await syncHomeView({ force: true })
 }
+
+// React to the shared store's config whenever the meaningful fields change. This
+// is what turns a successful "Concluir configuração" (which mutates loadedConfig
+// → onboarded: true) into an immediate, in-place switch to the launcher on the
+// same mount — independent of the child <LiaProviderConfig> emit handshake. We
+// watch a stable signature (not the object identity) so recomputes that produce
+// an equal config don't re-trigger, and we only act while still on onboarding so
+// routine config writes elsewhere never disturb the view.
+const liaConfigSignature = computed(() => {
+  const c = liaProviderStore.loadedConfig ?? {}
+  const p = c.preferred
+  const fb = c.fallback?.[0]
+  return [p?.providerId, p?.modelId, c.onboarded, c.fallbackEnabled, fb?.providerId, fb?.modelId].join('|')
+})
+
+watch(liaConfigSignature, async () => {
+  if (view.value !== 'onboarding')
+    return
+  await syncHomeView()
+})
 
 function toggleLogs() {
   logsOpen.value = !logsOpen.value
@@ -210,11 +245,10 @@ onMounted(async () => {
   liaProviderStore.registerRuntimeExtensions()
 
   // First-run gating: derive readiness from the REAL persisted config (preferred
-  // provider + model + onboarded marker + stored key). Onboarding is shown until
-  // the user completes a valid setup; afterwards the launcher opens directly.
-  const ready = await liaProviderStore.isReadyToChat()
-  await computeSummary()
-  view.value = ready ? 'launcher' : 'onboarding'
+  // provider + model + onboarded marker + the credential it needs). Onboarding
+  // is shown until the user completes a valid setup; afterwards the launcher
+  // opens directly on the same route/mount.
+  await syncHomeView()
 })
 
 onUnmounted(() => {

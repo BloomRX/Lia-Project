@@ -281,9 +281,16 @@ async function conclude() {
     const ok = await save()
     if (!ok)
       return
-    // Mark the setup complete so future launches open Home directly.
+    // Mark the setup complete so future launches open Home directly. After this
+    // the store re-reads the persisted config, which also flips the reactive
+    // state Home watches — the launcher appears on the same mount.
     await store.markOnboarded()
     emit('complete')
+  }
+  catch {
+    // Surface any failure instead of leaving the onboarding screen silently
+    // stuck (the launcher transition only happens once this completes).
+    toast.error(tt('errors.concludeFailed'))
   }
   finally {
     busy.value = false
