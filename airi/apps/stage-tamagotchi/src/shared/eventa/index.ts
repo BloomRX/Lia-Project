@@ -572,5 +572,36 @@ export interface LiaProviderChatConfig {
 export const electronLiaProviderChatConfigGet = defineInvokeEventa<LiaProviderChatConfig>('eventa:invoke:lia:provider:chat:config:get')
 export const electronLiaProviderChatConfigSet = defineInvokeEventa<void, LiaProviderChatConfig>('eventa:invoke:lia:provider:chat:config:set')
 
+// Lia voice configuration (M1 Phase 4D).
+//
+// Lives in the Lia product config (`userData/lia-product.json`, namespace `lia`)
+// under `voice` and only carries references/metadata: the user's preferred TTS
+// target and the ordered TTS fallback list. No secret is ever stored here —
+// voice provider API keys live in the main-process secret vault (Phase 4C) and
+// are merged in per-use at provider-instance build time.
+//
+// 4D-1 scope: the bridge only reads/writes the `tts` slice. `voice.stt` is
+// forward-shaped in the product schema but has no IPC surface yet, and is never
+// clobbered by a TTS write.
+export interface LiaVoiceTtsTarget {
+  providerId: string
+  modelId?: string
+  voiceId?: string
+}
+
+export interface LiaVoiceTtsConfig {
+  /** Preferred primary TTS (voice) target. */
+  preferred?: LiaVoiceTtsTarget
+  /** Ordered TTS fallback list used when the primary voice provider fails. */
+  fallback?: LiaVoiceTtsTarget[]
+}
+
+export interface LiaVoiceConfig {
+  tts?: LiaVoiceTtsConfig
+}
+
+export const electronLiaVoiceConfigGet = defineInvokeEventa<LiaVoiceConfig>('eventa:invoke:lia:voice:config:get')
+export const electronLiaVoiceConfigSet = defineInvokeEventa<void, LiaVoiceConfig>('eventa:invoke:lia:voice:config:set')
+
 export { electron } from '@proj-airi/electron-eventa'
 export * from '@proj-airi/electron-eventa/electron-updater'

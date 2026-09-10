@@ -34,6 +34,7 @@ import { createI18n } from './libs/i18n'
 import { setupAppleSpeechTranscriptionService } from './services/airi/apple-speech-transcription'
 import { createLiaSecretVault, registerLiaSecretsBridge } from './services/lia/secrets-service'
 import { registerLiaProviderConfigBridge } from './services/lia/provider-config-service'
+import { registerLiaVoiceConfigBridge } from './services/lia/voice-config-service'
 import { setupServerChannel } from './services/airi/channel-server'
 import { setupGodotStageManager } from './services/airi/godot-stage'
 import { setupBuiltInServer } from './services/airi/http-server'
@@ -346,6 +347,16 @@ app.whenReady().then(async () => {
     callback: async (deps) => {
       const { context } = createContext(ipcMain)
       registerLiaProviderConfigBridge({ context, liaProductConfig: deps.liaProductConfig })
+    },
+  })
+
+  // Register the Lia voice.tts config bridge (references/metadata only — no
+  // secrets; API keys stay in the Phase 4C vault).
+  injeca.invoke({
+    dependsOn: { liaProductConfig },
+    callback: async (deps) => {
+      const { context } = createContext(ipcMain)
+      registerLiaVoiceConfigBridge({ context, liaProductConfig: deps.liaProductConfig })
     },
   })
 
