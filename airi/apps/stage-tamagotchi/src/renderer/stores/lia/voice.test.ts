@@ -24,7 +24,12 @@ import { electronLiaVoiceConfigGet, electronLiaVoiceConfigSet } from '../../../s
 
 const ipc = vi.hoisted(() => ({
   getVoiceConfig: vi.fn(async (): Promise<unknown> => ({ tts: {} })),
-  saveVoiceConfig: vi.fn(async (_config: LiaVoiceConfig) => {}),
+  saveVoiceConfig: vi.fn(async (_config: unknown) => {
+    // Electron IPC serializes invoke payloads with the structured clone
+    // algorithm, so a Vue reactive Proxy in the payload throws here exactly as
+    // it throws in the real app ("An object could not be cloned.").
+    structuredClone(_config)
+  }),
 }))
 
 vi.mock('@proj-airi/electron-vueuse', () => ({
@@ -63,7 +68,7 @@ function lastSentConfig(): LiaVoiceConfig {
   const call = ipc.saveVoiceConfig.mock.calls.at(-1)
   if (!call)
     throw new Error('saveVoiceConfig was never called')
-  return call[0]
+  return call[0] as LiaVoiceConfig
 }
 
 describe('lia voice store (4D-2)', async () => {
@@ -76,7 +81,13 @@ describe('lia voice store (4D-2)', async () => {
     ipc.getVoiceConfig.mockReset()
     ipc.saveVoiceConfig.mockReset()
     ipc.getVoiceConfig.mockResolvedValue({ tts: {} })
-    ipc.saveVoiceConfig.mockResolvedValue(undefined)
+    // Reinstall the real implementation after `mockReset()` wipes it, so every
+    // persisted payload is still put through the structured clone Electron IPC
+    // performs. Without this the store could send a Vue reactive Proxy and the
+    // suite would not notice.
+    ipc.saveVoiceConfig.mockImplementation(async (config: unknown) => {
+      structuredClone(config)
+    })
 
     const providersStore = useProviderStore()
     // Same edge `speech.test.ts` stubs: no voice catalog is fetched over IPC.

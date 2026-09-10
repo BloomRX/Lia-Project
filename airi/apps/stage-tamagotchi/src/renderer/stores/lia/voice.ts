@@ -201,11 +201,23 @@ export const useLiaVoiceStore = defineStore('lia-voice', () => {
    * The bridge uses replace semantics for `tts`, so sending only `preferred`
    * would silently delete a stored `fallback`. `fallback` is always sent as an
    * array (empty when there is none) for the same reason.
+   *
+   * Each target is rebuilt through `normalizeLiaVoiceTarget` rather than
+   * spread: `preferred` / `fallback` are `ref`s, so their contents (and every
+   * element of the array) are Vue reactive Proxies, and a spread keeps those
+   * proxies. Electron IPC serializes with the structured clone algorithm, which
+   * cannot clone a Proxy and throws "An object could not be cloned." — the same
+   * failure the chat onboarding gate had.
    */
   async function persistTtsConfig(): Promise<void> {
-    const tts: LiaVoiceTtsConfig = { fallback: [...fallback.value] }
-    if (preferred.value)
-      tts.preferred = { ...preferred.value }
+    const tts: LiaVoiceTtsConfig = {
+      fallback: fallback.value
+        .map(target => normalizeLiaVoiceTarget(target))
+        .filter((target): target is LiaVoiceTtsTarget => target !== undefined),
+    }
+    const preferredTarget = normalizeLiaVoiceTarget(preferred.value)
+    if (preferredTarget)
+      tts.preferred = preferredTarget
 
     await saveVoiceConfig({ tts })
     loadedConfig.value = { tts }
