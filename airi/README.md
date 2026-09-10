@@ -306,6 +306,23 @@ nix develop .#fhs
 pnpm dev:tamagotchi
 ```
 
+#### Windows: quick QA & dev launch (.bat)
+
+On Windows you can double-click (or run from a terminal/PowerShell) a few small
+`.bat` helpers in this folder (`airi\`), which just wrap the real `package.json`
+scripts:
+
+- `DevTamagotchi.bat` — starts the desktop app only: runs `pnpm dev:tamagotchi`
+  and keeps the window open on error so you can read the log.
+- `QA.bat` — full QA in a safe order, stopping on the first failure:
+  `pnpm test:run` → `pnpm typecheck` → `pnpm build:web`.
+- `DevKit.bat` — menu to pick any of the above plus a single Typecheck / Build
+  web / Testes / Git status. `[0]` exits.
+
+All three live in `airi\`, use only relative paths (`%~dp0`), never run
+`pnpm install`, and never perform destructive Git operations. They are specific
+to this project and unrelated to the generic `DevKit.bat` at the repo root.
+
 ### Stage Pocket (Mobile Version)
 
 Start the development server for the capacitor:
