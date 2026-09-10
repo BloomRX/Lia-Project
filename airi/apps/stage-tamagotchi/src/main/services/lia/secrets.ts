@@ -44,6 +44,35 @@ interface SecretsDeps {
   read?: (path: string) => string
   /** Overridable disk writer for deterministic tests. */
   write?: (path: string, data: string) => Promise<void>
+  /**
+   * Whether OS encryption is usable. Defaults to Electron `safeStorage`, but is
+   * injectable so the vault honours exactly the capability it was given (a
+   * vault constructed without a usable keychain must never store anything).
+   */
+  encryptionAvailable?: () => boolean
+  /**
+   * Encrypts a plaintext secret. Defaults to Electron
+   * `safeStorage.encryptString` (a `Buffer`). Alternate implementations may
+   * return a string; the result is always normalized to the ciphertext bytes
+   * before base64 is persisted.
+   */
+  encrypt?: (value: string) => Buffer | Uint8Array | string
+  /** Decrypts the stored ciphertext bytes. Defaults to Electron `safeStorage.decryptString`. */
+  decrypt?: (payload: Buffer) => string
+}
+
+/**
+ * Normalizes an `encrypt()` result to the base64 text that is persisted.
+ *
+ * Electron's `safeStorage.encryptString` returns a `Buffer`, while an injected
+ * implementation may return a string/Uint8Array. Encoding the *bytes* (rather
+ * than stringifying the value) keeps the on-disk format a faithful base64 of
+ * the ciphertext, so it always round-trips through
+ * `Buffer.from(cipher, 'base64')` on read.
+ */
+function ciphertextToBase64(encrypted: Buffer | Uint8Array | string): string {
+  const bytes = typeof encrypted === 'string' ? Buffer.from(encrypted, 'utf8') : Buffer.from(encrypted)
+  return bytes.toString('base64')
 }
 
 export function createLiaSecretVault(deps: SecretsDeps = {}): LiaSecretVault {
@@ -55,6 +84,14 @@ export function createLiaSecretVault(deps: SecretsDeps = {}): LiaSecretVault {
     await writeFile(tmp, data)
     await rename(tmp, p)
   })
+
+  // Encryption capabilities are injected when provided and otherwise fall back
+  // to Electron's safeStorage. The vault therefore uses exactly the
+  // availability/encrypt/decrypt it was constructed with — never an implicit
+  // real keychain when the caller supplied its own.
+  const isAvailable = deps.encryptionAvailable ?? (() => safeStorage.isEncryptionAvailable())
+  const encrypt = deps.encrypt ?? ((value: string) => safeStorage.encryptString(value))
+  const decrypt = deps.decrypt ?? ((payload: Buffer) => safeStorage.decryptString(payload))
 
   // The injected `read` is the single source of truth for reading the vault —
   // existence included. Probing the real filesystem here with `existsSync` would
@@ -89,12 +126,12 @@ export function createLiaSecretVault(deps: SecretsDeps = {}): LiaSecretVault {
   }
 
   return {
-    isEncryptionAvailable: () => safeStorage.isEncryptionAvailable(),
+    isEncryptionAvailable: () => isAvailable(),
     setSecret: async (scope, key, value) => {
-      if (!safeStorage.isEncryptionAvailable() || value.length === 0)
+      if (!isAvailable() || value.length === 0)
         return false
       const file = load()
-      file[encodeKey(scope, key)] = safeStorage.encryptString(value).toString('base64')
+      file[encodeKey(scope, key)] = ciphertextToBase64(encrypt(value))
       return save(file)
     },
     getSecret: (scope, key) => {
@@ -102,9 +139,9 @@ export function createLiaSecretVault(deps: SecretsDeps = {}): LiaSecretVault {
       const cipher = file[encodeKey(scope, key)]
       if (!cipher)
         return undefined
-      if (!safeStorage.isEncryptionAvailable())
+      if (!isAvailable())
         return undefined
-      return safeStorage.decryptString(Buffer.from(cipher, 'base64'))
+      return decrypt(Buffer.from(cipher, 'base64'))
     },
     hasSecret: (scope, key) => load()[encodeKey(scope, key)] !== undefined,
     deleteSecret: async (scope, key) => {
