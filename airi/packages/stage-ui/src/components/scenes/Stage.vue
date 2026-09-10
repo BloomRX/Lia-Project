@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { Live2DLipSync, Live2DLipSyncOptions } from '@proj-airi/model-driver-lipsync'
 import type { Profile } from '@proj-airi/model-driver-lipsync/shared/wlipsync'
+import type { TtsRequest } from '@proj-airi/pipelines-audio'
 import type { CaptionChannelEvent } from '@proj-airi/stage-shared'
 import type { VrmInteractionTarget } from '@proj-airi/stage-ui-three'
 import type { SpeechProviderWithExtraOptions } from '@xsai-ext/providers/utils'
@@ -39,6 +40,7 @@ import { live2dMotionMagicProfiles, useLive2DMotionMagic, useLive2DMotionMagicSe
 import { getDefaultStreamingModel, getDefinedProvider } from '../../libs/providers/providers'
 import { OFFICIAL_SPEECH_PROVIDER_ID, OFFICIAL_SPEECH_STREAMING_PROVIDER_ID } from '../../libs/providers/providers/official'
 import { bindSpeakingStateToPlaybackManager } from '../../libs/speech/playback-speaking-state'
+import { getSpeechTtsFallbackPolicy, notifySpeechTtsTurnEnded, withSpeechTtsSegmentFallback } from '../../libs/speech/tts-fallback'
 import { createStageTtsSession } from '../../libs/speech/tts-session'
 import { getSpeechBusContext, speechOutputGetPlaybackState } from '../../services/speech/bus'
 import { useLlmStreamingControlStore } from '../../stores/ai/chat-llm/streaming-control'
@@ -434,144 +436,162 @@ function resolveStageVoiceType(): 'official_selected' | 'custom_configured' {
   return activeSpeechProvider.value === OFFICIAL_SPEECH_PROVIDER_ID || activeSpeechProvider.value === OFFICIAL_SPEECH_STREAMING_PROVIDER_ID ? 'official_selected' : 'custom_configured'
 }
 
-const speechPipeline = createSpeechPipeline<AudioBuffer>({
-  tts: async (request, signal) => {
-    if (signal.aborted)
-      return null
+/**
+ * One synthesis attempt for one segment.
+ *
+ * Returns `null` when there is legitimately nothing to speak (aborted, muted,
+ * noop provider, empty segment, no model/voice picked) and THROWS when the
+ * attempt actually failed, so the fallback wrapper can tell "no audio by design"
+ * from "this provider could not deliver" and give the optional Lia fallback
+ * policy a chance to switch target and retry this same segment. Diagnostics
+ * stay here so every attempt keeps its full context.
+ */
+async function stageSynthesizeSegment(request: TtsRequest, signal: AbortSignal): Promise<AudioBuffer | null> {
+  if (signal.aborted)
+    return null
 
-    if (speechMuted.value)
-      return null
+  if (speechMuted.value)
+    return null
 
-    if (activeSpeechProvider.value === 'speech-noop')
-      return null
+  if (activeSpeechProvider.value === 'speech-noop')
+    return null
 
-    if (!activeSpeechProvider.value)
-      return null
+  if (!activeSpeechProvider.value)
+    return null
 
-    // Streaming provider must NEVER reach this per-segment callback. The
-    // streaming code path opens its own ws at `onBeforeMessageComposed`
-    // and bypasses speech-pipeline entirely. If we got here while the
-    // streaming provider is active, the open path failed (most often:
-    // voice catalog hadn't finished loading when the user sent the
-    // message). The old fallback would silently re-open a fresh ws per
-    // segment — exactly the behavior the refactor is meant to delete.
-    // Codex review MEDIUM #3: refuse loudly instead.
-    if (resolveSpeechTransport(activeSpeechProvider.value) === 'bidirectional-ws') {
-      console.warn('[Speech Pipeline] bidirectional-ws provider reached per-segment fallback', {
-        reason: 'streaming session was not opened at intent start (voice unset?)',
+  // Streaming provider must NEVER reach this per-segment callback. The
+  // streaming code path opens its own ws at `onBeforeMessageComposed`
+  // and bypasses speech-pipeline entirely. If we got here while the
+  // streaming provider is active, the open path failed (most often:
+  // voice catalog hadn't finished loading when the user sent the
+  // message). The old fallback would silently re-open a fresh ws per
+  // segment — exactly the behavior the refactor is meant to delete.
+  // Codex review MEDIUM #3: refuse loudly instead.
+  if (resolveSpeechTransport(activeSpeechProvider.value) === 'bidirectional-ws') {
+    console.warn('[Speech Pipeline] bidirectional-ws provider reached per-segment fallback', {
+      reason: 'streaming session was not opened at intent start (voice unset?)',
+      provider: activeSpeechProvider.value,
+      segment: request.text?.slice(0, 40),
+    })
+    return null
+  }
+
+  const provider = await providersStore.getProviderInstance(activeSpeechProvider.value) as SpeechProviderWithExtraOptions<string, UnElevenLabsOptions>
+  if (!provider) {
+    console.error('Failed to initialize speech provider')
+    throw new Error(`Failed to initialize speech provider: ${activeSpeechProvider.value}`)
+  }
+
+  if (!request.text && !request.special)
+    return null
+
+  const providerConfig = providerStore.getProviderConfig(activeSpeechProvider.value)
+
+  // For OpenAI Compatible providers, always use provider config for model and voice
+  // since these are manually configured in provider settings
+  let model = activeSpeechModel.value
+  let voice = activeSpeechVoice.value
+
+  if (activeSpeechProvider.value === 'openai-compatible-audio-speech') {
+    // Always prefer provider config for OpenAI Compatible (user configured it there)
+    if (providerConfig?.model) {
+      model = providerConfig.model as string
+    }
+    else {
+      // Fallback to default if not in provider config
+      model = 'tts-1'
+      console.warn('[Speech Pipeline] OpenAI Compatible: No model in provider config, using default', { providerConfig })
+    }
+
+    if (providerConfig?.voice) {
+      voice = {
+        id: providerConfig.voice as string,
+        name: providerConfig.voice as string,
+        description: providerConfig.voice as string,
+        previewURL: '',
+        languages: [{ code: 'en', title: 'English' }],
         provider: activeSpeechProvider.value,
-        segment: request.text?.slice(0, 40),
-      })
-      return null
-    }
-
-    const provider = await providersStore.getProviderInstance(activeSpeechProvider.value) as SpeechProviderWithExtraOptions<string, UnElevenLabsOptions>
-    if (!provider) {
-      console.error('Failed to initialize speech provider')
-      return null
-    }
-
-    if (!request.text && !request.special)
-      return null
-
-    const providerConfig = providerStore.getProviderConfig(activeSpeechProvider.value)
-
-    // For OpenAI Compatible providers, always use provider config for model and voice
-    // since these are manually configured in provider settings
-    let model = activeSpeechModel.value
-    let voice = activeSpeechVoice.value
-
-    if (activeSpeechProvider.value === 'openai-compatible-audio-speech') {
-      // Always prefer provider config for OpenAI Compatible (user configured it there)
-      if (providerConfig?.model) {
-        model = providerConfig.model as string
-      }
-      else {
-        // Fallback to default if not in provider config
-        model = 'tts-1'
-        console.warn('[Speech Pipeline] OpenAI Compatible: No model in provider config, using default', { providerConfig })
-      }
-
-      if (providerConfig?.voice) {
-        voice = {
-          id: providerConfig.voice as string,
-          name: providerConfig.voice as string,
-          description: providerConfig.voice as string,
-          previewURL: '',
-          languages: [{ code: 'en', title: 'English' }],
-          provider: activeSpeechProvider.value,
-          gender: 'neutral',
-        }
-      }
-      else {
-        // Fallback to default if not in provider config
-        voice = {
-          id: 'alloy',
-          name: 'alloy',
-          description: 'alloy',
-          previewURL: '',
-          languages: [{ code: 'en', title: 'English' }],
-          provider: activeSpeechProvider.value,
-          gender: 'neutral',
-        }
-        console.warn('[Speech Pipeline] OpenAI Compatible: No voice in provider config, using default', { providerConfig })
+        gender: 'neutral',
       }
     }
+    else {
+      // Fallback to default if not in provider config
+      voice = {
+        id: 'alloy',
+        name: 'alloy',
+        description: 'alloy',
+        previewURL: '',
+        languages: [{ code: 'en', title: 'English' }],
+        provider: activeSpeechProvider.value,
+        gender: 'neutral',
+      }
+      console.warn('[Speech Pipeline] OpenAI Compatible: No voice in provider config, using default', { providerConfig })
+    }
+  }
 
-    if (!model || !voice)
+  if (!model || !voice)
+    return null
+
+  try {
+    const speechRequest = speechStore.resolveSpeechInput({
+      text: request.text,
+      voice,
+      providerConfig: {
+        ...providerConfig,
+        pitch: ssmlEnabled.value ? pitch.value : undefined,
+      },
+      forceSSML: ssmlEnabled.value,
+      supportsSSML: speechStore.supportsSSML,
+    })
+
+    // Non-streaming providers only: synth via REST. Streaming provider
+    // was already early-returned above; it owns its own ws path opened
+    // in `onBeforeMessageComposed`.
+    const res = await speechStore.speech(
+      provider,
+      model,
+      speechRequest.input,
+      voice.id,
+      speechRequest.providerConfig,
+      {
+        trigger: 'auto',
+        source: 'chat_auto_tts',
+        voice_type: resolveStageVoiceType(),
+      },
+    )
+
+    if (signal.aborted || !res || res.byteLength === 0)
       return null
 
-    try {
-      const speechRequest = speechStore.resolveSpeechInput({
-        text: request.text,
-        voice,
-        providerConfig: {
-          ...providerConfig,
-          pitch: ssmlEnabled.value ? pitch.value : undefined,
-        },
-        forceSSML: ssmlEnabled.value,
-        supportsSSML: speechStore.supportsSSML,
-      })
-
-      // Non-streaming providers only: synth via REST. Streaming provider
-      // was already early-returned above; it owns its own ws path opened
-      // in `onBeforeMessageComposed`.
-      const res = await speechStore.speech(
-        provider,
+    const audioBuffer = await audioContext.decodeAudioData(res)
+    return audioBuffer
+  }
+  catch (err) {
+    // Surface the error with context. Pipeline still drops the segment
+    // (returning null) so the conversation keeps going, but operators see
+    // the failure in devtools instead of silent truncation. Streaming
+    // failures (truncated session, network drop, billing rejection) now
+    // produce visible diagnostic lines — see codex review item #6.
+    if (!signal.aborted) {
+      console.error('[Speech Pipeline] tts() failed', {
+        provider: activeSpeechProvider.value,
         model,
-        speechRequest.input,
-        voice.id,
-        speechRequest.providerConfig,
-        {
-          trigger: 'auto',
-          source: 'chat_auto_tts',
-          voice_type: resolveStageVoiceType(),
-        },
-      )
-
-      if (signal.aborted || !res || res.byteLength === 0)
-        return null
-
-      const audioBuffer = await audioContext.decodeAudioData(res)
-      return audioBuffer
+        voice: voice?.id,
+        error: err,
+      })
     }
-    catch (err) {
-      // Surface the error with context. Pipeline still drops the segment
-      // (returning null) so the conversation keeps going, but operators see
-      // the failure in devtools instead of silent truncation. Streaming
-      // failures (truncated session, network drop, billing rejection) now
-      // produce visible diagnostic lines — see codex review item #6.
-      if (!signal.aborted) {
-        console.error('[Speech Pipeline] tts() failed', {
-          provider: activeSpeechProvider.value,
-          model,
-          voice: voice?.id,
-          error: err,
-        })
-      }
-      return null
-    }
-  },
+    // Rethrow so the optional fallback wrapper can decide whether another
+    // voice target is worth trying; it converts a final failure back into
+    // `null` (segment dropped) exactly as this callback used to.
+    throw err
+  }
+}
+
+const speechPipeline = createSpeechPipeline<AudioBuffer>({
+  // Retries the SAME segment on recoverable failures while the optional Lia
+  // fallback policy keeps switching voice targets. With no policy registered
+  // this is exactly one attempt followed by the historical `null`.
+  tts: withSpeechTtsSegmentFallback(stageSynthesizeSegment),
   playback: playbackManager,
 })
 
@@ -591,6 +611,9 @@ speechPipeline.on('onSpecial', (segment) => {
 
 speechPipeline.on('onTurnEnd', (turnId) => {
   streamingControl.completeTurn(turnId)
+  // A finished turn is the lifecycle boundary for a temporary fallback: let the
+  // optional Lia policy restore its preferred target. No-op when none exists.
+  notifySpeechTtsTurnEnded()
 })
 
 speechPipeline.on('onTurnCancel', ({ turnId }) => {
@@ -909,6 +932,15 @@ watch(
     if (!currentSession)
       return
     if (provider === prevProvider && voiceId === prevVoiceId && model === prevModel)
+      return
+    // A Lia TTS fallback switches provider mid-reply ON PURPOSE. The segmenter
+    // adapter holds no provider/voice/model state (`fromIntent` is a pure
+    // passthrough; `stageSynthesizeSegment` re-resolves all three per segment),
+    // so tearing it down would only abort the rest of the reply for no benefit.
+    // Only the streaming adapter snapshots those values and genuinely needs
+    // re-opening. Gated on a fallback policy being registered so AIRI behaves
+    // exactly as before when Lia voice is not in play.
+    if (currentSession.transport !== 'bidirectional-ws' && getSpeechTtsFallbackPolicy())
       return
     console.warn('[Speech Pipeline] provider/voice/model changed mid-session, tearing down', {
       provider,

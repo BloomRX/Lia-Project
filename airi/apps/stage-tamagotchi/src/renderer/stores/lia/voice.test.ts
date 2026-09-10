@@ -1,5 +1,6 @@
 import type { LiaVoiceConfig, LiaVoiceTtsTarget } from '../../../shared/eventa'
 
+import { getSpeechTtsFallbackPolicy, resetSpeechTtsFallbackForTesting } from '@proj-airi/stage-ui/libs/speech/tts-fallback'
 import { useSpeechStore } from '@proj-airi/stage-ui/stores/modules/speech'
 import { useProviderStore } from '@proj-airi/stage-ui/stores/providers/provider'
 import { createPinia, setActivePinia } from 'pinia'
@@ -399,5 +400,116 @@ describe('lia voice store (4D-2)', async () => {
     expect(store.isLoaded).toBe(false)
     expect(store.isLoading).toBe(false)
     expect(store.hasConfiguration).toBe(false)
+  })
+  describe('runtime fallback policy (4D-3)', () => {
+    beforeEach(() => {
+      resetSpeechTtsFallbackForTesting()
+    })
+
+    /** Registers the policy and returns the store with a loaded chain. */
+    async function withChain(tts: unknown) {
+      ipc.getVoiceConfig.mockResolvedValue({ tts })
+      const store = useLiaVoiceStore()
+      await store.refreshConfig()
+      store.registerRuntimeExtensions()
+      const policy = getSpeechTtsFallbackPolicy()
+      if (!policy)
+        throw new Error('policy was not registered')
+      return { store, policy }
+    }
+
+    it('registers the policy on the shared speech runtime', async () => {
+      const { policy } = await withChain({ preferred: PREFERRED })
+      expect(policy).toBeDefined()
+      expect(getSpeechTtsFallbackPolicy()).toBe(policy)
+    })
+
+    it('consumes nextVoiceTargetOnFailure() and applies each switch to the speech runtime', async () => {
+      const { store, policy } = await withChain({ preferred: PREFERRED, fallback: [FALLBACK_A, FALLBACK_B] })
+      expect(store.activeTargetIndex).toBe(0)
+
+      // First failure: preferred -> fallback[0].
+      expect(await policy.onAttemptFailed({ attempt: 1, error: new Error('503') })).toBe(true)
+      expect(store.activeTargetIndex).toBe(1)
+      expect(speechStore.activeSpeechProvider).toBe(FALLBACK_A.providerId)
+      expect(speechStore.activeSpeechModel).toBe(FALLBACK_A.modelId)
+      expect(speechStore.activeSpeechVoiceId).toBe(FALLBACK_A.voiceId)
+
+      // Second failure: fallback[0] -> fallback[1].
+      expect(await policy.onAttemptFailed({ attempt: 2, error: new Error('503') })).toBe(true)
+      expect(store.activeTargetIndex).toBe(2)
+      expect(speechStore.activeSpeechProvider).toBe(FALLBACK_B.providerId)
+
+      // Chain exhausted: no further switch, no loop.
+      expect(await policy.onAttemptFailed({ attempt: 3, error: new Error('503') })).toBe(false)
+      expect(store.activeTargetIndex).toBe(2)
+      expect(speechStore.activeSpeechProvider).toBe(FALLBACK_B.providerId)
+    })
+
+    it('falls back to fallback[0] when no preferred is configured', async () => {
+      const { store, policy } = await withChain({ fallback: [FALLBACK_A, FALLBACK_B] })
+      expect(store.resolveCurrentVoiceTarget()).toEqual(FALLBACK_A)
+
+      expect(await policy.onAttemptFailed({ attempt: 1, error: new Error('503') })).toBe(true)
+      expect(speechStore.activeSpeechProvider).toBe(FALLBACK_B.providerId)
+    })
+
+    it('does nothing when there is no configuration at all', async () => {
+      const { policy } = await withChain({})
+      const before = {
+        provider: speechStore.activeSpeechProvider,
+        model: speechStore.activeSpeechModel,
+        voiceId: speechStore.activeSpeechVoiceId,
+      }
+
+      expect(await policy.onAttemptFailed({ attempt: 1, error: new Error('503') })).toBe(false)
+
+      expect(speechStore.activeSpeechProvider).toBe(before.provider)
+      expect(speechStore.activeSpeechModel).toBe(before.model)
+      expect(speechStore.activeSpeechVoiceId).toBe(before.voiceId)
+    })
+
+    it('never persists a fallback as the preferred target', async () => {
+      const { policy } = await withChain({ preferred: PREFERRED, fallback: [FALLBACK_A] })
+
+      await policy.onAttemptFailed({ attempt: 1, error: new Error('503') })
+      expect(speechStore.activeSpeechProvider).toBe(FALLBACK_A.providerId)
+
+      // The switch lives only in the runtime; lia-product.json is untouched.
+      expect(ipc.saveVoiceConfig).not.toHaveBeenCalled()
+    })
+
+    it('restores the preferred target when the turn ends after a fallback', async () => {
+      const { store, policy } = await withChain({ preferred: PREFERRED, fallback: [FALLBACK_A] })
+
+      await policy.onAttemptFailed({ attempt: 1, error: new Error('503') })
+      expect(speechStore.activeSpeechProvider).toBe(FALLBACK_A.providerId)
+
+      await policy.onTurnEnded?.()
+
+      expect(store.activeTargetIndex).toBe(0)
+      expect(store.resolveCurrentVoiceTarget()).toEqual(PREFERRED)
+      expect(speechStore.activeSpeechProvider).toBe(PREFERRED.providerId)
+      expect(speechStore.activeSpeechModel).toBe(PREFERRED.modelId)
+      expect(speechStore.activeSpeechVoiceId).toBe(PREFERRED.voiceId)
+      // Restoring is not a configuration change either.
+      expect(ipc.saveVoiceConfig).not.toHaveBeenCalled()
+    })
+
+    it('leaves the runtime alone at turn end when no fallback happened', async () => {
+      const { store, policy } = await withChain({ preferred: PREFERRED, fallback: [FALLBACK_A] })
+
+      speechStore.activeSpeechProvider = 'user-chosen-provider'
+      speechStore.activeSpeechModel = 'user-chosen-model'
+      speechStore.activeSpeechVoiceId = 'user-chosen-voice'
+      await nextTick()
+
+      await policy.onTurnEnded?.()
+
+      expect(store.activeTargetIndex).toBe(0)
+      expect(speechStore.activeSpeechProvider).toBe('user-chosen-provider')
+      expect(speechStore.activeSpeechModel).toBe('user-chosen-model')
+      expect(speechStore.activeSpeechVoiceId).toBe('user-chosen-voice')
+    })
   })
 })

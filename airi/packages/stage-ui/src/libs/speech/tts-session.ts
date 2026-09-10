@@ -21,6 +21,17 @@ import { createStreamingTtsPipeline } from './streaming-pipeline'
 export interface StageTtsSession {
   /** Stable id for this session. Used by playback to scope cancellation. */
   readonly intentId: string
+  /**
+   * Which adapter backs this session, and therefore whether a mid-session
+   * provider/voice/model swap invalidates it.
+   *
+   * `'rest'` (segmenter) sessions hold NO provider/voice/model state — see
+   * {@link fromIntent}: the host re-resolves all three per segment inside its
+   * `tts()` callback — so a swap simply takes effect on the next segment.
+   * `'bidirectional-ws'` sessions snapshot them at open time (see
+   * {@link StreamingSessionSnapshot}) and must be torn down and re-opened.
+   */
+  readonly transport: SpeechTransport
   /** Forward an LLM token. Adapter decides whether it's segmented or raw. */
   appendText: (text: string) => void
   /**
@@ -54,6 +65,7 @@ type IntentHandleSubset = Pick<IntentHandle, 'intentId' | 'writeLiteral' | 'writ
 function fromIntent(intent: IntentHandleSubset): StageTtsSession {
   return {
     intentId: intent.intentId,
+    transport: 'rest',
     appendText: intent.writeLiteral,
     appendSpecial: intent.writeSpecial,
     finishInput: intent.writeFlush,
@@ -203,6 +215,7 @@ export function createStreamingTtsSession<TAudio = AudioBuffer>(
 
   return {
     intentId,
+    transport: 'bidirectional-ws',
     appendText: handle.appendText,
     // Streaming has no in-band queue to align audio with; fire the host's
     // immediate-special callback so emotion / delay tokens still reach the

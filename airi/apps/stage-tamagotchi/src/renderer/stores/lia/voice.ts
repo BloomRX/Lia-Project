@@ -2,6 +2,7 @@ import type { LiaVoiceConfig, LiaVoiceTtsConfig, LiaVoiceTtsTarget } from '../..
 
 import { errorMessageFrom } from '@moeru/std'
 import { useElectronEventaInvoke } from '@proj-airi/electron-vueuse'
+import { registerSpeechTtsFallbackPolicy } from '@proj-airi/stage-ui/libs/speech/tts-fallback'
 import { useSpeechStore } from '@proj-airi/stage-ui/stores/modules/speech'
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
@@ -252,6 +253,57 @@ export const useLiaVoiceStore = defineStore('lia-voice', () => {
     return applyVoiceTarget(resolveCurrentVoiceTarget())
   }
 
+  /**
+   * Installs the inert-by-default TTS fallback policy for this renderer
+   * session, mirroring `useLiaProviderStore.registerRuntimeExtensions()`.
+   * Called once by the Lia Home. Idempotent.
+   *
+   * The speech runtime stays in charge of *when* to retry (one segment at a
+   * time, never on abort, never on a non-recoverable error, bounded by its own
+   * attempt ceiling); this policy only answers "is there another target?" and
+   * applies it.
+   */
+  function registerRuntimeExtensions(): void {
+    registerSpeechTtsFallbackPolicy({
+      onAttemptFailed: async (ctx) => {
+        // Read BEFORE the switch: this is the provider that just failed.
+        const failedProviderId = speechStore.activeSpeechProvider
+
+        // The cursor is the single source of truth for the chain — preferred,
+        // then each fallback exactly once, then exhausted. It cannot loop, and
+        // it never revisits an earlier target within the same turn.
+        const next = nextVoiceTargetOnFailure()
+        if (!next)
+          return false
+
+        await applyVoiceTarget(next)
+
+        // Technical diagnostic only: which provider gave up and which took over.
+        // No toast, no UI, no secret material.
+        console.warn('[Lia Voice] TTS provider failed, falling back', {
+          failedProviderId,
+          attempt: ctx.attempt,
+          nextProviderId: next.providerId,
+          nextModelId: next.modelId,
+          nextVoiceId: next.voiceId,
+        })
+        return true
+      },
+
+      onTurnEnded: async () => {
+        // Nothing to restore unless a fallback actually took over this turn.
+        if (activeTargetIndex.value === 0)
+          return
+
+        // A fallback is temporary recovery, never a new preference: the cursor
+        // goes back to the preferred target and the runtime follows. Nothing is
+        // persisted, so `lia-product.json` still names the original preferred.
+        resetVoiceTarget()
+        await applyVoiceTarget(resolveCurrentVoiceTarget())
+      },
+    })
+  }
+
   return {
     // State
     loadedConfig,
@@ -279,5 +331,8 @@ export const useLiaVoiceStore = defineStore('lia-voice', () => {
     // Apply
     applyVoiceTarget,
     applyResolvedTarget,
+
+    // Runtime wiring (4D-3)
+    registerRuntimeExtensions,
   }
 })

@@ -20,6 +20,7 @@ import WindowTitleBar from '../components/Window/TitleBar.vue'
 import LiaProviderConfig from '../components/LiaProviderConfig.vue'
 import liaFallbackAsset from '../assets/lia/lia-home.png'
 import { useLiaProviderStore } from '../stores/lia/provider'
+import { useLiaVoiceStore } from '../stores/lia/voice'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -34,6 +35,7 @@ const getMainWindowLogs = useElectronEventaInvoke(electronGetMainWindowLogs)
 const openSettings = useElectronEventaInvoke(electronOpenSettings)
 
 const liaProviderStore = useLiaProviderStore()
+const liaVoiceStore = useLiaVoiceStore()
 
 type HomeView = 'loading' | 'onboarding' | 'launcher' | 'settings'
 
@@ -243,6 +245,9 @@ onMounted(async () => {
   // Install the (inert-by-default) chat runtime extensions so the shared AIRI
   // chat can use the secure vault key and fail over on recoverable errors.
   liaProviderStore.registerRuntimeExtensions()
+  // Same idea for voice: install the inert-by-default TTS fallback policy so a
+  // failing preferred voice provider can fail over to a configured fallback.
+  liaVoiceStore.registerRuntimeExtensions()
 
   // First-run gating: derive readiness from the REAL persisted config (preferred
   // provider + model + onboarded marker + the credential it needs). Onboarding
