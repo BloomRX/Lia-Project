@@ -5,16 +5,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   buildReport,
   extractErrorMessage,
+  formatMessageDigest,
   formatReport,
+  hasMetaInstructionText,
   installRealChatObserver,
   isCandidateRequest,
   isChatEndpoint,
   providerIdFromHost,
   readAuthorizationLength,
+  readMessagesFromBody,
   readModelFromBody,
   readReasoningEffortFromBody,
   readToolCountFromBody,
   sanitizeResponseMessage,
+  summarizeMessages,
 } from './real-chat-observer'
 
 /**
@@ -32,6 +36,7 @@ function makeRequest(overrides: Partial<ObservedRequest> = {}): ObservedRequest 
     modelId: 'openai/gpt-oss-120b',
     reasoningEffort: null,
     toolCount: null,
+    messages: [],
     isChatRequest: true,
     endpoint: 'https://api.openai.com/v1/chat/completions',
     host: 'api.openai.com',
@@ -96,6 +101,97 @@ describe('real chat observer helpers', () => {
     expect(readAuthorizationLength([['Authorization', 'Bearer abc']])).toBe('Bearer abc'.length)
     expect(readAuthorizationLength(undefined)).toBe(0)
     expect(readAuthorizationLength({ 'Content-Type': 'application/json' })).toBe(0)
+  })
+
+  it('reduces the outgoing messages array to safe metadata', () => {
+    const body = JSON.stringify({
+      model: 'openai/gpt-oss-120b',
+      messages: [
+        { role: 'system', content: 'Voce e Lia. Idioma: responda sempre em pt-BR por padrao. Personalidade tsundere natural.' },
+        { role: 'user', content: 'oi' },
+      ],
+    })
+
+    const messages = readMessagesFromBody(body)
+    expect(messages).toHaveLength(2)
+    expect(messages[0].role).toBe('system')
+    expect(messages[0].markers).toEqual(expect.arrayContaining(['LIA', 'PTBR', 'IDIOMA', 'TSUNDERE']))
+    expect(messages[1].role).toBe('user')
+    expect(messages[1].size).toBe(2)
+    // The user's own words are measured, never echoed.
+    expect(messages[1].head).toBe('')
+
+    const summary = summarizeMessages(messages)
+    expect(summary.systemCount).toBe(1)
+    expect(summary.userCount).toBe(1)
+    expect(summary.personaPresent).toBe(true)
+    expect(summary.languagePtBrPresent).toBe(true)
+    expect(summary.identityLiaPresent).toBe(true)
+    expect(summary.metaInstructionPresent).toBe(false)
+    expect(summary.lastPersonaMessageIndex).toBe(1)
+  })
+
+  it('counts a developer role separately from system', () => {
+    const messages = readMessagesFromBody(JSON.stringify({
+      messages: [
+        { role: 'system', content: 'a' },
+        { role: 'developer', content: 'b' },
+        { role: 'user', content: 'oi' },
+        { role: 'assistant', content: 'oi!' },
+      ],
+    }))
+    const summary = summarizeMessages(messages)
+    expect(summary.systemCount).toBe(1)
+    expect(summary.developerCount).toBe(1)
+    expect(summary.userCount).toBe(1)
+    expect(summary.assistantCount).toBe(1)
+  })
+
+  it('flattens the parts-shaped content and redacts a secret inside an instruction', () => {
+    const messages = readMessagesFromBody(JSON.stringify({
+      messages: [
+        { role: 'system', content: [{ type: 'text', text: 'call with Bearer gsk-SECRET-VALUE-1234567890 now' }] },
+        { role: 'user', content: [{ type: 'text', text: 'my private note gsk-ANOTHER-SECRET-9999999999' }] },
+      ],
+    }))
+    expect(messages[0].head).not.toContain('gsk-SECRET-VALUE-1234567890')
+    expect(messages[0].head).toContain('REDACTED')
+    // A user message is never echoed at all, secret or not.
+    expect(messages[1].head).toBe('')
+  })
+
+  it('flags English meta-commentary that must not reach the user', () => {
+    expect(hasMetaInstructionText('The assistant should respond as Lia.')).toBe(true)
+    expect(hasMetaInstructionText('According to guidelines, stay in character.')).toBe(true)
+    expect(hasMetaInstructionText('User says just oi, so greet warmly.')).toBe(true)
+    expect(hasMetaInstructionText('Oi! Tudo bem por aqui.')).toBe(false)
+
+    const messages = readMessagesFromBody(JSON.stringify({
+      messages: [{ role: 'system', content: 'The assistant should respond as Lia and follow the guidelines.' }],
+    }))
+    expect(summarizeMessages(messages).metaInstructionPresent).toBe(true)
+  })
+
+  it('renders the requested digest keys in order', () => {
+    const messages = readMessagesFromBody(JSON.stringify({
+      messages: [
+        { role: 'system', content: 'Lia. Idioma: pt-BR.' },
+        { role: 'user', content: 'oi' },
+      ],
+    }))
+    const lines = formatMessageDigest(messages)
+    expect(lines[0]).toBe('MESSAGES_TOTAL=2')
+    expect(lines).toContain('SYSTEM_MESSAGE_COUNT=1')
+    expect(lines).toContain('DEVELOPER_MESSAGE_COUNT=0')
+    expect(lines).toContain('USER_MESSAGE_COUNT=1')
+    expect(lines).toContain('PERSONA_PRESENT=true')
+    expect(lines).toContain('LANGUAGE_PTBR_PRESENT=true')
+    expect(lines).toContain('IDENTITY_LIA_PRESENT=true')
+    expect(lines).toContain('METAINSTRUCTION_TEXT_PRESENT=false')
+    expect(lines).toContain('MESSAGE_1_ROLE=system')
+    expect(lines).toContain('MESSAGE_2_ROLE=user')
+    // No persona at all must stay distinguishable from a present-but-late one.
+    expect(formatMessageDigest([])).toEqual([])
   })
 
   it('counts the tools on an outgoing request', () => {

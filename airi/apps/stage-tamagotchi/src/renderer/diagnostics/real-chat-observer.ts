@@ -34,6 +34,8 @@ export interface ObservedRequest {
   requestStarted: boolean
   /** How many tools this request sent; null when the body carried none. */
   toolCount: number | null
+  /** The outgoing `messages` array, reduced to safe metadata. */
+  messages: ObservedMessage[]
   /** True for chat-completions calls, as opposed to a `/models` probe. */
   isChatRequest: boolean
   responseStatus: number | null
@@ -42,6 +44,20 @@ export interface ObservedRequest {
   rawHttpErrorMessage: string | null
   failed: boolean
   failureKind: string | null
+}
+
+/** One message of the outgoing `messages` array, reduced to safe metadata. */
+export interface ObservedMessage {
+  index: number
+  role: string
+  /** Length of the flattened text content. */
+  size: number
+  /** First ~300 characters, secrets redacted. */
+  head: string
+  /** Last ~200 characters, secrets redacted. */
+  tail: string
+  /** Which persona markers this message carries. */
+  markers: string[]
 }
 
 export interface RealChatReport {
@@ -179,6 +195,130 @@ export function readToolCountFromBody(body: unknown): number | null {
   }
 }
 
+/**
+ * Markers whose presence in the outgoing prompt answers "is the persona
+ * actually in this request, and where". `<|ACT` rather than `ACT` so ordinary
+ * prose does not match the stage token.
+ */
+const PERSONA_MARKERS: ReadonlyArray<readonly [needle: string, label: string]> = [
+  ['Lia', 'LIA'],
+  ['pt-BR', 'PTBR'],
+  ['tsundere', 'TSUNDERE'],
+  ['Idioma', 'IDIOMA'],
+  ['<|ACT', 'ACT_TOKEN'],
+  ['systemPrompt', 'SYSTEMPROMPT'],
+  ['personality', 'PERSONALITY'],
+  ['description', 'DESCRIPTION'],
+  ['scenario', 'SCENARIO'],
+]
+
+/**
+ * English meta-commentary that must never reach the user. Its presence in the
+ * prompt is what makes a model narrate its own rules instead of acting.
+ */
+const META_INSTRUCTION_PATTERNS: readonly RegExp[] = [
+  /the assistant should/i,
+  /according to (the )?(guidelines|instructions|rules)/i,
+  /user says/i,
+  /as an ai/i,
+  /\bthe model should\b/i,
+  /\byou are an? (ai|assistant) that/i,
+]
+
+/** Flattens the string-or-parts content shape into plain text. */
+function flattenMessageContent(content: unknown): string {
+  if (typeof content === 'string')
+    return content
+  if (Array.isArray(content)) {
+    return content
+      .map(part => (part && typeof part === 'object' && typeof (part as { text?: unknown }).text === 'string'
+        ? (part as { text: string }).text
+        : ''))
+      .join('\n')
+  }
+  return ''
+}
+
+/**
+ * Reduces the outgoing `messages` array to roles, sizes and short redacted
+ * excerpts. The full text is never retained, and no header or credential is
+ * read here - only the `messages` key of the request body.
+ */
+export function readMessagesFromBody(body: unknown): ObservedMessage[] {
+  if (typeof body !== 'string' || body.length === 0)
+    return []
+
+  let parsed: { messages?: unknown }
+  try {
+    parsed = JSON.parse(body) as { messages?: unknown }
+  }
+  catch {
+    return []
+  }
+
+  if (!Array.isArray(parsed?.messages))
+    return []
+
+  return parsed.messages.map((raw: unknown, index: number) => {
+    const message = (raw && typeof raw === 'object' ? raw : {}) as { role?: unknown, content?: unknown }
+    const role = typeof message.role === 'string' ? message.role : 'unknown'
+    const text = flattenMessageContent(message.content)
+
+    // Only the instruction roles get an excerpt. The user's own words and the
+    // assistant's earlier replies are personal content, not diagnostics: the
+    // question is what instructions precede the user message, and echoing the
+    // conversation back into a console log would trade one leak for another.
+    const isInstructionRole = role === 'system' || role === 'developer'
+    const redacted = isInstructionRole ? (sanitizeResponseMessage(text) ?? '') : ''
+
+    return {
+      index: index + 1,
+      role,
+      size: text.length,
+      head: redacted.slice(0, 300),
+      tail: redacted.length > 300 ? redacted.slice(-200) : '',
+      markers: PERSONA_MARKERS.filter(([needle]) => text.includes(needle)).map(([, label]) => label),
+    }
+  })
+}
+
+/** True when a message narrates its own instructions instead of acting. */
+export function hasMetaInstructionText(text: string): boolean {
+  return META_INSTRUCTION_PATTERNS.some(pattern => pattern.test(text))
+}
+
+export interface MessageSummary {
+  systemCount: number
+  developerCount: number
+  userCount: number
+  assistantCount: number
+  personaPresent: boolean
+  languagePtBrPresent: boolean
+  identityLiaPresent: boolean
+  metaInstructionPresent: boolean
+  /** Index of the last message carrying persona markers, for ordering checks. */
+  lastPersonaMessageIndex: number | null
+}
+
+/** Rolls the per-message digest up into the requested presence flags. */
+export function summarizeMessages(messages: ObservedMessage[]): MessageSummary {
+  const countRole = (role: string) => messages.filter(message => message.role === role).length
+  const anyMarker = (label: string) => messages.some(message => message.markers.includes(label))
+  const personaIndexes = messages.filter(message => message.markers.length > 0).map(message => message.index)
+
+  return {
+    systemCount: countRole('system'),
+    developerCount: countRole('developer'),
+    userCount: countRole('user'),
+    assistantCount: countRole('assistant'),
+    personaPresent: anyMarker('TSUNDERE') || anyMarker('IDIOMA') || anyMarker('PERSONALITY'),
+    languagePtBrPresent: anyMarker('PTBR'),
+    identityLiaPresent: anyMarker('LIA'),
+    metaInstructionPresent: messages.some(message => hasMetaInstructionText(`${message.head}\n${message.tail}`)),
+    lastPersonaMessageIndex: personaIndexes.length > 0 ? Math.max(...personaIndexes) : null,
+  }
+}
+
 /** True for the endpoints that actually carry a chat completion. */
 export function isChatEndpoint(path: string): boolean {
   return path.endsWith('/chat/completions') || path.endsWith('/completions')
@@ -269,6 +409,7 @@ export function formatReport(report: RealChatReport): string {
       `REQUEST_${n}_MODEL=${request.modelId ?? 'unknown'}`,
       `REQUEST_${n}_REASONING_EFFORT=${request.reasoningEffort ?? 'omitted'}`,
       `REQUEST_${n}_TOOLCOUNT=${request.toolCount ?? 'none'}`,
+      ...formatMessageDigest(request.messages),
       `REQUEST_${n}_IS_CHAT=${request.isChatRequest}`,
       `REQUEST_${n}_ENDPOINT=${request.method} ${request.endpoint}`,
       `REQUEST_${n}_AUTH=${request.hasAuthorizationHeader}(len=${request.authorizationHeaderLength})`,
@@ -281,6 +422,39 @@ export function formatReport(report: RealChatReport): string {
   lines.push(`FIRST_401_ENDPOINT=${report.first401Endpoint ?? 'none'}`)
   lines.push('===== END LIA REAL CHAT DIAGNOSTIC =====')
   return lines.join('\n')
+}
+
+/** Renders the message digest for one request: order, roles, sizes, excerpts. */
+export function formatMessageDigest(messages: ObservedMessage[]): string[] {
+  if (messages.length === 0)
+    return []
+
+  const summary = summarizeMessages(messages)
+  const lines: string[] = [
+    `MESSAGES_TOTAL=${messages.length}`,
+    `SYSTEM_MESSAGE_COUNT=${summary.systemCount}`,
+    `DEVELOPER_MESSAGE_COUNT=${summary.developerCount}`,
+    `USER_MESSAGE_COUNT=${summary.userCount}`,
+    `ASSISTANT_MESSAGE_COUNT=${summary.assistantCount}`,
+    `PERSONA_PRESENT=${summary.personaPresent}`,
+    `LANGUAGE_PTBR_PRESENT=${summary.languagePtBrPresent}`,
+    `IDENTITY_LIA_PRESENT=${summary.identityLiaPresent}`,
+    `METAINSTRUCTION_TEXT_PRESENT=${summary.metaInstructionPresent}`,
+    `LAST_PERSONA_MESSAGE_INDEX=${summary.lastPersonaMessageIndex ?? 'none'}`,
+  ]
+
+  for (const message of messages) {
+    lines.push(
+      `MESSAGE_${message.index}_ROLE=${message.role}`,
+      `MESSAGE_${message.index}_SIZE=${message.size}`,
+      `MESSAGE_${message.index}_MARKERS=${message.markers.join('+') || 'none'}`,
+      `MESSAGE_${message.index}_HEAD=${message.head}`,
+    )
+    if (message.tail.length > 0)
+      lines.push(`MESSAGE_${message.index}_TAIL=${message.tail}`)
+  }
+
+  return lines
 }
 
 interface ObserverHandles {
@@ -332,6 +506,7 @@ export function installRealChatObserver(win: Window & { __LIA_REAL_CHAT_DIAG__?:
       modelId: readModelFromBody(init?.body),
       reasoningEffort: readReasoningEffortFromBody(init?.body),
       toolCount: readToolCountFromBody(init?.body),
+      messages: readMessagesFromBody(init?.body),
       isChatRequest: isChatEndpoint(parsed.pathname),
       // Query strings can carry identifiers; only origin + path is recorded.
       endpoint: `${parsed.origin}${parsed.pathname}`,
