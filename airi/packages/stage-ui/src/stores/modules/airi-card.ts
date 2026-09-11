@@ -8,7 +8,7 @@ import { defineStore } from 'pinia'
 import { computed } from 'vue'
 
 import { LIA_BUILT_IN_CARD_ID, LIA_DEFAULT_CARD } from '../../constants/lia-default-card'
-import { LIA_DEFAULT_PERSONA } from '../../constants/lia-persona'
+import { CURRENT_LIA_PERSONA_PROJECTION_VERSION, LIA_DEFAULT_PERSONA, renderLiaPersonaFields } from '../../constants/lia-persona'
 import { DEFAULT_ARTISTRY_WIDGET_SPAWNING_PROMPT } from '../../constants/prompts/character-defaults'
 import { captureAnalyticsEvent } from '../../libs/analytics'
 import { useSettingsStageModel } from '../settings/stage-model'
@@ -362,6 +362,51 @@ export const useAiriCardStore = defineStore('airi-card', () => {
     }
   }
 
+  /**
+   * Re-projects the built-in Lia card's prose fields from its structured persona.
+   *
+   * `initialize()` seeds the Lia card only when it is absent, so a card persisted
+   * by an earlier build kept whichever prose projection existed at the time -
+   * which is why the pt-BR fix needed a manual `localStorage['airi-cards']` wipe.
+   * `description`/`personality`/`scenario` are derived data produced by
+   * `renderLiaPersonaFields`; `extensions.airi.persona` is the source of truth.
+   * Re-projecting them therefore cannot destroy user intent: the built-in card's
+   * prose is read-only in the UI (`CardDetailDialog` only displays those fields)
+   * and custom prose can only exist on a different card id.
+   *
+   * Only the built-in Lia is rewritten. Imported and user cards are never
+   * touched, and no card is ever deleted.
+   */
+  function migrateBuiltInLiaProjection() {
+    const card = cards.value.get(LIA_BUILT_IN_CARD_ID)
+    if (!card)
+      return
+
+    const persona = card.extensions?.airi?.persona ?? LIA_DEFAULT_PERSONA
+    const storedVersion = card.extensions?.airi?.personaProjectionVersion ?? 1
+    if (storedVersion >= CURRENT_LIA_PERSONA_PROJECTION_VERSION)
+      return
+
+    const projected = renderLiaPersonaFields(persona)
+    cards.value.set(LIA_BUILT_IN_CARD_ID, {
+      ...card,
+      description: projected.description,
+      personality: projected.personality,
+      scenario: projected.scenario,
+      extensions: {
+        ...card.extensions,
+        airi: {
+          ...resolveAiriExtension(card),
+          ...card.extensions?.airi,
+          persona,
+          personaProjectionVersion: CURRENT_LIA_PERSONA_PROJECTION_VERSION,
+        },
+      },
+    })
+
+    console.info(`[lia] persona projection migrated v${storedVersion} -> v${CURRENT_LIA_PERSONA_PROJECTION_VERSION}`)
+  }
+
   async function initialize() {
     // This synchronized action executes in the leader. Each window calls it,
     // but only the first call can apply persisted card settings to the runtime.
@@ -380,6 +425,9 @@ export const useAiriCardStore = defineStore('airi-card', () => {
       // The persona prose fields on the card are projections of this object;
       // the future "Gerenciar personalidade" screen edits here.
       liaCard.extensions.airi.persona = LIA_DEFAULT_PERSONA
+      // A freshly seeded card is already on the current projection, so it must
+      // not be rewritten again on the next boot.
+      liaCard.extensions.airi.personaProjectionVersion = CURRENT_LIA_PERSONA_PROJECTION_VERSION
       cards.value.set(LIA_BUILT_IN_CARD_ID, liaCard)
     }
 
@@ -388,6 +436,11 @@ export const useAiriCardStore = defineStore('airi-card', () => {
     // dangling id falls back to the Lia built-in. A *valid* persisted active
     // id — including a legacy 'default' (ReLU) card the user kept — is honored
     // as-is rather than being force-switched back to Lia.
+    // A card persisted by an earlier build carries the projection it was
+    // seeded with. Re-project it here so prose fixes reach existing installs
+    // without asking anyone to clear localStorage.
+    migrateBuiltInLiaProjection()
+
     if (!cards.value.has(activeCardId.value))
       activeCardId.value = LIA_BUILT_IN_CARD_ID
 

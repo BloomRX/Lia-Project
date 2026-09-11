@@ -78,6 +78,14 @@ export interface AiriExtension {
    * funcionando pelos campos de texto.
    */
   persona?: LiaPersona
+
+  /**
+   * Versão da projeção persona -> prosa aplicada a este card. Ausente em cards
+   * persistidos antes do mecanismo existir; o built-in Lia é re-projetado no
+   * boot quando o valor armazenado é menor que
+   * `CURRENT_LIA_PERSONA_PROJECTION_VERSION`.
+   */
+  personaProjectionVersion?: number
 }
 
 /** Character card normalized with the AIRI extension required by the runtime. */

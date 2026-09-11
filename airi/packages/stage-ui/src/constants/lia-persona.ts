@@ -387,6 +387,17 @@ export function renderLiaPersonaScenario(persona: LiaPersona): string {
   ].join('\n\n')
 }
 
+/**
+ * Versão da projeção persona -> prosa.
+ *
+ * Incremente sempre que a saída de `renderLiaPersonaFields` mudar, para que
+ * cards Lia persistidos por builds anteriores sejam re-projetados no boot em
+ * vez de manterem prosa defasada. v1 publicava a diretiva de idioma no fim do
+ * `personality`; v2 a coloca no início, para que pt-BR não fique enterrada
+ * atrás do runtime prompt em inglês.
+ */
+export const CURRENT_LIA_PERSONA_PROJECTION_VERSION = 2
+
 /** Projeta a persona estruturada nos campos de texto (CCv3) do card. */
 export function renderLiaPersonaFields(persona: LiaPersona): {
   description: string
