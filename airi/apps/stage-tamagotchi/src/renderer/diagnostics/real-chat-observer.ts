@@ -32,9 +32,14 @@ export interface ObservedRequest {
   hasAuthorizationHeader: boolean
   authorizationHeaderLength: number
   requestStarted: boolean
+  /** How many tools this request sent; null when the body carried none. */
+  toolCount: number | null
+  /** True for chat-completions calls, as opposed to a `/models` probe. */
+  isChatRequest: boolean
   responseStatus: number | null
   responseOk: boolean | null
-  responseBodyMessage: string | null
+  /** The provider's own error text, verbatim apart from secret redaction. */
+  rawHttpErrorMessage: string | null
   failed: boolean
   failureKind: string | null
 }
@@ -45,6 +50,7 @@ export interface RealChatReport {
   model: string
   instanceCredential: boolean
   requestCount: number
+  assistantResponseReceived: boolean
   first401Endpoint: string | null
   requests: ObservedRequest[]
 }
@@ -160,6 +166,24 @@ export function readReasoningEffortFromBody(body: unknown): string | null {
   }
 }
 
+/** Counts the tools on an outgoing request without keeping the body. */
+export function readToolCountFromBody(body: unknown): number | null {
+  if (typeof body !== 'string' || body.length === 0)
+    return null
+  try {
+    const parsed = JSON.parse(body) as { tools?: unknown }
+    return Array.isArray(parsed?.tools) ? parsed.tools.length : null
+  }
+  catch {
+    return null
+  }
+}
+
+/** True for the endpoints that actually carry a chat completion. */
+export function isChatEndpoint(path: string): boolean {
+  return path.endsWith('/chat/completions') || path.endsWith('/completions')
+}
+
 /** Reads an Authorization header from any of the three fetch header shapes. */
 export function readAuthorizationLength(headers: unknown): number {
   const get = (name: string): string | null => {
@@ -204,6 +228,10 @@ export function buildReport(
   const first401 = requests.find(request => request.responseStatus === 401)
   const anyCredential = requests.some(request => request.hasAuthorizationHeader && request.authorizationHeaderLength > 0)
   const anyFailure = requests.some(request => request.failed || (request.responseStatus !== null && request.responseStatus >= 400))
+  // A 2xx on the chat endpoint means the provider answered and streamed a
+  // reply. That is the evidence separating "the provider rejected us" from
+  // "the provider answered and the model itself wrote that text".
+  const assistantResponseReceived = requests.some(request => request.isChatRequest && request.responseOk === true)
 
   // The observer sees the wire, not the store, so "instance credential" means
   // "some real request carried a non-empty Authorization".
@@ -216,6 +244,7 @@ export function buildReport(
     model,
     instanceCredential: anyCredential,
     requestCount: requests.length,
+    assistantResponseReceived,
     first401Endpoint: first401 ? `${first401.method} ${first401.endpoint}` : null,
     requests,
   }
@@ -230,6 +259,7 @@ export function formatReport(report: RealChatReport): string {
     `MODEL=${report.model}`,
     `INSTANCE_CREDENTIAL=${report.instanceCredential}`,
     `REQUEST_COUNT=${report.requestCount}`,
+    `ASSISTANT_RESPONSE_RECEIVED=${report.assistantResponseReceived}`,
   ]
 
   report.requests.slice(0, 5).forEach((request, position) => {
@@ -238,11 +268,13 @@ export function formatReport(report: RealChatReport): string {
       `REQUEST_${n}_PROVIDER=${request.providerId}`,
       `REQUEST_${n}_MODEL=${request.modelId ?? 'unknown'}`,
       `REQUEST_${n}_REASONING_EFFORT=${request.reasoningEffort ?? 'omitted'}`,
+      `REQUEST_${n}_TOOLCOUNT=${request.toolCount ?? 'none'}`,
+      `REQUEST_${n}_IS_CHAT=${request.isChatRequest}`,
       `REQUEST_${n}_ENDPOINT=${request.method} ${request.endpoint}`,
       `REQUEST_${n}_AUTH=${request.hasAuthorizationHeader}(len=${request.authorizationHeaderLength})`,
       `REQUEST_${n}_STARTED=${request.requestStarted}`,
       `REQUEST_${n}_STATUS=${request.responseStatus ?? 'no-response'}`,
-      `REQUEST_${n}_MESSAGE=${request.responseBodyMessage ?? ''}`,
+      `REQUEST_${n}_RAW_HTTP_ERROR_MESSAGE=${request.rawHttpErrorMessage ?? ''}`,
     )
   })
 
@@ -299,6 +331,8 @@ export function installRealChatObserver(win: Window & { __LIA_REAL_CHAT_DIAG__?:
       providerId: providerIdFromHost(parsed.hostname),
       modelId: readModelFromBody(init?.body),
       reasoningEffort: readReasoningEffortFromBody(init?.body),
+      toolCount: readToolCountFromBody(init?.body),
+      isChatRequest: isChatEndpoint(parsed.pathname),
       // Query strings can carry identifiers; only origin + path is recorded.
       endpoint: `${parsed.origin}${parsed.pathname}`,
       host: parsed.hostname,
@@ -309,7 +343,7 @@ export function installRealChatObserver(win: Window & { __LIA_REAL_CHAT_DIAG__?:
       requestStarted: true,
       responseStatus: null,
       responseOk: null,
-      responseBodyMessage: null,
+      rawHttpErrorMessage: null,
       failed: false,
       failureKind: null,
     }
@@ -319,7 +353,8 @@ export function installRealChatObserver(win: Window & { __LIA_REAL_CHAT_DIAG__?:
       `[LIA-DIAG] #${record.index} ${record.method} ${record.endpoint}`
       + ` auth=${record.hasAuthorizationHeader}(len=${record.authorizationHeaderLength})`
       + ` model=${record.modelId ?? 'unknown'} provider=${record.providerId}`
-      + ` reasoning_effort=${record.reasoningEffort ?? 'omitted'}`,
+      + ` reasoning_effort=${record.reasoningEffort ?? 'omitted'}`
+      + ` toolCount=${record.toolCount ?? 'none'} chat=${record.isChatRequest}`,
     )
 
     let response: Response
@@ -342,14 +377,20 @@ export function installRealChatObserver(win: Window & { __LIA_REAL_CHAT_DIAG__?:
     if (!response.ok) {
       try {
         const text = await response.clone().text()
-        record.responseBodyMessage = sanitizeResponseMessage(extractErrorMessage(text))
+        record.rawHttpErrorMessage = sanitizeResponseMessage(extractErrorMessage(text))
       }
       catch {
-        record.responseBodyMessage = null
+        record.rawHttpErrorMessage = null
       }
       console.info(
-        `[LIA-DIAG] #${record.index} -> HTTP ${response.status} ${record.responseBodyMessage ?? ''}`.trimEnd(),
+        `[LIA-DIAG] #${record.index} -> HTTP ${response.status} ${record.rawHttpErrorMessage ?? ''}`.trimEnd(),
       )
+      printIfConclusive(handles)
+    }
+    else if (record.isChatRequest) {
+      // A successful chat call is itself the finding: it rules out a real
+      // 401/400 and means whatever text the user saw came from the reply.
+      console.info(`[LIA-DIAG] #${record.index} -> HTTP ${response.status} chat accepted by provider`)
       printIfConclusive(handles)
     }
 
@@ -378,9 +419,20 @@ export function readConfiguredFromLocalStorage(win: Window): { provider: string 
   }
 }
 
-/** Prints the full block once a failing response has been observed. */
+/**
+ * Prints the full block once a chat request has finished - failing or not.
+ *
+ * Printing only on failure would hide exactly the case we need to tell apart:
+ * a 200 on the chat endpoint means there was no HTTP error at all, and the
+ * troubleshooting text the user read came out of the reply rather than out of
+ * a rejected request.
+ */
 function printIfConclusive(handles: ObserverHandles) {
-  const report = buildReport(handles.requests, { provider: null, model: null })
-  if (report.status === 'FAIL')
-    console.info(`\n${formatReport(report)}\n`)
+  const chatFinished = handles.requests.some(
+    request => request.isChatRequest && (request.failed || request.responseStatus !== null),
+  )
+  if (!chatFinished)
+    return
+
+  console.info(`\n${formatReport(buildReport(handles.requests, { provider: null, model: null }))}\n`)
 }

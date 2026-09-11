@@ -8,10 +8,12 @@ import {
   formatReport,
   installRealChatObserver,
   isCandidateRequest,
+  isChatEndpoint,
   providerIdFromHost,
   readAuthorizationLength,
   readModelFromBody,
   readReasoningEffortFromBody,
+  readToolCountFromBody,
   sanitizeResponseMessage,
 } from './real-chat-observer'
 
@@ -29,6 +31,8 @@ function makeRequest(overrides: Partial<ObservedRequest> = {}): ObservedRequest 
     providerId: 'groq',
     modelId: 'openai/gpt-oss-120b',
     reasoningEffort: null,
+    toolCount: null,
+    isChatRequest: true,
     endpoint: 'https://api.openai.com/v1/chat/completions',
     host: 'api.openai.com',
     path: '/v1/chat/completions',
@@ -38,7 +42,7 @@ function makeRequest(overrides: Partial<ObservedRequest> = {}): ObservedRequest 
     requestStarted: true,
     responseStatus: 401,
     responseOk: false,
-    responseBodyMessage: 'Missing bearer authentication in header',
+    rawHttpErrorMessage: 'Missing bearer authentication in header',
     failed: false,
     failureKind: null,
     ...overrides,
@@ -94,6 +98,21 @@ describe('real chat observer helpers', () => {
     expect(readAuthorizationLength({ 'Content-Type': 'application/json' })).toBe(0)
   })
 
+  it('counts the tools on an outgoing request', () => {
+    expect(readToolCountFromBody(JSON.stringify({ model: 'm', tools: [{}, {}, {}] }))).toBe(3)
+    expect(readToolCountFromBody(JSON.stringify({ model: 'm', tools: [] }))).toBe(0)
+    // No tools key at all must stay distinguishable from an empty tool list.
+    expect(readToolCountFromBody(JSON.stringify({ model: 'm' }))).toBeNull()
+    expect(readToolCountFromBody('{not json')).toBeNull()
+  })
+
+  it('tells a chat completion apart from a models probe', () => {
+    expect(isChatEndpoint('/openai/v1/chat/completions')).toBe(true)
+    expect(isChatEndpoint('/v1/chat/completions')).toBe(true)
+    expect(isChatEndpoint('/openai/v1/models')).toBe(false)
+    expect(isChatEndpoint('/v1/embeddings')).toBe(false)
+  })
+
   it('reads the wire reasoning_effort out of an outgoing body', () => {
     expect(readReasoningEffortFromBody(JSON.stringify({ model: 'm', reasoning_effort: 'medium' }))).toBe('medium')
     expect(readReasoningEffortFromBody(JSON.stringify({ model: 'm', reasoning_effort: 'none' }))).toBe('none')
@@ -123,6 +142,40 @@ describe('real chat observer helpers', () => {
     expect(report.requestCount).toBe(2)
     expect(report.first401Endpoint).toBe('POST https://api.openai.com/v1/chat/completions')
     expect(report.instanceCredential).toBe(true)
+  })
+
+  it('reports a received assistant response when the chat call returned 2xx', () => {
+    // Hypothesis B: no HTTP error at all, so the text the user read came out of
+    // the reply rather than out of a rejected request.
+    const report = buildReport([makeRequest({ responseStatus: 200, responseOk: true })], { provider: null, model: null })
+    expect(report.status).toBe('PASS')
+    expect(report.assistantResponseReceived).toBe(true)
+    expect(formatReport(report)).toContain('ASSISTANT_RESPONSE_RECEIVED=true')
+  })
+
+  it('does not claim an assistant response for a failed chat call', () => {
+    const report = buildReport([makeRequest({ responseStatus: 401, responseOk: false })], { provider: null, model: null })
+    expect(report.assistantResponseReceived).toBe(false)
+    expect(formatReport(report)).toContain('ASSISTANT_RESPONSE_RECEIVED=false')
+  })
+
+  it('does not count a successful models probe as an assistant response', () => {
+    const report = buildReport(
+      [makeRequest({ isChatRequest: false, path: '/openai/v1/models', responseStatus: 200, responseOk: true })],
+      { provider: null, model: null },
+    )
+    expect(report.status).toBe('PASS')
+    expect(report.assistantResponseReceived).toBe(false)
+  })
+
+  it('reports the tool count and chat flag per request', () => {
+    const report = buildReport(
+      [makeRequest({ toolCount: 2, responseStatus: 200, responseOk: true })],
+      { provider: null, model: null },
+    )
+    const text = formatReport(report)
+    expect(text).toContain('REQUEST_1_TOOLCOUNT=2')
+    expect(text).toContain('REQUEST_1_IS_CHAT=true')
   })
 
   it('reports FAIL when no request was observed at all', () => {
@@ -173,6 +226,76 @@ describe('installRealChatObserver', () => {
     } as unknown as Window
   }
 
+  it('still prints the block when the chat call succeeds, and reports the tools sent', async () => {
+    // The case the observer used to stay silent about: a 200 means there was no
+    // HTTP error at all, so the block has to appear in order to say so.
+    const originalFetch = vi.fn(async () => new Response('data: []\n\ndata: [DONE]\n\n', {
+      status: 200,
+      headers: { 'content-type': 'text/event-stream' },
+    }))
+    const logs: string[] = []
+    const info = vi.spyOn(console, 'info').mockImplementation((...args: unknown[]) => {
+      logs.push(String(args[0]))
+    })
+    const win = makeWindow(originalFetch as unknown as typeof globalThis.fetch)
+
+    const handles = installRealChatObserver(win)
+    await win.fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { authorization: 'Bearer gsk-FAKE-OBSERVER-TOKEN-0000000000' },
+      body: JSON.stringify({
+        model: 'openai/gpt-oss-120b',
+        messages: [{ role: 'user', content: 'Oi Lia' }],
+        tools: [{ type: 'function', function: { name: 'a' } }, { type: 'function', function: { name: 'b' } }],
+      }),
+    })
+
+    const record = handles.requests[0]
+    expect(record.responseStatus).toBe(200)
+    expect(record.isChatRequest).toBe(true)
+    expect(record.toolCount).toBe(2)
+    expect(record.reasoningEffort).toBeNull()
+
+    const report = handles.report()
+    expect(logs.some(line => line.includes('LIA REAL CHAT DIAGNOSTIC'))).toBe(true)
+    expect(report).toContain('REAL_CHAT_STATUS=PASS')
+    expect(report).toContain('ASSISTANT_RESPONSE_RECEIVED=true')
+    expect(report).toContain('REQUEST_1_TOOLCOUNT=2')
+    expect(report).toContain('REQUEST_1_IS_CHAT=true')
+    expect(report).toContain('REQUEST_1_REASONING_EFFORT=omitted')
+    // A successful body must never be read, let alone printed.
+    expect(originalFetch).toHaveBeenCalledOnce()
+    expect(report).not.toContain('Oi Lia')
+
+    info.mockRestore()
+  })
+
+  it('prints the block for a real 400 carrying a provider error message', async () => {
+    const originalFetch = vi.fn(async () => new Response(
+      JSON.stringify({ error: { message: '`reasoning_effort` must be one of `low`, `medium`, or `high`', code: 'invalid_request_error' } }),
+      { status: 400, headers: { 'content-type': 'application/json' } },
+    ))
+    const win = makeWindow(originalFetch as unknown as typeof globalThis.fetch)
+
+    const handles = installRealChatObserver(win)
+    await win.fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { authorization: 'Bearer gsk-FAKE-OBSERVER-TOKEN-0000000000' },
+      body: JSON.stringify({ model: 'openai/gpt-oss-120b', reasoning_effort: 'none' }),
+    })
+
+    const record = handles.requests[0]
+    expect(record.responseStatus).toBe(400)
+    expect(record.reasoningEffort).toBe('none')
+    expect(record.rawHttpErrorMessage).toContain('must be one of')
+
+    const report = handles.report()
+    expect(report).toContain('REQUEST_1_STATUS=400')
+    expect(report).toContain('REQUEST_1_REASONING_EFFORT=none')
+    expect(report).toContain('ASSISTANT_RESPONSE_RECEIVED=false')
+    expect(report).toContain('REQUEST_1_RAW_HTTP_ERROR_MESSAGE=')
+  })
+
   it('captures the real 401 exactly as the app would produce it', async () => {
     const secret = 'Bearer gsk-REAL-LOOKING-SECRET-VALUE-1234567890'
     const upstream = vi.fn(async () => new Response(
@@ -201,7 +324,7 @@ describe('installRealChatObserver', () => {
     expect(record.authorizationHeaderLength).toBe(secret.length)
     expect(record.requestStarted).toBe(true)
     expect(record.responseStatus).toBe(401)
-    expect(record.responseBodyMessage).toContain('Missing bearer authentication in header')
+    expect(record.rawHttpErrorMessage).toContain('Missing bearer authentication in header')
 
     const report = handles.report()
     expect(report).toContain('REAL_CHAT_STATUS=FAIL')
