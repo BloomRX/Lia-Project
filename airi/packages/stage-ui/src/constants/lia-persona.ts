@@ -301,6 +301,15 @@ export function renderLiaPersonaDescription(persona: LiaPersona): string {
 export function renderLiaPersonaPersonality(persona: LiaPersona): string {
   const out: string[] = []
 
+  // O idioma vai primeiro de propósito. Este bloco é concatenado depois de um
+  // runtime `systemPrompt` longo e integralmente em inglês (tokens ACT/DELAY/
+  // CALL), e uma diretiva de idioma enterrada no fim perde saliência: o modelo
+  // ancora no enquadramento dominante e responde em inglês. A regra continua
+  // sendo projetada de `persona.language`, então a personagem — e não a UI nem
+  // o chat — segue sendo a dona dela.
+  const secondary = persona.language.supportedSecondary.join(', ')
+  out.push(`Idioma: responda sempre em ${persona.language.character} por padrão (linguagem informal e natural). ${secondary} podem ser usados quando solicitado ou necessário, e acompanhe o idioma do usuário se ele escrever em outro.`)
+
   // Preset + essência/tom (dados qualitativos).
   const demeanorLines = persona.demeanor.notes.map(note => `- ${note}`).join('\n')
   out.push(
@@ -351,10 +360,8 @@ export function renderLiaPersonaPersonality(persona: LiaPersona): string {
   const defaultNote = defaultContext ? ` Contexto base: ${defaultContext.label}.` : ''
   out.push([`Intensidade emocional (parcela de tsundere/zoeira por contexto):${defaultNote}`, ...ctxLines].join('\n'))
 
-  // Estilo de fala e idioma.
+  // Estilo de fala. A diretiva de idioma fica no topo deste bloco.
   out.push(`Estilo de fala: ${persona.speechStyle.notes.join(' ')}`)
-  const secondary = persona.language.supportedSecondary.join(', ')
-  out.push(`Idioma: responda em ${persona.language.character} por padrão (linguagem informal e natural); ${secondary} podem ser usados quando solicitado ou necessário, e acompanhe o idioma do usuário se ele escrever em outro.`)
 
   // Limites.
   out.push(`Limites:\n${persona.limits.map(limit => `- ${limit}`).join('\n')}`)
