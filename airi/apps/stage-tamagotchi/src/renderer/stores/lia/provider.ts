@@ -395,6 +395,15 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
       return false
 
     await activateTarget(preferred)
+    // `activeProvider` / `activeModel` only say which target the chat should use;
+    // the AIRI runtime tracks "is this provider configured" separately, on the
+    // provider record's status. `ensureProviderRecord` creates that record as
+    // `unconfigured`, so without this the provider is active for sending yet the
+    // runtime still reports it as not configured. Same pair the AIRI defaults
+    // command uses, and it writes no credential anywhere: the record keeps only
+    // references/metadata while the vault resolver supplies the key per build.
+    await providersStore.initializeProvider(preferred.providerId)
+    providersStore.forceProviderConfigured(preferred.providerId)
     return true
   }
 

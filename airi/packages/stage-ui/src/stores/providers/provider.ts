@@ -82,6 +82,31 @@ const useProviderStateStore = defineStore('provider-state', () => {
 })
 
 /**
+ * Augments a provider config with the credential a registered resolver supplies
+ * (M1 Phase 4C). When no resolver is registered — web, pocket, and any host that
+ * stores credentials in the provider config itself — the config is returned
+ * untouched, so behaviour is unchanged.
+ *
+ * Every path that builds a provider from a config record must go through here,
+ * otherwise that path reaches the upstream API without the credential: the
+ * resolver is the only place a host such as the Lia desktop can supply a secret
+ * that is deliberately kept out of localStorage and out of its own config file.
+ * The merged credential lives only in the in-memory config passed to
+ * `createProvider`; it is never persisted or logged.
+ */
+async function withResolvedCredential(providerId: string, config: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const resolver = getProviderCredentialResolver()
+  if (!resolver)
+    return config
+
+  const extra = await resolver(providerId)
+  if (!extra || typeof extra !== 'object')
+    return config
+
+  return { ...config, ...extra }
+}
+
+/**
  * Owns executable provider instances and inference-specific runtime state.
  *
  * Provider definitions remain in the static registry. Serializable provider
@@ -621,7 +646,7 @@ export const useProviderStore = defineStore('provider', () => {
     }
 
     try {
-      const models = await listProviderModels(providerId, config || {})
+      const models = await listProviderModels(providerId, await withResolvedCredential(providerId, config || {}))
       const normalizedModels = uniqBy(models.filter(model => !!model.id), m => m.id)
         .map(model => ({
           id: model.id,
@@ -797,21 +822,9 @@ export const useProviderStore = defineStore('provider', () => {
     if (!config && !noCredentials)
       throw new Error(`Provider credentials for ${providerId} not found`)
 
-    // Optional per-use credential resolver (M1 Phase 4C): when registered (by the
-    // Lia desktop), augment the config with a transient secret (e.g. apiKey)
-    // resolved from the secure main-process vault. Absent by default → no change.
-    // The resolved credential is only merged into the in-memory config used to
-    // build this instance; it is never written to localStorage or logged.
-    let effectiveConfig = config || {}
-    if (config) {
-      const resolver = getProviderCredentialResolver()
-      if (resolver) {
-        const extra = await resolver(providerId)
-        if (extra && typeof extra === 'object') {
-          effectiveConfig = { ...effectiveConfig, ...extra }
-        }
-      }
-    }
+    const effectiveConfig = config
+      ? await withResolvedCredential(providerId, config)
+      : {}
 
     try {
       const instance = await definition.createProvider(effectiveConfig)
