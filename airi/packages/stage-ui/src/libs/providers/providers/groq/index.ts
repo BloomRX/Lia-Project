@@ -47,10 +47,18 @@ export const providerGroq = defineProvider<GroqConfig>({
       ...provider,
       chat(model: string, options?: ChatRequestOptions) {
         const request = provider.chat(model)
-        if (!options?.reasoning)
+
+        // Groq's effort scale is model-specific. gpt-oss accepts only
+        // `low | medium | high` and rejects anything else with a 400, while
+        // `none` exists for the qwen3 family only. Which set applies depends on
+        // the model, and models must not be hardcoded in a provider adapter, so
+        // "reasoning disabled" omits the field entirely and lets Groq apply the
+        // model default instead of sending a value the model may reject.
+        // `enabled` keeps the `medium` this adapter has always sent.
+        if (options?.reasoning !== 'enabled')
           return request
 
-        return { ...request, reasoningEffort: options.reasoning === 'enabled' ? 'medium' : 'none' }
+        return { ...request, reasoningEffort: 'medium' }
       },
     }
   },
