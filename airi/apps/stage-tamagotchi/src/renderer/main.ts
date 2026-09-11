@@ -18,7 +18,7 @@ import { handleHotUpdate, routes } from 'vue-router/auto-routes'
 
 import App from './App.vue'
 
-import { installRealChatObserver } from './diagnostics/real-chat-observer'
+import { shouldInstallRealChatObserver } from './diagnostics/gate'
 import { i18n } from './modules/i18n'
 import { resolveRendererWindowContext } from './window-context'
 
@@ -48,16 +48,20 @@ configureAnalyticsAdapter(async (options) => {
 })
 registerAuthorizationHandler(browserAuthorizationHandler)
 
-// TEMPORARY read-only 401 diagnostic. Passive: it wraps fetch to record request
-// metadata and forwards every call untouched. Active in dev, or in a packaged
-// build after `localStorage.setItem('lia:diag:real-chat', '1')` + reload.
-// Remove together with ./diagnostics/real-chat-observer once the 401 is traced.
-try {
-  if (import.meta.env.DEV || globalThis.localStorage?.getItem('lia:diag:real-chat') === '1')
-    installRealChatObserver(globalThis as unknown as Window)
-}
-catch (error) {
-  console.warn('[LIA-DIAG] observer not installed:', error)
+// TEMPORARY read-only chat diagnostic. Passive: it wraps fetch to record
+// request metadata and forwards every call untouched.
+//
+// Hard-gated to dev builds. This used to also install in a packaged build after
+// `localStorage.setItem('lia:diag:real-chat', '1')`, but a value in
+// user-writable storage is not an authorization boundary, so the flag now only
+// refines behaviour inside dev ('0' opts out) and is inert in production. The
+// module is imported dynamically so a packaged renderer never loads the
+// instrumentation at all.
+// Remove together with ./diagnostics/real-chat-observer once tracing is done.
+if (shouldInstallRealChatObserver(import.meta.env.DEV, globalThis.localStorage?.getItem('lia:diag:real-chat'))) {
+  import('./diagnostics/real-chat-observer')
+    .then(({ installRealChatObserver }) => installRealChatObserver(globalThis as unknown as Window))
+    .catch((error: unknown) => console.warn('[LIA-DIAG] observer not installed:', error))
 }
 
 const pinia = createPinia()

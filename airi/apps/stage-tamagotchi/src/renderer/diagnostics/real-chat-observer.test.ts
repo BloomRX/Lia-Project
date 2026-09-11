@@ -392,6 +392,38 @@ describe('installRealChatObserver', () => {
     expect(report).toContain('REQUEST_1_RAW_HTTP_ERROR_MESSAGE=')
   })
 
+  it('never writes a credential into any console line', async () => {
+    const secret = 'gsk-REAL-LOOKING-SECRET-VALUE-1234567890'
+    const upstream = vi.fn(async () => new Response(
+      JSON.stringify({ error: { message: `unauthorized for ${secret}` } }),
+      { status: 401, headers: { 'Content-Type': 'application/json' } },
+    ))
+    const logs: string[] = []
+    const info = vi.spyOn(console, 'info').mockImplementation((...args: unknown[]) => {
+      logs.push(args.map(arg => String(arg)).join(' '))
+    })
+    const warn = vi.spyOn(console, 'warn').mockImplementation((...args: unknown[]) => {
+      logs.push(args.map(arg => String(arg)).join(' '))
+    })
+    const win = makeWindow(upstream as unknown as typeof globalThis.fetch)
+
+    const handles = installRealChatObserver(win)
+    await win.fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${secret}` },
+      body: JSON.stringify({ model: 'openai/gpt-oss-120b', messages: [{ role: 'user', content: 'oi' }] }),
+    })
+
+    const everything = logs.join('\n') + handles.report()
+    expect(everything).not.toContain(secret)
+    expect(everything).not.toContain(`Bearer ${secret}`)
+    // Length is reported instead of the value.
+    expect(handles.requests[0].authorizationHeaderLength).toBe(`Bearer ${secret}`.length)
+
+    info.mockRestore()
+    warn.mockRestore()
+  })
+
   it('captures the real 401 exactly as the app would produce it', async () => {
     const secret = 'Bearer gsk-REAL-LOOKING-SECRET-VALUE-1234567890'
     const upstream = vi.fn(async () => new Response(
