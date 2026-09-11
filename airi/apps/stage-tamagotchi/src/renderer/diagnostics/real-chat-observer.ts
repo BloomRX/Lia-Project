@@ -23,6 +23,8 @@ export interface ObservedRequest {
   providerId: string
   /** Read from the outgoing JSON body's `model` field. */
   modelId: string | null
+  /** Wire value of `reasoning_effort`, exactly as sent to the provider. */
+  reasoningEffort: string | null
   endpoint: string
   host: string
   path: string
@@ -139,6 +141,25 @@ export function extractErrorMessage(text: string): string | null {
   }
 }
 
+/**
+ * Reads the wire `reasoning_effort` out of an outgoing JSON body.
+ *
+ * At this point the body has already been serialized by `@xsai/shared`'s
+ * `requestBody`, so the key is snake_case - this is the value the provider
+ * actually receives, not the camelCase one held in memory.
+ */
+export function readReasoningEffortFromBody(body: unknown): string | null {
+  if (typeof body !== 'string' || body.length === 0)
+    return null
+  try {
+    const parsed = JSON.parse(body) as { reasoning_effort?: unknown }
+    return typeof parsed?.reasoning_effort === 'string' ? parsed.reasoning_effort : null
+  }
+  catch {
+    return null
+  }
+}
+
 /** Reads an Authorization header from any of the three fetch header shapes. */
 export function readAuthorizationLength(headers: unknown): number {
   const get = (name: string): string | null => {
@@ -216,6 +237,7 @@ export function formatReport(report: RealChatReport): string {
     lines.push(
       `REQUEST_${n}_PROVIDER=${request.providerId}`,
       `REQUEST_${n}_MODEL=${request.modelId ?? 'unknown'}`,
+      `REQUEST_${n}_REASONING_EFFORT=${request.reasoningEffort ?? 'omitted'}`,
       `REQUEST_${n}_ENDPOINT=${request.method} ${request.endpoint}`,
       `REQUEST_${n}_AUTH=${request.hasAuthorizationHeader}(len=${request.authorizationHeaderLength})`,
       `REQUEST_${n}_STARTED=${request.requestStarted}`,
@@ -276,6 +298,7 @@ export function installRealChatObserver(win: Window & { __LIA_REAL_CHAT_DIAG__?:
       index: requests.length + 1,
       providerId: providerIdFromHost(parsed.hostname),
       modelId: readModelFromBody(init?.body),
+      reasoningEffort: readReasoningEffortFromBody(init?.body),
       // Query strings can carry identifiers; only origin + path is recorded.
       endpoint: `${parsed.origin}${parsed.pathname}`,
       host: parsed.hostname,
@@ -295,7 +318,8 @@ export function installRealChatObserver(win: Window & { __LIA_REAL_CHAT_DIAG__?:
     console.info(
       `[LIA-DIAG] #${record.index} ${record.method} ${record.endpoint}`
       + ` auth=${record.hasAuthorizationHeader}(len=${record.authorizationHeaderLength})`
-      + ` model=${record.modelId ?? 'unknown'} provider=${record.providerId}`,
+      + ` model=${record.modelId ?? 'unknown'} provider=${record.providerId}`
+      + ` reasoning_effort=${record.reasoningEffort ?? 'omitted'}`,
     )
 
     let response: Response

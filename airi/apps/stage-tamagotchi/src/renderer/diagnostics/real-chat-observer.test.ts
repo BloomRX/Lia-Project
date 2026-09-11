@@ -11,6 +11,7 @@ import {
   providerIdFromHost,
   readAuthorizationLength,
   readModelFromBody,
+  readReasoningEffortFromBody,
   sanitizeResponseMessage,
 } from './real-chat-observer'
 
@@ -27,6 +28,7 @@ function makeRequest(overrides: Partial<ObservedRequest> = {}): ObservedRequest 
     index: 1,
     providerId: 'groq',
     modelId: 'openai/gpt-oss-120b',
+    reasoningEffort: null,
     endpoint: 'https://api.openai.com/v1/chat/completions',
     host: 'api.openai.com',
     path: '/v1/chat/completions',
@@ -90,6 +92,15 @@ describe('real chat observer helpers', () => {
     expect(readAuthorizationLength([['Authorization', 'Bearer abc']])).toBe('Bearer abc'.length)
     expect(readAuthorizationLength(undefined)).toBe(0)
     expect(readAuthorizationLength({ 'Content-Type': 'application/json' })).toBe(0)
+  })
+
+  it('reads the wire reasoning_effort out of an outgoing body', () => {
+    expect(readReasoningEffortFromBody(JSON.stringify({ model: 'm', reasoning_effort: 'medium' }))).toBe('medium')
+    expect(readReasoningEffortFromBody(JSON.stringify({ model: 'm', reasoning_effort: 'none' }))).toBe('none')
+    // Omitted must stay distinguishable from an empty value.
+    expect(readReasoningEffortFromBody(JSON.stringify({ model: 'm' }))).toBeNull()
+    expect(readReasoningEffortFromBody('{not json')).toBeNull()
+    expect(readReasoningEffortFromBody(undefined)).toBeNull()
   })
 
   it('reads only the model field out of an outgoing body', () => {
@@ -174,7 +185,7 @@ describe('installRealChatObserver', () => {
     const response = await win.fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: { 'Authorization': secret, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'openai/gpt-oss-120b', messages: [{ role: 'user', content: 'Oi Lia' }] }),
+      body: JSON.stringify({ model: 'openai/gpt-oss-120b', reasoning_effort: 'medium', messages: [{ role: 'user', content: 'Oi Lia' }] }),
     })
 
     expect(response.status).toBe(401)
@@ -183,6 +194,7 @@ describe('installRealChatObserver', () => {
     const record = handles.requests[0]
     expect(record.providerId).toBe('openai')
     expect(record.modelId).toBe('openai/gpt-oss-120b')
+    expect(record.reasoningEffort).toBe('medium')
     expect(record.method).toBe('POST')
     expect(record.endpoint).toBe('https://api.openai.com/v1/chat/completions')
     expect(record.hasAuthorizationHeader).toBe(true)
@@ -195,6 +207,7 @@ describe('installRealChatObserver', () => {
     expect(report).toContain('REAL_CHAT_STATUS=FAIL')
     expect(report).toContain('FIRST_401_ENDPOINT=POST https://api.openai.com/v1/chat/completions')
     expect(report).toContain('REQUEST_COUNT=1')
+    expect(report).toContain('REQUEST_1_REASONING_EFFORT=medium')
 
     // The credential itself must never reach the console or the report.
     expect(report).not.toContain(secret)
