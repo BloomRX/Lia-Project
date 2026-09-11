@@ -387,6 +387,41 @@ export const useProviderStore = defineStore('provider', () => {
     }
   }
 
+  /**
+   * Materializes the schema defaults a provider declares before it is
+   * instantiated.
+   *
+   * Providers express their endpoint as `baseUrl: z.string().default(...)`, but
+   * a zod default only appears when the config is parsed. Instances are built
+   * from the raw stored object, so a config saved without `baseUrl` reached
+   * `createProvider()` with none — and factories such as Groq's
+   * `createOpenAI(apiKey, baseUrl)` then fell back to their own built-in host,
+   * sending that provider's credential to the wrong API.
+   *
+   * Reuses {@link normalizeProviderConfigDefaults}; it adds no second parser.
+   */
+  function withSchemaDefaults(providerId: string, config: Record<string, unknown>) {
+    const defaults = Object.fromEntries(
+      Object.entries(getDefaultProviderConfig(providerId))
+        // `getDefaultProviderConfig` adds `baseUrl: ''` as a placeholder when the
+        // schema declares no default. An empty value is not a default: forcing it
+        // in would replace the factory's own fallback with a broken base URL.
+        .filter(([, value]) => (typeof value === 'string' ? value.trim() !== '' : value !== null && value !== undefined)),
+    )
+
+    // No declared defaults: hand the config back untouched.
+    if (Object.keys(defaults).length === 0)
+      return config
+
+    // A stored empty string means "never configured", not "explicitly empty".
+    const stored = Object.fromEntries(
+      Object.entries(config)
+        .filter(([key, value]) => !(key in defaults) || typeof value !== 'string' || value.trim() !== ''),
+    )
+
+    return normalizeProviderConfigDefaults(stored, defaults)
+  }
+
   function initializeProviderRuntimeState(providerId: string) {
     if (!providerRuntimeState.value[providerId]) {
       providerRuntimeState.value[providerId] = {
@@ -553,19 +588,24 @@ export const useProviderStore = defineStore('provider', () => {
   }
 
   async function listProviderModels(providerId: string, config: Record<string, unknown>) {
+    // Schema defaults come from provider metadata, which is resolved
+    // asynchronously. Without this the defaults would silently be missing on a
+    // cold start and the factory would fall back to its own built-in endpoint.
+    await waitForProviderMetadata()
     const definition = getProviderDefinition(providerId)
-    const provider = await definition.createProvider(config)
+    const effectiveConfig = withSchemaDefaults(providerId, config)
+    const provider = await definition.createProvider(effectiveConfig)
     try {
       if (definition.extraMethods?.listModels) {
-        const models = await definition.extraMethods.listModels(config, provider, { t })
+        const models = await definition.extraMethods.listModels(effectiveConfig, provider, { t })
         return normalizeProviderModels(providerId, models)
       }
 
       if (isModelProvider(provider))
         return normalizeProviderModels(providerId, await listModels(provider.model()))
 
-      const baseUrl = typeof config.baseUrl === 'string' ? config.baseUrl.trim() : ''
-      const apiKey = typeof config.apiKey === 'string' ? config.apiKey.trim() : ''
+      const baseUrl = typeof effectiveConfig.baseUrl === 'string' ? effectiveConfig.baseUrl.trim() : ''
+      const apiKey = typeof effectiveConfig.apiKey === 'string' ? effectiveConfig.apiKey.trim() : ''
       if (!baseUrl)
         return []
 
@@ -822,9 +862,12 @@ export const useProviderStore = defineStore('provider', () => {
     if (!config && !noCredentials)
       throw new Error(`Provider credentials for ${providerId} not found`)
 
-    const effectiveConfig = config
+    const resolvedConfig = config
       ? await withResolvedCredential(providerId, config)
       : {}
+    // Schema defaults must be applied after the resolver, so a credential
+    // supplied per build is never overwritten by a declared default.
+    const effectiveConfig = withSchemaDefaults(providerId, resolvedConfig)
 
     try {
       const instance = await definition.createProvider(effectiveConfig)
