@@ -4,6 +4,7 @@ import { ContextUpdateStrategy } from '@proj-airi/server-sdk'
 import { describe, expect, it, vi } from 'vitest'
 
 import { createSparkCommandTool } from './spark-command'
+import { sparkCommandContextSchema } from './spark-command-shared'
 
 function isJsonSchema(value: JsonSchema | boolean | undefined): value is JsonSchema {
   return Boolean(value && typeof value === 'object')
@@ -268,5 +269,157 @@ describe('tools/character/orchestrator/spark-command', () => {
     expect(sendSparkCommand).toHaveBeenCalledOnce()
     expect(result).toContain('spark:command sent')
     expect(result).toContain('broadcast')
+  })
+})
+
+/**
+ * Strict tool-schema compatibility.
+ *
+ * Regression for the Groq 400 `invalid_request_error`:
+ *
+ *   tool builtIn_emitSparkCommand
+ *   tools[1].function.parameters:
+ *     /properties/contexts/anyOf/0/items/properties/destinations/anyOf
+ *   variant 0: properties must be present (or set additionalProperties:false)
+ *
+ * ROOT CAUSE: `z.union([...]).nullable()` nests the union. The outer `anyOf`
+ * variant 0 was then a bare `{ anyOf: [...] }` - no `type`, no `properties`, no
+ * `additionalProperties`. Strict validators treat a typeless branch as an object
+ * and reject it. The same shape existed on the root `interrupt` field.
+ */
+describe('builtIn_emitSparkCommand strict tool-schema compatibility', () => {
+  async function toolParameters() {
+    const tools = await createSparkCommandTool({ sendSparkCommand: () => undefined })
+    expect(tools[0].function.name).toBe('builtIn_emitSparkCommand')
+    return tools[0].function.parameters as JsonSchema
+  }
+
+  function contextItemProperties(schema: JsonSchema) {
+    const contexts = getArraySchema(schema.properties?.contexts as JsonSchema)
+    return (contexts?.items as JsonSchema).properties as Record<string, JsonSchema>
+  }
+
+  /** Every `anyOf`/`oneOf` branch in the schema, with its JSON pointer path. */
+  function collectBranches(schema: JsonSchema | undefined, path = '#'): Array<{ branch: JsonSchema, path: string }> {
+    if (!schema)
+      return []
+
+    const found: Array<{ branch: JsonSchema, path: string }> = []
+    for (const key of ['anyOf', 'oneOf'] as const) {
+      const branches = [...(schema[key] ?? [])].filter(isJsonSchema)
+      branches.forEach((branch, index) => {
+        found.push({ branch, path: `${path}/${key}/${index}` })
+        found.push(...collectBranches(branch, `${path}/${key}/${index}`))
+      })
+    }
+
+    for (const [name, value] of Object.entries(schema.properties ?? {})) {
+      if (isJsonSchema(value))
+        found.push(...collectBranches(value, `${path}/properties/${name}`))
+    }
+
+    const items = schema.items
+    if (Array.isArray(items))
+      items.forEach((item, index) => found.push(...collectBranches(isJsonSchema(item) ? item : undefined, `${path}/items/${index}`)))
+    else if (isJsonSchema(items))
+      found.push(...collectBranches(items, `${path}/items`))
+
+    return found
+  }
+
+  it('finds the tool and exposes its final provider-facing JSON Schema', async () => {
+    const parameters = await toolParameters()
+    expect(parameters.type).toBe('object')
+    expect(parameters.additionalProperties).toBe(false)
+  })
+
+  it('keeps every contexts[].destinations.anyOf branch explicitly typed', async () => {
+    const destinations = contextItemProperties(await toolParameters()).destinations
+    const branches = [...(destinations.anyOf ?? [])].filter(isJsonSchema)
+
+    // array | { all: true } | { include, exclude } | null
+    expect(branches.map(branch => branch.type)).toEqual(['array', 'object', 'object', 'null'])
+
+    for (const branch of branches) {
+      // The regression: a bare nested `{ anyOf: [...] }` has no `type` at all.
+      expect(branch.type, JSON.stringify(branch)).toBeDefined()
+      expect(branch.anyOf, `${JSON.stringify(branch)} must not nest another anyOf`).toBeUndefined()
+    }
+  })
+
+  it('leaves no object branch without properties or additionalProperties:false', async () => {
+    const offenders = collectBranches(await toolParameters())
+      .filter(({ branch }) => branch.type === 'object')
+      .filter(({ branch }) => !branch.properties && branch.additionalProperties !== false)
+      .map(({ path }) => path)
+
+    expect(offenders).toEqual([])
+  })
+
+  it('leaves no typeless anyOf/oneOf branch anywhere in the tool schema', async () => {
+    const offenders = collectBranches(await toolParameters())
+      .filter(({ branch }) => branch.type === undefined)
+      .map(({ path }) => path)
+
+    expect(offenders).toEqual([])
+  })
+
+  it('keeps the root interrupt field flat as well', async () => {
+    const interrupt = (await toolParameters()).properties?.interrupt as JsonSchema
+    const branches = [...(interrupt.anyOf ?? [])].filter(isJsonSchema)
+
+    expect(branches.every(branch => branch.type !== undefined && branch.anyOf === undefined)).toBe(true)
+    expect(branches.map(branch => branch.const ?? branch.type)).toEqual(['force', 'soft', false, 'null'])
+  })
+
+  it('still accepts every destinations form the runtime produces', () => {
+    const base = {
+      lane: null,
+      ideas: null,
+      hints: null,
+      strategy: ContextUpdateStrategy.AppendSelf,
+      text: 'context text',
+      metadata: null,
+    }
+
+    const accepted = [
+      ['character', 'memory'],
+      { all: true },
+      { include: ['character'], exclude: null },
+      { include: null, exclude: ['memory'] },
+      null,
+    ]
+
+    for (const destinations of accepted)
+      expect(sparkCommandContextSchema.safeParse({ ...base, destinations }).success, JSON.stringify(destinations)).toBe(true)
+  })
+
+  it('still rejects destinations forms that were never valid', () => {
+    const base = {
+      lane: null,
+      ideas: null,
+      hints: null,
+      strategy: ContextUpdateStrategy.AppendSelf,
+      text: 'context text',
+      metadata: null,
+    }
+
+    for (const destinations of [{ all: false }, { include: 'character' }, { other: true }, 'character'])
+      expect(sparkCommandContextSchema.safeParse({ ...base, destinations }).success, JSON.stringify(destinations)).toBe(false)
+  })
+
+  it('keeps the OpenAI-compatible tool envelope used by AIRI', async () => {
+    const tools = await createSparkCommandTool({ sendSparkCommand: () => undefined })
+    const [tool] = tools as Array<{ type?: string, function: { name: string, description?: string, parameters: JsonSchema } }>
+
+    // xsai sends `{ type: 'function', function: { name, description, parameters } }`.
+    expect(tool.type ?? 'function').toBe('function')
+    expect(tool.function.name).toBe('builtIn_emitSparkCommand')
+    expect(typeof tool.function.description).toBe('string')
+    expect(tool.function.parameters.type).toBe('object')
+    expect(Array.isArray(tool.function.parameters.required)).toBe(true)
+    // A strict provider requires every declared property to be listed as required.
+    expect([...(tool.function.parameters.required as string[])].sort())
+      .toEqual(Object.keys(tool.function.parameters.properties ?? {}).sort())
   })
 })

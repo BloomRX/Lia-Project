@@ -46,6 +46,12 @@ export const sparkCommandContextSchema = z.object({
   hints: z.union([z.array(z.string()), z.null()]).describe('Hints to attach to the target context.'),
   strategy: z.enum(ContextUpdateStrategy).describe('How the target should merge this context update.'),
   text: z.string().describe('Primary text of the context update.'),
+  // NOTICE: `z.null()` is a union member rather than a trailing `.nullable()`.
+  // Wrapping a union with `.nullable()` emits a nested `anyOf` whose first
+  // branch is a bare `{ anyOf: [...] }` - no `type`, no `properties`, no
+  // `additionalProperties`. Strict tool-schema validators (Groq) reject that
+  // branch outright. Listing null inline keeps one flat `anyOf` where every
+  // branch is explicitly typed, and accepts exactly the same values.
   destinations: z.union([
     z.array(z.string()),
     z.object({
@@ -55,7 +61,8 @@ export const sparkCommandContextSchema = z.object({
       include: z.union([z.array(z.string()), z.null()]).describe('Included destinations.'),
       exclude: z.union([z.array(z.string()), z.null()]).describe('Excluded destinations.'),
     }).strict(),
-  ]).nullable().describe('Optional routing for the attached context update.'),
+    z.null(),
+  ]).describe('Optional routing for the attached context update.'),
   metadata: z.union([z.array(sparkCommandMetadataEntrySchema), z.null()]).describe('JSON-like metadata for the context update, expressed as key-value pairs for schema compatibility.'),
 }).strict()
 
@@ -71,7 +78,13 @@ export const sparkCommandToolSchema = z.object({
   // properties are optional. These root fields stay required in the provider-facing schema
   // and use `null` as the "not supplied" value, then runtime code normalizes them back to
   // `undefined` or defaults before emitting `spark:command`.
-  interrupt: z.union([sparkCommandInterruptSchema, z.null()]).describe('Whether the command should preempt current work.'),
+  // NOTICE: the interrupt literals are spread inline instead of nesting
+  // `sparkCommandInterruptSchema` as a single branch, for the same reason as
+  // `destinations` below: a union inside a union emits a typeless
+  // `{ anyOf: [...] }` branch that strict tool-schema validators reject.
+  // Spreading `.options` keeps this schema the single source of truth while
+  // producing one flat `anyOf`. Same accepted values.
+  interrupt: z.union([...sparkCommandInterruptSchema.options, z.null()]).describe('Whether the command should preempt current work.'),
   priority: z.union([sparkCommandPrioritySchema, z.null()]).describe('Priority of the command.'),
   intent: z.union([sparkCommandIntentSchema, z.null()]).describe('Intent of the command.'),
   ack: z.union([z.string(), z.null()]).describe('Short acknowledgement or instruction summary for the receiver.'),
