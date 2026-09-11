@@ -222,7 +222,7 @@ describe('synthesizeWithSpeechFallback', () => {
   })
 
   it('enforces the attempt ceiling even if the policy always says retry', async () => {
-    const stub = createPolicyStub(Array.from({ length: 20 }).fill(true))
+    const stub = createPolicyStub(Array.from<boolean>({ length: 20 }).fill(true))
     registerSpeechTtsFallbackPolicy(stub.policy)
     const { signal } = createSignal()
     const synthesize = vi.fn(async () => {
