@@ -370,6 +370,35 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
   }
 
   /**
+   * Applies the persisted Lia chat config to the shared AIRI runtime, so the
+   * first message can be sent without the user opening any settings screen.
+   *
+   * Persisting a config (`persistConfig`) only writes `lia-product.json`; it does
+   * not touch `consciousness.activeProvider` / `activeModel`, which is what
+   * `chat.executeSendAttempt` reads. Without this, a fully configured Lia still
+   * failed the first send with "No active chat provider or model configured".
+   *
+   * Readiness is re-derived from the persisted config on every call, so an
+   * incomplete or invalid config is never pushed into the runtime — the caller
+   * stays where it is and the onboarding gate keeps showing. Returns `true` only
+   * when a target was actually activated. Runtime-only: no secret is written to
+   * localStorage or to the product config; the vault resolver supplies the key
+   * per provider build.
+   */
+  async function activateConfiguredProvider(): Promise<boolean> {
+    await refreshConfig()
+    if (!await isReadyToChat())
+      return false
+
+    const preferred = loadedConfig.value?.preferred
+    if (!preferred?.providerId || !preferred.modelId)
+      return false
+
+    await activateTarget(preferred)
+    return true
+  }
+
+  /**
    * Whether the persisted config is genuinely ready to have a conversation.
    *
    * Ready requires: a preferred provider + model, the `onboarded` completion
@@ -475,6 +504,7 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
     ensureProviderRecord,
     activateTarget,
     activatePreferred,
+    activateConfiguredProvider,
     isReadyToChat,
     markOnboarded,
     isFallbackConfigured,

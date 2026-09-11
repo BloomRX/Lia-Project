@@ -171,7 +171,8 @@ watch([() => logs.value.length, logsOpen], async () => {
 async function goConversar() {
   // Activate the user's configured Lia chat provider/model before entering the
   // Stage, so the existing AIRI chat streams with the secure (vault-resolved) key.
-  await liaProviderStore.activatePreferred()
+  // Validated variant: an incomplete config is never pushed into the runtime.
+  await liaProviderStore.activateConfiguredProvider()
   // Primary destination: the existing Stage (character experience) at '/'.
   // Resize the window to the Stage preset BEFORE navigating so the Stage mounts
   // at its intended size (contextual window sizing, M1 Phase 2).
@@ -199,6 +200,13 @@ async function openCharacterSettings() {
 async function syncHomeView(options: { force?: boolean } = {}) {
   const ready = await liaProviderStore.isReadyToChat()
   await computeSummary()
+  // A config that just became ready is applied to the shared runtime right away,
+  // so finishing onboarding leaves the chat usable without another click and
+  // without opening any settings screen. Idempotent: re-activating the same
+  // target only rebuilds its provider instance.
+  if (ready) {
+    await liaProviderStore.activateConfiguredProvider()
+  }
   if (options.force || view.value !== 'settings') {
     view.value = ready ? 'launcher' : 'onboarding'
   }
