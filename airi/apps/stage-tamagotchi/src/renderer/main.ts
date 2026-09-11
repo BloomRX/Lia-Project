@@ -18,6 +18,7 @@ import { handleHotUpdate, routes } from 'vue-router/auto-routes'
 
 import App from './App.vue'
 
+import { installRealChatObserver } from './diagnostics/real-chat-observer'
 import { i18n } from './modules/i18n'
 import { resolveRendererWindowContext } from './window-context'
 
@@ -46,6 +47,18 @@ configureAnalyticsAdapter(async (options) => {
   return createPosthogAdapter(options)
 })
 registerAuthorizationHandler(browserAuthorizationHandler)
+
+// TEMPORARY read-only 401 diagnostic. Passive: it wraps fetch to record request
+// metadata and forwards every call untouched. Active in dev, or in a packaged
+// build after `localStorage.setItem('lia:diag:real-chat', '1')` + reload.
+// Remove together with ./diagnostics/real-chat-observer once the 401 is traced.
+try {
+  if (import.meta.env.DEV || globalThis.localStorage?.getItem('lia:diag:real-chat') === '1')
+    installRealChatObserver(globalThis as unknown as Window)
+}
+catch (error) {
+  console.warn('[LIA-DIAG] observer not installed:', error)
+}
 
 const pinia = createPinia()
 const synced = setupSynced({
