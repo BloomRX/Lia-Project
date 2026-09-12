@@ -134,6 +134,29 @@ config:
       notConfigured: "Nenhuma voz configurada ainda."
       loading: "Carregando configuração de voz…"
       loadError: "Não foi possível carregar a configuração de voz."
+      primary:
+        title: "Voz principal"
+        none: "Nenhuma voz configurada"
+      reserve:
+        title: "Voz de reserva"
+        none: "Nenhuma"
+        hint: "Usada somente se a voz principal falhar."
+        duplicate: "A voz de reserva é igual à principal, então não vai ajudar se ela falhar."
+      preview:
+        play: "▶ Ouvir exemplo"
+        cancel: "Parar"
+        loading: "Gerando exemplo…"
+        playing: "Tocando exemplo…"
+        cancelled: "Exemplo interrompido."
+        error: "Não foi possível gerar o exemplo."
+      catalog:
+        loading: "Carregando vozes…"
+        empty: "Este provedor não oferece uma lista de vozes."
+        fromProviderSettings: "A voz dele é escolhida nas configurações do próprio provedor."
+      errors:
+        persist: "Não foi possível salvar a voz. Nada foi alterado."
+        projection: "A voz foi salva, mas o cartão da Lia não foi atualizado. Será corrigido ao reabrir esta tela."
+        fallbackIdentical: "A voz de reserva não pode ser igual à voz principal."
     appearance:
       title: "Aparência"
       summary: "Como a Lia parece: avatar, roupa, acessórios e estado."

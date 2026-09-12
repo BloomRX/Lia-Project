@@ -134,6 +134,29 @@ config:
       notConfigured: "No voice configured yet."
       loading: "Loading voice configuration…"
       loadError: "Could not load the voice configuration."
+      primary:
+        title: "Main voice"
+        none: "No voice configured"
+      reserve:
+        title: "Backup voice"
+        none: "None"
+        hint: "Used only if the main voice fails."
+        duplicate: "The backup voice is the same as the main one, so it will not help if that one fails."
+      preview:
+        play: "▶ Hear a sample"
+        cancel: "Stop"
+        loading: "Generating sample…"
+        playing: "Playing sample…"
+        cancelled: "Sample stopped."
+        error: "Could not generate the sample."
+      catalog:
+        loading: "Loading voices…"
+        empty: "This provider does not offer a voice list."
+        fromProviderSettings: "Its voice is chosen in the provider's own settings."
+      errors:
+        persist: "Could not save the voice. Nothing was changed."
+        projection: "The voice was saved, but Lia's card was not updated. It will be repaired when this screen is opened again."
+        fallbackIdentical: "The backup voice cannot be the same as the main voice."
     appearance:
       title: "Appearance"
       summary: "How Lia looks: avatar, outfit, accessories and state."

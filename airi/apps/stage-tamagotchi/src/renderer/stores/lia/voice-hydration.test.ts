@@ -122,7 +122,9 @@ describe('lia voice hydration chain (4E-1 investigation)', () => {
     // card projection.
     // Paths come back relative to this folder's parent (stores/).
     const renderer = join(__dirname, '..')
-    const writers = ['persistTtsConfig', 'updateTtsConfig']
+    // Call sites, not mentions: a comment explaining why a file must NOT call
+    // the writer is exactly what this test wants to keep around.
+    const writers = [/\bpersistTtsConfig\s*\(/, /\bupdateTtsConfig\s*\(/]
     const hits: string[] = []
 
     const walk = (dir: string): void => {
@@ -136,7 +138,7 @@ describe('lia voice hydration chain (4E-1 investigation)', () => {
           continue
 
         const text = readFileSync(full, 'utf8')
-        if (writers.some(writer => text.includes(writer)))
+        if (writers.some(writer => writer.test(text)))
           hits.push(full.slice(renderer.length + 1).split('\\').join('/'))
       }
     }

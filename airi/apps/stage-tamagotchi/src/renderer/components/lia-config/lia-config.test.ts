@@ -82,10 +82,43 @@ describe('lia config panel contract', () => {
   it('reuses the existing voice runtime instead of reimplementing it', () => {
     const voice = readSource('components/lia-config/sections/VoiceSection.vue')
     expect(voice).toContain('useLiaVoiceStore')
-    // No provider registry, TTS runtime or speech store is built here.
+    // No provider registry, TTS runtime or speech store is built here. The tab
+    // reads the real catalogues through the editor, never by reaching for the
+    // speech store itself.
     expect(voice).not.toContain('registerRuntimeExtensions')
     expect(voice).not.toContain('useSpeechStore')
     expect(voice).not.toContain('applyVoiceTarget')
+    expect(voice).toContain('useVoiceEditor')
+  })
+
+  it('writes voice.tts only through the central writer', () => {
+    const voice = readSource('components/lia-config/sections/VoiceSection.vue')
+    const editor = readSource('stores/lia/voice-editor.ts')
+
+    // `saveTtsConfiguration` is what owns the voice.tts -> card -> runtime
+    // order, so nothing above it may take a shortcut past it.
+    expect(editor).toContain('saveTtsConfiguration')
+    for (const source of [voice, editor]) {
+      expect(source, 'must not call the writer directly').not.toMatch(/\b(?:updateTtsConfig|persistTtsConfig)\s*\(/)
+      expect(source, 'must not apply the runtime target directly').not.toMatch(/\bapplyVoiceTarget\s*\(/)
+      expect(source, 'no direct card write').not.toMatch(/updateActiveCardSpeech|persistActiveCardModuleSelections/)
+    }
+  })
+
+  it('offers no free-text field and no hardcoded catalogue in the voice UI', () => {
+    const voice = readSource('components/lia-config/sections/VoiceSection.vue')
+    const editor = readSource('stores/lia/voice-editor.ts')
+
+    // A free-text model id would let a user persist something the runtime cannot
+    // resolve, so the model field is a dropdown over the real catalogue or nothing.
+    expect(voice).not.toMatch(/<input/)
+
+    expect(editor).toContain('availableSpeechProvidersMetadata')
+    expect(editor).toContain('getVoicesForProvider')
+    expect(editor).toContain('getModelsForProvider')
+    // No provider, voice or model is baked into the editor.
+    for (const baked of ['alloy', 'af_heart', 'bf_emma', 'tts-1', 'kokoro-82m'])
+      expect(editor, baked).not.toContain(baked)
   })
 
   it('keeps navigation inside the panel and inside the main window', () => {

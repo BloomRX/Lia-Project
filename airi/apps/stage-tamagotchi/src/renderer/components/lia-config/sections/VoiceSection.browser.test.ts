@@ -1,3 +1,7 @@
+import type { LiaVoiceConfig } from '../../../../shared/eventa'
+
+import { useSpeechStore } from '@proj-airi/stage-ui/stores/modules/speech'
+import { useProviderStore } from '@proj-airi/stage-ui/stores/providers/provider'
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render } from 'vitest-browser-vue'
@@ -10,22 +14,42 @@ import '@unocss/reset/tailwind.css'
 import 'virtual:uno.css'
 
 /**
- * Mounting half of the 4E-1 voice regression.
+ * Mounting half of the voice UI (4E-2 commit 2).
  *
- * The defect was that nothing in runtime called `useLiaVoiceStore.refreshConfig()`,
- * so the section read empty refs and reported "not configured" for a Lia that was
- * configured. The fix loads the persisted config when the section mounts, so the
- * assertion that matters here is the one this file can make and the SSR-render
- * companion (`VoiceSection.test.ts`) cannot: **mount alone, with no explicit
- * load call, is enough for the real values to appear.**
+ * This is the file that needs a real DOM: it proves that *mount alone* loads the
+ * persisted configuration, that a change in a `<select>` really reaches
+ * `saveTtsConfiguration`, and that hearing a sample writes nothing. None of that
+ * is observable through SSR rendering, which is what
+ * `VoiceSection.test.ts` covers.
  *
- * The IPC edge is mocked exactly like `stores/lia/voice.test.ts` keys it, on the
- * channel's `receiveEvent.id`. The store under test is the real one.
+ * NOTE: this suite runs in vitest's `browser` project and needs a browser
+ * binary. It was written against the same locator API the 4E-1 version used.
  */
 
 const ipc = vi.hoisted(() => ({
   getVoiceConfig: vi.fn(async (): Promise<unknown> => ({ tts: {} })),
-  saveVoiceConfig: vi.fn(async () => {}),
+  saveVoiceConfig: vi.fn(async (_config: unknown) => {
+    structuredClone(_config)
+  }),
+}))
+
+type CardSpeech = { provider?: string, model?: string, voice_id?: string } | undefined
+
+const card = vi.hoisted(() => ({
+  speech: undefined as CardSpeech,
+  persona: { language: { character: 'pt-BR' } },
+  updateActiveCardSpeech: vi.fn(async (_speech: CardSpeech) => true),
+  persistActiveCardModuleSelections: vi.fn(async () => {}),
+  get activeCard() {
+    return {
+      id: 'lia',
+      extensions: { airi: { modules: { speech: card.speech }, persona: card.persona } },
+    }
+  },
+}))
+
+const preview = vi.hoisted(() => ({
+  calls: [] as { providerId: string, voiceId?: string, text: string }[],
 }))
 
 vi.mock('@proj-airi/electron-vueuse', () => ({
@@ -44,129 +68,149 @@ vi.mock('vue-i18n', () => ({
     locale: { value: 'pt-BR' },
     // Rendering keys keeps assertions exact; `lia-config.test.ts` is what proves
     // those keys exist in both locales.
-    t: (key: string) => key,
+    t: (key: string, fallback?: string) => fallback ?? key,
   }),
+}))
+
+vi.mock('@proj-airi/stage-ui/stores/modules/airi-card', () => ({
+  useAiriCardStore: () => card,
+}))
+
+// The sample needs no sound card here: what matters is which target it was
+// asked to speak, and that asking changed nothing.
+vi.mock('../../../stores/lia/voice-preview', () => ({
+  createVoicePreviewDriver: () => async (
+    target: { providerId: string, voiceId?: string },
+    text: string,
+  ) => {
+    preview.calls.push({ providerId: target.providerId, voiceId: target.voiceId, text })
+  },
 }))
 
 const TT = 'tamagotchi.home.config.sections.voice'
 
+const KOKORO_VOICES = [
+  { id: 'af_heart', name: 'Heart (English, female)', provider: 'kokoro-local' },
+  { id: 'bf_emma', name: 'Emma (English, female)', provider: 'kokoro-local' },
+]
+
 const CONFIGURED = {
   tts: {
-    preferred: {
-      providerId: 'openai-compatible-audio-speech',
-      modelId: 'tts-1',
-      voiceId: 'alloy',
-    },
-    fallback: [
-      { providerId: 'kokoro-local', modelId: 'kokoro-82m', voiceId: 'af_heart' },
-      { providerId: 'edge-tts', modelId: 'edge', voiceId: 'pt-BR-AntonioNeural' },
-    ],
+    preferred: { providerId: 'kokoro-local', voiceId: 'af_heart' },
+    fallback: [{ providerId: 'kokoro-local', voiceId: 'bf_emma' }],
   },
 }
 
 /** Mounts the section on a fresh pinia. Deliberately does NOT load the config. */
-async function mountSection() {
+async function mountSection(persisted: unknown = { tts: {} }) {
   const pinia = createPinia()
   setActivePinia(pinia)
-  const screen = await render(VoiceSection, {
-    global: { plugins: [pinia] },
-  })
-  return { pinia, screen, store: useLiaVoiceStore(pinia) }
+
+  vi.spyOn(useProviderStore(), 'listProviderVoices').mockImplementation(async (providerId: string) =>
+    providerId === 'kokoro-local' ? KOKORO_VOICES as never : [] as never)
+
+  ipc.getVoiceConfig.mockResolvedValue(persisted)
+
+  const screen = await render(VoiceSection, { global: { plugins: [pinia] } })
+  return { pinia, screen, store: useLiaVoiceStore(pinia), speech: useSpeechStore(pinia) }
 }
 
-function rowText(screen: Awaited<ReturnType<typeof mountSection>>['screen'], field: string): string {
-  return (screen.getByTestId(`lia-config-voice-${field}`).element() as HTMLElement).textContent?.trim() ?? ''
+function lastSent(): LiaVoiceConfig | undefined {
+  return ipc.saveVoiceConfig.mock.calls.at(-1)?.[0] as LiaVoiceConfig | undefined
 }
 
-function noteText(screen: Awaited<ReturnType<typeof mountSection>>['screen']): string {
-  return (screen.getByTestId('lia-config-voice-note').element() as HTMLElement).textContent?.trim() ?? ''
-}
-
-describe('voice section mounting (4E-1 voice config loading)', () => {
+describe('voice section mounting (4E-2 voice UI)', () => {
   beforeEach(() => {
     ipc.getVoiceConfig.mockReset()
     ipc.getVoiceConfig.mockResolvedValue({ tts: {} })
     ipc.saveVoiceConfig.mockReset()
-    ipc.saveVoiceConfig.mockResolvedValue(undefined)
+    ipc.saveVoiceConfig.mockImplementation(async (config: unknown) => {
+      structuredClone(config)
+    })
+
+    card.speech = undefined
+    card.updateActiveCardSpeech.mockReset()
+    card.updateActiveCardSpeech.mockImplementation(async (speech: CardSpeech) => {
+      card.speech = speech
+      return true
+    })
+    card.persistActiveCardModuleSelections.mockReset()
+    card.persistActiveCardModuleSelections.mockResolvedValue(undefined)
+
+    preview.calls.length = 0
   })
 
   it('loads the persisted configuration on mount, with no explicit load call', async () => {
-    ipc.getVoiceConfig.mockResolvedValue(CONFIGURED)
-    const { screen, store } = await mountSection()
+    const { screen, store } = await mountSection(CONFIGURED)
 
-    // This is the regression guard: mounting alone must populate the store.
-    await vi.waitFor(() => {
-      expect(store.isLoaded).toBe(true)
-    })
+    // The 4E-1 regression guard: mounting alone must populate the store.
+    await vi.waitFor(() => expect(store.isLoaded).toBe(true))
 
-    expect(rowText(screen, 'provider')).toBe('openai-compatible-audio-speech')
-    expect(rowText(screen, 'model')).toBe('tts-1')
-    expect(rowText(screen, 'voice')).toBe('alloy')
-    expect(rowText(screen, 'fallback')).toBe('2')
-    expect(noteText(screen)).toBe(`${TT}.configured`)
-  })
-
-  it('keeps showing "unset" when nothing is configured', async () => {
-    const { screen, store } = await mountSection()
-
-    await vi.waitFor(() => {
-      expect(store.isLoaded).toBe(true)
-    })
-
-    for (const field of ['provider', 'model', 'voice', 'fallback'])
-      expect(rowText(screen, field), field).toBe(`${TT}.fields.unset`)
-
-    expect(noteText(screen)).toBe(`${TT}.notConfigured`)
-  })
-
-  it('survives a failing refreshConfig and reports it instead of breaking', async () => {
-    ipc.getVoiceConfig.mockRejectedValue(new Error('bridge unavailable'))
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const { screen, store } = await mountSection()
-
-    await vi.waitFor(() => {
-      expect(store.loadError).not.toBeNull()
-    })
-
-    expect(noteText(screen)).toBe(`${TT}.loadError`)
-    // The rows still render: a failed read degrades to "unset", not to a crash.
-    expect(rowText(screen, 'provider')).toBe(`${TT}.fields.unset`)
-    expect(warn).toHaveBeenCalled()
-    warn.mockRestore()
+    await expect.element(screen.getByTestId('lia-config-voice-provider')).toHaveValue('kokoro-local')
+    await expect.element(screen.getByTestId('lia-config-voice-note')).toHaveTextContent(`${TT}.configured`)
   })
 
   it('never writes the configuration just for being opened', async () => {
-    ipc.getVoiceConfig.mockResolvedValue(CONFIGURED)
-    const { store } = await mountSection()
+    const { store } = await mountSection(CONFIGURED)
 
-    await vi.waitFor(() => {
-      expect(store.isLoaded).toBe(true)
-    })
+    await vi.waitFor(() => expect(store.isLoaded).toBe(true))
 
-    // Reading goes through the existing get channel only; the set channel is
-    // never touched, so opening the panel cannot change what is persisted.
     expect(ipc.getVoiceConfig).toHaveBeenCalledTimes(1)
     expect(ipc.saveVoiceConfig).not.toHaveBeenCalled()
   })
 
-  it('shows the same values after a restart', async () => {
-    ipc.getVoiceConfig.mockResolvedValue(CONFIGURED)
+  it('persists a provider chosen from the dropdown', async () => {
+    const { screen } = await mountSection()
 
-    const first = await mountSection()
-    await vi.waitFor(() => {
-      expect(first.store.isLoaded).toBe(true)
+    await screen.getByTestId('lia-config-voice-provider').selectOptions('kokoro-local')
+
+    await vi.waitFor(() => expect(lastSent()?.tts?.preferred).toEqual({ providerId: 'kokoro-local' }))
+    await expect.element(screen.getByTestId('lia-config-voice-voice')).toBeInTheDocument()
+  })
+
+  it('persists the whole target when a voice is chosen', async () => {
+    const { screen } = await mountSection(CONFIGURED)
+    await vi.waitFor(() => expect(screen.getByTestId('lia-config-voice-voice').element()).toBeTruthy())
+
+    await screen.getByTestId('lia-config-voice-voice').selectOptions('bf_emma')
+
+    await vi.waitFor(() =>
+      expect(lastSent()?.tts?.preferred).toEqual({ providerId: 'kokoro-local', voiceId: 'bf_emma' }))
+  })
+
+  it('turns "Nenhuma" into an empty fallback array', async () => {
+    const { screen } = await mountSection(CONFIGURED)
+    await vi.waitFor(() => expect(screen.getByTestId('lia-config-voice-reserve-voice').element()).toBeTruthy())
+
+    await screen.getByTestId('lia-config-voice-reserve-provider').selectOptions('')
+
+    await vi.waitFor(() => expect(lastSent()?.tts?.fallback).toEqual([]))
+  })
+
+  it('previews the selected voice and writes nothing while doing it', async () => {
+    const { screen } = await mountSection(CONFIGURED)
+    await vi.waitFor(() => expect(screen.getByTestId('lia-config-voice-preview').element()).toBeTruthy())
+
+    const writesBefore = ipc.saveVoiceConfig.mock.calls.length
+    await screen.getByTestId('lia-config-voice-preview').click()
+
+    await vi.waitFor(() => expect(preview.calls).toHaveLength(1))
+    expect(preview.calls[0]).toEqual({
+      providerId: 'kokoro-local',
+      voiceId: 'af_heart',
+      text: 'Olá! Eu sou a Lia.',
     })
-    const before = ['provider', 'model', 'voice', 'fallback'].map(field => rowText(first.screen, field))
+    expect(ipc.saveVoiceConfig.mock.calls).toHaveLength(writesBefore)
+  })
 
-    // A restart is a new app, a new pinia and a new store over the same
-    // persisted config.
-    const second = await mountSection()
-    await vi.waitFor(() => {
-      expect(second.store.isLoaded).toBe(true)
-    })
-    const after = ['provider', 'model', 'voice', 'fallback'].map(field => rowText(second.screen, field))
+  it('shows the persisted values again after a restart', async () => {
+    const first = await mountSection(CONFIGURED)
+    await vi.waitFor(() => expect(first.store.isLoaded).toBe(true))
 
-    expect(before).toEqual(['openai-compatible-audio-speech', 'tts-1', 'alloy', '2'])
-    expect(after).toEqual(before)
+    const second = await mountSection(CONFIGURED)
+    await vi.waitFor(() => expect(second.store.isLoaded).toBe(true))
+
+    await expect.element(second.screen.getByTestId('lia-config-voice-provider')).toHaveValue('kokoro-local')
+    await expect.element(second.screen.getByTestId('lia-config-voice-voice')).toHaveValue('af_heart')
   })
 })
