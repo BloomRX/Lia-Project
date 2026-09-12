@@ -187,18 +187,46 @@ export function useVoiceEditor(options: { preview?: VoicePreviewDriver } = {}) {
   /** A stable message key the template translates; `null` when the last write succeeded. */
   const saveError = ref<'fallbackIdentical' | 'persist' | 'projection' | null>(null)
 
+  /**
+   * Voice loads in flight, keyed by provider + model.
+   *
+   * A provider change reaches the catalogue from two directions: this editor
+   * asks for it, and `applyVoiceTarget` moves `activeSpeechProvider`, whose own
+   * watcher in the speech store asks too. `listProviderVoices` dedupes
+   * concurrent requests that share a key, but the two callers do not always
+   * agree on the model - and two different keys mean two real provider
+   * instantiations, which for Kokoro means loading the local model twice. This
+   * keeps the editor to a single load per target, however often it is asked.
+   */
+  const voiceLoadsInFlight = new Map<string, Promise<void>>()
+
   async function refreshVoices(providerId: string, modelId?: string): Promise<void> {
     if (!providerId)
       return
 
-    isLoadingVoices.value = true
+    const key = `${providerId}\u0000${modelId ?? ''}`
+    const inFlight = voiceLoadsInFlight.get(key)
+    if (inFlight)
+      return await inFlight
+
+    const task = (async () => {
+      isLoadingVoices.value = true
+      try {
+        // `loadVoicesForProvider` populates the store cache and never throws; it
+        // reports failures through `speechProviderError`.
+        await speechStore.loadVoicesForProvider(providerId, modelId)
+      }
+      finally {
+        isLoadingVoices.value = false
+      }
+    })()
+
+    voiceLoadsInFlight.set(key, task)
     try {
-      // `loadVoicesForProvider` populates the store cache and never throws; it
-      // reports failures through `speechProviderError`.
-      await speechStore.loadVoicesForProvider(providerId, modelId)
+      await task
     }
     finally {
-      isLoadingVoices.value = false
+      voiceLoadsInFlight.delete(key)
     }
   }
 

@@ -107,6 +107,13 @@ export default defineConfig({
     },
 
     optimizeDeps: {
+      // `kokoro-js` is only reachable through the Kokoro inference worker, which
+      // the renderer imports lazily the first time a Kokoro voice catalogue is
+      // requested. Discovered that late, Vite re-optimizes mid-session and full
+      // reloads the window ("optimized dependencies changed. reloading"), which
+      // looks exactly like the app restarting. Declaring it up front keeps the
+      // first visit to the voice tab from reloading the renderer.
+      include: ['kokoro-js'],
       exclude: [
         // Internal Packages
         '@proj-airi/stage-ui/*',

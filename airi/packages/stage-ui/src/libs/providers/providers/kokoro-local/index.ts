@@ -156,10 +156,18 @@ export const providerKokoroLocal = defineProvider({
     listVoices: async (config) => {
       try {
         const adapter = await getKokoroAdapter()
-        if (adapter.state !== 'ready' || config.model !== lastLoadedModelId) {
-          const model = assertModelSupported(config.model)
+        // `config.model` is absent whenever Kokoro has never been saved in the
+        // provider settings - which is the normal case for a provider that
+        // needs no credential. The config schema below declares exactly this
+        // default, so fall back to it instead of letting `assertModelSupported`
+        // throw and turn voice discovery into an empty list.
+        const capabilities = getWebGpuState()
+        const modelId = config.model
+          ?? getDefaultKokoroModel(capabilities.supported, capabilities.fp16Supported)
+        if (adapter.state !== 'ready' || modelId !== lastLoadedModelId) {
+          const model = assertModelSupported(modelId)
           await adapter.loadModel(model.quantization, model.platform)
-          lastLoadedModelId = config.model
+          lastLoadedModelId = modelId
         }
 
         return Object.entries(adapter.getVoices() as Record<string, KokoroVoice>).map(([id, voice]) => {

@@ -425,6 +425,62 @@ describe('lia voice editor (4E-2 commit 2)', async () => {
   })
 
   // -------------------------------------------------------------------------
+  // Load discipline: no duplicate work, no recursion
+  // -------------------------------------------------------------------------
+
+  it('collapses concurrent voice loads for the same target', async () => {
+    const editor = await setup()
+    const load = vi.spyOn(useSpeechStore(), 'loadVoicesForProvider')
+    load.mockClear()
+
+    await Promise.all([
+      editor.refreshVoices(KOKORO),
+      editor.refreshVoices(KOKORO),
+      editor.refreshVoices(KOKORO),
+    ])
+
+    // One catalogue, one load. Without the in-flight guard each caller would
+    // start its own provider instantiation - for Kokoro, its own model load.
+    expect(load).toHaveBeenCalledTimes(1)
+  })
+
+  it('switches provider repeatedly without looping and recovers the catalogue', async () => {
+    const editor = await setup()
+    const speech = useSpeechStore()
+    const load = vi.spyOn(speech, 'loadVoicesForProvider')
+    load.mockClear()
+
+    const sequence = [KOKORO, OPENAI_COMPATIBLE, KOKORO, OPENAI_COMPATIBLE, KOKORO]
+    for (const providerId of sequence)
+      await editor.selectProvider(providerId)
+
+    // Exactly one load per change: a provider change must not trigger another
+    // provider change, and `applyVoiceTarget` must not cascade into a reload.
+    expect(load.mock.calls).toHaveLength(sequence.length)
+    expect(speech.activeSpeechProvider).toBe(KOKORO)
+    expect(editor.selectedProviderId.value).toBe(KOKORO)
+
+    // Returning to a previous provider brings its catalogue back.
+    expect(editor.voiceOptions.value.map(voice => voice.id)).toEqual(['af_heart', 'bf_emma'])
+    expect(editor.hasNoVoiceCatalog.value).toBe(false)
+  })
+
+  it('treats "None" as the real no-output provider, not as a UI sentinel', async () => {
+    const editor = await setup()
+
+    // `speech-noop` is a registered speech provider meaning "no speech output";
+    // its English name is literally "None". It is a catalogue entry, not the
+    // empty option at the top of the dropdown, and this pins that distinction.
+    const none = editor.providerOptions.value.find(option => option.id === 'speech-noop')
+    expect(none, 'speech-noop must come from the real registry').toBeDefined()
+    expect(useSpeechStore().availableSpeechProvidersMetadata.some(meta => meta.id === 'speech-noop')).toBe(true)
+
+    // The sentinel is separate: it is the empty value, never a provider id.
+    expect(editor.providerOptions.value.some(option => option.id === '')).toBe(false)
+    expect(editor.selectedProviderId.value).toBe('')
+  })
+
+  // -------------------------------------------------------------------------
   // Preview
   // -------------------------------------------------------------------------
 
