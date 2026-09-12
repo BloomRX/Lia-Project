@@ -3,6 +3,7 @@ import type { LiaVoiceConfig, LiaVoiceTtsConfig, LiaVoiceTtsTarget } from '../..
 import { errorMessageFrom } from '@moeru/std'
 import { useElectronEventaInvoke } from '@proj-airi/electron-vueuse'
 import { registerSpeechTtsFallbackPolicy } from '@proj-airi/stage-ui/libs/speech/tts-fallback'
+import { useAiriCardStore } from '@proj-airi/stage-ui/stores/modules/airi-card'
 import { useSpeechStore } from '@proj-airi/stage-ui/stores/modules/speech'
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
@@ -92,6 +93,24 @@ export function normalizeLiaVoiceTts(value: LiaVoiceTtsConfig | undefined): LiaV
 
   const preferred = normalizeLiaVoiceTarget(source.preferred)
   return preferred ? { preferred, fallback } : { fallback }
+}
+
+/**
+ * Outcome of a voice configuration save.
+ *
+ * Two stages, deliberately separate, because decision 9.2 of the 4E-2 plan makes
+ * `voice.tts` the source of truth and the card a derived projection: the source
+ * is written first and is never rolled back to compensate for the projection.
+ * `persisted: true, projected: false` is therefore a real, reportable state -
+ * not a half-saved one the UI has to hide.
+ */
+export interface LiaVoiceSaveResult {
+  /** `voice.tts` reached `lia-product.json`. */
+  persisted: boolean
+  /** The card projection was updated and persisted. */
+  projected: boolean
+  failedStage: 'persist' | 'projection' | null
+  error: string | null
 }
 
 export const useLiaVoiceStore = defineStore('lia-voice', () => {
@@ -276,6 +295,101 @@ export const useLiaVoiceStore = defineStore('lia-voice', () => {
    * attempt ceiling); this policy only answers "is there another target?" and
    * applies it.
    */
+  /**
+   * The card projection of the current `voice.tts.preferred`, in the field names
+   * `extensions.airi.modules.speech` already uses.
+   */
+  function cardSpeechProjection(): { provider: string, model: string, voice_id: string } {
+    const target = preferred.value
+    return {
+      provider: target?.providerId ?? '',
+      model: target?.modelId ?? '',
+      voice_id: target?.voiceId ?? '',
+    }
+  }
+
+  /** Writes the projection into the active card and persists the card. */
+  async function projectToCard(): Promise<void> {
+    const cardStore = useAiriCardStore()
+    await cardStore.updateActiveCardSpeech(cardSpeechProjection())
+    await cardStore.persistActiveCardModuleSelections()
+  }
+
+  /**
+   * Saves a TTS configuration: source of truth first, projection second.
+   *
+   * Never throws. The caller gets a {@link LiaVoiceSaveResult} and decides how to
+   * report it, which is what keeps "partially saved" out of the UI: either the
+   * source was written or it was not, and the projection is reported separately.
+   */
+  async function saveTtsConfiguration(next: LiaVoiceTtsConfig): Promise<LiaVoiceSaveResult> {
+    try {
+      await updateTtsConfig(next)
+    }
+    catch (error) {
+      return {
+        persisted: false,
+        projected: false,
+        failedStage: 'persist',
+        error: errorMessageFrom(error) ?? 'Unknown error',
+      }
+    }
+
+    try {
+      await projectToCard()
+      // Applied only after both writes, so the runtime never speaks a voice that
+      // is not the persisted one.
+      await applyVoiceTarget(preferred.value)
+    }
+    catch (error) {
+      // voice.tts stays written on purpose - the source of truth wins. The next
+      // time the Voice tab opens, resyncProjectionFromSource() repairs the card.
+      return {
+        persisted: true,
+        projected: false,
+        failedStage: 'projection',
+        error: errorMessageFrom(error) ?? 'Unknown error',
+      }
+    }
+
+    return { persisted: true, projected: true, failedStage: null, error: null }
+  }
+
+  /**
+   * Re-projects the card from `voice.tts` when the two disagree.
+   *
+   * This is the recovery path for a save whose projection failed: the source
+   * stayed correct, the card did not, and without this the divergence would stay
+   * silent until the next restart.
+   *
+   * Deliberately a no-op when no voice is configured. An empty `voice.tts` means
+   * the Lia product has not claimed a voice at all - not that it claims silence -
+   * so it must not wipe whatever the user configured elsewhere. That also keeps
+   * the "no factory default" rule intact: nothing here invents a voice.
+   *
+   * Returns `true` when it actually re-projected.
+   */
+  async function resyncProjectionFromSource(): Promise<boolean> {
+    if (!preferred.value) {
+      return false
+    }
+
+    const cardStore = useAiriCardStore()
+    const speech = cardStore.activeCard?.extensions?.airi?.modules?.speech
+    const wanted = cardSpeechProjection()
+
+    if (
+      speech?.provider === wanted.provider
+      && speech?.model === wanted.model
+      && speech?.voice_id === wanted.voice_id
+    ) {
+      return false
+    }
+
+    await projectToCard()
+    return true
+  }
+
   function registerRuntimeExtensions(): void {
     registerSpeechTtsFallbackPolicy({
       onAttemptFailed: async (ctx) => {
@@ -344,6 +458,10 @@ export const useLiaVoiceStore = defineStore('lia-voice', () => {
     // Apply
     applyVoiceTarget,
     applyResolvedTarget,
+
+    // 4E-2: write the source of truth, then the card projection
+    saveTtsConfiguration,
+    resyncProjectionFromSource,
 
     // Runtime wiring (4D-3)
     registerRuntimeExtensions,

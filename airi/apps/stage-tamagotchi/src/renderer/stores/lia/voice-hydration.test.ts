@@ -114,7 +114,13 @@ describe('lia voice hydration chain (4E-1 investigation)', () => {
     ])
   })
 
-  it('no runtime code writes voice.tts, so nothing can populate it yet', () => {
+  it('voice.tts has exactly one writer: the lia voice store', () => {
+    // 4E-2 turned `voice.ts` into the single legitimate writer. This used to
+    // assert "nobody writes voice.tts"; asserting that again would only mean
+    // the feature was rolled back. What has to stay true is that no *second*
+    // writer appears, so the source of truth cannot drift out of sync with the
+    // card projection.
+    // Paths come back relative to this folder's parent (stores/).
     const renderer = join(__dirname, '..')
     const writers = ['persistTtsConfig', 'updateTtsConfig']
     const hits: string[] = []
@@ -128,17 +134,14 @@ describe('lia voice hydration chain (4E-1 investigation)', () => {
         }
         if (!/\.(?:ts|vue)$/.test(entry) || /\.test\.ts$/.test(entry))
           continue
-        // The store that declares them is not a caller of itself.
-        if (full.endsWith(join('stores', 'lia', 'voice.ts')))
-          continue
 
         const text = readFileSync(full, 'utf8')
         if (writers.some(writer => text.includes(writer)))
-          hits.push(full.slice(renderer.length + 1))
+          hits.push(full.slice(renderer.length + 1).split('\\').join('/'))
       }
     }
     walk(renderer)
 
-    expect(hits).toEqual([])
+    expect(hits).toEqual(['lia/voice.ts'])
   })
 })
