@@ -49,8 +49,10 @@ que é um provider de TTS:
 2. Ouvir um **teste** antes de salvar.
 3. **Salvar** — e a Lia passa a falar com aquela voz, inclusive depois de
    reiniciar o app.
-4. Opcionalmente, indicar uma **voz reserva** (o `fallback` que a 4D já modela).
-5. Poder **desconfigurar** e voltar ao estado atual.
+4. Indicar uma **voz de reserva** — escolha secundária, `[Nenhuma]` por padrão
+   (decisão 9.5).
+5. Poder **limpar** a voz e voltar ao estado "nenhuma voz configurada", que é
+   válido e não um erro (decisão 9.3: não há default de fábrica).
 
 Fora do objetivo: STT/ouvir, permissões de microfone, barge-in, VAD. São itens
 3 e 4 do §8.2 do plano da Phase 4 e continuam fora.
@@ -114,71 +116,106 @@ fontes editáveis do mesmo fato. A regra prática fica:
   speech store;
 - nenhuma tela edita a projeção diretamente.
 
-**Ponto de atenção a validar na implementação:** o que acontece se o usuário
-mudar a voz pelo Settings do AIRI. Ou a projeção volta a divergir, ou o Settings
-do AIRI deixa de ser o caminho. Isso é a decisão 9.1.
+**Decidido (9.1):** a voz da Lia tem uma única superfície — a tela Configurar
+Lia. O Settings do AIRI não deve oferecer configuração de voz concorrente na
+experiência da Lia, e isso entra como **cleanup próprio em commit separado**
+quando a 4E-2 for implementada, sem se misturar com o escritor. Enquanto esse
+cleanup não existir, a rota paralela pode divergir; ela não é tratada como
+suportada e a divergência se resolve pela regra acima na próxima abertura.
 
 ---
 
 ## 5. Estrutura da tela
 
-Substituir o `<dl>` read-only atual da aba Voz, mantendo a mesma linguagem visual
-do resto do painel e sem transformar a tela em painel administrativo.
+Definição de produto fechada. Substitui o `<dl>` read-only atual da aba Voz,
+mantendo a linguagem visual do resto do painel.
 
 ```
 Voz
-Como a Lia fala.
 
-  Voz da Lia            [ ▾ catálogo: provider › modelo › voz ]
-  [ ▶ Ouvir amostra ]
-  Voz reserva           [ ▾ mesma árvore, opcional ]  (colapsado por padrão)
+Voz principal
+  Provedor
+  Voz
+  Modelo (somente quando necessário)
 
-  [ Salvar ]   [ Limpar voz ]
+[▶ Ouvir exemplo]
 
-  nota: "Voz configurada." / "Nenhuma voz configurada ainda." / erro
+Voz de reserva
+  [Nenhuma]
+  ou
+  escolher outra voz
 ```
+
+E, por baixo, o que está gravado — em texto discreto, para quem precisar conferir
+sem transformar a tela em painel técnico:
+
+```
+voice.tts.preferred
+voice.tts.fallback[]
+```
+
+Mapeamento para o que já existe (seção 3):
+
+| Campo | Fonte |
+| --- | --- |
+| Provedor | `availableSpeechProvidersMetadata` |
+| Voz | `availableVoices` / `getVoicesForProvider(provider, model?)` |
+| Modelo (quando necessário) | `providerModels`, exibido só se `supportsModelListing` |
+| Estados de espera/erro | `isLoadingActiveProviderModels`, `isLoadingSpeechProviderVoices`, `speechProviderError` |
 
 Princípios:
 
-- **Uma escolha por vez.** O usuário pensa "qual voz", não "qual provider". A
-  árvore provider › modelo › voz é o mecanismo; o rótulo é o nome da voz.
-- **Sem campo livre de Model ID.** Sempre dropdown alimentado pelo catálogo.
-- **Estados de carregamento e erro visíveis**, vindos de
-  `isLoadingActiveProviderModels`, `isLoadingSpeechProviderVoices` e
-  `speechProviderError`. Silenciar erro é o anti-padrão que este projeto já
-  rejeitou.
-- **Salvar é explícito.** Nada persiste só por navegar ou abrir a aba — a 4E-1 já
-  garantiu isso para leitura e a 4E-2 mantém para escrita.
-- **Teste de voz não persiste.** Ouvir a amostra usa o runtime; não grava nada.
+- **Ordem Provedor → Voz → Modelo**, e o Modelo **só aparece quando o provider
+  exige** (`supportsModelListing`). Não expor Modelo por padrão é o que impede a
+  tela de virar configuração técnica.
+- **Sem campo livre de Model ID.** Sempre dropdown alimentado pelo catálogo vivo.
+- **Voz de reserva é secundária**: `[Nenhuma]` como padrão, escolha opcional
+  abaixo da principal. A capacidade de fallback fica transparente sem competir
+  com a escolha dominante.
+- **Estados de carregamento e erro visíveis.** Silenciar erro é anti-padrão já
+  rejeitado neste projeto.
+- **Salvar é explícito.** Nada persiste só por abrir a aba.
+- **Ouvir exemplo não persiste** nada (decisão 9.4).
 
 ---
 
 ## 6. Fluxo de escrita
 
+Ordem decidida em 9.2: **a fonte de verdade primeiro, a projeção depois.**
+
 ```
 usuário escolhe voz
-  → (opcional) ouvir amostra via applyVoiceTarget temporário, sem persistir
+  → (opcional) [▶ Ouvir exemplo] — runtime apenas, nada persistido
   → Salvar
-      → useLiaVoiceStore.updateTtsConfig({ preferred, fallback })
-          → normalizeLiaVoiceTts  (descarta campos desconhecidos/credenciais)
-          → applyTtsState         (refs do store)
-          → persistTtsConfig      → IPC Set → lia-product.json
-      → useAiriCardStore.updateActiveCardSpeech({ provider, model, voice_id })
-      → useAiriCardStore.persistActiveCardModuleSelections()
-      → applyVoiceTarget(preferred)   (runtime fala já, sem precisar reiniciar)
+      1. useLiaVoiceStore.updateTtsConfig({ preferred, fallback })
+             → normalizeLiaVoiceTts   (descarta campos desconhecidos/credenciais)
+             → applyTtsState          (refs do store)
+             → persistTtsConfig       → IPC Set → lia-product.json   ← FONTE
+      2. useAiriCardStore.updateActiveCardSpeech({ provider, model, voice_id })
+         useAiriCardStore.persistActiveCardModuleSelections()         ← PROJEÇÃO
+      3. applyVoiceTarget(preferred)   (fala já, sem precisar reiniciar)
 ```
+
+Se o passo 2 falhar:
+
+- **`voice.tts` permanece gravado** — a fonte de verdade não é revertida;
+- a UI **mostra erro**;
+- **não existe estado "parcialmente salvo"** na interface: ou salvou, ou falhou;
+- na **próxima abertura da aba**, a projeção é **ressincronizada a partir de
+  `voice.tts`** quando houver divergência. Sem isso a falha ficaria silenciosa
+  até o próximo restart, e isso é requisito, não detalhe.
 
 Invariantes a manter:
 
-1. **Nenhum segredo em `lia-product.json`.** `normalizeTtsTarget` no main já
-   mantém só `providerId/modelId/voiceId` e descarta o resto — inclusive
-   `apiKey`/`baseUrl`. A UI não deve tentar contornar isso. Chaves continuam no
-   vault da 4C.
-2. **`fallback` sempre array.** O serviço main materializa `[]`; o store já
-   garante isso. Uma substituição não pode derrubar a lista por omissão.
+1. **Nenhum segredo em `lia-product.json`.** `normalizeTtsTarget` no main mantém
+   só `providerId/modelId/voiceId` e descarta o resto — inclusive
+   `apiKey`/`baseUrl`. A UI não contorna isso; chaves continuam no vault da 4C.
+2. **`fallback` sempre array.** O serviço main materializa `[]` e o store já
+   garante; uma substituição não pode derrubar a lista por omissão. `[Nenhuma]`
+   na UI é `fallback: []`, nunca ausência do campo.
 3. **`voice.stt` intocado.** A ponte só possui a fatia `tts`.
-4. **Se a escrita no card falhar, o estado não pode ficar meio aplicado.**
-   Decidir ordem e compensação — é a decisão 9.2.
+4. **Sem default de fábrica** (9.3): salvar sem escolher nada não é um caminho; o
+   estado "nenhuma voz" vem de não ter salvo, não de um default implícito.
 
 ---
 
@@ -216,41 +253,90 @@ para montagem real):
 7. Nenhuma credencial aparece no payload enviado (o teste do main já cobre o lado
    do serviço; aqui é o lado do renderer).
 8. Reiniciar mantém a voz: store novo + mesmo documento → mesmos valores.
-9. **Atualizar** `voice-hydration.test.ts`: a asserção "nenhum módulo em runtime
-   escreve `voice.tts`" deve passar a apontar para o novo escritor legítimo, em
-   vez de ser apagada.
+9. **Ordem (9.2):** `voice.tts` é gravado **antes** da projeção do card — o teste
+   deve afirmar a ordem, não apenas que os dois aconteceram.
+10. **Falha na projeção (9.2):** com o card falhando, `voice.tts` continua
+    gravado, a UI reporta erro, e a próxima abertura **ressincroniza** a projeção
+    a partir da fonte.
+11. **Modelo só quando necessário (seção 5):** com `supportsModelListing` falso, o
+    campo Modelo não é renderizado.
+12. **Ouvir exemplo não persiste (9.4):** tocar a amostra não invoca o IPC `Set`
+    nem `updateActiveCardSpeech`.
+13. **`[Nenhuma]` na voz de reserva** é gravado como `fallback: []`, nunca como
+    ausência do campo.
+14. **Atualizar** `voice-hydration.test.ts`: a asserção "nenhum módulo em runtime
+    escreve `voice.tts`" deve passar a apontar para o novo escritor legítimo, em
+    vez de ser apagada.
 
 Sem testes de screenshot.
 
 ---
 
-## 9. Decisões em aberto (precisam da sua resposta)
+## 9. Decisões fechadas
 
-**9.1 — Se o usuário mudar a voz pelo Settings do AIRI, o que acontece?**
-(a) a projeção diverge e a aba Voz passa a mostrar algo diferente do que está
-soando; (b) o Settings do AIRI deixa de expor voz; (c) a aba Voz passa a ler o
-speech store em vez de `voice.tts`. **Recomendo (b)**: uma superfície só. Mas é
-mudança no AIRI e precisa da sua decisão.
+As cinco decisões foram fechadas em 2026-09-12. O que segue é o combinado, não
+mais uma recomendação.
 
-**9.2 — Ordem e compensação se a escrita no card falhar depois de
-`voice.tts` já ter sido gravado.** (a) gravar o card primeiro; (b) gravar
-`voice.tts` primeiro e compensar; (c) aceitar divergência temporária e
-ressincronizar na próxima abertura. **Recomendo (a)** — o card é barato de
-escrever e é o que o runtime lê.
+### 9.1 — Uma única superfície de voz
 
-**9.3 — Voz default de fábrica.** O §8.3 do plano da Phase 4 sugere um TTS cloud
-configurável com `kokoro-local` como reserva, **condicionado a teste real em
-hardware**. A 4E-2 deve (a) não definir default nenhum, só permitir escolher; ou
-(b) já nascer com um default. **Recomendo (a)** nesta fase, e decidir o default
-depois do teste de hardware.
+A voz da Lia tem **uma** superfície: a tela **Configurar Lia**. O Settings do
+AIRI **não** deve oferecer configuração de voz concorrente na experiência da Lia.
 
-**9.4 — Amostra de voz.** Tocar uma amostra exige decidir o texto (fixo em pt-BR?
-o nome da Lia?) e garantir que não persiste nada. **Recomendo** texto fixo curto
-em pt-BR, sem persistência.
+**Isso é um cleanup próprio, feito quando a 4E-2 for implementada, em commit
+separado — não misturado com o escritor.** Duas razões: o escritor é o caminho
+crítico e não deve carregar mudança no AIRI; e o cleanup tem risco e revisão
+próprios.
 
-**9.5 — Escopo do `fallback` nesta fase.** Expor a escolha da voz reserva agora,
-ou só a voz principal e deixar o `fallback` para depois? O modelo de dados já
-suporta os dois; é só questão de superfície.
+Consequência a registrar: enquanto o cleanup não acontecer, existe uma rota
+paralela que pode divergir da fonte de verdade. Ela não deve ser tratada como
+suportada, e a divergência se resolve pela regra da seção 4 (a fonte de verdade
+vence) na próxima abertura da aba.
+
+### 9.2 — Ordem de escrita: a fonte de verdade vence
+
+**Gravar `voice.tts` primeiro; só depois atualizar a projeção do card.**
+
+Se a atualização do card falhar:
+
+- mostrar erro ao usuário;
+- **manter `voice.tts` persistido** — não reverter a fonte de verdade;
+- **não inventar um estado "parcialmente salvo"**: ou a UI diz que falhou, ou diz
+  que salvou.
+
+Isso inverte a recomendação anterior deste documento (que era gravar o card
+primeiro). A razão de produto prevalece: a fonte de verdade nunca pode ficar
+atrás da projeção.
+
+**Requisito de implementação que decorre disso:** como `voice.tts` pode ficar
+gravado enquanto o card não foi atualizado, a abertura da aba precisa
+**ressincronizar a projeção a partir da fonte de verdade** quando detectar
+divergência. Sem isso, a falha ficaria silenciosa até o próximo restart.
+
+### 9.3 — Sem default de fábrica nesta fase
+
+A 4E-2 **não define voz default**. O §8.3 do plano da Phase 4 condiciona essa
+escolha ao teste real do `kokoro-local` em hardware, e uma hipótese não vira
+default de produto antes desse teste.
+
+A aba continua podendo mostrar "Nenhuma voz configurada ainda." — e isso é um
+estado válido, não um erro.
+
+### 9.4 — Amostra de voz
+
+Texto **fixo, curto e em pt-BR**, **sem persistência**. Conteúdo **neutro**, que
+permita avaliar timbre e pronúncia — não uma fala da personalidade da Lia, para
+que a amostra não sugira conteúdo que a voz não vai reproduzir no uso real.
+
+Tocar a amostra usa o runtime e não grava nada em `lia-product.json` nem no card.
+
+### 9.5 — Voz de reserva exposta agora, de forma secundária
+
+O `fallback` **entra nesta fase**, mas como escolha **secundária**: a voz
+principal domina a tela; abaixo dela, "Voz de reserva" com `[Nenhuma]` como
+opção padrão, opcional.
+
+O objetivo é tornar a capacidade de fallback **transparente** sem transformar a
+tela em configuração técnica.
 
 ---
 
@@ -276,3 +362,13 @@ suporta os dois; é só questão de superfície.
 6. Todas as strings novas em pt-BR e en, sem divergência entre os locales.
 7. Validação real no Windows: abrir → Voz → escolher → ouvir → salvar → falar →
    reiniciar → confirmar.
+8. **Cleanup do Settings do AIRI entregue em commit separado** (decisão 9.1): a
+   superfície da Lia passa a ser a única que configura voz. Não misturar com o
+   escritor.
+
+Ordem de entrega sugerida, um commit por responsabilidade:
+
+1. escritor (`voice.tts` → projeção → runtime) + testes;
+2. UI da aba Voz (voz principal, ouvir exemplo, voz de reserva) + i18n pt-BR/en;
+3. ressincronização da projeção na abertura + teste de divergência;
+4. cleanup do Settings do AIRI.
