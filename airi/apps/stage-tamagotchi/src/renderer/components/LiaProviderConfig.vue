@@ -10,8 +10,14 @@ import { LIA_CHAT_PROVIDER_OPTIONS, curatedModelsFor, isModelInCatalog, recommen
 const props = withDefaults(defineProps<{
   /** 'onboarding' (first run: must test + conclude) or 'manage' (later edits). */
   mode?: 'onboarding' | 'manage'
+  /**
+   * Rendered inside the unified "Configurar Lia" panel, which owns navigation.
+   * Suppresses this component's own back button so there is a single way back.
+   */
+  embedded?: boolean
 }>(), {
   mode: 'onboarding',
+  embedded: false,
 })
 
 const emit = defineEmits<{
@@ -591,6 +597,7 @@ onMounted(() => {
           {{ tt('actions.remove') }}
         </button>
         <button
+          v-if="!props.embedded"
           type="button"
           class="ml-auto rounded-lg border border-neutral-300 px-3.5 py-2 text-sm font-medium text-neutral-700 transition hover:bg-neutral-100 disabled:opacity-50 dark:border-neutral-600 dark:text-neutral-200 dark:hover:bg-neutral-700"
           :disabled="busy"

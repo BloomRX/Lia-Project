@@ -17,6 +17,7 @@ import {
 } from '../../shared/eventa'
 
 import WindowTitleBar from '../components/Window/TitleBar.vue'
+import LiaConfigPanel from '../components/lia-config/LiaConfigPanel.vue'
 import LiaProviderConfig from '../components/LiaProviderConfig.vue'
 import liaFallbackAsset from '../assets/lia/lia-home.png'
 import { useLiaProviderStore } from '../stores/lia/provider'
@@ -294,7 +295,7 @@ onUnmounted(() => {
 
       <!-- Later configuration (same editor). -->
       <div v-else-if="view === 'settings'" class="flex min-h-full w-full items-center justify-center px-6 py-10">
-        <LiaProviderConfig mode="manage" @back="onSettingsBack" />
+        <LiaConfigPanel @back="onSettingsBack" />
       </div>
 
       <!-- Clean launcher / companion home -->

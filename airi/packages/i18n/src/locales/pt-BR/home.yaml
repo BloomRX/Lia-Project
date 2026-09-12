@@ -99,3 +99,46 @@ provider:
     fillFirst: "Selecione um provider e um modelo para testar a conexão."
     testFirst: "Teste a conexão antes de concluir."
     concludeFailed: "Não foi possível concluir a configuração. Tente novamente."
+config:
+  title: "Configurar sua Lia"
+  subtitle: "Como ela pensa, como ela fala e como ela parece."
+  actions:
+    back: "Voltar"
+  navigation:
+    label: "Seções da configuração da Lia"
+  sections:
+    ai:
+      title: "IA"
+      summary: "O cérebro da Lia: provider, modelo e reserva."
+    personality:
+      title: "Personalidade"
+      summary: "Quem a Lia é: nome, estilo, idioma e humor."
+      fields:
+        name: "Nome"
+        style: "Estilo"
+        language: "Idioma"
+        mood: "Modo de humor"
+        unset: "Não definido"
+      missing: "Nenhuma personalidade carregada neste cartão."
+      readOnlyNote: "Estes valores vêm da personalidade da Lia. A edição completa chega em uma próxima etapa."
+    voice:
+      title: "Voz"
+      summary: "Como a Lia fala: provider de voz, modelo e timbre."
+      fields:
+        provider: "Provider de voz"
+        model: "Modelo"
+        voice: "Voz"
+        fallback: "Reservas"
+        unset: "Não definido"
+      configured: "Voz configurada."
+      notConfigured: "Nenhuma voz configurada ainda."
+    appearance:
+      title: "Aparência"
+      summary: "Como a Lia parece: avatar, roupa, acessórios e estado."
+      slots:
+        avatar: "Avatar"
+        outfit: "Roupa"
+        accessory: "Acessórios"
+        state: "Estado"
+        pending: "Em breve"
+      comingSoon: "Roupas, acessórios e estados chegam na etapa de Avatar."

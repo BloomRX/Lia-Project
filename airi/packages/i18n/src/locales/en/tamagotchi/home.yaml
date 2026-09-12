@@ -99,3 +99,46 @@ provider:
     fillFirst: "Select a provider and a model to test the connection."
     testFirst: "Test the connection before finishing."
     concludeFailed: "Could not finish the setup. Please try again."
+config:
+  title: "Configure your Lia"
+  subtitle: "How she thinks, how she speaks and how she looks."
+  actions:
+    back: "Back"
+  navigation:
+    label: "Lia configuration sections"
+  sections:
+    ai:
+      title: "AI"
+      summary: "Lia's brain: provider, model and fallback."
+    personality:
+      title: "Personality"
+      summary: "Who Lia is: name, style, language and mood."
+      fields:
+        name: "Name"
+        style: "Style"
+        language: "Language"
+        mood: "Mood mode"
+        unset: "Not set"
+      missing: "No personality loaded on this card."
+      readOnlyNote: "These values come from Lia's personality. Full editing arrives in a later step."
+    voice:
+      title: "Voice"
+      summary: "How Lia speaks: voice provider, model and timbre."
+      fields:
+        provider: "Voice provider"
+        model: "Model"
+        voice: "Voice"
+        fallback: "Fallbacks"
+        unset: "Not set"
+      configured: "Voice configured."
+      notConfigured: "No voice configured yet."
+    appearance:
+      title: "Appearance"
+      summary: "How Lia looks: avatar, outfit, accessories and state."
+      slots:
+        avatar: "Avatar"
+        outfit: "Outfit"
+        accessory: "Accessories"
+        state: "State"
+        pending: "Coming soon"
+      comingSoon: "Outfits, accessories and states arrive in the Avatar step."
