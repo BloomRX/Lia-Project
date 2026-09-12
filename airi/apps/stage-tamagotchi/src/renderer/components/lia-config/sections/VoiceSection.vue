@@ -12,7 +12,6 @@
 import { computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-import { logVoiceConfigDiag } from '../../../diagnostics/voice-config'
 import { useLiaVoiceStore } from '../../../stores/lia/voice'
 
 const { t } = useI18n()
@@ -34,26 +33,6 @@ const voiceStore = useLiaVoiceStore()
 async function loadPersistedVoiceConfig(): Promise<void> {
   try {
     await voiceStore.refreshConfig()
-
-    // TEMPORARY 4E-1 investigation: what this component actually sees once the
-    // load settles. `storePreferredExists` matching the store's own line is what
-    // proves the section reads the same store instance as the rest of the app.
-    // DEV-only, references only, no secrets.
-    const config = voiceStore.loadedConfig
-    logVoiceConfigDiag(import.meta.env.DEV, {
-      stage: 'component',
-      ipcGetReturned: true,
-      ipcTtsExists: !!config && typeof config === 'object' && 'tts' in config,
-      persistedVoiceTts: !!config?.tts && typeof config.tts === 'object' && Object.keys(config.tts).length > 0,
-      preferredExists: !!voiceStore.preferred,
-      fallbackCount: voiceStore.fallback.length,
-      storePreferredExists: !!voiceStore.preferred,
-      storeFallbackCount: voiceStore.fallback.length,
-      hasConfiguration: voiceStore.hasConfiguration,
-      providerId: voiceStore.preferred?.providerId ?? null,
-      modelId: voiceStore.preferred?.modelId ?? null,
-      voiceId: voiceStore.preferred?.voiceId ?? null,
-    })
   }
   catch (error) {
     // refreshConfig rethrows after recording loadError, which the template
