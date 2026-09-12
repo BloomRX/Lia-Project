@@ -132,6 +132,8 @@ config:
         unset: "Não definido"
       configured: "Voz configurada."
       notConfigured: "Nenhuma voz configurada ainda."
+      loading: "Carregando configuração de voz…"
+      loadError: "Não foi possível carregar a configuração de voz."
     appearance:
       title: "Aparência"
       summary: "Como a Lia parece: avatar, roupa, acessórios e estado."

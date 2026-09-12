@@ -132,6 +132,8 @@ config:
         unset: "Not set"
       configured: "Voice configured."
       notConfigured: "No voice configured yet."
+      loading: "Loading voice configuration…"
+      loadError: "Could not load the voice configuration."
     appearance:
       title: "Appearance"
       summary: "How Lia looks: avatar, outfit, accessories and state."

@@ -9,7 +9,7 @@
  *
  * Phase 4E-1 shows current values; editing lands in a later phase.
  */
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { useLiaVoiceStore } from '../../../stores/lia/voice'
@@ -18,6 +18,33 @@ const { t } = useI18n()
 const tt = (key: string) => t(`tamagotchi.home.config.sections.voice.${key}`)
 
 const voiceStore = useLiaVoiceStore()
+
+/**
+ * Loads the persisted `voice.tts` through the store's single existing IPC read.
+ *
+ * The store's refs start empty and only `refreshConfig()` fills them, so without
+ * this the section would report "not configured" for a Lia that is configured.
+ * `home.vue` installs the voice runtime extensions on mount but never loaded the
+ * config, because before this panel nothing displayed it.
+ *
+ * Read-only by construction: `refreshConfig()` only invokes the *get* channel,
+ * so opening the section cannot change what is persisted.
+ */
+async function loadPersistedVoiceConfig(): Promise<void> {
+  try {
+    await voiceStore.refreshConfig()
+  }
+  catch (error) {
+    // refreshConfig rethrows after recording loadError, which the template
+    // renders below. The failure is surfaced, never swallowed, and the rest of
+    // the panel keeps working.
+    console.warn('[Lia Config] could not load the persisted voice configuration', error)
+  }
+}
+
+onMounted(() => {
+  void loadPersistedVoiceConfig()
+})
 
 const rows = computed(() => [
   { key: 'provider', value: voiceStore.preferred?.providerId ?? null },
@@ -45,8 +72,20 @@ const rows = computed(() => [
       </div>
     </dl>
 
-    <p class="text-xs text-neutral-400 dark:text-neutral-500" data-testid="lia-config-voice-note">
-      {{ voiceStore.hasConfiguration ? tt('configured') : tt('notConfigured') }}
+    <p
+      class="text-xs"
+      :class="voiceStore.loadError
+        ? 'text-red-500 dark:text-red-400'
+        : 'text-neutral-400 dark:text-neutral-500'"
+      data-testid="lia-config-voice-note"
+    >
+      {{
+        voiceStore.loadError
+          ? tt('loadError')
+          : voiceStore.isLoading
+            ? tt('loading')
+            : voiceStore.hasConfiguration ? tt('configured') : tt('notConfigured')
+      }}
     </p>
   </div>
 </template>
