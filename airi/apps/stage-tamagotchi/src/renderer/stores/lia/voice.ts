@@ -11,6 +11,7 @@ import {
   electronLiaVoiceConfigGet,
   electronLiaVoiceConfigSet,
 } from '../../../shared/eventa'
+import { logVoiceConfigDiag } from '../../diagnostics/voice-config'
 
 /**
  * Lia voice (TTS) configuration on the renderer side (M1 Phase 4D-2).
@@ -183,6 +184,25 @@ export const useLiaVoiceStore = defineStore('lia-voice', () => {
       loadedConfig.value = config ?? {}
       const state = normalizeLiaVoiceTts(config?.tts)
       applyTtsState(state)
+
+      // TEMPORARY 4E-1 investigation: measures each stage of the hydration chain
+      // on a real machine. DEV-only, references only, no secrets. Remove with the
+      // investigation.
+      logVoiceConfigDiag(import.meta.env.DEV, {
+        stage: 'store',
+        ipcGetReturned: config !== undefined && config !== null,
+        ipcTtsExists: !!config && typeof config === 'object' && 'tts' in config,
+        persistedVoiceTts: !!config?.tts && typeof config.tts === 'object' && Object.keys(config.tts).length > 0,
+        preferredExists: !!state.preferred,
+        fallbackCount: state.fallback.length,
+        storePreferredExists: !!preferred.value,
+        storeFallbackCount: fallback.value.length,
+        hasConfiguration: hasConfiguration.value,
+        providerId: state.preferred?.providerId ?? null,
+        modelId: state.preferred?.modelId ?? null,
+        voiceId: state.preferred?.voiceId ?? null,
+      })
+
       isLoaded.value = true
       return state
     }
