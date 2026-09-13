@@ -162,7 +162,7 @@ sources, so the doc says not to rely on it. The Lia's own licence is unchanged.
 
 ## 12. Tests
 
-**78 new this round; 92 covering the feature in total.**
+**90 new this round; 104 covering the feature in total.**
 
 | File | Tests |
 |---|---|
@@ -173,6 +173,7 @@ sources, so the doc says not to rely on it. The Lia's own licence is unchanged.
 | `custom-voice-restart.test.ts` | 3 |
 | `custom-voice-convergence.test.ts` | 8 |
 | `custom-voice-fallback.test.ts` | 5 |
+| `CustomVoicePanel.test.ts` | 12 |
 | `custom-local-voice/index.test.ts` (stage-ui) | 11 |
 
 All 24 required cases are covered. HTTP-dependent tests run against a real local
@@ -191,7 +192,9 @@ server; nothing needs a real AllTalk.
 | MQ7 | Offline becomes a non-recoverable error | 2 failed |
 | MQ8 | Selection bypasses `saveTtsConfiguration` | 2 failed |
 
-**Two of these needed the test fixed first, and both were my fault:**
+**Two of these needed the test fixed first, and both were my fault** (a third
+class of mistake, type errors I had already committed, is recorded under
+*Validation* below):
 
 - **MQ6 originally passed.** Removing the `isInside` check before a copy changed
   nothing, because `managedVoiceFilename` already guarantees a bare name — the
@@ -202,21 +205,42 @@ server; nothing needs a real AllTalk.
   the plausible hardcode, so pinning the id was invisible. Now uses an id no
   guess would produce.
 
+### Mistakes worth recording
+
+Three separate times this round, a check I had skipped found something a check I
+had run did not:
+
+1. **Mutations MQ3 and MQ6 passed on the first try** because the tests were
+   wrong, not the code (above).
+2. **`stage-ui` `vue-tsc` found two errors I had already committed.** The
+   provider test read `.speech` off a `ProviderInstance`, which is a union of
+   chat/embed/speech/transcription/model providers and has no such property. The
+   tamagotchi typecheck does not reach that file, so skipping the stage-ui run
+   hid it.
+3. **A type error in the restart test** only appeared on a later tamagotchi run:
+   `LiaProductConfig` is the schema's *output* type, where `persona`, `provider`
+   and `preferences` are required because the schema gives them defaults.
+
+All three are fixed; both packages now typecheck independently and the suites are
+green.
+
 ## 14. Validation
 
 | Check | Result |
 |---|---|
-| tamagotchi node suite | **93 files / 744 passed / 1 skipped** |
+| tamagotchi node suite | **94 files / 756 passed / 1 skipped** |
 | stage-ui node suite | **135 files / 875 passed** |
 | `vue-tsc --noEmit` (tamagotchi) | **3 errors = baseline exact** |
+| `vue-tsc --noEmit` (stage-ui) | **0 errors** |
 | ESLint (files touched) | **0** |
 
 The 3 baseline errors are pre-existing and untouched:
 `provider-config-service.ts(41,32) TS2322`, `home.vue(85,9) TS6133`,
 `lia-persona.ts(383,42) TS6133`.
 
-`stage-ui` `vue-tsc` was **not run separately** this round; the shared package
-was typechecked through the tamagotchi run, which reaches the new provider.
+`stage-ui` `vue-tsc` was skipped in the first pass and run afterwards, which is
+what caught the two `ProviderInstance` errors described below. Both packages are
+now typechecked independently.
 
 ## 15. What still requires QA on Windows
 
@@ -237,7 +261,9 @@ without one. Specifically unverified:
 5. **Latency** for a full round trip on the target hardware.
 6. **XTTS-v2 quality and language behaviour** for `pt` with a Brazilian
    reference recording.
-7. **The panel's real rendering** — no Electron or display exists in this
-   environment, so the UI was never shown.
+7. **The panel's real rendering in a browser.** `CustomVoicePanel.test.ts`
+   renders it through `renderToString` and pins the words and controls for each
+   state, but no Electron or display exists here, so it was never actually shown
+   on screen — layout, focus order and click behaviour are unverified.
 
 **Custom voice is NOT PASS until this is done.**
