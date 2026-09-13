@@ -35,6 +35,11 @@ export interface AllTalkRuntimeConfig {
    * `character_voice_gen` to resolve; see the note above.
    */
   voicesDir?: string
+  /**
+   * Where AllTalk is installed, so the Lia can start and stop it. Only ever
+   * written by the main process's own directory picker.
+   */
+  installDir?: string
 }
 
 export const DEFAULT_ALLTALK_BASE_URL = 'http://127.0.0.1:7851'

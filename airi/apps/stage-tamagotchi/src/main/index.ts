@@ -42,6 +42,7 @@ import { setupArtistryBridge } from './services/airi/widgets/artistry-bridge'
 import { setupAutoUpdater } from './services/electron/auto-updater'
 import { setupGlobalShortcutService } from './services/electron/global-shortcut'
 import { setupPermissionHandlers } from './services/electron/media-permissions'
+import { registerLiaRuntimeBridge } from './services/lia/alltalk-runtime-service'
 import { registerLiaAllTalkBridge } from './services/lia/alltalk-service'
 import { createAllTalkSyncService } from './services/lia/alltalk-voices-sync'
 import { registerLiaProviderConfigBridge } from './services/lia/provider-config-service'
@@ -400,6 +401,26 @@ app.whenReady().then(async () => {
         context,
         liaProductConfig: deps.liaProductConfig,
         store: deps.liaVoiceProfiles,
+      })
+    },
+  })
+
+  // Managed speech runtime: detect, start, health-check and stop the local voice
+  // server, so a custom voice works without the user opening a terminal.
+  injeca.invoke({
+    dependsOn: { liaProductConfig },
+    callback: async (deps) => {
+      const { context } = createContext(ipcMain)
+      const runtime = registerLiaRuntimeBridge({
+        context,
+        liaProductConfig: deps.liaProductConfig,
+      })
+
+      // Autostart. Only when the persisted voice selection actually needs the
+      // local runtime, and never fatal: if the server cannot come up the chat
+      // keeps working as text and the UI offers "Try again".
+      void runtime.autostartIfNeeded().catch((error) => {
+        console.warn('[lia-runtime] autostart failed, continuing without custom voice:', error)
       })
     },
   })

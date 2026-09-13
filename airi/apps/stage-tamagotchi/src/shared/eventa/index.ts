@@ -781,6 +781,33 @@ export const electronLiaAllTalkSync = defineInvokeEventa<LiaAllTalkSyncResult, {
 /** Resolves the profile, publishes it if needed, and returns the generated WAV. */
 export const electronLiaAllTalkSynthesize = defineInvokeEventa<ArrayBuffer, LiaAllTalkSynthesisRequest>('eventa:invoke:lia:alltalk:synthesize')
 
+/* --------------------------------------------------------------------------
+ * Managed speech runtime
+ *
+ * The Lia starts and stops the local voice server itself. The renderer only
+ * ever asks about state or requests a transition; it never runs a process.
+ * -------------------------------------------------------------------------- */
+
+/** Current lifecycle state of the managed voice runtime. */
+export const electronLiaRuntimeState = defineInvokeEventa<LiaRuntimeState>('eventa:invoke:lia:runtime:state')
+
+/** Detects the install and, when present, starts it and waits for health. */
+export const electronLiaRuntimeStart = defineInvokeEventa<LiaRuntimeState>('eventa:invoke:lia:runtime:start')
+
+/** Stops the managed process. Used by advanced settings and app shutdown. */
+export const electronLiaRuntimeStop = defineInvokeEventa<LiaRuntimeState>('eventa:invoke:lia:runtime:stop')
+
+/**
+ * OS directory picker for the install location.
+ *
+ * Like `voicesDir`, the path can only enter the config from here - there is no
+ * channel that accepts an install directory from the renderer.
+ */
+export const electronLiaRuntimeInstallDirPick = defineInvokeEventa<string | null, { clear?: boolean }>('eventa:invoke:lia:runtime:install-dir:pick')
+
+/** The guided install wizard's steps, with completion flags. */
+export const electronLiaRuntimeInstallSteps = defineInvokeEventa<LiaRuntimeInstallStep[]>('eventa:invoke:lia:runtime:install-steps')
+
 /** Engines the current build knows how to drive, with what each expects. */
 export const electronLiaVoiceEnginesList = defineInvokeEventa<Array<{ extensions: string[], id: string, label: string, roles: string[] }>>('eventa:invoke:lia:voice:engines:list')
 

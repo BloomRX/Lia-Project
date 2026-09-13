@@ -33,6 +33,7 @@ export function resolveAllTalkRuntime(config: LiaProductConfig | undefined): All
     baseUrl: stored?.baseUrl?.trim() || DEFAULT_ALLTALK_BASE_URL,
     timeoutMs: stored?.timeoutMs && stored.timeoutMs > 0 ? stored.timeoutMs : DEFAULT_ALLTALK_TIMEOUT_MS,
     ...(stored?.voicesDir?.trim() ? { voicesDir: stored.voicesDir.trim() } : {}),
+    ...(stored?.installDir?.trim() ? { installDir: stored.installDir.trim() } : {}),
   }
 }
 
@@ -82,7 +83,9 @@ export function normalizeAllTalkRuntimePayload(
   if (Number.isFinite(timeoutMs) && timeoutMs >= 1000 && timeoutMs <= 600_000)
     next.timeoutMs = Math.round(timeoutMs)
 
-  // `payload.voicesDir` is intentionally never read.
+  // `payload.voicesDir` and `payload.installDir` are intentionally never read.
+  // Both are filesystem paths, and both can only enter the config through the
+  // main process's own `showOpenDialog` handler.
 
   return next
 }

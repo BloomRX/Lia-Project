@@ -17,9 +17,13 @@ import {
   electronLiaVoiceProfilesPick,
   electronLiaVoiceProfilesRemove,
 } from '../../../shared/eventa'
+/**
+ * Re-exported from `shared/lia-voice` so the main process can read the same id
+ * without importing renderer code. Kept here because the whole renderer already
+ * imports it from this module, and there must still be exactly one definition.
+ */
+import { CUSTOM_VOICE_PROVIDER_ID } from '../../../shared/lia-voice'
 import { useLiaVoiceStore } from './voice'
-import { createVoicePreviewDriver } from './voice-preview'
-
 /**
  * The renderer side of the private voice library.
  *
@@ -32,17 +36,9 @@ import { createVoicePreviewDriver } from './voice-preview'
  *   profile goes through the voice store's `saveTtsConfiguration()`, the same
  *   single route the Voz tab already uses.
  */
+import { createVoicePreviewDriver } from './voice-preview'
 
-/**
- * The provider id a custom voice is selected under.
- *
- * A custom voice fits the existing target schema exactly - `providerId` plus a
- * `voiceId` that is the profile id - so no new configuration shape and no second
- * source of truth is needed. Synthesis itself is delegated to an engine adapter
- * for `profile.engine`; until an adapter ships, selecting one is honest about it
- * rather than failing quietly.
- */
-export const CUSTOM_VOICE_PROVIDER_ID = 'custom-local-voice'
+export { CUSTOM_VOICE_PROVIDER_ID }
 
 /** How `voice.tts` points at a profile: by id, never by path or by content. */
 export function targetForProfile(profile: Pick<LiaCustomVoiceProfile, 'id'>): LiaVoiceTtsTarget {
