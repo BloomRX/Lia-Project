@@ -74,6 +74,24 @@ describe('a custom voice target is an ordinary target', () => {
   })
 })
 
+describe('the provider is reachable from the ordinary catalogue', () => {
+  it('appears among the speech providers the UI offers', async () => {
+    // The panel has its own "use this voice" button, but the main voice editor
+    // only offers what this list contains. If registration or the category
+    // derivation were wrong, a custom voice could be spoken yet never pickable
+    // outside the panel.
+    const speech = useSpeechStore()
+    for (let attempt = 0; attempt < 200 && speech.availableSpeechProvidersMetadata.length === 0; attempt++)
+      await new Promise(resolve => setTimeout(resolve, 10))
+
+    const ids = speech.availableSpeechProvidersMetadata.map(metadata => metadata.id)
+    expect(ids).toContain(CUSTOM_VOICE_PROVIDER_ID)
+    // Sanity: the filter is really the speech one, not an empty list that
+    // happens to pass.
+    expect(ids).toContain('kokoro-local')
+  })
+})
+
 describe('the preview goes through the common path', () => {
   it('resolves the provider by id and calls speechStore.speech with the profile id', async () => {
     // Typed parameters: without them `mock.calls[0]` is an empty tuple and the
