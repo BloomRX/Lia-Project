@@ -1,6 +1,7 @@
 import type { BrowserWindow } from 'electron'
 
 import type { FileLoggerHandle } from './app/file-logger'
+import type { MainWindowSizeSettingsController } from './windows/main/window-size-settings'
 
 import process, { env, platform } from 'node:process'
 
@@ -21,8 +22,8 @@ import { isLinux } from 'std-env'
 import icon from '../../resources/icon.png?asset'
 
 import { openDebugger, setupDebugger } from './app/debugger'
-import { ingestMainProcessLog } from './app/main-process-log-bus'
 import { nullFileLoggerHandle, setupFileLogger } from './app/file-logger'
+import { ingestMainProcessLog } from './app/main-process-log-bus'
 import { resolveIsWayland } from './app/ozone'
 import { installSingleInstanceGuard } from './app/single-instance'
 import { createArtistryConfig } from './configs/artistry'
@@ -32,9 +33,6 @@ import { emitAppBeforeQuit, emitAppReady, emitAppWindowAllClosed } from './libs/
 import { setElectronMainDirname } from './libs/electron/location'
 import { createI18n } from './libs/i18n'
 import { setupAppleSpeechTranscriptionService } from './services/airi/apple-speech-transcription'
-import { createLiaSecretVault, registerLiaSecretsBridge } from './services/lia/secrets-service'
-import { registerLiaProviderConfigBridge } from './services/lia/provider-config-service'
-import { registerLiaVoiceConfigBridge } from './services/lia/voice-config-service'
 import { setupServerChannel } from './services/airi/channel-server'
 import { setupGodotStageManager } from './services/airi/godot-stage'
 import { setupBuiltInServer } from './services/airi/http-server'
@@ -44,6 +42,10 @@ import { setupArtistryBridge } from './services/airi/widgets/artistry-bridge'
 import { setupAutoUpdater } from './services/electron/auto-updater'
 import { setupGlobalShortcutService } from './services/electron/global-shortcut'
 import { setupPermissionHandlers } from './services/electron/media-permissions'
+import { registerLiaProviderConfigBridge } from './services/lia/provider-config-service'
+import { createLiaSecretVault, registerLiaSecretsBridge } from './services/lia/secrets-service'
+import { registerLiaVoiceConfigBridge } from './services/lia/voice-config-service'
+import { registerLiaVoiceProfilesBridge } from './services/lia/voice-profiles-service'
 import { setupTray } from './tray'
 import { setupAboutWindowReusable } from './windows/about'
 import { setupBeatSync } from './windows/beat-sync'
@@ -56,7 +58,6 @@ import { setupMainWindow } from './windows/main'
 import { setupNoticeWindowManager } from './windows/notice'
 import { setupOnboardingWindowManager } from './windows/onboarding'
 import { setupSettingsWindowReusableFunc } from './windows/settings'
-import type { MainWindowSizeSettingsController } from './windows/main/window-size-settings'
 import { setupSpotlightWindowManager } from './windows/spotlight'
 import { setupWidgetsWindowManager } from './windows/widgets'
 
@@ -357,6 +358,16 @@ app.whenReady().then(async () => {
     callback: async (deps) => {
       const { context } = createContext(ipcMain)
       registerLiaVoiceConfigBridge({ context, liaProductConfig: deps.liaProductConfig })
+    },
+  })
+
+  // Private voice library: import/remove imported voices. Kept separate from the
+  // bridge above on purpose - selecting a voice still goes through
+  // `electronLiaVoiceConfigSet`, so `voice.tts` keeps exactly one writer.
+  injeca.invoke({
+    callback: async () => {
+      const { context } = createContext(ipcMain)
+      registerLiaVoiceProfilesBridge({ context })
     },
   })
 
