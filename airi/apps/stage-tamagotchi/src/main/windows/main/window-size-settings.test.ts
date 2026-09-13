@@ -1,5 +1,5 @@
+import type { LiaWindowSizeRecord, MainWindowContext, MainWindowContextSizing, liaMainWindowStateSchema } from './window-sizing'
 import type { Config } from '../../libs/electron/persistence'
-import type { liaMainWindowStateSchema, LiaWindowSizeRecord, MainWindowContext, MainWindowContextSizing } from './window-sizing'
 
 import { describe, expect, it, vi } from 'vitest'
 

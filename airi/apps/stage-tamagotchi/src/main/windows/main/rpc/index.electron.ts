@@ -59,7 +59,7 @@ export async function setupMainWindowElectronInvokes(params: {
 
   defineInvokeHandler(context, electronCenterMainWindow, () => centerWindowOnDisplay(params.window))
   defineInvokeHandler(context, electronGetMainWindowLogs, () => getMainProcessLogSnapshot())
-  defineInvokeHandler(context, electronSetMainWindowContext, (payload) => {
+  defineInvokeHandler(context, electronSetMainWindowContext, payload => {
     if (payload?.mode)
       params.setMainWindowContext(payload.mode)
   })
@@ -67,7 +67,7 @@ export async function setupMainWindowElectronInvokes(params: {
   // Stream sanitized main-process logs to this (main) window's renderer so the
   // Lia Home viewer can show live log entries. The bus buffers everything from
   // boot; only the main window asks for it, so the emitter targets it.
-  setMainProcessLogEmitter((line) => {
+  setMainProcessLogEmitter(line => {
     if (!params.window.isDestroyed()) {
       context.emit(electronMainWindowLogEntry, line)
     }

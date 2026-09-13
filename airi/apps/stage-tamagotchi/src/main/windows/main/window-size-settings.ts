@@ -1,9 +1,10 @@
 import type { Config } from '../../libs/electron/persistence'
+
 import type {
-  liaMainWindowStateSchema,
   LiaWindowSizeRecord,
   MainWindowContext,
   MainWindowContextSizing,
+  liaMainWindowStateSchema,
 } from './window-sizing'
 
 /**
@@ -25,13 +26,13 @@ export interface MainWindowSizeSettingsSnapshot {
 
 export interface MainWindowSizeSettingsController {
   /** Current per-mode overrides + the active main-window mode. */
-  getSnapshot: () => MainWindowSizeSettingsSnapshot
+  getSnapshot(): MainWindowSizeSettingsSnapshot
   /**
    * Writes a mode's initial-size override (or clears it when `size` is null →
    * falls back to the built-in preset). If that mode is the one currently shown,
    * re-applies the new bounds live so the change is immediately visible.
    */
-  setInitialSize: (mode: MainWindowContext, size: { width: number, height: number } | null) => void
+  setInitialSize(mode: MainWindowContext, size: { width: number, height: number } | null): void
 }
 
 export function createMainWindowSizeSettingsController(params: {

@@ -1,11 +1,11 @@
 import type { LiaProviderChatConfig, LiaProviderChatTarget } from '../../../shared/eventa'
 
-import { errorMessageFrom } from '@moeru/std'
 import { useElectronEventaInvoke } from '@proj-airi/electron-vueuse'
 import { registerChatFallbackResolver, registerProviderCredentialResolver } from '@proj-airi/stage-ui/stores/chat/chat-provider-runtime'
 import { useConsciousnessStore } from '@proj-airi/stage-ui/stores/modules/consciousness'
 import { useProviderConfigStore } from '@proj-airi/stage-ui/stores/providers/config'
 import { useProviderStore } from '@proj-airi/stage-ui/stores/providers/provider'
+import { errorMessageFrom } from '@moeru/std'
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
@@ -91,7 +91,7 @@ export interface LiaModelOption {
  * and never by asking the user to type an id.
  */
 export const LIA_MODEL_CATALOG: Record<string, LiaModelOption[]> = {
-  'openai': [
+  openai: [
     { id: 'gpt-5.4', label: 'GPT-5.4', recommended: true },
     { id: 'gpt-5.4-mini', label: 'GPT-5.4 mini' },
     { id: 'gpt-5', label: 'GPT-5' },
@@ -99,7 +99,7 @@ export const LIA_MODEL_CATALOG: Record<string, LiaModelOption[]> = {
     { id: 'o4-mini', label: 'OpenAI o4-mini' },
     { id: 'gpt-oss-120b', label: 'GPT-OSS 120B' },
   ],
-  'groq': [
+  groq: [
     { id: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B', recommended: true },
     { id: 'meta-llama/llama-4-maverick-17b-128e-instruct', label: 'Llama 4 Maverick 17B' },
     { id: 'openai/gpt-oss-120b', label: 'GPT-OSS 120B' },
@@ -114,12 +114,12 @@ export const LIA_MODEL_CATALOG: Record<string, LiaModelOption[]> = {
     { id: 'gpt-oss-120b', label: 'GPT-OSS 120B' },
     { id: 'llama3.1-8b', label: 'Llama 3.1 8B' },
   ],
-  'anthropic': [
+  anthropic: [
     { id: 'claude-sonnet-4-5-20250929', label: 'Claude Sonnet 4.5', recommended: true },
     { id: 'claude-opus-4-1-20250805', label: 'Claude Opus 4.1' },
     { id: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5' },
   ],
-  'xai': [
+  xai: [
     { id: 'grok-4.5', label: 'Grok 4.5', recommended: true },
     { id: 'grok-4', label: 'Grok 4' },
     { id: 'grok-3-mini', label: 'Grok 3 mini' },
@@ -135,7 +135,7 @@ export const LIA_MODEL_CATALOG: Record<string, LiaModelOption[]> = {
     { id: 'openai/gpt-4o-mini', label: 'OpenAI GPT-4o mini' },
     { id: 'anthropic/claude-3.5-sonnet', label: 'Claude 3.5 Sonnet' },
   ],
-  'ollama': [
+  ollama: [
     { id: 'llama3.1', label: 'Llama 3.1', recommended: true },
     { id: 'llama3.3', label: 'Llama 3.3' },
     { id: 'qwen2.5', label: 'Qwen 2.5' },
@@ -216,26 +216,10 @@ function toSerializableChatConfig(config: LiaProviderChatConfig): LiaProviderCha
 function isRecoverableChatError(error: unknown): boolean {
   const text = errorMessageFrom(error) ?? ''
   const permanentMarkers = [
-    '401',
-    '403',
-    'invalid api key',
-    'api key',
-    'authentication',
-    'unauthorized',
-    'not found',
-    'model_not_found',
-    '404',
-    '400',
-    'unsupported',
-    'invalid config',
-    'configuration',
-    'no active chat provider',
-    'not configured',
-    'no credentials',
-    'credentials',
-    'cors',
-    'certificate',
-    'blocked',
+    '401', '403', 'invalid api key', 'api key', 'authentication', 'unauthorized',
+    'not found', 'model_not_found', '404', '400', 'unsupported', 'invalid config',
+    'configuration', 'no active chat provider', 'not configured', 'no credentials',
+    'credentials', 'cors', 'certificate', 'blocked',
   ]
   return !permanentMarkers.some(marker => text.toLowerCase().includes(marker.toLowerCase()))
 }

@@ -103,13 +103,13 @@ export function resolveContextBounds(params: {
 
 export interface MainWindowContextSizing {
   /** Applies the requested mode's bounds to the live window (recenters on demand). */
-  setContext: (context: MainWindowContext, options?: { recenter?: boolean }) => void
+  setContext(context: MainWindowContext, options?: { recenter?: boolean }): void
   /** Records the current window size against the active mode (user resize). */
-  captureUserBounds: () => void
+  captureUserBounds(): void
   /** Enables persistence of user resizes (called once the window is shown/settled). */
-  armUserResizeCapture: () => void
+  armUserResizeCapture(): void
   /** Read-only: the mode the main window is currently sized for. */
-  getContext: () => MainWindowContext
+  getContext(): MainWindowContext
 }
 
 /**

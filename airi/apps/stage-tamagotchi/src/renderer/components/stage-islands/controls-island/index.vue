@@ -218,6 +218,7 @@ async function goHome() {
   }
   await router.push('/home')
 }
+
 </script>
 
 <template>

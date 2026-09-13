@@ -69,7 +69,7 @@ async function loadVault(fs: { disk: string }, { encryptionAvailable = true }: {
   return { vault, safeStorage, readDisk: () => fs.disk, decodedDisk }
 }
 
-describe('lia secret vault', () => {
+describe('Lia secret vault', () => {
   beforeEach(() => {
     vi.resetModules()
     vi.clearAllMocks()

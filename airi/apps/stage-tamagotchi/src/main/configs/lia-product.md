@@ -59,10 +59,10 @@ additively without bumping the version.
 ```json
 {
   "schemaVersion": 1,
-  "persona": {},
-  "provider": {},
-  "voice": {},
-  "preferences": {}
+  "persona":       {},
+  "provider":      {},
+  "voice":         {},
+  "preferences":   {}
 }
 ```
 
