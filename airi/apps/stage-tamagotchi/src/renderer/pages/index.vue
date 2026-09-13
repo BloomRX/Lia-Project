@@ -42,6 +42,7 @@ import ResourceStatusIsland from '../components/stage-islands/resource-status-is
 import { electronOpenOnboarding } from '../../shared/eventa'
 import { modelSettingsRuntimeSnapshotChannelName } from '../../shared/model-settings-runtime'
 import { useControlsIslandStore } from '../stores/controls-island'
+import { shouldAutoOpenAiriWelcome } from '../stores/lia/airi-onboarding-policy'
 import { useStageWindowLifecycleStore } from '../stores/stage-window-lifecycle'
 import { resolveFadeOnHoverInteraction } from '../utils/fade-on-hover'
 import { shouldSampleStageTransparency } from '../utils/stage-three-transparency'
@@ -743,7 +744,11 @@ watch(nowSpeaking, async (speaking) => {
 })
 
 onMounted(() => {
-  if (onboardingStore.needsOnboarding) {
+  // Lia never requires an AIRI account, so mounting the Stage must not raise the
+  // upstream account prompt. The window and the `electronOpenOnboarding` invoke
+  // stay intact - only the automatic open is gated. See the policy for what does
+  // and does not depend on an AIRI session.
+  if (shouldAutoOpenAiriWelcome(onboardingStore.needsOnboarding)) {
     openOnboarding()
   }
 })
