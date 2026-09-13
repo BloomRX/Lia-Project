@@ -215,6 +215,28 @@ describe('ensureProfileAvailableToAllTalk', () => {
     expect(result).toMatchObject({ ok: false, error: 'fileMissing' })
   })
 
+  it('keeps the imported voice in the library even though publishing is refused', async () => {
+    // Item J: AllTalk being absent must not cost the user their imported voice.
+    // The import itself never touches the voices folder, so the profile exists
+    // and stays usable; only publishing fails, and it fails with a message that
+    // says what to do next.
+    const profile = await importProfile()
+
+    const publish = await service(null).ensureProfileAvailableToAllTalk(profile.id)
+    expect(publish).toMatchObject({ ok: false, error: 'notConfigured' })
+
+    const stillThere = await store().get(profile.id)
+    expect(stillThere?.id).toBe(profile.id)
+    expect(stillThere?.name).toBe('Lia pessoal')
+    // And the canonical file is untouched.
+    expect((await stat(join(profilesDir, profile.id, 'minha voz.wav'))).size).toBe(4096)
+
+    // Configuring the server afterwards publishes the same profile, with no
+    // re-import.
+    const after = await service().ensureProfileAvailableToAllTalk(profile.id)
+    expect(after).toMatchObject({ ok: true, copied: true })
+  })
+
   it('refuses when no voicesDir is configured', async () => {
     const profile = await importProfile()
 
