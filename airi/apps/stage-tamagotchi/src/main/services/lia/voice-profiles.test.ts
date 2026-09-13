@@ -226,15 +226,17 @@ describe('lia voice profile store', () => {
     const model = await makeSource(sourceDir, 'model.pth')
     const imported = await store.importProfile(importRequest({}, [{ path: model, role: 'model' }]), new Set([model]))
     expect(imported.ok).toBe(true)
-    const profile = (imported as { value: (typeof import('../../../shared/eventa').prototype) }).value as never
+    if (!imported.ok)
+      throw new Error('import failed')
+    const profile = imported.value
 
-    expect(await findMissingFiles(store, profile as never)).toEqual([])
+    expect(await findMissingFiles(store, profile)).toEqual([])
 
     // Simulate the file disappearing (moved userData, partial restore).
     const { rm } = await import('node:fs/promises')
-    await rm(store.resolveFile((profile as { id: string }).id, 'model.pth')!)
+    await rm(store.resolveFile(profile.id, 'model.pth')!)
 
-    expect(await findMissingFiles(store, profile as never)).toEqual(['model.pth'])
+    expect(await findMissingFiles(store, profile)).toEqual(['model.pth'])
   })
 
   it('treats a damaged or absent registry as an empty library', async () => {

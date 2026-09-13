@@ -365,6 +365,7 @@ app.whenReady().then(async () => {
   // bridge above on purpose - selecting a voice still goes through
   // `electronLiaVoiceConfigSet`, so `voice.tts` keeps exactly one writer.
   injeca.invoke({
+    dependsOn: {},
     callback: async () => {
       const { context } = createContext(ipcMain)
       registerLiaVoiceProfilesBridge({ context })

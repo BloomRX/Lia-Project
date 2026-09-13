@@ -163,7 +163,11 @@ export function createLiaVoiceProfileStore(params: { rootDir: string }): LiaVoic
       if (!name)
         return fail('emptyName', 'Give this voice a name first.')
 
-      const engine = VOICE_ENGINES.find(candidate => candidate.id === request?.engine)
+      // Widened to `readonly string[]`: `VOICE_ENGINES` is `as const`, so without
+      // this `includes(role)` would only accept the literal union.
+      const engine = VOICE_ENGINES.find(candidate => candidate.id === request?.engine) as
+        | { extensions: readonly string[], id: string, label: string, roles: readonly string[] }
+        | undefined
       if (!engine)
         return fail('engineUnknown', `Unknown voice engine "${String(request?.engine ?? '')}".`)
 
