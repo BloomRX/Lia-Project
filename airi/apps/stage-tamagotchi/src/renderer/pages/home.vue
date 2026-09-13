@@ -257,6 +257,10 @@ onMounted(async () => {
   // Same idea for voice: install the inert-by-default TTS fallback policy so a
   // failing preferred voice provider can fail over to a configured fallback.
   liaVoiceStore.registerRuntimeExtensions()
+  // Registering the policy is not enough: the speech store still boots on its
+  // own `speech-noop` default, so the persisted `voice.tts` has to be applied to
+  // this window's runtime as well. Read-only with respect to the config.
+  void liaVoiceStore.hydrateRuntime()
 
   // First-run gating: derive readiness from the REAL persisted config (preferred
   // provider + model + onboarded marker + the credential it needs). Onboarding

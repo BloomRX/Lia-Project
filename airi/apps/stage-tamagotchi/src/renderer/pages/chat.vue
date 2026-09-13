@@ -3,12 +3,14 @@ import { defineInvoke } from '@moeru/eventa'
 import { useStopSpeakingButton } from '@proj-airi/stage-layouts/composables/useStopSpeakingButton'
 import { ChatSessionsDrawer } from '@proj-airi/stage-ui/components'
 import { getSpeechBusContext, speechOutputGetPlaybackState } from '@proj-airi/stage-ui/services/speech/bus'
-import { shallowRef } from 'vue'
+import { onMounted, shallowRef } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import InteractiveArea from '../components/InteractiveArea.vue'
 import WindowTitleBar from '../components/Window/TitleBar.vue'
 import ChatPageShell from './chat-page-shell.vue'
+
+import { useLiaVoiceStore } from '../stores/lia/voice'
 
 const sessionsDrawerOpen = shallowRef(false)
 const getOutputPlaybackState = defineInvoke(getSpeechBusContext(), speechOutputGetPlaybackState)
@@ -23,6 +25,16 @@ const { speechMuted, toggleSpeechMuted } = useStopSpeakingButton({
   },
 })
 const { t } = useI18n()
+
+/**
+ * This page runs in its own BrowserWindow (`#/chat`), so it has its own Pinia
+ * and its own speech store - which boots on the `speech-noop` default. Nothing
+ * else brings Lia's persisted voice into this context, and without it the
+ * conversation renders text and stays silent.
+ */
+onMounted(() => {
+  void useLiaVoiceStore().hydrateRuntime()
+})
 </script>
 
 <template>

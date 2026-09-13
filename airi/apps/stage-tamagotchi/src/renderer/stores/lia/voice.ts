@@ -431,6 +431,30 @@ export const useLiaVoiceStore = defineStore('lia-voice', () => {
     })
   }
 
+  /**
+   * Brings the EXISTING speech runtime in line with the persisted `voice.tts`.
+   *
+   * `voice.tts` surviving a restart does not by itself mean the runtime is
+   * configured: `registerRuntimeExtensions()` only installs the fallback policy,
+   * and the speech store boots on its own `speech-noop` default. Each renderer
+   * context has its own Pinia, so the chat window - a separate BrowserWindow on
+   * `#/chat` - needs this just as much as the launcher does. Without it the
+   * conversation renders text and stays silent.
+   *
+   * Read-only with respect to `voice.tts`: this applies what is persisted, it
+   * never writes it.
+   */
+  async function hydrateRuntime(): Promise<void> {
+    await refreshConfig()
+
+    const target = resolveCurrentVoiceTarget()
+    if (target)
+      await applyVoiceTarget(target)
+
+    // A card projection left behind by a failed write is repaired on the way in.
+    await resyncProjectionFromSource()
+  }
+
   return {
     // State
     loadedConfig,
@@ -462,6 +486,7 @@ export const useLiaVoiceStore = defineStore('lia-voice', () => {
     // 4E-2: write the source of truth, then the card projection
     saveTtsConfiguration,
     resyncProjectionFromSource,
+    hydrateRuntime,
 
     // Runtime wiring (4D-3)
     registerRuntimeExtensions,
