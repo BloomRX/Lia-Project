@@ -1,3 +1,5 @@
+import type { LiaProductConfig } from '../../configs/lia-schema'
+
 import { Buffer } from 'node:buffer'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -6,7 +8,7 @@ import { join } from 'node:path'
 import { parse } from 'valibot'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { liaProductConfigSchema } from '../../configs/lia-schema'
+import { defaultLiaProductConfig, liaProductConfigSchema } from '../../configs/lia-schema'
 import { mergeAllTalkRuntime, resolveAllTalkRuntime } from './alltalk-runtime-config'
 import { createAllTalkSyncService } from './alltalk-voices-sync'
 import { createLiaVoiceProfileStore } from './voice-profiles'
@@ -73,8 +75,20 @@ describe('restart', () => {
   })
 
   it('restores the runtime settings through the persisted schema', () => {
+    // Built from the defaults: `LiaProductConfig` is the schema's *output* type,
+    // where `persona`, `provider` and `preferences` are required because the
+    // schema gives them defaults - the shape a real document on disk has.
+    const existing: LiaProductConfig = {
+      ...defaultLiaProductConfig,
+      voice: {
+        tts: {
+          preferred: { providerId: 'custom-local-voice', voiceId: 'profile-1' },
+          fallback: [],
+        },
+      },
+    }
     const written = mergeAllTalkRuntime(
-      { schemaVersion: 1, voice: { tts: { preferred: { providerId: 'custom-local-voice', voiceId: 'profile-1' }, fallback: [] } } },
+      existing,
       { baseUrl: 'http://127.0.0.1:7851', voicesDir, timeoutMs: 12_000 },
     )
 

@@ -43,16 +43,34 @@ function fakeTransport(overrides: Partial<CustomVoiceTransport> = {}): CustomVoi
   }
 }
 
+/**
+ * Narrows a `ProviderInstance` to the speech shape.
+ *
+ * `ProviderInstance` is a union of chat/embed/speech/transcription/model
+ * providers, so `.speech` is not reachable without narrowing - and narrowing
+ * beats a cast, because a cast would keep compiling if the provider stopped
+ * exposing speech at all.
+ */
+function speechFetchOf(instance: unknown): typeof fetch {
+  if (!instance || typeof instance !== 'object' || !('speech' in instance))
+    throw new Error('provider exposes no speech()')
+
+  const speech = (instance as { speech: (config: unknown) => { fetch?: typeof fetch } })
+    .speech({ voiceId: '' })
+
+  if (!speech?.fetch)
+    throw new Error('provider exposes no speech fetch')
+
+  return speech.fetch
+}
+
 /** Drives the provider the way the speech runtime does: through `speech().fetch`. */
 async function callSpeech(input: string, voice: string): Promise<Response> {
   const definition = getDefinedProvider(CUSTOM_LOCAL_VOICE_PROVIDER_ID)
   if (!definition)
     throw new Error('provider not registered')
   const instance = await definition.createProvider({ voiceId: '' } as never)
-  const speech = instance.speech?.({ voiceId: '' } as never)
-  const speechFetch = (speech as { fetch?: typeof fetch } | undefined)?.fetch
-  if (!speechFetch)
-    throw new Error('provider exposes no speech fetch')
+  const speechFetch = speechFetchOf(instance)
 
   return speechFetch('http://custom-local-voice/v1/audio/speech', {
     method: 'POST',
@@ -175,7 +193,7 @@ describe('synthesis', () => {
   it('rejects a malformed request body', async () => {
     const definition = getDefinedProvider(CUSTOM_LOCAL_VOICE_PROVIDER_ID)!
     const instance = await definition.createProvider({ voiceId: '' } as never)
-    const speechFetch = (instance.speech?.({ voiceId: '' } as never) as { fetch?: typeof fetch })?.fetch!
+    const speechFetch = speechFetchOf(instance)
 
     await expect(speechFetch('http://x/v1/audio/speech', { method: 'POST' })).rejects.toThrow(/Invalid request body/)
   })
