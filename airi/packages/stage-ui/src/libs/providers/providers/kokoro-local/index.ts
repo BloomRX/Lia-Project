@@ -6,6 +6,7 @@ import { getCachedWebGPUCapabilities } from '@proj-airi/stage-shared/webgpu'
 import { z } from 'zod'
 
 import { getDefaultKokoroModel, KOKORO_MODELS, kokoroModelsToModelInfo } from '../../../../workers/kokoro/constants'
+import { describeWavBuffer, logAudioDiagnostics } from '../../../diagnostics/audio-probe'
 import { getKokoroAdapter } from '../../../inference/adapters/kokoro'
 import { defineProvider } from '../registry'
 
@@ -98,6 +99,17 @@ export const providerKokoroLocal = defineProvider({
             if (!(body.voice in adapter.getVoices()))
               throw new Error(`Unknown Kokoro voice: ${body.voice}`)
             const buffer = await adapter.generate(body.input ?? '', body.voice as VoiceKey)
+
+            // The encoded bytes as they leave the provider. Compared against the
+            // `worker-output` probe above, this separates "the samples were
+            // wrong" from "the header does not describe them".
+            logAudioDiagnostics('LIA-KOKORO-AUDIO', {
+              stage: 'wav-response',
+              voice: body.voice,
+              inputChars: (body.input ?? '').length,
+              ...describeWavBuffer(buffer),
+            })
+
             return new Response(buffer, {
               status: 200,
               headers: { 'Content-Type': 'audio/wav' },

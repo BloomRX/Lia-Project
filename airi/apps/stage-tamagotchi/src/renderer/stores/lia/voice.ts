@@ -2,6 +2,7 @@ import type { LiaVoiceConfig, LiaVoiceTtsConfig, LiaVoiceTtsTarget } from '../..
 
 import { errorMessageFrom } from '@moeru/std'
 import { useElectronEventaInvoke } from '@proj-airi/electron-vueuse'
+import { logAudioDiagnostics } from '@proj-airi/stage-ui/libs/diagnostics/audio-probe'
 import { registerSpeechTtsFallbackPolicy } from '@proj-airi/stage-ui/libs/speech/tts-fallback'
 import { useAiriCardStore } from '@proj-airi/stage-ui/stores/modules/airi-card'
 import { useSpeechStore } from '@proj-airi/stage-ui/stores/modules/speech'
@@ -453,6 +454,23 @@ export const useLiaVoiceStore = defineStore('lia-voice', () => {
 
     // A card projection left behind by a failed write is repaired on the way in.
     await resyncProjectionFromSource()
+
+    // Metadata only - ids and counts, never text, keys or audio. This is the
+    // line that distinguishes "nothing was configured" from "it was configured
+    // and something downstream stayed silent".
+    logAudioDiagnostics('LIA-VOICE-RUNTIME', {
+      stage: 'hydrate',
+      hasConfiguration: hasConfiguration.value,
+      persistedPreferred: preferred.value
+        ? { providerId: preferred.value.providerId, voiceId: preferred.value.voiceId, modelId: preferred.value.modelId }
+        : null,
+      persistedFallbackCount: fallback.value.length,
+      resolvedTarget: target
+        ? { providerId: target.providerId, voiceId: target.voiceId, modelId: target.modelId }
+        : null,
+      activeProvider: speechStore.activeSpeechProvider,
+      activeVoice: (speechStore.activeSpeechVoice as { id?: string } | null)?.id ?? null,
+    })
   }
 
   return {

@@ -14,6 +14,7 @@ import { defaultPerfTracer } from '@proj-airi/stage-shared'
 import { Mutex } from 'async-mutex'
 
 import { removeInferenceStatus, updateInferenceStatus } from '../../../composables/use-inference-status'
+import { describeFloat32Audio, logAudioDiagnostics } from '../../diagnostics/audio-probe'
 import { DEVICE_LOSS_WASM_THRESHOLD, MAX_RESTARTS, MODEL_NAMES, RESTART_DELAY_MS, TIMEOUTS } from '../constants'
 import { getGPUCoordinator, getLoadQueue, MODEL_VRAM_ESTIMATES } from '../coordinator'
 import { LOAD_PRIORITY } from '../load-queue'
@@ -404,7 +405,23 @@ export function createKokoroAdapter(): KokoroAdapter {
       if (output.action === 'generate') {
         state = 'ready'
         onSuccess()
-        return toWav((output.samples as Float32Array).buffer, output.samplingRate as number)
+
+        const samples = output.samples as Float32Array
+        const samplingRate = output.samplingRate as number
+
+        // The samples exactly as the worker handed them back, before any
+        // conversion. When the result is noise this is the line that says
+        // whether the inference produced it or the WAV encoding did: a sane
+        // Float32 speech buffer has an RMS around 0.05-0.3 and no non-finite
+        // samples, and the encoding half is already pinned by
+        // `packages/audio`'s deterministic round-trip test.
+        logAudioDiagnostics('LIA-KOKORO-AUDIO', {
+          stage: 'worker-output',
+          voice,
+          ...describeFloat32Audio(samples, samplingRate),
+        })
+
+        return toWav(samples.buffer, samplingRate)
       }
 
       const errorCode = classifyError(new Error('Unexpected output action'))
