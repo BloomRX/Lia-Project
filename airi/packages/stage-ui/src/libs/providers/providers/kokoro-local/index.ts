@@ -158,12 +158,19 @@ export const providerKokoroLocal = defineProvider({
         const adapter = await getKokoroAdapter()
         // `config.model` is absent whenever Kokoro has never been saved in the
         // provider settings - which is the normal case for a provider that
-        // needs no credential. The config schema below declares exactly this
-        // default, so fall back to it instead of letting `assertModelSupported`
-        // throw and turn voice discovery into an empty list.
-        const capabilities = getWebGpuState()
-        const modelId = config.model
-          ?? getDefaultKokoroModel(capabilities.supported, capabilities.fp16Supported)
+        // needs no credential. The config schema below declares a default, so
+        // fall back to one instead of letting `assertModelSupported` throw and
+        // turn voice discovery into an empty list.
+        //
+        // The implicit fallback is the WASM build, deliberately. The WebGPU
+        // branch would key off `getWebGpuState().supported`, which degrades to
+        // `Boolean(navigator.gpu)` whenever the capability probe has not run -
+        // and `navigator.gpu` exists in any Chromium whether or not the actual
+        // GPU can run WebGPU. Committing an *implicit* choice to an unverified
+        // backend is how a provider that merely needed its voice list ends up
+        // synthesizing through a path its hardware does not support. WebGPU
+        // stays available by selecting it explicitly in the provider settings.
+        const modelId = config.model ?? getDefaultKokoroModel(false)
         if (adapter.state !== 'ready' || modelId !== lastLoadedModelId) {
           const model = assertModelSupported(modelId)
           await adapter.loadModel(model.quantization, model.platform)
