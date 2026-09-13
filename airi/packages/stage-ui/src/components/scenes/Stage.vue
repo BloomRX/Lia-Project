@@ -40,6 +40,7 @@ import { live2dMotionMagicProfiles, useLive2DMotionMagic, useLive2DMotionMagicSe
 import { getDefaultStreamingModel, getDefinedProvider } from '../../libs/providers/providers'
 import { OFFICIAL_SPEECH_PROVIDER_ID, OFFICIAL_SPEECH_STREAMING_PROVIDER_ID } from '../../libs/providers/providers/official'
 import { bindSpeakingStateToPlaybackManager } from '../../libs/speech/playback-speaking-state'
+import { isModellessTarget, resolveSynthesisTarget } from '../../libs/speech/synthesize-target'
 import { getSpeechTtsFallbackPolicy, notifySpeechTtsTurnEnded, withSpeechTtsSegmentFallback } from '../../libs/speech/tts-fallback'
 import { createStageTtsSession } from '../../libs/speech/tts-session'
 import { getSpeechBusContext, speechOutputGetPlaybackState } from '../../services/speech/bus'
@@ -245,7 +246,7 @@ function resetAssistantSpeechSurface(source: string) {
 
 const { activeCard } = storeToRefs(useAiriCardStore())
 const speechStore = useSpeechStore()
-const { ssmlEnabled, activeSpeechProvider, activeSpeechModel, activeSpeechVoice, pitch } = storeToRefs(speechStore)
+const { ssmlEnabled, activeSpeechProvider, activeSpeechModel, activeSpeechVoice, activeSpeechVoiceId, pitch } = storeToRefs(speechStore)
 const activeCardId = computed(() => activeCard.value?.name ?? 'default')
 const speechRuntimeStore = useSpeechRuntimeStore()
 const backgroundStore = useBackgroundStore()
@@ -529,8 +530,30 @@ async function stageSynthesizeSegment(request: TtsRequest, signal: AbortSignal):
     }
   }
 
-  if (!model || !voice)
+  // One implementation, shared with the integration test: see
+  // `libs/speech/synthesize-target.ts` for why a model is optional and why an
+  // unresolved voice object is not an unselected voice.
+  const synthesisTarget = resolveSynthesisTarget({
+    providerId: activeSpeechProvider.value,
+    modelId: model ?? '',
+    voiceId: activeSpeechVoiceId.value,
+    resolvedVoice: voice,
+  })
+
+  if (!synthesisTarget)
     return null
+
+  if (isModellessTarget(synthesisTarget)) {
+    // Loud, not silent: a provider that truly needs a model should surface here
+    // and reach the fallback policy rather than mute the conversation.
+    console.warn('[Speech Pipeline] synthesizing without a model id', {
+      provider: activeSpeechProvider.value,
+      voice: synthesisTarget.voice.id,
+    })
+  }
+
+  model = synthesisTarget.model
+  voice = synthesisTarget.voice
 
   try {
     const speechRequest = speechStore.resolveSpeechInput({
