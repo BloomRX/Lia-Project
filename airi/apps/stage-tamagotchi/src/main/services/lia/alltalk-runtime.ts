@@ -1,0 +1,294 @@
+import type { Buffer } from 'node:buffer'
+import type { ChildProcess, SpawnOptions } from 'node:child_process'
+
+import process from 'node:process'
+
+import { spawn } from 'node:child_process'
+import { access } from 'node:fs/promises'
+import { join } from 'node:path'
+
+/**
+ * The speech runtime as a process the Lia owns.
+ *
+ * Before this, using a custom voice meant the user had to open a terminal,
+ * `cd` somewhere, and run a `.bat` file - and remember to do it every time.
+ * This module is what removes that: the Lia detects the install, starts it
+ * hidden, waits until it actually answers, and shuts it down when the app
+ * closes.
+ *
+ * ## What it deliberately does NOT do
+ *
+ * **It never installs.** AllTalk's `atsetup.bat` is interactive (it asks the
+ * user to pick "Standalone Installation" then option 1) and its prerequisites -
+ * Git, Microsoft C++ Build Tools with the Windows SDK, and espeak-ng - are
+ * separate multi-gigabyte installs that need an administrator. There is no
+ * versioned, checksummed artifact to fetch. Automating that would mean building
+ * a fragile downloader around an installer that was never designed to be driven,
+ * so installation stays a guided wizard and this module starts from "already
+ * installed".
+ *
+ * ## Process safety
+ *
+ * - Arguments are an explicit array and `shell` is left `false`. On Windows a
+ *   `.bat` still needs an interpreter, so `cmd.exe` is invoked *as the program*
+ *   with `/c` and the script name as a separate argument - the install directory
+ *   is passed as `cwd`, never interpolated into a command string.
+ * - `windowsHide: true`, so no console window flashes on the user's desktop.
+ * - One child at a time: `start()` while starting or running is a no-op, so a
+ *   double click cannot leave two servers fighting over port 7851.
+ * - `stop()` on app quit, and the child is unref'd from nothing - we keep the
+ *   handle so an orphan cannot outlive us.
+ */
+
+/** Files that must exist for a folder to count as an AllTalk install. */
+export const INSTALL_MARKERS = ['script.py', 'system', 'voices'] as const
+
+/** The launcher `atsetup.bat` generates. Windows only. */
+export const WINDOWS_START_SCRIPT = 'start_alltalk.bat'
+
+/** How long to wait for the server to answer after spawning it. */
+export const DEFAULT_START_TIMEOUT_MS = 180_000
+
+export interface RuntimeStateSnapshot {
+  phase: 'error' | 'notInstalled' | 'ready' | 'starting' | 'stopped'
+  /** Only set when `phase` is `error`. A short sentence, never a stack trace. */
+  message?: string
+  /** Process id of the managed child, when we started one. */
+  pid?: number
+}
+
+export interface RuntimeManagerDeps {
+  /** Where AllTalk is installed, or undefined when the user has not pointed at one. */
+  installDir?: string
+  /** Health probe: true when the server answers. Injected so tests need no server. */
+  isHealthy: () => Promise<boolean>
+  platform?: NodeJS.Platform
+  spawnImpl?: typeof spawn
+  /** How often to poll health while waiting for startup. */
+  pollIntervalMs?: number
+  startTimeoutMs?: number
+  /** How long to wait for SIGTERM before escalating. Bounded, so app quit cannot hang. */
+  stopGraceMs?: number
+  /** Receives stdout/stderr lines. Diagnostics only; never surfaced raw. */
+  onOutput?: (chunk: string) => void
+}
+
+export interface RuntimeManager {
+  state: () => RuntimeStateSnapshot
+  /** True when the folder looks like a real AllTalk install. */
+  isInstalled: () => Promise<boolean>
+  /** Starts if needed and waits for health. Idempotent. */
+  start: () => Promise<RuntimeStateSnapshot>
+  /** Stops the managed child, if any. Safe to call repeatedly. */
+  stop: () => Promise<void>
+}
+
+async function exists(path: string): Promise<boolean> {
+  try {
+    await access(path)
+    return true
+  }
+  catch {
+    return false
+  }
+}
+
+/**
+ * Builds the spawn arguments for the platform.
+ *
+ * Exported because it is the part with security consequences: it must never
+ * produce a shell-interpolated string containing a user-chosen path.
+ */
+export function startCommandFor(
+  platform: NodeJS.Platform,
+  installDir: string,
+): { args: string[], command: string, options: SpawnOptions } {
+  const options: SpawnOptions = {
+    cwd: installDir,
+    // No console window on the user's desktop.
+    windowsHide: true,
+    // Inherit nothing: stdout/stderr are piped and read here.
+    stdio: ['ignore', 'pipe', 'pipe'],
+    env: { ...process.env },
+  }
+
+  if (platform === 'win32') {
+    // A .bat needs cmd.exe, but as the program with the script as an argument -
+    // not as a string handed to a shell.
+    return {
+      command: process.env.ComSpec ?? 'cmd.exe',
+      args: ['/d', '/s', '/c', WINDOWS_START_SCRIPT],
+      options,
+    }
+  }
+
+  return {
+    command: 'bash',
+    args: ['-lc', 'python3 script.py'],
+    options,
+  }
+}
+
+export function createRuntimeManager(deps: RuntimeManagerDeps): RuntimeManager {
+  const platform = deps.platform ?? process.platform
+  const spawnImpl = deps.spawnImpl ?? spawn
+  const startTimeoutMs = deps.startTimeoutMs ?? DEFAULT_START_TIMEOUT_MS
+  const pollIntervalMs = deps.pollIntervalMs ?? 1000
+  const stopGraceMs = deps.stopGraceMs ?? 5000
+
+  let snapshot: RuntimeStateSnapshot = { phase: 'stopped' }
+  let child: ChildProcess | undefined
+  /** Guards against two concurrent starts racing into two children. */
+  let starting: Promise<RuntimeStateSnapshot> | undefined
+
+  function set(next: RuntimeStateSnapshot): RuntimeStateSnapshot {
+    snapshot = next
+    return next
+  }
+
+  async function isInstalled(): Promise<boolean> {
+    const dir = deps.installDir?.trim()
+    if (!dir)
+      return false
+
+    for (const marker of INSTALL_MARKERS) {
+      if (!await exists(join(dir, marker)))
+        return false
+    }
+    // The launcher only exists once the user has actually run the setup script,
+    // so it is the difference between "extracted the zip" and "installed".
+    return platform === 'win32' ? exists(join(dir, WINDOWS_START_SCRIPT)) : true
+  }
+
+  async function waitForHealth(deadline: number): Promise<boolean> {
+    for (;;) {
+      try {
+        if (await deps.isHealthy())
+          return true
+      }
+      catch {
+        // A server that is still booting refuses connections; that is not an
+        // error yet, only a reason to keep waiting.
+      }
+
+      if (Date.now() >= deadline)
+        return false
+
+      await new Promise(resolve => setTimeout(resolve, pollIntervalMs))
+    }
+  }
+
+  async function stop(): Promise<void> {
+    const current = child
+    child = undefined
+    if (starting)
+      starting = undefined
+
+    if (!current || current.exitCode !== null) {
+    // Nothing to kill. A previous failure is kept so the UI still explains
+    // why the voice is unavailable instead of silently reading "stopped".
+      set(snapshot.phase === 'error' ? snapshot : { phase: 'stopped' })
+      return
+    }
+
+    const exited = new Promise<void>((resolve) => {
+      current.once('exit', () => resolve())
+      // Never hang the app's shutdown on a stubborn child.
+      setTimeout(resolve, stopGraceMs).unref?.()
+    })
+
+    current.kill('SIGTERM')
+    await exited
+
+    if (current.exitCode === null) {
+    // Did not take the hint: make sure it cannot outlive us.
+      current.kill('SIGKILL')
+    }
+
+    set({ phase: 'stopped' })
+  }
+
+  async function doStart(): Promise<RuntimeStateSnapshot> {
+    try {
+      if (snapshot.phase === 'ready') {
+        // Still alive? If the user closed the server behind our back, restart.
+        try {
+          if (await deps.isHealthy())
+            return snapshot
+        }
+        catch {
+          // fall through and start again
+        }
+        set({ phase: 'stopped' })
+      }
+
+      if (!(await isInstalled()))
+        return set({ phase: 'notInstalled' })
+
+      const installDir = deps.installDir!.trim()
+      set({ phase: 'starting' })
+
+      const { command, args, options } = startCommandFor(platform, installDir)
+      const spawned = spawnImpl(command, args, options)
+      child = spawned
+
+      const record = (chunk: Buffer | string) => {
+        deps.onOutput?.(String(chunk))
+      }
+      spawned.stdout?.on('data', record)
+      spawned.stderr?.on('data', record)
+
+      const exited = new Promise<number | null>((resolve) => {
+        spawned.once('exit', code => resolve(code))
+        spawned.once('error', () => resolve(null))
+      })
+
+      const healthy = await Promise.race([
+        waitForHealth(Date.now() + startTimeoutMs),
+        exited.then(() => false),
+      ])
+
+      if (!healthy) {
+        // Read the exit code *before* killing anything: stop() would otherwise
+        // fill it in and make a timeout look like a crash.
+        const died = spawned.exitCode !== null
+        await stop()
+        return set({
+          phase: 'error',
+          message: died
+            ? 'The voice system closed while starting.'
+            : 'The voice system took too long to start.',
+        })
+      }
+
+      return set({ phase: 'ready', pid: spawned.pid })
+    }
+    catch {
+      await stop()
+      return set({ phase: 'error', message: 'The voice system could not be started.' })
+    }
+    finally {
+      starting = undefined
+    }
+  }
+
+  return {
+    state: () => snapshot,
+
+    isInstalled,
+
+    start() {
+      // Single-instance guard. `starting` must be assigned *synchronously*: an
+      // async function suspends at its first await, and every await before this
+      // assignment was a window in which a second caller could spawn its own
+      // child and leave two servers fighting over the same port.
+      if (starting)
+        return starting
+
+      starting = doStart()
+      return starting
+    },
+
+    stop: () => stop(),
+  }
+}

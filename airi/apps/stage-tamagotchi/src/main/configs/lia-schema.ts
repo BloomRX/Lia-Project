@@ -86,6 +86,16 @@ const alltalkRuntimeSchema = object({
   voicesDir: optional(string()),
   /** Per-request timeout in milliseconds. */
   timeoutMs: optional(number()),
+  /**
+   * Where AllTalk is installed, as chosen through the OS directory picker.
+   *
+   * The Lia never installs it: AllTalk's own setup script is interactive and
+   * needs prerequisites the user must provide (Git, MS C++ Build Tools,
+   * espeak-ng), so there is no honest way to automate it. What the Lia *can* do
+   * once it knows the folder is detect the install, start it, watch its health
+   * and stop it - which is what removes the terminal from the user's day.
+   */
+  installDir: optional(string()),
 })
 
 const sttTargetSchema = object({

@@ -683,8 +683,36 @@ export interface LiaAllTalkRuntimeConfig {
   baseUrl: string
   /** AllTalk's own voices folder, chosen through the OS directory picker. */
   voicesDir?: string
+  /** Where AllTalk is installed, chosen through the OS directory picker. */
+  installDir?: string
   /** Per-request timeout in milliseconds. */
   timeoutMs?: number
+}
+
+/**
+ * What the Lia knows about the speech runtime it manages.
+ *
+ * Deliberately free of technical vocabulary: the UI turns `notInstalled` into
+ * "we need to install the voice system", never "AllTalk is missing from
+ * installDir".
+ */
+export type LiaRuntimeState
+  = | { state: 'checking' }
+    | { state: 'error', message: string }
+    | { state: 'notInstalled' }
+    | { state: 'ready' }
+    | { state: 'starting' }
+    | { state: 'stopped' }
+
+/** Install steps the guided wizard walks the user through. */
+export interface LiaRuntimeInstallStep {
+  /** Stable id, so the UI can mark progress without parsing labels. */
+  id: string
+  title: string
+  detail: string
+  /** External documentation, opened only on an explicit user click. */
+  link?: string
+  done: boolean
 }
 
 /**
