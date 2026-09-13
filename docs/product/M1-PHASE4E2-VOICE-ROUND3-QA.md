@@ -4,7 +4,7 @@
 
 Três correções, todas verificadas no código:
 
-### 1. HEAD esperado é `c371cec`, não `8326751`
+### 1. HEAD esperado é `18c381f`
 
 Adicionei a instrumentação que o TESTE 7 procurava. **Faça `git pull` de novo.**
 
@@ -12,12 +12,14 @@ Adicionei a instrumentação que o TESTE 7 procurava. **Faça `git pull` de novo
 cd J:\Lia-Project
 git checkout arena/01a07b6d-lia-project
 git pull origin arena/01a07b6d-lia-project
-git log --oneline -6
+git log --oneline -7
 ```
 
 Esperado, nesta ordem:
 
 ```
+18c381f docs(lia): QA plan for 4E-2 round 3, corrected for where the logs land
+2a????? (este arquivo)
 c371cec feat(lia): add build-mode-gated audio diagnostics for the Kokoro path
 8326751 docs(lia): note the report commit in the 4E-2 round 2 findings
 76bd178 docs(lia): report the 4E-2 round 2 findings
@@ -26,7 +28,9 @@ efe9dec fix(lia): stop querying unconfigured providers and drop speech-noop from
 215557f fix(lia): hydrate the speech runtime from the persisted voice
 ```
 
-Se `c371cec` não estiver no topo, pare: os TESTES 3, 5 e 7 não vão produzir nada.
+**O que importa é que `c371cec` esteja presente** — é ele que traz os logs. Os
+commits de documentação acima dele não afetam o comportamento. Se `c371cec` não
+aparecer, pare: os TESTES 3, 5 e 7 não vão produzir nada.
 
 ### 2. O terminal do `DevTamagotchi.bat` NÃO mostra esses logs
 
