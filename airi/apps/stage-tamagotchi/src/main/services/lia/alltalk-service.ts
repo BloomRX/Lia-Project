@@ -22,13 +22,13 @@ import {
 } from '../../../shared/eventa'
 import {
   createAllTalkClient,
-  toAllTalkLanguage,
 } from './alltalk-client'
 import {
   mergeAllTalkRuntime,
   normalizeAllTalkRuntimePayload,
   resolveAllTalkRuntime,
 } from './alltalk-runtime-config'
+import { synthesizeProfileWithAllTalk } from './alltalk-synthesis'
 import { createAllTalkSyncService } from './alltalk-voices-sync'
 
 type MainContext = ReturnType<typeof createContext>['context']
@@ -158,14 +158,12 @@ export function registerLiaAllTalkBridge(params: {
 
       // Publish first, so `character_voice_gen` always names a file that exists
       // in AllTalk's folder by the time the request is made.
-      const published = await syncService(runtime.voicesDir).ensureProfileAvailableToAllTalk(profileId)
-      if (!published.ok)
-        throw new Error(published.message)
-
-      return createAllTalkClient(runtime).synthesize({
+      return synthesizeProfileWithAllTalk({
+        profileId,
         text: String(request?.text ?? ''),
-        characterVoiceGen: published.filename,
-        language: toAllTalkLanguage(request?.language),
+        language: request?.language,
+        runtime,
+        store: params.store,
       })
     },
   )

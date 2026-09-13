@@ -72,6 +72,12 @@ pinia.use(synced.pinia)
 if (import.meta.env.DEV)
   pinia.use(piniaPluginTracing)
 
+// Give the `custom-local-voice` provider its route to the main process, before
+// any component can ask it to speak. The provider lives in the shared stage-ui
+// package and knows nothing about Electron; this is the only place the desktop
+// app connects the two.
+installCustomVoiceTransport()
+
 const router = createRouter({
   history: createWebHashHistory(),
   // TODO: vite-plugin-vue-layouts is long deprecated, replace with another layout solution

@@ -124,6 +124,30 @@ describe('ensureProfileAvailableToAllTalk', () => {
     expect(published.every(byte => byte === 7)).toBe(true)
   })
 
+  it('writes nothing anywhere except AllTalk\'s voices folder', async () => {
+    const profile = await importProfile()
+    await service().ensureProfileAvailableToAllTalk(profile.id)
+
+    // Asserted as an outcome rather than as a guard: if the destination were
+    // ever built from anything other than `voicesDir`, a stray copy would show
+    // up here. Walks the whole temp tree, including the canonical library.
+    const stray: string[] = []
+    async function walk(dir: string) {
+      for (const entry of await readdir(dir, { withFileTypes: true })) {
+        const full = join(dir, entry.name)
+        if (entry.isDirectory())
+          await walk(full)
+        else if (entry.name.startsWith(MANAGED_VOICE_PREFIX) && !full.startsWith(`${voicesDir}/`))
+          stray.push(full)
+      }
+    }
+    await walk(root)
+
+    expect(stray).toEqual([])
+    // And exactly one copy exists, in the right place.
+    expect((await readdir(voicesDir)).sort()).toEqual([`lia-${profile.id}.wav`])
+  })
+
   it('leaves the canonical file where it is', async () => {
     const profile = await importProfile()
     await service().ensureProfileAvailableToAllTalk(profile.id)
