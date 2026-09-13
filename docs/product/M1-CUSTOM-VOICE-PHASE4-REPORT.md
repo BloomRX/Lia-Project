@@ -168,6 +168,13 @@ cannot prevent the app from starting.
   reserve) still exists and is unchanged — it is just no longer something the user
   is asked to configure.
 
+  This is covered by a pre-existing test rather than a new one:
+  `tts-fallback.test.ts > withSpeechTtsSegmentFallback > converts a final failure
+  back into null so the segment is dropped`. Returning `null` instead of throwing
+  is precisely what keeps a dead voice runtime from taking the chat turn down —
+  the exception that would have propagated into the turn is swallowed at the
+  synthesis boundary and the segment is dropped.
+
 ## 10. "Create my voice" / training
 
 There is **no validated training notebook for Lia**. So the button says
@@ -181,6 +188,32 @@ shape (recordings → notebook → training → package → download → Importa
 existing import path, which already accepts a voice file and registers it.
 
 ## 11. Tests and mutations
+
+### Coverage of the 17 required checks (item P)
+
+| # | Required check | Where it is proven |
+|---|---|---|
+| 1 | Default UI shows no AllTalk | `VoiceUxInvariants` — *shows no AllTalk vocabulary outside advanced settings* |
+| 2 | …no server URL | *shows no server address outside advanced settings* |
+| 3 | …no `voicesDir` | *shows no voices folder outside advanced settings* |
+| 4 | …no fallback picker | *shows no fallback picker outside advanced settings* |
+| 5 | Custom voice active does not show Kokoro as part of it | *hides the ready-made voice picker while a custom voice is active* |
+| 6 | Advanced reveals the technical detail | *keeps every technical control inside the collapsed block* |
+| 7 | Missing runtime shows Install | *offers to install when the runtime is missing, instead of a broken import* |
+| 8 | Installed runtime shows Ready | `VoiceRuntimeAdvanced` — *shows the runtime state in words the user can act on* |
+| 9 | Selecting a custom voice triggers autostart | `alltalk-runtime-service` — *autostarts only for a custom voice* (+3 negative cases) |
+| 10 | The process does not start twice | `alltalk-runtime` — *does not spawn twice when started while already starting* |
+| 11 | Shutdown terminates the child | *terminates the managed child* + *escalates to SIGKILL when the child ignores SIGTERM* |
+| 12 | A runtime failure does not take Lia down | `VoiceUxInvariants` — *still renders the voice choices when the runtime errors* + *keeps the tab usable when the runtime cannot be reached at all* |
+| 13 | Chat continues as text | pre-existing `tts-fallback` — *converts a final failure back into null so the segment is dropped* |
+| 14 | `preferred` remains the source of truth | `VoiceUxInvariants` derives the mode from it; `custom-voice-fallback` — *starts on the custom voice, with the reserve behind it* |
+| 15 | A custom profile keeps working | `CustomVoicePanel` — *renders a profile with its language, backend and actions* |
+| 16 | Import does not require a manual `voicesDir` | pre-existing `alltalk-voices-sync` — *is a no-op when no voicesDir is configured* |
+| 17 | Train button is not functional without a valid Colab | *shows "coming soon" rather than a link to a notebook that does not exist* |
+
+Items 13 and 16 are covered by tests written in earlier phases. They are listed
+here rather than duplicated: re-asserting them in a new file would prove nothing
+that the existing test does not already prove.
 
 New and updated test files:
 
