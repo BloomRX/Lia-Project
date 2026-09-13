@@ -197,7 +197,8 @@ depois (629 passed).
 
 ## 11. Commit SHA
 
-**`5f44ee8`** (HEAD, enviado). Cadeia: `5f44ee8` ← `efe9dec` ← `215557f` ← `9661da4`.
+**`5f44ee8`** é o último commit de código. Cadeia: `efe9dec` ← `215557f` ← `9661da4` (base).
+Este relatório foi commitado em `76bd178`. Tudo enviado à `arena/01a07b6d-lia-project`.
 
 ---
 
