@@ -81,6 +81,20 @@ vi.mock('@proj-airi/electron-vueuse', () => ({
     if (id === 'eventa:invoke:lia:voice:profiles:remove-receive')
       return async () => ({ ok: true, value: { id: '' } })
 
+    // The managed runtime store is instantiated by this section. It reports a
+    // ready runtime so these tests exercise the voice UI rather than the install
+    // card; RuntimeInstallCard has its own coverage.
+    if (id === 'eventa:invoke:lia:runtime:state-receive')
+      return async () => ({ state: 'ready' })
+    if (id === 'eventa:invoke:lia:runtime:start-receive')
+      return async () => ({ state: 'ready' })
+    if (id === 'eventa:invoke:lia:runtime:stop-receive')
+      return async () => ({ state: 'stopped' })
+    if (id === 'eventa:invoke:lia:runtime:install-dir:pick-receive')
+      return async () => null
+    if (id === 'eventa:invoke:lia:runtime:install-steps-receive')
+      return async () => []
+
     throw new Error(`Unexpected eventa invoke: ${JSON.stringify(invoke)}`)
   },
 }))

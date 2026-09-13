@@ -107,61 +107,6 @@ beforeEach(() => {
   ipc.profiles.current = []
 })
 
-describe('server status', () => {
-  it.each([
-    ['connected', { state: 'connected', voices: ['lia.wav'] }],
-    ['offline', { state: 'offline' }],
-    ['notConfigured', { state: 'notConfigured' }],
-    ['error', { state: 'error', error: 'AllTalk answered 500' }],
-  ] as Array<[string, LiaAllTalkStatus]>)('shows the %s state as its own word', async (_name, status) => {
-    ipc.status.current = status
-
-    const html = await renderPanel()
-
-    expect(html).toContain(`data-testid="lia-alltalk-status-${status.state}"`)
-    expect(html).toContain(`${TT}.states.${status.state}`)
-  })
-
-  it('renders an error as a sentence, never as a stack trace', async () => {
-    ipc.status.current = { state: 'error', error: 'AllTalk answered 500' }
-
-    const html = await renderPanel()
-
-    expect(html).toContain('AllTalk answered 500')
-    // A stack trace in the UI is exactly what this feature was told not to do.
-    expect(html).not.toMatch(/at \w+ \(/)
-    expect(html).not.toContain('TypeError')
-    expect(html).not.toContain('    at ')
-  })
-
-  it('shows the configured address in the field', async () => {
-    ipc.config.current = { baseUrl: 'http://192.168.0.7:7851' }
-
-    const html = await renderPanel()
-
-    expect(html).toContain('data-testid="lia-alltalk-base-url"')
-  })
-})
-
-describe('voices folder', () => {
-  it('offers the picker, and no clear button while nothing is chosen', async () => {
-    const html = await renderPanel()
-
-    expect(html).toContain('data-testid="lia-alltalk-choose-folder"')
-    expect(html).not.toContain('data-testid="lia-alltalk-clear-folder"')
-    expect(html).toContain(`${TT}.folder.none`)
-  })
-
-  it('shows the chosen folder and offers to clear it', async () => {
-    ipc.config.current = { baseUrl: 'http://127.0.0.1:7851', voicesDir: 'C:\\alltalk\\voices' }
-
-    const html = await renderPanel()
-
-    expect(html).toContain('C:\\alltalk\\voices')
-    expect(html).toContain('data-testid="lia-alltalk-clear-folder"')
-  })
-})
-
 describe('the library', () => {
   it('says so when nothing has been imported yet', async () => {
     const html = await renderPanel()

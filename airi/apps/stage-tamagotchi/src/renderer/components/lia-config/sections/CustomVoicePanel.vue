@@ -34,15 +34,9 @@ const alltalk = useLiaAllTalkStore()
 const profilesStore = useLiaVoiceProfilesStore()
 const voiceStore = useLiaVoiceStore()
 
-const baseUrl = ref('')
 const previewText = 'Olá! Eu sou a Lia.'
 /** Which profile is currently being tested, so only its button shows "playing". */
 const testingId = ref<string | null>(null)
-
-const statusKey = computed(() => `states.${alltalk.status.state}`)
-const statusDetail = computed(() =>
-  alltalk.status.state === 'error' ? alltalk.status.error : '',
-)
 
 const activeProfileId = computed(() => {
   const preferred = voiceStore.preferred
@@ -50,20 +44,11 @@ const activeProfileId = computed(() => {
 })
 
 onMounted(async () => {
-  await Promise.all([alltalk.refresh(), profilesStore.refresh()])
-  baseUrl.value = alltalk.config?.baseUrl ?? ''
+  await profilesStore.refresh()
 })
 
 /** Language for a new profile. `pt-BR` is the character's language, not the UI's. */
 const PROFILE_LANGUAGE = 'pt-BR'
-
-async function onChooseFolder(): Promise<void> {
-  await alltalk.chooseVoicesDir()
-}
-
-async function onSaveServer(): Promise<void> {
-  await alltalk.saveBaseUrl(baseUrl.value.trim())
-}
 
 /**
  * Import is two steps, in the panel rather than in a browser dialog:
@@ -179,77 +164,6 @@ void CUSTOM_VOICE_PROVIDER_ID
       {{ tt('subtitle') }}
     </p>
 
-    <!-- Speech server -->
-    <div class="flex flex-col gap-2">
-      <div class="flex items-center justify-between gap-2">
-        <span class="text-sm text-neutral-600 dark:text-neutral-300">{{ tt('server.label') }}</span>
-        <span
-          class="text-xs font-medium"
-          :data-testid="`lia-alltalk-status-${alltalk.status.state}`"
-          :class="{
-            'text-emerald-600 dark:text-emerald-400': alltalk.status.state === 'connected',
-            'text-amber-600 dark:text-amber-400': alltalk.status.state === 'checking',
-            'text-neutral-500 dark:text-neutral-400': alltalk.status.state === 'notConfigured',
-            'text-red-600 dark:text-red-400': alltalk.status.state === 'error' || alltalk.status.state === 'offline',
-          }"
-        >
-          {{ tt(statusKey) }}
-        </span>
-      </div>
-      <p v-if="statusDetail" class="text-xs text-red-600 dark:text-red-400">
-        {{ statusDetail }}
-      </p>
-
-      <div class="flex gap-2">
-        <input
-          v-model="baseUrl"
-          type="text"
-          class="w-full border border-neutral-200 rounded bg-white px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900"
-          :placeholder="tt('server.placeholder')"
-          :disabled="alltalk.isBusy"
-          data-testid="lia-alltalk-base-url"
-        >
-        <button
-          type="button"
-          class="border border-neutral-200 rounded px-2 py-1 text-sm dark:border-neutral-700"
-          :disabled="alltalk.isBusy"
-          data-testid="lia-alltalk-save-server"
-          @click="onSaveServer"
-        >
-          {{ tt('server.save') }}
-        </button>
-      </div>
-    </div>
-
-    <!-- Voices folder -->
-    <div class="flex flex-col gap-1">
-      <span class="text-sm text-neutral-600 dark:text-neutral-300">{{ tt('folder.label') }}</span>
-      <p class="text-xs text-neutral-500 dark:text-neutral-400">
-        {{ alltalk.config?.voicesDir || tt('folder.none') }}
-      </p>
-      <div class="flex gap-2">
-        <button
-          type="button"
-          class="border border-neutral-200 rounded px-2 py-1 text-sm dark:border-neutral-700"
-          :disabled="alltalk.isBusy"
-          data-testid="lia-alltalk-choose-folder"
-          @click="onChooseFolder"
-        >
-          {{ tt('folder.choose') }}
-        </button>
-        <button
-          v-if="alltalk.isConfigured"
-          type="button"
-          class="rounded px-2 py-1 text-sm text-neutral-500 dark:text-neutral-400"
-          :disabled="alltalk.isBusy"
-          data-testid="lia-alltalk-clear-folder"
-          @click="alltalk.clearVoicesDir()"
-        >
-          {{ tt('folder.clear') }}
-        </button>
-      </div>
-    </div>
-
     <!-- Import: pick the file, then name it -->
     <div v-if="!pendingPath" class="flex flex-col gap-1">
       <button
@@ -292,6 +206,32 @@ void CUSTOM_VOICE_PROVIDER_ID
         </button>
       </div>
     </div>
+
+    <!--
+      Create my voice (item L).
+
+      There is no validated training notebook for Lia yet, so this is an honest
+      "coming soon" rather than a button that opens a link which does not exist.
+      When a notebook is published and checked, this block becomes a real link -
+      the shape is ready, the fabrication is not.
+    -->
+    <section
+      class="flex flex-col gap-1 border border-neutral-200 rounded-lg p-3 dark:border-neutral-700"
+      data-testid="lia-custom-voice-create"
+    >
+      <span class="text-sm text-neutral-900 font-medium dark:text-neutral-50">
+        {{ tt('create.title') }}
+      </span>
+      <p class="text-xs text-neutral-500 dark:text-neutral-400">
+        {{ tt('create.hint') }}
+      </p>
+      <span
+        class="w-fit border border-neutral-200 rounded px-2 py-1 text-xs text-neutral-500 dark:border-neutral-700 dark:text-neutral-400"
+        data-testid="lia-custom-voice-create-soon"
+      >
+        {{ tt('create.soon') }}
+      </span>
+    </section>
 
     <p v-if="profilesStore.lastError" class="text-xs text-red-600 dark:text-red-400">
       {{ profilesStore.lastError.message }}
