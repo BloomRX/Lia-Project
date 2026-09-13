@@ -1,6 +1,7 @@
 import type { Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 
+import { Buffer } from 'node:buffer'
 import { createServer } from 'node:http'
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
@@ -82,10 +83,6 @@ beforeAll(async () => {
   baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
 })
 
-afterAll(async () => {
-  await new Promise<void>(resolve => server.close(() => resolve()))
-})
-
 beforeEach(() => {
   recorded.length = 0
   behaviour = {
@@ -94,6 +91,10 @@ beforeEach(() => {
     generateBody: { status: 'generate-success', output_file_url: '/audio/out.wav' },
     voicesStatus: 200,
   }
+})
+
+afterAll(async () => {
+  await new Promise<void>(resolve => server.close(() => resolve()))
 })
 
 function form(url: string): URLSearchParams {

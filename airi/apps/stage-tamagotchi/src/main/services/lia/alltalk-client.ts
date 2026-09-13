@@ -147,7 +147,7 @@ export function createAllTalkClient(
           : []
         return { ok: true, state: 'connected', voices }
       }
-      catch (error) {
+      catch {
         // A refused connection is the normal "AllTalk is not running" case, not
         // a fault to report as an error.
         return { ok: false, state: 'offline' }
