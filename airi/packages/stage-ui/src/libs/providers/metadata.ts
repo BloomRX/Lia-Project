@@ -19,6 +19,7 @@ type ProviderMetadataField
     | 'iconColor'
     | 'iconImage'
     | 'requiresCredentials'
+    | 'configuredBy'
 
 /**
  * Serializable UI metadata selected from a provider definition.
@@ -98,6 +99,7 @@ export async function selectProviderMetadata(
     ...(definition.iconColor ? { iconColor: definition.iconColor } : {}),
     ...(definition.iconImage ? { iconImage: definition.iconImage } : {}),
     ...(definition.requiresCredentials !== undefined ? { requiresCredentials: definition.requiresCredentials } : {}),
+    ...(definition.configuredBy !== undefined ? { configuredBy: definition.configuredBy } : {}),
     ...(onboardingFields ? { onboardingFields } : {}),
     ...(transcription
       ? {

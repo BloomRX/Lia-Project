@@ -153,6 +153,8 @@ config:
         loading: "Loading voices…"
         empty: "This provider does not offer a voice list."
         fromProviderSettings: "Its voice is chosen in the provider's own settings."
+        needsConfiguration: "Configure this provider before picking one of its voices."
+        error: "Could not load this provider's voice list."
       errors:
         persist: "Could not save the voice. Nothing was changed."
         projection: "The voice was saved, but Lia's card was not updated. It will be repaired when this screen is opened again."

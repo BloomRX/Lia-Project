@@ -182,9 +182,15 @@ describe('voice section rendering (4E-2 voice UI)', () => {
     const labels = optionLabels(html, 'lia-config-voice-provider')
     const values = optionValues(html, 'lia-config-voice-provider')
 
-    // "Nenhuma voz configurada" plus every real provider.
+    // "Nenhuma voz configurada" plus every real provider except the one this
+    // picker hides - `speech-noop`, whose English name reads "None" and which
+    // would only repeat what the first option already says.
+    const registry = useSpeechStore().availableSpeechProvidersMetadata
     expect(labels[0]).toBe(`${TT}.primary.none`)
-    expect(labels.length).toBe(useSpeechStore().availableSpeechProvidersMetadata.length + 1)
+    expect(labels.length).toBe(registry.length)
+    expect(values).not.toContain('speech-noop')
+    // ...while it stays a real provider elsewhere in the app.
+    expect(registry.some(meta => meta.id === 'speech-noop')).toBe(true)
 
     // A user reads names; ids travel in `value` only.
     expect(labels.slice(1).every(label => label.startsWith(`${TT}.`) === false)).toBe(true)
@@ -215,10 +221,12 @@ describe('voice section rendering (4E-2 voice UI)', () => {
     })
 
     expect(contains(html, 'lia-config-voice-voice')).toBe(false)
-    expect(contains(html, 'lia-config-voice-no-catalog')).toBe(true)
-    const note = strip(html.slice(html.indexOf('data-testid="lia-config-voice-no-catalog"')))
-    expect(note).toContain(`${TT}.catalog.empty`)
-    expect(note).toContain(`${TT}.catalog.fromProviderSettings`)
+    // This provider needs a credential, so the tab says so rather than reporting
+    // an empty voice list - the two used to be the same message.
+    expect(contains(html, 'lia-config-voice-needs-config')).toBe(true)
+    expect(contains(html, 'lia-config-voice-no-catalog')).toBe(false)
+    const note = strip(html.slice(html.indexOf('data-testid="lia-config-voice-needs-config"')))
+    expect(note).toContain(`${TT}.catalog.needsConfiguration`)
   })
 
   it('defaults the reserve voice to "Nenhuma"', async () => {

@@ -3,6 +3,7 @@ import type { VoicePreviewDriver } from './voice-preview'
 
 import { errorMessageFrom } from '@moeru/std'
 import { useSpeechStore } from '@proj-airi/stage-ui/stores/modules/speech'
+import { useProviderConfigStore } from '@proj-airi/stage-ui/stores/providers/config'
 import { useProviderStore } from '@proj-airi/stage-ui/stores/providers/provider'
 import { computed, ref } from 'vue'
 
@@ -42,6 +43,21 @@ export interface VoiceEditorOption {
 export type VoicePreviewState = 'cancelled' | 'error' | 'idle' | 'loading' | 'playing'
 
 /**
+ * What the voice catalogue for the selected provider currently is.
+ *
+ * Kept apart on purpose: `empty` means the provider really ships no list,
+ * `needsConfiguration` means the user has to supply a credential first, and
+ * `error` means the lookup failed and may work on a retry.
+ */
+export type VoiceCatalogState
+  = | 'empty'
+    | 'error'
+    | 'loading'
+    | 'needsConfiguration'
+    | 'ready'
+    | 'unselected'
+
+/**
  * Providers that carry no voice catalog of their own.
  *
  * This is not a hardcoded *catalog* — no voice or model is listed here. It only
@@ -65,6 +81,18 @@ const PROVIDERS_WITHOUT_VOICE_CATALOG: readonly string[] = [
  */
 export const LIA_VOICE_PREVIEW_TEXT = 'Olá! Eu sou a Lia.'
 
+/**
+ * Speech providers hidden from the Lia picker.
+ *
+ * `speech-noop` is a real registered provider meaning "no speech output", and
+ * its English name is literally "None". It stays in the global registry and AIRI
+ * keeps using it - the speech store even defaults to it - but the Lia tab
+ * already has a "Nenhuma voz configurada" option at the top, so a second way to
+ * say "no voice" in the middle of the list only confuses. Filtered here, at the
+ * Lia layer, and nowhere else.
+ */
+const HIDDEN_FROM_LIA_PICKER: readonly string[] = ['speech-noop']
+
 /** `''` in a dropdown means "Nenhuma", i.e. the field is cleared. */
 const NONE = ''
 
@@ -85,6 +113,7 @@ export function useVoiceEditor(options: { preview?: VoicePreviewDriver } = {}) {
   const voiceStore = useLiaVoiceStore()
   const speechStore = useSpeechStore()
   const providersStore = useProviderStore()
+  const providerConfigStore = useProviderConfigStore()
 
   const previewDriver = options.preview
 
@@ -94,10 +123,45 @@ export function useVoiceEditor(options: { preview?: VoicePreviewDriver } = {}) {
 
   /** Real speech provider catalog (`availableSpeechProvidersMetadata`). */
   const providerOptions = computed<VoiceEditorOption[]>(() =>
-    speechStore.availableSpeechProvidersMetadata.map(meta => ({
-      id: meta.id,
-      label: meta.localizedName || meta.id,
-    })))
+    speechStore.availableSpeechProvidersMetadata
+      .filter(meta => !HIDDEN_FROM_LIA_PICKER.includes(meta.id))
+      .map(meta => ({
+        id: meta.id,
+        label: meta.localizedName || meta.id,
+      })))
+
+  /**
+   * Whether a provider cannot list its voices until the user supplies a
+   * credential in the provider settings.
+   *
+   * Derived from metadata the registry already publishes - `requiresCredentials`
+   * on the definition and `configuredProviders` from the config store - so there
+   * is no parallel Lia-side list of providers. Knowing this up front is what
+   * keeps browsing the dropdown from firing requests that can only fail: a 401
+   * from the official provider, a `.trim()` on an undefined config, a refused
+   * connection to a local engine.
+   */
+  function requiresConfiguration(providerId: string): boolean {
+    if (!providerId)
+      return false
+
+    const meta = speechStore.availableSpeechProvidersMetadata.find(item => item.id === providerId)
+    if (!meta)
+      return false
+
+    // The registry already tracks readiness; nothing here re-derives it.
+    if (meta.configured || providerConfigStore.configuredProviders[providerId])
+      return false
+
+    // A `configuredBy: 'authentication'` provider holds no user-supplied key, so
+    // `requiresCredentials` is false for it - yet it is exactly as unusable with
+    // no session, and asking it for a catalogue is what produced a 401 on every
+    // dropdown open.
+    if (meta.configuredBy === 'authentication')
+      return true
+
+    return meta.requiresCredentials !== false
+  }
 
   function voicesFor(providerId: string): VoiceEditorOption[] {
     if (!providerId)
@@ -140,16 +204,47 @@ export function useVoiceEditor(options: { preview?: VoicePreviewDriver } = {}) {
    */
   const showModelSelector = computed(() => modelOptions.value.length > 0)
 
-  const isLoadingVoices = ref(false)
+  /**
+   * Providers whose catalogue is in flight.
+   *
+   * Per provider rather than one shared flag: browsing A -> B -> C must not let
+   * A's late answer clear B's loading state, and the catalogue for the provider
+   * now on screen has to reflect only its own request.
+   */
+  const voiceLoadsPending = ref(new Set<string>())
+
+  const isLoadingVoices = computed(() => voiceLoadsPending.value.has(selectedProviderId.value))
+
+  /**
+   * One state instead of three booleans that could disagree.
+   *
+   * "The catalogue is empty" and "this provider needs configuring first" and
+   * "the request failed" used to collapse into the same message, which is how a
+   * missing credential came to read as a provider with no voices.
+   */
+  function catalogStateFor(providerId: string, options: VoiceEditorOption[]): VoiceCatalogState {
+    if (!providerId)
+      return 'unselected'
+    if (voiceLoadsPending.value.has(providerId))
+      return 'loading'
+    if (requiresConfiguration(providerId))
+      return 'needsConfiguration'
+    if (options.length > 0)
+      return 'ready'
+    if (speechStore.speechProviderError)
+      return 'error'
+
+    return 'empty'
+  }
+
+  const voiceCatalogState = computed<VoiceCatalogState>(() =>
+    catalogStateFor(selectedProviderId.value, voiceOptions.value))
 
   /**
    * A provider is selected but its voice catalog is genuinely empty. Distinct
    * from "still loading", so the message never flashes while voices arrive.
    */
-  const hasNoVoiceCatalog = computed(() =>
-    !!selectedProviderId.value
-    && !isLoadingVoices.value
-    && voiceOptions.value.length === 0)
+  const hasNoVoiceCatalog = computed(() => voiceCatalogState.value === 'empty')
 
   /** Whether the empty catalog is expected rather than a failure. */
   const voiceCatalogComesFromProviderSettings = computed(() =>
@@ -166,10 +261,10 @@ export function useVoiceEditor(options: { preview?: VoicePreviewDriver } = {}) {
   const fallbackModelOptions = computed(() => modelsFor(selectedFallbackProviderId.value))
   const showFallbackModelSelector = computed(() => fallbackModelOptions.value.length > 0)
 
-  const fallbackHasNoVoiceCatalog = computed(() =>
-    !!selectedFallbackProviderId.value
-    && !isLoadingVoices.value
-    && fallbackVoiceOptions.value.length === 0)
+  const fallbackVoiceCatalogState = computed<VoiceCatalogState>(() =>
+    catalogStateFor(selectedFallbackProviderId.value, fallbackVoiceOptions.value))
+
+  const fallbackHasNoVoiceCatalog = computed(() => fallbackVoiceCatalogState.value === 'empty')
 
   /**
    * A reserve identical in all three fields to the preferred voice would fail
@@ -204,20 +299,28 @@ export function useVoiceEditor(options: { preview?: VoicePreviewDriver } = {}) {
     if (!providerId)
       return
 
+    // Browsing the dropdown must not fire a request that can only fail. The
+    // provider says so in its own metadata, so ask nothing at all and let the UI
+    // show "configure this provider first" instead of an empty catalogue.
+    if (requiresConfiguration(providerId))
+      return
+
     const key = `${providerId}\u0000${modelId ?? ''}`
     const inFlight = voiceLoadsInFlight.get(key)
     if (inFlight)
       return await inFlight
 
     const task = (async () => {
-      isLoadingVoices.value = true
+      voiceLoadsPending.value = new Set(voiceLoadsPending.value).add(providerId)
       try {
         // `loadVoicesForProvider` populates the store cache and never throws; it
         // reports failures through `speechProviderError`.
         await speechStore.loadVoicesForProvider(providerId, modelId)
       }
       finally {
-        isLoadingVoices.value = false
+        const pending = new Set(voiceLoadsPending.value)
+        pending.delete(providerId)
+        voiceLoadsPending.value = pending
       }
     })()
 
@@ -465,6 +568,9 @@ export function useVoiceEditor(options: { preview?: VoicePreviewDriver } = {}) {
     fallbackVoiceOptions,
     fallbackModelOptions,
     isLoadingVoices,
+    voiceCatalogState,
+    fallbackVoiceCatalogState,
+    requiresConfiguration,
     hasNoVoiceCatalog,
     voiceCatalogComesFromProviderSettings,
     fallbackHasNoVoiceCatalog,

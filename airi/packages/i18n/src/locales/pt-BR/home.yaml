@@ -153,6 +153,8 @@ config:
         loading: "Carregando vozes…"
         empty: "Este provedor não oferece uma lista de vozes."
         fromProviderSettings: "A voz dele é escolhida nas configurações do próprio provedor."
+        needsConfiguration: "Configure este provedor antes de escolher uma voz dele."
+        error: "Não foi possível carregar a lista de vozes deste provedor."
       errors:
         persist: "Não foi possível salvar a voz. Nada foi alterado."
         projection: "A voz foi salva, mas o cartão da Lia não foi atualizado. Será corrigido ao reabrir esta tela."

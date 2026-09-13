@@ -2,6 +2,7 @@ import type { LiaVoiceConfig } from '../../../shared/eventa'
 import type { VoicePreviewDriver } from './voice-preview'
 
 import { useSpeechStore } from '@proj-airi/stage-ui/stores/modules/speech'
+import { useProviderConfigStore } from '@proj-airi/stage-ui/stores/providers/config'
 import { useProviderStore } from '@proj-airi/stage-ui/stores/providers/provider'
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -183,11 +184,14 @@ describe('lia voice editor (4E-2 commit 2)', async () => {
     const real = speech.availableSpeechProvidersMetadata
     expect(real.length, 'the real registry must be populated, not stubbed').toBeGreaterThan(5)
 
-    expect(editor.providerOptions.value).toHaveLength(real.length)
+    // Every registry entry except the one the Lia picker deliberately hides.
+    const shown = real.filter(meta => meta.id !== 'speech-noop')
+
+    expect(editor.providerOptions.value).toHaveLength(shown.length)
     expect(editor.providerOptions.value.map(option => option.id))
-      .toEqual(real.map(meta => meta.id))
+      .toEqual(shown.map(meta => meta.id))
     // The friendly name is the label; the id is carried but never shown.
-    for (const [index, meta] of real.entries())
+    for (const [index, meta] of shown.entries())
       expect(editor.providerOptions.value[index].label, meta.id).toBe(meta.localizedName)
   })
 
@@ -223,12 +227,27 @@ describe('lia voice editor (4E-2 commit 2)', async () => {
   })
 
   it('reports an explanatory state for a provider with no voice catalogue', async () => {
+    // Kokoro needs no credential, so with its catalogue answering `[]` this is a
+    // real empty list rather than a missing credential.
+    vi.spyOn(useProviderStore(), 'listProviderVoices').mockResolvedValue([] as never)
+    const editor = await setup()
+    await editor.selectProvider(KOKORO)
+
+    expect(editor.requiresConfiguration(KOKORO)).toBe(false)
+    expect(editor.voiceOptions.value).toEqual([])
+    expect(editor.voiceCatalogState.value).toBe('empty')
+    expect(editor.hasNoVoiceCatalog.value).toBe(true)
+  })
+
+  it('says "configure this provider" instead of showing an empty catalogue', async () => {
     const editor = await setup()
     await editor.selectProvider(OPENAI_COMPATIBLE)
 
+    // This used to read as "this provider has no voices", which is how a missing
+    // credential came to look like a provider defect.
     expect(editor.voiceOptions.value).toEqual([])
-    expect(editor.hasNoVoiceCatalog.value).toBe(true)
-    expect(editor.voiceCatalogComesFromProviderSettings.value).toBe(true)
+    expect(editor.voiceCatalogState.value).toBe('needsConfiguration')
+    expect(editor.hasNoVoiceCatalog.value).toBe(false)
   })
 
   it('does not invent voices for OpenAI-compatible', async () => {
@@ -450,7 +469,11 @@ describe('lia voice editor (4E-2 commit 2)', async () => {
     const load = vi.spyOn(speech, 'loadVoicesForProvider')
     load.mockClear()
 
-    const sequence = [KOKORO, OPENAI_COMPATIBLE, KOKORO, OPENAI_COMPATIBLE, KOKORO]
+    // The other end is marked ready so every switch is one the editor is
+    // actually allowed to perform a lookup for.
+    const other = anUnconfiguredProvider()
+    markConfigured(other)
+    const sequence = [KOKORO, other, KOKORO, other, KOKORO]
     for (const providerId of sequence)
       await editor.selectProvider(providerId)
 
@@ -465,17 +488,18 @@ describe('lia voice editor (4E-2 commit 2)', async () => {
     expect(editor.hasNoVoiceCatalog.value).toBe(false)
   })
 
-  it('treats "None" as the real no-output provider, not as a UI sentinel', async () => {
+  it('keeps "no speech output" out of the picker while leaving it registered', async () => {
     const editor = await setup()
 
-    // `speech-noop` is a registered speech provider meaning "no speech output";
-    // its English name is literally "None". It is a catalogue entry, not the
-    // empty option at the top of the dropdown, and this pins that distinction.
-    const none = editor.providerOptions.value.find(option => option.id === 'speech-noop')
-    expect(none, 'speech-noop must come from the real registry').toBeDefined()
+    // `speech-noop` is a registered speech provider meaning "no speech output"
+    // and its English name is literally "None". The Lia tab already opens with
+    // "Nenhuma voz configurada", so a second way of saying "no voice" mid-list
+    // only confused things. It stays in the registry - AIRI uses it and the
+    // speech store defaults to it - and it is dropped from this picker only.
     expect(useSpeechStore().availableSpeechProvidersMetadata.some(meta => meta.id === 'speech-noop')).toBe(true)
+    expect(editor.providerOptions.value.some(option => option.id === 'speech-noop')).toBe(false)
 
-    // The sentinel is separate: it is the empty value, never a provider id.
+    // The sentinel is still separate: it is the empty value, never a provider id.
     expect(editor.providerOptions.value.some(option => option.id === '')).toBe(false)
     expect(editor.selectedProviderId.value).toBe('')
   })
@@ -592,5 +616,130 @@ describe('lia voice editor (4E-2 commit 2)', async () => {
     expect(preview.calls).toHaveLength(0)
     expect(editor.previewState.value).toBe('error')
     expect(editor.previewError.value).toBe('noVoice')
+  })
+  // -------------------------------------------------------------------------
+  // 4E-2 round 2
+  // -------------------------------------------------------------------------
+
+  /**
+   * Tells the config store a provider is ready, so a test can exercise a second
+   * provider the editor is allowed to query. Kokoro is the only speech provider
+   * that needs nothing supplied at all.
+   */
+  function markConfigured(providerId: string): void {
+    const configStore = useProviderConfigStore()
+    configStore.providers = {
+      ...(configStore.providers as object),
+      [providerId]: { status: 'configured' },
+    } as typeof configStore.providers
+  }
+
+  /**
+   * A provider the registry already reports as unusable until the user does
+   * something - a credential, or a session for the `configuredBy:
+   * 'authentication'` ones. Taken from live metadata so no provider is listed
+   * by hand.
+   */
+  function anUnconfiguredProvider(): string {
+    const candidate = useSpeechStore().availableSpeechProvidersMetadata.find(meta =>
+      !meta.configured && (meta.requiresCredentials !== false || meta.configuredBy === 'authentication'))
+    if (!candidate)
+      throw new Error('the live registry exposes no provider needing configuration')
+    return candidate.id
+  }
+
+  it('keeps speech-noop registered but out of the Lia picker', async () => {
+    const editor = await setup()
+    const speech = useSpeechStore()
+
+    const registered = speech.availableSpeechProvidersMetadata.map(meta => meta.id)
+    const offered = editor.providerOptions.value.map(option => option.id)
+
+    // Still a real provider in the global registry, so AIRI keeps working and the
+    // speech store keeps defaulting to it.
+    expect(registered).toContain('speech-noop')
+    // ...and gone from the Lia tab, where "Nenhuma voz configurada" already says it.
+    expect(offered).not.toContain('speech-noop')
+    // Nothing else was filtered out as a side effect.
+    expect(offered).toEqual(registered.filter(id => id !== 'speech-noop'))
+    expect(offered.length).toBe(registered.length - 1)
+  })
+
+  it('applies the persisted voice to this window\'s speech runtime on hydration', async () => {
+    ipc.getVoiceConfig.mockResolvedValue({
+      tts: {
+        preferred: { providerId: KOKORO, voiceId: 'af_heart', modelId: '' },
+        fallback: [],
+      },
+    })
+    const speech = useSpeechStore()
+    const voiceStore = useLiaVoiceStoreForSpy()
+
+    // The whole reported bug: the config is on disk, the runtime is not.
+    expect(speech.activeSpeechProvider).toBe('speech-noop')
+
+    await voiceStore.hydrateRuntime()
+
+    expect(speech.activeSpeechProvider).toBe(KOKORO)
+    expect(speech.activeSpeechVoice?.id).toBe('af_heart')
+  })
+
+  it('hydrating without a configured voice leaves the runtime alone', async () => {
+    ipc.getVoiceConfig.mockResolvedValue({ tts: {} })
+    const speech = useSpeechStore()
+
+    await useLiaVoiceStoreForSpy().hydrateRuntime()
+
+    expect(speech.activeSpeechProvider).toBe('speech-noop')
+  })
+
+  it('does not ask an unconfigured provider for its catalogue', async () => {
+    const unconfigured = anUnconfiguredProvider()
+    const editor = await setup({
+      tts: { preferred: { providerId: unconfigured, voiceId: '', modelId: '' }, fallback: [] },
+    })
+
+    const spy = vi.spyOn(useProviderStore(), 'listProviderVoices').mockResolvedValue([] as never)
+
+    expect(editor.requiresConfiguration(unconfigured)).toBe(true)
+    await editor.refreshVoices(unconfigured)
+
+    expect(spy).not.toHaveBeenCalled()
+    expect(editor.voiceCatalogState.value).toBe('needsConfiguration')
+  })
+
+  it('does not let a late answer from the previous provider clear the current one\'s loading state', async () => {
+    const editor = await setup({
+      tts: { preferred: { providerId: KOKORO, voiceId: '', modelId: '' }, fallback: [] },
+    })
+
+    // The old provider only needs to be *allowed* to load, so mark it ready in
+    // the config store rather than inventing a second credential-free provider.
+    const unconfigured = anUnconfiguredProvider()
+    markConfigured(unconfigured)
+    expect(editor.requiresConfiguration(unconfigured)).toBe(false)
+
+    const release: Record<string, () => void> = {}
+    vi.spyOn(useProviderStore(), 'listProviderVoices').mockImplementation(
+      (providerId: string) => new Promise((resolve) => {
+        release[providerId] = () => resolve([] as never)
+      }),
+    )
+
+    const slow = editor.refreshVoices(unconfigured)
+    const current = editor.refreshVoices(KOKORO)
+
+    expect(editor.isLoadingVoices.value).toBe(true)
+
+    // The stale one lands while Kokoro is still in flight.
+    release[unconfigured]()
+    await slow
+
+    expect(editor.isLoadingVoices.value).toBe(true)
+
+    release[KOKORO]()
+    await current
+
+    expect(editor.isLoadingVoices.value).toBe(false)
   })
 })

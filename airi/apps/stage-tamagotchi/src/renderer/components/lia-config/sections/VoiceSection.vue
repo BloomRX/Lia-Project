@@ -113,7 +113,23 @@ function onPreview(): void {
         the message says where that provider's voice is chosen instead.
       -->
       <p
-        v-else-if="editor.hasNoVoiceCatalog.value"
+        v-else-if="editor.voiceCatalogState.value === 'needsConfiguration'"
+        class="text-xs text-amber-600 dark:text-amber-400"
+        data-testid="lia-config-voice-needs-config"
+      >
+        {{ tt('catalog.needsConfiguration') }}
+      </p>
+
+      <p
+        v-else-if="editor.voiceCatalogState.value === 'error'"
+        class="text-xs text-red-500 dark:text-red-400"
+        data-testid="lia-config-voice-catalog-error"
+      >
+        {{ tt('catalog.error') }}
+      </p>
+
+      <p
+        v-else-if="editor.voiceCatalogState.value === 'empty'"
         class="text-xs text-neutral-500 dark:text-neutral-400"
         data-testid="lia-config-voice-no-catalog"
       >
@@ -124,8 +140,9 @@ function onPreview(): void {
       </p>
 
       <p
-        v-else-if="editor.isLoadingVoices.value"
+        v-else-if="editor.voiceCatalogState.value === 'loading'"
         class="text-xs text-neutral-400 dark:text-neutral-500"
+        data-testid="lia-config-voice-catalog-loading"
       >
         {{ tt('catalog.loading') }}
       </p>
@@ -236,7 +253,23 @@ function onPreview(): void {
       </label>
 
       <p
-        v-else-if="editor.fallbackHasNoVoiceCatalog.value"
+        v-else-if="editor.fallbackVoiceCatalogState.value === 'needsConfiguration'"
+        class="text-xs text-amber-600 dark:text-amber-400"
+        data-testid="lia-config-voice-reserve-needs-config"
+      >
+        {{ tt('catalog.needsConfiguration') }}
+      </p>
+
+      <p
+        v-else-if="editor.fallbackVoiceCatalogState.value === 'error'"
+        class="text-xs text-red-500 dark:text-red-400"
+        data-testid="lia-config-voice-reserve-catalog-error"
+      >
+        {{ tt('catalog.error') }}
+      </p>
+
+      <p
+        v-else-if="editor.fallbackVoiceCatalogState.value === 'empty'"
         class="text-xs text-neutral-500 dark:text-neutral-400"
         data-testid="lia-config-voice-reserve-no-catalog"
       >
