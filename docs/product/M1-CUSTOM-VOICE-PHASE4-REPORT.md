@@ -183,9 +183,41 @@ link**. A test asserts `colab.research.google.com` does not appear, with a comme
 marking it as the assertion to change — deliberately — once a real notebook is
 published and verified.
 
-No training code was written, and no Colab contract was invented. The future
-shape (recordings → notebook → training → package → download → Importar) fits the
-existing import path, which already accepts a voice file and registers it.
+No training code was written, and no Colab contract was invented.
+
+### Planned contract for a future notebook (item M)
+
+The flow would be: recordings → notebook → training → package → download →
+`Importar voz`. What makes that cheap to add later is that the import path already
+validates against a per-engine contract, so a notebook only has to produce files
+that satisfy one that exists.
+
+`VOICE_ENGINES` today:
+
+| Engine | Roles | Extensions |
+|---|---|---|
+| `alltalk` | `referenceAudio` | `.wav` `.mp3` `.flac` `.ogg` |
+| `generic` | `model` | `.pth` `.pt` `.onnx` `.ckpt` `.safetensors` `.bin` `.json` |
+| `rvc` | `model`, `index` | `.pth`, `.index` |
+
+Two consequences for whoever writes the notebook:
+
+1. **It must emit files matching a declared role and extension.** A notebook that
+   produces, say, a `.ckpt` plus a `.json` config already fits `generic`; one that
+   produces a `.pth` and an `.index` already fits `rvc`. Anything else needs a new
+   engine entry first — and that entry is a *declaration* of what the backend
+   expects, not a Lia-side implementation of it. The core still must not assume
+   RVC, F5, XTTS or AllTalk.
+2. **The 4 GB per-file limit (`MAX_FILE_BYTES`) applies.** A notebook that exports
+   full checkpoints with optimizer state will blow it; it should export inference
+   weights only.
+
+What must **not** change: the profile stays a reference, never a binary in config;
+`userData/lia-voices/<id>/` stays the canonical location; and an imported file is
+data, never something the Lia executes.
+
+Until a notebook exists and is verified end to end, the button stays "coming soon"
+and renders no link.
 
 ## 11. Tests and mutations
 
