@@ -670,6 +670,49 @@ export interface LiaVoiceProfileImportRequest {
   metadata?: Record<string, string>
 }
 
+/**
+ * How to reach the local AllTalk server. Runtime configuration only - it lives
+ * in `voice.runtime.alltalk` inside `lia-product.json`, never inside a voice
+ * profile, because one server serves every imported voice.
+ *
+ * No secret and no audio: AllTalk on localhost takes no credential, and the
+ * reference WAV stays on disk under `userData/lia-voices/<id>/`.
+ */
+export interface LiaAllTalkRuntimeConfig {
+  /** Base URL without a trailing slash, e.g. `http://127.0.0.1:7851`. */
+  baseUrl: string
+  /** AllTalk's own voices folder, chosen through the OS directory picker. */
+  voicesDir?: string
+  /** Per-request timeout in milliseconds. */
+  timeoutMs?: number
+}
+
+/**
+ * What the UI shows about AllTalk. `notConfigured` is distinct from `offline`:
+ * one says "point me at your server", the other says "the server is not
+ * running". Conflating them sends the user to the wrong fix.
+ */
+export type LiaAllTalkStatus
+  = | { state: 'checking' }
+    | { state: 'connected', voices: string[] }
+    | { state: 'error', error: string }
+    | { state: 'notConfigured' }
+    | { state: 'offline' }
+
+/** A synthesis request from the renderer, resolved to a profile in the main process. */
+export interface LiaAllTalkSynthesisRequest {
+  /** The custom voice profile id - never a path, never a filename. */
+  profileId: string
+  text: string
+  /** BCP-47 tag, e.g. `pt-BR`. Normalized to AllTalk's `pt` in the main process. */
+  language?: string
+}
+
+/** Outcome of publishing a profile's reference audio into AllTalk's voices folder. */
+export type LiaAllTalkSyncResult
+  = | { copied: boolean, filename: string, ok: true }
+    | { error: LiaVoiceProfileErrorCode | 'notConfigured', message: string, ok: false }
+
 export const electronLiaVoiceConfigGet = defineInvokeEventa<LiaVoiceConfig>('eventa:invoke:lia:voice:config:get')
 export const electronLiaVoiceConfigSet = defineInvokeEventa<void, LiaVoiceConfig>('eventa:invoke:lia:voice:config:set')
 
@@ -686,6 +729,29 @@ export const electronLiaVoiceProfilesPick = defineInvokeEventa<string[] | null, 
 export const electronLiaVoiceProfilesImport = defineInvokeEventa<LiaVoiceProfileResult<LiaCustomVoiceProfile>, LiaVoiceProfileImportRequest>('eventa:invoke:lia:voice:profiles:import')
 
 export const electronLiaVoiceProfilesRemove = defineInvokeEventa<LiaVoiceProfileResult<{ id: string }>, { id: string }>('eventa:invoke:lia:voice:profiles:remove')
+
+/**
+ * AllTalk runtime.
+ *
+ * The voices directory is only ever produced by the main process's own
+ * `showOpenDialog`: there is no channel through which the renderer can set a
+ * path, so a compromised renderer cannot point the sync at an arbitrary folder.
+ */
+export const electronLiaAllTalkConfigGet = defineInvokeEventa<LiaAllTalkRuntimeConfig>('eventa:invoke:lia:alltalk:config:get')
+
+/** Writes only `baseUrl`/`timeoutMs`. `voicesDir` is ignored here on purpose. */
+export const electronLiaAllTalkConfigSet = defineInvokeEventa<LiaAllTalkRuntimeConfig, Partial<LiaAllTalkRuntimeConfig>>('eventa:invoke:lia:alltalk:config:set')
+
+/** Opens the OS directory picker and persists the choice. Resolves `null` on cancel. */
+export const electronLiaAllTalkVoicesDirPick = defineInvokeEventa<string | null, { clear?: boolean }>('eventa:invoke:lia:alltalk:voices-dir:pick')
+
+export const electronLiaAllTalkStatus = defineInvokeEventa<LiaAllTalkStatus>('eventa:invoke:lia:alltalk:status')
+
+/** Publishes a profile's reference audio into AllTalk's voices folder. */
+export const electronLiaAllTalkSync = defineInvokeEventa<LiaAllTalkSyncResult, { profileId: string }>('eventa:invoke:lia:alltalk:sync')
+
+/** Resolves the profile, publishes it if needed, and returns the generated WAV. */
+export const electronLiaAllTalkSynthesize = defineInvokeEventa<ArrayBuffer, LiaAllTalkSynthesisRequest>('eventa:invoke:lia:alltalk:synthesize')
 
 /** Engines the current build knows how to drive, with what each expects. */
 export const electronLiaVoiceEnginesList = defineInvokeEventa<Array<{ extensions: string[], id: string, label: string, roles: string[] }>>('eventa:invoke:lia:voice:engines:list')

@@ -49,6 +49,20 @@ const REGISTRY_FILENAME = 'index.json'
  */
 export const VOICE_ENGINES = [
   {
+    /**
+     * Reference-audio voice cloning served by a local AllTalk server.
+     *
+     * The role is `referenceAudio` rather than `model` because that is what it
+     * is: a few seconds of speech the backend clones from. No weights, no
+     * training - the backend (XTTS-v2 today) is AllTalk's business, not the
+     * Lia's.
+     */
+    id: 'alltalk',
+    label: 'AllTalk (voice cloning)',
+    roles: ['referenceAudio'],
+    extensions: ['.wav', '.mp3', '.flac', '.ogg'],
+  },
+  {
     id: 'generic',
     label: 'Generic (local server)',
     roles: ['model'],
@@ -104,6 +118,14 @@ export interface LiaVoiceProfileStore {
   get: (id: string) => Promise<LiaCustomVoiceProfile | undefined>
   importProfile: (request: LiaVoiceProfileImportRequest, allowedSourcePaths: ReadonlySet<string>) => Promise<LiaVoiceProfileResult<LiaCustomVoiceProfile>>
   remove: (id: string) => Promise<LiaVoiceProfileResult<{ id: string }>>
+  /**
+   * Merges string metadata onto a profile.
+   *
+   * Used by the AllTalk sync to record what it published. Values are coerced to
+   * strings and length-capped exactly as at import time, so this cannot become a
+   * side door for a path or a blob into the registry.
+   */
+  update: (id: string, metadata: Record<string, string>) => Promise<LiaVoiceProfileResult<LiaCustomVoiceProfile>>
   /** Absolute path of a profile file, or null if the profile/file is unknown. */
   resolveFile: (id: string, filename: string) => string | null
 }
@@ -259,6 +281,23 @@ export function createLiaVoiceProfileStore(params: { rootDir: string }): LiaVoic
 
       await writeRegistry(rootDir, [...profiles, profile])
       return { ok: true, value: profile }
+    },
+
+    async update(id, metadata) {
+      const profiles = await readRegistry(rootDir)
+      const index = profiles.findIndex(profile => profile.id === id)
+      if (index === -1)
+        return fail('notFound', 'That voice is not in the library.')
+
+      const merged: Record<string, string> = { ...(profiles[index].metadata ?? {}) }
+      for (const [key, value] of Object.entries(metadata ?? {})) {
+        if (typeof value === 'string')
+          merged[key] = value.slice(0, 500)
+      }
+
+      const updated: LiaCustomVoiceProfile = { ...profiles[index], metadata: merged }
+      await writeRegistry(rootDir, profiles.map((profile, i) => (i === index ? updated : profile)))
+      return { ok: true, value: updated }
     },
 
     async remove(id) {

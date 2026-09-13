@@ -1,6 +1,7 @@
 import type { createContext } from '@moeru/eventa/adapters/electron/main'
 
 import type { LiaCustomVoiceProfile, LiaVoiceProfileImportRequest } from '../../../shared/eventa'
+import type { LiaVoiceProfileStore } from './voice-profiles'
 
 import { join } from 'node:path'
 
@@ -34,10 +35,22 @@ type MainContext = ReturnType<typeof createContext>['context']
 export function registerLiaVoiceProfilesBridge(params: {
   context: MainContext
   rootDir?: string
+  /**
+   * Shared store. The AllTalk bridge needs the *same* registry instance to
+   * publish and unpublish voices, so the app creates one and hands it to both.
+   */
+  store?: LiaVoiceProfileStore
+  /**
+   * Runs before a profile is deleted. The AllTalk bridge uses it to remove the
+   * derived copy it published, so a removed voice leaves nothing behind in
+   * AllTalk's folder. A failure here never blocks the removal: the canonical
+   * profile is the real record, and an orphaned copy is harmless.
+   */
+  beforeRemove?: (id: string) => Promise<void>
 }): void {
   const { context } = params
   const rootDir = params.rootDir ?? join(app.getPath('userData'), 'lia-voices')
-  const store = createLiaVoiceProfileStore({ rootDir })
+  const store = params.store ?? createLiaVoiceProfileStore({ rootDir })
 
   /**
    * Paths the dialog has handed back and that have not been consumed yet.
@@ -112,6 +125,10 @@ export function registerLiaVoiceProfilesBridge(params: {
     },
   )
 
-  defineInvokeHandler(context, electronLiaVoiceProfilesRemove, async (payload: { id: string }) =>
-    store.remove(String(payload?.id ?? '')))
+  defineInvokeHandler(context, electronLiaVoiceProfilesRemove, async (payload: { id: string }) => {
+    const id = String(payload?.id ?? '')
+    if (params.beforeRemove)
+      await params.beforeRemove(id).catch(() => {})
+    return store.remove(id)
+  })
 }

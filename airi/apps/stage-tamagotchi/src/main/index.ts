@@ -5,7 +5,7 @@ import type { MainWindowSizeSettingsController } from './windows/main/window-siz
 
 import process, { env, platform } from 'node:process'
 
-import { dirname } from 'node:path'
+import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import messages from '@proj-airi/i18n/locales'
@@ -42,9 +42,12 @@ import { setupArtistryBridge } from './services/airi/widgets/artistry-bridge'
 import { setupAutoUpdater } from './services/electron/auto-updater'
 import { setupGlobalShortcutService } from './services/electron/global-shortcut'
 import { setupPermissionHandlers } from './services/electron/media-permissions'
+import { registerLiaAllTalkBridge } from './services/lia/alltalk-service'
+import { createAllTalkSyncService } from './services/lia/alltalk-voices-sync'
 import { registerLiaProviderConfigBridge } from './services/lia/provider-config-service'
 import { createLiaSecretVault, registerLiaSecretsBridge } from './services/lia/secrets-service'
 import { registerLiaVoiceConfigBridge } from './services/lia/voice-config-service'
+import { createLiaVoiceProfileStore } from './services/lia/voice-profiles'
 import { registerLiaVoiceProfilesBridge } from './services/lia/voice-profiles-service'
 import { setupTray } from './tray'
 import { setupAboutWindowReusable } from './windows/about'
@@ -188,6 +191,11 @@ app.whenReady().then(async () => {
   // Lia secure secret vault (M1 Phase 4C). Provider API keys live encrypted in
   // the Electron main process, never in renderer localStorage or lia-product.json.
   const liaSecrets = injeca.provide('services:lia-secrets', () => createLiaSecretVault())
+  // One voice-library instance for the whole main process. The AllTalk bridge and
+  // the profiles bridge must read and write the same registry, otherwise a
+  // published voice would not be visible to the code that removes it.
+  const liaVoiceProfiles = injeca.provide('services:lia-voice-profiles', () =>
+    createLiaVoiceProfileStore({ rootDir: join(app.getPath('userData'), 'lia-voices') }))
   const electronApp = injeca.provide('host:electron:app', () => app)
   const autoUpdater = injeca.provide('services:auto-updater', {
     dependsOn: { appConfig },
@@ -365,10 +373,34 @@ app.whenReady().then(async () => {
   // bridge above on purpose - selecting a voice still goes through
   // `electronLiaVoiceConfigSet`, so `voice.tts` keeps exactly one writer.
   injeca.invoke({
-    dependsOn: {},
-    callback: async () => {
+    dependsOn: { liaProductConfig, liaVoiceProfiles },
+    callback: async (deps) => {
       const { context } = createContext(ipcMain)
-      registerLiaVoiceProfilesBridge({ context })
+      registerLiaVoiceProfilesBridge({
+        context,
+        store: deps.liaVoiceProfiles,
+        // Deleting a profile also unpublishes the copy the Lia put in AllTalk's
+        // folder. `removeManagedVoice` re-derives the filename from the profile
+        // id and refuses anything it does not own, so a same-named file the user
+        // placed there by hand survives.
+        beforeRemove: id => createAllTalkSyncService({
+          store: deps.liaVoiceProfiles,
+          voicesDir: deps.liaProductConfig.get()?.voice?.runtime?.alltalk?.voicesDir,
+        }).removeManagedVoice(id).then(() => undefined),
+      })
+    },
+  })
+
+  // Local AllTalk runtime: connection settings, voices folder, publish/synthesize.
+  injeca.invoke({
+    dependsOn: { liaProductConfig, liaVoiceProfiles },
+    callback: async (deps) => {
+      const { context } = createContext(ipcMain)
+      registerLiaAllTalkBridge({
+        context,
+        liaProductConfig: deps.liaProductConfig,
+        store: deps.liaVoiceProfiles,
+      })
     },
   })
 
