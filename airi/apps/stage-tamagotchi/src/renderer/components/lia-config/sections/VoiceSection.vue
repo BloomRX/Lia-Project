@@ -16,6 +16,8 @@
 import { onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 
+import CustomVoicePanel from './CustomVoicePanel.vue'
+
 import { useLiaVoiceStore } from '../../../stores/lia/voice'
 import { useVoiceEditor } from '../../../stores/lia/voice-editor'
 import { createVoicePreviewDriver } from '../../../stores/lia/voice-preview'
@@ -66,6 +68,9 @@ function onPreview(): void {
 
 <template>
   <div class="flex flex-col gap-5">
+    <!-- Voz personalizada: imported voices and the local server that speaks them -->
+    <CustomVoicePanel />
+
     <!-- Voz principal -->
     <section class="flex flex-col gap-3" data-testid="lia-config-voice-primary">
       <h3 class="text-sm text-neutral-900 font-semibold dark:text-neutral-50">

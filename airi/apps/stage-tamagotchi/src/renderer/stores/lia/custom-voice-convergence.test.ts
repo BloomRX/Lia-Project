@@ -76,7 +76,9 @@ describe('a custom voice target is an ordinary target', () => {
 
 describe('the preview goes through the common path', () => {
   it('resolves the provider by id and calls speechStore.speech with the profile id', async () => {
-    const speech = vi.fn(async () => new ArrayBuffer(0))
+    // Typed parameters: without them `mock.calls[0]` is an empty tuple and the
+    // destructuring below has nothing to check.
+    const speech = vi.fn(async (_provider: unknown, _model: string, _text: string, _voiceId: string) => new ArrayBuffer(0))
     const speechStore = useSpeechStore()
     vi.spyOn(speechStore, 'speech').mockImplementation(speech as never)
 
@@ -116,7 +118,7 @@ describe('neither path special-cases the provider', () => {
     resolve(__dirname, '../../../../../../packages/stage-ui/src/libs/speech/synthesize-target.ts'),
   ]
 
-  it.each(files.map(file => [file.split('/').pop(), file]))(
+  it.each(files.map(file => [file.split('/').pop() as string, file] as [string, string]))(
     '%s has no branch on the custom voice provider',
     (_name, file) => {
       const source = readFileSync(file, 'utf8')

@@ -56,6 +56,31 @@ vi.mock('@proj-airi/electron-vueuse', () => ({
     if (invoke?.receiveEvent?.id === 'eventa:invoke:lia:voice:config:set-receive')
       return ipc.saveVoiceConfig
 
+    // The custom-voice panel is part of this section now, so its AllTalk channels
+    // have to be answered too. It reports "not configured" and an empty library:
+    // the neutral state, so these tests keep exercising the primary voice UI.
+    const id = invoke?.receiveEvent?.id
+    if (id === 'eventa:invoke:lia:alltalk:config:get-receive')
+      return async () => ({ baseUrl: 'http://127.0.0.1:7851' })
+    if (id === 'eventa:invoke:lia:alltalk:config:set-receive')
+      return async () => ({ baseUrl: 'http://127.0.0.1:7851' })
+    if (id === 'eventa:invoke:lia:alltalk:voices-dir:pick-receive')
+      return async () => null
+    if (id === 'eventa:invoke:lia:alltalk:sync-receive')
+      return async () => ({ ok: true, copied: false, filename: '' })
+    if (id === 'eventa:invoke:lia:alltalk:status-receive')
+      return async () => ({ state: 'notConfigured' })
+    if (id === 'eventa:invoke:lia:voice:profiles:list-receive')
+      return async () => []
+    if (id === 'eventa:invoke:lia:voice:engines:list-receive')
+      return async () => []
+    if (id === 'eventa:invoke:lia:voice:profiles:pick-receive')
+      return async () => null
+    if (id === 'eventa:invoke:lia:voice:profiles:import-receive')
+      return async () => ({ ok: false, error: 'cancelled', message: '' })
+    if (id === 'eventa:invoke:lia:voice:profiles:remove-receive')
+      return async () => ({ ok: true, value: { id: '' } })
+
     throw new Error(`Unexpected eventa invoke: ${JSON.stringify(invoke)}`)
   },
 }))
@@ -212,7 +237,17 @@ describe('voice section rendering (4E-2 voice UI)', () => {
     // there is nothing honest to offer and no free-text field replaces it.
     expect(useProviderStore().supportsModelListing('kokoro-local')).toBe(true)
     expect(contains(html, 'lia-config-voice-model')).toBe(false)
-    expect(html).not.toMatch(/<input/)
+
+    // Scoped to the primary-voice block. The section now also holds the custom
+    // voice panel, which has a legitimate text field for the server address; the
+    // property under test is that the *model* area offers no free-text escape
+    // hatch, and that is unchanged.
+    const primary = html.slice(
+      html.indexOf('data-testid="lia-config-voice-primary"'),
+      html.indexOf('data-testid="lia-config-voice-reserve"'),
+    )
+    expect(primary.length).toBeGreaterThan(0)
+    expect(primary).not.toMatch(/<input/)
   })
 
   it('explains instead of inventing voices for a provider with no catalogue', async () => {

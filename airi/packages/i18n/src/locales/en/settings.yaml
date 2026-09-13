@@ -1243,6 +1243,9 @@ pages:
       deepgram-tts:
         description: deepgram.com
         title: Deepgram
+      custom-local-voice:
+        title: Custom voice
+        description: Speak with a voice you imported yourself, through a local speech server.
       speech-noop:
         title: None
         description: No speech output.

@@ -159,6 +159,44 @@ config:
         persist: "Could not save the voice. Nothing was changed."
         projection: "The voice was saved, but Lia's card was not updated. It will be repaired when this screen is opened again."
         fallbackIdentical: "The backup voice cannot be the same as the main voice."
+      custom:
+        title: "Custom voice"
+        subtitle: "Speak with a voice of your own. The file stays on your computer."
+        server:
+          label: "Speech server"
+          placeholder: "http://127.0.0.1:7851"
+          save: "Save"
+        folder:
+          label: "Server voices folder"
+          none: "No folder chosen yet."
+          choose: "Select folder…"
+          clear: "Clear"
+        states:
+          checking: "Checking…"
+          connected: "Connected"
+          offline: "Disconnected"
+          notConfigured: "Not configured"
+          error: "Error"
+        import:
+          button: "Import voice"
+          confirm: "Import"
+          cancel: "Cancel"
+          namePrompt: "Give this voice a name:"
+          nameDefault: "My voice"
+        profiles:
+          empty: "No imported voices yet."
+          use: "Use this voice"
+          test: "Test"
+          testing: "Playing…"
+          remove: "Remove"
+          removeYes: "Yes, remove"
+          removeConfirm: "Remove this voice? The imported file will be deleted."
+          status:
+            ready: "Ready to use"
+            inUse: "In use"
+            notConfigured: "Speech server not configured"
+            serverOffline: "Speech server is off"
+            syncFailed: "Could not send to the server"
     appearance:
       title: "Appearance"
       summary: "How Lia looks: avatar, outfit, accessories and state."

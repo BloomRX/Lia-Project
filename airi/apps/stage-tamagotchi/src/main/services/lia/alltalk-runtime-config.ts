@@ -1,5 +1,6 @@
 import type { LiaAllTalkRuntimeConfig } from '../../../shared/eventa'
 import type { LiaProductConfig } from '../../configs/lia-schema'
+import type { AllTalkRuntimeConfig } from './alltalk-client'
 
 import { defaultLiaProductConfig } from '../../configs/lia-schema'
 import { DEFAULT_ALLTALK_BASE_URL, DEFAULT_ALLTALK_TIMEOUT_MS } from './alltalk-client'
@@ -21,7 +22,12 @@ import { DEFAULT_ALLTALK_BASE_URL, DEFAULT_ALLTALK_TIMEOUT_MS } from './alltalk-
  * configured" remains distinguishable from "configured as empty" - the UI owes
  * the user a different instruction in each case.
  */
-export function resolveAllTalkRuntime(config: LiaProductConfig | undefined): LiaAllTalkRuntimeConfig {
+/**
+ * Returns the *client's* shape, with `baseUrl` and `timeoutMs` filled in. That is
+ * the whole job of this function: downstream code should never have to ask
+ * whether a default was applied.
+ */
+export function resolveAllTalkRuntime(config: LiaProductConfig | undefined): AllTalkRuntimeConfig {
   const stored = config?.voice?.runtime?.alltalk
   return {
     baseUrl: stored?.baseUrl?.trim() || DEFAULT_ALLTALK_BASE_URL,

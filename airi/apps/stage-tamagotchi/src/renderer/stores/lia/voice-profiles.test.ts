@@ -24,6 +24,7 @@ const ipc = vi.hoisted(() => ({
   pick: vi.fn(async (_options: unknown): Promise<string[] | null> => null),
   importProfile: vi.fn(async (_request: unknown): Promise<unknown> => ({ error: 'fileMissing', message: 'x', ok: false })),
   remove: vi.fn(async (_payload: unknown): Promise<unknown> => ({ ok: true, value: { id: 'x' } })),
+  sync: vi.fn(async (_payload: unknown): Promise<unknown> => ({ ok: true, copied: true, filename: 'lia.wav' })),
 }))
 
 const card = vi.hoisted(() => ({
@@ -53,6 +54,8 @@ vi.mock('@proj-airi/electron-vueuse', () => ({
       return ipc.importProfile
     if (id === 'eventa:invoke:lia:voice:profiles:remove-receive')
       return ipc.remove
+    if (id === 'eventa:invoke:lia:alltalk:sync-receive')
+      return ipc.sync
     throw new Error(`Unexpected eventa invoke: ${JSON.stringify(invoke)}`)
   },
 }))

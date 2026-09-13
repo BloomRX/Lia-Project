@@ -4,7 +4,7 @@ import { sanitizeLogText } from './main-process-log-bus'
 
 describe('sanitizeLogText', () => {
   it('strips ANSI escape codes', () => {
-    expect(sanitizeLogText('\u001b[32mgreen\u001b[0m message')).toBe('green message')
+    expect(sanitizeLogText('\u001B[32mgreen\u001B[0m message')).toBe('green message')
   })
 
   it('masks Bearer tokens and Authorization headers', () => {

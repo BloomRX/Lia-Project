@@ -159,6 +159,44 @@ config:
         persist: "Não foi possível salvar a voz. Nada foi alterado."
         projection: "A voz foi salva, mas o cartão da Lia não foi atualizado. Será corrigido ao reabrir esta tela."
         fallbackIdentical: "A voz de reserva não pode ser igual à voz principal."
+      custom:
+        title: "Voz personalizada"
+        subtitle: "Use uma voz sua. O arquivo fica só no seu computador."
+        server:
+          label: "Servidor de voz"
+          placeholder: "http://127.0.0.1:7851"
+          save: "Salvar"
+        folder:
+          label: "Pasta de vozes do servidor"
+          none: "Nenhuma pasta escolhida ainda."
+          choose: "Selecionar pasta…"
+          clear: "Limpar"
+        states:
+          checking: "Verificando…"
+          connected: "Conectado"
+          offline: "Desconectado"
+          notConfigured: "Não configurado"
+          error: "Erro"
+        import:
+          button: "Importar voz"
+          confirm: "Importar"
+          cancel: "Cancelar"
+          namePrompt: "Dê um nome para esta voz:"
+          nameDefault: "Minha voz"
+        profiles:
+          empty: "Nenhuma voz importada ainda."
+          use: "Usar esta voz"
+          test: "Testar"
+          testing: "Tocando…"
+          remove: "Remover"
+          removeYes: "Sim, remover"
+          removeConfirm: "Remover esta voz? O arquivo importado será apagado."
+          status:
+            ready: "Pronta para uso"
+            inUse: "Em uso"
+            notConfigured: "Servidor de voz não configurado"
+            serverOffline: "Servidor de voz desligado"
+            syncFailed: "Não foi possível enviar ao servidor"
     appearance:
       title: "Aparência"
       summary: "Como a Lia parece: avatar, roupa, acessórios e estado."

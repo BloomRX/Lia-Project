@@ -7,6 +7,7 @@ import type {
   LiaAllTalkSynthesisRequest,
 } from '../../../shared/eventa'
 import type { LiaProductConfig } from '../../configs/lia-schema'
+import type { AllTalkRuntimeConfig } from './alltalk-client'
 import type { LiaVoiceProfileStore } from './voice-profiles'
 
 import { defineInvokeHandler } from '@moeru/eventa'
@@ -20,6 +21,7 @@ import {
   electronLiaAllTalkSynthesize,
   electronLiaAllTalkVoicesDirPick,
 } from '../../../shared/eventa'
+import { defaultLiaProductConfig } from '../../configs/lia-schema'
 import {
   createAllTalkClient,
 } from './alltalk-client'
@@ -70,7 +72,7 @@ export function registerLiaAllTalkBridge(params: {
 }): void {
   const { context, liaProductConfig } = params
 
-  function readRuntime(): LiaAllTalkRuntimeConfig {
+  function readRuntime(): AllTalkRuntimeConfig {
     return resolveAllTalkRuntime(liaProductConfig.get())
   }
 

@@ -20,6 +20,7 @@ import App from './App.vue'
 
 import { shouldInstallRealChatObserver } from './diagnostics/gate'
 import { i18n } from './modules/i18n'
+import { installCustomVoiceTransport } from './stores/lia/custom-voice-transport'
 import { resolveRendererWindowContext } from './window-context'
 
 import '@unocss/reset/tailwind.css'

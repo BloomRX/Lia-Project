@@ -145,7 +145,8 @@ export const providerCustomLocalVoice = defineProvider({
           name: profile.name,
           description: profile.name,
           previewURL: '',
-          languages: profile.language ? [profile.language] : [],
+          // `VoiceInfo.languages` is a labelled list, not bare tags.
+          languages: profile.language ? [{ code: profile.language, title: profile.language }] : [],
           provider: CUSTOM_LOCAL_VOICE_PROVIDER_ID,
           gender: 'neutral' as const,
         }))

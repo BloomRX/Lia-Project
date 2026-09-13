@@ -1,4 +1,4 @@
-import type { LiaAllTalkRuntimeConfig } from '../../../shared/eventa'
+import type { AllTalkRuntimeConfig } from './alltalk-client'
 import type { LiaVoiceProfileStore } from './voice-profiles'
 
 import { createAllTalkClient, toAllTalkLanguage } from './alltalk-client'
@@ -29,7 +29,8 @@ export interface SynthesizeProfileParams {
   text: string
   /** BCP-47 tag, e.g. `pt-BR`; normalized to AllTalk's `pt` by the client. */
   language?: string
-  runtime: LiaAllTalkRuntimeConfig
+  /** Already resolved: `baseUrl` and `timeoutMs` are filled in by the caller. */
+  runtime: AllTalkRuntimeConfig
   store: LiaVoiceProfileStore
   fetchImpl?: typeof fetch
 }

@@ -8,6 +8,7 @@ import type { NoticeWindowManager } from '../notice'
 import type { OnboardingWindowManager } from '../onboarding'
 import type { SettingsWindowManager } from '../settings'
 import type { WidgetsWindowManager } from '../widgets'
+import type { MainWindowSizeSettingsController } from './window-size-settings'
 import type { MainWindowContext } from './window-sizing'
 
 import { dirname, join, resolve } from 'node:path'
@@ -30,15 +31,15 @@ import { createConfig } from '../../libs/electron/persistence'
 import { protectPrivilegedWindowNavigation, setWindowAlwaysOnTop, transparentWindowConfig } from '../shared'
 import { setupMainWindowElectronInvokes } from './rpc/index.electron'
 import {
+  createMainWindowSizeSettingsController,
+
+} from './window-size-settings'
+import {
   createMainWindowContextSizing,
   HOME_WINDOW_PRESET,
   liaMainWindowStateSchema,
   MAIN_WINDOW_MIN_SIZE,
 } from './window-sizing'
-import {
-  createMainWindowSizeSettingsController,
-  type MainWindowSizeSettingsController,
-} from './window-size-settings'
 
 export async function setupMainWindow(params: {
   editorWindow: EditorWindowManager

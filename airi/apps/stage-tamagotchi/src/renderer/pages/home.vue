@@ -1,13 +1,18 @@
 <script setup lang="ts">
+import type { MainProcessLogLine } from '../../shared/eventa'
+
 import { useElectronEventaContext, useElectronEventaInvoke } from '@proj-airi/electron-vueuse'
-import { Button, GhostButton } from '@proj-airi/ui'
 import { useSettingsStageModel } from '@proj-airi/stage-ui/stores/settings/stage-model'
+import { Button, GhostButton } from '@proj-airi/ui'
 import { storeToRefs } from 'pinia'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 
-import type { MainProcessLogLine } from '../../shared/eventa'
+import liaFallbackAsset from '../assets/lia/lia-home.png'
+import LiaConfigPanel from '../components/lia-config/LiaConfigPanel.vue'
+import LiaProviderConfig from '../components/LiaProviderConfig.vue'
+import WindowTitleBar from '../components/Window/TitleBar.vue'
 
 import {
   electronGetMainWindowLogs,
@@ -15,11 +20,6 @@ import {
   electronOpenSettings,
   electronSetMainWindowContext,
 } from '../../shared/eventa'
-
-import WindowTitleBar from '../components/Window/TitleBar.vue'
-import LiaConfigPanel from '../components/lia-config/LiaConfigPanel.vue'
-import LiaProviderConfig from '../components/LiaProviderConfig.vue'
-import liaFallbackAsset from '../assets/lia/lia-home.png'
 import { useLiaProviderStore } from '../stores/lia/provider'
 import { useLiaVoiceStore } from '../stores/lia/voice'
 
@@ -276,35 +276,35 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="relative flex h-full w-full flex-col overflow-hidden bg-[var(--bg-color)] text-neutral-800 dark:text-neutral-100">
+  <div class="relative h-full w-full flex flex-col overflow-hidden bg-[var(--bg-color)] text-neutral-800 dark:text-neutral-100">
     <!-- window chrome / drag region (reuses AIRI TitleBar: drag-region + no-drag on controls) -->
     <WindowTitleBar
       :title="t('tamagotchi.home.presence.name')"
       icon="i-solar:home-angle-bold-duotone"
     />
 
-    <div class="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary-500/10 via-transparent to-pink-500/10 dark:from-primary-500/15 dark:to-pink-500/15" />
+    <div class="pointer-events-none absolute inset-0 from-primary-500/10 via-transparent to-pink-500/10 bg-gradient-to-br dark:from-primary-500/15 dark:to-pink-500/15" />
 
     <!-- Scrollable content below the fixed TitleBar: centers when it fits, scrolls when it overflows -->
     <div class="absolute inset-x-0 bottom-0 top-11 z-10 overflow-y-auto">
       <!-- Loading -->
-      <div v-if="view === 'loading'" class="flex min-h-full w-full items-center justify-center px-6 py-8 text-sm text-neutral-400 dark:text-neutral-500">
+      <div v-if="view === 'loading'" class="min-h-full w-full flex items-center justify-center px-6 py-8 text-sm text-neutral-400 dark:text-neutral-500">
         {{ t('tamagotchi.home.states.loading') }}
       </div>
 
       <!-- First-run setup (reuses the Lia provider editor). -->
-      <div v-else-if="view === 'onboarding'" class="flex min-h-full w-full items-center justify-center px-6 py-10">
+      <div v-else-if="view === 'onboarding'" class="min-h-full w-full flex items-center justify-center px-6 py-10">
         <LiaProviderConfig mode="onboarding" @complete="onOnboardingComplete" />
       </div>
 
       <!-- Later configuration (same editor). -->
-      <div v-else-if="view === 'settings'" class="flex min-h-full w-full items-center justify-center px-6 py-10">
+      <div v-else-if="view === 'settings'" class="min-h-full w-full flex items-center justify-center px-6 py-10">
         <LiaConfigPanel @back="onSettingsBack" />
       </div>
 
       <!-- Clean launcher / companion home -->
-      <div v-else class="flex min-h-full w-full flex-col">
-        <div class="my-auto flex w-full flex-col items-center justify-center gap-4 px-6 py-8 text-center">
+      <div v-else class="min-h-full w-full flex flex-col">
+        <div class="my-auto w-full flex flex-col items-center justify-center gap-4 px-6 py-8 text-center">
           <div class="relative">
             <div class="size-32 overflow-hidden rounded-2xl shadow-lg ring-1 ring-white/10">
               <img
@@ -316,10 +316,10 @@ onUnmounted(() => {
             </div>
           </div>
 
-          <h1 class="text-2xl font-semibold tracking-wide text-neutral-900 dark:text-white">
+          <h1 class="text-2xl text-neutral-900 font-semibold tracking-wide dark:text-white">
             {{ t('tamagotchi.home.presence.name') }}
           </h1>
-          <p class="max-w-xs text-sm leading-relaxed text-neutral-500 dark:text-neutral-300">
+          <p class="max-w-xs text-sm text-neutral-500 leading-relaxed dark:text-neutral-300">
             {{ t('tamagotchi.home.greeting') }}
           </p>
 
@@ -336,7 +336,7 @@ onUnmounted(() => {
             </span>
           </div>
 
-          <div class="mt-1 flex w-full max-w-xs flex-col gap-2">
+          <div class="mt-1 max-w-xs w-full flex flex-col gap-2">
             <Button
               color="primary"
               variant="primary"
@@ -362,9 +362,9 @@ onUnmounted(() => {
             />
           </div>
 
-          <div class="w-full max-w-xs">
+          <div class="max-w-xs w-full">
             <button
-              class="flex w-full items-center justify-center gap-1.5 py-1 text-xs text-neutral-500 transition hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200"
+              class="w-full flex items-center justify-center gap-1.5 py-1 text-xs text-neutral-500 transition dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200"
               type="button"
               :aria-expanded="logsOpen"
               @click="toggleLogs"
@@ -375,14 +375,18 @@ onUnmounted(() => {
             <div
               v-if="logsOpen"
               ref="logPanelEl"
-              class="mt-1 max-h-32 overflow-y-auto whitespace-pre-wrap break-words rounded-lg border border-neutral-200/70 bg-neutral-500/5 px-3 py-2 text-left text-xs leading-relaxed text-neutral-600 dark:border-neutral-700 dark:bg-black/20 dark:text-neutral-400"
+              class="mt-1 max-h-32 overflow-y-auto whitespace-pre-wrap break-words border border-neutral-200/70 rounded-lg bg-neutral-500/5 px-3 py-2 text-left text-xs text-neutral-600 leading-relaxed dark:border-neutral-700 dark:bg-black/20 dark:text-neutral-400"
             >
               <template v-if="logsLoading && logs.length === 0">
-                <p class="text-neutral-400 dark:text-neutral-500">{{ t('tamagotchi.home.logs.loading') }}</p>
+                <p class="text-neutral-400 dark:text-neutral-500">
+                  {{ t('tamagotchi.home.logs.loading') }}
+                </p>
               </template>
               <template v-else-if="logs.length === 0">
                 <p>{{ t('tamagotchi.home.logs.empty') }}</p>
-                <p class="mt-1 text-neutral-400 dark:text-neutral-500">{{ t('tamagotchi.home.logs.technicalNote') }}</p>
+                <p class="mt-1 text-neutral-400 dark:text-neutral-500">
+                  {{ t('tamagotchi.home.logs.technicalNote') }}
+                </p>
               </template>
               <template v-else>
                 <p v-for="line in logs" :key="line.id" class="py-0.5">

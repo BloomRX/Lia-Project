@@ -95,7 +95,8 @@ describe('registration', () => {
     expect(voices?.map(voice => voice.id)).toEqual(['profile-a', 'profile-b'])
     expect(voices?.[0]?.name).toBe('Lia pessoal')
     expect(voices?.[0]?.provider).toBe(CUSTOM_LOCAL_VOICE_PROVIDER_ID)
-    expect(voices?.[0]?.languages).toEqual(['pt-BR'])
+    // `VoiceInfo.languages` is a labelled list, not bare tags.
+    expect(voices?.[0]?.languages).toEqual([{ code: 'pt-BR', title: 'pt-BR' }])
     // A profile with no recorded language claims none, rather than a guess.
     expect(voices?.[1]?.languages).toEqual([])
   })

@@ -128,7 +128,9 @@ describe('persisted schema', () => {
   })
 
   it('accepts a document written before the runtime slice existed', () => {
-    const legacy: LiaProductConfig = { schemaVersion: 1, voice: { tts: {} } }
+    // A document as an older build wrote it: no `runtime`, and no `fallback`
+    // either, since that default only materializes on parse.
+    const legacy = { schemaVersion: 1, voice: { tts: {} } }
     const parsed = parse(liaProductConfigSchema, JSON.parse(JSON.stringify(legacy)))
 
     // Additive and optional: no migration, nothing lost. The `fallback: []` is
@@ -160,7 +162,7 @@ describe('resolveAllTalkRuntime', () => {
   it('keeps an unset voicesDir absent rather than empty', () => {
     // The UI distinguishes "not configured" from "configured as empty", so the
     // difference has to survive the read.
-    expect(resolveAllTalkRuntime({ schemaVersion: 1 })).not.toHaveProperty('voicesDir')
+    expect(resolveAllTalkRuntime({ schemaVersion: 1 } as LiaProductConfig)).not.toHaveProperty('voicesDir')
     const cleared = resolveAllTalkRuntime(mergeAllTalkRuntime(configWithVoice, { voicesDir: '' }))
     expect(cleared).not.toHaveProperty('voicesDir')
   })
