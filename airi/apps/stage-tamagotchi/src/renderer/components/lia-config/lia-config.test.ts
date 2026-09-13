@@ -21,6 +21,7 @@ const PANEL_SOURCES = [
   'components/lia-config/sections/AiSection.vue',
   'components/lia-config/sections/PersonalitySection.vue',
   'components/lia-config/sections/VoiceSection.vue',
+  'components/lia-config/sections/CustomVoicePanel.vue',
   'components/lia-config/sections/AppearanceSection.vue',
 ]
 
@@ -195,6 +196,31 @@ describe('lia config i18n coverage', () => {
         expect(en.has(key), `en missing ${key}`).toBe(true)
       }
     }
+  })
+
+  /**
+   * Keys the custom voice panel builds at runtime, which the regex scanner above
+   * cannot see: `tt(statusKey)` where statusKey is `states.${...}`, and
+   * `tt(profileStatusKey(...))`. A typo in either renders the raw key on screen,
+   * and no other test would notice.
+   *
+   * The value lists are duplicated from the component's unions on purpose - if a
+   * state is added there and not here, the assertion below still holds, and if it
+   * is added here and not to the locales, the test fails, which is the direction
+   * that matters.
+   */
+  it('resolves every runtime-built key of the custom voice panel', () => {
+    const states = ['checking', 'connected', 'offline', 'notConfigured', 'error']
+    const profileStates = ['ready', 'inUse', 'notConfigured', 'serverOffline', 'syncFailed']
+
+    const keys = [
+      ...states.map(state => `config.sections.voice.custom.states.${state}`),
+      ...profileStates.map(state => `config.sections.voice.custom.profiles.status.${state}`),
+    ]
+
+    expect(keys).toHaveLength(10)
+    expect(keys.filter(key => !ptBr.has(key)), 'missing in pt-BR').toEqual([])
+    expect(keys.filter(key => !en.has(key)), 'missing in en').toEqual([])
   })
 
   it('keeps the two locale files in sync for the whole home namespace', () => {
