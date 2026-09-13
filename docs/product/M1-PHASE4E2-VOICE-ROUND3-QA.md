@@ -4,7 +4,7 @@
 
 Três correções, todas verificadas no código:
 
-### 1. HEAD esperado é `18c381f`
+### 1. HEAD esperado é `35e529a`
 
 Adicionei a instrumentação que o TESTE 7 procurava. **Faça `git pull` de novo.**
 
@@ -18,8 +18,8 @@ git log --oneline -7
 Esperado, nesta ordem:
 
 ```
+35e529a docs(lia): point the round 3 QA plan at the current HEAD
 18c381f docs(lia): QA plan for 4E-2 round 3, corrected for where the logs land
-2a????? (este arquivo)
 c371cec feat(lia): add build-mode-gated audio diagnostics for the Kokoro path
 8326751 docs(lia): note the report commit in the 4E-2 round 2 findings
 76bd178 docs(lia): report the 4E-2 round 2 findings
