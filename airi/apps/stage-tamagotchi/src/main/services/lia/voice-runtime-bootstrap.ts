@@ -83,7 +83,7 @@ export type BootstrapFailureCategory = LiaBootstrapFailureCategory
  * Its absence is the difference between "the zip was extracted" and "the setup
  * finished", which is why the verify step requires it.
  */
-const START_SCRIPT = 'start_alltalk.bat'
+export const START_SCRIPT = 'start_alltalk.bat'
 
 export const PINNED_ALLTALK_COMMIT = 'f16117e95b540e9bbbd8247b49ca6c6b1350b172'
 

@@ -3,6 +3,7 @@ import type { ProbeStatus } from './voice-runtime-env'
 
 import { beforeEach, describe, expect, it } from 'vitest'
 
+import { ENVIRONMENT_MARKERS, INSTALL_MARKERS } from './alltalk-runtime'
 import {
   alltalkSourceUrl,
   BOOTSTRAP_STEP_IDS,
@@ -11,6 +12,7 @@ import {
   messageFor,
   PINNED_ALLTALK_COMMIT,
   PINNED_ALLTALK_VERSION,
+  START_SCRIPT,
 } from './voice-runtime-bootstrap'
 import { assessEnvironment, assessInstallPath, parseVersion, probeVoiceRuntimeEnvironment, REQUIRED_FREE_BYTES } from './voice-runtime-env'
 
@@ -51,6 +53,16 @@ interface Harness {
   stateRecord: () => RuntimeInstallRecord | undefined
 }
 
+/**
+ * What the extraction leaves behind, and what running the setup produces.
+ *
+ * Derived from the shipped constants rather than restated, so this harness cannot
+ * keep faking a layout the product has since changed - which would let these tests
+ * pass against a fiction.
+ */
+const SOURCE_TREE = ['atsetup.bat', ...INSTALL_MARKERS]
+const SETUP_PRODUCTS = [START_SCRIPT, ...ENVIRONMENT_MARKERS]
+
 function harness(overrides: Partial<BootstrapDeps> = {}): Harness {
   const existing = new Set<string>()
   const calls = { downloaded: [] as string[], exec: [] as string[][], extracted: [] as string[], removed: [] as string[] }
@@ -67,7 +79,7 @@ function harness(overrides: Partial<BootstrapDeps> = {}): Harness {
       // A successful silent setup writes the launcher as its last act and leaves
       // the conda root and env behind. That is what verify-install looks for.
       if (args.includes('atsetup.bat') && execResult.code === 0) {
-        for (const marker of ['start_alltalk.bat', 'alltalk_environment/conda', 'alltalk_environment/env'])
+        for (const marker of SETUP_PRODUCTS)
           existing.add(`${options.cwd}/${marker}`)
       }
       return { code: execResult.code, stderr: execResult.stderr ?? '', stdout: execResult.stdout ?? '' }
@@ -81,7 +93,7 @@ function harness(overrides: Partial<BootstrapDeps> = {}): Harness {
       // Only the source tree. `start_alltalk.bat` and the conda environment are
       // *products* of running atsetup.bat, so a fake that created them here would
       // make the installer look already-run and skip the step under test.
-      for (const marker of ['atsetup.bat', 'script.py', 'system', 'voices'])
+      for (const marker of SOURCE_TREE)
         existing.add(`${dest}/${marker}`)
     },
     exists: async path => existing.has(path),
@@ -425,7 +437,7 @@ describe('failure handling', () => {
     const h = harness({
       exec: async (_cmd, args, options) => {
         if (args.includes('atsetup.bat')) {
-          for (const marker of ['start_alltalk.bat', 'alltalk_environment/conda', 'alltalk_environment/env'])
+          for (const marker of SETUP_PRODUCTS)
             h.markExists(`${options.cwd}/${marker}`)
           return { code: 3, stderr: 'DeepSpeed installation failed', stdout: '' }
         }
@@ -515,6 +527,26 @@ describe('failure handling', () => {
       // an install that died halfway, which a naive "exit code 0 means success"
       // check would wave through.
       exec: async () => ({ code: 0, stderr: '', stdout: '' }),
+    })
+    const bootstrapper = createVoiceRuntimeBootstrapper(h.deps)
+
+    const state = await bootstrapper.run()
+
+    expect(state.phase).toBe('failed')
+    expect(bootstrapper.state().steps.find(step => step.id === 'verify-install')?.status).toBe('failed')
+  })
+
+  it('refuses an install that has the launcher but no conda environment', async () => {
+    // The exact case the shared marker list exists for. atsetup.bat writes the
+    // launcher before it finishes building the environment, so a run that dies in
+    // between leaves a folder that looks installed to anything checking only the
+    // launcher - and the runtime manager and this step must agree that it is not.
+    const h = harness({
+      exec: async (_cmd, args, options) => {
+        if (args.includes('atsetup.bat'))
+          h.markExists(`${options.cwd}/${START_SCRIPT}`)
+        return { code: 0, stderr: '', stdout: '' }
+      },
     })
     const bootstrapper = createVoiceRuntimeBootstrapper(h.deps)
 
