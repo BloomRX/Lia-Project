@@ -50,6 +50,7 @@ import { createLiaSecretVault, registerLiaSecretsBridge } from './services/lia/s
 import { registerLiaVoiceConfigBridge } from './services/lia/voice-config-service'
 import { createLiaVoiceProfileStore } from './services/lia/voice-profiles'
 import { registerLiaVoiceProfilesBridge } from './services/lia/voice-profiles-service'
+import { registerLiaBootstrapBridge } from './services/lia/voice-runtime-bootstrap-service'
 import { setupTray } from './tray'
 import { setupAboutWindowReusable } from './windows/about'
 import { setupBeatSync } from './windows/beat-sync'
@@ -416,10 +417,22 @@ app.whenReady().then(async () => {
         liaProductConfig: deps.liaProductConfig,
       })
 
+      // Registered for its IPC handlers; the renderer talks to it directly, so
+      // nothing else here needs to hold the handle.
+      const bootstrap = registerLiaBootstrapBridge({ context, runtime })
+
       // Autostart. Only when the persisted voice selection actually needs the
       // local runtime, and never fatal: if the server cannot come up the chat
       // keeps working as text and the UI offers "Try again".
-      void runtime.autostartIfNeeded().catch((error) => {
+      //
+      // Skipped while an install is in flight. Starting a server whose files are
+      // still being written would report a failure the user did nothing to cause,
+      // and the bootstrap's own final step starts it anyway.
+      void (async () => {
+        if (bootstrap.isInstalling())
+          return
+        await runtime.autostartIfNeeded()
+      })().catch((error) => {
         console.warn('[lia-runtime] autostart failed, continuing without custom voice:', error)
       })
     },

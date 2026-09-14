@@ -1,7 +1,6 @@
 import type { createContext } from '@moeru/eventa/adapters/electron/main'
 
 import type { LiaBootstrapState } from '../../../shared/lia-voice'
-import type { RuntimeManager } from './alltalk-runtime'
 import type { Bootstrapper } from './voice-runtime-bootstrap'
 
 import { defineInvokeHandler } from '@moeru/eventa'
@@ -32,6 +31,20 @@ import {
 type MainContext = ReturnType<typeof createContext>['context']
 
 /**
+ * The slice of the runtime service the bootstrapper needs.
+ *
+ * Depending on this rather than the underlying process manager is deliberate:
+ * the service owns the server, and reaching past it would leave two owners for
+ * one process - which is how a user ends up with a port conflict they cannot
+ * diagnose.
+ */
+export interface LiaRuntimeControl {
+  start: () => Promise<unknown>
+  stop: () => Promise<void>
+  state: () => { state: string }
+}
+
+/**
  * Wires the pure bootstrapper to IPC (items M, O, P, U).
  *
  * ## Concurrency (item U)
@@ -59,7 +72,7 @@ export interface LiaBootstrapService {
 
 export function registerLiaBootstrapBridge(params: {
   context: MainContext
-  runtime: { manager: () => RuntimeManager, resolveInstallDir: () => string }
+  runtime: LiaRuntimeControl
 }): LiaBootstrapService {
   const { context } = params
   const logger = createRuntimeLogger()
@@ -102,11 +115,10 @@ export function registerLiaBootstrapBridge(params: {
    * conflict they cannot diagnose.
    */
   const startRuntime = async (): Promise<boolean> => {
-    const manager = params.runtime.manager()
-    await manager.start()
+    await params.runtime.start()
     const deadline = Date.now() + 180_000
     while (Date.now() < deadline) {
-      if (manager.state().phase === 'ready')
+      if (params.runtime.state().state === 'ready')
         return true
       await new Promise(resolve => setTimeout(resolve, 1000))
     }
@@ -183,7 +195,7 @@ export function registerLiaBootstrapBridge(params: {
   defineInvokeHandler(context, electronLiaBootstrapRemove, async (): Promise<void> => {
     // Stop first: deleting files out from under a running server leaves it
     // holding handles and reporting errors for the rest of the session.
-    await params.runtime.manager().stop().catch(() => undefined)
+    await params.runtime.stop().catch(() => undefined)
     await ensureBootstrapper().remove()
     emit(ensureBootstrapper().state())
   })
@@ -198,7 +210,7 @@ export function registerLiaBootstrapBridge(params: {
     run: async (repair?: boolean) => runAndPublish(repair ?? false),
     cancel: () => ensureBootstrapper().cancel(),
     remove: async () => {
-      await params.runtime.manager().stop().catch(() => undefined)
+      await params.runtime.stop().catch(() => undefined)
       await ensureBootstrapper().remove()
       emit(ensureBootstrapper().state())
     },
