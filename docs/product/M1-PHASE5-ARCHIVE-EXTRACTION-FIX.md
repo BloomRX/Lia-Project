@@ -180,3 +180,62 @@ Windows:
 
 If it fails again, the log will now name the entry and the reason instead of only
 saying that something escaped.
+
+## 8. Follow-up work after this report
+
+Written while waiting on the QA run above. Each item is a separate commit.
+
+### 8.1 A finished extraction was indistinguishable from a hang (`ea4f07f`)
+
+The log carried `extract-start` and `entry-rejected` but no completion signal, so a
+97 MB extraction sitting on a slow disk looked identical to a dead process.
+`createRuntimeExtract` now takes an `onComplete({ elapsedMs, entries })` callback
+that fires after the entry loop, logged as `extract-complete`. It deliberately does
+not fire when an entry is rejected, so "complete" still means complete.
+
+### 8.2 The installer timeout was untested (`3726812`)
+
+That timeout is the only thing standing between a stalled `choice /C YN` prompt and
+a window that says "Installing" forever, and it had no test at all. The fake child
+process could only exit, so the test stub was taught to hang, and the test now
+asserts the child is killed with `SIGKILL` rather than merely that one spawn
+happened. Removing the `kill` call fails it.
+
+### 8.3 A path the installer cannot use is now refused up front (`85ebe2a`)
+
+`atsetup.bat` aborts outright when its working directory contains a space — line
+353 in the silent branch, because Miniconda cannot be installed silently under one.
+The runtime lives under `userData`, which on Windows includes the user's name, so
+`C:\Users\John Smith\...` is a plausible install path the installer will simply
+refuse.
+
+Before this the user downloaded 97 MB, the installer printed a sentence about folder
+names and exited, and Lia reported a setup failure with no idea why.
+`assessInstallPath()` now rejects a space before the download starts, and warns —
+without blocking — on the characters the installer itself only warns about. Inventing
+a stricter rule would have refused installs that would have succeeded.
+
+The packaged app uses `productName: 'Lia'`, which has no space, so this only bites on
+the username — which is exactly the case nobody would think to test for.
+
+### 8.4 Four facts that were each written down twice
+
+Found by looking for the same mistake in other places rather than waiting for it to
+surface on a machine.
+
+| Commit | The duplicated fact | What went wrong |
+| --- | --- | --- |
+| `0407bdc` | The server address | The bootstrap health-checked a hardcoded `127.0.0.1:7851` while everything else read the config. A user who moved the port got "the voice system did not become ready" for a server that was running. |
+| `074eb62` | What makes an install usable | The runtime manager checked three markers plus the launcher; the bootstrap also required the conda environment. An install that wrote the launcher but failed to build the environment was "installed" to one and "not installed" to the other. |
+| `6da7bac` | *(the test for the row above)* | The unification was untested. Removing the environment markers from the verify step left all 47 tests passing, because the harness's fake setup always wrote every marker at once. The new test builds the one folder shape that separates them: launcher present, environment absent. |
+| `7619b1d` | The start timeout | The bootstrap polled on a literal `180_000` while the manager exported `DEFAULT_START_TIMEOUT_MS` for that same budget. Harmless today; the moment the manager's budget changed, the bootstrap would report a timeout for a runtime still legitimately starting. |
+
+The test harness now derives its fake install layout from the shipped constants
+instead of restating them, so it cannot keep faking a layout the product has since
+changed and let these tests pass against a fiction.
+
+### 8.5 What this does not change
+
+None of the above touches the extraction fix, the traversal guard, the pin, or the
+promise that nothing runs with elevated privileges. The QA list in section 7 stands
+unchanged and still has to be run.
