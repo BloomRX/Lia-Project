@@ -6,6 +6,7 @@ import {
   adoptRuntimeRootSync,
   ATSETUP_FORBIDDEN_PATH_CHARS,
   migrateLegacyRuntimeRootsSync,
+  resolveLocalAppDataDir,
   resolveRuntimeRootLayout,
   sanitizeWindowsRuntimeRelativePath,
   sanitizeWindowsRuntimeSegment,
@@ -275,5 +276,62 @@ describe('adoptRuntimeRootSync - the never-break-the-panel decision', () => {
     const decision = adoptRuntimeRootSync(LAYOUT, harness.deps)
     expect(decision.adopted).toBe('fallback-legacy')
     expect(decision.rootDir).toBe(ROUND_SIX_ROOT)
+  })
+})
+
+/**
+ * Round-7 hotfix 4, items A/B/F: `%LOCALAPPDATA%` from the one supported
+ * source. `app.getPath` has no 'localAppData' name on any Electron release -
+ * passing one threw at bridge-registration and took the whole handler with
+ * it, which is what made the Install click die between "install-invoke" and a
+ * main that never heard it. The environment is the documented source, and it
+ * is validated here before the layout consumes it.
+ */
+describe('resolveLocalAppDataDir - the supported %LOCALAPPDATA% source', () => {
+  it('returns the local profile directory on Windows (F)', () => {
+    const local = resolveLocalAppDataDir('win32', name => (
+      name === 'LOCALAPPDATA' ? String.raw`C:\Users\Test\AppData\Local` : undefined
+    ))
+    expect(local).toBe(String.raw`C:\Users\Test\AppData\Local`)
+
+    // End to end through the layout: the exact target of the product
+    // decision, checked with the same conviction the report demands.
+    const layout = resolveRuntimeRootLayout({
+      appDataDir: String.raw`C:\Users\Test\AppData\Roaming`,
+      localAppDataDir: local,
+      pathApi: win,
+      platform: 'win32',
+      userDataDir: String.raw`C:\Users\Test\AppData\Roaming\@proj-airi\stage-tamagotchi`,
+    })
+    expect(layout.rootDir).toBe(String.raw`C:\Users\Test\AppData\Local\Lia\runtimes\alltalk`)
+    expect(win.isAbsolute(layout.rootDir)).toBe(true)
+    expect(layout.rootDir.includes('Roaming')).toBe(false)
+    expect(layout.rootDir.includes('@')).toBe(false)
+    for (const char of ATSETUP_BLACKLIST_CHARS) {
+      expect(layout.rootDir.includes(char)).toBe(false)
+    }
+  })
+
+  it('fails clearly when LOCALAPPDATA is absent on a Windows profile (F)', () => {
+    expect(() => resolveLocalAppDataDir('win32', () => undefined)).toThrow(/LOCALAPPDATA is not set/)
+    expect(() => resolveLocalAppDataDir('win32', () => '')).toThrow(/LOCALAPPDATA is not set/)
+  })
+
+  it('rejects a LOCALAPPDATA that is not an absolute Windows path (F)', () => {
+    expect(() => resolveLocalAppDataDir('win32', () => 'AppData\\Local')).toThrow(/not an absolute Windows path/)
+    expect(() => resolveLocalAppDataDir('win32', () => '/usr/local')).toThrow(/not an absolute Windows path/)
+    // UNC roots remain valid, as real (if rare) Windows setups show.
+    expect(resolveLocalAppDataDir('win32', () => '\\\\server\\share')).toBe('\\\\server\\share')
+  })
+
+  it('rejects blacklist characters rather than sheltering a broken install (F)', () => {
+    expect(() => resolveLocalAppDataDir('win32', () => String.raw`C:\Users\T@st\AppData\Local`)).toThrow(/characters the voice installer cannot handle/)
+  })
+
+  it('reads nothing off Windows, so non-Windows profiles cannot fail here (B)', () => {
+    expect(resolveLocalAppDataDir('darwin', () => {
+      throw new Error('must not read')
+    })).toBe('')
+    expect(resolveLocalAppDataDir('linux', () => undefined)).toBe('')
   })
 })

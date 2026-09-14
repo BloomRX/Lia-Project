@@ -14,8 +14,8 @@ import { probeVoiceRuntimeEnvironment } from './voice-runtime-env'
 import { createRuntimeLogger, createRuntimeRunCommand, freeBytesFor } from './voice-runtime-install-exec'
 import {
   adoptRuntimeRootSync,
+  resolveLocalAppDataDir,
   resolveRuntimeRootLayout,
-
 } from './voice-runtime-root'
 
 /**
@@ -38,12 +38,15 @@ function runtimeRootLayout(): RuntimeRootLayout {
   const platform = process.platform
   const layout = resolveRuntimeRootLayout({
     appDataDir: app.getPath('appData'),
-    // `localAppData` is a Windows-only Electron path; off Windows the
-    // resolver never reads it, so an empty string is honest rather than a
-    // thrown "unknown path" at startup.
-    // Electron's getPath supports 'localAppData' on Windows at runtime even
-    // though the type union omits it; the cast is the honest escape hatch.
-    localAppDataDir: platform === 'win32' ? (app.getPath as (name: string) => string)('localAppData') : '',
+    // Round-7 hotfix 4 (item A): 'localAppData' is NOT an app.getPath name on
+    // any Electron release - calling it threw, and because this layout used to
+    // be resolved at bridge-registration time the throw took the whole IPC
+    // handler down with it. The supported source of the local (non-roaming)
+    // profile dir is the environment, validated in `resolveLocalAppDataDir`
+    // (exists, absolute, blacklist-free). Registration no longer touches this
+    // line eagerly, so a bad machine surfaces the failure as a bootstrap
+    // failure, after the invoke reached main - never as a dead click.
+    localAppDataDir: resolveLocalAppDataDir(platform),
     platform,
     userDataDir: app.getPath('userData'),
   })

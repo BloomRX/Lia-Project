@@ -6,6 +6,7 @@ import type { Bootstrapper } from './voice-runtime-bootstrap'
 import { mkdir as fsMkdir, rm as fsRemove } from 'node:fs/promises'
 
 import { defineInvokeHandler } from '@moeru/eventa'
+import { errorMessageFrom } from '@moeru/std'
 import { app } from 'electron'
 
 import {
@@ -18,7 +19,10 @@ import {
 import { isLiaBootstrapActivePhase } from '../../../shared/lia-voice'
 import { createAllTalkClient } from './alltalk-client'
 import { DEFAULT_START_TIMEOUT_MS } from './alltalk-runtime'
-import { createVoiceRuntimeBootstrapper } from './voice-runtime-bootstrap'
+import {
+  BOOTSTRAP_STEP_IDS,
+  createVoiceRuntimeBootstrapper,
+} from './voice-runtime-bootstrap'
 import {
   createRuntimeDownload,
   createRuntimeExec,
@@ -31,6 +35,21 @@ import {
 } from './voice-runtime-bootstrap-electron'
 
 type MainContext = ReturnType<typeof createContext>['context']
+
+/**
+ * The failure a run reports when it breaks before the state machine even
+ * reached a step (round-7 hotfix 4, item C). Uses the same five pending steps
+ * the bootstrapper itself starts from, so the card shows the familiar
+ * structured picture with its Retry - never an invented checklist.
+ */
+function bootstrapRunFailureState(detail: string): LiaBootstrapState {
+  return {
+    failureCategory: 'setup',
+    message: `The voice system could not start installing (${detail}).`,
+    phase: 'failed',
+    steps: BOOTSTRAP_STEP_IDS.map(id => ({ id, status: 'pending' as const })),
+  }
+}
 
 /**
  * The slice of the runtime service the bootstrapper needs.
@@ -86,7 +105,17 @@ export function registerLiaBootstrapBridge(params: {
 }): LiaBootstrapService {
   const { context } = params
   const logger = createRuntimeLogger()
-  const store = createRuntimeStateStore(runtimeRootDir())
+
+  /**
+   * Lazy on purpose (round-7 hotfix 4, item C): resolving the Windows-local
+   * runtime root can throw on a broken profile, and resolving it HERE killed
+   * bridge registration with it - the invoke never reached main, which QA
+   * could only see as "the click does nothing". Registration must not depend
+   * on the filesystem; a failed root becomes a structured bootstrap failure
+   * at run time, after the renderer's invoke reached the handler.
+   */
+  let stateStore: ReturnType<typeof createRuntimeStateStore> | undefined
+  const getStateStore = () => (stateStore ??= createRuntimeStateStore(runtimeRootDir()))
 
   /**
    * Emits every state change.
@@ -186,13 +215,13 @@ export function registerLiaBootstrapBridge(params: {
       onStateChange: state => emit(state),
       probe: createRuntimeProbe(),
       readFile: async path => await import('node:fs/promises').then(({ readFile }) => readFile(path, 'utf8').then(content => content, () => undefined)),
-      readState: async () => store.read(),
+      readState: async () => getStateStore().read(),
       remove: async path => fsRemove(path, { force: true, recursive: true }),
       rename: async (from, to) => (await import('node:fs/promises')).rename(from, to),
       runtimeDir: runtimeRootDir(),
       startRuntime,
       writeFile: async (path, content) => await import('node:fs/promises').then(({ writeFile }) => writeFile(path, content, 'utf8')),
-      writeState: store.write,
+      writeState: async (state: LiaBootstrapState) => getStateStore().write(state),
     })
 
     return bootstrapper
@@ -200,19 +229,43 @@ export function registerLiaBootstrapBridge(params: {
 
   /** Runs and publishes, so the renderer never has to poll. */
   const runAndPublish = async (repair: boolean): Promise<LiaBootstrapState> => {
-    const instance = ensureBootstrapper()
-    emit(instance.state())
+    try {
+      const instance = ensureBootstrapper()
+      emit(instance.state())
 
-    // Every transition in between is pushed by the bootstrapper itself through
-    // onStateChange; this wrapper only brackets the run with the initial and
-    // the final snapshot.
-    const final = await instance.run({ repair })
-    emit(final)
-    return final
+      // Every transition in between is pushed by the bootstrapper itself through
+      // onStateChange; this wrapper only brackets the run with the initial and
+      // the final snapshot.
+      const final = await instance.run({ repair })
+      emit(final)
+      return final
+    }
+    catch (error) {
+      // A root that cannot resolve (or any other pre-run failure) is a
+      // bootstrap FAILURE, not a dead invoke (round-7 hotfix 4, item C/D):
+      // log it with the reserved prefix, publish the ordinary failed state so
+      // the card offers Retry, and answer the invoke truthfully. The failure
+      // arrives AFTER install-main-received, exactly like any setup error.
+      const detail = errorMessageFrom(error)
+      logger({ detail, event: 'failed', step: 'bootstrap' })
+      const failed = bootstrapRunFailureState(detail)
+      emit(failed)
+      return failed
+    }
   }
 
-  defineInvokeHandler(context, electronLiaBootstrapState, async (): Promise<LiaBootstrapState> =>
-    ensureBootstrapper().state())
+  defineInvokeHandler(context, electronLiaBootstrapState, async (): Promise<LiaBootstrapState> => {
+    try {
+      return ensureBootstrapper().state()
+    }
+    catch (error) {
+      // Same rule as the run path: a broken root is a failing install the
+      // card will show as an offer, not an unreadable bridge. The card's own
+      // mount diagnostics stay quiet because the idle look is the offer.
+      console.warn('[LIA-VOICE-BOOTSTRAP] could not resolve the runtime root for a state read; reporting not-installed', error)
+      return { phase: 'not-installed', steps: [] }
+    }
+  })
 
   defineInvokeHandler(context, electronLiaBootstrapRun, async (_repair: boolean): Promise<LiaBootstrapState> => {
     // Round-7 hotfix-3 trace: this line is the boundary between "the click

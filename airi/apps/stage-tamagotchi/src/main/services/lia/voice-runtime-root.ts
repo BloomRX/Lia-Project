@@ -56,6 +56,50 @@ export function sanitizeWindowsRuntimeRelativePath(relativePath: string): string
  */
 export const WINDOWS_RUNTIME_PRODUCT_DIR = 'Lia'
 
+/**
+ * Resolves `%LOCALAPPDATA%` without inventing Electron path keys (round-7
+ * hotfix 4, items A and B).
+ *
+ * `app.getPath(...)` does not know a 'localAppData' name - passing one throws
+ * "Failed to get 'localAppData' path" on every Electron release. The
+ * supported, documented source for the *local* (never-roaming) profile
+ * directory on Windows is the environment block the OS gives every logged-in
+ * process; this validates it before the layout resolver consumes it:
+ *
+ * - the variable must exist (its absence is a machine fault worth naming,
+ *   not a silent roam);
+ * - the value must be an absolute Windows path - drive-letter or UNC;
+ * - the value must be free of the characters the AllTalk silent installer's
+ *   path blacklist rejects (the same rule the `_local` choice exists to
+ *   honour).
+ *
+ * Off Windows nothing reads this value, so an empty string is honest - the
+ * layout resolver only consults it under `platform === 'win32'`.
+ */
+export interface ResolveLocalAppDataEnv {
+  (name: string): string | undefined
+}
+
+export const LOCAL_APP_DATA_ENV_NAME = 'LOCALAPPDATA'
+
+export function resolveLocalAppDataDir(
+  platform: string = process.platform,
+  env: ResolveLocalAppDataEnv = name => process.env[name],
+): string {
+  if (platform !== 'win32')
+    return ''
+  const value = env(LOCAL_APP_DATA_ENV_NAME)
+  if (!value?.trim())
+    throw new Error('LOCALAPPDATA is not set on this Windows profile, so the local runtime root cannot be resolved. Sign out and back in, or reinstall the user profile.')
+  if (!/^(?:[a-z]:[/\\]|\\\\)/i.test(value))
+    throw new Error(`LOCALAPPDATA is not an absolute Windows path ("${value}"); it must look like "C:\\Users\\<you>\\AppData\\Local".`)
+  // replace+compare (never .test on the /g singleton) so repeated calls cannot
+  // trip over a mutated lastIndex.
+  if (value.replace(ATSETUP_FORBIDDEN_PATH_CHARS, '') !== value)
+    throw new Error(`LOCALAPPDATA contains characters the voice installer cannot handle ("${value}"); the characters !#$%&()*+,;<=>?@[\\]^\`{|}~ are not supported in this path.`)
+  return value
+}
+
 /** The `join`/`relative` pair of one `node:path` implementation. */
 export interface RuntimeRootPathApi {
   join: (...segments: string[]) => string
