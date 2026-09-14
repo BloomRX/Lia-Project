@@ -9,6 +9,8 @@ import { errorMessageFrom } from '@moeru/std'
 
 import { assessEnvironment, REQUIRED_FREE_BYTES } from './voice-runtime-env'
 
+export type { VoiceRuntimeEnvironment } from './voice-runtime-env'
+
 /**
  * The idempotent voice-runtime bootstrapper (items A, D, H, I, L, S).
  *
