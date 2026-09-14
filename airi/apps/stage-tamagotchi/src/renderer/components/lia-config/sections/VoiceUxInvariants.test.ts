@@ -444,7 +444,8 @@ describe('the install experience', () => {
       steps: [
         { id: 'check-environment', status: 'done' },
         { detail: 'downloading', id: 'fetch-source', status: 'running' },
-        { id: 'run-setup', status: 'pending' },
+        // A running step WITHOUT a detail: nothing may be invented in its place.
+        { id: 'run-setup', status: 'running' },
       ],
     }
 
@@ -454,9 +455,12 @@ describe('the install experience', () => {
     expect(visible).toContain(`${TT}.runtime.step.fetch-source`)
     // No byte counter exists on this step, so none may be shown.
     expect(visible).not.toMatch(/\b\d+(\.\d+)?\s?(MB|GB|KB)\b/)
-    // And the sub-state line must not appear before its state is real - this
-    // assertion is what dies if sub-state rendering ever hardcodes itself.
-    expect(visible).not.toContain('data-testid="lia-runtime-step-substate-fetch-source"')
+    // 'downloading' is a real machine sub-state (round 7), so the line shows.
+    expect(visible).toContain('data-testid="lia-runtime-step-substate-fetch-source"')
+    expect(visible).toContain(`${TT}.runtime.downloading`)
+    // The step without a detail stays silent: this assertion is what dies if
+    // sub-state rendering ever hardcodes itself.
+    expect(visible).not.toContain('data-testid="lia-runtime-step-substate-run-setup"')
   })
 
   it('says when the download step has moved on to extracting', async () => {

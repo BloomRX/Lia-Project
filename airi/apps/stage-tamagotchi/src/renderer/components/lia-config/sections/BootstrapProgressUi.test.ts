@@ -68,7 +68,10 @@ const STR: Record<string, string> = {
   'tamagotchi.home.config.sections.voice.runtime.readyHint': 'Tudo certo por aqui.',
   'tamagotchi.home.config.sections.voice.runtime.failedTitle': 'Não foi possível concluir a instalação.',
   'tamagotchi.home.config.sections.voice.runtime.cancelledTitle': 'Instalação cancelada.',
+  'tamagotchi.home.config.sections.voice.runtime.downloading': 'Baixando os arquivos…',
   'tamagotchi.home.config.sections.voice.runtime.extracting': 'Extraindo os arquivos…',
+  'tamagotchi.home.config.sections.voice.runtime.environment': 'Preparando o ambiente de voz…',
+  'tamagotchi.home.config.sections.voice.runtime.components': 'Instalando os componentes de voz… {done}/{total}',
   'tamagotchi.home.config.sections.voice.runtime.install': 'Instalar',
   'tamagotchi.home.config.sections.voice.runtime.retry': 'Tentar novamente',
   'tamagotchi.home.config.sections.voice.runtime.repair': 'Reparar',
@@ -83,7 +86,13 @@ const STR: Record<string, string> = {
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({
     locale: { value: 'pt-BR' },
-    t: (key: string, fallback?: string) => STR[key] ?? fallback ?? key,
+    // Named interpolation only: nothing in the UI strings is positional, and
+    // the named params are dropped straight into the sentence (vue-i18n braces).
+    t: (key: string, named?: Record<string, string>) =>
+      Object.entries(named ?? {}).reduce(
+        (sentence, [param, value]) => sentence.replaceAll(`{${param}}`, value),
+        STR[key] ?? key,
+      ),
   }),
 }))
 
@@ -276,6 +285,7 @@ describe('the install progress a Windows user actually sees', () => {
       ],
     })
     expect(container.querySelector('[data-testid="lia-runtime-step-fetch-source"] [data-testid="lia-runtime-step-spinner"]')).not.toBeNull()
+    expect(text(container)).toContain('Baixando os arquivos…')
     expect(text(container)).not.toContain('Extraindo os arquivos…')
 
     // extracting: the same running step now carries its real sub-state.
@@ -331,6 +341,44 @@ describe('the install progress a Windows user actually sees', () => {
       ],
     })
     expect(text(container)).toContain('Sistema de voz pronto')
+
+    unmount()
+  })
+
+  it('keeps talking during the long setup stages (environment build, component counter)', async () => {
+    // The setup step is the longest of all - an environment build, then nine
+    // official commands. Round 7 found the gap: with no sub-state the card sat
+    // on one spinning line for half an hour and read as "stuck, no way back".
+    const { container, emit, unmount } = await mountSection()
+
+    await emit({
+      phase: 'installing-runtime',
+      steps: [
+        step('check-environment', 'done'),
+        step('fetch-source', 'done'),
+        step('run-setup', 'running', 'environment'),
+        step('verify-install', 'pending'),
+        step('verify-health', 'pending'),
+      ],
+    })
+    expect(text(container)).toContain('Preparando o ambiente de voz…')
+
+    await emit({
+      phase: 'installing-runtime',
+      steps: [
+        step('check-environment', 'done'),
+        step('fetch-source', 'done'),
+        step('run-setup', 'running', 'components:3/9'),
+        step('verify-install', 'pending'),
+        step('verify-health', 'pending'),
+      ],
+    })
+    expect(text(container)).toContain('Instalando os componentes de voz… 3/9')
+
+    // The whole time, the offer/retry button stays hidden and Cancel is the
+    // only action: the machine owns the run, the panel owns the words.
+    expect(container.querySelector('[data-testid="lia-runtime-install-button"]')).toBeNull()
+    expect(container.querySelector('[data-testid="lia-runtime-cancel"]')).not.toBeNull()
 
     unmount()
   })

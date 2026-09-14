@@ -36,7 +36,7 @@ import { isLiaBootstrapActivePhase } from '../../../../shared/lia-voice'
 import { useLiaRuntimeStore } from '../../../stores/lia/runtime'
 
 const { t } = useI18n()
-const tt = (key: string) => t(`tamagotchi.home.config.sections.voice.${key}`)
+const tt = (key: string, named?: Record<string, string>) => t(`tamagotchi.home.config.sections.voice.${key}`, named)
 
 const runtime = useLiaRuntimeStore()
 
@@ -67,14 +67,28 @@ const needsRepair = computed(
  *
  * The download step takes minutes on a slow link, then the extraction takes
  * seconds with no byte counter at all - telling the user which of the two is
- * happening is the difference between "slow" and "stuck". The vocabulary is
- * the bootstrapper's own step detail; nothing is invented here.
+ * happening is the difference between "slow" and "stuck". Same for the setup
+ * step, which is the longest of all: an environment build, then the component
+ * sequence with its real counter. The vocabulary is the bootstrapper's own
+ * step detail - tokens, never command names - rendered through i18n so nothing
+ * technical reaches the panel; nothing is invented here.
  */
 function subStateFor(step: { detail?: string, id: string, status: string }): string {
   if (step.status !== 'running')
     return ''
-  if (step.id === 'fetch-source' && step.detail === 'extracting')
-    return tt('runtime.extracting')
+  if (step.id === 'fetch-source') {
+    if (step.detail === 'downloading')
+      return tt('runtime.downloading')
+    if (step.detail === 'extracting')
+      return tt('runtime.extracting')
+  }
+  if (step.id === 'run-setup') {
+    if (step.detail === 'environment')
+      return tt('runtime.environment')
+    const match = /^components:(\d+)\/(\d+)$/.exec(step.detail ?? '')
+    if (match)
+      return tt('runtime.components', { done: match[1], total: match[2] })
+  }
   return ''
 }
 
