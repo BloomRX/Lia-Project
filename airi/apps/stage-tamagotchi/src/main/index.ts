@@ -409,9 +409,15 @@ app.whenReady().then(async () => {
   // Managed speech runtime: detect, start, health-check and stop the local voice
   // server, so a custom voice works without the user opening a terminal.
   injeca.invoke({
-    dependsOn: { liaProductConfig },
+    dependsOn: { liaProductConfig, mainWindow },
     callback: async (deps) => {
-      const { context } = createContext(ipcMain)
+      // The window is NOT optional here. The electron main adapter forwards
+      // outbound events through `window.webContents.send`; without a window it
+      // can only *reply* to an incoming invoke, so a spontaneous push - the
+      // bootstrap's live install progress, from its `onStateChange` - was
+      // silently dropped and the panel never changed until the run returned.
+      // Round-4 QA item H: this line is why the progress UI looked dead.
+      const { context } = createContext(ipcMain, deps.mainWindow)
       const runtime = registerLiaRuntimeBridge({
         context,
         liaProductConfig: deps.liaProductConfig,
