@@ -170,6 +170,14 @@ export interface ExtractOptions {
   onReject?: (report: ArchiveRejectReport) => void
   /** Records what was done, for the bootstrap log. */
   onProgress?: (info: { entries: number, stripRoot?: string }) => void
+  /**
+   * Fired when every entry has been written.
+   *
+   * Worth having even though a resolved promise means the same thing: a long
+   * extraction with no output in between is indistinguishable from a hang, and the
+   * person watching the log needs the line that says it finished.
+   */
+  onComplete?: (info: { elapsedMs: number, entries: number }) => void
 }
 
 /** Opens the archive and walks its entries without extracting anything. */
@@ -236,6 +244,7 @@ export function createRuntimeExtract(options: ExtractOptions = {}) {
 
     options.onProgress?.({ entries: listing.length, stripRoot })
 
+    const startedAt = Date.now()
     let reported = false
 
     await new Promise<void>((resolve, reject) => {
@@ -302,6 +311,8 @@ export function createRuntimeExtract(options: ExtractOptions = {}) {
         zipfile.readEntry()
       })
     })
+
+    options.onComplete?.({ elapsedMs: Date.now() - startedAt, entries: listing.length })
   }
 }
 

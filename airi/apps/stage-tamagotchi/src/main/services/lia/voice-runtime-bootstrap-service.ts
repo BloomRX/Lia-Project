@@ -146,6 +146,12 @@ export function registerLiaBootstrapBridge(params: {
         // Diagnostics for a refused entry. Fired once, for the first one only: a
         // 700-entry archive would otherwise emit 700 identical lines and bury the
         // single entry that matters. Paths stay in the log, never in the UI.
+        onComplete: info => logger({
+          detail: `entries=${info.entries}`,
+          elapsedMs: info.elapsedMs,
+          event: 'extract-complete',
+          step: 'fetch-source',
+        }),
         onProgress: info => logger({
           detail: `entries=${info.entries}${info.stripRoot ? ` stripRoot=${info.stripRoot}` : ''}`,
           event: 'extract-start',

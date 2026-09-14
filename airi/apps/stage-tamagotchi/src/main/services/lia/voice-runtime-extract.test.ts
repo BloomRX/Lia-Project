@@ -177,6 +177,34 @@ describe('extracting the real archive shape', () => {
 
     expect(progress[0]?.entries).toBeGreaterThanOrEqual(2)
   })
+
+  it('signals completion, so a long extraction is not indistinguishable from a hang', async () => {
+    const completed: Array<{ elapsedMs: number, entries: number }> = []
+    const archive = await makeZip({ [`${WRAPPER}/a`]: 'a', [`${WRAPPER}/b`]: 'b' })
+
+    await createRuntimeExtract({ onComplete: info => completed.push(info) })(archive, join(workDir, 'app'))
+
+    expect(completed).toHaveLength(1)
+    expect(completed[0].entries).toBeGreaterThanOrEqual(2)
+    expect(completed[0].elapsedMs).toBeGreaterThanOrEqual(0)
+  })
+
+  it('does not signal completion when an entry is refused', async () => {
+    const completed: unknown[] = []
+    const archive = join(workDir, 'evil.zip')
+    await writeFile(archive, await makeRawZip([
+      { data: 'good', name: `${WRAPPER}/good.py` },
+      { data: 'evil', name: `${WRAPPER}/../../evil.txt` },
+    ]))
+
+    await expect(
+      createRuntimeExtract({ onComplete: info => completed.push(info) })(archive, join(workDir, 'app')),
+    ).rejects.toThrow()
+
+    // A completion signal after a failure would be worse than none: it is the line
+    // QA reads to decide whether to move on.
+    expect(completed).toHaveLength(0)
+  })
 })
 
 /**
