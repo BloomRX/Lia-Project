@@ -349,7 +349,10 @@ export function createVoiceRuntimeBootstrapper(deps: BootstrapDeps): Bootstrappe
 
   async function stepFetchSource(): Promise<void> {
     const started = Date.now()
-    setStep('fetch-source', { status: 'running' })
+    // The detail tracks the sub-state this step is actually inside: it starts
+    // in the download, and flips to 'extracting' right before the extraction
+    // call below. Real machine states, not presentation guesses.
+    setStep('fetch-source', { detail: 'downloading', status: 'running' })
 
     const target = appDir()
 
@@ -393,6 +396,7 @@ export function createVoiceRuntimeBootstrapper(deps: BootstrapDeps): Bootstrappe
     }
 
     await deps.mkdir(target)
+    setStep('fetch-source', { detail: 'extracting' })
     await deps.extract(archive, target)
     await deps.remove(archive).catch(() => undefined)
 

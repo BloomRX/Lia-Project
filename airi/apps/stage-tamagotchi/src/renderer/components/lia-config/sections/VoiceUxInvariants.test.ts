@@ -190,7 +190,11 @@ beforeEach(() => {
   ipc.config.current = { baseUrl: 'http://127.0.0.1:7851' }
   ipc.runtimeState.current = { state: 'ready' }
   ipc.steps.current = []
-  ipc.bootstrap.current = { phase: 'ready', steps: [] }
+  // The honest default for a session that never ran the bootstrap. 'ready'
+  // used to be convenient, but it describes an install that finished just
+  // now - and since the outcome card exists, that state deliberately shows
+  // UI, so it must be opted into per test rather than leaking into all of them.
+  ipc.bootstrap.current = { phase: 'not-installed', steps: [] }
   ipc.profiles.current = []
   ipc.voiceConfig.current = { tts: { preferred: { providerId: 'kokoro-local', voiceId: 'af_heart' } } }
 })
@@ -410,6 +414,174 @@ describe('the install experience', () => {
 
     expect(visible).toContain('data-testid="lia-runtime-install-button"')
     expect(visible).not.toContain('data-testid="lia-runtime-steps"')
+  })
+
+  it('names the computer-check step while it runs', async () => {
+    ipc.voiceConfig.current = { tts: { preferred: { providerId: 'custom-local-voice', voiceId: 'p-1' } } }
+    ipc.runtimeState.current = { state: 'notInstalled' }
+    ipc.bootstrap.current = {
+      phase: 'checking',
+      steps: [
+        { id: 'check-environment', status: 'running' },
+        { id: 'fetch-source', status: 'pending' },
+      ],
+    }
+
+    const visible = beforeAdvanced(await render())
+
+    expect(visible).toContain(`${TT}.runtime.step.check-environment`)
+    expect(visible).toContain(`${TT}.runtime.runningTitle`)
+    // "Moving" is a CSS spinner, never a number.
+    expect(visible).toContain('data-testid="lia-runtime-step-spinner"')
+    expect(visible).not.toMatch(/\b\d{1,3}%/)
+  })
+
+  it('names the download step while it runs, without inventing bytes', async () => {
+    ipc.voiceConfig.current = { tts: { preferred: { providerId: 'custom-local-voice', voiceId: 'p-1' } } }
+    ipc.runtimeState.current = { state: 'notInstalled' }
+    ipc.bootstrap.current = {
+      phase: 'checking',
+      steps: [
+        { id: 'check-environment', status: 'done' },
+        { detail: 'downloading', id: 'fetch-source', status: 'running' },
+        { id: 'run-setup', status: 'pending' },
+      ],
+    }
+
+    const visible = beforeAdvanced(await render())
+
+    expect(visible).toContain('data-testid="lia-runtime-step-fetch-source"')
+    expect(visible).toContain(`${TT}.runtime.step.fetch-source`)
+    // No byte counter exists on this step, so none may be shown.
+    expect(visible).not.toMatch(/\b\d+(\.\d+)?\s?(MB|GB|KB)\b/)
+    // And the sub-state line must not appear before its state is real - this
+    // assertion is what dies if sub-state rendering ever hardcodes itself.
+    expect(visible).not.toContain('data-testid="lia-runtime-step-substate-fetch-source"')
+  })
+
+  it('says when the download step has moved on to extracting', async () => {
+    // After the archive lands, the same step spends a while unzipping with no
+    // counter at all. Naming that sub-state is what separates "slow" from
+    // "stuck" for the person watching. The vocabulary is the bootstrapper's
+    // own step detail - the card renders it, it never invents it.
+    ipc.voiceConfig.current = { tts: { preferred: { providerId: 'custom-local-voice', voiceId: 'p-1' } } }
+    ipc.runtimeState.current = { state: 'notInstalled' }
+    ipc.bootstrap.current = {
+      phase: 'checking',
+      steps: [
+        { id: 'check-environment', status: 'done' },
+        { detail: 'extracting', id: 'fetch-source', status: 'running' },
+        { id: 'run-setup', status: 'pending' },
+      ],
+    }
+
+    const visible = beforeAdvanced(await render())
+
+    expect(visible).toContain('data-testid="lia-runtime-step-substate-fetch-source"')
+    expect(visible).toContain(`${TT}.runtime.extracting`)
+  })
+
+  it('names the verification step while it runs', async () => {
+    ipc.voiceConfig.current = { tts: { preferred: { providerId: 'custom-local-voice', voiceId: 'p-1' } } }
+    ipc.runtimeState.current = { state: 'notInstalled' }
+    ipc.bootstrap.current = {
+      phase: 'verifying',
+      steps: [
+        { id: 'check-environment', status: 'done' },
+        { id: 'fetch-source', status: 'done' },
+        { id: 'run-setup', status: 'done' },
+        { id: 'verify-install', status: 'running' },
+        { id: 'verify-health', status: 'pending' },
+      ],
+    }
+
+    const visible = beforeAdvanced(await render())
+
+    expect(visible).toContain(`${TT}.runtime.step.verify-install`)
+    expect(visible).toContain('data-testid="lia-runtime-step-spinner"')
+  })
+
+  it('shows the finished state the install earned, next to the voices', async () => {
+    // The runtime flipping to ready must not steal the "pronto" the user
+    // earned: the card stays as the outcome banner and the voice panel opens
+    // right below it.
+    ipc.voiceConfig.current = { tts: { preferred: { providerId: 'custom-local-voice', voiceId: 'p-1' } } }
+    ipc.runtimeState.current = { state: 'ready' }
+    ipc.bootstrap.current = {
+      phase: 'ready',
+      steps: [
+        { id: 'check-environment', status: 'done' },
+        { id: 'fetch-source', status: 'done' },
+        { id: 'run-setup', status: 'done' },
+        { id: 'verify-install', status: 'done' },
+        { id: 'verify-health', status: 'done' },
+      ],
+    }
+
+    const visible = beforeAdvanced(await render())
+
+    expect(visible).toContain('data-testid="lia-runtime-install"')
+    expect(visible).toContain(`${TT}.runtime.readyTitle`)
+    expect(visible).toContain('data-testid="lia-custom-voice-import"')
+    // Done: no action button, no spinner, no cancel.
+    expect(visible).not.toContain('data-testid="lia-runtime-install-button"')
+    expect(visible).not.toContain('data-testid="lia-runtime-step-spinner"')
+    expect(visible).not.toContain('data-testid="lia-runtime-cancel"')
+  })
+
+  it('names a plain failure with its own title and a retry', async () => {
+    ipc.voiceConfig.current = { tts: { preferred: { providerId: 'custom-local-voice', voiceId: 'p-1' } } }
+    ipc.runtimeState.current = { state: 'notInstalled' }
+    ipc.bootstrap.current = {
+      failureCategory: 'setup',
+      message: 'The voice system could not be installed.',
+      phase: 'failed',
+      steps: [],
+    }
+
+    const visible = beforeAdvanced(await render())
+
+    expect(visible).toContain(`${TT}.runtime.failedTitle`)
+    expect(visible).toContain('data-testid="lia-runtime-install-error"')
+    expect(visible).toContain(`${TT}.runtime.retry`)
+    // A plain setup failure is not a repair: the files are not there to fix.
+    expect(visible).not.toContain(`${TT}.runtime.repair`)
+  })
+
+  it('names a cancellation distinctly from a crash', async () => {
+    ipc.voiceConfig.current = { tts: { preferred: { providerId: 'custom-local-voice', voiceId: 'p-1' } } }
+    ipc.runtimeState.current = { state: 'notInstalled' }
+    ipc.bootstrap.current = {
+      message: 'Installation cancelled.',
+      phase: 'cancelled',
+      steps: [],
+    }
+
+    const visible = beforeAdvanced(await render())
+
+    expect(visible).toContain(`${TT}.runtime.cancelledTitle`)
+    // Cancellation is not an error to read; the title says it and the action
+    // is simply to start again.
+    expect(visible).not.toContain('data-testid="lia-runtime-install-error"')
+    expect(visible).toContain(`${TT}.runtime.retry`)
+  })
+
+  it('never shows two running marks after a sub-state flip', async () => {
+    ipc.voiceConfig.current = { tts: { preferred: { providerId: 'custom-local-voice', voiceId: 'p-1' } } }
+    ipc.runtimeState.current = { state: 'notInstalled' }
+    ipc.bootstrap.current = {
+      phase: 'checking',
+      steps: [
+        { id: 'check-environment', status: 'done' },
+        { detail: 'extracting', id: 'fetch-source', status: 'running' },
+        { id: 'run-setup', status: 'pending' },
+      ],
+    }
+
+    const visible = beforeAdvanced(await render())
+
+    const spinners = visible.match(/lia-runtime-step-spinner/g) ?? []
+    expect(spinners).toHaveLength(1)
   })
 })
 

@@ -21,13 +21,18 @@
  * *something* happen is what keeps a long download from feeling like a hang - but
  * they are read-only progress, not a to-do list.
  *
- * The progress deliberately has no percentage. The honest granularities available
- * are "which step" and "is it moving", and a number that moves smoothly while
- * nothing measurable is happening would be a lie the user can catch.
+ * ## What progress means here
+ *
+ * Every pixel of progress is the main process's state machine, received over
+ * IPC and rendered as-is. The progress deliberately has no percentage and no
+ * timer: the honest granularities available are "which step", "which sub-state
+ * of the download step" and "is it moving", and a number that moves smoothly
+ * while nothing measurable is happening would be a lie the user can catch.
  */
 import { computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 
+import { isLiaBootstrapActivePhase } from '../../../../shared/lia-voice'
 import { useLiaRuntimeStore } from '../../../stores/lia/runtime'
 
 const { t } = useI18n()
@@ -39,23 +44,16 @@ const runtime = useLiaRuntimeStore()
 const steps = computed(() => runtime.bootstrap?.steps ?? [])
 
 /** Whether an install or repair is currently in flight. */
-const isRunning = computed(() => {
-  const phase = runtime.bootstrap?.phase
-  return phase === 'checking' || phase === 'installing-prerequisites'
-    || phase === 'installing-runtime' || phase === 'preparing-model' || phase === 'verifying'
-})
+const isRunning = computed(() => isLiaBootstrapActivePhase(runtime.bootstrap?.phase))
 
 /**
  * Whether to present the finished state.
  *
- * Requires the runtime to agree. This card is only mounted when the runtime is
- * missing, so trusting the bootstrap alone would be able to render "Ready" with
- * no button at all - a dead end the user cannot get out of. When the two
- * disagree, fall back to the install prompt instead: the bootstrap is idempotent,
- * so offering it again is always a safe action, whereas claiming success that the
- * runtime contradicts is not.
+ * Requires the bootstrap to have reached 'ready'; the card is only shown at
+ * that point because the section keeps it mounted for the outcome, so a state
+ * the runtime manager contradicts cannot present a dead end with no button.
  */
-const isReady = computed(() => runtime.bootstrap?.phase === 'ready' && !runtime.needsInstall)
+const isReady = computed(() => runtime.bootstrap?.phase === 'ready')
 const isFailed = computed(() => runtime.bootstrap?.phase === 'failed')
 const isCancelled = computed(() => runtime.bootstrap?.phase === 'cancelled')
 /** A failed health check leaves the files in place; repair is the right action. */
@@ -64,15 +62,29 @@ const needsRepair = computed(
     || (isFailed.value && runtime.bootstrap?.failureCategory === 'health'),
 )
 
-/** Mark per step status: ✓ done, ● running, ○ not started, ✗ failed. */
+/**
+ * The one running step's sub-state line, when it has one worth reporting.
+ *
+ * The download step takes minutes on a slow link, then the extraction takes
+ * seconds with no byte counter at all - telling the user which of the two is
+ * happening is the difference between "slow" and "stuck". The vocabulary is
+ * the bootstrapper's own step detail; nothing is invented here.
+ */
+function subStateFor(step: { detail?: string, id: string, status: string }): string {
+  if (step.status !== 'running')
+    return ''
+  if (step.id === 'fetch-source' && step.detail === 'extracting')
+    return tt('runtime.extracting')
+  return ''
+}
+
+/** Mark per step status: ✓ done, spinner running, ○ not started, ✗ failed. */
 function markFor(status: string): string {
   switch (status) {
     case 'done':
       return '✓'
     case 'skipped':
       return '✓'
-    case 'running':
-      return '●'
     case 'failed':
       return '✗'
     default:
@@ -109,16 +121,26 @@ function onCancel(): void {
     data-testid="lia-runtime-install"
   >
     <h4 class="text-sm text-neutral-900 font-semibold dark:text-neutral-50">
+      {{ tt('runtime.title') }}
+    </h4>
+
+    <p class="text-xs text-neutral-700 font-medium dark:text-neutral-200" data-testid="lia-runtime-install-status">
       <template v-if="isReady">
         {{ tt('runtime.readyTitle') }}
       </template>
       <template v-else-if="isRunning">
         {{ tt('runtime.runningTitle') }}
       </template>
+      <template v-else-if="isFailed">
+        {{ tt('runtime.failedTitle') }}
+      </template>
+      <template v-else-if="isCancelled">
+        {{ tt('runtime.cancelledTitle') }}
+      </template>
       <template v-else>
         {{ tt('runtime.needed') }}
       </template>
-    </h4>
+    </p>
 
     <p class="text-xs text-neutral-500 dark:text-neutral-400" data-testid="lia-runtime-install-hint">
       <template v-if="isReady">
@@ -127,15 +149,16 @@ function onCancel(): void {
       <template v-else-if="isRunning">
         {{ tt('runtime.runningHint') }}
       </template>
-      <template v-else>
+      <template v-else-if="!isFailed && !isCancelled">
         {{ tt('runtime.neededHint') }}
       </template>
     </p>
 
-    <!-- Failure and cancellation get their own wording, because "Try again" is
-         only useful advice for some kinds of failure. -->
+    <!-- The diagnosis sentence the main process produced: one line, never a
+         stack trace, and only while failed (cancelled already says everything
+         in its title). -->
     <p
-      v-if="isFailed || isCancelled"
+      v-if="isFailed"
       class="text-xs text-amber-700 dark:text-amber-400"
       data-testid="lia-runtime-install-error"
     >
@@ -173,11 +196,15 @@ function onCancel(): void {
       </button>
     </div>
 
-    <!-- Read-only progress. Data comes from the main process, never hardcoded. -->
+    <!-- Read-only progress, mirroring the state machine as published by the
+         main process. The spinner carries the "moving" signal: it is CSS
+         animation, not a counter, so nothing on screen can drift ahead of the
+         machine it describes. -->
     <ol
       v-if="steps.length > 0"
       class="flex flex-col gap-1.5"
       data-testid="lia-runtime-steps"
+      role="status"
     >
       <li
         v-for="step in steps"
@@ -186,13 +213,27 @@ function onCancel(): void {
         :data-testid="`lia-runtime-step-${step.id}`"
       >
         <span
+          v-if="step.status === 'running'"
+          class="h-3 w-3 text-blue-600"
+          :class="['i-svg-spinners:ring-resize']"
+          data-testid="lia-runtime-step-spinner"
+        />
+        <span
+          v-else
           class="w-3 text-xs"
-          :class="step.status === 'failed' ? 'text-red-600' : step.status === 'running' ? 'text-blue-600' : 'text-neutral-400'"
+          :class="step.status === 'failed' ? 'text-red-600' : 'text-neutral-400'"
         >
           {{ markFor(step.status) }}
         </span>
         <span class="text-xs text-neutral-700 dark:text-neutral-300">
           {{ tt(`runtime.step.${step.id}`) }}
+        </span>
+        <span
+          v-if="subStateFor(step)"
+          class="text-xs text-neutral-500 dark:text-neutral-400"
+          :data-testid="`lia-runtime-step-substate-${step.id}`"
+        >
+          {{ subStateFor(step) }}
         </span>
       </li>
     </ol>

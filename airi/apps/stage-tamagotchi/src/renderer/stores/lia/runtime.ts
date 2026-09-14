@@ -71,6 +71,25 @@ export const useLiaRuntimeStore = defineStore('lia-runtime', () => {
   const isInstalling = computed(() => isLiaBootstrapActivePhase(bootstrap.value?.phase))
 
   /**
+   * Whether the bootstrap has something worth showing even when the runtime
+   * itself needs nothing.
+   *
+   * This is what makes "Sistema de voz pronto" visible at all: the runtime
+   * flipping to ready would otherwise swap the install card for the voice
+   * panel in the same tick and the user would never see the success they
+   * caused. `not-installed` is the state of a session that never ran the
+   * bootstrap, so a restarted app on a healthy install stays silent, as it
+   * should.
+   */
+  const bootstrapOutcome = computed(() => {
+    const phase = bootstrap.value?.phase
+    if (!phase || phase === 'not-installed')
+      return false
+    return isLiaBootstrapActivePhase(phase)
+      || phase === 'ready' || phase === 'failed' || phase === 'cancelled' || phase === 'repair-needed'
+  })
+
+  /**
    * Mirrors the bootstrap state the main process publishes.
    *
    * The main process is the source of truth for the install; this store holds
@@ -234,6 +253,7 @@ export const useLiaRuntimeStore = defineStore('lia-runtime', () => {
 
   return {
     bootstrap,
+    bootstrapOutcome,
     isBusy,
     isInstalling,
     isReady,

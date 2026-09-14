@@ -929,6 +929,26 @@ describe('state change notifications', () => {
 
     expect(state.phase).toBe('ready')
   })
+
+  it('tracks the real download-then-extract sub-states of the fetch step', async () => {
+    // The UI renders 'downloading' and then 'extracting' off the step detail.
+    // Both must come from the machine itself - emitted when the download is
+    // actually running and when the extraction actually starts - never from a
+    // renderer-side guess at what probably comes next.
+    const details: Array<string | undefined> = []
+    const h = harness({
+      onStateChange: (state) => {
+        const step = state.steps.find(entry => entry.id === 'fetch-source')
+        if (step?.status === 'running')
+          details.push(step.detail)
+      },
+    })
+    const bootstrapper = createVoiceRuntimeBootstrapper(h.deps)
+
+    await bootstrapper.run()
+
+    expect(details).toEqual(['downloading', 'extracting'])
+  })
 })
 
 describe('failure classification', () => {
