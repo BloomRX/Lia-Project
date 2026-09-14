@@ -47,9 +47,7 @@ O adapter eventa do processo main (`@moeru/eventa/adapters/electron/main`) encam
 | mover `/D` do final | falha o teste "último arg = `/D=` sem `/` no valor" |
 | `/D` com path misto (sem `win32Path`) | falha o pin de normalização |
 | store lê snapshot (primeiro estado gruda) | falha o lifecycle DOM |
-
-|-
-| subscription desconectada no store | falha o lifecycle DOM / o teste "goes dark" verde por construção cobre a forma positiva |
+| subscription desconectada no store | falha o lifecycle DOM; o teste "goes dark" cobre a forma positiva por construção |
 
 Suíte: **104 arquivos / 960 passando / 1 skipped**; ESLint 0; vue-tsc **0 erros**.
 
