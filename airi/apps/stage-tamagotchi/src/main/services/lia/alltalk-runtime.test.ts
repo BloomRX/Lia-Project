@@ -9,7 +9,7 @@ import { join } from 'node:path'
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { createRuntimeManager, INSTALL_MARKERS, startCommandFor, WINDOWS_START_SCRIPT } from './alltalk-runtime'
+import { createRuntimeManager, ENVIRONMENT_MARKERS, INSTALL_MARKERS, startCommandFor, WINDOWS_START_SCRIPT } from './alltalk-runtime'
 
 /**
  * The runtime manager owns a real process, so these tests inject both the
@@ -72,11 +72,11 @@ function fakeChild(options: { obedient?: boolean } = {}): FakeChild {
 /** A folder that looks like a completed AllTalk install. */
 async function installedDir(): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), 'lia-runtime-'))
-  for (const marker of INSTALL_MARKERS) {
+  for (const marker of [...INSTALL_MARKERS, ...ENVIRONMENT_MARKERS]) {
     if (marker.includes('.'))
       await writeFile(join(dir, marker), '# placeholder\n')
     else
-      await mkdir(join(dir, marker))
+      await mkdir(join(dir, marker), { recursive: true })
   }
   await writeFile(join(dir, WINDOWS_START_SCRIPT), '@echo off\n')
   return dir

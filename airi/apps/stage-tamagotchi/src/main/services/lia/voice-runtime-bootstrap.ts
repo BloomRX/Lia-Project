@@ -15,6 +15,7 @@ import { join } from 'node:path'
 
 import { errorMessageFrom } from '@moeru/std'
 
+import { ENVIRONMENT_MARKERS, INSTALL_MARKERS } from './alltalk-runtime'
 import { assessEnvironment, REQUIRED_FREE_BYTES } from './voice-runtime-env'
 
 export type { VoiceRuntimeEnvironment } from './voice-runtime-env'
@@ -76,6 +77,14 @@ export type BootstrapFailureCategory = LiaBootstrapFailureCategory
  * day, and a bad upstream commit would break installs with no Lia change to
  * explain it. Bumping this constant is a reviewed decision, not a side effect.
  */
+/**
+ * The launcher `atsetup.bat` generates as its last step.
+ *
+ * Its absence is the difference between "the zip was extracted" and "the setup
+ * finished", which is why the verify step requires it.
+ */
+const START_SCRIPT = 'start_alltalk.bat'
+
 export const PINNED_ALLTALK_COMMIT = 'f16117e95b540e9bbbd8247b49ca6c6b1350b172'
 
 /** Short form, for display and for `state.json`. */
@@ -378,7 +387,9 @@ export function createVoiceRuntimeBootstrapper(deps: BootstrapDeps): Bootstrappe
     const cwd = appDir()
     // All four must exist: the tree, the generated launcher, the conda root and
     // the environment inside it. A partial install is what `repair` exists for.
-    const required = ['script.py', 'start_alltalk.bat', 'alltalk_environment/conda', 'alltalk_environment/env']
+    // The same definition the runtime manager uses, so the two cannot disagree
+    // about whether this folder is a working install.
+    const required = [...INSTALL_MARKERS, ...ENVIRONMENT_MARKERS, START_SCRIPT]
     const missing: string[] = []
     for (const entry of required) {
       if (!await deps.exists(`${cwd}/${entry}`))

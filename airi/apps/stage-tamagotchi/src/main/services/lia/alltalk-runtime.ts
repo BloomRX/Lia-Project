@@ -43,6 +43,17 @@ import { join } from 'node:path'
 /** Files that must exist for a folder to count as an AllTalk install. */
 export const INSTALL_MARKERS = ['script.py', 'system', 'voices'] as const
 
+/**
+ * The Python environment `atsetup.bat` builds, without which the folder is source
+ * code rather than a working runtime.
+ *
+ * Checked by the runtime manager and by the bootstrap's verify step alike. Two
+ * separate lists drift: the manager would call an install usable that the bootstrap
+ * still considers missing, and the user gets a started-but-broken state with no
+ * explanation.
+ */
+export const ENVIRONMENT_MARKERS = ['alltalk_environment/conda', 'alltalk_environment/env'] as const
+
 /** The launcher `atsetup.bat` generates. Windows only. */
 export const WINDOWS_START_SCRIPT = 'start_alltalk.bat'
 
@@ -151,7 +162,7 @@ export function createRuntimeManager(deps: RuntimeManagerDeps): RuntimeManager {
     if (!dir)
       return false
 
-    for (const marker of INSTALL_MARKERS) {
+    for (const marker of [...INSTALL_MARKERS, ...ENVIRONMENT_MARKERS]) {
       if (!await exists(join(dir, marker)))
         return false
     }
