@@ -108,8 +108,8 @@ análogas. Tudo revertido e re-certificado: **542/542 verdes**, `vue-tsc
 
 ## 7. SHA
 
-Hotfix 3: a preencher no commit em que este relatório entre (ver histórico do
-arquivo). Suites: 542 testes passando em serviços do main, componentes de
+Hotfix 3: **`fb0a594`** — "fix(lia-ui): trace the install click end to end +
+prove it in tests (round-7 hotfix 3)". Suites: 542 testes passando em serviços do main, componentes de
 config, stores e shared. O installer continua **sem** condição PASS — o
 próximo passo é o QA Windows com as cinco linhas do trace ATIVAS, e a remoção
 da instrumentação temporária (items A) assim que a causa estiver provada no
