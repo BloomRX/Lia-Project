@@ -88,7 +88,7 @@ absoluto, blacklist-livre; ausente/relativo/proibido = erros claros; off-win
 
 ## 6. SHA
 
-Hotfix 4: **** — "fix(lia): resolve %LOCALAPPDATA% from the environment and keep IPC registration lazy (round-7 hotfix 4)".
+Hotfix 4: **`d32d778`** — "fix(lia): resolve %LOCALAPPDATA% from the environment and keep IPC registration lazy (round-7 hotfix 4)".
 Suítes: **550/550 verdes** (services main incl. novos testes E/F, componentes
 de config, stores, shared), `vue-tsc --noEmit` 0 erros, eslint limpo nos
 arquivos tocados. Nada foi tocado em Miniconda, comandos pós-Miniconda, pin do
