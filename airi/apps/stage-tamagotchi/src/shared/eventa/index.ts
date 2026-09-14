@@ -28,6 +28,8 @@ import type {
 } from '@proj-airi/stage-ui-three/trace'
 import type { Rectangle } from 'electron'
 
+import type { LiaBootstrapState } from '../lia-voice'
+
 import { defineEventa, defineInvokeEventa } from '@moeru/eventa'
 
 /** A single sanitized main-process log line streamed to the Lia Home viewer. */
@@ -807,6 +809,29 @@ export const electronLiaRuntimeInstallDirPick = defineInvokeEventa<string | null
 
 /** The guided install wizard's steps, with completion flags. */
 export const electronLiaRuntimeInstallSteps = defineInvokeEventa<LiaRuntimeInstallStep[]>('eventa:invoke:lia:runtime:install-steps')
+
+/* --------------------------------------------------------------------------
+ * Managed voice runtime: install, repair, remove
+ *
+ * An install is long-running, so its state is a snapshot the renderer pulls plus
+ * an event pushed on every change - the same shape the runtime control above
+ * already uses.
+ * -------------------------------------------------------------------------- */
+
+/** Current bootstrap state, so a reopened UI resumes instead of guessing. */
+export const electronLiaBootstrapState = defineInvokeEventa<LiaBootstrapState>('eventa:invoke:lia:bootstrap:state')
+
+/** Starts install, or repair when the runtime is already present. */
+export const electronLiaBootstrapRun = defineInvokeEventa<LiaBootstrapState, boolean>('eventa:invoke:lia:bootstrap:run')
+
+/** Asks a running install to stop at the next step boundary. */
+export const electronLiaBootstrapCancel = defineInvokeEventa<void>('eventa:invoke:lia:bootstrap:cancel')
+
+/** Removes only what the Lia installed. */
+export const electronLiaBootstrapRemove = defineInvokeEventa<void>('eventa:invoke:lia:bootstrap:remove')
+
+/** Emitted on every bootstrap state change. */
+export const electronLiaBootstrapChanged = defineEventa<LiaBootstrapState>('eventa:lia:bootstrap:changed')
 
 /** Engines the current build knows how to drive, with what each expects. */
 export const electronLiaVoiceEnginesList = defineInvokeEventa<Array<{ extensions: string[], id: string, label: string, roles: string[] }>>('eventa:invoke:lia:voice:engines:list')

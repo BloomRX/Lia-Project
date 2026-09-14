@@ -1,3 +1,10 @@
+import type {
+  LiaBootstrapFailureCategory,
+  LiaBootstrapPhase,
+  LiaBootstrapState,
+  LiaBootstrapStep,
+  LiaBootstrapStepStatus,
+} from '../../../shared/lia-voice'
 import type { VoiceRuntimeEnvironment } from './voice-runtime-env'
 
 import process from 'node:process'
@@ -48,47 +55,17 @@ export type { VoiceRuntimeEnvironment } from './voice-runtime-env'
  */
 
 /** Lifecycle states (item L). */
-export type BootstrapPhase
-  = | 'not-installed'
-    | 'checking'
-    | 'installing-prerequisites'
-    | 'installing-runtime'
-    | 'preparing-model'
-    | 'verifying'
-    | 'ready'
-    | 'repair-needed'
-    | 'failed'
-    | 'cancelled'
-
-export type StepStatus = 'done' | 'failed' | 'pending' | 'running' | 'skipped'
-
-export interface BootstrapStep {
-  id: string
-  status: StepStatus
-  /** Short, user-safe note. Never a stack trace, never a raw path. */
-  detail?: string
-  elapsedMs?: number
-}
-
-export interface BootstrapState {
-  phase: BootstrapPhase
-  steps: BootstrapStep[]
-  /** Set when `phase` is `failed`. A sentence, not an exception. */
-  message?: string
-  /** Stable id so the UI can translate without parsing prose. */
-  failureCategory?: BootstrapFailureCategory
-  /** Installed AllTalk commit, when known. */
-  version?: string
-}
-
-export type BootstrapFailureCategory
-  = | 'cancelled'
-    | 'disk'
-    | 'download'
-    | 'health'
-    | 'network'
-    | 'setup'
-    | 'unsupported'
+/**
+ * The lifecycle types live in `shared/lia-voice` because the renderer has to
+ * render them. Aliasing rather than redefining is deliberate: two definitions of
+ * the same phase list is exactly how a UI ends up waiting on a state the main
+ * process never emits.
+ */
+export type BootstrapPhase = LiaBootstrapPhase
+export type StepStatus = LiaBootstrapStepStatus
+export type BootstrapStep = LiaBootstrapStep
+export type BootstrapState = LiaBootstrapState
+export type BootstrapFailureCategory = LiaBootstrapFailureCategory
 
 /**
  * The AllTalk commit this build installs.
