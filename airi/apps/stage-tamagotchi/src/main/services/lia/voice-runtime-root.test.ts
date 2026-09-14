@@ -3,6 +3,7 @@ import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 import {
+  adoptRuntimeRootSync,
   ATSETUP_FORBIDDEN_PATH_CHARS,
   migrateLegacyRuntimeRootsSync,
   resolveRuntimeRootLayout,
@@ -199,5 +200,80 @@ describe('migrateLegacyRuntimeRootsSync', () => {
     }
     expect(() => migrateLegacyRuntimeRootsSync(LAYOUT, harness.deps)).toThrow('EPERM')
     expect(harness.logs).toEqual([])
+  })
+})
+
+describe('adoptRuntimeRootSync - the never-break-the-panel decision', () => {
+  const epermDeps = (harness: ReturnType<typeof createFsHarness>) => {
+    harness.deps.renameSync = () => {
+      throw new Error('EPERM: operation not permitted, rename')
+    }
+    return harness.deps
+  }
+
+  it('adopts the new root and reports the migration when it succeeds', () => {
+    const harness = createFsHarness([ROUND_SIX_ROOT])
+    const decision = adoptRuntimeRootSync(LAYOUT, harness.deps)
+    expect(decision).toEqual({ adopted: 'migrated', rootDir: LAYOUT.rootDir })
+  })
+
+  it('passes a no-op through unchanged (root already present)', () => {
+    const harness = createFsHarness([LAYOUT.rootDir, ROUND_SIX_ROOT])
+    const decision = adoptRuntimeRootSync(LAYOUT, harness.deps)
+    expect(decision).toEqual({ adopted: 'root-present', rootDir: LAYOUT.rootDir })
+  })
+
+  it('on a failed rename, adopts the newest char-safe legacy root instead of throwing', () => {
+    // The round-6 QA machine shape: a leftover voice server (or an AV handle)
+    // holds files in the old tree, rename fails with EPERM, and without this
+    // adoption the runtime-state IPC kept rejecting - so the Install card
+    // never mounted. With it, the session works from the round-6 root and the
+    // rename is retried on the next process start.
+    const harness = createFsHarness([ROUND_SIX_ROOT])
+    const decision = adoptRuntimeRootSync(LAYOUT, epermDeps(harness))
+    expect(decision.adopted).toBe('fallback-legacy')
+    expect(decision.rootDir).toBe(ROUND_SIX_ROOT)
+    expect(decision.error).toContain('EPERM')
+    const entry = harness.logs[0] as { detail?: string, event?: string }
+    expect(entry.event).toBe('migration-failed-fallback-legacy')
+    expect(entry.detail).toContain(ROUND_SIX_ROOT)
+    expect(entry.detail).toContain('EPERM')
+  })
+
+  it('prefers a fresh new root over the char-poisoned @proj-airi tree, even when it is the only legacy', () => {
+    // Never resurrect the path the installer cannot survive. Nothing is
+    // copied, nothing is deleted: the Install card comes back and the guided
+    // flow builds the new root.
+    const harness = createFsHarness([ORIGINAL_ROOT])
+    const decision = adoptRuntimeRootSync(LAYOUT, epermDeps(harness))
+    expect(decision.adopted).toBe('fallback-fresh-root')
+    expect(decision.rootDir).toBe(LAYOUT.rootDir)
+    expect(decision.rootDir).not.toContain('@')
+    expect(harness.existing.has(ORIGINAL_ROOT)).toBe(true) // untouched
+    const entry = harness.logs[0] as { detail?: string, event?: string }
+    expect(entry.event).toBe('migration-failed-fallback-fresh-root')
+  })
+
+  it('on an empty disk the new root wins through the ordinary no-op path - nothing to copy or delete', () => {
+    // Nothing to migrate means the rename never runs: adoption is the plain
+    // legacy-absent no-op, not a fallback.
+    const harness = createFsHarness([])
+    const decision = adoptRuntimeRootSync(LAYOUT, epermDeps(harness))
+    expect(decision.adopted).toBe('legacy-absent')
+    expect(decision.rootDir).toBe(LAYOUT.rootDir)
+    expect(harness.existing.size).toBe(0)
+    expect(harness.calls).toEqual([])
+  })
+
+  it('a failed mkdir of the new root parent also falls back, not through', () => {
+    // mkdirSync is part of the migration step too; whatever stage throws, the
+    // decision must end in a usable root for this session.
+    const harness = createFsHarness([ROUND_SIX_ROOT])
+    harness.deps.mkdirSync = () => {
+      throw new Error('EPERM: mkdir')
+    }
+    const decision = adoptRuntimeRootSync(LAYOUT, harness.deps)
+    expect(decision.adopted).toBe('fallback-legacy')
+    expect(decision.rootDir).toBe(ROUND_SIX_ROOT)
   })
 })

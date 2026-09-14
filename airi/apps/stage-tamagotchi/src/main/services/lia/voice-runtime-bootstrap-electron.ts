@@ -1,4 +1,5 @@
 import type { VoiceRuntimeEnvironment } from './voice-runtime-env'
+import type { RuntimeRootLayout } from './voice-runtime-root'
 
 import process from 'node:process'
 
@@ -11,7 +12,11 @@ import { app } from 'electron'
 import { RUNTIME_APP_SUBDIR } from './voice-runtime-bootstrap'
 import { probeVoiceRuntimeEnvironment } from './voice-runtime-env'
 import { createRuntimeLogger, createRuntimeRunCommand, freeBytesFor } from './voice-runtime-install-exec'
-import { migrateLegacyRuntimeRootsSync, resolveRuntimeRootLayout } from './voice-runtime-root'
+import {
+  adoptRuntimeRootSync,
+  resolveRuntimeRootLayout,
+
+} from './voice-runtime-root'
 
 /**
  * The parts of the voice-runtime install that genuinely need Electron.
@@ -25,9 +30,11 @@ import { migrateLegacyRuntimeRootsSync, resolveRuntimeRootLayout } from './voice
  * have to know which half a helper ended up in.
  */
 
-let legacyMigrationAttempted = false
+let cachedRootLayout: RuntimeRootLayout | undefined
 
-function runtimeRootLayout() {
+function runtimeRootLayout(): RuntimeRootLayout {
+  if (cachedRootLayout)
+    return cachedRootLayout
   const platform = process.platform
   const layout = resolveRuntimeRootLayout({
     appDataDir: app.getPath('appData'),
@@ -38,21 +45,30 @@ function runtimeRootLayout() {
     platform,
     userDataDir: app.getPath('userData'),
   })
-  // One attempt per process, latched only on success: a transient failure
-  // (e.g. a locked file inside the old tree) is retried on the next access
-  // instead of the old path silently coming back. Migration details are in
-  // `voice-runtime-root` - rounds 5-7 proved out the `@` character first and
-  // then moved the tree to the local, non-roaming %LOCALAPPDATA%\Lia.
-  if (!legacyMigrationAttempted) {
-    migrateLegacyRuntimeRootsSync(layout, {
-      existsSync,
-      log: createRuntimeLogger(),
-      mkdirSync: target => mkdirSync(target, { recursive: true }),
-      renameSync,
+  // One adoption decision per process, latched either way: `adoptRuntimeRootSync`
+  // migrates when it can and, when the rename is rejected (a locked file in
+  // the old tree, an antivirus handle), adopts a workable root for this
+  // session instead of throwing - a throw here made every runtime-state IPC
+  // reject forever, and with it went the card that offers Install. The next
+  // process start runs the whole decision again, so a temporary lock does not
+  // become a permanent loss of the new root.
+  const decision = adoptRuntimeRootSync(layout, {
+    existsSync,
+    log: createRuntimeLogger(),
+    mkdirSync: target => mkdirSync(target, { recursive: true }),
+    renameSync,
+  })
+  if (decision.error) {
+    createRuntimeLogger()({
+      detail: `adoption=${decision.adopted} root=${decision.rootDir} error=${decision.error}`,
+      event: 'runtime-root-adopted-with-fallback',
+      step: 'runtime-root',
     })
-    legacyMigrationAttempted = true
   }
-  return layout
+  cachedRootLayout = decision.rootDir === layout.rootDir
+    ? layout
+    : { ...layout, legacyRootDirs: [], rootDir: decision.rootDir }
+  return cachedRootLayout
 }
 
 /**

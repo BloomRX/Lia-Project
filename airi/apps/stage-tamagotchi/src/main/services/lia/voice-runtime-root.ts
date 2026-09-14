@@ -3,6 +3,8 @@ import type { BootstrapLogEntry } from './voice-runtime-bootstrap'
 import nodePath from 'node:path'
 import process from 'node:process'
 
+import { errorMessageFrom } from '@moeru/std'
+
 /**
  * Where the AllTalk runtime root lives on Windows: `%LOCALAPPDATA%\Lia`.
  *
@@ -151,4 +153,69 @@ export function migrateLegacyRuntimeRootsSync(
     step: 'runtime-root',
   })
   return { from: source, migrated: true, to: rootDir }
+}
+
+/** How the adoption of a runtime root ended, for logs and for tests. */
+export interface RuntimeRootDecision {
+  adopted: 'migrated' | 'root-present' | 'legacy-absent' | 'same-path' | 'fallback-legacy' | 'fallback-fresh-root'
+  /**
+   * Why the migration could not run, when a fallback fired. Kept for the log:
+   * the panel keeps working, the technical reason belongs to support.
+   */
+  error?: string
+  rootDir: string
+}
+
+/** Matches exactly one forbidden character, for candidate vetting. */
+const ATSETUP_FORBIDDEN_PATH_CHARS_SINGLE = /[!#$%&()*+,;<=>?@[\]^`{|}~]/
+
+/**
+ * Picks the runtime root this session, migrating when possible, WITHOUT EVER
+ * THROWING the app out of shape (round-7 addendum: a failed rename killed
+ * the install panel on machines where something in the old tree was locked -
+ * a leftover voice server, AV, a OneDrive sync handle - because the throw
+ * never stopped, the runtime probe IPC rejected forever and the card with
+ * the Install button never mounted).
+ *
+ * Contract:
+ * - Migration succeeds (or is a no-op): the new root wins, as designed.
+ * - Migration throws: adopt the most recent legacy root that could still host
+ *   the official continuation - i.e. free of the installers' forbidden
+ *   characters. For the tree as shipped, that is exactly the round-6 root;
+ *   the original `@proj-airi` path is never chosen again.
+ * - No usable legacy: adopt the new root un-migrated. Nothing is deleted and
+ *   nothing is copied; the fallback is session-local, so the next process
+ *   start retries the rename (the lock was probably temporary).
+ */
+export function adoptRuntimeRootSync(
+  layout: RuntimeRootLayout,
+  deps: RuntimeRootMigrationDeps,
+): RuntimeRootDecision {
+  try {
+    const migration = migrateLegacyRuntimeRootsSync(layout, deps)
+    if (migration.migrated)
+      return { adopted: 'migrated', rootDir: migration.to }
+    return { adopted: migration.reason as RuntimeRootDecision['adopted'] ?? 'root-present', rootDir: migration.to }
+  }
+  catch (error) {
+    const message = errorMessageFrom(error)
+    const fallback = layout.legacyRootDirs.find(dir =>
+      dir !== layout.rootDir
+      && !ATSETUP_FORBIDDEN_PATH_CHARS_SINGLE.test(dir)
+      && deps.existsSync(dir))
+    if (fallback !== undefined) {
+      deps.log?.({
+        detail: `adopted=${fallback} error=${message}`,
+        event: 'migration-failed-fallback-legacy',
+        step: 'runtime-root',
+      })
+      return { adopted: 'fallback-legacy', error: message, rootDir: fallback }
+    }
+    deps.log?.({
+      detail: `adopted=${layout.rootDir} (nothing migrated, nothing deleted) error=${message}`,
+      event: 'migration-failed-fallback-fresh-root',
+      step: 'runtime-root',
+    })
+    return { adopted: 'fallback-fresh-root', error: message, rootDir: layout.rootDir }
+  }
 }
