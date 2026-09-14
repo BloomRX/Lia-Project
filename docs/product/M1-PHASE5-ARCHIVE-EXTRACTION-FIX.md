@@ -174,7 +174,8 @@ Windows:
    wrapper directory.
 2. **`atsetup.bat -silent`** runs to completion with stdin closed — the load-bearing
    assumption from Phase 5, still unverified.
-3. The six `choice /C YN` prompts in its failure branches fail rather than hang.
+3. The six `choice /C YN` prompts fail rather than hang. **Partly narrowed since
+   this list was written** — see 8.6.
 4. The CUDA PyTorch stack downloads on the RX 580.
 5. Health comes up and the runtime reaches `ready`.
 
@@ -239,3 +240,30 @@ changed and let these tests pass against a fiction.
 None of the above touches the extraction fix, the traversal guard, the pin, or the
 promise that nothing runs with elevated privileges. The QA list in section 7 stands
 unchanged and still has to be run.
+
+### 8.6 The interactive prompts are only reachable on failure
+
+Section 7 lists the six `choice /C YN` prompts as an open risk. Reading
+`atsetup.bat` narrows it: every one of the six sits inside an `if errorlevel 1 (`
+block — the branch taken when a conda step has already failed.
+
+| Prompt | Line | Guarded by |
+| --- | --- | --- |
+| retry the Pytorch installation | 425 | `if errorlevel 1 (` at 408 |
+| retry the Faiss installation | 455 | `if errorlevel 1 (` at 437 |
+| retry the FFmpeg installation | 486 | `if errorlevel 1 (` at 468 |
+| retry the Gradio update | 519 | `if errorlevel 1 (` at 502 |
+| retry the DeepSpeed download | 548 | `if errorlevel 1 (` at 531 |
+| retry the DeepSpeed installation | 579 | `if errorlevel 1 (` at 559 |
+
+So a clean `-silent` run never reaches a prompt. Each is also followed by
+`if errorlevel 2 goto End`, and `if errorlevel 2` matches any errorlevel of 2 or
+above.
+
+What is **not** verified: what `choice` returns when stdin is ignored and there is
+no console, which is how Lia spawns it. The reasoning is that a non-1 errorlevel
+takes the `goto End` path and the script exits rather than waiting, but that is
+inference from the script's control flow, not an observed result — there is no
+Windows console here to run it against. If it does hang, the setup timeout kills the
+child and the install fails with a message rather than leaving the window on
+"Installing" forever.
