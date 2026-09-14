@@ -18,6 +18,7 @@ import {
   MINICONDA_PREFIX,
   minicondaInstallerArgs,
   outputTail,
+  win32Path,
   PINNED_ALLTALK_COMMIT,
   PINNED_ALLTALK_VERSION,
   SETUP_INPUTS,
@@ -1023,7 +1024,7 @@ describe('run-setup Miniconda repair', () => {
           atsetupSeq += 1
           return normalize(options.onAtsetup?.(atsetupSeq, h) ?? { code: 0 })
         }
-        if (command === installerPath(h))
+        if (command === win32Path(installerPath(h)))
           return normalize(options.onInstaller?.(h) ?? { code: 0 })
         return normalize({ code: 0 })
       },
@@ -1040,9 +1041,8 @@ describe('run-setup Miniconda repair', () => {
       // The classic round-3 outcome: atsetup exits 0 having written nothing,
       // its output ending with "Miniconda not found." The second (resume)
       // attempt stands in for a script that can continue once Miniconda works.
-      onAtsetup: (seq, h2) => {
-        if (seq === 1)
-          return { code: 0, stderr: 'O sistema nao pode encontrar o caminho especificado.', stdout: 'Miniconda not found.' }
+      onAtsetup: (_seq, h2) => {
+        // The resume attempt, as a pin that can continue once Miniconda works.
         for (const product of SETUP_PRODUCTS)
           h2.markExists(`${appRoot(h2)}/${product}`)
         return { code: 0 }
@@ -1053,6 +1053,8 @@ describe('run-setup Miniconda repair', () => {
       },
     })
     h.setHealthy(true)
+    // The 81 MB installer already sits in the tree from the failed attempt the
+    // QA log shows - this run must reuse it, never re-download it.
     h.markExists(installerPath(h))
 
     const bootstrapper = createVoiceRuntimeBootstrapper(h.deps)
@@ -1062,17 +1064,29 @@ describe('run-setup Miniconda repair', () => {
     const installs = installerCalls(execs)
     expect(installs).toHaveLength(1)
     const install = installs[0]
-    // The command carries no arguments: nothing is ever re-parsed by a shell (item I.8).
-    expect(install.command).toBe(installerPath(h))
+    // The command carries no arguments: nothing is ever re-parsed by a shell (item I.8),
+    // and process-facing paths go to NSIS in win32 form, never as mixed separators
+    // (round-4 QA showed the mixed form exiting 2).
+    expect(install.command).toBe(win32Path(installerPath(h)))
+    expect(install.command).not.toContain('/')
     expect(install.cwd).toBe(appRoot(h))
     expect(install.timeoutMs).toBe(MINICONDA_INSTALL_TIMEOUT_MS)
-    // Exactly the arguments of the pinned `start /wait` line, as an array (items I.1, I.7):
-    // JustMe + AddToPath=0 + RegisterPython=0 + NoRegistry=1 keep global tooling untouched,
-    // and /D= stays last with its value unquoted, as NSIS requires.
-    expect(install.args).toEqual(minicondaInstallerArgs(condaPrefix(h)))
-    expect(install.args[install.args.length - 1]).toBe(`/D=${condaPrefix(h)}`)
-    // The continuation went through the supported upstream entry point.
-    expect(atsetupCalls(execs)).toHaveLength(2)
+    // Exactly the officially documented silent switches, no more and no less
+    // (round-4 item L.1..L.5): JustMe + AddToPath=0 + RegisterPython=0 keep global
+    // tooling untouched, /D= stays last, unquoted, win32-normalised.
+    expect(install.args).toEqual([
+      '/InstallationType=JustMe',
+      '/AddToPath=0',
+      '/RegisterPython=0',
+      '/S',
+      `/D=${win32Path(condaPrefix(h))}`,
+    ])
+    expect(install.args).toEqual(minicondaInstallerArgs(win32Path(condaPrefix(h))))
+    // The /D= switch itself carries a slash by design; its *value* must not.
+    expect(install.args[install.args.length - 1]).toMatch(/^\/D=[^/]+$/)
+    // The installer was already on disk, so no fresh atsetup ran to re-download it
+    // (round-4 item J): the only atsetup run is the resume attempt.
+    expect(atsetupCalls(execs)).toHaveLength(1)
     const events = h.logs.map(l => l.event)
     expect(events).toContain('miniconda-facts')
     expect(events).toContain('miniconda-install-verified')
@@ -1127,9 +1141,9 @@ describe('run-setup Miniconda repair', () => {
     expect(verify?.detail).toContain('conda-prefix-exists=false')
     expect(verify?.detail).toContain('conda-exe-exists=false')
     // The lie is caught at the verification line: without the artefacts the
-    // stage stops dead, and no resume attempt is ever made on a phantom.
+    // stage stops dead, and no atsetup ever runs on a phantom Miniconda.
     expect(h.logs.some(l => l.event === 'miniconda-install-verified')).toBe(false)
-    expect(atsetupCalls(execs)).toHaveLength(1)
+    expect(atsetupCalls(execs)).toHaveLength(0)
   })
 
   it('a verified Miniconda is not reinstalled: the next attempt goes straight to the resume', async () => {
@@ -1165,13 +1179,13 @@ describe('run-setup Miniconda repair', () => {
           // at the Miniconda stage exactly like the round-3 QA log. After a
           // verified repair its resume attempt completes the setup.
           h.markExists(installerPath(h))
-          if (atsetupSeq === 3) {
+          if (atsetupSeq === 2) {
             for (const product of SETUP_PRODUCTS)
               h.markExists(`${execOptions.cwd}/${product}`)
           }
           return normalize({ code: 0 })
         }
-        if (command === installerPath(h)) {
+        if (command === win32Path(installerPath(h))) {
           installerRuns += 1
           if (installerRuns === 2)
             h.markExists(condaPrefix(h), condaExe(h))
@@ -1195,7 +1209,7 @@ describe('run-setup Miniconda repair', () => {
     // (item H). Same rule for the 81 MB installer: two attempts, two direct
     // runs, zero curls of our own.
     expect(h.calls.downloaded).toHaveLength(1)
-    expect(atsetupCalls(execs)).toHaveLength(3) // initial(1) + initial(2) + resume(2)
+    expect(atsetupCalls(execs)).toHaveLength(2) // initial(1) + resume(2); run 2 skips straight to repair (item J)
     expect(installerCalls(execs)).toHaveLength(2) // one direct run per attempt, never more
     // Nothing the user already had is destroyed while repairing.
     expect(h.calls.removed.every(p => p.endsWith('.zip.tmp'))).toBe(true)
@@ -1204,9 +1218,8 @@ describe('run-setup Miniconda repair', () => {
   it('keeps a path with special characters verbatim through the direct run', async () => {
     const runtimeDir = 'C:\\Users\\lucas\\AppData\\Roaming\\@proj-airi\\stage-tamagotchi\\runtimes\\alltalk'
     const { execs, h } = repairHarness({
-      onAtsetup: (seq, h2) => {
-        if (seq === 1)
-          return { code: 0, stdout: 'Miniconda not found.' }
+      onAtsetup: (_seq, h2) => {
+        // Only the resume attempt runs: the installer is already on disk.
         for (const product of SETUP_PRODUCTS)
           h2.markExists(`${appRoot(h2)}/${product}`)
         return { code: 0 }
@@ -1226,6 +1239,6 @@ describe('run-setup Miniconda repair', () => {
     expect(bootstrapper.state().phase).toBe('ready')
     const install = installerCalls(execs)[0]
     expect(install.command).toContain('@proj-airi')
-    expect(install.args[install.args.length - 1]).toBe(`/D=${condaPrefix(h)}`)
+    expect(install.args[install.args.length - 1]).toBe(`/D=${win32Path(condaPrefix(h))}`)
   })
 })

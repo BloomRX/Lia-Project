@@ -101,24 +101,38 @@ export const MINICONDA_EXE = 'alltalk_environment/conda/_conda.exe'
 export const MINICONDA_INSTALL_TIMEOUT_MS = 20 * 60 * 1000
 
 /**
- * Exactly the invocation of the pinned script's `start /wait` line, as an
- * argument array rather than a shell string: the installer path is never
- * re-parsed, the arguments never concatenate into a command line, and NSIS
- * still receives /D= last and unquoted as it requires. JustMe, AddToPath=0,
- * RegisterPython=0 and NoRegistry=1 are what keep the install inside the
- * runtime tree: the global PATH, the global Python and the registry are not
- * touched (item F of the round-3 brief).
+ * The silent-install invocation as an argument array rather than a shell
+ * string: the installer path is never re-parsed, the arguments never
+ * concatenate into a command line, and NSIS still receives /D= last and
+ * unquoted as it requires.
+ *
+ * Only switches in the official Miniconda silent-install list are passed
+ * (round-4 brief, items A/D): JustMe, AddToPath=0 and RegisterPython=0 are
+ * already what keeps the global PATH, the global Python and the registry
+ * untouched; `/NoShortcuts` and `/NoRegistry` came from the pinned upstream
+ * script and are constructor-level switches - valid per conda's constructor
+ * docs, but not part of the documented Miniconda set, so they now live only
+ * in the manual isolation probe (QA-Miniconda.bat), never in production.
  */
 export function minicondaInstallerArgs(condaPrefix: string): string[] {
   return [
     '/InstallationType=JustMe',
-    '/NoShortcuts=1',
     '/AddToPath=0',
     '/RegisterPython=0',
-    '/NoRegistry=1',
     '/S',
     `/D=${condaPrefix}`,
   ]
+}
+
+/**
+ * The form NSIS actually parses. The bootstrap builds paths with the generic
+ * `/`, which produced the mixed-separator `/D=` of the round-4 QA log
+ * (`...\app/alltalk_environment/conda`, exit 2). Process-facing strings -
+ * the installer command and the /D value - pass through here; filesystem
+ * probes keep the plain form, which Windows accepts either way.
+ */
+export function win32Path(path: string): string {
+  return path.replace(/\//g, '\\')
 }
 
 /**
@@ -538,12 +552,14 @@ export function createVoiceRuntimeBootstrapper(deps: BootstrapDeps): Bootstrappe
 
     const entry = await minicondaFacts('miniconda-facts')
 
-    // When Miniconda is already verified, a fresh run is pure waste: the
-    // script's conda check would short-circuit anyway, and it would curl 81 MB
-    // of installer over a file that is already there (item H). Go straight to
-    // the resume attempt below.
+    // A fresh run only has work the bootstrapper cannot do itself when the
+    // installer still needs downloading: the script curls it unconditionally,
+    // so re-running it with the file already on disk would just fetch 81 MB
+    // again to immediately overwrite them (round-4 brief, item J). With the
+    // installer present - or Miniconda already verified - go straight to the
+    // repair/resume logic below, which reuses exactly what is on disk.
     let result: ExecResult | undefined
-    if (!entry.condaReady)
+    if (!entry.condaReady && !entry.installerExists)
       result = await runAtsetup('initial')
 
     // Exit code alone is a liar here. atsetup.bat abandons a failed install by
@@ -589,13 +605,13 @@ export function createVoiceRuntimeBootstrapper(deps: BootstrapDeps): Bootstrappe
       // installer directly instead, with the very same arguments, and collect
       // what the script never could: the real process exit code (items D, E).
       deps.log({
-        detail: `cwd=${cwd} exe=${installer} installer-bytes=${recovery.installerBytes ?? 'unknown'} args=${minicondaInstallerArgs(condaPrefix).join(' ')}`,
+        detail: `cwd=${cwd} exe=${win32Path(installer)} installer-bytes=${recovery.installerBytes ?? 'unknown'} args=${minicondaInstallerArgs(win32Path(condaPrefix)).join(' ')}`,
         event: 'miniconda-install-start',
         step: 'run-setup',
       })
       const installResult = await deps.exec(
-        installer,
-        minicondaInstallerArgs(condaPrefix),
+        win32Path(installer),
+        minicondaInstallerArgs(win32Path(condaPrefix)),
         { cwd, timeoutMs: MINICONDA_INSTALL_TIMEOUT_MS },
       )
       deps.log({
