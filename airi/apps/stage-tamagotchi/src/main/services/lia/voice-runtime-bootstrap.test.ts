@@ -10,8 +10,10 @@ import {
   categorizeFailure,
   createVoiceRuntimeBootstrapper,
   messageFor,
+  outputTail,
   PINNED_ALLTALK_COMMIT,
   PINNED_ALLTALK_VERSION,
+  SETUP_INPUTS,
   START_SCRIPT,
 } from './voice-runtime-bootstrap'
 import { assessEnvironment, assessInstallPath, parseVersion, probeVoiceRuntimeEnvironment, REQUIRED_FREE_BYTES } from './voice-runtime-env'
@@ -46,6 +48,7 @@ function env(overrides: Partial<VoiceRuntimeEnvironment> = {}): VoiceRuntimeEnvi
 interface Harness {
   deps: BootstrapDeps
   calls: { exec: string[][], removed: string[], downloaded: string[], extracted: string[] }
+  logs: Array<{ detail?: string, event: string, exitCode?: number | null, step: string }>
   setExecResult: (result: { code: number | null, stderr?: string, stdout?: string }) => void
   setHealthy: (value: boolean) => void
   setStartResult: (value: boolean) => void
@@ -58,14 +61,17 @@ interface Harness {
  *
  * Derived from the shipped constants rather than restated, so this harness cannot
  * keep faking a layout the product has since changed - which would let these tests
- * pass against a fiction.
+ * pass against a fiction. The setup inputs are part of the source tree because
+ * the installer refuses to start without them, and the step under test now
+ * refuses to spawn without them too.
  */
-const SOURCE_TREE = ['atsetup.bat', ...INSTALL_MARKERS]
+const SOURCE_TREE = [...SETUP_INPUTS, ...INSTALL_MARKERS]
 const SETUP_PRODUCTS = [START_SCRIPT, ...ENVIRONMENT_MARKERS]
 
 function harness(overrides: Partial<BootstrapDeps> = {}): Harness {
   const existing = new Set<string>()
   const calls = { downloaded: [] as string[], exec: [] as string[][], extracted: [] as string[], removed: [] as string[] }
+  const logs: Harness['logs'] = []
   let execResult: { code: number | null, stderr?: string, stdout?: string } = { code: 0 }
   let healthy = false
   let startResult = true
@@ -114,13 +120,16 @@ function harness(overrides: Partial<BootstrapDeps> = {}): Harness {
       record = value
     },
     readState: async () => record,
-    log: () => undefined,
+    log: (entry) => {
+      logs.push({ detail: entry.detail, event: entry.event, exitCode: entry.exitCode, step: entry.step })
+    },
     ...overrides,
   }
 
   return {
     calls,
     deps,
+    logs,
     markExists: (...paths) => {
       for (const path of paths)
         existing.add(path)
@@ -415,6 +424,138 @@ describe('concurrency', () => {
   })
 })
 
+describe('the setup step, after the round-2 QA log', () => {
+  it('treats exit code 0 without the generated launcher as a failed setup', async () => {
+    // This is the failure the real Windows QA produced: atsetup.bat printed
+    // "the system cannot find the path specified", gave up through its end
+    // label - whose echoes reset ERRORLEVEL - and returned 0 without ever
+    // writing the launcher. A step that trusted the exit code walked on to
+    // verify-install and reported the wrong culprit.
+    const h = harness({
+      exec: async () => ({
+        code: 0,
+        stderr: '',
+        stdout: 'Downloading Miniconda\r\nO sistema nao pode encontrar o caminho especificado.\r\nMiniconda not found.\r\nExiting AllTalk Setup Utility...\r\n',
+      }),
+    })
+    const bootstrapper = createVoiceRuntimeBootstrapper(h.deps)
+
+    const state = await bootstrapper.run()
+
+    expect(state.phase).toBe('failed')
+    expect(bootstrapper.state().steps.find(step => step.id === 'run-setup')?.status).toBe('failed')
+    // The failure must be named here, not two steps later.
+    expect(bootstrapper.state().steps.find(step => step.id === 'verify-install')?.status).toBe('pending')
+    expect(state.message).toBe(messageFor('setup'))
+    // The user sees a sentence; the stack-trace-shaped details stay in the log.
+    expect(state.message).not.toContain('caminho')
+  })
+
+  it('logs the exit-0-without-launcher case with its cause, for the next QA report', async () => {
+    const h = harness({ exec: async () => ({ code: 0, stderr: 'adapter gave up', stdout: 'giving up here' }) })
+    const bootstrapper = createVoiceRuntimeBootstrapper(h.deps)
+
+    await bootstrapper.run()
+
+    const incomplete = h.logs.find(entry => entry.step === 'run-setup' && entry.event === 'incomplete')
+    expect(incomplete).toBeTruthy()
+    expect(incomplete!.detail).toContain(START_SCRIPT)
+
+    // Both streams land in the log: the script prints its diagnosis to stdout
+    // while curl and the shell noise go to stderr, and either can hold the line
+    // that names the failure.
+    const finished = h.logs.find(entry => entry.step === 'run-setup' && entry.event === 'finished')
+    expect(finished!.detail).toContain('giving up here')
+    expect(finished!.detail).toContain('adapter gave up')
+    expect(finished!.exitCode).toBe(0)
+  })
+
+  it('logs the working directory and arguments before spawning the installer', async () => {
+    const h = harness()
+    const bootstrapper = createVoiceRuntimeBootstrapper(h.deps)
+
+    await bootstrapper.run()
+
+    const started = h.logs.find(entry => entry.step === 'run-setup' && entry.event === 'start')
+    expect(started).toBeTruthy()
+    expect(started!.detail).toContain(`cwd=${h.deps.runtimeDir}/app`)
+    expect(started!.detail).toContain('atsetup.bat')
+    expect(started!.detail).toContain('-silent')
+  })
+
+  it('refuses to spawn the installer when atsetup.bat is not in the tree', async () => {
+    // A truncated extraction must fail before any spawn: the alternative is a
+    // shell error about a missing script, minutes into what looked like progress.
+    const h = harness({
+      extract: async (_archive, dest) => {
+        for (const marker of INSTALL_MARKERS)
+          h.markExists(`${dest}/${marker}`)
+      },
+    })
+    const bootstrapper = createVoiceRuntimeBootstrapper(h.deps)
+
+    const state = await bootstrapper.run()
+
+    expect(state.phase).toBe('failed')
+    expect(bootstrapper.state().steps.find(step => step.id === 'run-setup')?.status).toBe('failed')
+    expect(h.calls.exec.filter(call => call.includes('atsetup.bat'))).toHaveLength(0)
+    const refused = h.logs.find(entry => entry.step === 'run-setup' && entry.event === 'layout-invalid')
+    expect(refused).toBeTruthy()
+    expect(refused!.detail).toContain('atsetup.bat')
+  })
+
+  it('refuses to spawn when the requirements files the installer pip-installs are missing', async () => {
+    // atsetup.bat runs `pip install -r system\requirements\...` with relative
+    // paths from its own directory; without them the env build dies mid-setup,
+    // far from the actual gap.
+    const h = harness({
+      extract: async (_archive, dest) => {
+        h.markExists(`${dest}/atsetup.bat`)
+        for (const marker of INSTALL_MARKERS)
+          h.markExists(`${dest}/${marker}`)
+      },
+    })
+    const bootstrapper = createVoiceRuntimeBootstrapper(h.deps)
+
+    const state = await bootstrapper.run()
+
+    expect(state.phase).toBe('failed')
+    expect(h.calls.exec.filter(call => call.includes('atsetup.bat'))).toHaveLength(0)
+    const refused = h.logs.find(entry => entry.step === 'run-setup' && entry.event === 'layout-invalid')
+    expect(refused!.detail).toContain('requirements_standalone.txt')
+  })
+
+  it('spawns with the extracted tree root as cwd - the directory the script assumes', async () => {
+    const h = harness()
+    const bootstrapper = createVoiceRuntimeBootstrapper(h.deps)
+
+    await bootstrapper.run()
+
+    // The script's relative paths (system\requirements\..., %cd%\alltalk_environment)
+    // only resolve if cwd is the AllTalk root itself - and the log line and the
+    // spawn must agree about which directory that was.
+    const spawn = h.calls.exec.find(call => call.includes('atsetup.bat'))
+    const cwdArg = spawn!.find(arg => arg.startsWith('cwd='))
+    expect(cwdArg).toBe(`cwd=${h.deps.runtimeDir}/app`)
+    // The pre-spawn log names the same directory the spawn used - a QA report
+    // can then be read without guessing which tree the installer ran in.
+    const started = h.logs.find(entry => entry.step === 'run-setup' && entry.event === 'start')
+    expect(started!.detail).toContain(cwdArg)
+  })
+
+  it('still walks on to verify-install when the setup genuinely completes', async () => {
+    // Guards the guard: the exit-0 check must not reject an install that did
+    // produce its final artefact.
+    const h = harness()
+    const bootstrapper = createVoiceRuntimeBootstrapper(h.deps)
+
+    const state = await bootstrapper.run()
+
+    expect(state.phase).toBe('ready')
+    expect(bootstrapper.state().steps.find(step => step.id === 'verify-install')?.status).toBe('done')
+  })
+})
+
 describe('failure handling', () => {
   it('reports a failed installer as failed, with a sentence', async () => {
     const h = harness()
@@ -519,21 +660,6 @@ describe('failure handling', () => {
     expect(state.phase).toBe('failed')
     expect(state.failureCategory).toBe('download')
     expect(h.calls.extracted).toHaveLength(0)
-  })
-
-  it('detects a partial install during verification', async () => {
-    const h = harness({
-      // The installer exits 0 but leaves no conda environment - the signature of
-      // an install that died halfway, which a naive "exit code 0 means success"
-      // check would wave through.
-      exec: async () => ({ code: 0, stderr: '', stdout: '' }),
-    })
-    const bootstrapper = createVoiceRuntimeBootstrapper(h.deps)
-
-    const state = await bootstrapper.run()
-
-    expect(state.phase).toBe('failed')
-    expect(bootstrapper.state().steps.find(step => step.id === 'verify-install')?.status).toBe('failed')
   })
 
   it('refuses an install that has the launcher but no conda environment', async () => {
@@ -692,6 +818,37 @@ describe('the install path', () => {
 
     expect(message).toContain('space')
     expect(message).not.toContain('Error:')
+  })
+})
+
+describe('outputTail', () => {
+  it('keeps the end of both streams, flattened onto one line', () => {
+    const detail = outputTail({
+      stderr: 'curl progress\nmore noise\nO sistema nao pode encontrar o caminho especificado.\n',
+      stdout: 'Miniconda not found.\nExiting AllTalk Setup Utility...\n',
+    })
+
+    expect(detail).toContain('caminho especificado')
+    expect(detail).toContain('Miniconda not found')
+    expect(detail).not.toContain('\n')
+  })
+
+  it('marks an empty stream instead of dropping it silently', () => {
+    // "(empty)" is what tells the reader of a QA log that there was nothing to
+    // miss on that stream, rather than leaving them wondering whether it was
+    // captured at all.
+    const detail = outputTail({ stderr: '', stdout: 'hello' })
+
+    expect(detail).toContain('stderr=(empty)')
+    expect(detail).toContain('stdout=hello')
+  })
+
+  it('truncates long output to its tail, where the failure is named', () => {
+    const noise = 'x'.repeat(10_000)
+    const detail = outputTail({ stderr: `${noise}\nfinal error line`, stdout: '' })
+
+    expect(detail).toContain('final error line')
+    expect(detail.length).toBeLessThan(1000)
   })
 })
 

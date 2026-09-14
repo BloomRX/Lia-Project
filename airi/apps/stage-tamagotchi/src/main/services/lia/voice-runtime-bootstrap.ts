@@ -113,6 +113,21 @@ export function alltalkSourceUrl(commit: string = PINNED_ALLTALK_COMMIT): string
   return `https://github.com/erew123/alltalk_tts/archive/${commit}.zip`
 }
 
+/**
+ * Files the setup step needs on disk before it may spawn the installer.
+ *
+ * Read straight from the `-silent` branch of `atsetup.bat`: the script itself,
+ * plus the two requirements files it feeds to `pip install -r` with a *relative*
+ * path from its working directory. Spawning without them would not fail here -
+ * it would fail twenty minutes in, mid-setup, with a pip error far away from the
+ * real cause. Refusing first is what keeps the failure named correctly.
+ */
+export const SETUP_INPUTS = [
+  'atsetup.bat',
+  'system/requirements/requirements_standalone.txt',
+  'system/requirements/requirements_parler.txt',
+] as const
+
 /** The step ids, in order. The UI renders these; the runner walks them. */
 export const BOOTSTRAP_STEP_IDS = [
   'check-environment',
@@ -358,13 +373,38 @@ export function createVoiceRuntimeBootstrapper(deps: BootstrapDeps): Bootstrappe
 
     // Already set up? The marker is the launcher atsetup.bat writes as its final
     // act, so its presence means a previous run completed this step.
-    if (await deps.exists(`${cwd}/start_alltalk.bat`)) {
+    if (await deps.exists(`${cwd}/${START_SCRIPT}`)) {
       deps.log({ event: 'skipped-present', step: 'run-setup' })
       setStep('run-setup', { detail: 'already set up', elapsedMs: Date.now() - started, status: 'skipped' })
       return
     }
 
-    deps.log({ event: 'start', step: 'run-setup' })
+    // Refuse to spawn into a broken tree (item E of the round-2 brief). The
+    // installer assumes it runs from the AllTalk root and reads these inputs by
+    // relative path; if the extraction left something out, failing *here* names
+    // the missing file instead of surfacing as a mid-setup error twenty minutes
+    // and one Miniconda download later.
+    const missingInputs: string[] = []
+    for (const input of SETUP_INPUTS) {
+      if (!await deps.exists(`${cwd}/${input}`))
+        missingInputs.push(input)
+    }
+    if (missingInputs.length > 0) {
+      deps.log({ detail: `missing: ${missingInputs.join(', ')}`, event: 'layout-invalid', step: 'run-setup' })
+      throw Object.assign(
+        new Error(`setup inputs missing, refusing to run the installer: ${missingInputs.join(', ')}`),
+        { category: 'setup' as const },
+      )
+    }
+
+    // Logged before spawning so a failure report carries the exact working
+    // directory and arguments that ran rather than a reconstruction (item D).
+    // Paths belong in this log, never in what the UI shows.
+    deps.log({
+      detail: `cwd=${cwd} exe=${process.env.ComSpec ?? 'cmd.exe'} args=atsetup.bat -silent`,
+      event: 'start',
+      step: 'run-setup',
+    })
 
     // `-silent` bypasses the interactive menu entirely (audit, atsetup.bat:46).
     // `cmd /d /s /c <script>` with the directory as cwd: the path is never part
@@ -376,7 +416,7 @@ export function createVoiceRuntimeBootstrapper(deps: BootstrapDeps): Bootstrappe
     )
 
     deps.log({
-      detail: result.stderr ? result.stderr.slice(-300) : undefined,
+      detail: outputTail(result),
       elapsedMs: Date.now() - started,
       event: 'finished',
       exitCode: result.code,
@@ -386,6 +426,24 @@ export function createVoiceRuntimeBootstrapper(deps: BootstrapDeps): Bootstrappe
     if (result.code !== 0) {
       const error = new Error(`atsetup.bat exited with code ${result.code}`)
       throw Object.assign(error, { category: categorizeFailure(error, result.stderr) })
+    }
+
+    // Exit code alone is a liar here. atsetup.bat abandons a failed install by
+    // jumping to its end label, and the echoes there reset ERRORLEVEL, so a
+    // half-built tree still returns 0 - the QA log of round 2 shows exactly
+    // that: "path not found" from the script, exit 0, and only verify-install
+    // noticing. The honest success signal of this step is the artefact the
+    // script only writes as its final act: the generated launcher.
+    if (!await deps.exists(`${cwd}/${START_SCRIPT}`)) {
+      deps.log({
+        detail: `the installer exited 0 but never wrote ${START_SCRIPT}; its output above names where it gave up`,
+        event: 'incomplete',
+        step: 'run-setup',
+      })
+      throw Object.assign(
+        new Error(`atsetup.bat reported success but did not finish the setup (${START_SCRIPT} was not created)`),
+        { category: 'setup' as const },
+      )
     }
 
     setStep('run-setup', { elapsedMs: Date.now() - started, status: 'done' })
@@ -547,6 +605,23 @@ export function messageFor(category: BootstrapFailureCategory): string {
 /** SHA-256 of a buffer, for validating a download before it is used. */
 export function sha256Of(bytes: Uint8Array): string {
   return createHash('sha256').update(Buffer.from(bytes)).digest('hex')
+}
+
+/**
+ * The end of the installer's output, flattened onto one log line.
+ *
+ * The installer prints its diagnosis to *either* stream - the `ERRORLEVEL`
+ * messages go to stderr while the surrounding narration sits on stdout - so
+ * capturing only stderr, as the first version did, could leave the single line
+ * that names the failure out of the log. Kept short and whitespace-flattened:
+ * this is a tail for a human reading a QA log, not a transcript. Installer
+ * output only; never conversation text, never a secret.
+ */
+export function outputTail(result: Pick<ExecResult, 'stderr' | 'stdout'>, maxPerStream = 300): string {
+  const tail = (text: string): string => text.replace(/\s+/g, ' ').trim().slice(-maxPerStream)
+  const stdout = tail(result.stdout)
+  const stderr = tail(result.stderr)
+  return `stdout=${stdout || '(empty)'} | stderr=${stderr || '(empty)'}`
 }
 
 /**
