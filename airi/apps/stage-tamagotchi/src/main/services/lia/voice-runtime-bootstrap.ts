@@ -11,6 +11,7 @@ import process from 'node:process'
 
 import { Buffer } from 'node:buffer'
 import { createHash } from 'node:crypto'
+import { join } from 'node:path'
 
 import { errorMessageFrom } from '@moeru/std'
 
@@ -228,8 +229,17 @@ export function createVoiceRuntimeBootstrapper(deps: BootstrapDeps): Bootstrappe
   }
 
   /** App directory: `<runtimeDir>/app`, holding the AllTalk tree. */
+  /**
+   * The AllTalk tree inside the runtime root.
+   *
+   * Built with the platform separator rather than a hardcoded `/`. Concatenating a
+   * forward slash onto a Windows path produces `C:\...\alltalk/app`, which is
+   * legal enough for the filesystem to accept but does not string-compare equal to
+   * the normalised form - and that mismatch is what made the extractor's safety
+   * check reject every entry of a legitimate archive on a real Windows machine.
+   */
   function appDir(): string {
-    return `${deps.runtimeDir}${deps.runtimeDir.endsWith('/') || deps.runtimeDir.endsWith('\\') ? '' : '/'}app`
+    return join(deps.runtimeDir, 'app')
   }
 
   async function stepCheckEnvironment(): Promise<void> {

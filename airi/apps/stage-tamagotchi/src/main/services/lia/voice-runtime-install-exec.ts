@@ -1,17 +1,30 @@
+import type { Buffer } from 'node:buffer'
+
 import type { BootstrapLogEntry, RuntimeInstallRecord } from './voice-runtime-bootstrap'
 import type { CommandResult, RunCommand } from './voice-runtime-env'
 
+import path, { dirname } from 'node:path'
 import process from 'node:process'
 
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { createWriteStream } from 'node:fs'
 import { mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
 import { Readable, Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 
 import { fromBuffer } from 'yauzl'
+
+import { detectStripRoot, isSymlinkEntry, resolveArchiveEntry } from './archive-path'
+
+/**
+ * The path implementation matching this platform.
+ *
+ * Chosen once rather than per call, and injected into the validator so tests can
+ * exercise Windows semantics on a POSIX machine - which is the only way to catch a
+ * separator bug before a user does.
+ */
+const pathImpl = path.sep === '\\' ? path.win32 : path.posix
 
 /**
  * The process, download and archive primitives the bootstrapper is injected with.
@@ -143,82 +156,162 @@ export function createRuntimeDownload() {
   }
 }
 
+/** Diagnostics for a refused entry. Only the first one is ever reported. */
+export interface ArchiveRejectReport {
+  computedTarget?: string
+  normalised: string
+  raw: string
+  reason: string
+  rootDir: string
+}
+
+export interface ExtractOptions {
+  /** Called once, for the first refused entry. */
+  onReject?: (report: ArchiveRejectReport) => void
+  /** Records what was done, for the bootstrap log. */
+  onProgress?: (info: { entries: number, stripRoot?: string }) => void
+}
+
+/** Opens the archive and walks its entries without extracting anything. */
+function listEntries(buffer: Buffer): Promise<Array<{ externalFileAttributes: number, fileName: string, versionMadeBy: number }>> {
+  return new Promise((resolve, reject) => {
+    fromBuffer(buffer, { lazyEntries: true }, (error, zipfile) => {
+      if (error || !zipfile) {
+        reject(error ?? new Error('could not open the archive'))
+        return
+      }
+      const names: Array<{ externalFileAttributes: number, fileName: string, versionMadeBy: number }> = []
+      zipfile.on('error', reject)
+      zipfile.on('end', () => resolve(names))
+      zipfile.on('entry', (entry) => {
+        names.push({
+          externalFileAttributes: entry.externalFileAttributes,
+          fileName: entry.fileName,
+          versionMadeBy: entry.versionMadeBy,
+        })
+        zipfile.readEntry()
+      })
+      zipfile.readEntry()
+    })
+  })
+}
+
 /**
  * Extracts a ZIP into `destDir`.
  *
- * GitHub's archive endpoint wraps everything in a top-level
- * `<repo>-<sha>/` folder; that layer is stripped so the tree lands directly in
- * the destination. Entries are joined with `join` and re-checked, so a crafted
- * archive cannot write outside the destination.
+ * Two passes, and the first one is not decoration. The wrapper directory GitHub
+ * adds (`<repo>-<sha>/`) has to be identified from the whole entry list before
+ * anything is written, because stripping a first component blindly would silently
+ * eat a real directory from an archive that has no wrapper.
+ *
+ * ## Path safety
+ *
+ * Every entry is validated *before* it is resolved, by `resolveArchiveEntry`, which
+ * refuses traversal, absolute paths, drive letters and UNC names, and compares
+ * against the root with a real separator boundary. The destination is normalised
+ * with `resolve` first - a QA run on Windows failed precisely because a root
+ * assembled with forward slashes never matched a backslash-normalised target, so
+ * the guard rejected a legitimate archive.
+ *
+ * ## Symlinks
+ *
+ * Refused outright. Filename validation cannot protect against a link: the
+ * traversal check only ever sees the link's own path, never where it points. The
+ * official archive contains none, so refusing costs nothing and removes a whole
+ * class of escape.
  */
+export function createRuntimeExtract(options: ExtractOptions = {}) {
+  return async (archivePath: string, destDir: string): Promise<void> => {
+    const buffer = await readFile(archivePath)
 
-export function createRuntimeExtract() {
-  return (archivePath: string, destDir: string): Promise<void> =>
-    new Promise((resolve, reject) => {
-      void readFile(archivePath).then((buffer) => {
-        fromBuffer(buffer, { lazyEntries: true }, (error, zipfile) => {
-          if (error || !zipfile) {
-            reject(error ?? new Error('could not open the archive'))
+    const listing = await listEntries(buffer)
+    const stripRoot = detectStripRoot(listing.map(entry => entry.fileName), pathImpl)
+
+    // Refuse symlinks before extracting anything, so a malicious archive cannot get
+    // a partial write out before being caught.
+    const link = listing.find(entry => isSymlinkEntry(entry))
+    if (link) {
+      throw new Error(`the archive contains a symbolic link, which is not accepted: ${link.fileName}`)
+    }
+
+    options.onProgress?.({ entries: listing.length, stripRoot })
+
+    let reported = false
+
+    await new Promise<void>((resolve, reject) => {
+      fromBuffer(buffer, { lazyEntries: true }, (error, zipfile) => {
+        if (error || !zipfile) {
+          reject(error ?? new Error('could not open the archive'))
+          return
+        }
+
+        zipfile.on('error', reject)
+        zipfile.on('end', () => resolve())
+
+        zipfile.on('entry', (entry) => {
+          const decision = resolveArchiveEntry({
+            entryName: entry.fileName,
+            pathImpl,
+            rootDir: destDir,
+            stripRoot,
+          })
+
+          if (!decision.ok) {
+            // Log once. A 700-entry archive would otherwise emit 700 identical
+            // lines and bury the one that matters.
+            if (!reported) {
+              reported = true
+              options.onReject?.({
+                computedTarget: decision.computedTarget,
+                normalised: decision.normalised,
+                raw: decision.raw,
+                reason: decision.reason,
+                rootDir: pathImpl.resolve(destDir),
+              })
+            }
+            reject(new Error(`archive entry escapes the destination directory (${decision.reason}): ${decision.raw}`))
             return
           }
 
-          let topLevel: string | undefined
+          if (decision.isRootMarker) {
+            zipfile.readEntry()
+            return
+          }
 
-          zipfile.on('error', reject)
-          zipfile.on('end', () => resolve())
+          const target = decision.target
 
-          zipfile.on('entry', (entry) => {
-            const parts = entry.fileName.split('/')
-            // Strip the wrapper folder GitHub adds.
-            const relative = parts.slice(topLevel === undefined ? 0 : 1).join('/')
-            if (topLevel === undefined)
-              topLevel = parts[0]
+          if (entry.fileName.endsWith('/')) {
+            void mkdir(target, { recursive: true })
+              .then(() => zipfile.readEntry())
+              .catch(reject)
+            return
+          }
 
-            if (!relative) {
-              zipfile.readEntry()
+          zipfile.openReadStream(entry, (streamError, stream) => {
+            if (streamError || !stream) {
+              reject(streamError ?? new Error('could not read the archive entry'))
               return
             }
-
-            const target = join(destDir, relative)
-            if (!target.startsWith(destDir)) {
-              reject(new Error('archive entry escapes the destination directory'))
-              return
-            }
-
-            if (entry.fileName.endsWith('/')) {
-              void mkdir(target, { recursive: true })
-                .then(() => zipfile.readEntry())
-                .catch(reject)
-              return
-            }
-
-            zipfile.openReadStream(entry, (streamError, stream) => {
-              if (streamError || !stream) {
-                reject(streamError ?? new Error('could not read the archive entry'))
-                return
-              }
-              void mkdir(dirname(target), { recursive: true })
-                .then(() => pipeline(stream, createWriteStream(target)))
-                .then(() => zipfile.readEntry())
-                .catch(reject)
-            })
+            void mkdir(dirname(target), { recursive: true })
+              .then(() => pipeline(stream, createWriteStream(target)))
+              .then(() => zipfile.readEntry())
+              .catch(reject)
           })
-
-          zipfile.readEntry()
         })
-      }).catch(reject)
+
+        zipfile.readEntry()
+      })
     })
+  }
 }
 
-/** Reads and writes the install record. A corrupt file reads as absent. */
-
 export function createRuntimeStateStore(rootDir: string) {
-  const path = join(rootDir, 'state.json')
+  const stateFile = path.join(rootDir, 'state.json')
 
   return {
     read: async (): Promise<RuntimeInstallRecord | undefined> => {
       try {
-        const parsed = JSON.parse(await readFile(path, 'utf8')) as RuntimeInstallRecord
+        const parsed = JSON.parse(await readFile(stateFile, 'utf8')) as RuntimeInstallRecord
         return parsed && typeof parsed.commit === 'string' ? parsed : undefined
       }
       catch {
@@ -231,9 +324,9 @@ export function createRuntimeStateStore(rootDir: string) {
       await mkdir(rootDir, { recursive: true })
       // Temp file then rename, so a crash mid-write cannot leave a half-written
       // record that later reads as a valid install.
-      const tmp = `${path}.tmp`
+      const tmp = `${stateFile}.tmp`
       await writeFile(tmp, JSON.stringify(record, null, 2), 'utf8')
-      await rename(tmp, path)
+      await rename(tmp, stateFile)
     },
   }
 }

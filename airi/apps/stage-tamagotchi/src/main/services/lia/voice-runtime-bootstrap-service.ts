@@ -142,7 +142,21 @@ export function registerLiaBootstrapBridge(params: {
       download: createRuntimeDownload(),
       exec: createRuntimeExec(),
       exists: async path => await import('node:fs/promises').then(({ stat }) => stat(path).then(() => true, () => false)),
-      extract: createRuntimeExtract(),
+      extract: createRuntimeExtract({
+        // Diagnostics for a refused entry. Fired once, for the first one only: a
+        // 700-entry archive would otherwise emit 700 identical lines and bury the
+        // single entry that matters. Paths stay in the log, never in the UI.
+        onProgress: info => logger({
+          detail: `entries=${info.entries}${info.stripRoot ? ` stripRoot=${info.stripRoot}` : ''}`,
+          event: 'extract-start',
+          step: 'fetch-source',
+        }),
+        onReject: report => logger({
+          detail: `reason=${report.reason} raw=${report.raw} normalised=${report.normalised} root=${report.rootDir} target=${report.computedTarget ?? 'n/a'}`,
+          event: 'entry-rejected',
+          step: 'fetch-source',
+        }),
+      }),
       isHealthy,
       log: entry => logger(entry),
       mkdir: async (path) => {
