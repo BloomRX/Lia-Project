@@ -85,6 +85,17 @@ export type BootstrapFailureCategory = LiaBootstrapFailureCategory
  */
 export const START_SCRIPT = 'start_alltalk.bat'
 
+/**
+ * Subdirectory the AllTalk tree lives in, inside the runtime root.
+ *
+ * Named once because two modules compute this path: the bootstrapper, which
+ * extracts into it, and the runtime manager, which starts the server from it. If
+ * they disagreed, the install would complete and the runtime would then look for a
+ * server in a different folder - an install that succeeds and a voice that never
+ * comes up, with nothing in the logs connecting the two.
+ */
+export const RUNTIME_APP_SUBDIR = 'app'
+
 export const PINNED_ALLTALK_COMMIT = 'f16117e95b540e9bbbd8247b49ca6c6b1350b172'
 
 /** Short form, for display and for `state.json`. */
@@ -248,7 +259,7 @@ export function createVoiceRuntimeBootstrapper(deps: BootstrapDeps): Bootstrappe
    * check reject every entry of a legitimate archive on a real Windows machine.
    */
   function appDir(): string {
-    return join(deps.runtimeDir, 'app')
+    return join(deps.runtimeDir, RUNTIME_APP_SUBDIR)
   }
 
   async function stepCheckEnvironment(): Promise<void> {

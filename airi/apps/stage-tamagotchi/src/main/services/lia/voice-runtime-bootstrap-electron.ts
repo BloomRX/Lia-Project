@@ -5,6 +5,7 @@ import { join } from 'node:path'
 
 import { app } from 'electron'
 
+import { RUNTIME_APP_SUBDIR } from './voice-runtime-bootstrap'
 import { probeVoiceRuntimeEnvironment } from './voice-runtime-env'
 import { createRuntimeRunCommand, freeBytesFor } from './voice-runtime-install-exec'
 
@@ -33,7 +34,7 @@ export function runtimeRootDir(): string {
 
 /** The AllTalk tree itself, inside the runtime root. */
 export function runtimeAppDir(): string {
-  return join(runtimeRootDir(), 'app')
+  return join(runtimeRootDir(), RUNTIME_APP_SUBDIR)
 }
 
 /** Builds the real probe, bound to this machine. */
