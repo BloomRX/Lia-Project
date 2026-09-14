@@ -181,8 +181,25 @@ config:
           button: "Importar voz"
           confirm: "Importar"
           cancel: "Cancelar"
+          opening: "Abrindo o seletor de arquivo…"
+          pickFailed: "Não foi possível abrir o seletor de arquivo. Tente novamente."
+          chosenFile: "Arquivo escolhido:"
           namePrompt: "Dê um nome para esta voz:"
           nameDefault: "Minha voz"
+        prepare:
+          title: "Preparar voz personalizada"
+          license: "Para falar com a sua voz, a Lia baixa o modelo de voz direto da fonte original (cerca de 2 GB). Esse modelo tem licença própria (Coqui Public Model License — não é MIT); o texto da licença vem junto com o download. Isso só acontece quando você pedir aqui."
+          button: "Baixar e preparar"
+          retry: "Tentar de novo"
+          cancel: "Cancelar download"
+          phase:
+            checking: "Verificando a preparação da voz…"
+            enabling-first-run: "Preparando as configurações da voz…"
+            downloading: "Baixando o modelo de voz. Isso pode levar vários minutos em conexão lenta — você pode continuar usando a Lia."
+            verifying: "Conferindo o modelo de voz…"
+            ready: "Voz personalizada pronta"
+            error: "A preparação falhou. Você pode tentar de novo."
+            cancelled: "Download cancelado. Nada foi instalado."
         profiles:
           empty: "Nenhuma voz importada ainda."
           use: "Usar esta voz"
@@ -194,6 +211,7 @@ config:
           status:
             ready: "Pronta para uso"
             inUse: "Em uso"
+            notPrepared: "Modelo de voz ainda não preparado"
             notConfigured: "Servidor de voz não configurado"
             serverOffline: "Servidor de voz desligado"
             syncFailed: "Não foi possível enviar ao servidor"
@@ -247,6 +265,7 @@ config:
           check-environment: "Verificando o computador"
           fetch-source: "Baixando o sistema de voz"
           run-setup: "Instalando o sistema de voz"
+          configure-engine: "Preparando as configurações de voz"
           verify-install: "Conferindo a instalação"
           verify-health: "Iniciando e verificando"
       advanced:

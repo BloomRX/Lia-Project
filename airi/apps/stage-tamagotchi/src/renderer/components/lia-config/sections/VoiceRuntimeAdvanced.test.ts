@@ -7,6 +7,8 @@ import { renderToString } from 'vue/server-renderer'
 
 import VoiceRuntimeAdvanced from './VoiceRuntimeAdvanced.vue'
 
+import { liaRuntimeChannelAnswer } from './test-helpers'
+
 /**
  * The advanced panel, rendered.
  *
@@ -68,6 +70,11 @@ vi.mock('@proj-airi/electron-vueuse', () => ({
       return async () => null
     if (id === 'eventa:invoke:lia:bootstrap:remove-receive')
       return async () => null
+
+    // Custom voice engine channels (Phase 6), same house rule.
+    const runtimeAnswer = liaRuntimeChannelAnswer(id, {})
+    if (runtimeAnswer)
+      return runtimeAnswer
 
     throw new Error(`Unexpected eventa invoke: ${JSON.stringify(invoke)}`)
   },

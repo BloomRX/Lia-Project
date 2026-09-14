@@ -836,5 +836,58 @@ export const electronLiaBootstrapChanged = defineEventa<LiaBootstrapState>('even
 /** Engines the current build knows how to drive, with what each expects. */
 export const electronLiaVoiceEnginesList = defineInvokeEventa<Array<{ extensions: string[], id: string, label: string, roles: string[] }>>('eventa:invoke:lia:voice:engines:list')
 
+/* --------------------------------------------------------------------------
+ * Custom voice engine preparation (Phase 6)
+ *
+ * Deliberately separate from the bootstrap: installing the voice system is the
+ * Lia's responsibility, but downloading the multi-gigabyte, separately-licensed
+ * voice-cloning model happens only at an explicit user request. State is pulled,
+ * progress is pushed - the same shape as the bootstrap above.
+ * -------------------------------------------------------------------------- */
+
+/** How the managed runtime's voice engine is configured, per its own config files. */
+export interface LiaCustomVoiceEngineState {
+  /** The engine the server will load (e.g. 'xtts', 'piper'); undefined when unknown. */
+  engine?: string
+  /** `true` only when engine, model files and first-run flag all agree. */
+  ready: boolean
+  /** The upstream interactive first-run prompt is still armed: a start would time out. */
+  firstRunPending: boolean
+  /** Every file of the pin's xtts model set is on disk. */
+  modelComplete: boolean
+  /** How many model files are missing, for diagnostics that want more than a flag. */
+  missingModelFiles: number
+  /** A config file could not be parsed; carries its display name. */
+  parseError?: string
+}
+
+/** Prepare phases. `error` carries `detail`; a cancelled run says so too. */
+export type LiaCustomVoicePreparePhase
+  = | 'checking'
+    | 'enabling-first-run'
+    | 'downloading'
+    | 'verifying'
+    | 'ready'
+    | 'error'
+    | 'cancelled'
+
+export interface LiaCustomVoicePrepareState {
+  phase: LiaCustomVoicePreparePhase
+  /** A human sentence, safe to show. Never a path, never a URL, never a stack. */
+  detail?: string
+}
+
+/** Reads the engine configuration of the managed runtime. */
+export const electronLiaCustomVoiceEngineState = defineInvokeEventa<LiaCustomVoiceEngineState>('eventa:invoke:lia:custom-voice:engine-state')
+
+/** Runs the documented upstream download for the voice-cloning model. */
+export const electronLiaCustomVoicePrepare = defineInvokeEventa<LiaCustomVoicePrepareState>('eventa:invoke:lia:custom-voice:prepare')
+
+/** Asks a running prepare to stop - the download child is actually killed. */
+export const electronLiaCustomVoiceCancel = defineInvokeEventa<void>('eventa:invoke:lia:custom-voice:cancel')
+
+/** Emitted on every prepare state change. */
+export const electronLiaCustomVoiceChanged = defineEventa<LiaCustomVoicePrepareState>('eventa:lia:custom-voice:changed')
+
 export { electron } from '@proj-airi/electron-eventa'
 export * from '@proj-airi/electron-eventa/electron-updater'

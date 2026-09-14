@@ -15,10 +15,11 @@
  * - It never sends a path. The folder picker runs in the main process; this
  *   component only asks for it to open.
  */
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { useLiaAllTalkStore } from '../../../stores/lia/alltalk'
+import { useLiaRuntimeStore } from '../../../stores/lia/runtime'
 import { useLiaVoiceStore } from '../../../stores/lia/voice'
 import {
   CUSTOM_VOICE_PROVIDER_ID,
@@ -31,6 +32,7 @@ const { t } = useI18n()
 const tt = (key: string) => t(`tamagotchi.home.config.sections.voice.custom.${key}`)
 
 const alltalk = useLiaAllTalkStore()
+const runtimeStore = useLiaRuntimeStore()
 const profilesStore = useLiaVoiceProfilesStore()
 const voiceStore = useLiaVoiceStore()
 
@@ -43,8 +45,44 @@ const activeProfileId = computed(() => {
   return isCustomVoiceTarget(preferred) ? preferred?.voiceId : undefined
 })
 
+/* ------------------------------------------------------------------------
+ * Custom voice preparation (Phase 6, item H).
+ *
+ * "The system is installed" and "it can clone YOUR voice" are different
+ * states. The second one is true only when the runtime's own config says so
+ * (engine loaded = the cloning engine, its model files complete) - and
+ * preparing is an explicit download the user consents to, with the model's
+ * license told in plain language before they click.
+ * ------------------------------------------------------------------------ */
+
+const engine = computed(() => runtimeStore.customVoiceEngine)
+const engineConfirmedNotReady = computed(() => engine.value !== undefined && !engine.value.ready)
+/** The card appears only over an installed runtime: no runtime, nothing to prepare. */
+const showPrepareCard = computed(() => runtimeStore.isReady && engineConfirmedNotReady.value)
+
 onMounted(async () => {
   await profilesStore.refresh()
+  if (runtimeStore.isReady)
+    await runtimeStore.refreshCustomVoiceEngine()
+})
+
+watch(() => runtimeStore.isReady, async (ready) => {
+  if (ready)
+    await runtimeStore.refreshCustomVoiceEngine()
+})
+
+async function onPrepare(): Promise<void> {
+  await runtimeStore.prepareCustomVoiceModel()
+}
+
+async function onCancelPrepare(): Promise<void> {
+  await runtimeStore.cancelCustomVoicePrepare()
+}
+
+/** The i18n key of the prepare's current phase - a modelled word, not stdout. */
+const preparePhaseKey = computed(() => {
+  const phase = runtimeStore.customVoicePrepare?.phase
+  return phase ? `prepare.phase.${phase}` : undefined
 })
 
 /** Language for a new profile. `pt-BR` is the character's language, not the UI's. */
@@ -58,16 +96,45 @@ const PROFILE_LANGUAGE = 'pt-BR'
 const pendingPath = ref<string | null>(null)
 const pendingName = ref('')
 const confirmingRemoveId = ref<string | null>(null)
+/**
+ * The picker opens in the main process and on Windows it sits on top of a
+ * full-screen overlay window: while it is open this button is the only thing
+ * the user sees, so it must say *something* happened (item B). `pickError`
+ * carries what the pick itself could not; `isPicking` gives the click an
+ * immediate effect instead of a dead-press.
+ */
+const isPicking = ref(false)
+const pickError = ref(false)
 
 async function onPickFile(): Promise<void> {
-  const paths = await profilesStore.pickFiles('alltalk', ['referenceAudio'])
-  // A cancelled picker resolves to null and must change nothing.
-  if (!paths || paths.length === 0)
-    return
+  isPicking.value = true
+  pickError.value = false
+  try {
+    const paths = await profilesStore.pickFiles('alltalk', ['referenceAudio'])
+    // A cancelled picker resolves to null and must change nothing.
+    if (!paths || paths.length === 0)
+      return
 
-  pendingPath.value = paths[0]
-  pendingName.value = tt('import.nameDefault')
+    pendingPath.value = paths[0]
+    pendingName.value = tt('import.nameDefault')
+  }
+  catch {
+    // The channel is broken or main could not open the dialog: say so instead
+    // of leaving an unhandled rejection looking like a no-op.
+    pickError.value = true
+  }
+  finally {
+    isPicking.value = false
+  }
 }
+
+/** Only the file's bare name - the full path is nobody's business here. */
+const pendingFileName = computed(() => {
+  const path = pendingPath.value
+  if (!path)
+    return ''
+  return path.split(/[\\/]/).pop() ?? ''
+})
 
 function onCancelImport(): void {
   pendingPath.value = null
@@ -143,6 +210,10 @@ function backendOf(metadata: Record<string, string> | undefined): string {
 function profileStatusKey(profileId: string): string {
   if (profilesStore.syncErrors[profileId])
     return 'profiles.status.syncFailed'
+  // A confirmed-not-ready engine comes first: with the wrong engine loaded the
+  // server is up but cannot clone, and nothing should read "ready" through it.
+  if (engineConfirmedNotReady.value && runtimeStore.isReady)
+    return 'profiles.status.notPrepared'
   if (!alltalk.isConfigured)
     return 'profiles.status.notConfigured'
   if (!alltalk.isConnected)
@@ -164,19 +235,84 @@ void CUSTOM_VOICE_PROVIDER_ID
       {{ tt('subtitle') }}
     </p>
 
+    <!--
+      Prepare the custom voice (item H). Only shown when the voice system is
+      installed AND its own config says the cloning engine is not ready - and
+      preparing always starts from an informed click, never from startup code.
+    -->
+    <section
+      v-if="showPrepareCard"
+      class="flex flex-col gap-2 border border-neutral-200 rounded-lg p-3 dark:border-neutral-700"
+      data-testid="lia-custom-voice-prepare"
+    >
+      <span class="text-sm text-neutral-900 font-medium dark:text-neutral-50">
+        {{ tt('prepare.title') }}
+      </span>
+      <p class="text-xs text-neutral-500 dark:text-neutral-400">
+        {{ tt('prepare.license') }}
+      </p>
+      <div class="flex flex-wrap gap-2">
+        <button
+          v-if="!runtimeStore.isPreparing"
+          type="button"
+          class="rounded bg-neutral-900 px-2 py-1 text-sm text-white dark:bg-neutral-100 dark:text-neutral-900"
+          data-testid="lia-custom-voice-prepare-button"
+          @click="onPrepare"
+        >
+          {{ runtimeStore.customVoicePrepare?.phase === 'error' || runtimeStore.customVoicePrepare?.phase === 'cancelled' ? tt('prepare.retry') : tt('prepare.button') }}
+        </button>
+        <button
+          v-else
+          type="button"
+          class="rounded px-2 py-1 text-sm text-neutral-500 dark:text-neutral-400"
+          data-testid="lia-custom-voice-prepare-cancel"
+          @click="onCancelPrepare"
+        >
+          {{ tt('prepare.cancel') }}
+        </button>
+      </div>
+      <p
+        v-if="runtimeStore.isPreparing && preparePhaseKey"
+        class="text-xs text-neutral-500 dark:text-neutral-400"
+        data-testid="lia-custom-voice-prepare-phase"
+      >
+        {{ tt(preparePhaseKey) }}
+      </p>
+      <p
+        v-if="runtimeStore.customVoicePrepare?.phase === 'error'"
+        class="text-xs text-red-600 dark:text-red-400"
+        data-testid="lia-custom-voice-prepare-error"
+      >
+        {{ tt('prepare.phase.error') }}
+      </p>
+      <p
+        v-if="runtimeStore.customVoicePrepare?.phase === 'cancelled'"
+        class="text-xs text-neutral-500 dark:text-neutral-400"
+        data-testid="lia-custom-voice-prepare-cancelled"
+      >
+        {{ tt('prepare.phase.cancelled') }}
+      </p>
+    </section>
+
     <!-- Import: pick the file, then name it -->
     <div v-if="!pendingPath" class="flex flex-col gap-1">
       <button
         type="button"
         class="border border-neutral-200 rounded px-2 py-1 text-sm dark:border-neutral-700"
-        :disabled="profilesStore.isBusy"
+        :disabled="profilesStore.isBusy || isPicking"
         data-testid="lia-custom-voice-import"
         @click="onPickFile"
       >
-        {{ tt('import.button') }}
+        {{ isPicking ? tt('import.opening') : tt('import.button') }}
       </button>
+      <p v-if="pickError" class="text-xs text-red-600 dark:text-red-400" data-testid="lia-custom-voice-pick-error">
+        {{ tt('import.pickFailed') }}
+      </p>
     </div>
     <div v-else class="flex flex-col gap-2" data-testid="lia-custom-voice-naming">
+      <p class="text-xs text-neutral-500 dark:text-neutral-400" data-testid="lia-custom-voice-chosen-file">
+        {{ tt('import.chosenFile') }} {{ pendingFileName }}
+      </p>
       <label class="flex flex-col gap-1">
         <span class="text-sm text-neutral-600 dark:text-neutral-300">{{ tt('import.namePrompt') }}</span>
         <input

@@ -155,6 +155,9 @@ function harness(overrides: Partial<BootstrapDeps> = {}): Harness {
       // make the installer look already-run and skip the step under test.
       for (const marker of SOURCE_TREE)
         existing.add(`${dest}/${marker}`)
+      // The pinned archive ships its config with the first-run prompt armed -
+      // exactly what the configure-engine step exists to disarm.
+      files.set(`${dest}/confignew.json`, JSON.stringify({ branding: 'AllTalk ', firstrun_model: true }))
     },
     exists: async path => existing.has(path),
     stat: async path => (existing.has(path) ? { size: 81_720_000 } : undefined),
@@ -712,7 +715,9 @@ describe('the setup step — the round-7 continuation', () => {
     await createVoiceRuntimeBootstrapper(h.deps).run()
 
     const wanted = alltalkStartScripts(appRoot(h))
-    expect(h.calls.written.sort()).toEqual(wanted.map(script => `${appRoot(h)}/${script.file}`).sort())
+    // The configure-engine step also writes a file (`confignew.json`); scope
+    // this check to the launchers only.
+    expect(h.calls.written.filter(path => path.endsWith('.bat')).sort()).toEqual(wanted.map(script => `${appRoot(h)}/${script.file}`).sort())
     for (const script of wanted) {
       const content = h.fileContent(`${appRoot(h)}/${script.file}`)
       expect(content).toBe(script.content)
@@ -870,6 +875,82 @@ describe('the setup step — the round-7 continuation', () => {
     expect(h.calls.exec.some(call => call[1] === 'create')).toBe(false)
     expect(h.logs.some(entry => entry.event === 'conda-env-present')).toBe(true)
     expect(h.logs.filter(entry => entry.event === 'setup-command-start')).toHaveLength(9)
+  })
+})
+
+describe('the configure-engine step (phase 6: disarming the upstream first-run prompt)', () => {
+  const appRoot = (h: Harness): string => `${h.deps.runtimeDir}/app`
+
+  it('sits between the setup and the installation checks', () => {
+    expect(BOOTSTRAP_STEP_IDS.indexOf('configure-engine')).toBe(BOOTSTRAP_STEP_IDS.indexOf('run-setup') + 1)
+    expect(BOOTSTRAP_STEP_IDS.indexOf('configure-engine')).toBe(BOOTSTRAP_STEP_IDS.indexOf('verify-install') - 1)
+  })
+
+  it('writes firstrun_model false while preserving the pinned config\'s other keys', async () => {
+    const h = harness()
+    const state = await createVoiceRuntimeBootstrapper(h.deps).run()
+
+    const config = JSON.parse(h.fileContent(`${appRoot(h)}/confignew.json`)!)
+    expect(config.firstrun_model).toBe(false)
+    expect(config.branding).toBe('AllTalk ')
+
+    const step = state.steps.find(item => item.id === 'configure-engine')!
+    expect(step.status).toBe('done')
+    expect(step.detail).toBe('first-run prompt disabled')
+  })
+
+  it('T: a repair walk notices a re-armed prompt and disarms it again (not a no-op)', async () => {
+    const h = harness()
+    h.setHealthy(true)
+    const bootstrapper = createVoiceRuntimeBootstrapper(h.deps)
+    await bootstrapper.run()
+
+    // Whatever re-armed it: a hand edit, an upgrade of the AllTalk config.
+    await h.deps.writeFile(`${appRoot(h)}/confignew.json`, JSON.stringify({ branding: 'AllTalk ', firstrun_model: true }))
+    const before = h.calls.written.length
+
+    const repaired = await bootstrapper.run({ repair: true })
+
+    expect(repaired.phase).toBe('ready')
+    const config = JSON.parse(h.fileContent(`${appRoot(h)}/confignew.json`)!)
+    expect(config.firstrun_model).toBe(false)
+    // The file was rewritten - prove the walk actually did something here.
+    expect(h.calls.written.length).toBeGreaterThan(before)
+  })
+
+  it('T: a satisfied config is reported without a rewrite (checked, nothing missing)', async () => {
+    const h = harness()
+    h.setHealthy(true)
+    const bootstrapper = createVoiceRuntimeBootstrapper(h.deps)
+    await bootstrapper.run()
+
+    const before = h.calls.written.length
+    const repaired = await bootstrapper.run({ repair: true })
+
+    const step = repaired.steps.find(item => item.id === 'configure-engine')!
+    expect(step.status).toBe('done')
+    expect(step.detail).toBe('already configured')
+    expect(h.logs.filter(entry => entry.event === 'configure-engine').length).toBe(0)
+    // No extra writes beyond this verification.
+    expect(h.calls.written).toHaveLength(before)
+  })
+
+  it('a corrupted confignew.json fails the step loudly instead of overwriting a damaged config', async () => {
+    const h = harness()
+    h.setHealthy(true)
+    const bootstrapper = createVoiceRuntimeBootstrapper(h.deps)
+    await bootstrapper.run()
+
+    await h.deps.writeFile(`${appRoot(h)}/confignew.json`, '{broken')
+
+    const repaired = await bootstrapper.run({ repair: true })
+
+    expect(repaired.phase).toBe('failed')
+    const step = repaired.steps.find(item => item.id === 'configure-engine')!
+    expect(step.status).toBe('failed')
+    expect(step.detail).toBe('setup')
+    // The damaged file survives untouched for diagnosis.
+    expect(h.fileContent(`${appRoot(h)}/confignew.json`)).toBe('{broken')
   })
 })
 

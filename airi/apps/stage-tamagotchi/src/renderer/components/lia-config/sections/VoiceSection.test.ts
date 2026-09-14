@@ -10,6 +10,7 @@ import { renderToString } from 'vue/server-renderer'
 import VoiceSection from './VoiceSection.vue'
 
 import { useLiaVoiceStore } from '../../../stores/lia/voice'
+import { liaRuntimeChannelAnswer } from './test-helpers'
 
 /**
  * Rendering half of the 4E-2 voice UI.
@@ -105,6 +106,11 @@ vi.mock('@proj-airi/electron-vueuse', () => ({
       return async () => null
     if (id === 'eventa:invoke:lia:bootstrap:remove-receive')
       return async () => null
+
+    // Custom voice engine channels (Phase 6), same house rule.
+    const runtimeAnswer = liaRuntimeChannelAnswer(id, {})
+    if (runtimeAnswer)
+      return runtimeAnswer
 
     throw new Error(`Unexpected eventa invoke: ${JSON.stringify(invoke)}`)
   },

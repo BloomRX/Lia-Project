@@ -135,6 +135,7 @@ describe('bridge registration survives an unresolvable runtime root (item E)', (
       'check-environment:pending',
       'fetch-source:pending',
       'run-setup:pending',
+      'configure-engine:pending',
       'verify-install:pending',
       'verify-health:pending',
     ])

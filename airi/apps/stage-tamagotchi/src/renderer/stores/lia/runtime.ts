@@ -1,4 +1,4 @@
-import type { LiaRuntimeInstallStep, LiaRuntimeState } from '../../../shared/eventa'
+import type { LiaCustomVoiceEngineState, LiaCustomVoicePrepareState, LiaRuntimeInstallStep, LiaRuntimeState } from '../../../shared/eventa'
 import type { LiaBootstrapState } from '../../../shared/lia-voice'
 
 import { getElectronEventaContext, useElectronEventaInvoke } from '@proj-airi/electron-vueuse'
@@ -11,6 +11,10 @@ import {
   electronLiaBootstrapRemove,
   electronLiaBootstrapRun,
   electronLiaBootstrapState,
+  electronLiaCustomVoiceCancel,
+  electronLiaCustomVoiceChanged,
+  electronLiaCustomVoiceEngineState,
+  electronLiaCustomVoicePrepare,
   electronLiaRuntimeInstallDirPick,
   electronLiaRuntimeInstallSteps,
   electronLiaRuntimeStart,
@@ -108,6 +112,73 @@ export const useLiaRuntimeStore = defineStore('lia-runtime', () => {
   catch {
     // No ipcRenderer in this context (SSR render in tests, or a non-Electron
     // host): the store degrades to invoke-only, exactly as before.
+  }
+
+  /* ------------------------------------------------------------------------
+   * Custom voice engine preparation (Phase 6).
+   *
+   * Pulled state plus pushed progress, installed by explicit user request only.
+   * `isPreparing` is true from the click until the prepare answer arrives, so
+   * a double click is collapsed before it ever reaches main - and main itself
+   * single-flights the same protect.
+   * ------------------------------------------------------------------------ */
+
+  const fetchCustomVoiceEngine = useElectronEventaInvoke(electronLiaCustomVoiceEngineState)
+  const startCustomVoicePrepare = useElectronEventaInvoke(electronLiaCustomVoicePrepare)
+  const cancelCustomVoicePrepareInvoke = useElectronEventaInvoke(electronLiaCustomVoiceCancel)
+
+  const customVoiceEngine = ref<LiaCustomVoiceEngineState | undefined>()
+  const customVoicePrepare = ref<LiaCustomVoicePrepareState | undefined>()
+  const isPreparing = ref(false)
+
+  try {
+    getElectronEventaContext().on(electronLiaCustomVoiceChanged, (event) => {
+      if (event.body) {
+        customVoicePrepare.value = event.body
+        if (event.body.phase === 'ready' || event.body.phase === 'error' || event.body.phase === 'cancelled')
+          isPreparing.value = false
+      }
+    })
+  }
+  catch {
+    // Same degradation as the bootstrap subscription above.
+  }
+
+  async function refreshCustomVoiceEngine(): Promise<void> {
+    try {
+      customVoiceEngine.value = await fetchCustomVoiceEngine()
+    }
+    catch {
+      // An unreachable main process must not blank the Voice tab: the engine
+      // simply reads as "not confirmed ready" and the prepare card offers
+      // preparation instead of a broken panel.
+      customVoiceEngine.value = undefined
+    }
+  }
+
+  async function prepareCustomVoiceModel(): Promise<void> {
+    if (isPreparing.value)
+      return
+    isPreparing.value = true
+    try {
+      const result = await startCustomVoicePrepare()
+      customVoicePrepare.value = result
+      // The prepare answer is verified, so it is also the freshest engine read.
+      await refreshCustomVoiceEngine()
+    }
+    finally {
+      isPreparing.value = false
+    }
+  }
+
+  async function cancelCustomVoicePrepare(): Promise<void> {
+    try {
+      await cancelCustomVoicePrepareInvoke()
+    }
+    catch {
+      // Cancel is best-effort; the prepare's own phase change is what the UI
+      // shows, and a missed cancel leaves a running download, not a lie.
+    }
   }
 
   /**
@@ -261,17 +332,23 @@ export const useLiaRuntimeStore = defineStore('lia-runtime', () => {
   return {
     bootstrap,
     bootstrapOutcome,
+    customVoiceEngine,
+    customVoicePrepare,
     isBusy,
     isInstalling,
+    isPreparing,
     isReady,
     needsInstall,
     state,
     steps,
+    cancelCustomVoicePrepare,
     cancelInstall,
     chooseInstallDir,
     loadBootstrap,
     loadSteps,
+    prepareCustomVoiceModel,
     refresh,
+    refreshCustomVoiceEngine,
     removeRuntime,
     runBootstrap,
     start,

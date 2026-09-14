@@ -7,6 +7,8 @@ import { renderToString } from 'vue/server-renderer'
 
 import CustomVoicePanel from './CustomVoicePanel.vue'
 
+import { liaRuntimeChannelAnswer } from './test-helpers'
+
 /**
  * The panel, rendered.
  *
@@ -24,6 +26,9 @@ const ipc = vi.hoisted(() => ({
   status: { current: { state: 'notConfigured' } as LiaAllTalkStatus },
   config: { current: { baseUrl: 'http://127.0.0.1:7851' } as Record<string, unknown> },
   profiles: { current: [] as LiaCustomVoiceProfile[] },
+  customVoiceEngine: {
+    current: { firstRunPending: false, missingModelFiles: 0, modelComplete: true, ready: true } as Record<string, unknown>,
+  },
 }))
 
 const card = vi.hoisted(() => ({
@@ -69,6 +74,10 @@ vi.mock('@proj-airi/electron-vueuse', () => ({
       return async () => ({ ok: false, error: 'cancelled', message: '' })
     if (id === 'eventa:invoke:lia:voice:profiles:remove-receive')
       return async () => ({ ok: true, value: { id: '' } })
+
+    const runtimeAnswer = liaRuntimeChannelAnswer(id, ipc)
+    if (runtimeAnswer)
+      return runtimeAnswer
 
     throw new Error(`Unexpected eventa invoke: ${JSON.stringify(invoke)}`)
   },

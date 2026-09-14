@@ -13,6 +13,7 @@ import { join } from 'node:path'
 
 import { errorMessageFrom } from '@moeru/std'
 
+import { markAlltalkFirstRunDone } from './alltalk-engine-config'
 import { ENVIRONMENT_MARKERS, INSTALL_MARKERS } from './alltalk-runtime'
 import { assessEnvironment, REQUIRED_FREE_BYTES } from './voice-runtime-env'
 
@@ -359,6 +360,7 @@ export const BOOTSTRAP_STEP_IDS = [
   'check-environment',
   'fetch-source',
   'run-setup',
+  'configure-engine',
   'verify-install',
   'verify-health',
 ] as const
@@ -370,6 +372,7 @@ export const STEP_LABELS: Record<BootstrapStepId, string> = {
   'check-environment': 'Checking the computer',
   'fetch-source': 'Downloading the voice system',
   'run-setup': 'Installing the voice system',
+  'configure-engine': 'Preparing the voice settings',
   'verify-install': 'Checking the installation',
   'verify-health': 'Starting and verifying',
 }
@@ -851,6 +854,41 @@ export function createVoiceRuntimeBootstrapper(deps: BootstrapDeps): Bootstrappe
     setStep('run-setup', { elapsedMs: Date.now() - started, status: 'done' })
   }
 
+  async function stepConfigureEngine(): Promise<void> {
+    const started = Date.now()
+    setStep('configure-engine', { status: 'running' })
+
+    // Phase 6 (items H/J): the pin's `script.py` runs its interactive
+    // `firstrun.py` menu on every start while `confignew.json.firstrun_model`
+    // is true. A managed, windowless spawn cannot answer that menu, so its
+    // 60-second timeout expired on the QA machine and the upstream code
+    // downloaded Piper - a voice engine that cannot clone voices, chosen
+    // nobody asked for. Writing `firstrun_model: false` here, before the first
+    // start, is the same file the upstream `set_firstrun_model_false()` writes
+    // after its guided flow: a supported pre-configuration, not a patch. It
+    // leaves the engine selection empty until the user explicitly prepares the
+    // custom voice (see `alltalk-custom-voice-prepare.ts`), which is also what
+    // keeps a few gigabytes of XTTS weights out of this base install.
+    try {
+      const changed = await markAlltalkFirstRunDone(
+        { readFile: deps.readFile, writeFile: deps.writeFile },
+        appDir(),
+      )
+      // Always 'done': the step's obligation is that, afterwards, the config
+      // file cannot produce the interactive prompt. The detail records whether
+      // the walk had to change anything, so a repair log still separates
+      // "restored" from "checked, nothing missing".
+      setStep('configure-engine', {
+        detail: changed ? 'first-run prompt disabled' : 'already configured',
+        elapsedMs: Date.now() - started,
+        status: 'done',
+      })
+    }
+    catch (error) {
+      throw Object.assign(error instanceof Error ? error : new Error(String(error)), { category: 'setup' as const })
+    }
+  }
+
   async function stepVerifyInstall(): Promise<void> {
     const started = Date.now()
     setStep('verify-install', { status: 'running' })
@@ -897,6 +935,7 @@ export function createVoiceRuntimeBootstrapper(deps: BootstrapDeps): Bootstrappe
     'check-environment': stepCheckEnvironment,
     'fetch-source': stepFetchSource,
     'run-setup': stepRunSetup,
+    'configure-engine': stepConfigureEngine,
     'verify-install': stepVerifyInstall,
     'verify-health': stepVerifyHealth,
   }

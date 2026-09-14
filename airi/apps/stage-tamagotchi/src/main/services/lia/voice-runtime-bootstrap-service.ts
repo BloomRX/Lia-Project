@@ -1,8 +1,15 @@
+import type { ChildProcess } from 'node:child_process'
+
 import type { createContext } from '@moeru/eventa/adapters/electron/main'
 
+import type {
+  LiaCustomVoiceEngineState,
+  LiaCustomVoicePrepareState,
+} from '../../../shared/eventa'
 import type { LiaBootstrapState } from '../../../shared/lia-voice'
 import type { Bootstrapper } from './voice-runtime-bootstrap'
 
+import { spawn } from 'node:child_process'
 import { mkdir as fsMkdir, rm as fsRemove } from 'node:fs/promises'
 
 import { defineInvokeHandler } from '@moeru/eventa'
@@ -15,9 +22,15 @@ import {
   electronLiaBootstrapRemove,
   electronLiaBootstrapRun,
   electronLiaBootstrapState,
+  electronLiaCustomVoiceCancel,
+  electronLiaCustomVoiceChanged,
+  electronLiaCustomVoiceEngineState,
+  electronLiaCustomVoicePrepare,
 } from '../../../shared/eventa'
 import { isLiaBootstrapActivePhase } from '../../../shared/lia-voice'
 import { createAllTalkClient } from './alltalk-client'
+import { CUSTOM_VOICE_PREPARE_LOG_PREFIX, prepareCustomVoiceEngine } from './alltalk-custom-voice-prepare'
+import { readCustomVoiceEngineStatus } from './alltalk-engine-config'
 import { DEFAULT_START_TIMEOUT_MS } from './alltalk-runtime'
 import {
   BOOTSTRAP_STEP_IDS,
@@ -221,7 +234,7 @@ export function registerLiaBootstrapBridge(params: {
       runtimeDir: runtimeRootDir(),
       startRuntime,
       writeFile: async (path, content) => await import('node:fs/promises').then(({ writeFile }) => writeFile(path, content, 'utf8')),
-      writeState: async (state: LiaBootstrapState) => getStateStore().write(state),
+      writeState: async record => getStateStore().write(record),
     })
 
     return bootstrapper
@@ -246,7 +259,7 @@ export function registerLiaBootstrapBridge(params: {
       // log it with the reserved prefix, publish the ordinary failed state so
       // the card offers Retry, and answer the invoke truthfully. The failure
       // arrives AFTER install-main-received, exactly like any setup error.
-      const detail = errorMessageFrom(error)
+      const detail = errorMessageFrom(error) ?? 'bootstrap registration failure'
       logger({ detail, event: 'failed', step: 'bootstrap' })
       const failed = bootstrapRunFailureState(detail)
       emit(failed)
@@ -285,6 +298,152 @@ export function registerLiaBootstrapBridge(params: {
     await params.runtime.stop().catch(() => undefined)
     await ensureBootstrapper().remove()
     emit(ensureBootstrapper().state())
+  })
+
+  /* ------------------------------------------------------------------------
+   * Custom voice engine preparation (Phase 6).
+   *
+   * Separate from the bootstrap on purpose: the base install is automatic and
+   * carries no model, while preparing downloads ~2 GB of separately licensed
+   * weights - only at an explicit user request, only through the upstream
+   * CLI, and verified afterwards by reading the runtime's own config.
+   * ------------------------------------------------------------------------ */
+
+  const emitCustomVoice = (state: LiaCustomVoicePrepareState): void => {
+    try {
+      context.emit(electronLiaCustomVoiceChanged, state)
+    }
+    catch (error) {
+      console.warn(CUSTOM_VOICE_PREPARE_LOG_PREFIX, 'could not notify the renderer', error)
+    }
+  }
+
+  const customVoiceFs = {
+    readFile: async (path: string) => await import('node:fs/promises').then(({ readFile }) => readFile(path, 'utf8').then(content => content, () => undefined)),
+    listFiles: async (dir: string) => await import('node:fs/promises').then(({ readdir }) => readdir(dir).then(entries => entries, () => undefined)),
+    writeFile: async (path: string, content: string) => await import('node:fs/promises').then(({ writeFile }) => writeFile(path, content, 'utf8')),
+  }
+
+  defineInvokeHandler(context, electronLiaCustomVoiceEngineState, async (): Promise<LiaCustomVoiceEngineState> => {
+    try {
+      const status = await readCustomVoiceEngineStatus(customVoiceFs, runtimeAppDir())
+      return {
+        engine: status.engine,
+        firstRunPending: status.firstRunPending,
+        missingModelFiles: status.missingModelFiles.length,
+        modelComplete: status.modelComplete,
+        ...(status.parseError ? { parseError: status.parseError } : {}),
+        ready: status.ready,
+      }
+    }
+    catch (error) {
+      // Same rule as the bootstrap state read (hotfix 4): a broken root is a
+      // state, not a dead handler. Not-ready is the honest answer.
+      console.warn(CUSTOM_VOICE_PREPARE_LOG_PREFIX, 'engine state read failed; reporting not-ready', error)
+      return { firstRunPending: false, missingModelFiles: 0, modelComplete: false, ready: false }
+    }
+  })
+
+  /** Single-flight: two clicks must not start two downloads. */
+  let prepareRunning: Promise<LiaCustomVoicePrepareState> | undefined
+  /** Set between the cancel invoke and the prepare noticing it. */
+  let prepareCancelRequested = false
+  /** The download child, so cancel can actually kill it mid-flight. */
+  let prepareChild: ChildProcess | undefined
+
+  /**
+   * Like `createRuntimeExec()`, but the child is reachable: the same spawn
+   * contract (argument array, no shell, no window, buffered output, kill on
+   * timeout), plus a handle the cancel invoke can use so "Cancel" is not a
+   * lie that only takes effect at the timeout.
+   */
+  function createCancellableExec() {
+    return (command: string, args: string[], options: { cwd: string, timeoutMs: number }): Promise<{ code: number | null, stderr: string, stdout: string }> =>
+      new Promise((resolve, reject) => {
+        const child = spawn(command, args, {
+          cwd: options.cwd,
+          shell: false,
+          stdio: ['ignore', 'pipe', 'pipe'],
+          windowsHide: true,
+        })
+        prepareChild = child
+
+        let stdout = ''
+        let stderr = ''
+        child.stdout?.on('data', chunk => (stdout += String(chunk)))
+        child.stderr?.on('data', chunk => (stderr += String(chunk)))
+
+        const timer = setTimeout(() => {
+          child.kill('SIGKILL')
+          reject(new Error(`timed out after ${options.timeoutMs}ms`))
+        }, options.timeoutMs)
+        timer.unref?.()
+
+        child.once('error', (error) => {
+          clearTimeout(timer)
+          prepareChild = undefined
+          reject(error)
+        })
+        child.once('exit', (code) => {
+          clearTimeout(timer)
+          prepareChild = undefined
+          resolve({ code, stderr, stdout })
+        })
+      })
+  }
+
+  defineInvokeHandler(context, electronLiaCustomVoicePrepare, async (): Promise<LiaCustomVoicePrepareState> => {
+    if (prepareRunning)
+      return prepareRunning
+
+    prepareCancelRequested = false
+    let latest: LiaCustomVoicePrepareState = { phase: 'checking' }
+    const run = (async (): Promise<LiaCustomVoicePrepareState> => {
+      try {
+        const result = await prepareCustomVoiceEngine({
+          appDir: runtimeAppDir(),
+          exec: createCancellableExec(),
+          isCancelled: () => prepareCancelRequested,
+          log: (entry) => {
+            // The brief's [LIA-VOICE-RUNTIME] prefix on every line; the detail
+            // is engine names and file counts only, never paths or URLs.
+            console.info(CUSTOM_VOICE_PREPARE_LOG_PREFIX, entry.event, entry.detail ?? '')
+          },
+          onStateChange: (state) => {
+            latest = state
+            emitCustomVoice(state)
+          },
+          ...customVoiceFs,
+        })
+
+        latest = result.ok
+          ? { phase: 'ready' }
+          : result.error === 'cancelled'
+            ? { detail: result.message, phase: 'cancelled' }
+            : { detail: result.message, phase: 'error' }
+        emitCustomVoice(latest)
+        return latest
+      }
+      finally {
+        prepareRunning = undefined
+        prepareChild = undefined
+        prepareCancelRequested = false
+      }
+    })()
+
+    prepareRunning = run
+    return run
+  })
+
+  defineInvokeHandler(context, electronLiaCustomVoiceCancel, async (): Promise<void> => {
+    prepareCancelRequested = true
+    try {
+      prepareChild?.kill('SIGKILL')
+    }
+    catch {
+      // A child that already exited is done; nothing to undo.
+    }
+    console.info(CUSTOM_VOICE_PREPARE_LOG_PREFIX, 'prepare.cancel-requested', '')
   })
 
   return {

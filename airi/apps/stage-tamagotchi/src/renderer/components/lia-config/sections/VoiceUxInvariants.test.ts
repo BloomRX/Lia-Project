@@ -35,6 +35,11 @@ const ipc = vi.hoisted(() => ({
   steps: { current: [] as Array<{ detail: string, done: boolean, id: string, link?: string, title: string }> },
   bootstrap: { current: { phase: 'ready', steps: [] } as Record<string, unknown> },
   profiles: { current: [] as LiaCustomVoiceProfile[] },
+  // The ideal post-prepare machine: engine fully verified, so legacy scenarios
+  // keep their face; scenarios about preparation set this themselves.
+  customVoiceEngine: {
+    current: { firstRunPending: false, missingModelFiles: 0, modelComplete: true, ready: true } as Record<string, unknown>,
+  },
   voiceConfig: {
     current: {
       tts: { preferred: { providerId: 'kokoro-local', voiceId: 'af_heart' } },
@@ -99,6 +104,15 @@ vi.mock('@proj-airi/electron-vueuse', () => ({
     if (id === 'eventa:invoke:lia:bootstrap:cancel-receive')
       return async () => null
     if (id === 'eventa:invoke:lia:bootstrap:remove-receive')
+      return async () => null
+
+    // Custom voice engine channels (Phase 6). Same mock-open rule: the panel
+    // asks for the engine state when the runtime reports ready.
+    if (id === 'eventa:invoke:lia:custom-voice:engine-state-receive')
+      return async () => ipc.customVoiceEngine.current
+    if (id === 'eventa:invoke:lia:custom-voice:prepare-receive')
+      return async () => ({ phase: 'ready' })
+    if (id === 'eventa:invoke:lia:custom-voice:cancel-receive')
       return async () => null
 
     throw new Error(`Unexpected eventa invoke: ${JSON.stringify(invoke)}`)
