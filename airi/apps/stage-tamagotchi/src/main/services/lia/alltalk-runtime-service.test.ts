@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { CUSTOM_VOICE_PROVIDER_ID } from '../../../shared/lia-voice'
-import { buildInstallSteps, INSTALL_STEPS, shouldAutostartRuntime } from './alltalk-runtime-install'
+import { buildInstallSteps, INSTALL_STEPS, mayAutostartRuntime, shouldAutostartRuntime } from './alltalk-runtime-install'
 
 /**
  * The parts of the runtime service that carry a decision, tested without booting
@@ -30,6 +30,30 @@ describe('shouldAutostartRuntime', () => {
     // A prefix match would make 'custom-local-voice-v2' start the runtime too.
     expect(shouldAutostartRuntime({ providerId: 'custom-local-voice-v2' })).toBe(false)
     expect(shouldAutostartRuntime({ providerId: 'not-custom-local-voice' })).toBe(false)
+  })
+})
+
+describe('mayAutostartRuntime', () => {
+  it('autostarts a custom voice when nothing is installing', () => {
+    expect(mayAutostartRuntime({ providerId: CUSTOM_VOICE_PROVIDER_ID })).toBe(true)
+  })
+
+  it('does not autostart while an install is in flight', () => {
+    // The mutation this guards: starting a server whose files are still being
+    // written reports a failure the user did nothing to cause, and the
+    // bootstrap's own final step starts it anyway.
+    expect(mayAutostartRuntime({ providerId: CUSTOM_VOICE_PROVIDER_ID }, { installing: true })).toBe(false)
+  })
+
+  it('does not autostart a built-in voice even when idle', () => {
+    // A user who picked a ready-made voice should never pay for a server they
+    // will not use, install or no install.
+    expect(mayAutostartRuntime({ providerId: 'kokoro-local' })).toBe(false)
+    expect(mayAutostartRuntime(undefined)).toBe(false)
+  })
+
+  it('treats an omitted option as not installing', () => {
+    expect(mayAutostartRuntime({ providerId: CUSTOM_VOICE_PROVIDER_ID }, {})).toBe(true)
   })
 })
 

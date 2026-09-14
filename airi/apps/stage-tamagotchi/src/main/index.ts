@@ -428,11 +428,7 @@ app.whenReady().then(async () => {
       // Skipped while an install is in flight. Starting a server whose files are
       // still being written would report a failure the user did nothing to cause,
       // and the bootstrap's own final step starts it anyway.
-      void (async () => {
-        if (bootstrap.isInstalling())
-          return
-        await runtime.autostartIfNeeded()
-      })().catch((error) => {
+      void runtime.autostartIfNeeded({ installing: bootstrap.isInstalling() }).catch((error) => {
         console.warn('[lia-runtime] autostart failed, continuing without custom voice:', error)
       })
     },

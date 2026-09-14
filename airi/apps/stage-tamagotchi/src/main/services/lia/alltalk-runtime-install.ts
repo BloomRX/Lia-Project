@@ -95,3 +95,27 @@ export function buildInstallSteps(params: { installed: boolean, installDirConfig
 export function shouldAutostartRuntime(preferred: { providerId?: string } | undefined): boolean {
   return preferred?.providerId === CUSTOM_VOICE_PROVIDER_ID
 }
+
+/**
+ * Whether autostart may proceed right now (item U).
+ *
+ * Two separate questions, and conflating them is the bug this prevents:
+ *
+ * - *Does this voice need the runtime at all?* Only a custom voice does. A user
+ *   who picked a built-in voice should never pay for a server they will not use.
+ * - *Is now a safe moment?* Not while an install is in flight. Starting a server
+ *   whose files are still being written reports a failure the user did nothing to
+ *   cause, and the bootstrap's own final step starts it anyway.
+ *
+ * Both must hold. Returning true during an install would put a spurious "could
+ * not start" error in front of someone who has only just clicked Install.
+ */
+export function mayAutostartRuntime(
+  preferred: { providerId?: string } | undefined,
+  options: { installing?: boolean } = {},
+): boolean {
+  if (options.installing)
+    return false
+
+  return shouldAutostartRuntime(preferred)
+}

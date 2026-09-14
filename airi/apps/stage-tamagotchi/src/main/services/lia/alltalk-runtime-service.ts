@@ -18,7 +18,7 @@ import { defaultLiaProductConfig } from '../../configs/lia-schema'
 import { createAllTalkClient } from './alltalk-client'
 import { createRuntimeManager } from './alltalk-runtime'
 import { mergeAllTalkRuntime, resolveAllTalkRuntime } from './alltalk-runtime-config'
-import { buildInstallSteps, shouldAutostartRuntime } from './alltalk-runtime-install'
+import { buildInstallSteps, mayAutostartRuntime } from './alltalk-runtime-install'
 import { runtimeAppDir } from './voice-runtime-bootstrap-electron'
 
 type MainContext = ReturnType<typeof createContext>['context']
@@ -36,7 +36,7 @@ export interface LiaRuntimeService {
    * Returns quietly when the selected voice is not a custom one: a user who
    * picked a built-in voice should never pay for a server they will not use.
    */
-  autostartIfNeeded: () => Promise<LiaRuntimeState | null>
+  autostartIfNeeded: (options?: { installing?: boolean }) => Promise<LiaRuntimeState | null>
 }
 
 /** Maps the manager's internal phases onto what the renderer is told. */
@@ -168,8 +168,11 @@ export function registerLiaRuntimeBridge(params: {
     stop: async () => {
       await manager().stop()
     },
-    async autostartIfNeeded() {
-      if (!shouldAutostartRuntime(liaProductConfig.get()?.voice?.tts?.preferred))
+    async autostartIfNeeded(options: { installing?: boolean } = {}) {
+      // Both conditions must hold: that this voice needs the runtime at all, and
+      // that now is a safe moment. Starting a server whose files are still being
+      // written would report a failure the user did nothing to cause.
+      if (!mayAutostartRuntime(liaProductConfig.get()?.voice?.tts?.preferred, options))
         return null
 
       const installed = await manager().isInstalled()
