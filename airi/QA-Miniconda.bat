@@ -18,6 +18,12 @@ rem  destination path (...Roaming\@proj-airi\...), (h2) the downloaded
 rem  file was corrupted in place after a good download, (h3) local
 rem  AV / SmartScreen / Controlled Folder Access blocking the write.
 rem
+rem  ROUND 5 RESULT (confirmed): hash matched the official record, the
+rem  default run still failed with exit 2, and "cleanpath" succeeded with
+rem  exit 0 + _conda.exe — the "@" in the real destination path is the
+rem  cause. Two refinement modes below nail the discriminator at 100%
+rem  (Roaming-vs-Temp vs the character itself).
+rem
 rem  MODES (one per run, first argument):
 rem    QA-Miniconda.bat              default: facts + sha256 + official-args
 rem                                  silent install into the REAL prefix
@@ -25,6 +31,13 @@ rem    QA-Miniconda.bat cleanpath    SAME official-args install, but with
 rem                                  /D=%TEMP%\lia-qa-conda (no "@", short).
 rem                                  exit 0 here => h1 (path) confirmed.
 rem                                  exit 2 here => h3 (environment) leads.
+rem    QA-Miniconda.bat roamingclean same, but /D=%APPDATA%\lia-qa-conda
+rem                                  (Roaming dir, no "@"). exit 0 here proves
+rem                                  the discriminator is the character, not
+rem                                  the Roaming folder itself.
+rem    QA-Miniconda.bat cleanamp     same, but /D=%TEMP%\@lia-qa-conda
+rem                                  (Temp, WITH "@"). exit 2 here reproduces
+rem                                  the failure with the character alone.
 rem    QA-Miniconda.bat redownload   deletes the cached installer, downloads
 rem                                  the EXACT pinned URL again, re-verifies
 rem                                  size+sha256, then runs the default install
@@ -33,7 +46,7 @@ rem    QA-Miniconda.bat shortcuts    adds /NoShortcuts=1 (round-4 isolation)
 rem    QA-Miniconda.bat registry     adds /NoRegistry=1  (round-4 isolation)
 rem
 rem  Nothing global is touched: JustMe, AddToPath=0, RegisterPython=0,
-rem  destinations only under the Lia runtime tree or %TEMP%\lia-qa-conda.
+rem  destinations only under the Lia runtime tree or the probe prefixes (%TEMP%\lia-qa-conda, %APPDATA%\lia-qa-conda, %TEMP%\@lia-qa-conda).
 rem  Prerequisites: run "Instalar" in Lia once, so the installer file
 rem  exists (not needed for the "redownload" mode).
 rem ======================================================================
@@ -49,9 +62,11 @@ set "EXPECTED_SHA256=fb6aaeaf92907b8e7598aac0f7b29793a00b27641dc074a961eeb86ff86
 set "EXTRA="
 set "MODE=%~1"
 if /I "%MODE%"==""          set "MODE=default"
-if /I "%MODE%"=="cleanpath" set "PREFIX=%TEMP%\lia-qa-conda"
-if /I "%MODE%"=="shortcuts" set "EXTRA=/NoShortcuts=1"
-if /I "%MODE%"=="registry"  set "EXTRA=/NoRegistry=1"
+if /I "%MODE%"=="cleanpath"    set "PREFIX=%TEMP%\lia-qa-conda"
+if /I "%MODE%"=="roamingclean" set "PREFIX=%APPDATA%\lia-qa-conda"
+if /I "%MODE%"=="cleanamp"     set "PREFIX=%TEMP%\@lia-qa-conda"
+if /I "%MODE%"=="shortcuts"    set "EXTRA=/NoShortcuts=1"
+if /I "%MODE%"=="registry"     set "EXTRA=/NoRegistry=1"
 
 echo [QA-MINICONDA] mode=%MODE%
 if /I "%MODE%"=="redownload" goto Redownload
@@ -88,7 +103,22 @@ if /I "%MODE%"=="cleanpath" (
         echo   exit %EXITCODE% even on a clean path =^> environment leads: check Windows Security -^> Protection history
         echo   around the run time, Controlled Folder Access, and any third-party AV. Report back.
     )
-) else (
+)
+if /I "%MODE%"=="roamingclean" (
+    if "%EXITCODE%"=="0" (
+        echo   exit 0 in Roaming WITHOUT "@" =^> the character itself is the discriminator, fully nailed.
+    ) else (
+        echo   exit %EXITCODE% in Roaming without "@" =^> the Roaming folder, not the character. Report back.
+    )
+)
+if /I "%MODE%"=="cleanamp" (
+    if "%EXITCODE%"=="0" (
+        echo   exit 0 in Temp WITH "@" =^> unexpected: "@" alone does not reproduce it. Report back.
+    ) else (
+        echo   exit %EXITCODE% in Temp WITH "@" =^> "@" alone reproduces the failure: fully nailed.
+    )
+)
+if /I "%MODE%"=="default" (
     echo   1^) if the sha256 above differs from expected =^> file corrupted: run QA-Miniconda.bat redownload
     echo   2^) if sha256 matches and exit is not 0 =^> run QA-Miniconda.bat cleanpath
 )
