@@ -12,7 +12,7 @@ import {
   PINNED_ALLTALK_COMMIT,
   PINNED_ALLTALK_VERSION,
 } from './voice-runtime-bootstrap'
-import { assessEnvironment, parseVersion, probeVoiceRuntimeEnvironment, REQUIRED_FREE_BYTES } from './voice-runtime-env'
+import { assessEnvironment, assessInstallPath, parseVersion, probeVoiceRuntimeEnvironment, REQUIRED_FREE_BYTES } from './voice-runtime-env'
 
 /**
  * The bootstrapper, exercised against a fake machine.
@@ -611,6 +611,55 @@ describe('removal', () => {
     for (const path of h.calls.removed) {
       expect(path === h.deps.runtimeDir || path.endsWith('.zip.tmp')).toBe(true)
     }
+  })
+})
+
+describe('the install path', () => {
+  it('refuses a path containing a space', () => {
+    // atsetup.bat aborts outright on a space in the working directory, because
+    // Miniconda cannot be installed silently under one. The runtime lives under
+    // userData, which on Windows includes the user's name.
+    expect(assessInstallPath('C:\\Users\\John Smith\\AppData\\Roaming\\Lia\\runtimes\\alltalk\\app').ok).toBe(false)
+  })
+
+  it('accepts a clean path', () => {
+    const verdict = assessInstallPath('C:\\Users\\john\\AppData\\Roaming\\Lia\\runtimes\\alltalk\\app')
+
+    expect(verdict.ok).toBe(true)
+    expect(verdict.blocker).toBeUndefined()
+  })
+
+  it('warns rather than blocking on the characters the installer only warns about', () => {
+    // Mirrors the installer's own behaviour: these get a warning, not an abort.
+    // Treating them as fatal would refuse installs the installer would run.
+    const verdict = assessInstallPath('C:\\Users\\jo+hn\\runtime')
+
+    expect(verdict.ok).toBe(true)
+    expect(verdict.warning).toBe('path-has-special-characters')
+  })
+
+  it('surfaces the blocker through the readiness verdict', () => {
+    expect(assessEnvironment(env({ runtimeDir: 'C:\\Users\\John Smith\\app' })).blockers).toContain('path-has-space')
+    expect(assessEnvironment(env({ runtimeDir: 'C:\\Users\\john\\app' })).ok).toBe(true)
+  })
+
+  it('reports the path problem before downloading anything', async () => {
+    const h = harness({ probe: async () => env({ runtimeDir: 'C:\\Users\\John Smith\\app' }) })
+    const bootstrapper = createVoiceRuntimeBootstrapper(h.deps)
+
+    const state = await bootstrapper.run()
+
+    expect(state.phase).toBe('failed')
+    expect(state.failureCategory).toBe('path')
+    // The point of checking first: no 97 MB fetched only to be thrown away.
+    expect(h.calls.downloaded).toHaveLength(0)
+  })
+
+  it('gives the path failure a sentence of its own', () => {
+    const message = messageFor('path')
+
+    expect(message).toContain('space')
+    expect(message).not.toContain('Error:')
   })
 })
 

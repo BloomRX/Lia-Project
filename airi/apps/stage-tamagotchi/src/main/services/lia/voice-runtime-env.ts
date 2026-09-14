@@ -68,6 +68,13 @@ export interface VoiceRuntimeEnvironment {
   nvidiaGpu: boolean
   /** Free bytes on the target volume, when it could be read. */
   freeBytes?: number
+  /**
+   * Where the runtime would be installed.
+   *
+   * Probed so a path the installer cannot use is reported before anything is
+   * downloaded, not after.
+   */
+  runtimeDir?: string
 }
 
 /** Pulls `x.y.z` out of arbitrary `--version` output. */
@@ -129,6 +136,8 @@ export interface ProbeDeps {
   arch?: string
   /** Free bytes on the volume the runtime would be installed to. */
   freeBytes?: () => Promise<number | undefined>
+  /** Where the runtime would be installed, for the path check. */
+  runtimeDir?: string
 }
 
 export async function probeVoiceRuntimeEnvironment(deps: ProbeDeps): Promise<VoiceRuntimeEnvironment> {
@@ -155,6 +164,7 @@ export async function probeVoiceRuntimeEnvironment(deps: ProbeDeps): Promise<Voi
     espeak,
     nvidiaGpu,
     ...(deps.freeBytes ? { freeBytes: await deps.freeBytes() } : {}),
+    ...(deps.runtimeDir ? { runtimeDir: deps.runtimeDir } : {}),
   }
 }
 
@@ -180,6 +190,36 @@ export interface ReadinessVerdict {
  * Returns blocker ids rather than sentences: wording belongs to the locale files,
  * and a machine-readable verdict is what the bootstrapper has to branch on.
  */
+/**
+ * Characters `atsetup.bat` warns about (it does not abort on these).
+ *
+ * Mirrors the script's own character class so the Lia says the same thing the
+ * installer would, rather than inventing a stricter rule of its own.
+ */
+const INSTALLER_SPECIAL_CHARS = /[!#$%&()*+,;<=>?@[\]^`{|}~]/
+
+/**
+ * Whether the installer can run in `dir`.
+ *
+ * `atsetup.bat` aborts outright when the working directory contains a space
+ * (line 353 of the silent path): Miniconda cannot be installed silently under one.
+ * The runtime lives under `userData`, which on Windows includes the user's name -
+ * and "C:\Users\John Smith\..." is common.
+ *
+ * Catching this here is the difference between an instant, explainable refusal and
+ * a 97 MB download that ends in the installer printing a sentence about folder
+ * names and exiting.
+ */
+export function assessInstallPath(dir: string): { blocker?: string, ok: boolean, warning?: string } {
+  if (dir.includes(' '))
+    return { blocker: 'path-has-space', ok: false }
+
+  if (INSTALLER_SPECIAL_CHARS.test(dir))
+    return { ok: true, warning: 'path-has-special-characters' }
+
+  return { ok: true }
+}
+
 export function assessEnvironment(env: VoiceRuntimeEnvironment): ReadinessVerdict {
   const blockers: string[] = []
 
@@ -193,6 +233,14 @@ export function assessEnvironment(env: VoiceRuntimeEnvironment): ReadinessVerdic
 
   if (env.freeBytes !== undefined && env.freeBytes < REQUIRED_FREE_BYTES)
     blockers.push('insufficient-disk')
+
+  // Checked last because it is the only blocker whose wording has to tell the user
+  // something about their own machine rather than about the Lia.
+  if (env.runtimeDir) {
+    const verdict = assessInstallPath(env.runtimeDir)
+    if (!verdict.ok && verdict.blocker)
+      blockers.push(verdict.blocker)
+  }
 
   return { blockers, ok: blockers.length === 0 }
 }

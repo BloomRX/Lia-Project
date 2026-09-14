@@ -262,7 +262,9 @@ export function createVoiceRuntimeBootstrapper(deps: BootstrapDeps): Bootstrappe
         ? 'unsupported'
         : verdict.blockers.includes('insufficient-disk')
           ? 'disk'
-          : 'setup'
+          : verdict.blockers.includes('path-has-space')
+            ? 'path'
+            : 'setup'
       throw Object.assign(new Error(`environment blockers: ${verdict.blockers.join(', ')}`), { category })
     }
 
@@ -511,6 +513,8 @@ export function messageFor(category: BootstrapFailureCategory): string {
       return 'The voice system installed but did not start.'
     case 'network':
       return 'No internet connection, or it was interrupted.'
+    case 'path':
+      return 'The voice system cannot be installed in a folder whose name contains a space.'
     case 'unsupported':
       return 'This operating system is not supported yet.'
     default:

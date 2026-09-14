@@ -43,6 +43,9 @@ export function createRuntimeProbe(): () => Promise<VoiceRuntimeEnvironment> {
     probeVoiceRuntimeEnvironment({
       freeBytes: () => freeBytesFor(runtimeRootDir()),
       run,
+      // Carried so the path can be rejected before a 97 MB download rather than
+      // after, when the installer would abort on its own terms.
+      runtimeDir: runtimeAppDir(),
     })
 }
 

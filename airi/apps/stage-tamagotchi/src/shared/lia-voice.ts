@@ -55,6 +55,8 @@ export type LiaBootstrapFailureCategory
     | 'download'
     | 'health'
     | 'network'
+    /** The install folder has a name the installer cannot use, e.g. a space. */
+    | 'path'
     | 'setup'
     | 'unsupported'
 
