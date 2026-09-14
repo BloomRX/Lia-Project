@@ -29,6 +29,8 @@ const alltalk = useLiaAllTalkStore()
 const runtime = useLiaRuntimeStore()
 
 const baseUrl = ref('')
+const removeError = ref('')
+const confirmingRemove = ref(false)
 
 const statusKey = computed(() => `states.${alltalk.status.state}`)
 const statusDetail = computed(() =>
@@ -58,6 +60,36 @@ function onStart(): void {
 
 function onStop(): void {
   void runtime.stop()
+}
+
+/**
+ * Repair re-runs the same idempotent walk as install.
+ *
+ * Safe to offer unconditionally: it re-checks what exists and only fixes what is
+ * missing, so pressing it on a healthy install costs a verification and nothing
+ * else. That is what makes it the right answer to "it stopped working".
+ */
+function onRepair(): void {
+  void runtime.runBootstrap(true)
+}
+
+/**
+ * Remove, behind an inline confirmation.
+ *
+ * Two-step rather than `window.confirm`, which the lint config forbids and which
+ * is also the worse interaction here: a native modal shows no detail about what
+ * is about to be deleted. The first click replaces the button with the scope and
+ * a second, differently-worded action, so the destructive step is never one
+ * stray click away.
+ */
+function onRemove(): void {
+  removeError.value = ''
+  if (!confirmingRemove.value) {
+    confirmingRemove.value = true
+    return
+  }
+  confirmingRemove.value = false
+  void runtime.removeRuntime()
 }
 </script>
 
@@ -116,6 +148,42 @@ function onStop(): void {
       >
         {{ tr('chooseFolder') }}
       </button>
+    </div>
+
+    <!-- Repair and remove. See onRepair and onRemove for why each is safe. -->
+    <div class="flex flex-col gap-2">
+      <span class="text-sm text-neutral-600 dark:text-neutral-300">{{ tr('maintenance') }}</span>
+      <div class="flex flex-wrap gap-2">
+        <button
+          type="button"
+          class="border border-neutral-200 rounded px-2 py-1 text-sm dark:border-neutral-700"
+          :disabled="runtime.isBusy"
+          data-testid="lia-runtime-advanced-repair"
+          @click="onRepair"
+        >
+          {{ tr('repair') }}
+        </button>
+        <button
+          type="button"
+          class="border border-red-200 rounded px-2 py-1 text-sm text-red-700 dark:border-red-900 dark:text-red-400"
+          :disabled="runtime.isBusy"
+          data-testid="lia-runtime-advanced-remove"
+          @click="onRemove"
+        >
+          <template v-if="confirmingRemove">{{ tr('removeConfirm') }}</template>
+          <template v-else>{{ tr('remove') }}</template>
+        </button>
+      </div>
+      <p class="text-xs text-neutral-500 dark:text-neutral-400">
+        {{ tr('removeHint') }}
+      </p>
+      <p
+        v-if="removeError"
+        class="text-xs text-red-600 dark:text-red-400"
+        data-testid="lia-runtime-advanced-remove-error"
+      >
+        {{ removeError }}
+      </p>
     </div>
 
     <!-- Speech server address -->

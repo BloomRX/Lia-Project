@@ -231,6 +231,8 @@ config:
         runningTitle: "Preparando o sistema de voz…"
         runningHint: "Isso leva alguns minutos na primeira vez. Você pode deixar a janela aberta."
         repair: "Reparar"
+        maintenance: "Manutenção"
+        removeConfirm: "Confirmar remoção"
         cancel: "Cancelar"
         remove: "Remover sistema de voz"
         removeHint: "Remove apenas o que a Lia instalou. Suas vozes importadas não são apagadas."

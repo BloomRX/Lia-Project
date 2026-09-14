@@ -231,6 +231,8 @@ config:
         runningTitle: "Preparing the voice system..."
         runningHint: "This takes a few minutes the first time. You can leave the window open."
         repair: "Repair"
+        maintenance: "Maintenance"
+        removeConfirm: "Confirm removal"
         cancel: "Cancel"
         remove: "Remove voice system"
         removeHint: "Removes only what the Lia installed. Your imported voices are kept."
