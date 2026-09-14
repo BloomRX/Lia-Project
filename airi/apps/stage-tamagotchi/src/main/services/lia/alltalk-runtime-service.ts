@@ -37,6 +37,15 @@ export interface LiaRuntimeService {
    * picked a built-in voice should never pay for a server they will not use.
    */
   autostartIfNeeded: (options?: { installing?: boolean }) => Promise<LiaRuntimeState | null>
+  /**
+   * Where the server actually listens.
+   *
+   * Exposed rather than re-derived elsewhere, so there is one place that decides
+   * the address. A second, hardcoded copy is how the bootstrap ends up
+   * health-checking a port the user moved the server off of, then reporting a
+   * failure for a server that is in fact running.
+   */
+  clientConfig: () => { baseUrl: string, timeoutMs: number }
 }
 
 /** Maps the manager's internal phases onto what the renderer is told. */
@@ -163,6 +172,10 @@ export function registerLiaRuntimeBridge(params: {
   })
 
   const service: LiaRuntimeService = {
+    clientConfig: () => {
+      const runtime = readRuntime()
+      return { baseUrl: runtime.baseUrl, timeoutMs: runtime.timeoutMs }
+    },
     state: () => toRendererState(manager().state().phase),
     start: startRuntime,
     stop: async () => {

@@ -42,6 +42,14 @@ export interface LiaRuntimeControl {
   start: () => Promise<unknown>
   stop: () => Promise<void>
   state: () => { state: string }
+  /**
+   * Where the server actually listens.
+   *
+   * Taken from the runtime service rather than hardcoded: a second copy of the
+   * address is how the bootstrap ends up health-checking a port the user moved the
+   * server off of, and then reporting a failure for a server that is running.
+   */
+  clientConfig: () => { baseUrl: string, timeoutMs: number }
 }
 
 /**
@@ -96,10 +104,7 @@ export function registerLiaBootstrapBridge(params: {
 
   const isHealthy = async (): Promise<boolean> => {
     try {
-      const status = await createAllTalkClient({
-        baseUrl: 'http://127.0.0.1:7851',
-        timeoutMs: 10_000,
-      }).status()
+      const status = await createAllTalkClient(params.runtime.clientConfig()).status()
       return status.ok
     }
     catch {
