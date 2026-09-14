@@ -87,3 +87,44 @@ export function isLiaBootstrapActivePhase(phase: LiaBootstrapPhase | undefined):
   return phase === 'checking' || phase === 'installing-prerequisites' || phase === 'installing-runtime'
     || phase === 'preparing-model' || phase === 'verifying'
 }
+
+/** The one action the install card may offer, derived - never stored - from the real states. */
+export type LiaVoiceRuntimePrimaryAction = 'install' | 'installing' | 'none' | 'repair' | 'retry'
+
+/**
+ * What the primary button of the install card means right now.
+ *
+ * Round-7 hotfix contract ("a tela nunca fica sem ação quando o runtime não
+ * está pronto"): every bootstrap phase maps to exactly one action, so there is
+ * no branch in which a partial, failed, cancelled or never-started runtime
+ * leaves the panel empty-handed. `none` is allowed only when the runtime
+ * itself is healthy - then the card is not the view responsible for actions
+ * (the voice panel is), and any `none` while the runtime cannot work is the
+ * regression this function exists to make testable.
+ *
+ * Pure by design: the main process owns the state machine; a renderer-side
+ * copy of it would be the second source of truth the brief forbids. The
+ * function asks the real states one question (what should the one button
+ * say?) instead of re-deriving them.
+ */
+export function resolveVoiceRuntimePrimaryAction(input: {
+  bootstrap?: LiaBootstrapState
+  /** Whether the voice server actually works right now. */
+  runtimeReady: boolean
+}): LiaVoiceRuntimePrimaryAction {
+  const phase = input.bootstrap?.phase
+  // In flight: the button must stay on screen, disabled - never absent.
+  if (phase && isLiaBootstrapActivePhase(phase))
+    return 'installing'
+  // A finished install offers the same idempotent walk for maintenance.
+  if (phase === 'ready' || phase === 'repair-needed')
+    return 'repair'
+  // A failed health check leaves the files in place; repair, not reinstall.
+  if (phase === 'failed')
+    return input.bootstrap?.failureCategory === 'health' ? 'repair' : 'retry'
+  if (phase === 'cancelled')
+    return 'retry'
+  // 'not-installed', or the state has not arrived yet: the bootstrap is the
+  // only way out when the runtime does not work.
+  return input.runtimeReady ? 'none' : 'install'
+}

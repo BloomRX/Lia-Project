@@ -22,7 +22,7 @@
  * methods the adapters call (on/off/removeListener/send); everything from the
  * event name to the DOM is production code.
  */
-import type { LiaBootstrapState } from '../../../../shared/lia-voice'
+import type { LiaBootstrapState, LiaBootstrapStep, LiaBootstrapStepStatus } from '../../../../shared/lia-voice'
 
 import { defineInvokeHandler } from '@moeru/eventa'
 import { createContext as createMainContext } from '@moeru/eventa/adapters/electron/main'
@@ -70,6 +70,7 @@ const STR: Record<string, string> = {
   'tamagotchi.home.config.sections.voice.runtime.cancelledTitle': 'Instalação cancelada.',
   'tamagotchi.home.config.sections.voice.runtime.downloading': 'Baixando os arquivos…',
   'tamagotchi.home.config.sections.voice.runtime.extracting': 'Extraindo os arquivos…',
+  'tamagotchi.home.config.sections.voice.runtime.installing': 'Instalando…',
   'tamagotchi.home.config.sections.voice.runtime.environment': 'Preparando o ambiente de voz…',
   'tamagotchi.home.config.sections.voice.runtime.components': 'Instalando os componentes de voz… {done}/{total}',
   'tamagotchi.home.config.sections.voice.runtime.install': 'Instalar',
@@ -154,14 +155,17 @@ function makeTransport() {
   return { ipcMain, ipcRenderer, sever, window: window_ }
 }
 
-/** The answers the main process gives when nothing is installed. */
-function registerMainHandlers(context: ReturnType<typeof createMainContext>['context']) {
-  const runtimeState = { state: 'notInstalled' }
-  const bootstrap = { phase: 'not-installed', steps: [] }
+/** The answers the main process gives; overridable per mount for the fixtures. */
+function registerMainHandlers(
+  context: ReturnType<typeof createMainContext>['context'],
+  initial?: { bootstrap?: LiaBootstrapState, runtime?: { state: string } },
+) {
+  const runtimeState = initial?.runtime ?? { state: 'notInstalled' }
+  const bootstrap = initial?.bootstrap ?? { phase: 'not-installed', steps: [] }
   defineInvokeHandler(context, electronLiaAllTalkStatus, async () => ({ state: 'notConfigured' }))
   defineInvokeHandler(context, electronLiaAllTalkConfigGet, async () => ({ baseUrl: 'http://127.0.0.1:7851' }))
   defineInvokeHandler(context, electronLiaAllTalkConfigSet, async () => ({}))
-  defineInvokeHandler(context, electronLiaAllTalkSync, async () => ({ copied: false, filename: '', ok: true }))
+  defineInvokeHandler(context, electronLiaAllTalkSync, (async () => ({ copied: false, filename: '', ok: true })) as never)
   defineInvokeHandler(context, electronLiaAllTalkVoicesDirPick, async () => null)
   defineInvokeHandler(context, electronLiaRuntimeState, async () => runtimeState)
   defineInvokeHandler(context, electronLiaRuntimeStart, async () => runtimeState)
@@ -169,15 +173,15 @@ function registerMainHandlers(context: ReturnType<typeof createMainContext>['con
   defineInvokeHandler(context, electronLiaRuntimeInstallDirPick, async () => null)
   defineInvokeHandler(context, electronLiaRuntimeInstallSteps, async () => [])
   defineInvokeHandler(context, electronLiaBootstrapState, async () => bootstrap)
-  defineInvokeHandler(context, electronLiaBootstrapRun, async () => true)
+  defineInvokeHandler(context, electronLiaBootstrapRun, (async () => true) as never)
   defineInvokeHandler(context, electronLiaBootstrapCancel, async () => undefined)
   defineInvokeHandler(context, electronLiaBootstrapRemove, async () => undefined)
   defineInvokeHandler(context, electronLiaVoiceConfigGet, async () => ({ tts: { preferred: { providerId: 'custom-local-voice', voiceId: 'p-1' } } }))
   defineInvokeHandler(context, electronLiaVoiceConfigSet, async () => undefined)
   defineInvokeHandler(context, electronLiaVoiceProfilesList, async () => [])
   defineInvokeHandler(context, electronLiaVoiceProfilesPick, async () => null)
-  defineInvokeHandler(context, electronLiaVoiceProfilesImport, async () => ({ error: 'cancelled', message: '', ok: false }))
-  defineInvokeHandler(context, electronLiaVoiceProfilesRemove, async () => ({ ok: true, value: { id: '' } }))
+  defineInvokeHandler(context, electronLiaVoiceProfilesImport, (async () => ({ error: 'cancelled', message: '', ok: false })) as never)
+  defineInvokeHandler(context, electronLiaVoiceProfilesRemove, (async () => ({ ok: true, value: { id: '' } })) as never)
   defineInvokeHandler(context, electronLiaVoiceEnginesList, async () => [
     { extensions: ['.wav'], id: 'alltalk', label: 'AllTalk', roles: ['referenceAudio'] },
   ])
@@ -196,7 +200,7 @@ async function flush(): Promise<void> {
   await new Promise(resolve => setTimeout(resolve, 0))
 }
 
-async function mountSection(options: { windowed?: boolean } = {}): Promise<Mounted> {
+async function mountSection(options: { initialBootstrap?: LiaBootstrapState, initialRuntime?: { state: string }, windowed?: boolean } = {}): Promise<Mounted> {
   const transport = makeTransport()
   ;(globalThis.window as { electron?: unknown }).electron = { ipcRenderer: transport.ipcRenderer }
 
@@ -205,7 +209,7 @@ async function mountSection(options: { windowed?: boolean } = {}): Promise<Mount
   const { context: mainContext } = options.windowed === false
     ? createMainContext(transport.ipcMain as never)
     : createMainContext(transport.ipcMain as never, transport.window as never)
-  registerMainHandlers(mainContext)
+  registerMainHandlers(mainContext, { bootstrap: options.initialBootstrap, runtime: options.initialRuntime })
 
   const pinia = createPinia()
   setActivePinia(pinia)
@@ -229,7 +233,7 @@ async function mountSection(options: { windowed?: boolean } = {}): Promise<Mount
   }
 }
 
-function step(id: string, status: string, detail?: string) {
+function step(id: string, status: LiaBootstrapStepStatus, detail?: string): LiaBootstrapStep {
   return detail === undefined ? { id, status } : { detail, id, status }
 }
 
@@ -271,7 +275,8 @@ describe('the install progress a Windows user actually sees', () => {
     expect(text(container)).toContain('Verificando o computador')
     expect(text(container)).toContain('Baixando o sistema de voz')
     expect(container.querySelector('[data-testid="lia-runtime-step-check-environment"] [data-testid="lia-runtime-step-spinner"]')).not.toBeNull()
-    expect(container.querySelector('[data-testid="lia-runtime-install-button"]')).toBeNull()
+    // Round-7: the button is visible but disabled while the machine works.
+    expect((container.querySelector('[data-testid="lia-runtime-install-button"]') as HTMLButtonElement).disabled).toBe(true)
 
     // downloading: step 1 done, step 2 spins.
     await emit({
@@ -327,7 +332,7 @@ describe('the install progress a Windows user actually sees', () => {
       ],
     })
     expect(text(container)).toContain('Preparando o sistema de voz…')
-    expect(container.querySelector('[data-testid="lia-runtime-install-button"]')).toBeNull()
+    expect((container.querySelector('[data-testid="lia-runtime-install-button"]') as HTMLButtonElement).disabled).toBe(true)
 
     // ready: the finished banner.
     await emit({
@@ -375,10 +380,125 @@ describe('the install progress a Windows user actually sees', () => {
     })
     expect(text(container)).toContain('Instalando os componentes de voz… 3/9')
 
-    // The whole time, the offer/retry button stays hidden and Cancel is the
-    // only action: the machine owns the run, the panel owns the words.
-    expect(container.querySelector('[data-testid="lia-runtime-install-button"]')).toBeNull()
+    // The whole time, the primary button stays visible but disabled and
+    // Cancel is the live action: the machine owns the run, the panel owns
+    // the words, and the panel never looks empty-handed (round-7 contract).
+    expect((container.querySelector('[data-testid="lia-runtime-install-button"]') as HTMLButtonElement).disabled).toBe(true)
     expect(container.querySelector('[data-testid="lia-runtime-cancel"]')).not.toBeNull()
+
+    unmount()
+  })
+
+  it('the Round-7 hotfix contract: no real state leaves the panel without an action', async () => {
+    // The regression the user saw ("segue sem o botao para instalar"): for the
+    // custom voice runtime, `runtime != ready` must ALWAYS come with a button.
+    // This matrix emits every phase the state machine can publish - through
+    // the real IPC wiring - and asserts both the button's existence and its
+    // exact word. `none` is never acceptable while the runtime cannot work.
+    const { container, emit, unmount } = await mountSection()
+    const button = () => container.querySelector('[data-testid="lia-runtime-install-button"]') as HTMLButtonElement | null
+
+    const expectAction = async (state: LiaBootstrapState, label: string, disabled: boolean) => {
+      await emit(state)
+      const b = button()
+      expect(b, `action ${label} for phase ${String(state.phase)}`).not.toBeNull()
+      expect(b!.textContent).toContain(label)
+      expect(b!.disabled).toBe(disabled)
+    }
+
+    const stepsOf = (...entries: Array<[string, LiaBootstrapStepStatus]>) => entries.map(([id, status]) => step(id, status))
+
+    // not installed, first contact with the card.
+    await expectAction(
+      { phase: 'not-installed', steps: [] },
+      'Instalar',
+      false,
+    )
+    // in flight: visible, disabled, named "Instalando…" - never absent.
+    await expectAction(
+      { phase: 'installing-runtime', steps: stepsOf(['check-environment', 'done'], ['fetch-source', 'done'], ['run-setup', 'running'], ['verify-install', 'pending'], ['verify-health', 'pending']) },
+      'Instalando…',
+      true,
+    )
+    await expectAction(
+      { phase: 'checking', steps: stepsOf(['check-environment', 'running'], ['fetch-source', 'pending'], ['run-setup', 'pending'], ['verify-install', 'pending'], ['verify-health', 'pending']) },
+      'Instalando…',
+      true,
+    )
+    // failed (any category but health) → retry.
+    await expectAction(
+      { failureCategory: 'setup', message: 'The voice system could not be installed.', phase: 'failed', steps: stepsOf(['check-environment', 'done'], ['fetch-source', 'done'], ['run-setup', 'failed'], ['verify-install', 'pending'], ['verify-health', 'pending']) },
+      'Tentar novamente',
+      false,
+    )
+    // failed health: the files stay, so the right verb is repair.
+    await expectAction(
+      { failureCategory: 'health', message: 'The voice system installed but did not start.', phase: 'failed', steps: stepsOf(['check-environment', 'done'], ['fetch-source', 'done'], ['run-setup', 'done'], ['verify-install', 'done'], ['verify-health', 'failed']) },
+      'Reparar',
+      false,
+    )
+    // cancelled → retry.
+    await expectAction(
+      { message: 'Installation cancelled.', phase: 'cancelled', steps: stepsOf(['check-environment', 'done'], ['fetch-source', 'running'], ['run-setup', 'pending'], ['verify-install', 'pending'], ['verify-health', 'pending']) },
+      'Tentar novamente',
+      false,
+    )
+    // ready → repair, for maintenance after the celebration banner.
+    await expectAction(
+      { phase: 'ready', steps: stepsOf(['check-environment', 'done'], ['fetch-source', 'done'], ['run-setup', 'done'], ['verify-install', 'done'], ['verify-health', 'done']) },
+      'Reparar',
+      false,
+    )
+
+    unmount()
+  })
+
+  it('the round-6/7 partial-install fixture (brief D) offers Tentar novamente in the same session', async () => {
+    // The exact state of the QA machine at the round-7 update: source tree and
+    // a VALID Miniconda already inside the runtime root, the conda environment
+    // still incomplete, start_alltalk.bat missing, the last bootstrap finished
+    // as failed, the server not answering. The runtime manager therefore
+    // reports notInstalled while the bootstrap keeps the failure of the run -
+    // and the card must not collapse to nothing.
+    const { container, unmount } = await mountSection({
+      initialBootstrap: {
+        failureCategory: 'setup',
+        message: 'The voice system could not be installed.',
+        phase: 'failed',
+        steps: [
+          step('check-environment', 'done'),
+          step('fetch-source', 'done'),
+          step('run-setup', 'failed'),
+          step('verify-install', 'pending'),
+          step('verify-health', 'pending'),
+        ],
+      },
+      initialRuntime: { state: 'notInstalled' },
+    })
+
+    expect(text(container)).toContain('Não foi possível concluir a instalação.')
+    const b = container.querySelector('[data-testid="lia-runtime-install-button"]') as HTMLButtonElement | null
+    expect(b).not.toBeNull()
+    expect(b!.textContent).toContain('Tentar novamente')
+    expect(b!.disabled).toBe(false)
+
+    unmount()
+  })
+
+  it('a runtime-state error (e.g. a rejected IPC read) still mounts the card with an Install way out', async () => {
+    // The exact zero-action branch the QA session hit: the runtime probe went
+    // down for whatever reason, the store fell back to 'error', and the old
+    // mount rule (`needsInstall || bootstrapOutcome`) had no card for that.
+    // The panel is not ready and must not be action-less: the idempotent
+    // install is the way back.
+    const { container, unmount } = await mountSection({
+      initialBootstrap: { phase: 'not-installed', steps: [] },
+      initialRuntime: { state: 'error' },
+    })
+
+    const b = container.querySelector('[data-testid="lia-runtime-install-button"]') as HTMLButtonElement | null
+    expect(b, 'error state must still show a primary action').not.toBeNull()
+    expect(b!.textContent).toContain('Instalar')
 
     unmount()
   })

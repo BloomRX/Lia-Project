@@ -35,7 +35,7 @@ describe('the atsetup-forbidden-chars regex pin', () => {
   it('covers exactly the atsetup blacklist set', () => {
     const target = '@@proj-airi'
     for (const char of ATSETUP_BLACKLIST_CHARS) {
-      expect(char.replace(ATSETUP_FORBIDDEN_PATH_CHARS, '~')).toBe('~', `char ${char} must be blacklisted`)
+      expect(char.replace(ATSETUP_FORBIDDEN_PATH_CHARS, '~')).toBe('~')
     }
     expect(target.replace(ATSETUP_FORBIDDEN_PATH_CHARS, '~')).toBe('~proj-airi')
     // Characters that must NOT be touched: plain text, dash, underscore, dot.

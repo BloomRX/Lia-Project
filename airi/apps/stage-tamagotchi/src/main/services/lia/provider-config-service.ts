@@ -38,7 +38,19 @@ export function registerLiaProviderConfigBridge(params: {
     liaProductConfig.update({
       schemaVersion: current.schemaVersion ?? defaultLiaProductConfig.schemaVersion,
       persona: current.persona ?? {},
-      provider: { ...provider, chat },
+      // The persisted shape (valibot output: fallback defaulted to []) and the
+      // wire shape (shared eventa type: everything optional) differ by design;
+      // bridge them explicitly instead of leaning on structural luck.
+      provider: {
+        ...provider,
+        chat: {
+          ...(chat.strategy ? { strategy: chat.strategy } : {}),
+          ...(chat.preferred ? { preferred: chat.preferred } : {}),
+          fallback: chat.fallback ?? [],
+          ...(chat.fallbackEnabled !== undefined ? { fallbackEnabled: chat.fallbackEnabled } : {}),
+          ...(chat.onboarded !== undefined ? { onboarded: chat.onboarded } : {}),
+        },
+      },
       voice: current.voice ?? {},
       preferences: current.preferences ?? {},
     })

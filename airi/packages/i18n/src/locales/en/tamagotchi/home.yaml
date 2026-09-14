@@ -236,6 +236,7 @@ config:
         extracting: "Extracting the files..."
         environment: "Preparing the voice environment..."
         components: "Installing the voice components... {done}/{total}"
+        installing: "Installing..."
         repair: "Repair"
         maintenance: "Maintenance"
         removeConfirm: "Confirm removal"

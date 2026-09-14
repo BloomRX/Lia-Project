@@ -82,7 +82,6 @@ function ledClass(state: LedState) {
 async function computeSummary() {
   const config = await liaProviderStore.refreshConfig()
   const aiReady = await liaProviderStore.isReadyToChat()
-  const fallback = config.fallback?.[0]
   const fallbackConfigured = await liaProviderStore.isFallbackConfigured()
   const fallbackEnabled = config.fallbackEnabled !== false
 

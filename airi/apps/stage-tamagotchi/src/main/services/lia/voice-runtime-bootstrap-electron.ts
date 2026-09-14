@@ -41,7 +41,9 @@ function runtimeRootLayout(): RuntimeRootLayout {
     // `localAppData` is a Windows-only Electron path; off Windows the
     // resolver never reads it, so an empty string is honest rather than a
     // thrown "unknown path" at startup.
-    localAppDataDir: platform === 'win32' ? app.getPath('localAppData') : '',
+    // Electron's getPath supports 'localAppData' on Windows at runtime even
+    // though the type union omits it; the cast is the honest escape hatch.
+    localAppDataDir: platform === 'win32' ? (app.getPath as (name: string) => string)('localAppData') : '',
     platform,
     userDataDir: app.getPath('userData'),
   })

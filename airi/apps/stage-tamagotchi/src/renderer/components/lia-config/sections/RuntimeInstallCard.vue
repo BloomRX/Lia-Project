@@ -32,11 +32,13 @@
 import { computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-import { isLiaBootstrapActivePhase } from '../../../../shared/lia-voice'
+import { isLiaBootstrapActivePhase, resolveVoiceRuntimePrimaryAction } from '../../../../shared/lia-voice'
 import { useLiaRuntimeStore } from '../../../stores/lia/runtime'
 
 const { t } = useI18n()
-const tt = (key: string, named?: Record<string, string>) => t(`tamagotchi.home.config.sections.voice.${key}`, named)
+// The two-argument overload only fires when a named map actually exists -
+// several harnesses mock t() as (key) => key and would happily render "{}".
+const tt = (key: string, named?: Record<string, string>) => named ? t(`tamagotchi.home.config.sections.voice.${key}`, named) : t(`tamagotchi.home.config.sections.voice.${key}`)
 
 const runtime = useLiaRuntimeStore()
 
@@ -46,21 +48,23 @@ const steps = computed(() => runtime.bootstrap?.steps ?? [])
 /** Whether an install or repair is currently in flight. */
 const isRunning = computed(() => isLiaBootstrapActivePhase(runtime.bootstrap?.phase))
 
-/**
- * Whether to present the finished state.
- *
- * Requires the bootstrap to have reached 'ready'; the card is only shown at
- * that point because the section keeps it mounted for the outcome, so a state
- * the runtime manager contradicts cannot present a dead end with no button.
- */
 const isReady = computed(() => runtime.bootstrap?.phase === 'ready')
 const isFailed = computed(() => runtime.bootstrap?.phase === 'failed')
 const isCancelled = computed(() => runtime.bootstrap?.phase === 'cancelled')
-/** A failed health check leaves the files in place; repair is the right action. */
-const needsRepair = computed(
-  () => runtime.bootstrap?.phase === 'repair-needed'
-    || (isFailed.value && runtime.bootstrap?.failureCategory === 'health'),
-)
+
+/**
+ * What the one button means right now (round-7 hotfix contract).
+ *
+ * Resolved from the real state by `resolveVoiceRuntimePrimaryAction`, so every
+ * phase the state machine can publish maps to one action and there is no
+ * template branch that leaves a not-ready runtime with nothing to click.
+ * Previous revisions derived the label from scattered computeds and could end
+ * with zero actions; that derivation now lives in one pure, tested function.
+ */
+const primaryAction = computed(() => resolveVoiceRuntimePrimaryAction({
+  bootstrap: runtime.bootstrap,
+  runtimeReady: runtime.state.state === 'ready',
+}))
 
 /**
  * The one running step's sub-state line, when it has one worth reporting.
@@ -121,7 +125,9 @@ onMounted(() => {
  * which is exactly the bug an unused `onRepair` would have been.
  */
 function onPrimaryAction(): void {
-  void runtime.runBootstrap(needsRepair.value)
+  // Only 'repair' carries the intent flag; install and retry are the same
+  // idempotent walk, so the label and the action cannot drift apart.
+  void runtime.runBootstrap(primaryAction.value === 'repair')
 }
 
 function onCancel(): void {
@@ -180,18 +186,25 @@ function onCancel(): void {
     </p>
 
     <div class="flex flex-wrap gap-2">
+      <!-- The round-7 contract: while there is a primary action - and for a
+           not-ready runtime there ALWAYS is one - the button is on screen.
+           In flight ('installing') it stays visible but disabled, so the
+           panel is never empty-handed either. -->
       <button
-        v-if="!isReady && !isRunning"
+        v-if="primaryAction !== 'none'"
         type="button"
         class="rounded bg-neutral-900 px-3 py-1 text-sm text-white dark:bg-neutral-100 dark:text-neutral-900"
-        :disabled="runtime.isBusy"
+        :disabled="runtime.isBusy || primaryAction === 'installing'"
         data-testid="lia-runtime-install-button"
         @click="onPrimaryAction"
       >
-        <template v-if="needsRepair">
+        <template v-if="primaryAction === 'installing'">
+          {{ tt('runtime.installing') }}
+        </template>
+        <template v-else-if="primaryAction === 'repair'">
           {{ tt('runtime.repair') }}
         </template>
-        <template v-else-if="isFailed || isCancelled">
+        <template v-else-if="primaryAction === 'retry'">
           {{ tt('runtime.retry') }}
         </template>
         <template v-else>

@@ -433,7 +433,9 @@ export interface RuntimeInstallRecord {
 }
 
 export interface BootstrapLogEntry {
-  step: BootstrapStepId | 'bootstrap'
+  // 'runtime-root' carries the root-resolution/migration lifecycle events,
+  // which happen before any bootstrap step exists.
+  step: BootstrapStepId | 'bootstrap' | 'runtime-root'
   event: string
   /** Never a secret, never conversation text, never audio. */
   detail?: string

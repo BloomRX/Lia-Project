@@ -359,8 +359,10 @@ describe('the install experience', () => {
     // A number that moves smoothly while nothing measurable happens is a lie the
     // user can catch, so the honest granularity is which step is running.
     expect(visible).not.toMatch(/\b\d{1,3}%/)
-    // The install button is gone while it runs; cancel is offered instead.
-    expect(visible).not.toContain('data-testid="lia-runtime-install-button"')
+    // Round-7 contract: the button is never gone mid-run - it sits there,
+    // visibly working and disabled, while cancel is offered next to it.
+    expect(visible).toContain('data-testid="lia-runtime-install-button"')
+    expect(visible).toContain('disabled')
     expect(visible).toContain('data-testid="lia-runtime-cancel"')
   })
 
@@ -527,8 +529,10 @@ describe('the install experience', () => {
     expect(visible).toContain('data-testid="lia-runtime-install"')
     expect(visible).toContain(`${TT}.runtime.readyTitle`)
     expect(visible).toContain('data-testid="lia-custom-voice-import"')
-    // Done: no action button, no spinner, no cancel.
-    expect(visible).not.toContain('data-testid="lia-runtime-install-button"')
+    // Done: repair is the maintenance action (round-7 contract), enabled,
+    // with no spinner and no cancel.
+    expect(visible).toContain('data-testid="lia-runtime-install-button"')
+    expect(visible).toContain(`${TT}.runtime.repair`)
     expect(visible).not.toContain('data-testid="lia-runtime-step-spinner"')
     expect(visible).not.toContain('data-testid="lia-runtime-cancel"')
   })

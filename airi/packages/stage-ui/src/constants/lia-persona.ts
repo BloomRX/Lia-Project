@@ -32,14 +32,14 @@ export type TraitLevel = number
  * Personality Preset (AGENTS §32). A Lia é `tsundere`. O preset é um dado que
  * um editor futuro poderá trocar (presets futuros continuam possíveis).
  */
-export type PersonalityPresetId =
-  | 'tsundere'
-  | 'kuudere'
-  | 'genki'
-  | 'dandere'
-  | 'friendly'
-  | 'gamer'
-  | 'custom'
+export type PersonalityPresetId
+  = | 'tsundere'
+    | 'kuudere'
+    | 'genki'
+    | 'dandere'
+    | 'friendly'
+    | 'gamer'
+    | 'custom'
 
 /** Atributos controlados pelo preset (AGENTS §33). */
 export interface LiaPersonalityAttributes {
@@ -62,14 +62,14 @@ export interface LiaPersonalityAttributes {
  */
 export type LiaPriorityTier = 'utility' | 'personality' | 'humor'
 
-export type LiaIntensityContextId =
-  | 'casual'
-  | 'playful'
-  | 'relaxed'
-  | 'praise'
-  | 'serious'
-  | 'helping'
-  | 'custom'
+export type LiaIntensityContextId
+  = | 'casual'
+    | 'playful'
+    | 'relaxed'
+    | 'praise'
+    | 'serious'
+    | 'helping'
+    | 'custom'
 
 /**
  * Intensidade emocional por contexto. Define a parcela adequada de
@@ -380,7 +380,7 @@ export function renderLiaPersonaPersonality(persona: LiaPersona): string {
 }
 
 /** Renderiza `scenario` a partir da persona estruturada. */
-export function renderLiaPersonaScenario(persona: LiaPersona): string {
+export function renderLiaPersonaScenario(_persona: LiaPersona): string {
   return [
     'O palco é a casa de Lia, e sua também.',
     'Você abre uma conversa para trabalhar em algo, planejar ou simplesmente passar tempo juntos. Lia te recebe com interesse genuíno, humor leve e a familiaridade de uma amiga próxima.',

@@ -283,8 +283,12 @@ function onPreview(): void {
            exists. After a run, both show: the card carries the outcome (the
            "pronto" the user earned, or the failure with its retry) and the
            panel carries on with the voices. A session that never ran the
-           bootstrap shows only the panel. -->
-      <RuntimeInstallCard v-if="runtime.needsInstall || runtime.bootstrapOutcome" />
+           bootstrap shows only the panel.
+           Round-7 addendum: a runtime state the probe cannot classify
+           ('error') still mounts the card. The runtime is then by definition
+           not working, and a panel with zero paths to repair was the exact
+           regression that hid the Install button. -->
+      <RuntimeInstallCard v-if="runtime.needsInstall || runtime.bootstrapOutcome || runtime.state.state === 'error'" />
       <CustomVoicePanel v-if="!runtime.needsInstall" />
     </section>
 
