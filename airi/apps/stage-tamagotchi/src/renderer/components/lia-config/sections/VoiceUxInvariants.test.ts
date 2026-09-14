@@ -33,6 +33,7 @@ const ipc = vi.hoisted(() => ({
   config: { current: { baseUrl: 'http://127.0.0.1:7851' } as Record<string, unknown> },
   runtimeState: { current: { state: 'ready' } as LiaRuntimeState },
   steps: { current: [] as Array<{ detail: string, done: boolean, id: string, link?: string, title: string }> },
+  bootstrap: { current: { phase: 'ready', steps: [] } as Record<string, unknown> },
   profiles: { current: [] as LiaCustomVoiceProfile[] },
   voiceConfig: {
     current: {
@@ -89,6 +90,17 @@ vi.mock('@proj-airi/electron-vueuse', () => ({
     if (id === 'eventa:invoke:lia:runtime:install-steps-receive')
       return async () => ipc.steps.current
 
+    // Bootstrap channels. Registered in every harness because the mock throws on
+    // an unknown channel, and the runtime store now opens these on mount.
+    if (id === 'eventa:invoke:lia:bootstrap:state-receive')
+      return async () => ipc.bootstrap.current
+    if (id === 'eventa:invoke:lia:bootstrap:run-receive')
+      return async () => ipc.bootstrap.current
+    if (id === 'eventa:invoke:lia:bootstrap:cancel-receive')
+      return async () => null
+    if (id === 'eventa:invoke:lia:bootstrap:remove-receive')
+      return async () => null
+
     throw new Error(`Unexpected eventa invoke: ${JSON.stringify(invoke)}`)
   },
 }))
@@ -127,6 +139,9 @@ async function render(options: { stubChildren?: boolean } = {}): Promise<string>
     useLiaVoiceProfilesStore().refresh(),
     runtimeStore.refresh(),
     runtimeStore.loadSteps(),
+    // onMounted does not run under SSR, so the bootstrap state has to be pulled
+    // here or every test would render the card's unknown-state fallback.
+    runtimeStore.loadBootstrap(),
     useLiaVoiceStore().refreshConfig(),
   ])
 
@@ -175,6 +190,7 @@ beforeEach(() => {
   ipc.config.current = { baseUrl: 'http://127.0.0.1:7851' }
   ipc.runtimeState.current = { state: 'ready' }
   ipc.steps.current = []
+  ipc.bootstrap.current = { phase: 'ready', steps: [] }
   ipc.profiles.current = []
   ipc.voiceConfig.current = { tts: { preferred: { providerId: 'kokoro-local', voiceId: 'af_heart' } } }
 })
@@ -302,30 +318,75 @@ describe('the install experience', () => {
     expect(visible).toContain('data-testid="lia-custom-voice-import"')
   })
 
-  it('walks the user through the documented steps', async () => {
+  it('shows one install action, not a checklist for the user to work through', async () => {
+    // The re-audit found the upstream installer accepts a silent flag and brings
+    // its own Python, so there is nothing left for the user to install by hand.
+    // A checklist here would be asking them to do work the Lia now does.
     ipc.voiceConfig.current = { tts: { preferred: { providerId: 'custom-local-voice', voiceId: 'p-1' } } }
     ipc.runtimeState.current = { state: 'notInstalled' }
-    ipc.steps.current = [
-      { detail: 'Install it, then restart.', done: false, id: 'git', link: 'https://git-scm.com/download/win', title: 'Install Git' },
-      { detail: 'Select the folder you installed.', done: true, id: 'point-lia', title: 'Show the Lia where it is' },
-    ]
-
-    const visible = beforeAdvanced(await render())
-
-    expect(visible).toContain('data-testid="lia-runtime-steps"')
-    expect(visible).toContain('Install Git')
-    expect(visible).toContain('1/2')
-  })
-
-  it('degrades to the folder action when the steps cannot be read', async () => {
-    ipc.voiceConfig.current = { tts: { preferred: { providerId: 'custom-local-voice', voiceId: 'p-1' } } }
-    ipc.runtimeState.current = { state: 'notInstalled' }
-    ipc.steps.current = []
+    ipc.bootstrap.current = { phase: 'not-installed', steps: [] }
 
     const visible = beforeAdvanced(await render())
 
     expect(visible).toContain('data-testid="lia-runtime-install-button"')
-    expect(visible).toContain('data-testid="lia-runtime-choose-folder"')
+    expect(visible).toContain(`${TT}.runtime.install`)
+    // No manual to-do list, and no folder picker: the Lia chooses the folder.
+    expect(visible).not.toContain('data-testid="lia-runtime-choose-folder"')
+  })
+
+  it('shows read-only progress while installing, with no invented percentage', async () => {
+    ipc.voiceConfig.current = { tts: { preferred: { providerId: 'custom-local-voice', voiceId: 'p-1' } } }
+    ipc.runtimeState.current = { state: 'notInstalled' }
+    ipc.bootstrap.current = {
+      phase: 'installing-runtime',
+      steps: [
+        { id: 'check-environment', status: 'done' },
+        { id: 'fetch-source', status: 'done' },
+        { id: 'run-setup', status: 'running' },
+        { id: 'verify-install', status: 'pending' },
+        { id: 'verify-health', status: 'pending' },
+      ],
+    }
+
+    const visible = beforeAdvanced(await render())
+
+    expect(visible).toContain('data-testid="lia-runtime-steps"')
+    expect(visible).toContain('data-testid="lia-runtime-step-run-setup"')
+    // A number that moves smoothly while nothing measurable happens is a lie the
+    // user can catch, so the honest granularity is which step is running.
+    expect(visible).not.toMatch(/\b\d{1,3}%/)
+    // The install button is gone while it runs; cancel is offered instead.
+    expect(visible).not.toContain('data-testid="lia-runtime-install-button"')
+    expect(visible).toContain('data-testid="lia-runtime-cancel"')
+  })
+
+  it('offers repair rather than reinstall when the files are there but it will not start', async () => {
+    ipc.voiceConfig.current = { tts: { preferred: { providerId: 'custom-local-voice', voiceId: 'p-1' } } }
+    ipc.runtimeState.current = { state: 'notInstalled' }
+    ipc.bootstrap.current = {
+      failureCategory: 'health',
+      message: 'The voice system installed but did not start.',
+      phase: 'failed',
+      steps: [],
+    }
+
+    const visible = beforeAdvanced(await render())
+
+    expect(visible).toContain('data-testid="lia-runtime-install-button"')
+    expect(visible).toContain(`${TT}.runtime.repair`)
+    // The user sees a sentence, not a stack trace.
+    expect(visible).toContain('did not start')
+    expect(visible).not.toContain('    at ')
+  })
+
+  it('still offers a single action when progress cannot be read', async () => {
+    ipc.voiceConfig.current = { tts: { preferred: { providerId: 'custom-local-voice', voiceId: 'p-1' } } }
+    ipc.runtimeState.current = { state: 'notInstalled' }
+    ipc.bootstrap.current = { phase: 'not-installed', steps: [] }
+
+    const visible = beforeAdvanced(await render())
+
+    expect(visible).toContain('data-testid="lia-runtime-install-button"')
     expect(visible).not.toContain('data-testid="lia-runtime-steps"')
   })
 })

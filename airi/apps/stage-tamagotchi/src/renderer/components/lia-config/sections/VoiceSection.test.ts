@@ -95,6 +95,17 @@ vi.mock('@proj-airi/electron-vueuse', () => ({
     if (id === 'eventa:invoke:lia:runtime:install-steps-receive')
       return async () => []
 
+    // Bootstrap channels. Registered in every harness because the mock throws on
+    // an unknown channel, and the runtime store now opens these on mount.
+    if (id === 'eventa:invoke:lia:bootstrap:state-receive')
+      return async () => ({ phase: 'ready', steps: [] })
+    if (id === 'eventa:invoke:lia:bootstrap:run-receive')
+      return async () => ({ phase: 'ready', steps: [] })
+    if (id === 'eventa:invoke:lia:bootstrap:cancel-receive')
+      return async () => null
+    if (id === 'eventa:invoke:lia:bootstrap:remove-receive')
+      return async () => null
+
     throw new Error(`Unexpected eventa invoke: ${JSON.stringify(invoke)}`)
   },
 }))

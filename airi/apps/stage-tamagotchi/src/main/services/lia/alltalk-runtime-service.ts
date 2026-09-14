@@ -19,6 +19,7 @@ import { createAllTalkClient } from './alltalk-client'
 import { createRuntimeManager } from './alltalk-runtime'
 import { mergeAllTalkRuntime, resolveAllTalkRuntime } from './alltalk-runtime-config'
 import { buildInstallSteps, shouldAutostartRuntime } from './alltalk-runtime-install'
+import { runtimeAppDir } from './voice-runtime-bootstrap-electron'
 
 type MainContext = ReturnType<typeof createContext>['context']
 
@@ -70,20 +71,35 @@ export function registerLiaRuntimeBridge(params: {
     return resolveAllTalkRuntime(liaProductConfig.get())
   }
 
+  /**
+   * Where to look for the runtime.
+   *
+   * An explicitly chosen folder wins - that is the "I already installed it"
+   * path. Otherwise the directory the bootstrapper installs into is used, so the
+   * two agree by construction. Without this they could disagree: the bootstrap
+   * would finish successfully while the manager, pointed at an empty default,
+   * kept reporting "not installed", and the UI would offer to install again
+   * something that is already there.
+   */
+  function resolveInstallDir(runtime: { installDir?: string }): string {
+    return runtime.installDir?.trim() || runtimeAppDir()
+  }
+
   function manager(): RuntimeManager {
     const runtime = readRuntime()
-    if (cached && cached.dir === runtime.installDir)
+    const installDir = resolveInstallDir(runtime)
+    if (cached && cached.dir === installDir)
       return cached.manager
 
     const built = createRuntimeManager({
-      installDir: runtime.installDir,
+      installDir,
       isHealthy: async () => {
         const probe = await createAllTalkClient(runtime).status()
         return probe.ok
       },
       onOutput: line => console.info('[lia-runtime]', line.trimEnd()),
     })
-    cached = { dir: runtime.installDir, manager: built }
+    cached = { dir: installDir, manager: built }
     return built
   }
 
@@ -141,7 +157,7 @@ export function registerLiaRuntimeBridge(params: {
   )
 
   defineInvokeHandler(context, electronLiaRuntimeInstallSteps, async (): Promise<LiaRuntimeInstallStep[]> => {
-    const configured = Boolean(readRuntime().installDir)
+    const configured = Boolean(readRuntime().installDir?.trim())
     const installed = await manager().isInstalled()
     return buildInstallSteps({ installDirConfigured: configured, installed })
   })

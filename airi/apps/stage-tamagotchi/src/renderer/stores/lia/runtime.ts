@@ -1,10 +1,15 @@
 import type { LiaRuntimeInstallStep, LiaRuntimeState } from '../../../shared/eventa'
+import type { LiaBootstrapState } from '../../../shared/lia-voice'
 
 import { useElectronEventaInvoke } from '@proj-airi/electron-vueuse'
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 
 import {
+  electronLiaBootstrapCancel,
+  electronLiaBootstrapRemove,
+  electronLiaBootstrapRun,
+  electronLiaBootstrapState,
   electronLiaRuntimeInstallDirPick,
   electronLiaRuntimeInstallSteps,
   electronLiaRuntimeStart,
@@ -34,6 +39,14 @@ export const useLiaRuntimeStore = defineStore('lia-runtime', () => {
   const state = ref<LiaRuntimeState>({ state: 'checking' })
   const steps = ref<LiaRuntimeInstallStep[]>([])
   const isBusy = ref(false)
+
+  /** Install/repair progress. `undefined` until the first read succeeds. */
+  const bootstrap = ref<LiaBootstrapState | undefined>()
+
+  const installBootstrap = useElectronEventaInvoke(electronLiaBootstrapRun)
+  const fetchBootstrap = useElectronEventaInvoke(electronLiaBootstrapState)
+  const cancelBootstrap = useElectronEventaInvoke(electronLiaBootstrapCancel)
+  const removeBootstrap = useElectronEventaInvoke(electronLiaBootstrapRemove)
 
   /** Whether the guided wizard should be showing instead of a voice list. */
   const needsInstall = computed(() => state.value.state === 'notInstalled')
@@ -117,15 +130,78 @@ export const useLiaRuntimeStore = defineStore('lia-runtime', () => {
     }
   }
 
+  /**
+   * Runs install, or repair when the runtime is already present.
+   *
+   * The main process holds a single in-flight run, so clicking twice cannot
+   * double-install - but the button is disabled too, because a user who sees a
+   * button that appears to do nothing will click it again.
+   */
+  async function runBootstrap(repair = false): Promise<void> {
+    isBusy.value = true
+    try {
+      const result = await installBootstrap(repair)
+      if (result)
+        bootstrap.value = result
+      await refresh()
+    }
+    catch {
+      // Leaving `bootstrap` as-is keeps the last known progress on screen. A
+      // blank card would read as "nothing happened" when in fact it failed.
+    }
+    finally {
+      isBusy.value = false
+    }
+  }
+
+  /** Pulls the current bootstrap state, so a reopened UI resumes. */
+  async function loadBootstrap(): Promise<void> {
+    try {
+      const result = await fetchBootstrap()
+      if (result)
+        bootstrap.value = result
+    }
+    catch {
+      // An unreadable state is not worth surfacing: the card falls back to its
+      // idle appearance, and the next run repopulates it.
+    }
+  }
+
+  async function cancelInstall(): Promise<void> {
+    try {
+      await cancelBootstrap()
+    }
+    catch {
+      // Cancelling is best-effort; the install stops at its next step boundary.
+    }
+  }
+
+  /** Removes only what the Lia installed. The caller confirms first. */
+  async function removeRuntime(): Promise<void> {
+    isBusy.value = true
+    try {
+      await removeBootstrap()
+      await Promise.all([refresh(), loadBootstrap()])
+    }
+    finally {
+      isBusy.value = false
+    }
+  }
+
   return {
+    bootstrap,
     isBusy,
     isReady,
     needsInstall,
     state,
     steps,
+    cancelInstall,
     chooseInstallDir,
+    loadBootstrap,
     loadSteps,
     refresh,
+    removeRuntime,
+    runBootstrap,
     start,
     stop,
   }
