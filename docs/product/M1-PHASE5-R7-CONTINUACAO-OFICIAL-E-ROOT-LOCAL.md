@@ -60,3 +60,13 @@ Auditado `atsetup.bat` no commit pinado `f16117e9` e no master upstream de hoje:
 2. **Resume do env**: com conda+installer presentes e env ausente (estado deixado pela R6), o passo `run-setup` cria o env (`conda-env-create-*`), corre os 9 comandos (`setup-command-start/finished`, nenhum `setup-command-failed`) e termina `ready` **sem** `atsetup` no log e **sem** exit 1/RunScript.
 3. **Bats renovados**: os 4 `start_*.bat` no novo root, com caminhos `Local\Lia` (ver `start-script-written/kept`).
 4. Falha induzida (opcional): quebrar sha256 do instalador baixado → falha categorizada `download`, instalador apagado, nada executado.
+
+## 9. Adendo R7.1 — "botão Instalar/Tentar novamente sumiu" (fix da sessão seguinte)
+
+Sintoma reportado: durante a continuação o card ficava sem o botão e aparentava travado. O botão é escondido por design em fase ativa — o problema de verdade era que ela podia ficar ativa **para sempre** e **muda**:
+
+- **Download sem timeout** (`createRuntimeDownload`): uma conexão travada (TCP meio-aberto) deixava a fase ativa eternamente. Agora há teto de 45 min com `AbortSignal.timeout`, normalizado para falha de rede — e a mensagem evita "aborted", que cairia no regex de `cancelled` e mostraria "Instalação cancelada." sobre uma falha de rede (pego em teste de categorização).
+- **Download parcial era reutilizado**: falha de rede no instalador/wheel deixava arquivo presente; a retentativa o executaria corrompido. Agora o passo apaga o destino (`remove`) sempre que o download falha, antes de propagar o erro.
+- **Zero subestado durante a etapa mais longa** (30–90 min reais na máquina QA): o card mostra agora as palavras da própria máquina — "Baixando os arquivos…", "Preparando o ambiente de voz…", "Instalando os componentes de voz… 3/9" (contador real, 9 comandos oficiais; tokens em i18n, nenhum substanto técnico vaza).
+
+Testes: main 15 arquivos / 297 verdes (+stalled-download cleanup ×2, +tokens de subestado, +classificação ETIMEDOUT); renderer lia-config + stores: 35 arquivos / 520 verdes (subestados no wiring real, invariant atualizado: `'downloading'` passa a ser subestado real renderizado). Commits separados (main / UI). Débito mantido: rodada de mutações.

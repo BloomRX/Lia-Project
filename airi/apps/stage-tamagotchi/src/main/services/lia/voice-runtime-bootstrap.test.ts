@@ -772,6 +772,83 @@ describe('the setup step — the round-7 continuation', () => {
     expect(h2.fileContent(`${appRoot(h2)}/${stale.file}`)).toBe(stale.content)
   })
 
+  it('publishes honest, non-technical substates for the long stages (environment, components counter)', async () => {
+    const details: Array<string | undefined> = []
+    const h = harness({
+      onStateChange: (state) => {
+        const step = state.steps.find(entry => entry.id === 'run-setup')
+        if (step?.status === 'running' && step.detail !== undefined)
+          details.push(step.detail)
+      },
+    })
+    h.setHealthy(true)
+
+    await createVoiceRuntimeBootstrapper(h.deps).run()
+
+    // First the environment build, then one token per official command - the
+    // real counter the panel shows instead of an invented percentage. This is
+    // what keeps a 45-minute step from reading as a hang with no way back.
+    expect(details[0]).toBe('environment')
+    expect(details.slice(1)).toEqual([...Array.from({ length: 9 }).keys()].map(i => `components:${i + 1}/9`))
+    // The contract is tokens: no command ids or technical nouns ever go to the UI.
+    for (const detail of details)
+      expect(detail).toMatch(/^(environment|components:\d+\/\d+)$/)
+  })
+
+  it('a stalled installer download is deleted, never executed partially on the retry', async () => {
+    // A stalled/aborted transfer leaves a partial file behind; if the next
+    // attempt found it "present" it would run a corrupted installer.
+    let stalled = true
+    const h = harness({
+      download: async (url, dest) => {
+        h.calls.downloaded.push(url)
+        h.markExists(dest) // the partial bytes that a stalled pipeline writes
+        if (url === MINICONDA_INSTALLER_URL && stalled)
+          throw new Error('ETIMEDOUT: the download stalled and timed out')
+        if (url === MINICONDA_INSTALLER_URL)
+          return { bytes: MINICONDA_INSTALLER_BYTES, sha256: MINICONDA_INSTALLER_SHA256, url: undefined as never }
+        return { bytes: 5_000_000, sha256: 'a'.repeat(64), url: undefined as never }
+      },
+    } as Partial<BootstrapDeps>)
+    h.setHealthy(true)
+
+    const first = await createVoiceRuntimeBootstrapper(h.deps).run()
+    expect(first.phase).toBe('failed')
+    expect(first.failureCategory).toBe('network')
+    const installerPath = `${appRoot(h)}/${MINICONDA_INSTALLER}`
+    expect(h.calls.removed).toContain(installerPath)
+    // Nothing ever executed the partial: no installer run at all on that attempt.
+    expect(h.calls.exec.some(call => call[0].endsWith('miniconda_installer.exe'))).toBe(false)
+
+    stalled = false
+    const second = await createVoiceRuntimeBootstrapper(h.deps)
+    await second.run()
+    expect(second.state().phase).toBe('ready')
+    // The retry downloaded again (twice in total for this URL): it did not
+    // reuse the leftover.
+    expect(h.calls.downloaded.filter(url => url === MINICONDA_INSTALLER_URL)).toHaveLength(2)
+  })
+
+  it('a stalled component download is deleted, never fed to pip half-written', async () => {
+    const h = harness({
+      download: async (url, dest) => {
+        h.calls.downloaded.push(url)
+        h.markExists(dest)
+        if (url === DEEPSPEED_WHEEL_URL)
+          throw new Error('ETIMEDOUT: the download stalled and timed out')
+        if (url === MINICONDA_INSTALLER_URL)
+          return { bytes: MINICONDA_INSTALLER_BYTES, sha256: MINICONDA_INSTALLER_SHA256, url: undefined as never }
+        return { bytes: 5_000_000, sha256: 'a'.repeat(64), url: undefined as never }
+      },
+    } as Partial<BootstrapDeps>)
+
+    const state = await createVoiceRuntimeBootstrapper(h.deps).run()
+
+    expect(state.phase).toBe('failed')
+    expect(state.failureCategory).toBe('network')
+    expect(h.calls.removed).toContain(win32Path(`${appRoot(h)}/${DEEPSPEED_WHEEL}`))
+  })
+
   it('reruns only what is missing when conda and env already exist', async () => {
     // The resume shape round 3 needed: with a verified Miniconda and a present
     // env, the installer and `conda create` cost zero; the package suite still
@@ -1203,6 +1280,10 @@ describe('state change notifications', () => {
 describe('failure classification', () => {
   it('maps errors onto stable categories', () => {
     expect(categorizeFailure(new Error('getaddrinfo ENOTFOUND'))).toBe('network')
+    // The stalled-download message from createRuntimeDownload must stay
+    // network-shaped: wording that drifts into '/cancel|abort/' would put a
+    // "cancelled" title over a network failure.
+    expect(categorizeFailure(new Error('ETIMEDOUT: the download stalled and timed out'))).toBe('network')
     expect(categorizeFailure(new Error('ENOSPC no space left'))).toBe('disk')
     expect(categorizeFailure(new Error('user cancelled UAC'))).toBe('cancelled')
     expect(categorizeFailure(new Error('checksum mismatch'))).toBe('download')

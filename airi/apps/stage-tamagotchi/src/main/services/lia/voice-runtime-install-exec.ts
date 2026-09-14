@@ -121,6 +121,16 @@ export function createRuntimeExec() {
  * here executes the file.
  */
 
+/**
+ * Hard ceiling for any runtime download. Without one, a stalled connection
+ * (half-open TCP, dead proxy) leaves the bootstrap in an active phase forever -
+ * the panel shows the run as moving and hides Install/Retry while nothing ever
+ * moves again. 45 minutes covers the largest artefact (the ~300 MB wheel) on a
+ * ~1 Mbps link; anything slower is, for the user, functionally offline and is
+ * better reported as a network failure with a working retry than left spinning.
+ */
+export const RUNTIME_DOWNLOAD_TIMEOUT_MS = 45 * 60 * 1000
+
 export function createRuntimeDownload() {
   return async (url: string, destPath: string): Promise<{ bytes: number, sha256: string }> => {
     // Only https. An http: or file: URL would mean fetching something that cannot
@@ -128,7 +138,18 @@ export function createRuntimeDownload() {
     if (!url.startsWith('https://'))
       throw new Error(`refusing non-https download: ${url.slice(0, 32)}`)
 
-    const response = await fetch(url, { redirect: 'follow' })
+    let response
+    try {
+      response = await fetch(url, {
+        redirect: 'follow',
+        signal: AbortSignal.timeout(RUNTIME_DOWNLOAD_TIMEOUT_MS),
+      })
+    }
+    catch (error) {
+      if ((error as Error).name === 'TimeoutError')
+        throw new Error(`ETIMEDOUT: the download stalled and timed out after ${RUNTIME_DOWNLOAD_TIMEOUT_MS}ms`)
+      throw error
+    }
     if (!response.ok || !response.body)
       throw new Error(`download failed with HTTP ${response.status}`)
 
@@ -150,7 +171,16 @@ export function createRuntimeDownload() {
       },
     })
 
-    await pipeline(source, counted, sink)
+    // The same abort signal governs the body, so a stall mid-transfer rejects
+    // here - and is normalised to the same network-shaped failure.
+    try {
+      await pipeline(source, counted, sink)
+    }
+    catch (error) {
+      if ((error as Error).name === 'AbortError' || (error as Error).name === 'TimeoutError')
+        throw new Error(`ETIMEDOUT: the download stalled and timed out after ${RUNTIME_DOWNLOAD_TIMEOUT_MS}ms`)
+      throw error
+    }
 
     return { bytes, sha256: hash.digest('hex') }
   }

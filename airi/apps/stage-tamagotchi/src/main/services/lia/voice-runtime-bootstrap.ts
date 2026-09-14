@@ -683,7 +683,16 @@ export function createVoiceRuntimeBootstrapper(deps: BootstrapDeps): Bootstrappe
     if (!await deps.exists(installer)) {
       deps.log({ detail: `url=${MINICONDA_INSTALLER_URL} dest=${installer}`, event: 'miniconda-installer-download-start', step: 'run-setup' })
       await deps.mkdir(installerDir)
-      const fetched = await deps.download(MINICONDA_INSTALLER_URL, installer)
+      let fetched: { bytes: number, sha256: string }
+      try {
+        fetched = await deps.download(MINICONDA_INSTALLER_URL, installer)
+      }
+      catch (error) {
+        // A stalled/aborted transfer leaves a partial file; without removal the
+        // next attempt would find it "present" and run a corrupted installer.
+        await deps.remove(installer).catch(() => undefined)
+        throw error
+      }
       const integrityOk = fetched.bytes === MINICONDA_INSTALLER_BYTES && fetched.sha256 === MINICONDA_INSTALLER_SHA256
       deps.log({
         detail: `bytes=${fetched.bytes} sha256=${fetched.sha256} expected-bytes=${MINICONDA_INSTALLER_BYTES} expected-sha256=${MINICONDA_INSTALLER_SHA256} integrity=${integrityOk}`,
@@ -760,6 +769,7 @@ export function createVoiceRuntimeBootstrapper(deps: BootstrapDeps): Bootstrappe
     // again: its conda-exists branch targets a RunScript label the file does
     // not define (upstream bug, present in the pin and in today's master).
     if (!await deps.exists(envPython)) {
+      setStep('run-setup', { detail: 'environment' })
       deps.log({ detail: `prefix=${envDir} python=${ALLTALK_ENV_PYTHON_VERSION}`, event: 'conda-env-create-start', step: 'run-setup' })
       const created = await deps.exec(
         win32Path(condaExe),
@@ -780,18 +790,31 @@ export function createVoiceRuntimeBootstrapper(deps: BootstrapDeps): Bootstrappe
       deps.log({ event: 'conda-env-present', step: 'run-setup' })
     }
 
-    for (const command of alltalkSetupCommands({
+    const commands = alltalkSetupCommands({
       condaExe: win32Path(`${cwd}/${MINICONDA_CONDA_EXE}`),
       envDir: win32Path(envDir),
       envPip: win32Path(`${cwd}/${MINICONDA_ENV_PIP}`),
       wheelPath: win32Path(`${cwd}/${DEEPSPEED_WHEEL}`),
-    })) {
+    })
+    for (const [index, command] of commands.entries()) {
       if (command.downloadUrl && command.cleanupPath && !await deps.exists(command.cleanupPath)) {
         deps.log({ detail: `url=${command.downloadUrl} dest=${command.cleanupPath}`, event: 'setup-component-download-start', step: 'run-setup' })
-        const wheel = await deps.download(command.downloadUrl, command.cleanupPath)
+        let wheel: { bytes: number, sha256: string }
+        try {
+          wheel = await deps.download(command.downloadUrl, command.cleanupPath)
+        }
+        catch (error) {
+          // Same rule as the installer: a partial wheel must never be the
+          // thing the next attempt finds "present" and feeds to pip.
+          await deps.remove(command.cleanupPath).catch(() => undefined)
+          throw error
+        }
         deps.log({ detail: `id=${command.id} bytes=${wheel.bytes} sha256=${wheel.sha256}`, event: 'setup-component-download-finished', step: 'run-setup' })
       }
-      setStep('run-setup', { detail: `installing voice components (${command.id})` })
+      // The detail is a stable token plus a real counter - the renderer turns
+      // it into words. Never put command names here: they are technical nouns
+      // and the log, not the user's screen, is where they belong.
+      setStep('run-setup', { detail: `components:${index + 1}/${commands.length}` })
       deps.log({ detail: `id=${command.id} exe=${command.command} args=${command.args.join(' ')}`, event: 'setup-command-start', step: 'run-setup' })
       const result = await deps.exec(command.command, command.args, { cwd, timeoutMs: command.timeoutMs })
       deps.log({ detail: `id=${command.id} ${outputTail(result)}`, event: 'setup-command-finished', exitCode: result.code, step: 'run-setup' })
