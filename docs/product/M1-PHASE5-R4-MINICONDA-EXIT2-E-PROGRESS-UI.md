@@ -57,7 +57,7 @@ Ver `git log` do branch: (args+retry) → (IPC + integração) → (sonda) → (
 
 ## Round-5 Windows QA checklist
 
-1. "Tentar novamente" deve ser imediato: não baixa 97 MB, não baixa 81 MB (installer já presente e verificado — item J: seqüência de atsetup só roda quando o instalador falta).
+1. "Tentar novamente" deve ser imediato: não baixa 97 MB, não baixa 81 MB (installer já presente e verificado — item J: o atsetup inicial só roda quando o instalador falta).
 2. Log: `miniconda-facts` → `miniconda-install-finished exit=N` → `miniconda-install-verify exit=0 conda-prefix-exists=true conda-exe-exists=true` é o objetivo; qualquer outro valor é a próxima pista concreta.
 3. Se `_conda.exe` existir: o resume upstream roda — e o log `resume-incomplete` confirmará empiricamente (pela segunda vez) que o pin não tem `:RunScript`. Isso fecha a decisão seguinte com evidência.
 4. **O painel deve se mover em tempo real** desta vez: "Preparando o sistema de voz…" + etapas girando ao clicar em Instalar.
