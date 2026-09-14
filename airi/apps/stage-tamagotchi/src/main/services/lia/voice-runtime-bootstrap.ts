@@ -180,6 +180,17 @@ export interface BootstrapDeps {
   setupTimeoutMs?: number
   /** Aborts the run when it returns true. Checked between steps. */
   isCancelled?: () => boolean
+  /**
+   * Called synchronously after every state mutation.
+   *
+   * This is how progress reaches the UI: the main process forwards each call
+   * to the renderer, which renders exactly what it receives. Deliberately push,
+   * not poll - a timer republishing the same state would emit updates that
+   * carry no information, and a number that moves on a schedule is a fake
+   * progress the user can catch. No timer anywhere in here: if nothing
+   * changed, nothing is said.
+   */
+  onStateChange?: (state: BootstrapState) => void
 }
 
 /** What is recorded in `state.json`. */
@@ -248,8 +259,37 @@ export function createVoiceRuntimeBootstrapper(deps: BootstrapDeps): Bootstrappe
   let running: Promise<BootstrapState> | undefined
   let cancelRequested = false
 
+  /**
+   * Publishes the current state - but only when it actually changed.
+   *
+   * The comparison is on the published content, not on object identity:
+   * `setPhase('checking')` while already in `checking` must not emit a payload
+   * indistinguishable from the previous one, because a "notification" that
+   * carries no new information is what a republication timer produces. Every
+   * emitted payload is worth the renderer's attention.
+   *
+   * A listener that throws must not abort the install: the renderer being slow
+   * or unhappy is no reason to leave a half-finished runtime. The bootstrap
+   * log still records what happened.
+   */
+  let lastPublished = ''
+  function notify(): void {
+    const snapshot = JSON.stringify(state)
+    if (snapshot === lastPublished)
+      return
+    lastPublished = snapshot
+
+    try {
+      deps.onStateChange?.(state)
+    }
+    catch {
+      // Swallowed on purpose - see above.
+    }
+  }
+
   function setPhase(phase: BootstrapPhase, extra: Partial<BootstrapState> = {}): void {
     state = { ...state, phase, ...extra }
+    notify()
   }
 
   function setStep(id: BootstrapStepId, patch: Partial<BootstrapStep>): void {
@@ -257,6 +297,7 @@ export function createVoiceRuntimeBootstrapper(deps: BootstrapDeps): Bootstrappe
       ...state,
       steps: state.steps.map(step => (step.id === id ? { ...step, ...patch } : step)),
     }
+    notify()
   }
 
   function isCancelled(): boolean {
@@ -502,6 +543,7 @@ export function createVoiceRuntimeBootstrapper(deps: BootstrapDeps): Bootstrappe
   async function doRun(repair: boolean): Promise<BootstrapState> {
     cancelRequested = false
     state = { phase: 'checking', steps: initialSteps() }
+    notify()
     deps.log({ detail: repair ? 'repair' : 'install', event: 'start', step: 'bootstrap' })
     const startedAt = Date.now()
 
@@ -575,6 +617,7 @@ export function createVoiceRuntimeBootstrapper(deps: BootstrapDeps): Bootstrappe
       deps.log({ event: 'start', step: 'bootstrap' })
       await deps.remove(deps.runtimeDir)
       state = { phase: 'not-installed', steps: initialSteps() }
+      notify()
       deps.log({ event: 'removed', step: 'bootstrap' })
     },
   }

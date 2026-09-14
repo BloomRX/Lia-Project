@@ -1,4 +1,4 @@
-import type { BootstrapDeps, RuntimeInstallRecord, VoiceRuntimeEnvironment } from './voice-runtime-bootstrap'
+import type { BootstrapDeps, BootstrapState, RuntimeInstallRecord, VoiceRuntimeEnvironment } from './voice-runtime-bootstrap'
 import type { ProbeStatus } from './voice-runtime-env'
 
 import { beforeEach, describe, expect, it } from 'vitest'
@@ -849,6 +849,85 @@ describe('outputTail', () => {
 
     expect(detail).toContain('final error line')
     expect(detail.length).toBeLessThan(1000)
+  })
+})
+
+describe('state change notifications', () => {
+  it('publishes each mutation, in order, ending at the terminal phase', async () => {
+    const seen: string[] = []
+    const h = harness({ onStateChange: state => seen.push(state.phase) })
+    const bootstrapper = createVoiceRuntimeBootstrapper(h.deps)
+
+    await bootstrapper.run()
+
+    // The run opens by announcing 'checking' and closes on 'ready'; every
+    // transition the UI needs is in between, pushed rather than polled.
+    expect(seen[0]).toBe('checking')
+    expect(seen[seen.length - 1]).toBe('ready')
+    expect(seen).toContain('installing-runtime')
+    expect(seen).toContain('verifying')
+  })
+
+  it('never publishes the same state twice in a row', async () => {
+    // The anti-timer invariant, stated positively: if two consecutive payloads
+    // are deep-equal, one of them carried no information - which is precisely
+    // what a republication interval emits while a long step is running.
+    const seen: Array<BootstrapState | undefined> = []
+    const h = harness({ onStateChange: state => seen.push(state) })
+    const bootstrapper = createVoiceRuntimeBootstrapper(h.deps)
+
+    await bootstrapper.run()
+
+    for (let i = 1; i < seen.length; i++)
+      expect(JSON.stringify(seen[i])).not.toBe(JSON.stringify(seen[i - 1]))
+    expect(seen.length).toBeGreaterThan(0)
+  })
+
+  it('stays silent while a step is running and nothing has changed', async () => {
+    // The negative form: a long, unchanged step (a 45-minute installer run is
+    // the real case) must produce no notifications at all. A timer would tick;
+    // the state machine does not.
+    let release!: () => void
+    const gate = new Promise<void>(resolve => (release = resolve))
+    const seen: unknown[] = []
+    const h = harness({
+      exec: async () => {
+        await gate
+        return { code: 0, stderr: '', stdout: '' }
+      },
+      onStateChange: state => seen.push(state),
+    })
+    const bootstrapper = createVoiceRuntimeBootstrapper(h.deps)
+
+    const promise = bootstrapper.run()
+    // Let the run reach the setup step, then record the baseline.
+    await new Promise(resolve => setTimeout(resolve, 20))
+    const atGate = seen.length
+
+    await new Promise(resolve => setTimeout(resolve, 60))
+    // The step has been waiting for three times the baseline window: still no
+    // new payload, because nothing new happened.
+    expect(seen.length).toBe(atGate)
+
+    // Mutations survive the broken exec (which wrote no launcher): the run
+    // resolves and reports the failure rather than hanging on the gate.
+    release()
+    const state = await promise
+    expect(state.phase).toBe('failed')
+    expect(seen[seen.length - 1] as BootstrapState | undefined).toMatchObject({ phase: 'failed' })
+  })
+
+  it('a throwing listener cannot abort the install', async () => {
+    const h = harness({
+      onStateChange: () => {
+        throw new Error('renderer exploded')
+      },
+    })
+    const bootstrapper = createVoiceRuntimeBootstrapper(h.deps)
+
+    const state = await bootstrapper.run()
+
+    expect(state.phase).toBe('ready')
   })
 })
 
