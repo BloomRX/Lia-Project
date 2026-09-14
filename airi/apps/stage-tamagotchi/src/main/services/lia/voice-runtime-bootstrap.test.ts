@@ -126,8 +126,6 @@ function harness(overrides: Partial<BootstrapDeps> = {}): Harness {
   }
 }
 
-const appDirOf = (dir: string) => `${dir}/app`
-
 describe('environment probe', () => {
   it('reports curl as present when it answers', async () => {
     const probed = await probeVoiceRuntimeEnvironment({
