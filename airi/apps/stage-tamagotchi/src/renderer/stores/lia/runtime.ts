@@ -1,12 +1,13 @@
 import type { LiaRuntimeInstallStep, LiaRuntimeState } from '../../../shared/eventa'
 import type { LiaBootstrapState } from '../../../shared/lia-voice'
 
-import { useElectronEventaInvoke } from '@proj-airi/electron-vueuse'
+import { getElectronEventaContext, useElectronEventaInvoke } from '@proj-airi/electron-vueuse'
 import { defineStore } from 'pinia'
-import { computed, ref } from 'vue'
+import { computed, ref, shallowRef } from 'vue'
 
 import {
   electronLiaBootstrapCancel,
+  electronLiaBootstrapChanged,
   electronLiaBootstrapRemove,
   electronLiaBootstrapRun,
   electronLiaBootstrapState,
@@ -16,6 +17,7 @@ import {
   electronLiaRuntimeState,
   electronLiaRuntimeStop,
 } from '../../../shared/eventa'
+import { isLiaBootstrapActivePhase } from '../../../shared/lia-voice'
 
 /**
  * The managed voice runtime, as the UI sees it.
@@ -40,8 +42,15 @@ export const useLiaRuntimeStore = defineStore('lia-runtime', () => {
   const steps = ref<LiaRuntimeInstallStep[]>([])
   const isBusy = ref(false)
 
-  /** Install/repair progress. `undefined` until the first read succeeds. */
-  const bootstrap = ref<LiaBootstrapState | undefined>()
+  /**
+   * Install/repair progress. `undefined` until the first read succeeds.
+   *
+   * A shallow ref on purpose: the payload only ever arrives whole from the main
+   * process - it is replaced, never edited field by field in here - so deep
+   * reactivity would buy nothing, and the proxy it builds would stop the value
+   * from being literally the object the state machine produced.
+   */
+  const bootstrap = shallowRef<LiaBootstrapState | undefined>()
 
   const installBootstrap = useElectronEventaInvoke(electronLiaBootstrapRun)
   const fetchBootstrap = useElectronEventaInvoke(electronLiaBootstrapState)
@@ -51,6 +60,55 @@ export const useLiaRuntimeStore = defineStore('lia-runtime', () => {
   /** Whether the guided wizard should be showing instead of a voice list. */
   const needsInstall = computed(() => state.value.state === 'notInstalled')
   const isReady = computed(() => state.value.state === 'ready')
+
+  /**
+   * Whether the bootstrap is mid-run, per the state machine itself.
+   *
+   * This is the guard beneath the disabled button: the card hides the Install
+   * button while running, the main process collapses concurrent runs into one,
+   * and this computed is what makes a programmatic second call a no-op too.
+   */
+  const isInstalling = computed(() => isLiaBootstrapActivePhase(bootstrap.value?.phase))
+
+  /**
+   * Whether the bootstrap has something worth showing even when the runtime
+   * itself needs nothing.
+   *
+   * This is what makes "Sistema de voz pronto" visible at all: the runtime
+   * flipping to ready would otherwise swap the install card for the voice
+   * panel in the same tick and the user would never see the success they
+   * caused. `not-installed` is the state of a session that never ran the
+   * bootstrap, so a restarted app on a healthy install stays silent, as it
+   * should.
+   */
+  const bootstrapOutcome = computed(() => {
+    const phase = bootstrap.value?.phase
+    if (!phase || phase === 'not-installed')
+      return false
+    return isLiaBootstrapActivePhase(phase)
+      || phase === 'ready' || phase === 'failed' || phase === 'cancelled' || phase === 'repair-needed'
+  })
+
+  /**
+   * Mirrors the bootstrap state the main process publishes.
+   *
+   * The main process is the source of truth for the install; this store holds
+   * no timer, no counters and no derived progress of its own. Whatever object
+   * arrives over IPC is stored verbatim and rendered verbatim - adding a local
+   * copy of the state machine here would be the second source of truth the
+   * round-2 brief forbids. The events keep flowing even when the config panel
+   * is closed, so an install is never "lost" by navigating away.
+   */
+  try {
+    getElectronEventaContext().on(electronLiaBootstrapChanged, (event) => {
+      if (event.body)
+        bootstrap.value = event.body
+    })
+  }
+  catch {
+    // No ipcRenderer in this context (SSR render in tests, or a non-Electron
+    // host): the store degrades to invoke-only, exactly as before.
+  }
 
   /**
    * Reads the current state.
@@ -135,9 +193,14 @@ export const useLiaRuntimeStore = defineStore('lia-runtime', () => {
    *
    * The main process holds a single in-flight run, so clicking twice cannot
    * double-install - but the button is disabled too, because a user who sees a
-   * button that appears to do nothing will click it again.
+   * button that appears to do nothing will click it again. And this guard
+   * covers the path no button can: a second call that arrives while the state
+   * machine already reports a run in flight.
    */
   async function runBootstrap(repair = false): Promise<void> {
+    if (isInstalling.value)
+      return
+
     isBusy.value = true
     try {
       const result = await installBootstrap(repair)
@@ -190,7 +253,9 @@ export const useLiaRuntimeStore = defineStore('lia-runtime', () => {
 
   return {
     bootstrap,
+    bootstrapOutcome,
     isBusy,
+    isInstalling,
     isReady,
     needsInstall,
     state,

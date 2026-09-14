@@ -73,3 +73,17 @@ export interface LiaBootstrapState {
 
 /** Whether an install or repair is in flight. Drives the disabled Install button. */
 export type LiaBootstrapBusy = boolean
+
+/**
+ * The phases in which an install or repair is actually running.
+ *
+ * This list has exactly one home because three consumers branch on it - the
+ * main-process service (autostart must not race an install), the renderer store
+ * (a click mid-install is a no-op) and the install card (which button shows).
+ * Three copies of one list is how an install becomes "running" to one of them
+ * and "idle" to another.
+ */
+export function isLiaBootstrapActivePhase(phase: LiaBootstrapPhase | undefined): LiaBootstrapBusy {
+  return phase === 'checking' || phase === 'installing-prerequisites' || phase === 'installing-runtime'
+    || phase === 'preparing-model' || phase === 'verifying'
+}

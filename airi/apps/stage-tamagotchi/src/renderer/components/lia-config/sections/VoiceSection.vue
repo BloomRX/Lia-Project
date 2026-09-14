@@ -279,8 +279,13 @@ function onPreview(): void {
       class="flex flex-col gap-4"
       data-testid="lia-config-voice-custom-mode"
     >
-      <RuntimeInstallCard v-if="runtime.needsInstall" />
-      <CustomVoicePanel v-else />
+      <!-- The card is an either/or with the voice panel only before anything
+           exists. After a run, both show: the card carries the outcome (the
+           "pronto" the user earned, or the failure with its retry) and the
+           panel carries on with the voices. A session that never ran the
+           bootstrap shows only the panel. -->
+      <RuntimeInstallCard v-if="runtime.needsInstall || runtime.bootstrapOutcome" />
+      <CustomVoicePanel v-if="!runtime.needsInstall" />
     </section>
 
     <!--

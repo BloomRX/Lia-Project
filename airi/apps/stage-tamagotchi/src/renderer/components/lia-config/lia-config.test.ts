@@ -23,6 +23,7 @@ const PANEL_SOURCES = [
   'components/lia-config/sections/VoiceSection.vue',
   'components/lia-config/sections/CustomVoicePanel.vue',
   'components/lia-config/sections/AppearanceSection.vue',
+  'components/lia-config/sections/RuntimeInstallCard.vue',
 ]
 
 function readSource(relative: string): string {
@@ -37,7 +38,10 @@ function yamlKeys(path: string): Set<string> {
   for (const rawLine of readFileSync(path, 'utf8').split('\n')) {
     if (!rawLine.trim() || rawLine.trim().startsWith('#'))
       continue
-    const match = /^(\s*)(\w+):(.*)$/.exec(rawLine)
+    // Keys carry hyphens too ('check-environment'): YAML allows them and the
+    // bootstrap step labels depend on it. `\w` alone would silently skip
+    // exactly the keys this file is scanned for.
+    const match = /^(\s*)([\w-]+):(.*)$/.exec(rawLine)
     if (!match)
       continue
     const [, indent, key, rest] = match
@@ -226,5 +230,21 @@ describe('lia config i18n coverage', () => {
   it('keeps the two locale files in sync for the whole home namespace', () => {
     expect([...ptBr].filter(key => !en.has(key)).sort()).toEqual([])
     expect([...en].filter(key => !ptBr.has(key)).sort()).toEqual([])
+  })
+
+  /**
+   * The install card builds step keys at runtime from the main process's step
+   * ids (`tt(\`runtime.step.${step.id}\`)`), so the scanner above cannot see
+   * them. Importing the real list is the point: a step id renamed in the main
+   * process without its locale line would render the raw key on screen, in
+   * the exact UI the round-2 brief cares about.
+   */
+  it('resolves every bootstrap step label in both locales', async () => {
+    const { BOOTSTRAP_STEP_IDS } = await import('../../../main/services/lia/voice-runtime-bootstrap')
+
+    const keys = BOOTSTRAP_STEP_IDS.map(id => `config.sections.voice.runtime.step.${id}`)
+    expect(keys.length).toBeGreaterThan(3)
+    expect(keys.filter(key => !ptBr.has(key)), 'missing in pt-BR').toEqual([])
+    expect(keys.filter(key => !en.has(key)), 'missing in en').toEqual([])
   })
 })
