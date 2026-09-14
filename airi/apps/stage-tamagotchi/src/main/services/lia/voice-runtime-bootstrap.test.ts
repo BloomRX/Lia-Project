@@ -417,6 +417,31 @@ describe('failure handling', () => {
     expect(state.message).not.toContain('    at ')
   })
 
+  it('fails on a non-zero installer exit even when the files all landed', async () => {
+    // Isolates the exit-code check. The earlier partial-install test cannot: there
+    // the missing conda env is what fails, so a bootstrapper that ignored the exit
+    // code would still be caught. Here the installer reports failure *and* leaves
+    // a complete tree behind - only reading the exit code can catch that.
+    const h = harness({
+      exec: async (_cmd, args, options) => {
+        if (args.includes('atsetup.bat')) {
+          for (const marker of ['start_alltalk.bat', 'alltalk_environment/conda', 'alltalk_environment/env'])
+            h.markExists(`${options.cwd}/${marker}`)
+          return { code: 3, stderr: 'DeepSpeed installation failed', stdout: '' }
+        }
+        return { code: 0, stderr: '', stdout: '' }
+      },
+    })
+    const bootstrapper = createVoiceRuntimeBootstrapper(h.deps)
+
+    const state = await bootstrapper.run()
+
+    expect(state.phase).toBe('failed')
+    expect(bootstrapper.state().steps.find(step => step.id === 'run-setup')?.status).toBe('failed')
+    // It must not have gone on to declare health.
+    expect(bootstrapper.state().steps.find(step => step.id === 'verify-health')?.status).toBe('pending')
+  })
+
   it('classifies a network failure distinctly from a setup failure', async () => {
     const h = harness({
       download: async () => {
