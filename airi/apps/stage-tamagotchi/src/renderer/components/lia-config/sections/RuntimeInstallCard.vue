@@ -117,17 +117,44 @@ onMounted(() => {
 })
 
 /**
- * One entry point, two meanings.
+ * One entry point, explicit per action.
  *
  * A repair is the same idempotent walk with the intent flag set - the steps
- * re-check what exists and only fix what is missing. Routing both through one
- * handler is what keeps the button's label and its action from drifting apart,
- * which is exactly the bug an unused `onRepair` would have been.
+ * re-check what exists and only fix what is missing. The dispatch below is
+ * deliberately a switch over the resolved action rather than a "repair
+ * boolean" guess: a label and its action cannot drift apart when each branch
+ * names its own handler, and a missing branch would fail loudly instead of
+ * becoming a button that looks clickable and does nothing.
  */
+function handleInstall(): void {
+  void runtime.runBootstrap(false)
+}
+
+function handleRepair(): void {
+  void runtime.runBootstrap(true)
+}
+
+function handleRetry(): void {
+  void runtime.runBootstrap(false)
+}
+
 function onPrimaryAction(): void {
-  // Only 'repair' carries the intent flag; install and retry are the same
-  // idempotent walk, so the label and the action cannot drift apart.
-  void runtime.runBootstrap(primaryAction.value === 'repair')
+  // Round-7 hotfix-3 trace points (remove once the click path is proven in
+  // the wild): [LIA-VOICE-UI] lines, the store's [LIA-VOICE-IPC] pair, the
+  // main handler's own line, then the bootstrapper's existing start log.
+  console.info('[LIA-VOICE-UI] install-click')
+  console.info('[LIA-VOICE-UI] install-handler-enter', primaryAction.value)
+  switch (primaryAction.value) {
+    case 'install':
+      return handleInstall()
+    case 'repair':
+      return handleRepair()
+    case 'retry':
+      return handleRetry()
+    default:
+      // 'installing' and 'none' render the button disabled or absent; a click
+      // arriving here is a no-op either way, never a silent install.
+  }
 }
 
 function onCancel(): void {

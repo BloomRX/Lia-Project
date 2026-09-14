@@ -202,15 +202,22 @@ export const useLiaRuntimeStore = defineStore('lia-runtime', () => {
       return
 
     isBusy.value = true
+    // Round-7 hotfix-3 trace: if this line prints but the main handler's
+    // "install-main-received" never does, the break is between store and
+    // main (bridge, channel, preload) - exactly the point the hunt needed.
+    console.info('[LIA-VOICE-IPC] install-invoke', repair)
     try {
       const result = await installBootstrap(repair)
       if (result)
         bootstrap.value = result
       await refresh()
     }
-    catch {
+    catch (error) {
       // Leaving `bootstrap` as-is keeps the last known progress on screen. A
-      // blank card would read as "nothing happened" when in fact it failed.
+      // blank card would read as "nothing happened" when in fact it failed -
+      // and so would a swallowed invoke error, which is exactly what hid the
+      // round-7 click bug. Staying quiet is not an option here anymore.
+      console.warn('[LIA-VOICE-IPC] install-invoke failed', error)
     }
     finally {
       isBusy.value = false

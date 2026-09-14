@@ -214,8 +214,13 @@ export function registerLiaBootstrapBridge(params: {
   defineInvokeHandler(context, electronLiaBootstrapState, async (): Promise<LiaBootstrapState> =>
     ensureBootstrapper().state())
 
-  defineInvokeHandler(context, electronLiaBootstrapRun, async (_repair: boolean): Promise<LiaBootstrapState> =>
-    runAndPublish(_repair ?? false))
+  defineInvokeHandler(context, electronLiaBootstrapRun, async (_repair: boolean): Promise<LiaBootstrapState> => {
+    // Round-7 hotfix-3 trace: this line is the boundary between "the click
+    // reached main" and "the bootstrap never started". The store prints its
+    // own line first; the bootstrapper prints the start log after this.
+    console.info('[LIA-VOICE-IPC] install-main-received', _repair)
+    return runAndPublish(_repair ?? false)
+  })
 
   defineInvokeHandler(context, electronLiaBootstrapCancel, async (): Promise<void> => {
     ensureBootstrapper().cancel()
