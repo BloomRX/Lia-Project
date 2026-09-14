@@ -1,0 +1,28 @@
+# Electron tray context menu — pt-BR
+menu:
+  labels:
+    label:
+      show: Mostrar
+      adjust_sizes: Ajustar tamanho
+      recommended_size: Recomendado (450x600)
+      full_height: Altura total
+      half_height: Meia altura
+      full_screen: Tela cheia
+      align_to: Alinhar em
+      center: Centralizar
+      top_left: Superior esquerdo
+      top_right: Superior direito
+      bottom_left: Inferior esquerdo
+      bottom_right: Inferior direito
+      settings: Configurações...
+      about: Sobre...
+      open_inlay: Abrir inlay...
+      open_widgets: Abrir widgets...
+      open_caption: Abrir legenda...
+      close_caption: Fechar legenda...
+      caption_overlay: Sobreposição de legenda
+      follow_window: Seguir janela
+      reset_position: Redefinir posição
+      devtools: DevTools
+      troubleshoot_beatsync: Solucionar problemas do BeatSync...
+      quit: Sair

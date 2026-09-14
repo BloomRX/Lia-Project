@@ -1,0 +1,257 @@
+# Lia launcher Home (M1 Phase 2, product layer)
+greeting: "Finally you're here..."
+status:
+  ready: "All ready"
+  preparing: "Preparing..."
+  detail: "AI, voice and memory are ready. Discord is off."
+  ai: "AI ready"
+  voice: "Voice ready"
+  memory: "Memory ready"
+  discord: "Discord off"
+actions:
+  converse: "Talk with Lia"
+  character: "Character"
+  voice: "Voice"
+  activities: "Activities"
+  settings: "Settings"
+  configure: "Configure"
+  diagnostics: "Diagnostics"
+logs:
+  label: "Show logs"
+  title: "Logs"
+  close: "Hide logs"
+  empty: "Nothing to report right now."
+  loading: "Loading logs..."
+  technicalNote: "Detailed technical logs are available in Advanced."
+  viewAdvanced: "Open in Advanced"
+states:
+  loading: "Preparing your companion..."
+  unavailable: "Unavailable right now."
+  comingSoon: "Coming soon"
+  retry: "Try again"
+navigation:
+  home: "Home"
+presence:
+  name: "Lia"
+  role: "Your AI companion"
+leds:
+  title: "Status"
+  ai: "AI"
+  voice: "Voice"
+  avatar: "Avatar"
+  fallback: "Fallback"
+  on: "On"
+  off: "Off"
+  pending: "Not configured"
+provider:
+  title: "Conversation provider"
+  subtitle: "Manage how Lia talks."
+  onboarding:
+    title: "Configure your Lia"
+    subtitle: "One step to get Lia ready to talk. Your key is stored securely on this device."
+  key:
+    saved: "Key stored"
+    missing: "No key"
+  fields:
+    provider:
+      label: "Main provider"
+      placeholder: "Provider"
+    model:
+      label: "Model"
+      placeholder: "Select a model"
+    endpoint:
+      label: "Endpoint"
+      placeholder: "Base URL (endpoint)"
+    key:
+      label: "API key"
+      placeholder: "API key"
+      replace: "New API key (leave blank to keep)"
+    fallbackProvider:
+      label: "Fallback provider"
+      placeholder: "Optional backup provider"
+    fallbackModel:
+      label: "Fallback model"
+      placeholder: "Select a fallback model"
+    fallbackKey:
+      label: "Fallback API key"
+  fallback:
+    label: "Automatic fallback"
+    hint: "Backup if the main provider fails"
+  securityNote: "Your API key is encrypted with the device's secure storage. It is never written to your configuration or logs."
+  actions:
+    save: "Save"
+    test: "Test connection"
+    remove: "Remove"
+    back: "Back"
+    conclude: "Finish setup"
+    getKey: "Get API key"
+  saved: "Provider saved"
+  removed: "Provider removed"
+  connection:
+    ok: "Connection OK"
+    failed: "Connection failed. Check the provider, model and key."
+    fallbackFailed: "Fallback connection failed. Check its provider, model and key."
+  errors:
+    providerRequired: "Select a provider first."
+    modelRequired: "Select a model."
+    keyStoreUnavailable: "Secure key storage is unavailable on this device."
+    save: "Could not save the provider."
+    fillFirst: "Select a provider and a model to test the connection."
+    testFirst: "Test the connection before finishing."
+    concludeFailed: "Could not finish the setup. Please try again."
+config:
+  title: "Configure your Lia"
+  subtitle: "How she thinks, how she speaks and how she looks."
+  actions:
+    back: "Back"
+  navigation:
+    label: "Lia configuration sections"
+  sections:
+    ai:
+      title: "AI"
+      summary: "Lia's brain: provider, model and fallback."
+    personality:
+      title: "Personality"
+      summary: "Who Lia is: name, style, language and mood."
+      fields:
+        name: "Name"
+        style: "Style"
+        language: "Language"
+        mood: "Mood mode"
+        unset: "Not set"
+      missing: "No personality loaded on this card."
+      readOnlyNote: "These values come from Lia's personality. Full editing arrives in a later step."
+    voice:
+      title: "Voice"
+      summary: "How Lia speaks: voice provider, model and timbre."
+      fields:
+        provider: "Voice provider"
+        model: "Model"
+        voice: "Voice"
+        fallback: "Fallbacks"
+        unset: "Not set"
+      configured: "Voice configured."
+      notConfigured: "No voice configured yet."
+      loading: "Loading voice configuration…"
+      loadError: "Could not load the voice configuration."
+      primary:
+        title: "Main voice"
+        none: "No voice configured"
+      reserve:
+        title: "Backup voice"
+        none: "None"
+        hint: "Used only if the main voice fails."
+        duplicate: "The backup voice is the same as the main one, so it will not help if that one fails."
+      preview:
+        play: "▶ Hear a sample"
+        cancel: "Stop"
+        loading: "Generating sample…"
+        playing: "Playing sample…"
+        cancelled: "Sample stopped."
+        error: "Could not generate the sample."
+      catalog:
+        loading: "Loading voices…"
+        empty: "This provider does not offer a voice list."
+        fromProviderSettings: "Its voice is chosen in the provider's own settings."
+        needsConfiguration: "Configure this provider before picking one of its voices."
+        error: "Could not load this provider's voice list."
+      errors:
+        persist: "Could not save the voice. Nothing was changed."
+        projection: "The voice was saved, but Lia's card was not updated. It will be repaired when this screen is opened again."
+        fallbackIdentical: "The backup voice cannot be the same as the main voice."
+      custom:
+        title: "Custom voice"
+        subtitle: "Speak with a voice of your own. The file stays on your computer."
+        server:
+          label: "Speech server"
+          placeholder: "http://127.0.0.1:7851"
+          save: "Save"
+        folder:
+          label: "Server voices folder"
+          none: "No folder chosen yet."
+          choose: "Select folder…"
+          clear: "Clear"
+        states:
+          checking: "Checking…"
+          connected: "Connected"
+          offline: "Disconnected"
+          notConfigured: "Not configured"
+          error: "Error"
+        import:
+          button: "Import voice"
+          confirm: "Import"
+          cancel: "Cancel"
+          namePrompt: "Give this voice a name:"
+          nameDefault: "My voice"
+        profiles:
+          empty: "No imported voices yet."
+          use: "Use this voice"
+          test: "Test"
+          testing: "Playing…"
+          remove: "Remove"
+          removeYes: "Yes, remove"
+          removeConfirm: "Remove this voice? The imported file will be deleted."
+          status:
+            ready: "Ready to use"
+            inUse: "In use"
+            notConfigured: "Speech server not configured"
+            serverOffline: "Speech server is off"
+            syncFailed: "Could not send to the server"
+        create:
+          title: "Create my voice"
+          hint: "You can train a voice from recordings and then import the result into Lia."
+          soon: "Training coming soon"
+      choose:
+        title: "How should Lia speak?"
+        hint: "Pick one of the two. You can change it whenever you like."
+        ready: "Ready-made voice"
+        readyHint: "One of the voices that already comes with Lia."
+        custom: "My own voice"
+        customHint: "Speak with a voice of your own. The file stays on your computer."
+      runtime:
+        title: "Voice system"
+        needed: "Voice system needed"
+        neededHint: "For Lia to speak with a voice of your own, it needs a voice system installed on your computer."
+        install: "Install"
+        wizardTitle: "How to install the voice system"
+        wizardHint: "A few steps, done once. Lia tracks what is left."
+        chooseFolder: "Already installed — choose the folder"
+        folderChosen: "Folder chosen"
+        starting: "Starting the voice system…"
+        ready: "Ready"
+        stopped: "Stopped"
+        checking: "Checking…"
+        notInstalled: "Not installed"
+        startFailed: "Could not start the voice system."
+        retry: "Try again"
+        stop: "Stop"
+        error: "Error"
+        readyTitle: "Voice system ready"
+        readyHint: "The Lia can now speak with a voice of yours."
+        runningTitle: "Preparing the voice system..."
+        runningHint: "This takes a few minutes the first time. You can leave the window open."
+        repair: "Repair"
+        maintenance: "Maintenance"
+        removeConfirm: "Confirm removal"
+        cancel: "Cancel"
+        remove: "Remove voice system"
+        removeHint: "Removes only what the Lia installed. Your imported voices are kept."
+        step:
+          check-environment: "Checking this computer"
+          fetch-source: "Downloading the voice system"
+          run-setup: "Installing the voice system"
+          verify-install: "Checking the installation"
+          verify-health: "Starting and verifying"
+      advanced:
+        title: "Advanced settings"
+        hint: "Voice provider, model, emergency voice and voice server."
+    appearance:
+      title: "Appearance"
+      summary: "How Lia looks: avatar, outfit, accessories and state."
+      slots:
+        avatar: "Avatar"
+        outfit: "Outfit"
+        accessory: "Accessories"
+        state: "State"
+        pending: "Coming soon"
+      comingSoon: "Outfits, accessories and states arrive in the Avatar step."

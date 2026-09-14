@@ -1,0 +1,257 @@
+# Lia launcher Home — pt-BR (M1 Phase 2, subconjunto mínimo)
+greeting: "Finalmente você chegou..."
+status:
+  ready: "Tudo pronto"
+  preparing: "Preparando..."
+  detail: "IA, voz e memória prontas. Discord desligado."
+  ai: "IA pronta"
+  voice: "Voz pronta"
+  memory: "Memória pronta"
+  discord: "Discord desligado"
+actions:
+  converse: "Conversar"
+  character: "Personagem"
+  voice: "Voz"
+  activities: "Atividades"
+  settings: "Configurações"
+  configure: "Configurar"
+  diagnostics: "Diagnósticos"
+logs:
+  label: "Mostrar logs"
+  title: "Logs"
+  close: "Ocultar logs"
+  empty: "Nada a reportar no momento."
+  loading: "Carregando logs..."
+  technicalNote: "Logs técnicos detalhados ficam em Avançado."
+  viewAdvanced: "Abrir em Avançado"
+states:
+  loading: "Preparando sua companheira..."
+  unavailable: "Indisponível no momento."
+  comingSoon: "Em breve"
+  retry: "Tentar novamente"
+navigation:
+  home: "Início"
+presence:
+  name: "Lia"
+  role: "Sua companheira virtual"
+leds:
+  title: "Status"
+  ai: "IA"
+  voice: "Voz"
+  avatar: "Avatar"
+  fallback: "Fallback"
+  on: "Ligado"
+  off: "Desligado"
+  pending: "Não configurado"
+provider:
+  title: "Provider de conversa"
+  subtitle: "Gerencie como a Lia conversa."
+  onboarding:
+    title: "Configure sua Lia"
+    subtitle: "Um passo para deixar a Lia pronta para conversar. Sua chave fica armazenada com segurança neste dispositivo."
+  key:
+    saved: "Chave salva"
+    missing: "Sem chave"
+  fields:
+    provider:
+      label: "Provider principal"
+      placeholder: "Provedor"
+    model:
+      label: "Modelo"
+      placeholder: "Selecione um modelo"
+    endpoint:
+      label: "Endpoint"
+      placeholder: "URL base (endpoint)"
+    key:
+      label: "Chave da API"
+      placeholder: "Chave da API"
+      replace: "Nova chave da API (deixe em branco para manter)"
+    fallbackProvider:
+      label: "Provider de fallback"
+      placeholder: "Provider reserva (opcional)"
+    fallbackModel:
+      label: "Modelo de fallback"
+      placeholder: "Selecione um modelo de fallback"
+    fallbackKey:
+      label: "Chave do provider de fallback"
+  fallback:
+    label: "Fallback automático"
+    hint: "Reserva se o provider principal falhar"
+  securityNote: "Sua chave da API é criptografada com o armazenamento seguro do dispositivo. Nunca é gravada na sua configuração nem nos logs."
+  actions:
+    save: "Salvar"
+    test: "Testar conexão"
+    remove: "Remover"
+    back: "Voltar"
+    conclude: "Concluir configuração"
+    getKey: "Obter chave da API"
+  saved: "Provider salvo"
+  removed: "Provider removido"
+  connection:
+    ok: "Conexão OK"
+    failed: "Falha na conexão. Verifique o provider, o modelo e a chave."
+    fallbackFailed: "Falha na conexão do fallback. Verifique o provider, o modelo e a chave do fallback."
+  errors:
+    providerRequired: "Selecione um provider primeiro."
+    modelRequired: "Selecione um modelo."
+    keyStoreUnavailable: "O armazenamento seguro de chaves não está disponível neste dispositivo."
+    save: "Não foi possível salvar o provider."
+    fillFirst: "Selecione um provider e um modelo para testar a conexão."
+    testFirst: "Teste a conexão antes de concluir."
+    concludeFailed: "Não foi possível concluir a configuração. Tente novamente."
+config:
+  title: "Configurar sua Lia"
+  subtitle: "Como ela pensa, como ela fala e como ela parece."
+  actions:
+    back: "Voltar"
+  navigation:
+    label: "Seções da configuração da Lia"
+  sections:
+    ai:
+      title: "IA"
+      summary: "O cérebro da Lia: provider, modelo e reserva."
+    personality:
+      title: "Personalidade"
+      summary: "Quem a Lia é: nome, estilo, idioma e humor."
+      fields:
+        name: "Nome"
+        style: "Estilo"
+        language: "Idioma"
+        mood: "Modo de humor"
+        unset: "Não definido"
+      missing: "Nenhuma personalidade carregada neste cartão."
+      readOnlyNote: "Estes valores vêm da personalidade da Lia. A edição completa chega em uma próxima etapa."
+    voice:
+      title: "Voz"
+      summary: "Como a Lia fala: provider de voz, modelo e timbre."
+      fields:
+        provider: "Provider de voz"
+        model: "Modelo"
+        voice: "Voz"
+        fallback: "Reservas"
+        unset: "Não definido"
+      configured: "Voz configurada."
+      notConfigured: "Nenhuma voz configurada ainda."
+      loading: "Carregando configuração de voz…"
+      loadError: "Não foi possível carregar a configuração de voz."
+      primary:
+        title: "Voz principal"
+        none: "Nenhuma voz configurada"
+      reserve:
+        title: "Voz de reserva"
+        none: "Nenhuma"
+        hint: "Usada somente se a voz principal falhar."
+        duplicate: "A voz de reserva é igual à principal, então não vai ajudar se ela falhar."
+      preview:
+        play: "▶ Ouvir exemplo"
+        cancel: "Parar"
+        loading: "Gerando exemplo…"
+        playing: "Tocando exemplo…"
+        cancelled: "Exemplo interrompido."
+        error: "Não foi possível gerar o exemplo."
+      catalog:
+        loading: "Carregando vozes…"
+        empty: "Este provedor não oferece uma lista de vozes."
+        fromProviderSettings: "A voz dele é escolhida nas configurações do próprio provedor."
+        needsConfiguration: "Configure este provedor antes de escolher uma voz dele."
+        error: "Não foi possível carregar a lista de vozes deste provedor."
+      errors:
+        persist: "Não foi possível salvar a voz. Nada foi alterado."
+        projection: "A voz foi salva, mas o cartão da Lia não foi atualizado. Será corrigido ao reabrir esta tela."
+        fallbackIdentical: "A voz de reserva não pode ser igual à voz principal."
+      custom:
+        title: "Voz personalizada"
+        subtitle: "Use uma voz sua. O arquivo fica só no seu computador."
+        server:
+          label: "Servidor de voz"
+          placeholder: "http://127.0.0.1:7851"
+          save: "Salvar"
+        folder:
+          label: "Pasta de vozes do servidor"
+          none: "Nenhuma pasta escolhida ainda."
+          choose: "Selecionar pasta…"
+          clear: "Limpar"
+        states:
+          checking: "Verificando…"
+          connected: "Conectado"
+          offline: "Desconectado"
+          notConfigured: "Não configurado"
+          error: "Erro"
+        import:
+          button: "Importar voz"
+          confirm: "Importar"
+          cancel: "Cancelar"
+          namePrompt: "Dê um nome para esta voz:"
+          nameDefault: "Minha voz"
+        profiles:
+          empty: "Nenhuma voz importada ainda."
+          use: "Usar esta voz"
+          test: "Testar"
+          testing: "Tocando…"
+          remove: "Remover"
+          removeYes: "Sim, remover"
+          removeConfirm: "Remover esta voz? O arquivo importado será apagado."
+          status:
+            ready: "Pronta para uso"
+            inUse: "Em uso"
+            notConfigured: "Servidor de voz não configurado"
+            serverOffline: "Servidor de voz desligado"
+            syncFailed: "Não foi possível enviar ao servidor"
+        create:
+          title: "Criar minha voz"
+          hint: "Você pode treinar uma voz usando gravações e depois importar o resultado para a Lia."
+          soon: "Treinamento em breve"
+      choose:
+        title: "Como a Lia vai falar?"
+        hint: "Escolha uma das duas opções. Você pode trocar quando quiser."
+        ready: "Voz pronta"
+        readyHint: "Uma das vozes que já vêm com a Lia."
+        custom: "Minha própria voz"
+        customHint: "Use uma voz sua. O arquivo fica só no seu computador."
+      runtime:
+        title: "Sistema de voz"
+        needed: "Sistema de voz necessário"
+        neededHint: "Para a Lia falar com uma voz sua, ela precisa de um sistema de voz instalado no seu computador."
+        install: "Instalar"
+        wizardTitle: "Como instalar o sistema de voz"
+        wizardHint: "São alguns passos, feitos uma única vez. A Lia acompanha o que falta."
+        chooseFolder: "Já instalei — escolher a pasta"
+        folderChosen: "Pasta escolhida"
+        starting: "Iniciando o sistema de voz…"
+        ready: "Pronto"
+        stopped: "Parado"
+        checking: "Verificando…"
+        notInstalled: "Não instalado"
+        startFailed: "Não foi possível iniciar o sistema de voz."
+        retry: "Tentar novamente"
+        stop: "Parar"
+        error: "Erro"
+        readyTitle: "Sistema de voz pronto"
+        readyHint: "A Lia já pode falar com uma voz sua."
+        runningTitle: "Preparando o sistema de voz…"
+        runningHint: "Isso leva alguns minutos na primeira vez. Você pode deixar a janela aberta."
+        repair: "Reparar"
+        maintenance: "Manutenção"
+        removeConfirm: "Confirmar remoção"
+        cancel: "Cancelar"
+        remove: "Remover sistema de voz"
+        removeHint: "Remove apenas o que a Lia instalou. Suas vozes importadas não são apagadas."
+        step:
+          check-environment: "Verificando o computador"
+          fetch-source: "Baixando o sistema de voz"
+          run-setup: "Instalando o sistema de voz"
+          verify-install: "Conferindo a instalação"
+          verify-health: "Iniciando e verificando"
+      advanced:
+        title: "Configurações avançadas"
+        hint: "Provider de voz, modelo, voz de emergência e servidor de voz."
+    appearance:
+      title: "Aparência"
+      summary: "Como a Lia parece: avatar, roupa, acessórios e estado."
+      slots:
+        avatar: "Avatar"
+        outfit: "Roupa"
+        accessory: "Acessórios"
+        state: "Estado"
+        pending: "Em breve"
+      comingSoon: "Roupas, acessórios e estados chegam na etapa de Avatar."

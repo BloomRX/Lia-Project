@@ -1,0 +1,13 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <!-- Lia placeholder mark: rounded tile + monogram. Replace with final brand art. -->
+  <defs>
+    <linearGradient id="liaGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4338ca"/>
+      <stop offset="0.55" stop-color="#7c3aed"/>
+      <stop offset="1" stop-color="#db2777"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="1024" height="1024" rx="190" fill="url(#liaGrad)"/>
+  <text x="512" y="672" font-family="DejaVu Sans, Arial, sans-serif" font-size="700"
+        font-weight="bold" fill="#ffffff" text-anchor="middle">L</text>
+</svg>
