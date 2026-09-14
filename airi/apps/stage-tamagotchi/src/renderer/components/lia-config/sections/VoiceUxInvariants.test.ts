@@ -379,6 +379,28 @@ describe('the install experience', () => {
     expect(visible).not.toContain('    at ')
   })
 
+  it('says what is wrong about the folder instead of only offering retry', async () => {
+    // A folder name the installer cannot use will fail again identically on every
+    // retry, so the sentence has to carry the diagnosis - the button alone cannot.
+    ipc.voiceConfig.current = { tts: { preferred: { providerId: 'custom-local-voice', voiceId: 'p-1' } } }
+    ipc.runtimeState.current = { state: 'notInstalled' }
+    ipc.bootstrap.current = {
+      failureCategory: 'path',
+      message: 'The voice system cannot be installed in a folder whose name contains a space.',
+      phase: 'failed',
+      steps: [],
+    }
+
+    const visible = beforeAdvanced(await render())
+
+    // The sentence is the actionable part, and it names the cause.
+    expect(visible).toContain('data-testid="lia-runtime-install-error"')
+    expect(visible).toContain('contains a space')
+    // Repair would re-run the same installer against the same folder and fail the
+    // same way, so this is not a repair case.
+    expect(visible).not.toContain(`${TT}.runtime.repair`)
+  })
+
   it('still offers a single action when progress cannot be read', async () => {
     ipc.voiceConfig.current = { tts: { preferred: { providerId: 'custom-local-voice', voiceId: 'p-1' } } }
     ipc.runtimeState.current = { state: 'notInstalled' }
