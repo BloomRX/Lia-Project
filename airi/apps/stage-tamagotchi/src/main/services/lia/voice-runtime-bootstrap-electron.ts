@@ -11,7 +11,7 @@ import { app } from 'electron'
 import { RUNTIME_APP_SUBDIR } from './voice-runtime-bootstrap'
 import { probeVoiceRuntimeEnvironment } from './voice-runtime-env'
 import { createRuntimeLogger, createRuntimeRunCommand, freeBytesFor } from './voice-runtime-install-exec'
-import { migrateLegacyRuntimeRootSync, resolveRuntimeRootLayout } from './voice-runtime-root'
+import { migrateLegacyRuntimeRootsSync, resolveRuntimeRootLayout } from './voice-runtime-root'
 
 /**
  * The parts of the voice-runtime install that genuinely need Electron.
@@ -28,18 +28,23 @@ import { migrateLegacyRuntimeRootSync, resolveRuntimeRootLayout } from './voice-
 let legacyMigrationAttempted = false
 
 function runtimeRootLayout() {
+  const platform = process.platform
   const layout = resolveRuntimeRootLayout({
     appDataDir: app.getPath('appData'),
-    platform: process.platform,
+    // `localAppData` is a Windows-only Electron path; off Windows the
+    // resolver never reads it, so an empty string is honest rather than a
+    // thrown "unknown path" at startup.
+    localAppDataDir: platform === 'win32' ? app.getPath('localAppData') : '',
+    platform,
     userDataDir: app.getPath('userData'),
   })
   // One attempt per process, latched only on success: a transient failure
   // (e.g. a locked file inside the old tree) is retried on the next access
-  // instead of the old `@` path silently coming back. Migration details are
-  // in `voice-runtime-root` - the round-5 probe proved the `@` in the
-  // userData path alone makes the Miniconda installer exit 2.
+  // instead of the old path silently coming back. Migration details are in
+  // `voice-runtime-root` - rounds 5-7 proved out the `@` character first and
+  // then moved the tree to the local, non-roaming %LOCALAPPDATA%\Lia.
   if (!legacyMigrationAttempted) {
-    migrateLegacyRuntimeRootSync(layout, {
+    migrateLegacyRuntimeRootsSync(layout, {
       existsSync,
       log: createRuntimeLogger(),
       mkdirSync: target => mkdirSync(target, { recursive: true }),
@@ -51,14 +56,14 @@ function runtimeRootLayout() {
 }
 
 /**
- * Where the runtime lives (item D, moved in round 6).
+ * Where the runtime lives (item D, moved in round 7).
  *
- * Off Windows: `<userData>/runtimes/alltalk`, as before. On Windows: the same
- * relative tree under a sibling of userData with the atsetup-blacklisted
- * characters stripped (see `voice-runtime-root`), because the `@` of
- * `@proj-airi` made the Miniconda silent installer exit 2 with no output.
- * Lia-controlled either way: survives app updates, not inside the repository,
- * not the user's Downloads folder.
+ * Off Windows: `<userData>/runtimes/alltalk`, as before. On Windows:
+ * `%LOCALAPPDATA%\Lia\runtimes\alltalk` - local rather than roaming (this
+ * tree carries Conda and gigabytes of models, not config), and free of the
+ * `@` that made the Miniconda silent installer exit 2 (see
+ * `voice-runtime-root`). Lia-controlled either way: survives app updates,
+ * not inside the repository, not the user's Downloads folder.
  */
 export function runtimeRootDir(): string {
   return runtimeRootLayout().rootDir

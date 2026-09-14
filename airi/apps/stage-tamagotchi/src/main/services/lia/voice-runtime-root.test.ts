@@ -4,17 +4,19 @@ import { describe, expect, it } from 'vitest'
 
 import {
   ATSETUP_FORBIDDEN_PATH_CHARS,
-  migrateLegacyRuntimeRootSync,
+  migrateLegacyRuntimeRootsSync,
   resolveRuntimeRootLayout,
   sanitizeWindowsRuntimeRelativePath,
   sanitizeWindowsRuntimeSegment,
 } from './voice-runtime-root'
 
 /**
- * Round-6 runtime root: the `@` in `@proj-airi` made the Miniconda silent
- * installer exit 2 (proven by the round-5 probe). The sanitizer and the
- * migration live here, dependency-free, so Windows semantics are tested on a
- * POSIX runner - the bug class itself was invisible on Linux.
+ * The round-7 runtime root: `%LOCALAPPDATA%\Lia\runtimes\alltalk`.
+ *
+ * Round 5 proved the `@` in `@proj-airi` made the Miniconda silent installer
+ * exit 2; round 7 (product decision) moved the multi-GB tree out of Roaming
+ * into the local profile directory. Everything here is dependency-free with
+ * an injectable path api, so Windows semantics are tested on a POSIX runner.
  */
 
 const win = path.win32
@@ -66,32 +68,41 @@ describe('sanitizeWindowsRuntimeRelativePath', () => {
   })
 })
 
+const WIN_INPUT = {
+  appDataDir: String.raw`C:\Users\lucas\AppData\Roaming`,
+  localAppDataDir: String.raw`C:\Users\lucas\AppData\Local`,
+  pathApi: win,
+  platform: 'win32',
+  userDataDir: String.raw`C:\Users\lucas\AppData\Roaming\@proj-airi\stage-tamagotchi`,
+} as const
+
 describe('resolveRuntimeRootLayout', () => {
-  const appData = String.raw`C:\Users\lucas\AppData\Roaming`
-  const userData = String.raw`C:\Users\lucas\AppData\Roaming\@proj-airi\stage-tamagotchi`
-
-  it('moves the Windows root to the sanitized sibling (the shape that made the probe exit 0)', () => {
-    const layout = resolveRuntimeRootLayout({ appDataDir: appData, pathApi: win, platform: 'win32', userDataDir: userData })
-    expect(layout.rootDir).toBe(String.raw`C:\Users\lucas\AppData\Roaming\proj-airi\stage-tamagotchi\runtimes\alltalk`)
-    expect(layout.legacyRootDir).toBe(String.raw`C:\Users\lucas\AppData\Roaming\@proj-airi\stage-tamagotchi\runtimes\alltalk`)
-  })
-
-  it('guarantees no atsetup-blacklisted character survives in the effective root', () => {
-    const layout = resolveRuntimeRootLayout({ appDataDir: appData, pathApi: win, platform: 'win32', userDataDir: userData })
+  it('roots the Windows runtime at %LOCALAPPDATA%\\Lia - local, not roaming, no blacklist chars', () => {
+    const layout = resolveRuntimeRootLayout(WIN_INPUT)
+    expect(layout.rootDir).toBe(String.raw`C:\Users\lucas\AppData\Local\Lia\runtimes\alltalk`)
     for (const char of ATSETUP_BLACKLIST_CHARS) {
       expect(layout.rootDir.includes(char)).toBe(false)
     }
   })
 
-  it('keeps the legacy root untouched off Windows', () => {
+  it('keeps BOTH previous roots as migration candidates, most recent first', () => {
+    const layout = resolveRuntimeRootLayout(WIN_INPUT)
+    expect(layout.legacyRootDirs).toEqual([
+      String.raw`C:\Users\lucas\AppData\Roaming\proj-airi\stage-tamagotchi\runtimes\alltalk`,
+      String.raw`C:\Users\lucas\AppData\Roaming\@proj-airi\stage-tamagotchi\runtimes\alltalk`,
+    ])
+  })
+
+  it('keeps the userData root untouched off Windows, with nothing to migrate', () => {
     const layout = resolveRuntimeRootLayout({
       appDataDir: '/home/lia/.config',
+      localAppDataDir: '',
       pathApi: posix,
       platform: 'linux',
       userDataDir: '/home/lia/.config/@proj-airi/stage-tamagotchi',
     })
-    expect(layout.rootDir).toBe(layout.legacyRootDir)
     expect(layout.rootDir).toBe('/home/lia/.config/@proj-airi/stage-tamagotchi/runtimes/alltalk')
+    expect(layout.legacyRootDirs).toEqual([])
   })
 })
 
@@ -119,59 +130,74 @@ function createFsHarness(initialPaths: string[]) {
   }
 }
 
-const WIN_LAYOUT = {
-  legacyRootDir: String.raw`C:\Users\lucas\AppData\Roaming\@proj-airi\stage-tamagotchi\runtimes\alltalk`,
-  rootDir: String.raw`C:\Users\lucas\AppData\Roaming\proj-airi\stage-tamagotchi\runtimes\alltalk`,
-}
+const LAYOUT = resolveRuntimeRootLayout(WIN_INPUT)
+const ROUND_SIX_ROOT = LAYOUT.legacyRootDirs[0]
+const ORIGINAL_ROOT = LAYOUT.legacyRootDirs[1]
 
-describe('migrateLegacyRuntimeRootSync', () => {
-  it('moves the legacy tree in one rename (no re-download of the 97/85 MB payloads)', () => {
-    const harness = createFsHarness([WIN_LAYOUT.legacyRootDir])
-    const facts = migrateLegacyRuntimeRootSync(WIN_LAYOUT, harness.deps)
-    expect(facts).toEqual({ from: WIN_LAYOUT.legacyRootDir, migrated: true, to: WIN_LAYOUT.rootDir })
+describe('migrateLegacyRuntimeRootsSync', () => {
+  it('moves the most recent legacy tree in one rename - installer and state come along, no re-download', () => {
+    const harness = createFsHarness([ROUND_SIX_ROOT])
+    const facts = migrateLegacyRuntimeRootsSync(LAYOUT, harness.deps)
+    expect(facts).toEqual({ from: ROUND_SIX_ROOT, migrated: true, to: LAYOUT.rootDir })
     // Parents are created BEFORE the rename, and the rename is issued exactly once.
     expect(harness.calls).toEqual([
-      `mkdir:${String.raw`C:\Users\lucas\AppData\Roaming\proj-airi\stage-tamagotchi\runtimes`}`,
-      `rename:${WIN_LAYOUT.legacyRootDir}->${WIN_LAYOUT.rootDir}`,
+      `mkdir:${String.raw`C:\Users\lucas\AppData\Local\Lia\runtimes`}`,
+      `rename:${ROUND_SIX_ROOT}->${LAYOUT.rootDir}`,
     ])
-    expect(harness.existing.has(WIN_LAYOUT.rootDir)).toBe(true)
-    expect(harness.existing.has(WIN_LAYOUT.legacyRootDir)).toBe(false)
     const entry = harness.logs[0] as { detail?: string, event?: string }
     expect(entry.event).toBe('migrated')
-    expect(entry.detail).toContain('@proj-airi')
-    expect(entry.detail).toContain('proj-airi\\stage-tamagotchi')
+    expect(entry.detail).toContain('Roaming\\proj-airi')
+    expect(entry.detail).toContain(String.raw`Local\Lia`)
   })
 
-  it('is a no-op when the new root already exists (post-migration steady state)', () => {
-    const harness = createFsHarness([WIN_LAYOUT.rootDir, WIN_LAYOUT.legacyRootDir])
-    const facts = migrateLegacyRuntimeRootSync(WIN_LAYOUT, harness.deps)
-    expect(facts).toEqual({ from: WIN_LAYOUT.legacyRootDir, migrated: false, reason: 'root-present', to: WIN_LAYOUT.rootDir })
+  it('falls back to the oldest root when the round-6 one never existed', () => {
+    const harness = createFsHarness([ORIGINAL_ROOT])
+    const facts = migrateLegacyRuntimeRootsSync(LAYOUT, harness.deps)
+    expect(facts).toEqual({ from: ORIGINAL_ROOT, migrated: true, to: LAYOUT.rootDir })
+  })
+
+  it('prefers the newest legacy root when several exist', () => {
+    const harness = createFsHarness([ROUND_SIX_ROOT, ORIGINAL_ROOT])
+    const facts = migrateLegacyRuntimeRootsSync(LAYOUT, harness.deps)
+    expect(facts.from).toBe(ROUND_SIX_ROOT)
+    expect(harness.calls.filter(call => call.startsWith('rename:'))).toHaveLength(1)
+  })
+
+  it('never overwrites an existing destination, even when a legacy tree also exists', () => {
+    const harness = createFsHarness([LAYOUT.rootDir, ROUND_SIX_ROOT])
+    const facts = migrateLegacyRuntimeRootsSync(LAYOUT, harness.deps)
+    expect(facts).toEqual({ from: undefined, migrated: false, reason: 'root-present', to: LAYOUT.rootDir })
     expect(harness.calls).toEqual([])
+    expect(harness.existing.has(ROUND_SIX_ROOT)).toBe(true)
   })
 
   it('is a no-op on a fresh install (nothing to move)', () => {
     const harness = createFsHarness([])
-    const facts = migrateLegacyRuntimeRootSync(WIN_LAYOUT, harness.deps)
-    expect(facts.reason).toBe('legacy-absent')
-    expect(facts.migrated).toBe(false)
+    const facts = migrateLegacyRuntimeRootsSync(LAYOUT, harness.deps)
+    expect(facts).toEqual({ from: undefined, migrated: false, reason: 'legacy-absent', to: LAYOUT.rootDir })
     expect(harness.calls).toEqual([])
   })
 
-  it('never renames when both roots are the same path (non-Windows layout)', () => {
-    const same = { legacyRootDir: WIN_LAYOUT.rootDir, rootDir: WIN_LAYOUT.rootDir }
-    const harness = createFsHarness([WIN_LAYOUT.rootDir])
-    const facts = migrateLegacyRuntimeRootSync(same, harness.deps)
-    expect(facts).toEqual({ from: WIN_LAYOUT.rootDir, migrated: false, reason: 'same-path', to: WIN_LAYOUT.rootDir })
+  it('never renames when the root is its own only candidate (non-Windows layout)', () => {
+    const layout = resolveRuntimeRootLayout({
+      appDataDir: '/home/lia/.config',
+      localAppDataDir: '',
+      pathApi: posix,
+      platform: 'linux',
+      userDataDir: '/home/lia/.config/@proj-airi/stage-tamagotchi',
+    })
+    const harness = createFsHarness([layout.rootDir])
+    const facts = migrateLegacyRuntimeRootsSync(layout, harness.deps)
+    expect(facts).toEqual({ from: undefined, migrated: false, reason: 'same-path', to: layout.rootDir })
     expect(harness.calls).toEqual([])
   })
 
-  it('propagates a failed rename instead of silently resurrecting the @ path', () => {
-    // Harness sees the legacy dir as present but refuses the actual rename.
-    const harness = createFsHarness([WIN_LAYOUT.legacyRootDir])
+  it('propagates a failed rename instead of silently resurrecting the legacy path', () => {
+    const harness = createFsHarness([ROUND_SIX_ROOT])
     harness.deps.renameSync = () => {
       throw new Error('EPERM: operation not permitted')
     }
-    expect(() => migrateLegacyRuntimeRootSync(WIN_LAYOUT, harness.deps)).toThrow('EPERM')
+    expect(() => migrateLegacyRuntimeRootsSync(LAYOUT, harness.deps)).toThrow('EPERM')
     expect(harness.logs).toEqual([])
   })
 })
