@@ -3,6 +3,8 @@ import type { createContext } from '@moeru/eventa/adapters/electron/main'
 import type { LiaBootstrapState } from '../../../shared/lia-voice'
 import type { Bootstrapper } from './voice-runtime-bootstrap'
 
+import { mkdir as fsMkdir, rm as fsRemove } from 'node:fs/promises'
+
 import { defineInvokeHandler } from '@moeru/eventa'
 import { app } from 'electron'
 
@@ -22,8 +24,6 @@ import {
   createRuntimeLogger,
   createRuntimeProbe,
   createRuntimeStateStore,
-  ensureDir,
-  removePath,
   runtimeAppDir,
   runtimeRootDir,
 } from './voice-runtime-bootstrap-electron'
@@ -146,11 +146,11 @@ export function registerLiaBootstrapBridge(params: {
       isHealthy,
       log: entry => logger(entry),
       mkdir: async (path) => {
-        await ensureDir(path, { recursive: true })
+        await fsMkdir(path, { recursive: true })
       },
       probe: createRuntimeProbe(),
       readState: async () => store.read(),
-      remove: async path => removePath(path, { force: true, recursive: true }),
+      remove: async path => fsRemove(path, { force: true, recursive: true }),
       rename: async (from, to) => (await import('node:fs/promises')).rename(from, to),
       runtimeDir: runtimeRootDir(),
       startRuntime,
