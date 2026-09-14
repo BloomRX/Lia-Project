@@ -185,11 +185,13 @@ export function registerLiaBootstrapBridge(params: {
       // UI side, exactly like a fake progress driver.
       onStateChange: state => emit(state),
       probe: createRuntimeProbe(),
+      readFile: async path => await import('node:fs/promises').then(({ readFile }) => readFile(path, 'utf8').then(content => content, () => undefined)),
       readState: async () => store.read(),
       remove: async path => fsRemove(path, { force: true, recursive: true }),
       rename: async (from, to) => (await import('node:fs/promises')).rename(from, to),
       runtimeDir: runtimeRootDir(),
       startRuntime,
+      writeFile: async (path, content) => await import('node:fs/promises').then(({ writeFile }) => writeFile(path, content, 'utf8')),
       writeState: store.write,
     })
 

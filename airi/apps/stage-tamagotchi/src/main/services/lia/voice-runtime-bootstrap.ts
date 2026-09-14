@@ -7,8 +7,6 @@ import type {
 } from '../../../shared/lia-voice'
 import type { VoiceRuntimeEnvironment } from './voice-runtime-env'
 
-import process from 'node:process'
-
 import { Buffer } from 'node:buffer'
 import { createHash } from 'node:crypto'
 import { join } from 'node:path'
@@ -101,6 +99,182 @@ export const MINICONDA_EXE = 'alltalk_environment/conda/_conda.exe'
 export const MINICONDA_INSTALL_TIMEOUT_MS = 20 * 60 * 1000
 
 /**
+ * The environment the pinned `atsetup.bat` builds inside the runtime tree, and
+ * the binaries the continuation drives directly instead of scripting a cmd
+ * activation: the env itself, the python.exe the pin uses as its "env created"
+ * check, and the env's own pip (what a bare `pip` call resolves to under the
+ * activated env).
+ */
+export const MINICONDA_ENV = 'alltalk_environment/env'
+export const MINICONDA_ENV_PYTHON = 'alltalk_environment/env/python.exe'
+export const MINICONDA_ENV_PIP = 'alltalk_environment/env/Scripts/pip.exe'
+export const MINICONDA_CONDA_EXE = 'alltalk_environment/conda/Scripts/conda.exe'
+
+/**
+ * The exact Miniconda build the pinned `atsetup.bat`
+ * (`MINICONDA_DOWNLOAD_URL` at f16117e9) downloads, with its official record
+ * from the repo.anaconda.com index: 85,690,400 bytes and this SHA-256, which
+ * the round-5 probe verified byte-for-byte on the real QA machine. Downloads
+ * from anywhere else, or bytes that differ in either number, are deleted
+ * rather than executed.
+ */
+export const MINICONDA_INSTALLER_URL = 'https://repo.anaconda.com/miniconda/Miniconda3-py311_24.4.0-0-Windows-x86_64.exe'
+export const MINICONDA_INSTALLER_BYTES = 85_690_400
+export const MINICONDA_INSTALLER_SHA256 = 'fb6aaeaf92907b8e7598aac0f7b29793a00b27641dc074a961eeb86ff86d0268'
+
+/** `_conda.exe --version`, the pin's own "conda exists and works" check. */
+export const CONDA_VERSION_CHECK_TIMEOUT_MS = 2 * 60 * 1000
+
+/** `conda create` of a fresh python=3.11.9 env: minutes on a slow link. */
+export const CONDA_ENV_CREATE_TIMEOUT_MS = 30 * 60 * 1000
+
+/** The python version the pin creates its env with (`python=3.11.9`). */
+export const ALLTALK_ENV_PYTHON_VERSION = '3.11.9'
+
+/** The DeepSpeed wheel of the pin's `install_deepspeed` step (GitHub release). */
+export const DEEPSPEED_WHEEL = 'deepspeed-0.14.0+ce78a63-cp311-cp311-win_amd64.whl'
+export const DEEPSPEED_WHEEL_URL = `https://github.com/erew123/alltalk_tts/releases/download/DeepSpeed-14.0/${DEEPSPEED_WHEEL}`
+
+/** One command of the idempotent round-7 continuation. */
+export interface AlltalkSetupCommand {
+  /** The atsetup.bat label or step the command is lifted from (pin f16117e9). */
+  id: string
+  command: string
+  args: string[]
+  timeoutMs: number
+  /** Downloaded right before this step when missing; kept on failure for retry. */
+  downloadUrl?: string
+  /** Deleted by us only after this step succeeds, exactly like the pin's `del`. */
+  cleanupPath?: string
+  /** False only for steps the pin runs without an errorlevel guard. */
+  fatal: boolean
+}
+
+/**
+ * The round-7 continuation as data: the exact commands the pinned
+ * `atsetup.bat` runs after Miniconda works, in the pin's order, with only the
+ * targeting mechanism changed - an explicit `--prefix <env>`/the env's own
+ * pip.exe instead of an interactive `conda activate` (item 6: the official
+ * commands, reused; no menu automation, no reimplementation of the install
+ * logic itself). Reading order matches :install_pytorch through the conda
+ * clean in :InstallCustomStandalone.
+ *
+ * Idempotent by the package managers' own nature: satisfied specs do not
+ * re-download, so a retry after a mid-sequence failure re-enters cheaply.
+ */
+export function alltalkSetupCommands(input: {
+  condaExe: string
+  envDir: string
+  envPip: string
+  wheelPath: string
+}): AlltalkSetupCommand[] {
+  const { condaExe, envDir, envPip, wheelPath } = input
+  const requirementsStandalone = win32Path('system/requirements/requirements_standalone.txt')
+  const requirementsParler = win32Path('system/requirements/requirements_parler.txt')
+  return [
+    {
+      args: ['install', '-y', '--prefix', envDir, 'pytorch==2.2.1', 'torchvision==0.17.1', 'torchaudio==2.2.1', 'pytorch-cuda=12.1', '-c', 'pytorch', '-c', 'nvidia'],
+      command: condaExe,
+      fatal: true,
+      id: 'install_pytorch',
+      timeoutMs: 60 * 60 * 1000,
+    },
+    {
+      args: ['install', '-y', '--prefix', envDir, 'pytorch::faiss-cpu'],
+      command: condaExe,
+      fatal: true,
+      id: 'install_faiss',
+      timeoutMs: 20 * 60 * 1000,
+    },
+    {
+      args: ['install', '-y', '--prefix', envDir, '-c', 'conda-forge', 'ffmpeg=*=*gpl*'],
+      command: condaExe,
+      fatal: true,
+      id: 'install_ffmpeg-gpl',
+      timeoutMs: 20 * 60 * 1000,
+    },
+    {
+      args: ['install', '-y', '--prefix', envDir, '-c', 'conda-forge', 'ffmpeg=*=h*_*', '--no-deps'],
+      command: condaExe,
+      fatal: true,
+      id: 'install_ffmpeg-h',
+      timeoutMs: 20 * 60 * 1000,
+    },
+    {
+      args: ['install', '-r', requirementsStandalone],
+      command: envPip,
+      fatal: true,
+      id: 'install_requirements',
+      timeoutMs: 45 * 60 * 1000,
+    },
+    {
+      args: ['install', '--upgrade', 'gradio==4.44.1'],
+      command: envPip,
+      fatal: true,
+      id: 'update_gradio',
+      timeoutMs: 20 * 60 * 1000,
+    },
+    {
+      args: ['install', DEEPSPEED_WHEEL],
+      cleanupPath: wheelPath,
+      command: envPip,
+      downloadUrl: DEEPSPEED_WHEEL_URL,
+      fatal: true,
+      id: 'install_deepspeed',
+      timeoutMs: 30 * 60 * 1000,
+    },
+    {
+      args: ['install', '-r', requirementsParler],
+      command: envPip,
+      fatal: true,
+      id: 'install_parler',
+      timeoutMs: 20 * 60 * 1000,
+    },
+    {
+      args: ['clean', '--all', '--force-pkgs-dirs', '-y'],
+      command: condaExe,
+      fatal: false,
+      id: 'clean_environment',
+      timeoutMs: 15 * 60 * 1000,
+    },
+  ]
+}
+
+/** One launcher file the pin echoes into the tree as its final act. */
+export interface AlltalkStartScript {
+  content: string
+  file: string
+}
+
+/**
+ * The four launchers, byte-for-byte what the pin's echo lines produce: same
+ * five-line prolog with the absolute `alltalk_environment` paths of THIS tree
+ * (`%cd%` at generation time in the script, `appDir` for us), then each
+ * file's own last line. The byte identity is the verification: a kept file is
+ * one that already matches; anything else is rewritten (stale absolute paths
+ * are the exact remnant a runtime move leaves behind).
+ */
+export function alltalkStartScripts(appDir: string): AlltalkStartScript[] {
+  const app = win32Path(appDir)
+  const condaRoot = `${app}\\alltalk_environment\\conda`
+  const envDir = `${app}\\alltalk_environment\\env`
+  const prolog = [
+    '@echo off',
+    `cd /D "${app}\\"`,
+    `set CONDA_ROOT_PREFIX=${condaRoot}`,
+    `set INSTALL_ENV_DIR=${envDir}`,
+    `call "${condaRoot}\\condabin\\conda.bat" activate "${envDir}"`,
+  ]
+  const script = (entry: string[]): string => `${[...prolog, ...entry].join('\r\n')}\r\n`
+  return [
+    { content: script([]), file: 'start_environment.bat' },
+    { content: script(['call python script.py']), file: 'start_alltalk.bat' },
+    { content: script(['call python finetune.py']), file: 'start_finetune.bat' },
+    { content: script(['call python diagnostics.py']), file: 'start_diagnostics.bat' },
+  ]
+}
+
+/**
  * The silent-install invocation as an argument array rather than a shell
  * string: the installer path is never re-parsed, the arguments never
  * concatenate into a command line, and NSIS still receives /D= last and
@@ -164,16 +338,18 @@ export function alltalkSourceUrl(commit: string = PINNED_ALLTALK_COMMIT): string
 }
 
 /**
- * Files the setup step needs on disk before it may spawn the installer.
+ * Files the setup step needs on disk before it may run the continuation.
  *
- * Read straight from the `-silent` branch of `atsetup.bat`: the script itself,
- * plus the two requirements files it feeds to `pip install -r` with a *relative*
- * path from its working directory. Spawning without them would not fail here -
- * it would fail twenty minutes in, mid-setup, with a pip error far away from the
- * real cause. Refusing first is what keeps the failure named correctly.
+ * The two requirements files the pinned `atsetup.bat` feeds to `pip install -r`
+ * with a *relative* path from its working directory - the exact same files the
+ * round-7 continuation installs from. Spawning without them would not fail
+ * here - it would fail twenty minutes in, mid-setup, with a pip error far away
+ * from the real cause. Refusing first is what keeps the failure named
+ * correctly. The pin's script itself stays in the tree but is never executed
+ * again (its conda-exists branch targets a RunScript label the file does not
+ * define - the upstream bug the round-7 brief item 2 points at).
  */
 export const SETUP_INPUTS = [
-  'atsetup.bat',
   'system/requirements/requirements_standalone.txt',
   'system/requirements/requirements_parler.txt',
 ] as const
@@ -217,6 +393,9 @@ export interface BootstrapDeps {
   mkdir: (path: string) => Promise<void>
   remove: (path: string) => Promise<void>
   rename: (from: string, to: string) => Promise<void>
+  /** Reads a text file; undefined answers "missing", like stat does. */
+  readFile: (path: string) => Promise<string | undefined>
+  writeFile: (path: string, content: string) => Promise<void>
   /** Health probe against the running server. */
   isHealthy: () => Promise<boolean>
   /** Starts the managed runtime and waits for health. */
@@ -228,8 +407,6 @@ export interface BootstrapDeps {
   writeState: (record: RuntimeInstallRecord) => Promise<void>
   readState: () => Promise<RuntimeInstallRecord | undefined>
   log: (entry: BootstrapLogEntry) => void
-  /** Overall ceiling for the setup step. */
-  setupTimeoutMs?: number
   /** Aborts the run when it returns true. Checked between steps. */
   isCancelled?: () => boolean
   /**
@@ -263,9 +440,6 @@ export interface BootstrapLogEntry {
   exitCode?: number | null
   elapsedMs?: number
 }
-
-/** How long the setup step may run before it is treated as hung. */
-export const DEFAULT_SETUP_TIMEOUT_MS = 45 * 60 * 1000
 
 export interface Bootstrapper {
   state: () => BootstrapState
@@ -304,8 +478,6 @@ export function categorizeFailure(error: unknown, stderr = ''): BootstrapFailure
 }
 
 export function createVoiceRuntimeBootstrapper(deps: BootstrapDeps): Bootstrapper {
-  const setupTimeoutMs = deps.setupTimeoutMs ?? DEFAULT_SETUP_TIMEOUT_MS
-
   let state: BootstrapState = { phase: 'not-installed', steps: initialSteps() }
   /** The single in-flight run. Shared so two clicks cannot double-install. */
   let running: Promise<BootstrapState> | undefined
@@ -468,8 +640,8 @@ export function createVoiceRuntimeBootstrapper(deps: BootstrapDeps): Bootstrappe
 
     const cwd = appDir()
 
-    // Already set up? The marker is the launcher atsetup.bat writes as its final
-    // act, so its presence means a previous run completed this step.
+    // Already set up? The marker is the launcher the continuation writes as
+    // its final act, so its presence means a previous run completed this step.
     if (await deps.exists(`${cwd}/${START_SCRIPT}`)) {
       deps.log({ event: 'skipped-present', step: 'run-setup' })
       setStep('run-setup', { detail: 'already set up', elapsedMs: Date.now() - started, status: 'skipped' })
@@ -477,10 +649,9 @@ export function createVoiceRuntimeBootstrapper(deps: BootstrapDeps): Bootstrappe
     }
 
     // Refuse to spawn into a broken tree (item E of the round-2 brief). The
-    // installer assumes it runs from the AllTalk root and reads these inputs by
-    // relative path; if the extraction left something out, failing *here* names
-    // the missing file instead of surfacing as a mid-setup error twenty minutes
-    // and one Miniconda download later.
+    // continuation reads these inputs by relative path from its cwd; if the
+    // extraction left something out, failing *here* names the missing file
+    // instead of surfacing as a pip error twenty minutes in.
     const missingInputs: string[] = []
     for (const input of SETUP_INPUTS) {
       if (!await deps.exists(`${cwd}/${input}`))
@@ -489,123 +660,65 @@ export function createVoiceRuntimeBootstrapper(deps: BootstrapDeps): Bootstrappe
     if (missingInputs.length > 0) {
       deps.log({ detail: `missing: ${missingInputs.join(', ')}`, event: 'layout-invalid', step: 'run-setup' })
       throw Object.assign(
-        new Error(`setup inputs missing, refusing to run the installer: ${missingInputs.join(', ')}`),
+        new Error(`setup inputs missing, refusing to run the continuation: ${missingInputs.join(', ')}`),
         { category: 'setup' as const },
       )
     }
 
-    const startScript = `${cwd}/${START_SCRIPT}`
     const installer = `${cwd}/${MINICONDA_INSTALLER}`
+    const installerDir = `${cwd}/alltalk_environment`
     const condaPrefix = `${cwd}/${MINICONDA_PREFIX}`
     const condaExe = `${cwd}/${MINICONDA_EXE}`
+    const envDir = `${cwd}/${MINICONDA_ENV}`
+    const envPython = `${cwd}/${MINICONDA_ENV_PYTHON}`
 
     /** Generic failure: the UI shows this sentence, so no technical nouns. */
     const opaqueFailure = (): Error =>
       Object.assign(new Error('The voice environment could not be prepared; the technical reason is in the log.'), { category: 'setup' as const })
 
-    // Logged before spawning so a failure report carries the exact working
-    // directory and arguments that ran rather than a reconstruction (item D).
-    // Paths belong in this log, never in what the UI shows.
-    const runAtsetup = async (attempt: 'initial' | 'resume'): Promise<ExecResult> => {
+    // 1. The Miniconda installer itself. The pinned atsetup.bat curls it
+    // unconditionally (round-3 audit), so an absent file means this machine
+    // never got one - fetch it once, from the exact pinned URL, and prove the
+    // bytes against the official record before anything executes them.
+    if (!await deps.exists(installer)) {
+      deps.log({ detail: `url=${MINICONDA_INSTALLER_URL} dest=${installer}`, event: 'miniconda-installer-download-start', step: 'run-setup' })
+      await deps.mkdir(installerDir)
+      const fetched = await deps.download(MINICONDA_INSTALLER_URL, installer)
+      const integrityOk = fetched.bytes === MINICONDA_INSTALLER_BYTES && fetched.sha256 === MINICONDA_INSTALLER_SHA256
       deps.log({
-        detail: `cwd=${cwd} exe=${process.env.ComSpec ?? 'cmd.exe'} args=atsetup.bat -silent attempt=${attempt}`,
-        event: 'start',
+        detail: `bytes=${fetched.bytes} sha256=${fetched.sha256} expected-bytes=${MINICONDA_INSTALLER_BYTES} expected-sha256=${MINICONDA_INSTALLER_SHA256} integrity=${integrityOk}`,
+        event: 'miniconda-installer-download-finished',
         step: 'run-setup',
       })
-
-      // `-silent` bypasses the interactive menu entirely (audit, atsetup.bat:46).
-      // `cmd /d /s /c <script>` with the directory as cwd: the path is never part
-      // of a command string, so it cannot be re-parsed by a shell.
-      const result = await deps.exec(
-        process.env.ComSpec ?? 'cmd.exe',
-        ['/d', '/s', '/c', 'atsetup.bat', '-silent'],
-        { cwd, timeoutMs: setupTimeoutMs },
-      )
-
-      deps.log({
-        detail: outputTail(result),
-        elapsedMs: Date.now() - started,
-        event: 'finished',
-        exitCode: result.code,
-        step: 'run-setup',
-      })
-      return result
-    }
-
-    // The facts a diagnosis of the Miniconda stage needs (item B): the
-    // installer the script downloaded, its size, the prefix its /D= targets,
-    // and the binary whose absence made the script give up. Logged, never shown.
-    const minicondaFacts = async (event: string): Promise<{ condaReady: boolean, installerBytes?: number, installerExists: boolean }> => {
-      const [installerExists, prefixExists, condaExeExists, installerStat] = await Promise.all([
-        deps.exists(installer),
-        deps.exists(condaPrefix),
-        deps.exists(condaExe),
-        deps.stat(installer),
-      ])
-      deps.log({
-        detail: `cwd=${cwd} installer=${installer} installer-exists=${installerExists} installer-bytes=${installerStat ? installerStat.size : 'unknown'} conda-prefix=${condaPrefix} conda-prefix-exists=${prefixExists} conda-exe=${condaExe} conda-exe-exists=${condaExeExists}`,
-        event,
-        step: 'run-setup',
-      })
-      return { condaReady: prefixExists && condaExeExists, installerBytes: installerStat?.size, installerExists }
-    }
-
-    const entry = await minicondaFacts('miniconda-facts')
-
-    // A fresh run only has work the bootstrapper cannot do itself when the
-    // installer still needs downloading: the script curls it unconditionally,
-    // so re-running it with the file already on disk would just fetch 81 MB
-    // again to immediately overwrite them (round-4 brief, item J). With the
-    // installer present - or Miniconda already verified - go straight to the
-    // repair/resume logic below, which reuses exactly what is on disk.
-    let result: ExecResult | undefined
-    if (!entry.condaReady && !entry.installerExists)
-      result = await runAtsetup('initial')
-
-    // Exit code alone is a liar here. atsetup.bat abandons a failed install by
-    // jumping to its end label, and the echoes there reset ERRORLEVEL, so a
-    // half-built tree still returns 0 - the QA log of round 2 shows exactly
-    // that: "path not found" from the script, exit 0, and only verify-install
-    // noticing. The honest success signal of this step is the artefact the
-    // script only writes as its final act: the generated launcher.
-    if (result?.code === 0 && await deps.exists(startScript)) {
-      setStep('run-setup', { elapsedMs: Date.now() - started, status: 'done' })
-      return
-    }
-
-    if (result?.code === 0) {
-      deps.log({
-        detail: `the installer exited 0 but never wrote ${START_SCRIPT}; its output above names where it gave up`,
-        event: 'incomplete',
-        step: 'run-setup',
-      })
-    }
-
-    // Recovery. The facts are re-read because the attempt above is what
-    // usually downloads the installer.
-    const recovery = await minicondaFacts('miniconda-recovery-facts')
-
-    if (!recovery.installerExists && !recovery.condaReady) {
-      // Nothing to repair with: the download itself is what failed. Preserve
-      // the diagnostics this step reported before the repair layer existed.
-      deps.log({ detail: `no ${MINICONDA_INSTALLER} to run directly`, event: 'miniconda-repair-skipped', step: 'run-setup' })
-      if (result && result.code !== 0) {
-        const error = new Error(`atsetup.bat exited with code ${result.code}`)
-        throw Object.assign(error, { category: categorizeFailure(error, result.stderr) })
+      if (!integrityOk) {
+        await deps.remove(installer).catch(() => undefined)
+        throw Object.assign(
+          new Error('the voice installer download failed its integrity check'),
+          { category: 'download' as const },
+        )
       }
-      throw Object.assign(
-        new Error(`atsetup.bat reported success but did not finish the setup (${START_SCRIPT} was not created)`),
-        { category: 'setup' as const },
-      )
+    }
+    else {
+      const presentStat = await deps.stat(installer)
+      deps.log({ detail: `installer=${installer} installer-bytes=${presentStat ? presentStat.size : 'unknown'}`, event: 'miniconda-installer-present', step: 'run-setup' })
     }
 
-    if (!recovery.condaReady) {
-      // The known failure of the pinned script: its `start /wait` line runs
-      // the NSIS installer and never checks the outcome. Run the very same
-      // installer directly instead, with the very same arguments, and collect
-      // what the script never could: the real process exit code (items D, E).
+    // 2. A working Miniconda. Installed by us directly since round 4 (the
+    // upstream script runs the same installer through `start /wait` and never
+    // checks its outcome), then validated the way the pin itself decides
+    // "conda exists": an actual `_conda.exe --version`, so a half-deleted or
+    // AV-mangled install is caught here rather than twenty commands later.
+    const [prefixExists, condaExeExists] = await Promise.all([deps.exists(condaPrefix), deps.exists(condaExe)])
+    deps.log({
+      detail: `cwd=${cwd} conda-prefix=${condaPrefix} conda-prefix-exists=${prefixExists} conda-exe=${condaExe} conda-exe-exists=${condaExeExists}`,
+      event: 'miniconda-facts',
+      step: 'run-setup',
+    })
+
+    if (!prefixExists || !condaExeExists) {
+      const installerStat = await deps.stat(installer)
       deps.log({
-        detail: `cwd=${cwd} exe=${win32Path(installer)} installer-bytes=${recovery.installerBytes ?? 'unknown'} args=${minicondaInstallerArgs(win32Path(condaPrefix)).join(' ')}`,
+        detail: `cwd=${cwd} exe=${win32Path(installer)} installer-bytes=${installerStat ? installerStat.size : 'unknown'} args=${minicondaInstallerArgs(win32Path(condaPrefix)).join(' ')}`,
         event: 'miniconda-install-start',
         step: 'run-setup',
       })
@@ -621,7 +734,7 @@ export function createVoiceRuntimeBootstrapper(deps: BootstrapDeps): Bootstrappe
         step: 'run-setup',
       })
 
-      // Item G: exit code AND both artefacts, or the stage did not pass.
+      // Exit code AND both artefacts, or the stage did not pass (item G).
       const prefixOk = await deps.exists(condaPrefix)
       const exeOk = await deps.exists(condaExe)
       deps.log({
@@ -634,25 +747,83 @@ export function createVoiceRuntimeBootstrapper(deps: BootstrapDeps): Bootstrappe
       deps.log({ event: 'miniconda-install-verified', step: 'run-setup' })
     }
 
-    // Miniconda is functional now. Item E: continue through the supported
-    // upstream path rather than reimplementing the rest of the setup. The
-    // audit of the pin says this cannot resume - the script's conda-exists
-    // branch jumps to a RunScript label the file does not define - but the
-    // attempt is deterministic, cheap, downloads nothing, and the artefact
-    // check below is what decides either way; if a future pin resumes
-    // properly, this simply starts passing.
-    const resume = await runAtsetup('resume')
-    if (await deps.exists(startScript)) {
-      setStep('run-setup', { elapsedMs: Date.now() - started, status: 'done' })
-      return
+    const versionCheck = await deps.exec(win32Path(condaExe), ['--version'], { cwd, timeoutMs: CONDA_VERSION_CHECK_TIMEOUT_MS })
+    deps.log({ detail: outputTail(versionCheck), event: 'miniconda-version-check', exitCode: versionCheck.code, step: 'run-setup' })
+    if (versionCheck.code !== 0) {
+      deps.log({ detail: 'conda present but does not answer --version; refusing to build on a broken base', event: 'miniconda-broken', step: 'run-setup' })
+      throw opaqueFailure()
     }
 
-    deps.log({
-      detail: `resume exited ${resume.code} without writing ${START_SCRIPT}; the pinned -silent cannot resume (its conda-exists branch targets a RunScript label the script does not define, audit of pin ${PINNED_ALLTALK_COMMIT})`,
-      event: 'resume-incomplete',
-      step: 'run-setup',
-    })
-    throw opaqueFailure()
+    // 3. The idempotent continuation (round-7 brief, items 2/5/7): the exact
+    // commands the pinned atsetup.bat runs after Miniconda - env, packages,
+    // launchers - each verified on its own artefacts. Never the script itself
+    // again: its conda-exists branch targets a RunScript label the file does
+    // not define (upstream bug, present in the pin and in today's master).
+    if (!await deps.exists(envPython)) {
+      deps.log({ detail: `prefix=${envDir} python=${ALLTALK_ENV_PYTHON_VERSION}`, event: 'conda-env-create-start', step: 'run-setup' })
+      const created = await deps.exec(
+        win32Path(condaExe),
+        ['create', '--no-shortcuts', '-y', '-k', '--prefix', win32Path(envDir), `python=${ALLTALK_ENV_PYTHON_VERSION}`],
+        { cwd, timeoutMs: CONDA_ENV_CREATE_TIMEOUT_MS },
+      )
+      const envOk = await deps.exists(envPython)
+      deps.log({
+        detail: `exit=${created.code} env-python-exists=${envOk} ${outputTail(created)}`,
+        event: 'conda-env-create-finished',
+        exitCode: created.code,
+        step: 'run-setup',
+      })
+      if (created.code !== 0 || !envOk)
+        throw opaqueFailure()
+    }
+    else {
+      deps.log({ event: 'conda-env-present', step: 'run-setup' })
+    }
+
+    for (const command of alltalkSetupCommands({
+      condaExe: win32Path(`${cwd}/${MINICONDA_CONDA_EXE}`),
+      envDir: win32Path(envDir),
+      envPip: win32Path(`${cwd}/${MINICONDA_ENV_PIP}`),
+      wheelPath: win32Path(`${cwd}/${DEEPSPEED_WHEEL}`),
+    })) {
+      if (command.downloadUrl && command.cleanupPath && !await deps.exists(command.cleanupPath)) {
+        deps.log({ detail: `url=${command.downloadUrl} dest=${command.cleanupPath}`, event: 'setup-component-download-start', step: 'run-setup' })
+        const wheel = await deps.download(command.downloadUrl, command.cleanupPath)
+        deps.log({ detail: `id=${command.id} bytes=${wheel.bytes} sha256=${wheel.sha256}`, event: 'setup-component-download-finished', step: 'run-setup' })
+      }
+      setStep('run-setup', { detail: `installing voice components (${command.id})` })
+      deps.log({ detail: `id=${command.id} exe=${command.command} args=${command.args.join(' ')}`, event: 'setup-command-start', step: 'run-setup' })
+      const result = await deps.exec(command.command, command.args, { cwd, timeoutMs: command.timeoutMs })
+      deps.log({ detail: `id=${command.id} ${outputTail(result)}`, event: 'setup-command-finished', exitCode: result.code, step: 'run-setup' })
+      if (result.code !== 0) {
+        if (!command.fatal) {
+          deps.log({ detail: `id=${command.id} tolerated (the pin runs this step without an errorlevel guard)`, event: 'setup-command-nonfatal-failure', step: 'run-setup' })
+          continue
+        }
+        deps.log({ detail: `id=${command.id}`, event: 'setup-command-failed', step: 'run-setup' })
+        throw opaqueFailure()
+      }
+      if (command.cleanupPath)
+        await deps.remove(command.cleanupPath).catch(() => undefined)
+    }
+
+    // 4. The launchers (item 7: generate/verify). Byte-exact comparison is the
+    // verification: identical files are kept, anything else - missing, edited,
+    // or carryover from before the runtime moved out of Roaming - is rewritten
+    // with this tree's current absolute paths.
+    for (const script of alltalkStartScripts(cwd)) {
+      const scriptPath = `${cwd}/${script.file}`
+      const current = await deps.readFile(scriptPath)
+      if (current === script.content) {
+        deps.log({ detail: `file=${script.file}`, event: 'start-script-kept', step: 'run-setup' })
+        continue
+      }
+      await deps.writeFile(scriptPath, script.content)
+      deps.log({ detail: `file=${script.file} reason=${current === undefined ? 'missing' : 'stale-or-tampered'}`, event: 'start-script-written', step: 'run-setup' })
+    }
+
+    deps.log({ elapsedMs: Date.now() - started, event: 'finished', step: 'run-setup' })
+    setStep('run-setup', { elapsedMs: Date.now() - started, status: 'done' })
   }
 
   async function stepVerifyInstall(): Promise<void> {

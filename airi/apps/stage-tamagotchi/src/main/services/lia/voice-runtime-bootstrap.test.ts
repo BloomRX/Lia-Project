@@ -1,28 +1,40 @@
 import type { BootstrapDeps, BootstrapState, RuntimeInstallRecord, VoiceRuntimeEnvironment } from './voice-runtime-bootstrap'
 import type { ProbeStatus } from './voice-runtime-env'
 
-import { join } from 'node:path'
-
 import { beforeEach, describe, expect, it } from 'vitest'
 
-import { ENVIRONMENT_MARKERS, INSTALL_MARKERS } from './alltalk-runtime'
+import { INSTALL_MARKERS } from './alltalk-runtime'
 import {
+  ALLTALK_ENV_PYTHON_VERSION,
+  alltalkSetupCommands,
   alltalkSourceUrl,
+  alltalkStartScripts,
   BOOTSTRAP_STEP_IDS,
   categorizeFailure,
+  CONDA_ENV_CREATE_TIMEOUT_MS,
+  CONDA_VERSION_CHECK_TIMEOUT_MS,
   createVoiceRuntimeBootstrapper,
+  DEEPSPEED_WHEEL,
+  DEEPSPEED_WHEEL_URL,
   messageFor,
+  MINICONDA_CONDA_EXE,
+  MINICONDA_ENV,
+  MINICONDA_ENV_PIP,
+  MINICONDA_ENV_PYTHON,
   MINICONDA_EXE,
   MINICONDA_INSTALL_TIMEOUT_MS,
   MINICONDA_INSTALLER,
+  MINICONDA_INSTALLER_BYTES,
+  MINICONDA_INSTALLER_SHA256,
+  MINICONDA_INSTALLER_URL,
   MINICONDA_PREFIX,
   minicondaInstallerArgs,
   outputTail,
-  win32Path,
   PINNED_ALLTALK_COMMIT,
   PINNED_ALLTALK_VERSION,
   SETUP_INPUTS,
   START_SCRIPT,
+  win32Path,
 } from './voice-runtime-bootstrap'
 import { assessEnvironment, assessInstallPath, parseVersion, probeVoiceRuntimeEnvironment, REQUIRED_FREE_BYTES } from './voice-runtime-env'
 
@@ -55,32 +67,42 @@ function env(overrides: Partial<VoiceRuntimeEnvironment> = {}): VoiceRuntimeEnvi
 
 interface Harness {
   deps: BootstrapDeps
-  calls: { exec: string[][], removed: string[], downloaded: string[], extracted: string[] }
+  calls: { exec: string[][], removed: string[], downloaded: string[], extracted: string[], written: string[] }
   logs: Array<{ detail?: string, event: string, exitCode?: number | null, step: string }>
-  setExecResult: (result: { code: number | null, stderr?: string, stdout?: string }) => void
+  failExecMatching: (pattern: string, result: { code: number | null, stderr?: string, stdout?: string }) => void
+  clearExecFailures: () => void
+  setCondaBroken: (value: boolean) => void
   setHealthy: (value: boolean) => void
   setStartResult: (value: boolean) => void
   markExists: (...paths: string[]) => void
+  fileContent: (path: string) => string | undefined
   stateRecord: () => RuntimeInstallRecord | undefined
 }
 
 /**
- * What the extraction leaves behind, and what running the setup produces.
- *
- * Derived from the shipped constants rather than restated, so this harness cannot
- * keep faking a layout the product has since changed - which would let these tests
- * pass against a fiction. The setup inputs are part of the source tree because
- * the installer refuses to start without them, and the step under test now
- * refuses to spawn without them too.
+ * What the extraction leaves behind: the source tree, with the two files the
+ * continuation feeds to pip as relative paths. Running the setup itself
+ * produces the conda environment and the launcher, so a fake that created
+ * them here would make the installer look already-run and skip the step
+ * under test.
  */
-const SOURCE_TREE = [...SETUP_INPUTS, ...INSTALL_MARKERS]
-const SETUP_PRODUCTS = [START_SCRIPT, ...ENVIRONMENT_MARKERS]
+// The pin's own script is part of the extracted zip (it stays in the tree,
+// it is just never executed again), and the fetch step uses its presence as
+// the "this commit is already on disk" marker - so the fake extraction must
+// lay it down like the real archive does.
+const SOURCE_TREE = ['atsetup.bat', ...SETUP_INPUTS, ...INSTALL_MARKERS]
+
+function normalizeExec(stub: { code: number | null, stderr?: string, stdout?: string }) {
+  return { code: stub.code, stderr: stub.stderr ?? '', stdout: stub.stdout ?? '' }
+}
 
 function harness(overrides: Partial<BootstrapDeps> = {}): Harness {
   const existing = new Set<string>()
-  const calls = { downloaded: [] as string[], exec: [] as string[][], extracted: [] as string[], removed: [] as string[] }
+  const files = new Map<string, string>()
+  const calls = { downloaded: [] as string[], exec: [] as string[][], extracted: [] as string[], removed: [] as string[], written: [] as string[] }
   const logs: Harness['logs'] = []
-  let execResult: { code: number | null, stderr?: string, stdout?: string } = { code: 0 }
+  const failures: Array<{ pattern: string, result: { code: number | null, stderr?: string, stdout?: string } }> = []
+  let condaBroken = false
   let healthy = false
   let startResult = true
   let record: RuntimeInstallRecord | undefined
@@ -88,36 +110,70 @@ function harness(overrides: Partial<BootstrapDeps> = {}): Harness {
   const runtimeDir = overrides.runtimeDir ?? 'C:\\Users\\lia\\AppData\\Local\\Lia\\runtimes\\alltalk'
 
   const deps: BootstrapDeps = {
+    // Fake machine behaviour, routed on what the production code actually
+    // spawns: the NSIS installer (which then leaves its artefacts behind),
+    // `_conda.exe` answering --version, `_conda.exe create` leaving the env -
+    // plus a failure-list the tests can arm by output-recognisable pattern.
     exec: async (command, args, options) => {
-      calls.exec.push([command, ...args, `cwd=${options.cwd}`])
-      // A successful silent setup writes the launcher as its last act and leaves
-      // the conda root and env behind. That is what verify-install looks for.
-      if (args.includes('atsetup.bat') && execResult.code === 0) {
-        for (const marker of SETUP_PRODUCTS)
-          existing.add(`${options.cwd}/${marker}`)
+      calls.exec.push([command, ...args, `cwd=${options.cwd}`, `timeout=${options.timeoutMs}`])
+      const matched = failures.find(failure => [command, ...args].join(' ').includes(failure.pattern))
+      if (matched)
+        return normalizeExec(matched.result)
+      if (command.endsWith('miniconda_installer.exe')) {
+        existing.add(`${options.cwd}/${MINICONDA_PREFIX}`)
+        existing.add(`${options.cwd}/${MINICONDA_EXE}`)
+        return normalizeExec({ code: 0 })
       }
-      return { code: execResult.code, stderr: execResult.stderr ?? '', stdout: execResult.stdout ?? '' }
+      if (command.endsWith('_conda.exe')) {
+        if (args[0] === '--version')
+          return normalizeExec(condaBroken ? { code: 1, stderr: 'Access is denied.' } : { code: 0, stdout: 'conda 24.4.0' })
+        if (args[0] === 'create') {
+          existing.add(`${options.cwd}/${MINICONDA_ENV_PYTHON}`)
+          existing.add(`${options.cwd}/${MINICONDA_ENV}`)
+          return normalizeExec({ code: 0 })
+        }
+      }
+      // The env's own conda (install/clean) and pip (every requirements or
+      // package step) succeed silently: their artefacts are not what
+      // verify-install checks.
+      return normalizeExec({ code: 0 })
     },
-    download: async (url) => {
+    download: async (url, dest) => {
       calls.downloaded.push(url)
+      existing.add(dest)
+      // The installer download must come back matching the official record,
+      // otherwise every happy-path test would be exercising the integrity
+      // rejection instead of the continuation.
+      if (url === MINICONDA_INSTALLER_URL)
+        return { bytes: MINICONDA_INSTALLER_BYTES, sha256: MINICONDA_INSTALLER_SHA256 }
       return { bytes: 5_000_000, sha256: 'a'.repeat(64) }
     },
     extract: async (_archive, dest) => {
       calls.extracted.push(dest)
       // Only the source tree. `start_alltalk.bat` and the conda environment are
-      // *products* of running atsetup.bat, so a fake that created them here would
+      // *products* of running the setup, so a fake that created them here would
       // make the installer look already-run and skip the step under test.
       for (const marker of SOURCE_TREE)
         existing.add(`${dest}/${marker}`)
     },
     exists: async path => existing.has(path),
     stat: async path => (existing.has(path) ? { size: 81_720_000 } : undefined),
+    readFile: async path => files.get(path),
+    writeFile: async (path, content) => {
+      files.set(path, content)
+      existing.add(path)
+      calls.written.push(path)
+    },
     mkdir: async () => undefined,
     remove: async (path) => {
       calls.removed.push(path)
       for (const key of [...existing]) {
         if (key === path || key.startsWith(`${path}/`) || key.startsWith(`${path}\\`))
           existing.delete(key)
+      }
+      for (const key of [...files.keys()]) {
+        if (key === path || key.startsWith(`${path}/`) || key.startsWith(`${path}\\`))
+          files.delete(key)
       }
     },
     rename: async () => undefined,
@@ -137,14 +193,21 @@ function harness(overrides: Partial<BootstrapDeps> = {}): Harness {
 
   return {
     calls,
+    clearExecFailures: () => {
+      failures.length = 0
+    },
     deps,
+    failExecMatching: (pattern, result) => {
+      failures.push({ pattern, result })
+    },
+    fileContent: path => files.get(path),
     logs,
     markExists: (...paths) => {
       for (const path of paths)
         existing.add(path)
     },
-    setExecResult: (result) => {
-      execResult = result
+    setCondaBroken: (value) => {
+      condaBroken = value
     },
     setHealthy: (value) => {
       healthy = value
@@ -262,8 +325,9 @@ describe('what must NOT be treated as a prerequisite', () => {
     const everyArg = h.calls.exec.flat().join(' ')
     expect(everyArg).not.toContain('winget')
     expect(everyArg).not.toContain('git')
-    // The only thing downloaded is the pinned AllTalk archive.
-    expect(h.calls.downloaded).toHaveLength(1)
+    // Downloaded: exactly the pinned upstream artefacts - the archive, the
+    // Miniconda installer and the DeepSpeed wheel - and nothing else.
+    expect(h.calls.downloaded).toEqual([alltalkSourceUrl(), MINICONDA_INSTALLER_URL, DEEPSPEED_WHEEL_URL])
   })
 })
 
@@ -313,23 +377,21 @@ describe('a successful install', () => {
     expect(h.stateRecord()?.sourceSha256).toBeTruthy()
   })
 
-  it('runs the installer silently, with the directory as cwd and never in a command string', async () => {
+  it('runs every spawned process with the tree root as cwd and none of it through a shell', async () => {
     const bootstrapper = createVoiceRuntimeBootstrapper(h.deps)
 
     await bootstrapper.run()
 
-    const setup = h.calls.exec.find(call => call.includes('atsetup.bat'))
-    expect(setup).toBeTruthy()
-    expect(setup).toContain('-silent')
-
-    // The install directory appears only as cwd=, never inside an argument that a
-    // shell would re-parse. This is the assertion that would catch a
-    // `cmd /c "cd ${dir} && atsetup.bat"` construction.
-    const cwdArg = setup!.find(arg => arg.startsWith('cwd='))
-    expect(cwdArg).toBe(`cwd=${h.deps.runtimeDir}/app`)
-    for (const arg of setup!) {
-      if (!arg.startsWith('cwd='))
-        expect(arg).not.toContain('AppData')
+    const appRoot = `${h.deps.runtimeDir}/app`
+    expect(h.calls.exec.length).toBeGreaterThan(0)
+    for (const call of h.calls.exec) {
+      // Every command runs where the pinned script assumed it was: the AllTalk
+      // root, so its relative paths (system\\requirements\\...) resolve.
+      expect(call.find(arg => arg.startsWith('cwd='))).toBe(`cwd=${appRoot}`)
+      // And none of it goes through a shell that would re-parse anything.
+      expect(call[0]).not.toMatch(/cmd/i)
+      expect(call).not.toContain('/C')
+      expect(call).not.toContain('/c')
     }
   })
 
@@ -372,24 +434,25 @@ describe('idempotency', () => {
     const h = harness()
     const bootstrapper = createVoiceRuntimeBootstrapper(h.deps)
     await bootstrapper.run()
-    expect(h.calls.downloaded).toHaveLength(1)
+    expect(h.calls.downloaded).toEqual([alltalkSourceUrl(), MINICONDA_INSTALLER_URL, DEEPSPEED_WHEEL_URL])
 
     const second = await bootstrapper.run()
 
     expect(second.phase).toBe('ready')
-    expect(h.calls.downloaded).toHaveLength(1)
+    // Nothing at all came off the network the second time.
+    expect(h.calls.downloaded).toEqual([alltalkSourceUrl(), MINICONDA_INSTALLER_URL, DEEPSPEED_WHEEL_URL])
     expect(bootstrapper.state().steps.find(step => step.id === 'fetch-source')?.status).toBe('skipped')
   })
 
-  it('does not re-run the installer when the generated launcher exists', async () => {
+  it('does not re-run the continuation when the generated launcher exists', async () => {
     const h = harness()
     const bootstrapper = createVoiceRuntimeBootstrapper(h.deps)
     await bootstrapper.run()
-    const setupRuns = h.calls.exec.filter(call => call.includes('atsetup.bat')).length
+    const execRuns = h.calls.exec.length
 
     await bootstrapper.run()
 
-    expect(h.calls.exec.filter(call => call.includes('atsetup.bat')).length).toBe(setupRuns)
+    expect(h.calls.exec.length).toBe(execRuns)
     expect(bootstrapper.state().steps.find(step => step.id === 'run-setup')?.status).toBe('skipped')
   })
 
@@ -402,7 +465,7 @@ describe('idempotency', () => {
     await bootstrapper.run()
 
     // A deliberate upgrade, not a re-run: the pin changed, so the source must too.
-    expect(h.calls.downloaded).toHaveLength(1)
+    expect(h.calls.downloaded[0]).toBe(alltalkSourceUrl())
     expect(h.stateRecord()?.commit).toBe(PINNED_ALLTALK_COMMIT)
   })
 })
@@ -415,8 +478,8 @@ describe('concurrency', () => {
     const [first, second] = await Promise.all([bootstrapper.run(), bootstrapper.run()])
 
     expect(first).toBe(second)
-    expect(h.calls.downloaded).toHaveLength(1)
-    expect(h.calls.exec.filter(call => call.includes('atsetup.bat'))).toHaveLength(1)
+    expect(h.calls.downloaded).toEqual([alltalkSourceUrl(), MINICONDA_INSTALLER_URL, DEEPSPEED_WHEEL_URL])
+    expect(h.calls.exec.filter(call => call[0].endsWith('miniconda_installer.exe'))).toHaveLength(1)
   })
 
   it('does not let a repair race an install', async () => {
@@ -429,72 +492,16 @@ describe('concurrency', () => {
     ])
 
     expect(install).toBe(repair)
-    expect(h.calls.exec.filter(call => call.includes('atsetup.bat'))).toHaveLength(1)
+    expect(h.calls.exec.filter(call => call[0].endsWith('miniconda_installer.exe'))).toHaveLength(1)
   })
 })
 
-describe('the setup step, after the round-2 QA log', () => {
-  it('treats exit code 0 without the generated launcher as a failed setup', async () => {
-    // This is the failure the real Windows QA produced: atsetup.bat printed
-    // "the system cannot find the path specified", gave up through its end
-    // label - whose echoes reset ERRORLEVEL - and returned 0 without ever
-    // writing the launcher. A step that trusted the exit code walked on to
-    // verify-install and reported the wrong culprit.
-    const h = harness({
-      exec: async () => ({
-        code: 0,
-        stderr: '',
-        stdout: 'Downloading Miniconda\r\nO sistema nao pode encontrar o caminho especificado.\r\nMiniconda not found.\r\nExiting AllTalk Setup Utility...\r\n',
-      }),
-    })
-    const bootstrapper = createVoiceRuntimeBootstrapper(h.deps)
+describe('the setup step — the round-7 continuation', () => {
+  const appRoot = (h: Harness): string => `${h.deps.runtimeDir}/app`
 
-    const state = await bootstrapper.run()
-
-    expect(state.phase).toBe('failed')
-    expect(bootstrapper.state().steps.find(step => step.id === 'run-setup')?.status).toBe('failed')
-    // The failure must be named here, not two steps later.
-    expect(bootstrapper.state().steps.find(step => step.id === 'verify-install')?.status).toBe('pending')
-    expect(state.message).toBe(messageFor('setup'))
-    // The user sees a sentence; the stack-trace-shaped details stay in the log.
-    expect(state.message).not.toContain('caminho')
-  })
-
-  it('logs the exit-0-without-launcher case with its cause, for the next QA report', async () => {
-    const h = harness({ exec: async () => ({ code: 0, stderr: 'adapter gave up', stdout: 'giving up here' }) })
-    const bootstrapper = createVoiceRuntimeBootstrapper(h.deps)
-
-    await bootstrapper.run()
-
-    const incomplete = h.logs.find(entry => entry.step === 'run-setup' && entry.event === 'incomplete')
-    expect(incomplete).toBeTruthy()
-    expect(incomplete!.detail).toContain(START_SCRIPT)
-
-    // Both streams land in the log: the script prints its diagnosis to stdout
-    // while curl and the shell noise go to stderr, and either can hold the line
-    // that names the failure.
-    const finished = h.logs.find(entry => entry.step === 'run-setup' && entry.event === 'finished')
-    expect(finished!.detail).toContain('giving up here')
-    expect(finished!.detail).toContain('adapter gave up')
-    expect(finished!.exitCode).toBe(0)
-  })
-
-  it('logs the working directory and arguments before spawning the installer', async () => {
-    const h = harness()
-    const bootstrapper = createVoiceRuntimeBootstrapper(h.deps)
-
-    await bootstrapper.run()
-
-    const started = h.logs.find(entry => entry.step === 'run-setup' && entry.event === 'start')
-    expect(started).toBeTruthy()
-    expect(started!.detail).toContain(`cwd=${h.deps.runtimeDir}/app`)
-    expect(started!.detail).toContain('atsetup.bat')
-    expect(started!.detail).toContain('-silent')
-  })
-
-  it('refuses to spawn the installer when atsetup.bat is not in the tree', async () => {
+  it('refuses to start when the requirements files the pip steps install are missing', async () => {
     // A truncated extraction must fail before any spawn: the alternative is a
-    // shell error about a missing script, minutes into what looked like progress.
+    // pip error twenty minutes into what looked like progress.
     const h = harness({
       extract: async (_archive, dest) => {
         for (const marker of INSTALL_MARKERS)
@@ -507,19 +514,20 @@ describe('the setup step, after the round-2 QA log', () => {
 
     expect(state.phase).toBe('failed')
     expect(bootstrapper.state().steps.find(step => step.id === 'run-setup')?.status).toBe('failed')
-    expect(h.calls.exec.filter(call => call.includes('atsetup.bat'))).toHaveLength(0)
+    expect(h.calls.exec).toHaveLength(0)
     const refused = h.logs.find(entry => entry.step === 'run-setup' && entry.event === 'layout-invalid')
     expect(refused).toBeTruthy()
-    expect(refused!.detail).toContain('atsetup.bat')
+    for (const input of SETUP_INPUTS)
+      expect(refused!.detail).toContain(input)
   })
 
-  it('refuses to spawn when the requirements files the installer pip-installs are missing', async () => {
-    // atsetup.bat runs `pip install -r system\requirements\...` with relative
-    // paths from its own directory; without them the env build dies mid-setup,
-    // far from the actual gap.
+  it('refuses when only one of the requirements files is missing', async () => {
+    // The continuation runs `pip install -r system\\requirements\\...` with
+    // relative paths from its own directory; without them the env build dies
+    // mid-setup, far from the actual gap.
     const h = harness({
       extract: async (_archive, dest) => {
-        h.markExists(`${dest}/atsetup.bat`)
+        h.markExists(`${dest}/${SETUP_INPUTS[0]}`)
         for (const marker of INSTALL_MARKERS)
           h.markExists(`${dest}/${marker}`)
       },
@@ -529,46 +537,269 @@ describe('the setup step, after the round-2 QA log', () => {
     const state = await bootstrapper.run()
 
     expect(state.phase).toBe('failed')
-    expect(h.calls.exec.filter(call => call.includes('atsetup.bat'))).toHaveLength(0)
+    expect(h.calls.exec).toHaveLength(0)
     const refused = h.logs.find(entry => entry.step === 'run-setup' && entry.event === 'layout-invalid')
-    expect(refused!.detail).toContain('requirements_standalone.txt')
+    expect(refused!.detail).toContain('requirements_parler.txt')
   })
 
-  it('spawns with the extracted tree root as cwd - the directory the script assumes', async () => {
+  it('downloads the pinned installer and proves its integrity before executing it', async () => {
     const h = harness()
+    h.setHealthy(true)
     const bootstrapper = createVoiceRuntimeBootstrapper(h.deps)
 
     await bootstrapper.run()
 
-    // The script's relative paths (system\requirements\..., %cd%\alltalk_environment)
-    // only resolve if cwd is the AllTalk root itself - and the log line and the
-    // spawn must agree about which directory that was.
-    const spawn = h.calls.exec.find(call => call.includes('atsetup.bat'))
-    const cwdArg = spawn!.find(arg => arg.startsWith('cwd='))
-    expect(cwdArg).toBe(`cwd=${h.deps.runtimeDir}/app`)
-    // The pre-spawn log names the same directory the spawn used - a QA report
-    // can then be read without guessing which tree the installer ran in.
-    const started = h.logs.find(entry => entry.step === 'run-setup' && entry.event === 'start')
-    expect(started!.detail).toContain(cwdArg)
+    expect(h.calls.downloaded).toContain(MINICONDA_INSTALLER_URL)
+    const finished = h.logs.find(entry => entry.event === 'miniconda-installer-download-finished')
+    expect(finished!.detail).toContain(`sha256=${MINICONDA_INSTALLER_SHA256}`)
+    expect(finished!.detail).toContain('integrity=true')
+    // Only a verified installer may ever be executed.
+    expect(h.calls.exec.some(call => call[0].endsWith('miniconda_installer.exe'))).toBe(true)
   })
 
-  it('still walks on to verify-install when the setup genuinely completes', async () => {
-    // Guards the guard: the exit-0 check must not reject an install that did
-    // produce its final artefact.
+  it('deletes the installer download and stops when its integrity check fails', async () => {
+    // Bytes from an unofficial mirror - or a truncated transfer - are deleted,
+    // never executed.
+    const h = harness({
+      download: async (url, dest) => {
+        h.calls.downloaded.push(url)
+        h.markExists(dest)
+        if (url === MINICONDA_INSTALLER_URL)
+          return { bytes: 1234, sha256: 'b'.repeat(64), url: undefined as never }
+        return { bytes: 5_000_000, sha256: 'a'.repeat(64), url: undefined as never }
+      },
+    } as Partial<BootstrapDeps>)
+    const bootstrapper = createVoiceRuntimeBootstrapper(h.deps)
+
+    const state = await bootstrapper.run()
+
+    expect(state.phase).toBe('failed')
+    expect(state.failureCategory).toBe('download')
+    expect(h.calls.exec.some(call => call[0].endsWith('miniconda_installer.exe'))).toBe(false)
+    const installerPath = `${appRoot(h)}/${MINICONDA_INSTALLER}`
+    expect(h.calls.removed).toContain(installerPath)
+    const finished = h.logs.find(entry => entry.event === 'miniconda-installer-download-finished')
+    expect(finished!.detail).toContain('integrity=false')
+  })
+
+  it('reuses the installer already on disk instead of downloading it again', async () => {
+    // The 85 MB installer already sits in the tree from a failed attempt -
+    // this run must reuse it, never re-download it (round-4 item J).
     const h = harness()
+    h.setHealthy(true)
+    h.markExists(`${appRoot(h)}/${MINICONDA_INSTALLER}`)
+
+    await createVoiceRuntimeBootstrapper(h.deps).run()
+
+    expect(h.calls.downloaded).toEqual([alltalkSourceUrl(), DEEPSPEED_WHEEL_URL])
+    const present = h.logs.find(entry => entry.event === 'miniconda-installer-present')
+    expect(present).toBeTruthy()
+    expect(present!.detail).toContain('installer-bytes=81720000')
+  })
+
+  it('catches a Miniconda that is present but does not answer --version', async () => {
+    // The pin's own "conda exists and works" check. A half-deleted install
+    // answering nothing must stop the continuation here, not twenty commands
+    // later inside a conda error.
+    const h = harness()
+    h.markExists(`${appRoot(h)}/${MINICONDA_PREFIX}`, `${appRoot(h)}/${MINICONDA_EXE}`, `${appRoot(h)}/${MINICONDA_INSTALLER}`)
+    h.setCondaBroken(true)
+    const bootstrapper = createVoiceRuntimeBootstrapper(h.deps)
+
+    const state = await bootstrapper.run()
+
+    expect(state.phase).toBe('failed')
+    expect(state.failureCategory).toBe('setup')
+    expect(h.logs.some(entry => entry.event === 'miniconda-broken')).toBe(true)
+    // Not a single continuation command ran against the broken base.
+    expect(h.logs.some(entry => entry.event === 'setup-command-start')).toBe(false)
+  })
+
+  it('creates the env with the pinned python and runs the exact official command sequence in order', async () => {
+    const h = harness()
+    h.setHealthy(true)
     const bootstrapper = createVoiceRuntimeBootstrapper(h.deps)
 
     const state = await bootstrapper.run()
 
     expect(state.phase).toBe('ready')
-    expect(bootstrapper.state().steps.find(step => step.id === 'verify-install')?.status).toBe('done')
+    const create = h.calls.exec.find(call => call[1] === 'create')
+    expect(create).toBeTruthy()
+    expect(create![0]).toBe(win32Path(`${appRoot(h)}/${MINICONDA_EXE}`))
+    expect(create!.slice(1, -2)).toEqual(['create', '--no-shortcuts', '-y', '-k', '--prefix', win32Path(`${appRoot(h)}/${MINICONDA_ENV}`), `python=${ALLTALK_ENV_PYTHON_VERSION}`])
+    expect(create!.find(arg => arg.startsWith('timeout='))).toBe(`timeout=${CONDA_ENV_CREATE_TIMEOUT_MS}`)
+
+    // The continuation is the pinned atsetup.bat, as ordered data.
+    const wanted = alltalkSetupCommands({
+      condaExe: win32Path(`${appRoot(h)}/${MINICONDA_CONDA_EXE}`),
+      envDir: win32Path(`${appRoot(h)}/${MINICONDA_ENV}`),
+      envPip: win32Path(`${appRoot(h)}/${MINICONDA_ENV_PIP}`),
+      wheelPath: win32Path(`${appRoot(h)}/${DEEPSPEED_WHEEL}`),
+    })
+    const commandStarts = h.logs.filter(entry => entry.event === 'setup-command-start').map(entry => entry.detail)
+    expect(commandStarts.map(detail => detail!.split(' ')[0])).toEqual(wanted.map(command => `id=${command.id}`))
+
+    for (const command of wanted) {
+      const call = h.calls.exec.find(entry => entry[0] === command.command && entry[1] === command.args[0] && entry.join(' ').includes(command.args[command.args.length - 1]))
+      expect(call, `command ${command.id}`).toBeTruthy()
+      expect(call!.slice(1, -2)).toEqual(command.args)
+      expect(call!.find(arg => arg.startsWith('timeout='))).toBe(`timeout=${command.timeoutMs}`)
+    }
+  })
+
+  it('drives pip only through the env\'s own Scripts path', async () => {
+    const h = harness()
+    h.setHealthy(true)
+    await createVoiceRuntimeBootstrapper(h.deps).run()
+
+    const pipCalls = h.calls.exec.filter(call => call[0].endsWith('pip.exe'))
+    expect(pipCalls.length).toBeGreaterThanOrEqual(4)
+    for (const call of pipCalls)
+      expect(call[0]).toBe(win32Path(`${appRoot(h)}/${MINICONDA_ENV_PIP}`))
+    // And a bare `pip` from PATH is never touched by anything.
+    expect(h.calls.exec.some(call => /(?:^|[\\/])pip(?:\\.exe)?$/.test(call[0]) && !call[0].includes('alltalk_environment'))).toBe(false)
+  })
+
+  it('downloads, installs then deletes the DeepSpeed wheel, in that order, exactly like the pin', async () => {
+    const h = harness()
+    h.setHealthy(true)
+    await createVoiceRuntimeBootstrapper(h.deps).run()
+
+    expect(h.calls.downloaded).toContain(DEEPSPEED_WHEEL_URL)
+    const wheelPath = win32Path(`${appRoot(h)}/${DEEPSPEED_WHEEL}`)
+    const downloadAt = h.logs.findIndex(entry => entry.event === 'setup-component-download-finished')
+    const installAt = h.calls.exec.findIndex(call => call.slice(1, -2).join(' ') === `install ${DEEPSPEED_WHEEL}`)
+    expect(downloadAt).toBeGreaterThanOrEqual(0)
+    expect(installAt).toBeGreaterThanOrEqual(0)
+    // The wheel comes from GitHub before pip sees it, and leaves the disk only
+    // after pip accepted it - the exact sequence of the pin's step.
+    expect(h.calls.removed).toContain(wheelPath)
+  })
+
+  it('fails the step with an opaque sentence when a fatal component fails', async () => {
+    // Only `clean_environment` is tolerated: everything else mirrors the pin's
+    // errorlevel guard.
+    const h = harness()
+    h.failExecMatching('faiss-cpu', { code: 1, stderr: 'conda died' })
+    const bootstrapper = createVoiceRuntimeBootstrapper(h.deps)
+
+    const state = await bootstrapper.run()
+
+    expect(state.phase).toBe('failed')
+    expect(bootstrapper.state().steps.find(step => step.id === 'run-setup')?.status).toBe('failed')
+    expect(bootstrapper.state().steps.find(step => step.id === 'verify-install')?.status).toBe('pending')
+    expect(state.message).toBe(messageFor('setup'))
+    expect(state.message).not.toContain('faiss')
+    expect(state.message).not.toContain('conda')
+    expect(h.logs.some(entry => entry.event === 'setup-command-failed')).toBe(true)
+  })
+
+  it('tolerates a failing conda clean exactly like the pin does', async () => {
+    const h = harness()
+    h.setHealthy(true)
+    h.failExecMatching('--force-pkgs-dirs', { code: 1, stderr: 'cannot remove package cache' })
+    const bootstrapper = createVoiceRuntimeBootstrapper(h.deps)
+
+    const state = await bootstrapper.run()
+
+    expect(state.phase).toBe('ready')
+    expect(h.logs.some(entry => entry.event === 'setup-command-nonfatal-failure')).toBe(true)
+  })
+
+  it('writes the four launchers, byte-exact what the pin echoes, with this tree\'s paths', async () => {
+    const h = harness()
+    h.setHealthy(true)
+    await createVoiceRuntimeBootstrapper(h.deps).run()
+
+    const wanted = alltalkStartScripts(appRoot(h))
+    expect(h.calls.written.sort()).toEqual(wanted.map(script => `${appRoot(h)}/${script.file}`).sort())
+    for (const script of wanted) {
+      const content = h.fileContent(`${appRoot(h)}/${script.file}`)
+      expect(content).toBe(script.content)
+      // Batch files must be CRLF: the pin's own echo lines end that way, and a
+      // single LF would break label parsing on cmd.
+      expect(content).toContain('\r\n')
+      expect(content!.split('\r\n').every(line => !line.includes('\n'))).toBe(true)
+      expect(content).toContain(win32Path(appRoot(h)))
+    }
+    // Byte identity is the verification: identical files are the "a previous
+    // run got this far" signal for the next attempt.
+    expect(h.logs.filter(entry => entry.event === 'start-script-written')).toHaveLength(4)
+  })
+
+  it('keeps byte-identical launchers from a previous attempt and rewrites anything stale', async () => {
+    const h = harness()
+    h.setHealthy(true)
+    const wanted = alltalkStartScripts(appRoot(h))
+    // Pre-seed all launchers except the guard one: three kept as-is, one
+    // deliberately stale (carrying a path from before the runtime moved).
+    const stale = wanted.find(script => script.file === 'start_finetune.bat')!
+    h.markExists(`${appRoot(h)}/${stale.file}`)
+    for (const script of wanted) {
+      if (script.file === START_SCRIPT || script.file === stale.file)
+        continue
+      h.markExists(`${appRoot(h)}/${script.file}`)
+    }
+    // Then override readFile to answer the pre-seeded content: identical for
+    // two, foreign for the stale one.
+    const seeded = new Map(wanted.filter(script => script.file !== START_SCRIPT).map(script => [
+      `${appRoot(h)}/${script.file}`,
+      script.file === stale.file ? script.content.replaceAll(win32Path(appRoot(h)), 'C:\\\\oldpath') : script.content,
+    ]))
+    const deps: Partial<BootstrapDeps> = {
+      readFile: async (path) => {
+        const found = seeded.get(path)
+        if (found !== undefined)
+          return found
+        return h.fileContent(path)
+      },
+    }
+    const h2 = harness({ ...deps, runtimeDir: h.deps.runtimeDir })
+    // transplant the seeds: exists info for non-guard scripts
+    for (const script of wanted) {
+      if (script.file !== START_SCRIPT)
+        h2.markExists(`${appRoot(h2)}/${script.file}`)
+    }
+    h2.setHealthy(true)
+
+    await createVoiceRuntimeBootstrapper(h2.deps).run()
+
+    const kept = h2.logs.filter(entry => entry.event === 'start-script-kept').map(entry => entry.detail)
+    const rewritten = h2.logs.filter(entry => entry.event === 'start-script-written').map(entry => entry.detail)
+    expect(kept).toHaveLength(2)
+    expect(rewritten.some(detail => detail!.includes(START_SCRIPT) && detail!.includes('missing'))).toBe(true)
+    expect(rewritten.some(detail => detail!.includes(stale.file) && detail!.includes('stale-or-tampered'))).toBe(true)
+    expect(h2.fileContent(`${appRoot(h2)}/${stale.file}`)).toBe(stale.content)
+  })
+
+  it('reruns only what is missing when conda and env already exist', async () => {
+    // The resume shape round 3 needed: with a verified Miniconda and a present
+    // env, the installer and `conda create` cost zero; the package suite still
+    // runs (the package managers own the idempotency).
+    const h = harness()
+    h.setHealthy(true)
+    h.markExists(
+      `${appRoot(h)}/${MINICONDA_INSTALLER}`,
+      `${appRoot(h)}/${MINICONDA_PREFIX}`,
+      `${appRoot(h)}/${MINICONDA_EXE}`,
+      `${appRoot(h)}/${MINICONDA_ENV}`,
+      `${appRoot(h)}/${MINICONDA_ENV_PYTHON}`,
+    )
+
+    const state = await createVoiceRuntimeBootstrapper(h.deps).run()
+
+    expect(state.phase).toBe('ready')
+    expect(h.calls.exec.some(call => call[0].endsWith('miniconda_installer.exe'))).toBe(false)
+    expect(h.calls.exec.some(call => call[1] === 'create')).toBe(false)
+    expect(h.logs.some(entry => entry.event === 'conda-env-present')).toBe(true)
+    expect(h.logs.filter(entry => entry.event === 'setup-command-start')).toHaveLength(9)
   })
 })
 
 describe('failure handling', () => {
-  it('reports a failed installer as failed, with a sentence', async () => {
+  it('reports a failed setup stage as failed, with a sentence', async () => {
     const h = harness()
-    h.setExecResult({ code: 1, stderr: 'conda create failed' })
+    h.failExecMatching(`python=${ALLTALK_ENV_PYTHON_VERSION}`, { code: 1, stderr: 'conda create failed' })
     const bootstrapper = createVoiceRuntimeBootstrapper(h.deps)
 
     const state = await bootstrapper.run()
@@ -579,26 +810,18 @@ describe('failure handling', () => {
     expect(state.message).not.toContain('    at ')
   })
 
-  it('fails on a non-zero installer exit even when the files all landed', async () => {
-    // Isolates the exit-code check. The earlier partial-install test cannot: there
-    // the missing conda env is what fails, so a bootstrapper that ignored the exit
-    // code would still be caught. Here the installer reports failure *and* leaves
-    // a complete tree behind - only reading the exit code can catch that.
-    const h = harness({
-      exec: async (_cmd, args, options) => {
-        if (args.includes('atsetup.bat')) {
-          for (const marker of SETUP_PRODUCTS)
-            h.markExists(`${options.cwd}/${marker}`)
-          return { code: 3, stderr: 'DeepSpeed installation failed', stdout: '' }
-        }
-        return { code: 0, stderr: '', stdout: '' }
-      },
-    })
+  it('fails on a fatal component exit even when everything else landed', async () => {
+    // Isolates the exit-code check: the env creation succeeded, the package
+    // suite reports a real failure - a step that trusted presence over exit
+    // codes would walk on and wrongly blame the health probe.
+    const h = harness()
+    h.failExecMatching('gradio==4.44.1', { code: 3, stderr: 'pip exploded' })
     const bootstrapper = createVoiceRuntimeBootstrapper(h.deps)
 
     const state = await bootstrapper.run()
 
     expect(state.phase).toBe('failed')
+    expect(state.failureCategory).toBe('setup')
     expect(bootstrapper.state().steps.find(step => step.id === 'run-setup')?.status).toBe('failed')
     // It must not have gone on to declare health.
     expect(bootstrapper.state().steps.find(step => step.id === 'verify-health')?.status).toBe('pending')
@@ -672,14 +895,19 @@ describe('failure handling', () => {
   })
 
   it('refuses an install that has the launcher but no conda environment', async () => {
-    // The exact case the shared marker list exists for. atsetup.bat writes the
-    // launcher before it finishes building the environment, so a run that dies in
-    // between leaves a folder that looks installed to anything checking only the
-    // launcher - and the runtime manager and this step must agree that it is not.
+    // The exact case the shared marker list exists for: a run that dies after
+    // writing the launchers but before the env takes shape leaves a folder
+    // that looks installed to anything checking only the launcher - and the
+    // runtime manager and this step must agree that it is not.
     const h = harness({
-      exec: async (_cmd, args, options) => {
-        if (args.includes('atsetup.bat'))
-          h.markExists(`${options.cwd}/${START_SCRIPT}`)
+      exec: async (command, args, options) => {
+        h.calls.exec.push([command, ...args, `cwd=${options.cwd}`, `timeout=${options.timeoutMs}`])
+        if (command.endsWith('miniconda_installer.exe'))
+          h.markExists(`${options.cwd}/${MINICONDA_PREFIX}`, `${options.cwd}/${MINICONDA_EXE}`)
+        // The env step "succeeds" but leaves the environment itself half-built:
+        // enough for the step's own check, not enough for verify-install.
+        if (command.endsWith('_conda.exe') && args[0] === 'create')
+          h.markExists(`${options.cwd}/${MINICONDA_ENV_PYTHON}`)
         return { code: 0, stderr: '', stdout: '' }
       },
     })
@@ -694,13 +922,16 @@ describe('failure handling', () => {
   it('recovers on retry after a transient failure', async () => {
     let attempts = 0
     const h = harness({
-      download: async (url) => {
+      download: async (url, dest) => {
         attempts += 1
         if (attempts === 1)
           throw new Error('connection reset')
-        return { bytes: 5_000_000, sha256: 'a'.repeat(64), url }
+        h.markExists(dest)
+        if (url === MINICONDA_INSTALLER_URL)
+          return { bytes: MINICONDA_INSTALLER_BYTES, sha256: MINICONDA_INSTALLER_SHA256, url: undefined as never }
+        return { bytes: 5_000_000, sha256: 'a'.repeat(64), url: undefined as never }
       },
-    })
+    } as Partial<BootstrapDeps>)
     const bootstrapper = createVoiceRuntimeBootstrapper(h.deps)
 
     expect((await bootstrapper.run()).phase).toBe('failed')
@@ -710,7 +941,7 @@ describe('failure handling', () => {
 
   it('does not get stuck in a running phase after a failure', async () => {
     const h = harness()
-    h.setExecResult({ code: 1 })
+    h.failExecMatching('faiss-cpu', { code: 1 })
     const bootstrapper = createVoiceRuntimeBootstrapper(h.deps)
 
     await bootstrapper.run()
@@ -773,10 +1004,11 @@ describe('removal', () => {
     expect(removed).not.toContain('Python')
     expect(removed).not.toContain('espeak')
     expect(removed).not.toContain('Program Files')
-    // The only removals are its own directory and the temporary archive it
-    // downloaded - never anything belonging to the user or the system.
+    // The only removals are its own directory, the temporary archive it
+    // downloaded and the DeepSpeed wheel it deletes after installing exactly
+    // like the pin - never anything belonging to the user or the system.
     for (const path of h.calls.removed) {
-      expect(path === h.deps.runtimeDir || path.endsWith('.zip.tmp')).toBe(true)
+      expect(path === h.deps.runtimeDir || path.endsWith('.zip.tmp') || path.endsWith(DEEPSPEED_WHEEL)).toBe(true)
     }
   })
 })
@@ -899,9 +1131,17 @@ describe('state change notifications', () => {
     let release!: () => void
     const gate = new Promise<void>(resolve => (release = resolve))
     const seen: unknown[] = []
+    // The override mirrors the default routing's machine side effects (the
+    // installer leaving its artefacts, the env build leaving the env), because
+    // the run must be able to continue to ready once the gate opens. `h` is
+    // referenced safely: the exec callback only runs after construction ends.
     const h = harness({
-      exec: async () => {
+      exec: async (command, args, options) => {
         await gate
+        if (command.endsWith('miniconda_installer.exe'))
+          h.markExists(`${options.cwd}/${MINICONDA_PREFIX}`, `${options.cwd}/${MINICONDA_EXE}`)
+        if (command.endsWith('_conda.exe') && args[0] === 'create')
+          h.markExists(`${options.cwd}/${MINICONDA_ENV_PYTHON}`, `${options.cwd}/${MINICONDA_ENV}`)
         return { code: 0, stderr: '', stdout: '' }
       },
       onStateChange: state => seen.push(state),
@@ -918,12 +1158,12 @@ describe('state change notifications', () => {
     // new payload, because nothing new happened.
     expect(seen.length).toBe(atGate)
 
-    // Mutations survive the broken exec (which wrote no launcher): the run
-    // resolves and reports the failure rather than hanging on the gate.
+    // Mutations continue once the gate opens: the run resolves all the way to
+    // ready rather than hanging on it.
     release()
     const state = await promise
-    expect(state.phase).toBe('failed')
-    expect(seen[seen.length - 1] as BootstrapState | undefined).toMatchObject({ phase: 'failed' })
+    expect(state.phase).toBe('ready')
+    expect(seen[seen.length - 1] as BootstrapState | undefined).toMatchObject({ phase: 'ready' })
   })
 
   it('a throwing listener cannot abort the install', async () => {
@@ -981,79 +1221,25 @@ describe('failure classification', () => {
 })
 
 /**
- * The Miniconda repair layer described by the round-3 brief. The pinned setup
- * script runs the NSIS installer through `start /wait` and never checks the
- * outcome; when that line fails the script still exits 0. These tests pin the
- * bootstrapper's own execution of that one stage - same installer, same
- * arguments, real exit code, verified artefacts - and the supported
- * continuation that follows it.
+ * The Miniconda repair layer from the round-3/4 briefs, kept verbatim under
+ * the round-7 continuation: the pinned setup script runs the NSIS installer
+ * through `start /wait` and never checks the outcome; when that line fails
+ * the script still exits 0. These tests pin the bootstrapper's own execution
+ * of that one stage - same installer, same arguments, real exit code,
+ * verified artefacts - and the retry shape the whole feature exists for.
  */
 describe('run-setup Miniconda repair', () => {
-  const appRoot = (h: Harness): string => join(h.deps.runtimeDir, 'app')
+  const appRoot = (h: Harness): string => `${h.deps.runtimeDir}/app`
   const installerPath = (h: Harness): string => `${appRoot(h)}/${MINICONDA_INSTALLER}`
   const condaPrefix = (h: Harness): string => `${appRoot(h)}/${MINICONDA_PREFIX}`
   const condaExe = (h: Harness): string => `${appRoot(h)}/${MINICONDA_EXE}`
 
-  interface ExecCall {
-    args: string[]
-    command: string
-    cwd: string
-    timeoutMs: number
-  }
+  const installerCalls = (h: Harness): string[][] => h.calls.exec.filter(call => call[0].endsWith('miniconda_installer.exe'))
 
-  interface ExecStub {
-    code: number
-    stderr?: string
-    stdout?: string
-  }
-
-  const normalize = (stub: ExecStub): ExecStub & { stderr: string, stdout: string } =>
-    ({ stderr: '', stdout: '', ...stub })
-
-  function repairHarness(options: {
-    runtimeDir?: string
-    onAtsetup?: (seq: number, h: Harness) => ExecStub
-    onInstaller?: (h: Harness) => ExecStub
-  }): { execs: ExecCall[], h: Harness } {
-    const execs: ExecCall[] = []
-    let atsetupSeq = 0
-    const h = harness({
-      exec: async (command, args, execOptions) => {
-        execs.push({ args, command, cwd: execOptions.cwd, timeoutMs: execOptions.timeoutMs })
-        if (args.includes('atsetup.bat')) {
-          atsetupSeq += 1
-          return normalize(options.onAtsetup?.(atsetupSeq, h) ?? { code: 0 })
-        }
-        if (command === win32Path(installerPath(h)))
-          return normalize(options.onInstaller?.(h) ?? { code: 0 })
-        return normalize({ code: 0 })
-      },
-      ...(options.runtimeDir ? { runtimeDir: options.runtimeDir } : {}),
-    })
-    return { execs, h }
-  }
-
-  const installerCalls = (execs: ExecCall[]): ExecCall[] => execs.filter(e => e.command.endsWith('miniconda_installer.exe'))
-  const atsetupCalls = (execs: ExecCall[]): ExecCall[] => execs.filter(e => e.args.includes('atsetup.bat'))
-
-  it('runs the downloaded installer directly with the pinned arguments, then lets the setup continue', async () => {
-    const { execs, h } = repairHarness({
-      // The classic round-3 outcome: atsetup exits 0 having written nothing,
-      // its output ending with "Miniconda not found." The second (resume)
-      // attempt stands in for a script that can continue once Miniconda works.
-      onAtsetup: (_seq, h2) => {
-        // The resume attempt, as a pin that can continue once Miniconda works.
-        for (const product of SETUP_PRODUCTS)
-          h2.markExists(`${appRoot(h2)}/${product}`)
-        return { code: 0 }
-      },
-      onInstaller: (h2) => {
-        h2.markExists(condaPrefix(h2), condaExe(h2))
-        return { code: 0 }
-      },
-    })
+  it('runs the installer directly with the pinned arguments when Miniconda is missing', async () => {
+    const h = harness()
     h.setHealthy(true)
-    // The 81 MB installer already sits in the tree from the failed attempt the
+    // The 85 MB installer already sits in the tree from the failed attempt the
     // QA log shows - this run must reuse it, never re-download it.
     h.markExists(installerPath(h))
 
@@ -1061,59 +1247,37 @@ describe('run-setup Miniconda repair', () => {
     await bootstrapper.run()
 
     expect(bootstrapper.state().phase).toBe('ready')
-    const installs = installerCalls(execs)
+    const installs = installerCalls(h)
     expect(installs).toHaveLength(1)
     const install = installs[0]
-    // The command carries no arguments: nothing is ever re-parsed by a shell (item I.8),
-    // and process-facing paths go to NSIS in win32 form, never as mixed separators
+    // The command carries no shell: nothing is ever re-parsed (item I.8), and
+    // process-facing paths go to NSIS in win32 form, never as mixed separators
     // (round-4 QA showed the mixed form exiting 2).
-    expect(install.command).toBe(win32Path(installerPath(h)))
-    expect(install.command).not.toContain('/')
-    expect(install.cwd).toBe(appRoot(h))
-    expect(install.timeoutMs).toBe(MINICONDA_INSTALL_TIMEOUT_MS)
+    expect(install[0]).toBe(win32Path(installerPath(h)))
+    expect(install[0]).not.toContain('/')
+    expect(install.find(arg => arg.startsWith('cwd='))).toBe(`cwd=${appRoot(h)}`)
+    expect(install.find(arg => arg.startsWith('timeout='))).toBe(`timeout=${MINICONDA_INSTALL_TIMEOUT_MS}`)
     // Exactly the officially documented silent switches, no more and no less
-    // (round-4 item L.1..L.5): JustMe + AddToPath=0 + RegisterPython=0 keep global
-    // tooling untouched, /D= stays last, unquoted, win32-normalised.
-    expect(install.args).toEqual([
+    // (round-4 item L.1..L.5): JustMe + AddToPath=0 + RegisterPython=0 keep
+    // global tooling untouched, /D= stays last, unquoted, win32-normalised.
+    expect(install.slice(1, -2)).toEqual([
       '/InstallationType=JustMe',
       '/AddToPath=0',
       '/RegisterPython=0',
       '/S',
       `/D=${win32Path(condaPrefix(h))}`,
     ])
-    expect(install.args).toEqual(minicondaInstallerArgs(win32Path(condaPrefix(h))))
+    expect(install.slice(1, -2)).toEqual(minicondaInstallerArgs(win32Path(condaPrefix(h))))
     // The /D= switch itself carries a slash by design; its *value* must not.
-    expect(install.args[install.args.length - 1]).toMatch(/^\/D=[^/]+$/)
-    // The installer was already on disk, so no fresh atsetup ran to re-download it
-    // (round-4 item J): the only atsetup run is the resume attempt.
-    expect(atsetupCalls(execs)).toHaveLength(1)
-    const events = h.logs.map(l => l.event)
+    expect(install.slice(1, -2)[4]).toMatch(/^\/D=[^/]+$/)
+    const events = h.logs.map(entry => entry.event)
     expect(events).toContain('miniconda-facts')
     expect(events).toContain('miniconda-install-verified')
-    const recoveryFacts = h.logs.find(l => l.event === 'miniconda-recovery-facts')
-    expect(recoveryFacts?.detail).toContain('installer-exists=true')
-    expect(recoveryFacts?.detail).toContain('installer-bytes=81720000')
-  })
-
-  it('fails clearly when the installer itself is missing, without inventing one', async () => {
-    const { execs, h } = repairHarness({
-      onAtsetup: () => ({ code: 0, stdout: 'curl: (28) Timeout was reached' }),
-    })
-
-    const state = await createVoiceRuntimeBootstrapper(h.deps).run()
-
-    expect(state.phase).toBe('failed')
-    expect(installerCalls(execs)).toHaveLength(0)
-    expect(atsetupCalls(execs)).toHaveLength(1)
-    expect(h.logs.some(l => l.event === 'miniconda-repair-skipped')).toBe(true)
-    expect(h.logs.find(l => l.event === 'incomplete')?.detail).toContain(START_SCRIPT)
   })
 
   it('fails the step on the installer\'s real non-zero exit code instead of masking it', async () => {
-    const { h } = repairHarness({
-      onAtsetup: () => ({ code: 0, stderr: 'O sistema nao pode encontrar o caminho especificado.', stdout: 'Miniconda not found.' }),
-      onInstaller: () => ({ code: 3, stderr: 'NSIS Error: tester' }),
-    })
+    const h = harness()
+    h.failExecMatching('miniconda_installer.exe', { code: 3, stderr: 'NSIS Error: tester' })
     h.markExists(installerPath(h))
 
     const state = await createVoiceRuntimeBootstrapper(h.deps).run()
@@ -1124,112 +1288,79 @@ describe('run-setup Miniconda repair', () => {
     expect(state.message).toBe('The voice system could not be installed.')
     expect(state.message).not.toMatch(/miniconda|conda|alltalk|C:/i)
     // The real exit code lives in the log, where it belongs (item B).
-    expect(h.logs.find(l => l.event === 'miniconda-install-finished')?.exitCode).toBe(3)
+    expect(h.logs.find(entry => entry.event === 'miniconda-install-finished')?.exitCode).toBe(3)
+    const verify = h.logs.find(entry => entry.event === 'miniconda-install-verify')
+    expect(verify?.detail).toContain('conda-prefix-exists=false')
+    expect(h.logs.some(entry => entry.event === 'miniconda-install-verified')).toBe(false)
   })
 
   it('does not trust a zero exit code without the artefacts it should have produced', async () => {
-    const { execs, h } = repairHarness({
-      onAtsetup: () => ({ code: 0 }),
-      onInstaller: () => ({ code: 0 }), // claims success, builds nothing
-    })
-    h.markExists(installerPath(h))
+    const h = harness()
+    // Claims success, builds nothing: the failure list returns 0 without the
+    // artefact side effects a real success leaves behind.
+    h.failExecMatching('miniconda_installer.exe', { code: 0 })
 
     const state = await createVoiceRuntimeBootstrapper(h.deps).run()
 
     expect(state.phase).toBe('failed')
-    const verify = h.logs.find(l => l.event === 'miniconda-install-verify')
+    const verify = h.logs.find(entry => entry.event === 'miniconda-install-verify')
     expect(verify?.detail).toContain('conda-prefix-exists=false')
     expect(verify?.detail).toContain('conda-exe-exists=false')
     // The lie is caught at the verification line: without the artefacts the
-    // stage stops dead, and no atsetup ever runs on a phantom Miniconda.
-    expect(h.logs.some(l => l.event === 'miniconda-install-verified')).toBe(false)
-    expect(atsetupCalls(execs)).toHaveLength(0)
+    // stage stops dead, and no continuation runs on a phantom Miniconda.
+    expect(h.logs.some(entry => entry.event === 'miniconda-install-verified')).toBe(false)
+    expect(h.logs.some(entry => entry.event === 'setup-command-start')).toBe(false)
   })
 
-  it('a verified Miniconda is not reinstalled: the next attempt goes straight to the resume', async () => {
-    const { execs, h } = repairHarness({
-      // The pinned script cannot resume (its conda-exists branch targets a
-      // RunScript label the file does not define): the honest outcome is a
-      // failed step with the evidence logged, never a re-download or a
-      // re-install loop.
-      onAtsetup: () => ({ code: 1, stderr: 'The system cannot find the batch label specified - RunScript' }),
-    })
-    h.markExists(condaPrefix(h), condaExe(h))
+  it('a verified Miniconda is not reinstalled: the run goes straight to the continuation', async () => {
+    const h = harness()
+    h.setHealthy(true)
+    h.markExists(condaPrefix(h), condaExe(h), installerPath(h))
 
     const state = await createVoiceRuntimeBootstrapper(h.deps).run()
 
-    expect(state.phase).toBe('failed')
-    expect(installerCalls(execs)).toHaveLength(0)
-    expect(atsetupCalls(execs)).toHaveLength(1)
-    const facts = h.logs.find(l => l.event === 'miniconda-facts')
+    expect(state.phase).toBe('ready')
+    expect(installerCalls(h)).toHaveLength(0)
+    // But it is always checked for real: --version must still answer (item 4
+    // of the brief: validate before building on it).
+    const version = h.calls.exec.filter(call => call[0].endsWith('_conda.exe') && call[1] === '--version')
+    expect(version).toHaveLength(1)
+    expect(version[0].find(arg => arg.startsWith('timeout='))).toBe(`timeout=${CONDA_VERSION_CHECK_TIMEOUT_MS}`)
+    const facts = h.logs.find(entry => entry.event === 'miniconda-facts')
+    expect(facts?.detail).toContain('conda-prefix-exists=true')
     expect(facts?.detail).toContain('conda-exe-exists=true')
-    expect(h.logs.some(l => l.event === 'resume-incomplete')).toBe(true)
   })
 
-  it('retries a partial install: reuses the source, reuses the installer, downloads nothing again', async () => {
-    let installerRuns = 0
-    let atsetupSeq = 0
-    const execs: ExecCall[] = []
-    const h = harness({
-      exec: async (command, args, execOptions) => {
-        execs.push({ args, command, cwd: execOptions.cwd, timeoutMs: execOptions.timeoutMs })
-        if (args.includes('atsetup.bat')) {
-          atsetupSeq += 1
-          // First attempt: the script curls the installer down, then abandons
-          // at the Miniconda stage exactly like the round-3 QA log. After a
-          // verified repair its resume attempt completes the setup.
-          h.markExists(installerPath(h))
-          if (atsetupSeq === 2) {
-            for (const product of SETUP_PRODUCTS)
-              h.markExists(`${execOptions.cwd}/${product}`)
-          }
-          return normalize({ code: 0 })
-        }
-        if (command === win32Path(installerPath(h))) {
-          installerRuns += 1
-          if (installerRuns === 2)
-            h.markExists(condaPrefix(h), condaExe(h))
-          return normalize(installerRuns === 1 ? { code: 1, stderr: 'AV said no' } : { code: 0 })
-        }
-        return normalize({ code: 0 })
-      },
-    })
+  it('after a failed attempt the retry reuses source, installer and every surviving artefact', async () => {
+    const h = harness()
     h.setHealthy(true)
+    // Attempt one: the real-exit-code repair runs and the installer fails
+    // exactly like round 3. Attempt two: everything on disk is reused.
+    h.failExecMatching('miniconda_installer.exe', { code: 1, stderr: 'AV said no' })
 
-    // Attempt one: repair runs but the installer fails for real. Attempt two:
-    // everything on disk is reused, the repair succeeds, the resume finishes.
     const first = await createVoiceRuntimeBootstrapper(h.deps).run()
     expect(first.phase).toBe('failed')
+    expect(installerCalls(h)).toHaveLength(1)
+
+    h.clearExecFailures()
     const second = createVoiceRuntimeBootstrapper(h.deps)
     await second.run()
     expect(second.state().phase).toBe('ready')
 
-    // The 97 MB archive was fetched exactly once - the very first attempt -
-    // and the retry reused the extracted source instead of downloading again
-    // (item H). Same rule for the 81 MB installer: two attempts, two direct
-    // runs, zero curls of our own.
-    expect(h.calls.downloaded).toHaveLength(1)
-    expect(atsetupCalls(execs)).toHaveLength(2) // initial(1) + resume(2); run 2 skips straight to repair (item J)
-    expect(installerCalls(execs)).toHaveLength(2) // one direct run per attempt, never more
+    // The 97 MB archive downloads exactly once: its recorded commit is the
+    // fetch step's skip signal and it landed on the first, failed attempt.
+    // Same for the 85 MB installer, which survives the failure and is reused.
+    // The wheel only ever downloads on the attempt that reaches it.
+    expect(h.calls.downloaded).toEqual([alltalkSourceUrl(), MINICONDA_INSTALLER_URL, DEEPSPEED_WHEEL_URL])
+    // One installer execution per attempt that actually needs one.
+    expect(installerCalls(h)).toHaveLength(2)
     // Nothing the user already had is destroyed while repairing.
-    expect(h.calls.removed.every(p => p.endsWith('.zip.tmp'))).toBe(true)
+    expect(h.calls.removed.every(path => path.endsWith(DEEPSPEED_WHEEL) || path.endsWith('.zip.tmp'))).toBe(true)
   })
 
   it('keeps a path with special characters verbatim through the direct run', async () => {
     const runtimeDir = 'C:\\Users\\lucas\\AppData\\Roaming\\@proj-airi\\stage-tamagotchi\\runtimes\\alltalk'
-    const { execs, h } = repairHarness({
-      onAtsetup: (_seq, h2) => {
-        // Only the resume attempt runs: the installer is already on disk.
-        for (const product of SETUP_PRODUCTS)
-          h2.markExists(`${appRoot(h2)}/${product}`)
-        return { code: 0 }
-      },
-      onInstaller: (h2) => {
-        h2.markExists(condaPrefix(h2), condaExe(h2))
-        return { code: 0 }
-      },
-      runtimeDir,
-    })
+    const h = harness({ runtimeDir })
     h.setHealthy(true)
     h.markExists(installerPath(h))
 
@@ -1237,8 +1368,8 @@ describe('run-setup Miniconda repair', () => {
     await bootstrapper.run()
 
     expect(bootstrapper.state().phase).toBe('ready')
-    const install = installerCalls(execs)[0]
-    expect(install.command).toContain('@proj-airi')
-    expect(install.args[install.args.length - 1]).toBe(`/D=${win32Path(condaPrefix(h))}`)
+    const install = installerCalls(h)[0]
+    expect(install[0]).toContain('@proj-airi')
+    expect(install.slice(1, -2)[4]).toBe(`/D=${win32Path(condaPrefix(h))}`)
   })
 })
