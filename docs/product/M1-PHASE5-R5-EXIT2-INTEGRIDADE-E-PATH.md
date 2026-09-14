@@ -1,6 +1,19 @@
 # Phase 5 Round 5 — exit=2 persiste com argumentos oficiais: refutação, integridade do instalador, hipóteses restantes e protocolo
 
-Commits desta rodada em `arena/01a09ddb-lia-project` (nesta ordem: sonda QA v2, este doc). **Sem installer PASS** — a próxima leitura no Windows decide. Nenhum código de produção foi alterado nesta rodada (diagnóstico apenas).
+Commits desta rodada em `arena/01a09ddb-lia-project` (nesta ordem: sonda QA v2, este doc). Nenhum código de produção foi alterado nesta rodada (diagnóstico apenas).
+
+## 0. Atualização — CAUSA CONFIRMADA pela leitura da sonda
+
+Execução real no Windows (usuário, mesma máquina dos rounds anteriores):
+
+| run | sha256 | args | `/D` | resultado |
+|---|---|---|---|---|
+| default | **bateu com o oficial** (`fb6aaeaf…d0268`) | oficiais | prefixo real com `@proj-airi` | **exit=2**, sem prefix |
+| cleanpath | idem | oficiais (idênticos) | `…\Temp\lia-qa-conda` (sem `@`) | **exit=0**, prefix criado, `_conda.exe` criado |
+
+Leitura: **h1 confirmada — o `@` de `@proj-airi` no path de destino é a causa do exit=2.** Na mesma execução ficam refutadas: (a) flags/args (conjunto oficial em ambos os runs), (b) forma mista do path, (h2) integridade do arquivo (hash idêntico ao registro oficial), (h3) ambiente como causa primária (o mesmo processo, no mesmo minuto, instala com sucesso apenas mudando o destino). Ressalva de rigor mantida de propósito: os dois runs também diferem em Roaming-vs-Temp; os modos de refinamento `roamingclean` (Roaming sem `@`) e `cleanamp` (Temp com `@`) fecham o discriminador em definitivo — a conclusão de produto não muda, porque o fix em qualquer cenário é **tirar o `@` do path de instalação**.
+
+**Sem installer PASS** no caminho de produção — o app ainda falha até o fix de produto existir.
 
 ## 1. O que o log da Round 5 prova
 
@@ -59,10 +72,7 @@ Produção intacta nesta rodada. Se h1 confirmar, as opções de correção (pre
 
 ## 6. Contratos da próxima leitura
 
-1. sha256 impresso pela sonda bate com `fb6aaeaf…d0268`?
-2. `cleanpath`: exit code + `conda prefix exists=` + `_conda.exe exists=`.
-3. Se h3 vencer: uma entrada correspondente no Histórico de proteção do Windows no horário do run.
-4. Se algum modo retornar exit 0 + `_conda.exe` no prefixo real, aí sim o resume upstream (`resume-incomplete`) pode ser exercitado — até lá, **sem installer PASS**.
+Respondidos pela leitura acima: (1) sha256 **bateu**; (2) cleanpath exit **0** com prefix e `_conda.exe`. O que resta: (3) refinamento opcional do discriminador via `roamingclean`/`cleanamp`; (4) após o fix de produto da Round 6, uma instalação de ponta a ponta no app (verify exit=0 → resume upstream → marker `start_alltalk.bat`) é o que finalmente autoriza declarar **installer PASS**.
 
 ## 7. Verificação local
 
