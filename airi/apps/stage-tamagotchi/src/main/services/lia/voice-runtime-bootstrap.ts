@@ -86,6 +86,42 @@ export type BootstrapFailureCategory = LiaBootstrapFailureCategory
 export const START_SCRIPT = 'start_alltalk.bat'
 
 /**
+ * The Miniconda stage of the pinned installer, named so the setup step can
+ * verify and repair it rather than inheriting the script's blinkered exit
+ * code. Read straight from `atsetup.bat` at the pinned commit (branch
+ * :InstallCustomStandalone): the installer the script curls into its own
+ * tree, the prefix its NSIS /D= switch targets, and the binary the script
+ * itself uses to decide whether Miniconda needs installing.
+ */
+export const MINICONDA_INSTALLER = 'alltalk_environment/miniconda_installer.exe'
+export const MINICONDA_PREFIX = 'alltalk_environment/conda'
+export const MINICONDA_EXE = 'alltalk_environment/conda/_conda.exe'
+
+/** Ceiling for the direct installer run. A silent NSIS install is minutes, not hours. */
+export const MINICONDA_INSTALL_TIMEOUT_MS = 20 * 60 * 1000
+
+/**
+ * Exactly the invocation of the pinned script's `start /wait` line, as an
+ * argument array rather than a shell string: the installer path is never
+ * re-parsed, the arguments never concatenate into a command line, and NSIS
+ * still receives /D= last and unquoted as it requires. JustMe, AddToPath=0,
+ * RegisterPython=0 and NoRegistry=1 are what keep the install inside the
+ * runtime tree: the global PATH, the global Python and the registry are not
+ * touched (item F of the round-3 brief).
+ */
+export function minicondaInstallerArgs(condaPrefix: string): string[] {
+  return [
+    '/InstallationType=JustMe',
+    '/NoShortcuts=1',
+    '/AddToPath=0',
+    '/RegisterPython=0',
+    '/NoRegistry=1',
+    '/S',
+    `/D=${condaPrefix}`,
+  ]
+}
+
+/**
  * Subdirectory the AllTalk tree lives in, inside the runtime root.
  *
  * Named once because two modules compute this path: the bootstrapper, which
@@ -112,6 +148,21 @@ export const PINNED_ALLTALK_VERSION = PINNED_ALLTALK_COMMIT.slice(0, 12)
 export function alltalkSourceUrl(commit: string = PINNED_ALLTALK_COMMIT): string {
   return `https://github.com/erew123/alltalk_tts/archive/${commit}.zip`
 }
+
+/**
+ * Files the setup step needs on disk before it may spawn the installer.
+ *
+ * Read straight from the `-silent` branch of `atsetup.bat`: the script itself,
+ * plus the two requirements files it feeds to `pip install -r` with a *relative*
+ * path from its working directory. Spawning without them would not fail here -
+ * it would fail twenty minutes in, mid-setup, with a pip error far away from the
+ * real cause. Refusing first is what keeps the failure named correctly.
+ */
+export const SETUP_INPUTS = [
+  'atsetup.bat',
+  'system/requirements/requirements_standalone.txt',
+  'system/requirements/requirements_parler.txt',
+] as const
 
 /** The step ids, in order. The UI renders these; the runner walks them. */
 export const BOOTSTRAP_STEP_IDS = [
@@ -147,6 +198,8 @@ export interface BootstrapDeps {
   /** Extracts a ZIP archive into a directory. */
   extract: (archivePath: string, destDir: string) => Promise<void>
   exists: (path: string) => Promise<boolean>
+  /** Size of a file on disk, when it exists. Undefined answers "missing". */
+  stat: (path: string) => Promise<{ size: number } | undefined>
   mkdir: (path: string) => Promise<void>
   remove: (path: string) => Promise<void>
   rename: (from: string, to: string) => Promise<void>
@@ -165,6 +218,17 @@ export interface BootstrapDeps {
   setupTimeoutMs?: number
   /** Aborts the run when it returns true. Checked between steps. */
   isCancelled?: () => boolean
+  /**
+   * Called synchronously after every state mutation.
+   *
+   * This is how progress reaches the UI: the main process forwards each call
+   * to the renderer, which renders exactly what it receives. Deliberately push,
+   * not poll - a timer republishing the same state would emit updates that
+   * carry no information, and a number that moves on a schedule is a fake
+   * progress the user can catch. No timer anywhere in here: if nothing
+   * changed, nothing is said.
+   */
+  onStateChange?: (state: BootstrapState) => void
 }
 
 /** What is recorded in `state.json`. */
@@ -233,8 +297,37 @@ export function createVoiceRuntimeBootstrapper(deps: BootstrapDeps): Bootstrappe
   let running: Promise<BootstrapState> | undefined
   let cancelRequested = false
 
+  /**
+   * Publishes the current state - but only when it actually changed.
+   *
+   * The comparison is on the published content, not on object identity:
+   * `setPhase('checking')` while already in `checking` must not emit a payload
+   * indistinguishable from the previous one, because a "notification" that
+   * carries no new information is what a republication timer produces. Every
+   * emitted payload is worth the renderer's attention.
+   *
+   * A listener that throws must not abort the install: the renderer being slow
+   * or unhappy is no reason to leave a half-finished runtime. The bootstrap
+   * log still records what happened.
+   */
+  let lastPublished = ''
+  function notify(): void {
+    const snapshot = JSON.stringify(state)
+    if (snapshot === lastPublished)
+      return
+    lastPublished = snapshot
+
+    try {
+      deps.onStateChange?.(state)
+    }
+    catch {
+      // Swallowed on purpose - see above.
+    }
+  }
+
   function setPhase(phase: BootstrapPhase, extra: Partial<BootstrapState> = {}): void {
     state = { ...state, phase, ...extra }
+    notify()
   }
 
   function setStep(id: BootstrapStepId, patch: Partial<BootstrapStep>): void {
@@ -242,6 +335,7 @@ export function createVoiceRuntimeBootstrapper(deps: BootstrapDeps): Bootstrappe
       ...state,
       steps: state.steps.map(step => (step.id === id ? { ...step, ...patch } : step)),
     }
+    notify()
   }
 
   function isCancelled(): boolean {
@@ -293,7 +387,10 @@ export function createVoiceRuntimeBootstrapper(deps: BootstrapDeps): Bootstrappe
 
   async function stepFetchSource(): Promise<void> {
     const started = Date.now()
-    setStep('fetch-source', { status: 'running' })
+    // The detail tracks the sub-state this step is actually inside: it starts
+    // in the download, and flips to 'extracting' right before the extraction
+    // call below. Real machine states, not presentation guesses.
+    setStep('fetch-source', { detail: 'downloading', status: 'running' })
 
     const target = appDir()
 
@@ -337,6 +434,7 @@ export function createVoiceRuntimeBootstrapper(deps: BootstrapDeps): Bootstrappe
     }
 
     await deps.mkdir(target)
+    setStep('fetch-source', { detail: 'extracting' })
     await deps.extract(archive, target)
     await deps.remove(archive).catch(() => undefined)
 
@@ -358,37 +456,187 @@ export function createVoiceRuntimeBootstrapper(deps: BootstrapDeps): Bootstrappe
 
     // Already set up? The marker is the launcher atsetup.bat writes as its final
     // act, so its presence means a previous run completed this step.
-    if (await deps.exists(`${cwd}/start_alltalk.bat`)) {
+    if (await deps.exists(`${cwd}/${START_SCRIPT}`)) {
       deps.log({ event: 'skipped-present', step: 'run-setup' })
       setStep('run-setup', { detail: 'already set up', elapsedMs: Date.now() - started, status: 'skipped' })
       return
     }
 
-    deps.log({ event: 'start', step: 'run-setup' })
-
-    // `-silent` bypasses the interactive menu entirely (audit, atsetup.bat:46).
-    // `cmd /d /s /c <script>` with the directory as cwd: the path is never part
-    // of a command string, so it cannot be re-parsed by a shell.
-    const result = await deps.exec(
-      process.env.ComSpec ?? 'cmd.exe',
-      ['/d', '/s', '/c', 'atsetup.bat', '-silent'],
-      { cwd, timeoutMs: setupTimeoutMs },
-    )
-
-    deps.log({
-      detail: result.stderr ? result.stderr.slice(-300) : undefined,
-      elapsedMs: Date.now() - started,
-      event: 'finished',
-      exitCode: result.code,
-      step: 'run-setup',
-    })
-
-    if (result.code !== 0) {
-      const error = new Error(`atsetup.bat exited with code ${result.code}`)
-      throw Object.assign(error, { category: categorizeFailure(error, result.stderr) })
+    // Refuse to spawn into a broken tree (item E of the round-2 brief). The
+    // installer assumes it runs from the AllTalk root and reads these inputs by
+    // relative path; if the extraction left something out, failing *here* names
+    // the missing file instead of surfacing as a mid-setup error twenty minutes
+    // and one Miniconda download later.
+    const missingInputs: string[] = []
+    for (const input of SETUP_INPUTS) {
+      if (!await deps.exists(`${cwd}/${input}`))
+        missingInputs.push(input)
+    }
+    if (missingInputs.length > 0) {
+      deps.log({ detail: `missing: ${missingInputs.join(', ')}`, event: 'layout-invalid', step: 'run-setup' })
+      throw Object.assign(
+        new Error(`setup inputs missing, refusing to run the installer: ${missingInputs.join(', ')}`),
+        { category: 'setup' as const },
+      )
     }
 
-    setStep('run-setup', { elapsedMs: Date.now() - started, status: 'done' })
+    const startScript = `${cwd}/${START_SCRIPT}`
+    const installer = `${cwd}/${MINICONDA_INSTALLER}`
+    const condaPrefix = `${cwd}/${MINICONDA_PREFIX}`
+    const condaExe = `${cwd}/${MINICONDA_EXE}`
+
+    /** Generic failure: the UI shows this sentence, so no technical nouns. */
+    const opaqueFailure = (): Error =>
+      Object.assign(new Error('The voice environment could not be prepared; the technical reason is in the log.'), { category: 'setup' as const })
+
+    // Logged before spawning so a failure report carries the exact working
+    // directory and arguments that ran rather than a reconstruction (item D).
+    // Paths belong in this log, never in what the UI shows.
+    const runAtsetup = async (attempt: 'initial' | 'resume'): Promise<ExecResult> => {
+      deps.log({
+        detail: `cwd=${cwd} exe=${process.env.ComSpec ?? 'cmd.exe'} args=atsetup.bat -silent attempt=${attempt}`,
+        event: 'start',
+        step: 'run-setup',
+      })
+
+      // `-silent` bypasses the interactive menu entirely (audit, atsetup.bat:46).
+      // `cmd /d /s /c <script>` with the directory as cwd: the path is never part
+      // of a command string, so it cannot be re-parsed by a shell.
+      const result = await deps.exec(
+        process.env.ComSpec ?? 'cmd.exe',
+        ['/d', '/s', '/c', 'atsetup.bat', '-silent'],
+        { cwd, timeoutMs: setupTimeoutMs },
+      )
+
+      deps.log({
+        detail: outputTail(result),
+        elapsedMs: Date.now() - started,
+        event: 'finished',
+        exitCode: result.code,
+        step: 'run-setup',
+      })
+      return result
+    }
+
+    // The facts a diagnosis of the Miniconda stage needs (item B): the
+    // installer the script downloaded, its size, the prefix its /D= targets,
+    // and the binary whose absence made the script give up. Logged, never shown.
+    const minicondaFacts = async (event: string): Promise<{ condaReady: boolean, installerBytes?: number, installerExists: boolean }> => {
+      const [installerExists, prefixExists, condaExeExists, installerStat] = await Promise.all([
+        deps.exists(installer),
+        deps.exists(condaPrefix),
+        deps.exists(condaExe),
+        deps.stat(installer),
+      ])
+      deps.log({
+        detail: `cwd=${cwd} installer=${installer} installer-exists=${installerExists} installer-bytes=${installerStat ? installerStat.size : 'unknown'} conda-prefix=${condaPrefix} conda-prefix-exists=${prefixExists} conda-exe=${condaExe} conda-exe-exists=${condaExeExists}`,
+        event,
+        step: 'run-setup',
+      })
+      return { condaReady: prefixExists && condaExeExists, installerBytes: installerStat?.size, installerExists }
+    }
+
+    const entry = await minicondaFacts('miniconda-facts')
+
+    // When Miniconda is already verified, a fresh run is pure waste: the
+    // script's conda check would short-circuit anyway, and it would curl 81 MB
+    // of installer over a file that is already there (item H). Go straight to
+    // the resume attempt below.
+    let result: ExecResult | undefined
+    if (!entry.condaReady)
+      result = await runAtsetup('initial')
+
+    // Exit code alone is a liar here. atsetup.bat abandons a failed install by
+    // jumping to its end label, and the echoes there reset ERRORLEVEL, so a
+    // half-built tree still returns 0 - the QA log of round 2 shows exactly
+    // that: "path not found" from the script, exit 0, and only verify-install
+    // noticing. The honest success signal of this step is the artefact the
+    // script only writes as its final act: the generated launcher.
+    if (result?.code === 0 && await deps.exists(startScript)) {
+      setStep('run-setup', { elapsedMs: Date.now() - started, status: 'done' })
+      return
+    }
+
+    if (result?.code === 0) {
+      deps.log({
+        detail: `the installer exited 0 but never wrote ${START_SCRIPT}; its output above names where it gave up`,
+        event: 'incomplete',
+        step: 'run-setup',
+      })
+    }
+
+    // Recovery. The facts are re-read because the attempt above is what
+    // usually downloads the installer.
+    const recovery = await minicondaFacts('miniconda-recovery-facts')
+
+    if (!recovery.installerExists && !recovery.condaReady) {
+      // Nothing to repair with: the download itself is what failed. Preserve
+      // the diagnostics this step reported before the repair layer existed.
+      deps.log({ detail: `no ${MINICONDA_INSTALLER} to run directly`, event: 'miniconda-repair-skipped', step: 'run-setup' })
+      if (result && result.code !== 0) {
+        const error = new Error(`atsetup.bat exited with code ${result.code}`)
+        throw Object.assign(error, { category: categorizeFailure(error, result.stderr) })
+      }
+      throw Object.assign(
+        new Error(`atsetup.bat reported success but did not finish the setup (${START_SCRIPT} was not created)`),
+        { category: 'setup' as const },
+      )
+    }
+
+    if (!recovery.condaReady) {
+      // The known failure of the pinned script: its `start /wait` line runs
+      // the NSIS installer and never checks the outcome. Run the very same
+      // installer directly instead, with the very same arguments, and collect
+      // what the script never could: the real process exit code (items D, E).
+      deps.log({
+        detail: `cwd=${cwd} exe=${installer} installer-bytes=${recovery.installerBytes ?? 'unknown'} args=${minicondaInstallerArgs(condaPrefix).join(' ')}`,
+        event: 'miniconda-install-start',
+        step: 'run-setup',
+      })
+      const installResult = await deps.exec(
+        installer,
+        minicondaInstallerArgs(condaPrefix),
+        { cwd, timeoutMs: MINICONDA_INSTALL_TIMEOUT_MS },
+      )
+      deps.log({
+        detail: outputTail(installResult),
+        event: 'miniconda-install-finished',
+        exitCode: installResult.code,
+        step: 'run-setup',
+      })
+
+      // Item G: exit code AND both artefacts, or the stage did not pass.
+      const prefixOk = await deps.exists(condaPrefix)
+      const exeOk = await deps.exists(condaExe)
+      deps.log({
+        detail: `exit=${installResult.code} conda-prefix-exists=${prefixOk} conda-exe-exists=${exeOk}`,
+        event: 'miniconda-install-verify',
+        step: 'run-setup',
+      })
+      if (installResult.code !== 0 || !prefixOk || !exeOk)
+        throw opaqueFailure()
+      deps.log({ event: 'miniconda-install-verified', step: 'run-setup' })
+    }
+
+    // Miniconda is functional now. Item E: continue through the supported
+    // upstream path rather than reimplementing the rest of the setup. The
+    // audit of the pin says this cannot resume - the script's conda-exists
+    // branch jumps to a RunScript label the file does not define - but the
+    // attempt is deterministic, cheap, downloads nothing, and the artefact
+    // check below is what decides either way; if a future pin resumes
+    // properly, this simply starts passing.
+    const resume = await runAtsetup('resume')
+    if (await deps.exists(startScript)) {
+      setStep('run-setup', { elapsedMs: Date.now() - started, status: 'done' })
+      return
+    }
+
+    deps.log({
+      detail: `resume exited ${resume.code} without writing ${START_SCRIPT}; the pinned -silent cannot resume (its conda-exists branch targets a RunScript label the script does not define, audit of pin ${PINNED_ALLTALK_COMMIT})`,
+      event: 'resume-incomplete',
+      step: 'run-setup',
+    })
+    throw opaqueFailure()
   }
 
   async function stepVerifyInstall(): Promise<void> {
@@ -444,6 +692,7 @@ export function createVoiceRuntimeBootstrapper(deps: BootstrapDeps): Bootstrappe
   async function doRun(repair: boolean): Promise<BootstrapState> {
     cancelRequested = false
     state = { phase: 'checking', steps: initialSteps() }
+    notify()
     deps.log({ detail: repair ? 'repair' : 'install', event: 'start', step: 'bootstrap' })
     const startedAt = Date.now()
 
@@ -517,6 +766,7 @@ export function createVoiceRuntimeBootstrapper(deps: BootstrapDeps): Bootstrappe
       deps.log({ event: 'start', step: 'bootstrap' })
       await deps.remove(deps.runtimeDir)
       state = { phase: 'not-installed', steps: initialSteps() }
+      notify()
       deps.log({ event: 'removed', step: 'bootstrap' })
     },
   }
@@ -547,6 +797,23 @@ export function messageFor(category: BootstrapFailureCategory): string {
 /** SHA-256 of a buffer, for validating a download before it is used. */
 export function sha256Of(bytes: Uint8Array): string {
   return createHash('sha256').update(Buffer.from(bytes)).digest('hex')
+}
+
+/**
+ * The end of the installer's output, flattened onto one log line.
+ *
+ * The installer prints its diagnosis to *either* stream - the `ERRORLEVEL`
+ * messages go to stderr while the surrounding narration sits on stdout - so
+ * capturing only stderr, as the first version did, could leave the single line
+ * that names the failure out of the log. Kept short and whitespace-flattened:
+ * this is a tail for a human reading a QA log, not a transcript. Installer
+ * output only; never conversation text, never a secret.
+ */
+export function outputTail(result: Pick<ExecResult, 'stderr' | 'stdout'>, maxPerStream = 300): string {
+  const tail = (text: string): string => text.replace(/\s+/g, ' ').trim().slice(-maxPerStream)
+  const stdout = tail(result.stdout)
+  const stderr = tail(result.stderr)
+  return `stdout=${stdout || '(empty)'} | stderr=${stderr || '(empty)'}`
 }
 
 /**

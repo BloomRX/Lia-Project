@@ -15,6 +15,7 @@ import {
   electronLiaBootstrapRun,
   electronLiaBootstrapState,
 } from '../../../shared/eventa'
+import { isLiaBootstrapActivePhase } from '../../../shared/lia-voice'
 import { createAllTalkClient } from './alltalk-client'
 import { DEFAULT_START_TIMEOUT_MS } from './alltalk-runtime'
 import { createVoiceRuntimeBootstrapper } from './voice-runtime-bootstrap'
@@ -151,6 +152,7 @@ export function registerLiaBootstrapBridge(params: {
       download: createRuntimeDownload(),
       exec: createRuntimeExec(),
       exists: async path => await import('node:fs/promises').then(({ stat }) => stat(path).then(() => true, () => false)),
+      stat: async p => await import('node:fs/promises').then(({ stat }) => stat(p).then(s => ({ size: s.size }), () => undefined)),
       extract: createRuntimeExtract({
         // Diagnostics for a refused entry. Fired once, for the first one only: a
         // 700-entry archive would otherwise emit 700 identical lines and bury the
@@ -177,6 +179,11 @@ export function registerLiaBootstrapBridge(params: {
       mkdir: async (path) => {
         await fsMkdir(path, { recursive: true })
       },
+      // The bootstrapper reports every state mutation; each one is forwarded to
+      // the renderer as-is. This replaces the old 250 ms republication timer,
+      // which emitted updates carrying no new information - and looked, from the
+      // UI side, exactly like a fake progress driver.
+      onStateChange: state => emit(state),
       probe: createRuntimeProbe(),
       readState: async () => store.read(),
       remove: async path => fsRemove(path, { force: true, recursive: true }),
@@ -194,21 +201,12 @@ export function registerLiaBootstrapBridge(params: {
     const instance = ensureBootstrapper()
     emit(instance.state())
 
-    // The bootstrapper mutates its state as it goes; publishing on a timer would
-    // be arbitrary. Instead, publish at each step boundary by observing the
-    // returned state transitions through a short poll of the pure object.
-    const promise = instance.run({ repair })
-    const interval = setInterval(() => emit(instance.state()), 250)
-
-    try {
-      const final = await promise
-      emit(final)
-      return final
-    }
-    finally {
-      clearInterval(interval)
-      emit(instance.state())
-    }
+    // Every transition in between is pushed by the bootstrapper itself through
+    // onStateChange; this wrapper only brackets the run with the initial and
+    // the final snapshot.
+    const final = await instance.run({ repair })
+    emit(final)
+    return final
   }
 
   defineInvokeHandler(context, electronLiaBootstrapState, async (): Promise<LiaBootstrapState> =>
@@ -231,11 +229,7 @@ export function registerLiaBootstrapBridge(params: {
 
   return {
     state: () => ensureBootstrapper().state(),
-    isInstalling: () => {
-      const phase = ensureBootstrapper().state().phase
-      return phase === 'checking' || phase === 'installing-prerequisites' || phase === 'installing-runtime'
-        || phase === 'preparing-model' || phase === 'verifying'
-    },
+    isInstalling: () => isLiaBootstrapActivePhase(ensureBootstrapper().state().phase),
     run: async (repair?: boolean) => runAndPublish(repair ?? false),
     cancel: () => ensureBootstrapper().cancel(),
     remove: async () => {
