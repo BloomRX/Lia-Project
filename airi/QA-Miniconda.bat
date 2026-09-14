@@ -24,6 +24,10 @@ rem  exit 0 + _conda.exe — the "@" in the real destination path is the
 rem  cause. Two refinement modes below nail the discriminator at 100%
 rem  (Roaming-vs-Temp vs the character itself).
 rem
+rem  ROUND 6 NOTE: production moved the runtime root off the '@' path
+rem  (the confirmed exit=2 cause). The probe prefers the new root and
+rem  falls back to the legacy one for trees not yet migrated.
+rem
 rem  MODES (one per run, first argument):
 rem    QA-Miniconda.bat              default: facts + sha256 + official-args
 rem                                  silent install into the REAL prefix
@@ -51,7 +55,8 @@ rem  Prerequisites: run "Instalar" in Lia once, so the installer file
 rem  exists (not needed for the "redownload" mode).
 rem ======================================================================
 setlocal
-set "APPROOT=%APPDATA%\@proj-airi\stage-tamagotchi\runtimes\alltalk\app"
+set "APPROOT=%APPDATA%\proj-airi\stage-tamagotchi\runtimes\alltalk\app"
+if not exist "%APPROOT%\" set "APPROOT=%APPDATA%\@proj-airi\stage-tamagotchi\runtimes\alltalk\app"
 set "ENVDIR=%APPROOT%\alltalk_environment"
 set "INSTALLER=%ENVDIR%\miniconda_installer.exe"
 set "PREFIX=%ENVDIR%\conda"
