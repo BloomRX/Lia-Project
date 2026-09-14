@@ -16,6 +16,7 @@ import {
   electronLiaBootstrapState,
 } from '../../../shared/eventa'
 import { createAllTalkClient } from './alltalk-client'
+import { DEFAULT_START_TIMEOUT_MS } from './alltalk-runtime'
 import { createVoiceRuntimeBootstrapper } from './voice-runtime-bootstrap'
 import {
   createRuntimeDownload,
@@ -121,7 +122,10 @@ export function registerLiaBootstrapBridge(params: {
    */
   const startRuntime = async (): Promise<boolean> => {
     await params.runtime.start()
-    const deadline = Date.now() + 180_000
+    // The manager's own budget, not a second copy of it. Polling for less time
+    // than the manager allows would report a timeout for a runtime that is still
+    // legitimately starting.
+    const deadline = Date.now() + DEFAULT_START_TIMEOUT_MS
     while (Date.now() < deadline) {
       if (params.runtime.state().state === 'ready')
         return true
