@@ -28,6 +28,15 @@ rem  ROUND 6 NOTE: production moved the runtime root off the '@' path
 rem  (the confirmed exit=2 cause). The probe prefers the new root and
 rem  falls back to the legacy one for trees not yet migrated.
 rem
+rem  ROUND 7 NOTE: production moved the runtime root once more, to
+rem  %LOCALAPPDATA%\Lia\runtimes\alltalk (Local rather than Roaming:
+rem  gigabytes of conda environment do not belong in a synced profile).
+rem  The probe now prefers that root and falls back to the round-6
+rem  (Roaming\proj-airi) and round-5 (@proj-airi) ones. Round 7 also
+rem  closed the Miniconda arc: the direct silent install exits 0 with
+rem  verified artefacts, so this probe's default mode should succeed
+rem  end-to-end on a machine where the Lia installer ran once.
+rem
 rem  MODES (one per run, first argument):
 rem    QA-Miniconda.bat              default: facts + sha256 + official-args
 rem                                  silent install into the REAL prefix
@@ -55,7 +64,8 @@ rem  Prerequisites: run "Instalar" in Lia once, so the installer file
 rem  exists (not needed for the "redownload" mode).
 rem ======================================================================
 setlocal
-set "APPROOT=%APPDATA%\proj-airi\stage-tamagotchi\runtimes\alltalk\app"
+set "APPROOT=%LOCALAPPDATA%\Lia\runtimes\alltalk\app"
+if not exist "%APPROOT%\" set "APPROOT=%APPDATA%\proj-airi\stage-tamagotchi\runtimes\alltalk\app"
 if not exist "%APPROOT%\" set "APPROOT=%APPDATA%\@proj-airi\stage-tamagotchi\runtimes\alltalk\app"
 set "ENVDIR=%APPROOT%\alltalk_environment"
 set "INSTALLER=%ENVDIR%\miniconda_installer.exe"
