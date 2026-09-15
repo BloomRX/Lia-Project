@@ -112,6 +112,10 @@ vi.mock('@proj-airi/electron-vueuse', () => ({
       return async () => null
     if (id === 'eventa:invoke:lia:runtime:install-steps-receive')
       return async () => []
+    // The on-disk fact, asked on mount (Phase 6 hotfix, item E): default to
+    // the honest empty machine so these harnesses keep their legacy rows.
+    if (id === 'eventa:invoke:lia:runtime:install-state-receive')
+      return async () => ({ state: 'not-installed' })
     if (id === 'eventa:invoke:lia:bootstrap:state-receive')
       return async () => ({ phase: 'ready', steps: [] })
     if (id === 'eventa:invoke:lia:bootstrap:run-receive')

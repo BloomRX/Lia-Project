@@ -25,12 +25,13 @@ import type { LiaBootstrapState } from '../../../shared/lia-voice'
 import { defineInvoke } from '@moeru/eventa'
 import { createContext as createMainContext } from '@moeru/eventa/adapters/electron/main'
 import { createContext as createRendererContext } from '@moeru/eventa/adapters/electron/renderer'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   electronLiaBootstrapChanged,
   electronLiaBootstrapRun,
   electronLiaBootstrapState,
+  electronLiaRuntimeInstallState,
 } from '../../../shared/eventa'
 
 vi.mock('electron', () => ({
@@ -43,14 +44,33 @@ vi.mock('electron', () => ({
 
 const ROOT_ERROR = new Error('Failed to resolve the local runtime root (test)')
 
+const { rootBroken, stateStoreRead } = vi.hoisted(() => ({
+  // The item-E fault, switchable: the original describe keeps it on (root
+  // unresolvable), the install-state describe turns it off so the persisted
+  // record - which lives under the root - is reachable again.
+  rootBroken: { current: true },
+  // A record the injected fault cannot throw for: createRuntimeStateStore
+  // receives a store whose read is driven per-test. The default - null -
+  // spells "never completed", which is what the throwing root used to mean.
+  stateStoreRead: { current: async () => null as null | Record<string, unknown> },
+}))
+
 vi.mock('./voice-runtime-bootstrap-electron', async (importOriginal) => {
   const original = await importOriginal<typeof import('./voice-runtime-bootstrap-electron')>()
   return {
     ...original,
     // The machine fault the QA showed us, injected at the exact seam it
     // happened on: everything the bridge asks for a root now throws.
+    // createRuntimeStateStore is spared and jailed in memory: the install-state
+    // handler must be able to read the persisted record even when the root
+    // itself cannot resolve - a record is the fact that survived, not a path.
+    createRuntimeStateStore: () => ({ read: () => stateStoreRead.current(), write: async () => undefined }),
     runtimeAppDir: () => { throw ROOT_ERROR },
-    runtimeRootDir: () => { throw ROOT_ERROR },
+    runtimeRootDir: () => {
+      if (rootBroken.current)
+        throw ROOT_ERROR
+      return '/tmp/lia-hotfix4-root'
+    },
   }
 })
 
@@ -174,5 +194,79 @@ describe('bridge registration survives an unresolvable runtime root (item E)', (
     expect(result?.phase).toBe('failed')
 
     consoleInfo.mockRestore()
+  })
+})
+
+describe('install-state handler: asked from disk, never inferred (Phase 6 hotfix, item H)', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+    // The record only exists under a resolvable root; these tests are about
+    // what the handler concludes from it, not about the root fault above.
+    rootBroken.current = false
+    stateStoreRead.current = async () => null
+  })
+
+  afterEach(() => {
+    rootBroken.current = true
+  })
+
+  const bridge = async (runtime: Parameters<Awaited<typeof import('./voice-runtime-bootstrap-service')>['registerLiaBootstrapBridge']>[0]['runtime']) => {
+    const { registerLiaBootstrapBridge } = await import('./voice-runtime-bootstrap-service')
+    const transport = makeTransport()
+    const { context: mainContext } = createMainContext(transport.ipcMain as never, transport.window as never)
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    registerLiaBootstrapBridge({ context: mainContext, runtime })
+    const { context: rendererContext } = createRendererContext(transport.ipcRenderer as never)
+    return defineInvoke(rendererContext, electronLiaRuntimeInstallState)()
+  }
+
+  it('the runtime says installed → installed, with no record and no record read even attempted well', async () => {
+    stateStoreRead.current = async () => null
+    const answer = await bridge({ ...fakeRuntimeControl, isInstalled: async () => true })
+    expect(answer?.state).toBe('installed')
+  })
+
+  it('markers gone but a completed-install record survives → repair-needed', async () => {
+    // Round-6/7 partial tree stands opposite here: files half-present with a
+    // finished record must offer Repair, never Install and never "missing".
+    stateStoreRead.current = async () => ({ completedAt: '2026-09-01T00:00:00Z' })
+    const answer = await bridge({ ...fakeRuntimeControl, isInstalled: async () => false })
+    expect(answer?.state).toBe('repair-needed')
+  })
+
+  it('markers gone and no record → not-installed (the new machine, honestly)', async () => {
+    stateStoreRead.current = async () => null
+    const answer = await bridge({ ...fakeRuntimeControl, isInstalled: async () => false })
+    expect(answer?.state).toBe('not-installed')
+  })
+
+  it('an isInstalled probe that blows up alongside the root → still an answer, never a rejection', async () => {
+    // The card mounts against this handler; a rejected invoke would leave the
+    // install question blank - the exact silent-card shape this round exists
+    // to forbid.
+    stateStoreRead.current = async () => null
+    const answer = await bridge({
+      ...fakeRuntimeControl,
+      isInstalled: async () => { throw new Error('root gone') },
+    })
+    expect(answer?.state).toBe('not-installed')
+  })
+
+  it('legacy control without the probe read: the record decides (installed ⇒ repair-needed)', async () => {
+    // fakeRuntimeControl carries no isInstalled - the handler must not
+    // invent "not installed" for it when a completed record says otherwise.
+    stateStoreRead.current = async () => ({ completedAt: '2026-09-01T00:00:00Z' })
+    const answer = await bridge(fakeRuntimeControl)
+    expect(answer?.state).toBe('repair-needed')
+  })
+
+  it('mutation guard: server health is never asked for the install answer', async () => {
+    // A passing health probe must not fabricate "installed", and a failing
+    // one must not fabricate "not-installed" - the handler has exactly one
+    // source of truth and this test would see any second one consulted.
+    const state = vi.fn(() => ({ state: 'error' }))
+    stateStoreRead.current = async () => null
+    await bridge({ ...fakeRuntimeControl, isInstalled: async () => false, state })
+    expect(state).not.toHaveBeenCalled()
   })
 })

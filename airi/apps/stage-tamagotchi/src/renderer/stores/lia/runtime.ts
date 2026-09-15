@@ -1,5 +1,5 @@
 import type { LiaCustomVoiceEngineState, LiaCustomVoicePrepareState, LiaRuntimeInstallStep, LiaRuntimeState } from '../../../shared/eventa'
-import type { LiaBootstrapState } from '../../../shared/lia-voice'
+import type { LiaBootstrapState, LiaRuntimeInstallState } from '../../../shared/lia-voice'
 
 import { getElectronEventaContext, useElectronEventaInvoke } from '@proj-airi/electron-vueuse'
 import { defineStore } from 'pinia'
@@ -16,6 +16,7 @@ import {
   electronLiaCustomVoiceEngineState,
   electronLiaCustomVoicePrepare,
   electronLiaRuntimeInstallDirPick,
+  electronLiaRuntimeInstallState,
   electronLiaRuntimeInstallSteps,
   electronLiaRuntimeStart,
   electronLiaRuntimeState,
@@ -60,6 +61,28 @@ export const useLiaRuntimeStore = defineStore('lia-runtime', () => {
   const fetchBootstrap = useElectronEventaInvoke(electronLiaBootstrapState)
   const cancelBootstrap = useElectronEventaInvoke(electronLiaBootstrapCancel)
   const removeBootstrap = useElectronEventaInvoke(electronLiaBootstrapRemove)
+  const fetchInstallState = useElectronEventaInvoke(electronLiaRuntimeInstallState)
+
+  /**
+   * What exists on disk - queried, never inferred (Phase 6 QA hotfix, item E).
+   *
+   * This is the fact that must survive the runtime dropping: a stopped or
+   * erroring server does not uninstall the files. The main process answers
+   * from the install markers plus the persisted install record, and this
+   * store holds that answer verbatim, refreshed whenever a bootstrap run
+   * lands on a terminal phase (final file states of an install/repair walk).
+   */
+  const installState = shallowRef<LiaRuntimeInstallState | undefined>()
+
+  async function refreshInstallState(): Promise<void> {
+    try {
+      installState.value = (await fetchInstallState())?.state
+    }
+    catch {
+      // An unreadable answer leaves the previous one in place: the card
+      // falls back to the session rows rather than guessing a regression.
+    }
+  }
 
   /** Whether the guided wizard should be showing instead of a voice list. */
   const needsInstall = computed(() => state.value.state === 'notInstalled')
@@ -107,6 +130,11 @@ export const useLiaRuntimeStore = defineStore('lia-runtime', () => {
     getElectronEventaContext().on(electronLiaBootstrapChanged, (event) => {
       if (event.body)
         bootstrap.value = event.body
+      // A run landing on a terminal phase finalizes the files, so the disk
+      // fact deserves a fresh read - never assumed from the phase itself.
+      const phase = event.body?.phase
+      if (phase === 'ready' || phase === 'failed' || phase === 'cancelled' || phase === 'repair-needed')
+        void refreshInstallState()
     })
   }
   catch {
@@ -334,6 +362,7 @@ export const useLiaRuntimeStore = defineStore('lia-runtime', () => {
     bootstrapOutcome,
     customVoiceEngine,
     customVoicePrepare,
+    installState,
     isBusy,
     isInstalling,
     isPreparing,
@@ -349,6 +378,7 @@ export const useLiaRuntimeStore = defineStore('lia-runtime', () => {
     prepareCustomVoiceModel,
     refresh,
     refreshCustomVoiceEngine,
+    refreshInstallState,
     removeRuntime,
     runBootstrap,
     start,

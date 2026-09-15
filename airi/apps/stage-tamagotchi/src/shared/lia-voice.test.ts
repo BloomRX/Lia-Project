@@ -1,4 +1,4 @@
-import type { LiaBootstrapState, LiaVoiceRuntimePrimaryAction } from './lia-voice'
+import type { LiaBootstrapState, LiaRuntimeInstallState, LiaVoiceRuntimePrimaryAction, LiaVoiceRuntimeRunState } from './lia-voice'
 
 import { describe, expect, it } from 'vitest'
 
@@ -18,7 +18,7 @@ import { resolveVoiceRuntimePrimaryAction } from './lia-voice'
 
 const steps = (...ids: string[]): LiaBootstrapState['steps'] => ids.map(id => ({ id, status: 'pending' }))
 
-function expectAction(input: { bootstrap?: LiaBootstrapState, runtimeReady: boolean }, action: LiaVoiceRuntimePrimaryAction): void {
+function expectAction(input: { bootstrap?: LiaBootstrapState, installState?: LiaRuntimeInstallState, runtimeReady: boolean, runtimeState?: LiaVoiceRuntimeRunState }, action: LiaVoiceRuntimePrimaryAction): void {
   expect(resolveVoiceRuntimePrimaryAction(input), JSON.stringify(input.bootstrap?.phase)).toBe(action)
 }
 
@@ -98,5 +98,76 @@ describe('resolveVoiceRuntimePrimaryAction - the never-empty-handed rule', () =>
     expectAction({ runtimeReady: true }, 'none')
     expectAction({ bootstrap: { phase: 'not-installed', steps: [] }, runtimeReady: true }, 'none')
     expect(resolveVoiceRuntimePrimaryAction({ bootstrap: undefined, runtimeReady: false })).not.toBe('none')
+  })
+})
+
+describe('install state outranks the session rows (Phase 6 hotfix, item H)', () => {
+  // The QA evidence this guards: the files were all on disk, the server
+  // refused to start, and the card offered [Instalar] over a real install.
+  // The disk answer must come from the main process and must win over
+  // whatever the last bootstrap run remembered.
+
+  it('installed + merely stopped → no reinstall button, ever (H-4)', () => {
+    expectAction({ installState: 'installed', runtimeReady: false, runtimeState: 'stopped' }, 'none')
+    // Even with a stale failed record hanging around, the files being complete
+    // forbids [Instalar] - the QA regression in one assertion.
+    expectAction(
+      { bootstrap: { phase: 'failed', steps: steps() }, installState: 'installed', runtimeReady: false, runtimeState: 'stopped' },
+      'none',
+    )
+  })
+
+  it('installed + starting → still no button: the launch is narrated, not offered', () => {
+    expectAction({ installState: 'installed', runtimeReady: false, runtimeState: 'starting' }, 'none')
+  })
+
+  it('installed + failed server → retry-start, never repair and never install (H-5)', () => {
+    expectAction({ installState: 'installed', runtimeReady: false, runtimeState: 'failed' }, 'retry-start')
+  })
+
+  it('an active walk keeps the disabled in-flight button even on an installed tree', () => {
+    for (const phase of ['checking', 'installing-prerequisites', 'installing-runtime', 'preparing-model', 'verifying'] as const) {
+      expectAction(
+        { bootstrap: { phase, steps: steps() }, installState: 'installed', runtimeReady: false, runtimeState: 'stopped' },
+        'installing',
+      )
+    }
+  })
+
+  it('not-installed keeps the install door open (H-6)', () => {
+    expectAction({ installState: 'not-installed', runtimeReady: false, runtimeState: 'stopped' }, 'install')
+    // A failed attempt on an incomplete tree: health cause → repair, otherwise retry.
+    expectAction(
+      { bootstrap: { failureCategory: 'setup', phase: 'failed', steps: steps() }, installState: 'not-installed', runtimeReady: false, runtimeState: 'stopped' },
+      'retry',
+    )
+    expectAction(
+      { bootstrap: { failureCategory: 'health', phase: 'failed', steps: steps() }, installState: 'not-installed', runtimeReady: false, runtimeState: 'stopped' },
+      'repair',
+    )
+    expectAction(
+      { bootstrap: { phase: 'cancelled', steps: steps() }, installState: 'not-installed', runtimeReady: false, runtimeState: 'stopped' },
+      'retry',
+    )
+  })
+
+  it('repair-needed → repair, whichever way the runtime stands', () => {
+    expectAction({ installState: 'repair-needed', runtimeReady: false, runtimeState: 'stopped' }, 'repair')
+    expectAction({ installState: 'repair-needed', runtimeReady: false, runtimeState: 'failed' }, 'repair')
+  })
+
+  it('mutation guard: an explicit install answer can never produce the bare legacy wrongs', () => {
+    // If the 'installed' branch regressed to falling through the matrix, this
+    // row would answer 'install' (bootstrap failed → retry/repair in the
+    // legacy path, 'install' with no record) and the QA bug is back.
+    const states: LiaRuntimeInstallState[] = ['installed', 'not-installed', 'repair-needed']
+    for (const installState of states) {
+      const action = resolveVoiceRuntimePrimaryAction({ installState, runtimeReady: false, runtimeState: 'stopped' })
+      expect(['install', 'none', 'repair'], installState).toContain(action)
+      if (installState === 'installed')
+        expect(action).not.toBe('install')
+      if (installState === 'not-installed')
+        expect(action).toBe('install')
+    }
   })
 })

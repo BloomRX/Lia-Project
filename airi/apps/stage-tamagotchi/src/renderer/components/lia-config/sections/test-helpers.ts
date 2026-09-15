@@ -12,12 +12,18 @@ export interface LiaRuntimeChannelColumns {
   runtimeState?: { current: unknown }
   bootstrap?: { current: unknown }
   customVoiceEngine?: { current: unknown }
+  installState?: { current: unknown }
 }
 
 export function liaRuntimeChannelAnswer(
   id: string | undefined,
   cols: LiaRuntimeChannelColumns,
 ): (() => Promise<unknown>) | undefined {
+  // The on-disk fact, asked by the runtime store on mount (Phase 6 hotfix,
+  // item E). Overrides answer the dual-matrix tests; the default is the
+  // honest empty machine so legacy harnesses keep their round-7 rows.
+  if (id === 'eventa:invoke:lia:runtime:install-state-receive')
+    return async () => ({ state: cols.installState?.current ?? 'not-installed' })
   if (id === 'eventa:invoke:lia:runtime:state-receive')
     return async () => cols.runtimeState?.current ?? { state: 'notInstalled' }
   if (id === 'eventa:invoke:lia:runtime:start-receive')

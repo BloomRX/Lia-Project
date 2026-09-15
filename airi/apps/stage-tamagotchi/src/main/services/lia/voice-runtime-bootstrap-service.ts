@@ -6,7 +6,7 @@ import type {
   LiaCustomVoiceEngineState,
   LiaCustomVoicePrepareState,
 } from '../../../shared/eventa'
-import type { LiaBootstrapState } from '../../../shared/lia-voice'
+import type { LiaBootstrapState, LiaRuntimeInstallState } from '../../../shared/lia-voice'
 import type { Bootstrapper } from './voice-runtime-bootstrap'
 
 import { spawn } from 'node:child_process'
@@ -26,6 +26,7 @@ import {
   electronLiaCustomVoiceChanged,
   electronLiaCustomVoiceEngineState,
   electronLiaCustomVoicePrepare,
+  electronLiaRuntimeInstallState,
 } from '../../../shared/eventa'
 import { isLiaBootstrapActivePhase } from '../../../shared/lia-voice'
 import { createAllTalkClient } from './alltalk-client'
@@ -98,6 +99,12 @@ export interface LiaRuntimeControl {
    * control in tests reads as "unknown", the conservative value.
    */
   isOwnedInstance?: () => boolean
+  /**
+   * Whether the runtime's install markers are complete ON DISK (item E of the
+   * hotfix brief: installed is not running). The card asks this before it is
+   * allowed to say "[Instalar]" about a stopped server.
+   */
+  isInstalled?: () => Promise<boolean>
 }
 
 /**
@@ -292,6 +299,30 @@ export function registerLiaBootstrapBridge(params: {
       console.warn('[LIA-VOICE-BOOTSTRAP] could not resolve the runtime root for a state read; reporting not-installed', error)
       return { phase: 'not-installed', steps: [] }
     }
+  })
+
+  defineInvokeHandler(context, electronLiaRuntimeInstallState, async (): Promise<{ state: LiaRuntimeInstallState }> => {
+    // Item E of the hotfix brief: installed is not running. The markers are
+    // asked first; only their reading may say "installed". A completed
+    // install whose markers no longer check out is repair, and everything
+    // else is honestly not installed. Never inferred from server health.
+    try {
+      if (await params.runtime.isInstalled?.())
+        return { state: 'installed' }
+    }
+    catch {
+      // A broken root falls through to the record read, same posture as the
+      // bootstrap state handler: evidence beats assumption.
+    }
+    try {
+      const record = await getStateStore().read()
+      if (record)
+        return { state: 'repair-needed' }
+    }
+    catch {
+      // Unreadable record is indistinguishable from "never completed".
+    }
+    return { state: 'not-installed' }
   })
 
   defineInvokeHandler(context, electronLiaBootstrapRun, async (_repair: boolean): Promise<LiaBootstrapState> => {

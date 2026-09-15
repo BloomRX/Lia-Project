@@ -97,6 +97,10 @@ vi.mock('@proj-airi/electron-vueuse', () => ({
 
     // Bootstrap channels. Registered in every harness because the mock throws on
     // an unknown channel, and the runtime store now opens these on mount.
+    // The on-disk fact, asked on mount (Phase 6 hotfix, item E): default to
+    // the honest empty machine so these harnesses keep their legacy rows.
+    if (id === 'eventa:invoke:lia:runtime:install-state-receive')
+      return async () => ({ state: 'not-installed' })
     if (id === 'eventa:invoke:lia:bootstrap:state-receive')
       return async () => ipc.bootstrap.current
     if (id === 'eventa:invoke:lia:bootstrap:run-receive')

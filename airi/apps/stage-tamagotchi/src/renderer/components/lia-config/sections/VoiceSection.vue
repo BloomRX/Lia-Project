@@ -64,7 +64,28 @@ onMounted(() => {
   // The runtime state decides whether the custom-voice path shows an install
   // card or the imported voices, so it is read whenever the tab opens.
   void runtime.refresh()
+  // Same for the disk fact (Phase 6 hotfix, item E): the card's mounting
+  // condition reads it, and the card cannot be the one to load it because
+  // the card only exists after the condition is true.
+  void runtime.refreshInstallState()
 })
+
+/**
+ * Phase 6 hotfix, item G: the mount condition, spoken as the dual matrix.
+ *
+ * An installed-but-not-running tree has something to say ("installed /
+ * starting / start failed / repair") even with no bootstrap row in this
+ * session and no error on the probe - hiding the card there was what made
+ * [Instalar] look like the only option. While the disk answer has not
+ * arrived, the round-7 rule decides alone, so nothing flickers or vanishes.
+ */
+const showInstallCard = computed(() =>
+  runtime.needsInstall
+  || runtime.bootstrapOutcome
+  || runtime.state.state === 'error'
+  || (runtime.installState !== undefined
+    && runtime.installState !== 'not-installed'
+    && runtime.state.state !== 'ready'))
 
 function onChooseReady(): void {
   // Choosing "ready-made voice" means leaving the custom provider. The provider
@@ -288,7 +309,7 @@ function onPreview(): void {
            ('error') still mounts the card. The runtime is then by definition
            not working, and a panel with zero paths to repair was the exact
            regression that hid the Install button. -->
-      <RuntimeInstallCard v-if="runtime.needsInstall || runtime.bootstrapOutcome || runtime.state.state === 'error'" />
+      <RuntimeInstallCard v-if="showInstallCard" />
       <CustomVoicePanel v-if="!runtime.needsInstall" />
     </section>
 

@@ -2,7 +2,7 @@ import type { createContext } from '@moeru/eventa/adapters/electron/main'
 
 import type { LiaRuntimeInstallStep, LiaRuntimeState } from '../../../shared/eventa'
 import type { LiaProductConfig } from '../../configs/lia-schema'
-import type { RuntimeManager, RuntimeProbeIdentity } from './alltalk-runtime'
+import type { RuntimeManager } from './alltalk-runtime'
 
 import process from 'node:process'
 
@@ -22,6 +22,7 @@ import { CUSTOM_VOICE_PROVIDER_ID } from '../../../shared/lia-voice'
 import { defaultLiaProductConfig } from '../../configs/lia-schema'
 import { createAllTalkClient } from './alltalk-client'
 import { gatherPortOwners } from './alltalk-port-diagnostics'
+import { loopbackHostFor, probeTcpListeners } from './alltalk-port-listeners'
 import { createRuntimeManager, taskkillArgs } from './alltalk-runtime'
 import { mergeAllTalkRuntime, resolveAllTalkRuntime } from './alltalk-runtime-config'
 import { buildInstallSteps, mayAutostartRuntime } from './alltalk-runtime-install'
@@ -74,6 +75,8 @@ export interface LiaRuntimeService {
    * with proven ownership, and needs to know before promising one.
    */
   isOwnedInstance: () => boolean
+  /** Whether the runtime's install markers are complete on disk (item E). */
+  isInstalled: () => Promise<boolean>
 }
 
 /** Maps the manager's internal phases onto what the renderer is told. */
@@ -190,23 +193,18 @@ export function registerLiaRuntimeBridge(params: {
         return probe.ok
       },
       /**
-       * Who is on the port, in three words the supervisor acts on (items B/D
-       * of the hotfix brief): an AllTalk-shaped answer means reuse, a
-       * non-answer (connection refused) means free, anything else - a
-       * refusal to speak AllTalk - means a stranger holds the port and must
-       * not be killed.
+       * The socket fact about the port - deliberately decoupled from the
+       * health fact above (Phase 6 QA hotfix, item B). The boot-clean QA log
+       * proved why: the client swallows a refused connection into a plain
+       * "offline", and reading *that* as "occupied by a stranger" produced a
+       * false `port-occupied-unknown-process` while netstat said
+       * `listeners=none`. Occupancy is asked of the sockets themselves;
+       * health findings never upgrade themselves to it.
        */
-      probeIdentity: async (): Promise<RuntimeProbeIdentity> => {
-        try {
-          const probe = await createAllTalkClient(runtime).status()
-          return probe.ok ? 'alltalk' : 'unknown'
-        }
-        catch (error) {
-          const cause = error instanceof Error ? (error.cause as { code?: string } | undefined) : undefined
-          const code = cause?.code ?? (error as { code?: string } | undefined)?.code
-          return code === 'ECONNREFUSED' || code === 'ECONNRESET' || code === 'ETIMEDOUT' ? 'none' : 'unknown'
-        }
-      },
+      probeOccupied: async () => await probeTcpListeners({
+        host: loopbackHostFor(readRuntime().baseUrl),
+        ports: runtimePorts(readRuntime().baseUrl),
+      }),
       execImpl: async (command, args, options) => await new Promise((resolve) => {
         // Only ever used for the Windows process-tree kill. taskkill exits
         // non-zero when the PID is already gone, and that - like a missing
@@ -302,6 +300,7 @@ export function registerLiaRuntimeBridge(params: {
       const runtime = readRuntime()
       return { baseUrl: runtime.baseUrl, timeoutMs: runtime.timeoutMs }
     },
+    isInstalled: async () => await manager().isInstalled(),
     isOwnedInstance: () => manager().state().phase === 'ready' && manager().state().owned !== false,
     state: () => toRendererState(manager().state().phase),
     start: async (options = {}) => await startRuntime(options.source ?? 'unknown'),

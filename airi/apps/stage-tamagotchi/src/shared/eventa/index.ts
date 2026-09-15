@@ -28,7 +28,7 @@ import type {
 } from '@proj-airi/stage-ui-three/trace'
 import type { Rectangle } from 'electron'
 
-import type { LiaBootstrapState } from '../lia-voice'
+import type { LiaBootstrapState, LiaRuntimeInstallState } from '../lia-voice'
 
 import { defineEventa, defineInvokeEventa } from '@moeru/eventa'
 
@@ -809,6 +809,14 @@ export const electronLiaRuntimeInstallDirPick = defineInvokeEventa<string | null
 
 /** The guided install wizard's steps, with completion flags. */
 export const electronLiaRuntimeInstallSteps = defineInvokeEventa<LiaRuntimeInstallStep[]>('eventa:invoke:lia:runtime:install-steps')
+
+/**
+ * What exists on disk - the install fact, separate from the run fact (Phase 6
+ * QA hotfix, item E). The main process answers from the install markers and
+ * the persisted install record; the renderer never infers it from server
+ * health errors.
+ */
+export const electronLiaRuntimeInstallState = defineInvokeEventa<{ state: LiaRuntimeInstallState }>('eventa:invoke:lia:runtime:install-state')
 
 /* --------------------------------------------------------------------------
  * Managed voice runtime: install, repair, remove

@@ -53,18 +53,68 @@ const isFailed = computed(() => runtime.bootstrap?.phase === 'failed')
 const isCancelled = computed(() => runtime.bootstrap?.phase === 'cancelled')
 
 /**
- * What the one button means right now (round-7 hotfix contract).
+ * Who is running, in the four words the card speaks (Phase 6 hotfix, item G).
+ * 'checking' and 'notInstalled' are about the install question, so they read
+ * as the stopped half here; the install question is answered separately.
+ */
+const runState = computed((): 'failed' | 'ready' | 'starting' | 'stopped' => {
+  switch (runtime.state.state) {
+    case 'error':
+      return 'failed'
+    case 'ready':
+      return 'ready'
+    case 'starting':
+      return 'starting'
+    default:
+      return 'stopped'
+  }
+})
+
+/**
+ * What the one button means right now (round-7 hotfix contract, extended by
+ * the Phase 6 installed-vs-running split).
  *
  * Resolved from the real state by `resolveVoiceRuntimePrimaryAction`, so every
  * phase the state machine can publish maps to one action and there is no
- * template branch that leaves a not-ready runtime with nothing to click.
- * Previous revisions derived the label from scattered computeds and could end
- * with zero actions; that derivation now lives in one pure, tested function.
+ * template branch that leaves a not-ready runtime with nothing to click. The
+ * disk fact (`installState`) outranks the session rows: an installed runtime
+ * that merely is not running never regresses to [Instalar] (QA evidence: a
+ * false port conflict did exactly that).
  */
 const primaryAction = computed(() => resolveVoiceRuntimePrimaryAction({
   bootstrap: runtime.bootstrap,
+  installState: runtime.installState,
   runtimeReady: runtime.state.state === 'ready',
+  runtimeState: runState.value,
 }))
+
+/**
+ * The banner row, from the same dual facts as the button.
+ *
+ * Installed-but-not-running and not-installed are different sentences now:
+ * the first says "Sistema de voz instalado / Iniciando…", the second keeps
+ * the classic "Sistema de voz necessário / [Instalar]" of an empty machine.
+ */
+const banner = computed((): 'cancelled' | 'failed' | 'installed' | 'installed-failed' | 'needed' | 'ready' | 'repair' | 'running' => {
+  if (isRunning.value)
+    return 'running'
+  if (runtime.installState === 'installed') {
+    if (runState.value === 'ready')
+      return 'ready'
+    if (runState.value === 'failed')
+      return 'installed-failed'
+    return 'installed'
+  }
+  if (runtime.installState === 'repair-needed')
+    return 'repair'
+  if (isFailed.value)
+    return 'failed'
+  if (isCancelled.value)
+    return 'cancelled'
+  if (isReady.value)
+    return 'ready'
+  return 'needed'
+})
 
 /**
  * The one running step's sub-state line, when it has one worth reporting.
@@ -114,6 +164,10 @@ onMounted(() => {
   // Resuming matters: if the app was closed mid-install, the card should show
   // where it stopped rather than presenting a fresh button.
   void runtime.loadBootstrap()
+  // And the disk fact answers the question the session rows cannot: is the
+  // thing installed at all? Without it a postcard install could regress to
+  // [Instalar] whenever the runtime happens to be stopped.
+  void runtime.refreshInstallState()
 })
 
 /**
@@ -138,6 +192,12 @@ function handleRetry(): void {
   void runtime.runBootstrap(false)
 }
 
+function handleRetryStart(): void {
+  // The install is fine; only the server refused. The bootstrap walk would
+  // re-verify files that are already proven - the fix is the start itself.
+  void runtime.start()
+}
+
 function onPrimaryAction(): void {
   // Round-7 hotfix-3 trace points (remove once the click path is proven in
   // the wild): [LIA-VOICE-UI] lines, the store's [LIA-VOICE-IPC] pair, the
@@ -151,6 +211,8 @@ function onPrimaryAction(): void {
       return handleRepair()
     case 'retry':
       return handleRetry()
+    case 'retry-start':
+      return handleRetryStart()
     default:
       // 'installing' and 'none' render the button disabled or absent; a click
       // arriving here is a no-op either way, never a silent install.
@@ -172,16 +234,22 @@ function onCancel(): void {
     </h4>
 
     <p class="text-xs text-neutral-700 font-medium dark:text-neutral-200" data-testid="lia-runtime-install-status">
-      <template v-if="isReady">
-        {{ tt('runtime.readyTitle') }}
-      </template>
-      <template v-else-if="isRunning">
+      <template v-if="banner === 'running'">
         {{ tt('runtime.runningTitle') }}
       </template>
-      <template v-else-if="isFailed">
+      <template v-else-if="banner === 'ready'">
+        {{ tt('runtime.readyTitle') }}
+      </template>
+      <template v-else-if="banner === 'installed' || banner === 'installed-failed'">
+        {{ tt('runtime.installedTitle') }}
+      </template>
+      <template v-else-if="banner === 'repair'">
+        {{ tt('runtime.repairTitle') }}
+      </template>
+      <template v-else-if="banner === 'failed'">
         {{ tt('runtime.failedTitle') }}
       </template>
-      <template v-else-if="isCancelled">
+      <template v-else-if="banner === 'cancelled'">
         {{ tt('runtime.cancelledTitle') }}
       </template>
       <template v-else>
@@ -190,13 +258,25 @@ function onCancel(): void {
     </p>
 
     <p class="text-xs text-neutral-500 dark:text-neutral-400" data-testid="lia-runtime-install-hint">
-      <template v-if="isReady">
-        {{ tt('runtime.readyHint') }}
-      </template>
-      <template v-else-if="isRunning">
+      <template v-if="banner === 'running'">
         {{ tt('runtime.runningHint') }}
       </template>
-      <template v-else-if="!isFailed && !isCancelled">
+      <template v-else-if="banner === 'ready'">
+        {{ tt('runtime.readyHint') }}
+      </template>
+      <template v-else-if="banner === 'installed-failed'">
+        {{ tt('runtime.startFailed') }}
+      </template>
+      <template v-else-if="banner === 'installed' && runState === 'starting'">
+        {{ tt('runtime.starting') }}
+      </template>
+      <template v-else-if="banner === 'installed'">
+        {{ tt('runtime.installedHint') }}
+      </template>
+      <template v-else-if="banner === 'repair'">
+        {{ tt('runtime.repairHint') }}
+      </template>
+      <template v-else-if="banner === 'needed'">
         {{ tt('runtime.neededHint') }}
       </template>
     </p>
@@ -231,12 +311,31 @@ function onCancel(): void {
         <template v-else-if="primaryAction === 'repair'">
           {{ tt('runtime.repair') }}
         </template>
+        <template v-else-if="primaryAction === 'retry-start'">
+          {{ tt('runtime.retryStart') }}
+        </template>
         <template v-else-if="primaryAction === 'retry'">
           {{ tt('runtime.retry') }}
         </template>
         <template v-else>
           {{ tt('runtime.install') }}
         </template>
+      </button>
+
+      <!-- The installed-and-failed pair: retrying the start is the first
+           move, but when the start keeps refusing the files themselves are
+           the suspect, and repair is the honest second door. Neither one is
+           "advanced" - they are the two halves of the same fix, shown side
+           by side. -->
+      <button
+        v-if="primaryAction === 'retry-start'"
+        type="button"
+        class="border border-neutral-200 rounded px-3 py-1 text-sm dark:border-neutral-700"
+        :disabled="runtime.isBusy"
+        data-testid="lia-runtime-repair-secondary"
+        @click="handleRepair"
+      >
+        {{ tt('runtime.repair') }}
       </button>
 
       <button

@@ -82,17 +82,27 @@ async function installedDir(): Promise<string> {
   return dir
 }
 
+/**
+ * `spawnFlow: true` models "I spawn and own my own server": the FIRST health
+ * call (the classification read) sees nothing, so the manager spawns; every
+ * later one answers, so waitForHealth succeeds and later starts reuse. Tests
+ * overriding `isHealthy` themselves handle their own sequencing.
+ */
 function managerFor(
-  overrides: Partial<RuntimeManagerDeps> & { installDir?: string, obedient?: boolean },
+  overrides: Partial<RuntimeManagerDeps> & { installDir?: string, obedient?: boolean, spawnFlow?: boolean },
 ): { manager: RuntimeManager, spawned: ReturnType<typeof vi.fn>, child: FakeChild } {
-  const { obedient, ...deps } = overrides
+  const { obedient, spawnFlow, ...deps } = overrides
   const child = fakeChild({ obedient })
   const spawned = vi.fn(() => child.proc)
+  let healthCalls = 0
   const manager = createRuntimeManager({
-    isHealthy: async () => false,
+    isHealthy: spawnFlow ? async () => (healthCalls += 1) > 1 : async () => false,
     installDir: '',
     platform: 'win32',
     pollIntervalMs: 1,
+    // The world is an empty port unless a test says otherwise: tests worth
+    // their salt name their conflicts explicitly.
+    probeOccupied: async () => 'free',
     spawnImpl: spawned as never,
     startTimeoutMs: 40,
     stopGraceMs: 30,
@@ -197,11 +207,11 @@ describe('start', () => {
   it('does not spawn again once the runtime is already ready', async () => {
     const dir = await installedDir()
     tempDirs.push(dir)
-    // `probeIdentity: 'none'` pins the scenario's intent: the health probe
-    // answers only *after* the spawn. With adoption the same blanket-true
-    // probe would instead mean "an instance is already running" - which the
-    // adoption tests below model on purpose.
-    const { manager, spawned } = managerFor({ installDir: dir, isHealthy: async () => true, probeIdentity: async () => 'none' })
+    // The first health read (classification) finds nothing, so the manager
+    // spawns; reads after that answer, so the second start reuses. Without
+    // that sequencing the blanket-true probe would mean "an instance is
+    // already running" - which the adoption tests below model on purpose.
+    const { manager, spawned } = managerFor({ installDir: dir, spawnFlow: true })
 
     await manager.start()
     await manager.start()
@@ -213,7 +223,7 @@ describe('start', () => {
   it('reaches ready and records the pid once health succeeds', async () => {
     const dir = await installedDir()
     tempDirs.push(dir)
-    const { manager } = managerFor({ installDir: dir, isHealthy: async () => true, probeIdentity: async () => 'none' })
+    const { manager } = managerFor({ installDir: dir, spawnFlow: true })
 
     const state = await manager.start()
 
@@ -225,15 +235,21 @@ describe('start', () => {
   it('restarts when the server disappeared behind its back', async () => {
     const dir = await installedDir()
     tempDirs.push(dir)
-    let healthy = true
-    const { manager, spawned } = managerFor({ installDir: dir, isHealthy: async () => healthy, probeIdentity: async () => 'none' })
+    let serving = true
+    let healthCalls = 0
+    const { manager, spawned } = managerFor({
+      installDir: dir,
+      // First read = classification (empty world, spawn); later reads track
+      // `serving`, so the .disappeared. path below is a real re-classify.
+      isHealthy: async () => (healthCalls += 1) > 1 ? serving : false,
+    })
 
     await manager.start()
     expect((await manager.start()).phase).toBe('ready')
     expect(spawned).toHaveBeenCalledTimes(1)
 
     // The user closed the terminal: the port is dead even though we think not.
-    healthy = false
+    serving = false
     expect(manager.state().phase).toBe('ready')
     await manager.start()
     expect(spawned).toHaveBeenCalledTimes(2)
@@ -303,7 +319,7 @@ describe('stop', () => {
   it('terminates the managed child', async () => {
     const dir = await installedDir()
     tempDirs.push(dir)
-    const { child, manager } = managerFor({ installDir: dir, isHealthy: async () => true, probeIdentity: async () => 'none' })
+    const { child, manager } = managerFor({ installDir: dir, spawnFlow: true })
 
     await manager.start()
     expect(manager.state().phase).toBe('ready')
@@ -321,9 +337,8 @@ describe('stop', () => {
     tempDirs.push(dir)
     const { child, manager } = managerFor({
       installDir: dir,
-      isHealthy: async () => true,
       obedient: false,
-      probeIdentity: async () => 'none',
+      spawnFlow: true,
     })
 
     await manager.start()
@@ -343,7 +358,7 @@ describe('stop', () => {
   it('does not leave an orphan when the child exits on its own', async () => {
     const dir = await installedDir()
     tempDirs.push(dir)
-    const { child, manager } = managerFor({ installDir: dir, isHealthy: async () => true, probeIdentity: async () => 'none' })
+    const { child, manager } = managerFor({ installDir: dir, spawnFlow: true })
 
     await manager.start()
     child.exit(0)
@@ -369,8 +384,10 @@ describe('adoption (single instance, brief A/B)', () => {
     tempDirs.push(dir)
     const { manager, spawned } = managerFor({
       installDir: dir,
+      // An AllTalk-shaped health answer IS the external instance: reuse by
+      // the health fact, no spawn. The socket stays unchecked - there is no
+      // conflict to resolve.
       isHealthy: async () => true,
-      probeIdentity: async () => 'alltalk',
     })
 
     const state = await manager.start()
@@ -385,7 +402,6 @@ describe('adoption (single instance, brief A/B)', () => {
     const { child, manager } = managerFor({
       installDir: dir,
       isHealthy: async () => true,
-      probeIdentity: async () => 'alltalk',
     })
 
     await manager.start()
@@ -398,12 +414,13 @@ describe('adoption (single instance, brief A/B)', () => {
   it('a stranger on the port: friendly error, nothing spawned, nothing killed (L-5)', async () => {
     const dir = await installedDir()
     tempDirs.push(dir)
-    const taskkill = vi.fn(async () => ({ code: 0 }))
+    const taskkill = vi.fn(async (_command: string, _args: string[], _options: { timeoutMs: number }) => ({ code: 0 }))
     const { child, manager, spawned } = managerFor({
       execImpl: taskkill,
       installDir: dir,
+      // Health silent + SOMETHING listening on the port: the stranger case.
       isHealthy: async () => false,
-      probeIdentity: async () => 'unknown',
+      probeOccupied: async () => 'occupied',
     })
 
     const state = await manager.start()
@@ -418,13 +435,23 @@ describe('adoption (single instance, brief A/B)', () => {
   it('a failed spawn against a race that another instance won ends in adoption, not two servers', async () => {
     const dir = await installedDir()
     tempDirs.push(dir)
-    // Cold port at the check, then the rival boots between our probe and our
-    // health budget - the second probe is the only one that sees it.
-    let probeCalls = 0
+    // Cold port at the check, so we spawn; our child never serves, and the
+    // socket re-read after failure finds the port TAKEN - by a health-true
+    // AllTalk (the rival that won between our spawn and our health budget).
+    // Adoption, not a second server.
+    let rivalServing = false
+    let occupancyCalls = 0
     const { manager, spawned } = managerFor({
       installDir: dir,
-      isHealthy: async () => false,
-      probeIdentity: async () => (probeCalls += 1) === 1 ? 'none' : 'alltalk',
+      isHealthy: async () => rivalServing,
+      probeOccupied: async () => {
+        occupancyCalls += 1
+        if (occupancyCalls >= 2) {
+          rivalServing = true
+          return 'occupied'
+        }
+        return 'free'
+      },
     })
 
     const state = await manager.start()
@@ -438,13 +465,12 @@ describe('the Windows process tree (brief K)', () => {
   it('a stubborn child is removed as a tree: taskkill on the owned root pid only', async () => {
     const dir = await installedDir()
     tempDirs.push(dir)
-    const taskkill = vi.fn(async () => ({ code: 0 }))
+    const taskkill = vi.fn(async (_command: string, _args: string[], _options: { timeoutMs: number }) => ({ code: 0 }))
     const { manager } = managerFor({
       execImpl: taskkill,
       installDir: dir,
-      isHealthy: async () => true,
       obedient: false,
-      probeIdentity: async () => 'none',
+      spawnFlow: true,
     })
 
     await manager.start()
@@ -493,10 +519,9 @@ describe('the start timeline instrumentation (Windows QA hotfix)', () => {
     const rec = recorder()
     const { manager } = managerFor({
       installDir: await installedDir(),
-      isHealthy: async () => true,
       onEvent: rec.onEvent,
       // This is a "spawn my own child" test, so nothing is on the port yet.
-      probeIdentity: async () => 'none',
+      spawnFlow: true,
     })
 
     await manager.start({ source: 'autostart' })
@@ -512,9 +537,8 @@ describe('the start timeline instrumentation (Windows QA hotfix)', () => {
     const rec = recorder()
     const { manager, spawned } = managerFor({
       installDir: await installedDir(),
-      isHealthy: async () => true,
       onEvent: rec.onEvent,
-      probeIdentity: async () => 'none',
+      spawnFlow: true,
     })
 
     const [first, second] = await Promise.all([
@@ -535,21 +559,21 @@ describe('the start timeline instrumentation (Windows QA hotfix)', () => {
     const diagnosis: string[] = []
     const { manager, spawned } = managerFor({
       installDir: await installedDir(),
-      isHealthy: async () => true,
+      isHealthy: async () => false,
       onEvent: rec.onEvent,
-      portOwnerDiagnostics: async ({ identity }) => {
-        diagnosis.push(identity)
+      portOwnerDiagnostics: async ({ reason }) => {
+        diagnosis.push(reason)
       },
-      probeIdentity: async () => 'unknown',
+      probeOccupied: async () => 'occupied',
     })
 
     const state = await manager.start({ source: 'ui-start' })
 
     expect(state.phase).toBe('error')
     expect(spawned).not.toHaveBeenCalled()
-    expect(diagnosis).toEqual(['unknown'])
+    expect(diagnosis).toEqual(['occupied'])
     // Evidence precedes the decision, exactly ("não matar antes da identificação" made orderable).
-    const diagAt = rec.lines.indexOf('runtime.port-diagnosis-started identity=unknown')
+    const diagAt = rec.lines.indexOf('runtime.port-diagnosis-started reason=occupied')
     const decidedAt = rec.lines.indexOf('runtime.port-occupied-unknown-process')
     expect(diagAt).toBeGreaterThanOrEqual(0)
     expect(decidedAt).toBeGreaterThan(diagAt)
@@ -560,38 +584,35 @@ describe('the start timeline instrumentation (Windows QA hotfix)', () => {
     const { manager, spawned } = managerFor({
       installDir: await installedDir(),
       isHealthy: async () => true,
-      portOwnerDiagnostics: async ({ identity }) => {
-        diagnosis.push(identity)
+      portOwnerDiagnostics: async ({ reason }) => {
+        diagnosis.push(reason)
       },
-      probeIdentity: async () => 'alltalk',
     })
 
     const state = await manager.start()
 
     expect(state).toEqual({ owned: false, phase: 'ready' })
     expect(spawned).not.toHaveBeenCalled()
-    expect(diagnosis).toEqual(['alltalk'])
+    expect(diagnosis).toEqual(['alltalk-compatible'])
   })
 
   it('a diagnostics failure or timeout never changes the start outcome', async () => {
     const throwing = managerFor({
       installDir: await installedDir(),
-      isHealthy: async () => false,
+      isHealthy: async () => true,
       portOwnerDiagnostics: async () => {
         throw new Error('powershell exploded')
       },
-      probeIdentity: async () => 'alltalk',
     })
     expect((await throwing.manager.start()).phase).toBe('ready')
 
     const rec = recorder()
     const forever = managerFor({
       installDir: await installedDir(),
-      isHealthy: async () => false,
+      isHealthy: async () => true,
       onEvent: rec.onEvent,
       portOwnerDiagnostics: async () => await new Promise(() => {}),
       portOwnerDiagnosticsTimeoutMs: 20,
-      probeIdentity: async () => 'alltalk',
     })
     expect((await forever.manager.start()).phase).toBe('ready')
     expect(rec.lines).toContain('runtime.port-diagnosis-timeout')
@@ -609,12 +630,12 @@ describe('the shutdown lifecycle contract (Windows QA hotfix)', () => {
 
   it('refuses every start after enterShutdown, without even probing the port', async () => {
     const rec = recorder()
-    const probe = vi.fn(async () => 'none' as const)
+    const probe = vi.fn(async () => 'free' as const)
     const { manager, spawned } = managerFor({
       installDir: await installedDir(),
       isHealthy: async () => false,
       onEvent: rec.onEvent,
-      probeIdentity: probe,
+      probeOccupied: probe,
     })
 
     manager.enterShutdown()
@@ -630,12 +651,12 @@ describe('the shutdown lifecycle contract (Windows QA hotfix)', () => {
 
   it('confirms the ports answer nobody after the owned kill (clause 6)', async () => {
     const rec = recorder()
-    let identity: 'alltalk' | 'none' = 'none'
+    let occupancy: 'free' | 'occupied' = 'free'
     const { manager, spawned } = managerFor({
       installDir: await installedDir(),
-      isHealthy: async () => true,
       onEvent: rec.onEvent,
-      probeIdentity: async () => identity,
+      probeOccupied: async () => occupancy,
+      spawnFlow: true,
     })
 
     await manager.start({ source: 'ui-start' })
@@ -643,11 +664,11 @@ describe('the shutdown lifecycle contract (Windows QA hotfix)', () => {
     expect(spawned).toHaveBeenCalledTimes(1)
 
     // While SIGTERM tears the tree down the port is still held; the probe
-    // only reads 'none' after that, which is exactly the transition clause 6
+    // only reads 'free' after that, which is exactly the transition clause 6
     // must observe.
-    identity = 'alltalk'
+    occupancy = 'occupied'
     queueMicrotask(() => {
-      identity = 'none'
+      occupancy = 'free'
     })
     await manager.stop({ confirmFreeMs: 2000 })
 
@@ -658,15 +679,15 @@ describe('the shutdown lifecycle contract (Windows QA hotfix)', () => {
   it('reports a still-occupied port with diagnostics when the timeout runs out', async () => {
     const rec = recorder()
     const diagnosis: string[] = []
-    let identity: 'alltalk' | 'none' = 'none'
+    let occupancy: 'free' | 'occupied' = 'free'
     const { manager } = managerFor({
       installDir: await installedDir(),
-      isHealthy: async () => true,
       onEvent: rec.onEvent,
-      portOwnerDiagnostics: async ({ identity: found }) => {
-        diagnosis.push(found)
+      portOwnerDiagnostics: async ({ reason }) => {
+        diagnosis.push(reason)
       },
-      probeIdentity: async () => identity,
+      probeOccupied: async () => occupancy,
+      spawnFlow: true,
     })
 
     await manager.start({ source: 'ui-start' })
@@ -674,13 +695,13 @@ describe('the shutdown lifecycle contract (Windows QA hotfix)', () => {
     expect(manager.state().owned).toBe(true)
     diagnosis.length = 0
     // From here on the port never lets go: the stop is treated as contested.
-    identity = 'alltalk'
+    occupancy = 'occupied'
 
     await manager.stop({ confirmFreeMs: 50 })
 
-    expect(rec.lines).toContain('runtime.shutdown-ports-still-occupied identity=alltalk')
+    expect(rec.lines).toContain('runtime.shutdown-ports-still-occupied occupancy=occupied')
     expect(rec.lines).not.toContain('runtime.shutdown-ports-free')
-    expect(diagnosis).toContain('alltalk')
+    expect(diagnosis).toContain('occupied')
   })
 
   it('never waits on ports after leaving an adopted foreign instance running', async () => {
@@ -689,7 +710,6 @@ describe('the shutdown lifecycle contract (Windows QA hotfix)', () => {
       installDir: await installedDir(),
       isHealthy: async () => true,
       onEvent: rec.onEvent,
-      probeIdentity: async () => 'alltalk',
     })
 
     await manager.start()
@@ -709,8 +729,7 @@ describe('the shutdown lifecycle contract (Windows QA hotfix)', () => {
   it('exposes the owned child pid only while the child is alive', async () => {
     const { manager } = managerFor({
       installDir: await installedDir(),
-      isHealthy: async () => true,
-      probeIdentity: async () => 'none',
+      spawnFlow: true,
     })
 
     expect(manager.ownedChildPid()).toBeUndefined()
@@ -718,5 +737,131 @@ describe('the shutdown lifecycle contract (Windows QA hotfix)', () => {
     expect(manager.ownedChildPid()).toBe(4242)
     await manager.stop()
     expect(manager.ownedChildPid()).toBeUndefined()
+  })
+})
+
+describe('the clean-BOOT classification (QA evidence, brief A-C/D/H)', () => {
+  function recorder() {
+    const lines: Array<string> = []
+    return {
+      lines,
+      onEvent: (event: string, detail?: string) => lines.push(detail ? `${event} ${detail}` : event),
+    }
+  }
+
+  /**
+   * THE QA log, as a fixture: health unreachable, listeners = none.
+   *
+   * The historical code answered this with `port-occupied-unknown-process`,
+   * because it inferred occupancy FROM the health failure. This test is the
+   * mutation guard of brief item D: any regression that maps "health down"
+   * onto "unknown occupied" fails here, because the verdict must be free and
+   * the flow must reach a spawn - exactly once.
+   */
+  it('health down + listeners=none classifies free and spawns exactly once (the real log)', async () => {
+    const rec = recorder()
+    const { manager, spawned } = managerFor({
+      installDir: await installedDir(),
+      onEvent: rec.onEvent,
+      // Socket truth: nothing listens. Health truth: nothing answers. The
+      // classification MUST read free, and the move MUST be a spawn.
+      probeOccupied: async () => 'free',
+      spawnFlow: true,
+    })
+
+    const state = await manager.start({ source: 'autostart' })
+
+    expect(state.owned).toBe(true)
+    expect(state.phase).toBe('ready')
+    expect(spawned).toHaveBeenCalledTimes(1)
+    expect(rec.lines).toContain('runtime.classified health=down')
+    expect(rec.lines).toContain('runtime.classified health=down occupancy=free')
+    expect(rec.lines).toContain('runtime.spawn-requested source=autostart')
+    expect(rec.lines).toContain('runtime.health-ready')
+    expect(rec.lines).not.toContain('runtime.port-occupied-unknown-process')
+    expect(rec.lines).not.toContain('runtime.port-occupancy-unverifiable')
+  })
+
+  it('listeners=none can never become unknown-occupied, even when health errors', async () => {
+    const rec = recorder()
+    const { manager, spawned } = managerFor({
+      installDir: await installedDir(),
+      isHealthy: async () => {
+        throw new Error('fetch failed: ECONNREFUSED')
+      },
+      onEvent: rec.onEvent,
+      probeOccupied: async () => 'free',
+    })
+    // With health erroring forever this spawn will time out - and the failure
+    // STILL must not be phrased as a stranger on the port, because the socket
+    // keeps answering free.
+    const state = await manager.start({ source: 'autostart' })
+
+    expect(state.phase).toBe('error')
+    expect(state.message).toBe('The voice system took too long to start.')
+    expect(rec.lines).not.toContain('runtime.port-occupied-unknown-process')
+    expect(spawned).toHaveBeenCalledTimes(1)
+  })
+
+  it('health down + a real listener: identify first, fail fast, never spawn (brief C-4)', async () => {
+    const rec = recorder()
+    const diagnosis: string[] = []
+    const { manager, spawned } = managerFor({
+      installDir: await installedDir(),
+      isHealthy: async () => false,
+      onEvent: rec.onEvent,
+      portOwnerDiagnostics: async ({ reason }) => {
+        diagnosis.push(reason)
+      },
+      probeOccupied: async () => 'occupied',
+    })
+
+    const state = await manager.start({ source: 'autostart' })
+
+    expect(state.phase).toBe('error')
+    expect(state.message).toBe('The voice system is already being used by another process.')
+    expect(spawned).not.toHaveBeenCalled()
+    expect(diagnosis).toEqual(['occupied'])
+    expect(rec.lines).toContain('runtime.classified health=down occupancy=occupied')
+    expect(rec.lines).toContain('runtime.port-occupied-unknown-process')
+  })
+
+  it('a socket that refuses to answer is unverifiable, not free and not occupied', async () => {
+    const rec = recorder()
+    const { manager, spawned } = managerFor({
+      installDir: await installedDir(),
+      isHealthy: async () => false,
+      onEvent: rec.onEvent,
+      probeOccupied: async () => 'unverifiable',
+    })
+
+    const state = await manager.start({ source: 'autostart' })
+
+    // The conservative verdict: no blind spawn, no foreign kill, distinct log.
+    expect(state.phase).toBe('error')
+    expect(spawned).not.toHaveBeenCalled()
+    expect(rec.lines).toContain('runtime.classified health=down occupancy=unverifiable')
+    expect(rec.lines).toContain('runtime.port-occupancy-unverifiable')
+  })
+
+  it('clean boot via autostart: ask, classify free, spawn once, health-ready - no clicks', async () => {
+    const rec = recorder()
+    const { manager, spawned } = managerFor({
+      installDir: await installedDir(),
+      onEvent: rec.onEvent,
+      spawnFlow: true,
+    })
+
+    await manager.start({ source: 'autostart' })
+
+    expect(spawned).toHaveBeenCalledTimes(1)
+    expect(rec.lines.indexOf('runtime.autostart-requested')).toBe(-1) // gate log lives in the service layer
+    expect(rec.lines.indexOf('runtime.start-request source=autostart')).toBeLessThan(
+      rec.lines.indexOf('runtime.classified health=down occupancy=free'),
+    )
+    expect(rec.lines.indexOf('runtime.classified health=down occupancy=free')).toBeLessThan(
+      rec.lines.indexOf('runtime.spawn-requested source=autostart'),
+    )
+    expect(rec.lines).toContain('runtime.health-ready')
   })
 })

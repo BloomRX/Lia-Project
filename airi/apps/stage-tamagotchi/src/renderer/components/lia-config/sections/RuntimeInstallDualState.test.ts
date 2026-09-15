@@ -1,0 +1,442 @@
+import type { LiaRuntimeState } from '../../../../shared/eventa'
+// @vitest-environment jsdom
+/**
+ * Phase 6 hotfix, items E/G/H-4..6: installed is not running - the UI half.
+ *
+ * The round-3 QA evidence this suite locks down: every install file was on
+ * disk, the server merely refused to start, and the card offered [Instalar]
+ * over a working install. Two facts were being conflated into one sentence:
+ * what EXISTS on disk (install state, answered by main from markers and the
+ * persisted record) and who is RUNNING (the server's own state probe).
+ *
+ * This suite mounts the real VoiceSection over the in-memory eventa pair -
+ * same harness lineage as InstallClickFlow - with the two facts driven
+ * separately, and asserts the contract from the brief:
+ *
+ *   INSTALLED + STOPPED    -> "Sistema de voz instalado" / "Iniciando…",
+ *                             and [Instalar] must be absent from the card.
+ *   INSTALLED + STARTING   -> installed title, the launch is narrated.
+ *   INSTALLED + FAILED     -> "Não foi possível iniciar o sistema de voz."
+ *                             + [Tentar iniciar novamente] + [Reparar].
+ *   INSTALLED + READY      -> the ordinary ready banner, no buttons.
+ *   NOT INSTALLED          -> "Sistema de voz necessário" + [Instalar].
+ *   REPAIR NEEDED          -> repair banner + [Reparar], never [Instalar].
+ *
+ * The mutation the matrix guards: any regression that lets a known-installed
+ * tree fall through to the legacy bootstrap-driven rows resurfaces the QA
+ * sentence "Sistema de voz necessário [Instalar]" and fails here first.
+ */
+import type { LiaBootstrapState, LiaBootstrapStep, LiaBootstrapStepStatus } from '../../../../shared/lia-voice'
+
+import { defineInvokeHandler } from '@moeru/eventa'
+import { createContext as createMainContext } from '@moeru/eventa/adapters/electron/main'
+import { createPinia, setActivePinia } from 'pinia'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { createApp, nextTick } from 'vue'
+
+import VoiceSection from './VoiceSection.vue'
+
+import {
+  electronLiaAllTalkConfigGet,
+  electronLiaAllTalkConfigSet,
+  electronLiaAllTalkStatus,
+  electronLiaAllTalkSync,
+  electronLiaAllTalkVoicesDirPick,
+  electronLiaBootstrapCancel,
+  electronLiaBootstrapRemove,
+  electronLiaBootstrapRun,
+  electronLiaBootstrapState,
+  electronLiaRuntimeInstallDirPick,
+  electronLiaRuntimeInstallState,
+  electronLiaRuntimeInstallSteps,
+  electronLiaRuntimeStart,
+  electronLiaRuntimeState,
+  electronLiaRuntimeStop,
+  electronLiaVoiceConfigGet,
+  electronLiaVoiceConfigSet,
+  electronLiaVoiceEnginesList,
+  electronLiaVoiceProfilesImport,
+  electronLiaVoiceProfilesList,
+  electronLiaVoiceProfilesPick,
+  electronLiaVoiceProfilesRemove,
+} from '../../../../shared/eventa'
+
+/** The pt-BR sentences the panel is contractually allowed to show. */
+const STR: Record<string, string> = {
+  'tamagotchi.home.config.sections.voice.runtime.title': 'Sistema de voz',
+  'tamagotchi.home.config.sections.voice.runtime.needed': 'Sistema de voz necessário',
+  'tamagotchi.home.config.sections.voice.runtime.neededHint': 'Para a Lia falar com uma voz sua, ela precisa de um sistema de voz instalado no seu computador.',
+  'tamagotchi.home.config.sections.voice.runtime.runningTitle': 'Preparando o sistema de voz…',
+  'tamagotchi.home.config.sections.voice.runtime.runningHint': 'Isso leva alguns minutos na primeira vez.',
+  'tamagotchi.home.config.sections.voice.runtime.readyTitle': 'Sistema de voz pronto',
+  'tamagotchi.home.config.sections.voice.runtime.readyHint': 'A Lia já pode falar com uma voz sua.',
+  'tamagotchi.home.config.sections.voice.runtime.failedTitle': 'Não foi possível concluir a instalação.',
+  'tamagotchi.home.config.sections.voice.runtime.cancelledTitle': 'Instalação cancelada.',
+  'tamagotchi.home.config.sections.voice.runtime.installedTitle': 'Sistema de voz instalado',
+  'tamagotchi.home.config.sections.voice.runtime.installedHint': 'Iniciando…',
+  'tamagotchi.home.config.sections.voice.runtime.retryStart': 'Tentar iniciar novamente',
+  'tamagotchi.home.config.sections.voice.runtime.repairTitle': 'O sistema de voz precisa de reparo.',
+  'tamagotchi.home.config.sections.voice.runtime.repairHint': 'Alguns arquivos do sistema de voz precisam ser baixados de novo.',
+  'tamagotchi.home.config.sections.voice.runtime.starting': 'Iniciando o sistema de voz…',
+  'tamagotchi.home.config.sections.voice.runtime.startFailed': 'Não foi possível iniciar o sistema de voz.',
+  'tamagotchi.home.config.sections.voice.runtime.installing': 'Instalando…',
+  'tamagotchi.home.config.sections.voice.runtime.install': 'Instalar',
+  'tamagotchi.home.config.sections.voice.runtime.retry': 'Tentar novamente',
+  'tamagotchi.home.config.sections.voice.runtime.repair': 'Reparar',
+  'tamagotchi.home.config.sections.voice.runtime.cancel': 'Cancelar',
+  'tamagotchi.home.config.sections.voice.runtime.step.check-environment': 'Verificando o computador',
+  'tamagotchi.home.config.sections.voice.runtime.step.fetch-source': 'Baixando o sistema de voz',
+  'tamagotchi.home.config.sections.voice.runtime.step.run-setup': 'Instalando o sistema de voz',
+  'tamagotchi.home.config.sections.voice.runtime.step.verify-install': 'Verificando a instalação',
+  'tamagotchi.home.config.sections.voice.runtime.step.verify-health': 'Preparando a voz',
+}
+
+vi.mock('vue-i18n', () => ({
+  useI18n: () => ({
+    locale: { value: 'pt-BR' },
+    t: (key: string, named?: Record<string, string>) =>
+      Object.entries(named ?? {}).reduce(
+        (sentence, [param, value]) => sentence.replaceAll(`{${param}}`, value),
+        STR[key] ?? key,
+      ),
+  }),
+}))
+
+const card = vi.hoisted(() => ({
+  speech: undefined as { provider?: string, model?: string, voice_id?: string } | undefined,
+  persona: { language: { character: 'pt-BR' } },
+  updateActiveCardSpeech: vi.fn(async () => true),
+  persistActiveCardModuleSelections: vi.fn(async () => {}),
+  get activeCard() {
+    return { id: 'lia', extensions: { airi: { modules: { speech: card.speech }, persona: card.persona } } }
+  },
+}))
+
+vi.mock('@proj-airi/stage-ui/stores/modules/airi-card', () => ({
+  useAiriCardStore: () => card,
+}))
+
+type Listener = (...args: unknown[]) => void
+
+/** One in-memory IPC pair, the round-4 harness construction. */
+function makeTransport(rendererListeners: Map<string, Listener[]> = new Map()) {
+  const mainListeners = new Map<string, Listener[]>()
+  const add = (map: Map<string, Listener[]>) => (channel: string, listener: Listener) => {
+    map.set(channel, [...(map.get(channel) ?? []), listener])
+  }
+  const remove = (map: Map<string, Listener[]>) => (channel: string, listener: Listener) => {
+    map.set(channel, (map.get(channel) ?? []).filter(l => l !== listener))
+  }
+  const deliver = (map: Map<string, Listener[]>) => (channel: string, ...args: unknown[]) => {
+    for (const listener of map.get(channel) ?? [])
+      listener({}, ...args)
+  }
+
+  const ipcMain = { off: remove(mainListeners), on: add(mainListeners) }
+  const sender = { isDestroyed: () => false, send: deliver(rendererListeners) }
+  const ipcRenderer = {
+    on: add(rendererListeners),
+    removeListener: remove(rendererListeners),
+    send: (channel: string, ...args: unknown[]) => {
+      for (const listener of mainListeners.get(channel) ?? [])
+        listener(sender, ...args)
+    },
+  }
+  const window_ = {
+    isDestroyed: () => false,
+    webContents: { id: 1, send: deliver(rendererListeners) },
+  }
+  return { ipcMain, ipcRenderer, window: window_ }
+}
+
+function step(id: string, status: LiaBootstrapStepStatus, detail?: string): LiaBootstrapStep {
+  return detail === undefined ? { id, status } : { detail, id, status }
+}
+
+type RuntimeProbe = 'error' | 'notInstalled' | 'ready' | 'starting' | 'stopped'
+type InstallProbe = 'installed' | 'not-installed' | 'repair-needed'
+
+/** The probe word as a full runtime state, whichever variant it names. */
+function runtimeStateFor(probe: RuntimeProbe): LiaRuntimeState {
+  return probe === 'error' ? { message: 'probe: the runtime refused', state: 'error' } : { state: probe }
+}
+
+interface Mounted {
+  container: HTMLElement
+  runSpy: ReturnType<typeof vi.fn>
+  startSpy: ReturnType<typeof vi.fn>
+  unmount: () => void
+}
+
+async function flush(): Promise<void> {
+  for (let i = 0; i < 6; i++) {
+    await new Promise(resolve => setTimeout(resolve, 0))
+    await nextTick()
+  }
+}
+
+async function waitFor(cond: () => boolean): Promise<void> {
+  for (let i = 0; i < 80 && !cond(); i++) {
+    await new Promise(resolve => setTimeout(resolve, 2))
+    await nextTick()
+  }
+}
+
+/** Routes the singleton electron-vueuse context to the transport of the moment. */
+const active: { transport: ReturnType<typeof makeTransport> | undefined } = { transport: undefined }
+const sharedRendererListeners = new Map<string, Listener[]>()
+
+const facade = {
+  ipcRenderer: {
+    on: (channel: string, listener: Listener) => active.transport?.ipcRenderer.on(channel, listener),
+    removeListener: (channel: string, listener: Listener) => active.transport?.ipcRenderer.removeListener(channel, listener),
+    send: (channel: string, ...args: unknown[]) => active.transport?.ipcRenderer.send(channel, ...args),
+  },
+}
+
+async function mountSection(options: {
+  initialBootstrap?: LiaBootstrapState
+  installState: InstallProbe
+  runtimeState: RuntimeProbe
+}): Promise<Mounted> {
+  active.transport = makeTransport(sharedRendererListeners)
+  const transport = active.transport
+  ;(globalThis.window as { electron?: unknown }).electron = facade
+
+  const { context: mainContext } = createMainContext(transport.ipcMain as never, transport.window as never)
+
+  const bootstrap = options.initialBootstrap ?? { phase: 'not-installed', steps: [] }
+  const runSpy = vi.fn(async (_repair?: boolean): Promise<LiaBootstrapState> => ({
+    phase: 'checking',
+    steps: [step('check-environment', 'running'), step('fetch-source', 'pending'), step('run-setup', 'pending'), step('verify-install', 'pending'), step('verify-health', 'pending')],
+  }))
+  const runtimeState = runtimeStateFor(options.runtimeState)
+  const startSpy = vi.fn(async () => runtimeState)
+
+  defineInvokeHandler(mainContext, electronLiaAllTalkStatus, async () => ({ state: 'notConfigured' }))
+  defineInvokeHandler(mainContext, electronLiaAllTalkConfigGet, async () => ({ baseUrl: 'http://127.0.0.1:7851' }))
+  defineInvokeHandler(mainContext, electronLiaAllTalkConfigSet, async () => ({}))
+  defineInvokeHandler(mainContext, electronLiaAllTalkSync, (async () => ({ copied: false, filename: '', ok: true })) as never)
+  defineInvokeHandler(mainContext, electronLiaAllTalkVoicesDirPick, async () => null)
+  defineInvokeHandler(mainContext, electronLiaRuntimeState, async () => runtimeState)
+  defineInvokeHandler(mainContext, electronLiaRuntimeStart, startSpy)
+  defineInvokeHandler(mainContext, electronLiaRuntimeStop, async () => ({ state: 'stopped' }))
+  defineInvokeHandler(mainContext, electronLiaRuntimeInstallDirPick, async () => null)
+  defineInvokeHandler(mainContext, electronLiaRuntimeInstallSteps, async () => [])
+  // The Phase 6 witness: main is ASKED what is on disk. Every row of this
+  // suite changes only this answer plus the server probe, never the tree.
+  defineInvokeHandler(mainContext, electronLiaRuntimeInstallState, async () => ({ state: options.installState }))
+  defineInvokeHandler(mainContext, electronLiaBootstrapState, async () => bootstrap)
+  defineInvokeHandler(mainContext, electronLiaBootstrapRun, runSpy as never)
+  defineInvokeHandler(mainContext, electronLiaBootstrapCancel, async () => undefined)
+  defineInvokeHandler(mainContext, electronLiaBootstrapRemove, async () => undefined)
+  defineInvokeHandler(mainContext, electronLiaVoiceConfigGet, async () => ({ tts: { preferred: { providerId: 'custom-local-voice', voiceId: 'p-1' } } }))
+  defineInvokeHandler(mainContext, electronLiaVoiceConfigSet, async () => undefined)
+  defineInvokeHandler(mainContext, electronLiaVoiceProfilesList, async () => [])
+  defineInvokeHandler(mainContext, electronLiaVoiceProfilesPick, async () => null)
+  defineInvokeHandler(mainContext, electronLiaVoiceProfilesImport, (async () => ({ error: 'cancelled', message: '', ok: false })) as never)
+  defineInvokeHandler(mainContext, electronLiaVoiceProfilesRemove, (async () => ({ ok: true, value: { id: '' } })) as never)
+  defineInvokeHandler(mainContext, electronLiaVoiceEnginesList, async () => [
+    { extensions: ['.wav'], id: 'alltalk', label: 'AllTalk', roles: ['referenceAudio'] },
+  ])
+
+  const pinia = createPinia()
+  setActivePinia(pinia)
+  const container = document.createElement('div')
+  document.body.appendChild(container)
+  const app = createApp(VoiceSection).use(pinia)
+  app.mount(container)
+  await flush()
+
+  return {
+    container,
+    runSpy,
+    startSpy,
+    unmount: () => {
+      app.unmount()
+      container.remove()
+    },
+  }
+}
+
+/**
+ * The card's mounting condition is `needsInstall || bootstrapOutcome ||
+ * state === 'error'`, and both the runtime state and the persisted bootstrap
+ * cross the wire AFTER the mount - so the card arrives one microtask later.
+ * Waiting on the element is the honest pause; assuming it is the flaky one.
+ */
+async function mountAndWaitForCard(options: Parameters<typeof mountSection>[0]): Promise<Mounted> {
+  const mounted = await mountSection(options)
+  await waitFor(() => mounted.container.querySelector('[data-testid="lia-runtime-install"]') !== null)
+  return mounted
+}
+
+function text(el: HTMLElement): string {
+  return (el.textContent ?? '').replace(/\s+/g, ' ')
+}
+
+function statusLine(container: HTMLElement) {
+  return container.querySelector('[data-testid="lia-runtime-install-status"]') as HTMLElement | null
+}
+function hintLine(container: HTMLElement) {
+  return container.querySelector('[data-testid="lia-runtime-install-hint"]') as HTMLElement | null
+}
+function primaryButton(container: HTMLElement) {
+  return container.querySelector('[data-testid="lia-runtime-install-button"]') as HTMLButtonElement | null
+}
+function repairSecondary(container: HTMLElement) {
+  return container.querySelector('[data-testid="lia-runtime-repair-secondary"]') as HTMLButtonElement | null
+}
+
+beforeEach(async () => {
+  const { resetElectronEventaContextForTesting } = await import('@proj-airi/electron-vueuse')
+  resetElectronEventaContextForTesting()
+  document.body.innerHTML = ''
+})
+
+afterEach(() => {
+  delete (globalThis.window as { electron?: unknown }).electron
+})
+
+describe('installed is not running (Phase 6 hotfix, item G: the UI half)', () => {
+  it('installed + stopped with a stale failed record: installed banner, and [Instalar] is gone (H-4)', async () => {
+    // The QA shape verbatim: the walk once failed in this session's record,
+    // yet the files check out. The disk fact must win over the record.
+    const { container, unmount } = await mountAndWaitForCard({
+      initialBootstrap: { message: 'A port is already in use.', phase: 'failed', steps: [] },
+      installState: 'installed',
+      runtimeState: 'stopped',
+    })
+
+    expect(text(statusLine(container)!)).toContain('Sistema de voz instalado')
+    expect(text(hintLine(container)!)).toContain('Iniciando…')
+    // The regression sentence, in both halves: neither the label nor the button.
+    expect(statusLine(container)!.textContent).not.toContain('Sistema de voz necessário')
+    expect(primaryButton(container)).toBeNull()
+    expect(repairSecondary(container)).toBeNull()
+    expect(text(container)).not.toContain('Instalação cancelada.')
+    unmount()
+  })
+
+  it('installed + starting: the launch is narrated, not offered as a click', async () => {
+    const { container, unmount } = await mountAndWaitForCard({
+      initialBootstrap: { phase: 'ready', steps: [] },
+      installState: 'installed',
+      runtimeState: 'starting',
+    })
+
+    expect(text(statusLine(container)!)).toContain('Sistema de voz instalado')
+    expect(text(hintLine(container)!)).toContain('Iniciando o sistema de voz…')
+    expect(primaryButton(container)).toBeNull()
+    unmount()
+  })
+
+  it('installed + failed: startFailed hint, [Tentar iniciar novamente] retries the start, [Reparar] walks (H-5)', async () => {
+    const { container, runSpy, startSpy, unmount } = await mountSection({
+      installState: 'installed',
+      runtimeState: 'error',
+    })
+
+    expect(text(statusLine(container)!)).toContain('Sistema de voz instalado')
+    expect(text(hintLine(container)!)).toContain('Não foi possível iniciar o sistema de voz.')
+
+    const primary = primaryButton(container)
+    expect(primary).not.toBeNull()
+    expect(text(primary!)).toContain('Tentar iniciar novamente')
+    expect(primary!.disabled).toBe(false)
+
+    const secondary = repairSecondary(container)
+    expect(secondary).not.toBeNull()
+    expect(text(secondary!)).toContain('Reparar')
+
+    // The primary is the server start, never the install walk: only the
+    // start invoke may fire, and the bootstrap walk must stay untouched.
+    primary!.click()
+    await waitFor(() => startSpy.mock.calls.length === 1)
+    expect(startSpy).toHaveBeenCalledTimes(1)
+    expect(runSpy).not.toHaveBeenCalled()
+
+    // The secondary is the repair walk, with the repair flag on.
+    secondary!.click()
+    await waitFor(() => runSpy.mock.calls.length === 1)
+    expect(runSpy.mock.calls[0]?.[0]).toBe(true)
+    unmount()
+  })
+
+  it('installed + ready: no card at all - a healthy server leaves the floor to the voice panel', async () => {
+    // The round-7 design kept the card away once the runtime genuinely
+    // works; the hotfix assigns the card a job (installed-but-not-running),
+    // which a running runtime does not need. Asserting absence locks both
+    // ends of that bargain: the banner never lingers on a working server,
+    // and never hides on a stalled one.
+    const { container, unmount } = await mountSection({
+      installState: 'installed',
+      runtimeState: 'ready',
+    })
+    await waitFor(() => container.querySelector('[data-testid="lia-custom-voice-import"]') !== null)
+
+    expect(container.querySelector('[data-testid="lia-runtime-install"]')).toBeNull()
+    unmount()
+  })
+
+  it('not installed: the classic offer - needed banner and [Instalar] (H-6)', async () => {
+    const { container, runSpy, unmount } = await mountAndWaitForCard({
+      installState: 'not-installed',
+      runtimeState: 'notInstalled',
+    })
+
+    expect(text(statusLine(container)!)).toContain('Sistema de voz necessário')
+    const primary = primaryButton(container)
+    expect(primary).not.toBeNull()
+    expect(text(primary!)).toContain('Instalar')
+    expect(repairSecondary(container)).toBeNull()
+
+    // And the click still reaches the walk, flag off - sanity that E did not
+    // move the install door.
+    primary!.click()
+    await waitFor(() => runSpy.mock.calls.length === 1)
+    expect(runSpy.mock.calls[0]?.[0]).toBe(false)
+    unmount()
+  })
+
+  it('repair needed: the repair banner and [Reparar], never [Instalar]', async () => {
+    const { container, unmount } = await mountAndWaitForCard({
+      initialBootstrap: { phase: 'ready', steps: [] },
+      installState: 'repair-needed',
+      runtimeState: 'stopped',
+    })
+
+    expect(text(statusLine(container)!)).toContain('O sistema de voz precisa de reparo.')
+    expect(text(hintLine(container)!)).toContain('Alguns arquivos do sistema de voz')
+    const primary = primaryButton(container)
+    expect(primary).not.toBeNull()
+    expect(text(primary!)).toContain('Reparar')
+    expect(text(primary!)).not.toContain('Instalar')
+    unmount()
+  })
+
+  it('mutation guard: an installed tree never shows the install sentence, however the session rows look', async () => {
+    // Sweep every noteworthy legacy row over a known-installed tree: if the
+    // display priority regressed to bootstrap-led ordering, one of these
+    // combinations reconstitutes the QA bug and fails the assertion.
+    for (const phase of ['failed', 'cancelled', 'ready'] as const) {
+      const { container, unmount } = await mountAndWaitForCard({
+        initialBootstrap: { phase, steps: [] },
+        installState: 'installed',
+        runtimeState: 'stopped',
+      })
+      expect(text(statusLine(container)!), `phase ${phase}`).toContain('Sistema de voz instalado')
+      expect(text(primaryButton(container) ?? document.createElement('span')), `phase ${phase}`).not.toContain('Instalar')
+      unmount()
+    }
+    // And the round-7 addendum row: an erroring server mounts the card even
+    // with no kept record; the installed tree still forbids [Instalar].
+    const { container, unmount } = await mountAndWaitForCard({
+      installState: 'installed',
+      runtimeState: 'error',
+    })
+    expect(text(statusLine(container)!)).toContain('Sistema de voz instalado')
+    expect(text(primaryButton(container)!)).toContain('Tentar iniciar novamente')
+    unmount()
+  })
+})

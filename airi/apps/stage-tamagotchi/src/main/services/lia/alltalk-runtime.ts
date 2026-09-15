@@ -79,15 +79,24 @@ export interface RuntimeStateSnapshot {
 }
 
 /**
- * Who answers on the runtime's port, as far as we can prove.
+ * Port occupancy: the *socket* fact, distinct from the *health* fact (Phase 6
+ * QA hotfix, items A/B).
  *
- * - `alltalk`: the API answered the way AllTalk answers - whatever owns it, it
- *   serves the documented endpoints and can be reused.
- * - `unknown`: something is listening but is not an AllTalk API (item D of the
- *   hotfix brief: another program holding the port).
- * - `none`: nothing answered.
+ * A health probe answers "does an AllTalk API speak here?" - an application
+ * question. Occupancy answers "does anything LISTEN here?" - a socket
+ * question. The boot-clean QA log proved these must never be equated: health
+ * walked off a refused connection, and mapping that onto `unknown` produced a
+ * false `port-occupied-unknown-process` on ports netstat showed as
+ * `listeners=none`. Occupancy therefore comes only from a real listener
+ * probe and stands in three explicit verdicts:
+ *
+ * - `free`: nothing listens; the right move is SPAWN.
+ * - `occupied`: something listens; identify the owner, then fail fast.
+ * - `unverifiable`: the probe itself could not tell (filtered port, probe
+ *   failure); never silently translated to free, and never invented as an
+ *   excuse to call a refused health check "occupied".
  */
-export type RuntimeProbeIdentity = 'alltalk' | 'none' | 'unknown'
+export type RuntimePortOccupancy = 'free' | 'occupied' | 'unverifiable'
 
 /**
  * The one supervised entry point of the voice runtime (hotfix brief, item A):
@@ -102,11 +111,12 @@ export interface RuntimeManagerDeps {
   /** Health probe: true when the server answers. Injected so tests need no server. */
   isHealthy: () => Promise<boolean>
   /**
-   * Who is on the port right now. Defaults to a healthy/none reading of
-   * `isHealthy` - the service layer injects the real API + TCP distinction,
-   * so the manager itself carries no socket code.
+   * Who listens on the port right now - the socket fact, injected so the
+   * manager stays socket-free. Without it the manager cannot honestly
+   * distinguish "free" from "occupied", so absence classifies as
+   * `unverifiable`, which never spawns blindly.
    */
-  probeIdentity?: () => Promise<RuntimeProbeIdentity>
+  probeOccupied?: () => Promise<RuntimePortOccupancy>
   platform?: NodeJS.Platform
   spawnImpl?: typeof spawn
   /** How often to poll health while waiting for startup. */
@@ -134,7 +144,7 @@ export interface RuntimeManagerDeps {
    * log*s; it never kills. The service wires the real
    * (netstat + Win32_Process) implementation; tests capture the calls.
    */
-  portOwnerDiagnostics?: (context: { identity: RuntimeProbeIdentity }) => Promise<void>
+  portOwnerDiagnostics?: (context: { reason: 'alltalk-compatible' | 'occupied' | 'unverifiable' }) => Promise<void>
   /** Bound on the diagnostics above, so a slow PowerShell cannot stall a start. */
   portOwnerDiagnosticsTimeoutMs?: number
   /** How long to wait for SIGTERM before escalating. Bounded, so app quit cannot hang. */
@@ -278,14 +288,26 @@ export function createRuntimeManager(deps: RuntimeManagerDeps): RuntimeManager {
   const pollIntervalMs = deps.pollIntervalMs ?? 1000
   const stopGraceMs = deps.stopGraceMs ?? 5000
   const existsImpl = deps.existsImpl ?? exists
-  const probeIdentity = deps.probeIdentity ?? (async (): Promise<RuntimeProbeIdentity> => {
+  const healthySafe = async (): Promise<boolean> => {
     try {
-      return await deps.isHealthy() ? 'alltalk' : 'none'
+      return await deps.isHealthy()
     }
     catch {
-      return 'none'
+      // A health probe that throws is *not* a socket answer; occupancy below
+      // is what may conclude anything about the port.
+      return false
     }
-  })
+  }
+  const occupancySafe = async (): Promise<RuntimePortOccupancy> => {
+    if (!deps.probeOccupied)
+      return 'unverifiable'
+    try {
+      return await deps.probeOccupied()
+    }
+    catch {
+      return 'unverifiable'
+    }
+  }
   const emit = (event: string, detail?: string): void => {
     try {
       deps.onEvent?.(event, detail)
@@ -302,10 +324,10 @@ export function createRuntimeManager(deps: RuntimeManagerDeps): RuntimeManager {
   /** Lifecycle contract, clause 1: no new starts once the app begins to die. */
   let shuttingDown = false
 
-  async function runPortDiagnostics(identity: RuntimeProbeIdentity): Promise<void> {
+  async function runPortDiagnostics(reason: 'alltalk-compatible' | 'occupied' | 'unverifiable'): Promise<void> {
     if (!deps.portOwnerDiagnostics)
       return
-    emit('runtime.port-diagnosis-started', `identity=${identity}`)
+    emit('runtime.port-diagnosis-started', `reason=${reason}`)
     const timeoutMs = deps.portOwnerDiagnosticsTimeoutMs ?? 8000
     let timedOut = false
     const timer = setTimeout(() => {
@@ -316,7 +338,7 @@ export function createRuntimeManager(deps: RuntimeManagerDeps): RuntimeManager {
       await Promise.race([
         (async () => {
           try {
-            await deps.portOwnerDiagnostics!({ identity })
+            await deps.portOwnerDiagnostics!({ reason })
           }
           catch {
             // Evidence gathering must never change the start/stop outcome.
@@ -442,11 +464,11 @@ export function createRuntimeManager(deps: RuntimeManagerDeps): RuntimeManager {
     const confirmFreeMs = options.confirmFreeMs ?? 0
     if (confirmFreeMs > 0) {
       const deadline = Date.now() + confirmFreeMs
-      let lastIdentity: RuntimeProbeIdentity = 'alltalk'
+      let lastOccupancy: RuntimePortOccupancy = 'unverifiable'
       let free = false
       while (Date.now() < deadline) {
-        lastIdentity = await probeIdentity()
-        if (lastIdentity === 'none') {
+        lastOccupancy = await occupancySafe()
+        if (lastOccupancy === 'free') {
           free = true
           break
         }
@@ -459,8 +481,8 @@ export function createRuntimeManager(deps: RuntimeManagerDeps): RuntimeManager {
         emit('runtime.shutdown-ports-free')
       }
       else {
-        emit('runtime.shutdown-ports-still-occupied', `identity=${lastIdentity}`)
-        await runPortDiagnostics(lastIdentity)
+        emit('runtime.shutdown-ports-still-occupied', `occupancy=${lastOccupancy}`)
+        await runPortDiagnostics(lastOccupancy === 'occupied' ? 'occupied' : 'unverifiable')
       }
     }
   }
@@ -487,26 +509,44 @@ export function createRuntimeManager(deps: RuntimeManagerDeps): RuntimeManager {
 
       const installDir = deps.installDir!.trim()
 
-      // Contract A-4 vs items B/D: before spawning, find out who is already on
-      // the port. An AllTalk is adopted (used, never killed, never duplicated);
-      // an unknown listener is a friendly error and nothing is killed.
-      const identity = await probeIdentity()
-      emit('runtime.classified', `identity=${identity}`)
-      if (identity !== 'none') {
-        // Someone already holds the port. Evidence first (who, exactly),
-        // decision second - "não matar antes da identificação" made testable.
-        await runPortDiagnostics(identity)
+      // The QA brief's item-C start order, nearly verbatim:
+      //   1. health answers AllTalk-shaped  -> reuse/adopt
+      //   2. health silent                  -> ask the SOCKET, not the health
+      //   3. ports free                     -> SPAWN
+      //   4. occupied                       -> identify owner, fail fast
+      //   5. occupancy unverifiable         -> diagnose, never spawn blind
+      //
+      // The boot-clean QA log proved why health must never *become* occupancy:
+      // a refused health check reads identically to "free" and to "stranger
+      // holds the port" - only the socket probe above separates the two.
+      const healthSaysAllTalk = await healthySafe()
+      emit('runtime.classified', healthSaysAllTalk ? 'health=alltalk occupancy=skipped' : 'health=down')
+      if (!healthSaysAllTalk) {
+        const occupancy = await occupancySafe()
+        emit('runtime.classified', `health=down occupancy=${occupancy}`)
+        if (occupancy !== 'free') {
+          // Someone - or no provable answer - holds the port. Evidence first,
+          // decision second: "não matar antes da identificação", made an
+          // ordering the tests assert.
+          await runPortDiagnostics(occupancy === 'occupied' ? 'occupied' : 'unverifiable')
+          emit(occupancy === 'occupied'
+            ? 'runtime.port-occupied-unknown-process'
+            : 'runtime.port-occupancy-unverifiable')
+          return set({
+            message: occupancy === 'occupied'
+              ? 'The voice system is already being used by another process.'
+              : 'The voice system could not prove its own port is free.',
+            phase: 'error',
+          })
+        }
       }
-      if (identity === 'alltalk') {
+      else {
+        // An AllTalk speaks on the port while we own no child. Reuse it -
+        // with the same evidence trail a conflict would produce, since the
+        // QA log needs to know WHO lives behind every port we accept.
+        await runPortDiagnostics('alltalk-compatible')
         emit('runtime.adopted-existing-instance')
         return set({ owned: false, phase: 'ready' })
-      }
-      if (identity === 'unknown') {
-        emit('runtime.port-occupied-unknown-process')
-        return set({
-          message: 'The voice system is already being used by another process.',
-          phase: 'error',
-        })
       }
 
       set({ phase: 'starting' })
@@ -535,23 +575,27 @@ export function createRuntimeManager(deps: RuntimeManagerDeps): RuntimeManager {
       ])
 
       if (!healthy) {
-        // The spawn failed to serve. Before admitting defeat, re-read the port:
-        // a racing Lia instance may have won it in the meantime - that is an
-        // adopt, not an error; and an unknown holder means our child died
-        // fighting for the port, which is the friendly message, not a crash.
-        const after = await probeIdentity()
-        if (after !== 'none')
-          await runPortDiagnostics(after)
-        if (after === 'alltalk') {
+        // The spawn failed to serve. Ask the SOCKET first: if nobody took the
+        // port at all, the child simply died (crash / health timeout). If
+        // something did take it, one last health read separates "a racing Lia
+        // instance won it" (healthy: adopt, not a second server) from "our
+        // child died fighting a stranger" (friendly error, never a kill).
+        const afterOccupancy = await occupancySafe()
+        if (afterOccupancy !== 'free') {
+          await runPortDiagnostics(afterOccupancy === 'occupied' ? 'occupied' : 'unverifiable')
+          if (await healthySafe()) {
+            await stop()
+            emit('runtime.adopted-existing-instance')
+            return set({ owned: false, phase: 'ready' })
+          }
           await stop()
-          emit('runtime.adopted-existing-instance')
-          return set({ owned: false, phase: 'ready' })
-        }
-        if (after === 'unknown') {
-          await stop()
-          emit('runtime.port-occupied-unknown-process')
+          emit(afterOccupancy === 'occupied'
+            ? 'runtime.port-occupied-unknown-process'
+            : 'runtime.port-occupancy-unverifiable')
           return set({
-            message: 'The voice system is already being used by another process.',
+            message: afterOccupancy === 'occupied'
+              ? 'The voice system is already being used by another process.'
+              : 'The voice system could not prove its own port is free.',
             phase: 'error',
           })
         }

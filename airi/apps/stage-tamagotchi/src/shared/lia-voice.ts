@@ -89,7 +89,34 @@ export function isLiaBootstrapActivePhase(phase: LiaBootstrapPhase | undefined):
 }
 
 /** The one action the install card may offer, derived - never stored - from the real states. */
-export type LiaVoiceRuntimePrimaryAction = 'install' | 'installing' | 'none' | 'repair' | 'retry'
+export type LiaVoiceRuntimePrimaryAction = 'install' | 'installing' | 'none' | 'repair' | 'retry' | 'retry-start'
+
+/* --------------------------------------------------------------------------
+ * Installed is not Running (Phase 6 Windows QA hotfix, item E)
+ *
+ * Two questions the UI used to collapse into one, which let a fresh boot of a
+ * perfectly installed runtime regress to "Sistema de voz necessário
+ * [Instalar]": what exists ON DISK (install state, asked of the markers and
+ * the persisted install record) versus who is RUNNING right now (runtime
+ * state). They answer separately below.
+ * -------------------------------------------------------------------------- */
+
+/**
+ * What exists on disk, as far as the main process can prove.
+ *
+ * - `installed`: the runtime files (markers, environment, launcher) exist.
+ *   The card must then never show [Instalar] again - a stopped or failing
+ *   server* is a different complaint than a missing *install*.
+ * - `repair-needed`: files were expected (a record exists of a previous
+ *   attempt) but the markers no longer say "complete" - interrupted,
+ *   deleted, moved.
+ * - `not-installed`: nothing ever completed here. Only this state earns the
+ *   [Instalar] button.
+ */
+export type LiaRuntimeInstallState = 'installed' | 'not-installed' | 'repair-needed'
+
+/** Who is running, reduced to the four states the install card speaks in. */
+export type LiaVoiceRuntimeRunState = 'failed' | 'ready' | 'starting' | 'stopped'
 
 /**
  * What the primary button of the install card means right now.
@@ -111,11 +138,41 @@ export function resolveVoiceRuntimePrimaryAction(input: {
   bootstrap?: LiaBootstrapState
   /** Whether the voice server actually works right now. */
   runtimeReady: boolean
+  /** What exists on disk (Phase 6 hotfix, item E). Asked, never assumed. */
+  installState?: LiaRuntimeInstallState
+  /** Who is running (Phase 6 hotfix, item G). */
+  runtimeState?: LiaVoiceRuntimeRunState
 }): LiaVoiceRuntimePrimaryAction {
   const phase = input.bootstrap?.phase
   // In flight: the button must stay on screen, disabled - never absent.
   if (phase && isLiaBootstrapActivePhase(phase))
     return 'installing'
+
+  // The disk fact, when known, outranks the session's run record: a complete
+  // install that merely is not running must never regress to [Instalar].
+  if (input.installState === 'installed') {
+    // A failed *server* with a healthy *install* is a start problem, answered
+    // by trying the start again - the Repair walk stays as the card's own
+    // secondary button for exactly this state.
+    if (input.runtimeState === 'failed')
+      return 'retry-start'
+    // starting / stopped / ready carry no button: the title says "installed"
+    // and the hint narrates the launch the autostart drives.
+    return 'none'
+  }
+  if (input.installState === 'repair-needed')
+    return 'repair'
+  if (input.installState === 'not-installed') {
+    // A failed or abandoned attempt on an incomplete tree: retry the walk.
+    if (phase === 'failed')
+      return input.bootstrap?.failureCategory === 'health' ? 'repair' : 'retry'
+    if (phase === 'cancelled')
+      return 'retry'
+    return 'install'
+  }
+
+  // Legacy rows, while the install answer has not arrived yet: the round-7
+  // matrix stays so the panel is never empty-handed.
   // A finished install offers the same idempotent walk for maintenance.
   if (phase === 'ready' || phase === 'repair-needed')
     return 'repair'
