@@ -71,21 +71,25 @@ onMounted(() => {
 })
 
 /**
- * Phase 6 hotfix, item G: the mount condition, spoken as the dual matrix.
+ * Phase 6 hotfix round 5, item D: with a tree on disk, the card ALWAYS
+ * exists.
  *
- * An installed-but-not-running tree has something to say ("installed /
- * starting / start failed / repair") even with no bootstrap row in this
- * session and no error on the probe - hiding the card there was what made
- * [Instalar] look like the only option. While the disk answer has not
- * arrived, the round-7 rule decides alone, so nothing flickers or vanishes.
+ * An install that main can prove - installed, or repair-needed - is a fact
+ * with something to say in every runtime state: starting maps to "Iniciando…",
+ * ready to "Sistema de voz pronto", stopped to "Sistema de voz instalado",
+ * failed to the retry/repair pair. Rounds 3-4 still hid the card at ready on
+ * the theory that a healthy server belongs to the voice panel; the round-5 QA
+ * boot showed the cost: an adopt before the tab opened left the user with no
+ * "system of voice" row at all, an absence that reads as "nothing happened".
+ * While the disk answer has not arrived, the legacy rows decide alone, as
+ * before.
  */
 const showInstallCard = computed(() =>
   runtime.needsInstall
   || runtime.bootstrapOutcome
   || runtime.state.state === 'error'
   || (runtime.installState !== undefined
-    && runtime.installState !== 'not-installed'
-    && runtime.state.state !== 'ready'))
+    && runtime.installState !== 'not-installed'))
 
 function onChooseReady(): void {
   // Choosing "ready-made voice" means leaving the custom provider. The provider

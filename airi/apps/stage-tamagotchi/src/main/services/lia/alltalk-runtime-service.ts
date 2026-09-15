@@ -27,6 +27,7 @@ import { loopbackHostFor, probeTcpListeners } from './alltalk-port-listeners'
 import { createRuntimeManager, taskkillArgs } from './alltalk-runtime'
 import { mergeAllTalkRuntime, resolveAllTalkRuntime } from './alltalk-runtime-config'
 import { buildInstallSteps, mayAutostartRuntime } from './alltalk-runtime-install'
+import { installRuntimeShutdownHooks } from './runtime-shutdown'
 import { runtimeAppDir } from './voice-runtime-bootstrap-electron'
 
 type MainContext = ReturnType<typeof createContext>['context']
@@ -279,11 +280,16 @@ export function registerLiaRuntimeBridge(params: {
 
   async function startRuntime(source = 'unknown'): Promise<LiaRuntimeState> {
     const result = await manager().start({ source })
+    // The return-value flush (round-5, item B): a transition carries its own
+    // event, but some end states do not - notInstalled, start-rejected, the
+    // catch-all error. No renderer may be left holding the previous answer.
+    publishRuntimeState('start-returned')
     return toRendererState(result.phase, result.message)
   }
 
   async function stopRuntime(): Promise<LiaRuntimeState> {
     await manager().stop()
+    publishRuntimeState('stop-returned')
     return toRendererState(manager().state().phase)
   }
 
@@ -347,6 +353,7 @@ export function registerLiaRuntimeBridge(params: {
     start: async (options = {}) => await startRuntime(options.source ?? 'unknown'),
     stop: async () => {
       await manager().stop()
+      publishRuntimeState('stop-returned')
     },
     async autostartIfNeeded(options: { installing?: boolean } = {}) {
       // The first waypoint of the boot timeline (hotfix QA brief): did the
@@ -375,53 +382,32 @@ export function registerLiaRuntimeBridge(params: {
   runtimeLog('runtime.manager-registered')
 
   /**
-   * The lifecycle contract (hotfix brief): everything the Lia started dies
-   * with the Lia. Ordered: declare shutdown (no new starts, ever) → stop the
-   * owned child gracefully (SIGTERM → grace → taskkill /T /F tree kill →
-   * SIGKILL) → confirm 7851/7852 answer nobody → only then let the main
-   * process exit. `before-quit` rather than `window-all-closed`, so it also
-   * fires on a quit with windows still open, and `window-all-closed` itself
-   * ends here through the default `app.quit()`.
+   * The lifecycle contract (hotfix brief, extended by the round-5 dev-quit
+   * bug): everything the Lia started dies with the Lia, through EVERY exit
+   * the operating system lets us see. Ordered: declare shutdown (no new
+   * starts, ever) → stop the owned child gracefully (SIGTERM → grace →
+   * taskkill /T /F tree kill → SIGKILL) → confirm 7851/7852 answer nobody →
+   * then let the process end. The triggers: `before-quit` (packaged quit,
+   * and `window-all-closed` through the default `app.quit()`), SIGINT /
+   * SIGTERM / SIGHUP (the dev loop: Ctrl+C in the terminal, the runner's
+   * kill on restart, a closed console), and the last-resort synchronous
+   * kill on `exit`. The semantics live in `runtime-shutdown.ts` so tests
+   * drive them without an Electron process.
    */
-  let quitting = false
-  app.on('before-quit', (event) => {
-    if (quitting)
-      return
-    quitting = true
-
-    const mgr = manager()
-    mgr.enterShutdown()
-
-    const phase = mgr.state().phase
-    if (phase !== 'ready' && phase !== 'starting' && phase !== 'error') {
-      runtimeLog('runtime.shutdown-nothing-to-stop', `phase=${phase}`)
-      return
-    }
-
-    event.preventDefault()
-    runtimeLog('runtime.shutdown-begin', `phase=${phase}`)
-    void mgr.stop({ confirmFreeMs: SHUTDOWN_CONFIRM_FREE_MS })
-      .catch((error: unknown) => {
-        runtimeLog('runtime.shutdown-stop-error', error instanceof Error ? error.name : 'unknown')
-      })
-      .finally(() => {
-        runtimeLog('runtime.shutdown-finished')
-        app.exit(0)
-      })
-  })
-
-  /**
-   * Crash/exit path: `before-quit` never runs when the main process dies via
-   * signal or unrecoverable error, so the synchronous best-effort kill runs
-   * here instead. Windows only, owned root PID only, taskkill /T tree kill -
-   * the same safety contract as the graceful path, just without await.
-   */
-  process.on('exit', () => {
-    const pid = cached?.manager.ownedChildPid()
-    if (pid === undefined)
-      return
-    runtimeLog('runtime.exit-sync-kill', `pid=${pid}`)
-    killOwnedTreeSync(pid)
+  installRuntimeShutdownHooks({
+    confirmFreeMs: SHUTDOWN_CONFIRM_FREE_MS,
+    endProcess: code => (code === 0 ? app.exit(0) : process.exit(code)),
+    enterShutdown: () => manager().enterShutdown(),
+    killTreeSync: pid => killOwnedTreeSync(pid),
+    listeners: {
+      beforeQuit: listener => app.on('before-quit', listener),
+      exit: listener => process.on('exit', listener),
+      signal: (signal, listener) => process.on(signal as NodeJS.Signals, listener),
+    },
+    log: (event, detail) => runtimeLog(event, detail),
+    ownedRootPid: () => cached?.manager.ownedChildPid(),
+    phase: () => manager().state().phase,
+    stop: async options => await manager().stop(options),
   })
 
   return service

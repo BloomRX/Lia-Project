@@ -381,19 +381,24 @@ describe('installed is not running (Phase 6 hotfix, item G: the UI half)', () =>
     unmount()
   })
 
-  it('installed + ready: no card at all - a healthy server leaves the floor to the voice panel', async () => {
-    // The round-7 design kept the card away once the runtime genuinely
-    // works; the hotfix assigns the card a job (installed-but-not-running),
-    // which a running runtime does not need. Asserting absence locks both
-    // ends of that bargain: the banner never lingers on a working server,
-    // and never hides on a stalled one.
-    const { container, unmount } = await mountSection({
+  it('installed + ready: the card STAYS, reading "Sistema de voz pronto" (round-5, item D)', async () => {
+    // The round-7 design hid the card once the server answered; the QA that
+    // rained down after was worse than the banner it saved: autostart had
+    // adopted the previous Lia's instance, the user opened this section a
+    // beat later, refresh() read state=ready, every disjunction went false,
+    // and the whole card vanished - nothing on screen could even ACKNOWLEDGE
+    // the runtime it had just started. Item D's rule reverses the balance:
+    // with installState=installed the card exists in EVERY runtime state -
+    // ready reads "pronto", and only 'not-installed' is ever cardless.
+    const { container, unmount } = await mountAndWaitForCard({
       installState: 'installed',
       runtimeState: 'ready',
     })
-    await waitFor(() => container.querySelector('[data-testid="lia-custom-voice-import"]') !== null)
 
-    expect(container.querySelector('[data-testid="lia-runtime-install"]')).toBeNull()
+    expect(text(statusLine(container)!)).toContain('Sistema de voz pronto')
+    // A working server is not a problem to fix: no primary, no repair secondary.
+    expect(primaryButton(container)).toBeNull()
+    expect(repairSecondary(container)).toBeNull()
     unmount()
   })
 

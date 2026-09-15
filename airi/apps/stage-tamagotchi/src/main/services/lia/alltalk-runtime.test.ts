@@ -379,6 +379,58 @@ describe('stop', () => {
  * wrapper alone.
  */
 describe('adoption (single instance, brief A/B)', () => {
+  it('adopt writes the snapshot BEFORE announcing it (round-5 QA: the adopted line fired while the snapshot still said stopped)', async () => {
+    // The round-5 Windows boot: `runtime.adopted-existing-instance` logged,
+    // the publisher re-read the state that very moment, saw 'stopped', and
+    // the dedupe swallowed the only ready announcement there would ever be.
+    // The contract that closes it: EVERY transition event observes its own
+    // phase already in place - phase before announcement, no exception.
+    const dir = await installedDir()
+    tempDirs.push(dir)
+    const phaseAtEvent = new Map<string, string[]>()
+    const note = (event: string, phase: string) =>
+      phaseAtEvent.set(event, [...(phaseAtEvent.get(event) ?? []), phase])
+
+    const built = managerFor({
+      installDir: dir,
+      isHealthy: async () => true,
+      onEvent: event => note(event, built.manager.state().phase),
+    })
+    const { manager } = built
+
+    const state = await manager.start()
+
+    expect(state).toEqual({ owned: false, phase: 'ready' })
+    // The QA sequence, with the snapshot proven at each announcement.
+    expect(phaseAtEvent.get('runtime.classified')).toEqual(['stopped'])
+    expect(phaseAtEvent.get('runtime.adopted-existing-instance')).toEqual(['ready'])
+  })
+
+  it('health-ready likewise announces AFTER the ready snapshot exists (round-5, item B audit)', async () => {
+    // Same ordering bug on the spawn path: `runtime.health-ready` fired
+    // before set(ready) - the publisher would have read 'starting' and the
+    // dedupe would have eaten the ready the round-4 QA waited 75 s for.
+    const dir = await installedDir()
+    tempDirs.push(dir)
+    const phaseAtEvent = new Map<string, string[]>()
+    const note = (event: string, phase: string) =>
+      phaseAtEvent.set(event, [...(phaseAtEvent.get(event) ?? []), phase])
+
+    const built = managerFor({
+      installDir: dir,
+      onEvent: event => note(event, built.manager.state().phase),
+      spawnFlow: true,
+    })
+    const { manager } = built
+
+    const state = await manager.start()
+
+    expect(state.phase).toBe('ready')
+    expect(phaseAtEvent.get('runtime.spawn-requested')).toEqual(['starting'])
+    expect(phaseAtEvent.get('runtime.health-ready')).toEqual(['ready'])
+    expect(phaseAtEvent.get('runtime.stopped')).toBeUndefined()
+  })
+
   it('an instance that already answers is reused, never duplicated (L-4)', async () => {
     const dir = await installedDir()
     tempDirs.push(dir)

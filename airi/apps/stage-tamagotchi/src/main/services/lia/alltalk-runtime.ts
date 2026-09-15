@@ -454,8 +454,8 @@ export function createRuntimeManager(deps: RuntimeManagerDeps): RuntimeManager {
         current.kill('SIGKILL')
     }
 
-    emit('runtime.stopped')
     set({ phase: 'stopped' })
+    emit('runtime.stopped')
 
     // Lifecycle contract, clause 6: prove the ports are clear before the main
     // process is allowed to finish. Only after an owned kill - confirming
@@ -529,15 +529,22 @@ export function createRuntimeManager(deps: RuntimeManagerDeps): RuntimeManager {
           // decision second: "não matar antes da identificação", made an
           // ordering the tests assert.
           await runPortDiagnostics(occupancy === 'occupied' ? 'occupied' : 'unverifiable')
-          emit(occupancy === 'occupied'
-            ? 'runtime.port-occupied-unknown-process'
-            : 'runtime.port-occupancy-unverifiable')
-          return set({
+          // Phase before announcement, always (round-5 contract, item B): the
+          // state publisher re-reads the snapshot on every event - an event
+          // that fired before its set() would publish the phase the machine
+          // just LEFT, and the publish dedupe would then swallow the very
+          // transition that mattered. The QA record: adopted fired, the
+          // publisher read 'stopped', and ready never crossed to the UI.
+          const next = set({
             message: occupancy === 'occupied'
               ? 'The voice system is already being used by another process.'
               : 'The voice system could not prove its own port is free.',
             phase: 'error',
           })
+          emit(occupancy === 'occupied'
+            ? 'runtime.port-occupied-unknown-process'
+            : 'runtime.port-occupancy-unverifiable')
+          return next
         }
       }
       else {
@@ -545,8 +552,9 @@ export function createRuntimeManager(deps: RuntimeManagerDeps): RuntimeManager {
         // with the same evidence trail a conflict would produce, since the
         // QA log needs to know WHO lives behind every port we accept.
         await runPortDiagnostics('alltalk-compatible')
+        const next = set({ owned: false, phase: 'ready' })
         emit('runtime.adopted-existing-instance')
-        return set({ owned: false, phase: 'ready' })
+        return next
       }
 
       set({ phase: 'starting' })
@@ -585,36 +593,40 @@ export function createRuntimeManager(deps: RuntimeManagerDeps): RuntimeManager {
           await runPortDiagnostics(afterOccupancy === 'occupied' ? 'occupied' : 'unverifiable')
           if (await healthySafe()) {
             await stop()
+            const next = set({ owned: false, phase: 'ready' })
             emit('runtime.adopted-existing-instance')
-            return set({ owned: false, phase: 'ready' })
+            return next
           }
           await stop()
-          emit(afterOccupancy === 'occupied'
-            ? 'runtime.port-occupied-unknown-process'
-            : 'runtime.port-occupancy-unverifiable')
-          return set({
+          const next = set({
             message: afterOccupancy === 'occupied'
               ? 'The voice system is already being used by another process.'
               : 'The voice system could not prove its own port is free.',
             phase: 'error',
           })
+          emit(afterOccupancy === 'occupied'
+            ? 'runtime.port-occupied-unknown-process'
+            : 'runtime.port-occupancy-unverifiable')
+          return next
         }
 
         // Read the exit code *before* killing anything: stop() would otherwise
         // fill it in and make a timeout look like a crash.
         const died = spawned.exitCode !== null
         await stop()
-        emit('runtime.start-failed', died ? 'exited-during-startup' : 'health-timeout')
-        return set({
+        const next = set({
           phase: 'error',
           message: died
             ? 'The voice system closed while starting.'
             : 'The voice system took too long to start.',
         })
+        emit('runtime.start-failed', died ? 'exited-during-startup' : 'health-timeout')
+        return next
       }
 
+      const next = set({ owned: true, phase: 'ready', pid: spawned.pid })
       emit('runtime.health-ready')
-      return set({ owned: true, phase: 'ready', pid: spawned.pid })
+      return next
     }
     catch {
       await stop()
