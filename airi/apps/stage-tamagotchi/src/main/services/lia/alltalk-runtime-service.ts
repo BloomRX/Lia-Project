@@ -22,7 +22,7 @@ import {
 import { CUSTOM_VOICE_PROVIDER_ID } from '../../../shared/lia-voice'
 import { defaultLiaProductConfig } from '../../configs/lia-schema'
 import { createAllTalkClient } from './alltalk-client'
-import { gatherPortOwners } from './alltalk-port-diagnostics'
+import { gatherPortOwners, inspectProcessRecord } from './alltalk-port-diagnostics'
 import { loopbackHostFor, probeTcpListeners } from './alltalk-port-listeners'
 import { createRuntimeManager, taskkillArgs } from './alltalk-runtime'
 import { mergeAllTalkRuntime, resolveAllTalkRuntime } from './alltalk-runtime-config'
@@ -262,10 +262,12 @@ export function registerLiaRuntimeBridge(params: {
       /**
        * Windows QA instrumentation: when anything is found on the port, name
        * it. Runs before every occupied-port decision and after a contested
-       * stop; it gathers and logs, and kills nothing.
+       * stop; it gathers and logs, and kills nothing. Round 6: the records it
+       * returns now double as the ownership evidence the manager classifies
+       * with (lia-managed / external / unknown).
        */
       portOwnerDiagnostics: async () => {
-        await gatherPortOwners({
+        return await gatherPortOwners({
           exec: execCapture,
           installDir,
           log: line => runtimeLog(line),
@@ -273,6 +275,11 @@ export function registerLiaRuntimeBridge(params: {
           ports: runtimePorts(readRuntime().baseUrl),
         })
       },
+      // The ancestry walk's one-process lookup (round-6 item D): validated
+      // roots are reconstructed from listener PID + parents, never trusted
+      // from the listener alone.
+      inspectProcess: async pid =>
+        await inspectProcessRecord({ exec: execCapture, platform: process.platform }, pid),
     })
     cached = { dir: installDir, manager: built }
     return built
@@ -348,7 +355,12 @@ export function registerLiaRuntimeBridge(params: {
       return { baseUrl: runtime.baseUrl, timeoutMs: runtime.timeoutMs }
     },
     isInstalled: async () => await manager().isInstalled(),
-    isOwnedInstance: () => manager().state().phase === 'ready' && manager().state().owned !== false,
+    // Round 6: every ready instance is ours by definition - a spawned child
+    // or a proven lia-managed tree (external/unknown never become ready).
+    isOwnedInstance: () => {
+      const snapshot = manager().state()
+      return snapshot.phase === 'ready' && (snapshot.pid !== undefined || snapshot.attachment !== undefined)
+    },
     state: () => toRendererState(manager().state().phase),
     start: async (options = {}) => await startRuntime(options.source ?? 'unknown'),
     stop: async () => {
@@ -405,7 +417,10 @@ export function registerLiaRuntimeBridge(params: {
       signal: (signal, listener) => process.on(signal as NodeJS.Signals, listener),
     },
     log: (event, detail) => runtimeLog(event, detail),
-    ownedRootPid: () => cached?.manager.ownedChildPid(),
+    // The synchronous exit-path kill sweeps whichever proven Lia root the
+    // shutdown could not stop gracefully: the spawned child first, then the
+    // validated roots of an attached lia-managed tree (round-6 item 4).
+    ownedRootPid: () => cached?.manager.ownedChildPid() ?? cached?.manager.liaManagedRootPids()[0],
     phase: () => manager().state().phase,
     stop: async options => await manager().stop(options),
   })

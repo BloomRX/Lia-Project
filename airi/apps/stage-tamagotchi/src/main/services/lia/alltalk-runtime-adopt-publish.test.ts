@@ -3,9 +3,9 @@
  *
  *   previous Lia's runtime is already healthy on the port
  *   -> this launch's autostart classifies health=alltalk
- *   -> adopted-existing-instance
+ *   -> adopted-lia-managed-instance (round 6: adopt ONLY with ownership proof)
  *   -> the snapshot IS ready at that moment
- *   -> the publisher emits `status=ready trigger=runtime.adopted-existing-instance`
+ *   -> the publisher emits `status=ready trigger=runtime.adopted-lia-managed-instance`
  *   -> a real renderer subscriber receives { state: 'ready' }
  *
  * The QA evidence this locks down: the adopt happened, the round-4 publisher
@@ -71,9 +71,32 @@ vi.mock('./alltalk-client', async (importOriginal) => {
   }
 })
 
-vi.mock('./alltalk-port-diagnostics', () => ({
-  gatherPortOwners: async () => undefined,
-}))
+vi.mock('./alltalk-port-diagnostics', async (importOriginal) => {
+  const original = await importOriginal<typeof import('./alltalk-port-diagnostics')>()
+  return {
+    ...original,
+    // The QA round-6 tree: a python listener under the install root whose
+    // parent is the supervised cmd.exe launcher of start_alltalk.bat.
+    gatherPortOwners: async () => [{
+      created: '20260915130000.000000+000',
+      cmdline: 'python script.py',
+      exe: `${installDirHolder.current}/venv/python.exe`,
+      parentPid: 9001,
+      pid: 9002,
+    }],
+    inspectProcessRecord: async (_deps: unknown, pid: number) => pid === 9001
+      ? {
+          created: '20260915130000.000000+000',
+          cmdline: 'cmd.exe /d /s /c start_alltalk.bat',
+          exe: 'C:\\Windows\\System32\\cmd.exe',
+          parentPid: 555,
+          pid: 9001,
+        }
+      : pid === 555
+        ? { created: '20260915080000.000000+000', exe: 'C:\\Windows\\explorer.exe', pid: 555 }
+        : undefined,
+  }
+})
 
 vi.mock('./alltalk-port-listeners', () => ({
   loopbackHostFor: (baseUrl: string) => baseUrl,
@@ -151,12 +174,12 @@ describe('the adopt boot, round-5 item C: ready must reach the renderer when the
     // 1-5: the manager half of the chain, in the log's own words.
     expect(answer?.state).toBe('ready')
     expect(consoleInfo).toHaveBeenCalledWith('[LIA-VOICE-RUNTIME]', expect.any(String), 'runtime.classified', 'health=alltalk occupancy=skipped')
-    expect(consoleInfo).toHaveBeenCalledWith('[LIA-VOICE-RUNTIME]', expect.any(String), 'runtime.adopted-existing-instance', '')
+    expect(consoleInfo).toHaveBeenCalledWith('[LIA-VOICE-RUNTIME]', expect.any(String), 'runtime.adopted-lia-managed-instance', 'classification=lia-managed rootPid=9001')
     // THE round-5 line: the ready announcement, carrying the adopt trigger,
     // with the snapshot already saying ready at emit time. Emit-before-set
     // regression -> this line reads status=stopped (or never exists) and the
     // renderer assertion below dies with it.
-    expect(consoleInfo).toHaveBeenCalledWith('[LIA-VOICE-RUNTIME] runtime.state-published', 'status=ready', 'trigger=runtime.adopted-existing-instance')
+    expect(consoleInfo).toHaveBeenCalledWith('[LIA-VOICE-RUNTIME] runtime.state-published', 'status=ready', 'trigger=runtime.adopted-lia-managed-instance')
 
     // 6: the renderer heard it.
     expect(received).toContainEqual({ state: 'ready' })

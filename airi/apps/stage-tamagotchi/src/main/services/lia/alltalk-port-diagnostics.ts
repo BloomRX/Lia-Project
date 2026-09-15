@@ -14,7 +14,10 @@
  * PowerShell are invoked as programs with fixed argument arrays.
  *
  * The classification above stays untouched - the log output of this module
- * is the evidence the QA criteria read:
+ * is the evidence the QA criteria read. Round 6 adds a second consumer:
+ * `gatherPortOwners` RETURNS the same records, and the ownership
+ * classification helpers below turn them into the verdict the runtime
+ * manager acts on (lia-managed / external / unknown).
  *
  * - `spawn pid=A` ... `port-owner port=7851 pid=A`  → classify-as-unknown was
  *   wrong; it is our own child.
@@ -22,6 +25,8 @@
  * - no Lia spawn at all before the occupied port → something external started
  *   with Windows.
  */
+
+import process from 'node:process'
 
 /** One command execution, same shape the runtime manager uses. */
 export interface PortDiagnosticExec {
@@ -49,6 +54,91 @@ export interface PortOwnerRecord {
   parentPid?: number
   /** CreationDate as the OS reports it (locale-free CIM string when possible). */
   created?: string
+  /**
+   * True when the executable lives under the Lia runtime install root. Filled
+   * by `gatherPortOwners`; absent (false) for records `inspectProcessRecord`
+   * fetched standalone - the ancestry walk re-derives it per hop.
+   */
+  underLiaInstallRoot?: boolean
+}
+
+const NETSTAT_TIMEOUT_MS = 10_000
+const PROCESS_TIMEOUT_MS = 10_000
+
+/** The base names Windows lists for the console supervisor of the launcher script. */
+const SUPERVISED_LAUNCHER_NAMES = ['cmd.exe', 'cmd']
+/** Hosts that may legitimately sit ABOVE our tree without saying anything about it. */
+const BENIGN_HOST_NAMES = ['cmd.exe', 'conhost.exe', 'powershell.exe', 'pwsh.exe', 'services.exe', 'svchost.exe', 'wininit.exe', 'winlogon.exe', 'csrss.exe', 'smss.exe', 'system', 'explorer.exe']
+
+/** Splits `C:\path\to\thing.exe` (accepting forward slashes too) into its file name. */
+function exeBasename(exe: string): string {
+  const lowered = exe.toLowerCase()
+  return lowered.slice(Math.max(lowered.lastIndexOf('\\'), lowered.lastIndexOf('/')) + 1)
+}
+
+/**
+ * Does this record belong to the Lia runtime tree? True when the executable
+ * lives under the install root; the prefix comparison is case-insensitive and
+ * separator-tolerant, because Win32_Process reports its own spelling.
+ */
+export function isUnderInstallRoot(record: { exe?: string }, installDir: string): boolean {
+  const root = installDir.replace(/[\\/]+$/, '').toLowerCase()
+  const exe = record.exe?.toLowerCase()
+  // The boundary accepts either separator spelling: Win32_Process reports
+  // backslashes, but a path spelled with forward slashes under the same root
+  // is the same tree - and tightening spelling would only weaken the proof,
+  // never strengthen it, since the prefix must still match the root directory.
+  return exe !== undefined && root.length > 0
+    && (exe.startsWith(`${root}\\`) || exe.startsWith(`${root}/`))
+}
+
+/**
+ * The supervised launcher: a console host (cmd.exe, which lives OUTSIDE the
+ * install root by definition) whose command line runs our launcher script.
+ * The one sentence that saves the ancestry walk: the real AllTalk tree's top
+ * is cmd.exe running `start_alltalk.bat` - an exe path under System32 that a
+ * pure prefix test would wrongly call foreign.
+ */
+export function isSupervisedLauncher(record: { cmdline?: string, exe?: string }, startScriptName: string): boolean {
+  if (record.exe === undefined || record.cmdline === undefined)
+    return false
+  if (!SUPERVISED_LAUNCHER_NAMES.includes(exeBasename(record.exe)))
+    return false
+  return record.cmdline.toLowerCase().includes(startScriptName.toLowerCase())
+}
+
+/**
+ * A host Windows itself puts above service trees, or the user's shell: none
+ * of these above our tree is evidence of foreignness either way. Anything
+ * ELSE read at that position (a browser, another app) means the tree is not
+ * ours to reason about - the caller classifies unknown and never kills.
+ */
+export function isBenignAncestor(record: { exe?: string }): boolean {
+  return record.exe === undefined || BENIGN_HOST_NAMES.includes(exeBasename(record.exe))
+}
+
+/** One Win32_Process lookup, non-throwing; undefined when the pid is unreadable or gone. */
+export async function inspectProcessRecord(
+  deps: { exec: PortDiagnosticExec, platform?: NodeJS.Platform, timeoutMs?: number },
+  pid: number,
+): Promise<PortOwnerRecord | undefined> {
+  const platform = deps.platform ?? process.platform
+  if (platform !== 'win32')
+    return undefined
+  try {
+    const ps = await deps.exec('powershell.exe', [
+      '-NoProfile',
+      '-NonInteractive',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-Command',
+      `Get-CimInstance Win32_Process -Filter "ProcessId=${pid}" | Select-Object ProcessId,ParentProcessId,CreationDate,ExecutablePath,CommandLine | Format-List`,
+    ], { timeoutMs: deps.timeoutMs ?? PROCESS_TIMEOUT_MS })
+    return ps.code === 0 ? parseProcessRecord(ps.stdout, pid) : undefined
+  }
+  catch {
+    return undefined
+  }
 }
 
 /**
@@ -117,15 +207,12 @@ export function parseProcessRecord(output: string, pid: number): PortOwnerRecord
   }
 }
 
-const NETSTAT_TIMEOUT_MS = 10_000
-const PROCESS_TIMEOUT_MS = 10_000
-
-export async function gatherPortOwners(deps: PortDiagnosticDeps): Promise<void> {
+export async function gatherPortOwners(deps: PortDiagnosticDeps): Promise<PortOwnerRecord[]> {
   if (deps.platform !== 'win32') {
     // The gate is an injected platform precisely so the Windows fixtures are
     // testable from the Linux CI box.
     deps.log(`port-diagnostic-skipped platform=${deps.platform}`)
-    return
+    return []
   }
 
   const timeoutMs = deps.timeoutMs ?? NETSTAT_TIMEOUT_MS
@@ -139,7 +226,7 @@ export async function gatherPortOwners(deps: PortDiagnosticDeps): Promise<void> 
   }
   catch (error) {
     deps.log(`port-diagnostic-error step=netstat reason=${error instanceof Error ? error.name : 'unknown'}`)
-    return
+    return []
   }
 
   const occupied = parseNetstatListening(netstatOut, deps.ports)
@@ -148,33 +235,20 @@ export async function gatherPortOwners(deps: PortDiagnosticDeps): Promise<void> 
     // lived holder between probe and netstat is possible, and the log should
     // say so honestly.
     deps.log(`port-owner ports=${deps.ports.join(',')} listeners=none`)
-    return
+    return []
   }
 
-  const root = deps.installDir.replace(/[\\/]$/, '').toLowerCase()
+  const owners: PortOwnerRecord[] = []
   for (const hit of occupied) {
-    let record: PortOwnerRecord = { pid: hit.pid }
-    try {
-      // No shell: powershell.exe is the program, the command is one fixed
-      // argument, and the PID came from a numeric parse, not user input.
-      const ps = await deps.exec('powershell.exe', [
-        '-NoProfile',
-        '-NonInteractive',
-        '-ExecutionPolicy',
-        'Bypass',
-        '-Command',
-        `Get-CimInstance Win32_Process -Filter "ProcessId=${hit.pid}" | Select-Object ProcessId,ParentProcessId,CreationDate,ExecutablePath,CommandLine | Format-List`,
-      ], { timeoutMs: deps.timeoutMs ?? PROCESS_TIMEOUT_MS })
-      if (ps.code === 0)
-        record = parseProcessRecord(ps.stdout, hit.pid)
-      else
-        deps.log(`port-diagnostic-error step=process pid=${hit.pid} exit=${String(ps.code)}`)
-    }
-    catch (error) {
-      deps.log(`port-diagnostic-error step=process pid=${hit.pid} reason=${error instanceof Error ? error.name : 'unknown'}`)
-    }
-
-    const underRoot = record.exe !== undefined && record.exe.toLowerCase().startsWith(root.length > 0 ? `${root}\\` : '\\')
+    // No shell anywhere in this chain: powershell.exe is the program, the
+    // command is one fixed argument, and the PID came from a numeric parse,
+    // not user input.
+    const looked = await inspectProcessRecord({ exec: deps.exec, platform: deps.platform, timeoutMs: deps.timeoutMs }, hit.pid)
+    if (looked === undefined)
+      deps.log(`port-diagnostic-error step=process pid=${hit.pid}`)
+    const record: PortOwnerRecord = looked ?? { pid: hit.pid }
+    const underRoot = isUnderInstallRoot(record, deps.installDir)
+    record.underLiaInstallRoot = underRoot
     deps.log(
       `port-owner port=${hit.port} pid=${record.pid}`
       + ` exe=${record.exe ?? 'unreadable'}`
@@ -184,5 +258,7 @@ export async function gatherPortOwners(deps: PortDiagnosticDeps): Promise<void> 
     )
     if (record.cmdline)
       deps.log(`port-owner-cmdline port=${hit.port} pid=${record.pid} cmd=${record.cmdline}`)
+    owners.push(record)
   }
+  return owners
 }

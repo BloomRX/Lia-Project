@@ -111,6 +111,46 @@ function managerFor(
   return { child, manager, spawned }
 }
 
+/** IDs of the QA round-6 tree: the launcher cmd.exe and the python below it. */
+const QA_LISTENER_PID = 9002
+const QA_LAUNCHER_PID = 9001
+const QA_LAUNCHER_EXE = 'C:\\Windows\\System32\\cmd.exe'
+const QA_LAUNCHER_CMDLINE = 'cmd.exe /d /s /c start_alltalk.bat'
+const QA_CREATED = '20260915130000.000000+000'
+
+/**
+ * The round-6 QA tree, as the port diagnostics would return it: a python
+ * listener under the install root whose parent is the supervised launcher,
+ * whose own parent is the desktop shell. Rebuilding the root from this is
+ * exactly what the ancestry walk does in production.
+ */
+function liaTreeRecords(dir: string): Array<{ created: string, cmdline: string, exe: string, parentPid: number, pid: number }> {
+  return [{
+    cmdline: 'python script.py',
+    created: QA_CREATED,
+    exe: `${dir}/venv/python.exe`,
+    parentPid: QA_LAUNCHER_PID,
+    pid: QA_LISTENER_PID,
+  }]
+}
+
+/** The ancestry lookup the walk asks about, for the QA tree. */
+function liaTreeInspect(_dir: string) {
+  const records = new Map<number, { created: string, cmdline?: string, exe: string, parentPid?: number, pid: number }>([
+    [QA_LAUNCHER_PID, { cmdline: QA_LAUNCHER_CMDLINE, created: QA_CREATED, exe: QA_LAUNCHER_EXE, parentPid: 555, pid: QA_LAUNCHER_PID }],
+    [555, { created: '20260915080000.000000+000', exe: 'C:\\Windows\\explorer.exe', pid: 555 }],
+  ])
+  return async (pid: number) => records.get(pid)
+}
+
+/** The attachable state the QA boot produces, for terse assertions. */
+function liaAttachment(_dir: string) {
+  return {
+    kind: 'lia-managed' as const,
+    roots: [{ created: QA_CREATED, exe: QA_LAUNCHER_EXE, pid: QA_LAUNCHER_PID }],
+  }
+}
+
 const tempDirs: string[] = []
 
 afterEach(() => {
@@ -380,11 +420,11 @@ describe('stop', () => {
  */
 describe('adoption (single instance, brief A/B)', () => {
   it('adopt writes the snapshot BEFORE announcing it (round-5 QA: the adopted line fired while the snapshot still said stopped)', async () => {
-    // The round-5 Windows boot: `runtime.adopted-existing-instance` logged,
-    // the publisher re-read the state that very moment, saw 'stopped', and
-    // the dedupe swallowed the only ready announcement there would ever be.
-    // The contract that closes it: EVERY transition event observes its own
-    // phase already in place - phase before announcement, no exception.
+    // The round-5 Windows boot: the adopted line logged, the publisher
+    // re-read the state that very moment, saw 'stopped', and the dedupe
+    // swallowed the only ready announcement there would ever be. The
+    // contract that closes it: EVERY transition event observes its own phase
+    // already in place - phase before announcement, no exception.
     const dir = await installedDir()
     tempDirs.push(dir)
     const phaseAtEvent = new Map<string, string[]>()
@@ -392,18 +432,20 @@ describe('adoption (single instance, brief A/B)', () => {
       phaseAtEvent.set(event, [...(phaseAtEvent.get(event) ?? []), phase])
 
     const built = managerFor({
+      inspectProcess: liaTreeInspect(dir),
       installDir: dir,
       isHealthy: async () => true,
       onEvent: event => note(event, built.manager.state().phase),
+      portOwnerDiagnostics: async () => liaTreeRecords(dir),
     })
     const { manager } = built
 
     const state = await manager.start()
 
-    expect(state).toEqual({ owned: false, phase: 'ready' })
+    expect(state).toEqual({ attachment: liaAttachment(dir), phase: 'ready' })
     // The QA sequence, with the snapshot proven at each announcement.
     expect(phaseAtEvent.get('runtime.classified')).toEqual(['stopped'])
-    expect(phaseAtEvent.get('runtime.adopted-existing-instance')).toEqual(['ready'])
+    expect(phaseAtEvent.get('runtime.adopted-lia-managed-instance')).toEqual(['ready'])
   })
 
   it('health-ready likewise announces AFTER the ready snapshot exists (round-5, item B audit)', async () => {
@@ -431,36 +473,84 @@ describe('adoption (single instance, brief A/B)', () => {
     expect(phaseAtEvent.get('runtime.stopped')).toBeUndefined()
   })
 
-  it('an instance that already answers is reused, never duplicated (L-4)', async () => {
+  it('a PROVEN lia-managed tree is reused, never duplicated (round-6: the L-4 reuse with ownership)', async () => {
     const dir = await installedDir()
     tempDirs.push(dir)
     const { manager, spawned } = managerFor({
+      inspectProcess: liaTreeInspect(dir),
       installDir: dir,
-      // An AllTalk-shaped health answer IS the external instance: reuse by
-      // the health fact, no spawn. The socket stays unchecked - there is no
-      // conflict to resolve.
+      // A healthy AllTalk-shaped answer gets the health fact first; the OWNERSHIP
+      // fact comes from the port evidence. Proven ours -> adopt + lifecycle.
       isHealthy: async () => true,
+      portOwnerDiagnostics: async () => liaTreeRecords(dir),
     })
 
     const state = await manager.start()
 
     expect(spawned).not.toHaveBeenCalled()
-    expect(state).toEqual({ owned: false, phase: 'ready' })
+    expect(state).toEqual({ attachment: liaAttachment(dir), phase: 'ready' })
   })
 
-  it('an adopted instance is not killed on stop (never kill without ownership, M)', async () => {
+  it('the attached lia-managed tree IS killed on stop: exactly one taskkill on the validated root (item E / case 6)', async () => {
     const dir = await installedDir()
     tempDirs.push(dir)
+    const taskkill = vi.fn(async (_command: string, _args: string[], _options: { timeoutMs: number }) => ({ code: 0 }))
+    const rec: string[] = []
     const { child, manager } = managerFor({
+      execImpl: taskkill,
+      inspectProcess: liaTreeInspect(dir),
       installDir: dir,
       isHealthy: async () => true,
+      onEvent: (event, detail) => rec.push(detail ? `${event} ${detail}` : event),
+      portOwnerDiagnostics: async () => liaTreeRecords(dir),
+      probeOccupied: async () => 'free',
     })
 
     await manager.start()
-    await manager.stop()
+    await manager.stop({ confirmFreeMs: 100 })
 
     expect(child.killImpl).not.toHaveBeenCalled()
-    expect(manager.state().phase).toBe('stopped')
+    // The supervisor dies once, the whole tree with it (7852's holder AND the
+    // 7851 worker under it), the listener pid itself never takes a direct hit.
+    const kills = taskkill.mock.calls.map(call => call[1])
+    expect(kills).toEqual([['/PID', String(QA_LAUNCHER_PID), '/T', '/F']])
+    expect(rec).toContain('runtime.stopping-lia-managed-existing rootPid=9001')
+    expect(rec).toContain('runtime.process-tree-terminated rootPid=9001')
+    expect(rec).toContain('runtime.shutdown-ports-free')
+    expect(manager.state()).toEqual({ phase: 'stopped' })
+  })
+
+  it('a recycled root PID is NOT killed: identity is revalidated at stop (case 5 mutation surface)', async () => {
+    const dir = await installedDir()
+    tempDirs.push(dir)
+    const taskkill = vi.fn(async (_command: string, _args: string[], _options: { timeoutMs: number }) => ({ code: 0 }))
+    const rec: string[] = []
+    // Between adopt and shutdown the OS recycled the launcher PID onto a
+    // NEWER process: creation date moved on, so the old death sentence
+    // cannot apply. The flag flips the moment adoption lands, so the adopt
+    // itself sees the tree as it was.
+    let recycled = false
+    const inspect = async (pid: number) => {
+      const record = await liaTreeInspect(dir)(pid)
+      if (recycled && record && pid === QA_LAUNCHER_PID)
+        return { ...record, created: '20260915210000.000000+000' }
+      return record
+    }
+    const { manager } = managerFor({
+      execImpl: taskkill,
+      inspectProcess: async pid => (await inspect(pid)),
+      installDir: dir,
+      isHealthy: async () => true,
+      onEvent: (event, detail) => rec.push(detail ? `${event} ${detail}` : event),
+      portOwnerDiagnostics: async () => liaTreeRecords(dir),
+    })
+
+    await manager.start()
+    recycled = true
+    await manager.stop()
+
+    expect(taskkill).not.toHaveBeenCalled()
+    expect(rec).toContain('runtime.rootpid-not-revalidated rootPid=9001')
   })
 
   it('a stranger on the port: friendly error, nothing spawned, nothing killed (L-5)', async () => {
@@ -478,7 +568,7 @@ describe('adoption (single instance, brief A/B)', () => {
     const state = await manager.start()
 
     expect(state.phase).toBe('error')
-    expect(state.message).toBe('The voice system is already being used by another process.')
+    expect(state.message).toBe('The voice system could not identify who is using its port.')
     expect(spawned).not.toHaveBeenCalled()
     expect(child.killImpl).not.toHaveBeenCalled()
     expect(taskkill).not.toHaveBeenCalled()
@@ -509,7 +599,9 @@ describe('adoption (single instance, brief A/B)', () => {
     const state = await manager.start()
 
     expect(spawned).toHaveBeenCalledTimes(1)
-    expect(state).toEqual({ owned: false, phase: 'ready' })
+    // The 7851 answer that arrived a breath after the race closed is our own
+    // child's - adoption is for trees we did NOT spawn (round-6 design note).
+    expect(state).toEqual({ phase: 'ready', pid: 4242 })
   })
 })
 
@@ -631,43 +723,251 @@ describe('the start timeline instrumentation (Windows QA hotfix)', () => {
     expect(decidedAt).toBeGreaterThan(diagAt)
   })
 
-  it('diagnoses before adopting an AllTalk-shaped port, then adopts', async () => {
+  it('diagnoses before adopting an AllTalk-shaped port, then adopts as lia-managed', async () => {
     const diagnosis: string[] = []
+    const dir = await installedDir()
     const { manager, spawned } = managerFor({
-      installDir: await installedDir(),
+      inspectProcess: liaTreeInspect(dir),
+      installDir: dir,
       isHealthy: async () => true,
       portOwnerDiagnostics: async ({ reason }) => {
         diagnosis.push(reason)
+        return liaTreeRecords(dir)
       },
     })
 
     const state = await manager.start()
 
-    expect(state).toEqual({ owned: false, phase: 'ready' })
+    expect(state).toEqual({ attachment: liaAttachment(dir), phase: 'ready' })
     expect(spawned).not.toHaveBeenCalled()
     expect(diagnosis).toEqual(['alltalk-compatible'])
   })
 
-  it('a diagnostics failure or timeout never changes the start outcome', async () => {
+  it('a diagnostics failure or timeout lands on the SAFE side: unknown conflict, never a blind adopt', async () => {
+    // Round-6 rule of thumb: ownership unproven never becomes ownership
+    // granted. A diagnostics crash used to be swallowed into a ready adopt;
+    // it is now the unknown verdict - a friendly conflict, and nobody dies.
+    const rec = recorder()
     const throwing = managerFor({
       installDir: await installedDir(),
       isHealthy: async () => true,
+      onEvent: rec.onEvent,
       portOwnerDiagnostics: async () => {
         throw new Error('powershell exploded')
       },
     })
-    expect((await throwing.manager.start()).phase).toBe('ready')
+    const thrownState = await throwing.manager.start()
+    expect(thrownState.phase).toBe('error')
+    expect(rec.lines).toContain('runtime.port-occupied-unknown-process')
 
-    const rec = recorder()
+    const rec2 = recorder()
     const forever = managerFor({
       installDir: await installedDir(),
       isHealthy: async () => true,
-      onEvent: rec.onEvent,
+      onEvent: rec2.onEvent,
       portOwnerDiagnostics: async () => await new Promise(() => {}),
       portOwnerDiagnosticsTimeoutMs: 20,
     })
-    expect((await forever.manager.start()).phase).toBe('ready')
-    expect(rec.lines).toContain('runtime.port-diagnosis-timeout')
+    const timeoutState = await forever.manager.start()
+    expect(timeoutState.phase).toBe('error')
+    expect(rec2.lines).toContain('runtime.port-diagnosis-timeout')
+    expect(rec2.lines).toContain('runtime.port-occupied-unknown-process')
+  })
+})
+
+describe('the round-6 ownership verdicts (items A-H, cases 3/4/5/7/8/9)', () => {
+  function recorder() {
+    const lines: Array<string> = []
+    return {
+      lines,
+      onEvent: (event: string, detail?: string) => lines.push(detail ? `${event} ${detail}` : event),
+    }
+  }
+
+  it('unknown when the ancestry cannot be proven: under-root exe + a FOREIGN named parent is not our tree (case 5)', async () => {
+    // The QA brief's scare case: a PID under Lia root is necessary, never
+    // sufficient. Here the listener IS under the install root, but the
+    // process holding its ancestry is a browser profile - provably not our
+    // launcher. The verdict is unknown: conflict, nothing killed.
+    const rec = recorder()
+    const dir = await installedDir()
+    const weirdRecords = [{
+      created: QA_CREATED,
+      cmdline: 'python script.py',
+      exe: `${dir}/venv/python.exe`,
+      parentPid: 777,
+      pid: QA_LISTENER_PID,
+    }]
+    const taskkill = vi.fn(async (_command: string, _args: string[], _options: { timeoutMs: number }) => ({ code: 0 }))
+    const { manager, spawned } = managerFor({
+      execImpl: taskkill,
+      // The parent exists, is READABLE - and is a browser. That is the
+      // ancestry that breaks the proof (a dead parent would say nothing, an
+      // unrelated live one says everything).
+      inspectProcess: async () => ({
+        created: QA_CREATED,
+        exe: 'C:\\Program Files\\Google\\Chrome\\chrome.exe',
+        pid: 777,
+      }),
+      installDir: dir,
+      isHealthy: async () => true,
+      onEvent: rec.onEvent,
+      portOwnerDiagnostics: async () => weirdRecords,
+    })
+
+    const state = await manager.start()
+
+    expect(state.phase).toBe('error')
+    expect(rec.lines).toContain('runtime.port-occupied-unknown-process')
+    expect(spawned).not.toHaveBeenCalled()
+    expect(taskkill).not.toHaveBeenCalled()
+  })
+
+  it('unknown when no ancestry probe exists at all: the listener alone is not proof (case 4)', async () => {
+    // A fixture honouring the honesty rule: without inspectProcess the walk
+    // cannot tell a launcher parent from a stranger one, and assumption is
+    // not allowed to stand in for proof.
+    const rec = recorder()
+    const dir = await installedDir()
+    const taskkill = vi.fn(async (_command: string, _args: string[], _options: { timeoutMs: number }) => ({ code: 0 }))
+    const { manager } = managerFor({
+      execImpl: taskkill,
+      installDir: dir,
+      isHealthy: async () => true,
+      onEvent: rec.onEvent,
+      portOwnerDiagnostics: async () => [{
+        created: QA_CREATED,
+        exe: `${dir}/venv/python.exe`,
+        parentPid: QA_LAUNCHER_PID,
+        pid: QA_LISTENER_PID,
+      }],
+    })
+
+    const state = await manager.start()
+
+    expect(state.phase).toBe('error')
+    expect(rec.lines).toContain('runtime.port-occupied-unknown-process')
+    expect(taskkill).not.toHaveBeenCalled()
+  })
+
+  it('crash recovery: the dead launcher above the survivor does NOT disqualify the tree (cases 7-8)', async () => {
+    // The exact round-6 QA corpse: Lia died (SIGKILL, laptop lid), the
+    // cmd.exe launcher exited with it, the python pal was orphaned. The
+    // ancestry lookup on the dead launcher comes back empty - and that is
+    // STILL our tree: every readable link is under our root. Adopt, then
+    // kill at shutdown.
+    const rec = recorder()
+    const dir = await installedDir()
+    const taskkill = vi.fn(async (_command: string, _args: string[], _options: { timeoutMs: number }) => ({ code: 0 }))
+    const orphanRoots = [{
+      created: QA_CREATED,
+      cmdline: 'python script.py',
+      exe: `${dir}/venv/python.exe`,
+      parentPid: QA_LAUNCHER_PID, // died with the old session; unreadable now
+      pid: QA_LISTENER_PID,
+    }]
+    const { manager } = managerFor({
+      execImpl: taskkill,
+      // Nothing UP the chain exists anymore - but the listener itself is
+      // alive and answers identity checks (that's who stop() revalidates).
+      inspectProcess: async (pid: number) => pid === QA_LISTENER_PID
+        ? orphanRoots[0]
+        : undefined,
+      installDir: dir,
+      isHealthy: async () => true,
+      onEvent: rec.onEvent,
+      portOwnerDiagnostics: async () => orphanRoots,
+      probeOccupied: async () => 'free',
+    })
+
+    const state = await manager.start()
+
+    expect(state).toEqual({
+      attachment: {
+        kind: 'lia-managed',
+        roots: [{ created: QA_CREATED, exe: `${dir}/venv/python.exe`, pid: QA_LISTENER_PID }],
+      },
+      phase: 'ready',
+    })
+
+    await manager.stop({ confirmFreeMs: 50 })
+
+    expect(taskkill).toHaveBeenCalledWith('taskkill', ['/PID', String(QA_LISTENER_PID), '/T', '/F'], expect.any(Object))
+    expect(rec.lines).toContain('runtime.process-tree-terminated rootPid=9002')
+  })
+
+  it('a STALE lia-managed tree (health down, port held): kill it with proof, then spawn fresh (item 8)', async () => {
+    const rec = recorder()
+    const dir = await installedDir()
+    const taskkill = vi.fn(async (_command: string, _args: string[], _options: { timeoutMs: number }) => ({ code: 0 }))
+    let portHeld = true
+    const { manager, spawned } = managerFor({
+      execImpl: taskkill,
+      inspectProcess: liaTreeInspect(dir),
+      installDir: dir,
+      isHealthy: async () => !portHeld, // corpse does not answer; a fresh spawn will
+      onEvent: rec.onEvent,
+      portOwnerDiagnostics: async () => liaTreeRecords(dir),
+      probeOccupied: async () => (portHeld ? 'occupied' : 'free'),
+    })
+    // The kill frees the port the moment taskkill resolves (fixture physics).
+    taskkill.mockImplementation(async () => {
+      portHeld = false
+      return { code: 0 }
+    })
+
+    const state = await manager.start()
+
+    expect(rec.lines).toContain('runtime.stopping-stale-lia-managed rootPid=9001')
+    expect(rec.lines).toContain('runtime.process-tree-terminated rootPid=9001')
+    expect(rec.lines).toContain('runtime.spawn-requested source=unknown')
+    expect(state).toEqual({ phase: 'ready', pid: 4242 })
+    expect(spawned).toHaveBeenCalledTimes(1)
+  })
+
+  it('engine-change style restart: stop kills ONLY the lia-managed tree, never a foreign listener (case 9)', async () => {
+    const rec = recorder()
+    const dir = await installedDir()
+    const taskkill = vi.fn(async (_command: string, _args: string[], _options: { timeoutMs: number }) => ({ code: 0 }))
+    const { manager } = managerFor({
+      execImpl: taskkill,
+      inspectProcess: liaTreeInspect(dir),
+      installDir: dir,
+      isHealthy: async () => true,
+      onEvent: rec.onEvent,
+      portOwnerDiagnostics: async () => liaTreeRecords(dir),
+      probeOccupied: async () => 'free',
+    })
+
+    await manager.start()
+    await manager.stop()
+
+    expect(taskkill).toHaveBeenCalledTimes(1)
+    expect(taskkill.mock.calls[0][1]).toEqual(['/PID', String(QA_LAUNCHER_PID), '/T', '/F'])
+    expect(rec.lines).toContain('runtime.stopping-lia-managed-existing rootPid=9001')
+  })
+
+  it('single-flight shutdown across attached + spawned shapes: one stop, one sweep (case 8)', async () => {
+    const rec = recorder()
+    const dir = await installedDir()
+    const taskkill = vi.fn(async (_command: string, _args: string[], _options: { timeoutMs: number }) => ({ code: 0 }))
+    const { manager } = managerFor({
+      execImpl: taskkill,
+      inspectProcess: liaTreeInspect(dir),
+      installDir: dir,
+      isHealthy: async () => true,
+      onEvent: rec.onEvent,
+      portOwnerDiagnostics: async () => liaTreeRecords(dir),
+      probeOccupied: async () => 'free',
+    })
+
+    await manager.start()
+    await Promise.all([
+      manager.stop({ confirmFreeMs: 50 }),
+      manager.stop({ confirmFreeMs: 50 }),
+    ])
+
+    expect(taskkill).toHaveBeenCalledTimes(1)
   })
 })
 
@@ -712,7 +1012,7 @@ describe('the shutdown lifecycle contract (Windows QA hotfix)', () => {
     })
 
     await manager.start({ source: 'ui-start' })
-    expect(manager.state()).toEqual({ owned: true, phase: 'ready', pid: 4242 })
+    expect(manager.state()).toEqual({ phase: 'ready', pid: 4242 })
     expect(spawned).toHaveBeenCalledTimes(1)
 
     // While SIGTERM tears the tree down the port is still held; the probe
@@ -744,7 +1044,7 @@ describe('the shutdown lifecycle contract (Windows QA hotfix)', () => {
 
     await manager.start({ source: 'ui-start' })
     expect(manager.state().phase).toBe('ready')
-    expect(manager.state().owned).toBe(true)
+    expect(manager.state().pid).toBe(4242)
     diagnosis.length = 0
     // From here on the port never lets go: the stop is treated as contested.
     occupancy = 'occupied'
@@ -756,26 +1056,41 @@ describe('the shutdown lifecycle contract (Windows QA hotfix)', () => {
     expect(diagnosis).toContain('occupied')
   })
 
-  it('never waits on ports after leaving an adopted foreign instance running', async () => {
+  it('an EXTERNAL alltalk is a friendly conflict: never adopted at start, never killed at stop (case 3)', async () => {
     const rec = recorder()
-    const { manager } = managerFor({
-      installDir: await installedDir(),
+    const dir = await installedDir()
+    const externalRecord = [{
+      created: QA_CREATED,
+      exe: 'D:\\ManualAllTalk\\python.exe',
+      parentPid: QA_LAUNCHER_PID,
+      pid: QA_LISTENER_PID,
+    }]
+    const taskkill = vi.fn(async (_command: string, _args: string[], _options: { timeoutMs: number }) => ({ code: 0 }))
+    const { manager, spawned } = managerFor({
+      execImpl: taskkill,
+      inspectProcess: liaTreeInspect(dir),
+      installDir: dir,
       isHealthy: async () => true,
       onEvent: rec.onEvent,
+      portOwnerDiagnostics: async () => externalRecord,
     })
 
-    await manager.start()
-    expect(manager.state()).toEqual({ owned: false, phase: 'ready' })
+    const state = await manager.start()
 
-    const before = Date.now()
-    await manager.stop({ confirmFreeMs: 5000 })
+    // Their AllTalk, their lifecycle: the port is theirs and the boot is a
+    // conflict, not an adoption (round-6, item 2: no automatic external
+    // server). Mutation check: a "kill every adopted process" regression
+    // would trip the taskkill assertion the moment the adopt path changed.
+    expect(state.phase).toBe('error')
+    expect(state.message).toBe('The voice system is already being used by another process.')
+    expect(rec.lines).toContain('runtime.port-occupied-external-process')
+    expect(spawned).not.toHaveBeenCalled()
 
-    // No confirmation polling and no ports-free claim for a port that was
-    // never ours: the flag file is short and honest, and the quit is fast.
-    expect(Date.now() - before).toBeLessThan(1000)
-    expect(rec.lines).toContain('runtime.left-external-instance-running')
+    await manager.stop({ confirmFreeMs: 50 })
+
+    expect(taskkill).not.toHaveBeenCalled()
+    expect(rec.lines).not.toContain('runtime.process-tree-terminated')
     expect(rec.lines).not.toContain('runtime.shutdown-ports-free')
-    expect(rec.lines).not.toContain('runtime.shutdown-ports-still-occupied')
   })
 
   it('exposes the owned child pid only while the child is alive', async () => {
@@ -823,8 +1138,7 @@ describe('the clean-BOOT classification (QA evidence, brief A-C/D/H)', () => {
 
     const state = await manager.start({ source: 'autostart' })
 
-    expect(state.owned).toBe(true)
-    expect(state.phase).toBe('ready')
+    expect(state).toEqual({ phase: 'ready', pid: 4242 })
     expect(spawned).toHaveBeenCalledTimes(1)
     expect(rec.lines).toContain('runtime.classified health=down')
     expect(rec.lines).toContain('runtime.classified health=down occupancy=free')
@@ -871,7 +1185,9 @@ describe('the clean-BOOT classification (QA evidence, brief A-C/D/H)', () => {
     const state = await manager.start({ source: 'autostart' })
 
     expect(state.phase).toBe('error')
-    expect(state.message).toBe('The voice system is already being used by another process.')
+    // Round 6: an unidentified listener is an owner the proof could not
+    // reach - the message says what we failed to learn, not who we assume.
+    expect(state.message).toBe('The voice system could not identify who is using its port.')
     expect(spawned).not.toHaveBeenCalled()
     expect(diagnosis).toEqual(['occupied'])
     expect(rec.lines).toContain('runtime.classified health=down occupancy=occupied')

@@ -126,7 +126,7 @@ describe('gatherPortOwners', () => {
         throw new Error('access denied')
       }) as PortDiagnosticDeps['exec'],
     })
-    await expect(gatherPortOwners(failing.deps)).resolves.toBeUndefined()
+    await expect(gatherPortOwners(failing.deps)).resolves.toEqual([])
     expect(failing.lines.some(line => line.startsWith('port-diagnostic-error step=netstat'))).toBe(true)
   })
 

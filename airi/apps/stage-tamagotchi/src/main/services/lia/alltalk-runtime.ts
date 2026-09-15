@@ -1,11 +1,15 @@
 import type { Buffer } from 'node:buffer'
 import type { ChildProcess, SpawnOptions } from 'node:child_process'
 
+import type { PortOwnerRecord } from './alltalk-port-diagnostics'
+
 import process from 'node:process'
 
 import { spawn } from 'node:child_process'
 import { access } from 'node:fs/promises'
 import { join } from 'node:path'
+
+import { isBenignAncestor, isSupervisedLauncher, isUnderInstallRoot } from './alltalk-port-diagnostics'
 
 /**
  * The speech runtime as a process the Lia owns.
@@ -60,22 +64,48 @@ export const WINDOWS_START_SCRIPT = 'start_alltalk.bat'
 /** How long to wait for the server to answer after spawning it. */
 export const DEFAULT_START_TIMEOUT_MS = 180_000
 
+/**
+ * A validated root of the AllTalk process tree (round-6 ownership model).
+ *
+ * `created` + `exe` are recorded at validation time and rechecked before any
+ * kill: a recycled PID must never inherit last session's death sentence.
+ */
+export interface ProvenProcessRoot {
+  pid: number
+  created?: string
+  exe?: string
+}
+
+/**
+ * Who the ready instance ACTUALLY is (round 6, decision of product):
+ *
+ * The runtime inside the Lia directory is a private, Lia-managed backend,
+ * not an external service. Round 5 shipped the bug this field ends: every
+ * adopted instance read as `owned: false` - one bucket for "the user's own
+ * AllTalk" and "our orphan from last session" - and the shutdown simply
+ * never killed the latter. The model now splits by VERDICT, not by
+ * who-spawned-it:
+ *
+ * - a child this manager spawned has NO attachment: `pid` alone says it;
+ * - `lia-managed`: a pre-existing tree whose every listener PID and every
+ *   proven ancestor lives under the install root (or is the recognized
+ *   supervised launcher) - reused like a child, AND killed on shutdown;
+ * - anything else is never adopted at all: external AllTalk and unknown
+ *   owners both surface as port conflicts, and neither is ever killed.
+ */
+export interface RuntimeAttachment {
+  kind: 'lia-managed'
+  roots: ProvenProcessRoot[]
+}
+
 export interface RuntimeStateSnapshot {
   phase: 'error' | 'notInstalled' | 'ready' | 'starting' | 'stopped'
   /** Only set when `phase` is `error`. A short sentence, never a stack trace. */
   message?: string
   /** Process id of the managed child, when we started one. */
   pid?: number
-  /**
-   * Whether the ready instance (if any) is a child this manager spawned.
-   *
-   * `false` means the server was already answering when asked - a manually
-   * started AllTalk or a Lia orphan that survived an earlier crash. Such an
-   * instance is *used* (restarting it would break the same contract in the
-   * other direction) but never *killed* (item B of the hotfix brief: a PID is
-   * only ever killed while its ownership is proven).
-   */
-  owned?: boolean
+  /** Ownership verdict of a pre-existing instance we attached to. */
+  attachment?: RuntimeAttachment
 }
 
 /**
@@ -144,9 +174,17 @@ export interface RuntimeManagerDeps {
    * log*s; it never kills. The service wires the real
    * (netstat + Win32_Process) implementation; tests capture the calls.
    */
-  portOwnerDiagnostics?: (context: { reason: 'alltalk-compatible' | 'occupied' | 'unverifiable' }) => Promise<void>
+  portOwnerDiagnostics?: (context: { reason: 'alltalk-compatible' | 'occupied' | 'unverifiable' }) => Promise<PortOwnerRecord[] | undefined>
   /** Bound on the diagnostics above, so a slow PowerShell cannot stall a start. */
   portOwnerDiagnosticsTimeoutMs?: number
+  /**
+   * One-process lookup for the ancestry walk (round-6 item D): the port
+   * diagnostics read the LISTENER; rebuilding the validated tree root means
+   * asking about each parent up the chain. Wired to `inspectProcessRecord`
+   * in production; absent in tests the classification cannot prove anything
+   * and falls back to `unknown` - which is the safe verdict by design.
+   */
+  inspectProcess?: (pid: number) => Promise<PortOwnerRecord | undefined>
   /** How long to wait for SIGTERM before escalating. Bounded, so app quit cannot hang. */
   stopGraceMs?: number
   /** Receives stdout/stderr lines. Diagnostics only; never surfaced raw. */
@@ -188,6 +226,12 @@ export interface RuntimeManager {
   enterShutdown: () => void
   /** PID of the live Lia-owned child, for the synchronous crash-path kill. */
   ownedChildPid: () => number | undefined
+  /**
+   * PIDs of the proven Lia tree we are responsible for at exit: the live
+   * spawned child, and/or the validated roots of an attached lia-managed
+   * tree. The 'exit' handler's synchronous kill sweeps all of them.
+   */
+  liaManagedRootPids: () => number[]
 }
 
 async function exists(path: string): Promise<boolean> {
@@ -324,9 +368,9 @@ export function createRuntimeManager(deps: RuntimeManagerDeps): RuntimeManager {
   /** Lifecycle contract, clause 1: no new starts once the app begins to die. */
   let shuttingDown = false
 
-  async function runPortDiagnostics(reason: 'alltalk-compatible' | 'occupied' | 'unverifiable'): Promise<void> {
+  async function runPortDiagnostics(reason: 'alltalk-compatible' | 'occupied' | 'unverifiable'): Promise<PortOwnerRecord[] | undefined> {
     if (!deps.portOwnerDiagnostics)
-      return
+      return undefined
     emit('runtime.port-diagnosis-started', `reason=${reason}`)
     const timeoutMs = deps.portOwnerDiagnosticsTimeoutMs ?? 8000
     let timedOut = false
@@ -334,19 +378,21 @@ export function createRuntimeManager(deps: RuntimeManagerDeps): RuntimeManager {
       timedOut = true
     }, timeoutMs)
     timer.unref?.()
+    let records: PortOwnerRecord[] | undefined
     try {
-      await Promise.race([
+      records = await Promise.race([
         (async () => {
           try {
-            await deps.portOwnerDiagnostics!({ reason })
+            return await deps.portOwnerDiagnostics!({ reason })
           }
           catch {
             // Evidence gathering must never change the start/stop outcome.
             emit('runtime.port-diagnosis-error')
+            return undefined
           }
         })(),
-        new Promise<void>((resolve) => {
-          const timeout = setTimeout(resolve, timeoutMs)
+        new Promise<PortOwnerRecord[] | undefined>((resolve) => {
+          const timeout = setTimeout(resolve, timeoutMs, undefined)
           timeout.unref?.()
         }),
       ])
@@ -355,6 +401,101 @@ export function createRuntimeManager(deps: RuntimeManagerDeps): RuntimeManager {
       clearTimeout(timer)
     }
     emit(timedOut ? 'runtime.port-diagnosis-timeout' : 'runtime.port-diagnosis-finished')
+    return records
+  }
+
+  /** Max ancestry hops before the walk gives up and classifies unknown (item 11, case 5). */
+  const ANCESTRY_WALK_LIMIT = 8
+
+  type OwnershipVerdict
+    = | { kind: 'lia-managed', roots: ProvenProcessRoot[] }
+      | { kind: 'external' | 'unknown' }
+
+  /**
+   * The round-6 verdict: who owns the tree that holds our ports.
+   *
+   * Per listener PID, climb the ancestry and accept a node when its exe is
+   * under the install root or it is the supervised launcher (cmd.exe running
+   * start_alltalk.bat - an exe path outside the root by definition, yet the
+   * crown of every legitimately spawned tree). The validated root is the
+   * HIGHEST accepted node; `taskkill /T` below it then covers 7851+7852 in
+   * one sweep (QA tree: 20092 owns children down to 20148).
+   *
+   * Verdicts, in the brief's own words:
+   * - every listener proven ours        -> lia-managed (roots recorded);
+   * - ANY listener plainly foreign      -> external (conflict, never killed);
+   * - a gap anywhere - unreadable exe, unreadable ancestor that is neither
+   *   under-root nor launcher nor a benign system host, a walk that cannot
+   *   terminate -                             -> unknown (same protection).
+   * An ancestor that CANNOT be read (already exited) does not condemn: the
+   * original launcher dying while its python pal survives is precisely the
+   * crash-recovery shape, and the proven under-root span stands on its own.
+   */
+  async function classifyOwners(records: PortOwnerRecord[]): Promise<OwnershipVerdict> {
+    if (records.length === 0)
+      return { kind: 'unknown' }
+
+    const installDir = deps.installDir?.trim() ?? ''
+    const accepted = (r: PortOwnerRecord) => isUnderInstallRoot(r, installDir) || isSupervisedLauncher(r, WINDOWS_START_SCRIPT)
+    const listenPids = [...new Set(records.map(r => r.pid))]
+    const roots: ProvenProcessRoot[] = []
+    for (const pid of listenPids) {
+      const record = records.find(r => r.pid === pid)!
+      if (record.exe === undefined)
+        return { kind: 'unknown' }
+      if (!accepted(record))
+        return { kind: 'external' }
+
+      let root: PortOwnerRecord = record
+      for (let hop = 0; root.parentPid !== undefined && hop < ANCESTRY_WALK_LIMIT; hop++) {
+        if (!deps.inspectProcess) {
+          // No ancestry probe: the listener alone proves the tree only while
+          // it is itself the top - with a parent alive and unproven, honesty
+          // is unknown, not wishful management.
+          return { kind: 'unknown' }
+        }
+        const parent = await deps.inspectProcess(root.parentPid)
+        if (parent === undefined) {
+          // Parent gone or unreadable: orphan shapes are the recovery case.
+          break
+        }
+        if (accepted(parent)) {
+          root = parent
+          continue
+        }
+        if (isBenignAncestor(parent)) {
+          // A shell/system host above the tree says nothing either way.
+          break
+        }
+        // A read, named, foreign process owns our candidate root's ancestry:
+        // the proof is broken and the brief says "não matar sem prova".
+        return { kind: 'unknown' }
+      }
+      if (!roots.some(r => r.pid === root.pid))
+        roots.push({ created: root.created, exe: root.exe, pid: root.pid })
+    }
+    return { kind: 'lia-managed', roots }
+  }
+
+  /** The Windows-only tree kill of ONE proven root, with the event trail the QA timeline reads. */
+  async function killLiaRootTree(root: ProvenProcessRoot, context: { revalidate: boolean }): Promise<void> {
+    if (context.revalidate && deps.inspectProcess) {
+      const fresh = await deps.inspectProcess(root.pid)
+      if (fresh === undefined) {
+        emit('runtime.process-tree-already-gone', `rootPid=${root.pid}`)
+        return
+      }
+      const sameIdentity
+        = (root.created === undefined || fresh.created === root.created)
+          && (root.exe === undefined || fresh.exe === root.exe)
+      if (!sameIdentity) {
+        // The PID got recycled: whatever lives there now never shook our hand.
+        emit('runtime.rootpid-not-revalidated', `rootPid=${root.pid}`)
+        return
+      }
+    }
+    await killProcessTree(root.pid)
+    emit('runtime.process-tree-terminated', `rootPid=${root.pid}`)
   }
 
   function set(next: RuntimeStateSnapshot): RuntimeStateSnapshot {
@@ -414,12 +555,23 @@ export function createRuntimeManager(deps: RuntimeManagerDeps): RuntimeManager {
     if (starting)
       starting = undefined
 
-    // An adopted instance is not ours to kill (item B): a manually started
-    // AllTalk, or an orphan from an earlier crash. Stop using it - but leave
-    // the process breathing for whoever started it.
-    if (!current && snapshot.phase === 'ready' && snapshot.owned === false) {
-      emit('runtime.left-external-instance-running')
+    // Round-6 ownership, clause 4: EVERY lia-managed tree - spawned now or
+    // found already running - dies when the Lia closes. The `owned:false`
+    // bucket that used to spare it is gone: adopted is ours when proven, and
+    // the unproven was never adopted (external/unknown are port conflicts,
+    // never attachments, and never killed here either).
+    if (!current && snapshot.attachment?.kind === 'lia-managed') {
+      // Ownership handoff first, kill second (the spawned-child path already
+      // works this way via `child = undefined` above): two concurrent stops
+      // must kill the tree EXACTLY once, so the attachment is detached from
+      // the snapshot before the first await of the kill loop.
+      const attachment = snapshot.attachment
       set({ phase: 'stopped' })
+      emit('runtime.stopping-lia-managed-existing', `rootPid=${attachment.roots.map(r => r.pid).join(',')}`)
+      for (const root of attachment.roots)
+        await killLiaRootTree(root, { revalidate: true })
+      emit('runtime.stopped')
+      await confirmPortsFree(options.confirmFreeMs ?? 0)
       return
     }
 
@@ -457,11 +609,16 @@ export function createRuntimeManager(deps: RuntimeManagerDeps): RuntimeManager {
     set({ phase: 'stopped' })
     emit('runtime.stopped')
 
-    // Lifecycle contract, clause 6: prove the ports are clear before the main
-    // process is allowed to finish. Only after an owned kill - confirming
-    // someone else's port would just delay every quit of a user who started
-    // AllTalk by hand.
-    const confirmFreeMs = options.confirmFreeMs ?? 0
+    await confirmPortsFree(options.confirmFreeMs ?? 0)
+  }
+
+  /**
+   * Lifecycle contract, clause 6: prove the ports are clear before the main
+   * process is allowed to finish. Runs after every kill of a Lia tree -
+   * spawned or attached; confirming someone else's port would just delay
+   * every quit of a user who started AllTalk by hand.
+   */
+  async function confirmPortsFree(confirmFreeMs: number): Promise<void> {
     if (confirmFreeMs > 0) {
       const deadline = Date.now() + confirmFreeMs
       let lastOccupancy: RuntimePortOccupancy = 'unverifiable'
@@ -501,6 +658,11 @@ export function createRuntimeManager(deps: RuntimeManagerDeps): RuntimeManager {
         catch {
           // fall through and start again
         }
+        // An attached tree that stopped answering is OUR stale server, not a
+        // stranger: stop() terminates it with proof before we respawn (item 8:
+        // "matar/recomeçar se corrupto/stale").
+        if (snapshot.attachment !== undefined)
+          await stop()
         set({ phase: 'stopped' })
       }
 
@@ -528,32 +690,90 @@ export function createRuntimeManager(deps: RuntimeManagerDeps): RuntimeManager {
           // Someone - or no provable answer - holds the port. Evidence first,
           // decision second: "não matar antes da identificação", made an
           // ordering the tests assert.
-          await runPortDiagnostics(occupancy === 'occupied' ? 'occupied' : 'unverifiable')
-          // Phase before announcement, always (round-5 contract, item B): the
-          // state publisher re-reads the snapshot on every event - an event
-          // that fired before its set() would publish the phase the machine
-          // just LEFT, and the publish dedupe would then swallow the very
-          // transition that mattered. The QA record: adopted fired, the
-          // publisher read 'stopped', and ready never crossed to the UI.
-          const next = set({
-            message: occupancy === 'occupied'
-              ? 'The voice system is already being used by another process.'
-              : 'The voice system could not prove its own port is free.',
-            phase: 'error',
-          })
-          emit(occupancy === 'occupied'
-            ? 'runtime.port-occupied-unknown-process'
-            : 'runtime.port-occupancy-unverifiable')
-          return next
+          const records = await runPortDiagnostics(occupancy === 'occupied' ? 'occupied' : 'unverifiable')
+
+          // Item 8 recovery path, where the last session left a corpse: the
+          // tree is provably ours but its health is down - kill it with
+          // proof and let the flow fall through to a fresh spawn.
+          if (occupancy === 'occupied' && records !== undefined) {
+            const verdict = await classifyOwners(records)
+            if (verdict.kind === 'lia-managed') {
+              emit('runtime.stopping-stale-lia-managed', `rootPid=${verdict.roots[0]?.pid ?? 'unknown'}`)
+              for (const root of verdict.roots)
+                await killLiaRootTree(root, { revalidate: true })
+            }
+            else {
+              // Phase before announcement, always (round-5 contract, item B):
+              // the state publisher re-reads the snapshot on every event - an
+              // event fired before its set() would publish the phase the
+              // machine just LEFT, and the publish dedupe would then swallow
+              // the very transition that mattered.
+              const foreign = verdict.kind === 'external'
+              const next = set({
+                message: foreign
+                  ? 'The voice system is already being used by another process.'
+                  : occupancy === 'occupied'
+                    ? 'The voice system cannot prove who is using its port.'
+                    : 'The voice system could not prove its own port is free.',
+                phase: 'error',
+              })
+              emit(foreign
+                ? 'runtime.port-occupied-external-process'
+                : occupancy === 'occupied'
+                  ? 'runtime.port-occupied-unknown-process'
+                  : 'runtime.port-occupancy-unverifiable')
+              return next
+            }
+          }
+          else if (occupancy !== 'occupied') {
+            // Unverifiable stands exactly as the round-4 contract drew it: a
+            // probe that cannot see, never an excuse to spawn blind.
+            const next = set({
+              message: 'The voice system could not prove its own port is free.',
+              phase: 'error',
+            })
+            emit('runtime.port-occupancy-unverifiable')
+            return next
+          }
+          else {
+            // Occupied by the socket, but no evidence the identification
+            // produced (or nothing to classify): the round-4 contract's own
+            // verdict - an unknown process holds the port, and only the safe
+            // side applies.
+            const next = set({
+              message: records === undefined
+                ? 'The voice system could not identify who is using its port.'
+                : 'The voice system cannot prove who is using its port.',
+              phase: 'error',
+            })
+            emit('runtime.port-occupied-unknown-process')
+            return next
+          }
         }
       }
       else {
-        // An AllTalk speaks on the port while we own no child. Reuse it -
-        // with the same evidence trail a conflict would produce, since the
-        // QA log needs to know WHO lives behind every port we accept.
-        await runPortDiagnostics('alltalk-compatible')
-        const next = set({ owned: false, phase: 'ready' })
-        emit('runtime.adopted-existing-instance')
+        // An AllTalk-shaped server answers while we own no child. Round 6
+        // ends the shrug that used to follow: ownership is PROVEN before any
+        // attach. Provably ours (survivor of an earlier Lia session) -> adopt
+        // as lia-managed, lifecycle included. Provably foreign -> a friendly
+        // port conflict, never an adoption; an AllTalk the user opened by
+        // hand stays theirs. Unproven -> the same conflict, safe side.
+        const records = await runPortDiagnostics('alltalk-compatible')
+        const verdict = records !== undefined ? await classifyOwners(records) : { kind: 'unknown' as const }
+        if (verdict.kind === 'lia-managed') {
+          const attachment: RuntimeAttachment = { kind: 'lia-managed', roots: verdict.roots }
+          const next = set({ attachment, phase: 'ready' })
+          emit('runtime.adopted-lia-managed-instance', `classification=lia-managed rootPid=${verdict.roots[0]?.pid ?? 'unknown'}`)
+          return next
+        }
+        const foreign = verdict.kind === 'external'
+        const next = set({
+          message: foreign
+            ? 'The voice system is already being used by another process.'
+            : 'The voice system cannot prove who owns its port.',
+          phase: 'error',
+        })
+        emit(foreign ? 'runtime.port-occupied-external-process' : 'runtime.port-occupied-unknown-process')
         return next
       }
 
@@ -586,16 +806,32 @@ export function createRuntimeManager(deps: RuntimeManagerDeps): RuntimeManager {
         // The spawn failed to serve. Ask the SOCKET first: if nobody took the
         // port at all, the child simply died (crash / health timeout). If
         // something did take it, one last health read separates "a racing Lia
-        // instance won it" (healthy: adopt, not a second server) from "our
-        // child died fighting a stranger" (friendly error, never a kill).
+        // instance won it" (healthy: attach with proof, not a second server)
+        // from "our child died fighting a stranger" (friendly error, never a
+        // kill).
         const afterOccupancy = await occupancySafe()
         if (afterOccupancy !== 'free') {
-          await runPortDiagnostics(afterOccupancy === 'occupied' ? 'occupied' : 'unverifiable')
-          if (await healthySafe()) {
-            await stop()
-            const next = set({ owned: false, phase: 'ready' })
-            emit('runtime.adopted-existing-instance')
+          const lateHealth = await healthySafe()
+          if (lateHealth && spawned.exitCode === null) {
+            // Our own child just got healthy a breath after the race closed:
+            // adopt no one - the child we spawned IS the ready server.
+            const next = set({ phase: 'ready', pid: spawned.pid })
+            emit('runtime.health-ready')
             return next
+          }
+          if (lateHealth) {
+            const records = await runPortDiagnostics('occupied')
+            const verdict = records !== undefined ? await classifyOwners(records) : { kind: 'unknown' as const }
+            if (verdict.kind === 'lia-managed') {
+              await stop()
+              const attachment: RuntimeAttachment = { kind: 'lia-managed', roots: verdict.roots }
+              const next = set({ attachment, phase: 'ready' })
+              emit('runtime.adopted-lia-managed-instance', `classification=lia-managed rootPid=${verdict.roots[0]?.pid ?? 'unknown'}`)
+              return next
+            }
+          }
+          else {
+            await runPortDiagnostics(afterOccupancy === 'occupied' ? 'occupied' : 'unverifiable')
           }
           await stop()
           const next = set({
@@ -624,7 +860,7 @@ export function createRuntimeManager(deps: RuntimeManagerDeps): RuntimeManager {
         return next
       }
 
-      const next = set({ owned: true, phase: 'ready', pid: spawned.pid })
+      const next = set({ phase: 'ready', pid: spawned.pid })
       emit('runtime.health-ready')
       return next
     }
@@ -680,5 +916,14 @@ export function createRuntimeManager(deps: RuntimeManagerDeps): RuntimeManager {
     },
 
     ownedChildPid: () => child && child.exitCode === null ? child.pid : undefined,
+
+    liaManagedRootPids: () => {
+      const pids: number[] = []
+      if (child && child.exitCode === null && child.pid !== undefined)
+        pids.push(child.pid)
+      if (snapshot.attachment?.kind === 'lia-managed')
+        pids.push(...snapshot.attachment.roots.map(r => r.pid))
+      return [...new Set(pids)]
+    },
   }
 }
