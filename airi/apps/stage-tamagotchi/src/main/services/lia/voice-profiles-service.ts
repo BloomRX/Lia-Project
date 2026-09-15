@@ -15,6 +15,7 @@ import {
   electronLiaVoiceProfilesPick,
   electronLiaVoiceProfilesRemove,
 } from '../../../shared/eventa'
+import { pickVoiceFiles, VOICE_IMPORT_LOG_PREFIX } from './voice-profile-picker'
 import { createLiaVoiceProfileStore, VOICE_ENGINES } from './voice-profiles'
 
 type MainContext = ReturnType<typeof createContext>['context']
@@ -83,30 +84,30 @@ export function registerLiaVoiceProfilesBridge(params: {
     context,
     electronLiaVoiceProfilesPick,
     async (options: { extensions: string[], multiple?: boolean, title?: string }): Promise<string[] | null> => {
-      const filters = Array.isArray(options?.extensions) && options.extensions.length > 0
-        ? [{ name: 'Voice model', extensions: options.extensions.map(extension => extension.replace(/^\./, '')) }]
-        : []
-
-      const parent = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
-      const result = parent
-        ? await dialog.showOpenDialog(parent, {
-            title: options?.title || 'Import voice',
-            properties: options?.multiple ? ['openFile', 'multiSelections'] : ['openFile'],
-            ...(filters.length > 0 ? { filters } : {}),
-          })
-        : await dialog.showOpenDialog({
-            title: options?.title || 'Import voice',
-            properties: options?.multiple ? ['openFile', 'multiSelections'] : ['openFile'],
-            ...(filters.length > 0 ? { filters } : {}),
-          })
+      const picked = await pickVoiceFiles(
+        {
+          dialog: (windowOrOptions: unknown, maybeOptions?: Record<string, unknown>) =>
+            maybeOptions === undefined
+              ? dialog.showOpenDialog(windowOrOptions as Electron.OpenDialogOptions)
+              : dialog.showOpenDialog(windowOrOptions as InstanceType<typeof BrowserWindow>, maybeOptions),
+          getAllWindows: () => BrowserWindow.getAllWindows(),
+          getFocusedWindow: () => BrowserWindow.getFocusedWindow(),
+          log: line => console.info(VOICE_IMPORT_LOG_PREFIX, line),
+        },
+        {
+          extensions: Array.isArray(options?.extensions) ? options.extensions : [],
+          multiple: options?.multiple,
+          title: options?.title,
+        },
+      )
 
       // Cancel is a normal outcome, not an error: nothing is offered and nothing
       // downstream changes state.
-      if (result.canceled || result.filePaths.length === 0)
+      if (!picked || picked.length === 0)
         return null
 
-      offer(result.filePaths)
-      return result.filePaths
+      offer(picked)
+      return picked
     },
   )
 

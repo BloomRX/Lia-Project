@@ -2,7 +2,9 @@ import type { createContext } from '@moeru/eventa/adapters/electron/main'
 
 import type { LiaRuntimeInstallStep, LiaRuntimeState } from '../../../shared/eventa'
 import type { LiaProductConfig } from '../../configs/lia-schema'
-import type { RuntimeManager } from './alltalk-runtime'
+import type { RuntimeManager, RuntimeProbeIdentity } from './alltalk-runtime'
+
+import { execFile } from 'node:child_process'
 
 import { defineInvokeHandler } from '@moeru/eventa'
 import { app, BrowserWindow, dialog } from 'electron'
@@ -46,6 +48,14 @@ export interface LiaRuntimeService {
    * failure for a server that is in fact running.
    */
   clientConfig: () => { baseUrl: string, timeoutMs: number }
+  /**
+   * Whether the answering instance is a child the Lia spawned.
+   *
+   * Readiness for *use* never cares (item G of the hotfix brief), but the
+   * prepare flow's engine-switch restart does: it may only stop an instance
+   * with proven ownership, and needs to know before promising one.
+   */
+  isOwnedInstance: () => boolean
 }
 
 /** Maps the manager's internal phases onto what the renderer is told. */
@@ -106,6 +116,35 @@ export function registerLiaRuntimeBridge(params: {
         const probe = await createAllTalkClient(runtime).status()
         return probe.ok
       },
+      /**
+       * Who is on the port, in three words the supervisor acts on (items B/D
+       * of the hotfix brief): an AllTalk-shaped answer means reuse, a
+       * non-answer (connection refused) means free, anything else - a
+       * refusal to speak AllTalk - means a stranger holds the port and must
+       * not be killed.
+       */
+      probeIdentity: async (): Promise<RuntimeProbeIdentity> => {
+        try {
+          const probe = await createAllTalkClient(runtime).status()
+          return probe.ok ? 'alltalk' : 'unknown'
+        }
+        catch (error) {
+          const cause = error instanceof Error ? (error.cause as { code?: string } | undefined) : undefined
+          const code = cause?.code ?? (error as { code?: string } | undefined)?.code
+          return code === 'ECONNREFUSED' || code === 'ECONNRESET' || code === 'ETIMEDOUT' ? 'none' : 'unknown'
+        }
+      },
+      execImpl: async (command, args, options) => await new Promise((resolve) => {
+        // Only ever used for the Windows process-tree kill. taskkill exits
+        // non-zero when the PID is already gone, and that - like a missing
+        // taskkill on a stripped system - leaves the tree either dead or
+        // unverifiable, both of which the subsequent SIGKILL attempt on the
+        // wrapper covers. It is never a reason to crash a stop.
+        execFile(command, args, { timeout: options.timeoutMs }, (error) => {
+          resolve({ code: typeof error?.code === 'number' ? error.code : 0 })
+        })
+      }),
+      onEvent: (event, detail) => console.info('[LIA-VOICE-RUNTIME]', event, detail ?? ''),
       onOutput: line => console.info('[lia-runtime]', line.trimEnd()),
     })
     cached = { dir: installDir, manager: built }
@@ -176,6 +215,7 @@ export function registerLiaRuntimeBridge(params: {
       const runtime = readRuntime()
       return { baseUrl: runtime.baseUrl, timeoutMs: runtime.timeoutMs }
     },
+    isOwnedInstance: () => manager().state().phase === 'ready' && manager().state().owned !== false,
     state: () => toRendererState(manager().state().phase),
     start: startRuntime,
     stop: async () => {

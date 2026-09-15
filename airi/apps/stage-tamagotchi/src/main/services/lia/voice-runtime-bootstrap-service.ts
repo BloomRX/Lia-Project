@@ -32,6 +32,7 @@ import { createAllTalkClient } from './alltalk-client'
 import { CUSTOM_VOICE_PREPARE_LOG_PREFIX, prepareCustomVoiceEngine } from './alltalk-custom-voice-prepare'
 import { readCustomVoiceEngineStatus } from './alltalk-engine-config'
 import { DEFAULT_START_TIMEOUT_MS } from './alltalk-runtime'
+import { restartForEngineChangeIfNeeded } from './custom-voice-engine-restart'
 import {
   BOOTSTRAP_STEP_IDS,
   createVoiceRuntimeBootstrapper,
@@ -84,6 +85,14 @@ export interface LiaRuntimeControl {
    * server off of, and then reporting a failure for a server that is running.
    */
   clientConfig: () => { baseUrl: string, timeoutMs: number }
+  /**
+   * Whether the answering instance is a Lia-owned child (hotfix brief, item F).
+   *
+   * The engine-switch restart may only stop what the Lia started; a foreign
+   * instance makes the switch unclaimable instead. Optional so a leaner
+   * control in tests reads as "unknown", the conservative value.
+   */
+  isOwnedInstance?: () => boolean
 }
 
 /**
@@ -415,6 +424,28 @@ export function registerLiaBootstrapBridge(params: {
           },
           ...customVoiceFs,
         })
+
+        if (result.ok && result.changed) {
+          // Item F of the hotfix brief: a newly prepared engine is not live
+          // until a running stale instance has been swapped. Only after that
+          // chain does the log deserve 'prepare.finished'.
+          const restart = await restartForEngineChangeIfNeeded({
+            isHealthy,
+            isOwnedInstance: params.runtime.isOwnedInstance?.bind(params.runtime),
+            log: (event, detail) => console.info(CUSTOM_VOICE_PREPARE_LOG_PREFIX, event, detail ?? ''),
+            runtimeState: () => params.runtime.state().state,
+            start: async () => await params.runtime.start() as { state: string },
+            stop: async () => await params.runtime.stop(),
+          })
+          if (!restart.ok) {
+            latest = { detail: restart.detail, phase: 'error' }
+            emitCustomVoice(latest)
+            return latest
+          }
+        }
+
+        if (result.ok)
+          console.info(CUSTOM_VOICE_PREPARE_LOG_PREFIX, 'prepare.finished', '')
 
         latest = result.ok
           ? { phase: 'ready' }

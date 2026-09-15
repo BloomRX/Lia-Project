@@ -101,6 +101,9 @@ export const useLiaVoiceProfilesStore = defineStore('lia-voice-profiles', () => 
    */
   async function pickFiles(engineId: string, roles: string[]): Promise<string[] | null> {
     const engine = engineFor(engineId)
+    // [LIA-VOICE-IMPORT] trail (hotfix Q): devtools-side half of the trail; the
+    // main process logs reception/dialog/result on its own side. Never a path.
+    console.info('[LIA-VOICE-IMPORT]', 'picker-invoke')
     const paths = await pickPaths({
       extensions: engine?.extensions ?? [],
       multiple: roles.length > 1,

@@ -195,6 +195,10 @@ export async function prepareCustomVoiceEngine(
     return { error: 'cancelled', message: 'Preparation was cancelled.', ok: false }
   }
 
+  // The CLI's own outcome, logged BEFORE any conclusion about the voice
+  // engine (item H of the hotfix brief): exit 0 marks the end of the
+  // download, never readiness.
+  deps.log({ detail: `exit=${String(result.code)}`, event: 'prepare.cli-finished' })
   set({ phase: 'verifying' })
 
   if (result.code !== 0) {
@@ -207,13 +211,14 @@ export async function prepareCustomVoiceEngine(
 
   // The source of truth after the run is the config, not the exit code: the
   // pin exits 0 having written nothing when, for example, a flag is off.
+  deps.log({ detail: `engine=${CUSTOM_VOICE_ENGINE.engine} model=${CUSTOM_VOICE_ENGINE.model}`, event: 'prepare.verify' })
   const verified = await readCustomVoiceEngineStatus(
     { readFile: deps.readFile, listFiles: deps.listFiles, writeFile: deps.writeFile },
     deps.appDir,
   )
 
   if (verified.ready) {
-    deps.log({ event: 'prepare.finished' })
+    deps.log({ detail: `engine=${verified.engine ?? CUSTOM_VOICE_ENGINE.engine}`, event: 'prepare.verified' })
     set({ phase: 'ready' })
     return { changed: true, ok: true }
   }

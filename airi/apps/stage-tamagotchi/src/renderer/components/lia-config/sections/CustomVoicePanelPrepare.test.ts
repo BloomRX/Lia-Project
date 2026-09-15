@@ -239,6 +239,37 @@ describe('the prepare card', () => {
     expect(wrapper.text()).toContain(`${TT}.profiles.status.notPrepared`)
     expect(wrapper.text()).not.toContain(`${TT}.profiles.status.ready`)
   })
+
+  it('gates Import and Test until the service is proven ready (hotfix brief N)', async () => {
+    ipc.customVoiceEngine.current = { firstRunPending: true, missingModelFiles: 4, modelComplete: false, ready: false }
+    ipc.profiles.current = [{
+      createdAt: '2026-09-13T00:00:00.000Z',
+      engine: 'alltalk',
+      files: [{ bytes: 1024, filename: 'referencia.wav', role: 'referenceAudio' }],
+      id: 'profile-1',
+      name: 'Lia pessoal',
+    } as unknown as LiaCustomVoiceProfile]
+    const wrapper = await mountPanel()
+
+    const importButton = wrapper.find('[data-testid="lia-custom-voice-import"]')
+    const testButton = wrapper.find('[data-testid="lia-custom-voice-test-profile-1"]')
+    expect(importButton.attributes('disabled')).toBeDefined()
+    expect(testButton.attributes('disabled')).toBeDefined()
+  })
+
+  it('unlocks Import and Test once the service is ready', async () => {
+    ipc.profiles.current = [{
+      createdAt: '2026-09-13T00:00:00.000Z',
+      engine: 'alltalk',
+      files: [{ bytes: 1024, filename: 'referencia.wav', role: 'referenceAudio' }],
+      id: 'profile-1',
+      name: 'Lia pessoal',
+    } as unknown as LiaCustomVoiceProfile]
+    const wrapper = await mountPanel()
+
+    expect(wrapper.find('[data-testid="lia-custom-voice-import"]').attributes('disabled')).toBeUndefined()
+    expect(wrapper.find('[data-testid="lia-custom-voice-test-profile-1"]').attributes('disabled')).toBeUndefined()
+  })
 })
 
 describe('the import picker', () => {

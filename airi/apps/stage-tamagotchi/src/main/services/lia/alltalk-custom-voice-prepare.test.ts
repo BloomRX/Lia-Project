@@ -162,8 +162,12 @@ describe('prepareCustomVoiceEngine', () => {
     expect(phases).toContain('verifying')
     expect(phases[phases.length - 1]).toBe('ready')
     expect(logs.map(entry => entry.event)).toEqual(
-      expect.arrayContaining(['prepare.requested', 'prepare.download-started', 'prepare.finished']),
+      expect.arrayContaining(['prepare.requested', 'prepare.download-started', 'prepare.cli-finished', 'prepare.verify', 'prepare.verified']),
     )
+    // 'prepare.finished' is deliberately NOT logged here: the brief's chain
+    // reserves it for after any needed engine-switch restart, which lives in
+    // the caller. The module's last claim is 'prepare.verified'.
+    expect(logs.map(entry => entry.event)).not.toContain('prepare.finished')
   })
 
   it('t: refuses to celebrate when the run leaves piper in place (the QA failure shape)', async () => {

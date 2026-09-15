@@ -9,7 +9,7 @@ import { join } from 'node:path'
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { createRuntimeManager, ENVIRONMENT_MARKERS, INSTALL_MARKERS, startCommandFor, WINDOWS_START_SCRIPT } from './alltalk-runtime'
+import { createRuntimeManager, ENVIRONMENT_MARKERS, INSTALL_MARKERS, spawnEnvFor, startCommandFor, taskkillArgs, WINDOWS_START_SCRIPT } from './alltalk-runtime'
 
 /**
  * The runtime manager owns a real process, so these tests inject both the
@@ -197,7 +197,11 @@ describe('start', () => {
   it('does not spawn again once the runtime is already ready', async () => {
     const dir = await installedDir()
     tempDirs.push(dir)
-    const { manager, spawned } = managerFor({ installDir: dir, isHealthy: async () => true })
+    // `probeIdentity: 'none'` pins the scenario's intent: the health probe
+    // answers only *after* the spawn. With adoption the same blanket-true
+    // probe would instead mean "an instance is already running" - which the
+    // adoption tests below model on purpose.
+    const { manager, spawned } = managerFor({ installDir: dir, isHealthy: async () => true, probeIdentity: async () => 'none' })
 
     await manager.start()
     await manager.start()
@@ -209,7 +213,7 @@ describe('start', () => {
   it('reaches ready and records the pid once health succeeds', async () => {
     const dir = await installedDir()
     tempDirs.push(dir)
-    const { manager } = managerFor({ installDir: dir, isHealthy: async () => true })
+    const { manager } = managerFor({ installDir: dir, isHealthy: async () => true, probeIdentity: async () => 'none' })
 
     const state = await manager.start()
 
@@ -222,7 +226,7 @@ describe('start', () => {
     const dir = await installedDir()
     tempDirs.push(dir)
     let healthy = true
-    const { manager, spawned } = managerFor({ installDir: dir, isHealthy: async () => healthy })
+    const { manager, spawned } = managerFor({ installDir: dir, isHealthy: async () => healthy, probeIdentity: async () => 'none' })
 
     await manager.start()
     expect((await manager.start()).phase).toBe('ready')
@@ -299,7 +303,7 @@ describe('stop', () => {
   it('terminates the managed child', async () => {
     const dir = await installedDir()
     tempDirs.push(dir)
-    const { child, manager } = managerFor({ installDir: dir, isHealthy: async () => true })
+    const { child, manager } = managerFor({ installDir: dir, isHealthy: async () => true, probeIdentity: async () => 'none' })
 
     await manager.start()
     expect(manager.state().phase).toBe('ready')
@@ -319,6 +323,7 @@ describe('stop', () => {
       installDir: dir,
       isHealthy: async () => true,
       obedient: false,
+      probeIdentity: async () => 'none',
     })
 
     await manager.start()
@@ -338,12 +343,138 @@ describe('stop', () => {
   it('does not leave an orphan when the child exits on its own', async () => {
     const dir = await installedDir()
     tempDirs.push(dir)
-    const { child, manager } = managerFor({ installDir: dir, isHealthy: async () => true })
+    const { child, manager } = managerFor({ installDir: dir, isHealthy: async () => true, probeIdentity: async () => 'none' })
 
     await manager.start()
     child.exit(0)
     await manager.stop()
 
     expect(manager.state().phase).toBe('stopped')
+  })
+})
+
+/**
+ * Phase 6 hotfix, items A/B/J/K/L — the single runtime authority.
+ *
+ * The QA evidence was two AllTalk instances arguing over ports 7851/7852
+ * (`Errno 10048`). These tests pin the contract that makes that shape
+ * impossible: spawn only when the port is provably silent, adopt what is
+ * provably AllTalk, refuse - with a sentence, not a kill - whatever is
+ * provably a stranger, and on Windows kill the Lia-owned tree, never the
+ * wrapper alone.
+ */
+describe('adoption (single instance, brief A/B)', () => {
+  it('an instance that already answers is reused, never duplicated (L-4)', async () => {
+    const dir = await installedDir()
+    tempDirs.push(dir)
+    const { manager, spawned } = managerFor({
+      installDir: dir,
+      isHealthy: async () => true,
+      probeIdentity: async () => 'alltalk',
+    })
+
+    const state = await manager.start()
+
+    expect(spawned).not.toHaveBeenCalled()
+    expect(state).toEqual({ owned: false, phase: 'ready' })
+  })
+
+  it('an adopted instance is not killed on stop (never kill without ownership, M)', async () => {
+    const dir = await installedDir()
+    tempDirs.push(dir)
+    const { child, manager } = managerFor({
+      installDir: dir,
+      isHealthy: async () => true,
+      probeIdentity: async () => 'alltalk',
+    })
+
+    await manager.start()
+    await manager.stop()
+
+    expect(child.killImpl).not.toHaveBeenCalled()
+    expect(manager.state().phase).toBe('stopped')
+  })
+
+  it('a stranger on the port: friendly error, nothing spawned, nothing killed (L-5)', async () => {
+    const dir = await installedDir()
+    tempDirs.push(dir)
+    const taskkill = vi.fn(async () => ({ code: 0 }))
+    const { child, manager, spawned } = managerFor({
+      execImpl: taskkill,
+      installDir: dir,
+      isHealthy: async () => false,
+      probeIdentity: async () => 'unknown',
+    })
+
+    const state = await manager.start()
+
+    expect(state.phase).toBe('error')
+    expect(state.message).toBe('The voice system is already being used by another process.')
+    expect(spawned).not.toHaveBeenCalled()
+    expect(child.killImpl).not.toHaveBeenCalled()
+    expect(taskkill).not.toHaveBeenCalled()
+  })
+
+  it('a failed spawn against a race that another instance won ends in adoption, not two servers', async () => {
+    const dir = await installedDir()
+    tempDirs.push(dir)
+    // Cold port at the check, then the rival boots between our probe and our
+    // health budget - the second probe is the only one that sees it.
+    let probeCalls = 0
+    const { manager, spawned } = managerFor({
+      installDir: dir,
+      isHealthy: async () => false,
+      probeIdentity: async () => (probeCalls += 1) === 1 ? 'none' : 'alltalk',
+    })
+
+    const state = await manager.start()
+
+    expect(spawned).toHaveBeenCalledTimes(1)
+    expect(state).toEqual({ owned: false, phase: 'ready' })
+  })
+})
+
+describe('the Windows process tree (brief K)', () => {
+  it('a stubborn child is removed as a tree: taskkill on the owned root pid only', async () => {
+    const dir = await installedDir()
+    tempDirs.push(dir)
+    const taskkill = vi.fn(async () => ({ code: 0 }))
+    const { child, manager } = managerFor({
+      execImpl: taskkill,
+      installDir: dir,
+      isHealthy: async () => true,
+      obedient: false,
+      probeIdentity: async () => 'none',
+    })
+
+    await manager.start()
+    await manager.stop()
+
+    expect(taskkill).toHaveBeenCalledTimes(1)
+    expect(taskkill.mock.calls[0][0]).toBe('taskkill')
+    expect(taskkill.mock.calls[0][1]).toEqual(taskkillArgs(4242))
+  })
+
+  it('taskkill arguments are the fixed array the brief demands', () => {
+    expect(taskkillArgs(1234)).toEqual(['/PID', '1234', '/T', '/F'])
+  })
+})
+
+describe('the bundled espeak PATH (brief I, L-15)', () => {
+  it('prepends the bundled directory on Windows when it exists - and only then', async () => {
+    const bundled = join('C:\\alltalk', 'system', 'espeak-ng')
+    const env = await spawnEnvFor('win32', 'C:\\alltalk', async path => path === bundled)
+    const pathKey = Object.keys(env).find(key => key.toLowerCase() === 'path') ?? 'PATH'
+    expect(env[pathKey]?.startsWith(`${bundled};`)).toBe(true)
+  })
+
+  it('leaves the environment alone when the bundled copy is absent', async () => {
+    const env = await spawnEnvFor('win32', 'C:\\alltalk', async () => false)
+    expect(Object.values(env).join('\n')).not.toContain('espeak-ng')
+  })
+
+  it('does nothing off Windows', async () => {
+    const env = await spawnEnvFor('linux', '/opt/alltalk', async () => true)
+    expect(Object.values(env).join('\n')).not.toContain('espeak-ng')
   })
 })

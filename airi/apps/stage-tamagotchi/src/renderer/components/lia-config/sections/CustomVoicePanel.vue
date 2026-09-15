@@ -60,6 +60,25 @@ const engineConfirmedNotReady = computed(() => engine.value !== undefined && !en
 /** The card appears only over an installed runtime: no runtime, nothing to prepare. */
 const showPrepareCard = computed(() => runtimeStore.isReady && engineConfirmedNotReady.value)
 
+/**
+ * The one readiness the flow gates on (hotfix brief, items G/N).
+ *
+ * Derived from the same two sources everything else reads - the runtime store
+ * says the API answers, the engine readback says XTTS is the configured
+ * engine with complete model files. It is a view, never a stored flag, so it
+ * cannot drift from the machine the way a parallel boolean would. Under it:
+ *
+ * - `customVoicePrepared` (disk) = `engine?.ready`
+ * - `runtimeReady` (process) = `runtimeStore.isReady`
+ * - `customVoiceServiceReady` = both, plus no open contradiction.
+ *
+ * While it is false, Import and Test must not proceed: importing a reference
+ * WAV the engine cannot use, or playing a preview through the wrong engine,
+ * would only produce the "it did nothing" shapes the QA report lists.
+ */
+const customVoiceServiceReady = computed(() =>
+  runtimeStore.isReady && engine.value?.ready === true)
+
 onMounted(async () => {
   await profilesStore.refresh()
   if (runtimeStore.isReady)
@@ -109,6 +128,9 @@ const pickError = ref(false)
 async function onPickFile(): Promise<void> {
   isPicking.value = true
   pickError.value = false
+  // [LIA-VOICE-IMPORT] trail (hotfix Q): proof the click handler fired; the
+  // store logs the invoke, the main process logs the dialog itself.
+  console.info('[LIA-VOICE-IMPORT]', 'picker-click')
   try {
     const paths = await profilesStore.pickFiles('alltalk', ['referenceAudio'])
     // A cancelled picker resolves to null and must change nothing.
@@ -299,7 +321,8 @@ void CUSTOM_VOICE_PROVIDER_ID
       <button
         type="button"
         class="border border-neutral-200 rounded px-2 py-1 text-sm dark:border-neutral-700"
-        :disabled="profilesStore.isBusy || isPicking"
+        :disabled="profilesStore.isBusy || isPicking || !customVoiceServiceReady"
+        :title="!customVoiceServiceReady ? tt('prepare.title') : undefined"
         data-testid="lia-custom-voice-import"
         @click="onPickFile"
       >
@@ -405,7 +428,7 @@ void CUSTOM_VOICE_PROVIDER_ID
           <button
             type="button"
             class="border border-neutral-200 rounded px-2 py-1 text-xs dark:border-neutral-700"
-            :disabled="testingId === profile.id"
+            :disabled="testingId === profile.id || !customVoiceServiceReady"
             :data-testid="`lia-custom-voice-test-${profile.id}`"
             @click="onTest(profile.id)"
           >
