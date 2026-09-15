@@ -74,7 +74,12 @@ function bootstrapRunFailureState(detail: string): LiaBootstrapState {
  * diagnose.
  */
 export interface LiaRuntimeControl {
-  start: () => Promise<unknown>
+  /**
+   * `source` rides the [LIA-VOICE-RUNTIME] timeline (hotfix QA brief): this
+   * wrapper always forwards one, so the log can tell bootstrap health-verify
+   * and the prepare restart apart from autostart and the UI button.
+   */
+  start: (options?: { source?: string }) => Promise<unknown>
   stop: () => Promise<void>
   state: () => { state: string }
   /**
@@ -173,7 +178,7 @@ export function registerLiaBootstrapBridge(params: {
    * conflict they cannot diagnose.
    */
   const startRuntime = async (): Promise<boolean> => {
-    await params.runtime.start()
+    await params.runtime.start({ source: 'bootstrap-verify-health' })
     // The manager's own budget, not a second copy of it. Polling for less time
     // than the manager allows would report a timeout for a runtime that is still
     // legitimately starting.
@@ -416,7 +421,7 @@ export function registerLiaBootstrapBridge(params: {
           log: (entry) => {
             // The brief's [LIA-VOICE-RUNTIME] prefix on every line; the detail
             // is engine names and file counts only, never paths or URLs.
-            console.info(CUSTOM_VOICE_PREPARE_LOG_PREFIX, entry.event, entry.detail ?? '')
+            console.info(CUSTOM_VOICE_PREPARE_LOG_PREFIX, new Date().toISOString(), entry.event, entry.detail ?? '')
           },
           onStateChange: (state) => {
             latest = state
@@ -432,9 +437,9 @@ export function registerLiaBootstrapBridge(params: {
           const restart = await restartForEngineChangeIfNeeded({
             isHealthy,
             isOwnedInstance: params.runtime.isOwnedInstance?.bind(params.runtime),
-            log: (event, detail) => console.info(CUSTOM_VOICE_PREPARE_LOG_PREFIX, event, detail ?? ''),
+            log: (event, detail) => console.info(CUSTOM_VOICE_PREPARE_LOG_PREFIX, new Date().toISOString(), event, detail ?? ''),
             runtimeState: () => params.runtime.state().state,
-            start: async () => await params.runtime.start() as { state: string },
+            start: async () => await params.runtime.start({ source: 'custom-voice-prepare-restart' }) as { state: string },
             stop: async () => await params.runtime.stop(),
           })
           if (!restart.ok) {
@@ -445,7 +450,7 @@ export function registerLiaBootstrapBridge(params: {
         }
 
         if (result.ok)
-          console.info(CUSTOM_VOICE_PREPARE_LOG_PREFIX, 'prepare.finished', '')
+          console.info(CUSTOM_VOICE_PREPARE_LOG_PREFIX, new Date().toISOString(), 'prepare.finished', '')
 
         latest = result.ok
           ? { phase: 'ready' }
@@ -474,7 +479,7 @@ export function registerLiaBootstrapBridge(params: {
     catch {
       // A child that already exited is done; nothing to undo.
     }
-    console.info(CUSTOM_VOICE_PREPARE_LOG_PREFIX, 'prepare.cancel-requested', '')
+    console.info(CUSTOM_VOICE_PREPARE_LOG_PREFIX, new Date().toISOString(), 'prepare.cancel-requested', '')
   })
 
   return {

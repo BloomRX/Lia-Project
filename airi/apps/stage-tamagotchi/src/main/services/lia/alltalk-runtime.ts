@@ -124,10 +124,43 @@ export interface RuntimeManagerDeps {
   execImpl?: (command: string, args: string[], options: { timeoutMs: number }) => Promise<{ code: number | null }>
   /** Structured lifecycle events for the `[LIA-VOICE-RUNTIME]` log. */
   onEvent?: (event: string, detail?: string) => void
+  /**
+   * Port-owner evidence gathering (Windows QA hotfix, "diagnóstico Windows").
+   *
+   * Runs *before* the start decision whenever the port is occupied, and after
+   * a contested shutdown: who owns 7851/7852 - PID, executable path, command
+   * line, parent PID, creation time - so the QA log proves whether the holder
+   * is a Lia child, another Lia spawn, or something external. It only ever
+   * log*s; it never kills. The service wires the real
+   * (netstat + Win32_Process) implementation; tests capture the calls.
+   */
+  portOwnerDiagnostics?: (context: { identity: RuntimeProbeIdentity }) => Promise<void>
+  /** Bound on the diagnostics above, so a slow PowerShell cannot stall a start. */
+  portOwnerDiagnosticsTimeoutMs?: number
   /** How long to wait for SIGTERM before escalating. Bounded, so app quit cannot hang. */
   stopGraceMs?: number
   /** Receives stdout/stderr lines. Diagnostics only; never surfaced raw. */
   onOutput?: (chunk: string) => void
+}
+
+/**
+ * `source` names which of the audited call sites asked for a start (hotfix
+ * QA brief: "prove who spawns"). It rides the `[LIA-VOICE-RUNTIME]` events -
+ * `start-request source=autostart`, `spawn pid=1234 source=autostart`,
+ * `start-coalesced existingPid=1234 source=bootstrap` - so two concurrent
+ * start paths can never disguise themselves as one.
+ */
+export interface RuntimeStartOptions {
+  source?: string
+}
+
+export interface RuntimeStopOptions {
+  /**
+   * After the owned tree is dead, poll until the port answers nobody, up to
+   * this budget (the lifecycle contract's "confirm 7851/7852 are free"). 0
+   * or omitted skips the confirmation.
+   */
+  confirmFreeMs?: number
 }
 
 export interface RuntimeManager {
@@ -135,9 +168,16 @@ export interface RuntimeManager {
   /** True when the folder looks like a real AllTalk install. */
   isInstalled: () => Promise<boolean>
   /** Starts if needed and waits for health. Idempotent. */
-  start: () => Promise<RuntimeStateSnapshot>
+  start: (options?: RuntimeStartOptions) => Promise<RuntimeStateSnapshot>
   /** Stops the managed child, if any. Safe to call repeatedly. */
-  stop: () => Promise<void>
+  stop: (options?: RuntimeStopOptions) => Promise<void>
+  /**
+   * Declares the app is going away: every later `start()` is refused with a
+   * `start-rejected reason=shutting-down` event (lifecycle contract, clause 1).
+   */
+  enterShutdown: () => void
+  /** PID of the live Lia-owned child, for the synchronous crash-path kill. */
+  ownedChildPid: () => number | undefined
 }
 
 async function exists(path: string): Promise<boolean> {
@@ -259,6 +299,41 @@ export function createRuntimeManager(deps: RuntimeManagerDeps): RuntimeManager {
   let child: ChildProcess | undefined
   /** Guards against two concurrent starts racing into two children. */
   let starting: Promise<RuntimeStateSnapshot> | undefined
+  /** Lifecycle contract, clause 1: no new starts once the app begins to die. */
+  let shuttingDown = false
+
+  async function runPortDiagnostics(identity: RuntimeProbeIdentity): Promise<void> {
+    if (!deps.portOwnerDiagnostics)
+      return
+    emit('runtime.port-diagnosis-started', `identity=${identity}`)
+    const timeoutMs = deps.portOwnerDiagnosticsTimeoutMs ?? 8000
+    let timedOut = false
+    const timer = setTimeout(() => {
+      timedOut = true
+    }, timeoutMs)
+    timer.unref?.()
+    try {
+      await Promise.race([
+        (async () => {
+          try {
+            await deps.portOwnerDiagnostics!({ identity })
+          }
+          catch {
+            // Evidence gathering must never change the start/stop outcome.
+            emit('runtime.port-diagnosis-error')
+          }
+        })(),
+        new Promise<void>((resolve) => {
+          const timeout = setTimeout(resolve, timeoutMs)
+          timeout.unref?.()
+        }),
+      ])
+    }
+    finally {
+      clearTimeout(timer)
+    }
+    emit(timedOut ? 'runtime.port-diagnosis-timeout' : 'runtime.port-diagnosis-finished')
+  }
 
   function set(next: RuntimeStateSnapshot): RuntimeStateSnapshot {
     snapshot = next
@@ -311,7 +386,7 @@ export function createRuntimeManager(deps: RuntimeManagerDeps): RuntimeManager {
     }
   }
 
-  async function stop(): Promise<void> {
+  async function stop(options: RuntimeStopOptions = {}): Promise<void> {
     const current = child
     child = undefined
     if (starting)
@@ -359,9 +434,38 @@ export function createRuntimeManager(deps: RuntimeManagerDeps): RuntimeManager {
 
     emit('runtime.stopped')
     set({ phase: 'stopped' })
+
+    // Lifecycle contract, clause 6: prove the ports are clear before the main
+    // process is allowed to finish. Only after an owned kill - confirming
+    // someone else's port would just delay every quit of a user who started
+    // AllTalk by hand.
+    const confirmFreeMs = options.confirmFreeMs ?? 0
+    if (confirmFreeMs > 0) {
+      const deadline = Date.now() + confirmFreeMs
+      let lastIdentity: RuntimeProbeIdentity = 'alltalk'
+      let free = false
+      while (Date.now() < deadline) {
+        lastIdentity = await probeIdentity()
+        if (lastIdentity === 'none') {
+          free = true
+          break
+        }
+        await new Promise<void>((resolve) => {
+          const pause = setTimeout(resolve, 250)
+          pause.unref?.()
+        })
+      }
+      if (free) {
+        emit('runtime.shutdown-ports-free')
+      }
+      else {
+        emit('runtime.shutdown-ports-still-occupied', `identity=${lastIdentity}`)
+        await runPortDiagnostics(lastIdentity)
+      }
+    }
   }
 
-  async function doStart(): Promise<RuntimeStateSnapshot> {
+  async function doStart(source: string): Promise<RuntimeStateSnapshot> {
     try {
       if (snapshot.phase === 'ready') {
         // Contract A-1/A-2: a live child, or any healthy API at all, is reused -
@@ -387,6 +491,12 @@ export function createRuntimeManager(deps: RuntimeManagerDeps): RuntimeManager {
       // the port. An AllTalk is adopted (used, never killed, never duplicated);
       // an unknown listener is a friendly error and nothing is killed.
       const identity = await probeIdentity()
+      emit('runtime.classified', `identity=${identity}`)
+      if (identity !== 'none') {
+        // Someone already holds the port. Evidence first (who, exactly),
+        // decision second - "não matar antes da identificação" made testable.
+        await runPortDiagnostics(identity)
+      }
       if (identity === 'alltalk') {
         emit('runtime.adopted-existing-instance')
         return set({ owned: false, phase: 'ready' })
@@ -400,13 +510,13 @@ export function createRuntimeManager(deps: RuntimeManagerDeps): RuntimeManager {
       }
 
       set({ phase: 'starting' })
-      emit('runtime.spawn-requested')
+      emit('runtime.spawn-requested', `source=${source}`)
 
       const env = await spawnEnvFor(platform, installDir, existsImpl)
       const { command, args, options } = startCommandFor(platform, installDir, { env })
       const spawned = spawnImpl(command, args, options)
       child = spawned
-      emit('runtime.spawned', spawned.pid !== undefined ? `pid=${spawned.pid}` : undefined)
+      emit('runtime.spawned', spawned.pid !== undefined ? `pid=${spawned.pid} source=${source}` : `source=${source}`)
 
       const record = (chunk: Buffer | string) => {
         deps.onOutput?.(String(chunk))
@@ -430,6 +540,8 @@ export function createRuntimeManager(deps: RuntimeManagerDeps): RuntimeManager {
         // adopt, not an error; and an unknown holder means our child died
         // fighting for the port, which is the friendly message, not a crash.
         const after = await probeIdentity()
+        if (after !== 'none')
+          await runPortDiagnostics(after)
         if (after === 'alltalk') {
           await stop()
           emit('runtime.adopted-existing-instance')
@@ -474,18 +586,43 @@ export function createRuntimeManager(deps: RuntimeManagerDeps): RuntimeManager {
 
     isInstalled,
 
-    start() {
+    start(options: RuntimeStartOptions = {}) {
+      const source = options.source ?? 'unknown'
+      emit('runtime.start-request', `source=${source}`)
+
+      // Lifecycle contract, clause 1: once the app begins to die, no caller -
+      // autostart racing the quit, a health check, a repair click buffered in
+      // the renderer - may spawn anything ever again.
+      if (shuttingDown) {
+        emit('runtime.start-rejected', `reason=shutting-down source=${source}`)
+        return Promise.resolve({
+          message: 'The application is closing.',
+          phase: 'error',
+        })
+      }
+
       // Single-instance guard. `starting` must be assigned *synchronously*: an
       // async function suspends at its first await, and every await before this
       // assignment was a window in which a second caller could spawn its own
-      // child and leave two servers fighting over the same port.
-      if (starting)
+      // child and leave two servers fighting over the same port. Concurrent
+      // callers are logged as coalesced, so the QA timeline shows every
+      // request even when only one spawn can ever happen.
+      if (starting) {
+        emit('runtime.start-coalesced', `source=${source} existingPid=${child?.pid ?? 'unknown'}`)
         return starting
+      }
 
-      starting = doStart()
+      starting = doStart(source)
       return starting
     },
 
-    stop: () => stop(),
+    stop: (options: RuntimeStopOptions = {}) => stop(options),
+
+    enterShutdown() {
+      shuttingDown = true
+      emit('runtime.shutdown-requested')
+    },
+
+    ownedChildPid: () => child && child.exitCode === null ? child.pid : undefined,
   }
 }

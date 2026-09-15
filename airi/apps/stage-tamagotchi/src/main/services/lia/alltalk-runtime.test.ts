@@ -439,7 +439,7 @@ describe('the Windows process tree (brief K)', () => {
     const dir = await installedDir()
     tempDirs.push(dir)
     const taskkill = vi.fn(async () => ({ code: 0 }))
-    const { child, manager } = managerFor({
+    const { manager } = managerFor({
       execImpl: taskkill,
       installDir: dir,
       isHealthy: async () => true,
@@ -476,5 +476,247 @@ describe('the bundled espeak PATH (brief I, L-15)', () => {
   it('does nothing off Windows', async () => {
     const env = await spawnEnvFor('linux', '/opt/alltalk', async () => true)
     expect(Object.values(env).join('\n')).not.toContain('espeak-ng')
+  })
+})
+
+describe('the start timeline instrumentation (Windows QA hotfix)', () => {
+  /** Collects (event, detail) pairs so order can be asserted. */
+  function recorder() {
+    const lines: Array<string> = []
+    return {
+      lines,
+      onEvent: (event: string, detail?: string) => lines.push(detail ? `${event} ${detail}` : event),
+    }
+  }
+
+  it('tags every start request and every spawn with its call-site source', async () => {
+    const rec = recorder()
+    const { manager } = managerFor({
+      installDir: await installedDir(),
+      isHealthy: async () => true,
+      onEvent: rec.onEvent,
+      // This is a "spawn my own child" test, so nothing is on the port yet.
+      probeIdentity: async () => 'none',
+    })
+
+    await manager.start({ source: 'autostart' })
+
+    expect(manager.state().phase).toBe('ready')
+    expect(rec.lines).toContain('runtime.start-request source=autostart')
+    expect(rec.lines).toContain('runtime.spawn-requested source=autostart')
+    // The QA brief's example format: `spawn pid=1234 source=autostart`.
+    expect(rec.lines).toContain('runtime.spawned pid=4242 source=autostart')
+  })
+
+  it('coalesces concurrent starts into one spawn, logging the second caller too', async () => {
+    const rec = recorder()
+    const { manager, spawned } = managerFor({
+      installDir: await installedDir(),
+      isHealthy: async () => true,
+      onEvent: rec.onEvent,
+      probeIdentity: async () => 'none',
+    })
+
+    const [first, second] = await Promise.all([
+      manager.start({ source: 'autostart' }),
+      manager.start({ source: 'bootstrap-verify-health' }),
+    ])
+
+    // One spawn, one flight, and the late caller is visible in the timeline.
+    expect(spawned).toHaveBeenCalledTimes(1)
+    expect(first).toEqual(second)
+    expect(rec.lines).toContain('runtime.start-request source=autostart')
+    expect(rec.lines).toContain('runtime.start-request source=bootstrap-verify-health')
+    expect(rec.lines.some(line => line.startsWith('runtime.start-coalesced source=bootstrap-verify-health existingPid='))).toBe(true)
+  })
+
+  it('runs port-owner diagnostics BEFORE the occupied-port decision and never kills first', async () => {
+    const rec = recorder()
+    const diagnosis: string[] = []
+    const { manager, spawned } = managerFor({
+      installDir: await installedDir(),
+      isHealthy: async () => true,
+      onEvent: rec.onEvent,
+      portOwnerDiagnostics: async ({ identity }) => {
+        diagnosis.push(identity)
+      },
+      probeIdentity: async () => 'unknown',
+    })
+
+    const state = await manager.start({ source: 'ui-start' })
+
+    expect(state.phase).toBe('error')
+    expect(spawned).not.toHaveBeenCalled()
+    expect(diagnosis).toEqual(['unknown'])
+    // Evidence precedes the decision, exactly ("não matar antes da identificação" made orderable).
+    const diagAt = rec.lines.indexOf('runtime.port-diagnosis-started identity=unknown')
+    const decidedAt = rec.lines.indexOf('runtime.port-occupied-unknown-process')
+    expect(diagAt).toBeGreaterThanOrEqual(0)
+    expect(decidedAt).toBeGreaterThan(diagAt)
+  })
+
+  it('diagnoses before adopting an AllTalk-shaped port, then adopts', async () => {
+    const diagnosis: string[] = []
+    const { manager, spawned } = managerFor({
+      installDir: await installedDir(),
+      isHealthy: async () => true,
+      portOwnerDiagnostics: async ({ identity }) => {
+        diagnosis.push(identity)
+      },
+      probeIdentity: async () => 'alltalk',
+    })
+
+    const state = await manager.start()
+
+    expect(state).toEqual({ owned: false, phase: 'ready' })
+    expect(spawned).not.toHaveBeenCalled()
+    expect(diagnosis).toEqual(['alltalk'])
+  })
+
+  it('a diagnostics failure or timeout never changes the start outcome', async () => {
+    const throwing = managerFor({
+      installDir: await installedDir(),
+      isHealthy: async () => false,
+      portOwnerDiagnostics: async () => {
+        throw new Error('powershell exploded')
+      },
+      probeIdentity: async () => 'alltalk',
+    })
+    expect((await throwing.manager.start()).phase).toBe('ready')
+
+    const rec = recorder()
+    const forever = managerFor({
+      installDir: await installedDir(),
+      isHealthy: async () => false,
+      onEvent: rec.onEvent,
+      portOwnerDiagnostics: async () => await new Promise(() => {}),
+      portOwnerDiagnosticsTimeoutMs: 20,
+      probeIdentity: async () => 'alltalk',
+    })
+    expect((await forever.manager.start()).phase).toBe('ready')
+    expect(rec.lines).toContain('runtime.port-diagnosis-timeout')
+  })
+})
+
+describe('the shutdown lifecycle contract (Windows QA hotfix)', () => {
+  function recorder() {
+    const lines: Array<string> = []
+    return {
+      lines,
+      onEvent: (event: string, detail?: string) => lines.push(detail ? `${event} ${detail}` : event),
+    }
+  }
+
+  it('refuses every start after enterShutdown, without even probing the port', async () => {
+    const rec = recorder()
+    const probe = vi.fn(async () => 'none' as const)
+    const { manager, spawned } = managerFor({
+      installDir: await installedDir(),
+      isHealthy: async () => false,
+      onEvent: rec.onEvent,
+      probeIdentity: probe,
+    })
+
+    manager.enterShutdown()
+    const state = await manager.start({ source: 'autostart' })
+
+    expect(state).toEqual({ message: 'The application is closing.', phase: 'error' })
+    expect(probe).not.toHaveBeenCalled()
+    expect(spawned).not.toHaveBeenCalled()
+    expect(rec.lines).toContain('runtime.shutdown-requested')
+    expect(rec.lines).toContain('runtime.start-request source=autostart')
+    expect(rec.lines).toContain('runtime.start-rejected reason=shutting-down source=autostart')
+  })
+
+  it('confirms the ports answer nobody after the owned kill (clause 6)', async () => {
+    const rec = recorder()
+    let identity: 'alltalk' | 'none' = 'none'
+    const { manager, spawned } = managerFor({
+      installDir: await installedDir(),
+      isHealthy: async () => true,
+      onEvent: rec.onEvent,
+      probeIdentity: async () => identity,
+    })
+
+    await manager.start({ source: 'ui-start' })
+    expect(manager.state()).toEqual({ owned: true, phase: 'ready', pid: 4242 })
+    expect(spawned).toHaveBeenCalledTimes(1)
+
+    // While SIGTERM tears the tree down the port is still held; the probe
+    // only reads 'none' after that, which is exactly the transition clause 6
+    // must observe.
+    identity = 'alltalk'
+    queueMicrotask(() => {
+      identity = 'none'
+    })
+    await manager.stop({ confirmFreeMs: 2000 })
+
+    expect(rec.lines).toContain('runtime.shutdown-ports-free')
+    expect(rec.lines).not.toContain('runtime.shutdown-ports-still-occupied')
+  })
+
+  it('reports a still-occupied port with diagnostics when the timeout runs out', async () => {
+    const rec = recorder()
+    const diagnosis: string[] = []
+    let identity: 'alltalk' | 'none' = 'none'
+    const { manager } = managerFor({
+      installDir: await installedDir(),
+      isHealthy: async () => true,
+      onEvent: rec.onEvent,
+      portOwnerDiagnostics: async ({ identity: found }) => {
+        diagnosis.push(found)
+      },
+      probeIdentity: async () => identity,
+    })
+
+    await manager.start({ source: 'ui-start' })
+    expect(manager.state().phase).toBe('ready')
+    expect(manager.state().owned).toBe(true)
+    diagnosis.length = 0
+    // From here on the port never lets go: the stop is treated as contested.
+    identity = 'alltalk'
+
+    await manager.stop({ confirmFreeMs: 50 })
+
+    expect(rec.lines).toContain('runtime.shutdown-ports-still-occupied identity=alltalk')
+    expect(rec.lines).not.toContain('runtime.shutdown-ports-free')
+    expect(diagnosis).toContain('alltalk')
+  })
+
+  it('never waits on ports after leaving an adopted foreign instance running', async () => {
+    const rec = recorder()
+    const { manager } = managerFor({
+      installDir: await installedDir(),
+      isHealthy: async () => true,
+      onEvent: rec.onEvent,
+      probeIdentity: async () => 'alltalk',
+    })
+
+    await manager.start()
+    expect(manager.state()).toEqual({ owned: false, phase: 'ready' })
+
+    const before = Date.now()
+    await manager.stop({ confirmFreeMs: 5000 })
+
+    // No confirmation polling and no ports-free claim for a port that was
+    // never ours: the flag file is short and honest, and the quit is fast.
+    expect(Date.now() - before).toBeLessThan(1000)
+    expect(rec.lines).toContain('runtime.left-external-instance-running')
+    expect(rec.lines).not.toContain('runtime.shutdown-ports-free')
+    expect(rec.lines).not.toContain('runtime.shutdown-ports-still-occupied')
+  })
+
+  it('exposes the owned child pid only while the child is alive', async () => {
+    const { manager } = managerFor({
+      installDir: await installedDir(),
+      isHealthy: async () => true,
+      probeIdentity: async () => 'none',
+    })
+
+    expect(manager.ownedChildPid()).toBeUndefined()
+    await manager.start()
+    expect(manager.ownedChildPid()).toBe(4242)
+    await manager.stop()
+    expect(manager.ownedChildPid()).toBeUndefined()
   })
 })
