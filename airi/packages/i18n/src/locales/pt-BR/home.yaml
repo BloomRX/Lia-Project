@@ -236,6 +236,8 @@ config:
         chooseFolder: "Já instalei — escolher a pasta"
         folderChosen: "Pasta escolhida"
         starting: "Iniciando o sistema de voz…"
+        startingHint: "Na primeira inicialização isso pode levar alguns minutos."
+        startingActivity: "O servidor de voz está subindo…"
         ready: "Pronto"
         stopped: "Parado"
         checking: "Verificando…"

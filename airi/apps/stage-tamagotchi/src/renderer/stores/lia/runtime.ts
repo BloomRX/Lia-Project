@@ -15,6 +15,7 @@ import {
   electronLiaCustomVoiceChanged,
   electronLiaCustomVoiceEngineState,
   electronLiaCustomVoicePrepare,
+  electronLiaRuntimeChanged,
   electronLiaRuntimeInstallDirPick,
   electronLiaRuntimeInstallState,
   electronLiaRuntimeInstallSteps,
@@ -126,6 +127,28 @@ export const useLiaRuntimeStore = defineStore('lia-runtime', () => {
    * round-2 brief forbids. The events keep flowing even when the config panel
    * is closed, so an install is never "lost" by navigating away.
    */
+  try {
+    /**
+     * The push half of the runtime state (Phase 6 hotfix: the lost
+     * health-ready). The pull side - refresh() on mount, start()/stop()
+     * answers - stays as is; it is how the FIRST snapshot arrives. This
+     * subscription is how every LATER one lands: main republishes the
+     * manager's snapshot on each transition, and the card waiting on a 75 s
+     * startup finally hears it. Verbatim in, verbatim rendered, one source
+     * of truth.
+     */
+    getElectronEventaContext().on(electronLiaRuntimeChanged, (event) => {
+      if (!event.body)
+        return
+      console.info('[LIA-VOICE-UI] runtime-state-received', `status=${event.body.state}`)
+      state.value = event.body
+    })
+  }
+  catch {
+    // Same degradation as the bootstrap subscription right below: no
+    // ipcRenderer means invoke-only, exactly the pre-hotfix posture.
+  }
+
   try {
     getElectronEventaContext().on(electronLiaBootstrapChanged, (event) => {
       if (event.body)

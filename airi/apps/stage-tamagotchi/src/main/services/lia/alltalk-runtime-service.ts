@@ -12,6 +12,7 @@ import { defineInvokeHandler } from '@moeru/eventa'
 import { app, BrowserWindow, dialog } from 'electron'
 
 import {
+  electronLiaRuntimeChanged,
   electronLiaRuntimeInstallDirPick,
   electronLiaRuntimeInstallSteps,
   electronLiaRuntimeStart,
@@ -162,6 +163,43 @@ export function registerLiaRuntimeBridge(params: {
    */
   let cached: { dir: string | undefined, manager: RuntimeManager } | undefined
 
+  /**
+   * The push half of the state pair (Phase 6 hotfix: the 75 s health-ready
+   * the card never saw).
+   *
+   * The renderer's runtime state used to be pull-only: the store asked once,
+   * on mount, and kept that answer. A server that becomes healthy long after
+   * the tab opened - the Windows QA boot was ~75 s - then stayed invisible:
+   * main printed `runtime.health-ready` while the card kept saying
+   * "Iniciando…". The manager already announces every transition through
+   * `onEvent` (the [LIA-VOICE-RUNTIME] log line); this hook republishes the
+   * resulting snapshot on the `lia:runtime:changed` channel. It dedupes so a
+   * chatty state machine cannot spam IPC, and it never throws: publishing is
+   * a mirror, and a mirror must not break what it reflects.
+   */
+  let lastPublished: string | undefined
+
+  function publishRuntimeState(trigger: string): void {
+    try {
+      const snapshot = cached?.manager.state()
+      if (!snapshot)
+        return
+      const next = toRendererState(snapshot.phase, snapshot.message)
+      const fingerprint = JSON.stringify(next)
+      if (fingerprint === lastPublished)
+        return
+      lastPublished = fingerprint
+      // The item-A trace line, word for word from the hotfix brief: where
+      // the ready event used to vanish, there is now a printed hand-off.
+      console.info('[LIA-VOICE-RUNTIME] runtime.state-published', `status=${next.state}`, `trigger=${trigger}`)
+      context.emit(electronLiaRuntimeChanged, next)
+    }
+    catch {
+      // A renderer that is gone - or a context mid-teardown - must never
+      // change what the runtime itself does next.
+    }
+  }
+
   function readRuntime() {
     return resolveAllTalkRuntime(liaProductConfig.get())
   }
@@ -215,7 +253,10 @@ export function registerLiaRuntimeBridge(params: {
           resolve({ code: typeof error?.code === 'number' ? error.code : 0 })
         })
       }),
-      onEvent: (event, detail) => runtimeLog(event, detail),
+      onEvent: (event, detail) => {
+        runtimeLog(event, detail)
+        publishRuntimeState(event)
+      },
       onOutput: line => console.info('[lia-runtime]', new Date().toISOString(), line.trimEnd()),
       /**
        * Windows QA instrumentation: when anything is found on the port, name

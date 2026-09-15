@@ -236,6 +236,8 @@ config:
         chooseFolder: "Already installed — choose the folder"
         folderChosen: "Folder chosen"
         starting: "Starting the voice system…"
+        startingHint: "The first start can take a few minutes."
+        startingActivity: "The voice server is coming up…"
         ready: "Ready"
         stopped: "Stopped"
         checking: "Checking…"

@@ -1,4 +1,4 @@
-import type { LiaRuntimeState } from '../../../../shared/eventa'
+import type { LiaCustomVoiceEngineState, LiaRuntimeState } from '../../../../shared/eventa'
 // @vitest-environment jsdom
 /**
  * Phase 6 hotfix, items E/G/H-4..6: installed is not running - the UI half.
@@ -46,6 +46,8 @@ import {
   electronLiaBootstrapRemove,
   electronLiaBootstrapRun,
   electronLiaBootstrapState,
+  electronLiaCustomVoiceEngineState,
+  electronLiaRuntimeChanged,
   electronLiaRuntimeInstallDirPick,
   electronLiaRuntimeInstallState,
   electronLiaRuntimeInstallSteps,
@@ -78,6 +80,8 @@ const STR: Record<string, string> = {
   'tamagotchi.home.config.sections.voice.runtime.repairTitle': 'O sistema de voz precisa de reparo.',
   'tamagotchi.home.config.sections.voice.runtime.repairHint': 'Alguns arquivos do sistema de voz precisam ser baixados de novo.',
   'tamagotchi.home.config.sections.voice.runtime.starting': 'Iniciando o sistema de voz…',
+  'tamagotchi.home.config.sections.voice.runtime.startingHint': 'Na primeira inicialização isso pode levar alguns minutos.',
+  'tamagotchi.home.config.sections.voice.runtime.startingActivity': 'O servidor de voz está subindo…',
   'tamagotchi.home.config.sections.voice.runtime.startFailed': 'Não foi possível iniciar o sistema de voz.',
   'tamagotchi.home.config.sections.voice.runtime.installing': 'Instalando…',
   'tamagotchi.home.config.sections.voice.runtime.install': 'Instalar',
@@ -163,6 +167,7 @@ function runtimeStateFor(probe: RuntimeProbe): LiaRuntimeState {
 
 interface Mounted {
   container: HTMLElement
+  emitRuntime: (state: LiaRuntimeState) => Promise<void>
   runSpy: ReturnType<typeof vi.fn>
   startSpy: ReturnType<typeof vi.fn>
   unmount: () => void
@@ -195,6 +200,7 @@ const facade = {
 }
 
 async function mountSection(options: {
+  customVoiceEngine?: LiaCustomVoiceEngineState
   initialBootstrap?: LiaBootstrapState
   installState: InstallProbe
   runtimeState: RuntimeProbe
@@ -230,6 +236,10 @@ async function mountSection(options: {
   defineInvokeHandler(mainContext, electronLiaBootstrapRun, runSpy as never)
   defineInvokeHandler(mainContext, electronLiaBootstrapCancel, async () => undefined)
   defineInvokeHandler(mainContext, electronLiaBootstrapRemove, async () => undefined)
+  // Item B of the brief made flesh in the harness: the XTTS clone engine
+  // answers whatever the fixture says, so a test can prove the SYSTEM card
+  // stopped caring about it.
+  defineInvokeHandler(mainContext, electronLiaCustomVoiceEngineState, async () => options.customVoiceEngine ?? { firstRunPending: false, missingModelFiles: 0, modelComplete: true, ready: true })
   defineInvokeHandler(mainContext, electronLiaVoiceConfigGet, async () => ({ tts: { preferred: { providerId: 'custom-local-voice', voiceId: 'p-1' } } }))
   defineInvokeHandler(mainContext, electronLiaVoiceConfigSet, async () => undefined)
   defineInvokeHandler(mainContext, electronLiaVoiceProfilesList, async () => [])
@@ -250,6 +260,14 @@ async function mountSection(options: {
 
   return {
     container,
+    // The push half, fired by hand: main republishes the manager's snapshot
+    // on this exact channel in production (alltalk-runtime-publish.test.ts
+    // proves that end); from here down the chain is the real store and the
+    // real card.
+    emitRuntime: async (state) => {
+      await mainContext.emit(electronLiaRuntimeChanged, state, undefined as never)
+      await flush()
+    },
     runSpy,
     startSpy,
     unmount: () => {
@@ -412,6 +430,79 @@ describe('installed is not running (Phase 6 hotfix, item G: the UI half)', () =>
     expect(primary).not.toBeNull()
     expect(text(primary!)).toContain('Reparar')
     expect(text(primary!)).not.toContain('Instalar')
+    unmount()
+  })
+
+  it('the 75 s boot, reproduced (item C): starting shows the launch, the pushed ready flips the card to pronto', async () => {
+    // The exact QA fixture: installed on disk, bootstrap record ready, the
+    // autostart's server still coming up. Then main republishes the state
+    // the manager reached - the event that used to die in main.
+    const consoleInfo = vi.spyOn(console, 'info').mockImplementation(() => undefined)
+    const { container, emitRuntime, unmount } = await mountAndWaitForCard({
+      initialBootstrap: { phase: 'ready', steps: [] },
+      installState: 'installed',
+      runtimeState: 'starting',
+    })
+
+    expect(text(statusLine(container)!)).toContain('Sistema de voz instalado')
+    // Item D: the wait is named, with its honest bound - and a liveness
+    // signal that is the state itself, never a percentage.
+    expect(text(hintLine(container)!)).toContain('Iniciando o sistema de voz…')
+    expect(text(hintLine(container)!)).toContain('pode levar alguns minutos')
+    expect(container.querySelector('[data-testid="lia-runtime-install-starting-activity"]')).not.toBeNull()
+
+    await emitRuntime({ state: 'ready' })
+
+    expect(text(statusLine(container)!)).toContain('Sistema de voz pronto')
+    expect(primaryButton(container)).toBeNull()
+    expect(repairSecondary(container)).toBeNull()
+    expect(container.querySelector('[data-testid="lia-runtime-install-starting-activity"]')).toBeNull()
+    // The item-A trace pair: the hand-off is printed at both ends now.
+    expect(consoleInfo).toHaveBeenCalledWith('[LIA-VOICE-UI] runtime-state-received', 'status=ready')
+    expect(consoleInfo).toHaveBeenCalledWith('[LIA-VOICE-UI] install-card-state', 'status=ready')
+
+    consoleInfo.mockRestore()
+    unmount()
+  })
+
+  it('mutation guard for the missing link: without the push subscription, the pushed ready never lands', async () => {
+    // This is the QA bug stated as a test. The ONLY writer of state after
+    // mount is the electronLiaRuntimeChanged subscription; ignoring the
+    // event (the pre-hotfix posture) must leave the card on starting - the
+    // assertion that fails if the subscription is ever deleted again.
+    const { container, emitRuntime, runSpy, startSpy, unmount } = await mountAndWaitForCard({
+      initialBootstrap: { phase: 'ready', steps: [] },
+      installState: 'installed',
+      runtimeState: 'starting',
+    })
+    expect(text(statusLine(container)!)).toContain('Sistema de voz instalado')
+
+    await emitRuntime({ state: 'ready' })
+    // If this line says 'installed' instead of 'pronto', the ready event
+    // died again - no click, no poll, nothing else moves the state.
+    expect(text(statusLine(container)!)).toContain('Sistema de voz pronto')
+    expect(runSpy).not.toHaveBeenCalled()
+    expect(startSpy).not.toHaveBeenCalled()
+    unmount()
+  })
+
+  it('runtimeReady ≠ customVoiceServiceReady (item B): the XTTS engine not being prepared must not hold the system card', async () => {
+    // AllTalk healthy at the end of a watched start, clone engine still
+    // needing first-run preparation: the SYSTEM card flips to pronto the
+    // moment the runtime says ready; the need for preparation belongs to
+    // the custom voice panel below it, never to the runtime banner.
+    const { container, emitRuntime, unmount } = await mountAndWaitForCard({
+      customVoiceEngine: { firstRunPending: true, missingModelFiles: 2, modelComplete: false, ready: false },
+      initialBootstrap: { phase: 'ready', steps: [] },
+      installState: 'installed',
+      runtimeState: 'starting',
+    })
+
+    await emitRuntime({ state: 'ready' })
+
+    expect(text(statusLine(container)!)).toContain('Sistema de voz pronto')
+    expect(text(hintLine(container)!)).toContain('A Lia já pode falar com uma voz sua.')
+    expect(primaryButton(container)).toBeNull()
     unmount()
   })
 

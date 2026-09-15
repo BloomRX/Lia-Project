@@ -818,6 +818,20 @@ export const electronLiaRuntimeInstallSteps = defineInvokeEventa<LiaRuntimeInsta
  */
 export const electronLiaRuntimeInstallState = defineInvokeEventa<{ state: LiaRuntimeInstallState }>('eventa:invoke:lia:runtime:install-state')
 
+/**
+ * Emitted by main on every runtime state transition (Phase 6 hotfix: the
+ * health-ready that never reached the card).
+ *
+ * The runtime's own control channels above are pull-only: the renderer asks,
+ * and gets one answer. That is enough for a click, and not enough for a
+ * server that takes ~75 s to become healthy after an unattended autostart -
+ * the store would keep the 'starting' snapshot it read at mount forever.
+ * This is the push half of the pair: the state machine emits an event on
+ * every transition (it already did, for the log), main republishes the new
+ * snapshot here, and the store holds whatever arrives verbatim.
+ */
+export const electronLiaRuntimeChanged = defineEventa<LiaRuntimeState>('eventa:lia:runtime:changed')
+
 /* --------------------------------------------------------------------------
  * Managed voice runtime: install, repair, remove
  *

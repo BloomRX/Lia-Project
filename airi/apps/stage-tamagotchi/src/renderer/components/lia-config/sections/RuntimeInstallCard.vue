@@ -29,7 +29,7 @@
  * of the download step" and "is it moving", and a number that moves smoothly
  * while nothing measurable is happening would be a lie the user can catch.
  */
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { isLiaBootstrapActivePhase, resolveVoiceRuntimePrimaryAction } from '../../../../shared/lia-voice'
@@ -115,6 +115,16 @@ const banner = computed((): 'cancelled' | 'failed' | 'installed' | 'installed-fa
     return 'ready'
   return 'needed'
 })
+
+/**
+ * The item-A trace line for the last link of the chain (Phase 6 hotfix):
+ * what the card actually concluded, every time the conclusion changes. The
+ * QA boot persisted 'installed-starting' for minutes after main printed
+ * health-ready - this line is how the next boot proves the renderer heard
+ * it: the sequence state-published → state-received → install-card-state
+ * reads complete, or it tells you exactly which hop is silent.
+ */
+watch(banner, value => console.info('[LIA-VOICE-UI] install-card-state', `status=${value}`), { immediate: true })
 
 /**
  * The one running step's sub-state line, when it has one worth reporting.
@@ -268,7 +278,7 @@ function onCancel(): void {
         {{ tt('runtime.startFailed') }}
       </template>
       <template v-else-if="banner === 'installed' && runState === 'starting'">
-        {{ tt('runtime.starting') }}
+        {{ tt('runtime.starting') }} {{ tt('runtime.startingHint') }}
       </template>
       <template v-else-if="banner === 'installed'">
         {{ tt('runtime.installedHint') }}
@@ -279,6 +289,19 @@ function onCancel(): void {
       <template v-else-if="banner === 'needed'">
         {{ tt('runtime.neededHint') }}
       </template>
+    </p>
+
+    <!-- The "still alive" signal of a long first start (item D). It is a CSS
+         pulse driven by the state the machine published - never a counter and
+         never a percentage, so it can only play while the start is genuinely
+         in flight, and freezes the moment the state says otherwise. -->
+    <p
+      v-if="banner === 'installed' && runState === 'starting'"
+      class="flex items-center gap-1.5 text-xs text-neutral-500 dark:text-neutral-400"
+      data-testid="lia-runtime-install-starting-activity"
+    >
+      <span class="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-amber-500" aria-hidden="true" />
+      {{ tt('runtime.startingActivity') }}
     </p>
 
     <!-- The diagnosis sentence the main process produced: one line, never a
