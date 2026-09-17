@@ -27,6 +27,7 @@ import { loopbackHostFor, probeTcpListeners } from './alltalk-port-listeners'
 import { createRuntimeManager, taskkillArgs } from './alltalk-runtime'
 import { mergeAllTalkRuntime, resolveAllTalkRuntime } from './alltalk-runtime-config'
 import { buildInstallSteps, mayAutostartRuntime } from './alltalk-runtime-install'
+import { isLauncherManaged } from './lia-managed'
 import { installRuntimeShutdownHooks } from './runtime-shutdown'
 import { runtimeAppDir } from './voice-runtime-bootstrap-electron'
 
@@ -373,6 +374,14 @@ export function registerLiaRuntimeBridge(params: {
       publishRuntimeState('stop-returned')
     },
     async autostartIfNeeded(options: { installing?: boolean } = {}) {
+      // Launcher-managed mode (Phase 7.1, item 4): with LIA_MANAGED=1 the
+      // voice runtime belongs to the LIA LAUNCHER - AIRI consumes it but
+      // must never start it. The stage runs WITHOUT the custom voice when
+      // the launcher has not brought it up.
+      if (isLauncherManaged()) {
+        runtimeLog('runtime.autostart-skipped', 'lia-managed')
+        return null
+      }
       // The first waypoint of the boot timeline (hotfix QA brief): did the
       // autostart path even *ask* for a start, and was it allowed past the
       // gates? The decision is logged either way, because "autostart fired
@@ -411,24 +420,33 @@ export function registerLiaRuntimeBridge(params: {
    * kill on `exit`. The semantics live in `runtime-shutdown.ts` so tests
    * drive them without an Electron process.
    */
-  installRuntimeShutdownHooks({
-    confirmFreeMs: SHUTDOWN_CONFIRM_FREE_MS,
-    endProcess: code => (code === 0 ? app.exit(0) : process.exit(code)),
-    enterShutdown: () => manager().enterShutdown(),
-    killTreeSync: pid => killOwnedTreeSync(pid),
-    listeners: {
-      beforeQuit: listener => app.on('before-quit', listener),
-      exit: listener => process.on('exit', listener),
-      signal: (signal, listener) => process.on(signal as NodeJS.Signals, listener),
-    },
-    log: (event, detail) => runtimeLog(event, detail),
-    // The synchronous exit-path kill sweeps whichever proven Lia root the
-    // shutdown could not stop gracefully: the spawned child first, then the
-    // validated roots of an attached lia-managed tree (round-6 item 4).
-    ownedRootPid: () => cached?.manager.ownedChildPid() ?? cached?.manager.liaManagedRootPids()[0],
-    phase: () => manager().state().phase,
-    stop: async options => await manager().stop(options),
-  })
+  if (isLauncherManaged()) {
+    // The launcher owns the lifecycle (Phase 7.1, item 4): under
+    // LIA_MANAGED the stage attaches to the runtime but installs NO
+    // shutdown hooks - quitting the stage leaves the launcher's server
+    // up, and the launcher's own supervisor decides who dies when.
+    runtimeLog('runtime.shutdown-hooks-skipped', 'lia-managed')
+  }
+  else {
+    installRuntimeShutdownHooks({
+      confirmFreeMs: SHUTDOWN_CONFIRM_FREE_MS,
+      endProcess: code => (code === 0 ? app.exit(0) : process.exit(code)),
+      enterShutdown: () => manager().enterShutdown(),
+      killTreeSync: pid => killOwnedTreeSync(pid),
+      listeners: {
+        beforeQuit: listener => app.on('before-quit', listener),
+        exit: listener => process.on('exit', listener),
+        signal: (signal, listener) => process.on(signal as NodeJS.Signals, listener),
+      },
+      log: (event, detail) => runtimeLog(event, detail),
+      // The synchronous exit-path kill sweeps whichever proven Lia root the
+      // shutdown could not stop gracefully: the spawned child first, then the
+      // validated roots of an attached lia-managed tree (round-6 item 4).
+      ownedRootPid: () => cached?.manager.ownedChildPid() ?? cached?.manager.liaManagedRootPids()[0],
+      phase: () => manager().state().phase,
+      stop: async options => await manager().stop(options),
+    })
+  }
 
   return service
 }

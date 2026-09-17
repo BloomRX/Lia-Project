@@ -2,23 +2,98 @@
 import { onMounted, ref } from 'vue'
 
 /**
- * Voice (Phase 7, architecture item 8): the existing Lia voice UX concepts -
- * ready-made voice vs. own voice, custom voice system status, import,
- * create, collapsed advanced - reading from the canonical voice library.
- * Import/create flows reuse the Lia Core behaviors in a later slice; this
- * version is the honest status + library view.
+ * Voice (Phase 7.1, item 6): ready-made voice vs. own voice, the local
+ * voice system's status, import via the OS picker, and the ACTIVE profile
+ * - all reusing the Lia Core voice behaviors. Zero storage duplication:
+ * the library registry stays the single source of truth.
  */
 const props = defineProps<{ api: any, status: any }>()
 
 const profiles = ref<any[]>([])
 const advanced = ref(false)
 const kind = ref<'custom' | 'ready'>('ready')
+const busy = ref(false)
+const feedback = ref('')
+const importName = ref('')
+
+async function reload() {
+  profiles.value = await props.api?.listVoices?.() ?? []
+  feedback.value = ''
+}
 
 onMounted(async () => {
-  profiles.value = await props.api?.listVoices?.() ?? []
+  await reload()
+  const preferred = (await props.api?.productConfig?.())?.snapshot?.voice?.tts?.preferred
+  kind.value = preferred?.providerId === 'custom-local-voice' ? 'custom' : 'ready'
 })
 
-const engines = (p: any) => (p.engine || 'desconhecido')
+async function activateReady() {
+  busy.value = true
+  feedback.value = ''
+  try {
+    // "Voz pronta" leaves the cloud TTS configured in Config untouched;
+    // it only moves the preference OFF the local custom voice, when set.
+    const current = (await props.api?.productConfig?.())?.snapshot?.voice?.tts?.preferred
+    const preferred = current && current.providerId !== 'custom-local-voice'
+      ? current
+      : { providerId: 'cloud-voice-provider', voiceId: 'nova' }
+    const result = await props.api.updateConfig({
+      update: { voice: { tts: { preferred } } },
+    })
+    feedback.value = result?.status === 'ok'
+      ? 'Voz pronta ativada.'
+      : `Não foi possível ativar: ${result?.message ?? 'erro desconhecido'}`
+  }
+  finally {
+    busy.value = false
+  }
+}
+
+async function activateCustom(profile: any) {
+  busy.value = true
+  feedback.value = ''
+  try {
+    const result = await props.api.updateConfig({
+      update: { voice: { tts: { preferred: { providerId: 'custom-local-voice', voiceId: profile.id } } } },
+    })
+    feedback.value = result?.status === 'ok'
+      ? `"${profile.name}" agora é a voz ativa da Lia.`
+      : `Não foi possível ativar: ${result?.message ?? 'erro desconhecido'}`
+  }
+  finally {
+    busy.value = false
+  }
+}
+
+async function importVoice() {
+  busy.value = true
+  feedback.value = ''
+  try {
+    const paths = await props.api.pickVoiceFiles()
+    if (!paths?.length) {
+      feedback.value = 'Nenhum arquivo escolhido.'
+      return
+    }
+    const name = importName.value.trim() || 'Minha voz'
+    const result = await props.api.importVoice({
+      engine: 'alltalk',
+      name,
+      // AllTalk voice cloning: the file IS the reference audio.
+      sources: paths.map((path: string) => ({ path, role: 'referenceAudio' })),
+    })
+    if (result?.ok) {
+      feedback.value = `"${result.value.name}" importada para a biblioteca.`
+      importName.value = ''
+      await reload()
+    }
+    else {
+      feedback.value = `Não foi possível importar: ${result?.message ?? result?.error ?? 'erro desconhecido'}`
+    }
+  }
+  finally {
+    busy.value = false
+  }
+}
 </script>
 
 <template>
@@ -57,19 +132,22 @@ const engines = (p: any) => (p.engine || 'desconhecido')
         </p>
         <ul v-else>
           <li v-for="p in profiles" :key="p.id">
-            {{ p.name }} <span class="dim">({{ engines(p) }}, {{ p.files?.length ?? 0 }} arquivo(s))</span>
+            {{ p.name }}
+            <span class="dim">({{ p.engine || 'desconhecido' }}, {{ p.files?.length ?? 0 }} arquivo(s))</span>
+            <button class="inline" :disabled="busy" @click="activateCustom(p)">
+              usar esta voz
+            </button>
           </li>
         </ul>
         <div class="row">
-          <button disabled>
-            Importar voz
-          </button>
-          <button disabled>
-            Criar minha voz
+          <input v-model="importName" class="name" placeholder="Nome da nova voz (opcional)">
+          <button :disabled="busy" @click="importVoice">
+            {{ busy ? 'Aguarde…' : 'Importar voz' }}
           </button>
         </div>
-        <p class="hint">
-          Importação e criação pelo launcher habilitam na próxima etapa, reutilizando os comportamentos já existentes no Lia Core.
+        <p class="dim field-note">
+          Os arquivos são copiados para a biblioteca canônica da Lia — nada é duplicado em outra pasta.
+          Criar a voz a partir de amostras guiadas chega numa próxima etapa.
         </p>
       </div>
 
@@ -88,9 +166,16 @@ const engines = (p: any) => (p.engine || 'desconhecido')
     <div v-else class="card">
       <h3>Voz pronta</h3>
       <p class="dim">
-        A voz pronta usa o provedor configurado na aba Configuração. A seleção fina chega com a edição de configuração.
+        A voz pronta usa o provedor configurado na aba Configuração.
       </p>
+      <button :disabled="busy" @click="activateReady">
+        Ativar voz pronta
+      </button>
     </div>
+
+    <p v-if="feedback" class="feedback">
+      {{ feedback }}
+    </p>
   </section>
 </template>
 
@@ -103,9 +188,19 @@ h3 { margin: 0 0 10px; }
 .choice.active { border-color: var(--lia-magenta); }
 .dim { color: var(--lia-text-dim); font-size: 13px; }
 code { color: var(--lia-magenta); font-size: 12px; word-break: break-all; }
-.row { display: flex; gap: 10px; margin-top: 12px; }
-.hint { color: var(--lia-warn); font-size: 13px; }
+.row { align-items: center; display: flex; gap: 10px; margin-top: 12px; }
+.name {
+  background: var(--lia-input, #171221);
+  border: 1px solid var(--lia-border);
+  border-radius: 8px;
+  color: inherit;
+  padding: 8px 10px;
+}
+.field-note { font-size: 12px; }
 .link { background: none; border: none; color: var(--lia-magenta); padding: 0; }
 .advanced { margin-top: 10px; }
 ul { margin: 0; padding-left: 18px; }
+li { margin: 6px 0; }
+.inline { font-size: 12px; margin-left: 8px; }
+.feedback { font-size: 13px; margin: 0; }
 </style>

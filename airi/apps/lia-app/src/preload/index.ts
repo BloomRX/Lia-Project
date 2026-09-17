@@ -18,9 +18,13 @@ const api = {
   productConfig: () => ipcRenderer.invoke('lia:product-config'),
   runtimeState: () => ipcRenderer.invoke('lia:runtime:state'),
   secretPresent: (providerId: string) => ipcRenderer.invoke('lia:secrets:presence', providerId),
+  importVoice: (request: unknown) => ipcRenderer.invoke('lia:voices:import', request),
+  pickVoiceFiles: () => ipcRenderer.invoke('lia:voices:pick'),
+  requestQuit: () => ipcRenderer.invoke('lia:app:quit'),
   stageState: () => ipcRenderer.invoke('lia:stage:state'),
   stopStage: () => ipcRenderer.invoke('lia:stage:stop'),
   timings: () => ipcRenderer.invoke('lia:timings'),
+  updateConfig: (payload: unknown) => ipcRenderer.invoke('lia:config:update', payload),
 }
 
 export type LiaApi = typeof api

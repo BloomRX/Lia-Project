@@ -1,11 +1,12 @@
 import type { RuntimeStateSnapshot } from '@lia/core/alltalk/runtime'
 import type { LiaBridgeConfig } from '@lia/core/bridge/lia-config'
 import type { LiaProductPaths } from '@lia/core/paths/product-paths'
-import type { LiaProductConfigSnapshot } from '@lia/core/product/config'
+import type { LiaProductConfigSnapshot, LiaProductConfigUpdate } from '@lia/core/product/config'
 import type { LiaSecretCipher, LiaSecretVault } from '@lia/core/secrets/vault'
-import type { LiaCustomVoiceProfile } from '@lia/core/voices/types'
+import type { LiaCustomVoiceProfile, LiaVoiceProfileImportRequest } from '@lia/core/voices/types'
 
 import type { AiriStageState } from './airi-stage-manager'
+import type { ShutdownReport } from './shutdown-coordinator'
 
 import process from 'node:process'
 
@@ -19,11 +20,12 @@ import { loopbackHostFor, probeTcpListeners } from '@lia/core/alltalk/port-liste
 import { createRuntimeManager } from '@lia/core/alltalk/runtime'
 import { buildLiaBridgeConfig, stageEnvFor } from '@lia/core/bridge/lia-config'
 import { liaProductPaths } from '@lia/core/paths/product-paths'
-import { readLiaProductConfig } from '@lia/core/product/config'
+import { readLiaProductConfig, updateLiaProductConfig } from '@lia/core/product/config'
 import { createLiaSecretVault } from '@lia/core/secrets/vault'
 import { createLiaVoiceProfileStore } from '@lia/core/voices/profiles'
 
 import { AiriStageManager } from './airi-stage-manager'
+import { ShutdownCoordinator } from './shutdown-coordinator'
 
 /**
  * The Lia host (Phase 7): where the launcher PROCESS meets Lia Core.
@@ -65,6 +67,20 @@ export interface LiaHomeStatus {
   }
 }
 
+/**
+ * One renderer "save" of the Config screen. Secrets travel ONLY through
+ * `secrets` - never inside `update`, where the core writer's recursive
+ * secret-field veto would (correctly) refuse them (contract item 5).
+ */
+export interface LiaConfigUpdatePayload {
+  secrets?: { key: string, scope: string, value: string }[]
+  update: LiaProductConfigUpdate
+}
+
+export type LiaConfigUpdateResult
+  = | { status: 'ok', value: LiaProductConfigSnapshot }
+    | { message: string, status: 'invalid-source' | 'secret-forbidden' | 'secret-vault-failed' | 'write-failed' }
+
 export interface LiaHostDeps {
   /**
    * The OS cipher for the secret vault (injected by the Electron entry from
@@ -82,6 +98,19 @@ export interface LiaHostDeps {
   workspaceRoot?: string
   /** Test seam: the stage manager is replaceable without touching spawn. */
   stageManagerFactory?: (deps: ConstructorParameters<typeof AiriStageManager>[0]) => AiriStageManager
+  /**
+   * Test seam: replace the runtime manager construction (e.g. to hand the
+   * coordinator a manager that owns a fake child, for contract test B).
+   */
+  runtimeManagerFactory?: (config: RuntimeManagerConfig) => ReturnType<typeof createRuntimeManager>
+}
+
+/** The slice of product config the runtime manager is built from. */
+export interface RuntimeManagerConfig {
+  baseUrl: string
+  installDir?: string
+  timeoutMs: number
+  voicesDir?: string
 }
 
 export interface LiaHost {
@@ -89,14 +118,25 @@ export interface LiaHost {
   bridgeConfig: () => Promise<LiaBridgeConfig>
   /** The "Conversar com Lia" pipeline (architecture items 9/12). */
   conversar: () => Promise<AiriStageState>
+  /** The supervisor's single graceful-shutdown officer (Phase 7.1, items 1/3). */
+  coordinator: ShutdownCoordinator
   homeStatus: () => Promise<LiaHomeStatus>
+  /** Imports a voice profile picked via the main-process dialog (allowlist). */
+  importVoice: (
+    request: LiaVoiceProfileImportRequest,
+    allowedSourcePaths: ReadonlySet<string>,
+  ) => Promise<Awaited<ReturnType<ReturnType<typeof createLiaVoiceProfileStore>['importProfile']>>>
   listVoices: () => Promise<LiaCustomVoiceProfile[]>
   paths: LiaProductPaths
   productSnapshot: () => Promise<LiaProductConfigSnapshot | undefined>
+  /** Graceful supervisor shutdown; safe to call more than once (single-flight). */
+  quit: () => Promise<ShutdownReport>
   runtime: () => Promise<ReturnType<typeof createRuntimeManager>>
   stage: AiriStageManager
   /** Launch facts the stage child will receive (bridge env + shared home). */
   stageEnv: () => Promise<Record<string, string>>
+  /** Persists the Config screen through the core writer; secrets to the vault only. */
+  updateConfig: (payload: LiaConfigUpdatePayload) => Promise<LiaConfigUpdateResult>
   vault: LiaSecretVault
 }
 
@@ -146,26 +186,40 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
 
   let cached: { installDir: string, manager: ReturnType<typeof createRuntimeManager>, snapshot: LiaProductConfigSnapshot | undefined } | undefined
 
+  /**
+   * The supervisor shutdown officer (Phase 7.1, items 1/2/3). Registration
+   * order IS teardown order: the stage leaves first (its children may talk
+   * to the voice runtime), the owned voice runtime second.
+   *
+   * `holdsOwnedProcess` is ownership, by this session, of a LIVE process -
+   * the exact round-7 axiom. An adopted/external runtime and any stage we
+   * did not spawn answer 'no-owned-process' and are never touched
+   * (contract tests C/D).
+   */
+  const coordinator = new ShutdownCoordinator({
+    onLog: line => emit('lia-app.shutdown', line),
+  })
+  coordinator.register({
+    holdsOwnedProcess: () => stage.holdsOwnedStage(),
+    name: 'stage',
+    stop: async () => await stage.stop(),
+  })
+  coordinator.register({
+    holdsOwnedProcess: () => cached?.manager.ownedChildPid() !== undefined,
+    name: 'voice-runtime',
+    stop: async () => {
+      await (await manager()).stop()
+    },
+  })
+
   async function readSnapshot(): Promise<{ snapshot: LiaProductConfigSnapshot | undefined, status: LiaHomeStatus['config']['status'] }> {
     const read = await readLiaProductConfig(paths.productConfigFile)
     return { snapshot: read.status === 'ok' ? read.value : undefined, status: read.status }
   }
 
-  async function manager(): Promise<ReturnType<typeof createRuntimeManager>> {
-    const { snapshot } = await readSnapshot()
-    const alltalk = snapshot?.voice?.runtime?.alltalk
-    const installDir = alltalk?.installDir?.trim() ?? ''
-    if (cached && cached.installDir === installDir)
-      return cached.manager
-
-    const runtimeConfig = {
-      baseUrl: alltalk?.baseUrl ?? DEFAULT_ALLTALK_BASE_URL,
-      installDir: installDir || undefined,
-      timeoutMs: alltalk?.timeoutMs ?? DEFAULT_ALLTALK_TIMEOUT_MS,
-      voicesDir: alltalk?.voicesDir,
-    }
-
-    const built = createRuntimeManager({
+  function buildManager(runtimeConfig: RuntimeManagerConfig): ReturnType<typeof createRuntimeManager> {
+    const installDir = runtimeConfig.installDir?.trim() ?? ''
+    return createRuntimeManager({
       // The socket fact about the port, deliberately decoupled from the API
       // health fact (Phase 6 lessons travelled with the core).
       probeOccupied: platform === 'win32'
@@ -181,6 +235,14 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
           resolvePromise({ code: typeof error?.code === 'number' ? error.code : 0 })
         })
       }),
+      /**
+       * Launcher mode (Phase 7.1, item 4): a voice server the launcher did
+       * NOT spawn this session is the user's own - ADOPTED, never owned.
+       * Closing Lia must never put it down. The coordinator additionally
+       * never routes adopted runtimes into stop() at all; this flag is the
+       * second, in-core layer of that axiom (test D).
+       */
+      preserveAdoptedOnStop: true,
       inspectProcess: platform === 'win32'
         ? async pid => await inspectProcess({ exec: execCapture, platform }, pid)
         : undefined,
@@ -201,6 +263,23 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
         })
         : undefined,
     })
+  }
+
+  async function manager(): Promise<ReturnType<typeof createRuntimeManager>> {
+    const { snapshot } = await readSnapshot()
+    const alltalk = snapshot?.voice?.runtime?.alltalk
+    const installDir = alltalk?.installDir?.trim() ?? ''
+    if (cached && cached.installDir === installDir)
+      return cached.manager
+
+    const runtimeConfig: RuntimeManagerConfig = {
+      baseUrl: alltalk?.baseUrl ?? DEFAULT_ALLTALK_BASE_URL,
+      installDir: installDir || undefined,
+      timeoutMs: alltalk?.timeoutMs ?? DEFAULT_ALLTALK_TIMEOUT_MS,
+      voicesDir: alltalk?.voicesDir,
+    }
+
+    const built = (deps.runtimeManagerFactory ?? buildManager)(runtimeConfig)
     cached = { installDir, manager: built, snapshot }
     return built
   }
@@ -248,14 +327,43 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
     }
   }
 
+  async function updateConfig(payload: LiaConfigUpdatePayload): Promise<LiaConfigUpdateResult> {
+    // Secrets first, into the vault and ONLY the vault. If the later
+    // document write fails, a stray vault entry is inert - the reverse
+    // order would risk a preferred-provider pointing at a missing key.
+    for (const secret of payload.secrets ?? []) {
+      const stored = await vault.setSecret(secret.scope, secret.key, secret.value)
+      if (!stored) {
+        emit('lia-app.config-blocked', 'reason=secret-vault-failed')
+        return { message: 'The key could not be stored securely on this device.', status: 'secret-vault-failed' }
+      }
+    }
+    const written = await updateLiaProductConfig(paths.productConfigFile, payload.update)
+    if (written.status !== 'ok') {
+      emit('lia-app.config-blocked', `reason=${written.status}`)
+      return { message: written.error.message, status: written.status }
+    }
+    // The runtime manager memoizes launch facts from the PREVIOUS document;
+    // configuration edits must reach the next start.
+    cached = undefined
+    emit('lia-app.config-updated', written.filePath)
+    return { status: 'ok', value: written.value }
+  }
+
   return {
     bridgeConfig: bridgeFactory,
+    coordinator,
     /**
      * "Conversar com Lia": validate configuration, ensure the managed voice
      * runtime is up ONLY when the chosen voice needs it (contract item 12),
      * then launch the stage - separate child, single-flight (items 9/10).
      */
     conversar: async () => {
+      // Supervisor rule (item 1): once Lia is closing, NOTHING new starts.
+      if (coordinator.isShuttingDown()) {
+        emit('lia-app.conversar-blocked', 'reason=lia-closing')
+        throw new Error('Lia is closing. Start a new conversation after reopening it.')
+      }
       const { snapshot } = await readSnapshot()
       const preferredAi = snapshot?.provider?.chat?.preferred
       if (!preferredAi || !vault.hasSecret(preferredAi.providerId, 'apiKey')) {
@@ -274,12 +382,20 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
       return await stage.start({ env: await hostStageEnv() })
     },
     homeStatus,
+    importVoice: async (request, allowedSourcePaths) => {
+      const result = await voices.importProfile(request, allowedSourcePaths)
+      if (result.ok)
+        emit('lia-app.voice-imported', result.value.id)
+      return result
+    },
     listVoices: async () => await voices.list(),
     paths,
     productSnapshot: async () => (await readSnapshot()).snapshot,
+    quit: async () => await coordinator.stopAll(),
     runtime: manager,
     stage,
     stageEnv: hostStageEnv,
+    updateConfig,
     vault,
   }
 }

@@ -208,6 +208,16 @@ export interface RuntimeManagerDeps {
   verifyRounds?: number
   /** How long to wait for SIGTERM before escalating. Bounded, so app quit cannot hang. */
   stopGraceMs?: number
+  /**
+   * SUPERVISOR scope (Phase 7.1): when true, a stop against a tree that was
+   * NOT spawned by THIS manager session - an attached/adopted lia-managed
+   * tree - leaves that tree ALIVE instead of killing it. The launcher owns
+   * only the runtimes it was asked to start; the user's own hand-started
+   * server outlives the launcher (tests C/D of the supervisor contract).
+   * The round-6 clause (every attached lia-managed tree dies with us)
+   * stays the default and untouched for the embedded runtime path.
+   */
+  preserveAdoptedOnStop?: boolean
   /** Receives stdout/stderr lines. Diagnostics only; never surfaced raw. */
   onOutput?: (chunk: string) => void
 }
@@ -715,6 +725,15 @@ export function createRuntimeManager(deps: RuntimeManagerDeps): RuntimeManager {
     // never attachments, and never killed here either).
     if (!current && snapshot.attachment?.kind === 'lia-managed') {
       const attachment = snapshot.attachment
+      if (deps.preserveAdoptedOnStop) {
+        // Supervisor scope: this tree got adopted, never born here. It may
+        // be the user's own hand-started server - and closing the launcher
+        // must never take that down. The session ends; the tree stays.
+        emit('runtime.attachment-preserved', `rootPid=${attachment.roots.map(r => r.pid).join(',')}`)
+        set({ phase: 'stopped' })
+        emit('runtime.stopped')
+        return
+      }
       // Item A, the rule this round exists for: 'stopped' is a FACT, not an
       // intention. The snapshot reads 'stopping' for the whole kill+verify,
       // and flips to 'stopped' only when the ports prove the tree is gone -

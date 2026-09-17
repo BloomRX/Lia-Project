@@ -153,3 +153,113 @@ describe('f. Stage exit updates state', () => {
     expect(state.lastExitCode).toBe(1)
   })
 })
+
+/**
+ * Phase 7.1 supervisor stop contract for the STAGE: honesty about
+ * 'stopping', exit-observed 'stopped', safe fallback to 'error', single-
+ * flight idempotence, and the axiom that an external stage is invisible.
+ */
+describe('supervisor stop (Phase 7.1)', () => {
+  async function startedManager(options: {
+    execFileImpl?: (...args: unknown[]) => void
+    platform?: NodeJS.Platform
+    stopGraceMs?: number
+  } = {}) {
+    const root = await makeStageWorkspace()
+    const child = fakeChild()
+    const spawnImpl = vi.fn(() => child as never)
+    const manager = new AiriStageManager({
+      execFileImpl: options.execFileImpl as never,
+      platform: options.platform ?? 'linux',
+      spawnImpl: spawnImpl as never,
+      stopGraceMs: options.stopGraceMs,
+      workspaceRoot: root,
+    })
+    const started = manager.start()
+    child.stdout.emit('data', 'ready in 50 ms')
+    await started
+    return { child, manager }
+  }
+
+  function giveExit(child: ReturnType<typeof fakeChild>, code: number) {
+    child.exitCode = code
+    child.emit('exit', code)
+  }
+
+  it('stop() passes through stopping and reports stopped only after the observed exit', async () => {
+    const { child, manager } = await startedManager()
+    const observed: string[] = []
+    const stopping = manager.stop().then(() => observed.push('resolved'))
+
+    expect(manager.state().phase).toBe('stopping')
+    expect(child.kill).toHaveBeenCalledWith('SIGTERM')
+
+    await new Promise<void>(resolve => setTimeout(resolve, 5))
+    expect(manager.state().phase).toBe('stopping') // No fake 'stopped'.
+    giveExit(child, 0)
+    await stopping
+    expect(manager.state().phase).toBe('stopped')
+    expect(observed).toEqual(['resolved'])
+  })
+
+  it('c. a manager that never spawned a stage stops nothing and stays honest', async () => {
+    const root = await makeStageWorkspace()
+    const execFileImpl = vi.fn()
+    const manager = new AiriStageManager({
+      execFileImpl: execFileImpl as never,
+      platform: 'win32',
+      workspaceRoot: root,
+    })
+    expect(manager.holdsOwnedStage()).toBe(false)
+    await manager.stop()
+    expect(manager.state().phase).toBe('stopped')
+    // An external stage is invisible: no taskkill was issued by name.
+    expect(execFileImpl).not.toHaveBeenCalled()
+  })
+
+  it('on Windows the tree kill targets the owned child and waits for its exit', async () => {
+    const calls: string[][] = []
+    const execFileImpl = vi.fn((...args: unknown[]) => {
+      calls.push(args.slice(0, 2) as string[])
+      const callback = args[args.length - 1] as (err: null) => void
+      callback(null)
+    })
+    const { child, manager } = await startedManager({ execFileImpl, platform: 'win32' })
+
+    const stopping = manager.stop()
+    expect(execFileImpl).toHaveBeenCalledTimes(1)
+    expect(calls[0][0]).toBe('taskkill')
+    expect(calls[0][1]).toEqual(['/PID', String(child.pid), '/T', '/F'])
+    expect(manager.state().phase).toBe('stopping')
+
+    giveExit(child, 0)
+    await stopping
+    expect(manager.state().phase).toBe('stopped')
+  })
+
+  it('a child that never exits after both attempts turns error - never a lying stopped', async () => {
+    const { manager } = await startedManager({ platform: 'linux', stopGraceMs: 10 })
+    await manager.stop()
+    expect(manager.state().phase).toBe('error')
+    expect(manager.state().message).toContain('did not confirm')
+  }, 15_000)
+
+  it('concurrent stop() calls share one teardown', async () => {
+    const execFileImpl = vi.fn((...args: unknown[]) => {
+      const callback = args[args.length - 1] as (err: null) => void
+      callback(null)
+    })
+    const { child, manager } = await startedManager({ execFileImpl, platform: 'win32' })
+
+    const first = manager.stop()
+    const second = manager.stop()
+    const third = manager.stop()
+    giveExit(child, 0)
+    await Promise.all([first, second, third])
+    expect(execFileImpl).toHaveBeenCalledTimes(1)
+
+    // Idempotent afterwards: another stop is a no-op, not a second kill.
+    await manager.stop()
+    expect(execFileImpl).toHaveBeenCalledTimes(1)
+  })
+})

@@ -1,5 +1,7 @@
+import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
-import { readFile } from 'node:fs/promises'
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { dirname } from 'node:path'
 
 import { safeDestr } from 'destr'
 
@@ -204,4 +206,153 @@ function asTtsTarget(value: unknown): LiaProductTtsTarget | undefined {
     return undefined
   const record = asRecord(value)
   return { ...target, voiceId: record ? asString(record.voiceId) : undefined }
+}
+
+
+/* --------------------------------------------------------------------------
+ * Writing: the controlled merge for the launcher's editable configuration
+ * (Phase 7.1, item 5).
+ *
+ * The launcher's edits are SMALL: a selection here, a language there. The
+ * canonical document keeps its whole shape - unknown fields from other
+ * editors (the AIRI persistence layer included) survive untouched, because
+ * the writer merges the patch onto the RAW parsed document and only ever
+ * touches the exact branches named by the patch. Arrays and `preferred`
+ * selections are REPLACED (a selection is atomic), scalar branches merged.
+ *
+ * Secrets never land here: API keys are vault material; hostile payloads
+ * that carry one are rejected rather than healed, so a confused caller can
+ * never accidentally funnel a secret into a world-readable JSON file.
+ * ------------------------------------------------------------------------ */
+
+export const SECRET_FIELD_NAMES = ['apikey', 'apisecret', 'bearer', 'secret', 'token'] as const
+
+export interface LiaProductConfigUpdate {
+  persona?: { activeCardId?: string }
+  provider?: { chat?: Partial<LiaProductChatConfig> }
+  preferences?: { language?: string }
+  voice?: {
+    runtime?: { alltalk?: Partial<LiaProductAllTalkRuntime> }
+    tts?: { preferred?: LiaProductTtsTarget }
+  }
+}
+
+export type LiaProductConfigWrite
+  = | { filePath: string, status: 'ok', value: LiaProductConfigSnapshot }
+    | { error: Error, filePath: string, status: 'secret-forbidden' | 'invalid-source' | 'write-failed' }
+
+export interface LiaProductConfigWriterDeps {
+  exists?: (path: string) => boolean
+  read?: (path: string) => Promise<string>
+  write?: (path: string, data: string) => Promise<void>
+}
+
+/** Walk every object in the patch - a secret-ish key anywhere vetoes the write. */
+function containsSecretField(value: unknown): boolean {
+  if (value === null || value === undefined || typeof value !== 'object')
+    return false
+  if (Array.isArray(value))
+    return value.some(containsSecretField)
+  for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
+    if (SECRET_FIELD_NAMES.some(name => key.toLowerCase().includes(name)))
+      return true
+    if (containsSecretField(nested))
+      return true
+  }
+  return false
+}
+
+export async function updateLiaProductConfig(
+  filePath: string,
+  update: LiaProductConfigUpdate,
+  deps: LiaProductConfigWriterDeps = {},
+): Promise<LiaProductConfigWrite> {
+  const exists = deps.exists ?? ((p: string) => existsSync(p))
+  const read = deps.read ?? (async (p: string) => await readFile(p, 'utf8'))
+  const write = deps.write ?? (async (p: string, data: string) => {
+    await mkdir(dirname(p), { recursive: true })
+    const tmp = `${p}.${randomUUID()}.tmp`
+    await writeFile(tmp, data)
+    await rename(tmp, p)
+  })
+
+  if (containsSecretField(update))
+    return { error: new Error('API keys and tokens belong to the secret vault, never to lia-product.json.'), filePath, status: 'secret-forbidden' }
+
+  // Start from the raw document when it exists and parses; create a fresh
+  // one when the user simply never ran any host before.
+  let raw: Record<string, unknown> = { schemaVersion: 1 }
+  if (exists(filePath)) {
+    let content: string
+    try {
+      content = await read(filePath)
+    }
+    catch (error) {
+      return { error: error instanceof Error ? error : new Error(String(error)), filePath, status: 'invalid-source' }
+    }
+    let parsed: unknown
+    try {
+      parsed = safeDestr(content)
+    }
+    catch (error) {
+      // An unreadable product document is NEVER healed into a fresh one by a
+      // writer - the user's file stays exactly as it is.
+      return { error: error instanceof Error ? error : new Error(String(error)), filePath, status: 'invalid-source' }
+    }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
+      return { error: new Error('lia-product.json is not a JSON object'), filePath, status: 'invalid-source' }
+    raw = parsed as Record<string, unknown>
+  }
+
+  const next = mergeProductUpdate(raw, update)
+  try {
+    await write(filePath, `${JSON.stringify(next, null, 2)}\n`)
+  }
+  catch (error) {
+    return { error: error instanceof Error ? error : new Error(String(error)), filePath, status: 'write-failed' }
+  }
+
+  return { filePath, status: 'ok', value: extract(next) }
+}
+
+function mergeProductUpdate(raw: Record<string, unknown>, update: LiaProductConfigUpdate): Record<string, unknown> {
+  const next: Record<string, unknown> = { ...raw }
+  if (update.persona) {
+    next.persona = { ...asRecord(raw.persona), ...definedOnly(update.persona) }
+  }
+  if (update.preferences) {
+    next.preferences = { ...asRecord(raw.preferences), ...definedOnly(update.preferences) }
+  }
+  if (update.provider?.chat) {
+    const provider = { ...asRecord(raw.provider) }
+    provider.chat = { ...asRecord(provider.chat), ...definedOnly(update.provider.chat) }
+    next.provider = provider
+  }
+  if (update.voice) {
+    const voice = { ...asRecord(raw.voice) }
+    if (update.voice.tts?.preferred !== undefined) {
+      const tts = { ...asRecord(voice.tts) }
+      // A selection is atomic: replace it whole, never deep-merge ids from
+      // two different picks into one Franken-target.
+      tts.preferred = definedOnly(update.voice.tts.preferred)
+      voice.tts = tts
+    }
+    if (update.voice.runtime?.alltalk) {
+      const runtime = { ...asRecord(voice.runtime) }
+      runtime.alltalk = { ...asRecord(runtime.alltalk), ...definedOnly(update.voice.runtime.alltalk) }
+      voice.runtime = runtime
+    }
+    next.voice = voice
+  }
+  return next
+}
+
+/** Drop `undefined` values so a partial patch never ERASES what it skipped. */
+function definedOnly<T extends Record<string, unknown>>(value: T): T {
+  const out: Record<string, unknown> = {}
+  for (const [key, inner] of Object.entries(value)) {
+    if (inner !== undefined)
+      out[key] = inner
+  }
+  return out as T
 }

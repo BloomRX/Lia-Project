@@ -1570,3 +1570,65 @@ describe('the clean-BOOT classification (QA evidence, brief A-C/D/H)', () => {
     expect(rec.lines).toContain('runtime.health-ready')
   })
 })
+
+describe('the supervisor scope (Phase 7.1): preserveAdoptedOnStop', () => {
+  function recorder() {
+    const lines: Array<string> = []
+    return {
+      lines,
+      onEvent: (event: string, detail?: string) => lines.push(detail ? `${event} ${detail}` : event),
+    }
+  }
+
+  it('D. an ADOPTED lia-managed tree survives the launcher close: zero kills, preserved event, session stopped', async () => {
+    // The launcher NEVER owns a server the user started by hand - even when
+    // the ancestry walk proves it came out of OUR install. Closing the
+    // launcher leaves the hand-started tree alive; the round-6 kill clause
+    // still governs the embedded path (the default flag remains false).
+    const rec = recorder()
+    const dir = await installedDir()
+    const taskkill = vi.fn(async (_command: string, _args: string[], _options: { timeoutMs: number }) => ({ code: 0 }))
+    const { manager } = managerFor({
+      execImpl: taskkill,
+      inspectProcess: async (pid: number) => await liaTreeInspect(dir)(pid),
+      installDir: dir,
+      isHealthy: async () => true,
+      onEvent: rec.onEvent,
+      portOwnerDiagnostics: async () => liaTreeRecords(dir),
+      preserveAdoptedOnStop: true,
+      probeOccupied: async () => 'occupied',
+    })
+
+    const started = await manager.start()
+    expect(started.phase).toBe('ready')
+
+    await manager.stop()
+
+    expect(taskkill).not.toHaveBeenCalled() // the actual ownership assertion
+    expect(rec.lines.some(line => line.startsWith('runtime.attachment-preserved'))).toBe(true)
+    expect(rec.lines).not.toContain('runtime.process-tree-terminated')
+    expect(rec.lines).toContain('runtime.stopped')
+    expect(manager.state()).toEqual({ phase: 'stopped' })
+  })
+
+  it('the default keep-killing-adopted contract is unchanged when the flag is absent', async () => {
+    const rec = recorder()
+    const dir = await installedDir()
+    const taskkill = vi.fn(async (_command: string, _args: string[], _options: { timeoutMs: number }) => ({ code: 0 }))
+    const { manager } = managerFor({
+      execImpl: taskkill,
+      inspectProcess: async (pid: number) => await liaTreeInspect(dir)(pid),
+      installDir: dir,
+      isHealthy: async () => true,
+      onEvent: rec.onEvent,
+      portOwnerDiagnostics: async () => liaTreeRecords(dir),
+      probeOccupied: async () => 'occupied',
+    })
+
+    await manager.start()
+    await manager.stop()
+
+    expect(taskkill).toHaveBeenCalled() // round-6 clause, preserved by default
+    expect(rec.lines.some(line => line.startsWith('runtime.attachment-preserved'))).toBe(false)
+  })
+})

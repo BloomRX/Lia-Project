@@ -174,3 +174,235 @@ describe('conversar() - the pipeline the CTA gates on', () => {
     expect(startedWith[0]).toMatchObject({ LIA_MANAGED: '1', APP_USER_DATA_PATH: home.userData })
   })
 })
+
+/**
+ * Phase 7.1 supervisor contract, host level: closing Lia stops WHAT IT
+ * OWNS (stage, voice runtime), leaves adopted/external processes alone,
+ * single-flights double quits, and refuses new conversations while closing.
+ */
+describe('supervisor shutdown through the host (A/B/D/F)', () => {
+  async function hostWithFakes(options: {
+    adopted?: boolean
+    ownedStage?: boolean
+    runtimeStop?: (() => Promise<void>) | undefined
+  } = {}) {
+    const calls: string[] = []
+    const home = await makeLiaHome()
+    const host = createLiaHost({
+      cipher: identityCipher,
+      env: fixtureEnv(home),
+      runtimeManagerFactory: () => {
+        const manager = {
+          isInstalled: async () => true,
+          ownedChildPid: () => options.adopted ? undefined : 4412,
+          start: async () => ({ phase: 'ready' as const }),
+          state: () => ({ phase: options.adopted ? 'adopted' as const : 'ready' as const }),
+          stop: options.runtimeStop ?? (async () => {
+            calls.push('runtime-stop')
+          }),
+        }
+        return manager as never
+      },
+      stageManagerFactory: () => {
+        const manager = {
+          holdsOwnedStage: () => options.ownedStage ?? false,
+          isAvailable: () => true,
+          start: async () => ({ logTail: [], phase: 'running' as const }),
+          state: () => ({ logTail: [], phase: options.ownedStage ? 'running' as const : 'stopped' as const }),
+          stop: async () => calls.push('stage-stop'),
+        }
+        return manager as never
+      },
+      workspaceRoot: '/missing',
+    })
+    // Materialize the runtime manager so the coordinator can see its ownership.
+    await host.runtime()
+    return { calls, host }
+  }
+
+  it('a. quitting with an owned stage stops the stage and reports it', async () => {
+    const { calls, host } = await hostWithFakes({ adopted: true, ownedStage: true })
+    const report = await host.quit()
+    expect(calls).toEqual(['stage-stop'])
+    expect(report.steps.find(s => s.name === 'stage')?.outcome).toBe('stopped')
+    expect(report.steps.find(s => s.name === 'voice-runtime')?.outcome).toBe('no-owned-process')
+  })
+
+  it('b. quitting with an owned voice runtime stops it - after the stage', async () => {
+    const { calls, host } = await hostWithFakes({ ownedStage: true })
+    const report = await host.quit()
+    expect(calls).toEqual(['stage-stop', 'runtime-stop'])
+    expect(report.steps.map(s => s.outcome)).toEqual(['stopped', 'stopped'])
+  })
+
+  it('d. an adopted voice runtime is never stopped on quit', async () => {
+    const runtimeStop = async () => {
+      throw new Error('must never be called')
+    }
+    const { calls, host } = await hostWithFakes({ adopted: true, ownedStage: true, runtimeStop })
+    const report = await host.quit()
+    expect(calls).toEqual(['stage-stop'])
+    expect(report.steps.find(s => s.name === 'voice-runtime')?.outcome).toBe('no-owned-process')
+  })
+
+  it('f. two quits share one teardown (single-flight)', async () => {
+    const { calls, host } = await hostWithFakes({ ownedStage: true })
+    const [first, second] = await Promise.all([host.quit(), host.quit()])
+    // Each owned target stopped EXACTLY once - no doubled kill, in order.
+    expect(calls).toEqual(['stage-stop', 'runtime-stop'])
+    expect(first).toBe(second)
+  })
+
+  it('once closing, conversar() is refused - no new starts during shutdown', async () => {
+    const { host } = await hostWithFakes()
+    await host.vault.setSecret('openrouter', 'apiKey', 'sk-x')
+    await host.quit()
+    await expect(host.conversar()).rejects.toThrow(/closing/)
+    expect(host.coordinator.isShuttingDown()).toBe(true)
+  })
+})
+
+/**
+ * Phase 7.1 items G-J/L, host level: the Config screen's save path -
+ * every editable subtree persists through the core writer, secrets ride
+ * the vault channel only, and the runtime cache follows the new document.
+ */
+describe('updateConfig - the editable product document', () => {
+  it('g-J. provider, persona, voice and language edits persist to the SAME file', async () => {
+    const home = await makeLiaHome({
+      productConfig: {
+        customField: 'keep-me',
+        persona: { activeCardId: 'lia-default' },
+        preferences: { language: 'pt-BR' },
+        provider: { chat: { preferred: { modelId: 'm1', providerId: 'openrouter' } } },
+        schemaVersion: 1,
+        voice: { tts: { preferred: { providerId: 'cloud-voice-provider', voiceId: 'nova' } } },
+      },
+    })
+    const host = createLiaHost({ cipher: identityCipher, env: fixtureEnv(home), workspaceRoot: '/missing' })
+
+    const saved = await host.updateConfig({
+      update: {
+        persona: { activeCardId: 'lia-energetica' },
+        preferences: { language: 'en-US' },
+        // NOTE: the schema's provider target is providerId+modelId only -
+        // a custom endpoint has no field to live in (documented, item 5).
+        provider: { chat: { preferred: { modelId: 'm2', providerId: 'openrouter' } } },
+        voice: { tts: { preferred: { providerId: 'custom-local-voice', voiceId: 'profile-1' } } },
+      },
+    })
+    expect(saved.status).toBe('ok')
+
+    const reread = await host.productSnapshot()
+    expect(reread?.persona?.activeCardId).toBe('lia-energetica')
+    expect(reread?.preferences?.language).toBe('en-US')
+    expect(reread?.provider?.chat?.preferred?.modelId).toBe('m2')
+    expect(reread?.voice?.tts?.preferred?.providerId).toBe('custom-local-voice')
+    // Unknown keys survive a save on DISK - forward compatibility with
+    // AIRI (item 5). The typed snapshot hides them by design, so check raw.
+    const raw = JSON.parse(await hostConfigText(home)) as Record<string, unknown>
+    expect(raw.customField).toBe('keep-me')
+    expect((await host.homeStatus()).config.filePath).toBe(join(home.userData, 'lia-product.json'))
+  })
+
+  it('a secret in the document update is refused by the core writer (L)', async () => {
+    const home = await makeLiaHome()
+    const before = await hostConfigText(home)
+    const host = createLiaHost({ cipher: identityCipher, env: fixtureEnv(home), workspaceRoot: '/missing' })
+
+    const result = await host.updateConfig({
+      update: { provider: { chat: { preferred: { apiKey: 'sk-should-never-persist', providerId: 'openrouter' } as never } } },
+    })
+    expect(result.status).toBe('secret-forbidden')
+    expect(await hostConfigText(home)).toBe(before) // The file was not touched.
+  })
+
+  it('secrets ride the vault channel: stored encrypted, never in the JSON (L)', async () => {
+    const home = await makeLiaHome()
+    const host = createLiaHost({ cipher: identityCipher, env: fixtureEnv(home), workspaceRoot: '/missing' })
+
+    const result = await host.updateConfig({
+      secrets: [{ key: 'apiKey', scope: 'openrouter', value: 'sk-top-secret-123' }],
+      update: { provider: { chat: { preferred: { modelId: 'm1', providerId: 'openrouter' } } } },
+    })
+    expect(result.status).toBe('ok')
+    expect(host.vault.hasSecret('openrouter', 'apiKey')).toBe(true)
+    expect(await hostConfigText(home)).not.toContain('sk-top-secret-123')
+  })
+})
+
+async function hostConfigText(home: { userData: string }): Promise<string> {
+  const { readFile } = await import('node:fs/promises')
+  return await readFile(join(home.userData, 'lia-product.json'), 'utf8')
+}
+
+/**
+ * K of Phase 7.1: after a config edit, the NEXT launch carries the new
+ * facts - the bridge contract re-reads the document on every build, and
+ * the stage env reflects the saved provider/voice immediately.
+ */
+describe('k. an edited config reaches the next stage launch', () => {
+  it('bridge + stage env are rebuilt from the UPDATED document', async () => {
+    const home = await makeLiaHome()
+    const host = createLiaHost({ cipher: identityCipher, env: fixtureEnv(home), workspaceRoot: '/missing' })
+
+    const bridgeBefore = await host.bridgeConfig()
+    expect(bridgeBefore.llm.preferred?.providerId).toBe('openrouter')
+
+    await host.updateConfig({
+      secrets: [{ key: 'apiKey', scope: 'openai', value: 'sk-new-provider' }],
+      update: {
+        preferences: { language: 'en-US' },
+        provider: { chat: { preferred: { modelId: 'gpt-5', providerId: 'openai' } } },
+      },
+    })
+
+    // The stage env points at the SAME canonical document - the next start
+    // reads the new provider from it (nothing is copied into the env).
+    const after = await host.stageEnv()
+    expect(after.LIA_PRODUCT_CONFIG_FILE).toBe(join(home.userData, 'lia-product.json'))
+    expect(after.LIA_MANAGED).toBe('1')
+
+    // The bridge contract rebuilt from the UPDATED document.
+    const bridge = await host.bridgeConfig()
+    expect(bridge.llm.preferred?.providerId).toBe('openai')
+    expect(bridge.llm.preferred?.modelId).toBe('gpt-5')
+    expect(bridge.language).toBe('en-US')
+    expect(bridge.secrets.hasSecret('openai')).toBe(true)
+    // And values stay out of every surface: keys are presence booleans only.
+    expect(JSON.stringify(bridge.identity)).not.toContain('sk-new-provider')
+    expect(JSON.stringify(after)).not.toContain('sk-new-provider')
+  })
+})
+
+/**
+ * The voice rail of Phase 7.1, item 6: importing a picked file lands in the
+ * canonical library, visible to both the launcher and AIRI - one storage.
+ */
+describe('voice import through the host', () => {
+  it('a dialog-picked file becomes a library profile (allowlisted source)', async () => {
+    const home = await makeLiaHome()
+    const host = createLiaHost({ cipher: identityCipher, env: fixtureEnv(home), workspaceRoot: '/missing' })
+    const { writeFile } = await import('node:fs/promises')
+    const sourceFile = join(home.userData, 'picked-voice.wav')
+    await writeFile(sourceFile, 'fake-audio')
+
+    const before = await host.listVoices()
+    const imported = await host.importVoice(
+      { engine: 'alltalk', name: 'Voz da Ana', sources: [{ path: sourceFile, role: 'referenceAudio' }] },
+      new Set([sourceFile]),
+    )
+    expect(imported.ok).toBe(true)
+
+    const after = await host.listVoices()
+    expect(after.length).toBe(before.length + 1)
+    expect(after.some(p => p.name === 'Voz da Ana')).toBe(true)
+
+    // A source the dialog never returned is refused (no arbitrary reads).
+    const refused = await host.importVoice(
+      { engine: 'alltalk', name: 'x', sources: [{ path: '/etc/passwd', role: 'model' }] },
+      new Set([sourceFile]),
+    )
+    expect(refused.ok).toBe(false)
+  })
+})

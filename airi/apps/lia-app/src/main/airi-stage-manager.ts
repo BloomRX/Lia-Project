@@ -32,7 +32,7 @@ import { env as nodeEnv, platform as nodePlatform } from 'node:process'
  * executable through the same call shape.
  */
 
-export type AiriStagePhase = 'error' | 'running' | 'starting' | 'stopped'
+export type AiriStagePhase = 'error' | 'running' | 'starting' | 'stopped' | 'stopping'
 
 export interface AiriStageState {
   /** Tail of the stage stdout/stderr, for the diagnostics tab. */
@@ -61,6 +61,12 @@ export interface AiriStageManagerDeps {
   /** Milliseconds before a spawned stage that never says "ready" errors out. */
   startGraceMs?: number
   /**
+   * Milliseconds the stop path waits for the REAL exit after signalling,
+   * before the hard fallback. Honest by contract: 'stopped' is reported
+   * only after the child's exit was observed.
+   */
+  stopGraceMs?: number
+  /**
    * The AIRI monorepo root that holds `apps/stage-tamagotchi`. In dev the
    * launcher resolves this from its own location; in production it will be
    * the packaged stage root. If the folder does not exist the manager is
@@ -78,6 +84,7 @@ export class AiriStageManager {
   private currentState: AiriStageState = { logTail: [], phase: 'stopped' }
   private child: ReturnType<typeof spawn> | undefined
   private starting: Promise<AiriStageState> | undefined
+  private stopping: Promise<void> | undefined
 
   constructor(private readonly deps: AiriStageManagerDeps) {}
 
@@ -111,20 +118,53 @@ export class AiriStageManager {
     }
   }
 
+  /**
+   * Stops the stage the launcher spawned THIS session. Single-flight and
+   * idempotent: concurrent stops join one teardown, repeated stops after
+   * teardown are no-ops. A stage this manager never spawned is invisible
+   * to it - nothing to find, nothing to kill (contract test C).
+   *
+   * State honesty: 'stopping' while the kill signal travels, 'stopped'
+   * ONLY after the child's exit was observed, 'error' when even the hard
+   * fallback could not confirm the death.
+   */
   async stop(): Promise<void> {
+    this.stopping ??= this.doStop()
+    try {
+      await this.stopping
+    }
+    finally {
+      this.stopping = undefined
+    }
+  }
+
+  /** True while this manager holds a live child IT spawned (ownership). */
+  holdsOwnedStage(): boolean {
+    return this.child !== undefined && this.child.exitCode === null
+  }
+
+  private async doStop(): Promise<void> {
     const child = this.child
-    this.child = undefined
     if (!child || child.exitCode !== null) {
+      this.child = undefined
       if (this.currentState.phase !== 'error')
         this.setState({ phase: 'stopped' })
       return
     }
 
     const pid = child.pid
+    this.setState({ phase: 'stopping', pid })
+
+    const exited = new Promise<null | number>((resolve) => {
+      child.once('exit', code => resolve(code))
+    })
     const platform = this.deps.platform ?? nodePlatform
+
     if (platform === 'win32' && pid !== undefined) {
       // The launcher owns this stage: we spawned it this session, so the
-      // whole tree goes down - the round-7 ownership axiom, child clause.
+      // whole tree goes down. taskkill needs the target ALIVE to walk the
+      // tree (round 7), and its exit code proves nothing either way -
+      // only the child's own exit below closes the question.
       await new Promise<void>((resolve) => {
         const execFileImpl = this.deps.execFileImpl ?? execFile
         execFileImpl('taskkill', ['/PID', String(pid), '/T', '/F'], { timeout: 30_000 }, () => resolve())
@@ -132,20 +172,39 @@ export class AiriStageManager {
     }
     else {
       child.kill('SIGTERM')
+    }
+
+    if (await waitForExit(exited, this.deps.stopGraceMs ?? 15_000)) {
+      this.child = undefined
+      this.setState({ phase: 'stopped' })
+      return
+    }
+
+    // Hard fallback, once. POSIX gets SIGKILL; Windows gets one more
+    // tree-kill attempt (the first can arrive while the tree was mid-form).
+    if (platform === 'win32' && pid !== undefined) {
       await new Promise<void>((resolve) => {
-        const timer = setTimeout(() => {
-          if (child.exitCode === null)
-            child.kill('SIGKILL')
-          resolve()
-        }, 5_000)
-        timer.unref?.()
-        child.once('exit', () => {
-          clearTimeout(timer)
-          resolve()
-        })
+        const execFileImpl = this.deps.execFileImpl ?? execFile
+        execFileImpl('taskkill', ['/PID', String(pid), '/T', '/F'], { timeout: 30_000 }, () => resolve())
       })
     }
-    this.setState({ phase: 'stopped' })
+    else if (child.exitCode === null) {
+      child.kill('SIGKILL')
+    }
+
+    if (await waitForExit(exited, 5_000)) {
+      this.child = undefined
+      this.setState({ phase: 'stopped' })
+      return
+    }
+
+    // We could not prove the stage died. Say so - the worst shutdown bug
+    // is a lying 'stopped'.
+    this.setState({
+      message: 'The stage did not confirm it has closed. It may still be shutting down.',
+      phase: 'error',
+      pid,
+    })
   }
 
   private async spawnStage(passEnv?: Record<string, string | undefined>): Promise<AiriStageState> {
@@ -226,6 +285,25 @@ export class AiriStageManager {
     this.currentState = { ...this.currentState, ...partial }
     this.deps.onState?.(this.state())
   }
+}
+
+/**
+ * Awaits the child's exit promise for up to `ms`. Returns true when the
+ * exit was observed. The exit promise itself never settles twice (Event
+ * semantics), so racing it repeatedly is safe.
+ */
+function waitForExit(exited: Promise<null | number>, ms: number): Promise<boolean> {
+  return new Promise<boolean>((resolve) => {
+    const timer = setTimeout(resolve, ms, false)
+    timer.unref?.()
+    exited.then(() => {
+      clearTimeout(timer)
+      resolve(true)
+    }, () => {
+      clearTimeout(timer)
+      resolve(false)
+    })
+  })
 }
 
 function appendLine(state: AiriStageState, line: string): void {

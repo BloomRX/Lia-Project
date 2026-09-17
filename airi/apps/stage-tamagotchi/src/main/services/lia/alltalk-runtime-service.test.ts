@@ -1,13 +1,25 @@
+import process from 'node:process'
+
 import { describe, expect, it } from 'vitest'
 
 import { CUSTOM_VOICE_PROVIDER_ID } from '../../../shared/lia-voice'
 import { buildInstallSteps, INSTALL_STEPS, mayAutostartRuntime, shouldAutostartRuntime } from './alltalk-runtime-install'
+import { isLauncherManaged } from './lia-managed'
 
 /**
  * The parts of the runtime service that carry a decision, tested without booting
  * Electron. The IPC handlers themselves are thin: they call these and hand the
  * result to the renderer.
  */
+
+describe('isLauncherManaged (Phase 7.1, item 4)', () => {
+  it('is true only for the exact launcher marker', () => {
+    expect(isLauncherManaged({ ...process.env, LIA_MANAGED: '1' })).toBe(true)
+    expect(isLauncherManaged({ ...process.env, LIA_MANAGED: '0' })).toBe(false)
+    expect(isLauncherManaged({ ...process.env, LIA_MANAGED: 'true' })).toBe(false)
+    expect(isLauncherManaged({ ...process.env, LIA_MANAGED: undefined })).toBe(false)
+  })
+})
 
 describe('shouldAutostartRuntime', () => {
   it('autostarts only for a custom voice', () => {

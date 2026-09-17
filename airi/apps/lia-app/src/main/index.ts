@@ -1,11 +1,14 @@
+import type { SupervisorQuitFlow } from './shutdown-coordinator'
+
 import process from 'node:process'
 
 import { join } from 'node:path'
 
-import { app, BrowserWindow, safeStorage } from 'electron'
+import { app, BrowserWindow, dialog, safeStorage } from 'electron'
 
 import { registerLiaIpc } from './ipc'
 import { createLiaHost } from './lia-host'
+import { createSupervisorQuitFlow } from './shutdown-coordinator'
 import { createLiaBootTimer } from './timing'
 
 /**
@@ -27,6 +30,12 @@ timer.mark('lia-app.start')
 const isDevelopment = process.env.NODE_ENV !== 'production'
 
 let mainWindow: BrowserWindow | undefined
+/**
+ * The ONE quit path (Phase 7.1, item 3). Exists only after the host does;
+ * an exit signal before that means nothing was spawned and the process may
+ * simply leave.
+ */
+let quitFlow: SupervisorQuitFlow | undefined
 
 async function bootstrap(): Promise<void> {
   await app.whenReady()
@@ -48,7 +57,30 @@ async function bootstrap(): Promise<void> {
   })
   timer.mark('lia-core.ready')
 
-  registerLiaIpc(host, timer)
+  // The supervisor quit flow: every exit route runs the coordinator first.
+  // `app.exit` (not `app.quit`) ends the process - it does not re-fire
+  // before-quit, and even if it did the guard below makes it a no-op.
+  quitFlow = createSupervisorQuitFlow({
+    coordinator: host.coordinator,
+    endProcess: code => app.exit(code),
+    log: line => console.info(line),
+  })
+
+  registerLiaIpc(host, timer, {
+    pickVoiceFiles: async () => {
+      if (!mainWindow)
+        return []
+      const picked = await dialog.showOpenDialog(mainWindow, {
+        filters: [{ extensions: ['flac', 'm4a', 'mp3', 'ogg', 'wav'], name: 'Arquivos de áudio' }],
+        properties: ['multiSelections', 'openFile'],
+        title: 'Escolha os arquivos da voz',
+      })
+      return picked.canceled ? [] : picked.filePaths
+    },
+    requestQuit: () => {
+      quitFlow?.onBeforeQuit()
+    },
+  })
 
   mainWindow = new BrowserWindow({
     autoHideMenuBar: true,
@@ -78,15 +110,43 @@ async function bootstrap(): Promise<void> {
 }
 
 app.on('window-all-closed', () => {
-  // The launcher closing stops Lia's OWN stage child (we spawned it; the
-  // handle is the proof), then the process may leave.
   app.quit()
 })
 
-// NOTE: the managed stage SHOULD follow the launcher down in a later
-// iteration; v1 keeps the child readable from the OS task manager and is
-// documented in the deliverable. AllTalk lifecycle is untouched here on
-// purpose: the Lia runtime manager owns it.
+app.on('before-quit', (event) => {
+  // Phase 7.1, items 1/3: closing Lia is a supervised teardown - stop the
+  // owned stage and the owned voice runtime, confirm, THEN leave. EVERY
+  // quit attempt joins the single graceful run (repeated clicks never
+  // bypass it); `app.exit` in endProcess ends the process without
+  // re-firing this hook.
+  event.preventDefault()
+  if (quitFlow) {
+    quitFlow.onBeforeQuit()
+  }
+  else {
+    // The host never came up: nothing is ours, nothing to stop.
+    app.exit(0)
+  }
+})
+
+// Ctrl+C and service-stop in dev take the SAME supervised path (test E
+// covers the flow logic; here it is just wired to the real process).
+process.on('SIGINT', () => {
+  if (quitFlow) {
+    quitFlow.onSigint()
+  }
+  else {
+    process.exit(130)
+  }
+})
+process.on('SIGTERM', () => {
+  if (quitFlow) {
+    quitFlow.onSigterm()
+  }
+  else {
+    process.exit(143)
+  }
+})
 
 void bootstrap().catch((error) => {
   console.error('[lia] the launcher failed to start:', error)
