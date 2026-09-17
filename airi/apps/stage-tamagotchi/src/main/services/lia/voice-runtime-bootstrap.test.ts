@@ -899,7 +899,7 @@ describe('the configure-engine step (phase 6: disarming the upstream first-run p
     expect(step.detail).toBe('first-run prompt disabled')
   })
 
-  it('T: a repair walk notices a re-armed prompt and disarms it again (not a no-op)', async () => {
+  it('t: a repair walk notices a re-armed prompt and disarms it again (not a no-op)', async () => {
     const h = harness()
     h.setHealthy(true)
     const bootstrapper = createVoiceRuntimeBootstrapper(h.deps)
@@ -918,7 +918,7 @@ describe('the configure-engine step (phase 6: disarming the upstream first-run p
     expect(h.calls.written.length).toBeGreaterThan(before)
   })
 
-  it('T: a satisfied config is reported without a rewrite (checked, nothing missing)', async () => {
+  it('t: a satisfied config is reported without a rewrite (checked, nothing missing)', async () => {
     const h = harness()
     h.setHealthy(true)
     const bootstrapper = createVoiceRuntimeBootstrapper(h.deps)

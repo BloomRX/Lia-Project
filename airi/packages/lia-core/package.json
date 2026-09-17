@@ -1,0 +1,53 @@
+{
+  "name": "@lia/core",
+  "type": "module",
+  "private": true,
+  "version": "0.0.1",
+  "description": "Lia product core: canonical paths, product config, voice profiles, secret vault, managed AllTalk runtime - independent of AIRI (Phase 7).",
+  "scripts": {
+    "build": "tsdown",
+    "dev": "pnpm run build",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "types": "./dist/index.d.mts",
+  "exports": {
+    ".": "./dist/index.mjs",
+    "./alltalk/client": "./dist/alltalk/client.mjs",
+    "./alltalk/custom-voice-engine-restart": "./dist/alltalk/custom-voice-engine-restart.mjs",
+    "./alltalk/custom-voice-prepare": "./dist/alltalk/custom-voice-prepare.mjs",
+    "./alltalk/engine-config": "./dist/alltalk/engine-config.mjs",
+    "./alltalk/port-diagnostics": "./dist/alltalk/port-diagnostics.mjs",
+    "./alltalk/port-listeners": "./dist/alltalk/port-listeners.mjs",
+    "./alltalk/runtime": "./dist/alltalk/runtime.mjs",
+    "./alltalk/shutdown": "./dist/alltalk/shutdown.mjs",
+    "./bootstrap/archive-path": "./dist/bootstrap/archive-path.mjs",
+    "./bootstrap/bootstrap": "./dist/bootstrap/bootstrap.mjs",
+    "./bootstrap/env": "./dist/bootstrap/env.mjs",
+    "./bootstrap/install-exec": "./dist/bootstrap/install-exec.mjs",
+    "./bootstrap/runtime-root": "./dist/bootstrap/runtime-root.mjs",
+    "./bridge/lia-config": "./dist/bridge/lia-config.mjs",
+    "./paths/product-paths": "./dist/paths/product-paths.mjs",
+    "./product/config": "./dist/product/config.mjs",
+    "./secrets/vault": "./dist/secrets/vault.mjs",
+    "./voice/shared": "./dist/voice/shared.mjs",
+    "./voices/profiles": "./dist/voices/profiles.mjs",
+    "./voices/types": "./dist/voices/types.mjs",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@moeru/std": "catalog:",
+    "destr": "catalog:",
+    "yauzl": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "@types/yauzl": "catalog:",
+    "tsdown": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:vitest"
+  }
+}

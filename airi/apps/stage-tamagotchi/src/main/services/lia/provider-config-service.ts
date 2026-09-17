@@ -1,9 +1,9 @@
 import type { createContext } from '@moeru/eventa/adapters/electron/main'
 
-import { defineInvokeHandler } from '@moeru/eventa'
-
 import type { LiaProviderChatConfig } from '../../../shared/eventa'
 import type { LiaProductConfig } from '../../configs/lia'
+
+import { defineInvokeHandler } from '@moeru/eventa'
 
 import {
   electronLiaProviderChatConfigGet,
