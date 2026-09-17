@@ -95,7 +95,16 @@ export async function readLiaProductConfig(
     return { error, filePath, status: 'read-error' }
   }
 
-  const parsed = safeDestr<unknown>(raw)
+  // A malformed document is INVALID, never a crash: the user keeps their
+  // file, untouched, and the launcher keeps booting. safeDestr itself can
+  // throw for JSON-shaped garbage, so the parse gets its own guard.
+  let parsed: unknown
+  try {
+    parsed = safeDestr(raw)
+  }
+  catch (error) {
+    return { error, filePath, status: 'invalid' }
+  }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
     return { error: new Error('lia-product.json is not a JSON object'), filePath, status: 'invalid' }
 

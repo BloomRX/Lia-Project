@@ -1,0 +1,28 @@
+{
+  "name": "@lia/lia-app",
+  "type": "module",
+  "private": true,
+  "version": "0.0.1",
+  "description": "The Lia launcher: the independent product shell of Lia (Phase 7). Owns product config, managed runtimes and the AIRI stage lifecycle. Boots with zero AIRI imports.",
+  "main": "./out/main/index.mjs",
+  "scripts": {
+    "build": "electron-vite build",
+    "dev": "electron-vite dev",
+    "preview": "electron-vite preview",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@lia/core": "workspace:*",
+    "vue": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "@vitejs/plugin-vue": "catalog:",
+    "electron": "catalog:",
+    "electron-vite": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:vitest"
+  }
+}

@@ -6,12 +6,12 @@
  */
 
 export { buildLiaBridgeConfig, LIA_STAGE_ENV, stageEnvFor } from './bridge/lia-config'
-export { liaProductPaths, liaUserDataCandidates } from './paths/product-paths'
-export { readLiaProductConfig } from './product/config'
-export { createLiaSecretVault, ciphertextToBase64 } from './secrets/vault'
-export { createLiaVoiceProfileStore } from './voices/profiles'
-
 export type { BuildLiaBridgeConfigInput, LiaBridgeConfig } from './bridge/lia-config'
+export { liaProductPaths, liaUserDataCandidates } from './paths/product-paths'
 export type { LiaProductPaths } from './paths/product-paths'
+export { readLiaProductConfig } from './product/config'
+
 export type { LiaProductConfigRead, LiaProductConfigSnapshot } from './product/config'
+export { ciphertextToBase64, createLiaSecretVault } from './secrets/vault'
 export type { LiaSecretVault } from './secrets/vault'
+export { createLiaVoiceProfileStore } from './voices/profiles'
