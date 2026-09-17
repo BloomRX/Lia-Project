@@ -205,7 +205,12 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
     stop: async () => await stage.stop(),
   })
   coordinator.register({
-    holdsOwnedProcess: () => cached?.manager.ownedChildPid() !== undefined,
+    // Ownership semantics (Phase 7.1 correction): the question is never
+    // "did WE spawn it this session?" - it is "is it PROVEN lia-managed?".
+    // A recovered pre-existing Lia runtime answers true and IS stopped on
+    // quit (test B); external and unknown answer false and are never
+    // touched (tests C/D). Origin and ownership stay separate.
+    holdsOwnedProcess: () => cached?.manager.hasManagedRuntime() ?? false,
     name: 'voice-runtime',
     stop: async () => {
       await (await manager()).stop()
@@ -235,14 +240,6 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
           resolvePromise({ code: typeof error?.code === 'number' ? error.code : 0 })
         })
       }),
-      /**
-       * Launcher mode (Phase 7.1, item 4): a voice server the launcher did
-       * NOT spawn this session is the user's own - ADOPTED, never owned.
-       * Closing Lia must never put it down. The coordinator additionally
-       * never routes adopted runtimes into stop() at all; this flag is the
-       * second, in-core layer of that axiom (test D).
-       */
-      preserveAdoptedOnStop: true,
       inspectProcess: platform === 'win32'
         ? async pid => await inspectProcess({ exec: execCapture, platform }, pid)
         : undefined,

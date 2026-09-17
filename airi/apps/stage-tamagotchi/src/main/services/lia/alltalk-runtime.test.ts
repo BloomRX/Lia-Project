@@ -1571,7 +1571,7 @@ describe('the clean-BOOT classification (QA evidence, brief A-C/D/H)', () => {
   })
 })
 
-describe('the supervisor scope (Phase 7.1): preserveAdoptedOnStop', () => {
+describe('the launcher ownership semantics (Phase 7.1 correction): origin is NOT ownership', () => {
   function recorder() {
     const lines: Array<string> = []
     return {
@@ -1580,13 +1580,15 @@ describe('the supervisor scope (Phase 7.1): preserveAdoptedOnStop', () => {
     }
   }
 
-  it('D. an ADOPTED lia-managed tree survives the launcher close: zero kills, preserved event, session stopped', async () => {
-    // The launcher NEVER owns a server the user started by hand - even when
-    // the ancestry walk proves it came out of OUR install. Closing the
-    // launcher leaves the hand-started tree alive; the round-6 kill clause
-    // still governs the embedded path (the default flag remains false).
+  it('b. a RECOVERED lia-managed runtime is stopped on shutdown - origin never spares ownership', async () => {
+    // The correction, as a kill that MUST happen: the server was already
+    // running when the manager met it (recovered-existing), but its identity
+    // proves it lia-managed. Closing the owner kills it, kill+verify, ports
+    // free. A rule of shape `adopted => preserve` - the one this correction
+    // removes - breaks THIS test: taskkill MUST fire below.
     const rec = recorder()
     const dir = await installedDir()
+    tempDirs.push(dir)
     const taskkill = vi.fn(async (_command: string, _args: string[], _options: { timeoutMs: number }) => ({ code: 0 }))
     const { manager } = managerFor({
       execImpl: taskkill,
@@ -1595,40 +1597,88 @@ describe('the supervisor scope (Phase 7.1): preserveAdoptedOnStop', () => {
       isHealthy: async () => true,
       onEvent: rec.onEvent,
       portOwnerDiagnostics: async () => liaTreeRecords(dir),
-      preserveAdoptedOnStop: true,
-      probeOccupied: async () => 'occupied',
+      probeOccupied: async () => 'free',
     })
 
     const started = await manager.start()
     expect(started.phase).toBe('ready')
+    expect(started.attachment?.kind).toBe('lia-managed')
+    // Held while the session lives: spawned OR recovered, ownership reads
+    // the same - 'lia-managed'.
+    expect(manager.hasManagedRuntime()).toBe(true)
+    expect(manager.runtimeOwnership()).toBe('lia-managed')
 
-    await manager.stop()
+    await manager.stop({ confirmFreeMs: 100 })
 
-    expect(taskkill).not.toHaveBeenCalled() // the actual ownership assertion
-    expect(rec.lines.some(line => line.startsWith('runtime.attachment-preserved'))).toBe(true)
-    expect(rec.lines).not.toContain('runtime.process-tree-terminated')
-    expect(rec.lines).toContain('runtime.stopped')
+    const kills = taskkill.mock.calls.map(call => call[1])
+    expect(kills).toEqual([['/PID', String(QA_LAUNCHER_PID), '/T', '/F']])
+    expect(rec.lines).toContain('runtime.stopping-lia-managed-existing rootPid=9001')
     expect(manager.state()).toEqual({ phase: 'stopped' })
+    // Gone from ownership after the proven teardown: no ghost held runtime.
+    expect(manager.hasManagedRuntime()).toBe(false)
+    expect(manager.runtimeOwnership()).toBe('none')
   })
 
-  it('the default keep-killing-adopted contract is unchanged when the flag is absent', async () => {
+  it('c. an external AllTalk is never adopted, never repaired, never killed', async () => {
+    // Foreign by THE LISTENER ITSELF: an AllTalk-like server living outside
+    // the install root, no supervised launcher anywhere - the user's own.
     const rec = recorder()
     const dir = await installedDir()
+    tempDirs.push(dir)
     const taskkill = vi.fn(async (_command: string, _args: string[], _options: { timeoutMs: number }) => ({ code: 0 }))
-    const { manager } = managerFor({
+    const externalRecords = [{
+      cmdline: 'python -m my_own_tts',
+      created: QA_CREATED,
+      exe: 'C:\\Tools\\my-tts\\python.exe',
+      parentPid: 655,
+      pid: 9010,
+    }]
+    const { manager, spawned } = managerFor({
       execImpl: taskkill,
-      inspectProcess: async (pid: number) => await liaTreeInspect(dir)(pid),
+      inspectProcess: async () => ({ kind: 'gone' as const }),
       installDir: dir,
       isHealthy: async () => true,
       onEvent: rec.onEvent,
-      portOwnerDiagnostics: async () => liaTreeRecords(dir),
+      portOwnerDiagnostics: async () => externalRecords,
       probeOccupied: async () => 'occupied',
     })
 
-    await manager.start()
-    await manager.stop()
+    const state = await manager.start()
+    expect(state.phase).toBe('error')
+    expect(state.message).toBe('The voice system is already being used by another process.')
+    expect(rec.lines).toContain('runtime.port-occupied-external-process')
+    expect(spawned).not.toHaveBeenCalled()
+    // Ownership never attaches to what it cannot own.
+    expect(manager.hasManagedRuntime()).toBe(false)
+    expect(manager.runtimeOwnership()).toBe('none')
 
-    expect(taskkill).toHaveBeenCalled() // round-6 clause, preserved by default
-    expect(rec.lines.some(line => line.startsWith('runtime.attachment-preserved'))).toBe(false)
+    await manager.stop()
+    expect(taskkill).not.toHaveBeenCalled()
+  })
+
+  it('d. an unknown holder is never adopted, never killed (safe side, always)', async () => {
+    const rec = recorder()
+    const dir = await installedDir()
+    tempDirs.push(dir)
+    const taskkill = vi.fn(async (_command: string, _args: string[], _options: { timeoutMs: number }) => ({ code: 0 }))
+    const { manager, spawned } = managerFor({
+      execImpl: taskkill,
+      installDir: dir,
+      isHealthy: async () => true,
+      onEvent: rec.onEvent,
+      // The socket is spoken for, but the census answers NOTHING: unproven.
+      portOwnerDiagnostics: async () => [],
+      probeOccupied: async () => 'occupied',
+    })
+
+    const state = await manager.start()
+    expect(state.phase).toBe('error')
+    expect(rec.lines).toContain('runtime.port-occupied-unknown-process')
+    expect(spawned).not.toHaveBeenCalled()
+    expect(manager.hasManagedRuntime()).toBe(false)
+    expect(manager.runtimeOwnership()).toBe('none')
+
+    await manager.stop()
+    expect(taskkill).not.toHaveBeenCalled()
   })
 })

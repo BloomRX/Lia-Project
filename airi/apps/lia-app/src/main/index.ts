@@ -9,6 +9,7 @@ import { app, BrowserWindow, dialog, safeStorage } from 'electron'
 import { registerLiaIpc } from './ipc'
 import { createLiaHost } from './lia-host'
 import { createSupervisorQuitFlow } from './shutdown-coordinator'
+import { enforceSingleInstance } from './single-instance'
 import { createLiaBootTimer } from './timing'
 
 /**
@@ -27,8 +28,6 @@ import { createLiaBootTimer } from './timing'
 const timer = createLiaBootTimer()
 timer.mark('lia-app.start')
 
-const isDevelopment = process.env.NODE_ENV !== 'production'
-
 let mainWindow: BrowserWindow | undefined
 /**
  * The ONE quit path (Phase 7.1, item 3). Exists only after the host does;
@@ -36,6 +35,27 @@ let mainWindow: BrowserWindow | undefined
  * simply leave.
  */
 let quitFlow: SupervisorQuitFlow | undefined
+
+/**
+ * ONE supervisor, ever (ownership correction, item 5). Must precede any
+ * host/window/spawn: the losing process owns nothing and leaves at once;
+ * the primary receives copies as focus requests on its existing window.
+ */
+const instanceRole = enforceSingleInstance({
+  focusPrimaryWindow: () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized())
+        mainWindow.restore()
+      mainWindow.focus()
+    }
+  },
+  leaveImmediately: () => app.exit(0),
+  log: line => console.info(line),
+  onSecondInstance: handler => app.on('second-instance', handler),
+  requestLock: () => app.requestSingleInstanceLock(),
+})
+
+const isDevelopment = process.env.NODE_ENV !== 'production'
 
 async function bootstrap(): Promise<void> {
   await app.whenReady()
@@ -148,7 +168,9 @@ process.on('SIGTERM', () => {
   }
 })
 
-void bootstrap().catch((error) => {
-  console.error('[lia] the launcher failed to start:', error)
-  app.quit()
-})
+if (instanceRole === 'primary') {
+  void bootstrap().catch((error) => {
+    console.error('[lia] the launcher failed to start:', error)
+    app.quit()
+  })
+}

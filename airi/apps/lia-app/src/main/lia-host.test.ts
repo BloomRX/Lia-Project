@@ -180,23 +180,36 @@ describe('conversar() - the pipeline the CTA gates on', () => {
  * OWNS (stage, voice runtime), leaves adopted/external processes alone,
  * single-flights double quits, and refuses new conversations while closing.
  */
-describe('supervisor shutdown through the host (A/B/D/F)', () => {
+describe('supervisor shutdown through the host: corrected ownership (A/B/C/D/F)', () => {
+  /**
+   * Fake runtimes come in two ownership shapes:
+   * - `liaManaged: true` = a PROVEN lia-managed server is HELD - spawned
+   *   this session (ownedChildPid set) or recovered pre-existing (unset).
+   *   The `spawnedThisSession` knob exists to prove the coordinator reads
+   *   ownership, never origin: test B is the recovered shape.
+   * - `liaManaged: false` = external or unknown: never held, never stopped.
+   */
   async function hostWithFakes(options: {
-    adopted?: boolean
+    liaManaged?: boolean
     ownedStage?: boolean
     runtimeStop?: (() => Promise<void>) | undefined
+    spawnedThisSession?: boolean
   } = {}) {
     const calls: string[] = []
     const home = await makeLiaHome()
+    const managed = options.liaManaged ?? false
+    const spawned = options.spawnedThisSession ?? true
     const host = createLiaHost({
       cipher: identityCipher,
       env: fixtureEnv(home),
       runtimeManagerFactory: () => {
         const manager = {
+          hasManagedRuntime: () => managed,
           isInstalled: async () => true,
-          ownedChildPid: () => options.adopted ? undefined : 4412,
+          ownedChildPid: () => managed && spawned ? 4412 : undefined,
+          runtimeOwnership: () => managed ? 'lia-managed' as const : 'none' as const,
           start: async () => ({ phase: 'ready' as const }),
-          state: () => ({ phase: options.adopted ? 'adopted' as const : 'ready' as const }),
+          state: () => ({ phase: managed ? 'ready' as const : 'error' as const }),
           stop: options.runtimeStop ?? (async () => {
             calls.push('runtime-stop')
           }),
@@ -220,33 +233,43 @@ describe('supervisor shutdown through the host (A/B/D/F)', () => {
     return { calls, host }
   }
 
-  it('a. quitting with an owned stage stops the stage and reports it', async () => {
-    const { calls, host } = await hostWithFakes({ adopted: true, ownedStage: true })
+  it('a. quitting with a spawned stage stops the stage and reports it', async () => {
+    const { calls, host } = await hostWithFakes({ liaManaged: false, ownedStage: true })
     const report = await host.quit()
     expect(calls).toEqual(['stage-stop'])
     expect(report.steps.find(s => s.name === 'stage')?.outcome).toBe('stopped')
     expect(report.steps.find(s => s.name === 'voice-runtime')?.outcome).toBe('no-owned-process')
   })
 
-  it('b. quitting with an owned voice runtime stops it - after the stage', async () => {
-    const { calls, host } = await hostWithFakes({ ownedStage: true })
+  it('b. a RECOVERED lia-managed runtime - NOT spawned this session - IS stopped on quit, after the stage', async () => {
+    // The corrected ownership rule and the mutation killer in one: below,
+    // ownedChildPid() is UNDEFINED (the server predates this session), yet
+    // ownership is proven lia-managed, so the coordinator MUST stop it.
+    // Any regression to "decide by ownedChildPid alone" or to
+    // "adopted => preserve" flips this step to no-owned-process and the
+    // recovered Lia server leaks past the launcher close.
+    const { calls, host } = await hostWithFakes({
+      liaManaged: true,
+      ownedStage: true,
+      spawnedThisSession: false,
+    })
     const report = await host.quit()
     expect(calls).toEqual(['stage-stop', 'runtime-stop'])
     expect(report.steps.map(s => s.outcome)).toEqual(['stopped', 'stopped'])
   })
 
-  it('d. an adopted voice runtime is never stopped on quit', async () => {
+  it('c. external / unknown holders are never stopped on quit', async () => {
     const runtimeStop = async () => {
       throw new Error('must never be called')
     }
-    const { calls, host } = await hostWithFakes({ adopted: true, ownedStage: true, runtimeStop })
+    const { calls, host } = await hostWithFakes({ liaManaged: false, ownedStage: true, runtimeStop })
     const report = await host.quit()
     expect(calls).toEqual(['stage-stop'])
     expect(report.steps.find(s => s.name === 'voice-runtime')?.outcome).toBe('no-owned-process')
   })
 
   it('f. two quits share one teardown (single-flight)', async () => {
-    const { calls, host } = await hostWithFakes({ ownedStage: true })
+    const { calls, host } = await hostWithFakes({ liaManaged: true, ownedStage: true })
     const [first, second] = await Promise.all([host.quit(), host.quit()])
     // Each owned target stopped EXACTLY once - no doubled kill, in order.
     expect(calls).toEqual(['stage-stop', 'runtime-stop'])
