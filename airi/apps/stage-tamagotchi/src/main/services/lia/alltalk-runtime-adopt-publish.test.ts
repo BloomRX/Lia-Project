@@ -84,6 +84,20 @@ vi.mock('./alltalk-port-diagnostics', async (importOriginal) => {
       parentPid: 9001,
       pid: 9002,
     }],
+    inspectProcess: async (_deps: unknown, pid: number) => pid === 9001
+      ? {
+          kind: 'record' as const,
+          record: {
+            created: '20260915130000.000000+000',
+            cmdline: 'cmd.exe /d /s /c start_alltalk.bat',
+            exe: 'C:\\Windows\\System32\\cmd.exe',
+            parentPid: 555,
+            pid: 9001,
+          },
+        }
+      : pid === 555
+        ? { kind: 'record' as const, record: { created: '20260915080000.000000+000', exe: 'C:\\Windows\\explorer.exe', pid: 555 } }
+        : { kind: 'gone' as const },
     inspectProcessRecord: async (_deps: unknown, pid: number) => pid === 9001
       ? {
           created: '20260915130000.000000+000',

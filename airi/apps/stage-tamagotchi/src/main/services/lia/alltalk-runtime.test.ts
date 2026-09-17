@@ -106,6 +106,8 @@ function managerFor(
     spawnImpl: spawned as never,
     startTimeoutMs: 40,
     stopGraceMs: 30,
+    verifyGraceMs: 1,
+    verifyRounds: 2,
     ...deps,
   })
   return { child, manager, spawned }
@@ -134,13 +136,26 @@ function liaTreeRecords(dir: string): Array<{ created: string, cmdline: string, 
   }]
 }
 
-/** The ancestry lookup the walk asks about, for the QA tree. */
+/**
+ * The ancestry lookup the walk asks about, for the QA tree - in the round-7
+ * tri-state shape: a readable answer is a record; absence is 'gone'; noise
+ * is 'unreadable' (which a lie may never hide behind).
+ */
+function boxedRecords<T extends { pid: number }>(records: Map<number, T>) {
+  return async (pid: number) => {
+    const record = records.get(pid)
+    return record === undefined
+      ? { kind: 'gone' as const }
+      : { kind: 'record' as const, record }
+  }
+}
+
 function liaTreeInspect(_dir: string) {
   const records = new Map<number, { created: string, cmdline?: string, exe: string, parentPid?: number, pid: number }>([
     [QA_LAUNCHER_PID, { cmdline: QA_LAUNCHER_CMDLINE, created: QA_CREATED, exe: QA_LAUNCHER_EXE, parentPid: 555, pid: QA_LAUNCHER_PID }],
     [555, { created: '20260915080000.000000+000', exe: 'C:\\Windows\\explorer.exe', pid: 555 }],
   ])
-  return async (pid: number) => records.get(pid)
+  return boxedRecords(records)
 }
 
 /** The attachable state the QA boot produces, for terse assertions. */
@@ -530,15 +545,14 @@ describe('adoption (single instance, brief A/B)', () => {
     // cannot apply. The flag flips the moment adoption lands, so the adopt
     // itself sees the tree as it was.
     let recycled = false
-    const inspect = async (pid: number) => {
-      const record = await liaTreeInspect(dir)(pid)
-      if (recycled && record && pid === QA_LAUNCHER_PID)
-        return { ...record, created: '20260915210000.000000+000' }
-      return record
-    }
     const { manager } = managerFor({
       execImpl: taskkill,
-      inspectProcess: async pid => (await inspect(pid)),
+      inspectProcess: async (pid: number) => {
+        const looked = await liaTreeInspect(dir)(pid)
+        if (recycled && looked.kind === 'record' && pid === QA_LAUNCHER_PID)
+          return { kind: 'record' as const, record: { ...looked.record, created: '20260915210000.000000+000' } }
+        return looked
+      },
       installDir: dir,
       isHealthy: async () => true,
       onEvent: (event, detail) => rec.push(detail ? `${event} ${detail}` : event),
@@ -550,7 +564,7 @@ describe('adoption (single instance, brief A/B)', () => {
     await manager.stop()
 
     expect(taskkill).not.toHaveBeenCalled()
-    expect(rec).toContain('runtime.rootpid-not-revalidated rootPid=9001')
+    expect(rec).toContain('runtime.root-revalidate-rejected pid=9001 reason=created-mismatch')
   })
 
   it('a stranger on the port: friendly error, nothing spawned, nothing killed (L-5)', async () => {
@@ -805,9 +819,12 @@ describe('the round-6 ownership verdicts (items A-H, cases 3/4/5/7/8/9)', () => 
       // ancestry that breaks the proof (a dead parent would say nothing, an
       // unrelated live one says everything).
       inspectProcess: async () => ({
-        created: QA_CREATED,
-        exe: 'C:\\Program Files\\Google\\Chrome\\chrome.exe',
-        pid: 777,
+        kind: 'record' as const,
+        record: {
+          created: QA_CREATED,
+          exe: 'C:\\Program Files\\Google\\Chrome\\chrome.exe',
+          pid: 777,
+        },
       }),
       installDir: dir,
       isHealthy: async () => true,
@@ -871,8 +888,8 @@ describe('the round-6 ownership verdicts (items A-H, cases 3/4/5/7/8/9)', () => 
       // Nothing UP the chain exists anymore - but the listener itself is
       // alive and answers identity checks (that's who stop() revalidates).
       inspectProcess: async (pid: number) => pid === QA_LISTENER_PID
-        ? orphanRoots[0]
-        : undefined,
+        ? { kind: 'record' as const, record: orphanRoots[0] }
+        : { kind: 'gone' as const },
       installDir: dir,
       isHealthy: async () => true,
       onEvent: rec.onEvent,
@@ -968,6 +985,202 @@ describe('the round-6 ownership verdicts (items A-H, cases 3/4/5/7/8/9)', () => 
     ])
 
     expect(taskkill).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('the round-7 QA failures, reproduced as fixtures (items K, D, B)', () => {
+  function recorder() {
+    const lines: Array<string> = []
+    return {
+      lines,
+      onEvent: (event: string, detail?: string) => lines.push(detail ? `${event} ${detail}` : event),
+    }
+  }
+
+  it('eV1 verbatim: taskkill exit=0 kills the root wrapper but NOT the tree - the stop hunts survivors by PROOF (mutation: kill assumed by exit code)', async () => {
+    // The exact QA tree: spawned cmd 22472 -> python 13900 (7852) ->
+    // python 14148 (7851). taskkill "succeeds" on 22472; the pythons keep
+    // listening. pre-7 code logged kill-tree + stopped and quit with the
+    // port occupied. The new contract: one kill is never the fact - the
+    // port answers for the tree, and only then does the state flip.
+    const rec = recorder()
+    const dir = await installedDir()
+    const killed: string[][] = []
+    // Fixture physics of the QA machine: the spawn tree ALIVE holds the
+    // ports; killing the cmd wrapper leaves the pythons alive (exit 0 and
+    // all), and only the taskkill that reaches THEIR root 13900 silences
+    // 7852/7851. The fake child's own SIGTERM stubbornly leaves exitCode
+    // null (obedient:false), so the wrapper escalation always runs.
+    let treeAlive = false
+    const { manager } = managerFor({
+      execImpl: async (_command: string, args: string[], _options: { timeoutMs: number }) => {
+        killed.push(args)
+        if (args.includes(String(13900)))
+          treeAlive = false // killing the python root kills its worker too
+        // Killing 4242 (the wrapper) changes NOTHING about the tree:
+        // the EV1 fact in one line.
+        return { code: 0 }
+      },
+      inspectProcess: async (pid: number) => {
+        if (!treeAlive)
+          return { kind: 'gone' as const }
+        if (pid === 13900)
+          return { kind: 'record' as const, record: { created: QA_CREATED, exe: `${dir}/venv/python.exe`, parentPid: 4242, pid: 13900 } }
+        if (pid === 4242)
+          // The wrapper died on the way down; ancestry above the python
+          // survivor is absent, never disqualifying.
+          return { kind: 'gone' as const }
+        return { kind: 'record' as const, record: { created: QA_CREATED, exe: `${dir}/venv/python.exe`, parentPid: 13900, pid } }
+      },
+      installDir: dir,
+      obedient: false,
+      // The tree exists once the spawn EXISTS - 'runtime.spawned' is the
+      // fixture's ignition: before it, ports are free (a clean first boot),
+      // after it, the python pair owns them until 13900 itself takes a
+      // taskkill.
+      onEvent: (event, detail) => {
+        if (event === 'runtime.spawned')
+          treeAlive = true
+        rec.onEvent(event, detail)
+      },
+      portOwnerDiagnostics: async () => !treeAlive
+        ? []
+        : [
+            { created: QA_CREATED, exe: `${dir}/venv/python.exe`, parentPid: 4242, pid: 13900 },
+            { created: QA_CREATED, exe: `${dir}/venv/python.exe`, parentPid: 13900, pid: 14148 },
+          ],
+      probeOccupied: async () => (treeAlive ? 'occupied' : 'free'),
+      spawnFlow: true,
+    })
+
+    await manager.start()
+
+    await manager.stop({ confirmFreeMs: 50 })
+
+    // Two kill sessions, ordered: the wrapper sweep, then the proven
+    // survivor root - and 'stopped' only after the port went quiet.
+    const orders = killed.map(args => Number.parseInt(args[1], 10))
+    expect(orders).toEqual([4242, 13900])
+    expect(rec.lines.some(line => line.startsWith('runtime.kill-tree-start pid='))).toBe(true)
+    expect(rec.lines).toContain('runtime.process-tree-terminated rootPid=13900')
+    expect(rec.lines).toContain('runtime.shutdown-ports-free')
+    const killedIdx = rec.lines.indexOf('runtime.process-tree-terminated rootPid=13900')
+    const stoppedIdx = rec.lines.indexOf('runtime.stopped')
+    expect(killedIdx).toBeGreaterThanOrEqual(0)
+    expect(stoppedIdx).toBeGreaterThan(killedIdx)
+    expect(manager.state()).toEqual({ phase: 'stopped' })
+
+    // THE mutation guard the brief demands: comment away the verify sweep
+    // and this test dies, because the wrapper kill alone NEVER reaches 13900.
+    expect(killed.filter(args => args.includes('13900'))).toHaveLength(1)
+  })
+
+  it('revalidation rejected + port still occupied: ERROR, never stopped, with the named reason', async () => {
+    // The round-7 silent-skip scenario, reconstructed for keeps: the root's
+    // ticks moved (PID recycled) AND the port never quiets. Old code: event
+    // already sounded 'stopped'. Contract: rejected kill + occupied port =
+    // error, stop-incomplete, and the reason is in the log.
+    const rec = recorder()
+    const dir = await installedDir()
+    const taskkill = vi.fn(async (_command: string, _args: string[], _options: { timeoutMs: number }) => ({ code: 0 }))
+    const { manager } = managerFor({
+      execImpl: taskkill,
+      inspectProcess: async (pid: number) => {
+        if (pid === QA_LAUNCHER_PID) {
+          return {
+            kind: 'record' as const,
+            record: {
+              cmdline: QA_LAUNCHER_CMDLINE,
+              created: '20260915210000.000000+000', // NOT the recorded creation
+              exe: QA_LAUNCHER_EXE,
+              pid: QA_LAUNCHER_PID,
+            },
+          }
+        }
+        const looked = await liaTreeInspect(dir)(pid)
+        return looked
+      },
+      installDir: dir,
+      isHealthy: async () => true,
+      onEvent: rec.onEvent,
+      portOwnerDiagnostics: async () => liaTreeRecords(dir),
+      probeOccupied: async () => 'occupied', // the lie: whatever holds it, it is not free
+    })
+    // Adoption happens ONLY with the pre-recycle identity: gather-time
+    // inspect answers the original created; the kill-time re-check answers
+    // the recycled one - the fixture's two phases in one closure.
+    const originalCreated = QA_CREATED
+    const states: string[] = []
+    const inspectProxy = async (pid: number) => {
+      const looked = await liaTreeInspect(dir)(pid)
+      if (states.includes('adopted') && looked.kind === 'record')
+        return { kind: 'record' as const, record: { ...looked.record, created: '20260915210000.000000+000' } }
+      return looked
+    }
+    const { manager: proxied } = managerFor({
+      execImpl: taskkill,
+      inspectProcess: inspectProxy,
+      installDir: dir,
+      isHealthy: async () => true,
+      onEvent: rec.onEvent,
+      portOwnerDiagnostics: async () => liaTreeRecords(dir),
+      probeOccupied: async () => 'occupied',
+    })
+
+    const adopted = await proxied.start()
+    expect(adopted.phase).toBe('ready')
+    states.push('adopted')
+    expect(originalCreated).toBe(QA_CREATED)
+    void manager
+
+    await proxied.stop({ confirmFreeMs: 20 })
+
+    // Round 1 vetoes the kill on the identity we recorded (`created`
+    // moved). The fallback sweep may kill a re-proven identical-instant
+    // root - proof always travels with the kill, and OUR tree is still ours
+    // - but the port QUIT never happens in this fixture, so the state can
+    // only end 'error', with the reason in the log. Never 'stopped'.
+    expect(rec.lines).toContain('runtime.root-revalidate-rejected pid=9001 reason=created-mismatch')
+    expect(taskkill.mock.calls.length).toBeLessThanOrEqual(1)
+    expect(rec.lines.some(line => line.startsWith('runtime.stop-incomplete'))).toBe(true)
+    expect(proxied.state().phase).toBe('error')
+    expect(proxied.state()).not.toEqual(expect.objectContaining({ phase: 'stopped' }))
+  })
+
+  it('an unreadable re-check is NOT death: the kill still fires, and the port answers the truth after (item B)', async () => {
+    // The suspected QA skip, inverted: revalidation comes back 'unreadable'
+    // (PowerShell had a bad day) - the round-7 rule says kill anyway and let
+    // the port judge. Old code would have skipped as 'already gone'.
+    const rec = recorder()
+    const dir = await installedDir()
+    const taskkill = vi.fn(async (_command: string, _args: string[], _options: { timeoutMs: number }) => ({ code: 0 }))
+    let killTimeInspection = false
+    let portsHeld = true
+    const { manager } = managerFor({
+      execImpl: async (command: string, args: string[], options: { timeoutMs: number }) => {
+        portsHeld = false // a successful tree kill actually quiets the ports
+        return (await taskkill(command, args, options))
+      },
+      inspectProcess: async (pid: number) => {
+        if (killTimeInspection)
+          return { kind: 'unreadable' as const }
+        return await liaTreeInspect(dir)(pid)
+      },
+      installDir: dir,
+      isHealthy: async () => true,
+      onEvent: rec.onEvent,
+      portOwnerDiagnostics: async () => liaTreeRecords(dir),
+      probeOccupied: async () => (portsHeld ? 'occupied' : 'free'),
+    })
+
+    await manager.start()
+    killTimeInspection = true
+    await manager.stop({ confirmFreeMs: 20 })
+
+    expect(rec.lines).toContain('runtime.root-revalidate-inconclusive pid=9001')
+    expect(taskkill).toHaveBeenCalledTimes(1)
+    expect(rec.lines).toContain('runtime.process-tree-terminated rootPid=9001')
+    expect(manager.state()).toEqual({ phase: 'stopped' })
   })
 })
 

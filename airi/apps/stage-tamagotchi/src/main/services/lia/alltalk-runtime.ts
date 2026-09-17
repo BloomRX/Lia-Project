@@ -1,7 +1,7 @@
 import type { Buffer } from 'node:buffer'
 import type { ChildProcess, SpawnOptions } from 'node:child_process'
 
-import type { PortOwnerRecord } from './alltalk-port-diagnostics'
+import type { PortOwnerRecord, ProcessInspection } from './alltalk-port-diagnostics'
 
 import process from 'node:process'
 
@@ -73,6 +73,8 @@ export const DEFAULT_START_TIMEOUT_MS = 180_000
 export interface ProvenProcessRoot {
   pid: number
   created?: string
+  /** Creation ticks (Int64 as string) - the canonical kill-revalidation key. */
+  createdTicks?: string
   exe?: string
 }
 
@@ -99,7 +101,14 @@ export interface RuntimeAttachment {
 }
 
 export interface RuntimeStateSnapshot {
-  phase: 'error' | 'notInstalled' | 'ready' | 'starting' | 'stopped'
+  /**
+   * `stopping` is the round-7 truth phase (item A/J): it exists only while
+   * kill work is in flight, so the snapshot can never read 'stopped' while a
+   * Lia tree still holds the port. `stopped` now means "termination
+   * attempted, observed, and the ports confirmed free" - an `error` where
+   * that proof failed.
+   */
+  phase: 'error' | 'notInstalled' | 'ready' | 'starting' | 'stopped' | 'stopping'
   /** Only set when `phase` is `error`. A short sentence, never a stack trace. */
   message?: string
   /** Process id of the managed child, when we started one. */
@@ -178,13 +187,25 @@ export interface RuntimeManagerDeps {
   /** Bound on the diagnostics above, so a slow PowerShell cannot stall a start. */
   portOwnerDiagnosticsTimeoutMs?: number
   /**
-   * One-process lookup for the ancestry walk (round-6 item D): the port
-   * diagnostics read the LISTENER; rebuilding the validated tree root means
-   * asking about each parent up the chain. Wired to `inspectProcessRecord`
-   * in production; absent in tests the classification cannot prove anything
-   * and falls back to `unknown` - which is the safe verdict by design.
+   * One-process lookup for the ancestry walk AND kill revalidation (round-6
+   * item D; round-7 item B): the port diagnostics read the LISTENER;
+   * rebuilding the validated tree root means asking about each parent up the
+   * chain, and proving a root still IS the process we recorded means asking
+   * about it once more before any taskkill. Tri-state by contract: 'gone'
+   * requires the query to have RAN and found nothing; a failed query is
+   * 'unreadable' and is NOT evidence of absence.
+   * Wired to `inspectProcess` in production; absent in tests the
+   * classification cannot prove anything and falls back to `unknown` - which
+   * is the safe verdict by design.
    */
-  inspectProcess?: (pid: number) => Promise<PortOwnerRecord | undefined>
+  inspectProcess?: (pid: number) => Promise<ProcessInspection>
+  /**
+   * Grace between a tree kill and the survivor probe, and the bound on
+   * fallback rounds (round 7, item F). Defaults are Windows-shaped; tests
+   * shrink them to nothing.
+   */
+  verifyGraceMs?: number
+  verifyRounds?: number
   /** How long to wait for SIGTERM before escalating. Bounded, so app quit cannot hang. */
   stopGraceMs?: number
   /** Receives stdout/stderr lines. Diagnostics only; never surfaced raw. */
@@ -365,6 +386,8 @@ export function createRuntimeManager(deps: RuntimeManagerDeps): RuntimeManager {
   let child: ChildProcess | undefined
   /** Guards against two concurrent starts racing into two children. */
   let starting: Promise<RuntimeStateSnapshot> | undefined
+  /** Round-7: concurrent stops converge into exactly ONE kill-and-verify run. */
+  let stopping: Promise<void> | undefined
   /** Lifecycle contract, clause 1: no new starts once the app begins to die. */
   let shuttingDown = false
 
@@ -454,11 +477,17 @@ export function createRuntimeManager(deps: RuntimeManagerDeps): RuntimeManager {
           // is unknown, not wishful management.
           return { kind: 'unknown' }
         }
-        const parent = await deps.inspectProcess(root.parentPid)
-        if (parent === undefined) {
-          // Parent gone or unreadable: orphan shapes are the recovery case.
+        const looked = await deps.inspectProcess(root.parentPid)
+        if (looked.kind === 'unreadable') {
+          // The query itself failed: NOISE about the parent is not proof in
+          // either direction (item B: a broken inspection is not death).
+          return { kind: 'unknown' }
+        }
+        if (looked.kind === 'gone') {
+          // Parent provably gone: orphan shapes are the recovery case.
           break
         }
+        const parent = looked.record
         if (accepted(parent)) {
           root = parent
           continue
@@ -472,30 +501,55 @@ export function createRuntimeManager(deps: RuntimeManagerDeps): RuntimeManager {
         return { kind: 'unknown' }
       }
       if (!roots.some(r => r.pid === root.pid))
-        roots.push({ created: root.created, exe: root.exe, pid: root.pid })
+        roots.push({ created: root.created, createdTicks: root.createdTicks, exe: root.exe, pid: root.pid })
     }
     return { kind: 'lia-managed', roots }
   }
 
-  /** The Windows-only tree kill of ONE proven root, with the event trail the QA timeline reads. */
+  /**
+   * The Windows-only tree kill of ONE proven root, with named revalidation
+   * (round 7, items B/C). Identity = the canonical ticks when BOTH sides
+   * have them, the localized string only as documented last resort, and the
+   * executable path in every story. And the round-7 correction of the skip
+   * the QA caught silently: an unreadable re-check is NOT death - the kill
+   * proceeds (the pid is our PROVEN root; the truth comes from the port
+   * verify after), while only a query that *ran and found nothing* may
+   * skip it as genuinely gone.
+   */
   async function killLiaRootTree(root: ProvenProcessRoot, context: { revalidate: boolean }): Promise<void> {
     if (context.revalidate && deps.inspectProcess) {
+      emit('runtime.root-revalidate-start', `pid=${root.pid}`)
       const fresh = await deps.inspectProcess(root.pid)
-      if (fresh === undefined) {
-        emit('runtime.process-tree-already-gone', `rootPid=${root.pid}`)
+      if (fresh.kind === 'gone') {
+        emit('runtime.root-revalidate-rejected', `pid=${root.pid} reason=process-gone`)
         return
       }
-      const sameIdentity
-        = (root.created === undefined || fresh.created === root.created)
-          && (root.exe === undefined || fresh.exe === root.exe)
-      if (!sameIdentity) {
-        // The PID got recycled: whatever lives there now never shook our hand.
-        emit('runtime.rootpid-not-revalidated', `rootPid=${root.pid}`)
-        return
+      if (fresh.kind === 'record') {
+        const identityBreaking
+          = (root.exe !== undefined && fresh.record.exe !== root.exe)
+            ? 'exe-mismatch'
+            : (root.createdTicks !== undefined && fresh.record.createdTicks !== undefined && fresh.record.createdTicks !== root.createdTicks)
+                ? 'created-mismatch'
+                : (root.createdTicks === undefined && fresh.record.createdTicks === undefined
+                  && root.created !== undefined && fresh.record.created !== root.created)
+                    ? 'created-mismatch'
+                    : undefined
+        if (identityBreaking !== undefined) {
+          // The PID got recycled: whatever lives there now never shook our hand.
+          emit('runtime.root-revalidate-rejected', `pid=${root.pid} reason=${identityBreaking}`)
+          return
+        }
+        emit('runtime.root-revalidate-ok', `pid=${root.pid}`)
+      }
+      else {
+        // 'unreadable': verification could not speak - never pretended to be
+        // death. The kill still fires and the port check below judges.
+        emit('runtime.root-revalidate-inconclusive', `pid=${root.pid}`)
       }
     }
-    await killProcessTree(root.pid)
-    emit('runtime.process-tree-terminated', `rootPid=${root.pid}`)
+    const reported = await killProcessTree(root.pid)
+    if (reported)
+      emit('runtime.process-tree-terminated', `rootPid=${root.pid}`)
   }
 
   function set(next: RuntimeStateSnapshot): RuntimeStateSnapshot {
@@ -535,21 +589,97 @@ export function createRuntimeManager(deps: RuntimeManagerDeps): RuntimeManager {
     }
   }
 
-  async function killProcessTree(pid: number): Promise<void> {
+  /**
+   * The observed tree kill (round 7, item D). Exit code is FACT, not noise:
+   * `taskkill` returning non-zero - notoriously "process not found" when the
+   * root died before the tree walk could start - used to be swallowed into a
+   * pretend success, and the children below the dead root outlived their
+   * very kill event. Now the caller learns the truth: true means taskkill
+   * REPORTED the kill; whether the tree actually died is still only known by
+   * probing the ports after (item E), which the verify loop does.
+   */
+  async function killProcessTree(pid: number): Promise<boolean> {
     if (platform !== 'win32' || !deps.execImpl)
-      return
+      return false
     // Fixed arguments, no shell, Lia-owned root PID only (item K).
     const args = taskkillArgs(pid)
-    emit('runtime.kill-tree', `pid=${pid}`)
+    emit('runtime.kill-tree-start', `pid=${pid}`)
     try {
-      await deps.execImpl('taskkill', args, { timeoutMs: stopGraceMs })
+      const result = await deps.execImpl('taskkill', args, { timeoutMs: stopGraceMs })
+      emit('runtime.kill-tree-finished', `pid=${pid} exit=${String(result.code)}`)
+      if (result.code !== 0) {
+        // Never a success: the PID may already be dead (fine for the root,
+        // fatal for its tree), or the kill itself failed. The caller's
+        // survivor probe is the judge.
+        emit('runtime.kill-tree-failed', `pid=${pid} exit=${String(result.code)}`)
+        return false
+      }
+      return true
     }
     catch {
-      // The tree may already be gone; a kill that finds nothing is not a failure.
+      emit('runtime.kill-tree-failed', `pid=${pid} reason=exec-error`)
+      return false
     }
   }
 
-  async function stop(options: RuntimeStopOptions = {}): Promise<void> {
+  /** Delay helper: a pause that never pins the event loop. */
+  async function grace(ms: number): Promise<void> {
+    if (ms <= 0)
+      return
+    await new Promise<void>((resolve) => {
+      const timer = setTimeout(resolve, ms)
+      timer.unref?.()
+    })
+  }
+
+  /**
+   * Round 7, items D-F, the engine of the new stop: kill the proven roots,
+   * then prove the ports. Survivors are re-diagnosed and re-verified, and
+   * only PROVEN lia-managed survivors are killed again; anything foreign or
+   * unproven ends the attempt with an error, never with a kill.
+   *
+   * Returns true only when the ports answer free afterwards. `roots` may
+   * carry the spawned child's wrapper PID, which taskkill can refuse while
+   * the python it raised is very much alive - the EV1 shape exactly.
+   */
+  async function killAndVerify(roots: ProvenProcessRoot[]): Promise<boolean> {
+    const rounds = deps.verifyRounds ?? 3
+    const graceMs = deps.verifyGraceMs ?? 1500
+    let survivors = [...roots]
+    for (let round = 1; round <= rounds; round++) {
+      for (const root of survivors)
+        await killLiaRootTree(root, { revalidate: true })
+
+      await grace(graceMs)
+      const occupancy = await occupancySafe()
+      emit('runtime.kill-verify', `round=${round} occupancy=${occupancy}`)
+      if (occupancy === 'free')
+        return true
+
+      // Who survived? Only a rerun of the evidence can say.
+      const records = await runPortDiagnostics('occupied')
+      if (records === undefined || records.length === 0) {
+        // The probe sees occupied but the census sees nobody - a lie
+        // detection failure, not a port we may kill for.
+        emit('runtime.kill-verify-inconclusive', `round=${round}`)
+        return false
+      }
+      const verdict = await classifyOwners(records)
+      if (verdict.kind !== 'lia-managed') {
+        // The survivor is NOT our tree (external survives, unknown survives):
+        // killing here would be the very murder the whole model exists to
+        // prevent. Report, and let the caller mark the stop as failed.
+        emit('runtime.shutdown-survivor-not-lia-managed', `classification=${verdict.kind} round=${round}`)
+        return false
+      }
+      survivors = verdict.roots
+      emit('runtime.kill-verify-survivors', `round=${round} survivors=${survivors.map(r => r.pid).join(',')}`)
+    }
+    emit('runtime.kill-verify-exhausted', `rounds=${rounds}`)
+    return false
+  }
+
+  async function doStop(options: RuntimeStopOptions): Promise<void> {
     const current = child
     child = undefined
     if (starting)
@@ -561,16 +691,22 @@ export function createRuntimeManager(deps: RuntimeManagerDeps): RuntimeManager {
     // the unproven was never adopted (external/unknown are port conflicts,
     // never attachments, and never killed here either).
     if (!current && snapshot.attachment?.kind === 'lia-managed') {
-      // Ownership handoff first, kill second (the spawned-child path already
-      // works this way via `child = undefined` above): two concurrent stops
-      // must kill the tree EXACTLY once, so the attachment is detached from
-      // the snapshot before the first await of the kill loop.
       const attachment = snapshot.attachment
-      set({ phase: 'stopped' })
+      // Item A, the rule this round exists for: 'stopped' is a FACT, not an
+      // intention. The snapshot reads 'stopping' for the whole kill+verify,
+      // and flips to 'stopped' only when the ports prove the tree is gone -
+      // or to 'error' with the reason when they do not.
+      set({ phase: 'stopping' })
       emit('runtime.stopping-lia-managed-existing', `rootPid=${attachment.roots.map(r => r.pid).join(',')}`)
-      for (const root of attachment.roots)
-        await killLiaRootTree(root, { revalidate: true })
-      emit('runtime.stopped')
+      const finished = await killAndVerify(attachment.roots)
+      if (finished) {
+        set({ phase: 'stopped' })
+        emit('runtime.stopped')
+      }
+      else {
+        set({ message: 'The voice system could not be fully stopped.', phase: 'error' })
+        emit('runtime.stop-incomplete', 'reason=ports-still-occupied-after-kill')
+      }
       await confirmPortsFree(options.confirmFreeMs ?? 0)
       return
     }
@@ -578,9 +714,13 @@ export function createRuntimeManager(deps: RuntimeManagerDeps): RuntimeManager {
     if (!current || current.exitCode !== null) {
     // Nothing to kill. A previous failure is kept so the UI still explains
     // why the voice is unavailable instead of silently reading "stopped".
-      set(snapshot.phase === 'error' ? snapshot : { phase: 'stopped' })
+      if (snapshot.phase !== 'error' && snapshot.phase !== 'stopping' && snapshot.phase !== 'stopped')
+        set({ phase: 'stopped' })
       return
     }
+
+    const pid = current.pid
+    set({ phase: 'stopping' })
 
     const exited = new Promise<void>((resolve) => {
       current.once('exit', () => resolve())
@@ -595,8 +735,8 @@ export function createRuntimeManager(deps: RuntimeManagerDeps): RuntimeManager {
     // Did not take the hint: make sure it cannot outlive us.
     // On Windows the bat wrapper dies alone and orphans its python worker, so
     // the escalation there is the process-tree kill first.
-      if (platform === 'win32' && current.pid !== undefined) {
-        await killProcessTree(current.pid)
+      if (platform === 'win32' && pid !== undefined) {
+        await killLiaRootTree({ pid }, { revalidate: false })
         await new Promise<void>((resolve) => {
           current.once('exit', () => resolve())
           setTimeout(resolve, stopGraceMs).unref?.()
@@ -606,10 +746,55 @@ export function createRuntimeManager(deps: RuntimeManagerDeps): RuntimeManager {
         current.kill('SIGKILL')
     }
 
+    // Item E, the axiom the QA forced us to accept: a root kill - even a
+    // reported one - proves nothing about the tree. The ports alone answer
+    // for it, and survivors get one verified fallback sweep before the stop
+    // is allowed to claim 'stopped'.
+    if (platform === 'win32') {
+      await grace(deps.verifyGraceMs ?? 1500)
+      const occupancy = await occupancySafe()
+      emit('runtime.kill-verify', `round=kill occupancy=${occupancy}`)
+      if (occupancy !== 'free') {
+        const records = await runPortDiagnostics('occupied')
+        const verdict = records !== undefined && records.length > 0 ? await classifyOwners(records) : { kind: 'unknown' as const }
+        if (verdict.kind === 'lia-managed') {
+          const finished = await killAndVerify(verdict.roots)
+          if (!finished) {
+            set({ message: 'The voice system could not be fully stopped.', phase: 'error' })
+            emit('runtime.stop-incomplete', 'reason=ports-still-occupied-after-kill')
+            await confirmPortsFree(options.confirmFreeMs ?? 0)
+            return
+          }
+        }
+        else {
+          if (verdict.kind === 'unknown')
+            emit('runtime.kill-verify-inconclusive', 'round=kill')
+          else
+            emit('runtime.shutdown-survivor-not-lia-managed', `classification=${verdict.kind}`)
+          set({ message: 'The voice system could not prove its port is free.', phase: 'error' })
+          emit('runtime.stop-incomplete', 'reason=survivor-unverified')
+          await confirmPortsFree(options.confirmFreeMs ?? 0)
+          return
+        }
+      }
+    }
+
     set({ phase: 'stopped' })
     emit('runtime.stopped')
 
     await confirmPortsFree(options.confirmFreeMs ?? 0)
+  }
+
+  function stop(options: RuntimeStopOptions = {}): Promise<void> {
+    // Round-7 single-flight: concurrent stops converge into ONE kill-and-
+    // verify run. The snapshot meanwhile reads 'stopping' - never 'stopped'
+    // ahead of the proof (item A).
+    if (!stopping) {
+      stopping = doStop(options).finally(() => {
+        stopping = undefined
+      })
+    }
+    return stopping
   }
 
   /**

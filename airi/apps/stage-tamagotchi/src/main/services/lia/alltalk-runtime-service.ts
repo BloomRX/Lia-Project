@@ -22,7 +22,7 @@ import {
 import { CUSTOM_VOICE_PROVIDER_ID } from '../../../shared/lia-voice'
 import { defaultLiaProductConfig } from '../../configs/lia-schema'
 import { createAllTalkClient } from './alltalk-client'
-import { gatherPortOwners, inspectProcessRecord } from './alltalk-port-diagnostics'
+import { gatherPortOwners, inspectProcess } from './alltalk-port-diagnostics'
 import { loopbackHostFor, probeTcpListeners } from './alltalk-port-listeners'
 import { createRuntimeManager, taskkillArgs } from './alltalk-runtime'
 import { mergeAllTalkRuntime, resolveAllTalkRuntime } from './alltalk-runtime-config'
@@ -92,6 +92,10 @@ function toRendererState(phase: string, message?: string): LiaRuntimeState {
       return { state: 'ready' }
     case 'starting':
       return { state: 'starting' }
+    // 'stopping' maps onto 'stopped' deliberately: the shared contract stays
+    // a 5-state vocabulary (item J allows the internal phase without contract
+    // change), and the quit path showing one extra beat of 'stopped' changes
+    // nothing a user can observe behind a closing window.
     default:
       return { state: 'stopped' }
   }
@@ -275,11 +279,12 @@ export function registerLiaRuntimeBridge(params: {
           ports: runtimePorts(readRuntime().baseUrl),
         })
       },
-      // The ancestry walk's one-process lookup (round-6 item D): validated
-      // roots are reconstructed from listener PID + parents, never trusted
-      // from the listener alone.
+      // The ancestry walk's one-process lookup (round-6 item D; round-7
+      // item B): validated roots are reconstructed from listener PID +
+      // parents, and re-checked before any kill - tri-state so a failed
+      // query is never pretended to be death.
       inspectProcess: async pid =>
-        await inspectProcessRecord({ exec: execCapture, platform: process.platform }, pid),
+        await inspectProcess({ exec: execCapture, platform: process.platform }, pid),
     })
     cached = { dir: installDir, manager: built }
     return built

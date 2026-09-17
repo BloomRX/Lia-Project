@@ -52,8 +52,14 @@ export interface PortOwnerRecord {
   exe?: string
   cmdline?: string
   parentPid?: number
-  /** CreationDate as the OS reports it (locale-free CIM string when possible). */
+  /** CreationDate as the OS reports it (localized - a display string, never an identity). */
   created?: string
+  /**
+   * `CreationDate.Ticks` as a STRING: an Int64, canonical across locales -
+   * this is the value kill-revalidation compares (round 7, item C). A JS
+   * number cannot hold an Int64 past 2^53, which Date.UTC(2026) ticks exceed.
+   */
+  createdTicks?: string
   /**
    * True when the executable lives under the Lia runtime install root. Filled
    * by `gatherPortOwners`; absent (false) for records `inspectProcessRecord`
@@ -117,14 +123,25 @@ export function isBenignAncestor(record: { exe?: string }): boolean {
   return record.exe === undefined || BENIGN_HOST_NAMES.includes(exeBasename(record.exe))
 }
 
-/** One Win32_Process lookup, non-throwing; undefined when the pid is unreadable or gone. */
-export async function inspectProcessRecord(
+/**
+ * Round 7, item B: a process lookup has THREE answers, and treating two of
+ * them as one produced the silent skip the QA logged: "the old launcher is
+ * gone" is only true when the query RAN and answered nothing. A failed query
+ * (PowerShell broke, non-zero exit, timeout) is NOT evidence of absence -
+ * build no decision on it; the caller must choose its safe side explicitly.
+ */
+export type ProcessInspection
+  = | { kind: 'record', record: PortOwnerRecord }
+    | { kind: 'gone' }
+    | { kind: 'unreadable' }
+
+export async function inspectProcess(
   deps: { exec: PortDiagnosticExec, platform?: NodeJS.Platform, timeoutMs?: number },
   pid: number,
-): Promise<PortOwnerRecord | undefined> {
+): Promise<ProcessInspection> {
   const platform = deps.platform ?? process.platform
   if (platform !== 'win32')
-    return undefined
+    return { kind: 'unreadable' }
   try {
     const ps = await deps.exec('powershell.exe', [
       '-NoProfile',
@@ -132,13 +149,28 @@ export async function inspectProcessRecord(
       '-ExecutionPolicy',
       'Bypass',
       '-Command',
-      `Get-CimInstance Win32_Process -Filter "ProcessId=${pid}" | Select-Object ProcessId,ParentProcessId,CreationDate,ExecutablePath,CommandLine | Format-List`,
+      `Get-CimInstance Win32_Process -Filter "ProcessId=${pid}" `
+      + `| Select-Object ProcessId,ParentProcessId,CreationDate,ExecutablePath,CommandLine, `
+      + `@{Name='CreatedTicks';Expression={$_.CreationDate.Ticks}} | Format-List`,
     ], { timeoutMs: deps.timeoutMs ?? PROCESS_TIMEOUT_MS })
-    return ps.code === 0 ? parseProcessRecord(ps.stdout, pid) : undefined
+    if (ps.code !== 0)
+      return { kind: 'unreadable' }
+    if (ps.stdout.trim().length === 0)
+      return { kind: 'gone' }
+    return { kind: 'record', record: parseProcessRecord(ps.stdout, pid) }
   }
   catch {
-    return undefined
+    return { kind: 'unreadable' }
   }
+}
+
+/** @deprecated Compatibility alias for the tri-state inspector; wire `inspectProcess` instead. */
+export async function inspectProcessRecord(
+  deps: { exec: PortDiagnosticExec, platform?: NodeJS.Platform, timeoutMs?: number },
+  pid: number,
+): Promise<PortOwnerRecord | undefined> {
+  const result = await inspectProcess(deps, pid)
+  return result.kind === 'record' ? result.record : undefined
 }
 
 /**
@@ -201,6 +233,7 @@ export function parseProcessRecord(output: string, pid: number): PortOwnerRecord
   return {
     cmdline: fields.commandline || undefined,
     created: fields.creationdate || undefined,
+    createdTicks: fields.createdticks || undefined,
     exe: fields.executablepath || undefined,
     parentPid: Number.isNaN(parent) ? undefined : parent,
     pid,
@@ -242,11 +275,14 @@ export async function gatherPortOwners(deps: PortDiagnosticDeps): Promise<PortOw
   for (const hit of occupied) {
     // No shell anywhere in this chain: powershell.exe is the program, the
     // command is one fixed argument, and the PID came from a numeric parse,
-    // not user input.
-    const looked = await inspectProcessRecord({ exec: deps.exec, platform: deps.platform, timeoutMs: deps.timeoutMs }, hit.pid)
-    if (looked === undefined)
-      deps.log(`port-diagnostic-error step=process pid=${hit.pid}`)
-    const record: PortOwnerRecord = looked ?? { pid: hit.pid }
+    // not user input. `gone` and `unreadable` both degrade to the pid-only
+    // record - but they are logged as DISTINCT facts (item B).
+    const looked = await inspectProcess({ exec: deps.exec, platform: deps.platform, timeoutMs: deps.timeoutMs }, hit.pid)
+    if (looked.kind === 'unreadable')
+      deps.log(`port-diagnostic-error step=process pid=${hit.pid} reason=unreadable`)
+    if (looked.kind === 'gone')
+      deps.log(`port-diagnostic-error step=process pid=${hit.pid} reason=gone-between-probes`)
+    const record: PortOwnerRecord = looked.kind === 'record' ? looked.record : { pid: hit.pid }
     const underRoot = isUnderInstallRoot(record, deps.installDir)
     record.underLiaInstallRoot = underRoot
     deps.log(
