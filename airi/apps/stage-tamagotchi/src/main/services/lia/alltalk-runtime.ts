@@ -508,48 +508,50 @@ export function createRuntimeManager(deps: RuntimeManagerDeps): RuntimeManager {
 
   /**
    * The Windows-only tree kill of ONE proven root, with named revalidation
-   * (round 7, items B/C). Identity = the canonical ticks when BOTH sides
-   * have them, the localized string only as documented last resort, and the
-   * executable path in every story. And the round-7 correction of the skip
-   * the QA caught silently: an unreadable re-check is NOT death - the kill
-   * proceeds (the pid is our PROVEN root; the truth comes from the port
-   * verify after), while only a query that *ran and found nothing* may
-   * skip it as genuinely gone.
+   * (round 7, items B/C, and the ownership safety correction):
+   *
+   * - record + compatible identity  -> the kill is permitted;
+   * - provably gone                 -> nothing to kill;
+   * - identity broke (recycled PID) -> never touch it again;
+   * - UNREADABLE                    -> the identity of the PID right now
+   *   cannot be proven. "I could not check" never decomposes into
+   *   "still ours", so the direct kill is VETOED. The caller's fresh-
+   *   diagnosis path is where new proof may be earned - and only a root
+   *   proven by THAT new evidence may die.
    */
-  async function killLiaRootTree(root: ProvenProcessRoot, context: { revalidate: boolean }): Promise<void> {
+  async function killLiaRootTree(root: ProvenProcessRoot, context: { revalidate: boolean }): Promise<KillOutcome> {
     if (context.revalidate && deps.inspectProcess) {
       emit('runtime.root-revalidate-start', `pid=${root.pid}`)
       const fresh = await deps.inspectProcess(root.pid)
       if (fresh.kind === 'gone') {
         emit('runtime.root-revalidate-rejected', `pid=${root.pid} reason=process-gone`)
-        return
+        return { result: 'gone' }
       }
-      if (fresh.kind === 'record') {
-        const identityBreaking
-          = (root.exe !== undefined && fresh.record.exe !== root.exe)
-            ? 'exe-mismatch'
-            : (root.createdTicks !== undefined && fresh.record.createdTicks !== undefined && fresh.record.createdTicks !== root.createdTicks)
-                ? 'created-mismatch'
-                : (root.createdTicks === undefined && fresh.record.createdTicks === undefined
-                  && root.created !== undefined && fresh.record.created !== root.created)
-                    ? 'created-mismatch'
-                    : undefined
-        if (identityBreaking !== undefined) {
-          // The PID got recycled: whatever lives there now never shook our hand.
-          emit('runtime.root-revalidate-rejected', `pid=${root.pid} reason=${identityBreaking}`)
-          return
-        }
-        emit('runtime.root-revalidate-ok', `pid=${root.pid}`)
-      }
-      else {
-        // 'unreadable': verification could not speak - never pretended to be
-        // death. The kill still fires and the port check below judges.
+      if (fresh.kind === 'unreadable') {
+        // The correction, in one sentence: unproven is not safe.
         emit('runtime.root-revalidate-inconclusive', `pid=${root.pid}`)
+        return { reason: 'revalidation-unreadable', result: 'vetoed' }
       }
+      const identityBreaking
+        = (root.exe !== undefined && fresh.record.exe !== root.exe)
+          ? 'exe-mismatch'
+          : (root.createdTicks !== undefined && fresh.record.createdTicks !== undefined && fresh.record.createdTicks !== root.createdTicks)
+              ? 'created-mismatch'
+              : (root.createdTicks === undefined && fresh.record.createdTicks === undefined
+                && root.created !== undefined && fresh.record.created !== root.created)
+                  ? 'created-mismatch'
+                  : undefined
+      if (identityBreaking !== undefined) {
+        // The PID got recycled: whatever lives there now never shook our hand.
+        emit('runtime.root-revalidate-rejected', `pid=${root.pid} reason=${identityBreaking}`)
+        return { reason: identityBreaking, result: 'vetoed' }
+      }
+      emit('runtime.root-revalidate-ok', `pid=${root.pid}`)
     }
     const reported = await killProcessTree(root.pid)
     if (reported)
       emit('runtime.process-tree-terminated', `rootPid=${root.pid}`)
+    return { result: 'attempted' }
   }
 
   function set(next: RuntimeStateSnapshot): RuntimeStateSnapshot {
@@ -622,6 +624,15 @@ export function createRuntimeManager(deps: RuntimeManagerDeps): RuntimeManager {
     }
   }
 
+  type KillOutcome
+    = | { result: 'attempted' | 'gone' }
+      | { reason: 'created-mismatch' | 'exe-mismatch' | 'process-gone' | 'revalidation-unreadable', result: 'vetoed' }
+
+  interface VerifyOutcome {
+    finished: boolean
+    reason?: string
+  }
+
   /** Delay helper: a pause that never pins the event loop. */
   async function grace(ms: number): Promise<void> {
     if (ms <= 0)
@@ -642,41 +653,53 @@ export function createRuntimeManager(deps: RuntimeManagerDeps): RuntimeManager {
    * carry the spawned child's wrapper PID, which taskkill can refuse while
    * the python it raised is very much alive - the EV1 shape exactly.
    */
-  async function killAndVerify(roots: ProvenProcessRoot[]): Promise<boolean> {
+  async function killAndVerify(roots: ProvenProcessRoot[]): Promise<VerifyOutcome> {
     const rounds = deps.verifyRounds ?? 3
     const graceMs = deps.verifyGraceMs ?? 1500
     let survivors = [...roots]
+    let lastReason: string | undefined
     for (let round = 1; round <= rounds; round++) {
-      for (const root of survivors)
-        await killLiaRootTree(root, { revalidate: true })
+      let unreadableVeto = false
+      for (const root of survivors) {
+        const outcome = await killLiaRootTree(root, { revalidate: true })
+        if (outcome.result === 'vetoed') {
+          if (outcome.reason === 'revalidation-unreadable')
+            unreadableVeto = true
+          lastReason = outcome.reason
+        }
+      }
 
       await grace(graceMs)
       const occupancy = await occupancySafe()
       emit('runtime.kill-verify', `round=${round} occupancy=${occupancy}`)
       if (occupancy === 'free')
-        return true
+        return { finished: true }
 
-      // Who survived? Only a rerun of the evidence can say.
+      // Who is really there? Only a rerun of the evidence can say - and this
+      // is the OFFICIAL recovery from an unreadable revalidation: not a kill
+      // on the old (unproven-today) identity, but a fresh census whose own
+      // proof chain either re-establishes lia-managed (and only those newly
+      // proven roots die) or stays silent and keeps every process alive.
       const records = await runPortDiagnostics('occupied')
       if (records === undefined || records.length === 0) {
         // The probe sees occupied but the census sees nobody - a lie
         // detection failure, not a port we may kill for.
         emit('runtime.kill-verify-inconclusive', `round=${round}`)
-        return false
+        return { finished: false, reason: unreadableVeto ? 'revalidation-unreadable' : (lastReason ?? 'verification-inconclusive') }
       }
       const verdict = await classifyOwners(records)
       if (verdict.kind !== 'lia-managed') {
-        // The survivor is NOT our tree (external survives, unknown survives):
-        // killing here would be the very murder the whole model exists to
-        // prevent. Report, and let the caller mark the stop as failed.
+        // The survivor is NOT provably ours - external survives, unknown
+        // survives. Killing here would be the very murder the whole model
+        // exists to prevent; the stop ends with a named reason instead.
         emit('runtime.shutdown-survivor-not-lia-managed', `classification=${verdict.kind} round=${round}`)
-        return false
+        return { finished: false, reason: unreadableVeto ? 'revalidation-unreadable' : `survivor-${verdict.kind}` }
       }
       survivors = verdict.roots
       emit('runtime.kill-verify-survivors', `round=${round} survivors=${survivors.map(r => r.pid).join(',')}`)
     }
     emit('runtime.kill-verify-exhausted', `rounds=${rounds}`)
-    return false
+    return { finished: false, reason: lastReason ?? 'kill-verify-exhausted' }
   }
 
   async function doStop(options: RuntimeStopOptions): Promise<void> {
@@ -698,14 +721,14 @@ export function createRuntimeManager(deps: RuntimeManagerDeps): RuntimeManager {
       // or to 'error' with the reason when they do not.
       set({ phase: 'stopping' })
       emit('runtime.stopping-lia-managed-existing', `rootPid=${attachment.roots.map(r => r.pid).join(',')}`)
-      const finished = await killAndVerify(attachment.roots)
-      if (finished) {
+      const outcome = await killAndVerify(attachment.roots)
+      if (outcome.finished) {
         set({ phase: 'stopped' })
         emit('runtime.stopped')
       }
       else {
         set({ message: 'The voice system could not be fully stopped.', phase: 'error' })
-        emit('runtime.stop-incomplete', 'reason=ports-still-occupied-after-kill')
+        emit('runtime.stop-incomplete', `reason=${outcome.reason ?? 'ports-still-occupied-after-kill'}`)
       }
       await confirmPortsFree(options.confirmFreeMs ?? 0)
       return
@@ -758,10 +781,10 @@ export function createRuntimeManager(deps: RuntimeManagerDeps): RuntimeManager {
         const records = await runPortDiagnostics('occupied')
         const verdict = records !== undefined && records.length > 0 ? await classifyOwners(records) : { kind: 'unknown' as const }
         if (verdict.kind === 'lia-managed') {
-          const finished = await killAndVerify(verdict.roots)
-          if (!finished) {
+          const outcome = await killAndVerify(verdict.roots)
+          if (!outcome.finished) {
             set({ message: 'The voice system could not be fully stopped.', phase: 'error' })
-            emit('runtime.stop-incomplete', 'reason=ports-still-occupied-after-kill')
+            emit('runtime.stop-incomplete', `reason=${outcome.reason ?? 'ports-still-occupied-after-kill'}`)
             await confirmPortsFree(options.confirmFreeMs ?? 0)
             return
           }

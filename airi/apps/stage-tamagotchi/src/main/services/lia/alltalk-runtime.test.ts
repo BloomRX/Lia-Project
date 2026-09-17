@@ -988,7 +988,7 @@ describe('the round-6 ownership verdicts (items A-H, cases 3/4/5/7/8/9)', () => 
   })
 })
 
-describe('the round-7 QA failures, reproduced as fixtures (items K, D, B)', () => {
+describe('the round-7 QA failures, reproduced as fixtures (items K, D, B, and the ownership safety correction)', () => {
   function recorder() {
     const lines: Array<string> = []
     return {
@@ -1147,43 +1147,167 @@ describe('the round-7 QA failures, reproduced as fixtures (items K, D, B)', () =
     expect(proxied.state()).not.toEqual(expect.objectContaining({ phase: 'stopped' }))
   })
 
-  it('an unreadable re-check is NOT death: the kill still fires, and the port answers the truth after (item B)', async () => {
-    // The suspected QA skip, inverted: revalidation comes back 'unreadable'
-    // (PowerShell had a bad day) - the round-7 rule says kill anyway and let
-    // the port judge. Old code would have skipped as 'already gone'.
+  it('recovered attachment, revalidation unreadable, fresh census unknown: ZERO taskkill, error, reason=revalidation-unreadable (ownership correction 1/3)', async () => {
+    // The safety correction, fixture 1 of 3: 'unreadable' in a kill
+    // revalidation NEVER decomposes into "still ours". PowerShell went
+    // blind on every identity question, nothing about PID 9001 can be
+    // proven today, and the fresh census cannot re-prove the listeners
+    // either (every climb drowns too). The port is held by SOMEONE - whom,
+    // we may never learn. Verdict: no kill, phase 'error', the named
+    // reason in the log. MUTATION GUARD: a code path that reads unreadable
+    // as "kill anyway" fires taskkill in this fixture and this test fails.
     const rec = recorder()
     const dir = await installedDir()
     const taskkill = vi.fn(async (_command: string, _args: string[], _options: { timeoutMs: number }) => ({ code: 0 }))
-    let killTimeInspection = false
-    let portsHeld = true
+    let stoppingPhase = false
     const { manager } = managerFor({
-      execImpl: async (command: string, args: string[], options: { timeoutMs: number }) => {
-        portsHeld = false // a successful tree kill actually quiets the ports
-        return (await taskkill(command, args, options))
-      },
+      execImpl: taskkill,
       inspectProcess: async (pid: number) => {
-        if (killTimeInspection)
-          return { kind: 'unreadable' as const }
-        return await liaTreeInspect(dir)(pid)
+        if (!stoppingPhase)
+          return await liaTreeInspect(dir)(pid) // the adoption reads clearly
+        return { kind: 'unreadable' as const } // the stop reads NOTHING
       },
       installDir: dir,
       isHealthy: async () => true,
       onEvent: rec.onEvent,
       portOwnerDiagnostics: async () => liaTreeRecords(dir),
-      probeOccupied: async () => (portsHeld ? 'occupied' : 'free'),
+      probeOccupied: async () => 'occupied', // held - but occupancy alone never authorizes a kill
     })
 
-    await manager.start()
-    killTimeInspection = true
+    const adopted = await manager.start()
+    expect(adopted.phase).toBe('ready')
+    stoppingPhase = true
+
     await manager.stop({ confirmFreeMs: 20 })
 
     expect(rec.lines).toContain('runtime.root-revalidate-inconclusive pid=9001')
+    expect(taskkill).not.toHaveBeenCalled() // the mutation guard itself
+    expect(rec.lines).toContain('runtime.stop-incomplete reason=revalidation-unreadable')
+    expect(rec.lines.some(line => line.startsWith('runtime.shutdown-survivor-not-lia-managed'))).toBe(true)
+    expect(rec.lines).not.toContain('runtime.process-tree-terminated')
+    expect(rec.lines).not.toContain('runtime.stopped')
+    expect(manager.state().phase).toBe('error')
+  })
+
+  it('recovered attachment, revalidation unreadable, FRESH census re-proves lia-managed: only the newly proven root dies, then ports free and stopped (ownership correction 2/3)', async () => {
+    // The correction's recovery path, fixture 2 of 3: the revalidation of
+    // the recovered root 9001 drowns ONCE - veto. Recovery runs the
+    // evidence again (probe -> census -> ancestry) instead of trusting the
+    // stale identity: the fresh census re-proves the tree under a recycled
+    // python, 9031 with THIS session's ticks, inside the install venv,
+    // while 9001 is not even in today's census. Only 9031 may die - the
+    // kill rides the NEW proof, and the unverifiable 9001 stays untouched.
+    const rec = recorder()
+    const dir = await installedDir()
+    const NEW_CREATED = '20260916101010.000000+000'
+    const taskkill = vi.fn(async (_command: string, _args: string[], _options: { timeoutMs: number }) => ({ code: 0 }))
+    let stoppingPhase = false
+    let killTimeChecks = 0
+    let portsHeld = true
+    // The post-stop world: the listener python is the proven root (its
+    // launcher 9017 is dead; ancestry above it absent, as in EV1), and
+    // the once-trusted 9001 answers nothing at all.
+    const censusInspect = async (pid: number) => {
+      if (pid === 9031) {
+        return {
+          kind: 'record' as const,
+          record: { cmdline: 'python script.py', created: NEW_CREATED, exe: `${dir}/venv/python.exe`, parentPid: 9017, pid: 9031 },
+        }
+      }
+      return { kind: 'gone' as const }
+    }
+    const { manager } = managerFor({
+      execImpl: async (command: string, args: string[], options: { timeoutMs: number }) => {
+        if (args.includes(String(9031)))
+          portsHeld = false // killing the proven python root quiets the ports
+        return await taskkill(command, args, options)
+      },
+      inspectProcess: async (pid: number) => {
+        if (!stoppingPhase)
+          return await liaTreeInspect(dir)(pid)
+        killTimeChecks += 1
+        // The stop's FIRST identity question - the revalidation of the
+        // recovered root - drowns. Everything after it (the fresh census
+        // climbs, the revalidation of the newly proven root) reads clearly.
+        if (killTimeChecks === 1)
+          return { kind: 'unreadable' as const }
+        return await censusInspect(pid)
+      },
+      installDir: dir,
+      isHealthy: async () => true,
+      onEvent: rec.onEvent,
+      portOwnerDiagnostics: async () => {
+        if (!stoppingPhase || !portsHeld)
+          return liaTreeRecords(dir)
+        // Today's census: the recycled python is the new listener root;
+        // the tree the adoption once trusted is gone from the evidence.
+        return [{ cmdline: 'python script.py', created: NEW_CREATED, exe: `${dir}/venv/python.exe`, parentPid: 9017, pid: 9031 }]
+      },
+      probeOccupied: async () => (portsHeld ? 'occupied' : 'free'),
+    })
+
+    const adopted = await manager.start()
+    expect(adopted.phase).toBe('ready')
+    stoppingPhase = true
+
+    await manager.stop({ confirmFreeMs: 20 })
+
+    expect(rec.lines).toContain('runtime.root-revalidate-inconclusive pid=9001')
+    expect(rec.lines).toContain('runtime.root-revalidate-ok pid=9031')
+    // THE assertion of the correction: exactly one kill, on the NEWLY
+    // proven root - a direct kill of the unreadable 9001 (the mutation)
+    // shows up here as a wrong pid or a second call.
     expect(taskkill).toHaveBeenCalledTimes(1)
-    expect(rec.lines).toContain('runtime.process-tree-terminated rootPid=9001')
+    expect(taskkill.mock.calls[0][1]).toEqual(['/PID', '9031', '/T', '/F'])
+    expect(rec.lines).toContain('runtime.process-tree-terminated rootPid=9031')
+    expect(rec.lines).toContain('runtime.shutdown-ports-free')
+    expect(rec.lines.some(line => line.startsWith('runtime.stop-incomplete'))).toBe(false)
+    expect(rec.lines).toContain('runtime.stopped')
+    expect(manager.state()).toEqual({ phase: 'stopped' })
+  })
+
+  it('current-session child with inspection unavailable: its own tree still dies (ownership correction 3/3, item A exemption)', async () => {
+    // The exemption, fixture 3 of 3: a child SPAWNED THIS SESSION carries
+    // its proof in the runtime's own hand (the ChildProcess handle) - the
+    // stop never asks PowerShell who the child is. With inspectProcess
+    // ABSENT ENTIRELY (WMI dead on this box), a stubborn child is still
+    // tree-killed, and the verified ports flip the state to 'stopped'.
+    const rec = recorder()
+    const dir = await installedDir()
+    const taskkill = vi.fn(async (_command: string, _args: string[], _options: { timeoutMs: number }) => ({ code: 0 }))
+    let treeAlive = false
+    const { manager } = managerFor({
+      execImpl: async (command: string, args: string[], options: { timeoutMs: number }) => {
+        treeAlive = false // the wrapper taskkill actually ends the tree here
+        return await taskkill(command, args, options)
+      },
+      installDir: dir,
+      obedient: false,
+      onEvent: (event, detail) => {
+        if (event === 'runtime.spawned')
+          treeAlive = true
+        rec.onEvent(event, detail)
+      },
+      probeOccupied: async () => (treeAlive ? 'occupied' : 'free'),
+      spawnFlow: true,
+      // NO inspectProcess at all: the exemption under oath. Had the stop
+      // ever asked for a revalidation, it would have drowned - it asks none.
+    })
+
+    await manager.start()
+    await manager.stop()
+
+    expect(taskkill).toHaveBeenCalledTimes(1)
+    expect(taskkill.mock.calls[0][0]).toBe('taskkill')
+    expect(taskkill.mock.calls[0][1]).toEqual(taskkillArgs(4242))
+    expect(rec.lines).toContain('runtime.process-tree-terminated rootPid=4242')
+    // The exemption in the log: NO revalidation was ever attempted.
+    expect(rec.lines.some(line => line.startsWith('runtime.root-revalidate-'))).toBe(false)
+    expect(rec.lines.some(line => line.startsWith('runtime.stop-incomplete'))).toBe(false)
+    expect(rec.lines).toContain('runtime.stopped')
     expect(manager.state()).toEqual({ phase: 'stopped' })
   })
 })
-
 describe('the shutdown lifecycle contract (Windows QA hotfix)', () => {
   function recorder() {
     const lines: Array<string> = []
