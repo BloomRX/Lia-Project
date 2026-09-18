@@ -21,6 +21,17 @@ const packageJson = JSON.parse(readFileSync(join(appRoot, 'package.json'), 'utf8
 }
 const electronViteConfig = readFileSync(join(appRoot, 'electron.vite.config.ts'), 'utf8')
 
+/**
+ * The npm-electron bootstrap markers. They name the loader machinery
+ * (`getElectronPath`, its refusal banner, its install hook) - strings no
+ * honest launcher source ever legitimately writes, so a hit can only mean
+ * the npm package got bundled.
+ */
+const NPM_ELECTRON_LOADER_MARKERS = [
+  'getElectronPath',
+  'Electron failed to install correctly',
+]
+
 describe('the Electron entry convention (Windows boot hotfix)', () => {
   it('package.json declares the monorepo convention: type module + index.js entry', () => {
     expect(packageJson.type).toBe('module')
@@ -55,5 +66,41 @@ describe('the Electron entry convention (Windows boot hotfix)', () => {
     // And the phantom the QA hit stays absent: the build must not grow a
     // second entry copy next to the real one.
     expect(existsSync(join(builtMainDir, 'index.mjs'))).toBe(false)
+  })
+})
+
+describe('electron must stay the runtime built-in, never bundled (Windows boot hotfix 2)', () => {
+  it('the build config externalizes electron in BOTH main and preload, through rolldownOptions', () => {
+    // Two `external:` lists covering the electron specifier, and written on
+    // the key rolldown-vite actually honors. The deprecated plugin must not
+    // return: it suppresses electron-vite's own externalize-deps hook.
+    expect(electronViteConfig).toContain('rolldownOptions')
+    expect(electronViteConfig.match(/\/\^electron\\\/\.\+\//g)?.length ?? 0).toBeGreaterThanOrEqual(1)
+    const externalsBlocks = electronViteConfig.match(/external:/g)?.length ?? 0
+    expect(externalsBlocks).toBeGreaterThanOrEqual(2)
+    expect(electronViteConfig).not.toContain('externalizeDepsPlugin')
+  })
+
+  it('when a build exists on disk, the npm electron bootstrap is NOT inside out/main/index.js', (context) => {
+    const builtMain = join(appRoot, 'out', 'main', 'index.js')
+    if (!existsSync(builtMain)) {
+      context.skip('no built main output on disk - config-level guard above carries this contract')
+      return
+    }
+    const emitted = readFileSync(builtMain, 'utf8')
+    for (const marker of NPM_ELECTRON_LOADER_MARKERS) {
+      expect(emitted).not.toContain(marker)
+    }
+    // Positive evidence too: the ESM main TALKS to electron as an external
+    // runtime builtin - that import must survive to the consumer.
+    expect(emitted).toContain('from "electron"')
+
+    const builtPreload = join(appRoot, 'out', 'preload', 'index.cjs')
+    expect(existsSync(builtPreload)).toBe(true)
+    const preload = readFileSync(builtPreload, 'utf8')
+    for (const marker of NPM_ELECTRON_LOADER_MARKERS) {
+      expect(preload).not.toContain(marker)
+    }
+    expect(preload).toContain('require("electron")')
   })
 })
