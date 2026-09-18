@@ -543,7 +543,14 @@ async function stageSynthesizeSegment(request: TtsRequest, signal: AbortSignal):
   if (!synthesisTarget)
     return null
 
-  if (isModellessTarget(synthesisTarget)) {
+  // Phase 7.4 Part F: warn about a missing model id only when the provider
+  // PUBLISHES a model catalogue. Providers without one (Kokoro, Edge TTS,
+  // custom voices served by AllTalk) select nothing here because the model
+  // is the BACKEND's business - XTTS lives where the AllTalk server is
+  // configured, never in an AIRI modelId riding the chat bridge. An empty
+  // model id for them is by-design, and the warning was false noise.
+  const providerPublishesModels = providersStore.getModelsForProvider(activeSpeechProvider.value).length > 0
+  if (isModellessTarget(synthesisTarget) && providerPublishesModels) {
     // Loud, not silent: a provider that truly needs a model should surface here
     // and reach the fallback policy rather than mute the conversation.
     console.warn('[Speech Pipeline] synthesizing without a model id', {

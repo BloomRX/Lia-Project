@@ -21,6 +21,7 @@
     "./bootstrap/runtime-root": "./dist/bootstrap/runtime-root.mjs",
     "./bridge/lia-config": "./dist/bridge/lia-config.mjs",
     "./paths/product-paths": "./dist/paths/product-paths.mjs",
+    "./paths/install-location": "./dist/paths/install-location.mjs",
     "./product/config": "./dist/product/config.mjs",
     "./secrets/vault": "./dist/secrets/vault.mjs",
     "./voice/shared": "./dist/voice/shared.mjs",

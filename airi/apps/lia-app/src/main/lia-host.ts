@@ -12,6 +12,7 @@ import type { ShutdownReport } from './shutdown-coordinator'
 import process from 'node:process'
 
 import { execFile } from 'node:child_process'
+import { access, stat } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -20,11 +21,12 @@ import { gatherPortOwners, inspectProcess } from '@lia/core/alltalk/port-diagnos
 import { loopbackHostFor, probeTcpListeners } from '@lia/core/alltalk/port-listeners'
 import { createRuntimeManager, inspectAllTalkInstall } from '@lia/core/alltalk/runtime'
 import { buildLiaBridgeConfig, stageEnvFor } from '@lia/core/bridge/lia-config'
+import { classifyInstallLocation, inspectInstallLocationTarget } from '@lia/core/paths/install-location'
 import { liaProductPaths } from '@lia/core/paths/product-paths'
-import { resolveAllTalkInstallCandidates } from '@lia/core/paths/runtime-paths'
+import { resolveAllTalkInstallCandidates, resolveAllTalkRuntimeDir } from '@lia/core/paths/runtime-paths'
 import { readLiaProductConfig, updateLiaProductConfig } from '@lia/core/product/config'
 import { createLiaSecretVault } from '@lia/core/secrets/vault'
-import { createLiaVoiceProfileStore } from '@lia/core/voices/profiles'
+import { createLiaVoiceProfileStore, findMissingFiles } from '@lia/core/voices/profiles'
 
 import { AiriStageManager } from './airi-stage-manager'
 import { ShutdownCoordinator } from './shutdown-coordinator'
@@ -145,6 +147,33 @@ export interface RuntimeManagerConfig {
   voicesDir?: string
 }
 
+/**
+ * Phase 7.4 (Part G/H/J): what the Voice screen renders about WHERE the
+ * heavy runtime lives. `effectiveInstallDir` is the first trusted
+ * candidate (configured first, canonical default otherwise) - the dir the
+ * markers would be checked against, whether installed or not.
+ */
+export interface LiaRuntimeLocationStatus {
+  /** `%LOCALAPPDATA%\Lia\runtimes\alltalk\app` (Windows) - the Phase 7.1 canonical default. */
+  canonicalDefaultDir: string
+  configuredInstallDir?: string
+  customActive: boolean
+  effectiveInstallDir: string
+  /** Marker-proven install at the effective dir (never "the folder exists"). */
+  installed: boolean
+}
+
+/** The pick outcome, in UI vocabulary; raw reasons stay in events. */
+export type LiaRuntimeLocationPickResult
+  = | { status: 'canceled' }
+    | {
+      installDir: string
+      /** Exactly why nothing was moved to the new root (Part J choice A). */
+      note: 'new-location-applies-to-future-install'
+      status: 'ok'
+    }
+    | { message: string, reason: string, status: 'rejected' }
+
 export interface LiaHost {
   /** The resolved bridge contract for THIS launch (built fresh from disk). */
   bridgeConfig: () => Promise<LiaBridgeConfig>
@@ -169,6 +198,17 @@ export interface LiaHost {
   stageEnv: () => Promise<Record<string, string>>
   /** Persists the Config screen through the core writer; secrets to the vault only. */
   updateConfig: (payload: LiaConfigUpdatePayload) => Promise<LiaConfigUpdateResult>
+  /** Where the heavy runtime lives now (Part G/J status for the Voice screen). */
+  runtimeLocationStatus: () => Promise<LiaRuntimeLocationStatus>
+  /**
+   * Applies a dialog-chosen runtime root (Part H/K). NEVER moves bytes: a
+   * valid new location pins the NEXT install; an invalid one is rejected
+   * with a human message and changes nothing. The directory path only ever
+   * enters through the main-process dialog, validated by the core rules.
+   */
+  applyRuntimeLocation: (chosenDir: string | null) => Promise<LiaRuntimeLocationPickResult>
+  /** Clears the configured root, restoring the canonical default. */
+  clearRuntimeLocation: () => Promise<LiaRuntimeLocationStatus>
   vault: LiaSecretVault
 }
 
@@ -269,6 +309,60 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
   async function readSnapshot(): Promise<{ snapshot: LiaProductConfigSnapshot | undefined, status: LiaHomeStatus['config']['status'] }> {
     const read = await readLiaProductConfig(paths.productConfigFile)
     return { snapshot: read.status === 'ok' ? read.value : undefined, status: read.status }
+  }
+
+  /**
+   * Phase 7.4 voice gate (items B/E): when the preferred voice is
+   * `custom-local-voice`, prove the slice before the stage is ever asked to
+   * start. Order is the semantics:
+   *   1. selected profile must exist in the library (plus its files);
+   *   2. the runtime must be installed (markers, any trusted candidate);
+   *   3. it must START and reach real readiness (HTTP health, the core
+   *      manager's own poll - never a sleep);
+   * and each failure is a human pt-BR message thrown to the CTA plus a
+   * `conversar-blocked` diagnostic event carrying only safe metadata (a
+   * missing-file COUNT, never filenames or audio contents).
+   *
+   * A non-custom provider starts NOTHING: AllTalk stays at rest (item D).
+   */
+  async function ensureVoiceReadyForConversar(snapshot: LiaProductConfigSnapshot | undefined): Promise<void> {
+    const preferredVoice = snapshot?.voice?.tts?.preferred
+    if (preferredVoice?.providerId !== 'custom-local-voice')
+      return
+
+    const profileId = preferredVoice.voiceId
+    const profile = profileId ? await voices.get(profileId) : undefined
+    if (!profile) {
+      emit('lia-app.conversar-blocked', 'reason=voice-profile-missing')
+      throw new Error('Não encontrei a voz selecionada. Confira a voz ativa nas configurações de Voz da Lia.')
+    }
+    const missing = await findMissingFiles(voices, profile)
+    if (missing.length > 0) {
+      // Safe diagnostic: the count is metadata; filenames are the user's
+      // private audio and never enter an event/log.
+      emit('lia-app.conversar-blocked', `reason=voice-profile-files-missing count=${missing.length}`)
+      throw new Error('Não encontrei a voz selecionada. Importe-a novamente nas configurações de Voz da Lia.')
+    }
+
+    const runtime = await manager()
+    if (!(await runtime.isInstalled())) {
+      emit('lia-app.conversar-blocked', 'reason=voice-runtime-not-installed')
+      throw new Error('O sistema de voz precisa ser instalado. Abra as configurações da Lia para instalar.')
+    }
+
+    let state: RuntimeStateSnapshot
+    try {
+      state = await runtime.start({ source: 'conversar' })
+    }
+    catch (thrown) {
+      emit('lia-app.conversar-blocked', `reason=voice-runtime-start-failed detail=${briefReason(thrown)}`)
+      throw new Error('Não foi possível iniciar o sistema de voz. Veja Diagnósticos para detalhes.')
+    }
+    if (state.phase !== 'ready') {
+      emit('lia-app.conversar-blocked', `reason=voice-runtime-readiness-timeout phase=${state.phase}`)
+      throw new Error('O sistema de voz não ficou pronto a tempo. Tente novamente ou veja Diagnósticos.')
+    }
+    emit('lia-app.voice-runtime-ready', `phase=${state.phase} source=conversar`)
   }
 
   function buildManager(runtimeConfig: RuntimeManagerConfig): ReturnType<typeof createRuntimeManager> {
@@ -456,6 +550,115 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
     }
   }
 
+  /** Short, safe failure evidence for diagnostics: bounded, space-free. */
+  function briefReason(thrown: unknown): string {
+    try {
+      // Lint policy forbids the instanceof ternary; this is its contract.
+      let text = ''
+      if (thrown instanceof Error)
+        text = thrown.message
+      else
+        text = String(thrown)
+      return text.replace(/\s+/g, ' ').slice(0, 80).trim() || 'unknown'
+    }
+    catch {
+      return 'unknown'
+    }
+  }
+
+  /**
+   * Part G/H: the user-facing WHERE. `resolveInstallDir` already implements
+   * the precedence (configured-proven > canonical-proven > configured-unproven
+   * > canonical) with markers as the only "installed" proof; this only
+   * renders the outcome to the Voice screen.
+   */
+  async function runtimeLocationStatus(): Promise<LiaRuntimeLocationStatus> {
+    const { snapshot } = await readSnapshot()
+    const configuredInstallDir = snapshot?.voice?.runtime?.alltalk?.installDir?.trim() || undefined
+    const resolution = await resolveInstallDir(configuredInstallDir)
+    return {
+      canonicalDefaultDir: resolveAllTalkRuntimeDir({ env, platform, userDataDir: paths.userDataDir }),
+      customActive: configuredInstallDir !== undefined,
+      ...(configuredInstallDir ? { configuredInstallDir } : {}),
+      effectiveInstallDir: resolution.candidate?.dir ?? '',
+      installed: resolution.installed,
+    }
+  }
+
+  /** Human vocabulary for each machine reject reason (pt-BR, Part J). */
+  function locationRejectMessage(reason: string): string {
+    const messages: Record<string, string> = {
+      'empty': 'Escolha uma pasta para o sistema de voz.',
+      'not-absolute': 'Escolha uma pasta válida no computador (por exemplo D:\\Lia\\VoiceRuntime).',
+      'filesystem-root': 'Não é possível instalar o sistema de voz na raiz do disco. Escolha uma pasta.',
+      'system-root': 'Escolha uma pasta fora das pastas do sistema (Windows, Arquivos de Programas).',
+      'too-long': 'Esse caminho é muito longo. Escolha uma pasta mais próxima do disco.',
+      'exists-as-file': 'Esse caminho é um arquivo, não uma pasta. Escolha uma pasta.',
+    }
+    return messages[reason] ?? 'Esse local não pode ser usado para o sistema de voz.'
+  }
+
+  async function applyRuntimeLocation(chosenDir: string | null): Promise<LiaRuntimeLocationPickResult> {
+    if (!chosenDir)
+      return { status: 'canceled' }
+
+    const decision = classifyInstallLocation(chosenDir, platform)
+    if (decision.status !== 'ok') {
+      emit('lia-app.runtime-location-blocked', `reason=${decision.reason}`)
+      return { message: locationRejectMessage(decision.reason), reason: decision.reason, status: 'rejected' }
+    }
+    const fsDecision = await inspectInstallLocationTarget(decision.normalized, {
+      // Tests inject a virtual DISK (sync); production falls back to real fs.
+      exists: deps.exists
+        ? async path => Boolean(deps.exists?.(path))
+        : async (path) => {
+          try {
+            await access(path)
+            return true
+          }
+          catch {
+            return false
+          }
+        },
+      isDirectory: deps.exists
+        ? async () => true
+        : async path => (await stat(path)).isDirectory(),
+    })
+    if (fsDecision.status !== 'ok') {
+      emit('lia-app.runtime-location-blocked', `reason=${fsDecision.reason}`)
+      return { message: locationRejectMessage(fsDecision.reason), reason: fsDecision.reason, status: 'rejected' }
+    }
+
+    const written = await updateLiaProductConfig(paths.productConfigFile, {
+      voice: { runtime: { alltalk: { installDir: decision.normalized } } },
+    })
+    if (written.status !== 'ok') {
+      emit('lia-app.runtime-location-blocked', `reason=${written.status}`)
+      return { message: written.error.message, reason: written.status, status: 'rejected' }
+    }
+
+    // The runtime manager memoizes the previous document; the next start
+    // must see the new root (same rule as updateConfig).
+    cached = undefined
+    emit('lia-app.runtime-location-updated', 'source=user-pick move=never')
+    return {
+      installDir: decision.normalized,
+      note: 'new-location-applies-to-future-install',
+      status: 'ok',
+    }
+  }
+
+  async function clearRuntimeLocation(): Promise<LiaRuntimeLocationStatus> {
+    const written = await updateLiaProductConfig(paths.productConfigFile, {
+      voice: { runtime: { alltalk: { installDir: '' } } },
+    })
+    if (written.status === 'ok') {
+      cached = undefined
+      emit('lia-app.runtime-location-updated', 'source=user-clear')
+    }
+    return runtimeLocationStatus()
+  }
+
   async function updateConfig(payload: LiaConfigUpdatePayload): Promise<LiaConfigUpdateResult> {
     // Secrets first, into the vault and ONLY the vault. If the later
     // document write fails, a stray vault entry is inert - the reverse
@@ -486,6 +689,11 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
      * "Conversar com Lia": validate configuration, ensure the managed voice
      * runtime is up ONLY when the chosen voice needs it (contract item 12),
      * then launch the stage - separate child, single-flight (items 9/10).
+     *
+     * Phase 7.4 voice contract (items B/D/E): a custom local voice implies
+     * an ordered, evidence-gated pipeline, and EVERY refusal carries a human
+     * message plus a machine-readable diagnostic event - never a silent
+     * broken speech pipeline.
      */
     conversar: async () => {
       // Supervisor rule (item 1): once Lia is closing, NOTHING new starts.
@@ -499,15 +707,7 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
         emit('lia-app.conversar-blocked', 'reason=ai-not-ready')
         throw new Error('Lia is not fully configured yet. Finish the AI setup first.')
       }
-      const preferredVoice = snapshot?.voice?.tts?.preferred
-      if (preferredVoice?.providerId === 'custom-local-voice' && snapshot?.voice?.runtime?.alltalk?.installDir) {
-        const runtime = await manager()
-        const state = await runtime.start({ source: 'conversar' })
-        if (state.phase !== 'ready') {
-          emit('lia-app.conversar-blocked', `reason=runtime-not-ready phase=${state.phase}`)
-          throw new Error('The voice system could not be made ready.')
-        }
-      }
+      await ensureVoiceReadyForConversar(snapshot)
       return await stage.start({ env: await hostStageEnv() })
     },
     homeStatus,
@@ -522,6 +722,9 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
     productSnapshot: async () => (await readSnapshot()).snapshot,
     quit: async () => await coordinator.stopAll(),
     runtime: manager,
+    runtimeLocationStatus,
+    applyRuntimeLocation,
+    clearRuntimeLocation,
     stage,
     stageEnv: hostStageEnv,
     updateConfig,

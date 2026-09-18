@@ -31,6 +31,11 @@ export interface LiaHomeFixture {
  */
 export async function makeLiaHome(options: {
   customVoice?: boolean
+  /**
+   * Phase 7.4 test E: write the registry but skip the profile FILES, so
+   * `findMissingFiles` reports the imported voice as incomplete.
+   */
+  missingVoiceFiles?: boolean
   productConfig?: Record<string, unknown>
   voiceCount?: number
 } = {}): Promise<LiaHomeFixture> {
@@ -66,11 +71,21 @@ export async function makeLiaHome(options: {
   const profiles = Array.from({ length: options.voiceCount ?? 2 }, (_, i) => ({
     createdAt: '2026-09-01T12:00:00.000Z',
     engine: 'alltalk',
-    files: [{ bytes: 1234, filename: 'model.wav', role: 'model' }],
+    files: [{ bytes: 1234, filename: 'model.wav', role: 'referenceAudio' }],
     id: `profile-${i + 1}`,
     name: `Voz ${i + 1}`,
   }))
   await writeFile(join(voicesRoot, 'index.json'), `${JSON.stringify({ profiles }, null, 2)}\n`)
+
+  // The canonical COPIES (Phase 7.4 Part A): the library is self-contained,
+  // so an entry the profile lists on disk must actually be there, exactly as
+  // the import left it - unless the test deliberately asks for a broken one.
+  if (!options.missingVoiceFiles) {
+    for (const profile of profiles) {
+      await mkdir(join(voicesRoot, profile.id), { recursive: true })
+      await writeFile(join(voicesRoot, profile.id, 'model.wav'), Buffer.alloc(1234))
+    }
+  }
 
   // The managed runtime fixture: every marker the runtime manager requires.
   await mkdir(join(installDir, 'system'), { recursive: true })

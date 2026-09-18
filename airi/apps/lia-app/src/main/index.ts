@@ -106,6 +106,16 @@ async function bootstrap(): Promise<void> {
     requestQuit: () => {
       quitFlow?.onBeforeQuit()
     },
+    // Phase 7.4 Part J: native folder picker for the heavy runtime root.
+    pickDirectory: async () => {
+      if (!mainWindow)
+        return null
+      const picked = await dialog.showOpenDialog(mainWindow, {
+        properties: ['createDirectory', 'openDirectory'],
+        title: 'Escolha a pasta do sistema de voz',
+      })
+      return picked.canceled || picked.filePaths.length === 0 ? null : picked.filePaths[0]
+    },
   })
 
   mainWindow = new BrowserWindow({

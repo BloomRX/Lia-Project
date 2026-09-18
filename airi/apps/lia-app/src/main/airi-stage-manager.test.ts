@@ -48,7 +48,7 @@ describe('Phase 7.2: ownership retained, spawn without shell (tests C/D/G)', () 
   it('G: the Windows spawn path carries NO shell option - the DEP0190 route is eliminated', async () => {
     const root = await makeStageWorkspace()
     const child = fakeChild()
-    const spawnImpl = vi.fn(() => child as never)
+    const spawnImpl = vi.fn((..._args: unknown[]) => child as never)
     for (const platform of ['win32', 'linux'] as const) {
       const manager = new AiriStageManager({
         platform,
@@ -266,7 +266,7 @@ describe('supervisor stop (Phase 7.1)', () => {
   } = {}) {
     const root = await makeStageWorkspace()
     const child = fakeChild()
-    const spawnImpl = vi.fn(() => child as never)
+    const spawnImpl = vi.fn((..._args: unknown[]) => child as never)
     const manager = new AiriStageManager({
       execFileImpl: options.execFileImpl as never,
       platform: options.platform ?? 'linux',

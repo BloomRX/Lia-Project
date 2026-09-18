@@ -19,6 +19,13 @@ export interface LiaIpcExtras {
    * remembered as the ONLY importable sources until the next pick.
    */
   pickVoiceFiles?: () => Promise<string[]>
+  /**
+   * Opens the OS DIRECTORY picker for the heavy runtime location (Phase
+   * 7.4 Part J). The directory path may ONLY arrive here - never as a
+   * renderer payload - so a compromised window cannot aim installs at
+   * `C:\Windows`.
+   */
+  pickDirectory?: () => Promise<string | null>
   /** The renderer's "close Lia" button routes here (Phase 7.1, item 3). */
   requestQuit?: () => void
 }
@@ -88,6 +95,20 @@ export function registerLiaIpc(host: LiaHost, timer: LiaBootTimer, extras: LiaIp
   ipcMain.handle('lia:app:quit', () => {
     extras.requestQuit?.()
   })
+
+  // ---- Phase 7.4 runtime location channels (Part G/J) --------------------
+  // The renderer can ASK for a folder pick, but the path itself only ever
+  // enters through the main-process dialog and only persists after the
+  // core's validation - mirroring the voicesDir rule above.
+
+  ipcMain.handle('lia:runtime-location:status', async () => await host.runtimeLocationStatus())
+
+  ipcMain.handle('lia:runtime-location:pick', async () => {
+    const chosen = extras.pickDirectory ? await extras.pickDirectory() : null
+    return await host.applyRuntimeLocation(chosen)
+  })
+
+  ipcMain.handle('lia:runtime-location:clear', async () => await host.clearRuntimeLocation())
 }
 
 /**

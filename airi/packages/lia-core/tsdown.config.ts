@@ -18,6 +18,7 @@ export default defineConfig({
     './src/bootstrap/runtime-root.ts',
     './src/bridge/lia-config.ts',
     './src/paths/product-paths.ts',
+    './src/paths/install-location.ts',
     './src/paths/runtime-paths.ts',
     './src/product/config.ts',
     './src/secrets/vault.ts',

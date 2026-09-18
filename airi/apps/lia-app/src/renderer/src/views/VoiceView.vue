@@ -15,17 +15,55 @@ const kind = ref<'custom' | 'ready'>('ready')
 const busy = ref(false)
 const feedback = ref('')
 const importName = ref('')
+const runtimeLocation = ref<any>(undefined)
 
 async function reload() {
   profiles.value = await props.api?.listVoices?.() ?? []
   feedback.value = ''
 }
 
+async function reloadLocation() {
+  runtimeLocation.value = await props.api?.runtimeLocation?.() ?? undefined
+}
+
 onMounted(async () => {
   await reload()
+  await reloadLocation()
   const preferred = (await props.api?.productConfig?.())?.snapshot?.voice?.tts?.preferred
   kind.value = preferred?.providerId === 'custom-local-voice' ? 'custom' : 'ready'
 })
+
+async function changeLocation() {
+  busy.value = true
+  feedback.value = ''
+  try {
+    const result = await props.api.pickRuntimeLocation()
+    if (result?.status === 'ok') {
+      feedback.value = 'Novo local definido. Se o sistema de voz já estava instalado em outra pasta, o novo local valerá para uma futura instalação — nada foi movido.'
+      await reloadLocation()
+    }
+    else if (result?.status === 'rejected') {
+      feedback.value = result.message ?? 'Esse local não pôde ser usado.'
+    }
+    // 'canceled' is a normal outcome: nothing changes.
+  }
+  finally {
+    busy.value = false
+  }
+}
+
+async function resetLocation() {
+  busy.value = true
+  feedback.value = ''
+  try {
+    await props.api.clearRuntimeLocation()
+    await reloadLocation()
+    feedback.value = 'Local padrão restaurado.'
+  }
+  finally {
+    busy.value = false
+  }
+}
 
 async function activateReady() {
   busy.value = true
@@ -120,8 +158,22 @@ async function importVoice() {
           Estado:
           <strong>{{ status?.alltalk?.installed === undefined ? 'estado desconhecido' : (status.alltalk.installed ? status.alltalk.phase : (status.alltalk.installDir ? 'instalação não encontrada' : 'não instalado')) }}</strong>
         </p>
-        <p v-if="status?.alltalk?.installDir" class="dim">
-          Pasta: <code>{{ status.alltalk.installDir }}</code>
+        <p class="dim">
+          Local de instalação:
+          <code>{{ runtimeLocation?.effectiveInstallDir ?? status?.alltalk?.installDir ?? '…' }}</code>
+          <span v-if="runtimeLocation?.customActive" class="badge">personalizado</span>
+        </p>
+        <div class="row">
+          <button :disabled="busy" @click="changeLocation">
+            Alterar local
+          </button>
+          <button v-if="runtimeLocation?.customActive" class="link inline" :disabled="busy" @click="resetLocation">
+            usar o padrão
+          </button>
+        </div>
+        <p class="dim field-note">
+          O local vale para o sistema de voz inteiro (programa, ambiente e modelos — vários GB).
+          Alterar o local não move uma instalação existente.
         </p>
       </div>
 
@@ -198,6 +250,14 @@ code { color: var(--lia-magenta); font-size: 12px; word-break: break-all; }
 }
 .field-note { font-size: 12px; }
 .link { background: none; border: none; color: var(--lia-magenta); padding: 0; }
+.badge {
+  background: var(--lia-magenta);
+  border-radius: 999px;
+  color: var(--lia-bg, #0d0a12);
+  font-size: 11px;
+  margin-left: 8px;
+  padding: 2px 8px;
+}
 .advanced { margin-top: 10px; }
 ul { margin: 0; padding-left: 18px; }
 li { margin: 6px 0; }
