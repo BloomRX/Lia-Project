@@ -1,16 +1,9 @@
 {
   "name": "@lia/core",
   "type": "module",
-  "private": true,
   "version": "0.0.1",
+  "private": true,
   "description": "Lia product core: canonical paths, product config, voice profiles, secret vault, managed AllTalk runtime - independent of AIRI (Phase 7).",
-  "scripts": {
-    "build": "tsdown",
-    "dev": "pnpm run build",
-    "test": "vitest run",
-    "typecheck": "tsc --noEmit"
-  },
-  "types": "./dist/index.d.mts",
   "exports": {
     ".": "./dist/index.mjs",
     "./alltalk/client": "./dist/alltalk/client.mjs",
@@ -33,11 +26,19 @@
     "./voice/shared": "./dist/voice/shared.mjs",
     "./voices/profiles": "./dist/voices/profiles.mjs",
     "./voices/types": "./dist/voices/types.mjs",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./paths/runtime-paths": "./dist/paths/runtime-paths.mjs"
   },
+  "types": "./dist/index.d.mts",
   "files": [
     "dist"
   ],
+  "scripts": {
+    "build": "tsdown",
+    "dev": "pnpm run build",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
   "dependencies": {
     "@moeru/std": "catalog:",
     "destr": "catalog:",

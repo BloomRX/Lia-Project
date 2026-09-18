@@ -1,6 +1,7 @@
 import type { RuntimeStateSnapshot } from '@lia/core/alltalk/runtime'
 import type { LiaBridgeConfig } from '@lia/core/bridge/lia-config'
 import type { LiaProductPaths } from '@lia/core/paths/product-paths'
+import type { LiaInstallDirCandidate } from '@lia/core/paths/runtime-paths'
 import type { LiaProductConfigSnapshot, LiaProductConfigUpdate } from '@lia/core/product/config'
 import type { LiaSecretCipher, LiaSecretVault } from '@lia/core/secrets/vault'
 import type { LiaCustomVoiceProfile, LiaVoiceProfileImportRequest } from '@lia/core/voices/types'
@@ -17,9 +18,10 @@ import { fileURLToPath } from 'node:url'
 import { createAllTalkClient, DEFAULT_ALLTALK_BASE_URL, DEFAULT_ALLTALK_TIMEOUT_MS } from '@lia/core/alltalk/client'
 import { gatherPortOwners, inspectProcess } from '@lia/core/alltalk/port-diagnostics'
 import { loopbackHostFor, probeTcpListeners } from '@lia/core/alltalk/port-listeners'
-import { createRuntimeManager } from '@lia/core/alltalk/runtime'
+import { createRuntimeManager, inspectAllTalkInstall } from '@lia/core/alltalk/runtime'
 import { buildLiaBridgeConfig, stageEnvFor } from '@lia/core/bridge/lia-config'
 import { liaProductPaths } from '@lia/core/paths/product-paths'
+import { resolveAllTalkInstallCandidates } from '@lia/core/paths/runtime-paths'
 import { readLiaProductConfig, updateLiaProductConfig } from '@lia/core/product/config'
 import { createLiaSecretVault } from '@lia/core/secrets/vault'
 import { createLiaVoiceProfileStore } from '@lia/core/voices/profiles'
@@ -45,11 +47,25 @@ import { ShutdownCoordinator } from './shutdown-coordinator'
 export interface LiaHomeStatus {
   /** Chat provider onboarding: has a preferred target AND its key present. */
   ai: { ready: boolean }
-  /** Voice selection + runtime facts for the home strip. */
+  /**
+   * Voice runtime facts, on four SEPARATE axes (integration hotfix, item 6):
+   * an installation can exist without running; a process can be stopped
+   * without the configuration being absent. "Unconfigured" was the old
+   * single-bucket lie - it is gone.
+   */
   alltalk: {
+    /** Voice configuration targets the custom runtime? (preferred = custom-local-voice) */
+    configured: boolean
+    /** Install markers all present at the effective install dir? */
     installed: boolean
+    /** The effective install dir - only when it was PROVEN installed. */
     installDir?: string
-    phase: 'unconfigured' | RuntimeStateSnapshot['phase']
+    /** The manager's own phase; 'notInstalled' when no install exists. */
+    phase: RuntimeStateSnapshot['phase']
+    /** A voice profile id is actively selected. */
+    profileSelected: boolean
+    /** The runtime answers health / holds a li-managed tree right now. */
+    running: boolean
   }
   config: {
     filePath: string
@@ -90,6 +106,12 @@ export interface LiaHostDeps {
   /** Env for path resolution (tests point it at fixture folders). */
   env?: Record<string, string | undefined>
   exists?: (path: string) => boolean
+  /**
+   * Install-marker inspection, injected so integration tests can exercise
+   * the REAL resolver and manager against a virtual disk (the canonical
+   * LocalAppData root only exists on a real Windows profile).
+   */
+  inspectInstallImpl?: typeof inspectAllTalkInstall
   /** Never-secret log lines; the renderer log strip shows a pass-through. */
   onEvent?: (event: string, detail?: string) => void
   /** Never-crashes platform override for tests. */
@@ -262,10 +284,38 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
     })
   }
 
+  /**
+   * Where the install lives, decided with EVIDENCE (integration hotfix):
+   * the document's configured path wins only when it proves installed;
+   * the canonical `%LOCALAPPDATA%\Lia\runtimes\alltalk\app` is the
+   * default the Windows installer actually wrote. Detection is the same
+   * marker set as the runtime's own - never "the folder exists".
+   */
+  async function resolveInstallDir(configuredInstallDir?: string): Promise<{ candidate: LiaInstallDirCandidate | undefined, installed: boolean }> {
+    const candidates = resolveAllTalkInstallCandidates({
+      configuredInstallDir,
+      env: deps.env,
+      platform,
+      userDataDir: paths.userDataDir,
+    })
+    const inspect = deps.inspectInstallImpl ?? inspectAllTalkInstall
+    const first = candidates[0]
+    for (const candidate of candidates) {
+      if (await inspect(candidate.dir, { platform })) {
+        return { candidate, installed: true }
+      }
+    }
+    // Nothing installed: keep the document's pointer if one exists (a
+    // broken-but-explicit path the user can fix at instead of a silent
+    // reroute), otherwise the canonical future home.
+    return { candidate: first, installed: false }
+  }
+
   async function manager(): Promise<ReturnType<typeof createRuntimeManager>> {
     const { snapshot } = await readSnapshot()
     const alltalk = snapshot?.voice?.runtime?.alltalk
-    const installDir = alltalk?.installDir?.trim() ?? ''
+    const resolution = await resolveInstallDir(alltalk?.installDir)
+    const installDir = resolution.candidate?.dir ?? ''
     if (cached && cached.installDir === installDir)
       return cached.manager
 
@@ -286,16 +336,24 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
     const runtime = await manager()
     const profiles = await voices.list()
     const installed = await runtime.isInstalled()
-    const installDir = snapshot?.voice?.runtime?.alltalk?.installDir
+    const runtimeState = runtime.state()
     const preferredAi = snapshot?.provider?.chat?.preferred
+    const preferredVoice = snapshot?.voice?.tts?.preferred
     return {
       ai: {
         ready: preferredAi !== undefined && vault.hasSecret(preferredAi.providerId, 'apiKey'),
       },
       alltalk: {
+        configured: preferredVoice?.providerId === 'custom-local-voice',
         installed,
-        installDir,
-        phase: installDir ? runtime.state().phase : 'unconfigured',
+        // The dir is named only when the install there PROVED valid; a
+        // guessed location remains out of a status users act on.
+        installDir: installed ? cached?.installDir : undefined,
+        phase: runtimeState.phase === 'ready'
+          ? 'ready'
+          : installed ? runtimeState.phase : 'notInstalled',
+        profileSelected: preferredVoice?.voiceId !== undefined,
+        running: runtimeState.phase === 'ready',
       },
       config: { filePath: paths.productConfigFile, status },
       paths,

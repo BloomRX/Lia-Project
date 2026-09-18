@@ -61,6 +61,35 @@ export const ENVIRONMENT_MARKERS = ['alltalk_environment/conda', 'alltalk_enviro
 /** The launcher `atsetup.bat` generates. Windows only. */
 export const WINDOWS_START_SCRIPT = 'start_alltalk.bat'
 
+/**
+ * One install, one verdict - the SINGLE marker check of the product
+ * (Windows integration hotfix: the launcher's detection and the runtime
+ * manager must agree, bit for bit, on what "installed" means).
+ *
+ * Installed = ALL of `INSTALL_MARKERS` + ALL of `ENVIRONMENT_MARKERS` in
+ * the given directory, and - Windows only - the generated launcher
+ * script (its existence is the difference between "unzipped" and
+ * "setup actually ran"). Anything less is not installed: never weakened
+ * to "the folder exists".
+ */
+export interface AllTalkInstallInspectDeps {
+  exists?: (path: string) => Promise<boolean>
+  platform?: NodeJS.Platform | string
+}
+
+export async function inspectAllTalkInstall(dir: string, deps: AllTalkInstallInspectDeps = {}): Promise<boolean> {
+  const trimmed = dir.trim()
+  if (!trimmed)
+    return false
+  const exists = deps.exists ?? (async (p: string) => await access(p).then(() => true, () => false))
+  const platform = deps.platform ?? process.platform
+  for (const marker of [...INSTALL_MARKERS, ...ENVIRONMENT_MARKERS]) {
+    if (!await exists(join(trimmed, marker)))
+      return false
+  }
+  return platform === 'win32' ? exists(join(trimmed, WINDOWS_START_SCRIPT)) : true
+}
+
 /** How long to wait for the server to answer after spawning it. */
 export const DEFAULT_START_TIMEOUT_MS = 180_000
 
@@ -575,17 +604,7 @@ export function createRuntimeManager(deps: RuntimeManagerDeps): RuntimeManager {
   }
 
   async function isInstalled(): Promise<boolean> {
-    const dir = deps.installDir?.trim()
-    if (!dir)
-      return false
-
-    for (const marker of [...INSTALL_MARKERS, ...ENVIRONMENT_MARKERS]) {
-      if (!await exists(join(dir, marker)))
-        return false
-    }
-    // The launcher only exists once the user has actually run the setup script,
-    // so it is the difference between "extracted the zip" and "installed".
-    return platform === 'win32' ? exists(join(dir, WINDOWS_START_SCRIPT)) : true
+    return await inspectAllTalkInstall(deps.installDir ?? '', { exists: existsImpl, platform })
   }
 
   async function waitForHealth(deadline: number): Promise<boolean> {
