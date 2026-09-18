@@ -8,6 +8,7 @@ import type { ChatHistoryItem, ChatToolReference, StreamingAssistantMessage } fr
 import type { ToolCallRerunPayload } from './tool-call-rerun'
 
 import { errorMessageFrom } from '@moeru/std'
+import { humanizeSendErrorMessage } from './chat/send-error'
 import { createChatOrchestratorRuntime } from '@proj-airi/core-agent'
 import { IOAttributes, IOEvents, IOSpanNames, IOSubsystems } from '@proj-airi/stage-shared'
 import { nanoid } from 'nanoid'
@@ -373,9 +374,20 @@ export const useChatStore = defineStore('chat', () => {
     if (!chatSession.getSessionMessagesIfLoaded(sessionId))
       return
 
+    const raw = errorMessageFrom(error) ?? 'Unknown chat operation failure'
+    // Phase 7.3 (QA item 10): the bubble gets the human mapping; the raw
+    // provider error ALWAYS stays in the diagnostic log. Raw text never
+    // contains secrets - transport errors carry status/code, not keys.
+    const humanized = humanizeSendErrorMessage(raw, {
+      authHint: 'the Lia Settings',
+      fallback: 'Unknown chat operation failure',
+    })
+    if (humanized.kind === 'auth-failure')
+      console.warn('[lia] chat send auth failure (raw provider detail follows):', raw)
+
     chatSession.appendSessionMessage(sessionId, {
       role: 'error',
-      content: errorMessageFrom(error) ?? 'Unknown chat operation failure',
+      content: humanized.humanText,
     })
   }
 

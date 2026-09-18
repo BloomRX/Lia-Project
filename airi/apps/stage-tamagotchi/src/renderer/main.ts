@@ -20,6 +20,7 @@ import App from './App.vue'
 
 import { shouldInstallRealChatObserver } from './diagnostics/gate'
 import { i18n } from './modules/i18n'
+import { managedRoutePolicyGuard } from './navigation/managed-route-policy'
 import { installCustomVoiceTransport } from './stores/lia/custom-voice-transport'
 import { resolveRendererWindowContext } from './window-context'
 
@@ -84,6 +85,13 @@ const router = createRouter({
   // TODO: vite-plugin-vue-layouts is long deprecated, replace with another layout solution
   routes: setupLayouts(routes as RouteRecordRaw[]),
 })
+
+/**
+ * Phase 7.3 central managed-route policy: under LIA_MANAGED the legacy
+ * launcher shell is not a destination (guard replaces it with the
+ * companion). Standalone is untouched - the guard then always allows.
+ */
+router.beforeEach(managedRoutePolicyGuard(resolveRendererWindowContext().liaManaged))
 
 if (import.meta.hot) {
   handleHotUpdate(router, (updatedRoutes) => {

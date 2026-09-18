@@ -64,6 +64,8 @@ import { electronPluginToolsChanged } from '../shared/eventa/plugin/tools'
 import { initializeElectronAuthCallbackBridge } from './bridges/electron-auth-callback'
 import { initializeStageThreeRuntimeTraceBridge } from './bridges/stage-three-runtime-trace'
 import { useLanguage } from './composables/use-language'
+import { useLiaProviderStore } from './stores/lia/provider'
+import { useLiaVoiceStore } from './stores/lia/voice'
 import { useServerChannelSettingsStore } from './stores/settings/server-channel'
 import { useStageWindowLifecycleStore } from './stores/stage-window-lifecycle'
 import {
@@ -84,6 +86,8 @@ const setLocale = useElectronEventaInvoke(i18nSetLocale)
 const windowContext = resolveRendererWindowContext()
 const initialRoutePath = resolveInitialRendererRoutePath(route.path)
 const chatStore = useChatStore()
+const liaProviderStore = useLiaProviderStore()
+const liaVoiceStore = useLiaVoiceStore()
 const builtinToolsStore = useTamagotchiBuiltinToolsStore()
 const mcpToolsStore = useTamagotchiMcpToolsStore()
 const pluginToolsStore = useTamagotchiPluginToolsStore()
@@ -324,6 +328,24 @@ const { updateThemeColor } = useThemeColor(themeColorFromValue({ light: 'rgb(255
 watch(dark, () => updateThemeColor(), { immediate: true })
 watch(route, () => updateThemeColor(), { immediate: true })
 onMounted(() => updateThemeColor())
+
+/**
+ * Phase 7.3 root fix for "oi -> 401": the Lia runtime extensions used to be
+ * installed by the Lia Home page's onMounted - and Phase 7.2 (correctly)
+ * skipped that page under LIA_MANAGED, so the vault credential resolver was
+ * never installed and the AIRI chat fell back to legacy credentials (empty),
+ * producing the provider 401. The mount point for the extensions is the MAIN
+ * WINDOW itself, independent of which route it opens on. Registration is a
+ * singleton assignment (idempotent), so the Home page calling it again when
+ * standalone is a no-op; voice extensions ride the same mount and stay
+ * inert-by-default.
+ */
+onMounted(() => {
+  if (windowContext.leadership === 'leader-only') {
+    liaProviderStore.registerRuntimeExtensions()
+    liaVoiceStore.registerRuntimeExtensions()
+  }
+})
 
 if (isSettingsWindow) {
   context.value.on(electronSettingsNavigate, (event) => {

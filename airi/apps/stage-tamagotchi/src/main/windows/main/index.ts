@@ -8,6 +8,7 @@ import type { NoticeWindowManager } from '../notice'
 import type { OnboardingWindowManager } from '../onboarding'
 import type { SettingsWindowManager } from '../settings'
 import type { WidgetsWindowManager } from '../widgets'
+import type { MainWindowSizeSettingsController } from './window-size-settings'
 import type { MainWindowContext } from './window-sizing'
 
 import { dirname, join, resolve } from 'node:path'
@@ -26,20 +27,21 @@ import icon from '../../../../resources/icon.png?asset'
 import { electronStartDraggingWindow } from '../../../shared/eventa'
 import { onAppBeforeQuit } from '../../libs/bootkit/lifecycle'
 import { baseUrl, getElectronMainDirname, load, withHashRoute } from '../../libs/electron/location'
-import { initialMainWindowContext, initialMainWindowRoute } from '../../services/lia/initial-route'
 import { createConfig } from '../../libs/electron/persistence'
+import { initialMainWindowContext, initialMainWindowRoute } from '../../services/lia/initial-route'
+import { isLauncherManaged } from '../../services/lia/lia-managed'
 import { protectPrivilegedWindowNavigation, setWindowAlwaysOnTop, transparentWindowConfig } from '../shared'
 import { setupMainWindowElectronInvokes } from './rpc/index.electron'
+import {
+  createMainWindowSizeSettingsController,
+
+} from './window-size-settings'
 import {
   createMainWindowContextSizing,
   HOME_WINDOW_PRESET,
   liaMainWindowStateSchema,
   MAIN_WINDOW_MIN_SIZE,
 } from './window-sizing'
-import {
-  createMainWindowSizeSettingsController,
-  type MainWindowSizeSettingsController,
-} from './window-size-settings'
 
 export async function setupMainWindow(params: {
   editorWindow: EditorWindowManager
@@ -184,7 +186,14 @@ export async function setupMainWindow(params: {
   // the supervisor (LIA_MANAGED=1, Phase 7.2) the stage IS the companion
   // engine and the window lands directly on it - never a second launcher.
   await load(window, withHashRoute(baseUrl(resolve(getElectronMainDirname(), '..', 'renderer')), initialMainWindowRoute(), {
-    query: { 'synced-leader': 'true' },
+    // `lia-managed` mirrors LIA_MANAGED into the RENDERER read path (the
+    // window-context query convention, synced-leader style): env vars stay
+    // in the main process, the renderer gets the one boolean it needs for
+    // its central managed-route policy - Phase 7.3.
+    query: {
+      'synced-leader': 'true',
+      ...(isLauncherManaged() ? { 'lia-managed': 'true' } : {}),
+    },
   }))
 
   /**
