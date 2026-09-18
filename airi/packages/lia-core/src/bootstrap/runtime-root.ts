@@ -82,22 +82,82 @@ export interface ResolveLocalAppDataEnv {
 
 export const LOCAL_APP_DATA_ENV_NAME = 'LOCALAPPDATA'
 
+/** The profile-root variable the LocalAppData fallback derives from. */
+export const USER_PROFILE_ENV_NAME = 'USERPROFILE'
+
+/** Windows only: a rooted drive-letter or UNC path. */
+function isAbsoluteWindowsPath(value: string): boolean {
+  return /^(?:[a-z]:[/\\]|\\\\)/i.test(value)
+}
+
+// replace+compare (never .test on the /g singleton) so repeated calls cannot
+// trip over a mutated lastIndex.
+function hasForbiddenChars(value: string): boolean {
+  return value.replace(ATSETUP_FORBIDDEN_PATH_CHARS, '') !== value
+}
+
+const FORBIDDEN_LIST = '!#$%&()*+,;<=>?@[\\]^\`{|}~'
+
+/**
+ * A single LocalAppData candidate, validated; the rejection reason (never
+ * thrown directly) becomes the detail of the one operational error below.
+ */
+function validateLocalAppDataValue(value: string, source: string): { dir?: string, reason?: string } {
+  const trimmed = value.trim()
+  if (!trimmed)
+    return { reason: `${source} is empty` }
+  if (!isAbsoluteWindowsPath(trimmed))
+    return { reason: `${source} ("${trimmed}") is not an absolute Windows path; it must look like "C:\\Users\\<you>\\AppData\\Local"` }
+  if (hasForbiddenChars(trimmed))
+    return { reason: `${source} ("${trimmed}") contains characters the voice installer cannot handle (${FORBIDDEN_LIST})` }
+  return { dir: trimmed }
+}
+
+/** Paths the resolver is forbidden from ever substituting for LocalAppData. */
+function composedUserProfileFallback(userProfile: string): { dir?: string, reason?: string } {
+  // Never APPDATA: fallbacking to the ROAMING root would silently re-point
+  // a multi-GB runtime at a folder Windows syncs across machines.
+  const base = userProfile.trim().replace(/[\\/]+$/, '')
+  return validateLocalAppDataValue(`${base}\\AppData\\Local`, `${USER_PROFILE_ENV_NAME} fallback`)
+}
+
 export function resolveLocalAppDataDir(
   platform: string = process.platform,
   env: ResolveLocalAppDataEnv = name => process.env[name],
 ): string {
   if (platform !== 'win32')
     return ''
-  const value = env(LOCAL_APP_DATA_ENV_NAME)
-  if (!value?.trim())
-    throw new Error('LOCALAPPDATA is not set on this Windows profile, so the local runtime root cannot be resolved. Sign out and back in, or reinstall the user profile.')
-  if (!/^(?:[a-z]:[/\\]|\\\\)/i.test(value))
-    throw new Error(`LOCALAPPDATA is not an absolute Windows path ("${value}"); it must look like "C:\\Users\\<you>\\AppData\\Local".`)
-  // replace+compare (never .test on the /g singleton) so repeated calls cannot
-  // trip over a mutated lastIndex.
-  if (value.replace(ATSETUP_FORBIDDEN_PATH_CHARS, '') !== value)
-    throw new Error(`LOCALAPPDATA contains characters the voice installer cannot handle ("${value}"); the characters !#$%&()*+,;<=>?@[\\]^\`{|}~ are not supported in this path.`)
-  return value
+
+  const reasons: string[] = []
+  // Order (Windows integration hotfix, item 3): the profile's own env value
+  // first, then ONE defensive fallback composed from the profile root.
+  const primary = env(LOCAL_APP_DATA_ENV_NAME)
+  if (primary?.trim()) {
+    const primaryCheck = validateLocalAppDataValue(primary, LOCAL_APP_DATA_ENV_NAME)
+    if (primaryCheck.dir)
+      return primaryCheck.dir
+    reasons.push(primaryCheck.reason!)
+  }
+  else {
+    reasons.push(`${LOCAL_APP_DATA_ENV_NAME} is not present in the environment the Lia received`)
+  }
+
+  const userProfile = env(USER_PROFILE_ENV_NAME)
+  if (userProfile?.trim()) {
+    const fallback = composedUserProfileFallback(userProfile)
+    if (fallback.dir)
+      return fallback.dir
+    reasons.push(fallback.reason!)
+  }
+  else {
+    reasons.push(`${USER_PROFILE_ENV_NAME} is not present in the environment the Lia received`)
+  }
+
+  // One operational error (hotfix, item 4): the core cannot conclude a
+  // Windows profile is broken merely because an INJECTED env object lacks
+  // the key - so no more "reinstall your profile" instructions here. The
+  // reasons stay in the message for logs, never as repair advice.
+  throw new Error(`Could not resolve Windows LocalAppData for the Lia runtime (needed by the voice engine). Reasons: ${reasons.join('; ')}.`)
 }
 
 /** The `join`/`relative` pair of one `node:path` implementation. */

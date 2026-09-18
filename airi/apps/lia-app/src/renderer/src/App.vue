@@ -48,10 +48,12 @@ const chips = computed(() => {
       tone: s.ai.ready ? 'ok' : 'warn',
     },
     {
-      label: s.alltalk.installed
-        ? `voz: ${s.alltalk.phase}`
-        : (s.alltalk.installDir ? 'voz: instalação não encontrada' : 'voz: não configurada'),
-      tone: s.alltalk.installed ? (s.alltalk.phase === 'ready' ? 'ok' : 'warn') : 'dim',
+      label: s.alltalk.installed === undefined
+        ? 'voz: estado desconhecido'
+        : s.alltalk.installed
+          ? `voz: ${s.alltalk.phase}`
+          : (s.alltalk.installDir ? 'voz: instalação não encontrada' : 'voz: não configurada'),
+      tone: s.alltalk.installed === undefined ? 'dim' : s.alltalk.installed ? (s.alltalk.phase === 'ready' ? 'ok' : 'warn') : 'dim',
     },
     {
       label: s.stage.available ? `stage: ${s.stage.state.phase}` : 'stage: indisponível',

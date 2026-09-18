@@ -1,5 +1,6 @@
+import process from 'node:process'
+
 import { join } from 'node:path'
-import { platform as nodePlatform } from 'node:process'
 
 import { RUNTIME_APP_SUBDIR } from '../bootstrap/bootstrap'
 import { resolveLocalAppDataDir, WINDOWS_RUNTIME_PRODUCT_DIR } from '../bootstrap/runtime-root'
@@ -40,7 +41,7 @@ export interface LiaRuntimePathsDeps {
 }
 
 function platformOf(deps: LiaRuntimePathsDeps): string {
-  return deps.platform ?? nodePlatform
+  return deps.platform ?? process.platform
 }
 
 /**
@@ -52,7 +53,8 @@ function platformOf(deps: LiaRuntimePathsDeps): string {
  */
 export function resolveLiaRuntimeRoot(deps: LiaRuntimePathsDeps = {}): string {
   if (platformOf(deps) === 'win32') {
-    const localAppData = resolveLocalAppDataDir('win32', name => deps.env?.[name])
+    const env = deps.env
+    const localAppData = resolveLocalAppDataDir('win32', name => env ? env[name] : process.env[name])
     return join(localAppData, WINDOWS_RUNTIME_PRODUCT_DIR, 'runtimes', 'alltalk')
   }
   const userData = deps.userDataDir?.trim()

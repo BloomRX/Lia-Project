@@ -312,9 +312,35 @@ describe('resolveLocalAppDataDir - the supported %LOCALAPPDATA% source', () => {
     }
   })
 
-  it('fails clearly when LOCALAPPDATA is absent on a Windows profile (F)', () => {
-    expect(() => resolveLocalAppDataDir('win32', () => undefined)).toThrow(/LOCALAPPDATA is not set/)
-    expect(() => resolveLocalAppDataDir('win32', () => '')).toThrow(/LOCALAPPDATA is not set/)
+  it('fails with an operational error when no LocalAppData source resolves (F - hotfix item 4)', () => {
+    // The old copy ordered users to reinstall their Windows profile - the
+    // core cannot conclude that from a missing env key (hotfix, item 4).
+    expect(() => resolveLocalAppDataDir('win32', () => undefined))
+      .toThrow(/Could not resolve Windows LocalAppData/)
+    expect(() => resolveLocalAppDataDir('win32', () => undefined))
+      .toThrow(/LOCALAPPDATA is not present/)
+    expect(() => resolveLocalAppDataDir('win32', () => undefined))
+      .toThrow(/USERPROFILE is not present/)
+    expect(() => resolveLocalAppDataDir('win32', () => undefined))
+      .not.toThrow(/reinstall/)
+    expect(() => resolveLocalAppDataDir('win32', () => ''))
+      .toThrow(/Could not resolve Windows LocalAppData/)
+  })
+
+  it('validates USERPROFILE\\AppData\\Local as the defensive fallback (hotfix item 3)', () => {
+    const env = (values: Record<string, string | undefined>) =>
+      (name: string) => values[name]
+    expect(resolveLocalAppDataDir('win32', env({ LOCALAPPDATA: undefined, USERPROFILE: 'C:\\Users\\lucas' })))
+      .toBe(String.raw`C:\Users\lucas\AppData\Local`)
+    // A faulty primary must never hide a valid profile-root fallback.
+    expect(resolveLocalAppDataDir('win32', env({ LOCALAPPDATA: 'relative', USERPROFILE: 'C:\\Users\\lucas' })))
+      .toBe(String.raw`C:\Users\lucas\AppData\Local`)
+    // Trailing separators in the profile root stay single.
+    expect(resolveLocalAppDataDir('win32', env({ LOCALAPPDATA: '', USERPROFILE: 'C:\\Users\\lucas\\' })))
+      .toBe(String.raw`C:\Users\lucas\AppData\Local`)
+    // Roaming is never a LocalAppData substitute (hotfix item 3).
+    expect(() => resolveLocalAppDataDir('win32', env({ APPDATA: 'C:\\Users\\a\\AppData\\Roaming' })))
+      .toThrow(/Could not resolve Windows LocalAppData/)
   })
 
   it('rejects a LOCALAPPDATA that is not an absolute Windows path (F)', () => {

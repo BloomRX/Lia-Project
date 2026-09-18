@@ -6,6 +6,7 @@ import { join } from 'node:path'
 
 import { app, BrowserWindow, dialog, safeStorage } from 'electron'
 
+import { createLiaEventPublisher } from './event-publisher'
 import { registerLiaIpc } from './ipc'
 import { createLiaHost } from './lia-host'
 import { createSupervisorQuitFlow } from './shutdown-coordinator'
@@ -57,6 +58,12 @@ const instanceRole = enforceSingleInstance({
 
 const isDevelopment = process.env.NODE_ENV !== 'production'
 
+/** The ONE renderer-facing event sink, guarded for the window's lifetime. */
+const publishLiaEvent = createLiaEventPublisher({
+  getWindow: () => mainWindow,
+  log: line => console.info(line),
+})
+
 async function bootstrap(): Promise<void> {
   await app.whenReady()
 
@@ -69,11 +76,10 @@ async function bootstrap(): Promise<void> {
       decrypt: payload => safeStorage.decryptString(payload),
       encrypt: value => safeStorage.encryptString(value),
     },
-    onEvent: (event, detail) => {
-      // Host events are never secret; the renderer log strip mirrors them.
-      console.info('[lia]', new Date().toISOString(), event, detail ?? '')
-      mainWindow?.webContents.send('lia:event', { detail, event })
-    },
+    // Host events are never secret; the renderer log strip mirrors them
+    // through the bounded publisher (item 6: terminal sink always,
+    // renderer best-effort, delivery errors never escape).
+    onEvent: (event, detail) => publishLiaEvent(event, detail),
   })
   timer.mark('lia-core.ready')
 

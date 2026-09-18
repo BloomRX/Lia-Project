@@ -53,21 +53,30 @@ export interface LiaHomeStatus {
    * without the configuration being absent. "Unconfigured" was the old
    * single-bucket lie - it is gone.
    */
+  /**
+   * Resilience contract (follow-up hotfix, item 5): if detection never ran
+   * (path resolution threw, snapshot unreadable) the fields are ABSENT and
+   * `error` carries the operational reason - never a fabricated
+   * `installed: false` invented by an exception.
+   */
   alltalk: {
-    /** Voice configuration targets the custom runtime? (preferred = custom-local-voice) */
-    configured: boolean
-    /** Install markers all present at the effective install dir? */
-    installed: boolean
+    /** Voice configuration targets the custom runtime? Absent when the document could not be read. */
+    configured?: boolean
+    /** Why inspection did not produce facts, when it did not. */
+    error?: string
+    /** Install markers all present at the effective install dir? Absent = inspection never ran (unknown). */
+    installed?: boolean
     /** The effective install dir - only when it was PROVEN installed. */
     installDir?: string
-    /** The manager's own phase; 'notInstalled' when no install exists. */
-    phase: RuntimeStateSnapshot['phase']
-    /** A voice profile id is actively selected. */
-    profileSelected: boolean
+    /** The manager's own phase; 'unknown' when inspection failed before any phase could exist. */
+    phase: 'unknown' | RuntimeStateSnapshot['phase']
+    /** A voice profile id is actively selected. Absent when the document could not be read. */
+    profileSelected?: boolean
     /** The runtime answers health / holds a li-managed tree right now. */
     running: boolean
   }
   config: {
+    error?: string
     filePath: string
     status: 'invalid' | 'missing' | 'ok' | 'read-error'
   }
@@ -79,6 +88,7 @@ export interface LiaHomeStatus {
   }
   voices: {
     count: number
+    error?: string
     profiles: LiaCustomVoiceProfile[]
   }
 }
@@ -186,7 +196,24 @@ function runtimePorts(baseUrl: string): number[] {
 }
 
 export function createLiaHost(deps: LiaHostDeps): LiaHost {
-  const paths = liaProductPaths({ env: deps.env, exists: deps.exists })
+  /**
+   * The ONE environment every core resolver sees (hotfix, items 1-3): the
+   * injected test block, otherwise the process's REAL one. Passing an
+   * absent env down used to reach the resolvers as an EMPTY lookup, which
+   * made the core believe LOCALAPPDATA did not exist on a healthy profile.
+   */
+  const env = deps.env ?? process.env
+  const paths = liaProductPaths({ env, exists: deps.exists })
+
+  // Safe boot evidence (hotfix, item 1): booleans only, never values.
+  if ((deps.platform ?? process.platform) === 'win32') {
+    deps.onEvent?.('lia:env', JSON.stringify({
+      hasAPPDATA: env.APPDATA !== undefined && env.APPDATA !== '',
+      hasLOCALAPPDATA: env.LOCALAPPDATA !== undefined && env.LOCALAPPDATA !== '',
+      hasUSERPROFILE: env.USERPROFILE !== undefined && env.USERPROFILE !== '',
+      source: deps.env ? 'injected' : 'process',
+    }))
+  }
   const platform = deps.platform ?? process.platform
   const vault = createLiaSecretVault({
     cipher: deps.cipher,
@@ -294,7 +321,7 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
   async function resolveInstallDir(configuredInstallDir?: string): Promise<{ candidate: LiaInstallDirCandidate | undefined, installed: boolean }> {
     const candidates = resolveAllTalkInstallCandidates({
       configuredInstallDir,
-      env: deps.env,
+      env,
       platform,
       userDataDir: paths.userDataDir,
     })
@@ -331,20 +358,46 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
     return built
   }
 
+  /**
+   * Sections computed INDEPENDENTLY (follow-up hotfix, item 5): a runtime
+   * path exception must not hide stage availability, a bad document must
+   * not zero the voice list, and a detection that never ran must surface
+   * "unknown" - never a fabricated `false`.
+   */
   const homeStatus = async (): Promise<LiaHomeStatus> => {
-    const { snapshot, status } = await readSnapshot()
-    const runtime = await manager()
-    const profiles = await voices.list()
-    const installed = await runtime.isInstalled()
-    const runtimeState = runtime.state()
-    const preferredAi = snapshot?.provider?.chat?.preferred
+    const reason = (thrown: unknown): string => {
+      // Lint policy forbids the instanceof ternary; this is its contract.
+      try {
+        if (thrown instanceof Error)
+          return thrown.message
+        return String(thrown)
+      }
+      catch {
+        return 'unknown operational error'
+      }
+    }
+
+    const configSection = readSnapshot()
+      .then(({ snapshot, status }): { error?: string, snapshot: LiaProductConfigSnapshot | undefined, status: LiaHomeStatus['config']['status'] } =>
+        ({ snapshot, status }))
+      .catch(thrown => ({ error: reason(thrown), snapshot: undefined, status: 'read-error' as const }))
+
+    const voicesSection = voices.list()
+      .then(profiles => ({ count: profiles.length, profiles }))
+      .catch((thrown): { count: number, error: string, profiles: LiaCustomVoiceProfile[] } =>
+        ({ count: 0, error: reason(thrown), profiles: [] }))
+
+    const [config, voiceList] = await Promise.all([configSection, voicesSection])
+    const { snapshot } = config
     const preferredVoice = snapshot?.voice?.tts?.preferred
-    return {
-      ai: {
-        ready: preferredAi !== undefined && vault.hasSecret(preferredAi.providerId, 'apiKey'),
-      },
-      alltalk: {
-        configured: preferredVoice?.providerId === 'custom-local-voice',
+
+    let alltalk: LiaHomeStatus['alltalk']
+    try {
+      const runtime = await manager()
+      const installed = await runtime.isInstalled()
+      const runtimeState = runtime.state()
+      alltalk = {
+        configured: snapshot === undefined ? undefined : preferredVoice?.providerId === 'custom-local-voice',
         installed,
         // The dir is named only when the install there PROVED valid; a
         // guessed location remains out of a status users act on.
@@ -352,13 +405,34 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
         phase: runtimeState.phase === 'ready'
           ? 'ready'
           : installed ? runtimeState.phase : 'notInstalled',
-        profileSelected: preferredVoice?.voiceId !== undefined,
+        profileSelected: snapshot === undefined ? undefined : preferredVoice?.voiceId !== undefined,
         running: runtimeState.phase === 'ready',
-      },
-      config: { filePath: paths.productConfigFile, status },
+      }
+    }
+    catch (thrown) {
+      alltalk = {
+        configured: snapshot === undefined ? undefined : preferredVoice?.providerId === 'custom-local-voice',
+        error: reason(thrown),
+        phase: 'unknown',
+        profileSelected: snapshot === undefined ? undefined : preferredVoice?.voiceId !== undefined,
+        running: false,
+      }
+    }
+
+    let aiReady = false
+    try {
+      const preferredAi = snapshot?.provider?.chat?.preferred
+      aiReady = preferredAi !== undefined && vault.hasSecret(preferredAi.providerId, 'apiKey')
+    }
+    catch { /* a vault read failure is degraded status, not a crash */ }
+
+    return {
+      ai: { ready: aiReady },
+      alltalk,
+      config: { error: config.error, filePath: paths.productConfigFile, status: config.status },
       paths,
       stage: { available: stage.isAvailable(), state: stage.state() },
-      voices: { count: profiles.length, profiles },
+      voices: voiceList,
     }
   }
 

@@ -118,7 +118,7 @@ async function importVoice() {
         <h3>Sistema de voz</h3>
         <p>
           Estado:
-          <strong>{{ status?.alltalk?.installed ? status.alltalk.phase : (status?.alltalk?.installDir ? 'instalação não encontrada' : 'não instalado') }}</strong>
+          <strong>{{ status?.alltalk?.installed === undefined ? 'estado desconhecido' : (status.alltalk.installed ? status.alltalk.phase : (status.alltalk.installDir ? 'instalação não encontrada' : 'não instalado')) }}</strong>
         </p>
         <p v-if="status?.alltalk?.installDir" class="dim">
           Pasta: <code>{{ status.alltalk.installDir }}</code>
