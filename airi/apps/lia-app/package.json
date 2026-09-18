@@ -6,8 +6,8 @@
   "description": "The Lia launcher: the independent product shell of Lia (Phase 7). Owns product config, managed runtimes and the AIRI stage lifecycle. Boots with zero AIRI imports.",
   "main": "./out/main/index.js",
   "scripts": {
-    "build": "electron-vite build",
-    "dev": "electron-vite dev",
+    "build": "pnpm -F @lia/core build && electron-vite build",
+    "dev": "pnpm -F @lia/core build && electron-vite dev",
     "preview": "electron-vite preview",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
