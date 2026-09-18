@@ -2,6 +2,7 @@ import { EventEmitter } from 'node:events'
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { execPath } from 'node:process'
 
 import { describe, expect, it, vi } from 'vitest'
 
@@ -43,6 +44,98 @@ async function makeStageWorkspace(): Promise<string> {
   return stageWorkspace
 }
 
+describe('Phase 7.2: ownership retained, spawn without shell (tests C/D/G)', () => {
+  it('G: the Windows spawn path carries NO shell option - the DEP0190 route is eliminated', async () => {
+    const root = await makeStageWorkspace()
+    const child = fakeChild()
+    const spawnImpl = vi.fn(() => child as never)
+    for (const platform of ['win32', 'linux'] as const) {
+      const manager = new AiriStageManager({
+        platform,
+        spawnImpl: spawnImpl as never,
+        workspaceRoot: root,
+      })
+      // eslint-disable-next-line @typescript-eslint/no-floating-promises
+      manager.start()
+      const options = spawnImpl.mock.calls.at(-1)?.[2] as { shell?: unknown } | undefined
+      expect(options?.shell, `${platform} must not request a shell`).toBeUndefined()
+      const [entrypoint, sub] = spawnImpl.mock.calls.at(-1)?.[1] as string[]
+      expect(entrypoint).toContain('electron-vite')
+      expect(sub).toBe('dev')
+    }
+  })
+
+  it('C: a session spawn retains truthful ownership while the dev-server lives', async () => {
+    const root = await makeStageWorkspace()
+    const child = fakeChild({ pid: 4242 })
+    const manager = new AiriStageManager({
+      platform: 'linux',
+      spawnImpl: vi.fn(() => child as never) as never,
+      workspaceRoot: root,
+    })
+    const started = manager.start()
+    child.stdout.emit('data', 'ready in 200 ms')
+    await started
+
+    expect(manager.holdsOwnedStage()).toBe(true)
+    expect(manager.state().pid).toBe(4242)
+    expect(manager.state().phase).toBe('running')
+    expect(manager.command()).not.toContain('pnpm')
+    expect(manager.command()).toContain('electron-vite')
+  })
+
+  it('D: ownership is a live-process fact, not a wrapper fact - exit after running flips to stopped, stop() then stops attempting', async () => {
+    const root = await makeStageWorkspace()
+    const child = fakeChild({ pid: 4243 })
+    const manager = new AiriStageManager({
+      platform: 'linux',
+      spawnImpl: vi.fn(() => child as never) as never,
+      workspaceRoot: root,
+    })
+    const started = manager.start()
+    child.stdout.emit('data', 'ready in 100 ms')
+    await started
+    expect(manager.holdsOwnedStage()).toBe(true)
+
+    child.emit('exit', 0, null)
+    expect(manager.holdsOwnedStage()).toBe(false)
+    expect(manager.state().phase).toBe('stopped')
+    expect(manager.state().lastExitCode).toBe(0)
+
+    await manager.stop() // nothing live: stops are no-ops, not kills
+    expect(child.kill).not.toHaveBeenCalled()
+  })
+
+  it('E: shutdown after a session start ALWAYS attempts the stop - never "nothing this session started" (win32 taskkill path)', async () => {
+    const root = await makeStageWorkspace()
+    const child = fakeChild({ pid: 7890 })
+    const execFileImpl = vi.fn((_cmd: string, _args: string[], _opts: unknown, cb: () => void) => {
+      setTimeout(() => child.emit('exit', null, 'SIGTERM'), 5)
+      cb()
+      return {} as never
+    })
+    const manager = new AiriStageManager({
+      execFileImpl: execFileImpl as never,
+      platform: 'win32',
+      spawnImpl: vi.fn(() => child as never) as never,
+      workspaceRoot: root,
+    })
+    const started = manager.start()
+    child.stdout.emit('data', 'ready in 100 ms')
+    await started
+
+    await manager.stop()
+    expect(execFileImpl).toHaveBeenCalledWith(
+      'taskkill',
+      ['/PID', '7890', '/T', '/F'],
+      expect.objectContaining({ timeout: 30_000 }),
+      expect.any(Function),
+    )
+    expect(manager.state().phase).toBe('stopped')
+    expect(manager.holdsOwnedStage()).toBe(false)
+  })
+})
+
 describe('d. Conversar spawns the stage once', () => {
   it('start() spawns the documented command and reports running after the ready signal', async () => {
     const root = await makeStageWorkspace()
@@ -60,8 +153,14 @@ describe('d. Conversar spawns the stage once', () => {
     const started = manager.start({ env: { LIA_MANAGED: '1' } })
     expect(manager.state().phase).toBe('starting')
     expect(spawnImpl).toHaveBeenCalledTimes(1)
-    expect(spawnImpl.mock.calls[0][1]).toEqual(['-rF', '@proj-airi/stage-tamagotchi', 'run', 'dev'])
-    expect(spawnImpl.mock.calls[0][2]).toMatchObject({ cwd: root })
+    // Phase 7.2 ownership fix: the dev-server executable DIRECTLY via node -
+    // no pnpm wrapper, no shell intermediary (the DEP0190 route is gone).
+    expect(spawnImpl.mock.calls[0][0]).toBe(execPath)
+    const [entrypoint, subcommand] = spawnImpl.mock.calls[0][1] as string[]
+    expect(entrypoint.replace(/\\/g, '/')).toContain('apps/stage-tamagotchi/node_modules/electron-vite/bin/electron-vite.js')
+    expect(subcommand).toBe('dev')
+    expect(spawnImpl.mock.calls[0][2]).toMatchObject({ cwd: join(root, 'apps', 'stage-tamagotchi') })
+    expect((spawnImpl.mock.calls[0][2] as { shell?: unknown }).shell).toBeUndefined()
     expect((spawnImpl.mock.calls[0][2] as { env: Record<string, string> }).env.LIA_MANAGED).toBe('1')
 
     child.stdout.emit('data', '> dev server ready in 512 ms\n')

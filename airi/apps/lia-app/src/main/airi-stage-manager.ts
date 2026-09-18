@@ -1,7 +1,7 @@
 import { execFile, spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
-import { env as nodeEnv, platform as nodePlatform } from 'node:process'
+import { env as nodeEnv, execPath as nodeExecPath, platform as nodePlatform } from 'node:process'
 
 /**
  * AiriStageManager (Phase 7, architecture items 9-10).
@@ -58,6 +58,12 @@ export interface AiriStageManagerDeps {
   /** Platform override for tests. */
   platform?: NodeJS.Platform
   spawnImpl?: typeof spawn
+  /**
+   * The dev-server entry script the manager launches with `node`. Default:
+   * the stage package's own electron-vite bin, resolved as a FILE - never
+   * through a package-manager wrapper.
+   */
+  stageDevEntrypoint?: (stageDir: string) => string
   /** Milliseconds before a spawned stage that never says "ready" errors out. */
   startGraceMs?: number
   /**
@@ -76,6 +82,18 @@ export interface AiriStageManagerDeps {
 }
 
 const STAGE_PACKAGE = '@proj-airi/stage-tamagotchi'
+
+/**
+ * The dev-server entry as a concrete SCRIPT FILE (node runs it, no shell,
+ * no package-manager wrapper). pnpm links the package's bin into
+ * `node_modules/electron-vite/bin/`, so this path exists in any installed
+ * workspace; missing files surface as an honest child 'error' event.
+ */
+function stageDevEntrypointFor(stageDir: string, deps: AiriStageManagerDeps): string {
+  return deps.stageDevEntrypoint?.(stageDir)
+    ?? join(stageDir, 'node_modules', 'electron-vite', 'bin', 'electron-vite.js')
+}
+
 /** electron-vite dev speaks like Vite: "ready in N ms" when the dev server is listening. */
 const READY_SIGNAL = /ready in|Local:.*http|dev server/i
 const LOG_TAIL_MAX = 200
@@ -94,7 +112,11 @@ export class AiriStageManager {
 
   /** The child spawn command, as one inspectable string for diagnostics. */
   command(): string {
-    return `pnpm -rF ${STAGE_PACKAGE} run dev`
+    return `node ${stageDevEntrypointFor(this.stageDir(), this.deps)} dev`
+  }
+
+  private stageDir(): string {
+    return join(this.deps.workspaceRoot, 'apps', 'stage-tamagotchi')
   }
 
   isAvailable(): boolean {
@@ -154,6 +176,7 @@ export class AiriStageManager {
 
     const pid = child.pid
     this.setState({ phase: 'stopping', pid })
+    this.deps.onLog?.(`stop requested (pid ${String(pid)})`)
 
     const exited = new Promise<null | number>((resolve) => {
       child.once('exit', code => resolve(code))
@@ -219,16 +242,30 @@ export class AiriStageManager {
     const platform = this.deps.platform ?? nodePlatform
     this.setState({ phase: 'starting' })
 
+    /**
+     * THE ownership fix (QA items 5-7). The old chain was
+     * `pnpm -> cmd shim -> install-electron -> electron-vite -> electron`:
+     * a WRAPPER could exit while the Electron grandchild kept living, and
+     * this manager - holding only the wrapper's dead PID - reported
+     * "nothing this session started" while a window was visibly open.
+     *
+     * The fix is to spawn the dev-server executable DIRECTLY: our child is
+     * `node electron-vite.js dev`, the exact process that parents the
+     * Electron window. It lives for the whole session (its exit IS the
+     * stage's exit), `holdsOwnedStage` stays truthful, and taskkill /T
+     * walks the real tree. As a bonus the Windows DEP0190 route is gone:
+     * no `shell` option, no cmd intermediary, arguments stay an array.
+     */
+    const stageDir = this.stageDir()
+    const entrypoint = stageDevEntrypointFor(stageDir, this.deps)
     const spawnImpl = this.deps.spawnImpl ?? spawn
-    const child = spawnImpl('pnpm', ['-rF', STAGE_PACKAGE, 'run', 'dev'], {
-      cwd: this.deps.workspaceRoot,
+    const child = spawnImpl(nodeExecPath, [entrypoint, 'dev'], {
+      cwd: stageDir,
       env: { ...nodeEnv, ...this.deps.childEnv, ...passEnv },
-      // No detached group: on POSIX we signal the child directly; on Windows
-      // taskkill walks the tree by PID anyway.
-      shell: platform === 'win32',
     })
     this.child = child
     this.setState({ phase: 'starting', pid: child.pid })
+    this.deps.onLog?.(`spawn: node ${entrypoint} dev (pid ${String(child.pid)})`)
 
     return await new Promise<AiriStageState>((resolve) => {
       const grace = this.deps.startGraceMs ?? 180_000
@@ -251,9 +288,17 @@ export class AiriStageManager {
       const onData = (data: unknown) => {
         const text = String(data)
         appendLine(this.currentState, text)
+        // The managed stage's own words stay observable on the Lia
+        // terminal (item 8): every line forwards with the stage prefix;
+        // the tail stays bounded by appendLine.
+        for (const line of text.split(/\r?\n/)) {
+          if (line.trim())
+            this.deps.onLog?.(line)
+        }
         if (READY_SIGNAL.test(text) && !readySeen) {
           readySeen = true
           this.setState({ phase: 'running', pid: child.pid })
+          this.deps.onLog?.(`ready (pid ${String(child.pid)})`)
           this.deps.onState?.(this.state())
           finish(this.state())
         }
@@ -267,8 +312,9 @@ export class AiriStageManager {
         finish(this.state())
       })
 
-      child.on('exit', (code) => {
+      child.on('exit', (code, signal) => {
         this.child = undefined
+        this.deps.onLog?.(`exit: code ${String(code)} signal ${String(signal)}`)
         if (!readySeen) {
           this.setState({ lastExitCode: code, message: 'The stage closed while starting.', phase: 'error' })
           finish(this.state())

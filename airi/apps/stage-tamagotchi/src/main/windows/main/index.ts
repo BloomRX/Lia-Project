@@ -26,6 +26,7 @@ import icon from '../../../../resources/icon.png?asset'
 import { electronStartDraggingWindow } from '../../../shared/eventa'
 import { onAppBeforeQuit } from '../../libs/bootkit/lifecycle'
 import { baseUrl, getElectronMainDirname, load, withHashRoute } from '../../libs/electron/location'
+import { initialMainWindowContext, initialMainWindowRoute } from '../../services/lia/initial-route'
 import { createConfig } from '../../libs/electron/persistence'
 import { protectPrivilegedWindowNavigation, setWindowAlwaysOnTop, transparentWindowConfig } from '../shared'
 import { setupMainWindowElectronInvokes } from './rpc/index.electron'
@@ -104,9 +105,11 @@ export async function setupMainWindow(params: {
   })
   params.onSizeSettingsReady?.(sizeSettings)
 
-  // First open / relaunch always lands on the launcher: apply the Home mode
-  // (persisted Home size or the Home preset) and center it on its display.
-  sizing.setContext('home', { recenter: true })
+  // First open / relaunch applies the mode matching the initial route
+  // (Phase 7.2: a Lia-managed stage lands on the companion directly, so it
+  // opens at the stage preset - never at the small launcher size).
+  const initialContext = initialMainWindowContext()
+  sizing.setContext(initialContext, { recenter: true })
 
   // Persist the *active* mode's size on user resize (not the legacy global
   // bounds), so Home and Stage never overwrite each other silently.
@@ -153,9 +156,10 @@ export async function setupMainWindow(params: {
 
   window.on('ready-to-show', () => {
     window!.show()
-    // Startup Home bounds (preset or persisted override) are now applied and the
-    // window is visible. Only now may genuine user resizes be persisted, so a
-    // transient startup resize can never overwrite the Home override.
+    // Startup bounds (preset or the persisted override of the ACTIVE mode)
+    // are now applied and the window is visible. Only now may genuine user
+    // resizes be persisted, so a transient startup resize can never
+    // overwrite the mode's override.
     sizing.armUserResizeCapture()
   })
   protectPrivilegedWindowNavigation(window)
@@ -176,9 +180,10 @@ export async function setupMainWindow(params: {
     setMainWindowContext,
   })
 
-  // M1 Phase 2 (Lia): launcher-first. The main window lands on the Lia Home;
-  // "Talk" navigates to the existing Stage at '/' (index.vue).
-  await load(window, withHashRoute(baseUrl(resolve(getElectronMainDirname(), '..', 'renderer')), '/home', {
+  // M1 Phase 2 (Lia): launcher-first WHEN STANDALONE. When the Lia App is
+  // the supervisor (LIA_MANAGED=1, Phase 7.2) the stage IS the companion
+  // engine and the window lands directly on it - never a second launcher.
+  await load(window, withHashRoute(baseUrl(resolve(getElectronMainDirname(), '..', 'renderer')), initialMainWindowRoute(), {
     query: { 'synced-leader': 'true' },
   }))
 
