@@ -21,6 +21,7 @@ import App from './App.vue'
 import { shouldInstallRealChatObserver } from './diagnostics/gate'
 import { i18n } from './modules/i18n'
 import { managedRoutePolicyGuard } from './navigation/managed-route-policy'
+import { useLiaCapabilitiesStore } from './stores/lia/capabilities'
 import { installCustomVoiceTransport } from './stores/lia/custom-voice-transport'
 import { resolveRendererWindowContext } from './window-context'
 
@@ -79,6 +80,13 @@ if (import.meta.env.DEV)
 // package and knows nothing about Electron; this is the only place the desktop
 // app connects the two.
 installCustomVoiceTransport()
+
+// Phase 7.7 (Parts 7-11): install the capability bridge so the persona
+// always answers from the product's CURRENT truth (voice configured?
+// available right now?). The main process computes it; this store carries
+// it into the shared chat context at turn boundaries.
+const liaCapabilities = useLiaCapabilitiesStore(pinia)
+liaCapabilities.initialize()
 
 const router = createRouter({
   history: createWebHashHistory(),

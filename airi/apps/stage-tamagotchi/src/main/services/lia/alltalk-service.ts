@@ -25,6 +25,7 @@ import { defaultLiaProductConfig } from '../../configs/lia-schema'
 import {
   createAllTalkClient,
 } from './alltalk-client'
+import { logAllTalkDeviceReport, probeAllTalkDevice } from './alltalk-device-probe'
 import {
   mergeAllTalkRuntime,
   normalizeAllTalkRuntimePayload,
@@ -172,4 +173,23 @@ export function registerLiaAllTalkBridge(params: {
       })
     },
   )
+
+  // Phase 7.7, Part 2: audit the ACTUAL execution device of the running
+  // stack - once per process, never blocking IPC, never crashing it. The
+  // report distinguishes a CPU-build from a CUDA build from the torch wheel
+  // shipped in the install (RX 580 -> likely +cpu, but MEASURED, not guessed).
+  void probeAllTalkDevice(readRuntime(), {
+    getGpuInfoImpl: async () => {
+      try {
+        const { app } = await import('electron')
+        const info = await app.getGPUInfo('basic') as { gpuDevice?: Array<{ deviceName?: string, deviceVendor?: string }> }
+        return Array.isArray(info?.gpuDevice) ? info.gpuDevice : []
+      }
+      catch {
+        return []
+      }
+    },
+  })
+    .then(report => logAllTalkDeviceReport(report))
+    .catch(() => undefined)
 }

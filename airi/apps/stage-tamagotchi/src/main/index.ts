@@ -42,9 +42,11 @@ import { setupArtistryBridge } from './services/airi/widgets/artistry-bridge'
 import { setupAutoUpdater } from './services/electron/auto-updater'
 import { setupGlobalShortcutService } from './services/electron/global-shortcut'
 import { setupPermissionHandlers } from './services/electron/media-permissions'
+import { resolveAllTalkRuntime } from './services/lia/alltalk-runtime-config'
 import { registerLiaRuntimeBridge } from './services/lia/alltalk-runtime-service'
 import { registerLiaAllTalkBridge } from './services/lia/alltalk-service'
 import { createAllTalkSyncService } from './services/lia/alltalk-voices-sync'
+import { registerLiaCapabilitiesBridge } from './services/lia/lia-capabilities'
 import { registerLiaProviderConfigBridge } from './services/lia/provider-config-service'
 import { createLiaSecretVault, registerLiaSecretsBridge } from './services/lia/secrets-service'
 import { registerLiaVoiceConfigBridge } from './services/lia/voice-config-service'
@@ -401,6 +403,18 @@ app.whenReady().then(async () => {
       registerLiaAllTalkBridge({
         context,
         liaProductConfig: deps.liaProductConfig,
+        store: deps.liaVoiceProfiles,
+      })
+
+      // Phase 7.7 (Parts 7-11): the capability truth the persona reads every
+      // turn - voice configured/available from Lia-managed state, computed
+      // HERE in the main process (never inferred by the renderer).
+      registerLiaCapabilitiesBridge({
+        context,
+        liaProductConfig: {
+          get: () => deps.liaProductConfig.get(),
+        },
+        readRuntime: () => resolveAllTalkRuntime(deps.liaProductConfig.get()),
         store: deps.liaVoiceProfiles,
       })
     },

@@ -736,6 +736,34 @@ export const electronLiaAllTalkSync = defineInvokeEventa<LiaAllTalkSyncResult, {
 export const electronLiaAllTalkSynthesize = defineInvokeEventa<ArrayBuffer, LiaAllTalkSynthesisRequest>('eventa:invoke:lia:alltalk:synthesize')
 
 /* --------------------------------------------------------------------------
+ * Lia product capabilities (Phase 7.7, Parts 7-11)
+ *
+ * A tiny, dynamic product-truth snapshot for the persona: what the product
+ * can currently DO for the user, never HOW (no AllTalk, no XTTS, no ports,
+ * no paths). The main process is the single authority; the renderer only
+ * carries it into the LLM context at a turn boundary.
+ * -------------------------------------------------------------------------- */
+
+export interface LiaCapabilitySnapshot {
+  voice: {
+    /** A voice is selected and its profile is valid. */
+    configured: boolean
+    /** The voice output can actually play right now (runtime usable). */
+    available: boolean
+  }
+  avatar: {
+    /** A stage avatar is present and rendering. */
+    available: boolean
+  }
+}
+
+/** Pull: the current capability snapshot, always fresh (cached seconds only). */
+export const electronLiaCapabilitiesGet = defineInvokeEventa<LiaCapabilitySnapshot, { avatarAvailable?: boolean } | undefined>('eventa:invoke:lia:capabilities:get')
+
+/** Push: fired when any derived truth changes (config or runtime). */
+export const electronLiaCapabilitiesUpdated = defineEventa<LiaCapabilitySnapshot>('eventa:event:lia:capabilities:updated')
+
+/* --------------------------------------------------------------------------
  * Managed speech runtime
  *
  * The Lia starts and stops the local voice server itself. The renderer only

@@ -125,6 +125,7 @@ vi.mock('../composables/use-io-tracer', () => ({
 }))
 
 vi.mock('./chat/context-providers', () => ({
+  createLiaCapabilitiesContext: () => null,
   createMinecraftContext: () => createMinecraftContextMock(),
 }))
 

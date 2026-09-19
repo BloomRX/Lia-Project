@@ -7,7 +7,7 @@ import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { resolveSynthesisLanguage, synthesizeProfileWithAllTalk } from './alltalk-synthesis'
 import { createLiaVoiceProfileStore } from './voice-profiles'
@@ -172,6 +172,56 @@ describe('synthesizeProfileWithAllTalk', () => {
     expect(fields.get('character_voice_gen')).toBe(`lia-${profile.id}.wav`)
     expect(fields.get('character_voice_gen')).not.toBe('referencia.wav')
     expect(fields.get('text_input')).toBe('Olá!')
+  })
+
+  it('g: reports generation/download/total as separate safe-metadata durations', async () => {
+    const info: string[] = []
+    const infoSpy = vi.spyOn(console, 'info').mockImplementation((line: unknown) => {
+      if (typeof line === 'string')
+        info.push(line)
+    })
+    try {
+      const profile = await importedProfile()
+      await synthesizeProfileWithAllTalk({
+        profileId: profile.id,
+        text: 'Uma frase para medir as fases.',
+        language: 'pt-BR',
+        runtime: runtime(),
+        store: store(),
+      })
+
+      const response = info.find(line => line.includes('lia.voice.synthesize.response'))
+      expect(response).toBeDefined()
+      const meta = Object.fromEntries(
+        (response ?? '')
+          .split(' ')
+          .filter(pair => pair.includes('='))
+          .map((pair) => {
+            const index = pair.indexOf('=')
+            return [pair.slice(0, index), pair.slice(index + 1)]
+          }),
+      )
+
+      // Four durations, all present, all numbers - and the whole is the sum
+      // of its observable parts (loosely: timers overlap by scheduling).
+      expect(Number(meta.generationMs)).toBeGreaterThanOrEqual(0)
+      expect(Number(meta.downloadMs)).toBeGreaterThanOrEqual(0)
+      expect(Number(meta.preflightMs)).toBeGreaterThanOrEqual(0)
+      expect(Number(meta.ms)).toBeGreaterThanOrEqual(0)
+      expect(Number(meta.ms)).toBeGreaterThanOrEqual(
+        Number(meta.generationMs) + Number(meta.downloadMs) - 50,
+      )
+
+      // First-of-process ordinal is present (first XTTS inference marker).
+      expect(Number(meta.ordinal)).toBeGreaterThanOrEqual(1)
+
+      // L: no full text anywhere in the log line - textLength only.
+      expect(response).not.toContain('Uma frase para medir')
+      expect(Number(meta.textLength)).toBe('Uma frase para medir as fases.'.length)
+    }
+    finally {
+      infoSpy.mockRestore()
+    }
   })
 
   it('normalizes pt-BR to the pt code AllTalk documents', async () => {

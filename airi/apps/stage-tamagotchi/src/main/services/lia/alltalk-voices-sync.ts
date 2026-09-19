@@ -7,6 +7,7 @@ import { createAllTalkSyncService as createCoreAllTalkSyncService } from '@lia/c
 export {
   ALLTALK_AUDIO_EXTENSIONS,
   describeManagedFilename,
+  isVoiceVisibleToAllTalk,
   MANAGED_VOICE_PREFIX,
   managedVoiceFilename,
   referenceFileOf,

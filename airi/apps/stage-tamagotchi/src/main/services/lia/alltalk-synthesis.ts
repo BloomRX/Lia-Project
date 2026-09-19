@@ -1,4 +1,4 @@
-import type { AllTalkRuntimeConfig } from './alltalk-client'
+import type { AllTalkRuntimeConfig, AllTalkSynthesizeTiming } from './alltalk-client'
 import type { LiaVoiceProfileStore } from './voice-profiles'
 
 import { AllTalkGenerationError, createAllTalkClient, toAllTalkLanguage } from './alltalk-client'
@@ -74,43 +74,71 @@ export function resolveSynthesisLanguage(options: {
 export async function synthesizeProfileWithAllTalk(params: SynthesizeProfileParams): Promise<ArrayBuffer> {
   const { profileId, text, language, runtime, store } = params
 
+  // Phase 7.6/7.7, Parts 1+3: the synthesis path, split into its observable
+  // phases, per request. The ~119s the Windows QA measured only becomes
+  // attributable when these numbers exist side by side:
+  //
+  //   preflightMs   - profile publish + /api/voices visibility checks
+  //   generationMs  - POST /api/tts-generate: server accept + internal queue
+  //                   + XTTS inference + speaker conditioning + WAV write
+  //                   (individually unobservable from outside the server's
+  //                   HTTP boundary - that split needs AllTalk-side logging,
+  //                   which the contract does not expose; reported, not guessed)
+  //   downloadMs    - GET of the generated WAV (local HTTP overhead)
+  //   totalMs       - everything above, end to end
+  //
+  // `ordinal` marks the first synthesis since process start: the first XTTS
+  // inference after boot has a price the second one does not. Metadata only:
+  // no text, no audio, ever.
+  const ordinal = nextSynthesisOrdinal()
+  const languageUsed = toAllTalkLanguage(language)
+  const queuedAt = Date.now()
+
   const published = await createAllTalkSyncService({ store, voicesDir: runtime.voicesDir })
     .ensureProfileAvailableToAllTalk(profileId)
 
   if (!published.ok)
     throw new Error(published.message)
 
+  const preflightMs = Date.now() - queuedAt
+  const requestStartedAt = Date.now()
+
   // Phase 7.5, Part 2: exactly ONE request log line, metadata only. The full
   // text of what was said and any audio bytes never enter a log.
   logRequest({
     event: 'lia.voice.synthesize.request',
-    language: language ?? 'auto',
+    language: languageUsed,
+    ordinal,
     profileId,
     provider: 'custom-local-voice',
     requestVoiceName: published.filename,
     textLength: text.length,
   })
 
-  // Phase 7.6, item 3/10: wall-clock duration of the AllTalk round trip, per
-  // synthesis request. This is the number the Windows QA never had - it lets
-  // us separate a slow XTTS inference (large ms, constant per text length)
-  // from server-internal queueing (small first request, large serial backlog).
-  const startedAt = Date.now()
+  let timing: AllTalkSynthesizeTiming | undefined
 
   try {
     const bytes = await createAllTalkClient(runtime, params.fetchImpl).synthesize({
       text,
       characterVoiceGen: published.filename,
       // The provider passes a BCP-47 tag through; AllTalk only accepts `pt`.
-      language: toAllTalkLanguage(language),
+      language: languageUsed,
+    }, {
+      onTiming: (next) => { timing = next },
     })
+    const totalMs = Date.now() - queuedAt
     logRequest({
       bytes: bytes.byteLength,
+      downloadMs: timing?.downloadMs ?? -1,
       event: 'lia.voice.synthesize.response',
-      language: toAllTalkLanguage(language),
-      ms: Date.now() - startedAt,
+      generationMs: timing?.generationMs ?? -1,
+      language: languageUsed,
+      ms: totalMs,
+      ordinal,
+      preflightMs,
       profileId,
       provider: 'custom-local-voice',
+      requestDurationMs: Date.now() - requestStartedAt,
       textLength: text.length,
     })
     return bytes
@@ -125,8 +153,11 @@ export async function synthesizeProfileWithAllTalk(params: SynthesizeProfilePara
         category: thrown.category,
         endpoint: thrown.endpoint,
         event: 'lia.voice.synthesize.response',
-        language: toAllTalkLanguage(language),
-        ms: Date.now() - startedAt,
+        generationMs: timing?.generationMs ?? -1,
+        language: languageUsed,
+        ms: Date.now() - queuedAt,
+        ordinal,
+        preflightMs,
         profileId,
         provider: 'custom-local-voice',
         status: thrown.status,
@@ -137,6 +168,13 @@ export async function synthesizeProfileWithAllTalk(params: SynthesizeProfilePara
     }
     throw thrown
   }
+}
+
+/** Monotonic counter: marks the first synthesis of this process. */
+let synthesisOrdinal = 0
+function nextSynthesisOrdinal(): number {
+  synthesisOrdinal += 1
+  return synthesisOrdinal
 }
 
 /** Structured main-side log: key=value pairs, nothing free-form. */

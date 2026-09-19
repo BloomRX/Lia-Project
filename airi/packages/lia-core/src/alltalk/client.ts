@@ -181,11 +181,28 @@ export type AllTalkStatus
     | { error: string, ok: false, state: 'error' }
     | { ok: false, state: 'offline' }
 
+export interface AllTalkSynthesizeTiming {
+  /** POST /api/tts-generate round trip (server queue + inference + write). */
+  generationMs: number
+  /** The second-hop WAV download (local HTTP overhead only). */
+  downloadMs: number
+}
+
 export interface AllTalkClient {
   /** GET /api/voices - doubles as the health check. */
   status: () => Promise<AllTalkStatus>
   /** POST /api/tts-generate, then fetch the WAV from `output_file_url`. */
-  synthesize: (params: AllTalkGenerateParams) => Promise<ArrayBuffer>
+  synthesize: (
+    params: AllTalkGenerateParams,
+    options?: {
+      /**
+       * Phase 7.7 Part 1: reports the two hop-level durations the server
+       * boundary allows us to observe. Never carries text or audio -
+       * durations only.
+       */
+      onTiming?: (timing: AllTalkSynthesizeTiming) => void
+    },
+  ) => Promise<ArrayBuffer>
 }
 
 function joinUrl(base: string, path: string): string {
@@ -234,7 +251,8 @@ export function createAllTalkClient(
       }
     },
 
-    async synthesize(params) {
+    async synthesize(params, options) {
+      const generationStartedAt = Date.now()
       if (!params.text?.trim())
         throw new Error('Nothing to synthesize.')
       if (!params.characterVoiceGen)
@@ -283,6 +301,7 @@ export function createAllTalkClient(
         })
       }
 
+      const generationFinishedAt = Date.now()
       const body = await response.json() as AllTalkGenerateResponse
       if (body.status !== 'generate-success') {
         throw new AllTalkGenerationError({
@@ -298,6 +317,7 @@ export function createAllTalkClient(
         throw new Error('AllTalk returned success but no audio location.')
 
       // Second hop: the generation endpoint returns a pointer, not the bytes.
+      const downloadStartedAt = Date.now()
       const audio = await request(new URL(audioUrl, base).toString())
       if (!audio.ok)
         throw new Error(`Could not fetch the generated audio (${audio.status}).`)
@@ -305,6 +325,11 @@ export function createAllTalkClient(
       const buffer = await audio.arrayBuffer()
       if (buffer.byteLength === 0)
         throw new Error('AllTalk returned an empty audio file.')
+
+      options?.onTiming?.({
+        downloadMs: Date.now() - downloadStartedAt,
+        generationMs: generationFinishedAt - generationStartedAt,
+      })
 
       return buffer
     },

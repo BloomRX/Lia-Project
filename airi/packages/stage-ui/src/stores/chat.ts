@@ -8,7 +8,6 @@ import type { ChatHistoryItem, ChatToolReference, StreamingAssistantMessage } fr
 import type { ToolCallRerunPayload } from './tool-call-rerun'
 
 import { errorMessageFrom } from '@moeru/std'
-import { humanizeSendErrorMessage } from './chat/send-error'
 import { createChatOrchestratorRuntime } from '@proj-airi/core-agent'
 import { IOAttributes, IOEvents, IOSpanNames, IOSubsystems } from '@proj-airi/stage-shared'
 import { nanoid } from 'nanoid'
@@ -29,8 +28,9 @@ import { resolveLlmTools } from './ai/chat-llm/tool-resolver'
 import { useLlmToolsStore } from './ai/chat-llm/tools'
 import { useLlmToolsetPromptsStore } from './ai/chat-llm/toolset-prompts'
 import { CHAT_FALLBACK_MAX_ATTEMPTS, getChatFallbackResolver } from './chat/chat-provider-runtime'
-import { createMinecraftContext } from './chat/context-providers'
+import { createLiaCapabilitiesContext, createMinecraftContext } from './chat/context-providers'
 import { useChatContextStore } from './chat/context-store'
+import { humanizeSendErrorMessage } from './chat/send-error'
 import { useChatSessionStore } from './chat/session-store'
 import { useChatStreamStore } from './chat/stream-store'
 import { useContextObservabilityStore } from './devtools/context-observability'
@@ -299,6 +299,10 @@ export const useChatStore = defineStore('chat', () => {
     getActiveProvider: () => activeProvider.value,
     getSystemPromptSupplement: () => llmToolsetPromptsStore.activeToolsetPrompt,
     runtimeContextProviders: [
+      // Phase 7.7 (Parts 7-11): product-capability truth for the persona,
+      // refreshed at every turn boundary; async providers are awaited by the
+      // chat core before composing the prompt snapshot.
+      createLiaCapabilitiesContext,
       createMinecraftContext,
     ],
     createId: nanoid,

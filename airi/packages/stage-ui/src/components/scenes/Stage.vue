@@ -37,6 +37,7 @@ import { useIOTraceBridge } from '../../composables/use-io-trace-bridge'
 import { initIOTracer } from '../../composables/use-io-tracer'
 import { Emotion, EMOTION_EmotionMotionName_value, EMOTION_VRMExpressionName_value, EmotionThinkMotionName } from '../../constants/emotions'
 import { live2dMotionMagicProfiles, useLive2DMotionMagic, useLive2DMotionMagicSettings } from '../../features/motions/live2d'
+import { getLiaCapabilityRefreshHook } from '../../libs/capabilities/lia-capability-port'
 import { getDefaultStreamingModel, getDefinedProvider } from '../../libs/providers/providers'
 import { OFFICIAL_SPEECH_PROVIDER_ID, OFFICIAL_SPEECH_STREAMING_PROVIDER_ID } from '../../libs/providers/providers/official'
 import { recordSpeechLatency } from '../../libs/speech/latency-probe'
@@ -921,6 +922,12 @@ watch(speechMuted, (muted) => {
 }, { immediate: true })
 
 chatHookCleanups.push(onBeforeMessageComposed(async (_message, context) => {
+  // Phase 7.7, Part 11: refresh the persona's capability truth AT THIS turn
+  // boundary - never mid-generation. The refresh re-resolves the port's
+  // last-good snapshot; the provider the chat core composes with reads it
+  // synchronously, so what this turn says about her voice is current.
+  void getLiaCapabilityRefreshHook()?.().catch(() => undefined)
+
   playbackManager.stopAll('new-message')
   resetAssistantSpeechSurface('new-message')
 
