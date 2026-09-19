@@ -14,7 +14,7 @@ import { defineInvokeHandler } from '@moeru/eventa'
 import { sleep } from '@moeru/std'
 import { createLive2DLipSync } from '@proj-airi/model-driver-lipsync'
 import { wlipsyncProfile } from '@proj-airi/model-driver-lipsync/shared/wlipsync'
-import { createPlaybackManager, createSpeechPipeline, normalizeActPayload } from '@proj-airi/pipelines-audio'
+import { createPlaybackManager, createSpeechPipeline, createTtsSegmentStream, normalizeActPayload } from '@proj-airi/pipelines-audio'
 import { defaultLive2DMotionControlDynamics, Live2DScene, useLive2DMotionControl, useLive2dParams, useSettingsLive2d } from '@proj-airi/stage-ui-live2d'
 import { MMDScene } from '@proj-airi/stage-ui-mmd'
 import { SpineScene } from '@proj-airi/stage-ui-spine'
@@ -39,6 +39,8 @@ import { Emotion, EMOTION_EmotionMotionName_value, EMOTION_VRMExpressionName_val
 import { live2dMotionMagicProfiles, useLive2DMotionMagic, useLive2DMotionMagicSettings } from '../../features/motions/live2d'
 import { getDefaultStreamingModel, getDefinedProvider } from '../../libs/providers/providers'
 import { OFFICIAL_SPEECH_PROVIDER_ID, OFFICIAL_SPEECH_STREAMING_PROVIDER_ID } from '../../libs/providers/providers/official'
+import { recordSpeechLatency } from '../../libs/speech/latency-probe'
+import { resolveSpeechPipelineTuning } from '../../libs/speech/pipeline-tuning'
 import { bindSpeakingStateToPlaybackManager } from '../../libs/speech/playback-speaking-state'
 import { isModellessTarget, resolveSynthesisTarget } from '../../libs/speech/synthesize-target'
 import { getSpeechTtsFallbackPolicy, notifySpeechTtsTurnEnded, withSpeechTtsSegmentFallback } from '../../libs/speech/tts-fallback'
@@ -623,6 +625,29 @@ const speechPipeline = createSpeechPipeline<AudioBuffer>({
   // this is exactly one attempt followed by the historical `null`.
   tts: withSpeechTtsSegmentFallback(stageSynthesizeSegment),
   playback: playbackManager,
+
+  // Phase 7.6: per-provider pipeline tuning (libs/speech/pipeline-tuning).
+  // Some engines are serialized internally (the local custom voice runs one
+  // XTTS inference at a time), in which case tiny fast-path fragments are
+  // pure overhead and parallel requests only blind-queue on the server:
+  // the tuning record may re-chunk the segmenter (merge fragments up to
+  // natural-sentence size) and bound synthesis concurrency accordingly.
+  // Stage.vue itself stays provider-agnostic (4E-2 convergence rule).
+  segmenter: (tokens, meta) => {
+    const tuning = resolveSpeechPipelineTuning(activeSpeechProvider.value)
+    const base = createTtsSegmentStream
+    return (tuning.wrapSegmenter?.(base) ?? base)(tokens, meta)
+  },
+  ttsMaxConcurrent: () => resolveSpeechPipelineTuning(activeSpeechProvider.value).maxConcurrent,
+})
+
+// Phase 7.6, item 3: bounded, metadata-only latency instrumentation. Only
+// numbers/ids/flags cross this log - never segment text - so operators can
+// separate \"engine inference\", \"AllTalk queue\", \"local HTTP\" and \"renderer
+// scheduling\" from a Windows QA run without reading anyone's messages.
+recordSpeechLatency(speechPipeline, {
+  onEntry: entry => console.info('[lia.voice.latency]', entry),
+  onTurnSummary: summary => console.info('[lia.voice.latency.turn]', summary),
 })
 
 initIOTracer()

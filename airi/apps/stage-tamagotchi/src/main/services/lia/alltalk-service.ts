@@ -30,7 +30,7 @@ import {
   normalizeAllTalkRuntimePayload,
   resolveAllTalkRuntime,
 } from './alltalk-runtime-config'
-import { synthesizeProfileWithAllTalk } from './alltalk-synthesis'
+import { resolveSynthesisLanguage, synthesizeProfileWithAllTalk } from './alltalk-synthesis'
 import { createAllTalkSyncService } from './alltalk-voices-sync'
 
 type MainContext = ReturnType<typeof createContext>['context']
@@ -163,7 +163,10 @@ export function registerLiaAllTalkBridge(params: {
       return synthesizeProfileWithAllTalk({
         profileId,
         text: String(request?.text ?? ''),
-        language: request?.language,
+        language: resolveSynthesisLanguage({
+          configured: liaProductConfig.get()?.preferences?.language,
+          requested: request?.language,
+        }),
         runtime,
         store: params.store,
       })

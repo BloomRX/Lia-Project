@@ -9,7 +9,7 @@ import { join } from 'node:path'
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
-import { synthesizeProfileWithAllTalk } from './alltalk-synthesis'
+import { resolveSynthesisLanguage, synthesizeProfileWithAllTalk } from './alltalk-synthesis'
 import { createLiaVoiceProfileStore } from './voice-profiles'
 
 /**
@@ -119,6 +119,26 @@ function lastGenerate(): URLSearchParams {
     throw new Error('no generation request reached the server')
   return new URLSearchParams(entry.body)
 }
+
+describe('resolveSynthesisLanguage', () => {
+  it('prefers an explicit request language over the product preference', () => {
+    expect(resolveSynthesisLanguage({ configured: 'pt-BR', requested: 'en' })).toBe('en')
+  })
+
+  it('falls back to the product preference instead of AllTalk auto-detection', () => {
+    expect(resolveSynthesisLanguage({ configured: 'pt-BR', requested: undefined })).toBe('pt-BR')
+  })
+
+  it('keeps auto-detection when neither side declares a language', () => {
+    expect(resolveSynthesisLanguage({ configured: '', requested: undefined })).toBeUndefined()
+    expect(resolveSynthesisLanguage({})).toBeUndefined()
+  })
+
+  it('trims stray whitespace and treats blanks as undeclared', () => {
+    expect(resolveSynthesisLanguage({ configured: '  ', requested: '   ' })).toBeUndefined()
+    expect(resolveSynthesisLanguage({ configured: ' pt ', requested: '  ' })).toBe('pt')
+  })
+})
 
 describe('synthesizeProfileWithAllTalk', () => {
   it('resolves a profile id into audio, with no filename from the caller', async () => {

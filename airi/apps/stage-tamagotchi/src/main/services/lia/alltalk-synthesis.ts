@@ -48,6 +48,29 @@ export const ALLTALK_HUMAN_ERROR_MESSAGES: Record<string, string> = {
   'unknown': 'Ocorreu um problema no sistema de voz.',
 }
 
+/**
+ * Phase 7.6, item 12: resolve the language a synthesis request should carry.
+ *
+ * The renderer usually does not name a language. AllTalk's own default is
+ * `auto` detection - real per-request latency AND lossy pt-BR segmentation -
+ * so the product's declared `preferences.language` (e.g. `pt-BR`) wins over
+ * `auto` whenever it is set. An explicit request language (a future
+ * per-utterance override) always beats both. Empty/missing = keep `auto`.
+ *
+ * Pure and total on purpose: the rule is the unit the tests pin, the IPC
+ * handler just feeds it the two config sources.
+ */
+export function resolveSynthesisLanguage(options: {
+  configured?: string
+  requested?: string
+}): string | undefined {
+  const requested = String(options.requested ?? '').trim()
+  if (requested)
+    return requested
+  const configured = String(options.configured ?? '').trim()
+  return configured || undefined
+}
+
 export async function synthesizeProfileWithAllTalk(params: SynthesizeProfileParams): Promise<ArrayBuffer> {
   const { profileId, text, language, runtime, store } = params
 
@@ -68,6 +91,12 @@ export async function synthesizeProfileWithAllTalk(params: SynthesizeProfilePara
     textLength: text.length,
   })
 
+  // Phase 7.6, item 3/10: wall-clock duration of the AllTalk round trip, per
+  // synthesis request. This is the number the Windows QA never had - it lets
+  // us separate a slow XTTS inference (large ms, constant per text length)
+  // from server-internal queueing (small first request, large serial backlog).
+  const startedAt = Date.now()
+
   try {
     const bytes = await createAllTalkClient(runtime, params.fetchImpl).synthesize({
       text,
@@ -78,8 +107,11 @@ export async function synthesizeProfileWithAllTalk(params: SynthesizeProfilePara
     logRequest({
       bytes: bytes.byteLength,
       event: 'lia.voice.synthesize.response',
+      language: toAllTalkLanguage(language),
+      ms: Date.now() - startedAt,
       profileId,
       provider: 'custom-local-voice',
+      textLength: text.length,
     })
     return bytes
   }
@@ -93,9 +125,12 @@ export async function synthesizeProfileWithAllTalk(params: SynthesizeProfilePara
         category: thrown.category,
         endpoint: thrown.endpoint,
         event: 'lia.voice.synthesize.response',
+        language: toAllTalkLanguage(language),
+        ms: Date.now() - startedAt,
         profileId,
         provider: 'custom-local-voice',
         status: thrown.status,
+        textLength: text.length,
       }, true)
       const human = ALLTALK_HUMAN_ERROR_MESSAGES[thrown.category] ?? ALLTALK_HUMAN_ERROR_MESSAGES.unknown
       throw new Error(`${human} [category=${thrown.category}]`)

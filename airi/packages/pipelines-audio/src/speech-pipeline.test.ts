@@ -165,6 +165,117 @@ describe('createSpeechPipeline', () => {
     expect(maxInFlight).toBe(2)
   })
 
+  it('resolves a dynamic concurrency cap per intent (Phase 7.6 item 17-H)', async () => {
+    // Serialized local engines (AllTalk/XTTS) ask for 1: parallel requests
+    // onto a serialized queue only add contention. The cap may be a FUNCTION,
+    // re-read for every intent, so swapping providers mid-session takes
+    // effect on the very next reply - never a Promise.all-style burst.
+    const { playback } = createPlaybackSpy()
+    let cap = 1
+    let capReads = 0
+
+    let inFlight = 0
+    let maxInFlight = 0
+    const pendingRequests: Array<PromiseWithResolvers<string>> = []
+
+    const pipeline = createSpeechPipeline<string>({
+      ttsMaxConcurrent: () => {
+        capReads += 1
+        return cap
+      },
+      segmenter: createSegmenter(['first', 'second', 'third']),
+      playback,
+      async tts() {
+        // `request.sequence` restarts per intent; the gate below indexes the
+        // PUSH position instead, so the second intent's tasks are controlled
+        // by THEIR OWN resolvers.
+        const slot = Promise.withResolvers<string>()
+        const slotIndex = pendingRequests.push(slot) - 1
+        inFlight += 1
+        maxInFlight = Math.max(maxInFlight, inFlight)
+        try {
+          return await pendingRequests[slotIndex]!.promise
+        }
+        finally {
+          inFlight -= 1
+        }
+      },
+    })
+
+    const intentFinished = new Promise<void>((resolve) => {
+      pipeline.on('onIntentEnd', () => resolve())
+    })
+
+    const intent = pipeline.openIntent()
+    intent.end()
+
+    await delay(0)
+
+    // Exactly one in flight, never an unbounded burst.
+    expect(maxInFlight).toBe(1)
+    expect(capReads).toBeGreaterThan(0)
+
+    pendingRequests[0]!.resolve('alpha')
+    // Wait for the NEXT task to actually start before resolving it.
+    while (pendingRequests.length < 2)
+      await delay(1)
+    expect(maxInFlight).toBe(1)
+    pendingRequests[1]!.resolve('beta')
+    while (pendingRequests.length < 3)
+      await delay(1)
+    pendingRequests[2]!.resolve('gamma')
+    await intentFinished
+    expect(maxInFlight).toBe(1)
+
+    // A remote provider (cap 4) on the NEXT intent gets its own resolution.
+    cap = 4
+    const secondFinished = new Promise<void>((resolve) => {
+      let count = 0
+      pipeline.on('onIntentEnd', () => {
+        count += 1
+        if (count >= 1)
+          resolve()
+      })
+    })
+    const second = pipeline.openIntent()
+    second.end()
+    while (pendingRequests.length < 5)
+      await delay(1)
+    expect(maxInFlight).toBeGreaterThan(1)
+    pendingRequests[3]!.resolve('delta')
+    pendingRequests[4]!.resolve('echo')
+    pendingRequests[5]!.resolve('foxtrot')
+    await secondFinished
+  })
+
+  it('drops a failed segment and keeps the queue moving (Phase 7.6 item 17-L)', async () => {
+    // A single TTS failure must NOT stop the queue: the failed segment is
+    // dropped, later segments are scheduled normally, in textual order.
+    const { scheduled, playback } = createPlaybackSpy()
+
+    const pipeline = createSpeechPipeline<string>({
+      ttsMaxConcurrent: 1,
+      segmenter: createSegmenter(['first', 'broken', 'third']),
+      playback,
+      async tts(request) {
+        if (request.text === 'broken')
+          return null // the host converts provider errors to null (fallback policy exhausted)
+        return request.text
+      },
+    })
+
+    const intentFinished = new Promise<void>((resolve) => {
+      pipeline.on('onIntentEnd', () => resolve())
+    })
+
+    const intent = pipeline.openIntent()
+    intent.end()
+
+    await intentFinished
+
+    expect(scheduled.map(item => item.text)).toEqual(['first', 'third'])
+  })
+
   it('cancels in-flight TTS work without scheduling stale playback', async () => {
     const { scheduled, playback } = createPlaybackSpy()
     const abortedRequests: number[] = []
