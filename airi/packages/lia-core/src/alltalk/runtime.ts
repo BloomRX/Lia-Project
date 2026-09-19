@@ -229,6 +229,25 @@ export interface RuntimeManagerDeps {
    */
   inspectProcess?: (pid: number) => Promise<ProcessInspection>
   /**
+   * The supervisor's own PID (this process). Defaults to `process.pid`.
+   *
+   * Phase 7.5.1, item G: the Lia SPAWN tree is
+   * electron(Lia App) -> cmd.exe(start_alltalk.bat) -> python(script.py)
+   * -> python(tts_server.py, the 7851/7852 listeners). The ancestry walk
+   * used to declare the tree's very TOP - the supervisor that started it
+   * all - "foreign" the moment it was alive, because electron is neither
+   * under the install root nor a benign system host. The QA proved it:
+   * our own spawned runtime, alive and answering health, classified
+   * `port-occupied-unknown-process` on the retry.
+   *
+   * The fix is a stronger proof, not a weaker one: an ancestor that IS the
+   * supervisor's own PID is the crown of a tree this session spawned. Any
+   * OTHER foreign ancestor still condemns the verdict to unknown; the
+   * terminus is simply "this process asked for that runtime to exist".
+   * Injectable for tests; production never passes it.
+   */
+  supervisorPid?: number
+  /**
    * Grace between a tree kill and the survivor probe, and the bound on
    * fallback rounds (round 7, item F). Defaults are Windows-shaped; tests
    * shrink them to nothing.
@@ -538,6 +557,16 @@ export function createRuntimeManager(deps: RuntimeManagerDeps): RuntimeManager {
         }
         if (isBenignAncestor(parent)) {
           // A shell/system host above the tree says nothing either way.
+          break
+        }
+        if (parent.pid === (deps.supervisorPid ?? process.pid)) {
+          // The SUPERVISOR's own PID: exactly the process that spawned this
+          // tree - the strongest crown there is. Before Phase 7.5.1 this
+          // node fell into the "foreign ancestor" branch below and our own
+          // live child read as unknown - the QA's second-conversar failure.
+          // Rooting the tree here keeps every OTHER foreign ancestor
+          // condemning the verdict.
+          root = parent
           break
         }
         // A read, named, foreign process owns our candidate root's ancestry:

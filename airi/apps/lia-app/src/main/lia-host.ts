@@ -15,7 +15,7 @@ import process from 'node:process'
 
 import { execFile } from 'node:child_process'
 import { access, readdir, readFile, stat, writeFile } from 'node:fs/promises'
-import { dirname, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { createAllTalkClient, DEFAULT_ALLTALK_BASE_URL, DEFAULT_ALLTALK_TIMEOUT_MS } from '@lia/core/alltalk/client'
@@ -23,7 +23,7 @@ import { readCustomVoiceEngineStatus } from '@lia/core/alltalk/engine-config'
 import { gatherPortOwners, inspectProcess } from '@lia/core/alltalk/port-diagnostics'
 import { loopbackHostFor, probeTcpListeners } from '@lia/core/alltalk/port-listeners'
 import { createRuntimeManager, inspectAllTalkInstall } from '@lia/core/alltalk/runtime'
-import { createAllTalkSyncService } from '@lia/core/alltalk/voices-sync'
+import { createAllTalkSyncService, isVoiceVisibleToAllTalk } from '@lia/core/alltalk/voices-sync'
 import { buildLiaBridgeConfig, stageEnvFor } from '@lia/core/bridge/lia-config'
 import { classifyInstallLocation, inspectInstallLocationTarget } from '@lia/core/paths/install-location'
 import { liaProductPaths } from '@lia/core/paths/product-paths'
@@ -371,12 +371,27 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
     }
 
     const alltalkConfig = snapshot?.voice?.runtime?.alltalk
-    const resolution = await resolveInstallDir(alltalkConfig?.installDir)
-    const effectiveInstallDir = resolution.candidate?.dir ?? ''
-    // Part 4(B/D): the voices folder the SERVER reads derives from the
-    // proven install. A configured voicesDir kept as the override; an
-    // absent one follows the install - never a second, divergent root.
-    const voicesDir = alltalkConfig?.voicesDir?.trim() || resolveAllTalkVoicesDirForInstallDir(effectiveInstallDir)
+    // The preflights and the spawn MUST agree on ONE install. The manager
+    // owns that contract (ownership beats resolution, item G), so the
+    // effective install here is the manager's - never a second, divergent
+    // resolve.
+    const effectiveInstallDir = cached?.installDir ?? ''
+    const resolution = effectiveInstallDir ? undefined : await resolveInstallDir(alltalkConfig?.installDir)
+    const installDirForPrep = effectiveInstallDir || (resolution?.candidate?.dir ?? '')
+
+    // Phase 7.5.1, items A/D: the voices folder the PREP writes into is
+    // derived EXCLUSIVELY from the install the manager will run -
+    // `<install app dir>\voices`, the same folder `/api/voices` lists and
+    // `/api/tts-generate` resolves from (verified upstream: list_files
+    // this_dir/"voices", fresh per request, `*.wav` only, exact-shape
+    // `{"voices": string[]}`). A configured voicesDir that diverges would
+    // be the split-brain the QA proved present=false with, so divergence is
+    // diagnosed and the DERIVED root wins, never the configured one.
+    const voicesDir = resolveAllTalkVoicesDirForInstallDir(installDirForPrep)
+    const configuredVoicesDir = alltalkConfig?.voicesDir?.trim() ?? ''
+    if (configuredVoicesDir && configuredVoicesDir.toLowerCase() !== voicesDir.toLowerCase()) {
+      emit('lia-app.conversar-note', `reason=voices-dir-diverges configured=${configuredVoicesDir} derived=${voicesDir}`)
+    }
 
     // Prep is a pure FILESYSTEM step: publish the canonical reference audio
     // as the deterministic managed copy BEFORE the runtime starts, so no
@@ -390,15 +405,20 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
 
     // Engine truth is read back from config files, never assumed: a runtime
     // that boots Piper answers every XTTS request with a 500.
-    if (effectiveInstallDir) {
-      const engine = await (deps.engineStatusImpl?.(effectiveInstallDir)
-        ?? readCustomVoiceEngineStatus(fsEngineConfigDeps(), effectiveInstallDir))
+    if (installDirForPrep) {
+      const engine = await (deps.engineStatusImpl?.(installDirForPrep)
+        ?? readCustomVoiceEngineStatus(fsEngineConfigDeps(), installDirForPrep))
       if (!engine.ready) {
         emit('lia-app.conversar-blocked', `reason=voice-engine-not-ready engine=${engine.engine ?? 'unknown'} modelLoaded=${engine.modelComplete} firstRunPending=${engine.firstRunPending}`)
         throw new Error('O sistema de voz não conseguiu carregar o modelo. Veja Diagnósticos para detalhes.')
       }
       emit('lia-app.voice-engine-ready', `engine=${engine.engine ?? 'unknown'} modelLoaded=${engine.modelComplete}`)
     }
+
+    // Diagnostic D (7.5.1): the ONE line that proves the sync destination
+    // and the running server live under the same root, before we spend a
+    // start on it. Safe paths only - no contents, no audio.
+    emit('lia-app.voice-prep', `runtimeInstallDir=${installDirForPrep} voicesDir=${voicesDir} managedVoice=${sync.filename}`)
 
     let state: RuntimeStateSnapshot
     try {
@@ -416,18 +436,38 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
     // The last proof is on the API itself: the filename the synthesis
     // request will name must be visible to THIS server (Part 8). A probe
     // failure is inconclusive, never a silent pass.
-    const probe = await (deps.voiceVisibilityProbeImpl?.(runtimeConfigFor(alltalkConfig, effectiveInstallDir))
-      ?? createAllTalkClient(runtimeConfigFor(alltalkConfig, effectiveInstallDir)).status())
+    // The probe answers about the same voices dir the sync wrote into -
+    // the derived root, not whatever is configured (that configured value
+    // is precisely what the QA proved wrong).
+    const probeConfig = { ...runtimeConfigFor(alltalkConfig, installDirForPrep), voicesDir }
+    const probe = await (deps.voiceVisibilityProbeImpl?.(probeConfig)
+      ?? createAllTalkClient(probeConfig).status())
     if (!probe.ok) {
       emit('lia-app.conversar-blocked', `reason=voice-probe-inconclusive state=${probe.state}`)
       throw new Error('Não foi possível confirmar a voz selecionada. Veja Diagnósticos para detalhes.')
     }
-    if (!probe.voices.includes(sync.filename)) {
-      emit('lia-app.conversar-blocked', `reason=voice-not-visible voice=${sync.filename} present=false knownVoices=${probe.voices.length}`)
+    if (!isVoiceVisibleToAllTalk(probe.voices, sync.filename)) {
+      // The file may exist yet be invisible: `.WAV` uppercase never matches
+      // the upstream `.wav` filter. The disk cross-check keeps that reason
+      // reportable without audio contents.
+      const existsOnDisk = await probeVoiceCopyOnDisk(voicesDir, sync.filename)
+      emit('lia-app.conversar-blocked', `reason=voice-not-visible voice=${sync.filename} present=false onDisk=${existsOnDisk} knownVoices=${probe.voices.length}`)
       throw new Error('Não foi possível carregar a voz selecionada.')
     }
     emit('lia-app.voice-visible', `voice=${sync.filename} present=true`)
     emit('lia-app.voice-runtime-ready', `phase=${state.phase} source=conversar`)
+  }
+
+  /** Filesystem cross-check for the not-visible diagnostic: exists on disk? */
+  /** Filesystem cross-check for the not-visible diagnostic: exists on disk? */
+  async function probeVoiceCopyOnDisk(voicesDir: string, filename: string): Promise<boolean> {
+    try {
+      await stat(join(voicesDir, filename))
+      return true
+    }
+    catch {
+      return false
+    }
   }
 
   /** The shared voices sync service for one resolved folder. */
@@ -542,6 +582,19 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
     const alltalk = snapshot?.voice?.runtime?.alltalk
     const resolution = await resolveInstallDir(alltalk?.installDir)
     const installDir = resolution.candidate?.dir ?? ''
+
+    // Phase 7.5.1, item G: ownership beats resolution. A cached manager that
+    // currently HOLDS a live runtime (spawned child or proven attachment)
+    // is never thrown away because the re-resolved install string drifted:
+    // discarding it here orphaned the live process and re-classified our
+    // own tree as an unknown intruder on the next start - the exact
+    // `port-occupied-unknown-process` the QA logged, and the exact reason
+    // the shutdown later skipped a runtime this session had started.
+    if (cached && cached.manager.hasManagedRuntime()) {
+      if (cached.installDir !== installDir)
+        emit('lia-app.runtime-ownership-retained', `session=<held> resolved=<drifted>`)
+      return cached.manager
+    }
     if (cached && cached.installDir === installDir)
       return cached.manager
 

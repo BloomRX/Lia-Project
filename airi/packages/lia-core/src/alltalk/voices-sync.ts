@@ -58,8 +58,33 @@ import { isInside, safeFilename } from '../voices/profiles'
  * `alltalk-voices-sync.ts`, which is now a shim.
  */
 
-/** Extensions AllTalk accepts as reference audio. */
-export const ALLTALK_AUDIO_EXTENSIONS = ['.wav', '.mp3', '.flac', '.ogg'] as const
+/**
+ * Extensions AllTalk accepts as reference audio - the UPSTREAM contract,
+ * verified from the server's own code (Phase 7.5.1, Part E):
+ * `GET /api/voices` runs `list_files(this_dir / "voices")` filtered by
+ * `f.endswith(".wav")`, and `/api/tts-generate` declares its voice field
+ * with `pattern="^.*\\.wav$"`. Only `.wav` files ever appear in the list
+ * and only `.wav` names ever synthesize. A broader whitelist here would
+ * publish a copy the server structurally can never resolve.
+ */
+export const ALLTALK_AUDIO_EXTENSIONS = ['.wav'] as const
+
+/**
+ * Whether AllTalk's `/api/voices` list makes a managed filename eligible
+ * for `/api/tts-generate`.
+ *
+ * Phase 7.5.1, item C - the REAL upstream semantics, inspected in
+ * `tts_server.py` rather than assumed: the response is exactly
+ * `{"voices": string[]}`, each entry the filename (with extension) of a
+ * file directly inside the server's `<script_dir>\voices` folder, listed
+ * FRESH on every request (no cache, no restart needed). `tts-generate`
+ * resolves `character_voice_gen` as `this_dir/voices/<name>` - the same
+ * folder and the same string. So exact string membership is not blind
+ * comparison: it is the very contract generation relies on.
+ */
+export function isVoiceVisibleToAllTalk(voices: readonly unknown[], managedFilename: string): boolean {
+  return voices.some(voice => typeof voice === 'string' && voice === managedFilename)
+}
 
 /** Prefix every Lia-managed copy carries. */
 export const MANAGED_VOICE_PREFIX = 'lia-'

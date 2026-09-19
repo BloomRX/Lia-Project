@@ -71,9 +71,9 @@ async function importProfile(name = 'Lia pessoal', filename = 'minha voz.wav') {
 describe('managedVoiceFilename', () => {
   it('is deterministic and derived from the id, never from the user\'s filename', () => {
     expect(managedVoiceFilename(REAL_ID, '.wav')).toBe(`lia-${REAL_ID}.wav`)
-    // Two profiles imported from files that happened to share a name still get
-    // distinct, non-colliding copies.
-    expect(managedVoiceFilename(REAL_ID, '.mp3')).toBe(`lia-${REAL_ID}.mp3`)
+    // The managed name never depends on anything but the id + a usable ext,
+    // so two imports of files that happened to share a name stay distinct.
+    expect(managedVoiceFilename(REAL_ID, '.wav')).not.toBeNull()
   })
 
   it('always carries the managed prefix', () => {
@@ -86,8 +86,12 @@ describe('managedVoiceFilename', () => {
     expect(managedVoiceFilename('', '.wav')).toBeNull()
   })
 
-  it('refuses an extension AllTalk cannot use', () => {
+  it('refuses an extension AllTalk cannot use (Phase 7.5.1: upstream serves WAV only)', () => {
     expect(managedVoiceFilename(REAL_ID, '.exe')).toBeNull()
+    expect(managedVoiceFilename(REAL_ID, '.mp3')).toBeNull()
+    // Upper-case input normalizes to the lowercase the upstream filter
+    // requires - the PUBLISHED name is always `.wav`.
+    expect(managedVoiceFilename(REAL_ID, '.WAV')).toBe(`lia-${REAL_ID}.wav`)
     expect(managedVoiceFilename(REAL_ID, '.pth')).toBeNull()
     expect(managedVoiceFilename(REAL_ID, '')).toBeNull()
     for (const extension of ALLTALK_AUDIO_EXTENSIONS)

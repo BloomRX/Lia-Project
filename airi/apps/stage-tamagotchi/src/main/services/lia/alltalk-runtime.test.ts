@@ -567,6 +567,82 @@ describe('adoption (single instance, brief A/B)', () => {
     expect(rec).toContain('runtime.root-revalidate-rejected pid=9001 reason=created-mismatch')
   })
 
+  it('g: our own spawn tree - listener under the install root crowned by the supervisor electron proves lia-managed, never unknown', async () => {
+    const dir = await installedDir()
+    tempDirs.push(dir)
+    // The exact 7.5.1 QA tree: python listeners whose ancestry terminates at
+    // the Lauchner's electron (the process that spawned them). BEFORE the
+    // supervisor-crown clause that foreign-looking parent condemned the
+    // tree to `port-occupied-unknown-process` - ownership retention lost on
+    // retry. The supervisor crown is the STRONGEST proof that exists: that
+    // parent PID is `process.pid` of the very process asking to start.
+    const SELF_PID = 31337
+    const records = [{
+      cmdline: 'python tts_server.py',
+      created: QA_CREATED,
+      exe: `${dir}\\alltalk_environment\\env\\python.exe`,
+      parentPid: SELF_PID,
+      pid: QA_LISTENER_PID,
+    }]
+    const inspect = boxedRecords(new Map<number, { created: string, cmdline?: string, exe: string, parentPid?: number, pid: number }>([
+      [SELF_PID, { created: '20260915080000.000000+000', exe: 'C:\\Program Files\\Lia\\Lia.exe', pid: SELF_PID }],
+    ]))
+    const rec: string[] = []
+    const { manager, spawned } = managerFor({
+      inspectProcess: inspect,
+      installDir: dir,
+      isHealthy: async () => true,
+      onEvent: (event, detail) => rec.push(detail ? `${event} ${detail}` : event),
+      portOwnerDiagnostics: async () => records,
+      supervisorPid: SELF_PID,
+    })
+
+    const state = await manager.start()
+
+    expect(spawned).not.toHaveBeenCalled()
+    expect(state.phase).toBe('ready')
+    expect(state.attachment?.kind).toBe('lia-managed')
+    expect(rec.some(line => line.startsWith('runtime.adopted-lia-managed-instance'))).toBe(true)
+    expect(rec.some(line => line.includes('port-occupied-unknown-process'))).toBe(false)
+    expect(manager.hasManagedRuntime()).toBe(true)
+  })
+
+  it('g-protective: a foreign ancestor that is NOT the supervisor still condemns the verdict - nothing adopted, nothing killed', async () => {
+    const dir = await installedDir()
+    tempDirs.push(dir)
+    const taskkill = vi.fn(async (_command: string, _args: string[], _options: { timeoutMs: number }) => ({ code: 0 }))
+    const SELF_PID = 31337
+    const FOREIGN_PID = 11223
+    const records = [{
+      cmdline: 'python tts_server.py',
+      created: QA_CREATED,
+      exe: `${dir}\\alltalk_environment\\env\\python.exe`,
+      parentPid: FOREIGN_PID,
+      pid: QA_LISTENER_PID,
+    }]
+    const inspect = boxedRecords(new Map<number, { created: string, cmdline?: string, exe: string, parentPid?: number, pid: number }>([
+      // A plainly foreign application - not under the root, not the
+      // supervised launcher, not a benign host, not US.
+      [FOREIGN_PID, { created: QA_CREATED, exe: 'C:\\Somewhere\\OtherApp\\tool.exe', pid: FOREIGN_PID }],
+    ]))
+    const { manager, spawned } = managerFor({
+      execImpl: taskkill,
+      inspectProcess: inspect,
+      installDir: dir,
+      isHealthy: async () => true,
+      portOwnerDiagnostics: async () => records,
+      supervisorPid: SELF_PID,
+    })
+
+    const state = await manager.start()
+
+    // The safe side stands: unknown runtime found, never adopted, never killed.
+    expect(state.phase).toBe('error')
+    expect(spawned).not.toHaveBeenCalled()
+    expect(taskkill).not.toHaveBeenCalled()
+    expect(manager.hasManagedRuntime()).toBe(false)
+  })
+
   it('a stranger on the port: friendly error, nothing spawned, nothing killed (L-5)', async () => {
     const dir = await installedDir()
     tempDirs.push(dir)
