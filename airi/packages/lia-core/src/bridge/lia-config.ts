@@ -43,7 +43,12 @@ export interface LiaBridgeVoice {
 export interface LiaBridgeRuntime {
   /** Base URL of the managed AllTalk server, no trailing slash. */
   alltalkBaseUrl?: string
-  /** Whether the voice runtime is expected to be up for this launch. */
+  /**
+   * Whether the voice runtime is expected to be up for this launch.
+   * The stage runs Lia-managed. Field name kept for bridge compatibility;
+   * whichever modular voice engine is active keeps the same managed-mode
+   * contract.
+   */
   alltalkManaged: boolean
 }
 
@@ -74,7 +79,7 @@ export interface BuildLiaBridgeConfigInput {
     preferences?: { language?: string }
     provider?: { chat?: { fallbackEnabled?: boolean, preferred?: { modelId?: string, providerId: string } } }
     voice?: {
-      runtime?: { alltalk?: { baseUrl?: string, installDir?: string } }
+      runtime?: { alltalk?: { baseUrl?: string, installDir?: string }, installDir?: string }
       tts?: { preferred?: { modelId?: string, providerId: string, voiceId?: string } }
     }
   }
@@ -84,6 +89,7 @@ export interface BuildLiaBridgeConfigInput {
 export function buildLiaBridgeConfig(input: BuildLiaBridgeConfigInput): LiaBridgeConfig {
   const chat = input.snapshot.provider?.chat
   const alltalk = input.snapshot.voice?.runtime?.alltalk
+  const runtimeHome = input.snapshot.voice?.runtime?.installDir
   return {
     bridgeVersion: 1,
     identity: {
@@ -100,7 +106,7 @@ export function buildLiaBridgeConfig(input: BuildLiaBridgeConfigInput): LiaBridg
     productConfigFile: input.productConfigFile,
     runtime: {
       alltalkBaseUrl: alltalk?.baseUrl,
-      alltalkManaged: alltalk?.installDir !== undefined,
+      alltalkManaged: alltalk?.installDir !== undefined || runtimeHome !== undefined,
     },
     secrets: {
       hasSecret: input.hasSecret,

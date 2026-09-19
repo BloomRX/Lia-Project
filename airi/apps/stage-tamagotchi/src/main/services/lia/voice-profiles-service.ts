@@ -70,11 +70,15 @@ export function registerLiaVoiceProfilesBridge(params: {
   }
 
   defineInvokeHandler(context, electronLiaVoiceEnginesList, () =>
+    // Only REAL runnable engines are ever offered as a NEW pick; legacy ids
+    // (`LEGACY_VOICE_ENGINES`) simply are not in this list. Transitional
+    // state (7.8D): empty - the picker offers nothing until the first
+    // modular engine (Kokoro) registers.
     VOICE_ENGINES.map(engine => ({
+      extensions: [...engine.extensions],
       id: engine.id,
       label: engine.label,
       roles: [...engine.roles],
-      extensions: [...engine.extensions],
     })))
 
   defineInvokeHandler(context, electronLiaVoiceProfilesList, async (): Promise<LiaCustomVoiceProfile[]> =>

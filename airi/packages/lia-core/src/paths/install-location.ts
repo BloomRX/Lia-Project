@@ -1,7 +1,7 @@
 /**
  * Phase 7.4 (Part G/H/K): user-chosen HEAVY RUNTIME location validation.
  *
- * The product document may pin `voice.runtime.alltalk.installDir` to a
+ * The product document may pin `voice.runtime.installDir` to a
  * non-default root (e.g. `D:\Lia\Voice Runtime`). This module is the ONE
  * place that decides whether such a path is *shaped* acceptably - before
  * it ever reaches the document. It answers exactly two questions:
@@ -17,8 +17,9 @@
  *    installer performs the real writable check at install time.
  *
  * Marker checks ("is the runtime REALLY installed here") stay where they
- * always were: `inspectAllTalkInstall`. Directory existence never implies
- * installed (Part I of the brief).
+ * always were: the host's install-inspection seam (`inspectInstallImpl` in
+ * the launcher; whatever the hosted engine declares, Phase 7.8E). Directory
+ * existence never implies installed (Part I of the brief).
  */
 
 export type InstallLocationRejectReason

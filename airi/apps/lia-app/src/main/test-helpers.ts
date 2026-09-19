@@ -48,7 +48,7 @@ export async function makeLiaHome(options: {
   const root = await mkdtemp(join(tmpdir(), 'lia-app-test-'))
   const appData = join(root, 'AppData', 'Roaming')
   const userData = join(appData, 'Lia')
-  const installDir = join(root, 'runtimes', 'alltalk')
+  const installDir = join(root, 'runtimes', 'lia-voice')
 
   const product = options.productConfig ?? {
     persona: { activeCardId: 'lia-default' },
@@ -62,7 +62,8 @@ export async function makeLiaHome(options: {
     schemaVersion: 1,
     voice: options.customVoice
       ? {
-          runtime: { alltalk: { baseUrl: 'http://127.0.0.1:7851', installDir } },
+          engine: { preferred: 'alltalk' },
+          runtime: { installDir },
           tts: { preferred: { providerId: 'custom-local-voice', voiceId: options.firstVoiceId ?? 'profile-1' } },
         }
       : {
@@ -76,6 +77,7 @@ export async function makeLiaHome(options: {
   await mkdir(voicesRoot, { recursive: true })
   const profiles = Array.from({ length: options.voiceCount ?? 2 }, (_, i) => ({
     createdAt: '2026-09-01T12:00:00.000Z',
+    // Legacy-era id: existing documents carrying it must stay readable.
     engine: 'alltalk',
     files: [{ bytes: 1234, filename: 'model.wav', role: 'referenceAudio' }],
     id: i === 0 ? options.firstVoiceId ?? 'profile-1' : `profile-${i + 1}`,
@@ -93,23 +95,11 @@ export async function makeLiaHome(options: {
     }
   }
 
-  // The managed runtime fixture: every marker the runtime manager requires,
-  // PLUS a XTTS-ready engine config (Phase 7.5 Part 9: conversar gates on
-  // the read-back, so the custom-voice fixtures need a complete engine).
-  await mkdir(join(installDir, 'system'), { recursive: true })
-  await mkdir(join(installDir, 'voices'), { recursive: true })
-  await mkdir(join(installDir, 'alltalk_environment', 'conda'), { recursive: true })
-  await mkdir(join(installDir, 'alltalk_environment', 'env'), { recursive: true })
-  await writeFile(join(installDir, 'script.py'), '# fixture\n')
-  await writeFile(join(installDir, 'start_alltalk.bat'), '@echo off\n')
-  await writeFile(join(installDir, 'confignew.json'), '{"firstrun_model": false}\n')
-  await mkdir(join(installDir, 'system', 'tts_engines'), { recursive: true })
-  await writeFile(join(installDir, 'system', 'tts_engines', 'tts_engines.json'), '{"engine_loaded": "xtts"}\n')
-  const modelDir = join(installDir, 'models', 'xtts', 'xttsv2_2.0.3')
-  await mkdir(modelDir, { recursive: true })
-  for (const file of ['LICENSE.txt', 'README.md', 'config.json', 'dvae.pth', 'mel_stats.pth', 'model.pth', 'speakers_xtts.pth', 'vocab.json']) {
-    await writeFile(join(modelDir, file), file)
-  }
+  // The managed runtime fixture (Phase 7.8C, engine-neutral): the home
+  // exists on disk; the install PROOF is whatever the hosted modular engine
+  // (Kokoro first) declares - asserted by tests via `inspectInstallImpl`,
+  // never baked into the fixture itself.
+  await mkdir(installDir, { recursive: true })
 
   return { appData, installDir, userData, voicesRoot }
 }

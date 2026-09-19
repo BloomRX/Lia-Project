@@ -1,17 +1,20 @@
 /**
  * Windows integration HOTFIX 4 - build/orchestration contract.
  *
- * QA hit on a real Windows machine: `[MISSING_EXPORT] "inspectAllTalkInstall"
- * is not exported by packages/lia-core/dist/alltalk/runtime.mjs`. The source
- * change (hotfix 3) was correct and the sandbox suite was green - but the
- * launcher consumes @lia/core through its BUILT dist, and that dist had been
- * compiled at `pnpm install` time, BEFORE the fixes were pulled. Nothing but
- * the developer's memory ever rebuilt it.
+ * The QA hit this file pins, in the words of its era: `[MISSING_EXPORT]
+ * "inspectAllTalkInstall" is not exported by packages/lia-core/dist/...` -
+ * the source change was correct, the sandbox suite was green, and yet the
+ * launcher consumed @lia/core through its BUILT dist, which had been compiled
+ * at `pnpm install` time, BEFORE the fixes were pulled. Nothing but the
+ * developer's memory ever rebuilt it.
  *
  * The fix is orchestration, not more code: the app's dev/build scripts now
  * rebuild @lia/core first, so `Lia.bat` (which calls `pnpm dev:lia`) is
  * sufficient after a fresh checkout + install. This file pins that contract
- * so a future "optimization" cannot quietly put staleness back.
+ * so a future "optimization" cannot quietly put staleness back. The contract
+ * outlives every engine era; the concrete exports pinned below are simply the
+ * ones the current host imports (Phase 7.8E: engine-neutral transitional core,
+ * no AllTalk/F5 modules).
  */
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -27,43 +30,72 @@ function readJson<T>(path: string): T {
   return JSON.parse(readFileSync(path, 'utf8')) as T
 }
 
-describe('hotfix 4: @lia/core is fresh before any Lia boot', () => {
-  it('a: the source really exports inspectAllTalkInstall (no silent regression)', () => {
-    const source = readFileSync(join(CORE_DIR, 'src', 'alltalk', 'runtime.ts'), 'utf8')
-    expect(source).toContain('export async function inspectAllTalkInstall')
+/**
+ * The core subpaths the host really imports - listed once so every leg of
+ * this contract reads the same surface. Engine-neutral transitional core:
+ * no AllTalk/F5 modules are expected to exist.
+ */
+const APP_CORE_SUBPATHS = [
+  'bootstrap/runtime-root',
+  'paths/install-location',
+  'paths/product-paths',
+  'secrets/vault',
+  'voices/types',
+] as const
 
-    const runtimePaths = readFileSync(join(CORE_DIR, 'src', 'paths', 'runtime-paths.ts'), 'utf8')
-    expect(runtimePaths).toContain('export function resolveLiaRuntimeRoot')
-    expect(runtimePaths).toContain('export function resolveAllTalkRuntimeDir')
-    expect(runtimePaths).toContain('export function resolveAllTalkInstallCandidates')
+describe('hotfix 4: @lia/core is fresh before any Lia boot', () => {
+  it('a: the source still exports what the host imports (no silent regression)', () => {
+    const REQUIRED_EXPORTS: Record<string, string[]> = {
+      'bootstrap/runtime-root': ['resolveVoiceRuntimeHome'],
+      'bridge/lia-config': ['buildLiaBridgeConfig', 'stageEnvFor'],
+      'paths/install-location': ['classifyInstallLocation', 'inspectInstallLocationTarget'],
+      'paths/product-paths': ['liaProductPaths'],
+      'product/config': ['readLiaProductConfig', 'updateLiaProductConfig'],
+      'secrets/vault': ['createLiaSecretVault'],
+      'voices/profiles': ['createLiaVoiceProfileStore', 'findMissingFiles', 'VOICE_ENGINES'],
+    }
+    for (const [subpath, names] of Object.entries(REQUIRED_EXPORTS)) {
+      const source = readFileSync(join(CORE_DIR, 'src', `${subpath}.ts`), 'utf8')
+      for (const name of names)
+        expect(source, `${subpath}: ${name}`).toMatch(new RegExp(`export (async )?(function|const|type|interface) ${name}\\b`))
+
+      // Ancient engine-era detectors must never come back under any name.
+      expect(source, `${subpath} must not resurrect AllTalk detectors`).not.toContain('inspectAllTalkInstall')
+    }
   })
 
   it('b: the package export map exposes the subpaths the app imports', () => {
-    const pkg = readJson<{ exports: Record<string, string> }>(join(CORE_DIR, 'package.json'))
-    expect(pkg.exports['./alltalk/runtime']).toBe('./dist/alltalk/runtime.mjs')
-    expect(pkg.exports['./paths/runtime-paths']).toBe('./dist/paths/runtime-paths.mjs')
-
-    // tsdown must actually be told to emit that entry, or the map points at
+    const pkg = readJson<{ exports: Record<string, unknown> }>(join(CORE_DIR, 'package.json'))
+    // tsdown must actually be told to emit each entry, or the map points at
     // a file that will never exist (the first incarnation of hotfix 4's bug).
     const tsdown = readFileSync(join(CORE_DIR, 'tsdown.config.ts'), 'utf8')
-    expect(tsdown).toContain('\'./src/alltalk/runtime.ts\'')
-    expect(tsdown).toContain('\'./src/paths/runtime-paths.ts\'')
+    for (const subpath of ['bootstrap/runtime-root', 'bridge/lia-config', 'paths/install-location', 'paths/product-paths', 'product/config', 'secrets/vault', 'voices/profiles', 'voices/types']) {
+      const exported = pkg.exports[`./${subpath}`]
+      expect(exported, `./${subpath}`).toBeTruthy()
+      expect(JSON.stringify(exported), `./${subpath}`).toContain(`dist/${subpath}`)
+      expect(tsdown, `tsdown missing ${subpath}`).toContain(`./src/${subpath}.ts`)
+    }
+    // ...and the deleted engine-era subpaths are not re-entered by accident.
+    expect(pkg.exports['./alltalk/runtime']).toBeUndefined()
+    expect(pkg.exports['./voice/engines/f5/install-plan']).toBeUndefined()
+    expect(APP_CORE_SUBPATHS.length).toBeGreaterThan(0)
   })
 
   it('c: when a dist exists, it must contain the current API (fresh, not install-time stale)', () => {
     /** A pristine checkout legitimately has no dist yet - the dev script builds it. */
-    const distRuntime = join(CORE_DIR, 'dist', 'alltalk', 'runtime.mjs')
-    if (!existsSync(distRuntime))
+    const dist = (subpath: string) => join(CORE_DIR, 'dist', `${subpath}.mjs`)
+    if (!existsSync(dist('bootstrap/runtime-root')))
       return
 
-    const artifact = readFileSync(distRuntime, 'utf8')
-    expect(artifact).toContain('inspectAllTalkInstall')
-
-    const distRuntimePaths = join(CORE_DIR, 'dist', 'paths', 'runtime-paths.mjs')
-    expect(existsSync(distRuntimePaths)).toBe(true)
-    const pathsArtifact = readFileSync(distRuntimePaths, 'utf8')
-    expect(pathsArtifact).toContain('resolveLiaRuntimeRoot')
-    expect(pathsArtifact).toContain('resolveAllTalkInstallCandidates')
+    for (const subpath of ['bootstrap/runtime-root', 'bridge/lia-config', 'paths/install-location', 'paths/product-paths', 'product/config', 'secrets/vault', 'voices/profiles']) {
+      expect(existsSync(dist(subpath)), `dist/${subpath}.mjs`).toBe(true)
+      const artifact = readFileSync(dist(subpath), 'utf8')
+      // Staleness runs both ways now: what the app consumes must be current.
+      expect(artifact, `dist/${subpath}.mjs stale`).not.toContain('inspectAllTalkInstall')
+    }
+    const profiles = readFileSync(dist('voices/profiles'), 'utf8')
+    expect(profiles).toContain('VOICE_ENGINES')
+    expect(profiles).toContain('LEGACY_VOICE_ENGINES')
   })
 
   it('d: dev and build scripts build @lia/core BEFORE electron-vite touches it', () => {

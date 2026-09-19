@@ -1,10 +1,6 @@
-import type { AllTalkStatus } from '@lia/core/alltalk/client'
-import type { CustomVoiceEngineStatus } from '@lia/core/alltalk/engine-config'
-import type { RuntimeStateSnapshot } from '@lia/core/alltalk/runtime'
 import type { LiaBridgeConfig } from '@lia/core/bridge/lia-config'
 import type { LiaProductPaths } from '@lia/core/paths/product-paths'
-import type { LiaInstallDirCandidate } from '@lia/core/paths/runtime-paths'
-import type { LiaProductAllTalkRuntime, LiaProductConfigSnapshot, LiaProductConfigUpdate } from '@lia/core/product/config'
+import type { LiaProductConfigSnapshot, LiaProductConfigUpdate } from '@lia/core/product/config'
 import type { LiaSecretCipher, LiaSecretVault } from '@lia/core/secrets/vault'
 import type { LiaCustomVoiceProfile, LiaVoiceProfileImportRequest } from '@lia/core/voices/types'
 
@@ -13,21 +9,14 @@ import type { ShutdownReport } from './shutdown-coordinator'
 
 import process from 'node:process'
 
-import { execFile } from 'node:child_process'
-import { access, readdir, readFile, stat, writeFile } from 'node:fs/promises'
+import { access, stat } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { createAllTalkClient, DEFAULT_ALLTALK_BASE_URL, DEFAULT_ALLTALK_TIMEOUT_MS } from '@lia/core/alltalk/client'
-import { readCustomVoiceEngineStatus } from '@lia/core/alltalk/engine-config'
-import { gatherPortOwners, inspectProcess } from '@lia/core/alltalk/port-diagnostics'
-import { loopbackHostFor, probeTcpListeners } from '@lia/core/alltalk/port-listeners'
-import { createRuntimeManager, inspectAllTalkInstall } from '@lia/core/alltalk/runtime'
-import { createAllTalkSyncService, isVoiceVisibleToAllTalk } from '@lia/core/alltalk/voices-sync'
 import { buildLiaBridgeConfig, stageEnvFor } from '@lia/core/bridge/lia-config'
+import { resolveVoiceRuntimeHome } from '@lia/core/bootstrap/runtime-root'
 import { classifyInstallLocation, inspectInstallLocationTarget } from '@lia/core/paths/install-location'
 import { liaProductPaths } from '@lia/core/paths/product-paths'
-import { resolveAllTalkInstallCandidates, resolveAllTalkRuntimeDir, resolveAllTalkVoicesDirForInstallDir } from '@lia/core/paths/runtime-paths'
 import { readLiaProductConfig, updateLiaProductConfig } from '@lia/core/product/config'
 import { createLiaSecretVault } from '@lia/core/secrets/vault'
 import { createLiaVoiceProfileStore, findMissingFiles } from '@lia/core/voices/profiles'
@@ -65,7 +54,8 @@ export interface LiaHomeStatus {
    * `error` carries the operational reason - never a fabricated
    * `installed: false` invented by an exception.
    */
-  alltalk: {
+  /** The voice product's runtime facts (`voice` since Phase 7.8; engine-neutral). */
+  voice: {
     /** Voice configuration targets the custom runtime? Absent when the document could not be read. */
     configured?: boolean
     /** Why inspection did not produce facts, when it did not. */
@@ -74,11 +64,11 @@ export interface LiaHomeStatus {
     installed?: boolean
     /** The effective install dir - only when it was PROVEN installed. */
     installDir?: string
-    /** The manager's own phase; 'unknown' when inspection failed before any phase could exist. */
-    phase: 'unknown' | RuntimeStateSnapshot['phase']
+    /** The worker's own state label; 'unknown' when inspection failed before any state could exist. */
+    phase: 'unknown' | 'stopped' | 'starting' | 'ready' | 'stopping' | 'error' | 'notInstalled'
     /** A voice profile id is actively selected. Absent when the document could not be read. */
     profileSelected?: boolean
-    /** The runtime answers health / holds a li-managed tree right now. */
+    /** The runtime answers health / holds a launcher-owned worker right now. */
     running: boolean
   }
   config: {
@@ -123,21 +113,13 @@ export interface LiaHostDeps {
   env?: Record<string, string | undefined>
   exists?: (path: string) => boolean
   /**
-   * Install-marker inspection, injected so integration tests can exercise
-   * the REAL resolver and manager against a virtual disk (the canonical
-   * LocalAppData root only exists on a real Windows profile).
+   * Install inspection, injected so integration tests can exercise the REAL
+   * resolver against a virtual disk (the canonical LocalAppData root only
+   * exists on a real Windows profile). Phase 7.8C: no modular engine is
+   * registered yet, so the default answer is honestly `false` until an
+   * engine (Kokoro first) declares what "installed" means for its tree.
    */
-  inspectInstallImpl?: typeof inspectAllTalkInstall
-  /**
-   * Engine-config read-back (Phase 7.5 Part 9). Default: the core's real
-   * file read; tests stub the disk outcome only.
-   */
-  engineStatusImpl?: (appDir: string) => Promise<CustomVoiceEngineStatus>
-  /**
-   * The `/api/voices` probe used by the Part-8 visibility check. Default:
-   * the real client; tests answer from a scripted server state.
-   */
-  voiceVisibilityProbeImpl?: (config: RuntimeManagerConfig) => Promise<AllTalkStatus>
+  inspectInstallImpl?: (runtimeHome: string, platform?: string) => Promise<boolean>
   /** Never-secret log lines; the renderer log strip shows a pass-through. */
   onEvent?: (event: string, detail?: string) => void
   /** Never-crashes platform override for tests. */
@@ -146,29 +128,16 @@ export interface LiaHostDeps {
   workspaceRoot?: string
   /** Test seam: the stage manager is replaceable without touching spawn. */
   stageManagerFactory?: (deps: ConstructorParameters<typeof AiriStageManager>[0]) => AiriStageManager
-  /**
-   * Test seam: replace the runtime manager construction (e.g. to hand the
-   * coordinator a manager that owns a fake child, for contract test B).
-   */
-  runtimeManagerFactory?: (config: RuntimeManagerConfig) => ReturnType<typeof createRuntimeManager>
-}
-
-/** The slice of product config the runtime manager is built from. */
-export interface RuntimeManagerConfig {
-  baseUrl: string
-  installDir?: string
-  timeoutMs: number
-  voicesDir?: string
 }
 
 /**
- * Phase 7.4 (Part G/H/J): what the Voice screen renders about WHERE the
- * heavy runtime lives. `effectiveInstallDir` is the first trusted
- * candidate (configured first, canonical default otherwise) - the dir the
- * markers would be checked against, whether installed or not.
+ * What the Voice screen renders about WHERE the managed voice runtime
+ * lives. `effectiveInstallDir` is the configured root when one exists,
+ * otherwise the canonical engine-neutral home (`%LOCALAPPDATA%\Lia\runtimes`)
+ * - the dir install state is checked against, whether installed or not.
  */
 export interface LiaRuntimeLocationStatus {
-  /** `%LOCALAPPDATA%\Lia\runtimes\alltalk\app` (Windows) - the Phase 7.1 canonical default. */
+  /** The canonical default home of the managed voice runtime. */
   canonicalDefaultDir: string
   configuredInstallDir?: string
   customActive: boolean
@@ -189,6 +158,7 @@ export type LiaRuntimeLocationPickResult
     | { message: string, reason: string, status: 'rejected' }
 
 export interface LiaHost {
+
   /** The resolved bridge contract for THIS launch (built fresh from disk). */
   bridgeConfig: () => Promise<LiaBridgeConfig>
   /** The "Conversar com Lia" pipeline (architecture items 9/12). */
@@ -206,13 +176,12 @@ export interface LiaHost {
   productSnapshot: () => Promise<LiaProductConfigSnapshot | undefined>
   /** Graceful supervisor shutdown; safe to call more than once (single-flight). */
   quit: () => Promise<ShutdownReport>
-  runtime: () => Promise<ReturnType<typeof createRuntimeManager>>
   stage: AiriStageManager
   /** Launch facts the stage child will receive (bridge env + shared home). */
   stageEnv: () => Promise<Record<string, string>>
   /** Persists the Config screen through the core writer; secrets to the vault only. */
   updateConfig: (payload: LiaConfigUpdatePayload) => Promise<LiaConfigUpdateResult>
-  /** Where the heavy runtime lives now (Part G/J status for the Voice screen). */
+  /** Where the managed voice runtime lives now (Part G/J status for the Voice screen). */
   runtimeLocationStatus: () => Promise<LiaRuntimeLocationStatus>
   /**
    * Applies a dialog-chosen runtime root (Part H/K). NEVER moves bytes: a
@@ -224,29 +193,6 @@ export interface LiaHost {
   /** Clears the configured root, restoring the canonical default. */
   clearRuntimeLocation: () => Promise<LiaRuntimeLocationStatus>
   vault: LiaSecretVault
-}
-
-/** execFile with captured stdout, shaped for the diagnostics module. */
-async function execCapture(command: string, args: string[], options: { timeoutMs: number }): Promise<{ code: null | number, stdout: string }> {
-  return await new Promise((resolvePromise) => {
-    execFile(command, args, { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024, timeout: options.timeoutMs }, (error, stdout) => {
-      resolvePromise({
-        code: typeof error?.code === 'number' ? error.code : 0,
-        stdout: typeof stdout === 'string' ? stdout : '',
-      })
-    })
-  })
-}
-
-/** The API port and the bundled-web port the diagnostics inspect. */
-function runtimePorts(baseUrl: string): number[] {
-  try {
-    const apiPort = Number.parseInt(new URL(baseUrl).port || '7851', 10)
-    return [apiPort, apiPort + 1]
-  }
-  catch {
-    return [7851, 7852]
-  }
 }
 
 export function createLiaHost(deps: LiaHostDeps): LiaHost {
@@ -276,9 +222,8 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
   const voices = createLiaVoiceProfileStore({ rootDir: paths.voicesRoot })
   const emit = deps.onEvent ?? (() => {})
 
-  // The canonical runtime facts, as configured in the product document.
-  // The manager is rebuilt only when the document changes; the launcher's
-  // boot NEVER starts the heavy runtime (contract item 12).
+  // The canonical runtime facts come from the product document; the
+  // launcher's boot NEVER starts a voice runtime (contract item 12).
 
   const workspaceRoot = deps.workspaceRoot ?? defaultWorkspaceRoot()
 
@@ -287,17 +232,16 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
     workspaceRoot,
   })
 
-  let cached: { installDir: string, manager: ReturnType<typeof createRuntimeManager>, snapshot: LiaProductConfigSnapshot | undefined } | undefined
-
   /**
    * The supervisor shutdown officer (Phase 7.1, items 1/2/3). Registration
    * order IS teardown order: the stage leaves first (its children may talk
-   * to the voice runtime), the owned voice runtime second.
+   * to a voice runtime).
    *
    * `holdsOwnedProcess` is ownership, by this session, of a LIVE process -
-   * the exact round-7 axiom. An adopted/external runtime and any stage we
-   * did not spawn answer 'no-owned-process' and are never touched
-   * (contract tests C/D).
+   * the exact round-7 axiom. Phase 7.8C: no voice-engine worker is owned by
+   * the host (F5 manager removed; modular engines - Kokoro first - register
+   * their own owned-process entry HERE when they land), so the stage is the
+   * only registrant for now.
    */
   const coordinator = new ShutdownCoordinator({
     onLog: line => emit('lia-app.shutdown', line),
@@ -307,18 +251,6 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
     name: 'stage',
     stop: async () => await stage.stop(),
   })
-  coordinator.register({
-    // Ownership semantics (Phase 7.1 correction): the question is never
-    // "did WE spawn it this session?" - it is "is it PROVEN lia-managed?".
-    // A recovered pre-existing Lia runtime answers true and IS stopped on
-    // quit (test B); external and unknown answer false and are never
-    // touched (tests C/D). Origin and ownership stay separate.
-    holdsOwnedProcess: () => cached?.manager.hasManagedRuntime() ?? false,
-    name: 'voice-runtime',
-    stop: async () => {
-      await (await manager()).stop()
-    },
-  })
 
   async function readSnapshot(): Promise<{ snapshot: LiaProductConfigSnapshot | undefined, status: LiaHomeStatus['config']['status'] }> {
     const read = await readLiaProductConfig(paths.productConfigFile)
@@ -326,26 +258,20 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
   }
 
   /**
-   * Phase 7.4 + 7.5 voice gate (items B/E + Part 6/7/8/9): when the
-   * preferred voice is `custom-local-voice`, prove the whole slice - in the
-   * order the facts make cheap - before the stage is ever asked to start:
+   * Voice gate (Phase 7.8 items 6/9/23; engine-neutral since 7.8C): when
+   * the preferred voice is `custom-local-voice`, prove exactly the facts
+   * that matter now - in the order that makes them cheap - before the
+   * stage is ever asked to start:
    *   1. the selected profile exists in the canonical library (+ its files);
-   *   2. a marker-proven install exists (any trusted candidate);
-   *   3. the managed voice copy is PUBLISHED into the voices folder of that
-   *      same install (fs-only step - so it happens before any start, and
-   *      the voices folder derives FROM the proven install when none was
-   *      configured, closing the "sync wrote to the wrong server" split);
-   *   4. the engine config says the custom model is actually usable
-   *      (engine_loaded=xtts + complete weights - read-back, never a guess);
-   *   5. the runtime starts and reaches real health (the manager's poll);
-   *   6. the voice the request will name is CONFIRMED visible via
-   *      `GET /api/voices` before the stage enters speech.
-   * Each failure is a human pt-BR message thrown to the CTA plus a
-   * `conversar-blocked` diagnostic event carrying only safe metadata
-   * (reason codes, counts, the managed FILENAME - never text, audio or
-   * source paths).
-   *
-   * A non-custom provider starts NOTHING: AllTalk stays at rest (item D).
+   *   2. a proven managed voice runtime exists at the effective home;
+   *   3. the registered engine is ready - WAITING ON a modular engine to be
+   *      hosted here (7.8C removed the F5 manager; Kokoro is next).
+   * The canonical reference WAV is read by the engine straight from the
+   * profile's own directory: there is NO derived published copy, no voices
+   * folder to drift out of sync, and the transcript the engine may need
+   * comes from the profile's own metadata.
+   * Every refusal is a human pt-BR message plus a machine-readable event
+   * (safe metadata only). A non-custom provider starts NOTHING.
    */
   async function ensureVoiceReadyForConversar(snapshot: LiaProductConfigSnapshot | undefined): Promise<void> {
     const preferredVoice = snapshot?.voice?.tts?.preferred
@@ -364,250 +290,37 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
       throw new Error('Não encontrei a voz selecionada. Importe-a novamente nas configurações de Voz da Lia.')
     }
 
-    const runtime = await manager()
-    if (!(await runtime.isInstalled())) {
+    const runtimeHome = effectiveRuntimeHome(snapshot)
+    if (!(await voiceRuntimeInstalled(runtimeHome))) {
       emit('lia-app.conversar-blocked', 'reason=voice-runtime-not-installed')
       throw new Error('O sistema de voz precisa ser instalado. Abra as configurações da Lia para instalar.')
     }
 
-    const alltalkConfig = snapshot?.voice?.runtime?.alltalk
-    // The preflights and the spawn MUST agree on ONE install. The manager
-    // owns that contract (ownership beats resolution, item G), so the
-    // effective install here is the manager's - never a second, divergent
-    // resolve.
-    const effectiveInstallDir = cached?.installDir ?? ''
-    const resolution = effectiveInstallDir ? undefined : await resolveInstallDir(alltalkConfig?.installDir)
-    const installDirForPrep = effectiveInstallDir || (resolution?.candidate?.dir ?? '')
-
-    // Phase 7.5.1, items A/D: the voices folder the PREP writes into is
-    // derived EXCLUSIVELY from the install the manager will run -
-    // `<install app dir>\voices`, the same folder `/api/voices` lists and
-    // `/api/tts-generate` resolves from (verified upstream: list_files
-    // this_dir/"voices", fresh per request, `*.wav` only, exact-shape
-    // `{"voices": string[]}`). A configured voicesDir that diverges would
-    // be the split-brain the QA proved present=false with, so divergence is
-    // diagnosed and the DERIVED root wins, never the configured one.
-    const voicesDir = resolveAllTalkVoicesDirForInstallDir(installDirForPrep)
-    const configuredVoicesDir = alltalkConfig?.voicesDir?.trim() ?? ''
-    if (configuredVoicesDir && configuredVoicesDir.toLowerCase() !== voicesDir.toLowerCase()) {
-      emit('lia-app.conversar-note', `reason=voices-dir-diverges configured=${configuredVoicesDir} derived=${voicesDir}`)
-    }
-
-    // Prep is a pure FILESYSTEM step: publish the canonical reference audio
-    // as the deterministic managed copy BEFORE the runtime starts, so no
-    // engine restart cycle is ever spent discovering a missing voice later.
-    const sync = await voicesSyncService(voicesDir).ensureProfileAvailableToAllTalk(profile.id)
-    if (!sync.ok) {
-      emit('lia-app.conversar-blocked', `reason=voice-sync-failed code=${sync.error}`)
-      throw new Error('Não foi possível preparar a voz da Lia. Tente novamente ou veja Diagnósticos.')
-    }
-    emit('lia-app.voice-synced', `voice=${sync.filename} copied=${sync.copied}`)
-
-    // Engine truth is read back from config files, never assumed: a runtime
-    // that boots Piper answers every XTTS request with a 500.
-    if (installDirForPrep) {
-      const engine = await (deps.engineStatusImpl?.(installDirForPrep)
-        ?? readCustomVoiceEngineStatus(fsEngineConfigDeps(), installDirForPrep))
-      if (!engine.ready) {
-        emit('lia-app.conversar-blocked', `reason=voice-engine-not-ready engine=${engine.engine ?? 'unknown'} modelLoaded=${engine.modelComplete} firstRunPending=${engine.firstRunPending}`)
-        throw new Error('O sistema de voz não conseguiu carregar o modelo. Veja Diagnósticos para detalhes.')
-      }
-      emit('lia-app.voice-engine-ready', `engine=${engine.engine ?? 'unknown'} modelLoaded=${engine.modelComplete}`)
-    }
-
-    // Diagnostic D (7.5.1): the ONE line that proves the sync destination
-    // and the running server live under the same root, before we spend a
-    // start on it. Safe paths only - no contents, no audio.
-    emit('lia-app.voice-prep', `runtimeInstallDir=${installDirForPrep} voicesDir=${voicesDir} managedVoice=${sync.filename}`)
-
-    let state: RuntimeStateSnapshot
-    try {
-      state = await runtime.start({ source: 'conversar' })
-    }
-    catch (thrown) {
-      emit('lia-app.conversar-blocked', `reason=voice-runtime-start-failed detail=${briefReason(thrown)}`)
-      throw new Error('Não foi possível iniciar o sistema de voz. Veja Diagnósticos para detalhes.')
-    }
-    if (state.phase !== 'ready') {
-      emit('lia-app.conversar-blocked', `reason=voice-runtime-readiness-timeout phase=${state.phase}`)
-      throw new Error('O sistema de voz não ficou pronto a tempo. Tente novamente ou veja Diagnósticos.')
-    }
-
-    // The last proof is on the API itself: the filename the synthesis
-    // request will name must be visible to THIS server (Part 8). A probe
-    // failure is inconclusive, never a silent pass.
-    // The probe answers about the same voices dir the sync wrote into -
-    // the derived root, not whatever is configured (that configured value
-    // is precisely what the QA proved wrong).
-    const probeConfig = { ...runtimeConfigFor(alltalkConfig, installDirForPrep), voicesDir }
-    const probe = await (deps.voiceVisibilityProbeImpl?.(probeConfig)
-      ?? createAllTalkClient(probeConfig).status())
-    if (!probe.ok) {
-      emit('lia-app.conversar-blocked', `reason=voice-probe-inconclusive state=${probe.state}`)
-      throw new Error('Não foi possível confirmar a voz selecionada. Veja Diagnósticos para detalhes.')
-    }
-    if (!isVoiceVisibleToAllTalk(probe.voices, sync.filename)) {
-      // The file may exist yet be invisible: `.WAV` uppercase never matches
-      // the upstream `.wav` filter. The disk cross-check keeps that reason
-      // reportable without audio contents.
-      const existsOnDisk = await probeVoiceCopyOnDisk(voicesDir, sync.filename)
-      emit('lia-app.conversar-blocked', `reason=voice-not-visible voice=${sync.filename} present=false onDisk=${existsOnDisk} knownVoices=${probe.voices.length}`)
-      throw new Error('Não foi possível carregar a voz selecionada.')
-    }
-    emit('lia-app.voice-visible', `voice=${sync.filename} present=true`)
-    emit('lia-app.voice-runtime-ready', `phase=${state.phase} source=conversar`)
-  }
-
-  /** Filesystem cross-check for the not-visible diagnostic: exists on disk? */
-  /** Filesystem cross-check for the not-visible diagnostic: exists on disk? */
-  async function probeVoiceCopyOnDisk(voicesDir: string, filename: string): Promise<boolean> {
-    try {
-      await stat(join(voicesDir, filename))
-      return true
-    }
-    catch {
-      return false
-    }
-  }
-
-  /** The shared voices sync service for one resolved folder. */
-  function voicesSyncService(voicesDir: string) {
-    return createAllTalkSyncService({ store: voices, voicesDir })
-  }
-
-  /** Real fs deps for the engine read-back (tests ride the real tmp disk). */
-  function fsEngineConfigDeps() {
-    return {
-      listFiles: async (dir: string) => {
-        try {
-          return await readdir(dir)
-        }
-        catch {
-          return undefined
-        }
-      },
-      readFile: async (path: string) => {
-        try {
-          return await readFile(path, 'utf8')
-        }
-        catch {
-          return undefined
-        }
-      },
-      writeFile: async (path: string, content: string) => {
-        await writeFile(path, content)
-      },
-    }
-  }
-
-  /** Doc values merged with the proven install (probe + client boundary). */
-  function runtimeConfigFor(alltalkConfig: LiaProductAllTalkRuntime | undefined, effectiveInstallDir: string): RuntimeManagerConfig {
-    return {
-      baseUrl: alltalkConfig?.baseUrl?.trim() || DEFAULT_ALLTALK_BASE_URL,
-      timeoutMs: alltalkConfig?.timeoutMs && alltalkConfig.timeoutMs > 0 ? alltalkConfig.timeoutMs : DEFAULT_ALLTALK_TIMEOUT_MS,
-      ...(alltalkConfig?.voicesDir?.trim() ? { voicesDir: alltalkConfig.voicesDir.trim() } : {}),
-      ...(effectiveInstallDir ? { installDir: effectiveInstallDir } : {}),
-    }
-  }
-
-  function buildManager(runtimeConfig: RuntimeManagerConfig): ReturnType<typeof createRuntimeManager> {
-    const installDir = runtimeConfig.installDir?.trim() ?? ''
-    return createRuntimeManager({
-      // The socket fact about the port, deliberately decoupled from the API
-      // health fact (Phase 6 lessons travelled with the core).
-      probeOccupied: platform === 'win32'
-        ? async () => await probeTcpListeners({
-          host: loopbackHostFor(runtimeConfig.baseUrl),
-          ports: runtimePorts(runtimeConfig.baseUrl),
-        })
-        : async () => 'free' as const,
-      execImpl: async (command, args, options) => await new Promise((resolvePromise) => {
-        // The Windows process-tree kill never propagates a non-zero exit
-        // into a crash - the round-7 contract.
-        execFile(command, args, { timeout: options.timeoutMs }, (error) => {
-          resolvePromise({ code: typeof error?.code === 'number' ? error.code : 0 })
-        })
-      }),
-      inspectProcess: platform === 'win32'
-        ? async pid => await inspectProcess({ exec: execCapture, platform }, pid)
-        : undefined,
-      installDir,
-      isHealthy: async () => {
-        const probe = await createAllTalkClient(runtimeConfig).status()
-        return probe.ok
-      },
-      onEvent: emit,
-      platform,
-      portOwnerDiagnostics: platform === 'win32'
-        ? async () => await gatherPortOwners({
-          exec: execCapture,
-          installDir,
-          log: line => emit('lia-app.runtime-diagnostics', line),
-          platform,
-          ports: runtimePorts(runtimeConfig.baseUrl),
-        })
-        : undefined,
-    })
+    // The engine read/ready step registers here when a modular engine
+    // (Kokoro first) is hosted by the launcher again.
   }
 
   /**
-   * Where the install lives, decided with EVIDENCE (integration hotfix):
-   * the document's configured path wins only when it proves installed;
-   * the canonical `%LOCALAPPDATA%\Lia\runtimes\alltalk\app` is the
-   * default the Windows installer actually wrote. Detection is the same
-   * marker set as the runtime's own - never "the folder exists".
+   * The runtime home the host works against, resolved to ONE answer:
+   * the configured `voice.runtime.installDir` when set, otherwise the
+   * canonical engine-neutral `%LOCALAPPDATA%\Lia\runtimes` (POSIX: the
+   * shared user-data home). The legacy alltalk block is read by NOBODY here.
    */
-  async function resolveInstallDir(configuredInstallDir?: string): Promise<{ candidate: LiaInstallDirCandidate | undefined, installed: boolean }> {
-    const candidates = resolveAllTalkInstallCandidates({
-      configuredInstallDir,
-      env,
-      platform,
-      userDataDir: paths.userDataDir,
-    })
-    const inspect = deps.inspectInstallImpl ?? inspectAllTalkInstall
-    const first = candidates[0]
-    for (const candidate of candidates) {
-      if (await inspect(candidate.dir, { platform })) {
-        return { candidate, installed: true }
-      }
-    }
-    // Nothing installed: keep the document's pointer if one exists (a
-    // broken-but-explicit path the user can fix at instead of a silent
-    // reroute), otherwise the canonical future home.
-    return { candidate: first, installed: false }
+  function effectiveRuntimeHome(snapshot: LiaProductConfigSnapshot | undefined): string {
+    const configured = snapshot?.voice?.runtime?.installDir?.trim()
+    if (configured)
+      return configured
+    return resolveVoiceRuntimeHome({ env, platform, userDataDir: paths.userDataDir })
   }
 
-  async function manager(): Promise<ReturnType<typeof createRuntimeManager>> {
-    const { snapshot } = await readSnapshot()
-    const alltalk = snapshot?.voice?.runtime?.alltalk
-    const resolution = await resolveInstallDir(alltalk?.installDir)
-    const installDir = resolution.candidate?.dir ?? ''
-
-    // Phase 7.5.1, item G: ownership beats resolution. A cached manager that
-    // currently HOLDS a live runtime (spawned child or proven attachment)
-    // is never thrown away because the re-resolved install string drifted:
-    // discarding it here orphaned the live process and re-classified our
-    // own tree as an unknown intruder on the next start - the exact
-    // `port-occupied-unknown-process` the QA logged, and the exact reason
-    // the shutdown later skipped a runtime this session had started.
-    if (cached && cached.manager.hasManagedRuntime()) {
-      if (cached.installDir !== installDir)
-        emit('lia-app.runtime-ownership-retained', `session=<held> resolved=<drifted>`)
-      return cached.manager
-    }
-    if (cached && cached.installDir === installDir)
-      return cached.manager
-
-    const runtimeConfig: RuntimeManagerConfig = {
-      baseUrl: alltalk?.baseUrl ?? DEFAULT_ALLTALK_BASE_URL,
-      installDir: installDir || undefined,
-      timeoutMs: alltalk?.timeoutMs ?? DEFAULT_ALLTALK_TIMEOUT_MS,
-      voicesDir: alltalk?.voicesDir,
-    }
-
-    const built = (deps.runtimeManagerFactory ?? buildManager)(runtimeConfig)
-    cached = { installDir, manager: built, snapshot }
-    return built
+  /**
+   * Install proof at the effective home. Phase 7.8C: with no modular engine
+   * registered there is nothing that could be "installed", so the default
+   * answer is honestly false; an engine declares its own proof next phase.
+   */
+  async function voiceRuntimeInstalled(runtimeHome: string): Promise<boolean> {
+    const inspect = deps.inspectInstallImpl ?? (async () => false)
+    return inspect(runtimeHome, platform)
   }
 
   /**
@@ -643,26 +356,25 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
     const { snapshot } = config
     const preferredVoice = snapshot?.voice?.tts?.preferred
 
-    let alltalk: LiaHomeStatus['alltalk']
+    let voice: LiaHomeStatus['voice']
     try {
-      const runtime = await manager()
-      const installed = await runtime.isInstalled()
-      const runtimeState = runtime.state()
-      alltalk = {
+      const runtimeHome = effectiveRuntimeHome(snapshot)
+      const installed = await voiceRuntimeInstalled(runtimeHome)
+      voice = {
         configured: snapshot === undefined ? undefined : preferredVoice?.providerId === 'custom-local-voice',
         installed,
         // The dir is named only when the install there PROVED valid; a
         // guessed location remains out of a status users act on.
-        installDir: installed ? cached?.installDir : undefined,
-        phase: runtimeState.phase === 'ready'
-          ? 'ready'
-          : installed ? runtimeState.phase : 'notInstalled',
+        installDir: installed ? runtimeHome : undefined,
+        // Phase 7.8C: no engine worker is hosted by the launcher right now,
+        // so 'stopped' is the honest running-state of a proven install.
+        phase: installed ? 'stopped' : 'notInstalled',
         profileSelected: snapshot === undefined ? undefined : preferredVoice?.voiceId !== undefined,
-        running: runtimeState.phase === 'ready',
+        running: false,
       }
     }
     catch (thrown) {
-      alltalk = {
+      voice = {
         configured: snapshot === undefined ? undefined : preferredVoice?.providerId === 'custom-local-voice',
         error: reason(thrown),
         phase: 'unknown',
@@ -680,7 +392,7 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
 
     return {
       ai: { ready: aiReady },
-      alltalk,
+      voice,
       config: { error: config.error, filePath: paths.productConfigFile, status: config.status },
       paths,
       stage: { available: stage.isAvailable(), state: stage.state() },
@@ -708,38 +420,21 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
     }
   }
 
-  /** Short, safe failure evidence for diagnostics: bounded, space-free. */
-  function briefReason(thrown: unknown): string {
-    try {
-      // Lint policy forbids the instanceof ternary; this is its contract.
-      let text = ''
-      if (thrown instanceof Error)
-        text = thrown.message
-      else
-        text = String(thrown)
-      return text.replace(/\s+/g, ' ').slice(0, 80).trim() || 'unknown'
-    }
-    catch {
-      return 'unknown'
-    }
-  }
-
   /**
-   * Part G/H: the user-facing WHERE. `resolveInstallDir` already implements
-   * the precedence (configured-proven > canonical-proven > configured-unproven
-   * > canonical) with markers as the only "installed" proof; this only
-   * renders the outcome to the Voice screen.
+   * Part G/H: the user-facing WHERE. Precedence is configured home when
+   * set, otherwise the canonical engine-neutral home; `installed` is the
+   * engine's own proof (honestly false while no modular engine is hosted).
    */
   async function runtimeLocationStatus(): Promise<LiaRuntimeLocationStatus> {
     const { snapshot } = await readSnapshot()
-    const configuredInstallDir = snapshot?.voice?.runtime?.alltalk?.installDir?.trim() || undefined
-    const resolution = await resolveInstallDir(configuredInstallDir)
+    const configuredInstallDir = snapshot?.voice?.runtime?.installDir?.trim() || undefined
+    const effective = effectiveRuntimeHome(snapshot)
     return {
-      canonicalDefaultDir: resolveAllTalkRuntimeDir({ env, platform, userDataDir: paths.userDataDir }),
+      canonicalDefaultDir: resolveVoiceRuntimeHome({ env, platform, userDataDir: paths.userDataDir }),
       customActive: configuredInstallDir !== undefined,
       ...(configuredInstallDir ? { configuredInstallDir } : {}),
-      effectiveInstallDir: resolution.candidate?.dir ?? '',
-      installed: resolution.installed,
+      effectiveInstallDir: effective,
+      installed: await voiceRuntimeInstalled(effective),
     }
   }
 
@@ -788,16 +483,13 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
     }
 
     const written = await updateLiaProductConfig(paths.productConfigFile, {
-      voice: { runtime: { alltalk: { installDir: decision.normalized } } },
+      voice: { runtime: { installDir: decision.normalized } },
     })
     if (written.status !== 'ok') {
       emit('lia-app.runtime-location-blocked', `reason=${written.status}`)
       return { message: written.error.message, reason: written.status, status: 'rejected' }
     }
 
-    // The runtime manager memoizes the previous document; the next start
-    // must see the new root (same rule as updateConfig).
-    cached = undefined
     emit('lia-app.runtime-location-updated', 'source=user-pick move=never')
     return {
       installDir: decision.normalized,
@@ -808,12 +500,10 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
 
   async function clearRuntimeLocation(): Promise<LiaRuntimeLocationStatus> {
     const written = await updateLiaProductConfig(paths.productConfigFile, {
-      voice: { runtime: { alltalk: { installDir: '' } } },
+      voice: { runtime: { installDir: '' } },
     })
-    if (written.status === 'ok') {
-      cached = undefined
+    if (written.status === 'ok')
       emit('lia-app.runtime-location-updated', 'source=user-clear')
-    }
     return runtimeLocationStatus()
   }
 
@@ -833,9 +523,6 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
       emit('lia-app.config-blocked', `reason=${written.status}`)
       return { message: written.error.message, status: written.status }
     }
-    // The runtime manager memoizes launch facts from the PREVIOUS document;
-    // configuration edits must reach the next start.
-    cached = undefined
     emit('lia-app.config-updated', written.filePath)
     return { status: 'ok', value: written.value }
   }
@@ -879,7 +566,6 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
     paths,
     productSnapshot: async () => (await readSnapshot()).snapshot,
     quit: async () => await coordinator.stopAll(),
-    runtime: manager,
     runtimeLocationStatus,
     applyRuntimeLocation,
     clearRuntimeLocation,

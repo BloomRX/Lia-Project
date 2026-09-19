@@ -1,30 +1,48 @@
-import type { BootstrapLogEntry } from './bootstrap'
-
 import nodePath from 'node:path'
 import process from 'node:process'
 
 import { errorMessageFrom } from '@moeru/std'
 
 /**
- * Where the AllTalk runtime root lives on Windows: `%LOCALAPPDATA%\Lia`.
+ * One structured, metadata-only line the resolver emits for diagnostics.
+ * Owned locally by this module (Phase 7.8C): the old `./bootstrap` module
+ * that used to define this shape was removed with the AllTalk bootstrap;
+ * the runtime-root machinery is engine-neutral and keeps its own type.
+ */
+export interface RuntimeRootLogEntry {
+  /** Machine-readable context (paths, ids), never secrets. */
+  detail?: string
+  /** What happened, e.g. 'migrated'. */
+  event: string
+  /** Which pipeline step produced it, e.g. 'runtime-root'. */
+  step: string
+}
+
+/**
+ * Where the canonical voice runtime root lives on Windows: `%LOCALAPPDATA%\Lia`.
  *
  * Two rounds of evidence shaped this. Round 5 proved the `@` of the scoped
  * Electron product name made the Miniconda silent installer exit 2 (same
  * args, same file, same machine - only the destination differed), and the
- * pinned `atsetup.bat` itself warns that special characters in the path -
- * `@` is literally in its `findstr` blacklist - can make the installation
- * fail. Round 7 (product decision): `%APPDATA%` (Roaming) is for small
- * per-user configuration that may follow the profile; a runtime carrying
- * Conda, Python and potentially several GB of models belongs in the local,
- * non-roaming profile directory. Hence `%LOCALAPPDATA%\Lia\runtimes\alltalk`:
- * local, Lia-named, and free of every atsetup-blacklisted character.
+ * historical `atsetup.bat` installer script warned that special characters
+ * in the path - `@` was literally in its `findstr` blacklist - can make an
+ * installation fail. Round 7 (product decision): `%APPDATA%` (Roaming) is
+ * for small per-user configuration that may follow the profile; a runtime
+ * carrying Conda, Python and potentially several GB of models belongs in the
+ * local, non-roaming profile directory. Hence `%LOCALAPPDATA%\Lia\runtimes`:
+ * local, Lia-named, and free of every installer-blacklisted character.
  *
- * Off Windows the root is unchanged: `<userData>/runtimes/alltalk`.
+ * Off Windows the root is unchanged: `<userData>/runtimes`.
+ *
+ * The root is ENGINE-NEUTRAL (Phase 7.8): it carries no engine's name -
+ * each modular voice engine (Kokoro first) composes its own subdirectory
+ * beneath it when it lands. Legacy `%...%\runtimes\alltalk` trees are
+ * migrated away, never read as an active install.
  */
 
 /**
- * The exact special-character set from the pinned `atsetup.bat`
- * (`f16117e9...`), copied rather than approximated:
+ * The exact special-character set from the historical installer script
+ * (`atsetup.bat`, pin `f16117e9...`), copied rather than approximated:
  *
  * ```
  * findstr /R /C:"[!#\$%&()\*+,;<=>?@\[\]\^`{|}~]"
@@ -69,9 +87,8 @@ export const WINDOWS_RUNTIME_PRODUCT_DIR = 'Lia'
  * - the variable must exist (its absence is a machine fault worth naming,
  *   not a silent roam);
  * - the value must be an absolute Windows path - drive-letter or UNC;
- * - the value must be free of the characters the AllTalk silent installer's
- *   path blacklist rejects (the same rule the `_local` choice exists to
- *   honour).
+ * - the value must be free of the characters the legacy voice installer
+ *   blacklist rejects (the same rule the `_local` choice exists to honour).
  *
  * Off Windows nothing reads this value, so an empty string is honest - the
  * layout resolver only consults it under `platform === 'win32'`.
@@ -166,6 +183,24 @@ export interface RuntimeRootPathApi {
   relative: (from: string, to: string) => string
 }
 
+/**
+ * The engine-neutral voice-runtime home (Phase 7.8C):
+ * `%LOCALAPPDATA%\Lia\runtimes` on Windows (POSIX: `<userData>/runtimes`).
+ * Any concrete modular engine installs its tree UNDER this home - one
+ * subdirectory per engine id. The legacy layout functions below keep
+ * managing the frozen 'runtimes/alltalk' leaf for already-existing trees.
+ */
+export function resolveVoiceRuntimeHome(input: {
+  env?: ResolveLocalAppDataEnv
+  platform?: string
+  userDataDir: string
+}): string {
+  const platform = input.platform ?? process.platform
+  if (platform === 'win32')
+    return nodePath.join(resolveLocalAppDataDir(platform, input.env), WINDOWS_RUNTIME_PRODUCT_DIR, 'runtimes')
+  return nodePath.join(input.userDataDir, 'runtimes')
+}
+
 export interface RuntimeRootLayout {
   /**
    * Where previous builds may already have put the tree, most recent first.
@@ -218,7 +253,7 @@ export interface RuntimeRootMigrationDeps {
   existsSync: (path: string) => boolean
   mkdirSync: (path: string) => void
   renameSync: (from: string, to: string) => void
-  log?: (entry: BootstrapLogEntry) => void
+  log?: (entry: RuntimeRootLogEntry) => void
 }
 
 /**

@@ -34,8 +34,8 @@ function row(label: string, value: unknown): { label: string, value: string } {
         <tbody>
           <tr
             v-for="r in [
-              row('Sistema de voz instalado', status?.alltalk?.installed === undefined ? 'desconhecido' : (status.alltalk.installed ? 'sim' : 'não')),
-              row('Estado do sistema de voz', status?.alltalk?.phase),
+              row('Sistema de voz instalado', status?.voice?.installed === undefined ? 'desconhecido' : (status.voice.installed ? 'sim' : 'não')),
+              row('Estado do sistema de voz', status?.voice?.phase),
               row('Stage (companhia) disponível', status?.stage?.available ? 'sim' : 'não'),
               row('Estado do stage', status?.stage?.state?.phase),
               row('Vozes importadas', status?.voices?.count),

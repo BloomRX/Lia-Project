@@ -114,9 +114,10 @@ async function importVoice() {
     }
     const name = importName.value.trim() || 'Minha voz'
     const result = await props.api.importVoice({
-      engine: 'alltalk',
+      // No engine id: none is registered yet (Phase 7.8D), so the import
+      // defers cleanly in the core until a real one (Kokoro first) exists.
       name,
-      // AllTalk voice cloning: the file IS the reference audio.
+      // Cloning-style import: the file IS the reference audio.
       sources: paths.map((path: string) => ({ path, role: 'referenceAudio' })),
     })
     if (result?.ok) {
@@ -156,11 +157,11 @@ async function importVoice() {
         <h3>Sistema de voz</h3>
         <p>
           Estado:
-          <strong>{{ status?.alltalk?.installed === undefined ? 'estado desconhecido' : (status.alltalk.installed ? status.alltalk.phase : (status.alltalk.installDir ? 'instalação não encontrada' : 'não instalado')) }}</strong>
+          <strong>{{ status?.voice?.installed === undefined ? 'estado desconhecido' : (status.voice.installed ? status.voice.phase : (status.voice.installDir ? 'instalação não encontrada' : 'não instalado')) }}</strong>
         </p>
         <p class="dim">
           Local de instalação:
-          <code>{{ runtimeLocation?.effectiveInstallDir ?? status?.alltalk?.installDir ?? '…' }}</code>
+          <code>{{ runtimeLocation?.effectiveInstallDir ?? status?.voice?.installDir ?? '…' }}</code>
           <span v-if="runtimeLocation?.customActive" class="badge">personalizado</span>
         </p>
         <div class="row">

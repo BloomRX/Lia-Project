@@ -75,7 +75,14 @@ export interface LiaVoiceProfileSource {
 
 export interface LiaVoiceProfileImportRequest {
   name: string
-  engine: string
+  /**
+   * The engine the new profile belongs to. Optional in the request: with no
+   * runnable engine registered (Phase 7.8D transition), an import without -
+   * or with any unknown - engine id is refused cleanly, so no fake id is
+   * written while the real engine (Kokoro first) is absent. A STORED profile
+   * always keeps its own id (`LiaCustomVoiceProfile.engine` stays required).
+   */
+  engine?: string
   sources: LiaVoiceProfileSource[]
   metadata?: Record<string, string>
 }

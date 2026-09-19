@@ -23,7 +23,6 @@ const PANEL_SOURCES = [
   'components/lia-config/sections/VoiceSection.vue',
   'components/lia-config/sections/CustomVoicePanel.vue',
   'components/lia-config/sections/AppearanceSection.vue',
-  'components/lia-config/sections/RuntimeInstallCard.vue',
 ]
 
 function readSource(relative: string): string {
@@ -204,27 +203,32 @@ describe('lia config i18n coverage', () => {
 
   /**
    * Keys the custom voice panel builds at runtime, which the regex scanner above
-   * cannot see: `tt(statusKey)` where statusKey is `states.${...}`, and
-   * `tt(profileStatusKey(...))`. A typo in either renders the raw key on screen,
+   * cannot see: `tt(profileStatusKey(...))` where the key is
+   * `profiles.status.${...}`. A typo in either renders the raw key on screen,
    * and no other test would notice.
    *
-   * The value lists are duplicated from the component's unions on purpose - if a
-   * state is added there and not here, the assertion below still holds, and if it
-   * is added here and not to the locales, the test fails, which is the direction
-   * that matters.
+   * The transitional contract (Phase 7.8E) trims the set on purpose: no server
+   * states may ever come back, so the only runtime-built statuses left are the
+   * two plain truths - in use, or saved idle - plus the neutral missing-engine
+   * note.
    */
   it('resolves every runtime-built key of the custom voice panel', () => {
-    const states = ['checking', 'connected', 'offline', 'notConfigured', 'error']
-    const profileStates = ['ready', 'inUse', 'notConfigured', 'serverOffline', 'syncFailed']
+    const profileStates = ['idle', 'inUse']
 
     const keys = [
-      ...states.map(state => `config.sections.voice.custom.states.${state}`),
       ...profileStates.map(state => `config.sections.voice.custom.profiles.status.${state}`),
+      'config.sections.voice.custom.engine.missing.title',
+      'config.sections.voice.custom.engine.missing.hint',
     ]
 
-    expect(keys).toHaveLength(10)
+    expect(keys).toHaveLength(4)
     expect(keys.filter(key => !ptBr.has(key)), 'missing in pt-BR').toEqual([])
     expect(keys.filter(key => !en.has(key)), 'missing in en').toEqual([])
+    // ...and none of the AllTalk-era statuses exists in either locale anymore.
+    for (const gone of ['ready', 'notConfigured', 'serverOffline', 'syncFailed', 'notPrepared']) {
+      expect(ptBr.has(`config.sections.voice.custom.profiles.status.${gone}`), gone).toBe(false)
+      expect(en.has(`config.sections.voice.custom.profiles.status.${gone}`), gone).toBe(false)
+    }
   })
 
   it('keeps the two locale files in sync for the whole home namespace', () => {
@@ -239,12 +243,4 @@ describe('lia config i18n coverage', () => {
    * process without its locale line would render the raw key on screen, in
    * the exact UI the round-2 brief cares about.
    */
-  it('resolves every bootstrap step label in both locales', async () => {
-    const { BOOTSTRAP_STEP_IDS } = await import('../../../main/services/lia/voice-runtime-bootstrap')
-
-    const keys = BOOTSTRAP_STEP_IDS.map(id => `config.sections.voice.runtime.step.${id}`)
-    expect(keys.length).toBeGreaterThan(3)
-    expect(keys.filter(key => !ptBr.has(key)), 'missing in pt-BR').toEqual([])
-    expect(keys.filter(key => !en.has(key)), 'missing in en').toEqual([])
-  })
 })

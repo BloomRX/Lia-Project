@@ -45,8 +45,13 @@ export function registerLiaIpc(host: LiaHost, timer: LiaBootTimer, extras: LiaIp
   })
   ipcMain.handle('lia:voices:list', async () => await host.listVoices())
   ipcMain.handle('lia:runtime:state', async () => {
-    const runtime = await host.runtime()
-    return { installed: await runtime.isInstalled(), state: runtime.state() }
+    // Engine-neutral answer from the home status (Phase 7.8C): the launcher
+    // hosts no worker yet, so the strip reads the install phase honestly.
+    const voice = (await host.homeStatus()).voice
+    return {
+      installed: voice.installed === true,
+      state: { note: voice.error, phase: voice.phase, running: voice.running },
+    }
   })
   ipcMain.handle('lia:bridge', async () => {
     // The stage adapter contract, rendered read-only for the diagnostics
@@ -137,7 +142,7 @@ function sanitizeConfigUpdate(payload: unknown): LiaConfigUpdatePayload {
 
 /** The voice import request, whittled to name + engine + picked sources. */
 function sanitizeVoiceImport(request: unknown): {
-  engine: string
+  engine?: string
   name: string
   sources: { path: string, role: string }[]
 } {
@@ -155,6 +160,8 @@ function sanitizeVoiceImport(request: unknown): {
     }
   }
   const name = typeof source.name === 'string' && source.name.trim().length > 0 ? source.name.trim().slice(0, 200) : 'Voz importada'
-  const engine = typeof source.engine === 'string' && source.engine.trim().length > 0 ? source.engine.trim().slice(0, 64) : 'alltalk'
-  return { engine, name, sources }
+  // No default engine id: with no runnable engine registered (Phase 7.8D) an
+  // import without one defers cleanly in the core instead of writing a fake id.
+  const engine = typeof source.engine === 'string' && source.engine.trim().length > 0 ? source.engine.trim().slice(0, 64) : undefined
+  return { ...(engine ? { engine } : {}), name, sources }
 }

@@ -54,10 +54,17 @@ const preview = vi.hoisted(() => ({
 
 vi.mock('@proj-airi/electron-vueuse', () => ({
   useElectronEventaInvoke: (invoke: { receiveEvent?: { id?: string } }) => {
-    if (invoke?.receiveEvent?.id === 'eventa:invoke:lia:voice:config:get-receive')
+    const id = invoke?.receiveEvent?.id
+    if (id === 'eventa:invoke:lia:voice:config:get-receive')
       return ipc.getVoiceConfig
-    if (invoke?.receiveEvent?.id === 'eventa:invoke:lia:voice:config:set-receive')
+    if (id === 'eventa:invoke:lia:voice:config:set-receive')
       return ipc.saveVoiceConfig
+    // The custom panel (mounted with the section) reads the transitional
+    // library on mount: profiles plus the empty engine list.
+    if (id === 'eventa:invoke:lia:voice:profiles:list-receive')
+      return async () => []
+    if (id === 'eventa:invoke:lia:voice:engines:list-receive')
+      return async () => []
 
     throw new Error(`Unexpected eventa invoke: ${JSON.stringify(invoke)}`)
   },

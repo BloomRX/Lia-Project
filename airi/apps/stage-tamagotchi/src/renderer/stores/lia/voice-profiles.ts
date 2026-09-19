@@ -10,7 +10,6 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 
 import {
-  electronLiaAllTalkSync,
   electronLiaVoiceEnginesList,
   electronLiaVoiceProfilesImport,
   electronLiaVoiceProfilesList,
@@ -63,20 +62,11 @@ export const useLiaVoiceProfilesStore = defineStore('lia-voice-profiles', () => 
   const pickPaths = useElectronEventaInvoke(electronLiaVoiceProfilesPick)
   const sendImport = useElectronEventaInvoke(electronLiaVoiceProfilesImport)
   const sendRemove = useElectronEventaInvoke(electronLiaVoiceProfilesRemove)
-  const sendSync = useElectronEventaInvoke(electronLiaAllTalkSync)
 
   const profiles = ref<LiaCustomVoiceProfile[]>([])
   const engines = ref<LiaVoiceEngineInfo[]>([])
   const isBusy = ref(false)
   const lastError = ref<{ code: string, message: string } | null>(null)
-  /**
-   * Per-profile publication failures, keyed by id.
-   *
-   * Kept separate from `lastError` because a profile that cannot be published is
-   * still in the library and still selectable later; the row needs its own note
-   * rather than a banner that the next action clears.
-   */
-  const syncErrors = ref<Record<string, string>>({})
 
   const byId = computed(() => new Map(profiles.value.map(profile => [profile.id, profile])))
 
@@ -187,23 +177,6 @@ export const useLiaVoiceProfilesStore = defineStore('lia-voice-profiles', () => 
   }
 
   /**
-   * Publishes a profile's reference audio into AllTalk's voices folder.
-   *
-   * Best-effort by design: an unconfigured or offline server leaves the profile
-   * in the library with a note, because losing someone's imported voice over a
-   * server that happens to be off would be the worse failure.
-   */
-  async function syncProfile(id: string): Promise<boolean> {
-    const result = await sendSync({ profileId: id })
-    if (result.ok) {
-      delete syncErrors.value[id]
-      return true
-    }
-    syncErrors.value = { ...syncErrors.value, [id]: result.message }
-    return false
-  }
-
-  /**
    * Speaks one line in a profile's voice.
    *
    * Goes through the ordinary preview driver, which resolves the provider by id
@@ -222,13 +195,11 @@ export const useLiaVoiceProfilesStore = defineStore('lia-voice-profiles', () => 
     isBusy,
     lastError,
     profiles,
-    syncErrors,
     engineFor,
     importProfile,
     pickFiles,
     previewProfile,
     refresh,
     removeProfile,
-    syncProfile,
   }
 })

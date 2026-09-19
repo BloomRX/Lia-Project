@@ -103,6 +103,23 @@ const sttTargetSchema = object({
   modelId: optional(string()),
 })
 
+/**
+ * Phase 7.8C: the engine-neutral voice-engine config. `alltalk` below
+ * stays in the schema for one reason only - legacy documents must still
+ * LOAD - and is deprecated/inert from here on.
+ */
+const voiceEngineSchema = object({
+  /** Selected voice engine id; the config layer itself never names one. */
+  preferred: optional(string()),
+})
+
+const voiceFallbackSchema = object({
+  /** A non-preferred engine MAY answer only when true. */
+  enabled: optional(boolean()),
+  /** Explicit fallback engine id when the operator pinned one. */
+  engineId: optional(string()),
+})
+
 const voiceConfigSchema = object({
   tts: optional(object({
     /** Preferred primary TTS (voice) target. */
@@ -118,8 +135,13 @@ const voiceConfigSchema = object({
    * to `tts`/`stt` inside the existing `voice` domain rather than in a new
    * config file, so `lia-product.json` stays the single Lia product document.
    */
+  engine: optional(voiceEngineSchema),
+  fallback: optional(voiceFallbackSchema),
   runtime: optional(object({
+    /** DEPRECATED: readable for legacy document compatibility; drives nothing. */
     alltalk: optional(alltalkRuntimeSchema),
+    /** Engine-neutral managed-runtime home override. */
+    installDir: optional(string()),
   })),
 })
 

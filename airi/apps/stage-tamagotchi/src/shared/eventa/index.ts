@@ -36,7 +36,6 @@ import type {
 } from '@proj-airi/stage-ui-three/trace'
 import type { Rectangle } from 'electron'
 
-import type { LiaBootstrapState, LiaRuntimeInstallState } from '../lia-voice'
 
 import { defineEventa, defineInvokeEventa } from '@moeru/eventa'
 
@@ -624,77 +623,6 @@ export type LiaVoiceProfileImportRequest = LiaCoreVoiceProfileImportRequest
 export type LiaVoiceProfileResult<T> = LiaCoreVoiceProfileResult<T>
 export type LiaVoiceProfileSource = LiaCoreVoiceProfileSource
 
-/**
- * How to reach the local AllTalk server. Runtime configuration only - it lives
- * in `voice.runtime.alltalk` inside `lia-product.json`, never inside a voice
- * profile, because one server serves every imported voice.
- *
- * No secret and no audio: AllTalk on localhost takes no credential, and the
- * reference WAV stays on disk under `userData/lia-voices/<id>/`.
- */
-export interface LiaAllTalkRuntimeConfig {
-  /** Base URL without a trailing slash, e.g. `http://127.0.0.1:7851`. */
-  baseUrl: string
-  /** AllTalk's own voices folder, chosen through the OS directory picker. */
-  voicesDir?: string
-  /** Where AllTalk is installed, chosen through the OS directory picker. */
-  installDir?: string
-  /** Per-request timeout in milliseconds. */
-  timeoutMs?: number
-}
-
-/**
- * What the Lia knows about the speech runtime it manages.
- *
- * Deliberately free of technical vocabulary: the UI turns `notInstalled` into
- * "we need to install the voice system", never "AllTalk is missing from
- * installDir".
- */
-export type LiaRuntimeState
-  = | { state: 'checking' }
-    | { state: 'error', message: string }
-    | { state: 'notInstalled' }
-    | { state: 'ready' }
-    | { state: 'starting' }
-    | { state: 'stopped' }
-
-/** Install steps the guided wizard walks the user through. */
-export interface LiaRuntimeInstallStep {
-  /** Stable id, so the UI can mark progress without parsing labels. */
-  id: string
-  title: string
-  detail: string
-  /** External documentation, opened only on an explicit user click. */
-  link?: string
-  done: boolean
-}
-
-/**
- * What the UI shows about AllTalk. `notConfigured` is distinct from `offline`:
- * one says "point me at your server", the other says "the server is not
- * running". Conflating them sends the user to the wrong fix.
- */
-export type LiaAllTalkStatus
-  = | { state: 'checking' }
-    | { state: 'connected', voices: string[] }
-    | { state: 'error', error: string }
-    | { state: 'notConfigured' }
-    | { state: 'offline' }
-
-/** A synthesis request from the renderer, resolved to a profile in the main process. */
-export interface LiaAllTalkSynthesisRequest {
-  /** The custom voice profile id - never a path, never a filename. */
-  profileId: string
-  text: string
-  /** BCP-47 tag, e.g. `pt-BR`. Normalized to AllTalk's `pt` in the main process. */
-  language?: string
-}
-
-/** Outcome of publishing a profile's reference audio into AllTalk's voices folder. */
-export type LiaAllTalkSyncResult
-  = | { copied: boolean, filename: string, ok: true }
-    | { error: LiaVoiceProfileErrorCode | 'notConfigured', message: string, ok: false }
-
 export const electronLiaVoiceConfigGet = defineInvokeEventa<LiaVoiceConfig>('eventa:invoke:lia:voice:config:get')
 export const electronLiaVoiceConfigSet = defineInvokeEventa<void, LiaVoiceConfig>('eventa:invoke:lia:voice:config:set')
 
@@ -712,28 +640,53 @@ export const electronLiaVoiceProfilesImport = defineInvokeEventa<LiaVoiceProfile
 
 export const electronLiaVoiceProfilesRemove = defineInvokeEventa<LiaVoiceProfileResult<{ id: string }>, { id: string }>('eventa:invoke:lia:voice:profiles:remove')
 
-/**
- * AllTalk runtime.
+/* --------------------------------------------------------------------------
+ * Lia Voice (Phase 7.8): the ONLY speech path the Stage knows.
  *
- * The voices directory is only ever produced by the main process's own
- * `showOpenDialog`: there is no channel through which the renderer can set a
- * path, so a compromised renderer cannot point the sync at an arbitrary folder.
- */
-export const electronLiaAllTalkConfigGet = defineInvokeEventa<LiaAllTalkRuntimeConfig>('eventa:invoke:lia:alltalk:config:get')
+ * Engine-agnostic by contract: the renderer asks the Lia Voice Service, the
+ * main process routes to the selected engine or - only when enabled - a
+ * fallback engine. No engine name reaches normal UI.
+ * -------------------------------------------------------------------------- */
 
-/** Writes only `baseUrl`/`timeoutMs`. `voicesDir` is ignored here on purpose. */
-export const electronLiaAllTalkConfigSet = defineInvokeEventa<LiaAllTalkRuntimeConfig, Partial<LiaAllTalkRuntimeConfig>>('eventa:invoke:lia:alltalk:config:set')
+/** Outcome of the whole voice product, engine-neutral on purpose. */
+export type LiaVoiceStatus
+  = | { state: 'checking' }
+    | { state: 'ready', engine: string }
+    | { state: 'unavailable', note?: string }
 
-/** Opens the OS directory picker and persists the choice. Resolves `null` on cancel. */
-export const electronLiaAllTalkVoicesDirPick = defineInvokeEventa<string | null, { clear?: boolean }>('eventa:invoke:lia:alltalk:voices-dir:pick')
+/** A synthesis request from the renderer. The profile id is never a path. */
+export interface LiaVoiceSynthesisRequest {
+  profileId: string
+  text: string
+  /** BCP-47 tag, e.g. `pt-BR`. */
+  language?: string
+}
 
-export const electronLiaAllTalkStatus = defineInvokeEventa<LiaAllTalkStatus>('eventa:invoke:lia:alltalk:status')
+/** The audio plus the engine fact - diagnostics metadata, not persona text. */
+export interface LiaVoiceSynthesisResult {
+  audio: ArrayBuffer
+  engine: string
+}
 
-/** Publishes a profile's reference audio into AllTalk's voices folder. */
-export const electronLiaAllTalkSync = defineInvokeEventa<LiaAllTalkSyncResult, { profileId: string }>('eventa:invoke:lia:alltalk:sync')
+export const electronLiaVoiceStatus = defineInvokeEventa<LiaVoiceStatus>('eventa:invoke:lia:voice:status')
 
-/** Resolves the profile, publishes it if needed, and returns the generated WAV. */
-export const electronLiaAllTalkSynthesize = defineInvokeEventa<ArrayBuffer, LiaAllTalkSynthesisRequest>('eventa:invoke:lia:alltalk:synthesize')
+export const electronLiaVoiceSynthesize = defineInvokeEventa<LiaVoiceSynthesisResult, LiaVoiceSynthesisRequest>('eventa:invoke:lia:voice:synthesize')
+
+/** The voice-engine product config (normal UI sees only the fallback toggle). */
+export interface LiaVoiceEngineConfig {
+  /** Selected engine id, when one was selected. The UI never hard-codes one. */
+  engine?: { preferred?: string }
+  fallback?: {
+    /** A non-preferred engine MAY answer only when true. */
+    enabled?: boolean
+    /** Explicit fallback engine id when the operator pinned one. */
+    engineId?: string
+  }
+}
+
+export const electronLiaVoiceEngineConfigGet = defineInvokeEventa<LiaVoiceEngineConfig>('eventa:invoke:lia:voice:engine-config:get')
+
+export const electronLiaVoiceEngineConfigSet = defineInvokeEventa<void, LiaVoiceEngineConfig>('eventa:invoke:lia:voice:engine-config:set')
 
 /* --------------------------------------------------------------------------
  * Lia product capabilities (Phase 7.7, Parts 7-11)
@@ -763,133 +716,9 @@ export const electronLiaCapabilitiesGet = defineInvokeEventa<LiaCapabilitySnapsh
 /** Push: fired when any derived truth changes (config or runtime). */
 export const electronLiaCapabilitiesUpdated = defineEventa<LiaCapabilitySnapshot>('eventa:event:lia:capabilities:updated')
 
-/* --------------------------------------------------------------------------
- * Managed speech runtime
- *
- * The Lia starts and stops the local voice server itself. The renderer only
- * ever asks about state or requests a transition; it never runs a process.
- * -------------------------------------------------------------------------- */
-
-/** Current lifecycle state of the managed voice runtime. */
-export const electronLiaRuntimeState = defineInvokeEventa<LiaRuntimeState>('eventa:invoke:lia:runtime:state')
-
-/** Detects the install and, when present, starts it and waits for health. */
-export const electronLiaRuntimeStart = defineInvokeEventa<LiaRuntimeState>('eventa:invoke:lia:runtime:start')
-
-/** Stops the managed process. Used by advanced settings and app shutdown. */
-export const electronLiaRuntimeStop = defineInvokeEventa<LiaRuntimeState>('eventa:invoke:lia:runtime:stop')
-
-/**
- * OS directory picker for the install location.
- *
- * Like `voicesDir`, the path can only enter the config from here - there is no
- * channel that accepts an install directory from the renderer.
- */
-export const electronLiaRuntimeInstallDirPick = defineInvokeEventa<string | null, { clear?: boolean }>('eventa:invoke:lia:runtime:install-dir:pick')
-
-/** The guided install wizard's steps, with completion flags. */
-export const electronLiaRuntimeInstallSteps = defineInvokeEventa<LiaRuntimeInstallStep[]>('eventa:invoke:lia:runtime:install-steps')
-
-/**
- * What exists on disk - the install fact, separate from the run fact (Phase 6
- * QA hotfix, item E). The main process answers from the install markers and
- * the persisted install record; the renderer never infers it from server
- * health errors.
- */
-export const electronLiaRuntimeInstallState = defineInvokeEventa<{ state: LiaRuntimeInstallState }>('eventa:invoke:lia:runtime:install-state')
-
-/**
- * Emitted by main on every runtime state transition (Phase 6 hotfix: the
- * health-ready that never reached the card).
- *
- * The runtime's own control channels above are pull-only: the renderer asks,
- * and gets one answer. That is enough for a click, and not enough for a
- * server that takes ~75 s to become healthy after an unattended autostart -
- * the store would keep the 'starting' snapshot it read at mount forever.
- * This is the push half of the pair: the state machine emits an event on
- * every transition (it already did, for the log), main republishes the new
- * snapshot here, and the store holds whatever arrives verbatim.
- */
-export const electronLiaRuntimeChanged = defineEventa<LiaRuntimeState>('eventa:lia:runtime:changed')
-
-/* --------------------------------------------------------------------------
- * Managed voice runtime: install, repair, remove
- *
- * An install is long-running, so its state is a snapshot the renderer pulls plus
- * an event pushed on every change - the same shape the runtime control above
- * already uses.
- * -------------------------------------------------------------------------- */
-
-/** Current bootstrap state, so a reopened UI resumes instead of guessing. */
-export const electronLiaBootstrapState = defineInvokeEventa<LiaBootstrapState>('eventa:invoke:lia:bootstrap:state')
-
-/** Starts install, or repair when the runtime is already present. */
-export const electronLiaBootstrapRun = defineInvokeEventa<LiaBootstrapState, boolean>('eventa:invoke:lia:bootstrap:run')
-
-/** Asks a running install to stop at the next step boundary. */
-export const electronLiaBootstrapCancel = defineInvokeEventa<void>('eventa:invoke:lia:bootstrap:cancel')
-
-/** Removes only what the Lia installed. */
-export const electronLiaBootstrapRemove = defineInvokeEventa<void>('eventa:invoke:lia:bootstrap:remove')
-
-/** Emitted on every bootstrap state change. */
-export const electronLiaBootstrapChanged = defineEventa<LiaBootstrapState>('eventa:lia:bootstrap:changed')
 
 /** Engines the current build knows how to drive, with what each expects. */
 export const electronLiaVoiceEnginesList = defineInvokeEventa<Array<{ extensions: string[], id: string, label: string, roles: string[] }>>('eventa:invoke:lia:voice:engines:list')
-
-/* --------------------------------------------------------------------------
- * Custom voice engine preparation (Phase 6)
- *
- * Deliberately separate from the bootstrap: installing the voice system is the
- * Lia's responsibility, but downloading the multi-gigabyte, separately-licensed
- * voice-cloning model happens only at an explicit user request. State is pulled,
- * progress is pushed - the same shape as the bootstrap above.
- * -------------------------------------------------------------------------- */
-
-/** How the managed runtime's voice engine is configured, per its own config files. */
-export interface LiaCustomVoiceEngineState {
-  /** The engine the server will load (e.g. 'xtts', 'piper'); undefined when unknown. */
-  engine?: string
-  /** `true` only when engine, model files and first-run flag all agree. */
-  ready: boolean
-  /** The upstream interactive first-run prompt is still armed: a start would time out. */
-  firstRunPending: boolean
-  /** Every file of the pin's xtts model set is on disk. */
-  modelComplete: boolean
-  /** How many model files are missing, for diagnostics that want more than a flag. */
-  missingModelFiles: number
-  /** A config file could not be parsed; carries its display name. */
-  parseError?: string
-}
-
-/** Prepare phases. `error` carries `detail`; a cancelled run says so too. */
-export type LiaCustomVoicePreparePhase
-  = | 'checking'
-    | 'enabling-first-run'
-    | 'downloading'
-    | 'verifying'
-    | 'ready'
-    | 'error'
-    | 'cancelled'
-
-export interface LiaCustomVoicePrepareState {
-  phase: LiaCustomVoicePreparePhase
-  /** A human sentence, safe to show. Never a path, never a URL, never a stack. */
-  detail?: string
-}
-
-/** Reads the engine configuration of the managed runtime. */
-export const electronLiaCustomVoiceEngineState = defineInvokeEventa<LiaCustomVoiceEngineState>('eventa:invoke:lia:custom-voice:engine-state')
-
-/** Runs the documented upstream download for the voice-cloning model. */
-export const electronLiaCustomVoicePrepare = defineInvokeEventa<LiaCustomVoicePrepareState>('eventa:invoke:lia:custom-voice:prepare')
-
-/** Asks a running prepare to stop - the download child is actually killed. */
-export const electronLiaCustomVoiceCancel = defineInvokeEventa<void>('eventa:invoke:lia:custom-voice:cancel')
-
-/** Emitted on every prepare state change. */
-export const electronLiaCustomVoiceChanged = defineEventa<LiaCustomVoicePrepareState>('eventa:lia:custom-voice:changed')
 
 export { electron } from '@proj-airi/electron-eventa'
 export * from '@proj-airi/electron-eventa/electron-updater'

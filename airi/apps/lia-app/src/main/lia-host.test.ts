@@ -47,17 +47,29 @@ describe('h. Existing voice profile list is read', () => {
   })
 })
 
-describe('i. Existing AllTalk installation is detected', () => {
-  it('the runtime fixture inside the configured installDir passes isInstalled()', async () => {
+describe('i. Voice-install detection is honest and engine-neutral (Phase 7.8E)', () => {
+  it('with no engine hosted, the default answer is installed = false - directory existence is never proof', async () => {
     const home = await makeLiaHome({ customVoice: true })
     const host = createLiaHost({ cipher: identityCipher, env: fixtureEnv(home), workspaceRoot: '/missing' })
 
-    const runtime = await host.runtime()
-    expect(await runtime.isInstalled()).toBe(true)
+    const status = await host.homeStatus()
+    expect(status.voice.installed).toBe(false)
+    expect(status.voice.installDir).toBeUndefined()
+  })
+
+  it('the engine inspection seam - today injected, tomorrow the real adapter - is the only route to installed', async () => {
+    const home = await makeLiaHome({ customVoice: true })
+    const host = createLiaHost({
+      cipher: identityCipher,
+      env: fixtureEnv(home),
+      inspectInstallImpl: async () => true,
+      workspaceRoot: '/missing',
+    })
 
     const status = await host.homeStatus()
-    expect(status.alltalk.installed).toBe(true)
-    expect(status.alltalk.installDir).toBe(home.installDir)
+    expect(status.voice.installed).toBe(true)
+    // The seam proves the install AT the configured runtime home.
+    expect(status.voice.installDir).toBe(home.installDir)
   })
 })
 
@@ -180,42 +192,23 @@ describe('conversar() - the pipeline the CTA gates on', () => {
  * OWNS (stage, voice runtime), leaves adopted/external processes alone,
  * single-flights double quits, and refuses new conversations while closing.
  */
-describe('supervisor shutdown through the host: corrected ownership (A/B/C/D/F)', () => {
+describe('supervisor shutdown through the host: the stage is the only owned child (A/F, engine-neutral)', () => {
   /**
-   * Fake runtimes come in two ownership shapes:
-   * - `liaManaged: true` = a PROVEN lia-managed server is HELD - spawned
-   *   this session (ownedChildPid set) or recovered pre-existing (unset).
-   *   The `spawnedThisSession` knob exists to prove the coordinator reads
-   *   ownership, never origin: test B is the recovered shape.
-   * - `liaManaged: false` = external or unknown: never held, never stopped.
+   * Transitional ownership (Phase 7.8C/E): the launcher hosts NO voice
+   * worker anymore - the F5 manager and its whole ownership shape (owned
+   * this session vs recovered pre-existing vs external) were deleted, not
+   * parked. The coordinator therefore has exactly ONE registrant, the stage.
+   * The axioms that survive unchanged: an owned child is stopped exactly
+   * once, teardown is single-flight, and nothing unregistered is touched.
    */
   async function hostWithFakes(options: {
-    liaManaged?: boolean
     ownedStage?: boolean
-    runtimeStop?: (() => Promise<void>) | undefined
-    spawnedThisSession?: boolean
   } = {}) {
     const calls: string[] = []
     const home = await makeLiaHome()
-    const managed = options.liaManaged ?? false
-    const spawned = options.spawnedThisSession ?? true
     const host = createLiaHost({
       cipher: identityCipher,
       env: fixtureEnv(home),
-      runtimeManagerFactory: () => {
-        const manager = {
-          hasManagedRuntime: () => managed,
-          isInstalled: async () => true,
-          ownedChildPid: () => managed && spawned ? 4412 : undefined,
-          runtimeOwnership: () => managed ? 'lia-managed' as const : 'none' as const,
-          start: async () => ({ phase: 'ready' as const }),
-          state: () => ({ phase: managed ? 'ready' as const : 'error' as const }),
-          stop: options.runtimeStop ?? (async () => {
-            calls.push('runtime-stop')
-          }),
-        }
-        return manager as never
-      },
       stageManagerFactory: () => {
         const manager = {
           holdsOwnedStage: () => options.ownedStage ?? false,
@@ -228,51 +221,33 @@ describe('supervisor shutdown through the host: corrected ownership (A/B/C/D/F)'
       },
       workspaceRoot: '/missing',
     })
-    // Materialize the runtime manager so the coordinator can see its ownership.
-    await host.runtime()
     return { calls, host }
   }
 
   it('a. quitting with a spawned stage stops the stage and reports it', async () => {
-    const { calls, host } = await hostWithFakes({ liaManaged: false, ownedStage: true })
+    const { calls, host } = await hostWithFakes({ ownedStage: true })
     const report = await host.quit()
     expect(calls).toEqual(['stage-stop'])
     expect(report.steps.find(s => s.name === 'stage')?.outcome).toBe('stopped')
-    expect(report.steps.find(s => s.name === 'voice-runtime')?.outcome).toBe('no-owned-process')
   })
 
-  it('b. a RECOVERED lia-managed runtime - NOT spawned this session - IS stopped on quit, after the stage', async () => {
-    // The corrected ownership rule and the mutation killer in one: below,
-    // ownedChildPid() is UNDEFINED (the server predates this session), yet
-    // ownership is proven lia-managed, so the coordinator MUST stop it.
-    // Any regression to "decide by ownedChildPid alone" or to
-    // "adopted => preserve" flips this step to no-owned-process and the
-    // recovered Lia server leaks past the launcher close.
-    const { calls, host } = await hostWithFakes({
-      liaManaged: true,
-      ownedStage: true,
-      spawnedThisSession: false,
-    })
+  it('the voice-runtime step is gone entirely - no worker exists to own, recover, or leak', async () => {
+    // The round-7 ownership cases for a voice runtime (spawned, recovered,
+    // external/unknown) are all answered by the same deletion: there is NO
+    // voice-runtime registrant at all, so that entire leaked-process failure
+    // class cannot reappear until a modular engine registers its own entry.
+    const { calls, host } = await hostWithFakes({ ownedStage: false })
     const report = await host.quit()
-    expect(calls).toEqual(['stage-stop', 'runtime-stop'])
-    expect(report.steps.map(s => s.outcome)).toEqual(['stopped', 'stopped'])
-  })
-
-  it('c. external / unknown holders are never stopped on quit', async () => {
-    const runtimeStop = async () => {
-      throw new Error('must never be called')
-    }
-    const { calls, host } = await hostWithFakes({ liaManaged: false, ownedStage: true, runtimeStop })
-    const report = await host.quit()
-    expect(calls).toEqual(['stage-stop'])
-    expect(report.steps.find(s => s.name === 'voice-runtime')?.outcome).toBe('no-owned-process')
+    expect(calls).toEqual([])
+    expect(report.steps.map(s => s.name)).toEqual(['stage'])
+    expect(report.steps[0].outcome).toBe('no-owned-process')
   })
 
   it('f. two quits share one teardown (single-flight)', async () => {
-    const { calls, host } = await hostWithFakes({ liaManaged: true, ownedStage: true })
+    const { calls, host } = await hostWithFakes({ ownedStage: true })
     const [first, second] = await Promise.all([host.quit(), host.quit()])
-    // Each owned target stopped EXACTLY once - no doubled kill, in order.
-    expect(calls).toEqual(['stage-stop', 'runtime-stop'])
+    // The owned stage is stopped EXACTLY once - no doubled kill.
+    expect(calls).toEqual(['stage-stop'])
     expect(first).toBe(second)
   })
 
@@ -403,7 +378,7 @@ describe('k. an edited config reaches the next stage launch', () => {
  * canonical library, visible to both the launcher and AIRI - one storage.
  */
 describe('voice import through the host', () => {
-  it('a dialog-picked file becomes a library profile (allowlisted source)', async () => {
+  it('a dialog-picked file DEFERS cleanly - no engine is hosted to receive it (Phase 7.8D/E)', async () => {
     const home = await makeLiaHome()
     const host = createLiaHost({ cipher: identityCipher, env: fixtureEnv(home), workspaceRoot: '/missing' })
     const { writeFile } = await import('node:fs/promises')
@@ -411,21 +386,33 @@ describe('voice import through the host', () => {
     await writeFile(sourceFile, 'fake-audio')
 
     const before = await host.listVoices()
+    // Any engine id - real legacy or invented - names no runnable engine.
     const imported = await host.importVoice(
-      { engine: 'alltalk', name: 'Voz da Ana', sources: [{ path: sourceFile, role: 'referenceAudio' }] },
+      { engine: 'f5-tts', name: 'Voz da Ana', sources: [{ path: sourceFile, role: 'referenceAudio' }] },
       new Set([sourceFile]),
     )
-    expect(imported.ok).toBe(true)
+    expect(imported.ok).toBe(false)
+    if (!imported.ok) {
+      expect(imported.error).toBe('engineUnknown')
+    }
 
+    // Nothing is created: the library is untouched by a deferred import.
     const after = await host.listVoices()
-    expect(after.length).toBe(before.length + 1)
-    expect(after.some(p => p.name === 'Voz da Ana')).toBe(true)
+    expect(after.length).toBe(before.length)
+    expect(after.some(p => p.name === 'Voz da Ana')).toBe(false)
 
-    // A source the dialog never returned is refused (no arbitrary reads).
+    // The dialog-allowlist guard against arbitrary reads is absorbed by the
+    // deferral: the engine gate fires BEFORE any source path is looked at
+    // (core importProfile order), so an unallowlisted path can never even be
+    // opened. The dedicated failure-order coverage lives in the core profile
+    // tests; here we assert the refusal needs no successful path through it.
     const refused = await host.importVoice(
-      { engine: 'alltalk', name: 'x', sources: [{ path: '/etc/passwd', role: 'model' }] },
+      { name: 'x', sources: [{ path: '/etc/passwd', role: 'model' }] },
       new Set([sourceFile]),
     )
     expect(refused.ok).toBe(false)
+    if (!refused.ok) {
+      expect(refused.error).toBe('engineUnknown')
+    }
   })
 })

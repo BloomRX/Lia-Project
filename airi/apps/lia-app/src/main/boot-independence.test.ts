@@ -115,11 +115,12 @@ describe('c. Opening Lia never spawns the stage', () => {
     })
 
     // Every shot the boot window takes: status, config, voices, bridge env.
+    // (There is deliberately no host.runtime() surface anymore - Phase 7.8E:
+    // the launcher hosts no voice worker, and none can be materialized here.)
     await host.homeStatus()
     await host.productSnapshot()
     await host.listVoices()
     await host.bridgeConfig()
-    await host.runtime()
     await host.stageEnv()
 
     expect(stageStart).not.toHaveBeenCalled()

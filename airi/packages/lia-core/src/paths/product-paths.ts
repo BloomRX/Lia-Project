@@ -7,11 +7,11 @@ import { env } from 'node:process'
  *
  * One product, one home: everything Lia owns - product config, imported
  * voices, the secret vault ciphertext - lives under a single user-data root
- * (`<lia-user-data>`), and the managed voice runtime under
- * `%LOCALAPPDATA%\Lia\runtimes\alltalk` (resolved by `resolveVoiceRuntimeRoot`
- * in `../bootstrap/runtime-root`). The Lia Launcher and the AIRI stage host
- * MUST read the same files: the launcher never forks the user's data into a
- * second location.
+ * (`<lia-user-data>`), and managed voice engines under the engine-neutral
+ * runtime home (resolved by `resolveVoiceRuntimeHome` in
+ * `../bootstrap/runtime-root`, `%LOCALAPPDATA%\Lia\runtimes` on Windows).
+ * The Lia Launcher and the AIRI stage host MUST read the same files: the
+ * launcher never forks the user's data into a second location.
  *
  * Resolution order for the user-data root:
  *   1. `LIA_USER_DATA` env (explicit override - diagnostics, QA, portable runs);

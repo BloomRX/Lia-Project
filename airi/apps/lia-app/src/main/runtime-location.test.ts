@@ -22,27 +22,34 @@ async function makeLocationHost() {
   return { events, home, host }
 }
 
-/** The markers `inspectAllTalkInstall` checks (its test contract). */
-async function populateRuntimeMarkers(root: string) {
-  await mkdir(join(root, 'system'), { recursive: true })
-  await mkdir(join(root, 'voices'), { recursive: true })
-  await mkdir(join(root, 'alltalk_environment', 'conda'), { recursive: true })
-  await mkdir(join(root, 'alltalk_environment', 'env'), { recursive: true })
-  await writeFile(join(root, 'script.py'), '# fixture\n')
-  await writeFile(join(root, 'start_alltalk.bat'), '@echo off\n')
-  await writeFile(join(root, '..', 'state.json'), '{}\n')
+/** A host whose install-inspection seam answers `installed`; the engine plug. */
+async function makeInstalledHost(seam: (home: string) => Promise<boolean>) {
+  const home = await makeLiaHome()
+  const host = createLiaHost({
+    cipher: identityCipher,
+    env: fixtureEnv(home),
+    inspectInstallImpl: seam,
+    workspaceRoot: '/missing',
+  })
+  return { home, host }
 }
 
-describe('phase 7.4 G/H/I - the configured runtime root', () => {
-  it('h: with NO configured path the canonical default remains the effective dir (nothing moves)', async () => {
+describe('phase 7.4 G/H/I - the configured runtime root (generic, engine-neutral)', () => {
+  it('h: with NO configured path the canonical ENGINE-NEUTRAL default remains the effective dir (nothing moves)', async () => {
     const { home, host } = await makeLocationHost()
     const status = await host.runtimeLocationStatus()
     expect(status.customActive).toBe(false)
     expect(status.effectiveInstallDir).toBe(status.canonicalDefaultDir)
-    expect(status.canonicalDefaultDir).toBe(join(home.userData, 'runtimes', 'alltalk', 'app'))
+    // The canonical home carries no engine name - an engine (Kokoro first)
+    // composes its own subdir under it when it lands.
+    expect(status.canonicalDefaultDir).toBe(join(home.userData, 'runtimes'))
+
+    // Transitional truth (Phase 7.8E): no engine is hosted, so the honest
+    // default answer is installed = false. Directory existence is never proof.
+    expect(status.installed).toBe(false)
   })
 
-  it('g: a valid chosen path persists, wins, and a marker-proven install there reports installed', async () => {
+  it('g: a valid chosen path persists, wins, and reports installed ONLY through the engine seam', async () => {
     const { home, host } = await makeLocationHost()
     const chosen = join(home.userData, '..', 'Lia Voice Runtime')
     await mkdir(chosen, { recursive: true })
@@ -53,14 +60,30 @@ describe('phase 7.4 G/H/I - the configured runtime root', () => {
       return
     expect(picked.note).toBe('new-location-applies-to-future-install')
 
-    // The document carries the exact normalized path from the picker.
+    // The document carries the exact normalized path from the picker, in the
+    // neutral runtime block - never inside an engine's name.
     const document = JSON.parse(await readFile(join(home.userData, 'lia-product.json'), 'utf8'))
-    expect(document.voice.runtime.alltalk.installDir).toBe(chosen)
+    expect(document.voice.runtime.installDir).toBe(chosen)
+    expect(document.voice.runtime.f5).toBeUndefined()
 
-    // Once real markers are written at the chosen root, the resolution chain
-    // marks it installed - directory existence alone was never the proof.
-    await populateRuntimeMarkers(chosen)
-    const status = await host.runtimeLocationStatus()
+    // Directory existence alone proves nothing: installed stays false until
+    // the engine's own inspection seam says otherwise.
+    const defaultSeam = createLiaHost({
+      cipher: identityCipher,
+      env: fixtureEnv(home),
+      inspectInstallImpl: async () => false,
+      workspaceRoot: '/missing',
+    })
+    expect(await defaultSeam.runtimeLocationStatus()).toMatchObject({
+      customActive: true, // the config the first host wrote persists here
+      installed: false,
+    })
+
+    // ...and when the seam (today: injected; tomorrow: the real engine's
+    // adapter) says installed at the chosen root, the host reflects it.
+    const proven = await makeInstalledHost(async () => true)
+    await proven.host.applyRuntimeLocation(chosen)
+    const status = await proven.host.runtimeLocationStatus()
     expect(status.customActive).toBe(true)
     expect(status.effectiveInstallDir).toBe(chosen)
     expect(status.installed).toBe(true)
@@ -79,7 +102,8 @@ describe('phase 7.4 G/H/I - the configured runtime root', () => {
     expect(events).toContainEqual({ detail: 'reason=exists-as-file', event: 'lia-app.runtime-location-blocked' })
 
     const document = JSON.parse(await readFile(join(home.userData, 'lia-product.json'), 'utf8'))
-    expect(document.voice?.runtime?.alltalk?.installDir).toBeUndefined()
+    expect(document.voice?.runtime?.installDir).toBeUndefined()
+    expect(document.voice?.runtime?.f5).toBeUndefined()
   })
 
   it('k-shape: a path with spaces survives end-to-end and the picker cancel is a no-op', async () => {
@@ -108,28 +132,32 @@ describe('phase 7.4 G/H/I - the configured runtime root', () => {
     }
   })
 
-  it('h: with markers in BOTH roots the CONFIGURED path wins - the canonical default never outranks an explicit valid config', async () => {
-    const { home, host } = await makeLocationHost()
-    await populateRuntimeMarkers(join(home.userData, 'runtimes', 'alltalk', 'app'))
-    const chosen = join(home.userData, '..', 'Lia Custom Root')
-    await populateRuntimeMarkers(chosen)
-    await host.applyRuntimeLocation(chosen)
-    const status = await host.runtimeLocationStatus()
-    expect(status.effectiveInstallDir).toBe(chosen)
-    expect(status.installed).toBe(true)
+  it('h: a CONFIGURED path always wins as the effective dir - the canonical default never outranks an explicit valid config', async () => {
+    const { host } = await makeLocationHost()
+    const chosen = (await import('node:path')).join('/tmp', 'Lia Explicit Root')
+    // The canonical home even existing somewhere does not matter: the config
+    // is the single source of truth for WHERE the voice runtime lives.
+    const picked = await host.applyRuntimeLocation(chosen)
+    expect(picked.status === 'ok' || picked.status === 'rejected').toBe(true)
+
+    const { host: host2 } = await makeLocationHost()
+    const chosen2 = join('/tmp', 'Lia Explicit Root 2')
+    await host2.applyRuntimeLocation(chosen2)
+    const status = await host2.runtimeLocationStatus()
+    expect(status.effectiveInstallDir).toBe(chosen2)
+    expect(status.customActive).toBe(true)
   })
 
-  it('configured-but-unproven beats canonical only AFTER markers prove (existing machine keeps working)', async () => {
+  it('a configured root is authoritative and HONEST: unproven there reports installed=false (no silent canonical fallback)', async () => {
+    // Transitional semantics (Phase 7.8E): the configured root is the only
+    // place the host ever looks; an unproven install there is honestly false.
     const { home, host } = await makeLocationHost()
-    // Canonical default install exists (what the QA machine already has).
-    await populateRuntimeMarkers(join(home.userData, 'runtimes', 'alltalk', 'app'))
-    // Configure a still-empty new root: detection must keep the canonical
-    // install, not route to the unproven configured one.
+    await mkdir(join(home.userData, 'runtimes'), { recursive: true })
     const chosen = join(home.userData, '..', 'NovoLocal')
     await mkdir(chosen, { recursive: true })
     await host.applyRuntimeLocation(chosen)
     const status = await host.runtimeLocationStatus()
-    expect(status.effectiveInstallDir).toBe(join(home.userData, 'runtimes', 'alltalk', 'app'))
-    expect(status.installed).toBe(true)
+    expect(status.effectiveInstallDir).toBe(chosen)
+    expect(status.installed).toBe(false)
   })
 })

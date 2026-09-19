@@ -42,17 +42,13 @@ import { setupArtistryBridge } from './services/airi/widgets/artistry-bridge'
 import { setupAutoUpdater } from './services/electron/auto-updater'
 import { setupGlobalShortcutService } from './services/electron/global-shortcut'
 import { setupPermissionHandlers } from './services/electron/media-permissions'
-import { resolveAllTalkRuntime } from './services/lia/alltalk-runtime-config'
-import { registerLiaRuntimeBridge } from './services/lia/alltalk-runtime-service'
-import { registerLiaAllTalkBridge } from './services/lia/alltalk-service'
-import { createAllTalkSyncService } from './services/lia/alltalk-voices-sync'
+import { registerLiaVoiceBridge } from './services/lia/lia-voice-service'
 import { registerLiaCapabilitiesBridge } from './services/lia/lia-capabilities'
 import { registerLiaProviderConfigBridge } from './services/lia/provider-config-service'
 import { createLiaSecretVault, registerLiaSecretsBridge } from './services/lia/secrets-service'
 import { registerLiaVoiceConfigBridge } from './services/lia/voice-config-service'
 import { createLiaVoiceProfileStore } from './services/lia/voice-profiles'
 import { registerLiaVoiceProfilesBridge } from './services/lia/voice-profiles-service'
-import { registerLiaBootstrapBridge } from './services/lia/voice-runtime-bootstrap-service'
 import { setupTray } from './tray'
 import { setupAboutWindowReusable } from './windows/about'
 import { setupBeatSync } from './windows/beat-sync'
@@ -195,9 +191,8 @@ app.whenReady().then(async () => {
   // Lia secure secret vault (M1 Phase 4C). Provider API keys live encrypted in
   // the Electron main process, never in renderer localStorage or lia-product.json.
   const liaSecrets = injeca.provide('services:lia-secrets', () => createLiaSecretVault())
-  // One voice-library instance for the whole main process. The AllTalk bridge and
-  // the profiles bridge must read and write the same registry, otherwise a
-  // published voice would not be visible to the code that removes it.
+  // One voice-library instance for the whole main process: the voice bridge
+  // and the profiles bridge read and write the same registry.
   const liaVoiceProfiles = injeca.provide('services:lia-voice-profiles', () =>
     createLiaVoiceProfileStore({ rootDir: join(app.getPath('userData'), 'lia-voices') }))
   const electronApp = injeca.provide('host:electron:app', () => app)
@@ -380,77 +375,47 @@ app.whenReady().then(async () => {
     dependsOn: { liaProductConfig, liaVoiceProfiles },
     callback: async (deps) => {
       const { context } = createContext(ipcMain)
-      registerLiaVoiceProfilesBridge({
-        context,
-        store: deps.liaVoiceProfiles,
-        // Deleting a profile also unpublishes the copy the Lia put in AllTalk's
-        // folder. `removeManagedVoice` re-derives the filename from the profile
-        // id and refuses anything it does not own, so a same-named file the user
-        // placed there by hand survives.
-        beforeRemove: id => createAllTalkSyncService({
-          store: deps.liaVoiceProfiles,
-          voicesDir: deps.liaProductConfig.get()?.voice?.runtime?.alltalk?.voicesDir,
-        }).removeManagedVoice(id).then(() => undefined),
-      })
+      // Phase 7.8: there are NO engine-managed voice copies anymore - a
+      // modular engine reads the canonical reference from the profile's own
+      // directory directly, so removing a profile needs no engine cleanup.
+      registerLiaVoiceProfilesBridge({ context, store: deps.liaVoiceProfiles })
     },
   })
 
-  // Local AllTalk runtime: connection settings, voices folder, publish/synthesize.
+  // Lia Voice bridge: the engine-neutral IPC surface over the Lia Voice
+  // Service (Phase 7.8C). Phase 7.8C registers NO concrete engine: the
+  // service answers "unavailable" honestly, and the modular engines
+  // (Kokoro is the first candidate) plug into this same seam when they
+  // land - with their own runtime bridge, on-demand start and autostart
+  // policy.
   injeca.invoke({
-    dependsOn: { liaProductConfig, liaVoiceProfiles },
-    callback: async (deps) => {
-      const { context } = createContext(ipcMain)
-      registerLiaAllTalkBridge({
-        context,
-        liaProductConfig: deps.liaProductConfig,
-        store: deps.liaVoiceProfiles,
-      })
-
-      // Phase 7.7 (Parts 7-11): the capability truth the persona reads every
-      // turn - voice configured/available from Lia-managed state, computed
-      // HERE in the main process (never inferred by the renderer).
-      registerLiaCapabilitiesBridge({
-        context,
-        liaProductConfig: {
-          get: () => deps.liaProductConfig.get(),
-        },
-        readRuntime: () => resolveAllTalkRuntime(deps.liaProductConfig.get()),
-        store: deps.liaVoiceProfiles,
-      })
-    },
-  })
-
-  // Managed speech runtime: detect, start, health-check and stop the local voice
-  // server, so a custom voice works without the user opening a terminal.
-  injeca.invoke({
-    dependsOn: { liaProductConfig, mainWindow },
+    dependsOn: { liaProductConfig, liaVoiceProfiles, mainWindow },
     callback: async (deps) => {
       // The window is NOT optional here. The electron main adapter forwards
       // outbound events through `window.webContents.send`; without a window it
-      // can only *reply* to an incoming invoke, so a spontaneous push - the
-      // bootstrap's live install progress, from its `onStateChange` - was
-      // silently dropped and the panel never changed until the run returned.
-      // Round-4 QA item H: this line is why the progress UI looked dead.
+      // can only *reply* to an incoming invoke, so a spontaneous push - a
+      // bootstrap's live install progress, from its `onStateChange` - is
+      // silently dropped and the panel never changes until the run returns.
       const { context } = createContext(ipcMain, deps.mainWindow)
-      const runtime = registerLiaRuntimeBridge({
+
+      // Capability invalidation is circular-by-nature: the voice bridge
+      // fires the change, the capability probe recomputes. A late-bound ref
+      // keeps the registration order honest.
+      let invalidateCapabilities: (() => void) | undefined
+      const voiceBridge = registerLiaVoiceBridge({
         context,
         liaProductConfig: deps.liaProductConfig,
+        onVoiceAvailabilityChanged: () => invalidateCapabilities?.(),
+        store: deps.liaVoiceProfiles,
       })
 
-      // Registered for its IPC handlers; the renderer talks to it directly, so
-      // nothing else here needs to hold the handle.
-      const bootstrap = registerLiaBootstrapBridge({ context, runtime })
-
-      // Autostart. Only when the persisted voice selection actually needs the
-      // local runtime, and never fatal: if the server cannot come up the chat
-      // keeps working as text and the UI offers "Try again".
-      //
-      // Skipped while an install is in flight. Starting a server whose files are
-      // still being written would report a failure the user did nothing to cause,
-      // and the bootstrap's own final step starts it anyway.
-      void runtime.autostartIfNeeded({ installing: bootstrap.isInstalling() }).catch((error) => {
-        console.warn('[lia-runtime] autostart failed, continuing without custom voice:', error)
+      const capabilities = registerLiaCapabilitiesBridge({
+        context,
+        liaProductConfig: { get: () => deps.liaProductConfig.get() },
+        store: deps.liaVoiceProfiles,
+        voiceAvailable: voiceBridge.voiceAvailable,
       })
+      invalidateCapabilities = capabilities.invalidate
     },
   })
 

@@ -42,6 +42,25 @@ export interface LiaProductAllTalkRuntime {
   installDir?: string
 }
 
+/**
+ * Phase 7.8C: the engine-neutral voice-engine config surface. `alltalk`
+ * stays READABLE (legacy documents must load) but is deprecated/inert - no
+ * runtime behavior reads it anymore. No engine id and no per-engine runtime
+ * fields are hard-coded here; a modular engine declares its own surface
+ * when it lands.
+ */
+export interface LiaProductVoiceEngine {
+  /** Selected engine id, when one was selected. */
+  preferred?: string
+}
+
+export interface LiaProductVoiceFallback {
+  /** A non-preferred engine MAY answer only when true. */
+  enabled?: boolean
+  /** Explicit fallback engine id when the operator pinned one. */
+  engineId?: string
+}
+
 export interface LiaProductVoiceConfig {
   tts?: {
     preferred?: LiaProductTtsTarget
@@ -50,8 +69,13 @@ export interface LiaProductVoiceConfig {
   stt?: {
     preferred?: { providerId: string, modelId?: string }
   }
+  engine?: LiaProductVoiceEngine
+  fallback?: LiaProductVoiceFallback
   runtime?: {
+    /** DEPRECATED: readable for document compatibility, drives nothing. */
     alltalk?: LiaProductAllTalkRuntime
+    /** Engine-neutral managed-runtime home override. */
+    installDir?: string
   }
 }
 
@@ -160,16 +184,41 @@ function extract(doc: Record<string, unknown>): LiaProductConfigSnapshot {
     if (sttPreferred)
       extracted.stt = { preferred: sttPreferred }
     const runtime = asRecord(voice.runtime)
-    const alltalk = runtime ? asRecord(runtime.alltalk) : undefined
-    if (alltalk) {
-      extracted.runtime = {
-        alltalk: {
+    if (runtime) {
+      const alltalk = asRecord(runtime.alltalk)
+      const runtimeExtracted: NonNullable<LiaProductVoiceConfig['runtime']> = {}
+      if (alltalk) {
+        // Legacy keys: preserved on read for document compatibility, but
+        // nothing runtime-facing consumes them anymore.
+        runtimeExtracted.alltalk = {
           baseUrl: asString(alltalk.baseUrl),
           installDir: asString(alltalk.installDir),
           timeoutMs: typeof alltalk.timeoutMs === 'number' ? alltalk.timeoutMs : undefined,
           voicesDir: asString(alltalk.voicesDir),
-        },
+        }
       }
+      const installDir = asString(runtime.installDir)
+      if (installDir !== undefined)
+        runtimeExtracted.installDir = installDir
+      if (Object.keys(runtimeExtracted).length > 0)
+        extracted.runtime = runtimeExtracted
+    }
+    const engine = asRecord(voice.engine)
+    const engineExtracted: LiaProductVoiceEngine = {}
+    if (engine?.preferred !== undefined)
+      engineExtracted.preferred = asString(engine.preferred)
+    if (Object.keys(engineExtracted).length > 0)
+      extracted.engine = engineExtracted
+    const fallback = asRecord(voice.fallback)
+    if (fallback) {
+      const fallbackExtracted: LiaProductVoiceFallback = {}
+      if (typeof fallback.enabled === 'boolean')
+        fallbackExtracted.enabled = fallback.enabled
+      const engineId = asString(fallback.engineId)
+      if (engineId !== undefined)
+        fallbackExtracted.engineId = engineId
+      if (Object.keys(fallbackExtracted).length > 0)
+        extracted.fallback = fallbackExtracted
     }
     snapshot.voice = extracted
   }
@@ -231,7 +280,12 @@ export interface LiaProductConfigUpdate {
   provider?: { chat?: Partial<LiaProductChatConfig> }
   preferences?: { language?: string }
   voice?: {
-    runtime?: { alltalk?: Partial<LiaProductAllTalkRuntime> }
+    engine?: Partial<LiaProductVoiceEngine>
+    fallback?: Partial<LiaProductVoiceFallback>
+    runtime?: {
+      alltalk?: Partial<LiaProductAllTalkRuntime>
+      installDir?: string
+    }
     tts?: { preferred?: LiaProductTtsTarget }
   }
 }
@@ -336,9 +390,23 @@ function mergeProductUpdate(raw: Record<string, unknown>, update: LiaProductConf
       tts.preferred = definedOnly(update.voice.tts.preferred)
       voice.tts = tts
     }
-    if (update.voice.runtime?.alltalk) {
+    if (update.voice.engine) {
+      const engine = { ...asRecord(voice.engine) }
+      Object.assign(engine, definedOnly(update.voice.engine))
+      voice.engine = engine
+    }
+    if (update.voice.fallback) {
+      const fallback = { ...asRecord(voice.fallback) }
+      voice.fallback = { ...fallback, ...definedOnly(update.voice.fallback) }
+    }
+    if (update.voice.runtime) {
       const runtime = { ...asRecord(voice.runtime) }
-      runtime.alltalk = { ...asRecord(runtime.alltalk), ...definedOnly(update.voice.runtime.alltalk) }
+      if (update.voice.runtime.alltalk) {
+        // Legacy: still mergeable so existing documents round-trip intact.
+        runtime.alltalk = { ...asRecord(runtime.alltalk), ...definedOnly(update.voice.runtime.alltalk) }
+      }
+      if (update.voice.runtime.installDir !== undefined)
+        runtime.installDir = update.voice.runtime.installDir
       voice.runtime = runtime
     }
     next.voice = voice

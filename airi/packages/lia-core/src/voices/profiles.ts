@@ -40,43 +40,53 @@ export const MAX_FILE_BYTES = 4 * 1024 * 1024 * 1024
 const REGISTRY_FILENAME = 'index.json'
 
 /**
- * What the current build knows how to drive.
- *
- * An engine is a declaration, not an implementation: `roles` says which files a
- * profile of that engine needs and `extensions` what the picker should offer.
- * Adding an engine is adding an entry here plus a synthesis adapter; nothing in
- * the core branches on a specific one.
+ * What one runnable TTS engine declares to the voice library: which file
+ * roles a profile of that engine needs and which extensions the picker
+ * should offer. It is a declaration, not an implementation - nothing in the
+ * core branches on a specific engine.
  */
-export const VOICE_ENGINES = [
+export interface LiaVoiceEngineDeclaration {
+  id: string
+  label: string
+  roles: readonly string[]
+  extensions: readonly string[]
+  /** Never offered as a NEW pick; kept only so old documents still resolve. */
+  legacy?: true
+}
+
+/**
+ * The runnable TTS engines this build can actually drive.
+ *
+ * Transitional state (Phase 7.8D): EMPTY. The engines the core previously
+ * shipped were removed, and the 'lia-cloning' placeholder was never a real
+ * engine - it existed only as a label and is gone. A modular engine adapter
+ * (Kokoro first) registers its entry here, together with its synthesis
+ * adapter, when it lands; adding an entry is what makes import possible
+ * again for that engine's profile shape.
+ */
+export const VOICE_ENGINES: readonly LiaVoiceEngineDeclaration[] = []
+
+/**
+ * Legacy engine ids kept ONLY so voice-library documents written by older
+ * builds still make sense when read back (list/get/resolveFile never
+ * validate `profile.engine`, so those profiles simply load). These ids are
+ * never offered to the picker and never accepted for a NEW import.
+ */
+export const LEGACY_VOICE_ENGINES: readonly LiaVoiceEngineDeclaration[] = [
   {
-    /**
-     * Reference-audio voice cloning served by a local AllTalk server.
-     *
-     * The role is `referenceAudio` rather than `model` because that is what it
-     * is: a few seconds of speech the backend clones from. No weights, no
-     * training - the backend (XTTS-v2 today) is AllTalk's business, not the
-     * Lia's.
-     */
     id: 'alltalk',
-    label: 'AllTalk (voice cloning)',
+    label: 'Lia voice (cloning)',
+    legacy: true,
     roles: ['referenceAudio'],
     extensions: ['.wav', '.mp3', '.flac', '.ogg'],
   },
-  {
-    id: 'generic',
-    label: 'Generic (local server)',
-    roles: ['model'],
-    extensions: ['.pth', '.pt', '.onnx', '.ckpt', '.safetensors', '.bin', '.json'],
-  },
-  {
-    id: 'rvc',
-    label: 'RVC',
-    roles: ['model', 'index'],
-    extensions: ['.pth', '.index'],
-  },
-] as const
+]
 
-export type VoiceEngineId = typeof VOICE_ENGINES[number]['id']
+/**
+ * Engine ids are adapter-owned strings. The registry above is intentionally
+ * empty right now, so no narrowing literal union exists to derive.
+ */
+export type VoiceEngineId = string
 
 function fail<T>(error: LiaVoiceProfileErrorCode, message: string): LiaVoiceProfileResult<T> {
   return { ok: false, error, message }
@@ -151,8 +161,15 @@ async function writeRegistry(rootDir: string, profiles: LiaCustomVoiceProfile[])
   await writeFile(join(rootDir, REGISTRY_FILENAME), `${JSON.stringify({ profiles }, null, 2)}\n`, 'utf8')
 }
 
-export function createLiaVoiceProfileStore(params: { rootDir: string }): LiaVoiceProfileStore {
+export function createLiaVoiceProfileStore(params: { rootDir: string, engines?: readonly LiaVoiceEngineDeclaration[] }): LiaVoiceProfileStore {
   const { rootDir } = params
+  /**
+   * The engine registry this store validates imports against. Production
+   * passes nothing and gets the build's real registry - empty during the
+   * transition, so every NEW import defers cleanly below. A modular engine
+   * (or a test fixture) registers its declarations here.
+   */
+  const engines = params.engines ?? VOICE_ENGINES
 
   function profileDir(id: string): string {
     return join(rootDir, id)
@@ -185,13 +202,9 @@ export function createLiaVoiceProfileStore(params: { rootDir: string }): LiaVoic
       if (!name)
         return fail('emptyName', 'Give this voice a name first.')
 
-      // Widened to `readonly string[]`: `VOICE_ENGINES` is `as const`, so without
-      // this `includes(role)` would only accept the literal union.
-      const engine = VOICE_ENGINES.find(candidate => candidate.id === request?.engine) as
-        | { extensions: readonly string[], id: string, label: string, roles: readonly string[] }
-        | undefined
+      const engine = engines.find(candidate => candidate.id === request?.engine)
       if (!engine)
-        return fail('engineUnknown', `Unknown voice engine "${String(request?.engine ?? '')}".`)
+        return fail('engineUnknown', `Unknown voice engine "${String(request?.engine ?? '')}": no runnable voice engine is registered for it yet, so new voice imports are temporarily disabled.`)
 
       const profiles = await readRegistry(rootDir)
       if (profiles.some(profile => profile.name.toLowerCase() === name.toLowerCase()))

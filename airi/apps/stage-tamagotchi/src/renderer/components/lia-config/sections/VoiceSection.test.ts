@@ -10,7 +10,6 @@ import { renderToString } from 'vue/server-renderer'
 import VoiceSection from './VoiceSection.vue'
 
 import { useLiaVoiceStore } from '../../../stores/lia/voice'
-import { liaRuntimeChannelAnswer } from './test-helpers'
 
 /**
  * Rendering half of the 4E-2 voice UI.
@@ -57,20 +56,9 @@ vi.mock('@proj-airi/electron-vueuse', () => ({
     if (invoke?.receiveEvent?.id === 'eventa:invoke:lia:voice:config:set-receive')
       return ipc.saveVoiceConfig
 
-    // The custom-voice panel is part of this section now, so its AllTalk channels
-    // have to be answered too. It reports "not configured" and an empty library:
-    // the neutral state, so these tests keep exercising the primary voice UI.
+    // The custom-voice library channels the section's panel opens on mount:
+    // the transitional library is just profiles + an empty engine list.
     const id = invoke?.receiveEvent?.id
-    if (id === 'eventa:invoke:lia:alltalk:config:get-receive')
-      return async () => ({ baseUrl: 'http://127.0.0.1:7851' })
-    if (id === 'eventa:invoke:lia:alltalk:config:set-receive')
-      return async () => ({ baseUrl: 'http://127.0.0.1:7851' })
-    if (id === 'eventa:invoke:lia:alltalk:voices-dir:pick-receive')
-      return async () => null
-    if (id === 'eventa:invoke:lia:alltalk:sync-receive')
-      return async () => ({ ok: true, copied: false, filename: '' })
-    if (id === 'eventa:invoke:lia:alltalk:status-receive')
-      return async () => ({ state: 'notConfigured' })
     if (id === 'eventa:invoke:lia:voice:profiles:list-receive')
       return async () => []
     if (id === 'eventa:invoke:lia:voice:engines:list-receive')
@@ -81,36 +69,6 @@ vi.mock('@proj-airi/electron-vueuse', () => ({
       return async () => ({ ok: false, error: 'cancelled', message: '' })
     if (id === 'eventa:invoke:lia:voice:profiles:remove-receive')
       return async () => ({ ok: true, value: { id: '' } })
-
-    // The managed runtime store is instantiated by this section. It reports a
-    // ready runtime so these tests exercise the voice UI rather than the install
-    // card; RuntimeInstallCard has its own coverage.
-    if (id === 'eventa:invoke:lia:runtime:state-receive')
-      return async () => ({ state: 'ready' })
-    if (id === 'eventa:invoke:lia:runtime:start-receive')
-      return async () => ({ state: 'ready' })
-    if (id === 'eventa:invoke:lia:runtime:stop-receive')
-      return async () => ({ state: 'stopped' })
-    if (id === 'eventa:invoke:lia:runtime:install-dir:pick-receive')
-      return async () => null
-    if (id === 'eventa:invoke:lia:runtime:install-steps-receive')
-      return async () => []
-
-    // Bootstrap channels. Registered in every harness because the mock throws on
-    // an unknown channel, and the runtime store now opens these on mount.
-    if (id === 'eventa:invoke:lia:bootstrap:state-receive')
-      return async () => ({ phase: 'ready', steps: [] })
-    if (id === 'eventa:invoke:lia:bootstrap:run-receive')
-      return async () => ({ phase: 'ready', steps: [] })
-    if (id === 'eventa:invoke:lia:bootstrap:cancel-receive')
-      return async () => null
-    if (id === 'eventa:invoke:lia:bootstrap:remove-receive')
-      return async () => null
-
-    // Custom voice engine channels (Phase 6), same house rule.
-    const runtimeAnswer = liaRuntimeChannelAnswer(id, {})
-    if (runtimeAnswer)
-      return runtimeAnswer
 
     throw new Error(`Unexpected eventa invoke: ${JSON.stringify(invoke)}`)
   },

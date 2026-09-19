@@ -10,8 +10,13 @@
  *   2. My own voice      — import a recording; Lia handles the rest.
  *
  * Everything technical still exists, but it lives behind "Advanced settings",
- * which is **closed by default**: the voice provider, the model, the emergency
- * voice, and the local voice server's address and folders.
+ * which is **closed by default**: the voice provider, the model and the
+ * emergency voice.
+ *
+ * Phase 7.8E (transitional product truth): there is NO runnable voice engine
+ * yet, so the custom path carries one neutral notice inside its own panel -
+ * never an engine's name, never an install wizard. The technical add-ons of
+ * the old runtime era (server address, folders, install steps) are gone.
  *
  * Two invariants this template is careful about:
  *
@@ -27,11 +32,8 @@ import { computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import CustomVoicePanel from './CustomVoicePanel.vue'
-import RuntimeInstallCard from './RuntimeInstallCard.vue'
-import VoiceRuntimeAdvanced from './VoiceRuntimeAdvanced.vue'
 
 import { CUSTOM_VOICE_PROVIDER_ID } from '../../../../shared/lia-voice'
-import { useLiaRuntimeStore } from '../../../stores/lia/runtime'
 import { useLiaVoiceStore } from '../../../stores/lia/voice'
 import { useVoiceEditor } from '../../../stores/lia/voice-editor'
 import { createVoicePreviewDriver } from '../../../stores/lia/voice-preview'
@@ -40,7 +42,6 @@ const { t } = useI18n()
 const tt = (key: string) => t(`tamagotchi.home.config.sections.voice.${key}`)
 
 const voiceStore = useLiaVoiceStore()
-const runtime = useLiaRuntimeStore()
 const editor = useVoiceEditor({ preview: createVoicePreviewDriver() })
 
 /**
@@ -55,42 +56,13 @@ const isCustomVoice = computed(
 )
 
 /**
- * Loads the persisted configuration, repairs a card projection left behind by a
- * failed write, and warms the catalogue of whatever is selected. Read-only with
- * respect to `voice.tts`: opening the tab never configures anything.
+ * Loads the persisted configuration and warms the catalogue of whatever is
+ * selected. Read-only with respect to `voice.tts`: opening the tab never
+ * configures anything.
  */
 onMounted(() => {
   void editor.hydrate()
-  // The runtime state decides whether the custom-voice path shows an install
-  // card or the imported voices, so it is read whenever the tab opens.
-  void runtime.refresh()
-  // Same for the disk fact (Phase 6 hotfix, item E): the card's mounting
-  // condition reads it, and the card cannot be the one to load it because
-  // the card only exists after the condition is true.
-  void runtime.refreshInstallState()
 })
-
-/**
- * Phase 6 hotfix round 5, item D: with a tree on disk, the card ALWAYS
- * exists.
- *
- * An install that main can prove - installed, or repair-needed - is a fact
- * with something to say in every runtime state: starting maps to "Iniciando…",
- * ready to "Sistema de voz pronto", stopped to "Sistema de voz instalado",
- * failed to the retry/repair pair. Rounds 3-4 still hid the card at ready on
- * the theory that a healthy server belongs to the voice panel; the round-5 QA
- * boot showed the cost: an adopt before the tab opened left the user with no
- * "system of voice" row at all, an absence that reads as "nothing happened".
- * While the disk answer has not arrived, the legacy rows decide alone, as
- * before.
- */
-const showInstallCard = computed(() =>
-  runtime.needsInstall
-  || runtime.bootstrapOutcome
-  || runtime.state.state === 'error'
-  || (runtime.installState !== undefined
-    && runtime.installState !== 'not-installed'))
-
 function onChooseReady(): void {
   // Choosing "ready-made voice" means leaving the custom provider. The provider
   // itself is picked in advanced settings; this only has to stop being custom.
@@ -296,32 +268,23 @@ function onPreview(): void {
     <!--
       Mode 2: my own voice.
 
-      The install card replaces the voice list when the local runtime is missing,
-      so the user is never shown an import button that cannot work.
+      Transitional (Phase 7.8E): with no runnable engine there is no install
+      card, no wizard, no readiness gate - just the honest library panel with
+      its neutral "no engine yet" notice inside.
     -->
     <section
       v-else
       class="flex flex-col gap-4"
       data-testid="lia-config-voice-custom-mode"
     >
-      <!-- The card is an either/or with the voice panel only before anything
-           exists. After a run, both show: the card carries the outcome (the
-           "pronto" the user earned, or the failure with its retry) and the
-           panel carries on with the voices. A session that never ran the
-           bootstrap shows only the panel.
-           Round-7 addendum: a runtime state the probe cannot classify
-           ('error') still mounts the card. The runtime is then by definition
-           not working, and a panel with zero paths to repair was the exact
-           regression that hid the Install button. -->
-      <RuntimeInstallCard v-if="showInstallCard" />
-      <CustomVoicePanel v-if="!runtime.needsInstall" />
+      <CustomVoicePanel />
     </section>
 
     <!--
       Advanced settings.
 
       Closed by default, and the only place the technical surface appears: the
-      voice provider, the model, the emergency voice, and the local server. A
+      voice provider, the model and the emergency voice. A
       `<details>` element gives real disclosure semantics for free - the browser
       keeps it closed, and nothing here has to remember whether it was open.
     -->
@@ -477,8 +440,6 @@ function onPreview(): void {
         </p>
       </section>
 
-      <!-- The local voice server: address, folders and manual start/stop. -->
-      <VoiceRuntimeAdvanced />
     </details>
 
     <!-- Erros: sempre visíveis, nunca escondidos -->

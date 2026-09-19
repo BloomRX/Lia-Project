@@ -2,7 +2,6 @@ import type { createContext } from '@moeru/eventa/adapters/electron/main'
 
 import type { LiaCapabilitySnapshot } from '../../../shared/eventa'
 import type { LiaProductConfig } from '../../configs/lia-schema'
-import type { AllTalkRuntimeConfig } from './alltalk-client'
 import type { LiaVoiceProfileStore } from './voice-profiles'
 
 import { defineInvokeHandler } from '@moeru/eventa'
@@ -11,8 +10,6 @@ import {
   electronLiaCapabilitiesGet,
   electronLiaCapabilitiesUpdated,
 } from '../../../shared/eventa'
-import { createAllTalkClient } from './alltalk-client'
-import { createAllTalkSyncService, isVoiceVisibleToAllTalk } from './alltalk-voices-sync'
 
 /**
  * Phase 7.7, Parts 7 + 10 + 11: the product's capability truth.
@@ -76,46 +73,30 @@ type MainContext = ReturnType<typeof createContext>['context']
 export function registerLiaCapabilitiesBridge(params: {
   context: MainContext
   liaProductConfig: { get: () => LiaProductConfig | undefined }
-  /** Live resolver of the runtime connection the synthesis path can use. */
-  readRuntime: () => AllTalkRuntimeConfig
+  /**
+   * Phase 7.8: the voice-service answer - any usable engine (the selected
+   * engine, or the enabled fallback) means available. Engine facts never
+   * reach the persona; availability does.
+   */
+  voiceAvailable: () => Promise<boolean>
   store: LiaVoiceProfileStore
 }): { invalidate: () => void } {
-  const { context, liaProductConfig, readRuntime, store } = params
+  const { context, liaProductConfig, voiceAvailable, store } = params
 
   interface AvailabilityCache {
     available: boolean
     expiresAt: number
-    /** Profile the availability result referred to - live checks only matter for it. */
-    profileId: string
   }
   let availabilityCache: AvailabilityCache | undefined
 
-  async function probeVoiceAvailable(profileId: string): Promise<boolean> {
-    if (availabilityCache
-      && availabilityCache.profileId === profileId
-      && availabilityCache.expiresAt > Date.now()) {
+  async function probeVoiceAvailable(_profileId: string): Promise<boolean> {
+    void _profileId // availability is engine-level now, not per-profile
+    if (availabilityCache && availabilityCache.expiresAt > Date.now())
       return availabilityCache.available
-    }
-
-    const runtime = readRuntime()
-    if (!runtime)
-      return false
 
     let available = false
     try {
-      const status = await createAllTalkClient(runtime).status()
-      if (status.ok && status.state === 'connected') {
-        // Visibility via the REAL contract (Phase 7.5.1): the server reports
-        // managed filenames exactly as `/api/voices` returns them.
-        const managedFilename = await createAllTalkSyncService({
-          store,
-          voicesDir: runtime.voicesDir,
-        }).filenameFor(profileId)
-        available
-          = !managedFilename // no derived name -> profile's audio missing
-            ? false
-            : isVoiceVisibleToAllTalk(status.voices, managedFilename)
-      }
+      available = await voiceAvailable()
     }
     catch {
       available = false
@@ -124,7 +105,6 @@ export function registerLiaCapabilitiesBridge(params: {
     availabilityCache = {
       available,
       expiresAt: Date.now() + PROBE_TTL_MS,
-      profileId,
     }
     return available
   }
