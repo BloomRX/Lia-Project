@@ -6,7 +6,7 @@ import {
   resetLiaCapabilitySnapshotForTesting,
   setLiaCapabilitySnapshot,
 } from '../../../libs/capabilities/lia-capability-port'
-import { createLiaCapabilitiesContext, renderLiaCapabilitiesInstructions } from './lia-capabilities'
+import { createLiaCapabilitiesContext, liaCapabilityPromptSupplement, renderLiaCapabilitiesInstructions } from './lia-capabilities'
 
 /**
  * Phase 7.7, Part 12 (A-F): the persona's capability knowledge must reflect
@@ -23,6 +23,28 @@ function snapshot(voice: { configured: boolean, available: boolean }, avatarAvai
 
 beforeEach(() => {
   resetLiaCapabilitySnapshotForTesting()
+})
+
+describe('liaCapabilityPromptSupplement (Phase 7.7.1, parts A/B)', () => {
+  it('returns the same capability truths for the system-prompt authority path', () => {
+    setLiaCapabilitySnapshot(snapshot({ available: true, configured: true }))
+    const supplement = liaCapabilityPromptSupplement()
+    expect(supplement).toBeDefined()
+    expect(supplement).toContain('Você TEM uma voz')
+    expect(supplement).toContain('Não diga que você só tem texto')
+  })
+
+  it('poses no text for standalone AIRI (no snapshot installed - unchanged behavior)', () => {
+    expect(liaCapabilityPromptSupplement()).toBeUndefined()
+  })
+
+  it('keeps temporary-unavailable semantics for configured+unavailable, no external-tool advice', () => {
+    setLiaCapabilitySnapshot(snapshot({ available: false, configured: true }))
+    const supplement = liaCapabilityPromptSupplement() ?? ''
+    expect(supplement).toContain('temporariamente indisponível')
+    expect(supplement.toLowerCase()).not.toContain('paste')
+    expect(supplement).not.toContain('copiar suas respostas para um')
+  })
 })
 
 describe('createLiaCapabilitiesContext', () => {

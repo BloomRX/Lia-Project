@@ -28,7 +28,8 @@ import { resolveLlmTools } from './ai/chat-llm/tool-resolver'
 import { useLlmToolsStore } from './ai/chat-llm/tools'
 import { useLlmToolsetPromptsStore } from './ai/chat-llm/toolset-prompts'
 import { CHAT_FALLBACK_MAX_ATTEMPTS, getChatFallbackResolver } from './chat/chat-provider-runtime'
-import { createLiaCapabilitiesContext, createMinecraftContext } from './chat/context-providers'
+import { createMinecraftContext } from './chat/context-providers'
+import { liaCapabilityPromptSupplement } from './chat/context-providers/lia-capabilities'
 import { useChatContextStore } from './chat/context-store'
 import { humanizeSendErrorMessage } from './chat/send-error'
 import { useChatSessionStore } from './chat/session-store'
@@ -297,12 +298,22 @@ export const useChatStore = defineStore('chat', () => {
     },
     getActiveSessionId: () => activeSessionId.value,
     getActiveProvider: () => activeProvider.value,
-    getSystemPromptSupplement: () => llmToolsetPromptsStore.activeToolsetPrompt,
+    getSystemPromptSupplement: () => {
+      // Phase 7.7.1, parts A/B: the persona's capability truth must sit at the
+      // SAME authority as the system/developer message - never as weak side
+      // context appended near the user turn (that is where context providers
+      // land, and where a "you are a text model" default wins the argument
+      // the QA's reasoning trace showed). Injecting here puts
+      // "you DO have a voice in this application" INSIDE the system prompt.
+      // Under LIA_MANAGEMENT the managed semantics rule; standalone AIRI has
+      // no capability snapshot installed and gets no text at all (unchanged).
+      const capability = liaCapabilityPromptSupplement()
+      const toolset = llmToolsetPromptsStore.activeToolsetPrompt
+      return [capability, toolset].filter(Boolean).join('\n\n') || undefined
+    },
     runtimeContextProviders: [
-      // Phase 7.7 (Parts 7-11): product-capability truth for the persona,
-      // refreshed at every turn boundary; async providers are awaited by the
-      // chat core before composing the prompt snapshot.
-      createLiaCapabilitiesContext,
+      // (Phase 7.7.1, parts A/B: capability truth MOVED to the system-prompt
+      // supplement above - side-context authority was the QA's A-failure.)
       createMinecraftContext,
     ],
     createId: nanoid,

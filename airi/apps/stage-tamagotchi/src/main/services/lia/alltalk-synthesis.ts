@@ -5,6 +5,16 @@ import { AllTalkGenerationError, createAllTalkClient, toAllTalkLanguage } from '
 import { createAllTalkSyncService } from './alltalk-voices-sync'
 
 /**
+ * Phase 7.7.1, item H: how many synthesis requests are ACTIVELY inside the
+ * server boundary right now. Every synthesis crosses this envelope, so the
+ * counter is ground truth for "more than one in flight?" - the QA run
+ * showed ordinals 3 and 4 appearing while 1:99/2:96 sized, which is exactly
+ * what sentence pipelining vs true concurrent inference must be told apart
+ * by. Metadata only, always.
+ */
+let activeSynthesisCount = 0
+
+/**
  * One utterance, end to end: profile id in, audio out.
  *
  * ```
@@ -117,6 +127,22 @@ export async function synthesizeProfileWithAllTalk(params: SynthesizeProfilePara
 
   let timing: AllTalkSynthesizeTiming | undefined
 
+  // Phase 7.7.1, item H: the ordinal log above already marks "queued" at
+  // envelope entry; this marks "started" just before the POST, with the
+  // live active count. If active ever reads > 1 in the QA's log, the
+  // overlap is here - not at the semaphore, which pins concurrency to 1 at
+  // the generation step (the preflight profiles/publish phase is cheap and
+  // preceeds this point).
+  activeSynthesisCount += 1
+  logRequest({
+    activeSynthesisCount,
+    event: 'lia.voice.synthesize.started',
+    ordinal,
+    profileId,
+    provider: 'custom-local-voice',
+    textLength: text.length,
+  })
+
   try {
     const bytes = await createAllTalkClient(runtime, params.fetchImpl).synthesize({
       text,
@@ -127,10 +153,15 @@ export async function synthesizeProfileWithAllTalk(params: SynthesizeProfilePara
       onTiming: (next) => { timing = next },
     })
     const totalMs = Date.now() - queuedAt
+    activeSynthesisCount -= 1
     logRequest({
+      activeSynthesisCount,
+      audioBodyReadMs: timing?.audioBodyReadMs ?? -1,
+      audioGetHeadersMs: timing?.audioGetHeadersMs ?? -1,
       bytes: bytes.byteLength,
       downloadMs: timing?.downloadMs ?? -1,
       event: 'lia.voice.synthesize.response',
+      generationBodyMs: timing?.generationBodyMs ?? -1,
       generationMs: timing?.generationMs ?? -1,
       language: languageUsed,
       ms: totalMs,
@@ -141,9 +172,12 @@ export async function synthesizeProfileWithAllTalk(params: SynthesizeProfilePara
       requestDurationMs: Date.now() - requestStartedAt,
       textLength: text.length,
     })
+    logCompleted(ordinal, profileId, text.length)
     return bytes
   }
   catch (thrown) {
+    activeSynthesisCount -= 1
+    logCompleted(ordinal, profileId, text.length)
     if (thrown instanceof AllTalkGenerationError) {
       // The reason itself is NEVER swallowed: the full failure (status, body
       // snippet) lands here, in the MAIN-process diagnostic log, while the
@@ -175,6 +209,18 @@ let synthesisOrdinal = 0
 function nextSynthesisOrdinal(): number {
   synthesisOrdinal += 1
   return synthesisOrdinal
+}
+
+/** Phase 7.7.1, item H: the terminal edge of one active synthesis. */
+function logCompleted(ordinal: number, profileId: string, textLength: number): void {
+  logRequest({
+    activeSynthesisCount,
+    event: 'lia.voice.synthesize.completed',
+    ordinal,
+    profileId,
+    provider: 'custom-local-voice',
+    textLength,
+  })
 }
 
 /** Structured main-side log: key=value pairs, nothing free-form. */

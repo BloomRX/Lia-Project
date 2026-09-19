@@ -31,6 +31,7 @@ import {
   normalizeAllTalkRuntimePayload,
   resolveAllTalkRuntime,
 } from './alltalk-runtime-config'
+import { runtimeAppDir } from './voice-runtime-bootstrap-electron'
 import { resolveSynthesisLanguage, synthesizeProfileWithAllTalk } from './alltalk-synthesis'
 import { createAllTalkSyncService } from './alltalk-voices-sync'
 
@@ -178,6 +179,24 @@ export function registerLiaAllTalkBridge(params: {
   // stack - once per process, never blocking IPC, never crashing it. The
   // report distinguishes a CPU-build from a CUDA build from the torch wheel
   // shipped in the install (RX 580 -> likely +cpu, but MEASURED, not guessed).
+  // Phase 7.7.1, items D/E: the probe must inspect the install the runtime
+  // manager actually resolved - configured path first, canonical runtime app
+  // dir always as the default candidate (an empty product config used to be
+  // mislabeled "external server" while the launcher had in fact started the
+  // canonical managed runtime). Path values stay main-side only; the report
+  // carries just the source LABEL.
+  let installCandidates: Array<{ dir: string, source: 'configured-product-document' | 'canonical-runtime' | 'external-server' }> = []
+  try {
+    const runtimeAppDirectory = runtimeAppDir()
+    const configured = readRuntime().installDir?.trim()
+    installCandidates = [
+      ...(configured ? [{ dir: configured, source: 'configured-product-document' as const }] : []),
+      { dir: runtimeAppDirectory, source: 'canonical-runtime' as const },
+    ]
+  }
+  catch {
+    installCandidates = []
+  }
   void probeAllTalkDevice(readRuntime(), {
     getGpuInfoImpl: async () => {
       try {
@@ -189,7 +208,7 @@ export function registerLiaAllTalkBridge(params: {
         return []
       }
     },
-  })
+  }, installCandidates)
     .then(report => logAllTalkDeviceReport(report))
     .catch(() => undefined)
 }

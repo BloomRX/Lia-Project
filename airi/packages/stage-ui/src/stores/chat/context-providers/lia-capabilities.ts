@@ -67,6 +67,21 @@ export function renderLiaCapabilitiesInstructions(snapshot: {
   return lines
 }
 
+/**
+ * Phase 7.7.1, parts A/B: the same rendered truths, delivered as the SYSTEM
+ * PROMPT SUPPLEMENT - the strongest instruction authority in the composed
+ * prompt. The earlier side-context channel (kept exported below for test
+ * shape stability) proved weaker than the model's built-in "I am a text
+ * assistant" prior; the QA reasoning trace ("We have a conflict: the system
+ * instructions (developer) say never to claim...") is the direct evidence.
+ */
+export function liaCapabilityPromptSupplement(): string | undefined {
+  const snapshot = getLiaCapabilitySnapshot()
+  if (!snapshot)
+    return undefined
+  return renderLiaCapabilitiesInstructions(snapshot).join(' ')
+}
+
 export function createLiaCapabilitiesContext(): ContextMessage | null {
   const snapshot = getLiaCapabilitySnapshot()
   if (!snapshot)

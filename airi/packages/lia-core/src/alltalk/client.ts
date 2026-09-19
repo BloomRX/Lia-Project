@@ -182,9 +182,30 @@ export type AllTalkStatus
     | { ok: false, state: 'offline' }
 
 export interface AllTalkSynthesizeTiming {
-  /** POST /api/tts-generate round trip (server queue + inference + write). */
+  /**
+   * POST /api/tts-generate up to response headers: server accept + internal
+   * queue + XTTS inference + WAV write. (AllTalk's tts_server.py answers the
+   * generation POST only AFTER the file exists - see `generate_tts` writing
+   * the WAV and then returning output_file_url - so this number carries the
+   * whole server-side generation; phases inside it are unobservable from
+   * outside the HTTP boundary, reported not guessed.)
+   */
   generationMs: number
-  /** The second-hop WAV download (local HTTP overhead only). */
+  /** Parsing the generation response body (the output_file_url envelope). */
+  generationBodyMs: number
+  /**
+   * GET of the generated WAV up to response headers. If the server were
+   * still finalising the file when the GET arrives, the wait would show
+   * up HERE - the split proves or refutes that suspicion per request.
+   */
+  audioGetHeadersMs: number
+  /** Reading the WAV body after headers arrived (true byte transfer time). */
+  audioBodyReadMs: number
+  /**
+   * DEPRECATED aggregate kept for one release against the old field name.
+   * Equals audioGetHeadersMs + audioBodyReadMs: the "download" was never a
+   * single phase; the 31s the QA measured must be attributed per phase.
+   */
   downloadMs: number
 }
 
@@ -303,6 +324,7 @@ export function createAllTalkClient(
 
       const generationFinishedAt = Date.now()
       const body = await response.json() as AllTalkGenerateResponse
+      const generationBodyFinishedAt = Date.now()
       if (body.status !== 'generate-success') {
         throw new AllTalkGenerationError({
           bodySnippet: typeof body.status === 'string' ? body.status.slice(0, FAILURE_BODY_SNIPPET_MAX) : undefined,
@@ -317,8 +339,14 @@ export function createAllTalkClient(
         throw new Error('AllTalk returned success but no audio location.')
 
       // Second hop: the generation endpoint returns a pointer, not the bytes.
+      // Phase 7.7.1, item F: the download is decomposed - headers vs body -
+      // because the QA measured 31s for a 388KB localhost WAV, which a plain
+      // "download" cannot explain. If the GET were held while AllTalk
+      // finished the WAV, audioGetHeadersMs would carry it; if the slowness
+      // were the byte stream itself, audioBodyReadMs would.
       const downloadStartedAt = Date.now()
       const audio = await request(new URL(audioUrl, base).toString())
+      const audioHeadersAt = Date.now()
       if (!audio.ok)
         throw new Error(`Could not fetch the generated audio (${audio.status}).`)
 
@@ -326,8 +354,12 @@ export function createAllTalkClient(
       if (buffer.byteLength === 0)
         throw new Error('AllTalk returned an empty audio file.')
 
+      const audioBodyAt = Date.now()
       options?.onTiming?.({
-        downloadMs: Date.now() - downloadStartedAt,
+        audioBodyReadMs: audioBodyAt - audioHeadersAt,
+        audioGetHeadersMs: audioHeadersAt - downloadStartedAt,
+        downloadMs: audioBodyAt - downloadStartedAt,
+        generationBodyMs: generationBodyFinishedAt - generationFinishedAt,
         generationMs: generationFinishedAt - generationStartedAt,
       })
 

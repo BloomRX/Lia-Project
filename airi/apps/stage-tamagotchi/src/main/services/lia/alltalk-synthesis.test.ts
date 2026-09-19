@@ -174,6 +174,41 @@ describe('synthesizeProfileWithAllTalk', () => {
     expect(fields.get('text_input')).toBe('Olá!')
   })
 
+  it('h: logs queued/started/completed with an active count that returns to 0', async () => {
+    const info: string[] = []
+    const infoSpy = vi.spyOn(console, 'info').mockImplementation((line: unknown) => {
+      if (typeof line === 'string')
+        info.push(line)
+    })
+    try {
+      const profile = await importedProfile()
+      await synthesizeProfileWithAllTalk({
+        profileId: profile.id,
+        text: 'Frase com log de fila.',
+        language: 'pt-BR',
+        runtime: runtime(),
+        store: store(),
+      })
+
+      const started = info.find(line => line.includes('lia.voice.synthesize.started'))
+      const completed = info.find(line => line.includes('lia.voice.synthesize.completed'))
+      expect(started).toBeDefined()
+      expect(completed).toBeDefined()
+
+      // While inside the server boundary the envelope saw exactly one active
+      // request; after completion the count is back to zero.
+      expect(started).toContain('activeSynthesisCount=1')
+      expect(completed).toContain('activeSynthesisCount=0')
+
+      const ordinal = started?.match(/ordinal=(\d+)/)?.[1]
+      expect(ordinal).toBeDefined()
+      expect(info.indexOf(started ?? '')).toBeLessThan(info.indexOf(completed ?? ''))
+    }
+    finally {
+      infoSpy.mockRestore()
+    }
+  })
+
   it('g: reports generation/download/total as separate safe-metadata durations', async () => {
     const info: string[] = []
     const infoSpy = vi.spyOn(console, 'info').mockImplementation((line: unknown) => {
@@ -214,6 +249,16 @@ describe('synthesizeProfileWithAllTalk', () => {
 
       // First-of-process ordinal is present (first XTTS inference marker).
       expect(Number(meta.ordinal)).toBeGreaterThanOrEqual(1)
+
+      // Phase 7.7.1, item F: the download is decomposed - audioGetHeadersMs
+      // proves/refutes "the GET waited for the WAV", audioBodyReadMs is the
+      // true byte-transfer time; their sum reproduces the legacy aggregate.
+      expect(Number(meta.audioGetHeadersMs)).toBeGreaterThanOrEqual(0)
+      expect(Number(meta.audioBodyReadMs)).toBeGreaterThanOrEqual(0)
+      expect(Number(meta.generationBodyMs)).toBeGreaterThanOrEqual(0)
+      expect(Number(meta.downloadMs) + 50).toBeGreaterThanOrEqual(
+        Number(meta.audioGetHeadersMs) + Number(meta.audioBodyReadMs),
+      )
 
       // L: no full text anywhere in the log line - textLength only.
       expect(response).not.toContain('Uma frase para medir')

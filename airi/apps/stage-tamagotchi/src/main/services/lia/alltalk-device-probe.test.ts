@@ -102,6 +102,51 @@ describe('probeAllTalkDevice', () => {
     expect(report.currentModelLoaded).toBe('XTTSv2 Local')
   })
 
+  it('inspects the canonical managed install when the product config names no path', async () => {
+    // Phase 7.7.1, item D: the QA rig launched the canonical runtime
+    // (%LocalAppData%\\Lia\\runtimes\\alltalk\\app) with an empty product
+    // config - the probe must NOT mislabel that as an external server.
+    const report = await probeAllTalkDevice(
+      { baseUrl: baseUrl(), timeoutMs: 2000 },
+      {
+        readFileImpl: async path => (path.includes('canonical')
+          ? '__version__ = \'2.4.1+cpu\'\n'
+          : (() => { throw new Error('ENOENT') })()),
+      },
+      [
+        { dir: 'C:/runtimes/alltalk/canonical', source: 'canonical-runtime' },
+      ],
+    )
+    expect(report.device).toBe('cpu')
+    expect(report.installSource).toBe('canonical-runtime')
+    expect(report.note).toBeUndefined()
+  })
+
+  it('labels external-server only when no candidate carries a readable wheel', async () => {
+    const report = await probeAllTalkDevice(
+      { baseUrl: baseUrl(), timeoutMs: 2000 },
+      { readFileImpl: async () => { throw new Error('ENOENT') } },
+      [{ dir: 'C:/runtimes/alltalk/canonical', source: 'canonical-runtime' }],
+    )
+    expect(report.device).toBe('unknown')
+    expect(report.installSource).toBe('unknown')
+    expect(report.note).toMatch(/not readable/i)
+  })
+
+  it('trusts a configured product path before the canonical app dir', async () => {
+    const report = await probeAllTalkDevice(
+      { baseUrl: baseUrl(), installDir: 'C:/configured/install', timeoutMs: 2000 },
+      {
+        readFileImpl: async path => (path.includes('configured')
+          ? '__version__ = \'2.4.1+cu121\'\n'
+          : '__version__ = \'2.4.1+cpu\'\n'),
+      },
+      [{ dir: 'C:/runtimes/alltalk/canonical', source: 'canonical-runtime' }],
+    )
+    expect(report.device).toBe('cuda')
+    expect(report.installSource).toBe('configured-product-document')
+  })
+
   it('log line is metadata-only and carries the device key', () => {
     const lines: string[] = []
     const spy = vi.spyOn(console, 'info').mockImplementation((line: unknown) => {
@@ -109,12 +154,15 @@ describe('probeAllTalkDevice', () => {
         lines.push(line)
     })
     try {
-      logAllTalkDeviceReport({ device: 'cpu', torchBuild: '2.4.1+cpu', gpuName: 'AMD Radeon RX 580' })
+      logAllTalkDeviceReport({ device: 'cpu', installSource: 'canonical-runtime', torchBuild: '2.4.1+cpu', gpuName: 'AMD Radeon RX 580' })
       expect(lines).toHaveLength(1)
       expect(lines[0]).toContain('event=lia.voice.device')
       expect(lines[0]).toContain('device=cpu')
       expect(lines[0]).toContain('torchBuild=2.4.1+cpu')
       expect(lines[0]).toContain('gpuName=AMD Radeon RX 580')
+      expect(lines[0]).toContain('installSource=canonical-runtime')
+      // A path value never enters the log - the source label does.
+      expect(lines[0]).not.toContain('runtimes')
     }
     finally {
       spy.mockRestore()
