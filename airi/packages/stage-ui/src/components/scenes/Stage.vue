@@ -8,6 +8,7 @@ import type { SpeechProviderWithExtraOptions } from '@xsai-ext/providers/utils'
 import type { UnElevenLabsOptions } from 'unspeech'
 
 import type { EmotionPayload } from '../../constants/emotions'
+import type { TextForSpeechDiagnostics } from '../../libs/speech/text-for-speech'
 import type { SpeechTransport, StageTtsSession, StreamingSessionSnapshot } from '../../libs/speech/tts-session'
 
 import { defineInvokeHandler } from '@moeru/eventa'
@@ -44,6 +45,7 @@ import { recordSpeechLatency } from '../../libs/speech/latency-probe'
 import { resolveSpeechPipelineTuning } from '../../libs/speech/pipeline-tuning'
 import { bindSpeakingStateToPlaybackManager } from '../../libs/speech/playback-speaking-state'
 import { isModellessTarget, resolveSynthesisTarget } from '../../libs/speech/synthesize-target'
+import { isSpeechChunkSpeakable, normalizeTextForSpeech } from '../../libs/speech/text-for-speech'
 import { getSpeechTtsFallbackPolicy, notifySpeechTtsTurnEnded, withSpeechTtsSegmentFallback } from '../../libs/speech/tts-fallback'
 import { createStageTtsSession } from '../../libs/speech/tts-session'
 import { getSpeechBusContext, speechOutputGetPlaybackState } from '../../services/speech/bus'
@@ -56,6 +58,7 @@ import { useSpeechStore } from '../../stores/modules/speech'
 import { useProviderConfigStore } from '../../stores/providers/config'
 import { useProviderStore } from '../../stores/providers/provider'
 import { useSettings } from '../../stores/settings'
+import { useSettingsDeveloper } from '../../stores/settings/developer'
 import { useSpeechOutputControlStore } from '../../stores/speech-output-control'
 import { useSpeechRuntimeStore } from '../../stores/speech-runtime'
 
@@ -80,6 +83,7 @@ const tachieSceneRef = ref<InstanceType<typeof TachieScene>>()
 const mmdSceneRef = ref<InstanceType<typeof MMDScene>>()
 
 const settingsStore = useSettings()
+const settingsDeveloper = useSettingsDeveloper()
 const {
   stageModelRenderer,
   stageViewControlsEnabled,
@@ -441,6 +445,54 @@ function resolveStageVoiceType(): 'official_selected' | 'custom_configured' {
 }
 
 /**
+ * Phase 7.7.2, item 12: bounded, PII-free diagnostics for the speech-input
+ * transformation - structure counters only, never a character of content.
+ * Throttled to transitions that actually changed something, so a normal
+ * sentence costs zero lines.
+ */
+/**
+ * Phase 7.7.2, item 14-F: one dev-gated line - `{provider, bytes, sha256}` -
+ * emitted just before decodeAudioData consumes a TTS payload. The main
+ * process logs wavSha256 for the same bytes; equality proves no transport
+ * or pipeline layer altered the audio before playback.
+ */
+async function logSpeechBytesHash(res: ArrayBuffer, providerId: string): Promise<void> {
+  if (!settingsDeveloper.inspectAudioPayloadHashes)
+    return
+  try {
+    const digest = await crypto.subtle.digest('SHA-256', res.slice(0))
+    const hash = Array.from(new Uint8Array(digest)).map(byte => byte.toString(16).padStart(2, '0')).join('')
+    console.info('[lia.voice.speech-bytes]', {
+      audioContextSampleRate: audioContext.sampleRate,
+      bytes: res.byteLength,
+      provider: providerId,
+      sha256: hash,
+    })
+  }
+  catch {
+    // Diagnostics never break playback.
+  }
+}
+
+function speechInputDiagnosticsLog(diagnostics: TextForSpeechDiagnostics): void {
+  if (diagnostics.inputLength === diagnostics.normalizedLength
+    && diagnostics.removedCodeChars === 0
+    && diagnostics.removedMarkupCount === 0
+    && diagnostics.removedUrlCount === 0
+    && diagnostics.emojiRemovedCount === 0) {
+    return
+  }
+  console.info('[lia.voice.speech-input]', {
+    emojiRemovedCount: diagnostics.emojiRemovedCount,
+    inputLength: diagnostics.inputLength,
+    normalizedLength: diagnostics.normalizedLength,
+    removedCodeChars: diagnostics.removedCodeChars,
+    removedMarkupCount: diagnostics.removedMarkupCount,
+    removedUrlCount: diagnostics.removedUrlCount,
+  })
+}
+
+/**
  * One synthesis attempt for one segment.
  *
  * Returns `null` when there is legitimately nothing to speak (aborted, muted,
@@ -565,9 +617,20 @@ async function stageSynthesizeSegment(request: TtsRequest, signal: AbortSignal):
   model = synthesisTarget.model
   voice = synthesisTarget.voice
 
+  // Phase 7.7.2, items 12-13: the deterministic text-for-speech layer runs
+  // HERE, on the speech path only - the visible message text is a different
+  // string and is never touched (item L). Markdown/code/URLs/emoji do not
+  // reach the engine, punctuation stays attached to its word, and a
+  // punctuation-only segment is dropped before it can cost a 40s backend
+  // round trip.
+  const normalized = normalizeTextForSpeech(request.text)
+  speechInputDiagnosticsLog(normalized.diagnostics)
+  if (!isSpeechChunkSpeakable(normalized.text))
+    return null
+
   try {
     const speechRequest = speechStore.resolveSpeechInput({
-      text: request.text,
+      text: normalized.text,
       voice,
       providerConfig: {
         ...providerConfig,
@@ -595,6 +658,9 @@ async function stageSynthesizeSegment(request: TtsRequest, signal: AbortSignal):
 
     if (signal.aborted || !res || res.byteLength === 0)
       return null
+
+    // Phase 7.7.2, item 14-F: byte-identity proof at the decode boundary.
+    await logSpeechBytesHash(res, activeSpeechProvider.value)
 
     const audioBuffer = await audioContext.decodeAudioData(res)
     return audioBuffer

@@ -26,14 +26,15 @@ import {
   createAllTalkClient,
 } from './alltalk-client'
 import { logAllTalkDeviceReport, probeAllTalkDevice } from './alltalk-device-probe'
+import { probeTorchFactsWithManagedPython } from './alltalk-python-probe'
 import {
   mergeAllTalkRuntime,
   normalizeAllTalkRuntimePayload,
   resolveAllTalkRuntime,
 } from './alltalk-runtime-config'
-import { runtimeAppDir } from './voice-runtime-bootstrap-electron'
 import { resolveSynthesisLanguage, synthesizeProfileWithAllTalk } from './alltalk-synthesis'
 import { createAllTalkSyncService } from './alltalk-voices-sync'
+import { runtimeAppDir } from './voice-runtime-bootstrap-electron'
 
 type MainContext = ReturnType<typeof createContext>['context']
 
@@ -167,6 +168,11 @@ export function registerLiaAllTalkBridge(params: {
         text: String(request?.text ?? ''),
         language: resolveSynthesisLanguage({
           configured: liaProductConfig.get()?.preferences?.language,
+          // Phase 7.7.2, item 11: when neither the provider request nor the
+          // product preferences name a language, the profile's own imported
+          // tag (pt-BR) wins over `auto` - the backend's explicit `pt` is
+          // then measurable against `auto` in QA.
+          profileLanguage: (await params.store.get(profileId).catch(() => undefined))?.metadata?.language,
           requested: request?.language,
         }),
         runtime,
@@ -209,6 +215,38 @@ export function registerLiaAllTalkBridge(params: {
       }
     },
   }, installCandidates)
-    .then(report => logAllTalkDeviceReport(report))
+    .then(async (report) => {
+      // Phase 7.7.2, item 6: when the wheel's version string has no
+      // +cpu/+cu suffix (the QA rig showed torchBuild=2.2.1 -> device=other),
+      // the only conclusive answer comes from the managed interpreter
+      // itself: torch.cuda.is_available(). Runs the install's OWN python,
+      // imports torch, loads no model, changes nothing. An AMD card with a
+      // CUDA-capable wheel still reports cudaAvailable=false -> device=cpu.
+      if (report.installDir && (report.device === 'other' || report.device === 'unknown')) {
+        const facts = await probeTorchFactsWithManagedPython(report.installDir)
+          .catch(() => undefined)
+        if (facts?.torchVersion) {
+          report.torchBuild = facts.torchVersion
+          if (facts.cudaVersion)
+            report.cudaVersion = facts.cudaVersion
+          if (typeof facts.cudaAvailable === 'boolean') {
+            report.cudaAvailable = facts.cudaAvailable
+            report.device = facts.cudaAvailable ? 'cuda' : 'cpu'
+            if (facts.cudaAvailable && facts.deviceName)
+              report.cudaDeviceName = facts.deviceName
+            report.note = facts.cudaAvailable
+              ? 'device measured through the managed python interpreter (torch.cuda.is_available()=true)'
+              : 'device measured through the managed python interpreter (torch.cuda.is_available()=false -> cpu-bound)'
+          }
+          else {
+            report.note = 'managed interpreter answered but cuda availability was not reported'
+          }
+        }
+        else {
+          report.note = 'managed python interpreter probe not answerable - keeping filesystem-derived device'
+        }
+      }
+      logAllTalkDeviceReport(report)
+    })
     .catch(() => undefined)
 }

@@ -12,12 +12,21 @@ export const useSettingsDeveloper = defineStore('settings-developer', () => {
   // Lia product installed its capability truth (see response-part.vue).
   const showChatReasoning = useLocalStorageManualReset<boolean>('settings/developer/show-chat-reasoning', false)
 
+  // Phase 7.7.2, item 14-F: logs the content-free SHA-256 + byteLength of
+  // every TTS payload the Stage is about to decode. Compared against the
+  // main process's wavSha256 (= what AllTalk returned), identical values
+  // prove the playback input is byte-identical to the engine output - the
+  // GENERATION vs PLAYBACK isolation of item 7. Off by default.
+  const inspectAudioPayloadHashes = useLocalStorageManualReset<boolean>('settings/developer/inspect-audio-payload-hashes', false)
+
   function resetState() {
+    inspectAudioPayloadHashes.reset()
     inspectUpdaterDiagnostics.reset()
     showChatReasoning.reset()
   }
 
   return {
+    inspectAudioPayloadHashes,
     inspectUpdaterDiagnostics,
     showChatReasoning,
     resetState,

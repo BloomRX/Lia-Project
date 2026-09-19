@@ -37,6 +37,7 @@ const recorded: Recorded[] = []
 /** Set per test: where the second hop points, and whether the server is up. */
 let audioUrl = '/audio/out.wav'
 let generateStatus: 'generate-success' | 'generate-failure' = 'generate-success'
+let generateHoldMs = 0
 
 let root: string
 let profilesDir: string
@@ -56,8 +57,14 @@ beforeAll(async () => {
         return
       }
       if (req.url === '/api/tts-generate') {
-        res.writeHead(200, { 'Content-Type': 'application/json' })
-        res.end(JSON.stringify({ status: generateStatus, output_file_url: audioUrl }))
+        const finish = () => {
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ status: generateStatus, output_file_url: audioUrl }))
+        }
+        if (generateHoldMs > 0)
+          setTimeout(finish, generateHoldMs)
+        else
+          finish()
         return
       }
       if (req.url?.startsWith('/audio/')) {
@@ -78,6 +85,7 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   recorded.length = 0
+  generateHoldMs = 0
   audioUrl = '/audio/out.wav'
   generateStatus = 'generate-success'
 
@@ -87,7 +95,37 @@ beforeEach(async () => {
   downloadsDir = join(root, 'downloads')
   await mkdir(downloadsDir, { recursive: true })
   await mkdir(voicesDir, { recursive: true })
-  await writeFile(join(downloadsDir, 'referencia.wav'), Buffer.alloc(2048, 5))
+  const fmt = Buffer.from([
+    0x01,
+    0x00, // PCM
+    0x01,
+    0x00, // mono
+    0x22,
+    0x56,
+    0x00,
+    0x00, // 22050 Hz
+    0x44,
+    0xAC,
+    0x00,
+    0x00, // byte rate
+    0x02,
+    0x00, // block align
+    0x10,
+    0x00, // 16-bit
+  ])
+  const data = Buffer.alloc(2048, 5)
+  const header = Buffer.concat([
+    Buffer.from('RIFF', 'latin1'),
+    Buffer.from(new Uint32Array([36 + data.length]).buffer),
+    Buffer.from('WAVE', 'latin1'),
+    Buffer.from('fmt ', 'latin1'),
+    Buffer.from(new Uint32Array([16]).buffer),
+    fmt,
+    Buffer.from('data', 'latin1'),
+    Buffer.from(new Uint32Array([data.length]).buffer),
+    data,
+  ])
+  await writeFile(join(downloadsDir, 'referencia.wav'), header)
 })
 
 afterAll(async () => {
@@ -134,6 +172,13 @@ describe('resolveSynthesisLanguage', () => {
     expect(resolveSynthesisLanguage({})).toBeUndefined()
   })
 
+  it('profile tag (pt-BR) beats `auto` when nothing else declares a language', () => {
+    // Phase 7.7.2, item 11.
+    expect(resolveSynthesisLanguage({ configured: '', profileLanguage: 'pt-BR', requested: undefined })).toBe('pt-BR')
+    expect(resolveSynthesisLanguage({ configured: 'en', profileLanguage: 'pt-BR', requested: undefined })).toBe('en')
+    expect(resolveSynthesisLanguage({ configured: 'en', profileLanguage: 'pt-BR', requested: 'fr' })).toBe('fr')
+  })
+
   it('trims stray whitespace and treats blanks as undeclared', () => {
     expect(resolveSynthesisLanguage({ configured: '  ', requested: '   ' })).toBeUndefined()
     expect(resolveSynthesisLanguage({ configured: ' pt ', requested: '  ' })).toBe('pt')
@@ -172,6 +217,137 @@ describe('synthesizeProfileWithAllTalk', () => {
     expect(fields.get('character_voice_gen')).toBe(`lia-${profile.id}.wav`)
     expect(fields.get('character_voice_gen')).not.toBe('referencia.wav')
     expect(fields.get('text_input')).toBe('Olá!')
+  })
+
+  it('a-c: two concurrent calls strictly serialize through the backend slot', async () => {
+    // Phase 7.7.2, tests A/B/C: the second request must WAIT for the first
+    // to complete - queueWaitMs > 0, active never 2, no started-overlap.
+    generateHoldMs = 150
+    const info: string[] = []
+    const infoSpy = vi.spyOn(console, 'info').mockImplementation((line: unknown) => {
+      if (typeof line === 'string')
+        info.push(line)
+    })
+    try {
+      const profile = await importedProfile()
+      const [bytes1, bytes2] = await Promise.all([
+        synthesizeProfileWithAllTalk({
+          profileId: profile.id,
+          text: 'Primeira frase segurada pelo servidor.',
+          language: 'pt-BR',
+          runtime: runtime(),
+          store: store(),
+        }),
+        synthesizeProfileWithAllTalk({
+          profileId: profile.id,
+          text: 'Segunda frase, obrigada a esperar.',
+          language: 'pt-BR',
+          runtime: runtime(),
+          store: store(),
+        }),
+      ])
+      expect(bytes1.byteLength).toBeGreaterThan(0)
+      expect(bytes2.byteLength).toBeGreaterThan(0)
+
+      const events = info.filter(line => line.includes('lia.voice.synthesize.started') || line.includes('lia.voice.synthesize.completed'))
+      // Exactly two started and two completed, with strict alternation:
+      // started -> completed -> started -> completed. active==2 never logged.
+      expect(events.filter(line => line.includes('.started'))).toHaveLength(2)
+      expect(events.filter(line => line.includes('.completed'))).toHaveLength(2)
+      for (const line of events)
+        expect(line).not.toContain('activeSynthesisCount=2')
+
+      const firstStarted = events.find(line => line.includes('.started'))
+      const firstCompleted = events.find(line => line.includes('.completed'))
+      expect(info.indexOf(firstStarted ?? '')).toBeLessThan(info.indexOf(firstCompleted ?? ''))
+      const secondStarted = events.filter(line => line.includes('.started'))[1]
+      expect(info.indexOf(secondStarted ?? '')).toBeGreaterThan(info.indexOf(firstCompleted ?? ''))
+
+      // The queued request reports a real queue wait on its response line.
+      const responses = info.filter(line => line.includes('lia.voice.synthesize.response'))
+      expect(responses).toHaveLength(2)
+      const waits = responses.map(line => Number(line.match(/queueWaitMs=(\d+)/)?.[1] ?? -1))
+      expect(waits.filter(ms => ms > 0)).toHaveLength(1)
+      expect(waits.filter(ms => ms >= 100)).toHaveLength(1)
+    }
+    finally {
+      infoSpy.mockRestore()
+    }
+  })
+
+  it('d: generated and reference WAV metadata are logged as safe structural fields', async () => {
+    // Phase 7.7.2, item 14-D.
+    const info: string[] = []
+    const infoSpy = vi.spyOn(console, 'info').mockImplementation((line: unknown) => {
+      if (typeof line === 'string')
+        info.push(line)
+    })
+    try {
+      const profile = await importedProfile()
+      await synthesizeProfileWithAllTalk({
+        profileId: profile.id,
+        text: 'Frase com metadados de audio.',
+        language: 'pt-BR',
+        runtime: runtime(),
+        store: store(),
+      })
+
+      const response = info.find(line => line.includes('lia.voice.synthesize.response')) ?? ''
+      expect(response).toMatch(/wavBytes=\d+/)
+      expect(response).toMatch(/wavSha256=[0-9a-f]{64}/)
+      expect(Number(response.match(/wavBytes=(\d+)/)?.[1])).toBeGreaterThan(0)
+
+      const request = info.find(line => line.includes('lia.voice.synthesize.request')) ?? ''
+      expect(request).toMatch(/refWavBytes=\d+/)
+      expect(request).toMatch(/refWavSampleRate=\d+/)
+    }
+    finally {
+      infoSpy.mockRestore()
+    }
+  })
+
+  it('e: the QA dump exists only with LIA_VOICE_QA_DUMP=1 and lands outside the repo', async () => {
+    // Phase 7.7.2, items 7/14-E.
+    const info: string[] = []
+    const infoSpy = vi.spyOn(console, 'info').mockImplementation((line: unknown) => {
+      if (typeof line === 'string')
+        info.push(line)
+    })
+    const previous = process.env.LIA_VOICE_QA_DUMP
+    delete process.env.LIA_VOICE_QA_DUMP
+    try {
+      const profile = await importedProfile()
+      await synthesizeProfileWithAllTalk({
+        profileId: profile.id,
+        text: 'Sem dump sem a flag.',
+        language: 'pt-BR',
+        runtime: runtime(),
+        store: store(),
+      })
+      expect(info.some(line => line.includes('lia.voice.synthesize.qa-dump'))).toBe(false)
+
+      process.env.LIA_VOICE_QA_DUMP = '1'
+      await synthesizeProfileWithAllTalk({
+        profileId: profile.id,
+        text: 'Com dump sob a flag de diagnostico.',
+        language: 'pt-BR',
+        runtime: runtime(),
+        store: store(),
+      })
+      const dump = info.find(line => line.includes('lia.voice.synthesize.qa-dump'))
+      expect(dump).toBeDefined()
+      const path = dump?.match(/path=(\S+)/)?.[1] ?? ''
+      expect(path).toContain('lia-voice-qa')
+      expect(path.replace(/\\/g, '/')).not.toContain(process.cwd().replace(/\\/g, '/'))
+      await expect(readFile(path)).resolves.toBeTruthy()
+    }
+    finally {
+      infoSpy.mockRestore()
+      if (previous === undefined)
+        delete process.env.LIA_VOICE_QA_DUMP
+      else
+        process.env.LIA_VOICE_QA_DUMP = previous
+    }
   })
 
   it('h: logs queued/started/completed with an active count that returns to 0', async () => {
@@ -296,7 +472,7 @@ describe('synthesizeProfileWithAllTalk', () => {
     // The copy exists in AllTalk's folder by the time generation runs, which is
     // the only way `character_voice_gen` can resolve.
     const published = await readFile(join(voicesDir, `lia-${profile.id}.wav`))
-    expect(published.byteLength).toBe(2048)
+    expect(published.byteLength).toBe(2048 + 44)
   })
 
   it('returns the bytes from the second hop, not the JSON envelope', async () => {

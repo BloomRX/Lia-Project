@@ -202,6 +202,13 @@ export interface AllTalkSynthesizeTiming {
   /** Reading the WAV body after headers arrived (true byte transfer time). */
   audioBodyReadMs: number
   /**
+   * Phase 7.7.2, items 2-3: how long this request waited for the synthesis
+   * slot before its POST could start. Frontend pipelining vs backend
+   * concurrency is now unambiguous: queue wait happens BEFORE 'started',
+   * while exactly one request holds the slot.
+   */
+  queueWaitMs: number
+  /**
    * DEPRECATED aggregate kept for one release against the old field name.
    * Equals audioGetHeadersMs + audioBodyReadMs: the "download" was never a
    * single phase; the 31s the QA measured must be attributed per phase.
@@ -222,8 +229,85 @@ export interface AllTalkClient {
        * durations only.
        */
       onTiming?: (timing: AllTalkSynthesizeTiming) => void
+      /**
+       * Phase 7.7.2, item 2: fired the moment this request WINS the single
+       * synthesis slot (after any queue wait). The caller's "started"
+       * instrumentation belongs here, never at call time - a queued request
+       * is not an active synthesis.
+       */
+      onSlotAcquired?: () => void
+      /** Fired when the slot is released (success, failure or cancel). */
+      onSlotReleased?: () => void
+      /**
+       * Cooperative cancel while QUEUED: a request aborted before winning
+       * the slot leaves the queue and rejects with an AbortError - it never
+       * starts a POST for a turn the user already replaced.
+       */
+      signal?: AbortSignal
     },
   ) => Promise<ArrayBuffer>
+}
+
+/**
+ * Phase 7.7.2, item 2 - TRUE ENGINE SERIALIZATION.
+ *
+ * The Windows QA log proved renderer-side scheduling alone did not serialize
+ * synthesis: `activeSynthesisCount=2` with two ordinals 19ms apart. The
+ * renderer pipeline can race (intent replace/interrupt starts the next
+ * intent while the canceled intent's in-flight task still owns a fetch -
+ * nothing aborts that fetch), so the authoritative rule lives HERE, at the
+ * narrowest backend boundary: a module-level FIFO mutex wrapped around the
+ * whole synthesize round trip (POST + WAV fetch). Exactly one request holds
+ * the slot at any moment, per process. Remote/cloud providers keep their
+ * own provider-specific policies - this mutex is named for the AllTalk/XTTS
+ * engine only.
+ */
+let synthesisSlotHeld = false
+interface SynthesisSlotWaiter {
+  resolve: () => void
+  reject: (error: Error) => void
+  onAbort: () => void
+}
+const synthesisSlotQueue: SynthesisSlotWaiter[] = []
+
+function acquireSynthesisSlot(signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted)
+    return Promise.reject(new DOMException('Synthesis canceled while queued.', 'AbortError'))
+  if (!synthesisSlotHeld && synthesisSlotQueue.length === 0) {
+    synthesisSlotHeld = true
+    return Promise.resolve()
+  }
+  return new Promise<void>((resolve, reject) => {
+    const waiter: SynthesisSlotWaiter = {
+      resolve,
+      reject,
+      onAbort: () => {
+        const index = synthesisSlotQueue.indexOf(waiter)
+        if (index >= 0) {
+          synthesisSlotQueue.splice(index, 1)
+          reject(new DOMException('Synthesis canceled while queued.', 'AbortError'))
+        }
+      },
+    }
+    synthesisSlotQueue.push(waiter)
+    signal?.addEventListener('abort', waiter.onAbort, { once: true })
+  })
+}
+
+function releaseSynthesisSlot(): void {
+  const next = synthesisSlotQueue.shift()
+  if (next) {
+    // Hand the slot to the queued request directly: the slot never reads
+    // "free" for a synchronous caller between two waiters.
+    next.resolve()
+    return
+  }
+  synthesisSlotHeld = false
+}
+
+/** Test-only visibility: how many requests currently wait for the slot. */
+export function synthesisSlotQueueLengthForTesting(): number {
+  return synthesisSlotQueue.length
 }
 
 function joinUrl(base: string, path: string): string {
@@ -273,97 +357,112 @@ export function createAllTalkClient(
     },
 
     async synthesize(params, options) {
-      const generationStartedAt = Date.now()
-      if (!params.text?.trim())
-        throw new Error('Nothing to synthesize.')
-      if (!params.characterVoiceGen)
-        throw new Error('This voice has no reference audio registered with AllTalk.')
+      // Phase 7.7.2, items 2-3: the slot is acquired HERE - one engine
+      // request at a time, by construction, regardless of renderer
+      // scheduling. Everything from the POST to the last WAV byte happens
+      // while holding it; queue wait happens before it.
+      const queuedAt = Date.now()
+      await acquireSynthesisSlot(options?.signal)
+      const lockAcquiredAt = Date.now()
+      options?.onSlotAcquired?.()
+      try {
+        const generationStartedAt = Date.now()
+        if (!params.text?.trim())
+          throw new Error('Nothing to synthesize.')
+        if (!params.characterVoiceGen)
+          throw new Error('This voice has no reference audio registered with AllTalk.')
 
-      // Only the documented fields are sent; everything else is left to the
-      // server's Global API defaults, which the wiki says is the intended way to
-      // omit a setting.
-      const form = new URLSearchParams({
-        text_input: params.text,
-        character_voice_gen: params.characterVoiceGen,
-        language: params.language,
-        narrator_enabled: 'false',
-        text_filtering: 'standard',
-        // Timestamped so concurrent requests cannot overwrite one another's file.
-        output_file_timestamp: 'true',
-        autoplay: 'false',
-        ...(params.outputFileName ? { output_file_name: params.outputFileName } : {}),
-        ...(params.speed !== undefined ? { speed: String(params.speed) } : {}),
-        ...(params.pitch !== undefined ? { pitch: String(params.pitch) } : {}),
-        ...(params.temperature !== undefined ? { temperature: String(params.temperature) } : {}),
-        ...(params.repetitionPenalty !== undefined ? { repetition_penalty: String(params.repetitionPenalty) } : {}),
-      })
+        // Only the documented fields are sent; everything else is left to the
+        // server's Global API defaults, which the wiki says is the intended way to
+        // omit a setting.
+        const form = new URLSearchParams({
+          text_input: params.text,
+          character_voice_gen: params.characterVoiceGen,
+          language: params.language,
+          narrator_enabled: 'false',
+          text_filtering: 'standard',
+          // Timestamped so concurrent requests cannot overwrite one another's file.
+          output_file_timestamp: 'true',
+          autoplay: 'false',
+          ...(params.outputFileName ? { output_file_name: params.outputFileName } : {}),
+          ...(params.speed !== undefined ? { speed: String(params.speed) } : {}),
+          ...(params.pitch !== undefined ? { pitch: String(params.pitch) } : {}),
+          ...(params.temperature !== undefined ? { temperature: String(params.temperature) } : {}),
+          ...(params.repetitionPenalty !== undefined ? { repetition_penalty: String(params.repetitionPenalty) } : {}),
+        })
 
-      const response = await request(joinUrl(base, '/api/tts-generate'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: form.toString(),
-      })
+        const response = await request(joinUrl(base, '/api/tts-generate'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: form.toString(),
+        })
 
-      if (!response.ok) {
-        // Phase 7.5 item 3: never swallow the backend's actual reason. The
-        // snippet is bounded; the server-side (main process) log keeps the
-        // full body.
-        let snippet: string | undefined
-        try {
-          const raw = await response.text()
-          snippet = raw.replace(/\s+/g, ' ').trim().slice(0, FAILURE_BODY_SNIPPET_MAX) || undefined
+        if (!response.ok) {
+          // Phase 7.5 item 3: never swallow the backend's actual reason. The
+          // snippet is bounded; the server-side (main process) log keeps the
+          // full body.
+          let snippet: string | undefined
+          try {
+            const raw = await response.text()
+            snippet = raw.replace(/\s+/g, ' ').trim().slice(0, FAILURE_BODY_SNIPPET_MAX) || undefined
+          }
+          catch { /* an unreadable body leaves the category to the status code */ }
+          throw new AllTalkGenerationError({
+            bodySnippet: snippet,
+            category: categorizeAllTalkFailure(response.status, snippet ?? ''),
+            endpoint: '/api/tts-generate',
+            status: response.status,
+          })
         }
-        catch { /* an unreadable body leaves the category to the status code */ }
-        throw new AllTalkGenerationError({
-          bodySnippet: snippet,
-          category: categorizeAllTalkFailure(response.status, snippet ?? ''),
-          endpoint: '/api/tts-generate',
-          status: response.status,
+
+        const generationFinishedAt = Date.now()
+        const body = await response.json() as AllTalkGenerateResponse
+        const generationBodyFinishedAt = Date.now()
+        if (body.status !== 'generate-success') {
+          throw new AllTalkGenerationError({
+            bodySnippet: typeof body.status === 'string' ? body.status.slice(0, FAILURE_BODY_SNIPPET_MAX) : undefined,
+            category: categorizeAllTalkFailure(200, String(body.status ?? '')),
+            endpoint: '/api/tts-generate',
+            status: 200,
+          })
+        }
+
+        const audioUrl = body.output_file_url
+        if (!audioUrl)
+          throw new Error('AllTalk returned success but no audio location.')
+
+        // Second hop: the generation endpoint returns a pointer, not the bytes.
+        // Phase 7.7.1, item F: the download is decomposed - headers vs body -
+        // because the QA measured 31s for a 388KB localhost WAV, which a plain
+        // "download" cannot explain. If the GET were held while AllTalk
+        // finished the WAV, audioGetHeadersMs would carry it; if the slowness
+        // were the byte stream itself, audioBodyReadMs would.
+        const downloadStartedAt = Date.now()
+        const audio = await request(new URL(audioUrl, base).toString())
+        const audioHeadersAt = Date.now()
+        if (!audio.ok)
+          throw new Error(`Could not fetch the generated audio (${audio.status}).`)
+
+        const buffer = await audio.arrayBuffer()
+        if (buffer.byteLength === 0)
+          throw new Error('AllTalk returned an empty audio file.')
+
+        const audioBodyAt = Date.now()
+        options?.onTiming?.({
+          audioBodyReadMs: audioBodyAt - audioHeadersAt,
+          audioGetHeadersMs: audioHeadersAt - downloadStartedAt,
+          downloadMs: audioBodyAt - downloadStartedAt,
+          generationBodyMs: generationBodyFinishedAt - generationFinishedAt,
+          generationMs: generationFinishedAt - generationStartedAt,
+          queueWaitMs: lockAcquiredAt - queuedAt,
         })
+
+        return buffer
       }
-
-      const generationFinishedAt = Date.now()
-      const body = await response.json() as AllTalkGenerateResponse
-      const generationBodyFinishedAt = Date.now()
-      if (body.status !== 'generate-success') {
-        throw new AllTalkGenerationError({
-          bodySnippet: typeof body.status === 'string' ? body.status.slice(0, FAILURE_BODY_SNIPPET_MAX) : undefined,
-          category: categorizeAllTalkFailure(200, String(body.status ?? '')),
-          endpoint: '/api/tts-generate',
-          status: 200,
-        })
+      finally {
+        options?.onSlotReleased?.()
+        releaseSynthesisSlot()
       }
-
-      const audioUrl = body.output_file_url
-      if (!audioUrl)
-        throw new Error('AllTalk returned success but no audio location.')
-
-      // Second hop: the generation endpoint returns a pointer, not the bytes.
-      // Phase 7.7.1, item F: the download is decomposed - headers vs body -
-      // because the QA measured 31s for a 388KB localhost WAV, which a plain
-      // "download" cannot explain. If the GET were held while AllTalk
-      // finished the WAV, audioGetHeadersMs would carry it; if the slowness
-      // were the byte stream itself, audioBodyReadMs would.
-      const downloadStartedAt = Date.now()
-      const audio = await request(new URL(audioUrl, base).toString())
-      const audioHeadersAt = Date.now()
-      if (!audio.ok)
-        throw new Error(`Could not fetch the generated audio (${audio.status}).`)
-
-      const buffer = await audio.arrayBuffer()
-      if (buffer.byteLength === 0)
-        throw new Error('AllTalk returned an empty audio file.')
-
-      const audioBodyAt = Date.now()
-      options?.onTiming?.({
-        audioBodyReadMs: audioBodyAt - audioHeadersAt,
-        audioGetHeadersMs: audioHeadersAt - downloadStartedAt,
-        downloadMs: audioBodyAt - downloadStartedAt,
-        generationBodyMs: generationBodyFinishedAt - generationFinishedAt,
-        generationMs: generationFinishedAt - generationStartedAt,
-      })
-
-      return buffer
     },
   }
 }

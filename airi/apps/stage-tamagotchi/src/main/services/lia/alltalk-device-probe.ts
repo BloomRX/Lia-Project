@@ -41,8 +41,23 @@ export interface AllTalkDeviceReport {
    * main-side only and never reaches the persona.
    */
   installSource: AllTalkInstallSource
+  /**
+   * The resolved install root - MAIN-SIDE ONLY, never logged and never sent
+   * across the bridge. The interpreter probe (Phase 7.7.2, item 6) needs it
+   * to find `alltalk_environment/env/python.exe`.
+   */
+  installDir?: string
   /** What the stack is empirically running on. */
   device: 'cpu' | 'cuda' | 'other' | 'unknown'
+  /**
+   * Phase 7.7.2, item 6: facts measured by the MANAGED interpreter itself
+   * (`torch.cuda.is_available()`), used when the wheel's version string
+   * carries no `+cpu`/`+cu` suffix. With an AMD card this proves CPU - and
+   * only a true `cudaAvailable` may ever label GPU acceleration.
+   */
+  cudaAvailable?: boolean
+  cudaVersion?: string
+  cudaDeviceName?: string
   /** The packaged PyTorch build, e.g. `2.4.1+cpu` - when readable. */
   torchBuild?: string
   /** The server-reported model method, e.g. `XTTSv2 Local`. */
@@ -116,6 +131,7 @@ export async function probeAllTalkDevice(
     try {
       const versionPy = await readImpl(join(candidate.dir, ...torchRel))
       report.installSource = candidate.source
+      report.installDir = candidate.dir
       report.torchBuild = extractTorchBuild(versionPy)
       report.device = deviceFromTorchBuild(report.torchBuild)
       if (!report.torchBuild)
@@ -189,6 +205,9 @@ export function logAllTalkDeviceReport(report: AllTalkDeviceReport): void {
     device: report.device,
     event: 'lia.voice.device',
     installSource: report.installSource,
+    ...(report.cudaAvailable !== undefined ? { cudaAvailable: report.cudaAvailable } : {}),
+    ...(report.cudaVersion ? { cudaVersion: report.cudaVersion } : {}),
+    ...(report.cudaDeviceName ? { cudaDeviceName: report.cudaDeviceName } : {}),
     torchBuild: report.torchBuild ?? 'unknown',
     ...(report.currentModelLoaded ? { currentModelLoaded: report.currentModelLoaded } : {}),
     ...(report.deepspeedStatus !== undefined ? { deepspeedStatus: report.deepspeedStatus } : {}),

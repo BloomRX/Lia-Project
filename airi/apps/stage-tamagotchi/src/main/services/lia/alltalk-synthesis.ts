@@ -1,8 +1,17 @@
 import type { AllTalkRuntimeConfig, AllTalkSynthesizeTiming } from './alltalk-client'
 import type { LiaVoiceProfileStore } from './voice-profiles'
 
+import process from 'node:process'
+
+import { Buffer } from 'node:buffer'
+import { createHash } from 'node:crypto'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
 import { AllTalkGenerationError, createAllTalkClient, toAllTalkLanguage } from './alltalk-client'
 import { createAllTalkSyncService } from './alltalk-voices-sync'
+import { sniffWavMetadata } from './wav-metadata'
 
 /**
  * Phase 7.7.1, item H: how many synthesis requests are ACTIVELY inside the
@@ -73,12 +82,22 @@ export const ALLTALK_HUMAN_ERROR_MESSAGES: Record<string, string> = {
 export function resolveSynthesisLanguage(options: {
   configured?: string
   requested?: string
+  /**
+   * Phase 7.7.2, item 11: the voice profile's own language tag (e.g. the
+   * imported profile reads pt-BR) - used when neither the request nor the
+   * product preferences carried one. This is what stops `auto` from being
+   * sent for a voice whose language is KNOWABLE.
+   */
+  profileLanguage?: string
 }): string | undefined {
   const requested = String(options.requested ?? '').trim()
   if (requested)
     return requested
   const configured = String(options.configured ?? '').trim()
-  return configured || undefined
+  if (configured)
+    return configured
+  const profile = String(options.profileLanguage ?? '').trim()
+  return profile || undefined
 }
 
 export async function synthesizeProfileWithAllTalk(params: SynthesizeProfileParams): Promise<ArrayBuffer> {
@@ -123,26 +142,18 @@ export async function synthesizeProfileWithAllTalk(params: SynthesizeProfilePara
     provider: 'custom-local-voice',
     requestVoiceName: published.filename,
     textLength: text.length,
+    ...await sniffReferenceWavForDiagnostics(runtime.voicesDir, published.filename),
   })
 
   let timing: AllTalkSynthesizeTiming | undefined
 
-  // Phase 7.7.1, item H: the ordinal log above already marks "queued" at
-  // envelope entry; this marks "started" just before the POST, with the
-  // live active count. If active ever reads > 1 in the QA's log, the
-  // overlap is here - not at the semaphore, which pins concurrency to 1 at
-  // the generation step (the preflight profiles/publish phase is cheap and
-  // preceeds this point).
-  activeSynthesisCount += 1
-  logRequest({
-    activeSynthesisCount,
-    event: 'lia.voice.synthesize.started',
-    ordinal,
-    profileId,
-    provider: 'custom-local-voice',
-    textLength: text.length,
-  })
-
+  // Phase 7.7.2, items 1-2: "started" is fired by the BACKEND slot now, not
+  // by this envelope - the Windows QA showed activeSynthesisCount=2 because
+  // the envelope counted at CALL time while the real concurrency point is
+  // the synthesis slot inside the client (module-level FIFO mutex, one
+  // holder at a time). queued = ordinal log above; started = slot won;
+  // completed = slot released. active==2 is now impossible by construction:
+  // no second request can acquire while the first holds the slot.
   try {
     const bytes = await createAllTalkClient(runtime, params.fetchImpl).synthesize({
       text,
@@ -150,10 +161,25 @@ export async function synthesizeProfileWithAllTalk(params: SynthesizeProfilePara
       // The provider passes a BCP-47 tag through; AllTalk only accepts `pt`.
       language: languageUsed,
     }, {
+      onSlotAcquired: () => {
+        activeSynthesisCount += 1
+        logRequest({
+          activeSynthesisCount,
+          event: 'lia.voice.synthesize.started',
+          ordinal,
+          profileId,
+          provider: 'custom-local-voice',
+          textLength: text.length,
+        })
+      },
+      onSlotReleased: () => {
+        activeSynthesisCount -= 1
+        logCompleted(ordinal, profileId, text.length)
+      },
       onTiming: (next) => { timing = next },
     })
     const totalMs = Date.now() - queuedAt
-    activeSynthesisCount -= 1
+    const generated = await sniffGeneratedWavForDiagnostics(bytes)
     logRequest({
       activeSynthesisCount,
       audioBodyReadMs: timing?.audioBodyReadMs ?? -1,
@@ -169,15 +195,16 @@ export async function synthesizeProfileWithAllTalk(params: SynthesizeProfilePara
       preflightMs,
       profileId,
       provider: 'custom-local-voice',
+      queueWaitMs: timing?.queueWaitMs ?? -1,
       requestDurationMs: Date.now() - requestStartedAt,
       textLength: text.length,
+      ...generated.logFields,
     })
-    logCompleted(ordinal, profileId, text.length)
+    if (generated.qaDumpPath)
+      logRequest({ event: 'lia.voice.synthesize.qa-dump', ordinal, path: generated.qaDumpPath })
     return bytes
   }
   catch (thrown) {
-    activeSynthesisCount -= 1
-    logCompleted(ordinal, profileId, text.length)
     if (thrown instanceof AllTalkGenerationError) {
       // The reason itself is NEVER swallowed: the full failure (status, body
       // snippet) lands here, in the MAIN-process diagnostic log, while the
@@ -209,6 +236,77 @@ let synthesisOrdinal = 0
 function nextSynthesisOrdinal(): number {
   synthesisOrdinal += 1
   return synthesisOrdinal
+}
+
+/**
+ * Phase 7.7.2, items 7-9 and tests D/F: structural metadata of the generated
+ * WAV (sample rate, channels, bit depth, duration) plus a CONTENT-FREE hash
+ * - the Stage side hashes the bytes it receives before decodeAudioData, and
+ * identical hashes prove the playback input is byte-identical to what
+ * AllTalk returned. Under LIA_VOICE_QA_DUMP=1 (dev/diagnostics only) the raw
+ * WAV is also copied to the OS temp dir so the QA can play it in a normal
+ * player and isolate GENERATION vs PLAYBACK (item 7). The dump never lives
+ * in the repository and is never written without the flag.
+ */
+async function sniffGeneratedWavForDiagnostics(bytes: ArrayBuffer): Promise<{ logFields: Record<string, string | number>, qaDumpPath?: string }> {
+  const logFields: Record<string, string | number> = {
+    wavBytes: bytes.byteLength,
+    wavSha256: createHash('sha256').update(Buffer.from(bytes)).digest('hex'),
+  }
+  const meta = sniffWavMetadata(bytes)
+  if (meta.container !== 'unknown') {
+    if (meta.sampleRate)
+      logFields.wavSampleRate = meta.sampleRate
+    if (meta.channels)
+      logFields.wavChannels = meta.channels
+    if (meta.bitDepth)
+      logFields.wavBitDepth = meta.bitDepth
+    if (meta.durationMs !== undefined)
+      logFields.wavDurationMs = meta.durationMs
+    logFields.wavCodec = meta.codec
+  }
+
+  let qaDumpPath: string | undefined
+  if (process.env.LIA_VOICE_QA_DUMP === '1') {
+    const dir = join(tmpdir(), 'lia-voice-qa')
+    const path = join(dir, `lia-qa-${Date.now()}.wav`)
+    // Awaited: the dump is a dev-only diagnostic and its log line must mean
+    // "the file is on disk now", not "a write exists somewhere in flight".
+    // Cost is a single local file write, and only under the flag.
+    await mkdir(dir, { recursive: true }).catch(() => undefined)
+    await writeFile(path, Buffer.from(bytes)).catch(() => undefined)
+    qaDumpPath = path
+  }
+  return { logFields, qaDumpPath }
+}
+
+/**
+ * Phase 7.7.2, item 9: the reference file AllTalk actually reads - structural
+ * metadata only, logged once per synthesis next to preflight so a low-
+ * bandwidth or reverberant SOURCE is visible in QA instead of being masked.
+ */
+async function sniffReferenceWavForDiagnostics(voicesDir: string | undefined, filename: string): Promise<Record<string, string | number>> {
+  if (!voicesDir)
+    return {}
+  try {
+    const bytes = await readFile(join(voicesDir, filename))
+    const fields: Record<string, string | number> = { refWavBytes: bytes.byteLength }
+    const meta = sniffWavMetadata(bytes)
+    if (meta.sampleRate)
+      fields.refWavSampleRate = meta.sampleRate
+    if (meta.channels)
+      fields.refWavChannels = meta.channels
+    if (meta.bitDepth)
+      fields.refWavBitDepth = meta.bitDepth
+    if (meta.durationMs !== undefined)
+      fields.refWavDurationMs = meta.durationMs
+    if (meta.codec !== 'unknown')
+      fields.refWavCodec = meta.codec
+    return fields
+  }
+  catch {
+    return {}
+  }
 }
 
 /** Phase 7.7.1, item H: the terminal edge of one active synthesis. */
