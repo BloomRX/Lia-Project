@@ -1,8 +1,10 @@
+import type { AllTalkStatus } from '@lia/core/alltalk/client'
+import type { CustomVoiceEngineStatus } from '@lia/core/alltalk/engine-config'
 import type { RuntimeStateSnapshot } from '@lia/core/alltalk/runtime'
 import type { LiaBridgeConfig } from '@lia/core/bridge/lia-config'
 import type { LiaProductPaths } from '@lia/core/paths/product-paths'
 import type { LiaInstallDirCandidate } from '@lia/core/paths/runtime-paths'
-import type { LiaProductConfigSnapshot, LiaProductConfigUpdate } from '@lia/core/product/config'
+import type { LiaProductAllTalkRuntime, LiaProductConfigSnapshot, LiaProductConfigUpdate } from '@lia/core/product/config'
 import type { LiaSecretCipher, LiaSecretVault } from '@lia/core/secrets/vault'
 import type { LiaCustomVoiceProfile, LiaVoiceProfileImportRequest } from '@lia/core/voices/types'
 
@@ -12,18 +14,20 @@ import type { ShutdownReport } from './shutdown-coordinator'
 import process from 'node:process'
 
 import { execFile } from 'node:child_process'
-import { access, stat } from 'node:fs/promises'
+import { access, readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { createAllTalkClient, DEFAULT_ALLTALK_BASE_URL, DEFAULT_ALLTALK_TIMEOUT_MS } from '@lia/core/alltalk/client'
+import { readCustomVoiceEngineStatus } from '@lia/core/alltalk/engine-config'
 import { gatherPortOwners, inspectProcess } from '@lia/core/alltalk/port-diagnostics'
 import { loopbackHostFor, probeTcpListeners } from '@lia/core/alltalk/port-listeners'
 import { createRuntimeManager, inspectAllTalkInstall } from '@lia/core/alltalk/runtime'
+import { createAllTalkSyncService } from '@lia/core/alltalk/voices-sync'
 import { buildLiaBridgeConfig, stageEnvFor } from '@lia/core/bridge/lia-config'
 import { classifyInstallLocation, inspectInstallLocationTarget } from '@lia/core/paths/install-location'
 import { liaProductPaths } from '@lia/core/paths/product-paths'
-import { resolveAllTalkInstallCandidates, resolveAllTalkRuntimeDir } from '@lia/core/paths/runtime-paths'
+import { resolveAllTalkInstallCandidates, resolveAllTalkRuntimeDir, resolveAllTalkVoicesDirForInstallDir } from '@lia/core/paths/runtime-paths'
 import { readLiaProductConfig, updateLiaProductConfig } from '@lia/core/product/config'
 import { createLiaSecretVault } from '@lia/core/secrets/vault'
 import { createLiaVoiceProfileStore, findMissingFiles } from '@lia/core/voices/profiles'
@@ -124,6 +128,16 @@ export interface LiaHostDeps {
    * LocalAppData root only exists on a real Windows profile).
    */
   inspectInstallImpl?: typeof inspectAllTalkInstall
+  /**
+   * Engine-config read-back (Phase 7.5 Part 9). Default: the core's real
+   * file read; tests stub the disk outcome only.
+   */
+  engineStatusImpl?: (appDir: string) => Promise<CustomVoiceEngineStatus>
+  /**
+   * The `/api/voices` probe used by the Part-8 visibility check. Default:
+   * the real client; tests answer from a scripted server state.
+   */
+  voiceVisibilityProbeImpl?: (config: RuntimeManagerConfig) => Promise<AllTalkStatus>
   /** Never-secret log lines; the renderer log strip shows a pass-through. */
   onEvent?: (event: string, detail?: string) => void
   /** Never-crashes platform override for tests. */
@@ -312,16 +326,24 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
   }
 
   /**
-   * Phase 7.4 voice gate (items B/E): when the preferred voice is
-   * `custom-local-voice`, prove the slice before the stage is ever asked to
-   * start. Order is the semantics:
-   *   1. selected profile must exist in the library (plus its files);
-   *   2. the runtime must be installed (markers, any trusted candidate);
-   *   3. it must START and reach real readiness (HTTP health, the core
-   *      manager's own poll - never a sleep);
-   * and each failure is a human pt-BR message thrown to the CTA plus a
-   * `conversar-blocked` diagnostic event carrying only safe metadata (a
-   * missing-file COUNT, never filenames or audio contents).
+   * Phase 7.4 + 7.5 voice gate (items B/E + Part 6/7/8/9): when the
+   * preferred voice is `custom-local-voice`, prove the whole slice - in the
+   * order the facts make cheap - before the stage is ever asked to start:
+   *   1. the selected profile exists in the canonical library (+ its files);
+   *   2. a marker-proven install exists (any trusted candidate);
+   *   3. the managed voice copy is PUBLISHED into the voices folder of that
+   *      same install (fs-only step - so it happens before any start, and
+   *      the voices folder derives FROM the proven install when none was
+   *      configured, closing the "sync wrote to the wrong server" split);
+   *   4. the engine config says the custom model is actually usable
+   *      (engine_loaded=xtts + complete weights - read-back, never a guess);
+   *   5. the runtime starts and reaches real health (the manager's poll);
+   *   6. the voice the request will name is CONFIRMED visible via
+   *      `GET /api/voices` before the stage enters speech.
+   * Each failure is a human pt-BR message thrown to the CTA plus a
+   * `conversar-blocked` diagnostic event carrying only safe metadata
+   * (reason codes, counts, the managed FILENAME - never text, audio or
+   * source paths).
    *
    * A non-custom provider starts NOTHING: AllTalk stays at rest (item D).
    */
@@ -338,8 +360,6 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
     }
     const missing = await findMissingFiles(voices, profile)
     if (missing.length > 0) {
-      // Safe diagnostic: the count is metadata; filenames are the user's
-      // private audio and never enter an event/log.
       emit('lia-app.conversar-blocked', `reason=voice-profile-files-missing count=${missing.length}`)
       throw new Error('Não encontrei a voz selecionada. Importe-a novamente nas configurações de Voz da Lia.')
     }
@@ -348,6 +368,36 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
     if (!(await runtime.isInstalled())) {
       emit('lia-app.conversar-blocked', 'reason=voice-runtime-not-installed')
       throw new Error('O sistema de voz precisa ser instalado. Abra as configurações da Lia para instalar.')
+    }
+
+    const alltalkConfig = snapshot?.voice?.runtime?.alltalk
+    const resolution = await resolveInstallDir(alltalkConfig?.installDir)
+    const effectiveInstallDir = resolution.candidate?.dir ?? ''
+    // Part 4(B/D): the voices folder the SERVER reads derives from the
+    // proven install. A configured voicesDir kept as the override; an
+    // absent one follows the install - never a second, divergent root.
+    const voicesDir = alltalkConfig?.voicesDir?.trim() || resolveAllTalkVoicesDirForInstallDir(effectiveInstallDir)
+
+    // Prep is a pure FILESYSTEM step: publish the canonical reference audio
+    // as the deterministic managed copy BEFORE the runtime starts, so no
+    // engine restart cycle is ever spent discovering a missing voice later.
+    const sync = await voicesSyncService(voicesDir).ensureProfileAvailableToAllTalk(profile.id)
+    if (!sync.ok) {
+      emit('lia-app.conversar-blocked', `reason=voice-sync-failed code=${sync.error}`)
+      throw new Error('Não foi possível preparar a voz da Lia. Tente novamente ou veja Diagnósticos.')
+    }
+    emit('lia-app.voice-synced', `voice=${sync.filename} copied=${sync.copied}`)
+
+    // Engine truth is read back from config files, never assumed: a runtime
+    // that boots Piper answers every XTTS request with a 500.
+    if (effectiveInstallDir) {
+      const engine = await (deps.engineStatusImpl?.(effectiveInstallDir)
+        ?? readCustomVoiceEngineStatus(fsEngineConfigDeps(), effectiveInstallDir))
+      if (!engine.ready) {
+        emit('lia-app.conversar-blocked', `reason=voice-engine-not-ready engine=${engine.engine ?? 'unknown'} modelLoaded=${engine.modelComplete} firstRunPending=${engine.firstRunPending}`)
+        throw new Error('O sistema de voz não conseguiu carregar o modelo. Veja Diagnósticos para detalhes.')
+      }
+      emit('lia-app.voice-engine-ready', `engine=${engine.engine ?? 'unknown'} modelLoaded=${engine.modelComplete}`)
     }
 
     let state: RuntimeStateSnapshot
@@ -362,7 +412,62 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
       emit('lia-app.conversar-blocked', `reason=voice-runtime-readiness-timeout phase=${state.phase}`)
       throw new Error('O sistema de voz não ficou pronto a tempo. Tente novamente ou veja Diagnósticos.')
     }
+
+    // The last proof is on the API itself: the filename the synthesis
+    // request will name must be visible to THIS server (Part 8). A probe
+    // failure is inconclusive, never a silent pass.
+    const probe = await (deps.voiceVisibilityProbeImpl?.(runtimeConfigFor(alltalkConfig, effectiveInstallDir))
+      ?? createAllTalkClient(runtimeConfigFor(alltalkConfig, effectiveInstallDir)).status())
+    if (!probe.ok) {
+      emit('lia-app.conversar-blocked', `reason=voice-probe-inconclusive state=${probe.state}`)
+      throw new Error('Não foi possível confirmar a voz selecionada. Veja Diagnósticos para detalhes.')
+    }
+    if (!probe.voices.includes(sync.filename)) {
+      emit('lia-app.conversar-blocked', `reason=voice-not-visible voice=${sync.filename} present=false knownVoices=${probe.voices.length}`)
+      throw new Error('Não foi possível carregar a voz selecionada.')
+    }
+    emit('lia-app.voice-visible', `voice=${sync.filename} present=true`)
     emit('lia-app.voice-runtime-ready', `phase=${state.phase} source=conversar`)
+  }
+
+  /** The shared voices sync service for one resolved folder. */
+  function voicesSyncService(voicesDir: string) {
+    return createAllTalkSyncService({ store: voices, voicesDir })
+  }
+
+  /** Real fs deps for the engine read-back (tests ride the real tmp disk). */
+  function fsEngineConfigDeps() {
+    return {
+      listFiles: async (dir: string) => {
+        try {
+          return await readdir(dir)
+        }
+        catch {
+          return undefined
+        }
+      },
+      readFile: async (path: string) => {
+        try {
+          return await readFile(path, 'utf8')
+        }
+        catch {
+          return undefined
+        }
+      },
+      writeFile: async (path: string, content: string) => {
+        await writeFile(path, content)
+      },
+    }
+  }
+
+  /** Doc values merged with the proven install (probe + client boundary). */
+  function runtimeConfigFor(alltalkConfig: LiaProductAllTalkRuntime | undefined, effectiveInstallDir: string): RuntimeManagerConfig {
+    return {
+      baseUrl: alltalkConfig?.baseUrl?.trim() || DEFAULT_ALLTALK_BASE_URL,
+      timeoutMs: alltalkConfig?.timeoutMs && alltalkConfig.timeoutMs > 0 ? alltalkConfig.timeoutMs : DEFAULT_ALLTALK_TIMEOUT_MS,
+      ...(alltalkConfig?.voicesDir?.trim() ? { voicesDir: alltalkConfig.voicesDir.trim() } : {}),
+      ...(effectiveInstallDir ? { installDir: effectiveInstallDir } : {}),
+    }
   }
 
   function buildManager(runtimeConfig: RuntimeManagerConfig): ReturnType<typeof createRuntimeManager> {

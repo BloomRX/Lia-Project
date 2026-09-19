@@ -208,7 +208,6 @@ function asTtsTarget(value: unknown): LiaProductTtsTarget | undefined {
   return { ...target, voiceId: record ? asString(record.voiceId) : undefined }
 }
 
-
 /* --------------------------------------------------------------------------
  * Writing: the controlled merge for the launcher's editable configuration
  * (Phase 7.1, item 5).

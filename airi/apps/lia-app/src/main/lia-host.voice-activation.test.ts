@@ -8,7 +8,7 @@
  * model of it.
  */
 import { Buffer } from 'node:buffer'
-import { mkdtemp, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdtemp, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -21,21 +21,49 @@ import { fixtureEnv, identityCipher, makeLiaHome } from './test-helpers'
 interface EventsList { detail?: string, event: string }
 
 /**
+ * A syntactically real profile id (the QA log's own UUID) - managed voice
+ * filenames are only minted for true UUIDs, so the fixtures must use one.
+ */
+const PROFILE_UUID = '80202d55-24e8-4edf-a665-fa8236af2c5e'
+
+/**
  * A host with the two children faked and everything else real (config,
  * vault, voice library, resolution).
  */
+/**
+ * The Part-8 probe, fed from the REAL voices folder of the fixture so the
+ * visibility check reads exactly what sync wrote - a faithful `/api/voices`,
+ * not a list hand-fitted to assertions. Divergent tests override it.
+ */
+async function filesystemVoiceProbe(config: { installDir?: string, voicesDir?: string }): Promise<LiaVoiceVisibilityProbeResult> {
+  try {
+    const dir = config.voicesDir?.trim() || join(config.installDir ?? '', 'voices')
+    const files = await readdir(dir)
+    return { ok: true as const, state: 'connected' as const, voices: files.filter(file => !file.startsWith('.')) }
+  }
+  catch {
+    return { error: 'voices listing failed', ok: false as const, state: 'error' as const }
+  }
+}
+
+type LiaVoiceVisibilityProbeResult
+  = | { ok: true, state: 'connected', voices: string[] }
+    | { error: string, ok: false, state: 'error' }
+
 async function makeVoiceHost(options: {
   fixture?: Parameters<typeof makeLiaHome>[0]
   runtimeStart?: () => Promise<{ phase: string }>
   runtimeInstalled?: boolean
+  voiceVisibilityProbeImpl?: (config: { installDir?: string, voicesDir?: string }) => Promise<LiaVoiceVisibilityProbeResult>
 } = {}) {
-  const home = await makeLiaHome(options.fixture)
+  const home = await makeLiaHome({ firstVoiceId: PROFILE_UUID, ...options.fixture })
   const events: EventsList[] = []
   const order: string[] = []
   const host = createLiaHost({
     cipher: identityCipher,
     env: fixtureEnv(home),
     onEvent: (event, detail) => events.push({ detail, event }),
+    voiceVisibilityProbeImpl: options.voiceVisibilityProbeImpl ?? (async config => await filesystemVoiceProbe(config)),
     runtimeManagerFactory: () => ({
       hasManagedRuntime: () => true,
       isInstalled: async () => options.runtimeInstalled ?? true,
@@ -194,6 +222,54 @@ describe('phase 7.4 K boundary facts', () => {
     const runtimeRoot = resolveAllTalkRuntimeDir({ userDataDir: home.userData })
     expect(host.paths.voicesRoot).not.toBe(runtimeRoot)
     expect(host.paths.voicesRoot.startsWith(runtimeRoot)).toBe(false)
+  })
+})
+
+describe('phase 7.5 Parts 6/7/8/9 - conversar prepares, proves, then starts', () => {
+  it('publishes the managed voice INTO the install voices folder before the runtime starts (F-order, D-copy)', async () => {
+    const { home, host, order } = await makeVoiceHost({
+      fixture: { customVoice: true },
+      runtimeStart: async () => {
+        // At START time, the copy must already exist in THIS install's folder.
+        const voices = await readdir(join(home.installDir, 'voices'))
+        expect(voices).toContain(`lia-${PROFILE_UUID}.wav`)
+        return { phase: 'ready' as const }
+      },
+    })
+    const state = await host.conversar()
+    expect(state.phase).toBe('running')
+    expect(order).toEqual(['runtime-start', 'stage-start'])
+  })
+
+  it('a healthy runtime with the voice NOT visible blocks with the human line and never starts the stage (I)', async () => {
+    const { events, host, order } = await makeVoiceHost({
+      fixture: { customVoice: true },
+      // The server answers /api/voices with everything EXCEPT our file
+      // (e.g. a second server on the port watching another folder).
+      voiceVisibilityProbeImpl: async () => ({ ok: true as const, state: 'connected' as const, voices: ['other.wav'] }),
+    })
+    await expect(host.conversar()).rejects.toThrow('Não foi possível carregar a voz selecionada.')
+    expect(events.some(e => e.event === 'lia-app.conversar-blocked' && e.detail === `reason=voice-not-visible voice=lia-${PROFILE_UUID}.wav present=false knownVoices=1`)).toBe(true)
+    expect(order).toEqual(['runtime-start'])
+  })
+
+  it('an engine that never loaded XTTS blocks with the model sentence before any start (Part 9)', async () => {
+    const { home, host, events, order } = await makeVoiceHost({ fixture: { customVoice: true } })
+    // Corrupt the engine the read-back expects: Piper answers every XTTS
+    // request with a 500, which is exactly the QA symptom.
+    await writeFile(join(home.installDir, 'system', 'tts_engines', 'tts_engines.json'), '{"engine_loaded": "piper"}\n')
+    await expect(host.conversar()).rejects.toThrow('O sistema de voz não conseguiu carregar o modelo.')
+    expect(events.some(e => e.event === 'lia-app.conversar-blocked' && e.detail === 'reason=voice-engine-not-ready engine=piper modelLoaded=true firstRunPending=false')).toBe(true)
+    // The engine gate comes BEFORE start: the runtime never booted.
+    expect(order).toEqual([])
+  })
+
+  it('emits the safe diagnostics line carrying ONLY the managed filename and counts - no content', async () => {
+    const { events, host } = await makeVoiceHost({ fixture: { customVoice: true } })
+    await host.conversar()
+    expect(events.some(e => e.event === 'lia-app.voice-synced' && e.detail === `voice=lia-${PROFILE_UUID}.wav copied=true`)).toBe(true)
+    expect(events.some(e => e.event === 'lia-app.voice-engine-ready' && e.detail === 'engine=xtts modelLoaded=true')).toBe(true)
+    expect(events.some(e => e.event === 'lia-app.voice-visible' && e.detail === `voice=lia-${PROFILE_UUID}.wav present=true`)).toBe(true)
   })
 })
 

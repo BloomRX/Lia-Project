@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -21,7 +21,7 @@ async function freshConfig(contents?: Record<string, unknown>): Promise<string> 
 }
 
 describe('updateLiaProductConfig', () => {
-  it('G. an IA change persists beside everything that was already there', async () => {
+  it('g. an IA change persists beside everything that was already there', async () => {
     const file = await freshConfig({
       persona: { activeCardId: 'lia-default' },
       provider: { chat: { fallbackEnabled: true, onboarded: false, preferred: { providerId: 'old-one' } } },
@@ -44,7 +44,7 @@ describe('updateLiaProductConfig', () => {
     expect(read.value.persona?.activeCardId).toBe('lia-default')
   })
 
-  it('H. a personality change persists', async () => {
+  it('h. a personality change persists', async () => {
     const file = await freshConfig({ persona: { activeCardId: 'lia-default' }, schemaVersion: 1 })
     await updateLiaProductConfig(file, { persona: { activeCardId: 'lia-adventurous' } })
     const read = await readLiaProductConfig(file)
@@ -53,7 +53,7 @@ describe('updateLiaProductConfig', () => {
     expect(read.value.persona?.activeCardId).toBe('lia-adventurous')
   })
 
-  it('I. a voice selection persists and replaces the previous one ATOMICALLY', async () => {
+  it('i. a voice selection persists and replaces the previous one ATOMICALLY', async () => {
     const file = await freshConfig({
       schemaVersion: 1,
       voice: { tts: { preferred: { providerId: 'cloud-voice', voiceId: 'nova' } } },
@@ -67,7 +67,7 @@ describe('updateLiaProductConfig', () => {
     expect(read.value.voice?.tts?.preferred).toEqual({ modelId: undefined, providerId: 'custom-local-voice', voiceId: 'profile-2' })
   })
 
-  it('J. an appearance (language) change persists', async () => {
+  it('j. an appearance (language) change persists', async () => {
     const file = await freshConfig({ preferences: { language: 'en' }, schemaVersion: 1 })
     await updateLiaProductConfig(file, { preferences: { language: 'pt-BR' } })
     const read = await readLiaProductConfig(file)
@@ -92,7 +92,7 @@ describe('updateLiaProductConfig', () => {
     expect(raw.schemaVersion).toBe(1)
   })
 
-  it('L-adjacent: a secret-shaped field anywhere in the patch VETOES the write', async () => {
+  it('l-adjacent: a secret-shaped field anywhere in the patch VETOES the write', async () => {
     const file = await freshConfig({ schemaVersion: 1 })
     const result = await updateLiaProductConfig(file, {
       provider: { chat: { preferred: { providerId: 'openrouter' } } },

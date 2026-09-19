@@ -1,7 +1,7 @@
 import type { AllTalkRuntimeConfig } from './alltalk-client'
 import type { LiaVoiceProfileStore } from './voice-profiles'
 
-import { createAllTalkClient, toAllTalkLanguage } from './alltalk-client'
+import { AllTalkGenerationError, createAllTalkClient, toAllTalkLanguage } from './alltalk-client'
 import { createAllTalkSyncService } from './alltalk-voices-sync'
 
 /**
@@ -35,6 +35,19 @@ export interface SynthesizeProfileParams {
   fetchImpl?: typeof fetch
 }
 
+/**
+ * Phase 7.5, Part 10: one human, pt-BR sentence per failure CATEGORY. The
+ * technical `[category=<key>]` marker stays appended so the renderer's
+ * fallback policy can still classify terminal setup failures through the
+ * IPC error serialization - the marker is metadata, not prose.
+ */
+export const ALLTALK_HUMAN_ERROR_MESSAGES: Record<string, string> = {
+  'voice-not-found': 'Não foi possível carregar a voz selecionada.',
+  'engine-unavailable': 'O sistema de voz não conseguiu carregar o modelo.',
+  'generation-failed': 'Não foi possível gerar a fala da Lia.',
+  'unknown': 'Ocorreu um problema no sistema de voz.',
+}
+
 export async function synthesizeProfileWithAllTalk(params: SynthesizeProfileParams): Promise<ArrayBuffer> {
   const { profileId, text, language, runtime, store } = params
 
@@ -44,10 +57,58 @@ export async function synthesizeProfileWithAllTalk(params: SynthesizeProfilePara
   if (!published.ok)
     throw new Error(published.message)
 
-  return createAllTalkClient(runtime, params.fetchImpl).synthesize({
-    text,
-    characterVoiceGen: published.filename,
-    // The provider passes a BCP-47 tag through; AllTalk only accepts `pt`.
-    language: toAllTalkLanguage(language),
+  // Phase 7.5, Part 2: exactly ONE request log line, metadata only. The full
+  // text of what was said and any audio bytes never enter a log.
+  logRequest({
+    event: 'lia.voice.synthesize.request',
+    language: language ?? 'auto',
+    profileId,
+    provider: 'custom-local-voice',
+    requestVoiceName: published.filename,
+    textLength: text.length,
   })
+
+  try {
+    const bytes = await createAllTalkClient(runtime, params.fetchImpl).synthesize({
+      text,
+      characterVoiceGen: published.filename,
+      // The provider passes a BCP-47 tag through; AllTalk only accepts `pt`.
+      language: toAllTalkLanguage(language),
+    })
+    logRequest({
+      bytes: bytes.byteLength,
+      event: 'lia.voice.synthesize.response',
+      profileId,
+      provider: 'custom-local-voice',
+    })
+    return bytes
+  }
+  catch (thrown) {
+    if (thrown instanceof AllTalkGenerationError) {
+      // The reason itself is NEVER swallowed: the full failure (status, body
+      // snippet) lands here, in the MAIN-process diagnostic log, while the
+      // renderer receives exactly one human sentence plus the category marker.
+      logRequest({
+        bodySnippet: thrown.bodySnippet ?? '',
+        category: thrown.category,
+        endpoint: thrown.endpoint,
+        event: 'lia.voice.synthesize.response',
+        profileId,
+        provider: 'custom-local-voice',
+        status: thrown.status,
+      }, true)
+      const human = ALLTALK_HUMAN_ERROR_MESSAGES[thrown.category] ?? ALLTALK_HUMAN_ERROR_MESSAGES.unknown
+      throw new Error(`${human} [category=${thrown.category}]`)
+    }
+    throw thrown
+  }
+}
+
+/** Structured main-side log: key=value pairs, nothing free-form. */
+function logRequest(meta: Record<string, string | number>, isError = false): void {
+  const line = Object.entries(meta).map(([key, value]) => `${key}=${String(value)}`).join(' ')
+  if (isError)
+    console.error(line)
+  else
+    console.info(line)
 }

@@ -32,6 +32,12 @@ export interface LiaHomeFixture {
 export async function makeLiaHome(options: {
   customVoice?: boolean
   /**
+   * The canonical profile id for the FIRST fixture voice, when a test needs
+   * a syntactically real UUID (Phase 7.5: managed voice filenames require
+   * one). Defaults keep `profile-N` so pre-7.5 fixture users don't churn.
+   */
+  firstVoiceId?: string
+  /**
    * Phase 7.4 test E: write the registry but skip the profile FILES, so
    * `findMissingFiles` reports the imported voice as incomplete.
    */
@@ -57,7 +63,7 @@ export async function makeLiaHome(options: {
     voice: options.customVoice
       ? {
           runtime: { alltalk: { baseUrl: 'http://127.0.0.1:7851', installDir } },
-          tts: { preferred: { providerId: 'custom-local-voice', voiceId: 'profile-1' } },
+          tts: { preferred: { providerId: 'custom-local-voice', voiceId: options.firstVoiceId ?? 'profile-1' } },
         }
       : {
           tts: { preferred: { providerId: 'cloud-voice-provider', voiceId: 'nova' } },
@@ -72,7 +78,7 @@ export async function makeLiaHome(options: {
     createdAt: '2026-09-01T12:00:00.000Z',
     engine: 'alltalk',
     files: [{ bytes: 1234, filename: 'model.wav', role: 'referenceAudio' }],
-    id: `profile-${i + 1}`,
+    id: i === 0 ? options.firstVoiceId ?? 'profile-1' : `profile-${i + 1}`,
     name: `Voz ${i + 1}`,
   }))
   await writeFile(join(voicesRoot, 'index.json'), `${JSON.stringify({ profiles }, null, 2)}\n`)
@@ -87,13 +93,23 @@ export async function makeLiaHome(options: {
     }
   }
 
-  // The managed runtime fixture: every marker the runtime manager requires.
+  // The managed runtime fixture: every marker the runtime manager requires,
+  // PLUS a XTTS-ready engine config (Phase 7.5 Part 9: conversar gates on
+  // the read-back, so the custom-voice fixtures need a complete engine).
   await mkdir(join(installDir, 'system'), { recursive: true })
   await mkdir(join(installDir, 'voices'), { recursive: true })
   await mkdir(join(installDir, 'alltalk_environment', 'conda'), { recursive: true })
   await mkdir(join(installDir, 'alltalk_environment', 'env'), { recursive: true })
   await writeFile(join(installDir, 'script.py'), '# fixture\n')
   await writeFile(join(installDir, 'start_alltalk.bat'), '@echo off\n')
+  await writeFile(join(installDir, 'confignew.json'), '{"firstrun_model": false}\n')
+  await mkdir(join(installDir, 'system', 'tts_engines'), { recursive: true })
+  await writeFile(join(installDir, 'system', 'tts_engines', 'tts_engines.json'), '{"engine_loaded": "xtts"}\n')
+  const modelDir = join(installDir, 'models', 'xtts', 'xttsv2_2.0.3')
+  await mkdir(modelDir, { recursive: true })
+  for (const file of ['LICENSE.txt', 'README.md', 'config.json', 'dvae.pth', 'mel_stats.pth', 'model.pth', 'speakers_xtts.pth', 'vocab.json']) {
+    await writeFile(join(modelDir, file), file)
+  }
 
   return { appData, installDir, userData, voicesRoot }
 }

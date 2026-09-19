@@ -13,6 +13,7 @@
     "./alltalk/port-diagnostics": "./dist/alltalk/port-diagnostics.mjs",
     "./alltalk/port-listeners": "./dist/alltalk/port-listeners.mjs",
     "./alltalk/runtime": "./dist/alltalk/runtime.mjs",
+    "./alltalk/voices-sync": "./dist/alltalk/voices-sync.mjs",
     "./alltalk/shutdown": "./dist/alltalk/shutdown.mjs",
     "./bootstrap/archive-path": "./dist/bootstrap/archive-path.mjs",
     "./bootstrap/bootstrap": "./dist/bootstrap/bootstrap.mjs",

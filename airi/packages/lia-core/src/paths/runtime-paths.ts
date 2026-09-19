@@ -69,6 +69,20 @@ export function resolveAllTalkRuntimeDir(deps: LiaRuntimePathsDeps = {}): string
   return join(resolveLiaRuntimeRoot(deps), RUNTIME_APP_SUBDIR)
 }
 
+/**
+ * The AllTalk VOICES directory - `<installDir>/voices`.
+ *
+ * Phase 7.5, Part 4(B/D): this is where AllTalk resolves
+ * `character_voice_gen` filenames. Deriving it from the marker-proven
+ * install dir - rather than requiring a separately configured `voicesDir` -
+ * is the contract that keeps the managed voice copy and the running server
+ * pointed at the SAME folder (the Phase 7.5 QA 500 came from exactly that
+ * split-brain).
+ */
+export function resolveAllTalkVoicesDirForInstallDir(installDir: string): string {
+  return join(installDir, 'voices')
+}
+
 export type LiaInstallDirSource = 'canonical-runtime' | 'configured-product-document'
 
 export interface LiaInstallDirCandidate {

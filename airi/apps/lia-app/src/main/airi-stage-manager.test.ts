@@ -44,8 +44,8 @@ async function makeStageWorkspace(): Promise<string> {
   return stageWorkspace
 }
 
-describe('Phase 7.2: ownership retained, spawn without shell (tests C/D/G)', () => {
-  it('G: the Windows spawn path carries NO shell option - the DEP0190 route is eliminated', async () => {
+describe('phase 7.2: ownership retained, spawn without shell (tests C/D/G)', () => {
+  it('g: the Windows spawn path carries NO shell option - the DEP0190 route is eliminated', async () => {
     const root = await makeStageWorkspace()
     const child = fakeChild()
     const spawnImpl = vi.fn((..._args: unknown[]) => child as never)
@@ -65,7 +65,7 @@ describe('Phase 7.2: ownership retained, spawn without shell (tests C/D/G)', () 
     }
   })
 
-  it('C: a session spawn retains truthful ownership while the dev-server lives', async () => {
+  it('c: a session spawn retains truthful ownership while the dev-server lives', async () => {
     const root = await makeStageWorkspace()
     const child = fakeChild({ pid: 4242 })
     const manager = new AiriStageManager({
@@ -84,7 +84,7 @@ describe('Phase 7.2: ownership retained, spawn without shell (tests C/D/G)', () 
     expect(manager.command()).toContain('electron-vite')
   })
 
-  it('D: ownership is a live-process fact, not a wrapper fact - exit after running flips to stopped, stop() then stops attempting', async () => {
+  it('d: ownership is a live-process fact, not a wrapper fact - exit after running flips to stopped, stop() then stops attempting', async () => {
     const root = await makeStageWorkspace()
     const child = fakeChild({ pid: 4243 })
     const manager = new AiriStageManager({
@@ -106,7 +106,7 @@ describe('Phase 7.2: ownership retained, spawn without shell (tests C/D/G)', () 
     expect(child.kill).not.toHaveBeenCalled()
   })
 
-  it('E: shutdown after a session start ALWAYS attempts the stop - never "nothing this session started" (win32 taskkill path)', async () => {
+  it('e: shutdown after a session start ALWAYS attempts the stop - never "nothing this session started" (win32 taskkill path)', async () => {
     const root = await makeStageWorkspace()
     const child = fakeChild({ pid: 7890 })
     const execFileImpl = vi.fn((_cmd: string, _args: string[], _opts: unknown, cb: () => void) => {

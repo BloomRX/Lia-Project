@@ -56,6 +56,29 @@ export interface SpeechTtsFallbackPolicy {
 }
 
 /**
+ * Phase 7.5, Part 11: categories that are SETUP failures - deterministic
+ * states no amount of retrying, on this provider or another, can fix
+ * ("your reference voice is not on the server", "the engine never loaded a
+ * model"). For them the ONLY correct behavior of a voice-target switcher is
+ * to stop immediately and let the turn go quiet.
+ *
+ * The category travels as a `[category=<key>]` marker appended to the human
+ * message on the MAIN-process boundary: it crosses the IPC Error
+ * serialization intact (Error.message survives; custom fields do not), so
+ * both surviving layers can rely on it without typing.
+ */
+export type SpeechTtsTerminalCategory = 'voice-not-found' | 'engine-unavailable'
+
+export function speechTtsTerminalCategory(error: unknown): SpeechTtsTerminalCategory | undefined {
+  const text = errorMessageFrom(error) ?? ''
+  const match = text.match(/\[category=([a-z][a-z-]*[a-z])\]/)
+  const category = match?.[1]
+  return category === 'voice-not-found' || category === 'engine-unavailable'
+    ? category
+    : undefined
+}
+
+/**
  * Hard ceiling on attempts per segment (preferred + fallbacks). A safety net
  * only — a well-formed policy exhausts its own chain first.
  */

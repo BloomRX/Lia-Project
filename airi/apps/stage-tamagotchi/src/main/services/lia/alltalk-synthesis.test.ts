@@ -224,7 +224,7 @@ describe('synthesizeProfileWithAllTalk', () => {
       text: 'Olá!',
       runtime: runtime(),
       store: store(),
-    })).rejects.toThrow(/generate-failure/)
+    })).rejects.toThrow(/Não foi possível gerar a fala da Lia\. \[category=generation-failed\]/)
   })
 
   it('throws when no voicesDir is configured, without calling the server', async () => {

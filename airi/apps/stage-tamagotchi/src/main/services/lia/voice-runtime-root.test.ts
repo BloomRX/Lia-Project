@@ -322,7 +322,8 @@ describe('resolveLocalAppDataDir - the supported %LOCALAPPDATA% source', () => {
     expect(() => resolveLocalAppDataDir('win32', () => undefined))
       .toThrow(/USERPROFILE is not present/)
     expect(() => resolveLocalAppDataDir('win32', () => undefined))
-      .not.toThrow(/reinstall/)
+      .not
+      .toThrow(/reinstall/)
     expect(() => resolveLocalAppDataDir('win32', () => ''))
       .toThrow(/Could not resolve Windows LocalAppData/)
   })

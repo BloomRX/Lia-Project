@@ -94,6 +94,81 @@ export interface AllTalkGenerateParams {
   repetitionPenalty?: number
 }
 
+/**
+ * Phase 7.5, item 3: a failed `/api/tts-generate` keeps its OWN diagnostic
+ * category instead of collapsing into "failed (500)". The category is what
+ * downstream retry policies read; the body snippet is what diagnostics read.
+ */
+export type AllTalkFailureCategory
+  = | 'voice-not-found'
+    | 'engine-unavailable'
+    | 'generation-failed'
+    | 'unknown'
+
+/** Safe body cap: long enough for the real reason, never a full traceback. */
+const FAILURE_BODY_SNIPPET_MAX = 600
+
+/**
+ * Maps an HTTP failure to its category from facts already on the wire.
+ *
+ * - `voice-not-found`: the server could not resolve the reference file
+ *   (`character_voice_gen`). AllTalk answers this as a 500 whose body names
+ *   the missing voice.
+ * - `engine-unavailable`: the TTS engine/model never came up (server boots
+ *   but every generation dies at engine load).
+ * Determination lives on the BODY, not the verb: AllTalk returns 500 for
+ * both, with the reason in the payload.
+ */
+export function categorizeAllTalkFailure(status: number, bodyText: string): AllTalkFailureCategory {
+  const body = bodyText.toLowerCase()
+  const namesVoiceFile = /voice/.test(body)
+    && /not\s*found|no such|missing|does not exist|couldn'?t find|invalid/i.test(body)
+  if (namesVoiceFile)
+    return 'voice-not-found'
+  const engineUnready = /engine|model/.test(body)
+    && /not\s*loaded|unavailable|missing|failed to load|not initialized|no such engine/i.test(body)
+  if (engineUnready)
+    return 'engine-unavailable'
+  // AllTalk answers a real synthesis failure on a 200 with `generate-failure`
+  // (and a 500 for transport-level ones); both are generation faults.
+  if (/generate-failure|generation.*(?:failed|error)|failed to generate/i.test(body))
+    return 'generation-failed'
+  return status >= 500 ? 'generation-failed' : 'unknown'
+}
+
+/** Terminal categories are SETUP failures: retrying them cannot help. */
+export function isTerminalVoiceSetupCategory(category: AllTalkFailureCategory): boolean {
+  return category === 'voice-not-found' || category === 'engine-unavailable'
+}
+
+export interface AllTalkGenerationFailure {
+  /** Categorized reason - what a retry/fallback policy should branch on. */
+  category: AllTalkFailureCategory
+  /** The endpoint the failure came from (path only, never a full URL with host). */
+  endpoint: string
+  /** Bounded, human-readable body excerpt - the backend's actual reason. */
+  bodySnippet?: string
+  status: number
+}
+
+export class AllTalkGenerationError extends Error implements AllTalkGenerationFailure {
+  readonly bodySnippet?: string
+  readonly category: AllTalkFailureCategory
+  readonly endpoint: string
+  readonly status: number
+
+  constructor(failure: AllTalkGenerationFailure) {
+    const detail = failure.bodySnippet ? `: ${failure.bodySnippet}` : ''
+    super(`AllTalk generation failed (${failure.status}) [category=${failure.category}]${detail}`)
+    this.name = 'AllTalkGenerationError'
+    this.category = failure.category
+    this.endpoint = failure.endpoint
+    this.status = failure.status
+    if (failure.bodySnippet)
+      this.bodySnippet = failure.bodySnippet
+  }
+}
+
 export interface AllTalkGenerateResponse {
   status: string
   output_file_path?: string
@@ -190,12 +265,33 @@ export function createAllTalkClient(
         body: form.toString(),
       })
 
-      if (!response.ok)
-        throw new Error(`AllTalk generation failed (${response.status}).`)
+      if (!response.ok) {
+        // Phase 7.5 item 3: never swallow the backend's actual reason. The
+        // snippet is bounded; the server-side (main process) log keeps the
+        // full body.
+        let snippet: string | undefined
+        try {
+          const raw = await response.text()
+          snippet = raw.replace(/\s+/g, ' ').trim().slice(0, FAILURE_BODY_SNIPPET_MAX) || undefined
+        }
+        catch { /* an unreadable body leaves the category to the status code */ }
+        throw new AllTalkGenerationError({
+          bodySnippet: snippet,
+          category: categorizeAllTalkFailure(response.status, snippet ?? ''),
+          endpoint: '/api/tts-generate',
+          status: response.status,
+        })
+      }
 
       const body = await response.json() as AllTalkGenerateResponse
-      if (body.status !== 'generate-success')
-        throw new Error(`AllTalk reported "${body.status ?? 'unknown'}" for this generation.`)
+      if (body.status !== 'generate-success') {
+        throw new AllTalkGenerationError({
+          bodySnippet: typeof body.status === 'string' ? body.status.slice(0, FAILURE_BODY_SNIPPET_MAX) : undefined,
+          category: categorizeAllTalkFailure(200, String(body.status ?? '')),
+          endpoint: '/api/tts-generate',
+          status: 200,
+        })
+      }
 
       const audioUrl = body.output_file_url
       if (!audioUrl)

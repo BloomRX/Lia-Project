@@ -10,6 +10,7 @@ export default defineConfig({
     './src/alltalk/port-diagnostics.ts',
     './src/alltalk/port-listeners.ts',
     './src/alltalk/runtime.ts',
+    './src/alltalk/voices-sync.ts',
     './src/alltalk/shutdown.ts',
     './src/bootstrap/archive-path.ts',
     './src/bootstrap/bootstrap.ts',
