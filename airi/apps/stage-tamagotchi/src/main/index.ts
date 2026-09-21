@@ -13,6 +13,9 @@ import messages from '@proj-airi/i18n/locales'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { Format, LogLevel, setGlobalFormat, setGlobalHookPostLog, setGlobalLogLevel, useLogg } from '@guiiai/logg'
 import { createContext } from '@moeru/eventa/adapters/electron/main'
+import { resolveVoiceRuntimeHome } from '@lia/core/bootstrap/runtime-root'
+import { readVoiceRuntimeSelection } from '@lia/core/voice/config'
+import { createKokoroVoiceEngine } from '@lia/core/voice/engines/kokoro'
 import { hasSelectedScreenCaptureSource, initScreenCaptureForMain } from '@proj-airi/electron-screen-capture/main'
 import { app, ipcMain, session } from 'electron'
 import { noop } from 'es-toolkit'
@@ -398,12 +401,25 @@ app.whenReady().then(async () => {
       // silently dropped and the panel never changes until the run returns.
       const { context } = createContext(ipcMain, deps.mainWindow)
 
+      // Phase 7.9C: the engines this build ships, constructed at the HOST
+      // seam. The bridge/renderer/service never name an engine; the engine
+      // owns its runtime tree under the engine-neutral home (with the
+      // optional product-config override) and starts lazily on first use.
+      const userDataDir = app.getPath('userData')
+      const engines = [
+        createKokoroVoiceEngine({
+          installDirOverride: () => readVoiceRuntimeSelection(deps.liaProductConfig.get()?.voice).installDir,
+          runtimeHome: () => resolveVoiceRuntimeHome({ userDataDir }),
+        }),
+      ]
+
       // Capability invalidation is circular-by-nature: the voice bridge
       // fires the change, the capability probe recomputes. A late-bound ref
       // keeps the registration order honest.
       let invalidateCapabilities: (() => void) | undefined
       const voiceBridge = registerLiaVoiceBridge({
         context,
+        engines,
         liaProductConfig: deps.liaProductConfig,
         onVoiceAvailabilityChanged: () => invalidateCapabilities?.(),
         store: deps.liaVoiceProfiles,

@@ -656,7 +656,10 @@ export type LiaVoiceStatus
 
 /** A synthesis request from the renderer. The profile id is never a path. */
 export interface LiaVoiceSynthesisRequest {
-  profileId: string
+  /** User-imported voice profile. Optional since Phase 7.9C: stock engines
+   * (Kokoro ships its own pt-BR voices) synthesize with their engine
+   * default when no profile is selected. */
+  profileId?: string
   text: string
   /** BCP-47 tag, e.g. `pt-BR`. */
   language?: string

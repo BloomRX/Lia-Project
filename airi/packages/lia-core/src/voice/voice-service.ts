@@ -68,12 +68,22 @@ export function createLiaVoiceService(deps: VoiceServiceDeps) {
   /**
    * The route for one request: cloning engines first (preferred id first),
    * then fallback engines - ONLY when the fallback toggle allows them.
+   *
+   * Phase 7.9C addendum (stock engines): the fallback toggle exists to
+   * prevent a SILENT SWITCH AWAY from a user-selected cloning engine
+   * (items 16/24). When this build registers no cloning engine at all,
+   * there is nothing to switch away from - a registered stock engine (the
+   * engine the build itself ships, e.g. Kokoro) answers on its own merits,
+   * and the toggle simply has nothing left to gate.
    */
   function route(): { engines: LiaVoiceEngine[], fallbackAllowed: boolean } {
     const ordered = enginesByPreference()
+    const anyCloning = deps.engines.some(engine => engine.capabilities().clonesVoice)
     return {
       engines: ordered.filter((engine, index) => {
         if (engine.capabilities().clonesVoice)
+          return true
+        if (!anyCloning)
           return true
         const fallback = deps.fallback()
         if (!fallback.enabled)
@@ -169,6 +179,11 @@ export function createLiaVoiceService(deps: VoiceServiceDeps) {
       const primary = ordered[0]
       const fallbackEngine = ordered.find(engine => !engine.capabilities().clonesVoice)
       const fallbackCfg = deps.fallback()
+      // Stock-only builds: with no cloning engine registered, the fallback
+      // toggle has nothing to gate, so the stock engine's health is probed
+      // for real (mirrors the route() rule above).
+      const anyCloning = deps.engines.some(engine => engine.capabilities().clonesVoice)
+      const fallbackGated = anyCloning && !fallbackCfg.enabled
 
       let available = false
       let primaryState: { id: string, ok: boolean, state: string, note?: string } | undefined
@@ -180,9 +195,9 @@ export function createLiaVoiceService(deps: VoiceServiceDeps) {
         available = available || health.ok
       }
       if (fallbackEngine) {
-        const health = fallbackCfg.enabled
-          ? await fallbackEngine.health()
-          : { note: 'fallback disabled by configuration', ok: false, state: 'unavailable' as const }
+        const health = fallbackGated
+          ? { note: 'fallback disabled by configuration', ok: false, state: 'unavailable' as const }
+          : await fallbackEngine.health()
         fallbackState = { enabled: fallbackCfg.enabled, id: fallbackEngine.id, ok: health.ok, ...(health.note ? { note: health.note } : {}), state: health.state }
         available = available || health.ok
       }

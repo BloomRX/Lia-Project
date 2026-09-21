@@ -1,4 +1,5 @@
 import type { MainContext } from '@moeru/eventa/adapters/electron/main'
+import type { LiaVoiceEngine } from '@lia/core/voice/engines/types'
 import type {
   LiaVoiceEngineConfig,
   LiaVoiceStatus,
@@ -19,6 +20,7 @@ import {
   electronLiaVoiceSynthesize,
 } from '../../../shared/eventa'
 import { defaultLiaProductConfig } from '../../configs/lia-schema'
+import { onAppBeforeQuit } from '../../libs/bootkit/lifecycle'
 
 /**
  * The Lia Voice IPC bridge (Phase 7.8, items 1/2/16/17; engine-neutral
@@ -38,20 +40,31 @@ interface LiaVoiceServiceParams {
   liaProductConfig: { get: () => LiaProductConfig | undefined, update: (value: LiaProductConfig) => void }
   store: LiaVoiceProfileStore
   onVoiceAvailabilityChanged?: (available: boolean) => void
+  /**
+   * The engines this build registers at the host seam (Phase 7.9C: the
+   * Kokoro engine, constructed by the product main). The bridge itself
+   * stays engine-neutral: it only ever sees the LiaVoiceEngine contract.
+   */
+  engines?: LiaVoiceEngine[]
 }
 
 const capabilityCacheTtlMs = 5_000
 
 export function registerLiaVoiceBridge(params: LiaVoiceServiceParams) {
   const { context, liaProductConfig, store } = params
+  const engines = params.engines ?? []
 
   const service = createLiaVoiceService({
-    // Phase 7.8C: no engine registered yet. Modular engines plug in here.
-    engines: [],
+    engines,
     fallback: () => readVoiceFallbackConfig(liaProductConfig.get()?.voice),
     preferredEngineId: () => readVoiceEngineConfig(liaProductConfig.get()?.voice).preferred,
     log: record => console.info(Object.entries(record).map(([key, value]) => `${key}=${String(value)}`).join(' ')),
   })
+
+  // Engine lifecycle is engine-owned on the way in (lazy start via
+  // health/synthesize) and host-released on the way out: a quitting app
+  // never leaves a voice worker behind. Idempotent by engine contract.
+  onAppBeforeQuit(() => Promise.allSettled(engines.map(engine => engine.stop())).then(() => undefined))
 
   // Capability cache: state() hits health endpoints; the persona's
   // turn-boundary snapshot must never stall on a TCP timeout.
@@ -96,8 +109,18 @@ export function registerLiaVoiceBridge(params: LiaVoiceServiceParams) {
     electronLiaVoiceSynthesize,
     async (request: LiaVoiceSynthesisRequest): Promise<LiaVoiceSynthesisResult> => {
       const profileId = String(request?.profileId ?? '').trim()
-      if (!profileId)
-        throw new Error('No voice profile was selected.')
+      if (!profileId) {
+        // Stock engines (Kokoro first, Phase 7.9C) ship their voices with
+        // the engine: no user profile is needed and the engine default
+        // voice (pf_dora, pt-BR) answers. Cloning engines keep requiring a
+        // profile below; the reference-stripping in the Voice Service is
+        // the belt-and-braces guarantee no stock engine ever receives one.
+        const output = await service.synthesize({
+          language: String(request?.language ?? '').trim() || undefined,
+          text: String(request?.text ?? ''),
+        })
+        return { audio: output.audio, engine: output.engine }
+      }
 
       const profile = await store.get(profileId)
       if (!profile)

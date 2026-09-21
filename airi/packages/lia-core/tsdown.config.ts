@@ -6,6 +6,8 @@ export default defineConfig({
     './src/bootstrap/runtime-root.ts',
     './src/bridge/lia-config.ts',
     './src/voice/config.ts',
+    './src/voice/engines/kokoro/index.ts',
+    './src/voice/engines/registry.ts',
     './src/voice/engines/types.ts',
     './src/voice/voice-service.ts',
     './src/paths/product-paths.ts',

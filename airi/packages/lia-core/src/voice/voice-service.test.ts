@@ -179,3 +179,65 @@ describe('lia voice service', () => {
     expect(second).not.toHaveBeenCalled()
   })
 })
+
+describe('stock engines on builds without a cloning engine (Phase 7.9C)', () => {
+  it('the registered stock engine answers on its own - the fallback toggle has nothing to gate', async () => {
+    const service = createLiaVoiceService({
+      engines: [engine('kokoro')],
+      fallback: () => ({ enabled: false }),
+      log,
+      preferredEngineId: () => undefined,
+    })
+    const output = await service.synthesize({ text: 'Oi, tudo bem?' })
+    expect(output.engine).toBe('kokoro')
+
+    const state = await service.state()
+    expect(state.available).toBe(true)
+    expect(state.fallback?.ok).toBe(true)
+    // The toggle FACT is still reported verbatim; it just does not apply.
+    expect(state.fallback?.enabled).toBe(false)
+  })
+
+  it('reference stripping still protects a stock engine on stock-only builds', async () => {
+    const spy = engine('kokoro')
+    const received: unknown[] = []
+    spy.synthesize = (async (input: unknown) => {
+      received.push(input)
+      return { audio: new Uint8Array([9]).buffer, engine: 'kokoro' }
+    }) as never
+    const service = createLiaVoiceService({
+      engines: [spy],
+      fallback: () => ({ enabled: false }),
+      log,
+      preferredEngineId: () => undefined,
+    })
+    await service.synthesize({ referenceAudioPath: '/ref.wav', referenceText: 'ref', text: 'Oi' })
+    expect(received).toHaveLength(1)
+    expect((received[0] as { referenceAudioPath?: string }).referenceAudioPath).toBeUndefined()
+    expect((received[0] as { referenceText?: string }).referenceText).toBeUndefined()
+  })
+
+  it('with a cloning engine alongside, stock engines stay the gated tail (old rules unchanged)', async () => {
+    const down = new LiaVoiceEngineError('primary-a', 'engine-unavailable', 'down')
+    const gated = createLiaVoiceService({
+      engines: [engine('primary-a', { clones: true, fail: down }), engine('kokoro')],
+      fallback: () => ({ enabled: false }),
+      log,
+      preferredEngineId: () => 'primary-a',
+    })
+    // Primary down + fallback disallowed: the stock engine must NOT answer.
+    await expect(gated.synthesize({ referenceAudioPath: '/ref.wav', text: 'Oi' })).rejects.toThrow('down')
+    const state = await gated.state()
+    expect(state.available).toBe(false)
+    expect(state.fallback?.note).toBe('fallback disabled by configuration')
+
+    const allowed = createLiaVoiceService({
+      engines: [engine('primary-a', { clones: true, fail: down }), engine('kokoro')],
+      fallback: () => ({ enabled: true }),
+      log,
+      preferredEngineId: () => 'primary-a',
+    })
+    const output = await allowed.synthesize({ referenceAudioPath: '/ref.wav', text: 'Oi' })
+    expect(output.engine).toBe('kokoro')
+  })
+})

@@ -9,6 +9,8 @@
     "./bootstrap/runtime-root": "./dist/bootstrap/runtime-root.mjs",
     "./bridge/lia-config": "./dist/bridge/lia-config.mjs",
     "./voice/config": "./dist/voice/config.mjs",
+    "./voice/engines/kokoro": "./dist/voice/engines/kokoro/index.mjs",
+    "./voice/engines/registry": "./dist/voice/engines/registry.mjs",
     "./voice/engines/types": "./dist/voice/engines/types.mjs",
     "./voice/voice-service": "./dist/voice/voice-service.mjs",
     "./paths/product-paths": "./dist/paths/product-paths.mjs",

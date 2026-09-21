@@ -55,14 +55,17 @@ export interface LiaVoiceEngineDeclaration {
 }
 
 /**
- * The runnable TTS engines this build can actually drive.
+ * The runnable TTS engines this build can IMPORT profiles for.
  *
- * Transitional state (Phase 7.8D): EMPTY. The engines the core previously
- * shipped were removed, and the 'lia-cloning' placeholder was never a real
- * engine - it existed only as a label and is gone. A modular engine adapter
- * (Kokoro first) registers its entry here, together with its synthesis
- * adapter, when it lands; adding an entry is what makes import possible
- * again for that engine's profile shape.
+ * Transitional state: EMPTY on purpose, even with Kokoro registered. This
+ * registry declares IMPORTABLE profile shapes (file roles + extensions for
+ * user-imported voices). Kokoro (Phase 7.9C) is a stock-voice engine: it
+ * ships its voices WITH the engine, so there is nothing for a user to
+ * import into it and nothing to declare here. Engine adapters themselves -
+ * id, label, backend, capabilities - live in the seam's own registry at
+ * `voice/engines/registry.ts`. A future cloning engine that accepts user
+ * audio registers its declaration here TOGETHER with its adapter; adding
+ * an entry is what makes import possible again for that profile shape.
  */
 export const VOICE_ENGINES: readonly LiaVoiceEngineDeclaration[] = []
 
