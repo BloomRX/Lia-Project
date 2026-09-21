@@ -1,8 +1,8 @@
-import type { KokoroInstallDeps } from './install'
+import type { KokoroInstallDeps, KokoroInstallRunResult } from './install'
 
 import { describe, expect, it } from 'vitest'
 
-import { ensureKokoroInstalled, pythonCandidates } from './install'
+import { ensureKokoroInstalled, parsePyLauncherInventory } from './install'
 import { resolveKokoroLayout } from './layout'
 import {
   KOKORO_MODEL_BYTES,
@@ -29,7 +29,7 @@ interface CallLog {
   writes: Array<{ bytes: number, path: string }>
 }
 
-function fakeDeps(log: CallLog, options: { failHf?: boolean, modelDigest?: string, platform?: string, preInstalled?: boolean, pythonVersion?: string } = {}): { deps: KokoroInstallDeps, layout: ReturnType<typeof resolveKokoroLayout> } {
+function fakeDeps(log: CallLog, options: { failHf?: boolean, modelDigest?: string, platform?: string, preInstalled?: boolean, pythonVersion?: string, runScript?: (command: string, args: string[]) => KokoroInstallRunResult | undefined } = {}): { deps: KokoroInstallDeps, layout: ReturnType<typeof resolveKokoroLayout> } {
   const platform = options.platform ?? 'linux'
   const layout = resolveKokoroLayout({ home: '/run/lia-voice-runtimes', platform })
   const files = new Map<string, number>()
@@ -94,9 +94,15 @@ function fakeDeps(log: CallLog, options: { failHf?: boolean, modelDigest?: strin
     },
     run: async (command, args) => {
       log.runs.push({ args: [...args], command })
+      const scripted = options.runScript?.(command, args)
+      if (scripted)
+        return scripted
       if (args.join(' ').includes("sys.version_info"))
         return { code: 0, stdout: `${options.pythonVersion ?? '3.12'}\n`, stderr: '' }
-      if (args[0] === '-m' && args[1] === 'venv') {
+      // Position-independent: launcher prefix args (`py -3.11 -m venv ...`)
+      // must not hide the venv step.
+      const mIndex = args.indexOf('-m')
+      if (mIndex >= 0 && args[mIndex + 1] === 'venv') {
         files.set(layout.venvPython, 1)
         return { code: 0, stdout: '', stderr: '' }
       }
@@ -207,10 +213,120 @@ describe('kokoro install (engine-owned, sha256-pinned, idempotent)', () => {
     await expect(ensureKokoroInstalled(layout, deps)).rejects.toThrow(/python3, python/)
   })
 
-  it('win32: venv python is Scripts/python.exe and the py launcher is probed first', () => {
-    expect(pythonCandidates('win32')[0]).toMatchObject({ args: ['-3', '-c', expect.any(String)], command: 'py' })
-    expect(pythonCandidates('linux')[0]).toMatchObject({ command: 'python3' })
-    const layout = resolveKokoroLayout({ home: 'C:/Lia/runtimes', platform: 'win32' })
-    expect(layout.venvPython).toMatch(/Scripts[\\/]python\.exe$/)
+  it('win32: 3.14 as the machine default + 3.11 side-by-side -> the launcher inventory picks 3.11, and the out-of-range default is never even probed', async () => {
+    const log = freshLog()
+    const python311 = 'C:\\Program Files\\Python311\\python.exe'
+    const { deps, layout } = fakeDeps(log, {
+      platform: 'win32',
+      runScript: (command, args) => {
+        if (command === 'py' && args.join(' ') === '-0p') {
+          return { code: 0, stdout: [
+            ' -V:3.14 *        C:\\Program Files\\Python314\\python.exe',
+            ' -V:3.11          C:\\Program Files\\Python311\\python.exe',
+            '',
+          ].join('\r\n'), stderr: '' }
+        }
+        if (command === python311 && args.includes('-c'))
+          return { code: 0, stdout: '3.11\n', stderr: '' }
+        // Any other probe is an unscripted interpreter: it does not exist.
+        if (args.includes('-c'))
+          return { code: 1, stdout: '', stderr: 'not installed' }
+        return undefined
+      },
+    })
+
+    const facts = await ensureKokoroInstalled(layout, deps)
+    expect(facts.installed).toBe(true)
+    expect(facts.pythonPath).toBe(python311)
+    expect(facts.pythonVersion).toBe('3.11')
+
+    // Exactly ONE interpreter probe ran - against 3.11's real path. The
+    // 3.14 default row produced NO probe call (skipped pre-probe).
+    const probes = log.runs.filter(call => call.args.includes('-c'))
+    expect(probes).toHaveLength(1)
+    expect(probes[0]!.command).toBe(python311)
+    expect(log.runs.some(call => call.command === 'py' && call.args.join(' ') === '-0p')).toBe(true)
+    expect(log.runs.some(call => /3\.14/.test(`${call.command} ${call.args.join(' ')}`))).toBe(false)
+
+    // The venv is created with the interpreter PATH directly (launcher
+    // flags are not needed once we know where 3.11 lives).
+    const venv = log.runs.find(call => call.args.includes('venv'))!
+    expect(venv.command).toBe(python311)
+    expect(venv.args).toEqual(['-m', 'venv', layout.venvDir])
+  })
+
+  it('win32: inventory unusable -> explicit py -3.x flags, and the flags travel with EVERY invocation (probe, venv)', async () => {
+    const log = freshLog()
+    const { deps, layout } = fakeDeps(log, {
+      platform: 'win32',
+      runScript: (command, args) => {
+        if (command === 'py' && args.join(' ') === '-0p')
+          return { code: 1, stdout: '', stderr: 'launcher inventory broken' }
+        if (command === 'py' && args[0] === '-3.13')
+          return { code: 1, stdout: '', stderr: 'not installed' }
+        if (command === 'py' && args[0] === '-3.12')
+          return { code: 1, stdout: '', stderr: 'not installed' }
+        if (command === 'py' && args[0] === '-3.11' && args.includes('-c'))
+          return { code: 0, stdout: '3.11\n', stderr: '' }
+        if (args.includes('-c'))
+          return { code: 1, stdout: '', stderr: 'not installed' }
+        return undefined
+      },
+    })
+
+    const facts = await ensureKokoroInstalled(layout, deps)
+    expect(facts.pythonPath).toBe('py')
+    expect(facts.pythonVersion).toBe('3.11')
+
+    // Probe order pinned: 3.13 and 3.12 were asked first and declined.
+    const probes = log.runs.filter(call => call.args.includes('-c'))
+    expect(probes.map(call => call.args[0])).toEqual(['-3.13', '-3.12', '-3.11'])
+    // Launcher flags MUST travel with the venv call or we'd create a 3.14 venv.
+    const venv = log.runs.find(call => call.args.includes('venv'))!
+    expect(venv.command).toBe('py')
+    expect(venv.args).toEqual(['-3.11', '-m', 'venv', layout.venvDir])
+  })
+
+  it('win32: only an out-of-range 3.14 exists -> the error names EVERY attempt and explains the intentional skip', async () => {
+    const log = freshLog()
+    const { deps, layout } = fakeDeps(log, {
+      platform: 'win32',
+      runScript: (command, args) => {
+        if (command === 'py' && args.join(' ') === '-0p')
+          return { code: 0, stdout: ' -V:3.14 *        C:\\Program Files\\Python314\\python.exe\r\n', stderr: '' }
+        // PATH names exist but all resolve to 3.14: probed, then rejected.
+        if ((command === 'python' || command === 'python3') && args.includes('-c'))
+          return { code: 0, stdout: '3.14\n', stderr: '' }
+        if (args.includes('-c'))
+          return { code: 1, stdout: '', stderr: 'not installed' }
+        return undefined
+      },
+    })
+
+    await expect(ensureKokoroInstalled(layout, deps)).rejects.toMatchObject({ name: 'KokoroInstallError', step: 'python-probe' })
+    await expect(ensureKokoroInstalled(layout, deps)).rejects.toThrow(/py -3\.13, py -3\.12, py -3\.11, py -3\.10, python, python3/)
+    await expect(ensureKokoroInstalled(layout, deps)).rejects.toThrow(/3\.14\) is skipped on purpose/)
+    // No venv, no pip, no downloads: failure stops at the probe step.
+    expect(log.runs.some(call => call.args.includes('venv'))).toBe(false)
+    expect(log.runs.some(call => call.args.includes('pip'))).toBe(false)
+    expect(log.downloads).toEqual([])
+  })
+
+  it('py -0p inventory parsing: default marker, path column with spaces, pathless rows', () => {
+    expect(parsePyLauncherInventory([
+      ' -V:3.14 *        C:\\Program Files\\Python314\\python.exe',
+      ' -V:3.11',
+      ' -V:3.10          D:\\bin\\py\\python.exe',
+      '',
+    ].join('\r\n'))).toEqual([
+      { version: '3.14', path: 'C:\\Program Files\\Python314\\python.exe' },
+      { version: '3.11' },
+      { version: '3.10', path: 'D:\\bin\\py\\python.exe' },
+    ])
+  })
+
+  it('venv interpreter convention: Scripts/python.exe on win32, bin/python elsewhere', () => {
+    expect(resolveKokoroLayout({ home: 'C:/Lia/runtimes', platform: 'win32' }).venvPython).toMatch(/Scripts[\\/]python\.exe$/)
+    expect(resolveKokoroLayout({ home: '/run/lia', platform: 'linux' }).venvPython).toMatch(/bin[\\/]python$/)
   })
 })

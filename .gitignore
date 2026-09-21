@@ -1,0 +1,6 @@
+# Python bytecode caches (DevKit test imports create tools/__pycache__).
+__pycache__/
+
+# Lia dev-only QA outputs (Phase 7.9D smoke WAVs, staging homes). Never commit:
+# no models, no runtimes, no audio artifacts live in Git.
+.devkit-qa/

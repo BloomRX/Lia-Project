@@ -24,6 +24,13 @@ import type { KokoroSpawn, KokoroWorkerClient, KokoroWorkerFacts } from './proce
 
 export type { KokoroInstallFacts, KokoroLayout, KokoroSpawn, KokoroWorkerClient, KokoroWorkerFacts }
 
+// The dev-only smoke path (Phase 7.9D) and layout inspection compose the
+// same adapter surface as the engine itself - one production module.
+export { runKokoroSmoke, kokoroSmokeSummaryLine, KOKORO_SMOKE_PHRASES } from './smoke'
+export { inspectKokoroInstall, resolveKokoroLayout } from './layout'
+export { KOKORO_MODEL_SHA256, KOKORO_MODEL_BYTES, KOKORO_SAMPLE_RATE } from './manifest'
+export type { KokoroSmokeFileSystem, KokoroSmokeOptions, KokoroSmokeReport } from './smoke'
+
 /**
  * Phase 7.9C: the Kokoro voice engine - Lia's first real modular TTS
  * engine. CPU-only by measured QA (DirectML initialized and then failed

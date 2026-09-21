@@ -1138,6 +1138,38 @@ def menu():
         except RuntimeError as exc: print("ERRO:", redact(str(exc)))
 
 
+def kokoro_smoke():
+    """Lia (fase 7.9D): prova dev-only do engine Kokoro REAL, via codigo de producao.
+
+    Roda o runner Node fino (tools/kokoro-smoke.mjs), que usa exclusivamente os
+    dists de producao do lia-core (createKokoroVoiceEngine, resolveKokoroLayout,
+    resolveVoiceRuntimeHome, runKokoroSmoke): nada de harness de QA duplicado.
+    Primeira execucao instala o runtime (venv + modelo sha256-pinado); as demais
+    reutilizam sem redownload se os hashes conferem. WAVs ficam em .devkit-qa/.
+    """
+    script = KIT / "tools" / "kokoro-smoke.mjs"
+    if not script.is_file():
+        raise RuntimeError(f"Runner do smoke ausente: {script.relative_to(KIT)}")
+    for dist in ("voice/engines/kokoro/index.mjs", "bootstrap/runtime-root.mjs"):
+        rel = Path("airi") / "packages" / "lia-core" / "dist" / Path(dist)
+        if not (KIT / rel).is_file():
+            raise RuntimeError(
+                f"Build de producao do lia-core ausente: {rel}. Rode antes: "
+                "cd airi/packages/lia-core && pnpm run build (ou npx tsdown).")
+    node = shutil.which("node")
+    if not node:
+        raise RuntimeError(
+            "Node.js nao encontrado no PATH. O smoke executa o engine real de voz "
+            "(codigo de producao da Lia) dentro do Node; instale o Node LTS e tente de novo.")
+    print("== Kokoro smoke (dev-only; engine real de producao) ==")
+    print("   Runner:", script.relative_to(KIT))
+    completed = subprocess.run([node, str(script)], cwd=str(KIT))
+    if completed.returncode:
+        raise RuntimeError(
+            f"kokoro-smoke falhou (exit {completed.returncode}). Log acima; "
+            "nenhuma limpeza automatica foi feita (o runtime instalado pode ser reutilizado na proxima tentativa).")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="cmd")
@@ -1154,6 +1186,7 @@ def main():
     item.add_argument("name", nargs="?")
     sub.add_parser("resume-repo", help="retoma somente o dono/nome registrados; nunca escolhe outro repo")
     sub.add_parser("pr"); sub.add_parser("diagnose")
+    sub.add_parser("kokoro-smoke", help="(Lia, fase 7.9D, dev-only) prova o engine Kokoro real com o codigo de producao: instala uma vez, sintetiza 4 frases pt-BR, mede fatos")
     args = parser.parse_args()
     try:
         if args.cmd in ("sync", "push"): sync(args.message, not args.no_push)
@@ -1166,6 +1199,7 @@ def main():
         elif args.cmd == "resume-repo": resume_repo()
         elif args.cmd == "pr": pr()
         elif args.cmd == "diagnose": diagnose()
+        elif args.cmd == "kokoro-smoke": kokoro_smoke()
         else: menu()
     except (RuntimeError, OSError, EOFError) as exc:
         print("ERRO:", redact(str(exc))); return 1

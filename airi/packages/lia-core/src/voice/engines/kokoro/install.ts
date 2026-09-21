@@ -158,19 +158,6 @@ export function defaultKokoroInstallDeps(): KokoroInstallDeps {
 
 const PYTHON_PROBE_ARGS = ['-c', "import sys;print(f'{sys.version_info[0]}.{sys.version_info[1]}')"]
 
-export function pythonCandidates(platform: string): Array<{ command: string, args: string[] }> {
-  return platform === 'win32'
-    ? [
-        { command: 'py', args: ['-3', ...PYTHON_PROBE_ARGS] },
-        { command: 'python', args: PYTHON_PROBE_ARGS },
-        { command: 'python3', args: PYTHON_PROBE_ARGS },
-      ]
-    : [
-        { command: 'python3', args: PYTHON_PROBE_ARGS },
-        { command: 'python', args: PYTHON_PROBE_ARGS },
-      ]
-}
-
 function pythonVersionOk(version: string): boolean {
   const match = /^(\d+)\.(\d+)/.exec(version.trim())
   if (!match)
@@ -182,22 +169,96 @@ function pythonVersionOk(version: string): boolean {
   return minor >= KOKORO_PYTHON_MIN[1] && minor <= KOKORO_PYTHON_MAX[1]
 }
 
-interface PythonResolution { pythonPath: string, version: string }
+/**
+ * One inventory line of the py launcher (`py -0p`):
+ * ` -V:3.13 *        C:\\Program Files\\Python313\\python.exe`
+ * The path column is optional (`-0` lists without it) and may contain spaces.
+ */
+export function parsePyLauncherInventory(output: string): Array<{ version: string, path?: string }> {
+  const entries: Array<{ version: string, path?: string }> = []
+  for (const raw of output.split(/\r?\n/)) {
+    const match = /-V:(\d+\.\d+)\s*\*?\s*(.+)?$/.exec(raw)
+    if (!match)
+      continue
+    const entry: { version: string, path?: string } = { version: match[1]! }
+    const path = match[2]?.trim()
+    if (path)
+      entry.path = path
+    entries.push(entry)
+  }
+  return entries
+}
+
+export interface PythonResolution {
+  pythonPath: string
+  /** Launcher flags that must travel with every invocation (e.g. `py -3.11`). */
+  prefixArgs?: readonly string[]
+  version: string
+}
+
+async function probePython(
+  deps: KokoroInstallDeps,
+  tried: string[],
+  command: string,
+  prefixArgs: readonly string[],
+  label: string,
+): Promise<PythonResolution | undefined> {
+  tried.push(label)
+  const probe = await deps.run(command, [...prefixArgs, ...PYTHON_PROBE_ARGS])
+  if (probe.code !== 0)
+    return undefined
+  const version = probe.stdout.trim()
+  if (!pythonVersionOk(version))
+    return undefined
+  return { pythonPath: command, prefixArgs, version }
+}
 
 async function resolvePython(deps: KokoroInstallDeps): Promise<PythonResolution> {
   const tried: string[] = []
-  for (const candidate of pythonCandidates(deps.platform)) {
-    tried.push(candidate.command)
-    const result = await deps.run(candidate.command, candidate.args)
-    if (result.code !== 0)
-      continue
-    const version = result.stdout.trim()
-    if (pythonVersionOk(version))
-      return { pythonPath: candidate.command, version }
+  if (deps.platform === 'win32') {
+    // 1. The py launcher's own inventory first - the case that burned this
+    // phase: the DEFAULT python on the machine is 3.14 (out of range), and a
+    // supported 3.11 sits right next to it. We must see BOTH and pick 3.11.
+    tried.push('py -0p (inventory)')
+    const listed = await deps.run('py', ['-0p'])
+    if (listed.code === 0) {
+      for (const entry of parsePyLauncherInventory(listed.stdout)) {
+        // Out-of-range installs (3.14) are skipped before any probe call.
+        if (!pythonVersionOk(entry.version))
+          continue
+        const hit = entry.path
+          ? await probePython(deps, tried, entry.path, [], entry.path)
+          : await probePython(deps, tried, 'py', [`-${entry.version}`], `py -${entry.version}`)
+        if (hit)
+          return hit
+      }
+    }
+    // 2. Explicit version flags in descending preference: covers machines
+    // where the inventory output could not be parsed but versions exist.
+    for (const minor of [13, 12, 11, 10]) {
+      const hit = await probePython(deps, tried, 'py', [`-3.${minor}`], `py -3.${minor}`)
+      if (hit)
+        return hit
+    }
+    // 3. Generic names: an org installer without the launcher, or a PATH
+    // alias pointing at a supported interpreter even when 3.14 is default.
+    for (const command of ['python', 'python3']) {
+      const hit = await probePython(deps, tried, command, [], command)
+      if (hit)
+        return hit
+    }
+  }
+  else {
+    for (const command of ['python3', 'python']) {
+      const hit = await probePython(deps, tried, command, [], command)
+      if (hit)
+        return hit
+    }
   }
   throw new KokoroInstallError(
     'python-probe',
-    `No usable Python found (tried: ${tried.join(', ')}). Kokoro needs Python ${KOKORO_PYTHON_MIN.join('.')}..${KOKORO_PYTHON_MAX.join('.')} on PATH.`,
+    `No supported Python found (Kokoro needs ${KOKORO_PYTHON_MIN.join('.')}..${KOKORO_PYTHON_MAX.join('.')}). Tried: ${tried.join(', ')}. `
+    + 'An out-of-range default (e.g. 3.14) is skipped on purpose, never fails the run: install any supported version side-by-side and re-run.',
   )
 }
 
@@ -232,7 +293,7 @@ export async function ensureKokoroInstalled(layout: KokoroLayout, deps: KokoroIn
   if (!deps.existsSync(layout.venvPython)) {
     python = await resolvePython(deps)
     deps.log({ event: 'lia.voice.kokoro.install', step: 'python', detail: `${python.pythonPath} ${python.version}` })
-    const venv = await deps.run(python.pythonPath, ['-m', 'venv', layout.venvDir])
+    const venv = await deps.run(python.pythonPath, [...(python.prefixArgs ?? []), '-m', 'venv', layout.venvDir])
     if (venv.code !== 0)
       throw new KokoroInstallError('venv', `venv creation failed (exit ${venv.code}): ${venv.stderr.trim().slice(0, 300)}`)
   }
