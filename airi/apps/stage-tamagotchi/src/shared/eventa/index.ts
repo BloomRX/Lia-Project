@@ -675,6 +675,20 @@ export const electronLiaVoiceStatus = defineInvokeEventa<LiaVoiceStatus>('eventa
 
 export const electronLiaVoiceSynthesize = defineInvokeEventa<LiaVoiceSynthesisResult, LiaVoiceSynthesisRequest>('eventa:invoke:lia:voice:synthesize')
 
+/**
+ * Phase 7.9E: the startup-greeting claim. The MAIN process keeps the
+ * exactly-once latch so a renderer reload/HMR cannot greet twice - the
+ * latch dies with the launch, which is precisely "once per real managed
+ * Stage launch". The channel carries no text: the greeting pool and policy
+ * are renderer-side product orchestration.
+ */
+export interface LiaStartupGreetingClaim {
+  /** True exactly once per real managed Stage launch. */
+  granted: boolean
+}
+
+export const electronLiaVoiceStartupGreetingClaim = defineInvokeEventa<LiaStartupGreetingClaim>('eventa:invoke:lia:voice:startup-greeting:claim')
+
 /** The voice-engine product config (normal UI sees only the fallback toggle). */
 export interface LiaVoiceEngineConfig {
   /** Selected engine id, when one was selected. The UI never hard-codes one. */

@@ -23,6 +23,7 @@ import { i18n } from './modules/i18n'
 import { managedRoutePolicyGuard } from './navigation/managed-route-policy'
 import { useLiaCapabilitiesStore } from './stores/lia/capabilities'
 import { installCustomVoiceTransport } from './stores/lia/custom-voice-transport'
+import { installLiaStartupGreeting } from './stores/lia/startup-greeting'
 import { resolveRendererWindowContext } from './window-context'
 
 import '@unocss/reset/tailwind.css'
@@ -87,6 +88,15 @@ installCustomVoiceTransport()
 // it into the shared chat context at turn boundaries.
 const liaCapabilities = useLiaCapabilitiesStore(pinia)
 liaCapabilities.initialize()
+
+// Phase 7.9E, items 2-3: ONE startup greeting per REAL managed launch,
+// through the normal speech pipeline (normalizer -> selected TTS engine ->
+// playback), doubling as the first real inference warmup. Scheduling is
+// asynchronous fire-and-forget: this neither awaits voice readiness nor
+// delays the renderer boot by a millisecond; the main process holds the
+// exactly-once latch so a reload/HMR cannot greet twice, and a window
+// unload cancels a still-pending greeting honestly.
+installLiaStartupGreeting(pinia)
 
 const router = createRouter({
   history: createWebHashHistory(),

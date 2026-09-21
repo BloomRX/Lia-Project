@@ -45,11 +45,14 @@ import { setupArtistryBridge } from './services/airi/widgets/artistry-bridge'
 import { setupAutoUpdater } from './services/electron/auto-updater'
 import { setupGlobalShortcutService } from './services/electron/global-shortcut'
 import { setupPermissionHandlers } from './services/electron/media-permissions'
-import { registerLiaVoiceBridge } from './services/lia/lia-voice-service'
 import { registerLiaCapabilitiesBridge } from './services/lia/lia-capabilities'
+import { isLauncherManaged } from './services/lia/lia-managed'
+import { registerLiaVoiceBridge } from './services/lia/lia-voice-service'
 import { registerLiaProviderConfigBridge } from './services/lia/provider-config-service'
 import { createLiaSecretVault, registerLiaSecretsBridge } from './services/lia/secrets-service'
+import { registerLiaStartupGreetingBridge } from './services/lia/startup-greeting'
 import { registerLiaVoiceConfigBridge } from './services/lia/voice-config-service'
+import { prewarmManagedVoice } from './services/lia/voice-prewarm'
 import { createLiaVoiceProfileStore } from './services/lia/voice-profiles'
 import { registerLiaVoiceProfilesBridge } from './services/lia/voice-profiles-service'
 import { setupTray } from './tray'
@@ -432,6 +435,25 @@ app.whenReady().then(async () => {
         voiceAvailable: voiceBridge.voiceAvailable,
       })
       invalidateCapabilities = capabilities.invalidate
+
+      // Phase 7.9E, item 1: a real MANAGED launch hides the engine cold
+      // start behind the Stage boot. Fire-and-forget by construction - the
+      // constructor never waits on the engine, so this callback (and the
+      // whole boot) is not delayed one millisecond by warming. Failure
+      // degrades to voice-unavailable + diagnostics; a settle refreshes the
+      // capability truth so the warmed engine becomes visible without any
+      // user action. Standalone launches keep the lazy start untouched.
+      const prewarm = prewarmManagedVoice({
+        engines,
+        log: record => console.info(Object.entries(record).map(([key, value]) => `${key}=${String(value)}`).join(' ')),
+        managedLaunch: isLauncherManaged(),
+        onSettled: () => voiceBridge.voiceChanged(),
+      })
+      void prewarm.settled
+
+      // Phase 7.9E, item 3: the exactly-once startup-greeting latch lives in
+      // this process - it IS the launch. Registered once, engine-blind.
+      registerLiaStartupGreetingBridge({ context, managedLaunch: isLauncherManaged() })
     },
   })
 
