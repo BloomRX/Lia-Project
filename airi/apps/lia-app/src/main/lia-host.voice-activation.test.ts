@@ -24,7 +24,9 @@ import { fixtureEnv, identityCipher, makeLiaHome } from './test-helpers'
 interface EventsList { detail?: string, event: string }
 
 function makeVoiceHost(options: {
+  env?: Record<string, string>
   fixture?: Parameters<typeof makeLiaHome>[0]
+  platform?: NodeJS.Platform
   runtimeInstalled?: boolean
 } = {}) {
   const events: EventsList[] = []
@@ -33,9 +35,10 @@ function makeVoiceHost(options: {
     const home = await makeLiaHome({ firstVoiceId: '80202d55-24e8-4edf-a665-fa8236af2c5e', ...options.fixture })
     const host = createLiaHost({
       cipher: identityCipher,
-      env: fixtureEnv(home),
+      env: { ...fixtureEnv(home), ...options.env },
       inspectInstallImpl: async () => options.runtimeInstalled ?? true,
       onEvent: (event, detail) => events.push({ detail, event }),
+      ...(options.platform !== undefined ? { platform: options.platform } : {}),
       stageManagerFactory: () => ({
         holdsOwnedStage: () => order.includes('stage-start'),
         isAvailable: () => true,
@@ -79,6 +82,67 @@ describe('7.8 A - transitional import: no engine is hosted, so it defers cleanly
     expect(after.length).toBe(before.length)
     expect(after.some(entry => entry.name === 'Voz da Ana')).toBe(false)
     await rm(outside, { force: true, recursive: true })
+  })
+})
+
+describe('7.9E.1 - Windows runtime-home contract regression (env object vs lookup)', () => {
+  // path.join is host-separator (posix in CI, win32 in production); build the
+  // expected runtime root through the same join the resolver uses.
+  const WINDOWS_LOCALAPPDATA = 'C:\\Users\\lucas\\AppData\\Local'
+  const WINDOWS_RUNTIME_ROOT = join(WINDOWS_LOCALAPPDATA, 'Lia', 'runtimes')
+
+  function windowsFixtureProduct(): Record<string, unknown> {
+    // Custom local voice selected WITHOUT a configured runtime.installDir:
+    // exactly the branch that resolves the canonical home through
+    // resolveVoiceRuntimeHome (every older fixture short-circuited it with
+    // an explicit installDir, which is why this crash hid until real QA).
+    return {
+      persona: { activeCardId: 'lia-default' },
+      preferences: { language: 'pt-BR' },
+      provider: {
+        chat: {
+          onboarded: true,
+          preferred: { modelId: 'test-model', providerId: 'openrouter' },
+        },
+      },
+      schemaVersion: 1,
+      voice: {
+        tts: { preferred: { providerId: 'custom-local-voice', voiceId: '80202d55-24e8-4edf-a665-fa8236af2c5e' } },
+      },
+    }
+  }
+
+  it('conversar on Windows with LOCALAPPDATA set: no "env is not a function", home is the Lia runtime root, the stage starts', async () => {
+    const { events, host, order } = await makeVoiceHost({
+      env: { LOCALAPPDATA: WINDOWS_LOCALAPPDATA },
+      fixture: { productConfig: windowsFixtureProduct() },
+      platform: 'win32',
+    })
+
+    // Before the fix this threw TypeError: env is not a function, from
+    // resolveLocalAppDataDir inside resolveVoiceRuntimeHome inside
+    // effectiveRuntimeHome inside ensureVoiceReadyForConversar.
+    const state = await host.conversar()
+    expect(state.phase).toBe('running')
+    expect(order).toContain('stage-start')
+    expect(events.find(entry => entry.event === 'lia-app.conversar-blocked')).toBeUndefined()
+
+    // The canonical home resolved EXACTLY to the Lia runtime root, never
+    // to a substituted/mutated location: %LOCALAPPDATA%\Lia\runtimes.
+    const location = await host.runtimeLocationStatus()
+    expect(location.customActive).toBe(false)
+    expect(location.canonicalDefaultDir).toBe(WINDOWS_RUNTIME_ROOT)
+    expect(location.effectiveInstallDir).toBe(WINDOWS_RUNTIME_ROOT)
+  })
+
+  it('an INVALID Windows LOCALAPPDATA still surfaces the resolver\'s own operational error (lookup honored, not bypassed)', async () => {
+    const { host } = await makeVoiceHost({
+      env: { LOCALAPPDATA: 'relative\\not\\absolute' },
+      fixture: { productConfig: windowsFixtureProduct() },
+      platform: 'win32',
+      runtimeInstalled: true,
+    })
+    await expect(host.conversar()).rejects.toThrow(/Could not resolve Windows LocalAppData/)
   })
 })
 

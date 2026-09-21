@@ -10,11 +10,11 @@ import type { ShutdownReport } from './shutdown-coordinator'
 import process from 'node:process'
 
 import { access, stat } from 'node:fs/promises'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { buildLiaBridgeConfig, stageEnvFor } from '@lia/core/bridge/lia-config'
 import { resolveVoiceRuntimeHome } from '@lia/core/bootstrap/runtime-root'
+import { buildLiaBridgeConfig, stageEnvFor } from '@lia/core/bridge/lia-config'
 import { classifyInstallLocation, inspectInstallLocationTarget } from '@lia/core/paths/install-location'
 import { liaProductPaths } from '@lia/core/paths/product-paths'
 import { readLiaProductConfig, updateLiaProductConfig } from '@lia/core/product/config'
@@ -204,6 +204,16 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
    */
   const env = deps.env ?? process.env
   const paths = liaProductPaths({ env, exists: deps.exists })
+  /**
+   * Phase 7.9E.1: the runtime-home resolver's `env` contract is a LOOKUP
+   * (`ResolveLocalAppDataEnv` is `(name) => string | undefined`), never the
+   * raw object the rest of this host reads (`env.APPDATA` & friends).
+   * Handing the object over used to explode on Windows -
+   * `TypeError: env is not a function` - inside resolveLocalAppDataDir,
+   * before "Conversar com Lia" could even start the stage. One adapter,
+   * still reading from the ONE environment above, keeps both contracts.
+   */
+  const envLookup = (name: string): string | undefined => env[name]
 
   // Safe boot evidence (hotfix, item 1): booleans only, never values.
   if ((deps.platform ?? process.platform) === 'win32') {
@@ -310,7 +320,7 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
     const configured = snapshot?.voice?.runtime?.installDir?.trim()
     if (configured)
       return configured
-    return resolveVoiceRuntimeHome({ env, platform, userDataDir: paths.userDataDir })
+    return resolveVoiceRuntimeHome({ env: envLookup, platform, userDataDir: paths.userDataDir })
   }
 
   /**
@@ -430,7 +440,7 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
     const configuredInstallDir = snapshot?.voice?.runtime?.installDir?.trim() || undefined
     const effective = effectiveRuntimeHome(snapshot)
     return {
-      canonicalDefaultDir: resolveVoiceRuntimeHome({ env, platform, userDataDir: paths.userDataDir }),
+      canonicalDefaultDir: resolveVoiceRuntimeHome({ env: envLookup, platform, userDataDir: paths.userDataDir }),
       customActive: configuredInstallDir !== undefined,
       ...(configuredInstallDir ? { configuredInstallDir } : {}),
       effectiveInstallDir: effective,
