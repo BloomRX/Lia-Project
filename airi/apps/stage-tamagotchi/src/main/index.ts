@@ -13,9 +13,6 @@ import messages from '@proj-airi/i18n/locales'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { Format, LogLevel, setGlobalFormat, setGlobalHookPostLog, setGlobalLogLevel, useLogg } from '@guiiai/logg'
 import { createContext } from '@moeru/eventa/adapters/electron/main'
-import { resolveVoiceRuntimeHome } from '@lia/core/bootstrap/runtime-root'
-import { readVoiceRuntimeSelection } from '@lia/core/voice/config'
-import { createKokoroVoiceEngine } from '@lia/core/voice/engines/kokoro'
 import { hasSelectedScreenCaptureSource, initScreenCaptureForMain } from '@proj-airi/electron-screen-capture/main'
 import { app, ipcMain, session } from 'electron'
 import { noop } from 'es-toolkit'
@@ -45,14 +42,10 @@ import { setupArtistryBridge } from './services/airi/widgets/artistry-bridge'
 import { setupAutoUpdater } from './services/electron/auto-updater'
 import { setupGlobalShortcutService } from './services/electron/global-shortcut'
 import { setupPermissionHandlers } from './services/electron/media-permissions'
-import { registerLiaCapabilitiesBridge } from './services/lia/lia-capabilities'
-import { isLauncherManaged } from './services/lia/lia-managed'
-import { registerLiaVoiceBridge } from './services/lia/lia-voice-service'
+import { startLiaMainWindowVoiceRuntime } from './services/lia/main-window-voice-runtime'
 import { registerLiaProviderConfigBridge } from './services/lia/provider-config-service'
 import { createLiaSecretVault, registerLiaSecretsBridge } from './services/lia/secrets-service'
-import { registerLiaStartupGreetingBridge } from './services/lia/startup-greeting'
 import { registerLiaVoiceConfigBridge } from './services/lia/voice-config-service'
-import { prewarmManagedVoice } from './services/lia/voice-prewarm'
 import { createLiaVoiceProfileStore } from './services/lia/voice-profiles'
 import { registerLiaVoiceProfilesBridge } from './services/lia/voice-profiles-service'
 import { setupTray } from './tray'
@@ -308,16 +301,28 @@ app.whenReady().then(async () => {
   })
 
   const mainWindow = injeca.provide('windows:main', {
-    dependsOn: { editorWindow, settingsWindow, chatWindow, widgetsManager, noticeWindow, beatSync, autoUpdater, serverChannel, godotStageManager, mcpStdioManager, i18n, onboardingWindowManager, appleSpeechTranscription },
-    build: async ({ dependsOn }) => setupMainWindow({
-      ...dependsOn,
-      onWindowCreated: (window) => {
-        userFacingMainWindow = window
-      },
-      onSizeSettingsReady: (controller) => {
-        userFacingMainWindowSizeSettings = controller
-      },
-    }),
+    dependsOn: { editorWindow, settingsWindow, chatWindow, widgetsManager, noticeWindow, beatSync, autoUpdater, serverChannel, godotStageManager, mcpStdioManager, i18n, onboardingWindowManager, appleSpeechTranscription, liaProductConfig, liaVoiceProfiles },
+    build: async ({ dependsOn }) => {
+      // Phase 7.9E.4: the voice runtime must register BEFORE the renderer
+      // loads. `onWindowCreated` runs right after `new BrowserWindow`, so
+      // these handles travel INTO that hook instead of arriving through
+      // this provider's own (post-load) resolution.
+      const { liaProductConfig: liaProductCfg, liaVoiceProfiles: voiceProfileStore, ...windowDeps } = dependsOn
+      return setupMainWindow({
+        ...windowDeps,
+        onWindowCreated: (window) => {
+          userFacingMainWindow = window
+          startLiaMainWindowVoiceRuntime({
+            liaProductConfig: liaProductCfg,
+            liaVoiceProfiles: voiceProfileStore,
+            window,
+          })
+        },
+        onSizeSettingsReady: (controller) => {
+          userFacingMainWindowSizeSettings = controller
+        },
+      })
+    },
   })
 
   const captionWindow = injeca.provide('windows:caption', {
@@ -389,73 +394,13 @@ app.whenReady().then(async () => {
   })
 
   // Lia Voice bridge: the engine-neutral IPC surface over the Lia Voice
-  // Service (Phase 7.8C). Phase 7.8C registers NO concrete engine: the
-  // service answers "unavailable" honestly, and the modular engines
-  // (Kokoro is the first candidate) plug into this same seam when they
-  // land - with their own runtime bridge, on-demand start and autostart
-  // policy.
-  injeca.invoke({
-    dependsOn: { liaProductConfig, liaVoiceProfiles, mainWindow },
-    callback: async (deps) => {
-      // The window is NOT optional here. The electron main adapter forwards
-      // outbound events through `window.webContents.send`; without a window it
-      // can only *reply* to an incoming invoke, so a spontaneous push - a
-      // bootstrap's live install progress, from its `onStateChange` - is
-      // silently dropped and the panel never changes until the run returns.
-      const { context } = createContext(ipcMain, deps.mainWindow)
-
-      // Phase 7.9C: the engines this build ships, constructed at the HOST
-      // seam. The bridge/renderer/service never name an engine; the engine
-      // owns its runtime tree under the engine-neutral home (with the
-      // optional product-config override) and starts lazily on first use.
-      const userDataDir = app.getPath('userData')
-      const engines = [
-        createKokoroVoiceEngine({
-          installDirOverride: () => readVoiceRuntimeSelection(deps.liaProductConfig.get()?.voice).installDir,
-          runtimeHome: () => resolveVoiceRuntimeHome({ userDataDir }),
-        }),
-      ]
-
-      // Capability invalidation is circular-by-nature: the voice bridge
-      // fires the change, the capability probe recomputes. A late-bound ref
-      // keeps the registration order honest.
-      let invalidateCapabilities: (() => void) | undefined
-      const voiceBridge = registerLiaVoiceBridge({
-        context,
-        engines,
-        liaProductConfig: deps.liaProductConfig,
-        onVoiceAvailabilityChanged: () => invalidateCapabilities?.(),
-        store: deps.liaVoiceProfiles,
-      })
-
-      const capabilities = registerLiaCapabilitiesBridge({
-        context,
-        liaProductConfig: { get: () => deps.liaProductConfig.get() },
-        store: deps.liaVoiceProfiles,
-        voiceAvailable: voiceBridge.voiceAvailable,
-      })
-      invalidateCapabilities = capabilities.invalidate
-
-      // Phase 7.9E, item 1: a real MANAGED launch hides the engine cold
-      // start behind the Stage boot. Fire-and-forget by construction - the
-      // constructor never waits on the engine, so this callback (and the
-      // whole boot) is not delayed one millisecond by warming. Failure
-      // degrades to voice-unavailable + diagnostics; a settle refreshes the
-      // capability truth so the warmed engine becomes visible without any
-      // user action. Standalone launches keep the lazy start untouched.
-      const prewarm = prewarmManagedVoice({
-        engines,
-        log: record => console.info(Object.entries(record).map(([key, value]) => `${key}=${String(value)}`).join(' ')),
-        managedLaunch: isLauncherManaged(),
-        onSettled: () => voiceBridge.voiceChanged(),
-      })
-      void prewarm.settled
-
-      // Phase 7.9E, item 3: the exactly-once startup-greeting latch lives in
-      // this process - it IS the launch. Registered once, engine-blind.
-      registerLiaStartupGreetingBridge({ context, managedLaunch: isLauncherManaged() })
-    },
-  })
+  // Phase 7.9E.4: the Lia voice runtime (bridge + capabilities + managed
+  // prewarm + greeting latch) no longer lives here as an injeca.invoke on
+  // `mainWindow` - that was the renderer<->main race: the provider only
+  // resolves after the renderer load begins. It now starts inside the
+  // windows:main `onWindowCreated` hook (see main-window-voice-runtime.ts),
+  // i.e. strictly BEFORE `load(...)`. One registration per process, as
+  // before.
 
   injeca.invoke({
     dependsOn: { mainWindow, tray, serverChannel, airiHttpServer, godotStageManager, pluginHost, mcpStdioManager, onboardingWindow: onboardingWindowManager, widgetsWindow: widgetsManager, spotlightWindow, artistryConfig },
