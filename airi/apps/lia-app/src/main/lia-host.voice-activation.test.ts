@@ -11,21 +11,31 @@
  * install proof arrives exclusively through `inspectInstallImpl` - exactly
  * the seam the engine's adapter will implement.
  */
-import { Buffer } from 'node:buffer'
-import { mkdtemp, rm, stat, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import type { LiaHomeFixture } from './test-helpers'
 
+import { Buffer } from 'node:buffer'
+import { mkdir, mkdtemp, rm, stat, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { dirname, join } from 'node:path'
+
+import { inspectKokoroInstall, resolveKokoroLayout } from '@lia/core/voice/engines/kokoro'
 import { describe, expect, it } from 'vitest'
 
 import { createLiaHost } from './lia-host'
 import { fixtureEnv, identityCipher, makeLiaHome } from './test-helpers'
+import { createLiaVoiceInstallInspector } from './voice-install-inspector'
 
 interface EventsList { detail?: string, event: string }
 
 function makeVoiceHost(options: {
   env?: Record<string, string>
   fixture?: Parameters<typeof makeLiaHome>[0]
+  /**
+   * Phase 7.9E.2: 'stub' keeps the historical injected boolean; 'real'
+   * plugs the PRODUCTION inspector (createLiaVoiceInstallInspector), so the
+   * gate is decided by bytes on the fixture disk, never by test truth.
+   */
+  inspector?: 'real' | 'stub'
   platform?: NodeJS.Platform
   runtimeInstalled?: boolean
 } = {}) {
@@ -36,7 +46,9 @@ function makeVoiceHost(options: {
     const host = createLiaHost({
       cipher: identityCipher,
       env: { ...fixtureEnv(home), ...options.env },
-      inspectInstallImpl: async () => options.runtimeInstalled ?? true,
+      inspectInstallImpl: options.inspector === 'real'
+        ? createLiaVoiceInstallInspector()
+        : async () => options.runtimeInstalled ?? true,
       onEvent: (event, detail) => events.push({ detail, event }),
       ...(options.platform !== undefined ? { platform: options.platform } : {}),
       stageManagerFactory: () => ({
@@ -143,6 +155,94 @@ describe('7.9E.1 - Windows runtime-home contract regression (env object vs looku
       runtimeInstalled: true,
     })
     await expect(host.conversar()).rejects.toThrow(/Could not resolve Windows LocalAppData/)
+  })
+})
+
+describe('7.9E.2 - real Kokoro install proof drives the gate (no injected truth)', () => {
+  function customVoiceProduct(): Record<string, unknown> {
+    // Custom local voice selected WITHOUT a configured runtime.installDir:
+    // the effective home is the canonical resolver home, like production.
+    return {
+      persona: { activeCardId: 'lia-default' },
+      preferences: { language: 'pt-BR' },
+      provider: {
+        chat: {
+          onboarded: true,
+          preferred: { modelId: 'test-model', providerId: 'openrouter' },
+        },
+      },
+      schemaVersion: 1,
+      voice: {
+        tts: { preferred: { providerId: 'custom-local-voice', voiceId: '80202d55-24e8-4edf-a665-fa8236af2c5e' } },
+      },
+    }
+  }
+
+  /** Effective posix runtime home: makeLiaHome.userData + '/runtimes'. */
+  function fixtureRuntimeHome(home: LiaHomeFixture): string {
+    return join(home.userData, 'runtimes')
+  }
+
+  /**
+   * Exactly the markers a finished installer leaves - nothing else. The
+   * required set is DISCOVERED from the engine's own inspector (recording
+   * probe), so the engine stays the single authority even for fixtures.
+   */
+  async function materializeKokoroInstall(home: string, options: { without?: string[] } = {}) {
+    const layout = resolveKokoroLayout({ home })
+    const required: string[] = []
+    inspectKokoroInstall(layout, {
+      existsSync: (path) => {
+        required.push(path)
+        return false
+      },
+    })
+    for (const target of required) {
+      if (options.without?.includes(target))
+        continue
+      await mkdir(dirname(target), { recursive: true })
+      await writeFile(target, 'ok')
+    }
+    return layout
+  }
+
+  it('a REAL validated Kokoro tree on disk lets Conversar reach stage.start (the QA blocker retires)', async () => {
+    const { events, home, host, order } = await makeVoiceHost({
+      fixture: { productConfig: customVoiceProduct() },
+      inspector: 'real',
+    })
+    // The production-smoke-validated shape: <effective runtime home>/kokoro
+    // with every required marker. The gate decides from THESE bytes.
+    await materializeKokoroInstall(fixtureRuntimeHome(home))
+
+    const state = await host.conversar()
+    expect(state.phase).toBe('running')
+    expect(order).toContain('stage-start')
+    expect(events.find(entry => entry.event === 'lia-app.conversar-blocked')).toBeUndefined()
+  })
+
+  it('a REAL tree missing ONE required marker still blocks with voice-runtime-not-installed (no bypass)', async () => {
+    const { events, home, host, order } = await makeVoiceHost({
+      fixture: { productConfig: customVoiceProduct() },
+      inspector: 'real',
+    })
+    const layout = await materializeKokoroInstall(fixtureRuntimeHome(home))
+    // Remove exactly ONE required marker - the installer never finished.
+    await rm(layout.stateFile, { force: true })
+
+    await expect(host.conversar()).rejects.toThrow('O sistema de voz precisa ser instalado.')
+    expect(order).toEqual([])
+    expect(events).toContainEqual({ detail: 'reason=voice-runtime-not-installed', event: 'lia-app.conversar-blocked' })
+  })
+
+  it('an ABSENT runtime home stays blocked through the real inspector (7.8 negative preserved end-to-end)', async () => {
+    const { events, host, order } = await makeVoiceHost({
+      fixture: { productConfig: customVoiceProduct() },
+      inspector: 'real',
+    })
+    await expect(host.conversar()).rejects.toThrow('O sistema de voz precisa ser instalado.')
+    expect(order).toEqual([])
+    expect(events).toContainEqual({ detail: 'reason=voice-runtime-not-installed', event: 'lia-app.conversar-blocked' })
   })
 })
 

@@ -12,6 +12,7 @@ import { createLiaHost } from './lia-host'
 import { createSupervisorQuitFlow } from './shutdown-coordinator'
 import { enforceSingleInstance } from './single-instance'
 import { createLiaBootTimer } from './timing'
+import { createLiaVoiceInstallInspector } from './voice-install-inspector'
 
 /**
  * The Lia launcher entry (Phase 7, architecture items 1/11/15).
@@ -76,6 +77,9 @@ async function bootstrap(): Promise<void> {
       decrypt: payload => safeStorage.decryptString(payload),
       encrypt: value => safeStorage.encryptString(value),
     },
+    // Phase 7.9E.2: the REAL install proof - without this the gate defaulted
+    // to not-installed even with the validated Kokoro tree on disk.
+    inspectInstallImpl: createLiaVoiceInstallInspector(),
     // Host events are never secret; the renderer log strip mirrors them
     // through the bounded publisher (item 6: terminal sink always,
     // renderer best-effort, delivery errors never escape).
