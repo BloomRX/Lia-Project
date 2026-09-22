@@ -49,7 +49,6 @@ function fakeIntent(record: FakeIntent): IntentHandle {
 
 interface World {
   claims: number
-  diags: string[]
   intents: FakeIntent[]
   logs: LiaStartupGreetingLogEntry[]
   statusCalls: number
@@ -61,7 +60,6 @@ interface World {
 function greetingWorld(overrides: Partial<World> = {}) {
   const world: World = {
     claims: 0,
-    diags: [],
     grant: true,
     intents: [],
     logs: [],
@@ -74,9 +72,6 @@ function greetingWorld(overrides: Partial<World> = {}) {
     claimGreeting: async () => {
       world.claims += 1
       return { granted: world.grant }
-    },
-    diag: (step: string, detail?: string) => {
-      world.diags.push(detail !== undefined ? `${step} ${detail}` : step)
     },
     log: (entry: LiaStartupGreetingLogEntry) => {
       world.logs.push(entry)
@@ -234,58 +229,5 @@ describe('lia startup greeting (renderer orchestration, Phase 7.9E)', () => {
     expect(pickLiaStartupGreeting(LIA_STARTUP_GREETING_POOL, () => 0).poolIndex).toBe(0)
     expect(pickLiaStartupGreeting(LIA_STARTUP_GREETING_POOL, () => 0.999).poolIndex).toBe(LIA_STARTUP_GREETING_POOL.length - 1)
     expect(pickLiaStartupGreeting(LIA_STARTUP_GREETING_POOL, () => 0.5).text).toBe(LIA_STARTUP_GREETING_POOL[2])
-  })
-})
-
-describe('7.9E.3 TEMP diagnostics - every QA boundary fires, metadata-only', () => {
-  it('happy path emits the exact boundary sequence in order (scheduler -> status -> host -> claim -> write)', async () => {
-    const { options, world } = greetingWorld()
-    const handle = scheduleLiaStartupGreeting(options)
-    await expect(handle.done).resolves.toBe('spoken')
-
-    const steps = world.diags.map(line => line.split(' ')[0])
-    expect(steps).toEqual([
-      'scheduler-started',
-      'voice-status-invoke-start',
-      'voice-status-invoke-end',
-      'speech-host-wait-start',
-      'speech-host-found',
-      'claim-invoke-start',
-      'claim-invoke-end',
-      'intent-write-start',
-    ])
-    // Managed fact resolved at scheduler start; claim answers granted only.
-    expect(world.diags[0]).toContain('managed=true')
-    expect(world.diags.find(line => line.startsWith('claim-invoke-end'))).toContain('granted=true')
-  })
-
-  it('voice-status detail carries STATE ONLY - never payload notes (paths must not cross)', async () => {
-    const { options, world } = greetingWorld({
-      statusScript: [{ note: 'C:\\Users\\secret\\runtimes\\kokoro', state: 'unavailable' } as never, { state: 'ready' }],
-    })
-    const handle = scheduleLiaStartupGreeting(options)
-    await expect(handle.done).resolves.toBe('spoken')
-    expect(world.diags.find(line => line.startsWith('voice-status-invoke-end'))).toContain('state=unavailable')
-    expect(world.diags.join('\n')).not.toContain('secret')
-  })
-
-  it('a rejecting voiceStatus invoke is traced as invoke-error (the unbounded-await QA case)', async () => {
-    const { options, world } = greetingWorld()
-    options.voiceStatus = async () => {
-      throw new Error('ipc down')
-    }
-    const handle = scheduleLiaStartupGreeting({ ...options, waitBudgetMs: 1_000 })
-    await expect(handle.done).resolves.toBe('voice-unavailable')
-    expect(world.diags.find(line => line.startsWith('voice-status-invoke-end'))).toContain('invoke-error')
-  })
-
-  it('diag is optional: omitting it changes no greeting behavior', async () => {
-    const { options, world } = greetingWorld()
-    const { diag: _omitted, ...without } = options
-    const handle = scheduleLiaStartupGreeting(without)
-    await expect(handle.done).resolves.toBe('spoken')
-    expect(world.diags).toEqual([])
-    expect(world.claims).toBe(1)
-    expect(world.intents).toHaveLength(1)
   })
 })

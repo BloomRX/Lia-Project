@@ -85,13 +85,6 @@ export interface LiaStartupGreetingOptions {
   /** Acoustic identity intent fields; never a persona/visible-chat branch. */
   intentOwnerId?: string
   log?: (entry: LiaStartupGreetingLogEntry) => void
-  /**
-   * TEMPORARY (7.9E.3 real-Window QA): boundary tracer to locate the stall
-   * the 7.9E logs cannot see (the first existing entry only fires after the
-   * first wait settles). Metadata-only: steps, booleans, state strings and
-   * milliseconds - never text, paths or payloads. REMOVE with this phase.
-   */
-  diag?: (step: string, detail?: string) => void
 }
 
 export interface LiaStartupGreetingHandle {
@@ -113,7 +106,6 @@ export function scheduleLiaStartupGreeting(options: LiaStartupGreetingOptions): 
   const pollIntervalMs = options.pollIntervalMs ?? 1_000
   const intentOwnerId = options.intentOwnerId ?? 'lia-startup-greeting'
   const log = options.log ?? (() => undefined)
-  const diag = options.diag ?? (() => undefined)
 
   let cancelReason: string | undefined
   let intent: IntentHandle | undefined
@@ -124,7 +116,6 @@ export function scheduleLiaStartupGreeting(options: LiaStartupGreetingOptions): 
   const isCancelled = () => cancelReason !== undefined
 
   const done = (async (): Promise<LiaStartupGreetingOutcome> => {
-    diag('scheduler-started', `managed=${String(options.managedLaunch)}`)
     if (!options.managedLaunch) {
       // Standalone stages never greet: the managed shell is the product
       // moment this belongs to. The latch is not touched here at all.
@@ -139,18 +130,8 @@ export function scheduleLiaStartupGreeting(options: LiaStartupGreetingOptions): 
     //    usual cold start; a first-run box without the runtime fails this
     //    wait politely after the budget).
     let ready = false
-    let poll = 0
     while (!isCancelled()) {
-      poll += 1
-      diag('voice-status-invoke-start', `poll=${poll} ms=${now() - startedAt}`)
-      let invokeFailed = false
-      const status = await options.voiceStatus().catch(() => {
-        invokeFailed = true
-        return undefined
-      })
-      // TEMP 7.9E.3: state only - an IPC hop's payload note can carry a
-      // path, and paths never cross this tracer.
-      diag('voice-status-invoke-end', invokeFailed ? 'invoke-error' : `state=${status?.state ?? 'none'} ms=${now() - startedAt}`)
+      const status = await options.voiceStatus().catch(() => undefined)
       if (status?.state === 'ready') {
         ready = true
         break
@@ -168,7 +149,6 @@ export function scheduleLiaStartupGreeting(options: LiaStartupGreetingOptions): 
     // 2. Wait for the speech HOST to exist (Stage.vue registers it when the
     //    scene mounts). The same budget covers this: a stage without a
     //    speech host simply cannot greet audibly this launch.
-    diag('speech-host-wait-start', `ms=${now() - startedAt}`)
     while (!isCancelled() && intent === undefined) {
       intent = options.openIntent({ behavior: 'queue', ownerId: intentOwnerId, priority: 'normal' })
       if (intent)
@@ -183,14 +163,11 @@ export function scheduleLiaStartupGreeting(options: LiaStartupGreetingOptions): 
     }
     if (!intent)
       return finish('no-speech-host', { readyWaitMs })
-    diag('speech-host-found', `ms=${now() - startedAt}`)
 
     // 3. Claim the launch's single slot BEFORE writing anything: a reload
     //    racing mid-greeting can never double-speak, because the claim is
     //    the gate and it lives under the main process.
-    diag('claim-invoke-start', `ms=${now() - startedAt}`)
     const claim = await options.claimGreeting().catch(() => undefined)
-    diag('claim-invoke-end', `granted=${String(claim?.granted ?? 'error')}`)
     if (cancelReason !== undefined) {
       intent.cancel(cancelReason)
       return finish('cancelled', { note: cancelReason })
@@ -203,7 +180,6 @@ export function scheduleLiaStartupGreeting(options: LiaStartupGreetingOptions): 
     // 4. ONE utterance down the ordinary pipeline. `end()` hands it over;
     //    playback finishing later is the pipeline's business, not ours.
     const { poolIndex, text } = pickLiaStartupGreeting(LIA_STARTUP_GREETING_POOL, random)
-    diag('intent-write-start', `poolIndex=${poolIndex}`)
     log({ event: 'lia.voice.startup-greeting', poolIndex, readyWaitMs })
     intent.writeLiteral(text)
     intent.writeFlush()
@@ -240,21 +216,14 @@ export function scheduleLiaStartupGreeting(options: LiaStartupGreetingOptions): 
  * reloads - are stopped by the main-process latch inside the flow.
  */
 export function installLiaStartupGreeting(pinia: Parameters<typeof useSpeechRuntimeStore>[0]): LiaStartupGreetingHandle {
-  // TEMP 7.9E.3: same prefix family as the product log so the QA DevTools
-  // filter ("lia.voice.startup-greeting") catches every boundary line.
-  const diag = (step: string, detail?: string) => console.info(`[lia.voice.startup-greeting:diag] step=${step}${detail !== undefined ? ` ${detail}` : ''}`)
-  diag('install-entered')
   const voiceStatus = useElectronEventaInvoke(electronLiaVoiceStatus)
   const claimGreeting = useElectronEventaInvoke(electronLiaVoiceStartupGreetingClaim)
   const speechRuntime = () => useSpeechRuntimeStore(pinia)
-  const managedLaunch = resolveRendererWindowContext().liaManaged
-  diag('managed-launch', String(managedLaunch))
 
   const handle = scheduleLiaStartupGreeting({
     claimGreeting: async () => claimGreeting(),
-    diag,
     log: entry => console.info('[lia.voice.startup-greeting]', Object.entries(entry).map(([key, value]) => `${key}=${String(value)}`).join(' ')),
-    managedLaunch,
+    managedLaunch: resolveRendererWindowContext().liaManaged,
     openIntent: (intentOptions) => {
       // No speech host yet (scene not mounted) -> the scheduler must retry,
       // not speak into the void: tokens of a host-less intent go nowhere.
