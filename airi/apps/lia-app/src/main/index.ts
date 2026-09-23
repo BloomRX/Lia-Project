@@ -12,6 +12,7 @@ import { createLiaHost } from './lia-host'
 import { createSupervisorQuitFlow } from './shutdown-coordinator'
 import { enforceSingleInstance } from './single-instance'
 import { createLiaBootTimer } from './timing'
+import { createLiaVoiceEngineService } from './voice-engine-service'
 import { createLiaVoiceInstallInspector } from './voice-install-inspector'
 
 /**
@@ -87,6 +88,17 @@ async function bootstrap(): Promise<void> {
   })
   timer.mark('lia-core.ready')
 
+  // Phase 7.9G: the Voice Engine surface reuses the SAME real install proof
+  // (7.9E.2), the host-owned effective runtime home (7.4), the canonical
+  // snapshot for the selection model (7.9F) and the bounded event rail
+  // (item 6). No path or layout knowledge is duplicated here.
+  const voiceEngine = createLiaVoiceEngineService({
+    effectiveHome: async () => (await host.runtimeLocationStatus()).effectiveInstallDir,
+    inspector: createLiaVoiceInstallInspector(),
+    onEvent: (event, detail) => publishLiaEvent(event, detail),
+    snapshot: async () => await host.productSnapshot(),
+  })
+
   // The supervisor quit flow: every exit route runs the coordinator first.
   // `app.exit` (not `app.quit`) ends the process - it does not re-fire
   // before-quit, and even if it did the guard below makes it a no-op.
@@ -110,6 +122,7 @@ async function bootstrap(): Promise<void> {
     requestQuit: () => {
       quitFlow?.onBeforeQuit()
     },
+    voiceEngine,
     // Phase 7.4 Part J: native folder picker for the heavy runtime root.
     pickDirectory: async () => {
       if (!mainWindow)

@@ -28,6 +28,10 @@ const api = {
   stopStage: () => ipcRenderer.invoke('lia:stage:stop'),
   timings: () => ipcRenderer.invoke('lia:timings'),
   updateConfig: (payload: unknown) => ipcRenderer.invoke('lia:config:update', payload),
+  // Phase 7.9G: Voice Engine surface - state read + the ONE install action.
+  // Selection writes ride `updateConfig` (the existing canonical seam).
+  installVoiceEngine: () => ipcRenderer.invoke('lia:voice-engine:install'),
+  voiceEngineState: () => ipcRenderer.invoke('lia:voice-engine:state'),
 }
 
 export type LiaApi = typeof api

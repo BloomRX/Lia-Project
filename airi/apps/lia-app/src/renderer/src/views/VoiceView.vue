@@ -1,13 +1,21 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 
+import VoiceEngineCard from '../components/VoiceEngineCard.vue'
+
 /**
  * Voice (Phase 7.1, item 6): ready-made voice vs. own voice, the local
  * voice system's status, import via the OS picker, and the ACTIVE profile
  * - all reusing the Lia Core voice behaviors. Zero storage duplication:
  * the library registry stays the single source of truth.
+ *
+ * Phase 7.9G: the Voice Engine card (install state, one install action,
+ * selection) sits ABOVE the kind choice - the selected engine is a
+ * product-level surface, independent from the ready/custom kind below.
+ * Same 7.9F model, rendered engine-neutral.
  */
 const props = defineProps<{ api: any, status: any }>()
+const emit = defineEmits<{ (e: 'refresh'): void }>()
 
 const profiles = ref<any[]>([])
 const advanced = ref(false)
@@ -114,8 +122,8 @@ async function importVoice() {
     }
     const name = importName.value.trim() || 'Minha voz'
     const result = await props.api.importVoice({
-      // No engine id: none is registered yet (Phase 7.8D), so the import
-      // defers cleanly in the core until a real one (Kokoro first) exists.
+      // No engine id: the core defers the import cleanly until a modular
+      // voice engine is hosted here.
       name,
       // Cloning-style import: the file IS the reference audio.
       sources: paths.map((path: string) => ({ path, role: 'referenceAudio' })),
@@ -138,6 +146,14 @@ async function importVoice() {
 <template>
   <section class="voice">
     <h2>Como a Lia vai falar?</h2>
+
+    <!--
+      Phase 7.9G finalize: the Voice Engine card IS the product's selected
+      voice-engine surface - independent from the ready/custom voice-kind
+      choice below. It appears ALWAYS, exactly once, before every
+      kind-specific section.
+    -->
+    <VoiceEngineCard v-if="props.api" :api="props.api" @changed="emit('refresh')" />
 
     <div class="choices">
       <label class="choice card" :class="{ active: kind === 'ready' }" @click="kind = 'ready'">

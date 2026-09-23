@@ -1,15 +1,18 @@
 import type { LiaVoiceEngine, LiaVoiceEngineHealth, LiaVoiceSynthesisInput, LiaVoiceSynthesisOutput } from '../types'
+import type { KokoroInstallDeps, KokoroInstallFacts } from './install'
+import type { KokoroLayout } from './layout'
+import type { KokoroSpawn, KokoroWorkerClient, KokoroWorkerFacts } from './process-worker'
 
-import { readFile, rm } from 'node:fs/promises'
-import { existsSync, mkdirSync } from 'node:fs'
 import nodePath from 'node:path'
 import process from 'node:process'
 
+import { existsSync, mkdirSync } from 'node:fs'
+import { readFile, rm } from 'node:fs/promises'
+
 import { errorMessageFrom } from '@moeru/std'
 
-import { LiaVoiceEngineError } from '../types'
 import { KOKORO_ENGINE_ADAPTER } from '../registry'
-
+import { LiaVoiceEngineError } from '../types'
 import { defaultKokoroInstallDeps, ensureKokoroInstalled } from './install'
 import { inspectKokoroInstall, resolveKokoroLayout } from './layout'
 import {
@@ -18,17 +21,20 @@ import {
   KOKORO_ENGINE_ID,
 } from './manifest'
 import { createKokoroWorkerClient, KokoroWorkerError } from './process-worker'
-import type { KokoroInstallDeps, KokoroInstallFacts } from './install'
-import type { KokoroLayout } from './layout'
-import type { KokoroSpawn, KokoroWorkerClient, KokoroWorkerFacts } from './process-worker'
 
 export type { KokoroInstallFacts, KokoroLayout, KokoroSpawn, KokoroWorkerClient, KokoroWorkerFacts }
 
+// The engine-owned installer (Phase 7.9C), exposed whole so product hosts
+// (Lia App 7.9G) can run THE ONE production install path - idempotent,
+// marker-pinned, its own honest errors - instead of re-implementing steps.
+export { defaultKokoroInstallDeps, ensureKokoroInstalled, KokoroInstallError } from './install'
+export type { KokoroInstallDeps } from './install'
+export { inspectKokoroInstall, resolveKokoroLayout } from './layout'
+export { KOKORO_MODEL_BYTES, KOKORO_MODEL_SHA256, KOKORO_SAMPLE_RATE } from './manifest'
+
 // The dev-only smoke path (Phase 7.9D) and layout inspection compose the
 // same adapter surface as the engine itself - one production module.
-export { runKokoroSmoke, kokoroSmokeSummaryLine, KOKORO_SMOKE_PHRASES } from './smoke'
-export { inspectKokoroInstall, resolveKokoroLayout } from './layout'
-export { KOKORO_MODEL_SHA256, KOKORO_MODEL_BYTES, KOKORO_SAMPLE_RATE } from './manifest'
+export { KOKORO_SMOKE_PHRASES, kokoroSmokeSummaryLine, runKokoroSmoke } from './smoke'
 export type { KokoroSmokeFileSystem, KokoroSmokeOptions, KokoroSmokeReport } from './smoke'
 
 /**
@@ -66,9 +72,9 @@ export interface KokoroEngineOptions {
 
 export interface KokoroVoiceEngine extends LiaVoiceEngine {
   /** Idempotent engine-owned install. Failures leave a retryable tree. */
-  install(): Promise<KokoroInstallFacts>
+  install: () => Promise<KokoroInstallFacts>
   /** The composed layout (diagnostics/tests; persona never sees it). */
-  layout(): KokoroLayout
+  layout: () => KokoroLayout
 }
 
 const defaultFileSystem: KokoroEngineFileSystem = {

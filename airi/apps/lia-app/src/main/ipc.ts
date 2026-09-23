@@ -28,6 +28,15 @@ export interface LiaIpcExtras {
   pickDirectory?: () => Promise<string | null>
   /** The renderer's "close Lia" button routes here (Phase 7.1, item 3). */
   requestQuit?: () => void
+  /**
+   * Phase 7.9G: the product Voice Engine surface (install state, ONE
+   * install action). Owner: `voice-engine-service`; absent in unit tests
+   * that do not exercise the Voice screen.
+   */
+  voiceEngine?: {
+    install: () => Promise<unknown>
+    state: () => Promise<unknown>
+  }
 }
 
 /** The voice-file allowlist, refreshed by every successful pick. */
@@ -114,6 +123,23 @@ export function registerLiaIpc(host: LiaHost, timer: LiaBootTimer, extras: LiaIp
   })
 
   ipcMain.handle('lia:runtime-location:clear', async () => await host.clearRuntimeLocation())
+
+  // ---- Phase 7.9G voice-engine channels ----------------------------------
+  // READ surface + ONE install action. Selection intentionally rides the
+  // EXISTING `lia:config:update` writer (canonical seam) - no new write
+  // channel exists for engines.
+
+  ipcMain.handle('lia:voice-engine:state', async () => {
+    if (!extras.voiceEngine)
+      return { engines: [], phase: 'idle' }
+    return await extras.voiceEngine.state()
+  })
+
+  ipcMain.handle('lia:voice-engine:install', async () => {
+    if (!extras.voiceEngine)
+      return { status: 'failed' }
+    return await extras.voiceEngine.install()
+  })
 }
 
 /**
