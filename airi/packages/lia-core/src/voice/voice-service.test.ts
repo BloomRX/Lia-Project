@@ -1,6 +1,6 @@
-import { describe, expect, it, vi } from 'vitest'
-
 import type { LiaVoiceEngine } from './engines/types'
+
+import { describe, expect, it, vi } from 'vitest'
 
 import { LiaVoiceEngineError } from './engines/types'
 import { createLiaVoiceService } from './voice-service'
@@ -239,5 +239,201 @@ describe('stock engines on builds without a cloning engine (Phase 7.9C)', () => 
     })
     const output = await allowed.synthesize({ referenceAudioPath: '/ref.wav', text: 'Oi' })
     expect(output.engine).toBe('kokoro')
+  })
+})
+
+describe('7.9F selected-engine gate (configured-but-unbuildable = honest unavailable, never silent fallback)', () => {
+  const unknownSelection = () => ({ source: 'configured' as const, unknownConfiguredId: 'alltalk-server' })
+
+  it('the ROUTE is empty: no engine is even ASKED to synthesize', async () => {
+    const called: string[] = []
+    const healthy = engine('kokoro')
+    const spy = {
+      ...healthy,
+      synthesize: async (input: never) => {
+        called.push('kokoro')
+        return healthy.synthesize(input)
+      },
+    } as unknown as LiaVoiceEngine
+    const service = createLiaVoiceService({
+      engines: [spy],
+      fallback: () => ({ enabled: true }),
+      preferredEngineId: () => undefined,
+      selection: unknownSelection,
+    })
+    // Synthesis must fail honestly instead of landing on the healthy engine.
+    await expect(service.synthesize({ text: 'oi' })).rejects.toThrow()
+    expect(called).toEqual([])
+  })
+
+  it('state() is honestly UNAVAILABLE and names the pinned id (no health probe of other engines)', async () => {
+    let probed = false
+    const spy = {
+      ...engine('kokoro'),
+      health: async () => {
+        probed = true
+        return { ok: true, state: 'ready' }
+      },
+    } as unknown as LiaVoiceEngine
+    const service = createLiaVoiceService({
+      engines: [spy],
+      fallback: () => ({ enabled: true }),
+      preferredEngineId: () => undefined,
+      selection: unknownSelection,
+    })
+    const state = await service.state()
+    expect(state.available).toBe(false)
+    expect(state.primary).toMatchObject({ id: 'alltalk-server', ok: false, state: 'unavailable' })
+    expect(probed).toBe(false)
+  })
+
+  it('a RESOLVED selection keeps the historical route intact (regression shield)', async () => {
+    const service = createLiaVoiceService({
+      engines: [engine('kokoro')],
+      fallback: () => ({ enabled: true }),
+      preferredEngineId: () => 'kokoro',
+      selection: () => ({ engineId: 'kokoro', source: 'configured' as const }),
+    })
+    const output = await service.synthesize({ text: 'oi' })
+    expect(output.engine).toBe('kokoro')
+  })
+
+  it('callers WITHOUT the selection dep behave exactly as before (backward compatibility)', async () => {
+    const service = createLiaVoiceService({
+      engines: [engine('kokoro')],
+      fallback: () => ({ enabled: true }),
+      preferredEngineId: () => undefined,
+    })
+    const output = await service.synthesize({ text: 'oi' })
+    expect(output.engine).toBe('kokoro')
+  })
+})
+
+describe('7.9F authoritative selection - the ONE selected TTS engine, or nothing (two-engine proofs)', () => {
+  interface ProbeEngine {
+    engine: LiaVoiceEngine
+    calls: { health: number, start: number, synthesize: number }
+  }
+
+  function probeEngine(id: string, options: { clones?: boolean, healthy?: boolean, synthFailsWith?: Error } = {}): ProbeEngine {
+    const calls = { health: 0, start: 0, synthesize: 0 }
+    return {
+      calls,
+      engine: {
+        id,
+        capabilities: () => ({ clonesVoice: options.clones ?? false, requiresNetwork: false, runsLocally: true, streams: false }),
+        health: async () => {
+          calls.health += 1
+          return options.healthy ?? true
+            ? { ok: true, state: 'ready' }
+            : { ok: false, state: 'unavailable' }
+        },
+        start: async () => {
+          calls.start += 1
+        },
+        stop: async () => undefined,
+        synthesize: async () => {
+          calls.synthesize += 1
+          if (options.synthFailsWith)
+            throw options.synthFailsWith
+          return {
+            audio: new Uint8Array([1, 2, 3]).buffer,
+            audioDurationMs: 1000,
+            channels: 1,
+            engine: id,
+            generationMs: 500,
+            sampleRate: 24000,
+          }
+        },
+      },
+    }
+  }
+
+  function selectedService(a: ProbeEngine, b: ProbeEngine, selectedId: string) {
+    return createLiaVoiceService({
+      engines: [a.engine, b.engine],
+      fallback: () => ({ enabled: true }), // toggle ON on purpose: selection overrides it anyway
+      preferredEngineId: () => selectedId,
+      selection: () => ({ engineId: selectedId, source: 'configured' as const }),
+    })
+  }
+
+  it('a - selected A healthy: ONLY A is health-probed and synthesized; B is never touched', async () => {
+    const a = probeEngine('engine-a')
+    const b = probeEngine('engine-b')
+    const service = selectedService(a, b, 'engine-a')
+
+    const state = await service.state()
+    expect(state.available).toBe(true)
+    expect(state.primary).toMatchObject({ id: 'engine-a', ok: true })
+    const output = await service.synthesize({ text: 'oi' })
+    expect(output.engine).toBe('engine-a')
+
+    expect(a.calls).toEqual({ health: 1, start: 0, synthesize: 1 })
+    expect(b.calls).toEqual({ health: 0, start: 0, synthesize: 0 })
+  })
+
+  it('b - selected A unhealthy while B healthy: honestly unavailable; B gets ZERO probes/calls', async () => {
+    const a = probeEngine('engine-a', { healthy: false })
+    const b = probeEngine('engine-b')
+    const service = selectedService(a, b, 'engine-a')
+
+    const state = await service.state()
+    expect(state.available).toBe(false)
+    expect(state.primary).toMatchObject({ id: 'engine-a', ok: false, state: 'unavailable' })
+    expect(state.fallback).toBeUndefined() // no fallback column in the product model
+
+    expect(a.calls.health).toBe(1)
+    expect(b.calls).toEqual({ health: 0, start: 0, synthesize: 0 })
+  })
+
+  it('c - selected A healthy but SYNTH fails while B healthy: failure surfaces from A; B never synthesizes', async () => {
+    const synthError = new LiaVoiceEngineError('engine-a', 'engine-error', 'boom')
+    const a = probeEngine('engine-a', { synthFailsWith: synthError })
+    const b = probeEngine('engine-b')
+    const service = selectedService(a, b, 'engine-a')
+
+    await expect(service.synthesize({ text: 'oi' })).rejects.toBe(synthError)
+    expect(a.calls.synthesize).toBe(1)
+    expect(b.calls).toEqual({ health: 0, start: 0, synthesize: 0 })
+  })
+
+  it('d - selection resolves NO engine (unknown configured id or no default): route empty, zero engines queried', async () => {
+    const a = probeEngine('engine-a')
+    const b = probeEngine('engine-b')
+    const unknown = createLiaVoiceService({
+      engines: [a.engine, b.engine],
+      fallback: () => ({ enabled: true }),
+      preferredEngineId: () => 'missing-engine',
+      selection: () => ({ source: 'configured' as const, unknownConfiguredId: 'missing-engine' }),
+    })
+    await expect(unknown.synthesize({ text: 'oi' })).rejects.toThrow()
+    const noDefault = createLiaVoiceService({
+      engines: [a.engine, b.engine],
+      fallback: () => ({ enabled: true }),
+      preferredEngineId: () => undefined,
+      selection: () => ({ source: 'none' as const }),
+    })
+    expect((await noDefault.state()).available).toBe(false)
+    await expect(noDefault.synthesize({ text: 'oi' })).rejects.toThrow()
+
+    expect(a.calls).toEqual({ health: 0, start: 0, synthesize: 0 })
+    expect(b.calls).toEqual({ health: 0, start: 0, synthesize: 0 })
+  })
+
+  it('e - selection dep ABSENT: legacy 7.8C cloning sweep still falls to the next engine', async () => {
+    // The legacy sweep only exists for CLONING engines: non-cloning engines
+    // throw on first failure in both models (pinned by synthesizeOne).
+    const a = probeEngine('engine-a', { clones: true, synthFailsWith: new LiaVoiceEngineError('engine-a', 'engine-error', 'boom') })
+    const b = probeEngine('engine-b', { clones: true })
+    const legacy = createLiaVoiceService({
+      engines: [a.engine, b.engine],
+      fallback: () => ({ enabled: true }),
+      preferredEngineId: () => 'engine-a',
+    })
+    const output = await legacy.synthesize({ text: 'oi' })
+    expect(output.engine).toBe('engine-b')
+    expect(a.calls.synthesize).toBe(1)
+    expect(b.calls.synthesize).toBe(1)
   })
 })

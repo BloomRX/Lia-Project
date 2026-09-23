@@ -23,9 +23,11 @@ const h = vi.hoisted(() => {
   return {
     calls: [] as string[],
     isManaged: true,
-    prewarmArgs: [] as Array<{ managedLaunch: boolean }>,
     latchArgs: [] as Array<{ managedLaunch: boolean }>,
     kokoroFactoryCalls: 0,
+    preferred: undefined as string | undefined,
+    prewarmArgs: [] as Array<{ engineIds: string[], managedLaunch: boolean }>,
+    seamLogs: [] as string[],
   }
 })
 
@@ -70,9 +72,9 @@ vi.mock('./lia-capabilities', () => ({
 }))
 
 vi.mock('./voice-prewarm', () => ({
-  prewarmManagedVoice: (options: { managedLaunch: boolean }) => {
+  prewarmManagedVoice: (options: { engines: Array<{ id: string }>, managedLaunch: boolean }) => {
     h.calls.push('prewarm')
-    h.prewarmArgs.push({ managedLaunch: options.managedLaunch })
+    h.prewarmArgs.push({ engineIds: options.engines.map(engine => engine.id), managedLaunch: options.managedLaunch })
     return { readyEngines: () => ['kokoro'], settled: Promise.resolve() }
   },
 }))
@@ -89,7 +91,10 @@ vi.mock('./lia-managed', () => ({
 }))
 
 const fakeWindow = { webContents: { send: () => undefined } } as never
-const fakeProductConfig = { get: () => ({ voice: { runtime: {} } }), update: () => undefined } as never
+const fakeProductConfig = {
+  get: () => ({ voice: { ...(h.preferred ? { engine: { preferred: h.preferred } } : {}), runtime: {} } }),
+  update: () => undefined,
+} as never
 const fakeStore = {} as never
 
 describe('7.9E.4 - voice runtime registers at the window-creation seam (order, exactly once)', () => {
@@ -99,6 +104,8 @@ describe('7.9E.4 - voice runtime registers at the window-creation seam (order, e
     h.latchArgs.length = 0
     h.kokoroFactoryCalls = 0
     h.isManaged = true
+    h.preferred = undefined
+    h.seamLogs.length = 0
   })
 
   it('managed launch: exact composition order context -> engine -> bridges -> prewarm -> latch', () => {
@@ -110,7 +117,7 @@ describe('7.9E.4 - voice runtime registers at the window-creation seam (order, e
     expect(h.calls).toEqual(['context', 'kokoro-engine', 'voice-bridge', 'capabilities-bridge', 'prewarm', 'greeting-latch'])
     // Exactly once each: ONE engine set, ONE greeting latch per process.
     expect(h.kokoroFactoryCalls).toBe(1)
-    expect(h.prewarmArgs).toEqual([{ managedLaunch: true }])
+    expect(h.prewarmArgs).toEqual([{ engineIds: ['kokoro'], managedLaunch: true }])
     expect(h.latchArgs).toEqual([{ managedLaunch: true }])
   })
 
@@ -122,8 +129,45 @@ describe('7.9E.4 - voice runtime registers at the window-creation seam (order, e
       window: fakeWindow,
     })
     expect(h.calls).toEqual(['context', 'kokoro-engine', 'voice-bridge', 'capabilities-bridge', 'prewarm', 'greeting-latch'])
-    expect(h.prewarmArgs).toEqual([{ managedLaunch: false }])
+    expect(h.prewarmArgs).toEqual([{ engineIds: ['kokoro'], managedLaunch: false }])
     expect(h.latchArgs).toEqual([{ managedLaunch: false }])
+  })
+
+  it('7.9F default/legacy config: prewarm warms ONLY the product default engine (Kokoro)', () => {
+    startLiaMainWindowVoiceRuntime({
+      liaProductConfig: fakeProductConfig,
+      liaVoiceProfiles: fakeStore,
+      window: fakeWindow,
+    })
+    expect(h.prewarmArgs).toEqual([{ engineIds: ['kokoro'], managedLaunch: true }])
+  })
+
+  it('7.9F multi-engine: ONLY the SELECTED engine warms, never every registered engine', () => {
+    h.preferred = 'second-engine'
+    const kokoroEngine = { id: 'kokoro', capabilities: () => ({ clonesVoice: false }), health: async () => ({ ok: true, state: 'ready' }), start: async () => undefined, stop: async () => undefined }
+    const secondEngine = { ...kokoroEngine, id: 'second-engine' }
+    startLiaMainWindowVoiceRuntime({
+      engines: [kokoroEngine, secondEngine] as never,
+      liaProductConfig: fakeProductConfig,
+      liaVoiceProfiles: fakeStore,
+      window: fakeWindow,
+    })
+    // Exactly ONE engine in the warm list - a solo start (the prewarm module
+    // itself starts each listed engine exactly once, pinned by its own tests).
+    expect(h.prewarmArgs).toEqual([{ engineIds: ['second-engine'], managedLaunch: true }])
+    expect(h.kokoroFactoryCalls).toBe(0) // test seam engines: no second build-side engine constructed
+  })
+
+  it('7.9F unknown configured engine: warms NOTHING and logs an honest metadata-only note', () => {
+    h.preferred = 'alltalk-server'
+    startLiaMainWindowVoiceRuntime({
+      liaProductConfig: fakeProductConfig,
+      liaVoiceProfiles: fakeStore,
+      log: line => h.seamLogs.push(line),
+      window: fakeWindow,
+    })
+    expect(h.prewarmArgs).toEqual([{ engineIds: [], managedLaunch: true }])
+    expect(h.seamLogs).toContainEqual('event=lia.voice.selection source=configured unknown=alltalk-server')
   })
 })
 

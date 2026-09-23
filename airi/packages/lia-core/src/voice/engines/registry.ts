@@ -90,3 +90,86 @@ export function resolveVoiceEngineBackend(engineId: string, requested?: string):
 export function listVoiceEngineBackends(engineId: string): readonly VoiceEngineBackend[] | undefined {
   return findVoiceEngineAdapter(String(engineId).trim())?.backends
 }
+
+// ---------------------------------------------------------------------------
+// Phase 7.9F: canonical SELECTED-ENGINE resolution + product descriptors.
+// ---------------------------------------------------------------------------
+
+/**
+ * The default engine the transitional product selects when the operator
+ * never configured one (legacy/fresh documents). Stable engine id, never a
+ * provider/backend name.
+ */
+export const LIA_DEFAULT_VOICE_ENGINE_ID = 'kokoro'
+
+/**
+ * Which engine the product should use and WHY. `engineId` is absent when no
+ * usable selection exists:
+ * - `source: 'configured'` + absent engineId ALWAYS pairs with
+ *   `unknownConfiguredId` - the operator pinned an engine this build cannot
+ *   construct. That is honest voice-unavailable, NEVER a silent switch to
+ *   another engine (item: unknown must not fallback).
+ * - `source: 'default'` means a legacy/fresh document resolved to the
+ *   product default engine.
+ * - `source: 'none'` means not even the default exists (future builds).
+ */
+export interface LiaVoiceEngineSelection {
+  engineId?: string
+  source: 'configured' | 'default' | 'none'
+  unknownConfiguredId?: string
+}
+
+/**
+ * Resolves the ONE selected engine id from product truth + this build's
+ * engine set. Engine ids only - providers/backends stay invisible to this
+ * layer (and to the renderer, which never resolves selection itself).
+ */
+export function resolveVoiceEngineSelection(input: {
+  preferred?: string
+  availableEngineIds: readonly string[]
+  defaultEngineId?: string
+}): LiaVoiceEngineSelection {
+  const preferred = input.preferred?.trim()
+  if (preferred) {
+    if (input.availableEngineIds.includes(preferred))
+      return { engineId: preferred, source: 'configured' }
+    return { source: 'configured', unknownConfiguredId: preferred }
+  }
+  const defaultEngineId = input.defaultEngineId ?? LIA_DEFAULT_VOICE_ENGINE_ID
+  if (input.availableEngineIds.includes(defaultEngineId))
+    return { engineId: defaultEngineId, source: 'default' }
+  return { source: 'none' }
+}
+
+/**
+ * The product-facing descriptor for a NORMAL UI: id, a localized-name
+ * handle, and honest installed/selectable facts. No provider, backend,
+ * Python or runtime jargon crosses this surface - `nameKey` lets the UI
+ * localize while `name` is the English fallback (today the adapter label,
+ * which is already product language: "Kokoro").
+ */
+export interface LiaVoiceEngineDescriptor {
+  id: string
+  nameKey: string
+  name: string
+  installed: boolean
+  selectable: boolean
+  selected: boolean
+}
+
+export function describeVoiceEngineOptions(input: {
+  installed?: (adapterId: string) => boolean
+  selection: LiaVoiceEngineSelection
+}): LiaVoiceEngineDescriptor[] {
+  return VOICE_ENGINE_ADAPTERS.map((adapter) => {
+    const installed = input.installed?.(adapter.id) ?? false
+    return {
+      id: adapter.id,
+      installed,
+      name: adapter.label,
+      nameKey: `lia.voice.engines.${adapter.id}.name`,
+      selectable: installed,
+      selected: input.selection.engineId === adapter.id,
+    }
+  })
+}

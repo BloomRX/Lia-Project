@@ -1,5 +1,6 @@
-import type { LiaVoiceEngine, LiaVoiceEngineError as LiaVoiceEngineErrorType, LiaVoiceSynthesisInput, LiaVoiceSynthesisOutput } from './engines/types'
 import type { LiaVoiceFallbackConfig } from './config'
+import type { LiaVoiceEngineSelection } from './engines/registry'
+import type { LiaVoiceEngine, LiaVoiceEngineError as LiaVoiceEngineErrorType, LiaVoiceSynthesisInput, LiaVoiceSynthesisOutput } from './engines/types'
 
 import { LiaVoiceEngineError } from './engines/types'
 
@@ -42,6 +43,20 @@ export interface VoiceServiceDeps {
   fallback: () => LiaVoiceFallbackConfig
   /** Preferences lookup: the selected engine id, if one was selected. */
   preferredEngineId: () => string | undefined
+  /**
+   * Phase 7.9F: the RESOLVED selection (host seam) - AUTHORITATIVE for all
+   * voice traffic when present:
+   * - `engineId` set => ONLY the registered engine with that id is ever
+   *   routed or health-probed. No cloning sweep, no stock fallback tail:
+   *   one selected TTS engine, or nothing (items 16/24 hardened to the
+   *   product model).
+   * - no `engineId` (unknown configured id, or a build without the product
+   *   default) => the route is EMPTY and state() is unavailable. Honest
+   *   degradation, NEVER a silent switch to another TTS.
+   * Callers that omit this dep keep the legacy 7.8C routing - compatibility
+   * for internal consumers not yet migrated to the product selection model.
+   */
+  selection?: () => LiaVoiceEngineSelection
   log?: (record: Record<string, string | number | boolean>) => void
 }
 
@@ -77,6 +92,20 @@ export function createLiaVoiceService(deps: VoiceServiceDeps) {
    * and the toggle simply has nothing left to gate.
    */
   function route(): { engines: LiaVoiceEngine[], fallbackAllowed: boolean } {
+    // Phase 7.9F: the selection is AUTHORITATIVE. A resolved engineId
+    // routes EXACTLY that engine (nothing else is ever attempted); an
+    // unresolved selection routes NOTHING - honest unavailable, never a
+    // fallback to a different TTS engine.
+    if (deps.selection) {
+      const selection = deps.selection()
+      if (selection.engineId === undefined)
+        return { engines: [], fallbackAllowed: false }
+      const selected = deps.engines.find(engine => engine.id === selection.engineId)
+      return {
+        engines: selected ? [selected] : [],
+        fallbackAllowed: false,
+      }
+    }
     const ordered = enginesByPreference()
     const anyCloning = deps.engines.some(engine => engine.capabilities().clonesVoice)
     return {
@@ -175,6 +204,32 @@ export function createLiaVoiceService(deps: VoiceServiceDeps) {
       fallback?: { id: string, ok: boolean, enabled: boolean, state: string, note?: string }
     }> {
       void now
+      // Phase 7.9F: with an authoritative selection, ONLY the selected
+      // engine's health is probed - the fallback column simply does not
+      // exist for the product model.
+      if (deps.selection) {
+        const selection = deps.selection()
+        if (selection.engineId === undefined) {
+          return {
+            available: false,
+            ...(selection.unknownConfiguredId
+              ? { primary: { id: selection.unknownConfiguredId, note: 'configured-voice-engine-not-available', ok: false, state: 'unavailable' } }
+              : {}),
+          }
+        }
+        const selected = deps.engines.find(engine => engine.id === selection.engineId)
+        if (!selected) {
+          return {
+            available: false,
+            primary: { id: selection.engineId, note: 'selected-voice-engine-not-registered', ok: false, state: 'unavailable' },
+          }
+        }
+        const health = await selected.health()
+        return {
+          available: health.ok,
+          primary: { id: selected.id, ok: health.ok, ...(health.note ? { note: health.note } : {}), state: health.state },
+        }
+      }
       const ordered = enginesByPreference()
       const primary = ordered[0]
       const fallbackEngine = ordered.find(engine => !engine.capabilities().clonesVoice)

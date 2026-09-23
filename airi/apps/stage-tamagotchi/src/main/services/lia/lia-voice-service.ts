@@ -1,5 +1,6 @@
-import type { MainContext } from '@moeru/eventa/adapters/electron/main'
 import type { LiaVoiceEngine } from '@lia/core/voice/engines/types'
+import type { MainContext } from '@moeru/eventa/adapters/electron/main'
+
 import type {
   LiaVoiceEngineConfig,
   LiaVoiceStatus,
@@ -9,9 +10,10 @@ import type {
 import type { LiaProductConfig } from '../../configs/lia-schema'
 import type { LiaVoiceProfileStore } from './voice-profiles'
 
-import { defineInvokeHandler } from '@moeru/eventa'
 import { readVoiceEngineConfig, readVoiceFallbackConfig, VOICE_FALLBACK_DEFAULT_ENABLED } from '@lia/core/voice/config'
+import { resolveVoiceEngineSelection } from '@lia/core/voice/engines/registry'
 import { createLiaVoiceService } from '@lia/core/voice/voice-service'
+import { defineInvokeHandler } from '@moeru/eventa'
 
 import {
   electronLiaVoiceEngineConfigGet,
@@ -54,10 +56,18 @@ export function registerLiaVoiceBridge(params: LiaVoiceServiceParams) {
   const { context, liaProductConfig, store } = params
   const engines = params.engines ?? []
 
+  // Phase 7.9F: the selected engine is resolved ONCE at this host seam
+  // (default -> Kokoro; configured-but-unknown -> honest unavailable,
+  // never a silent switch). The renderer never resolves selection itself.
+  const selection = () => resolveVoiceEngineSelection({
+    availableEngineIds: engines.map(engine => engine.id),
+    preferred: readVoiceEngineConfig(liaProductConfig.get()?.voice).preferred,
+  })
   const service = createLiaVoiceService({
     engines,
     fallback: () => readVoiceFallbackConfig(liaProductConfig.get()?.voice),
-    preferredEngineId: () => readVoiceEngineConfig(liaProductConfig.get()?.voice).preferred,
+    preferredEngineId: () => selection().engineId,
+    selection,
     log: record => console.info(Object.entries(record).map(([key, value]) => `${key}=${String(value)}`).join(' ')),
   })
 

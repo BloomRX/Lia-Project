@@ -20,6 +20,44 @@ async function freshConfig(contents?: Record<string, unknown>): Promise<string> 
   return file
 }
 
+describe('7.9F selected-engine roundtrip (write -> read survives, neighbors untouched)', () => {
+  it('voice.engine.preferred persists through the canonical merge; schemaVersion and legacy voice keys intact', async () => {
+    const file = await freshConfig({
+      persona: { activeCardId: 'lia-default' },
+      schemaVersion: 1,
+      voice: {
+        engine: { preferred: 'kokoro' },
+        fallback: { enabled: true },
+        runtime: { installDir: 'C:\\Users\\lucas\\AppData\\Local\\Lia\\runtimes' },
+        tts: { preferred: { providerId: 'custom-local-voice', voiceId: 'pf_dora' } },
+      },
+    })
+
+    const read = await readLiaProductConfig(file)
+    expect(read.status).toBe('ok')
+    if (read.status !== 'ok')
+      return
+    // The canonical selected-engine field roundtrips verbatim, and every
+    // typed neighbor (legacy tts target, fallback policy, runtime override)
+    // survives the read untouched - document compatibility, no migration.
+    const voice = read.value.voice
+    expect(voice?.engine?.preferred).toBe('kokoro')
+    expect(voice?.fallback?.enabled).toBe(true)
+    expect(read.value.schemaVersion).toBe(1)
+    expect(voice?.tts?.preferred).toEqual({ providerId: 'custom-local-voice', voiceId: 'pf_dora' })
+  })
+
+  it('a legacy document WITHOUT any engine block reads preference-less (the resolver defaults to Kokoro)', async () => {
+    const file = await freshConfig({ schemaVersion: 1 })
+    const read = await readLiaProductConfig(file)
+    expect(read.status).toBe('ok')
+    if (read.status !== 'ok')
+      return
+    expect(read.value.voice?.engine?.preferred).toBeUndefined()
+    expect(read.value.schemaVersion).toBe(1)
+  })
+})
+
 describe('updateLiaProductConfig', () => {
   it('g. an IA change persists beside everything that was already there', async () => {
     const file = await freshConfig({

@@ -33,11 +33,13 @@
  * Prewarm stays managed-only, async, engine-owned, failure-nonfatal.
  */
 
+import type { LiaVoiceEngine } from '@lia/core/voice/engines/types'
 import type { BrowserWindow } from 'electron'
 
 import { resolveVoiceRuntimeHome } from '@lia/core/bootstrap/runtime-root'
-import { readVoiceRuntimeSelection } from '@lia/core/voice/config'
+import { readVoiceEngineConfig, readVoiceRuntimeSelection } from '@lia/core/voice/config'
 import { createKokoroVoiceEngine } from '@lia/core/voice/engines/kokoro'
+import { resolveVoiceEngineSelection } from '@lia/core/voice/engines/registry'
 import { createContext } from '@moeru/eventa/adapters/electron/main'
 import { app, ipcMain } from 'electron'
 
@@ -54,6 +56,12 @@ export interface LiaMainWindowVoiceRuntimeParams {
   liaProductConfig: Parameters<typeof registerLiaVoiceBridge>[0]['liaProductConfig']
   liaVoiceProfiles: Parameters<typeof registerLiaVoiceBridge>[0]['store']
   log?: (line: string) => void
+  /**
+   * Test seam ONLY (7.9F multi-engine prewarm proofs). Production leaves it
+   * undefined and gets the build's engine set below; a future engine lands
+   * by being ADDED to that same construction, never through this param.
+   */
+  engines?: LiaVoiceEngine[]
 }
 
 export function startLiaMainWindowVoiceRuntime(params: LiaMainWindowVoiceRuntimeParams): void {
@@ -71,12 +79,27 @@ export function startLiaMainWindowVoiceRuntime(params: LiaMainWindowVoiceRuntime
   // owns its runtime tree under the engine-neutral home (with the
   // optional product-config override) and starts lazily on first use.
   const userDataDir = app.getPath('userData')
-  const engines = [
+  const engines = params.engines ?? [
     createKokoroVoiceEngine({
       installDirOverride: () => readVoiceRuntimeSelection(params.liaProductConfig.get()?.voice).installDir,
       runtimeHome: () => resolveVoiceRuntimeHome({ userDataDir }),
     }),
   ]
+
+  // Phase 7.9F: ONE selected engine drives prewarm. Legacy/fresh documents
+  // resolve the product default (Kokoro today); a configured-but-unbuildable
+  // engine warms NOTHING and is surfaced as voice-unavailable downstream,
+  // never silently replaced. The SERVICE's own route gate is the same
+  // resolution - this is only the warm list at boot.
+  const selection = resolveVoiceEngineSelection({
+    availableEngineIds: engines.map(engine => engine.id),
+    preferred: readVoiceEngineConfig(params.liaProductConfig.get()?.voice).preferred,
+  })
+  if (selection.unknownConfiguredId)
+    log(`event=lia.voice.selection source=configured unknown=${selection.unknownConfiguredId}`)
+  const prewarmEngines = selection.engineId !== undefined
+    ? engines.filter(engine => engine.id === selection.engineId)
+    : []
 
   // Capability invalidation is circular-by-nature: the voice bridge
   // fires the change, the capability probe recomputes. A late-bound ref
@@ -98,15 +121,15 @@ export function startLiaMainWindowVoiceRuntime(params: LiaMainWindowVoiceRuntime
   })
   invalidateCapabilities = capabilities.invalidate
 
-  // Phase 7.9E, item 1: a real MANAGED launch hides the engine cold
-  // start behind the Stage boot. Fire-and-forget by construction - this
-  // hook (and the whole boot) is not delayed one millisecond by warming.
-  // Failure degrades to voice-unavailable + diagnostics; a settle
-  // refreshes the capability truth so the warmed engine becomes visible
-  // without any user action. Standalone launches keep the lazy start
-  // untouched.
+  // Phase 7.9E, item 1 / 7.9F: a real MANAGED launch hides the SELECTED
+  // engine's cold start behind the Stage boot (never every registered
+  // engine). Fire-and-forget by construction - this hook (and the whole
+  // boot) is not delayed one millisecond by warming. Failure degrades to
+  // voice-unavailable + diagnostics; a settle refreshes the capability
+  // truth so the warmed engine becomes visible without any user action.
+  // Standalone launches keep the lazy start untouched.
   const prewarm = prewarmManagedVoice({
-    engines,
+    engines: prewarmEngines,
     log: record => log(Object.entries(record).map(([key, value]) => `${key}=${String(value)}`).join(' ')),
     managedLaunch: isLauncherManaged(),
     onSettled: () => voiceBridge.voiceChanged(),
