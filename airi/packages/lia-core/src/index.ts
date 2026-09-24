@@ -5,6 +5,8 @@
  * vice-versa.
  */
 
+export { groqBrainDescriptors } from './brain/adapters/groq'
+export type { LiaBrainDescriptorSet } from './brain/adapters/groq'
 export {
   eligibleBrainEngines,
   eligibleBrainModels,
