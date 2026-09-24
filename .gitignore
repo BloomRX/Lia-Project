@@ -4,3 +4,11 @@ __pycache__/
 # Lia dev-only QA outputs (Phase 7.9D smoke WAVs, staging homes). Never commit:
 # no models, no runtimes, no audio artifacts live in Git.
 .devkit-qa/
+
+# Lia QA harness generated content (Phase 7.9G-QA). Run folders carry isolated
+# runtimes, downloaded models, logs and metrics - none of it belongs in Git.
+# Only Tests/README.md and Tests/tools are committed.
+Tests/runs/
+Tests/runtimes/
+Tests/logs/
+Tests/inventory/

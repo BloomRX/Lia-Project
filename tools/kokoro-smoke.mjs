@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 /**
  * Lia - Phase 7.9D dev-only Kokoro smoke (primary target: Windows).
- * Entry point: `DevKit.bat kokoro-smoke` from the repo root.
+ * Entry point: `DevKit.bat kokoro-smoke` from the repo root, or
+ * `node tools\kokoro-smoke.mjs [outDir]` (the QA harness passes a
+ * run-specific artifacts dir; without it the .devkit-qa default stays).
  *
  * This file is a THIN CLI. It contains no TTS logic of its own: it wires
  * together PRODUCTION modules built from `airi/packages/lia-core` -
@@ -42,9 +44,15 @@ const { resolveVoiceRuntimeHome } = await import(pathToFileURL(runtimeDist).href
 // Dev-only QA corner of the repo (gitignored). On Windows the REAL runtime
 // home (%LOCALAPPDATA%\Lia\runtimes) is used - exercising it is the entire
 // point of the smoke. POSIX runs stage here so a dev box is never dirtied.
+//
+// Output-dir seam (Phase 7.9G-QA, tooling-only): the QA harness passes a
+// run-specific artifacts dir so smoke WAVs live INSIDE the test run
+// (`node tools\kokoro-smoke.mjs <outDir>`). Invoked without an argument the
+// behavior is EXACTLY what it always was - the .devkit-qa corner below.
+const outDirArg = process.argv[2]?.trim()
 const QA_DIR = nodePath.join(REPO_ROOT, '.devkit-qa')
 const stagingUserData = nodePath.join(QA_DIR, 'staging-userData')
-const outDir = nodePath.join(QA_DIR, 'kokoro-smoke')
+const outDir = outDirArg ? nodePath.resolve(REPO_ROOT, outDirArg) : nodePath.join(QA_DIR, 'kokoro-smoke')
 await mkdir(outDir, { recursive: true })
 
 const runtimeHome = resolveVoiceRuntimeHome({ userDataDir: stagingUserData })
