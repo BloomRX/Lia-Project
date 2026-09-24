@@ -5,6 +5,12 @@
  * vice-versa.
  */
 
+export {
+  eligibleBrainEngines,
+  eligibleBrainModels,
+  satisfiesBrainCapabilities,
+} from './brain/capabilities'
+export type { LiaBrainCapability, LiaBrainCapabilityRequirement } from './brain/capabilities'
 export { createBrainEngineRegistry, modelsForEngine } from './brain/engine-registry'
 export type { LiaBrainEngineRegistrationResult, LiaBrainEngineRegistry } from './brain/engine-registry'
 export type {
