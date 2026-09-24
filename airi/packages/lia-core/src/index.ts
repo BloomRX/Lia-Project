@@ -26,13 +26,21 @@ export type { BuildLiaBridgeConfigInput, LiaBridgeConfig } from './bridge/lia-co
 export { liaProductPaths, liaUserDataCandidates } from './paths/product-paths'
 export type { LiaProductPaths } from './paths/product-paths'
 export {
+  brainRoutingModeUpdate,
   brainSelectionUpdate,
+  isBrainRoutingMode,
+  readBrainRoutingMode,
   readLiaProductConfig,
   readPreferredBrainEngineId,
   readPreferredBrainModelId,
 } from './product/config'
 
-export type { LiaProductBrainSelection, LiaProductConfigRead, LiaProductConfigSnapshot } from './product/config'
+export type {
+  LiaBrainRoutingMode,
+  LiaProductBrainSelection,
+  LiaProductConfigRead,
+  LiaProductConfigSnapshot,
+} from './product/config'
 export { ciphertextToBase64, createLiaSecretVault } from './secrets/vault'
 export type { LiaSecretVault } from './secrets/vault'
 export { createLiaVoiceProfileStore } from './voices/profiles'

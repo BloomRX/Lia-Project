@@ -176,12 +176,17 @@ const setupSchema = object({
  * user's Brain choice on the next Stage save. The ids are OPAQUE (Brain
  * Engine Registry / Brain Model ids) - the Stage never resolves them, so
  * no provider/vendor field belongs in this shape. Additive/optional.
+ *
+ * Phase 8.0C-3A: `mode` persists the user's routing intent. Only the three
+ * canonical literals round-trip; anything else falls away on parse, and a
+ * document WITHOUT it stays valid (absence = no explicit routing mode).
  */
 const brainSelectionTargetSchema = object({
   preferred: optional(string()),
 })
 
 const brainConfigSchema = object({
+  mode: optional(union([literal('automatic'), literal('manual'), literal('disabled')])),
   engine: optional(brainSelectionTargetSchema),
   model: optional(brainSelectionTargetSchema),
 })

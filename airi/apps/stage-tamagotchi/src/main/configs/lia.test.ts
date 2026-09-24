@@ -317,6 +317,66 @@ describe('lia product config', () => {
     expect(persisted.preferences?.language).toBe('pt-BR')
   })
 
+  it('brain routing mode survives the Stage parse/write round-trip (8.0C-3A)', async () => {
+    // Same anti-stripping duty as voice.enabled / setup.completed: the mode
+    // is the user's routing intent, and a Stage-side write must carry it.
+    const { mod, fs } = await loadModules(invalidFileMocks('/tmp/u', JSON.stringify({
+      schemaVersion: 1,
+      persona: { activeCardId: 'lia' },
+      provider: {},
+      voice: {},
+      preferences: {},
+      brain: {
+        mode: 'manual',
+        engine: { preferred: 'engine-alpha' },
+        model: { preferred: 'model-alpha' },
+      },
+    })))
+    const config = mod.createLiaProductConfig()
+
+    expect(config.getDiagnostics()?.status).toBe('ok')
+    expect(config.get()?.brain?.mode).toBe('manual')
+    expect(config.get()?.brain?.engine?.preferred).toBe('engine-alpha')
+
+    // An unrelated update rewrites the document WITH mode + selections.
+    config.update({
+      ...config.get()!,
+      preferences: { language: 'pt-BR' },
+    })
+    expect(config.get()?.brain?.mode).toBe('manual')
+
+    await vi.waitFor(() => {
+      expect(fs.writeFile).toHaveBeenCalled()
+    })
+    const persisted = JSON.parse((fs.writeFile as ReturnType<typeof vi.fn>).mock.calls[0][1] as string) as Record<string, any>
+    expect(persisted.brain).toEqual({
+      mode: 'manual',
+      engine: { preferred: 'engine-alpha' },
+      model: { preferred: 'model-alpha' },
+    })
+  })
+
+  it('an invalid brain.mode never becomes canonical state - the doc auto-heals like any invalid v1 document (8.0C-3A)', async () => {
+    // Stage validation is strict: a non-canonical mode makes the whole
+    // document invalid, so it auto-heals back to the default (with a .bak
+    // attempt) - the bogus mode can never round-trip as stored state.
+    // (The launcher's own tolerant reader degrades gracefully instead -
+    // proven in lia-core's product config suite.)
+    const { mod, fs } = await loadModules(invalidFileMocks('/tmp/u', JSON.stringify({
+      schemaVersion: 1,
+      brain: {
+        mode: 'turbo',
+        engine: { preferred: 'engine-alpha' },
+      },
+    })))
+    const config = mod.createLiaProductConfig()
+    expect(config.get()?.schemaVersion).toBe(1)
+    expect(config.get()?.brain?.mode).toBeUndefined()
+    await vi.waitFor(() => {
+      expect(fs.copyFile).toHaveBeenCalled()
+    })
+  })
+
   it('documents without brain stay valid for the Stage (additive schema)', async () => {
     const { mod } = await loadModules(invalidFileMocks('/tmp/u', JSON.stringify({
       schemaVersion: 1,

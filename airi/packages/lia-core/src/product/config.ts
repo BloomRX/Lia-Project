@@ -91,7 +91,29 @@ export interface LiaProductVoiceConfig {
  * provider/vendor fields. Absent means "no explicit selection yet";
  * default resolution deliberately does NOT live here (a later phase).
  */
+
+/**
+ * Phase 8.0C-3A: the user's Brain routing INTENT - persisted, never
+ * interpreted into a route by this layer:
+ * - `automatic`: a future automatic resolver may choose an eligible route;
+ * - `manual`: the explicit engine/model preference is authoritative (an
+ *   invalid one yields the explicit resolver's failure - no substitute);
+ * - `disabled`: Brain routing is off by user intent.
+ * Absent means "no explicit routing mode" - the product-config layer never
+ * reads absence as a default; policy belongs to a later composition phase.
+ */
+export const BRAIN_ROUTING_MODES = ['automatic', 'disabled', 'manual'] as const
+
+export type LiaBrainRoutingMode = typeof BRAIN_ROUTING_MODES[number]
+
+/** Canonical-mode guard: only the three literals ever become stored state. */
+export function isBrainRoutingMode(value: unknown): value is LiaBrainRoutingMode {
+  return typeof value === 'string' && (BRAIN_ROUTING_MODES as readonly string[]).includes(value)
+}
+
 export interface LiaProductBrainSelection {
+  /** Phase 8.0C-3A: routing intent; absent = no explicit mode. */
+  mode?: LiaBrainRoutingMode
   engine?: { preferred?: string }
   model?: { preferred?: string }
 }
@@ -266,6 +288,8 @@ function extract(doc: Record<string, unknown>): LiaProductConfigSnapshot {
   const brain = asRecord(doc.brain)
   if (brain) {
     const extracted: LiaProductBrainSelection = {}
+    if (isBrainRoutingMode(brain.mode))
+      extracted.mode = brain.mode
     const enginePreferred = asString(asRecord(brain.engine)?.preferred)
     if (enginePreferred !== undefined)
       extracted.engine = { preferred: enginePreferred }
@@ -332,8 +356,11 @@ export interface LiaProductConfigUpdate {
   /**
    * Phase 8.0B-2: Brain selection writes. A non-blank `preferred` sets the
    * opaque id; an explicit blank clears it back to "no explicit selection".
+   * Phase 8.0C-3A: `mode` writes persist the routing intent - only the
+   * three canonical literals are ever stored.
    */
   brain?: {
+    mode?: LiaBrainRoutingMode
     engine?: { preferred?: string }
     model?: { preferred?: string }
   }
@@ -409,6 +436,26 @@ export function brainSelectionUpdate(selection: { engineId?: string, modelId?: s
   if (selection.modelId !== undefined)
     brain.model = { preferred: selection.modelId }
   return { brain }
+}
+
+/**
+ * Phase 8.0C-3A: the persisted Brain routing intent. Only the three
+ * canonical modes are ever returned; anything else (or absence) reads as
+ * `undefined` - "no explicit routing mode". This reader NEVER interprets
+ * absence as a default; policy belongs to a later composition phase.
+ */
+export function readBrainRoutingMode(snapshot: Pick<LiaProductConfigSnapshot, 'brain'> | undefined): LiaBrainRoutingMode | undefined {
+  const mode = snapshot?.brain?.mode
+  return isBrainRoutingMode(mode) ? mode : undefined
+}
+
+/**
+ * The canonical routing-mode update. It touches ONLY `brain.mode`: engine/
+ * model selections and everything else in the document are preserved by
+ * the controlled merge (switching modes never erases manual selections).
+ */
+export function brainRoutingModeUpdate(mode: LiaBrainRoutingMode): { brain: { mode: LiaBrainRoutingMode } } {
+  return { brain: { mode } }
 }
 
 export type LiaProductConfigWrite
@@ -510,6 +557,12 @@ function mergeProductUpdate(raw: Record<string, unknown>, update: LiaProductConf
   }
   if (update.brain) {
     const brain = { ...asRecord(raw.brain) }
+    // Phase 8.0C-3A: routing intent persists independently of the engine/
+    // model selections - a mode write never touches them, and a selection
+    // write never touches the mode. Only canonical literals are stored
+    // (defense in depth: the runtime seam may hand over anything).
+    if (isBrainRoutingMode(update.brain.mode))
+      brain.mode = update.brain.mode
     // A selection is atomic, like every other `preferred` in this writer:
     // a non-blank id replaces the previous one, an explicit blank clears
     // the key back to "no explicit selection" (the product default).

@@ -360,3 +360,92 @@ describe('brain selection writes (Phase 8.0B-2)', () => {
     expect(cleared.value.brain?.engine?.preferred).toBeUndefined()
   })
 })
+
+describe('brain routing mode writes (Phase 8.0C-3A)', () => {
+  it('f: changing the mode PRESERVES the preferred engine/model (manual selections survive mode switches)', async () => {
+    const file = await freshConfig({
+      brain: {
+        engine: { preferred: 'engine-alpha' },
+        model: { preferred: 'model-alpha' },
+      },
+      schemaVersion: 1,
+      setup: { completed: true },
+    })
+
+    // automatic -> selections intact...
+    const automatic = await updateLiaProductConfig(file, { brain: { mode: 'automatic' } })
+    expect(automatic.status).toBe('ok')
+    if (automatic.status !== 'ok')
+      return
+    expect(automatic.value.brain).toEqual({
+      mode: 'automatic',
+      engine: { preferred: 'engine-alpha' },
+      model: { preferred: 'model-alpha' },
+    })
+    expect(automatic.value.setup?.completed).toBe(true)
+
+    // ...and disabled -> STILL intact (the user may return to manual later).
+    const disabled = await updateLiaProductConfig(file, { brain: { mode: 'disabled' } })
+    expect(disabled.status).toBe('ok')
+    if (disabled.status !== 'ok')
+      return
+    expect(disabled.value.brain).toEqual({
+      mode: 'disabled',
+      engine: { preferred: 'engine-alpha' },
+      model: { preferred: 'model-alpha' },
+    })
+  })
+
+  it('g: changing the preferred engine/model PRESERVES the mode', async () => {
+    const file = await freshConfig({
+      brain: { mode: 'manual', model: { preferred: 'model-old' } },
+      schemaVersion: 1,
+    })
+
+    const engineWrite = await updateLiaProductConfig(file, { brain: { engine: { preferred: 'engine-beta' } } })
+    expect(engineWrite.status).toBe('ok')
+    if (engineWrite.status !== 'ok')
+      return
+    expect(engineWrite.value.brain?.mode).toBe('manual')
+    expect(engineWrite.value.brain?.engine?.preferred).toBe('engine-beta')
+    expect(engineWrite.value.brain?.model?.preferred).toBe('model-old')
+
+    const modelWrite = await updateLiaProductConfig(file, { brain: { model: { preferred: 'model-new' } } })
+    expect(modelWrite.status).toBe('ok')
+    if (modelWrite.status !== 'ok')
+      return
+    expect(modelWrite.value.brain?.mode).toBe('manual')
+    expect(modelWrite.value.brain?.model?.preferred).toBe('model-new')
+  })
+
+  it('h: ONE update may set mode + engine + model together', async () => {
+    const file = await freshConfig({ schemaVersion: 1 })
+
+    const result = await updateLiaProductConfig(file, {
+      brain: {
+        engine: { preferred: 'engine-alpha' },
+        mode: 'manual',
+        model: { preferred: 'model-alpha' },
+      },
+    })
+    expect(result.status).toBe('ok')
+    if (result.status !== 'ok')
+      return
+    expect(result.value.brain).toEqual({
+      engine: { preferred: 'engine-alpha' },
+      mode: 'manual',
+      model: { preferred: 'model-alpha' },
+    })
+  })
+
+  it('non-canonical mode values are rejected at the writer too (defense in depth)', async () => {
+    const file = await freshConfig({ brain: { mode: 'manual' }, schemaVersion: 1 })
+
+    const result = await updateLiaProductConfig(file, { brain: { mode: 'turbo' as never } })
+    expect(result.status).toBe('ok')
+    if (result.status !== 'ok')
+      return
+    // The bogus value never lands; the previous canonical mode survives.
+    expect(result.value.brain?.mode).toBe('manual')
+  })
+})
