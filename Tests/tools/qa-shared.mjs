@@ -29,6 +29,43 @@ export const ACTIVE_MARKER = nodePath.join('snapshots', 'ACTIVE.txt')
 export const LIA_PRODUCT_CONFIG_FILENAME = 'lia-product.json'
 
 /* ------------------------------------------------------------------ */
+/* Log decoding (Phase 7.9G-QA2: Windows finding)                      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Decodes one captured log buffer to text, robust to the encodings the
+ * Windows capture path actually produces. PowerShell's default redirection
+ * writes UTF-16LE with a BOM, which made the metrics parser see a wall of
+ * NUL bytes and report every metric as "not observed" even though the run
+ * itself was healthy. Supported, in detection order:
+ *   FF FE        -> UTF-16LE (PowerShell default)
+ *   FE FF        -> UTF-16BE
+ *   EF BB BF     -> UTF-8 with BOM
+ *   anything else -> UTF-8
+ * The leading BOM codepoint is stripped; CRLF normalization is left to the
+ * line splitter. Production logging is never changed to satisfy this.
+ */
+export function decodeLogBuffer(buffer) {
+  if (buffer.length >= 2 && buffer[0] === 0xFF && buffer[1] === 0xFE)
+    return stripBom(buffer.subarray(2).toString('utf16le'))
+  if (buffer.length >= 2 && buffer[0] === 0xFE && buffer[1] === 0xFF) {
+    const swapped = Buffer.alloc(buffer.length - 2)
+    for (let index = 2; index + 1 < buffer.length; index += 2) {
+      swapped[index - 2] = buffer[index + 1]
+      swapped[index - 1] = buffer[index]
+    }
+    return stripBom(swapped.toString('utf16le'))
+  }
+  if (buffer.length >= 3 && buffer[0] === 0xEF && buffer[1] === 0xBB && buffer[2] === 0xBF)
+    return buffer.subarray(3).toString('utf-8')
+  return buffer.toString('utf-8')
+}
+
+function stripBom(text) {
+  return text.charCodeAt(0) === 0xFEFF ? text.slice(1) : text
+}
+
+/* ------------------------------------------------------------------ */
 /* Product-config path resolution                                      */
 /* ------------------------------------------------------------------ */
 

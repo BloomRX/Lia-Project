@@ -19,6 +19,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import nodePath from 'node:path'
 import { pathToFileURL } from 'node:url'
 
+import { decodeLogBuffer } from './qa-shared.mjs'
 import * as sharedRef from './qa-shared.mjs'
 
 /** Event-category matchers used for voice-events.txt (order = output order). */
@@ -37,6 +38,39 @@ export function parseKeyValueTokens(line) {
   for (const match of line.matchAll(/([A-Za-z][\w.]*)=(\S+)/g))
     values[match[1]] = match[2]
   return values
+}
+
+/* ------------------------------------------------------------------ */
+/* kokoro-smoke standalone output (Phase 7.9G-QA2: Windows finding)    */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The standalone `tools\kokoro-smoke.mjs` runner prints its own line shape,
+ * not the Lia structured event shape:
+ *   [kokoro-smoke] <slug>: gen <ms>ms | audio <ms>ms | RTF <rtf> | <wav path>
+ *   [kokoro-smoke] cold start (worker spawn + model load): <ms>ms
+ *   [kokoro-smoke] verified runtime already present - reuse, zero redownload
+ *   [kokoro-smoke] runtime not installed (missing: ...) - installing ...
+ *   [kokoro-smoke] worker stopped cleanly (shutdown frame acknowledged)
+ * This parser summarizes exactly those lines. Missing values stay -1 in the
+ * runner and become "not observed" here - nothing is fabricated.
+ */
+export function parseSmokeLog(text) {
+  const syntheses = []
+  for (const match of text.matchAll(/\[kokoro-smoke\]\s+(\S+):\s+gen\s+(-?\d+)ms\s+\|\s+audio\s+(-?\d+)ms\s+\|\s+RTF\s+(-?[\d.]+)/g)) {
+    const [, slug, gen, audio, rtf] = match
+    syntheses.push({
+      audioDurationMs: Number(audio) >= 0 ? Number(audio) : undefined,
+      generationMs: Number(gen) >= 0 ? Number(gen) : undefined,
+      rtf: Number(rtf) >= 0 ? Number(rtf) : undefined,
+      slug,
+    })
+  }
+  const coldMatch = text.match(/\[kokoro-smoke\]\s+cold start \(worker spawn \+ model load\):\s+(\d+)ms/)
+  const reused = /\[kokoro-smoke\]\s+verified runtime already present - reuse/.test(text)
+  const installRan = /\[kokoro-smoke\]\s+runtime not installed/.test(text)
+  const stoppedCleanly = /\[kokoro-smoke\]\s+worker stopped cleanly/.test(text)
+  return { coldStartMs: coldMatch ? Number(coldMatch[1]) : undefined, installRan, reused, stoppedCleanly, syntheses }
 }
 
 function toNumber(value) {
@@ -94,7 +128,12 @@ export function parseVoiceLog(text) {
     ? warmRtfs.reduce((sum, value) => sum + value, 0) / warmRtfs.length
     : undefined
 
-  const selectedEngine = syntheses.find(s => s.engine)?.engine ?? lastPrewarm?.engine
+  // The standalone smoke runner is Kokoro-only by construction; naming it is
+  // not fabrication - it is the identity of the tool that produced the lines.
+  const smoke = parseSmokeLog(text)
+  const selectedEngine = syntheses.find(s => s.engine)?.engine ?? lastPrewarm?.engine ?? (smoke.syntheses.length > 0 ? 'kokoro' : undefined)
+  if (cleanShutdown === 'not observed' && smoke.stoppedCleanly)
+    cleanShutdown = 'yes (smoke worker stopped cleanly)'
 
   return {
     blocked,
@@ -103,6 +142,7 @@ export function parseVoiceLog(text) {
     lastPrewarm,
     selectedEngine,
     shutdownLines,
+    smoke,
     syntheses,
     voiceErrors,
     warmAverageRtf,
@@ -133,15 +173,35 @@ export function renderVoiceSummary(facts, { logFound = true, runId = '' } = {}) 
     lines.push('prewarm              : not observed')
   }
 
+  const smoke = facts.smoke ?? { syntheses: [] }
+  const structuredCount = facts.syntheses.length
+  const smokeCount = smoke.syntheses.length
+
   lines.push('')
-  lines.push(`synthesis count      : ${facts.syntheses.length}`)
-  if (facts.syntheses.length === 0) {
-    lines.push('syntheses            : not observed')
+  if (structuredCount === 0 && smokeCount > 0) {
+    lines.push(`synthesis count      : ${smokeCount} (kokoro-smoke standalone output)`)
+    smoke.syntheses.forEach((s, index) => {
+      lines.push(`  smoke #${index + 1} ${s.slug}: gen=${fmt(s.generationMs, 0)}ms audio=${fmt(s.audioDurationMs, 0)}ms rtf=${fmt(s.rtf)}`)
+    })
+    const smokeRtfs = smoke.syntheses.map(s => s.rtf).filter(value => value !== undefined)
+    const warmSmokeRtfs = smokeCount >= 2 ? smokeRtfs.slice(1) : []
+    const warmAverage = warmSmokeRtfs.length > 0
+      ? warmSmokeRtfs.reduce((sum, value) => sum + value, 0) / warmSmokeRtfs.length
+      : undefined
+    lines.push(`smoke RTF average    : ${smokeCount >= 2 ? fmt(warmAverage) : 'not observed (needs >= 2 syntheses)'}`)
+    lines.push(`smoke cold start     : ${smoke.coldStartMs !== undefined ? `${smoke.coldStartMs} ms (worker spawn + model load)` : 'not observed'}`)
+    lines.push(`smoke runtime state  : ${smoke.reused ? 'reused (zero redownload)' : smoke.installRan ? 'installed during this run' : 'not observed'}`)
   }
-  facts.syntheses.forEach((s, index) => {
-    lines.push(`  #${index + 1}: generationMs=${fmt(s.generationMs, 0)} totalMs=${fmt(s.totalMs, 0)} audioDurationMs=${fmt(s.audioDurationMs, 0)} rtf=${fmt(s.rtf)} queueWaitMs=${fmt(s.queueWaitMs, 0)}${s.engine ? ` engine=${s.engine}` : ''}`)
-  })
-  lines.push(`warm RTF average     : ${facts.syntheses.length >= 2 ? fmt(facts.warmAverageRtf) : 'not observed (needs >= 2 syntheses)'}`)
+  else {
+    lines.push(`synthesis count      : ${structuredCount}${smokeCount > 0 ? ` (+ ${smokeCount} from kokoro-smoke output)` : ''}`)
+    if (structuredCount === 0) {
+      lines.push('syntheses            : not observed')
+    }
+    facts.syntheses.forEach((s, index) => {
+      lines.push(`  #${index + 1}: generationMs=${fmt(s.generationMs, 0)} totalMs=${fmt(s.totalMs, 0)} audioDurationMs=${fmt(s.audioDurationMs, 0)} rtf=${fmt(s.rtf)} queueWaitMs=${fmt(s.queueWaitMs, 0)}${s.engine ? ` engine=${s.engine}` : ''}`)
+    })
+    lines.push(`warm RTF average     : ${structuredCount >= 2 ? fmt(facts.warmAverageRtf) : 'not observed (needs >= 2 syntheses)'}`)
+  }
 
   lines.push('')
   const installPhases = facts.installs.map(line => (line.match(/(phase=\S+|result=\S+|step=\S+)/g) ?? [line.trim()]).join(' '))
@@ -187,7 +247,9 @@ export function finalizeRun({ runDir }) {
   const runId = nodePath.basename(runDir)
 
   const logFound = existsSync(logFile)
-  const text = logFound ? readFileSync(logFile, 'utf-8') : ''
+  // Buffer-level decode: on Windows the capture path can write UTF-16LE/BOM
+  // (PowerShell default) - reading as utf-8 would hide every event.
+  const text = logFound ? decodeLogBuffer(readFileSync(logFile)) : ''
 
   writeFileSync(nodePath.join(metricsDir, 'voice-events.txt'), logFound ? `${renderVoiceEvents(text)}\n` : 'log file not found - no events extracted.\n', 'utf-8')
 
