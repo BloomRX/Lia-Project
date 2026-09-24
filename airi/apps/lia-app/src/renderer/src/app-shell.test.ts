@@ -121,7 +121,13 @@ describe('app shell structure (8.0A-2)', () => {
     // Same state-driven mechanism (no router invented), same props/events.
     expect(source).toContain('type Page = \'config\' | \'diagnostics\' | \'home\' | \'voice\'')
     expect(source).toContain('const page = ref<Page>(\'home\')')
-    expect(source).toContain('<component :is="current" :status="status" :api="api" @refresh="refresh" />')
+    // The switching contract is intact; Home additionally receives the
+    // shell's readiness facts (8.0A-3) - and ONLY Home.
+    expect(source).toContain(':is="current"')
+    expect(source).toContain(':status="status"')
+    expect(source).toContain(':api="api"')
+    expect(source).toContain('@refresh="refresh"')
+    expect(source).toContain('v-bind="page === \'home\' ? { language, readiness } : {}"')
     expect(source).toContain('switch (page.value)')
     // Views stay imported exactly as before - nothing migrated or replaced.
     for (const view of ['ConfigView', 'DiagnosticsView', 'HomeView', 'VoiceView'])

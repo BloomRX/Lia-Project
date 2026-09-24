@@ -1,20 +1,48 @@
 <script setup lang="ts">
+/**
+ * The Lia Home page (Phase 8.0A-3): character-first, simple, built on the
+ * 8.0A-1 tokens + primitives inside the 8.0A-2 shell.
+ *
+ * The VIEW is declarative only: readiness facts come from the launcher's
+ * existing sources (home status prop + the shell's voice readiness,
+ * handed down by App.vue - never a second state model), labels from the
+ * pure `home-vm`, and the ONE action still rides `api.conversar()` exactly
+ * as before. No preparation logic, no runtime knowledge, no invented data.
+ */
 import { computed, ref } from 'vue'
 
-const props = defineProps<{ api: any, status: any }>()
+import LiaButton from '../components/lia/LiaButton.vue'
+import LiaPanel from '../components/lia/LiaPanel.vue'
+import LiaStatusChip from '../components/lia/LiaStatusChip.vue'
+
+import { voiceStatusChipVariant, voiceStatusChipVm } from '../components/voice-engine-card.vm'
+import {
+  homeAiChipVm,
+  homeBlockerHintVm,
+  homeConversationLabelVm,
+  homeConversationStartingVm,
+} from './home-vm'
+
+const props = defineProps<{
+  api: any
+  status: any
+  /** Shell-provided voice readiness (7.9H source of truth). */
+  readiness?: any
+  /** Shell-provided language preference (pt-BR default). */
+  language?: string
+}>()
 const emit = defineEmits<{ (e: 'refresh'): void }>()
 
 const busy = ref(false)
 const error = ref<string | undefined>(undefined)
 
-const stageLabel = computed(() => {
-  const phase = props.status?.stage?.state?.phase
-  if (phase === 'running')
-    return 'Conversando…'
-  if (phase === 'starting')
-    return 'Abrindo o palco…'
-  return 'Conversar com Lia'
-})
+const aiChip = computed(() => homeAiChipVm(props.status))
+const blockerHint = computed(() => homeBlockerHintVm(props.status))
+const conversationLabel = computed(() => homeConversationLabelVm(props.status))
+const conversationStarting = computed(() => homeConversationStartingVm(props.status))
+
+const voiceChip = computed(() => voiceStatusChipVm(props.readiness, props.language))
+const voiceVariant = computed(() => voiceStatusChipVariant(voiceChip.value.tone))
 
 async function conversar() {
   busy.value = true
@@ -37,56 +65,136 @@ async function conversar() {
 
 <template>
   <section class="home">
-    <div class="avatar card">
-      <div class="avatar-ring">
-        <span class="avatar-letter">L</span>
+    <!-- A. Hero / Lia presence: she is the protagonist (§11-12). The
+         visual slot is structured for the canonical hero image; until it
+         ships as a production asset, the EXISTING wired brand mark fills
+         it - nothing is generated or faked. -->
+    <LiaPanel class="home-hero">
+      <div class="home-hero-visual" aria-label="Lia" role="img">
+        <div class="home-hero-ring">
+          <span class="home-hero-letter">L</span>
+        </div>
       </div>
-      <h1>Lia</h1>
-      <p class="dim">
+      <h1 class="home-title">
+        Lia
+      </h1>
+      <p class="home-subtitle">
         sua companhia de desktop
       </p>
-    </div>
 
-    <div class="actions card">
-      <button class="primary big" :disabled="busy || status?.stage?.state?.phase === 'starting'" @click="conversar">
-        {{ stageLabel }}
-      </button>
-      <p v-if="error" class="error">
+      <!-- B. Primary action: the SAME launch path, untouched behavior. -->
+      <LiaButton
+        class="home-action"
+        variant="primary"
+        :disabled="busy || conversationStarting"
+        @click="conversar"
+      >
+        {{ conversationLabel }}
+      </LiaButton>
+      <p v-if="error" class="home-error">
         {{ error }}
       </p>
-      <p v-if="status && !status.ai.ready" class="hint">
-        A Lia ainda precisa da configuração de IA para conversar — veja a aba Configuração.
+    </LiaPanel>
+
+    <!-- C. Status summary: concise product-level readiness only - never
+         paths or infrastructure internals (§12: no dashboard). -->
+    <LiaPanel class="home-status">
+      <div class="home-status-row">
+        <LiaStatusChip :variant="aiChip.variant">
+          {{ aiChip.label }}
+        </LiaStatusChip>
+        <LiaStatusChip :variant="voiceVariant">
+          voz: {{ voiceChip.label }}
+        </LiaStatusChip>
+      </div>
+      <p v-if="blockerHint" class="home-hint">
+        {{ blockerHint }}
       </p>
-    </div>
+    </LiaPanel>
   </section>
 </template>
 
 <style scoped>
-.home { display: flex; flex-direction: column; gap: 18px; }
+/* Spacious, character-first Home on semantic tokens only. */
+.home {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lia-space-6);
+  margin: 0 auto;
+  max-width: 760px;
+  min-width: 0;
+}
 
-.avatar { align-items: center; display: flex; flex-direction: column; padding: 40px 20px; text-align: center; }
-.avatar-ring {
+/* A. Hero ------------------------------------------------------------ */
+.home-hero {
   align-items: center;
-  border: 2px solid var(--lia-magenta);
+  display: flex;
+  flex-direction: column;
+  padding: var(--lia-space-8) var(--lia-space-6);
+  text-align: center;
+}
+
+/* The hero visual SLOT: sized for the canonical Lia image (a later
+   production asset); the wired brand mark occupies it until then. */
+.home-hero-visual {
+  align-items: center;
+  display: flex;
+  justify-content: center;
+  min-height: 140px;
+}
+.home-hero-ring {
+  align-items: center;
+  border: 2px solid var(--lia-border-accent);
   border-radius: 50%;
   display: flex;
   height: 120px;
   justify-content: center;
-  margin-bottom: 18px;
   width: 120px;
 }
-.avatar-letter {
-  background: linear-gradient(135deg, var(--lia-magenta), var(--lia-magenta-soft));
+.home-hero-letter {
+  background: linear-gradient(135deg, var(--lia-accent), var(--lia-accent-soft));
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
   font-size: 56px;
-  font-weight: 800;
+  font-weight: var(--lia-font-bold);
 }
-.dim { color: var(--lia-text-dim); }
 
-.actions { align-items: center; display: flex; flex-direction: column; gap: 10px; }
-.big { font-size: 16px; padding: 14px 34px; }
-.error { color: var(--lia-err); font-size: 13px; }
-.hint { color: var(--lia-warn); font-size: 13px; }
+.home-title {
+  font-size: var(--lia-text-2xl);
+  font-weight: var(--lia-font-bold);
+  letter-spacing: 0.5px;
+  margin: var(--lia-space-4) 0 0;
+}
+.home-subtitle {
+  color: var(--lia-text-secondary);
+  font-size: var(--lia-text-md);
+  margin: var(--lia-space-1) 0 0;
+}
+
+/* B. Primary action --------------------------------------------------- */
+.home-action {
+  font-size: var(--lia-text-lg);
+  margin-top: var(--lia-space-6);
+  padding: var(--lia-space-3) var(--lia-space-8);
+}
+.home-error {
+  color: var(--lia-status-error);
+  font-size: var(--lia-text-sm);
+  margin: var(--lia-space-3) 0 0;
+}
+
+/* C. Status summary ----------------------------------------------------- */
+.home-status-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--lia-space-3);
+  justify-content: center;
+}
+.home-hint {
+  color: var(--lia-status-warning);
+  font-size: var(--lia-text-sm);
+  margin: var(--lia-space-3) 0 0;
+  text-align: center;
+}
 </style>

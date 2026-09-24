@@ -23,7 +23,7 @@ import DiagnosticsView from './views/DiagnosticsView.vue'
 import HomeView from './views/HomeView.vue'
 import VoiceView from './views/VoiceView.vue'
 
-import { LIA_VOICE_READINESS_EVENT, voiceStatusChipVm } from './components/voice-engine-card.vm'
+import { LIA_VOICE_READINESS_EVENT, voiceStatusChipVariant, voiceStatusChipVm } from './components/voice-engine-card.vm'
 
 type Page = 'config' | 'diagnostics' | 'home' | 'voice'
 
@@ -68,15 +68,8 @@ function push(line: string) {
 
 const voiceChip = computed(() => voiceStatusChipVm(readiness.value, language.value))
 
-/** Chip tone -> the LiaStatusChip semantic variant (one mapping, no drift). */
-const voiceVariant = computed<'disabled' | 'error' | 'neutral' | 'ready' | 'warning'>(() => {
-  switch (voiceChip.value.tone) {
-    case 'err': return 'error'
-    case 'ok': return 'ready'
-    case 'warn': return 'warning'
-    default: return 'disabled'
-  }
-})
+/** Chip tone -> the LiaStatusChip semantic variant (the shared mapping). */
+const voiceVariant = computed(() => voiceStatusChipVariant(voiceChip.value.tone))
 
 /**
  * The persistent middle navigation. Global settings intentionally live in
@@ -166,7 +159,16 @@ onMounted(async () => {
       </header>
 
       <main class="stage">
-        <component :is="current" :status="status" :api="api" @refresh="refresh" />
+        <!-- Home additionally consumes the shell's readiness facts (same
+             source of truth - never a second state model); other views are
+             untouched and receive nothing extra. -->
+        <component
+          :is="current"
+          :status="status"
+          :api="api"
+          v-bind="page === 'home' ? { language, readiness } : {}"
+          @refresh="refresh"
+        />
       </main>
 
       <footer class="logbar">

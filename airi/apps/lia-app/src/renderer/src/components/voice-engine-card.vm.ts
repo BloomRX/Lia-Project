@@ -177,6 +177,20 @@ export interface VoiceStatusChipVm {
 }
 
 /**
+ * The ONE tone -> LiaStatusChip variant mapping, shared by every surface
+ * that renders the voice readiness (shell context bar, Home summary) so the
+ * same state can never drift between two mappings.
+ */
+export function voiceStatusChipVariant(tone: VoiceStatusChipTone): 'disabled' | 'error' | 'neutral' | 'ready' | 'warning' {
+  switch (tone) {
+    case 'err': return 'error'
+    case 'ok': return 'ready'
+    case 'warn': return 'warning'
+    default: return 'disabled'
+  }
+}
+
+/**
  * Maps the provisioning readiness state to the canonical chip vocabulary:
  * disabled->Desativada, checking->Verificando…, missing/preparing->
  * Preparando voz…, ready->Pronto, error->Erro. While preparing with a real
