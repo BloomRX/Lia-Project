@@ -17,6 +17,12 @@ export { resolvePreferredBrainSelection } from './brain/resolver'
 export type { LiaBrainPreferredResolution, LiaBrainPreferredResolutionInput } from './brain/resolver'
 export { eligibleBrainModelRoutes } from './brain/routes'
 export type { LiaBrainModelRoute } from './brain/routes'
+export { selectBrainRouteByPolicy } from './brain/selection'
+export type {
+  LiaBrainAutomaticSelection,
+  LiaBrainAutomaticSelectionPolicy,
+  LiaBrainRouteRef,
+} from './brain/selection'
 export type {
   LiaBrainCapabilities,
   LiaBrainEngineAvailability,
