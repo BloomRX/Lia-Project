@@ -11,6 +11,8 @@ export {
   satisfiesBrainCapabilities,
 } from './brain/capabilities'
 export type { LiaBrainCapability, LiaBrainCapabilityRequirement } from './brain/capabilities'
+export { decideBrainRoute } from './brain/decision'
+export type { LiaBrainRoutingDecision, LiaBrainRoutingDecisionInput } from './brain/decision'
 export { createBrainEngineRegistry, modelsForEngine } from './brain/engine-registry'
 export type { LiaBrainEngineRegistrationResult, LiaBrainEngineRegistry } from './brain/engine-registry'
 export { resolvePreferredBrainSelection } from './brain/resolver'
