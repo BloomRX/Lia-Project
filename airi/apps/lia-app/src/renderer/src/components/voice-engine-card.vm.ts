@@ -94,6 +94,22 @@ export const LIA_VOICE_ENGINE_EVENT = 'lia-app.voice-install'
 export function voiceEngineStateLabel(row: VoiceEngineRowVm, locale: ReturnType<typeof pickVoiceEngineLocale>): string {
   return voiceEngineText(locale, row.stateKey)
 }
+
+/**
+ * Phase 8.0A-4: the ONE engine-row state -> LiaStatusChip variant mapping
+ * (presentation only, mirroring `voiceStatusChipVariant`), so every Voice
+ * surface renders row states through the same mapping - no drift between
+ * two renderings of the same row state.
+ */
+export function voiceEngineRowChipVariant(stateKey: LiaVoiceEngineStringKey): 'disabled' | 'error' | 'neutral' | 'ready' | 'warning' {
+  switch (stateKey) {
+    case INSTALLING: return 'warning'
+    case NOT_INSTALLED: return 'neutral'
+    case READY: return 'ready'
+    case UNAVAILABLE: return 'error'
+    default: return 'neutral'
+  }
+}
 // ---------------------------------------------------------------------------
 // Phase 7.9H: automatic first-run voice provisioning - the card's readiness
 // view. The main process owns the readiness model; the renderer only maps

@@ -176,16 +176,19 @@ describe('8.0A-1 primitives stay pure (H)', () => {
     }
   })
 
-  it('existing PAGE content stays un-migrated: the primitives may serve the shell (8.0A-2) but never page internals yet', () => {
-    // 8.0A-2 deliberately adopted LiaStatusChip in the APP SHELL's global
-    // status area - that is the shell, not a page migration. Page content
-    // (the Voice card and the views) must stay untouched until its own
-    // migration phase.
+  it('migration stays phased: the Voice surface (8.0A-4) is ON the primitives; every other page stays un-migrated', () => {
+    // 8.0A-2 adopted LiaStatusChip in the shell, 8.0A-3 migrated Home and
+    // 8.0A-4 migrates the Voice page + card. Everything else stays raw
+    // until its own migration phase.
     const voiceCard = readSource('../VoiceEngineCard.vue')
-    for (const source of [voiceCard]) {
-      expect(source).not.toContain('LiaPanel')
-      expect(source).not.toContain('LiaButton')
-      expect(source).not.toContain('LiaStatusChip')
+    expect(voiceCard).toContain('LiaPanel')
+    expect(voiceCard).toContain('LiaButton')
+    expect(voiceCard).toContain('LiaStatusChip')
+    for (const page of ['ConfigView.vue', 'DiagnosticsView.vue']) {
+      const source = readSource(`../../views/${page}`)
+      expect(source, page).not.toContain('LiaPanel')
+      expect(source, page).not.toContain('LiaButton')
+      expect(source, page).not.toContain('LiaStatusChip')
     }
   })
 })

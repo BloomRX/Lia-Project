@@ -1,26 +1,39 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 
+import LiaButton from './lia/LiaButton.vue'
+import LiaPanel from './lia/LiaPanel.vue'
+import LiaStatusChip from './lia/LiaStatusChip.vue'
+
 import { voiceEngineText } from '../voice-engine-strings'
 import {
   LIA_VOICE_ENGINE_EVENT,
   LIA_VOICE_READINESS_EVENT,
   voiceEnabledPayload,
   voiceEngineCardVm,
+  voiceEngineRowChipVariant,
   voiceEngineSelectionPayload,
   voiceEngineStateLabel,
   voiceProvisioningVm,
+  voiceStatusChipVariant,
+  voiceStatusChipVm,
 } from './voice-engine-card.vm'
 
 /**
- * Voice Engine card (Phase 7.9G, extended 7.9H): the product-facing
- * surface for the local Voice of Lia - readiness of the automatic
- * first-run provisioning, the voice on/off switch, engine name, install
- * state, ONE install action and selection. All truth comes from the main
- * process (7.9H readiness model, 7.9F selection model, 7.9E.2 real
- * install proof); the only persistence call EVER made here is the
- * existing `lia:config:update` writer. No files, no engines, no paths,
- * no invented progress numbers.
+ * Voice Engine card (Phase 7.9G, extended 7.9H, migrated to the Lia design
+ * system in 8.0A-4): the product-facing surface for the local Voice of Lia -
+ * readiness of the automatic first-run preparation, the voice on/off
+ * switch, engine name, install state, ONE install action and selection.
+ * All truth comes from the main process (7.9H readiness model, 7.9F
+ * selection model, 7.9E.2 real install proof); the only persistence call
+ * EVER made here is the existing config writer seam. No files, no engines,
+ * no paths, no invented progress numbers.
+ *
+ * 8.0A-4 is visual only: the same wiring now renders on LiaPanel /
+ * LiaButton / LiaStatusChip + semantic tokens. The canonical readiness
+ * state stays the 7.9H model - the chip below uses the SAME chip
+ * vocabulary the shell and Home already render (`voiceStatusChipVm`), so
+ * one state can never drift between surfaces.
  */
 const props = defineProps<{ api: any }>()
 
@@ -44,13 +57,16 @@ async function reloadProvisioning() {
 
 const vm = computed(() => voiceEngineCardVm(surface.value ?? { engines: [], phase: 'idle' }, language.value))
 const provVm = computed(() => voiceProvisioningVm(readiness.value, language.value))
+// Phase 8.0A-4: the canonical chip face - the SAME readiness state as
+// provVm, mapped to the compact chip vocabulary (no second state model).
+const chipVm = computed(() => voiceStatusChipVm(readiness.value, language.value))
 
 onMounted(async () => {
   const config = await (props.api?.productConfig?.() ?? Promise.resolve(undefined)).catch(() => undefined)
   language.value = config?.snapshot?.preferences?.language
   await reload()
   await reloadProvisioning()
-  // Engine progress/completion AND provisioning readiness transitions ride
+  // Engine progress/completion AND readiness transitions ride
   // the bounded lia:event rail.
   unsubscribe = props.api?.onLiaEvent?.(({ event, detail }: { detail?: string, event: string }) => {
     if (event === LIA_VOICE_READINESS_EVENT) {
@@ -141,89 +157,110 @@ async function toggleVoiceEnabled() {
 </script>
 
 <template>
-  <section class="card voice-engine">
+  <LiaPanel class="voice-engine">
     <h3>{{ vm.title }}</h3>
 
-    <!-- Phase 7.9H: automatic first-run readiness. Product words only -
-         no jargon, no invented percentages, voice-off is "Desativada". -->
+    <!-- Phase 7.9H readiness, rendered as the canonical LiaStatusChip:
+         product words only, no jargon, no invented percentages,
+         voice-off is "Desativada". -->
     <div class="readiness">
-      <span class="badge state">{{ provVm.stateLabel }}</span>
+      <LiaStatusChip :variant="voiceStatusChipVariant(chipVm.tone)">
+        {{ chipVm.label }}
+      </LiaStatusChip>
       <span v-if="provVm.progressLabel" class="dim progress">{{ provVm.progressLabel }}</span>
-      <button
+      <LiaButton
         v-if="provVm.canRetry"
-        class="retry"
         :disabled="busy"
         @click="retryProvisioning"
       >
         {{ busy ? '…' : voiceEngineText(vm.locale, 'lia.voice.provisioning.retry.action') }}
-      </button>
-      <button
-        class="toggle inline"
+      </LiaButton>
+      <LiaButton
+        class="toggle"
         :disabled="busySwitch"
         @click="toggleVoiceEnabled"
       >
         {{ provVm.toggleLabel }}
-      </button>
+      </LiaButton>
     </div>
 
-    <p v-if="vm.hintKey" class="dim">
+    <p v-if="vm.hintKey" class="dim hint">
       {{ voiceEngineText(vm.locale, vm.hintKey) }}
     </p>
 
     <ul class="engines">
       <li v-for="row in vm.rows" :key="row.id" class="engine-row">
         <span class="engine-name">{{ row.userFacingName }}</span>
-        <span class="badge state">{{ voiceEngineStateLabel(row, vm.locale) }}</span>
-        <span v-if="row.selected" class="badge selected">{{ voiceEngineText(vm.locale, 'lia.voice.engines.selected') }}</span>
-        <button
+        <LiaStatusChip :variant="voiceEngineRowChipVariant(row.stateKey)">
+          {{ voiceEngineStateLabel(row, vm.locale) }}
+        </LiaStatusChip>
+        <span v-if="row.selected" class="selected-mark">{{ voiceEngineText(vm.locale, 'lia.voice.engines.selected') }}</span>
+        <LiaButton
           v-if="row.canInstall && !provVm.busy"
           class="install"
+          variant="primary"
           :disabled="busy"
           @click="install"
         >
           {{ busy ? '…' : voiceEngineText(vm.locale, 'lia.voice.engines.install.action') }}
-        </button>
-        <button
+        </LiaButton>
+        <LiaButton
           v-if="row.canSelect"
-          class="inline"
+          class="select"
           :disabled="busy"
           @click="select(row.id)"
         >
           {{ voiceEngineText(vm.locale, 'lia.voice.engines.select.action') }}
-        </button>
+        </LiaButton>
       </li>
     </ul>
 
     <p v-if="feedback" class="feedback">
       {{ feedback }}
     </p>
-  </section>
+  </LiaPanel>
 </template>
 
 <style scoped>
-h3 { margin: 0 0 10px; }
-.dim { color: var(--lia-text-dim); font-size: 13px; }
-.engines { list-style: none; margin: 0; padding: 0; }
-.engine-row { align-items: center; display: flex; gap: 10px; margin: 8px 0; }
-.engine-name { font-weight: 600; }
-.badge.state {
-  background: var(--lia-border);
-  border-radius: 999px;
-  font-size: 11px;
-  padding: 2px 8px;
+/* 8.0A-4: semantic tokens only - no raw colors. */
+h3 { margin: 0 0 var(--lia-space-3); }
+.dim { color: var(--lia-text-secondary); font-size: var(--lia-text-sm); }
+.hint { margin: 0 0 var(--lia-space-3); }
+
+.readiness {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--lia-space-3);
+  margin: 0 0 var(--lia-space-3);
 }
-.badge.selected {
-  background: var(--lia-magenta);
-  border-radius: 999px;
-  color: var(--lia-bg, #0d0a12);
-  font-size: 11px;
-  padding: 2px 8px;
-}
-.readiness { align-items: center; display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 8px; }
-.readiness .progress { font-size: 12px; }
+.readiness .progress { font-size: var(--lia-text-xs); }
 .readiness .toggle { margin-left: auto; }
-.retry { font-size: 12px; }
-.install { margin-left: auto; }
-.inline { font-size: 12px; margin-left: auto; }
-.feedback { font-size: 13px; margin: 10px 0 0; }
+
+.engines {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lia-space-2);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.engine-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--lia-space-3);
+}
+.engine-name { font-weight: var(--lia-font-medium); }
+.selected-mark {
+  background: var(--lia-accent);
+  border-radius: var(--lia-radius-pill);
+  color: var(--lia-accent-contrast);
+  font-size: var(--lia-text-xs);
+  padding: var(--lia-space-1) var(--lia-space-3);
+}
+.engine-row .install { margin-left: auto; }
+.engine-row .select { margin-left: auto; }
+
+.feedback { font-size: var(--lia-text-sm); margin: var(--lia-space-3) 0 0; }
 </style>
