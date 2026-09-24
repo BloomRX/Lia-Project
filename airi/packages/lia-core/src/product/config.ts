@@ -91,6 +91,13 @@ export interface LiaProductConfigSnapshot {
   provider?: { chat?: LiaProductChatConfig }
   voice?: LiaProductVoiceConfig
   preferences?: { language?: string }
+  /**
+   * Phase 7.9H-B3: first-run product setup marker. Absent or `false` means
+   * the initial product setup has NOT been completed; only an explicit
+   * `true` marks it done. Existing documents without it stay valid - the
+   * marker is additive and forces nothing by itself.
+   */
+  setup?: { completed?: boolean }
 }
 
 export type LiaProductConfigRead
@@ -236,6 +243,10 @@ function extract(doc: Record<string, unknown>): LiaProductConfigSnapshot {
   if (language !== undefined)
     snapshot.preferences = { language }
 
+  const setup = asRecord(doc.setup)
+  if (setup && typeof setup.completed === 'boolean')
+    snapshot.setup = { completed: setup.completed }
+
   return snapshot
 }
 
@@ -287,6 +298,8 @@ export interface LiaProductConfigUpdate {
   persona?: { activeCardId?: string }
   provider?: { chat?: Partial<LiaProductChatConfig> }
   preferences?: { language?: string }
+  /** Phase 7.9H-B3: first-run setup completion (`true` = setup done). */
+  setup?: { completed?: boolean }
   voice?: {
     /** Phase 7.9H: explicit voice on/off switch (`false` = voice off). */
     enabled?: boolean
@@ -298,6 +311,26 @@ export interface LiaProductConfigUpdate {
     }
     tts?: { preferred?: LiaProductTtsTarget }
   }
+}
+
+/**
+ * Phase 7.9H-B3: first-run setup semantics. Absent or `false` means the
+ * initial product setup has not been completed; only an explicit `true`
+ * marks it done. Reading is tolerant (any document version), and the flag
+ * is independent of `voice.enabled` - a future onboarding writes the voice
+ * choice and this marker through the SAME canonical update seam.
+ */
+export const SETUP_COMPLETED_DEFAULT = false
+
+export function readSetupCompletedConfig(setup: unknown): boolean {
+  // NB: THIS file's `asRecord` answers `undefined` for non-objects (the
+  // voice/config.ts sibling answers `{}`) - normalize before reading.
+  return (asRecord(setup) ?? {}).completed === true
+}
+
+/** The canonical setup-completion update, ridden through `lia:config:update`. */
+export function setupCompletionUpdate(completed: boolean): { setup: { completed: boolean } } {
+  return { setup: { completed } }
 }
 
 export type LiaProductConfigWrite
@@ -385,6 +418,17 @@ function mergeProductUpdate(raw: Record<string, unknown>, update: LiaProductConf
   }
   if (update.preferences) {
     next.preferences = { ...asRecord(raw.preferences), ...definedOnly(update.preferences) }
+  }
+  if (typeof update.setup?.completed === 'boolean') {
+    const setup = { ...asRecord(raw.setup) }
+    // Completed is stored as-is; "not completed" is expressed by ABSENCE
+    // (the product default), so a reset never needs to carry an inferred
+    // false and old documents stay byte-minimal.
+    if (update.setup.completed)
+      setup.completed = true
+    else
+      delete setup.completed
+    next.setup = setup
   }
   if (update.provider?.chat) {
     const provider = { ...asRecord(raw.provider) }

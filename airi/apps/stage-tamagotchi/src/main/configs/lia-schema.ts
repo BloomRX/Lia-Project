@@ -159,6 +159,17 @@ const preferencesSchema = object({
   language: optional(string()),
 })
 
+/**
+ * Phase 7.9H-B3: the launcher's first-run setup marker. The Stage only
+ * needs to round-trip it: valibot drops unknown keys on parse, and any
+ * Stage-side config write persists the parsed copy - so a field missing
+ * here would silently un-complete the setup on the next Stage save.
+ * Additive/optional: existing documents without it stay valid.
+ */
+const setupSchema = object({
+  completed: optional(boolean()),
+})
+
 export const liaProductConfigSchema = object({
   /** Declares/validates the supported schema version. */
   schemaVersion: literal(LIA_PRODUCT_SCHEMA_VERSION),
@@ -166,6 +177,7 @@ export const liaProductConfigSchema = object({
   provider: optional(providerConfigSchema, {}),
   voice: optional(voiceConfigSchema, {}),
   preferences: optional(preferencesSchema, {}),
+  setup: optional(setupSchema),
 })
 
 export type LiaProductConfig = InferOutput<typeof liaProductConfigSchema>

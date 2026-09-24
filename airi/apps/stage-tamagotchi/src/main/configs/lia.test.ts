@@ -194,6 +194,46 @@ describe('lia product config', () => {
     expect(persisted.preferences).toEqual({ language: 'pt-BR' })
   })
 
+  it('round-trips setup.completed across restart AND the Stage own writes (7.9H-B3)', async () => {
+    // Same hazard class as voice.enabled: the launcher marks first-run
+    // setup complete in the canonical document; the Stage re-parses it at
+    // boot and persists its parsed copy on every update() - a field the
+    // schema dropped would silently un-complete the setup.
+    const { mod, fs } = await loadModules(invalidFileMocks('/tmp/u', JSON.stringify({
+      schemaVersion: 1,
+      persona: { activeCardId: 'lia' },
+      provider: {},
+      setup: { completed: true },
+      voice: {},
+      preferences: {},
+    })))
+    const config = mod.createLiaProductConfig()
+    expect(config.getDiagnostics()?.status).toBe('ok')
+    expect(config.get()?.setup?.completed).toBe(true)
+
+    const current = config.get()!
+    config.update({ ...current, preferences: { language: 'pt-BR' } })
+    await vi.waitFor(() => {
+      expect(fs.writeFile).toHaveBeenCalled()
+    })
+    const persisted = JSON.parse((fs.writeFile as ReturnType<typeof vi.fn>).mock.calls[0]![1] as string) as Record<string, unknown>
+    expect((persisted.setup as Record<string, unknown>).completed).toBe(true)
+    expect(persisted.preferences).toEqual({ language: 'pt-BR' })
+  })
+
+  it('documents WITHOUT the setup marker stay valid and marker-less (backward compatible, 7.9H-B3)', async () => {
+    const { mod } = await loadModules(invalidFileMocks('/tmp/u', JSON.stringify({
+      schemaVersion: 1,
+      persona: { activeCardId: 'lia' },
+      provider: {},
+      voice: {},
+      preferences: {},
+    })))
+    const config = mod.createLiaProductConfig()
+    expect(config.getDiagnostics()?.status).toBe('ok')
+    expect(config.get()?.setup).toBeUndefined()
+  })
+
   it('absent voice.enabled reads back absent - the product default stays implicit (7.9H-B1)', async () => {
     const { mod } = await loadModules(invalidFileMocks('/tmp/u', JSON.stringify({
       schemaVersion: 1,

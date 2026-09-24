@@ -4,7 +4,7 @@ import { join } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
 
-import { readLiaProductConfig, updateLiaProductConfig } from './config'
+import { readLiaProductConfig, readSetupCompletedConfig, updateLiaProductConfig } from './config'
 
 /**
  * The writer contract (Phase 7.1, tests G/H/I/J + the secret firewall):
@@ -194,5 +194,79 @@ describe('7.9H voice.enabled switch (write -> read survives, default stays impli
     if (read.status !== 'ok')
       return
     expect(read.value.voice?.enabled).toBeUndefined()
+  })
+})
+
+describe('first-run setup marker writes (Phase 7.9H-B3)', () => {
+  it('e: writing setup completion PRESERVES the existing voice config', async () => {
+    const file = await freshConfig({
+      schemaVersion: 1,
+      voice: { enabled: false, engine: { preferred: 'kokoro' } },
+    })
+    const result = await updateLiaProductConfig(file, { setup: { completed: true } })
+    expect(result.status).toBe('ok')
+
+    const read = await readLiaProductConfig(file)
+    expect(read.status).toBe('ok')
+    if (read.status !== 'ok')
+      return
+    expect(read.value.setup?.completed).toBe(true)
+    expect(read.value.voice?.enabled).toBe(false)
+    expect(read.value.voice?.engine?.preferred).toBe('kokoro')
+  })
+
+  it('f: writing the voice choice PRESERVES the setup state', async () => {
+    const file = await freshConfig({ schemaVersion: 1, setup: { completed: true } })
+    const result = await updateLiaProductConfig(file, { voice: { enabled: false } })
+    expect(result.status).toBe('ok')
+
+    const read = await readLiaProductConfig(file)
+    expect(read.status).toBe('ok')
+    if (read.status !== 'ok')
+      return
+    expect(read.value.setup?.completed).toBe(true)
+    expect(read.value.voice?.enabled).toBe(false)
+  })
+
+  it('g: OLD product configs (no setup key) remain valid and gain the marker additively', async () => {
+    const file = await freshConfig({
+      persona: { activeCardId: 'lia' },
+      provider: { chat: { onboarded: true, preferred: { modelId: 'm1', providerId: 'openrouter' } } },
+      schemaVersion: 1,
+      voice: { tts: { preferred: { providerId: 'cloud', voiceId: 'nova' } } },
+    })
+    // The old document reads back intact - no setup key, nothing invalidated.
+    const read = await readLiaProductConfig(file)
+    expect(read.status).toBe('ok')
+    if (read.status !== 'ok')
+      return
+    expect(read.value.setup).toBeUndefined()
+    expect(read.value.provider?.chat?.onboarded).toBe(true)
+
+    // And a later completion write lands additively, neighbors untouched.
+    const result = await updateLiaProductConfig(file, { setup: { completed: true } })
+    expect(result.status).toBe('ok')
+    const after = await readLiaProductConfig(file)
+    expect(after.status).toBe('ok')
+    if (after.status !== 'ok')
+      return
+    expect(after.value.setup?.completed).toBe(true)
+    expect(after.value.persona?.activeCardId).toBe('lia')
+    expect(after.value.voice?.tts?.preferred).toEqual({ providerId: 'cloud', voiceId: 'nova' })
+  })
+
+  it('un-completing setup removes the explicit key (absence = the product default)', async () => {
+    const file = await freshConfig({ schemaVersion: 1, setup: { completed: true } })
+    const result = await updateLiaProductConfig(file, { setup: { completed: false } })
+    expect(result.status).toBe('ok')
+
+    const raw = JSON.parse(await readFile(file, 'utf8')) as Record<string, unknown>
+    expect((raw.setup as Record<string, unknown> | undefined)?.completed).toBeUndefined()
+
+    const read = await readLiaProductConfig(file)
+    expect(read.status).toBe('ok')
+    if (read.status !== 'ok')
+      return
+    expect(readSetupCompletedConfig(read.value.setup)).toBe(false)
   })
 })
