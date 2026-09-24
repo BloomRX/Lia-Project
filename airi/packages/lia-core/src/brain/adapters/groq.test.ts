@@ -242,8 +242,12 @@ describe('current brain descriptor adapter (8.0D-2)', () => {
   it('n: the generic Brain domain files stay free of provider/model identities', () => {
     const domainDir = fileURLToPath(new URL('..', import.meta.url))
     // Production files only - test files legitimately spell vendor names as
-    // scan patterns in their assertions.
-    const genericFiles = readdirSync(domainDir).filter(name => name.endsWith('.ts') && !name.includes('.test.'))
+    // scan patterns in their assertions. The production catalog is excluded
+    // by design: it is the ONE composition module allowed to name adapters
+    // (its own suite pins that dependency direction), while the generic
+    // domain files below stay identity-free.
+    const genericFiles = readdirSync(domainDir)
+      .filter(name => name.endsWith('.ts') && !name.includes('.test.') && name !== 'catalog.ts')
     expect(genericFiles.length).toBeGreaterThan(0)
     const vendorPattern = /groq|gpt-oss|qwen|openai|anthropic|gemini|claude|mistral|ollama|deepseek|cerebras/i
     for (const name of genericFiles)
