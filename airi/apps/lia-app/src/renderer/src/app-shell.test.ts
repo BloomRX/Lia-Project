@@ -127,7 +127,7 @@ describe('app shell structure (8.0A-2)', () => {
     expect(source).toContain(':status="status"')
     expect(source).toContain(':api="api"')
     expect(source).toContain('@refresh="refresh"')
-    expect(source).toContain('v-bind="page === \'home\' ? { language, readiness } : {}"')
+    expect(source).toContain('v-bind="page === \'home\' ? { language, readiness, setup } : {}"')
     expect(source).toContain('switch (page.value)')
     // Views stay imported exactly as before - nothing migrated or replaced.
     for (const view of ['ConfigView', 'DiagnosticsView', 'HomeView', 'VoiceView'])

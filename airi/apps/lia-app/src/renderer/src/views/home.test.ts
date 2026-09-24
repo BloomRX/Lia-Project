@@ -4,6 +4,8 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
 import {
+  firstRunChoicePayload,
+  firstRunPanelVisible,
   homeAiChipVm,
   homeBlockerHintVm,
   homeConversationLabelVm,
@@ -116,8 +118,10 @@ describe('logic stays out of the view (G)', () => {
     // The view consumes the pure VM and existing state only.
     expect(source).toContain('from \'./home-vm\'')
     expect(source).not.toMatch(/inspect|provisioning|ensureKokoro|voiceRuntimeInstalled|spawn|child_process/i)
-    // No config writes from Home.
-    expect(source).not.toContain('updateConfig')
+    // No config writes from Home EXCEPT the single canonical first-run
+    // choice (8.0A-5): payload built by the pure VM, one seam call.
+    expect((source.match(/updateConfig/g) ?? []).length).toBe(1)
+    expect(source).toContain('props.api?.updateConfig(firstRunChoicePayload(choice))')
     // The VM itself is metadata-only: no IPC, no fs, no engine ids.
     const vm = HOME_VM()
     expect(vm).not.toMatch(/ipcRenderer|invoke|fetch\(|kokoro|engine/i)
@@ -139,5 +143,83 @@ describe('home fits the shell (H)', () => {
     const app = readSource('../App.vue')
     expect(app).toContain('default: return HomeView')
     expect(app).toContain('import HomeView from \'./views/HomeView.vue\'')
+  })
+})
+
+describe('8.0A-5 minimal first-run choice', () => {
+  it('a: setup.completed=true hides the first-run panel', () => {
+    expect(firstRunPanelVisible({ completed: true })).toBe(false)
+    // The panel is gated ONLY by the marker (+ the local post-choice flag).
+    const source = HOME_VUE()
+    expect(source).toContain('v-if="firstRunVisible"')
+    expect(source).toContain('!firstRunDone.value && firstRunPanelVisible(props.setup)')
+  })
+
+  it('b: missing or false marker shows the panel (honest first-run)', () => {
+    expect(firstRunPanelVisible(undefined)).toBe(true)
+    expect(firstRunPanelVisible({})).toBe(true)
+    expect(firstRunPanelVisible({ completed: false })).toBe(true)
+    // The marker arrives through the shell's existing product-config seam.
+    expect(HOME_VUE()).toContain('setup?: { completed?: boolean }')
+    const app = readSource('../App.vue')
+    expect(app).toContain('setup.value = config?.snapshot?.setup')
+    expect(app).toContain('{ language, readiness, setup }')
+  })
+
+  it('c: "Completa" writes voice.enabled=true + setup.completed=true', () => {
+    expect(firstRunChoicePayload('complete')).toEqual({
+      update: { setup: { completed: true }, voice: { enabled: true } },
+    })
+  })
+
+  it('d: "Somente texto" writes voice.enabled=false + setup.completed=true', () => {
+    expect(firstRunChoicePayload('textOnly')).toEqual({
+      update: { setup: { completed: true }, voice: { enabled: false } },
+    })
+  })
+
+  it('e: exactly ONE config update per selection, on the canonical seam', () => {
+    const source = HOME_VUE()
+    const calls = source.match(/updateConfig\(firstRunChoicePayload\(choice\)\)/g) ?? []
+    expect(calls.length).toBe(1)
+    expect(source).toContain('const result = await props.api?.updateConfig(firstRunChoicePayload(choice))')
+  })
+
+  it('f: Home never calls the voice preparation machinery itself', () => {
+    const source = HOME_VUE()
+    // No direct installer/retry/state call and no raw channel names - the
+    // voice-on choice simply lets the launcher's existing automatic flow
+    // happen on its own.
+    expect(source).not.toMatch(/installVoiceEngine|retryVoiceProvisioning|voiceEngineState|voiceProvisioningState/)
+    expect(source).not.toContain('\'lia:')
+  })
+
+  it('g: the first-run marker never blocks Conversar (no modal, no gate)', () => {
+    const source = HOME_VUE()
+    // Conversar stays disabled ONLY by its own launch state...
+    expect(source).toContain(':disabled="busy || conversationStarting"')
+    // ...the first-run flag gates the panel and NOTHING else...
+    expect((source.match(/v-if="firstRunVisible"/g) ?? []).length).toBe(1)
+    expect(source).not.toMatch(/firstRun(Visible|Done|Busy).*conversar|conversar.*firstRun/i)
+    // ...and there is no modal/forced-surface machinery anywhere on the page.
+    expect(source).not.toMatch(/modal|overlay|backdrop/i)
+  })
+
+  it('h: the first-run surface is jargon-free product copy', () => {
+    const source = HOME_VUE()
+    expect(source).toContain('Como você quer começar?')
+    expect(source).toContain('Conversa e voz. A Lia prepara a voz automaticamente.')
+    expect(source).toContain('Conversa sem voz. Você pode ativá-la depois.')
+    // Same sweep as the normal Home surface: no implementation words.
+    const forbidden = /python|onnx|\bpip\b|venv|directml|alltalk|xtts|backend|huggingface|installdir|install dir|runtimehome|runtime home|\bhash\b/i
+    expect(source.slice(source.indexOf('<template>'), source.indexOf('</template>'))).not.toMatch(forbidden)
+  })
+
+  it('i: no raw new hex/rgb colors - the new panel rides semantic tokens', () => {
+    const styleBlock = HOME_VUE().slice(HOME_VUE().indexOf('<style scoped>'))
+    expect(styleBlock).not.toMatch(/#[0-9a-f]{3,8}\b/i)
+    expect(styleBlock).not.toMatch(/rgba?\(/i)
+    for (const variable of [...styleBlock.matchAll(/var\(([^)]+)\)/g)].map(match => match[1].trim()))
+      expect(variable).toMatch(/^--lia-/)
   })
 })

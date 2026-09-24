@@ -47,3 +47,34 @@ export function homeConversationLabelVm(status: unknown): string {
 export function homeConversationStartingVm(status: unknown): boolean {
   return (status as Record<string, any> | undefined)?.stage?.state?.phase === 'starting'
 }
+
+// ---------------------------------------------------------------------------
+// Phase 8.0A-5: the minimal first-run choice. The marker is the canonical
+// product-config `setup.completed` flag (7.9H-B3): absent or false means the
+// initial choice has not happened yet; only an explicit `true` marks it
+// done. The panel is NON-BLOCKING - it never gates any other Home surface.
+// ---------------------------------------------------------------------------
+
+/** The choice panel shows until the canonical marker is explicitly true. */
+export function firstRunPanelVisible(setup: { completed?: boolean } | undefined): boolean {
+  return setup?.completed !== true
+}
+
+export type FirstRunChoice = 'complete' | 'textOnly'
+
+/**
+ * THE first-run write contract: ONE canonical config update per choice,
+ * through the SAME seam every other product preference rides. "Completa"
+ * leaves voice on (the automatic preparation flow proceeds on its own);
+ * "Somente texto" switches voice off. Both mark the setup as done.
+ */
+export function firstRunChoicePayload(choice: FirstRunChoice): {
+  update: { setup: { completed: true }, voice: { enabled: boolean } }
+} {
+  return {
+    update: {
+      setup: { completed: true },
+      voice: { enabled: choice === 'complete' },
+    },
+  }
+}

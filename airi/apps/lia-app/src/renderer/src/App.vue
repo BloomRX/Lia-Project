@@ -33,6 +33,10 @@ const status = ref<any>(undefined)
 // state the Voice page shows (7.9H source of truth - one state model).
 const readiness = ref<any>(undefined)
 const language = ref<string | undefined>(undefined)
+// Phase 8.0A-5: the canonical first-run marker, read from the SAME product
+// config snapshot the shell already fetches (no second source, no direct
+// file reads). Home decides what to show with it; nothing is gated by it.
+const setup = ref<{ completed?: boolean } | undefined>(undefined)
 const logLines = reactive<string[]>([])
 
 const api = computed(() => (window as any).liaApi)
@@ -96,6 +100,7 @@ onMounted(async () => {
   try {
     const config = await api.value?.productConfig?.()
     language.value = config?.snapshot?.preferences?.language
+    setup.value = config?.snapshot?.setup
   }
   catch {
     // Language stays the pt-BR product default - never fatal.
@@ -166,7 +171,7 @@ onMounted(async () => {
           :is="current"
           :status="status"
           :api="api"
-          v-bind="page === 'home' ? { language, readiness } : {}"
+          v-bind="page === 'home' ? { language, readiness, setup } : {}"
           @refresh="refresh"
         />
       </main>

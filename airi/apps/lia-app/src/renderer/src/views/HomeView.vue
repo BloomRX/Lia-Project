@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import type { FirstRunChoice } from './home-vm'
+
 /**
  * The Lia Home page (Phase 8.0A-3): character-first, simple, built on the
  * 8.0A-1 tokens + primitives inside the 8.0A-2 shell.
@@ -17,6 +19,8 @@ import LiaStatusChip from '../components/lia/LiaStatusChip.vue'
 
 import { voiceStatusChipVariant, voiceStatusChipVm } from '../components/voice-engine-card.vm'
 import {
+  firstRunChoicePayload,
+  firstRunPanelVisible,
   homeAiChipVm,
   homeBlockerHintVm,
   homeConversationLabelVm,
@@ -30,11 +34,17 @@ const props = defineProps<{
   readiness?: any
   /** Shell-provided language preference (pt-BR default). */
   language?: string
+  /** Shell-provided first-run marker (canonical product config). */
+  setup?: { completed?: boolean }
 }>()
 const emit = defineEmits<{ (e: 'refresh'): void }>()
 
 const busy = ref(false)
 const error = ref<string | undefined>(undefined)
+// Phase 8.0A-5: the first-run choice has its OWN busy flag, so choosing
+// never touches the Conversar action; success hides the panel locally.
+const firstRunBusy = ref(false)
+const firstRunDone = ref(false)
 
 const aiChip = computed(() => homeAiChipVm(props.status))
 const blockerHint = computed(() => homeBlockerHintVm(props.status))
@@ -43,6 +53,32 @@ const conversationStarting = computed(() => homeConversationStartingVm(props.sta
 
 const voiceChip = computed(() => voiceStatusChipVm(props.readiness, props.language))
 const voiceVariant = computed(() => voiceStatusChipVariant(voiceChip.value.tone))
+
+/**
+ * Phase 8.0A-5: the minimal first-run choice shows until the canonical
+ * marker says done. NON-BLOCKING: nothing else on Home depends on it.
+ */
+const firstRunVisible = computed(() => !firstRunDone.value && firstRunPanelVisible(props.setup))
+
+/**
+ * ONE canonical config update per choice. The voice-on choice naturally
+ * lets the launcher's automatic voice preparation run; the voice-off
+ * choice keeps it switched off. Home never starts anything itself and
+ * never leaves the page.
+ */
+async function chooseFirstRun(choice: FirstRunChoice) {
+  firstRunBusy.value = true
+  try {
+    const result = await props.api?.updateConfig(firstRunChoicePayload(choice))
+    if (result?.status === 'ok') {
+      firstRunDone.value = true
+      emit('refresh')
+    }
+  }
+  finally {
+    firstRunBusy.value = false
+  }
+}
 
 async function conversar() {
   busy.value = true
@@ -94,6 +130,33 @@ async function conversar() {
       <p v-if="error" class="home-error">
         {{ error }}
       </p>
+    </LiaPanel>
+
+    <!-- Phase 8.0A-5: minimal first-run choice - one compact panel, shown
+         until the canonical setup marker is done. It NEVER blocks the
+         hero or the status surfaces, and choosing never leaves Home. -->
+    <LiaPanel v-if="firstRunVisible" class="home-first-run">
+      <h2 class="home-first-run-title">
+        Como você quer começar?
+      </h2>
+      <div class="home-first-run-choices">
+        <div class="home-first-run-choice">
+          <LiaButton variant="primary" :disabled="firstRunBusy" @click="chooseFirstRun('complete')">
+            Completa
+          </LiaButton>
+          <p class="home-first-run-note">
+            Conversa e voz. A Lia prepara a voz automaticamente.
+          </p>
+        </div>
+        <div class="home-first-run-choice">
+          <LiaButton :disabled="firstRunBusy" @click="chooseFirstRun('textOnly')">
+            Somente texto
+          </LiaButton>
+          <p class="home-first-run-note">
+            Conversa sem voz. Você pode ativá-la depois.
+          </p>
+        </div>
+      </div>
     </LiaPanel>
 
     <!-- C. Status summary: concise product-level readiness only - never
@@ -196,5 +259,30 @@ async function conversar() {
   font-size: var(--lia-text-sm);
   margin: var(--lia-space-3) 0 0;
   text-align: center;
+}
+
+/* 8.0A-5 first-run choice: compact, non-blocking, token-only. */
+.home-first-run-title {
+  font-size: var(--lia-text-lg);
+  font-weight: var(--lia-font-medium);
+  margin: 0 0 var(--lia-space-4);
+}
+.home-first-run-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--lia-space-6);
+}
+.home-first-run-choice {
+  align-items: flex-start;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--lia-space-2);
+  min-width: 220px;
+}
+.home-first-run-note {
+  color: var(--lia-text-secondary);
+  font-size: var(--lia-text-sm);
+  margin: 0;
 }
 </style>
