@@ -176,10 +176,13 @@ describe('8.0A-1 primitives stay pure (H)', () => {
     }
   })
 
-  it('the foundation does NOT migrate existing UI: no existing component imports the primitives yet', () => {
-    const appVue = readSource('../../App.vue')
+  it('existing PAGE content stays un-migrated: the primitives may serve the shell (8.0A-2) but never page internals yet', () => {
+    // 8.0A-2 deliberately adopted LiaStatusChip in the APP SHELL's global
+    // status area - that is the shell, not a page migration. Page content
+    // (the Voice card and the views) must stay untouched until its own
+    // migration phase.
     const voiceCard = readSource('../VoiceEngineCard.vue')
-    for (const source of [appVue, voiceCard]) {
+    for (const source of [voiceCard]) {
       expect(source).not.toContain('LiaPanel')
       expect(source).not.toContain('LiaButton')
       expect(source).not.toContain('LiaStatusChip')
