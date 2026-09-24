@@ -157,3 +157,49 @@ export function voiceEnabledPayload(enabled: boolean): { update: { voice: { enab
 
 /** Readiness transitions ride the bounded rail under this event name. */
 export const LIA_VOICE_READINESS_EVENT = 'lia-app.voice-readiness'
+
+// ---------------------------------------------------------------------------
+// Phase 7.9H-B2: the launcher-wide voice STATUS surface (top-bar chip and
+// any future summary). Source of truth: the SAME 7.9H provisioning
+// readiness state the Voice page shows - one state model, one reader
+// (`voiceProvisioningState` IPC + `lia-app.voice-readiness` rail), two
+// honest presentations: the card's fuller copy and this compact chip
+// vocabulary. No second state model, no jargon, no invented progress.
+// ---------------------------------------------------------------------------
+
+export type VoiceStatusChipTone = 'dim' | 'err' | 'ok' | 'warn'
+
+export interface VoiceStatusChipVm {
+  /** The compact status label (honest step label wins while preparing). */
+  label: string
+  /** Chip dot tone: ok=ready, warn=in progress, err=failure, dim=off/unknown. */
+  tone: VoiceStatusChipTone
+}
+
+/**
+ * Maps the provisioning readiness state to the canonical chip vocabulary:
+ * disabled->Desativada, checking->Verificando…, missing/preparing->
+ * Preparando voz…, ready->Pronto, error->Erro. While preparing with a real
+ * step, the existing honest step label (Configurando ambiente… / Baixando
+ * voz… / Finalizando…) is shown instead - metadata-derived, never faked.
+ */
+export function voiceStatusChipVm(status: LiaVoiceProvisioningStatus | undefined, languagePreference?: string): VoiceStatusChipVm {
+  const locale = pickVoiceEngineLocale(languagePreference)
+  const state = status?.state ?? 'checking'
+
+  const tone: VoiceStatusChipTone = state === 'ready'
+    ? 'ok'
+    : state === 'error'
+      ? 'err'
+      : state === 'disabled'
+        ? 'dim'
+        : 'warn'
+
+  const label = state === 'preparing' || state === 'missing'
+    ? (status?.step
+        ? voiceEngineText(locale, provisioningStepKey(status.step))
+        : voiceEngineText(locale, 'lia.voice.provisioning.step.preparing'))
+    : voiceEngineText(locale, `lia.voice.status.${state}` as LiaVoiceEngineStringKey)
+
+  return { label, tone }
+}

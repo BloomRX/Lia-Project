@@ -41,6 +41,15 @@ export const LIA_VOICE_ENGINE_STRINGS = {
     'lia.voice.provisioning.step.preparing': 'Preparing voice…',
     'lia.voice.provisioning.step.settingUp': 'Setting up the environment…',
     'lia.voice.provisioning.step.voice': 'Downloading voice…',
+    // Phase 7.9H-B2: the launcher-wide status surface (top bar chip and
+    // any future summary) - the SAME readiness state as the Voice page,
+    // mapped to compact chip vocabulary. Product words only.
+    'lia.voice.status.checking': 'Checking…',
+    'lia.voice.status.disabled': 'Off',
+    'lia.voice.status.error': 'Error',
+    'lia.voice.status.missing': 'Preparing voice…',
+    'lia.voice.status.preparing': 'Preparing voice…',
+    'lia.voice.status.ready': 'Ready',
   },
   'pt-BR': {
     'lia.voice.engines.install.action': 'Instalar voz',
@@ -71,6 +80,16 @@ export const LIA_VOICE_ENGINE_STRINGS = {
     'lia.voice.provisioning.step.preparing': 'Preparando voz…',
     'lia.voice.provisioning.step.settingUp': 'Configurando ambiente…',
     'lia.voice.provisioning.step.voice': 'Baixando voz…',
+    // Phase 7.9H-B2: a superfície de status do launcher (chip da barra
+    // superior e qualquer resumo futuro) - o MESMO estado de readiness da
+    // página Voz, mapeado para vocabulário compacto de chip. Só palavras
+    // de produto.
+    'lia.voice.status.checking': 'Verificando…',
+    'lia.voice.status.disabled': 'Desativada',
+    'lia.voice.status.error': 'Erro',
+    'lia.voice.status.missing': 'Preparando voz…',
+    'lia.voice.status.preparing': 'Preparando voz…',
+    'lia.voice.status.ready': 'Pronto',
   },
 } as const
 

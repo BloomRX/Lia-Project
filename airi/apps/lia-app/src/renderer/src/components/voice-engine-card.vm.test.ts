@@ -10,6 +10,7 @@ import {
   voiceEngineSelectionPayload,
   voiceEngineStateLabel,
   voiceProvisioningVm,
+  voiceStatusChipVm,
 } from './voice-engine-card.vm'
 
 /**
@@ -233,5 +234,67 @@ describe('voiceProvisioningVm (7.9H automatic first-run readiness)', () => {
   it('the enable/disable toggle rides the canonical config-update payload', () => {
     expect(voiceEnabledPayload(false)).toEqual({ update: { voice: { enabled: false } } })
     expect(voiceEnabledPayload(true)).toEqual({ update: { voice: { enabled: true } } })
+  })
+})
+
+describe('voiceStatusChipVm (7.9H-B2 launcher status surface)', () => {
+  it('a: disabled -> Desativada (and a dim dot - never an error tone)', () => {
+    expect(voiceStatusChipVm({ state: 'disabled' })).toEqual({ label: 'Desativada', tone: 'dim' })
+  })
+
+  it('b: checking -> Verificando…', () => {
+    expect(voiceStatusChipVm({ state: 'checking' })).toEqual({ label: 'Verificando…', tone: 'warn' })
+  })
+
+  it('c: preparing (and the momentary missing) -> Preparando voz…, never an error face', () => {
+    expect(voiceStatusChipVm({ state: 'preparing' })).toEqual({ label: 'Preparando voz…', tone: 'warn' })
+    expect(voiceStatusChipVm({ state: 'missing' })).toEqual({ label: 'Preparando voz…', tone: 'warn' })
+  })
+
+  it('d: preparing + a real step keeps the existing honest step label', () => {
+    expect(voiceStatusChipVm({ state: 'preparing', step: 'python' }).label).toBe('Configurando ambiente…')
+    expect(voiceStatusChipVm({ state: 'preparing', step: 'pip' }).label).toBe('Configurando ambiente…')
+    expect(voiceStatusChipVm({ state: 'preparing', step: 'model' }).label).toBe('Baixando voz…')
+    expect(voiceStatusChipVm({ state: 'preparing', step: 'voices' }).label).toBe('Finalizando…')
+  })
+
+  it('e: ready -> Pronto', () => {
+    expect(voiceStatusChipVm({ state: 'ready' })).toEqual({ label: 'Pronto', tone: 'ok' })
+  })
+
+  it('f: error -> Erro', () => {
+    expect(voiceStatusChipVm({ retryable: true, state: 'error' })).toEqual({ label: 'Erro', tone: 'err' })
+  })
+
+  it('g: en-US parity - the same six-state vocabulary ships in English', () => {
+    expect(voiceStatusChipVm({ state: 'disabled' }, 'en-US').label).toBe('Off')
+    expect(voiceStatusChipVm({ state: 'checking' }, 'en-US').label).toBe('Checking…')
+    expect(voiceStatusChipVm({ state: 'preparing' }, 'en-US').label).toBe('Preparing voice…')
+    expect(voiceStatusChipVm({ state: 'ready' }, 'en-US').label).toBe('Ready')
+    expect(voiceStatusChipVm({ state: 'error' }, 'en-US').label).toBe('Error')
+    expect(voiceStatusChipVm({ state: 'preparing', step: 'model' }, 'en-US').label).toBe('Downloading voice…')
+    // Every chip key resolves in BOTH locales (parity, no raw keys leak).
+    for (const locale of ['en-US', 'pt-BR'] as const) {
+      for (const state of ['checking', 'disabled', 'error', 'missing', 'preparing', 'ready'] as const) {
+        const label = voiceStatusChipVm({ state }, locale).label
+        expect(label, `${locale}:${state}`).not.toContain('lia.voice.')
+        expect(label.length, `${locale}:${state}`).toBeGreaterThan(0)
+      }
+    }
+  })
+
+  it('h: no backend/runtime jargon ever reaches the normal status surface', () => {
+    const forbidden = /python|backend|onnx|provider|directml|execution|runtime home|runtimeHome|model sha|spawn|\bpip\b|\bvenv\b|install dir|instalacao|instalação|não instalada|nao instalada/i
+    for (const locale of ['en-US', 'pt-BR'] as const) {
+      for (const state of ['checking', 'disabled', 'error', 'missing', 'preparing', 'ready'] as const) {
+        expect(voiceStatusChipVm({ state }, locale).label, `${locale}:${state}`).not.toMatch(forbidden)
+        for (const step of ['pip', 'python', 'model', 'voices'] as const)
+          expect(voiceStatusChipVm({ state: 'preparing', step }, locale).label, `${locale}:${state}:${step}`).not.toMatch(forbidden)
+      }
+    }
+  })
+
+  it('unknown/absent readiness degrades to the honest checking face', () => {
+    expect(voiceStatusChipVm(undefined)).toEqual({ label: 'Verificando…', tone: 'warn' })
   })
 })

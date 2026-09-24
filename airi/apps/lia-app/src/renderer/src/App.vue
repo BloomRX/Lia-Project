@@ -13,10 +13,16 @@ import DiagnosticsView from './views/DiagnosticsView.vue'
 import HomeView from './views/HomeView.vue'
 import VoiceView from './views/VoiceView.vue'
 
+import { LIA_VOICE_READINESS_EVENT, voiceStatusChipVm } from './components/voice-engine-card.vm'
+
 type Page = 'config' | 'diagnostics' | 'home' | 'voice'
 
 const page = ref<Page>('home')
 const status = ref<any>(undefined)
+// Phase 7.9H-B2: the voice chip reads the SAME provisioning readiness
+// state the Voice page shows (7.9H source of truth - one state model).
+const readiness = ref<any>(undefined)
+const language = ref<string | undefined>(undefined)
 const logLines = reactive<string[]>([])
 
 const api = computed(() => (window as any).liaApi)
@@ -32,11 +38,25 @@ async function refresh() {
   }
 }
 
+async function refreshVoiceReadiness() {
+  if (!api.value)
+    return
+  try {
+    readiness.value = await api.value.voiceProvisioningState?.()
+  }
+  catch {
+    // The chip degrades to its honest unknown face; the next rail event
+    // or refresh retries.
+  }
+}
+
 function push(line: string) {
   logLines.push(`[${new Date().toLocaleTimeString()}] ${line}`)
   if (logLines.length > 200)
     logLines.splice(0, logLines.length - 200)
 }
+
+const voiceChip = computed(() => voiceStatusChipVm(readiness.value, language.value))
 
 const chips = computed(() => {
   const s = status.value
@@ -47,13 +67,13 @@ const chips = computed(() => {
       label: s.ai.ready ? 'IA pronta' : 'IA a configurar',
       tone: s.ai.ready ? 'ok' : 'warn',
     },
+    // Phase 7.9H-B2: the voice chip mirrors the Voice page's readiness:
+    // Desativada / Verificando… / Preparando voz… (+ honest step label) /
+    // Pronto / Erro - never install-state jargon, never a scary "not
+    // installed" while the launcher is simply preparing.
     {
-      label: s.voice.installed === undefined
-        ? 'voz: estado desconhecido'
-        : s.voice.installed
-          ? `voz: ${s.voice.phase}`
-          : (s.voice.installDir ? 'voz: instalação não encontrada' : 'voz: não configurada'),
-      tone: s.voice.installed === undefined ? 'dim' : s.voice.installed ? (s.voice.phase === 'ready' ? 'ok' : 'warn') : 'dim',
+      label: `voz: ${voiceChip.value.label}`,
+      tone: voiceChip.value.tone,
     },
     {
       label: s.stage.available ? `stage: ${s.stage.state.phase}` : 'stage: indisponível',
@@ -78,10 +98,22 @@ const current = computed(() => {
   }
 })
 
-onMounted(() => {
+onMounted(async () => {
   void refresh()
+  void refreshVoiceReadiness()
+  try {
+    const config = await api.value?.productConfig?.()
+    language.value = config?.snapshot?.preferences?.language
+  }
+  catch {
+    // Language stays the pt-BR product default - never fatal.
+  }
   api.value?.onLiaEvent?.((payload: { detail?: string, event: string }) => {
     push(`${payload.event}${payload.detail ? ` ${payload.detail}` : ''}`)
+    // Readiness transitions refresh the chip from the source of truth;
+    // everything else keeps the legacy whole-status refresh.
+    if (payload.event === LIA_VOICE_READINESS_EVENT)
+      void refreshVoiceReadiness()
     void refresh()
   })
 })
