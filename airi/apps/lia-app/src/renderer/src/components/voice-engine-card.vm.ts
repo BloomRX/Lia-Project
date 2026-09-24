@@ -1,4 +1,5 @@
 import type { LiaVoiceEngineSurfaceState } from '../../../main/voice-engine-service'
+import type { LiaVoiceProvisioningStatus } from '../../../main/voice-provisioning'
 import type { LiaVoiceEngineStringKey } from '../voice-engine-strings'
 
 import { pickVoiceEngineLocale, voiceEngineText } from '../voice-engine-strings'
@@ -93,3 +94,66 @@ export const LIA_VOICE_ENGINE_EVENT = 'lia-app.voice-install'
 export function voiceEngineStateLabel(row: VoiceEngineRowVm, locale: ReturnType<typeof pickVoiceEngineLocale>): string {
   return voiceEngineText(locale, row.stateKey)
 }
+// ---------------------------------------------------------------------------
+// Phase 7.9H: automatic first-run voice provisioning - the card's readiness
+// view. The main process owns the readiness model; the renderer only maps
+// states/steps to catalog copy (never invents numbers, never names
+// Python/ONNX/pip/paths/backends in normal labels).
+// ---------------------------------------------------------------------------
+
+export interface VoiceProvisioningVm {
+  /** True while checking/preparing - the card shows live progress copy. */
+  busy: boolean
+  /** Retry is offered ONLY for honest, retryable failures. */
+  canRetry: boolean
+  /** Voice switch as seen by the user (disabled state = off). */
+  enabled: boolean
+  /** Honest step label, present only while preparing. */
+  progressLabel?: string
+  /** The readiness line in product words. */
+  stateLabel: string
+  /** Accessible label for the on/off toggle. */
+  toggleLabel: string
+}
+
+/** Step metadata -> the honest progress line (labels only, no percentages). */
+function provisioningStepKey(step: string | undefined): LiaVoiceEngineStringKey {
+  if (step === 'python' || step === 'pip')
+    return 'lia.voice.provisioning.step.settingUp'
+  if (step === 'model')
+    return 'lia.voice.provisioning.step.voice'
+  if (step === 'voices')
+    return 'lia.voice.provisioning.step.finalizing'
+  return 'lia.voice.provisioning.step.preparing'
+}
+
+export function voiceProvisioningVm(status: LiaVoiceProvisioningStatus | undefined, languagePreference?: string): VoiceProvisioningVm {
+  const locale = pickVoiceEngineLocale(languagePreference)
+  const state = status?.state ?? 'checking'
+
+  const stateKey = `lia.voice.provisioning.state.${state}` as LiaVoiceEngineStringKey
+  const enabled = state !== 'disabled'
+  const busy = state === 'checking' || state === 'missing' || state === 'preparing'
+
+  return {
+    busy,
+    canRetry: state === 'error' && status?.retryable !== false,
+    enabled,
+    ...(busy && state !== 'checking'
+      ? { progressLabel: voiceEngineText(locale, provisioningStepKey(status?.step)) }
+      : {}),
+    stateLabel: voiceEngineText(locale, stateKey),
+    toggleLabel: voiceEngineText(locale, enabled ? 'lia.voice.provisioning.disable.action' : 'lia.voice.provisioning.enable.action'),
+  }
+}
+
+/**
+ * THE enable/disable write contract: rides the existing canonical
+ * `lia:config:update` seam, exactly like the engine selection payload.
+ */
+export function voiceEnabledPayload(enabled: boolean): { update: { voice: { enabled: boolean } } } {
+  return { update: { voice: { enabled } } }
+}
+
+/** Readiness transitions ride the bounded rail under this event name. */
+export const LIA_VOICE_READINESS_EVENT = 'lia-app.voice-readiness'

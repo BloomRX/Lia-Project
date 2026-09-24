@@ -221,7 +221,7 @@ describe('7.9E.2 - real Kokoro install proof drives the gate (no injected truth)
     expect(events.find(entry => entry.event === 'lia-app.conversar-blocked')).toBeUndefined()
   })
 
-  it('a REAL tree missing ONE required marker still blocks with voice-runtime-not-installed (no bypass)', async () => {
+  it('a REAL tree missing ONE required marker: text conversation proceeds, voice-not-ready is announced (7.9H)', async () => {
     const { events, home, host, order } = await makeVoiceHost({
       fixture: { productConfig: customVoiceProduct() },
       inspector: 'real',
@@ -230,19 +230,24 @@ describe('7.9E.2 - real Kokoro install proof drives the gate (no injected truth)
     // Remove exactly ONE required marker - the installer never finished.
     await rm(layout.stateFile, { force: true })
 
-    await expect(host.conversar()).rejects.toThrow('O sistema de voz precisa ser instalado.')
-    expect(order).toEqual([])
-    expect(events).toContainEqual({ detail: 'reason=voice-runtime-not-installed', event: 'lia-app.conversar-blocked' })
+    // Voice preparation is provisioning's job, not a conversation blocker:
+    // the text path opens, honestly announced as voice-not-ready.
+    const state = await host.conversar()
+    expect(state.phase).toBe('running')
+    expect(order).toContain('stage-start')
+    expect(events).toContainEqual({ detail: 'reason=voice-runtime-not-installed', event: 'lia-app.conversar-voice-not-ready' })
+    expect(events.find(entry => entry.event === 'lia-app.conversar-blocked' && entry.detail === 'reason=voice-runtime-not-installed')).toBeUndefined()
   })
 
-  it('an ABSENT runtime home stays blocked through the real inspector (7.8 negative preserved end-to-end)', async () => {
+  it('an ABSENT runtime home: the launcher provisions voice herself instead of blocking (7.9H)', async () => {
     const { events, host, order } = await makeVoiceHost({
       fixture: { productConfig: customVoiceProduct() },
       inspector: 'real',
     })
-    await expect(host.conversar()).rejects.toThrow('O sistema de voz precisa ser instalado.')
-    expect(order).toEqual([])
-    expect(events).toContainEqual({ detail: 'reason=voice-runtime-not-installed', event: 'lia-app.conversar-blocked' })
+    const state = await host.conversar()
+    expect(state.phase).toBe('running')
+    expect(order).toContain('stage-start')
+    expect(events).toContainEqual({ detail: 'reason=voice-runtime-not-installed', event: 'lia-app.conversar-voice-not-ready' })
   })
 })
 
@@ -301,14 +306,15 @@ describe('7.8 E/F - failure semantics stay human-readable', () => {
     expect(detail).not.toContain('model.wav')
   })
 
-  it('f: no seam-proven install blocks; the stage never starts', async () => {
+  it('f: no seam-proven install - text path still opens, voice readiness is honest (7.9H)', async () => {
     const { events, host, order } = await makeVoiceHost({
       fixture: { customVoice: true },
       runtimeInstalled: false,
     })
-    await expect(host.conversar()).rejects.toThrow('O sistema de voz precisa ser instalado.')
-    expect(order).toEqual([])
-    expect(events).toContainEqual({ detail: 'reason=voice-runtime-not-installed', event: 'lia-app.conversar-blocked' })
+    const state = await host.conversar()
+    expect(state.phase).toBe('running')
+    expect(order).toContain('stage-start')
+    expect(events).toContainEqual({ detail: 'reason=voice-runtime-not-installed', event: 'lia-app.conversar-voice-not-ready' })
   })
 
   // The old "worker start failure" / "worker never reaches readiness" cases

@@ -302,8 +302,12 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
 
     const runtimeHome = effectiveRuntimeHome(snapshot)
     if (!(await voiceRuntimeInstalled(runtimeHome))) {
-      emit('lia-app.conversar-blocked', 'reason=voice-runtime-not-installed')
-      throw new Error('O sistema de voz precisa ser instalado. Abra as configurações da Lia para instalar.')
+      // Phase 7.9H: voice preparation is NO LONGER a hard gate for
+      // conversation. The text path works while the launcher provisions the
+      // voice automatically (or retries after an honest failure); spoken
+      // output simply joins once the capability is ready. The fix belongs
+      // to provisioning, not to a blocking error.
+      emit('lia-app.conversar-voice-not-ready', 'reason=voice-runtime-not-installed')
     }
 
     // The engine read/ready step registers here when a modular engine

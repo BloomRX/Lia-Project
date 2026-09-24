@@ -37,6 +37,18 @@ export interface LiaVoiceRuntimeSelection {
 
 export const VOICE_FALLBACK_DEFAULT_ENABLED = true
 
+/**
+ * The product-level voice switch (Phase 7.9H). Voice is part of Lia's
+ * default experience: ABSENT or any non-`false` value means enabled - only
+ * an explicit `voice.enabled === false` opts the user out, which stops
+ * automatic voice provisioning (text conversation stays fully available).
+ */
+export const VOICE_ENABLED_DEFAULT = true
+
+export function readVoiceEnabledConfig(voice: unknown): boolean {
+  return asRecord(voice).enabled !== false
+}
+
 // ---------------------------------------------------------------------------
 // Readers: tolerate any document version; the legacy alltalk block is inert
 // by contract and never consulted here.

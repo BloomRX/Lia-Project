@@ -37,6 +37,18 @@ export interface LiaIpcExtras {
     install: () => Promise<unknown>
     state: () => Promise<unknown>
   }
+  /**
+   * Phase 7.9H: the automatic first-run voice provisioning surface. The
+   * renderer READS this; provisioning itself starts from the launcher at
+   * boot - ordinary users never click "install voice". The legacy install
+   * action stays available as honest retry/recovery.
+   */
+  voiceProvisioning?: {
+    /** Re-runs the readiness decision after a persisted config change. */
+    reconcile: (reason: string) => void
+    status: () => unknown
+    retry: () => Promise<unknown>
+  }
 }
 
 /** The voice-file allowlist, refreshed by every successful pick. */
@@ -89,7 +101,12 @@ export function registerLiaIpc(host: LiaHost, timer: LiaBootTimer, extras: LiaIp
   // ---- Phase 7.1 channels -------------------------------------------------
 
   ipcMain.handle('lia:config:update', async (_event, payload: unknown) => {
-    return await host.updateConfig(sanitizeConfigUpdate(payload))
+    const result = await host.updateConfig(sanitizeConfigUpdate(payload))
+    // Phase 7.9H: a persisted voice change (enabled toggle, engine switch,
+    // QA install-dir override) re-runs the readiness decision - the launcher
+    // may need to start, stop-waiting, or re-check provisioning.
+    extras.voiceProvisioning?.reconcile('config-update')
+    return result
   })
 
   ipcMain.handle('lia:voices:pick', async () => {
@@ -139,6 +156,22 @@ export function registerLiaIpc(host: LiaHost, timer: LiaBootTimer, extras: LiaIp
     if (!extras.voiceEngine)
       return { status: 'failed' }
     return await extras.voiceEngine.install()
+  })
+
+  // ---- Phase 7.9H voice-provisioning channels ----------------------------
+  // READ the automatic first-run readiness state, or RETRY an honest
+  // failure. Provisioning itself is launched by the launcher at boot; these
+  // channels never START a fresh install for an ordinary user.
+  ipcMain.handle('lia:voice-provisioning:state', () => {
+    if (!extras.voiceProvisioning)
+      return { state: 'disabled' }
+    return extras.voiceProvisioning.status()
+  })
+
+  ipcMain.handle('lia:voice-provisioning:retry', async () => {
+    if (!extras.voiceProvisioning)
+      return { status: 'failed' }
+    return await extras.voiceProvisioning.retry()
   })
 }
 

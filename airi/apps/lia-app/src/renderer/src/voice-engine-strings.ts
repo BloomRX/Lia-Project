@@ -25,6 +25,22 @@ export const LIA_VOICE_ENGINE_STRINGS = {
     'lia.voice.engines.state.ready': 'Ready',
     'lia.voice.engines.state.unavailable': 'Unavailable',
     'lia.voice.engines.title': 'Lia voice',
+    // Phase 7.9H: automatic first-run provisioning copy. Normal-product
+    // words only - no Python/ONNX/pip/paths/backend names, no invented
+    // percentages (progress is step-labeled, never numeric fiction).
+    'lia.voice.provisioning.disable.action': 'Turn voice off',
+    'lia.voice.provisioning.enable.action': 'Turn voice on',
+    'lia.voice.provisioning.retry.action': 'Try again',
+    'lia.voice.provisioning.state.checking': 'Checking voice…',
+    'lia.voice.provisioning.state.disabled': 'Off',
+    'lia.voice.provisioning.state.error': 'Voice could not be prepared',
+    'lia.voice.provisioning.state.missing': 'Preparing voice…',
+    'lia.voice.provisioning.state.preparing': 'Preparing voice…',
+    'lia.voice.provisioning.state.ready': 'Voice ready',
+    'lia.voice.provisioning.step.finalizing': 'Finalizing…',
+    'lia.voice.provisioning.step.preparing': 'Preparing voice…',
+    'lia.voice.provisioning.step.settingUp': 'Setting up the environment…',
+    'lia.voice.provisioning.step.voice': 'Downloading voice…',
   },
   'pt-BR': {
     'lia.voice.engines.install.action': 'Instalar voz',
@@ -38,6 +54,23 @@ export const LIA_VOICE_ENGINE_STRINGS = {
     'lia.voice.engines.state.ready': 'Pronto',
     'lia.voice.engines.state.unavailable': 'Não disponível',
     'lia.voice.engines.title': 'Voz da Lia',
+    // Phase 7.9H: copy do provisionamento automático de primeira execução.
+    // Só vocabulário normal de produto - nada de Python/ONNX/pip/paths/nomes
+    // de backend, sem percentuais inventados (progresso por etapa, nunca
+    // número fictício).
+    'lia.voice.provisioning.disable.action': 'Desativar voz',
+    'lia.voice.provisioning.enable.action': 'Ativar voz',
+    'lia.voice.provisioning.retry.action': 'Tentar novamente',
+    'lia.voice.provisioning.state.checking': 'Verificando voz…',
+    'lia.voice.provisioning.state.disabled': 'Desativada',
+    'lia.voice.provisioning.state.error': 'Não foi possível preparar a voz',
+    'lia.voice.provisioning.state.missing': 'Preparando voz…',
+    'lia.voice.provisioning.state.preparing': 'Preparando voz…',
+    'lia.voice.provisioning.state.ready': 'Voz pronta',
+    'lia.voice.provisioning.step.finalizing': 'Finalizando…',
+    'lia.voice.provisioning.step.preparing': 'Preparando voz…',
+    'lia.voice.provisioning.step.settingUp': 'Configurando ambiente…',
+    'lia.voice.provisioning.step.voice': 'Baixando voz…',
   },
 } as const
 

@@ -149,3 +149,50 @@ describe('updateLiaProductConfig', () => {
     expect(await readFile(file, 'utf8')).toBe('{broken json')
   })
 })
+
+describe('7.9H voice.enabled switch (write -> read survives, default stays implicit)', () => {
+  it('disabling voice persists `voice.enabled: false` and reads back; neighbors intact', async () => {
+    const file = await freshConfig({
+      schemaVersion: 1,
+      voice: { engine: { preferred: 'kokoro' } },
+    })
+    const result = await updateLiaProductConfig(file, { voice: { enabled: false } })
+    expect(result.status).toBe('ok')
+
+    const read = await readLiaProductConfig(file)
+    expect(read.status).toBe('ok')
+    if (read.status !== 'ok')
+      return
+    expect(read.value.voice?.enabled).toBe(false)
+    // The selected engine survives the switch - disabling never erases it.
+    expect(read.value.voice?.engine?.preferred).toBe('kokoro')
+
+    // On disk the key is explicit...
+    const raw = JSON.parse(await readFile(file, 'utf8')) as Record<string, unknown>
+    expect((raw.voice as Record<string, unknown>).enabled).toBe(false)
+  })
+
+  it('re-enabling removes the explicit key: absent = the product default (no inferred noise)', async () => {
+    const file = await freshConfig({ schemaVersion: 1, voice: { enabled: false } })
+    const result = await updateLiaProductConfig(file, { voice: { enabled: true } })
+    expect(result.status).toBe('ok')
+
+    const raw = JSON.parse(await readFile(file, 'utf8')) as Record<string, unknown>
+    expect((raw.voice as Record<string, unknown>).enabled).toBeUndefined()
+
+    const read = await readLiaProductConfig(file)
+    expect(read.status).toBe('ok')
+    if (read.status !== 'ok')
+      return
+    expect(read.value.voice?.enabled).toBeUndefined()
+  })
+
+  it('a document without the key reads enabled (voice is part of the default experience)', async () => {
+    const file = await freshConfig({ schemaVersion: 1 })
+    const read = await readLiaProductConfig(file)
+    expect(read.status).toBe('ok')
+    if (read.status !== 'ok')
+      return
+    expect(read.value.voice?.enabled).toBeUndefined()
+  })
+})

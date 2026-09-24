@@ -32,6 +32,12 @@ const api = {
   // Selection writes ride `updateConfig` (the existing canonical seam).
   installVoiceEngine: () => ipcRenderer.invoke('lia:voice-engine:install'),
   voiceEngineState: () => ipcRenderer.invoke('lia:voice-engine:state'),
+  // Phase 7.9H: automatic first-run voice readiness. The launcher provisions
+  // by itself; the renderer reads the readiness state and can retry a
+  // failure. Live transitions ride the existing `onLiaEvent` rail
+  // (`lia-app.voice-readiness` details).
+  retryVoiceProvisioning: () => ipcRenderer.invoke('lia:voice-provisioning:retry'),
+  voiceProvisioningState: () => ipcRenderer.invoke('lia:voice-provisioning:state'),
 }
 
 export type LiaApi = typeof api

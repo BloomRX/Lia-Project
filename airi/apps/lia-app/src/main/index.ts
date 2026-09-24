@@ -14,6 +14,7 @@ import { enforceSingleInstance } from './single-instance'
 import { createLiaBootTimer } from './timing'
 import { createLiaVoiceEngineService } from './voice-engine-service'
 import { createLiaVoiceInstallInspector } from './voice-install-inspector'
+import { createLiaVoiceProvisioning } from './voice-provisioning'
 
 /**
  * The Lia launcher entry (Phase 7, architecture items 1/11/15).
@@ -88,6 +89,16 @@ async function bootstrap(): Promise<void> {
   })
   timer.mark('lia-core.ready')
 
+  // Phase 7.9H: local fan-out of the shared install path's events. The
+  // provisioning module needs completion/step notifications; the renderer
+  // rail keeps its normal terminal sink. One listener set, bounded.
+  const installEventListeners = new Set<(event: string, detail?: string) => void>()
+  const fanOutEvent = (event: string, detail?: string): void => {
+    publishLiaEvent(event, detail)
+    for (const listener of [...installEventListeners])
+      listener(event, detail)
+  }
+
   // Phase 7.9G: the Voice Engine surface reuses the SAME real install proof
   // (7.9E.2), the host-owned effective runtime home (7.4), the canonical
   // snapshot for the selection model (7.9F) and the bounded event rail
@@ -95,9 +106,42 @@ async function bootstrap(): Promise<void> {
   const voiceEngine = createLiaVoiceEngineService({
     effectiveHome: async () => (await host.runtimeLocationStatus()).effectiveInstallDir,
     inspector: createLiaVoiceInstallInspector(),
-    onEvent: (event, detail) => publishLiaEvent(event, detail),
+    onEvent: fanOutEvent,
     snapshot: async () => await host.productSnapshot(),
   })
+
+  // Phase 7.9H: automatic first-run voice provisioning. It DELEGATES every
+  // real action (install proof: 7.9E.2 inspector; installation: the same
+  // 7.9G single-flight service the manual card uses; home: host resolution
+  // honoring the QA installDir override) and owns only the readiness model
+  // and its exactly-one-attempt semantics.
+  const voiceProvisioning = createLiaVoiceProvisioning({
+    effectiveHome: async () => (await host.runtimeLocationStatus()).effectiveInstallDir,
+    install: async () => await voiceEngine.install(),
+    installEvents: (listener) => {
+      installEventListeners.add(listener)
+      return () => installEventListeners.delete(listener)
+    },
+    isInstalled: runtimeHome => createLiaVoiceInstallInspector()(runtimeHome),
+    onStatus: (status) => {
+      // Metadata-only rail event: the renderer derives its human copy from
+      // state+step; the terminal log keeps the same honest detail.
+      const parts = [`state=${status.state}`]
+      if (status.engineId)
+        parts.push(`engine=${status.engineId}`)
+      if (status.step)
+        parts.push(`step=${status.step}`)
+      if (status.retryable !== undefined)
+        parts.push(`retryable=${String(status.retryable)}`)
+      if (status.errorDetail)
+        parts.push(`errorDetail=${status.errorDetail}`)
+      publishLiaEvent('lia-app.voice-readiness', parts.join(' '))
+    },
+    snapshot: async () => await host.productSnapshot(),
+  })
+  // Boot reconcile is fire-and-forget: launch stays responsive; the outcome
+  // rides the readiness rail and the provisioning IPC channel.
+  void voiceProvisioning.reconcile('boot')
 
   // The supervisor quit flow: every exit route runs the coordinator first.
   // `app.exit` (not `app.quit`) ends the process - it does not re-fire
@@ -123,6 +167,8 @@ async function bootstrap(): Promise<void> {
       quitFlow?.onBeforeQuit()
     },
     voiceEngine,
+    // Phase 7.9H: automatic first-run readiness surface (read + honest retry).
+    voiceProvisioning,
     // Phase 7.4 Part J: native folder picker for the heavy runtime root.
     pickDirectory: async () => {
       if (!mainWindow)

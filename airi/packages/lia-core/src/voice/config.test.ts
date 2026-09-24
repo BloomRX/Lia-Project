@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  readVoiceEnabledConfig,
   readVoiceEngineConfig,
   readVoiceFallbackConfig,
   readVoiceRuntimeSelection,
+  VOICE_ENABLED_DEFAULT,
   writeVoiceConfig,
 } from './config'
 
@@ -66,5 +68,25 @@ describe('voice config: engine-neutral surface', () => {
 
     const clearedFallback = writeVoiceConfig(merged, { fallback: { engineId: '' } })
     expect(clearedFallback.fallback).toEqual({ enabled: false })
+  })
+})
+
+describe('voice config: the product-level enabled switch (Phase 7.9H)', () => {
+  it('absent config means voice ON - the default experience', () => {
+    expect(VOICE_ENABLED_DEFAULT).toBe(true)
+    expect(readVoiceEnabledConfig(undefined)).toBe(true)
+    expect(readVoiceEnabledConfig({})).toBe(true)
+    expect(readVoiceEnabledConfig({ engine: { preferred: 'kokoro' } })).toBe(true)
+  })
+
+  it('only an explicit `enabled: false` opts out', () => {
+    expect(readVoiceEnabledConfig({ enabled: false })).toBe(false)
+    expect(readVoiceEnabledConfig({ enabled: true })).toBe(true)
+  })
+
+  it('non-boolean values never disable voice (tolerant reader)', () => {
+    expect(readVoiceEnabledConfig({ enabled: 'false' })).toBe(true)
+    expect(readVoiceEnabledConfig({ enabled: 0 })).toBe(true)
+    expect(readVoiceEnabledConfig({ enabled: null })).toBe(true)
   })
 })

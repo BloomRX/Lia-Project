@@ -5,9 +5,11 @@ import { describe, expect, it } from 'vitest'
 
 import { LIA_VOICE_ENGINE_STRINGS, pickVoiceEngineLocale, voiceEngineText } from '../voice-engine-strings'
 import {
+  voiceEnabledPayload,
   voiceEngineCardVm,
   voiceEngineSelectionPayload,
   voiceEngineStateLabel,
+  voiceProvisioningVm,
 } from './voice-engine-card.vm'
 
 /**
@@ -172,5 +174,64 @@ describe('structural placement in VoiceView (7.9G finalize)', () => {
   it('the renderer never writes the config file directly (selection rides updateConfig only)', () => {
     const view = readSource('../views/VoiceView.vue')
     expect(view).not.toMatch(/node:fs|writeFile|productConfigFile|ipcRenderer/)
+  })
+})
+
+describe('voiceProvisioningVm (7.9H automatic first-run readiness)', () => {
+  it('the normal first-run arc renders jargon-free product copy (pt-BR)', () => {
+    expect(voiceProvisioningVm({ state: 'checking' })).toMatchObject({
+      busy: true,
+      canRetry: false,
+      enabled: true,
+      stateLabel: 'Verificando voz…',
+    })
+    expect(voiceProvisioningVm({ state: 'preparing' })).toMatchObject({
+      busy: true,
+      progressLabel: 'Preparando voz…',
+      stateLabel: 'Preparando voz…',
+    })
+    expect(voiceProvisioningVm({ state: 'ready' })).toMatchObject({
+      busy: false,
+      enabled: true,
+      stateLabel: 'Voz pronta',
+    })
+  })
+
+  it('progress follows the honest step metadata - environment, download, finalizing', () => {
+    expect(voiceProvisioningVm({ state: 'preparing', step: 'python' }).progressLabel).toBe('Configurando ambiente…')
+    expect(voiceProvisioningVm({ state: 'preparing', step: 'pip' }).progressLabel).toBe('Configurando ambiente…')
+    expect(voiceProvisioningVm({ state: 'preparing', step: 'model' }).progressLabel).toBe('Baixando voz…')
+    expect(voiceProvisioningVm({ state: 'preparing', step: 'voices' }).progressLabel).toBe('Finalizando…')
+    // Unknown step metadata degrades to the generic honest line.
+    expect(voiceProvisioningVm({ state: 'preparing', step: 'mystery' }).progressLabel).toBe('Preparando voz…')
+    // No invented progress outside the preparing state.
+    expect(voiceProvisioningVm({ state: 'ready', step: 'voices' }).progressLabel).toBeUndefined()
+  })
+
+  it('voice OFF renders as "Desativada" - never error, never "not installed"', () => {
+    const vm = voiceProvisioningVm({ state: 'disabled' })
+    expect(vm).toMatchObject({ busy: false, canRetry: false, enabled: false, stateLabel: 'Desativada' })
+    expect(vm.toggleLabel).toBe('Ativar voz')
+    expect(vm.stateLabel).not.toContain('instala')
+    expect(vm.stateLabel.toLowerCase()).not.toContain('erro')
+  })
+
+  it('a retryable failure offers exactly one recovery path; non-retryable stays honest', () => {
+    expect(voiceProvisioningVm({ retryable: true, state: 'error' })).toMatchObject({
+      canRetry: true,
+      stateLabel: 'Não foi possível preparar a voz',
+    })
+    expect(voiceProvisioningVm({ retryable: false, state: 'error' })).toMatchObject({ canRetry: false })
+  })
+
+  it('en-US locale renders the same honest model in English', () => {
+    expect(voiceProvisioningVm({ state: 'preparing', step: 'model' }, 'en-US').progressLabel).toBe('Downloading voice…')
+    expect(voiceProvisioningVm({ state: 'disabled' }, 'en-US').stateLabel).toBe('Off')
+    expect(voiceProvisioningVm({ state: 'ready' }, 'en-US').stateLabel).toBe('Voice ready')
+  })
+
+  it('the enable/disable toggle rides the canonical config-update payload', () => {
+    expect(voiceEnabledPayload(false)).toEqual({ update: { voice: { enabled: false } } })
+    expect(voiceEnabledPayload(true)).toEqual({ update: { voice: { enabled: true } } })
   })
 })

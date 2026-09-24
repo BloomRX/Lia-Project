@@ -62,6 +62,12 @@ export interface LiaProductVoiceFallback {
 }
 
 export interface LiaProductVoiceConfig {
+  /**
+   * Phase 7.9H: the product-level voice switch. Absent means enabled
+   * (voice is part of Lia's default experience); only an explicit `false`
+   * opts the user out of voice - text conversation always remains.
+   */
+  enabled?: boolean
   tts?: {
     preferred?: LiaProductTtsTarget
     fallback?: LiaProductTtsTarget[]
@@ -170,6 +176,8 @@ function extract(doc: Record<string, unknown>): LiaProductConfigSnapshot {
   const voice = asRecord(doc.voice)
   if (voice) {
     const extracted: LiaProductVoiceConfig = {}
+    if (typeof voice.enabled === 'boolean')
+      extracted.enabled = voice.enabled
     const tts = asRecord(voice.tts)
     if (tts) {
       extracted.tts = {
@@ -280,6 +288,8 @@ export interface LiaProductConfigUpdate {
   provider?: { chat?: Partial<LiaProductChatConfig> }
   preferences?: { language?: string }
   voice?: {
+    /** Phase 7.9H: explicit voice on/off switch (`false` = voice off). */
+    enabled?: boolean
     engine?: Partial<LiaProductVoiceEngine>
     fallback?: Partial<LiaProductVoiceFallback>
     runtime?: {
@@ -408,6 +418,15 @@ function mergeProductUpdate(raw: Record<string, unknown>, update: LiaProductConf
       if (update.voice.runtime.installDir !== undefined)
         runtime.installDir = update.voice.runtime.installDir
       voice.runtime = runtime
+    }
+    if (typeof update.voice.enabled === 'boolean') {
+      // An explicit switch is stored as-is; ABSENT stays absent (the
+      // product default), so a first-run document is never needlessly
+      // rewritten with an inferred value.
+      if (update.voice.enabled)
+        delete (voice as Record<string, unknown>).enabled
+      else
+        voice.enabled = false
     }
     next.voice = voice
   }
