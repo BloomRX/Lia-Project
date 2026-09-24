@@ -13,6 +13,8 @@ export {
 export type { LiaBrainCapability, LiaBrainCapabilityRequirement } from './brain/capabilities'
 export { createBrainEngineRegistry, modelsForEngine } from './brain/engine-registry'
 export type { LiaBrainEngineRegistrationResult, LiaBrainEngineRegistry } from './brain/engine-registry'
+export { resolvePreferredBrainSelection } from './brain/resolver'
+export type { LiaBrainPreferredResolution, LiaBrainPreferredResolutionInput } from './brain/resolver'
 export type {
   LiaBrainCapabilities,
   LiaBrainEngineAvailability,
