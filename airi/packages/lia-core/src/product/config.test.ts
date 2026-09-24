@@ -5,7 +5,10 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 import {
+  brainSelectionUpdate,
   readLiaProductConfig,
+  readPreferredBrainEngineId,
+  readPreferredBrainModelId,
   readSetupCompletedConfig,
   SETUP_COMPLETED_DEFAULT,
   setupCompletionUpdate,
@@ -137,5 +140,106 @@ describe('first-run setup marker (Phase 7.9H-B3)', () => {
     expect(readSetupCompletedConfig({ completed: 'true' })).toBe(false)
     expect(readSetupCompletedConfig({ completed: 1 })).toBe(false)
     expect(readSetupCompletedConfig({ completed: null })).toBe(false)
+  })
+})
+
+describe('brain selection preference (Phase 8.0B-2)', () => {
+  async function readDoc(doc: Record<string, unknown>) {
+    const dir = await mkdtemp(join(tmpdir(), 'lia-product-'))
+    const file = join(dir, 'lia-product.json')
+    await writeFile(file, JSON.stringify(doc))
+    return await readLiaProductConfig(file)
+  }
+
+  it('a: old configs without any brain key remain valid - no silent default', async () => {
+    const read = await readDoc({
+      persona: { activeCardId: 'lia' },
+      provider: { chat: { onboarded: true, preferred: { modelId: 'm1', providerId: 'openrouter' } } },
+      schemaVersion: 1,
+    })
+    expect(read.status).toBe('ok')
+    if (read.status !== 'ok')
+      return
+    expect(read.value.brain).toBeUndefined()
+    expect(readPreferredBrainEngineId(read.value)).toBeUndefined()
+    expect(readPreferredBrainModelId(read.value)).toBeUndefined()
+    // ...and every pre-existing section is untouched.
+    expect(read.value.provider?.chat?.preferred).toEqual({ modelId: 'm1', providerId: 'openrouter' })
+    expect(read.value.persona?.activeCardId).toBe('lia')
+  })
+
+  it('b: the preferred engine id reads back exactly (opaque id, no interpretation)', () => {
+    expect(readPreferredBrainEngineId({ brain: { engine: { preferred: 'engine-alpha' } } })).toBe('engine-alpha')
+    expect(readPreferredBrainEngineId({ brain: {} })).toBeUndefined()
+    expect(readPreferredBrainEngineId(undefined)).toBeUndefined()
+    // Blank is never a selection.
+    expect(readPreferredBrainEngineId({ brain: { engine: { preferred: '   ' } } })).toBeUndefined()
+  })
+
+  it('c: the preferred model id reads back exactly', async () => {
+    expect(readPreferredBrainModelId({ brain: { model: { preferred: 'model-alpha' } } })).toBe('model-alpha')
+    expect(readPreferredBrainModelId({ brain: {} })).toBeUndefined()
+
+    const read = await readDoc({ schemaVersion: 1, brain: { model: { preferred: 'model-alpha' } } })
+    expect(read.status).toBe('ok')
+    if (read.status !== 'ok')
+      return
+    expect(readPreferredBrainModelId(read.value)).toBe('model-alpha')
+  })
+
+  it('d: engine and model preferences are independent dimensions', async () => {
+    // Engine only.
+    const engineOnly = await readDoc({ schemaVersion: 1, brain: { engine: { preferred: 'engine-alpha' } } })
+    expect(engineOnly.status).toBe('ok')
+    if (engineOnly.status !== 'ok')
+      return
+    expect(readPreferredBrainEngineId(engineOnly.value)).toBe('engine-alpha')
+    expect(readPreferredBrainModelId(engineOnly.value)).toBeUndefined()
+
+    // Model only.
+    const modelOnly = await readDoc({ schemaVersion: 1, brain: { model: { preferred: 'model-beta' } } })
+    expect(modelOnly.status).toBe('ok')
+    if (modelOnly.status !== 'ok')
+      return
+    expect(readPreferredBrainEngineId(modelOnly.value)).toBeUndefined()
+    expect(readPreferredBrainModelId(modelOnly.value)).toBe('model-beta')
+
+    // The reader keeps them as separate branches - no cross-fill.
+    expect(modelOnly.value.brain?.engine).toBeUndefined()
+    expect(engineOnly.value.brain?.model).toBeUndefined()
+  })
+
+  it('non-string preferred values never become a selection (tolerant reader)', async () => {
+    const read = await readDoc({ schemaVersion: 1, brain: { engine: { preferred: 42 }, model: { preferred: null } } })
+    expect(read.status).toBe('ok')
+    if (read.status !== 'ok')
+      return
+    expect(read.value.brain).toBeUndefined()
+    expect(readPreferredBrainEngineId(read.value)).toBeUndefined()
+    expect(readPreferredBrainModelId(read.value)).toBeUndefined()
+  })
+
+  it('the canonical brain-selection update payload is exactly the expected shape', () => {
+    expect(brainSelectionUpdate({ engineId: 'engine-alpha' })).toEqual({
+      brain: { engine: { preferred: 'engine-alpha' } },
+    })
+    expect(brainSelectionUpdate({ modelId: 'model-alpha' })).toEqual({
+      brain: { model: { preferred: 'model-alpha' } },
+    })
+    expect(brainSelectionUpdate({ engineId: 'engine-alpha', modelId: 'model-alpha' })).toEqual({
+      brain: { engine: { preferred: 'engine-alpha' }, model: { preferred: 'model-alpha' } },
+    })
+    // Omitted ids stay out of the patch.
+    expect(brainSelectionUpdate({})).toEqual({ brain: {} })
+  })
+})
+
+describe('brain selection stays out of the current chat path (8.0B-2)', () => {
+  it('j: the provider/chat bridge never reads the brain preference yet', async () => {
+    const { readFileSync } = await import('node:fs')
+    const bridgeSource = readFileSync(new URL('../bridge/lia-config.ts', import.meta.url), 'utf-8')
+    // The chat provider pipeline keeps its own provider/model fields - the
+    // brain preference is persistent state ONLY until a later wiring phase.
+    expect(bridgeSource).not.toMatch(/brain/i)
   })
 })

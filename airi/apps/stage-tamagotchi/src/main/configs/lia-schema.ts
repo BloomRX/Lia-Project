@@ -170,6 +170,22 @@ const setupSchema = object({
   completed: optional(boolean()),
 })
 
+/**
+ * Phase 8.0B-2: the persistent Brain selection preference. Same round-trip
+ * duty as the setup marker: a field missing here would silently drop the
+ * user's Brain choice on the next Stage save. The ids are OPAQUE (Brain
+ * Engine Registry / Brain Model ids) - the Stage never resolves them, so
+ * no provider/vendor field belongs in this shape. Additive/optional.
+ */
+const brainSelectionTargetSchema = object({
+  preferred: optional(string()),
+})
+
+const brainConfigSchema = object({
+  engine: optional(brainSelectionTargetSchema),
+  model: optional(brainSelectionTargetSchema),
+})
+
 export const liaProductConfigSchema = object({
   /** Declares/validates the supported schema version. */
   schemaVersion: literal(LIA_PRODUCT_SCHEMA_VERSION),
@@ -178,6 +194,7 @@ export const liaProductConfigSchema = object({
   voice: optional(voiceConfigSchema, {}),
   preferences: optional(preferencesSchema, {}),
   setup: optional(setupSchema),
+  brain: optional(brainConfigSchema),
 })
 
 export type LiaProductConfig = InferOutput<typeof liaProductConfigSchema>

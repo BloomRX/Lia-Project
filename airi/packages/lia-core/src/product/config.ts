@@ -85,12 +85,28 @@ export interface LiaProductVoiceConfig {
   }
 }
 
+/**
+ * Phase 8.0B-2: the persistent Brain selection preference. Ids are OPAQUE
+ * and stable - a Brain Engine Registry id and a Brain Model id - never
+ * provider/vendor fields. Absent means "no explicit selection yet";
+ * default resolution deliberately does NOT live here (a later phase).
+ */
+export interface LiaProductBrainSelection {
+  engine?: { preferred?: string }
+  model?: { preferred?: string }
+}
+
 export interface LiaProductConfigSnapshot {
   schemaVersion?: number
   persona?: { activeCardId?: string }
   provider?: { chat?: LiaProductChatConfig }
   voice?: LiaProductVoiceConfig
   preferences?: { language?: string }
+  /**
+   * Phase 8.0B-2: preferred Brain engine/model. Additive: old documents
+   * without it stay valid and simply carry no explicit Brain selection.
+   */
+  brain?: LiaProductBrainSelection
   /**
    * Phase 7.9H-B3: first-run product setup marker. Absent or `false` means
    * the initial product setup has NOT been completed; only an explicit
@@ -247,6 +263,19 @@ function extract(doc: Record<string, unknown>): LiaProductConfigSnapshot {
   if (setup && typeof setup.completed === 'boolean')
     snapshot.setup = { completed: setup.completed }
 
+  const brain = asRecord(doc.brain)
+  if (brain) {
+    const extracted: LiaProductBrainSelection = {}
+    const enginePreferred = asString(asRecord(brain.engine)?.preferred)
+    if (enginePreferred !== undefined)
+      extracted.engine = { preferred: enginePreferred }
+    const modelPreferred = asString(asRecord(brain.model)?.preferred)
+    if (modelPreferred !== undefined)
+      extracted.model = { preferred: modelPreferred }
+    if (Object.keys(extracted).length > 0)
+      snapshot.brain = extracted
+  }
+
   return snapshot
 }
 
@@ -300,6 +329,14 @@ export interface LiaProductConfigUpdate {
   preferences?: { language?: string }
   /** Phase 7.9H-B3: first-run setup completion (`true` = setup done). */
   setup?: { completed?: boolean }
+  /**
+   * Phase 8.0B-2: Brain selection writes. A non-blank `preferred` sets the
+   * opaque id; an explicit blank clears it back to "no explicit selection".
+   */
+  brain?: {
+    engine?: { preferred?: string }
+    model?: { preferred?: string }
+  }
   voice?: {
     /** Phase 7.9H: explicit voice on/off switch (`false` = voice off). */
     enabled?: boolean
@@ -331,6 +368,47 @@ export function readSetupCompletedConfig(setup: unknown): boolean {
 /** The canonical setup-completion update, ridden through `lia:config:update`. */
 export function setupCompletionUpdate(completed: boolean): { setup: { completed: boolean } } {
   return { setup: { completed } }
+}
+
+// ---------------------------------------------------------------------------
+// Phase 8.0B-2: Brain selection preference - persistent state ONLY. Reading
+// these fields changes nothing about today's chat path (which keeps its own
+// provider/model pipeline); resolution/defaulting belongs to a later phase.
+// ---------------------------------------------------------------------------
+
+/**
+ * The preferred Brain engine id - an opaque Brain Engine Registry id.
+ * Absent/blank means "no explicit Brain engine selected" (NEVER a silent
+ * default at this layer).
+ */
+export function readPreferredBrainEngineId(snapshot: Pick<LiaProductConfigSnapshot, 'brain'> | undefined): string | undefined {
+  const preferred = snapshot?.brain?.engine?.preferred
+  return typeof preferred === 'string' && preferred.trim().length > 0 ? preferred : undefined
+}
+
+/** The preferred Brain model id - opaque, same semantics as the engine id. */
+export function readPreferredBrainModelId(snapshot: Pick<LiaProductConfigSnapshot, 'brain'> | undefined): string | undefined {
+  const preferred = snapshot?.brain?.model?.preferred
+  return typeof preferred === 'string' && preferred.trim().length > 0 ? preferred : undefined
+}
+
+/**
+ * The canonical Brain-selection update, ridden through the SAME
+ * `lia:config:update` seam as every other product preference. Omitted ids
+ * are simply not part of the patch; blank ids clear the selection.
+ */
+export function brainSelectionUpdate(selection: { engineId?: string, modelId?: string }): {
+  brain: {
+    engine?: { preferred: string }
+    model?: { preferred: string }
+  }
+} {
+  const brain: { engine?: { preferred: string }, model?: { preferred: string } } = {}
+  if (selection.engineId !== undefined)
+    brain.engine = { preferred: selection.engineId }
+  if (selection.modelId !== undefined)
+    brain.model = { preferred: selection.modelId }
+  return { brain }
 }
 
 export type LiaProductConfigWrite
@@ -429,6 +507,31 @@ function mergeProductUpdate(raw: Record<string, unknown>, update: LiaProductConf
     else
       delete setup.completed
     next.setup = setup
+  }
+  if (update.brain) {
+    const brain = { ...asRecord(raw.brain) }
+    // A selection is atomic, like every other `preferred` in this writer:
+    // a non-blank id replaces the previous one, an explicit blank clears
+    // the key back to "no explicit selection" (the product default).
+    if (update.brain.engine?.preferred !== undefined) {
+      const engine = { ...asRecord(brain.engine) }
+      const preferred = update.brain.engine.preferred.trim()
+      if (preferred)
+        engine.preferred = preferred
+      else
+        delete engine.preferred
+      brain.engine = engine
+    }
+    if (update.brain.model?.preferred !== undefined) {
+      const model = { ...asRecord(brain.model) }
+      const preferred = update.brain.model.preferred.trim()
+      if (preferred)
+        model.preferred = preferred
+      else
+        delete model.preferred
+      brain.model = model
+    }
+    next.brain = brain
   }
   if (update.provider?.chat) {
     const provider = { ...asRecord(raw.provider) }

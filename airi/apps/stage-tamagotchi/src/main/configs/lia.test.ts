@@ -272,4 +272,61 @@ describe('lia product config', () => {
     expect(product.get()?.persona).toEqual({ activeCardId: 'lia' })
     expect(product.get()?.schemaVersion).toBe(1)
   })
+
+  it('brain selection survives the Stage parse/write round-trip (8.0B-2)', async () => {
+    // What the launcher's Brain preference leaves on disk. On the next Stage
+    // launch `setup()` re-parses the file through the schema, and any later
+    // Stage-side write persists the parsed copy - so a field the schema
+    // dropped here would silently erase the user's Brain choice.
+    const { mod, fs } = await loadModules(invalidFileMocks('/tmp/u', JSON.stringify({
+      schemaVersion: 1,
+      persona: { activeCardId: 'lia' },
+      provider: {},
+      voice: {},
+      preferences: {},
+      brain: {
+        engine: { preferred: 'engine-alpha' },
+        model: { preferred: 'model-alpha' },
+      },
+    })))
+    const config = mod.createLiaProductConfig()
+
+    // Parse keeps both branches...
+    expect(config.getDiagnostics()?.status).toBe('ok')
+    expect(config.get()?.brain?.engine?.preferred).toBe('engine-alpha')
+    expect(config.get()?.brain?.model?.preferred).toBe('model-alpha')
+
+    // ...and an unrelated Stage-side update rewrites the document WITH the
+    // selection still inside it.
+    config.update({
+      ...config.get()!,
+      preferences: { language: 'pt-BR' },
+    })
+    expect(config.get()?.brain?.engine?.preferred).toBe('engine-alpha')
+    expect(config.get()?.brain?.model?.preferred).toBe('model-alpha')
+
+    await vi.waitFor(() => {
+      expect(fs.writeFile).toHaveBeenCalled()
+    })
+    const written = (fs.writeFile as ReturnType<typeof vi.fn>).mock.calls[0][1] as string
+    const persisted = JSON.parse(written) as Record<string, any>
+    expect(persisted.brain).toEqual({
+      engine: { preferred: 'engine-alpha' },
+      model: { preferred: 'model-alpha' },
+    })
+    expect(persisted.preferences?.language).toBe('pt-BR')
+  })
+
+  it('documents without brain stay valid for the Stage (additive schema)', async () => {
+    const { mod } = await loadModules(invalidFileMocks('/tmp/u', JSON.stringify({
+      schemaVersion: 1,
+      persona: { activeCardId: 'lia' },
+      provider: {},
+      voice: {},
+      preferences: {},
+    })))
+    const config = mod.createLiaProductConfig()
+    expect(config.getDiagnostics()?.status).toBe('ok')
+    expect(config.get()?.brain).toBeUndefined()
+  })
 })

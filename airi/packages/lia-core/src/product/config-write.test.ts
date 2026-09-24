@@ -270,3 +270,93 @@ describe('first-run setup marker writes (Phase 7.9H-B3)', () => {
     expect(readSetupCompletedConfig(read.value.setup)).toBe(false)
   })
 })
+
+describe('brain selection writes (Phase 8.0B-2)', () => {
+  it('e: writing the ENGINE selection preserves every unrelated section', async () => {
+    const file = await freshConfig({
+      persona: { activeCardId: 'lia' },
+      preferences: { language: 'pt-BR' },
+      provider: { chat: { onboarded: true, preferred: { modelId: 'm1', providerId: 'openrouter' } } },
+      schemaVersion: 1,
+      setup: { completed: true },
+      voice: { enabled: false, engine: { preferred: 'kokoro' } },
+    })
+
+    const result = await updateLiaProductConfig(file, { brain: { engine: { preferred: 'engine-alpha' } } })
+    expect(result.status).toBe('ok')
+    if (result.status !== 'ok')
+      return
+
+    // The new selection lands...
+    expect(result.value.brain?.engine?.preferred).toBe('engine-alpha')
+    // ...and nothing else moves.
+    expect(result.value.persona?.activeCardId).toBe('lia')
+    expect(result.value.preferences?.language).toBe('pt-BR')
+    expect(result.value.provider?.chat).toEqual({ onboarded: true, preferred: { modelId: 'm1', providerId: 'openrouter' } })
+    expect(result.value.setup?.completed).toBe(true)
+    expect(result.value.voice?.enabled).toBe(false)
+    expect(result.value.voice?.engine?.preferred).toBe('kokoro')
+
+    // And it survives the disk round-trip.
+    const read = await readLiaProductConfig(file)
+    expect(read.status).toBe('ok')
+    if (read.status !== 'ok')
+      return
+    expect(read.value.brain?.engine?.preferred).toBe('engine-alpha')
+  })
+
+  it('f: writing the MODEL selection preserves every unrelated section', async () => {
+    const file = await freshConfig({
+      brain: { engine: { preferred: 'engine-alpha' } },
+      schemaVersion: 1,
+      setup: { completed: true },
+    })
+
+    const result = await updateLiaProductConfig(file, { brain: { model: { preferred: 'model-beta' } } })
+    expect(result.status).toBe('ok')
+    if (result.status !== 'ok')
+      return
+
+    expect(result.value.brain?.model?.preferred).toBe('model-beta')
+    // A model-only patch never touches the engine branch...
+    expect(result.value.brain?.engine?.preferred).toBe('engine-alpha')
+    // ...nor anything else in the document.
+    expect(result.value.setup?.completed).toBe(true)
+    expect(result.value.schemaVersion).toBe(1)
+  })
+
+  it('g: writing BOTH in one update preserves both (one merge, one write)', async () => {
+    const file = await freshConfig({ schemaVersion: 1 })
+
+    const result = await updateLiaProductConfig(file, {
+      brain: { engine: { preferred: 'engine-alpha' }, model: { preferred: 'model-alpha' } },
+    })
+    expect(result.status).toBe('ok')
+    if (result.status !== 'ok')
+      return
+    expect(result.value.brain?.engine?.preferred).toBe('engine-alpha')
+    expect(result.value.brain?.model?.preferred).toBe('model-alpha')
+
+    const raw = JSON.parse(await readFile(file, 'utf-8')) as Record<string, any>
+    expect(raw.brain).toEqual({ engine: { preferred: 'engine-alpha' }, model: { preferred: 'model-alpha' } })
+  })
+
+  it('selection semantics: ids are trimmed, blank clears back to absence, unknown fields survive', async () => {
+    const file = await freshConfig({ schemaVersion: 1, brain: { engine: { preferred: 'engine-alpha' } } })
+
+    // Trimmed on write - the stored id is canonical.
+    const trimmed = await updateLiaProductConfig(file, { brain: { engine: { preferred: '  engine-beta  ' } } })
+    expect(trimmed.status).toBe('ok')
+    if (trimmed.status !== 'ok')
+      return
+    expect(trimmed.value.brain?.engine?.preferred).toBe('engine-beta')
+
+    // An explicit blank removes the preference (absence = no selection),
+    // exactly like the voice/setup conventions.
+    const cleared = await updateLiaProductConfig(file, { brain: { engine: { preferred: '' } } })
+    expect(cleared.status).toBe('ok')
+    if (cleared.status !== 'ok')
+      return
+    expect(cleared.value.brain?.engine?.preferred).toBeUndefined()
+  })
+})
