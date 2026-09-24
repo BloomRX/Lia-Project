@@ -5,6 +5,14 @@
  * vice-versa.
  */
 
+export { createBrainEngineRegistry, modelsForEngine } from './brain/engine-registry'
+export type { LiaBrainEngineRegistrationResult, LiaBrainEngineRegistry } from './brain/engine-registry'
+export type {
+  LiaBrainCapabilities,
+  LiaBrainEngineAvailability,
+  LiaBrainEngineDescriptor,
+  LiaBrainModelDescriptor,
+} from './brain/types'
 export { buildLiaBridgeConfig, LIA_STAGE_ENV, stageEnvFor } from './bridge/lia-config'
 export type { BuildLiaBridgeConfigInput, LiaBridgeConfig } from './bridge/lia-config'
 export { liaProductPaths, liaUserDataCandidates } from './paths/product-paths'
