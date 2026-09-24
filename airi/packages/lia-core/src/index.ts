@@ -15,6 +15,8 @@ export { createBrainEngineRegistry, modelsForEngine } from './brain/engine-regis
 export type { LiaBrainEngineRegistrationResult, LiaBrainEngineRegistry } from './brain/engine-registry'
 export { resolvePreferredBrainSelection } from './brain/resolver'
 export type { LiaBrainPreferredResolution, LiaBrainPreferredResolutionInput } from './brain/resolver'
+export { eligibleBrainModelRoutes } from './brain/routes'
+export type { LiaBrainModelRoute } from './brain/routes'
 export type {
   LiaBrainCapabilities,
   LiaBrainEngineAvailability,
