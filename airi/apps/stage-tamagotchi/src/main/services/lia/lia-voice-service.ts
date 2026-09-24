@@ -10,7 +10,7 @@ import type {
 import type { LiaProductConfig } from '../../configs/lia-schema'
 import type { LiaVoiceProfileStore } from './voice-profiles'
 
-import { readVoiceEngineConfig, readVoiceFallbackConfig, VOICE_FALLBACK_DEFAULT_ENABLED } from '@lia/core/voice/config'
+import { readVoiceEnabledConfig, readVoiceEngineConfig, readVoiceFallbackConfig, VOICE_FALLBACK_DEFAULT_ENABLED } from '@lia/core/voice/config'
 import { resolveVoiceEngineSelection } from '@lia/core/voice/engines/registry'
 import { createLiaVoiceService } from '@lia/core/voice/voice-service'
 import { defineInvokeHandler } from '@moeru/eventa'
@@ -52,9 +52,56 @@ interface LiaVoiceServiceParams {
 
 const capabilityCacheTtlMs = 5_000
 
+let silentWav: ArrayBuffer | undefined
+
+/**
+ * Phase 7.9H-B1: a small, valid, fully-silent WAV. When the product voice
+ * switch is OFF, the synthesis gate hands this back instead of reaching an
+ * engine: the pipeline decodes it and plays silence - no synthesis happens,
+ * nothing audible plays, and no provider error or fallback loop is
+ * triggered. Engine/runtime management is untouched either way.
+ */
+function silentWavBuffer(): ArrayBuffer {
+  if (silentWav)
+    return silentWav
+  const sampleRate = 16_000
+  const samples = 1_600 // 100 ms of 16-bit mono silence
+  const dataSize = samples * 2
+  const buffer = new ArrayBuffer(44 + dataSize)
+  const view = new DataView(buffer)
+  const writeLabel = (offset: number, label: string): void => {
+    for (let i = 0; i < label.length; i++)
+      view.setUint8(offset + i, label.charCodeAt(i))
+  }
+  writeLabel(0, 'RIFF')
+  view.setUint32(4, 36 + dataSize, true)
+  writeLabel(8, 'WAVE')
+  writeLabel(12, 'fmt ')
+  view.setUint32(16, 16, true) // fmt chunk size
+  view.setUint16(20, 1, true) // PCM
+  view.setUint16(22, 1, true) // mono
+  view.setUint32(24, sampleRate, true)
+  view.setUint32(28, sampleRate * 2, true) // byte rate
+  view.setUint16(32, 2, true) // block align
+  view.setUint16(34, 16, true) // bits per sample
+  writeLabel(36, 'data')
+  view.setUint32(40, dataSize, true)
+  // The sample bytes are already zero - silence.
+  silentWav = buffer
+  return buffer
+}
+
 export function registerLiaVoiceBridge(params: LiaVoiceServiceParams) {
   const { context, liaProductConfig, store } = params
   const engines = params.engines ?? []
+
+  // Phase 7.9H-B1: the ONE central speech-output gate. Absent/true means
+  // enabled (the product default); only an explicit `voice.enabled: false`
+  // opts the user out. Opting out silences spoken output WITHOUT touching
+  // runtime management: engines stay installed/registered (prewarm keeps
+  // running), text stays fully available, Stage launch never fails, and a
+  // later re-enable resumes the existing engine path with zero reinstall.
+  const voiceEnabled = () => readVoiceEnabledConfig(liaProductConfig.get()?.voice)
 
   // Phase 7.9F: the selected engine is resolved ONCE at this host seam
   // (default -> Kokoro; configured-but-unknown -> honest unavailable,
@@ -80,6 +127,11 @@ export function registerLiaVoiceBridge(params: LiaVoiceServiceParams) {
   // turn-boundary snapshot must never stall on a TCP timeout.
   let cache: { expiresAt: number, available: boolean } | undefined
   async function voiceAvailable(): Promise<boolean> {
+    // The product switch wins over any probe cache: while voice is off the
+    // capability truth is honestly "no voice" (persona stays text-only);
+    // skipping the cache also makes a re-enable visible on the next probe.
+    if (!voiceEnabled())
+      return false
     if (cache && Date.now() < cache.expiresAt)
       return cache.available
     try {
@@ -100,6 +152,11 @@ export function registerLiaVoiceBridge(params: LiaVoiceServiceParams) {
   }
 
   defineInvokeHandler(context, electronLiaVoiceStatus, async (): Promise<LiaVoiceStatus> => {
+    // Voice off: honestly not ready. The startup greeting's existing
+    // ready-wait therefore ends in its honest `voice-unavailable` outcome -
+    // nothing is synthesized, nothing plays, the latch stays unclaimed.
+    if (!voiceEnabled())
+      return { note: 'voice-disabled', state: 'unavailable' }
     try {
       const state = await service.state()
       if (!state.available)
@@ -118,6 +175,12 @@ export function registerLiaVoiceBridge(params: LiaVoiceServiceParams) {
     context,
     electronLiaVoiceSynthesize,
     async (request: LiaVoiceSynthesisRequest): Promise<LiaVoiceSynthesisResult> => {
+      // Voice off: silence instead of synthesis. No engine is touched (not
+      // even lazily started), so spoken output stops while the runtime
+      // stays installed and managed for a later re-enable.
+      if (!voiceEnabled())
+        return { audio: silentWavBuffer(), engine: 'none' }
+
       const profileId = String(request?.profileId ?? '').trim()
       if (!profileId) {
         // Stock engines (Kokoro first, Phase 7.9C) ship their voices with

@@ -167,6 +167,46 @@ describe('lia product config', () => {
     expect(chat?.fallback).toEqual([{ providerId: 'groq', modelId: 'llama-3.3-70b-versatile' }])
   })
 
+  it('round-trips voice.enabled across restart AND the Stage own writes (7.9H-B1)', async () => {
+    // What a disabled-voice user leaves on disk (written by the launcher's
+    // canonical writer). On the next launch setup() re-parses through the
+    // schema - and every later Stage-side update() writes the parsed copy
+    // back - so a field the schema dropped would silently re-enable voice.
+    const { mod, fs } = await loadModules(invalidFileMocks('/tmp/u', JSON.stringify({
+      schemaVersion: 1,
+      persona: { activeCardId: 'lia' },
+      provider: {},
+      voice: { enabled: false },
+      preferences: {},
+    })))
+    const config = mod.createLiaProductConfig()
+    expect(config.getDiagnostics()?.status).toBe('ok')
+    expect(config.get()?.voice?.enabled).toBe(false)
+
+    // An unrelated Stage-side write must carry the switch back to disk.
+    const current = config.get()!
+    config.update({ ...current, preferences: { language: 'pt-BR' } })
+    await vi.waitFor(() => {
+      expect(fs.writeFile).toHaveBeenCalled()
+    })
+    const persisted = JSON.parse((fs.writeFile as ReturnType<typeof vi.fn>).mock.calls[0]![1] as string) as Record<string, unknown>
+    expect((persisted.voice as Record<string, unknown>).enabled).toBe(false)
+    expect(persisted.preferences).toEqual({ language: 'pt-BR' })
+  })
+
+  it('absent voice.enabled reads back absent - the product default stays implicit (7.9H-B1)', async () => {
+    const { mod } = await loadModules(invalidFileMocks('/tmp/u', JSON.stringify({
+      schemaVersion: 1,
+      persona: { activeCardId: 'lia' },
+      provider: {},
+      voice: {},
+      preferences: {},
+    })))
+    const config = mod.createLiaProductConfig()
+    expect(config.getDiagnostics()?.status).toBe('ok')
+    expect(config.get()?.voice?.enabled).toBeUndefined()
+  })
+
   it('persists to a distinct file from the main-window sizing config (lia-product.json vs lia-main-window.json)', async () => {
     const { mod } = await loadModules(missingFileMocks('/tmp/u'))
     const product = mod.createLiaProductConfig()

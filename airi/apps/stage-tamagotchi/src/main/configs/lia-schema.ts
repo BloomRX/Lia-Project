@@ -121,6 +121,15 @@ const voiceFallbackSchema = object({
 })
 
 const voiceConfigSchema = object({
+  /**
+   * Phase 7.9H: the product-level voice switch. Absent means enabled (voice
+   * is part of Lia's default experience); only an explicit `false` opts the
+   * user out of spoken output. The Stage honors it at its ONE central
+   * speech-output gate; runtime management keeps running either way.
+   * Keeping it in the schema also guarantees the Stage's own config writes
+   * round-trip the key instead of silently stripping it from the document.
+   */
+  enabled: optional(boolean()),
   tts: optional(object({
     /** Preferred primary TTS (voice) target. */
     preferred: optional(ttsTargetSchema),
