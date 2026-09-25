@@ -42,6 +42,7 @@ import { setupArtistryBridge } from './services/airi/widgets/artistry-bridge'
 import { setupAutoUpdater } from './services/electron/auto-updater'
 import { setupGlobalShortcutService } from './services/electron/global-shortcut'
 import { setupPermissionHandlers } from './services/electron/media-permissions'
+import { registerLiaBrainDecisionBridge } from './services/lia/brain-decision-service'
 import { createLiaBrainService } from './services/lia/lia-brain-service'
 import { startLiaMainWindowVoiceRuntime } from './services/lia/main-window-voice-runtime'
 import { registerLiaProviderConfigBridge } from './services/lia/provider-config-service'
@@ -389,6 +390,19 @@ app.whenReady().then(async () => {
     callback: async (deps) => {
       const { context } = createContext(ipcMain)
       registerLiaVoiceConfigBridge({ context, liaProductConfig: deps.liaProductConfig })
+    },
+  })
+
+  // Phase 8.0D-7: the read-only Brain decision bridge. It reuses the ONE
+  // Brain service owned by this lifecycle (see the provider above) and grants
+  // no execution authority - it answers a routing question about a described
+  // chat turn and returns the canonical decision unchanged. No production
+  // chat code calls it yet.
+  injeca.invoke({
+    dependsOn: { liaBrain },
+    callback: async (deps) => {
+      const { context } = createContext(ipcMain)
+      registerLiaBrainDecisionBridge({ context, brain: deps.liaBrain })
     },
   })
 

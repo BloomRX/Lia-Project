@@ -1,5 +1,10 @@
 import type { Locale } from '@intlify/core'
 import type {
+  LiaBrainAutomaticSelectionPolicy as LiaCoreBrainAutomaticSelectionPolicy,
+  LiaBrainRoutingDecision as LiaCoreBrainRoutingDecision,
+  LiaChatTurnBrainFacts as LiaCoreChatTurnBrainFacts,
+} from '@lia/core'
+import type {
   LiaCustomVoiceFile as LiaCoreCustomVoiceFile,
   LiaCustomVoiceProfile as LiaCoreCustomVoiceProfile,
   LiaVoiceProfileErrorCode as LiaCoreVoiceProfileErrorCode,
@@ -35,7 +40,6 @@ import type {
   VrmUpdateFrameTracePayload,
 } from '@proj-airi/stage-ui-three/trace'
 import type { Rectangle } from 'electron'
-
 
 import { defineEventa, defineInvokeEventa } from '@moeru/eventa'
 
@@ -656,9 +660,11 @@ export type LiaVoiceStatus
 
 /** A synthesis request from the renderer. The profile id is never a path. */
 export interface LiaVoiceSynthesisRequest {
-  /** User-imported voice profile. Optional since Phase 7.9C: stock engines
+  /**
+   * User-imported voice profile. Optional since Phase 7.9C: stock engines
    * (Kokoro ships its own pt-BR voices) synthesize with their engine
-   * default when no profile is selected. */
+   * default when no profile is selected.
+   */
   profileId?: string
   text: string
   /** BCP-47 tag, e.g. `pt-BR`. */
@@ -733,9 +739,39 @@ export const electronLiaCapabilitiesGet = defineInvokeEventa<LiaCapabilitySnapsh
 /** Push: fired when any derived truth changes (config or runtime). */
 export const electronLiaCapabilitiesUpdated = defineEventa<LiaCapabilitySnapshot>('eventa:event:lia:capabilities:updated')
 
-
 /** Engines the current build knows how to drive, with what each expects. */
 export const electronLiaVoiceEnginesList = defineInvokeEventa<Array<{ extensions: string[], id: string, label: string, roles: string[] }>>('eventa:invoke:lia:voice:engines:list')
+
+/* -------------------------------------------------------------------------- */
+/* Lia Brain chat decision (Phase 8.0D-7)                                     */
+/*                                                                            */
+/* READ-ONLY contract: the renderer describes WHAT the turn needs (chat turn  */
+/* facts) and may hand over an explicit automatic selection policy. It never  */
+/* names a provider, engine or model - routing identity comes from the        */
+/* persisted product state plus the production Brain catalog owned by Stage   */
+/* main. The response is the canonical Lia Core routing decision, returned    */
+/* unchanged: normal outcomes (modeUnspecified, disabled, manual failures,    */
+/* automaticPolicyMissing, noCandidates, noPolicyMatch, ambiguous) are DATA.  */
+/* -------------------------------------------------------------------------- */
+
+/** What one chat turn needs, exactly as the chat path already describes it. */
+export type LiaBrainChatTurnFacts = LiaCoreChatTurnBrainFacts
+
+/**
+ * The whole request. `facts` is the only required part and carries no
+ * identity: no providerId, no engineId/modelId, no keys, endpoints or
+ * options. `automaticPolicy` is optional and explicit - absent stays absent.
+ */
+export interface LiaBrainChatDecisionRequest {
+  automaticPolicy?: LiaCoreBrainAutomaticSelectionPolicy
+  facts: LiaBrainChatTurnFacts
+}
+
+/** The canonical decision, unflattened. */
+export type LiaBrainChatDecision = LiaCoreBrainRoutingDecision
+
+/** Pull: the routing decision for one described chat turn (read-only). */
+export const electronLiaBrainChatDecision = defineInvokeEventa<LiaBrainChatDecision, LiaBrainChatDecisionRequest>('eventa:invoke:lia:brain:chat-decision')
 
 export { electron } from '@proj-airi/electron-eventa'
 export * from '@proj-airi/electron-eventa/electron-updater'

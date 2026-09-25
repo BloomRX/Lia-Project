@@ -200,18 +200,33 @@ describe('lia brain host service (Phase 8.0D-4)', () => {
     expect(source).not.toMatch(/readFile|writeFile|existsSync|process\.env|vault|apiKey|api_key|secret/i)
   })
 
-  it('m: no renderer IPC or UI surface was added', () => {
+  it('m: the service itself exposes no renderer surface', () => {
     const source = readSource('./lia-brain-service.ts')
     expect(source).not.toMatch(/electron|eventa|ipcMain|ipcRenderer|defineInvokeHandler|BrowserWindow/)
-    // The shared IPC contract carries no Brain channel at all.
+    // The ONLY Brain channel the shared IPC contract may carry is the
+    // read-only decision request (Phase 8.0D-7): no setter, no catalog or
+    // service exposure, no push channel.
     const eventa = readFileSync(fileURLToPath(new URL('../../../shared/eventa/index.ts', import.meta.url)), 'utf-8')
-    expect(eventa).not.toMatch(/brain/i)
+    const brainChannels = eventa.match(/eventa:(?:invoke|event):lia:brain[^']*/g) ?? []
+    expect(brainChannels).toEqual(['eventa:invoke:lia:brain:chat-decision'])
+    // Within that Brain section, no host object leaks across: the request and
+    // the decision are plain data, and the catalog stays host-side. Only the
+    // prose may mention it.
+    const marker = eventa.indexOf('Lia Brain chat decision (Phase 8.0D-7)')
+    expect(marker).toBeGreaterThan(-1)
+    const brainSection = eventa
+      .slice(marker, eventa.indexOf('export { electron }', marker))
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^\s*\/\/.*$/gm, '')
+    expect(brainSection).not.toMatch(/catalog|registry|createLiaBrainService|LiaBrainService/i)
   })
 
   it('n/o: no current chat/provider code consumes the service, and those paths are untouched', () => {
-    // The only production caller is the Stage-main composition entry (Phase
-    // 8.0D-5 owns the instance there); no conversation path mentions the
-    // service, and the chat/provider files carry no Brain reference at all.
+    // Production consumers are exactly two, both host-side: the Stage-main
+    // composition entry (8.0D-5 owns the instance) and the read-only decision
+    // bridge (8.0D-7 receives it as a dependency). No conversation path
+    // mentions the service, and the chat/provider files carry no Brain
+    // reference at all.
     const stageSrc = fileURLToPath(new URL('../../../', import.meta.url))
     const consumers: string[] = []
     for (const entry of readdirSync(stageSrc, { recursive: true, withFileTypes: true })) {
@@ -224,7 +239,7 @@ describe('lia brain host service (Phase 8.0D-4)', () => {
       if (/createLiaBrainService|LiaBrainDecisionRequest|LiaBrainService\b/.test(readFileSync(file, 'utf-8')))
         consumers.push(relative)
     }
-    expect(consumers).toEqual([])
+    expect(consumers).toEqual(['main/services/lia/brain-decision-service.ts'])
 
     for (const relative of [
       './provider-config-service.ts',

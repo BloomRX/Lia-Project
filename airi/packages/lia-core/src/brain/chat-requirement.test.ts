@@ -167,8 +167,10 @@ describe('chat turn brain requirement (8.0D-6)', () => {
       expect(source, relative).not.toMatch(/LiaBrainService|liaBrain\b|decideBrainRoute|brainRequirementForChatTurn/)
     }
 
-    // And the helper has no consumer anywhere outside lia-core yet - only the
-    // package root may mention it (its export).
+    // And the helper's ONLY consumer outside lia-core is the read-only Brain
+    // decision bridge (Phase 8.0D-7), which maps chat facts in main. Nothing
+    // in a chat execution path consumes it: the helper defines the contract,
+    // the bridge exposes it, and no conversation code calls either yet.
     const airiDir = fileURLToPath(new URL('../../../../', import.meta.url))
     const consumers: string[] = []
     for (const root of ['apps', 'packages']) {
@@ -192,6 +194,9 @@ describe('chat turn brain requirement (8.0D-6)', () => {
         }
       }
     }
-    expect(consumers).toEqual([])
+    expect(consumers.sort()).toEqual([
+      'apps/stage-tamagotchi/src/main/services/lia/brain-decision-service.ts',
+      'apps/stage-tamagotchi/src/shared/eventa/index.ts',
+    ])
   })
 })

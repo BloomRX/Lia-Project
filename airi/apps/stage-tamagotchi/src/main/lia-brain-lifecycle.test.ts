@@ -78,11 +78,12 @@ describe('lia brain service lifecycle ownership (Phase 8.0D-5)', () => {
     const source = mainEntry()
     // One provider registration for the whole main process...
     expect(source.match(/services:lia-brain/g)).toHaveLength(1)
-    // ...and exactly three references to the handle: its declaration, the
-    // boot invoke that materializes it, and that invoke's touch. No other
-    // seam receives it.
-    expect(source.match(/\bliaBrain\b/g)).toHaveLength(3)
-    expect(source.match(/dependsOn: \{ liaBrain \}/g)).toHaveLength(1)
+    // ...and exactly five references to the handle: its declaration, the boot
+    // invoke that materializes it, that invoke's touch, and the read-only
+    // decision bridge (8.0D-7) that receives the SAME instance - its invoke
+    // dependency plus the handle it passes on. No other seam receives it.
+    expect(source.match(/\bliaBrain\b/g)).toHaveLength(5)
+    expect(source.match(/dependsOn: \{ liaBrain \}/g)).toHaveLength(2)
     expect(source.match(/createLiaBrainService\(/g)).toHaveLength(1)
     // No module-global singleton outside the container's ownership.
     const block = brainProvideBlock(source)
@@ -114,13 +115,20 @@ describe('lia brain service lifecycle ownership (Phase 8.0D-5)', () => {
     expect(source.match(/from '\.\/services\/lia\/lia-brain/g)).toHaveLength(1)
   })
 
-  it('j: no Brain renderer surface (IPC, preload, eventa, renderer stores) was added', () => {
+  it('j: the only Brain renderer surface is the read-only decision request', () => {
+    // Phase 8.0D-7 added exactly one renderer-facing Brain seam: a read-only
+    // invoke. Nothing else may cross: no setter, no push event, no catalog or
+    // registry exposure, no service handle.
     const shared = readSource('../shared/eventa/index.ts')
-    expect(shared).not.toMatch(/brain/i)
+    const brainChannels = shared.match(/eventa:(?:invoke|event:):?lia:brain[^']*/g) ?? []
+    expect(brainChannels).toEqual(['eventa:invoke:lia:brain:chat-decision'])
+    expect(shared).not.toMatch(/eventa:event:lia:brain/)
+    expect(shared).not.toMatch(/electronLiaBrainChatDecisionSet/)
     for (const relative of ['../preload/index.ts', '../renderer/stores/lia/provider.ts']) {
       expect(readSource(relative), relative).not.toMatch(/brain/i)
     }
-    // The service module itself imports no Electron/Eventa seam.
+    // The service module itself imports no Electron/Eventa seam: the bridge
+    // is a separate module that receives the service as a dependency.
     const service = readSource('./services/lia/lia-brain-service.ts')
     expect(service).not.toMatch(/electron|eventa|ipcMain|ipcRenderer|defineInvokeHandler/)
   })
@@ -133,9 +141,16 @@ describe('lia brain service lifecycle ownership (Phase 8.0D-5)', () => {
         continue
       const file = `${entry.parentPath}/${entry.name}`
       const relative = file.slice(stageSrc.length)
-      // The service itself and the composition entry (its legitimate owner).
-      if (relative.startsWith('main/services/lia/lia-brain-service.ts') || relative === 'main/index.ts')
+      // Host-side Brain modules are the legitimate holders: the service
+      // itself, the composition entry that owns it, and the read-only bridge
+      // that receives it as a dependency.
+      if (
+        relative.startsWith('main/services/lia/lia-brain-service.ts')
+        || relative === 'main/index.ts'
+        || relative.startsWith('main/services/lia/brain-decision-service.ts')
+      ) {
         continue
+      }
       const source = readFileSync(file, 'utf-8')
       if (/LiaBrainService|createLiaBrainService|liaBrain\b|decideBrainRoute/.test(source))
         offenders.push(relative)
