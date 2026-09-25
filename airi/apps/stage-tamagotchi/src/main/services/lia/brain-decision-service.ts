@@ -9,7 +9,7 @@ import type {
 } from '../../../shared/eventa'
 import type { LiaBrainService } from './lia-brain-service'
 
-import { brainRequirementForChatTurn } from '@lia/core'
+import { brainRequirementForChatTurn, createProductionBrainAutomaticPolicy } from '@lia/core'
 import { defineInvokeHandler } from '@moeru/eventa'
 
 import { electronLiaBrainChatDecision } from '../../../shared/eventa'
@@ -17,8 +17,8 @@ import { electronLiaBrainChatDecision } from '../../../shared/eventa'
 type MainContext = ReturnType<typeof createContext>['context']
 
 /**
- * Phase 8.0D-7, corrected by 8.0D-7A: the read-only renderer -> main Brain
- * decision bridge.
+ * Phases 8.0D-7/8.0D-7A, extended by 8.0D-8: the read-only renderer -> main
+ * Brain decision bridge.
  *
  * One typed invoke: the renderer describes WHAT one chat turn needs (facts);
  * main maps those facts through the canonical `brainRequirementForChatTurn(...)`
@@ -27,11 +27,18 @@ type MainContext = ReturnType<typeof createContext>['context']
  *
  * Authority boundary: renderer-controlled data may influence capability
  * REQUIREMENTS only (textInput/textOutput plus imageInput, reasoning,
- * toolCalling). It may NOT influence route identity or route precedence - the
- * request carries no policy, because route selection belongs to the trusted
- * main/product layer. Until a trusted production policy owner exists, an
- * `automatic` mode reached through this bridge honestly reports
- * `automaticPolicyMissing`.
+ * toolCalling). It may NOT influence route identity or route precedence. The
+ * automatic policy is TRUSTED PRODUCT STATE: it is created here, once, from
+ * Lia Core's product policy (`createProductionBrainAutomaticPolicy()`) - never
+ * from request data - and reused for every request.
+ *
+ * Mode semantics stay canonical: this bridge never inspects `brain.mode`.
+ * Supplying the trusted policy unconditionally is safe because the unified
+ * router is the authority - an absent mode yields `modeUnspecified`, a
+ * disabled mode `disabled`, a manual mode ignores the automatic policy
+ * entirely, and only an automatic mode consults it (capability eligibility
+ * still decides which routes are candidates, and the policy never overrides
+ * it).
  *
  * Read-only by construction - it computes a DECISION and grants no execution
  * authority: no config write, no provider/model selection, no registry
@@ -70,15 +77,22 @@ function readFacts(value: unknown): LiaChatTurnBrainFacts {
 /**
  * Registers the bridge on the given main-process context, using the Brain
  * service the lifecycle already owns.
+ *
+ * The trusted production automatic policy is created ONCE here, at
+ * registration - the same lifecycle as the bridge itself - and reused by
+ * every request. It is product state, so it is never rebuilt per renderer
+ * call and never derived from request data.
  */
 export function registerLiaBrainDecisionBridge(params: {
   context: MainContext
   brain: Pick<LiaBrainService, 'decide'>
 }): void {
   const { context, brain } = params
+  const trustedAutomaticPolicy = createProductionBrainAutomaticPolicy()
 
   defineInvokeHandler(context, electronLiaBrainChatDecision, (request: LiaBrainChatDecisionRequest): LiaBrainChatDecision => {
     return brain.decide({
+      automaticPolicy: trustedAutomaticPolicy,
       requirement: brainRequirementForChatTurn(readFacts(request?.facts)),
     })
   })

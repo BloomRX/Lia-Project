@@ -43,6 +43,7 @@ export { buildLiaBridgeConfig, LIA_STAGE_ENV, stageEnvFor } from './bridge/lia-c
 export type { BuildLiaBridgeConfigInput, LiaBridgeConfig } from './bridge/lia-config'
 export { liaProductPaths, liaUserDataCandidates } from './paths/product-paths'
 export type { LiaProductPaths } from './paths/product-paths'
+export { createProductionBrainAutomaticPolicy } from './product/brain-policy'
 export {
   brainRoutingModeUpdate,
   brainSelectionUpdate,
