@@ -14,7 +14,7 @@ import { electronLiaBrainChatDecision } from '../../../shared/eventa'
  * decision is turned into a single diagnostic line. Nothing else consumes it.
  *
  * Authority boundary (unchanged, and enforced by construction here):
- *   renderer -> capability requirements ONLY (facts)
+ *   renderer -> capability requirements (facts) + ONE opaque join key
  *   trusted main/product layer -> the routing policy
  *   canonical router -> the decision
  *
@@ -46,6 +46,17 @@ export function chatTurnFactsFromSend(input: {
   }
 }
 
+/** What the shadow observation is given: the turn facts and, when the caller has one, its logical-send key. */
+export interface LiaBrainShadowObservationInput {
+  /**
+   * Phase 8.0D-10B-3B2: the SAME opaque key the send path carries for this
+   * logical user send. This helper only FORWARDS it - it never mints one and
+   * never interprets it. Absent when the caller has none.
+   */
+  correlationId?: string
+  facts: LiaBrainChatTurnFacts
+}
+
 /**
  * Sends the turn facts to the Brain decision bridge and observes the result.
  *
@@ -54,8 +65,8 @@ export function chatTurnFactsFromSend(input: {
  * thrown error, slow bridge) is caught inside and reduced to a diagnostic
  * line. Chat send is never gated on it.
  */
-export function observeLiaBrainDecisionForChatTurn(facts: LiaBrainChatTurnFacts): void {
-  void observe(facts)
+export function observeLiaBrainDecisionForChatTurn(input: LiaBrainShadowObservationInput): void {
+  void observe(input)
 }
 
 /** Minimal statuses - never ids, payloads, prompt text or model metadata. */
@@ -67,12 +78,16 @@ function describeDecision(decision: LiaBrainChatDecision): string {
   return `status=${decision.status}`
 }
 
-async function observe(facts: LiaBrainChatTurnFacts): Promise<void> {
+async function observe(input: LiaBrainShadowObservationInput): Promise<void> {
   try {
     // The existing renderer invoke convention - the same context every other
-    // Lia renderer caller uses. The request is exactly `{ facts }`.
+    // Lia renderer caller uses. The request is `{ facts }` plus the caller's
+    // opaque key when it has one (never invented here).
     const invoke = useElectronEventaInvoke(electronLiaBrainChatDecision)
-    const decision = await invoke({ facts })
+    const decision = await invoke({
+      ...(input.correlationId === undefined ? {} : { correlationId: input.correlationId }),
+      facts: input.facts,
+    })
     console.info(`[LIA-BRAIN] shadow decision ${describeDecision(decision)}`)
   }
   catch (error) {

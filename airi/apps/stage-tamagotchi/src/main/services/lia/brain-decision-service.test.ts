@@ -103,7 +103,7 @@ function brainSection(): string {
 function requestContract(): string {
   const section = brainSection()
   const declaration = section.slice(section.indexOf('export interface LiaBrainChatDecisionRequest'))
-  return declaration.slice(0, declaration.indexOf('}'))
+  return stripComments(declaration.slice(0, declaration.indexOf('}')))
 }
 
 /** The first argument of every recorded `decide` call. */
@@ -164,18 +164,19 @@ beforeEach(() => {
 })
 
 describe('lia brain decision bridge (Phase 8.0D-8)', () => {
-  it('k: the renderer request contract is still facts-only', () => {
+  it('k/o: the renderer request contract is facts plus ONE optional opaque key', () => {
     const body = requestContract()
 
     expect(body).toContain('facts: LiaBrainChatTurnFacts')
+    expect(body).toContain('correlationId?: string')
     // No policy crosses this boundary - not even an optional one.
     expect(body).not.toContain('automaticPolicy')
     expect(body).not.toMatch(/routes|policy/i)
     for (const forbidden of ['engineId', 'modelId', 'providerId', 'apiKey', 'baseUrl', 'endpoint', 'options'])
       expect(body, forbidden).not.toContain(forbidden)
-    // Exactly ONE field is declared, and it is the turn facts.
+    // Exactly TWO fields are declared: the facts and the opaque join key.
     const fields = body.slice(body.indexOf('{') + 1).split('\n').map(line => line.trim()).filter(Boolean)
-    expect(fields).toEqual(['facts: LiaBrainChatTurnFacts'])
+    expect(fields).toEqual(['correlationId?: string', 'facts: LiaBrainChatTurnFacts'])
 
     // The request type cannot name a policy type or a route ref either.
     expect(brainSection()).not.toMatch(/LiaCoreBrainAutomaticSelectionPolicy|LiaBrainAutomaticSelectionPolicy|LiaBrainRouteRef/)
@@ -239,6 +240,74 @@ describe('lia brain decision bridge (Phase 8.0D-8)', () => {
     const [call] = decideCalls()
     expect(call.requirement).toBe(mocks.requirementForChatTurn.mock.results.at(-1)?.value)
     expect(Object.keys(call).sort()).toEqual(['automaticPolicy', 'requirement'])
+  })
+
+  it('p/q/r/s/t/u/v/w: the opaque correlation key is tolerated metadata with zero authority', async () => {
+    // P + Q + U: any shape reads the same way - present, absent, non-string,
+    // empty, or containing routing-looking text. The requirement, the policy and
+    // the decision are byte-for-byte identical in every case.
+    const shapes: unknown[] = [
+      undefined,
+      'logical-send-1',
+      '',
+      42,
+      { correlationId: 'nested' },
+      ['logical-send-1'],
+      'engineId=openai;modelId=gpt-5.4',
+      'providerId',
+    ]
+
+    const observed: string[] = []
+    for (const correlationId of shapes) {
+      vi.clearAllMocks()
+      mocks.decide.mockReturnValueOnce(SENTINEL)
+      const handler = await loadBridge()
+
+      const request = correlationId === undefined
+        ? { facts: { hasImageInput: true, usesTools: true } }
+        : { correlationId, facts: { hasImageInput: true, usesTools: true } }
+      const result = handler(request)
+
+      // W: the response is the canonical decision, returned unchanged - never
+      // wrapped, never echoed with an id.
+      expect(result).toBe(SENTINEL)
+
+      const [call] = decideCalls()
+      // R: the requirement builder receives FACTS ONLY (the key is never an
+      // input to it).
+      expect(mocks.requirementForChatTurn).toHaveBeenCalledTimes(1)
+      expect(Object.keys(mocks.requirementForChatTurn.mock.calls[0]?.[0] as object).sort())
+        .toEqual(['hasImageInput', 'usesTools'])
+      // S + T: decide receives exactly the trusted policy and the requirement -
+      // the key is not part of the call in any position.
+      expect(Object.keys(call).sort()).toEqual(['automaticPolicy', 'requirement'])
+      expect(call.automaticPolicy).toEqual(TRUSTED_POLICY)
+      expect(JSON.stringify(call)).not.toMatch(/logical-send|correlationId|engineId=openai/)
+      observed.push(JSON.stringify({ requirement: call.requirement, status: (result as LiaBrainRoutingDecision).status }))
+    }
+
+    // Every shape produced the identical decision input.
+    expect(new Set(observed).size).toBe(1)
+  })
+
+  it('v/v2: nothing about a decision or its request is retained', async () => {
+    const handler = await loadBridge()
+    mocks.decide.mockReturnValue(SENTINEL)
+
+    handler({ correlationId: 'logical-send-retained?', facts: { usesTools: true } })
+    handler({ correlationId: 'logical-send-retained?', facts: { usesTools: true } })
+
+    // V: each request is an independent evaluation - no memoization, no replay
+    // of a previous answer, and the key was not used to deduplicate anything.
+    expect(mocks.decide).toHaveBeenCalledTimes(2)
+
+    // No retention surface exists in the bridge source at all.
+    const source = stripComments(readSource('./brain-decision-service.ts'))
+    expect(source).not.toMatch(/\bMap\b|\bSet\b|lastDecision|pendingComparison|cache|history|store\b/i)
+    // The only code reference to the key is the tolerant read that is
+    // immediately discarded - no variable holds it, nothing returns it.
+    expect(source.match(/correlationId/g)).toHaveLength(1)
+    expect(source).toContain('void readCorrelationId(request?.correlationId)')
   })
 
   it('l/m/n/o: the trusted policy is built once per registration and reused, not per request', async () => {
@@ -378,7 +447,9 @@ describe('lia brain decision bridge (Phase 8.0D-8)', () => {
     // await, branch on, store or execute with), no chat store, no send - and
     // no provider, model, policy or route plumbing of its own.
     const shadow = stripComments(readSource('../../../renderer/services/lia/brain-shadow.ts'))
-    expect(shadow).toMatch(/export function observeLiaBrainDecisionForChatTurn\(facts: LiaBrainChatTurnFacts\): void/)
+    expect(shadow).toMatch(/export function observeLiaBrainDecisionForChatTurn\(input: LiaBrainShadowObservationInput\): void/)
+    // 8.0D-10B-3B2: it forwards the caller's opaque key and nothing else new.
+    expect(shadow).toMatch(/correlationId === undefined \? \{\} : \{ correlationId: input\.correlationId \}/)
     expect(shadow).not.toMatch(/chatStore|useChatStore|\.send\(|getChatProviderInstance|useChatProvider/)
     expect(shadow).not.toMatch(/automaticPolicy|engineId|modelId|providerId|routes/)
 
@@ -510,7 +581,7 @@ describe('lia brain decision bridge (Phase 8.0D-8)', () => {
     // Inside it the decision reaches only the diagnostic line, and only
     // statuses are read - never routes, engines, models or ids to act upon.
     const shadow = stripComments(readSource('../../../renderer/services/lia/brain-shadow.ts'))
-    expect(shadow).toContain('const decision = await invoke({ facts })')
+    expect(shadow).toContain('const decision = await invoke({')
     expect(shadow).toMatch(/console\.info\(`\[LIA-BRAIN\] shadow decision \$\{describeDecision\(decision\)\}`\)/)
     expect(shadow).not.toMatch(/decision\.(?:selection|resolution|readiness)\.(?:route|engine|model|id)\b/)
     expect(shadow).not.toMatch(/decision\.(?:route|engine|model|provider)\b/)

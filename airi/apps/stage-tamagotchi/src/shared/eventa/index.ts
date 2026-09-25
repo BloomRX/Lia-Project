@@ -745,23 +745,34 @@ export const electronLiaVoiceEnginesList = defineInvokeEventa<Array<{ extensions
 /* Lia Brain chat decision (Phases 8.0D-7, 8.0D-7A)                          */
 /*                                                                            */
 /* READ-ONLY contract: the renderer describes WHAT the turn needs (chat turn  */
-/* facts) and NOTHING ELSE. It never names a provider, engine or model, and   */
-/* it never supplies routing policy - route identity and policy ownership     */
-/* belong to the trusted main/product layer. The response is the canonical    */
-/* Lia Core routing decision, returned unchanged: normal outcomes             */
-/* (modeUnspecified, disabled, manual failures, automaticPolicyMissing,       */
-/* noCandidates, noPolicyMatch, ambiguous) are DATA.                          */
+/* facts) plus one opaque logical-send correlation key, and NOTHING ELSE. It  */
+/* never names a provider, engine or model, and it never supplies routing     */
+/* policy - route identity and policy ownership belong to the trusted         */
+/* main/product layer. The response is the canonical Lia Core routing         */
+/* decision, returned unchanged: normal outcomes (modeUnspecified, disabled,  */
+/* manual failures, automaticPolicyMissing, noCandidates, noPolicyMatch,      */
+/* ambiguous) are DATA.                                                       */
 /* -------------------------------------------------------------------------- */
 
 /** What one chat turn needs, exactly as the chat path already describes it. */
 export type LiaBrainChatTurnFacts = LiaCoreChatTurnBrainFacts
 
 /**
- * The whole request: turn facts and nothing else. No identity and no
- * authority cross this boundary - no providerId, no engineId/modelId, no
- * route refs, no keys, endpoints or options.
+ * The whole request: turn facts plus, since 8.0D-10B-3B2, ONE opaque join key.
+ *
+ * No identity and no authority cross this boundary - no providerId, no
+ * engineId/modelId, no route refs, no keys, endpoints or options. The
+ * correlationId is transport metadata that lets the trusted side associate
+ * this decision request with the logical send it describes; it is opaque,
+ * optional, never interpreted and never routed on.
  */
 export interface LiaBrainChatDecisionRequest {
+  /**
+   * Opaque key of the logical user send this request describes - the SAME
+   * value the execution path carries for that send. Absent when the caller
+   * has none; it is never synthesized.
+   */
+  correlationId?: string
   facts: LiaBrainChatTurnFacts
 }
 

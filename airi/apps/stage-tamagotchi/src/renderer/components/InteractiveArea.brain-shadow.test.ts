@@ -14,7 +14,7 @@ import { electronLiaBrainChatDecision } from '../../shared/eventa'
 import { artistryToolReferences } from '../stores/tools'
 
 /**
- * Phase 8.0D-9: the shadow observation at the REAL user-send seam.
+ * Phases 8.0D-9 / 8.0D-10B-3B2: the shadow observation at the REAL user-send seam.
  *
  * The component, the stores and the shadow helper all run for real; only the
  * renderer invoke seam is a spy - and it is intercepted for the Brain channel
@@ -112,10 +112,13 @@ describe('interactive area shadow brain observation (Phase 8.0D-9)', () => {
     await submitDraft(wrapper, 'plain shadow turn')
     await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(1))
 
-    // K: exactly one observation per send.
+    // K: exactly one observation per send, carrying the facts and - since
+    // 8.0D-10B-3B2 - the one opaque logical-send key this submission generated.
     await vi.waitFor(() => expect(electron.brainInvoke).toHaveBeenCalledTimes(1))
     const [request] = electron.brainInvoke.mock.calls[0] as [Record<string, unknown>]
-    expect(Object.keys(request)).toEqual(['facts'])
+    expect(Object.keys(request).sort()).toEqual(['correlationId', 'facts'])
+    expect(typeof request.correlationId).toBe('string')
+    expect(String(request.correlationId)).not.toHaveLength(0)
     // M: no attachments -> hasImageInput false (the canonical facts shape).
     expect(observedFacts()).toEqual(NO_IMAGE_FACTS)
   })
@@ -273,8 +276,9 @@ describe('interactive area shadow brain observation (Phase 8.0D-9)', () => {
     // event id is the channel tag with the `-receive` suffix.
     expect(electronLiaBrainChatDecision.receiveEvent.id).toBe('eventa:invoke:lia:brain:chat-decision-receive')
     // The invoke the helper used is the channel's own invoke - and the request
-    // carries nothing but the facts.
-    expect(Object.keys((electron.brainInvoke.mock.calls[0] as [Record<string, unknown>])[0])).toEqual(['facts'])
+    // carries nothing but the facts and the one opaque join key.
+    expect(Object.keys((electron.brainInvoke.mock.calls[0] as [Record<string, unknown>])[0]).sort())
+      .toEqual(['correlationId', 'facts'])
   })
 
   it('intercepts only the Brain channel and preserves the real invoke for everything else', async () => {

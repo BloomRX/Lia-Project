@@ -115,11 +115,17 @@ async function handleSend() {
   // by contract - the helper returns void, never throws and is never awaited,
   // so it cannot change the provider, the model, this payload, whether the
   // message sends, retries, or any UI state.
-  observeLiaBrainDecisionForChatTurn(chatTurnFactsFromSend({
-    attachments: attachmentsToSend,
-    reasoning: consciousnessSettings.reasoning,
-    tools: artistryToolReferences,
-  }))
+  //
+  // Phase 8.0D-10B-3B2: the SAME logical-send key the send below carries is
+  // forwarded here - one submission, one id, on both paths.
+  observeLiaBrainDecisionForChatTurn({
+    correlationId,
+    facts: chatTurnFactsFromSend({
+      attachments: attachmentsToSend,
+      reasoning: consciousnessSettings.reasoning,
+      tools: artistryToolReferences,
+    }),
+  })
 
   try {
     await chatStore.send({

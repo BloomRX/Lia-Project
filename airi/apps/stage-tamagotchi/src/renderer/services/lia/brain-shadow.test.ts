@@ -7,11 +7,11 @@ import { electronLiaBrainChatDecision } from '../../../shared/eventa'
 import { chatTurnFactsFromSend, observeLiaBrainDecisionForChatTurn } from './brain-shadow'
 
 /**
- * Phase 8.0D-9: the shadow Brain observer.
+ * Phases 8.0D-9 / 8.0D-10B-3B2: the shadow Brain observer.
  *
  * Real behavior: the helper runs for real, only the renderer invoke seam is a
- * spy - so these tests pin the channel, the exact request shape, the
- * fire-and-forget contract and the failure isolation.
+ * spy - so these tests pin the channel, the exact request shape, the forwarded
+ * logical-send key, the fire-and-forget contract and the failure isolation.
  */
 
 const electron = vi.hoisted(() => ({
@@ -40,6 +40,7 @@ async function flush(): Promise<void> {
   await new Promise(resolve => setTimeout(resolve, 0))
 }
 
+const CORRELATION_ID = '1f9d6a1e-0000-4000-8000-00000000abcd'
 const FACTS = { hasImageInput: true, reasoningRequested: false, usesTools: true }
 
 beforeEach(() => {
@@ -51,15 +52,49 @@ beforeEach(() => {
 
 describe('shadow brain observer (Phase 8.0D-9)', () => {
   it('a: it invokes exactly the existing Brain decision channel', async () => {
-    observeLiaBrainDecisionForChatTurn(FACTS)
+    observeLiaBrainDecisionForChatTurn({ facts: FACTS })
     await flush()
 
     expect(electron.useElectronEventaInvoke).toHaveBeenCalledTimes(1)
     expect(electron.useElectronEventaInvoke).toHaveBeenCalledWith(electronLiaBrainChatDecision)
   })
 
-  it('b: the request is exactly { facts } - the same facts object is handed over', async () => {
-    observeLiaBrainDecisionForChatTurn(FACTS)
+  it('a2/b: the exact correlationId is forwarded verbatim - the helper mints nothing', async () => {
+    const randomUuid = vi.spyOn(crypto, 'randomUUID')
+    observeLiaBrainDecisionForChatTurn({ correlationId: CORRELATION_ID, facts: FACTS })
+    await flush()
+
+    expect(electron.invoke).toHaveBeenCalledTimes(1)
+    const [request] = electron.invoke.mock.calls[0] as [Record<string, unknown>]
+    // A: the caller's value crosses unchanged, in the same request as the facts.
+    expect(request.correlationId).toBe(CORRELATION_ID)
+    expect(request.facts).toBe(FACTS)
+    // B: no id factory is consulted anywhere in the helper.
+    expect(randomUuid).not.toHaveBeenCalled()
+    randomUuid.mockRestore()
+  })
+
+  it('b2/c: the correlated request is exactly { correlationId, facts }', async () => {
+    observeLiaBrainDecisionForChatTurn({ correlationId: CORRELATION_ID, facts: FACTS })
+    await flush()
+
+    const [request] = electron.invoke.mock.calls[0] as [Record<string, unknown>]
+    expect(Object.keys(request).sort()).toEqual(['correlationId', 'facts'])
+    expect(electron.invoke).toHaveBeenCalledWith({ correlationId: CORRELATION_ID, facts: FACTS })
+  })
+
+  it('d: without a correlationId the key is omitted entirely - never synthesized', async () => {
+    observeLiaBrainDecisionForChatTurn({ facts: FACTS })
+    await flush()
+
+    const [request] = electron.invoke.mock.calls[0] as [Record<string, unknown>]
+    expect(Object.keys(request)).toEqual(['facts'])
+    expect(request.correlationId).toBeUndefined()
+    expect(electron.invoke).toHaveBeenCalledWith({ facts: FACTS })
+  })
+
+  it('b: the uncorrelated request stays exactly { facts } - the same facts object is handed over', async () => {
+    observeLiaBrainDecisionForChatTurn({ facts: FACTS })
     await flush()
 
     expect(electron.invoke).toHaveBeenCalledTimes(1)
@@ -70,7 +105,7 @@ describe('shadow brain observer (Phase 8.0D-9)', () => {
   })
 
   it('c/d: no policy, no route identity, no descriptors ever leave the renderer', async () => {
-    observeLiaBrainDecisionForChatTurn(FACTS)
+    observeLiaBrainDecisionForChatTurn({ correlationId: CORRELATION_ID, facts: FACTS })
     await flush()
 
     const payload = JSON.stringify(electron.invoke.mock.calls[0])
@@ -78,6 +113,10 @@ describe('shadow brain observer (Phase 8.0D-9)', () => {
     // The helper cannot even name them: nothing policy-shaped exists in code.
     const source = stripComments(readSource('./brain-shadow.ts'))
     expect(source).not.toMatch(/automaticPolicy|engineId|modelId|providerId|routes/)
+
+    // E: the key is never parsed, so it stays opaque metadata - no branch, no
+    // prefix/suffix inspection, no semantic encoding anywhere in the helper.
+    expect(source).not.toMatch(/correlationId\.(?:split|slice|substring|startsWith|includes|match|replace)/)
   })
 
   it('e: the decision is observational only - the helper returns nothing to consume', async () => {
@@ -86,7 +125,7 @@ describe('shadow brain observer (Phase 8.0D-9)', () => {
       status: 'automatic',
     })
 
-    const result = observeLiaBrainDecisionForChatTurn(FACTS)
+    const result = observeLiaBrainDecisionForChatTurn({ facts: FACTS })
     await flush()
 
     // No return channel at all: a caller cannot await or branch on a decision.
@@ -99,7 +138,7 @@ describe('shadow brain observer (Phase 8.0D-9)', () => {
   it('f: a rejected invoke is caught and reduced to a diagnostic line', async () => {
     electron.invoke.mockRejectedValueOnce(new Error('no handler registered'))
 
-    expect(() => observeLiaBrainDecisionForChatTurn(FACTS)).not.toThrow()
+    expect(() => observeLiaBrainDecisionForChatTurn({ facts: FACTS })).not.toThrow()
     await flush()
 
     expect(console.info).toHaveBeenCalledWith(expect.stringContaining('[LIA-BRAIN] shadow unavailable'))
@@ -113,7 +152,7 @@ describe('shadow brain observer (Phase 8.0D-9)', () => {
       throw new Error('context unavailable')
     })
 
-    expect(() => observeLiaBrainDecisionForChatTurn(FACTS)).not.toThrow()
+    expect(() => observeLiaBrainDecisionForChatTurn({ facts: FACTS })).not.toThrow()
     await flush()
 
     expect(console.info).toHaveBeenCalledWith(expect.stringContaining('[LIA-BRAIN] shadow unavailable'))
@@ -126,11 +165,11 @@ describe('shadow brain observer (Phase 8.0D-9)', () => {
 
     try {
       electron.invoke.mockRejectedValueOnce(new Error('bridge down'))
-      observeLiaBrainDecisionForChatTurn(FACTS)
+      observeLiaBrainDecisionForChatTurn({ facts: FACTS })
       await flush()
       // A slow bridge that resolves late must be harmless as well.
       electron.invoke.mockImplementationOnce(() => new Promise(() => {}))
-      observeLiaBrainDecisionForChatTurn(FACTS)
+      observeLiaBrainDecisionForChatTurn({ facts: FACTS })
       await flush()
     }
     finally {
@@ -156,7 +195,7 @@ describe('shadow brain observer (Phase 8.0D-9)', () => {
     // without DOM globals, so storage is either absent (nothing to write) or
     // present and unchanged.
     const storageBefore = typeof localStorage === 'undefined' ? null : localStorage.length
-    observeLiaBrainDecisionForChatTurn(FACTS)
+    observeLiaBrainDecisionForChatTurn({ facts: FACTS })
     await flush()
     if (storageBefore !== null)
       expect(localStorage.length).toBe(storageBefore)
@@ -183,7 +222,7 @@ describe('shadow brain observer (Phase 8.0D-9)', () => {
       vi.clearAllMocks()
       electron.useElectronEventaInvoke.mockReturnValue(electron.invoke)
       electron.invoke.mockResolvedValueOnce(decision)
-      observeLiaBrainDecisionForChatTurn(FACTS)
+      observeLiaBrainDecisionForChatTurn({ facts: FACTS })
       await flush()
 
       const line = (console.info as unknown as { mock: { calls: string[][] } }).mock.calls.at(-1)?.[0] ?? ''

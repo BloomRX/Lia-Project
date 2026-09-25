@@ -57,6 +57,19 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
+ * Phase 8.0D-10B-3B2: reads the request's opaque logical-send key.
+ *
+ * Transport metadata only. The value is opaque by contract: it is not parsed,
+ * not validated against a format, not compared, not stored, and it never
+ * reaches the requirement builder, the policy or `decide(...)`. A non-string
+ * (or absent) value simply reads as "no key", following the same tolerant
+ * field-by-field convention as `readFacts`.
+ */
+function readCorrelationId(value: unknown): string | undefined {
+  return typeof value === 'string' && value.length > 0 ? value : undefined
+}
+
+/**
  * Reads the three turn facts from the request. Only an explicit `true` turns
  * a flag on; anything else (absent, false, a string, a function) reads as
  * "this turn does not need it" - never as a hidden default.
@@ -91,6 +104,13 @@ export function registerLiaBrainDecisionBridge(params: {
   const trustedAutomaticPolicy = createProductionBrainAutomaticPolicy()
 
   defineInvokeHandler(context, electronLiaBrainChatDecision, (request: LiaBrainChatDecisionRequest): LiaBrainChatDecision => {
+    // Phase 8.0D-10B-3B2: the request may carry an opaque logical-send key.
+    // It is accepted tolerantly (any non-string shape reads as "no key") and
+    // then deliberately DISCARDED here: this phase retains no decision state,
+    // and the key never reaches the requirement builder, the trusted policy or
+    // `decide(...)` - so it can influence nothing about the decision.
+    void readCorrelationId(request?.correlationId)
+
     return brain.decide({
       automaticPolicy: trustedAutomaticPolicy,
       requirement: brainRequirementForChatTurn(readFacts(request?.facts)),

@@ -166,21 +166,20 @@ describe('interactive area logical send correlation (Phase 8.0D-10B-3B1)', () =>
     expect(payload.correlationId).toBe(MINTED_IDS[0])
   })
 
-  it('e/f: the Brain shadow request is unchanged and still facts-only', async () => {
+  it('e/f: the Brain shadow request is unchanged apart from the forwarded id', async () => {
     const { send, wrapper } = await renderArea()
 
     await submitDraft(wrapper, 'shadow untouched')
     await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(1))
     await vi.waitFor(() => expect(electron.brainInvoke).toHaveBeenCalledTimes(1))
 
-    // E: exactly one invoke, on the same channel, with the same shape.
+    // E: exactly one invoke, on the same channel, with the approved shape.
     const [request] = electron.brainInvoke.mock.calls[0] as [Record<string, unknown>]
-    expect(Object.keys(request)).toEqual(['facts'])
-    // F: the facts are still the canonical turn description, and the new
-    // logical-send key never crosses the Brain boundary.
+    expect(Object.keys(request).sort()).toEqual(['correlationId', 'facts'])
+    // F: the facts are still the canonical turn description.
     expect(request.facts).toEqual({ hasImageInput: false, reasoningRequested: false, usesTools: true })
-    expect(JSON.stringify(electron.brainInvoke.mock.calls[0])).not.toContain(MINTED_IDS[0])
-    expect(JSON.stringify(electron.brainInvoke.mock.calls[0])).not.toMatch(/correlationId/)
+    // No route identity or policy crosses the boundary with the key.
+    expect(JSON.stringify(request)).not.toMatch(/automaticPolicy|routes|engineId|modelId|providerId|descriptor/i)
   })
 
   it('keeps the shadow observation and the send id independent of each other', async () => {
@@ -196,5 +195,84 @@ describe('interactive area logical send correlation (Phase 8.0D-10B-3B1)', () =>
     const [request] = electron.brainInvoke.mock.calls[0] as [Record<string, unknown>]
     expect(request.facts).toEqual({ hasImageInput: false, reasoningRequested: true, usesTools: true })
     expect((send.mock.calls[0] as [Record<string, unknown>])[0].correlationId).toBe(MINTED_IDS[0])
+  })
+  it('h/i/m: ONE submission sends the SAME generated id down both paths', async () => {
+    const { send, wrapper } = await renderArea()
+    const before = minted.mock.calls.length
+
+    await submitDraft(wrapper, 'one submission, two paths')
+    await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(1))
+    await vi.waitFor(() => expect(electron.brainInvoke).toHaveBeenCalledTimes(1))
+
+    // H: one submission, one generated id - nothing was minted twice.
+    expect(minted.mock.calls.length - before).toBe(1)
+    const generated = MINTED_IDS[0]
+
+    // I: the execution path and the shadow path carry the very same value.
+    const [payload] = send.mock.calls[0] as [Record<string, unknown>]
+    const [request] = electron.brainInvoke.mock.calls[0] as [Record<string, unknown>]
+    expect(payload.correlationId).toBe(generated)
+    expect(request.correlationId).toBe(generated)
+    expect(request.correlationId).toBe(payload.correlationId)
+    // Exact value identity, not a copy of some other id.
+    expect(String(request.correlationId)).not.toHaveLength(0)
+
+    // M: the shadow invoke was never awaited - the send had already happened
+    // by the time it was observed, and the send call is not gated behind it.
+    expect(electron.brainInvoke.mock.invocationCallOrder[0]).toBeGreaterThan(0)
+    expect(send.mock.calls.length).toBe(1)
+  })
+
+  it('j: a second submission gets its own id on both paths', async () => {
+    const { send, wrapper } = await renderArea()
+
+    await submitDraft(wrapper, 'first')
+    await vi.waitFor(() => expect(electron.brainInvoke).toHaveBeenCalledTimes(1))
+    await submitDraft(wrapper, 'second')
+    await vi.waitFor(() => expect(electron.brainInvoke).toHaveBeenCalledTimes(2))
+
+    expect((send.mock.calls[0] as [Record<string, unknown>])[0].correlationId).toBe(MINTED_IDS[0])
+    expect((send.mock.calls[1] as [Record<string, unknown>])[0].correlationId).toBe(MINTED_IDS[1])
+    expect((electron.brainInvoke.mock.calls[0] as [Record<string, unknown>])[0].correlationId).toBe(MINTED_IDS[0])
+    expect((electron.brainInvoke.mock.calls[1] as [Record<string, unknown>])[0].correlationId).toBe(MINTED_IDS[1])
+    expect(MINTED_IDS[0]).not.toBe(MINTED_IDS[1])
+  })
+
+  it('k/l: facts and the rest of the send payload are unchanged by the key', async () => {
+    const { consciousness, send, wrapper } = await renderArea()
+    consciousness.reasoning = true
+    await attachImages(wrapper, 1)
+
+    await submitDraft(wrapper, 'facts and payload')
+    await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(1))
+    await vi.waitFor(() => expect(electron.brainInvoke).toHaveBeenCalledTimes(1))
+
+    // K: the facts still describe exactly the outgoing turn.
+    const [request] = electron.brainInvoke.mock.calls[0] as [Record<string, unknown>]
+    expect(request.facts).toEqual({ hasImageInput: true, reasoningRequested: true, usesTools: true })
+
+    // L: the send payload keeps its fields and values; the key is the only
+    // addition this milestone approved.
+    const [payload] = send.mock.calls[0] as [Record<string, unknown>]
+    expect(payload.sessionId).toBe('session-b')
+    expect(payload.text).toBe('facts and payload')
+    expect((payload.attachments as unknown[]).length).toBe(1)
+    expect(payload.tools).toBe(artistryToolReferences)
+    expect(Object.keys(payload).sort()).toEqual(['attachments', 'correlationId', 'sessionId', 'text', 'tools'])
+  })
+
+  it('n: a rejected Brain bridge cannot prevent the correlated send', async () => {
+    const { send, wrapper } = await renderArea()
+    electron.brainInvoke.mockRejectedValue(new Error('bridge exploded'))
+
+    await submitDraft(wrapper, 'rejected bridge')
+    await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(1))
+    await new Promise(resolve => setTimeout(resolve, 0))
+
+    // N: the send still went out, with its own generated key and its payload
+    // otherwise intact.
+    const [payload] = send.mock.calls[0] as [Record<string, unknown>]
+    expect(payload.correlationId).toBe(MINTED_IDS[0])
+    expect(payload.text).toBe('rejected bridge')
   })
 })
