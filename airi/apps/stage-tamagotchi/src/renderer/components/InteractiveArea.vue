@@ -12,6 +12,7 @@ import { useChatSessionStore } from '@proj-airi/stage-ui/stores/chat/session-sto
 import { useChatStreamStore } from '@proj-airi/stage-ui/stores/chat/stream-store'
 import { useJournalPreviewStore } from '@proj-airi/stage-ui/stores/journal-preview'
 import { useAiriCardStore } from '@proj-airi/stage-ui/stores/modules/airi-card'
+import { useConsciousnessSettingsStore } from '@proj-airi/stage-ui/stores/modules/consciousness-settings'
 import { BasicTextarea } from '@proj-airi/ui'
 import { useLocalStorage } from '@vueuse/core'
 import { storeToRefs } from 'pinia'
@@ -24,6 +25,7 @@ import JournalToolCallBlock from './chat-tool-renderers/journal-tool-call-block.
 import ChatViewportLayout from './chat-viewport-layout.vue'
 
 import { useHearingInputChannel } from '../composables/use-hearing-input-channel'
+import { chatTurnFactsFromSend, observeLiaBrainDecisionForChatTurn } from '../services/lia/brain-shadow'
 import { artistryToolReferences, widgetToolReferences } from '../stores/tools'
 
 const router = useRouter()
@@ -38,6 +40,9 @@ const chatStream = useChatStreamStore()
 const backgroundStore = useBackgroundStore()
 const journalPreviewStore = useJournalPreviewStore()
 const airiCardStore = useAiriCardStore()
+// Existing session-level reasoning request - the same value consciousness
+// chat request preparation reads (no new state is introduced for the shadow).
+const consciousnessSettings = useConsciousnessSettingsStore()
 
 const { activeSessionId, messages } = storeToRefs(chatSession)
 const { streamingMessage } = storeToRefs(chatStream)
@@ -97,6 +102,17 @@ async function handleSend() {
   // optimistic clear
   messageInput.value = ''
   attachments.value = []
+
+  // Phase 8.0D-9 shadow observation: the SAME outgoing values are described to
+  // the read-only Brain bridge and the decision is only logged. Fire-and-forget
+  // by contract - the helper returns void, never throws and is never awaited,
+  // so it cannot change the provider, the model, this payload, whether the
+  // message sends, retries, or any UI state.
+  observeLiaBrainDecisionForChatTurn(chatTurnFactsFromSend({
+    attachments: attachmentsToSend,
+    reasoning: consciousnessSettings.reasoning,
+    tools: artistryToolReferences,
+  }))
 
   try {
     await chatStore.send({

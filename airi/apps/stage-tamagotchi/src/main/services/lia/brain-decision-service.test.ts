@@ -63,6 +63,34 @@ function stripComments(source: string): string {
   return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
 }
 
+/** Any production reference to the Lia Brain IPC surface or its shadow observer. */
+const BRAIN_IPC_PATTERN = /electronLiaBrainChatDecision|LiaBrainChatDecision|registerLiaBrainDecisionBridge|brain:chat-decision|brain-shadow|observeLiaBrainDecisionForChatTurn|chatTurnFactsFromSend/
+
+/** Any production reference to a Brain decision or its shadow observer. */
+const BRAIN_DECISION_PATTERN = /brain-shadow|observeLiaBrainDecisionForChatTurn|chatTurnFactsFromSend|LiaBrainChatDecision|brain:chat-decision/
+
+const REPO_ROOT = new URL('../../../../../../', import.meta.url)
+
+/** Every production (non-test) `.ts`/`.vue` file under the airi-relative roots. */
+function productionSources(roots: string[]): string[] {
+  const repoRoot = fileURLToPath(REPO_ROOT)
+  const files: string[] = []
+  for (const root of roots) {
+    for (const entry of readdirSync(new URL(root, REPO_ROOT), { recursive: true, withFileTypes: true })) {
+      if (!entry.isFile() || !/\.(?:ts|vue)$/.test(entry.name) || entry.name.includes('.test.'))
+        continue
+      files.push(`${entry.parentPath}/${entry.name}`.slice(repoRoot.length))
+    }
+  }
+  return files.sort()
+}
+
+/** The production sources under the roots whose content matches the pattern. */
+function productionSourcesMatching(roots: string[], pattern: RegExp): string[] {
+  return productionSources(roots)
+    .filter(relative => pattern.test(readFileSync(new URL(relative, REPO_ROOT), 'utf-8')))
+}
+
 /** The shared contract's Brain section, comments included. */
 function brainSection(): string {
   const shared = readSource('../../../shared/eventa/index.ts')
@@ -323,7 +351,7 @@ describe('lia brain decision bridge (Phase 8.0D-8)', () => {
     expect(imports).toMatch(/import type \{\s*LiaChatTurnBrainFacts,\s*\} from '@lia\/core'/)
   })
 
-  it('y: no production chat code calls the bridge, and chat execution is untouched', () => {
+  it('8.0D-9 caller guard: exactly ONE legitimate production caller, and it holds no execution authority', () => {
     const stageSrc = fileURLToPath(new URL('../../../', import.meta.url))
     const callers: string[] = []
     for (const entry of readdirSync(stageSrc, { recursive: true, withFileTypes: true })) {
@@ -341,10 +369,22 @@ describe('lia brain decision bridge (Phase 8.0D-8)', () => {
       if (/registerLiaBrainDecisionBridge|electronLiaBrainChatDecision|LiaBrainChatDecisionRequest|LiaBrainChatDecision\b/.test(readFileSync(file, 'utf-8')))
         callers.push(relative)
     }
-    expect(callers).toEqual([])
+    // 8.0D-7A proved "zero production callers". 8.0D-9 legitimately evolves
+    // that invariant into exactly ONE: the Stage renderer's shadow observation
+    // of the normal user send. Nothing else in production knows the bridge.
+    expect(callers).toEqual(['renderer/services/lia/brain-shadow.ts'])
+
+    // The one caller observes and nothing else: void by contract (no result to
+    // await, branch on, store or execute with), no chat store, no send - and
+    // no provider, model, policy or route plumbing of its own.
+    const shadow = stripComments(readSource('../../../renderer/services/lia/brain-shadow.ts'))
+    expect(shadow).toMatch(/export function observeLiaBrainDecisionForChatTurn\(facts: LiaBrainChatTurnFacts\): void/)
+    expect(shadow).not.toMatch(/chatStore|useChatStore|\.send\(|getChatProviderInstance|useChatProvider/)
+    expect(shadow).not.toMatch(/automaticPolicy|engineId|modelId|providerId|routes/)
 
     // The provider identity stays out of the renderer-facing paths too: the
-    // renderer can never name what the policy selects.
+    // renderer can never name what the policy selects - provider/model ids
+    // remain the chat stack's own business, and no Brain identity leaks in.
     for (const relative of [
       '../../../../../../packages/stage-ui/src/stores/chat.ts',
       '../../../../../../packages/core-agent/src/runtime/chat-orchestrator-runtime.ts',
@@ -392,5 +432,87 @@ describe('lia brain decision bridge (Phase 8.0D-8)', () => {
     // The trusted policy is NOT created in the composition entry - the bridge
     // owns that lifecycle, and config is never consulted for it.
     expect(entry).not.toMatch(/createProductionBrainAutomaticPolicy|automaticPolicy/)
+  })
+
+  it('isolation y: stage-ui production chat code carries no Lia Brain IPC', () => {
+    // The generic chat store the renderer drives stays entirely unaware - it
+    // cannot name the bridge, the channel or the shadow observer.
+    expect(productionSourcesMatching(['packages/stage-ui/src'], BRAIN_IPC_PATTERN)).toEqual([])
+  })
+
+  it('isolation z: core-agent production code carries no Lia Brain IPC', () => {
+    // The generic agent runtime executes the chat exactly as before and never
+    // learns that a Brain decision exists.
+    expect(productionSourcesMatching(['packages/core-agent/src'], BRAIN_IPC_PATTERN)).toEqual([])
+  })
+
+  it('isolation aa: provider/model selection never imports or uses the shadow helper', () => {
+    // The modules that pick a provider/model stay blind to the observer.
+    for (const relative of [
+      '../../../../../../packages/stage-ui/src/stores/chat.ts',
+      '../../../../../../packages/stage-ui/src/stores/modules/consciousness.ts',
+      '../../../../../../packages/stage-ui/src/stores/providers/provider.ts',
+      '../../../../../../packages/stage-ui/src/stores/character/orchestrator/store.ts',
+      '../../../../../../packages/core-agent/src/runtime/llm-service.ts',
+      '../../../../../../packages/core-agent/src/runtime/chat-orchestrator-runtime.ts',
+    ]) {
+      expect(readSource(relative), relative).not.toMatch(BRAIN_DECISION_PATTERN)
+    }
+
+    // The helper module is imported by exactly ONE production file: the normal
+    // user-send seam. Nothing in the selection or execution path reaches it.
+    expect(productionSourcesMatching(
+      ['apps/stage-tamagotchi/src', 'packages/stage-ui/src', 'packages/core-agent/src'],
+      /brain-shadow/,
+    )).toEqual(['apps/stage-tamagotchi/src/renderer/components/InteractiveArea.vue'])
+  })
+
+  it('isolation ab: no additional Brain IPC channel was introduced', () => {
+    const tags = new Set<string>()
+    for (const relative of productionSources(['apps/stage-tamagotchi/src', 'packages/lia-core/src', 'packages/stage-ui/src', 'packages/core-agent/src'])) {
+      for (const match of readFileSync(new URL(relative, REPO_ROOT), 'utf-8').matchAll(/eventa:(?:invoke|event):lia:brain[^'"]*/g))
+        tags.add(match[0])
+    }
+    // The whole production tree names exactly the single read-only decision
+    // channel - no setter, no update channel, no second seam.
+    expect([...tags].sort()).toEqual(['eventa:invoke:lia:brain:chat-decision'])
+  })
+
+  it('isolation ac: the trusted automatic policy stays Product/main-owned', () => {
+    // Declared in Lia Core's product layer - never inside generic brain modules.
+    expect(readSource('../../../../../../packages/lia-core/src/product/brain-policy.ts'))
+      .toMatch(/export function createProductionBrainAutomaticPolicy/)
+
+    // Production referrers: the product declaration, its public export line and
+    // the trusted Stage main bridge - and nothing else.
+    expect(productionSourcesMatching(
+      ['apps/stage-tamagotchi/src', 'packages/lia-core/src', 'packages/stage-ui/src', 'packages/core-agent/src'],
+      /createProductionBrainAutomaticPolicy/,
+    )).toEqual([
+      'apps/stage-tamagotchi/src/main/services/lia/brain-decision-service.ts',
+      'packages/lia-core/src/index.ts',
+      'packages/lia-core/src/product/brain-policy.ts',
+    ])
+
+    // The composition entry does not build it; the renderer never sees it.
+    expect(readSource('../../../main/index.ts')).not.toMatch(/createProductionBrainAutomaticPolicy/)
+    expect(readSource('../../../renderer/components/InteractiveArea.vue')).not.toMatch(/createProductionBrainAutomaticPolicy/)
+  })
+
+  it('isolation ad: the only decision reader is the shadow observer, and it only logs statuses', () => {
+    // Across every execution-adjacent production root, exactly ONE file reads a
+    // Brain decision: the shadow observer.
+    expect(productionSourcesMatching(
+      ['apps/stage-tamagotchi/src/renderer', 'packages/stage-ui/src', 'packages/core-agent/src'],
+      /LiaBrainChatDecision|brain:chat-decision/,
+    )).toEqual(['apps/stage-tamagotchi/src/renderer/services/lia/brain-shadow.ts'])
+
+    // Inside it the decision reaches only the diagnostic line, and only
+    // statuses are read - never routes, engines, models or ids to act upon.
+    const shadow = stripComments(readSource('../../../renderer/services/lia/brain-shadow.ts'))
+    expect(shadow).toContain('const decision = await invoke({ facts })')
+    expect(shadow).toMatch(/console\.info\(`\[LIA-BRAIN\] shadow decision \$\{describeDecision\(decision\)\}`\)/)
+    expect(shadow).not.toMatch(/decision\.(?:selection|resolution|readiness)\.(?:route|engine|model|id)\b/)
+    expect(shadow).not.toMatch(/decision\.(?:route|engine|model|provider)\b/)
   })
 })
