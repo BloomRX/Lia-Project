@@ -125,4 +125,40 @@ describe('chat request-start observation extension', () => {
     expect(notifyChatRequestStarted(observation)).toBeUndefined()
     expect(getChatRequestStartedObserver()).toBe(observer)
   })
+  describe('logical send correlation on the observation', () => {
+    it('u: correlationId is optional and travels verbatim, never invented', () => {
+      const captured: ChatRequestStartedObservation[] = []
+      registerChatRequestStartedObserver(observation => captured.push(observation))
+
+      // Absent: stays absent - the seam never synthesizes one.
+      notifyChatRequestStarted(observation)
+      expect(captured[0]?.correlationId).toBeUndefined()
+      expect(Object.keys(captured[0] as object)).not.toContain('correlationId')
+
+      // Present: forwarded exactly as supplied, alongside the per-attempt keys.
+      const correlated = { ...observation, correlationId: 'logical-send-7' }
+      notifyChatRequestStarted(correlated)
+      expect(captured[1]?.correlationId).toBe('logical-send-7')
+      expect(captured[1]).toEqual({
+        conversationId: 'session-1',
+        roundId: 'round-1',
+        providerId: 'groq',
+        modelId: 'openai/gpt-oss-120b',
+        correlationId: 'logical-send-7',
+      })
+      // The seam forwards the caller's object; it neither adds nor rewrites ids.
+      expect(captured[1]).toBe(correlated)
+    })
+
+    it('y: a throwing observer stays isolated for correlated observations too', () => {
+      const observer = vi.fn(() => {
+        throw new Error('observer exploded')
+      })
+      registerChatRequestStartedObserver(observer)
+
+      expect(() => notifyChatRequestStarted({ ...observation, correlationId: 'logical-send-8' })).not.toThrow()
+      expect(observer).toHaveBeenCalledTimes(1)
+      expect(getChatRequestStartedObserver()).toBe(observer)
+    })
+  })
 })

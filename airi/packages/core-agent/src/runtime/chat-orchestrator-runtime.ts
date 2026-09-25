@@ -63,6 +63,17 @@ export interface ChatOrchestratorSendOptions {
    * previous `deps.getActiveProvider()` behaviour.
    */
   providerId?: string
+  /**
+   * Opaque caller-owned key for ONE logical send, spanning every attempt of
+   * that send (provider fallback included).
+   *
+   * Phase 8.0D-10B-3B1: carried through to the request-start metadata so an
+   * execution observation can be joined to the decision that preceded the
+   * send. Descriptive only - this runtime never reads it to resolve, select,
+   * route, retry, fall back, order, cancel or compose anything, and it never
+   * synthesizes one: an absent value stays absent.
+   */
+  correlationId?: string
   /** Provider-specific request options, currently used for headers. */
   providerConfig?: Record<string, unknown>
   /** Image attachments appended to the user message content parts. */
@@ -248,6 +259,12 @@ export interface ChatOrchestratorRuntimeDeps {
     model: string
     provider: string
     hasVoice: boolean
+    /**
+     * Phase 8.0D-10B-3B1: the caller's opaque logical-send key, forwarded
+     * verbatim from the send options. Absent whenever the caller supplied
+     * none - this runtime never synthesizes one.
+     */
+    correlationId?: string
   }) => void
   /** Called when the first text token arrives from the provider stream. */
   onLlmFirstToken?: (event: ChatRoundCorrelation & {
@@ -775,6 +792,10 @@ export function createChatOrchestratorRuntime(deps: ChatOrchestratorRuntimeDeps)
         // `'unknown'` default for a genuinely unidentified provider stays.
         provider: activeProvider || 'unknown',
         hasVoice,
+        // Phase 8.0D-10B-3B1: forwarded as-is (absent stays absent). This is
+        // the logical send's key, not the round's - `roundId` above remains
+        // the per-attempt identity.
+        ...(options.correlationId === undefined ? {} : { correlationId: options.correlationId }),
       })
 
       await deps.llm.stream(options.model, options.chatProvider, newMessages as Message[], {

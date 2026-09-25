@@ -1146,3 +1146,109 @@ describe('carried provider identity', () => {
     expect(stored.activeProviderSpy.mock.calls.length - carried.activeProviderSpy.mock.calls.length).toBe(1)
   })
 })
+
+// Phase 8.0D-10B-3B1: the caller's opaque logical-send key is carried, verbatim,
+// into the request-start metadata and decides nothing.
+describe('logical send correlation', () => {
+  function streamOnce(harness: ReturnType<typeof createHarness>) {
+    harness.stream.mockImplementationOnce(async (_model, _chatProvider, _messages, options) => {
+      await options?.onStreamEvent?.({ type: 'text-delta', text: 'assistant reply' })
+      await options?.onStreamEvent?.({ type: 'finish', finishReason: 'stop' })
+    })
+  }
+
+  it('p: a supplied correlationId appears unchanged in the request-start event', async () => {
+    const harness = createHarness()
+    streamOnce(harness)
+
+    await harness.runtime.ingest('hello', {
+      model: 'gpt-test',
+      chatProvider: provider,
+      correlationId: 'logical-send-1',
+    })
+
+    expect(harness.telemetry.llmRequestStarted).toEqual([
+      expect.objectContaining({ correlationId: 'logical-send-1' }),
+    ])
+    expect(harness.telemetry.llmRequestStarted[0]).toHaveProperty('correlationId', 'logical-send-1')
+  })
+
+  it('q: an absent correlationId stays absent and is never synthesized', async () => {
+    const harness = createHarness()
+    streamOnce(harness)
+
+    await harness.runtime.ingest('hello', {
+      model: 'gpt-test',
+      chatProvider: provider,
+    })
+
+    const [event] = harness.telemetry.llmRequestStarted as [Record<string, unknown>]
+    expect(event.correlationId).toBeUndefined()
+    expect(Object.keys(event)).not.toContain('correlationId')
+    // The per-attempt identity is untouched by the new field.
+    expect(event).toMatchObject({ conversationId: 'session-1', model: 'gpt-test', provider: 'mock-provider' })
+    expect(typeof event.roundId).toBe('string')
+  })
+
+  it('r/s: correlationId alters neither the model nor the provider object', async () => {
+    const withId = createHarness()
+    streamOnce(withId)
+    await withId.runtime.ingest('hello', {
+      model: 'gpt-correlated',
+      chatProvider: provider,
+      correlationId: 'logical-send-2',
+    })
+
+    const withoutId = createHarness()
+    streamOnce(withoutId)
+    await withoutId.runtime.ingest('hello', {
+      model: 'gpt-correlated',
+      chatProvider: provider,
+    })
+
+    for (const harness of [withId, withoutId]) {
+      expect(harness.stream).toHaveBeenCalledTimes(1)
+      expect(harness.stream.mock.calls[0]?.[0]).toBe('gpt-correlated')
+      expect(harness.stream.mock.calls[0]?.[1]).toBe(provider)
+    }
+  })
+
+  it('t: correlationId does not alter queue ordering or per-send round semantics', async () => {
+    const harness = createHarness()
+    const started: string[] = []
+    let releaseFirstSend: (() => void) | undefined
+    harness.stream.mockImplementation(async (model, _chatProvider, _messages, options) => {
+      started.push(model)
+      if (started.length === 1) {
+        await new Promise<void>((resolve) => {
+          releaseFirstSend = resolve
+        })
+      }
+      await options?.onStreamEvent?.({ type: 'text-delta', text: 'reply' })
+      await options?.onStreamEvent?.({ type: 'finish', finishReason: 'stop' })
+    })
+
+    const firstSend = harness.runtime.ingest('first', {
+      model: 'model-a',
+      chatProvider: provider,
+      correlationId: 'send-a',
+    })
+    const secondSend = harness.runtime.ingest('second', {
+      model: 'model-b',
+      chatProvider: provider,
+      correlationId: 'send-b',
+    })
+
+    await vi.waitFor(() => expect(harness.stream).toHaveBeenCalledTimes(1))
+    expect(harness.runtime.getPendingQueuedSendCount()).toBe(1)
+
+    releaseFirstSend?.()
+    await Promise.all([firstSend, secondSend])
+
+    // FIFO order is preserved and each send keeps its own key and round.
+    expect(started).toEqual(['model-a', 'model-b'])
+    const events = harness.telemetry.llmRequestStarted as Array<Record<string, unknown>>
+    expect(events.map(event => event.correlationId)).toEqual(['send-a', 'send-b'])
+    expect(events[0]?.roundId).not.toBe(events[1]?.roundId)
+  })
+})

@@ -1282,4 +1282,130 @@ describe('chat store contract', () => {
       expect(getChatProviderInstanceMock).toHaveBeenCalledTimes(2)
     })
   })
+  // Phase 8.0D-10B-3B1: the logical-send correlation key travels with the
+  // payload through the send seam into per-attempt request metadata.
+  describe('logical send correlation', () => {
+    afterEach(() => {
+      resetChatProviderRuntimeExtensionsForTesting()
+      activeProviderRef.value = 'mock-provider'
+      activeModelRef.value = 'gpt-test'
+    })
+
+    function streamOnce() {
+      llmStreamMock.mockImplementation(async (_model: string, _chatProvider: ChatProvider, _messages: Message[], options: any) => {
+        await options.onStreamEvent({ type: 'text-delta', text: 'ok' })
+        await options.onStreamEvent({ type: 'finish', finishReason: 'stop' })
+      })
+    }
+
+    it('h/i/v: the exact payload id reaches the request-start observation unchanged', async () => {
+      streamOnce()
+      const observations: ChatRequestStartedObservation[] = []
+      registerChatRequestStartedObserver(observation => observations.push(observation))
+
+      const payload: ChatSendPayload = {
+        sessionId: 'session-1',
+        text: 'correlated turn',
+        correlationId: 'logical-send-42',
+      }
+      // H: the payload stays plain serializable data - the same shape the
+      // leader boundary structured-clones.
+      expect(() => structuredClone(payload)).not.toThrow()
+
+      const store = useChatStore()
+      await store.send(payload)
+
+      // V + I: one observation, carrying exactly the id the caller supplied -
+      // it can only come from options.correlationId (nothing else knows it).
+      expect(observations).toHaveLength(1)
+      expect(observations[0]?.correlationId).toBe('logical-send-42')
+      expect(observations[0]).toMatchObject({
+        conversationId: 'session-1',
+        providerId: 'mock-provider',
+        modelId: 'gpt-test',
+      })
+      // The per-attempt level is untouched: roundId is still there and distinct.
+      expect(typeof observations[0]?.roundId).toBe('string')
+      expect(observations[0]?.roundId).not.toBe('logical-send-42')
+      // Execution is unchanged.
+      expect(llmStreamMock.mock.calls[0]?.[0]).toBe('gpt-test')
+      expect(llmStreamMock.mock.calls[0]?.[1]).toBe(provider)
+      expect(getChatProviderInstanceMock).toHaveBeenCalledTimes(1)
+    })
+
+    it('j/k/w: without a correlationId the send is unchanged and nothing is synthesized', async () => {
+      streamOnce()
+      const observations: ChatRequestStartedObservation[] = []
+      registerChatRequestStartedObserver(observation => observations.push(observation))
+
+      const store = useChatStore()
+      await expect(store.send({ sessionId: 'session-1', text: 'uncorrelated turn' })).resolves.toBeDefined()
+
+      expect(observations).toHaveLength(1)
+      // K/W: absent stays absent - not an empty string, not the round or the
+      // session id.
+      expect(observations[0]?.correlationId).toBeUndefined()
+      expect(Object.keys(observations[0] as object)).not.toContain('correlationId')
+      // J: the pre-existing contract is untouched.
+      expect(observations[0]).toMatchObject({
+        conversationId: 'session-1',
+        providerId: 'mock-provider',
+        modelId: 'gpt-test',
+      })
+      expect(llmStreamMock).toHaveBeenCalledTimes(1)
+    })
+
+    it('l/m/n/o/x: one logical send keeps the same id across fallback attempts, with distinct rounds', async () => {
+      llmStreamMock.mockRejectedValueOnce(new Error('recoverable failure'))
+      streamOnce()
+      const observations: ChatRequestStartedObservation[] = []
+      registerChatRequestStartedObserver(observation => observations.push(observation))
+      registerChatFallbackResolver(async () => {
+        activeProviderRef.value = 'fallback-provider'
+        activeModelRef.value = 'fallback-model'
+        return { providerId: 'fallback-provider', modelId: 'fallback-model' }
+      })
+
+      const store = useChatStore()
+      await store.send({ sessionId: 'session-1', text: 'correlated fallback', correlationId: 'logical-send-99' })
+
+      expect(observations).toHaveLength(2)
+      // L + M: the SAME logical-send key on both attempts - it is not re-minted.
+      expect(observations.map(observation => observation.correlationId)).toEqual([
+        'logical-send-99',
+        'logical-send-99',
+      ])
+      // X: rounds stay distinct, and each attempt reports its own identity.
+      expect(observations[0]?.roundId).not.toBe(observations[1]?.roundId)
+      expect(observations[0]).toMatchObject({ providerId: 'mock-provider', modelId: 'gpt-test' })
+      expect(observations[1]).toMatchObject({ providerId: 'fallback-provider', modelId: 'fallback-model' })
+      // N: fallback behavior itself is unchanged.
+      expect(llmStreamMock.mock.calls[0]?.[0]).toBe('gpt-test')
+      expect(llmStreamMock.mock.calls[1]?.[0]).toBe('fallback-model')
+      // O: still exactly one provider resolution per attempt.
+      expect(getChatProviderInstanceMock).toHaveBeenCalledTimes(2)
+      expect(getChatProviderInstanceMock.mock.calls.map(call => call[0])).toEqual([
+        'mock-provider',
+        'fallback-provider',
+      ])
+    })
+
+    it('y: an observer cannot use the id to influence execution', async () => {
+      streamOnce()
+      const observer = ((value: ChatRequestStartedObservation) => {
+        value.providerId = 'mutated-provider'
+        value.modelId = 'mutated-model'
+        return { providerId: 'hijacked-provider', modelId: 'hijacked-model', correlationId: 'hijacked-send' }
+      }) as unknown as ChatRequestStartedObserver
+      registerChatRequestStartedObserver(observer)
+
+      const store = useChatStore()
+      await store.send({ sessionId: 'session-1', text: 'hostile observer', correlationId: 'logical-send-100' })
+
+      expect(llmStreamMock).toHaveBeenCalledTimes(1)
+      expect(llmStreamMock.mock.calls[0]?.[0]).toBe('gpt-test')
+      expect(llmStreamMock.mock.calls[0]?.[1]).toBe(provider)
+      expect(getChatProviderInstanceMock).toHaveBeenCalledTimes(1)
+    })
+  })
 })

@@ -52,6 +52,17 @@ interface ForkOptions {
 export interface ChatSendPayload {
   /** Image attachments for the new user message. */
   attachments?: { type: 'image', data: string, mimeType: string }[]
+  /**
+   * Phase 8.0D-10B-3B1: opaque key for ONE logical user send, spanning every
+   * provider attempt of that send.
+   *
+   * Optional by design: the payload itself is the authoritative sender ->
+   * leader carrier, so callers that predate this field (voice input, spotlight,
+   * context bridges, other apps and tests) keep working unchanged, and an
+   * absent value is never synthesized. It identifies a send; it never selects,
+   * routes or authorizes anything.
+   */
+  correlationId?: string
   /** Original input metadata for chat hooks and telemetry. */
   input?: WebSocketEventInputs
   /** Session that owns the new turn. */
@@ -334,6 +345,10 @@ export const useChatStore = defineStore('chat', () => {
         roundId: event.roundId,
         providerId: event.provider,
         modelId: event.model,
+        // Phase 8.0D-10B-3B1: the logical-send key joins the per-attempt
+        // metadata, so one send's attempts can be recognised as one send.
+        // Absent when the caller carried none - never synthesized here.
+        ...(event.correlationId === undefined ? {} : { correlationId: event.correlationId }),
       })
     },
     ...analyticsHooks,
@@ -444,6 +459,10 @@ export const useChatStore = defineStore('chat', () => {
       // so per-round telemetry reports what actually ran here. Execution is
       // untouched: `chatProvider` remains the executable provider.
       providerId,
+      // Phase 8.0D-10B-3B1: the logical-send key is forwarded unchanged from
+      // the payload - the same value for every attempt of this send, and
+      // absent when the caller supplied none (nothing is synthesized here).
+      ...(payload.correlationId === undefined ? {} : { correlationId: payload.correlationId }),
       attachments: payload.attachments,
       input: payload.input,
       toolReferences: payload.tools,

@@ -67,6 +67,13 @@ export type ChatFallbackResolver = (
  * describe which provider/model ran, and nothing else.
  */
 export interface ChatRequestStartedObservation {
+  /**
+   * Phase 8.0D-10B-3B1: opaque key of the logical send this attempt belongs to,
+   * when the caller supplied one. Every attempt of one send reports the same
+   * value; callers that carry none leave it absent. It is a join key only -
+   * never a provider/model/route identity.
+   */
+  correlationId?: string
   /** Application conversation that owns the round. */
   conversationId: string
   /** Stable round key of the attempt about to reach the provider. */

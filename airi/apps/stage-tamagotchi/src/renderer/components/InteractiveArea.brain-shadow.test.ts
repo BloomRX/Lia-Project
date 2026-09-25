@@ -188,16 +188,20 @@ describe('interactive area shadow brain observation (Phase 8.0D-9)', () => {
     await submitDraft(wrapper, 'payload check')
     await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(1))
 
-    // S: byte-for-byte the same payload shape the send had before this phase -
-    // sessionId, text, the copied attachments and the tool references.
-    expect(send).toHaveBeenCalledWith({
+    // S: the same payload shape the send has always had - sessionId, text, the
+    // copied attachments and the tool references - plus ONLY the additive
+    // logical-send correlation key added by 8.0D-10B-3B1.
+    const [payload] = send.mock.calls[0] as [Record<string, unknown>]
+    expect(payload).toMatchObject({
       attachments: [],
       sessionId: 'session-b',
       text: 'payload check',
       tools: artistryToolReferences,
     })
-    const [payload] = send.mock.calls[0] as [Record<string, unknown>]
-    expect(Object.keys(payload).sort()).toEqual(['attachments', 'sessionId', 'text', 'tools'])
+    expect(Object.keys(payload).sort()).toEqual(['attachments', 'correlationId', 'sessionId', 'text', 'tools'])
+    // The additive key is one opaque non-empty string - not a decision value.
+    expect(typeof payload.correlationId).toBe('string')
+    expect(String(payload.correlationId)).not.toHaveLength(0)
     // T: nothing brain-shaped is part of what the store received.
     expect(JSON.stringify(payload)).not.toMatch(/brain|decision|selection|readiness|engineId|modelId/i)
   })

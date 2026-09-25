@@ -99,6 +99,13 @@ async function handleSend() {
   // Keep one correlation key for both the send and its failure recovery.
   const targetSessionId = chatSession.activeSessionId
 
+  // Phase 8.0D-10B-3B1: one opaque key for this LOGICAL send, minted once here
+  // - the seam that owns the user submission - and carried unchanged through
+  // the leader-routed send into per-attempt request metadata, so every attempt
+  // of this send (fallback included) reports the same value. Opaque by design:
+  // it encodes nothing and selects nothing.
+  const correlationId = crypto.randomUUID()
+
   // optimistic clear
   messageInput.value = ''
   attachments.value = []
@@ -118,6 +125,7 @@ async function handleSend() {
     await chatStore.send({
       sessionId: targetSessionId,
       text: textToSend,
+      correlationId,
       attachments: attachmentsToSend,
       tools: artistryToolReferences,
     })
