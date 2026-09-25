@@ -254,8 +254,13 @@ describe('lia brain correlation service - composition ownership (Phase 8.0D-10B-
     expect(entry).toContain('injeca.provide(\'services:lia-brain\', {')
     expect(entry).not.toMatch(/new Function|globalThis\.\w*[Cc]orrelation|window\.\w*[Cc]orrelation/)
 
-    // U: the entry materializes it exactly once and records nothing.
-    expect(entry.match(/dependsOn: \{ liaBrainCorrelation \}/g)).toHaveLength(1)
+    // U: the entry materializes it exactly once and records nothing. Since
+    // 8.0D-10B-4B3 the SAME handle is also injected into the two registration
+    // seams - three references total, none of which records through the handle.
+    // (the bridge registration lists a second dependency, so the bare
+    // `liaBrainCorrelation }` sequence appears in three dependency objects)
+    expect(entry.match(/dependsOn: \{ liaBrainCorrelation \}/g)).toHaveLength(2)
+    expect(entry.match(/liaBrainCorrelation \}/g) ?? []).toHaveLength(4)
     expect(entry.match(/void deps\.liaBrainCorrelation/g)).toHaveLength(1)
     // U (record-free boot invariant): every mention of the handle is a bare
     // reference - it is never read, never recorded into.
@@ -282,19 +287,24 @@ describe('lia brain correlation service - composition ownership (Phase 8.0D-10B-
         'apps/stage-tamagotchi/src/main/services/lia/brain-correlation-service.ts',
         'apps/stage-tamagotchi/src/main/services/lia/brain-correlation-store.ts',
       ])
+    // Since 8.0D-10B-4B3 the two producers legitimately type their injected
+    // dependency with the service surface - and still create nothing.
     expect(productionSourcesMatching(BRAIN_ROOTS, /brain-correlation-service|createLiaBrainCorrelationService|LiaBrainCorrelationService/))
       .toEqual([
         'apps/stage-tamagotchi/src/main/index.ts',
         'apps/stage-tamagotchi/src/main/services/lia/brain-correlation-service.ts',
+        'apps/stage-tamagotchi/src/main/services/lia/brain-decision-service.ts',
+        'apps/stage-tamagotchi/src/main/services/lia/brain-execution-report-service.ts',
       ])
   })
 })
 
 describe('lia brain correlation service - isolation (Phase 8.0D-10B-4B2)', () => {
   it('o/p/q/r: the handlers, the reporter and the shared contract stay store-blind', () => {
-    const storeReference = /brain-correlation-store|brain-correlation-service|createLiaBrainCorrelationStore|createLiaBrainCorrelationService|LiaBrainCorrelationService|LiaBrainCorrelationStore/
+    const storeReference = /brain-correlation-store|createLiaBrainCorrelationStore|LiaBrainCorrelationStore/
 
-    // O/P: neither production handler knows the store or the service.
+    // O/P: neither production handler may reach the STORE module directly - the
+    // canonical service arrives as an injected dependency (8.0D-10B-4B3).
     expect(readSource('./brain-decision-service.ts')).not.toMatch(storeReference)
     expect(readSource('./brain-execution-report-service.ts')).not.toMatch(storeReference)
     // Q: the renderer reporter does not either.
@@ -302,13 +312,19 @@ describe('lia brain correlation service - isolation (Phase 8.0D-10B-4B2)', () =>
     // R: and the shared Eventa contract names no correlation surface.
     expect(readSource('../../../shared/eventa/index.ts')).not.toMatch(storeReference)
 
-    // The handlers keep their exact discipline: the bridge returns a decision
-    // and retains nothing; the report handler sanitizes and discards.
+    // Phase 8.0D-10B-4B3 legitimately wires the two producers into the store,
+    // so this phase's invariant is the NARROW one: each producer only WRITES its
+    // own side, and neither reads. The bridge has no execution side; the handler
+    // has no decision side.
     const bridge = stripComments(readSource('./brain-decision-service.ts'))
-    expect(bridge).not.toMatch(/recordDecision|recordExecution|correlationStore/)
+    expect(bridge.match(/correlationStore\.recordDecision\(/g)).toHaveLength(1)
+    expect(bridge).not.toMatch(/correlationStore\.recordExecution|correlationStore\.get\(|correlationStore\.size/)
     const handler = stripComments(readSource('./brain-execution-report-service.ts'))
-    expect(handler).not.toMatch(/recordDecision|recordExecution|correlationStore/)
-    expect(handler).toMatch(/void sanitizeLiaBrainExecutionObservationReport/)
+    expect(handler.match(/correlationStore\.recordExecution\(/g)).toHaveLength(1)
+    expect(handler).not.toMatch(/correlationStore\.recordDecision|correlationStore\.get\(|correlationStore\.size/)
+    // The handler still sanitizes first and keeps nothing of its own.
+    expect(handler).toContain('sanitizeLiaBrainExecutionObservationReport(')
+    expect(handler).not.toMatch(/\.push\(|new Map|new Set/)
   })
 
   it('no new IPC channel, and the Brain allowlist is unchanged', () => {

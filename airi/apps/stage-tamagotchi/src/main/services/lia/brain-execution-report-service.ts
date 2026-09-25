@@ -1,6 +1,7 @@
 import type { createContext } from '@moeru/eventa/adapters/electron/main'
 
 import type { LiaBrainExecutionObservationReport } from '../../../shared/eventa'
+import type { LiaBrainCorrelationService } from './brain-correlation-service'
 
 import { electronLiaBrainExecutionObservation } from '../../../shared/eventa'
 
@@ -13,8 +14,10 @@ type MainContext = ReturnType<typeof createContext>['context']
  * It receives the ONE-WAY diagnostic report the renderer that executed a
  * request pushed (five string identities of one attempt) and does exactly
  * three things: sanitize the fields tolerantly, require a non-empty
- * correlationId, and DISCARD the result. After the handler returns, main
- * retains nothing.
+ * correlationId, and hand the sanitized five-field object to the injected
+ * correlation store as a diagnostic fact (Phase 8.0D-10B-4B3). Nothing else is
+ * retained here: this module keeps no state, and it only WRITES
+ * (`recordExecution`) - it never reads, inspects or interprets the store.
  *
  * Trust boundary: execution identity is UNTRUSTED DATA, even though it
  * originates from the leader's real execution seam. `providerId`/`modelId` are
@@ -69,10 +72,32 @@ export function sanitizeLiaBrainExecutionObservationReport(value: unknown): LiaB
  * inside the handler: no return value, no state, no side effect - the handler
  * cannot produce an execution command even by accident.
  */
-export function registerLiaBrainExecutionReportHandler(params: { context: MainContext }): void {
-  params.context.on(electronLiaBrainExecutionObservation, (event) => {
-    // Sanitize, require the key, DROP the sanitized report. The result is
-    // voided on purpose - keeping it would be the retention this phase forbids.
-    void sanitizeLiaBrainExecutionObservationReport((event as { body?: unknown } | undefined)?.body)
+export function registerLiaBrainExecutionReportHandler(params: {
+  context: MainContext
+  /**
+   * Phase 8.0D-10B-4B3: the canonical correlation store, injected by the
+   * lifecycle - never created or resolved here. It is used for exactly ONE
+   * diagnostic write (`recordExecution`) and is never read.
+   */
+  correlationStore: LiaBrainCorrelationService
+}): void {
+  const { context, correlationStore } = params
+
+  context.on(electronLiaBrainExecutionObservation, (event) => {
+    // Sanitize first: only a report with a usable key survives, and only the
+    // five contract fields are read into a fresh object.
+    const report = sanitizeLiaBrainExecutionObservationReport((event as { body?: unknown } | undefined)?.body)
+    if (report === undefined)
+      return
+
+    // Diagnostic write, isolated: a correlation store that throws cannot make
+    // an exception escape into chat execution, cannot trigger a retry or a
+    // fallback, and cannot produce a user-facing error.
+    try {
+      correlationStore.recordExecution(report)
+    }
+    catch {
+      // Diagnostic memory only: the request this report describes is unaffected.
+    }
   })
 }

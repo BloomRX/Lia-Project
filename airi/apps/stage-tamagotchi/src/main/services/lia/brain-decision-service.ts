@@ -7,6 +7,7 @@ import type {
   LiaBrainChatDecision,
   LiaBrainChatDecisionRequest,
 } from '../../../shared/eventa'
+import type { LiaBrainCorrelationService } from './brain-correlation-service'
 import type { LiaBrainService } from './lia-brain-service'
 
 import { brainRequirementForChatTurn, createProductionBrainAutomaticPolicy } from '@lia/core'
@@ -49,7 +50,13 @@ type MainContext = ReturnType<typeof createContext>['context']
  * Renderer data is untrusted: only the contract's own shape is read, field by
  * field, into fresh plain objects. Unknown keys (a policy blob, a providerId,
  * descriptors, callbacks, paths) are simply never looked at, so they cannot
- * reach the routing stack. No production chat code calls this yet.
+ * reach the routing stack.
+ *
+ * Phase 8.0D-10B-4B3: the injected correlation store receives the canonical
+ * decision as a DIAGNOSTIC fact, keyed by the request's opaque logical-send
+ * key. This bridge only WRITES (`recordDecision`); it never reads, inspects or
+ * interprets the retained state, and the store can influence nothing about the
+ * decision - it is written strictly AFTER the decision already exists.
  */
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -99,21 +106,43 @@ function readFacts(value: unknown): LiaChatTurnBrainFacts {
 export function registerLiaBrainDecisionBridge(params: {
   context: MainContext
   brain: Pick<LiaBrainService, 'decide'>
+  /**
+   * Phase 8.0D-10B-4B3: the canonical correlation store, injected by the
+   * lifecycle - the bridge never resolves or creates one itself. It is used for
+   * exactly ONE diagnostic write (`recordDecision`) and is never read here.
+   */
+  correlationStore: LiaBrainCorrelationService
 }): void {
-  const { context, brain } = params
+  const { context, brain, correlationStore } = params
   const trustedAutomaticPolicy = createProductionBrainAutomaticPolicy()
 
   defineInvokeHandler(context, electronLiaBrainChatDecision, (request: LiaBrainChatDecisionRequest): LiaBrainChatDecision => {
-    // Phase 8.0D-10B-3B2: the request may carry an opaque logical-send key.
-    // It is accepted tolerantly (any non-string shape reads as "no key") and
-    // then deliberately DISCARDED here: this phase retains no decision state,
-    // and the key never reaches the requirement builder, the trusted policy or
-    // `decide(...)` - so it can influence nothing about the decision.
-    void readCorrelationId(request?.correlationId)
+    // Phase 8.0D-10B-3B2: the request may carry an opaque logical-send key. It
+    // stays transport metadata: it is validated tolerantly (any non-string or
+    // empty shape reads as "no key"), never parsed, and it never reaches the
+    // requirement builder, the trusted policy or `decide(...)`.
+    const correlationId = readCorrelationId(request?.correlationId)
 
-    return brain.decide({
+    const decision = brain.decide({
       automaticPolicy: trustedAutomaticPolicy,
       requirement: brainRequirementForChatTurn(readFacts(request?.facts)),
     })
+
+    // Phase 8.0D-10B-4B3: after a canonical decision exists, the diagnostic
+    // record is filled with THAT decision - the very object the Brain service
+    // returned, never reconstructed, normalized or compared. The write is
+    // fire-and-forget and isolated: a correlation store that throws cannot
+    // change the decision the renderer receives, cannot cause a second
+    // `decide(...)`, and cannot surface an error to the caller.
+    if (correlationId !== undefined) {
+      try {
+        correlationStore.recordDecision(correlationId, decision)
+      }
+      catch {
+        // Diagnostic memory only: the decision below is unaffected.
+      }
+    }
+
+    return decision
   })
 }

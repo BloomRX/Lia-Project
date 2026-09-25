@@ -86,7 +86,11 @@ describe('lia brain service lifecycle ownership (Phase 8.0D-5)', () => {
     // decision bridge (8.0D-7) that receives the SAME instance - its invoke
     // dependency plus the handle it passes on. No other seam receives it.
     expect(source.match(/\bliaBrain\b/g)).toHaveLength(5)
-    expect(source.match(/dependsOn: \{ liaBrain \}/g)).toHaveLength(2)
+    // The bridge invoke lists a second dependency since 8.0D-10B-4B3
+    // (`{ liaBrain, liaBrainCorrelation }`), so the bare single-dependency form
+    // now appears once - in the boot materialization invoke.
+    expect(source.match(/dependsOn: \{ liaBrain \}/g)).toHaveLength(1)
+    expect(source.match(/dependsOn: \{ liaBrain, liaBrainCorrelation \}/g)).toHaveLength(1)
     expect(source.match(/createLiaBrainService\(/g)).toHaveLength(1)
     // No module-global singleton outside the container's ownership.
     const block = brainProvideBlock(source)

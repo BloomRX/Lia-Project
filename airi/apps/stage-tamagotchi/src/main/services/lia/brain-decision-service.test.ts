@@ -30,6 +30,10 @@ const mocks = vi.hoisted(() => ({
   requirementForChatTurn: vi.fn(),
   automaticPolicy: vi.fn(),
   decide: vi.fn(),
+  // Phase 8.0D-10B-4B3: the injected correlation store, observed through its
+  // single write. Recording is diagnostic, so the tests assert the call shape
+  // and that nothing about the decision depends on it.
+  recordDecision: vi.fn(),
 }))
 
 vi.mock('@moeru/eventa', () => ({
@@ -115,11 +119,16 @@ function decideCalls(): DecideInput[] {
 
 type Handler = (request?: unknown) => LiaBrainRoutingDecision
 
-/** Registers the bridge against an injected Brain surface. */
-async function register(brain: unknown): Promise<Handler> {
+/** The canonical correlation store double the bridge receives. */
+function correlationStoreDouble() {
+  return { recordDecision: mocks.recordDecision } as never
+}
+
+/** Registers the bridge against an injected Brain surface and correlation store. */
+async function register(brain: unknown, correlationStore: unknown = correlationStoreDouble()): Promise<Handler> {
   mocks.handlers.clear()
   const { registerLiaBrainDecisionBridge } = await import('./brain-decision-service')
-  registerLiaBrainDecisionBridge({ brain: brain as never, context: {} as never })
+  registerLiaBrainDecisionBridge({ brain: brain as never, context: {} as never, correlationStore: correlationStore as never })
   const handler = mocks.handlers.get(channels.decision)
   expect(handler).toBeTypeOf('function')
   return handler as Handler
@@ -290,6 +299,98 @@ describe('lia brain decision bridge (Phase 8.0D-8)', () => {
     expect(new Set(observed).size).toBe(1)
   })
 
+  it('a/b/c/d: a correlated request records the canonical decision verbatim, once', async () => {
+    const handler = await loadBridge()
+    mocks.decide.mockReturnValue(SENTINEL)
+    mocks.recordDecision.mockClear()
+
+    const returned = handler({ correlationId: 'logical-send-X', facts: { usesTools: true } })
+
+    // A: exactly one diagnostic write per request.
+    expect(mocks.recordDecision).toHaveBeenCalledTimes(1)
+    const [recordedId, recordedDecision] = mocks.recordDecision.mock.calls[0] as [string, LiaBrainRoutingDecision]
+    // B: the exact opaque key, forwarded verbatim.
+    expect(recordedId).toBe('logical-send-X')
+    // C: the exact value `decide(...)` returned - not a copy, not a rebuild.
+    expect(recordedDecision).toBe(SENTINEL)
+    // D: and the renderer still receives exactly that canonical decision.
+    expect(returned).toBe(SENTINEL)
+  })
+
+  it('e/f: an absent or malformed key records nothing, and never synthesizes one', async () => {
+    const handler = await loadBridge()
+    mocks.decide.mockReturnValue(SENTINEL)
+    mocks.recordDecision.mockClear()
+
+    for (const correlationId of [undefined, '', 42, null, {}, []]) {
+      const returned = handler({ correlationId, facts: { usesTools: true } } as never)
+      expect(returned).toBe(SENTINEL)
+    }
+
+    expect(mocks.recordDecision).not.toHaveBeenCalled()
+    // `decide` still ran for every request - only the diagnostic write is skipped.
+    expect(mocks.decide).toHaveBeenCalledTimes(6)
+
+    // The convention is tolerant WITHOUT trimming: a whitespace-only key is a
+    // non-empty string and is therefore a (useless but) usable opaque key -
+    // the value is never normalized, so nothing is invented and nothing lost.
+    mocks.recordDecision.mockClear()
+    handler({ correlationId: '   ', facts: {} } as never)
+    expect(mocks.recordDecision).toHaveBeenCalledWith('   ', SENTINEL)
+  })
+
+  it('g/h: a throwing correlation store changes nothing about the decision', async () => {
+    const handler = await register({ decide: mocks.decide }, {
+      recordDecision: () => {
+        throw new Error('diagnostic memory is gone')
+      },
+    })
+    mocks.decide.mockReturnValue(SENTINEL)
+
+    // G: the canonical decision still reaches the renderer, and no error escapes.
+    expect(handler({ correlationId: 'logical-send-X', facts: {} })).toBe(SENTINEL)
+    // H: and no retry of the routing call happened as a side effect.
+    expect(mocks.decide).toHaveBeenCalledTimes(1)
+  })
+
+  it('i: a failing Brain decision records nothing and keeps its own failure path', async () => {
+    const failure = new Error('brain decision failed')
+    mocks.decide.mockImplementation(() => {
+      throw failure
+    })
+    const handler = await loadBridge()
+    mocks.recordDecision.mockClear()
+
+    // The failure is preserved EXACTLY: it propagates and no synthetic entry is
+    // written merely to record the failure.
+    expect(() => handler({ correlationId: 'logical-send-X', facts: {} })).toThrow(failure)
+    expect(mocks.recordDecision).not.toHaveBeenCalled()
+  })
+
+  it('j: the requirement and the trusted policy reaching decide are unchanged by recording', async () => {
+    const handler = await loadBridge()
+    mocks.decide.mockReturnValue(SENTINEL)
+
+    handler({ correlationId: 'logical-send-X', facts: { hasImageInput: false, reasoningRequested: true, usesTools: false } })
+    handler({ facts: { hasImageInput: false, reasoningRequested: true, usesTools: false } })
+
+    const calls = decideCalls()
+    expect(calls).toHaveLength(2)
+    // Identical inputs whether or not a key was recorded - the diagnostic write
+    // contributes nothing to routing.
+    expect(calls[1]).toEqual(calls[0])
+    // The canonical builder received the same sanitized facts both times...
+    expect(mocks.requirementForChatTurn.mock.calls).toEqual([
+      [{ reasoningRequested: true }],
+      [{ reasoningRequested: true }],
+    ])
+    // ...and `decide` received the builder's own output plus the ONE trusted
+    // policy instance - exactly the same shape as before this phase.
+    expect(calls[0]?.requirement).toBe(mocks.requirementForChatTurn.mock.results[0]?.value)
+    expect(calls[0]?.automaticPolicy).toBe(calls[1]?.automaticPolicy)
+    expect(Object.keys(calls[0] ?? {}).sort()).toEqual(['automaticPolicy', 'requirement'])
+  })
+
   it('v/v2: nothing about a decision or its request is retained', async () => {
     const handler = await loadBridge()
     mocks.decide.mockReturnValue(SENTINEL)
@@ -301,13 +402,20 @@ describe('lia brain decision bridge (Phase 8.0D-8)', () => {
     // of a previous answer, and the key was not used to deduplicate anything.
     expect(mocks.decide).toHaveBeenCalledTimes(2)
 
-    // No retention surface exists in the bridge source at all.
+    // The bridge itself retains nothing: no map, no set, no cache, no history,
+    // no last/pending state. Since 8.0D-10B-4B3 the canonical decision is
+    // handed to the INJECTED store - the only retention is that store's, behind
+    // an explicit dependency, and the bridge has no read of it.
     const source = stripComments(readSource('./brain-decision-service.ts'))
-    expect(source).not.toMatch(/\bMap\b|\bSet\b|lastDecision|pendingComparison|cache|history|store\b/i)
-    // The only code reference to the key is the tolerant read that is
-    // immediately discarded - no variable holds it, nothing returns it.
-    expect(source.match(/correlationId/g)).toHaveLength(1)
-    expect(source).toContain('void readCorrelationId(request?.correlationId)')
+    expect(source).not.toMatch(/\bnew Map\b|\bnew Set\b|lastDecision|pendingComparison|\bcache\b|history/i)
+    expect(source.match(/correlationStore\.\w+/g)).toEqual(['correlationStore.recordDecision'])
+    expect(source).not.toMatch(/correlationStore\.(?:get|size)/)
+    // The key is read once, tolerantly, into a local the diagnostic write shares -
+    // it is still never parsed, never compared and never returned. Its four
+    // occurrences are: the reader call, the local declaration, the guard and
+    // the diagnostic write.
+    expect(source.match(/correlationId/g)).toHaveLength(4)
+    expect(source).toContain('const correlationId = readCorrelationId(request?.correlationId)')
   })
 
   it('l/m/n/o: the trusted policy is built once per registration and reused, not per request', async () => {
@@ -506,7 +614,9 @@ describe('lia brain decision bridge (Phase 8.0D-8)', () => {
     // 8.0D-10B-4B2) still names exactly one provider.
     expect(entry.match(/services:lia-brain'/g)).toHaveLength(1)
     expect(entry.match(/createLiaBrainService\(/g)).toHaveLength(1)
-    expect(entry).toContain('registerLiaBrainDecisionBridge({ context, brain: deps.liaBrain })')
+    // 8.0D-10B-4B3: the registration also receives the lifecycle-owned
+    // correlation store explicitly - the entry owns the injection.
+    expect(stripComments(entry)).toMatch(/registerLiaBrainDecisionBridge\(\{[\s\S]*?brain: deps\.liaBrain,[\s\S]*?correlationStore: deps\.liaBrainCorrelation,/)
     // The trusted policy is NOT created in the composition entry - the bridge
     // owns that lifecycle, and config is never consulted for it.
     expect(entry).not.toMatch(/createProductionBrainAutomaticPolicy|automaticPolicy/)

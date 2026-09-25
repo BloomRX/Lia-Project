@@ -493,10 +493,22 @@ describe('lia brain correlation store - isolation invariants (Phase 8.0D-10B-4B1
       .sort()
     expect(factoryCallSites).toEqual(['apps/stage-tamagotchi/src/main/services/lia/brain-correlation-service.ts'])
 
-    // The handlers and the composition entry stay exactly as they were.
-    expect(readFileSync(new URL('./brain-decision-service.ts', import.meta.url), 'utf-8')).not.toMatch(/correlation-store|correlationStore/)
-    expect(readFileSync(new URL('./brain-execution-report-service.ts', import.meta.url), 'utf-8')).not.toMatch(/correlation-store|correlationStore/)
-    expect(readFileSync(new URL('../../index.ts', import.meta.url), 'utf-8')).not.toMatch(/correlation-store|correlationStore|LiaBrainCorrelationStore/)
+    // Phase 8.0D-10B-4B3 wires the two producers into the canonical SERVICE,
+    // so the invariant becomes the narrow one: neither handler reaches the
+    // STORE module, and each only writes its own side.
+    const bridge = stripComments(readFileSync(new URL('./brain-decision-service.ts', import.meta.url), 'utf-8'))
+    expect(bridge).not.toMatch(/brain-correlation-store|createLiaBrainCorrelationStore|LiaBrainCorrelationStore/)
+    expect(bridge.match(/correlationStore\.recordDecision\(/g)).toHaveLength(1)
+    expect(bridge).not.toMatch(/correlationStore\.(?:recordExecution|get|size)/)
+    const handler = stripComments(readFileSync(new URL('./brain-execution-report-service.ts', import.meta.url), 'utf-8'))
+    expect(handler).not.toMatch(/brain-correlation-store|createLiaBrainCorrelationStore|LiaBrainCorrelationStore/)
+    expect(handler.match(/correlationStore\.recordExecution\(/g)).toHaveLength(1)
+    expect(handler).not.toMatch(/correlationStore\.(?:recordDecision|get|size)/)
+    // The composition entry never reaches the STORE module either - it owns the
+    // service handle and injects it (8.0D-10B-4B3).
+    const entry = readFileSync(new URL('../../index.ts', import.meta.url), 'utf-8')
+    expect(entry).not.toMatch(/brain-correlation-store|createLiaBrainCorrelationStore|LiaBrainCorrelationStore/)
+    expect(entry.match(/correlationStore: deps\.liaBrainCorrelation/g)).toHaveLength(2)
   })
 
   it('ai: the store introduces no transport of its own', () => {

@@ -408,23 +408,31 @@ app.whenReady().then(async () => {
   // no execution authority - it answers a routing question about a described
   // chat turn and returns the canonical decision unchanged. No production
   // chat code calls it yet.
+  // Phase 8.0D-10B-4B3: the bridge also receives the canonical correlation
+  // store, so the canonical decision it returns is recorded as a diagnostic
+  // fact for that logical send. Injection stays HERE: the bridge never resolves
+  // a store, and it only writes.
   injeca.invoke({
-    dependsOn: { liaBrain },
+    dependsOn: { liaBrain, liaBrainCorrelation },
     callback: async (deps) => {
       const { context } = createContext(ipcMain)
-      registerLiaBrainDecisionBridge({ context, brain: deps.liaBrain })
+      registerLiaBrainDecisionBridge({
+        context,
+        brain: deps.liaBrain,
+        correlationStore: deps.liaBrainCorrelation,
+      })
     },
   })
 
-  // Phase 8.0D-10B-4A: the one-way Lia execution observation report. It is
-  // diagnostic only and deliberately depends on NOTHING - not on the Brain
-  // service, not on product config: the handler sanitizes, requires the
-  // logical-send key and discards the report.
+  // Phase 8.0D-10B-4A: the one-way Lia execution observation report. It stays
+  // diagnostic only - it depends on the correlation store (never on the Brain
+  // service nor on product config): the handler sanitizes, requires the
+  // logical-send key and records the five-field fact.
   injeca.invoke({
-    dependsOn: {},
-    callback: async () => {
+    dependsOn: { liaBrainCorrelation },
+    callback: async (deps) => {
       const { context } = createContext(ipcMain)
-      registerLiaBrainExecutionReportHandler({ context })
+      registerLiaBrainExecutionReportHandler({ context, correlationStore: deps.liaBrainCorrelation })
     },
   })
 
