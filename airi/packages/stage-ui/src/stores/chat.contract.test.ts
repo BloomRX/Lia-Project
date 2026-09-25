@@ -3,10 +3,12 @@ import type { ChatProvider } from '@xsai-ext/providers/utils'
 import type { Message, Tool } from '@xsai/shared-chat'
 import type { SyncedPiniaRuntime } from 'pinia-plugin-synced'
 
+import type { ChatSendPayload } from './chat'
+
 import { errorMessageFrom } from '@moeru/std'
 import { IOAttributes, IOSpanNames } from '@proj-airi/stage-shared'
 import { createPinia, setActivePinia } from 'pinia'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { nextTick, ref } from 'vue'
 
 import {
@@ -15,6 +17,7 @@ import {
   AIRI_CHAT_SESSION_ID_HEADER,
 } from '../libs/analytics-headers'
 import { useChatStore } from './chat'
+import { registerChatFallbackResolver, resetChatProviderRuntimeExtensionsForTesting } from './chat/chat-provider-runtime'
 import { useConsciousnessSettingsStore } from './modules/consciousness-settings'
 
 vi.hoisted(() => {
@@ -1025,5 +1028,101 @@ describe('chat store contract', () => {
       hidden: true,
     })
     expect(ensureSessionMock).toHaveBeenCalledWith('session-forked')
+  })
+
+  // Phase 8.0D-10B-1: `executeSendAttempt` carries the provider id it resolved
+  // for THIS attempt into the request metadata, while execution keeps using the
+  // exact same provider instance and model string as before.
+  describe('carried provider identity in the send contract', () => {
+    afterEach(() => resetChatProviderRuntimeExtensionsForTesting())
+
+    function streamWithUsage() {
+      llmStreamMock.mockImplementation(async (_model: string, _chatProvider: ChatProvider, _messages: Message[], options: any) => {
+        await options.onStreamEvent({ type: 'text-delta', text: 'ok' })
+        await options.onStreamEvent({ type: 'finish', finishReason: 'stop' })
+        await options.onUsage({ inputTokens: 1, outputTokens: 1, totalTokens: 2, source: 'reported' })
+      })
+    }
+
+    it('carries the attempt identity without changing execution or the payload', async () => {
+      streamWithUsage()
+      const store = useChatStore()
+
+      await store.send({ sessionId: 'session-1', text: 'hello' })
+
+      // J + K: the per-round metadata reports exactly the locals resolved for
+      // this attempt.
+      expect(chatAnalyticsMocks.trackAiGeneration).toHaveBeenCalledWith(expect.objectContaining({
+        provider_id: 'mock-provider',
+        model_id: 'gpt-test',
+      }))
+      // L + Q: provider resolution still happens exactly once per attempt.
+      expect(getChatProviderInstanceMock).toHaveBeenCalledTimes(1)
+      expect(getChatProviderInstanceMock).toHaveBeenCalledWith('mock-provider', { reasoning: 'disabled' })
+      // R: execution received the same provider instance and the same model.
+      expect(llmStreamMock).toHaveBeenCalledTimes(1)
+      expect(llmStreamMock.mock.calls[0]?.[0]).toBe('gpt-test')
+      expect(llmStreamMock.mock.calls[0]?.[1]).toBe(provider)
+
+      // M: the payload contract is untouched - the minimal historical payload is
+      // still all a caller needs (no new required field).
+      const payload: ChatSendPayload = { sessionId: 'session-1', text: 'second turn' }
+      await store.send(payload)
+      expect(getChatProviderInstanceMock).toHaveBeenCalledTimes(2)
+    })
+
+    it('keeps the attempt identity when the live selection changes mid-send', async () => {
+      streamWithUsage()
+      // The live store value changes AFTER this attempt resolved its provider -
+      // only a carried value can still report what actually runs.
+      getChatProviderInstanceMock.mockImplementationOnce(async () => {
+        activeProviderRef.value = 'switched-mid-send'
+        return provider
+      })
+
+      const store = useChatStore()
+      await store.send({ sessionId: 'session-1', text: 'hello' })
+
+      expect(chatAnalyticsMocks.trackAiGeneration).toHaveBeenCalledWith(expect.objectContaining({
+        provider_id: 'mock-provider',
+        model_id: 'gpt-test',
+      }))
+      expect(llmStreamMock.mock.calls[0]?.[1]).toBe(provider)
+    })
+
+    it('carries the identity resolved for each fallback attempt, never a cached one', async () => {
+      llmStreamMock.mockRejectedValueOnce(new Error('recoverable failure'))
+      streamWithUsage()
+      registerChatFallbackResolver(async () => {
+      // Production swaps this same reactive selection before retrying; the mock
+      // store exposes the state as refs, so the test mirrors that swap.
+        activeProviderRef.value = 'fallback-provider'
+        activeModelRef.value = 'fallback-model'
+        return { providerId: 'fallback-provider', modelId: 'fallback-model' }
+      })
+
+      const store = useChatStore()
+      await store.send({ sessionId: 'session-1', text: 'hello' })
+
+      // Attempt 1 reported the provider that actually failed.
+      expect(chatAnalyticsMocks.trackMessageRoundFailed).toHaveBeenCalledWith(expect.objectContaining({
+        provider_id: 'mock-provider',
+        model_id: 'gpt-test',
+      }))
+      // Attempt 2 reported the NEW identity - nothing was cached across attempts.
+      expect(chatAnalyticsMocks.trackAiGeneration).toHaveBeenCalledWith(expect.objectContaining({
+        provider_id: 'fallback-provider',
+        model_id: 'fallback-model',
+      }))
+      // P: model handling per attempt is unchanged.
+      expect(llmStreamMock.mock.calls[0]?.[0]).toBe('gpt-test')
+      expect(llmStreamMock.mock.calls[1]?.[0]).toBe('fallback-model')
+      // Q: exactly one resolution per attempt, no extras.
+      expect(getChatProviderInstanceMock).toHaveBeenCalledTimes(2)
+      expect(getChatProviderInstanceMock.mock.calls.map(call => call[0])).toEqual([
+        'mock-provider',
+        'fallback-provider',
+      ])
+    })
   })
 })

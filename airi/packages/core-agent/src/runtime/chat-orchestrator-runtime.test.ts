@@ -13,7 +13,7 @@ const provider = {
   chat: () => ({ baseURL: 'https://example.com/' }),
 } as unknown as ChatProvider
 
-function createHarness() {
+function createHarness(options: { getActiveProvider?: () => string | undefined } = {}) {
   const sessionMessages: Record<string, ChatHistoryItem[]> = {
     'session-1': [
       {
@@ -51,6 +51,9 @@ function createHarness() {
     await options?.onStreamEvent?.({ type: 'finish', finishReason: 'stop' })
   })
   const ids = ['stream-context', 'assistant-id', 'user-id', 'fallback-id']
+  // Counts every live-store provider read so a test can prove that carrying the
+  // identity adds no additional provider resolution.
+  const activeProviderSpy = vi.fn(options.getActiveProvider ?? (() => 'mock-provider'))
   let systemPromptSupplement: string | undefined
   let nowValue = new Date(2026, 3, 25, 18, 47).getTime()
   let monotonicNowValues = [1000]
@@ -80,7 +83,7 @@ function createHarness() {
       stream,
     },
     getActiveSessionId: () => 'session-1',
-    getActiveProvider: () => 'mock-provider',
+    getActiveProvider: activeProviderSpy,
     getSystemPromptSupplement: () => systemPromptSupplement,
     now: () => nowValue,
     monotonicNow: () => monotonicNowValues.shift() ?? 1000,
@@ -105,6 +108,7 @@ function createHarness() {
   })
 
   return {
+    activeProviderSpy,
     assistantAppended,
     assistantTurns,
     contextSnapshot,
@@ -1018,5 +1022,127 @@ describe('createChatOrchestratorRuntime', () => {
     ])
     expect(harness.assistantAppended).toHaveLength(1)
     expect(harness.foregroundResets).toHaveLength(1)
+  })
+})
+
+// Phase 8.0D-10B-1: the provider identity the caller resolved for THIS attempt
+// travels with the send options and feeds every per-round observational
+// milestone, instead of being reconstructed through a live store read.
+describe('carried provider identity', () => {
+  const usage = { inputTokens: 3, outputTokens: 2, totalTokens: 5, source: 'reported' as const }
+
+  function streamWithUsage(harness: ReturnType<typeof createHarness>) {
+    harness.stream.mockImplementationOnce(async (_model, _chatProvider, _messages, options) => {
+      await options?.onStreamEvent?.({ type: 'text-delta', text: 'assistant reply' })
+      await options?.onStreamEvent?.({ type: 'finish', finishReason: 'stop' })
+      await options?.onUsage?.(usage)
+    })
+  }
+
+  it('reports the supplied providerId in per-round metadata and never the divergent store value', async () => {
+    const harness = createHarness({ getActiveProvider: () => 'store-provider' })
+    streamWithUsage(harness)
+
+    await harness.runtime.ingest('hello', {
+      model: 'gpt-carried',
+      chatProvider: provider,
+      providerId: 'carried-provider',
+    })
+
+    // A + B: request start carries exactly the supplied id (the live store had
+    // a different value, so this cannot come from the store read).
+    expect(harness.telemetry.llmRequestStarted).toEqual([
+      expect.objectContaining({ model: 'gpt-carried', provider: 'carried-provider' }),
+    ])
+    // H: one round cannot report two provider identities.
+    expect(harness.telemetry.chatActivationStarted).toEqual([
+      expect.objectContaining({ provider: 'carried-provider' }),
+    ])
+    expect(harness.telemetry.chatActivationSucceeded).toEqual([
+      expect.objectContaining({ provider: 'carried-provider' }),
+    ])
+    expect(harness.telemetry.llmGeneration).toEqual([
+      expect.objectContaining({ model: 'gpt-carried', provider: 'carried-provider' }),
+    ])
+    expect(harness.userAppended).toEqual([
+      expect.objectContaining({ provider: 'carried-provider' }),
+    ])
+  })
+
+  it('leaves the executed provider object and model untouched', async () => {
+    const harness = createHarness({ getActiveProvider: () => 'store-provider' })
+    streamWithUsage(harness)
+
+    await harness.runtime.ingest('hello', {
+      model: 'gpt-carried',
+      chatProvider: provider,
+      providerId: 'carried-provider',
+    })
+
+    // D + E + F + G: same exact model string and the very same provider object
+    // identity the caller supplied - the metadata field decides nothing.
+    expect(harness.stream).toHaveBeenCalledTimes(1)
+    expect(harness.stream.mock.calls[0]?.[0]).toBe('gpt-carried')
+    expect(harness.stream.mock.calls[0]?.[1]).toBe(provider)
+  })
+
+  it('keeps the live-store fallback when no identity is carried', async () => {
+    const harness = createHarness({ getActiveProvider: () => 'store-provider' })
+    streamWithUsage(harness)
+
+    await harness.runtime.ingest('hello', {
+      model: 'gpt-store',
+      chatProvider: provider,
+    })
+
+    // C: absent field still resolves through deps.getActiveProvider().
+    expect(harness.telemetry.llmRequestStarted).toEqual([
+      expect.objectContaining({ model: 'gpt-store', provider: 'store-provider' }),
+    ])
+    expect(harness.telemetry.llmGeneration).toEqual([
+      expect.objectContaining({ provider: 'store-provider' }),
+    ])
+    expect(harness.stream.mock.calls[0]?.[0]).toBe('gpt-store')
+    expect(harness.stream.mock.calls[0]?.[1]).toBe(provider)
+  })
+
+  it('reports the carried identity on a failed round too', async () => {
+    const harness = createHarness({ getActiveProvider: () => 'store-provider' })
+    harness.stream.mockRejectedValueOnce(new Error('provider rejected'))
+
+    await expect(harness.runtime.ingest('hello', {
+      model: 'gpt-carried',
+      chatProvider: provider,
+      providerId: 'carried-provider',
+    })).rejects.toThrow('provider rejected')
+
+    expect(harness.telemetry.messageRoundFailed).toEqual([
+      expect.objectContaining({ model: 'gpt-carried', provider: 'carried-provider' }),
+    ])
+    expect(harness.telemetry.chatActivationFailed).toEqual([
+      expect.objectContaining({ provider: 'carried-provider' }),
+    ])
+  })
+
+  it('adds no provider resolution of its own', async () => {
+    const carried = createHarness({ getActiveProvider: () => 'store-provider' })
+    streamWithUsage(carried)
+    await carried.runtime.ingest('hello', {
+      model: 'gpt-x',
+      chatProvider: provider,
+      providerId: 'carried-provider',
+    })
+
+    const stored = createHarness({ getActiveProvider: () => 'store-provider' })
+    streamWithUsage(stored)
+    await stored.runtime.ingest('hello', {
+      model: 'gpt-x',
+      chatProvider: provider,
+    })
+
+    // I: the carried field is not a second resolution path. It removes exactly
+    // one live-store read - the request-start milestone's - while the remaining
+    // reads (response categorisation) are untouched.
+    expect(stored.activeProviderSpy.mock.calls.length - carried.activeProviderSpy.mock.calls.length).toBe(1)
   })
 })

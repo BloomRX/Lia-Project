@@ -423,6 +423,11 @@ export const useChatStore = defineStore('chat', () => {
     await runtime.ingest(payload.text, {
       model: modelId,
       chatProvider,
+      // Phase 8.0D-10B-1: the SAME provider id resolved above for this attempt
+      // (never a re-read) travels with the request as observational metadata,
+      // so per-round telemetry reports what actually ran here. Execution is
+      // untouched: `chatProvider` remains the executable provider.
+      providerId,
       attachments: payload.attachments,
       input: payload.input,
       toolReferences: payload.tools,

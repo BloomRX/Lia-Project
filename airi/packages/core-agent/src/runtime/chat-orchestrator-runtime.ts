@@ -52,6 +52,17 @@ export interface ChatOrchestratorSendOptions {
   model: string
   /** Concrete chat provider implementation selected by the caller. */
   chatProvider: ChatProvider
+  /**
+   * Exact provider id the caller resolved for THIS execution attempt.
+   *
+   * Phase 8.0D-10B-1: carried by value so per-round observational metadata
+   * reports the provider that actually ran this attempt instead of re-reading
+   * live store state. Optional and descriptive only - the executable provider
+   * is `chatProvider`, and nothing in this runtime resolves, selects, routes,
+   * retries or falls back on this value. Callers that omit it keep the
+   * previous `deps.getActiveProvider()` behaviour.
+   */
+  providerId?: string
   /** Provider-specific request options, currently used for headers. */
   providerConfig?: Record<string, unknown>
   /** Image attachments appended to the user message content parts. */
@@ -522,7 +533,12 @@ export function createChatOrchestratorRuntime(deps: ChatOrchestratorRuntimeDeps)
     const hasVoice = options.input?.type === 'input:voice'
       || options.input?.type === 'input:text:voice'
     const sendSource = hasVoice ? 'voice' : 'text'
-    const activeProvider = deps.getActiveProvider?.() ?? ''
+    // Phase 8.0D-10B-1: prefer the provider id the caller resolved for THIS
+    // attempt (carried by value) so one round can never report an identity
+    // other than the one that executed it. The live-store read stays as the
+    // fallback for callers that carry nothing. Metadata only: the executable
+    // provider is `options.chatProvider` and no routing decision reads this.
+    const activeProvider = options.providerId ?? deps.getActiveProvider?.() ?? ''
     // The user message is the durable start of a round, so its ID also serves
     // as the correlation key for every telemetry milestone emitted by it.
     const correlation: ChatRoundCorrelation = {
@@ -755,7 +771,9 @@ export function createChatOrchestratorRuntime(deps: ChatOrchestratorRuntimeDeps)
       deps.onLlmRequestStarted?.({
         ...correlation,
         model: options.model,
-        provider: deps.getActiveProvider() || 'unknown',
+        // Same captured value as every other per-round milestone; the
+        // `'unknown'` default for a genuinely unidentified provider stays.
+        provider: activeProvider || 'unknown',
         hasVoice,
       })
 
