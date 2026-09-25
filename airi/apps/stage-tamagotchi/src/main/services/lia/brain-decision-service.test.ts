@@ -120,7 +120,11 @@ function automaticSelection(decision: LiaBrainRoutingDecision) {
 }
 
 /** A decision the spy service returns, standing in for the real one. */
-const SENTINEL: LiaBrainRoutingDecision = { resolution: { status: 'noPreference' }, status: 'manual' }
+const SENTINEL: LiaBrainRoutingDecision = {
+  readiness: { status: 'notResolved' },
+  resolution: { status: 'noPreference' },
+  status: 'manual',
+}
 
 /** The trusted production policy, as the product factory declares it. */
 const TRUSTED_POLICY: LiaBrainAutomaticSelectionPolicy = {
@@ -299,6 +303,8 @@ describe('lia brain decision bridge (Phase 8.0D-8)', () => {
       return
     expect(decision.resolution.engine.id).toBe('groq')
     expect(decision.resolution.model.id).toBe('openai/gpt-oss-120b')
+    // Phase 8.0C-4's additive readiness travels unchanged through the bridge.
+    expect(decision.readiness).toEqual({ status: 'ready' })
   })
 
   it('x: the bridge never inspects the routing mode itself', () => {

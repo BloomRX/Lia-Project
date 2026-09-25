@@ -116,6 +116,8 @@ describe('runtime brain decision context (8.0D-1)', () => {
     // exactly as the explicit resolver defines it.
     expect(decision.resolution.engine).toBe(engines[0])
     expect(decision.resolution.model).toBe(models[0])
+    // Phase 8.0C-4: the additive readiness describes that resolved engine.
+    expect(decision.readiness).toEqual({ status: 'ready' })
 
     // Engine-only persisted preference resolves engine-only, same as direct.
     const engineOnly = decideBrainRouteFromProductState({
@@ -128,14 +130,20 @@ describe('runtime brain decision context (8.0D-1)', () => {
     if (engineOnly.status !== 'manual')
       return
     expect(engineOnly.resolution.status).toBe('resolvedEngine')
+    expect(engineOnly.readiness).toEqual({ status: 'ready' })
 
-    // Blank ids read as absent through the canonical readers (noPreference).
+    // Blank ids read as absent through the canonical readers (noPreference) -
+    // and an unsettled preference has no readiness to report.
     expect(decideBrainRouteFromProductState({
       engines,
       models,
       requirement: NEEDS_VISION,
       snapshot: snapshot({ engine: { preferred: '   ' }, mode: 'manual' }),
-    })).toEqual({ resolution: { status: 'noPreference' }, status: 'manual' })
+    })).toEqual({
+      readiness: { status: 'notResolved' },
+      resolution: { status: 'noPreference' },
+      status: 'manual',
+    })
   })
 
   it('d: an automatic snapshot + explicit policy equals the direct decideBrainRoute decision', () => {
