@@ -364,10 +364,17 @@ describe('lia brain correlation wiring - invariants (Phase 8.0D-10B-4B3)', () =>
     expect(handler.match(/correlationStore\.recordExecution\(/g)).toHaveLength(1)
     expect(handler).not.toMatch(/correlationStore\.recordDecision|correlationStore\.get\(|correlationStore\.size/)
 
-    // No production module reads the store: no `.get(`/`.size` on a correlation
-    // handle anywhere except the store's own implementation and this test file.
+    // Exactly ONE production module reads the correlation memory (Phase
+    // 8.0D-10B-4C3A): the pure read adapter. Every other production reference to
+    // a `.get(`/`.size` on a correlation handle stays forbidden - there is still
+    // no application reader, and nothing reads besides that one module.
     const readers = matching(/\w*[Cc]orrelation\w*\.(?:get\(|size\b)/)
-    expect(readers).toEqual([])
+    expect(readers).toEqual([
+      'apps/stage-tamagotchi/src/main/services/lia/brain-correlation-reader.ts',
+    ])
+    const readAdapter = stripComments(readSource('./brain-correlation-reader.ts'))
+    expect(readAdapter.match(/\.get\(/g)).toHaveLength(1)
+    expect(readAdapter).not.toMatch(/\.size|recordDecision\(|recordExecution\(/)
 
     // The composition entry only injects/materializes.
     const entry = stripComments(readSource('../../index.ts'))

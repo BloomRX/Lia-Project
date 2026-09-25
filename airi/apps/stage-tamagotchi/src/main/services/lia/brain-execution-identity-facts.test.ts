@@ -580,10 +580,16 @@ describe('execution identity facts - authority and isolation invariants (Phase 8
     expect(source).toMatch(/modelIdentityEqual: attempt\.modelId === expected\.route\.modelId/)
   })
 
-  it('v: zero production application callers - not in main, bridges, handlers, lifecycle or renderer', () => {
+  it('v: exactly ONE pure production-code caller - the correlation snapshot reader', () => {
+    // Phase 8.0D-10B-4C3A evolved the 4C2B "zero production application callers"
+    // state into an explicit allowlist of exactly one: the narrow read adapter,
+    // which forwards ONE snapshot and reuses these facts. No application,
+    // lifecycle, bridge, handler or renderer caller exists.
     expect(productionSources(BRAIN_ROOTS)
       .filter(relative => /brain-execution-identity-facts/.test(stripComments(readFileSync(new URL(relative, REPO_ROOT), 'utf-8'))))
-      .sort()).toEqual([])
+      .sort()).toEqual([
+      'apps/stage-tamagotchi/src/main/services/lia/brain-correlation-reader.ts',
+    ])
 
     for (const relative of [
       'apps/stage-tamagotchi/src/main/index.ts',
@@ -609,11 +615,16 @@ describe('execution identity facts - authority and isolation invariants (Phase 8
     expect(source.match(/expectedExecutionRouteForBrainDecision\(/g)).toHaveLength(1)
   })
 
-  it('x: the shipped zero-reader invariant stays exactly true across production sources', () => {
-    // No production module reads a correlation handle - the same pattern the
-    // shipped guards use, re-run here.
+  it('x: the zero-reader invariant holds for every module except the ONE pure read adapter', () => {
+    // The shipped invariant was "no production reader at all". Phase
+    // 8.0D-10B-4C3A evolves it narrowly to exactly one legitimate read
+    // adapter - the same pattern the shipped guards use, re-run here. This
+    // module itself is still NOT a reader.
     expect(productionSources(BRAIN_ROOTS)
       .filter(relative => /\w*[Cc]orrelation\w*\.(?:get\(|size\b)/.test(stripComments(readFileSync(new URL(relative, REPO_ROOT), 'utf-8'))))
-      .sort()).toEqual([])
+      .sort()).toEqual([
+      'apps/stage-tamagotchi/src/main/services/lia/brain-correlation-reader.ts',
+    ])
+    expect(source).not.toMatch(/\w*[Cc]orrelation\w*\.(?:get\(|size\b)/)
   })
 })
