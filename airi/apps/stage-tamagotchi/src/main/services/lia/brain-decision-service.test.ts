@@ -1,18 +1,20 @@
-import type { LiaBrainAutomaticSelectionPolicy, LiaBrainRoutingDecision } from '@lia/core'
+import type { LiaBrainRoutingDecision } from '@lia/core'
 
 import { readdirSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { createLiaBrainService } from './lia-brain-service'
+
 /**
- * Phase 8.0D-7: the read-only Brain decision bridge.
+ * Phase 8.0D-7, corrected by 8.0D-7A: the read-only Brain decision bridge.
  *
- * Real behavior throughout: the real `brainRequirementForChatTurn` maps the
- * facts, and the service is a spy double of the shape the lifecycle hands
- * over - so these tests prove the call contract, the untrusted-input handling
- * and the read-only boundary, while confirming nothing constructs a second
- * service or catalog and no production chat code calls the bridge.
+ * Real behavior throughout. The requirement builder is a spy-wrapped copy of
+ * the real implementation and the service is either a spy double (call
+ * contract) or the REAL Stage service built over a real product snapshot
+ * (end-to-end outcome proofs). The tests pin the authority boundary: renderer
+ * input reaches capability REQUIREMENTS only, never route identity or policy.
  */
 
 const channels = vi.hoisted(() => ({
@@ -54,8 +56,25 @@ function stripComments(source: string): string {
   return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
 }
 
+/** The shared contract's Brain section, comments included. */
+function brainSection(): string {
+  const shared = readSource('../../../shared/eventa/index.ts')
+  const marker = shared.indexOf('Lia Brain chat decision')
+  expect(marker).toBeGreaterThan(-1)
+  return shared.slice(marker, shared.indexOf('export { electron }', marker))
+}
+
+/** The declared body of the request interface. */
+function requestContract(): string {
+  const section = brainSection()
+  const declaration = section.slice(section.indexOf('export interface LiaBrainChatDecisionRequest'))
+  return declaration.slice(0, declaration.indexOf('}'))
+}
+
 /** The first argument of every recorded `decide` call. */
-function decideCalls(): { automaticPolicy?: LiaBrainAutomaticSelectionPolicy, requirement: { required: string[] } }[] {
+interface DecideInput { automaticPolicy?: unknown, requirement: { required: string[] } }
+
+function decideCalls(): DecideInput[] {
   return (mocks.decide.mock.calls as unknown as [unknown][]).map(([argument]) => argument as never)
 }
 
@@ -68,6 +87,11 @@ async function loadBridge(): Promise<(request?: unknown) => LiaBrainRoutingDecis
   return handler as (request?: unknown) => LiaBrainRoutingDecision
 }
 
+/** A config owner shaped like the canonical Stage product config provider. */
+function configOwner(snapshot: unknown) {
+  return { get: () => snapshot as never }
+}
+
 /** A decision the spy service returns, standing in for the real one. */
 const SENTINEL: LiaBrainRoutingDecision = { resolution: { status: 'noPreference' }, status: 'manual' }
 
@@ -75,70 +99,81 @@ beforeEach(() => {
   vi.clearAllMocks()
 })
 
-describe('lia brain decision bridge (8.0D-7)', () => {
-  it('a: the shared contract exposes exactly one read-only Brain decision request', () => {
-    const shared = readSource('../../../shared/eventa/index.ts')
-    const brainChannels = shared.match(/define(?:Invoke)?Eventa<[^>]*>\('eventa:(?:invoke|event):lia:brain[^']*'\)/g) ?? []
-    expect(brainChannels).toEqual([
-      'defineInvokeEventa<LiaBrainChatDecision, LiaBrainChatDecisionRequest>(\'eventa:invoke:lia:brain:chat-decision\')',
-    ])
-    // No push channel and no second Brain seam anywhere in the contract.
-    expect(shared).not.toMatch(/eventa:event:lia:brain/)
-    expect(shared).not.toMatch(/electronLiaBrainChatDecisionSet|eventa:invoke:lia:brain:[a-z-]*(?:set|write|update)/)
-  })
+describe('lia brain decision bridge (Phase 8.0D-7A)', () => {
+  it('a/b/c: the request contract is facts and nothing else', () => {
+    const body = requestContract()
 
-  it('b: the request carries chat turn facts and nothing else required', () => {
-    const shared = readSource('../../../shared/eventa/index.ts')
-    const contract = shared.slice(shared.indexOf('export interface LiaBrainChatDecisionRequest'))
-    const body = contract.slice(0, contract.indexOf('}'))
+    // A: the turn facts are the request.
     expect(body).toContain('facts: LiaBrainChatTurnFacts')
-    expect(body).toContain('automaticPolicy?: LiaCoreBrainAutomaticSelectionPolicy')
-    // Facts are the canonical Lia Core type, not a renderer copy.
-    expect(shared).toContain('export type LiaBrainChatTurnFacts = LiaCoreChatTurnBrainFacts')
-    expect(shared).toContain('export type LiaBrainChatDecision = LiaCoreBrainRoutingDecision')
-  })
-
-  it('c: the request cannot carry provider/model selection fields', () => {
-    const shared = readSource('../../../shared/eventa/index.ts')
-    const contract = shared.slice(shared.indexOf('export interface LiaBrainChatDecisionRequest'))
-    const body = contract.slice(0, contract.indexOf('}'))
-    for (const forbidden of ['providerId', 'engineId', 'modelId', 'apiKey', 'baseUrl', 'endpoint', 'options'])
+    // B: no policy ownership crosses the renderer boundary...
+    expect(body).not.toContain('automaticPolicy')
+    expect(body).not.toMatch(/routes|policy/i)
+    // C: ...and no route identity either.
+    for (const forbidden of ['engineId', 'modelId', 'providerId', 'apiKey', 'baseUrl', 'endpoint', 'options'])
       expect(body, forbidden).not.toContain(forbidden)
-    // The bridge code never accepts or forwards provider-facing fields either
-    // (comments aside). `engineId`/`modelId` DO appear there - a policy is
-    // made of route references - but only as policy entries, never as any
-    // provider identity the request could hand over.
-    const source = stripComments(readSource('./brain-decision-service.ts'))
-    expect(source).not.toMatch(/providerId|apiKey|baseUrl|endpoint|options/)
-    const engineIdLines = source.split('\n').filter(line => line.includes('engineId'))
-    for (const line of engineIdLines)
-      expect(line).toMatch(/entry\.engineId|routes\.push\(\{ engineId/)
+
+    // The request type cannot even name a policy type or a route ref.
+    const section = brainSection()
+    expect(section).not.toMatch(/LiaCoreBrainAutomaticSelectionPolicy|LiaBrainAutomaticSelectionPolicy|LiaBrainRouteRef/)
+    // Exactly ONE field is declared, and it is the turn facts.
+    const fields = body.slice(body.indexOf('{') + 1).split('\n').map(line => line.trim()).filter(Boolean)
+    expect(fields).toEqual(['facts: LiaBrainChatTurnFacts'])
+    // `automaticPolicyMissing` still appears - as an honest DECISION outcome.
+    expect(section).toContain('automaticPolicyMissing')
   })
 
-  it('d: an explicit automaticPolicy passes through to the service unchanged', async () => {
-    const handler = await loadBridge()
-    mocks.decide.mockReturnValueOnce(SENTINEL)
-    const policy = { routes: [{ engineId: 'engine-a', modelId: 'model-a' }] }
+  it('d/e: malformed and extra renderer keys are ignored, only canonical booleans count', async () => {
+    const cases: [unknown, string[]][] = [
+      [{}, ['textInput', 'textOutput']],
+      // D: unknown/foreign keys - policy blobs, identity, callbacks, paths.
+      [{
+        automaticPolicy: { routes: [{ engineId: 'groq', modelId: 'openai/gpt-oss-120b' }] },
+        engineId: 'groq',
+        facts: { hasImageInput: 'yes', nested: { usesTools: true }, providerId: 'groq' },
+        modelId: 'openai/gpt-oss-120b',
+        providerId: 'groq',
+        routes: [{ engineId: 'groq', modelId: 'openai/gpt-oss-120b' }],
+      }, ['textInput', 'textOutput']],
+      // E: only explicit, canonical booleans turn a fact on.
+      [{ facts: { hasImageInput: 1, reasoningRequested: 'true', usesTools: null } }, ['textInput', 'textOutput']],
+      [{ facts: { hasImageInput: true, reasoningRequested: true, usesTools: true } }, ['textInput', 'imageInput', 'textOutput', 'reasoning', 'toolCalling']],
+      [{ facts: { hasImageInput: false, reasoningRequested: false, usesTools: false } }, ['textInput', 'textOutput']],
+      // A request shape from the previous phase is not honoured either.
+      [{ automaticPolicy: { routes: [{ engineId: 'groq', modelId: 'openai/gpt-oss-120b' }] }, facts: {} }, ['textInput', 'textOutput']],
+    ]
 
-    const result = handler({ automaticPolicy: policy, facts: {} })
+    for (const [request, expected] of cases) {
+      vi.clearAllMocks()
+      mocks.decide.mockReturnValueOnce(SENTINEL)
+      const current = await loadBridge()
+      current(request)
 
-    expect(mocks.decide).toHaveBeenCalledTimes(1)
-    const [call] = decideCalls()
-    expect(call.automaticPolicy).toEqual(policy)
-    expect(result).toBe(SENTINEL)
+      const [call] = decideCalls()
+      expect(call.requirement, JSON.stringify(request)).toEqual({ required: expected })
+      // H: nothing policy-shaped was forwarded, in any shape.
+      expect('automaticPolicy' in call).toBe(false)
+      expect(JSON.stringify(call)).not.toMatch(/automaticPolicy|routes|groq|engineId/)
+    }
   })
 
-  it('e: the handler calls the canonical brainRequirementForChatTurn with the turn facts', async () => {
+  it('f/g: sanitized facts feed the canonical builder, whose exact requirement reaches decide', async () => {
     const handler = await loadBridge()
     mocks.decide.mockReturnValueOnce(SENTINEL)
 
-    handler({ facts: { hasImageInput: true, usesTools: true } })
+    handler({ facts: { hasImageInput: true, junk: 'x', usesTools: true } })
 
+    // F: the builder receives ONLY the sanitized facts, rebuilt fresh.
     expect(mocks.requirementForChatTurn).toHaveBeenCalledTimes(1)
     expect(mocks.requirementForChatTurn).toHaveBeenCalledWith({ hasImageInput: true, usesTools: true })
+    const [factsArg] = mocks.requirementForChatTurn.mock.calls[0] as [Record<string, unknown>]
+    expect(Object.keys(factsArg).sort()).toEqual(['hasImageInput', 'usesTools'])
+    // G: the very object the builder returned travelled - no re-derivation.
+    const [call] = decideCalls()
+    expect(call.requirement).toBe(mocks.requirementForChatTurn.mock.results.at(-1)?.value)
+    expect(call.requirement).toEqual({ required: ['textInput', 'imageInput', 'textOutput', 'toolCalling'] })
   })
 
-  it('f/j/k/l/m: the EXACT resulting requirement reaches decide - baseline, image, tools, reasoning', async () => {
+  it('g: every canonical requirement shape survives the bridge unchanged', async () => {
     const cases = [
       { facts: {}, expected: ['textInput', 'textOutput'] },
       { facts: { hasImageInput: true }, expected: ['textInput', 'imageInput', 'textOutput'] },
@@ -154,94 +189,109 @@ describe('lia brain decision bridge (8.0D-7)', () => {
 
       const [call] = decideCalls()
       expect(call.requirement, JSON.stringify(facts)).toEqual({ required: expected })
-      // The very object the builder returned travelled - no re-derivation.
-      expect(call.requirement).toBe(mocks.requirementForChatTurn.mock.results.at(-1)?.value)
-      expect(call.automaticPolicy).toBeUndefined()
     }
   })
 
-  it('g/h: the bridge constructs neither a service nor a catalog', () => {
-    const source = readSource('./brain-decision-service.ts')
-    expect(source).not.toMatch(/createLiaBrainService|createProductionBrainCatalog/)
-    expect(source).not.toMatch(/groq|gpt-oss|brain\/adapters/)
-    // The service arrives as a dependency (injected), never imported as a factory.
-    expect(source).toContain('brain: Pick<LiaBrainService, \'decide\'>')
-  })
-
-  it('i: the handler returns the exact LiaBrainRoutingDecision, unflattened', async () => {
-    const handler = await loadBridge()
-    const ambiguous: LiaBrainRoutingDecision = { ref: { engineId: 'engine-a', modelId: 'model-a' }, status: 'ambiguous' }
-    const automaticMissing: LiaBrainRoutingDecision = { status: 'automaticPolicyMissing' }
-
-    mocks.decide.mockReturnValueOnce(ambiguous)
-    expect(handler({ facts: {} })).toBe(ambiguous)
-    mocks.decide.mockReturnValueOnce(automaticMissing)
-    expect(handler({ facts: {} })).toBe(automaticMissing)
-  })
-
-  it('n/o: an absent policy stays absent, and automaticPolicyMissing passes through as data', async () => {
-    const handler = await loadBridge()
-    const missing: LiaBrainRoutingDecision = { status: 'automaticPolicyMissing' }
-    mocks.decide.mockReturnValueOnce(missing)
-
-    const result = handler({ facts: {} })
-
-    const [call] = decideCalls()
-    expect(call.automaticPolicy).toBeUndefined()
-    expect(result).toEqual({ status: 'automaticPolicyMissing' })
-
-    // A malformed policy degrades to absent rather than becoming a default.
-    vi.clearAllMocks()
-    mocks.decide.mockReturnValueOnce(missing)
-    handler({ automaticPolicy: { routes: [{ engineId: 42 }] }, facts: {} })
-    const [malformed] = decideCalls()
-    expect(malformed.automaticPolicy).toBeUndefined()
-  })
-
-  it('untrusted input: foreign keys, callbacks and malformed facts never reach the routing stack', async () => {
+  it('h: decide is called with the requirement field and nothing else', async () => {
     const handler = await loadBridge()
     mocks.decide.mockReturnValueOnce(SENTINEL)
 
-    handler({
-      // An attacker-style payload: identity, callbacks, paths, non-booleans.
-      facts: {
-        hasImageInput: 'yes',
-        providerId: 'groq',
-        reasoningRequested: 1,
-        usesTools: () => true,
-      },
-      providerId: 'groq',
-    })
+    handler({ facts: { reasoningRequested: true } })
 
+    expect(mocks.decide).toHaveBeenCalledTimes(1)
     const [call] = decideCalls()
-    // Only honest `true` facts count: everything else reads as "not needed".
-    expect(call.requirement).toEqual({ required: ['textInput', 'textOutput'] })
+    expect(Object.keys(call)).toEqual(['requirement'])
     expect(call.automaticPolicy).toBeUndefined()
-    expect(JSON.stringify(call)).not.toMatch(/groq/)
+    expect('automaticPolicy' in call).toBe(false)
   })
 
-  it('p: the handler performs no config write, network, provider or chat-state work', () => {
-    const source = readSource('./brain-decision-service.ts')
+  it('i: automatic mode without a trusted policy reports automaticPolicyMissing - the real service path', async () => {
+    // The REAL Stage service over a real snapshot in automatic mode. The
+    // bridge cannot supply a policy, so no route may be invented.
+    const service = createLiaBrainService({ liaProductConfig: configOwner({ brain: { mode: 'automatic' } }) })
+    mocks.handlers.clear()
+    const { registerLiaBrainDecisionBridge } = await import('./brain-decision-service')
+    registerLiaBrainDecisionBridge({ brain: service, context: {} as never })
+    const handler = mocks.handlers.get(channels.decision) as (request?: unknown) => LiaBrainRoutingDecision
+
+    expect(handler({ facts: {} })).toEqual({ status: 'automaticPolicyMissing' })
+    // Same answer with the richest requirement facts: capability needs never
+    // become route precedence.
+    expect(handler({ facts: { hasImageInput: true, reasoningRequested: true, usesTools: true } }))
+      .toEqual({ status: 'automaticPolicyMissing' })
+    // And a renderer-supplied pseudo-policy changes NOTHING (ignored key).
+    expect(handler({ automaticPolicy: { routes: [{ engineId: 'groq', modelId: 'openai/gpt-oss-120b' }] }, facts: {} }))
+      .toEqual({ status: 'automaticPolicyMissing' })
+  })
+
+  it('i/j: canonical decisions pass through unchanged, response type unmapped', async () => {
+    const handler = await loadBridge()
+    const decisions: LiaBrainRoutingDecision[] = [
+      { status: 'automaticPolicyMissing' },
+      { resolution: { status: 'noPreference' }, status: 'manual' },
+      { ref: { engineId: 'engine-a', modelId: 'model-a' }, status: 'ambiguous' },
+      { status: 'noCandidates' },
+      { status: 'disabled' },
+    ]
+
+    for (const decision of decisions) {
+      mocks.decide.mockReturnValueOnce(decision)
+      expect(handler({ facts: {} })).toBe(decision)
+    }
+
+    // J: the response is the canonical Lia Core type, not a renderer model.
+    const shared = readSource('../../../shared/eventa/index.ts')
+    expect(shared).toContain('export type LiaBrainChatDecision = LiaCoreBrainRoutingDecision')
+    expect(brainSection()).not.toMatch(/interface LiaBrainChatDecision\b/)
+    // I: the field name survives in the decision vocabulary only.
+    expect(readSource('./brain-decision-service.ts')).not.toMatch(/flatten|adaptDecision|toRenderer/)
+  })
+
+  it('k/l: the bridge reuses the injected service and constructs none', () => {
+    const source = stripComments(readSource('./brain-decision-service.ts'))
+    // K: the service arrives as a dependency - the lifecycle owns the instance.
+    expect(source).toContain('brain: Pick<LiaBrainService, \'decide\'>')
+    expect(source).toMatch(/brain\.decide\(\{/)
+    // L: no service, no catalog, no engine registry is built here.
+    expect(source).not.toMatch(/createLiaBrainService|createProductionBrainCatalog|createBrainEngineRegistry/)
+    // R: the lifecycle entry still wires the SAME instance in, unchanged.
+    const entry = stripComments(readSource('../../index.ts'))
+    expect(entry.match(/services:lia-brain/g)).toHaveLength(1)
+    expect(entry.match(/createLiaBrainService\(/g)).toHaveLength(1)
+    expect(entry).toContain('registerLiaBrainDecisionBridge({ context, brain: deps.liaBrain })')
+  })
+
+  it('m/n: the bridge knows no provider, no model and no route, and does no write', () => {
+    const source = stripComments(readSource('./brain-decision-service.ts'))
+
+    // M: no provider/model identity, no route handling, no policy plumbing.
+    expect(source).not.toMatch(/groq|gpt-oss|qwen|anthropic|gemini|claude|openrouter/i)
+    expect(source).not.toMatch(/readPolicy|sanitizePolicy|automaticPolicy|engineId|modelId|providerId|routes/)
+    expect(source).not.toMatch(/brain\/adapters|LiaBrainAutomaticSelectionPolicy/)
+
+    // N: read-only - no config write, no network, no SDK, no chat state.
     expect(source).not.toMatch(/from ['"](?:node:)?(fs|net|https?|child_process|dns|dgram)['/]/)
     expect(source).not.toMatch(/\bfetch\(|XMLHttpRequest|WebSocket|axios/)
     expect(source).not.toMatch(/readFile|writeFile|process\.env|vault|apiKey|secret/i)
     expect(source).not.toMatch(/updateLiaProductConfig|brainRoutingModeUpdate|brainSelectionUpdate|readLiaProductConfig/)
-    expect(source).not.toMatch(/registry\.register|createBrainEngineRegistry|decideBrainRoute|satisfiesBrainCapabilities/)
-    // The only real work: map facts -> requirement -> decide -> return.
+    expect(source).not.toMatch(/registry\.register|decideBrainRoute|satisfiesBrainCapabilities|select/)
+    // Exactly one service call per request: requirement -> decide -> return.
     expect(source.match(/brain\.decide\(/g)).toHaveLength(1)
   })
 
-  it('q: the renderer-facing contract stays free of provider/model ids', () => {
+  it('o: the shared contract exposes exactly one Brain invoke channel and no setter', () => {
     const shared = readSource('../../../shared/eventa/index.ts')
-    const marker = shared.indexOf('Lia Brain chat decision (Phase 8.0D-7)')
-    expect(marker).toBeGreaterThan(-1)
-    const brainSection = shared.slice(marker, shared.indexOf('export { electron }', marker))
-    expect(brainSection).not.toMatch(/groq|gpt-oss|qwen|anthropic|gemini|claude/i)
-    // And the preload surface is untouched: it exposes generic Electron only.
+    const brainChannels = shared.match(/eventa:(?:invoke|event):lia:brain[^']*/g) ?? []
+    expect(brainChannels).toEqual(['eventa:invoke:lia:brain:chat-decision'])
+    expect(shared).not.toMatch(/eventa:(?:invoke|event):lia:brain:[a-z-]*(?:set|write|update)/)
+    expect(shared.match(/electronLiaBrainChatDecision\b/g)?.length).toBe(1)
+
+    // The preload surface stays generic: no per-channel renderer exposure.
     expect(readSource('../../../preload/shared.ts')).not.toMatch(/brain/i)
+    expect(readSource('../../../preload/index.ts')).not.toMatch(/brain/i)
   })
 
-  it('r/s: no production chat code calls the bridge, and the seam has zero callers', () => {
+  it('p/q: no production chat code calls the bridge, and chat execution is untouched', async () => {
     const stageSrc = fileURLToPath(new URL('../../../', import.meta.url))
     const callers: string[] = []
     for (const entry of readdirSync(stageSrc, { recursive: true, withFileTypes: true })) {
@@ -263,26 +313,15 @@ describe('lia brain decision bridge (8.0D-7)', () => {
     }
     expect(callers).toEqual([])
 
-    // The chat execution files themselves carry no Brain reference.
+    // P/Q: the chat execution files carry no Brain reference at all - the
+    // renderer never invokes the channel and the paths are untouched.
     for (const relative of [
       '../../../../../../packages/stage-ui/src/stores/chat.ts',
       '../../../../../../packages/core-agent/src/runtime/chat-orchestrator-runtime.ts',
+      '../../../../../../packages/core-agent/src/runtime/llm-service.ts',
       '../../../renderer/components/InteractiveArea.vue',
     ]) {
-      expect(readSource(relative), relative).not.toMatch(/liaBrain|brainDecision|electronLiaBrainChatDecision|LiaBrainService/)
+      expect(readSource(relative), relative).not.toMatch(/liaBrain|brainDecision|electronLiaBrainChatDecision|brain:chat-decision/)
     }
-  })
-
-  it('t: the lifecycle keeps owning exactly one service instance, reused by the bridge', () => {
-    const entry = readSource('../../index.ts')
-    // Still exactly one provider and one construction...
-    expect(entry.match(/services:lia-brain/g)).toHaveLength(1)
-    expect(entry.match(/createLiaBrainService\(/g)).toHaveLength(1)
-    // ...and the bridge receives THAT instance through dependsOn.
-    const wiring = entry.slice(entry.indexOf('read-only Brain decision bridge'))
-    const invoke = wiring.slice(0, wiring.indexOf('\n  })'))
-    expect(invoke).toContain('dependsOn: { liaBrain }')
-    expect(invoke).toContain('registerLiaBrainDecisionBridge({ context, brain: deps.liaBrain })')
-    expect(invoke).not.toMatch(/createLiaBrainService|createProductionBrainCatalog/)
   })
 })

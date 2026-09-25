@@ -212,7 +212,7 @@ describe('lia brain host service (Phase 8.0D-4)', () => {
     // Within that Brain section, no host object leaks across: the request and
     // the decision are plain data, and the catalog stays host-side. Only the
     // prose may mention it.
-    const marker = eventa.indexOf('Lia Brain chat decision (Phase 8.0D-7)')
+    const marker = eventa.indexOf('Lia Brain chat decision')
     expect(marker).toBeGreaterThan(-1)
     const brainSection = eventa
       .slice(marker, eventa.indexOf('export { electron }', marker))

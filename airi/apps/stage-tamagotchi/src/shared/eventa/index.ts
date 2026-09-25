@@ -1,6 +1,5 @@
 import type { Locale } from '@intlify/core'
 import type {
-  LiaBrainAutomaticSelectionPolicy as LiaCoreBrainAutomaticSelectionPolicy,
   LiaBrainRoutingDecision as LiaCoreBrainRoutingDecision,
   LiaChatTurnBrainFacts as LiaCoreChatTurnBrainFacts,
 } from '@lia/core'
@@ -743,27 +742,26 @@ export const electronLiaCapabilitiesUpdated = defineEventa<LiaCapabilitySnapshot
 export const electronLiaVoiceEnginesList = defineInvokeEventa<Array<{ extensions: string[], id: string, label: string, roles: string[] }>>('eventa:invoke:lia:voice:engines:list')
 
 /* -------------------------------------------------------------------------- */
-/* Lia Brain chat decision (Phase 8.0D-7)                                     */
+/* Lia Brain chat decision (Phases 8.0D-7, 8.0D-7A)                          */
 /*                                                                            */
 /* READ-ONLY contract: the renderer describes WHAT the turn needs (chat turn  */
-/* facts) and may hand over an explicit automatic selection policy. It never  */
-/* names a provider, engine or model - routing identity comes from the        */
-/* persisted product state plus the production Brain catalog owned by Stage   */
-/* main. The response is the canonical Lia Core routing decision, returned    */
-/* unchanged: normal outcomes (modeUnspecified, disabled, manual failures,    */
-/* automaticPolicyMissing, noCandidates, noPolicyMatch, ambiguous) are DATA.  */
+/* facts) and NOTHING ELSE. It never names a provider, engine or model, and   */
+/* it never supplies routing policy - route identity and policy ownership     */
+/* belong to the trusted main/product layer. The response is the canonical    */
+/* Lia Core routing decision, returned unchanged: normal outcomes             */
+/* (modeUnspecified, disabled, manual failures, automaticPolicyMissing,       */
+/* noCandidates, noPolicyMatch, ambiguous) are DATA.                          */
 /* -------------------------------------------------------------------------- */
 
 /** What one chat turn needs, exactly as the chat path already describes it. */
 export type LiaBrainChatTurnFacts = LiaCoreChatTurnBrainFacts
 
 /**
- * The whole request. `facts` is the only required part and carries no
- * identity: no providerId, no engineId/modelId, no keys, endpoints or
- * options. `automaticPolicy` is optional and explicit - absent stays absent.
+ * The whole request: turn facts and nothing else. No identity and no
+ * authority cross this boundary - no providerId, no engineId/modelId, no
+ * route refs, no keys, endpoints or options.
  */
 export interface LiaBrainChatDecisionRequest {
-  automaticPolicy?: LiaCoreBrainAutomaticSelectionPolicy
   facts: LiaBrainChatTurnFacts
 }
 

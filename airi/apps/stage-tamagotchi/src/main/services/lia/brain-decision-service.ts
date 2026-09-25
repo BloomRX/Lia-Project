@@ -1,6 +1,4 @@
 import type {
-  LiaBrainAutomaticSelectionPolicy,
-  LiaBrainRouteRef,
   LiaChatTurnBrainFacts,
 } from '@lia/core'
 import type { createContext } from '@moeru/eventa/adapters/electron/main'
@@ -19,13 +17,21 @@ import { electronLiaBrainChatDecision } from '../../../shared/eventa'
 type MainContext = ReturnType<typeof createContext>['context']
 
 /**
- * Phase 8.0D-7: the read-only renderer -> main Brain decision bridge.
+ * Phase 8.0D-7, corrected by 8.0D-7A: the read-only renderer -> main Brain
+ * decision bridge.
  *
- * One typed invoke: the renderer describes WHAT one chat turn needs (facts)
- * and optionally hands over an explicit automatic selection policy; main maps
- * those facts through the canonical `brainRequirementForChatTurn(...)` and
- * asks the Stage-owned Brain service for a routing decision, which is
+ * One typed invoke: the renderer describes WHAT one chat turn needs (facts);
+ * main maps those facts through the canonical `brainRequirementForChatTurn(...)`
+ * and asks the Stage-owned Brain service for a routing decision, which is
  * returned unchanged.
+ *
+ * Authority boundary: renderer-controlled data may influence capability
+ * REQUIREMENTS only (textInput/textOutput plus imageInput, reasoning,
+ * toolCalling). It may NOT influence route identity or route precedence - the
+ * request carries no policy, because route selection belongs to the trusted
+ * main/product layer. Until a trusted production policy owner exists, an
+ * `automatic` mode reached through this bridge honestly reports
+ * `automaticPolicyMissing`.
  *
  * Read-only by construction - it computes a DECISION and grants no execution
  * authority: no config write, no provider/model selection, no registry
@@ -34,9 +40,9 @@ type MainContext = ReturnType<typeof createContext>['context']
  * module never constructs a service or a catalog.
  *
  * Renderer data is untrusted: only the contract's own shape is read, field by
- * field, into fresh plain objects. Unknown keys (a providerId, descriptor
- * blobs, callbacks, paths) are simply never looked at, so they cannot reach
- * the routing stack. No production chat code calls this yet.
+ * field, into fresh plain objects. Unknown keys (a policy blob, a providerId,
+ * descriptors, callbacks, paths) are simply never looked at, so they cannot
+ * reach the routing stack. No production chat code calls this yet.
  */
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -62,25 +68,6 @@ function readFacts(value: unknown): LiaChatTurnBrainFacts {
 }
 
 /**
- * Reads the explicit policy, keeping only well-formed route references.
- * Anything else - a missing list, a malformed entry, a foreign object - is
- * dropped rather than trusted; an empty result stays `undefined`, so a
- * missing policy keeps its honest `automaticPolicyMissing` outcome instead of
- * becoming an invented default.
- */
-function readPolicy(value: unknown): LiaBrainAutomaticSelectionPolicy | undefined {
-  if (!isRecord(value) || !Array.isArray(value.routes))
-    return undefined
-  const routes: LiaBrainRouteRef[] = []
-  for (const entry of value.routes) {
-    if (!isRecord(entry) || typeof entry.engineId !== 'string' || typeof entry.modelId !== 'string')
-      continue
-    routes.push({ engineId: entry.engineId, modelId: entry.modelId })
-  }
-  return routes.length > 0 ? { routes } : undefined
-}
-
-/**
  * Registers the bridge on the given main-process context, using the Brain
  * service the lifecycle already owns.
  */
@@ -92,7 +79,6 @@ export function registerLiaBrainDecisionBridge(params: {
 
   defineInvokeHandler(context, electronLiaBrainChatDecision, (request: LiaBrainChatDecisionRequest): LiaBrainChatDecision => {
     return brain.decide({
-      automaticPolicy: readPolicy(request?.automaticPolicy),
       requirement: brainRequirementForChatTurn(readFacts(request?.facts)),
     })
   })
