@@ -486,8 +486,13 @@ function productionMatching(pattern: RegExp): string[] {
 describe('correlation snapshot reader - authority and isolation invariants (Phase 8.0D-10B-4C3A)', () => {
   const source = stripComments(readSource('./brain-correlation-reader.ts'))
 
-  it('z: zero application/lifecycle callers - the reader is reachable from nothing but its own test', () => {
-    expect(productionMatching(/brain-correlation-reader/)).toEqual([])
+  it('z: exactly ONE production caller - the diagnostic observer, and no application/lifecycle caller', () => {
+    // Phase 8.0D-10B-4C4A evolves the 4C3A "zero callers" state into an explicit
+    // allowlist of exactly one: the tiny main-side diagnostic observer, which
+    // only invokes the read path and discards the result.
+    expect(productionMatching(/brain-correlation-reader/)).toEqual([
+      'apps/stage-tamagotchi/src/main/services/lia/brain-correlation-observer.ts',
+    ])
 
     for (const relative of [
       'apps/stage-tamagotchi/src/main/index.ts',
@@ -528,8 +533,12 @@ describe('correlation snapshot reader - authority and isolation invariants (Phas
       expect(source, duplicated).not.toContain(duplicated)
   })
 
-  it('ac: the expected-route caller allowlist stays exactly the identity-facts module', () => {
-    expect(productionMatching(/brain-expected-route/)).toEqual([IDENTITY_FACTS])
+  it('ac: the expected-route FUNCTION caller allowlist stays exactly the identity-facts module', () => {
+    // Since 8.0D-10B-4C4A the diagnostic observer references the module to
+    // consume the trusted mapping VALUE - it is not a caller. The function-call
+    // allowlist is what must stay exactly one module (the declaration itself is
+    // excluded by the `function ` lookbehind).
+    expect(productionMatching(/(?<!function )expectedExecutionRouteForBrainDecision\(/)).toEqual([IDENTITY_FACTS])
     expect(productionMatching(/brain-expected-route/)).not.toContain(READER)
     expect(productionMatching(/brain-expected-route/)).not.toContain(EXPECTED_ROUTE)
     // The dependency chain is strictly linear: reader -> facts -> expected route.

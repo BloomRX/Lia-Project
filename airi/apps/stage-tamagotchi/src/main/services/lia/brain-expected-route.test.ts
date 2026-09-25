@@ -512,19 +512,30 @@ describe('expected-route module - authority and purity invariants (Phase 8.0D-10
     expect(source).not.toMatch(comparisonPattern)
   })
 
-  it('w: exactly ONE pure production-code caller - the per-attempt identity facts module', () => {
+  it('w: exactly ONE expected-route function caller, plus ONE mapping-value consumer', () => {
     // Phase 8.0D-10B-4C2B turned the 4C2A "zero callers" state into an explicit
-    // allowlist of exactly one: the pure per-attempt facts transformation, which
-    // derives its expectation THROUGH this foundation (never by copying its
-    // route extraction, its table or its Groq identities).
-    expect(productionSources(BRAIN_ROOTS)
+    // allowlist of exactly one; Phase 8.0D-10B-4C4A adds a second MODULE
+    // reference that is NOT a caller: the diagnostic observer consumes the
+    // immutable trusted mapping VALUE and passes it to the read adapter, without
+    // ever calling the foundation's functions.
+    const moduleReferences = productionSources(BRAIN_ROOTS)
       .filter(relative => /brain-expected-route/.test(stripComments(readFileSync(new URL(relative, REPO_ROOT), 'utf-8'))))
-      .sort()).toEqual([
+      .sort()
+    expect(moduleReferences).toEqual([
+      'apps/stage-tamagotchi/src/main/services/lia/brain-correlation-observer.ts',
       'apps/stage-tamagotchi/src/main/services/lia/brain-execution-identity-facts.ts',
     ])
 
-    // Explicitly: the two producers, the composition entry and the lifecycle
-    // service of the correlation work do not name it either.
+    // The FUNCTION call allowlist stays exactly the identity-facts module - the
+    // observer must never derive a route itself.
+    // (the `function ` lookbehind excludes this module's own declaration)
+    const functionCallers = productionSources(BRAIN_ROOTS)
+      .filter(relative => /(?<!function )expectedExecutionRouteForBrainDecision\(/.test(stripComments(readFileSync(new URL(relative, REPO_ROOT), 'utf-8'))))
+      .sort()
+    expect(functionCallers).toEqual([
+      'apps/stage-tamagotchi/src/main/services/lia/brain-execution-identity-facts.ts',
+    ])
+
     for (const relative of [
       'apps/stage-tamagotchi/src/main/index.ts',
       'apps/stage-tamagotchi/src/main/services/lia/brain-decision-service.ts',

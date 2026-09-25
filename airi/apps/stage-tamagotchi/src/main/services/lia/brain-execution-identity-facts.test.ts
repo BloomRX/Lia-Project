@@ -604,9 +604,19 @@ describe('execution identity facts - authority and isolation invariants (Phase 8
     }
   })
 
-  it('w: exactly one production-code caller of the expected-route foundation - this module', () => {
+  it('w: exactly ONE expected-route function caller, plus ONE mapping-value consumer', () => {
+    // Phase 8.0D-10B-4C4A: the diagnostic observer consumes the immutable
+    // trusted mapping VALUE - it is a module reference, NOT a caller. The
+    // function-call allowlist therefore stays exactly this module.
     expect(productionSources(BRAIN_ROOTS)
       .filter(relative => /brain-expected-route/.test(stripComments(readFileSync(new URL(relative, REPO_ROOT), 'utf-8'))))
+      .sort()).toEqual([
+      'apps/stage-tamagotchi/src/main/services/lia/brain-correlation-observer.ts',
+      'apps/stage-tamagotchi/src/main/services/lia/brain-execution-identity-facts.ts',
+    ])
+    // (the `function ` lookbehind excludes the declaration in the owning module)
+    expect(productionSources(BRAIN_ROOTS)
+      .filter(relative => /(?<!function )expectedExecutionRouteForBrainDecision\(/.test(stripComments(readFileSync(new URL(relative, REPO_ROOT), 'utf-8'))))
       .sort()).toEqual([
       'apps/stage-tamagotchi/src/main/services/lia/brain-execution-identity-facts.ts',
     ])
