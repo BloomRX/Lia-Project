@@ -487,11 +487,16 @@ describe('lia brain decision bridge (Phase 8.0D-8)', () => {
     expect(source).not.toMatch(/registry\.register|satisfiesBrainCapabilities/)
 
     // The response type is canonical and unmapped, and the contract exposes
-    // exactly one read-only Brain channel - no setter, no second seam.
+    // exactly the two Brain channels of the allowlist: this read-only decision
+    // invoke and (Phase 8.0D-10B-4A) the one-way execution report - no setter,
+    // no command, no second decision seam.
     const shared = readSource('../../../shared/eventa/index.ts')
     expect(shared).toContain('export type LiaBrainChatDecision = LiaCoreBrainRoutingDecision')
-    expect(shared.match(/eventa:(?:invoke|event):lia:brain[^']*/g) ?? []).toEqual(['eventa:invoke:lia:brain:chat-decision'])
-    expect(shared).not.toMatch(/eventa:(?:invoke|event):lia:brain:[a-z-]*(?:set|write|update)/)
+    expect(shared.match(/eventa:(?:invoke|event):lia:brain[^']*/g) ?? []).toEqual([
+      'eventa:invoke:lia:brain:chat-decision',
+      'eventa:event:lia:brain:execution-observation',
+    ])
+    expect(shared).not.toMatch(/eventa:(?:invoke|event):lia:brain:[a-z-]*(?:set|write|update|command|select|policy|compare)/)
     expect(readSource('../../../preload/index.ts')).not.toMatch(/brain/i)
   })
 
@@ -544,9 +549,13 @@ describe('lia brain decision bridge (Phase 8.0D-8)', () => {
       for (const match of readFileSync(new URL(relative, REPO_ROOT), 'utf-8').matchAll(/eventa:(?:invoke|event):lia:brain[^'"]*/g))
         tags.add(match[0])
     }
-    // The whole production tree names exactly the single read-only decision
-    // channel - no setter, no update channel, no second seam.
-    expect([...tags].sort()).toEqual(['eventa:invoke:lia:brain:chat-decision'])
+    // The whole production tree names exactly the two-channel allowlist - the
+    // read-only decision invokes plus the 8.0D-10B-4A one-way execution report.
+    // No setter, no update channel, no command, no comparison seam.
+    expect([...tags].sort()).toEqual([
+      'eventa:event:lia:brain:execution-observation',
+      'eventa:invoke:lia:brain:chat-decision',
+    ])
   })
 
   it('isolation ac: the trusted automatic policy stays Product/main-owned', () => {

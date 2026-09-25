@@ -21,6 +21,7 @@ import App from './App.vue'
 import { shouldInstallRealChatObserver } from './diagnostics/gate'
 import { i18n } from './modules/i18n'
 import { managedRoutePolicyGuard } from './navigation/managed-route-policy'
+import { registerLiaBrainExecutionObserver } from './services/lia/execution-reporter'
 import { useLiaCapabilitiesStore } from './stores/lia/capabilities'
 import { installCustomVoiceTransport } from './stores/lia/custom-voice-transport'
 import { installLiaStartupGreeting } from './stores/lia/startup-greeting'
@@ -81,6 +82,15 @@ if (import.meta.env.DEV)
 // package and knows nothing about Electron; this is the only place the desktop
 // app connects the two.
 installCustomVoiceTransport()
+
+// Phase 8.0D-10B-4A: the ONE production registration of the Lia execution
+// observer. It hooks the generic request-start seam the chat runtime already
+// exposes (the shared layers stay Brain-blind) so that the window which
+// actually executes an LLM request reports the identity of that attempt to
+// main. Diagnostic only: it reads correlated request-start metadata and pushes
+// one one-way report - it never reads a decision, never chooses execution and
+// never stores anything.
+registerLiaBrainExecutionObserver()
 
 // Phase 7.7 (Parts 7-11): install the capability bridge so the persona
 // always answers from the product's CURRENT truth (voice configured?

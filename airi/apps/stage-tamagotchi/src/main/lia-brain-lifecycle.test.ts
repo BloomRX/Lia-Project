@@ -115,14 +115,19 @@ describe('lia brain service lifecycle ownership (Phase 8.0D-5)', () => {
     expect(source.match(/from '\.\/services\/lia\/lia-brain/g)).toHaveLength(1)
   })
 
-  it('j: the only Brain renderer surface is the read-only decision request', () => {
+  it('j: the Brain renderer surface is the read-only decision request plus the one-way execution report', () => {
     // Phase 8.0D-7 added exactly one renderer-facing Brain seam: a read-only
-    // invoke. Nothing else may cross: no setter, no push event, no catalog or
-    // registry exposure, no service handle.
+    // invoke. Phase 8.0D-10B-4A adds exactly one more, and it is a one-way
+    // REPORT (renderer -> main, no response, no authority). Nothing else may
+    // cross: no setter, no command, no selector, no comparison result, no
+    // catalog or registry exposure, no service handle.
     const shared = readSource('../shared/eventa/index.ts')
     const brainChannels = shared.match(/eventa:(?:invoke|event:):?lia:brain[^']*/g) ?? []
-    expect(brainChannels).toEqual(['eventa:invoke:lia:brain:chat-decision'])
-    expect(shared).not.toMatch(/eventa:event:lia:brain/)
+    expect(brainChannels).toEqual([
+      'eventa:invoke:lia:brain:chat-decision',
+      'eventa:event:lia:brain:execution-observation',
+    ])
+    expect(shared).not.toMatch(/eventa:event:lia:brain:(?!execution-observation)/)
     expect(shared).not.toMatch(/electronLiaBrainChatDecisionSet/)
     for (const relative of ['../preload/index.ts', '../renderer/stores/lia/provider.ts']) {
       expect(readSource(relative), relative).not.toMatch(/brain/i)

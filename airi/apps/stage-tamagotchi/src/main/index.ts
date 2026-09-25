@@ -43,6 +43,7 @@ import { setupAutoUpdater } from './services/electron/auto-updater'
 import { setupGlobalShortcutService } from './services/electron/global-shortcut'
 import { setupPermissionHandlers } from './services/electron/media-permissions'
 import { registerLiaBrainDecisionBridge } from './services/lia/brain-decision-service'
+import { registerLiaBrainExecutionReportHandler } from './services/lia/brain-execution-report-service'
 import { createLiaBrainService } from './services/lia/lia-brain-service'
 import { startLiaMainWindowVoiceRuntime } from './services/lia/main-window-voice-runtime'
 import { registerLiaProviderConfigBridge } from './services/lia/provider-config-service'
@@ -403,6 +404,18 @@ app.whenReady().then(async () => {
     callback: async (deps) => {
       const { context } = createContext(ipcMain)
       registerLiaBrainDecisionBridge({ context, brain: deps.liaBrain })
+    },
+  })
+
+  // Phase 8.0D-10B-4A: the one-way Lia execution observation report. It is
+  // diagnostic only and deliberately depends on NOTHING - not on the Brain
+  // service, not on product config: the handler sanitizes, requires the
+  // logical-send key and discards the report.
+  injeca.invoke({
+    dependsOn: {},
+    callback: async () => {
+      const { context } = createContext(ipcMain)
+      registerLiaBrainExecutionReportHandler({ context })
     },
   })
 

@@ -782,5 +782,47 @@ export type LiaBrainChatDecision = LiaCoreBrainRoutingDecision
 /** Pull: the routing decision for one described chat turn (read-only). */
 export const electronLiaBrainChatDecision = defineInvokeEventa<LiaBrainChatDecision, LiaBrainChatDecisionRequest>('eventa:invoke:lia:brain:chat-decision')
 
+/* -------------------------------------------------------------------------- */
+/* Lia Brain execution observation (Phase 8.0D-10B-4A)                        */
+/*                                                                            */
+/* ONE-WAY report, renderer (the window that actually executes the request)   */
+/* -> trusted main process, and nothing else. It carries the identity of one  */
+/* attempt that is starting right now - never a prompt, a message, a tool, an */
+/* attachment, a credential, an endpoint, a provider object, a Brain decision */
+/* or a routing policy.                                                       */
+/*                                                                            */
+/* It is a REPORT, not a request: no response is read, no command is granted  */
+/* and no setter authority exists on this channel. Main sanitizes the five    */
+/* string fields and DISCARDS them; nothing is retained and nothing is        */
+/* compared. The identities are UNTRUSTED diagnostic claims - they can never  */
+/* select a route, change a policy, choose a provider/model, trigger a        */
+/* fallback or authorize anything.                                            */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The whole execution report: five string identities, exactly.
+ *
+ * `correlationId` is the opaque logical-send key the execution path already
+ * carries for the attempt (the same value the Brain shadow request carries);
+ * the other four describe the attempt main is being told about. All five are
+ * plain strings by contract - anything else is dropped by the tolerant readers
+ * on either side.
+ */
+export interface LiaBrainExecutionObservationReport {
+  /** Opaque key of the logical user send this attempt belongs to. */
+  correlationId: string
+  /** Application conversation that owns the round. */
+  conversationId: string
+  /** Stable round key of the attempt that is starting. */
+  roundId: string
+  /** Provider id that executes this attempt (untrusted diagnostic claim). */
+  providerId: string
+  /** Model id that executes this attempt (untrusted diagnostic claim). */
+  modelId: string
+}
+
+/** Push: one attempt of a correlated logical send started executing (write-only report). */
+export const electronLiaBrainExecutionObservation = defineEventa<LiaBrainExecutionObservationReport>('eventa:event:lia:brain:execution-observation')
+
 export { electron } from '@proj-airi/electron-eventa'
 export * from '@proj-airi/electron-eventa/electron-updater'
