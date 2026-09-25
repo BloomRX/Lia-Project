@@ -512,10 +512,16 @@ describe('expected-route module - authority and purity invariants (Phase 8.0D-10
     expect(source).not.toMatch(comparisonPattern)
   })
 
-  it('zero production callers: the module is reachable from nothing but its own test', () => {
+  it('w: exactly ONE pure production-code caller - the per-attempt identity facts module', () => {
+    // Phase 8.0D-10B-4C2B turned the 4C2A "zero callers" state into an explicit
+    // allowlist of exactly one: the pure per-attempt facts transformation, which
+    // derives its expectation THROUGH this foundation (never by copying its
+    // route extraction, its table or its Groq identities).
     expect(productionSources(BRAIN_ROOTS)
       .filter(relative => /brain-expected-route/.test(stripComments(readFileSync(new URL(relative, REPO_ROOT), 'utf-8'))))
-      .sort()).toEqual([])
+      .sort()).toEqual([
+      'apps/stage-tamagotchi/src/main/services/lia/brain-execution-identity-facts.ts',
+    ])
 
     // Explicitly: the two producers, the composition entry and the lifecycle
     // service of the correlation work do not name it either.
