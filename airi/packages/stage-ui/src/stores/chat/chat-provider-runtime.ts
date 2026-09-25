@@ -13,6 +13,9 @@
  *   build; it is never persisted and never logged.
  * - {@link registerChatFallbackResolver}: decides, after a *recoverable* send
  *   failure, whether to retry the same message with another provider/model.
+ * - {@link registerChatRequestStartedObserver}: observes that one LLM request
+ *   is starting, with the provider/model identity resolved for that attempt.
+ *   Notification only - it can neither choose nor alter execution.
  *
  * Nothing is imported from Electron here. Without any registration every
  * consumer (web, pocket, …) behaves exactly as before — these hooks are purely
@@ -55,8 +58,35 @@ export type ChatFallbackResolver = (
   ctx: ChatFallbackContext,
 ) => ChatProviderCandidate | undefined | Promise<ChatProviderCandidate | undefined>
 
+/**
+ * Phase 8.0D-10B-2: the smallest generic observation of one LLM request start.
+ *
+ * Plain metadata only - the identity the runtime resolved for THIS attempt
+ * plus its existing round correlation. No provider object, no request body, no
+ * prompt/messages, no headers, no credential, no endpoint: an observer can
+ * describe which provider/model ran, and nothing else.
+ */
+export interface ChatRequestStartedObservation {
+  /** Application conversation that owns the round. */
+  conversationId: string
+  /** Stable round key of the attempt about to reach the provider. */
+  roundId: string
+  /** Provider id that executes this attempt. */
+  providerId: string
+  /** Model id that executes this attempt. */
+  modelId: string
+}
+
+/**
+ * Observes that an LLM request is starting. Return value is ignored: this is a
+ * notification, never a decision - it cannot supply a provider/model, pick a
+ * retry target, cancel the request or transform it.
+ */
+export type ChatRequestStartedObserver = (observation: ChatRequestStartedObservation) => void
+
 let providerCredentialResolver: ProviderCredentialResolver | undefined
 let chatFallbackResolver: ChatFallbackResolver | undefined
+let chatRequestStartedObserver: ChatRequestStartedObserver | undefined
 
 /** Hard ceiling on total attempts per message (primary + fallbacks). */
 export const CHAT_FALLBACK_MAX_ATTEMPTS = 4
@@ -69,6 +99,15 @@ export function registerChatFallbackResolver(resolver?: ChatFallbackResolver): v
   chatFallbackResolver = resolver
 }
 
+/**
+ * Installs (or with `undefined` clears) the single request-start observer.
+ * Registration alone does nothing: the observer only ever runs when the
+ * runtime reports that a request is starting.
+ */
+export function registerChatRequestStartedObserver(observer?: ChatRequestStartedObserver): void {
+  chatRequestStartedObserver = observer
+}
+
 export function getProviderCredentialResolver(): ProviderCredentialResolver | undefined {
   return providerCredentialResolver
 }
@@ -77,7 +116,34 @@ export function getChatFallbackResolver(): ChatFallbackResolver | undefined {
   return chatFallbackResolver
 }
 
+export function getChatRequestStartedObserver(): ChatRequestStartedObserver | undefined {
+  return chatRequestStartedObserver
+}
+
+/**
+ * Forwards one request-start observation to the registered observer, if any.
+ *
+ * Failure isolation: an observer is diagnostic, so a throwing observer is
+ * swallowed right here - execution continues, nothing is retried, no fallback
+ * is triggered and no error reaches the chat. The observation object is passed
+ * through untouched (no defaults are applied); with no observer registered this
+ * is a no-op.
+ */
+export function notifyChatRequestStarted(observation: ChatRequestStartedObservation): void {
+  const observer = chatRequestStartedObserver
+  if (!observer)
+    return
+
+  try {
+    observer(observation)
+  }
+  catch {
+    // Downstream-only: an observer must never be able to break a send.
+  }
+}
+
 export function resetChatProviderRuntimeExtensionsForTesting(): void {
   providerCredentialResolver = undefined
   chatFallbackResolver = undefined
+  chatRequestStartedObserver = undefined
 }

@@ -4,6 +4,7 @@ import type { Message, Tool } from '@xsai/shared-chat'
 import type { SyncedPiniaRuntime } from 'pinia-plugin-synced'
 
 import type { ChatSendPayload } from './chat'
+import type { ChatRequestStartedObservation, ChatRequestStartedObserver } from './chat/chat-provider-runtime'
 
 import { errorMessageFrom } from '@moeru/std'
 import { IOAttributes, IOSpanNames } from '@proj-airi/stage-shared'
@@ -17,7 +18,7 @@ import {
   AIRI_CHAT_SESSION_ID_HEADER,
 } from '../libs/analytics-headers'
 import { useChatStore } from './chat'
-import { registerChatFallbackResolver, resetChatProviderRuntimeExtensionsForTesting } from './chat/chat-provider-runtime'
+import { registerChatFallbackResolver, registerChatRequestStartedObserver, resetChatProviderRuntimeExtensionsForTesting } from './chat/chat-provider-runtime'
 import { useConsciousnessSettingsStore } from './modules/consciousness-settings'
 
 vi.hoisted(() => {
@@ -1034,7 +1035,13 @@ describe('chat store contract', () => {
   // for THIS attempt into the request metadata, while execution keeps using the
   // exact same provider instance and model string as before.
   describe('carried provider identity in the send contract', () => {
-    afterEach(() => resetChatProviderRuntimeExtensionsForTesting())
+    afterEach(() => {
+      resetChatProviderRuntimeExtensionsForTesting()
+      // These tests deliberately swap the live selection; restore the harness
+      // defaults so later tests in this file observe the documented state.
+      activeProviderRef.value = 'mock-provider'
+      activeModelRef.value = 'gpt-test'
+    })
 
     function streamWithUsage() {
       llmStreamMock.mockImplementation(async (_model: string, _chatProvider: ChatProvider, _messages: Message[], options: any) => {
@@ -1123,6 +1130,156 @@ describe('chat store contract', () => {
         'mock-provider',
         'fallback-provider',
       ])
+    })
+  })
+  // Phase 8.0D-10B-2: the generic request-start seam, observed through the real
+  // store wiring. The observer is downstream-only: it receives plain metadata
+  // and can neither break nor steer a send.
+  describe('request-start observation', () => {
+    afterEach(() => {
+      resetChatProviderRuntimeExtensionsForTesting()
+      // These tests deliberately swap the live selection; restore the harness
+      // defaults so later tests in this file observe the documented state.
+      activeProviderRef.value = 'mock-provider'
+      activeModelRef.value = 'gpt-test'
+    })
+
+    function streamOnce() {
+      llmStreamMock.mockImplementation(async (_model: string, _chatProvider: ChatProvider, _messages: Message[], options: any) => {
+        await options.onStreamEvent({ type: 'text-delta', text: 'ok' })
+        await options.onStreamEvent({ type: 'finish', finishReason: 'stop' })
+      })
+    }
+
+    it('f/g/h/i/j/k: fires exactly once per request with the exact per-attempt metadata', async () => {
+      streamOnce()
+      const observations: ChatRequestStartedObservation[] = []
+      registerChatRequestStartedObserver(observation => observations.push(observation))
+
+      const store = useChatStore()
+      await store.send({ sessionId: 'session-1', text: 'hello' })
+
+      // F: one request, one observation.
+      expect(observations).toHaveLength(1)
+      const [observation] = observations
+
+      // G: exact correlation + identity fields.
+      expect(observation.conversationId).toBe('session-1')
+      expect(observation.roundId).toEqual(expect.any(String))
+      expect(observation.roundId.length).toBeGreaterThan(0)
+      expect(observation.providerId).toBe('mock-provider')
+      expect(observation.modelId).toBe('gpt-test')
+
+      // G (cont.): the roundId is the very round that reached the provider.
+      expect(observation.roundId).toBe(chatAnalyticsMocks.trackMessageRound.mock.calls[0]?.[0].round_id)
+
+      // H/I: the identity equals the carried per-attempt metadata and the exact
+      // runtime model - the same values execution used.
+      expect(observation.providerId).toBe('mock-provider')
+      expect(observation.modelId).toBe(llmStreamMock.mock.calls[0]?.[0])
+
+      // J/K/L: metadata only - no prompt, messages, tools, credential, endpoint
+      // or provider object, and the object is a fresh plain-data copy rather
+      // than the runtime's send options.
+      expect(Object.keys(observation).sort()).toEqual([
+        'conversationId',
+        'modelId',
+        'providerId',
+        'roundId',
+      ])
+      for (const value of Object.values(observation))
+        expect(typeof value).toBe('string')
+    })
+
+    it('observes a generic direct ingest too, without adding any field of its own', async () => {
+      streamOnce()
+      const observations: ChatRequestStartedObservation[] = []
+      registerChatRequestStartedObserver(observation => observations.push(observation))
+
+      const store = useChatStore()
+      await store.ingest('generic turn', { model: 'gpt-generic', chatProvider: provider })
+
+      // The seam is generic (not Lia-send specific) and the absent carried id
+      // still reports the existing live-store value.
+      expect(observations).toEqual([
+        {
+          conversationId: 'session-1',
+          roundId: expect.any(String),
+          providerId: 'mock-provider',
+          modelId: 'gpt-generic',
+        },
+      ])
+    })
+
+    it('m: ignores the observer return value and any mutation attempt', async () => {
+      streamOnce()
+      const observer = ((value: ChatRequestStartedObservation) => {
+        // A hostile observer returning an execution-looking object and mutating
+        // what it received must change nothing.
+        value.providerId = 'mutated-provider'
+        value.modelId = 'mutated-model'
+        return { providerId: 'hijacked-provider', modelId: 'hijacked-model' }
+      }) as unknown as ChatRequestStartedObserver
+      registerChatRequestStartedObserver(observer)
+
+      const store = useChatStore()
+      await store.send({ sessionId: 'session-1', text: 'hello' })
+
+      expect(llmStreamMock).toHaveBeenCalledTimes(1)
+      expect(llmStreamMock.mock.calls[0]?.[0]).toBe('gpt-test')
+      expect(llmStreamMock.mock.calls[0]?.[1]).toBe(provider)
+      expect(getChatProviderInstanceMock).toHaveBeenCalledTimes(1)
+    })
+
+    it('n/o/p: a throwing observer cannot break the send, execution inputs or fallback policy', async () => {
+      streamOnce()
+      const fallbackResolver = vi.fn(async () => undefined)
+      registerChatFallbackResolver(fallbackResolver)
+      registerChatRequestStartedObserver(() => {
+        throw new Error('observer exploded')
+      })
+
+      const store = useChatStore()
+      await expect(store.send({ sessionId: 'session-1', text: 'hello' })).resolves.toBeDefined()
+
+      // N: the request still reached the provider and completed.
+      expect(llmStreamMock).toHaveBeenCalledTimes(1)
+      // O: execution inputs are byte-for-byte the ones this attempt resolved.
+      expect(llmStreamMock.mock.calls[0]?.[0]).toBe('gpt-test')
+      expect(llmStreamMock.mock.calls[0]?.[1]).toBe(provider)
+      // P: no retry and no fallback decision were triggered by the failure.
+      expect(getChatProviderInstanceMock).toHaveBeenCalledTimes(1)
+      expect(fallbackResolver).not.toHaveBeenCalled()
+      expect(chatAnalyticsMocks.trackMessageRoundFailed).not.toHaveBeenCalled()
+      // The turn really completed: the assistant reply is persisted.
+      expect(sessionMessages['session-1']?.at(-1)).toMatchObject({ role: 'assistant', content: 'ok' })
+    })
+
+    it('q/r/s/t: every attempt gets its own observation, with distinct rounds', async () => {
+      llmStreamMock.mockRejectedValueOnce(new Error('recoverable failure'))
+      streamOnce()
+      const observations: ChatRequestStartedObservation[] = []
+      registerChatRequestStartedObserver(observation => observations.push(observation))
+      registerChatFallbackResolver(async () => {
+        activeProviderRef.value = 'fallback-provider'
+        activeModelRef.value = 'fallback-model'
+        return { providerId: 'fallback-provider', modelId: 'fallback-model' }
+      })
+
+      const store = useChatStore()
+      await store.send({ sessionId: 'session-1', text: 'hello' })
+
+      // Q + R: the failed attempt and the second attempt are both observed.
+      expect(observations).toHaveLength(2)
+      expect(observations[0]).toMatchObject({ providerId: 'mock-provider', modelId: 'gpt-test' })
+      // S: the second observation carries the fallback identity.
+      expect(observations[1]).toMatchObject({ providerId: 'fallback-provider', modelId: 'fallback-model' })
+      // T: each attempt runs its own round, so the round keys stay distinct.
+      expect(observations[1].roundId).not.toBe(observations[0].roundId)
+      // Execution itself is untouched by the observation.
+      expect(llmStreamMock.mock.calls[0]?.[0]).toBe('gpt-test')
+      expect(llmStreamMock.mock.calls[1]?.[0]).toBe('fallback-model')
+      expect(getChatProviderInstanceMock).toHaveBeenCalledTimes(2)
     })
   })
 })

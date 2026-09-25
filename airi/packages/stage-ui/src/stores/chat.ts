@@ -27,7 +27,7 @@ import { useLLM } from './ai/chat-llm/llm'
 import { resolveLlmTools } from './ai/chat-llm/tool-resolver'
 import { useLlmToolsStore } from './ai/chat-llm/tools'
 import { useLlmToolsetPromptsStore } from './ai/chat-llm/toolset-prompts'
-import { CHAT_FALLBACK_MAX_ATTEMPTS, getChatFallbackResolver } from './chat/chat-provider-runtime'
+import { CHAT_FALLBACK_MAX_ATTEMPTS, getChatFallbackResolver, notifyChatRequestStarted } from './chat/chat-provider-runtime'
 import { createMinecraftContext } from './chat/context-providers'
 import { liaCapabilityPromptSupplement } from './chat/context-providers/lia-capabilities'
 import { useChatContextStore } from './chat/context-store'
@@ -320,6 +320,22 @@ export const useChatStore = defineStore('chat', () => {
     unwrapMessage: message => toRaw(message),
     onStateChange: syncRuntimeState,
     onSendSettled: settleOwnedActiveTurnSpan,
+    // Phase 8.0D-10B-2: the existing authoritative request-start moment is
+    // forwarded - unchanged, and only as metadata - to the optional observer
+    // registered through the shared chat-provider-runtime extension point. The
+    // payload already carries the per-attempt identity (8.0D-10B-1), so this is
+    // a pure field mapping: no identity lookup, no store read, no provider
+    // resolution, no catalog. Observation only: it is never awaited, cannot
+    // return an execution input, and a failing observer is isolated by
+    // `notifyChatRequestStarted`.
+    onLlmRequestStarted: (event) => {
+      notifyChatRequestStarted({
+        conversationId: event.conversationId,
+        roundId: event.roundId,
+        providerId: event.provider,
+        modelId: event.model,
+      })
+    },
     ...analyticsHooks,
     onLifecycle: record => contextObservability.recordLifecycle(record),
     onPromptProjection: payload => contextObservability.capturePromptProjection(payload),
