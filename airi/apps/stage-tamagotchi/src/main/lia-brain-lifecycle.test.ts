@@ -77,7 +77,10 @@ describe('lia brain service lifecycle ownership (Phase 8.0D-5)', () => {
   it('c: the lifecycle owns exactly ONE Brain service instance', () => {
     const source = mainEntry()
     // One provider registration for the whole main process...
-    expect(source.match(/services:lia-brain/g)).toHaveLength(1)
+    // The EXACT id, not a prefix: 8.0D-10B-4B2 adds a sibling provider
+    // (`services:lia-brain-correlation`) that must not be confused with this one.
+    expect(source.match(/services:lia-brain'/g)).toHaveLength(1)
+    expect(source.match(/services:lia-brain-correlation'/g)).toHaveLength(1)
     // ...and exactly five references to the handle: its declaration, the boot
     // invoke that materializes it, that invoke's touch, and the read-only
     // decision bridge (8.0D-7) that receives the SAME instance - its invoke

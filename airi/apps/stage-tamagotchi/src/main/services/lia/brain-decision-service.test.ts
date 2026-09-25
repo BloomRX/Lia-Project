@@ -502,7 +502,9 @@ describe('lia brain decision bridge (Phase 8.0D-8)', () => {
 
   it('the lifecycle keeps owning exactly one service instance, reused by the bridge', () => {
     const entry = stripComments(readSource('../../index.ts'))
-    expect(entry.match(/services:lia-brain/g)).toHaveLength(1)
+    // The EXACT id (not the prefix of the sibling correlation provider added in
+    // 8.0D-10B-4B2) still names exactly one provider.
+    expect(entry.match(/services:lia-brain'/g)).toHaveLength(1)
     expect(entry.match(/createLiaBrainService\(/g)).toHaveLength(1)
     expect(entry).toContain('registerLiaBrainDecisionBridge({ context, brain: deps.liaBrain })')
     // The trusted policy is NOT created in the composition entry - the bridge

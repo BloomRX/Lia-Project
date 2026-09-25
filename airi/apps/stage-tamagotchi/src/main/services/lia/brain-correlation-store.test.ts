@@ -478,10 +478,20 @@ describe('lia brain correlation store - isolation invariants (Phase 8.0D-10B-4B1
       ['apps/stage-tamagotchi/src', 'packages/stage-ui/src', 'packages/core-agent/src', 'packages/lia-core/src'],
       /brain-correlation-store|createLiaBrainCorrelationStore|LiaBrainCorrelationStore/,
     )
-    // AG: no handler records into it. AH: the main entry does not instantiate
-    // it. AL: no provider-selection module can even name it - the module itself
-    // is the only production reference in the whole tree.
-    expect(storeReferences).toEqual(['apps/stage-tamagotchi/src/main/services/lia/brain-correlation-store.ts'])
+    // AG: no handler records into it. AL: no provider-selection module can even
+    // name it. Since 8.0D-10B-4B2 the composition entry legitimately MATERIALIZES
+    // the store, but only through the dedicated lifecycle service factory - the
+    // store module and that factory are the only production references.
+    expect(storeReferences).toEqual([
+      'apps/stage-tamagotchi/src/main/services/lia/brain-correlation-service.ts',
+      'apps/stage-tamagotchi/src/main/services/lia/brain-correlation-store.ts',
+    ])
+    // The pure store factory itself is CALLED in exactly ONE production module
+    // (a doc comment naming it is not a call site, so comments are stripped).
+    const factoryCallSites = productionSources(['apps/stage-tamagotchi/src', 'packages/stage-ui/src', 'packages/core-agent/src', 'packages/lia-core/src'])
+      .filter(relative => /(?<!function )createLiaBrainCorrelationStore\(/.test(stripComments(readFileSync(new URL(relative, REPO_ROOT), 'utf-8'))))
+      .sort()
+    expect(factoryCallSites).toEqual(['apps/stage-tamagotchi/src/main/services/lia/brain-correlation-service.ts'])
 
     // The handlers and the composition entry stay exactly as they were.
     expect(readFileSync(new URL('./brain-decision-service.ts', import.meta.url), 'utf-8')).not.toMatch(/correlation-store|correlationStore/)

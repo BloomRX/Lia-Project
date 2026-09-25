@@ -42,6 +42,7 @@ import { setupArtistryBridge } from './services/airi/widgets/artistry-bridge'
 import { setupAutoUpdater } from './services/electron/auto-updater'
 import { setupGlobalShortcutService } from './services/electron/global-shortcut'
 import { setupPermissionHandlers } from './services/electron/media-permissions'
+import { createLiaBrainCorrelationService } from './services/lia/brain-correlation-service'
 import { registerLiaBrainDecisionBridge } from './services/lia/brain-decision-service'
 import { registerLiaBrainExecutionReportHandler } from './services/lia/brain-execution-report-service'
 import { createLiaBrainService } from './services/lia/lia-brain-service'
@@ -209,6 +210,14 @@ app.whenReady().then(async () => {
     dependsOn: { liaProductConfig },
     build: ({ dependsOn }) => createLiaBrainService({ liaProductConfig: dependsOn.liaProductConfig }),
   })
+  // Phase 8.0D-10B-4B2: the Lia Brain correlation store - ONE ephemeral,
+  // bounded, diagnostic-only in-memory instance for the whole main process,
+  // built by its own factory with the production bounds it owns. It depends on
+  // nothing (the store is pure memory), and nothing records into it yet: the
+  // decision bridge and the execution report handler stay unaware of it in
+  // this phase.
+  const liaBrainCorrelation = injeca.provide('services:lia-brain-correlation', () =>
+    createLiaBrainCorrelationService())
   const electronApp = injeca.provide('host:electron:app', () => app)
   const autoUpdater = injeca.provide('services:auto-updater', {
     dependsOn: { appConfig },
@@ -474,6 +483,18 @@ app.whenReady().then(async () => {
     dependsOn: { liaBrain },
     callback: (deps) => {
       void deps.liaBrain
+    },
+  })
+
+  // Phase 8.0D-10B-4B2: materialize the correlation store at boot (same eager
+  // pattern as the Brain service above) so its ONE instance exists from
+  // startup with the explicit production bounds. The callback only touches the
+  // handle: it records nothing, so the store is born empty and stays empty
+  // until a future explicit caller records data.
+  injeca.invoke({
+    dependsOn: { liaBrainCorrelation },
+    callback: (deps) => {
+      void deps.liaBrainCorrelation
     },
   })
 
