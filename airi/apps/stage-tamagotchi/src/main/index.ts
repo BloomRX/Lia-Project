@@ -42,6 +42,7 @@ import { setupArtistryBridge } from './services/airi/widgets/artistry-bridge'
 import { setupAutoUpdater } from './services/electron/auto-updater'
 import { setupGlobalShortcutService } from './services/electron/global-shortcut'
 import { setupPermissionHandlers } from './services/electron/media-permissions'
+import { createLiaBrainService } from './services/lia/lia-brain-service'
 import { startLiaMainWindowVoiceRuntime } from './services/lia/main-window-voice-runtime'
 import { registerLiaProviderConfigBridge } from './services/lia/provider-config-service'
 import { createLiaSecretVault, registerLiaSecretsBridge } from './services/lia/secrets-service'
@@ -194,6 +195,18 @@ app.whenReady().then(async () => {
   // and the profiles bridge read and write the same registry.
   const liaVoiceProfiles = injeca.provide('services:lia-voice-profiles', () =>
     createLiaVoiceProfileStore({ rootDir: join(app.getPath('userData'), 'lia-voices') }))
+  // Phase 8.0D-5: the Lia Brain service - ONE instance per main-process
+  // lifetime, created through its own factory so the production Brain catalog
+  // (composed and validated during construction) has a single owner. It has
+  // NO consumers yet: the boot invoke below only materializes the instance so
+  // a broken catalog invariant fails loudly at startup instead of at a future
+  // first use. Startup evaluates nothing about routing - brain mode,
+  // preferences, capability requirements and selection policies are all
+  // caller inputs that arrive only through the service's own decide(...).
+  const liaBrain = injeca.provide('services:lia-brain', {
+    dependsOn: { liaProductConfig },
+    build: ({ dependsOn }) => createLiaBrainService({ liaProductConfig: dependsOn.liaProductConfig }),
+  })
   const electronApp = injeca.provide('host:electron:app', () => app)
   const autoUpdater = injeca.provide('services:auto-updater', {
     dependsOn: { appConfig },
@@ -422,6 +435,18 @@ app.whenReady().then(async () => {
     dependsOn: { liaProductConfig },
     callback: (deps) => {
       deps.liaProductConfig.get()
+    },
+  })
+
+  // Phase 8.0D-5: materialize the Lia Brain service at boot (same eager
+  // pattern as the product config above) so the production catalog is
+  // composed and validated exactly once per process. Touching the handle
+  // constructs the service; it calls nothing on it, so no routing decision -
+  // and no read of mode, preferences, requirement or policy - happens here.
+  injeca.invoke({
+    dependsOn: { liaBrain },
+    callback: (deps) => {
+      void deps.liaBrain
     },
   })
 

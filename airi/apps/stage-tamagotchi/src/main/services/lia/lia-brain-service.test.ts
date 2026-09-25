@@ -209,19 +209,20 @@ describe('lia brain host service (Phase 8.0D-4)', () => {
   })
 
   it('n/o: no current chat/provider code consumes the service, and those paths are untouched', () => {
-    // Zero production callers: no source file outside this service's own
-    // module/test mentions it, and the chat/provider files carry no Brain
-    // reference whatsoever.
+    // The only production caller is the Stage-main composition entry (Phase
+    // 8.0D-5 owns the instance there); no conversation path mentions the
+    // service, and the chat/provider files carry no Brain reference at all.
     const stageSrc = fileURLToPath(new URL('../../../', import.meta.url))
     const consumers: string[] = []
     for (const entry of readdirSync(stageSrc, { recursive: true, withFileTypes: true })) {
       if (!entry.isFile() || !/\.(?:ts|vue)$/.test(entry.name))
         continue
       const file = `${entry.parentPath}/${entry.name}`
-      if (file.endsWith('lia-brain-service.ts') || file.endsWith('lia-brain-service.test.ts'))
+      const relative = file.slice(stageSrc.length)
+      if (relative === 'main/services/lia/lia-brain-service.ts' || relative === 'main/index.ts' || relative.endsWith('.test.ts'))
         continue
       if (/createLiaBrainService|LiaBrainDecisionRequest|LiaBrainService\b/.test(readFileSync(file, 'utf-8')))
-        consumers.push(file.slice(stageSrc.length))
+        consumers.push(relative)
     }
     expect(consumers).toEqual([])
 
