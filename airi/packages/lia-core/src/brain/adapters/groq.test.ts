@@ -259,7 +259,9 @@ describe('current brain descriptor adapter (8.0D-2)', () => {
   it('o: the current chat/provider execution path does not consume the adapter', () => {
     // Nothing outside lia-core references the adapter or its descriptor set:
     // the source trees of both apps and the other packages are scanned and
-    // no consumer exists, so no existing behavior can depend on it yet.
+    // no PRODUCTION consumer exists, so no existing behavior can depend on
+    // it yet. Test files are skipped - they legitimately spell these names
+    // as guard patterns in their own assertions.
     const airiDir = fileURLToPath(new URL('../../../../../', import.meta.url))
     const consumers: string[] = []
     for (const root of ['apps', 'packages']) {
@@ -275,7 +277,7 @@ describe('current brain descriptor adapter (8.0D-2)', () => {
           continue
         }
         for (const entry of entries) {
-          if (!entry.isFile() || !/\.(?:ts|vue)$/.test(entry.name))
+          if (!entry.isFile() || !/\.(?:ts|vue)$/.test(entry.name) || entry.name.includes('.test.'))
             continue
           const file = `${entry.parentPath}/${entry.name}`
           if (/groqBrainDescriptors|LiaBrainDescriptorSet/.test(readFileSync(file, 'utf-8')))
