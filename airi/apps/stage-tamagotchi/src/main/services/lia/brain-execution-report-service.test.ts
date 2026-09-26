@@ -25,6 +25,9 @@ const mocks = vi.hoisted(() => ({
   // Phase 8.0D-10B-4B3: the injected correlation store, observed through its
   // single write (recording is diagnostic; the handler keeps no state of its own).
   recordExecution: vi.fn(),
+  // Phase 8.0D-10B-4C4C: the injected diagnostic observer, observed through its
+  // single trigger (observing is diagnostic too).
+  observe: vi.fn(),
 }))
 
 vi.mock('../../../shared/eventa', () => ({
@@ -76,6 +79,11 @@ function correlationStoreDouble(overrides: Partial<{ recordExecution: (report: u
   return { recordExecution: overrides.recordExecution ?? mocks.recordExecution } as never
 }
 
+/** The canonical diagnostic observer double the handler receives. */
+function correlationObserverDouble(observe: (correlationId: string) => void = mocks.observe) {
+  return { observe } as never
+}
+
 /** A context double that records the ONE listener the handler registers. */
 function fakeContext() {
   return {
@@ -89,9 +97,9 @@ function fakeContext() {
   } as never as Parameters<typeof registerLiaBrainExecutionReportHandler>[0]['context']
 }
 
-/** Registers the handler with the canonical store injected, as main does. */
-function registerHandler(store: unknown = correlationStoreDouble()): void {
-  registerLiaBrainExecutionReportHandler({ context: fakeContext(), correlationStore: store as never })
+/** Registers the handler with the canonical store + observer injected, as main does. */
+function registerHandler(store: unknown = correlationStoreDouble(), observer: unknown = correlationObserverDouble()): void {
+  registerLiaBrainExecutionReportHandler({ context: fakeContext(), correlationStore: store as never, correlationObserver: observer as never })
 }
 
 /** Deliver one report exactly as the renderer's one-way emit would. */
@@ -113,6 +121,7 @@ beforeEach(() => {
   mocks.listeners.clear()
   mocks.emitted.length = 0
   mocks.recordExecution.mockClear()
+  mocks.observe.mockClear()
 })
 
 describe('lia execution report handler (Phase 8.0D-10B-4A)', () => {
@@ -284,9 +293,10 @@ describe('lia execution report handler (Phase 8.0D-10B-4A)', () => {
 
     // The registration takes the context and nothing else - there is no
     // dependency through which execution could be touched.
-    // The registration signature gained exactly ONE dependency - the canonical
-    // correlation store the lifecycle injects (8.0D-10B-4B3).
-    expect(source).toMatch(/export function registerLiaBrainExecutionReportHandler\(params: \{\s*context: MainContext\s*correlationStore: LiaBrainCorrelationService\s*\}\): void/)
+    // The registration signature gained exactly TWO dependencies - the canonical
+    // correlation store the lifecycle injects (8.0D-10B-4B3) and the canonical
+    // diagnostic observer of the same lifecycle (8.0D-10B-4C4C).
+    expect(source).toMatch(/export function registerLiaBrainExecutionReportHandler\(params: \{\s*context: MainContext\s*correlationStore: LiaBrainCorrelationService\s*correlationObserver: LiaBrainCorrelationObserver\s*\}\): void/)
     expect(source.match(/context\.on\(/g)).toHaveLength(1)
   })
 
@@ -297,8 +307,8 @@ describe('lia execution report handler (Phase 8.0D-10B-4A)', () => {
     // report handler on the same context double.
     const decide = vi.fn(() => ({ status: 'modeUnspecified' }))
     const context = fakeContext()
-    registerLiaBrainExecutionReportHandler({ context, correlationStore: correlationStoreDouble() })
-    registerLiaBrainDecisionBridge({ context, brain: { decide } as never, correlationStore: correlationStoreDouble() })
+    registerLiaBrainExecutionReportHandler({ context, correlationStore: correlationStoreDouble(), correlationObserver: correlationObserverDouble() })
+    registerLiaBrainDecisionBridge({ context, brain: { decide } as never, correlationStore: correlationStoreDouble(), correlationObserver: correlationObserverDouble() })
 
     const askDecision = () => (mocks.listeners.get(channels.decision.id)!)({
       facts: { hasImageInput: false, reasoningRequested: false, usesTools: false },
@@ -363,7 +373,10 @@ describe('lia execution report invariants (Phase 8.0D-10B-4A)', () => {
     const entry = stripComments(readSource('../../index.ts'))
     // 8.0D-10B-4B3: the same registration also receives the lifecycle-owned
     // correlation store - still exactly one registration site.
-    expect(entry.match(/registerLiaBrainExecutionReportHandler\(\{ context, correlationStore: deps\.liaBrainCorrelation \}\)/g)).toHaveLength(1)
+    // 8.0D-10B-4C4C: the same registration now also receives the lifecycle-owned
+    // observer - still exactly one registration site, whitespace-normalized.
+    const entryCode = entry.replace(/\s+/g, ' ')
+    expect(entryCode.match(/registerLiaBrainExecutionReportHandler\(\{ context, correlationStore: deps\.liaBrainCorrelation, correlationObserver: deps\.liaBrainCorrelationObserver, \}\)/g)).toHaveLength(1)
   })
 
   it('the Brain channel allowlist is exactly the decision invoke plus the one-way report', () => {
@@ -456,5 +469,102 @@ describe('lia execution report invariants (Phase 8.0D-10B-4A)', () => {
       'observation.providerId',
       'observation.modelId',
     ])
+  })
+})
+
+describe('lia execution report handler - dual trigger (Phase 8.0D-10B-4C4C)', () => {
+  it('l/m/n: an accepted report is recorded once and then observed once, with its exact key', () => {
+    const order: string[] = []
+    mocks.recordExecution.mockImplementationOnce(() => {
+      order.push('recordExecution')
+    })
+    mocks.observe.mockImplementationOnce(() => {
+      order.push('observe')
+    })
+    registerHandler()
+
+    deliver(VALID_REPORT)
+
+    // L: exactly one diagnostic write and one observation per accepted report.
+    expect(mocks.recordExecution).toHaveBeenCalledTimes(1)
+    expect(mocks.observe).toHaveBeenCalledTimes(1)
+    // M: the observation receives the sanitized report's own key - the exact
+    // string, forwarded verbatim.
+    expect(mocks.observe).toHaveBeenCalledWith('logical-send-X')
+    expect((mocks.observe.mock.calls[0] as unknown[])[0]).toBe((mocks.recordExecution.mock.calls[0] as [{ correlationId: string }])[0].correlationId)
+    // N: the write completes BEFORE the observation.
+    expect(order).toEqual(['recordExecution', 'observe'])
+  })
+
+  it('o: an unusable report records nothing and observes nothing', () => {
+    registerHandler()
+
+    for (const report of [undefined, null, {}, { ...VALID_REPORT, correlationId: '' }, { ...VALID_REPORT, correlationId: 42 }])
+      deliver(report)
+
+    expect(mocks.recordExecution).not.toHaveBeenCalled()
+    expect(mocks.observe).not.toHaveBeenCalled()
+  })
+
+  it('p: a report that cannot be recorded is never observed', () => {
+    registerHandler(correlationStoreDouble({
+      recordExecution: () => {
+        throw new Error('diagnostic memory is gone')
+      },
+    }))
+
+    expect(() => deliver(VALID_REPORT)).not.toThrow()
+    // P: the failed write did not reach the trigger - no synthetic observation,
+    // no retry.
+    expect(mocks.observe).not.toHaveBeenCalled()
+  })
+
+  it('q: a hostile observer cannot escape the one-way handler', () => {
+    registerHandler(correlationStoreDouble(), correlationObserverDouble(() => {
+      throw new Error('hostile observer')
+    }))
+
+    // Q: the write happened, the observer threw, and the handler stays silent -
+    // no exception into chat execution and nothing emitted back.
+    expect(() => deliver(VALID_REPORT)).not.toThrow()
+    expect(mocks.recordExecution).toHaveBeenCalledTimes(1)
+    expect(mocks.emitted).toEqual([])
+    // The handler remains repeatable after a hostile observation.
+    expect(() => deliver({ ...VALID_REPORT, roundId: 'round-b' })).not.toThrow()
+    expect(mocks.emitted).toEqual([])
+  })
+
+  it('r/s: extra fields still never reach the stored report, and nothing is emitted', () => {
+    registerHandler()
+
+    // R: only the five contract fields are recorded, whichever extra renderer
+    // fields arrived...
+    deliver({ ...VALID_REPORT, text: 'private prompt', apiKey: 'sk-secret', execution: { providerId: 'anthropic' } })
+
+    const stored = (mocks.recordExecution.mock.calls[0] as [Record<string, unknown>])[0]
+    expect(Object.keys(stored).sort()).toEqual(['conversationId', 'correlationId', 'modelId', 'providerId', 'roundId'])
+    // ...and the observation is keyed by the SANITIZED report only.
+    expect(mocks.observe).toHaveBeenCalledWith('logical-send-X')
+    // S: the handler produces no response, command or emission of any kind.
+    expect(mocks.emitted).toEqual([])
+  })
+
+  it('t: the handler knows only observe(correlationId) - no reader, no mapping, no facts', () => {
+    const source = stripComments(readSource('./brain-execution-report-service.ts'))
+
+    // Type-only coupling: the contract arrives as a type, never as a factory,
+    // a reader, a mapping or a facts module.
+    expect(source).toContain(`import type { LiaBrainCorrelationObserver } from './brain-correlation-observer'`)
+    expect(source).not.toMatch(/createLiaBrainCorrelationObserver|brain-correlation-reader|readLiaBrainExecutionIdentityFacts|brain-expected-route|LIA_BRAIN_ENGINE_PROVIDER_MAPPING|brain-execution-identity-facts|providerIdentityEqual|modelIdentityEqual/)
+
+    // Exactly ONE trigger, as a bare statement with the report's OWN key - the
+    // void return is never assigned, awaited, inspected or branched on.
+    expect(source.match(/correlationObserver\.\w+/g)).toEqual(['correlationObserver.observe'])
+    expect(source).toMatch(/^\s*correlationObserver\.observe\(report\.correlationId\)$/m)
+    expect(source).not.toMatch(/=\s*correlationObserver|await correlationObserver/)
+
+    // Synchronous, same-tick, no queue and no second memory.
+    expect(source).not.toMatch(/async |await |Promise|queueMicrotask|setTimeout|setInterval|requestAnimationFrame/)
+    expect(source).not.toMatch(/\bnew Map\b|\bnew Set\b|pending|dedupe|retry|triggerQueue|lastObserved/i)
   })
 })

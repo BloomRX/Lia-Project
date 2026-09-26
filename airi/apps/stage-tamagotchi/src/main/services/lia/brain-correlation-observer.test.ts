@@ -604,26 +604,73 @@ describe('correlation observer - caller allowlists and authority (Phase 8.0D-10B
     }
   })
 
-  it('ai: the module/factory reference allowlist is exactly the composition entry, and observe() has no callers', () => {
-    // Phase 8.0D-10B-4C4B gives the observer its ONE canonical lifecycle owner:
-    // the Stage-main composition entry references the module and its factory.
+  it('zero authority: the observer cannot reach Brain, providers, config or any execution surface', () => {
+    // The whole dependency surface: the read adapter's structural type + function
+    // and the trusted mapping value - one structural dependency, nothing else.
+    expect(source.match(/^import .*$/gm)).toEqual([
+      `import type { LiaBrainCorrelationSnapshotReader } from './brain-correlation-reader'`,
+      `import { readLiaBrainExecutionIdentityFacts } from './brain-correlation-reader'`,
+      `import { LIA_BRAIN_ENGINE_PROVIDER_MAPPING } from './brain-expected-route'`,
+    ])
+
+    // No Brain service, no decision call, no policy or config write.
+    expect(source).not.toMatch(/LiaBrainService|decide\(|automaticPolicy|liaProductConfig|updateLiaProductConfig|setPreferred/)
+    // No provider/model resolution or selection.
+    expect(source).not.toMatch(/getChatProviderInstance|useProviderStore|activeProvider|activeModel|providersStore|createOpenAI|defineProvider|createProductionBrainCatalog/)
+    // No fallback, retry, tools or permissions.
+    expect(source).not.toMatch(/fallback|retry|permission|toolCall|switch|override/i)
+    // No timers, no I/O, no network, no filesystem.
+    expect(source).not.toMatch(/from ['"](?:node:)?(?:fs|net|https?|child_process|dns|dgram|timers)['/]|\bfetch\(|XMLHttpRequest|WebSocket|localStorage|sessionStorage/)
+    // No correlation memory naming either: the dependency is structural. (The
+    // factory patterns keep their call parens so this module's OWN
+    // `createLiaBrainCorrelationObserver(` cannot be mistaken for a store or
+    // service factory - the same convention the shipped guards use.)
+    expect(source).not.toMatch(/brain-correlation-store|brain-correlation-service|createLiaBrainCorrelation(?:Store|Service)\(|LiaBrainCorrelationStore\b|LiaBrainCorrelationService\b/)
+
+    // The exported surface is exactly the audited one.
+    expect([...source.matchAll(/^export (?:const|function|interface|type) (\w+)/gm)].map(match => match[1])).toEqual([
+      'LiaBrainCorrelationObserver',
+      'createLiaBrainCorrelationObserver',
+    ])
+  })
+})
+
+const DECISION_PRODUCER = 'apps/stage-tamagotchi/src/main/services/lia/brain-decision-service.ts'
+const EXECUTION_PRODUCER = 'apps/stage-tamagotchi/src/main/services/lia/brain-execution-report-service.ts'
+
+describe('correlation observer - lifecycle ownership and dual trigger (Phase 8.0D-10B-4C4C)', () => {
+  it('ai: the module references are the composition entry plus the two TYPE-ONLY producers, and the entry never observes', () => {
+    // Phase 8.0D-10B-4C4B gives the observer its ONE canonical lifecycle owner;
+    // Phase 8.0D-10B-4C4C adds the two producers, which know only the contract
+    // TYPE and the one trigger - neither creates, resolves or constructs one.
     expect(productionMatching(/brain-correlation-observer/)).toEqual([
       'apps/stage-tamagotchi/src/main/index.ts',
+      DECISION_PRODUCER,
+      EXECUTION_PRODUCER,
     ])
-    // (the `function ` lookbehind excludes the factory's own declaration, so
-    // this counts CALL sites - exactly the composition entry)
+    // A. FACTORY ownership stays exactly the composition entry (the `function `
+    // lookbehind excludes the factory's own declaration, so this counts CALLs).
     expect(productionMatching(/(?<!function )createLiaBrainCorrelationObserver\(/)).toEqual([
       'apps/stage-tamagotchi/src/main/index.ts',
     ])
 
-    // ...but OWNING it is not CALLING it: no production file invokes observe().
-    expect(productionMatching(/\.observe\(/)).toEqual([])
+    // B. The observer is triggered by EXACTLY the two producers - the callers
+    // that performed a successful diagnostic write first.
+    expect(productionMatching(/\.observe\(/)).toEqual([
+      DECISION_PRODUCER,
+      EXECUTION_PRODUCER,
+    ])
+    for (const producer of [DECISION_PRODUCER, EXECUTION_PRODUCER]) {
+      const source = stripComments(readFileSync(new URL(producer, REPO_ROOT), 'utf-8'))
+      // Type-only coupling + exactly one bare trigger statement.
+      expect(source, producer).toContain(`import type { LiaBrainCorrelationObserver } from './brain-correlation-observer'`)
+      expect(source.match(/correlationObserver\.\w+/g), producer).toEqual(['correlationObserver.observe'])
+      expect(source, producer).not.toMatch(/createLiaBrainCorrelationObserver|brain-correlation-reader|LIA_BRAIN_ENGINE_PROVIDER_MAPPING|brain-expected-route|brain-execution-identity-facts/)
+    }
 
-    // The producers, the correlation service and every renderer layer stay
+    // The correlation service, the read adapter and every renderer layer stay
     // entirely observer-blind - and the entry itself only composes it.
     for (const relative of [
-      'apps/stage-tamagotchi/src/main/services/lia/brain-decision-service.ts',
-      'apps/stage-tamagotchi/src/main/services/lia/brain-execution-report-service.ts',
       'apps/stage-tamagotchi/src/main/services/lia/brain-correlation-service.ts',
       'apps/stage-tamagotchi/src/main/services/lia/brain-correlation-reader.ts',
       'apps/stage-tamagotchi/src/renderer/main.ts',
@@ -647,9 +694,15 @@ describe('correlation observer - caller allowlists and authority (Phase 8.0D-10B
     const entryCode = entry.replace(/\s+/g, ' ')
     expect(entryCode).toContain('dependsOn: { liaBrainCorrelation }, build: ({ dependsOn }) => createLiaBrainCorrelationObserver({ correlationReader: dependsOn.liaBrainCorrelation })')
     expect(entryCode).toContain('dependsOn: { liaBrainCorrelationObserver }, callback: (deps) => { void deps.liaBrainCorrelationObserver')
-    // No observe call, no fact naming, no mapping, no snapshot read.
+    // The entry OWNS the observer but never TRIGGERS it: no observe call, no
+    // fact naming, no mapping and no snapshot read.
     expect(entry).not.toMatch(/\.observe\(|LIA_BRAIN_ENGINE_PROVIDER_MAPPING|readLiaBrainExecutionIdentityFacts|providerIdentityEqual|modelIdentityEqual/)
     expect(entry).not.toMatch(/recordDecision|recordExecution|\w*[Cc]orrelation\w*\.(?:get\(|size\b)/)
+
+    // Both producers receive the SAME lifecycle handle - two injections, one
+    // observer, no second instance anywhere in the composition.
+    expect(entryCode).toContain('correlationObserver: deps.liaBrainCorrelationObserver,')
+    expect(entry.match(/correlationObserver: deps\.liaBrainCorrelationObserver/g)).toHaveLength(2)
   })
 
   it('k/l/m/n/o/p/q: the lifecycle provider owns ONE observer instance per container', async () => {
@@ -697,35 +750,5 @@ describe('correlation observer - caller allowlists and authority (Phase 8.0D-10B
     expect(first.observer.observe('X')).toBeUndefined()
     expect(probes.reader.calls).toEqual(['X'])
     expect(probes.mapping.received).toEqual([GROQ_ENGINE_ID])
-  })
-
-  it('zero authority: the observer cannot reach Brain, providers, config or any execution surface', () => {
-    // The whole dependency surface: the read adapter's structural type + function
-    // and the trusted mapping value - one structural dependency, nothing else.
-    expect(source.match(/^import .*$/gm)).toEqual([
-      `import type { LiaBrainCorrelationSnapshotReader } from './brain-correlation-reader'`,
-      `import { readLiaBrainExecutionIdentityFacts } from './brain-correlation-reader'`,
-      `import { LIA_BRAIN_ENGINE_PROVIDER_MAPPING } from './brain-expected-route'`,
-    ])
-
-    // No Brain service, no decision call, no policy or config write.
-    expect(source).not.toMatch(/LiaBrainService|decide\(|automaticPolicy|liaProductConfig|updateLiaProductConfig|setPreferred/)
-    // No provider/model resolution or selection.
-    expect(source).not.toMatch(/getChatProviderInstance|useProviderStore|activeProvider|activeModel|providersStore|createOpenAI|defineProvider|createProductionBrainCatalog/)
-    // No fallback, retry, tools or permissions.
-    expect(source).not.toMatch(/fallback|retry|permission|toolCall|switch|override/i)
-    // No timers, no I/O, no network, no filesystem.
-    expect(source).not.toMatch(/from ['"](?:node:)?(?:fs|net|https?|child_process|dns|dgram|timers)['/]|\bfetch\(|XMLHttpRequest|WebSocket|localStorage|sessionStorage/)
-    // No correlation memory naming either: the dependency is structural. (The
-    // factory patterns keep their call parens so this module's OWN
-    // `createLiaBrainCorrelationObserver(` cannot be mistaken for a store or
-    // service factory - the same convention the shipped guards use.)
-    expect(source).not.toMatch(/brain-correlation-store|brain-correlation-service|createLiaBrainCorrelation(?:Store|Service)\(|LiaBrainCorrelationStore\b|LiaBrainCorrelationService\b/)
-
-    // The exported surface is exactly the audited one.
-    expect([...source.matchAll(/^export (?:const|function|interface|type) (\w+)/gm)].map(match => match[1])).toEqual([
-      'LiaBrainCorrelationObserver',
-      'createLiaBrainCorrelationObserver',
-    ])
   })
 })

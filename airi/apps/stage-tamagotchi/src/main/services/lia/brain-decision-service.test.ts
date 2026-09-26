@@ -34,6 +34,10 @@ const mocks = vi.hoisted(() => ({
   // single write. Recording is diagnostic, so the tests assert the call shape
   // and that nothing about the decision depends on it.
   recordDecision: vi.fn(),
+  // Phase 8.0D-10B-4C4C: the injected diagnostic observer, observed through its
+  // single trigger. Observing is diagnostic, so the tests assert the call shape
+  // and that nothing about the decision depends on it.
+  observe: vi.fn(),
 }))
 
 vi.mock('@moeru/eventa', () => ({
@@ -124,11 +128,20 @@ function correlationStoreDouble() {
   return { recordDecision: mocks.recordDecision } as never
 }
 
-/** Registers the bridge against an injected Brain surface and correlation store. */
-async function register(brain: unknown, correlationStore: unknown = correlationStoreDouble()): Promise<Handler> {
+/** The canonical diagnostic observer double the bridge receives. */
+function correlationObserverDouble(observe: (correlationId: string) => void = mocks.observe) {
+  return { observe } as never
+}
+
+/** Registers the bridge against an injected Brain surface, store and observer. */
+async function register(
+  brain: unknown,
+  correlationStore: unknown = correlationStoreDouble(),
+  correlationObserver: unknown = correlationObserverDouble(),
+): Promise<Handler> {
   mocks.handlers.clear()
   const { registerLiaBrainDecisionBridge } = await import('./brain-decision-service')
-  registerLiaBrainDecisionBridge({ brain: brain as never, context: {} as never, correlationStore: correlationStore as never })
+  registerLiaBrainDecisionBridge({ brain: brain as never, context: {} as never, correlationStore: correlationStore as never, correlationObserver: correlationObserver as never })
   const handler = mocks.handlers.get(channels.decision)
   expect(handler).toBeTypeOf('function')
   return handler as Handler
@@ -410,11 +423,11 @@ describe('lia brain decision bridge (Phase 8.0D-8)', () => {
     expect(source).not.toMatch(/\bnew Map\b|\bnew Set\b|lastDecision|pendingComparison|\bcache\b|history/i)
     expect(source.match(/correlationStore\.\w+/g)).toEqual(['correlationStore.recordDecision'])
     expect(source).not.toMatch(/correlationStore\.(?:get|size)/)
-    // The key is read once, tolerantly, into a local the diagnostic write shares -
-    // it is still never parsed, never compared and never returned. Its four
-    // occurrences are: the reader call, the local declaration, the guard and
-    // the diagnostic write.
-    expect(source.match(/correlationId/g)).toHaveLength(4)
+    // The key is read once, tolerantly, into a local the diagnostic path shares -
+    // it is still never parsed, never compared and never returned. Its five
+    // occurrences are: the reader call, the local declaration, the guard, the
+    // diagnostic write and the dual-trigger observation (8.0D-10B-4C4C).
+    expect(source.match(/correlationId/g)).toHaveLength(5)
     expect(source).toContain('const correlationId = readCorrelationId(request?.correlationId)')
   })
 
@@ -706,5 +719,112 @@ describe('lia brain decision bridge (Phase 8.0D-8)', () => {
     expect(shadow).toMatch(/console\.info\(`\[LIA-BRAIN\] shadow decision \$\{describeDecision\(decision\)\}`\)/)
     expect(shadow).not.toMatch(/decision\.(?:selection|resolution|readiness)\.(?:route|engine|model|id)\b/)
     expect(shadow).not.toMatch(/decision\.(?:route|engine|model|provider)\b/)
+  })
+})
+
+describe('lia brain decision bridge - dual trigger (Phase 8.0D-10B-4C4C)', () => {
+  it('a/b/c/d/e: one successful write triggers exactly one observation of the SAME key, after it', async () => {
+    const handler = await loadBridge()
+    mocks.decide.mockReturnValue(SENTINEL)
+    // The two diagnostic calls are recorded in one ordered log so the trigger
+    // boundary is proven by fact, not by assumption.
+    const order: string[] = []
+    mocks.recordDecision.mockImplementationOnce(() => {
+      order.push('recordDecision')
+    })
+    mocks.observe.mockImplementationOnce(() => {
+      order.push('observe')
+    })
+
+    const returned = handler({ correlationId: 'logical-send-X', facts: { usesTools: true } })
+
+    // A: exactly one write and exactly one observation per request.
+    expect(mocks.recordDecision).toHaveBeenCalledTimes(1)
+    expect(mocks.observe).toHaveBeenCalledTimes(1)
+    // B: the observation carries the exact opaque key the write was keyed by -
+    // forwarded verbatim, never rebuilt, never normalized.
+    expect(mocks.observe).toHaveBeenCalledWith('logical-send-X')
+    expect((mocks.recordDecision.mock.calls[0] as unknown[])[0]).toBe('logical-send-X')
+    expect((mocks.observe.mock.calls[0] as unknown[])[0]).toBe((mocks.recordDecision.mock.calls[0] as unknown[])[0])
+    // C: the mutation completes BEFORE the observation.
+    expect(order).toEqual(['recordDecision', 'observe'])
+    // D: the recorded value is still the exact canonical decision.
+    expect((mocks.recordDecision.mock.calls[0] as [string, unknown])[1]).toBe(SENTINEL)
+    // E: and the renderer still receives exactly that canonical decision.
+    expect(returned).toBe(SENTINEL)
+  })
+
+  it('f/g: an unusable key means neither a write nor an observation, and never a synthesized one', async () => {
+    const handler = await loadBridge()
+    mocks.decide.mockReturnValue(SENTINEL)
+
+    for (const correlationId of [undefined, '', 42, null, {}, []]) {
+      const returned = handler({ correlationId, facts: { usesTools: true } } as never)
+      expect(returned).toBe(SENTINEL)
+    }
+
+    // F: no record was attempted... G: and therefore nothing was observed -
+    // certainly not a fabricated key.
+    expect(mocks.recordDecision).not.toHaveBeenCalled()
+    expect(mocks.observe).not.toHaveBeenCalled()
+    // The decision itself still ran for every request.
+    expect(mocks.decide).toHaveBeenCalledTimes(6)
+  })
+
+  it('h: a record failure is never observed, and the decision is unchanged', async () => {
+    const handler = await register({ decide: mocks.decide }, {
+      recordDecision: () => {
+        throw new Error('diagnostic memory is gone')
+      },
+    })
+    mocks.decide.mockReturnValue(SENTINEL)
+
+    // H: the canonical decision still reaches the renderer, the write failed
+    // before the trigger, so the observer never ran - no retry, no synthetic
+    // record and no synthetic observation.
+    expect(handler({ correlationId: 'logical-send-X', facts: {} })).toBe(SENTINEL)
+    expect(mocks.observe).not.toHaveBeenCalled()
+    expect(mocks.decide).toHaveBeenCalledTimes(1)
+  })
+
+  it('i/j: a hostile observer cannot change the decision nor cause a second decision', async () => {
+    const handler = await register({ decide: mocks.decide }, correlationStoreDouble(), {
+      observe: () => {
+        throw new Error('hostile observer')
+      },
+    })
+    mocks.decide.mockReturnValue(SENTINEL)
+
+    // I: the write happened, the observer threw, and the caller sees nothing of
+    // it - the decision is returned unchanged and no error escapes the bridge.
+    let returned: LiaBrainRoutingDecision | undefined
+    expect(() => {
+      returned = handler({ correlationId: 'logical-send-X', facts: {} })
+    }).not.toThrow()
+    expect(returned).toBe(SENTINEL)
+    // The write did complete before the hostile trigger.
+    expect(mocks.recordDecision).toHaveBeenCalledTimes(1)
+    // J: and the routing call was not repeated as a side effect.
+    expect(mocks.decide).toHaveBeenCalledTimes(1)
+  })
+
+  it('k: the producer knows only observe(correlationId) - no reader, no mapping, no facts', async () => {
+    const source = stripComments(readSource('./brain-decision-service.ts'))
+
+    // The coupling is TYPE-ONLY: the observer's contract arrives as a type, and
+    // the module never imports the factory or any read/mapping/facts module.
+    expect(source).toContain(`import type { LiaBrainCorrelationObserver } from './brain-correlation-observer'`)
+    expect(source).not.toMatch(/createLiaBrainCorrelationObserver|brain-correlation-reader|readLiaBrainExecutionIdentityFacts|brain-expected-route|LIA_BRAIN_ENGINE_PROVIDER_MAPPING|brain-execution-identity-facts|providerIdentityEqual|modelIdentityEqual/)
+
+    // Exactly ONE trigger, as a bare statement: the returned value (void) is
+    // never assigned, awaited, inspected or branched on, and the observation
+    // carries the same opaque key the write used.
+    expect(source.match(/correlationObserver\.\w+/g)).toEqual(['correlationObserver.observe'])
+    expect(source).toMatch(/^\s*correlationObserver\.observe\(correlationId\)$/m)
+    expect(source).not.toMatch(/=\s*correlationObserver|await correlationObserver|correlationObserver\.observe\([\s\S]{0,60}\)\s*[.\w[]/)
+
+    // Synchronous, same-tick, no queue and no second memory.
+    expect(source).not.toMatch(/async |await |Promise|queueMicrotask|setTimeout|setInterval|requestAnimationFrame/)
+    expect(source).not.toMatch(/\bnew Map\b|\bnew Set\b|pending|dedupe|retry|triggerQueue|lastObserved/i)
   })
 })

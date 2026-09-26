@@ -424,14 +424,19 @@ app.whenReady().then(async () => {
   // store, so the canonical decision it returns is recorded as a diagnostic
   // fact for that logical send. Injection stays HERE: the bridge never resolves
   // a store, and it only writes.
+  // Phase 8.0D-10B-4C4C: the bridge also receives the observer instance this
+  // lifecycle owns, so one successful decision write triggers exactly one
+  // factual observation of the same key. The entry injects; the bridge never
+  // creates and never resolves an observer.
   injeca.invoke({
-    dependsOn: { liaBrain, liaBrainCorrelation },
+    dependsOn: { liaBrain, liaBrainCorrelation, liaBrainCorrelationObserver },
     callback: async (deps) => {
       const { context } = createContext(ipcMain)
       registerLiaBrainDecisionBridge({
         context,
         brain: deps.liaBrain,
         correlationStore: deps.liaBrainCorrelation,
+        correlationObserver: deps.liaBrainCorrelationObserver,
       })
     },
   })
@@ -440,11 +445,18 @@ app.whenReady().then(async () => {
   // diagnostic only - it depends on the correlation store (never on the Brain
   // service nor on product config): the handler sanitizes, requires the
   // logical-send key and records the five-field fact.
+  // Phase 8.0D-10B-4C4C: it receives the SAME lifecycle-owned observer the
+  // decision side uses - one canonical instance, never a second one - so one
+  // successful report write triggers exactly one observation of its key.
   injeca.invoke({
-    dependsOn: { liaBrainCorrelation },
+    dependsOn: { liaBrainCorrelation, liaBrainCorrelationObserver },
     callback: async (deps) => {
       const { context } = createContext(ipcMain)
-      registerLiaBrainExecutionReportHandler({ context, correlationStore: deps.liaBrainCorrelation })
+      registerLiaBrainExecutionReportHandler({
+        context,
+        correlationStore: deps.liaBrainCorrelation,
+        correlationObserver: deps.liaBrainCorrelationObserver,
+      })
     },
   })
 

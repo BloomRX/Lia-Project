@@ -1,13 +1,16 @@
 import type { LiaBrainChatDecisionRequest } from '../../../shared/eventa'
+import type { LiaBrainCorrelationReadFacts } from './brain-correlation-reader'
 
 import { readdirSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 import { describe, expect, it, vi } from 'vitest'
 
+import { readLiaBrainExecutionIdentityFacts } from './brain-correlation-reader'
 import { createLiaBrainCorrelationService } from './brain-correlation-service'
 import { registerLiaBrainDecisionBridge } from './brain-decision-service'
 import { registerLiaBrainExecutionReportHandler } from './brain-execution-report-service'
+import { LIA_BRAIN_ENGINE_PROVIDER_MAPPING } from './brain-expected-route'
 
 /**
  * Phase 8.0D-10B-4B3: the production wiring of the two already-proven main-side
@@ -20,6 +23,13 @@ import { registerLiaBrainExecutionReportHandler } from './brain-execution-report
  *
  * What is asserted is factual presence and order only - no comparison, no
  * verdict, no interpretation of whether a decision and an execution agree.
+ *
+ * Phase 8.0D-10B-4C4C adds the DUAL TRIGGER: both producers receive the SAME
+ * lifecycle-owned diagnostic observer and trigger it once per SUCCESSFUL write,
+ * strictly after that write. The integration half uses an observer-shaped probe
+ * that runs the REAL read adapter over the REAL store and records what it sees
+ * - production discards that value, test code needs it to prove the factual
+ * progression of the five arrival orders.
  */
 
 const channels = vi.hoisted(() => ({
@@ -92,7 +102,11 @@ function brainDouble() {
         mode: 'automatic',
         readiness: { status: 'ready' },
         requirement: input.requirement,
-        selection: { engine: { id: 'groq' }, model: { id: 'openai/gpt-oss-120b' }, status: 'selected' },
+        // The canonical automatic-selection shape of the routing decision: the
+        // established route lives under `selection.route`. (8.0D-10B-4C4C makes
+        // this double feed the REAL read/derive path through the probe, so it
+        // must be a decision the trusted extraction can actually read.)
+        selection: { route: { engine: { id: 'groq' }, model: { id: 'openai/gpt-oss-120b' } }, status: 'selected' },
         status: 'automatic',
       }
     }),
@@ -101,14 +115,19 @@ function brainDouble() {
 
 const FACTS = { hasImageInput: false, reasoningRequested: true, usesTools: false }
 
-/** The exact production wiring: both seams + ONE store. */
+/** The exact production wiring: both seams + ONE store + ONE observer. */
 function wireProduction(overrides: { brain?: ReturnType<typeof brainDouble>, store?: ReturnType<typeof createLiaBrainCorrelationService> } = {}) {
   const brain = overrides.brain ?? brainDouble()
   const store = overrides.store ?? createLiaBrainCorrelationService()
   const context = fakeContext()
-  registerLiaBrainDecisionBridge({ context, brain: brain as never, correlationStore: store })
-  registerLiaBrainExecutionReportHandler({ context, correlationStore: store })
-  return { brain, store }
+  // Phase 8.0D-10B-4C4C: the two seams receive the SAME observer object - ONE
+  // shared observation log, so an observation from either trigger lands in the
+  // same place. (Identity is proven end to end by the integration probe below.)
+  const observed: string[] = []
+  const observer = { observe: (correlationId: string) => observed.push(correlationId) }
+  registerLiaBrainDecisionBridge({ context, brain: brain as never, correlationStore: store, correlationObserver: observer as never })
+  registerLiaBrainExecutionReportHandler({ context, correlationStore: store, correlationObserver: observer as never })
+  return { brain, observed, store }
 }
 
 /** Calls the decision bridge the way the renderer invoke would. */
@@ -270,7 +289,10 @@ describe('lia brain correlation wiring - diagnostics cannot affect the decision 
       },
     }
     const context = fakeContext()
-    registerLiaBrainDecisionBridge({ context, brain: brain as never, correlationStore: hostileStore as never })
+    const observed: string[] = []
+    registerLiaBrainDecisionBridge({ context, brain: brain as never, correlationStore: hostileStore as never, correlationObserver: { observe: (correlationId: string) => observed.push(correlationId) } as never })
+    // The failed write never reached the trigger.
+    expect(observed).toEqual([])
 
     const answer = askDecision({ correlationId: 'X' })
     // The canonical decision still reaches the renderer, and `decide` ran once.
@@ -289,7 +311,10 @@ describe('lia brain correlation wiring - diagnostics cannot affect the decision 
       },
     }
     const context = fakeContext()
-    registerLiaBrainExecutionReportHandler({ context, correlationStore: hostileStore as never })
+    const observed: string[] = []
+    registerLiaBrainExecutionReportHandler({ context, correlationStore: hostileStore as never, correlationObserver: { observe: (correlationId: string) => observed.push(correlationId) } as never })
+    // The failed write never reached the trigger.
+    expect(observed).toEqual([])
 
     expect(() => deliverReport(report('X', 'A'))).not.toThrow()
     expect(store.size).toBe(0)
@@ -333,9 +358,17 @@ describe('lia brain correlation wiring - invariants (Phase 8.0D-10B-4B3)', () =>
     const entry = stripComments(readSource('../../index.ts'))
     expect(entry.match(/services:lia-brain-correlation'/g)).toHaveLength(1)
     // AK: BOTH registrations receive that lifecycle handle explicitly.
-    expect(entry).toMatch(/registerLiaBrainDecisionBridge\(\{[\s\S]*?correlationStore: deps\.liaBrainCorrelation/)
-    expect(entry).toMatch(/registerLiaBrainExecutionReportHandler\(\{ context, correlationStore: deps\.liaBrainCorrelation \}\)/)
+    // Both registrations receive the correlation handle...
+    const entryCode = entry.replace(/\s+/g, ' ')
+    expect(entryCode).toContain('registerLiaBrainDecisionBridge({ context, brain: deps.liaBrain, correlationStore: deps.liaBrainCorrelation,')
+    expect(entryCode).toContain('registerLiaBrainExecutionReportHandler({ context, correlationStore: deps.liaBrainCorrelation,')
+    expect(entryCode.match(/correlationStore: deps\.liaBrainCorrelation, correlationObserver: deps\.liaBrainCorrelationObserver,/g)).toHaveLength(2)
     expect(entry.match(/correlationStore: deps\.liaBrainCorrelation/g)).toHaveLength(2)
+    // ...and, since 8.0D-10B-4C4C, the SAME lifecycle-owned observer instance:
+    // two injections, one handle, no second observer anywhere in the entry.
+    expect(entry.match(/correlationObserver: deps\.liaBrainCorrelationObserver/g)).toHaveLength(2)
+    expect(entry.match(/createLiaBrainCorrelationObserver\(/g)).toHaveLength(1)
+    expect(entry).not.toMatch(/\.observe\(/)
 
     // AN: no module-global correlation state.
     for (const relative of ['apps/stage-tamagotchi/src/main/index.ts', 'apps/stage-tamagotchi/src/main/services/lia/brain-decision-service.ts', 'apps/stage-tamagotchi/src/main/services/lia/brain-execution-report-service.ts']) {
@@ -436,5 +469,259 @@ describe('lia brain correlation wiring - invariants (Phase 8.0D-10B-4B3)', () =>
     expect(productionSources(['packages/core-agent/src'])
       .filter(relative => /electronLiaBrain|LiaBrainChatDecision|brain-shadow|LiaBrainCorrelation/.test(readFileSync(new URL(relative, REPO_ROOT), 'utf-8'))))
       .toEqual([])
+  })
+})
+
+/**
+ * Phase 8.0D-10B-4C4C - the observer-shaped diagnostic probe.
+ *
+ * It is the REAL read adapter over the REAL store, with the trusted mapping;
+ * only the RESULT of the read is recorded, and only in TEST code (production
+ * discards it). Recording is what makes each observation assertable by fact.
+ */
+function observerProbe(store: ReturnType<typeof createLiaBrainCorrelationService>) {
+  const seen: { correlationId: string, facts: LiaBrainCorrelationReadFacts }[] = []
+  return {
+    observer: {
+      observe: (correlationId: string) => {
+        seen.push({ correlationId, facts: readLiaBrainExecutionIdentityFacts(store, correlationId, LIA_BRAIN_ENGINE_PROVIDER_MAPPING) })
+      },
+    },
+    seen,
+  }
+}
+
+/** Both REAL seams + ONE real store + ONE observer-shaped probe. */
+function wireDualTrigger(overrides: { observer?: { observe: (correlationId: string) => void } } = {}) {
+  const brain = brainDouble()
+  const store = createLiaBrainCorrelationService()
+  const probe = observerProbe(store)
+  const observer = overrides.observer ?? probe.observer
+  const context = fakeContext()
+  registerLiaBrainDecisionBridge({ context, brain: brain as never, correlationStore: store, correlationObserver: observer as never })
+  registerLiaBrainExecutionReportHandler({ context, correlationStore: store, correlationObserver: observer as never })
+  return { brain, observer, probe, store }
+}
+
+/** Each observed factual state, in the compact notation of this phase. */
+function observedStates(probe: ReturnType<typeof observerProbe>): string[] {
+  return probe.seen.map(({ facts }) => facts.status === 'attemptIdentityFacts'
+    ? `attemptIdentityFacts[${facts.attempts.map(attempt => attempt.roundId).join(',')}]`
+    : facts.status)
+}
+
+describe('lia brain correlation dual trigger - factual progression (Phase 8.0D-10B-4C4C)', () => {
+  it('the dual trigger is real: both producers observe the ONE probe, once each, with their own keys', () => {
+    const { probe } = wireDualTrigger()
+
+    askDecision({ correlationId: 'X' })
+    deliverReport(report('X', 'A'))
+
+    // ONE observer object received BOTH observations: a single log holds them
+    // in arrival order - one observation per successful write, no dedupe.
+    expect(probe.seen).toHaveLength(2)
+    expect(probe.seen.map(entry => entry.correlationId)).toEqual(['X', 'X'])
+
+    // A report for a different logical send observes ITS own key - the trigger
+    // forwards the key of the write that completed, never another one.
+    deliverReport(report('Y', 'A'))
+    expect(probe.seen.map(entry => entry.correlationId)).toEqual(['X', 'X', 'Y'])
+    expect(probe.seen[2]!.facts.status).toBe('decisionNotObserved')
+  })
+
+  it('decision-first progression: noExecutionObserved -> attemptIdentityFacts[A]', () => {
+    const { probe } = wireDualTrigger()
+
+    askDecision({ correlationId: 'X' })
+    deliverReport(report('X', 'A'))
+
+    expect(observedStates(probe)).toEqual(['noExecutionObserved', 'attemptIdentityFacts[A]'])
+    // Two successful writes, two observations - no polling, no timer.
+    expect(probe.seen).toHaveLength(2)
+  })
+
+  it('execution-first progression: decisionNotObserved -> attemptIdentityFacts[A]', () => {
+    const { probe } = wireDualTrigger()
+
+    deliverReport(report('X', 'A'))
+    askDecision({ correlationId: 'X' })
+
+    // The first observation is keyed by the executed attempt before any
+    // decision exists; the already-observed attempt is preserved as factual
+    // metadata (that is the `[A]` the phase notation records).
+    expect(observedStates(probe)).toEqual(['decisionNotObserved', 'attemptIdentityFacts[A]'])
+    expect(probe.seen[0]!.facts.attempts?.map(attempt => attempt.roundId)).toEqual(['A'])
+    expect(probe.seen).toHaveLength(2)
+  })
+
+  it('multi-attempt progression: noExecutionObserved -> attemptIdentityFacts[A] -> attemptIdentityFacts[A,B]', () => {
+    const { probe } = wireDualTrigger()
+
+    askDecision({ correlationId: 'X' })
+    deliverReport(report('X', 'A'))
+    deliverReport(report('X', 'B', 'anthropic', 'claude-x'))
+
+    expect(observedStates(probe)).toEqual([
+      'noExecutionObserved',
+      'attemptIdentityFacts[A]',
+      'attemptIdentityFacts[A,B]',
+    ])
+    // Arrival order is preserved verbatim: A at index 0, B at index 1 - no
+    // sorting, no aggregation, no verdict.
+    const last = probe.seen[2]!.facts
+    expect(last.status).toBe('attemptIdentityFacts')
+    expect(last.attempts.map(attempt => [attempt.arrivalIndex, attempt.roundId])).toEqual([[0, 'A'], [1, 'B']])
+    expect(probe.seen).toHaveLength(3)
+  })
+
+  it('decision-last progression: decisionNotObserved[A] -> decisionNotObserved[A,B] -> attemptIdentityFacts[A,B]', () => {
+    const { probe } = wireDualTrigger()
+
+    // The order a single execution-side trigger alone could never complete:
+    // both attempts are observed before any decision exists, and the FINAL
+    // observation (triggered by the decision write) sees the whole picture.
+    deliverReport(report('X', 'A'))
+    deliverReport(report('X', 'B', 'anthropic', 'claude-x'))
+    askDecision({ correlationId: 'X' })
+
+    expect(observedStates(probe)).toEqual([
+      'decisionNotObserved',
+      'decisionNotObserved',
+      'attemptIdentityFacts[A,B]',
+    ])
+    expect(probe.seen[0]!.facts.attempts?.map(attempt => attempt.roundId)).toEqual(['A'])
+    expect(probe.seen[1]!.facts.attempts?.map(attempt => attempt.roundId)).toEqual(['A', 'B'])
+    expect(probe.seen).toHaveLength(3)
+  })
+
+  it('interleaved order: decisionNotObserved[A] -> attemptIdentityFacts[A] -> attemptIdentityFacts[A,B]', () => {
+    const { probe } = wireDualTrigger()
+
+    deliverReport(report('X', 'A'))
+    askDecision({ correlationId: 'X' })
+    deliverReport(report('X', 'B', 'anthropic', 'claude-x'))
+
+    expect(observedStates(probe)).toEqual([
+      'decisionNotObserved',
+      'attemptIdentityFacts[A]',
+      'attemptIdentityFacts[A,B]',
+    ])
+    expect(probe.seen).toHaveLength(3)
+  })
+
+  it('duplicate decision: every successful write is observed, while the store still keeps the FIRST decision', () => {
+    const { probe, store } = wireDualTrigger()
+
+    const first = askDecision({ correlationId: 'X' })
+    const second = askDecision({ correlationId: 'X' })
+
+    // Two successful writes -> two observations. Nothing detects whether the
+    // store actually changed, and nothing dedupes by key.
+    expect(probe.seen).toHaveLength(2)
+    expect(probe.seen.map(entry => entry.correlationId)).toEqual(['X', 'X'])
+    // The memory keeps first-decision-wins, and both answers reached the caller.
+    expect(store.get('X')?.decision).toEqual(first)
+    expect(store.get('X')?.decision).not.toEqual(second)
+  })
+
+  it('duplicate execution report: both writes are factual and both are observed', () => {
+    const { probe, store } = wireDualTrigger()
+
+    deliverReport(report('X', 'A'))
+    deliverReport(report('X', 'A'))
+
+    expect(probe.seen).toHaveLength(2)
+    expect(probe.seen.map(entry => entry.correlationId)).toEqual(['X', 'X'])
+    // The store still retains both accepted attempts - no dedupe on either side.
+    expect(store.get('X')?.executions.map(execution => execution.roundId)).toEqual(['A', 'A'])
+  })
+})
+
+describe('lia brain correlation dual trigger - successful write only (Phase 8.0D-10B-4C4C)', () => {
+  it('decision side: a successful write observes, a failed write does NOT', () => {
+    // Success: the observer runs, once, keyed by the request's key.
+    const observed: string[] = []
+    const probe = { observe: (correlationId: string) => observed.push(correlationId) }
+    const wired = wireDualTrigger({ observer: probe })
+    const answer = askDecision({ correlationId: 'X' })
+    expect(answer.status).toBe('automatic')
+    expect(observed).toEqual(['X'])
+
+    // Failure: the write throws before the trigger, so nothing is observed.
+    const brain = brainDouble()
+    const store = createLiaBrainCorrelationService()
+    const failedObserved: string[] = []
+    const context = fakeContext()
+    registerLiaBrainDecisionBridge({
+      context,
+      brain: brain as never,
+      correlationStore: {
+        ...store,
+        recordDecision: () => {
+          throw new Error('diagnostic memory is gone')
+        },
+      } as never,
+      correlationObserver: { observe: (correlationId: string) => failedObserved.push(correlationId) } as never,
+    })
+
+    expect(askDecision({ correlationId: 'X' }).status).toBe('automatic')
+    expect(failedObserved).toEqual([])
+    expect(brain.decide).toHaveBeenCalledTimes(1)
+    expect(store.size).toBe(0)
+    expect(wired.store.size).toBe(1)
+  })
+
+  it('execution side: a successful write observes, a failed write does NOT', () => {
+    // Success: the observer runs, once, keyed by the sanitized report's key.
+    const observed: string[] = []
+    const wired = wireDualTrigger({ observer: { observe: (correlationId: string) => observed.push(correlationId) } })
+    deliverReport(report('X', 'A'))
+    expect(observed).toEqual(['X'])
+    expect(wired.store.get('X')?.executions.map(execution => execution.roundId)).toEqual(['A'])
+
+    // Failure: the write throws before the trigger, so nothing is observed and
+    // nothing escapes the one-way handler.
+    const store = createLiaBrainCorrelationService()
+    const failedObserved: string[] = []
+    const context = fakeContext()
+    registerLiaBrainExecutionReportHandler({
+      context,
+      correlationStore: {
+        ...store,
+        recordExecution: () => {
+          throw new Error('diagnostic memory is gone')
+        },
+      } as never,
+      correlationObserver: { observe: (correlationId: string) => failedObserved.push(correlationId) } as never,
+    })
+
+    expect(() => deliverReport(report('X', 'A'))).not.toThrow()
+    expect(failedObserved).toEqual([])
+    expect(store.size).toBe(0)
+  })
+
+  it('a hostile observer is isolated on both sides - the real one never throws by contract', () => {
+    const hostile = {
+      observe: () => {
+        throw new Error('hostile observer')
+      },
+    }
+    const { store } = wireDualTrigger({ observer: hostile })
+
+    // Decision side: the canonical decision still reaches the caller, unchanged,
+    // and `decide` ran exactly once.
+    let answer: Record<string, unknown> | undefined
+    expect(() => {
+      answer = askDecision({ correlationId: 'X' })
+    }).not.toThrow()
+    expect(answer!.status).toBe('automatic')
+    // The write completed before the hostile trigger: the fact IS recorded,
+    // while the failed observation changed nothing else.
+    expect(store.get('X')?.decision).toBeDefined()
+
+    // Execution side: the handler stays silent and the attempt is still stored.
+    expect(() => deliverReport(report('X', 'A'))).not.toThrow()
+    expect(mocks.emitted).toEqual([])
+    expect(store.get('X')?.executions.map(execution => execution.roundId)).toEqual(['A'])
   })
 })

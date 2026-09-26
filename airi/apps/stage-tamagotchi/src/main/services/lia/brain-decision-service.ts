@@ -7,6 +7,7 @@ import type {
   LiaBrainChatDecision,
   LiaBrainChatDecisionRequest,
 } from '../../../shared/eventa'
+import type { LiaBrainCorrelationObserver } from './brain-correlation-observer'
 import type { LiaBrainCorrelationService } from './brain-correlation-service'
 import type { LiaBrainService } from './lia-brain-service'
 
@@ -57,6 +58,14 @@ type MainContext = ReturnType<typeof createContext>['context']
  * key. This bridge only WRITES (`recordDecision`); it never reads, inspects or
  * interprets the retained state, and the store can influence nothing about the
  * decision - it is written strictly AFTER the decision already exists.
+ *
+ * Phase 8.0D-10B-4C4C: the injected diagnostic observer is triggered from the
+ * SAME isolated block, strictly AFTER the successful write, so the dual-trigger
+ * semantics proven by the 4C3B audit hold here: one completed factual mutation
+ * produces exactly one observation of THAT key. The observer dependency is the
+ * canonical lifecycle instance and its contract is one method - `observe(...)`
+ * returning nothing - so this bridge cannot inspect a result, cannot learn about
+ * facts, engines, providers or expectations, and cannot branch on diagnostics.
  */
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -112,8 +121,15 @@ export function registerLiaBrainDecisionBridge(params: {
    * exactly ONE diagnostic write (`recordDecision`) and is never read here.
    */
   correlationStore: LiaBrainCorrelationService
+  /**
+   * Phase 8.0D-10B-4C4C: the canonical diagnostic observer owned by the
+   * lifecycle (the 4C4B provider) - never resolved or created here. It is
+   * triggered once per successful decision write, receives the same opaque key,
+   * and returns nothing: the bridge never reads, stores or branches on it.
+   */
+  correlationObserver: LiaBrainCorrelationObserver
 }): void {
-  const { context, brain, correlationStore } = params
+  const { context, brain, correlationStore, correlationObserver } = params
   const trustedAutomaticPolicy = createProductionBrainAutomaticPolicy()
 
   defineInvokeHandler(context, electronLiaBrainChatDecision, (request: LiaBrainChatDecisionRequest): LiaBrainChatDecision => {
@@ -134,9 +150,17 @@ export function registerLiaBrainDecisionBridge(params: {
     // fire-and-forget and isolated: a correlation store that throws cannot
     // change the decision the renderer receives, cannot cause a second
     // `decide(...)`, and cannot surface an error to the caller.
+    // Phase 8.0D-10B-4C4C: the observation follows the WRITE, in the same
+    // isolated block - a record that throws is never observed, and a hostile
+    // observer cannot escape either. Nothing about the returned decision
+    // depends on this diagnostic path.
     if (correlationId !== undefined) {
       try {
         correlationStore.recordDecision(correlationId, decision)
+        // Ordering is the contract: the factual mutation completes first, and
+        // only then is THAT key observed. The returned value is discarded (it
+        // is `void`), so no diagnostic result is inspected or acted upon.
+        correlationObserver.observe(correlationId)
       }
       catch {
         // Diagnostic memory only: the decision below is unaffected.

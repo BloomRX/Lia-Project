@@ -260,8 +260,14 @@ describe('lia brain correlation service - composition ownership (Phase 8.0D-10B-
     // 8.0D-10B-4B3 the SAME handle is also injected into the two registration
     // seams, and since 8.0D-10B-4C4B the observer provider depends on it too -
     // none of those references records through the handle.
-    expect(entry.match(/dependsOn: \{ liaBrainCorrelation \}/g)).toHaveLength(3)
-    expect(entry.match(/liaBrainCorrelation \}/g) ?? []).toHaveLength(6)
+    // Since 8.0D-10B-4C4C the two registrations ALSO receive the lifecycle-owned
+    // observer, so their dependency sets are the two explicit shapes below; the
+    // single-dependency form is left to the observer provider and the boot
+    // materialization. Every occurrence is enumerated - nothing is inferred.
+    expect(entry.match(/dependsOn: \{ liaBrainCorrelation \}/g)).toHaveLength(2)
+    expect(entry.match(/dependsOn: \{ liaBrainCorrelation, liaBrainCorrelationObserver \}/g)).toHaveLength(1)
+    expect(entry.match(/dependsOn: \{ liaBrain, liaBrainCorrelation, liaBrainCorrelationObserver \}/g)).toHaveLength(1)
+    expect(entry.match(/liaBrainCorrelation \}/g) ?? []).toHaveLength(3)
     // The observer handle of 8.0D-10B-4C4B shares the name prefix, so the
     // materialization counts are pinned with a word boundary on both sides:
     // the correlation service is voided once, the observer once.

@@ -1,6 +1,7 @@
 import type { createContext } from '@moeru/eventa/adapters/electron/main'
 
 import type { LiaBrainExecutionObservationReport } from '../../../shared/eventa'
+import type { LiaBrainCorrelationObserver } from './brain-correlation-observer'
 import type { LiaBrainCorrelationService } from './brain-correlation-service'
 
 import { electronLiaBrainExecutionObservation } from '../../../shared/eventa'
@@ -18,6 +19,14 @@ type MainContext = ReturnType<typeof createContext>['context']
  * correlation store as a diagnostic fact (Phase 8.0D-10B-4B3). Nothing else is
  * retained here: this module keeps no state, and it only WRITES
  * (`recordExecution`) - it never reads, inspects or interprets the store.
+ *
+ * Phase 8.0D-10B-4C4C: the injected diagnostic observer is triggered from the
+ * same isolated block, strictly AFTER the successful write, with the sanitized
+ * report's own key - so one accepted attempt produces exactly one observation
+ * of ITS logical send. The dependency is the canonical lifecycle instance and
+ * its contract is one method, `observe(...)`, returning nothing: this handler
+ * cannot inspect a result, cannot learn about facts, engines, providers or
+ * expectations, and cannot branch on diagnostics.
  *
  * Trust boundary: execution identity is UNTRUSTED DATA, even though it
  * originates from the leader's real execution seam. `providerId`/`modelId` are
@@ -80,8 +89,15 @@ export function registerLiaBrainExecutionReportHandler(params: {
    * diagnostic write (`recordExecution`) and is never read.
    */
   correlationStore: LiaBrainCorrelationService
+  /**
+   * Phase 8.0D-10B-4C4C: the canonical diagnostic observer owned by the
+   * lifecycle (the 4C4B provider) - never resolved or created here. It is
+   * triggered once per successful report write with that report's own sanitized
+   * key, and returns nothing: the handler never reads, stores or branches on it.
+   */
+  correlationObserver: LiaBrainCorrelationObserver
 }): void {
-  const { context, correlationStore } = params
+  const { context, correlationStore, correlationObserver } = params
 
   context.on(electronLiaBrainExecutionObservation, (event) => {
     // Sanitize first: only a report with a usable key survives, and only the
@@ -93,8 +109,15 @@ export function registerLiaBrainExecutionReportHandler(params: {
     // Diagnostic write, isolated: a correlation store that throws cannot make
     // an exception escape into chat execution, cannot trigger a retry or a
     // fallback, and cannot produce a user-facing error.
+    // Phase 8.0D-10B-4C4C: the observation follows the WRITE, in the same
+    // isolated block - a record that throws is never observed, and a hostile
+    // observer cannot escape into the one-way handler either.
     try {
       correlationStore.recordExecution(report)
+      // Ordering is the contract: the factual mutation completes first, and
+      // only then is the sanitized report's own key observed. The returned
+      // value is discarded (it is `void`) - no diagnostic result is inspected.
+      correlationObserver.observe(report.correlationId)
     }
     catch {
       // Diagnostic memory only: the request this report describes is unaffected.
