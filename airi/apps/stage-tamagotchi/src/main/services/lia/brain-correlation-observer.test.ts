@@ -15,8 +15,11 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 import { createProductionBrainAutomaticPolicy, createProductionBrainCatalog, decideBrainRoute } from '@lia/core'
+import { createContainer, provide, resolve } from 'injeca'
 import { describe, expect, it, vi } from 'vitest'
 
+import { createLiaBrainCorrelationObserver } from './brain-correlation-observer'
+import { createLiaBrainCorrelationService } from './brain-correlation-service'
 import { createLiaBrainCorrelationStore } from './brain-correlation-store'
 
 /**
@@ -159,6 +162,41 @@ function recordingReader(snapshots: Record<string, LiaBrainExecutionIdentitySnap
 async function loadObserver(reader: LiaBrainCorrelationSnapshotReader): Promise<LiaBrainCorrelationObserver> {
   const { createLiaBrainCorrelationObserver } = await import('./brain-correlation-observer')
   return createLiaBrainCorrelationObserver({ correlationReader: reader })
+}
+
+/**
+ * A REAL Injeca container wired EXACTLY like the composition entry (Phase
+ * 8.0D-10B-4C4B), over the REAL production factories - same provider ids, same
+ * dependency declaration, same build shape. Nothing is adapted or wrapped.
+ */
+function createTestContainer() {
+  const container = createContainer()
+  const observedReaders: LiaBrainCorrelationSnapshotReader[] = []
+  const liaBrainCorrelation = provide(container, 'services:lia-brain-correlation', () => createLiaBrainCorrelationService())
+  const liaBrainCorrelationObserver = provide(container, 'services:lia-brain-correlation-observer', {
+    dependsOn: { liaBrainCorrelation },
+    build: ({ dependsOn }) => {
+      observedReaders.push(dependsOn.liaBrainCorrelation)
+      return createLiaBrainCorrelationObserver({ correlationReader: dependsOn.liaBrainCorrelation })
+    },
+  })
+
+  return {
+    async resolved() {
+      const { correlation, observer } = await resolve(container, { correlation: liaBrainCorrelation, observer: liaBrainCorrelationObserver })
+      return {
+        builds: observedReaders,
+        correlation,
+        observer,
+        observedReaders,
+        providerIds: [...container.providers.keys()].sort((a, b) => a.localeCompare(b)),
+        get reads() {
+          return probes.reader.calls
+        },
+        resolveAgain: () => resolve(container, { correlation: liaBrainCorrelation, observer: liaBrainCorrelationObserver }),
+      }
+    },
+  }
 }
 
 /** Clears the probes so one test's observations cannot leak into the next. */
@@ -566,14 +604,28 @@ describe('correlation observer - caller allowlists and authority (Phase 8.0D-10B
     }
   })
 
-  it('ai: zero producers, main, lifecycle or renderer call the observer', () => {
-    expect(productionMatching(/brain-correlation-observer/)).toEqual([])
-
-    for (const relative of [
+  it('ai: the module/factory reference allowlist is exactly the composition entry, and observe() has no callers', () => {
+    // Phase 8.0D-10B-4C4B gives the observer its ONE canonical lifecycle owner:
+    // the Stage-main composition entry references the module and its factory.
+    expect(productionMatching(/brain-correlation-observer/)).toEqual([
       'apps/stage-tamagotchi/src/main/index.ts',
+    ])
+    // (the `function ` lookbehind excludes the factory's own declaration, so
+    // this counts CALL sites - exactly the composition entry)
+    expect(productionMatching(/(?<!function )createLiaBrainCorrelationObserver\(/)).toEqual([
+      'apps/stage-tamagotchi/src/main/index.ts',
+    ])
+
+    // ...but OWNING it is not CALLING it: no production file invokes observe().
+    expect(productionMatching(/\.observe\(/)).toEqual([])
+
+    // The producers, the correlation service and every renderer layer stay
+    // entirely observer-blind - and the entry itself only composes it.
+    for (const relative of [
       'apps/stage-tamagotchi/src/main/services/lia/brain-decision-service.ts',
       'apps/stage-tamagotchi/src/main/services/lia/brain-execution-report-service.ts',
       'apps/stage-tamagotchi/src/main/services/lia/brain-correlation-service.ts',
+      'apps/stage-tamagotchi/src/main/services/lia/brain-correlation-reader.ts',
       'apps/stage-tamagotchi/src/renderer/main.ts',
       'apps/stage-tamagotchi/src/renderer/services/lia/brain-shadow.ts',
       'apps/stage-tamagotchi/src/renderer/components/InteractiveArea.vue',
@@ -582,6 +634,69 @@ describe('correlation observer - caller allowlists and authority (Phase 8.0D-10B
         .not
         .toMatch(/brain-correlation-observer|createLiaBrainCorrelationObserver|\.observe\(/)
     }
+
+    // The owner performs composition only: the factory call, the dependency
+    // declaration and the boot materialization - never a read, a fact or an
+    // observation.
+    const entry = stripComments(readFileSync(new URL('apps/stage-tamagotchi/src/main/index.ts', REPO_ROOT), 'utf-8'))
+    expect(entry).toContain(`import { createLiaBrainCorrelationObserver } from './services/lia/brain-correlation-observer'`)
+    expect(entry.match(/createLiaBrainCorrelationObserver\(/g)).toHaveLength(1)
+    expect(entry).toContain('const liaBrainCorrelationObserver = injeca.provide(\'services:lia-brain-correlation-observer\', {')
+    // (whitespace is normalized first so these stay literal shape checks -
+    // no line-break regex gymnastics, no backtracking)
+    const entryCode = entry.replace(/\s+/g, ' ')
+    expect(entryCode).toContain('dependsOn: { liaBrainCorrelation }, build: ({ dependsOn }) => createLiaBrainCorrelationObserver({ correlationReader: dependsOn.liaBrainCorrelation })')
+    expect(entryCode).toContain('dependsOn: { liaBrainCorrelationObserver }, callback: (deps) => { void deps.liaBrainCorrelationObserver')
+    // No observe call, no fact naming, no mapping, no snapshot read.
+    expect(entry).not.toMatch(/\.observe\(|LIA_BRAIN_ENGINE_PROVIDER_MAPPING|readLiaBrainExecutionIdentityFacts|providerIdentityEqual|modelIdentityEqual/)
+    expect(entry).not.toMatch(/recordDecision|recordExecution|\w*[Cc]orrelation\w*\.(?:get\(|size\b)/)
+  })
+
+  it('k/l/m/n/o/p/q: the lifecycle provider owns ONE observer instance per container', async () => {
+    resetProbes()
+    const first = await createTestContainer().resolved()
+    const second = await createTestContainer().resolved()
+
+    // K: exactly one canonical provider id owns the observer, and the container
+    // declares exactly the two providers the composition entry declares.
+    expect(first.providerIds).toEqual([
+      'services:lia-brain-correlation',
+      'services:lia-brain-correlation-observer',
+    ])
+
+    // L: the factory received the container's OWN canonical correlation
+    // instance - the very same object the lifecycle owns, not a copy, not a
+    // wrapper and not a second store.
+    expect(first.observedReaders).toHaveLength(1)
+    expect(first.observedReaders[0]).toBe(first.correlation)
+
+    // M/N: exactly one build per container, and repeated resolution returns the
+    // very same observer object.
+    expect(first.builds).toHaveLength(1)
+    const again = await first.resolveAgain()
+    expect(again.observer).toBe(first.observer)
+    expect(again.correlation).toBe(first.correlation)
+
+    // O: a separate container receives a different observer instance - there is
+    // no module-global singleton and no shared registry.
+    expect(second.observer).not.toBe(first.observer)
+    expect(second.correlation).not.toBe(first.correlation)
+
+    // P/Q: materialization/boot reads nothing, records nothing and emits
+    // nothing - the correlation memory stays untouched and empty.
+    expect(first.reads).toEqual([])
+    expect(first.builds).toHaveLength(1)
+    expect(first.correlation.size).toBe(0)
+    expect(first.correlation.get('X')).toBeUndefined()
+    expect(probes.reader.calls).toEqual([])
+    expect(probes.mapping.received).toEqual([])
+
+    // The wiring is real: content recorded through the container's correlation
+    // instance is what an observation of the same container sees.
+    first.correlation.recordDecision('X', productionDecision())
+    expect(first.observer.observe('X')).toBeUndefined()
+    expect(probes.reader.calls).toEqual(['X'])
+    expect(probes.mapping.received).toEqual([GROQ_ENGINE_ID])
   })
 
   it('zero authority: the observer cannot reach Brain, providers, config or any execution surface', () => {

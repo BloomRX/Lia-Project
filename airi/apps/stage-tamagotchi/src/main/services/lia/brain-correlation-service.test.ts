@@ -246,8 +246,10 @@ describe('lia brain correlation service - composition ownership (Phase 8.0D-10B-
 
     // S: exactly one factory creates the production store...
     expect(entry.match(/createLiaBrainCorrelationService\(\)/g)).toHaveLength(1)
-    // T: exactly one canonical lifecycle provider owns it...
-    expect(entry.match(/services:lia-brain-correlation/g)).toHaveLength(1)
+    // T: exactly one canonical lifecycle provider owns it (the quoted id keeps
+    // the sibling observer provider of 8.0D-10B-4C4B from counting here - it is
+    // a DIFFERENT provider id, not a second owner of this one)...
+    expect(entry.match(/services:lia-brain-correlation'/g)).toHaveLength(1)
     expect(entry).toContain('const liaBrainCorrelation = injeca.provide(\'services:lia-brain-correlation\', () =>')
     // ...registered with the SAME DI mechanism as the Brain service - no second
     // framework, no getter, no module-level instance.
@@ -256,12 +258,15 @@ describe('lia brain correlation service - composition ownership (Phase 8.0D-10B-
 
     // U: the entry materializes it exactly once and records nothing. Since
     // 8.0D-10B-4B3 the SAME handle is also injected into the two registration
-    // seams - three references total, none of which records through the handle.
-    // (the bridge registration lists a second dependency, so the bare
-    // `liaBrainCorrelation }` sequence appears in three dependency objects)
-    expect(entry.match(/dependsOn: \{ liaBrainCorrelation \}/g)).toHaveLength(2)
-    expect(entry.match(/liaBrainCorrelation \}/g) ?? []).toHaveLength(4)
-    expect(entry.match(/void deps\.liaBrainCorrelation/g)).toHaveLength(1)
+    // seams, and since 8.0D-10B-4C4B the observer provider depends on it too -
+    // none of those references records through the handle.
+    expect(entry.match(/dependsOn: \{ liaBrainCorrelation \}/g)).toHaveLength(3)
+    expect(entry.match(/liaBrainCorrelation \}/g) ?? []).toHaveLength(6)
+    // The observer handle of 8.0D-10B-4C4B shares the name prefix, so the
+    // materialization counts are pinned with a word boundary on both sides:
+    // the correlation service is voided once, the observer once.
+    expect(entry.match(/void deps\.liaBrainCorrelation\b/g)).toHaveLength(1)
+    expect(entry.match(/void deps\.liaBrainCorrelationObserver/g)).toHaveLength(1)
     // U (record-free boot invariant): every mention of the handle is a bare
     // reference - it is never read, never recorded into.
     const correlationLines = entry.split('\n').filter(line => line.includes('liaBrainCorrelation'))

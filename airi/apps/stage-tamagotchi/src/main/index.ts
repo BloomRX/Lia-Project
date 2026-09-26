@@ -42,6 +42,7 @@ import { setupArtistryBridge } from './services/airi/widgets/artistry-bridge'
 import { setupAutoUpdater } from './services/electron/auto-updater'
 import { setupGlobalShortcutService } from './services/electron/global-shortcut'
 import { setupPermissionHandlers } from './services/electron/media-permissions'
+import { createLiaBrainCorrelationObserver } from './services/lia/brain-correlation-observer'
 import { createLiaBrainCorrelationService } from './services/lia/brain-correlation-service'
 import { registerLiaBrainDecisionBridge } from './services/lia/brain-decision-service'
 import { registerLiaBrainExecutionReportHandler } from './services/lia/brain-execution-report-service'
@@ -218,6 +219,17 @@ app.whenReady().then(async () => {
   // this phase.
   const liaBrainCorrelation = injeca.provide('services:lia-brain-correlation', () =>
     createLiaBrainCorrelationService())
+  // Phase 8.0D-10B-4C4B: the Lia Brain correlation OBSERVER - ONE instance per
+  // main-process lifetime, created through its own factory over the canonical
+  // correlation service (which structurally satisfies its read contract, so no
+  // adapter and no second memory exist). It owns the diagnostic invocation, the
+  // trusted engine -> provider mapping and the read-failure isolation boundary -
+  // and nothing else: creating it reads nothing, records nothing and emits
+  // nothing. No producer calls it yet.
+  const liaBrainCorrelationObserver = injeca.provide('services:lia-brain-correlation-observer', {
+    dependsOn: { liaBrainCorrelation },
+    build: ({ dependsOn }) => createLiaBrainCorrelationObserver({ correlationReader: dependsOn.liaBrainCorrelation }),
+  })
   const electronApp = injeca.provide('host:electron:app', () => app)
   const autoUpdater = injeca.provide('services:auto-updater', {
     dependsOn: { appConfig },
@@ -503,6 +515,18 @@ app.whenReady().then(async () => {
     dependsOn: { liaBrainCorrelation },
     callback: (deps) => {
       void deps.liaBrainCorrelation
+    },
+  })
+
+  // Phase 8.0D-10B-4C4B: materialize the diagnostic observer at boot (same
+  // eager pattern as the services above) so its ONE instance exists from
+  // startup, wired to the correlation instance the lifecycle already owns. The
+  // callback only touches the handle: it observes nothing, so no snapshot is
+  // read and the correlation memory stays exactly as it was.
+  injeca.invoke({
+    dependsOn: { liaBrainCorrelationObserver },
+    callback: (deps) => {
+      void deps.liaBrainCorrelationObserver
     },
   })
 
