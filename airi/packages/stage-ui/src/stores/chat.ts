@@ -27,7 +27,7 @@ import { useLLM } from './ai/chat-llm/llm'
 import { resolveLlmTools } from './ai/chat-llm/tool-resolver'
 import { useLlmToolsStore } from './ai/chat-llm/tools'
 import { useLlmToolsetPromptsStore } from './ai/chat-llm/toolset-prompts'
-import { CHAT_FALLBACK_MAX_ATTEMPTS, getChatFallbackResolver, notifyChatRequestStarted } from './chat/chat-provider-runtime'
+import { CHAT_FALLBACK_MAX_ATTEMPTS, getChatFallbackResolver, notifyChatRequestStarted, notifyChatRoundSettled } from './chat/chat-provider-runtime'
 import { createMinecraftContext } from './chat/context-providers'
 import { liaCapabilityPromptSupplement } from './chat/context-providers/lia-capabilities'
 import { useChatContextStore } from './chat/context-store'
@@ -350,6 +350,14 @@ export const useChatStore = defineStore('chat', () => {
         // Absent when the caller carried none - never synthesized here.
         ...(event.correlationId === undefined ? {} : { correlationId: event.correlationId }),
       })
+    },
+    // Phase 8.0D-10B-4D4B2: the factual terminal treatment of every round that
+    // entered the send body is forwarded, unchanged, into the same generic seam
+    // convention the request-start observation uses. Field mapping only: this
+    // adapter neither inspects the outcome nor branches on it, and the notifier
+    // owns the isolation.
+    onChatRoundSettled: (observation) => {
+      notifyChatRoundSettled(observation)
     },
     ...analyticsHooks,
     onLifecycle: record => contextObservability.recordLifecycle(record),

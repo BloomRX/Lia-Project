@@ -1,3 +1,5 @@
+import type { ChatRoundSettledObservation } from '@proj-airi/core-agent'
+
 /**
  * Optional, inert-by-default runtime extensions for provider-backed chat.
  *
@@ -16,6 +18,10 @@
  * - {@link registerChatRequestStartedObserver}: observes that one LLM request
  *   is starting, with the provider/model identity resolved for that attempt.
  *   Notification only - it can neither choose nor alter execution.
+ * - {@link registerChatRoundSettledObserver}: observes the factual terminal
+ *   treatment of a round that already entered the send body (`succeeded`,
+ *   `failed`, `abandoned`, as the Core runtime defined them). Same convention,
+ *   same single slot, same isolation - and equally unable to influence it.
  *
  * Nothing is imported from Electron here. Without any registration every
  * consumer (web, pocket, …) behaves exactly as before — these hooks are purely
@@ -91,9 +97,22 @@ export interface ChatRequestStartedObservation {
  */
 export type ChatRequestStartedObserver = (observation: ChatRequestStartedObservation) => void
 
+/**
+ * Phase 8.0D-10B-4D4B2: observes the factual terminal treatment of ONE Core
+ * Agent round.
+ *
+ * The observation is consumed by TYPE-ONLY import from `@proj-airi/core-agent`:
+ * this module is a transport seam, not a second owner of that contract, and it
+ * re-declares neither the outcome union nor the payload. The return value is
+ * ignored - this is a notification, never a decision, and it can neither pick a
+ * provider/model, drive fallback, retry a send nor change a Brain decision.
+ */
+export type ChatRoundSettledObserver = (observation: ChatRoundSettledObservation) => void
+
 let providerCredentialResolver: ProviderCredentialResolver | undefined
 let chatFallbackResolver: ChatFallbackResolver | undefined
 let chatRequestStartedObserver: ChatRequestStartedObserver | undefined
+let chatRoundSettledObserver: ChatRoundSettledObserver | undefined
 
 /** Hard ceiling on total attempts per message (primary + fallbacks). */
 export const CHAT_FALLBACK_MAX_ATTEMPTS = 4
@@ -115,6 +134,16 @@ export function registerChatRequestStartedObserver(observer?: ChatRequestStarted
   chatRequestStartedObserver = observer
 }
 
+/**
+ * Installs (or with `undefined` clears) the single round-settled observer.
+ * Exactly the request-start convention: one slot, replacement on re-register,
+ * no disposer, no multiple subscribers. Registration alone observes nothing -
+ * the observer only ever runs when the runtime reports a settled round.
+ */
+export function registerChatRoundSettledObserver(observer?: ChatRoundSettledObserver): void {
+  chatRoundSettledObserver = observer
+}
+
 export function getProviderCredentialResolver(): ProviderCredentialResolver | undefined {
   return providerCredentialResolver
 }
@@ -125,6 +154,10 @@ export function getChatFallbackResolver(): ChatFallbackResolver | undefined {
 
 export function getChatRequestStartedObserver(): ChatRequestStartedObserver | undefined {
   return chatRequestStartedObserver
+}
+
+export function getChatRoundSettledObserver(): ChatRoundSettledObserver | undefined {
+  return chatRoundSettledObserver
 }
 
 /**
@@ -149,8 +182,32 @@ export function notifyChatRequestStarted(observation: ChatRequestStartedObservat
   }
 }
 
+/**
+ * Forwards one settled-round observation to the registered observer, if any.
+ *
+ * Same isolation contract as the request-start notification: the SAME
+ * observation object is forwarded verbatim (a missing `correlationId` stays
+ * missing - this generic seam applies no filtering of its own), exactly once,
+ * synchronously, and a throwing observer is swallowed right here so it cannot
+ * change whether a send succeeded or failed, cannot trigger a retry, and cannot
+ * reach a fallback decision.
+ */
+export function notifyChatRoundSettled(observation: ChatRoundSettledObservation): void {
+  const observer = chatRoundSettledObserver
+  if (!observer)
+    return
+
+  try {
+    observer(observation)
+  }
+  catch {
+    // Downstream-only: an observer must never be able to break a send.
+  }
+}
+
 export function resetChatProviderRuntimeExtensionsForTesting(): void {
   providerCredentialResolver = undefined
   chatFallbackResolver = undefined
   chatRequestStartedObserver = undefined
+  chatRoundSettledObserver = undefined
 }
