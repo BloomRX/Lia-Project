@@ -7,7 +7,7 @@ import type {
   LiaBrainRoutingDecision,
 } from '@lia/core'
 
-import type { LiaBrainCorrelationObserver } from './brain-correlation-observer'
+import type { LiaBrainCorrelationObserver, LiaBrainDiagnosticEntry } from './brain-correlation-observer'
 import type { LiaBrainCorrelationSnapshotReader } from './brain-correlation-reader'
 import type { LiaBrainExecutionIdentitySnapshot, LiaObservedExecutionIdentity } from './brain-execution-identity-facts'
 
@@ -49,6 +49,9 @@ const probes = vi.hoisted(() => ({
   reader: {
     calls: [] as string[],
     error: undefined as Error | undefined,
+    // Phase 8.0D-10B-4D2A: the exact object the read returned, so the entry can
+    // be proven to forward THAT reference (not a clone, not a rebuild).
+    returned: [] as unknown[],
   },
 }))
 
@@ -79,7 +82,9 @@ vi.mock('./brain-correlation-reader', async (importOriginal) => {
       probes.reader.calls.push(correlationId)
       if (probes.reader.error !== undefined)
         throw probes.reader.error
-      return actual.readLiaBrainExecutionIdentityFacts(reader, correlationId, mapping)
+      const facts = actual.readLiaBrainExecutionIdentityFacts(reader, correlationId, mapping)
+      probes.reader.returned.push(facts)
+      return facts
     },
   }
 })
@@ -159,9 +164,14 @@ function recordingReader(snapshots: Record<string, LiaBrainExecutionIdentitySnap
 }
 
 /** Loads the observer factory with the module doubles in place. */
-async function loadObserver(reader: LiaBrainCorrelationSnapshotReader): Promise<LiaBrainCorrelationObserver> {
+async function loadObserver(
+  reader: LiaBrainCorrelationSnapshotReader,
+  log?: (entry: LiaBrainDiagnosticEntry) => void,
+): Promise<LiaBrainCorrelationObserver> {
   const { createLiaBrainCorrelationObserver } = await import('./brain-correlation-observer')
-  return createLiaBrainCorrelationObserver({ correlationReader: reader })
+  // Phase 8.0D-10B-4D2A: the callback is OPTIONAL and only present when a test
+  // supplies one - exactly the production shape (which never does).
+  return createLiaBrainCorrelationObserver({ correlationReader: reader, ...(log === undefined ? {} : { log }) })
 }
 
 /**
@@ -205,6 +215,7 @@ function resetProbes(): void {
   probes.mapping.throwOn = undefined
   probes.reader.calls.length = 0
   probes.reader.error = undefined
+  probes.reader.returned.length = 0
 }
 
 describe('correlation observer - contract and invocation (Phase 8.0D-10B-4C4A)', () => {
@@ -480,40 +491,54 @@ describe('correlation observer - no retention, no inspection, synchrony (Phase 8
     expect(probes.reader.calls).toEqual(['X'])
   })
 
-  it('v/w/x/y/z: the source never inspects the factual result', () => {
+  it('v/w/x/y/z: the source may forward the factual result but never interprets it', () => {
     const source = stripComments(readSource('./brain-correlation-observer.ts'))
 
-    // The result is discarded in place - never assigned to a semantic local.
-    expect(source).toContain('void readLiaBrainExecutionIdentityFacts(')
-    expect(source).not.toMatch(/=\s*readLiaBrainExecutionIdentityFacts/)
+    // Phase 8.0D-10B-4D2A: the result is handed off by REFERENCE to the
+    // optional callback - assigned to exactly one local named `facts`, which
+    // never leaves the module's own entry shape.
+    expect(source).toContain('const facts = readLiaBrainExecutionIdentityFacts(correlationReader, correlationId, LIA_BRAIN_ENGINE_PROVIDER_MAPPING)')
+    expect(source).toContain('log?.({ correlationId, facts })')
+    // Exactly ONE read call site and ONE forward call site.
+    expect(source.match(/readLiaBrainExecutionIdentityFacts\(/g)).toHaveLength(1)
+    expect(source.match(/log\?\.\(/g)).toHaveLength(1)
     expect(source).not.toMatch(/\bresult\b|\boutcome\b|\bsnapshot\b/)
-    // V: no status inspection, and no state branching at all.
+    // V: the facts are never READ: no property access, no status inspection and
+    // no state branching at all. (`facts` may only be named, never dereferenced.)
+    expect(source).not.toMatch(/facts\./)
     expect(source).not.toMatch(/status/i)
-    expect(source).not.toMatch(/\bif\b|\bswitch\b|\belse\b|\?\?|\?\./)
+    expect(source).not.toMatch(/\bif\b|\bswitch\b|\belse\b|\?\?/)
+    // The ONLY optional chaining is the callback call itself - not a branch on
+    // any factual value.
+    expect(source.match(/\?\./g)).toHaveLength(1)
+    expect(source).not.toMatch(/facts\?\.|attempts\?\.|expected\?\./)
     // W: no attempt iteration or reading.
     expect(source).not.toMatch(/attempts|\.map\(|\.filter\(|for \(/)
     // X/Y: no equality facts are read.
     expect(source).not.toMatch(/providerIdentityEqual|modelIdentityEqual/)
     // Z: nothing is destructured out of a result - the ONLY destructuring is
-    // the injected dependency.
+    // the injected dependencies (reader + optional callback).
     expect(source.match(/const \{/g)).toHaveLength(1)
-    expect(source).toContain('const { correlationReader } = params')
+    expect(source).toContain('const { correlationReader, log } = params')
   })
 
-  it('the source retains nothing, emits nothing and uses no async API', () => {
+  it('the source retains nothing, writes nothing itself and uses no async API', () => {
     const source = stripComments(readSource('./brain-correlation-observer.ts'))
 
     for (const forbidden of ['new Map', 'new Set', 'history', 'cache', 'pending', 'lastResult', 'lastFacts', 'debounce', 'ttl'])
       expect(source, forbidden).not.toMatch(new RegExp(forbidden, 'i'))
     // AC: no Promise, microtask or timer API exists.
     expect(source).not.toMatch(/setTimeout|setInterval|queueMicrotask|Promise|async |await /)
-    // The only binding in the whole module is the injected dependency: nothing
-    // else is ever assigned, so nothing can hold observed data.
-    expect(source.match(/^\s*(?:const|let|var) /gm)).toHaveLength(1)
+    // The bindings are the injected dependencies plus the single factual local
+    // that is handed off immediately: nothing else is ever assigned, so nothing
+    // can hold observed data past the call.
+    expect(source.match(/^\s*(?:const|let|var) /gm)).toHaveLength(2)
 
-    // No output of any kind.
-    expect(source).not.toMatch(/console\.|process\.stdout|logger|telemetry|\.emit\(/)
+    // No output of any kind - the module calls an injected callback and nothing
+    // else: no logger import, no console, no stream, no emitter, no transport.
+    expect(source).not.toMatch(/console\.|process\.stdout|useLogg|@guiiai\/logg|logger|telemetry|\.emit\(/)
     expect(source).not.toMatch(/eventa|defineEventa|defineInvokeEventa|defineInvokeHandler|ipcMain|ipcRenderer|BrowserWindow/)
+    expect(source).not.toMatch(/from ['"](?:node:)?(?:fs|net|https?|dns|dgram|child_process)['/]|\bfetch\(|XMLHttpRequest|WebSocket/)
   })
 })
 
@@ -605,10 +630,12 @@ describe('correlation observer - caller allowlists and authority (Phase 8.0D-10B
   })
 
   it('zero authority: the observer cannot reach Brain, providers, config or any execution surface', () => {
-    // The whole dependency surface: the read adapter's structural type + function
-    // and the trusted mapping value - one structural dependency, nothing else.
+    // The whole dependency surface: the read adapter's structural type + its
+    // result type + function, and the trusted mapping value - nothing else.
+    // (Phase 8.0D-10B-4D2A adds exactly the read result TYPE, so the diagnostic
+    // entry can forward it verbatim instead of re-declaring its union.)
     expect(source.match(/^import .*$/gm)).toEqual([
-      `import type { LiaBrainCorrelationSnapshotReader } from './brain-correlation-reader'`,
+      `import type { LiaBrainCorrelationReadFacts, LiaBrainCorrelationSnapshotReader } from './brain-correlation-reader'`,
       `import { readLiaBrainExecutionIdentityFacts } from './brain-correlation-reader'`,
       `import { LIA_BRAIN_ENGINE_PROVIDER_MAPPING } from './brain-expected-route'`,
     ])
@@ -627,9 +654,11 @@ describe('correlation observer - caller allowlists and authority (Phase 8.0D-10B
     // service factory - the same convention the shipped guards use.)
     expect(source).not.toMatch(/brain-correlation-store|brain-correlation-service|createLiaBrainCorrelation(?:Store|Service)\(|LiaBrainCorrelationStore\b|LiaBrainCorrelationService\b/)
 
-    // The exported surface is exactly the audited one.
+    // The exported surface is exactly the audited one - the observer contract,
+    // the structured diagnostic entry of 8.0D-10B-4D2A and its factory.
     expect([...source.matchAll(/^export (?:const|function|interface|type) (\w+)/gm)].map(match => match[1])).toEqual([
       'LiaBrainCorrelationObserver',
+      'LiaBrainDiagnosticEntry',
       'createLiaBrainCorrelationObserver',
     ])
   })
@@ -663,7 +692,10 @@ describe('correlation observer - lifecycle ownership and dual trigger (Phase 8.0
     for (const producer of [DECISION_PRODUCER, EXECUTION_PRODUCER]) {
       const source = stripComments(readFileSync(new URL(producer, REPO_ROOT), 'utf-8'))
       // Type-only coupling + exactly one bare trigger statement.
+      // The producers know the CONTRACT type only - never the diagnostic entry
+      // of 8.0D-10B-4D2A, never the factory, never a logger.
       expect(source, producer).toContain(`import type { LiaBrainCorrelationObserver } from './brain-correlation-observer'`)
+      expect(source, producer).not.toMatch(/LiaBrainDiagnosticEntry|log\?:|\(entry\)/)
       expect(source.match(/correlationObserver\.\w+/g), producer).toEqual(['correlationObserver.observe'])
       expect(source, producer).not.toMatch(/createLiaBrainCorrelationObserver|brain-correlation-reader|LIA_BRAIN_ENGINE_PROVIDER_MAPPING|brain-expected-route|brain-execution-identity-facts/)
     }
@@ -750,5 +782,220 @@ describe('correlation observer - lifecycle ownership and dual trigger (Phase 8.0
     expect(first.observer.observe('X')).toBeUndefined()
     expect(probes.reader.calls).toEqual(['X'])
     expect(probes.mapping.received).toEqual([GROQ_ENGINE_ID])
+  })
+})
+
+/**
+ * Phase 8.0D-10B-4D2A: the structured diagnostic log seam.
+ *
+ * The observer may now hand the EXACT facts it just read to an injected
+ * callback - and nothing else changes: the read is still unconditional, the
+ * facts are still never interpreted, every factual state travels unfiltered,
+ * and production still supplies no callback at all.
+ */
+
+/** A recording log callback, plus the read count observed AT each call. */
+function recordingLog() {
+  const entries: LiaBrainDiagnosticEntry[] = []
+  const readsAtLogTime: number[] = []
+  return {
+    entries,
+    // Read BEFORE forward: at the moment the callback runs, the read has
+    // already happened (and happened exactly once).
+    log: (entry: LiaBrainDiagnosticEntry) => {
+      readsAtLogTime.push(probes.reader.calls.length)
+      entries.push(entry)
+    },
+    readsAtLogTime,
+  }
+}
+
+/** The snapshot that yields each factual state, over one shared key. */
+const STATE_SNAPSHOTS = {
+  correlationNotObserved: undefined,
+  decisionNotObserved: { executions: [attempt()] },
+  noBrainRouteSelected: { decision: manual({ status: 'noPreference' }), executions: [attempt()] },
+  engineMappingMissing: {
+    decision: manual({ engine: engine({ id: 'mystery-engine' }), model: model({ engineId: 'mystery-engine', id: 'mystery-model' }), status: 'resolvedModel' }),
+    executions: [attempt()],
+  },
+  noExecutionObserved: { decision: productionDecision(), executions: [] },
+  attemptIdentityFacts: { decision: productionDecision(), executions: [attempt()] },
+} satisfies Record<string, LiaBrainExecutionIdentitySnapshot | undefined>
+
+describe('correlation observer - structured diagnostic log seam (Phase 8.0D-10B-4D2A)', () => {
+  it('a/b/c/d/e: without a callback the observation is exactly what it was, and the read still runs', async () => {
+    resetProbes()
+    const { calls, reader } = recordingReader({ X: STATE_SNAPSHOTS.attemptIdentityFacts })
+    const observer = await loadObserver(reader)
+
+    // A: the factory is valid with only the reader - the production shape.
+    expect(observer).toBeTypeOf('object')
+    // B: the public contract is still exactly one method.
+    expect(Object.keys(observer)).toEqual(['observe'])
+    expect(observer.observe).toBeTypeOf('function')
+    // C: observing returns nothing.
+    expect(observer.observe('X')).toBeUndefined()
+    // D: the read still runs - unconditionally, exactly once.
+    expect(probes.reader.calls).toEqual(['X'])
+    expect(calls).toEqual(['X'])
+    // E: the opaque key reaches the reader verbatim.
+    expect(probes.mapping.received).toEqual([GROQ_ENGINE_ID])
+  })
+
+  it('f/g/h/i/j/k: the entry is exactly { correlationId, facts } and forwards the read result by reference', async () => {
+    resetProbes()
+    const { reader } = recordingReader({ 'logical-send-X': STATE_SNAPSHOTS.decisionNotObserved })
+    const recorded = recordingLog()
+    const observer = await loadObserver(reader, recorded.log)
+
+    observer.observe('logical-send-X')
+
+    // F: one observation -> exactly one entry.
+    expect(recorded.entries).toHaveLength(1)
+    const entry = recorded.entries[0]!
+    // G: exactly the two approved top-level fields - no timestamp, no sequence
+    // number, no environment or window id, no provider/model/status duplicate,
+    // no derived verdict.
+    expect(Object.keys(entry).sort()).toEqual(['correlationId', 'facts'])
+    // H: the caller's key is forwarded verbatim, never trimmed or rewritten.
+    expect(entry.correlationId).toBe('logical-send-X')
+    // I: the entry carries the EXACT object the read produced - the seam
+    // recorded that reference, and it is the same one the entry holds. Not a
+    // clone, not a re-derivation, not an edited copy.
+    expect(probes.reader.returned).toHaveLength(1)
+    expect(entry.facts).toBe(probes.reader.returned[0])
+    expect(entry.facts.status).toBe('decisionNotObserved')
+    // J: no time of any kind was added by this module.
+    expect(entry).not.toHaveProperty('timestamp')
+    expect(entry).not.toHaveProperty('time')
+    expect(entry).not.toHaveProperty('at')
+    // K: no duplicated fact at the top level.
+    for (const duplicated of ['status', 'expected', 'attempts', 'providerId', 'modelId', 'engineId', 'roundId', 'providerIdentityEqual', 'modelIdentityEqual'])
+      expect(entry).not.toHaveProperty(duplicated)
+  })
+
+  it('l/m/n/o/p/q: every factual state is forwarded - one entry each, unfiltered', async () => {
+    for (const [status, snapshot] of Object.entries(STATE_SNAPSHOTS)) {
+      resetProbes()
+      const { reader } = recordingReader({ X: snapshot })
+      const recorded = recordingLog()
+      const observer = await loadObserver(reader, recorded.log)
+
+      observer.observe('X')
+
+      // Exactly one entry for this state - no status filtering, no suppression.
+      expect(recorded.entries, status).toHaveLength(1)
+      expect(recorded.entries[0]!.correlationId, status).toBe('X')
+      // The state that travels is the state the facts layer produced, unedited.
+      expect(recorded.entries[0]!.facts.status, status).toBe(status)
+    }
+  })
+
+  it('r/s/t: the read precedes the callback, and duplicates are never deduped', async () => {
+    resetProbes()
+    const { reader } = recordingReader({ X: STATE_SNAPSHOTS.attemptIdentityFacts })
+    const recorded = recordingLog()
+    const observer = await loadObserver(reader, recorded.log)
+
+    observer.observe('X')
+    // R: the callback ran only after the read had already happened once.
+    expect(recorded.readsAtLogTime).toEqual([1])
+    expect(probes.reader.calls).toEqual(['X'])
+
+    observer.observe('X')
+    // S: two observations -> two reads -> two entries.
+    expect(probes.reader.calls).toEqual(['X', 'X'])
+    expect(recorded.entries).toHaveLength(2)
+    // T: identical facts are NOT deduplicated - both entries are kept, and both
+    // carry their own freshly read value.
+    expect(recorded.entries[0]!.facts).toEqual(recorded.entries[1]!.facts)
+    expect(recorded.entries[0]!.facts).toBe(probes.reader.returned[0])
+    expect(recorded.entries[1]!.facts).toBe(probes.reader.returned[1])
+    expect(recorded.entries[0]!.facts).not.toBe(recorded.entries[1]!.facts)
+  })
+
+  it('u/v/w: a read that throws is never forwarded, and nothing is retried', async () => {
+    // U: the read adapter itself throws (an injected storage defect).
+    resetProbes()
+    const { reader } = recordingReader({ X: STATE_SNAPSHOTS.attemptIdentityFacts })
+    const recorded = recordingLog()
+    const observer = await loadObserver(reader, recorded.log)
+    probes.reader.error = new Error('storage exploded')
+
+    expect(observer.observe('X')).toBeUndefined()
+    expect(recorded.entries).toEqual([])
+    // W: exactly ONE read attempt - no retry, no second read.
+    expect(probes.reader.calls).toEqual(['X'])
+
+    // V: the mapping/derive layer throws instead - same isolation.
+    resetProbes()
+    const second = recordingLog()
+    const observer2 = await loadObserver(recordingReader({ X: STATE_SNAPSHOTS.attemptIdentityFacts }).reader, second.log)
+    probes.mapping.throwOn = GROQ_ENGINE_ID
+
+    expect(observer2.observe('X')).toBeUndefined()
+    expect(second.entries).toEqual([])
+    expect(probes.reader.calls).toEqual(['X'])
+  })
+
+  it('x/y/z/aa/ab: a hostile callback cannot escape, and it is called exactly once', async () => {
+    resetProbes()
+    const { reader } = recordingReader({ X: STATE_SNAPSHOTS.attemptIdentityFacts })
+    const attempted: string[] = []
+    const hostile = (entry: LiaBrainDiagnosticEntry) => {
+      attempted.push(entry.correlationId)
+      throw new Error('hostile log destination')
+    }
+    const observer = await loadObserver(reader, hostile)
+
+    // Y: the exception never escapes the observation.
+    expect(() => observer.observe('X')).not.toThrow()
+    // X/AA: the callback was attempted exactly once...
+    expect(attempted).toEqual(['X'])
+    // ...and AB: there was no retry, no second callback and no second read.
+    expect(attempted).toHaveLength(1)
+    expect(probes.reader.calls).toEqual(['X'])
+
+    // The observer remains usable after a hostile destination failed.
+    expect(() => observer.observe('X')).not.toThrow()
+    expect(attempted).toEqual(['X', 'X'])
+    expect(probes.reader.calls).toEqual(['X', 'X'])
+  })
+
+  it('shape: the serialized entry carries the two approved fields and no hostile extra', async () => {
+    resetProbes()
+    const { reader } = recordingReader({ X: STATE_SNAPSHOTS.attemptIdentityFacts })
+    const recorded = recordingLog()
+    const observer = await loadObserver(reader, recorded.log)
+
+    observer.observe('X')
+
+    const serialized = JSON.stringify(recorded.entries[0]!)
+    // The observer adds no data beyond the key and the facts: no prompt, no
+    // message, no attachment, no tool argument, no credential, no API key, no
+    // baseURL, no provider config and no chat payload has any path into it.
+    // (Sanitizing arbitrary content INSIDE a trusted fact value is not this
+    // module's job - transport sanitization stays upstream.)
+    for (const forbidden of ['prompt', 'messages', 'attachments', 'tools', 'apiKey', 'secret', 'baseURL', 'chatProvider', 'credentials', 'conversationId'])
+      expect(serialized, forbidden).not.toContain(forbidden)
+    // And the only keys are the approved two.
+    expect(Object.keys(JSON.parse(serialized))).toEqual(['correlationId', 'facts'])
+  })
+
+  it('production still supplies NO callback - the composition constructs the reader-only shape', () => {
+    // The exact production factory call, whitespace-normalized: the dependency
+    // set is the reader alone, so nothing in production can produce output.
+    const entry = stripComments(readFileSync(new URL('apps/stage-tamagotchi/src/main/index.ts', REPO_ROOT), 'utf-8'))
+    const entryCode = entry.replace(/\s+/g, ' ')
+    expect(entryCode).toContain('createLiaBrainCorrelationObserver({ correlationReader: dependsOn.liaBrainCorrelation })')
+    expect(entry).not.toMatch(/log: |useLogg\('lia:brain/)
+    // Exactly ONE factory call site in production, and it is the entry's.
+    expect(productionMatching(/(?<!function )createLiaBrainCorrelationObserver\(/)).toEqual([
+      'apps/stage-tamagotchi/src/main/index.ts',
+    ])
+    // Zero production sources name the diagnostic entry's callback seam: the
+    // only module that knows it is this one.
+    expect(productionMatching(/LiaBrainDiagnosticEntry/)).toEqual([OBSERVER])
   })
 })
