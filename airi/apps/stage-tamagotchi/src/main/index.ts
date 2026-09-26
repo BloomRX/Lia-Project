@@ -45,6 +45,7 @@ import { setupPermissionHandlers } from './services/electron/media-permissions'
 import { createLiaBrainCorrelationObserver } from './services/lia/brain-correlation-observer'
 import { createLiaBrainCorrelationService } from './services/lia/brain-correlation-service'
 import { registerLiaBrainDecisionBridge } from './services/lia/brain-decision-service'
+import { selectLiaBrainDiagnosticLog } from './services/lia/brain-diagnostic-log'
 import { registerLiaBrainExecutionReportHandler } from './services/lia/brain-execution-report-service'
 import { createLiaBrainService } from './services/lia/lia-brain-service'
 import { startLiaMainWindowVoiceRuntime } from './services/lia/main-window-voice-runtime'
@@ -225,10 +226,19 @@ app.whenReady().then(async () => {
   // adapter and no second memory exist). It owns the diagnostic invocation, the
   // trusted engine -> provider mapping and the read-failure isolation boundary -
   // and nothing else: creating it reads nothing, records nothing and emits
-  // nothing. No producer calls it yet.
+  // nothing by itself. No producer calls it yet.
+  // Phase 8.0D-10B-4D2B: the diagnostic LOG callback is selected HERE, in the
+  // trusted composition root, from the build mode alone - a development build
+  // gets the one adapter line ("[LIA-BRAIN-DIAG] ...", informational), and
+  // every other build gets `undefined`, which is the reader-only shape: facts
+  // are still read on every observation and simply have no destination. No
+  // renderer value, storage or product config participates in this decision.
   const liaBrainCorrelationObserver = injeca.provide('services:lia-brain-correlation-observer', {
     dependsOn: { liaBrainCorrelation },
-    build: ({ dependsOn }) => createLiaBrainCorrelationObserver({ correlationReader: dependsOn.liaBrainCorrelation }),
+    build: ({ dependsOn }) => createLiaBrainCorrelationObserver({
+      correlationReader: dependsOn.liaBrainCorrelation,
+      log: selectLiaBrainDiagnosticLog(import.meta.env.DEV),
+    }),
   })
   const electronApp = injeca.provide('host:electron:app', () => app)
   const autoUpdater = injeca.provide('services:auto-updater', {

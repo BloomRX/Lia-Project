@@ -569,6 +569,7 @@ function stripComments(source: string): string {
 
 const BRAIN_ROOTS = ['apps/stage-tamagotchi/src', 'packages/stage-ui/src', 'packages/core-agent/src', 'packages/lia-core/src']
 const OBSERVER = 'apps/stage-tamagotchi/src/main/services/lia/brain-correlation-observer.ts'
+const DIAGNOSTIC_LOG = 'apps/stage-tamagotchi/src/main/services/lia/brain-diagnostic-log.ts'
 const READER = 'apps/stage-tamagotchi/src/main/services/lia/brain-correlation-reader.ts'
 const IDENTITY_FACTS = 'apps/stage-tamagotchi/src/main/services/lia/brain-execution-identity-facts.ts'
 const EXPECTED_ROUTE = 'apps/stage-tamagotchi/src/main/services/lia/brain-expected-route.ts'
@@ -671,12 +672,19 @@ describe('correlation observer - lifecycle ownership and dual trigger (Phase 8.0
   it('ai: the module references are the composition entry plus the two TYPE-ONLY producers, and the entry never observes', () => {
     // Phase 8.0D-10B-4C4B gives the observer its ONE canonical lifecycle owner;
     // Phase 8.0D-10B-4C4C adds the two producers, which know only the contract
-    // TYPE and the one trigger - neither creates, resolves or constructs one.
+    // TYPE and the one trigger; 8.0D-10B-4D2B adds the diagnostic log adapter,
+    // which knows only the entry TYPE. None of them creates or constructs one.
     expect(productionMatching(/brain-correlation-observer/)).toEqual([
       'apps/stage-tamagotchi/src/main/index.ts',
       DECISION_PRODUCER,
+      DIAGNOSTIC_LOG,
       EXECUTION_PRODUCER,
     ])
+    // The adapter's coupling is TYPE-ONLY: it imports the entry contract and
+    // never the module's value surface (no factory, no reader, no mapping).
+    const adapter = stripComments(readFileSync(new URL(DIAGNOSTIC_LOG, REPO_ROOT), 'utf-8'))
+    expect(adapter).toContain(`import type { LiaBrainDiagnosticEntry } from './brain-correlation-observer'`)
+    expect(adapter).not.toMatch(/createLiaBrainCorrelationObserver|brain-correlation-reader|brain-execution-identity-facts|brain-expected-route|brain-correlation-store|brain-correlation-service/)
     // A. FACTORY ownership stays exactly the composition entry (the `function `
     // lookbehind excludes the factory's own declaration, so this counts CALLs).
     expect(productionMatching(/(?<!function )createLiaBrainCorrelationObserver\(/)).toEqual([
@@ -724,7 +732,9 @@ describe('correlation observer - lifecycle ownership and dual trigger (Phase 8.0
     // (whitespace is normalized first so these stay literal shape checks -
     // no line-break regex gymnastics, no backtracking)
     const entryCode = entry.replace(/\s+/g, ' ')
-    expect(entryCode).toContain('dependsOn: { liaBrainCorrelation }, build: ({ dependsOn }) => createLiaBrainCorrelationObserver({ correlationReader: dependsOn.liaBrainCorrelation })')
+    // The provider still receives the canonical correlation reader; since
+    // 8.0D-10B-4D2B it also hands over the BUILD-SELECTED log callback.
+    expect(entryCode).toContain('dependsOn: { liaBrainCorrelation }, build: ({ dependsOn }) => createLiaBrainCorrelationObserver({ correlationReader: dependsOn.liaBrainCorrelation, log: selectLiaBrainDiagnosticLog(import.meta.env.DEV), })')
     expect(entryCode).toContain('dependsOn: { liaBrainCorrelationObserver }, callback: (deps) => { void deps.liaBrainCorrelationObserver')
     // The entry OWNS the observer but never TRIGGERS it: no observe call, no
     // fact naming, no mapping and no snapshot read.
@@ -983,19 +993,26 @@ describe('correlation observer - structured diagnostic log seam (Phase 8.0D-10B-
     expect(Object.keys(JSON.parse(serialized))).toEqual(['correlationId', 'facts'])
   })
 
-  it('production still supplies NO callback - the composition constructs the reader-only shape', () => {
-    // The exact production factory call, whitespace-normalized: the dependency
-    // set is the reader alone, so nothing in production can produce output.
+  it('the composition supplies only the BUILD-SELECTED callback - the reader plus one dev-gated sink', () => {
+    // Phase 8.0D-10B-4D2B: the entry passes exactly the reader and the callback
+    // the build-mode selector returned - no literal function, no logger, no
+    // environment knowledge beyond the single selector argument.
     const entry = stripComments(readFileSync(new URL('apps/stage-tamagotchi/src/main/index.ts', REPO_ROOT), 'utf-8'))
     const entryCode = entry.replace(/\s+/g, ' ')
-    expect(entryCode).toContain('createLiaBrainCorrelationObserver({ correlationReader: dependsOn.liaBrainCorrelation })')
-    expect(entry).not.toMatch(/log: |useLogg\('lia:brain/)
+    expect(entryCode).toContain('createLiaBrainCorrelationObserver({ correlationReader: dependsOn.liaBrainCorrelation, log: selectLiaBrainDiagnosticLog(import.meta.env.DEV), })')
+    // The entry never names the adapter's logger, never formats a line and
+    // never inspects facts: it hands over the gate decision and nothing else.
+    expect(entry).not.toMatch(/useLogg\('lia:brain'|\[LIA-BRAIN-DIAG\]|formatLiaBrainDiagnosticEntry|LiaBrainDiagnosticEntry/)
+    expect(entry).not.toMatch(/\bfacts\b|\bstatus\b|\battempts\b|\bproviderId\b|\bmodelId\b|\bengineId\b/)
     // Exactly ONE factory call site in production, and it is the entry's.
     expect(productionMatching(/(?<!function )createLiaBrainCorrelationObserver\(/)).toEqual([
       'apps/stage-tamagotchi/src/main/index.ts',
     ])
-    // Zero production sources name the diagnostic entry's callback seam: the
-    // only module that knows it is this one.
-    expect(productionMatching(/LiaBrainDiagnosticEntry/)).toEqual([OBSERVER])
+    // Exactly TWO production modules name the diagnostic entry: this module
+    // (which defines it) and the narrow log adapter (which consumes it).
+    expect(productionMatching(/LiaBrainDiagnosticEntry/)).toEqual([
+      OBSERVER,
+      DIAGNOSTIC_LOG,
+    ])
   })
 })

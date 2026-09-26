@@ -98,6 +98,35 @@ describe('lia brain service lifecycle ownership (Phase 8.0D-5)', () => {
     expect(block).not.toMatch(/let |var |globalThis|module\.exports/)
   })
 
+  it('4d2b: the dev diagnostic log gate lives in the composition root and nowhere else', () => {
+    const source = stripComments(mainEntry())
+
+    // The observer provider is still exactly ONE, still reached through its own
+    // factory, and still built over the canonical correlation reader.
+    expect(source.match(/services:lia-brain-correlation-observer'/g)).toHaveLength(1)
+    expect(source.match(/(?<!function )createLiaBrainCorrelationObserver\(/g)).toHaveLength(1)
+    const code = source.replace(/\s+/g, ' ')
+    expect(code).toContain('createLiaBrainCorrelationObserver({ correlationReader: dependsOn.liaBrainCorrelation, log: selectLiaBrainDiagnosticLog(import.meta.env.DEV), })')
+
+    // The gate argument is the BUILD mode and nothing else - no env var, no
+    // renderer storage, no product config, no per-observation construction.
+    expect(source.match(/selectLiaBrainDiagnosticLog\(/g)).toHaveLength(1)
+    expect(source).toContain('selectLiaBrainDiagnosticLog(import.meta.env.DEV)')
+    expect(source).not.toMatch(/MAIN_APP_DEBUG|APP_DEBUG|localStorage|sessionStorage|useLogg\('lia:brain'/)
+
+    // The composition root hands over the gate decision only: it never formats,
+    // never names the logger/prefix and never inspects a factual value.
+    expect(source).not.toMatch(/useLogg\('lia:brain|\[LIA-BRAIN-DIAG\]|formatLiaBrainDiagnosticEntry|LiaBrainDiagnosticEntry/)
+    expect(source).not.toMatch(/\.observe\(/)
+    expect(source).not.toMatch(/\bfacts\b|\bstatus\b|\battempts\b|providerIdentityEqual|modelIdentityEqual/)
+    // Still provider-neutral: no engine/model/provider literal anywhere.
+    expect(source).not.toMatch(/groq|gpt-oss|qwen|openai|anthropic/i)
+
+    // The adapter is imported as a VALUE (the selector), and it is the only new
+    // import this phase adds to the entry.
+    expect(mainEntry()).toContain(`import { selectLiaBrainDiagnosticLog } from './services/lia/brain-diagnostic-log'`)
+  })
+
   it('d/e/f/g: boot materializes the service without evaluating any routing input', () => {
     const source = stripComments(mainEntry())
     const boot = source.slice(source.indexOf('injeca.invoke({', source.lastIndexOf('const liaBrain')))
