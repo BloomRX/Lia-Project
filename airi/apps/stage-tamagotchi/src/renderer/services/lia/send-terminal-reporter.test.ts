@@ -329,27 +329,37 @@ describe('lia logical-send terminal reporter (Phase 8.0D-10B-4D4C4-B2)', () => {
     const withContract = productionSources(BRAIN_ROOTS)
       .filter(relative => /electronLiaBrainSendTerminalObservation/.test(readFileSync(join(process.cwd(), '..', '..', relative), 'utf-8')))
       .sort()
-    // Exactly two: the shared declaration and this renderer reporter. No main
-    // listener, no ingress service, no allowlist entry beyond them.
+    // Exactly three: the shared declaration, this renderer reporter and, since
+    // 8.0D-10B-4D4C4-B3B2, the ONE main transport listener that consumes it. No
+    // allowlist entry beyond them, and no second main handler.
     expect(withContract).toEqual([
+      'apps/stage-tamagotchi/src/main/services/lia/brain-send-terminal-report-listener.ts',
       'apps/stage-tamagotchi/src/renderer/services/lia/send-terminal-reporter.ts',
       'apps/stage-tamagotchi/src/shared/eventa/index.ts',
     ])
-    expect(withContract.filter(relative => relative.includes('/src/main/'))).toEqual([])
+    // Since 8.0D-10B-4D4C4-B3B2 exactly ONE main module consumes it - the
+    // transport listener - and that is the only main-side reference.
+    expect(withContract.filter(relative => relative.includes('/src/main/')))
+      .toEqual(['apps/stage-tamagotchi/src/main/services/lia/brain-send-terminal-report-listener.ts'])
 
-    // The report type stays in the shared contract, and since
+    // The payload TYPE itself stays in the shared contract, and since
     // 8.0D-10B-4D4C4-B3A/B3B1 exactly TWO main modules TYPE-import it - the
     // canonical correlation store that retains the fact and the trusted ingress
-    // service that sanitizes it. Nothing else names it: no listener, no fact
-    // module, no renderer.
+    // service that sanitizes it. The transport listener needs no payload type at
+    // all (it forwards `event.body` untouched), and no fact module, reader or
+    // renderer names it.
     expect(productionSources(BRAIN_ROOTS)
-      .filter(relative => /LiaBrainSendTerminalReport/.test(readFileSync(join(process.cwd(), '..', '..', relative), 'utf-8')))
+      .filter(relative => /LiaBrainSendTerminalReport\b/.test(readFileSync(join(process.cwd(), '..', '..', relative), 'utf-8')))
       .sort())
       .toEqual([
         'apps/stage-tamagotchi/src/main/services/lia/brain-correlation-store.ts',
         'apps/stage-tamagotchi/src/main/services/lia/brain-send-terminal-report-service.ts',
         'apps/stage-tamagotchi/src/shared/eventa/index.ts',
       ])
+    // The listener names no payload type at all: it knows only the service.
+    expect(readFileSync(join(process.cwd(), 'src/main/services/lia/brain-send-terminal-report-listener.ts'), 'utf-8'))
+      .not
+      .toMatch(/LiaBrainSendTerminalReport\b/)
   })
 
   it('u: the main observer triggers stay exactly three - the send signal triggers none', () => {

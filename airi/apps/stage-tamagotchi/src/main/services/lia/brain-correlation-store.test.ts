@@ -904,9 +904,10 @@ describe('lia brain correlation store - isolation invariants (Phase 8.0D-10B-4B1
     // service handle and injects it (8.0D-10B-4B3).
     const entry = readFileSync(new URL('../../index.ts', import.meta.url), 'utf-8')
     expect(entry).not.toMatch(/brain-correlation-store|createLiaBrainCorrelationStore|LiaBrainCorrelationStore/)
-    // 8.0D-10B-4D4C2B2 adds the third injection of that ONE handle: the terminal
-    // ingress service is created over the same canonical store - no second store.
-    expect(entry.match(/correlationStore: deps\.liaBrainCorrelation/g)).toHaveLength(3)
+    // 8.0D-10B-4D4C2B2 added the third injection of that ONE handle (the
+    // terminal ingress), and 8.0D-10B-4D4C4-B3B2 the fourth (the send-terminal
+    // ingress): both are created over the SAME canonical store - no second store.
+    expect(entry.match(/correlationStore: deps\.liaBrainCorrelation/g)).toHaveLength(4)
   })
 
   it('ai: the store introduces no transport of its own', () => {
@@ -1412,10 +1413,12 @@ describe('lia brain correlation store - logical send terminal fact (Phase 8.0D-1
   })
 
   it('44/45/46/47/81/82/83: no fourth trigger, no main listener, no ingress, FOUR channels, THREE triggers', () => {
-    // 45/46/81: the fourth channel still has NO main consumer at all - no
-    // listener, no ingress service, no main module naming the channel.
+    // 45/46/81: B3A froze the fourth channel with NO main consumer at all;
+    // 8.0D-10B-4D4C4-B3B2 evolves that honestly to exactly ONE - the transport
+    // listener - and to no second main module naming the channel. There is
+    // still no store-level consumer beyond the ingress it forwards to.
     expect(productionSourcesMatching(['apps/stage-tamagotchi/src/main'], /electronLiaBrainSendTerminalObservation|send-terminal-observation/))
-      .toEqual([])
+      .toEqual(['apps/stage-tamagotchi/src/main/services/lia/brain-send-terminal-report-listener.ts'])
 
     // 47/48/49/50/51: the reader, the facts, the composition, the observer and
     // the formatter do not know the field yet.

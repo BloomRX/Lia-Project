@@ -49,6 +49,8 @@ import { selectLiaBrainDiagnosticLog } from './services/lia/brain-diagnostic-log
 import { registerLiaBrainExecutionReportHandler } from './services/lia/brain-execution-report-service'
 import { registerLiaBrainExecutionTerminalReportListener } from './services/lia/brain-execution-terminal-report-listener'
 import { createLiaBrainExecutionTerminalReportService } from './services/lia/brain-execution-terminal-report-service'
+import { registerLiaBrainSendTerminalReportListener } from './services/lia/brain-send-terminal-report-listener'
+import { createLiaBrainSendTerminalReportService } from './services/lia/brain-send-terminal-report-service'
 import { createLiaBrainService } from './services/lia/lia-brain-service'
 import { startLiaMainWindowVoiceRuntime } from './services/lia/main-window-voice-runtime'
 import { registerLiaProviderConfigBridge } from './services/lia/provider-config-service'
@@ -489,6 +491,25 @@ app.whenReady().then(async () => {
         correlationObserver: deps.liaBrainCorrelationObserver,
       })
       registerLiaBrainExecutionTerminalReportListener({ context, terminalReportService })
+    },
+  })
+
+  // Phase 8.0D-10B-4D4C4-B3B2: the FOURTH Brain channel - the one-way
+  // logical-send terminal report. It depends on the correlation store and on
+  // NOTHING else: this path deliberately receives no observer, because the
+  // diagnostic reader/composition does not expose the send-level fact yet, so
+  // an observation here could not represent it. The entry creates the ONE
+  // send-terminal ingress instance over the SAME lifecycle handle the other
+  // producers write through - one canonical store, never a second one - and the
+  // listener forwards the raw payload to it; nothing here inspects the payload.
+  injeca.invoke({
+    dependsOn: { liaBrainCorrelation },
+    callback: async (deps) => {
+      const { context } = createContext(ipcMain)
+      const sendTerminalReportService = createLiaBrainSendTerminalReportService({
+        correlationStore: deps.liaBrainCorrelation,
+      })
+      registerLiaBrainSendTerminalReportListener({ context, sendTerminalReportService })
     },
   })
 

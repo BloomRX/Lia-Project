@@ -515,21 +515,38 @@ describe('lia send terminal ingress service - isolation invariants (Phase 8.0D-1
     expect(service).not.toMatch(/recordDecision\(|recordExecution\(|correlationStore\.(?:get|size)/)
   })
 
-  it('37/39/83: the ingress has ZERO production callers - and no other module reaches the store', () => {
-    // The factory exists and nothing constructs it yet: the Eventa listener
-    // that will forward raw payloads is the NEXT phase and does not exist.
-    expect(productionSourcesMatching(BRAIN_ROOTS, /(?<!function )createLiaBrainSendTerminalReportService\(/)).toEqual([])
-    expect(productionSourcesMatching(BRAIN_ROOTS, /LiaBrainSendTerminalReportService|LiaBrainSendTerminalRecorder/))
+  it('37/39/83: the ingress has exactly ONE production caller - the canonical composition', () => {
+    // B3B1 shipped this factory with ZERO callers on purpose; 8.0D-10B-4D4C4-B3B2
+    // evolves that honestly to exactly ONE - the composition entry that creates
+    // the instance the transport listener forwards into.
+    expect(productionSourcesMatching(BRAIN_ROOTS, /(?<!function )createLiaBrainSendTerminalReportService\(/))
+      .toEqual(['apps/stage-tamagotchi/src/main/index.ts'])
+    // The ingress interface and its narrow recorder contract are DECLARED in
+    // exactly one production module, and TYPE-imported by exactly one consumer -
+    // the transport listener. (The composition entry only calls the factory, so
+    // the camel-case noun of that factory name is not a type reference.)
+    expect(productionSourcesMatching(BRAIN_ROOTS, /export interface LiaBrainSendTerminalReportService|export interface LiaBrainSendTerminalRecorder/))
       .toEqual(['apps/stage-tamagotchi/src/main/services/lia/brain-send-terminal-report-service.ts'])
+    expect(productionSourcesMatching(BRAIN_ROOTS, /import type \{[^}]*LiaBrainSendTerminalReportService[^}]*\}/))
+      .toEqual(['apps/stage-tamagotchi/src/main/services/lia/brain-send-terminal-report-listener.ts'])
     // Exactly ONE production file carries this name - the service itself...
     expect(productionSources(BRAIN_ROOTS).filter(relative => relative.includes('brain-send-terminal-report-service')))
       .toEqual(['apps/stage-tamagotchi/src/main/services/lia/brain-send-terminal-report-service.ts'])
-    // ...and NO production file references the module at all: no listener, no
-    // composition entry, no reader, no observer, no renderer.
-    expect(productionSourcesMatching(BRAIN_ROOTS, /brain-send-terminal-report-service/)).toEqual([])
-    // No renderer/main/decision path calls the send-terminal writer directly.
-    for (const relative of ['../../../renderer/main.ts', '../../../renderer/services/lia/send-terminal-reporter.ts', '../../index.ts'])
+    // ...and exactly TWO other production modules reference it: the composition
+    // entry (which calls the factory) and the transport listener (which imports
+    // its interface TYPE only). No reader, no observer, no formatter, no
+    // renderer, no second main handler.
+    expect(productionSourcesMatching(BRAIN_ROOTS, /brain-send-terminal-report-service/))
+      .toEqual([
+        'apps/stage-tamagotchi/src/main/index.ts',
+        'apps/stage-tamagotchi/src/main/services/lia/brain-send-terminal-report-listener.ts',
+      ])
+    // The listener consumes the ingress through its narrow public interface and
+    // never reaches a store member directly; no renderer path does either.
+    for (const relative of ['../../../renderer/main.ts', '../../../renderer/services/lia/send-terminal-reporter.ts'])
       expect(readSource(relative), relative).not.toMatch(/recordSendTerminal|brain-send-terminal-report-service/)
+    const listener = stripComments(readSource('./brain-send-terminal-report-listener.ts'))
+    expect(listener).not.toMatch(/recordSendTerminal|correlationStore/)
   })
 
   it('76/34: the ingress knows no transport - no Eventa, no Electron, no channel', () => {
@@ -596,19 +613,26 @@ describe('lia send terminal ingress service - isolation invariants (Phase 8.0D-1
     expect(source).not.toMatch(/Object\.(?:keys|entries|values|assign|fromEntries)|hasOwnProperty|Object\.hasOwn/)
   })
 
-  it('84/48: the fourth channel still has NO main consumer - the shared declaration and renderer producer only', () => {
-    // No main file LISTENS or HANDLES it: no listener, no ingress registration,
-    // no composition entry naming the constant.
+  it('84/48: the fourth channel has exactly ONE main consumer - the send-terminal listener', () => {
+    // B3B1 froze this channel with no main consumer; 8.0D-10B-4D4C4-B3B2 wires
+    // exactly ONE main module to it - the transport listener - and no second
+    // main handler of any kind.
     expect(productionSourcesMatching(['apps/stage-tamagotchi/src/main'], /electronLiaBrainSendTerminalObservation|send-terminal-observation/))
-      .toEqual([])
+      .toEqual(['apps/stage-tamagotchi/src/main/services/lia/brain-send-terminal-report-listener.ts'])
+    expect(productionSourcesMatching(['apps/stage-tamagotchi/src/main'], /context\.on\(electronLiaBrainSendTerminalObservation/))
+      .toEqual(['apps/stage-tamagotchi/src/main/services/lia/brain-send-terminal-report-listener.ts'])
     // The legitimate sides stay: the shared contract declares it and the
-    // renderer reporter pushes it.
+    // renderer reporter pushes it - and the ingress itself knows no transport.
     expect(readSource('../../../shared/eventa/index.ts')).toContain(`'eventa:event:lia:brain:send-terminal-observation'`)
     expect(readSource('../../../renderer/services/lia/send-terminal-reporter.ts')).toContain('electronLiaBrainSendTerminalObservation')
     expect(productionSourcesMatching(BRAIN_ROOTS, /electronLiaBrainSendTerminalObservation/)).toEqual([
+      'apps/stage-tamagotchi/src/main/services/lia/brain-send-terminal-report-listener.ts',
       'apps/stage-tamagotchi/src/renderer/services/lia/send-terminal-reporter.ts',
       'apps/stage-tamagotchi/src/shared/eventa/index.ts',
     ])
+    expect(stripComments(readSource('./brain-send-terminal-report-service.ts')))
+      .not
+      .toMatch(/electronLiaBrainSendTerminalObservation|brain-send-terminal-report-listener/)
   })
 
   it('40/41/42/43/44/45/46/47: the frozen layers are untouched by this phase', () => {

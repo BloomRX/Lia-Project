@@ -274,11 +274,14 @@ describe('lia brain correlation service - composition ownership (Phase 8.0D-10B-
     // 8.0D-10B-4D4C3B2-B3 reverses exactly that asymmetry: the terminal ingress
     // now receives the SAME lifecycle-owned observer, so the single-dependency
     // set is back to the observer provider and the boot materialization, and the
-    // store + observer pair is the shape of all THREE producers.)
-    expect(entry.match(/dependsOn: \{ liaBrainCorrelation \}/g)).toHaveLength(2)
+    // store + observer pair is the shape of all THREE producers.
+    // 8.0D-10B-4D4C4-B3B2 adds the FOURTH store-only block: the send-terminal
+    // ingress deliberately receives no observer, so the single-dependency set
+    // grows to three while the store + observer pair stays at two.)
+    expect(entry.match(/dependsOn: \{ liaBrainCorrelation \}/g)).toHaveLength(3)
     expect(entry.match(/dependsOn: \{ liaBrainCorrelation, liaBrainCorrelationObserver \}/g)).toHaveLength(2)
     expect(entry.match(/dependsOn: \{ liaBrain, liaBrainCorrelation, liaBrainCorrelationObserver \}/g)).toHaveLength(1)
-    expect(entry.match(/liaBrainCorrelation \}/g) ?? []).toHaveLength(2)
+    expect(entry.match(/liaBrainCorrelation \}/g) ?? []).toHaveLength(3)
     expect(entry.match(/correlationReader: dependsOn\.liaBrainCorrelation,/g)).toHaveLength(1)
     // The observer handle of 8.0D-10B-4C4B shares the name prefix, so the
     // materialization counts are pinned with a word boundary on both sides:
