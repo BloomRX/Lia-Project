@@ -570,6 +570,7 @@ function stripComments(source: string): string {
 
 const BRAIN_ROOTS = ['apps/stage-tamagotchi/src', 'packages/stage-ui/src', 'packages/core-agent/src', 'packages/lia-core/src']
 const OBSERVER = 'apps/stage-tamagotchi/src/main/services/lia/brain-correlation-observer.ts'
+const COMPOSITION = 'apps/stage-tamagotchi/src/main/services/lia/brain-correlation-diagnostic-facts.ts'
 const DIAGNOSTIC_LOG = 'apps/stage-tamagotchi/src/main/services/lia/brain-diagnostic-log.ts'
 const READER = 'apps/stage-tamagotchi/src/main/services/lia/brain-correlation-reader.ts'
 const IDENTITY_FACTS = 'apps/stage-tamagotchi/src/main/services/lia/brain-execution-identity-facts.ts'
@@ -584,20 +585,24 @@ function productionMatching(pattern: RegExp): string[] {
 describe('correlation observer - caller allowlists and authority (Phase 8.0D-10B-4C4A)', () => {
   const source = stripComments(readSource('./brain-correlation-observer.ts'))
 
-  it('ad: the reader has exactly ONE production caller - this observer', () => {
-    expect(productionMatching(/brain-correlation-reader/)).toEqual([OBSERVER])
+  it('ad: the reader has exactly TWO production references - this observer and the pure composition', () => {
+    // Phase 8.0D-10B-4D4C3B2 adds the second reference: the unwired
+    // single-snapshot composition names the reader for its structural contracts.
+    expect(productionMatching(/brain-correlation-reader/)).toEqual([COMPOSITION, OBSERVER])
     expect(source).toContain(`import { readLiaBrainExecutionIdentityFacts } from './brain-correlation-reader'`)
     expect(source.match(/readLiaBrainExecutionIdentityFacts\(/g)).toHaveLength(1)
   })
 
-  it('ae: the direct correlation read allowlist is still exactly the reader module', () => {
-    expect(productionMatching(/\w*[Cc]orrelation\w*\.(?:get\(|size\b)/)).toEqual([READER])
+  it('ae: the direct correlation read allowlist is the reader module plus the unwired composition', () => {
+    // Phase 8.0D-10B-4D4C3B2's composition owns the ONE read of a composed
+    // result; it has no production caller yet.
+    expect(productionMatching(/\w*[Cc]orrelation\w*\.(?:get\(|size\b)/)).toEqual([COMPOSITION, READER])
     // The observer never touches the memory itself: no `.get(`, no size.
     expect(source).not.toMatch(/\.get\(|\.size/)
   })
 
-  it('af: the identity-facts caller allowlist is still exactly the reader module', () => {
-    expect(productionMatching(/brain-execution-identity-facts/)).toEqual([READER])
+  it('af: the identity-facts caller allowlist is the reader plus the unwired composition', () => {
+    expect(productionMatching(/brain-execution-identity-facts/)).toEqual([COMPOSITION, READER])
     expect(source).not.toMatch(/brain-execution-identity-facts|deriveLiaBrainExecutionIdentityFacts/)
   })
 

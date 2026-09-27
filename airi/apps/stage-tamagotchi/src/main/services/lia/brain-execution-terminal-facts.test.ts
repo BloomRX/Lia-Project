@@ -21,6 +21,7 @@ import { deriveLiaBrainTerminalObservationFacts } from './brain-execution-termin
 
 const REPO_ROOT = new URL('../../../../../../', import.meta.url)
 const TERMINAL_FACTS = 'apps/stage-tamagotchi/src/main/services/lia/brain-execution-terminal-facts.ts'
+const COMPOSITION = 'apps/stage-tamagotchi/src/main/services/lia/brain-correlation-diagnostic-facts.ts'
 const BRAIN_ROOTS = ['apps/stage-tamagotchi/src']
 
 /** `fileURLToPath` keeps the trailing separator of a directory URL. */
@@ -336,9 +337,11 @@ describe('execution terminal facts - source guards (Phase 8.0D-10B-4D4C3B1)', ()
     expect(source).not.toMatch(/prompt|messages?|usage|credential|apiKey|baseURL/i)
   })
 
-  it('t: the derivation has ZERO production callers outside its own definition', () => {
-    // Deliberate: this phase adds the pure derivation only. Wiring it into the
-    // read path, the observer or the diagnostic output is a later phase.
-    expect(productionMatching(/deriveLiaBrainTerminalObservationFacts\(/)).toEqual([TERMINAL_FACTS])
+  it('t: the derivation has exactly ONE production caller - the unwired composition', () => {
+    // Phase 8.0D-10B-4D4C3B2 adds that ONE caller: the pure single-snapshot
+    // composition, which itself has no production caller. Wiring the counts
+    // into the read path, the observer or the diagnostic output is a later
+    // phase.
+    expect(productionMatching(/deriveLiaBrainTerminalObservationFacts\(/)).toEqual([COMPOSITION, TERMINAL_FACTS])
   })
 })

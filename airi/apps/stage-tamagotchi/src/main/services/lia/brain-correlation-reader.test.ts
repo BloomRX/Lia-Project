@@ -478,6 +478,7 @@ function stripComments(source: string): string {
 
 const BRAIN_ROOTS = ['apps/stage-tamagotchi/src', 'packages/stage-ui/src', 'packages/core-agent/src', 'packages/lia-core/src']
 const READER = 'apps/stage-tamagotchi/src/main/services/lia/brain-correlation-reader.ts'
+const COMPOSITION = 'apps/stage-tamagotchi/src/main/services/lia/brain-correlation-diagnostic-facts.ts'
 const IDENTITY_FACTS = 'apps/stage-tamagotchi/src/main/services/lia/brain-execution-identity-facts.ts'
 const EXPECTED_ROUTE = 'apps/stage-tamagotchi/src/main/services/lia/brain-expected-route.ts'
 
@@ -660,11 +661,14 @@ describe('correlation snapshot reader - terminal records stop at the snapshot (P
 describe('correlation snapshot reader - authority and isolation invariants (Phase 8.0D-10B-4C3A)', () => {
   const source = stripComments(readSource('./brain-correlation-reader.ts'))
 
-  it('z: exactly ONE production caller - the diagnostic observer, and no application/lifecycle caller', () => {
+  it('z: the production references are the diagnostic observer and the unwired composition', () => {
     // Phase 8.0D-10B-4C4A evolves the 4C3A "zero callers" state into an explicit
     // allowlist of exactly one: the tiny main-side diagnostic observer, which
-    // only invokes the read path and discards the result.
+    // only invokes the read path and discards the result. Phase 8.0D-10B-4D4C3B2
+    // adds the second, UNWIRED reference: the single-snapshot composition names
+    // this adapter's structural contracts.
     expect(productionMatching(/brain-correlation-reader/)).toEqual([
+      COMPOSITION,
       'apps/stage-tamagotchi/src/main/services/lia/brain-correlation-observer.ts',
     ])
 
@@ -683,11 +687,13 @@ describe('correlation snapshot reader - authority and isolation invariants (Phas
     }
   })
 
-  it('aa: exactly ONE production correlation reader, and it only reads - once, by key', () => {
-    // The shipped invariant was ZERO readers. This phase evolves it narrowly to
-    // exactly ONE legitimate read adapter, and nothing else in production may
-    // call `.get(`/`.size` on a correlation handle.
-    expect(productionMatching(/\w*[Cc]orrelation\w*\.(?:get\(|size\b)/)).toEqual([READER])
+  it('aa: the production correlation readers are this adapter and the unwired composition', () => {
+    // The shipped invariant was ZERO readers. The 4C3A phase evolved it narrowly
+    // to exactly ONE legitimate read adapter; 8.0D-10B-4D4C3B2 adds the second
+    // LEGITIMATE read owner (the composed one-read boundary), which has no
+    // production caller yet - and nothing else may call `.get(`/`.size` on a
+    // correlation handle.
+    expect(productionMatching(/\w*[Cc]orrelation\w*\.(?:get\(|size\b)/)).toEqual([COMPOSITION, READER])
 
     // ...and that module is a READER only: one `get(...)`, no size, no writes.
     expect(source.match(/\.get\(/g)).toHaveLength(1)
@@ -698,8 +704,10 @@ describe('correlation snapshot reader - authority and isolation invariants (Phas
     expect(source).not.toMatch(/^(?:let|var) /m)
   })
 
-  it('ab: the identity-facts caller allowlist is exactly this ONE pure production caller', () => {
-    expect(productionMatching(/brain-execution-identity-facts/)).toEqual([READER])
+  it('ab: the identity-facts caller allowlist is this read adapter plus the unwired composition', () => {
+    // Phase 8.0D-10B-4D4C3B2 adds the second, unwired consumer: the
+    // single-snapshot composition delegates to the same pure facts layer.
+    expect(productionMatching(/brain-execution-identity-facts/)).toEqual([COMPOSITION, READER])
     // It reuses the facts layer - it does not re-implement any of it.
     expect(source).toContain(`import { deriveLiaBrainExecutionIdentityFacts } from './brain-execution-identity-facts'`)
     expect(source.match(/deriveLiaBrainExecutionIdentityFacts\(/g)).toHaveLength(1)
