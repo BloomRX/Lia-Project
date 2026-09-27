@@ -304,13 +304,17 @@ describe('lia brain correlation service - composition ownership (Phase 8.0D-10B-
         'apps/stage-tamagotchi/src/main/services/lia/brain-correlation-store.ts',
       ])
     // Since 8.0D-10B-4B3 the two producers legitimately type their injected
-    // dependency with the service surface - and still create nothing.
+    // dependency with the service surface - and still create nothing. Since
+    // 8.0D-10B-4D4C2B1 the terminal ingress is a third consumer of that same
+    // surface: it TYPE-ONLY names the canonical service, creates nothing and
+    // resolves nothing.
     expect(productionSourcesMatching(BRAIN_ROOTS, /brain-correlation-service|createLiaBrainCorrelationService|LiaBrainCorrelationService/))
       .toEqual([
         'apps/stage-tamagotchi/src/main/index.ts',
         'apps/stage-tamagotchi/src/main/services/lia/brain-correlation-service.ts',
         'apps/stage-tamagotchi/src/main/services/lia/brain-decision-service.ts',
         'apps/stage-tamagotchi/src/main/services/lia/brain-execution-report-service.ts',
+        'apps/stage-tamagotchi/src/main/services/lia/brain-execution-terminal-report-service.ts',
       ])
   })
 })
