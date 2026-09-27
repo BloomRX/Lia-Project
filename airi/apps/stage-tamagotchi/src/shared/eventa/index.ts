@@ -824,5 +824,52 @@ export interface LiaBrainExecutionObservationReport {
 /** Push: one attempt of a correlated logical send started executing (write-only report). */
 export const electronLiaBrainExecutionObservation = defineEventa<LiaBrainExecutionObservationReport>('eventa:event:lia:brain:execution-observation')
 
+/* -------------------------------------------------------------------------- */
+/* Lia Brain execution TERMINAL observation (Phase 8.0D-10B-4D4C1)            */
+/*                                                                            */
+/* ONE-WAY report, renderer (the window that actually ran the round) ->       */
+/* trusted main process, and nothing else. It carries the FACTUAL terminal    */
+/* treatment of one already-created round - `succeeded`, `failed` or          */
+/* `abandoned`, exactly as the Core Agent runtime classified it - plus the     */
+/* two opaque join keys of that round.                                        */
+/*                                                                            */
+/* It is a REPORT, not a request: no response is read and no setter authority  */
+/* exists on this channel. It carries NO provider/model identity, NO           */
+/* conversation, NO timings, NO usage, NO error, failure stage or code - and   */
+/* it can never select a route, change a policy, choose a provider/model,      */
+/* trigger a fallback, retry a send or authorize anything: the outcome is      */
+/* UNTRUSTED execution metadata describing what already happened.              */
+/*                                                                            */
+/* Deliberately SEPARATE from the request-start observation channel: that one  */
+/* reports an identity at a start boundary, this one reports an outcome at a   */
+/* terminal boundary. Different lifecycle, different shape, independent        */
+/* sanitizers, and a future store must be able to tell them apart.             */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The factual terminal treatment of ONE round, plus its two opaque join keys.
+ *
+ * `correlationId` is the same logical-send key the brain shadow request and
+ * the request-start report carry; `roundId` identifies the attempt (round)
+ * that settled. The outcome is a finite, closed vocabulary - the renderer
+ * never invents, normalizes or extends it.
+ */
+export interface LiaBrainExecutionTerminalReport {
+  /** Opaque key of the logical user send this round belongs to. */
+  correlationId: string
+  /** Stable round key of the round that settled. */
+  roundId: string
+  /**
+   * The factual terminal treatment of that round, exactly as the Core Agent
+   * runtime reported it: the successful path completed, a real error left the
+   * round, or processing stopped because the round's captured session
+   * generation went stale.
+   */
+  outcome: 'succeeded' | 'failed' | 'abandoned'
+}
+
+/** Push: one correlated round reached its terminal treatment (write-only report). */
+export const electronLiaBrainExecutionTerminalObservation = defineEventa<LiaBrainExecutionTerminalReport>('eventa:event:lia:brain:execution-terminal-observation')
+
 export { electron } from '@proj-airi/electron-eventa'
 export * from '@proj-airi/electron-eventa/electron-updater'

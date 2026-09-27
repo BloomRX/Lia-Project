@@ -448,7 +448,7 @@ describe('lia brain correlation wiring - invariants (Phase 8.0D-10B-4B3)', () =>
     }
   })
 
-  it('the exact two-channel allowlist and the single observer registration are unchanged', () => {
+  it('the exact three-channel allowlist and the two observer registrations are unchanged', () => {
     const tags = new Set<string>()
     for (const relative of productionSources(BRAIN_ROOTS)) {
       for (const match of readFileSync(new URL(relative, REPO_ROOT), 'utf-8').matchAll(/eventa:(?:invoke|event):lia:brain[^'"]*/g))
@@ -456,6 +456,7 @@ describe('lia brain correlation wiring - invariants (Phase 8.0D-10B-4B3)', () =>
     }
     expect([...tags].sort()).toEqual([
       'eventa:event:lia:brain:execution-observation',
+      'eventa:event:lia:brain:execution-terminal-observation',
       'eventa:invoke:lia:brain:chat-decision',
     ])
 

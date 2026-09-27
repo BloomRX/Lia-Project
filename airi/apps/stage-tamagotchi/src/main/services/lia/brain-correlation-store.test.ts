@@ -520,7 +520,8 @@ describe('lia brain correlation store - isolation invariants (Phase 8.0D-10B-4B1
     expect(source).not.toMatch(/defineEventa|defineInvokeEventa|defineInvokeHandler|ipcMain|ipcRenderer|BrowserWindow|\.emit\(/)
     expect(source).not.toMatch(/eventa:(?:invoke|event):lia:brain/)
 
-    // And the production Brain channel allowlist is unchanged by this phase.
+    // And the production Brain channel allowlist is the three-channel set
+    // (8.0D-10B-4D4C1 added the one-way terminal report).
     const tags = new Set<string>()
     for (const relative of productionSources(['apps/stage-tamagotchi/src', 'packages/lia-core/src', 'packages/stage-ui/src', 'packages/core-agent/src'])) {
       for (const match of readFileSync(new URL(relative, REPO_ROOT), 'utf-8').matchAll(/eventa:(?:invoke|event):lia:brain[^'"]*/g))
@@ -528,6 +529,7 @@ describe('lia brain correlation store - isolation invariants (Phase 8.0D-10B-4B1
     }
     expect([...tags].sort()).toEqual([
       'eventa:event:lia:brain:execution-observation',
+      'eventa:event:lia:brain:execution-terminal-observation',
       'eventa:invoke:lia:brain:chat-decision',
     ])
   })

@@ -608,14 +608,16 @@ describe('lia brain decision bridge (Phase 8.0D-8)', () => {
     expect(source).not.toMatch(/registry\.register|satisfiesBrainCapabilities/)
 
     // The response type is canonical and unmapped, and the contract exposes
-    // exactly the two Brain channels of the allowlist: this read-only decision
-    // invoke and (Phase 8.0D-10B-4A) the one-way execution report - no setter,
-    // no command, no second decision seam.
+    // exactly the three Brain channels of the allowlist: this read-only
+    // decision invoke, the one-way execution report (Phase 8.0D-10B-4A) and
+    // the one-way terminal report (Phase 8.0D-10B-4D4C1) - no setter, no
+    // command, no second decision seam.
     const shared = readSource('../../../shared/eventa/index.ts')
     expect(shared).toContain('export type LiaBrainChatDecision = LiaCoreBrainRoutingDecision')
     expect(shared.match(/eventa:(?:invoke|event):lia:brain[^']*/g) ?? []).toEqual([
       'eventa:invoke:lia:brain:chat-decision',
       'eventa:event:lia:brain:execution-observation',
+      'eventa:event:lia:brain:execution-terminal-observation',
     ])
     expect(shared).not.toMatch(/eventa:(?:invoke|event):lia:brain:[a-z-]*(?:set|write|update|command|select|policy|compare)/)
     expect(readSource('../../../preload/index.ts')).not.toMatch(/brain/i)
@@ -674,11 +676,13 @@ describe('lia brain decision bridge (Phase 8.0D-8)', () => {
       for (const match of readFileSync(new URL(relative, REPO_ROOT), 'utf-8').matchAll(/eventa:(?:invoke|event):lia:brain[^'"]*/g))
         tags.add(match[0])
     }
-    // The whole production tree names exactly the two-channel allowlist - the
-    // read-only decision invokes plus the 8.0D-10B-4A one-way execution report.
-    // No setter, no update channel, no command, no comparison seam.
+    // The whole production tree names exactly the three-channel allowlist - the
+    // read-only decision invokes plus the two one-way reports (8.0D-10B-4A
+    // execution, 8.0D-10B-4D4C1 terminal). No setter, no update channel, no
+    // command, no comparison seam.
     expect([...tags].sort()).toEqual([
       'eventa:event:lia:brain:execution-observation',
+      'eventa:event:lia:brain:execution-terminal-observation',
       'eventa:invoke:lia:brain:chat-decision',
     ])
   })

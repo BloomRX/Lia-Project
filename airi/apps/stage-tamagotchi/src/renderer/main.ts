@@ -22,6 +22,7 @@ import { shouldInstallRealChatObserver } from './diagnostics/gate'
 import { i18n } from './modules/i18n'
 import { managedRoutePolicyGuard } from './navigation/managed-route-policy'
 import { registerLiaBrainExecutionObserver } from './services/lia/execution-reporter'
+import { registerLiaBrainExecutionTerminalObserver } from './services/lia/execution-terminal-reporter'
 import { useLiaCapabilitiesStore } from './stores/lia/capabilities'
 import { installCustomVoiceTransport } from './stores/lia/custom-voice-transport'
 import { installLiaStartupGreeting } from './stores/lia/startup-greeting'
@@ -91,6 +92,15 @@ installCustomVoiceTransport()
 // one one-way report - it never reads a decision, never chooses execution and
 // never stores anything.
 registerLiaBrainExecutionObserver()
+
+// Phase 8.0D-10B-4D4C1: the ONE production registration of the Lia terminal
+// observer - the sibling of the request-start installation above, on the
+// generic settled-round seam. It reports the factual terminal treatment of a
+// round the same window ran (succeeded / failed / abandoned), one one-way push
+// per settled round. Diagnostic only: it reads that observation, narrows it to
+// three fields and reports it - the outcome is never interpreted and never
+// influences execution.
+registerLiaBrainExecutionTerminalObserver()
 
 // Phase 7.7 (Parts 7-11): install the capability bridge so the persona
 // always answers from the product's CURRENT truth (voice configured?

@@ -379,14 +379,16 @@ describe('lia execution report invariants (Phase 8.0D-10B-4A)', () => {
     expect(entryCode.match(/registerLiaBrainExecutionReportHandler\(\{ context, correlationStore: deps\.liaBrainCorrelation, correlationObserver: deps\.liaBrainCorrelationObserver, \}\)/g)).toHaveLength(1)
   })
 
-  it('the Brain channel allowlist is exactly the decision invoke plus the one-way report', () => {
+  it('the Brain channel allowlist is exactly the decision invoke plus the two one-way reports', () => {
     const shared = readSource('../../../shared/eventa/index.ts')
 
-    // Exactly two Brain-related channels exist, and each has the right shape:
-    // one invoke for the read-only decision, one one-way event for the report.
+    // Exactly three Brain-related channels exist, and each has the right shape:
+    // one invoke for the read-only decision, two one-way events for the two
+    // reports (8.0D-10B-4A execution, 8.0D-10B-4D4C1 terminal).
     expect(shared.match(/eventa:(?:invoke|event):lia:brain[^']*/g) ?? []).toEqual([
       'eventa:invoke:lia:brain:chat-decision',
       'eventa:event:lia:brain:execution-observation',
+      'eventa:event:lia:brain:execution-terminal-observation',
     ])
     expect(shared).toMatch(/export const electronLiaBrainExecutionObservation = defineEventa<LiaBrainExecutionObservationReport>\('eventa:event:lia:brain:execution-observation'\)/)
     // No setter, command, selector, policy or comparison channel was added.
@@ -405,6 +407,7 @@ describe('lia execution report invariants (Phase 8.0D-10B-4A)', () => {
     }
     expect([...tags].sort()).toEqual([
       'eventa:event:lia:brain:execution-observation',
+      'eventa:event:lia:brain:execution-terminal-observation',
       'eventa:invoke:lia:brain:chat-decision',
     ])
   })
