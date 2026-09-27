@@ -326,14 +326,23 @@ describe('lia terminal ingress service - isolation invariants (Phase 8.0D-10B-4D
     expect(service).not.toMatch(/recordDecision|recordExecution\(|correlationStore\.(?:get|size)/)
   })
 
-  it('r: ZERO production callers of the new ingress factory - Eventa is still unconnected', () => {
-    expect(productionSourcesMatching(BRAIN_ROOTS, /(?<!function )createLiaBrainExecutionTerminalReportService\(/)).toEqual([])
-    // And the terminal channel still has no main-side listener of any kind.
-    for (const relative of productionSources(['apps/stage-tamagotchi/src/main'])) {
-      const source = stripComments(readFileSync(new URL(relative, REPO_ROOT), 'utf-8'))
-      expect(source, relative).not.toMatch(/execution-terminal-observation|electronLiaBrainExecutionTerminalObservation/)
-      expect(source, relative).not.toMatch(/execution-terminal-report-service/)
-    }
+  it('r: the terminal ingress has exactly ONE production caller - the composition root', () => {
+    // 8.0D-10B-4D4C2B1 left this list empty on purpose; 8.0D-10B-4D4C2B2 wires
+    // the channel, so the invariant becomes the exact allowlist: the entry
+    // creates the ONE service instance, and nothing else does.
+    expect(productionSourcesMatching(BRAIN_ROOTS, /(?<!function )createLiaBrainExecutionTerminalReportService\(/))
+      .toEqual(['apps/stage-tamagotchi/src/main/index.ts'])
+
+    // The main-side surface of this channel is exactly ONE listener module - it
+    // imports the shared constant and delegates to this very service, and no
+    // other main file knows the channel at all.
+    expect(productionSourcesMatching(['apps/stage-tamagotchi/src/main'], /electronLiaBrainExecutionTerminalObservation/))
+      .toEqual(['apps/stage-tamagotchi/src/main/services/lia/brain-execution-terminal-report-listener.ts'])
+    // The ingress module itself still knows no transport: it names the channel
+    // neither by constant nor by tag, and the listener owns the registration.
+    const ingress = stripComments(readSource('./brain-execution-terminal-report-service.ts'))
+    expect(ingress).not.toMatch(/electronLiaBrain|eventa:(?:invoke|event):lia:brain|context\.on\(/)
+
     // The shared contract still declares it, and the renderer still pushes it.
     expect(readSource('../../../shared/eventa/index.ts')).toContain('eventa:event:lia:brain:execution-terminal-observation')
     expect(readSource('../../../renderer/services/lia/execution-terminal-reporter.ts')).toContain('electronLiaBrainExecutionTerminalObservation')

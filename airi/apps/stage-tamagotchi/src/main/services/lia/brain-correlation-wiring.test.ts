@@ -363,7 +363,9 @@ describe('lia brain correlation wiring - invariants (Phase 8.0D-10B-4B3)', () =>
     expect(entryCode).toContain('registerLiaBrainDecisionBridge({ context, brain: deps.liaBrain, correlationStore: deps.liaBrainCorrelation,')
     expect(entryCode).toContain('registerLiaBrainExecutionReportHandler({ context, correlationStore: deps.liaBrainCorrelation,')
     expect(entryCode.match(/correlationStore: deps\.liaBrainCorrelation, correlationObserver: deps\.liaBrainCorrelationObserver,/g)).toHaveLength(2)
-    expect(entry.match(/correlationStore: deps\.liaBrainCorrelation/g)).toHaveLength(2)
+    // 8.0D-10B-4D4C2B2 adds the third: the terminal ingress factory is built
+    // over the same lifecycle handle (and receives no observer at all).
+    expect(entry.match(/correlationStore: deps\.liaBrainCorrelation/g)).toHaveLength(3)
     // ...and, since 8.0D-10B-4C4C, the SAME lifecycle-owned observer instance:
     // two injections, one handle, no second observer anywhere in the entry.
     expect(entry.match(/correlationObserver: deps\.liaBrainCorrelationObserver/g)).toHaveLength(2)

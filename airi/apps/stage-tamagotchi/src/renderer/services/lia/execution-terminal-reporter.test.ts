@@ -254,17 +254,19 @@ describe('lia terminal execution reporter (Phase 8.0D-10B-4D4C1)', () => {
     expect(settledRegistrarSites).toEqual(['apps/stage-tamagotchi/src/renderer/main.ts'])
     // ...the request-start installation count is unchanged...
     expect(requestStartRegistrarSites).toEqual(['apps/stage-tamagotchi/src/renderer/main.ts'])
-    // ...and the new channel has exactly ONE producer module plus its shared
-    // declaration - no second emitter exists yet.
+    // ...the new channel has exactly ONE producer module plus its shared
+    // declaration...
     expect(terminalChannelSites.sort()).toEqual([
+      'apps/stage-tamagotchi/src/main/services/lia/brain-execution-terminal-report-listener.ts',
       'apps/stage-tamagotchi/src/renderer/services/lia/execution-terminal-reporter.ts',
       'apps/stage-tamagotchi/src/shared/eventa/index.ts',
     ])
 
-    // Zero main-process consumer of the new channel (declaration only, no
-    // listener, no handler, no lifecycle provider).
+    // ...and exactly ONE main-process consumer: the listener wiring of
+    // 8.0D-10B-4D4C2B2, which delegates to the terminal ingress service. No
+    // second listener, no handler registered anywhere else.
     const mainConsumers = terminalChannelSites.filter(relative => relative.startsWith('apps/stage-tamagotchi/src/main/'))
-    expect(mainConsumers).toEqual([])
+    expect(mainConsumers).toEqual(['apps/stage-tamagotchi/src/main/services/lia/brain-execution-terminal-report-listener.ts'])
   })
 })
 

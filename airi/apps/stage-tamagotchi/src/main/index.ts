@@ -47,6 +47,8 @@ import { createLiaBrainCorrelationService } from './services/lia/brain-correlati
 import { registerLiaBrainDecisionBridge } from './services/lia/brain-decision-service'
 import { selectLiaBrainDiagnosticLog } from './services/lia/brain-diagnostic-log'
 import { registerLiaBrainExecutionReportHandler } from './services/lia/brain-execution-report-service'
+import { registerLiaBrainExecutionTerminalReportListener } from './services/lia/brain-execution-terminal-report-listener'
+import { createLiaBrainExecutionTerminalReportService } from './services/lia/brain-execution-terminal-report-service'
 import { createLiaBrainService } from './services/lia/lia-brain-service'
 import { startLiaMainWindowVoiceRuntime } from './services/lia/main-window-voice-runtime'
 import { registerLiaProviderConfigBridge } from './services/lia/provider-config-service'
@@ -467,6 +469,25 @@ app.whenReady().then(async () => {
         correlationStore: deps.liaBrainCorrelation,
         correlationObserver: deps.liaBrainCorrelationObserver,
       })
+    },
+  })
+
+  // Phase 8.0D-10B-4D4C2B2: the THIRD Brain channel - the one-way terminal
+  // execution report. It depends on the correlation store ONLY (never on the
+  // Brain service, the observer or product config): the entry creates the ONE
+  // terminal ingress instance over the SAME lifecycle-owned store the decision
+  // bridge and the execution report handler already received, and the listener
+  // forwards the raw payload to it. The ingress sanitizes and writes; nothing
+  // here inspects the payload, and - deliberately - no observer is injected, so
+  // a terminal write is not a diagnostic trigger in this phase.
+  injeca.invoke({
+    dependsOn: { liaBrainCorrelation },
+    callback: async (deps) => {
+      const { context } = createContext(ipcMain)
+      const terminalReportService = createLiaBrainExecutionTerminalReportService({
+        correlationStore: deps.liaBrainCorrelation,
+      })
+      registerLiaBrainExecutionTerminalReportListener({ context, terminalReportService })
     },
   })
 

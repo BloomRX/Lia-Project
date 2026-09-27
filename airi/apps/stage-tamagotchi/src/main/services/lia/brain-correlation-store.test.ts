@@ -899,7 +899,9 @@ describe('lia brain correlation store - isolation invariants (Phase 8.0D-10B-4B1
     // service handle and injects it (8.0D-10B-4B3).
     const entry = readFileSync(new URL('../../index.ts', import.meta.url), 'utf-8')
     expect(entry).not.toMatch(/brain-correlation-store|createLiaBrainCorrelationStore|LiaBrainCorrelationStore/)
-    expect(entry.match(/correlationStore: deps\.liaBrainCorrelation/g)).toHaveLength(2)
+    // 8.0D-10B-4D4C2B2 adds the third injection of that ONE handle: the terminal
+    // ingress service is created over the same canonical store - no second store.
+    expect(entry.match(/correlationStore: deps\.liaBrainCorrelation/g)).toHaveLength(3)
   })
 
   it('ai: the store introduces no transport of its own', () => {
