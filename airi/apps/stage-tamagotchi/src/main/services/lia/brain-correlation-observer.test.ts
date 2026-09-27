@@ -9,7 +9,8 @@ import type {
 
 import type { LiaBrainCorrelationObserver, LiaBrainDiagnosticEntry } from './brain-correlation-observer'
 import type { LiaBrainCorrelationSnapshotReader } from './brain-correlation-reader'
-import type { LiaBrainExecutionIdentitySnapshot, LiaObservedExecutionIdentity } from './brain-execution-identity-facts'
+import type { LiaBrainExecutionIdentityFacts, LiaBrainExecutionIdentitySnapshot, LiaObservedExecutionIdentity } from './brain-execution-identity-facts'
+import type { LiaBrainTerminalObservationFacts } from './brain-execution-terminal-facts'
 
 import { readdirSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -22,6 +23,7 @@ import { createLiaBrainCorrelationObserver } from './brain-correlation-observer'
 import { createLiaBrainCorrelationService } from './brain-correlation-service'
 import { createLiaBrainCorrelationStore } from './brain-correlation-store'
 import { formatLiaBrainDiagnosticEntry } from './brain-diagnostic-log'
+import { LIA_BRAIN_ENGINE_PROVIDER_MAPPING } from './brain-expected-route'
 
 /**
  * Phase 8.0D-10B-4C4A: the focused proof of the main-side diagnostic observer.
@@ -47,11 +49,16 @@ const probes = vi.hoisted(() => ({
     received: [] as string[],
     throwOn: undefined as string | undefined,
   },
-  reader: {
+  // Phase 8.0D-10B-4D4C3B2-B2: the composition delegation seam. The observer now
+  // hands the read handle, the opaque key and the trusted mapping to the
+  // composition - so the probes record exactly those three arguments, plus the
+  // composed value the real implementation returned (the entry must forward
+  // THAT value's members by reference).
+  composition: {
     calls: [] as string[],
     error: undefined as Error | undefined,
-    // Phase 8.0D-10B-4D2A: the exact object the read returned, so the entry can
-    // be proven to forward THAT reference (not a clone, not a rebuild).
+    mappings: [] as unknown[],
+    readers: [] as unknown[],
     returned: [] as unknown[],
   },
 }))
@@ -71,21 +78,21 @@ vi.mock('./brain-expected-route', async (importOriginal) => {
   }
 })
 
-vi.mock('./brain-correlation-reader', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./brain-correlation-reader')>()
+vi.mock('./brain-correlation-diagnostic-facts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./brain-correlation-diagnostic-facts')>()
   return {
     ...actual,
-    readLiaBrainExecutionIdentityFacts: (
-      reader: LiaBrainCorrelationSnapshotReader,
-      correlationId: string,
-      mapping: Parameters<typeof actual.readLiaBrainExecutionIdentityFacts>[2],
+    composeLiaBrainCorrelationDiagnosticFacts: (
+      ...args: Parameters<typeof actual.composeLiaBrainCorrelationDiagnosticFacts>
     ) => {
-      probes.reader.calls.push(correlationId)
-      if (probes.reader.error !== undefined)
-        throw probes.reader.error
-      const facts = actual.readLiaBrainExecutionIdentityFacts(reader, correlationId, mapping)
-      probes.reader.returned.push(facts)
-      return facts
+      probes.composition.calls.push(args[1])
+      probes.composition.readers.push(args[0])
+      probes.composition.mappings.push(args[2])
+      if (probes.composition.error !== undefined)
+        throw probes.composition.error
+      const composed = actual.composeLiaBrainCorrelationDiagnosticFacts(...args)
+      probes.composition.returned.push(composed)
+      return composed
     },
   }
 })
@@ -201,8 +208,8 @@ function createTestContainer() {
         observer,
         observedReaders,
         providerIds: [...container.providers.keys()].sort((a, b) => a.localeCompare(b)),
-        get reads() {
-          return probes.reader.calls
+        get delegations() {
+          return probes.composition.calls
         },
         resolveAgain: () => resolve(container, { correlation: liaBrainCorrelation, observer: liaBrainCorrelationObserver }),
       }
@@ -210,13 +217,30 @@ function createTestContainer() {
   }
 }
 
+/** One entry, narrowed to the present arm: counts guaranteed, facts narrowed. */
+function presentEntry(entry: LiaBrainDiagnosticEntry): { facts: LiaBrainExecutionIdentityFacts, terminalFacts: LiaBrainTerminalObservationFacts } {
+  if (!('terminalFacts' in entry))
+    throw new Error('expected a present correlation entry')
+  return { facts: entry.facts, terminalFacts: entry.terminalFacts }
+}
+
+/** The present arm of a composed value a delegation returned, narrowed once. */
+function composedPresent(index = 0): { facts: LiaBrainExecutionIdentityFacts, terminalFacts: LiaBrainTerminalObservationFacts } {
+  const composed = probes.composition.returned[index]
+  if (typeof composed !== 'object' || composed === null || !('terminalFacts' in composed))
+    throw new Error('expected a present composed value')
+  return composed as { facts: LiaBrainExecutionIdentityFacts, terminalFacts: LiaBrainTerminalObservationFacts }
+}
+
 /** Clears the probes so one test's observations cannot leak into the next. */
 function resetProbes(): void {
   probes.mapping.received.length = 0
   probes.mapping.throwOn = undefined
-  probes.reader.calls.length = 0
-  probes.reader.error = undefined
-  probes.reader.returned.length = 0
+  probes.composition.calls.length = 0
+  probes.composition.error = undefined
+  probes.composition.mappings.length = 0
+  probes.composition.readers.length = 0
+  probes.composition.returned.length = 0
 }
 
 describe('correlation observer - contract and invocation (Phase 8.0D-10B-4C4A)', () => {
@@ -244,11 +268,35 @@ describe('correlation observer - contract and invocation (Phase 8.0D-10B-4C4A)',
     observer.observe(opaqueKey)
 
     // C: the read adapter was invoked once with that exact key...
-    expect(probes.reader.calls).toEqual([opaqueKey])
+    expect(probes.composition.calls).toEqual([opaqueKey])
     // ...and the single snapshot read happened exactly once.
     expect(calls).toEqual([opaqueKey])
     // D: nothing trimmed, prefixed, parsed or synthesized.
     expect(calls[0]).toBe(opaqueKey)
+  })
+
+  it('composition delegation: exactly ONE call per observation, with the exact three arguments', async () => {
+    resetProbes()
+    const opaqueKey = '  logical-send/..\tX-9  '
+    const { reader } = recordingReader({ [opaqueKey]: { executions: [attempt()] } })
+    const observer = await loadObserver(reader)
+
+    observer.observe(opaqueKey)
+
+    // Exactly one delegation, carrying the key verbatim...
+    expect(probes.composition.calls).toEqual([opaqueKey])
+    expect(probes.composition.calls[0]).toBe(opaqueKey)
+    // ...the EXACT reader object the observer was built over...
+    expect(probes.composition.readers).toHaveLength(1)
+    expect(probes.composition.readers[0]).toBe(reader)
+    // ...and the exact trusted mapping VALUE, unconverted and unwrapped.
+    expect(probes.composition.mappings).toHaveLength(1)
+    expect(probes.composition.mappings[0]).toBe(LIA_BRAIN_ENGINE_PROVIDER_MAPPING)
+
+    // A second observation composes a second time - never a remembered value.
+    observer.observe(opaqueKey)
+    expect(probes.composition.calls).toEqual([opaqueKey, opaqueKey])
+    expect(probes.composition.mappings).toHaveLength(2)
   })
 
   it('the manual route form is observed the same way, even when its engine needs configuration', async () => {
@@ -340,7 +388,7 @@ describe('correlation observer - failure isolation (Phase 8.0D-10B-4C4A)', () =>
     expect(observer.observe('X')).toBeUndefined()
     // N: no retry - exactly one read per observation, two observations total.
     expect(calls).toEqual(['X', 'X'])
-    expect(probes.reader.calls).toEqual(['X', 'X'])
+    expect(probes.composition.calls).toEqual(['X', 'X'])
   })
 
   it('k: a throwing trusted mapping does not escape', async () => {
@@ -361,13 +409,13 @@ describe('correlation observer - failure isolation (Phase 8.0D-10B-4C4A)', () =>
     resetProbes()
     const { calls, reader } = recordingReader({ X: { decision: productionDecision(), executions: [attempt()] } })
     const observer = await loadObserver(reader)
-    probes.reader.error = new Error('derivation exploded')
+    probes.composition.error = new Error('derivation exploded')
 
     expect(() => observer.observe('X')).not.toThrow()
     expect(observer.observe('X')).toBeUndefined()
     // The delegation still happens once per observation: the failure is INSIDE
     // the read path, never a read-path bypass or a second code path...
-    expect(probes.reader.calls).toEqual(['X', 'X'])
+    expect(probes.composition.calls).toEqual(['X', 'X'])
     // ...and nothing was retried: the injected failure aborted before the
     // adapter could reach the memory, and no attempt was made to read again.
     expect(calls).toEqual([])
@@ -379,14 +427,14 @@ describe('correlation observer - failure isolation (Phase 8.0D-10B-4C4A)', () =>
     const observer = await loadObserver(reader)
     const before = Object.keys(observer)
 
-    probes.reader.error = new Error('isolated')
+    probes.composition.error = new Error('isolated')
     observer.observe('X')
-    probes.reader.error = undefined
+    probes.composition.error = undefined
     observer.observe('X')
 
     expect(Object.keys(observer)).toEqual(before)
     expect(before).toEqual(['observe'])
-    expect(probes.reader.calls).toEqual(['X', 'X'])
+    expect(probes.composition.calls).toEqual(['X', 'X'])
   })
 })
 
@@ -468,7 +516,7 @@ describe('correlation observer - no retention, no inspection, synchrony (Phase 8
     snapshots.X = { decision: productionDecision(), executions: [attempt(), attempt({ roundId: 'B' })] }
     observer.observe('X')
     expect(calls).toEqual(['X', 'Y', 'X'])
-    expect(probes.reader.calls).toEqual(['X', 'Y', 'X'])
+    expect(probes.composition.calls).toEqual(['X', 'Y', 'X'])
     // A further observation of the same key reads again - never served from a
     // remembered result.
     observer.observe('X')
@@ -489,36 +537,39 @@ describe('correlation observer - no retention, no inspection, synchrony (Phase 8
     const returned = observer.observe('X')
     expect(returned).toBeUndefined()
     expect(returned).not.toBeInstanceOf(Promise)
-    expect(probes.reader.calls).toEqual(['X'])
+    expect(probes.composition.calls).toEqual(['X'])
   })
 
-  it('v/w/x/y/z: the source may forward the factual result but never interprets it', () => {
+  it('v/w/x/y/z: the source may forward the composed facts but never interprets them', () => {
     const source = stripComments(readSource('./brain-correlation-observer.ts'))
 
-    // Phase 8.0D-10B-4D2A: the result is handed off by REFERENCE to the
-    // optional callback - assigned to exactly one local named `facts`, which
-    // never leaves the module's own entry shape.
-    expect(source).toContain('const facts = readLiaBrainExecutionIdentityFacts(correlationReader, correlationId, LIA_BRAIN_ENGINE_PROVIDER_MAPPING)')
-    expect(source).toContain('log?.({ correlationId, facts })')
-    // Exactly ONE read call site and ONE forward call site.
-    expect(source.match(/readLiaBrainExecutionIdentityFacts\(/g)).toHaveLength(1)
+    // Phase 8.0D-10B-4D4C3B2-B2: the composed value is handed off by REFERENCE
+    // to the optional callback - assigned to exactly one local, spread into the
+    // module's own entry shape, and never dereferenced.
+    expect(source).toContain('const diagnosticFacts = composeLiaBrainCorrelationDiagnosticFacts(correlationReader, correlationId, LIA_BRAIN_ENGINE_PROVIDER_MAPPING)')
+    expect(source).toContain('log?.({ correlationId, ...diagnosticFacts })')
+    // Exactly ONE composition call site and ONE forward call site.
+    expect(source.match(/composeLiaBrainCorrelationDiagnosticFacts\(/g)).toHaveLength(1)
     expect(source.match(/log\?\.\(/g)).toHaveLength(1)
+    // The identity-only read is gone from this module; the composition owns the
+    // ONE read and BOTH derivations.
+    expect(source).not.toMatch(/readLiaBrainExecutionIdentityFacts|deriveLiaBrain/)
     expect(source).not.toMatch(/\bresult\b|\boutcome\b|\bsnapshot\b/)
-    // V: the facts are never READ: no property access, no status inspection and
-    // no state branching at all. (`facts` may only be named, never dereferenced.)
-    expect(source).not.toMatch(/facts\./)
+    // V: the composed members are never READ: no property access on them, no
+    // status inspection and no state branching at all.
+    expect(source).not.toMatch(/diagnosticFacts\.|\bfacts\./)
     expect(source).not.toMatch(/status/i)
     expect(source).not.toMatch(/\bif\b|\bswitch\b|\belse\b|\?\?/)
     // The ONLY optional chaining is the callback call itself - not a branch on
-    // any factual value.
+    // any composed value.
     expect(source.match(/\?\./g)).toHaveLength(1)
     expect(source).not.toMatch(/facts\?\.|attempts\?\.|expected\?\./)
     // W: no attempt iteration or reading.
     expect(source).not.toMatch(/attempts|\.map\(|\.filter\(|for \(/)
-    // X/Y: no equality facts are read.
-    expect(source).not.toMatch(/providerIdentityEqual|modelIdentityEqual/)
-    // Z: nothing is destructured out of a result - the ONLY destructuring is
-    // the injected dependencies (reader + optional callback).
+    // X/Y: no equality fact and no individual terminal count is ever named.
+    expect(source).not.toMatch(/providerIdentityEqual|modelIdentityEqual|TerminalObservationCount/)
+    // Z: nothing is destructured out of the composed value - the ONLY
+    // destructuring is the injected dependencies (reader + optional callback).
     expect(source.match(/const \{/g)).toHaveLength(1)
     expect(source).toContain('const { correlationReader, log } = params')
   })
@@ -585,12 +636,30 @@ function productionMatching(pattern: RegExp): string[] {
 describe('correlation observer - caller allowlists and authority (Phase 8.0D-10B-4C4A)', () => {
   const source = stripComments(readSource('./brain-correlation-observer.ts'))
 
-  it('ad: the reader has exactly TWO production references - this observer and the pure composition', () => {
-    // Phase 8.0D-10B-4D4C3B2 adds the second reference: the unwired
-    // single-snapshot composition names the reader for its structural contracts.
+  it('ad: the reader keeps its two production references, and the observer only names its TYPE', () => {
+    // Phase 8.0D-10B-4D4C3B2 introduced the single-snapshot composition; Phase
+    // 8.0D-10B-4D4C3B2-B2 wires the observer to it, so the observer no longer
+    // calls the identity-only read at all.
     expect(productionMatching(/brain-correlation-reader/)).toEqual([COMPOSITION, OBSERVER])
-    expect(source).toContain(`import { readLiaBrainExecutionIdentityFacts } from './brain-correlation-reader'`)
-    expect(source.match(/readLiaBrainExecutionIdentityFacts\(/g)).toHaveLength(1)
+    expect(source).toContain(`import type { LiaBrainCorrelationSnapshotReader } from './brain-correlation-reader'`)
+    expect(source).not.toMatch(/readLiaBrainExecutionIdentityFacts/)
+  })
+
+  it('ad2: the identity-only read has NO production caller left - only its own definition', () => {
+    // Phase 8.0D-10B-4D4C3B2-B2: the observer migrated to the composition, which
+    // owns the read. The tested/frozen public reader API stays exactly where it
+    // is - it simply has no production caller anymore.
+    expect(productionMatching(/readLiaBrainExecutionIdentityFacts\(/)).toEqual([READER])
+    expect(productionMatching(/(?<!function )readLiaBrainExecutionIdentityFacts\(/)).toEqual([])
+  })
+
+  it('ad3: the composed read boundary has exactly ONE production caller - this observer', () => {
+    // The module is named by this observer only, and its ONE call site is here.
+    expect(productionMatching(/brain-correlation-diagnostic-facts/)).toEqual([OBSERVER])
+    expect(productionMatching(/composeLiaBrainCorrelationDiagnosticFacts\(/)).toEqual([COMPOSITION, OBSERVER])
+    expect(productionMatching(/(?<!function )composeLiaBrainCorrelationDiagnosticFacts\(/)).toEqual([OBSERVER])
+    expect(source).toContain(`import { composeLiaBrainCorrelationDiagnosticFacts } from './brain-correlation-diagnostic-facts'`)
+    expect(source.match(/composeLiaBrainCorrelationDiagnosticFacts\(/g)).toHaveLength(1)
   })
 
   it('ae: the direct correlation read allowlist is the reader module plus the unwired composition', () => {
@@ -637,13 +706,15 @@ describe('correlation observer - caller allowlists and authority (Phase 8.0D-10B
   })
 
   it('zero authority: the observer cannot reach Brain, providers, config or any execution surface', () => {
-    // The whole dependency surface: the read adapter's structural type + its
-    // result type + function, and the trusted mapping value - nothing else.
-    // (Phase 8.0D-10B-4D2A adds exactly the read result TYPE, so the diagnostic
-    // entry can forward it verbatim instead of re-declaring its union.)
+    // The whole dependency surface: the reader's structural TYPE, the composed
+    // result TYPE and its ONE composition dependency, plus the trusted mapping
+    // value - nothing else. (Phase 8.0D-10B-4D4C3B2-B2 replaces the old
+    // identity-only read import with the composition, so the observer can no
+    // longer read or derive anything itself.)
     expect(source.match(/^import .*$/gm)).toEqual([
-      `import type { LiaBrainCorrelationReadFacts, LiaBrainCorrelationSnapshotReader } from './brain-correlation-reader'`,
-      `import { readLiaBrainExecutionIdentityFacts } from './brain-correlation-reader'`,
+      `import type { LiaBrainCorrelationDiagnosticFacts } from './brain-correlation-diagnostic-facts'`,
+      `import type { LiaBrainCorrelationSnapshotReader } from './brain-correlation-reader'`,
+      `import { composeLiaBrainCorrelationDiagnosticFacts } from './brain-correlation-diagnostic-facts'`,
       `import { LIA_BRAIN_ENGINE_PROVIDER_MAPPING } from './brain-expected-route'`,
     ])
 
@@ -785,18 +856,18 @@ describe('correlation observer - lifecycle ownership and dual trigger (Phase 8.0
 
     // P/Q: materialization/boot reads nothing, records nothing and emits
     // nothing - the correlation memory stays untouched and empty.
-    expect(first.reads).toEqual([])
+    expect(first.delegations).toEqual([])
     expect(first.builds).toHaveLength(1)
     expect(first.correlation.size).toBe(0)
     expect(first.correlation.get('X')).toBeUndefined()
-    expect(probes.reader.calls).toEqual([])
+    expect(probes.composition.calls).toEqual([])
     expect(probes.mapping.received).toEqual([])
 
     // The wiring is real: content recorded through the container's correlation
     // instance is what an observation of the same container sees.
     first.correlation.recordDecision('X', productionDecision())
     expect(first.observer.observe('X')).toBeUndefined()
-    expect(probes.reader.calls).toEqual(['X'])
+    expect(probes.composition.calls).toEqual(['X'])
     expect(probes.mapping.received).toEqual([GROQ_ENGINE_ID])
   })
 })
@@ -810,16 +881,16 @@ describe('correlation observer - lifecycle ownership and dual trigger (Phase 8.0
  * and production still supplies no callback at all.
  */
 
-/** A recording log callback, plus the read count observed AT each call. */
+/** A recording log callback, plus the composition count observed AT each call. */
 function recordingLog() {
   const entries: LiaBrainDiagnosticEntry[] = []
   const readsAtLogTime: number[] = []
   return {
     entries,
-    // Read BEFORE forward: at the moment the callback runs, the read has
-    // already happened (and happened exactly once).
+    // Compose BEFORE forward: at the moment the callback runs, the ONE
+    // composition delegation has already happened (and happened exactly once).
     log: (entry: LiaBrainDiagnosticEntry) => {
-      readsAtLogTime.push(probes.reader.calls.length)
+      readsAtLogTime.push(probes.composition.calls.length)
       entries.push(entry)
     },
     readsAtLogTime,
@@ -853,13 +924,13 @@ describe('correlation observer - structured diagnostic log seam (Phase 8.0D-10B-
     // C: observing returns nothing.
     expect(observer.observe('X')).toBeUndefined()
     // D: the read still runs - unconditionally, exactly once.
-    expect(probes.reader.calls).toEqual(['X'])
+    expect(probes.composition.calls).toEqual(['X'])
     expect(calls).toEqual(['X'])
     // E: the opaque key reaches the reader verbatim.
     expect(probes.mapping.received).toEqual([GROQ_ENGINE_ID])
   })
 
-  it('f/g/h/i/j/k: the entry is exactly { correlationId, facts } and forwards the read result by reference', async () => {
+  it('f/g/h/i/j/k: the entry is the composed value plus the key, forwarded by reference', async () => {
     resetProbes()
     const { reader } = recordingReader({ 'logical-send-X': STATE_SNAPSHOTS.decisionNotObserved })
     const recorded = recordingLog()
@@ -870,17 +941,20 @@ describe('correlation observer - structured diagnostic log seam (Phase 8.0D-10B-
     // F: one observation -> exactly one entry.
     expect(recorded.entries).toHaveLength(1)
     const entry = recorded.entries[0]!
-    // G: exactly the two approved top-level fields - no timestamp, no sequence
-    // number, no environment or window id, no provider/model/status duplicate,
-    // no derived verdict.
-    expect(Object.keys(entry).sort()).toEqual(['correlationId', 'facts'])
+    // G: exactly the approved top-level fields - the opaque key plus the two
+    // composed members. No timestamp, no sequence number, no environment or
+    // window id, no provider/model/status duplicate, no raw snapshot, no
+    // terminal record and no derived verdict.
+    expect(Object.keys(entry).sort()).toEqual(['correlationId', 'facts', 'terminalFacts'])
     // H: the caller's key is forwarded verbatim, never trimmed or rewritten.
     expect(entry.correlationId).toBe('logical-send-X')
-    // I: the entry carries the EXACT object the read produced - the seam
-    // recorded that reference, and it is the same one the entry holds. Not a
+    // I: the entry carries the EXACT members the composition produced - the seam
+    // recorded that value, and BOTH members are the same references. Not a
     // clone, not a re-derivation, not an edited copy.
-    expect(probes.reader.returned).toHaveLength(1)
-    expect(entry.facts).toBe(probes.reader.returned[0])
+    expect(probes.composition.returned).toHaveLength(1)
+    const composed = composedPresent()
+    expect(entry.facts).toBe(composed.facts)
+    expect('terminalFacts' in entry && entry.terminalFacts).toBe(composed.terminalFacts)
     expect(entry.facts.status).toBe('decisionNotObserved')
     // J: no time of any kind was added by this module.
     expect(entry).not.toHaveProperty('timestamp')
@@ -889,6 +963,24 @@ describe('correlation observer - structured diagnostic log seam (Phase 8.0D-10B-
     // K: no duplicated fact at the top level.
     for (const duplicated of ['status', 'expected', 'attempts', 'providerId', 'modelId', 'engineId', 'roundId', 'providerIdentityEqual', 'modelIdentityEqual'])
       expect(entry).not.toHaveProperty(duplicated)
+  })
+
+  it('k2: the absent composed value reaches the callback as exactly two keys, with NO terminal member', async () => {
+    resetProbes()
+    const { reader } = recordingReader({})
+    const recorded = recordingLog()
+    const observer = await loadObserver(reader, recorded.log)
+
+    observer.observe('logical-send-absent')
+
+    expect(recorded.entries).toHaveLength(1)
+    const entry = recorded.entries[0]!
+    // The absence state is the whole answer: the key plus the absent facts, and
+    // no terminal member - zero is never fabricated for a key with no snapshot.
+    expect(Object.keys(entry).sort()).toEqual(['correlationId', 'facts'])
+    expect('terminalFacts' in entry).toBe(false)
+    expect(entry.facts).toEqual({ status: 'correlationNotObserved' })
+    expect(probes.composition.returned[0]).toEqual({ facts: { status: 'correlationNotObserved' } })
   })
 
   it('l/m/n/o/p/q: every factual state is forwarded - one entry each, unfiltered', async () => {
@@ -917,32 +1009,34 @@ describe('correlation observer - structured diagnostic log seam (Phase 8.0D-10B-
     observer.observe('X')
     // R: the callback ran only after the read had already happened once.
     expect(recorded.readsAtLogTime).toEqual([1])
-    expect(probes.reader.calls).toEqual(['X'])
+    expect(probes.composition.calls).toEqual(['X'])
 
     observer.observe('X')
     // S: two observations -> two reads -> two entries.
-    expect(probes.reader.calls).toEqual(['X', 'X'])
+    expect(probes.composition.calls).toEqual(['X', 'X'])
     expect(recorded.entries).toHaveLength(2)
     // T: identical facts are NOT deduplicated - both entries are kept, and both
     // carry their own freshly read value.
     expect(recorded.entries[0]!.facts).toEqual(recorded.entries[1]!.facts)
-    expect(recorded.entries[0]!.facts).toBe(probes.reader.returned[0])
-    expect(recorded.entries[1]!.facts).toBe(probes.reader.returned[1])
+    expect(recorded.entries[0]!.facts).toBe(composedPresent(0).facts)
+    expect(recorded.entries[1]!.facts).toBe(composedPresent(1).facts)
     expect(recorded.entries[0]!.facts).not.toBe(recorded.entries[1]!.facts)
+    expect('terminalFacts' in recorded.entries[0]! && recorded.entries[0]!.terminalFacts).toBe(composedPresent(0).terminalFacts)
+    expect('terminalFacts' in recorded.entries[1]! && recorded.entries[1]!.terminalFacts).toBe(composedPresent(1).terminalFacts)
   })
 
-  it('u/v/w: a read that throws is never forwarded, and nothing is retried', async () => {
-    // U: the read adapter itself throws (an injected storage defect).
+  it('u/v/w: a composition that throws is never forwarded, and nothing is retried', async () => {
+    // U: the composition itself throws (an injected read/storage defect).
     resetProbes()
     const { reader } = recordingReader({ X: STATE_SNAPSHOTS.attemptIdentityFacts })
     const recorded = recordingLog()
     const observer = await loadObserver(reader, recorded.log)
-    probes.reader.error = new Error('storage exploded')
+    probes.composition.error = new Error('storage exploded')
 
     expect(observer.observe('X')).toBeUndefined()
     expect(recorded.entries).toEqual([])
     // W: exactly ONE read attempt - no retry, no second read.
-    expect(probes.reader.calls).toEqual(['X'])
+    expect(probes.composition.calls).toEqual(['X'])
 
     // V: the mapping/derive layer throws instead - same isolation.
     resetProbes()
@@ -952,7 +1046,7 @@ describe('correlation observer - structured diagnostic log seam (Phase 8.0D-10B-
 
     expect(observer2.observe('X')).toBeUndefined()
     expect(second.entries).toEqual([])
-    expect(probes.reader.calls).toEqual(['X'])
+    expect(probes.composition.calls).toEqual(['X'])
   })
 
   it('x/y/z/aa/ab: a hostile callback cannot escape, and it is called exactly once', async () => {
@@ -971,15 +1065,15 @@ describe('correlation observer - structured diagnostic log seam (Phase 8.0D-10B-
     expect(attempted).toEqual(['X'])
     // ...and AB: there was no retry, no second callback and no second read.
     expect(attempted).toHaveLength(1)
-    expect(probes.reader.calls).toEqual(['X'])
+    expect(probes.composition.calls).toEqual(['X'])
 
     // The observer remains usable after a hostile destination failed.
     expect(() => observer.observe('X')).not.toThrow()
     expect(attempted).toEqual(['X', 'X'])
-    expect(probes.reader.calls).toEqual(['X', 'X'])
+    expect(probes.composition.calls).toEqual(['X', 'X'])
   })
 
-  it('shape: the serialized entry carries the two approved fields and no hostile extra', async () => {
+  it('shape: the serialized present entry carries the approved fields and no hostile extra', async () => {
     resetProbes()
     const { reader } = recordingReader({ X: STATE_SNAPSHOTS.attemptIdentityFacts })
     const recorded = recordingLog()
@@ -993,10 +1087,29 @@ describe('correlation observer - structured diagnostic log seam (Phase 8.0D-10B-
     // baseURL, no provider config and no chat payload has any path into it.
     // (Sanitizing arbitrary content INSIDE a trusted fact value is not this
     // module's job - transport sanitization stays upstream.)
-    for (const forbidden of ['prompt', 'messages', 'attachments', 'tools', 'apiKey', 'secret', 'baseURL', 'chatProvider', 'credentials', 'conversationId'])
+    for (const forbidden of ['prompt', 'messages', 'attachments', 'tools', 'apiKey', 'secret', 'baseURL', 'chatProvider', 'credentials', 'conversationId', 'executionTerminals', 'snapshot', 'createdAt'])
       expect(serialized, forbidden).not.toContain(forbidden)
-    // And the only keys are the approved two.
+    // And the only keys are the approved three.
+    expect(Object.keys(JSON.parse(serialized))).toEqual(['correlationId', 'facts', 'terminalFacts'])
+    // The counts are the only terminal data, and they carry no record.
+    expect(Object.keys(JSON.parse(serialized).terminalFacts).sort()).toEqual([
+      'abandonedTerminalObservationCount',
+      'failedTerminalObservationCount',
+      'succeededTerminalObservationCount',
+    ])
+  })
+
+  it('shape-absent: the serialized absent entry keeps its two keys and no terminal member', async () => {
+    resetProbes()
+    const { reader } = recordingReader({})
+    const recorded = recordingLog()
+    const observer = await loadObserver(reader, recorded.log)
+
+    observer.observe('absent')
+
+    const serialized = JSON.stringify(recorded.entries[0]!)
     expect(Object.keys(JSON.parse(serialized))).toEqual(['correlationId', 'facts'])
+    expect(serialized).not.toContain('terminal')
   })
 
   it('the composition supplies only the BUILD-SELECTED callback - the reader plus one dev-gated sink', () => {
@@ -1025,16 +1138,23 @@ describe('correlation observer - structured diagnostic log seam (Phase 8.0D-10B-
 
 /**
  * Phase 8.0D-10B-4D4C3A-F: the boundary correction that keeps RAW terminal
- * records out of the diagnostic facts.
+ * records out of the diagnostic facts - evolved by Phase 8.0D-10B-4D4C3B2-B2,
+ * where the COMPOSED counts, and only they, reach the structured entry.
  *
  * The reader's SNAPSHOT contract may carry the terminal records a canonical
- * correlation entry stores, but the read RESULT is the identity facts alone -
- * so nothing terminal can reach the structured entry or the log line. These
- * proofs drive the REAL store through the REAL observer (the module doubles
- * above delegate to the real implementations).
+ * correlation entry stores; the composition counts them without exposing them,
+ * so nothing terminal beyond the three counts can reach the structured entry or
+ * the log line. These proofs drive the REAL store through the REAL observer (the
+ * module double above delegates to the real implementation).
  */
-describe('correlation observer - terminal records never reach the diagnostic facts (Phase 8.0D-10B-4D4C3A-F)', () => {
+describe('correlation observer - terminals reach the entry as counts only (Phase 8.0D-10B-4D4C3B2-B2)', () => {
   type Terminals = readonly { outcome: 'succeeded' | 'failed' | 'abandoned', roundId: string }[]
+
+  const ZERO_TERMINALS: LiaBrainTerminalObservationFacts = {
+    abandonedTerminalObservationCount: 0,
+    failedTerminalObservationCount: 0,
+    succeededTerminalObservationCount: 0,
+  }
 
   /** The real store: real decision, one real execution report, plus terminals. */
   function storeWithTerminals(terminals: Terminals) {
@@ -1056,25 +1176,34 @@ describe('correlation observer - terminal records never reach the diagnostic fac
     return { entry: recorded.entries[0]!, store }
   }
 
-  it('bz: the entry keeps its exact keys and NO terminal field reaches the facts', async () => {
+  it('bz: the entry carries the composed counts and NO raw terminal record', async () => {
     const { entry, store } = await observe([{ outcome: 'succeeded', roundId: 'R' }])
 
-    // The structured entry is exactly what it was: two top-level keys...
-    expect(Object.keys(entry).sort()).toEqual(['correlationId', 'facts'])
-    // ...the forwarded facts neither declare nor carry a terminal collection...
+    // The structured entry is exactly the composed shape: the opaque key, the
+    // identity facts and the three counts.
+    expect(Object.keys(entry).sort()).toEqual(['correlationId', 'facts', 'terminalFacts'])
+    // The forwarded identity facts neither declare nor carry a terminal collection.
     expect('executionTerminals' in entry.facts).toBe(false)
     expect('outcome' in entry.facts).toBe(false)
-    // ...and no terminal vocabulary is reachable from the entry at all.
-    const serialized = JSON.stringify(entry)
-    for (const forbidden of ['executionTerminals', 'outcome', 'succeeded', 'failed', 'abandoned', 'terminal'])
-      expect(serialized, forbidden).not.toMatch(new RegExp(forbidden, 'i'))
+    // The counts are the ONLY terminal data in the entry, and they are the three
+    // approved fields - no record, no round key, no outcome array.
+    const present = presentEntry(entry)
+    expect(present.terminalFacts).toEqual({ ...ZERO_TERMINALS, succeededTerminalObservationCount: 1 })
+    expect(Object.keys(present.terminalFacts).sort()).toEqual([
+      'abandonedTerminalObservationCount',
+      'failedTerminalObservationCount',
+      'succeededTerminalObservationCount',
+    ])
+    const serialized = JSON.stringify(present.terminalFacts)
+    for (const forbidden of ['executionTerminals', 'roundId', 'outcome', 'snapshot', 'records'])
+      expect(serialized, forbidden).not.toContain(forbidden)
 
-    // The raw record still exists at the SNAPSHOT boundary: the stop is the read
-    // API, not terminal storage.
+    // The raw record still exists at the SNAPSHOT boundary: the stop is the
+    // composition, not terminal storage.
     expect(store.get('X')!.executionTerminals).toEqual([{ outcome: 'succeeded', roundId: 'R' }])
   })
 
-  it('ca: the observed facts are deeply equal with and without terminal records', async () => {
+  it('ca: the identity facts stay identical with and without terminal records - only the counts move', async () => {
     const withoutTerminals = await observe([])
     const withTerminals = await observe([
       { outcome: 'succeeded', roundId: 'R' },
@@ -1085,9 +1214,17 @@ describe('correlation observer - terminal records never reach the diagnostic fac
     // The factual state is the real identity-facts answer, not a degenerate one.
     expect(withoutTerminals.entry.facts.status).toBe('attemptIdentityFacts')
     expect(Object.keys(withoutTerminals.entry.facts).sort()).toEqual(['attempts', 'expected', 'status'])
-    // A terminal stream of any length changes nothing in the diagnostic facts.
+    // A terminal stream of any length changes nothing in the identity facts.
     expect(withTerminals.entry.facts).toEqual(withoutTerminals.entry.facts)
     expect(Object.keys(withTerminals.entry.facts).sort()).toEqual(['attempts', 'expected', 'status'])
+    // ...and the counts are the ONLY difference between the two entries.
+    expect(presentEntry(withoutTerminals.entry).terminalFacts).toEqual(ZERO_TERMINALS)
+    expect(presentEntry(withTerminals.entry).terminalFacts).toEqual({
+      abandonedTerminalObservationCount: 1,
+      failedTerminalObservationCount: 1,
+      succeededTerminalObservationCount: 1,
+    })
+    expect(Object.keys(withoutTerminals.entry).sort()).toEqual(Object.keys(withTerminals.entry).sort())
   })
 
   it('cb: the diagnostic log line is byte-identical with and without terminal records', async () => {
@@ -1096,12 +1233,153 @@ describe('correlation observer - terminal records never reach the diagnostic fac
       { outcome: 'succeeded', roundId: 'R' },
       { outcome: 'failed', roundId: 'S' },
     ])
+    const mixed = await observe([
+      { outcome: 'succeeded', roundId: 'R' },
+      { outcome: 'succeeded', roundId: 'S' },
+      { outcome: 'failed', roundId: 'T' },
+      { outcome: 'abandoned', roundId: 'U' },
+    ])
 
     const line = formatLiaBrainDiagnosticEntry(withoutTerminals.entry)
+    // The formatter IGNORES the counts entirely in this phase: zero, two and
+    // four retained terminals all format to the very same line.
     expect(formatLiaBrainDiagnosticEntry(withTerminals.entry)).toBe(line)
+    expect(formatLiaBrainDiagnosticEntry(mixed.entry)).toBe(line)
     // One deterministic metadata line, with no terminal vocabulary in it.
     expect(line.startsWith('[LIA-BRAIN-DIAG] ')).toBe(true)
-    for (const forbidden of ['terminal', 'outcome', 'succeeded', 'failed', 'abandoned'])
+    for (const forbidden of ['terminal', 'outcome', 'succeeded', 'failed', 'abandoned', 'count'])
       expect(line, forbidden).not.toMatch(new RegExp(forbidden, 'i'))
+  })
+})
+
+/**
+ * Phase 8.0D-10B-4D4C3B2-B2: the composed entry over the REAL store, state by
+ * state - an absent key, a decision-only key, an execution-only key, a
+ * terminal-only key, a matched start+terminal pair, an unmatched pair and mixed
+ * terminal outcomes. The observer adds nothing to what the composition derived:
+ * it forwards the key plus the composed members, and the identity side is never
+ * joined with the terminal side.
+ */
+describe('correlation observer - composed entry states (Phase 8.0D-10B-4D4C3B2-B2)', () => {
+  const ZERO_TERMINALS: LiaBrainTerminalObservationFacts = {
+    abandonedTerminalObservationCount: 0,
+    failedTerminalObservationCount: 0,
+    succeededTerminalObservationCount: 0,
+  }
+
+  function liveStore() {
+    return createLiaBrainCorrelationStore({ maxEntries: 8, now: () => 1_000, ttlMs: 900_000 })
+  }
+
+  function start(store: ReturnType<typeof liveStore>, correlationId: string, roundId: string) {
+    store.recordExecution({ conversationId: 'conversation-1', correlationId, modelId: GROQ_MODEL_ID, providerId: GROQ_ENGINE_ID, roundId })
+  }
+
+  function terminal(store: ReturnType<typeof liveStore>, correlationId: string, roundId: string, outcome: 'succeeded' | 'failed' | 'abandoned') {
+    store.recordExecutionTerminal({ correlationId, outcome, roundId })
+  }
+
+  /** One observation over a prepared store, through the REAL observer and its entry. */
+  async function entryAfter(prepare: (store: ReturnType<typeof liveStore>) => void, correlationId = 'X') {
+    resetProbes()
+    const store = liveStore()
+    prepare(store)
+    const recorded = recordingLog()
+    const observer = await loadObserver(store, recorded.log)
+    observer.observe(correlationId)
+    return { entries: recorded.entries, entry: recorded.entries[0]!, store }
+  }
+
+  it('absent: the entry carries the key and the absence state, and no terminal member', async () => {
+    const { entries, entry } = await entryAfter(() => {}, 'never-written')
+
+    expect(entries).toHaveLength(1)
+    expect(Object.keys(entry).sort()).toEqual(['correlationId', 'facts'])
+    expect(entry.facts).toEqual({ status: 'correlationNotObserved' })
+    expect('terminalFacts' in entry).toBe(false)
+    expect(JSON.stringify(entry)).not.toContain('terminal')
+  })
+
+  it('decision-only: the current identity facts plus explicit zero counts', async () => {
+    const { entry } = await entryAfter((store) => {
+      store.recordDecision('X', productionDecision())
+    })
+
+    expect(Object.keys(entry).sort()).toEqual(['correlationId', 'facts', 'terminalFacts'])
+    const { facts, terminalFacts } = presentEntry(entry)
+    expect(facts.status).toBe('noExecutionObserved')
+    if (facts.status !== 'noExecutionObserved')
+      throw new Error('expected noExecutionObserved')
+    expect(facts.attempts).toEqual([])
+    expect(terminalFacts).toEqual(ZERO_TERMINALS)
+  })
+
+  it('execution-only: the observed attempt plus zero counts, with no pending interpretation', async () => {
+    const { entry } = await entryAfter((store) => {
+      start(store, 'X', 'A')
+    })
+
+    const { facts, terminalFacts } = presentEntry(entry)
+    expect(facts.status).toBe('decisionNotObserved')
+    expect(facts.attempts.map(observation => observation.roundId)).toEqual(['A'])
+    expect(terminalFacts).toEqual(ZERO_TERMINALS)
+    expect(JSON.stringify(facts)).not.toMatch(/pending|incomplete|failure/i)
+  })
+
+  it('terminal-only: the current identity status plus the counted terminal, with no new status', async () => {
+    const { entry } = await entryAfter((store) => {
+      terminal(store, 'X', 'R', 'failed')
+    })
+
+    const { facts, terminalFacts } = presentEntry(entry)
+    expect(facts).toEqual({ attempts: [], status: 'decisionNotObserved' })
+    expect(terminalFacts).toEqual({ ...ZERO_TERMINALS, failedTerminalObservationCount: 1 })
+  })
+
+  it('matched: the attempt keeps its exact shape and the terminal is counted once', async () => {
+    const { entry } = await entryAfter((store) => {
+      start(store, 'X', 'R')
+      terminal(store, 'X', 'R', 'succeeded')
+    })
+
+    const { facts, terminalFacts } = presentEntry(entry)
+    expect(facts.status).toBe('decisionNotObserved')
+    expect(facts.attempts).toHaveLength(1)
+    expect(Object.keys(facts.attempts[0]!).sort()).toEqual(['arrivalIndex', 'modelId', 'providerId', 'roundId'])
+    expect(JSON.stringify(facts)).not.toMatch(/outcome|succeeded|failed|abandoned/)
+    expect(terminalFacts).toEqual({ ...ZERO_TERMINALS, succeededTerminalObservationCount: 1 })
+  })
+
+  it('unmatched: both sides stay independent - no mismatch, no orphan and no join field', async () => {
+    const { entry } = await entryAfter((store) => {
+      start(store, 'X', 'A')
+      terminal(store, 'X', 'B', 'abandoned')
+    })
+
+    const { facts, terminalFacts } = presentEntry(entry)
+    expect(facts.attempts.map(observation => observation.roundId)).toEqual(['A'])
+    expect(terminalFacts).toEqual({ ...ZERO_TERMINALS, abandonedTerminalObservationCount: 1 })
+    const serialized = JSON.stringify(entry)
+    for (const forbidden of ['mismatch', 'orphan', 'join', 'unmatched'])
+      expect(serialized, forbidden).not.toContain(forbidden)
+  })
+
+  it('mixed: the counts are per outcome, with no total field', async () => {
+    const { entry } = await entryAfter((store) => {
+      start(store, 'X', 'R1')
+      terminal(store, 'X', 'R1', 'succeeded')
+      terminal(store, 'X', 'R2', 'succeeded')
+      terminal(store, 'X', 'R3', 'failed')
+      terminal(store, 'X', 'R4', 'abandoned')
+    })
+
+    const { facts, terminalFacts } = presentEntry(entry)
+    expect(terminalFacts).toEqual({
+      abandonedTerminalObservationCount: 1,
+      failedTerminalObservationCount: 1,
+      succeededTerminalObservationCount: 2,
+    })
+    expect('total' in terminalFacts).toBe(false)
+    expect(facts.attempts).toHaveLength(1)
   })
 })

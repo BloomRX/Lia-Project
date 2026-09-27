@@ -74,6 +74,7 @@ beforeEach(resetProbes)
 
 const REPO_ROOT = new URL('../../../../../../', import.meta.url)
 const COMPOSITION = 'apps/stage-tamagotchi/src/main/services/lia/brain-correlation-diagnostic-facts.ts'
+const OBSERVER = 'apps/stage-tamagotchi/src/main/services/lia/brain-correlation-observer.ts'
 const BRAIN_ROOTS = ['apps/stage-tamagotchi/src', 'packages/stage-ui/src', 'packages/core-agent/src', 'packages/lia-core/src']
 
 /** `fileURLToPath` keeps the trailing separator of a directory URL. */
@@ -521,21 +522,20 @@ describe('correlation diagnostic facts - source guards (Phase 8.0D-10B-4D4C3B2)'
       expect(code, String(forbidden)).not.toMatch(forbidden)
   })
 
-  it('u: the composition has ZERO production callers, and the deferred layers do not know it', () => {
+  it('u: the composition has exactly ONE production caller - the diagnostic observer', () => {
     // It exists in exactly ONE production module - its own.
     expect(productionSources(BRAIN_ROOTS).filter(relative => relative.includes('brain-correlation-diagnostic-facts'))).toEqual([COMPOSITION])
-    // Every occurrence of the function is its own DECLARATION - no caller
-    // anywhere in production.
-    expect(productionMatching(/composeLiaBrainCorrelationDiagnosticFacts\(/)).toEqual([COMPOSITION])
-    expect(productionMatching(/(?<!function )composeLiaBrainCorrelationDiagnosticFacts\(/)).toEqual([])
-    // And no other production module names the module at all - not the file, not
-    // the value, not the composed type.
-    expect(productionMatching(/brain-correlation-diagnostic-facts/)).toEqual([])
+    // The function has exactly two production occurrences: its own declaration
+    // and the ONE call in the observer (Phase 8.0D-10B-4D4C3B2-B2).
+    expect(productionMatching(/composeLiaBrainCorrelationDiagnosticFacts\(/)).toEqual([COMPOSITION, OBSERVER])
+    expect(productionMatching(/(?<!function )composeLiaBrainCorrelationDiagnosticFacts\(/)).toEqual([OBSERVER])
+    // ...and exactly one other production module names the module at all.
+    expect(productionMatching(/brain-correlation-diagnostic-facts/)).toEqual([OBSERVER])
 
-    // The observer, the diagnostic line, the store and the reader stay exactly
-    // where they were: this phase wires nothing.
+    // The deferred layers stay exactly where they were: the diagnostic line, the
+    // store, the service, the read adapter and the composition entry do not know
+    // the composed type, and printing the counts is a later phase.
     for (const relative of [
-      'apps/stage-tamagotchi/src/main/services/lia/brain-correlation-observer.ts',
       'apps/stage-tamagotchi/src/main/services/lia/brain-diagnostic-log.ts',
       'apps/stage-tamagotchi/src/main/services/lia/brain-correlation-store.ts',
       'apps/stage-tamagotchi/src/main/services/lia/brain-correlation-service.ts',
