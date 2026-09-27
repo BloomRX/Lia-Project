@@ -1,6 +1,6 @@
 import type { LiaBrainRoutingDecision } from '@lia/core'
 
-import type { LiaBrainExecutionObservationReport } from '../../../shared/eventa'
+import type { LiaBrainExecutionObservationReport, LiaBrainExecutionTerminalReport } from '../../../shared/eventa'
 
 /**
  * Phase 8.0D-10B-4B1: the ephemeral main-side correlation store.
@@ -122,7 +122,12 @@ export interface LiaBrainCorrelationStore {
    */
   recordExecution: (report: LiaBrainExecutionObservationReport) => void
   /**
-   * Records the terminal treatment of one round of a logical send.
+   * Appends the terminal treatment of one round of a logical send.
+   *
+   * It consumes the serialized report exactly like `recordExecution` consumes
+   * its own: ONE report object carrying the opaque key, and the two terminal
+   * facts. The stored record itself stays two-field (see
+   * `LiaBrainExecutionTerminalRecord`).
    *
    * FIRST terminal outcome per round wins: a repeated or conflicting report for
    * a round the entry already knows never overwrites, never merges and never
@@ -130,10 +135,10 @@ export interface LiaBrainCorrelationStore {
    * exactly like the decision. A terminal may be the FIRST thing ever seen for
    * a key, and it may describe a round whose start was never reported: no
    * execution record, no decision and no provider/model identity is ever
-   * synthesized for it. An unusable key or an unusable `roundId` ignores the
-   * call.
+   * synthesized for it. An unusable `report.correlationId` or `report.roundId`
+   * ignores the call.
    */
-  recordExecutionTerminal: (correlationId: string, terminal: LiaBrainExecutionTerminalRecord) => void
+  recordExecutionTerminal: (report: LiaBrainExecutionTerminalReport) => void
   /** Read-only snapshot of one entry, or `undefined` when absent or expired. */
   get: (correlationId: string) => LiaBrainCorrelationEntry | undefined
   /** Live entry count after lazy expiry pruning. */
@@ -266,13 +271,13 @@ export function createLiaBrainCorrelationStore(options: LiaBrainCorrelationStore
     createEntry(key, at).executions.push(copyExecutionReport(report))
   }
 
-  function recordExecutionTerminal(correlationId: string, terminal: LiaBrainExecutionTerminalRecord): void {
-    const key = readCorrelationId(correlationId)
+  function recordExecutionTerminal(report: LiaBrainExecutionTerminalReport): void {
+    const key = readCorrelationId(report?.correlationId)
     if (!key)
       return
 
     // The round key follows the same "usable key" convention as the entry key.
-    const roundId = readCorrelationId(terminal?.roundId)
+    const roundId = readCorrelationId(report?.roundId)
     if (!roundId)
       return
 
@@ -289,8 +294,10 @@ export function createLiaBrainCorrelationStore(options: LiaBrainCorrelationStore
 
     // Arrival order, no sorting. Storing a terminal outcome is a pure fact
     // append: no execution record, no decision, no identity is created beside
-    // it, and nothing here reads the other collections.
-    entry.executionTerminals.push(copyExecutionTerminalRecord(terminal))
+    // it, and nothing here reads the other collections. The stored record is
+    // built two-field on purpose - the entry already holds the key, so the
+    // report's correlationId is deliberately NOT copied into it.
+    entry.executionTerminals.push({ roundId, outcome: report.outcome })
   }
 
   function get(correlationId: string): LiaBrainCorrelationEntry | undefined {

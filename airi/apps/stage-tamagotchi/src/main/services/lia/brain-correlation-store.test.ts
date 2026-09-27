@@ -1,6 +1,7 @@
 import type { LiaBrainRoutingDecision } from '@lia/core'
 
-import type { LiaBrainExecutionTerminalRecord } from './brain-correlation-store'
+import type { LiaBrainExecutionTerminalReport } from '../../../shared/eventa'
+import type { LiaBrainCorrelationStore, LiaBrainExecutionTerminalRecord } from './brain-correlation-store'
 
 import { readdirSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -49,6 +50,11 @@ function report(overrides: Partial<Record<'correlationId' | 'conversationId' | '
     providerId: overrides.providerId ?? 'mock-provider',
     modelId: overrides.modelId ?? 'gpt-test',
   }
+}
+
+/** One serialized terminal report, exactly as the future main ingress will deliver it. */
+function terminalReport(correlationId: string, roundId: string, outcome: 'succeeded' | 'failed' | 'abandoned'): LiaBrainExecutionTerminalReport {
+  return { correlationId, outcome, roundId }
 }
 
 /** A store whose clock the test drives by hand. */
@@ -478,11 +484,6 @@ describe('lia brain correlation store - mutation isolation (Phase 8.0D-10B-4B1)'
 })
 
 describe('lia brain correlation store - terminal round outcomes (Phase 8.0D-10B-4C2A)', () => {
-  /** One two-field terminal record, exactly as the future main sanitizer will build it. */
-  function terminal(roundId: string, outcome: 'succeeded' | 'failed' | 'abandoned'): LiaBrainExecutionTerminalRecord {
-    return { outcome, roundId }
-  }
-
   /** The canonical terminal collection of one entry, flattened for assertions. */
   function settled(store: ReturnType<typeof createLiaBrainCorrelationStore>, correlationId: string): string[] {
     return store.get(correlationId)!.executionTerminals.map(record => `${record.roundId}/${record.outcome}`)
@@ -506,7 +507,7 @@ describe('lia brain correlation store - terminal round outcomes (Phase 8.0D-10B-
   it('42: a terminal-first write is a normal entry - decision absent, no execution invented', () => {
     const { store } = clockedStore()
 
-    store.recordExecutionTerminal('X', terminal('round-a', 'failed'))
+    store.recordExecutionTerminal(terminalReport('X', 'round-a', 'failed'))
 
     expect(store.size).toBe(1)
     const snapshot = store.get('X')!
@@ -521,9 +522,9 @@ describe('lia brain correlation store - terminal round outcomes (Phase 8.0D-10B-
   it('43: all three outcomes are stored verbatim, with no translation or normalization', () => {
     const { store } = clockedStore()
 
-    store.recordExecutionTerminal('X', terminal('round-a', 'succeeded'))
-    store.recordExecutionTerminal('X', terminal('round-b', 'failed'))
-    store.recordExecutionTerminal('X', terminal('round-c', 'abandoned'))
+    store.recordExecutionTerminal(terminalReport('X', 'round-a', 'succeeded'))
+    store.recordExecutionTerminal(terminalReport('X', 'round-b', 'failed'))
+    store.recordExecutionTerminal(terminalReport('X', 'round-c', 'abandoned'))
 
     expect(settled(store, 'X')).toEqual(['round-a/succeeded', 'round-b/failed', 'round-c/abandoned'])
   })
@@ -532,12 +533,12 @@ describe('lia brain correlation store - terminal round outcomes (Phase 8.0D-10B-
     const { store } = clockedStore()
 
     // The conflicting sequence: the fact that settled first is the fact kept.
-    store.recordExecutionTerminal('X', terminal('round-r', 'failed'))
-    store.recordExecutionTerminal('X', terminal('round-r', 'succeeded'))
-    store.recordExecutionTerminal('X', terminal('round-r', 'abandoned'))
+    store.recordExecutionTerminal(terminalReport('X', 'round-r', 'failed'))
+    store.recordExecutionTerminal(terminalReport('X', 'round-r', 'succeeded'))
+    store.recordExecutionTerminal(terminalReport('X', 'round-r', 'abandoned'))
     // A repeated identical outcome appends nothing either.
-    store.recordExecutionTerminal('X', terminal('round-s', 'succeeded'))
-    store.recordExecutionTerminal('X', terminal('round-s', 'succeeded'))
+    store.recordExecutionTerminal(terminalReport('X', 'round-s', 'succeeded'))
+    store.recordExecutionTerminal(terminalReport('X', 'round-s', 'succeeded'))
 
     expect(settled(store, 'X')).toEqual(['round-r/failed', 'round-s/succeeded'])
     expect(store.get('X')!.executionTerminals).toHaveLength(2)
@@ -549,9 +550,9 @@ describe('lia brain correlation store - terminal round outcomes (Phase 8.0D-10B-
     const { store } = clockedStore()
 
     // Deliberately not alphabetical: the stored order is arrival, not ranking.
-    store.recordExecutionTerminal('X', terminal('round-c', 'failed'))
-    store.recordExecutionTerminal('X', terminal('round-a', 'succeeded'))
-    store.recordExecutionTerminal('X', terminal('round-b', 'abandoned'))
+    store.recordExecutionTerminal(terminalReport('X', 'round-c', 'failed'))
+    store.recordExecutionTerminal(terminalReport('X', 'round-a', 'succeeded'))
+    store.recordExecutionTerminal(terminalReport('X', 'round-b', 'abandoned'))
 
     expect(settled(store, 'X')).toEqual(['round-c/failed', 'round-a/succeeded', 'round-b/abandoned'])
   })
@@ -559,7 +560,7 @@ describe('lia brain correlation store - terminal round outcomes (Phase 8.0D-10B-
   it('47: terminal before execution start keeps both facts and synthesizes no identity', () => {
     const { store } = clockedStore()
 
-    store.recordExecutionTerminal('X', terminal('round-a', 'failed'))
+    store.recordExecutionTerminal(terminalReport('X', 'round-a', 'failed'))
     // Nothing to read an identity from - and nothing is invented.
     expect(store.get('X')!.executions).toEqual([])
 
@@ -576,7 +577,7 @@ describe('lia brain correlation store - terminal round outcomes (Phase 8.0D-10B-
     const { store } = clockedStore()
 
     store.recordExecution(report({ correlationId: 'X', roundId: 'round-a', providerId: 'groq' }))
-    store.recordExecutionTerminal('X', terminal('round-a', 'succeeded'))
+    store.recordExecutionTerminal(terminalReport('X', 'round-a', 'succeeded'))
 
     const snapshot = store.get('X')!
     expect(snapshot.executions).toEqual([report({ correlationId: 'X', roundId: 'round-a', providerId: 'groq' })])
@@ -588,13 +589,13 @@ describe('lia brain correlation store - terminal round outcomes (Phase 8.0D-10B-
 
   it('49/50: terminal and decision coexist in either arrival order, first decision still wins', () => {
     const terminalFirst = clockedStore().store
-    terminalFirst.recordExecutionTerminal('X', terminal('round-a', 'abandoned'))
+    terminalFirst.recordExecutionTerminal(terminalReport('X', 'round-a', 'abandoned'))
     terminalFirst.recordDecision('X', decision({ engineId: 'groq' }))
     terminalFirst.recordDecision('X', decision({ engineId: 'anthropic' }))
 
     const decisionFirst = clockedStore().store
     decisionFirst.recordDecision('X', decision({ engineId: 'groq' }))
-    decisionFirst.recordExecutionTerminal('X', terminal('round-a', 'abandoned'))
+    decisionFirst.recordExecutionTerminal(terminalReport('X', 'round-a', 'abandoned'))
 
     for (const store of [terminalFirst, decisionFirst]) {
       expect(store.get('X')!.decision?.selection?.engine?.id).toBe('groq')
@@ -606,11 +607,11 @@ describe('lia brain correlation store - terminal round outcomes (Phase 8.0D-10B-
     const { store } = clockedStore()
 
     // No executions at all.
-    store.recordExecutionTerminal('X', terminal('round-a', 'succeeded'))
+    store.recordExecutionTerminal(terminalReport('X', 'round-a', 'succeeded'))
     // A start for a DIFFERENT round only.
     store.recordExecution(report({ correlationId: 'X', roundId: 'round-other' }))
     // And a terminal for a round that never started.
-    store.recordExecutionTerminal('X', terminal('round-never-started', 'failed'))
+    store.recordExecutionTerminal(terminalReport('X', 'round-never-started', 'failed'))
 
     const snapshot = store.get('X')!
     expect(snapshot.executions.map(execution => execution.roundId)).toEqual(['round-other'])
@@ -619,11 +620,11 @@ describe('lia brain correlation store - terminal round outcomes (Phase 8.0D-10B-
 
   it('52: the terminal collection is copy-safe on both directions', () => {
     const { store } = clockedStore()
-    store.recordExecutionTerminal('X', terminal('round-a', 'failed'))
+    store.recordExecutionTerminal(terminalReport('X', 'round-a', 'failed'))
 
     const snapshot = store.get('X')!
     // Mutating the returned array does not reach the entry.
-    snapshot.executionTerminals.push(terminal('hijacked', 'succeeded'))
+    snapshot.executionTerminals.push({ outcome: 'succeeded', roundId: 'hijacked' })
     // Mutating a returned record does not reach the entry either.
     snapshot.executionTerminals[0]!.outcome = 'succeeded'
     snapshot.executionTerminals[0]!.roundId = 'mutated'
@@ -633,8 +634,8 @@ describe('lia brain correlation store - terminal round outcomes (Phase 8.0D-10B-
     expect(store.get('X')!.executionTerminals).not.toBe(store.get('X')!.executionTerminals)
 
     // And the object handed IN is copied too.
-    const incoming = terminal('round-b', 'failed')
-    store.recordExecutionTerminal('X', incoming)
+    const incoming = terminalReport('X', 'round-b', 'failed')
+    store.recordExecutionTerminal(incoming)
     incoming.outcome = 'succeeded'
     incoming.roundId = 'changed-after-recording'
     expect(store.get('X')!.executionTerminals[1]).toEqual({ outcome: 'failed', roundId: 'round-b' })
@@ -643,14 +644,14 @@ describe('lia brain correlation store - terminal round outcomes (Phase 8.0D-10B-
   it('53: a terminal-first write establishes createdAt, and later terminals never extend the lifetime', () => {
     const { store, advance } = clockedStore({ ttlMs: 1_000 })
 
-    store.recordExecutionTerminal('X', terminal('round-a', 'succeeded'))
+    store.recordExecutionTerminal(terminalReport('X', 'round-a', 'succeeded'))
     const createdAt = store.get('X')!.createdAt
 
     // A stream of later terminal reports must not keep the entry alive: the age
     // is measured from creation, exactly like every other write.
     for (let i = 0; i < 9; i += 1) {
       advance(100)
-      store.recordExecutionTerminal('X', terminal(`round-${i}`, 'failed'))
+      store.recordExecutionTerminal(terminalReport('X', `round-${i}`, 'failed'))
     }
 
     expect(store.get('X')!.createdAt).toBe(createdAt)
@@ -665,12 +666,12 @@ describe('lia brain correlation store - terminal round outcomes (Phase 8.0D-10B-
     const { store, advance } = clockedStore({ ttlMs: 1_000 })
 
     // T0 terminal A, T1 execution A, T2 terminal B, T3 decision.
-    store.recordExecutionTerminal('X', terminal('round-a', 'succeeded'))
+    store.recordExecutionTerminal(terminalReport('X', 'round-a', 'succeeded'))
     const createdAt = store.get('X')!.createdAt
     advance(10)
     store.recordExecution(report({ correlationId: 'X', roundId: 'round-a' }))
     advance(10)
-    store.recordExecutionTerminal('X', terminal('round-b', 'failed'))
+    store.recordExecutionTerminal(terminalReport('X', 'round-b', 'failed'))
     advance(10)
     store.recordDecision('X', decision())
 
@@ -689,11 +690,11 @@ describe('lia brain correlation store - terminal round outcomes (Phase 8.0D-10B-
 
     store.recordDecision('X', decision())
     store.recordExecution(report({ correlationId: 'X', roundId: 'round-old' }))
-    store.recordExecutionTerminal('X', terminal('round-old', 'succeeded'))
+    store.recordExecutionTerminal(terminalReport('X', 'round-old', 'succeeded'))
     advance(500)
     expect(store.size).toBe(0)
 
-    store.recordExecutionTerminal('X', terminal('round-new', 'failed'))
+    store.recordExecutionTerminal(terminalReport('X', 'round-new', 'failed'))
 
     expect(store.size).toBe(1)
     const snapshot = store.get('X')!
@@ -706,14 +707,14 @@ describe('lia brain correlation store - terminal round outcomes (Phase 8.0D-10B-
     const { store, advance } = clockedStore({ maxEntries: 2, ttlMs: 100_000 })
 
     advance(10)
-    store.recordExecutionTerminal('A', terminal('round-a', 'failed'))
+    store.recordExecutionTerminal(terminalReport('A', 'round-a', 'failed'))
     advance(10)
-    store.recordExecutionTerminal('B', terminal('round-b', 'succeeded'))
+    store.recordExecutionTerminal(terminalReport('B', 'round-b', 'succeeded'))
 
     expect(store.size).toBe(2)
 
     advance(10)
-    store.recordExecutionTerminal('C', terminal('round-c', 'abandoned'))
+    store.recordExecutionTerminal(terminalReport('C', 'round-c', 'abandoned'))
 
     // The oldest live entry goes, exactly as for decisions and executions: no
     // terminal-specific quota, no ranking.
@@ -727,7 +728,7 @@ describe('lia brain correlation store - terminal round outcomes (Phase 8.0D-10B-
     const { store } = clockedStore({ maxEntries: 2, ttlMs: 100_000 })
 
     for (let i = 0; i < 20; i += 1)
-      store.recordExecutionTerminal('X', terminal(`round-${i}`, 'succeeded'))
+      store.recordExecutionTerminal(terminalReport('X', `round-${i}`, 'succeeded'))
 
     // Terminal records never count as entries of their own.
     expect(store.size).toBe(1)
@@ -745,8 +746,8 @@ describe('lia brain correlation store - terminal round outcomes (Phase 8.0D-10B-
     store.recordExecution(duplicate)
     store.recordExecution(duplicate)
     // Terminal outcomes: one factual outcome per round, duplicates dropped.
-    store.recordExecutionTerminal('X', terminal('round-a', 'failed'))
-    store.recordExecutionTerminal('X', terminal('round-a', 'failed'))
+    store.recordExecutionTerminal(terminalReport('X', 'round-a', 'failed'))
+    store.recordExecutionTerminal(terminalReport('X', 'round-a', 'failed'))
 
     const snapshot = store.get('X')!
     expect(snapshot.executions).toHaveLength(2)
@@ -759,7 +760,7 @@ describe('lia brain correlation store - terminal round outcomes (Phase 8.0D-10B-
     // The type only permits the three outcomes; the main IPC sanitizer owns
     // hostile payload validation LATER. A value forced through a cast is kept
     // verbatim - this store never rewrites a fact into `completed`/`settled`.
-    store.recordExecutionTerminal('X', { outcome: 'cancelled', roundId: 'round-a' } as unknown as LiaBrainExecutionTerminalRecord)
+    store.recordExecutionTerminal({ correlationId: 'X', outcome: 'cancelled', roundId: 'round-a' } as unknown as LiaBrainExecutionTerminalReport)
 
     expect(store.get('X')!.executionTerminals).toEqual([{ outcome: 'cancelled', roundId: 'round-a' }])
   })
@@ -767,11 +768,11 @@ describe('lia brain correlation store - terminal round outcomes (Phase 8.0D-10B-
   it('f2: an unusable key or round key is ignored, and nothing else is stored', () => {
     const { store } = clockedStore()
 
-    store.recordExecutionTerminal('', terminal('round-a', 'failed'))
-    store.recordExecutionTerminal(undefined as unknown as string, terminal('round-a', 'failed'))
-    store.recordExecutionTerminal('X', terminal('', 'failed'))
-    store.recordExecutionTerminal('X', { outcome: 'failed', roundId: undefined } as unknown as LiaBrainExecutionTerminalRecord)
-    store.recordExecutionTerminal('X', undefined as unknown as LiaBrainExecutionTerminalRecord)
+    store.recordExecutionTerminal(terminalReport('', 'round-a', 'failed'))
+    store.recordExecutionTerminal({ correlationId: undefined, outcome: 'failed', roundId: 'round-a' } as unknown as LiaBrainExecutionTerminalReport)
+    store.recordExecutionTerminal(terminalReport('X', '', 'failed'))
+    store.recordExecutionTerminal({ correlationId: 'X', outcome: 'failed', roundId: undefined } as unknown as LiaBrainExecutionTerminalReport)
+    store.recordExecutionTerminal(undefined as unknown as LiaBrainExecutionTerminalReport)
 
     expect(store.size).toBe(0)
     expect(store.get('X')).toBeUndefined()
@@ -811,6 +812,54 @@ describe('lia brain correlation store - terminal round outcomes (Phase 8.0D-10B-
       ['apps/stage-tamagotchi/src', 'packages/stage-ui/src', 'packages/core-agent/src', 'packages/lia-core/src'],
       /createLiaBrainTerminalStore|terminalCorrelationStore|terminalCache|executionTerminalStore/,
     )).toEqual([])
+  })
+})
+
+describe('lia brain correlation store - terminal report API shape (Phase 8.0D-10B-4C2A-F)', () => {
+  it('a: both writers take exactly ONE serialized report object - no positional pair', () => {
+    // Compile-time proofs: each method has a single parameter, and that
+    // parameter IS the shared serialized report type (mutually assignable, so
+    // the method accepts the whole report and requires nothing narrower).
+    type ExecutionParameters = Parameters<LiaBrainCorrelationStore['recordExecution']>
+    type TerminalParameters = Parameters<LiaBrainCorrelationStore['recordExecutionTerminal']>
+
+    const executionTakesOneArgument: ExecutionParameters['length'] extends 1 ? true : false = true
+    const terminalTakesOneArgument: TerminalParameters['length'] extends 1 ? true : false = true
+    const executionArgumentIsTheReport: ExecutionParameters[0] extends LiaBrainExecutionObservationReport ? true : false = true
+    const terminalArgumentIsTheReport: TerminalParameters[0] extends LiaBrainExecutionTerminalReport ? true : false = true
+    const theWholeReportIsTheArgument: LiaBrainExecutionTerminalReport extends TerminalParameters[0] ? true : false = true
+
+    expect({ executionArgumentIsTheReport, executionTakesOneArgument, terminalArgumentIsTheReport, terminalTakesOneArgument, theWholeReportIsTheArgument })
+      .toEqual({ executionArgumentIsTheReport: true, executionTakesOneArgument: true, terminalArgumentIsTheReport: true, terminalTakesOneArgument: true, theWholeReportIsTheArgument: true })
+
+    // The stored record stays store-owned and two-field: the report's
+    // correlationId is not part of it (the entry already holds the key).
+    const storedRecordHasNoKey: 'correlationId' extends keyof LiaBrainExecutionTerminalRecord ? false : true = true
+    expect(storedRecordHasNoKey).toBe(true)
+
+    // And the shape works at runtime: the report is accepted as-is and only its
+    // two terminal facts are retained.
+    const { store } = clockedStore()
+    store.recordExecutionTerminal(terminalReport('X', 'round-a', 'failed'))
+    expect(store.get('X')!.executionTerminals).toEqual([{ outcome: 'failed', roundId: 'round-a' }])
+  })
+
+  it('b: the store consumes the shared contract TYPE-ONLY, with both methods symmetric', () => {
+    const source = storeSource()
+    const code = stripComments(source)
+
+    // ONE type-only import carries both serialized report types; no value,
+    // channel constant or imported module of that contract is referenced.
+    expect(code).toMatch(/import type \{ LiaBrainExecutionObservationReport, LiaBrainExecutionTerminalReport \} from '\.\.\/\.\.\/\.\.\/shared\/eventa'/)
+    expect(code.match(/from '\.\.\/\.\.\/\.\.\/shared\/eventa'/g)).toHaveLength(1)
+    expect(code).not.toMatch(/defineEventa|electronLiaBrain/)
+
+    // The two writers are declared the same way: one report-object argument.
+    expect(code).toMatch(/recordExecution: \(report: LiaBrainExecutionObservationReport\) => void/)
+    expect(code).toMatch(/recordExecutionTerminal: \(report: LiaBrainExecutionTerminalReport\) => void/)
+    // No positional-pair variant survives anywhere in the module.
+    expect(code).not.toMatch(/recordExecutionTerminal: \(\s*\w+:\s*string,/)
+    expect(code).not.toMatch(/recordExecutionTerminal\([^)]*,\s*(?:terminal|record)\b/)
   })
 })
 
@@ -858,7 +907,7 @@ describe('lia brain correlation store - isolation invariants (Phase 8.0D-10B-4B1
 
     // No Eventa/IPC surface, no channel tag: the contract import is TYPE-ONLY
     // (the five-field report shape) and nothing here can send or receive.
-    expect(source).toMatch(/import type \{ LiaBrainExecutionObservationReport \} from '\.\.\/\.\.\/\.\.\/shared\/eventa'/)
+    expect(source).toMatch(/import type \{ LiaBrainExecutionObservationReport, LiaBrainExecutionTerminalReport \} from '\.\.\/\.\.\/\.\.\/shared\/eventa'/)
     expect(source).not.toMatch(/defineEventa|defineInvokeEventa|defineInvokeHandler|ipcMain|ipcRenderer|BrowserWindow|\.emit\(/)
     expect(source).not.toMatch(/eventa:(?:invoke|event):lia:brain/)
 
