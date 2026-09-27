@@ -655,7 +655,13 @@ describe('lia send terminal ingress service - isolation invariants (Phase 8.0D-1
       './brain-execution-identity-facts.ts',
     ])
       expect(stripComments(readSource(relative)), relative).not.toMatch(/sendTerminal|sendSucceeded|sendFailed/)
-    expect(productionSourcesMatching(BRAIN_ROOTS, /sendTerminalOutcome|sendTerminalObserved/)).toEqual([])
+    // 8.0D-10B-4D4C4-B4B2 evolves the field-vocabulary allowlist honestly: the
+    // ONE production owner of `sendTerminalOutcome` is the pure send-facts
+    // projection (which still has zero production callers), and the distinct
+    // term `sendTerminalObserved` is introduced NOWHERE.
+    expect(productionSourcesMatching(BRAIN_ROOTS, /sendTerminalOutcome|sendTerminalObserved/))
+      .toEqual(['apps/stage-tamagotchi/src/main/services/lia/brain-send-terminal-facts.ts'])
+    expect(productionSourcesMatching(BRAIN_ROOTS, /sendTerminalObserved/)).toEqual([])
 
     // The transport, the Stage seam and Core Agent know nothing about the
     // stored field: B2 and the B1 seam stay frozen.

@@ -670,7 +670,13 @@ describe('lia send terminal wiring invariants (Phase 8.0D-10B-4D4C4-B3B2)', () =
       './brain-execution-identity-facts.ts',
     ])
       expect(stripComments(readSource(relative)), relative).not.toMatch(/sendTerminal|sendSucceeded|sendFailed/)
-    expect(productionSourcesMatching(BRAIN_ROOTS, /sendTerminalOutcome|sendTerminalObserved|sendSucceeded|sendFailed/)).toEqual([])
+    // 8.0D-10B-4D4C4-B4B2 evolves the field-vocabulary allowlist honestly to its
+    // exact new owner: the pure send-facts projection, and nothing else. The
+    // distinct term `sendTerminalObserved` and the verdict words stay absent
+    // from production entirely.
+    expect(productionSourcesMatching(BRAIN_ROOTS, /sendTerminalOutcome|sendTerminalObserved|sendSucceeded|sendFailed/))
+      .toEqual(['apps/stage-tamagotchi/src/main/services/lia/brain-send-terminal-facts.ts'])
+    expect(productionSourcesMatching(BRAIN_ROOTS, /sendTerminalObserved|sendSucceeded|sendFailed/)).toEqual([])
 
     // The shared contract still declares exactly the two-field send report, and
     // the renderer/Stage/Core layers know nothing about the stored field.

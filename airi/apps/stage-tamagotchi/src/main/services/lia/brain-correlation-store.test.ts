@@ -1405,6 +1405,13 @@ describe('lia brain correlation store - logical send terminal fact (Phase 8.0D-1
 
     // Singular by construction, and the store stays the ONE canonical one.
     expect(productionSourcesMatching(BRAIN_ROOTS, /sendTerminals|logicalSendTerminals|terminalHistory|sendTerminalStore|recordSendTerminals/)).toEqual([])
+    // 8.0D-10B-4D4C4-B4B2: the ONE production owner of the projected field name
+    // is the pure send-facts module; the store itself still never names it, and
+    // the distinct term `sendTerminalObserved` exists nowhere in production.
+    expect(productionSourcesMatching(BRAIN_ROOTS, /sendTerminalOutcome/))
+      .toEqual(['apps/stage-tamagotchi/src/main/services/lia/brain-send-terminal-facts.ts'])
+    expect(productionSourcesMatching(BRAIN_ROOTS, /sendTerminalObserved/)).toEqual([])
+    expect(stripComments(source)).not.toMatch(/sendTerminalOutcome|sendTerminalObserved/)
 
     // 55/56/57/58: no fallback, final, winner or completion derivation, and no
     // authority can act on the settlement the store retains.
