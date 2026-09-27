@@ -4,7 +4,7 @@ import type { Message, Tool } from '@xsai/shared-chat'
 import type { SyncedPiniaRuntime } from 'pinia-plugin-synced'
 
 import type { ChatSendPayload } from './chat'
-import type { ChatRequestStartedObservation, ChatRequestStartedObserver } from './chat/chat-provider-runtime'
+import type { ChatRequestStartedObservation, ChatRequestStartedObserver, ChatSendSettledObservation, ChatSendSettledObserver } from './chat/chat-provider-runtime'
 
 import { errorMessageFrom } from '@moeru/std'
 import { IOAttributes, IOSpanNames } from '@proj-airi/stage-shared'
@@ -22,6 +22,7 @@ import {
   registerChatFallbackResolver,
   registerChatRequestStartedObserver,
   registerChatRoundSettledObserver,
+  registerChatSendSettledObserver,
   resetChatProviderRuntimeExtensionsForTesting,
 } from './chat/chat-provider-runtime'
 import { useConsciousnessSettingsStore } from './modules/consciousness-settings'
@@ -1553,6 +1554,307 @@ describe('chat store contract', () => {
       expect(llmStreamMock.mock.calls[0]?.[0]).toBe('gpt-test')
       expect(llmStreamMock.mock.calls[0]?.[1]).toBe(provider)
       expect(getChatProviderInstanceMock).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  // Phase 8.0D-10B-4D4C4-B1: the generic Stage seam that observes the factual
+  // settlement of ONE logical send - the whole send/retry invocation, never a
+  // round and never an attempt. The store only forwards it: no inspection, no
+  // branching, no Lia reporter, no IPC, no derived verdict.
+  describe('logical send settlement observation', () => {
+    afterEach(() => {
+      resetChatProviderRuntimeExtensionsForTesting()
+      activeProviderRef.value = 'mock-provider'
+      activeModelRef.value = 'gpt-test'
+    })
+
+    function streamOnce() {
+      llmStreamMock.mockImplementation(async (_model: string, _chatProvider: ChatProvider, _messages: Message[], options: any) => {
+        await options.onStreamEvent({ type: 'text-delta', text: 'ok' })
+        await options.onStreamEvent({ type: 'finish', finishReason: 'stop' })
+      })
+    }
+
+    function errorBubbles(sessionId = 'session-1') {
+      return (sessionMessages[sessionId] ?? []).filter(message => message.role === 'error')
+    }
+
+    it('a/b: a correlated success settles exactly once, with the payload key and no round', async () => {
+      streamOnce()
+      const settled: ChatSendSettledObservation[] = []
+      registerChatSendSettledObserver(observation => settled.push(observation))
+
+      const store = useChatStore()
+      await expect(store.send({ sessionId: 'session-1', text: 'hello', correlationId: 'logical-send-77' })).resolves.toBeDefined()
+
+      expect(settled).toEqual([{ correlationId: 'logical-send-77', outcome: 'succeeded' }])
+      // Exactly the two contract keys: no roundId, no attempt, no provider, no
+      // model, no timing, no result - the send settled, and that is all.
+      expect(Object.keys(settled[0] as object).sort()).toEqual(['correlationId', 'outcome'])
+      expect(llmStreamMock).toHaveBeenCalledTimes(1)
+      expect(getChatProviderInstanceMock).toHaveBeenCalledTimes(1)
+    })
+
+    it('c: an uncorrelated success carries no key at all - nothing is synthesized', async () => {
+      streamOnce()
+      const settled: ChatSendSettledObservation[] = []
+      registerChatSendSettledObserver(observation => settled.push(observation))
+
+      const store = useChatStore()
+      await store.send({ sessionId: 'session-1', text: 'uncorrelated turn' })
+
+      expect(settled).toEqual([{ outcome: 'succeeded' }])
+      // Absent stays absent: not an empty string, not the session id, not a round.
+      expect('correlationId' in (settled[0] as object)).toBe(false)
+    })
+
+    it('d/e: a failed send settles once as failed, keeps the error identity, and absorbs a hostile observer', async () => {
+      const failure = new Error('provider exploded')
+      llmStreamMock.mockRejectedValueOnce(failure)
+      const observed: ChatSendSettledObservation[] = []
+      registerChatSendSettledObserver((observation) => {
+        observed.push({ ...observation })
+        observation.outcome = 'succeeded'
+        throw new Error('observer exploded')
+      })
+
+      const store = useChatStore()
+      await expect(store.send({ sessionId: 'session-1', text: 'hello', correlationId: 'logical-send-5' })).rejects.toBe(failure)
+
+      // D: one notification, reporting the factual settlement - the observer's
+      // mutation attempt changed neither the outcome nor the send.
+      expect(observed).toEqual([{ correlationId: 'logical-send-5', outcome: 'failed' }])
+      // E: the pre-existing failure path is unchanged - one attempt, one bubble.
+      expect(llmStreamMock).toHaveBeenCalledTimes(1)
+      expect(errorBubbles()).toHaveLength(1)
+    })
+
+    it('f: a recovered send settles ONCE, as succeeded - per send, never per attempt', async () => {
+      llmStreamMock.mockRejectedValueOnce(new Error('recoverable failure'))
+      streamOnce()
+      const fallbackResolver = vi.fn(async () => {
+        activeProviderRef.value = 'fallback-provider'
+        activeModelRef.value = 'fallback-model'
+        return { providerId: 'fallback-provider', modelId: 'fallback-model' }
+      })
+      registerChatFallbackResolver(fallbackResolver)
+      const settled: ChatSendSettledObservation[] = []
+      registerChatSendSettledObserver(observation => settled.push(observation))
+
+      const store = useChatStore()
+      await expect(store.send({ sessionId: 'session-1', text: 'hello', correlationId: 'logical-send-8' })).resolves.toBeDefined()
+
+      // The failed first attempt is NOT a settlement of the send, and the
+      // fallback is not reported as its own send: one observation, succeeded.
+      expect(settled).toEqual([{ correlationId: 'logical-send-8', outcome: 'succeeded' }])
+      expect(llmStreamMock).toHaveBeenCalledTimes(2)
+      expect(errorBubbles()).toHaveLength(0)
+    })
+
+    it('f2: two failed attempts then a success settle once, as succeeded', async () => {
+      llmStreamMock.mockRejectedValueOnce(new Error('recoverable failure 1'))
+      llmStreamMock.mockRejectedValueOnce(new Error('recoverable failure 2'))
+      streamOnce()
+      registerChatFallbackResolver(async () => {
+        activeProviderRef.value = 'fallback-provider'
+        return { providerId: 'fallback-provider' }
+      })
+      const settled: ChatSendSettledObservation[] = []
+      registerChatSendSettledObserver(observation => settled.push(observation))
+
+      const store = useChatStore()
+      await expect(store.send({ sessionId: 'session-1', text: 'hello', correlationId: 'logical-send-14' })).resolves.toBeDefined()
+
+      // Multiple failed attempts, one settlement: the seam counts sends, not
+      // attempts, and the successful attempt does not report a second time.
+      expect(settled).toEqual([{ correlationId: 'logical-send-14', outcome: 'succeeded' }])
+      expect(llmStreamMock).toHaveBeenCalledTimes(3)
+      expect(errorBubbles()).toHaveLength(0)
+    })
+
+    it('g2: a throwing fallback resolver settles the send once, as failed', async () => {
+      llmStreamMock.mockRejectedValueOnce(new Error('provider exploded'))
+      registerChatFallbackResolver(async () => {
+        throw new Error('resolver exploded')
+      })
+      const settled: ChatSendSettledObservation[] = []
+      registerChatSendSettledObserver(observation => settled.push(observation))
+
+      const store = useChatStore()
+      // The resolver's own failure escapes the send body: the logical send
+      // rejected, so it settled as failed - no round outcome is consulted for
+      // this, and no failure stage is named.
+      await expect(store.send({ sessionId: 'session-1', text: 'hello', correlationId: 'logical-send-15' })).rejects.toThrow('resolver exploded')
+
+      expect(settled).toEqual([{ correlationId: 'logical-send-15', outcome: 'failed' }])
+      expect(errorBubbles()).toHaveLength(1)
+    })
+
+    it('g: exhausting every bounded attempt settles once, as failed, with one error bubble', async () => {
+      llmStreamMock.mockRejectedValue(new Error('always failing'))
+      registerChatFallbackResolver(async () => {
+        activeProviderRef.value = 'fallback-provider'
+        return { providerId: 'fallback-provider' }
+      })
+      const settled: ChatSendSettledObservation[] = []
+      registerChatSendSettledObserver(observation => settled.push(observation))
+
+      const store = useChatStore()
+      await expect(store.send({ sessionId: 'session-1', text: 'hello', correlationId: 'logical-send-9' })).rejects.toThrow('always failing')
+
+      expect(settled).toEqual([{ correlationId: 'logical-send-9', outcome: 'failed' }])
+      // Four attempts of ONE send: still exactly one report, and the bubble is
+      // appended exactly once, by the wrapper that owns it.
+      expect(llmStreamMock).toHaveBeenCalledTimes(4)
+      expect(errorBubbles()).toHaveLength(1)
+    })
+
+    it('h/i: a failure before any round still settles the send, with no round observation', async () => {
+      const started: ChatRequestStartedObservation[] = []
+      const rounds: ChatRoundSettledObservation[] = []
+      const settled: ChatSendSettledObservation[] = []
+      registerChatRequestStartedObserver(observation => started.push(observation))
+      registerChatRoundSettledObserver(observation => rounds.push(observation))
+      registerChatSendSettledObserver(observation => settled.push(observation))
+      // The provider cannot be resolved: the send fails before it ever reaches
+      // the Core runtime, so no round exists at all.
+      getChatProviderInstanceMock.mockResolvedValue(undefined)
+
+      const store = useChatStore()
+      await expect(store.send({ sessionId: 'session-1', text: 'hello', correlationId: 'logical-send-10' })).rejects.toThrow('Failed to resolve chat provider')
+
+      // H: the send settlement does not require a round to have existed.
+      expect(settled).toEqual([{ correlationId: 'logical-send-10', outcome: 'failed' }])
+      // I: and it is not inferred from the round seams, which saw nothing.
+      expect(started).toEqual([])
+      expect(rounds).toEqual([])
+      expect(llmStreamMock).not.toHaveBeenCalled()
+    })
+
+    it('j: a round abandonment does NOT become a send failure - the send settles by its own outcome', async () => {
+      streamOnce()
+      const rounds: ChatRoundSettledObservation[] = []
+      const settled: ChatSendSettledObservation[] = []
+      registerChatRoundSettledObserver(observation => rounds.push(observation))
+      registerChatSendSettledObserver(observation => settled.push(observation))
+
+      const store = useChatStore()
+      store.onBeforeSend(async () => {
+        // The session generation this round captured goes stale before the
+        // request start: Core abandons the round and the send still resolves.
+        currentGeneration = 2
+      })
+
+      await expect(store.send({ sessionId: 'session-1', text: 'hello', correlationId: 'logical-send-11' })).resolves.toBeDefined()
+
+      // Core's own round vocabulary is not translated: what settled here is the
+      // logical send, and it settled successfully.
+      expect(rounds).toEqual([{ correlationId: 'logical-send-11', outcome: 'abandoned', roundId: expect.any(String) }])
+      expect(settled).toEqual([{ correlationId: 'logical-send-11', outcome: 'succeeded' }])
+      expect(llmStreamMock).not.toHaveBeenCalled()
+    })
+
+    it('k: sequential sends settle in order, even with the SAME key - no dedupe, no memory', async () => {
+      streamOnce()
+      const settled: ChatSendSettledObservation[] = []
+      registerChatSendSettledObserver(observation => settled.push(observation))
+
+      const store = useChatStore()
+      await store.send({ sessionId: 'session-1', text: 'first', correlationId: 'logical-send-12' })
+      await store.send({ sessionId: 'session-1', text: 'second', correlationId: 'logical-send-12' })
+
+      // Two sends, two settlements, in settlement order: the seam keeps no
+      // record of what it has already reported.
+      expect(settled).toEqual([
+        { correlationId: 'logical-send-12', outcome: 'succeeded' },
+        { correlationId: 'logical-send-12', outcome: 'succeeded' },
+      ])
+      expect(llmStreamMock).toHaveBeenCalledTimes(2)
+    })
+
+    it('l: a hostile observer cannot steer a send or its fallback decision', async () => {
+      llmStreamMock.mockRejectedValueOnce(new Error('recoverable failure'))
+      streamOnce()
+      const fallbackResolver = vi.fn(async () => {
+        activeProviderRef.value = 'fallback-provider'
+        activeModelRef.value = 'fallback-model'
+        return { providerId: 'fallback-provider', modelId: 'fallback-model' }
+      })
+      registerChatFallbackResolver(fallbackResolver)
+      registerChatSendSettledObserver(((observation: ChatSendSettledObservation) => {
+        observation.outcome = 'failed'
+        return { outcome: 'failed' }
+      }) as unknown as ChatSendSettledObserver)
+
+      const store = useChatStore()
+      const result = await store.send({ sessionId: 'session-1', text: 'hello', correlationId: 'logical-send-13' })
+
+      // The send still ran, still recovered, and returned its own result.
+      expect(result.sessionId).toBe('session-1')
+      expect(result.messages.length).toBeGreaterThan(0)
+      expect(fallbackResolver).toHaveBeenCalledTimes(1)
+      expect(llmStreamMock).toHaveBeenCalledTimes(2)
+      expect(getChatProviderInstanceMock).toHaveBeenCalledTimes(2)
+      expect(llmStreamMock.mock.calls[1]?.[0]).toBe('fallback-model')
+    })
+
+    it('m/n: a retry settles through the same wrapper, uncorrelated - success and failure alike', async () => {
+      sessionMessages['session-1'] = [
+        { role: 'system', content: 'system prompt', createdAt: 1, id: 'system' },
+        { role: 'user', content: 'first question', createdAt: 2, id: 'u1' },
+        { role: 'assistant', content: 'answer', createdAt: 3, id: 'a1' },
+      ]
+      streamOnce()
+      const settled: ChatSendSettledObservation[] = []
+      registerChatSendSettledObserver(observation => settled.push(observation))
+
+      const store = useChatStore()
+      // Index 2 is the assistant turn: the retry walks back to the user message
+      // that produced it and replaces the stored tail before sending.
+      await expect(store.retry({ sessionId: 'session-1', index: 2 })).resolves.toBeDefined()
+
+      // M: a retried message is a NEW logical send - it carries no key, and the
+      // original send's key is never claimed or reused here.
+      expect(settled).toEqual([{ outcome: 'succeeded' }])
+      expect('correlationId' in (settled[0] as object)).toBe(false)
+      expect(sessionMessages['session-1']?.some(message => message.id === 'a1')).toBe(false)
+
+      // N: the failure path of a retry settles the same way, once.
+      llmStreamMock.mockRejectedValueOnce(new Error('retry exploded'))
+      settled.length = 0
+      await expect(store.retry({ sessionId: 'session-1', index: 1 })).rejects.toThrow('retry exploded')
+
+      expect(settled).toEqual([{ outcome: 'failed' }])
+      // The wrapper owns the bubble: exactly one per failed retry, never one
+      // per layer (the retry no longer appends its own).
+      expect(errorBubbles()).toHaveLength(1)
+    })
+
+    it('o: a retry that stops before sending settles nothing - no failure is fabricated', async () => {
+      const settled: ChatSendSettledObservation[] = []
+      registerChatSendSettledObserver(observation => settled.push(observation))
+
+      const store = useChatStore()
+      // Index 0 is the system message: there is no retriable user source, so the
+      // retry exits before any send ever starts.
+      await expect(store.retry({ sessionId: 'session-1', index: 0 })).rejects.toThrow('Retry target has no retriable source message')
+
+      // A session that cannot be loaded exits there too.
+      loadSessionMock.mockResolvedValueOnce(false)
+      await expect(store.retry({ sessionId: 'session-1', index: 1 })).rejects.toThrow('Failed to load the target chat session')
+
+      expect(settled).toEqual([])
+      expect(llmStreamMock).not.toHaveBeenCalled()
+      expect(errorBubbles()).toHaveLength(0)
+    })
+
+    it('p: the wrapper stays private - the store surface is unchanged', () => {
+      const store = useChatStore()
+      expect(Object.keys(store)).not.toContain('executeSettledSend')
+      expect(Object.keys(store)).not.toContain('executeSend')
+      // The exported send surface is exactly what it was.
+      expect(typeof store.send).toBe('function')
+      expect(typeof store.retry).toBe('function')
     })
   })
 })

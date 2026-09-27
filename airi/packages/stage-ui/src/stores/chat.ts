@@ -5,6 +5,7 @@ import type { Message } from '@xsai/shared-chat'
 import type { SyncedPiniaRuntime } from 'pinia-plugin-synced'
 
 import type { ChatHistoryItem, ChatToolReference, StreamingAssistantMessage } from '../types/chat'
+import type { ChatSendOutcome } from './chat/chat-provider-runtime'
 import type { ToolCallRerunPayload } from './tool-call-rerun'
 
 import { errorMessageFrom } from '@moeru/std'
@@ -27,7 +28,7 @@ import { useLLM } from './ai/chat-llm/llm'
 import { resolveLlmTools } from './ai/chat-llm/tool-resolver'
 import { useLlmToolsStore } from './ai/chat-llm/tools'
 import { useLlmToolsetPromptsStore } from './ai/chat-llm/toolset-prompts'
-import { CHAT_FALLBACK_MAX_ATTEMPTS, getChatFallbackResolver, notifyChatRequestStarted, notifyChatRoundSettled } from './chat/chat-provider-runtime'
+import { CHAT_FALLBACK_MAX_ATTEMPTS, getChatFallbackResolver, notifyChatRequestStarted, notifyChatRoundSettled, notifyChatSendSettled } from './chat/chat-provider-runtime'
 import { createMinecraftContext } from './chat/context-providers'
 import { liaCapabilityPromptSupplement } from './chat/context-providers/lia-capabilities'
 import { useChatContextStore } from './chat/context-store'
@@ -581,15 +582,49 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  /** Sends one serializable chat request through the elected leader. */
-  async function send(payload: ChatSendPayload): Promise<ChatSendResult> {
+  /**
+   * Phase 8.0D-10B-4D4C4-B1: runs ONE logical send and reports its factual
+   * settlement.
+   *
+   * The settlement boundary is exactly `executeSend(payload)` as a whole: the
+   * whole fallback loop with all of its attempts, rollback and restore work.
+   * It resolves -> `succeeded`; it rejects - for ANY reason - -> `failed`. No
+   * round outcome, request start, attempt count or error shape is inspected,
+   * and nothing is inferred from them: the send either settled or it did not.
+   *
+   * Ownership: this is the single caller of `executeSend`, so the notification
+   * happens at most once per logical send, and the existing error bubble is
+   * still appended exactly once on failure, after the notification. The result
+   * and the error are passed through with their original identity - this
+   * wrapper neither clones nor rewraps them, and it adds no authority: the
+   * observer can neither change an outcome, trigger a retry nor reach a
+   * fallback decision (`notifyChatSendSettled` owns that isolation).
+   *
+   * The key is forwarded exactly as the payload carried it (absent stays
+   * absent, and this layer applies no filtering of its own).
+   */
+  async function executeSettledSend(payload: ChatSendPayload): Promise<ChatSendResult> {
+    const settle = (outcome: ChatSendOutcome) => notifyChatSendSettled(
+      payload.correlationId === undefined
+        ? { outcome }
+        : { correlationId: payload.correlationId, outcome },
+    )
+
     try {
-      return await executeSend(payload)
+      const result = await executeSend(payload)
+      settle('succeeded')
+      return result
     }
     catch (error) {
+      settle('failed')
       appendSendError(payload.sessionId, error)
       throw error
     }
+  }
+
+  /** Sends one serializable chat request through the elected leader. */
+  async function send(payload: ChatSendPayload): Promise<ChatSendResult> {
+    return executeSettledSend(payload)
   }
 
   /** Replaces one stored turn with a new execution of its user message. */
@@ -609,17 +644,17 @@ export const useChatStore = defineStore('chat', () => {
 
     chatSession.setSessionMessages(payload.sessionId, currentMessages.slice(0, sourceIndex))
 
-    try {
-      return await executeSend({
-        sessionId: payload.sessionId,
-        text,
-        tools: payload.tools ?? sourceMessage?.tools,
-      })
-    }
-    catch (error) {
-      appendSendError(payload.sessionId, error)
-      throw error
-    }
+    // Phase 8.0D-10B-4D4C4-B1: the retry only replaces its own try/catch with the
+    // shared settlement wrapper - its preprocessing above is untouched, and a
+    // retry that exits before this point settles nothing and observes nothing.
+    // The retry payload carries no correlationId, so its settlement is reported
+    // uncorrelated: a retried message is a NEW logical send, never a continuation
+    // of the send that originally produced the text.
+    return executeSettledSend({
+      sessionId: payload.sessionId,
+      text,
+      tools: payload.tools ?? sourceMessage?.tools,
+    })
   }
 
   /** Runs one stored tool call again and replaces its stored result. */

@@ -1,19 +1,24 @@
 import type { ChatRoundOutcome, ChatRoundSettledObservation } from '@proj-airi/core-agent'
 
-import type { ChatRequestStartedObservation, ChatRequestStartedObserver } from './chat-provider-runtime'
+import type { ChatRequestStartedObservation, ChatRequestStartedObserver, ChatSendSettledObservation } from './chat-provider-runtime'
 
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
+import { join, relative } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
   getChatRequestStartedObserver,
   getChatRoundSettledObserver,
+  getChatSendSettledObserver,
   notifyChatRequestStarted,
   notifyChatRoundSettled,
+  notifyChatSendSettled,
   registerChatFallbackResolver,
   registerChatRequestStartedObserver,
   registerChatRoundSettledObserver,
+  registerChatSendSettledObserver,
   registerProviderCredentialResolver,
   resetChatProviderRuntimeExtensionsForTesting,
 } from './chat-provider-runtime'
@@ -390,5 +395,249 @@ describe('chat round-settled observation extension', () => {
     // The request-start observation type was not touched either.
     expect(CODE).toContain('export interface ChatRequestStartedObservation {')
     expect(CODE).toContain('export type ChatRequestStartedObserver = (observation: ChatRequestStartedObservation) => void')
+  })
+})
+
+/**
+ * Phase 8.0D-10B-4D4C4-B1: the logical-send sibling of the request-start and
+ * round-settled seams.
+ *
+ * Same convention once more - one optional slot, plain `register*` / `get*` /
+ * reset-for-testing, verbatim synchronous forwarding and a swallowed observer
+ * failure - now over the settlement of ONE whole Stage logical send (the entire
+ * send/retry invocation, not a round and not an attempt). Unlike those two, the
+ * observation type is Stage-owned and declared here: the send lifecycle belongs
+ * to this package, not to the Core Agent.
+ */
+describe('chat send-settled observation extension', () => {
+  const SOURCE = readFileSync(new URL('./chat-provider-runtime.ts', import.meta.url), 'utf-8')
+  /** Source without comments: guards must only find vocabulary in real code. */
+  const CODE = SOURCE.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+  const SEND_REGION = CODE.slice(
+    CODE.indexOf('export function notifyChatSendSettled'),
+    CODE.indexOf('export function resetChatProviderRuntimeExtensionsForTesting'),
+  )
+  const DECLARATION_REGION = CODE.slice(
+    CODE.indexOf('export type ChatSendOutcome'),
+    CODE.indexOf('let chatSendSettledObserver:'),
+  )
+
+  const settled: ChatSendSettledObservation = { outcome: 'succeeded' }
+
+  afterEach(() => resetChatProviderRuntimeExtensionsForTesting())
+
+  it('a: with no observer registered the seam is an inert no-op', () => {
+    expect(getChatSendSettledObserver()).toBeUndefined()
+    expect(() => notifyChatSendSettled(settled)).not.toThrow()
+    expect(notifyChatSendSettled(settled)).toBeUndefined()
+    expect(notifyChatSendSettled({ outcome: 'failed' })).toBeUndefined()
+  })
+
+  it('b: registration exposes exactly the registered observer and uses it once', () => {
+    const observer = vi.fn()
+    registerChatSendSettledObserver(observer)
+
+    expect(getChatSendSettledObserver()).toBe(observer)
+    // Registration alone observes nothing.
+    expect(observer).not.toHaveBeenCalled()
+
+    notifyChatSendSettled(settled)
+    expect(observer).toHaveBeenCalledTimes(1)
+    expect(observer).toHaveBeenCalledWith(settled)
+  })
+
+  it('c: the observer receives the caller object itself, and its return value is ignored', () => {
+    const received: unknown[] = []
+    const observer = ((observation: ChatSendSettledObservation) => {
+      received.push(observation)
+      return { outcome: 'failed', correlationId: 'hijacked' }
+    }) as unknown as (observation: ChatSendSettledObservation) => void
+    registerChatSendSettledObserver(observer)
+
+    // Identity is preserved: the seam forwards, it does not re-wrap.
+    expect(notifyChatSendSettled(settled)).toBeUndefined()
+    expect(received[0]).toBe(settled)
+    expect(getChatSendSettledObserver()).toBe(observer)
+  })
+
+  it('d: re-registering replaces the previous observer, and undefined clears it', () => {
+    const first = vi.fn()
+    const second = vi.fn()
+    registerChatSendSettledObserver(first)
+    registerChatSendSettledObserver(second)
+
+    notifyChatSendSettled(settled)
+    expect(first).not.toHaveBeenCalled()
+    expect(second).toHaveBeenCalledTimes(1)
+
+    registerChatSendSettledObserver(undefined)
+    expect(getChatSendSettledObserver()).toBeUndefined()
+    expect(() => notifyChatSendSettled(settled)).not.toThrow()
+    expect(second).toHaveBeenCalledTimes(1)
+  })
+
+  it('e: the testing reset clears the send observer without touching the other extensions', () => {
+    const send = vi.fn()
+    const round = vi.fn()
+    const requestStart = vi.fn()
+    registerChatSendSettledObserver(send)
+    registerChatRoundSettledObserver(round)
+    registerChatRequestStartedObserver(requestStart)
+
+    resetChatProviderRuntimeExtensionsForTesting()
+
+    expect(getChatSendSettledObserver()).toBeUndefined()
+    notifyChatSendSettled(settled)
+    expect(send).not.toHaveBeenCalled()
+    expect(round).not.toHaveBeenCalled()
+    expect(requestStart).not.toHaveBeenCalled()
+  })
+
+  it('f: a throwing observer is isolated at the seam - one attempt, nothing escapes', () => {
+    const observer = vi.fn(() => {
+      throw new Error('observer exploded')
+    })
+    registerChatSendSettledObserver(observer)
+
+    expect(() => notifyChatSendSettled(settled)).not.toThrow()
+    expect(notifyChatSendSettled({ outcome: 'failed' })).toBeUndefined()
+    // Exactly one attempt per notification: no retry, no second call.
+    expect(observer).toHaveBeenCalledTimes(2)
+
+    const later = vi.fn()
+    registerChatSendSettledObserver(later)
+    notifyChatSendSettled(settled)
+    expect(later).toHaveBeenCalledTimes(1)
+  })
+
+  it('g: an absent correlationId stays absent, and a present one is never filtered', () => {
+    const captured: ChatSendSettledObservation[] = []
+    registerChatSendSettledObserver(observation => captured.push(observation))
+
+    notifyChatSendSettled({ outcome: 'failed' })
+    expect(captured).toEqual([{ outcome: 'failed' }])
+    expect('correlationId' in (captured[0] as object)).toBe(false)
+
+    // The generic seam applies no "usable key" rule of its own: even an empty or
+    // whitespace-only key crosses verbatim - filtering is a consumer's job.
+    for (const correlationId of ['', '   ', 'logical-send-7']) {
+      const observation = { correlationId, outcome: 'succeeded' as const }
+      notifyChatSendSettled(observation)
+      expect(captured.at(-1)).toBe(observation)
+      expect(captured.at(-1)?.correlationId).toBe(correlationId)
+      expect(Object.keys(captured.at(-1) as object).sort()).toEqual(['correlationId', 'outcome'])
+    }
+  })
+
+  it('h: the observation is exactly the two contract fields and the outcome is either literal', () => {
+    // Two fields, one optional join key and one required outcome - and nothing
+    // about the send's round, attempt, provider, model, error or timing.
+    expect(DECLARATION_REGION.match(/^\s{2}(?:readonly )?(\w+)\??:/gm)?.map(field => field.trim()))
+      .toEqual(['correlationId?:', 'outcome:'])
+    expect(DECLARATION_REGION).toContain(`export type ChatSendOutcome = 'succeeded' | 'failed'`)
+    // No third settlement value may creep in as a cast or an alias.
+    expect(DECLARATION_REGION).not.toMatch(/abandoned|cancelled|superseded|completed|fallbackExhausted|unknown|any/i)
+
+    // Both literals cross the seam unchanged, in both key shapes.
+    const captured: ChatSendSettledObservation[] = []
+    registerChatSendSettledObserver(observation => captured.push(observation))
+    notifyChatSendSettled({ outcome: 'succeeded' })
+    notifyChatSendSettled({ outcome: 'failed' })
+    notifyChatSendSettled({ correlationId: 'logical-send-1', outcome: 'succeeded' })
+    notifyChatSendSettled({ correlationId: 'logical-send-1', outcome: 'failed' })
+    expect(captured.map(observation => observation.outcome)).toEqual([
+      'succeeded',
+      'failed',
+      'succeeded',
+      'failed',
+    ])
+  })
+
+  it('i: the seam owns one slot, one notifier and no state of its own', () => {
+    // Exactly one slot, assigned exactly once, read exactly once.
+    expect(CODE.match(/^let chatSendSettledObserver:/m)).toHaveLength(1)
+    expect(CODE.match(/chatSendSettledObserver = observer/g)).toHaveLength(1)
+    expect(CODE.match(/const observer = chatSendSettledObserver/g)).toHaveLength(1)
+    // Exactly one implementation of each of the three entry points.
+    expect(CODE.match(/export function notifyChatSendSettled/g)).toHaveLength(1)
+    expect(CODE.match(/export function registerChatSendSettledObserver/g)).toHaveLength(1)
+    expect(CODE.match(/export function getChatSendSettledObserver/g)).toHaveLength(1)
+
+    // No state collections, history or caching in the notifier.
+    expect(SEND_REGION).not.toMatch(/\bnew Map\b|\bnew Set\b|\bhistory\b|lastOutcome|\bcache\b|\bqueue\b|\bbuffer\b/)
+    // No second observer framework: no array of subscribers anywhere.
+    expect(CODE).not.toMatch(/SendObservers\b|subscribers|listeners\.push|\.subscribe\(/)
+    // No async, timers or retries.
+    expect(SEND_REGION).not.toMatch(/\basync\b|\bawait\b|Promise|queueMicrotask|setTimeout|setInterval|retry/i)
+    // No foreign capability and no diagnostics output.
+    expect(SEND_REGION).not.toMatch(/eventa|electron|ipcMain|ipcRenderer|BrowserWindow|main-process/i)
+    expect(SEND_REGION).not.toMatch(/\bBrain\b|LiaBrain|lia-brain|correlation-store|providerStore|providersStore/i)
+    expect(SEND_REGION).not.toMatch(/console\.|@guiiai\/logg|logger|telemetry|posthog/i)
+    // No aggregate/verdict vocabulary, in any casing.
+    expect(SEND_REGION).not.toMatch(/winner|finalAttempt|firstAttempt|anyAttempt|fallbackObserved|fallbackCount|routeMatch|mismatch|divergence|aligned|verdict|score|recommendation/i)
+    // No execution authority.
+    expect(SEND_REGION).not.toMatch(/setProvider|setModel|activeProvider|activeModel|resolver|permission|toolCall|cancel/i)
+    // The two siblings are still the untouched seams.
+    expect(CODE).toContain('export function notifyChatRoundSettled(observation: ChatRoundSettledObservation): void {')
+    expect(CODE).toContain('export function notifyChatRequestStarted(observation: ChatRequestStartedObservation): void {')
+  })
+
+  it('j: the seam is inert in production - zero registrations, one notification site', () => {
+    const airiRoot = fileURLToPath(new URL('../../../../..', import.meta.url))
+    const roots = ['apps/stage-tamagotchi/src', 'packages/stage-ui/src', 'packages/core-agent/src']
+    const registrarSites: string[] = []
+    const notifySites: string[] = []
+    for (const root of roots) {
+      for (const entry of readdirSync(join(airiRoot, root), { recursive: true, withFileTypes: true })) {
+        if (!entry.isFile() || !/\.(?:ts|vue)$/.test(entry.name) || entry.name.includes('.test.'))
+          continue
+        const file = join(entry.parentPath, entry.name)
+        const source = readFileSync(file, 'utf-8')
+        const site = relative(airiRoot, file)
+        // The registration SIGNAL: CALLING the installer, never defining it.
+        if (/(?<!function )registerChatSendSettledObserver\(/.test(source))
+          registrarSites.push(site)
+        if (/(?<!function )notifyChatSendSettled\(/.test(source))
+          notifySites.push(site)
+      }
+    }
+
+    // Inert: nothing in production installs a send-settled observer - there is
+    // no consumer yet, and this phase deliberately adds none.
+    expect(registrarSites).toEqual([])
+    // Exactly one notification site, and it is the Stage send owner.
+    expect(notifySites).toEqual(['packages/stage-ui/src/stores/chat.ts'])
+  })
+
+  it('k: the wrapper is the only caller of executeSend, with exactly the two send entry points', () => {
+    const chatSource = readFileSync(new URL('../chat.ts', import.meta.url), 'utf-8')
+    const chatCode = chatSource.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+
+    // One textual notification site in the store, reached by both settlements.
+    expect(chatCode.match(/(?<!function )notifyChatSendSettled\(/g)).toHaveLength(1)
+    // `executeSend` runs only through the wrapper: one call site, not two.
+    expect(chatCode.match(/(?<!function )executeSend\(/g)).toHaveLength(1)
+    // The wrapper has exactly the two logical-send entry points as callers.
+    expect(chatCode.match(/(?<!function )executeSettledSend\(/g)).toHaveLength(2)
+    // Its notification happens before the pre-existing error bubble.
+    const wrapperRegion = chatCode.slice(
+      chatCode.indexOf('async function executeSettledSend'),
+      chatCode.indexOf('async function send'),
+    )
+    expect(wrapperRegion.indexOf('settle(\'failed\')')).toBeLessThan(wrapperRegion.indexOf('appendSendError('))
+    // The whole fallback loop is inside the settlement boundary: the wrapper
+    // awaits `executeSend` as a whole and inspects nothing about the failure.
+    expect(wrapperRegion).toContain('await executeSend(payload)')
+    expect(wrapperRegion).not.toMatch(/instanceof|errorMessageFrom|fallbackResolver|attempt|roundId|providerId|modelId/)
+    // The failure settlement is UNCONDITIONAL: any rejection of the whole send -
+    // including one thrown by the fallback resolver or by the restore work that
+    // `executeSend` runs in its own finally - settles as failed. Nothing about
+    // the rejection is inspected to decide that, so no failure kind can escape
+    // the seam or be reported twice.
+    expect(wrapperRegion).toMatch(/catch \(error\) \{\s*settle\('failed'\)/)
+    // Result and error keep their identity: nothing is cloned, spread or wrapped.
+    expect(wrapperRegion).toContain('return result')
+    expect(wrapperRegion).toContain('throw error')
+    expect(wrapperRegion).not.toMatch(/structuredClone|toRaw|\.\.\.result|\.\.\.error/)
   })
 })

@@ -22,6 +22,10 @@ import type { ChatRoundSettledObservation } from '@proj-airi/core-agent'
  *   treatment of a round that already entered the send body (`succeeded`,
  *   `failed`, `abandoned`, as the Core runtime defined them). Same convention,
  *   same single slot, same isolation - and equally unable to influence it.
+ * - {@link registerChatSendSettledObserver}: observes the factual settlement of
+ *   ONE logical chat send as a whole (`succeeded`/`failed`) - the entire
+ *   send/retry invocation, not one round and not one attempt. Same convention,
+ *   same single slot, same isolation - and equally unable to influence it.
  *
  * Nothing is imported from Electron here. Without any registration every
  * consumer (web, pocket, …) behaves exactly as before — these hooks are purely
@@ -109,10 +113,48 @@ export type ChatRequestStartedObserver = (observation: ChatRequestStartedObserva
  */
 export type ChatRoundSettledObserver = (observation: ChatRoundSettledObservation) => void
 
+/**
+ * Phase 8.0D-10B-4D4C4-B1: how ONE logical chat send ended.
+ *
+ * The send is the whole `send`/`retry` invocation - every provider attempt the
+ * fallback policy ran inside it, plus its own rollback/restore work - never one
+ * Core Agent round. There is no third value and no derived one: a logical send
+ * either resolved (`succeeded`) or rejected (`failed`).
+ */
+export type ChatSendOutcome = 'succeeded' | 'failed'
+
+/**
+ * Phase 8.0D-10B-4D4C4-B1: the smallest generic observation of one settled
+ * logical chat send.
+ *
+ * Plain outcome metadata only. `correlationId` is the opaque key the caller
+ * carried on the send payload: forwarded verbatim when it was present and left
+ * absent when it was not - this generic transport seam applies no filtering of
+ * its own (the "usable key" rule belongs to a consumer). No round, attempt,
+ * provider, model, error, message, timing, fallback or verdict travels here.
+ */
+export interface ChatSendSettledObservation {
+  /**
+   * Opaque key of the logical send this settlement belongs to, when the caller
+   * supplied one. It is a join key only - never a provider/model/route identity.
+   */
+  correlationId?: string
+  /** Factual settlement of the logical send as a whole. */
+  outcome: ChatSendOutcome
+}
+
+/**
+ * Observes that one logical chat send settled. Return value is ignored: this is
+ * a notification, never a decision - it cannot supply a provider/model, pick a
+ * retry target, drive fallback, cancel a send or transform it.
+ */
+export type ChatSendSettledObserver = (observation: ChatSendSettledObservation) => void
+
 let providerCredentialResolver: ProviderCredentialResolver | undefined
 let chatFallbackResolver: ChatFallbackResolver | undefined
 let chatRequestStartedObserver: ChatRequestStartedObserver | undefined
 let chatRoundSettledObserver: ChatRoundSettledObserver | undefined
+let chatSendSettledObserver: ChatSendSettledObserver | undefined
 
 /** Hard ceiling on total attempts per message (primary + fallbacks). */
 export const CHAT_FALLBACK_MAX_ATTEMPTS = 4
@@ -144,6 +186,17 @@ export function registerChatRoundSettledObserver(observer?: ChatRoundSettledObse
   chatRoundSettledObserver = observer
 }
 
+/**
+ * Installs (or with `undefined` clears) the single logical-send-settled
+ * observer. Exactly the same convention as its two siblings: one slot,
+ * replacement on re-register, no disposer, no multiple subscribers.
+ * Registration alone observes nothing - the observer only ever runs when a
+ * logical send actually settles.
+ */
+export function registerChatSendSettledObserver(observer?: ChatSendSettledObserver): void {
+  chatSendSettledObserver = observer
+}
+
 export function getProviderCredentialResolver(): ProviderCredentialResolver | undefined {
   return providerCredentialResolver
 }
@@ -158,6 +211,10 @@ export function getChatRequestStartedObserver(): ChatRequestStartedObserver | un
 
 export function getChatRoundSettledObserver(): ChatRoundSettledObserver | undefined {
   return chatRoundSettledObserver
+}
+
+export function getChatSendSettledObserver(): ChatSendSettledObserver | undefined {
+  return chatSendSettledObserver
 }
 
 /**
@@ -205,9 +262,34 @@ export function notifyChatRoundSettled(observation: ChatRoundSettledObservation)
   }
 }
 
+/**
+ * Forwards one settled-logical-send observation to the registered observer, if
+ * any.
+ *
+ * Same isolation contract as its two siblings: the SAME observation object is
+ * forwarded verbatim (a missing `correlationId` stays missing - this generic
+ * seam applies no filtering of its own), exactly once per settlement,
+ * synchronously, and a throwing observer is swallowed right here so it cannot
+ * change whether a send succeeded or failed, cannot trigger a retry, and cannot
+ * reach a fallback decision. With no observer registered this is a no-op.
+ */
+export function notifyChatSendSettled(observation: ChatSendSettledObservation): void {
+  const observer = chatSendSettledObserver
+  if (!observer)
+    return
+
+  try {
+    observer(observation)
+  }
+  catch {
+    // Downstream-only: an observer must never be able to break a send.
+  }
+}
+
 export function resetChatProviderRuntimeExtensionsForTesting(): void {
   providerCredentialResolver = undefined
   chatFallbackResolver = undefined
   chatRequestStartedObserver = undefined
   chatRoundSettledObserver = undefined
+  chatSendSettledObserver = undefined
 }
