@@ -338,14 +338,16 @@ describe('lia logical-send terminal reporter (Phase 8.0D-10B-4D4C4-B2)', () => {
     expect(withContract.filter(relative => relative.includes('/src/main/'))).toEqual([])
 
     // The report type stays in the shared contract, and since
-    // 8.0D-10B-4D4C4-B3A exactly ONE main module TYPE-imports it - the canonical
-    // correlation store that retains the fact. Nothing else names it: no
-    // listener, no ingress service, no fact module.
+    // 8.0D-10B-4D4C4-B3A/B3B1 exactly TWO main modules TYPE-import it - the
+    // canonical correlation store that retains the fact and the trusted ingress
+    // service that sanitizes it. Nothing else names it: no listener, no fact
+    // module, no renderer.
     expect(productionSources(BRAIN_ROOTS)
       .filter(relative => /LiaBrainSendTerminalReport/.test(readFileSync(join(process.cwd(), '..', '..', relative), 'utf-8')))
       .sort())
       .toEqual([
         'apps/stage-tamagotchi/src/main/services/lia/brain-correlation-store.ts',
+        'apps/stage-tamagotchi/src/main/services/lia/brain-send-terminal-report-service.ts',
         'apps/stage-tamagotchi/src/shared/eventa/index.ts',
       ])
   })

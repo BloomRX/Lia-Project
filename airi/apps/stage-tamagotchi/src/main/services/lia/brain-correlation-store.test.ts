@@ -1379,13 +1379,16 @@ describe('lia brain correlation store - logical send terminal fact (Phase 8.0D-1
     expect(code).toMatch(/recordSendTerminal: \(report: LiaBrainSendTerminalReport\) => void/)
     expect(code).not.toMatch(/electronLiaBrainSendTerminalObservation/)
 
-    // The method exists, and production calls it NOWHERE yet: its own
-    // definition is the only site, and no renderer, main or core module names
-    // it. The future ingress service is the one caller this foundation awaits.
+    // B3A shipped the method with ZERO production callers; 8.0D-10B-4D4C4-B3B1
+    // evolves that allowlist honestly to exactly ONE - the trusted main ingress
+    // that sanitizes the renderer payload and forwards it. Nothing else calls
+    // it: no renderer, no listener, no composition entry, no observer.
     expect(productionSourcesMatching(BRAIN_ROOTS, /recordSendTerminal/)).toEqual([
       'apps/stage-tamagotchi/src/main/services/lia/brain-correlation-store.ts',
+      'apps/stage-tamagotchi/src/main/services/lia/brain-send-terminal-report-service.ts',
     ])
-    expect(productionSourcesMatching(BRAIN_ROOTS, /\.recordSendTerminal\(/)).toEqual([])
+    expect(productionSourcesMatching(BRAIN_ROOTS, /\.recordSendTerminal\(/))
+      .toEqual(['apps/stage-tamagotchi/src/main/services/lia/brain-send-terminal-report-service.ts'])
   })
 
   it('15-19/59: the send terminal record carries no round, identity, attempt, error or content vocabulary', () => {
