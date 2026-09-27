@@ -473,19 +473,20 @@ app.whenReady().then(async () => {
   })
 
   // Phase 8.0D-10B-4D4C2B2: the THIRD Brain channel - the one-way terminal
-  // execution report. It depends on the correlation store ONLY (never on the
-  // Brain service, the observer or product config): the entry creates the ONE
-  // terminal ingress instance over the SAME lifecycle-owned store the decision
-  // bridge and the execution report handler already received, and the listener
-  // forwards the raw payload to it. The ingress sanitizes and writes; nothing
-  // here inspects the payload, and - deliberately - no observer is injected, so
-  // a terminal write is not a diagnostic trigger in this phase.
+  // execution report. It depends on the correlation store and, since
+  // 8.0D-10B-4D4C3B2-B3, on the SAME lifecycle-owned observer the decision
+  // bridge and the execution report handler already receive - one canonical
+  // instance, never a second one - so one accepted terminal report triggers
+  // exactly one observation of its key, after the write. The entry creates the
+  // ONE terminal ingress instance over the SAME lifecycle handle, and the
+  // listener forwards the raw payload to it; nothing here inspects the payload.
   injeca.invoke({
-    dependsOn: { liaBrainCorrelation },
+    dependsOn: { liaBrainCorrelation, liaBrainCorrelationObserver },
     callback: async (deps) => {
       const { context } = createContext(ipcMain)
       const terminalReportService = createLiaBrainExecutionTerminalReportService({
         correlationStore: deps.liaBrainCorrelation,
+        correlationObserver: deps.liaBrainCorrelationObserver,
       })
       registerLiaBrainExecutionTerminalReportListener({ context, terminalReportService })
     },

@@ -1,12 +1,16 @@
 import type { LiaBrainChatDecisionRequest } from '../../../shared/eventa'
+import type { LiaBrainDiagnosticEntry } from './brain-correlation-observer'
+import type { LiaBrainTerminalObservationFacts } from './brain-execution-terminal-facts'
 
 import { readdirSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { createLiaBrainCorrelationObserver } from './brain-correlation-observer'
 import { createLiaBrainCorrelationService } from './brain-correlation-service'
 import { registerLiaBrainDecisionBridge } from './brain-decision-service'
+import { formatLiaBrainDiagnosticEntry } from './brain-diagnostic-log'
 import { registerLiaBrainExecutionReportHandler } from './brain-execution-report-service'
 import { registerLiaBrainExecutionTerminalReportListener } from './brain-execution-terminal-report-listener'
 import { createLiaBrainExecutionTerminalReportService } from './brain-execution-terminal-report-service'
@@ -117,13 +121,25 @@ function brainDouble() {
 
 const FACTS = { hasImageInput: false, reasoningRequested: true, usesTools: false }
 
+/** A recording diagnostic observer double. */
+function observerDouble() {
+  const observed: string[] = []
+  return { observed, observer: { observe: (correlationId: string) => observed.push(correlationId) } }
+}
+
+/** The canonical terminal ingress: ONE service over ONE store and ONE observer. */
+function terminalIngress(store: unknown, observer: unknown = { observe: () => {} }) {
+  return createLiaBrainExecutionTerminalReportService({ correlationStore: store as never, correlationObserver: observer as never })
+}
+
 /** The exact production wiring of the THIRD channel: ONE service over ONE store. */
 function wireTerminal(overrides: { store?: ReturnType<typeof createLiaBrainCorrelationService> } = {}) {
   const store = overrides.store ?? createLiaBrainCorrelationService()
   const context = fakeContext()
-  const terminalReportService = createLiaBrainExecutionTerminalReportService({ correlationStore: store })
+  const { observed, observer } = observerDouble()
+  const terminalReportService = terminalIngress(store, observer)
   registerLiaBrainExecutionTerminalReportListener({ context, terminalReportService })
-  return { store, terminalReportService }
+  return { observed, store, terminalReportService }
 }
 
 /**
@@ -139,8 +155,9 @@ function wireFullComposition() {
   const brain = brainDouble()
   registerLiaBrainDecisionBridge({ context, brain: brain as never, correlationStore: store, correlationObserver: observer as never })
   registerLiaBrainExecutionReportHandler({ context, correlationStore: store, correlationObserver: observer as never })
-  const terminalReportService = createLiaBrainExecutionTerminalReportService({ correlationStore: store })
-  // The terminal registration receives NO observer - the pinned asymmetry.
+  const terminalReportService = terminalIngress(store, observer)
+  // Phase 8.0D-10B-4D4C3B2-B3: the terminal registration receives the SAME
+  // observer the other two producers use - one canonical instance.
   registerLiaBrainExecutionTerminalReportListener({ context, terminalReportService })
   return { brain, observed, store }
 }
@@ -258,7 +275,7 @@ describe('lia terminal channel wiring (Phase 8.0D-10B-4D4C2B2)', () => {
     const countingContext = fakeContext()
     registerLiaBrainExecutionTerminalReportListener({
       context: countingContext,
-      terminalReportService: createLiaBrainExecutionTerminalReportService({ correlationStore: countingStore as never }),
+      terminalReportService: terminalIngress(countingStore),
     })
     deliverTerminal({ correlationId: 'corr-1', outcome: 'failed', roundId: 'round-1' })
     deliverTerminal({ correlationId: 'corr-1', outcome: 'failed', roundId: 'round-1' })
@@ -278,7 +295,7 @@ describe('lia terminal channel wiring (Phase 8.0D-10B-4D4C2B2)', () => {
     const context = fakeContext()
     registerLiaBrainExecutionTerminalReportListener({
       context,
-      terminalReportService: createLiaBrainExecutionTerminalReportService({ correlationStore: countingStore as never }),
+      terminalReportService: terminalIngress(countingStore),
     })
 
     deliverTerminal({ correlationId: 'X', outcome: 'failed', roundId: 'R' })
@@ -303,21 +320,22 @@ describe('lia terminal channel wiring (Phase 8.0D-10B-4D4C2B2)', () => {
     deliverTerminal({ correlationId: 'X', outcome: 'failed', roundId: 'R' })
 
     // H: terminal without a matching start - no error, no identity synthesis,
-    // and NO diagnostic trigger from the terminal path.
+    // and (Phase 8.0D-10B-4D4C3B2-B3) exactly ONE observation of its own key,
+    // after the write.
     expect(store.get('X')!.executions).toEqual([])
     expect(store.get('X')!.executionTerminals).toEqual([{ outcome: 'failed', roundId: 'R' }])
-    expect(observed).toEqual([])
+    expect(observed).toEqual(['X'])
 
     // I: the normal start path for the SAME round then lands beside it...
     deliverExecution(executionReport('X', 'R'))
     expect(store.get('X')!.executions).toEqual([executionReport('X', 'R')])
-    // ...the terminal fact is unchanged, and the START still triggers exactly
-    // the observation it always did.
+    // ...the terminal fact is unchanged, and the START triggers its own
+    // observation too - one per successful write, never a join.
     expect(store.get('X')!.executionTerminals).toEqual([{ outcome: 'failed', roundId: 'R' }])
-    expect(observed).toEqual(['X'])
+    expect(observed).toEqual(['X', 'X'])
   })
 
-  it('j: start before terminal keeps both facts, and the terminal adds no observation', () => {
+  it('j: start before terminal keeps both facts, and the terminal adds its OWN observation', () => {
     const { observed, store } = wireFullComposition()
 
     deliverExecution(executionReport('X', 'R'))
@@ -327,24 +345,28 @@ describe('lia terminal channel wiring (Phase 8.0D-10B-4D4C2B2)', () => {
 
     expect(store.get('X')!.executions).toHaveLength(1)
     expect(store.get('X')!.executionTerminals).toEqual([{ outcome: 'succeeded', roundId: 'R' }])
-    // The terminal write did NOT add a trigger.
-    expect(observed).toEqual(['X'])
+    // Phase 8.0D-10B-4D4C3B2-B3: the terminal write triggers too - two producer
+    // events, two observations of their own keys.
+    expect(observed).toEqual(['X', 'X'])
   })
 
   it('k: terminal and decision coexist in either order, with first-decision semantics intact', () => {
     // Terminal first.
     const terminalFirst = wireFullComposition()
     deliverTerminal({ correlationId: 'X', outcome: 'abandoned', roundId: 'R' })
-    expect(terminalFirst.observed).toEqual([])
+    expect(terminalFirst.observed).toEqual(['X'])
     const firstDecision = askDecision({ correlationId: 'X', facts: FACTS })
     expect(terminalFirst.store.get('X')!.decision).toBe(firstDecision)
     expect(terminalFirst.store.get('X')!.executionTerminals).toEqual([{ outcome: 'abandoned', roundId: 'R' }])
-    // The observation came from the DECISION path only.
-    expect(terminalFirst.observed).toEqual(['X'])
-    // First decision wins: a second shadow request never replaces it.
+    // Both producer events observed their own key - terminal first, decision
+    // second.
+    expect(terminalFirst.observed).toEqual(['X', 'X'])
+    // First decision wins: a second shadow request never replaces it - and,
+    // having been accepted, it triggers its own observation too.
     askDecision({ correlationId: 'X', facts: FACTS })
     expect(terminalFirst.store.get('X')!.decision).toBe(firstDecision)
     expect(terminalFirst.store.get('X')!.executionTerminals).toEqual([{ outcome: 'abandoned', roundId: 'R' }])
+    expect(terminalFirst.observed).toEqual(['X', 'X', 'X'])
 
     // Decision first.
     mocks.listeners.clear()
@@ -353,7 +375,8 @@ describe('lia terminal channel wiring (Phase 8.0D-10B-4D4C2B2)', () => {
     deliverTerminal({ correlationId: 'X', outcome: 'abandoned', roundId: 'R' })
     expect(decisionFirst.store.get('X')!.decision).toBe(firstDecisionAgain)
     expect(decisionFirst.store.get('X')!.executionTerminals).toEqual([{ outcome: 'abandoned', roundId: 'R' }])
-    expect(decisionFirst.observed).toEqual(['X'])
+    // Decision first, then terminal: both producer events observed their key.
+    expect(decisionFirst.observed).toEqual(['X', 'X'])
   })
 
   it('l: the wiring forwards the RAW payload object, untouched - identity preserved', () => {
@@ -383,35 +406,38 @@ describe('lia terminal channel wiring (Phase 8.0D-10B-4D4C2B2)', () => {
       context,
       terminalReportService: createLiaBrainExecutionTerminalReportService({
         correlationStore: { recordExecutionTerminal: () => { throw new Error('diagnostic memory is gone') } } as never,
+        correlationObserver: { observe: (correlationId: string) => observed.push(correlationId) } as never,
       }),
     })
 
     expect(() => deliverTerminal({ correlationId: 'X', outcome: 'failed', roundId: 'R' })).not.toThrow()
     expect(() => deliverTerminal({ correlationId: 'X', outcome: 'failed', roundId: 'R' })).not.toThrow()
+    // The write threw both times, so nothing was ever observed.
     expect(observed).toEqual([])
     expect(mocks.emitted).toEqual([])
   })
 
-  it('n: the terminal path triggers the observer ZERO times, while the other two paths still do', () => {
+  it('n: all THREE producers trigger the ONE observer, once each, with their own keys', () => {
     const { observed, store } = wireFullComposition()
 
-    // One valid terminal event: no observation, even though the composition
-    // holds the very observer the other producers use.
+    // Phase 8.0D-10B-4D4C3B2-B3: one valid terminal event now observes its key,
+    // exactly like the other two producers.
     deliverTerminal({ correlationId: 'X', outcome: 'failed', roundId: 'R' })
-    expect(observed).toEqual([])
+    expect(observed).toEqual(['X'])
     expect(store.get('X')!.executionTerminals).toHaveLength(1)
 
-    // Regression: the execution-start write still observes its key.
+    // The execution-start write observes its own key.
     deliverExecution(executionReport('Y', 'R'))
-    expect(observed).toEqual(['Y'])
+    expect(observed).toEqual(['X', 'Y'])
 
-    // Regression: the decision write still observes its key.
+    // The decision write observes its own key.
     askDecision({ correlationId: 'Z', facts: FACTS })
-    expect(observed).toEqual(['Y', 'Z'])
+    expect(observed).toEqual(['X', 'Y', 'Z'])
 
-    // A terminal for an already-observed key adds nothing.
+    // A further terminal for an already-observed key triggers again - the
+    // trigger boundary is the accepted write, never a change detection.
     deliverTerminal({ correlationId: 'Y', outcome: 'abandoned', roundId: 'R' })
-    expect(observed).toEqual(['Y', 'Z'])
+    expect(observed).toEqual(['X', 'Y', 'Z', 'Y'])
   })
 })
 
@@ -449,10 +475,14 @@ describe('lia terminal wiring invariants (Phase 8.0D-10B-4D4C2B2)', () => {
     expect(entry.match(/createLiaBrainExecutionTerminalReportService\(/g)).toHaveLength(1)
     expect(entry.match(/registerLiaBrainExecutionTerminalReportListener\(/g)).toHaveLength(1)
     const entryCode = entry.replace(/\s+/g, ' ')
-    expect(entryCode).toContain('const terminalReportService = createLiaBrainExecutionTerminalReportService({ correlationStore: deps.liaBrainCorrelation, })')
+    expect(entryCode).toContain('const terminalReportService = createLiaBrainExecutionTerminalReportService({ correlationStore: deps.liaBrainCorrelation, correlationObserver: deps.liaBrainCorrelationObserver, })')
     expect(entryCode).toContain('registerLiaBrainExecutionTerminalReportListener({ context, terminalReportService })')
 
-    // The terminal block receives NO observer: the pinned asymmetry.
+    // Phase 8.0D-10B-4D4C3B2-B3: the terminal service is built over the SAME
+    // lifecycle-owned observer the other two producers receive - one canonical
+    // instance, never a second one - and the listener itself stays observer-free.
+    expect(entry.match(/correlationObserver: deps\.liaBrainCorrelationObserver/g)).toHaveLength(3)
+    expect(entry.match(/dependsOn: \{ liaBrainCorrelation, liaBrainCorrelationObserver \}/g)).toHaveLength(2)
     expect(entryCode).not.toContain('registerLiaBrainExecutionTerminalReportListener({ context, terminalReportService, correlationObserver')
 
     // The entry never sanitizes, never writes to the store and never branches
@@ -543,5 +573,164 @@ describe('lia terminal wiring invariants (Phase 8.0D-10B-4D4C2B2)', () => {
     const store = stripComments(readSource('./brain-correlation-store.ts'))
     expect(store.match(/recordExecutionTerminal: \(report: LiaBrainExecutionTerminalReport\) => void/g)).toHaveLength(1)
     expect(store).not.toMatch(/terminalListener|registerLiaBrainExecutionTerminalReportListener/)
+  })
+})
+
+/**
+ * Phase 8.0D-10B-4D4C3B2-B3: the terminal trigger over the REAL observer.
+ *
+ * The full production composition - the real terminal listener, the real
+ * terminal ingress, the real decision bridge, the real execution report handler,
+ * ONE real correlation store and the REAL diagnostic observer with its ONE-
+ * snapshot composition - driven through the REAL Eventa seams, with the
+ * structured entries recorded by a test-only callback. This is where the
+ * terminal counts become visible in a structured entry.
+ */
+describe('terminal trigger - real observer integration (Phase 8.0D-10B-4D4C3B2-B3)', () => {
+  const ZERO_TERMINALS: LiaBrainTerminalObservationFacts = {
+    abandonedTerminalObservationCount: 0,
+    failedTerminalObservationCount: 0,
+    succeededTerminalObservationCount: 0,
+  }
+
+  /** The full composition, with the REAL observer and a recording entry sink. */
+  function wireRealComposition() {
+    const store = createLiaBrainCorrelationService()
+    const context = fakeContext()
+    const entries: LiaBrainDiagnosticEntry[] = []
+    const observer = createLiaBrainCorrelationObserver({
+      correlationReader: store,
+      log: entry => entries.push(entry),
+    })
+    const brain = brainDouble()
+    registerLiaBrainDecisionBridge({ context, brain: brain as never, correlationStore: store, correlationObserver: observer })
+    registerLiaBrainExecutionReportHandler({ context, correlationStore: store, correlationObserver: observer })
+    const terminalReportService = terminalIngress(store, observer)
+    registerLiaBrainExecutionTerminalReportListener({ context, terminalReportService })
+    return { brain, entries, store }
+  }
+
+  /** The present arm of one recorded entry, narrowed once. */
+  function observedTerminals(entry: LiaBrainDiagnosticEntry): LiaBrainTerminalObservationFacts {
+    if (!('terminalFacts' in entry))
+      throw new Error('expected a present correlation entry')
+    return entry.terminalFacts
+  }
+
+  it('a: TERMINAL FIRST - one stored terminal, ONE entry carrying the counted outcome', () => {
+    const { entries, store } = wireRealComposition()
+
+    deliverTerminal({ correlationId: 'X', outcome: 'failed', roundId: 'R' })
+
+    // Exactly one retained terminal, and exactly one observation of its key.
+    expect(store.get('X')!.executionTerminals).toEqual([{ outcome: 'failed', roundId: 'R' }])
+    expect(entries).toHaveLength(1)
+    expect(entries[0]!.correlationId).toBe('X')
+    // The identity side is the current factual answer - no synthesis, no status.
+    expect(entries[0]!.facts).toEqual({ attempts: [], status: 'decisionNotObserved' })
+    // ...and the terminal side is the counted outcome, visible on THIS call.
+    expect(observedTerminals(entries[0]!)).toEqual({ ...ZERO_TERMINALS, failedTerminalObservationCount: 1 })
+  })
+
+  it('b: START THEN TERMINAL - two producer events, two entries, the second carrying the count', () => {
+    const { entries, store } = wireRealComposition()
+
+    deliverExecution(executionReport('X', 'R'))
+    expect(entries).toHaveLength(1)
+    expect(observedTerminals(entries[0]!)).toEqual(ZERO_TERMINALS)
+
+    deliverTerminal({ correlationId: 'X', outcome: 'succeeded', roundId: 'R' })
+
+    expect(entries).toHaveLength(2)
+    expect(observedTerminals(entries[1]!)).toEqual({ ...ZERO_TERMINALS, succeededTerminalObservationCount: 1 })
+    // Both facts are retained side by side; the attempt keeps its exact shape.
+    expect(store.get('X')!.executions).toHaveLength(1)
+    expect(store.get('X')!.executionTerminals).toEqual([{ outcome: 'succeeded', roundId: 'R' }])
+    expect(entries[1]!.facts.status).toBe('decisionNotObserved')
+    if (entries[1]!.facts.status !== 'decisionNotObserved')
+      throw new Error('expected decisionNotObserved')
+    expect(Object.keys(entries[1]!.facts.attempts[0]!).sort()).toEqual(['arrivalIndex', 'modelId', 'providerId', 'roundId'])
+  })
+
+  it('c: TERMINAL THEN START - two entries, the second carrying BOTH streams', () => {
+    const { entries, store } = wireRealComposition()
+
+    deliverTerminal({ correlationId: 'X', outcome: 'abandoned', roundId: 'R' })
+    expect(entries).toHaveLength(1)
+    expect(observedTerminals(entries[0]!)).toEqual({ ...ZERO_TERMINALS, abandonedTerminalObservationCount: 1 })
+
+    deliverExecution(executionReport('X', 'R'))
+
+    expect(entries).toHaveLength(2)
+    expect(observedTerminals(entries[1]!)).toEqual({ ...ZERO_TERMINALS, abandonedTerminalObservationCount: 1 })
+    expect(entries[1]!.facts.status).toBe('decisionNotObserved')
+    if (entries[1]!.facts.status !== 'decisionNotObserved')
+      throw new Error('expected decisionNotObserved')
+    expect(entries[1]!.facts.attempts.map(attempt => attempt.roundId)).toEqual(['R'])
+    // No join: the terminal record is counted, never attached to the attempt.
+    expect(store.get('X')!.executions).toHaveLength(1)
+    expect(store.get('X')!.executionTerminals).toHaveLength(1)
+  })
+
+  it('d: DECISION + START + TERMINAL - exactly THREE triggers, no extra', () => {
+    const { entries } = wireRealComposition()
+
+    askDecision({ correlationId: 'X', facts: FACTS })
+    expect(entries).toHaveLength(1)
+
+    deliverExecution(executionReport('X', 'R'))
+    expect(entries).toHaveLength(2)
+
+    deliverTerminal({ correlationId: 'X', outcome: 'succeeded', roundId: 'R' })
+
+    expect(entries).toHaveLength(3)
+    expect(entries.map(entry => entry.correlationId)).toEqual(['X', 'X', 'X'])
+    // The last entry is the fully-populated factual state.
+    expect(entries[2]!.facts.status).toBe('attemptIdentityFacts')
+    expect(observedTerminals(entries[2]!)).toEqual({ ...ZERO_TERMINALS, succeededTerminalObservationCount: 1 })
+  })
+
+  it('e: duplicate terminal events trigger twice, and the canonical store keeps ONE record', () => {
+    const { entries, store } = wireRealComposition()
+
+    deliverTerminal({ correlationId: 'X', outcome: 'failed', roundId: 'R' })
+    deliverTerminal({ correlationId: 'X', outcome: 'failed', roundId: 'R' })
+
+    expect(entries).toHaveLength(2)
+    expect(store.get('X')!.executionTerminals).toEqual([{ outcome: 'failed', roundId: 'R' }])
+    // Both post-write entries read the same canonical retained fact.
+    expect(observedTerminals(entries[0]!)).toEqual({ ...ZERO_TERMINALS, failedTerminalObservationCount: 1 })
+    expect(observedTerminals(entries[1]!)).toEqual({ ...ZERO_TERMINALS, failedTerminalObservationCount: 1 })
+  })
+
+  it('f: conflicting terminal events trigger twice, and the store keeps the FIRST outcome', () => {
+    const { entries, store } = wireRealComposition()
+
+    deliverTerminal({ correlationId: 'X', outcome: 'failed', roundId: 'R' })
+    deliverTerminal({ correlationId: 'X', outcome: 'succeeded', roundId: 'R' })
+
+    expect(entries).toHaveLength(2)
+    expect(store.get('X')!.executionTerminals).toEqual([{ outcome: 'failed', roundId: 'R' }])
+    for (const entry of entries)
+      expect(observedTerminals(entry)).toEqual({ ...ZERO_TERMINALS, failedTerminalObservationCount: 1 })
+  })
+
+  it('g: the terminal-triggered entry carries counts and no raw record, and the line stays identity-only', () => {
+    const { entries } = wireRealComposition()
+
+    deliverTerminal({ correlationId: 'X', outcome: 'succeeded', roundId: 'R' })
+
+    const entry = entries[0]!
+    expect(Object.keys(entry).sort()).toEqual(['correlationId', 'facts', 'terminalFacts'])
+    const serialized = JSON.stringify(entry)
+    for (const forbidden of ['executionTerminals', 'roundId', 'outcome', 'snapshot', 'createdAt'])
+      expect(serialized, forbidden).not.toContain(forbidden)
+
+    // The formatter is UNCHANGED: the line prints the identity side only, and no
+    // terminal count appears in it - with or without a terminal record.
+    const line = formatLiaBrainDiagnosticEntry(entry)
+    expect(line).toBe('[LIA-BRAIN-DIAG] correlationId="X" status="decisionNotObserved"')
+    for (const forbidden of ['TerminalObservationCount', 'terminalFacts', 'terminal', 'succeeded', 'failed', 'abandoned', 'count'])
+      expect(line, forbidden).not.toMatch(new RegExp(forbidden, 'i'))
   })
 })

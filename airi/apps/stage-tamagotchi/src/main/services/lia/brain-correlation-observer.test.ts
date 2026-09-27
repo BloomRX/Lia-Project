@@ -626,6 +626,7 @@ const DIAGNOSTIC_LOG = 'apps/stage-tamagotchi/src/main/services/lia/brain-diagno
 const READER = 'apps/stage-tamagotchi/src/main/services/lia/brain-correlation-reader.ts'
 const IDENTITY_FACTS = 'apps/stage-tamagotchi/src/main/services/lia/brain-execution-identity-facts.ts'
 const EXPECTED_ROUTE = 'apps/stage-tamagotchi/src/main/services/lia/brain-expected-route.ts'
+const TERMINAL_PRODUCER = 'apps/stage-tamagotchi/src/main/services/lia/brain-execution-terminal-report-service.ts'
 
 function productionMatching(pattern: RegExp): string[] {
   return productionSources(BRAIN_ROOTS)
@@ -746,7 +747,7 @@ const DECISION_PRODUCER = 'apps/stage-tamagotchi/src/main/services/lia/brain-dec
 const EXECUTION_PRODUCER = 'apps/stage-tamagotchi/src/main/services/lia/brain-execution-report-service.ts'
 
 describe('correlation observer - lifecycle ownership and dual trigger (Phase 8.0D-10B-4C4C)', () => {
-  it('ai: the module references are the composition entry plus the two TYPE-ONLY producers, and the entry never observes', () => {
+  it('ai: the module references are the composition entry plus the three TYPE-ONLY producers, and the entry never observes', () => {
     // Phase 8.0D-10B-4C4B gives the observer its ONE canonical lifecycle owner;
     // Phase 8.0D-10B-4C4C adds the two producers, which know only the contract
     // TYPE and the one trigger; 8.0D-10B-4D2B adds the diagnostic log adapter,
@@ -756,6 +757,7 @@ describe('correlation observer - lifecycle ownership and dual trigger (Phase 8.0
       DECISION_PRODUCER,
       DIAGNOSTIC_LOG,
       EXECUTION_PRODUCER,
+      TERMINAL_PRODUCER,
     ])
     // The adapter's coupling is TYPE-ONLY: it imports the entry contract and
     // never the module's value surface (no factory, no reader, no mapping).
@@ -768,13 +770,15 @@ describe('correlation observer - lifecycle ownership and dual trigger (Phase 8.0
       'apps/stage-tamagotchi/src/main/index.ts',
     ])
 
-    // B. The observer is triggered by EXACTLY the two producers - the callers
-    // that performed a successful diagnostic write first.
+    // B. The observer is triggered by EXACTLY the three producers - the callers
+    // that performed a successful diagnostic write first (Phase
+    // 8.0D-10B-4D4C3B2-B3 adds the third: the terminal ingress).
     expect(productionMatching(/\.observe\(/)).toEqual([
       DECISION_PRODUCER,
       EXECUTION_PRODUCER,
+      TERMINAL_PRODUCER,
     ])
-    for (const producer of [DECISION_PRODUCER, EXECUTION_PRODUCER]) {
+    for (const producer of [DECISION_PRODUCER, EXECUTION_PRODUCER, TERMINAL_PRODUCER]) {
       const source = stripComments(readFileSync(new URL(producer, REPO_ROOT), 'utf-8'))
       // Type-only coupling + exactly one bare trigger statement.
       // The producers know the CONTRACT type only - never the diagnostic entry
@@ -818,10 +822,10 @@ describe('correlation observer - lifecycle ownership and dual trigger (Phase 8.0
     expect(entry).not.toMatch(/\.observe\(|LIA_BRAIN_ENGINE_PROVIDER_MAPPING|readLiaBrainExecutionIdentityFacts|providerIdentityEqual|modelIdentityEqual/)
     expect(entry).not.toMatch(/recordDecision|recordExecution|\w*[Cc]orrelation\w*\.(?:get\(|size\b)/)
 
-    // Both producers receive the SAME lifecycle handle - two injections, one
-    // observer, no second instance anywhere in the composition.
+    // All THREE producers receive the SAME lifecycle handle - three injections,
+    // one observer, no second instance anywhere in the composition.
     expect(entryCode).toContain('correlationObserver: deps.liaBrainCorrelationObserver,')
-    expect(entry.match(/correlationObserver: deps\.liaBrainCorrelationObserver/g)).toHaveLength(2)
+    expect(entry.match(/correlationObserver: deps\.liaBrainCorrelationObserver/g)).toHaveLength(3)
   })
 
   it('k/l/m/n/o/p/q: the lifecycle provider owns ONE observer instance per container', async () => {

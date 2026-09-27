@@ -18,6 +18,7 @@ import { createLiaBrainExecutionTerminalReportService, sanitizeLiaBrainExecution
  */
 
 const mocks = vi.hoisted(() => ({
+  observe: vi.fn(),
   recordExecutionTerminal: vi.fn(),
 }))
 
@@ -61,9 +62,14 @@ function correlationStoreDouble(overrides: Partial<{ recordExecutionTerminal: (r
   return { recordExecutionTerminal: overrides.recordExecutionTerminal ?? mocks.recordExecutionTerminal } as never
 }
 
-/** The ingress under test, over the recording store double. */
-function ingress(store: unknown = correlationStoreDouble()) {
-  return createLiaBrainExecutionTerminalReportService({ correlationStore: store as never })
+/** The canonical diagnostic observer double the ingress receives. */
+function correlationObserverDouble(observe: (correlationId: string) => void = mocks.observe) {
+  return { observe } as never
+}
+
+/** The ingress under test, over the recording store + observer doubles. */
+function ingress(store: unknown = correlationStoreDouble(), observer: unknown = correlationObserverDouble()) {
+  return createLiaBrainExecutionTerminalReportService({ correlationStore: store as never, correlationObserver: observer as never })
 }
 
 /** The report the store received on the Nth accepted call. */
@@ -95,7 +101,10 @@ const EXTRA_FIELDS = {
   apiKey: 'sk-secret',
 }
 
-beforeEach(() => mocks.recordExecutionTerminal.mockClear())
+beforeEach(() => {
+  mocks.observe.mockClear()
+  mocks.recordExecutionTerminal.mockClear()
+})
 
 describe('lia terminal ingress service - sanitizer (Phase 8.0D-10B-4D4C2B1)', () => {
   it('a: each accepted outcome is forwarded verbatim, with the exact three canonical keys', () => {
@@ -277,7 +286,7 @@ describe('lia terminal ingress service - sanitizer (Phase 8.0D-10B-4D4C2B1)', ()
     // The store double holds NO execution starts and exposes no read API at
     // all: this ingress cannot join a round to a start even by accident.
     const store = { recordExecutionTerminal: mocks.recordExecutionTerminal }
-    const service = createLiaBrainExecutionTerminalReportService({ correlationStore: store as never })
+    const service = ingress(store)
 
     service.report({ correlationId: 'logical-send-X', outcome: 'abandoned', roundId: 'round-never-started' })
 
@@ -306,6 +315,143 @@ describe('lia terminal ingress service - sanitizer (Phase 8.0D-10B-4D4C2B1)', ()
     expect(service.report({ ...VALID_REPORT, outcome: 'unknown' })).toBeUndefined()
     // No counter, no last report, no validation result to read.
     expect(Object.keys(service)).toEqual(['report'])
+  })
+})
+
+/**
+ * Phase 8.0D-10B-4D4C3B2-B3: the terminal observer trigger - the exact sibling
+ * convention of the execution ingress, proven on the ingress operation itself.
+ */
+describe('lia terminal ingress service - the observer trigger (Phase 8.0D-10B-4D4C3B2-B3)', () => {
+  it('a/b/c: each accepted outcome is stored once and THEN observed once, with the canonical key', () => {
+    for (const outcome of ['succeeded', 'failed', 'abandoned'] as const) {
+      mocks.observe.mockClear()
+      mocks.recordExecutionTerminal.mockClear()
+      const order: string[] = []
+      mocks.recordExecutionTerminal.mockImplementationOnce(() => order.push('store'))
+      mocks.observe.mockImplementationOnce(() => order.push('observe'))
+      const service = ingress()
+
+      service.report({ correlationId: 'logical-send-X', outcome, roundId: 'round-a' })
+
+      // The store write completes first, and only then is the key observed.
+      expect(order, outcome).toEqual(['store', 'observe'])
+      expect(mocks.recordExecutionTerminal, outcome).toHaveBeenCalledTimes(1)
+      expect(storedReport(), outcome).toEqual({ correlationId: 'logical-send-X', outcome, roundId: 'round-a' })
+      expect(mocks.observe, outcome).toHaveBeenCalledTimes(1)
+      // The observer receives ONLY the sanitized report's own key.
+      expect(mocks.observe, outcome).toHaveBeenCalledWith('logical-send-X')
+      expect((mocks.observe.mock.calls[0] as unknown[])[0]).toBe((storedReport() as { correlationId: string }).correlationId)
+      expect(mocks.observe.mock.calls[0]).toHaveLength(1)
+    }
+  })
+
+  it('d: a payload the sanitizer rejects stores nothing and observes nothing', () => {
+    const service = ingress()
+
+    for (const payload of [
+      undefined,
+      null,
+      'not a report',
+      42,
+      [],
+      {},
+      { correlationId: '', outcome: 'failed', roundId: 'R' },
+      { correlationId: 7, outcome: 'failed', roundId: 'R' },
+      { correlationId: 'X', outcome: 'failed', roundId: '' },
+      { correlationId: 'X', outcome: 'failed' },
+      { correlationId: 'X', outcome: 'completed', roundId: 'R' },
+      { correlationId: 'X', outcome: 'SUCCEEDED', roundId: 'R' },
+      { correlationId: 'X', roundId: 'R' },
+    ])
+      service.report(payload)
+
+    expect(mocks.recordExecutionTerminal).not.toHaveBeenCalled()
+    expect(mocks.observe).not.toHaveBeenCalled()
+  })
+
+  it('e: hostile extras reach neither the store nor the observer', () => {
+    const service = ingress()
+
+    service.report({ ...VALID_REPORT, ...EXTRA_FIELDS })
+
+    expect(storedReport()).toEqual(VALID_REPORT)
+    expect(mocks.observe).toHaveBeenCalledTimes(1)
+    expect(mocks.observe.mock.calls[0]).toEqual(['logical-send-X'])
+    expect(JSON.stringify(mocks.observe.mock.calls[0])).not.toMatch(/providerId|modelId|prompt|apiKey|error|turnIndex|conversationId|outcome|roundId/)
+  })
+
+  it('f: a store that throws is NEVER observed, and nothing is retried', () => {
+    let attempts = 0
+    const service = ingress(correlationStoreDouble({
+      recordExecutionTerminal: () => {
+        attempts += 1
+        throw new Error('diagnostic memory is gone')
+      },
+    }))
+
+    expect(() => service.report(VALID_REPORT)).not.toThrow()
+    expect(attempts).toBe(1)
+    expect(mocks.observe).not.toHaveBeenCalled()
+
+    // Repeatable, and still never observed.
+    expect(() => service.report({ ...VALID_REPORT, roundId: 'round-b' })).not.toThrow()
+    expect(attempts).toBe(2)
+    expect(mocks.observe).not.toHaveBeenCalled()
+  })
+
+  it('g: a hostile observer cannot escape, and the write is not undone or retried', () => {
+    const order: string[] = []
+    mocks.recordExecutionTerminal.mockImplementationOnce(() => order.push('store'))
+    const service = ingress(correlationStoreDouble(), correlationObserverDouble((correlationId: string) => {
+      order.push(`observe:${correlationId}`)
+      throw new Error('hostile observer')
+    }))
+
+    // The exception never escapes the ingress...
+    expect(() => service.report(VALID_REPORT)).not.toThrow()
+    // ...the write happened FIRST and exactly once, and no retry followed.
+    expect(order).toEqual(['store', 'observe:logical-send-X'])
+    expect(mocks.recordExecutionTerminal).toHaveBeenCalledTimes(1)
+
+    // The ingress remains usable after a hostile destination failed.
+    expect(() => service.report({ ...VALID_REPORT, roundId: 'round-b' })).not.toThrow()
+    expect(mocks.recordExecutionTerminal).toHaveBeenCalledTimes(2)
+    expect(order).toEqual(['store', 'observe:logical-send-X', 'observe:logical-send-X'])
+  })
+
+  it('h/i: duplicates and conflicts are both stored and both observed - the service resolves nothing', () => {
+    const service = ingress()
+
+    // Duplicate: the same valid report twice.
+    service.report(VALID_REPORT)
+    service.report(VALID_REPORT)
+    expect(mocks.recordExecutionTerminal).toHaveBeenCalledTimes(2)
+    expect(mocks.observe.mock.calls.map(call => call[0])).toEqual(['logical-send-X', 'logical-send-X'])
+
+    // Conflict: two different outcomes for the SAME round.
+    mocks.observe.mockClear()
+    mocks.recordExecutionTerminal.mockClear()
+    service.report({ correlationId: 'X', outcome: 'failed', roundId: 'R' })
+    service.report({ correlationId: 'X', outcome: 'succeeded', roundId: 'R' })
+
+    // Both writes are attempted and both trigger - what the canonical store does
+    // with the second one is the STORE's business, and this layer never asks.
+    expect(mocks.recordExecutionTerminal).toHaveBeenCalledTimes(2)
+    expect(storedReport(0)).toEqual({ correlationId: 'X', outcome: 'failed', roundId: 'R' })
+    expect(storedReport(1)).toEqual({ correlationId: 'X', outcome: 'succeeded', roundId: 'R' })
+    expect(mocks.observe.mock.calls.map(call => call[0])).toEqual(['X', 'X'])
+  })
+
+  it('j: the observer receives the key of the report being STORED, not a cached one', () => {
+    const service = ingress()
+
+    service.report({ correlationId: 'logical-send-A', outcome: 'failed', roundId: 'R1' })
+    service.report({ correlationId: 'logical-send-B', outcome: 'abandoned', roundId: 'R2' })
+
+    expect(mocks.observe.mock.calls.map(call => call[0])).toEqual(['logical-send-A', 'logical-send-B'])
+    expect(mocks.observe.mock.calls[0]![0]).toBe((storedReport(0) as { correlationId: string }).correlationId)
+    expect(mocks.observe.mock.calls[1]![0]).toBe((storedReport(1) as { correlationId: string }).correlationId)
   })
 })
 
@@ -351,11 +497,15 @@ describe('lia terminal ingress service - isolation invariants (Phase 8.0D-10B-4D
   it('s/t: the ingress is type-only, store-only and transport-free', () => {
     const source = stripComments(readSource('./brain-execution-terminal-report-service.ts'))
 
-    // S: the shared contract is imported TYPE-ONLY, and the only store edge is
-    // the injected canonical service type - no renderer, no Core Agent, no
-    // Stage UI, no second store.
-    expect(source).toMatch(/import type \{ LiaBrainExecutionTerminalReport \} from '\.\.\/\.\.\/\.\.\/shared\/eventa'/)
-    expect(source).toMatch(/import type \{ LiaBrainCorrelationService \} from '\.\/brain-correlation-service'/)
+    // S: the shared contract, the injected canonical service and the injected
+    // canonical observer contract are the WHOLE dependency surface, all
+    // TYPE-ONLY - no renderer, no Core Agent, no Stage UI, no second store, no
+    // value import of any diagnostic layer.
+    expect(source.match(/^import .*$/gm)).toEqual([
+      `import type { LiaBrainExecutionTerminalReport } from '../../../shared/eventa'`,
+      `import type { LiaBrainCorrelationObserver } from './brain-correlation-observer'`,
+      `import type { LiaBrainCorrelationService } from './brain-correlation-service'`,
+    ])
     expect(source).not.toMatch(/from '[^']*(?:renderer|core-agent|stage-ui|lia-core)/)
     expect(source).not.toMatch(/createLiaBrainCorrelationStore|createLiaBrainCorrelationService|brain-correlation-store/)
     // T: no Eventa, no Electron, no handler registration, no channel literal.
@@ -363,12 +513,15 @@ describe('lia terminal ingress service - isolation invariants (Phase 8.0D-10B-4D
     expect(source).not.toMatch(/eventa:(?:invoke|event):lia:brain|electronLiaBrain/)
   })
 
-  it('u: no observer trigger, no reader/facts, no diagnostic log, no authority', () => {
+  it('u: exactly ONE observer trigger with the sanitized key of that report, and no read side', () => {
     const source = stripComments(readSource('./brain-execution-terminal-report-service.ts'))
 
-    // U: the terminal write is NOT a diagnostic trigger yet, and the whole
-    // diagnostic read side stays unreachable from here.
-    expect(source).not.toMatch(/correlationObserver|correlation-observer|\.observe\(/)
+    // U (Phase 8.0D-10B-4D4C3B2-B3): the terminal write IS a diagnostic trigger
+    // now - exactly one call site, with the sanitized report's own key, nothing
+    // else, and the whole diagnostic read side stays unreachable from here.
+    expect(source.match(/correlationObserver\.\w+/g)).toEqual(['correlationObserver.observe'])
+    expect(source).toMatch(/^\s*correlationObserver\.observe\(report\.correlationId\)$/m)
+    expect(source.match(/\.observe\(/g)).toHaveLength(1)
     expect(source).not.toMatch(/brain-correlation-reader|brain-execution-identity-facts|brain-expected-route|brain-diagnostic-log|readLiaBrainExecutionIdentityFacts/)
     // No logger or telemetry of any kind: invalid payloads are silently ignored.
     expect(source).not.toMatch(/console\.|@guiiai\/logg|logger|telemetry|posthog/i)
@@ -377,6 +530,26 @@ describe('lia terminal ingress service - isolation invariants (Phase 8.0D-10B-4D
     // No execution authority, no retry, no fallback, no comparison, no aggregate
     // vocabulary and no provider/model selection.
     expect(source).not.toMatch(/fallback|retry|setProvider|setModel|activeProvider|activeModel|permission|\btools?\b|routeMatch|mismatch|divergence|compare|verdict|score|finalAttempt|winningAttempt/)
+  })
+
+  it('u2: the service depends on the store and the observer - and on nothing else', () => {
+    const source = stripComments(readSource('./brain-execution-terminal-report-service.ts'))
+
+    // It triggers the observer and stops: no composition, no facts layer, no
+    // reader, no expected-route mapping, no formatter, no diagnostic entry.
+    expect(source).not.toMatch(/brain-correlation-diagnostic-facts|composeLiaBrainCorrelationDiagnosticFacts/)
+    expect(source).not.toMatch(/brain-execution-terminal-facts|deriveLiaBrainTerminalObservationFacts|LiaBrainTerminalObservationFacts/)
+    expect(source).not.toMatch(/LIA_BRAIN_ENGINE_PROVIDER_MAPPING|brain-expected-route/)
+    expect(source).not.toMatch(/LiaBrainDiagnosticEntry|formatLiaBrainDiagnosticEntry|logLiaBrainDiagnostic/)
+    // No terminal arithmetic, no count naming and no outcome branch: the outcome
+    // is validated as one of three exact strings and copied verbatim, and the
+    // only two branches left are the sanitizer gates the sibling also has.
+    expect(source).not.toMatch(/TerminalObservationCount|reduce|\+\+|\+=|\bswitch\b|\belse\b/)
+    expect(source).not.toMatch(/outcome\s*(?:===|==|!==|!=)\s*['"`]/)
+    // The five branches are the tolerant sanitizer gates (isRecord, key length,
+    // round length, outcome read) plus the one sanitized-report gate - the
+    // sibling shape exactly, and none of them is an outcome comparison.
+    expect(source.match(/\bif\b/g)).toHaveLength(5)
   })
 
   it('v: no state, no dedupe, no async and no timers', () => {
