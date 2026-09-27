@@ -337,12 +337,17 @@ describe('lia logical-send terminal reporter (Phase 8.0D-10B-4D4C4-B2)', () => {
     ])
     expect(withContract.filter(relative => relative.includes('/src/main/'))).toEqual([])
 
-    // The report type itself stays in the shared contract: the reporter derives
-    // the observation from the seam and needs no extra annotation.
+    // The report type stays in the shared contract, and since
+    // 8.0D-10B-4D4C4-B3A exactly ONE main module TYPE-imports it - the canonical
+    // correlation store that retains the fact. Nothing else names it: no
+    // listener, no ingress service, no fact module.
     expect(productionSources(BRAIN_ROOTS)
       .filter(relative => /LiaBrainSendTerminalReport/.test(readFileSync(join(process.cwd(), '..', '..', relative), 'utf-8')))
       .sort())
-      .toEqual(['apps/stage-tamagotchi/src/shared/eventa/index.ts'])
+      .toEqual([
+        'apps/stage-tamagotchi/src/main/services/lia/brain-correlation-store.ts',
+        'apps/stage-tamagotchi/src/shared/eventa/index.ts',
+      ])
   })
 
   it('u: the main observer triggers stay exactly three - the send signal triggers none', () => {
@@ -355,9 +360,11 @@ describe('lia logical-send terminal reporter (Phase 8.0D-10B-4D4C4-B2)', () => {
         'apps/stage-tamagotchi/src/main/services/lia/brain-execution-terminal-report-service.ts',
       ])
 
-    // And the deferred layers hold no send field or send fact of any kind.
+    // And the still-deferred layers hold no send field or send fact of any
+    // kind. Since 8.0D-10B-4D4C4-B3A the canonical store is NOT among them: it
+    // legitimately retains the optional `sendTerminal` record - retention only,
+    // with no reader, no fact, no composition, no trigger and no formatter.
     for (const relative of [
-      'apps/stage-tamagotchi/src/main/services/lia/brain-correlation-store.ts',
       'apps/stage-tamagotchi/src/main/services/lia/brain-correlation-reader.ts',
       'apps/stage-tamagotchi/src/main/services/lia/brain-correlation-diagnostic-facts.ts',
       'apps/stage-tamagotchi/src/main/services/lia/brain-execution-terminal-facts.ts',

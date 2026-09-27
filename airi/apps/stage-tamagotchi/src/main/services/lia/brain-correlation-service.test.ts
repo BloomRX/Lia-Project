@@ -110,10 +110,11 @@ describe('lia brain correlation service - lifecycle ownership (Phase 8.0D-10B-4B
     expect(factory).toHaveBeenCalledTimes(1)
 
     // And the resolved object really is the bounded store API, not a wrapper
-    // with extra powers. 8.0D-10B-4C2A widened the store API by exactly one
-    // factual writer - the terminal outcome recorder - so the service, which IS
-    // the store, exposes it too.
-    expect(Object.keys(first.service).sort()).toEqual(['get', 'recordDecision', 'recordExecution', 'recordExecutionTerminal', 'size'])
+    // with extra powers. 8.0D-10B-4C2A widened that API by one factual writer -
+    // the round terminal recorder - and 8.0D-10B-4D4C4-B3A by one more: the
+    // logical-send terminal recorder. The service IS the store, so it exposes
+    // both, and nothing else.
+    expect(Object.keys(first.service).sort()).toEqual(['get', 'recordDecision', 'recordExecution', 'recordExecutionTerminal', 'recordSendTerminal', 'size'])
   })
 
   it('d: a second independent lifecycle receives a different instance', async () => {

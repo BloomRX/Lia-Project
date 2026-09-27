@@ -1,7 +1,7 @@
 import type { LiaBrainRoutingDecision } from '@lia/core'
 
-import type { LiaBrainExecutionTerminalReport } from '../../../shared/eventa'
-import type { LiaBrainCorrelationStore, LiaBrainExecutionTerminalRecord } from './brain-correlation-store'
+import type { LiaBrainExecutionTerminalReport, LiaBrainSendTerminalReport } from '../../../shared/eventa'
+import type { LiaBrainCorrelationStore, LiaBrainExecutionTerminalRecord, LiaBrainSendTerminalRecord } from './brain-correlation-store'
 
 import { readdirSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -55,6 +55,11 @@ function report(overrides: Partial<Record<'correlationId' | 'conversationId' | '
 /** One serialized terminal report, exactly as the future main ingress will deliver it. */
 function terminalReport(correlationId: string, roundId: string, outcome: 'succeeded' | 'failed' | 'abandoned'): LiaBrainExecutionTerminalReport {
   return { correlationId, outcome, roundId }
+}
+
+/** One serialized send-terminal report, exactly as the future main ingress will deliver it. */
+function sendReport(correlationId: string, outcome: 'succeeded' | 'failed'): LiaBrainSendTerminalReport {
+  return { correlationId, outcome }
 }
 
 /** A store whose clock the test drives by hand. */
@@ -850,7 +855,7 @@ describe('lia brain correlation store - terminal report API shape (Phase 8.0D-10
 
     // ONE type-only import carries both serialized report types; no value,
     // channel constant or imported module of that contract is referenced.
-    expect(code).toMatch(/import type \{ LiaBrainExecutionObservationReport, LiaBrainExecutionTerminalReport \} from '\.\.\/\.\.\/\.\.\/shared\/eventa'/)
+    expect(code).toMatch(/import type \{ LiaBrainExecutionObservationReport, LiaBrainExecutionTerminalReport, LiaBrainSendTerminalReport \} from '\.\.\/\.\.\/\.\.\/shared\/eventa'/)
     expect(code.match(/from '\.\.\/\.\.\/\.\.\/shared\/eventa'/g)).toHaveLength(1)
     expect(code).not.toMatch(/defineEventa|electronLiaBrain/)
 
@@ -909,7 +914,7 @@ describe('lia brain correlation store - isolation invariants (Phase 8.0D-10B-4B1
 
     // No Eventa/IPC surface, no channel tag: the contract import is TYPE-ONLY
     // (the five-field report shape) and nothing here can send or receive.
-    expect(source).toMatch(/import type \{ LiaBrainExecutionObservationReport, LiaBrainExecutionTerminalReport \} from '\.\.\/\.\.\/\.\.\/shared\/eventa'/)
+    expect(source).toMatch(/import type \{ LiaBrainExecutionObservationReport, LiaBrainExecutionTerminalReport, LiaBrainSendTerminalReport \} from '\.\.\/\.\.\/\.\.\/shared\/eventa'/)
     expect(source).not.toMatch(/defineEventa|defineInvokeEventa|defineInvokeHandler|ipcMain|ipcRenderer|BrowserWindow|\.emit\(/)
     expect(source).not.toMatch(/eventa:(?:invoke|event):lia:brain/)
 
@@ -966,7 +971,489 @@ describe('lia brain correlation store - isolation invariants (Phase 8.0D-10B-4B1
     // The store's own API is the whole surface: no backing map is exported.
     expect(source).toMatch(/export function createLiaBrainCorrelationStore/)
     expect(source).toMatch(/export interface LiaBrainCorrelationStore /)
-    // 8.0D-10B-4C2A adds exactly ONE export: the two-field terminal record type.
-    expect(source.match(/export /g)?.length).toBe(5)
+    // 8.0D-10B-4C2A added exactly ONE export (the two-field round terminal
+    // record type) and 8.0D-10B-4D4C4-B3A adds exactly one more - the one-field
+    // logical-send terminal record type. No other export exists.
+    expect(source.match(/export /g)?.length).toBe(6)
+  })
+})
+
+describe('lia brain correlation store - logical send terminal fact (Phase 8.0D-10B-4D4C4-B3A)', () => {
+  const BRAIN_ROOTS = ['apps/stage-tamagotchi/src', 'packages/stage-ui/src', 'packages/core-agent/src', 'packages/lia-core/src']
+
+  /** The retained send-level settlement of one entry, flattened for assertions. */
+  function sendSettlement(store: ReturnType<typeof createLiaBrainCorrelationStore>, correlationId: string): string | undefined {
+    return store.get(correlationId)?.sendTerminal?.outcome
+  }
+
+  it('62: a send terminal may be the very FIRST fact of a correlation', () => {
+    const { store } = clockedStore()
+
+    store.recordSendTerminal(sendReport('X', 'failed'))
+
+    expect(store.size).toBe(1)
+    const snapshot = store.get('X')!
+    // A normal entry, with the canonical defaults of one that has no decision
+    // and no round data: nothing was invented to accompany the send fact.
+    expect(snapshot.correlationId).toBe('X')
+    expect(snapshot.decision).toBeUndefined()
+    expect(snapshot.executions).toEqual([])
+    expect(snapshot.executionTerminals).toEqual([])
+    expect(snapshot.sendTerminal).toEqual({ outcome: 'failed' })
+    // Exactly the ONE field - the entry already holds the key, and a logical
+    // send fact carries no round, attempt, provider or model.
+    expect(Object.keys(snapshot.sendTerminal!).sort()).toEqual(['outcome'])
+  })
+
+  it('63: a send terminal joins an existing entry without disturbing its facts', () => {
+    const withDecision = clockedStore().store
+    withDecision.recordDecision('X', decision({ engineId: 'groq' }))
+    const decisionBefore = withDecision.get('X')!
+    withDecision.recordSendTerminal(sendReport('X', 'failed'))
+    const decisionAfter = withDecision.get('X')!
+
+    expect(decisionAfter.decision).toEqual(decisionBefore.decision)
+    expect(decisionAfter.decision).toEqual(decision({ engineId: 'groq' }))
+    expect(decisionAfter.sendTerminal).toEqual({ outcome: 'failed' })
+    expect(decisionAfter.createdAt).toBe(decisionBefore.createdAt)
+    expect(withDecision.size).toBe(1)
+
+    const withExecution = clockedStore().store
+    withExecution.recordExecution(report({ correlationId: 'X', roundId: 'round-a' }))
+    withExecution.recordSendTerminal(sendReport('X', 'succeeded'))
+
+    expect(withExecution.get('X')!.executions).toEqual([report({ correlationId: 'X', roundId: 'round-a' })])
+    expect(withExecution.get('X')!.executionTerminals).toEqual([])
+    expect(withExecution.get('X')!.sendTerminal).toEqual({ outcome: 'succeeded' })
+    expect(withExecution.size).toBe(1)
+  })
+
+  it('64: the same duplicate is ignored semantically - one record, no list, no error', () => {
+    const { store } = clockedStore()
+
+    // Duplicates and conflicts are tolerated traffic: no throw, no warning, no
+    // retry and no conflict state exists on this path.
+    expect(() => {
+      store.recordSendTerminal(sendReport('X', 'failed'))
+      store.recordSendTerminal(sendReport('X', 'failed'))
+    }).not.toThrow()
+
+    const snapshot = store.get('X')!
+    expect(snapshot.sendTerminal).toEqual({ outcome: 'failed' })
+    // Singular by construction: the second report grew nothing anywhere.
+    expect(Object.keys(snapshot.sendTerminal!).sort()).toEqual(['outcome'])
+    expect(store.size).toBe(1)
+  })
+
+  it('65: the first accepted send outcome wins in BOTH directions', () => {
+    const failedFirst = clockedStore().store
+    failedFirst.recordSendTerminal(sendReport('X', 'failed'))
+    failedFirst.recordSendTerminal(sendReport('X', 'succeeded'))
+
+    const succeededFirst = clockedStore().store
+    succeededFirst.recordSendTerminal(sendReport('X', 'succeeded'))
+    succeededFirst.recordSendTerminal(sendReport('X', 'failed'))
+
+    // A: failed -> succeeded stays failed. B: succeeded -> failed stays
+    // succeeded. The settlement of a send is never resolved by last write, and
+    // the loser of the race rewrites nothing.
+    expect(sendSettlement(failedFirst, 'X')).toBe('failed')
+    expect(sendSettlement(succeededFirst, 'X')).toBe('succeeded')
+  })
+
+  it('66: distinct correlations keep independent settlements', () => {
+    const { store } = clockedStore()
+
+    store.recordSendTerminal(sendReport('X', 'succeeded'))
+    store.recordSendTerminal(sendReport('Y', 'failed'))
+
+    expect(store.size).toBe(2)
+    expect(sendSettlement(store, 'X')).toBe('succeeded')
+    expect(sendSettlement(store, 'Y')).toBe('failed')
+  })
+
+  it('67: a round that succeeded and a send that failed coexist, verbatim', () => {
+    const { store } = clockedStore()
+
+    // The audit proved this combination can be legitimate: the store records
+    // both facts and normalizes neither.
+    store.recordExecutionTerminal(terminalReport('X', 'round-a', 'succeeded'))
+    store.recordSendTerminal(sendReport('X', 'failed'))
+
+    const snapshot = store.get('X')!
+    expect(snapshot.executionTerminals).toEqual([{ outcome: 'succeeded', roundId: 'round-a' }])
+    expect(snapshot.sendTerminal).toEqual({ outcome: 'failed' })
+    expect(store.size).toBe(1)
+  })
+
+  it('68: a round abandoned and a send that succeeded coexist, verbatim', () => {
+    const { store } = clockedStore()
+
+    store.recordExecutionTerminal(terminalReport('X', 'round-a', 'abandoned'))
+    store.recordSendTerminal(sendReport('X', 'succeeded'))
+
+    const snapshot = store.get('X')!
+    expect(snapshot.executionTerminals).toEqual([{ outcome: 'abandoned', roundId: 'round-a' }])
+    expect(snapshot.sendTerminal).toEqual({ outcome: 'succeeded' })
+  })
+
+  it('69: a send terminal first, then round data - both facts survive', () => {
+    const { store } = clockedStore()
+
+    store.recordSendTerminal(sendReport('X', 'failed'))
+    store.recordExecution(report({ correlationId: 'X', roundId: 'round-a' }))
+    store.recordExecutionTerminal(terminalReport('X', 'round-a', 'succeeded'))
+
+    const snapshot = store.get('X')!
+    expect(snapshot.sendTerminal).toEqual({ outcome: 'failed' })
+    expect(snapshot.executions.map(execution => execution.roundId)).toEqual(['round-a'])
+    expect(snapshot.executionTerminals).toEqual([{ outcome: 'succeeded', roundId: 'round-a' }])
+  })
+
+  it('70: round data first, then a send terminal - nothing is rewritten or joined', () => {
+    const { store } = clockedStore()
+
+    store.recordDecision('X', decision({ engineId: 'groq' }))
+    store.recordExecution(report({ correlationId: 'X', roundId: 'round-a', providerId: 'groq' }))
+    store.recordExecutionTerminal(terminalReport('X', 'round-a', 'failed'))
+    store.recordSendTerminal(sendReport('X', 'succeeded'))
+
+    const snapshot = store.get('X')!
+    expect(snapshot.decision).toEqual(decision({ engineId: 'groq' }))
+    expect(snapshot.executions).toEqual([report({ correlationId: 'X', roundId: 'round-a', providerId: 'groq' })])
+    expect(snapshot.executionTerminals).toEqual([{ outcome: 'failed', roundId: 'round-a' }])
+    expect(snapshot.sendTerminal).toEqual({ outcome: 'succeeded' })
+    // The send fact borrowed nothing from the round it did not settle: no
+    // roundId, no provider, no attempt count appears beside the outcome.
+    expect(Object.keys(snapshot.sendTerminal!).sort()).toEqual(['outcome'])
+  })
+
+  it('71: a send terminal never refreshes createdAt of an existing entry', () => {
+    const { store, advance } = clockedStore({ ttlMs: 1_000 })
+
+    store.recordDecision('X', decision())
+    const createdAt = store.get('X')!.createdAt
+
+    // A stream of later send settlements cannot keep the entry alive: age is
+    // measured from creation, exactly like every other write.
+    for (let i = 0; i < 9; i += 1) {
+      advance(100)
+      store.recordSendTerminal(sendReport('X', i % 2 === 0 ? 'failed' : 'succeeded'))
+    }
+
+    expect(store.get('X')!.createdAt).toBe(createdAt)
+    expect(sendSettlement(store, 'X')).toBe('failed')
+    advance(100)
+    expect(store.get('X')).toBeUndefined()
+    expect(store.size).toBe(0)
+  })
+
+  it('72: a send-first entry establishes createdAt once, and no later fact family refreshes it', () => {
+    const { store, advance } = clockedStore({ ttlMs: 1_000 })
+
+    store.recordSendTerminal(sendReport('X', 'succeeded'))
+    const createdAt = store.get('X')!.createdAt
+
+    advance(10)
+    store.recordDecision('X', decision())
+    advance(10)
+    store.recordExecution(report({ correlationId: 'X', roundId: 'round-a' }))
+    advance(10)
+    store.recordExecutionTerminal(terminalReport('X', 'round-a', 'failed'))
+
+    expect(store.get('X')!.createdAt).toBe(createdAt)
+    advance(969)
+    expect(store.get('X')!.createdAt).toBe(createdAt)
+    expect(store.size).toBe(1)
+    advance(1)
+    expect(store.get('X')).toBeUndefined()
+    expect(store.size).toBe(0)
+  })
+
+  it('73: the send terminal shares the entry lifetime - no second TTL, no extension', () => {
+    const { store, advance } = clockedStore({ ttlMs: 500 })
+
+    // A send-terminal-only entry expires from its own creation, like any other.
+    store.recordSendTerminal(sendReport('X', 'failed'))
+    advance(499)
+    expect(sendSettlement(store, 'X')).toBe('failed')
+    advance(1)
+    expect(store.get('X')).toBeUndefined()
+    expect(store.size).toBe(0)
+
+    // And a send terminal written to an EXISTING entry does not extend it.
+    store.recordDecision('Y', decision())
+    advance(250)
+    store.recordSendTerminal(sendReport('Y', 'succeeded'))
+    advance(249)
+    expect(sendSettlement(store, 'Y')).toBe('succeeded')
+    advance(1)
+    expect(store.get('Y')).toBeUndefined()
+    expect(store.size).toBe(0)
+  })
+
+  it('74: send-terminal-only entries take part in the SAME capacity eviction', () => {
+    const { store, advance } = clockedStore({ maxEntries: 2, ttlMs: 100_000 })
+
+    advance(10)
+    store.recordSendTerminal(sendReport('A', 'failed'))
+    advance(10)
+    store.recordSendTerminal(sendReport('B', 'succeeded'))
+    expect(store.size).toBe(2)
+
+    advance(10)
+    store.recordDecision('C', decision())
+    // The oldest live entry goes, exactly as for decisions and rounds: the send
+    // terminal earned no quota, no ranking and no second map of its own.
+    expect(store.size).toBe(2)
+    expect(store.get('A')).toBeUndefined()
+    expect(sendSettlement(store, 'B')).toBe('succeeded')
+
+    // Updating an existing key with a send terminal evicts nothing either.
+    advance(10)
+    store.recordSendTerminal(sendReport('B', 'failed'))
+    expect(store.size).toBe(2)
+    expect(sendSettlement(store, 'B')).toBe('succeeded')
+    expect(sendSettlement(store, 'C')).toBeUndefined()
+  })
+
+  it('75: the snapshot send terminal is copy-safe against hostile casts', () => {
+    const { store } = clockedStore()
+    store.recordSendTerminal(sendReport('X', 'failed'))
+
+    const returned = store.get('X')!.sendTerminal!
+    returned.outcome = 'succeeded'
+    const hostile = returned as unknown as Record<string, unknown>
+    delete hostile.outcome
+    hostile.roundId = 'hijacked'
+    hostile.attemptCount = 7
+
+    expect(store.get('X')!.sendTerminal).toEqual({ outcome: 'failed' })
+    expect(Object.keys(store.get('X')!.sendTerminal!)).toEqual(['outcome'])
+
+    // Replacing the returned object does not reach the entry either, and every
+    // read hands out a fresh object - never a shared internal reference.
+    store.get('X')!.sendTerminal = { outcome: 'succeeded' }
+    expect(sendSettlement(store, 'X')).toBe('failed')
+    expect(store.get('X')!.sendTerminal).not.toBe(store.get('X')!.sendTerminal)
+  })
+
+  it('76: the incoming report is never mutated - a frozen input still records', () => {
+    const { store } = clockedStore()
+    const incoming: LiaBrainSendTerminalReport = Object.freeze({ correlationId: 'X', outcome: 'failed' })
+
+    store.recordSendTerminal(incoming)
+
+    expect(sendSettlement(store, 'X')).toBe('failed')
+    expect(Object.isFrozen(incoming)).toBe(true)
+    expect(incoming).toEqual({ correlationId: 'X', outcome: 'failed' })
+
+    // And mutating the caller's object afterwards cannot reach the retained
+    // fact: the store kept its own copy.
+    const mutable = sendReport('Y', 'succeeded')
+    store.recordSendTerminal(mutable)
+    mutable.outcome = 'failed'
+    mutable.correlationId = 'changed-after-recording'
+    expect(sendSettlement(store, 'Y')).toBe('succeeded')
+    expect(store.get('changed-after-recording')).toBeUndefined()
+  })
+
+  it('77: the retained send terminal is exactly the one factual field - nothing hidden inside', () => {
+    const { store } = clockedStore()
+    store.recordSendTerminal(sendReport('X', 'failed'))
+
+    const record = store.get('X')!.sendTerminal!
+    expect(Object.keys(record)).toEqual(['outcome'])
+    expect(Object.keys(store.get('X')!).sort())
+      .toEqual(['correlationId', 'createdAt', 'executionTerminals', 'executions', 'sendTerminal'])
+
+    // Compile-time proofs: the stored record is store-owned (the entry already
+    // holds the key), carries no round or attempt identity, and its outcome
+    // vocabulary is the closed transport one - `abandoned` is a ROUND fact and
+    // cannot be a send fact.
+    const recordHasNoKey: 'correlationId' extends keyof LiaBrainSendTerminalRecord ? false : true = true
+    const recordHasNoRound: 'roundId' extends keyof LiaBrainSendTerminalRecord ? false : true = true
+    const outcomeIsClosed: LiaBrainSendTerminalRecord['outcome'] extends 'succeeded' | 'failed' ? true : false = true
+    const abandonedIsNotASendOutcome: 'abandoned' extends LiaBrainSendTerminalRecord['outcome'] ? false : true = true
+    expect({ abandonedIsNotASendOutcome, outcomeIsClosed, recordHasNoKey, recordHasNoRound })
+      .toEqual({ abandonedIsNotASendOutcome: true, outcomeIsClosed: true, recordHasNoKey: true, recordHasNoRound: true })
+  })
+
+  it('78: an entry without a send settlement has the key truly ABSENT', () => {
+    const { store } = clockedStore()
+
+    store.recordDecision('decision-only', decision())
+    store.recordExecution(report({ correlationId: 'execution-only' }))
+    store.recordExecutionTerminal(terminalReport('round-only', 'round-a', 'abandoned'))
+
+    for (const key of ['decision-only', 'execution-only', 'round-only']) {
+      const snapshot = store.get(key)!
+      // Absent, not `undefined`: a missing send settlement means only that none
+      // is retained - the snapshot is never padded to a fixed shape, and the
+      // absent key means nothing about the send itself.
+      expect('sendTerminal' in snapshot).toBe(false)
+      expect(Object.hasOwn(snapshot, 'sendTerminal')).toBe(false)
+      expect(Object.keys(snapshot)).not.toContain('sendTerminal')
+      expect(snapshot.sendTerminal).toBeUndefined()
+    }
+    // For an absent (or expired) correlation there is no snapshot at all.
+    expect(store.get('never-seen')).toBeUndefined()
+  })
+
+  it('79: the optional field added no required default to the existing shapes', () => {
+    const { store } = clockedStore()
+
+    store.recordDecision('decision-only', decision())
+    store.recordExecution(report({ correlationId: 'execution-only' }))
+    store.recordExecutionTerminal(terminalReport('round-only', 'round-a', 'abandoned'))
+
+    // The pre-existing key lists are exactly what they were before this phase:
+    // the optional contract stays meaningful instead of being written out.
+    expect(Object.keys(store.get('execution-only')!).sort()).toEqual(['correlationId', 'createdAt', 'executionTerminals', 'executions'])
+    expect(Object.keys(store.get('round-only')!).sort()).toEqual(['correlationId', 'createdAt', 'executionTerminals', 'executions'])
+    expect(Object.keys(store.get('decision-only')!).sort()).toEqual(['correlationId', 'createdAt', 'decision', 'executionTerminals', 'executions'])
+  })
+
+  it('30/31: the three streams stay independent - no join, no causality, no orphans', () => {
+    const { store } = clockedStore()
+
+    // A send terminal with no round data at all is a complete, valid fact...
+    store.recordSendTerminal(sendReport('send-only', 'failed'))
+    // ...and round data with no send terminal is equally valid: nothing is
+    // synthesized beside it and nothing is marked invalid.
+    store.recordExecution(report({ correlationId: 'round-only', roundId: 'round-a' }))
+    store.recordExecutionTerminal(terminalReport('round-only', 'round-a', 'succeeded'))
+
+    expect(store.get('send-only')!.sendTerminal).toEqual({ outcome: 'failed' })
+    expect(store.get('send-only')!.executions).toEqual([])
+    expect(store.get('send-only')!.executionTerminals).toEqual([])
+    expect(store.get('round-only')!.executions).toHaveLength(1)
+    expect(store.get('round-only')!.executionTerminals).toHaveLength(1)
+    expect('sendTerminal' in store.get('round-only')!).toBe(false)
+  })
+
+  it('37: both fact orders converge on the same retained facts', () => {
+    const forward = clockedStore().store
+    forward.recordDecision('X', decision())
+    forward.recordExecution(report({ correlationId: 'X', roundId: 'round-a' }))
+    forward.recordExecutionTerminal(terminalReport('X', 'round-a', 'succeeded'))
+    forward.recordSendTerminal(sendReport('X', 'failed'))
+
+    const backward = clockedStore().store
+    backward.recordSendTerminal(sendReport('X', 'failed'))
+    backward.recordExecutionTerminal(terminalReport('X', 'round-a', 'succeeded'))
+    backward.recordExecution(report({ correlationId: 'X', roundId: 'round-a' }))
+    backward.recordDecision('X', decision())
+
+    const facts = (store: ReturnType<typeof createLiaBrainCorrelationStore>) => {
+      const snapshot = store.get('X')!
+      return {
+        decision: snapshot.decision,
+        executions: snapshot.executions.map(execution => `${execution.roundId}/${execution.providerId}`),
+        executionTerminals: snapshot.executionTerminals.map(record => `${record.roundId}/${record.outcome}`),
+        sendTerminal: snapshot.sendTerminal,
+      }
+    }
+
+    expect(facts(forward)).toEqual(facts(backward))
+    expect(facts(forward)).toEqual({
+      decision: decision(),
+      executions: ['round-a/mock-provider'],
+      executionTerminals: ['round-a/succeeded'],
+      sendTerminal: { outcome: 'failed' },
+    })
+  })
+
+  it('41/42/43/80: the writer is a pure fact write - no sanitizer, no transport, no observer, one site', () => {
+    const source = storeSource()
+    const code = stripComments(source)
+
+    // The store is NOT the IPC sanitizer: hostile-payload tolerance belongs to
+    // the (future) main ingress, so no tolerant-read helper exists here.
+    expect(code).not.toMatch(/isRecord|readString|readNumber|normalize/)
+    // No transport, no channel constant and no observer trigger of its own.
+    expect(code).not.toMatch(/defineEventa|electronLiaBrain|ipcMain|ipcRenderer|\.emit\(|correlationObserver|\.observe\(/)
+    expect(code).not.toMatch(/eventa:(?:invoke|event):lia:brain/)
+
+    // The writer takes ONE serialized report - the shared TYPE, type-only.
+    expect(code).toMatch(/recordSendTerminal: \(report: LiaBrainSendTerminalReport\) => void/)
+    expect(code).not.toMatch(/electronLiaBrainSendTerminalObservation/)
+
+    // The method exists, and production calls it NOWHERE yet: its own
+    // definition is the only site, and no renderer, main or core module names
+    // it. The future ingress service is the one caller this foundation awaits.
+    expect(productionSourcesMatching(BRAIN_ROOTS, /recordSendTerminal/)).toEqual([
+      'apps/stage-tamagotchi/src/main/services/lia/brain-correlation-store.ts',
+    ])
+    expect(productionSourcesMatching(BRAIN_ROOTS, /\.recordSendTerminal\(/)).toEqual([])
+  })
+
+  it('15-19/59: the send terminal record carries no round, identity, attempt, error or content vocabulary', () => {
+    const source = storeSource()
+    const block = stripComments(source.slice(
+      source.indexOf('export interface LiaBrainSendTerminalRecord {'),
+      source.indexOf('export interface LiaBrainCorrelationStore {'),
+    ))
+
+    expect(block.match(/^\s{2}(\w+):/gm)).toEqual(['  outcome:'])
+    for (const forbidden of ['correlationId', 'roundId', 'attemptIndex', 'attemptCount', 'providerId', 'modelId', 'engineId', 'error', 'message', 'stack', 'failureStage', 'prompt', 'usage', 'tools', 'url', 'credential', 'sentAt', 'durationMs'])
+      expect(block).not.toContain(forbidden)
+
+    // Singular by construction, and the store stays the ONE canonical one.
+    expect(productionSourcesMatching(BRAIN_ROOTS, /sendTerminals|logicalSendTerminals|terminalHistory|sendTerminalStore|recordSendTerminals/)).toEqual([])
+
+    // 55/56/57/58: no fallback, final, winner or completion derivation, and no
+    // authority can act on the settlement the store retains.
+    expect(stripComments(source)).not.toMatch(/fallback|finalAttempt|winningAttempt|winner|sendSucceeded|sendFailed|sendCompleted|completion|completed|finished|priority|preferred/)
+    expect(stripComments(source)).not.toMatch(/setProvider|setModel|activeProvider|automaticPolicy|permission|updateLiaProductConfig/)
+  })
+
+  it('44/45/46/47/81/82/83: no fourth trigger, no main listener, no ingress, FOUR channels, THREE triggers', () => {
+    // 45/46/81: the fourth channel still has NO main consumer at all - no
+    // listener, no ingress service, no main module naming the channel.
+    expect(productionSourcesMatching(['apps/stage-tamagotchi/src/main'], /electronLiaBrainSendTerminalObservation|send-terminal-observation/))
+      .toEqual([])
+
+    // 47/48/49/50/51: the reader, the facts, the composition, the observer and
+    // the formatter do not know the field yet.
+    for (const relative of [
+      './brain-correlation-reader.ts',
+      './brain-correlation-diagnostic-facts.ts',
+      './brain-correlation-observer.ts',
+      './brain-diagnostic-log.ts',
+      './brain-execution-terminal-facts.ts',
+      './brain-execution-identity-facts.ts',
+    ])
+      expect(stripComments(readFileSync(new URL(relative, import.meta.url), 'utf-8')), relative).not.toMatch(/sendTerminal/)
+
+    // 52/53/54: the transport, the Stage seam and Core Agent still know nothing
+    // about the stored field - the frozen layers are untouched (B2 included).
+    for (const relative of [
+      '../../../shared/eventa/index.ts',
+      '../../../renderer/main.ts',
+      '../../../renderer/services/lia/send-terminal-reporter.ts',
+    ])
+      expect(readFileSync(new URL(relative, import.meta.url), 'utf-8'), relative).not.toMatch(/sendTerminal|LiaBrainSendTerminalRecord/)
+    expect(productionSourcesMatching(['packages/stage-ui/src', 'packages/core-agent/src'], /sendTerminal|LiaBrainSendTerminalRecord/)).toEqual([])
+
+    // 82: the Brain channel allowlist is still exactly the FOUR known channels.
+    const tags = new Set<string>()
+    for (const relative of productionSources(BRAIN_ROOTS)) {
+      for (const match of readFileSync(new URL(relative, REPO_ROOT), 'utf-8').matchAll(/eventa:(?:invoke|event):lia:brain[^'"]*/g))
+        tags.add(match[0])
+    }
+    expect([...tags].sort()).toEqual([
+      'eventa:event:lia:brain:execution-observation',
+      'eventa:event:lia:brain:execution-terminal-observation',
+      'eventa:event:lia:brain:send-terminal-observation',
+      'eventa:invoke:lia:brain:chat-decision',
+    ])
+
+    // 44/83: the main observer trigger allowlist is still exactly THREE.
+    expect(productionSourcesMatching(BRAIN_ROOTS, /correlationObserver\.observe\(/)).toEqual([
+      'apps/stage-tamagotchi/src/main/services/lia/brain-decision-service.ts',
+      'apps/stage-tamagotchi/src/main/services/lia/brain-execution-report-service.ts',
+      'apps/stage-tamagotchi/src/main/services/lia/brain-execution-terminal-report-service.ts',
+    ])
   })
 })

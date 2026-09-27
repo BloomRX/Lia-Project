@@ -1,14 +1,15 @@
 import type { LiaBrainRoutingDecision } from '@lia/core'
 
-import type { LiaBrainExecutionObservationReport, LiaBrainExecutionTerminalReport } from '../../../shared/eventa'
+import type { LiaBrainExecutionObservationReport, LiaBrainExecutionTerminalReport, LiaBrainSendTerminalReport } from '../../../shared/eventa'
 
 /**
  * Phase 8.0D-10B-4B1: the ephemeral main-side correlation store.
  *
  * It represents, per opaque logical send, the FACTS one diagnostic pass
  * eventually needs: the trusted Brain decision (at most one), the execution
- * attempts already reported (zero or more) and the terminal treatment of the
- * rounds already settled (one per round). It is a plain, explicitly bounded
+ * attempts already reported (zero or more), the terminal treatment of the
+ * rounds already settled (one per round) and the settlement of the whole
+ * logical send itself (at most one). It is a plain, explicitly bounded
  * in-memory structure - not Pinia, not renderer state, not localStorage, not
  * the filesystem, not product config, and not a global singleton: the future
  * lifecycle owner constructs it with `createLiaBrainCorrelationStore(...)`,
@@ -32,16 +33,20 @@ import type { LiaBrainExecutionObservationReport, LiaBrainExecutionTerminalRepor
  *                mismatch, no divergence, no score, no winner, no expected
  *                provider/model, no recommendation
  *
- * The two execution collections are deliberately separate factual streams:
- * `executions` records what was reported to have STARTED (duplicates preserved,
- * arrival order) while `executionTerminals` records how a round ENDED (first
- * factual outcome per round wins). A terminal may exist for a round whose start
- * was never reported; joining the two is a later, deliberate concern and
- * happens nowhere in this module.
+ * The three factual streams are deliberately separate: `executions` records
+ * what was reported to have STARTED (duplicates preserved, arrival order),
+ * `executionTerminals` records how a round ENDED (first factual outcome per
+ * round wins) and `sendTerminal` records how the whole logical send settled
+ * (first settlement wins). A round terminal may exist for a round whose start
+ * was never reported, a send terminal may exist with no round of its own at
+ * all, and a round may legitimately end one way while the send that ran it
+ * settles the other: joining, comparing or reconciling the three is a later,
+ * deliberate concern and happens nowhere in this module.
  *
  * Data minimization: an entry stores the opaque key, the canonical decision,
  * the five-field execution reports, one two-field terminal record per settled
- * round and the timestamps expiry needs. No prompt,
+ * round, one one-field send terminal record and the timestamps expiry needs.
+ * No prompt,
  * message text, attachment, tool, credential, API key, baseURL, provider
  * config, chat payload or window object can enter it - the record APIs take
  * exactly those shapes and copy nothing else.
@@ -98,8 +103,37 @@ export interface LiaBrainCorrelationEntry {
   executions: LiaBrainExecutionObservationReport[]
   /** Every accepted terminal outcome, one per round, in arrival order. */
   executionTerminals: LiaBrainExecutionTerminalRecord[]
+  /**
+   * The FACTUAL settlement of the whole logical send, retained at most once.
+   *
+   * OPTIONAL by contract: the key is simply ABSENT until one accepted
+   * send-terminal observation arrives - an absent key means only that no
+   * accepted send-level settlement is retained in this snapshot. It never means
+   * pending, and it never means failed, succeeded or cancelled; for an absent or
+   * expired correlation there is no snapshot at all.
+   */
+  sendTerminal?: LiaBrainSendTerminalRecord
   /** Creation time of the entry itself (never refreshed by later reports). */
   createdAt: number
+}
+
+/**
+ * The factual settlement of ONE whole logical send, as stored per entry.
+ *
+ * It carries exactly one field: the outcome the Stage send observed for the
+ * whole send - every provider attempt it ran, plus its own rollback/restore
+ * work - which is a fact of its own even when the send ran no final round or
+ * ended one way while its rounds did not. The correlation id is deliberately NOT
+ * duplicated here: the entry that holds the record is already keyed by it. No
+ * round, attempt, provider, model, engine, timing, error or content field
+ * exists on a send terminal record - this is a send-level fact that joins
+ * nothing.
+ */
+export interface LiaBrainSendTerminalRecord {
+  /** The factual settlement, in the closed transport vocabulary. */
+  outcome:
+    | 'succeeded'
+    | 'failed'
 }
 
 export interface LiaBrainCorrelationStore {
@@ -139,6 +173,23 @@ export interface LiaBrainCorrelationStore {
    * ignores the call.
    */
   recordExecutionTerminal: (report: LiaBrainExecutionTerminalReport) => void
+  /**
+   * Records the factual settlement of the whole logical send.
+   *
+   * It consumes the serialized report exactly like `recordExecutionTerminal`
+   * consumes its own: ONE report object carrying the opaque key and the single
+   * send-level fact. The stored record itself stays one-field (see
+   * `LiaBrainSendTerminalRecord`).
+   *
+   * FIRST send terminal wins: a repeated or conflicting report for a key the
+   * entry already carries never overwrites, never merges and never compares -
+   * the send keeps the settlement it was first seen with, exactly like the
+   * decision and like one round's terminal. A send terminal may be the FIRST
+   * thing ever seen for a key, and it needs no decision, no execution start and
+   * no round terminal beside it: nothing is synthesized for it and nothing is
+   * joined to it. An unusable `report.correlationId` ignores the call.
+   */
+  recordSendTerminal: (report: LiaBrainSendTerminalReport) => void
   /** Read-only snapshot of one entry, or `undefined` when absent or expired. */
   get: (correlationId: string) => LiaBrainCorrelationEntry | undefined
   /** Live entry count after lazy expiry pruning. */
@@ -169,6 +220,13 @@ function copyExecutionTerminalRecord(terminal: LiaBrainExecutionTerminalRecord):
   }
 }
 
+/** Copies exactly the one send-terminal field into a fresh plain object. */
+function copySendTerminalRecord(record: LiaBrainSendTerminalRecord): LiaBrainSendTerminalRecord {
+  return {
+    outcome: record.outcome,
+  }
+}
+
 /**
  * Creates one isolated correlation store. Bounds are mandatory and validated
  * here, deterministically, before any state exists - an invalid configuration
@@ -194,6 +252,7 @@ export function createLiaBrainCorrelationStore(options: LiaBrainCorrelationStore
     decision?: LiaBrainRoutingDecision
     executions: LiaBrainExecutionObservationReport[]
     executionTerminals: LiaBrainExecutionTerminalRecord[]
+    sendTerminal?: LiaBrainSendTerminalRecord
     createdAt: number
   }
 
@@ -300,6 +359,31 @@ export function createLiaBrainCorrelationStore(options: LiaBrainCorrelationStore
     entry.executionTerminals.push({ roundId, outcome: report.outcome })
   }
 
+  function recordSendTerminal(report: LiaBrainSendTerminalReport): void {
+    const key = readCorrelationId(report?.correlationId)
+    if (!key)
+      return
+
+    const at = now()
+    pruneExpired(at)
+
+    const entry = entries.get(key) ?? createEntry(key, at)
+
+    // FIRST send terminal wins: a logical send already reported keeps the
+    // settlement it was first seen with, so repeats and conflicts are ignored
+    // outright - never compared, never logged, never rewritten and never used
+    // to revise the round-level facts beside them.
+    if (entry.sendTerminal !== undefined)
+      return
+
+    // A pure fact write, in arrival order: no decision, no execution record, no
+    // round terminal, no identity and no timing is created beside it, and
+    // nothing here reads the other collections. The stored record is built
+    // one-field on purpose - the entry already holds the key, so the report's
+    // correlationId is deliberately NOT copied into it.
+    entry.sendTerminal = { outcome: report.outcome }
+  }
+
   function get(correlationId: string): LiaBrainCorrelationEntry | undefined {
     const at = now()
     pruneExpired(at)
@@ -317,6 +401,7 @@ export function createLiaBrainCorrelationStore(options: LiaBrainCorrelationStore
       ...(entry.decision === undefined ? {} : { decision: entry.decision }),
       executions: entry.executions.map(copyExecutionReport),
       executionTerminals: entry.executionTerminals.map(copyExecutionTerminalRecord),
+      ...(entry.sendTerminal === undefined ? {} : { sendTerminal: copySendTerminalRecord(entry.sendTerminal) }),
       createdAt: entry.createdAt,
     }
   }
@@ -325,6 +410,7 @@ export function createLiaBrainCorrelationStore(options: LiaBrainCorrelationStore
     recordDecision,
     recordExecution,
     recordExecutionTerminal,
+    recordSendTerminal,
     get,
     get size(): number {
       pruneExpired(now())
