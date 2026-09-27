@@ -524,12 +524,13 @@ describe('lia terminal wiring invariants (Phase 8.0D-10B-4D4C2B2)', () => {
       ])
   })
 
-  it('s: the three-channel Brain allowlist is unchanged and the fourth does not exist', () => {
+  it('s: the Brain allowlist is now exactly the FOUR known channels - this phase added the fourth', () => {
     const shared = readSource('../../../shared/eventa/index.ts')
     expect(shared.match(/eventa:(?:invoke|event):lia:brain[^']*/g) ?? []).toEqual([
       'eventa:invoke:lia:brain:chat-decision',
       'eventa:event:lia:brain:execution-observation',
       'eventa:event:lia:brain:execution-terminal-observation',
+      'eventa:event:lia:brain:send-terminal-observation',
     ])
 
     const tags = new Set<string>()
@@ -540,6 +541,7 @@ describe('lia terminal wiring invariants (Phase 8.0D-10B-4D4C2B2)', () => {
     expect([...tags].sort()).toEqual([
       'eventa:event:lia:brain:execution-observation',
       'eventa:event:lia:brain:execution-terminal-observation',
+      'eventa:event:lia:brain:send-terminal-observation',
       'eventa:invoke:lia:brain:chat-decision',
     ])
   })

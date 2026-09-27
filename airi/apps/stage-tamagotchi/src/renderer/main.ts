@@ -23,6 +23,7 @@ import { i18n } from './modules/i18n'
 import { managedRoutePolicyGuard } from './navigation/managed-route-policy'
 import { registerLiaBrainExecutionObserver } from './services/lia/execution-reporter'
 import { registerLiaBrainExecutionTerminalObserver } from './services/lia/execution-terminal-reporter'
+import { registerLiaBrainSendTerminalObserver } from './services/lia/send-terminal-reporter'
 import { useLiaCapabilitiesStore } from './stores/lia/capabilities'
 import { installCustomVoiceTransport } from './stores/lia/custom-voice-transport'
 import { installLiaStartupGreeting } from './stores/lia/startup-greeting'
@@ -101,6 +102,15 @@ registerLiaBrainExecutionObserver()
 // three fields and reports it - the outcome is never interpreted and never
 // influences execution.
 registerLiaBrainExecutionTerminalObserver()
+
+// Phase 8.0D-10B-4D4C4-B2: the ONE production registration of the Lia
+// send-terminal observer - the sibling of the two installations above, on the
+// generic logical-send settlement seam. It reports the factual settlement of a
+// whole send the same window ran (succeeded / failed), one one-way push per
+// settle. Diagnostic only: it reads that observation, narrows it to two fields
+// and reports it - the settlement is never interpreted, never joined to a round
+// and never influences execution.
+registerLiaBrainSendTerminalObserver()
 
 // Phase 7.7 (Parts 7-11): install the capability bridge so the persona
 // always answers from the product's CURRENT truth (voice configured?

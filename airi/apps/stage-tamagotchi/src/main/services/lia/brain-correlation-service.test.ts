@@ -353,7 +353,7 @@ describe('lia brain correlation service - isolation (Phase 8.0D-10B-4B2)', () =>
     expect(handler).not.toMatch(/\.push\(|new Map|new Set/)
   })
 
-  it('no new IPC channel, and the Brain allowlist is exactly the three-channel set', () => {
+  it('no IPC channel of its own, and the Brain allowlist is exactly the four-channel set', () => {
     const source = stripComments(readSource('./brain-correlation-service.ts'))
     expect(source).not.toMatch(/eventa|defineEventa|defineInvokeEventa|defineInvokeHandler|ipcMain|ipcRenderer|BrowserWindow|\.emit\(/)
 
@@ -365,6 +365,7 @@ describe('lia brain correlation service - isolation (Phase 8.0D-10B-4B2)', () =>
     expect([...tags].sort()).toEqual([
       'eventa:event:lia:brain:execution-observation',
       'eventa:event:lia:brain:execution-terminal-observation',
+      'eventa:event:lia:brain:send-terminal-observation',
       'eventa:invoke:lia:brain:chat-decision',
     ])
   })

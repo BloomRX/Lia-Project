@@ -871,5 +871,49 @@ export interface LiaBrainExecutionTerminalReport {
 /** Push: one correlated round reached its terminal treatment (write-only report). */
 export const electronLiaBrainExecutionTerminalObservation = defineEventa<LiaBrainExecutionTerminalReport>('eventa:event:lia:brain:execution-terminal-observation')
 
+/* -------------------------------------------------------------------------- */
+/* Lia Brain logical-send TERMINAL observation (Phase 8.0D-10B-4D4C4-B2)      */
+/*                                                                            */
+/* ONE-WAY report, renderer (the window that actually ran the logical send) ->  */
+/* trusted main process, and nothing else. It carries the FACTUAL settlement    */
+/* of one whole logical send - `succeeded` or `failed` - plus the opaque join   */
+/* key of that send.                                                           */
+/*                                                                            */
+/* It is a REPORT, not a request: no response is read and no setter authority   */
+/* exists on this channel. It carries NO round, NO provider/model identity,     */
+/* NO attempt count, NO error, NO message or usage - and it can never select a  */
+/* route, change a policy, choose a provider/model, trigger a fallback, retry   */
+/* a send or authorize anything: the settlement is UNTRUSTED renderer metadata  */
+/* describing what already happened to one logical send.                       */
+/*                                                                            */
+/* Deliberately SEPARATE from the two round-level channels: a logical send may  */
+/* legitimately settle with NO final Core round of its own (and a round may be  */
+/* abandoned while the send still resolves), so the send lifecycle is its own   */
+/* contract with its own shape and its own sanitizer. It is likewise separate   */
+/* from the request-start report: different lifecycle, different payload.       */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The factual settlement of ONE logical send, plus its opaque join key.
+ *
+ * `correlationId` is the same logical-send key the brain shadow request and the
+ * execution reports carry, and it is REQUIRED here: a send without a usable key
+ * is not part of this diagnostic and is never reported. The outcome is a
+ * finite, closed vocabulary - the renderer never invents, normalizes or
+ * extends it.
+ */
+export interface LiaBrainSendTerminalReport {
+  /** Opaque key of the logical user send that settled. */
+  correlationId: string
+  /**
+   * The factual settlement of that logical send as a whole, exactly as the
+   * Stage send observed it: the send resolved, or the send rejected.
+   */
+  outcome: 'succeeded' | 'failed'
+}
+
+/** Push: one correlated logical send reached its settlement (write-only report). */
+export const electronLiaBrainSendTerminalObservation = defineEventa<LiaBrainSendTerminalReport>('eventa:event:lia:brain:send-terminal-observation')
+
 export { electron } from '@proj-airi/electron-eventa'
 export * from '@proj-airi/electron-eventa/electron-updater'

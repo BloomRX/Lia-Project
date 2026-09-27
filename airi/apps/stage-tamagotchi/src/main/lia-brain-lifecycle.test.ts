@@ -152,11 +152,12 @@ describe('lia brain service lifecycle ownership (Phase 8.0D-5)', () => {
     expect(source.match(/from '\.\/services\/lia\/lia-brain/g)).toHaveLength(1)
   })
 
-  it('j: the Brain renderer surface is the read-only decision request plus the two one-way reports', () => {
+  it('j: the Brain renderer surface is the read-only decision request plus the three one-way reports', () => {
     // Phase 8.0D-7 added exactly one renderer-facing Brain seam: a read-only
-    // invoke. Phase 8.0D-10B-4A added exactly one more, and Phase
-    // 8.0D-10B-4D4C1 one more after it: both are one-way REPORTS
-    // (renderer -> main, no response, no authority). Nothing else may cross:
+    // invoke. Phase 8.0D-10B-4A added exactly one more, Phase 8.0D-10B-4D4C1 one
+    // more after it, and Phase 8.0D-10B-4D4C4-B2 the fourth: all three later ones
+    // are one-way REPORTS (renderer -> main, no response, no authority). Nothing
+    // else may cross:
     // no setter, no command, no selector, no comparison result, no catalog or
     // registry exposure, no service handle.
     const shared = readSource('../shared/eventa/index.ts')
@@ -165,8 +166,9 @@ describe('lia brain service lifecycle ownership (Phase 8.0D-5)', () => {
       'eventa:invoke:lia:brain:chat-decision',
       'eventa:event:lia:brain:execution-observation',
       'eventa:event:lia:brain:execution-terminal-observation',
+      'eventa:event:lia:brain:send-terminal-observation',
     ])
-    expect(shared).not.toMatch(/eventa:event:lia:brain:(?!execution-(?:observation|terminal-observation))/)
+    expect(shared).not.toMatch(/eventa:event:lia:brain:(?!execution-(?:observation|terminal-observation)|send-terminal-observation)/)
     expect(shared).not.toMatch(/eventa:invoke:lia:brain:(?!chat-decision)/)
     expect(shared).not.toMatch(/electronLiaBrainChatDecisionSet/)
     for (const relative of ['../preload/index.ts', '../renderer/stores/lia/provider.ts']) {

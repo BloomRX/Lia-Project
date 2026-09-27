@@ -298,12 +298,13 @@ describe('lia terminal execution contract (Phase 8.0D-10B-4D4C1)', () => {
   it('the channel is one one-way push under the frozen tag, declared exactly once', () => {
     expect(SHARED.match(/electronLiaBrainExecutionTerminalObservation/g)).toHaveLength(1)
     expect(SHARED).toMatch(/export const electronLiaBrainExecutionTerminalObservation = defineEventa<LiaBrainExecutionTerminalReport>\('eventa:event:lia:brain:execution-terminal-observation'\)/)
-    // The generic Brain allowlist is now exactly three tags: the read-only
-    // decision invoke and the two one-way reports.
+    // The generic Brain allowlist is now exactly four tags: the read-only
+    // decision invoke and the three one-way reports.
     expect(SHARED.match(/eventa:(?:invoke|event):lia:brain[^']*/g) ?? []).toEqual([
       'eventa:invoke:lia:brain:chat-decision',
       'eventa:event:lia:brain:execution-observation',
       'eventa:event:lia:brain:execution-terminal-observation',
+      'eventa:event:lia:brain:send-terminal-observation',
     ])
   })
 

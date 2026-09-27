@@ -561,16 +561,18 @@ describe('lia terminal ingress service - isolation invariants (Phase 8.0D-10B-4D
     expect(source).not.toMatch(/\bfetch\(|XMLHttpRequest|WebSocket|axios|localStorage|sessionStorage|writeFile|readFile|process\.env/)
   })
 
-  it('w: the three-channel Brain allowlist is unchanged, and no channel was added', () => {
+  it('w: the Brain allowlist is exactly the four known channels, and no fifth exists', () => {
     const shared = readSource('../../../shared/eventa/index.ts')
     expect(shared.match(/eventa:(?:invoke|event):lia:brain[^']*/g) ?? []).toEqual([
       'eventa:invoke:lia:brain:chat-decision',
       'eventa:event:lia:brain:execution-observation',
       'eventa:event:lia:brain:execution-terminal-observation',
+      'eventa:event:lia:brain:send-terminal-observation',
     ])
 
-    // The contract itself still declares exactly THREE Brain channels, and this
-    // phase added no fourth.
+    // The contract itself declares exactly FOUR Brain channels: the three
+    // already proven ones plus the 8.0D-10B-4D4C4-B2 logical-send terminal
+    // report. No fifth exists.
     const tags = new Set<string>()
     for (const relative of productionSources(BRAIN_ROOTS)) {
       for (const match of readFileSync(new URL(relative, REPO_ROOT), 'utf-8').matchAll(/eventa:(?:invoke|event):lia:brain[^'"]*/g))
@@ -579,6 +581,7 @@ describe('lia terminal ingress service - isolation invariants (Phase 8.0D-10B-4D
     expect([...tags].sort()).toEqual([
       'eventa:event:lia:brain:execution-observation',
       'eventa:event:lia:brain:execution-terminal-observation',
+      'eventa:event:lia:brain:send-terminal-observation',
       'eventa:invoke:lia:brain:chat-decision',
     ])
   })

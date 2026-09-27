@@ -203,17 +203,18 @@ describe('lia brain host service (Phase 8.0D-4)', () => {
   it('m: the service itself exposes no renderer surface', () => {
     const source = readSource('./lia-brain-service.ts')
     expect(source).not.toMatch(/electron|eventa|ipcMain|ipcRenderer|defineInvokeHandler|BrowserWindow/)
-    // The Brain channels the shared IPC contract may carry are exactly three
-    // (Phase 8.0D-7 + 8.0D-10B-4A + 8.0D-10B-4D4C1): the read-only decision
-    // invoke, the one-way execution report and the one-way terminal report the
-    // renderer pushes. No setter, no catalog or service exposure, no command or
-    // selector channel.
+    // The Brain channels the shared IPC contract may carry are exactly four
+    // (Phase 8.0D-7 + 8.0D-10B-4A + 8.0D-10B-4D4C1 + 8.0D-10B-4D4C4-B2): the
+    // read-only decision invoke and the three one-way reports the renderer
+    // pushes - execution, round terminal and logical-send terminal. No setter,
+    // no catalog or service exposure, no command or selector channel.
     const eventa = readFileSync(fileURLToPath(new URL('../../../shared/eventa/index.ts', import.meta.url)), 'utf-8')
     const brainChannels = eventa.match(/eventa:(?:invoke|event):lia:brain[^']*/g) ?? []
     expect(brainChannels).toEqual([
       'eventa:invoke:lia:brain:chat-decision',
       'eventa:event:lia:brain:execution-observation',
       'eventa:event:lia:brain:execution-terminal-observation',
+      'eventa:event:lia:brain:send-terminal-observation',
     ])
     // Within that Brain section, no host object leaks across: the request and
     // the decision are plain data, and the catalog stays host-side. Only the

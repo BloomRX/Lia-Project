@@ -582,7 +582,7 @@ describe('chat send-settled observation extension', () => {
     expect(CODE).toContain('export function notifyChatRequestStarted(observation: ChatRequestStartedObservation): void {')
   })
 
-  it('j: the seam is inert in production - zero registrations, one notification site', () => {
+  it('j: the seam has exactly ONE production registration, and one notification site', () => {
     const airiRoot = fileURLToPath(new URL('../../../../..', import.meta.url))
     const roots = ['apps/stage-tamagotchi/src', 'packages/stage-ui/src', 'packages/core-agent/src']
     const registrarSites: string[] = []
@@ -602,9 +602,10 @@ describe('chat send-settled observation extension', () => {
       }
     }
 
-    // Inert: nothing in production installs a send-settled observer - there is
-    // no consumer yet, and this phase deliberately adds none.
-    expect(registrarSites).toEqual([])
+    // B1 shipped this seam with ZERO production consumers; 8.0D-10B-4D4C4-B2
+    // evolves that allowlist honestly to exactly ONE - the Lia send-terminal
+    // reporter - and no other layer installs an observer of its own.
+    expect(registrarSites).toEqual(['apps/stage-tamagotchi/src/renderer/services/lia/send-terminal-reporter.ts'])
     // Exactly one notification site, and it is the Stage send owner.
     expect(notifySites).toEqual(['packages/stage-ui/src/stores/chat.ts'])
   })

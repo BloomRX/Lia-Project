@@ -631,7 +631,7 @@ describe('lia brain diagnostic log - source invariants (Phase 8.0D-10B-4D2B)', (
     expect(source).toContain(`useLogg('lia:brain').useGlobalConfig()`)
   })
 
-  it('31/57: no generic log pipeline file was touched, and the Brain IPC allowlist is exactly three', () => {
+  it('31/57: no generic log pipeline file was touched, and the Brain IPC allowlist is exactly four', () => {
     const roots = ['apps/stage-tamagotchi/src', 'packages/stage-ui/src', 'packages/core-agent/src', 'packages/lia-core/src']
     const repoPrefix = `${fileURLToPath(REPO_ROOT).replace(/\/+$/, '')}/`
     const files: string[] = []
@@ -662,6 +662,7 @@ describe('lia brain diagnostic log - source invariants (Phase 8.0D-10B-4D2B)', (
     expect([...tags].sort()).toEqual([
       'eventa:event:lia:brain:execution-observation',
       'eventa:event:lia:brain:execution-terminal-observation',
+      'eventa:event:lia:brain:send-terminal-observation',
       'eventa:invoke:lia:brain:chat-decision',
     ])
   })
