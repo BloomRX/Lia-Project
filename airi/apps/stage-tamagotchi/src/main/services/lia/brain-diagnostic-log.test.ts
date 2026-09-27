@@ -1,6 +1,6 @@
 import type { LiaBrainCorrelationDiagnosticFacts } from './brain-correlation-diagnostic-facts'
 import type { LiaBrainDiagnosticEntry } from './brain-correlation-observer'
-import type { LiaBrainExecutionIdentityFacts, LiaBrainExecutionIdentitySnapshot } from './brain-execution-identity-facts'
+import type { LiaBrainExecutionIdentityFacts } from './brain-execution-identity-facts'
 import type { LiaBrainTerminalObservationFacts } from './brain-execution-terminal-facts'
 
 import { readdirSync, readFileSync } from 'node:fs'
@@ -14,6 +14,11 @@ import { formatLiaBrainDiagnosticEntry, logLiaBrainDiagnostic, selectLiaBrainDia
 
 /**
  * Phase 8.0D-10B-4D2B: the focused proof of the diagnostic LOG ADAPTER.
+ *
+ * Phase 8.0D-10B-4D4C3B2-B4: the line of a PRESENT correlation now also prints
+ * the three approved terminal observation counts of the same retained snapshot,
+ * appended after every identity/attempt field; a correlation with no live
+ * snapshot still prints the historical absence line with no count invented.
  *
  * The formatter is pure and deterministic, so most of this file asserts exact
  * strings for every factual state. The logger itself is mocked at the module
@@ -44,11 +49,28 @@ const ZERO_TERMINALS: LiaBrainTerminalObservationFacts = {
 }
 
 /**
+ * Phase 8.0D-10B-4D4C3B2-B4: the terminal count fields exactly as the formatter
+ * appends them - fixed order, raw decimal integers, one space delimiter - for a
+ * 0/0/0 present snapshot.
+ */
+const ZERO_COUNTS = 'succeededTerminalObservationCount=0 failedTerminalObservationCount=0 abandonedTerminalObservationCount=0'
+
+/** The same three fields for an arbitrary count triple, in the fixed order. */
+function counts(succeeded: number, failed: number, abandoned: number): string {
+  return `succeededTerminalObservationCount=${succeeded} failedTerminalObservationCount=${failed} abandonedTerminalObservationCount=${abandoned}`
+}
+
+/** How many times one exact token appears in a line. */
+function occurrences(line: string, token: string): number {
+  return line.split(token).length - 1
+}
+
+/**
  * One structured entry for an arbitrary factual state.
  *
- * Phase 8.0D-10B-4D4C3B2-B2: a present state now also carries the composed
- * terminal counts - which this adapter deliberately IGNORES - while the absence
- * state has no terminal member at all.
+ * Phase 8.0D-10B-4D4C3B2-B4: a present state carries the composed terminal
+ * counts, which the formatter appends to the line, while the absence state has
+ * no terminal member at all - so no count is ever fabricated for it.
  */
 function entry(
   facts: LiaBrainCorrelationDiagnosticFacts['facts'],
@@ -78,7 +100,7 @@ describe('lia brain diagnostic log - formatting (Phase 8.0D-10B-4D2B)', () => {
       status: 'decisionNotObserved',
     }))
 
-    expect(line).toBe('[LIA-BRAIN-DIAG] correlationId="X" status="decisionNotObserved" attempt0.arrivalIndex=0 attempt0.roundId="A" attempt0.providerId="groq" attempt0.modelId="openai/gpt-oss-120b"')
+    expect(line).toBe(`[LIA-BRAIN-DIAG] correlationId="X" status="decisionNotObserved" attempt0.arrivalIndex=0 attempt0.roundId="A" attempt0.providerId="groq" attempt0.modelId="openai/gpt-oss-120b" ${ZERO_COUNTS}`)
     // No expectation exists in this state, and equality is never manufactured.
     expect(line).not.toMatch(/expected|IdentityEqual/)
   })
@@ -89,7 +111,7 @@ describe('lia brain diagnostic log - formatting (Phase 8.0D-10B-4D2B)', () => {
       status: 'noBrainRouteSelected',
     }))
 
-    expect(line).toBe('[LIA-BRAIN-DIAG] correlationId="X" status="noBrainRouteSelected" attempt0.arrivalIndex=0 attempt0.roundId="A" attempt0.providerId="groq" attempt0.modelId="openai/gpt-oss-120b"')
+    expect(line).toBe(`[LIA-BRAIN-DIAG] correlationId="X" status="noBrainRouteSelected" attempt0.arrivalIndex=0 attempt0.roundId="A" attempt0.providerId="groq" attempt0.modelId="openai/gpt-oss-120b" ${ZERO_COUNTS}`)
     expect(line).not.toMatch(/expected|IdentityEqual/)
   })
 
@@ -101,7 +123,7 @@ describe('lia brain diagnostic log - formatting (Phase 8.0D-10B-4D2B)', () => {
       status: 'engineMappingMissing',
     }))
 
-    expect(line).toBe('[LIA-BRAIN-DIAG] correlationId="X" status="engineMappingMissing" selectedEngineId="mystery-engine" selectedModelId="mystery-model" attempt0.arrivalIndex=0 attempt0.roundId="A" attempt0.providerId="groq" attempt0.modelId="openai/gpt-oss-120b"')
+    expect(line).toBe(`[LIA-BRAIN-DIAG] correlationId="X" status="engineMappingMissing" selectedEngineId="mystery-engine" selectedModelId="mystery-model" attempt0.arrivalIndex=0 attempt0.roundId="A" attempt0.providerId="groq" attempt0.modelId="openai/gpt-oss-120b" ${ZERO_COUNTS}`)
     // No expected provider/model exists in this state: it is never invented.
     expect(line).not.toMatch(/expected/)
   })
@@ -113,7 +135,7 @@ describe('lia brain diagnostic log - formatting (Phase 8.0D-10B-4D2B)', () => {
       status: 'noExecutionObserved',
     }))
 
-    expect(line).toBe('[LIA-BRAIN-DIAG] correlationId="X" status="noExecutionObserved" expectedEngineId="groq" expectedProviderId="groq" expectedModelId="openai/gpt-oss-120b"')
+    expect(line).toBe(`[LIA-BRAIN-DIAG] correlationId="X" status="noExecutionObserved" expectedEngineId="groq" expectedProviderId="groq" expectedModelId="openai/gpt-oss-120b" ${ZERO_COUNTS}`)
     expect(line).not.toMatch(/attempt/)
   })
 
@@ -124,7 +146,7 @@ describe('lia brain diagnostic log - formatting (Phase 8.0D-10B-4D2B)', () => {
       status: 'attemptIdentityFacts',
     }))
 
-    expect(line).toBe('[LIA-BRAIN-DIAG] correlationId="X" status="attemptIdentityFacts" expectedEngineId="groq" expectedProviderId="groq" expectedModelId="openai/gpt-oss-120b" attempt0.arrivalIndex=0 attempt0.roundId="A" attempt0.providerId="groq" attempt0.modelId="openai/gpt-oss-120b" attempt0.providerIdentityEqual=true attempt0.modelIdentityEqual=true')
+    expect(line).toBe(`[LIA-BRAIN-DIAG] correlationId="X" status="attemptIdentityFacts" expectedEngineId="groq" expectedProviderId="groq" expectedModelId="openai/gpt-oss-120b" attempt0.arrivalIndex=0 attempt0.roundId="A" attempt0.providerId="groq" attempt0.modelId="openai/gpt-oss-120b" attempt0.providerIdentityEqual=true attempt0.modelIdentityEqual=true ${ZERO_COUNTS}`)
   })
 
   it('g: multiple attempts append in arrival order, each with its own identity pair', () => {
@@ -137,7 +159,7 @@ describe('lia brain diagnostic log - formatting (Phase 8.0D-10B-4D2B)', () => {
       status: 'attemptIdentityFacts',
     }))
 
-    expect(line).toBe('[LIA-BRAIN-DIAG] correlationId="X" status="attemptIdentityFacts" expectedEngineId="groq" expectedProviderId="groq" expectedModelId="openai/gpt-oss-120b" attempt0.arrivalIndex=0 attempt0.roundId="A" attempt0.providerId="groq" attempt0.modelId="openai/gpt-oss-120b" attempt0.providerIdentityEqual=true attempt0.modelIdentityEqual=true attempt1.arrivalIndex=1 attempt1.roundId="B" attempt1.providerId="anthropic" attempt1.modelId="claude-x" attempt1.providerIdentityEqual=false attempt1.modelIdentityEqual=false')
+    expect(line).toBe(`[LIA-BRAIN-DIAG] correlationId="X" status="attemptIdentityFacts" expectedEngineId="groq" expectedProviderId="groq" expectedModelId="openai/gpt-oss-120b" attempt0.arrivalIndex=0 attempt0.roundId="A" attempt0.providerId="groq" attempt0.modelId="openai/gpt-oss-120b" attempt0.providerIdentityEqual=true attempt0.modelIdentityEqual=true attempt1.arrivalIndex=1 attempt1.roundId="B" attempt1.providerId="anthropic" attempt1.modelId="claude-x" attempt1.providerIdentityEqual=false attempt1.modelIdentityEqual=false ${ZERO_COUNTS}`)
   })
 
   it('h/i/j/k: the four equality combinations stay independent - no combined field exists', () => {
@@ -165,7 +187,7 @@ describe('lia brain diagnostic log - formatting (Phase 8.0D-10B-4D2B)', () => {
       status: 'decisionNotObserved',
     }))
 
-    expect(line).toBe('[LIA-BRAIN-DIAG] correlationId="X" status="decisionNotObserved" attempt0.arrivalIndex=0 attempt0.roundId="A" attempt0.providerId="groq" attempt0.modelId="openai/gpt-oss-120b" attempt1.arrivalIndex=1 attempt1.roundId="A" attempt1.providerId="groq" attempt1.modelId="openai/gpt-oss-120b"')
+    expect(line).toBe(`[LIA-BRAIN-DIAG] correlationId="X" status="decisionNotObserved" attempt0.arrivalIndex=0 attempt0.roundId="A" attempt0.providerId="groq" attempt0.modelId="openai/gpt-oss-120b" attempt1.arrivalIndex=1 attempt1.roundId="A" attempt1.providerId="groq" attempt1.modelId="openai/gpt-oss-120b" ${ZERO_COUNTS}`)
 
     // N: the prefix always agrees with the attempt's own arrivalIndex - a fact
     // object whose indexes are out of positional order is still reported by its
@@ -203,45 +225,46 @@ describe('lia brain diagnostic log - formatting (Phase 8.0D-10B-4D2B)', () => {
     expect(line.split('\n')).toHaveLength(1)
   })
 
-  it('58/59: the terminal counts are IGNORED by the line - zero and nonzero format identically', () => {
+  it('58/59: the whole pre-B4 line stays the byte-identical PREFIX of the new line', () => {
     const facts: LiaBrainExecutionIdentityFacts = {
       attempts: [{ ...attempt(), modelIdentityEqual: true, providerIdentityEqual: true }],
       expected: { engineId: 'groq', modelId: 'openai/gpt-oss-120b', providerId: 'groq' },
       status: 'attemptIdentityFacts',
     }
 
-    // The current identity-only line, byte for byte.
+    // The historical line, byte for byte - no field reordered or reworded.
     const identityOnly = '[LIA-BRAIN-DIAG] correlationId="X" status="attemptIdentityFacts" expectedEngineId="groq" expectedProviderId="groq" expectedModelId="openai/gpt-oss-120b" attempt0.arrivalIndex=0 attempt0.roundId="A" attempt0.providerId="groq" attempt0.modelId="openai/gpt-oss-120b" attempt0.providerIdentityEqual=true attempt0.modelIdentityEqual=true'
 
-    // A: present with zero retained terminals.
-    expect(formatLiaBrainDiagnosticEntry(entry(facts, 'X', ZERO_TERMINALS))).toBe(identityOnly)
-    // B: present with a nonzero mix - exactly the same line.
+    // A: present with zero retained terminals - the zeros are EXPLICIT.
+    const zero = formatLiaBrainDiagnosticEntry(entry(facts, 'X', ZERO_TERMINALS))
+    expect(zero).toBe(`${identityOnly} ${ZERO_COUNTS}`)
+    expect(zero.slice(0, identityOnly.length)).toBe(identityOnly)
+
+    // B: present with a nonzero mix - same prefix, the counts now literal.
     const nonzero = formatLiaBrainDiagnosticEntry(entry(facts, 'X', {
       abandonedTerminalObservationCount: 1,
       failedTerminalObservationCount: 1,
       succeededTerminalObservationCount: 2,
     }))
-    expect(nonzero).toBe(identityOnly)
-    // No count name and no terminal vocabulary in any line of this phase.
-    for (const forbidden of ['TerminalObservationCount', 'terminalFacts', 'terminal', 'succeeded', 'failed', 'abandoned', 'count'])
-      expect(nonzero, forbidden).not.toMatch(new RegExp(forbidden, 'i'))
+    expect(nonzero).toBe(`${identityOnly} ${counts(2, 1, 1)}`)
+    expect(nonzero.slice(0, identityOnly.length)).toBe(identityOnly)
   })
 
-  it('60: a comment-only counts change never moves the line - the state itself decides it', () => {
+  it('60: the absence state never gains a count - the entry, not the formatter, decides it', () => {
     // The absent state carries no terminal member: its line is the historical one.
     const absent = entry({ status: 'correlationNotObserved' }, 'logical-send-X')
     expect(formatLiaBrainDiagnosticEntry(absent)).toBe('[LIA-BRAIN-DIAG] correlationId="logical-send-X" status="correlationNotObserved"')
     expect('terminalFacts' in absent).toBe(false)
 
-    // The counts live OUTSIDE `facts`, so the identity line is untouched for
-    // every terminal state of the SAME facts.
+    // The counts live OUTSIDE `facts`: an identity state with no field of its own
+    // keeps its exact prefix and gains only the three appended count fields.
     const facts: LiaBrainExecutionIdentityFacts = { attempts: [], status: 'decisionNotObserved' }
-    for (const terminalFacts of [
-      ZERO_TERMINALS,
-      { abandonedTerminalObservationCount: 0, failedTerminalObservationCount: 1, succeededTerminalObservationCount: 0 },
-      { abandonedTerminalObservationCount: 1, failedTerminalObservationCount: 1, succeededTerminalObservationCount: 2 },
-    ])
-      expect(formatLiaBrainDiagnosticEntry(entry(facts, 'X', terminalFacts))).toBe('[LIA-BRAIN-DIAG] correlationId="X" status="decisionNotObserved"')
+    for (const [terminalFacts, suffix] of [
+      [ZERO_TERMINALS, ZERO_COUNTS],
+      [{ abandonedTerminalObservationCount: 0, failedTerminalObservationCount: 1, succeededTerminalObservationCount: 0 }, counts(0, 1, 0)],
+      [{ abandonedTerminalObservationCount: 1, failedTerminalObservationCount: 1, succeededTerminalObservationCount: 2 }, counts(2, 1, 1)],
+    ] as const)
+      expect(formatLiaBrainDiagnosticEntry(entry(facts, 'X', terminalFacts))).toBe(`[LIA-BRAIN-DIAG] correlationId="X" status="decisionNotObserved" ${suffix}`)
   })
 
   it('determinism: the same entry always formats to the exact same string', () => {
@@ -260,6 +283,158 @@ describe('lia brain diagnostic log - formatting (Phase 8.0D-10B-4D2B)', () => {
     expect(first.indexOf('correlationId=')).toBeLessThan(first.indexOf('status='))
     expect(first.indexOf('status=')).toBeLessThan(first.indexOf('expectedEngineId='))
     expect(first.indexOf('expectedModelId=')).toBeLessThan(first.indexOf('attempt0.'))
+  })
+})
+
+/**
+ * Phase 8.0D-10B-4D4C3B2-B4: the terminal count section of the line.
+ *
+ * The formatter derives NOTHING here: it appends the three already-approved
+ * counts of the entry's own `terminalFacts` member, after every identity/attempt
+ * field, as bare decimal integers in a fixed order. The absence state has no
+ * such member and therefore never prints one.
+ */
+describe('lia brain diagnostic log - terminal counts (Phase 8.0D-10B-4D4C3B2-B4)', () => {
+  const ABSENT_LINE = '[LIA-BRAIN-DIAG] correlationId="X" status="correlationNotObserved"'
+  const COUNT_FIELDS = ['succeededTerminalObservationCount', 'failedTerminalObservationCount', 'abandonedTerminalObservationCount']
+
+  it('40/56: the absent line is byte-identical to the historical one, with zero count tokens', () => {
+    // Exactly the current absence entry - nothing else in it.
+    const absent: LiaBrainDiagnosticEntry = { correlationId: 'X', facts: { status: 'correlationNotObserved' } }
+    const line = formatLiaBrainDiagnosticEntry(absent)
+
+    expect(line).toBe(ABSENT_LINE)
+    for (const field of COUNT_FIELDS)
+      expect(occurrences(line, field), field).toBe(0)
+    // No terminal member is fabricated by whoever formats it, either.
+    expect('terminalFacts' in absent).toBe(false)
+    expect(line).not.toMatch(/TerminalObservationCount|terminalFacts|succeeded|failed|abandoned|count/i)
+  })
+
+  it('41: decisionNotObserved with 0/0/0 prints the three zeros explicitly', () => {
+    const line = formatLiaBrainDiagnosticEntry(entry({ attempts: [attempt()], status: 'decisionNotObserved' }, 'X', ZERO_TERMINALS))
+
+    expect(line).toBe(`[LIA-BRAIN-DIAG] correlationId="X" status="decisionNotObserved" attempt0.arrivalIndex=0 attempt0.roundId="A" attempt0.providerId="groq" attempt0.modelId="openai/gpt-oss-120b" ${ZERO_COUNTS}`)
+    // "present, retaining no terminal observation" is a different fact from
+    // "no live snapshot" - and the two lines say so.
+    expect(line).not.toBe(ABSENT_LINE)
+    expect(line.endsWith(ZERO_COUNTS)).toBe(true)
+  })
+
+  it('42: decisionNotObserved with 0/1/0 prints the literal counts', () => {
+    const line = formatLiaBrainDiagnosticEntry(entry({ attempts: [attempt()], status: 'decisionNotObserved' }, 'X', {
+      abandonedTerminalObservationCount: 0,
+      failedTerminalObservationCount: 1,
+      succeededTerminalObservationCount: 0,
+    }))
+
+    expect(line).toBe(`[LIA-BRAIN-DIAG] correlationId="X" status="decisionNotObserved" attempt0.arrivalIndex=0 attempt0.roundId="A" attempt0.providerId="groq" attempt0.modelId="openai/gpt-oss-120b" ${counts(0, 1, 0)}`)
+  })
+
+  it('43/44: noExecutionObserved keeps its expected route and gains zero and nonzero counts', () => {
+    const expected = { engineId: 'groq', modelId: 'openai/gpt-oss-120b', providerId: 'groq' }
+    const prefix = '[LIA-BRAIN-DIAG] correlationId="X" status="noExecutionObserved" expectedEngineId="groq" expectedProviderId="groq" expectedModelId="openai/gpt-oss-120b"'
+
+    const zero = formatLiaBrainDiagnosticEntry(entry({ attempts: [], expected, status: 'noExecutionObserved' }, 'X', ZERO_TERMINALS))
+    expect(zero).toBe(`${prefix} ${ZERO_COUNTS}`)
+
+    // A terminal-only retained state coexists with "no execution observed": the
+    // counts are appended literally, with no contradiction invented.
+    const nonzero = formatLiaBrainDiagnosticEntry(entry({ attempts: [], expected, status: 'noExecutionObserved' }, 'X', {
+      abandonedTerminalObservationCount: 0,
+      failedTerminalObservationCount: 2,
+      succeededTerminalObservationCount: 0,
+    }))
+    expect(nonzero).toBe(`${prefix} ${counts(0, 2, 0)}`)
+  })
+
+  it('45/46: attemptIdentityFacts keeps its attempt serialization and gains 0/0/0 and 2/1/1', () => {
+    const facts: LiaBrainExecutionIdentityFacts = {
+      attempts: [{ arrivalIndex: 0, modelId: GROQ_MODEL_ID, modelIdentityEqual: true, providerId: GROQ_ENGINE_ID, providerIdentityEqual: true, roundId: 'A' }],
+      expected: { engineId: 'groq', modelId: 'openai/gpt-oss-120b', providerId: 'groq' },
+      status: 'attemptIdentityFacts',
+    }
+    const prefix = '[LIA-BRAIN-DIAG] correlationId="X" status="attemptIdentityFacts" expectedEngineId="groq" expectedProviderId="groq" expectedModelId="openai/gpt-oss-120b" attempt0.arrivalIndex=0 attempt0.roundId="A" attempt0.providerId="groq" attempt0.modelId="openai/gpt-oss-120b" attempt0.providerIdentityEqual=true attempt0.modelIdentityEqual=true'
+
+    expect(formatLiaBrainDiagnosticEntry(entry(facts, 'X', ZERO_TERMINALS))).toBe(`${prefix} ${ZERO_COUNTS}`)
+    expect(formatLiaBrainDiagnosticEntry(entry(facts, 'X', {
+      abandonedTerminalObservationCount: 1,
+      failedTerminalObservationCount: 1,
+      succeededTerminalObservationCount: 2,
+    }))).toBe(`${prefix} ${counts(2, 1, 1)}`)
+  })
+
+  it('47/55: with two attempts the counts appear exactly ONCE, at the very end of the line', () => {
+    const line = formatLiaBrainDiagnosticEntry(entry({
+      attempts: [
+        { arrivalIndex: 0, modelId: GROQ_MODEL_ID, modelIdentityEqual: true, providerId: GROQ_ENGINE_ID, providerIdentityEqual: true, roundId: 'A' },
+        { arrivalIndex: 1, modelId: 'claude-x', modelIdentityEqual: false, providerId: 'anthropic', providerIdentityEqual: false, roundId: 'B' },
+      ],
+      expected: { engineId: 'groq', modelId: 'openai/gpt-oss-120b', providerId: 'groq' },
+      status: 'attemptIdentityFacts',
+    }, 'X', {
+      abandonedTerminalObservationCount: 1,
+      failedTerminalObservationCount: 1,
+      succeededTerminalObservationCount: 2,
+    }))
+
+    // Each exact field name appears exactly once - never per attempt.
+    for (const field of ['succeededTerminalObservationCount=', 'failedTerminalObservationCount=', 'abandonedTerminalObservationCount='])
+      expect(occurrences(line, field), field).toBe(1)
+    // The block is appended after the last attempt field, in the fixed order.
+    expect(line.endsWith(` ${counts(2, 1, 1)}`)).toBe(true)
+    expect(line.indexOf('attempt1.modelIdentityEqual=')).toBeLessThan(line.indexOf('succeededTerminalObservationCount='))
+    expect(line.indexOf('succeededTerminalObservationCount=')).toBeLessThan(line.indexOf('failedTerminalObservationCount='))
+    expect(line.indexOf('failedTerminalObservationCount=')).toBeLessThan(line.indexOf('abandonedTerminalObservationCount='))
+    // The attempt order itself is untouched: no per-attempt count was inserted.
+    expect(line.indexOf('attempt0.arrivalIndex=')).toBeLessThan(line.indexOf('attempt1.arrivalIndex='))
+    expect(occurrences(line, 'arrivalIndex=')).toBe(2)
+  })
+
+  it('12/13: the counts are bare decimal integers - never quoted, JSON, percentages or booleans', () => {
+    const line = formatLiaBrainDiagnosticEntry(entry({ attempts: [], status: 'decisionNotObserved' }, 'X', {
+      abandonedTerminalObservationCount: 1,
+      failedTerminalObservationCount: 1,
+      succeededTerminalObservationCount: 2,
+    }))
+
+    expect(line).toContain('succeededTerminalObservationCount=2')
+    expect(line).toContain('failedTerminalObservationCount=1')
+    expect(line).toContain('abandonedTerminalObservationCount=1')
+    expect(line).not.toMatch(/TerminalObservationCount="/)
+    expect(line).not.toMatch(/%/)
+    expect(line).not.toMatch(/[{}]|true|false/)
+    // Still one line, with the historical prefix and delimiters.
+    expect(line.split('\n')).toHaveLength(1)
+    expect(line.startsWith('[LIA-BRAIN-DIAG] correlationId="X" status="decisionNotObserved" ')).toBe(true)
+  })
+
+  it('57/58: the same entry formats byte-identically twice and is never mutated', () => {
+    const facts: LiaBrainExecutionIdentityFacts = {
+      attempts: [{ arrivalIndex: 0, modelId: GROQ_MODEL_ID, modelIdentityEqual: true, providerId: GROQ_ENGINE_ID, providerIdentityEqual: true, roundId: 'A' }],
+      expected: { engineId: 'groq', modelId: 'openai/gpt-oss-120b', providerId: 'groq' },
+      status: 'attemptIdentityFacts',
+    }
+    const terminalFacts: LiaBrainTerminalObservationFacts = {
+      abandonedTerminalObservationCount: 1,
+      failedTerminalObservationCount: 1,
+      succeededTerminalObservationCount: 2,
+    }
+    const frozen: LiaBrainDiagnosticEntry = { correlationId: 'X', facts, terminalFacts }
+    Object.freeze(facts.attempts[0]!)
+    Object.freeze(facts.attempts)
+    Object.freeze(facts.expected)
+    Object.freeze(facts)
+    Object.freeze(terminalFacts)
+    Object.freeze(frozen)
+    const before = JSON.stringify(frozen)
+
+    const first = formatLiaBrainDiagnosticEntry(frozen)
+    const second = formatLiaBrainDiagnosticEntry(frozen)
+
+    expect(first).toBe(second)
+    expect(JSON.stringify(frozen)).toBe(before)
+    expect(first).toBe(`[LIA-BRAIN-DIAG] correlationId="X" status="attemptIdentityFacts" expectedEngineId="groq" expectedProviderId="groq" expectedModelId="openai/gpt-oss-120b" attempt0.arrivalIndex=0 attempt0.roundId="A" attempt0.providerId="groq" attempt0.modelId="openai/gpt-oss-120b" attempt0.providerIdentityEqual=true attempt0.modelIdentityEqual=true ${counts(2, 1, 1)}`)
   })
 })
 
@@ -293,28 +468,33 @@ describe('lia brain diagnostic log - selector and logger call (Phase 8.0D-10B-4D
     expect(line.startsWith('[LIA-BRAIN-DIAG] ')).toBe(true)
   })
 
-  it('51: the DEV-selected callback + the REAL observer produce one informational call per observation', () => {
+  it('51/64: the DEV-selected callback + the REAL observer and store log one call per observation, counts included', () => {
+    // The real correlation service, the REAL observer, the real adapter and the
+    // real formatter - only the logger sink is a double.
     const store = createLiaBrainCorrelationService()
-    const snapshot: LiaBrainExecutionIdentitySnapshot = { decision: undefined, executions: [] }
-    // A structural reader over a real snapshot keeps this focused: the observer,
-    // the adapter, the formatter and the logger seam are all the REAL ones.
-    const reader = { get: (correlationId: string) => (correlationId === 'logical-send-X' ? snapshot : undefined) }
-    const observer = createLiaBrainCorrelationObserver({ correlationReader: reader, log: selectLiaBrainDiagnosticLog(true) })
+    store.recordExecution({ conversationId: 'conversation-1', correlationId: 'logical-send-X', modelId: GROQ_MODEL_ID, providerId: GROQ_ENGINE_ID, roundId: 'R' })
+    const observer = createLiaBrainCorrelationObserver({ correlationReader: store, log: selectLiaBrainDiagnosticLog(true) })
 
     observer.observe('logical-send-X')
 
     expect(mocks.info).toHaveBeenCalledTimes(1)
-    expect(mocks.info).toHaveBeenCalledWith('[LIA-BRAIN-DIAG] correlationId="logical-send-X" status="decisionNotObserved"')
+    expect(mocks.info).toHaveBeenCalledWith(`[LIA-BRAIN-DIAG] correlationId="logical-send-X" status="decisionNotObserved" attempt0.arrivalIndex=0 attempt0.roundId="R" attempt0.providerId="groq" attempt0.modelId="openai/gpt-oss-120b" ${ZERO_COUNTS}`)
 
-    // A key with no live snapshot is a factual observation too - still one call.
-    observer.observe('absent')
+    // A terminal observation becomes visible on the very next dev line.
+    store.recordExecutionTerminal({ correlationId: 'logical-send-X', outcome: 'failed', roundId: 'R' })
+    observer.observe('logical-send-X')
     expect(mocks.info).toHaveBeenCalledTimes(2)
-    expect(mocks.info.mock.calls[1]![0]).toBe('[LIA-BRAIN-DIAG] correlationId="absent" status="correlationNotObserved"')
+    expect(mocks.info.mock.calls[1]![0]).toBe(`[LIA-BRAIN-DIAG] correlationId="logical-send-X" status="decisionNotObserved" attempt0.arrivalIndex=0 attempt0.roundId="R" attempt0.providerId="groq" attempt0.modelId="openai/gpt-oss-120b" ${counts(0, 1, 0)}`)
+
+    // A key with no live snapshot is a factual observation too - still one call,
+    // and still no fabricated count.
+    observer.observe('absent')
+    expect(mocks.info).toHaveBeenCalledTimes(3)
+    expect(mocks.info.mock.calls[2]![0]).toBe('[LIA-BRAIN-DIAG] correlationId="absent" status="correlationNotObserved"')
 
     // Duplicates are preserved: two observations, two calls, no dedupe.
     observer.observe('absent')
-    expect(mocks.info).toHaveBeenCalledTimes(3)
-    expect(store.size).toBe(0)
+    expect(mocks.info).toHaveBeenCalledTimes(4)
   })
 
   it('52: the NON-DEV selection still observes - it simply has no destination', () => {
@@ -396,17 +576,59 @@ describe('lia brain diagnostic log - source invariants (Phase 8.0D-10B-4D2B)', (
     ])
   })
 
-  it('61: the formatter names NO terminal count and NO composed member - printing is a later phase', () => {
+  it('59: the terminal block names exactly the three approved count fields - read, never derived', () => {
     const source = stripComments(readFileSync(new URL(DIAGNOSTIC_LOG, REPO_ROOT), 'utf-8'))
 
-    for (const forbidden of ['terminalFacts', 'succeededTerminalObservationCount', 'failedTerminalObservationCount', 'abandonedTerminalObservationCount'])
-      expect(source, forbidden).not.toContain(forbidden)
-    // The composed type and the composition are not even imported: the adapter
-    // receives the entry and reads only the identity side of it.
-    expect(source).not.toMatch(/brain-correlation-diagnostic-facts|LiaBrainCorrelationDiagnosticFacts|composeLiaBrainCorrelationDiagnosticFacts|brain-execution-terminal-facts/)
-    // Both composed members stay unread on the terminal side: no count field and
-    // no terminal vocabulary is emitted by the line.
-    expect(source).not.toMatch(/TerminalObservationCount|\bterminal\b|\bcount\b|succeeded|failed|abandoned/i)
+    // The formatter reads the entry's own already-derived terminal member...
+    const blockStart = source.indexOf(`if ('terminalFacts' in entry)`)
+    expect(blockStart).toBeGreaterThan(-1)
+    // ...and appends exactly these three fields, in exactly this order.
+    const block = source.slice(blockStart, source.indexOf(`return [PREFIX, ...fields].join(' ')`, blockStart))
+    // The exact template the formatter pushes for one count: the emitted name,
+    // the entry's own terminal member, and both as plain text.
+    const dollar = '$'
+    const template = (field: string) => `\`${field}=${dollar}{entry.terminalFacts.${field}}\`,`
+    expect(block).toContain([
+      template('succeededTerminalObservationCount'),
+      template('failedTerminalObservationCount'),
+      template('abandonedTerminalObservationCount'),
+    ].join('\n      '))
+    // Once as the emitted field name, once as the member it is read from.
+    expect(block.match(/TerminalObservationCount=/g)).toHaveLength(3)
+
+    // Nothing else about a terminal observation is reachable: no raw collection,
+    // no outcome, no round key, no per-round record, no total and no boolean.
+    expect(block).not.toMatch(/roundId|outcome|executionTerminals|total|succeededTerminalObserved|failedTerminalObserved|abandonedTerminalObserved/)
+    expect(source).not.toMatch(/executionTerminals|\boutcome\b|terminalObservationCount|succeededTerminalObserved|failedTerminalObserved|abandonedTerminalObserved|terminalOutcome/)
+    // The composed type, the composition and both facts modules stay unimported:
+    // the adapter receives the entry contract and derives nothing of its own.
+    expect(source).not.toMatch(/brain-correlation-diagnostic-facts|LiaBrainCorrelationDiagnosticFacts|composeLiaBrainCorrelationDiagnosticFacts|brain-execution-terminal-facts|LiaBrainTerminalObservationFacts|brain-execution-identity-facts|deriveLiaBrainTerminalObservationFacts|deriveLiaBrainExecutionIdentityFacts/)
+  })
+
+  it('60/61/62: no verdict/fallback/send/completion vocabulary, no authority and no new IO surface', () => {
+    const source = stripComments(readFileSync(new URL(DIAGNOSTIC_LOG, REPO_ROOT), 'utf-8'))
+
+    for (const forbidden of [
+      /fallback/i,
+      /finalAttempt|winningAttempt|winner/,
+      /sendSucceeded|sendFailed|sendOutcome/,
+      /completed|completion|finished/i,
+      /routeMatch|mismatch|orphan/i,
+    ])
+      expect(source, String(forbidden)).not.toMatch(forbidden)
+
+    // No Brain service, provider/config policy, retry, tool or permission reach -
+    // a log line holds no authority over anything.
+    expect(source).not.toMatch(/LiaBrainService|createProductionBrain|liaProductConfig|getChatProviderInstance|useProviderStore|activeProvider|activeModel|policy|retry|permission|tool/i)
+    // No IPC, no Eventa message, no network, no filesystem, no timers, no async.
+    expect(source).not.toMatch(/eventa|ipcMain|ipcRenderer|BrowserWindow|electron|from ['"](?:node:)?(?:fs|net|https?|dns|dgram|child_process|timers)['/]|\bfetch\(|XMLHttpRequest|WebSocket|\basync\b|\bawait\b|Promise|setTimeout|setInterval|queueMicrotask|\bnew Map\b|\bnew Set\b/)
+    // The import surface is unchanged, and so is the one logger handle.
+    expect(source.match(/^import .*$/gm)).toEqual([
+      `import type { LiaBrainDiagnosticEntry } from './brain-correlation-observer'`,
+      `import { useLogg } from '@guiiai/logg'`,
+    ])
+    expect(source.match(/useLogg\(/g)).toHaveLength(1)
+    expect(source).toContain(`useLogg('lia:brain').useGlobalConfig()`)
   })
 
   it('31/57: no generic log pipeline file was touched, and the Brain IPC allowlist is exactly three', () => {

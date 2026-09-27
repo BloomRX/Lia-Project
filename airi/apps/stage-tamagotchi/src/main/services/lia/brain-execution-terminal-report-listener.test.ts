@@ -598,16 +598,22 @@ describe('terminal trigger - real observer integration (Phase 8.0D-10B-4D4C3B2-B
     const store = createLiaBrainCorrelationService()
     const context = fakeContext()
     const entries: LiaBrainDiagnosticEntry[] = []
+    const lines: string[] = []
     const observer = createLiaBrainCorrelationObserver({
       correlationReader: store,
-      log: entry => entries.push(entry),
+      // The REAL formatter runs over every entry the real observer produced, so
+      // each observation also yields the exact line a dev build would log.
+      log: (entry) => {
+        entries.push(entry)
+        lines.push(formatLiaBrainDiagnosticEntry(entry))
+      },
     })
     const brain = brainDouble()
     registerLiaBrainDecisionBridge({ context, brain: brain as never, correlationStore: store, correlationObserver: observer })
     registerLiaBrainExecutionReportHandler({ context, correlationStore: store, correlationObserver: observer })
     const terminalReportService = terminalIngress(store, observer)
     registerLiaBrainExecutionTerminalReportListener({ context, terminalReportService })
-    return { brain, entries, store }
+    return { brain, entries, lines, store }
   }
 
   /** The present arm of one recorded entry, narrowed once. */
@@ -715,8 +721,8 @@ describe('terminal trigger - real observer integration (Phase 8.0D-10B-4D4C3B2-B
       expect(observedTerminals(entry)).toEqual({ ...ZERO_TERMINALS, failedTerminalObservationCount: 1 })
   })
 
-  it('g: the terminal-triggered entry carries counts and no raw record, and the line stays identity-only', () => {
-    const { entries } = wireRealComposition()
+  it('g: the terminal-triggered entry carries counts and no raw record, and the line prints them', () => {
+    const { entries, lines } = wireRealComposition()
 
     deliverTerminal({ correlationId: 'X', outcome: 'succeeded', roundId: 'R' })
 
@@ -726,11 +732,108 @@ describe('terminal trigger - real observer integration (Phase 8.0D-10B-4D4C3B2-B
     for (const forbidden of ['executionTerminals', 'roundId', 'outcome', 'snapshot', 'createdAt'])
       expect(serialized, forbidden).not.toContain(forbidden)
 
-    // The formatter is UNCHANGED: the line prints the identity side only, and no
-    // terminal count appears in it - with or without a terminal record.
+    // Phase 8.0D-10B-4D4C3B2-B4: the line now serializes the counts the entry
+    // already carried - the same key and status, plus the three count fields.
+    expect(lines).toEqual(['[LIA-BRAIN-DIAG] correlationId="X" status="decisionNotObserved" succeededTerminalObservationCount=1 failedTerminalObservationCount=0 abandonedTerminalObservationCount=0'])
+    // The raw terminal record itself still never reaches the line.
     const line = formatLiaBrainDiagnosticEntry(entry)
-    expect(line).toBe('[LIA-BRAIN-DIAG] correlationId="X" status="decisionNotObserved"')
-    for (const forbidden of ['TerminalObservationCount', 'terminalFacts', 'terminal', 'succeeded', 'failed', 'abandoned', 'count'])
-      expect(line, forbidden).not.toMatch(new RegExp(forbidden, 'i'))
+    for (const forbidden of ['executionTerminals', 'outcome', 'roundId":', 'snapshot', 'terminalFacts'])
+      expect(line, forbidden).not.toContain(forbidden)
+  })
+
+  /**
+   * Phase 8.0D-10B-4D4C3B2-B4: the same real stack - real listener, real ingress,
+   * real store, real observer, real composition - read through the REAL
+   * formatter. These proofs show that the counts of the RETAINED snapshot reach
+   * the very line a dev build logs, for every production path, and that nothing
+   * else about the line changed.
+   */
+  describe('terminal observer trigger: the counts reach the formatted line (Phase 8.0D-10B-4D4C3B2-B4)', () => {
+    const counts = (succeeded: number, failed: number, abandoned: number) =>
+      `succeededTerminalObservationCount=${succeeded} failedTerminalObservationCount=${failed} abandonedTerminalObservationCount=${abandoned}`
+    /** Terminal-first: nothing but the terminal was observed, so no attempt field. */
+    const terminalFirst = '[LIA-BRAIN-DIAG] correlationId="X" status="decisionNotObserved"'
+    /** After a request-start report: the same status plus the attempt's own fields. */
+    const withAttempt = '[LIA-BRAIN-DIAG] correlationId="X" status="decisionNotObserved" attempt0.arrivalIndex=0 attempt0.roundId="R" attempt0.providerId="groq" attempt0.modelId="openai/gpt-oss-120b"'
+    /** After the decision only: the expectation is known, no attempt yet. */
+    const decisionOnly = '[LIA-BRAIN-DIAG] correlationId="X" status="noExecutionObserved" expectedEngineId="groq" expectedProviderId="groq" expectedModelId="openai/gpt-oss-120b"'
+    /** After decision AND request-start: expectation, attempt and the two booleans. */
+    const withIdentity = '[LIA-BRAIN-DIAG] correlationId="X" status="attemptIdentityFacts" expectedEngineId="groq" expectedProviderId="groq" expectedModelId="openai/gpt-oss-120b" attempt0.arrivalIndex=0 attempt0.roundId="R" attempt0.providerId="groq" attempt0.modelId="openai/gpt-oss-120b" attempt0.providerIdentityEqual=true attempt0.modelIdentityEqual=true'
+
+    it('48: TERMINAL FIRST (failed) - one line, failed=1 and zeros for the other two', () => {
+      const { lines } = wireRealComposition()
+
+      deliverTerminal({ correlationId: 'X', outcome: 'failed', roundId: 'R' })
+
+      expect(lines).toEqual([`${terminalFirst} ${counts(0, 1, 0)}`])
+    })
+
+    it('49: START THEN TERMINAL - two lines, 0/0/0 then 1/0/0', () => {
+      const { lines } = wireRealComposition()
+
+      deliverExecution(executionReport('X', 'R'))
+      expect(lines).toEqual([`${withAttempt} ${counts(0, 0, 0)}`])
+
+      deliverTerminal({ correlationId: 'X', outcome: 'succeeded', roundId: 'R' })
+      expect(lines).toEqual([
+        `${withAttempt} ${counts(0, 0, 0)}`,
+        `${withAttempt} ${counts(1, 0, 0)}`,
+      ])
+    })
+
+    it('50: TERMINAL THEN START - two lines, both 0/0/1, the second adding the attempt', () => {
+      const { lines } = wireRealComposition()
+
+      deliverTerminal({ correlationId: 'X', outcome: 'abandoned', roundId: 'R' })
+      expect(lines).toEqual([`${terminalFirst} ${counts(0, 0, 1)}`])
+
+      deliverExecution(executionReport('X', 'R'))
+      expect(lines).toEqual([
+        `${terminalFirst} ${counts(0, 0, 1)}`,
+        `${withAttempt} ${counts(0, 0, 1)}`,
+      ])
+    })
+
+    it('51: DECISION + START + TERMINAL - exactly three lines, no fourth', () => {
+      const { lines } = wireRealComposition()
+
+      askDecision({ correlationId: 'X', facts: FACTS })
+      deliverExecution(executionReport('X', 'R'))
+      deliverTerminal({ correlationId: 'X', outcome: 'succeeded', roundId: 'R' })
+
+      expect(lines).toEqual([
+        `${decisionOnly} ${counts(0, 0, 0)}`,
+        `${withIdentity} ${counts(0, 0, 0)}`,
+        `${withIdentity} ${counts(1, 0, 0)}`,
+      ])
+    })
+
+    it('52: DUPLICATE TERMINAL - two lines, both printing the SAME canonical count', () => {
+      const { lines, store } = wireRealComposition()
+
+      deliverTerminal({ correlationId: 'X', outcome: 'failed', roundId: 'R' })
+      deliverTerminal({ correlationId: 'X', outcome: 'failed', roundId: 'R' })
+
+      // The store kept ONE record, so the printed number counts the snapshot - it
+      // is never incremented by the number of triggering events.
+      expect(store.get('X')!.executionTerminals).toEqual([{ outcome: 'failed', roundId: 'R' }])
+      expect(lines).toEqual([
+        `${terminalFirst} ${counts(0, 1, 0)}`,
+        `${terminalFirst} ${counts(0, 1, 0)}`,
+      ])
+    })
+
+    it('53: CONFLICTING TERMINAL - both lines print the store first-write outcome', () => {
+      const { lines, store } = wireRealComposition()
+
+      deliverTerminal({ correlationId: 'X', outcome: 'failed', roundId: 'R' })
+      deliverTerminal({ correlationId: 'X', outcome: 'succeeded', roundId: 'R' })
+
+      expect(store.get('X')!.executionTerminals).toEqual([{ outcome: 'failed', roundId: 'R' }])
+      expect(lines).toEqual([
+        `${terminalFirst} ${counts(0, 1, 0)}`,
+        `${terminalFirst} ${counts(0, 1, 0)}`,
+      ])
+    })
   })
 })

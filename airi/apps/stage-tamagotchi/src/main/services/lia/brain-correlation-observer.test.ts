@@ -1231,7 +1231,7 @@ describe('correlation observer - terminals reach the entry as counts only (Phase
     expect(Object.keys(withoutTerminals.entry).sort()).toEqual(Object.keys(withTerminals.entry).sort())
   })
 
-  it('cb: the diagnostic log line is byte-identical with and without terminal records', async () => {
+  it('cb: the counts are the ONLY difference in the line - the identity prefix stays byte-identical', async () => {
     const withoutTerminals = await observe([])
     const withTerminals = await observe([
       { outcome: 'succeeded', roundId: 'R' },
@@ -1244,15 +1244,29 @@ describe('correlation observer - terminals reach the entry as counts only (Phase
       { outcome: 'abandoned', roundId: 'U' },
     ])
 
-    const line = formatLiaBrainDiagnosticEntry(withoutTerminals.entry)
-    // The formatter IGNORES the counts entirely in this phase: zero, two and
-    // four retained terminals all format to the very same line.
-    expect(formatLiaBrainDiagnosticEntry(withTerminals.entry)).toBe(line)
-    expect(formatLiaBrainDiagnosticEntry(mixed.entry)).toBe(line)
-    // One deterministic metadata line, with no terminal vocabulary in it.
-    expect(line.startsWith('[LIA-BRAIN-DIAG] ')).toBe(true)
-    for (const forbidden of ['terminal', 'outcome', 'succeeded', 'failed', 'abandoned', 'count'])
-      expect(line, forbidden).not.toMatch(new RegExp(forbidden, 'i'))
+    const zero = formatLiaBrainDiagnosticEntry(withoutTerminals.entry)
+    const two = formatLiaBrainDiagnosticEntry(withTerminals.entry)
+    const four = formatLiaBrainDiagnosticEntry(mixed.entry)
+
+    // Phase 8.0D-10B-4D4C3B2-B4: each line now ENDS with the three approved
+    // counts of ITS OWN snapshot, in the fixed order.
+    expect(zero.endsWith('succeededTerminalObservationCount=0 failedTerminalObservationCount=0 abandonedTerminalObservationCount=0')).toBe(true)
+    expect(two.endsWith('succeededTerminalObservationCount=1 failedTerminalObservationCount=1 abandonedTerminalObservationCount=0')).toBe(true)
+    expect(four.endsWith('succeededTerminalObservationCount=2 failedTerminalObservationCount=1 abandonedTerminalObservationCount=1')).toBe(true)
+
+    // ...and everything BEFORE them is one and the same identity line: the
+    // counts are appended at the very end and move nothing else.
+    const prefix = zero.slice(0, zero.indexOf('succeededTerminalObservationCount='))
+    expect(two.slice(0, two.indexOf('succeededTerminalObservationCount='))).toBe(prefix)
+    expect(four.slice(0, four.indexOf('succeededTerminalObservationCount='))).toBe(prefix)
+
+    // One deterministic metadata line per entry, with no raw record in it.
+    for (const line of [zero, two, four]) {
+      expect(line.startsWith('[LIA-BRAIN-DIAG] ')).toBe(true)
+      expect(line.split('\n')).toHaveLength(1)
+      for (const forbidden of ['executionTerminals', 'outcome', 'snapshot', 'records', 'mismatch', 'orphan', 'fallback', 'winner', 'completed'])
+        expect(line, forbidden).not.toContain(forbidden)
+    }
   })
 })
 

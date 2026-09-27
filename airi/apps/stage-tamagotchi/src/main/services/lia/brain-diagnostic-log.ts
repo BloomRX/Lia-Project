@@ -23,11 +23,12 @@ import { useLogg } from '@guiiai/logg'
  *
  * Data class: metadata only. The formatter's whole input is the structured
  * entry (the opaque correlation key plus the read result), and it copies ONLY
- * the allowlisted identity fields out of it - the opaque key, the factual
- * status discriminator, the expected route ids, and per observed attempt its
- * arrival index plus the ids (and, for the identity-facts state, the two
- * equality booleans). No prompt, message, attachment, tool data, credential,
- * API key, baseURL, provider object or chat payload is reachable from here.
+ * the allowlisted fields out of it - the opaque key, the factual status
+ * discriminator, the expected route ids, per observed attempt its arrival index
+ * plus the ids (and, for the identity-facts state, the two equality booleans),
+ * and - for a present correlation - the three terminal observation counts of
+ * the SAME snapshot. No prompt, message, attachment, tool data, credential, API
+ * key, baseURL, provider object or chat payload is reachable from here.
  *
  * Authority: none. A log line cannot select a route, change a policy, pick a
  * provider/model, trigger a fallback, authorize a tool or start an execution -
@@ -67,11 +68,15 @@ function quoted(value: string): string {
  *
  * Field order is fixed and every value is copied verbatim from the entry: the
  * same entry always produces the exact same string (no timestamp, no random id,
- * no environment value, no clock). Booleans and the arrival index stay raw;
- * string identities are JSON-quoted.
+ * no environment value, no clock). Booleans, the arrival index and the three
+ * terminal counts stay raw numbers; string identities are JSON-quoted.
  *
  * Only fields the factual state actually carries are emitted - no placeholder
- * route, no synthesized attempt, no manufactured equality boolean.
+ * route, no synthesized attempt, no manufactured equality boolean. The counts
+ * are appended as the LAST fields of a present correlation, in their fixed
+ * order, and the absence state - which carries no terminal member at all - emits
+ * none of them: zero retained observations is a fact about a present snapshot,
+ * and is never fabricated for a key that has no snapshot.
  */
 export function formatLiaBrainDiagnosticEntry(entry: LiaBrainDiagnosticEntry): string {
   const { correlationId, facts } = entry
@@ -120,6 +125,21 @@ export function formatLiaBrainDiagnosticEntry(entry: LiaBrainDiagnosticEntry): s
       )
     }
   })
+
+  // Phase 8.0D-10B-4D4C3B2-B4: the terminal observation counts of the SAME
+  // retained snapshot that produced the fields above, appended after every
+  // identity and attempt field so no existing field moves. Each count is copied
+  // verbatim, as a decimal integer, from the approved facts layer - never
+  // counted here, never summed and never turned into a boolean, a verdict or a
+  // per-round record. The present arm is the only one that carries them: a key
+  // with no live snapshot returned above, with none of these fields invented.
+  if ('terminalFacts' in entry) {
+    fields.push(
+      `succeededTerminalObservationCount=${entry.terminalFacts.succeededTerminalObservationCount}`,
+      `failedTerminalObservationCount=${entry.terminalFacts.failedTerminalObservationCount}`,
+      `abandonedTerminalObservationCount=${entry.terminalFacts.abandonedTerminalObservationCount}`,
+    )
+  }
 
   return [PREFIX, ...fields].join(' ')
 }
