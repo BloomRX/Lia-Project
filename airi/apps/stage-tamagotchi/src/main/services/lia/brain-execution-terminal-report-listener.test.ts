@@ -514,10 +514,12 @@ describe('lia terminal wiring invariants (Phase 8.0D-10B-4D4C2B2)', () => {
     ])
   })
 
-  it('t: the frozen layers stay frozen - no terminal surface in reader, facts, observer or store', () => {
-    // The read side knows nothing about terminal outcomes yet.
+  it('t: the frozen layers stay frozen - the RAW carriage lives in the reader alone', () => {
+    // 8.0D-10B-4D4C3A: the correlation READER now hands the raw terminal
+    // collection out beside the identity facts. Every other read-side layer
+    // still knows nothing about terminal outcomes: no derivation, no observer
+    // trigger, no diagnostic output.
     for (const relative of [
-      './brain-correlation-reader.ts',
       './brain-execution-identity-facts.ts',
       './brain-expected-route.ts',
       './brain-correlation-observer.ts',
@@ -525,6 +527,11 @@ describe('lia terminal wiring invariants (Phase 8.0D-10B-4D4C2B2)', () => {
     ]) {
       expect(stripComments(readSource(relative)), relative).not.toMatch(/executionTerminal|recordExecutionTerminal/)
     }
+    // The reader carries it and nothing more: it names the collection, the
+    // round key and the outcome, and it never derives anything from them.
+    const reader = stripComments(readSource('./brain-correlation-reader.ts'))
+    expect(reader).toContain('executionTerminals')
+    expect(reader).not.toMatch(/recordExecutionTerminal|\.observe\(|anySucceeded|anyFailed|allFailed|hasTerminal|terminalCount|latestTerminal/)
 
     // The store keeps its three-field/one-method contract - the wiring did not
     // add a member or a semantic.

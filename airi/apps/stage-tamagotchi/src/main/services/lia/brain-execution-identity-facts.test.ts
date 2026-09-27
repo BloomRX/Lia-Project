@@ -492,6 +492,58 @@ describe('execution identity facts - purity and trust boundary (Phase 8.0D-10B-4
   })
 })
 
+describe('terminal carriage does not touch the identity facts (Phase 8.0D-10B-4D4C3A)', () => {
+  /** A snapshot carrying the raw terminal collection of 4D4C3A, or none at all. */
+  function withTerminals(terminals?: readonly { outcome: string, roundId: string }[]) {
+    return {
+      decision: productionAutomaticDecision(),
+      executions: [attempt({ roundId: 'A' }), attempt({ roundId: 'B', providerId: 'anthropic' })],
+      ...(terminals === undefined ? {} : { executionTerminals: terminals }),
+    }
+  }
+
+  it('aw: snapshots differing ONLY by their terminal collection derive identical facts', () => {
+    const baseline = deriveLiaBrainExecutionIdentityFacts(withTerminals(), LIA_BRAIN_ENGINE_PROVIDER_MAPPING)
+
+    // No terminals at all, then every outcome, then several rounds: the pure
+    // facts layer ignores the collection completely.
+    for (const terminals of [
+      [],
+      [{ outcome: 'succeeded', roundId: 'A' }],
+      [{ outcome: 'failed', roundId: 'A' }],
+      [{ outcome: 'abandoned', roundId: 'B' }],
+      [
+        { outcome: 'succeeded', roundId: 'A' },
+        { outcome: 'failed', roundId: 'B' },
+        { outcome: 'abandoned', roundId: 'C' },
+      ],
+    ]) {
+      const derived = deriveLiaBrainExecutionIdentityFacts(withTerminals(terminals), LIA_BRAIN_ENGINE_PROVIDER_MAPPING)
+      expect(derived).toEqual(baseline)
+      // Nothing terminal-shaped leaked into the derived object.
+      const serialized = JSON.stringify(derived)
+      for (const forbidden of ['terminal', 'outcome', 'succeeded', 'failed', 'abandoned', 'fallback', 'count'])
+        expect(serialized, forbidden).not.toMatch(new RegExp(forbidden, 'i'))
+    }
+  })
+
+  it('ax: the facts output keys are still exactly the 4C2B ones - no terminal field', () => {
+    const identity = deriveLiaBrainExecutionIdentityFacts(
+      withTerminals([{ outcome: 'failed', roundId: 'A' }]),
+      LIA_BRAIN_ENGINE_PROVIDER_MAPPING,
+    )
+    expect(identity.status).toBe('attemptIdentityFacts')
+    expect(Object.keys(identity).sort()).toEqual(['attempts', 'expected', 'status'])
+    for (const fact of identity.attempts)
+      expect(Object.keys(fact).sort()).toEqual(['arrivalIndex', 'modelId', 'modelIdentityEqual', 'providerId', 'providerIdentityEqual', 'roundId'])
+
+    // And the production derivation body never names the collection: the term
+    // belongs to the reader-owned input type only.
+    const source = stripComments(readSource('./brain-execution-identity-facts.ts'))
+    expect(source).not.toMatch(/executionTerminals|LiaObservedExecutionTerminal/)
+  })
+})
+
 const REPO_ROOT = new URL('../../../../../../', import.meta.url)
 /** `fileURLToPath` keeps the trailing separator of a directory URL. */
 const REPO_PREFIX = `${fileURLToPath(REPO_ROOT).replace(/\/+$/, '')}/`

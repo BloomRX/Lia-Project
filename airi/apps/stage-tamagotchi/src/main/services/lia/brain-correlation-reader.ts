@@ -13,6 +13,13 @@ import { deriveLiaBrainExecutionIdentityFacts } from './brain-execution-identity
  *     -> the existing pure identity-facts transformation
  *     -> factual per-attempt identity facts (or "nothing observed")
  *
+ * Since Phase 8.0D-10B-4D4C3A it also carries the RAW terminal collection of
+ * the snapshot it read (`executionTerminals`, one two-field record per round, in
+ * store arrival order). That is pure factual carriage: the reader never joins it
+ * to `executions`, never interprets an outcome and never derives anything from
+ * it - the identity facts are computed exactly as before, and the terminals are
+ * copied verbatim beside them.
+ *
  * It owns the READ only. It interprets nothing: every state the facts layer can
  * produce (`decisionNotObserved`, `noBrainRouteSelected`, `engineMappingMissing`,
  * `noExecutionObserved`, `attemptIdentityFacts`) is returned exactly as
@@ -40,16 +47,46 @@ import { deriveLiaBrainExecutionIdentityFacts } from './brain-execution-identity
  */
 
 /**
+ * The minimum a stored terminal record must carry for this adapter.
+ *
+ * Deliberately NOT the store's own record type: a real correlation-store entry
+ * satisfies this shape as-is (its `executionTerminals` carry exactly these two
+ * fields), and the opaque correlation key is not duplicated inside a record -
+ * the entry that holds it is already keyed by it.
+ */
+export interface LiaObservedExecutionTerminal {
+  roundId: string
+  outcome:
+    | 'succeeded'
+    | 'failed'
+    | 'abandoned'
+}
+
+/**
+ * The snapshot this adapter READS: the facts minimum plus the raw terminal
+ * collection, owned by this layer.
+ *
+ * `executionTerminals` is deliberately optional on the way IN - it is the one
+ * field a structural double may omit - while the reader's own result always
+ * exposes the collection (empty when the correlation has none). The two
+ * execution collections stay independent: nothing here pairs them by `roundId`.
+ */
+export interface LiaBrainCorrelationSnapshot extends LiaBrainExecutionIdentitySnapshot {
+  /** Every terminal record of that logical send, in store arrival order. */
+  executionTerminals?: readonly LiaObservedExecutionTerminal[]
+}
+
+/**
  * The minimum read dependency of this adapter: fetch ONE snapshot for an opaque
  * key, or nothing.
  *
  * Deliberately NOT the concrete correlation memory module: the production
- * object is structurally compatible (its entries carry the decision plus the
- * execution reports, which satisfy `LiaBrainExecutionIdentitySnapshot`), while
- * its write APIs, its `size` and its internals stay invisible to this module.
+ * object is structurally compatible (its entries carry the decision, the
+ * execution reports and the terminal records), while its write APIs, its `size`
+ * and its internals stay invisible to this module.
  */
 export interface LiaBrainCorrelationSnapshotReader {
-  get: (correlationId: string) => LiaBrainExecutionIdentitySnapshot | undefined
+  get: (correlationId: string) => LiaBrainCorrelationSnapshot | undefined
 }
 
 /**
@@ -72,17 +109,40 @@ export interface LiaBrainEngineProviderLookup {
 }
 
 /**
+ * The raw terminal carriage of one present snapshot.
+ *
+ * `executionTerminals` is ALWAYS an array for a correlation that exists - empty
+ * when no round has settled yet - and each element is a fresh two-field copy.
+ * A caller cannot reach the snapshot it passed in through it, and nothing here
+ * interprets an outcome, counts records or reads the last one.
+ */
+export interface LiaBrainCorrelationTerminalFacts {
+  executionTerminals: readonly LiaObservedExecutionTerminal[]
+}
+
+/**
  * The factual outcome of one read.
  *
  * - `correlationNotObserved`  no live snapshot exists for that key at read
  *   time (absent, expired or evicted - indistinguishable here, and deliberately
- *   not interpreted);
+ *   not interpreted). Nothing is fabricated for it - no empty collections;
  * - otherwise the identity facts are returned EXACTLY as the pure facts layer
- *   produced them, unmodified and unwrapped.
+ *   produced them, unmodified and unwrapped, BESIDE the raw terminal
+ *   collection of that same snapshot.
  */
 export type LiaBrainCorrelationReadFacts
   = | { status: 'correlationNotObserved' }
-    | LiaBrainExecutionIdentityFacts
+    | (LiaBrainExecutionIdentityFacts & LiaBrainCorrelationTerminalFacts)
+
+/** Copies exactly the two terminal fields of every record into fresh objects. */
+function copyObservedExecutionTerminals(
+  terminals: readonly LiaObservedExecutionTerminal[] | undefined,
+): LiaObservedExecutionTerminal[] {
+  return (terminals ?? []).map(terminal => ({
+    outcome: terminal.outcome,
+    roundId: terminal.roundId,
+  }))
+}
 
 /**
  * Reads one correlation snapshot and derives its per-attempt identity facts.
@@ -94,8 +154,10 @@ export type LiaBrainCorrelationReadFacts
  * 2. `undefined` -> `{ status: 'correlationNotObserved' }`; the mapping is not
  *    consulted at all in that case;
  * 3. a snapshot -> `deriveLiaBrainExecutionIdentityFacts(snapshot, mapping)`,
- *    returned unchanged. No second lookup, no re-derivation, no re-typing of
- *    its result states.
+ *    returned unchanged, with the snapshot's raw terminal collection copied
+ *    beside it (empty array when the correlation has no terminal records). No
+ *    second lookup, no re-derivation, no re-typing of its result states, and no
+ *    interpretation of the terminal facts.
  *
  * Failure semantics: the injected reader is a synchronous internal dependency,
  * so an unexpected throw is NOT swallowed here - it propagates to the caller
@@ -118,5 +180,11 @@ export function readLiaBrainExecutionIdentityFacts(
   if (snapshot === undefined)
     return { status: 'correlationNotObserved' }
 
-  return deriveLiaBrainExecutionIdentityFacts(snapshot, mapping)
+  // The facts are computed exactly as before - the terminal collection is NOT
+  // an input to that derivation - and the raw terminal facts are copied beside
+  // them, in their own order, one fresh record per stored record.
+  return {
+    ...deriveLiaBrainExecutionIdentityFacts(snapshot, mapping),
+    executionTerminals: copyObservedExecutionTerminals(snapshot.executionTerminals),
+  }
 }
