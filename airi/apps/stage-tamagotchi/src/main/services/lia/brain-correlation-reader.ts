@@ -22,6 +22,15 @@ import { deriveLiaBrainExecutionIdentityFacts } from './brain-execution-identity
  * interpreted by this module's runtime. A later phase may deliberately derive
  * terminal-specific facts; until then the collection stops at the snapshot.
  *
+ * Phase 8.0D-10B-4D4C4-B4B1 widens the same snapshot contract once more, to
+ * admit the logical-send terminal record a canonical correlation entry may
+ * retain (`sendTerminal`, one one-field record for the whole send). It is the
+ * same structural boundary with the same rules: the read RESULT is untouched,
+ * the runtime of this module never touches the field, nothing is derived from it
+ * and no fact of any layer can observe it from here. A later phase may
+ * deliberately derive send-terminal-specific facts; until then the record stops
+ * at the snapshot, exactly like the round terminals before it.
+ *
  * It owns the READ only. It interprets nothing: every state the facts layer can
  * produce (`decisionNotObserved`, `noBrainRouteSelected`, `engineMappingMissing`,
  * `noExecutionObserved`, `attemptIdentityFacts`) is returned exactly as
@@ -65,6 +74,23 @@ export interface LiaObservedExecutionTerminal {
 }
 
 /**
+ * The minimum a stored logical-send terminal record must carry for this adapter.
+ *
+ * Deliberately NOT the store's own record type and NOT the transport contract: a
+ * real correlation-store entry satisfies this shape as-is (its `sendTerminal`
+ * carries exactly this one field), and the opaque correlation key is not
+ * duplicated inside it - the entry that holds it is already keyed by it. The
+ * vocabulary is the closed transport one: the send resolved or the send
+ * rejected. No round, attempt, provider, model, engine, timing, error, content
+ * or lifecycle-vocabulary field belongs on this structural boundary.
+ */
+export interface LiaObservedSendTerminal {
+  outcome:
+    | 'succeeded'
+    | 'failed'
+}
+
+/**
  * The snapshot this adapter READS: the facts minimum plus the raw terminal
  * collection a canonical correlation entry carries, owned by this layer.
  *
@@ -77,6 +103,15 @@ export interface LiaObservedExecutionTerminal {
 export interface LiaBrainCorrelationSnapshot extends LiaBrainExecutionIdentitySnapshot {
   /** Every terminal record of that logical send, in store arrival order. */
   executionTerminals?: readonly LiaObservedExecutionTerminal[]
+  /**
+   * The logical-send terminal record of that same entry, when the entry retains
+   * one. Carriage only: OPTIONAL by contract, so every existing structural
+   * double stays compatible and the canonical store always supplies it when it
+   * has one. Absent means exactly that the supplied snapshot retains no
+   * accepted send-terminal observation - it is never pending, never running and
+   * never a settlement of any kind; nothing on this boundary reads it.
+   */
+  sendTerminal?: LiaObservedSendTerminal
 }
 
 /**

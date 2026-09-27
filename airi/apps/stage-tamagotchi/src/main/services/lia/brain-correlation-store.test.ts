@@ -1420,10 +1420,13 @@ describe('lia brain correlation store - logical send terminal fact (Phase 8.0D-1
     expect(productionSourcesMatching(['apps/stage-tamagotchi/src/main'], /electronLiaBrainSendTerminalObservation|send-terminal-observation/))
       .toEqual(['apps/stage-tamagotchi/src/main/services/lia/brain-send-terminal-report-listener.ts'])
 
-    // 47/48/49/50/51: the reader, the facts, the composition, the observer and
-    // the formatter do not know the field yet.
+    // 47/48/49/50/51: the composition, the observer, the formatter, the identity
+    // facts and the round-terminal facts do not know the field yet. The reader no
+    // longer belongs to this list: 8.0D-10B-4D4C4-B4B1 widened its SNAPSHOT
+    // contract to carry the raw record structurally (a carriage boundary only -
+    // it still derives and returns identity facts exclusively, and nothing on the
+    // read side consumes the field).
     for (const relative of [
-      './brain-correlation-reader.ts',
       './brain-correlation-diagnostic-facts.ts',
       './brain-correlation-observer.ts',
       './brain-diagnostic-log.ts',

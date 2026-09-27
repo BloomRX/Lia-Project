@@ -374,10 +374,11 @@ describe('lia logical-send terminal reporter (Phase 8.0D-10B-4D4C4-B2)', () => {
 
     // And the still-deferred layers hold no send field or send fact of any
     // kind. Since 8.0D-10B-4D4C4-B3A the canonical store is NOT among them: it
-    // legitimately retains the optional `sendTerminal` record - retention only,
-    // with no reader, no fact, no composition, no trigger and no formatter.
+    // legitimately retains the optional `sendTerminal` record, and since
+    // 8.0D-10B-4D4C4-B4B1 the reader is NOT among them either: its SNAPSHOT
+    // contract carries that record structurally. Both are carriage/retention
+    // only - still no fact, no composition, no trigger and no formatter.
     for (const relative of [
-      'apps/stage-tamagotchi/src/main/services/lia/brain-correlation-reader.ts',
       'apps/stage-tamagotchi/src/main/services/lia/brain-correlation-diagnostic-facts.ts',
       'apps/stage-tamagotchi/src/main/services/lia/brain-execution-terminal-facts.ts',
       'apps/stage-tamagotchi/src/main/services/lia/brain-diagnostic-log.ts',
