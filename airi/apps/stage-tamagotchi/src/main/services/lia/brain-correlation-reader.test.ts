@@ -7,7 +7,7 @@ import type {
   LiaBrainRoutingDecision,
 } from '@lia/core'
 
-import type { LiaBrainCorrelationReadFacts, LiaBrainCorrelationSnapshotReader, LiaBrainEngineProviderLookup, LiaObservedExecutionTerminal } from './brain-correlation-reader'
+import type { LiaBrainCorrelationReadFacts, LiaBrainCorrelationSnapshot, LiaBrainCorrelationSnapshotReader, LiaBrainEngineProviderLookup, LiaObservedExecutionTerminal } from './brain-correlation-reader'
 import type { LiaBrainCorrelationEntry, LiaBrainCorrelationStore } from './brain-correlation-store'
 import type { LiaBrainExecutionIdentitySnapshot, LiaObservedExecutionIdentity } from './brain-execution-identity-facts'
 import type { LiaBrainEngineProviderMapping } from './brain-expected-route'
@@ -95,8 +95,12 @@ function attempt(overrides: Partial<LiaObservedExecutionIdentity> = {}): LiaObse
   return { modelId: GROQ_MODEL_ID, providerId: GROQ_ENGINE_ID, roundId: 'A', ...overrides }
 }
 
-/** A recording structural reader double: feeds snapshots, records every key asked for. */
-function recordingReader(snapshots: Record<string, LiaBrainExecutionIdentitySnapshot | undefined>) {
+/**
+ * A recording structural reader double: feeds snapshots, records every key
+ * asked for. The value type is the reader's OWN snapshot contract, so a double
+ * may carry the raw terminal collection a canonical entry stores.
+ */
+function recordingReader(snapshots: Record<string, LiaBrainCorrelationSnapshot | undefined>) {
   const calls: string[] = []
   const reader = {
     get(correlationId: string): LiaBrainExecutionIdentitySnapshot | undefined {
@@ -166,9 +170,6 @@ describe('correlation snapshot reader - result states (Phase 8.0D-10B-4C3A)', ()
         { arrivalIndex: 0, modelId: GROQ_MODEL_ID, providerId: 'groq', roundId: 'A' },
         { arrivalIndex: 1, modelId: GROQ_MODEL_ID, providerId: 'unknown', roundId: 'B' },
       ],
-      // 8.0D-10B-4D4C3A: a present correlation always exposes the raw terminal
-      // collection - empty here, never undefined.
-      executionTerminals: [],
       status: 'decisionNotObserved',
     })
   })
@@ -178,7 +179,6 @@ describe('correlation snapshot reader - result states (Phase 8.0D-10B-4C3A)', ()
 
     expect(readLiaBrainExecutionIdentityFacts(reader, 'X', LIA_BRAIN_ENGINE_PROVIDER_MAPPING)).toEqual({
       attempts: [],
-      executionTerminals: [],
       expected: GROQ_EXPECTED,
       status: 'noExecutionObserved',
     })
@@ -200,7 +200,6 @@ describe('correlation snapshot reader - result states (Phase 8.0D-10B-4C3A)', ()
       const outcome = readLiaBrainExecutionIdentityFacts(reader, 'X', LIA_BRAIN_ENGINE_PROVIDER_MAPPING)
       expect(outcome, JSON.stringify(decision)).toEqual({
         attempts: [{ arrivalIndex: 0, modelId: GROQ_MODEL_ID, providerId: GROQ_ENGINE_ID, roundId: 'A' }],
-        executionTerminals: [],
         status: 'noBrainRouteSelected',
       })
       expect(outcome).not.toHaveProperty('expected')
@@ -219,7 +218,6 @@ describe('correlation snapshot reader - result states (Phase 8.0D-10B-4C3A)', ()
     expect(readLiaBrainExecutionIdentityFacts(reader, 'X', mapping)).toEqual({
       attempts: [{ arrivalIndex: 0, modelId: GROQ_MODEL_ID, providerId: GROQ_ENGINE_ID, roundId: 'A' }],
       engineId: 'brain-engine',
-      executionTerminals: [],
       modelId: 'brain-model-x',
       status: 'engineMappingMissing',
     })
@@ -250,11 +248,8 @@ describe('correlation snapshot reader - result states (Phase 8.0D-10B-4C3A)', ()
     // J/K: the two equality facts, per attempt, never combined.
     expect(outcome.attempts.map(fact => [fact.providerIdentityEqual, fact.modelIdentityEqual]))
       .toEqual([[true, true], [false, true], [true, false], [true, true]])
-    // The identity-facts keys are exactly the 4C2B ones, plus the ONE raw
-    // collection 8.0D-10B-4D4C3A carries beside them: no derived terminal field,
-    // no count, no verdict.
-    expect(Object.keys(outcome).sort()).toEqual(['attempts', 'executionTerminals', 'expected', 'status'])
-    expect(outcome.executionTerminals).toEqual([])
+    // No extra reader-derived field: the facts shape is exactly the 4C2B one.
+    expect(Object.keys(outcome).sort()).toEqual(['attempts', 'expected', 'status'])
     for (const fact of outcome.attempts)
       expect(Object.keys(fact).sort()).toEqual(['arrivalIndex', 'modelId', 'modelIdentityEqual', 'providerId', 'providerIdentityEqual', 'roundId'])
   })
@@ -492,159 +487,173 @@ function productionMatching(pattern: RegExp): string[] {
     .sort()
 }
 
-describe('correlation snapshot reader - terminal facts (Phase 8.0D-10B-4D4C3A)', () => {
-  /**
-   * The raw terminal collection of a PRESENT correlation.
-   *
-   * Typed access, never a structural cast: every state but
-   * `correlationNotObserved` declares the collection, so a missing field would
-   * be a compile error - the type is the first proof that the reader always
-   * answers with an array for a correlation that exists.
-   */
-  function observedTerminals(facts: LiaBrainCorrelationReadFacts): readonly LiaObservedExecutionTerminal[] {
-    if (facts.status === 'correlationNotObserved')
-      throw new Error('expected a present correlation')
-    return facts.executionTerminals
+describe('correlation snapshot reader - terminal records stop at the snapshot (Phase 8.0D-10B-4D4C3A-F)', () => {
+  /** One raw terminal record, exactly as the snapshot contract declares it. */
+  function terminal(roundId: string, outcome: 'succeeded' | 'failed' | 'abandoned'): LiaObservedExecutionTerminal {
+    return { outcome, roundId }
   }
 
-  it('af: a decision-only correlation exposes an empty terminal collection', () => {
-    const { reader } = recordingReader({ X: { decision: productionAutomaticDecision(), executions: [] } })
+  /** A structural snapshot double: the facts minimum plus an OPTIONAL collection. */
+  function snapshot(executions: LiaObservedExecutionIdentity[], terminals?: readonly LiaObservedExecutionTerminal[]) {
+    return {
+      decision: productionAutomaticDecision(),
+      executions,
+      ...(terminals === undefined ? {} : { executionTerminals: terminals }),
+    }
+  }
 
-    const outcome = readLiaBrainExecutionIdentityFacts(reader, 'X', LIA_BRAIN_ENGINE_PROVIDER_MAPPING)
-    expect(outcome.status).toBe('noExecutionObserved')
-    // Required empty array: a present correlation never answers `undefined`.
-    expect(observedTerminals(outcome)).toEqual([])
+  function read(reader: LiaBrainCorrelationSnapshotReader): LiaBrainCorrelationReadFacts {
+    return readLiaBrainExecutionIdentityFacts(reader, 'X', LIA_BRAIN_ENGINE_PROVIDER_MAPPING)
+  }
+
+  it('ap: the snapshot contract admits the raw terminal records and stays a facts snapshot', () => {
+    // Type-level proof: the collection is OPTIONAL on this boundary...
+    const bare = { executions: [attempt({ roundId: 'A' })] } satisfies LiaBrainCorrelationSnapshot
+    const carried = {
+      decision: productionAutomaticDecision(),
+      executions: [attempt({ roundId: 'A' })],
+      executionTerminals: [terminal('R', 'failed')],
+    } satisfies LiaBrainCorrelationSnapshot
+
+    // ...and both remain the structural minimum the pure facts layer consumes.
+    const asIdentityInput: LiaBrainExecutionIdentitySnapshot[] = [bare, carried]
+    expect(asIdentityInput).toHaveLength(2)
+
+    // The record is exactly the two-field store shape, nothing else.
+    const records: readonly LiaObservedExecutionTerminal[] = carried.executionTerminals
+    expect(records).toEqual([{ outcome: 'failed', roundId: 'R' }])
+    expect(Object.keys(records[0]!).sort()).toEqual(['outcome', 'roundId'])
   })
 
-  it('ag: an execution-only correlation exposes its attempts and an empty terminal collection', () => {
-    const { reader } = recordingReader({ X: { executions: [attempt({ roundId: 'A' })] } })
-
-    const outcome = readLiaBrainExecutionIdentityFacts(reader, 'X', LIA_BRAIN_ENGINE_PROVIDER_MAPPING)
-    expect(outcome.status).toBe('decisionNotObserved')
-    expect(observedTerminals(outcome)).toEqual([])
-  })
-
-  it('ah: a terminal-first correlation exposes the raw terminal record and nothing else', () => {
-    // The real store, terminal-first: no decision, no execution start - and the
-    // reader preserves exactly that factual state.
+  it('aq: the REAL store snapshot is consumable as the reader snapshot - terminal-only entry', () => {
     const { store } = realStore()
     store.recordExecutionTerminal({ correlationId: 'X', outcome: 'failed', roundId: 'R' })
 
-    const outcome = readLiaBrainExecutionIdentityFacts(store, 'X', LIA_BRAIN_ENGINE_PROVIDER_MAPPING)
-    expect(outcome.status).toBe('decisionNotObserved')
-    expect(observedTerminals(outcome)).toEqual([{ outcome: 'failed', roundId: 'R' }])
-    // Two fields per record: the correlation key is not duplicated inside.
-    for (const record of observedTerminals(outcome))
-      expect(Object.keys(record).sort()).toEqual(['outcome', 'roundId'])
+    // No adapter, no copy layer: what the canonical store hands out IS the
+    // reader's structural contract, and the store itself is a valid reader.
+    const snapshot: LiaBrainCorrelationSnapshot = store.get('X')!
+    const asReader: LiaBrainCorrelationSnapshotReader = store
+
+    // Snapshot-boundary evidence: the raw record is the one 4D4C2A froze...
+    expect(snapshot.executionTerminals).toEqual([{ outcome: 'failed', roundId: 'R' }])
+    // ...while the read output is the identity answer and nothing terminal.
+    const outcome = readLiaBrainExecutionIdentityFacts(asReader, 'X', LIA_BRAIN_ENGINE_PROVIDER_MAPPING)
+    expect(outcome).toEqual({ attempts: [], status: 'decisionNotObserved' })
+    expect('executionTerminals' in outcome).toBe(false)
   })
 
-  it('ai: all three outcomes are copied verbatim, in store arrival order', () => {
+  it('ar: the REAL store snapshot carries start and terminal side by side, still read as facts', () => {
     const { store } = realStore()
-    store.recordExecutionTerminal({ correlationId: 'X', outcome: 'succeeded', roundId: 'C' })
-    store.recordExecutionTerminal({ correlationId: 'X', outcome: 'failed', roundId: 'A' })
-    store.recordExecutionTerminal({ correlationId: 'X', outcome: 'abandoned', roundId: 'B' })
+    store.recordDecision('X', productionAutomaticDecision())
+    store.recordExecution(report('X', 'R'))
+    store.recordExecutionTerminal({ correlationId: 'X', outcome: 'succeeded', roundId: 'R' })
 
+    const snapshot: LiaBrainCorrelationSnapshot = store.get('X')!
+    expect(snapshot.executionTerminals).toEqual([{ outcome: 'succeeded', roundId: 'R' }])
+    expect(snapshot.executions).toHaveLength(1)
+
+    // The attempt is reported as an identity fact: the matching terminal record
+    // is NOT joined into it, and no terminal key appears anywhere.
     const outcome = readLiaBrainExecutionIdentityFacts(store, 'X', LIA_BRAIN_ENGINE_PROVIDER_MAPPING)
-    // No translation, no normalization, no sorting: the arrival order stands.
-    expect(observedTerminals(outcome)).toEqual([
-      { outcome: 'succeeded', roundId: 'C' },
-      { outcome: 'failed', roundId: 'A' },
-      { outcome: 'abandoned', roundId: 'B' },
-    ])
-  })
-
-  it('aj: start-then-terminal and terminal-then-start expose both independent collections', () => {
-    // Matching round R, start first.
-    const startFirst = realStore().store
-    startFirst.recordExecution(report('X', 'R'))
-    startFirst.recordExecutionTerminal({ correlationId: 'X', outcome: 'succeeded', roundId: 'R' })
-
-    const startFirstOutcome = readLiaBrainExecutionIdentityFacts(startFirst, 'X', LIA_BRAIN_ENGINE_PROVIDER_MAPPING)
-    expect((startFirstOutcome as { attempts: unknown[] }).attempts).toHaveLength(1)
-    expect(observedTerminals(startFirstOutcome)).toEqual([{ outcome: 'succeeded', roundId: 'R' }])
-    // The attempt carries ONLY its identity facts - this correlation has no
-    // decision, so no equality fact exists either - and the outcome was NOT
-    // joined into it.
-    for (const fact of (startFirstOutcome as { attempts: Record<string, unknown>[] }).attempts) {
-      expect(Object.keys(fact).sort()).toEqual(['arrivalIndex', 'modelId', 'providerId', 'roundId'])
+    expect(outcome.status).toBe('attemptIdentityFacts')
+    expect(Object.keys(outcome).sort()).toEqual(['attempts', 'expected', 'status'])
+    for (const fact of (outcome as { attempts: Record<string, unknown>[] }).attempts) {
+      expect(Object.keys(fact).sort()).toEqual(['arrivalIndex', 'modelId', 'modelIdentityEqual', 'providerId', 'providerIdentityEqual', 'roundId'])
       expect(fact).not.toHaveProperty('outcome')
     }
-
-    // Terminal first: the same factual state, the same two collections.
-    const terminalFirst = realStore().store
-    terminalFirst.recordExecutionTerminal({ correlationId: 'X', outcome: 'succeeded', roundId: 'R' })
-    terminalFirst.recordExecution(report('X', 'R'))
-    const terminalFirstOutcome = readLiaBrainExecutionIdentityFacts(terminalFirst, 'X', LIA_BRAIN_ENGINE_PROVIDER_MAPPING)
-    expect((terminalFirstOutcome as { attempts: unknown[] }).attempts).toHaveLength(1)
-    expect(observedTerminals(terminalFirstOutcome)).toEqual([{ outcome: 'succeeded', roundId: 'R' }])
   })
 
-  it('ak: an unmatched terminal round survives beside an unrelated execution start', () => {
-    const { store } = realStore()
-    store.recordExecution(report('X', 'A'))
-    store.recordExecutionTerminal({ correlationId: 'X', outcome: 'abandoned', roundId: 'B' })
+  it('as: a present correlation answers WITHOUT a terminal key - decision-only and execution-only', () => {
+    const decisionOnly = recordingReader({ X: { decision: productionAutomaticDecision(), executions: [] } }).reader
+    const executionOnly = recordingReader({ X: { executions: [attempt({ roundId: 'A' })] } }).reader
 
-    const outcome = readLiaBrainExecutionIdentityFacts(store, 'X', LIA_BRAIN_ENGINE_PROVIDER_MAPPING)
-    // Both survive independently: no pairing, no validation, no label.
+    const decisionOnlyOutcome = read(decisionOnly)
+    expect(decisionOnlyOutcome.status).toBe('noExecutionObserved')
+    expect(Object.keys(decisionOnlyOutcome).sort()).toEqual(['attempts', 'expected', 'status'])
+    expect('executionTerminals' in decisionOnlyOutcome).toBe(false)
+
+    const executionOnlyOutcome = read(executionOnly)
+    expect(executionOnlyOutcome.status).toBe('decisionNotObserved')
+    expect(Object.keys(executionOnlyOutcome).sort()).toEqual(['attempts', 'status'])
+    expect('executionTerminals' in executionOnlyOutcome).toBe(false)
+  })
+
+  it('at: a terminal-only snapshot answers exactly like an EMPTY one - no synthesized attempt', () => {
+    const terminalOnly = recordingReader({ X: { executions: [], executionTerminals: [terminal('R', 'failed')] } }).reader
+    const empty = recordingReader({ X: { executions: [] } }).reader
+
+    const outcome = read(terminalOnly)
+    expect(outcome).toEqual(read(empty))
+    expect(outcome).toEqual({ attempts: [], status: 'decisionNotObserved' })
+    expect('executionTerminals' in outcome).toBe(false)
+  })
+
+  it('au: start plus matching terminal answers exactly like the start alone', () => {
+    const matched = recordingReader({ X: snapshot([attempt({ roundId: 'R' })], [terminal('R', 'succeeded')]) }).reader
+    const startOnly = recordingReader({ X: snapshot([attempt({ roundId: 'R' })]) }).reader
+
+    const outcome = read(matched)
+    expect(outcome).toEqual(read(startOnly))
+    // No outcome was attached to the attempt and no terminal field leaked.
+    expect(JSON.stringify(outcome)).not.toMatch(/terminal|outcome|succeeded/i)
+    expect('executionTerminals' in outcome).toBe(false)
+  })
+
+  it('av: an unmatched terminal round is inert beside an unrelated execution start', () => {
+    const unmatched = recordingReader({ X: snapshot([attempt({ roundId: 'A' })], [terminal('B', 'abandoned')]) }).reader
+    const startOnly = recordingReader({ X: snapshot([attempt({ roundId: 'A' })]) }).reader
+
+    const outcome = read(unmatched)
+    // Identity output is based ONLY on execution A: no mismatch, no orphan, no
+    // label for B.
+    expect(outcome).toEqual(read(startOnly))
     expect((outcome as { attempts: { roundId: string }[] }).attempts.map(fact => fact.roundId)).toEqual(['A'])
-    expect(observedTerminals(outcome)).toEqual([{ outcome: 'abandoned', roundId: 'B' }])
+    expect(JSON.stringify(outcome)).not.toMatch(/mismatch|orphan|abandoned|terminal/i)
   })
 
-  it('al: an absent correlation is still correlationNotObserved - no fabricated collections', () => {
+  it('aw: every terminal variant is inert - all outcomes, several rounds, empty or absent', () => {
+    const executions = [attempt({ roundId: 'A' }), attempt({ roundId: 'B', providerId: 'anthropic' })]
+    const baseline = read(recordingReader({ X: snapshot(executions) }).reader)
+
+    for (const terminals of [
+      [],
+      [terminal('A', 'succeeded')],
+      [terminal('A', 'failed')],
+      [terminal('B', 'abandoned')],
+      [terminal('A', 'succeeded'), terminal('B', 'failed'), terminal('C', 'abandoned')],
+    ]) {
+      const outcome = read(recordingReader({ X: snapshot(executions, terminals) }).reader)
+      expect(outcome).toEqual(baseline)
+      expect('executionTerminals' in outcome).toBe(false)
+      expect(JSON.stringify(outcome)).not.toMatch(/terminal|succeeded|failed|abandoned|count|latest|fallback/i)
+    }
+  })
+
+  it('ax: an absent correlation keeps its exact single-key answer', () => {
     const { calls, reader } = recordingReader({})
 
     const outcome = readLiaBrainExecutionIdentityFacts(reader, 'missing', LIA_BRAIN_ENGINE_PROVIDER_MAPPING)
 
-    // Unchanged absence semantics: no `executionTerminals: []` for a key that
-    // does not exist, and the key is still forwarded verbatim.
     expect(outcome).toEqual({ status: 'correlationNotObserved' })
     expect(Object.keys(outcome)).toEqual(['status'])
+    expect('executionTerminals' in outcome).toBe(false)
     expect(calls).toEqual(['missing'])
   })
 
-  it('am: the exposed terminal collection is copy-safe in both directions', () => {
-    const { store } = realStore()
-    store.recordExecutionTerminal({ correlationId: 'X', outcome: 'failed', roundId: 'R' })
-
-    const outcome = readLiaBrainExecutionIdentityFacts(store, 'X', LIA_BRAIN_ENGINE_PROVIDER_MAPPING)
-    // The returned collection is the reader's own fresh array, so the test may
-    // reach into it: pushing and editing here must stay local to this call.
-    const returned = observedTerminals(outcome) as LiaObservedExecutionTerminal[]
-    returned.push({ outcome: 'succeeded', roundId: 'hijacked' })
-    returned[0]!.outcome = 'succeeded'
-    returned[0]!.roundId = 'mutated'
-
-    // The next read is freshly built...
-    const second = readLiaBrainExecutionIdentityFacts(store, 'X', LIA_BRAIN_ENGINE_PROVIDER_MAPPING)
-    expect(observedTerminals(second)).toEqual([{ outcome: 'failed', roundId: 'R' }])
-    expect(store.get('X')!.executionTerminals).toEqual([{ outcome: 'failed', roundId: 'R' }])
-  })
-
-  it('an: after expiry the reader follows the existing absence behavior', () => {
-    const { store, advance } = realStore()
-    store.recordExecutionTerminal({ correlationId: 'X', outcome: 'succeeded', roundId: 'R' })
-
-    expect((readLiaBrainExecutionIdentityFacts(store, 'X', LIA_BRAIN_ENGINE_PROVIDER_MAPPING) as { executionTerminals: unknown }).executionTerminals)
-      .toEqual([{ outcome: 'succeeded', roundId: 'R' }])
-
-    // TTL is the store's own business: once the entry is gone, the reader
-    // reports exactly what it reported before this phase - nothing observed.
-    advance(900_000)
-    expect(readLiaBrainExecutionIdentityFacts(store, 'X', LIA_BRAIN_ENGINE_PROVIDER_MAPPING)).toEqual({ status: 'correlationNotObserved' })
-  })
-
-  it('ao: the reader copies terminal facts only - no interpretation, ever', () => {
+  it('ay: the reader ends at the snapshot - runtime never touches the terminal collection', () => {
     const source = stripComments(readSource('./brain-correlation-reader.ts'))
+    const runtime = source.slice(source.indexOf('export function readLiaBrainExecutionIdentityFacts'))
 
-    // The collection is read and copied: no join, no pairing, no reducer, no
-    // count and no "latest" semantics.
-    expect(source).not.toMatch(/anySucceeded|anyFailed|allFailed|hasTerminal|terminalObserved|succeededAttempt|failedAttempt|abandonedAttempt|fallbackObserved|fallbackCount|winningAttempt|finalAttempt|sendSucceeded|sendFailed|routeMatch|mismatch|completionStatus|terminalCount|successCount|failureCount|completedCount|latestTerminal|lastTerminalOutcome|currentOutcome/)
-    // No write API and no triggering behavior of any kind.
-    expect(source).not.toMatch(/recordDecision|recordExecution|\.observe\(/)
-    // And the terminal vocabulary appears exactly where the carriage needs it.
-    expect(source.match(/executionTerminals/g)).toHaveLength(4)
-    expect(source.match(/roundId/g)?.length).toBe(3)
-    expect(source.match(/outcome/g)?.length).toBe(3)
+    // Runtime implementation: zero terminal vocabulary - the collection is not
+    // read, copied, mapped, filtered or counted.
+    expect(runtime).not.toMatch(/executionTerminals|roundId|outcome|terminal/i)
+    // No terminal helper of any kind anywhere in the module.
+    expect(source).not.toMatch(/copyObservedExecutionTerminals|readTerminals|terminalCopy|terminalMap|terminal\w*\.(?:map|filter|reduce|find|sort)\(/)
+    // The carriage lives in the type contract alone: one snapshot field, one
+    // record shape.
+    expect(source.match(/executionTerminals/g)).toHaveLength(1)
+    expect(source.match(/roundId/g)).toHaveLength(1)
+    expect(source.match(/outcome/g)).toHaveLength(1)
   })
 })
 
@@ -734,15 +743,15 @@ describe('correlation snapshot reader - authority and isolation invariants (Phas
     expect(source).not.toMatch(/from ['"](?:node:)?(?:fs|net|https?|child_process|dns|dgram|timers)['/]|\bfetch\(|XMLHttpRequest|WebSocket|localStorage|sessionStorage/)
     expect(source).not.toMatch(/console\.|^(?:process\.|globalThis\.)/m)
 
-    // The exported surface is exactly the audited one - the 4C3A members plus
-    // the three reader-owned TYPE declarations 8.0D-10B-4D4C3A introduces for
-    // the raw terminal carriage (no new function, no new read API).
+    // The exported surface is exactly the audited one - the 4C3A members plus the
+    // two reader-owned TYPE declarations 8.0D-10B-4D4C3A introduces for the
+    // terminal SNAPSHOT contract (no runtime function, no terminal-output type,
+    // no new read API).
     expect([...source.matchAll(/^export (?:const|function|interface|type) (\w+)/gm)].map(match => match[1])).toEqual([
       'LiaObservedExecutionTerminal',
       'LiaBrainCorrelationSnapshot',
       'LiaBrainCorrelationSnapshotReader',
       'LiaBrainEngineProviderLookup',
-      'LiaBrainCorrelationTerminalFacts',
       'LiaBrainCorrelationReadFacts',
       'readLiaBrainExecutionIdentityFacts',
     ])

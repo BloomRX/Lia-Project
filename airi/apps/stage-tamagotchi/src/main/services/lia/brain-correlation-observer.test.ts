@@ -21,6 +21,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { createLiaBrainCorrelationObserver } from './brain-correlation-observer'
 import { createLiaBrainCorrelationService } from './brain-correlation-service'
 import { createLiaBrainCorrelationStore } from './brain-correlation-store'
+import { formatLiaBrainDiagnosticEntry } from './brain-diagnostic-log'
 
 /**
  * Phase 8.0D-10B-4C4A: the focused proof of the main-side diagnostic observer.
@@ -1014,5 +1015,88 @@ describe('correlation observer - structured diagnostic log seam (Phase 8.0D-10B-
       OBSERVER,
       DIAGNOSTIC_LOG,
     ])
+  })
+})
+
+/**
+ * Phase 8.0D-10B-4D4C3A-F: the boundary correction that keeps RAW terminal
+ * records out of the diagnostic facts.
+ *
+ * The reader's SNAPSHOT contract may carry the terminal records a canonical
+ * correlation entry stores, but the read RESULT is the identity facts alone -
+ * so nothing terminal can reach the structured entry or the log line. These
+ * proofs drive the REAL store through the REAL observer (the module doubles
+ * above delegate to the real implementations).
+ */
+describe('correlation observer - terminal records never reach the diagnostic facts (Phase 8.0D-10B-4D4C3A-F)', () => {
+  type Terminals = readonly { outcome: 'succeeded' | 'failed' | 'abandoned', roundId: string }[]
+
+  /** The real store: real decision, one real execution report, plus terminals. */
+  function storeWithTerminals(terminals: Terminals) {
+    const store = createLiaBrainCorrelationStore({ maxEntries: 8, now: () => 1_000, ttlMs: 900_000 })
+    store.recordDecision('X', productionDecision())
+    store.recordExecution({ conversationId: 'conversation-1', correlationId: 'X', modelId: GROQ_MODEL_ID, providerId: GROQ_ENGINE_ID, roundId: 'R' })
+    for (const terminal of terminals)
+      store.recordExecutionTerminal({ correlationId: 'X', ...terminal })
+    return store
+  }
+
+  /** One observation over that store, through the real observer and its entry. */
+  async function observe(terminals: Terminals) {
+    resetProbes()
+    const store = storeWithTerminals(terminals)
+    const recorded = recordingLog()
+    const observer = await loadObserver(store, recorded.log)
+    observer.observe('X')
+    return { entry: recorded.entries[0]!, store }
+  }
+
+  it('bz: the entry keeps its exact keys and NO terminal field reaches the facts', async () => {
+    const { entry, store } = await observe([{ outcome: 'succeeded', roundId: 'R' }])
+
+    // The structured entry is exactly what it was: two top-level keys...
+    expect(Object.keys(entry).sort()).toEqual(['correlationId', 'facts'])
+    // ...the forwarded facts neither declare nor carry a terminal collection...
+    expect('executionTerminals' in entry.facts).toBe(false)
+    expect('outcome' in entry.facts).toBe(false)
+    // ...and no terminal vocabulary is reachable from the entry at all.
+    const serialized = JSON.stringify(entry)
+    for (const forbidden of ['executionTerminals', 'outcome', 'succeeded', 'failed', 'abandoned', 'terminal'])
+      expect(serialized, forbidden).not.toMatch(new RegExp(forbidden, 'i'))
+
+    // The raw record still exists at the SNAPSHOT boundary: the stop is the read
+    // API, not terminal storage.
+    expect(store.get('X')!.executionTerminals).toEqual([{ outcome: 'succeeded', roundId: 'R' }])
+  })
+
+  it('ca: the observed facts are deeply equal with and without terminal records', async () => {
+    const withoutTerminals = await observe([])
+    const withTerminals = await observe([
+      { outcome: 'succeeded', roundId: 'R' },
+      { outcome: 'failed', roundId: 'S' },
+      { outcome: 'abandoned', roundId: 'T' },
+    ])
+
+    // The factual state is the real identity-facts answer, not a degenerate one.
+    expect(withoutTerminals.entry.facts.status).toBe('attemptIdentityFacts')
+    expect(Object.keys(withoutTerminals.entry.facts).sort()).toEqual(['attempts', 'expected', 'status'])
+    // A terminal stream of any length changes nothing in the diagnostic facts.
+    expect(withTerminals.entry.facts).toEqual(withoutTerminals.entry.facts)
+    expect(Object.keys(withTerminals.entry.facts).sort()).toEqual(['attempts', 'expected', 'status'])
+  })
+
+  it('cb: the diagnostic log line is byte-identical with and without terminal records', async () => {
+    const withoutTerminals = await observe([])
+    const withTerminals = await observe([
+      { outcome: 'succeeded', roundId: 'R' },
+      { outcome: 'failed', roundId: 'S' },
+    ])
+
+    const line = formatLiaBrainDiagnosticEntry(withoutTerminals.entry)
+    expect(formatLiaBrainDiagnosticEntry(withTerminals.entry)).toBe(line)
+    // One deterministic metadata line, with no terminal vocabulary in it.
+    expect(line.startsWith('[LIA-BRAIN-DIAG] ')).toBe(true)
+    for (const forbidden of ['terminal', 'outcome', 'succeeded', 'failed', 'abandoned'])
+      expect(line, forbidden).not.toMatch(new RegExp(forbidden, 'i'))
   })
 })

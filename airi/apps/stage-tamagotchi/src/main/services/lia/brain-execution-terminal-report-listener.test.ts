@@ -514,10 +514,10 @@ describe('lia terminal wiring invariants (Phase 8.0D-10B-4D4C2B2)', () => {
     ])
   })
 
-  it('t: the frozen layers stay frozen - the RAW carriage lives in the reader alone', () => {
-    // 8.0D-10B-4D4C3A: the correlation READER now hands the raw terminal
-    // collection out beside the identity facts. Every other read-side layer
-    // still knows nothing about terminal outcomes: no derivation, no observer
+  it('t: the frozen layers stay frozen - the reader carries terminals at TYPE level only', () => {
+    // 8.0D-10B-4D4C3A-F: exactly ONE read-side layer names the terminal
+    // vocabulary, and only inside its reader-owned SNAPSHOT CONTRACT. Every
+    // other read-side layer stays terminal-free: no derivation, no observer
     // trigger, no diagnostic output.
     for (const relative of [
       './brain-execution-identity-facts.ts',
@@ -527,10 +527,15 @@ describe('lia terminal wiring invariants (Phase 8.0D-10B-4D4C2B2)', () => {
     ]) {
       expect(stripComments(readSource(relative)), relative).not.toMatch(/executionTerminal|recordExecutionTerminal/)
     }
-    // The reader carries it and nothing more: it names the collection, the
-    // round key and the outcome, and it never derives anything from them.
+
+    // The reader: the collection is declared on the snapshot boundary it owns...
     const reader = stripComments(readSource('./brain-correlation-reader.ts'))
-    expect(reader).toContain('executionTerminals')
+    expect(reader).toContain('executionTerminals?: readonly LiaObservedExecutionTerminal[]')
+    // ...while the runtime read path never touches it, and no terminal-output
+    // type or helper exists to carry it out of the read API.
+    const runtime = reader.slice(reader.indexOf('export function readLiaBrainExecutionIdentityFacts'))
+    expect(runtime).not.toMatch(/executionTerminals|roundId|outcome|terminal/i)
+    expect(reader).not.toMatch(/LiaBrainCorrelationTerminalFacts|copyObservedExecutionTerminals|readTerminals|terminalMap/)
     expect(reader).not.toMatch(/recordExecutionTerminal|\.observe\(|anySucceeded|anyFailed|allFailed|hasTerminal|terminalCount|latestTerminal/)
 
     // The store keeps its three-field/one-method contract - the wiring did not

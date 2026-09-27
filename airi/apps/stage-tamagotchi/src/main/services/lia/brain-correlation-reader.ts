@@ -13,12 +13,14 @@ import { deriveLiaBrainExecutionIdentityFacts } from './brain-execution-identity
  *     -> the existing pure identity-facts transformation
  *     -> factual per-attempt identity facts (or "nothing observed")
  *
- * Since Phase 8.0D-10B-4D4C3A it also carries the RAW terminal collection of
- * the snapshot it read (`executionTerminals`, one two-field record per round, in
- * store arrival order). That is pure factual carriage: the reader never joins it
- * to `executions`, never interprets an outcome and never derives anything from
- * it - the identity facts are computed exactly as before, and the terminals are
- * copied verbatim beside them.
+ * Phase 8.0D-10B-4D4C3A: the SNAPSHOT CONTRACT this adapter reads is widened to
+ * admit the raw terminal records a canonical correlation entry may carry
+ * (`executionTerminals`, one two-field record per round, in store arrival
+ * order). That is a structural boundary only: the read RESULT is untouched - the
+ * identity facts are still returned exactly as the pure facts layer produces
+ * them, and the raw terminal records are neither read, copied, joined nor
+ * interpreted by this module's runtime. A later phase may deliberately derive
+ * terminal-specific facts; until then the collection stops at the snapshot.
  *
  * It owns the READ only. It interprets nothing: every state the facts layer can
  * produce (`decisionNotObserved`, `noBrainRouteSelected`, `engineMappingMissing`,
@@ -64,12 +66,13 @@ export interface LiaObservedExecutionTerminal {
 
 /**
  * The snapshot this adapter READS: the facts minimum plus the raw terminal
- * collection, owned by this layer.
+ * collection a canonical correlation entry carries, owned by this layer.
  *
- * `executionTerminals` is deliberately optional on the way IN - it is the one
- * field a structural double may omit - while the reader's own result always
- * exposes the collection (empty when the correlation has none). The two
- * execution collections stay independent: nothing here pairs them by `roundId`.
+ * This is the ONLY terminal exposure this adapter owns. `executionTerminals` is
+ * deliberately OPTIONAL on this structural boundary, so every existing
+ * structural double stays compatible, while the canonical store always supplies
+ * it. The two execution collections stay independent: nothing here pairs them by
+ * `roundId` - the collection is carried by the contract and otherwise ignored.
  */
 export interface LiaBrainCorrelationSnapshot extends LiaBrainExecutionIdentitySnapshot {
   /** Every terminal record of that logical send, in store arrival order. */
@@ -109,40 +112,18 @@ export interface LiaBrainEngineProviderLookup {
 }
 
 /**
- * The raw terminal carriage of one present snapshot.
- *
- * `executionTerminals` is ALWAYS an array for a correlation that exists - empty
- * when no round has settled yet - and each element is a fresh two-field copy.
- * A caller cannot reach the snapshot it passed in through it, and nothing here
- * interprets an outcome, counts records or reads the last one.
- */
-export interface LiaBrainCorrelationTerminalFacts {
-  executionTerminals: readonly LiaObservedExecutionTerminal[]
-}
-
-/**
  * The factual outcome of one read.
  *
  * - `correlationNotObserved`  no live snapshot exists for that key at read
  *   time (absent, expired or evicted - indistinguishable here, and deliberately
  *   not interpreted). Nothing is fabricated for it - no empty collections;
  * - otherwise the identity facts are returned EXACTLY as the pure facts layer
- *   produced them, unmodified and unwrapped, BESIDE the raw terminal
- *   collection of that same snapshot.
+ *   produced them, unmodified and unwrapped. Raw terminal records are NOT part of
+ *   this result, even when the snapshot carries them.
  */
 export type LiaBrainCorrelationReadFacts
   = | { status: 'correlationNotObserved' }
-    | (LiaBrainExecutionIdentityFacts & LiaBrainCorrelationTerminalFacts)
-
-/** Copies exactly the two terminal fields of every record into fresh objects. */
-function copyObservedExecutionTerminals(
-  terminals: readonly LiaObservedExecutionTerminal[] | undefined,
-): LiaObservedExecutionTerminal[] {
-  return (terminals ?? []).map(terminal => ({
-    outcome: terminal.outcome,
-    roundId: terminal.roundId,
-  }))
-}
+    | LiaBrainExecutionIdentityFacts
 
 /**
  * Reads one correlation snapshot and derives its per-attempt identity facts.
@@ -154,10 +135,9 @@ function copyObservedExecutionTerminals(
  * 2. `undefined` -> `{ status: 'correlationNotObserved' }`; the mapping is not
  *    consulted at all in that case;
  * 3. a snapshot -> `deriveLiaBrainExecutionIdentityFacts(snapshot, mapping)`,
- *    returned unchanged, with the snapshot's raw terminal collection copied
- *    beside it (empty array when the correlation has no terminal records). No
- *    second lookup, no re-derivation, no re-typing of its result states, and no
- *    interpretation of the terminal facts.
+ *    returned unchanged. No second lookup, no re-derivation, no re-typing of
+ *    its result states - and no terminal handling of any kind, even when the
+ *    snapshot contract carries a terminal collection.
  *
  * Failure semantics: the injected reader is a synchronous internal dependency,
  * so an unexpected throw is NOT swallowed here - it propagates to the caller
@@ -180,11 +160,5 @@ export function readLiaBrainExecutionIdentityFacts(
   if (snapshot === undefined)
     return { status: 'correlationNotObserved' }
 
-  // The facts are computed exactly as before - the terminal collection is NOT
-  // an input to that derivation - and the raw terminal facts are copied beside
-  // them, in their own order, one fresh record per stored record.
-  return {
-    ...deriveLiaBrainExecutionIdentityFacts(snapshot, mapping),
-    executionTerminals: copyObservedExecutionTerminals(snapshot.executionTerminals),
-  }
+  return deriveLiaBrainExecutionIdentityFacts(snapshot, mapping)
 }
