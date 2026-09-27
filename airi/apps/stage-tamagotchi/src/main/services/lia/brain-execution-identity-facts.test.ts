@@ -475,6 +475,9 @@ describe('execution identity facts - purity and trust boundary (Phase 8.0D-10B-4
       createdAt,
       decision: productionAutomaticDecision(),
       executions: [report('A'), report('B')],
+      // 8.0D-10B-4C2A: the entry shape gained the terminal collection; the
+      // facts layer ignores it (this fixture only has to satisfy the type).
+      executionTerminals: [],
     })
 
     const early = deriveLiaBrainExecutionIdentityFacts(asSnapshot(entry(1)), LIA_BRAIN_ENGINE_PROVIDER_MAPPING)

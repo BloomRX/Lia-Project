@@ -110,8 +110,10 @@ describe('lia brain correlation service - lifecycle ownership (Phase 8.0D-10B-4B
     expect(factory).toHaveBeenCalledTimes(1)
 
     // And the resolved object really is the bounded store API, not a wrapper
-    // with extra powers.
-    expect(Object.keys(first.service).sort()).toEqual(['get', 'recordDecision', 'recordExecution', 'size'])
+    // with extra powers. 8.0D-10B-4C2A widened the store API by exactly one
+    // factual writer - the terminal outcome recorder - so the service, which IS
+    // the store, exposes it too.
+    expect(Object.keys(first.service).sort()).toEqual(['get', 'recordDecision', 'recordExecution', 'recordExecutionTerminal', 'size'])
   })
 
   it('d: a second independent lifecycle receives a different instance', async () => {
@@ -366,7 +368,7 @@ describe('lia brain correlation service - isolation (Phase 8.0D-10B-4B2)', () =>
     // config write, no fallback/retry, no chat action.
     expect(source).not.toMatch(/decide\(|LiaBrainService|brainRequirementForChatTurn|automaticPolicy|liaProductConfig|updateLiaProductConfig|fallback|retry|permission|useChatStore|chatStore/)
     expect(source).not.toMatch(/setInterval|setTimeout|from ['"](?:node:)?(fs|net|https?|child_process)['/]|\bfetch\(/)
-    // The surface is the store's own four members - nothing was added.
+    // The surface is the store's own five members - nothing was added here.
     expect(source).not.toMatch(/recordComparison|reportMismatch|expectedProvider|expectedModel/)
   })
 
