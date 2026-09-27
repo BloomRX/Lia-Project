@@ -411,7 +411,13 @@ describe('lia execution reporter across provider attempts (Phase 8.0D-10B-4A)', 
     // The report never invents extra identity for the attempts.
     for (const report of reports)
       expect(Object.keys(report).sort()).toEqual(['conversationId', 'correlationId', 'modelId', 'providerId', 'roundId'])
-  })
+    // This is the only test in this file that drives the REAL store send
+    // through a fallback: on a small (2-vCPU) machine the two attempts measure
+    // ~9s, well past the suite's generic 5s budget. A local budget keeps every
+    // assertion above a real one - a genuinely hung send still fails - while
+    // the generic default can no longer cut the send short and let its later
+    // reports leak into the next test.
+  }, 15000)
 
   it('q2: an uncorrelated send of the same shape reports nothing', async () => {
     const provider = { chat: () => ({ baseURL: 'https://example.com/' }) }
