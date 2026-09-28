@@ -49,6 +49,17 @@ interface ForkOptions {
   hidden?: boolean
 }
 
+/**
+ * Phase 8.0D-10B-4D4C4-D2A: generic per-send route override — ONE logical send
+ * may carry an optional provider/model pair without mutating global
+ * activeProvider/activeModel. Generic only: no Lia, no engineId, no
+ * correlationId, no attempt index. Optional, never mutated, never persisted.
+ */
+export interface ChatSendRouteOverride {
+  readonly providerId: string
+  readonly modelId: string
+}
+
 /** A serializable chat request that any application context can send to the leader. */
 export interface ChatSendPayload {
   /** Image attachments for the new user message. */
@@ -72,6 +83,13 @@ export interface ChatSendPayload {
   text: string
   /** Request-specific tools selected by their model-facing names. */
   tools?: ChatToolReference[]
+  /**
+   * Phase 8.0D-10B-4D4C4-D2A: optional generic route for the INITIAL attempt
+   * only. When supplied, attempt 0 uses this provider/model without touching
+   * global activeProvider/activeModel; later fallback attempts use the
+   * existing fallback resolver. Absent = current Stage behavior.
+   */
+  routeOverride?: ChatSendRouteOverride
 }
 
 /** The durable messages appended while one chat request executes. */
@@ -446,9 +464,12 @@ export const useChatStore = defineStore('chat', () => {
     })
   }
 
-  async function executeSendAttempt(payload: ChatSendPayload): Promise<ChatSendResult> {
-    const providerId = activeProvider.value
-    const modelId = activeModel.value
+  async function executeSendAttempt(payload: ChatSendPayload, effectiveRoute?: ChatSendRouteOverride): Promise<ChatSendResult> {
+    // Phase 8.0D-10B-4D4C4-D2A: per-send override takes precedence over global,
+    // with explicit effectiveRoute (fallback next) taking precedence over the
+    // payload's initial override. No global is mutated here.
+    const providerId = effectiveRoute?.providerId ?? payload.routeOverride?.providerId ?? activeProvider.value
+    const modelId = effectiveRoute?.modelId ?? payload.routeOverride?.modelId ?? activeModel.value
     if (!providerId || !modelId)
       throw new Error('No active chat provider or model configured')
 
@@ -507,14 +528,65 @@ export const useChatStore = defineStore('chat', () => {
    */
   async function executeSend(payload: ChatSendPayload): Promise<ChatSendResult> {
     const fallbackResolver = getChatFallbackResolver()
-    if (!fallbackResolver)
-      return executeSendAttempt(payload)
+    const hasRouteOverride = !!payload.routeOverride
+    if (!fallbackResolver) {
+      return executeSendAttempt(payload, hasRouteOverride ? payload.routeOverride : undefined)
+    }
 
     // Snapshot the conversation before the send so a failed attempt can be
     // rolled back precisely without duplicating messages or touching history.
     if (!await chatSession.loadSession(payload.sessionId))
       throw new Error('Failed to load the target chat session')
     const messageCountBefore = chatSession.getSessionMessages(payload.sessionId).length
+
+    if (hasRouteOverride) {
+      // Phase 8.0D-10B-4D4C4-D2A: per-send override path — never mutates
+      // global activeProvider/activeModel. The initial attempt uses
+      // payload.routeOverride; fallback updates the local effectiveRoute.
+      let effectiveRoute: ChatSendRouteOverride = payload.routeOverride!
+      let lastError: unknown
+      for (let attempt = 0; attempt < CHAT_FALLBACK_MAX_ATTEMPTS; attempt += 1) {
+        try {
+          return await executeSendAttempt(payload, effectiveRoute)
+        }
+        catch (error) {
+          lastError = error
+          const next = await fallbackResolver({
+            error,
+            providerId: effectiveRoute.providerId,
+            modelId: effectiveRoute.modelId,
+            attemptIndex: attempt,
+          })
+          if (!next)
+            throw error
+
+          // Sanitized technical log: never the error/secret, only provider ids.
+          console.warn('[chat] provider failover', {
+            from: effectiveRoute.providerId,
+            to: next.providerId,
+            attempt: attempt + 1,
+          })
+
+          // Remove exactly what this failed attempt appended (the rolled turn), so
+          // the retry re-runs the same user message without duplicating it. If
+          // nothing was appended (e.g. a provider-resolution failure before the
+          // message reached the queue) there is nothing to roll back — retry safe.
+          const current = chatSession.getSessionMessages(payload.sessionId)
+          if (current.length > messageCountBefore) {
+            chatSession.setSessionMessages(payload.sessionId, current.slice(0, messageCountBefore))
+          }
+
+          effectiveRoute = {
+            providerId: next.providerId ?? effectiveRoute.providerId,
+            modelId: next.modelId ?? effectiveRoute.modelId,
+          }
+        }
+      }
+
+      // All bounded attempts exhausted; surface the last error to the caller
+      // (which appends a friendly, sanitized error for the user).
+      throw lastError ?? new Error('Chat send failed')
+    }
 
     const originalProviderId = activeProvider.value
     const originalModelId = activeModel.value
