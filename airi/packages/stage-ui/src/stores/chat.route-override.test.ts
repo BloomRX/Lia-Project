@@ -410,4 +410,75 @@ describe('chat routeOverride (4D4C4-D2A)', () => {
     expect(payload.routeOverride).toBeUndefined()
     expect(getChatProviderInstanceMock).toHaveBeenCalledWith('mock-provider', expect.anything())
   })
+
+  it('provider-only fallback clears model per watcher semantics', async () => {
+    llmStreamMock.mockRejectedValueOnce(new Error('fail P0'))
+    streamOnce()
+    const seen: any[] = []
+    registerChatFallbackResolver(async (ctx) => {
+      seen.push({ ...ctx })
+      if (ctx.attemptIndex === 0)
+        return { providerId: 'fallback-provider' } as any
+      if (ctx.attemptIndex === 1)
+        return { providerId: 'fallback-provider-2', modelId: 'fallback-model-2' }
+      return undefined
+    })
+    const store = useChatStore()
+    // P0 has model, fallback P1 provider-only should clear model to '' per
+    // consciousness watcher semantics; next attempt fails before llm due to
+    // missing model, then fallback to P2/M2 succeeds.
+    await store.send({
+      sessionId: 'session-1',
+      text: 'hello',
+      routeOverride: { providerId: 'override-provider', modelId: 'override-model' },
+    })
+    expect(seen[0]).toMatchObject({ providerId: 'override-provider', modelId: 'override-model', attemptIndex: 0 })
+    // After provider-only, model is cleared -> ctx for attempt 1 sees empty model
+    expect(seen[1]).toMatchObject({ providerId: 'fallback-provider', modelId: '', attemptIndex: 1 })
+    expect(getChatProviderInstanceMock.mock.calls.map(c => c[0])).toEqual([
+      'override-provider',
+      'fallback-provider-2',
+    ])
+    // Second attempt failed before llm due to empty model, third used P2/M2
+    expect(llmStreamMock).toHaveBeenCalledTimes(2)
+    expect(llmStreamMock.mock.calls[1]?.[0]).toBe('fallback-model-2')
+    expect(activeProviderRef.value).toBe('mock-provider')
+    expect(activeModelRef.value).toBe('gpt-test')
+  })
+
+  it('model-only fallback preserves provider', async () => {
+    llmStreamMock.mockRejectedValueOnce(new Error('fail'))
+    streamOnce()
+    const seen: any[] = []
+    registerChatFallbackResolver(async (ctx) => {
+      seen.push({ ...ctx })
+      return { providerId: 'override-provider', modelId: 'new-model' }
+    })
+    const store = useChatStore()
+    await store.send({
+      sessionId: 'session-1',
+      text: 'hello',
+      routeOverride: { providerId: 'override-provider', modelId: 'override-model' },
+    })
+    expect(seen[0]).toMatchObject({ providerId: 'override-provider', modelId: 'override-model', attemptIndex: 0 })
+    expect(getChatProviderInstanceMock.mock.calls.map(c => c[0])).toEqual(['override-provider', 'override-provider'])
+    expect(llmStreamMock.mock.calls[0]?.[0]).toBe('override-model')
+    expect(llmStreamMock.mock.calls[1]?.[0]).toBe('new-model')
+    expect(activeProviderRef.value).toBe('mock-provider')
+  })
+
+  it('provider+model fallback updates both', async () => {
+    llmStreamMock.mockRejectedValueOnce(new Error('fail'))
+    streamOnce()
+    registerChatFallbackResolver(async () => ({ providerId: 'fallback-provider', modelId: 'fallback-model' }))
+    const store = useChatStore()
+    await store.send({
+      sessionId: 'session-1',
+      text: 'hello',
+      routeOverride: { providerId: 'override-provider', modelId: 'override-model' },
+    })
+    expect(getChatProviderInstanceMock.mock.calls.map(c => c[0])).toEqual(['override-provider', 'fallback-provider'])
+    expect(llmStreamMock.mock.calls[1]?.[0]).toBe('fallback-model')
+    expect(activeProviderRef.value).toBe('mock-provider')
+  })
 })

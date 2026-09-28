@@ -60,6 +60,28 @@ export interface ChatSendRouteOverride {
   readonly modelId: string
 }
 
+/**
+ * Phase 8.0D-10B-4D4C4-D2A-V: mirrors the consciousness-store watcher
+ * (`watch(activeProvider, …, {flush:'sync'})` → `activeModel=''`) for the
+ * local effectiveRoute. Provider change clears model unless the candidate
+ * supplies one; otherwise only supplied fields are updated.
+ */
+function applyFallbackCandidateToRoute(
+  current: ChatSendRouteOverride,
+  next: { providerId: string, modelId?: string },
+): ChatSendRouteOverride {
+  if (next.providerId !== current.providerId) {
+    return {
+      providerId: next.providerId,
+      modelId: next.modelId ?? '',
+    }
+  }
+  return {
+    providerId: next.providerId,
+    modelId: next.modelId ?? current.modelId,
+  }
+}
+
 /** A serializable chat request that any application context can send to the leader. */
 export interface ChatSendPayload {
   /** Image attachments for the new user message. */
@@ -576,10 +598,7 @@ export const useChatStore = defineStore('chat', () => {
             chatSession.setSessionMessages(payload.sessionId, current.slice(0, messageCountBefore))
           }
 
-          effectiveRoute = {
-            providerId: next.providerId ?? effectiveRoute.providerId,
-            modelId: next.modelId ?? effectiveRoute.modelId,
-          }
+          effectiveRoute = applyFallbackCandidateToRoute(effectiveRoute, next)
         }
       }
 
