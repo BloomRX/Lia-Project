@@ -1,5 +1,12 @@
 import type { LiaBrainRoutingDecision } from '@lia/core'
 
+import type { LiaBrainEngineProviderMapping } from '../../../shared/lia/brain-engine-provider-mapping'
+
+import {
+  GROQ_STAGE_CHAT_PROVIDER_ID,
+  LIA_BRAIN_ENGINE_PROVIDER_MAPPING,
+} from '../../../shared/lia/brain-engine-provider-mapping'
+
 /**
  * Phase 8.0D-10B-4C2A: the trusted expected-execution-route mapping.
  *
@@ -48,68 +55,8 @@ export interface LiaBrainSelectedRoute {
   modelId: string
 }
 
-/**
- * The trusted Brain-engine -> Stage-provider mapping contract: an engine id
- * in, a provider id (or nothing) out.
- *
- * Deliberately minimal: ids only. No provider object, no provider
- * configuration, no credential, no resolver, no async surface - a lookup
- * table cannot execute anything.
- */
-export interface LiaBrainEngineProviderMapping {
-  providerIdForEngine: (engineId: string) => string | undefined
-}
-
-/**
- * The Stage execution provider id of Lia's current chat brain.
- *
- * Source finding of the Phase 8.0D-10B-4C2A audit: NO importable Stage-side
- * constant for this id exists in the trusted main layer. The id is declared
- * by the RENDERER store (`LIA_CHAT_PROVIDER_OPTIONS` in
- * `renderer/stores/lia/provider.ts`) and by the AIRI provider DEFINITION
- * (`defineProvider({ id: 'groq' })` in
- * `packages/stage-ui/src/libs/providers/providers/groq/index.ts`, which pulls
- * the provider runtime), and `@lia/core` exports the Brain descriptor factory
- * but not this id. Importing either into main would cross the renderer or
- * provider-runtime boundary, so this literal is the explicit Main-owned
- * statement of the current Stage execution-provider contract - never derived
- * at runtime, and pinned by the focused tests.
- */
-export const GROQ_STAGE_CHAT_PROVIDER_ID = 'groq'
-
-/**
- * The audited Brain engine -> Stage provider ids of THIS build: exactly the
- * production Brain engines the production catalog registers, and nothing
- * else. One engine today:
- *
- *   Brain engine `groq`  (Lia Core's Groq adapter, `GROQ_BRAIN_ENGINE_ID`)
- *   -> Stage provider `groq` (`defineProvider` / `LIA_CHAT_PROVIDER_OPTIONS`)
- *
- * No speculative entries: a Stage provider ships in this build that has NO
- * production Brain engine (OpenAI, Anthropic, Gemini, Ollama, Qwen and the
- * rest) and must not appear here, and a Brain engine with no mapping is
- * reported as unmapped rather than guessed. Module-private on purpose: the
- * only access path is the frozen mapping object below.
- */
-const PRODUCTION_ENGINE_PROVIDER_IDS: ReadonlyMap<string, string> = new Map([
-  ['groq', GROQ_STAGE_CHAT_PROVIDER_ID],
-])
-
-/**
- * The production mapping: module-owned, frozen, read-only data.
- *
- * There is no mutation API, no registration point and no dynamic learning -
- * an execution report can neither add nor replace an entry, and the same
- * holds for the renderer, a product-config write, an engine's declared
- * availability and any runtime model selection. Unknown ids read as
- * `undefined`, deterministically, and nothing is ever inferred from an id's
- * spelling.
- */
-export const LIA_BRAIN_ENGINE_PROVIDER_MAPPING: LiaBrainEngineProviderMapping = Object.freeze({
-  providerIdForEngine(engineId: string): string | undefined {
-    return PRODUCTION_ENGINE_PROVIDER_IDS.get(engineId)
-  },
-})
+export { GROQ_STAGE_CHAT_PROVIDER_ID, LIA_BRAIN_ENGINE_PROVIDER_MAPPING }
+export type { LiaBrainEngineProviderMapping }
 
 /**
  * Extracts the ONE concrete selected Brain route of a decision, if the

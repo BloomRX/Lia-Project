@@ -1,7 +1,7 @@
 import type { LiaBrainRoutingDecision } from '@lia/core'
 import type { ChatSendRouteOverride } from '@proj-airi/stage-ui/stores/chat'
 
-import { LIA_BRAIN_ENGINE_PROVIDER_MAPPING } from '../../../main/services/lia/brain-expected-route'
+import { LIA_BRAIN_ENGINE_PROVIDER_MAPPING } from '../../../shared/lia/brain-engine-provider-mapping'
 
 /**
  * Phase 8.0D-10B-4D4C4-D2B1: Lia-specific route candidate adapter.
@@ -13,7 +13,7 @@ import { LIA_BRAIN_ENGINE_PROVIDER_MAPPING } from '../../../main/services/lia/br
  * - Everything else → `undefined` (manual/disabled/modeUnspecified/
  *   automaticPolicyMissing/noCandidates/noPolicyMatch/ambiguous/…)
  * - Mapping `engineId → providerId` reuses the canonical production table:
- *   `groq` → `groq` (see `main/services/lia/brain-expected-route.ts`
+ *   `groq` → `groq` (see `shared/lia/brain-engine-provider-mapping.ts`
  *   `LIA_BRAIN_ENGINE_PROVIDER_MAPPING`). No new table, no switch on
  *   model string, no inference.
  * - `modelId` is the selected Brain route's own id verbatim.

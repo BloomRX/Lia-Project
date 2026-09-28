@@ -705,8 +705,8 @@ describe('correlation observer - caller allowlists and authority (Phase 8.0D-10B
   })
 
   it('ah: the trusted mapping VALUE has exactly the intended consumers', () => {
-    // Its owning module (the declaration) and this observer - nothing else.
-    expect(productionMatching(/LIA_BRAIN_ENGINE_PROVIDER_MAPPING/)).toEqual([OBSERVER, EXPECTED_ROUTE])
+    // Its owning module (the declaration) plus its consumers — observer, expected-route (re-export), renderer adapter, and shared owner.
+    expect(productionMatching(/LIA_BRAIN_ENGINE_PROVIDER_MAPPING/)).toEqual([OBSERVER, EXPECTED_ROUTE, 'apps/stage-tamagotchi/src/renderer/services/lia/brain-send-route-candidate.ts', 'apps/stage-tamagotchi/src/shared/lia/brain-engine-provider-mapping.ts'].sort())
     // The observer imports the VALUE and passes it through - it never rebuilds
     // a table, never resolves a provider and never names a vendor identity.
     expect(source).toContain(`import { LIA_BRAIN_ENGINE_PROVIDER_MAPPING } from './brain-expected-route'`)

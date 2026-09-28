@@ -461,11 +461,15 @@ describe('expected-route module - authority and purity invariants (Phase 8.0D-10
   const source = stripComments(readSource('./brain-expected-route.ts'))
 
   it('the module is a pure id transformation: one type-only import, no transport, no runtime, no I/O', () => {
-    // The ENTIRE dependency surface: one TYPE import of the canonical decision.
+    // The ENTIRE dependency surface: one TYPE import of the canonical decision plus the shared mapping (process-neutral owner).
     expect(source.match(/^import .*$/gm)).toEqual([
       `import type { LiaBrainRoutingDecision } from '@lia/core'`,
+      `import type { LiaBrainEngineProviderMapping } from '../../../shared/lia/brain-engine-provider-mapping'`,
+      `import {`,
     ])
-    expect(source).not.toMatch(/from ['"]\.\.?\//)
+    // Only the shared mapping is allowed as a relative import.
+    const relativeImports = source.match(/from ['"]\.\.?\/[^'"]+['"]/g) ?? []
+    expect(relativeImports.every(imp => imp.includes('shared/lia/brain-engine-provider-mapping'))).toBe(true)
 
     // No IPC/Eventa surface and no Brain channel.
     expect(source).not.toMatch(/eventa|defineEventa|defineInvokeEventa|defineInvokeHandler|ipcMain|ipcRenderer|BrowserWindow|\.emit\(/)
@@ -490,16 +494,21 @@ describe('expected-route module - authority and purity invariants (Phase 8.0D-10
     expect(source).not.toMatch(/^(?:let|var) /m)
 
     // The exported surface is exactly the audited one - nothing to mutate with.
-    expect([...source.matchAll(/^export (?:const|function|interface|type) (\w+)/gm)].map(match => match[1])).toEqual([
-      'LiaBrainSelectedRoute',
-      'LiaBrainEngineProviderMapping',
+    // Mapping primitives are now re-exported from the shared owner, so check both direct and re-export forms.
+    const directExports = [...source.matchAll(/^export (?:const|function|interface|type) (\w+)/gm)].map(match => match[1])
+    const hasMappingReExports = source.includes(`export { GROQ_STAGE_CHAT_PROVIDER_ID, LIA_BRAIN_ENGINE_PROVIDER_MAPPING }`)
+      && source.includes(`export type { LiaBrainEngineProviderMapping }`)
+    const allExports = [...directExports, ...(hasMappingReExports ? ['GROQ_STAGE_CHAT_PROVIDER_ID', 'LIA_BRAIN_ENGINE_PROVIDER_MAPPING', 'LiaBrainEngineProviderMapping'] : [])].sort()
+    expect(allExports.sort()).toEqual([
       'GROQ_STAGE_CHAT_PROVIDER_ID',
       'LIA_BRAIN_ENGINE_PROVIDER_MAPPING',
-      'selectedLiaBrainRoute',
-      'LiaBrainExpectedRoute',
+      'LiaBrainEngineProviderMapping',
       'LiaBrainExpectedExecutionRoute',
+      'LiaBrainExpectedRoute',
+      'LiaBrainSelectedRoute',
       'expectedExecutionRouteForBrainDecision',
-    ])
+      'selectedLiaBrainRoute',
+    ].sort())
   })
 
   it('the module is neither a correlation-store reader nor a decision/execution comparator', () => {
