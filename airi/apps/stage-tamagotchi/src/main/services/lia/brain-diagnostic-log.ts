@@ -27,7 +27,8 @@ import { useLogg } from '@guiiai/logg'
  * discriminator, the expected route ids, per observed attempt its arrival index
  * plus the ids (and, for the identity-facts state, the two equality booleans),
  * and - for a present correlation - the three terminal observation counts of
- * the SAME snapshot. No prompt, message, attachment, tool data, credential, API
+ * the SAME snapshot plus the optional logical-send terminal settlement of that
+ * same snapshot. No prompt, message, attachment, tool data, credential, API
  * key, baseURL, provider object or chat payload is reachable from here.
  *
  * Authority: none. A log line cannot select a route, change a policy, pick a
@@ -73,10 +74,18 @@ function quoted(value: string): string {
  *
  * Only fields the factual state actually carries are emitted - no placeholder
  * route, no synthesized attempt, no manufactured equality boolean. The counts
- * are appended as the LAST fields of a present correlation, in their fixed
+ * come first among the appended fields of a present correlation, in their fixed
  * order, and the absence state - which carries no terminal member at all - emits
  * none of them: zero retained observations is a fact about a present snapshot,
  * and is never fabricated for a key that has no snapshot.
+ *
+ * The logical-send terminal settlement, when one was retained, is the very LAST
+ * field of the line: it is appended after all three counts, so no existing field
+ * ever moves. It is optional by contract - an empty sibling emits no token at
+ * all (no empty string, no null, no undefined, no pending, no zero) - and its
+ * value is copied verbatim from the already-derived projection: never re-derived
+ * from a count or an attempt, never joined with a round, and never turned into a
+ * count, a boolean, a status or a verdict.
  */
 export function formatLiaBrainDiagnosticEntry(entry: LiaBrainDiagnosticEntry): string {
   const { correlationId, facts } = entry
@@ -140,6 +149,18 @@ export function formatLiaBrainDiagnosticEntry(entry: LiaBrainDiagnosticEntry): s
       `abandonedTerminalObservationCount=${entry.terminalFacts.abandonedTerminalObservationCount}`,
     )
   }
+
+  // Phase 8.0D-10B-4D4C4-B4B4: the logical-send terminal settlement of the SAME
+  // retained snapshot, appended AFTER the three counts above so no existing field
+  // reorders. The sibling member is optional inside the present arm and the fact
+  // inside it is optional too: when nothing was accepted and retained, NO token
+  // is emitted - an absence is never printed as an empty value, a null, an
+  // undefined, a pending marker or a zero. The emitted string is quoted exactly
+  // like every other string diagnostic field, and it is copied verbatim from the
+  // approved projection: this module never derives an outcome, never compares it
+  // with a count or a round and never aggregates it.
+  if ('sendTerminalFacts' in entry && entry.sendTerminalFacts.sendTerminalOutcome !== undefined)
+    fields.push(`sendTerminalOutcome=${quoted(entry.sendTerminalFacts.sendTerminalOutcome)}`)
 
   return [PREFIX, ...fields].join(' ')
 }

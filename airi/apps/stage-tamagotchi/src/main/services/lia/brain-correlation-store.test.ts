@@ -1405,11 +1405,15 @@ describe('lia brain correlation store - logical send terminal fact (Phase 8.0D-1
 
     // Singular by construction, and the store stays the ONE canonical one.
     expect(productionSourcesMatching(BRAIN_ROOTS, /sendTerminals|logicalSendTerminals|terminalHistory|sendTerminalStore|recordSendTerminals/)).toEqual([])
-    // 8.0D-10B-4D4C4-B4B2: the ONE production owner of the projected field name
-    // is the pure send-facts module; the store itself still never names it, and
-    // the distinct term `sendTerminalObserved` exists nowhere in production.
+    // 8.0D-10B-4D4C4-B4B4: the TWO production owners of the projected field name
+    // are the pure send-facts module and the diagnostic formatter; the store
+    // itself still never names it, and the distinct term `sendTerminalObserved`
+    // exists nowhere in production.
     expect(productionSourcesMatching(BRAIN_ROOTS, /sendTerminalOutcome/))
-      .toEqual(['apps/stage-tamagotchi/src/main/services/lia/brain-send-terminal-facts.ts'])
+      .toEqual([
+        'apps/stage-tamagotchi/src/main/services/lia/brain-diagnostic-log.ts',
+        'apps/stage-tamagotchi/src/main/services/lia/brain-send-terminal-facts.ts',
+      ])
     expect(productionSourcesMatching(BRAIN_ROOTS, /sendTerminalObserved/)).toEqual([])
     expect(stripComments(source)).not.toMatch(/sendTerminalOutcome|sendTerminalObserved/)
 
@@ -1427,16 +1431,17 @@ describe('lia brain correlation store - logical send terminal fact (Phase 8.0D-1
     expect(productionSourcesMatching(['apps/stage-tamagotchi/src/main'], /electronLiaBrainSendTerminalObservation|send-terminal-observation/))
       .toEqual(['apps/stage-tamagotchi/src/main/services/lia/brain-send-terminal-report-listener.ts'])
 
-    // 47/48/49/50/51: the observer, the formatter, the identity facts and the
-    // round-terminal facts do not know the field yet. The reader no longer
-    // belongs to this list: 8.0D-10B-4D4C4-B4B1 widened its SNAPSHOT contract to
-    // carry the raw record structurally (a carriage boundary only). The
-    // composition left the list in 8.0D-10B-4D4C4-B4B3: it now delegates to the
-    // pure send projection and carries the derived sibling - while still printing
-    // nothing and still owning no send-level vocabulary of its own.
+    // 47/48/49/50/51: the observer, the identity facts and the round-terminal
+    // facts do not know the field yet. The reader no longer belongs to this list:
+    // 8.0D-10B-4D4C4-B4B1 widened its SNAPSHOT contract to carry the raw record
+    // structurally (a carriage boundary only). The composition left the list in
+    // 8.0D-10B-4D4C4-B4B3: it now delegates to the pure send projection and carries
+    // the derived sibling - while still printing nothing and still owning no
+    // send-level vocabulary of its own. The formatter left the list in
+    // 8.0D-10B-4D4C4-B4B4: it now prints the optional send outcome as the final
+    // quoted field.
     for (const relative of [
       './brain-correlation-observer.ts',
-      './brain-diagnostic-log.ts',
       './brain-execution-terminal-facts.ts',
       './brain-execution-identity-facts.ts',
     ])

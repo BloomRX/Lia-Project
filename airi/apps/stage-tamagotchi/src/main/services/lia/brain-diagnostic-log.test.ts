@@ -21,6 +21,11 @@ import { formatLiaBrainDiagnosticEntry, logLiaBrainDiagnostic, selectLiaBrainDia
  * appended after every identity/attempt field; a correlation with no live
  * snapshot still prints the historical absence line with no count invented.
  *
+ * Phase 8.0D-10B-4D4C4-B4B4: a present correlation MAY also carry the optional
+ * logical-send terminal settlement sibling; when `sendTerminalOutcome` is
+ * present it is appended AFTER the three counts as the very last, quoted,
+ * string-valued field - never re-derived, never joined and never fabricated.
+ *
  * The formatter is pure and deterministic, so most of this file asserts exact
  * strings for every factual state. The logger itself is mocked at the module
  * boundary: what matters is that ONE entry causes exactly ONE informational
@@ -73,10 +78,9 @@ function occurrences(line: string, token: string): number {
  * counts, which the formatter appends to the line, while the absence state has
  * no terminal member at all - so no count is ever fabricated for it.
  *
- * Phase 8.0D-10B-4D4C4-B4B3: a present state also carries the composed send
- * sibling. The formatter does NOT print it yet (that is B4B4), so every present
- * fixture here still has to carry the member and the emitted line must stay
- * byte-identical whatever the sibling says.
+ * Phase 8.0D-10B-4D4C4-B4B4: a present state also carries the optional
+ * logical-send settlement sibling; when `sendTerminalOutcome` is present the
+ * formatter appends it as the final quoted field after the three counts.
  */
 function entry(
   facts: LiaBrainCorrelationDiagnosticFacts['facts'],
@@ -443,32 +447,255 @@ describe('lia brain diagnostic log - terminal counts (Phase 8.0D-10B-4D4C3B2-B4)
 
     expect(first).toBe(second)
     expect(JSON.stringify(frozen)).toBe(before)
-    expect(first).toBe(`[LIA-BRAIN-DIAG] correlationId="X" status="attemptIdentityFacts" expectedEngineId="groq" expectedProviderId="groq" expectedModelId="openai/gpt-oss-120b" attempt0.arrivalIndex=0 attempt0.roundId="A" attempt0.providerId="groq" attempt0.modelId="openai/gpt-oss-120b" attempt0.providerIdentityEqual=true attempt0.modelIdentityEqual=true ${counts(2, 1, 1)}`)
+    // B4B4: the retained send settlement is the final, quoted field after the three counts.
+    expect(first).toBe(`[LIA-BRAIN-DIAG] correlationId="X" status="attemptIdentityFacts" expectedEngineId="groq" expectedProviderId="groq" expectedModelId="openai/gpt-oss-120b" attempt0.arrivalIndex=0 attempt0.roundId="A" attempt0.providerId="groq" attempt0.modelId="openai/gpt-oss-120b" attempt0.providerIdentityEqual=true attempt0.modelIdentityEqual=true ${counts(2, 1, 1)} sendTerminalOutcome="failed"`)
   })
 
-  it('b4b3: the send sibling is carried but NOT printed yet - the line stays byte-identical', () => {
+  it('b4b4: the send sibling changes ONLY the final optional token - empty vs succeeded vs failed', () => {
     const facts: LiaBrainCorrelationDiagnosticFacts['facts'] = {
       attempts: [],
       expected: { engineId: 'groq', modelId: 'openai/gpt-oss-120b', providerId: 'groq' },
       status: 'noExecutionObserved',
     }
-    const lines = ([{}, { sendTerminalOutcome: 'succeeded' }, { sendTerminalOutcome: 'failed' }] as LiaBrainSendTerminalObservationFacts[])
-      .map(sendTerminalFacts => formatLiaBrainDiagnosticEntry(entry(facts, 'X', ZERO_TERMINALS, sendTerminalFacts)))
+    const base = `[LIA-BRAIN-DIAG] correlationId="X" status="noExecutionObserved" expectedEngineId="groq" expectedProviderId="groq" expectedModelId="openai/gpt-oss-120b" ${counts(0, 0, 0)}`
+    const empty = formatLiaBrainDiagnosticEntry(entry(facts, 'X', ZERO_TERMINALS, {}))
+    const succeeded = formatLiaBrainDiagnosticEntry(entry(facts, 'X', ZERO_TERMINALS, { sendTerminalOutcome: 'succeeded' }))
+    const failed = formatLiaBrainDiagnosticEntry(entry(facts, 'X', ZERO_TERMINALS, { sendTerminalOutcome: 'failed' }))
 
-    // Same input, same line - the sibling changes nothing on the wire.
-    expect(new Set(lines).size).toBe(1)
-    expect(lines[0]).toBe(`[LIA-BRAIN-DIAG] correlationId="X" status="noExecutionObserved" expectedEngineId="groq" expectedProviderId="groq" expectedModelId="openai/gpt-oss-120b" ${counts(0, 0, 0)}`)
-    // The projected outcome never leaks into the line, in any form.
-    expect(lines[0]).not.toMatch(/sendTerminal|Outcome|succeeded[^T]|failed[^T]/)
+    // Empty sibling prints no token - byte-identical to the B4B3 terminal-only line.
+    expect(empty).toBe(base)
+    expect(occurrences(empty, 'sendTerminalOutcome=')).toBe(0)
+    // Succeeded and failed append exactly one quoted token as the VERY last field.
+    expect(succeeded).toBe(`${base} sendTerminalOutcome="succeeded"`)
+    expect(failed).toBe(`${base} sendTerminalOutcome="failed"`)
+    expect(occurrences(succeeded, 'sendTerminalOutcome=')).toBe(1)
+    expect(occurrences(failed, 'sendTerminalOutcome=')).toBe(1)
+    expect(succeeded.endsWith(' sendTerminalOutcome="succeeded"')).toBe(true)
+    expect(failed.endsWith(' sendTerminalOutcome="failed"')).toBe(true)
+    // The three lines differ only by the final token.
+    expect(new Set([empty, succeeded, failed]).size).toBe(3)
+    // Quoted, never bare.
+    expect(succeeded).toContain('sendTerminalOutcome="succeeded"')
+    expect(succeeded).not.toContain('sendTerminalOutcome=succeeded')
+    expect(failed).toContain('sendTerminalOutcome="failed"')
+    // No JSON object serialization.
+    expect(succeeded).not.toMatch(/sendTerminalFacts=/)
+    expect(failed).not.toMatch(/\{.*sendTerminalOutcome/)
   })
 
-  it('b4b3: an empty send sibling is a fact, not a placeholder - the line stays terminal-only', () => {
+  it('b4b4: an empty send sibling is a fact, not a placeholder - the line stays terminal-only', () => {
     const present = entry({ attempts: [], status: 'decisionNotObserved' }, 'X', ZERO_TERMINALS, {})
     const line = formatLiaBrainDiagnosticEntry(present)
 
     expect(line).toBe(`[LIA-BRAIN-DIAG] correlationId="X" status="decisionNotObserved" ${counts(0, 0, 0)}`)
-    // No fabricated pending/running/boolean token anywhere on the line.
+    // No fabricated pending/running/boolean token anywhere on the line, and no send outcome.
     expect(line).not.toMatch(/pending|running|false|true|\{\}|\[\]/i)
+    expect(occurrences(line, 'sendTerminalOutcome=')).toBe(0)
+    // B4B4 suffix proof: empty vs succeeded vs failed differ only by the final token.
+    expect(formatLiaBrainDiagnosticEntry(entry({ attempts: [], status: 'decisionNotObserved' }, 'X', ZERO_TERMINALS, { sendTerminalOutcome: 'succeeded' }))).toBe(`${line} sendTerminalOutcome="succeeded"`)
+    expect(formatLiaBrainDiagnosticEntry(entry({ attempts: [], status: 'decisionNotObserved' }, 'X', ZERO_TERMINALS, { sendTerminalOutcome: 'failed' }))).toBe(`${line} sendTerminalOutcome="failed"`)
+  })
+})
+
+/**
+ * Phase 8.0D-10B-4D4C4-B4B4: the optional logical-send terminal settlement.
+ *
+ * The formatter appends exactly one quoted string field for the retained
+ * settlement, AFTER the three terminal counts and as the very last field.
+ * Empty sibling => no token. Absent correlation => no token ever.
+ */
+describe('lia brain diagnostic log - logical-send terminal outcome (Phase 8.0D-10B-4D4C4-B4B4)', () => {
+  const ABSENT_LINE = '[LIA-BRAIN-DIAG] correlationId="X" status="correlationNotObserved"'
+
+  it('54: absent does not fabricate send - zero sendTerminalOutcome occurrences', () => {
+    const absent: LiaBrainDiagnosticEntry = { correlationId: 'X', facts: { status: 'correlationNotObserved' } }
+    const line = formatLiaBrainDiagnosticEntry(absent)
+    expect(line).toBe(ABSENT_LINE)
+    expect(occurrences(line, 'sendTerminalOutcome=')).toBe(0)
+    expect(line).not.toMatch(/sendTerminal/)
+    expect('sendTerminalFacts' in absent).toBe(false)
+  })
+
+  it('55: present empty does not fabricate send - terminal-only line', () => {
+    const line = formatLiaBrainDiagnosticEntry(entry({ attempts: [], status: 'decisionNotObserved' }, 'X', ZERO_TERMINALS, {}))
+    expect(line).toBe(`[LIA-BRAIN-DIAG] correlationId="X" status="decisionNotObserved" ${counts(0, 0, 0)}`)
+    expect(occurrences(line, 'sendTerminalOutcome=')).toBe(0)
+    expect(line).not.toMatch(/sendTerminalOutcome/)
+    expect(line.split('\n')).toHaveLength(1)
+  })
+
+  it('45: decisionNotObserved / EMPTY SEND is the exact full line', () => {
+    const line = formatLiaBrainDiagnosticEntry(entry({ attempts: [attempt()], status: 'decisionNotObserved' }, 'X', ZERO_TERMINALS, {}))
+    expect(line).toBe(`[LIA-BRAIN-DIAG] correlationId="X" status="decisionNotObserved" attempt0.arrivalIndex=0 attempt0.roundId="A" attempt0.providerId="groq" attempt0.modelId="openai/gpt-oss-120b" ${ZERO_COUNTS}`)
+    expect(occurrences(line, 'sendTerminalOutcome=')).toBe(0)
+  })
+
+  it('46: decisionNotObserved / SUCCEEDED appends exactly the final quoted token', () => {
+    const empty = formatLiaBrainDiagnosticEntry(entry({ attempts: [attempt()], status: 'decisionNotObserved' }, 'X', ZERO_TERMINALS, {}))
+    const succeeded = formatLiaBrainDiagnosticEntry(entry({ attempts: [attempt()], status: 'decisionNotObserved' }, 'X', ZERO_TERMINALS, { sendTerminalOutcome: 'succeeded' }))
+    const expected = `[LIA-BRAIN-DIAG] correlationId="X" status="decisionNotObserved" attempt0.arrivalIndex=0 attempt0.roundId="A" attempt0.providerId="groq" attempt0.modelId="openai/gpt-oss-120b" ${ZERO_COUNTS} sendTerminalOutcome="succeeded"`
+    expect(succeeded).toBe(expected)
+    expect(succeeded).toBe(`${empty} sendTerminalOutcome="succeeded"`)
+    expect(occurrences(succeeded, 'sendTerminalOutcome=')).toBe(1)
+    expect(succeeded).toContain('sendTerminalOutcome="succeeded"')
+    expect(succeeded).not.toContain('sendTerminalOutcome=succeeded')
+  })
+
+  it('47: decisionNotObserved / FAILED appends failed token', () => {
+    const empty = formatLiaBrainDiagnosticEntry(entry({ attempts: [attempt()], status: 'decisionNotObserved' }, 'X', ZERO_TERMINALS, {}))
+    const failed = formatLiaBrainDiagnosticEntry(entry({ attempts: [attempt()], status: 'decisionNotObserved' }, 'X', ZERO_TERMINALS, { sendTerminalOutcome: 'failed' }))
+    expect(failed).toBe(`[LIA-BRAIN-DIAG] correlationId="X" status="decisionNotObserved" attempt0.arrivalIndex=0 attempt0.roundId="A" attempt0.providerId="groq" attempt0.modelId="openai/gpt-oss-120b" ${ZERO_COUNTS} sendTerminalOutcome="failed"`)
+    expect(failed).toBe(`${empty} sendTerminalOutcome="failed"`)
+    expect(occurrences(failed, 'sendTerminalOutcome=')).toBe(1)
+  })
+
+  it('48: noExecutionObserved / SUCCEEDED keeps expected route and appends last', () => {
+    const expected = { engineId: 'groq', modelId: 'openai/gpt-oss-120b', providerId: 'groq' }
+    const prefix = '[LIA-BRAIN-DIAG] correlationId="X" status="noExecutionObserved" expectedEngineId="groq" expectedProviderId="groq" expectedModelId="openai/gpt-oss-120b"'
+    const base = `${prefix} ${ZERO_COUNTS}`
+    const empty = formatLiaBrainDiagnosticEntry(entry({ attempts: [], expected, status: 'noExecutionObserved' }, 'X', ZERO_TERMINALS, {}))
+    const succeeded = formatLiaBrainDiagnosticEntry(entry({ attempts: [], expected, status: 'noExecutionObserved' }, 'X', ZERO_TERMINALS, { sendTerminalOutcome: 'succeeded' }))
+    expect(empty).toBe(base)
+    expect(succeeded).toBe(`${base} sendTerminalOutcome="succeeded"`)
+    expect(succeeded.indexOf('expectedModelId="openai/gpt-oss-120b"')).toBeLessThan(succeeded.indexOf('succeededTerminalObservationCount='))
+    expect(succeeded.indexOf('abandonedTerminalObservationCount=')).toBeLessThan(succeeded.indexOf('sendTerminalOutcome='))
+  })
+
+  it('49: attemptIdentityFacts / FAILED keeps attempts and equality, send last', () => {
+    const facts: LiaBrainExecutionIdentityFacts = {
+      attempts: [{ arrivalIndex: 0, modelId: GROQ_MODEL_ID, modelIdentityEqual: true, providerId: GROQ_ENGINE_ID, providerIdentityEqual: true, roundId: 'A' }],
+      expected: { engineId: 'groq', modelId: 'openai/gpt-oss-120b', providerId: 'groq' },
+      status: 'attemptIdentityFacts',
+    }
+    const prefix = '[LIA-BRAIN-DIAG] correlationId="X" status="attemptIdentityFacts" expectedEngineId="groq" expectedProviderId="groq" expectedModelId="openai/gpt-oss-120b" attempt0.arrivalIndex=0 attempt0.roundId="A" attempt0.providerId="groq" attempt0.modelId="openai/gpt-oss-120b" attempt0.providerIdentityEqual=true attempt0.modelIdentityEqual=true'
+    const empty = formatLiaBrainDiagnosticEntry(entry(facts, 'X', ZERO_TERMINALS, {}))
+    const failed = formatLiaBrainDiagnosticEntry(entry(facts, 'X', ZERO_TERMINALS, { sendTerminalOutcome: 'failed' }))
+    expect(empty).toBe(`${prefix} ${ZERO_COUNTS}`)
+    expect(failed).toBe(`${prefix} ${ZERO_COUNTS} sendTerminalOutcome="failed"`)
+    expect(failed).toContain('attempt0.providerIdentityEqual=true')
+    expect(failed.indexOf('abandonedTerminalObservationCount=')).toBeLessThan(failed.indexOf('sendTerminalOutcome='))
+  })
+
+  it('50: multiple attempts - order unchanged, send appears exactly once after abandoned count', () => {
+    const facts: LiaBrainExecutionIdentityFacts = {
+      attempts: [
+        { arrivalIndex: 0, modelId: GROQ_MODEL_ID, modelIdentityEqual: true, providerId: GROQ_ENGINE_ID, providerIdentityEqual: true, roundId: 'A' },
+        { arrivalIndex: 1, modelId: 'claude-x', modelIdentityEqual: false, providerId: 'anthropic', providerIdentityEqual: false, roundId: 'B' },
+      ],
+      expected: { engineId: 'groq', modelId: 'openai/gpt-oss-120b', providerId: 'groq' },
+      status: 'attemptIdentityFacts',
+    }
+    const line = formatLiaBrainDiagnosticEntry(entry(facts, 'X', {
+      abandonedTerminalObservationCount: 1,
+      failedTerminalObservationCount: 1,
+      succeededTerminalObservationCount: 2,
+    }, { sendTerminalOutcome: 'succeeded' }))
+    for (const field of ['succeededTerminalObservationCount=', 'failedTerminalObservationCount=', 'abandonedTerminalObservationCount='])
+      expect(occurrences(line, field)).toBe(1)
+    expect(occurrences(line, 'sendTerminalOutcome=')).toBe(1)
+    expect(line.endsWith(' sendTerminalOutcome="succeeded"')).toBe(true)
+    expect(line.indexOf('attempt1.modelIdentityEqual=')).toBeLessThan(line.indexOf('succeededTerminalObservationCount='))
+    expect(line.indexOf('abandonedTerminalObservationCount=')).toBeLessThan(line.indexOf('sendTerminalOutcome='))
+    expect(line.indexOf('attempt0.arrivalIndex=')).toBeLessThan(line.indexOf('attempt1.arrivalIndex='))
+    expect(occurrences(line, 'arrivalIndex=')).toBe(2)
+  })
+
+  it('51: round SUCCEEDED + send FAILED - no mismatch', () => {
+    const line = formatLiaBrainDiagnosticEntry(entry({ attempts: [], status: 'decisionNotObserved' }, 'X', {
+      abandonedTerminalObservationCount: 0,
+      failedTerminalObservationCount: 0,
+      succeededTerminalObservationCount: 1,
+    }, { sendTerminalOutcome: 'failed' }))
+    expect(line).toBe(`[LIA-BRAIN-DIAG] correlationId="X" status="decisionNotObserved" ${counts(1, 0, 0)} sendTerminalOutcome="failed"`)
+    expect(line).not.toMatch(/mismatch|contradiction|warning|anomaly/i)
+    expect(line).toContain('succeededTerminalObservationCount=1')
+    expect(line).toContain('sendTerminalOutcome="failed"')
+  })
+
+  it('52: round ABANDONED + send SUCCEEDED - no normalization', () => {
+    const line = formatLiaBrainDiagnosticEntry(entry({ attempts: [], status: 'decisionNotObserved' }, 'X', {
+      abandonedTerminalObservationCount: 1,
+      failedTerminalObservationCount: 0,
+      succeededTerminalObservationCount: 0,
+    }, { sendTerminalOutcome: 'succeeded' }))
+    expect(line).toBe(`[LIA-BRAIN-DIAG] correlationId="X" status="decisionNotObserved" ${counts(0, 0, 1)} sendTerminalOutcome="succeeded"`)
+    expect(line).not.toMatch(/mismatch|contradiction|warning|anomaly/i)
+  })
+
+  it('53: mixed counts 2/1/1 + send FAILED - no aggregate', () => {
+    const line = formatLiaBrainDiagnosticEntry(entry({ attempts: [], status: 'decisionNotObserved' }, 'X', {
+      abandonedTerminalObservationCount: 1,
+      failedTerminalObservationCount: 1,
+      succeededTerminalObservationCount: 2,
+    }, { sendTerminalOutcome: 'failed' }))
+    expect(line).toBe(`[LIA-BRAIN-DIAG] correlationId="X" status="decisionNotObserved" ${counts(2, 1, 1)} sendTerminalOutcome="failed"`)
+    expect(line.indexOf('abandonedTerminalObservationCount=')).toBeLessThan(line.indexOf('sendTerminalOutcome='))
+  })
+
+  it('58/59/60: quoting and key name - exactly sendTerminalOutcome quoted', () => {
+    const succeeded = formatLiaBrainDiagnosticEntry(entry({ attempts: [], status: 'decisionNotObserved' }, 'X', ZERO_TERMINALS, { sendTerminalOutcome: 'succeeded' }))
+    const failed = formatLiaBrainDiagnosticEntry(entry({ attempts: [], status: 'decisionNotObserved' }, 'X', ZERO_TERMINALS, { sendTerminalOutcome: 'failed' }))
+    expect(succeeded).toContain('sendTerminalOutcome="succeeded"')
+    expect(failed).toContain('sendTerminalOutcome="failed"')
+    expect(succeeded).not.toContain('sendTerminalOutcome=succeeded')
+    expect(failed).not.toContain('sendTerminalOutcome=failed')
+    expect(succeeded).not.toMatch(/sendTerminalFacts=/)
+    expect(failed).not.toMatch(/sendTerminalFacts=/)
+    expect(succeeded).not.toMatch(/\{.*sendTerminalOutcome/)
+    expect(failed).not.toContain('sendOutcome')
+    expect(succeeded).toContain('sendTerminalOutcome=')
+  })
+
+  it('19/20: empty vs succeeded vs failed suffix proof', () => {
+    const base = entry({ attempts: [], status: 'decisionNotObserved' }, 'X', ZERO_TERMINALS, {})
+    const emptyLine = formatLiaBrainDiagnosticEntry(base)
+    const succLine = formatLiaBrainDiagnosticEntry(entry({ attempts: [], status: 'decisionNotObserved' }, 'X', ZERO_TERMINALS, { sendTerminalOutcome: 'succeeded' }))
+    const failLine = formatLiaBrainDiagnosticEntry(entry({ attempts: [], status: 'decisionNotObserved' }, 'X', ZERO_TERMINALS, { sendTerminalOutcome: 'failed' }))
+    expect(succLine).toBe(`${emptyLine} sendTerminalOutcome="succeeded"`)
+    expect(failLine).toBe(`${emptyLine} sendTerminalOutcome="failed"`)
+  })
+
+  it('21: succeeded vs failed only byte difference is the quoted value', () => {
+    const succ = formatLiaBrainDiagnosticEntry(entry({ attempts: [], status: 'decisionNotObserved' }, 'X', ZERO_TERMINALS, { sendTerminalOutcome: 'succeeded' }))
+    const fail = formatLiaBrainDiagnosticEntry(entry({ attempts: [], status: 'decisionNotObserved' }, 'X', ZERO_TERMINALS, { sendTerminalOutcome: 'failed' }))
+    expect(succ.replace('"succeeded"', '"failed"')).toBe(fail)
+    expect(succ.length - fail.length).toBe('"succeeded"'.length - '"failed"'.length)
+  })
+
+  it('18/38/88: determinism and immutability with send outcome', () => {
+    const facts: LiaBrainExecutionIdentityFacts = {
+      attempts: [{ arrivalIndex: 0, modelId: GROQ_MODEL_ID, modelIdentityEqual: true, providerId: GROQ_ENGINE_ID, providerIdentityEqual: true, roundId: 'A' }],
+      expected: { engineId: 'groq', modelId: 'openai/gpt-oss-120b', providerId: 'groq' },
+      status: 'attemptIdentityFacts',
+    }
+    const frozenFacts = Object.freeze({ ...facts, attempts: Object.freeze(facts.attempts.map(a => Object.freeze({ ...a }))) }) as LiaBrainExecutionIdentityFacts
+    const terminalFacts = Object.freeze({ abandonedTerminalObservationCount: 1, failedTerminalObservationCount: 1, succeededTerminalObservationCount: 2 } as LiaBrainTerminalObservationFacts)
+    const sendTerminalFacts = Object.freeze({ sendTerminalOutcome: 'succeeded' } as LiaBrainSendTerminalObservationFacts)
+    const frozen = Object.freeze({ correlationId: 'X', facts: frozenFacts, sendTerminalFacts, terminalFacts } as LiaBrainDiagnosticEntry)
+    const before = JSON.stringify(frozen)
+    const first = formatLiaBrainDiagnosticEntry(frozen)
+    const second = formatLiaBrainDiagnosticEntry(frozen)
+    expect(first).toBe(second)
+    expect(JSON.stringify(frozen)).toBe(before)
+    expect(occurrences(first, 'sendTerminalOutcome=')).toBe(1)
+    expect(first.endsWith(' sendTerminalOutcome="succeeded"')).toBe(true)
+  })
+
+  it('10/11/56/57: optional field - undefined emits nothing, present emits exactly once', () => {
+    const empty = formatLiaBrainDiagnosticEntry(entry({ attempts: [], status: 'decisionNotObserved' }, 'X', ZERO_TERMINALS, {}))
+    const succeeded = formatLiaBrainDiagnosticEntry(entry({ attempts: [], status: 'decisionNotObserved' }, 'X', ZERO_TERMINALS, { sendTerminalOutcome: 'succeeded' }))
+    const failed = formatLiaBrainDiagnosticEntry(entry({ attempts: [], status: 'decisionNotObserved' }, 'X', ZERO_TERMINALS, { sendTerminalOutcome: 'failed' }))
+    expect(occurrences(empty, 'sendTerminalOutcome=')).toBe(0)
+    expect(occurrences(succeeded, 'sendTerminalOutcome=')).toBe(1)
+    expect(occurrences(failed, 'sendTerminalOutcome=')).toBe(1)
+    expect(empty).not.toMatch(/sendTerminalOutcome=""|sendTerminalOutcome=null|sendTerminalOutcome=undefined|unknown|pending/)
+  })
+
+  it('22/23: counts stay required, send is not a count', () => {
+    const line = formatLiaBrainDiagnosticEntry(entry({ attempts: [], status: 'decisionNotObserved' }, 'X', ZERO_TERMINALS, { sendTerminalOutcome: 'succeeded' }))
+    for (const field of ['succeededTerminalObservationCount', 'failedTerminalObservationCount', 'abandonedTerminalObservationCount'])
+      expect(occurrences(line, field)).toBe(1)
+    expect(line).not.toMatch(/succeededSendTerminalObservationCount|failedSendTerminalObservationCount|sendTerminalObservationCount/)
   })
 })
 
@@ -529,6 +756,84 @@ describe('lia brain diagnostic log - selector and logger call (Phase 8.0D-10B-4D
     // Duplicates are preserved: two observations, two calls, no dedupe.
     observer.observe('absent')
     expect(mocks.info).toHaveBeenCalledTimes(4)
+  })
+
+  it('b4b4-74: send write alone does NOT log - no fourth trigger', () => {
+    const store = createLiaBrainCorrelationService()
+    const _observer = createLiaBrainCorrelationObserver({ correlationReader: store, log: selectLiaBrainDiagnosticLog(true) })
+
+    // Retain a send settlement - no diagnostic line yet because there is no
+    // send-terminal observer trigger.
+    store.recordSendTerminal({ correlationId: 'X', outcome: 'failed' })
+    expect(mocks.info).not.toHaveBeenCalled()
+
+    // No observe has happened, so no line exists to inspect. A later
+    // execution-start trigger will reveal the retained settlement.
+    expect(store.get('X')!.sendTerminal).toEqual({ outcome: 'failed' })
+  })
+
+  it('b4b4-76: send-first then execution-start trigger reveals retained send outcome', () => {
+    const store = createLiaBrainCorrelationService()
+    const observer = createLiaBrainCorrelationObserver({ correlationReader: store, log: selectLiaBrainDiagnosticLog(true) })
+
+    // 1) retain send failed for X
+    store.recordSendTerminal({ correlationId: 'X', outcome: 'failed' })
+    // 2) confirm no line solely from send write (no automatic trigger)
+    expect(mocks.info).not.toHaveBeenCalled()
+
+    // 3) deliver execution-start X
+    store.recordExecution({ conversationId: 'c1', correlationId: 'X', modelId: GROQ_MODEL_ID, providerId: GROQ_ENGINE_ID, roundId: 'R' })
+
+    // 4) existing execution-start observer trigger runs
+    observer.observe('X')
+
+    // 5) resulting line contains the retained send outcome as the final quoted token
+    expect(mocks.info).toHaveBeenCalledTimes(1)
+    const line = mocks.info.mock.calls[0]![0] as string
+    expect(line).toContain('sendTerminalOutcome="failed"')
+    expect(occurrences(line, 'sendTerminalOutcome=')).toBe(1)
+    expect(line.endsWith(' sendTerminalOutcome="failed"')).toBe(true)
+    expect(line).toContain('succeededTerminalObservationCount=0')
+    expect(line).not.toMatch(/mismatch|contradiction|warning|anomaly/i)
+    expect(line.split('\n')).toHaveLength(1)
+  })
+
+  it('b4b4-77: send-first succeeded then round-terminal trigger reveals succeeded', () => {
+    const store = createLiaBrainCorrelationService()
+    const observer = createLiaBrainCorrelationObserver({ correlationReader: store, log: selectLiaBrainDiagnosticLog(true) })
+
+    store.recordSendTerminal({ correlationId: 'Y', outcome: 'succeeded' })
+    expect(mocks.info).not.toHaveBeenCalled()
+
+    store.recordExecutionTerminal({ correlationId: 'Y', outcome: 'succeeded', roundId: 'R2' })
+    observer.observe('Y')
+
+    expect(mocks.info).toHaveBeenCalledTimes(1)
+    expect(mocks.info.mock.calls[0]![0]).toContain('sendTerminalOutcome="succeeded"')
+    expect(occurrences(mocks.info.mock.calls[0]![0] as string, 'sendTerminalOutcome=')).toBe(1)
+  })
+
+  it('b4b4-79/80: duplicate and conflicting send writes - canonical first-write printed once', () => {
+    const store = createLiaBrainCorrelationService()
+    const observer = createLiaBrainCorrelationObserver({ correlationReader: store, log: selectLiaBrainDiagnosticLog(true) })
+
+    // First write failed, second conflicting succeeded is ignored by store.
+    store.recordSendTerminal({ correlationId: 'Z', outcome: 'failed' })
+    store.recordSendTerminal({ correlationId: 'Z', outcome: 'succeeded' })
+    expect(store.get('Z')!.sendTerminal).toEqual({ outcome: 'failed' })
+
+    // Still no line until an existing trigger fires.
+    expect(mocks.info).not.toHaveBeenCalled()
+
+    store.recordExecution({ conversationId: 'c1', correlationId: 'Z', modelId: GROQ_MODEL_ID, providerId: GROQ_ENGINE_ID, roundId: 'R' })
+    observer.observe('Z')
+
+    expect(mocks.info).toHaveBeenCalledTimes(1)
+    const line = mocks.info.mock.calls[0]![0] as string
+    expect(line).toContain('sendTerminalOutcome="failed"')
+    expect(line).not.toContain('sendTerminalOutcome="succeeded"')
+    // Formatter does not know first-write policy - it merely prints the entry's outcome.
+    expect(occurrences(line, 'sendTerminalOutcome=')).toBe(1)
   })
 
   it('52: the NON-DEV selection still observes - it simply has no destination', () => {
@@ -631,16 +936,29 @@ describe('lia brain diagnostic log - source invariants (Phase 8.0D-10B-4D2B)', (
     expect(block.match(/TerminalObservationCount=/g)).toHaveLength(3)
 
     // Nothing else about a terminal observation is reachable: no raw collection,
-    // no outcome, no round key, no per-round record, no total and no boolean.
-    expect(block).not.toMatch(/roundId|outcome|executionTerminals|total|succeededTerminalObserved|failedTerminalObserved|abandonedTerminalObserved/)
-    expect(source).not.toMatch(/executionTerminals|\boutcome\b|terminalObservationCount|succeededTerminalObserved|failedTerminalObserved|abandonedTerminalObserved|terminalOutcome/)
+    // no round key, no per-round record, no total and no boolean.
+    expect(block).not.toMatch(/roundId|executionTerminals|total|succeededTerminalObserved|failedTerminalObserved|abandonedTerminalObserved/)
+    expect(source).not.toMatch(/executionTerminals|terminalObservationCount|succeededTerminalObserved|failedTerminalObserved|abandonedTerminalObserved|terminalOutcome/)
     // The composed type, the composition and both facts modules stay unimported:
     // the adapter receives the entry contract and derives nothing of its own.
     expect(source).not.toMatch(/brain-correlation-diagnostic-facts|LiaBrainCorrelationDiagnosticFacts|composeLiaBrainCorrelationDiagnosticFacts|brain-execution-terminal-facts|LiaBrainTerminalObservationFacts|brain-execution-identity-facts|deriveLiaBrainTerminalObservationFacts|deriveLiaBrainExecutionIdentityFacts/)
-    // ...and since 8.0D-10B-4D4C4-B4B3 the composed send sibling stays equally
-    // invisible: this module neither imports the pure send module nor names the
-    // sibling or the projected outcome value anywhere (B4B4 owns the printing).
-    expect(source).not.toMatch(/brain-send-terminal-facts|LiaBrainSendTerminalObservationFacts|deriveLiaBrainSendTerminalObservationFacts|sendTerminalFacts|sendTerminalOutcome|sendTerminal/)
+    // Phase 8.0D-10B-4D4C4-B4B4: the formatter now MAY name the composed send
+    // sibling and its optional outcome - but must still NOT import the pure
+    // send module at runtime, and must still NOT name the raw record.
+    expect(source).not.toMatch(/brain-send-terminal-facts|LiaBrainSendTerminalObservationFacts|deriveLiaBrainSendTerminalObservationFacts/)
+    expect(source).toMatch(/sendTerminalFacts/)
+    expect(source).toMatch(/sendTerminalOutcome/)
+    // Precise raw-record guard: the approved access is
+    // entry.sendTerminalFacts.sendTerminalOutcome (or destructured equivalent).
+    // Reject raw forms like entry.sendTerminal, snapshot.sendTerminal, sendTerminal.outcome.
+    expect(source).not.toMatch(/\.sendTerminal\b/)
+    expect(source).not.toMatch(/\bsendTerminal\.outcome\b/)
+    expect(source).not.toMatch(/snapshot\.sendTerminal\b/)
+    // No send aggregate / boolean / status / count vocabulary is introduced.
+    expect(source).not.toMatch(/succeededSendTerminalObservationCount|failedSendTerminalObservationCount|sendTerminalObservationCount/)
+    expect(source).not.toMatch(/sendSucceededObserved|sendFailedObserved|sendTerminalObserved/)
+    expect(source).not.toMatch(/sendStatus|logicalSendStatus|sendTerminalStatus/)
+    expect(source).not.toMatch(/\bsendSucceeded\b|\bsendFailed\b/)
   })
 
   it('60/61/62: no verdict/fallback/send/completion vocabulary, no authority and no new IO surface', () => {

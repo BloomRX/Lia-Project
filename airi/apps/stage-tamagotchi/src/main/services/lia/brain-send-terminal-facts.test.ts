@@ -23,6 +23,7 @@ import { deriveLiaBrainSendTerminalObservationFacts } from './brain-send-termina
 const REPO_ROOT = new URL('../../../../../../', import.meta.url)
 const SEND_FACTS = 'apps/stage-tamagotchi/src/main/services/lia/brain-send-terminal-facts.ts'
 const DIAGNOSTIC_FACTS = 'apps/stage-tamagotchi/src/main/services/lia/brain-correlation-diagnostic-facts.ts'
+const DIAGNOSTIC_LOG = 'apps/stage-tamagotchi/src/main/services/lia/brain-diagnostic-log.ts'
 const BRAIN_ROOTS = ['apps/stage-tamagotchi/src']
 
 /** `fileURLToPath` keeps the trailing separator of a directory URL. */
@@ -316,17 +317,17 @@ describe('logical send terminal facts - source guards (Phase 8.0D-10B-4D4C4-B4B2
     expect(productionMatching(/(?<!function )deriveLiaBrainSendTerminalObservationFacts\(/)).toEqual([DIAGNOSTIC_FACTS])
     // And no production module outside the pair names the module or its types.
     expect(productionMatching(/brain-send-terminal-facts|LiaBrainSendTerminalObservationSnapshot|LiaBrainSendTerminalObservationFacts/)).toEqual([SEND_FACTS, DIAGNOSTIC_FACTS].sort())
-    // The projected OUTCOME value is still owned by the pure module alone: the
-    // composition names the FIELD and receives the value structurally.
-    expect(productionMatching(/sendTerminalOutcome/)).toEqual([SEND_FACTS])
+    // Phase 8.0D-10B-4D4C4-B4B4: the formatter now also owns the projected
+    // OUTCOME textual field (printing it as the last quoted token), while the
+    // composition still only owns the structured field name.
+    expect(productionMatching(/sendTerminalOutcome/)).toEqual([SEND_FACTS, DIAGNOSTIC_LOG].sort())
     // The distinct term `sendTerminalObserved` is still introduced NOWHERE.
     expect(productionMatching(/sendTerminalObserved/)).toEqual([])
     // The deferred layers keep knowing nothing about the projection: the
-    // observer, the formatter, the identity facts and the round-terminal facts
-    // are untouched (the formatter prints nothing until B4B4).
+    // observer, the identity facts and the round-terminal facts are untouched.
+    // The formatter left the list in B4B4: it now prints the outcome.
     for (const relative of [
       'brain-correlation-observer.ts',
-      'brain-diagnostic-log.ts',
       'brain-execution-identity-facts.ts',
       'brain-execution-terminal-facts.ts',
     ]) {
@@ -334,5 +335,8 @@ describe('logical send terminal facts - source guards (Phase 8.0D-10B-4D4C4-B4B2
         .not
         .toMatch(/sendTerminalOutcome|brain-send-terminal-facts|deriveLiaBrainSendTerminalObservationFacts/)
     }
+    // Formatter must still NOT import the pure module nor call the deriver.
+    expect(stripComments(readSource(DIAGNOSTIC_LOG))).not.toMatch(/brain-send-terminal-facts|deriveLiaBrainSendTerminalObservationFacts/)
+    expect(productionMatching(/sendTerminalFacts/)).toEqual([DIAGNOSTIC_FACTS, DIAGNOSTIC_LOG].sort())
   })
 })

@@ -643,25 +643,28 @@ describe('lia send terminal ingress service - isolation invariants (Phase 8.0D-1
     expect(store).toMatch(/sendTerminal\?: LiaBrainSendTerminalRecord/)
     expect(store).not.toMatch(/LiaBrainSendTerminalRecorder|brain-send-terminal-report-service/)
 
-    // No send fact is EXPOSED anywhere on the read side, and the formatter still
-    // prints exactly the three terminal counts. The reader is no longer listed
-    // here: 8.0D-10B-4D4C4-B4B1 lets its SNAPSHOT contract carry the raw record
-    // structurally. The composition left the list in 8.0D-10B-4D4C4-B4B3, where
-    // it composes the derived send sibling from that same snapshot - exposure
-    // stays zero because no line and no consumer reads the member yet.
+    // No send fact is EXPOSED anywhere on the read side except via the
+    // formatter (B4B4), which now prints the optional send outcome as the final
+    // quoted field. The reader is no longer listed here: 8.0D-10B-4D4C4-B4B1
+    // lets its SNAPSHOT contract carry the raw record structurally. The
+    // composition left the list in 8.0D-10B-4D4C4-B4B3, where it composes the
+    // derived send sibling from that same snapshot. The formatter left the
+    // send-unknown list in B4B4.
     for (const relative of [
       './brain-correlation-observer.ts',
-      './brain-diagnostic-log.ts',
       './brain-execution-terminal-facts.ts',
       './brain-execution-identity-facts.ts',
     ])
       expect(stripComments(readSource(relative)), relative).not.toMatch(/sendTerminal|sendSucceeded|sendFailed/)
-    // 8.0D-10B-4D4C4-B4B2 evolves the field-vocabulary allowlist honestly: the
-    // ONE production owner of `sendTerminalOutcome` is the pure send-facts
-    // projection (which still has zero production callers), and the distinct
-    // term `sendTerminalObserved` is introduced NOWHERE.
+    // 8.0D-10B-4D4C4-B4B4 evolves the field-vocabulary allowlist honestly: the
+    // TWO production owners of `sendTerminalOutcome` are the pure send-facts
+    // projection and the diagnostic formatter, and the distinct term
+    // `sendTerminalObserved` is introduced NOWHERE.
     expect(productionSourcesMatching(BRAIN_ROOTS, /sendTerminalOutcome|sendTerminalObserved/))
-      .toEqual(['apps/stage-tamagotchi/src/main/services/lia/brain-send-terminal-facts.ts'])
+      .toEqual([
+        'apps/stage-tamagotchi/src/main/services/lia/brain-diagnostic-log.ts',
+        'apps/stage-tamagotchi/src/main/services/lia/brain-send-terminal-facts.ts',
+      ])
     expect(productionSourcesMatching(BRAIN_ROOTS, /sendTerminalObserved/)).toEqual([])
 
     // The transport, the Stage seam and Core Agent know nothing about the
