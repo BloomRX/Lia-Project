@@ -39,6 +39,7 @@ import { useContextObservabilityStore } from './devtools/context-observability'
 import { useAiriCardStore } from './modules/airi-card'
 import { useAutonomousArtistryStore } from './modules/artistry-autonomous'
 import { useConsciousnessStore } from './modules/consciousness'
+import { useProviderStore } from './providers/provider'
 import { useWebSearchStore } from './modules/web-search'
 import { executeToolCallRerun } from './tool-call-rerun'
 
@@ -112,6 +113,15 @@ export interface ChatSendPayload {
    * existing fallback resolver. Absent = current Stage behavior.
    */
   routeOverride?: ChatSendRouteOverride
+  /**
+   * Phase 8.0D-10B-4D4C4-D2B2-C1: optional generic per-send reasoning intent,
+   * frozen at logical-send construction. When defined (true/false), the same
+   * value survives every attempt of this logical send (including fallbacks)
+   * and is converted at the provider border to { reasoning: 'enabled' | 'disabled' }.
+   * Undefined preserves live global behavior (consciousnessSettings.reasoning).
+   * Independent of routeOverride; no Lia authority, no global mutation.
+   */
+  reasoning?: boolean
 }
 
 /** The durable messages appended while one chat request executes. */
@@ -499,7 +509,15 @@ export const useChatStore = defineStore('chat', () => {
       throw new Error('Failed to load the target chat session')
 
     const messageCount = chatSession.getSessionMessages(payload.sessionId).length
-    const chatProvider = await consciousnessStore.getChatProviderInstance(providerId)
+    // Phase 8.0D-10B-4D4C4-D2B2-C1: generic per-send reasoning frozen at payload
+    // construction. Undefined preserves live global behavior via consciousness
+    // store; defined true/false is reused verbatim for every attempt (incl.
+    // fallback) and converted here at the provider border. Provider store is
+    // resolved lazily only when per-send reasoning is present to avoid
+    // eagerly pulling the provider config query (document) in node tests.
+    const chatProvider = payload.reasoning !== undefined
+      ? await useProviderStore().getChatProviderInstance(providerId, { reasoning: payload.reasoning ? 'enabled' : 'disabled' })
+      : await consciousnessStore.getChatProviderInstance(providerId)
     if (!chatProvider)
       throw new Error(`Failed to resolve chat provider "${providerId}"`)
 
