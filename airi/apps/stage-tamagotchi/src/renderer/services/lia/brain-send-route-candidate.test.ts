@@ -121,6 +121,25 @@ describe('lia brain send route candidate adapter (D2B1)', () => {
     expect(resolveLiaBrainSendRouteCandidate(unknownEngineDecision)).toBeUndefined()
   })
 
+  it('modelId is canonical verbatim: no trim/lowercase/alias', () => {
+    const decision = makeAutomaticSelected()
+    const result = resolveLiaBrainSendRouteCandidate(decision)!
+    expect(result.modelId).toBe('openai/gpt-oss-120b')
+    // Verify no normalization was applied: cased variant would be preserved if mapping existed,
+    // but our canonical id is already lower-case; ensure we didn't mutate it
+    const custom: LiaBrainRoutingDecision = {
+      status: 'automatic',
+      selection: {
+        status: 'selected',
+        route: {
+          engine: groqBrainDescriptors().engines[0]!,
+          model: { id: ' OpenAI/GPT-OSS-120B ', engineId: 'groq', name: 'Custom', capabilities: {} as any },
+        },
+      },
+    }
+    expect(resolveLiaBrainSendRouteCandidate(custom)!.modelId).toBe(' OpenAI/GPT-OSS-120B ')
+  })
+
   it('no global state dependence', () => {
     const decision = makeAutomaticSelected()
     const a = resolveLiaBrainSendRouteCandidate(decision)
