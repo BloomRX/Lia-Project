@@ -675,16 +675,16 @@ describe('lia send terminal ingress service - isolation invariants (Phase 8.0D-1
 
     expect(source).not.toMatch(/defineEventa|defineInvokeEventa|defineInvokeHandler|ipcMain|ipcRenderer|BrowserWindow|createContext|context\.on\(|\.emit\(/)
     expect(source).not.toMatch(/eventa:(?:invoke|event):lia:brain|electronLiaBrain/)
-    // The whole dependency surface is the contract TYPE, the injected canonical
-    // store and the injected canonical observer contract, all TYPE-ONLY - no
-    // renderer, no Core Agent, no Stage UI, no second store.
+    // The whole dependency surface is the contract TYPE and the injected canonical
+    // observer contract, both TYPE-ONLY - the store dependency is the narrow
+    // recorder declared in-file, so no service import is needed. No renderer, no
+    // Core Agent, no Stage UI, no second store.
     expect(source.match(/^import .*$/gm)).toEqual([
       `import type { LiaBrainSendTerminalReport } from '../../../shared/eventa'`,
       `import type { LiaBrainCorrelationObserver } from './brain-correlation-observer'`,
-      `import type { LiaBrainCorrelationService } from './brain-correlation-service'`,
     ])
     expect(source).not.toMatch(/from '[^']*(?:renderer|core-agent|stage-ui|lia-core)/)
-    expect(source).not.toMatch(/createLiaBrainCorrelationStore|createLiaBrainCorrelationService|brain-correlation-store/)
+    expect(source).not.toMatch(/createLiaBrainCorrelationStore|createLiaBrainCorrelationService|brain-correlation-store|brain-correlation-service|LiaBrainCorrelationService/)
   })
 
   it('77/23: the ingress triggers the observer exactly once after the write, with no other diagnostic dependency', () => {
@@ -700,6 +700,24 @@ describe('lia send terminal ingress service - isolation invariants (Phase 8.0D-1
     expect(source).not.toMatch(/LIA_BRAIN_ENGINE_PROVIDER_MAPPING|readLiaBrainExecutionIdentityFacts/)
     // No second observer trigger, no reader, no formatter.
     expect(source).not.toMatch(/brain-correlation-observer.*brain-correlation-observer/)
+  })
+
+  it('77b: narrow recorder least-privilege - no broad store surface', () => {
+    const source = stripComments(readSource('./brain-send-terminal-report-service.ts'))
+    expect(source).not.toMatch(/recordDecision|recordExecution(?!Terminal)|recordExecutionTerminal|\.get\(|\.size\b/)
+    expect(source).not.toMatch(/brain-correlation-store|brain-correlation-service|LiaBrainCorrelationService/)
+    expect(source).toMatch(/interface LiaBrainSendTerminalRecorder/)
+    expect(source).toMatch(/recordSendTerminal: \(report: LiaBrainSendTerminalReport\) => void/)
+    // Compile-time proof: minimal recorder satisfies, full service satisfies structurally
+    const minimal: LiaBrainSendTerminalRecorder = { recordSendTerminal: () => {} }
+    expect(() => createLiaBrainSendTerminalReportService({ correlationStore: minimal, correlationObserver: { observe: () => {} } as unknown as never })).not.toThrow()
+    // Full canonical service also satisfies (structural)
+    const full = createLiaBrainCorrelationStore({ maxEntries: 1, ttlMs: 1000 })
+    expect(() => createLiaBrainSendTerminalReportService({ correlationStore: full, correlationObserver: { observe: () => {} } as unknown as never })).not.toThrow()
+    // Observer narrow: only observe
+    const obsSource = stripComments(readSource('./brain-correlation-observer.ts'))
+    expect(obsSource).toMatch(/interface LiaBrainCorrelationObserver/)
+    expect(obsSource).toMatch(/observe: \(correlationId: string\) => void/)
   })
 
   it('78/54: the ingress holds no authority and derives no verdict', () => {

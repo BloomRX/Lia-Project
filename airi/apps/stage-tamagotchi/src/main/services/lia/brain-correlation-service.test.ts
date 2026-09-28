@@ -326,7 +326,6 @@ describe('lia brain correlation service - composition ownership (Phase 8.0D-10B-
         'apps/stage-tamagotchi/src/main/services/lia/brain-decision-service.ts',
         'apps/stage-tamagotchi/src/main/services/lia/brain-execution-report-service.ts',
         'apps/stage-tamagotchi/src/main/services/lia/brain-execution-terminal-report-service.ts',
-        'apps/stage-tamagotchi/src/main/services/lia/brain-send-terminal-report-service.ts',
       ])
   })
 })

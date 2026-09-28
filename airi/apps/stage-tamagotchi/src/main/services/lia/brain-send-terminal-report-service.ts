@@ -1,6 +1,5 @@
 import type { LiaBrainSendTerminalReport } from '../../../shared/eventa'
 import type { LiaBrainCorrelationObserver } from './brain-correlation-observer'
-import type { LiaBrainCorrelationService } from './brain-correlation-service'
 
 /**
  * Phase 8.0D-10B-4D4C4-B3B1: the trusted main-process ingress for the Lia
@@ -131,7 +130,7 @@ export interface LiaBrainSendTerminalReportService {
  * repeated or conflicting outcomes, and this layer resolves nothing.
  */
 export function createLiaBrainSendTerminalReportService(params: {
-  correlationStore: LiaBrainCorrelationService
+  correlationStore: LiaBrainSendTerminalRecorder
   /**
    * Phase 8.0D-10B-4D4C4-B4B5: the canonical diagnostic observer owned by the
    * lifecycle - never resolved or created here. It is triggered once per
