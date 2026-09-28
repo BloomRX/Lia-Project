@@ -1,8 +1,8 @@
 import type { LiaBrainRoutingDecision } from '@lia/core'
 
+import { groqBrainDescriptors } from '@lia/core'
 import { describe, expect, it } from 'vitest'
 
-import { groqBrainDescriptors } from '@lia/core'
 import { resolveLiaBrainSendRouteCandidate } from './brain-send-route-candidate'
 
 function makeAutomaticSelected(): LiaBrainRoutingDecision {
@@ -170,7 +170,7 @@ describe('lia brain send route candidate adapter (D2B1)', () => {
     for (const v of variants) expect(() => resolveLiaBrainSendRouteCandidate(v)).not.toThrow()
   })
 
-  it('ChatSendRouteOverride shape compatible: no engineId', () => {
+  it('chatSendRouteOverride shape compatible: no engineId', () => {
     const result = resolveLiaBrainSendRouteCandidate(makeAutomaticSelected())!
     expect((result as any).engineId).toBeUndefined()
     expect(result).toHaveProperty('providerId')

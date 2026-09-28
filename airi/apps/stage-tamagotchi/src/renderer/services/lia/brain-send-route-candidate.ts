@@ -1,6 +1,7 @@
 import type { LiaBrainRoutingDecision } from '@lia/core'
-import { LIA_BRAIN_ENGINE_PROVIDER_MAPPING } from '../../../main/services/lia/brain-expected-route'
 import type { ChatSendRouteOverride } from '@proj-airi/stage-ui/stores/chat'
+
+import { LIA_BRAIN_ENGINE_PROVIDER_MAPPING } from '../../../main/services/lia/brain-expected-route'
 
 /**
  * Phase 8.0D-10B-4D4C4-D2B1: Lia-specific route candidate adapter.
