@@ -6,6 +6,7 @@ import type { LiaBrainCorrelationSnapshot, LiaBrainCorrelationSnapshotReader, Li
 import type { LiaBrainExecutionIdentityFacts, LiaBrainExecutionIdentitySnapshot } from './brain-execution-identity-facts'
 import type { LiaBrainTerminalObservationFacts, LiaBrainTerminalObservationSnapshot } from './brain-execution-terminal-facts'
 import type { LiaBrainEngineProviderMapping } from './brain-expected-route'
+import type { LiaBrainSendTerminalObservationFacts, LiaBrainSendTerminalObservationSnapshot } from './brain-send-terminal-facts'
 
 import { readdirSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -22,13 +23,12 @@ import { LIA_BRAIN_ENGINE_PROVIDER_MAPPING } from './brain-expected-route'
  * Phase 8.0D-10B-4D4C3B2: the focused proof of the ONE-SNAPSHOT diagnostic
  * composition.
  *
- * The composition is proven as a READ + TWO DELEGATIONS boundary only: exactly
- * one snapshot read, the explicit absence state when nothing live exists, and
- * both approved derivations over the SAME snapshot object - otherwise nothing.
- * It has ZERO production callers by design, and nothing here wires it into the
- * observer, the diagnostic entry or the output line.
+ * The composition is proven as a READ + THREE DELEGATIONS boundary only: exactly
+ * one snapshot read, the explicit absence state when nothing live exists, and all
+ * three approved derivations over the SAME snapshot object - otherwise nothing.
+ * Nothing here adds an observer entry or an output line.
  *
- * Two narrow module doubles make the delegations observable (which object,
+ * Three narrow module doubles make the delegations observable (which object,
  * which arguments, how many calls) while the behavior under test stays the REAL
  * derivations: each double forwards to the actual implementation.
  */
@@ -36,6 +36,7 @@ import { LIA_BRAIN_ENGINE_PROVIDER_MAPPING } from './brain-expected-route'
 const probes = vi.hoisted(() => ({
   identity: { inputs: [] as unknown[], mappings: [] as unknown[] },
   terminal: { argumentCounts: [] as number[], inputs: [] as unknown[] },
+  send: { argumentCounts: [] as number[], inputs: [] as unknown[] },
 }))
 
 vi.mock('./brain-execution-identity-facts', async (importOriginal) => {
@@ -62,12 +63,26 @@ vi.mock('./brain-execution-terminal-facts', async (importOriginal) => {
   }
 })
 
+vi.mock('./brain-send-terminal-facts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./brain-send-terminal-facts')>()
+  return {
+    ...actual,
+    deriveLiaBrainSendTerminalObservationFacts(...args: Parameters<typeof actual.deriveLiaBrainSendTerminalObservationFacts>) {
+      probes.send.argumentCounts.push(args.length)
+      probes.send.inputs.push(args[0])
+      return actual.deriveLiaBrainSendTerminalObservationFacts(...args)
+    },
+  }
+})
+
 /** Clears the probes so one test's delegations cannot leak into the next. */
 function resetProbes(): void {
   probes.identity.inputs.length = 0
   probes.identity.mappings.length = 0
   probes.terminal.argumentCounts.length = 0
   probes.terminal.inputs.length = 0
+  probes.send.argumentCounts.length = 0
+  probes.send.inputs.length = 0
 }
 
 beforeEach(resetProbes)
@@ -175,11 +190,15 @@ function recordingReader(snapshots: Record<string, LiaBrainCorrelationSnapshot |
   return { calls, reader }
 }
 
-/** The present branch of the composed union, with the counts guaranteed. */
-function observed(result: LiaBrainCorrelationDiagnosticFacts): { facts: LiaBrainExecutionIdentityFacts, terminalFacts: LiaBrainTerminalObservationFacts } {
+/** The present branch of the composed union, with both siblings guaranteed. */
+function observed(result: LiaBrainCorrelationDiagnosticFacts): {
+  facts: LiaBrainExecutionIdentityFacts
+  terminalFacts: LiaBrainTerminalObservationFacts
+  sendTerminalFacts: LiaBrainSendTerminalObservationFacts
+} {
   if (!('terminalFacts' in result))
     throw new Error('expected a present correlation')
-  return { facts: result.facts, terminalFacts: result.terminalFacts }
+  return { facts: result.facts, sendTerminalFacts: result.sendTerminalFacts, terminalFacts: result.terminalFacts }
 }
 
 const ZERO_TERMINALS: LiaBrainTerminalObservationFacts = {
@@ -188,7 +207,7 @@ const ZERO_TERMINALS: LiaBrainTerminalObservationFacts = {
   succeededTerminalObservationCount: 0,
 }
 
-describe('correlation diagnostic facts - one snapshot, two derivations (Phase 8.0D-10B-4D4C3B2)', () => {
+describe('correlation diagnostic facts - one snapshot, three derivations (Phase 8.0D-10B-4D4C3B2)', () => {
   it('a/b/c/d: an absent correlation answers with its explicit absence state, after exactly ONE read and no derivation', () => {
     const { calls, reader } = recordingReader({})
 
@@ -200,12 +219,15 @@ describe('correlation diagnostic facts - one snapshot, two derivations (Phase 8.
     expect(result).toEqual({ facts: { status: 'correlationNotObserved' } })
     expect(Object.keys(result).sort()).toEqual(['facts'])
     expect('terminalFacts' in result).toBe(false)
+    expect('sendTerminalFacts' in result).toBe(false)
     // B: exactly ONE read, with the key forwarded verbatim.
     expect(calls).toEqual(['X'])
-    // C/D: neither derivation ran - nothing was derived from nothing.
+    // C/D: no derivation ran - nothing was derived from nothing, and in
+    // particular no empty send sibling was fabricated from a missing snapshot.
     expect(probes.identity.inputs).toHaveLength(0)
     expect(probes.identity.mappings).toHaveLength(0)
     expect(probes.terminal.inputs).toHaveLength(0)
+    expect(probes.send.inputs).toHaveLength(0)
   })
 
   it('e/p: a decision-only snapshot answers with its identity facts plus explicit zero counts', () => {
@@ -226,6 +248,10 @@ describe('correlation diagnostic facts - one snapshot, two derivations (Phase 8.
     // absence - the key is there.
     expect(terminalFacts).toEqual(ZERO_TERMINALS)
     expect('terminalFacts' in result).toBe(true)
+    // The send sibling is REQUIRED for a present correlation, and it is empty
+    // because this snapshot retains no send-terminal observation.
+    expect(observed(result).sendTerminalFacts).toEqual({})
+    expect(Object.keys(observed(result).sendTerminalFacts)).toEqual([])
   })
 
   it('f: an execution-only snapshot keeps its attempts and reads zero terminals - no pending claim', () => {
@@ -241,6 +267,7 @@ describe('correlation diagnostic facts - one snapshot, two derivations (Phase 8.
     expect(terminalFacts).toEqual(ZERO_TERMINALS)
     expect(facts).toEqual(deriveLiaBrainExecutionIdentityFacts(live, LIA_BRAIN_ENGINE_PROVIDER_MAPPING))
     expect(JSON.stringify(facts)).not.toMatch(/pending|incomplete|failure/i)
+    expect(observed(composeLiaBrainCorrelationDiagnosticFacts(store, 'X', LIA_BRAIN_ENGINE_PROVIDER_MAPPING)).sendTerminalFacts).toEqual({})
   })
 
   it('g: a terminal-only snapshot keeps the identity status and counts the terminal - no new status', () => {
@@ -255,6 +282,8 @@ describe('correlation diagnostic facts - one snapshot, two derivations (Phase 8.
     expect(Object.keys(facts).sort()).toEqual(['attempts', 'status'])
     expect(terminalFacts).toEqual({ ...ZERO_TERMINALS, failedTerminalObservationCount: 1 })
     expect(facts).toEqual(deriveLiaBrainExecutionIdentityFacts(live, LIA_BRAIN_ENGINE_PROVIDER_MAPPING))
+    // A round terminal is NOT a send terminal: the send sibling stays empty.
+    expect(observed(composeLiaBrainCorrelationDiagnosticFacts(store, 'X', LIA_BRAIN_ENGINE_PROVIDER_MAPPING)).sendTerminalFacts).toEqual({})
   })
 
   it('h: a matched start plus terminal counts the terminal without joining it into the attempt', () => {
@@ -312,11 +341,84 @@ describe('correlation diagnostic facts - one snapshot, two derivations (Phase 8.
     })
     expect(facts).toEqual(deriveLiaBrainExecutionIdentityFacts(live, LIA_BRAIN_ENGINE_PROVIDER_MAPPING))
     expect(facts.attempts.length).toBe(1)
+    expect(observed(composeLiaBrainCorrelationDiagnosticFacts(store, 'X', LIA_BRAIN_ENGINE_PROVIDER_MAPPING)).sendTerminalFacts).toEqual({})
+  })
+
+  it('send-only: a send-terminal-only snapshot keeps the identity status and projects the settlement', () => {
+    for (const outcome of ['failed', 'succeeded'] as const) {
+      const { store } = realStore()
+      store.recordSendTerminal({ correlationId: 'X', outcome })
+
+      const result = observed(composeLiaBrainCorrelationDiagnosticFacts(store, 'X', LIA_BRAIN_ENGINE_PROVIDER_MAPPING))
+
+      // No new identity status is invented for a send-only entry...
+      expect(result.facts).toEqual({ attempts: [], status: 'decisionNotObserved' })
+      expect(Object.keys(result.facts).sort()).toEqual(['attempts', 'status'])
+      // ...the round counts read zero retained observations...
+      expect(result.terminalFacts).toEqual(ZERO_TERMINALS)
+      // ...and the send sibling carries exactly the one direct settlement.
+      expect(result.sendTerminalFacts).toEqual({ sendTerminalOutcome: outcome })
+      expect(Object.keys(result.sendTerminalFacts)).toEqual(['sendTerminalOutcome'])
+    }
+  })
+
+  it('round + send: the two terminal domains coexist without being joined', () => {
+    const succeededRound = realStore()
+    succeededRound.store.recordExecutionTerminal(terminalReport('X', 'R', 'succeeded'))
+    succeededRound.store.recordSendTerminal({ correlationId: 'X', outcome: 'failed' })
+
+    const first = observed(composeLiaBrainCorrelationDiagnosticFacts(succeededRound.store, 'X', LIA_BRAIN_ENGINE_PROVIDER_MAPPING))
+    expect(first.terminalFacts).toEqual({ ...ZERO_TERMINALS, succeededTerminalObservationCount: 1 })
+    expect(first.sendTerminalFacts).toEqual({ sendTerminalOutcome: 'failed' })
+    // No mismatch, no contradiction, no anomaly field anywhere.
+    expect(JSON.stringify(first)).not.toMatch(/mismatch|contradiction|anomaly|orphan/i)
+
+    const abandonedRound = realStore()
+    abandonedRound.store.recordExecutionTerminal(terminalReport('X', 'R', 'abandoned'))
+    abandonedRound.store.recordSendTerminal({ correlationId: 'X', outcome: 'succeeded' })
+
+    const second = observed(composeLiaBrainCorrelationDiagnosticFacts(abandonedRound.store, 'X', LIA_BRAIN_ENGINE_PROVIDER_MAPPING))
+    expect(second.terminalFacts).toEqual({ ...ZERO_TERMINALS, abandonedTerminalObservationCount: 1 })
+    expect(second.sendTerminalFacts).toEqual({ sendTerminalOutcome: 'succeeded' })
+  })
+
+  it('mixed rounds + send: the counts and the settlement travel independently', () => {
+    const { store } = realStore()
+    store.recordExecutionTerminal(terminalReport('X', 'R1', 'succeeded'))
+    store.recordExecutionTerminal(terminalReport('X', 'R2', 'succeeded'))
+    store.recordExecutionTerminal(terminalReport('X', 'R3', 'failed'))
+    store.recordExecutionTerminal(terminalReport('X', 'R4', 'abandoned'))
+    store.recordSendTerminal({ correlationId: 'X', outcome: 'failed' })
+
+    const result = observed(composeLiaBrainCorrelationDiagnosticFacts(store, 'X', LIA_BRAIN_ENGINE_PROVIDER_MAPPING))
+
+    expect(result.terminalFacts).toEqual({
+      abandonedTerminalObservationCount: 1,
+      failedTerminalObservationCount: 1,
+      succeededTerminalObservationCount: 2,
+    })
+    expect(result.sendTerminalFacts).toEqual({ sendTerminalOutcome: 'failed' })
+    // Nothing relates the two sides: the send sibling carries no round key.
+    expect(Object.keys(result.sendTerminalFacts)).toEqual(['sendTerminalOutcome'])
+  })
+
+  it('first write wins: the composition reflects the store canonical settlement only', () => {
+    const failedFirst = realStore()
+    failedFirst.store.recordSendTerminal({ correlationId: 'X', outcome: 'failed' })
+    failedFirst.store.recordSendTerminal({ correlationId: 'X', outcome: 'succeeded' })
+    expect(observed(composeLiaBrainCorrelationDiagnosticFacts(failedFirst.store, 'X', LIA_BRAIN_ENGINE_PROVIDER_MAPPING)).sendTerminalFacts)
+      .toEqual({ sendTerminalOutcome: 'failed' })
+
+    const succeededFirst = realStore()
+    succeededFirst.store.recordSendTerminal({ correlationId: 'X', outcome: 'succeeded' })
+    succeededFirst.store.recordSendTerminal({ correlationId: 'X', outcome: 'failed' })
+    expect(observed(composeLiaBrainCorrelationDiagnosticFacts(succeededFirst.store, 'X', LIA_BRAIN_ENGINE_PROVIDER_MAPPING)).sendTerminalFacts)
+      .toEqual({ sendTerminalOutcome: 'succeeded' })
   })
 })
 
 describe('correlation diagnostic facts - the single-snapshot invariant (Phase 8.0D-10B-4D4C3B2)', () => {
-  it('k: BOTH derivations receive the very object the ONE read returned', () => {
+  it('k: ALL THREE derivations receive the very object the ONE read returned', () => {
     const S = deepFreeze(snapshot({
       decision: productionDecision(),
       executionTerminals: [{ outcome: 'succeeded', roundId: 'A' }],
@@ -329,10 +431,14 @@ describe('correlation diagnostic facts - the single-snapshot invariant (Phase 8.
     expect(calls).toEqual(['X'])
     expect(probes.identity.inputs).toHaveLength(1)
     expect(probes.terminal.inputs).toHaveLength(1)
+    expect(probes.send.inputs).toHaveLength(1)
     expect(probes.identity.inputs[0]).toBe(S)
     expect(probes.terminal.inputs[0]).toBe(S)
+    expect(probes.send.inputs[0]).toBe(S)
     expect(probes.identity.inputs[0]).toBe(probes.terminal.inputs[0])
+    expect(probes.terminal.inputs[0]).toBe(probes.send.inputs[0])
     expect('terminalFacts' in result).toBe(true)
+    expect('sendTerminalFacts' in result).toBe(true)
   })
 
   it('l: the mapping reaches ONLY the identity derivation, unchanged', () => {
@@ -346,9 +452,10 @@ describe('correlation diagnostic facts - the single-snapshot invariant (Phase 8.
 
     expect(probes.identity.mappings).toHaveLength(1)
     expect(probes.identity.mappings[0]).toBe(mapping)
-    // The terminal derivation is handed the snapshot and nothing else - no
+    // Both terminal derivations are handed the snapshot and nothing else - no
     // mapping, no key, no second argument of any kind.
     expect(probes.terminal.argumentCounts).toEqual([1])
+    expect(probes.send.argumentCounts).toEqual([1])
   })
 
   it('m/n: a present snapshot is read exactly once, and each derivation runs exactly once per call', () => {
@@ -360,12 +467,14 @@ describe('correlation diagnostic facts - the single-snapshot invariant (Phase 8.
     expect(calls).toEqual(['X'])
     expect(probes.identity.inputs).toHaveLength(1)
     expect(probes.terminal.inputs).toHaveLength(1)
+    expect(probes.send.inputs).toHaveLength(1)
 
     composeLiaBrainCorrelationDiagnosticFacts(reader, 'X', LIA_BRAIN_ENGINE_PROVIDER_MAPPING)
 
     expect(calls).toEqual(['X', 'X'])
     expect(probes.identity.inputs).toHaveLength(2)
     expect(probes.terminal.inputs).toHaveLength(2)
+    expect(probes.send.inputs).toHaveLength(2)
   })
 })
 
@@ -380,23 +489,46 @@ describe('correlation diagnostic facts - composed output shape (Phase 8.0D-10B-4
     const serialized = JSON.stringify(result)
     for (const forbidden of ['correlationId', 'snapshot', 'executions', 'executionTerminals', 'createdAt', 'roundId'])
       expect(serialized, forbidden).not.toContain(forbidden)
+    expect(serialized).not.toContain('sendTerminal')
   })
 
-  it('p/q: the present result carries exactly the two approved keys and no raw snapshot escape', () => {
+  it('p/q: the present result carries exactly the three approved keys and no raw snapshot escape', () => {
     const { store } = realStore()
     store.recordExecutionTerminal(terminalReport('X', 'R', 'succeeded'))
 
     const result = composeLiaBrainCorrelationDiagnosticFacts(store, 'X', LIA_BRAIN_ENGINE_PROVIDER_MAPPING)
 
-    expect(Object.keys(result).sort()).toEqual(['facts', 'terminalFacts'])
+    expect(Object.keys(result).sort()).toEqual(['facts', 'sendTerminalFacts', 'terminalFacts'])
     expect('correlationId' in result).toBe(false)
     expect(Object.keys(observed(result).terminalFacts).sort()).toEqual([
       'abandonedTerminalObservationCount',
       'failedTerminalObservationCount',
       'succeededTerminalObservationCount',
     ])
+    // The send sibling is exactly the approved projection - and it is NEVER the
+    // raw record the snapshot carries.
+    expect(observed(result).sendTerminalFacts).toEqual({})
+    expect(observed(result).sendTerminalFacts).not.toBe(store.get('X')!.sendTerminal)
     const serialized = JSON.stringify(result)
     for (const forbidden of ['correlationId', 'snapshot', 'executions', 'executionTerminals', 'createdAt'])
+      expect(serialized, forbidden).not.toContain(forbidden)
+    // No raw `sendTerminal` record escapes: only the derived sibling does.
+    expect(serialized).not.toContain('\"sendTerminal\"')
+  })
+
+  it('raw escape: a retained send record reaches the output only as derived facts', () => {
+    const { store } = realStore()
+    store.recordSendTerminal({ correlationId: 'X', outcome: 'failed' })
+
+    const result = composeLiaBrainCorrelationDiagnosticFacts(store, 'X', LIA_BRAIN_ENGINE_PROVIDER_MAPPING)
+    const serialized = JSON.stringify(result)
+
+    expect(Object.keys(result).sort()).toEqual(['facts', 'sendTerminalFacts', 'terminalFacts'])
+    expect(observed(result).sendTerminalFacts).toEqual({ sendTerminalOutcome: 'failed' })
+    // The raw key exists ONLY inside the derived sibling path, never as the raw
+    // record object, and no snapshot metadata travels.
+    expect('sendTerminal' in result).toBe(false)
+    for (const forbidden of ['correlationId', 'snapshot', 'createdAt', 'executionTerminals'])
       expect(serialized, forbidden).not.toContain(forbidden)
   })
 
@@ -432,28 +564,39 @@ describe('correlation diagnostic facts - composed output shape (Phase 8.0D-10B-4
     expect(first.facts).not.toBe(second.facts)
     expect(observed(first).terminalFacts).not.toBe(observed(second).terminalFacts)
     expect(observed(first).terminalFacts).toEqual(observed(second).terminalFacts)
+    expect(observed(first).sendTerminalFacts).not.toBe(observed(second).sendTerminalFacts)
+    expect(observed(first).sendTerminalFacts).toEqual(observed(second).sendTerminalFacts)
   })
 
-  it('the contracts line up: one reader-owned snapshot feeds both derivations, unchanged', () => {
-    // Compile-time proofs: the reader-owned snapshot satisfies BOTH derivation
-    // inputs, and the reader-owned mapping type is exactly what the identity
-    // derivation accepts - so the composition needs no adapter and no clone.
+  it('the contracts line up: one reader-owned snapshot feeds ALL THREE derivations, unchanged', () => {
+    // Compile-time proofs: the reader-owned snapshot satisfies ALL THREE
+    // derivation inputs, and the reader-owned mapping type is exactly what the
+    // identity derivation accepts - so the composition needs no adapter and no
+    // clone, and the very same object can be handed to every derivation.
     const snapshotFitsIdentity: LiaBrainCorrelationSnapshot extends LiaBrainExecutionIdentitySnapshot ? true : false = true
     const snapshotFitsTerminal: LiaBrainCorrelationSnapshot extends LiaBrainTerminalObservationSnapshot ? true : false = true
+    const snapshotFitsSend: LiaBrainCorrelationSnapshot extends LiaBrainSendTerminalObservationSnapshot ? true : false = true
     const mappingFitsIdentity: LiaBrainEngineProviderLookup extends LiaBrainEngineProviderMapping ? true : false = true
     expect(snapshotFitsIdentity).toBe(true)
     expect(snapshotFitsTerminal).toBe(true)
+    expect(snapshotFitsSend).toBe(true)
     expect(mappingFitsIdentity).toBe(true)
 
     // ...and the composed union encodes zero-vs-unknown structurally: a present
-    // result WITHOUT the counts is not a composed result, the absence state is
-    // the only absent member, and the present member is reachable.
-    const presentWithoutCounts: { facts: LiaBrainExecutionIdentityFacts } extends LiaBrainCorrelationDiagnosticFacts ? true : false = false
-    const presentWithCounts: { facts: LiaBrainExecutionIdentityFacts, terminalFacts: LiaBrainTerminalObservationFacts } extends LiaBrainCorrelationDiagnosticFacts ? true : false = true
+    // result missing ANY of the three members is not a composed result, the
+    // absence state is the only absent member, and the present member is
+    // reachable.
+    const withoutTerminal: { facts: LiaBrainExecutionIdentityFacts } extends LiaBrainCorrelationDiagnosticFacts ? true : false = false
+    const withoutSend: { facts: LiaBrainExecutionIdentityFacts, terminalFacts: LiaBrainTerminalObservationFacts } extends LiaBrainCorrelationDiagnosticFacts ? true : false = false
+    const presentComplete: { facts: LiaBrainExecutionIdentityFacts, terminalFacts: LiaBrainTerminalObservationFacts, sendTerminalFacts: LiaBrainSendTerminalObservationFacts } extends LiaBrainCorrelationDiagnosticFacts ? true : false = true
     const absentIsTheOnlyAbsence: { facts: { status: 'correlationNotObserved' } } extends LiaBrainCorrelationDiagnosticFacts ? true : false = true
-    expect(presentWithoutCounts).toBe(false)
-    expect(presentWithCounts).toBe(true)
+    // The absence arm carries no sibling: each member belongs to exactly one arm.
+    const absenceHasNoSend: { facts: { status: 'correlationNotObserved' }, sendTerminalFacts: LiaBrainSendTerminalObservationFacts } extends LiaBrainCorrelationDiagnosticFacts ? true : false = false
+    expect(withoutTerminal).toBe(false)
+    expect(withoutSend).toBe(false)
+    expect(presentComplete).toBe(true)
     expect(absentIsTheOnlyAbsence).toBe(true)
+    expect(absenceHasNoSend).toBe(false)
   })
 })
 
@@ -461,15 +604,17 @@ describe('correlation diagnostic facts - source guards (Phase 8.0D-10B-4D4C3B2)'
   const source = readSource(COMPOSITION)
   const code = stripComments(source)
 
-  it('t: the composition is exactly the audited surface - one read, two delegations, no authority', () => {
-    // The whole dependency surface: the reader's structural contracts, the two
+  it('t: the composition is exactly the audited surface - one read, three delegations, no authority', () => {
+    // The whole dependency surface: the reader's structural contracts, the three
     // approved derivations and nothing else.
     expect(code.match(/^import .*$/gm)).toEqual([
       `import type { LiaBrainCorrelationSnapshotReader, LiaBrainEngineProviderLookup } from './brain-correlation-reader'`,
       `import type { LiaBrainExecutionIdentityFacts } from './brain-execution-identity-facts'`,
       `import type { LiaBrainTerminalObservationFacts } from './brain-execution-terminal-facts'`,
+      `import type { LiaBrainSendTerminalObservationFacts } from './brain-send-terminal-facts'`,
       `import { deriveLiaBrainExecutionIdentityFacts } from './brain-execution-identity-facts'`,
       `import { deriveLiaBrainTerminalObservationFacts } from './brain-execution-terminal-facts'`,
+      `import { deriveLiaBrainSendTerminalObservationFacts } from './brain-send-terminal-facts'`,
     ])
 
     // Exactly ONE read, of the key it was handed, and no inspection of a handle.
@@ -495,7 +640,12 @@ describe('correlation diagnostic facts - source guards (Phase 8.0D-10B-4D4C3B2)'
     const runtime = code.slice(code.indexOf('export function composeLiaBrainCorrelationDiagnosticFacts'))
     expect(runtime).toMatch(/deriveLiaBrainExecutionIdentityFacts\(snapshot, mapping\)/)
     expect(runtime).toMatch(/deriveLiaBrainTerminalObservationFacts\(snapshot\)/)
-    expect(runtime).not.toMatch(/executionTerminals|executions|decision|roundId/)
+    expect(runtime).toMatch(/deriveLiaBrainSendTerminalObservationFacts\(snapshot\)/)
+    expect(runtime).not.toMatch(/executionTerminals|executions|decision|roundId|sendTerminal\b/)
+    // Exactly THREE delegations, each over the SAME local snapshot - no clone,
+    // no reconstructed snapshot, no second read helper.
+    expect(runtime.match(/deriveLiaBrain\w+\(snapshot[,)]/g)).toHaveLength(3)
+    expect(runtime).not.toMatch(/structuredClone|JSON\.parse|JSON\.stringify|\.\.\.snapshot/)
 
     // No store, no service, no observer, no diagnostic layer, no logger, no
     // state, no clock, no async surface, no transport.
@@ -508,10 +658,10 @@ describe('correlation diagnostic facts - source guards (Phase 8.0D-10B-4D4C3B2)'
     for (const forbidden of [
       /fallback/i,
       /finalAttempt|winningAttempt|winner/,
-      /sendSucceeded|sendFailed|sendOutcome/,
-      /completed|completion|finished/i,
-      /routeMatch|mismatch/,
-      /recordDecision|recordExecution/,
+      /sendSucceeded|sendFailed|sendOutcome|anySucceeded|allFailed/,
+      /completed|completion|finished|pending/i,
+      /routeMatch|mismatch|contradiction|anomaly|orphan/i,
+      /recordDecision|recordExecution|recordSendTerminal/,
       /\.observe\(/,
       /eventa|ipcMain|ipcRenderer|\.emit\(/,
       /console\.|useLogg|logger|telemetry/i,
@@ -520,6 +670,10 @@ describe('correlation diagnostic facts - source guards (Phase 8.0D-10B-4D4C3B2)'
       /prompt|messages?|usage|credential|apiKey|baseURL/i,
     ])
       expect(code, String(forbidden)).not.toMatch(forbidden)
+    // The composition names the sibling FIELD, never the projected outcome
+    // value: it receives the pure result structurally.
+    expect(code).not.toMatch(/sendTerminalOutcome/)
+    expect(code).toMatch(/sendTerminalFacts: deriveLiaBrainSendTerminalObservationFacts\(snapshot\)/)
   })
 
   it('u: the composition has exactly ONE production caller - the diagnostic observer', () => {

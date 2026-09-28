@@ -729,7 +729,11 @@ describe('terminal trigger - real observer integration (Phase 8.0D-10B-4D4C3B2-B
     deliverTerminal({ correlationId: 'X', outcome: 'succeeded', roundId: 'R' })
 
     const entry = entries[0]!
-    expect(Object.keys(entry).sort()).toEqual(['correlationId', 'facts', 'terminalFacts'])
+    // 8.0D-10B-4D4C4-B4B3: the composed entry carries the derived send sibling as
+    // well - empty here, because this snapshot retains no send settlement - and
+    // its value is a fact about this snapshot, not a placeholder.
+    expect(Object.keys(entry).sort()).toEqual(['correlationId', 'facts', 'sendTerminalFacts', 'terminalFacts'])
+    expect('sendTerminalFacts' in entry && entry.sendTerminalFacts).toEqual({})
     const serialized = JSON.stringify(entry)
     for (const forbidden of ['executionTerminals', 'roundId', 'outcome', 'snapshot', 'createdAt'])
       expect(serialized, forbidden).not.toContain(forbidden)
@@ -739,7 +743,7 @@ describe('terminal trigger - real observer integration (Phase 8.0D-10B-4D4C3B2-B
     expect(lines).toEqual(['[LIA-BRAIN-DIAG] correlationId="X" status="decisionNotObserved" succeededTerminalObservationCount=1 failedTerminalObservationCount=0 abandonedTerminalObservationCount=0'])
     // The raw terminal record itself still never reaches the line.
     const line = formatLiaBrainDiagnosticEntry(entry)
-    for (const forbidden of ['executionTerminals', 'outcome', 'roundId":', 'snapshot', 'terminalFacts'])
+    for (const forbidden of ['executionTerminals', 'outcome', 'roundId":', 'snapshot', 'terminalFacts', 'sendTerminalFacts'])
       expect(line, forbidden).not.toContain(forbidden)
   })
 

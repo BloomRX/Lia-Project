@@ -2,6 +2,7 @@ import type { LiaBrainCorrelationDiagnosticFacts } from './brain-correlation-dia
 import type { LiaBrainDiagnosticEntry } from './brain-correlation-observer'
 import type { LiaBrainExecutionIdentityFacts } from './brain-execution-identity-facts'
 import type { LiaBrainTerminalObservationFacts } from './brain-execution-terminal-facts'
+import type { LiaBrainSendTerminalObservationFacts } from './brain-send-terminal-facts'
 
 import { readdirSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -71,15 +72,21 @@ function occurrences(line: string, token: string): number {
  * Phase 8.0D-10B-4D4C3B2-B4: a present state carries the composed terminal
  * counts, which the formatter appends to the line, while the absence state has
  * no terminal member at all - so no count is ever fabricated for it.
+ *
+ * Phase 8.0D-10B-4D4C4-B4B3: a present state also carries the composed send
+ * sibling. The formatter does NOT print it yet (that is B4B4), so every present
+ * fixture here still has to carry the member and the emitted line must stay
+ * byte-identical whatever the sibling says.
  */
 function entry(
   facts: LiaBrainCorrelationDiagnosticFacts['facts'],
   correlationId = 'X',
   terminalFacts: LiaBrainTerminalObservationFacts = ZERO_TERMINALS,
+  sendTerminalFacts: LiaBrainSendTerminalObservationFacts = {},
 ): LiaBrainDiagnosticEntry {
   return facts.status === 'correlationNotObserved'
     ? { correlationId, facts }
-    : { correlationId, facts, terminalFacts }
+    : { correlationId, facts, sendTerminalFacts, terminalFacts }
 }
 
 beforeEach(() => {
@@ -420,12 +427,14 @@ describe('lia brain diagnostic log - terminal counts (Phase 8.0D-10B-4D4C3B2-B4)
       failedTerminalObservationCount: 1,
       succeededTerminalObservationCount: 2,
     }
-    const frozen: LiaBrainDiagnosticEntry = { correlationId: 'X', facts, terminalFacts }
+    const sendTerminalFacts: LiaBrainSendTerminalObservationFacts = { sendTerminalOutcome: 'failed' }
+    const frozen: LiaBrainDiagnosticEntry = { correlationId: 'X', facts, sendTerminalFacts, terminalFacts }
     Object.freeze(facts.attempts[0]!)
     Object.freeze(facts.attempts)
     Object.freeze(facts.expected)
     Object.freeze(facts)
     Object.freeze(terminalFacts)
+    Object.freeze(sendTerminalFacts)
     Object.freeze(frozen)
     const before = JSON.stringify(frozen)
 
@@ -435,6 +444,31 @@ describe('lia brain diagnostic log - terminal counts (Phase 8.0D-10B-4D4C3B2-B4)
     expect(first).toBe(second)
     expect(JSON.stringify(frozen)).toBe(before)
     expect(first).toBe(`[LIA-BRAIN-DIAG] correlationId="X" status="attemptIdentityFacts" expectedEngineId="groq" expectedProviderId="groq" expectedModelId="openai/gpt-oss-120b" attempt0.arrivalIndex=0 attempt0.roundId="A" attempt0.providerId="groq" attempt0.modelId="openai/gpt-oss-120b" attempt0.providerIdentityEqual=true attempt0.modelIdentityEqual=true ${counts(2, 1, 1)}`)
+  })
+
+  it('b4b3: the send sibling is carried but NOT printed yet - the line stays byte-identical', () => {
+    const facts: LiaBrainCorrelationDiagnosticFacts['facts'] = {
+      attempts: [],
+      expected: { engineId: 'groq', modelId: 'openai/gpt-oss-120b', providerId: 'groq' },
+      status: 'noExecutionObserved',
+    }
+    const lines = ([{}, { sendTerminalOutcome: 'succeeded' }, { sendTerminalOutcome: 'failed' }] as LiaBrainSendTerminalObservationFacts[])
+      .map(sendTerminalFacts => formatLiaBrainDiagnosticEntry(entry(facts, 'X', ZERO_TERMINALS, sendTerminalFacts)))
+
+    // Same input, same line - the sibling changes nothing on the wire.
+    expect(new Set(lines).size).toBe(1)
+    expect(lines[0]).toBe(`[LIA-BRAIN-DIAG] correlationId="X" status="noExecutionObserved" expectedEngineId="groq" expectedProviderId="groq" expectedModelId="openai/gpt-oss-120b" ${counts(0, 0, 0)}`)
+    // The projected outcome never leaks into the line, in any form.
+    expect(lines[0]).not.toMatch(/sendTerminal|Outcome|succeeded[^T]|failed[^T]/)
+  })
+
+  it('b4b3: an empty send sibling is a fact, not a placeholder - the line stays terminal-only', () => {
+    const present = entry({ attempts: [], status: 'decisionNotObserved' }, 'X', ZERO_TERMINALS, {})
+    const line = formatLiaBrainDiagnosticEntry(present)
+
+    expect(line).toBe(`[LIA-BRAIN-DIAG] correlationId="X" status="decisionNotObserved" ${counts(0, 0, 0)}`)
+    // No fabricated pending/running/boolean token anywhere on the line.
+    expect(line).not.toMatch(/pending|running|false|true|\{\}|\[\]/i)
   })
 })
 
@@ -603,6 +637,10 @@ describe('lia brain diagnostic log - source invariants (Phase 8.0D-10B-4D2B)', (
     // The composed type, the composition and both facts modules stay unimported:
     // the adapter receives the entry contract and derives nothing of its own.
     expect(source).not.toMatch(/brain-correlation-diagnostic-facts|LiaBrainCorrelationDiagnosticFacts|composeLiaBrainCorrelationDiagnosticFacts|brain-execution-terminal-facts|LiaBrainTerminalObservationFacts|brain-execution-identity-facts|deriveLiaBrainTerminalObservationFacts|deriveLiaBrainExecutionIdentityFacts/)
+    // ...and since 8.0D-10B-4D4C4-B4B3 the composed send sibling stays equally
+    // invisible: this module neither imports the pure send module nor names the
+    // sibling or the projected outcome value anywhere (B4B4 owns the printing).
+    expect(source).not.toMatch(/brain-send-terminal-facts|LiaBrainSendTerminalObservationFacts|deriveLiaBrainSendTerminalObservationFacts|sendTerminalFacts|sendTerminalOutcome|sendTerminal/)
   })
 
   it('60/61/62: no verdict/fallback/send/completion vocabulary, no authority and no new IO surface', () => {

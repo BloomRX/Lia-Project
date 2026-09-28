@@ -217,19 +217,35 @@ function createTestContainer() {
   }
 }
 
-/** One entry, narrowed to the present arm: counts guaranteed, facts narrowed. */
-function presentEntry(entry: LiaBrainDiagnosticEntry): { facts: LiaBrainExecutionIdentityFacts, terminalFacts: LiaBrainTerminalObservationFacts } {
+/**
+ * One entry, narrowed to the present arm: both siblings guaranteed. Since
+ * 8.0D-10B-4D4C4-B4B3 the present composed value carries `sendTerminalFacts` too,
+ * and the observer forwards it untouched - so the sibling is part of the entry.
+ */
+function presentEntry(entry: LiaBrainDiagnosticEntry): {
+  facts: LiaBrainExecutionIdentityFacts
+  terminalFacts: LiaBrainTerminalObservationFacts
+  sendTerminalFacts: LiaBrainSendTerminalObservationFacts
+} {
   if (!('terminalFacts' in entry))
     throw new Error('expected a present correlation entry')
-  return { facts: entry.facts, terminalFacts: entry.terminalFacts }
+  return { facts: entry.facts, sendTerminalFacts: entry.sendTerminalFacts, terminalFacts: entry.terminalFacts }
 }
 
 /** The present arm of a composed value a delegation returned, narrowed once. */
-function composedPresent(index = 0): { facts: LiaBrainExecutionIdentityFacts, terminalFacts: LiaBrainTerminalObservationFacts } {
+function composedPresent(index = 0): {
+  facts: LiaBrainExecutionIdentityFacts
+  terminalFacts: LiaBrainTerminalObservationFacts
+  sendTerminalFacts: LiaBrainSendTerminalObservationFacts
+} {
   const composed = probes.composition.returned[index]
   if (typeof composed !== 'object' || composed === null || !('terminalFacts' in composed))
     throw new Error('expected a present composed value')
-  return composed as { facts: LiaBrainExecutionIdentityFacts, terminalFacts: LiaBrainTerminalObservationFacts }
+  return composed as {
+    facts: LiaBrainExecutionIdentityFacts
+    terminalFacts: LiaBrainTerminalObservationFacts
+    sendTerminalFacts: LiaBrainSendTerminalObservationFacts
+  }
 }
 
 /** Clears the probes so one test's observations cannot leak into the next. */
@@ -572,6 +588,10 @@ describe('correlation observer - no retention, no inspection, synchrony (Phase 8
     // destructuring is the injected dependencies (reader + optional callback).
     expect(source.match(/const \{/g)).toHaveLength(1)
     expect(source).toContain('const { correlationReader, log } = params')
+    // 8.0D-10B-4D4C4-B4B3: the send sibling travels by the SAME spread - the
+    // observer neither names the sibling nor the projected outcome value, and it
+    // needed no production edit to forward it.
+    expect(source).not.toMatch(/sendTerminalFacts|sendTerminalOutcome/)
   })
 
   it('the source retains nothing, writes nothing itself and uses no async API', () => {
@@ -712,6 +732,8 @@ describe('correlation observer - caller allowlists and authority (Phase 8.0D-10B
     // value - nothing else. (Phase 8.0D-10B-4D4C3B2-B2 replaces the old
     // identity-only read import with the composition, so the observer can no
     // longer read or derive anything itself.)
+    // (8.0D-10B-4D4C4-B4B3 adds NOTHING here: the send sibling is forwarded by
+    // the spread, so the observer never names the pure send module or its type.)
     expect(source.match(/^import .*$/gm)).toEqual([
       `import type { LiaBrainCorrelationDiagnosticFacts } from './brain-correlation-diagnostic-facts'`,
       `import type { LiaBrainCorrelationSnapshotReader } from './brain-correlation-reader'`,
@@ -945,20 +967,21 @@ describe('correlation observer - structured diagnostic log seam (Phase 8.0D-10B-
     // F: one observation -> exactly one entry.
     expect(recorded.entries).toHaveLength(1)
     const entry = recorded.entries[0]!
-    // G: exactly the approved top-level fields - the opaque key plus the two
+    // G: exactly the approved top-level fields - the opaque key plus the three
     // composed members. No timestamp, no sequence number, no environment or
     // window id, no provider/model/status duplicate, no raw snapshot, no
     // terminal record and no derived verdict.
-    expect(Object.keys(entry).sort()).toEqual(['correlationId', 'facts', 'terminalFacts'])
+    expect(Object.keys(entry).sort()).toEqual(['correlationId', 'facts', 'sendTerminalFacts', 'terminalFacts'])
     // H: the caller's key is forwarded verbatim, never trimmed or rewritten.
     expect(entry.correlationId).toBe('logical-send-X')
     // I: the entry carries the EXACT members the composition produced - the seam
-    // recorded that value, and BOTH members are the same references. Not a
+    // recorded that value, and ALL THREE members are the same references. Not a
     // clone, not a re-derivation, not an edited copy.
     expect(probes.composition.returned).toHaveLength(1)
     const composed = composedPresent()
     expect(entry.facts).toBe(composed.facts)
     expect('terminalFacts' in entry && entry.terminalFacts).toBe(composed.terminalFacts)
+    expect('sendTerminalFacts' in entry && entry.sendTerminalFacts).toBe(composed.sendTerminalFacts)
     expect(entry.facts.status).toBe('decisionNotObserved')
     // J: no time of any kind was added by this module.
     expect(entry).not.toHaveProperty('timestamp')
@@ -983,6 +1006,7 @@ describe('correlation observer - structured diagnostic log seam (Phase 8.0D-10B-
     // no terminal member - zero is never fabricated for a key with no snapshot.
     expect(Object.keys(entry).sort()).toEqual(['correlationId', 'facts'])
     expect('terminalFacts' in entry).toBe(false)
+    expect('sendTerminalFacts' in entry).toBe(false)
     expect(entry.facts).toEqual({ status: 'correlationNotObserved' })
     expect(probes.composition.returned[0]).toEqual({ facts: { status: 'correlationNotObserved' } })
   })
@@ -1093,8 +1117,8 @@ describe('correlation observer - structured diagnostic log seam (Phase 8.0D-10B-
     // module's job - transport sanitization stays upstream.)
     for (const forbidden of ['prompt', 'messages', 'attachments', 'tools', 'apiKey', 'secret', 'baseURL', 'chatProvider', 'credentials', 'conversationId', 'executionTerminals', 'snapshot', 'createdAt'])
       expect(serialized, forbidden).not.toContain(forbidden)
-    // And the only keys are the approved three.
-    expect(Object.keys(JSON.parse(serialized))).toEqual(['correlationId', 'facts', 'terminalFacts'])
+    // And the only keys are the approved four.
+    expect(Object.keys(JSON.parse(serialized))).toEqual(['correlationId', 'facts', 'terminalFacts', 'sendTerminalFacts'])
     // The counts are the only terminal data, and they carry no record.
     expect(Object.keys(JSON.parse(serialized).terminalFacts).sort()).toEqual([
       'abandonedTerminalObservationCount',
@@ -1184,8 +1208,8 @@ describe('correlation observer - terminals reach the entry as counts only (Phase
     const { entry, store } = await observe([{ outcome: 'succeeded', roundId: 'R' }])
 
     // The structured entry is exactly the composed shape: the opaque key, the
-    // identity facts and the three counts.
-    expect(Object.keys(entry).sort()).toEqual(['correlationId', 'facts', 'terminalFacts'])
+    // identity facts, the three counts and the send sibling.
+    expect(Object.keys(entry).sort()).toEqual(['correlationId', 'facts', 'sendTerminalFacts', 'terminalFacts'])
     // The forwarded identity facts neither declare nor carry a terminal collection.
     expect('executionTerminals' in entry.facts).toBe(false)
     expect('outcome' in entry.facts).toBe(false)
@@ -1201,6 +1225,10 @@ describe('correlation observer - terminals reach the entry as counts only (Phase
     const serialized = JSON.stringify(present.terminalFacts)
     for (const forbidden of ['executionTerminals', 'roundId', 'outcome', 'snapshot', 'records'])
       expect(serialized, forbidden).not.toContain(forbidden)
+    // The send sibling is present and empty here - a FACT about this snapshot,
+    // not an absence - and no raw send record exists at the entry level.
+    expect(present.sendTerminalFacts).toEqual({})
+    expect(Object.keys(present.sendTerminalFacts)).toEqual([])
 
     // The raw record still exists at the SNAPSHOT boundary: the stop is the
     // composition, not terminal storage.
@@ -1323,13 +1351,14 @@ describe('correlation observer - composed entry states (Phase 8.0D-10B-4D4C3B2-B
       store.recordDecision('X', productionDecision())
     })
 
-    expect(Object.keys(entry).sort()).toEqual(['correlationId', 'facts', 'terminalFacts'])
-    const { facts, terminalFacts } = presentEntry(entry)
+    expect(Object.keys(entry).sort()).toEqual(['correlationId', 'facts', 'sendTerminalFacts', 'terminalFacts'])
+    const { facts, terminalFacts, sendTerminalFacts } = presentEntry(entry)
     expect(facts.status).toBe('noExecutionObserved')
     if (facts.status !== 'noExecutionObserved')
       throw new Error('expected noExecutionObserved')
     expect(facts.attempts).toEqual([])
     expect(terminalFacts).toEqual(ZERO_TERMINALS)
+    expect(sendTerminalFacts).toEqual({})
   })
 
   it('execution-only: the observed attempt plus zero counts, with no pending interpretation', async () => {
@@ -1379,6 +1408,34 @@ describe('correlation observer - composed entry states (Phase 8.0D-10B-4D4C3B2-B
     expect(terminalFacts).toEqual({ ...ZERO_TERMINALS, abandonedTerminalObservationCount: 1 })
     const serialized = JSON.stringify(entry)
     for (const forbidden of ['mismatch', 'orphan', 'join', 'unmatched'])
+      expect(serialized, forbidden).not.toContain(forbidden)
+  })
+
+  it('send-only: the entry carries the direct settlement with zero round counts', async () => {
+    for (const outcome of ['succeeded', 'failed'] as const) {
+      const { entry } = await entryAfter((store) => {
+        store.recordSendTerminal({ correlationId: 'X', outcome })
+      })
+
+      const { facts, terminalFacts, sendTerminalFacts } = presentEntry(entry)
+      expect(facts).toEqual({ attempts: [], status: 'decisionNotObserved' })
+      expect(terminalFacts).toEqual(ZERO_TERMINALS)
+      expect(sendTerminalFacts).toEqual({ sendTerminalOutcome: outcome })
+      expect(Object.keys(sendTerminalFacts)).toEqual(['sendTerminalOutcome'])
+    }
+  })
+
+  it('round + send: the settlement reaches the entry without joining the counts', async () => {
+    const { entry } = await entryAfter((store) => {
+      terminal(store, 'X', 'R', 'succeeded')
+      store.recordSendTerminal({ correlationId: 'X', outcome: 'failed' })
+    })
+
+    const { terminalFacts, sendTerminalFacts } = presentEntry(entry)
+    expect(terminalFacts).toEqual({ ...ZERO_TERMINALS, succeededTerminalObservationCount: 1 })
+    expect(sendTerminalFacts).toEqual({ sendTerminalOutcome: 'failed' })
+    const serialized = JSON.stringify(entry)
+    for (const forbidden of ['mismatch', 'contradiction', 'anomaly'])
       expect(serialized, forbidden).not.toContain(forbidden)
   })
 

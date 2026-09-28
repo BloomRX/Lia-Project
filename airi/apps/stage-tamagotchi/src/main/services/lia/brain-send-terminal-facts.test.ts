@@ -22,6 +22,7 @@ import { deriveLiaBrainSendTerminalObservationFacts } from './brain-send-termina
 
 const REPO_ROOT = new URL('../../../../../../', import.meta.url)
 const SEND_FACTS = 'apps/stage-tamagotchi/src/main/services/lia/brain-send-terminal-facts.ts'
+const DIAGNOSTIC_FACTS = 'apps/stage-tamagotchi/src/main/services/lia/brain-correlation-diagnostic-facts.ts'
 const BRAIN_ROOTS = ['apps/stage-tamagotchi/src']
 
 /** `fileURLToPath` keeps the trailing separator of a directory URL. */
@@ -308,20 +309,22 @@ describe('logical send terminal facts - source guards (Phase 8.0D-10B-4D4C4-B4B2
     expect(code).not.toMatch(/isRecord|readString|typeof |\.trim\(|\.length === 0|structuredClone|JSON\./)
   })
 
-  it('y: the derivation has ZERO production callers - its own definition is the only occurrence', () => {
-    expect(productionMatching(/deriveLiaBrainSendTerminalObservationFacts/)).toEqual([SEND_FACTS])
-    // Definition-only: the call site allowlist is empty.
-    expect(productionMatching(/(?<!function )deriveLiaBrainSendTerminalObservationFacts\(/)).toEqual([])
-    // And no production module names the module, its types or its output field.
-    expect(productionMatching(/brain-send-terminal-facts|LiaBrainSendTerminalObservationSnapshot|LiaBrainSendTerminalObservationFacts/)).toEqual([SEND_FACTS])
+  it('y: the derivation has exactly ONE production call site - the composition, and nowhere else', () => {
+    // Phase 8.0D-10B-4D4C4-B4B3 wires the projection into the composition: the
+    // module and its ONE call site are now both named, and no third module joins.
+    expect(productionMatching(/deriveLiaBrainSendTerminalObservationFacts/)).toEqual([SEND_FACTS, DIAGNOSTIC_FACTS].sort())
+    expect(productionMatching(/(?<!function )deriveLiaBrainSendTerminalObservationFacts\(/)).toEqual([DIAGNOSTIC_FACTS])
+    // And no production module outside the pair names the module or its types.
+    expect(productionMatching(/brain-send-terminal-facts|LiaBrainSendTerminalObservationSnapshot|LiaBrainSendTerminalObservationFacts/)).toEqual([SEND_FACTS, DIAGNOSTIC_FACTS].sort())
+    // The projected OUTCOME value is still owned by the pure module alone: the
+    // composition names the FIELD and receives the value structurally.
     expect(productionMatching(/sendTerminalOutcome/)).toEqual([SEND_FACTS])
     // The distinct term `sendTerminalObserved` is still introduced NOWHERE.
     expect(productionMatching(/sendTerminalObserved/)).toEqual([])
     // The deferred layers keep knowing nothing about the projection: the
-    // composition, the observer, the formatter, the identity facts and the
-    // round-terminal facts are untouched by this phase.
+    // observer, the formatter, the identity facts and the round-terminal facts
+    // are untouched (the formatter prints nothing until B4B4).
     for (const relative of [
-      'brain-correlation-diagnostic-facts.ts',
       'brain-correlation-observer.ts',
       'brain-diagnostic-log.ts',
       'brain-execution-identity-facts.ts',

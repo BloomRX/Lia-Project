@@ -656,14 +656,13 @@ describe('lia send terminal wiring invariants (Phase 8.0D-10B-4D4C4-B3B2)', () =
     expect(ingress.match(/\.recordSendTerminal\(report\)/g)).toHaveLength(1)
     expect(ingress).not.toMatch(/correlationObserver|\.observe\(|electronLiaBrainSendTerminalObservation|brain-send-terminal-report-listener/)
 
-    // No send-level FACT or exposure exists anywhere on the read side, and the
-    // formatter still prints exactly the three terminal counts. The reader is no
-    // longer listed here: 8.0D-10B-4D4C4-B4B1 widened its snapshot CONTRACT to
-    // carry the raw record structurally, and this phase leaves that carriage
-    // inert - the read result is still identity-only and no layer derives a
-    // send-level fact from it.
+    // No send-level EXPOSURE exists anywhere on the read side, and the formatter
+    // still prints exactly the three terminal counts. The reader is no longer
+    // listed here: 8.0D-10B-4D4C4-B4B1 widened its snapshot CONTRACT to carry the
+    // raw record structurally. The composition left the list in
+    // 8.0D-10B-4D4C4-B4B3: it now derives the sibling through the pure send
+    // projection - an inert carriage of the derived fact, never an exposure.
     for (const relative of [
-      './brain-correlation-diagnostic-facts.ts',
       './brain-correlation-observer.ts',
       './brain-diagnostic-log.ts',
       './brain-execution-terminal-facts.ts',

@@ -643,12 +643,13 @@ describe('lia send terminal ingress service - isolation invariants (Phase 8.0D-1
     expect(store).toMatch(/sendTerminal\?: LiaBrainSendTerminalRecord/)
     expect(store).not.toMatch(/LiaBrainSendTerminalRecorder|brain-send-terminal-report-service/)
 
-    // No send FACT exists yet anywhere on the read side, and the formatter still
+    // No send fact is EXPOSED anywhere on the read side, and the formatter still
     // prints exactly the three terminal counts. The reader is no longer listed
     // here: 8.0D-10B-4D4C4-B4B1 lets its SNAPSHOT contract carry the raw record
-    // structurally - a carriage boundary that reads no field and derives no fact.
+    // structurally. The composition left the list in 8.0D-10B-4D4C4-B4B3, where
+    // it composes the derived send sibling from that same snapshot - exposure
+    // stays zero because no line and no consumer reads the member yet.
     for (const relative of [
-      './brain-correlation-diagnostic-facts.ts',
       './brain-correlation-observer.ts',
       './brain-diagnostic-log.ts',
       './brain-execution-terminal-facts.ts',
