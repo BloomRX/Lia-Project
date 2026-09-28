@@ -200,7 +200,7 @@ describe('lia terminal execution reporter (Phase 8.0D-10B-4D4C1)', () => {
   })
 
   it('p: the reporter is transport only - no state, no interpretation, no output', () => {
-    const source = readFileSync(join(process.cwd(), 'src/renderer/services/lia/execution-terminal-reporter.ts'), 'utf-8')
+    const source = (() => { for (const c of [join(process.cwd(), 'src/renderer/services/lia/execution-terminal-reporter.ts'), join(process.cwd(), 'apps/stage-tamagotchi/src/renderer/services/lia/execution-terminal-reporter.ts')]) try { return readFileSync(c, 'utf-8') } catch {} ; return readFileSync(join(process.cwd(), 'src/renderer/services/lia/execution-terminal-reporter.ts'), 'utf-8') })()
     const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
 
     // No cross-event memory of any kind.
@@ -228,7 +228,9 @@ describe('lia terminal execution reporter (Phase 8.0D-10B-4D4C1)', () => {
   })
 
   it('q: exactly one production registration site and one producer of the new channel', () => {
-    const airiRoot = join(process.cwd(), '..', '..')
+    const candidates = [join(process.cwd(), '..', '..'), process.cwd(), join(process.cwd(), 'airi')]
+  let airiRoot = candidates[0]
+  for (const candidate of candidates) { try { readdirSync(join(candidate, 'apps/stage-tamagotchi/src')); airiRoot = candidate; break } catch {} }
     const roots = ['apps/stage-tamagotchi/src', 'packages/stage-ui/src', 'packages/core-agent/src']
     const settledRegistrarSites: string[] = []
     const requestStartRegistrarSites: string[] = []
@@ -275,7 +277,7 @@ describe('lia terminal execution reporter (Phase 8.0D-10B-4D4C1)', () => {
  * new one-way channel, and no overload of the request-start contract.
  */
 describe('lia terminal execution contract (Phase 8.0D-10B-4D4C1)', () => {
-  const SHARED = readFileSync(join(process.cwd(), 'src/shared/eventa/index.ts'), 'utf-8')
+  const SHARED = (() => { for (const c of [join(process.cwd(), 'src/shared/eventa/index.ts'), join(process.cwd(), 'apps/stage-tamagotchi/src/shared/eventa/index.ts')]) try { return readFileSync(c, 'utf-8') } catch {} ; return readFileSync(join(process.cwd(), 'src/shared/eventa/index.ts'), 'utf-8') })()
 
   it('the report type is exactly the three contract fields, in that order', () => {
     const start = SHARED.indexOf('export interface LiaBrainExecutionTerminalReport {')

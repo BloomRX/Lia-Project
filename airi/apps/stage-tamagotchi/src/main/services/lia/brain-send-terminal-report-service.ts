@@ -1,4 +1,6 @@
 import type { LiaBrainSendTerminalReport } from '../../../shared/eventa'
+import type { LiaBrainCorrelationObserver } from './brain-correlation-observer'
+import type { LiaBrainCorrelationService } from './brain-correlation-service'
 
 /**
  * Phase 8.0D-10B-4D4C4-B3B1: the trusted main-process ingress for the Lia
@@ -11,12 +13,18 @@ import type { LiaBrainSendTerminalReport } from '../../../shared/eventa'
  * two-field report to the injected correlation store as a diagnostic fact
  * (Phase 8.0D-10B-4D4C4-B3A). It owns no other behavior and no state at all.
  *
- * The closest sibling is the round-terminal ingress
- * (`brain-execution-terminal-report-service.ts`), with one fewer contract field
- * and NO observer: this phase only sanitizes and writes, so it does not even
- * receive a diagnostic observer and no observation is triggered by a send-level
- * settlement. The transport binding will be its own module later; nothing here
- * listens to Eventa.
+ * Phase 8.0D-10B-4D4C4-B4B5: the injected diagnostic observer is
+ * triggered from the same isolated block, strictly AFTER the successful write,
+ * with the sanitized report's own key - exactly like the sibling terminal
+ * ingress. One accepted send-terminal report therefore produces exactly one
+ * observation of ITS logical send, and the observation follows the write, so
+ * the send fact is already available in the canonical store when the read
+ * happens. The dependency is the canonical lifecycle instance and its contract
+ * is one method, `observe(...)`, returning nothing.
+ *
+ * The transport binding lives in its own module
+ * (`brain-send-terminal-report-listener.ts`), which forwards raw payloads here
+ * and knows nothing about validation or the store.
  *
  * Trust boundary: the settlement of a logical send is UNTRUSTED METADATA, even
  * though it originates from the renderer that really ran the send. The outcome
@@ -30,9 +38,8 @@ import type { LiaBrainSendTerminalReport } from '../../../shared/eventa'
  * a hostile payload carries them.
  *
  * Deliberately absent: no Eventa/Electron, no handler registration, no
- * correlation observer, no correlation reader or facts, no diagnostic logger,
- * no Brain service, no product config, no comparison, no aggregates and no
- * send-level verdict.
+ * correlation reader or facts, no diagnostic logger, no Brain service, no
+ * product config, no comparison, no aggregates and no send-level verdict.
  */
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -112,19 +119,28 @@ export interface LiaBrainSendTerminalReportService {
 }
 
 /**
- * Creates the send-terminal ingress service over the injected send-terminal
- * recorder.
+ * Creates the send-terminal ingress service over the injected canonical
+ * correlation store and the injected canonical diagnostic observer.
  *
- * The dependency arrives exactly like the sibling ingresses receive the store -
- * never created, resolved or reached for here. A factory with zero production
- * callers is intentional in this phase: the Eventa listener that will forward
- * raw payloads (`brain-send-terminal-report-listener.ts`) is the next step and
- * does not exist yet.
+ * Both dependencies arrive exactly like the sibling terminal ingress receives
+ * them - never created, resolved or reached for here. The only store member
+ * this service touches is `recordSendTerminal`: it never writes a decision,
+ * never appends an execution start, never reads an entry and never inspects
+ * the size. The observer is triggered once per accepted report with that
+ * report's own sanitized key; the canonical store remains the authority on
+ * repeated or conflicting outcomes, and this layer resolves nothing.
  */
 export function createLiaBrainSendTerminalReportService(params: {
-  correlationStore: LiaBrainSendTerminalRecorder
+  correlationStore: LiaBrainCorrelationService
+  /**
+   * Phase 8.0D-10B-4D4C4-B4B5: the canonical diagnostic observer owned by the
+   * lifecycle - never resolved or created here. It is triggered once per
+   * successful send-terminal write with that report's own sanitized key, and
+   * returns nothing.
+   */
+  correlationObserver: LiaBrainCorrelationObserver
 }): LiaBrainSendTerminalReportService {
-  const { correlationStore } = params
+  const { correlationStore, correlationObserver } = params
 
   return {
     report(payload: unknown): void {
@@ -134,16 +150,22 @@ export function createLiaBrainSendTerminalReportService(params: {
       if (report === undefined)
         return
 
-      // Diagnostic write, isolated with the SAME containment policy as both
-      // sibling ingresses: a correlation store that throws cannot make an
+      // Diagnostic write, isolated with the SAME containment policy as the
+      // sibling terminal ingress: a correlation store that throws cannot make an
       // exception escape into the caller, cannot trigger a retry or a fallback,
       // and cannot produce a user-facing error.
+      // Phase 8.0D-10B-4D4C4-B4B5: the observation follows the WRITE, in the
+      // same isolated block - a record that throws is never observed, and a
+      // hostile observer cannot escape into the caller either.
       try {
         correlationStore.recordSendTerminal(report)
+        // Ordering is the contract: the factual mutation completes first, and
+        // only then is the sanitized report's own key observed.
+        correlationObserver.observe(report.correlationId)
       }
       catch {
         // Diagnostic memory only: the logical send this report describes is
-        // unaffected, and nothing here is observed or retried.
+        // unaffected.
       }
     },
   }

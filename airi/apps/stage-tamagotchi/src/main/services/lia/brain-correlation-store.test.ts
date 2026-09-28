@@ -1470,11 +1470,12 @@ describe('lia brain correlation store - logical send terminal fact (Phase 8.0D-1
       'eventa:invoke:lia:brain:chat-decision',
     ])
 
-    // 44/83: the main observer trigger allowlist is still exactly THREE.
+    // 44/83: the main observer trigger allowlist is now exactly FOUR - send terminal joins.
     expect(productionSourcesMatching(BRAIN_ROOTS, /correlationObserver\.observe\(/)).toEqual([
       'apps/stage-tamagotchi/src/main/services/lia/brain-decision-service.ts',
       'apps/stage-tamagotchi/src/main/services/lia/brain-execution-report-service.ts',
       'apps/stage-tamagotchi/src/main/services/lia/brain-execution-terminal-report-service.ts',
+      'apps/stage-tamagotchi/src/main/services/lia/brain-send-terminal-report-service.ts',
     ])
   })
 })

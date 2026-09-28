@@ -275,13 +275,14 @@ describe('lia brain correlation service - composition ownership (Phase 8.0D-10B-
     // now receives the SAME lifecycle-owned observer, so the single-dependency
     // set is back to the observer provider and the boot materialization, and the
     // store + observer pair is the shape of all THREE producers.
-    // 8.0D-10B-4D4C4-B3B2 adds the FOURTH store-only block: the send-terminal
-    // ingress deliberately receives no observer, so the single-dependency set
-    // grows to three while the store + observer pair stays at two.)
-    expect(entry.match(/dependsOn: \{ liaBrainCorrelation \}/g)).toHaveLength(3)
-    expect(entry.match(/dependsOn: \{ liaBrainCorrelation, liaBrainCorrelationObserver \}/g)).toHaveLength(2)
+    // 8.0D-10B-4D4C4-B3B2 adds the FOURTH store-only block, and
+    // 8.0D-10B-4D4C4-B4B5 makes that block an observer block as well, so the
+    // single-dependency set is back to two and the store + observer pair grows
+    // to three.)
+    expect(entry.match(/dependsOn: \{ liaBrainCorrelation \}/g)).toHaveLength(2)
+    expect(entry.match(/dependsOn: \{ liaBrainCorrelation, liaBrainCorrelationObserver \}/g)).toHaveLength(3)
     expect(entry.match(/dependsOn: \{ liaBrain, liaBrainCorrelation, liaBrainCorrelationObserver \}/g)).toHaveLength(1)
-    expect(entry.match(/liaBrainCorrelation \}/g) ?? []).toHaveLength(3)
+    expect(entry.match(/liaBrainCorrelation \}/g) ?? []).toHaveLength(2)
     expect(entry.match(/correlationReader: dependsOn\.liaBrainCorrelation,/g)).toHaveLength(1)
     // The observer handle of 8.0D-10B-4C4B shares the name prefix, so the
     // materialization counts are pinned with a word boundary on both sides:
@@ -325,6 +326,7 @@ describe('lia brain correlation service - composition ownership (Phase 8.0D-10B-
         'apps/stage-tamagotchi/src/main/services/lia/brain-decision-service.ts',
         'apps/stage-tamagotchi/src/main/services/lia/brain-execution-report-service.ts',
         'apps/stage-tamagotchi/src/main/services/lia/brain-execution-terminal-report-service.ts',
+        'apps/stage-tamagotchi/src/main/services/lia/brain-send-terminal-report-service.ts',
       ])
   })
 })

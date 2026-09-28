@@ -560,24 +560,26 @@ describe('lia send terminal wiring invariants (Phase 8.0D-10B-4D4C4-B3B2)', () =
     // lifecycle handle - the same one the other producers write through.
     expect(entry.match(/createLiaBrainSendTerminalReportService\(/g)).toHaveLength(1)
     expect(entry.match(/registerLiaBrainSendTerminalReportListener\(/g)).toHaveLength(1)
-    expect(entryCode).toContain('const sendTerminalReportService = createLiaBrainSendTerminalReportService({ correlationStore: deps.liaBrainCorrelation, })')
+    expect(entryCode).toContain('const sendTerminalReportService = createLiaBrainSendTerminalReportService({ correlationStore: deps.liaBrainCorrelation, correlationObserver: deps.liaBrainCorrelationObserver, })')
     expect(entryCode).toContain('registerLiaBrainSendTerminalReportListener({ context, sendTerminalReportService })')
 
-    // The dependency set is the store AND NOTHING ELSE: no observer reaches this
-    // path, so no observation can be triggered by a send settlement.
-    expect(entry.match(/dependsOn: \{ liaBrainCorrelation \}/g)).toHaveLength(3)
+    // The dependency set is the store plus the canonical observer: the send
+    // settlement now triggers observation (B4B5), like the other terminals.
+    expect(entry.match(/dependsOn: \{ liaBrainCorrelation, liaBrainCorrelationObserver \}/g)).toHaveLength(3)
     const sendBlock = entryCode.slice(entryCode.indexOf('createLiaBrainSendTerminalReportService('))
     const sendWiring = sendBlock.slice(0, sendBlock.indexOf('registerLiaBrainSendTerminalReportListener({ context, sendTerminalReportService })'))
-    expect(sendWiring).not.toMatch(/correlationObserver|observe|recordSendTerminal|isRecord|readString|outcome|succeeded|failed/)
+    expect(sendWiring).toMatch(/correlationObserver: deps\.liaBrainCorrelationObserver/)
+    expect(sendWiring).not.toMatch(/recordSendTerminal|isRecord|readString|outcome|succeeded|failed/)
 
     // No second store anywhere: the canonical service factory is still called
     // exactly once, and the entry never builds a store of its own.
     expect(entry.match(/createLiaBrainCorrelationService\(\)/g)).toHaveLength(1)
     expect(entry).not.toMatch(/createLiaBrainCorrelationStore\(/)
     expect(entry.match(/services:lia-brain-correlation'/g)).toHaveLength(1)
-    // The other three producers keep their exact shapes and counts.
+    // The other three producers keep their exact shapes and counts; now four
+    // producers share the same observer handle.
     expect(entry.match(/correlationStore: deps\.liaBrainCorrelation/g)).toHaveLength(4)
-    expect(entry.match(/correlationObserver: deps\.liaBrainCorrelationObserver/g)).toHaveLength(3)
+    expect(entry.match(/correlationObserver: deps\.liaBrainCorrelationObserver/g)).toHaveLength(4)
     expect(entry).not.toMatch(/\.observe\(/)
   })
 
@@ -636,17 +638,18 @@ describe('lia send terminal wiring invariants (Phase 8.0D-10B-4D4C4-B3B2)', () =
       'eventa:invoke:lia:brain:chat-decision',
     ])
 
-    // THREE observer triggers remain exactly the three producers.
+    // FOUR observer triggers - send terminal now triggers observation.
     expect(productionSourcesMatching(BRAIN_ROOTS, /correlationObserver\.observe\(/)).toEqual([
       'apps/stage-tamagotchi/src/main/services/lia/brain-decision-service.ts',
       'apps/stage-tamagotchi/src/main/services/lia/brain-execution-report-service.ts',
       'apps/stage-tamagotchi/src/main/services/lia/brain-execution-terminal-report-service.ts',
+      'apps/stage-tamagotchi/src/main/services/lia/brain-send-terminal-report-service.ts',
     ])
   })
 
   it('40/41/44/45/46/47/55/56/57/58/59/60/61: the frozen layers stay frozen', () => {
     // The store keeps the B3A surface this phase consumes; the ingress keeps its
-    // B3B1 sanitizer contract and receives no observer.
+    // B3B1 sanitizer contract and now triggers the observer (B4B5).
     const store = stripComments(readSource('./brain-correlation-store.ts'))
     expect(store.match(/recordSendTerminal: \(report: LiaBrainSendTerminalReport\) => void/g)).toHaveLength(1)
     expect(store).toMatch(/sendTerminal\?: LiaBrainSendTerminalRecord/)
@@ -654,7 +657,9 @@ describe('lia send terminal wiring invariants (Phase 8.0D-10B-4D4C4-B3B2)', () =
 
     const ingress = stripComments(readSource('./brain-send-terminal-report-service.ts'))
     expect(ingress.match(/\.recordSendTerminal\(report\)/g)).toHaveLength(1)
-    expect(ingress).not.toMatch(/correlationObserver|\.observe\(|electronLiaBrainSendTerminalObservation|brain-send-terminal-report-listener/)
+    expect(ingress).toMatch(/correlationObserver\.observe\(report\.correlationId\)/)
+    expect(ingress).not.toMatch(/electronLiaBrainSendTerminalObservation|brain-send-terminal-report-listener/)
+    expect(ingress.match(/\.observe\(/g)).toHaveLength(1)
 
     // No send-level EXPOSURE exists anywhere on the read side except via the
     // formatter (B4B4), which now prints the optional send outcome as the final

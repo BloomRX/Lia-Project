@@ -70,12 +70,22 @@ function emittedOutcomes(): unknown[] {
 
 /** The reporter's source, read from disk (the node project runs from the app root). */
 function reporterSource(): string {
+  for (const candidate of [
+    join(process.cwd(), 'src/renderer/services/lia/send-terminal-reporter.ts'),
+    join(process.cwd(), 'apps/stage-tamagotchi/src/renderer/services/lia/send-terminal-reporter.ts'),
+  ]) {
+    try { return readFileSync(candidate, 'utf-8') } catch {}
+  }
   return readFileSync(join(process.cwd(), 'src/renderer/services/lia/send-terminal-reporter.ts'), 'utf-8')
 }
 
 /** Production sources under the Brain roots - tests are never scanned. */
 function productionSources(roots: string[]): string[] {
-  const airiRoot = join(process.cwd(), '..', '..')
+  const candidates = [join(process.cwd(), '..', '..'), process.cwd(), join(process.cwd(), 'airi')]
+  let airiRoot = candidates[0]
+  for (const candidate of candidates) {
+    try { readdirSync(join(candidate, 'apps/stage-tamagotchi/src')); airiRoot = candidate; break } catch {}
+  }
   const files: string[] = []
   for (const root of roots) {
     for (const entry of readdirSync(join(airiRoot, root), { recursive: true, withFileTypes: true })) {
@@ -89,6 +99,14 @@ function productionSources(roots: string[]): string[] {
 }
 
 const BRAIN_ROOTS = ['apps/stage-tamagotchi/src', 'packages/stage-ui/src', 'packages/core-agent/src', 'packages/lia-core/src']
+
+function readProductionFile(relative: string): string {
+  for (const base of [join(process.cwd(), '..', '..'), process.cwd(), join(process.cwd(), 'airi')]) {
+    const candidate = join(base, relative)
+    try { return readFileSync(candidate, 'utf-8') } catch {}
+  }
+  return readProductionFile(relative)
+}
 
 describe('lia logical-send terminal reporter (Phase 8.0D-10B-4D4C4-B2)', () => {
   it('a/b: each valid settlement is reported exactly once, with the exact two keys', () => {
@@ -314,20 +332,20 @@ describe('lia logical-send terminal reporter (Phase 8.0D-10B-4D4C4-B2)', () => {
 
   it('s: exactly ONE production registration of the generic seam, in this reporter', () => {
     expect(productionSources(['apps/stage-tamagotchi/src', 'packages/stage-ui/src', 'packages/core-agent/src'])
-      .filter(relative => /(?<!function )registerChatSendSettledObserver\(/.test(readFileSync(join(process.cwd(), '..', '..', relative), 'utf-8')))
+      .filter(relative => /(?<!function )registerChatSendSettledObserver\(/.test(readProductionFile(relative)))
       .sort())
       .toEqual(['apps/stage-tamagotchi/src/renderer/services/lia/send-terminal-reporter.ts'])
     // The registration happens on the seam, and the installer is CALLED once,
     // from the canonical renderer lifecycle only.
     expect(productionSources(BRAIN_ROOTS)
-      .filter(relative => /(?<!function )registerLiaBrainSendTerminalObserver\(\)/.test(readFileSync(join(process.cwd(), '..', '..', relative), 'utf-8')))
+      .filter(relative => /(?<!function )registerLiaBrainSendTerminalObserver\(\)/.test(readProductionFile(relative)))
       .sort())
       .toEqual(['apps/stage-tamagotchi/src/renderer/main.ts'])
   })
 
   it('t: the new transport has exactly the four approved production references and no main consumer', () => {
     const withContract = productionSources(BRAIN_ROOTS)
-      .filter(relative => /electronLiaBrainSendTerminalObservation/.test(readFileSync(join(process.cwd(), '..', '..', relative), 'utf-8')))
+      .filter(relative => /electronLiaBrainSendTerminalObservation/.test(readProductionFile(relative)))
       .sort()
     // Exactly three: the shared declaration, this renderer reporter and, since
     // 8.0D-10B-4D4C4-B3B2, the ONE main transport listener that consumes it. No
@@ -349,7 +367,7 @@ describe('lia logical-send terminal reporter (Phase 8.0D-10B-4D4C4-B2)', () => {
     // all (it forwards `event.body` untouched), and no fact module, reader or
     // renderer names it.
     expect(productionSources(BRAIN_ROOTS)
-      .filter(relative => /LiaBrainSendTerminalReport\b/.test(readFileSync(join(process.cwd(), '..', '..', relative), 'utf-8')))
+      .filter(relative => /LiaBrainSendTerminalReport\b/.test(readProductionFile(relative)))
       .sort())
       .toEqual([
         'apps/stage-tamagotchi/src/main/services/lia/brain-correlation-store.ts',
@@ -357,19 +375,20 @@ describe('lia logical-send terminal reporter (Phase 8.0D-10B-4D4C4-B2)', () => {
         'apps/stage-tamagotchi/src/shared/eventa/index.ts',
       ])
     // The listener names no payload type at all: it knows only the service.
-    expect(readFileSync(join(process.cwd(), 'src/main/services/lia/brain-send-terminal-report-listener.ts'), 'utf-8'))
+    expect((() => { for (const c of [join(process.cwd(), 'src/main/services/lia/brain-send-terminal-report-listener.ts'), join(process.cwd(), 'apps/stage-tamagotchi/src/main/services/lia/brain-send-terminal-report-listener.ts')]) try { return readFileSync(c, 'utf-8') } catch {} ; return readFileSync(join(process.cwd(), 'src/main/services/lia/brain-send-terminal-report-listener.ts'), 'utf-8') })())
       .not
       .toMatch(/LiaBrainSendTerminalReport\b/)
   })
 
-  it('u: the main observer triggers stay exactly three - the send signal triggers none', () => {
+  it('u: the main observer triggers are now exactly four - send signal now triggers observation', () => {
     expect(productionSources(BRAIN_ROOTS)
-      .filter(relative => /correlationObserver\.observe\(/.test(readFileSync(join(process.cwd(), '..', '..', relative), 'utf-8')))
+      .filter(relative => /correlationObserver\.observe\(/.test(readProductionFile(relative)))
       .sort())
       .toEqual([
         'apps/stage-tamagotchi/src/main/services/lia/brain-decision-service.ts',
         'apps/stage-tamagotchi/src/main/services/lia/brain-execution-report-service.ts',
         'apps/stage-tamagotchi/src/main/services/lia/brain-execution-terminal-report-service.ts',
+        'apps/stage-tamagotchi/src/main/services/lia/brain-send-terminal-report-service.ts',
       ])
 
     // And the still-deferred layers hold no send field or send fact of any
@@ -385,7 +404,7 @@ describe('lia logical-send terminal reporter (Phase 8.0D-10B-4D4C4-B2)', () => {
       'apps/stage-tamagotchi/src/main/services/lia/brain-execution-terminal-facts.ts',
       'apps/stage-tamagotchi/src/main/services/lia/brain-correlation-observer.ts',
     ]) {
-      expect(readFileSync(join(process.cwd(), '..', '..', relative), 'utf-8'), relative)
+      expect(readProductionFile(relative), relative)
         .not
         .toMatch(/sendTerminal|SendTerminal|send-terminal|recordSendTerminal/)
     }
@@ -397,7 +416,15 @@ describe('lia logical-send terminal reporter (Phase 8.0D-10B-4D4C4-B2)', () => {
  * and no overload of the two round-level contracts.
  */
 describe('lia logical-send terminal contract (Phase 8.0D-10B-4D4C4-B2)', () => {
-  const SHARED = readFileSync(join(process.cwd(), 'src/shared/eventa/index.ts'), 'utf-8')
+  const SHARED = (() => {
+    for (const candidate of [
+      join(process.cwd(), 'src/shared/eventa/index.ts'),
+      join(process.cwd(), 'apps/stage-tamagotchi/src/shared/eventa/index.ts'),
+    ]) {
+      try { return readFileSync(candidate, 'utf-8') } catch {}
+    }
+    return readFileSync(join(process.cwd(), 'src/shared/eventa/index.ts'), 'utf-8')
+  })()
 
   it('the report type is exactly the two contract fields, in that order', () => {
     const start = SHARED.indexOf('export interface LiaBrainSendTerminalReport {')
@@ -433,7 +460,7 @@ describe('lia logical-send terminal contract (Phase 8.0D-10B-4D4C4-B2)', () => {
     // ...and the whole production tree names those four and no fifth.
     const tags = new Set<string>()
     for (const relative of productionSources(BRAIN_ROOTS)) {
-      for (const match of readFileSync(join(process.cwd(), '..', '..', relative), 'utf-8').matchAll(/eventa:(?:invoke|event):lia:brain[^'"\n]*/g))
+      for (const match of readProductionFile(relative).matchAll(/eventa:(?:invoke|event):lia:brain[^'"\n]*/g))
         tags.add(match[0])
     }
     expect([...tags].sort()).toEqual([

@@ -479,10 +479,12 @@ describe('lia terminal wiring invariants (Phase 8.0D-10B-4D4C2B2)', () => {
     expect(entryCode).toContain('registerLiaBrainExecutionTerminalReportListener({ context, terminalReportService })')
 
     // Phase 8.0D-10B-4D4C3B2-B3: the terminal service is built over the SAME
-    // lifecycle-owned observer the other two producers receive - one canonical
+    // lifecycle-owned observer the other three producers receive - one canonical
     // instance, never a second one - and the listener itself stays observer-free.
-    expect(entry.match(/correlationObserver: deps\.liaBrainCorrelationObserver/g)).toHaveLength(3)
-    expect(entry.match(/dependsOn: \{ liaBrainCorrelation, liaBrainCorrelationObserver \}/g)).toHaveLength(2)
+    // Phase 8.0D-10B-4D4C4-B4B5 adds the fourth (send) producer, so the global
+    // counts are now four and three.
+    expect(entry.match(/correlationObserver: deps\.liaBrainCorrelationObserver/g)).toHaveLength(4)
+    expect(entry.match(/dependsOn: \{ liaBrainCorrelation, liaBrainCorrelationObserver \}/g)).toHaveLength(3)
     expect(entryCode).not.toContain('registerLiaBrainExecutionTerminalReportListener({ context, terminalReportService, correlationObserver')
 
     // The entry never sanitizes, never writes to the store and never branches

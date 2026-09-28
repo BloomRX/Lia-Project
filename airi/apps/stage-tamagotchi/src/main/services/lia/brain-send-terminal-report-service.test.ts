@@ -28,6 +28,7 @@ import { createLiaBrainSendTerminalReportService, sanitizeLiaBrainSendTerminalRe
  */
 
 const mocks = vi.hoisted(() => ({
+  observe: vi.fn(),
   recordSendTerminal: vi.fn(),
 }))
 
@@ -71,9 +72,17 @@ function recorderDouble(recordSendTerminal: (report: unknown) => void = mocks.re
   return { recordSendTerminal } as LiaBrainSendTerminalRecorder
 }
 
-/** The ingress under test, over the recording recorder double. */
-function ingress(store: LiaBrainSendTerminalRecorder = recorderDouble()) {
-  return createLiaBrainSendTerminalReportService({ correlationStore: store })
+/** The canonical diagnostic observer double the ingress receives. */
+function observerDouble(observe: (correlationId: string) => void = mocks.observe) {
+  return { observe } as never
+}
+
+/** The ingress under test, over the recording recorder + observer doubles. */
+function ingress(
+  store: LiaBrainSendTerminalRecorder = recorderDouble(),
+  observer: unknown = observerDouble(),
+) {
+  return createLiaBrainSendTerminalReportService({ correlationStore: store as never, correlationObserver: observer as never })
 }
 
 /** The report the recorder received on the Nth accepted call. */
@@ -111,6 +120,7 @@ const EXTRA_FIELDS = {
 }
 
 beforeEach(() => {
+  mocks.observe.mockClear()
   mocks.recordSendTerminal.mockClear()
 })
 
@@ -497,6 +507,117 @@ describe('lia send terminal ingress service - real correlation store (Phase 8.0D
   })
 })
 
+/**
+ * Phase 8.0D-10B-4D4C4-B4B5: the send-terminal observer trigger
+ */
+describe('lia send terminal ingress service - the observer trigger (Phase 8.0D-10B-4D4C4-B4B5)', () => {
+  it('a/b/c: each accepted outcome is stored once and THEN observed once, with the canonical key', () => {
+    for (const outcome of ['succeeded', 'failed'] as const) {
+      mocks.observe.mockClear()
+      mocks.recordSendTerminal.mockClear()
+      const order: string[] = []
+      mocks.recordSendTerminal.mockImplementationOnce(() => order.push('store'))
+      mocks.observe.mockImplementationOnce(() => order.push('observe'))
+      const service = ingress()
+
+      service.report({ correlationId: 'logical-send-X', outcome })
+
+      expect(order, outcome).toEqual(['store', 'observe'])
+      expect(mocks.recordSendTerminal, outcome).toHaveBeenCalledTimes(1)
+      expect(storedReport(), outcome).toEqual({ correlationId: 'logical-send-X', outcome })
+      expect(mocks.observe, outcome).toHaveBeenCalledTimes(1)
+      expect(mocks.observe, outcome).toHaveBeenCalledWith('logical-send-X')
+      expect((mocks.observe.mock.calls[0] as unknown[])[0]).toBe((storedReport() as { correlationId: string }).correlationId)
+      expect(mocks.observe.mock.calls[0]).toHaveLength(1)
+    }
+  })
+
+  it('d: a payload the sanitizer rejects stores nothing and observes nothing', () => {
+    const service = ingress()
+
+    for (const payload of [
+      undefined,
+      null,
+      'not a report',
+      42,
+      [],
+      {},
+      { correlationId: '', outcome: 'failed' },
+      { correlationId: 7, outcome: 'failed' },
+      { correlationId: 'X', outcome: 'completed' },
+      { correlationId: 'X', outcome: 'abandoned' },
+      { correlationId: 'X' },
+    ])
+      service.report(payload)
+
+    expect(mocks.recordSendTerminal).not.toHaveBeenCalled()
+    expect(mocks.observe).not.toHaveBeenCalled()
+  })
+
+  it('e: hostile extras reach neither the store nor the observer', () => {
+    const service = ingress()
+
+    service.report({ ...VALID_REPORT, ...EXTRA_FIELDS })
+
+    expect(storedReport()).toEqual(VALID_REPORT)
+    expect(mocks.observe).toHaveBeenCalledTimes(1)
+    expect(mocks.observe.mock.calls[0]).toEqual(['logical-send-X'])
+  })
+
+  it('f: a store that throws is NEVER observed, and nothing is retried', () => {
+    let attempts = 0
+    const service = ingress(recorderDouble(() => {
+      attempts += 1
+      throw new Error('diagnostic memory is gone')
+    }))
+
+    expect(() => service.report(VALID_REPORT)).not.toThrow()
+    expect(attempts).toBe(1)
+    expect(mocks.observe).not.toHaveBeenCalled()
+
+    expect(() => service.report({ ...VALID_REPORT, correlationId: 'Y' })).not.toThrow()
+    expect(attempts).toBe(2)
+    expect(mocks.observe).not.toHaveBeenCalled()
+  })
+
+  it('g: a hostile observer cannot escape, and the write is not undone or retried', () => {
+    const order: string[] = []
+    mocks.recordSendTerminal.mockImplementationOnce(() => order.push('store'))
+    const service = ingress(recorderDouble(), {
+      observe: (correlationId: string) => {
+        order.push(`observe:${correlationId}`)
+        throw new Error('hostile observer')
+      },
+    } as never)
+
+    expect(() => service.report(VALID_REPORT)).not.toThrow()
+    expect(order).toEqual(['store', 'observe:logical-send-X'])
+    expect(mocks.recordSendTerminal).toHaveBeenCalledTimes(1)
+
+    expect(() => service.report({ ...VALID_REPORT, correlationId: 'Y' })).not.toThrow()
+    expect(mocks.recordSendTerminal).toHaveBeenCalledTimes(2)
+  })
+
+  it('h/i: duplicates and conflicts are both stored and both observed', () => {
+    const service = ingress()
+
+    service.report(VALID_REPORT)
+    service.report(VALID_REPORT)
+    expect(mocks.recordSendTerminal).toHaveBeenCalledTimes(2)
+    expect(mocks.observe.mock.calls.map(call => call[0])).toEqual(['logical-send-X', 'logical-send-X'])
+
+    mocks.observe.mockClear()
+    mocks.recordSendTerminal.mockClear()
+    service.report({ correlationId: 'X', outcome: 'failed' })
+    service.report({ correlationId: 'X', outcome: 'succeeded' })
+
+    expect(mocks.recordSendTerminal).toHaveBeenCalledTimes(2)
+    expect(storedReport(0)).toEqual({ correlationId: 'X', outcome: 'failed' })
+    expect(storedReport(1)).toEqual({ correlationId: 'X', outcome: 'succeeded' })
+    expect(mocks.observe.mock.calls.map(call => call[0])).toEqual(['X', 'X'])
+  })
+})
+
 describe('lia send terminal ingress service - isolation invariants (Phase 8.0D-10B-4D4C4-B3B1)', () => {
   it('38/81/82: exactly ONE production call site of recordSendTerminal - this service, plus the store', () => {
     // B3A shipped the writer with ZERO production callers; this phase evolves
@@ -554,24 +675,31 @@ describe('lia send terminal ingress service - isolation invariants (Phase 8.0D-1
 
     expect(source).not.toMatch(/defineEventa|defineInvokeEventa|defineInvokeHandler|ipcMain|ipcRenderer|BrowserWindow|createContext|context\.on\(|\.emit\(/)
     expect(source).not.toMatch(/eventa:(?:invoke|event):lia:brain|electronLiaBrain/)
-    // The whole dependency surface is the contract TYPE and the narrow recorder
-    // contract, both TYPE-ONLY - no renderer, no Core Agent, no Stage UI.
+    // The whole dependency surface is the contract TYPE, the injected canonical
+    // store and the injected canonical observer contract, all TYPE-ONLY - no
+    // renderer, no Core Agent, no Stage UI, no second store.
     expect(source.match(/^import .*$/gm)).toEqual([
       `import type { LiaBrainSendTerminalReport } from '../../../shared/eventa'`,
+      `import type { LiaBrainCorrelationObserver } from './brain-correlation-observer'`,
+      `import type { LiaBrainCorrelationService } from './brain-correlation-service'`,
     ])
     expect(source).not.toMatch(/from '[^']*(?:renderer|core-agent|stage-ui|lia-core)/)
-    expect(source).not.toMatch(/createLiaBrainCorrelationStore|createLiaBrainCorrelationService|brain-correlation-store|LiaBrainCorrelationService/)
+    expect(source).not.toMatch(/createLiaBrainCorrelationStore|createLiaBrainCorrelationService|brain-correlation-store/)
   })
 
-  it('77/23: the ingress has no observer, no read side and no diagnostic dependency', () => {
+  it('77/23: the ingress triggers the observer exactly once after the write, with no other diagnostic dependency', () => {
     const source = stripComments(readSource('./brain-send-terminal-report-service.ts'))
 
-    // There is no send-level trigger in this phase: the module cannot observe,
-    // and it does not even receive an observer.
-    expect(source).not.toMatch(/correlationObserver|observer|\.observe\(/)
-    expect(source).not.toMatch(/brain-correlation-observer|brain-correlation-reader|brain-execution-identity-facts|brain-execution-terminal-facts|brain-expected-route|brain-diagnostic-log/)
+    // Phase 8.0D-10B-4D4C4-B4B5: the send write IS a diagnostic trigger now -
+    // exactly one call site, with the sanitized report's own key.
+    expect(source.match(/correlationObserver\.\w+/g)).toEqual(['correlationObserver.observe'])
+    expect(source).toMatch(/^\s*correlationObserver\.observe\(report\.correlationId\)$/m)
+    expect(source.match(/\.observe\(/g)).toHaveLength(1)
+    expect(source).not.toMatch(/brain-correlation-reader|brain-execution-identity-facts|brain-expected-route|brain-diagnostic-log/)
     expect(source).not.toMatch(/composeLiaBrainCorrelationDiagnosticFacts|LiaBrainDiagnosticEntry|formatLiaBrainDiagnosticEntry|logLiaBrainDiagnostic|brain-correlation-diagnostic-facts/)
     expect(source).not.toMatch(/LIA_BRAIN_ENGINE_PROVIDER_MAPPING|readLiaBrainExecutionIdentityFacts/)
+    // No second observer trigger, no reader, no formatter.
+    expect(source).not.toMatch(/brain-correlation-observer.*brain-correlation-observer/)
   })
 
   it('78/54: the ingress holds no authority and derives no verdict', () => {
@@ -673,8 +801,8 @@ describe('lia send terminal ingress service - isolation invariants (Phase 8.0D-1
       expect(readSource(relative), relative).not.toMatch(/sendTerminal|LiaBrainSendTerminalRecord/)
     expect(productionSourcesMatching(['packages/stage-ui/src', 'packages/core-agent/src'], /sendTerminal|LiaBrainSendTerminalRecord/)).toEqual([])
 
-    // FOUR channels, no fifth - and the observer trigger allowlist is still
-    // exactly THREE producers: a send terminal triggers no observation.
+    // FOUR channels, no fifth - and the observer trigger allowlist is now
+    // exactly FOUR producers: send terminal now triggers observation.
     const tags = new Set<string>()
     for (const relative of productionSources(BRAIN_ROOTS)) {
       for (const match of readFileSync(new URL(relative, REPO_ROOT), 'utf-8').matchAll(/eventa:(?:invoke|event):lia:brain[^'"]*/g))
@@ -690,6 +818,7 @@ describe('lia send terminal ingress service - isolation invariants (Phase 8.0D-1
       'apps/stage-tamagotchi/src/main/services/lia/brain-decision-service.ts',
       'apps/stage-tamagotchi/src/main/services/lia/brain-execution-report-service.ts',
       'apps/stage-tamagotchi/src/main/services/lia/brain-execution-terminal-report-service.ts',
+      'apps/stage-tamagotchi/src/main/services/lia/brain-send-terminal-report-service.ts',
     ])
   })
 

@@ -502,12 +502,17 @@ app.whenReady().then(async () => {
   // send-terminal ingress instance over the SAME lifecycle handle the other
   // producers write through - one canonical store, never a second one - and the
   // listener forwards the raw payload to it; nothing here inspects the payload.
+  // Phase 8.0D-10B-4D4C4-B4B5: the ingress now receives the SAME canonical
+  // observer the other three terminal/decision producers already receive - one
+  // canonical instance, never a second one - so one accepted send-terminal
+  // report triggers exactly one observation of its key, after the write.
   injeca.invoke({
-    dependsOn: { liaBrainCorrelation },
+    dependsOn: { liaBrainCorrelation, liaBrainCorrelationObserver },
     callback: async (deps) => {
       const { context } = createContext(ipcMain)
       const sendTerminalReportService = createLiaBrainSendTerminalReportService({
         correlationStore: deps.liaBrainCorrelation,
+        correlationObserver: deps.liaBrainCorrelationObserver,
       })
       registerLiaBrainSendTerminalReportListener({ context, sendTerminalReportService })
     },

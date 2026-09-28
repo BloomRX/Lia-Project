@@ -363,15 +363,16 @@ describe('lia brain correlation wiring - invariants (Phase 8.0D-10B-4B3)', () =>
     expect(entryCode).toContain('registerLiaBrainDecisionBridge({ context, brain: deps.liaBrain, correlationStore: deps.liaBrainCorrelation,')
     expect(entryCode).toContain('registerLiaBrainExecutionReportHandler({ context, correlationStore: deps.liaBrainCorrelation,')
     // Phase 8.0D-10B-4D4C3B2-B3 adds the terminal ingress as the third producer
-    // wired over the same pair, so the pair appears three times now.
-    expect(entryCode.match(/correlationStore: deps\.liaBrainCorrelation, correlationObserver: deps\.liaBrainCorrelationObserver,/g)).toHaveLength(3)
+    // wired over the same pair, and 8.0D-10B-4D4C4-B4B5 adds the fourth (send),
+    // so the pair appears four times now.
+    expect(entryCode.match(/correlationStore: deps\.liaBrainCorrelation, correlationObserver: deps\.liaBrainCorrelationObserver,/g)).toHaveLength(4)
     // 8.0D-10B-4D4C2B2 added the third and 8.0D-10B-4D4C4-B3B2 the fourth: the
     // terminal and send-terminal ingress factories are built over the same
     // lifecycle handle (neither registration receives an observer of its own).
     expect(entry.match(/correlationStore: deps\.liaBrainCorrelation/g)).toHaveLength(4)
     // ...and, since 8.0D-10B-4C4C, the SAME lifecycle-owned observer instance:
-    // two injections, one handle, no second observer anywhere in the entry.
-    expect(entry.match(/correlationObserver: deps\.liaBrainCorrelationObserver/g)).toHaveLength(3)
+    // four injections, one handle, no second observer anywhere in the entry.
+    expect(entry.match(/correlationObserver: deps\.liaBrainCorrelationObserver/g)).toHaveLength(4)
     expect(entry.match(/createLiaBrainCorrelationObserver\(/g)).toHaveLength(1)
     expect(entry).not.toMatch(/\.observe\(/)
 
