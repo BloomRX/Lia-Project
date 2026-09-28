@@ -1,6 +1,5 @@
 import type { ChatProvider } from '@xsai-ext/providers/utils'
 import type { Message, Tool } from '@xsai/shared-chat'
-import type { SyncedPiniaRuntime } from 'pinia-plugin-synced'
 
 import type { ChatSendPayload } from './chat'
 
@@ -380,14 +379,6 @@ describe('chat store reasoning per-send foundation (phase 8.0D-10B-4D4C4-D2B2-C1
   it('multi fallback (3 attempts) preserves captured reasoning (false)', async () => {
     const settings = useConsciousnessSettingsStore()
     await settings.setReasoning(true)
-    // Fail twice, succeed third
-    llmStreamMock
-      .mockRejectedValueOnce(new Error('fail1'))
-      .mockRejectedValueOnce(new Error('fail2'))
-    // third will use streamWithUsage success impl
-    llmStreamMock.mockImplementationOnce(async () => { throw new Error('fail1') })
-    llmStreamMock.mockImplementationOnce(async () => { throw new Error('fail2') })
-    // Actually we need to set up correctly: use mockRejectedValue sequence then success
     llmStreamMock.mockReset()
     llmStreamMock
       .mockRejectedValueOnce(new Error('fail1'))
