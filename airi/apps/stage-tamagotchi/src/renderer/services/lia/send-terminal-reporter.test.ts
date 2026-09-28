@@ -378,11 +378,11 @@ describe('lia logical-send terminal reporter (Phase 8.0D-10B-4D4C4-B2)', () => {
     // 8.0D-10B-4D4C4-B4B1 the reader is NOT among them either (its SNAPSHOT
     // contract carries that record structurally), and since
     // 8.0D-10B-4D4C4-B4B3 the composition is NOT among them: it derives the
-    // sibling through the pure send projection. None of them triggers an
-    // observation and none of them exposes the settlement.
+    // sibling through the pure send projection. Since 8.0D-10B-4D4C4-B4B4 the
+    // formatter is NOT among them either: it prints the optional send outcome
+    // as the final quoted field. None of them triggers an observation.
     for (const relative of [
       'apps/stage-tamagotchi/src/main/services/lia/brain-execution-terminal-facts.ts',
-      'apps/stage-tamagotchi/src/main/services/lia/brain-diagnostic-log.ts',
       'apps/stage-tamagotchi/src/main/services/lia/brain-correlation-observer.ts',
     ]) {
       expect(readFileSync(join(process.cwd(), '..', '..', relative), 'utf-8'), relative)
