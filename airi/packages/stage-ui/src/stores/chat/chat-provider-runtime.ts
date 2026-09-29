@@ -126,12 +126,15 @@ export type ChatSendOutcome = 'succeeded' | 'failed'
 /**
  * Phase 8.0D-10B-4D4C4-B1: the smallest generic observation of one settled
  * logical chat send.
+ * Phase 8.0D-10B-4D4C4-D2B7 widens it with the factual initial routeOverride snapshot (null vs object vs not observed).
  *
- * Plain outcome metadata only. `correlationId` is the opaque key the caller
- * carried on the send payload: forwarded verbatim when it was present and left
- * absent when it was not - this generic transport seam applies no filtering of
- * its own (the "usable key" rule belongs to a consumer). No round, attempt,
- * provider, model, error, message, timing, fallback or verdict travels here.
+ * Plain outcome metadata plus the optional factual initial routeOverride only.
+ * `correlationId` is the opaque key the caller carried on the send payload:
+ * forwarded verbatim when it was present and left absent when it was not - this
+ * generic transport seam applies no filtering of its own (the "usable key" rule
+ * belongs to a consumer). No round, attempt, error, message, timing, fallback
+ * or verdict travels here; when present, initialRouteOverride is exactly
+ * {providerId, modelId} and never compared, scored or ranked here.
  */
 export interface ChatSendSettledObservation {
   /**
@@ -141,6 +144,15 @@ export interface ChatSendSettledObservation {
   correlationId?: string
   /** Factual settlement of the logical send as a whole. */
   outcome: ChatSendOutcome
+  /**
+   * Phase 8.0D-10B-4D4C4-D2B7: factual initial routeOverride snapshot.
+   * undefined = not observed, null = observed and absent, object = observed present.
+   * Optional for backward compatibility and truthful not-observed semantics.
+   */
+  initialRouteOverride?: {
+    providerId: string
+    modelId: string
+  } | null
 }
 
 /**

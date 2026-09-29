@@ -113,6 +113,12 @@ export interface LiaBrainCorrelationEntry {
    * expired correlation there is no snapshot at all.
    */
   sendTerminal?: LiaBrainSendTerminalRecord
+  /**
+   * Phase 8.0D-10B-4D4C4-D2B7: the factual initial routeOverride snapshot, at most once.
+   * undefined = not observed, null = observed absent, object = observed present.
+   * Independent from sendTerminal: the two are siblings, each first-write wins.
+   */
+  initialRouteOverride?: { providerId: string, modelId: string } | null
   /** Creation time of the entry itself (never refreshed by later reports). */
   createdAt: number
 }
@@ -227,6 +233,16 @@ function copySendTerminalRecord(record: LiaBrainSendTerminalRecord): LiaBrainSen
   }
 }
 
+/** Copies exactly the two initialRouteOverride fields into a fresh plain object, or preserves null. */
+function copyInitialRouteOverride(value: { providerId: string, modelId: string } | null): { providerId: string, modelId: string } | null {
+  if (value === null)
+    return null
+  return {
+    providerId: value.providerId,
+    modelId: value.modelId,
+  }
+}
+
 /**
  * Creates one isolated correlation store. Bounds are mandatory and validated
  * here, deterministically, before any state exists - an invalid configuration
@@ -253,6 +269,7 @@ export function createLiaBrainCorrelationStore(options: LiaBrainCorrelationStore
     executions: LiaBrainExecutionObservationReport[]
     executionTerminals: LiaBrainExecutionTerminalRecord[]
     sendTerminal?: LiaBrainSendTerminalRecord
+    initialRouteOverride?: { providerId: string, modelId: string } | null
     createdAt: number
   }
 
@@ -369,6 +386,24 @@ export function createLiaBrainCorrelationStore(options: LiaBrainCorrelationStore
 
     const entry = entries.get(key) ?? createEntry(key, at)
 
+    // Phase 8.0D-10B-4D4C4-D2B7: sibling initialRouteOverride, independent first-write.
+    // It shares the same bounded entry but is recorded separately from sendTerminal,
+    // so a repeated send-terminal does not overwrite a first-observed route snapshot
+    // and vice versa. The entry itself is already bounded FIFO and ephemeral.
+    if (entry.initialRouteOverride === undefined && report.initialRouteOverride !== undefined) {
+      const raw = report.initialRouteOverride
+      if (raw === null) {
+        entry.initialRouteOverride = null
+      }
+      else if (typeof raw === 'object' && raw !== null && !Array.isArray(raw)) {
+        const providerId = (raw as Record<string, unknown>).providerId
+        const modelId = (raw as Record<string, unknown>).modelId
+        if (typeof providerId === 'string' && typeof modelId === 'string') {
+          entry.initialRouteOverride = { providerId, modelId }
+        }
+      }
+    }
+
     // FIRST send terminal wins: a logical send already reported keeps the
     // settlement it was first seen with, so repeats and conflicts are ignored
     // outright - never compared, never logged, never rewritten and never used
@@ -402,6 +437,7 @@ export function createLiaBrainCorrelationStore(options: LiaBrainCorrelationStore
       executions: entry.executions.map(copyExecutionReport),
       executionTerminals: entry.executionTerminals.map(copyExecutionTerminalRecord),
       ...(entry.sendTerminal === undefined ? {} : { sendTerminal: copySendTerminalRecord(entry.sendTerminal) }),
+      ...(entry.initialRouteOverride === undefined ? {} : { initialRouteOverride: copyInitialRouteOverride(entry.initialRouteOverride) }),
       createdAt: entry.createdAt,
     }
   }

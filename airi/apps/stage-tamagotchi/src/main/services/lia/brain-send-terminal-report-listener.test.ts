@@ -691,7 +691,7 @@ describe('lia send terminal wiring invariants (Phase 8.0D-10B-4D4C4-B3B2)', () =
     // The shared contract still declares exactly the two-field send report, and
     // the renderer/Stage/Core layers know nothing about the stored field.
     const shared = readSource('../../../shared/eventa/index.ts')
-    expect(stripComments(shared).replace(/\s+/g, ' ')).toContain(`export interface LiaBrainSendTerminalReport { correlationId: string outcome: 'succeeded' | 'failed' }`)
+    expect(stripComments(shared).replace(/\s+/g, ' ')).toContain(`export interface LiaBrainSendTerminalReport { correlationId: string outcome: 'succeeded' | 'failed' initialRouteOverride?: { providerId: string modelId: string } | null }`)
     for (const relative of ['../../../shared/eventa/index.ts', '../../../renderer/main.ts'])
       expect(readSource(relative), relative).not.toMatch(/sendTerminal|LiaBrainSendTerminalRecord/)
     expect(productionSourcesMatching(['packages/stage-ui/src', 'packages/core-agent/src'], /sendTerminal|LiaBrainSendTerminalRecord/)).toEqual([])

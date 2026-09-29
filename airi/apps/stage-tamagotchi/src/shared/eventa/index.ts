@@ -910,6 +910,15 @@ export interface LiaBrainSendTerminalReport {
    * Stage send observed it: the send resolved, or the send rejected.
    */
   outcome: 'succeeded' | 'failed'
+  /**
+   * Phase 8.0D-10B-4D4C4-D2B7: factual initial routeOverride snapshot.
+   * undefined = not observed (legacy), null = observed absent, object = observed present.
+   * Optional for backward compatibility and truthful not-observed semantics.
+   */
+  initialRouteOverride?: {
+    providerId: string
+    modelId: string
+  } | null
 }
 
 /** Push: one correlated logical send reached its settlement (write-only report). */

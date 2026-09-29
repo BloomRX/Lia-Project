@@ -703,10 +703,16 @@ export const useChatStore = defineStore('chat', () => {
    * absent, and this layer applies no filtering of its own).
    */
   async function executeSettledSend(payload: ChatSendPayload): Promise<ChatSendResult> {
+    const initialRouteOverride = payload.routeOverride === undefined
+      ? null
+      : {
+          providerId: payload.routeOverride.providerId,
+          modelId: payload.routeOverride.modelId,
+        }
     const settle = (outcome: ChatSendOutcome) => notifyChatSendSettled(
       payload.correlationId === undefined
-        ? { outcome }
-        : { correlationId: payload.correlationId, outcome },
+        ? { outcome, initialRouteOverride }
+        : { correlationId: payload.correlationId, outcome, initialRouteOverride },
     )
 
     try {

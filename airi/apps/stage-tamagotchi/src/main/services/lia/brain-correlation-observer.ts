@@ -8,10 +8,11 @@ import { LIA_BRAIN_ENGINE_PROVIDER_MAPPING } from './brain-expected-route'
  * Phase 8.0D-10B-4C4A: the tiny main-side DIAGNOSTIC OBSERVER.
  *
  * Phase 8.0D-10B-4D4C4-D2B3: it delegates to the ONE-SNAPSHOT composition,
- * so a single observation carries all four factual sides of the retained snapshot:
+ * Phase 8.0D-10B-4D4C4-D2B7 widens it to five factual sides per snapshot
+ * (identity, terminal counts, send terminal, initial routeOverride, final successful execution):
  *
  *   observe(correlationId)
- *     -> the proven one-snapshot composition (ONE read, four derivations)
+ *     -> the proven one-snapshot composition (ONE read, five derivations)
  *     -> optionally forwarded to an injected log callback
  *     -> otherwise DISCARDED
  *
@@ -60,16 +61,18 @@ export interface LiaBrainCorrelationObserver {
  * Phase 8.0D-10B-4D2A: the structured diagnostic entry - the WHOLE payload the
  * optional callback receives, and nothing more. Phase 8.0D-10B-4D4C4-D2B3 widens
  * it to exactly the composed facts of ONE snapshot:
+ * Phase 8.0D-10B-4D4C4-D2B7 adds the fifth factual side (initial routeOverride):
  *
- *   present correlation   { correlationId, ...composed four factual members }
+ *   present correlation   { correlationId, ...composed five factual members }
  *   absent correlation    { correlationId, facts: { status: 'correlationNotObserved' } }
  *
  * The composed members are forwarded by reference and spread verbatim: the
  * identity facts with their states, their `expected` route, their attempts and
  * their two equality booleans, plus the three terminal counts, the logical-send
- * terminal fact and the final successful execution facts. Neither side is
- * re-declared, re-typed, cloned, filtered or normalized here - this type adds
- * only the opaque key the composed result itself does not carry.
+ * terminal fact, the initial routeOverride fact and the final successful
+ * execution facts. Neither side is re-declared, re-typed, cloned, filtered or
+ * normalized here - this type adds only the opaque key the composed result itself
+ * does not carry.
  *
  * The absent arm deliberately has NO terminal members: zero-vs-unknown is encoded
  * structurally by the composition, and this layer never fabricates counts or
@@ -119,7 +122,7 @@ export function createLiaBrainCorrelationObserver(params: {
     observe(correlationId: string): void {
       try {
         // Exactly ONE delegation, unconditionally: the composition performs the
-        // single snapshot read and ALL FOUR derivations over that one snapshot. The
+        // single snapshot read and ALL FIVE derivations over that one snapshot. The
         // read is NEVER skipped - with or without a callback - so the
         // observation itself does not depend on whether output is configured.
         const diagnosticFacts = composeLiaBrainCorrelationDiagnosticFacts(correlationReader, correlationId, LIA_BRAIN_ENGINE_PROVIDER_MAPPING)

@@ -85,10 +85,28 @@ export function sanitizeLiaBrainSendTerminalReport(value: unknown): LiaBrainSend
   const outcome = readOutcome(value.outcome)
   if (outcome === undefined)
     return undefined
-  return {
+  const report: LiaBrainSendTerminalReport = {
     correlationId,
     outcome,
   }
+  // Phase 8.0D-10B-4D4C4-D2B7: optional tri-state initialRouteOverride
+  // absent/undefined → omit (not observed), exactly null → null (observed absent),
+  // object with two strings → fresh two-field copy, malformed → omit but keep send terminal
+  const rawRoute = (value as Record<string, unknown>).initialRouteOverride
+  if (rawRoute === null) {
+    report.initialRouteOverride = null
+  }
+  else if (isRecord(rawRoute)) {
+    const providerId = rawRoute.providerId
+    const modelId = rawRoute.modelId
+    if (typeof providerId === 'string' && typeof modelId === 'string') {
+      report.initialRouteOverride = {
+        providerId: providerId as string,
+        modelId: modelId as string,
+      }
+    }
+  }
+  return report
 }
 
 /**

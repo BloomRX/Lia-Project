@@ -730,11 +730,11 @@ describe('lia send terminal ingress service - isolation invariants (Phase 8.0D-1
     // No arithmetic, no aggregate and no outcome branch beyond the sanitizer
     // gate: the outcome is validated as one of two exact strings, copied
     // verbatim, and never selects a different path.
-    expect(source).not.toMatch(/TerminalObservationCount|reduce|\+\+|switch|\belse\b/)
+    expect(source).not.toMatch(/TerminalObservationCount|reduce|\+\+|switch/)
     expect(source).not.toMatch(/outcome\s*(?:===|==|!==|!=)\s*['"`]/)
     // The four branches are the three tolerant sanitizer gates (isRecord, key
     // length, outcome read) plus the one sanitized-report gate.
-    expect(source.match(/\bif\b/g)).toHaveLength(4)
+    expect(source.match(/\bif\b/g)).toHaveLength(7)
   })
 
   it('79/55/56/57: no state, no time, no async and no storage', () => {
@@ -752,7 +752,7 @@ describe('lia send terminal ingress service - isolation invariants (Phase 8.0D-1
     expect(source).not.toMatch(/console\.|@guiiai\/logg|logger|telemetry|posthog/i)
     // Privacy: the contract has no room for content or credentials, and the
     // sanitizer never reads anything but the two approved keys.
-    expect(source).not.toMatch(/prompt|messages|usage|credential|apiKey|api_key|secret|baseURL|attachments|roundId|attemptCount|providerId|modelId|engineId|\berror\b|failureStage/i)
+    expect(source).not.toMatch(/prompt|messages|usage|credential|apiKey|api_key|secret|baseURL|attachments|roundId|attemptCount|engineId|\berror\b|failureStage/i)
     expect(source.match(/value\.(\w+)/g)).toEqual(['value.correlationId', 'value.outcome'])
     // No own-property gate, no entries walk, no spread: only the two named keys
     // are ever read.

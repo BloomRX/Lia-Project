@@ -79,7 +79,7 @@ export function registerLiaBrainSendTerminalObserver(): void {
  * delivered.
  */
 export function reportLiaBrainSendTerminalObservation(observation: ChatSendSettledObservation): void {
-  const { correlationId, outcome } = observation
+  const { correlationId, outcome, initialRouteOverride } = observation
 
   // Filter first: this Lia boundary REQUIRES the logical-send key (the generic
   // seam deliberately does not), and it never synthesizes one.
@@ -91,13 +91,28 @@ export function reportLiaBrainSendTerminalObservation(observation: ChatSendSettl
     return
 
   try {
-    // Field-by-field copy of exactly the two contract fields. Nothing is
+    // Field-by-field copy of exactly the contract fields. Nothing is
     // defaulted, derived, re-resolved or added: no round, no provider/model
     // identity, no attempt count, no timing, no usage, no error, no prompt, no
     // message, no tool, no decision.
-    const report = {
+    // Phase 8.0D-10B-4D4C4-D2B7: tri-state initialRouteOverride is copied
+    // field-by-field as well: undefined → omitted, null → null, object → fresh two-field copy.
+    const report: {
+      correlationId: string
+      outcome: 'succeeded' | 'failed'
+      initialRouteOverride?: { providerId: string, modelId: string } | null
+    } = {
       correlationId,
       outcome,
+    }
+    if (initialRouteOverride === null) {
+      report.initialRouteOverride = null
+    }
+    else if (initialRouteOverride !== undefined) {
+      report.initialRouteOverride = {
+        providerId: initialRouteOverride.providerId,
+        modelId: initialRouteOverride.modelId,
+      }
     }
     // One-way push: the existing renderer context, emitting - never an invoke,
     // because there is no response to read. Emitting is synchronous, so no

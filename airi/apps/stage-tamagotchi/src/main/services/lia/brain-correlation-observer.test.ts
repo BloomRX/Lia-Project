@@ -980,7 +980,7 @@ describe('correlation observer - structured diagnostic log seam (Phase 8.0D-10B-
     // composed members. No timestamp, no sequence number, no environment or
     // window id, no provider/model/status duplicate, no raw snapshot, no
     // terminal record and no derived verdict.
-    expect(Object.keys(entry).sort()).toEqual(['correlationId', 'facts', 'finalSuccessfulExecutionFacts', 'sendTerminalFacts', 'terminalFacts'])
+    expect(Object.keys(entry).sort()).toEqual(['correlationId', 'facts', 'finalSuccessfulExecutionFacts', 'initialRouteFacts', 'sendTerminalFacts', 'terminalFacts'])
     // H: the caller's key is forwarded verbatim, never trimmed or rewritten.
     expect(entry.correlationId).toBe('logical-send-X')
     // I: the entry carries the EXACT members the composition produced - the seam
@@ -1130,7 +1130,7 @@ describe('correlation observer - structured diagnostic log seam (Phase 8.0D-10B-
     for (const forbidden of ['prompt', 'messages', 'attachments', 'tools', 'apiKey', 'secret', 'baseURL', 'chatProvider', 'credentials', 'conversationId', 'executionTerminals', 'snapshot', 'createdAt'])
       expect(serialized, forbidden).not.toContain(forbidden)
     // And the only keys are the approved four.
-    expect(Object.keys(JSON.parse(serialized))).toEqual(['correlationId', 'facts', 'terminalFacts', 'sendTerminalFacts', 'finalSuccessfulExecutionFacts'])
+    expect(Object.keys(JSON.parse(serialized))).toEqual(['correlationId', 'facts', 'terminalFacts', 'sendTerminalFacts', 'initialRouteFacts', 'finalSuccessfulExecutionFacts'])
     // The counts are the only terminal data, and they carry no record.
     expect(Object.keys(JSON.parse(serialized).terminalFacts).sort()).toEqual([
       'abandonedTerminalObservationCount',
@@ -1221,7 +1221,7 @@ describe('correlation observer - terminals reach the entry as counts only (Phase
 
     // The structured entry is exactly the composed shape: the opaque key, the
     // identity facts, the three counts and the send sibling.
-    expect(Object.keys(entry).sort()).toEqual(['correlationId', 'facts', 'finalSuccessfulExecutionFacts', 'sendTerminalFacts', 'terminalFacts'])
+    expect(Object.keys(entry).sort()).toEqual(['correlationId', 'facts', 'finalSuccessfulExecutionFacts', 'initialRouteFacts', 'sendTerminalFacts', 'terminalFacts'])
     // The forwarded identity facts neither declare nor carry a terminal collection.
     expect('executionTerminals' in entry.facts).toBe(false)
     expect('outcome' in entry.facts).toBe(false)
@@ -1363,7 +1363,7 @@ describe('correlation observer - composed entry states (Phase 8.0D-10B-4D4C3B2-B
       store.recordDecision('X', productionDecision())
     })
 
-    expect(Object.keys(entry).sort()).toEqual(['correlationId', 'facts', 'finalSuccessfulExecutionFacts', 'sendTerminalFacts', 'terminalFacts'])
+    expect(Object.keys(entry).sort()).toEqual(['correlationId', 'facts', 'finalSuccessfulExecutionFacts', 'initialRouteFacts', 'sendTerminalFacts', 'terminalFacts'])
     const { facts, terminalFacts, sendTerminalFacts } = presentEntry(entry)
     expect(facts.status).toBe('noExecutionObserved')
     if (facts.status !== 'noExecutionObserved')

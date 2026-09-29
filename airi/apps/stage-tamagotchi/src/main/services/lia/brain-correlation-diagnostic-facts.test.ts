@@ -522,7 +522,7 @@ describe('correlation diagnostic facts - composed output shape (Phase 8.0D-10B-4
 
     const result = composeLiaBrainCorrelationDiagnosticFacts(store, 'X', LIA_BRAIN_ENGINE_PROVIDER_MAPPING)
 
-    expect(Object.keys(result).sort()).toEqual(['facts', 'finalSuccessfulExecutionFacts', 'sendTerminalFacts', 'terminalFacts'])
+    expect(Object.keys(result).sort()).toEqual(['facts', 'finalSuccessfulExecutionFacts', 'initialRouteFacts', 'sendTerminalFacts', 'terminalFacts'])
     expect('correlationId' in result).toBe(false)
     expect(Object.keys(observed(result).terminalFacts).sort()).toEqual([
       'abandonedTerminalObservationCount',
@@ -547,7 +547,7 @@ describe('correlation diagnostic facts - composed output shape (Phase 8.0D-10B-4
     const result = composeLiaBrainCorrelationDiagnosticFacts(store, 'X', LIA_BRAIN_ENGINE_PROVIDER_MAPPING)
     const serialized = JSON.stringify(result)
 
-    expect(Object.keys(result).sort()).toEqual(['facts', 'finalSuccessfulExecutionFacts', 'sendTerminalFacts', 'terminalFacts'])
+    expect(Object.keys(result).sort()).toEqual(['facts', 'finalSuccessfulExecutionFacts', 'initialRouteFacts', 'sendTerminalFacts', 'terminalFacts'])
     expect(observed(result).sendTerminalFacts).toEqual({ sendTerminalOutcome: 'failed' })
     // The raw key exists ONLY inside the derived sibling path, never as the raw
     // record object, and no snapshot metadata travels.
@@ -642,10 +642,12 @@ describe('correlation diagnostic facts - source guards (Phase 8.0D-10B-4D4C3B2)'
     expect(code.match(/^import .*$/gm)).toEqual([
       `import type { LiaBrainCorrelationSnapshotReader, LiaBrainEngineProviderLookup } from './brain-correlation-reader'`,
       `import type { LiaBrainExecutionIdentityFacts } from './brain-execution-identity-facts'`,
+      `import type { LiaBrainInitialRouteObservationFacts } from './brain-initial-route-facts'`,
       `import type { LiaBrainTerminalObservationFacts } from './brain-execution-terminal-facts'`,
       `import type { LiaBrainFinalSuccessfulExecutionFacts } from './brain-final-successful-execution-facts'`,
       `import type { LiaBrainSendTerminalObservationFacts } from './brain-send-terminal-facts'`,
       `import { deriveLiaBrainExecutionIdentityFacts } from './brain-execution-identity-facts'`,
+      `import { deriveLiaBrainInitialRouteObservationFacts } from './brain-initial-route-facts'`,
       `import { deriveLiaBrainTerminalObservationFacts } from './brain-execution-terminal-facts'`,
       `import { deriveLiaBrainFinalSuccessfulExecutionFacts } from './brain-final-successful-execution-facts'`,
       `import { deriveLiaBrainSendTerminalObservationFacts } from './brain-send-terminal-facts'`,
@@ -677,9 +679,9 @@ describe('correlation diagnostic facts - source guards (Phase 8.0D-10B-4D4C3B2)'
     expect(runtime).toMatch(/deriveLiaBrainSendTerminalObservationFacts\(snapshot\)/)
     expect(runtime).toMatch(/deriveLiaBrainFinalSuccessfulExecutionFacts\(snapshot\)/)
     expect(runtime).not.toMatch(/executionTerminals|executions|decision|roundId|sendTerminal\b/)
-    // Exactly FOUR delegations, each over the SAME local snapshot - no clone,
+    // Exactly FIVE delegations, each over the SAME local snapshot - no clone,
     // no reconstructed snapshot, no second read helper.
-    expect(runtime.match(/deriveLiaBrain\w+\(snapshot[,)]/g)).toHaveLength(4)
+    expect(runtime.match(/deriveLiaBrain\w+\(snapshot[,)]/g)).toHaveLength(5)
     expect(runtime).not.toMatch(/structuredClone|JSON\.parse|JSON\.stringify|\.\.\.snapshot/)
 
     // No store, no service, no observer, no diagnostic layer, no logger, no

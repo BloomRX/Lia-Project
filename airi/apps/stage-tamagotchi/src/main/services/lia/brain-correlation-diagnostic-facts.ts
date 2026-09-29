@@ -1,10 +1,12 @@
 import type { LiaBrainCorrelationSnapshotReader, LiaBrainEngineProviderLookup } from './brain-correlation-reader'
 import type { LiaBrainExecutionIdentityFacts } from './brain-execution-identity-facts'
+import type { LiaBrainInitialRouteObservationFacts } from './brain-initial-route-facts'
 import type { LiaBrainTerminalObservationFacts } from './brain-execution-terminal-facts'
 import type { LiaBrainFinalSuccessfulExecutionFacts } from './brain-final-successful-execution-facts'
 import type { LiaBrainSendTerminalObservationFacts } from './brain-send-terminal-facts'
 
 import { deriveLiaBrainExecutionIdentityFacts } from './brain-execution-identity-facts'
+import { deriveLiaBrainInitialRouteObservationFacts } from './brain-initial-route-facts'
 import { deriveLiaBrainTerminalObservationFacts } from './brain-execution-terminal-facts'
 import { deriveLiaBrainFinalSuccessfulExecutionFacts } from './brain-final-successful-execution-facts'
 import { deriveLiaBrainSendTerminalObservationFacts } from './brain-send-terminal-facts'
@@ -23,30 +25,32 @@ import { deriveLiaBrainSendTerminalObservationFacts } from './brain-send-termina
  *     -> the pure final successful execution facts of Phase 8.0D-10B-4D4C4-D2B3
  *     -> one composed result, or the explicit absence state
  *
- * The single-snapshot rule is the entire reason this module exists: ALL FOUR
+ * The single-snapshot rule is the entire reason this module exists: ALL FIVE
  * derivations are handed the SAME snapshot object the ONE read returned, so the
- * identity facts, the round-terminal counts, the logical-send terminal fact and
- * the final successful execution facts of one result always describe one and the
- * same retained snapshot. Two separate reads could describe two different
- * retained snapshots - a lazy expiry could fall between them, or a later write
- * could land between them - and a result that mixed them would be
- * indistinguishable from a correct one.
+ * identity facts, the round-terminal counts, the logical-send terminal fact,
+ * the initial routeOverride fact and the final successful execution facts of
+ * one result always describe one and the same retained snapshot. Two separate
+ * reads could describe two different retained snapshots - a lazy expiry could
+ * fall between them, or a later write could land between them - and a result
+ * that mixed them would be indistinguishable from a correct one.
  *
  * Because it performs that read, this module is not itself a mathematical
  * function: it consumes one live read handle and returns a fresh value per call.
- * The four derivations it invokes stay exactly what they were - pure,
+ * The five derivations it invokes stay exactly what they were - pure,
  * synchronous and stateless - and this module adds no reasoning of its own
- * beyond the read, the absence branch and the four delegations. It holds no
+ * beyond the read, the absence branch and the five delegations. It holds no
  * state between calls, reads no clock and interprets no fact: the identity
- * states, the three counts, the direct send settlement and the final successful
- * execution facts travel exactly as the pure layers produced them.
+ * states, the three counts, the direct send settlement, the initial route
+ * snapshot and the final successful execution facts travel exactly as the pure
+ * layers produced them.
  *
- * The four derivations stay INDEPENDENT: nothing here pairs an execution-start
+ * The five derivations stay INDEPENDENT: nothing here pairs an execution-start
  * observation with a terminal observation, groups by round key beyond the
  * successful-round join owned by the final derivation, joins the logical-send
- * settlement to any round outside that derivation, orders anything, dedupes
- * anything or combines the domains into a verdict. There is no aggregate, no
- * score and no execution authority - this module cannot influence what executes.
+ * settlement or the initial route to any round outside their derivation, orders
+ * anything, dedupes anything or combines the domains into a verdict. There is
+ * no aggregate, no score, no comparison and no execution authority - this
+ * module cannot influence what executes.
  *
  * Deliberately absent: no store, no service, no observer, no diagnostic line, no
  * IPC/Eventa, no output sink, no filesystem, no network, no timers and no
@@ -92,6 +96,7 @@ export type LiaBrainCorrelationDiagnosticFacts
       facts: LiaBrainExecutionIdentityFacts
       terminalFacts: LiaBrainTerminalObservationFacts
       sendTerminalFacts: LiaBrainSendTerminalObservationFacts
+      initialRouteFacts: LiaBrainInitialRouteObservationFacts
       finalSuccessfulExecutionFacts: LiaBrainFinalSuccessfulExecutionFacts
     }
 
@@ -136,13 +141,14 @@ export function composeLiaBrainCorrelationDiagnosticFacts(
   if (snapshot === undefined)
     return { facts: { status: 'correlationNotObserved' } }
 
-  // All four derivations read the same object, which is not copied, cloned or
+  // All five derivations read the same object, which is not copied, cloned or
   // split: the read handle already returns a fresh snapshot, and none of the
   // derivations keeps or edits anything it is handed.
   return {
     facts: deriveLiaBrainExecutionIdentityFacts(snapshot, mapping),
     terminalFacts: deriveLiaBrainTerminalObservationFacts(snapshot),
     sendTerminalFacts: deriveLiaBrainSendTerminalObservationFacts(snapshot),
+    initialRouteFacts: deriveLiaBrainInitialRouteObservationFacts(snapshot),
     finalSuccessfulExecutionFacts: deriveLiaBrainFinalSuccessfulExecutionFacts(snapshot),
   }
 }
