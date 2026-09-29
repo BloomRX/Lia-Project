@@ -1,14 +1,14 @@
 import type { LiaBrainCorrelationSnapshotReader, LiaBrainEngineProviderLookup } from './brain-correlation-reader'
 import type { LiaBrainExecutionIdentityFacts } from './brain-execution-identity-facts'
-import type { LiaBrainInitialRouteObservationFacts } from './brain-initial-route-facts'
 import type { LiaBrainTerminalObservationFacts } from './brain-execution-terminal-facts'
 import type { LiaBrainFinalSuccessfulExecutionFacts } from './brain-final-successful-execution-facts'
+import type { LiaBrainInitialRouteObservationFacts } from './brain-initial-route-facts'
 import type { LiaBrainSendTerminalObservationFacts } from './brain-send-terminal-facts'
 
 import { deriveLiaBrainExecutionIdentityFacts } from './brain-execution-identity-facts'
-import { deriveLiaBrainInitialRouteObservationFacts } from './brain-initial-route-facts'
 import { deriveLiaBrainTerminalObservationFacts } from './brain-execution-terminal-facts'
 import { deriveLiaBrainFinalSuccessfulExecutionFacts } from './brain-final-successful-execution-facts'
+import { deriveLiaBrainInitialRouteObservationFacts } from './brain-initial-route-facts'
 import { deriveLiaBrainSendTerminalObservationFacts } from './brain-send-terminal-facts'
 
 /**
@@ -96,7 +96,7 @@ export type LiaBrainCorrelationDiagnosticFacts
       facts: LiaBrainExecutionIdentityFacts
       terminalFacts: LiaBrainTerminalObservationFacts
       sendTerminalFacts: LiaBrainSendTerminalObservationFacts
-      initialRouteFacts: LiaBrainInitialRouteObservationFacts
+      initialRouteOverrideFacts: LiaBrainInitialRouteObservationFacts
       finalSuccessfulExecutionFacts: LiaBrainFinalSuccessfulExecutionFacts
     }
 
@@ -148,7 +148,7 @@ export function composeLiaBrainCorrelationDiagnosticFacts(
     facts: deriveLiaBrainExecutionIdentityFacts(snapshot, mapping),
     terminalFacts: deriveLiaBrainTerminalObservationFacts(snapshot),
     sendTerminalFacts: deriveLiaBrainSendTerminalObservationFacts(snapshot),
-    initialRouteFacts: deriveLiaBrainInitialRouteObservationFacts(snapshot),
+    initialRouteOverrideFacts: deriveLiaBrainInitialRouteObservationFacts(snapshot),
     finalSuccessfulExecutionFacts: deriveLiaBrainFinalSuccessfulExecutionFacts(snapshot),
   }
 }

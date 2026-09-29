@@ -7,9 +7,10 @@ import type { LiaBrainCorrelationObserver } from './brain-correlation-observer'
  *
  * It receives ONE unknown payload - the Eventa boundary is untrusted, so the
  * type it is handed is `unknown`, never the contract type - and does exactly
- * three things: sanitize the two contract fields tolerantly, require a usable
+ * three things: sanitize the two required contract fields (correlationId, outcome)
+ * plus the optional tri-state initialRouteOverride tolerantly, require a usable
  * logical-send key and a closed-vocabulary outcome, and hand the sanitized
- * two-field report to the injected correlation store as a diagnostic fact
+ * report to the injected correlation store as a diagnostic fact
  * (Phase 8.0D-10B-4D4C4-B3A). It owns no other behavior and no state at all.
  *
  * Phase 8.0D-10B-4D4C4-B4B5: the injected diagnostic observer is
@@ -31,10 +32,13 @@ import type { LiaBrainCorrelationObserver } from './brain-correlation-observer'
  * normalized, never mapped to a boolean, never used to derive a verdict, and it
  * grants no authority of any kind: no route selection, no policy change, no
  * preferred engine/model, no fallback, no retry, no tool authorization, no
- * permission, no execution switching. Round identity, provider/model identity,
- * attempt counts, error text, stack, failure stage, prompt, message, usage and
- * credentials are NOT part of this contract and are never looked at, even when
- * a hostile payload carries them.
+ * permission, no execution switching. Round identity, execution provider/model
+ * identity (the actual provider that executed), attempt counts, error text,
+ * stack, failure stage, prompt, message, usage and credentials are NOT part of
+ * this contract and are never looked at, even when a hostile payload carries
+ * them. The optional initialRouteOverride, when present, is a factual snapshot
+ * of the INITIAL routeOverride at the generic seam (providerId/modelId only) -
+ * not an execution identity, not a decision, and never compared.
  *
  * Deliberately absent: no Eventa/Electron, no handler registration, no
  * correlation reader or facts, no diagnostic logger, no Brain service, no
@@ -162,7 +166,7 @@ export function createLiaBrainSendTerminalReportService(params: {
   return {
     report(payload: unknown): void {
       // Sanitize first: only a payload with a usable key and one exact outcome
-      // survives, and only the two contract fields are read into a fresh object.
+      // survives, and only the two required fields plus optional tri-state are read into a fresh object.
       const report = sanitizeLiaBrainSendTerminalReport(payload)
       if (report === undefined)
         return

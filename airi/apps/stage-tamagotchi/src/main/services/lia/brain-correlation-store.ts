@@ -33,11 +33,12 @@ import type { LiaBrainExecutionObservationReport, LiaBrainExecutionTerminalRepor
  *                mismatch, no divergence, no score, no winner, no expected
  *                provider/model, no recommendation
  *
- * The three factual streams are deliberately separate: `executions` records
+ * The four factual streams are deliberately separate: `executions` records
  * what was reported to have STARTED (duplicates preserved, arrival order),
  * `executionTerminals` records how a round ENDED (first factual outcome per
- * round wins) and `sendTerminal` records how the whole logical send settled
- * (first settlement wins). A round terminal may exist for a round whose start
+ * round wins), `sendTerminal` records how the whole logical send settled
+ * (first settlement wins) and `initialRouteOverride` records the factual
+ * initial route snapshot observed at the generic seam (first observation wins, null vs object vs not observed). A round terminal may exist for a round whose start
  * was never reported, a send terminal may exist with no round of its own at
  * all, and a round may legitimately end one way while the send that ran it
  * settles the other: joining, comparing or reconciling the three is a later,
@@ -45,14 +46,13 @@ import type { LiaBrainExecutionObservationReport, LiaBrainExecutionTerminalRepor
  *
  * Data minimization: an entry stores the opaque key, the canonical decision,
  * the five-field execution reports, one two-field terminal record per settled
- * round, one one-field send terminal record and the timestamps expiry needs.
+ * round, one one-field send terminal record, one optional two-string initial
+ * routeOverride snapshot (providerId/modelId when observed) and the timestamps expiry needs.
  * No prompt,
  * message text, attachment, tool, credential, API key, baseURL, provider
  * config, chat payload or window object can enter it - the record APIs take
  * exactly those shapes and copy nothing else.
  *
- * Nothing in production wires this store yet: no handler records into it, the
- * lifecycle does not construct it, and no transport reaches it.
  */
 
 export interface LiaBrainCorrelationStoreOptions {

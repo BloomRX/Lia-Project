@@ -34,11 +34,12 @@ type ChatSendSettledObservation = Parameters<ChatSendSettledObserver>[0]
  *   renderer -> main carries a settlement as an UNTRUSTED diagnostic claim
  *
  * What this module may do: read the settled observation it receives, narrow it
- * to the two contract fields, and report it. What it may NOT do: read a Brain
+ * to the two required fields (correlationId, outcome) plus the optional tri-state
+ * initialRouteOverride, and report it. What it may NOT do: read a Brain
  * decision, look up a provider or a model, join a send to its rounds, compare
  * anything, remember anything, or influence the send it is observing. The
- * settlement is COPIED, never interpreted: there is no winner, no finality, no
- * fallback aggregate and no send-level verdict here.
+ * settlement and the optional initial route snapshot are COPIED, never interpreted:
+ * there is no winner, no finality, no fallback aggregate and no send-level verdict here.
  *
  * Multi-window: every renderer window has its own module instance and may
  * register, but only the window that actually ran the send ever receives an
@@ -64,8 +65,8 @@ export function registerLiaBrainSendTerminalObserver(): void {
 }
 
 /**
- * The observer itself: narrows ONE settled logical send to the two contract
- * fields and reports it, then returns `void`.
+ * The observer itself: narrows ONE settled logical send to the two required
+ * fields plus optional initialRouteOverride and reports it, then returns `void`.
  *
  * It is `void` by contract - no caller can await a report, branch on one or
  * feed one back into execution. A send without a usable key or with an outcome
@@ -91,10 +92,12 @@ export function reportLiaBrainSendTerminalObservation(observation: ChatSendSettl
     return
 
   try {
-    // Field-by-field copy of exactly the contract fields. Nothing is
-    // defaulted, derived, re-resolved or added: no round, no provider/model
-    // identity, no attempt count, no timing, no usage, no error, no prompt, no
-    // message, no tool, no decision.
+    // Field-by-field copy of exactly the required fields plus optional tri-state.
+    // Nothing is defaulted, derived, re-resolved or added: no round, no execution
+    // provider/model identity (the actual provider that executed), no attempt count,
+    // no timing, no usage, no error, no prompt, no message, no tool, no decision.
+    // The optional initialRouteOverride when present is a factual INITIAL snapshot
+    // (providerId/modelId only), not an execution identity, and never compared.
     // Phase 8.0D-10B-4D4C4-D2B7: tri-state initialRouteOverride is copied
     // field-by-field as well: undefined → omitted, null → null, object → fresh two-field copy.
     const report: {

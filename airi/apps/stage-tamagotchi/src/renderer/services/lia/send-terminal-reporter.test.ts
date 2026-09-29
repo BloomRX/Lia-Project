@@ -1,3 +1,4 @@
+/* eslint-disable style/max-statements-per-line */
 // @vitest-environment happy-dom
 
 import { readdirSync, readFileSync } from 'node:fs'
@@ -74,7 +75,8 @@ function reporterSource(): string {
     join(process.cwd(), 'src/renderer/services/lia/send-terminal-reporter.ts'),
     join(process.cwd(), 'apps/stage-tamagotchi/src/renderer/services/lia/send-terminal-reporter.ts'),
   ]) {
-    try { return readFileSync(candidate, 'utf-8') } catch {}
+    try { return readFileSync(candidate, 'utf-8') }
+    catch {}
   }
   return readFileSync(join(process.cwd(), 'src/renderer/services/lia/send-terminal-reporter.ts'), 'utf-8')
 }
@@ -84,7 +86,8 @@ function productionSources(roots: string[]): string[] {
   const candidates = [join(process.cwd(), '..', '..'), process.cwd(), join(process.cwd(), 'airi')]
   let airiRoot = candidates[0]
   for (const candidate of candidates) {
-    try { readdirSync(join(candidate, 'apps/stage-tamagotchi/src')); airiRoot = candidate; break } catch {}
+    try { readdirSync(join(candidate, 'apps/stage-tamagotchi/src')); airiRoot = candidate; break }
+    catch {}
   }
   const files: string[] = []
   for (const root of roots) {
@@ -103,7 +106,8 @@ const BRAIN_ROOTS = ['apps/stage-tamagotchi/src', 'packages/stage-ui/src', 'pack
 function readProductionFile(relative: string): string {
   for (const base of [join(process.cwd(), '..', '..'), process.cwd(), join(process.cwd(), 'airi')]) {
     const candidate = join(base, relative)
-    try { return readFileSync(candidate, 'utf-8') } catch {}
+    try { return readFileSync(candidate, 'utf-8') }
+    catch {}
   }
   return readProductionFile(relative)
 }
@@ -310,7 +314,7 @@ describe('lia logical-send terminal reporter (Phase 8.0D-10B-4D4C4-B2)', () => {
     // No diagnostics output and no telemetry.
     expect(code).not.toMatch(/console\.|@guiiai\/logg|logger|telemetry|posthog/i)
     // No round, provider/model, attempt, error, prompt or content knowledge.
-    expect(code).not.toMatch(/roundId|attemptIndex|attemptCount|providerId|modelId|conversationId|turnIndex|failureStage|errorCode|prompt|messages|toolResults|usage|credentials|apiKey|baseURL/i)
+    expect(code).not.toMatch(/roundId|attemptIndex|attemptCount|conversationId|turnIndex|failureStage|errorCode|prompt|messages|toolResults|usage|credentials|apiKey|baseURL/i)
     // No Core Agent edge: this signal is Stage-owned and derived from the seam.
     expect(code).not.toMatch(/@proj-airi\/core-agent|ChatRoundSettledObservation|executionTerminal/)
     // No main-process access, no second channel, no invoke.
@@ -375,7 +379,12 @@ describe('lia logical-send terminal reporter (Phase 8.0D-10B-4D4C4-B2)', () => {
         'apps/stage-tamagotchi/src/shared/eventa/index.ts',
       ])
     // The listener names no payload type at all: it knows only the service.
-    expect((() => { for (const c of [join(process.cwd(), 'src/main/services/lia/brain-send-terminal-report-listener.ts'), join(process.cwd(), 'apps/stage-tamagotchi/src/main/services/lia/brain-send-terminal-report-listener.ts')]) try { return readFileSync(c, 'utf-8') } catch {} ; return readFileSync(join(process.cwd(), 'src/main/services/lia/brain-send-terminal-report-listener.ts'), 'utf-8') })())
+    expect((() => {
+      for (const c of [join(process.cwd(), 'src/main/services/lia/brain-send-terminal-report-listener.ts'), join(process.cwd(), 'apps/stage-tamagotchi/src/main/services/lia/brain-send-terminal-report-listener.ts')]) {
+        try { return readFileSync(c, 'utf-8') }
+        catch {}
+      } ; return readFileSync(join(process.cwd(), 'src/main/services/lia/brain-send-terminal-report-listener.ts'), 'utf-8')
+    })())
       .not
       .toMatch(/LiaBrainSendTerminalReport\b/)
   })
@@ -415,13 +424,97 @@ describe('lia logical-send terminal reporter (Phase 8.0D-10B-4D4C4-B2)', () => {
  * Phase 8.0D-10B-4D4C4-B2: the fourth IPC contract - one new one-way send report
  * and no overload of the two round-level contracts.
  */
+
+describe('lia logical-send terminal reporter - initialRouteOverride tri-state (Phase 8.0D-10B-4D4C4-D2B7)', () => {
+  it('a: undefined field omitted from Eventa report', () => {
+    reportLiaBrainSendTerminalObservation(settled({ outcome: 'succeeded', initialRouteOverride: undefined }))
+    expect(electron.context.emit).toHaveBeenCalledTimes(1)
+    const [, report] = electron.context.emit.mock.calls[0] as [unknown, Record<string, unknown>]
+    expect(report).toEqual({ correlationId: 'logical-send-77', outcome: 'succeeded' })
+    expect('initialRouteOverride' in report).toBe(false)
+  })
+
+  it('b: null field emitted as null', () => {
+    reportLiaBrainSendTerminalObservation(settled({ outcome: 'succeeded', initialRouteOverride: null }))
+    expect(electron.context.emit).toHaveBeenCalledTimes(1)
+    const [, report] = electron.context.emit.mock.calls[0] as [unknown, Record<string, unknown>]
+    expect(report).toEqual({ correlationId: 'logical-send-77', outcome: 'succeeded', initialRouteOverride: null })
+    expect(report.initialRouteOverride).toBe(null)
+  })
+
+  it('c: route object exact fresh providerId/modelId', () => {
+    const route = { providerId: 'groq', modelId: 'openai/gpt-oss-120b' }
+    reportLiaBrainSendTerminalObservation(settled({ outcome: 'succeeded', initialRouteOverride: route }))
+    expect(electron.context.emit).toHaveBeenCalledTimes(1)
+    const [, report] = electron.context.emit.mock.calls[0] as [unknown, Record<string, unknown>]
+    expect(report).toEqual({ correlationId: 'logical-send-77', outcome: 'succeeded', initialRouteOverride: { providerId: 'groq', modelId: 'openai/gpt-oss-120b' } })
+    expect(Object.keys((report as any).initialRouteOverride).sort()).toEqual(['modelId', 'providerId'])
+  })
+
+  it('d: mutating original observation nested route after report cannot mutate emitted report', () => {
+    const route = { providerId: 'groq', modelId: 'm' }
+    const observation = settled({ outcome: 'succeeded', initialRouteOverride: route })
+    reportLiaBrainSendTerminalObservation(observation)
+    route.providerId = 'mutated'
+    route.modelId = 'mutated'
+    const [, report] = electron.context.emit.mock.calls[0] as [unknown, Record<string, unknown>]
+    expect((report as any).initialRouteOverride).toEqual({ providerId: 'groq', modelId: 'm' })
+    // Also mutating observation object itself
+    ;(observation as any).initialRouteOverride.providerId = 'mutated2'
+    expect((report as any).initialRouteOverride.providerId).toBe('groq')
+  })
+
+  it('e: unusable correlationId no Eventa report', () => {
+    reportLiaBrainSendTerminalObservation(settled({ correlationId: undefined, initialRouteOverride: { providerId: 'groq', modelId: 'm' } }))
+    reportLiaBrainSendTerminalObservation(settled({ correlationId: '', initialRouteOverride: null }))
+    expect(electron.context.emit).not.toHaveBeenCalled()
+  })
+
+  it('f: invalid outcome no Eventa report', () => {
+    reportLiaBrainSendTerminalObservation(settled({ outcome: 'abandoned' as any, initialRouteOverride: { providerId: 'groq', modelId: 'm' } }))
+    reportLiaBrainSendTerminalObservation(settled({ outcome: '' as any, initialRouteOverride: null }))
+    expect(electron.context.emit).not.toHaveBeenCalled()
+  })
+
+  it('g: dispatch exception isolated', () => {
+    electron.context.emit.mockImplementationOnce(() => { throw new Error('emit gone') })
+    expect(() => reportLiaBrainSendTerminalObservation(settled({ outcome: 'succeeded', initialRouteOverride: { providerId: 'groq', modelId: 'm' } }))).not.toThrow()
+    reportLiaBrainSendTerminalObservation(settled({ correlationId: 'after', outcome: 'succeeded', initialRouteOverride: null }))
+    expect(emittedReports().at(-1)).toEqual({ correlationId: 'after', outcome: 'succeeded', initialRouteOverride: null })
+  })
+
+  it('h: arbitrary unrelated observation fields are not copied', () => {
+    const hostile: any = {
+      correlationId: 'logical-send-77',
+      outcome: 'succeeded',
+      initialRouteOverride: { providerId: 'groq', modelId: 'm' },
+      roundId: 'r',
+      providerId: 'should-not-leak',
+      modelId: 'should-not-leak',
+      error: 'secret',
+      extra: 'x',
+    }
+    reportLiaBrainSendTerminalObservation(hostile)
+    const [, report] = electron.context.emit.mock.calls[0] as [unknown, Record<string, unknown>]
+    expect(report).toEqual({ correlationId: 'logical-send-77', outcome: 'succeeded', initialRouteOverride: { providerId: 'groq', modelId: 'm' } })
+    expect(Object.keys(report).sort()).toEqual(['correlationId', 'initialRouteOverride', 'outcome'])
+  })
+
+  it('i: exact existing send-terminal Eventa channel used', () => {
+    reportLiaBrainSendTerminalObservation(settled({ outcome: 'succeeded', initialRouteOverride: null }))
+    const [channel] = electron.context.emit.mock.calls[0] as [unknown, unknown]
+    expect(channel).toBe(electronLiaBrainSendTerminalObservation)
+  })
+})
+
 describe('lia logical-send terminal contract (Phase 8.0D-10B-4D4C4-B2)', () => {
   const SHARED = (() => {
     for (const candidate of [
       join(process.cwd(), 'src/shared/eventa/index.ts'),
       join(process.cwd(), 'apps/stage-tamagotchi/src/shared/eventa/index.ts'),
     ]) {
-      try { return readFileSync(candidate, 'utf-8') } catch {}
+      try { return readFileSync(candidate, 'utf-8') }
+      catch {}
     }
     return readFileSync(join(process.cwd(), 'src/shared/eventa/index.ts'), 'utf-8')
   })()
@@ -435,13 +528,16 @@ describe('lia logical-send terminal contract (Phase 8.0D-10B-4D4C4-B2)', () => {
     const block = SHARED.slice(start, end)
     // Guards read real code only: the doc prose may name the concepts.
     const blockCode = block.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
-    // Two fields and nothing else: no round, no conversation, no provider/model
-    // identity, no attempt, no timing, no usage, no error, no content.
-    expect(blockCode.match(/^\s{2}(\w+):/gm)?.map(field => field.trim()))
-      .toEqual(['correlationId:', 'outcome:'])
+    // Two required fields plus optional initialRouteOverride, nothing else.
+    expect(blockCode.match(/^\s{2}\w+\??:/gm)?.map(field => field.trim()))
+      .toEqual(['correlationId:', 'outcome:', 'initialRouteOverride?:'])
     expect(blockCode.replace(/\s+/g, ' ')).toContain('outcome: \'succeeded\' | \'failed\'')
-    for (const forbidden of ['roundId', 'conversationId', 'providerId', 'modelId', 'attemptCount', 'attemptIndex', 'turnIndex', 'timestamp', 'duration', 'error', 'failureStage', 'errorCode', 'prompt', 'text', 'messages', 'response', 'attachments', 'tools', 'usage', 'credentials', 'url', 'abandoned', 'cancelled', 'superseded', 'completed'])
+    expect(blockCode.replace(/\s+/g, ' ')).toContain('initialRouteOverride?:')
+    for (const forbidden of ['roundId', 'conversationId', 'attemptCount', 'attemptIndex', 'turnIndex', 'timestamp', 'duration', 'error', 'failureStage', 'errorCode', 'prompt', 'text', 'messages', 'response', 'attachments', 'tools', 'usage', 'credentials', 'url', 'abandoned', 'cancelled', 'superseded', 'completed'])
       expect(blockCode, forbidden).not.toContain(forbidden)
+    // The optional route override carries only providerId/modelId, no execution identity
+    expect(blockCode.replace(/\s+/g, ' ')).toContain('providerId: string')
+    expect(blockCode.replace(/\s+/g, ' ')).toContain('modelId: string')
   })
 
   it('the channel is one one-way push under the frozen tag, declared exactly once', () => {

@@ -1,3 +1,4 @@
+/* eslint-disable style/max-statements-per-line */
 import type { LiaBrainSendTerminalReport } from '../../../shared/eventa'
 import type { LiaBrainSendTerminalRecorder } from './brain-send-terminal-report-service'
 
@@ -849,5 +850,104 @@ describe('lia send terminal ingress service - isolation invariants (Phase 8.0D-1
     // this phase changed no line of it.
     expect(sibling).toMatch(/roundId = readString\(value\.roundId\)/)
     expect(sibling).not.toMatch(/electronLiaBrain|recordSendTerminal/)
+  })
+})
+
+describe('lia send terminal ingress service - initialRouteOverride tri-state (Phase 8.0D-10B-4D4C4-D2B7)', () => {
+  it('a: legacy report accepted -> omitted', () => {
+    const service = ingress()
+    service.report({ correlationId: 'X', outcome: 'succeeded' })
+    expect(mocks.recordSendTerminal).toHaveBeenCalledTimes(1)
+    expect(storedReport()).toEqual({ correlationId: 'X', outcome: 'succeeded' })
+    expect('initialRouteOverride' in storedReport()).toBe(false)
+    expect(sanitizeLiaBrainSendTerminalReport({ correlationId: 'X', outcome: 'succeeded' })).toEqual({ correlationId: 'X', outcome: 'succeeded' })
+  })
+
+  it('b: explicit null accepted', () => {
+    const service = ingress()
+    service.report({ correlationId: 'X', outcome: 'succeeded', initialRouteOverride: null })
+    expect(storedReport()).toEqual({ correlationId: 'X', outcome: 'succeeded', initialRouteOverride: null })
+    expect(sanitizeLiaBrainSendTerminalReport({ correlationId: 'X', outcome: 'succeeded', initialRouteOverride: null })).toEqual({ correlationId: 'X', outcome: 'succeeded', initialRouteOverride: null })
+  })
+
+  it('c: exact route object accepted', () => {
+    const service = ingress()
+    const route = { providerId: 'groq', modelId: 'openai/gpt-oss-120b' }
+    service.report({ correlationId: 'X', outcome: 'succeeded', initialRouteOverride: route })
+    expect(storedReport()).toEqual({ correlationId: 'X', outcome: 'succeeded', initialRouteOverride: { providerId: 'groq', modelId: 'openai/gpt-oss-120b' } })
+    expect(Object.keys((storedReport() as any).initialRouteOverride).sort()).toEqual(['modelId', 'providerId'])
+  })
+
+  it('d: route object is copied fresh', () => {
+    const service = ingress()
+    const route = { providerId: 'groq', modelId: 'm' }
+    const payload: any = { correlationId: 'X', outcome: 'succeeded', initialRouteOverride: route }
+    service.report(payload)
+    route.providerId = 'mutated'
+    expect((storedReport() as any).initialRouteOverride.providerId).toBe('groq')
+    // sanitize also copies fresh
+    const sanitized: any = sanitizeLiaBrainSendTerminalReport({ correlationId: 'X', outcome: 'succeeded', initialRouteOverride: { providerId: 'groq', modelId: 'm' } })
+    const orig: any = { providerId: 'groq', modelId: 'm' }
+    sanitized.initialRouteOverride.providerId = 'mutated2'
+    expect(orig.providerId).toBe('groq')
+  })
+
+  it('e: malformed optional route -> omitted, never fabricate null', () => {
+    const service = ingress()
+    const malformed: any[] = [
+      { providerId: 42, modelId: 'm' },
+      { providerId: 'groq' },
+      { modelId: 'm' },
+      [],
+      'groq',
+      true,
+      123,
+      { providerId: 'groq', modelId: 42 },
+      { providerId: null, modelId: 'm' },
+    ]
+    for (const route of malformed) {
+      mocks.recordSendTerminal.mockClear()
+      service.report({ correlationId: 'X', outcome: 'succeeded', initialRouteOverride: route })
+      expect(storedReport(), JSON.stringify(route)).toEqual({ correlationId: 'X', outcome: 'succeeded' })
+      expect('initialRouteOverride' in storedReport(), JSON.stringify(route)).toBe(false)
+      expect(sanitizeLiaBrainSendTerminalReport({ correlationId: 'X', outcome: 'succeeded', initialRouteOverride: route })?.initialRouteOverride).toBeUndefined()
+    }
+  })
+
+  it('f: unknown extra properties ignored', () => {
+    const service = ingress()
+    service.report({ correlationId: 'X', outcome: 'succeeded', initialRouteOverride: { providerId: 'groq', modelId: 'm' }, extra: 'secret', apiKey: 'sk', roundId: 'r' } as any)
+    expect(storedReport()).toEqual({ correlationId: 'X', outcome: 'succeeded', initialRouteOverride: { providerId: 'groq', modelId: 'm' } })
+    expect(JSON.stringify(storedReport())).not.toContain('secret')
+    expect(JSON.stringify(storedReport())).not.toContain('sk')
+    expect(JSON.stringify(storedReport())).not.toContain('roundId')
+  })
+
+  it('g: valid route allows only providerId/modelId inside nested route object', () => {
+    const service = ingress()
+    service.report({ correlationId: 'X', outcome: 'succeeded', initialRouteOverride: { providerId: 'groq', modelId: 'm', extra: 'x', outcome: 'failed' } } as any)
+    expect(storedReport()).toEqual({ correlationId: 'X', outcome: 'succeeded', initialRouteOverride: { providerId: 'groq', modelId: 'm' } })
+  })
+
+  it('h: observer is called strictly AFTER recordSendTerminal', () => {
+    const order: string[] = []
+    mocks.recordSendTerminal.mockImplementationOnce(() => order.push('store'))
+    mocks.observe.mockImplementationOnce(() => order.push('observe'))
+    const service = ingress()
+    service.report({ correlationId: 'X', outcome: 'succeeded', initialRouteOverride: { providerId: 'groq', modelId: 'm' } })
+    expect(order).toEqual(['store', 'observe'])
+    expect(mocks.observe).toHaveBeenCalledWith('X')
+  })
+
+  it('i: store throw prevents observer and is isolated', () => {
+    const service = ingress(recorderDouble(() => { throw new Error('store gone') }))
+    expect(() => service.report({ correlationId: 'X', outcome: 'succeeded', initialRouteOverride: null })).not.toThrow()
+    expect(mocks.observe).not.toHaveBeenCalled()
+  })
+
+  it('j: observer throw is isolated after successful write', () => {
+    const service = ingress(recorderDouble(), { observe: () => { throw new Error('observer hostile') } } as any)
+    expect(() => service.report({ correlationId: 'X', outcome: 'succeeded', initialRouteOverride: { providerId: 'groq', modelId: 'm' } })).not.toThrow()
+    expect(mocks.recordSendTerminal).toHaveBeenCalledTimes(1)
   })
 })

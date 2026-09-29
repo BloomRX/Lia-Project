@@ -1479,3 +1479,130 @@ describe('lia brain correlation store - logical send terminal fact (Phase 8.0D-1
     ])
   })
 })
+
+describe('lia brain correlation store - initial routeOverride sibling (Phase 8.0D-10B-4D4C4-D2B7)', () => {
+  function clockedStore() {
+    let current = 1_000
+    return {
+      store: createLiaBrainCorrelationStore({ maxEntries: 8, now: () => current, ttlMs: 900_000 }),
+      advance: (ms: number) => { current += ms },
+    }
+  }
+
+  it('a: initial state has NO initialRouteOverride property', () => {
+    const { store } = clockedStore()
+    store.recordDecision('X', decision())
+    expect(store.get('X')!.initialRouteOverride).toBeUndefined()
+    expect('initialRouteOverride' in store.get('X')!).toBe(false)
+    store.recordExecution({ correlationId: 'Y', conversationId: 'c', roundId: 'r', providerId: 'p', modelId: 'm' })
+    expect(store.get('Y')!.initialRouteOverride).toBeUndefined()
+    expect('initialRouteOverride' in store.get('Y')!).toBe(false)
+  })
+
+  it('b: explicit null -> snapshot.initialRouteOverride === null', () => {
+    const { store } = clockedStore()
+    store.recordSendTerminal({ correlationId: 'X', outcome: 'succeeded', initialRouteOverride: null })
+    const snap = store.get('X')!
+    expect(snap.initialRouteOverride).toBe(null)
+    expect('initialRouteOverride' in snap).toBe(true)
+  })
+
+  it('c: route object -> exact providerId/modelId', () => {
+    const { store } = clockedStore()
+    store.recordSendTerminal({ correlationId: 'X', outcome: 'succeeded', initialRouteOverride: { providerId: 'groq', modelId: 'openai/gpt-oss-120b' } })
+    expect(store.get('X')!.initialRouteOverride).toEqual({ providerId: 'groq', modelId: 'openai/gpt-oss-120b' })
+    expect(Object.keys(store.get('X')!.initialRouteOverride as any).sort()).toEqual(['modelId', 'providerId'])
+  })
+
+  it('d: fresh-copy on write - mutate original report route object after record', () => {
+    const { store } = clockedStore()
+    const route = { providerId: 'groq', modelId: 'openai/gpt-oss-120b' }
+    const report: LiaBrainSendTerminalReport = { correlationId: 'X', outcome: 'succeeded', initialRouteOverride: route }
+    store.recordSendTerminal(report)
+    route.providerId = 'mutated'
+    route.modelId = 'mutated'
+    expect(store.get('X')!.initialRouteOverride).toEqual({ providerId: 'groq', modelId: 'openai/gpt-oss-120b' })
+  })
+
+  it('e: fresh-copy on get - mutate route object returned from get()', () => {
+    const { store } = clockedStore()
+    store.recordSendTerminal({ correlationId: 'X', outcome: 'succeeded', initialRouteOverride: { providerId: 'groq', modelId: 'openai/gpt-oss-120b' } })
+    const snap = store.get('X')!
+    const route = snap.initialRouteOverride as { providerId: string, modelId: string }
+    route.providerId = 'mutated'
+    expect(store.get('X')!.initialRouteOverride).toEqual({ providerId: 'groq', modelId: 'openai/gpt-oss-120b' })
+  })
+
+  it('f: omitted first / present second - independent first-write dimensions', () => {
+    const { store } = clockedStore()
+    store.recordSendTerminal({ correlationId: 'X', outcome: 'succeeded' } as LiaBrainSendTerminalReport)
+    expect(store.get('X')!.sendTerminal).toEqual({ outcome: 'succeeded' })
+    expect(store.get('X')!.initialRouteOverride).toBeUndefined()
+    store.recordSendTerminal({ correlationId: 'X', outcome: 'failed', initialRouteOverride: { providerId: 'groq', modelId: 'openai/gpt-oss-120b' } } as LiaBrainSendTerminalReport)
+    expect(store.get('X')!.sendTerminal).toEqual({ outcome: 'succeeded' })
+    expect(store.get('X')!.initialRouteOverride).toEqual({ providerId: 'groq', modelId: 'openai/gpt-oss-120b' })
+  })
+
+  it('g: null first wins', () => {
+    const { store } = clockedStore()
+    store.recordSendTerminal({ correlationId: 'X', outcome: 'succeeded', initialRouteOverride: null })
+    store.recordSendTerminal({ correlationId: 'X', outcome: 'succeeded', initialRouteOverride: { providerId: 'groq', modelId: 'openai/gpt-oss-120b' } })
+    expect(store.get('X')!.initialRouteOverride).toBe(null)
+  })
+
+  it('h: object first wins - later other route and null ignored', () => {
+    const { store } = clockedStore()
+    store.recordSendTerminal({ correlationId: 'X', outcome: 'succeeded', initialRouteOverride: { providerId: 'groq', modelId: 'openai/gpt-oss-120b' } })
+    store.recordSendTerminal({ correlationId: 'X', outcome: 'succeeded', initialRouteOverride: { providerId: 'other', modelId: 'other' } })
+    store.recordSendTerminal({ correlationId: 'X', outcome: 'succeeded', initialRouteOverride: null })
+    expect(store.get('X')!.initialRouteOverride).toEqual({ providerId: 'groq', modelId: 'openai/gpt-oss-120b' })
+  })
+
+  it('i: send outcome first-write unchanged - later initial-route fill must not modify already retained outcome', () => {
+    const { store } = clockedStore()
+    store.recordSendTerminal({ correlationId: 'X', outcome: 'succeeded' } as LiaBrainSendTerminalReport)
+    store.recordSendTerminal({ correlationId: 'X', outcome: 'failed', initialRouteOverride: { providerId: 'groq', modelId: 'm' } } as any)
+    expect(store.get('X')!.sendTerminal).toEqual({ outcome: 'succeeded' })
+  })
+
+  it('j: route first-write unchanged - later send-terminal conflict must not modify already retained route', () => {
+    const { store } = clockedStore()
+    store.recordSendTerminal({ correlationId: 'X', outcome: 'succeeded', initialRouteOverride: { providerId: 'groq', modelId: 'm' } })
+    store.recordSendTerminal({ correlationId: 'X', outcome: 'failed', initialRouteOverride: { providerId: 'other', modelId: 'other' } } as any)
+    expect(store.get('X')!.initialRouteOverride).toEqual({ providerId: 'groq', modelId: 'm' })
+    expect(store.get('X')!.sendTerminal).toEqual({ outcome: 'succeeded' })
+  })
+
+  it('k: TTL behavior unchanged - route shares entry lifetime', () => {
+    const { store, advance } = clockedStore()
+    store.recordSendTerminal({ correlationId: 'X', outcome: 'succeeded', initialRouteOverride: { providerId: 'groq', modelId: 'm' } })
+    advance(900_000)
+    expect(store.get('X')).toBeUndefined()
+    // Fresh after expiry
+    store.recordSendTerminal({ correlationId: 'X', outcome: 'failed', initialRouteOverride: null })
+    expect(store.get('X')!.initialRouteOverride).toBe(null)
+    expect(store.get('X')!.sendTerminal).toEqual({ outcome: 'failed' })
+  })
+
+  it('l: capacity/eviction behavior unchanged - route does not affect eviction', () => {
+    let current = 1_000
+    const store = createLiaBrainCorrelationStore({ maxEntries: 2, now: () => current, ttlMs: 900_000 })
+    store.recordSendTerminal({ correlationId: 'A', outcome: 'succeeded', initialRouteOverride: { providerId: 'a', modelId: 'a' } })
+    current += 1
+    store.recordSendTerminal({ correlationId: 'B', outcome: 'succeeded', initialRouteOverride: { providerId: 'b', modelId: 'b' } })
+    current += 1
+    store.recordSendTerminal({ correlationId: 'C', outcome: 'succeeded', initialRouteOverride: { providerId: 'c', modelId: 'c' } })
+    expect(store.size).toBe(2)
+    expect(store.get('A')).toBeUndefined()
+    expect(store.get('B')!.initialRouteOverride).toEqual({ providerId: 'b', modelId: 'b' })
+    expect(store.get('C')!.initialRouteOverride).toEqual({ providerId: 'c', modelId: 'c' })
+  })
+
+  it('data minimization: only providerId/modelId retained', () => {
+    const { store } = clockedStore()
+    const report: any = { correlationId: 'X', outcome: 'succeeded', initialRouteOverride: { providerId: 'groq', modelId: 'm', extra: 'secret', apiKey: 'sk' } }
+    store.recordSendTerminal(report)
+    expect(store.get('X')!.initialRouteOverride).toEqual({ providerId: 'groq', modelId: 'm' })
+    expect(JSON.stringify(store.get('X')!.initialRouteOverride)).not.toContain('secret')
+  })
+})

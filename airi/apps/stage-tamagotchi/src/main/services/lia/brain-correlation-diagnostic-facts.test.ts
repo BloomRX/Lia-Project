@@ -39,6 +39,7 @@ const probes = vi.hoisted(() => ({
   terminal: { argumentCounts: [] as number[], inputs: [] as unknown[] },
   send: { argumentCounts: [] as number[], inputs: [] as unknown[] },
   final: { argumentCounts: [] as number[], inputs: [] as unknown[] },
+  initialRoute: { argumentCounts: [] as number[], inputs: [] as unknown[] },
 }))
 
 vi.mock('./brain-execution-identity-facts', async (importOriginal) => {
@@ -89,6 +90,18 @@ vi.mock('./brain-final-successful-execution-facts', async (importOriginal) => {
   }
 })
 
+vi.mock('./brain-initial-route-facts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./brain-initial-route-facts')>()
+  return {
+    ...actual,
+    deriveLiaBrainInitialRouteObservationFacts(...args: Parameters<typeof actual.deriveLiaBrainInitialRouteObservationFacts>) {
+      probes.initialRoute.argumentCounts.push(args.length)
+      probes.initialRoute.inputs.push(args[0])
+      return actual.deriveLiaBrainInitialRouteObservationFacts(...args)
+    },
+  }
+})
+
 /** Clears the probes so one test's delegations cannot leak into the next. */
 function resetProbes(): void {
   probes.identity.inputs.length = 0
@@ -99,6 +112,8 @@ function resetProbes(): void {
   probes.send.inputs.length = 0
   probes.final.argumentCounts.length = 0
   probes.final.inputs.length = 0
+  probes.initialRoute.argumentCounts.length = 0
+  probes.initialRoute.inputs.length = 0
 }
 
 beforeEach(resetProbes)
@@ -224,7 +239,7 @@ const ZERO_TERMINALS: LiaBrainTerminalObservationFacts = {
   succeededTerminalObservationCount: 0,
 }
 
-describe('correlation diagnostic facts - one snapshot, three derivations (Phase 8.0D-10B-4D4C3B2)', () => {
+describe('correlation diagnostic facts - one snapshot, five derivations (Phase 8.0D-10B-4D4C3B2)', () => {
   it('a/b/c/d: an absent correlation answers with its explicit absence state, after exactly ONE read and no derivation', () => {
     const { calls, reader } = recordingReader({})
 
@@ -436,7 +451,7 @@ describe('correlation diagnostic facts - one snapshot, three derivations (Phase 
 })
 
 describe('correlation diagnostic facts - the single-snapshot invariant (Phase 8.0D-10B-4D4C4-D2B3)', () => {
-  it('k: ALL FOUR derivations receive the very object the ONE read returned', () => {
+  it('k: ALL FIVE derivations receive the very object the ONE read returned', () => {
     const S = deepFreeze(snapshot({
       decision: productionDecision(),
       executionTerminals: [{ outcome: 'succeeded', roundId: 'A' }],
@@ -450,10 +465,13 @@ describe('correlation diagnostic facts - the single-snapshot invariant (Phase 8.
     expect(probes.identity.inputs).toHaveLength(1)
     expect(probes.terminal.inputs).toHaveLength(1)
     expect(probes.send.inputs).toHaveLength(1)
+    expect(probes.final.inputs).toHaveLength(1)
+    expect(probes.initialRoute.inputs).toHaveLength(1)
     expect(probes.identity.inputs[0]).toBe(S)
     expect(probes.terminal.inputs[0]).toBe(S)
     expect(probes.send.inputs[0]).toBe(S)
     expect(probes.final.inputs[0]).toBe(S)
+    expect(probes.initialRoute.inputs[0]).toBe(S)
     expect(probes.identity.inputs[0]).toBe(probes.terminal.inputs[0])
     expect(probes.terminal.inputs[0]).toBe(probes.send.inputs[0])
     expect(probes.send.inputs[0]).toBe(probes.final.inputs[0])
@@ -473,7 +491,7 @@ describe('correlation diagnostic facts - the single-snapshot invariant (Phase 8.
 
     expect(probes.identity.mappings).toHaveLength(1)
     expect(probes.identity.mappings[0]).toBe(mapping)
-    // Both terminal derivations and the final derivation are handed the snapshot and nothing else - no
+    // All four factual derivations (terminal, send, final, initialRoute) are handed the snapshot and nothing else - no
     // mapping, no key, no second argument of any kind.
     expect(probes.terminal.argumentCounts).toEqual([1])
     expect(probes.send.argumentCounts).toEqual([1])
@@ -516,13 +534,13 @@ describe('correlation diagnostic facts - composed output shape (Phase 8.0D-10B-4
     expect(serialized).not.toContain('sendTerminal')
   })
 
-  it('p/q: the present result carries exactly the three approved keys and no raw snapshot escape', () => {
+  it('p/q: the present result carries exactly the five approved keys and no raw snapshot escape', () => {
     const { store } = realStore()
     store.recordExecutionTerminal(terminalReport('X', 'R', 'succeeded'))
 
     const result = composeLiaBrainCorrelationDiagnosticFacts(store, 'X', LIA_BRAIN_ENGINE_PROVIDER_MAPPING)
 
-    expect(Object.keys(result).sort()).toEqual(['facts', 'finalSuccessfulExecutionFacts', 'initialRouteFacts', 'sendTerminalFacts', 'terminalFacts'])
+    expect(Object.keys(result).sort()).toEqual(['facts', 'finalSuccessfulExecutionFacts', 'initialRouteOverrideFacts', 'sendTerminalFacts', 'terminalFacts'])
     expect('correlationId' in result).toBe(false)
     expect(Object.keys(observed(result).terminalFacts).sort()).toEqual([
       'abandonedTerminalObservationCount',
@@ -547,7 +565,7 @@ describe('correlation diagnostic facts - composed output shape (Phase 8.0D-10B-4
     const result = composeLiaBrainCorrelationDiagnosticFacts(store, 'X', LIA_BRAIN_ENGINE_PROVIDER_MAPPING)
     const serialized = JSON.stringify(result)
 
-    expect(Object.keys(result).sort()).toEqual(['facts', 'finalSuccessfulExecutionFacts', 'initialRouteFacts', 'sendTerminalFacts', 'terminalFacts'])
+    expect(Object.keys(result).sort()).toEqual(['facts', 'finalSuccessfulExecutionFacts', 'initialRouteOverrideFacts', 'sendTerminalFacts', 'terminalFacts'])
     expect(observed(result).sendTerminalFacts).toEqual({ sendTerminalOutcome: 'failed' })
     // The raw key exists ONLY inside the derived sibling path, never as the raw
     // record object, and no snapshot metadata travels.
@@ -594,8 +612,8 @@ describe('correlation diagnostic facts - composed output shape (Phase 8.0D-10B-4
     expect(observed(first).finalSuccessfulExecutionFacts).toEqual(observed(second).finalSuccessfulExecutionFacts)
   })
 
-  it('the contracts line up: one reader-owned snapshot feeds ALL THREE derivations, unchanged', () => {
-    // Compile-time proofs: the reader-owned snapshot satisfies ALL THREE
+  it('the contracts line up: one reader-owned snapshot feeds ALL FIVE derivations, unchanged', () => {
+    // Compile-time proofs: the reader-owned snapshot satisfies ALL FIVE
     // derivation inputs, and the reader-owned mapping type is exactly what the
     // identity derivation accepts - so the composition needs no adapter and no
     // clone, and the very same object can be handed to every derivation.
@@ -636,8 +654,8 @@ describe('correlation diagnostic facts - source guards (Phase 8.0D-10B-4D4C3B2)'
   const source = readSource(COMPOSITION)
   const code = stripComments(source)
 
-  it('t: the composition is exactly the audited surface - one read, three delegations, no authority', () => {
-    // The whole dependency surface: the reader's structural contracts, the three
+  it('t: the composition is exactly the audited surface - one read, five delegations, no authority', () => {
+    // The whole dependency surface: the reader's structural contracts, the five
     // approved derivations and nothing else.
     expect(code.match(/^import .*$/gm)).toEqual([
       `import type { LiaBrainCorrelationSnapshotReader, LiaBrainEngineProviderLookup } from './brain-correlation-reader'`,
@@ -671,7 +689,7 @@ describe('correlation diagnostic facts - source guards (Phase 8.0D-10B-4D4C3B2)'
       'composeLiaBrainCorrelationDiagnosticFacts',
     ])
 
-    // The runtime slice: one read into one local snapshot, two delegations over
+    // The runtime slice: one read into one local snapshot, five delegations over
     // THAT object, and no raw collection named in the returned construction.
     const runtime = code.slice(code.indexOf('export function composeLiaBrainCorrelationDiagnosticFacts'))
     expect(runtime).toMatch(/deriveLiaBrainExecutionIdentityFacts\(snapshot, mapping\)/)
@@ -740,3 +758,64 @@ describe('correlation diagnostic facts - source guards (Phase 8.0D-10B-4D4C3B2)'
     }
   })
 })
+
+describe('lia correlation diagnostic facts - initialRouteOverride sibling (Phase 8.0D-10B-4D4C4-D2B7)', () => {
+  it('absent correlation returns ONLY facts with correlationNotObserved and no sibling', () => {
+    const { store } = realStore()
+    const result: any = composeLiaBrainCorrelationDiagnosticFacts(store, 'missing', LIA_BRAIN_ENGINE_PROVIDER_MAPPING)
+    expect(result).toEqual({ facts: { status: 'correlationNotObserved' } })
+    expect(Object.keys(result).sort()).toEqual(['facts'])
+    expect('initialRouteOverrideFacts' in result).toBe(false)
+    expect('terminalFacts' in result).toBe(false)
+    expect('sendTerminalFacts' in result).toBe(false)
+    expect('finalSuccessfulExecutionFacts' in result).toBe(false)
+  })
+
+  it('present snapshot always has initialRouteOverrideFacts', () => {
+    const { store } = realStore()
+    store.recordDecision('X', productionDecision())
+    const result: any = composeLiaBrainCorrelationDiagnosticFacts(store, 'X', LIA_BRAIN_ENGINE_PROVIDER_MAPPING)
+    expect('initialRouteOverrideFacts' in result).toBe(true)
+    expect(result.initialRouteOverrideFacts).toEqual({ status: 'initialRouteOverrideNotObserved' })
+    store.recordSendTerminal({ correlationId: 'Y', outcome: 'succeeded', initialRouteOverride: null })
+    const result2: any = composeLiaBrainCorrelationDiagnosticFacts(store, 'Y', LIA_BRAIN_ENGINE_PROVIDER_MAPPING)
+    expect(result2.initialRouteOverrideFacts).toEqual({ status: 'noInitialRouteOverride' })
+    store.recordSendTerminal({ correlationId: 'Z', outcome: 'succeeded', initialRouteOverride: { providerId: 'groq', modelId: 'm' } })
+    const result3: any = composeLiaBrainCorrelationDiagnosticFacts(store, 'Z', LIA_BRAIN_ENGINE_PROVIDER_MAPPING)
+    expect(result3.initialRouteOverrideFacts).toEqual({ status: 'initialRouteOverrideObserved', providerId: 'groq', modelId: 'm' })
+  })
+
+  it('route sibling does not change other four factual siblings', () => {
+    const { store } = realStore()
+    store.recordDecision('X', productionDecision())
+    store.recordExecution({ correlationId: 'X', conversationId: 'c', roundId: 'r', providerId: 'p', modelId: 'm' })
+    store.recordExecutionTerminal({ correlationId: 'X', roundId: 'r', outcome: 'succeeded' })
+    store.recordSendTerminal({ correlationId: 'X', outcome: 'succeeded' })
+    const withoutRoute: any = composeLiaBrainCorrelationDiagnosticFacts(store, 'X', LIA_BRAIN_ENGINE_PROVIDER_MAPPING)
+    const { store: store2 } = realStore()
+    store2.recordDecision('X', productionDecision())
+    store2.recordExecution({ correlationId: 'X', conversationId: 'c', roundId: 'r', providerId: 'p', modelId: 'm' })
+    store2.recordExecutionTerminal({ correlationId: 'X', roundId: 'r', outcome: 'succeeded' })
+    store2.recordSendTerminal({ correlationId: 'X', outcome: 'succeeded', initialRouteOverride: { providerId: 'groq', modelId: 'm' } })
+    const withRoute: any = composeLiaBrainCorrelationDiagnosticFacts(store2, 'X', LIA_BRAIN_ENGINE_PROVIDER_MAPPING)
+    expect(withRoute.facts).toEqual(withoutRoute.facts)
+    expect(withRoute.terminalFacts).toEqual(withoutRoute.terminalFacts)
+    expect(withRoute.sendTerminalFacts).toEqual(withoutRoute.sendTerminalFacts)
+    expect(withRoute.finalSuccessfulExecutionFacts).toEqual(withoutRoute.finalSuccessfulExecutionFacts)
+    expect(withoutRoute.initialRouteOverrideFacts).toEqual({ status: 'initialRouteOverrideNotObserved' })
+    expect(withRoute.initialRouteOverrideFacts).toEqual({ status: 'initialRouteOverrideObserved', providerId: 'groq', modelId: 'm' })
+  })
+
+  it('no comparison between siblings', () => {
+    const { store } = realStore()
+    store.recordDecision('X', productionDecision())
+    store.recordSendTerminal({ correlationId: 'X', outcome: 'succeeded', initialRouteOverride: { providerId: 'anthropic', modelId: 'claude-3' } })
+    const result: any = composeLiaBrainCorrelationDiagnosticFacts(store, 'X', LIA_BRAIN_ENGINE_PROVIDER_MAPPING)
+    expect(result.facts.status).not.toBe('routeMatched')
+    expect(result.initialRouteOverrideFacts.status).toBe('initialRouteOverrideObserved')
+    expect(JSON.stringify(result)).not.toContain('routeMatched')
+    expect(JSON.stringify(result)).not.toContain('mismatch')
+    expect(JSON.stringify(result)).not.toContain('divergence')
+  })
+})
+
