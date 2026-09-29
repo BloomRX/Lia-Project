@@ -663,14 +663,16 @@ describe('lia brain decision bridge (Phase 8.0D-8)', () => {
       expect(readSource(relative), relative).not.toMatch(BRAIN_DECISION_PATTERN)
     }
 
-    // The helper module is imported by the normal user-send seam and, since D1,
-    // the awaited authoritative resolver which reuses the same canonical primitive.
+    // The helper module is imported by the normal user-send seam, since D1 the
+    // awaited authoritative resolver which reuses the same canonical primitive,
+    // and since D2B5 the direct-voice send path which reuses the same resolver.
     // Nothing in the selection or execution path reaches it beyond those.
     expect(productionSourcesMatching(
       ['apps/stage-tamagotchi/src', 'packages/stage-ui/src', 'packages/core-agent/src'],
       /brain-shadow/,
     )).toEqual([
       'apps/stage-tamagotchi/src/renderer/components/InteractiveArea.vue',
+      'apps/stage-tamagotchi/src/renderer/pages/index.vue',
       'apps/stage-tamagotchi/src/renderer/services/lia/lia-authoritative-route-resolver.ts',
     ])
   })
