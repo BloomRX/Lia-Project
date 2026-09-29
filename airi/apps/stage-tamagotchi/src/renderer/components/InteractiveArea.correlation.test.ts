@@ -13,13 +13,13 @@ import InteractiveArea from './InteractiveArea.vue'
 import { artistryToolReferences } from '../stores/tools'
 
 /**
- * Phase 8.0D-10B-3B1: the logical-send correlation key at the REAL user-send
+ * Phase 8.0D-10B-3B1 + 8.0D-10B-4D4C4-D2B2-D2: the logical-send correlation key at the REAL user-send
  * seam.
  *
  * The component and the stores run for real, `chatStore.send` is a spy (so the
  * assertion is about the payload the seam hands over), and the renderer invoke
  * seam is intercepted for the Brain channel ONLY - exactly like the 8.0D-9 seam
- * test - so the shadow request can be proven untouched.
+ * test - so the authoritative Brain request can be proven.
  */
 
 const electron = vi.hoisted(() => ({
@@ -184,10 +184,10 @@ describe('interactive area logical send correlation (Phase 8.0D-10B-3B1)', () =>
     expect(payload.correlationId).toBe(MINTED_IDS[0])
   })
 
-  it('e/f: the Brain shadow request is unchanged apart from the forwarded id', async () => {
+  it('e/f: the Brain decision request is unchanged apart from the forwarded id', async () => {
     const { send, wrapper } = await renderArea()
 
-    await submitDraft(wrapper, 'shadow untouched')
+    await submitDraft(wrapper, 'authority untouched')
     await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(1))
     await vi.waitFor(() => expect(electron.brainInvoke).toHaveBeenCalledTimes(1))
 
@@ -200,7 +200,7 @@ describe('interactive area logical send correlation (Phase 8.0D-10B-3B1)', () =>
     expect(JSON.stringify(request)).not.toMatch(/automaticPolicy|routes|engineId|modelId|providerId|descriptor/i)
   })
 
-  it('keeps the shadow observation and the send id independent of each other', async () => {
+  it('keeps the Brain request and the send id correlated yet independent payloads', async () => {
     const { consciousness, send, wrapper } = await renderArea()
     consciousness.reasoning = true
 
@@ -214,7 +214,7 @@ describe('interactive area logical send correlation (Phase 8.0D-10B-3B1)', () =>
     expect(request.facts).toEqual({ hasImageInput: false, reasoningRequested: true, usesTools: true })
     expect((send.mock.calls[0] as [Record<string, unknown>])[0].correlationId).toBe(MINTED_IDS[0])
   })
-  it('h/i/m: ONE submission sends the SAME generated id down both paths', async () => {
+  it('h/i/m: ONE submission sends the SAME generated id down both authority and send paths', async () => {
     const { send, wrapper } = await renderArea()
     const before = minted.mock.calls.length
 
@@ -226,7 +226,7 @@ describe('interactive area logical send correlation (Phase 8.0D-10B-3B1)', () =>
     expect(minted.mock.calls.length - before).toBe(1)
     const generated = MINTED_IDS[0]
 
-    // I: the execution path and the shadow path carry the very same value.
+    // I: the Brain authority path and the send path carry the very same value.
     const [payload] = send.mock.calls[0] as [Record<string, unknown>]
     const [request] = electron.brainInvoke.mock.calls[0] as [Record<string, unknown>]
     expect(payload.correlationId).toBe(generated)
@@ -235,10 +235,8 @@ describe('interactive area logical send correlation (Phase 8.0D-10B-3B1)', () =>
     // Exact value identity, not a copy of some other id.
     expect(String(request.correlationId)).not.toHaveLength(0)
 
-    // M: the shadow invoke was never awaited - the send had already happened
-    // by the time it was observed, and the send call is not gated behind it.
-    expect(electron.brainInvoke.mock.invocationCallOrder[0]).toBeGreaterThan(0)
-    expect(send.mock.calls.length).toBe(1)
+    // M (D2): Brain authoritative request occurs before send — ordering. Awaiting itself is proved by the deferred test in brain-shadow.test.ts (send 0 before resolve → 1 after).
+    expect(electron.brainInvoke.mock.invocationCallOrder[0]).toBeLessThan(send.mock.invocationCallOrder[0])
   })
 
   it('j: a second submission gets its own id on both paths', async () => {
