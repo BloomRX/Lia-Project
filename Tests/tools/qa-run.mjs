@@ -93,7 +93,7 @@ function gitInfo() {
 
 /** Creates the run skeleton; returns the run dir. Collisions get -2, -3, ... */
 export function createRun({ kind, now = new Date(), runsDir = RUNS_DIR }) {
-  if (kind !== 'clean-install' && kind !== 'smoke')
+  if (kind !== 'clean-install' && kind !== 'smoke' && kind !== 'benchmark')
     throw new Error(`unknown run kind: ${kind}`)
 
   // Materialize the managed roots on first use (all gitignored). Skipped when
@@ -116,12 +116,18 @@ export function createRun({ kind, now = new Date(), runsDir = RUNS_DIR }) {
   const subs = ['runtime', 'logs', 'metrics', 'snapshots', 'artifacts']
   if (kind === 'smoke')
     subs.push(nodePath.join('artifacts', 'smoke'))
+  if (kind === 'benchmark') {
+    subs.push(nodePath.join('logs','raw'))
+    subs.push(nodePath.join('logs','redacted'))
+  }
   for (const sub of subs)
     mkdirSync(nodePath.join(runDir, sub), { recursive: true })
 
   const runtimeRoot = nodePath.join(runDir, 'runtime')
   const fill = text => text.replaceAll('{ID}', id).replaceAll('{RUNTIME_ROOT}', runtimeRoot)
-  const checklist = kind === 'clean-install' ? CLEAN_INSTALL_CHECKLIST : SMOKE_CHECKLIST
+  let checklist = SMOKE_CHECKLIST
+  if (kind === 'clean-install') checklist = CLEAN_INSTALL_CHECKLIST
+  else if (kind === 'benchmark') checklist = `Lia QA - WINDOWS BENCHMARK (run: {ID})\n=============================================================\nAutomated benchmark run. See benchmarks/{ID}/REPORT.md for results.\nArtifacts: logs/raw (local only, reviewable), metrics/, snapshots/\nPublication target: qa/windows-benchmarks (append-only)\n`
   writeFileSync(nodePath.join(runDir, 'QA-CHECKLIST.txt'), fill(checklist), 'utf-8')
   writeFileSync(nodePath.join(runDir, 'USER-NOTES.txt'), fill(USER_NOTES_TEMPLATE), 'utf-8')
 

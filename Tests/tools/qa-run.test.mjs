@@ -126,3 +126,25 @@ describe('qa-run: smoke checklist points at the run-owned artifacts', () => {
     assert.ok(!checklist.includes('.devkit-qa'), 'smoke runs must not point testers at .devkit-qa')
   })
 })
+
+describe('qa-run: benchmark kind', () => {
+  it('creates benchmark skeleton with raw/redacted logs', () => {
+    const runDir = createRun({ kind: 'benchmark', runsDir })
+    for (const sub of ['runtime','logs','metrics','snapshots','artifacts']) assert.ok(existsSync(nodePath.join(runDir, sub)), `${sub} missing`)
+    assert.ok(existsSync(nodePath.join(runDir, 'logs','raw')))
+    assert.ok(existsSync(nodePath.join(runDir, 'logs','redacted')))
+    const info = readFileSync(nodePath.join(runDir, 'run-info.txt'),'utf-8')
+    assert.match(info, /kind\s*:\s*benchmark/)
+    const checklist = readFileSync(nodePath.join(runDir,'QA-CHECKLIST.txt'),'utf-8')
+    assert.ok(checklist.includes('WINDOWS BENCHMARK'))
+    assert.ok(checklist.includes('qa/windows-benchmarks'))
+  })
+  it('benchmark ids collide with -2 suffix', () => {
+    const now = new Date(2026,8,29,12,0,0)
+    const a = createRun({ kind:'benchmark', now, runsDir })
+    const b = createRun({ kind:'benchmark', now, runsDir })
+    assert.notEqual(a,b)
+    assert.ok(nodePath.basename(b).endsWith('-2') || nodePath.basename(b).match(/-\d+$/))
+  })
+})
+

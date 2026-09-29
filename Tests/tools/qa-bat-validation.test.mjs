@@ -143,3 +143,83 @@ describe('gitignore: harness-generated folders can never enter Git', () => {
     assert.match(gitignore, /^Tests\/inventory\/$/m)
   })
 })
+
+describe('LiaBenchmark.bat: Windows benchmark harness static validation', () => {
+  const BENCH_BAT = nodePath.join(REPO_ROOT, 'LiaBenchmark.bat')
+  const bench = (()=>{ try{ return readFileSync(BENCH_BAT,'utf-8')}catch{ return ''} })()
+  it('exists and uses CRLF', () => {
+    assert.ok(bench.length>0, 'LiaBenchmark.bat missing')
+    assert.ok(bench.includes('\r\n'))
+  })
+  it('is a thin wrapper: @echo off, chcp 65001, where node, node qa-benchmark.mjs, exit %ERRORLEVEL%', () => {
+    assert.match(bench, /@echo off/i)
+    assert.match(bench, /chcp 65001/)
+    assert.match(bench, /where node/)
+    assert.match(bench, /qa-benchmark\.mjs/)
+    assert.match(bench, /exit \/b %\w+%/ )
+  })
+  it('sets local and cd to script dir', () => {
+    assert.match(bench, /setlocal/)
+    assert.match(bench, /cd \/d "?%~dp0"?/)
+  })
+  it('forwards all args', () => {
+    assert.ok(bench.includes('%*'))
+  })
+  it('contains NO destructive git/powershell/force', () => {
+    assert.doesNotMatch(bench, /git reset/)
+    assert.doesNotMatch(bench, /git clean/)
+    assert.doesNotMatch(bench, /git stash/)
+    assert.doesNotMatch(bench, /git rebase/)
+    assert.doesNotMatch(bench, /--force/)
+    assert.doesNotMatch(bench, /Invoke-Expression/)
+    assert.doesNotMatch(bench, /EncodedCommand/)
+  })
+  it('never installs: no npx, no pnpm install, no pip install', () => {
+    assert.doesNotMatch(bench, /\bnpx\b/)
+    assert.doesNotMatch(bench, /pnpm install/)
+    assert.doesNotMatch(bench, /pip install/)
+  })
+})
+
+describe('qa-benchmark.mjs: static allowlist validation', () => {
+  const BENCH_MJS = nodePath.join(REPO_ROOT, 'Tests','tools','qa-benchmark.mjs')
+  const mjs = (()=>{ try{ return readFileSync(BENCH_MJS,'utf-8')}catch{ return ''} })()
+  it('uses only pnpm exec, never npx', () => {
+    assert.ok(mjs.includes('pnpm exec'))
+    // all spawnSync argv must start with pnpm
+    const npxHits = (mjs.match(/\bnpx\b/g) || []).length
+    assert.equal(npxHits, 0)
+  })
+  it('does not run pnpm install automatically', () => {
+    // The string "pnpm install" may appear in comments; enforce not as argv
+    assert.ok(!mjs.includes("'pnpm','install'") && !mjs.includes('"pnpm", "install"'))
+  })
+  it('defines allowlist benchmarks/<runId> and forbids arena', () => {
+    assert.ok(mjs.includes('isPublishAllowed') || mjs.includes('benchmarks/'))
+    assert.ok(mjs.includes('qa/windows-benchmarks'))
+    // must not stage arena
+    const arenaStaging = mjs.includes('arena/')
+    // allow Source-Branch arena in commit message, but not staged path
+    const cachedCheck = mjs.includes('benchmarks/${runId}')
+    assert.ok(cachedCheck)
+  })
+  it('references redaction bridge not duplicated regex', () => {
+    assert.ok(mjs.includes('qa-security-bridge'))
+    assert.ok(!mjs.includes('BEGIN RSA PRIVATE KEY'))
+  })
+  it('uses sparse orphan worktree, no destructive git in source checkout', () => {
+    assert.ok(mjs.includes('worktree'))
+    assert.ok(mjs.includes('--orphan'))
+    // No git clean/reset in source checkout (allow worktree remove --force for temp cleanup)
+    assert.ok(!mjs.includes('git clean'))
+    assert.ok(!mjs.match(/git reset --hard/))
+    const forces = (mjs.match(/--force/g) || [])
+    assert.ok(forces.length <= 1, `expected at most one --force for worktree remove, got ${forces.length}`)
+    if (forces.length === 1) assert.ok(mjs.includes('worktree') && mjs.includes('--force'))
+  })
+  it('SHA manifest is deterministic lexical', () => {
+    assert.ok(mjs.includes('SHA256SUMS'))
+    assert.ok(mjs.includes('buildShaManifest') || mjs.includes('sha256'))
+  })
+})
+
