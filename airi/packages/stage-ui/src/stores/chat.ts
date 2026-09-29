@@ -135,6 +135,14 @@ export interface ChatRetryPayload {
   index: number
   sessionId: string
   tools?: ChatToolReference[]
+  /** Phase 8.0D-10B-4D4C4-D2B6: new logical-send correlation for the retry — optional to preserve legacy index-only callers. */
+  correlationId?: string
+  /** Phase 8.0D-10B-4D4C4-D2B6: frozen reasoning for the retry — optional, absent preserves live global behavior. */
+  reasoning?: boolean
+  /** Phase 8.0D-10B-4D4C4-D2B6: authoritative initial route for the retry — optional, absent preserves existing behavior. */
+  routeOverride?: ChatSendRouteOverride
+  /** Phase 8.0D-10B-4D4C4-D2B6: stable identity for the retry target — when supplied, retry resolves the CURRENT index by message.id. */
+  messageId?: string
 }
 
 /** Identifies one stored tool call that must run again in the leader. */
@@ -742,7 +750,15 @@ export const useChatStore = defineStore('chat', () => {
       throw new Error('Failed to load the target chat session')
 
     const currentMessages = chatSession.getSessionMessages(payload.sessionId)
-    const sourceIndex = retrySourceIndexFrom(currentMessages, payload.index)
+    // Phase 8.0D-10B-4D4C4-D2B6: stable target identity — when messageId is supplied, resolve CURRENT index by stable id
+    let targetIndex = payload.index
+    if (payload.messageId !== undefined) {
+      const found = currentMessages.findIndex(message => (message as { id?: string }).id === payload.messageId)
+      if (found < 0)
+        throw new Error('Retry target message not found: stale messageId')
+      targetIndex = found
+    }
+    const sourceIndex = retrySourceIndexFrom(currentMessages, targetIndex)
     if (sourceIndex < 0)
       throw new Error('Retry target has no retriable source message')
 
@@ -756,13 +772,14 @@ export const useChatStore = defineStore('chat', () => {
     // Phase 8.0D-10B-4D4C4-B1: the retry only replaces its own try/catch with the
     // shared settlement wrapper - its preprocessing above is untouched, and a
     // retry that exits before this point settles nothing and observes nothing.
-    // The retry payload carries no correlationId, so its settlement is reported
-    // uncorrelated: a retried message is a NEW logical send, never a continuation
-    // of the send that originally produced the text.
+    // Phase 8.0D-10B-4D4C4-D2B6: retry is a NEW logical send — correlationId, reasoning and routeOverride are forwarded only when supplied, preserving absence semantics for legacy callers.
     return executeSettledSend({
       sessionId: payload.sessionId,
       text,
       tools: payload.tools ?? sourceMessage?.tools,
+      ...(payload.correlationId === undefined ? {} : { correlationId: payload.correlationId }),
+      ...(payload.reasoning === undefined ? {} : { reasoning: payload.reasoning }),
+      ...(payload.routeOverride === undefined ? {} : { routeOverride: payload.routeOverride }),
     })
   }
 

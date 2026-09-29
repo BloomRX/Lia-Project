@@ -270,10 +270,31 @@ onMounted(() => {
 })
 
 async function handleRetryMessage(index: number) {
+  // Phase 8.0D-10B-4D4C4-D2B6: authoritative retry — NEW logical send with stable target identity
+  // Snapshot before awaiting Brain authority; do not re-read session/reasoning/tools after.
+  const targetSessionId = chatSession.activeSessionId
+  const targetMessage = messages.value[index] as unknown as { id?: string } | undefined
+  const targetMessageId = targetMessage?.id
+  const correlationId = crypto.randomUUID()
+  const reasoningToRetry = consciousnessSettings.reasoning
+  const toolsToRetry = [...widgetToolReferences]
+  const facts = chatTurnFactsFromSend({
+    attachments: [] as const,
+    reasoning: reasoningToRetry,
+    tools: toolsToRetry,
+  })
+  const routeOverride = await resolveLiaAuthoritativeSendRoute({
+    correlationId,
+    facts,
+  })
   await chatStore.retry({
-    sessionId: chatSession.activeSessionId,
+    sessionId: targetSessionId,
     index,
-    tools: widgetToolReferences,
+    ...(targetMessageId === undefined ? {} : { messageId: targetMessageId }),
+    tools: toolsToRetry,
+    correlationId,
+    reasoning: reasoningToRetry,
+    ...(routeOverride === undefined ? {} : { routeOverride }),
   })
   trackChatMessageRetried({
     source: 'history',
