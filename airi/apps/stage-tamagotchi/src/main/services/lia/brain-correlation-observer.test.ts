@@ -11,6 +11,7 @@ import type { LiaBrainCorrelationObserver, LiaBrainDiagnosticEntry } from './bra
 import type { LiaBrainCorrelationSnapshotReader } from './brain-correlation-reader'
 import type { LiaBrainExecutionIdentityFacts, LiaBrainExecutionIdentitySnapshot, LiaObservedExecutionIdentity } from './brain-execution-identity-facts'
 import type { LiaBrainTerminalObservationFacts } from './brain-execution-terminal-facts'
+import type { LiaBrainFinalSuccessfulExecutionFacts } from './brain-final-successful-execution-facts'
 
 import { readdirSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -218,18 +219,19 @@ function createTestContainer() {
 }
 
 /**
- * One entry, narrowed to the present arm: both siblings guaranteed. Since
- * 8.0D-10B-4D4C4-B4B3 the present composed value carries `sendTerminalFacts` too,
+ * One entry, narrowed to the present arm: all siblings guaranteed. Since
+ * 8.0D-10B-4D4C4-D2B3 the present composed value carries `finalSuccessfulExecutionFacts` too,
  * and the observer forwards it untouched - so the sibling is part of the entry.
  */
 function presentEntry(entry: LiaBrainDiagnosticEntry): {
   facts: LiaBrainExecutionIdentityFacts
   terminalFacts: LiaBrainTerminalObservationFacts
   sendTerminalFacts: LiaBrainSendTerminalObservationFacts
+  finalSuccessfulExecutionFacts: LiaBrainFinalSuccessfulExecutionFacts
 } {
   if (!('terminalFacts' in entry))
     throw new Error('expected a present correlation entry')
-  return { facts: entry.facts, sendTerminalFacts: entry.sendTerminalFacts, terminalFacts: entry.terminalFacts }
+  return { facts: entry.facts, sendTerminalFacts: entry.sendTerminalFacts, terminalFacts: entry.terminalFacts, finalSuccessfulExecutionFacts: entry.finalSuccessfulExecutionFacts }
 }
 
 /** The present arm of a composed value a delegation returned, narrowed once. */
@@ -237,6 +239,7 @@ function composedPresent(index = 0): {
   facts: LiaBrainExecutionIdentityFacts
   terminalFacts: LiaBrainTerminalObservationFacts
   sendTerminalFacts: LiaBrainSendTerminalObservationFacts
+  finalSuccessfulExecutionFacts: LiaBrainFinalSuccessfulExecutionFacts
 } {
   const composed = probes.composition.returned[index]
   if (typeof composed !== 'object' || composed === null || !('terminalFacts' in composed))
@@ -245,6 +248,7 @@ function composedPresent(index = 0): {
     facts: LiaBrainExecutionIdentityFacts
     terminalFacts: LiaBrainTerminalObservationFacts
     sendTerminalFacts: LiaBrainSendTerminalObservationFacts
+    finalSuccessfulExecutionFacts: LiaBrainFinalSuccessfulExecutionFacts
   }
 }
 
@@ -972,21 +976,22 @@ describe('correlation observer - structured diagnostic log seam (Phase 8.0D-10B-
     // F: one observation -> exactly one entry.
     expect(recorded.entries).toHaveLength(1)
     const entry = recorded.entries[0]!
-    // G: exactly the approved top-level fields - the opaque key plus the three
+    // G: exactly the approved top-level fields - the opaque key plus the four
     // composed members. No timestamp, no sequence number, no environment or
     // window id, no provider/model/status duplicate, no raw snapshot, no
     // terminal record and no derived verdict.
-    expect(Object.keys(entry).sort()).toEqual(['correlationId', 'facts', 'sendTerminalFacts', 'terminalFacts'])
+    expect(Object.keys(entry).sort()).toEqual(['correlationId', 'facts', 'finalSuccessfulExecutionFacts', 'sendTerminalFacts', 'terminalFacts'])
     // H: the caller's key is forwarded verbatim, never trimmed or rewritten.
     expect(entry.correlationId).toBe('logical-send-X')
     // I: the entry carries the EXACT members the composition produced - the seam
-    // recorded that value, and ALL THREE members are the same references. Not a
+    // recorded that value, and ALL FOUR members are the same references. Not a
     // clone, not a re-derivation, not an edited copy.
     expect(probes.composition.returned).toHaveLength(1)
     const composed = composedPresent()
     expect(entry.facts).toBe(composed.facts)
     expect('terminalFacts' in entry && entry.terminalFacts).toBe(composed.terminalFacts)
     expect('sendTerminalFacts' in entry && entry.sendTerminalFacts).toBe(composed.sendTerminalFacts)
+    expect('finalSuccessfulExecutionFacts' in entry && entry.finalSuccessfulExecutionFacts).toBe(composed.finalSuccessfulExecutionFacts)
     expect(entry.facts.status).toBe('decisionNotObserved')
     // J: no time of any kind was added by this module.
     expect(entry).not.toHaveProperty('timestamp')
@@ -1056,6 +1061,8 @@ describe('correlation observer - structured diagnostic log seam (Phase 8.0D-10B-
     expect(recorded.entries[0]!.facts).not.toBe(recorded.entries[1]!.facts)
     expect('terminalFacts' in recorded.entries[0]! && recorded.entries[0]!.terminalFacts).toBe(composedPresent(0).terminalFacts)
     expect('terminalFacts' in recorded.entries[1]! && recorded.entries[1]!.terminalFacts).toBe(composedPresent(1).terminalFacts)
+    expect('finalSuccessfulExecutionFacts' in recorded.entries[0]! && recorded.entries[0]!.finalSuccessfulExecutionFacts).toBe(composedPresent(0).finalSuccessfulExecutionFacts)
+    expect('finalSuccessfulExecutionFacts' in recorded.entries[1]! && recorded.entries[1]!.finalSuccessfulExecutionFacts).toBe(composedPresent(1).finalSuccessfulExecutionFacts)
   })
 
   it('u/v/w: a composition that throws is never forwarded, and nothing is retried', async () => {
@@ -1123,7 +1130,7 @@ describe('correlation observer - structured diagnostic log seam (Phase 8.0D-10B-
     for (const forbidden of ['prompt', 'messages', 'attachments', 'tools', 'apiKey', 'secret', 'baseURL', 'chatProvider', 'credentials', 'conversationId', 'executionTerminals', 'snapshot', 'createdAt'])
       expect(serialized, forbidden).not.toContain(forbidden)
     // And the only keys are the approved four.
-    expect(Object.keys(JSON.parse(serialized))).toEqual(['correlationId', 'facts', 'terminalFacts', 'sendTerminalFacts'])
+    expect(Object.keys(JSON.parse(serialized))).toEqual(['correlationId', 'facts', 'terminalFacts', 'sendTerminalFacts', 'finalSuccessfulExecutionFacts'])
     // The counts are the only terminal data, and they carry no record.
     expect(Object.keys(JSON.parse(serialized).terminalFacts).sort()).toEqual([
       'abandonedTerminalObservationCount',
@@ -1214,7 +1221,7 @@ describe('correlation observer - terminals reach the entry as counts only (Phase
 
     // The structured entry is exactly the composed shape: the opaque key, the
     // identity facts, the three counts and the send sibling.
-    expect(Object.keys(entry).sort()).toEqual(['correlationId', 'facts', 'sendTerminalFacts', 'terminalFacts'])
+    expect(Object.keys(entry).sort()).toEqual(['correlationId', 'facts', 'finalSuccessfulExecutionFacts', 'sendTerminalFacts', 'terminalFacts'])
     // The forwarded identity facts neither declare nor carry a terminal collection.
     expect('executionTerminals' in entry.facts).toBe(false)
     expect('outcome' in entry.facts).toBe(false)
@@ -1356,7 +1363,7 @@ describe('correlation observer - composed entry states (Phase 8.0D-10B-4D4C3B2-B
       store.recordDecision('X', productionDecision())
     })
 
-    expect(Object.keys(entry).sort()).toEqual(['correlationId', 'facts', 'sendTerminalFacts', 'terminalFacts'])
+    expect(Object.keys(entry).sort()).toEqual(['correlationId', 'facts', 'finalSuccessfulExecutionFacts', 'sendTerminalFacts', 'terminalFacts'])
     const { facts, terminalFacts, sendTerminalFacts } = presentEntry(entry)
     expect(facts.status).toBe('noExecutionObserved')
     if (facts.status !== 'noExecutionObserved')

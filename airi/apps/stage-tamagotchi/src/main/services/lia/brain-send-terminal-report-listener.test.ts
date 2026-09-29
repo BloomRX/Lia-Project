@@ -681,9 +681,12 @@ describe('lia send terminal wiring invariants (Phase 8.0D-10B-4D4C4-B3B2)', () =
     expect(productionSourcesMatching(BRAIN_ROOTS, /sendTerminalOutcome|sendTerminalObserved|sendSucceeded|sendFailed/))
       .toEqual([
         'apps/stage-tamagotchi/src/main/services/lia/brain-diagnostic-log.ts',
+        'apps/stage-tamagotchi/src/main/services/lia/brain-final-successful-execution-facts.ts',
         'apps/stage-tamagotchi/src/main/services/lia/brain-send-terminal-facts.ts',
       ])
-    expect(productionSourcesMatching(BRAIN_ROOTS, /sendTerminalObserved|sendSucceeded|sendFailed/)).toEqual([])
+    expect(productionSourcesMatching(BRAIN_ROOTS, /sendTerminalObserved|sendSucceeded|sendFailed/)).toEqual([
+        'apps/stage-tamagotchi/src/main/services/lia/brain-final-successful-execution-facts.ts',
+      ])
 
     // The shared contract still declares exactly the two-field send report, and
     // the renderer/Stage/Core layers know nothing about the stored field.

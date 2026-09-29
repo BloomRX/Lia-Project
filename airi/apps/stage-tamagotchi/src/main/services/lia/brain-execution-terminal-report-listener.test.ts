@@ -734,7 +734,7 @@ describe('terminal trigger - real observer integration (Phase 8.0D-10B-4D4C3B2-B
     // 8.0D-10B-4D4C4-B4B3: the composed entry carries the derived send sibling as
     // well - empty here, because this snapshot retains no send settlement - and
     // its value is a fact about this snapshot, not a placeholder.
-    expect(Object.keys(entry).sort()).toEqual(['correlationId', 'facts', 'sendTerminalFacts', 'terminalFacts'])
+    expect(Object.keys(entry).sort()).toEqual(['correlationId', 'facts', 'finalSuccessfulExecutionFacts', 'sendTerminalFacts', 'terminalFacts'])
     expect('sendTerminalFacts' in entry && entry.sendTerminalFacts).toEqual({})
     const serialized = JSON.stringify(entry)
     for (const forbidden of ['executionTerminals', 'roundId', 'outcome', 'snapshot', 'createdAt'])
