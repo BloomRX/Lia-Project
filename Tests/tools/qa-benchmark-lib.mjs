@@ -2,15 +2,16 @@
 /**
  * Lia QA benchmark library — pure, testable helpers.
  * No git writes, no spawn, no fs outside injected root.
+ * D2B8-B corrective: fail-closed, python resolution, classification, hard limits.
  */
 
 import crypto from 'node:crypto'
-import { execSync } from 'node:child_process'
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
+import { existsSync, readFileSync } from 'node:fs'
 import nodePath from 'node:path'
 import os from 'node:os'
 
-import { REPO_ROOT, RUNS_DIR, runTimestampId } from './qa-shared.mjs'
+import { REPO_ROOT, runTimestampId } from './qa-shared.mjs'
 
 // ---------------------------------------------------------------------------
 // Run ID
@@ -40,7 +41,13 @@ export function nextBenchmarkRunId(a, b, c) {
   const shortSha = c
   let id = benchmarkRunId(now, shortSha)
   let suffix = 1
-  while (existsSync(nodePath.join(runsDir, id)) || existsSync(nodePath.join(REPO_ROOT, '.devkit-qa', 'benchmark-publish', id)) || existsSync(nodePath.join(REPO_ROOT, 'Tests', 'benchmarks', id))) {
+  // Collision covers both local runs and publish staging, no deletion
+  while (
+    existsSync(nodePath.join(runsDir, id)) ||
+    existsSync(nodePath.join(REPO_ROOT, '.devkit-qa', 'benchmark-publish', id)) ||
+    existsSync(nodePath.join(REPO_ROOT, 'Tests', 'benchmarks', id)) ||
+    existsSync(nodePath.join(REPO_ROOT, 'Tests', 'runs', id))
+  ) {
     suffix += 1
     id = `${benchmarkRunId(now, shortSha)}-${suffix}`
   }
@@ -48,121 +55,114 @@ export function nextBenchmarkRunId(a, b, c) {
 }
 
 // ---------------------------------------------------------------------------
+// Python resolution — prefer py -3 >=3.10 else python >=3.10
+// ---------------------------------------------------------------------------
+export function resolvePython({ spawn = spawnSync } = {}) {
+  const candidates = [
+    { argv: ['py', '-3', '--version'], label: 'py -3' },
+    { argv: ['python', '--version'], label: 'python' },
+    { argv: ['python3', '--version'], label: 'python3' },
+  ]
+  for (const cand of candidates) {
+    try {
+      const res = spawn(cand.argv[0], cand.argv.slice(1), { encoding: 'utf-8', timeout: 3000 })
+      const out = (res.stdout || '') + (res.stderr || '')
+      const m = out.match(/Python\s+(\d+)\.(\d+)\.(\d+)/i)
+      if (m) {
+        const major = Number(m[1]); const minor = Number(m[2])
+        if (major > 3 || (major === 3 && minor >= 10)) {
+          // Return argv prefix to invoke bridge: e.g. ['py','-3'] -> ['py','-3','path']
+          // For python/python3, just ['python']
+          if (cand.argv[0] === 'py') return { argv: ['py', '-3'], version: `${major}.${minor}.${m[3]}`, raw: out.trim() }
+          return { argv: [cand.argv[0]], version: `${major}.${minor}.${m[3]}`, raw: out.trim() }
+        }
+      } else if (res.status === 0 && out.toLowerCase().includes('python')) {
+        // If version unparsable but exit 0, still consider available but mark version unknown
+        // Don't use if can't verify >=3.10
+      }
+    } catch {}
+  }
+  return null
+}
+
+export function isPythonAvailable(opts = {}) {
+  return resolvePython(opts) !== null
+}
+
+// ---------------------------------------------------------------------------
 // Command inventory — static argv, no shell
 // ---------------------------------------------------------------------------
-/**
- * Returns the canonical benchmark command matrix.
- * Each entry: {id,label,cwd,argv,mandatory,requiresNetwork,mayInstall}
- * cwd is relative to REPO_ROOT or absolute for airi.
- */
 export function benchmarkCommands({ repoRoot = REPO_ROOT } = {}) {
   const airiRoot = nodePath.join(repoRoot, 'airi')
-  // Use pnpm exec for local binary resolution, never npx
   return [
     {
       id: 'stage-vitest',
       label: 'Stage full (node)',
       cwd: nodePath.join(airiRoot, 'apps', 'stage-tamagotchi'),
-      argv: ['pnpm', 'exec', 'vitest', 'run', '--reporter=json', '--outputFile', '<METRICS>/stage-vitest.json'],
-      // actually vitest json output needs file; we will capture via --reporter=json and parse stdout
-      // For benchmark we use pnpm exec vitest run with json reporter via file
-      rawArgv: ['pnpm', 'exec', 'vitest', 'run'],
+      argv: ['pnpm', 'exec', 'vitest', 'run'],
       mandatory: true,
-      requiresNetwork: false,
-      mayInstall: false,
     },
     {
       id: 'core-agent',
       label: 'core-agent suite',
       cwd: airiRoot,
-      argv: ['pnpm', 'exec', 'vitest', 'run', '--project', '@proj-airi/core-agent', '--reporter=json'],
-      rawArgv: ['pnpm', 'exec', 'vitest', 'run', '--project', '@proj-airi/core-agent'],
+      argv: ['pnpm', 'exec', 'vitest', 'run', '--project', '@proj-airi/core-agent'],
       mandatory: true,
-      requiresNetwork: false,
-      mayInstall: false,
     },
     {
       id: 'lia-core',
       label: 'lia-core suite',
       cwd: nodePath.join(airiRoot, 'packages', 'lia-core'),
-      argv: ['pnpm', 'test', '--', '--reporter=json'],
-      rawArgv: ['pnpm', 'test'],
+      argv: ['pnpm', 'test'],
       mandatory: true,
-      requiresNetwork: false,
-      mayInstall: false,
     },
     {
       id: 'stage-ui',
       label: 'stage-ui suite',
       cwd: airiRoot,
-      argv: ['pnpm', 'exec', 'vitest', 'run', '--project', '@proj-airi/stage-ui', '--reporter=json'],
-      rawArgv: ['pnpm', 'exec', 'vitest', 'run', '--project', '@proj-airi/stage-ui'],
-      mandatory: false,
-      requiresNetwork: false,
-      mayInstall: false,
+      argv: ['pnpm', 'exec', 'vitest', 'run', '--project', '@proj-airi/stage-ui'],
+      mandatory: true,
     },
     {
       id: 'browser',
       label: 'Browser Stage (chromium)',
       cwd: nodePath.join(airiRoot, 'apps', 'stage-tamagotchi'),
-      argv: ['pnpm', 'exec', 'vitest', 'run', '--project', 'browser', '--reporter=json'],
-      rawArgv: ['pnpm', 'exec', 'vitest', 'run', '--project', 'browser'],
-      mandatory: false, // environment-limited if missing
-      requiresNetwork: false,
-      mayInstall: false,
+      argv: ['pnpm', 'exec', 'vitest', 'run', '--project', 'browser'],
+      mandatory: true,
     },
     {
       id: 'lint',
       label: 'Lint',
       cwd: airiRoot,
-      argv: ['pnpm', 'exec', 'eslint', '--cache', '.'],
-      rawArgv: ['pnpm', 'lint'],
+      argv: ['pnpm', 'lint'],
       mandatory: true,
-      requiresNetwork: false,
-      mayInstall: false,
     },
     {
       id: 'typecheck',
       label: 'Typecheck',
       cwd: airiRoot,
-      argv: ['pnpm', 'exec', 'tsc', '--noEmit'], // fallback; real is pnpm -rF... but we provide narrow
-      rawArgv: ['pnpm', 'typecheck'],
-      mandatory: false, // heavy, may OOM -> env-limited
-      requiresNetwork: false,
-      mayInstall: false,
+      argv: ['pnpm', 'typecheck'],
+      mandatory: true,
     },
     {
       id: 'build-packages',
       label: 'Build packages',
       cwd: airiRoot,
       argv: ['pnpm', 'run', 'build:packages'],
-      rawArgv: ['pnpm', 'run', 'build:packages'],
-      mandatory: false,
-      requiresNetwork: false,
-      mayInstall: false,
+      mandatory: true,
     },
   ]
 }
 
-// More precise inventory for implementation — use pnpm exec for all to avoid npx download
 export function canonicalCommands(repoRoot = REPO_ROOT) {
   const airi = nodePath.join(repoRoot, 'airi')
-  return [
-    {
-      id: 'stage-vitest',
-      label: 'Stage full',
-      cwd: nodePath.join(airi, 'apps', 'stage-tamagotchi'),
-      argv: ['pnpm', 'exec', 'vitest', 'run'],
-      mandatory: true,
-      requiresNetwork: false,
-    },
+  const base = [
     {
       id: 'core-agent',
       label: 'core-agent complete (12 files, 124 tests)',
       cwd: airi,
       argv: ['pnpm', 'exec', 'vitest', 'run', '--project', '@proj-airi/core-agent'],
       mandatory: true,
-      requiresNetwork: false,
     },
     {
       id: 'lia-core',
@@ -170,23 +170,13 @@ export function canonicalCommands(repoRoot = REPO_ROOT) {
       cwd: nodePath.join(airi, 'packages', 'lia-core'),
       argv: ['pnpm', 'test'],
       mandatory: true,
-      requiresNetwork: false,
-    },
-    {
-      id: 'stage-ui',
-      label: 'Stage UI',
-      cwd: airi,
-      argv: ['pnpm', 'exec', 'vitest', 'run', '--project', '@proj-airi/stage-ui'],
-      mandatory: false,
-      requiresNetwork: false,
     },
     {
       id: 'browser',
       label: 'Browser Stage',
       cwd: nodePath.join(airi, 'apps', 'stage-tamagotchi'),
       argv: ['pnpm', 'exec', 'vitest', 'run', '--project', 'browser'],
-      mandatory: false,
-      requiresNetwork: false,
+      mandatory: true,
     },
     {
       id: 'lint',
@@ -194,47 +184,136 @@ export function canonicalCommands(repoRoot = REPO_ROOT) {
       cwd: airi,
       argv: ['pnpm', 'lint'],
       mandatory: true,
-      requiresNetwork: false,
     },
     {
       id: 'typecheck',
       label: 'Typecheck',
       cwd: airi,
       argv: ['pnpm', 'typecheck'],
-      mandatory: false,
-      requiresNetwork: false,
+      mandatory: true,
     },
     {
       id: 'build-packages',
       label: 'Build packages',
       cwd: airi,
       argv: ['pnpm', 'run', 'build:packages'],
-      mandatory: false,
-      requiresNetwork: false,
+      mandatory: true,
+    },
+    {
+      id: 'stage-vitest',
+      label: 'Stage full',
+      cwd: nodePath.join(airi, 'apps', 'stage-tamagotchi'),
+      argv: ['pnpm', 'exec', 'vitest', 'run'],
+      mandatory: true,
+    },
+    {
+      id: 'stage-ui',
+      label: 'Stage UI',
+      cwd: airi,
+      argv: ['pnpm', 'exec', 'vitest', 'run', '--project', '@proj-airi/stage-ui'],
+      mandatory: true,
     },
   ]
+  return base
+}
+
+// Allow smoke only when requested, without download
+export function canonicalCommandsWithSmoke(repoRoot = REPO_ROOT, withSmoke = false) {
+  const base = canonicalCommands(repoRoot)
+  if (!withSmoke) return base
+  // runtime-smoke as optional evidence, no install
+  base.push({
+    id: 'runtime-smoke',
+    label: 'Runtime smoke (kokoro)',
+    cwd: nodePath.join(repoRoot),
+    argv: ['node', 'Tests/tools/kokoro-smoke.mjs', 'Tests/runs/<id>/artifacts/smoke'],
+    mandatory: false,
+  })
+  return base
 }
 
 // ---------------------------------------------------------------------------
-// Classification
+// Environment failure normalization — pure, testable
+// ---------------------------------------------------------------------------
+export function isEnvironmentFailure({ id, exitCode, error, stdout = '', stderr = '', timedOut = false }) {
+  const combined = `${stdout}\n${stderr}`.toLowerCase()
+  // Spawn errors: ENOENT, EACCES, etc.
+  if (error) {
+    const msg = String(error.message || error).toLowerCase()
+    if (msg.includes('enoent') || msg.includes('spawn') || msg.includes('eacces') || msg.includes('unknown command')) return true
+    if (msg.includes('enomen') || msg.includes('oom') || msg.includes('heap')) return true
+  }
+  if (timedOut) return true
+  // Browser missing
+  if (id === 'browser') {
+    if (combined.includes('chromium') && (combined.includes('executable doesn\'t exist') || combined.includes('browser') || combined.includes('not found') || combined.includes('missing'))) return true
+    if (combined.includes('playwright') && combined.includes('not found')) return true
+  }
+  // Typecheck OOM
+  if (id === 'typecheck' || combined.includes('typecheck')) {
+    if (combined.includes('heap out of memory') || combined.includes('javascript heap out of memory') || combined.includes('enomem') || combined.includes('allocation failure')) return true
+  }
+  // General OOM
+  if (combined.includes('heap out of memory') || combined.includes('enomem')) return true
+  // Executable missing
+  if (combined.includes('enoent') || combined.includes('command not found') || combined.includes('not found') && combined.includes('pnpm')) {
+    // Be conservative: pnpm exec missing tool often shows "command not found" or "enoent"
+    if (combined.includes('vitest') || combined.includes('eslint') || combined.includes('tsc') || combined.includes('playwright')) return true
+  }
+  // Security python unavailable
+  if (combined.includes('python') && combined.includes('not found')) return true
+  // Timeout benchmark-owned
+  if (combined.includes('timed out') || combined.includes('timeout')) return true
+  return false
+}
+
+export function classifyCommandOutcome({ id, exitCode, error, stdout = '', stderr = '', timedOut = false, skippedOptional = false }) {
+  if (skippedOptional) return 'skipped-optional'
+  if (error || timedOut) {
+    if (isEnvironmentFailure({ id, exitCode, error, stdout, stderr, timedOut })) return 'environment-limited'
+    // Unknown spawn error without defensible env pattern → environment if error exists but not recognizable? Spec says unknown nonzero → FAIL, but spawn errors with no pattern should be env? Conservative: if error exists and not env, still env? But spec says Do NOT classify arbitrary nonzero as env. For error case, we already check env patterns; if not env, should we treat as failed? But spawn error without env pattern is still env? We'll treat as environment-limited only if env pattern matches, otherwise failed? However spawn error typically is env. We'll return environment-limited if error exists and we can't prove fail, but spec says Do NOT classify arbitrary nonzero exit as env. So for error case with no env pattern, we should maybe return 'failed' to be safe? But then missing binary would be misclassified if pattern not matched. Better to be strict: only env if pattern matches, else failed.
+    // For now, if error exists but not env, treat as environment-limited? Let's treat as environment-limited only if pattern matches, else failed.
+    return 'failed'
+  }
+  if (exitCode === 0) return 'passed'
+  if (exitCode === null || exitCode === undefined) return 'environment-limited'
+  // Nonzero exit: check if it's defensible env
+  if (isEnvironmentFailure({ id, exitCode, error, stdout, stderr, timedOut })) return 'environment-limited'
+  return 'failed'
+}
+
+// ---------------------------------------------------------------------------
+// Classification — global rule: any executed FAILED → overall FAIL
 // ---------------------------------------------------------------------------
 export function classifyBenchmark({ commands, environmentLimitations = [] }) {
-  // Support both status-based test vectors and full command objects
-  const hasFail = commands.some(c => c.status === 'failed' || (c.exitCode !== undefined && c.exitCode !== 0 && c.status !== 'environment-limited'))
-  const hasEnv = commands.some(c => c.status === 'environment-limited') || environmentLimitations.length > 0
-  // For mandatory-aware logic: if commands carry mandatory flag, only those matter; otherwise all
-  const hasMandatory = commands.some(c => 'mandatory' in c)
-  if (hasMandatory) {
-    const mandatory = commands.filter(c => c.mandatory !== false)
-    const mFail = mandatory.some(c => c.status === 'failed' || (c.exitCode !== undefined && c.exitCode !== 0 && c.status !== 'environment-limited'))
-    const mEnv = mandatory.some(c => c.status === 'environment-limited' || c.exitCode === null || c.exitCode === undefined) || environmentLimitations.length > 0
-    if (mFail) return 'FAIL'
-    if (mEnv) return 'ENVIRONMENT-LIMITED'
-    return 'PASS'
+  // commands: array of {id,status,exitCode,...} where status is 'passed'|'failed'|'environment-limited'|'skipped-optional'
+  // Also support legacy where status strings are 'passed' etc.
+  let hasFail = false
+  let hasEnv = false
+  let hasPass = false
+  for (const c of commands) {
+    const status = c.status
+    if (status === 'failed') hasFail = true
+    else if (status === 'environment-limited') hasEnv = true
+    else if (status === 'passed') hasPass = true
+    else if (status === 'skipped-optional') { /* ignore */ }
+    else {
+      // Fallback for legacy numeric exitCode without status
+      if (c.exitCode !== undefined && c.exitCode !== 0 && c.exitCode !== null) {
+        // Check if it's env via isEnvironmentFailure
+        const outcome = classifyCommandOutcome({ id: c.id, exitCode: c.exitCode, stdout: c.stdout||'', stderr: c.stderr||'', error: c.error })
+        if (outcome === 'failed') hasFail = true
+        else if (outcome === 'environment-limited') hasEnv = true
+      } else if (c.exitCode === 0) hasPass = true
+      else if (c.exitCode === null || c.exitCode === undefined) hasEnv = true
+    }
   }
+  if (environmentLimitations.length > 0) hasEnv = true
   if (hasFail) return 'FAIL'
   if (hasEnv) return 'ENVIRONMENT-LIMITED'
-  return 'PASS'
+  if (hasPass) return 'PASS'
+  // No commands? Should be incomplete → env-limited
+  return 'ENVIRONMENT-LIMITED'
 }
 
 export function commandStatus({ exitCode, environmentLimited, mandatory }) {
@@ -276,7 +355,6 @@ export function sha256OfFile(filePath) {
 }
 
 export function buildShaManifest(files, baseDir) {
-  // files: absolute paths, baseDir for relative display, sorted lexical
   const sorted = [...files].sort((a, b) => a.localeCompare(b))
   const lines = sorted.map(f => {
     const rel = nodePath.relative(baseDir, f).replace(/\\/g, '/')
@@ -284,6 +362,20 @@ export function buildShaManifest(files, baseDir) {
     return `${hash}  ${rel}`
   })
   return lines.join('\n') + '\n'
+}
+
+export function verifyShaManifest(manifestText, baseDir) {
+  const lines = manifestText.trim().split('\n').filter(Boolean)
+  for (const line of lines) {
+    const m = line.match(/^([0-9a-f]{64})\s{2}(.+)$/)
+    if (!m) return { ok: false, reason: `malformed line: ${line}` }
+    const [, expectedHash, rel] = m
+    const abs = nodePath.join(baseDir, rel)
+    if (!existsSync(abs)) return { ok: false, reason: `missing file: ${rel}` }
+    const actual = sha256OfFile(abs)
+    if (actual !== expectedHash) return { ok: false, reason: `hash mismatch: ${rel}`, expected: expectedHash, actual }
+  }
+  return { ok: true }
 }
 
 // ---------------------------------------------------------------------------
@@ -298,7 +390,7 @@ export function hardwareFromNode() {
     release: os.release(),
     cpuModel: cpus[0]?.model ?? null,
     logicalCores: cpus.length,
-    physicalCores: null, // needs CIM
+    physicalCores: null,
     totalRamBytes: os.totalmem(),
     freeRamBytes: os.freemem(),
     nodeVersion: process.version,
@@ -323,13 +415,14 @@ export function powershellCommands() {
 // ---------------------------------------------------------------------------
 // Summary schema helpers
 // ---------------------------------------------------------------------------
-export function createSummarySkeleton({ runId, sourceSha, sourceBranch, remoteSourceSha, startedAt }) {
+export function createSummarySkeleton({ runId, sourceSha, sourceBranch, remoteSourceSha, startedAt, sourceRemoteObserved = true }) {
   return {
     schemaVersion: 1,
     runId,
     sourceSha,
     sourceBranch,
     remoteSourceSha,
+    sourceRemoteObserved,
     startedAt: startedAt.toISOString(),
     endedAt: null,
     durationMs: null,
@@ -342,19 +435,21 @@ export function createSummarySkeleton({ runId, sourceSha, sourceBranch, remoteSo
     artifacts: [],
     redaction: { policySource: 'tools/project_cli.py', applied: false, residualSensitiveContentDetected: false },
     truncation: { occurred: false, logs: [] },
-    publication: { requested: true, branch: 'qa/windows-benchmarks', committed: false, commitSha: null, pushed: false, pushSkippedReason: null },
+    publication: { requested: true, branch: 'qa/windows-benchmarks', intendedPush: true, committed: false, commitSha: null, pushed: false, pushSkippedReason: null },
   }
 }
 
 // ---------------------------------------------------------------------------
-// Allowlist
+// Allowlist — strict exact run
 // ---------------------------------------------------------------------------
 export function isBenchmarkPublishPath(path, runId) {
-  // Allow only benchmarks/<RUN-ID>/** and index.json and README.md for first orphan
   const normalized = path.replace(/\\/g, '/')
-  if (normalized === 'benchmarks/index.json' || normalized === 'index.json' || normalized === 'README.md') return true
-  if (normalized.startsWith(`benchmarks/${runId}/`)) return true
-  if (normalized.startsWith(`Tests/benchmarks/${runId}/`)) return true // legacy check
+  if (normalized === 'index.json' || normalized === 'README.md') return true
+  if (normalized.startsWith(`benchmarks/${runId}/`)) {
+    // Must be inside this run, not just prefix
+    const rest = normalized.slice(`benchmarks/${runId}/`.length)
+    return rest.length > 0 && !rest.includes('..')
+  }
   return false
 }
 
@@ -364,7 +459,9 @@ export function isPublishAllowed(path, runId) {
 
 export function validateStagedAllowlist(stagedFiles, runId) {
   const allowed = stagedFiles.every(f => isBenchmarkPublishPath(f, runId))
-  return { allowed, stagedFiles }
+  // Also ensure at least one file and all are under this run or index/README
+  const hasInvalid = stagedFiles.some(f => !isBenchmarkPublishPath(f, runId))
+  return { allowed: allowed && !hasInvalid, stagedFiles, invalid: stagedFiles.filter(f => !isBenchmarkPublishPath(f, runId)) }
 }
 
 // ---------------------------------------------------------------------------

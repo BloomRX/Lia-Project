@@ -8,7 +8,11 @@ Exposes:
   redact_file(path) -> redact text using project_cli.redact
   scan_files(paths) -> check each file via project_cli.secret_in_text / check_blob logic
   JSON CLI for Node: redact/scan commands
+
+FAIL-CLOSED: any inability to read/parse/inspect a candidate publication file
+makes publication unsafe (hasSecret: true, scanError).
 """
+
 import sys
 import json
 import pathlib
@@ -38,17 +42,21 @@ def scan_text(text: str) -> bool:
 
 def scan_file(path: str) -> dict:
     p = pathlib.Path(path)
-    # Use same logic as check_blob but without git object checks
-    # For benchmark publish, we scan file content directly
     try:
         text = p.read_text(encoding="utf-8", errors="replace")
     except Exception as e:
-        return {"path": str(p), "error": str(e), "hasSecret": False}
+        # FAIL CLOSED: unreadable file must block publication
+        return {"path": str(p), "hasSecret": True, "scanError": str(e), "error": str(e)}
+    # If file is directory, also fail closed
+    try:
+        if p.is_dir():
+            return {"path": str(p), "hasSecret": True, "scanError": "is directory", "error": "is directory"}
+    except Exception as e:
+        return {"path": str(p), "hasSecret": True, "scanError": str(e), "error": str(e)}
     has = scan_text(text)
     if not has and p.suffix.lower() in {".json", ".ipynb"}:
         try:
             data = json.loads(text)
-            # scan json strings iteratively
             def _scan_json(v):
                 if isinstance(v, str):
                     return scan_text(v)
@@ -61,22 +69,36 @@ def scan_file(path: str) -> dict:
         except Exception:
             pass
     # Also check private key and sensitive path names
-    if project_cli.PRIVATE_KEY_RE.search(text):
+    try:
+        if project_cli.PRIVATE_KEY_RE.search(text):
+            has = True
+    except Exception:
+        # If regex fails, be safe
         has = True
-    if project_cli.sensitive_path(p.name) and text.strip():
-        # if file is credential file itself, consider secret
+    try:
+        if project_cli.sensitive_path(p.name) and text.strip():
+            has = True
+    except Exception:
         has = True
-    return {"path": str(p), "hasSecret": has}
+    # If scanError field not needed, keep for transparency
+    if has:
+        return {"path": str(p), "hasSecret": True}
+    return {"path": str(p), "hasSecret": False}
 
 def scan_files(paths):
     results = []
     has_any = False
+    has_error = False
     for pp in paths:
         r = scan_file(pp)
         results.append(r)
         if r.get("hasSecret"):
             has_any = True
-    return {"hasSecret": has_any, "results": results}
+        if r.get("scanError") or r.get("error"):
+            has_error = True
+            has_any = True
+    # safeToPublish is false if any secret or any error
+    return {"hasSecret": has_any, "hasError": has_error, "safeToPublish": not has_any, "results": results}
 
 def main():
     import argparse
@@ -103,7 +125,10 @@ def main():
             sys.exit(1 if res["hasSecret"] else 0)
         else:
             for r in res["results"]:
-                print(f"{r['path']}: {'SECRET' if r['hasSecret'] else 'OK'}")
+                if r.get("scanError"):
+                    print(f"{r['path']}: SCAN_ERROR {r['scanError']}")
+                else:
+                    print(f"{r['path']}: {'SECRET' if r['hasSecret'] else 'OK'}")
             sys.exit(1 if res["hasSecret"] else 0)
     else:
         ap.print_help()
