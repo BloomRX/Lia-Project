@@ -5,6 +5,7 @@ import { resolve } from 'node:path'
 
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { createOrderedVoiceSendSequence } from '../services/lia/voice-send-sequence'
 
 function chatTurnFactsFromSend(input: {
   attachments: readonly unknown[]
@@ -43,7 +44,7 @@ function stripComments(s: string): string {
  * that prove index.vue contains the same shape.
  */
 
-// Replica of production chain — mirrors index.vue implementation exactly
+// Real production helper — tests now execute the actual sequencing code
 function createVoiceSendSequence(deps: {
   getActiveSessionId: () => string
   getReasoning: () => boolean
@@ -51,41 +52,34 @@ function createVoiceSendSequence(deps: {
   send: (payload: { sessionId: string, text: string, correlationId: string, reasoning: boolean, routeOverride?: { providerId: string, modelId: string } }) => Promise<void>
   reportFailure: (action: string, error: unknown) => void
 }) {
-  let chain: Promise<void> = Promise.resolve()
-
-  function enqueue(text: string): Promise<void> {
-    const textToSend = text
-    const targetSessionId = deps.getActiveSessionId()
-    const correlationId = crypto.randomUUID()
-    const reasoningToSend = deps.getReasoning()
-
-    const attachmentsToSend = [] as const
-    const toolsToSend = [] as const
-    const facts = chatTurnFactsFromSend({
-      attachments: attachmentsToSend,
-      reasoning: reasoningToSend,
-      tools: toolsToSend,
-    })
-
-    const runJob = async (): Promise<void> => {
-      const routeOverride = await deps.resolveRoute({ correlationId, facts })
-      await deps.send({
-        sessionId: targetSessionId,
-        text: textToSend,
-        correlationId,
+  const sequence = createOrderedVoiceSendSequence({
+    capture: (text: string) => {
+      const textToSend = text
+      const targetSessionId = deps.getActiveSessionId()
+      const correlationId = crypto.randomUUID()
+      const reasoningToSend = deps.getReasoning()
+      const attachmentsToSend = [] as const
+      const toolsToSend = [] as const
+      const facts = chatTurnFactsFromSend({
+        attachments: attachmentsToSend,
         reasoning: reasoningToSend,
+        tools: toolsToSend,
+      })
+      return { textToSend, targetSessionId, correlationId, reasoningToSend, facts }
+    },
+    execute: async (captured) => {
+      const routeOverride = await deps.resolveRoute({ correlationId: captured.correlationId, facts: captured.facts })
+      await deps.send({
+        sessionId: captured.targetSessionId,
+        text: captured.textToSend,
+        correlationId: captured.correlationId,
+        reasoning: captured.reasoningToSend,
         ...(routeOverride === undefined ? {} : { routeOverride }),
       })
-    }
-
-    const delivery = chain.then(() => runJob())
-    chain = delivery.catch((error) => {
-      deps.reportFailure('send to chat', error)
-    })
-    return chain
-  }
-
-  return { enqueue, getChain: () => chain }
+    },
+    reportFailure: deps.reportFailure,
+  })
+  return { enqueue: sequence.enqueue, getChain: sequence.getChain }
 }
 
 describe('direct voice authoritative routing (Phase 8.0D-10B-4D4C4-D2B5)', () => {
@@ -715,47 +709,57 @@ describe('direct voice authoritative routing (Phase 8.0D-10B-4D4C4-D2B5)', () =>
     const source = readSource('index.vue')
     const stripped = stripComments(source)
     expect(stripped).toMatch(/let voiceSendChain:\s*Promise<void>\s*=\s*Promise\.resolve\(\)/)
-    expect(stripped).toMatch(/const delivery = voiceSendChain\.then\(\(\) => runJob\(\)\)/)
-    expect(stripped).toMatch(/voiceSendChain = delivery\.catch\(\(error\) =>\s*\{\s*reportVoiceInputFailure\('send to chat', error\)\s*\}\)/)
-    expect(stripped).not.toMatch(/voiceSendChain = voiceSendChain\.then\(job\)/)
+    expect(stripped).toMatch(/import \{ createOrderedVoiceSendSequence \} from '\.\.\/services\/lia\/voice-send-sequence'/)
+    expect(stripped).toMatch(/const voiceSendSequence = createOrderedVoiceSendSequence\(\{/)
+    expect(stripped).toMatch(/voiceSendSequence\.enqueue\(text\)/)
+    expect(stripped).toMatch(/voiceSendChain = voiceSendSequence\.getChain\(\)/)
+    // helper owns the actual chain recovery
+    const helper = readSource('../services/lia/voice-send-sequence.ts')
+    const helperStripped = stripComments(helper)
+    expect(helperStripped).toMatch(/let chain:\s*Promise<void>\s*=\s*Promise\.resolve\(\)/)
+    expect(helperStripped).toMatch(/const delivery = chain\.then\(\(\) => runJob\(\)\)/)
+    expect(helperStripped).toMatch(/chain = delivery\.catch\(\(error\) =>\s*\{\s*options\.reportFailure\('send to chat', error\)\s*\}\)/)
   })
 
   it('source guards: capture before queue wait', async () => {
     const source = readSource('index.vue')
-    const fnIdx = source.indexOf('function sendVoiceInputTextToChat')
-    const fnBody = source.slice(fnIdx, fnIdx + 1500)
-    // Captures must appear before voiceSendChain.then
-    const captureSession = fnBody.indexOf('const targetSessionId = chatSession.activeSessionId')
-    const captureReasoning = fnBody.indexOf('const reasoningToSend = consciousnessSettings.reasoning')
-    const captureId = fnBody.indexOf('const correlationId = crypto.randomUUID()')
-    const captureFacts = fnBody.indexOf('const facts = chatTurnFactsFromSend')
-    const chainThen = fnBody.indexOf('voiceSendChain.then')
+    const seqIdx = source.indexOf('const voiceSendSequence = createOrderedVoiceSendSequence')
+    const seqBody = source.slice(seqIdx, seqIdx + 2000)
+    const captureIdx = seqBody.indexOf('capture: (text: string) =>')
+    const executeIdx = seqBody.indexOf('execute:')
+    const captureSession = seqBody.indexOf('const targetSessionId = chatSession.activeSessionId')
+    const captureReasoning = seqBody.indexOf('const reasoningToSend = consciousnessSettings.reasoning')
+    const captureId = seqBody.indexOf('const correlationId = crypto.randomUUID()')
+    const captureFacts = seqBody.indexOf('const facts = chatTurnFactsFromSend')
+    expect(captureIdx).toBeGreaterThan(-1)
+    expect(executeIdx).toBeGreaterThan(-1)
     expect(captureSession).toBeGreaterThan(-1)
     expect(captureReasoning).toBeGreaterThan(-1)
     expect(captureId).toBeGreaterThan(-1)
     expect(captureFacts).toBeGreaterThan(-1)
-    expect(chainThen).toBeGreaterThan(-1)
-    expect(captureSession).toBeLessThan(chainThen)
-    expect(captureId).toBeLessThan(chainThen)
-    expect(captureReasoning).toBeLessThan(chainThen)
-    expect(captureFacts).toBeLessThan(chainThen)
+    expect(captureSession).toBeLessThan(executeIdx)
+    expect(captureId).toBeLessThan(executeIdx)
+    expect(captureReasoning).toBeLessThan(executeIdx)
+    expect(captureFacts).toBeLessThan(executeIdx)
+    expect(captureIdx).toBeLessThan(executeIdx)
   })
 
   it('source guards: no new attachments/tools/input', async () => {
     const source = readSource('index.vue')
-    const fnIdx = source.indexOf('function sendVoiceInputTextToChat')
-    const fnBody = source.slice(fnIdx, fnIdx + 1500)
-    // Facts may use attachments/tools via chatTurnFactsFromSend — allowed
-    expect(fnBody).toMatch(/attachments: attachmentsToSend/)
-    expect(fnBody).toMatch(/tools: toolsToSend/)
+    const seqIdx = source.indexOf('const voiceSendSequence = createOrderedVoiceSendSequence')
+    const seqBody = source.slice(seqIdx, seqIdx + 2500)
+    // Facts may use attachments/tools via chatTurnFactsFromSend — allowed in capture
+    expect(seqBody).toMatch(/attachments: attachmentsToSend/)
+    expect(seqBody).toMatch(/tools: toolsToSend/)
     // Payload to chatStore.send must NOT contain attachments/tools/input (preserve no-tools/no-attachments)
-    const sendIdx = fnBody.indexOf('chatStore.send({')
-    const sendBlock = fnBody.slice(sendIdx, sendIdx + 600)
+    const sendIdx = seqBody.indexOf('chatStore.send({')
+    const sendBlock = seqBody.slice(sendIdx, sendIdx + 600)
     expect(sendBlock).not.toMatch(/attachments:/)
-    // tools: only allowed as part of facts, not in send payload
     expect(sendBlock).not.toMatch(/\btools:/)
     expect(sendBlock).not.toMatch(/\binput:/)
-    expect(sendBlock).toMatch(/reasoning: reasoningToSend/)
-    expect(sendBlock).toMatch(/correlationId/)
+    expect(sendBlock).toMatch(/captured\.reasoningToSend/)
+    expect(sendBlock).toMatch(/captured\.correlationId/)
+    expect(sendBlock).toMatch(/captured\.targetSessionId/)
+    expect(sendBlock).toMatch(/captured\.textToSend/)
   })
 })

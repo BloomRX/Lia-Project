@@ -44,6 +44,7 @@ import { electronOpenOnboarding } from '../../shared/eventa'
 import { modelSettingsRuntimeSnapshotChannelName } from '../../shared/model-settings-runtime'
 import { chatTurnFactsFromSend } from '../services/lia/brain-shadow'
 import { resolveLiaAuthoritativeSendRoute } from '../services/lia/lia-authoritative-route-resolver'
+import { createOrderedVoiceSendSequence } from '../services/lia/voice-send-sequence'
 import { useControlsIslandStore } from '../stores/controls-island'
 import { shouldAutoOpenAiriWelcome } from '../stores/lia/airi-onboarding-policy'
 import { useStageWindowLifecycleStore } from '../stores/stage-window-lifecycle'
@@ -335,6 +336,36 @@ const transcriptionConsumerId = 'stage-tamagotchi:voice-input'
 const chatStore = useChatStore()
 const chatSession = useChatSessionStore()
 const consciousnessSettings = useConsciousnessSettingsStore()
+const voiceSendSequence = createOrderedVoiceSendSequence({
+  capture: (text: string) => {
+    const textToSend = text
+    const targetSessionId = chatSession.activeSessionId
+    const correlationId = crypto.randomUUID()
+    const reasoningToSend = consciousnessSettings.reasoning
+    const attachmentsToSend = [] as const
+    const toolsToSend = [] as const
+    const facts = chatTurnFactsFromSend({
+      attachments: attachmentsToSend,
+      reasoning: reasoningToSend,
+      tools: toolsToSend,
+    })
+    return { textToSend, targetSessionId, correlationId, reasoningToSend, facts }
+  },
+  execute: async (captured) => {
+    const routeOverride = await resolveLiaAuthoritativeSendRoute({
+      correlationId: captured.correlationId,
+      facts: captured.facts,
+    })
+    await chatStore.send({
+      sessionId: captured.targetSessionId,
+      text: captured.textToSend,
+      correlationId: captured.correlationId,
+      reasoning: captured.reasoningToSend,
+      ...(routeOverride === undefined ? {} : { routeOverride }),
+    })
+  },
+  reportFailure: reportVoiceInputFailure,
+})
 let voiceSendChain: Promise<void> = Promise.resolve()
 const streamingTranscriptionUnavailable = ref(false)
 const shouldUseStreamInput = computed(() => supportsStreamInput.value && !!stream.value && !streamingTranscriptionUnavailable.value)
@@ -555,43 +586,14 @@ function postSpeakerCaption(text: string, operation: NonNullable<CaptionChannelE
  * synchronously at call time (text, session, correlationId, reasoning) before
  * waiting behind earlier voice jobs. The serialized job then awaits Lia
  * authority and the complete chatStore.send settlement. One chain preserves
- * FIFO order without touching Stage/Core.
+ * FIFO order without touching Stage/Core. Delegates to the extracted
+ * voice-send-sequence helper so behavioral tests execute the real production
+ * sequencing code.
  */
 function sendVoiceInputTextToChat(text: string): Promise<void> {
-  const textToSend = text
-  const targetSessionId = chatSession.activeSessionId
-  const correlationId = crypto.randomUUID()
-  const reasoningToSend = consciousnessSettings.reasoning
-
-  const attachmentsToSend = [] as const
-  const toolsToSend = [] as const
-  const facts = chatTurnFactsFromSend({
-    attachments: attachmentsToSend,
-    reasoning: reasoningToSend,
-    tools: toolsToSend,
-  })
-
-  const runJob = async (): Promise<void> => {
-    const routeOverride = await resolveLiaAuthoritativeSendRoute({
-      correlationId,
-      facts,
-    })
-
-    await chatStore.send({
-      sessionId: targetSessionId,
-      text: textToSend,
-      correlationId,
-      reasoning: reasoningToSend,
-      ...(routeOverride === undefined ? {} : { routeOverride }),
-    })
-  }
-
-  const delivery = voiceSendChain.then(() => runJob())
-  voiceSendChain = delivery.catch((error) => {
-    reportVoiceInputFailure('send to chat', error)
-  })
-
-  return voiceSendChain
+  const result = voiceSendSequence.enqueue(text)
+  voiceSendChain = voiceSendSequence.getChain()
+  return result
 }
 
 /** Sends completed streaming-ASR sentences to captions and chat. */
