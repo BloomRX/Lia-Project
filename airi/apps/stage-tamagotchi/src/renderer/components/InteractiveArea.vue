@@ -25,7 +25,8 @@ import JournalToolCallBlock from './chat-tool-renderers/journal-tool-call-block.
 import ChatViewportLayout from './chat-viewport-layout.vue'
 
 import { useHearingInputChannel } from '../composables/use-hearing-input-channel'
-import { chatTurnFactsFromSend, observeLiaBrainDecisionForChatTurn } from '../services/lia/brain-shadow'
+import { chatTurnFactsFromSend } from '../services/lia/brain-shadow'
+import { resolveLiaAuthoritativeSendRoute } from '../services/lia/lia-authoritative-route-resolver'
 import { artistryToolReferences, widgetToolReferences } from '../stores/tools'
 
 const router = useRouter()
@@ -110,21 +111,23 @@ async function handleSend() {
   messageInput.value = ''
   attachments.value = []
 
-  // Phase 8.0D-9 shadow observation: the SAME outgoing values are described to
-  // the read-only Brain bridge and the decision is only logged. Fire-and-forget
-  // by contract - the helper returns void, never throws and is never awaited,
-  // so it cannot change the provider, the model, this payload, whether the
-  // message sends, retries, or any UI state.
-  //
-  // Phase 8.0D-10B-3B2: the SAME logical-send key the send below carries is
-  // forwarded here - one submission, one id, on both paths.
-  observeLiaBrainDecisionForChatTurn({
+  // Phase 8.0D-10B-4D4C4-D2B2-D2: freeze reasoning + tools before awaiting Lia authority
+  // so in-flight logical send keeps its snapshot even if live settings change.
+  const reasoningToSend = consciousnessSettings.reasoning
+  const toolsToSend = [...artistryToolReferences]
+
+  // One fact snapshot from frozen values — Brain decides from SAME values payload will carry
+  const facts = chatTurnFactsFromSend({
+    attachments: attachmentsToSend,
+    reasoning: reasoningToSend,
+    tools: toolsToSend,
+  })
+
+  // Awaited authoritative INITIAL route — resolver reuses canonical requestLiaBrainDecisionForChatTurn
+  // failure/non-routable/no credential → undefined → normal Stage send continues without override
+  const routeOverride = await resolveLiaAuthoritativeSendRoute({
     correlationId,
-    facts: chatTurnFactsFromSend({
-      attachments: attachmentsToSend,
-      reasoning: consciousnessSettings.reasoning,
-      tools: artistryToolReferences,
-    }),
+    facts,
   })
 
   try {
@@ -133,7 +136,9 @@ async function handleSend() {
       text: textToSend,
       correlationId,
       attachments: attachmentsToSend,
-      tools: artistryToolReferences,
+      tools: toolsToSend,
+      reasoning: reasoningToSend,
+      ...(routeOverride === undefined ? {} : { routeOverride }),
     })
 
     attachmentsToSend.forEach(att => URL.revokeObjectURL(att.url))

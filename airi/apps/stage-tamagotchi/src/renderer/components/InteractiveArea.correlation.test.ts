@@ -26,6 +26,10 @@ const electron = vi.hoisted(() => ({
   brainInvoke: vi.fn(),
 }))
 
+const liaProviderMock = vi.hoisted(() => ({
+  hasApiKey: vi.fn().mockResolvedValue(true),
+}))
+
 vi.mock('@proj-airi/electron-vueuse', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@proj-airi/electron-vueuse')>()
   const { electronLiaBrainChatDecision } = await import('../../shared/eventa')
@@ -36,6 +40,16 @@ vi.mock('@proj-airi/electron-vueuse', async (importOriginal) => {
         return electron.brainInvoke
       return (actual.useElectronEventaInvoke as (...args: unknown[]) => unknown)(channel, ...rest)
     },
+  }
+})
+
+vi.mock('../stores/lia/provider', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../stores/lia/provider')>()
+  return {
+    ...actual,
+    useLiaProviderStore: () => ({
+      hasApiKey: liaProviderMock.hasApiKey,
+    }),
   }
 })
 
@@ -95,6 +109,7 @@ async function attachImages(wrapper: Awaited<ReturnType<typeof renderArea>>['wra
 beforeEach(() => {
   vi.clearAllMocks()
   electron.brainInvoke.mockResolvedValue({ status: 'modeUnspecified' })
+  liaProviderMock.hasApiKey.mockResolvedValue(true)
   localStorage.clear()
   vi.spyOn(console, 'info').mockImplementation(() => {})
   // Only the id factory is watched: it is the seam's own dependency-free
@@ -120,10 +135,11 @@ describe('interactive area logical send correlation (Phase 8.0D-10B-3B1)', () =>
     expect(String(payload.correlationId)).not.toHaveLength(0)
 
     // G: every pre-existing payload field is exactly as before - the additive
-    // key is the only difference.
+    // key plus D2's frozen reasoning are the only differences (routeOverride absent for modeUnspecified).
     expect(Object.keys(payload).sort()).toEqual([
       'attachments',
       'correlationId',
+      'reasoning',
       'sessionId',
       'text',
       'tools',
@@ -131,7 +147,9 @@ describe('interactive area logical send correlation (Phase 8.0D-10B-3B1)', () =>
     expect(payload.sessionId).toBe('session-b')
     expect(payload.text).toBe('plain correlated turn')
     expect(payload.attachments).toEqual([])
-    expect(payload.tools).toBe(artistryToolReferences)
+    expect(payload.tools).toEqual(artistryToolReferences)
+    expect(payload.tools).not.toBe(artistryToolReferences)
+    expect(payload.reasoning).toBe(false)
     // The payload stays serializable (the leader boundary structured-clones it).
     expect(() => structuredClone(payload)).not.toThrow()
     expect(structuredClone(payload).correlationId).toBe(MINTED_IDS[0])
@@ -251,14 +269,16 @@ describe('interactive area logical send correlation (Phase 8.0D-10B-3B1)', () =>
     const [request] = electron.brainInvoke.mock.calls[0] as [Record<string, unknown>]
     expect(request.facts).toEqual({ hasImageInput: true, reasoningRequested: true, usesTools: true })
 
-    // L: the send payload keeps its fields and values; the key is the only
-    // addition this milestone approved.
+    // L: the send payload keeps its fields and values; the key plus D2's
+    // reasoning and frozen tools are the additions.
     const [payload] = send.mock.calls[0] as [Record<string, unknown>]
     expect(payload.sessionId).toBe('session-b')
     expect(payload.text).toBe('facts and payload')
     expect((payload.attachments as unknown[]).length).toBe(1)
-    expect(payload.tools).toBe(artistryToolReferences)
-    expect(Object.keys(payload).sort()).toEqual(['attachments', 'correlationId', 'sessionId', 'text', 'tools'])
+    expect(payload.tools).toEqual(artistryToolReferences)
+    expect(payload.tools).not.toBe(artistryToolReferences)
+    expect(Object.keys(payload).sort()).toEqual(['attachments', 'correlationId', 'reasoning', 'sessionId', 'text', 'tools'])
+    expect(payload.reasoning).toBe(true)
   })
 
   it('n: a rejected Brain bridge cannot prevent the correlated send', async () => {
