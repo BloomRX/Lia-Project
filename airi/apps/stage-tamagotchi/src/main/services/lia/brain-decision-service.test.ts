@@ -663,12 +663,16 @@ describe('lia brain decision bridge (Phase 8.0D-8)', () => {
       expect(readSource(relative), relative).not.toMatch(BRAIN_DECISION_PATTERN)
     }
 
-    // The helper module is imported by exactly ONE production file: the normal
-    // user-send seam. Nothing in the selection or execution path reaches it.
+    // The helper module is imported by the normal user-send seam and, since D1,
+    // the awaited authoritative resolver which reuses the same canonical primitive.
+    // Nothing in the selection or execution path reaches it beyond those.
     expect(productionSourcesMatching(
       ['apps/stage-tamagotchi/src', 'packages/stage-ui/src', 'packages/core-agent/src'],
       /brain-shadow/,
-    )).toEqual(['apps/stage-tamagotchi/src/renderer/components/InteractiveArea.vue'])
+    )).toEqual([
+      'apps/stage-tamagotchi/src/renderer/components/InteractiveArea.vue',
+      'apps/stage-tamagotchi/src/renderer/services/lia/lia-authoritative-route-resolver.ts',
+    ])
   })
 
   it('isolation ab: no additional Brain IPC channel was introduced', () => {
@@ -721,7 +725,10 @@ describe('lia brain decision bridge (Phase 8.0D-8)', () => {
     // Inside it the decision reaches only the diagnostic line, and only
     // statuses are read - never routes, engines, models or ids to act upon.
     const shadow = stripComments(readSource('../../../renderer/services/lia/brain-shadow.ts'))
-    expect(shadow).toContain('const decision = await invoke({')
+    // D1: canonical awaited primitive reuses the single invoke; observer delegates to it
+    expect(shadow).toMatch(/requestLiaBrainDecisionForChatTurn/)
+    expect(shadow).toMatch(/return invoke\(\{/)
+    expect(shadow).toMatch(/const decision = await requestLiaBrainDecisionForChatTurn\(/)
     expect(shadow).toMatch(/console\.info\(`\[LIA-BRAIN\] shadow decision \$\{describeDecision\(decision\)\}`\)/)
     expect(shadow).not.toMatch(/decision\.(?:selection|resolution|readiness)\.(?:route|engine|model|id)\b/)
     expect(shadow).not.toMatch(/decision\.(?:route|engine|model|provider)\b/)

@@ -58,6 +58,27 @@ export interface LiaBrainShadowObservationInput {
 }
 
 /**
+ * Phase 8.0D-10B-4D4C4-D2B2-D1: canonical awaited Brain decision primitive.
+ *
+ * The ONE reusable Eventa invoke implementation for the Brain decision channel.
+ * It forwards `{ facts }` plus the caller's opaque `correlationId` when present
+ * (never minted, never interpreted) and returns the decision verbatim.
+ * It may reject/throw if the bridge is unavailable - callers own containment.
+ * The fire-and-forget observer and the future authoritative resolver both reuse
+ * this primitive so the decision invoke exists in ONE canonical renderer owner
+ * and future request count can stay one.
+ */
+export async function requestLiaBrainDecisionForChatTurn(
+  input: LiaBrainShadowObservationInput,
+): Promise<LiaBrainChatDecision> {
+  const invoke = useElectronEventaInvoke(electronLiaBrainChatDecision)
+  return invoke({
+    ...(input.correlationId === undefined ? {} : { correlationId: input.correlationId }),
+    facts: input.facts,
+  })
+}
+
+/**
  * Sends the turn facts to the Brain decision bridge and observes the result.
  *
  * Fire-and-forget BY CONTRACT: it returns `void` immediately, the invoke is
@@ -80,14 +101,7 @@ function describeDecision(decision: LiaBrainChatDecision): string {
 
 async function observe(input: LiaBrainShadowObservationInput): Promise<void> {
   try {
-    // The existing renderer invoke convention - the same context every other
-    // Lia renderer caller uses. The request is `{ facts }` plus the caller's
-    // opaque key when it has one (never invented here).
-    const invoke = useElectronEventaInvoke(electronLiaBrainChatDecision)
-    const decision = await invoke({
-      ...(input.correlationId === undefined ? {} : { correlationId: input.correlationId }),
-      facts: input.facts,
-    })
+    const decision = await requestLiaBrainDecisionForChatTurn(input)
     console.info(`[LIA-BRAIN] shadow decision ${describeDecision(decision)}`)
   }
   catch (error) {

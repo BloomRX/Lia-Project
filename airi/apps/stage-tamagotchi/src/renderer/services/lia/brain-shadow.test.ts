@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { electronLiaBrainChatDecision } from '../../../shared/eventa'
-import { chatTurnFactsFromSend, observeLiaBrainDecisionForChatTurn } from './brain-shadow'
+import { chatTurnFactsFromSend, observeLiaBrainDecisionForChatTurn, requestLiaBrainDecisionForChatTurn } from './brain-shadow'
 
 /**
  * Phases 8.0D-9 / 8.0D-10B-3B2: the shadow Brain observer.
@@ -268,5 +268,58 @@ describe('shadow brain observer (Phase 8.0D-9)', () => {
     const before = JSON.stringify(input)
     expect(Object.keys(chatTurnFactsFromSend(input)).sort()).toEqual(['hasImageInput', 'reasoningRequested', 'usesTools'])
     expect(JSON.stringify(input)).toBe(before)
+  })
+})
+
+describe('awaited brain decision primitive (D1)', () => {
+  it('a: exact invoke request forwarding — channel and shape', async () => {
+    const decision = { status: 'automatic', selection: { status: 'selected' } }
+    electron.invoke.mockResolvedValue(decision)
+    const result = await requestLiaBrainDecisionForChatTurn({ correlationId: CORRELATION_ID, facts: FACTS })
+    expect(electron.useElectronEventaInvoke).toHaveBeenCalledWith(electronLiaBrainChatDecision)
+    expect(electron.invoke).toHaveBeenCalledWith({ correlationId: CORRELATION_ID, facts: FACTS })
+    expect(result).toBe(decision)
+  })
+
+  it('b: correlationId preserved verbatim', async () => {
+    const decision = { status: 'disabled' }
+    electron.invoke.mockResolvedValue(decision)
+    const result = await requestLiaBrainDecisionForChatTurn({ correlationId: CORRELATION_ID, facts: FACTS })
+    const [request] = electron.invoke.mock.calls[0] as [Record<string, unknown>]
+    expect(request.correlationId).toBe(CORRELATION_ID)
+    expect(result).toBe(decision)
+  })
+
+  it('c: facts preserved verbatim', async () => {
+    const decision = { status: 'modeUnspecified' }
+    electron.invoke.mockResolvedValue(decision)
+    await requestLiaBrainDecisionForChatTurn({ facts: FACTS })
+    const [request] = electron.invoke.mock.calls[0] as [Record<string, unknown>]
+    expect(request.facts).toBe(FACTS)
+    expect(Object.keys(request).sort()).toEqual(['facts'])
+  })
+
+  it('d: returned decision preserved verbatim', async () => {
+    const decision = { status: 'automatic', selection: { status: 'noCandidates' } }
+    electron.invoke.mockResolvedValue(decision)
+    const result = await requestLiaBrainDecisionForChatTurn({ facts: FACTS })
+    expect(result).toBe(decision)
+  })
+
+  it('e: invoke rejection propagates (primitive may reject, resolver contains)', async () => {
+    electron.invoke.mockRejectedValue(new Error('bridge down'))
+    await expect(requestLiaBrainDecisionForChatTurn({ facts: FACTS })).rejects.toThrow('bridge down')
+  })
+
+  it('primitive shares the ONE canonical channel — observer reuses it', () => {
+    const source = readSource('./brain-shadow.ts')
+    // Only one invoke site for the channel plus the import
+    expect(source.match(/electronLiaBrainChatDecision/g)).toHaveLength(2)
+    // The observer must delegate to the primitive, not duplicate invoke
+    const stripped = stripComments(source)
+    // requestLiaBrainDecisionForChatTurn is the sole direct invoke
+    expect((stripped.match(/useElectronEventaInvoke\(electronLiaBrainChatDecision\)/g) ?? []).length).toBe(1)
+    expect(stripped).toMatch(/requestLiaBrainDecisionForChatTurn/)
+    expect(stripped).toMatch(/await requestLiaBrainDecisionForChatTurn/)
   })
 })
