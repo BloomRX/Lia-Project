@@ -660,14 +660,14 @@ describe('correlation diagnostic facts - source guards (Phase 8.0D-10B-4D4C3B2)'
     expect(code.match(/^import .*$/gm)).toEqual([
       `import type { LiaBrainCorrelationSnapshotReader, LiaBrainEngineProviderLookup } from './brain-correlation-reader'`,
       `import type { LiaBrainExecutionIdentityFacts } from './brain-execution-identity-facts'`,
-      `import type { LiaBrainInitialRouteObservationFacts } from './brain-initial-route-facts'`,
       `import type { LiaBrainTerminalObservationFacts } from './brain-execution-terminal-facts'`,
       `import type { LiaBrainFinalSuccessfulExecutionFacts } from './brain-final-successful-execution-facts'`,
+      `import type { LiaBrainInitialRouteObservationFacts } from './brain-initial-route-facts'`,
       `import type { LiaBrainSendTerminalObservationFacts } from './brain-send-terminal-facts'`,
       `import { deriveLiaBrainExecutionIdentityFacts } from './brain-execution-identity-facts'`,
-      `import { deriveLiaBrainInitialRouteObservationFacts } from './brain-initial-route-facts'`,
       `import { deriveLiaBrainTerminalObservationFacts } from './brain-execution-terminal-facts'`,
       `import { deriveLiaBrainFinalSuccessfulExecutionFacts } from './brain-final-successful-execution-facts'`,
+      `import { deriveLiaBrainInitialRouteObservationFacts } from './brain-initial-route-facts'`,
       `import { deriveLiaBrainSendTerminalObservationFacts } from './brain-send-terminal-facts'`,
     ])
 
