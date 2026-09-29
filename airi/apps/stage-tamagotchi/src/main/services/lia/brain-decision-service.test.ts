@@ -673,6 +673,7 @@ describe('lia brain decision bridge (Phase 8.0D-8)', () => {
     )).toEqual([
       'apps/stage-tamagotchi/src/renderer/components/InteractiveArea.vue',
       'apps/stage-tamagotchi/src/renderer/pages/index.vue',
+      'apps/stage-tamagotchi/src/renderer/services/lia/lia-authoritative-retry.ts',
       'apps/stage-tamagotchi/src/renderer/services/lia/lia-authoritative-route-resolver.ts',
     ])
   })

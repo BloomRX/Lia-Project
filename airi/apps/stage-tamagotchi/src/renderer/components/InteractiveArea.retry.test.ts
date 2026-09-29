@@ -1,369 +1,230 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { chatTurnFactsFromSend } from '../services/lia/brain-shadow'
-import { resolveLiaAuthoritativeSendRoute } from '../services/lia/lia-authoritative-route-resolver'
+import { groqBrainDescriptors } from '@lia/core'
 
+import { retrySourceMessageIdFrom } from '@proj-airi/stage-ui/stores/chat/retry-source'
+
+import { executeLiaAuthoritativeRetry } from '../services/lia/lia-authoritative-retry'
 import { widgetToolReferences } from '../stores/tools'
 
-// Mock Brain provider store
-const liaProviderMock = vi.hoisted(() => ({
-  hasApiKey: vi.fn().mockResolvedValue(true),
+const mocks = vi.hoisted(() => ({
+  requestDecision: vi.fn(),
+  hasApiKey: vi.fn(),
 }))
+
+vi.mock('../services/lia/brain-shadow', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../services/lia/brain-shadow')>()
+  return {
+    ...actual,
+    requestLiaBrainDecisionForChatTurn: mocks.requestDecision,
+  }
+})
+
 vi.mock('../stores/lia/provider', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../stores/lia/provider')>()
   return {
     ...actual,
     useLiaProviderStore: () => ({
-      hasApiKey: liaProviderMock.hasApiKey,
+      hasApiKey: mocks.hasApiKey,
     }),
   }
 })
 
-const electron = vi.hoisted(() => ({
-  brainInvoke: vi.fn(),
-}))
-vi.mock('@proj-airi/electron-vueuse', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@proj-airi/electron-vueuse')>()
-  const { electronLiaBrainChatDecision } = await import('../../shared/eventa')
+function makeAutomaticSelected() {
+  const { engines, models } = groqBrainDescriptors()
   return {
-    ...actual,
-    useElectronEventaInvoke: (channel?: unknown, ...rest: unknown[]) => {
-      if (channel === electronLiaBrainChatDecision)
-        return electron.brainInvoke
-      return (actual.useElectronEventaInvoke as (...args: unknown[]) => unknown)(channel, ...rest)
+    status: 'automatic' as const,
+    selection: {
+      status: 'selected' as const,
+      route: { engine: engines[0]!, model: models[0]! },
     },
-  }
-})
-
-const MINTED_IDS = [
-  '1f9d6a1e-0000-4000-8000-000000000010',
-  '1f9d6a1e-0000-4000-8000-000000000011',
-  '1f9d6a1e-0000-4000-8000-000000000012',
-]
-let mintedIndex = 0
-
-// Helper that mirrors InteractiveArea.handleRetryMessage capture + authority + retry
-function createRetrySequence(deps: {
-  getMessages: () => Array<{ id?: string, role: string, content: unknown }>,
-  getActiveSessionId: () => string,
-  getReasoning: () => boolean,
-  retry: (payload: Record<string, unknown>) => Promise<unknown>,
-}) {
-  return async (index: number) => {
-    const targetSessionId = deps.getActiveSessionId()
-    const targetMessage = deps.getMessages()[index] as unknown as { id?: string } | undefined
-    const targetMessageId = targetMessage?.id
-    const correlationId = crypto.randomUUID()
-    const reasoningToRetry = deps.getReasoning()
-    const toolsToRetry = [...widgetToolReferences]
-    const facts = chatTurnFactsFromSend({
-      attachments: [] as const,
-      reasoning: reasoningToRetry,
-      tools: toolsToRetry,
-    })
-    const routeOverride = await resolveLiaAuthoritativeSendRoute({
-      correlationId,
-      facts,
-    })
-    await deps.retry({
-      sessionId: targetSessionId,
-      index,
-      ...(targetMessageId === undefined ? {} : { messageId: targetMessageId }),
-      tools: toolsToRetry,
-      correlationId,
-      reasoning: reasoningToRetry,
-      ...(routeOverride === undefined ? {} : { routeOverride }),
-    })
-    return { correlationId, facts, toolsToRetry, reasoningToRetry, targetMessageId, targetSessionId }
   }
 }
 
+const MINTED = '1f9d6a1e-0000-4000-8000-000000000020'
+
 beforeEach(() => {
   vi.clearAllMocks()
-  electron.brainInvoke.mockResolvedValue({ status: 'modeUnspecified' })
-  liaProviderMock.hasApiKey.mockResolvedValue(true)
-  mintedIndex = 0
-  vi.spyOn(crypto, 'randomUUID').mockImplementation(() => MINTED_IDS[mintedIndex++] ?? `minted-${mintedIndex}`)
+  mocks.requestDecision.mockResolvedValue({ status: 'modeUnspecified' })
+  mocks.hasApiKey.mockResolvedValue(true)
+  vi.spyOn(crypto, 'randomUUID').mockReturnValue(MINTED)
 })
 
-describe('interactive area retry authoritative routing (Phase 8.0D-10B-4D4C4-D2B6)', () => {
-  it('one retry mints exactly one new correlationId and hands it to both Brain and retry', async () => {
-    const messages = [
-      { id: 'u1', role: 'user', content: 'first' },
-      { id: 'a1', role: 'assistant', content: 'reply' },
-      { id: 'u2', role: 'user', content: 'retry me' },
-      { id: 'a2', role: 'assistant', content: 'response' },
-    ]
-    const retry = vi.fn().mockResolvedValue({})
-    const seq = createRetrySequence({
-      getMessages: () => messages,
-      getActiveSessionId: () => 'session-b',
-      getReasoning: () => false,
-      retry,
+// Simulates InteractiveArea thin owner logic using REAL helpers — not a replica of Brain sequence
+async function handleRetryViaRealHelpers(opts: {
+  messages: Array<{ id?: string, role: string, content?: unknown }>,
+  index: number,
+  sessionId: string,
+  reasoning: boolean,
+  retry: (payload: Record<string, unknown>) => Promise<unknown>,
+  mint?: () => string,
+}) {
+  const sourceMessageId = retrySourceMessageIdFrom(opts.messages as unknown as import('@proj-airi/stage-ui/types/chat').ChatHistoryItem[], opts.index)
+  const toolsToRetry = [...widgetToolReferences]
+  if (sourceMessageId === undefined) {
+    await opts.retry({
+      sessionId: opts.sessionId,
+      index: opts.index,
+      tools: toolsToRetry,
     })
-    const before = (crypto.randomUUID as unknown as { mock: { calls: unknown[] } }).mock.calls.length
-    await seq(3)
-    const calls = (crypto.randomUUID as unknown as { mock: { calls: unknown[] } }).mock.calls.length - before
-    expect(calls).toBe(1)
-    const [brainReq] = electron.brainInvoke.mock.calls[0] as [Record<string, unknown>]
+    return { path: 'legacy' as const, sourceMessageId }
+  }
+  await executeLiaAuthoritativeRetry(
+    {
+      sessionId: opts.sessionId,
+      index: opts.index,
+      sourceMessageId,
+      reasoning: opts.reasoning,
+      tools: toolsToRetry,
+    },
+    {
+      retry: opts.retry as never,
+      mintCorrelationId: opts.mint ?? (() => MINTED),
+    },
+  )
+  return { path: 'authoritative' as const, sourceMessageId }
+}
+
+describe('interactive area retry thin owner (Phase 8.0D-10B-4D4C4-D2B6 corrective)', () => {
+  it('clicked user → authoritative with same user id', async () => {
+    const messages = [{ id: 'u1', role: 'user', content: 'hi' }, { id: 'a1', role: 'assistant', content: 'reply' }]
+    const retry = vi.fn().mockResolvedValue({})
+    const result = await handleRetryViaRealHelpers({ messages, index: 0, sessionId: 's1', reasoning: false, retry })
+    expect(result.path).toBe('authoritative')
+    expect(result.sourceMessageId).toBe('u1')
     const [payload] = retry.mock.calls[0] as [Record<string, unknown>]
-    expect(brainReq.correlationId).toBe(MINTED_IDS[0])
-    expect(payload.correlationId).toBe(MINTED_IDS[0])
+    expect(payload.sourceMessageId).toBe('u1')
   })
 
-  it('retry facts describe new payload: hasImageInput false, usesTools true, reasoning frozen', async () => {
-    const messages = [{ id: 'u1', role: 'user', content: 'first' }, { id: 'a1', role: 'assistant', content: 'reply' }]
+  it('clicked assistant → preceding user', async () => {
+    const messages = [{ id: 'u1', role: 'user', content: 'hi' }, { id: 'a1', role: 'assistant', content: 'reply' }]
     const retry = vi.fn().mockResolvedValue({})
-    const seq = createRetrySequence({
-      getMessages: () => messages,
-      getActiveSessionId: () => 'session-b',
-      getReasoning: () => false,
-      retry,
-    })
-    await seq(1)
-    const [req] = electron.brainInvoke.mock.calls[0] as [Record<string, unknown>]
-    expect(req.facts).toEqual({ hasImageInput: false, reasoningRequested: false, usesTools: true })
-    const payloadTools = (retry.mock.calls[0] as [Record<string, unknown>])[0].tools as Array<{ name: string }>
-    expect(payloadTools.map(t => t.name).sort()).toEqual(['get_weather', 'stage_widgets'])
+    const result = await handleRetryViaRealHelpers({ messages, index: 1, sessionId: 's1', reasoning: false, retry })
+    expect(result.sourceMessageId).toBe('u1')
+    expect(retry.mock.calls[0][0]).toHaveProperty('sourceMessageId', 'u1')
   })
 
-  it('original image source still gives retry hasImageInput false', async () => {
-    const messages = [
-      { id: 'u1', role: 'user', content: [{ type: 'text', text: 'with image' }, { type: 'image', image: 'data' }] as unknown as string },
-      { id: 'a1', role: 'assistant', content: 'reply' },
-    ]
+  it('clicked error WITHOUT id → preceding user u1 (core corrective)', async () => {
+    const messages = [{ id: 'u1', role: 'user', content: 'hi' }, { role: 'error', content: 'boom' } as unknown as { id?: string, role: string }]
     const retry = vi.fn().mockResolvedValue({})
-    const seq = createRetrySequence({
-      getMessages: () => messages as unknown as Array<{ id: string, role: string, content: unknown }>,
-      getActiveSessionId: () => 'session-b',
-      getReasoning: () => false,
-      retry,
-    })
-    await seq(1)
-    const [req] = electron.brainInvoke.mock.calls[0] as [Record<string, unknown>]
-    expect((req.facts as Record<string, unknown>).hasImageInput).toBe(false)
+    const result = await handleRetryViaRealHelpers({ messages, index: 1, sessionId: 's1', reasoning: false, retry })
+    expect(result.sourceMessageId).toBe('u1')
+    expect(result.path).toBe('authoritative')
   })
 
-  it('reasoning false and true are frozen and forwarded', async () => {
-    for (const reasoning of [false, true] as const) {
-      vi.clearAllMocks()
-      electron.brainInvoke.mockResolvedValue({ status: 'modeUnspecified' })
-      mintedIndex = 0
-      vi.spyOn(crypto, 'randomUUID').mockImplementation(() => MINTED_IDS[mintedIndex++] ?? `minted-${mintedIndex}`)
-      const messages = [{ id: 'u1', role: 'user', content: 'first' }, { id: 'a1', role: 'assistant', content: 'reply' }]
-      const retry = vi.fn().mockResolvedValue({})
-      const seq = createRetrySequence({
-        getMessages: () => messages,
-        getActiveSessionId: () => 'session-b',
-        getReasoning: () => reasoning,
-        retry,
-      })
-      await seq(1)
-      const [req] = electron.brainInvoke.mock.calls[0] as [Record<string, unknown>]
-      expect((req.facts as Record<string, unknown>).reasoningRequested).toBe(reasoning)
-      const [payload] = retry.mock.calls[0] as [Record<string, unknown>]
-      expect(payload.reasoning).toBe(reasoning)
-    }
-  })
-
-  it('reasoning drift frozen: capture false remains false after live true', async () => {
-    const messages = [{ id: 'u1', role: 'user', content: 'first' }, { id: 'a1', role: 'assistant', content: 'reply' }]
-    let reasoning = false
+  it('ERROR-BUBBLE RACE: capture before shift, shift history while Brain pending, still uses u1', async () => {
     let resolveBrain!: (v: unknown) => void
-    electron.brainInvoke.mockImplementation(() => new Promise(res => { resolveBrain = res as unknown as (v: unknown) => void }))
-    const retry = vi.fn().mockResolvedValue({})
-    const seq = createRetrySequence({
-      getMessages: () => messages,
-      getActiveSessionId: () => 'session-b',
-      getReasoning: () => reasoning,
-      retry,
+    mocks.requestDecision.mockImplementation(() => new Promise(res => { resolveBrain = res as unknown as (v: unknown) => void }))
+    const history = [{ id: 'u1', role: 'user', content: 'first' }, { role: 'error', content: 'boom' } as unknown as { id?: string, role: string }]
+    let messagesRef = [...history]
+    // Simulate capturer that would have run at click time before Brain await
+    const sourceAtClick = retrySourceMessageIdFrom(messagesRef as unknown as import('@proj-airi/stage-ui/types/chat').ChatHistoryItem[], 1)
+    expect(sourceAtClick).toBe('u1')
+    const retry = vi.fn().mockImplementation(async (payload: Record<string, unknown>) => {
+      // chatStore-like lookup by sourceMessageId
+      const idx = messagesRef.findIndex(m => (m as { id?: string }).id === payload.sourceMessageId && m.role === 'user')
+      if (idx < 0) throw new Error('Retry target has no retriable source message: stale sourceMessageId')
+      return {}
     })
-    const pending = seq(1)
+    const pending = executeLiaAuthoritativeRetry(
+      { sessionId: 's1', index: 1, sourceMessageId: sourceAtClick!, reasoning: false, tools: [...widgetToolReferences] },
+      { retry: retry as never, mintCorrelationId: () => MINTED },
+    )
     await new Promise(r => setTimeout(r, 5))
-    expect(electron.brainInvoke).toHaveBeenCalledTimes(1)
-    reasoning = true
+    expect(mocks.requestDecision).toHaveBeenCalledTimes(1)
+    expect(retry).not.toHaveBeenCalled()
+    // shift history by adding earlier messages
+    messagesRef = [{ id: 'u0', role: 'user', content: 'new' }, { id: 'a0', role: 'assistant', content: 'new' }, ...history]
     resolveBrain({ status: 'modeUnspecified' })
     await pending
     const [payload] = retry.mock.calls[0] as [Record<string, unknown>]
-    expect(payload.reasoning).toBe(false)
-    const [req] = electron.brainInvoke.mock.calls[0] as [Record<string, unknown>]
-    expect((req.facts as Record<string, unknown>).reasoningRequested).toBe(false)
+    expect(payload.sourceMessageId).toBe('u1')
+    expect(payload.index).toBe(1) // original clicked index, stale index irrelevant for source lookup
   })
 
-  it('tools snapshot frozen: same tools in facts and payload', async () => {
-    const messages = [{ id: 'u1', role: 'user', content: 'first' }, { id: 'a1', role: 'assistant', content: 'reply' }]
-    const retry = vi.fn().mockResolvedValue({})
-    const seq = createRetrySequence({
-      getMessages: () => messages,
-      getActiveSessionId: () => 'session-b',
-      getReasoning: () => false,
-      retry,
-    })
-    await seq(1)
-    const [req] = electron.brainInvoke.mock.calls[0] as [Record<string, unknown>]
-    expect((req.facts as Record<string, unknown>).usesTools).toBe(true)
-    const payloadTools = (retry.mock.calls[0] as [Record<string, unknown>])[0].tools as Array<{ name: string }>
-    expect(payloadTools).toEqual(widgetToolReferences)
-  })
-
-  it('authority awaited: deferred Brain blocks retry', async () => {
-    const messages = [{ id: 'u1', role: 'user', content: 'first' }, { id: 'a1', role: 'assistant', content: 'reply' }]
+  it('ERROR-BUBBLE DELETION: remove u1 while Brain pending → fails safely without fallback to stale index', async () => {
     let resolveBrain!: (v: unknown) => void
-    electron.brainInvoke.mockImplementation(() => new Promise(res => { resolveBrain = res as unknown as (v: unknown) => void }))
-    const retry = vi.fn().mockResolvedValue({})
-    const seq = createRetrySequence({
-      getMessages: () => messages,
-      getActiveSessionId: () => 'session-b',
-      getReasoning: () => false,
-      retry,
+    mocks.requestDecision.mockImplementation(() => new Promise(res => { resolveBrain = res as unknown as (v: unknown) => void }))
+    const history = [{ id: 'u1', role: 'user', content: 'first' }, { role: 'error', content: 'boom' } as unknown as { id?: string, role: string }]
+    let messagesRef = [...history]
+    const sourceAtClick = retrySourceMessageIdFrom(messagesRef as unknown as import('@proj-airi/stage-ui/types/chat').ChatHistoryItem[], 1)!
+    const retry = vi.fn().mockImplementation(async (payload: Record<string, unknown>) => {
+      const idx = messagesRef.findIndex(m => (m as { id?: string }).id === payload.sourceMessageId && m.role === 'user')
+      if (idx < 0) throw new Error('Retry target has no retriable source message: stale sourceMessageId')
+      return {}
     })
-    const pending = seq(1)
-    await new Promise(r => setTimeout(r, 10))
-    expect(electron.brainInvoke).toHaveBeenCalledTimes(1)
-    expect(retry).toHaveBeenCalledTimes(0)
+    const pending = executeLiaAuthoritativeRetry(
+      { sessionId: 's1', index: 1, sourceMessageId: sourceAtClick, reasoning: false, tools: [...widgetToolReferences] },
+      { retry: retry as never, mintCorrelationId: () => MINTED },
+    )
+    await new Promise(r => setTimeout(r, 5))
+    // delete u1
+    messagesRef = messagesRef.filter(m => m.id !== 'u1')
     resolveBrain({ status: 'modeUnspecified' })
-    await pending
+    await expect(pending).rejects.toThrow('stale sourceMessageId')
+    // ensure retry was attempted but threw, not silently retried stale index
     expect(retry).toHaveBeenCalledTimes(1)
   })
 
-  it('selected route forwarded, undefined route still retries', async () => {
-    const messages = [{ id: 'u1', role: 'user', content: 'first' }, { id: 'a1', role: 'assistant', content: 'reply' }]
-    // unspecified -> no routeOverride
-    const retry2 = vi.fn().mockResolvedValue({})
-    const seq2 = createRetrySequence({
-      getMessages: () => messages,
-      getActiveSessionId: () => 'session-b',
-      getReasoning: () => false,
-      retry: retry2,
-    })
-    electron.brainInvoke.mockResolvedValue({ status: 'modeUnspecified' })
-    await seq2(1)
-    expect(retry2.mock.calls[0][0]).not.toHaveProperty('routeOverride')
-    // failure case also still retries (tested separately)
-  })
-
-  it('Brain failure degrades: retry still called without routeOverride', async () => {
-    const messages = [{ id: 'u1', role: 'user', content: 'first' }, { id: 'a1', role: 'assistant', content: 'reply' }]
-    electron.brainInvoke.mockRejectedValue(new Error('brain fail'))
+  it('LEGACY ID-LESS USER: source user itself has no ID → immediate legacy path, no Brain', async () => {
+    const messages = [{ role: 'user', content: 'legacy' } as unknown as { id?: string, role: string }, { role: 'error', content: 'boom' } as unknown as { id?: string, role: string }]
     const retry = vi.fn().mockResolvedValue({})
-    const seq = createRetrySequence({
-      getMessages: () => messages,
-      getActiveSessionId: () => 'session-b',
-      getReasoning: () => false,
-      retry,
-    })
-    await seq(1)
-    const payload = (retry.mock.calls[0] as [Record<string, unknown>])[0]
-    expect(payload).not.toHaveProperty('routeOverride')
-    expect(payload.correlationId).toBe(MINTED_IDS[0])
+    const result = await handleRetryViaRealHelpers({ messages: messages as Array<{ id?: string, role: string }>, index: 1, sessionId: 's1', reasoning: false, retry })
+    expect(result.path).toBe('legacy')
+    expect(mocks.requestDecision).not.toHaveBeenCalled()
+    expect(retry).toHaveBeenCalledTimes(1)
+    const [payload] = retry.mock.calls[0] as [Record<string, unknown>]
+    expect(payload).not.toHaveProperty('sourceMessageId')
+    expect(payload).not.toHaveProperty('correlationId')
+    expect(payload.index).toBe(1)
   })
 
-  it('credential false degrades: no routeOverride', async () => {
-    const messages = [{ id: 'u1', role: 'user', content: 'first' }, { id: 'a1', role: 'assistant', content: 'reply' }]
-    liaProviderMock.hasApiKey.mockResolvedValue(false)
+  it('clicked user without id → legacy path', async () => {
+    const messages = [{ role: 'user', content: 'no id' } as unknown as { id?: string, role: string }]
     const retry = vi.fn().mockResolvedValue({})
-    const seq = createRetrySequence({
-      getMessages: () => messages,
-      getActiveSessionId: () => 'session-b',
-      getReasoning: () => false,
-      retry,
-    })
-    await seq(1)
-    const payload = (retry.mock.calls[0] as [Record<string, unknown>])[0]
-    expect(payload).not.toHaveProperty('routeOverride')
+    const result = await handleRetryViaRealHelpers({ messages: messages as Array<{ id?: string, role: string }>, index: 0, sessionId: 's1', reasoning: false, retry })
+    expect(result.path).toBe('legacy')
+    expect(mocks.requestDecision).not.toHaveBeenCalled()
   })
 
-  it('stable target: history shift while Brain pending still uses messageId', async () => {
-    const history = [
-      { id: 'u1', role: 'user', content: 'first' },
-      { id: 'a1', role: 'assistant', content: 'reply' },
-      { id: 'u2', role: 'user', content: 'target' },
-      { id: 'a2', role: 'assistant', content: 'to retry' },
-    ]
-    let resolveBrain!: (v: unknown) => void
-    electron.brainInvoke.mockImplementation(() => new Promise(res => { resolveBrain = res as unknown as (v: unknown) => void }))
-    let messagesRef = [...history]
-    const retry = vi.fn().mockImplementation(async (payload: Record<string, unknown>) => {
-      // simulate generic retry that would look up by messageId
-      if (payload.messageId) {
-        const idx = messagesRef.findIndex(m => m.id === payload.messageId)
-        if (idx < 0) throw new Error('Retry target message not found: stale messageId')
-        return {}
-      }
-      return {}
-    })
-    const seq = createRetrySequence({
-      getMessages: () => messagesRef,
-      getActiveSessionId: () => 'session-b',
-      getReasoning: () => false,
-      retry,
-    })
-    const pending = seq(3) // a2 at index 3
-    await new Promise(r => setTimeout(r, 5))
-    expect(electron.brainInvoke).toHaveBeenCalledTimes(1)
-    // shift history
-    messagesRef = [
-      { id: 'u0', role: 'user', content: 'new first' },
-      { id: 'a0', role: 'assistant', content: 'new reply' },
-      ...history,
-    ]
-    resolveBrain({ status: 'modeUnspecified' })
-    await pending
-    const payload = (retry.mock.calls[0] as [Record<string, unknown>])[0]
-    expect(payload.messageId).toBe('a2')
-    expect(payload.index).toBe(3)
+  it('stable source survives index shift: captured u1 before shift still used after shift', async () => {
+    const history = [{ id: 'u1', role: 'user', content: 'first' }, { id: 'a1', role: 'assistant', content: 'reply' }, { id: 'u2', role: 'user', content: 'second' }, { id: 'a2', role: 'assistant', content: 'reply2' }]
+    const source = retrySourceMessageIdFrom(history as unknown as import('@proj-airi/stage-ui/types/chat').ChatHistoryItem[], 3)
+    expect(source).toBe('u2')
+    // shift
+    const shifted = [{ id: 'u0', role: 'user', content: 'new' }, ...history]
+    // source still u2, even though its index moved from 2 to 3
+    const found = shifted.findIndex(m => m.id === source && m.role === 'user')
+    expect(found).toBe(3)
   })
 
-  it('deleted target fails safely and does not fall back to stale index', async () => {
-    const history = [
-      { id: 'u1', role: 'user', content: 'first' },
-      { id: 'a1', role: 'assistant', content: 'reply' },
-      { id: 'u2', role: 'user', content: 'target' },
-      { id: 'a2', role: 'assistant', content: 'to retry' },
-    ]
-    let resolveBrain!: (v: unknown) => void
-    electron.brainInvoke.mockImplementation(() => new Promise(res => { resolveBrain = res as unknown as (v: unknown) => void }))
-    let messagesRef = [...history]
-    const retry = vi.fn().mockImplementation(async (payload: Record<string, unknown>) => {
-      const idx = messagesRef.findIndex(m => m.id === payload.messageId)
-      if (idx < 0) throw new Error('Retry target message not found: stale messageId')
-      return {}
-    })
-    const seq = createRetrySequence({
-      getMessages: () => messagesRef,
-      getActiveSessionId: () => 'session-b',
-      getReasoning: () => false,
-      retry,
-    })
-    const pending = seq(3)
-    await new Promise(r => setTimeout(r, 5))
-    // delete target
-    messagesRef = messagesRef.filter(m => m.id !== 'a2')
-    resolveBrain({ status: 'modeUnspecified' })
-    await expect(pending).rejects.toThrow('Retry target message not found')
-  })
-
-  it('no global provider/model writes', async () => {
-    const fs = await import('node:fs')
-    const path = await import('node:path')
-    const src = fs.readFileSync(path.resolve(__dirname, './InteractiveArea.vue'), 'utf-8')
+  it('no global provider/model writes in InteractiveArea', async () => {
+    const { readFileSync } = await import('node:fs')
+    const { resolve } = await import('node:path')
+    const src = readFileSync(resolve(__dirname, './InteractiveArea.vue'), 'utf-8')
     expect(src).not.toMatch(/activeProvider/)
     expect(src).not.toMatch(/activeModel/)
+    expect(src).toMatch(/retrySourceMessageIdFrom/)
+    expect(src).toMatch(/executeLiaAuthoritativeRetry/)
   })
 
-  it('new correlationId is not original message id', async () => {
-    const history = [{ id: 'original-correlation-a', role: 'user', content: 'first' }, { id: 'a1', role: 'assistant', content: 'reply' }]
-    const retry = vi.fn().mockResolvedValue({})
-    const seq = createRetrySequence({
-      getMessages: () => history,
-      getActiveSessionId: () => 'session-b',
-      getReasoning: () => false,
-      retry,
-    })
-    await seq(1)
-    const payload = (retry.mock.calls[0] as [Record<string, unknown>])[0]
-    expect(payload.correlationId).not.toBe('original-correlation-a')
-    expect(payload.correlationId).toBe(MINTED_IDS[0])
+  it('does not contain duplicate Brain sequence (no direct requestLiaBrainDecisionForChatTurn nor chatTurnFactsFromSend in retry)', async () => {
+    const { readFileSync } = await import('node:fs')
+    const { resolve } = await import('node:path')
+    const src = readFileSync(resolve(__dirname, './InteractiveArea.vue'), 'utf-8')
+    const retryFn = src.slice(src.indexOf('async function handleRetryMessage'))
+    // Should not directly call resolver or build facts in retry; helper owns it
+    expect(retryFn).not.toMatch(/resolveLiaAuthoritativeSendRoute/)
+    expect(retryFn).not.toMatch(/chatTurnFactsFromSend/)
+    // Should not mint directly in retry path
+    expect(retryFn).not.toMatch(/crypto\.randomUUID/)
+  })
+
+  it('preserves retry analytics wiring', async () => {
+    const { readFileSync } = await import('node:fs')
+    const { resolve } = await import('node:path')
+    const src = readFileSync(resolve(__dirname, './InteractiveArea.vue'), 'utf-8')
+    expect(src).toMatch(/trackChatMessageRetried/)
   })
 })

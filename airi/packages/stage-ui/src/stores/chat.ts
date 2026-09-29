@@ -32,6 +32,7 @@ import { CHAT_FALLBACK_MAX_ATTEMPTS, getChatFallbackResolver, notifyChatRequestS
 import { createMinecraftContext } from './chat/context-providers'
 import { liaCapabilityPromptSupplement } from './chat/context-providers/lia-capabilities'
 import { useChatContextStore } from './chat/context-store'
+import { retrySourceIndexFrom } from './chat/retry-source'
 import { humanizeSendErrorMessage } from './chat/send-error'
 import { useChatSessionStore } from './chat/session-store'
 import { useChatStreamStore } from './chat/stream-store'
@@ -141,8 +142,8 @@ export interface ChatRetryPayload {
   reasoning?: boolean
   /** Phase 8.0D-10B-4D4C4-D2B6: authoritative initial route for the retry — optional, absent preserves existing behavior. */
   routeOverride?: ChatSendRouteOverride
-  /** Phase 8.0D-10B-4D4C4-D2B6: stable identity for the retry target — when supplied, retry resolves the CURRENT index by message.id. */
-  messageId?: string
+  /** Phase 8.0D-10B-4D4C4-D2B6 corrective: stable identity for the RETRIABLE USER source — when supplied, retry resolves CURRENT user index by message.id (role must be user). */
+  sourceMessageId?: string
 }
 
 /** Identifies one stored tool call that must run again in the leader. */
@@ -184,25 +185,6 @@ function retryTextFrom(message: ChatHistoryItem | undefined): string | null {
   }, []).join('\n\n')
 
   return text || null
-}
-
-function retrySourceIndexFrom(messages: ChatHistoryItem[], index: number): number {
-  const targetMessage = messages[index]
-  if (!targetMessage)
-    return -1
-
-  if (targetMessage.role === 'user')
-    return index
-
-  if (targetMessage.role !== 'assistant' && targetMessage.role !== 'error')
-    return -1
-
-  for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
-    if (messages[cursor]?.role === 'user')
-      return cursor
-  }
-
-  return -1
 }
 
 export type { QueuedSendSnapshot } from '@proj-airi/core-agent'
@@ -750,17 +732,21 @@ export const useChatStore = defineStore('chat', () => {
       throw new Error('Failed to load the target chat session')
 
     const currentMessages = chatSession.getSessionMessages(payload.sessionId)
-    // Phase 8.0D-10B-4D4C4-D2B6: stable target identity — when messageId is supplied, resolve CURRENT index by stable id
-    let targetIndex = payload.index
-    if (payload.messageId !== undefined) {
-      const found = currentMessages.findIndex(message => (message as { id?: string }).id === payload.messageId)
+    // Phase 8.0D-10B-4D4C4-D2B6 corrective: stable SOURCE identity — when sourceMessageId is supplied, locate CURRENT user by id
+    let sourceIndex: number
+    if (payload.sourceMessageId !== undefined) {
+      const found = currentMessages.findIndex(
+        message => (message as { id?: string }).id === payload.sourceMessageId && message.role === 'user',
+      )
       if (found < 0)
-        throw new Error('Retry target message not found: stale messageId')
-      targetIndex = found
+        throw new Error('Retry target has no retriable source message: stale sourceMessageId')
+      sourceIndex = found
     }
-    const sourceIndex = retrySourceIndexFrom(currentMessages, targetIndex)
-    if (sourceIndex < 0)
-      throw new Error('Retry target has no retriable source message')
+    else {
+      sourceIndex = retrySourceIndexFrom(currentMessages, payload.index)
+      if (sourceIndex < 0)
+        throw new Error('Retry target has no retriable source message')
+    }
 
     const sourceMessage = currentMessages[sourceIndex]
     const text = retryTextFrom(sourceMessage)

@@ -8,6 +8,7 @@ import { ChatHistory, JournalPreviewModal } from '@proj-airi/stage-ui/components
 import { useAnalytics } from '@proj-airi/stage-ui/composables/use-analytics'
 import { useBackgroundStore } from '@proj-airi/stage-ui/stores/background'
 import { useChatStore } from '@proj-airi/stage-ui/stores/chat'
+import { retrySourceMessageIdFrom } from '@proj-airi/stage-ui/stores/chat/retry-source'
 import { useChatSessionStore } from '@proj-airi/stage-ui/stores/chat/session-store'
 import { useChatStreamStore } from '@proj-airi/stage-ui/stores/chat/stream-store'
 import { useJournalPreviewStore } from '@proj-airi/stage-ui/stores/journal-preview'
@@ -26,6 +27,7 @@ import ChatViewportLayout from './chat-viewport-layout.vue'
 
 import { useHearingInputChannel } from '../composables/use-hearing-input-channel'
 import { chatTurnFactsFromSend } from '../services/lia/brain-shadow'
+import { executeLiaAuthoritativeRetry } from '../services/lia/lia-authoritative-retry'
 import { resolveLiaAuthoritativeSendRoute } from '../services/lia/lia-authoritative-route-resolver'
 import { artistryToolReferences, widgetToolReferences } from '../stores/tools'
 
@@ -270,32 +272,36 @@ onMounted(() => {
 })
 
 async function handleRetryMessage(index: number) {
-  // Phase 8.0D-10B-4D4C4-D2B6: authoritative retry — NEW logical send with stable target identity
-  // Snapshot before awaiting Brain authority; do not re-read session/reasoning/tools after.
+  // Phase 8.0D-10B-4D4C4-D2B6 corrective: thin owner — capture synchronously, delegate authoritative sequence
   const targetSessionId = chatSession.activeSessionId
-  const targetMessage = messages.value[index] as unknown as { id?: string } | undefined
-  const targetMessageId = targetMessage?.id
-  const correlationId = crypto.randomUUID()
   const reasoningToRetry = consciousnessSettings.reasoning
   const toolsToRetry = [...widgetToolReferences]
-  const facts = chatTurnFactsFromSend({
-    attachments: [] as const,
-    reasoning: reasoningToRetry,
-    tools: toolsToRetry,
-  })
-  const routeOverride = await resolveLiaAuthoritativeSendRoute({
-    correlationId,
-    facts,
-  })
-  await chatStore.retry({
-    sessionId: targetSessionId,
-    index,
-    ...(targetMessageId === undefined ? {} : { messageId: targetMessageId }),
-    tools: toolsToRetry,
-    correlationId,
-    reasoning: reasoningToRetry,
-    ...(routeOverride === undefined ? {} : { routeOverride }),
-  })
+  // Synchronous stable source capture before any await
+  const sourceMessageId = retrySourceMessageIdFrom(messages.value as unknown as ChatHistoryItem[], index)
+
+  if (sourceMessageId === undefined) {
+    // id-less legacy: preserve legacy non-authoritative path, no Brain await
+    await chatStore.retry({
+      sessionId: targetSessionId,
+      index,
+      tools: toolsToRetry,
+    })
+    trackChatMessageRetried({ source: 'history' })
+    return
+  }
+
+  await executeLiaAuthoritativeRetry(
+    {
+      sessionId: targetSessionId,
+      index,
+      sourceMessageId,
+      reasoning: reasoningToRetry,
+      tools: toolsToRetry,
+    },
+    {
+      retry: payload => chatStore.retry(payload),
+    },
+  )
   trackChatMessageRetried({
     source: 'history',
   })
