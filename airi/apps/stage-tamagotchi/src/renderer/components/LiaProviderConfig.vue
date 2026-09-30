@@ -5,7 +5,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { toast } from 'vue-sonner'
 
-import { LIA_CHAT_PROVIDER_OPTIONS, curatedModelsFor, isModelInCatalog, recommendedModelFor, useLiaProviderStore } from '../stores/lia/provider'
+import { curatedModelsFor, isModelInCatalog, LIA_CHAT_PROVIDER_OPTIONS, recommendedModelFor, useLiaProviderStore } from '../stores/lia/provider'
 
 const props = withDefaults(defineProps<{
   /** 'onboarding' (first run: must test + conclude) or 'manage' (later edits). */
@@ -80,10 +80,12 @@ const getFallbackKeyUrl = computed(() => store.providerApiKeyUrl(fallbackProvide
  * the primary AND that provider requires a credential. Same-provider fallbacks
  * reuse the primary's secret (no duplicate); key-less providers need none.
  */
-const fallbackNeedsOwnKey = () => fallbackEnabled.value
-  && Boolean(fallbackProviderId.value)
-  && fallbackProviderId.value !== providerId.value
-  && store.providerNeedsKey(fallbackProviderId.value)
+function fallbackNeedsOwnKey() {
+  return fallbackEnabled.value
+    && Boolean(fallbackProviderId.value)
+    && fallbackProviderId.value !== providerId.value
+    && store.providerNeedsKey(fallbackProviderId.value)
+}
 
 const canTest = () => Boolean(providerId.value) && Boolean(modelId.value.trim())
 const canConclude = () => Boolean(lastTestOk.value) && canTest()
@@ -367,24 +369,24 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="flex w-full max-w-md flex-col gap-4 rounded-2xl border border-neutral-200/70 bg-white/70 p-5 text-left shadow-lg backdrop-blur dark:border-neutral-700/70 dark:bg-black/25">
+  <div class="max-w-md w-full flex flex-col gap-4 border border-neutral-200/70 rounded-2xl bg-white/70 p-5 text-left shadow-lg backdrop-blur dark:border-neutral-700/70 dark:bg-black/25">
     <div>
-      <h2 class="text-lg font-semibold text-neutral-900 dark:text-white">
+      <h2 class="text-lg text-neutral-900 font-semibold dark:text-white">
         {{ isOnboarding() ? tt('onboarding.title') : tt('title') }}
       </h2>
-      <p class="mt-0.5 text-xs leading-relaxed text-neutral-500 dark:text-neutral-400">
+      <p class="mt-0.5 text-xs text-neutral-500 leading-relaxed dark:text-neutral-400">
         {{ isOnboarding() ? tt('onboarding.subtitle') : tt('subtitle') }}
       </p>
     </div>
 
     <div class="flex flex-col gap-3">
       <div class="flex flex-col gap-1">
-        <label class="text-xs font-medium text-neutral-600 dark:text-neutral-300">
+        <label class="text-xs text-neutral-600 font-medium dark:text-neutral-300">
           {{ tt('fields.provider.label') }}
         </label>
         <select
           v-model="providerId"
-          class="w-full rounded-lg border border-neutral-300 bg-white px-2.5 py-2 text-sm text-neutral-800 outline-none focus:border-primary-400 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100"
+          class="w-full border border-neutral-300 rounded-lg bg-white px-2.5 py-2 text-sm text-neutral-800 outline-none dark:border-neutral-600 focus:border-primary-400 dark:bg-neutral-800 dark:text-neutral-100"
         >
           <option value="" disabled>
             {{ tt('fields.provider.placeholder') }}
@@ -396,7 +398,7 @@ onMounted(() => {
       </div>
 
       <div class="flex flex-col gap-1">
-        <label class="text-xs font-medium text-neutral-600 dark:text-neutral-300">
+        <label class="text-xs text-neutral-600 font-medium dark:text-neutral-300">
           {{ tt('fields.model.label') }}
         </label>
         <!-- Model is a dropdown driven by the selected provider (see the primary
@@ -405,7 +407,7 @@ onMounted(() => {
         <select
           v-model="modelId"
           :disabled="!providerId || primaryModelOptions.length === 0"
-          class="w-full rounded-lg border border-neutral-300 bg-white px-2.5 py-2 text-sm text-neutral-800 outline-none focus:border-primary-400 disabled:opacity-60 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100"
+          class="w-full border border-neutral-300 rounded-lg bg-white px-2.5 py-2 text-sm text-neutral-800 outline-none dark:border-neutral-600 focus:border-primary-400 dark:bg-neutral-800 dark:text-neutral-100 disabled:opacity-60"
         >
           <option value="" disabled>
             {{ tt('fields.model.placeholder') }}
@@ -417,19 +419,19 @@ onMounted(() => {
       </div>
 
       <div v-if="needsBaseUrl()" class="flex flex-col gap-1">
-        <label class="text-xs font-medium text-neutral-600 dark:text-neutral-300">
+        <label class="text-xs text-neutral-600 font-medium dark:text-neutral-300">
           {{ tt('fields.endpoint.label') }}
         </label>
         <input
           v-model="baseUrl"
           type="text"
           :placeholder="tt('fields.endpoint.placeholder')"
-          class="w-full rounded-lg border border-neutral-300 bg-white px-2.5 py-2 text-sm text-neutral-800 outline-none focus:border-primary-400 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100"
+          class="w-full border border-neutral-300 rounded-lg bg-white px-2.5 py-2 text-sm text-neutral-800 outline-none dark:border-neutral-600 focus:border-primary-400 dark:bg-neutral-800 dark:text-neutral-100"
         >
       </div>
 
       <div v-if="primaryNeedsKey() || keySaved" class="flex flex-col gap-1">
-        <label class="text-xs font-medium text-neutral-600 dark:text-neutral-300">
+        <label class="text-xs text-neutral-600 font-medium dark:text-neutral-300">
           {{ tt('fields.key.label') }}
         </label>
         <div class="relative">
@@ -438,7 +440,7 @@ onMounted(() => {
             type="password"
             autocomplete="off"
             :placeholder="keySaved ? tt('fields.key.replace') : tt('fields.key.placeholder')"
-            class="w-full rounded-lg border border-neutral-300 bg-white px-2.5 py-2 pr-8 text-sm text-neutral-800 outline-none focus:border-primary-400 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100"
+            class="w-full border border-neutral-300 rounded-lg bg-white px-2.5 py-2 pr-8 text-sm text-neutral-800 outline-none dark:border-neutral-600 focus:border-primary-400 dark:bg-neutral-800 dark:text-neutral-100"
           >
           <span
             :title="keySaved ? tt('key.saved') : tt('key.missing')"
@@ -452,7 +454,7 @@ onMounted(() => {
           :href="getKeyUrl"
           target="_blank"
           rel="noopener noreferrer"
-          class="self-start text-[11px] font-medium text-primary-600 transition hover:text-primary-700 hover:underline dark:text-primary-400"
+          class="self-start text-[11px] text-primary-600 font-medium transition dark:text-primary-400 hover:text-primary-700 hover:underline"
         >
           {{ tt('actions.getKey') }} ↗
         </a>
@@ -467,12 +469,12 @@ onMounted(() => {
       </div>
 
       <div v-if="fallbackEnabled" class="flex flex-col gap-1">
-        <label class="text-xs font-medium text-neutral-600 dark:text-neutral-300">
+        <label class="text-xs text-neutral-600 font-medium dark:text-neutral-300">
           {{ tt('fields.fallbackProvider.label') }}
         </label>
         <select
           v-model="fallbackProviderId"
-          class="w-full rounded-lg border border-neutral-300 bg-white px-2.5 py-2 text-sm text-neutral-800 outline-none focus:border-primary-400 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100"
+          class="w-full border border-neutral-300 rounded-lg bg-white px-2.5 py-2 text-sm text-neutral-800 outline-none dark:border-neutral-600 focus:border-primary-400 dark:bg-neutral-800 dark:text-neutral-100"
         >
           <option value="" disabled>
             {{ tt('fields.fallbackProvider.placeholder') }}
@@ -484,14 +486,14 @@ onMounted(() => {
       </div>
 
       <div v-if="fallbackEnabled && fallbackProviderId" class="flex flex-col gap-1">
-        <label class="text-xs font-medium text-neutral-600 dark:text-neutral-300">
+        <label class="text-xs text-neutral-600 font-medium dark:text-neutral-300">
           {{ tt('fields.fallbackModel.label') }}
         </label>
         <!-- Fallback model is a dropdown mirroring the primary one. -->
         <select
           v-model="fallbackModelId"
           :disabled="fallbackModelOptions.length === 0"
-          class="w-full rounded-lg border border-neutral-300 bg-white px-2.5 py-2 text-sm text-neutral-800 outline-none focus:border-primary-400 disabled:opacity-60 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100"
+          class="w-full border border-neutral-300 rounded-lg bg-white px-2.5 py-2 text-sm text-neutral-800 outline-none dark:border-neutral-600 focus:border-primary-400 dark:bg-neutral-800 dark:text-neutral-100 disabled:opacity-60"
         >
           <option value="" disabled>
             {{ tt('fields.model.placeholder') }}
@@ -504,7 +506,7 @@ onMounted(() => {
 
       <!-- Separate key field ONLY when the fallback is a DIFFERENT key-requiring provider. -->
       <div v-if="fallbackNeedsOwnKey()" class="flex flex-col gap-1">
-        <label class="text-xs font-medium text-neutral-600 dark:text-neutral-300">
+        <label class="text-xs text-neutral-600 font-medium dark:text-neutral-300">
           {{ tt('fields.fallbackKey.label') }}
         </label>
         <div class="relative">
@@ -513,7 +515,7 @@ onMounted(() => {
             type="password"
             autocomplete="off"
             :placeholder="fallbackKeySaved ? tt('fields.key.replace') : tt('fields.key.placeholder')"
-            class="w-full rounded-lg border border-neutral-300 bg-white px-2.5 py-2 pr-8 text-sm text-neutral-800 outline-none focus:border-primary-400 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100"
+            class="w-full border border-neutral-300 rounded-lg bg-white px-2.5 py-2 pr-8 text-sm text-neutral-800 outline-none dark:border-neutral-600 focus:border-primary-400 dark:bg-neutral-800 dark:text-neutral-100"
           >
           <span
             :title="fallbackKeySaved ? tt('key.saved') : tt('key.missing')"
@@ -527,13 +529,13 @@ onMounted(() => {
           :href="getFallbackKeyUrl"
           target="_blank"
           rel="noopener noreferrer"
-          class="self-start text-[11px] font-medium text-primary-600 transition hover:text-primary-700 hover:underline dark:text-primary-400"
+          class="self-start text-[11px] text-primary-600 font-medium transition dark:text-primary-400 hover:text-primary-700 hover:underline"
         >
           {{ tt('actions.getKey') }} ↗
         </a>
       </div>
 
-      <p class="text-[10px] leading-relaxed text-neutral-500 dark:text-neutral-400">
+      <p class="text-[10px] text-neutral-500 leading-relaxed dark:text-neutral-400">
         {{ tt('securityNote') }}
       </p>
     </div>
@@ -542,7 +544,7 @@ onMounted(() => {
       <template v-if="isOnboarding()">
         <button
           type="button"
-          class="rounded-lg border border-neutral-300 px-3.5 py-2 text-sm font-medium text-neutral-700 transition hover:bg-neutral-100 disabled:opacity-50 dark:border-neutral-600 dark:text-neutral-200 dark:hover:bg-neutral-700"
+          class="border border-neutral-300 rounded-lg px-3.5 py-2 text-sm text-neutral-700 font-medium transition dark:border-neutral-600 hover:bg-neutral-100 dark:text-neutral-200 disabled:opacity-50 dark:hover:bg-neutral-700"
           :disabled="busy || !canTest()"
           @click="testConnection"
         >
@@ -550,7 +552,7 @@ onMounted(() => {
         </button>
         <button
           type="button"
-          class="rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-700 disabled:opacity-50"
+          class="rounded-lg bg-primary-600 px-4 py-2 text-sm text-white font-semibold transition hover:bg-primary-700 disabled:opacity-50"
           :disabled="busy || !canConclude()"
           @click="conclude"
         >
@@ -561,7 +563,7 @@ onMounted(() => {
              Concluir. Testing never clears the chosen provider/model/key. -->
         <span
           v-if="lastTestOk"
-          class="inline-flex items-center gap-1 text-[11px] font-medium text-green-600 dark:text-green-400"
+          class="inline-flex items-center gap-1 text-[11px] text-green-600 font-medium dark:text-green-400"
         >
           <span class="i-solar:check-circle-bold-duotone size-3.5" />
           {{ tt('connection.ok') }}
@@ -574,7 +576,7 @@ onMounted(() => {
       <template v-else>
         <button
           type="button"
-          class="rounded-lg bg-primary-600 px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-primary-700 disabled:opacity-50"
+          class="rounded-lg bg-primary-600 px-3.5 py-2 text-sm text-white font-semibold transition hover:bg-primary-700 disabled:opacity-50"
           :disabled="busy"
           @click="save"
         >
@@ -582,7 +584,7 @@ onMounted(() => {
         </button>
         <button
           type="button"
-          class="rounded-lg border border-neutral-300 px-3.5 py-2 text-sm font-medium text-neutral-700 transition hover:bg-neutral-100 disabled:opacity-50 dark:border-neutral-600 dark:text-neutral-200 dark:hover:bg-neutral-700"
+          class="border border-neutral-300 rounded-lg px-3.5 py-2 text-sm text-neutral-700 font-medium transition dark:border-neutral-600 hover:bg-neutral-100 dark:text-neutral-200 disabled:opacity-50 dark:hover:bg-neutral-700"
           :disabled="busy || !canTest()"
           @click="testConnection"
         >
@@ -590,7 +592,7 @@ onMounted(() => {
         </button>
         <button
           type="button"
-          class="rounded-lg px-3.5 py-2 text-sm font-medium text-neutral-400 transition hover:text-red-600 disabled:opacity-50 dark:text-neutral-500"
+          class="rounded-lg px-3.5 py-2 text-sm text-neutral-400 font-medium transition dark:text-neutral-500 hover:text-red-600 disabled:opacity-50"
           :disabled="busy || !providerId"
           @click="removeProvider"
         >
@@ -599,7 +601,7 @@ onMounted(() => {
         <button
           v-if="!props.embedded"
           type="button"
-          class="ml-auto rounded-lg border border-neutral-300 px-3.5 py-2 text-sm font-medium text-neutral-700 transition hover:bg-neutral-100 disabled:opacity-50 dark:border-neutral-600 dark:text-neutral-200 dark:hover:bg-neutral-700"
+          class="ml-auto border border-neutral-300 rounded-lg px-3.5 py-2 text-sm text-neutral-700 font-medium transition dark:border-neutral-600 hover:bg-neutral-100 dark:text-neutral-200 disabled:opacity-50 dark:hover:bg-neutral-700"
           :disabled="busy"
           @click="emit('back')"
         >

@@ -305,7 +305,7 @@ export function createLiaVoiceProfileStore(params: { rootDir: string, engines?: 
       if (index === -1)
         return fail('notFound', 'That voice is not in the library.')
 
-      const merged: Record<string, string> = { ...(profiles[index].metadata ?? {}) }
+      const merged: Record<string, string> = { ...profiles[index].metadata }
       for (const [key, value] of Object.entries(metadata ?? {})) {
         if (typeof value === 'string')
           merged[key] = value.slice(0, 500)

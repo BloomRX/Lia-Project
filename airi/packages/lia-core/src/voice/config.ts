@@ -80,7 +80,7 @@ export function readVoiceRuntimeSelection(voice: unknown): LiaVoiceRuntimeSelect
   const installDir = typeof runtime.installDir === 'string' && runtime.installDir.trim()
     ? runtime.installDir.trim()
     : undefined
-  return { ...(installDir ? { installDir } : {}) }
+  return (installDir ? { installDir } : {})
 }
 
 // ---------------------------------------------------------------------------

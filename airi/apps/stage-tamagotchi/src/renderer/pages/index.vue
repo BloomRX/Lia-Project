@@ -366,7 +366,6 @@ const voiceSendSequence = createOrderedVoiceSendSequence({
   },
   reportFailure: reportVoiceInputFailure,
 })
-let voiceSendChain: Promise<void> = Promise.resolve()
 const streamingTranscriptionUnavailable = ref(false)
 const shouldUseStreamInput = computed(() => supportsStreamInput.value && !!stream.value && !streamingTranscriptionUnavailable.value)
 const voiceTranscriptBuffer = createTranscriptBuffer({
@@ -591,9 +590,7 @@ function postSpeakerCaption(text: string, operation: NonNullable<CaptionChannelE
  * sequencing code.
  */
 function sendVoiceInputTextToChat(text: string): Promise<void> {
-  const result = voiceSendSequence.enqueue(text)
-  voiceSendChain = voiceSendSequence.getChain()
-  return result
+  return voiceSendSequence.enqueue(text)
 }
 
 /** Sends completed streaming-ASR sentences to captions and chat. */

@@ -13,14 +13,16 @@ describe('test-helpers production import guard (D2B9-A1)', () => {
       const base = join(airiRoot, root)
       try {
         for (const entry of readdirSync(base, { recursive: true, withFileTypes: true })) {
-          if (!entry.isFile() || !/\.(?:ts|vue)$/.test(entry.name) || entry.name.includes('.test.') || entry.name === 'test-helpers.ts' || entry.name === 'test-helpers.test.ts' || entry.name === 'test-helpers-guard.test.ts' || entry.name.includes('windows-portability')) continue
+          if (!entry.isFile() || !/\.(?:ts|vue)$/.test(entry.name) || entry.name.includes('.test.') || entry.name === 'test-helpers.ts' || entry.name === 'test-helpers.test.ts' || entry.name === 'test-helpers-guard.test.ts' || entry.name.includes('windows-portability'))
+            continue
           const file = join(entry.parentPath, entry.name)
           const content = readFileSync(file, 'utf-8')
           if (content.includes('test-helpers')) {
             offenders.push(relative(airiRoot, file))
           }
         }
-      } catch {}
+      }
+      catch {}
     }
     expect(offenders, `production files must not import test-helpers: ${offenders.join(', ')}`).toEqual([])
   })

@@ -79,7 +79,7 @@ function makeWorld(options: {
     counter,
     deps,
     emit: (event, detail) => {
-      for (const listener of [...listeners])
+      for (const listener of Array.from(listeners))
         listener(event, detail)
     },
     inspectedHomes,

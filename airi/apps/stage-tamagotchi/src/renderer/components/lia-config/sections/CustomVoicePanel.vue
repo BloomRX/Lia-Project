@@ -90,7 +90,7 @@ function profileStatusKey(profileId: string): string {
       safe, readable and selectable for when the engine arrives.
     -->
     <section
-      class="flex flex-col gap-1 border border-dashed border-neutral-200 rounded-lg p-3 dark:border-neutral-700"
+      class="flex flex-col gap-1 border border-neutral-200 rounded-lg border-dashed p-3 dark:border-neutral-700"
       data-testid="lia-custom-voice-engine-missing"
     >
       <span class="text-sm text-neutral-900 font-medium dark:text-neutral-50">

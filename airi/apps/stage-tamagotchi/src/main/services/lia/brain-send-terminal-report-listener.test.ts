@@ -5,8 +5,8 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { repoRelativePosix } from '../../../test-helpers'
 
+import { repoRelativePosix } from '../../../test-helpers'
 import { createLiaBrainCorrelationService } from './brain-correlation-service'
 import { registerLiaBrainDecisionBridge } from './brain-decision-service'
 import { registerLiaBrainExecutionReportHandler } from './brain-execution-report-service'
@@ -686,8 +686,8 @@ describe('lia send terminal wiring invariants (Phase 8.0D-10B-4D4C4-B3B2)', () =
         'apps/stage-tamagotchi/src/main/services/lia/brain-send-terminal-facts.ts',
       ])
     expect(productionSourcesMatching(BRAIN_ROOTS, /sendTerminalObserved|sendSucceeded|sendFailed/)).toEqual([
-        'apps/stage-tamagotchi/src/main/services/lia/brain-final-successful-execution-facts.ts',
-      ])
+      'apps/stage-tamagotchi/src/main/services/lia/brain-final-successful-execution-facts.ts',
+    ])
 
     // The shared contract still declares exactly the two-field send report, and
     // the renderer/Stage/Core layers know nothing about the stored field.

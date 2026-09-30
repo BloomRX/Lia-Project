@@ -1,201 +1,201 @@
 # Lia launcher Home (M1 Phase 2, product layer)
 greeting: "Finally you're here..."
 status:
-  ready: "All ready"
-  preparing: "Preparing..."
-  detail: "AI, voice and memory are ready. Discord is off."
-  ai: "AI ready"
-  voice: "Voice ready"
-  memory: "Memory ready"
-  discord: "Discord off"
+  ready: 'All ready'
+  preparing: 'Preparing...'
+  detail: 'AI, voice and memory are ready. Discord is off.'
+  ai: 'AI ready'
+  voice: 'Voice ready'
+  memory: 'Memory ready'
+  discord: 'Discord off'
 actions:
-  converse: "Talk with Lia"
-  character: "Character"
-  voice: "Voice"
-  activities: "Activities"
-  settings: "Settings"
-  configure: "Configure"
-  diagnostics: "Diagnostics"
+  converse: 'Talk with Lia'
+  character: 'Character'
+  voice: 'Voice'
+  activities: 'Activities'
+  settings: 'Settings'
+  configure: 'Configure'
+  diagnostics: 'Diagnostics'
 logs:
-  label: "Show logs"
-  title: "Logs"
-  close: "Hide logs"
-  empty: "Nothing to report right now."
-  loading: "Loading logs..."
-  technicalNote: "Detailed technical logs are available in Advanced."
-  viewAdvanced: "Open in Advanced"
+  label: 'Show logs'
+  title: 'Logs'
+  close: 'Hide logs'
+  empty: 'Nothing to report right now.'
+  loading: 'Loading logs...'
+  technicalNote: 'Detailed technical logs are available in Advanced.'
+  viewAdvanced: 'Open in Advanced'
 states:
-  loading: "Preparing your companion..."
-  unavailable: "Unavailable right now."
-  comingSoon: "Coming soon"
-  retry: "Try again"
+  loading: 'Preparing your companion...'
+  unavailable: 'Unavailable right now.'
+  comingSoon: 'Coming soon'
+  retry: 'Try again'
 navigation:
-  home: "Home"
+  home: 'Home'
 presence:
-  name: "Lia"
-  role: "Your AI companion"
+  name: 'Lia'
+  role: 'Your AI companion'
 leds:
-  title: "Status"
-  ai: "AI"
-  voice: "Voice"
-  avatar: "Avatar"
-  fallback: "Fallback"
-  on: "On"
-  off: "Off"
-  pending: "Not configured"
+  title: 'Status'
+  ai: 'AI'
+  voice: 'Voice'
+  avatar: 'Avatar'
+  fallback: 'Fallback'
+  on: 'On'
+  off: 'Off'
+  pending: 'Not configured'
 provider:
-  title: "Conversation provider"
-  subtitle: "Manage how Lia talks."
+  title: 'Conversation provider'
+  subtitle: 'Manage how Lia talks.'
   onboarding:
-    title: "Configure your Lia"
-    subtitle: "One step to get Lia ready to talk. Your key is stored securely on this device."
+    title: 'Configure your Lia'
+    subtitle: 'One step to get Lia ready to talk. Your key is stored securely on this device.'
   key:
-    saved: "Key stored"
-    missing: "No key"
+    saved: 'Key stored'
+    missing: 'No key'
   fields:
     provider:
-      label: "Main provider"
-      placeholder: "Provider"
+      label: 'Main provider'
+      placeholder: 'Provider'
     model:
-      label: "Model"
-      placeholder: "Select a model"
+      label: 'Model'
+      placeholder: 'Select a model'
     endpoint:
-      label: "Endpoint"
-      placeholder: "Base URL (endpoint)"
+      label: 'Endpoint'
+      placeholder: 'Base URL (endpoint)'
     key:
-      label: "API key"
-      placeholder: "API key"
-      replace: "New API key (leave blank to keep)"
+      label: 'API key'
+      placeholder: 'API key'
+      replace: 'New API key (leave blank to keep)'
     fallbackProvider:
-      label: "Fallback provider"
-      placeholder: "Optional backup provider"
+      label: 'Fallback provider'
+      placeholder: 'Optional backup provider'
     fallbackModel:
-      label: "Fallback model"
-      placeholder: "Select a fallback model"
+      label: 'Fallback model'
+      placeholder: 'Select a fallback model'
     fallbackKey:
-      label: "Fallback API key"
+      label: 'Fallback API key'
   fallback:
-    label: "Automatic fallback"
-    hint: "Backup if the main provider fails"
+    label: 'Automatic fallback'
+    hint: 'Backup if the main provider fails'
   securityNote: "Your API key is encrypted with the device's secure storage. It is never written to your configuration or logs."
   actions:
-    save: "Save"
-    test: "Test connection"
-    remove: "Remove"
-    back: "Back"
-    conclude: "Finish setup"
-    getKey: "Get API key"
-  saved: "Provider saved"
-  removed: "Provider removed"
+    save: 'Save'
+    test: 'Test connection'
+    remove: 'Remove'
+    back: 'Back'
+    conclude: 'Finish setup'
+    getKey: 'Get API key'
+  saved: 'Provider saved'
+  removed: 'Provider removed'
   connection:
-    ok: "Connection OK"
-    failed: "Connection failed. Check the provider, model and key."
-    fallbackFailed: "Fallback connection failed. Check its provider, model and key."
+    ok: 'Connection OK'
+    failed: 'Connection failed. Check the provider, model and key.'
+    fallbackFailed: 'Fallback connection failed. Check its provider, model and key.'
   errors:
-    providerRequired: "Select a provider first."
-    modelRequired: "Select a model."
-    keyStoreUnavailable: "Secure key storage is unavailable on this device."
-    save: "Could not save the provider."
-    fillFirst: "Select a provider and a model to test the connection."
-    testFirst: "Test the connection before finishing."
-    concludeFailed: "Could not finish the setup. Please try again."
+    providerRequired: 'Select a provider first.'
+    modelRequired: 'Select a model.'
+    keyStoreUnavailable: 'Secure key storage is unavailable on this device.'
+    save: 'Could not save the provider.'
+    fillFirst: 'Select a provider and a model to test the connection.'
+    testFirst: 'Test the connection before finishing.'
+    concludeFailed: 'Could not finish the setup. Please try again.'
 config:
-  title: "Configure your Lia"
-  subtitle: "How she thinks, how she speaks and how she looks."
+  title: 'Configure your Lia'
+  subtitle: 'How she thinks, how she speaks and how she looks.'
   actions:
-    back: "Back"
+    back: 'Back'
   navigation:
-    label: "Lia configuration sections"
+    label: 'Lia configuration sections'
   sections:
     ai:
-      title: "AI"
+      title: 'AI'
       summary: "Lia's brain: provider, model and fallback."
     personality:
-      title: "Personality"
-      summary: "Who Lia is: name, style, language and mood."
+      title: 'Personality'
+      summary: 'Who Lia is: name, style, language and mood.'
       fields:
-        name: "Name"
-        style: "Style"
-        language: "Language"
-        mood: "Mood mode"
-        unset: "Not set"
-      missing: "No personality loaded on this card."
+        name: 'Name'
+        style: 'Style'
+        language: 'Language'
+        mood: 'Mood mode'
+        unset: 'Not set'
+      missing: 'No personality loaded on this card.'
       readOnlyNote: "These values come from Lia's personality. Full editing arrives in a later step."
     voice:
-      title: "Voice"
-      summary: "How Lia speaks: voice provider, model and timbre."
+      title: 'Voice'
+      summary: 'How Lia speaks: voice provider, model and timbre.'
       fields:
-        provider: "Voice provider"
-        model: "Model"
-        voice: "Voice"
-        fallback: "Fallbacks"
-        unset: "Not set"
-      configured: "Voice configured."
-      notConfigured: "No voice configured yet."
-      loading: "Loading voice configuration…"
-      loadError: "Could not load the voice configuration."
+        provider: 'Voice provider'
+        model: 'Model'
+        voice: 'Voice'
+        fallback: 'Fallbacks'
+        unset: 'Not set'
+      configured: 'Voice configured.'
+      notConfigured: 'No voice configured yet.'
+      loading: 'Loading voice configuration…'
+      loadError: 'Could not load the voice configuration.'
       primary:
-        title: "Main voice"
-        none: "No voice configured"
+        title: 'Main voice'
+        none: 'No voice configured'
       reserve:
-        title: "Backup voice"
-        none: "None"
-        hint: "Used only if the main voice fails."
-        duplicate: "The backup voice is the same as the main one, so it will not help if that one fails."
+        title: 'Backup voice'
+        none: 'None'
+        hint: 'Used only if the main voice fails.'
+        duplicate: 'The backup voice is the same as the main one, so it will not help if that one fails.'
       preview:
-        play: "▶ Hear a sample"
-        cancel: "Stop"
-        loading: "Generating sample…"
-        playing: "Playing sample…"
-        cancelled: "Sample stopped."
-        error: "Could not generate the sample."
+        play: '▶ Hear a sample'
+        cancel: 'Stop'
+        loading: 'Generating sample…'
+        playing: 'Playing sample…'
+        cancelled: 'Sample stopped.'
+        error: 'Could not generate the sample.'
       catalog:
-        loading: "Loading voices…"
-        empty: "This provider does not offer a voice list."
+        loading: 'Loading voices…'
+        empty: 'This provider does not offer a voice list.'
         fromProviderSettings: "Its voice is chosen in the provider's own settings."
-        needsConfiguration: "Configure this provider before picking one of its voices."
+        needsConfiguration: 'Configure this provider before picking one of its voices.'
         error: "Could not load this provider's voice list."
       errors:
-        persist: "Could not save the voice. Nothing was changed."
+        persist: 'Could not save the voice. Nothing was changed.'
         projection: "The voice was saved, but Lia's card was not updated. It will be repaired when this screen is opened again."
-        fallbackIdentical: "The backup voice cannot be the same as the main voice."
+        fallbackIdentical: 'The backup voice cannot be the same as the main voice.'
       custom:
-        title: "Custom voice"
-        subtitle: "Use a voice of your own. Your files stay on this computer."
+        title: 'Custom voice'
+        subtitle: 'Use a voice of your own. Your files stay on this computer.'
         engine:
           missing:
-            title: "Voice engine not installed yet"
-            hint: "Custom voices become available once a voice engine is installed. Voices you already imported stay saved here."
+            title: 'Voice engine not installed yet'
+            hint: 'Custom voices become available once a voice engine is installed. Voices you already imported stay saved here.'
         profiles:
-          empty: "No imported voices yet."
-          use: "Use this voice"
-          remove: "Remove"
-          removeYes: "Yes, remove it"
-          removeConfirm: "Remove this voice? The imported file will be deleted."
-          cancel: "Cancel"
+          empty: 'No imported voices yet.'
+          use: 'Use this voice'
+          remove: 'Remove'
+          removeYes: 'Yes, remove it'
+          removeConfirm: 'Remove this voice? The imported file will be deleted.'
+          cancel: 'Cancel'
           status:
-            inUse: "In use"
-            idle: "Saved"
+            inUse: 'In use'
+            idle: 'Saved'
       engine:
-          title: "Voice engine not installed yet"
-          hint: "Custom voices become available once a voice engine is installed. Voices you already imported stay saved here."
+        title: 'Voice engine not installed yet'
+        hint: 'Custom voices become available once a voice engine is installed. Voices you already imported stay saved here.'
       choose:
-        title: "How should Lia speak?"
-        hint: "Pick one of the two. You can change it whenever you like."
-        ready: "Ready-made voice"
-        readyHint: "One of the voices that already comes with Lia."
-        custom: "My own voice"
-        customHint: "Speak with a voice of your own. The file stays on your computer."
+        title: 'How should Lia speak?'
+        hint: 'Pick one of the two. You can change it whenever you like.'
+        ready: 'Ready-made voice'
+        readyHint: 'One of the voices that already comes with Lia.'
+        custom: 'My own voice'
+        customHint: 'Speak with a voice of your own. The file stays on your computer.'
       advanced:
-        title: "Advanced settings"
-        hint: "Voice provider, model and emergency voice."
+        title: 'Advanced settings'
+        hint: 'Voice provider, model and emergency voice.'
     appearance:
-      title: "Appearance"
-      summary: "How Lia looks: avatar, outfit, accessories and state."
+      title: 'Appearance'
+      summary: 'How Lia looks: avatar, outfit, accessories and state.'
       slots:
-        avatar: "Avatar"
-        outfit: "Outfit"
-        accessory: "Accessories"
-        state: "State"
-        pending: "Coming soon"
-      comingSoon: "Outfits, accessories and states arrive in the Avatar step."
+        avatar: 'Avatar'
+        outfit: 'Outfit'
+        accessory: 'Accessories'
+        state: 'State'
+        pending: 'Coming soon'
+      comingSoon: 'Outfits, accessories and states arrive in the Avatar step.'

@@ -64,7 +64,7 @@ export function createPlaybackManager<TAudio>(
   }
 
   function emit<T>(bucket: Set<Listener<T>>, event: T) {
-    for (const listener of [...bucket])
+    for (const listener of Array.from(bucket))
       listener(event)
   }
 
@@ -368,7 +368,7 @@ export function createPlaybackManager<TAudio>(
         waiting.splice(i, 1)
     }
 
-    for (const entry of [...active.values()]) {
+    for (const entry of Array.from(active.values())) {
       if (entry.item.intentId === intentId)
         interrupt(entry, reason, { allowStartWaiting: false })
     }
@@ -382,7 +382,7 @@ export function createPlaybackManager<TAudio>(
         waiting.splice(i, 1)
     }
 
-    for (const entry of [...active.values()]) {
+    for (const entry of Array.from(active.values())) {
       if (entry.item.ownerId === ownerId)
         interrupt(entry, reason, { allowStartWaiting: false })
     }
@@ -395,7 +395,7 @@ export function createPlaybackManager<TAudio>(
     stopAll(reason = 'stop-all') {
       waiting.length = 0
 
-      for (const x of [...active.values()]) {
+      for (const x of Array.from(active.values())) {
         interrupt(x, reason, { allowStartWaiting: false })
       }
     },

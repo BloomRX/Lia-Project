@@ -16,9 +16,9 @@
  * This keeps the helper testable with real production code while staying
  * renderer-local and narrowly dependency-injected.
  */
-export interface OrderedVoiceSendSequence<Captured> {
-  enqueue(text: string): Promise<void>
-  getChain(): Promise<void>
+export interface OrderedVoiceSendSequence<_Captured> {
+  enqueue: (text: string) => Promise<void>
+  getChain: () => Promise<void>
 }
 
 export function createOrderedVoiceSendSequence<Captured>(options: {

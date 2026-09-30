@@ -11,8 +11,8 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 
 import InteractiveArea from './InteractiveArea.vue'
 
-import { createMemoryStorage } from '../../test-helpers'
 import { electronLiaBrainChatDecision } from '../../shared/eventa'
+import { createMemoryStorage } from '../../test-helpers'
 import { artistryToolReferences } from '../stores/tools'
 
 /**

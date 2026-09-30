@@ -1078,6 +1078,7 @@ export function createChatOrchestratorRuntime(deps: ChatOrchestratorRuntimeDeps)
         // still replaces any earlier completion - and it is the factual
         // terminal treatment of the round that performed the send.
         terminalOutcome = 'failed'
+        // oxlint-disable-next-line no-unsafe-finally -- throw in finally is intentional
         throw error
       }
       finally {

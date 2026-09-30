@@ -95,7 +95,7 @@ async function bootstrap(): Promise<void> {
   const installEventListeners = new Set<(event: string, detail?: string) => void>()
   const fanOutEvent = (event: string, detail?: string): void => {
     publishLiaEvent(event, detail)
-    for (const listener of [...installEventListeners])
+    for (const listener of Array.from(installEventListeners))
       listener(event, detail)
   }
 

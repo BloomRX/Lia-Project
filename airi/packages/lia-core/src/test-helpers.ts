@@ -1,7 +1,8 @@
+import nodePath, { join } from 'node:path'
+
 // TEST-ONLY portability helpers — no runtime effect
 import { symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import nodePath, { join } from 'node:path'
 
 export function normalizeLineEndings(text: string): string {
   return String(text).replace(/\r\n/g, '\n').replace(/\r/g, '\n')
@@ -34,13 +35,24 @@ export function isSymlinkSupported(): boolean {
   const link = `${base}-link`
   try {
     writeFileSync(target, 'x')
-    try { unlinkSync(link) } catch {}
+    try {
+      unlinkSync(link)
+    }
+    catch {}
     symlinkSync(target, link)
     return true
-  } catch {
+  }
+  catch {
     return false
-  } finally {
-    try { unlinkSync(link) } catch {}
-    try { unlinkSync(target) } catch {}
+  }
+  finally {
+    try {
+      unlinkSync(link)
+    }
+    catch {}
+    try {
+      unlinkSync(target)
+    }
+    catch {}
   }
 }

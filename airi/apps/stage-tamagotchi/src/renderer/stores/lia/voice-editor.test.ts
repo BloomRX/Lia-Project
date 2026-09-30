@@ -105,6 +105,7 @@ describe('lia voice editor (4E-2 commit 2)', async () => {
     const current = providers.providerRuntimeState as Record<string, unknown>
     providers.providerRuntimeState = {
       ...current,
+      // oxlint-disable-next-line unicorn/no-useless-fallback-in-spread -- fallback intentional
       [providerId]: { ...(current[providerId] as object ?? {}), models },
     } as typeof providers.providerRuntimeState
   }

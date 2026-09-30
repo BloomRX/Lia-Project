@@ -1,7 +1,8 @@
 import type { KokoroLayout } from './layout'
 
-import { spawn } from 'node:child_process'
 import process from 'node:process'
+
+import { spawn } from 'node:child_process'
 
 import { errorMessageFrom } from '@moeru/std'
 
@@ -370,7 +371,7 @@ export function createKokoroWorkerClient(options: KokoroWorkerClientOptions): Ko
           // a broken pipe means the child is already gone; proceed to kill
         }
       }
-      const grace = setTimeout(() => tryKill('SIGTERM'), shutdownGraceMs)
+      const grace = setTimeout(tryKill, shutdownGraceMs, 'SIGTERM')
       await Promise.race([exitPromise, new Promise<void>(resolve => setTimeout(resolve, shutdownGraceMs * 2))])
       clearTimeout(grace)
       tryKill('SIGTERM')

@@ -8,9 +8,9 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 import { describe, expect, it } from 'vitest'
-import { normalizeLineEndings } from '../test-helpers'
 
 import { createProductionBrainAutomaticPolicy } from '../product/brain-policy'
+import { normalizeLineEndings } from '../test-helpers'
 import { groqBrainDescriptors } from './adapters/groq'
 import { composeBrainCatalog } from './catalog'
 import { brainRequirementForChatTurn } from './chat-requirement'

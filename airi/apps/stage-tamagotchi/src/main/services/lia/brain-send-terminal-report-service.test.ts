@@ -6,8 +6,8 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { repoRelativePosix } from '../../../test-helpers'
 
+import { repoRelativePosix } from '../../../test-helpers'
 import { createLiaBrainCorrelationStore } from './brain-correlation-store'
 import { createLiaBrainExecutionTerminalReportService, sanitizeLiaBrainExecutionTerminalReport } from './brain-execution-terminal-report-service'
 import { createLiaBrainSendTerminalReportService, sanitizeLiaBrainSendTerminalReport } from './brain-send-terminal-report-service'

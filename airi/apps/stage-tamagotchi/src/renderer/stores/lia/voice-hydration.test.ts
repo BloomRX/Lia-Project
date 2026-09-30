@@ -134,7 +134,7 @@ describe('lia voice hydration chain (4E-1 investigation)', () => {
           walk(full)
           continue
         }
-        if (!/\.(?:ts|vue)$/.test(entry) || /\.test\.ts$/.test(entry))
+        if (!/\.(?:ts|vue)$/.test(entry) || entry.endsWith('.test.ts'))
           continue
 
         const text = readFileSync(full, 'utf8')

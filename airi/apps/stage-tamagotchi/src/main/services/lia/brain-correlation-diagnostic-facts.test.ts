@@ -14,8 +14,8 @@ import { fileURLToPath } from 'node:url'
 
 import { createProductionBrainAutomaticPolicy, createProductionBrainCatalog, decideBrainRoute } from '@lia/core'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { repoRelativePosix } from '../../../test-helpers'
 
+import { repoRelativePosix } from '../../../test-helpers'
 import { composeLiaBrainCorrelationDiagnosticFacts } from './brain-correlation-diagnostic-facts'
 import { createLiaBrainCorrelationStore } from './brain-correlation-store'
 import { deriveLiaBrainExecutionIdentityFacts } from './brain-execution-identity-facts'
@@ -556,7 +556,7 @@ describe('correlation diagnostic facts - composed output shape (Phase 8.0D-10B-4
     for (const forbidden of ['correlationId', 'snapshot', 'executions', 'executionTerminals', 'createdAt'])
       expect(serialized, forbidden).not.toContain(forbidden)
     // No raw `sendTerminal` record escapes: only the derived sibling does.
-    expect(serialized).not.toContain('\"sendTerminal\"')
+    expect(serialized).not.toContain('"sendTerminal"')
   })
 
   it('raw escape: a retained send record reaches the output only as derived facts', () => {
@@ -819,4 +819,3 @@ describe('lia correlation diagnostic facts - initialRouteOverride sibling (Phase
     expect(JSON.stringify(result)).not.toContain('divergence')
   })
 })
-

@@ -1,9 +1,6 @@
+import { retrySourceMessageIdFrom } from '@proj-airi/stage-ui/stores/chat/retry-source'
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-
-import { groqBrainDescriptors } from '@lia/core'
-
-import { retrySourceMessageIdFrom } from '@proj-airi/stage-ui/stores/chat/retry-source'
 
 import { executeLiaAuthoritativeRetry } from '../services/lia/lia-authoritative-retry'
 import { widgetToolReferences } from '../stores/tools'
@@ -31,17 +28,6 @@ vi.mock('../stores/lia/provider', async (importOriginal) => {
   }
 })
 
-function makeAutomaticSelected() {
-  const { engines, models } = groqBrainDescriptors()
-  return {
-    status: 'automatic' as const,
-    selection: {
-      status: 'selected' as const,
-      route: { engine: engines[0]!, model: models[0]! },
-    },
-  }
-}
-
 const MINTED = '1f9d6a1e-0000-4000-8000-000000000020'
 
 beforeEach(() => {
@@ -53,12 +39,12 @@ beforeEach(() => {
 
 // Simulates InteractiveArea thin owner logic using REAL helpers — not a replica of Brain sequence
 async function handleRetryViaRealHelpers(opts: {
-  messages: Array<{ id?: string, role: string, content?: unknown }>,
-  index: number,
-  sessionId: string,
-  reasoning: boolean,
-  retry: (payload: Record<string, unknown>) => Promise<unknown>,
-  mint?: () => string,
+  messages: Array<{ id?: string, role: string, content?: unknown }>
+  index: number
+  sessionId: string
+  reasoning: boolean
+  retry: (payload: Record<string, unknown>) => Promise<unknown>
+  mint?: () => string
 }) {
   const sourceMessageId = retrySourceMessageIdFrom(opts.messages as unknown as import('@proj-airi/stage-ui/types/chat').ChatHistoryItem[], opts.index)
   const toolsToRetry = [...widgetToolReferences]
@@ -113,9 +99,13 @@ describe('interactive area retry thin owner (Phase 8.0D-10B-4D4C4-D2B6 correctiv
     expect(result.path).toBe('authoritative')
   })
 
-  it('ERROR-BUBBLE RACE: capture before shift, shift history while Brain pending, still uses u1', async () => {
+  it('eRROR-BUBBLE RACE: capture before shift, shift history while Brain pending, still uses u1', async () => {
     let resolveBrain!: (v: unknown) => void
-    mocks.requestDecision.mockImplementation(() => new Promise(res => { resolveBrain = res as unknown as (v: unknown) => void }))
+    mocks.requestDecision.mockImplementation(
+      () => new Promise((res) => {
+        resolveBrain = res as unknown as (v: unknown) => void
+      }),
+    )
     const history = [{ id: 'u1', role: 'user', content: 'first' }, { role: 'error', content: 'boom' } as unknown as { id?: string, role: string }]
     let messagesRef = [...history]
     // Simulate capturer that would have run at click time before Brain await
@@ -124,7 +114,8 @@ describe('interactive area retry thin owner (Phase 8.0D-10B-4D4C4-D2B6 correctiv
     const retry = vi.fn().mockImplementation(async (payload: Record<string, unknown>) => {
       // chatStore-like lookup by sourceMessageId
       const idx = messagesRef.findIndex(m => (m as { id?: string }).id === payload.sourceMessageId && m.role === 'user')
-      if (idx < 0) throw new Error('Retry target has no retriable source message: stale sourceMessageId')
+      if (idx < 0)
+        throw new Error('Retry target has no retriable source message: stale sourceMessageId')
       return {}
     })
     const pending = executeLiaAuthoritativeRetry(
@@ -143,15 +134,20 @@ describe('interactive area retry thin owner (Phase 8.0D-10B-4D4C4-D2B6 correctiv
     expect(payload.index).toBe(1) // original clicked index, stale index irrelevant for source lookup
   })
 
-  it('ERROR-BUBBLE DELETION: remove u1 while Brain pending → fails safely without fallback to stale index', async () => {
+  it('eRROR-BUBBLE DELETION: remove u1 while Brain pending → fails safely without fallback to stale index', async () => {
     let resolveBrain!: (v: unknown) => void
-    mocks.requestDecision.mockImplementation(() => new Promise(res => { resolveBrain = res as unknown as (v: unknown) => void }))
+    mocks.requestDecision.mockImplementation(
+      () => new Promise((res) => {
+        resolveBrain = res as unknown as (v: unknown) => void
+      }),
+    )
     const history = [{ id: 'u1', role: 'user', content: 'first' }, { role: 'error', content: 'boom' } as unknown as { id?: string, role: string }]
     let messagesRef = [...history]
     const sourceAtClick = retrySourceMessageIdFrom(messagesRef as unknown as import('@proj-airi/stage-ui/types/chat').ChatHistoryItem[], 1)!
     const retry = vi.fn().mockImplementation(async (payload: Record<string, unknown>) => {
       const idx = messagesRef.findIndex(m => (m as { id?: string }).id === payload.sourceMessageId && m.role === 'user')
-      if (idx < 0) throw new Error('Retry target has no retriable source message: stale sourceMessageId')
+      if (idx < 0)
+        throw new Error('Retry target has no retriable source message: stale sourceMessageId')
       return {}
     })
     const pending = executeLiaAuthoritativeRetry(
@@ -167,7 +163,7 @@ describe('interactive area retry thin owner (Phase 8.0D-10B-4D4C4-D2B6 correctiv
     expect(retry).toHaveBeenCalledTimes(1)
   })
 
-  it('LEGACY ID-LESS USER: source user itself has no ID → immediate legacy path, no Brain', async () => {
+  it('lEGACY ID-LESS USER: source user itself has no ID → immediate legacy path, no Brain', async () => {
     const messages = [{ role: 'user', content: 'legacy' } as unknown as { id?: string, role: string }, { role: 'error', content: 'boom' } as unknown as { id?: string, role: string }]
     const retry = vi.fn().mockResolvedValue({})
     const result = await handleRetryViaRealHelpers({ messages: messages as Array<{ id?: string, role: string }>, index: 1, sessionId: 's1', reasoning: false, retry })

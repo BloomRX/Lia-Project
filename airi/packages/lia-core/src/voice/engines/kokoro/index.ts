@@ -305,7 +305,7 @@ export function createKokoroVoiceEngine(options: KokoroEngineOptions): KokoroVoi
     async install(): Promise<KokoroInstallFacts> {
       const deps: KokoroInstallDeps = {
         ...defaultKokoroInstallDeps(),
-        ...(options.installDeps ?? {}),
+        ...options.installDeps,
         platform: options.platform ?? options.installDeps?.platform ?? process.platform,
       }
       const factsResult = await ensureKokoroInstalled(currentLayout(), deps)

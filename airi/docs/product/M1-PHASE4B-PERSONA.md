@@ -33,7 +33,7 @@ The old provisional 4B persona was free prose. **Persona Lia v1.0 replaces that*
 
 New file: `packages/stage-ui/src/constants/lia-persona.ts`
 
-```ts
+```text
 LiaPersona {
   schemaVersion: 1
   identity: { name: 'Lia', greetings: string[] }

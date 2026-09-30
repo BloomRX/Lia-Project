@@ -14,8 +14,6 @@ import { tmpdir } from 'node:os'
 import { basename, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
-import { isSymlinkSupported } from '../../../test-helpers'
-
 import { useLogg } from '@guiiai/logg'
 import { defineInvoke } from '@moeru/eventa'
 import { ExtensionHost } from '@proj-airi/plugin-sdk/plugin-host'
@@ -33,6 +31,7 @@ import {
   electronPluginUnload,
 } from '../../../../shared/eventa/plugin/host'
 import { electronPluginToolsChanged } from '../../../../shared/eventa/plugin/tools'
+import { isSymlinkSupported } from '../../../test-helpers'
 import { setupExtensionHostServiceInternal } from './host'
 import { loadManifestsFrom } from './host/registry'
 import { setupExtensionHost as setupExtensionHostService } from './index'

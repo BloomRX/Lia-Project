@@ -5,8 +5,8 @@ import { fileURLToPath } from 'node:url'
 
 import { createContainer, provide, resolve } from 'injeca'
 import { describe, expect, it, vi } from 'vitest'
-import { repoRelativePosix } from '../../../test-helpers'
 
+import { repoRelativePosix } from '../../../test-helpers'
 import { createLiaBrainCorrelationService, LIA_BRAIN_CORRELATION_MAX_ENTRIES, LIA_BRAIN_CORRELATION_TTL_MS } from './brain-correlation-service'
 
 /**

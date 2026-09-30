@@ -1,38 +1,40 @@
-import { readFileSync } from 'node:fs'
 import { join, normalize, relative } from 'node:path'
 
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 
 import { createMemoryStorage, normalizeLineEndings } from './test-helpers'
 import { resolveKokoroLayout } from './voice/engines/kokoro/layout'
 import { KOKORO_VOICES } from './voice/engines/kokoro/manifest'
 
 describe('windows portability fixtures (D2B9-A1)', () => {
-  it('CRLF YAML parsing: yamlKeys normalizes CRLF before split', () => {
+  it('cRLF YAML parsing: yamlKeys normalizes CRLF before split', () => {
     const yaml = 'a:\r\n  b: 1\r\n  c: 2\r\n'
     const keys = new Set<string>()
     const stack: string[] = []
     for (const rawLine of normalizeLineEndings(yaml).split('\n')) {
-      if (!rawLine.trim() || rawLine.trim().startsWith('#')) continue
+      if (!rawLine.trim() || rawLine.trim().startsWith('#'))
+        continue
       const match = /^(\s*)([\w-]+):(.*)$/.exec(rawLine)
-      if (!match) continue
+      if (!match)
+        continue
       const [, indent, key, rest] = match
       stack.length = indent.length / 2
       stack.push(key)
-      if (rest.trim()) keys.add(stack.join('.'))
+      if (rest.trim())
+        keys.add(stack.join('.'))
     }
     expect(keys.has('a.b')).toBe(true)
     expect(keys.has('a.c')).toBe(true)
   })
 
-  it('CRLF source guard: readSource normalizes before regex', () => {
+  it('cRLF source guard: readSource normalizes before regex', () => {
     const source = 'const x = 1;\r\nconst y = 2;\r\n'
     const normalized = normalizeLineEndings(source)
     expect(normalized.split('\n')).toEqual(['const x = 1;', 'const y = 2;', ''])
     expect(normalized).toContain('const x = 1;')
   })
 
-  it('Windows backslash repo-relative path', () => {
+  it('windows backslash repo-relative path', () => {
     const repoRoot = join('/', 'repo', 'root')
     const abs = join(repoRoot, 'apps', 'stage-tamagotchi', 'src', 'file.ts')
     // Simulate Windows absolute path with backslashes
@@ -42,7 +44,7 @@ describe('windows portability fixtures (D2B9-A1)', () => {
     expect(posix).toBe('apps/stage-tamagotchi/src/file.ts')
   })
 
-  it('Kokoro win32 layout: root, markerPaths, installed health, synth, override', async () => {
+  it('kokoro win32 layout: root, markerPaths, installed health, synth, override', async () => {
     const home = join('C:', 'Users', 'you', 'AppData', 'Local', 'Lia', 'runtimes')
     const layout = resolveKokoroLayout({ home, platform: 'win32' })
     expect(layout.rootDir).toBe(join(home, 'kokoro'))
@@ -90,8 +92,10 @@ describe('windows portability fixtures (D2B9-A1)', () => {
       // Isolated
       const storage2 = createMemoryStorage()
       expect(storage2.length).toBe(0)
-    } finally {
-      if (original !== undefined) (globalThis as any).localStorage = original
+    }
+    finally {
+      if (original !== undefined)
+        (globalThis as any).localStorage = original
     }
   })
 
@@ -103,9 +107,11 @@ describe('windows portability fixtures (D2B9-A1)', () => {
         // Mock helper that simulates failure
         try {
           throw new Error('EPERM')
-        } catch {
+        }
+        catch {
           return false
-        } finally {
+        }
+        finally {
           // cleanup would happen here
         }
       })()

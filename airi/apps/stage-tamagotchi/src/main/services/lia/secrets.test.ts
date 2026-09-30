@@ -1,3 +1,5 @@
+import { Buffer } from 'node:buffer'
+
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**

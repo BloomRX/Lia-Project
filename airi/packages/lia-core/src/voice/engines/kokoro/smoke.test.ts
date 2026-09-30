@@ -5,15 +5,17 @@ import { join } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
 
-import { KOKORO_SMOKE_PHRASES, kokoroSmokeSummaryLine, runKokoroSmoke } from './smoke'
 import { resolveKokoroLayout } from './layout'
 import { KOKORO_ENGINE_ID, KOKORO_MODEL_SHA256, KOKORO_VOICES } from './manifest'
+import { KOKORO_SMOKE_PHRASES, kokoroSmokeSummaryLine, runKokoroSmoke } from './smoke'
 
 /**
  * The smoke's obligations to the production engine: order (install only if
  * missing -> start -> synth x4 -> stop), factual report fields, dev-only
  * WAV persistence, and clean stop after the last phrase.
  */
+
+const A_MODEL_BYTES = 92_361_116
 
 interface CallRecord {
   kind: 'install' | 'start' | 'synthesize' | 'stop'
@@ -68,8 +70,6 @@ function fakeEngine(calls: CallRecord[], options: { provider?: string } = {}): K
   }
 }
 
-const A_MODEL_BYTES = 92_361_116
-
 function fakeSmokeWorld(preInstalled: boolean) {
   const layout = resolveKokoroLayout({ home: join('/', 'run', 'lia-voice-runtimes') })
   const bytes = new Map<string, Uint8Array>()
@@ -123,7 +123,13 @@ describe('kokoro smoke (dev-only, drives the production engine)', () => {
     })
 
     expect(world.calls.map(call => call.kind)).toEqual([
-      'install', 'start', 'synthesize', 'synthesize', 'synthesize', 'synthesize', 'stop',
+      'install',
+      'start',
+      'synthesize',
+      'synthesize',
+      'synthesize',
+      'synthesize',
+      'stop',
     ])
     expect(report.installRan).toBe(true)
     expect(report.installedPrior).toBe(false)
@@ -170,7 +176,10 @@ describe('kokoro smoke (dev-only, drives the production engine)', () => {
       layout: world.layout,
       outDir: join('/', 'run', 'qa-out'),
       sha256File: async () => KOKORO_MODEL_SHA256,
-      now: (() => { let t = 1000; return () => (t += 250) })(),
+      now: (() => {
+        let t = 1000
+        return () => (t += 250)
+      })(),
     })
     expect(report.modelSha256).toBe(KOKORO_MODEL_SHA256)
     expect(report.modelMatchesManifest).toBe(true)

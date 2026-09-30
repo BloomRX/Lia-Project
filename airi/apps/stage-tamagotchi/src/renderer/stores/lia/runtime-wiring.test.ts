@@ -266,7 +266,7 @@ describe('lia provider runtime wiring (M1)', () => {
     const store = useLiaProviderStore()
     store.registerRuntimeExtensions()
     await store.activateConfiguredProvider()
-    await store.persistConfig({ ...(store.loadedConfig ?? {}), onboarded: true })
+    await store.persistConfig({ ...store.loadedConfig, onboarded: true })
 
     // The provider record is what `useLocalStorage('settings/providers/configured')`
     // persists, so a secret here would be a secret in localStorage.

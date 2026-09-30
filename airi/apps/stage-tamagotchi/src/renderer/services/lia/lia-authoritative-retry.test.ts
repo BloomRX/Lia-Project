@@ -1,10 +1,8 @@
+import { groqBrainDescriptors } from '@lia/core'
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { groqBrainDescriptors } from '@lia/core'
-
 import { widgetToolReferences } from '../../stores/tools'
-
 import { executeLiaAuthoritativeRetry } from './lia-authoritative-retry'
 
 const mocks = vi.hoisted(() => ({
@@ -104,7 +102,11 @@ describe('lia authoritative retry (Phase 8.0D-10B-4D4C4-D2B6 corrective)', () =>
 
   it('authority awaited: deferred Brain blocks retry', async () => {
     let resolveBrain!: (v: unknown) => void
-    mocks.requestDecision.mockImplementation(() => new Promise(res => { resolveBrain = res as unknown as (v: unknown) => void }))
+    mocks.requestDecision.mockImplementation(
+      () => new Promise((res) => {
+        resolveBrain = res as unknown as (v: unknown) => void
+      }),
+    )
     const retry = vi.fn().mockResolvedValue({})
     const pending = executeLiaAuthoritativeRetry(
       { sessionId: 's1', index: 1, sourceMessageId: 'u1', reasoning: false, tools: [...widgetToolReferences] },
@@ -142,7 +144,7 @@ describe('lia authoritative retry (Phase 8.0D-10B-4D4C4-D2B6 corrective)', () =>
     expect(payload.correlationId).toBe(MINTED)
   })
 
-  it('Brain failure degrades: retry still called without routeOverride', async () => {
+  it('brain failure degrades: retry still called without routeOverride', async () => {
     mocks.requestDecision.mockRejectedValue(new Error('brain fail'))
     const retry = vi.fn().mockResolvedValue({})
     await executeLiaAuthoritativeRetry(

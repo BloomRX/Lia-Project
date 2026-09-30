@@ -5,8 +5,8 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 import { describe, expect, it, vi } from 'vitest'
-import { repoRelativePosix } from '../../../test-helpers'
 
+import { repoRelativePosix } from '../../../test-helpers'
 import { readLiaBrainExecutionIdentityFacts } from './brain-correlation-reader'
 import { createLiaBrainCorrelationService } from './brain-correlation-service'
 import { registerLiaBrainDecisionBridge } from './brain-decision-service'

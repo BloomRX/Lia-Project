@@ -439,7 +439,6 @@ function onPreview(): void {
           {{ tt('reserve.duplicate') }}
         </p>
       </section>
-
     </details>
 
     <!-- Erros: sempre visíveis, nunca escondidos -->

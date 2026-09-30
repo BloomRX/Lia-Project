@@ -81,8 +81,6 @@ export interface AiriStageManagerDeps {
   workspaceRoot: string
 }
 
-const STAGE_PACKAGE = '@proj-airi/stage-tamagotchi'
-
 /**
  * The dev-server entry as a concrete SCRIPT FILE (node runs it, no shell,
  * no package-manager wrapper). pnpm links the package's bin into
@@ -239,7 +237,6 @@ export class AiriStageManager {
       return this.state()
     }
 
-    const platform = this.deps.platform ?? nodePlatform
     this.setState({ phase: 'starting' })
 
     /**

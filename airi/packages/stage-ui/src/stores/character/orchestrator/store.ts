@@ -255,6 +255,7 @@ export const useCharacterOrchestratorStore = defineStore('character-orchestrator
     tickTimer = undefined
   }
 
+  // oxlint-disable-next-line no-unused-vars -- interface requires param
   async function handleSparkEmit(_: WebSocketBaseEvent<'spark:emit', WebSocketEvents['spark:emit']>) {
     // Currently no-op
     return undefined

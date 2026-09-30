@@ -1,7 +1,6 @@
 import type { KokoroChildProcessLike } from './process-worker'
 
 import { EventEmitter } from 'node:events'
-
 import { join } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
@@ -370,7 +369,7 @@ describe('kokoro voice engine (Phase 7.9C)', () => {
         layout.workerFile,
         layout.stateFile,
       ])
-      const world = makeWorld({ platform: 'win32' })
+      const _world = makeWorld({ platform: 'win32' })
       // Simulate that our world with win32 uses same layout strategy
       const winLayout = resolveKokoroLayout({ home: join('C:', 'override', 'home'), platform: 'win32' })
       expect(winLayout.rootDir).toBe(join('C:', 'override', 'home', 'kokoro'))

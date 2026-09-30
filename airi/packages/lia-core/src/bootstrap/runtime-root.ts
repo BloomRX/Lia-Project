@@ -113,7 +113,7 @@ function hasForbiddenChars(value: string): boolean {
   return value.replace(ATSETUP_FORBIDDEN_PATH_CHARS, '') !== value
 }
 
-const FORBIDDEN_LIST = '!#$%&()*+,;<=>?@[\\]^\`{|}~'
+const FORBIDDEN_LIST = '!#$%&()*+,;<=>?@[\\]^`{|}~'
 
 /**
  * A single LocalAppData candidate, validated; the rejection reason (never

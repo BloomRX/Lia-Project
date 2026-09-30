@@ -5,8 +5,8 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 import { describe, expect, it } from 'vitest'
-import { normalizeLineEndings } from '../../test-helpers'
 
+import { normalizeLineEndings } from '../../test-helpers'
 import { satisfiesBrainCapabilities } from '../capabilities'
 import { createBrainEngineRegistry, modelsForEngine } from '../engine-registry'
 import { eligibleBrainModelRoutes } from '../routes'

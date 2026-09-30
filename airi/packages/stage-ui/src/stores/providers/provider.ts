@@ -31,8 +31,8 @@ import {
   validateProvider as runProviderValidation,
 } from '../../libs/providers'
 import { selectProviderMetadata, selectProvidersMetadata } from '../../libs/providers/metadata'
-import { getProviderCredentialResolver } from '../chat/chat-provider-runtime'
 import { useAuthStore } from '../auth'
+import { getProviderCredentialResolver } from '../chat/chat-provider-runtime'
 import { useProviderConfigStore } from './config'
 import { normalizeProviderConfigDefaults } from './config-defaults'
 

@@ -12,7 +12,8 @@ describe('test-helpers production import guard (D2B9-A1)', () => {
     for (const root of roots) {
       const base = join(airiRoot, root)
       for (const entry of readdirSync(base, { recursive: true, withFileTypes: true })) {
-        if (!entry.isFile() || !/\.(?:ts|vue)$/.test(entry.name) || entry.name.includes('.test.') || entry.name === 'test-helpers.ts') continue
+        if (!entry.isFile() || !/\.(?:ts|vue)$/.test(entry.name) || entry.name.includes('.test.') || entry.name === 'test-helpers.ts')
+          continue
         const file = join(entry.parentPath, entry.name)
         const content = readFileSync(file, 'utf-8')
         if (content.includes('test-helpers')) {

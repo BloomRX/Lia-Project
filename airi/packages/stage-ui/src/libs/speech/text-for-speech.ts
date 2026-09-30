@@ -41,6 +41,7 @@ const BULLET_RE = /^[ \t]*[*+-][ \t]+/gm
 const TABLE_PIPE_RE = /\|/g
 const EMPHASIS_RE = /(\*\*|__|\*|_|~~)/g
 /** Emoji and pictographs (extended pictographic + regional indicators + misc symbols/dingbats + variation selectors). */
+// oxlint-disable-next-line no-misleading-character-class -- emoji pattern
 const EMOJI_RE = /[\u{1F1E6}-\u{1F1FF}\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}\u{20E3}\u{2B50}]/gu
 /** What remains must contain a letter or a digit to be spoken at all. */
 const SPEAKABLE_RE = /[\p{L}\p{N}]/u

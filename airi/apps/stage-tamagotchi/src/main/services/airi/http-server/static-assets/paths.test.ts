@@ -5,7 +5,6 @@ import { join, normalize } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { isSymlinkSupported } from '../../../../../test-helpers'
-
 import {
   buildMountedStaticAssetPath,
   normalizeStaticAssetPath,

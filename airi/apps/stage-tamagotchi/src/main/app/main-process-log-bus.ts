@@ -54,7 +54,8 @@ export function ingestMainProcessLog(raw: string): void {
  */
 export function sanitizeLogText(raw: string): string {
   let text = raw
-    .replace(/\u001b\[[0-9;]*m/g, '') // strip ANSI color/style escape codes
+    // oxlint-disable-next-line no-control-regex -- ANSI escape
+    .replace(/\u001B\[[0-9;]*m/g, '') // strip ANSI color/style escape codes
     .trim() // drop leading/trailing whitespace, including any trailing newline
 
   text = maskSecrets(text)
@@ -73,7 +74,7 @@ function sanitizeLogLine(raw: string): string | null {
   // Collapse stack traces: keep the error line + the first frame, drop the rest
   // of the frame run so full stack traces are not shown in the normal Home view.
   const trimmed = raw.trim()
-  const isStackFrame = /^at\s/.test(trimmed) || /^<anonymous>/.test(trimmed)
+  const isStackFrame = /^at\s/.test(trimmed) || trimmed.startsWith('<anonymous>')
   if (isStackFrame) {
     if (lastLineWasStackFrame)
       return null
@@ -100,7 +101,7 @@ function maskSecrets(text: string): string {
   )
 
   masked = masked.replace(
-    /((?:api[_-]?key|apikey|secret|client[_-]?secret|password|passwd|token|access[_-]?token|refresh[_-]?token|session[_-]?key|auth[_-]?token)\s*[:=]\s*)(["']?)[^"',;\s]+/gi,
+    /((?:api[_-]?key|secret|client[_-]?secret|password|passwd|token|access[_-]?token|refresh[_-]?token|session[_-]?key|auth[_-]?token)\s*[:=]\s*)(["']?)[^"',;\s]+/gi,
     '$1$2***',
   )
 

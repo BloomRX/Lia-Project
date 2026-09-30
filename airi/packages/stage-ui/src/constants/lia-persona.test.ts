@@ -5,7 +5,7 @@ import {
   renderLiaPersonaFields,
 } from './lia-persona'
 
-describe('Lia persona v1.0 (structured model)', () => {
+describe('lia persona v1.0 (structured model)', () => {
   it('defines the official default persona shape', () => {
     const p = LIA_DEFAULT_PERSONA
 
@@ -19,8 +19,16 @@ describe('Lia persona v1.0 (structured model)', () => {
 
     // Every attribute the preset is required to control (AGENTS §33) is present.
     for (const key of [
-      'confidence', 'affection', 'shyness', 'teasing', 'sarcasm',
-      'humor', 'curiosity', 'energy', 'kindness', 'proactivity',
+      'confidence',
+      'affection',
+      'shyness',
+      'teasing',
+      'sarcasm',
+      'humor',
+      'curiosity',
+      'energy',
+      'kindness',
+      'proactivity',
     ] as const) {
       expect(typeof p.attributes[key]).toBe('number')
       expect(p.attributes[key]).toBeGreaterThanOrEqual(0)

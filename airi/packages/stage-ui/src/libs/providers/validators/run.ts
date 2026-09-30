@@ -93,6 +93,7 @@ export async function getValidatorsOfProvider(options: {
   ]
 
   const normalizedConfig = merge(options.schemaDefaults, options.config)
+  // oxlint-disable-next-line no-unused-vars -- generic placeholder
   const validationRequired = definition.validationRequiredWhen || (<TConfig extends Record<string, any>>(_: TConfig) => false)
   const shouldValidate = await validationRequired(normalizedConfig)
 

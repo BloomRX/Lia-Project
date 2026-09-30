@@ -55,10 +55,10 @@ describe('phase 7.2: ownership retained, spawn without shell (tests C/D/G)', () 
         spawnImpl: spawnImpl as never,
         workspaceRoot: root,
       })
-      // eslint-disable-next-line @typescript-eslint/no-floating-promises
-      manager.start()
+      void manager.start()
       const options = spawnImpl.mock.calls.at(-1)?.[2] as { shell?: unknown } | undefined
       expect(options?.shell, `${platform} must not request a shell`).toBeUndefined()
+      // oxlint-disable-next-line no-unsafe-optional-chaining -- test mock exists
       const [entrypoint, sub] = spawnImpl.mock.calls.at(-1)?.[1] as string[]
       expect(entrypoint).toContain('electron-vite')
       expect(sub).toBe('dev')

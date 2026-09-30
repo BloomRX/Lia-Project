@@ -238,7 +238,7 @@ export function registerLiaVoiceBridge(params: LiaVoiceServiceParams) {
     const current = liaProductConfig.get() ?? defaultLiaProductConfig
     // A tiny, schema-validated merge: engine/fallback keys only - the legacy
     // alltalk block is out of reach of this writer by construction.
-    const voice = { ...(current.voice ?? {}) } as Record<string, unknown>
+    const voice = { ...current.voice } as Record<string, unknown>
     if (update.engine?.preferred !== undefined) {
       const preferred = update.engine.preferred.trim()
       if (preferred)

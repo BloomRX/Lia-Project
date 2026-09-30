@@ -12,9 +12,8 @@
 import type { LiaVoiceEngine, LiaVoiceSynthesisInput } from '@lia/core/voice/engines/types'
 import type { MainContext } from '@moeru/eventa/adapters/electron/main'
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-
 import { LiaVoiceEngineError } from '@lia/core/voice/engines/types'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const statusChannel = { id: 'eventa:invoke:lia:voice:status' }
 const synthesizeChannel = { id: 'eventa:invoke:lia:voice:synthesize' }
@@ -142,7 +141,8 @@ describe('lia voice bridge with a stock engine registered (Phase 7.9C)', () => {
     const calls: EngineCalls = { healths: 0, inputs: [], stops: 0 }
     const env = await loadBridge([fakeKokoroEngine(calls)])
     await expect(env.handlers.get(synthesizeChannel)!({ profileId: 'gone', text: 'Oi' } as never))
-      .rejects.toThrow('no longer exists')
+      .rejects
+      .toThrow('no longer exists')
     expect(calls.inputs).toEqual([])
   })
 
@@ -150,7 +150,8 @@ describe('lia voice bridge with a stock engine registered (Phase 7.9C)', () => {
     const calls: EngineCalls = { healths: 0, inputs: [], stops: 0 }
     const env = await loadBridge([fakeKokoroEngine(calls)])
     await expect(env.handlers.get(synthesizeChannel)!({ text: '   ' } as never))
-      .rejects.toMatchObject({ kind: 'input-invalid' })
+      .rejects
+      .toMatchObject({ kind: 'input-invalid' })
   })
 
   it('the before-quit lifecycle hook stops every registered engine (idempotent host release)', async () => {

@@ -37,7 +37,6 @@
     "update-test:matrix": "bash scripts/update-test/run-matrix.sh"
   },
   "dependencies": {
-    "@lia/core": "workspace:*",
     "@date-fns/utc": "catalog:",
     "@fontsource-variable/comfortaa": "catalog:",
     "@fontsource-variable/dm-sans": "catalog:",
@@ -54,6 +53,7 @@
     "@guiiai/logg": "catalog:",
     "@huggingface/transformers": "catalog:",
     "@intlify/core": "catalog:",
+    "@lia/core": "workspace:*",
     "@moeru/eventa": "catalog:",
     "@moeru/std": "catalog:",
     "@pinia/colada": "catalog:",

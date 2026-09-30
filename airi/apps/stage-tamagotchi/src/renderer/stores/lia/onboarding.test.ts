@@ -103,7 +103,7 @@ async function runConclude(store: ReturnType<typeof useLiaProviderStore>, args: 
 
   // `buildConfig()` in the component: fresh literals over the loaded config.
   await store.persistConfig({
-    ...(store.loadedConfig ?? {}),
+    ...store.loadedConfig,
     strategy: 'manual',
     preferred: { providerId: args.providerId, modelId: args.modelId },
     fallback: [],

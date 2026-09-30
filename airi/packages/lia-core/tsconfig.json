@@ -4,17 +4,17 @@
     "lib": [
       "ESNext"
     ],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
     "types": [
       "node"
     ],
-    "module": "ESNext",
-    "moduleResolution": "bundler",
+    "strict": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
-    "skipLibCheck": true,
-    "strict": true
+    "skipLibCheck": true
   },
   "include": [
     "src/**/*.ts"

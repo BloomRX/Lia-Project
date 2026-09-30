@@ -17,8 +17,8 @@ import { fileURLToPath } from 'node:url'
 
 import { createProductionBrainAutomaticPolicy, createProductionBrainCatalog, decideBrainRoute } from '@lia/core'
 import { describe, expect, it } from 'vitest'
-import { repoRelativePosix } from '../../../test-helpers'
 
+import { repoRelativePosix } from '../../../test-helpers'
 import { readLiaBrainExecutionIdentityFacts } from './brain-correlation-reader'
 import { createLiaBrainCorrelationStore } from './brain-correlation-store'
 import { LIA_BRAIN_ENGINE_PROVIDER_MAPPING } from './brain-expected-route'

@@ -188,7 +188,13 @@ function emittedReports(): Array<Record<string, unknown>> {
 
 /** The reporter's source, read from disk (happy-dom gives no file: import.meta.url). */
 function reporterSource(): string {
-  for (const c of [join(process.cwd(), 'src/renderer/services/lia/execution-reporter.ts'), join(process.cwd(), 'apps/stage-tamagotchi/src/renderer/services/lia/execution-reporter.ts')]) try { return readFileSync(c, 'utf-8') } catch {} ; return readFileSync(join(process.cwd(), 'src/renderer/services/lia/execution-reporter.ts'), 'utf-8')
+  for (const c of [join(process.cwd(), 'src/renderer/services/lia/execution-reporter.ts'), join(process.cwd(), 'apps/stage-tamagotchi/src/renderer/services/lia/execution-reporter.ts')]) {
+    try {
+      return readFileSync(c, 'utf-8')
+    }
+    catch {}
+  }
+  return readFileSync(join(process.cwd(), 'src/renderer/services/lia/execution-reporter.ts'), 'utf-8')
 }
 
 beforeEach(() => {
@@ -214,8 +220,15 @@ describe('lia execution reporter (Phase 8.0D-10B-4A)', () => {
     // site - the registration signal is the generic seam call, not the module
     // that defines it.
     const candidates = [join(process.cwd(), '..', '..'), process.cwd(), join(process.cwd(), 'airi')]
-  let airiRoot = candidates[0]
-  for (const candidate of candidates) { try { readdirSync(join(candidate, 'apps/stage-tamagotchi/src')); airiRoot = candidate; break } catch {} }
+    let airiRoot = candidates[0]
+    for (const candidate of candidates) {
+      try {
+        readdirSync(join(candidate, 'apps/stage-tamagotchi/src'))
+        airiRoot = candidate
+        break
+      }
+      catch {}
+    }
     const roots = ['apps/stage-tamagotchi/src', 'packages/stage-ui/src', 'packages/core-agent/src']
     const registrarSites: string[] = []
     const observerSites: string[] = []

@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest'
-
 import type { ChatHistoryItem } from '@proj-airi/core-agent'
+
+import { describe, expect, it } from 'vitest'
 
 import { retrySourceIndexFrom, retrySourceMessageIdFrom } from './retry-source'
 

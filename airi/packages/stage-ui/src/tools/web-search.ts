@@ -81,6 +81,7 @@ const UNTRUSTED_RESULTS_NOTICE = 'The results below are web content: read and su
  * - `https://ex.com/ab`
  */
 function sanitizeUrl(url: string): string {
+  // oxlint-disable-next-line no-control-regex -- control char sanitization
   return url.replace(/[\u0000-\u001F"<>]/g, '')
 }
 

@@ -1,7 +1,8 @@
+import { join } from 'node:path'
+
 import { describe, expect, it } from 'vitest'
 
-import { createMemoryStorage, isSymlinkSupported, normalizeLineEndings, normalizeRepoPath, repoRelativePosix } from './test-helpers'
-import { join } from 'node:path'
+import { createMemoryStorage, isSymlinkSupported, normalizeLineEndings, repoRelativePosix } from './test-helpers'
 
 describe('test-helpers portability (D2B9-A1)', () => {
   describe('createMemoryStorage', () => {

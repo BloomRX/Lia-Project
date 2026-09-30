@@ -8,7 +8,7 @@ function readChatSource(): string {
 }
 
 describe('chat retry stable source target (Phase 8.0D-10B-4D4C4-D2B6 corrective)', () => {
-  it('ChatRetryPayload has optional sourceMessageId, correlationId, reasoning, routeOverride', async () => {
+  it('chatRetryPayload has optional sourceMessageId, correlationId, reasoning, routeOverride', async () => {
     const src = readChatSource()
     expect(src).toMatch(/export interface ChatRetryPayload/)
     expect(src).toMatch(/sourceMessageId\?: string/)
@@ -27,7 +27,7 @@ describe('chat retry stable source target (Phase 8.0D-10B-4D4C4-D2B6 corrective)
     expect(src).toMatch(/throw new Error\('Retry target has no retriable source message: stale sourceMessageId'\)/)
     // ensure no fallback to payload.index when sourceMessageId present
     const retryBlock = src.slice(src.indexOf('async function retry'))
-    expect(retryBlock).not.toMatch(/payload\.sourceMessageId !== undefined.*\?.*payload\.index.*:.*payload\.index/s)
+    expect(retryBlock).not.toMatch(/payload\.sourceMessageId !== undefined[^?]*\?.*payload\.index[^:]*:.*payload\.index/s)
   })
 
   it('forwards correlationId, reasoning, routeOverride when supplied and preserves absence', async () => {

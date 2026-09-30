@@ -69,13 +69,14 @@ function fakeDeps(log: CallLog, options: { failHf?: boolean, modelDigest?: strin
     log: () => undefined,
     platform,
     readFileSync: (path) => {
-      if (path === layout.stateFile && options.preInstalled)
+      if (path === layout.stateFile && options.preInstalled) {
         return JSON.stringify({
           modelSha256: KOKORO_MODEL_SHA256,
           pipRequirements: [...KOKORO_PIP_REQUIREMENTS],
           protocol: KOKORO_WORKER_PROTOCOL_VERSION,
           pythonVersion: '3.12',
         })
+      }
       if (!files.has(path))
         throw new Error(`ENOENT: ${path}`)
       return ''
@@ -99,7 +100,7 @@ function fakeDeps(log: CallLog, options: { failHf?: boolean, modelDigest?: strin
       const scripted = options.runScript?.(command, args)
       if (scripted)
         return scripted
-      if (args.join(' ').includes("sys.version_info"))
+      if (args.join(' ').includes('sys.version_info'))
         return { code: 0, stdout: `${options.pythonVersion ?? '3.12'}\n`, stderr: '' }
       // Position-independent: launcher prefix args (`py -3.11 -m venv ...`)
       // must not hide the venv step.

@@ -19,8 +19,8 @@ import { fileURLToPath } from 'node:url'
 
 import { createProductionBrainAutomaticPolicy, createProductionBrainCatalog, decideBrainRoute } from '@lia/core'
 import { describe, expect, it } from 'vitest'
-import { repoRelativePosix } from '../../../test-helpers'
 
+import { repoRelativePosix } from '../../../test-helpers'
 import { deriveLiaBrainExecutionIdentityFacts } from './brain-execution-identity-facts'
 import { LIA_BRAIN_ENGINE_PROVIDER_MAPPING } from './brain-expected-route'
 

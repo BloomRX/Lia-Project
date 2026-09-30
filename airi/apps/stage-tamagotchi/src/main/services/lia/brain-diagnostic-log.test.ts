@@ -8,8 +8,8 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { repoRelativePosix } from '../../../test-helpers'
 
+import { repoRelativePosix } from '../../../test-helpers'
 import { createLiaBrainCorrelationObserver } from './brain-correlation-observer'
 import { createLiaBrainCorrelationService } from './brain-correlation-service'
 import { formatLiaBrainDiagnosticEntry, logLiaBrainDiagnostic, selectLiaBrainDiagnosticLog } from './brain-diagnostic-log'

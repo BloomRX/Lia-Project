@@ -11,6 +11,8 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { installCustomVoiceTransport } from '../../stores/lia/custom-voice-transport'
+
 const synthesizeMock = vi.fn(async (_request: unknown) => ({ audio: new Uint8Array([7, 8]).buffer, engine: 'kokoro' }))
 
 const ipc = {
@@ -27,8 +29,6 @@ vi.mock('@proj-airi/electron-vueuse', () => ({
     throw new Error(`Unexpected eventa invoke: ${JSON.stringify(invoke)}`)
   },
 }))
-
-import { installCustomVoiceTransport } from '../../stores/lia/custom-voice-transport'
 
 describe('custom voice transport (Phase 7.9C)', () => {
   beforeEach(() => {

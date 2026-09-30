@@ -67,13 +67,13 @@ export interface LiaVoiceSynthesisOutput {
 
 export interface LiaVoiceEngine {
   id: string
-  capabilities(): LiaVoiceEngineCapabilities
+  capabilities: () => LiaVoiceEngineCapabilities
   /** Idempotent. Brings the engine to a synthesize-ready state. */
-  start(): Promise<void>
-  health(): Promise<LiaVoiceEngineHealth>
-  synthesize(input: LiaVoiceSynthesisInput): Promise<LiaVoiceSynthesisOutput>
+  start: () => Promise<void>
+  health: () => Promise<LiaVoiceEngineHealth>
+  synthesize: (input: LiaVoiceSynthesisInput) => Promise<LiaVoiceSynthesisOutput>
   /** Idempotent. Releases the model/process; safe to call twice. */
-  stop(): Promise<void>
+  stop: () => Promise<void>
 }
 
 /** Failure taxonomy: the service uses it for fallback decisions. */

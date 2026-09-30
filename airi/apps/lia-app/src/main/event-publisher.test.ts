@@ -108,7 +108,9 @@ describe('lia event publisher (hotfix item 6)', () => {
   it('a throw from inside send() is contained and still logged', () => {
     const lines: string[] = []
     const { win } = makeWindow()
-    win.webContents.send = () => { throw new TypeError('Object has been destroyed') }
+    win.webContents.send = () => {
+      throw new TypeError('Object has been destroyed')
+    }
     const publish = createLiaEventPublisher({ getWindow: () => win, log: line => lines.push(line) })
     expect(() => publish('shutdown', 'finished')).not.toThrow()
     expect(lines.some(line => line.includes('delivery skipped'))).toBe(true)

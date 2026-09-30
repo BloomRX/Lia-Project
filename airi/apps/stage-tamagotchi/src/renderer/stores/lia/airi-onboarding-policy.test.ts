@@ -6,7 +6,6 @@ import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createMemoryStorage } from '../../../test-helpers'
-
 import { mayAutoOpenAiriWelcome, shouldAutoOpenAiriWelcome } from './airi-onboarding-policy'
 
 /**

@@ -1,10 +1,12 @@
 import type { KokoroLayout } from './layout'
 
+import nodePath from 'node:path'
+import process from 'node:process'
+
+import { Buffer } from 'node:buffer'
 import { execFile } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
-import nodePath from 'node:path'
-import process from 'node:process'
 import { promisify } from 'node:util'
 
 import { errorMessageFrom } from '@moeru/std'
@@ -156,7 +158,7 @@ export function defaultKokoroInstallDeps(): KokoroInstallDeps {
 // Steps
 // ---------------------------------------------------------------------------
 
-const PYTHON_PROBE_ARGS = ['-c', "import sys;print(f'{sys.version_info[0]}.{sys.version_info[1]}')"]
+const PYTHON_PROBE_ARGS = ['-c', 'import sys;print(f\'{sys.version_info[0]}.{sys.version_info[1]}\')']
 
 function pythonVersionOk(version: string): boolean {
   const match = /^(\d+)\.(\d+)/.exec(version.trim())
@@ -177,7 +179,8 @@ function pythonVersionOk(version: string): boolean {
 export function parsePyLauncherInventory(output: string): Array<{ version: string, path?: string }> {
   const entries: Array<{ version: string, path?: string }> = []
   for (const raw of output.split(/\r?\n/)) {
-    const match = /-V:(\d+\.\d+)\s*\*?\s*(.+)?$/.exec(raw)
+    // eslint-disable-next-line regexp/no-super-linear-backtracking, regexp/no-misleading-capturing-group -- anchored py launcher pattern, false positive
+    const match = /-V:(\d+\.\d+)\s*(?:\*\s*)?(.+)?$/.exec(raw)
     if (!match)
       continue
     const entry: { version: string, path?: string } = { version: match[1]! }
@@ -300,7 +303,7 @@ export async function ensureKokoroInstalled(layout: KokoroLayout, deps: KokoroIn
 
   // 3. Pinned pip requirements -------------------------------------------------
   const pinsMatch = state?.pipRequirements?.join('|') === KOKORO_PIP_REQUIREMENTS.join('|')
-  if (!(deps.existsSync(layout.venvPython) && pinsMatch)) {
+  if (!deps.existsSync(layout.venvPython) || !pinsMatch) {
     const args = ['-m', 'pip', 'install', '--disable-pip-version-check', ...KOKORO_PIP_REQUIREMENTS]
     const pip = await deps.run(layout.venvPython, args)
     if (pip.code !== 0)

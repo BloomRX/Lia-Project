@@ -361,7 +361,7 @@ describe('chat routeOverride (4D4C4-D2A)', () => {
       sessionId: 'session-1',
       text: 'hello',
       routeOverride: { providerId: 'unknown-provider', modelId: 'unknown-model' },
-    })).rejects.toThrow('Failed to resolve chat provider \"unknown-provider\"')
+    })).rejects.toThrow('Failed to resolve chat provider "unknown-provider"')
     expect(activeProviderRef.value).toBe('mock-provider')
     expect(activeModelRef.value).toBe('gpt-test')
     expect(getChatProviderInstanceMock).toHaveBeenCalledWith('unknown-provider', expect.anything())
