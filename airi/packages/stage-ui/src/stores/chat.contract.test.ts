@@ -1587,10 +1587,10 @@ describe('chat store contract', () => {
       const store = useChatStore()
       await expect(store.send({ sessionId: 'session-1', text: 'hello', correlationId: 'logical-send-77' })).resolves.toBeDefined()
 
-      expect(settled).toEqual([{ correlationId: 'logical-send-77', outcome: 'succeeded' }])
-      // Exactly the two contract keys: no roundId, no attempt, no provider, no
+      expect(settled).toEqual([{ correlationId: 'logical-send-77', outcome: 'succeeded', initialRouteOverride: null }])
+      // Exactly the three contract keys: no roundId, no attempt, no provider, no
       // model, no timing, no result - the send settled, and that is all.
-      expect(Object.keys(settled[0] as object).sort()).toEqual(['correlationId', 'outcome'])
+      expect(Object.keys(settled[0] as object).sort()).toEqual(['correlationId', 'initialRouteOverride', 'outcome'])
       expect(llmStreamMock).toHaveBeenCalledTimes(1)
       expect(getChatProviderInstanceMock).toHaveBeenCalledTimes(1)
     })
@@ -1603,7 +1603,7 @@ describe('chat store contract', () => {
       const store = useChatStore()
       await store.send({ sessionId: 'session-1', text: 'uncorrelated turn' })
 
-      expect(settled).toEqual([{ outcome: 'succeeded' }])
+      expect(settled).toEqual([{ outcome: 'succeeded', initialRouteOverride: null }])
       // Absent stays absent: not an empty string, not the session id, not a round.
       expect('correlationId' in (settled[0] as object)).toBe(false)
     })
@@ -1623,7 +1623,7 @@ describe('chat store contract', () => {
 
       // D: one notification, reporting the factual settlement - the observer's
       // mutation attempt changed neither the outcome nor the send.
-      expect(observed).toEqual([{ correlationId: 'logical-send-5', outcome: 'failed' }])
+      expect(observed).toEqual([{ correlationId: 'logical-send-5', outcome: 'failed', initialRouteOverride: null }])
       // E: the pre-existing failure path is unchanged - one attempt, one bubble.
       expect(llmStreamMock).toHaveBeenCalledTimes(1)
       expect(errorBubbles()).toHaveLength(1)
@@ -1646,7 +1646,7 @@ describe('chat store contract', () => {
 
       // The failed first attempt is NOT a settlement of the send, and the
       // fallback is not reported as its own send: one observation, succeeded.
-      expect(settled).toEqual([{ correlationId: 'logical-send-8', outcome: 'succeeded' }])
+      expect(settled).toEqual([{ correlationId: 'logical-send-8', outcome: 'succeeded', initialRouteOverride: null }])
       expect(llmStreamMock).toHaveBeenCalledTimes(2)
       expect(errorBubbles()).toHaveLength(0)
     })
@@ -1667,7 +1667,7 @@ describe('chat store contract', () => {
 
       // Multiple failed attempts, one settlement: the seam counts sends, not
       // attempts, and the successful attempt does not report a second time.
-      expect(settled).toEqual([{ correlationId: 'logical-send-14', outcome: 'succeeded' }])
+      expect(settled).toEqual([{ correlationId: 'logical-send-14', outcome: 'succeeded', initialRouteOverride: null }])
       expect(llmStreamMock).toHaveBeenCalledTimes(3)
       expect(errorBubbles()).toHaveLength(0)
     })
@@ -1686,7 +1686,7 @@ describe('chat store contract', () => {
       // this, and no failure stage is named.
       await expect(store.send({ sessionId: 'session-1', text: 'hello', correlationId: 'logical-send-15' })).rejects.toThrow('resolver exploded')
 
-      expect(settled).toEqual([{ correlationId: 'logical-send-15', outcome: 'failed' }])
+      expect(settled).toEqual([{ correlationId: 'logical-send-15', outcome: 'failed', initialRouteOverride: null }])
       expect(errorBubbles()).toHaveLength(1)
     })
 
@@ -1702,7 +1702,7 @@ describe('chat store contract', () => {
       const store = useChatStore()
       await expect(store.send({ sessionId: 'session-1', text: 'hello', correlationId: 'logical-send-9' })).rejects.toThrow('always failing')
 
-      expect(settled).toEqual([{ correlationId: 'logical-send-9', outcome: 'failed' }])
+      expect(settled).toEqual([{ correlationId: 'logical-send-9', outcome: 'failed', initialRouteOverride: null }])
       // Four attempts of ONE send: still exactly one report, and the bubble is
       // appended exactly once, by the wrapper that owns it.
       expect(llmStreamMock).toHaveBeenCalledTimes(4)
@@ -1724,7 +1724,7 @@ describe('chat store contract', () => {
       await expect(store.send({ sessionId: 'session-1', text: 'hello', correlationId: 'logical-send-10' })).rejects.toThrow('Failed to resolve chat provider')
 
       // H: the send settlement does not require a round to have existed.
-      expect(settled).toEqual([{ correlationId: 'logical-send-10', outcome: 'failed' }])
+      expect(settled).toEqual([{ correlationId: 'logical-send-10', outcome: 'failed', initialRouteOverride: null }])
       // I: and it is not inferred from the round seams, which saw nothing.
       expect(started).toEqual([])
       expect(rounds).toEqual([])
@@ -1750,7 +1750,7 @@ describe('chat store contract', () => {
       // Core's own round vocabulary is not translated: what settled here is the
       // logical send, and it settled successfully.
       expect(rounds).toEqual([{ correlationId: 'logical-send-11', outcome: 'abandoned', roundId: expect.any(String) }])
-      expect(settled).toEqual([{ correlationId: 'logical-send-11', outcome: 'succeeded' }])
+      expect(settled).toEqual([{ correlationId: 'logical-send-11', outcome: 'succeeded', initialRouteOverride: null }])
       expect(llmStreamMock).not.toHaveBeenCalled()
     })
 
@@ -1766,8 +1766,8 @@ describe('chat store contract', () => {
       // Two sends, two settlements, in settlement order: the seam keeps no
       // record of what it has already reported.
       expect(settled).toEqual([
-        { correlationId: 'logical-send-12', outcome: 'succeeded' },
-        { correlationId: 'logical-send-12', outcome: 'succeeded' },
+        { correlationId: 'logical-send-12', outcome: 'succeeded', initialRouteOverride: null },
+        { correlationId: 'logical-send-12', outcome: 'succeeded', initialRouteOverride: null },
       ])
       expect(llmStreamMock).toHaveBeenCalledTimes(2)
     })
@@ -1815,7 +1815,7 @@ describe('chat store contract', () => {
 
       // M: a retried message is a NEW logical send - it carries no key, and the
       // original send's key is never claimed or reused here.
-      expect(settled).toEqual([{ outcome: 'succeeded' }])
+      expect(settled).toEqual([{ outcome: 'succeeded', initialRouteOverride: null }])
       expect('correlationId' in (settled[0] as object)).toBe(false)
       expect(sessionMessages['session-1']?.some(message => message.id === 'a1')).toBe(false)
 
@@ -1824,7 +1824,7 @@ describe('chat store contract', () => {
       settled.length = 0
       await expect(store.retry({ sessionId: 'session-1', index: 1 })).rejects.toThrow('retry exploded')
 
-      expect(settled).toEqual([{ outcome: 'failed' }])
+      expect(settled).toEqual([{ outcome: 'failed', initialRouteOverride: null }])
       // The wrapper owns the bubble: exactly one per failed retry, never one
       // per layer (the retry no longer appends its own).
       expect(errorBubbles()).toHaveLength(1)

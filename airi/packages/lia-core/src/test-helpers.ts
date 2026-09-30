@@ -1,5 +1,7 @@
 // TEST-ONLY portability helpers — no runtime effect
-import nodePath from 'node:path'
+import { symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import nodePath, { join } from 'node:path'
 
 export function normalizeLineEndings(text: string): string {
   return String(text).replace(/\r\n/g, '\n').replace(/\r/g, '\n')
@@ -27,21 +29,18 @@ export function createMemoryStorage() {
 }
 
 export function isSymlinkSupported(): boolean {
-  // Probe: try to create a symlink in tmp, if fails with EPERM, not supported
+  const base = join(tmpdir(), `lia-symlink-probe-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`)
+  const target = `${base}-target`
+  const link = `${base}-link`
   try {
-    const fs = require('node:fs')
-    const os = require('node:os')
-    const path = require('node:path')
-    const tmp = os.tmpdir()
-    const target = path.join(tmp, `lia-symlink-probe-target-${Date.now()}`)
-    const link = path.join(tmp, `lia-symlink-probe-link-${Date.now()}`)
-    fs.writeFileSync(target, 'x')
-    try { fs.unlinkSync(link) } catch {}
-    fs.symlinkSync(target, link)
-    fs.unlinkSync(link)
-    fs.unlinkSync(target)
+    writeFileSync(target, 'x')
+    try { unlinkSync(link) } catch {}
+    symlinkSync(target, link)
     return true
   } catch {
     return false
+  } finally {
+    try { unlinkSync(link) } catch {}
+    try { unlinkSync(target) } catch {}
   }
 }

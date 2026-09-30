@@ -25,8 +25,12 @@ const PANEL_SOURCES = [
   'components/lia-config/sections/AppearanceSection.vue',
 ]
 
+function normalizeLineEndings(value: string): string {
+  return value.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+}
+
 function readSource(relative: string): string {
-  return readFileSync(join(RENDERER, relative), 'utf8')
+  return normalizeLineEndings(readFileSync(join(RENDERER, relative), 'utf8'))
 }
 
 /** Parses a flat YAML mapping into dotted keys. Enough for these locale files. */
@@ -34,7 +38,7 @@ function yamlKeys(path: string): Set<string> {
   const keys = new Set<string>()
   const stack: string[] = []
 
-  for (const rawLine of readFileSync(path, 'utf8').split('\n')) {
+  for (const rawLine of normalizeLineEndings(readFileSync(path, 'utf8')).split('\n')) {
     if (!rawLine.trim() || rawLine.trim().startsWith('#'))
       continue
     // Keys carry hyphens too ('check-environment'): YAML allows them and the

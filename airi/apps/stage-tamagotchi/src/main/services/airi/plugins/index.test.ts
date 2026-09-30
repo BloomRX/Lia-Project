@@ -14,6 +14,8 @@ import { tmpdir } from 'node:os'
 import { basename, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
+import { isSymlinkSupported } from '../../../test-helpers'
+
 import { useLogg } from '@guiiai/logg'
 import { defineInvoke } from '@moeru/eventa'
 import { ExtensionHost } from '@proj-airi/plugin-sdk/plugin-host'
@@ -1193,7 +1195,7 @@ describe('setupExtensionHost', () => {
    * expect(widgetsManager.pushWidget).toHaveBeenCalledWith(expect.objectContaining({ id: 'kit-module:board' }))
    * expect(widgetsManager.updateWidget).toHaveBeenCalledWith(expect.objectContaining({ id: 'kit-module:board' }))
    */
-  it('injects gamelet orchestration methods backed by the widget manager', async () => {
+  it.skipIf(!isSymlinkSupported())('injects gamelet orchestration methods backed by the widget manager', async () => {
     const { service, widgetsManager } = await setupExtensionHostForTest()
     const pluginDir = join(pluginsDir, 'test-extension-gamelet-orchestration')
     await mkdir(pluginDir, { recursive: true })
@@ -1278,7 +1280,7 @@ describe('setupExtensionHost', () => {
    * @example
    * expect(widgetsManager.removeWidget).toHaveBeenCalledWith('chess:board')
    */
-  it('closes mounted gamelets when the owning extension session stops', async () => {
+  it.skipIf(!isSymlinkSupported())('closes mounted gamelets when the owning extension session stops', async () => {
     const { service, widgetsManager } = await setupExtensionHostForTest()
     const pluginDir = join(pluginsDir, 'test-extension-gamelet-session-cleanup')
     await mkdir(pluginDir, { recursive: true })

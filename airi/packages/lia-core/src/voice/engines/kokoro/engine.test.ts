@@ -2,6 +2,8 @@ import type { KokoroChildProcessLike } from './process-worker'
 
 import { EventEmitter } from 'node:events'
 
+import { join } from 'node:path'
+
 import { describe, expect, it } from 'vitest'
 
 import { createKokoroVoiceEngine } from './index'
@@ -76,12 +78,12 @@ function readyFactsFrame() {
 function makeWorld(options: { installed?: boolean, platform?: string, wavBytes?: Uint8Array } = {}) {
   const installed = options.installed ?? true
   const platform = options.platform ?? 'linux'
-  const home = '/run/lia-voice-runtimes'
+  const home = join('/', 'run', 'lia-voice-runtimes')
   const layout = resolveKokoroLayout({ home, platform })
   const markerPaths = new Set<string>([
     layout.venvPython,
     layout.modelFile,
-    ...KOKORO_VOICES.map(voice => `${layout.voicesDir}/${voice.name}.bin`),
+    ...KOKORO_VOICES.map(voice => join(layout.voicesDir, `${voice.name}.bin`)),
     layout.voicesNpz,
     layout.workerFile,
     layout.stateFile,
@@ -320,13 +322,15 @@ describe('kokoro voice engine (Phase 7.9C)', () => {
 
     const requests = world.children[0]!.frames().filter(frame => frame.cmd === 'synthesize')
     expect(requests).toEqual([])
+    const wavA = join(world.layout.tmpDir, 'a.wav')
+    const wavB = join(world.layout.tmpDir, 'b.wav')
     const first = world.engine.synthesize({ text: 'Um' })
-    world.children[0]!.reply({ audioMs: 100, channels: 1, event: 'result', generationMs: 10, id: 1, ok: true, sampleRate: 24000, wav: '/tmp/a.wav' })
-    world.files.set('/tmp/a.wav', new Uint8Array([1]))
+    world.children[0]!.reply({ audioMs: 100, channels: 1, event: 'result', generationMs: 10, id: 1, ok: true, sampleRate: 24000, wav: wavA })
+    world.files.set(wavA, new Uint8Array([1]))
     await first
-    world.files.set('/tmp/b.wav', new Uint8Array([2]))
+    world.files.set(wavB, new Uint8Array([2]))
     const second = world.engine.synthesize({ text: 'Dois' })
-    world.children[0]!.reply({ audioMs: 100, channels: 1, event: 'result', generationMs: 10, id: 2, ok: true, sampleRate: 24000, wav: '/tmp/b.wav' })
+    world.children[0]!.reply({ audioMs: 100, channels: 1, event: 'result', generationMs: 10, id: 2, ok: true, sampleRate: 24000, wav: wavB })
     await second
     expect(world.children[0]!.frames().filter(frame => frame.cmd === 'synthesize')).toHaveLength(2)
     void 0
@@ -336,12 +340,73 @@ describe('kokoro voice engine (Phase 7.9C)', () => {
     const world = makeWorld()
     expect(world.engine.layout().rootDir).toBe(world.layout.rootDir)
 
+    const overrideHome = join('/', 'override', 'home')
+    const defaultHome = join('/', 'default', 'home')
     const override = createKokoroVoiceEngine({
       fileSystem: { existsSync: () => false, mkdirSync: () => undefined, readFile: async () => { throw new Error('nope') }, remove: async () => {} },
-      installDirOverride: () => '/override/home',
-      runtimeHome: () => '/default/home',
+      installDirOverride: () => overrideHome,
+      runtimeHome: () => defaultHome,
       spawnImpl: () => new FakeChildProcess(),
     })
-    expect(override.layout().rootDir).toBe('/override/home/kokoro')
+    expect(override.layout().rootDir).toBe(join(overrideHome, 'kokoro'))
+  })
+
+  describe('win32 simulation (D2B9-A1)', () => {
+    it('root layout matches expected native components on win32', () => {
+      const home = join('C:', 'Users', 'you', 'AppData', 'Local', 'Lia', 'runtimes')
+      const layout = resolveKokoroLayout({ home, platform: 'win32' })
+      expect(layout.rootDir).toBe(join(home, 'kokoro'))
+      expect(layout.venvPython).toBe(join(layout.venvDir, 'Scripts', 'python.exe'))
+      expect(layout.modelFile).toBe(join(layout.modelsDir, 'model_quantized.onnx'))
+    })
+    it('markerPaths match generated layout on win32', () => {
+      const home = join('C:', 'override', 'home')
+      const layout = resolveKokoroLayout({ home, platform: 'win32' })
+      const markerPaths = new Set<string>([
+        layout.venvPython,
+        layout.modelFile,
+        ...KOKORO_VOICES.map(v => join(layout.voicesDir, `${v.name}.bin`)),
+        layout.voicesNpz,
+        layout.workerFile,
+        layout.stateFile,
+      ])
+      const world = makeWorld({ platform: 'win32' })
+      // Simulate that our world with win32 uses same layout strategy
+      const winLayout = resolveKokoroLayout({ home: join('C:', 'override', 'home'), platform: 'win32' })
+      expect(winLayout.rootDir).toBe(join('C:', 'override', 'home', 'kokoro'))
+      for (const p of markerPaths) expect(p.startsWith(layout.rootDir)).toBe(true)
+    })
+    it('installed health starts the worker on win32', async () => {
+      const world = makeWorld({ platform: 'win32' })
+      const health = await world.engine.health()
+      expect(health.state).toBe('starting')
+      expect(world.spawnLog).toHaveLength(1)
+    })
+    it('synth output path can be found in fake filesystem on win32', async () => {
+      const world = makeWorld({ platform: 'win32' })
+      const wavBytes = new Uint8Array([1, 2, 3])
+      const start = world.engine.start()
+      world.children[0]!.reply(readyFactsFrame())
+      await start
+      const child = world.children[0]!
+      const synthPromise = world.engine.synthesize({ text: 'Hello' })
+      const request = child.frames()[1]!
+      const out = String(request.out)
+      world.files.set(out, wavBytes)
+      child.reply({ audioMs: 100, channels: 1, event: 'result', generationMs: 10, id: 1, ok: true, sampleRate: 24000, wav: out })
+      const output = await synthPromise
+      expect(new Uint8Array(output.audio)).toEqual(wavBytes)
+    })
+    it('install override is honored without POSIX-only comparison on win32', () => {
+      const overrideHome = join('C:', 'override', 'home')
+      const engine = createKokoroVoiceEngine({
+        fileSystem: { existsSync: () => false, mkdirSync: () => undefined, readFile: async () => { throw new Error('nope') }, remove: async () => {} },
+        installDirOverride: () => overrideHome,
+        runtimeHome: () => join('C:', 'default', 'home'),
+        platform: 'win32',
+        spawnImpl: () => new FakeChildProcess(),
+      })
+      expect(engine.layout().rootDir).toBe(join(overrideHome, 'kokoro'))
+    })
   })
 })

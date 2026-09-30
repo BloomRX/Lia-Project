@@ -3,7 +3,9 @@
 import { useAuthStore } from '@proj-airi/stage-ui/stores/auth'
 import { useOnboardingStore } from '@proj-airi/stage-ui/stores/onboarding'
 import { createPinia, setActivePinia } from 'pinia'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+import { createMemoryStorage } from '../../../test-helpers'
 
 import { mayAutoOpenAiriWelcome, shouldAutoOpenAiriWelcome } from './airi-onboarding-policy'
 
@@ -18,6 +20,7 @@ import { mayAutoOpenAiriWelcome, shouldAutoOpenAiriWelcome } from './airi-onboar
  */
 describe('lia AIRI onboarding policy', () => {
   beforeEach(() => {
+    vi.stubGlobal('localStorage', createMemoryStorage())
     localStorage.clear()
     setActivePinia(createPinia())
   })

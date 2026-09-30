@@ -529,11 +529,11 @@ describe('chat send-settled observation extension', () => {
     }
   })
 
-  it('h: the observation is exactly the two contract fields and the outcome is either literal', () => {
-    // Two fields, one optional join key and one required outcome - and nothing
+  it('h: the observation is exactly the three contract fields and the outcome is either literal', () => {
+    // Three fields: optional join key, required outcome, optional factual initialRouteOverride - and nothing
     // about the send's round, attempt, provider, model, error or timing.
     expect(DECLARATION_REGION.match(/^\s{2}(?:readonly )?(\w+)\??:/gm)?.map(field => field.trim()))
-      .toEqual(['correlationId?:', 'outcome:'])
+      .toEqual(['correlationId?:', 'outcome:', 'initialRouteOverride?:'])
     expect(DECLARATION_REGION).toContain(`export type ChatSendOutcome = 'succeeded' | 'failed'`)
     // No third settlement value may creep in as a cast or an alias.
     expect(DECLARATION_REGION).not.toMatch(/abandoned|cancelled|superseded|completed|fallbackExhausted|unknown|any/i)

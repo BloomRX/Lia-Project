@@ -1,5 +1,7 @@
 import type { KokoroInstallDeps, KokoroInstallRunResult } from './install'
 
+import { join } from 'node:path'
+
 import { describe, expect, it } from 'vitest'
 
 import { ensureKokoroInstalled, parsePyLauncherInventory } from './install'
@@ -31,14 +33,14 @@ interface CallLog {
 
 function fakeDeps(log: CallLog, options: { failHf?: boolean, modelDigest?: string, platform?: string, preInstalled?: boolean, pythonVersion?: string, runScript?: (command: string, args: string[]) => KokoroInstallRunResult | undefined } = {}): { deps: KokoroInstallDeps, layout: ReturnType<typeof resolveKokoroLayout> } {
   const platform = options.platform ?? 'linux'
-  const layout = resolveKokoroLayout({ home: '/run/lia-voice-runtimes', platform })
+  const layout = resolveKokoroLayout({ home: join('/', 'run', 'lia-voice-runtimes'), platform })
   const files = new Map<string, number>()
 
   if (options.preInstalled) {
     files.set(layout.venvPython, 1)
     files.set(layout.modelFile, KOKORO_MODEL_BYTES)
     for (const voice of KOKORO_VOICES)
-      files.set(`${layout.voicesDir}/${voice.name}.bin`, voice.bytes)
+      files.set(join(layout.voicesDir, `${voice.name}.bin`), voice.bytes)
     files.set(layout.voicesNpz, 1)
     files.set(layout.workerFile, 1)
     files.set(layout.stateFile, JSON.stringify({
