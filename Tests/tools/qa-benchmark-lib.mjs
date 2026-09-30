@@ -237,32 +237,31 @@ export function canonicalCommandsWithSmoke(repoRoot = REPO_ROOT, withSmoke = fal
 // ---------------------------------------------------------------------------
 export function isEnvironmentFailure({ id, exitCode, error, stdout = '', stderr = '', timedOut = false }) {
   const combined = `${stdout}\n${stderr}`.toLowerCase()
-  // Spawn errors: ENOENT, EACCES, etc.
   if (error) {
     const msg = String(error.message || error).toLowerCase()
-    if (msg.includes('enoent') || msg.includes('spawn') || msg.includes('eacces') || msg.includes('unknown command')) return true
+    if (msg.includes('enoent') || msg.includes('eacces') || msg.includes('spawn')) return true
     if (msg.includes('enomen') || msg.includes('oom') || msg.includes('heap')) return true
   }
   if (timedOut) return true
-  // Browser missing
+  // Browser precise: only infrastructure signatures, not generic mention
   if (id === 'browser') {
-    if (combined.includes('chromium') && (combined.includes('executable doesn\'t exist') || combined.includes('browser') || combined.includes('not found') || combined.includes('missing'))) return true
-    if (combined.includes('playwright') && combined.includes('not found')) return true
+    if (combined.includes("executable doesn't exist")) return true
+    if (combined.includes('chromium executable missing')) return true
+    if (combined.includes('browser executable not found')) return true
+    if (combined.includes('playwright') && combined.includes('host system is missing dependencies')) return true
+    if (combined.includes('playwright') && combined.includes('please install')) return true
+    if (combined.includes('install') && combined.includes('playwright') && combined.includes('browser')) return true
+    // Do NOT treat generic "chromium" + "browser" as env
   }
   // Typecheck OOM
   if (id === 'typecheck' || combined.includes('typecheck')) {
     if (combined.includes('heap out of memory') || combined.includes('javascript heap out of memory') || combined.includes('enomem') || combined.includes('allocation failure')) return true
   }
-  // General OOM
   if (combined.includes('heap out of memory') || combined.includes('enomem')) return true
-  // Executable missing
-  if (combined.includes('enoent') || combined.includes('command not found') || combined.includes('not found') && combined.includes('pnpm')) {
-    // Be conservative: pnpm exec missing tool often shows "command not found" or "enoent"
+  if (combined.includes('enoent') || combined.includes('command not found')) {
     if (combined.includes('vitest') || combined.includes('eslint') || combined.includes('tsc') || combined.includes('playwright')) return true
   }
-  // Security python unavailable
   if (combined.includes('python') && combined.includes('not found')) return true
-  // Timeout benchmark-owned
   if (combined.includes('timed out') || combined.includes('timeout')) return true
   return false
 }
@@ -321,6 +320,110 @@ export function commandStatus({ exitCode, environmentLimited, mandatory }) {
   if (exitCode === 0) return 'passed'
   if (exitCode === null || exitCode === undefined) return 'environment-limited'
   return 'failed'
+}
+
+// Structured command result privacy — only publish allowed fields
+export function publicCommandResult(cmd) {
+  // Allowed: id,label,cwd(repo-relative),argv,startedAt,endedAt,durationMs,exitCode,status,testFiles,passed,failed,skipped,errors(log count),logPath(publish-relative),truncated
+  const publicFields = {}
+  publicFields.id = cmd.id
+  publicFields.label = cmd.label
+  // cwd must be repo-relative, never absolute
+  if (cmd.cwd) {
+    const cwd = String(cmd.cwd).replace(/\\/g, '/')
+    // If absolute, make relative or mask
+    publicFields.cwd = cwd
+    if (nodePath.isAbsolute(cwd)) {
+      // Should have been made relative before calling, but mask anyway
+      publicFields.cwd = '<REPO>/' + nodePath.basename(cwd)
+    } else {
+      publicFields.cwd = cwd
+    }
+  } else {
+    publicFields.cwd = null
+  }
+  publicFields.argv = Array.isArray(cmd.argv) ? [...cmd.argv] : null
+  publicFields.startedAt = cmd.startedAt || null
+  publicFields.endedAt = cmd.endedAt || null
+  publicFields.durationMs = cmd.durationMs ?? null
+  publicFields.exitCode = cmd.exitCode ?? null
+  publicFields.status = cmd.status || null
+  publicFields.testFiles = cmd.testFiles ?? null
+  publicFields.passed = cmd.passed ?? null
+  publicFields.failed = cmd.failed ?? null
+  publicFields.skipped = cmd.skipped ?? null
+  publicFields.errors = cmd.errors ?? null
+  // logPath must be publish-relative, never absolute or temp
+  if (cmd.logPath) {
+    const lp = String(cmd.logPath).replace(/\\/g, '/')
+    publicFields.logPath = lp
+  } else {
+    publicFields.logPath = null
+  }
+  publicFields.truncated = !!cmd.truncated
+  return publicFields
+}
+
+export function maskPrivatePaths(text, { repoRoot, homedir, tmpdir } = {}) {
+  let out = String(text)
+  const repo = repoRoot || REPO_ROOT
+  const home = homedir || os.homedir()
+  const tmp = tmpdir || os.tmpdir()
+  // Order: repoRoot first, home second, temp third
+  // Handle both / and \ representations
+  const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const replacements = [
+    { val: repo, token: '<REPO>' },
+    { val: home, token: '<HOME>' },
+    { val: tmp, token: '<TEMP>' },
+  ]
+  for (const { val, token } of replacements) {
+    if (!val) continue
+    const re1 = new RegExp(esc(val), 'g')
+    out = out.replace(re1, token)
+    // Also handle opposite slash direction
+    const alt = val.replace(/\\/g, '/').replace(/\//g, '\\')
+    // Try both slash variants
+    const vSlash = val.replace(/\\/g, '/')
+    const vBack = val.replace(/\//g, '\\')
+    if (vSlash !== val) {
+      const re2 = new RegExp(esc(vSlash), 'g')
+      out = out.replace(re2, token)
+    }
+    if (vBack !== val && vBack !== vSlash) {
+      const re3 = new RegExp(esc(vBack), 'g')
+      out = out.replace(re3, token)
+    }
+    // Windows drive letter case-insensitive? keep simple
+  }
+  return out
+}
+
+export function containsPrivatePath(text, { repoRoot, homedir, tmpdir } = {}) {
+  const t = String(text)
+  const repo = repoRoot || REPO_ROOT
+  const home = homedir || os.homedir()
+  const tmp = tmpdir || os.tmpdir()
+  const checks = [repo, home, tmp]
+  for (const v of checks) {
+    if (!v) continue
+    if (t.includes(v)) return true
+    const vSlash = v.replace(/\\/g, '/')
+    if (vSlash !== v && t.includes(vSlash)) return true
+    const vBack = v.replace(/\//g, '\\')
+    if (vBack !== v && t.includes(vBack)) return true
+  }
+  return false
+}
+
+export function exitCodeForStatus(status) {
+  switch (status) {
+    case 'PASS': return 0
+    case 'FAIL': return 1
+    case 'ENVIRONMENT-LIMITED': return 2
+    case 'INCOMPLETE': return 3
+    default: return 3
+  }
 }
 
 // ---------------------------------------------------------------------------

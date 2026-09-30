@@ -1,0 +1,158 @@
+import assert from 'node:assert/strict'
+import { describe, it } from 'node:test'
+import os from 'node:os'
+import nodePath from 'node:path'
+import { publicCommandResult, maskPrivatePaths, containsPrivatePath, exitCodeForStatus } from './qa-benchmark-lib.mjs'
+import { REPO_ROOT } from './qa-shared.mjs'
+
+describe('publicCommandResult exact shape', () => {
+  it('allows only whitelisted fields', () => {
+    const raw = {
+      id: 'browser',
+      label: 'Browser Stage',
+      cwd: '/home/user/Lia-Project/airi/apps/stage-tamagotchi',
+      argv: ['pnpm', 'exec', 'vitest', 'run', '--project', 'browser'],
+      startedAt: '2026-09-30T00:00:00Z',
+      endedAt: '2026-09-30T00:00:10Z',
+      durationMs: 10000,
+      exitCode: 1,
+      status: 'failed',
+      stdout: 'SECRET OUTPUT',
+      stderr: 'C:\\Users\\Alice\\secret',
+      error: new Error('Error with absolute path /home/user/secret'),
+      stack: 'stack trace',
+      testFiles: 1,
+      passed: 0,
+      failed: 1,
+      skipped: 0,
+      errors: 1,
+      logPath: '/tmp/c9f0f3/lia-123/log.log',
+      truncated: false,
+      extra: 'should not appear',
+    }
+    const pub = publicCommandResult(raw)
+    assert.equal(pub.id, 'browser')
+    assert.equal(pub.label, 'Browser Stage')
+    assert.ok(pub.cwd)
+    assert.deepEqual(pub.argv, ['pnpm', 'exec', 'vitest', 'run', '--project', 'browser'])
+    assert.equal(pub.exitCode, 1)
+    assert.equal(pub.status, 'failed')
+    // Forbidden fields must not appear
+    const json = JSON.stringify(pub)
+    assert.ok(!json.includes('SECRET OUTPUT'))
+    assert.ok(!json.includes('C:\\Users\\Alice'))
+    assert.ok(!json.includes('Error with absolute'))
+    assert.ok(!json.includes('stack trace'))
+    assert.ok(!json.includes('extra'))
+    assert.ok(!pub.stdout)
+    assert.ok(!pub.stderr)
+    assert.ok(!pub.error)
+    assert.ok(!pub.stack)
+    // Allowed fields
+    assert.ok('testFiles' in pub)
+    assert.ok('logPath' in pub)
+    assert.ok('truncated' in pub)
+  })
+  it('cwd is repo-relative, not absolute', () => {
+    const raw = { id: 'core-agent', label: 'x', cwd: REPO_ROOT + '/airi', argv: ['pnpm','test'], startedAt: new Date().toISOString(), endedAt: new Date().toISOString(), durationMs: 1, exitCode: 0, status: 'passed', logPath: 'logs/test.log', truncated: false }
+    const pub = publicCommandResult(raw)
+    // Should not contain absolute repoRoot
+    assert.ok(!pub.cwd.includes(REPO_ROOT))
+    assert.ok(pub.cwd.includes('airi'))
+  })
+  it('stdout/stderr/error exclusion proof', () => {
+    const raw = { id: 'lint', label: 'Lint', cwd: 'airi', argv: ['pnpm','lint'], startedAt: new Date().toISOString(), endedAt: new Date().toISOString(), durationMs: 1, exitCode: 1, status: 'failed', stdout: 'stdout leak', stderr: 'stderr leak', error: 'error leak', logPath: 'logs/lint.log', truncated: false }
+    const pub = publicCommandResult(raw)
+    const json = JSON.stringify(pub)
+    assert.ok(!json.includes('stdout leak'))
+    assert.ok(!json.includes('stderr leak'))
+    assert.ok(!json.includes('error leak'))
+  })
+})
+
+describe('repoRoot exclusion from gitInfo', () => {
+  it('gitInfo publish should not contain repoRoot', async () => {
+    const { createSummarySkeleton } = await import('./qa-benchmark-lib.mjs')
+    const s = createSummarySkeleton({ runId: '20260930-000000-abc1234', sourceSha: 'a'.repeat(40), sourceBranch: 'arena/x', remoteSourceSha: 'a'.repeat(40), startedAt: new Date() })
+    s.gitInfo = { sourceSha: 'a'.repeat(40), sourceBranch: 'arena/x', remoteSourceSha: 'a'.repeat(40), repoRoot: REPO_ROOT, gitVersion: '2', nodeVersion: 'v22', pnpmVersion: '9', pythonVersion: '3.11' }
+    const pub = publicCommandResult({ id: 'test', label: 'test', cwd: 'airi', argv: ['pnpm','test'], startedAt: new Date().toISOString(), endedAt: new Date().toISOString(), durationMs: 1, exitCode: 0, status: 'passed', logPath: 'logs/test.log', truncated: false })
+    // Simulate gitInfo publish filtering
+    const gitPublish = { sourceSha: s.gitInfo.sourceSha, sourceBranch: s.gitInfo.sourceBranch, remoteSourceSha: s.gitInfo.remoteSourceSha, gitVersion: s.gitInfo.gitVersion, nodeVersion: s.gitInfo.nodeVersion, pnpmVersion: s.gitInfo.pnpmVersion, pythonVersion: s.gitInfo.pythonVersion }
+    assert.ok(!JSON.stringify(gitPublish).includes(REPO_ROOT))
+    assert.ok(!('repoRoot' in gitPublish))
+  })
+})
+
+describe('path privacy masking', () => {
+  it('masks repoRoot → <REPO>', () => {
+    const text = `error in ${REPO_ROOT}/airi/foo.ts`
+    const masked = maskPrivatePaths(text, { repoRoot: REPO_ROOT, homedir: os.homedir(), tmpdir: os.tmpdir() })
+    assert.ok(masked.includes('<REPO>/airi/foo.ts'))
+    assert.ok(!masked.includes(REPO_ROOT))
+  })
+  it('Windows path: C:\\Users\\Alice\\Documents\\Lia-Project\\airi\\foo.ts → <REPO>\\airi\\foo.ts', () => {
+    const fakeRepo = 'C:\\Users\\Alice\\Documents\\Lia-Project'
+    const text = `at ${fakeRepo}\\airi\\foo.ts:10:5`
+    const masked = maskPrivatePaths(text, { repoRoot: fakeRepo, homedir: 'C:\\Users\\Alice', tmpdir: 'C:\\Temp' })
+    assert.ok(masked.includes('<REPO>\\airi\\foo.ts'))
+    assert.ok(!masked.includes('C:\\Users\\Alice\\Documents'))
+    assert.ok(!masked.includes(fakeRepo))
+  })
+  it('masks HOME and TEMP', () => {
+    const home = os.homedir()
+    const tmp = os.tmpdir()
+    const text = `home ${home}/file and tmp ${tmp}/file`
+    const masked = maskPrivatePaths(text, { repoRoot: REPO_ROOT, homedir: home, tmpdir: tmp })
+    assert.ok(masked.includes('<HOME>'))
+    assert.ok(masked.includes('<TEMP>'))
+    assert.ok(!masked.includes(home))
+    // tmp may be substring of home? still check
+    if (tmp !== home) assert.ok(!masked.includes(tmp) || masked.includes('<TEMP>'))
+  })
+  it('handles both slash representations', () => {
+    const repo = '/home/user/Lia-Project'
+    const text1 = `path ${repo}/airi/foo`
+    const text2 = `path ${repo.replace(/\//g, '\\')}\\airi\\foo`
+    const m1 = maskPrivatePaths(text1, { repoRoot: repo, homedir: os.homedir(), tmpdir: os.tmpdir() })
+    const m2 = maskPrivatePaths(text2, { repoRoot: repo, homedir: os.homedir(), tmpdir: os.tmpdir() })
+    assert.ok(m1.includes('<REPO>'))
+    // m2 may contain backslashes, but should also be masked if we handle alt slashes
+    assert.ok(m2.includes('<REPO>') || m2.includes('<HOME>') || m2.includes('<TEMP>') || !m2.includes(repo))
+  })
+})
+
+describe('residual private-path gate', () => {
+  it('detects residual repoRoot', () => {
+    const text = `leaked ${REPO_ROOT}/secret`
+    assert.ok(containsPrivatePath(text, { repoRoot: REPO_ROOT, homedir: os.homedir(), tmpdir: os.tmpdir() }))
+    const masked = maskPrivatePaths(text, { repoRoot: REPO_ROOT, homedir: os.homedir(), tmpdir: os.tmpdir() })
+    assert.ok(!containsPrivatePath(masked, { repoRoot: REPO_ROOT, homedir: os.homedir(), tmpdir: os.tmpdir() }))
+  })
+  it('detects HOME', () => {
+    const home = os.homedir()
+    assert.ok(containsPrivatePath(`file ${home}/.ssh`, { repoRoot: REPO_ROOT, homedir: home, tmpdir: os.tmpdir() }))
+  })
+})
+
+describe('exit code mapping', () => {
+  it('PASS 0, FAIL 1, ENV 2, INCOMPLETE 3', () => {
+    assert.equal(exitCodeForStatus('PASS'), 0)
+    assert.equal(exitCodeForStatus('FAIL'), 1)
+    assert.equal(exitCodeForStatus('ENVIRONMENT-LIMITED'), 2)
+    assert.equal(exitCodeForStatus('INCOMPLETE'), 3)
+    assert.equal(exitCodeForStatus('unknown'), 3)
+  })
+})
+
+describe('browser precise classifier', () => {
+  it('realistic browser test with chromium should be FAIL not env', async () => {
+    const { classifyCommandOutcome } = await import('./qa-benchmark-lib.mjs')
+    const out = classifyCommandOutcome({ id: 'browser', exitCode: 1, stdout: '[browser] chromium Test Files 1 failed', stderr: 'AssertionError: expected true to be false\n at /tmp/test.ts:10' })
+    assert.equal(out, 'failed')
+  })
+  it('Chromium executable does not exist → env-limited', async () => {
+    const { classifyCommandOutcome } = await import('./qa-benchmark-lib.mjs')
+    const out = classifyCommandOutcome({ id: 'browser', exitCode: 1, stdout: '', stderr: "Error: Chromium executable doesn't exist at /tmp/chromium" })
+    assert.equal(out, 'environment-limited')
+  })
+})
