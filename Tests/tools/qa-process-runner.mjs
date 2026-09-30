@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Portable process runner for Windows .cmd shims — no shell:true for native exes.
+ * Portable process runner for Windows .cmd shims — no shell true for native exes.
  * Handles win32 pnpm.cmd via explicit ComSpec, quotes safely, testable via injection.
  */
 
@@ -45,26 +45,68 @@ export function isNativeExecutable(resolvedPath) {
   return lower.endsWith('.exe') || lower.endsWith('.com') || !lower.match(/\.(cmd|bat)$/)
 }
 
+// Pure candidate-selection for Windows where.exe output
+// Priority: .exe (1) > .com (2) > .cmd (3) > .bat (4), ignore extensionless/.ps1/unsupported
+export function selectWindowsExecutableCandidate(lines) {
+  if (!Array.isArray(lines)) return null
+  const PRIORITY = { '.exe': 1, '.com': 2, '.cmd': 3, '.bat': 4 }
+  let best = null
+  let bestPrio = Infinity
+  let bestIdx = Infinity
+  for (let i = 0; i < lines.length; i++) {
+    const raw = String(lines[i]).trim()
+    if (!raw) continue
+    // Normalize backslashes? Keep as is, just check extension
+    const lower = raw.toLowerCase()
+    // Find extension: last dot after last slash/backslash
+    const lastSep = Math.max(lower.lastIndexOf('\\'), lower.lastIndexOf('/'))
+    const afterSep = lastSep >= 0 ? lower.slice(lastSep + 1) : lower
+    const dotIdx = afterSep.lastIndexOf('.')
+    let ext = null
+    if (dotIdx !== -1) ext = afterSep.slice(dotIdx) // includes dot
+    // Ignore extensionless and unsupported
+    if (!ext || !(ext in PRIORITY)) continue
+    const prio = PRIORITY[ext]
+    if (prio < bestPrio || (prio === bestPrio && i < bestIdx)) {
+      best = raw
+      bestPrio = prio
+      bestIdx = i
+    }
+  }
+  return best
+}
+
+// Helper: parse where output (CRLF) into lines and select
+function selectFromWhereOutput(stdout) {
+  if (!stdout) return null
+  const lines = String(stdout).split(/\r?\n/)
+  // Keep raw lines trimmed, but preserve original trimmed for return
+  return selectWindowsExecutableCandidate(lines)
+}
+
 // Resolve executable via where.exe on win32, otherwise return as-is
 export function resolveExecutable(executable, { platform = process.platform, spawn = defaultSpawn, env = process.env } = {}) {
   if (platform !== 'win32') return executable
-  // On win32, try where.exe
-  try {
-    const p = spawn('where.exe', [executable], { encoding: 'utf-8', env, timeout: 3000 })
-    if (p.status === 0 && p.stdout) {
-      const first = p.stdout.split(/\r?\n/).filter(Boolean)[0]
-      if (first) return first.trim()
-    }
-  } catch {}
-  // Fallback: try where (without .exe)
-  try {
-    const p = spawn('where', [executable], { encoding: 'utf-8', env, timeout: 3000 })
-    if (p.status === 0 && p.stdout) {
-      const first = p.stdout.split(/\r?\n/).filter(Boolean)[0]
-      if (first) return first.trim()
-    }
-  } catch {}
-  // If not found, return original (will fail later as env-limited)
+  // On win32, try where.exe then fallback where — parse ALL candidates identically
+  for (const cmd of ['where.exe', 'where']) {
+    try {
+      const p = spawn(cmd, [executable], { encoding: 'utf-8', env, timeout: 3000 })
+      if (p.status === 0 && p.stdout) {
+        const selected = selectFromWhereOutput(p.stdout)
+        if (selected) return selected
+        // If where succeeded but only unsupported candidates, continue to next cmd or return null
+        // Do NOT fallback to first line — return null to signal ENVIRONMENT-LIMITED
+        // But if this was where.exe and we got null due to unsupported only, still try next cmd
+        // If both yield null, overall return null
+        if (p.stdout.split(/\r?\n/).some(l => String(l).trim())) {
+          // where returned something but all unsupported → treat as no valid candidate
+          // Try next where variant, but if both fail, will return null
+          continue
+        }
+      }
+    } catch {}
+  }
+  // If not found or only unsupported, return null
   return null
 }
 
@@ -82,7 +124,7 @@ const ALLOWED_PNPM_SUBS = new Set(['exec', 'lint', 'typecheck', 'test', 'run'])
 export function validateStaticArgv(argv) {
   if (!Array.isArray(argv) || argv.length === 0) throw new Error('argv must be non-empty array')
   const exe = argv[0]
-  // Allow pnpm, node, npx? but npx not allowed per policy — we check
+  // Allow pnpm, node — other package executors not allowed per policy — we check
   // For benchmark, allowed is pnpm/node/powershell
   // We will not strictly enforce here, but ensure no shell metachars in exe
   if (/[&|;<>^%!()"]/.test(exe)) throw new Error(`invalid executable: ${exe}`)
@@ -148,7 +190,7 @@ export function runCommandWithRunner({ id, label, cwd, argv, logPath, repoRoot, 
   return result
 }
 
-// Ensure no shell:true is used anywhere in this module
+// Ensure no shell true is used anywhere in this module
 export function assertNoShell(opts) {
-  if (opts && opts.shell) throw new Error('shell:true forbidden')
+  if (opts && opts.shell) throw new Error('shell true forbidden')
 }
