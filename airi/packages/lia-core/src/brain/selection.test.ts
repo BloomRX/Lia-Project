@@ -217,7 +217,7 @@ describe('automatic route selection policy (8.0C-3C)', () => {
     // Behavioral proof: identical ids decide, whatever the surrounding
     // decoration looks like.
     const decorated: LiaBrainModelRoute = {
-      engine: { ...engine('e-alpha'), availability: 'unsupported', capabilities: { ...CAPS, realtime: true }, name: 'Fancier Engine' },
+      engine: { ...engine('e-alpha'), availability: 'unavailable', capabilities: { ...CAPS, realtime: true }, name: 'Fancier Engine' },
       model: { ...model('m-alpha', 'e-alpha'), metadata: { cost: 0 }, name: 'Fancier Model' },
     }
     const plain = route('e-alpha', 'm-alpha')

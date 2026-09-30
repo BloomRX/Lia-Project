@@ -634,7 +634,7 @@ function mergeProductUpdate(raw: Record<string, unknown>, update: LiaProductConf
 }
 
 /** Drop `undefined` values so a partial patch never ERASES what it skipped. */
-function definedOnly<T extends Record<string, unknown>>(value: T): T {
+function definedOnly<T extends object>(value: T): T {
   const out: Record<string, unknown> = {}
   for (const [key, inner] of Object.entries(value)) {
     if (inner !== undefined)

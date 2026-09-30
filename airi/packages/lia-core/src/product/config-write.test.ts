@@ -134,7 +134,6 @@ describe('updateLiaProductConfig', () => {
     const file = await freshConfig({ schemaVersion: 1 })
     const result = await updateLiaProductConfig(file, {
       provider: { chat: { preferred: { providerId: 'openrouter' } } },
-      // @ts-expect-error deliberate hostile payload for the firewall test
       sneaky: { apiKey: 'sk-no-no-no' },
     } as never)
     expect(result.status).toBe('secret-forbidden')

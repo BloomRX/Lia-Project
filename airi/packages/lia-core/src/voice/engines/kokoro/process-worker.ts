@@ -123,7 +123,7 @@ export function createKokoroWorkerClient(options: KokoroWorkerClientOptions): Ko
   let state: 'idle' | 'starting' | 'ready' | 'stopping' | 'dead' = 'idle'
   let startingPromise: Promise<KokoroWorkerFacts> | undefined
   let facts: KokoroWorkerFacts | undefined
-  let initFailure: Error | undefined
+  let initFailure: KokoroWorkerError | undefined
   let stderrTail: string[] = []
   const pending = new Map<number, PendingRequest>()
   let readyResolve: ((value: KokoroWorkerFacts) => void) | undefined
@@ -140,7 +140,7 @@ export function createKokoroWorkerClient(options: KokoroWorkerClientOptions): Ko
     readyReject = undefined
     readyResolve = undefined
     if (reject && error !== undefined)
-      reject(error instanceof Error ? error : new KokoroWorkerError('exit', errorMessageFrom(error)))
+      reject(error instanceof KokoroWorkerError ? error : error instanceof Error ? error : new KokoroWorkerError('exit', errorMessageFrom(error) ?? String(error)))
     else if (resolve && error === undefined && facts)
       resolve(facts)
   }
@@ -270,7 +270,7 @@ export function createKokoroWorkerClient(options: KokoroWorkerClientOptions): Ko
       }
       catch (error) {
         state = 'dead'
-        settleReady(new KokoroWorkerError('exit', `worker spawn failed: ${errorMessageFrom(error)}`))
+        settleReady(new KokoroWorkerError('exit', `worker spawn failed: ${errorMessageFrom(error) ?? String(error)}`))
         return startingPromise
       }
 
@@ -289,7 +289,7 @@ export function createKokoroWorkerClient(options: KokoroWorkerClientOptions): Ko
         exited = true
         state = 'dead'
         child = undefined
-        settleReady(new KokoroWorkerError('exit', `worker spawn error: ${errorMessageFrom(error)}`))
+        settleReady(new KokoroWorkerError('exit', `worker spawn error: ${errorMessageFrom(error) ?? String(error)}`))
       })
       child.on('exit', (code: unknown, signal: unknown) => {
         if (exited)
@@ -335,7 +335,7 @@ export function createKokoroWorkerClient(options: KokoroWorkerClientOptions): Ko
         catch (error) {
           clearTimeout(timer)
           pending.delete(request.id)
-          reject(new KokoroWorkerError('exit', `worker stdin write failed: ${errorMessageFrom(error)}`))
+          reject(new KokoroWorkerError('exit', `worker stdin write failed: ${errorMessageFrom(error) ?? String(error)}`))
         }
       })
     },

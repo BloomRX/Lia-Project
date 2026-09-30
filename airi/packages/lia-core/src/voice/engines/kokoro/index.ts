@@ -189,7 +189,7 @@ export function createKokoroVoiceEngine(options: KokoroEngineOptions): KokoroVoi
         state = 'error'
         const concise = error instanceof KokoroWorkerError && error.reason === 'init-failed'
           ? 'kokoro-model-load-failed'
-          : `kokoro-start-failed(${errorMessageFrom(error).slice(0, 120)})`
+          : `kokoro-start-failed(${(errorMessageFrom(error) ?? String(error)).slice(0, 120)})`
         lastErrorNote = concise
         log({ event: 'lia.voice.kokoro.start-failed', error: concise })
         throw new LiaVoiceEngineError(KOKORO_ENGINE_ID, 'engine-unavailable', concise)
@@ -297,8 +297,8 @@ export function createKokoroVoiceEngine(options: KokoroEngineOptions): KokoroVoi
         if (error instanceof LiaVoiceEngineError)
           throw error
         if (error instanceof KokoroWorkerError && error.reason === 'cancelled')
-          throw new LiaVoiceEngineError(KOKORO_ENGINE_ID, 'cancelled', errorMessageFrom(error))
-        throw new LiaVoiceEngineError(KOKORO_ENGINE_ID, 'engine-error', errorMessageFrom(error).slice(0, 300))
+          throw new LiaVoiceEngineError(KOKORO_ENGINE_ID, 'cancelled', errorMessageFrom(error) ?? String(error))
+        throw new LiaVoiceEngineError(KOKORO_ENGINE_ID, 'engine-error', (errorMessageFrom(error) ?? String(error)).slice(0, 300))
       }
     },
 

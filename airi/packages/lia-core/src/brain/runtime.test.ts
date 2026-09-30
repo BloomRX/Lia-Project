@@ -202,7 +202,7 @@ describe('runtime brain decision context (8.0D-1)', () => {
       engines: [],
       models: [],
       requirement: NEEDS_TEXT,
-      snapshot: { brain: { mode: 'turbo' } } as unknown as LiaProductConfigSnapshot['brain'],
+      snapshot: { brain: { mode: 'turbo' } } as unknown as LiaProductConfigSnapshot,
     })).toEqual({ status: 'modeUnspecified' })
   })
 
