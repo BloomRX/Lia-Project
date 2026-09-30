@@ -5,6 +5,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 import { describe, expect, it } from 'vitest'
+import { repoRelativePosix } from '../../../test-helpers'
 
 import { createLiaBrainCorrelationStore } from './brain-correlation-store'
 import { deriveLiaBrainFinalSuccessfulExecutionFacts } from './brain-final-successful-execution-facts'
@@ -25,7 +26,7 @@ const DIAGNOSTIC_FACTS = 'apps/stage-tamagotchi/src/main/services/lia/brain-corr
 const BRAIN_ROOTS = ['apps/stage-tamagotchi/src']
 
 /** `fileURLToPath` keeps the trailing separator of a directory URL. */
-const REPO_PREFIX = `${fileURLToPath(REPO_ROOT).replace(/\/+$/, '')}/`
+const REPO_ROOT_PATH = fileURLToPath(REPO_ROOT)
 
 function productionSources(roots: string[]): string[] {
   const files: string[] = []
@@ -33,7 +34,7 @@ function productionSources(roots: string[]): string[] {
     for (const entry of readdirSync(new URL(root, REPO_ROOT), { recursive: true, withFileTypes: true })) {
       if (!entry.isFile() || !/\.(?:ts|vue)$/.test(entry.name) || entry.name.includes('.test.'))
         continue
-      files.push(`${entry.parentPath.slice(REPO_PREFIX.length)}/${entry.name}`)
+      files.push(`${repoRelativePosix(REPO_ROOT_PATH, entry.parentPath)}/${entry.name}`)
     }
   }
   return files

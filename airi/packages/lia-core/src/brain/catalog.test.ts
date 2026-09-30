@@ -5,6 +5,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 import { describe, expect, it } from 'vitest'
+import { normalizeLineEndings } from '../test-helpers'
 
 import { groqBrainDescriptors } from './adapters/groq'
 import { composeBrainCatalog, createProductionBrainCatalog } from './catalog'
@@ -16,7 +17,7 @@ import { decideBrainRouteFromProductState } from './runtime'
  */
 
 function readSource(relative: string): string {
-  return readFileSync(fileURLToPath(new URL(relative, import.meta.url)), 'utf-8')
+  return normalizeLineEndings(readFileSync(fileURLToPath(new URL(relative, import.meta.url)), 'utf-8'))
 }
 
 describe('production brain catalog (8.0D-3)', () => {
@@ -201,7 +202,7 @@ describe('production brain catalog (8.0D-3)', () => {
     expect(source).not.toMatch(/readFile|writeFile|existsSync|process\.env|vault|apiKey|api_key/i)
     expect(source).not.toMatch(/readLiaProductConfig|updateLiaProductConfig|decideBrainRoute|ipcMain|ipcRenderer/)
     // Value imports are exactly two: the registry factory and the adapter.
-    expect(source.split('\n').filter(line => line.startsWith('import ') && !line.startsWith('import type ')).sort())
+    expect(normalizeLineEndings(source).split('\n').filter(line => line.startsWith('import ') && !line.startsWith('import type ')).sort())
       .toEqual([
         'import { createBrainEngineRegistry } from \'./engine-registry\'',
         'import { groqBrainDescriptors } from \'./adapters/groq\'',
@@ -215,7 +216,7 @@ describe('production brain catalog (8.0D-3)', () => {
       .filter(name => name.endsWith('.ts') && !name.includes('.test.') && name !== 'catalog.ts')
     expect(genericFiles.length).toBeGreaterThan(0)
     for (const name of genericFiles) {
-      const source = readFileSync(`${domainDir}/${name}`, 'utf-8')
+      const source = normalizeLineEndings(readFileSync(`${domainDir}/${name}`, 'utf-8'))
       expect(source, name).not.toMatch(/from '\.\/(?:catalog|adapters)/)
       expect(source, name).not.toMatch(/\bgroq\b/i)
     }

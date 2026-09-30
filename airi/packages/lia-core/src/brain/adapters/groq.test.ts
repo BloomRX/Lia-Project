@@ -5,6 +5,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 import { describe, expect, it } from 'vitest'
+import { normalizeLineEndings } from '../../test-helpers'
 
 import { satisfiesBrainCapabilities } from '../capabilities'
 import { createBrainEngineRegistry, modelsForEngine } from '../engine-registry'
@@ -19,7 +20,7 @@ import { GROQ_BRAIN_ENGINE_ID, GROQ_BRAIN_MODEL_ID, groqBrainDescriptors } from 
  */
 
 function readSource(relative: string): string {
-  return readFileSync(fileURLToPath(new URL(relative, import.meta.url)), 'utf-8')
+  return normalizeLineEndings(readFileSync(fileURLToPath(new URL(relative, import.meta.url)), 'utf-8'))
 }
 
 /** The nine capability dimensions, from the canonical domain interface. */
@@ -235,7 +236,7 @@ describe('current brain descriptor adapter (8.0D-2)', () => {
     // No config reads and no registry ownership either.
     expect(source).not.toMatch(/readLiaProductConfig|updateLiaProductConfig|createBrainEngineRegistry|decideBrainRoute/)
     // The only import is the erased type import from the neutral domain.
-    expect(source.split('\n').filter(line => line.startsWith('import')))
+    expect(normalizeLineEndings(source).split('\n').filter(line => line.startsWith('import')))
       .toEqual(['import type { LiaBrainCapabilities, LiaBrainEngineDescriptor, LiaBrainModelDescriptor } from \'../types\''])
   })
 
@@ -251,7 +252,7 @@ describe('current brain descriptor adapter (8.0D-2)', () => {
     expect(genericFiles.length).toBeGreaterThan(0)
     const vendorPattern = /groq|gpt-oss|qwen|openai|anthropic|gemini|claude|mistral|ollama|deepseek|cerebras/i
     for (const name of genericFiles)
-      expect(readFileSync(`${domainDir}/${name}`, 'utf-8'), name).not.toMatch(vendorPattern)
+      expect(normalizeLineEndings(readFileSync(`${domainDir}/${name}`, 'utf-8')), name).not.toMatch(vendorPattern)
     // And the adapter really lives outside them.
     expect(genericFiles).not.toContain('groq.ts')
   })

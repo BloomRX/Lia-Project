@@ -10,6 +10,7 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 
 import InteractiveArea from './InteractiveArea.vue'
 
+import { createMemoryStorage } from '../../test-helpers'
 import { artistryToolReferences } from '../stores/tools'
 
 /**
@@ -108,6 +109,7 @@ async function attachImages(wrapper: Awaited<ReturnType<typeof renderArea>>['wra
 
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.stubGlobal('localStorage', createMemoryStorage())
   electron.brainInvoke.mockResolvedValue({ status: 'modeUnspecified' })
   liaProviderMock.hasApiKey.mockResolvedValue(true)
   localStorage.clear()

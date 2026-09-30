@@ -7,6 +7,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 import { describe, expect, it } from 'vitest'
+import { normalizeLineEndings } from '../test-helpers'
 
 import { decideBrainRoute } from './decision'
 import { decideBrainRouteFromProductState } from './runtime'
@@ -17,7 +18,7 @@ import { decideBrainRouteFromProductState } from './runtime'
  */
 
 function readSource(relative: string): string {
-  return readFileSync(fileURLToPath(new URL(relative, import.meta.url)), 'utf-8')
+  return normalizeLineEndings(readFileSync(fileURLToPath(new URL(relative, import.meta.url)), 'utf-8'))
 }
 
 const NONE: LiaBrainCapabilities = {
@@ -248,7 +249,7 @@ describe('runtime brain decision context (8.0D-1)', () => {
     expect(source).not.toMatch(/updateLiaProductConfig|writeLiaProductConfig|brainRoutingModeUpdate|brainSelectionUpdate/)
     expect(source).not.toContain('createBrainEngineRegistry')
     // Exactly one import from the product layer: the three readers (values only).
-    expect(source.split('\n').filter(line => line.includes('../product')))
+    expect(normalizeLineEndings(source).split('\n').filter(line => line.includes('../product')))
       .toEqual([
         'import type { LiaProductConfigSnapshot } from \'../product/config\'',
         'import { readBrainRoutingMode, readPreferredBrainEngineId, readPreferredBrainModelId } from \'../product/config\'',

@@ -8,6 +8,7 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 import { describe, expect, it } from 'vitest'
+import { normalizeLineEndings } from '../test-helpers'
 
 import { createProductionBrainAutomaticPolicy } from '../product/brain-policy'
 import { groqBrainDescriptors } from './adapters/groq'
@@ -23,7 +24,7 @@ import { selectBrainRouteByPolicy } from './selection'
  */
 
 function readSource(relative: string): string {
-  return readFileSync(fileURLToPath(new URL(relative, import.meta.url)), 'utf-8')
+  return normalizeLineEndings(readFileSync(fileURLToPath(new URL(relative, import.meta.url)), 'utf-8'))
 }
 
 const NONE: LiaBrainCapabilities = {
@@ -492,7 +493,7 @@ describe('unified brain routing decision (8.0C-3D)', () => {
     expect(source).toMatch(/import type \{ LiaBrainRoutingMode \} from '\.\.\/product\/config'/)
     expect(source).not.toMatch(/readLiaProductConfig|brainSelectionUpdate|readBrainRoutingMode|updateLiaProductConfig/)
     // The lone '../product' line is the type-only mode import (erased at runtime).
-    expect(source.split('\n').filter(line => line.includes('../product')))
+    expect(normalizeLineEndings(source).split('\n').filter(line => line.includes('../product')))
       .toEqual(['import type { LiaBrainRoutingMode } from \'../product/config\''])
 
     const input: LiaBrainRoutingDecisionInput = {

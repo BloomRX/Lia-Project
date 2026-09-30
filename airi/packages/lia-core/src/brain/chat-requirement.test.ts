@@ -5,6 +5,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 import { describe, expect, it } from 'vitest'
+import { normalizeLineEndings } from '../test-helpers'
 
 import { brainRequirementForChatTurn } from './chat-requirement'
 
@@ -14,7 +15,7 @@ import { brainRequirementForChatTurn } from './chat-requirement'
  */
 
 function readSource(relative: string): string {
-  return readFileSync(fileURLToPath(new URL(relative, import.meta.url)), 'utf-8')
+  return normalizeLineEndings(readFileSync(fileURLToPath(new URL(relative, import.meta.url)), 'utf-8'))
 }
 
 /** The canonical capability order of the domain, used to check stability. */
@@ -150,7 +151,7 @@ describe('chat turn brain requirement (8.0D-6)', () => {
     expect(source).not.toMatch(/LiaBrainService|decideBrainRoute|createProductionBrainCatalog|createBrainEngineRegistry/)
     expect(source).not.toMatch(/readLiaProductConfig|updateLiaProductConfig|satisfiesBrainCapabilities/)
     // Value imports: none. The single import is the erased requirement type.
-    expect(source.split('\n').filter(line => line.startsWith('import ')))
+    expect(normalizeLineEndings(source).split('\n').filter(line => line.startsWith('import ')))
       .toEqual(['import type { LiaBrainCapability, LiaBrainCapabilityRequirement } from \'./capabilities\''])
   })
 

@@ -29,11 +29,15 @@ import {
   hardwareFromNode,
   maskPrivatePaths,
   nextBenchmarkRunId,
+  parseLintMetrics,
+  parseTypecheckMetrics,
+  parseVitestMetrics,
   PUBLISH_FILE_HARD_MAX,
   PUBLISH_PER_LOG_MAX,
   PUBLISH_TOTAL_HARD_MAX,
   publicCommandResult,
   resolvePython,
+  stripAnsi,
   verifyShaManifest,
 } from './qa-benchmark-lib.mjs'
 import { runWithRunner, getComSpec } from './qa-process-runner.mjs'
@@ -201,7 +205,33 @@ export function runCommand({ id, label, cwd, argv, logPath, repoRoot = REPO_ROOT
   }
   const exitCode = result.status
   const status = classifyCommandOutcome({ id, exitCode, error: result.error, stdout, stderr, timedOut: result.timedOut })
-  return { id, label, cwd: nodePath.relative(repoRoot, cwd).replace(/\\/g,'/'), argv, startedAt: startedAt.toISOString(), endedAt: endedAt.toISOString(), durationMs, exitCode, status, stdout, stderr, logPath: logPath ? nodePath.relative(repoRoot, logPath).replace(/\\/g,'/'): null, truncated: false, error: result.error ? String(result.error) : null }
+  // Metric extraction — ANSI-tolerant, pure
+  let testFiles = null, passed = null, failed = null, skipped = null, errors = null, warnings = null
+  const combinedForMetrics = `${stdout}\n${stderr}`
+  if (['core-agent','lia-core','stage-vitest','stage-ui','browser'].includes(id)) {
+    const vm = parseVitestMetrics(combinedForMetrics)
+    testFiles = vm.testFiles ?? vm.filesTotal ?? null
+    // For browser, testFiles may be filesTotal, for others use filesTotal or tests
+    passed = vm.passed ?? vm.testsPassed ?? null
+    failed = vm.failed ?? vm.testsFailed ?? null
+    skipped = vm.skipped ?? vm.testsSkipped ?? null
+    errors = vm.errors ?? null
+    // Prefer specific fields
+    if (vm.filesTotal !== null) testFiles = vm.filesTotal
+    if (vm.testsPassed !== null) passed = vm.testsPassed
+    if (vm.testsFailed !== null) failed = vm.testsFailed
+    if (vm.testsSkipped !== null) skipped = vm.testsSkipped
+    if (vm.errors !== null) errors = vm.errors
+  } else if (id === 'lint') {
+    const lm = parseLintMetrics(combinedForMetrics)
+    errors = lm.errors
+    warnings = lm.warnings
+    // testFiles for lint not applicable
+  } else if (id === 'typecheck') {
+    const tm = parseTypecheckMetrics(combinedForMetrics)
+    errors = tm.errors
+  }
+  return { id, label, cwd: nodePath.relative(repoRoot, cwd).replace(/\\/g,'/'), argv, startedAt: startedAt.toISOString(), endedAt: endedAt.toISOString(), durationMs, exitCode, status, stdout, stderr, logPath: logPath ? nodePath.relative(repoRoot, logPath).replace(/\\/g,'/'): null, truncated: false, error: result.error ? String(result.error) : null, testFiles, passed, failed, skipped, errors, warnings }
 }
 
 // ---------------------------------------------------------------------------
@@ -528,6 +558,7 @@ export async function runBenchmark({ repoRoot = REPO_ROOT, args = process.argv.s
   summary.publication.requested = !noPush
   summary.publication.intendedPush = !noPush
   summary.publication.branch = 'qa/windows-benchmarks'
+  if (noPush) summary.publication.pushSkippedReason = 'no-push-flag'
   if (summary.status==='INCOMPLETE') throw new Error('unexpected INCOMPLETE after commands')
 
   const publishLogsDir = nodePath.join(publishDir, 'logs')

@@ -11,6 +11,7 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 
 import InteractiveArea from './InteractiveArea.vue'
 
+import { createMemoryStorage } from '../../test-helpers'
 import { electronLiaBrainChatDecision } from '../../shared/eventa'
 import { artistryToolReferences } from '../stores/tools'
 
@@ -120,6 +121,7 @@ function observedCorrelationId(): string | undefined {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.stubGlobal('localStorage', createMemoryStorage())
   electron.brainInvoke.mockResolvedValue(makeAutomaticSelected())
   liaProviderMock.hasApiKey.mockResolvedValue(true)
   localStorage.clear()

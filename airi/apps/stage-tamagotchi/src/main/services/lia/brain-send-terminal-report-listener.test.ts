@@ -5,6 +5,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { repoRelativePosix } from '../../../test-helpers'
 
 import { createLiaBrainCorrelationService } from './brain-correlation-service'
 import { registerLiaBrainDecisionBridge } from './brain-decision-service'
@@ -69,7 +70,7 @@ function stripComments(source: string): string {
 
 const REPO_ROOT = new URL('../../../../../../', import.meta.url)
 /** `fileURLToPath` keeps the trailing separator of a directory URL. */
-const REPO_PREFIX = `${fileURLToPath(REPO_ROOT).replace(/\/+$/, '')}/`
+const REPO_ROOT_PATH = fileURLToPath(REPO_ROOT)
 
 /** Every production (non-test) `.ts`/`.vue` file under the repo-relative roots. */
 function productionSources(roots: string[]): string[] {
@@ -78,7 +79,7 @@ function productionSources(roots: string[]): string[] {
     for (const entry of readdirSync(new URL(root, REPO_ROOT), { recursive: true, withFileTypes: true })) {
       if (!entry.isFile() || !/\.(?:ts|vue)$/.test(entry.name) || entry.name.includes('.test.'))
         continue
-      files.push(`${entry.parentPath.slice(REPO_PREFIX.length)}/${entry.name}`)
+      files.push(`${repoRelativePosix(REPO_ROOT_PATH, entry.parentPath)}/${entry.name}`)
     }
   }
   return files

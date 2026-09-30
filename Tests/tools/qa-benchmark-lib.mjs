@@ -120,7 +120,7 @@ export function benchmarkCommands({ repoRoot = REPO_ROOT } = {}) {
       id: 'stage-ui',
       label: 'stage-ui suite',
       cwd: airiRoot,
-      argv: ['pnpm', 'exec', 'vitest', 'run', '--project', '@proj-airi/stage-ui'],
+      argv: ['pnpm', 'run', 'test-ui:run'],
       mandatory: true,
     },
     {
@@ -210,7 +210,7 @@ export function canonicalCommands(repoRoot = REPO_ROOT) {
       id: 'stage-ui',
       label: 'Stage UI',
       cwd: airi,
-      argv: ['pnpm', 'exec', 'vitest', 'run', '--project', '@proj-airi/stage-ui'],
+      argv: ['pnpm', 'run', 'test-ui:run'],
       mandatory: true,
     },
   ]
@@ -233,6 +233,169 @@ export function canonicalCommandsWithSmoke(repoRoot = REPO_ROOT, withSmoke = fal
 }
 
 // ---------------------------------------------------------------------------
+// ANSI stripping + validation evidence helpers (pure)
+// ---------------------------------------------------------------------------
+export function stripAnsi(text) {
+  return String(text).replace(/\u001b\[[0-9;]*[A-Za-z]/g, '').replace(/\u001b\][^\u0007]*\u0007/g, '')
+}
+
+export function hasVitestFailureEvidence(text) {
+  const clean = stripAnsi(String(text))
+  // Detect Vitest failure: Test Files ... failed, Tests ... failed, FAIL <test>
+  // Examples: "Test Files  9 failed | 15 passed (24)", "Tests  21 failed | 288 passed (309)", "FAIL  src/foo.test.ts"
+  if (/Test Files\s+.*\b\d+\s+failed\b/i.test(clean)) return true
+  if (/Tests\s+.*\b\d+\s+failed\b/i.test(clean)) return true
+  if (/^\s*FAIL\s+/m.test(clean)) return true
+  // Also "Test Files  30 failed | 107 passed" etc.
+  if (/Test Files\s+\d+\s+failed/i.test(clean)) return true
+  return false
+}
+
+export function hasTypeScriptError(text) {
+  const clean = stripAnsi(String(text))
+  return /error TS\d+\s*:/i.test(clean)
+}
+
+export function hasLintFailure(text) {
+  const clean = stripAnsi(String(text))
+  // ESLint: "✖ 498 problems (452 errors, 46 warnings)" or "X problems"
+  const m = clean.match(/✖\s*(\d+)\s+problems\s*\(\s*(\d+)\s+errors\s*,\s*(\d+)\s+warnings\s*\)/i)
+  if (m) {
+    const errors = Number(m[2])
+    return errors > 0
+  }
+  // Fallback: "452 errors" with problems
+  if (/problems.*\b\d+\s+errors\b/i.test(clean) && /✖/.test(clean)) {
+    const e = clean.match(/(\d+)\s+errors/)
+    if (e && Number(e[1]) > 0) return true
+  }
+  // Also check for "Definition for rule ... was not found" is still lint failure if exit non-zero, but we treat any lint with errors as failure
+  // If text contains "error" and lint command non-zero, but we need to avoid false env
+  // For now, also consider if contains "error" and "lint" but not env?
+  return false
+}
+
+export function hasNoTestsButBrowserEnv(text) {
+  // Browser-only: no tests executed, no failures, but browser missing
+  // We detect "no tests" phrasing
+  const clean = stripAnsi(String(text)).toLowerCase()
+  return clean.includes('no tests')
+}
+
+export function parseVitestMetrics(text) {
+  const clean = stripAnsi(String(text))
+  let testFiles = null, passed = null, failed = null, skipped = null, errors = null
+  // Test Files  9 failed | 15 passed (24)  OR  Test Files  30 failed | 107 passed (141)
+  let m = clean.match(/Test Files\s+(\d+)\s+failed\s*\|\s*(\d+)\s+passed\s*\((\d+)\)/i)
+  if (m) {
+    failed = Number(m[1]); passed = Number(m[2]); testFiles = Number(m[3])
+    // But note: this regex captures failed/passed as files, but we need to distinguish files vs tests
+    // For Test Files line, the failed/passed are files
+    // We will treat as testFiles metrics
+    // To capture both, we need separate matches for Test Files and Tests
+    testFiles = Number(m[3])
+    // Store files failed/passed separately? Use passed/failed for files?
+    // We'll map files failed/passed to failed/passed for now, but later Tests line will override
+    // So save as files
+    // Keep as is for now
+  } else {
+    // Browser: Test Files (4) or similar without failed/passed
+    m = clean.match(/Test Files\s*\((\d+)\)/i)
+    if (m) testFiles = Number(m[1])
+  }
+  // More robust: match Test Files line with possible ANSI and varied spacing
+  // Try alternative: "Test Files  9 failed | 15 passed (24)"
+  // Already handled. For Stage: same.
+  // Now Tests line: "Tests  21 failed | 288 passed (309)" or "Tests  109 failed | 1438 passed | 1 skipped (1548)"
+  let tm = clean.match(/Tests\s+(\d+)\s+failed\s*\|\s*(\d+)\s+passed\s*\|\s*(\d+)\s+skipped\s*\((\d+)\)/i)
+  if (tm) {
+    failed = Number(tm[1]); passed = Number(tm[2]); skipped = Number(tm[3]); // total = tm[4] but we can compute
+    // For Vitest, the Tests line is more important for passed/failed/skipped
+    // Override previous failed/passed if they were files?
+    // Actually previous failed/passed were files, but we want tests metrics in passed/failed fields
+    // So we will use Tests line values for passed/failed/skipped
+  } else {
+    tm = clean.match(/Tests\s+(\d+)\s+failed\s*\|\s*(\d+)\s+passed\s*\((\d+)\)/i)
+    if (tm) {
+      failed = Number(tm[1]); passed = Number(tm[2])
+      // total = tm[3]
+    } else {
+      // No tests case: "Tests  no tests" or similar
+      if (/Tests\s+no tests/i.test(clean)) {
+        failed = 0; passed = 0; skipped = 0
+      }
+    }
+  }
+  // Errors: "Errors      1 error" or "Errors  1 errors"
+  let em = clean.match(/Errors\s+(\d+)\s+error/i)
+  if (em) errors = Number(em[1])
+  // Also handle "1 error" without Errors label? Vitest also prints "Errors 1 error"
+  // Try to capture files total etc. For browser, Test Files (4) already handled
+  // If we matched earlier Test Files with failed/passed, we already have testFiles
+  // But if we matched Tests line and it overwrote failed/passed, we lost files info
+  // So we should capture both separately and return structured
+  // For now, return as parsed
+  // Re-parse to ensure correct mapping: testFiles should be from Test Files line, passed/failed from Tests line
+  // Let's do more precise:
+  const clean2 = clean
+  let filesTotal = null, filesFailed = null, filesPassed = null
+  const f1 = clean2.match(/Test Files\s+(\d+)\s+failed\s*\|\s*(\d+)\s+passed\s*\((\d+)\)/i)
+  if (f1) {
+    filesFailed = Number(f1[1]); filesPassed = Number(f1[2]); filesTotal = Number(f1[3])
+  } else {
+    const f2 = clean2.match(/Test Files\s*\((\d+)\)/i)
+    if (f2) filesTotal = Number(f2[1])
+  }
+  let testsFailed = null, testsPassed = null, testsSkipped = null, testsTotal = null
+  const t1 = clean2.match(/Tests\s+(\d+)\s+failed\s*\|\s*(\d+)\s+passed\s*\|\s*(\d+)\s+skipped\s*\((\d+)\)/i)
+  if (t1) {
+    testsFailed = Number(t1[1]); testsPassed = Number(t1[2]); testsSkipped = Number(t1[3]); testsTotal = Number(t1[4])
+  } else {
+    const t2 = clean2.match(/Tests\s+(\d+)\s+failed\s*\|\s*(\d+)\s+passed\s*\((\d+)\)/i)
+    if (t2) {
+      testsFailed = Number(t2[1]); testsPassed = Number(t2[2]); testsTotal = Number(t2[3])
+    } else if (/Tests\s+no tests/i.test(clean2)) {
+      testsFailed = 0; testsPassed = 0; testsSkipped = 0; testsTotal = 0
+    }
+  }
+  // Determine final fields for publicCommandResult: testFiles = filesTotal, passed = testsPassed, failed = testsFailed, skipped = testsSkipped, errors = errors
+  // But if filesTotal not found but testsTotal exists, use testsTotal? For lia-core, filesTotal 24, testsTotal 309, etc.
+  // For publicCommandResult, testFiles is intended as number of test files, passed/failed are tests
+  if (filesTotal !== null) testFiles = filesTotal
+  else if (testsTotal !== null) testFiles = testsTotal // fallback
+  if (testsFailed !== null) failed = testsFailed
+  else if (filesFailed !== null) failed = filesFailed
+  if (testsPassed !== null) passed = testsPassed
+  else if (filesPassed !== null) passed = filesPassed
+  if (testsSkipped !== null) skipped = testsSkipped
+  // errors already
+  return { testFiles, passed, failed, skipped, errors, filesTotal, filesFailed, filesPassed, testsTotal, testsFailed, testsPassed, testsSkipped }
+}
+
+export function parseLintMetrics(text) {
+  const clean = stripAnsi(String(text))
+  // "✖ 498 problems (452 errors, 46 warnings)"
+  let m = clean.match(/✖\s*(\d+)\s+problems\s*\(\s*(\d+)\s+errors\s*,\s*(\d+)\s+warnings\s*\)/i)
+  if (m) {
+    return { problems: Number(m[1]), errors: Number(m[2]), warnings: Number(m[3]) }
+  }
+  // Fallback: "X problems (Y errors, Z warnings)" without icon
+  m = clean.match(/(\d+)\s+problems\s*\(\s*(\d+)\s+errors\s*,\s*(\d+)\s+warnings\s*\)/i)
+  if (m) {
+    return { problems: Number(m[1]), errors: Number(m[2]), warnings: Number(m[3]) }
+  }
+  return { problems: null, errors: null, warnings: null }
+}
+
+export function parseTypecheckMetrics(text) {
+  const clean = stripAnsi(String(text))
+  const matches = clean.match(/error TS\d+:/gi)
+  if (matches) return { errors: matches.length }
+  return { errors: null }
+}
+
+
+// ---------------------------------------------------------------------------
 // Environment failure normalization — pure, testable
 // ---------------------------------------------------------------------------
 export function isEnvironmentFailure({ id, exitCode, error, stdout = '', stderr = '', timedOut = false }) {
@@ -243,6 +406,8 @@ export function isEnvironmentFailure({ id, exitCode, error, stdout = '', stderr 
     if (msg.includes('enomen') || msg.includes('oom') || msg.includes('heap')) return true
   }
   if (timedOut) return true
+  // Narrow timeout: only ETIMEDOUT or explicit process timed out, not generic setTimeout
+  if (combined.includes('etimedout') || combined.includes('process timed out')) return true
   // Browser precise: only infrastructure signatures, not generic mention
   if (id === 'browser') {
     if (combined.includes("executable doesn't exist")) return true
@@ -257,27 +422,31 @@ export function isEnvironmentFailure({ id, exitCode, error, stdout = '', stderr 
   if (id === 'typecheck' || combined.includes('typecheck')) {
     if (combined.includes('heap out of memory') || combined.includes('javascript heap out of memory') || combined.includes('enomem') || combined.includes('allocation failure')) return true
   }
-  if (combined.includes('heap out of memory') || combined.includes('enomem')) return true
-  if (combined.includes('enoent') || combined.includes('command not found')) {
-    if (combined.includes('vitest') || combined.includes('eslint') || combined.includes('tsc') || combined.includes('playwright')) return true
-  }
-  if (combined.includes('python') && combined.includes('not found')) return true
-  if (combined.includes('timed out') || combined.includes('timeout')) return true
+  if (combined.includes('heap out of memory') || combined.includes('enomem') || combined.includes('allocation failure')) return true
+  // Do NOT infer environment from arbitrary test output containing ENOENT/command not found/python not found
+  // Those are handled as spawn errors above, not via output substrings
   return false
 }
 
 export function classifyCommandOutcome({ id, exitCode, error, stdout = '', stderr = '', timedOut = false, skippedOptional = false }) {
   if (skippedOptional) return 'skipped-optional'
+  const combined = `${stdout}\n${stderr}`
+  // FIRST detect ATTRIBUTABLE validation evidence (failure precedence)
+  // Vitest: Test Files ... failed / Tests ... failed / FAIL
+  if (hasVitestFailureEvidence(combined)) return 'failed'
+  // Typecheck: error TSxxxx:
+  if (hasTypeScriptError(combined)) return 'failed'
+  // Lint:  ✖ N problems (M errors, ...) with M>0
+  if (hasLintFailure(combined)) return 'failed'
+  // Invalid Vitest project filter (stage-ui misconfiguration)
+  if (combined.includes('No projects matched')) return 'failed'
+  // Only then may environment signatures classify
+  if (isEnvironmentFailure({ id, exitCode, error, stdout, stderr, timedOut })) return 'environment-limited'
   if (error || timedOut) {
-    if (isEnvironmentFailure({ id, exitCode, error, stdout, stderr, timedOut })) return 'environment-limited'
-    // Unknown spawn error without defensible env pattern → environment if error exists but not recognizable? Spec says unknown nonzero → FAIL, but spawn errors with no pattern should be env? Conservative: if error exists and not env, still env? But spec says Do NOT classify arbitrary nonzero as env. For error case, we already check env patterns; if not env, should we treat as failed? But spawn error without env pattern is still env? We'll treat as environment-limited only if env pattern matches, otherwise failed? However spawn error typically is env. We'll return environment-limited if error exists and we can't prove fail, but spec says Do NOT classify arbitrary nonzero exit as env. So for error case with no env pattern, we should maybe return 'failed' to be safe? But then missing binary would be misclassified if pattern not matched. Better to be strict: only env if pattern matches, else failed.
-    // For now, if error exists but not env, treat as environment-limited? Let's treat as environment-limited only if pattern matches, else failed.
     return 'failed'
   }
   if (exitCode === 0) return 'passed'
   if (exitCode === null || exitCode === undefined) return 'environment-limited'
-  // Nonzero exit: check if it's defensible env
-  if (isEnvironmentFailure({ id, exitCode, error, stdout, stderr, timedOut })) return 'environment-limited'
   return 'failed'
 }
 
@@ -324,7 +493,7 @@ export function commandStatus({ exitCode, environmentLimited, mandatory }) {
 
 // Structured command result privacy — only publish allowed fields
 export function publicCommandResult(cmd) {
-  // Allowed: id,label,cwd(repo-relative),argv,startedAt,endedAt,durationMs,exitCode,status,testFiles,passed,failed,skipped,errors(log count),logPath(publish-relative),truncated
+  // Allowed: id,label,cwd(repo-relative),argv,startedAt,endedAt,durationMs,exitCode,status,testFiles,passed,failed,skipped,errors,warnings,logPath(publish-relative),truncated
   const publicFields = {}
   publicFields.id = cmd.id
   publicFields.label = cmd.label
@@ -353,6 +522,7 @@ export function publicCommandResult(cmd) {
   publicFields.failed = cmd.failed ?? null
   publicFields.skipped = cmd.skipped ?? null
   publicFields.errors = cmd.errors ?? null
+  publicFields.warnings = cmd.warnings ?? null
   // logPath must be publish-relative, never absolute or temp
   if (cmd.logPath) {
     const lp = String(cmd.logPath).replace(/\\/g, '/')

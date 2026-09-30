@@ -8,6 +8,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { repoRelativePosix } from '../../../test-helpers'
 
 import { createLiaBrainCorrelationObserver } from './brain-correlation-observer'
 import { createLiaBrainCorrelationService } from './brain-correlation-service'
@@ -989,13 +990,13 @@ describe('lia brain diagnostic log - source invariants (Phase 8.0D-10B-4D2B)', (
 
   it('31/57: no generic log pipeline file was touched, and the Brain IPC allowlist is exactly four', () => {
     const roots = ['apps/stage-tamagotchi/src', 'packages/stage-ui/src', 'packages/core-agent/src', 'packages/lia-core/src']
-    const repoPrefix = `${fileURLToPath(REPO_ROOT).replace(/\/+$/, '')}/`
+    const REPO_ROOT_PATH = fileURLToPath(REPO_ROOT)
     const files: string[] = []
     for (const root of roots) {
       for (const item of readdirSync(new URL(root, REPO_ROOT), { recursive: true, withFileTypes: true })) {
         if (!item.isFile() || !/\.(?:ts|vue)$/.test(item.name) || item.name.includes('.test.'))
           continue
-        files.push(`${item.parentPath.slice(repoPrefix.length)}/${item.name}`)
+        files.push(`${repoRelativePosix(REPO_ROOT_PATH, item.parentPath)}/${item.name}`)
       }
     }
 

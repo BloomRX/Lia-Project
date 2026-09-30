@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url'
 
 import { createProductionBrainAutomaticPolicy, createProductionBrainCatalog, decideBrainRoute } from '@lia/core'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { repoRelativePosix } from '../../../test-helpers'
 
 import { composeLiaBrainCorrelationDiagnosticFacts } from './brain-correlation-diagnostic-facts'
 import { createLiaBrainCorrelationStore } from './brain-correlation-store'
@@ -124,7 +125,7 @@ const OBSERVER = 'apps/stage-tamagotchi/src/main/services/lia/brain-correlation-
 const BRAIN_ROOTS = ['apps/stage-tamagotchi/src', 'packages/stage-ui/src', 'packages/core-agent/src', 'packages/lia-core/src']
 
 /** `fileURLToPath` keeps the trailing separator of a directory URL. */
-const REPO_PREFIX = `${fileURLToPath(REPO_ROOT).replace(/\/+$/, '')}/`
+const REPO_ROOT_PATH = fileURLToPath(REPO_ROOT)
 
 function productionSources(roots: string[]): string[] {
   const files: string[] = []
@@ -132,7 +133,7 @@ function productionSources(roots: string[]): string[] {
     for (const entry of readdirSync(new URL(root, REPO_ROOT), { recursive: true, withFileTypes: true })) {
       if (!entry.isFile() || !/\.(?:ts|vue)$/.test(entry.name) || entry.name.includes('.test.'))
         continue
-      files.push(`${entry.parentPath.slice(REPO_PREFIX.length)}/${entry.name}`)
+      files.push(`${repoRelativePosix(REPO_ROOT_PATH, entry.parentPath)}/${entry.name}`)
     }
   }
   return files
