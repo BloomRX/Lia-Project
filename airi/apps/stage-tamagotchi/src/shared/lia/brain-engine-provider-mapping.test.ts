@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url'
 
 import { describe, expect, it } from 'vitest'
 
-import { repoRelativePosix } from '../../test-helpers'
+import { normalizeLineEndings, repoRelativePosix } from '../../test-helpers'
 
 const REPO_ROOT = new URL('../../../../../', import.meta.url)
 const REPO_ROOT_PATH = fileURLToPath(REPO_ROOT)
@@ -29,7 +29,7 @@ const BRAIN_ROOTS = ['apps/stage-tamagotchi/src', 'packages/stage-ui/src', 'pack
 describe('brain engine provider mapping — process safety (D2B1-F)', () => {
   it('renderer Lia adapter imports zero src/main modules', () => {
     const adapterPath = 'apps/stage-tamagotchi/src/renderer/services/lia/brain-send-route-candidate.ts'
-    const source = stripComments(readFileSync(new URL(adapterPath, REPO_ROOT), 'utf-8'))
+    const source = stripComments(normalizeLineEndings(readFileSync(new URL(adapterPath, REPO_ROOT), 'utf-8')))
     // No import path resolving into /main/
     expect(source).not.toMatch(/from ['"]\.\.\/\.\.\/\.\.\/main\//)
     expect(source).not.toMatch(/\/main\//)
@@ -41,7 +41,7 @@ describe('brain engine provider mapping — process safety (D2B1-F)', () => {
   it('single canonical engine→provider mapping definition', () => {
     const all = productionSources(BRAIN_ROOTS)
     const withLiteral = all.filter((relative) => {
-      const s = stripComments(readFileSync(new URL(relative, REPO_ROOT), 'utf-8'))
+      const s = stripComments(normalizeLineEndings(readFileSync(new URL(relative, REPO_ROOT), 'utf-8')))
       return s.includes(`PRODUCTION_ENGINE_PROVIDER_IDS`) || s.includes(`['groq', GROQ_STAGE_CHAT_PROVIDER_ID]`)
     })
     // Only the shared owner defines the literal table
@@ -51,7 +51,7 @@ describe('brain engine provider mapping — process safety (D2B1-F)', () => {
   it('shared mapping is the sole LIA_BRAIN_ENGINE_PROVIDER_MAPPING definition', () => {
     const all = productionSources(BRAIN_ROOTS)
     const defining = all.filter((relative) => {
-      const s = stripComments(readFileSync(new URL(relative, REPO_ROOT), 'utf-8'))
+      const s = stripComments(normalizeLineEndings(readFileSync(new URL(relative, REPO_ROOT), 'utf-8')))
       // Definition is `export const LIA_BRAIN_ENGINE_PROVIDER_MAPPING = Object.freeze`
       return s.includes(`export const LIA_BRAIN_ENGINE_PROVIDER_MAPPING`)
     })
@@ -59,7 +59,7 @@ describe('brain engine provider mapping — process safety (D2B1-F)', () => {
   })
 
   it('main expected-route re-exports the shared mapping (no duplication)', () => {
-    const expectedRoute = stripComments(readFileSync(new URL('apps/stage-tamagotchi/src/main/services/lia/brain-expected-route.ts', REPO_ROOT), 'utf-8'))
+    const expectedRoute = stripComments(normalizeLineEndings(readFileSync(new URL('apps/stage-tamagotchi/src/main/services/lia/brain-expected-route.ts', REPO_ROOT), 'utf-8')))
     expect(expectedRoute).toContain(`from '../../../shared/lia/brain-engine-provider-mapping'`)
     expect(expectedRoute).toContain(`export { GROQ_STAGE_CHAT_PROVIDER_ID, LIA_BRAIN_ENGINE_PROVIDER_MAPPING }`)
     // No duplicate literal table in expected-route

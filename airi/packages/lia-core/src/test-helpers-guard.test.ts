@@ -1,8 +1,10 @@
 import { readdirSync, readFileSync } from 'node:fs'
-import { join, relative } from 'node:path'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { describe, expect, it } from 'vitest'
+
+import { repoRelativePosix } from './test-helpers'
 
 describe('test-helpers production import guard (D2B9-A1)', () => {
   it('no production file imports src/test-helpers', () => {
@@ -17,7 +19,7 @@ describe('test-helpers production import guard (D2B9-A1)', () => {
         const file = join(entry.parentPath, entry.name)
         const content = readFileSync(file, 'utf-8')
         if (content.includes('test-helpers')) {
-          offenders.push(relative(airiRoot, file))
+          offenders.push(repoRelativePosix(airiRoot, file))
         }
       }
     }

@@ -2,6 +2,7 @@ import { retrySourceMessageIdFrom } from '@proj-airi/stage-ui/stores/chat/retry-
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { normalizeLineEndings } from '../../test-helpers'
 import { executeLiaAuthoritativeRetry } from '../services/lia/lia-authoritative-retry'
 import { widgetToolReferences } from '../stores/tools'
 
@@ -198,7 +199,7 @@ describe('interactive area retry thin owner (Phase 8.0D-10B-4D4C4-D2B6 correctiv
   it('no global provider/model writes in InteractiveArea', async () => {
     const { readFileSync } = await import('node:fs')
     const { resolve } = await import('node:path')
-    const src = readFileSync(resolve(__dirname, './InteractiveArea.vue'), 'utf-8')
+    const src = normalizeLineEndings(readFileSync(resolve(__dirname, './InteractiveArea.vue'), 'utf-8'))
     expect(src).not.toMatch(/activeProvider/)
     expect(src).not.toMatch(/activeModel/)
     expect(src).toMatch(/retrySourceMessageIdFrom/)
@@ -208,7 +209,7 @@ describe('interactive area retry thin owner (Phase 8.0D-10B-4D4C4-D2B6 correctiv
   it('does not contain duplicate Brain sequence (no direct requestLiaBrainDecisionForChatTurn nor chatTurnFactsFromSend in retry)', async () => {
     const { readFileSync } = await import('node:fs')
     const { resolve } = await import('node:path')
-    const src = readFileSync(resolve(__dirname, './InteractiveArea.vue'), 'utf-8')
+    const src = normalizeLineEndings(readFileSync(resolve(__dirname, './InteractiveArea.vue'), 'utf-8'))
     const retryFn = src.slice(src.indexOf('async function handleRetryMessage'))
     // Should not directly call resolver or build facts in retry; helper owns it
     expect(retryFn).not.toMatch(/resolveLiaAuthoritativeSendRoute/)
@@ -220,7 +221,7 @@ describe('interactive area retry thin owner (Phase 8.0D-10B-4D4C4-D2B6 correctiv
   it('preserves retry analytics wiring', async () => {
     const { readFileSync } = await import('node:fs')
     const { resolve } = await import('node:path')
-    const src = readFileSync(resolve(__dirname, './InteractiveArea.vue'), 'utf-8')
+    const src = normalizeLineEndings(readFileSync(resolve(__dirname, './InteractiveArea.vue'), 'utf-8'))
     expect(src).toMatch(/trackChatMessageRetried/)
   })
 })

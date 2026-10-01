@@ -2,8 +2,12 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 import { describe, expect, it } from 'vitest'
+// TEST-ONLY helper: keep source guards stable across CRLF/LF checkouts
+function normalizeLineEndings(value: string): string {
+  return value.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+}
 
-const source = readFileSync(fileURLToPath(new URL('./tool-call-block.vue', import.meta.url)), 'utf8')
+const source = normalizeLineEndings(readFileSync(fileURLToPath(new URL('./tool-call-block.vue', import.meta.url)), 'utf8'))
 
 describe('chat tool call block rerun action', () => {
   it('wires the rerun button click to the expected toolCallRerun payload', () => {

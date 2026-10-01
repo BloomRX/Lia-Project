@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { normalizeLineEndings } from '../../../test-helpers'
 import { createLiaBrainService } from './lia-brain-service'
 
 /**
@@ -63,7 +64,7 @@ vi.mock('@lia/core', async (importOriginal) => {
 })
 
 function readSource(relative: string): string {
-  return readFileSync(fileURLToPath(new URL(relative, import.meta.url)), 'utf-8')
+  return normalizeLineEndings(readFileSync(fileURLToPath(new URL(relative, import.meta.url)), 'utf-8'))
 }
 
 /** Code without comments - guards must only find the words in real code. */
@@ -96,7 +97,7 @@ function productionSources(roots: string[]): string[] {
 /** The production sources under the roots whose content matches the pattern. */
 function productionSourcesMatching(roots: string[], pattern: RegExp): string[] {
   return productionSources(roots)
-    .filter(relative => pattern.test(readFileSync(new URL(relative, REPO_ROOT), 'utf-8')))
+    .filter(relative => pattern.test(normalizeLineEndings(readFileSync(new URL(relative, REPO_ROOT), 'utf-8'))))
 }
 
 /** The shared contract's Brain section, comments included. */
@@ -556,7 +557,7 @@ describe('lia brain decision bridge (Phase 8.0D-8)', () => {
       ) {
         continue
       }
-      if (/registerLiaBrainDecisionBridge|electronLiaBrainChatDecision|LiaBrainChatDecisionRequest|LiaBrainChatDecision\b/.test(readFileSync(file, 'utf-8')))
+      if (/registerLiaBrainDecisionBridge|electronLiaBrainChatDecision|LiaBrainChatDecisionRequest|LiaBrainChatDecision\b/.test(normalizeLineEndings(readFileSync(file, 'utf-8'))))
         callers.push(relative)
     }
     // 8.0D-7A proved "zero production callers". 8.0D-9 legitimately evolves
@@ -681,7 +682,7 @@ describe('lia brain decision bridge (Phase 8.0D-8)', () => {
   it('isolation ab: no additional Brain IPC channel was introduced', () => {
     const tags = new Set<string>()
     for (const relative of productionSources(['apps/stage-tamagotchi/src', 'packages/lia-core/src', 'packages/stage-ui/src', 'packages/core-agent/src'])) {
-      for (const match of readFileSync(new URL(relative, REPO_ROOT), 'utf-8').matchAll(/eventa:(?:invoke|event):lia:brain[^'"]*/g))
+      for (const match of normalizeLineEndings(readFileSync(new URL(relative, REPO_ROOT), 'utf-8')).matchAll(/eventa:(?:invoke|event):lia:brain[^'"]*/g))
         tags.add(match[0])
     }
     // The whole production tree names exactly the four-channel allowlist - the

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { createPinia, setActivePinia } from 'pinia'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { nextTick } from 'vue'
 
 import { useProviderConfigStore } from '../providers/config'
@@ -16,10 +16,54 @@ vi.mock('vue-i18n', () => ({
   }),
 }))
 
+class MemoryStorage implements Storage {
+  readonly values = new Map<string, string>()
+
+  get length() {
+    return this.values.size
+  }
+
+  clear() {
+    this.values.clear()
+  }
+
+  getItem(key: string) {
+    return this.values.get(key) ?? null
+  }
+
+  key(index: number) {
+    return [...this.values.keys()][index] ?? null
+  }
+
+  removeItem(key: string) {
+    this.values.delete(key)
+  }
+
+  setItem(key: string, value: string) {
+    this.values.set(key, value)
+  }
+}
+
+// TEST-ONLY: every test gets its own storage so state cannot leak between tests
+// (jsdom/browser localStorage is shared per document, which is not isolation).
+function installIsolatedLocalStorage() {
+  const storage = new MemoryStorage()
+  vi.stubGlobal('localStorage', storage)
+  try {
+    Object.defineProperty(window, 'localStorage', { configurable: true, value: storage, writable: true })
+  }
+  catch {}
+  return storage
+}
+
 describe('consciousness store provider selection', () => {
   beforeEach(() => {
-    localStorage.clear()
+    installIsolatedLocalStorage()
     setActivePinia(createPinia())
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
   })
 
   // ROOT CAUSE:
@@ -158,10 +202,13 @@ describe('consciousness store provider selection', () => {
     store.activeModel = 'auto'
     await nextTick()
 
+    // jsdom rejects a non-platform Storage as storageArea; the guard under test
+    // only cares about the key/newValue, so fall back to null off-jsdom.
+    const storageArea = typeof Storage !== 'undefined' && localStorage instanceof Storage ? localStorage : null
     window.dispatchEvent(new StorageEvent('storage', {
       key: 'settings/consciousness/active-model',
       newValue: '',
-      storageArea: localStorage,
+      storageArea,
     }))
     await nextTick()
     await nextTick()

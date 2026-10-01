@@ -159,14 +159,14 @@ export function canonicalCommands(repoRoot = REPO_ROOT) {
   const base = [
     {
       id: 'core-agent',
-      label: 'core-agent complete (12 files, 124 tests)',
+      label: 'Core Agent',
       cwd: airi,
       argv: ['pnpm', 'exec', 'vitest', 'run', '--project', '@proj-airi/core-agent'],
       mandatory: true,
     },
     {
       id: 'lia-core',
-      label: 'lia-core complete (24 files, 309 tests)',
+      label: 'Lia Core',
       cwd: nodePath.join(airi, 'packages', 'lia-core'),
       argv: ['pnpm', 'test'],
       mandatory: true,
@@ -283,8 +283,16 @@ export function hasNoTestsButBrowserEnv(text) {
 }
 
 export function parseVitestMetrics(text) {
-  const clean = stripAnsi(String(text))
+  let clean = stripAnsi(String(text))
   let testFiles = null, passed = null, failed = null, skipped = null, errors = null
+  // D2B9-C: normalize pass-only Vitest summaries to the `failed | passed` form the
+  // existing regexes expect, so all-green runs parse instead of yielding nulls.
+  const cleanNorm = clean
+    .replace(/Test Files\s+(\d+)\s+passed\s*\((\d+)\)/gi, 'Test Files 0 failed | $1 passed ($2)')
+    .replace(/Tests\s+(\d+)\s+passed\s*\((\d+)\)/gi, 'Tests 0 failed | $1 passed ($2)')
+    .replace(/Test Files\s+(\d+)\s+passed\s*\|\s*(\d+)\s+skipped\s*\((\d+)\)/gi, 'Test Files 0 failed | $1 passed | $2 skipped ($3)')
+    .replace(/Tests\s+(\d+)\s+passed\s*\|\s*(\d+)\s+skipped\s*\((\d+)\)/gi, 'Tests 0 failed | $1 passed | $2 skipped ($3)')
+  clean = cleanNorm
   // Test Files  9 failed | 15 passed (24)  OR  Test Files  30 failed | 107 passed (141)
   let m = clean.match(/Test Files\s+(\d+)\s+failed\s*\|\s*(\d+)\s+passed\s*\((\d+)\)/i)
   if (m) {

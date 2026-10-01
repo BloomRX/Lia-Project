@@ -2,11 +2,12 @@ import type { LiaBrainCapability } from './capabilities'
 import type { LiaChatTurnBrainFacts } from './chat-requirement'
 
 import { readdirSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { describe, expect, it } from 'vitest'
 
-import { normalizeLineEndings } from '../test-helpers'
+import { normalizeLineEndings, repoRelativePosix } from '../test-helpers'
 import { brainRequirementForChatTurn } from './chat-requirement'
 
 /**
@@ -189,9 +190,9 @@ describe('chat turn brain requirement (8.0D-6)', () => {
         for (const entry of entries) {
           if (!entry.isFile() || !/\.(?:ts|vue)$/.test(entry.name) || entry.name.includes('.test.'))
             continue
-          const file = `${entry.parentPath}/${entry.name}`
-          if (/brainRequirementForChatTurn|LiaChatTurnBrainFacts/.test(readFileSync(file, 'utf-8')))
-            consumers.push(file.slice(airiDir.length))
+          const file = join(entry.parentPath, entry.name)
+          if (/brainRequirementForChatTurn|LiaChatTurnBrainFacts/.test(normalizeLineEndings(readFileSync(file, 'utf-8'))))
+            consumers.push(repoRelativePosix(airiDir, file))
         }
       }
     }

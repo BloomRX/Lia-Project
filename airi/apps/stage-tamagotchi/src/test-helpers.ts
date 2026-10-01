@@ -9,12 +9,17 @@ export function normalizeLineEndings(text: string): string {
 }
 
 export function normalizeRepoPath(p: string): string {
-  return p.replace(/\\/g, '/')
+  // Turn every backslash into a forward slash, then collapse duplicate slashes
+  // (the JSON-escaped \\ in kokoroSmokeSummaryLine becomes // and must collapse to /).
+  // Keep protocol-like :// out of this helper — inputs are repo paths, not URLs.
+  return p.replace(/\\/g, '/').replace(/\/{2,}/g, '/')
 }
 
 export function repoRelativePosix(repoRoot: string, absolutePath: string): string {
-  const rel = nodePath.relative(repoRoot, absolutePath)
-  return rel.replace(/\\/g, '/')
+  const a = normalizeRepoPath(repoRoot)
+  const b = normalizeRepoPath(absolutePath)
+  const rel = nodePath.posix.relative(a, b)
+  return normalizeRepoPath(rel)
 }
 
 export function createMemoryStorage() {

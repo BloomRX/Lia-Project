@@ -25,9 +25,53 @@ function createSyncedContext(namespace: string, leadership: LeadershipMode) {
   return { pinia, runtime }
 }
 
+class MemoryStorage implements Storage {
+  readonly values = new Map<string, string>()
+
+  get length() {
+    return this.values.size
+  }
+
+  clear() {
+    this.values.clear()
+  }
+
+  getItem(key: string) {
+    return this.values.get(key) ?? null
+  }
+
+  key(index: number) {
+    return [...this.values.keys()][index] ?? null
+  }
+
+  removeItem(key: string) {
+    this.values.delete(key)
+  }
+
+  setItem(key: string, value: string) {
+    this.values.set(key, value)
+  }
+}
+
+// TEST-ONLY: every test gets its own storage so state cannot leak between tests
+// (jsdom/browser localStorage is shared per document, which is not isolation).
+function installIsolatedLocalStorage() {
+  const storage = new MemoryStorage()
+  vi.stubGlobal('localStorage', storage)
+  try {
+    Object.defineProperty(window, 'localStorage', { configurable: true, value: storage, writable: true })
+  }
+  catch {}
+  return storage
+}
+
 describe('consciousness settings synchronization', () => {
   beforeEach(() => {
-    localStorage.clear()
+    installIsolatedLocalStorage()
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
   })
 
   afterEach(() => {
@@ -35,7 +79,7 @@ describe('consciousness settings synchronization', () => {
       context.runtime.dispose()
       disposePinia(context.pinia)
     }
-    localStorage.clear()
+    installIsolatedLocalStorage()
   })
 
   it('applies one remote snapshot without publishing it again', async () => {

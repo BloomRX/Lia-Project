@@ -20,7 +20,7 @@ import { fileURLToPath } from 'node:url'
 import { createProductionBrainAutomaticPolicy, createProductionBrainCatalog, decideBrainRoute } from '@lia/core'
 import { describe, expect, it } from 'vitest'
 
-import { repoRelativePosix } from '../../../test-helpers'
+import { normalizeLineEndings, repoRelativePosix } from '../../../test-helpers'
 import { deriveLiaBrainExecutionIdentityFacts } from './brain-execution-identity-facts'
 import { LIA_BRAIN_ENGINE_PROVIDER_MAPPING } from './brain-expected-route'
 
@@ -562,7 +562,7 @@ function productionSources(roots: string[]): string[] {
 }
 
 function readSource(relative: string): string {
-  return readFileSync(fileURLToPath(new URL(relative, import.meta.url)), 'utf-8')
+  return normalizeLineEndings(readFileSync(fileURLToPath(new URL(relative, import.meta.url)), 'utf-8'))
 }
 
 /** Code without comments - guards must only find the words in real code. */
@@ -644,7 +644,7 @@ describe('execution identity facts - authority and isolation invariants (Phase 8
     // delegates to the same pure facts layer over its one snapshot. No
     // application, lifecycle, bridge, handler or renderer caller exists.
     expect(productionSources(BRAIN_ROOTS)
-      .filter(relative => /brain-execution-identity-facts/.test(stripComments(readFileSync(new URL(relative, REPO_ROOT), 'utf-8'))))
+      .filter(relative => /brain-execution-identity-facts/.test(stripComments(normalizeLineEndings(readFileSync(new URL(relative, REPO_ROOT), 'utf-8')))))
       .sort()).toEqual([
       'apps/stage-tamagotchi/src/main/services/lia/brain-correlation-diagnostic-facts.ts',
       'apps/stage-tamagotchi/src/main/services/lia/brain-correlation-reader.ts',
@@ -657,7 +657,7 @@ describe('execution identity facts - authority and isolation invariants (Phase 8
       'apps/stage-tamagotchi/src/main/services/lia/brain-correlation-service.ts',
       'apps/stage-tamagotchi/src/renderer/main.ts',
     ]) {
-      expect(stripComments(readFileSync(new URL(relative, REPO_ROOT), 'utf-8')), relative)
+      expect(stripComments(normalizeLineEndings(readFileSync(new URL(relative, REPO_ROOT), 'utf-8'))), relative)
         .not
         .toMatch(/brain-execution-identity-facts|deriveLiaBrainExecutionIdentityFacts/)
     }
@@ -668,14 +668,14 @@ describe('execution identity facts - authority and isolation invariants (Phase 8
     // trusted mapping VALUE - it is a module reference, NOT a caller. The
     // function-call allowlist therefore stays exactly this module.
     expect(productionSources(BRAIN_ROOTS)
-      .filter(relative => /brain-expected-route/.test(stripComments(readFileSync(new URL(relative, REPO_ROOT), 'utf-8'))))
+      .filter(relative => /brain-expected-route/.test(stripComments(normalizeLineEndings(readFileSync(new URL(relative, REPO_ROOT), 'utf-8')))))
       .sort()).toEqual([
       'apps/stage-tamagotchi/src/main/services/lia/brain-correlation-observer.ts',
       'apps/stage-tamagotchi/src/main/services/lia/brain-execution-identity-facts.ts',
     ])
     // (the `function ` lookbehind excludes the declaration in the owning module)
     expect(productionSources(BRAIN_ROOTS)
-      .filter(relative => /(?<!function )expectedExecutionRouteForBrainDecision\(/.test(stripComments(readFileSync(new URL(relative, REPO_ROOT), 'utf-8'))))
+      .filter(relative => /(?<!function )expectedExecutionRouteForBrainDecision\(/.test(stripComments(normalizeLineEndings(readFileSync(new URL(relative, REPO_ROOT), 'utf-8')))))
       .sort()).toEqual([
       'apps/stage-tamagotchi/src/main/services/lia/brain-execution-identity-facts.ts',
     ])
@@ -691,7 +691,7 @@ describe('execution identity facts - authority and isolation invariants (Phase 8
     // the second legitimate read owner - the same pattern the shipped guards
     // use, re-run here. This module itself is still NOT a reader.
     expect(productionSources(BRAIN_ROOTS)
-      .filter(relative => /\w*[Cc]orrelation\w*\.(?:get\(|size\b)/.test(stripComments(readFileSync(new URL(relative, REPO_ROOT), 'utf-8'))))
+      .filter(relative => /\w*[Cc]orrelation\w*\.(?:get\(|size\b)/.test(stripComments(normalizeLineEndings(readFileSync(new URL(relative, REPO_ROOT), 'utf-8')))))
       .sort()).toEqual([
       'apps/stage-tamagotchi/src/main/services/lia/brain-correlation-diagnostic-facts.ts',
       'apps/stage-tamagotchi/src/main/services/lia/brain-correlation-reader.ts',

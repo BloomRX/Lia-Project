@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { electronLiaBrainChatDecision } from '../../../shared/eventa'
+import { normalizeLineEndings } from '../../../test-helpers'
 import { chatTurnFactsFromSend, observeLiaBrainDecisionForChatTurn, requestLiaBrainDecisionForChatTurn } from './brain-shadow'
 
 /**
@@ -28,7 +29,7 @@ vi.mock('@proj-airi/electron-vueuse', async (importOriginal) => {
 })
 
 function readSource(relative: string): string {
-  return readFileSync(fileURLToPath(new URL(relative, import.meta.url)), 'utf-8')
+  return normalizeLineEndings(readFileSync(fileURLToPath(new URL(relative, import.meta.url)), 'utf-8'))
 }
 
 function stripComments(source: string): string {

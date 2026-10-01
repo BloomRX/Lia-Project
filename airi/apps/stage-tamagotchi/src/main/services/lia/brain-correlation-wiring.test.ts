@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 
 import { describe, expect, it, vi } from 'vitest'
 
-import { repoRelativePosix } from '../../../test-helpers'
+import { normalizeLineEndings, repoRelativePosix } from '../../../test-helpers'
 import { readLiaBrainExecutionIdentityFacts } from './brain-correlation-reader'
 import { createLiaBrainCorrelationService } from './brain-correlation-service'
 import { registerLiaBrainDecisionBridge } from './brain-decision-service'
@@ -56,7 +56,7 @@ vi.mock('@moeru/eventa', () => ({
 }))
 
 function readSource(relative: string): string {
-  return readFileSync(fileURLToPath(new URL(relative, import.meta.url)), 'utf-8')
+  return normalizeLineEndings(readFileSync(fileURLToPath(new URL(relative, import.meta.url)), 'utf-8'))
 }
 
 /** Code without comments - guards must only find the words in real code. */
@@ -330,7 +330,7 @@ describe('lia brain correlation wiring - invariants (Phase 8.0D-10B-4B3)', () =>
   /** Production sources whose CODE (comments stripped) matches the pattern. */
   function matching(pattern: RegExp): string[] {
     return productionSources(BRAIN_ROOTS)
-      .filter(relative => pattern.test(stripComments(readFileSync(new URL(relative, REPO_ROOT), 'utf-8'))))
+      .filter(relative => pattern.test(stripComments(normalizeLineEndings(readFileSync(new URL(relative, REPO_ROOT), 'utf-8')))))
       .sort()
   }
 
@@ -347,7 +347,7 @@ describe('lia brain correlation wiring - invariants (Phase 8.0D-10B-4B3)', () =>
       'apps/stage-tamagotchi/src/main/services/lia/brain-decision-service.ts',
       'apps/stage-tamagotchi/src/main/services/lia/brain-execution-report-service.ts',
     ]) {
-      const source = stripComments(readFileSync(new URL(relative, REPO_ROOT), 'utf-8'))
+      const source = stripComments(normalizeLineEndings(readFileSync(new URL(relative, REPO_ROOT), 'utf-8')))
       expect(source, relative).not.toMatch(/createLiaBrainCorrelationService\(|createLiaBrainCorrelationStore\(/)
     }
     // The composition entry owns the service call but never the store call.
@@ -379,7 +379,7 @@ describe('lia brain correlation wiring - invariants (Phase 8.0D-10B-4B3)', () =>
 
     // AN: no module-global correlation state.
     for (const relative of ['apps/stage-tamagotchi/src/main/index.ts', 'apps/stage-tamagotchi/src/main/services/lia/brain-decision-service.ts', 'apps/stage-tamagotchi/src/main/services/lia/brain-execution-report-service.ts']) {
-      const source = stripComments(readFileSync(new URL(relative, REPO_ROOT), 'utf-8'))
+      const source = stripComments(normalizeLineEndings(readFileSync(new URL(relative, REPO_ROOT), 'utf-8')))
       expect(source, relative).not.toMatch(/^(?:const|let|var) \w*[Cc]orrelation\w* = (?:new |create)/m)
       expect(source, relative).not.toMatch(/globalThis\.\w*[Cc]orrelation/)
     }
@@ -451,7 +451,7 @@ describe('lia brain correlation wiring - invariants (Phase 8.0D-10B-4B3)', () =>
       'packages/core-agent/src/runtime/chat-orchestrator-runtime.ts',
       'packages/core-agent/src/runtime/llm-service.ts',
     ]) {
-      expect(stripComments(readFileSync(new URL(relative, REPO_ROOT), 'utf-8')), relative)
+      expect(stripComments(normalizeLineEndings(readFileSync(new URL(relative, REPO_ROOT), 'utf-8'))), relative)
         .not
         .toMatch(/LiaBrainCorrelation|correlationStore|brain-correlation/)
     }
@@ -460,7 +460,7 @@ describe('lia brain correlation wiring - invariants (Phase 8.0D-10B-4B3)', () =>
   it('the exact four-channel allowlist and the two observer registrations are unchanged', () => {
     const tags = new Set<string>()
     for (const relative of productionSources(BRAIN_ROOTS)) {
-      for (const match of readFileSync(new URL(relative, REPO_ROOT), 'utf-8').matchAll(/eventa:(?:invoke|event):lia:brain[^'"]*/g))
+      for (const match of normalizeLineEndings(readFileSync(new URL(relative, REPO_ROOT), 'utf-8')).matchAll(/eventa:(?:invoke|event):lia:brain[^'"]*/g))
         tags.add(match[0])
     }
     expect([...tags].sort()).toEqual([
@@ -475,10 +475,10 @@ describe('lia brain correlation wiring - invariants (Phase 8.0D-10B-4B3)', () =>
     expect(matching(/(?<!function )registerChatRequestStartedObserver\(/))
       .toEqual(['apps/stage-tamagotchi/src/renderer/services/lia/execution-reporter.ts'])
     expect(productionSources(['packages/stage-ui/src'])
-      .filter(relative => /electronLiaBrain|LiaBrainChatDecision|brain-shadow|LiaBrainCorrelation/.test(readFileSync(new URL(relative, REPO_ROOT), 'utf-8'))))
+      .filter(relative => /electronLiaBrain|LiaBrainChatDecision|brain-shadow|LiaBrainCorrelation/.test(normalizeLineEndings(readFileSync(new URL(relative, REPO_ROOT), 'utf-8')))))
       .toEqual([])
     expect(productionSources(['packages/core-agent/src'])
-      .filter(relative => /electronLiaBrain|LiaBrainChatDecision|brain-shadow|LiaBrainCorrelation/.test(readFileSync(new URL(relative, REPO_ROOT), 'utf-8'))))
+      .filter(relative => /electronLiaBrain|LiaBrainChatDecision|brain-shadow|LiaBrainCorrelation/.test(normalizeLineEndings(readFileSync(new URL(relative, REPO_ROOT), 'utf-8')))))
       .toEqual([])
   })
 })

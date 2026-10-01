@@ -5,6 +5,7 @@ import { join } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
 
+import { normalizeRepoPath } from '../../../test-helpers'
 import { resolveKokoroLayout } from './layout'
 import { KOKORO_ENGINE_ID, KOKORO_MODEL_SHA256, KOKORO_VOICES } from './manifest'
 import { KOKORO_SMOKE_PHRASES, kokoroSmokeSummaryLine, runKokoroSmoke } from './smoke'
@@ -196,7 +197,7 @@ describe('kokoro smoke (dev-only, drives the production engine)', () => {
     expect(summary).toContain('"sampleRate":24000')
     expect(summary).toContain('"coldStartMs":250') // two now() ticks of 250ms - measured, not estimated
     expect(summary).toContain('"slug":"a"')
-    expect(summary).toContain('"outDir":"/run/qa-out"')
+    expect(normalizeRepoPath(summary)).toContain('"outDir":"/run/qa-out"')
     expect(summary).not.toContain('directml')
   })
 

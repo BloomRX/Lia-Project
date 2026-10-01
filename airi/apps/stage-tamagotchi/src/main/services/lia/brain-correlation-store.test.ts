@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url'
 
 import { describe, expect, it } from 'vitest'
 
-import { repoRelativePosix } from '../../../test-helpers'
+import { normalizeLineEndings, repoRelativePosix } from '../../../test-helpers'
 import { createLiaBrainCorrelationStore } from './brain-correlation-store'
 
 /**
@@ -99,12 +99,12 @@ function productionSources(roots: string[]): string[] {
 /** Production sources whose content matches the pattern, in stable order. */
 function productionSourcesMatching(roots: string[], pattern: RegExp): string[] {
   return productionSources(roots)
-    .filter(relative => pattern.test(readFileSync(new URL(relative, REPO_ROOT), 'utf-8')))
+    .filter(relative => pattern.test(normalizeLineEndings(readFileSync(new URL(relative, REPO_ROOT), 'utf-8'))))
     .sort()
 }
 
 function storeSource(): string {
-  return readFileSync(new URL('./brain-correlation-store.ts', import.meta.url), 'utf-8')
+  return normalizeLineEndings(readFileSync(new URL('./brain-correlation-store.ts', import.meta.url), 'utf-8'))
 }
 
 /** Code without comments - the vocabulary guards only look at real code. */
@@ -886,24 +886,24 @@ describe('lia brain correlation store - isolation invariants (Phase 8.0D-10B-4B1
     // The pure store factory itself is CALLED in exactly ONE production module
     // (a doc comment naming it is not a call site, so comments are stripped).
     const factoryCallSites = productionSources(['apps/stage-tamagotchi/src', 'packages/stage-ui/src', 'packages/core-agent/src', 'packages/lia-core/src'])
-      .filter(relative => /(?<!function )createLiaBrainCorrelationStore\(/.test(stripComments(readFileSync(new URL(relative, REPO_ROOT), 'utf-8'))))
+      .filter(relative => /(?<!function )createLiaBrainCorrelationStore\(/.test(stripComments(normalizeLineEndings(readFileSync(new URL(relative, REPO_ROOT), 'utf-8')))))
       .sort()
     expect(factoryCallSites).toEqual(['apps/stage-tamagotchi/src/main/services/lia/brain-correlation-service.ts'])
 
     // Phase 8.0D-10B-4B3 wires the two producers into the canonical SERVICE,
     // so the invariant becomes the narrow one: neither handler reaches the
     // STORE module, and each only writes its own side.
-    const bridge = stripComments(readFileSync(new URL('./brain-decision-service.ts', import.meta.url), 'utf-8'))
+    const bridge = stripComments(normalizeLineEndings(readFileSync(new URL('./brain-decision-service.ts', import.meta.url), 'utf-8')))
     expect(bridge).not.toMatch(/brain-correlation-store|createLiaBrainCorrelationStore|LiaBrainCorrelationStore/)
     expect(bridge.match(/correlationStore\.recordDecision\(/g)).toHaveLength(1)
     expect(bridge).not.toMatch(/correlationStore\.(?:recordExecution|get|size)/)
-    const handler = stripComments(readFileSync(new URL('./brain-execution-report-service.ts', import.meta.url), 'utf-8'))
+    const handler = stripComments(normalizeLineEndings(readFileSync(new URL('./brain-execution-report-service.ts', import.meta.url), 'utf-8')))
     expect(handler).not.toMatch(/brain-correlation-store|createLiaBrainCorrelationStore|LiaBrainCorrelationStore/)
     expect(handler.match(/correlationStore\.recordExecution\(/g)).toHaveLength(1)
     expect(handler).not.toMatch(/correlationStore\.(?:recordDecision|get|size)/)
     // The composition entry never reaches the STORE module either - it owns the
     // service handle and injects it (8.0D-10B-4B3).
-    const entry = readFileSync(new URL('../../index.ts', import.meta.url), 'utf-8')
+    const entry = normalizeLineEndings(readFileSync(new URL('../../index.ts', import.meta.url), 'utf-8'))
     expect(entry).not.toMatch(/brain-correlation-store|createLiaBrainCorrelationStore|LiaBrainCorrelationStore/)
     // 8.0D-10B-4D4C2B2 added the third injection of that ONE handle (the
     // terminal ingress), and 8.0D-10B-4D4C4-B3B2 the fourth (the send-terminal
@@ -925,7 +925,7 @@ describe('lia brain correlation store - isolation invariants (Phase 8.0D-10B-4B1
     // one-way logical-send terminal report).
     const tags = new Set<string>()
     for (const relative of productionSources(['apps/stage-tamagotchi/src', 'packages/lia-core/src', 'packages/stage-ui/src', 'packages/core-agent/src'])) {
-      for (const match of readFileSync(new URL(relative, REPO_ROOT), 'utf-8').matchAll(/eventa:(?:invoke|event):lia:brain[^'"]*/g))
+      for (const match of normalizeLineEndings(readFileSync(new URL(relative, REPO_ROOT), 'utf-8')).matchAll(/eventa:(?:invoke|event):lia:brain[^'"]*/g))
         tags.add(match[0])
     }
     expect([...tags].sort()).toEqual([
@@ -1446,7 +1446,7 @@ describe('lia brain correlation store - logical send terminal fact (Phase 8.0D-1
       './brain-execution-terminal-facts.ts',
       './brain-execution-identity-facts.ts',
     ])
-      expect(stripComments(readFileSync(new URL(relative, import.meta.url), 'utf-8')), relative).not.toMatch(/sendTerminal/)
+      expect(stripComments(normalizeLineEndings(readFileSync(new URL(relative, import.meta.url), 'utf-8'))), relative).not.toMatch(/sendTerminal/)
 
     // 52/53/54: the transport, the Stage seam and Core Agent still know nothing
     // about the stored field - the frozen layers are untouched (B2 included).
@@ -1455,13 +1455,13 @@ describe('lia brain correlation store - logical send terminal fact (Phase 8.0D-1
       '../../../renderer/main.ts',
       '../../../renderer/services/lia/send-terminal-reporter.ts',
     ])
-      expect(readFileSync(new URL(relative, import.meta.url), 'utf-8'), relative).not.toMatch(/sendTerminal|LiaBrainSendTerminalRecord/)
+      expect(normalizeLineEndings(readFileSync(new URL(relative, import.meta.url), 'utf-8')), relative).not.toMatch(/sendTerminal|LiaBrainSendTerminalRecord/)
     expect(productionSourcesMatching(['packages/stage-ui/src', 'packages/core-agent/src'], /sendTerminal|LiaBrainSendTerminalRecord/)).toEqual([])
 
     // 82: the Brain channel allowlist is still exactly the FOUR known channels.
     const tags = new Set<string>()
     for (const relative of productionSources(BRAIN_ROOTS)) {
-      for (const match of readFileSync(new URL(relative, REPO_ROOT), 'utf-8').matchAll(/eventa:(?:invoke|event):lia:brain[^'"]*/g))
+      for (const match of normalizeLineEndings(readFileSync(new URL(relative, REPO_ROOT), 'utf-8')).matchAll(/eventa:(?:invoke|event):lia:brain[^'"]*/g))
         tags.add(match[0])
     }
     expect([...tags].sort()).toEqual([

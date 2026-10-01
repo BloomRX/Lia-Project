@@ -7,6 +7,8 @@ import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ref } from 'vue'
 
+import { normalizeLineEndings } from '../../../test-helpers'
+
 /**
  * Phase 8.0D-10B-4D4C1: the Lia terminal execution reporter.
  *
@@ -203,11 +205,11 @@ describe('lia terminal execution reporter (Phase 8.0D-10B-4D4C1)', () => {
     const source = (() => {
       for (const c of [join(process.cwd(), 'src/renderer/services/lia/execution-terminal-reporter.ts'), join(process.cwd(), 'apps/stage-tamagotchi/src/renderer/services/lia/execution-terminal-reporter.ts')]) {
         try {
-          return readFileSync(c, 'utf-8')
+          return normalizeLineEndings(readFileSync(c, 'utf-8'))
         }
         catch {}
       }
-      return readFileSync(join(process.cwd(), 'src/renderer/services/lia/execution-terminal-reporter.ts'), 'utf-8')
+      return normalizeLineEndings(readFileSync(join(process.cwd(), 'src/renderer/services/lia/execution-terminal-reporter.ts'), 'utf-8'))
     })()
     const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
 
@@ -255,7 +257,7 @@ describe('lia terminal execution reporter (Phase 8.0D-10B-4D4C1)', () => {
         if (!entry.isFile() || !/\.(?:ts|vue)$/.test(entry.name) || entry.name.includes('.test.'))
           continue
         const file = `${entry.parentPath}/${entry.name}`
-        const source = readFileSync(file, 'utf-8')
+        const source = normalizeLineEndings(readFileSync(file, 'utf-8'))
         const relative = file.slice(join(airiRoot, '/').length)
         // The registration SIGNAL: CALLING the installer, never defining it.
         if (/(?<!function )registerLiaBrainExecutionTerminalObserver\(\)/.test(source))
@@ -295,11 +297,11 @@ describe('lia terminal execution contract (Phase 8.0D-10B-4D4C1)', () => {
   const SHARED = (() => {
     for (const c of [join(process.cwd(), 'src/shared/eventa/index.ts'), join(process.cwd(), 'apps/stage-tamagotchi/src/shared/eventa/index.ts')]) {
       try {
-        return readFileSync(c, 'utf-8')
+        return normalizeLineEndings(readFileSync(c, 'utf-8'))
       }
       catch {}
     }
-    return readFileSync(join(process.cwd(), 'src/shared/eventa/index.ts'), 'utf-8')
+    return normalizeLineEndings(readFileSync(join(process.cwd(), 'src/shared/eventa/index.ts'), 'utf-8'))
   })()
 
   it('the report type is exactly the three contract fields, in that order', () => {

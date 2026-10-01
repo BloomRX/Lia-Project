@@ -2,9 +2,13 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
+// TEST-ONLY helper: keep source guards stable across CRLF/LF checkouts
+function normalizeLineEndings(value: string): string {
+  return value.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+}
 
 function readChatSource(): string {
-  return readFileSync(resolve(__dirname, './chat.ts'), 'utf-8')
+  return normalizeLineEndings(readFileSync(resolve(__dirname, './chat.ts'), 'utf-8'))
 }
 
 describe('chat retry stable source target (Phase 8.0D-10B-4D4C4-D2B6 corrective)', () => {

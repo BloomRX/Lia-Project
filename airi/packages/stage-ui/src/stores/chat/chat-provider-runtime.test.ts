@@ -22,6 +22,10 @@ import {
   registerProviderCredentialResolver,
   resetChatProviderRuntimeExtensionsForTesting,
 } from './chat-provider-runtime'
+// TEST-ONLY helper: keep source guards stable across CRLF/LF checkouts
+function normalizeLineEndings(value: string): string {
+  return value.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+}
 
 /**
  * Phase 8.0D-10B-2: the request-start observation extension point.
@@ -184,7 +188,7 @@ describe('chat request-start observation extension', () => {
  * here - it is the Core Agent's, imported as a type.
  */
 describe('chat round-settled observation extension', () => {
-  const SOURCE = readFileSync(new URL('./chat-provider-runtime.ts', import.meta.url), 'utf-8')
+  const SOURCE = normalizeLineEndings(readFileSync(new URL('./chat-provider-runtime.ts', import.meta.url), 'utf-8'))
   /** Source without comments: guards must only find vocabulary in real code. */
   const CODE = SOURCE.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
   const SETTLED_REGION = CODE.slice(
@@ -410,7 +414,7 @@ describe('chat round-settled observation extension', () => {
  * to this package, not to the Core Agent.
  */
 describe('chat send-settled observation extension', () => {
-  const SOURCE = readFileSync(new URL('./chat-provider-runtime.ts', import.meta.url), 'utf-8')
+  const SOURCE = normalizeLineEndings(readFileSync(new URL('./chat-provider-runtime.ts', import.meta.url), 'utf-8'))
   /** Source without comments: guards must only find vocabulary in real code. */
   const CODE = SOURCE.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
   const SEND_REGION = CODE.slice(
@@ -592,8 +596,8 @@ describe('chat send-settled observation extension', () => {
         if (!entry.isFile() || !/\.(?:ts|vue)$/.test(entry.name) || entry.name.includes('.test.'))
           continue
         const file = join(entry.parentPath, entry.name)
-        const source = readFileSync(file, 'utf-8')
-        const site = relative(airiRoot, file)
+        const source = normalizeLineEndings(readFileSync(file, 'utf-8'))
+        const site = relative(airiRoot, file).replace(/\\/g, '/')
         // The registration SIGNAL: CALLING the installer, never defining it.
         if (/(?<!function )registerChatSendSettledObserver\(/.test(source))
           registrarSites.push(site)
@@ -611,7 +615,7 @@ describe('chat send-settled observation extension', () => {
   })
 
   it('k: the wrapper is the only caller of executeSend, with exactly the two send entry points', () => {
-    const chatSource = readFileSync(new URL('../chat.ts', import.meta.url), 'utf-8')
+    const chatSource = normalizeLineEndings(readFileSync(new URL('../chat.ts', import.meta.url), 'utf-8'))
     const chatCode = chatSource.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
 
     // One textual notification site in the store, reached by both settlements.
@@ -629,7 +633,15 @@ describe('chat send-settled observation extension', () => {
     // The whole fallback loop is inside the settlement boundary: the wrapper
     // awaits `executeSend` as a whole and inspects nothing about the failure.
     expect(wrapperRegion).toContain('await executeSend(payload)')
-    expect(wrapperRegion).not.toMatch(/instanceof|errorMessageFrom|fallbackResolver|attempt|roundId|providerId|modelId/)
+    // The wrapper inspects nothing about the failure. D2B7's route observability
+    // legitimately names the request-side override fields, so those two are pinned
+    // by their own contract assertion below instead of being banned here.
+    expect(wrapperRegion).not.toMatch(/instanceof|errorMessageFrom|fallbackResolver|attempt|roundId/)
+    // D2B7: the only route identity the wrapper may touch is the caller-supplied
+    // override, copied field-by-field (providerId/modelId) and never derived from
+    // the settled outcome or the result.
+    expect(wrapperRegion).toMatch(/const initialRouteOverride = payload\.routeOverride === undefined[\s\S]*?providerId: payload\.routeOverride\.providerId,[\s\S]*?modelId: payload\.routeOverride\.modelId,/)
+    expect(wrapperRegion).not.toMatch(/(outcome|result)\.(providerId|modelId)/)
     // The failure settlement is UNCONDITIONAL: any rejection of the whole send -
     // including one thrown by the fallback resolver or by the restore work that
     // `executeSend` runs in its own finally - settles as failed. Nothing about

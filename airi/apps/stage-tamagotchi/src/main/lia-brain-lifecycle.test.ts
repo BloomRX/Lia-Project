@@ -1,10 +1,12 @@
 import type { LiaProductConfigSnapshot } from '@lia/core'
 
 import { readdirSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { normalizeLineEndings, repoRelativePosix } from '../test-helpers'
 import { createLiaBrainService } from './services/lia/lia-brain-service'
 
 /**
@@ -34,7 +36,7 @@ vi.mock('@lia/core', async (importOriginal) => {
 })
 
 function readSource(relative: string): string {
-  return readFileSync(fileURLToPath(new URL(relative, import.meta.url)), 'utf-8')
+  return normalizeLineEndings(readFileSync(fileURLToPath(new URL(relative, import.meta.url)), 'utf-8'))
 }
 
 /** The Stage-main entry, as the lifecycle actually ships it. */
@@ -186,21 +188,31 @@ describe('lia brain service lifecycle ownership (Phase 8.0D-5)', () => {
     for (const entry of readdirSync(stageSrc, { recursive: true, withFileTypes: true })) {
       if (!entry.isFile() || !/\.(?:ts|vue)$/.test(entry.name) || entry.name.includes('.test.'))
         continue
-      const file = `${entry.parentPath}/${entry.name}`
-      const relative = file.slice(stageSrc.length)
+      const file = join(entry.parentPath, entry.name)
+      const relativePosix = repoRelativePosix(stageSrc, file)
+      // Exclude generated dirs (Windows-safe, POSIX-normalized).
+      if (
+        relativePosix.startsWith('.cache/')
+        || relativePosix.startsWith('dist/')
+        || relativePosix.includes('node_modules/')
+        || relativePosix.startsWith('coverage/')
+        || relativePosix.startsWith('.turbo/')
+      ) {
+        continue
+      }
       // Host-side Brain modules are the legitimate holders: the service
       // itself, the composition entry that owns it, and the read-only bridge
       // that receives it as a dependency.
       if (
-        relative.startsWith('main/services/lia/lia-brain-service.ts')
-        || relative === 'main/index.ts'
-        || relative.startsWith('main/services/lia/brain-decision-service.ts')
+        relativePosix.startsWith('main/services/lia/lia-brain-service.ts')
+        || relativePosix === 'main/index.ts'
+        || relativePosix.startsWith('main/services/lia/brain-decision-service.ts')
       ) {
         continue
       }
-      const source = readFileSync(file, 'utf-8')
+      const source = normalizeLineEndings(readFileSync(file, 'utf-8'))
       if (/LiaBrainService|createLiaBrainService|liaBrain\b|decideBrainRoute/.test(source))
-        offenders.push(relative)
+        offenders.push(relativePosix)
     }
     expect(offenders).toEqual([])
   })

@@ -17,7 +17,7 @@ import { fileURLToPath } from 'node:url'
 import { createProductionBrainAutomaticPolicy, createProductionBrainCatalog, decideBrainRoute } from '@lia/core'
 import { describe, expect, it } from 'vitest'
 
-import { repoRelativePosix } from '../../../test-helpers'
+import { normalizeLineEndings, repoRelativePosix } from '../../../test-helpers'
 import { expectedExecutionRouteForBrainDecision, LIA_BRAIN_ENGINE_PROVIDER_MAPPING, selectedLiaBrainRoute } from './brain-expected-route'
 
 /**
@@ -236,7 +236,7 @@ describe('selected Brain route extraction (Phase 8.0D-10B-4C2A)', () => {
 
 describe('trusted Brain engine -> Stage provider mapping (Phase 8.0D-10B-4C2A)', () => {
   function stageChatProviderOptionIds(): string[] {
-    const source = readFileSync(fileURLToPath(new URL('../../../renderer/stores/lia/provider.ts', import.meta.url)), 'utf-8')
+    const source = normalizeLineEndings(readFileSync(fileURLToPath(new URL('../../../renderer/stores/lia/provider.ts', import.meta.url)), 'utf-8'))
     const start = source.indexOf('export const LIA_CHAT_PROVIDER_OPTIONS')
     const end = source.indexOf('export interface LiaModelOption', start)
     return [...source.slice(start, end).matchAll(/\{ id: '([^']+)'/g)].map(match => match[1]!)
@@ -448,7 +448,7 @@ function productionSources(roots: string[]): string[] {
 }
 
 function readSource(relative: string): string {
-  return readFileSync(fileURLToPath(new URL(relative, import.meta.url)), 'utf-8')
+  return normalizeLineEndings(readFileSync(fileURLToPath(new URL(relative, import.meta.url)), 'utf-8'))
 }
 
 /** Code without comments - guards must only find the words in real code. */
@@ -529,7 +529,7 @@ describe('expected-route module - authority and purity invariants (Phase 8.0D-10
     // immutable trusted mapping VALUE and passes it to the read adapter, without
     // ever calling the foundation's functions.
     const moduleReferences = productionSources(BRAIN_ROOTS)
-      .filter(relative => /brain-expected-route/.test(stripComments(readFileSync(new URL(relative, REPO_ROOT), 'utf-8'))))
+      .filter(relative => /brain-expected-route/.test(stripComments(normalizeLineEndings(readFileSync(new URL(relative, REPO_ROOT), 'utf-8')))))
       .sort()
     expect(moduleReferences).toEqual([
       'apps/stage-tamagotchi/src/main/services/lia/brain-correlation-observer.ts',
@@ -540,7 +540,7 @@ describe('expected-route module - authority and purity invariants (Phase 8.0D-10
     // observer must never derive a route itself.
     // (the `function ` lookbehind excludes this module's own declaration)
     const functionCallers = productionSources(BRAIN_ROOTS)
-      .filter(relative => /(?<!function )expectedExecutionRouteForBrainDecision\(/.test(stripComments(readFileSync(new URL(relative, REPO_ROOT), 'utf-8'))))
+      .filter(relative => /(?<!function )expectedExecutionRouteForBrainDecision\(/.test(stripComments(normalizeLineEndings(readFileSync(new URL(relative, REPO_ROOT), 'utf-8')))))
       .sort()
     expect(functionCallers).toEqual([
       'apps/stage-tamagotchi/src/main/services/lia/brain-execution-identity-facts.ts',
@@ -553,7 +553,7 @@ describe('expected-route module - authority and purity invariants (Phase 8.0D-10
       'apps/stage-tamagotchi/src/main/services/lia/brain-correlation-service.ts',
       'apps/stage-tamagotchi/src/renderer/main.ts',
     ]) {
-      expect(stripComments(readFileSync(new URL(relative, REPO_ROOT), 'utf-8')), relative)
+      expect(stripComments(normalizeLineEndings(readFileSync(new URL(relative, REPO_ROOT), 'utf-8'))), relative)
         .not
         .toMatch(/brain-expected-route|selectedLiaBrainRoute|expectedExecutionRouteForBrainDecision|LIA_BRAIN_ENGINE_PROVIDER_MAPPING/)
     }

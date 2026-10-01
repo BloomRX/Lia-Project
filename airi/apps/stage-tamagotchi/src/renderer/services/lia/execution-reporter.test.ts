@@ -8,6 +8,8 @@ import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { reactive, ref } from 'vue'
 
+import { normalizeLineEndings } from '../../../test-helpers'
+
 /**
  * Phase 8.0D-10B-4A: the Lia execution reporter.
  *
@@ -190,11 +192,11 @@ function emittedReports(): Array<Record<string, unknown>> {
 function reporterSource(): string {
   for (const c of [join(process.cwd(), 'src/renderer/services/lia/execution-reporter.ts'), join(process.cwd(), 'apps/stage-tamagotchi/src/renderer/services/lia/execution-reporter.ts')]) {
     try {
-      return readFileSync(c, 'utf-8')
+      return normalizeLineEndings(readFileSync(c, 'utf-8'))
     }
     catch {}
   }
-  return readFileSync(join(process.cwd(), 'src/renderer/services/lia/execution-reporter.ts'), 'utf-8')
+  return normalizeLineEndings(readFileSync(join(process.cwd(), 'src/renderer/services/lia/execution-reporter.ts'), 'utf-8'))
 }
 
 beforeEach(() => {
@@ -237,7 +239,7 @@ describe('lia execution reporter (Phase 8.0D-10B-4A)', () => {
         if (!entry.isFile() || !/\.(?:ts|vue)$/.test(entry.name) || entry.name.includes('.test.'))
           continue
         const file = `${entry.parentPath}/${entry.name}`
-        const source = readFileSync(file, 'utf-8')
+        const source = normalizeLineEndings(readFileSync(file, 'utf-8'))
         const relative = file.slice(join(airiRoot, '/').length)
         // The registration SIGNAL: CALLING the installer, never defining it.
         if (/(?<!function )registerLiaBrainExecutionObserver\(\)/.test(source))
@@ -253,7 +255,7 @@ describe('lia execution reporter (Phase 8.0D-10B-4A)', () => {
     expect(registrarSites).toEqual(['apps/stage-tamagotchi/src/renderer/main.ts'])
     expect(observerSites).toEqual(['apps/stage-tamagotchi/src/renderer/services/lia/execution-reporter.ts'])
     // The generic registry module still DEFINES the seam and registers nothing.
-    expect(readFileSync(join(airiRoot, 'packages/stage-ui/src/stores/chat/chat-provider-runtime.ts'), 'utf-8'))
+    expect(normalizeLineEndings(readFileSync(join(airiRoot, 'packages/stage-ui/src/stores/chat/chat-provider-runtime.ts'), 'utf-8')))
       .toContain('export function registerChatRequestStartedObserver')
   })
 

@@ -11,6 +11,10 @@ import { ContextUpdateStrategy } from '@proj-airi/server-shared/types'
 import { describe, expect, it, vi } from 'vitest'
 
 import { createChatOrchestratorRuntime } from './chat-orchestrator-runtime'
+// TEST-ONLY helper: keep source guards stable across CRLF/LF checkouts
+function normalizeLineEndings(value: string): string {
+  return value.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+}
 
 const provider = {
   chat: () => ({ baseURL: 'https://example.com/' }),
@@ -1321,7 +1325,7 @@ describe('logical send correlation', () => {
 })
 
 describe('chat round settled seam (Phase 8.0D-10B-4D4B1)', () => {
-  const SOURCE = readFileSync(new URL('./chat-orchestrator-runtime.ts', import.meta.url), 'utf-8')
+  const SOURCE = normalizeLineEndings(readFileSync(new URL('./chat-orchestrator-runtime.ts', import.meta.url), 'utf-8'))
   /** Source without comments: guards must only find vocabulary in real code. */
   const CODE = SOURCE.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
   const COMPACT = CODE.replace(/\s+/g, ' ')

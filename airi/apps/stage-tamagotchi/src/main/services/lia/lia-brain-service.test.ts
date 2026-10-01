@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url'
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { normalizeLineEndings } from '../../../test-helpers'
 import { createLiaBrainService } from './lia-brain-service'
 
 /**
@@ -36,7 +37,7 @@ vi.mock('@lia/core', async (importOriginal) => {
 })
 
 function readSource(relative: string): string {
-  return readFileSync(fileURLToPath(new URL(relative, import.meta.url)), 'utf-8')
+  return normalizeLineEndings(readFileSync(fileURLToPath(new URL(relative, import.meta.url)), 'utf-8'))
 }
 
 /** A minimal config owner; `get` is a spy so snapshot reads are observable. */
@@ -208,7 +209,7 @@ describe('lia brain host service (Phase 8.0D-4)', () => {
     // read-only decision invoke and the three one-way reports the renderer
     // pushes - execution, round terminal and logical-send terminal. No setter,
     // no catalog or service exposure, no command or selector channel.
-    const eventa = readFileSync(fileURLToPath(new URL('../../../shared/eventa/index.ts', import.meta.url)), 'utf-8')
+    const eventa = normalizeLineEndings(readFileSync(fileURLToPath(new URL('../../../shared/eventa/index.ts', import.meta.url)), 'utf-8'))
     const brainChannels = eventa.match(/eventa:(?:invoke|event):lia:brain[^']*/g) ?? []
     expect(brainChannels).toEqual([
       'eventa:invoke:lia:brain:chat-decision',
@@ -243,7 +244,7 @@ describe('lia brain host service (Phase 8.0D-4)', () => {
       const relative = file.slice(stageSrc.length)
       if (relative === 'main/services/lia/lia-brain-service.ts' || relative === 'main/index.ts' || relative.endsWith('.test.ts'))
         continue
-      if (/createLiaBrainService|LiaBrainDecisionRequest|LiaBrainService\b/.test(readFileSync(file, 'utf-8')))
+      if (/createLiaBrainService|LiaBrainDecisionRequest|LiaBrainService\b/.test(normalizeLineEndings(readFileSync(file, 'utf-8'))))
         consumers.push(relative)
     }
     expect(consumers).toEqual(['main/services/lia/brain-decision-service.ts'])
@@ -257,7 +258,7 @@ describe('lia brain host service (Phase 8.0D-4)', () => {
     }
     // The renderer provider store (chat provider/model selection) is equally
     // free of Brain routing.
-    const rendererStore = readFileSync(fileURLToPath(new URL('../../../renderer/stores/lia/provider.ts', import.meta.url)), 'utf-8')
+    const rendererStore = normalizeLineEndings(readFileSync(fileURLToPath(new URL('../../../renderer/stores/lia/provider.ts', import.meta.url)), 'utf-8'))
     expect(rendererStore).not.toMatch(/brain/i)
   })
 })

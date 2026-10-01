@@ -5,6 +5,7 @@ import type { LiaBrainChatTurnFacts } from '../../../shared/eventa'
 import { groqBrainDescriptors } from '@lia/core'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { normalizeLineEndings } from '../../../test-helpers'
 import { resolveLiaBrainSendRouteCandidate } from './brain-send-route-candidate'
 import { resolveLiaAuthoritativeSendRoute } from './lia-authoritative-route-resolver'
 
@@ -185,7 +186,7 @@ describe('lia authoritative route resolver (D1)', () => {
   it('no credential cache — source has no Map/Set/ref holding readiness', async () => {
     const { readFileSync } = await import('node:fs')
     const { fileURLToPath } = await import('node:url')
-    const source = readFileSync(fileURLToPath(new URL('./lia-authoritative-route-resolver.ts', import.meta.url)), 'utf-8')
+    const source = normalizeLineEndings(readFileSync(fileURLToPath(new URL('./lia-authoritative-route-resolver.ts', import.meta.url)), 'utf-8'))
     // resolver must not hold a Map/Set/WeakMap/cache for credentials
     expect(source).not.toMatch(/\bnew\s+(Map|Set|WeakMap|WeakSet)\b/)
     expect(source).not.toMatch(/\buseState\b|\bref\(|\breactive\b/)
@@ -195,7 +196,7 @@ describe('lia authoritative route resolver (D1)', () => {
   it('no secret value — source never calls electronLiaSecretGet', async () => {
     const { readFileSync } = await import('node:fs')
     const { fileURLToPath } = await import('node:url')
-    const source = readFileSync(fileURLToPath(new URL('./lia-authoritative-route-resolver.ts', import.meta.url)), 'utf-8')
+    const source = normalizeLineEndings(readFileSync(fileURLToPath(new URL('./lia-authoritative-route-resolver.ts', import.meta.url)), 'utf-8'))
     expect(source).not.toMatch(/electronLiaSecretGet/)
     expect(source).not.toMatch(/secretGet/)
     expect(source).not.toMatch(/resolveApiKey/)

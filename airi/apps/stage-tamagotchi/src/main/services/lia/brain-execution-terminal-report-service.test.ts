@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url'
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { repoRelativePosix } from '../../../test-helpers'
+import { normalizeLineEndings, repoRelativePosix } from '../../../test-helpers'
 import { sanitizeLiaBrainExecutionObservationReport } from './brain-execution-report-service'
 import { createLiaBrainExecutionTerminalReportService, sanitizeLiaBrainExecutionTerminalReport } from './brain-execution-terminal-report-service'
 
@@ -24,7 +24,7 @@ const mocks = vi.hoisted(() => ({
 }))
 
 function readSource(relative: string): string {
-  return readFileSync(fileURLToPath(new URL(relative, import.meta.url)), 'utf-8')
+  return normalizeLineEndings(readFileSync(fileURLToPath(new URL(relative, import.meta.url)), 'utf-8'))
 }
 
 /** Code without comments - guards must only find the words in real code. */
@@ -52,7 +52,7 @@ function productionSources(roots: string[]): string[] {
 /** Production sources whose content matches the pattern, in stable order. */
 function productionSourcesMatching(roots: string[], pattern: RegExp): string[] {
   return productionSources(roots)
-    .filter(relative => pattern.test(readFileSync(new URL(relative, REPO_ROOT), 'utf-8')))
+    .filter(relative => pattern.test(normalizeLineEndings(readFileSync(new URL(relative, REPO_ROOT), 'utf-8'))))
     .sort()
 }
 
@@ -576,7 +576,7 @@ describe('lia terminal ingress service - isolation invariants (Phase 8.0D-10B-4D
     // report. No fifth exists.
     const tags = new Set<string>()
     for (const relative of productionSources(BRAIN_ROOTS)) {
-      for (const match of readFileSync(new URL(relative, REPO_ROOT), 'utf-8').matchAll(/eventa:(?:invoke|event):lia:brain[^'"]*/g))
+      for (const match of normalizeLineEndings(readFileSync(new URL(relative, REPO_ROOT), 'utf-8')).matchAll(/eventa:(?:invoke|event):lia:brain[^'"]*/g))
         tags.add(match[0])
     }
     expect([...tags].sort()).toEqual([

@@ -4,11 +4,12 @@ import type { LiaBrainAutomaticSelectionPolicy, LiaBrainRouteRef } from './selec
 import type { LiaBrainCapabilities, LiaBrainEngineDescriptor, LiaBrainModelDescriptor } from './types'
 
 import { readdirSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { describe, expect, it } from 'vitest'
 
-import { normalizeLineEndings } from '../test-helpers'
+import { normalizeLineEndings, normalizeRepoPath, repoRelativePosix } from '../test-helpers'
 import { decideBrainRoute } from './decision'
 import { decideBrainRouteFromProductState } from './runtime'
 
@@ -265,12 +266,15 @@ describe('runtime brain decision context (8.0D-1)', () => {
     for (const entry of readdirSync(srcDir, { recursive: true, withFileTypes: true })) {
       if (!entry.isFile() || !entry.name.endsWith('.ts'))
         continue
-      const file = `${entry.parentPath}/${entry.name}`
-      if (file.startsWith(brainDir) || file.endsWith('brain/runtime.ts') || file.endsWith('brain/runtime.test.ts'))
+      const file = join(entry.parentPath, entry.name)
+      // Compare in POSIX form: on Windows parentPath carries backslashes, so a
+      // plain startsWith/endsWith against a POSIX literal silently leaks.
+      const filePosix = normalizeRepoPath(file)
+      if (filePosix.startsWith(normalizeRepoPath(brainDir)) || filePosix.endsWith('brain/runtime.ts') || filePosix.endsWith('brain/runtime.test.ts'))
         continue
-      const source = readFileSync(file, 'utf-8')
+      const source = normalizeLineEndings(readFileSync(file, 'utf-8'))
       if (/decideBrainRouteFromProductState|decideBrainRoute\b/.test(source))
-        consumers.push(file.slice(srcDir.length))
+        consumers.push(`/${repoRelativePosix(srcDir, file)}`)
     }
     // Only the package root re-exports it - no execution path imports it.
     expect(consumers).toEqual(['/index.ts'])

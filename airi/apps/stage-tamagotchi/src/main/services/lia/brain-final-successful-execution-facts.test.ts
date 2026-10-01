@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 
 import { describe, expect, it } from 'vitest'
 
-import { repoRelativePosix } from '../../../test-helpers'
+import { normalizeLineEndings, repoRelativePosix } from '../../../test-helpers'
 import { createLiaBrainCorrelationStore } from './brain-correlation-store'
 import { deriveLiaBrainFinalSuccessfulExecutionFacts } from './brain-final-successful-execution-facts'
 
@@ -42,12 +42,12 @@ function productionSources(roots: string[]): string[] {
 
 function productionMatching(pattern: RegExp): string[] {
   return productionSources(BRAIN_ROOTS)
-    .filter(relative => pattern.test(readFileSync(new URL(relative, REPO_ROOT), 'utf-8')))
+    .filter(relative => pattern.test(normalizeLineEndings(readFileSync(new URL(relative, REPO_ROOT), 'utf-8'))))
     .sort()
 }
 
 function readSource(relative: string): string {
-  return readFileSync(new URL(relative, REPO_ROOT), 'utf-8')
+  return normalizeLineEndings(readFileSync(new URL(relative, REPO_ROOT), 'utf-8'))
 }
 
 function stripComments(source: string): string {

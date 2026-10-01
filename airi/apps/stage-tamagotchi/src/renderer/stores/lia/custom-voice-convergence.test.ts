@@ -8,6 +8,7 @@ import { useProviderStore } from '@proj-airi/stage-ui/stores/providers/provider'
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { normalizeLineEndings } from '../../../test-helpers'
 import { createVoicePreviewDriver } from './voice-preview'
 import { CUSTOM_VOICE_PROVIDER_ID, isCustomVoiceTarget, targetForProfile } from './voice-profiles'
 
@@ -139,7 +140,7 @@ describe('neither path special-cases the provider', () => {
   it.each(files.map(file => [file.split('/').pop() as string, file] as [string, string]))(
     '%s has no branch on the custom voice provider',
     (_name, file) => {
-      const source = readFileSync(file, 'utf8')
+      const source = normalizeLineEndings(readFileSync(file, 'utf8'))
       expect(source).not.toContain(CUSTOM_VOICE_PROVIDER_ID)
     },
   )
@@ -149,6 +150,6 @@ describe('neither path special-cases the provider', () => {
       __dirname,
       '../../../../../../packages/stage-ui/src/libs/providers/providers/custom-local-voice/index.ts',
     )
-    expect(readFileSync(providerFile, 'utf8')).toContain(CUSTOM_LOCAL_VOICE_ID_SENTINEL)
+    expect(normalizeLineEndings(readFileSync(providerFile, 'utf8'))).toContain(CUSTOM_LOCAL_VOICE_ID_SENTINEL)
   })
 })

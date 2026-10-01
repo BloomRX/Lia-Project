@@ -20,7 +20,7 @@ import { createProductionBrainAutomaticPolicy, createProductionBrainCatalog, dec
 import { createContainer, provide, resolve } from 'injeca'
 import { describe, expect, it, vi } from 'vitest'
 
-import { repoRelativePosix } from '../../../test-helpers'
+import { normalizeLineEndings, repoRelativePosix } from '../../../test-helpers'
 import { createLiaBrainCorrelationObserver } from './brain-correlation-observer'
 import { createLiaBrainCorrelationService } from './brain-correlation-service'
 import { createLiaBrainCorrelationStore } from './brain-correlation-store'
@@ -636,7 +636,7 @@ function productionSources(roots: string[]): string[] {
 }
 
 function readSource(relative: string): string {
-  return readFileSync(fileURLToPath(new URL(relative, import.meta.url)), 'utf-8')
+  return normalizeLineEndings(readFileSync(fileURLToPath(new URL(relative, import.meta.url)), 'utf-8'))
 }
 
 /** Code without comments - guards must only find the words in real code. */
@@ -656,7 +656,7 @@ const SEND_PRODUCER = 'apps/stage-tamagotchi/src/main/services/lia/brain-send-te
 
 function productionMatching(pattern: RegExp): string[] {
   return productionSources(BRAIN_ROOTS)
-    .filter(relative => pattern.test(stripComments(readFileSync(new URL(relative, REPO_ROOT), 'utf-8'))))
+    .filter(relative => pattern.test(stripComments(normalizeLineEndings(readFileSync(new URL(relative, REPO_ROOT), 'utf-8')))))
     .sort()
 }
 
@@ -726,7 +726,7 @@ describe('correlation observer - caller allowlists and authority (Phase 8.0D-10B
       'apps/stage-tamagotchi/src/main/services/lia/brain-correlation-service.ts',
       'apps/stage-tamagotchi/src/renderer/main.ts',
     ]) {
-      expect(stripComments(readFileSync(new URL(forbidden, REPO_ROOT), 'utf-8')), forbidden)
+      expect(stripComments(normalizeLineEndings(readFileSync(new URL(forbidden, REPO_ROOT), 'utf-8'))), forbidden)
         .not
         .toMatch(/LIA_BRAIN_ENGINE_PROVIDER_MAPPING/)
     }
@@ -792,7 +792,7 @@ describe('correlation observer - lifecycle ownership and dual trigger (Phase 8.0
     ])
     // The adapter's coupling is TYPE-ONLY: it imports the entry contract and
     // never the module's value surface (no factory, no reader, no mapping).
-    const adapter = stripComments(readFileSync(new URL(DIAGNOSTIC_LOG, REPO_ROOT), 'utf-8'))
+    const adapter = stripComments(normalizeLineEndings(readFileSync(new URL(DIAGNOSTIC_LOG, REPO_ROOT), 'utf-8')))
     expect(adapter).toContain(`import type { LiaBrainDiagnosticEntry } from './brain-correlation-observer'`)
     expect(adapter).not.toMatch(/createLiaBrainCorrelationObserver|brain-correlation-reader|brain-execution-identity-facts|brain-expected-route|brain-correlation-store|brain-correlation-service/)
     // A. FACTORY ownership stays exactly the composition entry (the `function `
@@ -811,7 +811,7 @@ describe('correlation observer - lifecycle ownership and dual trigger (Phase 8.0
       SEND_PRODUCER,
     ])
     for (const producer of [DECISION_PRODUCER, EXECUTION_PRODUCER, TERMINAL_PRODUCER, SEND_PRODUCER]) {
-      const source = stripComments(readFileSync(new URL(producer, REPO_ROOT), 'utf-8'))
+      const source = stripComments(normalizeLineEndings(readFileSync(new URL(producer, REPO_ROOT), 'utf-8')))
       // Type-only coupling + exactly one bare trigger statement.
       // The producers know the CONTRACT type only - never the diagnostic entry
       // of 8.0D-10B-4D2A, never the factory, never a logger.
@@ -830,7 +830,7 @@ describe('correlation observer - lifecycle ownership and dual trigger (Phase 8.0
       'apps/stage-tamagotchi/src/renderer/services/lia/brain-shadow.ts',
       'apps/stage-tamagotchi/src/renderer/components/InteractiveArea.vue',
     ]) {
-      expect(stripComments(readFileSync(new URL(relative, REPO_ROOT), 'utf-8')), relative)
+      expect(stripComments(normalizeLineEndings(readFileSync(new URL(relative, REPO_ROOT), 'utf-8'))), relative)
         .not
         .toMatch(/brain-correlation-observer|createLiaBrainCorrelationObserver|\.observe\(/)
     }
@@ -838,7 +838,7 @@ describe('correlation observer - lifecycle ownership and dual trigger (Phase 8.0
     // The owner performs composition only: the factory call, the dependency
     // declaration and the boot materialization - never a read, a fact or an
     // observation.
-    const entry = stripComments(readFileSync(new URL('apps/stage-tamagotchi/src/main/index.ts', REPO_ROOT), 'utf-8'))
+    const entry = stripComments(normalizeLineEndings(readFileSync(new URL('apps/stage-tamagotchi/src/main/index.ts', REPO_ROOT), 'utf-8')))
     expect(entry).toContain(`import { createLiaBrainCorrelationObserver } from './services/lia/brain-correlation-observer'`)
     expect(entry.match(/createLiaBrainCorrelationObserver\(/g)).toHaveLength(1)
     expect(entry).toContain('const liaBrainCorrelationObserver = injeca.provide(\'services:lia-brain-correlation-observer\', {')
@@ -1160,7 +1160,7 @@ describe('correlation observer - structured diagnostic log seam (Phase 8.0D-10B-
     // Phase 8.0D-10B-4D2B: the entry passes exactly the reader and the callback
     // the build-mode selector returned - no literal function, no logger, no
     // environment knowledge beyond the single selector argument.
-    const entry = stripComments(readFileSync(new URL('apps/stage-tamagotchi/src/main/index.ts', REPO_ROOT), 'utf-8'))
+    const entry = stripComments(normalizeLineEndings(readFileSync(new URL('apps/stage-tamagotchi/src/main/index.ts', REPO_ROOT), 'utf-8')))
     const entryCode = entry.replace(/\s+/g, ' ')
     expect(entryCode).toContain('createLiaBrainCorrelationObserver({ correlationReader: dependsOn.liaBrainCorrelation, log: selectLiaBrainDiagnosticLog(import.meta.env.DEV), })')
     // The entry never names the adapter's logger, never formats a line and

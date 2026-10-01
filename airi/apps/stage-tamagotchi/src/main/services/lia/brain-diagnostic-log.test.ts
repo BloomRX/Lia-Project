@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url'
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { repoRelativePosix } from '../../../test-helpers'
+import { normalizeLineEndings, repoRelativePosix } from '../../../test-helpers'
 import { createLiaBrainCorrelationObserver } from './brain-correlation-observer'
 import { createLiaBrainCorrelationService } from './brain-correlation-service'
 import { formatLiaBrainDiagnosticEntry, logLiaBrainDiagnostic, selectLiaBrainDiagnosticLog } from './brain-diagnostic-log'
@@ -881,7 +881,7 @@ describe('lia brain diagnostic log - source invariants (Phase 8.0D-10B-4D2B)', (
   }
 
   it('55/56: one logger, one entry type, one fixed namespace - and no other capability at all', () => {
-    const source = stripComments(readFileSync(new URL(DIAGNOSTIC_LOG, REPO_ROOT), 'utf-8'))
+    const source = stripComments(normalizeLineEndings(readFileSync(new URL(DIAGNOSTIC_LOG, REPO_ROOT), 'utf-8')))
 
     // The whole import surface: the entry TYPE and the repository logger.
     expect(source.match(/^import .*$/gm)).toEqual([
@@ -917,7 +917,7 @@ describe('lia brain diagnostic log - source invariants (Phase 8.0D-10B-4D2B)', (
   })
 
   it('59: the terminal block names exactly the three approved count fields - read, never derived', () => {
-    const source = stripComments(readFileSync(new URL(DIAGNOSTIC_LOG, REPO_ROOT), 'utf-8'))
+    const source = stripComments(normalizeLineEndings(readFileSync(new URL(DIAGNOSTIC_LOG, REPO_ROOT), 'utf-8')))
 
     // The formatter reads the entry's own already-derived terminal member...
     const blockStart = source.indexOf(`if ('terminalFacts' in entry)`)
@@ -963,7 +963,7 @@ describe('lia brain diagnostic log - source invariants (Phase 8.0D-10B-4D2B)', (
   })
 
   it('60/61/62: no verdict/fallback/send/completion vocabulary, no authority and no new IO surface', () => {
-    const source = stripComments(readFileSync(new URL(DIAGNOSTIC_LOG, REPO_ROOT), 'utf-8'))
+    const source = stripComments(normalizeLineEndings(readFileSync(new URL(DIAGNOSTIC_LOG, REPO_ROOT), 'utf-8')))
 
     for (const forbidden of [
       /fallback/i,
@@ -1004,7 +1004,7 @@ describe('lia brain diagnostic log - source invariants (Phase 8.0D-10B-4D2B)', (
     // generic log infrastructure keeps its own consumers untouched, and the
     // structured entry never crosses an IPC boundary.
     const structuredEntryConsumers = files
-      .filter(relative => /LiaBrainDiagnosticEntry/.test(stripComments(readFileSync(new URL(relative, REPO_ROOT), 'utf-8'))))
+      .filter(relative => /LiaBrainDiagnosticEntry/.test(stripComments(normalizeLineEndings(readFileSync(new URL(relative, REPO_ROOT), 'utf-8')))))
       .sort()
     expect(structuredEntryConsumers).toEqual([
       'apps/stage-tamagotchi/src/main/services/lia/brain-correlation-observer.ts',
@@ -1013,7 +1013,7 @@ describe('lia brain diagnostic log - source invariants (Phase 8.0D-10B-4D2B)', (
 
     const tags = new Set<string>()
     for (const relative of files) {
-      for (const match of readFileSync(new URL(relative, REPO_ROOT), 'utf-8').matchAll(/eventa:(?:invoke|event):lia:brain[^'"]*/g))
+      for (const match of normalizeLineEndings(readFileSync(new URL(relative, REPO_ROOT), 'utf-8')).matchAll(/eventa:(?:invoke|event):lia:brain[^'"]*/g))
         tags.add(match[0])
     }
     expect([...tags].sort()).toEqual([

@@ -8,6 +8,8 @@ import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ref } from 'vue'
 
+import { normalizeLineEndings } from '../../../test-helpers'
+
 /**
  * Phase 8.0D-10B-4D4C4-B2: the Lia logical-send terminal reporter.
  *
@@ -75,10 +77,10 @@ function reporterSource(): string {
     join(process.cwd(), 'src/renderer/services/lia/send-terminal-reporter.ts'),
     join(process.cwd(), 'apps/stage-tamagotchi/src/renderer/services/lia/send-terminal-reporter.ts'),
   ]) {
-    try { return readFileSync(candidate, 'utf-8') }
+    try { return normalizeLineEndings(readFileSync(candidate, 'utf-8')) }
     catch {}
   }
-  return readFileSync(join(process.cwd(), 'src/renderer/services/lia/send-terminal-reporter.ts'), 'utf-8')
+  return normalizeLineEndings(readFileSync(join(process.cwd(), 'src/renderer/services/lia/send-terminal-reporter.ts'), 'utf-8'))
 }
 
 /** Production sources under the Brain roots - tests are never scanned. */
@@ -106,7 +108,7 @@ const BRAIN_ROOTS = ['apps/stage-tamagotchi/src', 'packages/stage-ui/src', 'pack
 function readProductionFile(relative: string): string {
   for (const base of [join(process.cwd(), '..', '..'), process.cwd(), join(process.cwd(), 'airi')]) {
     const candidate = join(base, relative)
-    try { return readFileSync(candidate, 'utf-8') }
+    try { return normalizeLineEndings(readFileSync(candidate, 'utf-8')) }
     catch {}
   }
   return readProductionFile(relative)
@@ -381,9 +383,9 @@ describe('lia logical-send terminal reporter (Phase 8.0D-10B-4D4C4-B2)', () => {
     // The listener names no payload type at all: it knows only the service.
     expect((() => {
       for (const c of [join(process.cwd(), 'src/main/services/lia/brain-send-terminal-report-listener.ts'), join(process.cwd(), 'apps/stage-tamagotchi/src/main/services/lia/brain-send-terminal-report-listener.ts')]) {
-        try { return readFileSync(c, 'utf-8') }
+        try { return normalizeLineEndings(readFileSync(c, 'utf-8')) }
         catch {}
-      } ; return readFileSync(join(process.cwd(), 'src/main/services/lia/brain-send-terminal-report-listener.ts'), 'utf-8')
+      } ; return normalizeLineEndings(readFileSync(join(process.cwd(), 'src/main/services/lia/brain-send-terminal-report-listener.ts'), 'utf-8'))
     })())
       .not
       .toMatch(/LiaBrainSendTerminalReport\b/)
@@ -513,10 +515,10 @@ describe('lia logical-send terminal contract (Phase 8.0D-10B-4D4C4-B2)', () => {
       join(process.cwd(), 'src/shared/eventa/index.ts'),
       join(process.cwd(), 'apps/stage-tamagotchi/src/shared/eventa/index.ts'),
     ]) {
-      try { return readFileSync(candidate, 'utf-8') }
+      try { return normalizeLineEndings(readFileSync(candidate, 'utf-8')) }
       catch {}
     }
-    return readFileSync(join(process.cwd(), 'src/shared/eventa/index.ts'), 'utf-8')
+    return normalizeLineEndings(readFileSync(join(process.cwd(), 'src/shared/eventa/index.ts'), 'utf-8'))
   })()
 
   it('the report type is exactly the two contract fields, in that order', () => {

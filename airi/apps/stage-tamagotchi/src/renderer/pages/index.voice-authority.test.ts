@@ -6,6 +6,7 @@ import { resolve } from 'node:path'
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { normalizeLineEndings } from '../../test-helpers'
 import { createOrderedVoiceSendSequence } from '../services/lia/voice-send-sequence'
 
 function chatTurnFactsFromSend(input: {
@@ -22,7 +23,7 @@ function chatTurnFactsFromSend(input: {
 
 function readSource(relative: string): string {
   const base = resolve(__dirname, '.')
-  return readFileSync(resolve(base, relative), 'utf-8')
+  return normalizeLineEndings(readFileSync(resolve(base, relative), 'utf-8'))
 }
 function stripComments(s: string): string {
   return s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '')
@@ -706,14 +707,15 @@ describe('direct voice authoritative routing (Phase 8.0D-10B-4D4C4-D2B5)', () =>
     expect(stripped).not.toMatch(/consciousnessStore\.activeProvider/)
   })
 
-  it('source guards: voiceSendChain exists and is failure-safe', async () => {
+  it('source guards: FIFO ownership stays in createOrderedVoiceSendSequence (voiceSendChain not restored)', async () => {
     const source = readSource('index.vue')
     const stripped = stripComments(source)
-    expect(stripped).toMatch(/let voiceSendChain:\s*Promise<void>\s*=\s*Promise\.resolve\(\)/)
+    // D2B9-C: the page must NOT re-declare a local voiceSendChain — the ordered
+    // voice send sequence helper is the single FIFO owner.
+    expect(stripped).not.toMatch(/voiceSendChain/)
     expect(stripped).toMatch(/import \{ createOrderedVoiceSendSequence \} from '\.\.\/services\/lia\/voice-send-sequence'/)
     expect(stripped).toMatch(/const voiceSendSequence = createOrderedVoiceSendSequence\(\{/)
     expect(stripped).toMatch(/voiceSendSequence\.enqueue\(text\)/)
-    expect(stripped).toMatch(/voiceSendChain = voiceSendSequence\.getChain\(\)/)
     // helper owns the actual chain recovery
     const helper = readSource('../services/lia/voice-send-sequence.ts')
     const helperStripped = stripComments(helper)

@@ -31,7 +31,7 @@ import {
   electronPluginUnload,
 } from '../../../../shared/eventa/plugin/host'
 import { electronPluginToolsChanged } from '../../../../shared/eventa/plugin/tools'
-import { isSymlinkSupported } from '../../../test-helpers'
+import { isSymlinkSupported } from '../../../../test-helpers'
 import { setupExtensionHostServiceInternal } from './host'
 import { loadManifestsFrom } from './host/registry'
 import { setupExtensionHost as setupExtensionHostService } from './index'

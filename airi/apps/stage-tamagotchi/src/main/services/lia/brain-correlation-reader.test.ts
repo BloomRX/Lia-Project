@@ -18,7 +18,7 @@ import { fileURLToPath } from 'node:url'
 import { createProductionBrainAutomaticPolicy, createProductionBrainCatalog, decideBrainRoute } from '@lia/core'
 import { describe, expect, it } from 'vitest'
 
-import { repoRelativePosix } from '../../../test-helpers'
+import { normalizeLineEndings, repoRelativePosix } from '../../../test-helpers'
 import { readLiaBrainExecutionIdentityFacts } from './brain-correlation-reader'
 import { createLiaBrainCorrelationStore } from './brain-correlation-store'
 import { LIA_BRAIN_ENGINE_PROVIDER_MAPPING } from './brain-expected-route'
@@ -469,7 +469,7 @@ function productionSources(roots: string[]): string[] {
 }
 
 function readSource(relative: string): string {
-  return readFileSync(fileURLToPath(new URL(relative, import.meta.url)), 'utf-8')
+  return normalizeLineEndings(readFileSync(fileURLToPath(new URL(relative, import.meta.url)), 'utf-8'))
 }
 
 /** Code without comments - guards must only find the words in real code. */
@@ -485,7 +485,7 @@ const EXPECTED_ROUTE = 'apps/stage-tamagotchi/src/main/services/lia/brain-expect
 
 function productionMatching(pattern: RegExp): string[] {
   return productionSources(BRAIN_ROOTS)
-    .filter(relative => pattern.test(stripComments(readFileSync(new URL(relative, REPO_ROOT), 'utf-8'))))
+    .filter(relative => pattern.test(stripComments(normalizeLineEndings(readFileSync(new URL(relative, REPO_ROOT), 'utf-8')))))
     .sort()
 }
 
@@ -842,7 +842,7 @@ describe('correlation snapshot reader - authority and isolation invariants (Phas
       'apps/stage-tamagotchi/src/renderer/services/lia/brain-shadow.ts',
       'apps/stage-tamagotchi/src/renderer/components/InteractiveArea.vue',
     ]) {
-      expect(stripComments(readFileSync(new URL(relative, REPO_ROOT), 'utf-8')), relative)
+      expect(stripComments(normalizeLineEndings(readFileSync(new URL(relative, REPO_ROOT), 'utf-8'))), relative)
         .not
         .toMatch(/brain-correlation-reader|readLiaBrainExecutionIdentityFacts/)
     }

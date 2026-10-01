@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url'
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { repoRelativePosix } from '../../../test-helpers'
+import { normalizeLineEndings, repoRelativePosix } from '../../../test-helpers'
 import { registerLiaBrainExecutionReportHandler, sanitizeLiaBrainExecutionObservationReport } from './brain-execution-report-service'
 
 /**
@@ -43,7 +43,7 @@ vi.mock('@moeru/eventa', () => ({
 }))
 
 function readSource(relative: string): string {
-  return readFileSync(fileURLToPath(new URL(relative, import.meta.url)), 'utf-8')
+  return normalizeLineEndings(readFileSync(fileURLToPath(new URL(relative, import.meta.url)), 'utf-8'))
 }
 
 /** Code without comments - guards must only find the words in real code. */
@@ -71,7 +71,7 @@ function productionSources(roots: string[]): string[] {
 /** Production sources whose content matches the pattern, in stable order. */
 function productionSourcesMatching(roots: string[], pattern: RegExp): string[] {
   return productionSources(roots)
-    .filter(relative => pattern.test(readFileSync(new URL(relative, REPO_ROOT), 'utf-8')))
+    .filter(relative => pattern.test(normalizeLineEndings(readFileSync(new URL(relative, REPO_ROOT), 'utf-8'))))
     .sort()
 }
 
@@ -357,7 +357,7 @@ describe('lia execution report invariants (Phase 8.0D-10B-4A)', () => {
       if (!entry.isFile() || !/\.(?:ts|vue)$/.test(entry.name) || entry.name.includes('.test.'))
         continue
       const file = `${entry.parentPath}/${entry.name}`
-      const source = readFileSync(file, 'utf-8')
+      const source = normalizeLineEndings(readFileSync(file, 'utf-8'))
       const relative = file.slice(stageSrc.length)
       // The registration SIGNAL: calling the registrar, never defining it.
       if (/(?<!function )registerLiaBrainExecutionReportHandler\(/.test(source))
@@ -405,7 +405,7 @@ describe('lia execution report invariants (Phase 8.0D-10B-4A)', () => {
     // And the whole production tree names no other Lia Brain channel.
     const tags = new Set<string>()
     for (const relative of productionSources(['apps/stage-tamagotchi/src', 'packages/lia-core/src', 'packages/stage-ui/src', 'packages/core-agent/src'])) {
-      for (const match of readFileSync(new URL(relative, REPO_ROOT), 'utf-8').matchAll(/eventa:(?:invoke|event):lia:brain[^'"]*/g))
+      for (const match of normalizeLineEndings(readFileSync(new URL(relative, REPO_ROOT), 'utf-8')).matchAll(/eventa:(?:invoke|event):lia:brain[^'"]*/g))
         tags.add(match[0])
     }
     expect([...tags].sort()).toEqual([
@@ -451,7 +451,7 @@ describe('lia execution report invariants (Phase 8.0D-10B-4A)', () => {
 
     function reporterMentionsDecision(): boolean {
       return /LiaBrainChatDecision|electronLiaBrainChatDecision|automaticPolicy|engineId|route/i.test(
-        readFileSync(new URL('../../../renderer/services/lia/execution-reporter.ts', import.meta.url), 'utf-8'),
+        normalizeLineEndings(readFileSync(new URL('../../../renderer/services/lia/execution-reporter.ts', import.meta.url), 'utf-8')),
       )
     }
   })
