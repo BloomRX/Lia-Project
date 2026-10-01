@@ -1,4 +1,4 @@
-/* eslint-disable unused-imports/no-unused-vars, style/max-statements-per-line -- test helper intentional patterns */
+/* eslint-disable style/max-statements-per-line -- test helper intentional patterns */
 // Helper to read production source for guards
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -270,18 +270,10 @@ describe('direct voice authoritative routing (Phase 8.0D-10B-4D4C4-D2B5)', () =>
 
   it('36: reasoning snapshot while waiting — B retains false even if live becomes true', async () => {
     let reasoning = false
-    const resolveRoute = vi.fn().mockImplementation(async (input: any) => {
-      // capture facts at call time
-      return undefined
-    })
-    const send = vi.fn().mockResolvedValue(undefined)
-    const seq = createVoiceSendSequence({
-      getActiveSessionId: () => 'S1',
-      getReasoning: () => reasoning,
-      resolveRoute,
-      send,
-      reportFailure: vi.fn(),
-    })
+
+    // The first sequence this test built was never enqueued against: the case
+    // needs a controllable A, so only `seq2` below is real. Keeping the dead
+    // pair of mocks would only imply an observation that never happened.
 
     // A long job
     let resolveA!: () => void
@@ -306,13 +298,19 @@ describe('direct voice authoritative routing (Phase 8.0D-10B-4D4C4-D2B5)', () =>
     // B enqueued while A pending, but B's reasoning is captured at enqueue (false)
     // Now mutate live before B starts
     const pB = seq2.enqueue('B')
+    let bSettled = false
+    void pB.then(() => { bSettled = true })
     reasoning = true // live flips to true while B waiting
 
     // Release A authority and send
-    resolveA(undefined as any)
+    resolveA()
     await new Promise(r => setTimeout(r, 5))
     // A send is pending, B should not have started authority yet (§38)
     expect(seq2Resolve).toHaveBeenCalledTimes(1)
+    // And B is therefore still undelivered: its promise is intentionally left
+    // pending, so the honest assertion is that it has NOT settled yet - never
+    // an await, which would hang on the FIFO gate this test exists to prove.
+    expect(bSettled).toBe(false)
     sendAResolve()
     await pA
     await new Promise(r => setTimeout(r, 5))
@@ -405,12 +403,12 @@ describe('direct voice authoritative routing (Phase 8.0D-10B-4D4C4-D2B5)', () =>
         const targetSessionId = session
         const correlationId = crypto.randomUUID()
         const reasoningToSend = false
-        const facts = chatTurnFactsFromSend({ attachments: [] as const, reasoning: false, tools: [] as const })
+        const facts = chatTurnFactsFromSend({ attachments: [] as const, reasoning: reasoningToSend, tools: [] as const })
         const runJob = async () => {
           if (textToSend === 'A')
             await new Promise<void>((res) => { releaseA = res })
           await resolveRoute({ correlationId, facts })
-          await send({ sessionId: targetSessionId, text: textToSend, correlationId, reasoning: false })
+          await send({ sessionId: targetSessionId, text: textToSend, correlationId, reasoning: reasoningToSend })
         }
         const delivery = chain.then(() => runJob())
         chain = delivery.catch(() => {})
@@ -440,7 +438,7 @@ describe('direct voice authoritative routing (Phase 8.0D-10B-4D4C4-D2B5)', () =>
     let resolveBrainA!: (v: any) => void
     let resolveSendA!: () => void
 
-    const resolveRoute = vi.fn().mockImplementation((input: any) => {
+    const resolveRoute = vi.fn().mockImplementation(() => {
       if (brainACall === 0) {
         brainACall++
         return new Promise((res) => { resolveBrainA = res })
@@ -450,7 +448,7 @@ describe('direct voice authoritative routing (Phase 8.0D-10B-4D4C4-D2B5)', () =>
         return Promise.resolve(undefined)
       }
     })
-    const send = vi.fn().mockImplementation((p: any) => {
+    const send = vi.fn().mockImplementation(() => {
       if (sendACall === 0) {
         sendACall++
         return new Promise<void>((res) => { resolveSendA = res })
@@ -547,10 +545,10 @@ describe('direct voice authoritative routing (Phase 8.0D-10B-4D4C4-D2B5)', () =>
     let session = 'S1'
     let reasoning: boolean = false
     const captured: Array<{ session: string, reasoning: boolean }> = []
-    const resolveRoute = vi.fn().mockImplementation(async (input: any) => {
+    const resolveRoute = vi.fn().mockImplementation(async () => {
       return undefined
     })
-    const send = vi.fn().mockImplementation(async (p: any) => {
+    const send = vi.fn().mockImplementation(async () => {
       // nothing
     })
 

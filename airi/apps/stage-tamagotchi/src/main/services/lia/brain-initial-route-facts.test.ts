@@ -89,8 +89,10 @@ describe('lia initial route facts - pure derivation (Phase 8.0D-10B-4D4C4-D2B7)'
     expect(deriveLiaBrainInitialRouteObservationFacts(withSendTerminal)).toEqual(expected)
 
     // Also for null and undefined
-    expect(deriveLiaBrainInitialRouteObservationFacts({ initialRouteOverride: null, decision: {} as any })).toEqual({ status: 'noInitialRouteOverride' })
-    expect(deriveLiaBrainInitialRouteObservationFacts({} as any)).toEqual({ status: 'initialRouteOverrideNotObserved' })
+    // The snapshot contract is the single optional tri-state member: unrelated
+    // keys are not part of it, and nothing here needs `any` to say so.
+    expect(deriveLiaBrainInitialRouteObservationFacts({ initialRouteOverride: null })).toEqual({ status: 'noInitialRouteOverride' })
+    expect(deriveLiaBrainInitialRouteObservationFacts({})).toEqual({ status: 'initialRouteOverrideNotObserved' })
   })
 
   it('malformed route object -> not observed (no throw, no repair)', () => {

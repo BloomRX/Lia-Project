@@ -10,10 +10,18 @@
  * tests; this file pins the BRIDGE's obligations to it.
  */
 import type { LiaVoiceEngine, LiaVoiceSynthesisInput } from '@lia/core/voice/engines/types'
-import type { MainContext } from '@moeru/eventa/adapters/electron/main'
+import type { createContext } from '@moeru/eventa/adapters/electron/main'
 
 import { LiaVoiceEngineError } from '@lia/core/voice/engines/types'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+/**
+ * Eventa 1.0.0 no longer exports a `MainContext` alias, so the fake context is
+ * typed from the adapter's OWN public `createContext` return - the same
+ * derivation the production bridge and its sibling hosts use. No IPC behavior
+ * is asserted through this type; it only keeps the fake honest.
+ */
+type MainContext = ReturnType<typeof createContext>['context']
 
 const statusChannel = { id: 'eventa:invoke:lia:voice:status' }
 const synthesizeChannel = { id: 'eventa:invoke:lia:voice:synthesize' }

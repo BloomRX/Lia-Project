@@ -7,6 +7,7 @@ import type { LiaBrainExecutionIdentityFacts, LiaBrainExecutionIdentitySnapshot 
 import type { LiaBrainTerminalObservationFacts, LiaBrainTerminalObservationSnapshot } from './brain-execution-terminal-facts'
 import type { LiaBrainEngineProviderMapping } from './brain-expected-route'
 import type { LiaBrainFinalSuccessfulExecutionFacts, LiaBrainFinalSuccessfulExecutionSnapshot } from './brain-final-successful-execution-facts'
+import type { LiaBrainInitialRouteObservationFacts } from './brain-initial-route-facts'
 import type { LiaBrainSendTerminalObservationFacts, LiaBrainSendTerminalObservationSnapshot } from './brain-send-terminal-facts'
 
 import { readdirSync, readFileSync } from 'node:fs'
@@ -639,18 +640,22 @@ describe('correlation diagnostic facts - composed output shape (Phase 8.0D-10B-4
     const withoutTerminal: { facts: LiaBrainExecutionIdentityFacts } extends LiaBrainCorrelationDiagnosticFacts ? true : false = false
     const withoutSend: { facts: LiaBrainExecutionIdentityFacts, terminalFacts: LiaBrainTerminalObservationFacts } extends LiaBrainCorrelationDiagnosticFacts ? true : false = false
     const withoutFinal: { facts: LiaBrainExecutionIdentityFacts, terminalFacts: LiaBrainTerminalObservationFacts, sendTerminalFacts: LiaBrainSendTerminalObservationFacts } extends LiaBrainCorrelationDiagnosticFacts ? true : false = false
-    const presentComplete: { facts: LiaBrainExecutionIdentityFacts, terminalFacts: LiaBrainTerminalObservationFacts, sendTerminalFacts: LiaBrainSendTerminalObservationFacts, finalSuccessfulExecutionFacts: LiaBrainFinalSuccessfulExecutionFacts } extends LiaBrainCorrelationDiagnosticFacts ? true : false = true
+    const presentComplete: { facts: LiaBrainExecutionIdentityFacts, finalSuccessfulExecutionFacts: LiaBrainFinalSuccessfulExecutionFacts, initialRouteOverrideFacts: LiaBrainInitialRouteObservationFacts, sendTerminalFacts: LiaBrainSendTerminalObservationFacts, terminalFacts: LiaBrainTerminalObservationFacts } extends LiaBrainCorrelationDiagnosticFacts ? true : false = true
     const absentIsTheOnlyAbsence: { facts: { status: 'correlationNotObserved' } } extends LiaBrainCorrelationDiagnosticFacts ? true : false = true
-    // The absence arm carries no sibling: each member belongs to exactly one arm.
-    const absenceHasNoSend: { facts: { status: 'correlationNotObserved' }, sendTerminalFacts: LiaBrainSendTerminalObservationFacts } extends LiaBrainCorrelationDiagnosticFacts ? true : false = false
-    const absenceHasNoFinal: { facts: { status: 'correlationNotObserved' }, finalSuccessfulExecutionFacts: LiaBrainFinalSuccessfulExecutionFacts } extends LiaBrainCorrelationDiagnosticFacts ? true : false = false
+    // The absence arm DECLARES no sibling. Assignability cannot prove that:
+    // an excess property on a NON-fresh object type is still assignable, so an
+    // `extends` check here would report `true` and prove nothing. The proof is
+    // declared key membership on the absence arm itself.
+    type AbsenceArm = Extract<LiaBrainCorrelationDiagnosticFacts, { facts: { status: 'correlationNotObserved' } }>
+    const absenceDeclaresNoSend: 'sendTerminalFacts' extends keyof AbsenceArm ? true : false = false
+    const absenceDeclaresNoFinal: 'finalSuccessfulExecutionFacts' extends keyof AbsenceArm ? true : false = false
     expect(withoutTerminal).toBe(false)
     expect(withoutSend).toBe(false)
     expect(withoutFinal).toBe(false)
     expect(presentComplete).toBe(true)
     expect(absentIsTheOnlyAbsence).toBe(true)
-    expect(absenceHasNoSend).toBe(false)
-    expect(absenceHasNoFinal).toBe(false)
+    expect(absenceDeclaresNoSend).toBe(false)
+    expect(absenceDeclaresNoFinal).toBe(false)
   })
 })
 

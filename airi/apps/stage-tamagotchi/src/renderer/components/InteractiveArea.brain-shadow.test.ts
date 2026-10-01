@@ -90,6 +90,19 @@ async function renderArea() {
   return { chat, consciousness: useConsciousnessSettingsStore(pinia), send, wrapper, pinia }
 }
 
+/**
+ * The send payload exactly as the chat store declares it - derived from the
+ * store's OWN `send` signature, never widened to `Record<string, unknown>`. A
+ * field that disappears from the payload contract then fails HERE, instead of
+ * silently reading `undefined` through a cast.
+ */
+type ChatSendPayload = Parameters<ReturnType<typeof useChatStore>['send']>[0]
+
+/** One recorded `send` call's payload, by index, through that same signature. */
+function sentPayloadAt(calls: [ChatSendPayload][], index: number): ChatSendPayload {
+  return calls[index][0]
+}
+
 async function submitDraft(wrapper: Awaited<ReturnType<typeof renderArea>>['wrapper'], draft: string) {
   const textarea = wrapper.find('textarea')
   await textarea.setValue(draft)
@@ -139,9 +152,9 @@ describe('interactive area authoritative Lia route (Phase 8.0D-10B-4D4C4-D2B2-D2
 
     expect(electron.brainInvoke).toHaveBeenCalledTimes(1)
     expect(liaProviderMock.hasApiKey).toHaveBeenCalledWith('groq')
-    const payload = send.mock.calls[0][0] as Record<string, unknown>
+    const payload = sentPayloadAt(send.mock.calls, 0)
     expect(payload.routeOverride).toEqual({ providerId: 'groq', modelId: 'openai/gpt-oss-120b' })
-    expect(Object.keys(payload.routeOverride as object).sort()).toEqual(['modelId', 'providerId'])
+    expect(Object.keys(payload.routeOverride ?? {}).sort()).toEqual(['modelId', 'providerId'])
   })
 
   it('32: non-routable still sends — routeOverride absent, one brain request', async () => {
@@ -164,7 +177,7 @@ describe('interactive area authoritative Lia route (Phase 8.0D-10B-4D4C4-D2B2-D2
       await submitDraft(wrapper, 'still sends')
       await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(1))
 
-      const payload = send.mock.calls[0][0] as Record<string, unknown>
+      const payload = sentPayloadAt(send.mock.calls, 0)
       expect(payload).not.toHaveProperty('routeOverride')
       expect(electron.brainInvoke).toHaveBeenCalledTimes(1)
       // no credential lookup for non-routable
@@ -180,7 +193,7 @@ describe('interactive area authoritative Lia route (Phase 8.0D-10B-4D4C4-D2B2-D2
     await submitDraft(wrapper, 'no cred')
     await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(1))
 
-    const payload = send.mock.calls[0][0] as Record<string, unknown>
+    const payload = sentPayloadAt(send.mock.calls, 0)
     expect(payload).not.toHaveProperty('routeOverride')
     expect(electron.brainInvoke).toHaveBeenCalledTimes(1)
     expect(liaProviderMock.hasApiKey).toHaveBeenCalledTimes(1)
@@ -203,7 +216,7 @@ describe('interactive area authoritative Lia route (Phase 8.0D-10B-4D4C4-D2B2-D2
     }
 
     expect(unhandled).toEqual([])
-    const payload = send.mock.calls[0][0] as Record<string, unknown>
+    const payload = sentPayloadAt(send.mock.calls, 0)
     expect(payload).not.toHaveProperty('routeOverride')
     // payload still has reasoning
     expect(payload).toHaveProperty('reasoning')
@@ -249,7 +262,7 @@ describe('interactive area authoritative Lia route (Phase 8.0D-10B-4D4C4-D2B2-D2
     await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(1))
 
     const brainCid = observedCorrelationId()
-    const payload = send.mock.calls[0][0] as Record<string, unknown>
+    const payload = sentPayloadAt(send.mock.calls, 0)
     expect(typeof brainCid).toBe('string')
     expect(brainCid!.length).toBeGreaterThan(0)
     expect(payload.correlationId).toBe(brainCid)
@@ -263,7 +276,7 @@ describe('interactive area authoritative Lia route (Phase 8.0D-10B-4D4C4-D2B2-D2
     await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(1))
 
     expect(observedFacts()?.reasoningRequested).toBe(true)
-    const payload = send.mock.calls[0][0] as Record<string, unknown>
+    const payload = sentPayloadAt(send.mock.calls, 0)
     expect(payload.reasoning).toBe(true)
     expect(payload).toHaveProperty('reasoning')
   })
@@ -276,7 +289,7 @@ describe('interactive area authoritative Lia route (Phase 8.0D-10B-4D4C4-D2B2-D2
     await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(1))
 
     expect(observedFacts()?.reasoningRequested).toBe(false)
-    const payload = send.mock.calls[0][0] as Record<string, unknown>
+    const payload = sentPayloadAt(send.mock.calls, 0)
     expect(payload.reasoning).toBe(false)
     expect(payload).toHaveProperty('reasoning')
     expect(Object.hasOwn(payload, 'reasoning')).toBe(true)
@@ -302,7 +315,7 @@ describe('interactive area authoritative Lia route (Phase 8.0D-10B-4D4C4-D2B2-D2
     await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(1))
 
     expect(observedFacts()?.reasoningRequested).toBe(false)
-    const payload = send.mock.calls[0][0] as Record<string, unknown>
+    const payload = sentPayloadAt(send.mock.calls, 0)
     expect(payload.reasoning).toBe(false)
   })
 
@@ -380,13 +393,13 @@ describe('interactive area authoritative Lia route (Phase 8.0D-10B-4D4C4-D2B2-D2
     await submitDraft(wrapper, 'exactness')
     await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(1))
 
-    const payload = send.mock.calls[0][0] as Record<string, unknown>
+    const payload = sentPayloadAt(send.mock.calls, 0)
     expect(Object.keys(payload).sort()).toEqual(['attachments', 'correlationId', 'reasoning', 'routeOverride', 'sessionId', 'text', 'tools'])
     expect(payload.reasoning).toBe(true)
     expect(payload.routeOverride).toEqual({ providerId: 'groq', modelId: 'openai/gpt-oss-120b' })
     expect(JSON.stringify(payload)).not.toMatch(/brain|decision|selection|readiness|engineId/i)
     // ensure no extra route fields
-    expect(Object.keys(payload.routeOverride as object).sort()).toEqual(['modelId', 'providerId'])
+    expect(Object.keys(payload.routeOverride ?? {}).sort()).toEqual(['modelId', 'providerId'])
   })
 
   it('44b: payload exactness for undefined route — reasoning present, routeOverride absent', async () => {
@@ -396,7 +409,7 @@ describe('interactive area authoritative Lia route (Phase 8.0D-10B-4D4C4-D2B2-D2
     await submitDraft(wrapper, 'undefined route')
     await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(1))
 
-    const payload = send.mock.calls[0][0] as Record<string, unknown>
+    const payload = sentPayloadAt(send.mock.calls, 0)
     expect(Object.keys(payload).sort()).toEqual(['attachments', 'correlationId', 'reasoning', 'sessionId', 'text', 'tools'])
     expect(payload).toHaveProperty('reasoning')
     expect(payload).not.toHaveProperty('routeOverride')

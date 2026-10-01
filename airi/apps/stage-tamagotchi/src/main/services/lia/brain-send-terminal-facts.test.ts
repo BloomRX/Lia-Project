@@ -141,7 +141,7 @@ describe('logical send terminal facts - projection (Phase 8.0D-10B-4D4C4-B4B2)',
   })
 
   it('i/j: the supplied snapshot is never edited, and a frozen one is accepted', () => {
-    const frozen = deepFreeze({ sendTerminal: { outcome: 'failed' } })
+    const frozen = deepFreeze({ sendTerminal: { outcome: 'failed' as const } })
     const projected = deriveLiaBrainSendTerminalObservationFacts(frozen)
 
     expect(projected).toEqual({ sendTerminalOutcome: 'failed' })
@@ -160,7 +160,7 @@ describe('logical send terminal facts - projection (Phase 8.0D-10B-4D4C4-B4B2)',
       decision: { selectedRoute: { engineId: 'groq' } },
       executions: [{ conversationId: 'c', correlationId: 'X', modelId: 'm', providerId: 'p', roundId: 'A' }],
       executionTerminals: [{ outcome: 'abandoned', roundId: 'A' }],
-      sendTerminal: { outcome: 'failed' },
+      sendTerminal: { outcome: 'failed' as const },
     }
 
     expect(deriveLiaBrainSendTerminalObservationFacts(rich))

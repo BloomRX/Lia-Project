@@ -1,5 +1,7 @@
 import type { LiaVoiceEngine } from '@lia/core/voice/engines/types'
 
+import type { LiaVoicePrewarmLogEntry } from './voice-prewarm'
+
 import { describe, expect, it, vi } from 'vitest'
 
 import { prewarmManagedVoice } from './voice-prewarm'
@@ -116,6 +118,40 @@ describe('lia voice prewarm (Phase 7.9E)', () => {
     expect(String(failure?.note)).toContain('not installed')
     const success = logs.find(entry => entry.engine === 'future-engine' && entry.ok === true)
     expect(success).toBeDefined()
+  })
+
+  it('an engine failure carrying NO message still degrades silently and warms the rest', async () => {
+    // `errorMessageFrom` returns `undefined` for a thrown non-Error, so the
+    // note must be built by an explicit narrow: without it the helper throws
+    // inside the catch, the loop aborts and the second engine is never warmed.
+    const calls: string[] = []
+    const logs: LiaVoicePrewarmLogEntry[] = []
+    const engines = [
+      // A deliberately non-Error rejection: `errorMessageFrom` returns
+      // `undefined` for anything that is not error-like, which is exactly the
+      // case the explicit narrow in `errorNote` exists to handle.
+      // eslint-disable-next-line prefer-promise-reject-errors -- the non-Error reason IS the case under test
+      fakeEngine('kokoro', () => Promise.reject({ code: 'ENOEXEC' }), calls),
+      fakeEngine('future-engine', () => Promise.resolve(), calls),
+    ]
+
+    const handle = prewarmManagedVoice({
+      engines,
+      log: entry => logs.push(entry),
+      managedLaunch: true,
+      now: (() => {
+        let t = 0
+        return () => (t += 250)
+      })(),
+    })
+    await expect(handle.settled).resolves.toBeUndefined()
+
+    // Sequential warm order is preserved and the healthy engine is still ready.
+    expect(calls).toEqual(['start:kokoro', 'start:future-engine'])
+    expect(handle.readyEngines()).toEqual(['future-engine'])
+    const failure = logs.find(entry => entry.ok === false)
+    expect(failure).toMatchObject({ engine: 'kokoro', event: 'lia.voice.prewarm', managed: true, ms: 250, note: '' })
+    expect(logs.find(entry => entry.engine === 'future-engine' && entry.ok === true)).toBeDefined()
   })
 
   it('onSettled runs after the attempt (capability refresh seam) and only then', async () => {

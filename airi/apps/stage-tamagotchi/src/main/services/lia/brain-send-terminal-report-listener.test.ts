@@ -1,4 +1,5 @@
 import type { LiaBrainChatDecisionRequest } from '../../../shared/eventa'
+import type { LiaBrainCorrelationObserver } from './brain-correlation-observer'
 import type { LiaBrainSendTerminalReportService } from './brain-send-terminal-report-service'
 
 import { readdirSync, readFileSync } from 'node:fs'
@@ -134,9 +135,19 @@ function observerDouble() {
   return { observed, observer: { observe: (correlationId: string) => observed.push(correlationId) } }
 }
 
+/**
+ * A typed INERT correlation observer.
+ *
+ * Production requires one on this service, and that requirement stays exactly
+ * as it is: the fixture supplies the dependency rather than production being
+ * loosened to accommodate a stale one. Inert means it records nothing and
+ * triggers nothing, so it cannot influence any assertion below.
+ */
+const inertObserver: LiaBrainCorrelationObserver = { observe: () => {} }
+
 /** The canonical send-terminal ingress: ONE service over ONE store. */
 function sendIngress(store: unknown) {
-  return createLiaBrainSendTerminalReportService({ correlationStore: store as never })
+  return createLiaBrainSendTerminalReportService({ correlationObserver: inertObserver, correlationStore: store as never })
 }
 
 /** The exact production wiring of the FOURTH channel: ONE service over ONE store. */
@@ -470,6 +481,7 @@ describe('lia send terminal channel - real store integration (Phase 8.0D-10B-4D4
     registerLiaBrainSendTerminalReportListener({
       context,
       sendTerminalReportService: createLiaBrainSendTerminalReportService({
+        correlationObserver: inertObserver,
         correlationStore: {
           recordSendTerminal: () => {
             attempts += 1

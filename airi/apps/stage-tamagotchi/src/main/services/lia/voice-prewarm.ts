@@ -53,7 +53,14 @@ export interface LiaVoicePrewarmHandle {
 }
 
 function errorNote(error: unknown): string {
-  return errorMessageFrom(error).replace(/\s+/g, ' ').trim().slice(0, 160)
+  // `errorMessageFrom` honestly returns `string | undefined`: a thrown
+  // non-Error carrying no message yields `undefined`. Narrow it explicitly
+  // rather than asserting - without the narrow this helper itself throws
+  // inside the catch below, which silently aborts the remaining engines and
+  // breaks this module's documented "degrade, never crash" contract. An error
+  // that DOES have a message produces exactly the same note as before.
+  const message = errorMessageFrom(error)
+  return message === undefined ? '' : message.replace(/\s+/g, ' ').trim().slice(0, 160)
 }
 
 export function prewarmManagedVoice(options: LiaVoicePrewarmOptions): LiaVoicePrewarmHandle {

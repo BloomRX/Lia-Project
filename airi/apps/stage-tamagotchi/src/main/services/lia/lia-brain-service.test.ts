@@ -1,4 +1,4 @@
-import type { LiaBrainRoutingDecision, LiaBrainRoutingDecisionInput } from '@lia/core'
+import type { LiaBrainRoutingDecision, LiaBrainRuntimeContext } from '@lia/core'
 
 import type { LiaBrainDecisionRequest } from './lia-brain-service'
 
@@ -94,7 +94,7 @@ describe('lia brain host service (Phase 8.0D-4)', () => {
     service.decide(TEXT_ONLY)
     service.decide(TEXT_ONLY)
 
-    const calls = core.decideBrainRouteFromProductState.mock.calls as unknown as [LiaBrainRoutingDecisionInput][]
+    const calls = core.decideBrainRouteFromProductState.mock.calls as unknown as [LiaBrainRuntimeContext][]
     expect(calls).toHaveLength(2)
     expect(calls[0][0].snapshot).toBe(first)
     expect(calls[1][0].snapshot).toBe(second)
@@ -108,7 +108,7 @@ describe('lia brain host service (Phase 8.0D-4)', () => {
     service.decide({ automaticPolicy: policy, requirement })
     service.decide({ requirement })
 
-    const calls = core.decideBrainRouteFromProductState.mock.calls as unknown as [LiaBrainRoutingDecisionInput][]
+    const calls = core.decideBrainRouteFromProductState.mock.calls as unknown as [LiaBrainRuntimeContext][]
     expect(calls[0][0].requirement).toBe(requirement)
     expect(calls[0][0].automaticPolicy).toBe(policy)
     expect(calls[1][0].requirement).toBe(requirement)
@@ -141,7 +141,7 @@ describe('lia brain host service (Phase 8.0D-4)', () => {
       return
     expect(decision.resolution.status).toBe('resolvedModel')
 
-    const calls = core.decideBrainRouteFromProductState.mock.calls as unknown as [LiaBrainRoutingDecisionInput][]
+    const calls = core.decideBrainRouteFromProductState.mock.calls as unknown as [LiaBrainRuntimeContext][]
     expect(calls[1][0].snapshot).toBe(manual)
   })
 

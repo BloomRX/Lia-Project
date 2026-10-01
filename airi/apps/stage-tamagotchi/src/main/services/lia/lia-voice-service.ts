@@ -1,5 +1,5 @@
 import type { LiaVoiceEngine } from '@lia/core/voice/engines/types'
-import type { MainContext } from '@moeru/eventa/adapters/electron/main'
+import type { createContext } from '@moeru/eventa/adapters/electron/main'
 
 import type {
   LiaVoiceEngineConfig,
@@ -36,6 +36,16 @@ import { onAppBeforeQuit } from '../../libs/bootkit/lifecycle'
  * IPC surface already carries everything it will need, so the renderer
  * contract does not change.
  */
+
+/**
+ * The Electron-main Eventa context contract, derived from the adapter's own
+ * public `createContext` signature: Eventa 1.0.0 no longer exports a
+ * `MainContext` alias, and re-declaring the interface here would duplicate an
+ * external contract. This is the same derivation every sibling bridge in this
+ * process already uses (`lia-capabilities`, `auth`, `auto-updater`). Carriage
+ * only - the IPC channels, handlers and voice behavior are unchanged.
+ */
+type MainContext = ReturnType<typeof createContext>['context']
 
 interface LiaVoiceServiceParams {
   context: MainContext

@@ -1,5 +1,7 @@
 import type { LiaBrainRoutingDecision } from '@lia/core'
 
+import type { LiaBrainCorrelationService } from './brain-correlation-service'
+
 import { readdirSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
@@ -86,10 +88,18 @@ function report(correlationId: string, roundId: string) {
   return { correlationId, conversationId: 'conversation-1', roundId, providerId: 'groq', modelId: 'openai/gpt-oss-120b' }
 }
 
-/** Builds a container the SAME way the composition does, over the real factory. */
-function lifecycleContainer(factory: () => unknown = createLiaBrainCorrelationService) {
+/**
+ * Builds a container the SAME way the composition does, over the real factory.
+ *
+ * The factory is typed with the ACTUAL service type - not `unknown` smuggled
+ * through a `never` cast - so `resolve(...)` keeps the store's real members.
+ * With `unknown` every `.service` read collapsed to `unknown` and the ten
+ * assertions below proved nothing; a member that disappears from the store now
+ * fails the compile here instead.
+ */
+function lifecycleContainer(factory: () => LiaBrainCorrelationService = createLiaBrainCorrelationService) {
   const container = createContainer()
-  const service = provide(container, 'services:lia-brain-correlation', factory as never)
+  const service = provide(container, 'services:lia-brain-correlation', factory)
   return { container, service }
 }
 

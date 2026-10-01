@@ -39,16 +39,24 @@ function makeAutomaticSelected() {
   }
 }
 
-const MINTED = '1f9d6a1e-0000-4000-8000-000000000099'
+/**
+ * Deterministic ids, all in the real UUID shape `crypto.randomUUID` is typed
+ * as - including the overflow fallback, so the spy is never widened to `string`
+ * to make a fixture fit.
+ */
+type MintedUuid = ReturnType<typeof crypto.randomUUID>
+
+const MINTED: MintedUuid = '1f9d6a1e-0000-4000-8000-000000000099'
 let mintedIndex = 0
-const MINTED_IDS = [MINTED, '1f9d6a1e-0000-4000-8000-000000000100']
+const MINTED_IDS: MintedUuid[] = [MINTED, '1f9d6a1e-0000-4000-8000-000000000100']
+const MINTED_OVERFLOW: MintedUuid = '1f9d6a1e-0000-4000-8000-0000000000ff'
 
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.requestDecision.mockResolvedValue(makeAutomaticSelected())
   mocks.hasApiKey.mockResolvedValue(true)
   mintedIndex = 0
-  vi.spyOn(crypto, 'randomUUID').mockImplementation(() => MINTED_IDS[mintedIndex++] ?? `minted-${mintedIndex}`)
+  vi.spyOn(crypto, 'randomUUID').mockImplementation(() => MINTED_IDS[mintedIndex++] ?? MINTED_OVERFLOW)
 })
 
 describe('lia authoritative retry (Phase 8.0D-10B-4D4C4-D2B6 corrective)', () => {

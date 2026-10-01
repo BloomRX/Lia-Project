@@ -12,6 +12,7 @@ import type { LiaBrainCorrelationSnapshotReader } from './brain-correlation-read
 import type { LiaBrainExecutionIdentityFacts, LiaBrainExecutionIdentitySnapshot, LiaObservedExecutionIdentity } from './brain-execution-identity-facts'
 import type { LiaBrainTerminalObservationFacts } from './brain-execution-terminal-facts'
 import type { LiaBrainFinalSuccessfulExecutionFacts } from './brain-final-successful-execution-facts'
+import type { LiaBrainSendTerminalObservationFacts } from './brain-send-terminal-facts'
 
 import { readdirSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'

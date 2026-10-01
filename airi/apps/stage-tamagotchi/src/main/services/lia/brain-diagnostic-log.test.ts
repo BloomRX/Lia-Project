@@ -2,6 +2,8 @@ import type { LiaBrainCorrelationDiagnosticFacts } from './brain-correlation-dia
 import type { LiaBrainDiagnosticEntry } from './brain-correlation-observer'
 import type { LiaBrainExecutionIdentityFacts } from './brain-execution-identity-facts'
 import type { LiaBrainTerminalObservationFacts } from './brain-execution-terminal-facts'
+import type { LiaBrainFinalSuccessfulExecutionFacts } from './brain-final-successful-execution-facts'
+import type { LiaBrainInitialRouteObservationFacts } from './brain-initial-route-facts'
 import type { LiaBrainSendTerminalObservationFacts } from './brain-send-terminal-facts'
 
 import { readdirSync, readFileSync } from 'node:fs'
@@ -34,12 +36,17 @@ import { formatLiaBrainDiagnosticEntry, logLiaBrainDiagnostic, selectLiaBrainDia
  * warning and never an error.
  */
 
+/**
+ * The sink double sits on the REAL `@guiiai/logg` informational method: the
+ * installed logger exposes `log` (there is no `info` on it), and the adapter
+ * under test calls exactly that one method - one formatted line per entry.
+ */
 const mocks = vi.hoisted(() => ({
-  info: vi.fn(),
+  log: vi.fn(),
 }))
 
 vi.mock('@guiiai/logg', () => ({
-  useLogg: () => ({ useGlobalConfig: () => ({ info: mocks.info }) }),
+  useLogg: () => ({ useGlobalConfig: () => ({ log: mocks.log }) }),
 }))
 
 const GROQ_ENGINE_ID = 'groq'
@@ -73,6 +80,14 @@ function occurrences(line: string, token: string): number {
 }
 
 /**
+ * The two siblings this suite never exercises, in their neutral factual
+ * states. The composition always supplies all five, so a present entry must
+ * carry them; the formatter reads neither, so no emitted token changes.
+ */
+const NOT_OBSERVED_INITIAL_ROUTE: LiaBrainInitialRouteObservationFacts = { status: 'initialRouteOverrideNotObserved' }
+const NOT_OBSERVED_FINAL_EXECUTION: LiaBrainFinalSuccessfulExecutionFacts = { status: 'sendTerminalNotObserved' }
+
+/**
  * One structured entry for an arbitrary factual state.
  *
  * Phase 8.0D-10B-4D4C3B2-B4: a present state carries the composed terminal
@@ -91,11 +106,18 @@ function entry(
 ): LiaBrainDiagnosticEntry {
   return facts.status === 'correlationNotObserved'
     ? { correlationId, facts }
-    : { correlationId, facts, sendTerminalFacts, terminalFacts }
+    : {
+        correlationId,
+        facts,
+        finalSuccessfulExecutionFacts: NOT_OBSERVED_FINAL_EXECUTION,
+        initialRouteOverrideFacts: NOT_OBSERVED_INITIAL_ROUTE,
+        sendTerminalFacts,
+        terminalFacts,
+      }
 }
 
 beforeEach(() => {
-  mocks.info.mockClear()
+  mocks.log.mockClear()
 })
 
 describe('lia brain diagnostic log - formatting (Phase 8.0D-10B-4D2B)', () => {
@@ -433,7 +455,14 @@ describe('lia brain diagnostic log - terminal counts (Phase 8.0D-10B-4D4C3B2-B4)
       succeededTerminalObservationCount: 2,
     }
     const sendTerminalFacts: LiaBrainSendTerminalObservationFacts = { sendTerminalOutcome: 'failed' }
-    const frozen: LiaBrainDiagnosticEntry = { correlationId: 'X', facts, sendTerminalFacts, terminalFacts }
+    const frozen: LiaBrainDiagnosticEntry = {
+      correlationId: 'X',
+      facts,
+      finalSuccessfulExecutionFacts: NOT_OBSERVED_FINAL_EXECUTION,
+      initialRouteOverrideFacts: NOT_OBSERVED_INITIAL_ROUTE,
+      sendTerminalFacts,
+      terminalFacts,
+    }
     Object.freeze(facts.attempts[0]!)
     Object.freeze(facts.attempts)
     Object.freeze(facts.expected)
@@ -710,22 +739,22 @@ describe('lia brain diagnostic log - selector and logger call (Phase 8.0D-10B-4D
     // Q: repeated selection yields the very same function - no per-call wrapper.
     expect(selectLiaBrainDiagnosticLog(true)).toBe(selectLiaBrainDiagnosticLog(true))
     // R: no state and no side effect: selecting produces no logging at all.
-    expect(mocks.info).not.toHaveBeenCalled()
+    expect(mocks.log).not.toHaveBeenCalled()
   })
 
   it('50: one entry causes exactly ONE informational call carrying the formatted line', () => {
     const source = entry({
-      attempts: [attempt()],
+      attempts: [{ ...attempt(), modelIdentityEqual: true, providerIdentityEqual: true }],
       expected: { engineId: 'groq', modelId: 'openai/gpt-oss-120b', providerId: 'groq' },
       status: 'attemptIdentityFacts',
     })
 
     logLiaBrainDiagnostic(source)
 
-    expect(mocks.info).toHaveBeenCalledTimes(1)
-    expect(mocks.info).toHaveBeenCalledWith(formatLiaBrainDiagnosticEntry(source))
+    expect(mocks.log).toHaveBeenCalledTimes(1)
+    expect(mocks.log).toHaveBeenCalledWith(formatLiaBrainDiagnosticEntry(source))
     // Exactly one line, and never at a higher level: these facts are not errors.
-    const [line] = mocks.info.mock.calls[0] as [string]
+    const [line] = mocks.log.mock.calls[0] as [string]
     expect(line.split('\n')).toHaveLength(1)
     expect(line.startsWith('[LIA-BRAIN-DIAG] ')).toBe(true)
   })
@@ -739,34 +768,37 @@ describe('lia brain diagnostic log - selector and logger call (Phase 8.0D-10B-4D
 
     observer.observe('logical-send-X')
 
-    expect(mocks.info).toHaveBeenCalledTimes(1)
-    expect(mocks.info).toHaveBeenCalledWith(`[LIA-BRAIN-DIAG] correlationId="logical-send-X" status="decisionNotObserved" attempt0.arrivalIndex=0 attempt0.roundId="R" attempt0.providerId="groq" attempt0.modelId="openai/gpt-oss-120b" ${ZERO_COUNTS}`)
+    expect(mocks.log).toHaveBeenCalledTimes(1)
+    expect(mocks.log).toHaveBeenCalledWith(`[LIA-BRAIN-DIAG] correlationId="logical-send-X" status="decisionNotObserved" attempt0.arrivalIndex=0 attempt0.roundId="R" attempt0.providerId="groq" attempt0.modelId="openai/gpt-oss-120b" ${ZERO_COUNTS}`)
 
     // A terminal observation becomes visible on the very next dev line.
     store.recordExecutionTerminal({ correlationId: 'logical-send-X', outcome: 'failed', roundId: 'R' })
     observer.observe('logical-send-X')
-    expect(mocks.info).toHaveBeenCalledTimes(2)
-    expect(mocks.info.mock.calls[1]![0]).toBe(`[LIA-BRAIN-DIAG] correlationId="logical-send-X" status="decisionNotObserved" attempt0.arrivalIndex=0 attempt0.roundId="R" attempt0.providerId="groq" attempt0.modelId="openai/gpt-oss-120b" ${counts(0, 1, 0)}`)
+    expect(mocks.log).toHaveBeenCalledTimes(2)
+    expect(mocks.log.mock.calls[1]![0]).toBe(`[LIA-BRAIN-DIAG] correlationId="logical-send-X" status="decisionNotObserved" attempt0.arrivalIndex=0 attempt0.roundId="R" attempt0.providerId="groq" attempt0.modelId="openai/gpt-oss-120b" ${counts(0, 1, 0)}`)
 
     // A key with no live snapshot is a factual observation too - still one call,
     // and still no fabricated count.
     observer.observe('absent')
-    expect(mocks.info).toHaveBeenCalledTimes(3)
-    expect(mocks.info.mock.calls[2]![0]).toBe('[LIA-BRAIN-DIAG] correlationId="absent" status="correlationNotObserved"')
+    expect(mocks.log).toHaveBeenCalledTimes(3)
+    expect(mocks.log.mock.calls[2]![0]).toBe('[LIA-BRAIN-DIAG] correlationId="absent" status="correlationNotObserved"')
 
     // Duplicates are preserved: two observations, two calls, no dedupe.
     observer.observe('absent')
-    expect(mocks.info).toHaveBeenCalledTimes(4)
+    expect(mocks.log).toHaveBeenCalledTimes(4)
   })
 
   it('b4b4-74: send write alone does NOT log - no fourth trigger', () => {
     const store = createLiaBrainCorrelationService()
-    const _observer = createLiaBrainCorrelationObserver({ correlationReader: store, log: selectLiaBrainDiagnosticLog(true) })
+    const observer = createLiaBrainCorrelationObserver({ correlationReader: store, log: selectLiaBrainDiagnosticLog(true) })
+    // Wiring the observer is inert: it logs nothing at construction time.
+    expect(observer).toBeDefined()
+    expect(mocks.log).not.toHaveBeenCalled()
 
     // Retain a send settlement - no diagnostic line yet because there is no
     // send-terminal observer trigger.
     store.recordSendTerminal({ correlationId: 'X', outcome: 'failed' })
-    expect(mocks.info).not.toHaveBeenCalled()
+    expect(mocks.log).not.toHaveBeenCalled()
 
     // No observe has happened, so no line exists to inspect. A later
     // execution-start trigger will reveal the retained settlement.
@@ -780,7 +812,7 @@ describe('lia brain diagnostic log - selector and logger call (Phase 8.0D-10B-4D
     // 1) retain send failed for X
     store.recordSendTerminal({ correlationId: 'X', outcome: 'failed' })
     // 2) confirm no line solely from send write (no automatic trigger)
-    expect(mocks.info).not.toHaveBeenCalled()
+    expect(mocks.log).not.toHaveBeenCalled()
 
     // 3) deliver execution-start X
     store.recordExecution({ conversationId: 'c1', correlationId: 'X', modelId: GROQ_MODEL_ID, providerId: GROQ_ENGINE_ID, roundId: 'R' })
@@ -789,8 +821,8 @@ describe('lia brain diagnostic log - selector and logger call (Phase 8.0D-10B-4D
     observer.observe('X')
 
     // 5) resulting line contains the retained send outcome as the final quoted token
-    expect(mocks.info).toHaveBeenCalledTimes(1)
-    const line = mocks.info.mock.calls[0]![0] as string
+    expect(mocks.log).toHaveBeenCalledTimes(1)
+    const line = mocks.log.mock.calls[0]![0] as string
     expect(line).toContain('sendTerminalOutcome="failed"')
     expect(occurrences(line, 'sendTerminalOutcome=')).toBe(1)
     expect(line.endsWith(' sendTerminalOutcome="failed"')).toBe(true)
@@ -804,14 +836,14 @@ describe('lia brain diagnostic log - selector and logger call (Phase 8.0D-10B-4D
     const observer = createLiaBrainCorrelationObserver({ correlationReader: store, log: selectLiaBrainDiagnosticLog(true) })
 
     store.recordSendTerminal({ correlationId: 'Y', outcome: 'succeeded' })
-    expect(mocks.info).not.toHaveBeenCalled()
+    expect(mocks.log).not.toHaveBeenCalled()
 
     store.recordExecutionTerminal({ correlationId: 'Y', outcome: 'succeeded', roundId: 'R2' })
     observer.observe('Y')
 
-    expect(mocks.info).toHaveBeenCalledTimes(1)
-    expect(mocks.info.mock.calls[0]![0]).toContain('sendTerminalOutcome="succeeded"')
-    expect(occurrences(mocks.info.mock.calls[0]![0] as string, 'sendTerminalOutcome=')).toBe(1)
+    expect(mocks.log).toHaveBeenCalledTimes(1)
+    expect(mocks.log.mock.calls[0]![0]).toContain('sendTerminalOutcome="succeeded"')
+    expect(occurrences(mocks.log.mock.calls[0]![0] as string, 'sendTerminalOutcome=')).toBe(1)
   })
 
   it('b4b4-79/80: duplicate and conflicting send writes - canonical first-write printed once', () => {
@@ -824,13 +856,13 @@ describe('lia brain diagnostic log - selector and logger call (Phase 8.0D-10B-4D
     expect(store.get('Z')!.sendTerminal).toEqual({ outcome: 'failed' })
 
     // Still no line until an existing trigger fires.
-    expect(mocks.info).not.toHaveBeenCalled()
+    expect(mocks.log).not.toHaveBeenCalled()
 
     store.recordExecution({ conversationId: 'c1', correlationId: 'Z', modelId: GROQ_MODEL_ID, providerId: GROQ_ENGINE_ID, roundId: 'R' })
     observer.observe('Z')
 
-    expect(mocks.info).toHaveBeenCalledTimes(1)
-    const line = mocks.info.mock.calls[0]![0] as string
+    expect(mocks.log).toHaveBeenCalledTimes(1)
+    const line = mocks.log.mock.calls[0]![0] as string
     expect(line).toContain('sendTerminalOutcome="failed"')
     expect(line).not.toContain('sendTerminalOutcome="succeeded"')
     // Formatter does not know first-write policy - it merely prints the entry's outcome.
@@ -854,11 +886,11 @@ describe('lia brain diagnostic log - selector and logger call (Phase 8.0D-10B-4D
     // call returns void and no logger call exists to make.
     expect(observer.observe('logical-send-X')).toBeUndefined()
     expect(reads).toEqual(['logical-send-X'])
-    expect(mocks.info).not.toHaveBeenCalled()
+    expect(mocks.log).not.toHaveBeenCalled()
   })
 
   it('proof: a throwing logger is contained by the observer, never by the adapter', () => {
-    mocks.info.mockImplementationOnce(() => {
+    mocks.log.mockImplementationOnce(() => {
       throw new Error('logger exploded')
     })
     const reader = { get: () => undefined }
@@ -867,7 +899,7 @@ describe('lia brain diagnostic log - selector and logger call (Phase 8.0D-10B-4D
     // The observer owns the mandatory isolation boundary - the adapter
     // deliberately has none of its own.
     expect(() => observer.observe('X')).not.toThrow()
-    expect(mocks.info).toHaveBeenCalledTimes(1)
+    expect(mocks.log).toHaveBeenCalledTimes(1)
   })
 })
 

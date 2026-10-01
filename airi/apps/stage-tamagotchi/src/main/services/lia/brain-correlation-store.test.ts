@@ -1,7 +1,7 @@
-import type { LiaBrainRoutingDecision } from '@lia/core'
+import type { LiaBrainCapabilities, LiaBrainEngineDescriptor, LiaBrainModelDescriptor, LiaBrainRoutingDecision } from '@lia/core'
 
-import type { LiaBrainExecutionTerminalReport, LiaBrainSendTerminalReport } from '../../../shared/eventa'
-import type { LiaBrainCorrelationStore, LiaBrainExecutionTerminalRecord, LiaBrainSendTerminalRecord } from './brain-correlation-store'
+import type { LiaBrainExecutionObservationReport, LiaBrainExecutionTerminalReport, LiaBrainSendTerminalReport } from '../../../shared/eventa'
+import type { LiaBrainCorrelationEntry, LiaBrainCorrelationStore, LiaBrainExecutionTerminalRecord, LiaBrainSendTerminalRecord } from './brain-correlation-store'
 
 import { readdirSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -22,24 +22,71 @@ import { createLiaBrainCorrelationStore } from './brain-correlation-store'
 interface DecisionOverrides {
   engineId?: string
   modelId?: string
-  mode?: string
-  status?: string
+  /** The decision arm to build; `'manual'` builds the manual arm, else automatic. */
+  status?: LiaBrainRoutingDecision['status']
 }
 
-/** A canonical-shaped decision. Only identity fields differ between cases. */
+/** The nine capability facts every descriptor in these fixtures carries. */
+const CAPABILITIES: LiaBrainCapabilities = {
+  audioInput: false,
+  audioOutput: false,
+  imageInput: false,
+  realtime: false,
+  reasoning: false,
+  textInput: true,
+  textOutput: true,
+  toolCalling: false,
+  videoInput: false,
+}
+
+function engineDescriptor(id: string, modelIds: readonly string[]): LiaBrainEngineDescriptor {
+  return { availability: 'available', capabilities: CAPABILITIES, id, modelIds, name: id }
+}
+
+function modelDescriptor(engineId: string, id: string): LiaBrainModelDescriptor {
+  return { capabilities: CAPABILITIES, engineId, id, name: id }
+}
+
+/**
+ * A canonical-shaped decision in the CURRENT union shape: the route rides
+ * `selection.route` inside the `automatic` arm, and the manual arm carries its
+ * own readiness + resolution. Only identity fields differ between cases, and
+ * nothing is cast - a field that leaves the domain type now fails HERE instead
+ * of being recorded by the store and read back as a lie.
+ */
 function decision(overrides: DecisionOverrides = {}): LiaBrainRoutingDecision {
+  const engineId = overrides.engineId ?? 'groq'
+  const modelId = overrides.modelId ?? 'openai/gpt-oss-120b'
+  const engine = engineDescriptor(engineId, [modelId])
+  const model = modelDescriptor(engineId, modelId)
+
+  if (overrides.status === 'manual') {
+    return {
+      readiness: { status: 'ready' },
+      resolution: { engine, model, status: 'resolvedModel' },
+      status: 'manual',
+    }
+  }
+
   return {
-    id: 'decision-1',
-    mode: overrides.mode ?? 'automatic',
-    readiness: { status: 'ready' },
-    required: ['textInput', 'textOutput'],
-    selection: {
-      engine: { id: overrides.engineId ?? 'groq' },
-      model: { id: overrides.modelId ?? 'openai/gpt-oss-120b' },
-      status: 'selected',
-    },
-    status: overrides.status ?? 'automatic',
-  } as unknown as LiaBrainRoutingDecision
+    selection: { route: { engine, model }, status: 'selected' },
+    status: 'automatic',
+  }
+}
+
+/**
+ * The selected engine id of a retained decision, through BOTH discriminants.
+ *
+ * `selection` exists only on the `automatic` arm of the decision, and `route`
+ * only on the `selected` arm of the selection - the other three arms carry no
+ * route at all. Narrowing both is the honest read; anything else would have to
+ * invent an engine for a decision that selected none.
+ */
+function selectedEngineId(entry: LiaBrainCorrelationEntry | undefined): string | undefined {
+  const decision = entry?.decision
+  if (decision?.status !== 'automatic' || decision.selection.status !== 'selected')
+    return undefined
+  return decision.selection.route.engine.id
 }
 
 /** One five-field execution report, exactly as the main handler sanitizes it. */
@@ -219,7 +266,7 @@ describe('lia brain correlation store - first decision wins (Phase 8.0D-10B-4B1)
   it('g/h/i/j: a repeated decision never replaces, merges or moves anything', () => {
     const { store } = clockedStore()
     const first = decision({ engineId: 'groq', modelId: 'openai/gpt-oss-120b' })
-    const second = decision({ engineId: 'anthropic', modelId: 'claude-x', mode: 'manual', status: 'manual' })
+    const second = decision({ engineId: 'anthropic', modelId: 'claude-x', status: 'manual' })
 
     // G: the first trusted decision is stored.
     store.recordDecision('X', first)
@@ -289,7 +336,7 @@ describe('lia brain correlation store - execution attempts (Phase 8.0D-10B-4B1)'
 })
 
 describe('lia brain correlation store - arrival order (Phase 8.0D-10B-4B1)', () => {
-  const factsOf = (entry: { decision?: LiaBrainRoutingDecision, executions: Array<Record<string, unknown>> } | undefined) => ({
+  const factsOf = (entry: LiaBrainCorrelationEntry | undefined) => ({
     decision: entry?.decision,
     executions: entry?.executions,
   })
@@ -430,7 +477,7 @@ describe('lia brain correlation store - capacity (Phase 8.0D-10B-4B1)', () => {
     expect(store.size).toBe(2)
     expect(store.get('A')?.executions).toHaveLength(5)
     expect(store.get('B')?.executions).toHaveLength(6)
-    expect(store.get('A')?.decision?.selection?.engine?.id).toBe('groq')
+    expect(selectedEngineId(store.get('A'))).toBe('groq')
   })
 
   it('ac: expired entries are pruned before capacity is enforced', () => {
@@ -607,7 +654,7 @@ describe('lia brain correlation store - terminal round outcomes (Phase 8.0D-10B-
     decisionFirst.recordExecutionTerminal(terminalReport('X', 'round-a', 'abandoned'))
 
     for (const store of [terminalFirst, decisionFirst]) {
-      expect(store.get('X')!.decision?.selection?.engine?.id).toBe('groq')
+      expect(selectedEngineId(store.get('X'))).toBe('groq')
       expect(store.get('X')!.executionTerminals).toEqual([{ outcome: 'abandoned', roundId: 'round-a' }])
     }
   })

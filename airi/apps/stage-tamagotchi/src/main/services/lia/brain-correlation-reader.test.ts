@@ -354,7 +354,9 @@ describe('correlation snapshot reader - read count, failure and purity (Phase 8.
     expect(calls).toEqual(['X'])
     expect(calls).toHaveLength(1)
     expect(outcome.status).toBe('attemptIdentityFacts')
-    expect(outcome.attempts).toHaveLength(2)
+    // `attempts` exists on every arm EXCEPT `correlationNotObserved`, so the
+    // read goes through the union's own discriminant instead of being assumed.
+    expect(outcome.status === 'correlationNotObserved' ? [] : outcome.attempts).toHaveLength(2)
     // The facts came from the ONE snapshot: still exactly one read.
     expect(calls).toHaveLength(1)
   })
@@ -781,8 +783,11 @@ describe('send-terminal carriage does not touch the identity facts (Phase 8.0D-1
     const { reader } = recordingReader({ X: frozen })
 
     expect(() => readLiaBrainExecutionIdentityFacts(reader, 'X', LIA_BRAIN_ENGINE_PROVIDER_MAPPING)).not.toThrow()
-    expect(frozen.sendTerminal).toEqual({ outcome: 'failed' })
-    expect(Object.keys(frozen.sendTerminal)).toEqual(['outcome'])
+    const retainedSendTerminal = frozen.sendTerminal
+    expect(retainedSendTerminal).toEqual({ outcome: 'failed' })
+    // The member is optional by contract, so its keys are only enumerable once
+    // its presence is established - never by asserting through `undefined`.
+    expect(retainedSendTerminal && Object.keys(retainedSendTerminal)).toEqual(['outcome'])
     expect(frozen.executionTerminals).toEqual([{ outcome: 'failed', roundId: 'A' }])
   })
 
@@ -910,7 +915,16 @@ describe('correlation snapshot reader - authority and isolation invariants (Phas
     expect(source).not.toMatch(/eventa|defineEventa|defineInvokeEventa|defineInvokeHandler|ipcMain|ipcRenderer|BrowserWindow|\.emit\(/)
     expect(source).not.toMatch(/decideBrainRoute|LiaBrainService|automaticPolicy|liaProductConfig|updateLiaProductConfig|setPreferred/)
     expect(source).not.toMatch(/getChatProviderInstance|useProviderStore|activeProvider|activeModel|providersStore|createOpenAI|defineProvider|createProductionBrainCatalog|LIA_MODEL_CATALOG/)
-    expect(source).not.toMatch(/fallback|retry|permission|toolCall|switch|override/i)
+    // No routing-policy, provider-selection or authority vocabulary. The ONE
+    // permitted occurrence is the declared CARRIAGE field `initialRouteOverride`
+    // on the snapshot contract (D2B9-E-R1 §7): this module declares it and never
+    // reads it, so the vocabulary check runs with that single declared name
+    // removed - and the two assertions below pin it to a bare declaration.
+    expect(source.replace(/initialRouteOverride/g, '')).not.toMatch(/fallback|retry|permission|toolCall|switch|override/i)
+    // Carriage only: exactly one occurrence (the declaration), never a member
+    // access, never a comparison and never a derivation of it.
+    expect(source.match(/initialRouteOverride/g)).toHaveLength(1)
+    expect(source).not.toMatch(/\.initialRouteOverride|deriveLiaBrainInitialRoute|readInitialRoute/)
     expect(source).not.toMatch(/setInterval|setTimeout|queueMicrotask|Date\.now|Math\.random|await /)
     expect(source).not.toMatch(/from ['"](?:node:)?(?:fs|net|https?|child_process|dns|dgram|timers)['/]|\bfetch\(|XMLHttpRequest|WebSocket|localStorage|sessionStorage/)
     expect(source).not.toMatch(/console\.|^(?:process\.|globalThis\.)/m)

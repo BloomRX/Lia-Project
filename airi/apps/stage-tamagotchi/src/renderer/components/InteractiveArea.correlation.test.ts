@@ -54,12 +54,23 @@ vi.mock('../stores/lia/provider', async (importOriginal) => {
   }
 })
 
-/** Deterministic, opaque-looking ids so the generated value can be asserted. */
-const MINTED_IDS = [
+/**
+ * Deterministic, opaque-looking ids so the generated value can be asserted.
+ *
+ * Every value - including the overflow fallback - keeps the real UUID shape,
+ * because `crypto.randomUUID` is TYPED as that shape and the seam must never be
+ * widened to `string` just to let a fixture fit.
+ */
+type MintedUuid = ReturnType<typeof crypto.randomUUID>
+
+const MINTED_IDS: MintedUuid[] = [
   '1f9d6a1e-0000-4000-8000-000000000001',
   '1f9d6a1e-0000-4000-8000-000000000002',
   '1f9d6a1e-0000-4000-8000-000000000003',
 ]
+
+/** Overflow id for an unexpected extra mint: still a real UUID, never a `string`. */
+const MINTED_OVERFLOW: MintedUuid = '1f9d6a1e-0000-4000-8000-0000000000ff'
 
 let minted: ReturnType<typeof vi.spyOn>
 let mintedIndex = 0
@@ -117,8 +128,21 @@ beforeEach(() => {
   // Only the id factory is watched: it is the seam's own dependency-free
   // mechanism, so counting it proves generation happens once, at the seam.
   mintedIndex = 0
-  minted = vi.spyOn(crypto, 'randomUUID').mockImplementation(() => MINTED_IDS[mintedIndex++] ?? `minted-${mintedIndex}`)
+  minted = vi.spyOn(crypto, 'randomUUID').mockImplementation(() => MINTED_IDS[mintedIndex++] ?? MINTED_OVERFLOW)
 })
+
+/**
+ * The send payload exactly as the chat store declares it - derived from the
+ * store's OWN `send` signature, never widened to `Record<string, unknown>`. A
+ * field that disappears from the payload contract then fails HERE, instead of
+ * silently reading `undefined` through a cast.
+ */
+type ChatSendPayload = Parameters<ReturnType<typeof useChatStore>['send']>[0]
+
+/** One recorded `send` call's payload, by index, through that same signature. */
+function sentPayloadAt(calls: [ChatSendPayload][], index: number): ChatSendPayload {
+  return calls[index][0]
+}
 
 describe('interactive area logical send correlation (Phase 8.0D-10B-3B1)', () => {
   it('a/b/g: one send mints exactly one id and hands the unchanged payload over', async () => {
@@ -131,7 +155,7 @@ describe('interactive area logical send correlation (Phase 8.0D-10B-3B1)', () =>
     // A: exactly one id per send.
     expect(minted.mock.calls.length - before).toBe(1)
 
-    const [payload] = send.mock.calls[0] as [Record<string, unknown>]
+    const payload = sentPayloadAt(send.mock.calls, 0)
     // B: the exact minted value reaches the send.
     expect(payload.correlationId).toBe(MINTED_IDS[0])
     expect(String(payload.correlationId)).not.toHaveLength(0)
@@ -165,8 +189,8 @@ describe('interactive area logical send correlation (Phase 8.0D-10B-3B1)', () =>
     await submitDraft(wrapper, 'second turn')
     await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(2))
 
-    const first = (send.mock.calls[0] as [Record<string, unknown>])[0].correlationId
-    const second = (send.mock.calls[1] as [Record<string, unknown>])[0].correlationId
+    const first = sentPayloadAt(send.mock.calls, 0).correlationId
+    const second = sentPayloadAt(send.mock.calls, 1).correlationId
     expect(first).toBe(MINTED_IDS[0])
     expect(second).toBe(MINTED_IDS[1])
     expect(second).not.toBe(first)
@@ -180,9 +204,9 @@ describe('interactive area logical send correlation (Phase 8.0D-10B-3B1)', () =>
     await submitDraft(wrapper, 'look at this')
     await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(1))
 
-    const [payload] = send.mock.calls[0] as [Record<string, unknown>]
+    const payload = sentPayloadAt(send.mock.calls, 0)
     expect(minted.mock.calls.length - before).toBe(1)
-    expect((payload.attachments as unknown[]).length).toBe(2)
+    expect(payload.attachments?.length).toBe(2)
     expect(payload.correlationId).toBe(MINTED_IDS[0])
   })
 
@@ -214,7 +238,7 @@ describe('interactive area logical send correlation (Phase 8.0D-10B-3B1)', () =>
     // id: two independent pieces of the same submission.
     const [request] = electron.brainInvoke.mock.calls[0] as [Record<string, unknown>]
     expect(request.facts).toEqual({ hasImageInput: false, reasoningRequested: true, usesTools: true })
-    expect((send.mock.calls[0] as [Record<string, unknown>])[0].correlationId).toBe(MINTED_IDS[0])
+    expect(sentPayloadAt(send.mock.calls, 0).correlationId).toBe(MINTED_IDS[0])
   })
   it('h/i/m: ONE submission sends the SAME generated id down both authority and send paths', async () => {
     const { send, wrapper } = await renderArea()
@@ -229,7 +253,7 @@ describe('interactive area logical send correlation (Phase 8.0D-10B-3B1)', () =>
     const generated = MINTED_IDS[0]
 
     // I: the Brain authority path and the send path carry the very same value.
-    const [payload] = send.mock.calls[0] as [Record<string, unknown>]
+    const payload = sentPayloadAt(send.mock.calls, 0)
     const [request] = electron.brainInvoke.mock.calls[0] as [Record<string, unknown>]
     expect(payload.correlationId).toBe(generated)
     expect(request.correlationId).toBe(generated)
@@ -249,8 +273,8 @@ describe('interactive area logical send correlation (Phase 8.0D-10B-3B1)', () =>
     await submitDraft(wrapper, 'second')
     await vi.waitFor(() => expect(electron.brainInvoke).toHaveBeenCalledTimes(2))
 
-    expect((send.mock.calls[0] as [Record<string, unknown>])[0].correlationId).toBe(MINTED_IDS[0])
-    expect((send.mock.calls[1] as [Record<string, unknown>])[0].correlationId).toBe(MINTED_IDS[1])
+    expect(sentPayloadAt(send.mock.calls, 0).correlationId).toBe(MINTED_IDS[0])
+    expect(sentPayloadAt(send.mock.calls, 1).correlationId).toBe(MINTED_IDS[1])
     expect((electron.brainInvoke.mock.calls[0] as [Record<string, unknown>])[0].correlationId).toBe(MINTED_IDS[0])
     expect((electron.brainInvoke.mock.calls[1] as [Record<string, unknown>])[0].correlationId).toBe(MINTED_IDS[1])
     expect(MINTED_IDS[0]).not.toBe(MINTED_IDS[1])
@@ -271,10 +295,10 @@ describe('interactive area logical send correlation (Phase 8.0D-10B-3B1)', () =>
 
     // L: the send payload keeps its fields and values; the key plus D2's
     // reasoning and frozen tools are the additions.
-    const [payload] = send.mock.calls[0] as [Record<string, unknown>]
+    const payload = sentPayloadAt(send.mock.calls, 0)
     expect(payload.sessionId).toBe('session-b')
     expect(payload.text).toBe('facts and payload')
-    expect((payload.attachments as unknown[]).length).toBe(1)
+    expect(payload.attachments?.length).toBe(1)
     expect(payload.tools).toEqual(artistryToolReferences)
     expect(payload.tools).not.toBe(artistryToolReferences)
     expect(Object.keys(payload).sort()).toEqual(['attachments', 'correlationId', 'reasoning', 'sessionId', 'text', 'tools'])
@@ -291,7 +315,7 @@ describe('interactive area logical send correlation (Phase 8.0D-10B-3B1)', () =>
 
     // N: the send still went out, with its own generated key and its payload
     // otherwise intact.
-    const [payload] = send.mock.calls[0] as [Record<string, unknown>]
+    const payload = sentPayloadAt(send.mock.calls, 0)
     expect(payload.correlationId).toBe(MINTED_IDS[0])
     expect(payload.text).toBe('rejected bridge')
   })

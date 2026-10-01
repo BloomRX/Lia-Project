@@ -112,6 +112,26 @@ export interface LiaBrainCorrelationSnapshot extends LiaBrainExecutionIdentitySn
    * never a settlement of any kind; nothing on this boundary reads it.
    */
   sendTerminal?: LiaObservedSendTerminal
+  /**
+   * Phase 8.0D-10B-4D4C4-D2B9-E-R1: the retained initial-route observation of
+   * that same entry, when the entry retains one.
+   *
+   * CARRIAGE ONLY. This boundary never interprets, compares, scores, ranks or
+   * derives it - the canonical store already supplies it (see the store's `get`)
+   * and the ONE derivation that reads it is
+   * `deriveLiaBrainInitialRouteObservationFacts`, which consumes exactly this
+   * shape. Declaring it here is what lets the single-snapshot composition hand
+   * the SAME object to that derivation without a cast.
+   *
+   * The D2B7 tri-state is preserved verbatim:
+   * - `undefined` : NOT OBSERVED (no accepted observation retained)
+   * - `null`      : OBSERVED ABSENT (the payload had no routeOverride)
+   * - object      : OBSERVED PRESENT (the retained providerId/modelId)
+   */
+  initialRouteOverride?: {
+    providerId: string
+    modelId: string
+  } | null
 }
 
 /**

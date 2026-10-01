@@ -1,3 +1,5 @@
+import type { VoicePickDeps } from './voice-profile-picker'
+
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
@@ -16,6 +18,16 @@ import {
  * never used), the log tells the whole story end to end, and a thrown dialog
  * reaches the caller with its technical reason already logged.
  */
+
+/**
+ * Mock-call metadata for the injected dialog, read through Vitest's typed
+ * `vi.mocked` seam. The production `VoicePickDialog` interface stays a plain
+ * call signature and gains no `mock` member: the mock-ness belongs to this
+ * test's fake, not to the contract the picker depends on.
+ */
+function dialogCalls(fake: Pick<VoicePickDeps, 'dialog'>) {
+  return vi.mocked(fake.dialog).mock.calls
+}
 
 const aliveWindow = { isDestroyed: () => false }
 const deadWindow = {
@@ -69,9 +81,9 @@ describe('pickVoiceFiles', () => {
     expect(fake.dialog).toHaveBeenCalledTimes(1)
     // The window overload is the one that ran: a destroyed window would have
     // thrown instead of answering.
-    expect(fake.dialog.mock.calls[0][0]).toBe(aliveWindow)
-    expect(fake.dialog.mock.calls[0][1]).toMatchObject({ properties: ['openFile'] })
-    const filters = (fake.dialog.mock.calls[0][1] as { filters: Array<{ extensions: string[] }> }).filters
+    expect(dialogCalls(fake)[0][0]).toBe(aliveWindow)
+    expect(dialogCalls(fake)[0][1]).toMatchObject({ properties: ['openFile'] })
+    const filters = (dialogCalls(fake)[0][1] as { filters: Array<{ extensions: string[] }> }).filters
     expect(filters[0].extensions).toEqual(['wav'])
 
     expect(logs).toEqual(['picker-main-received', 'picker-open-dialog parent=alive-window', 'picker-result cancelled=false count=1'])
@@ -82,7 +94,7 @@ describe('pickVoiceFiles', () => {
     const picked = await pickVoiceFiles(fake, { extensions: ['.wav'] })
 
     expect(picked).toEqual(['C:\\audio\\voz.wav'])
-    expect(fake.dialog.mock.calls[0][0]).not.toHaveProperty('isDestroyed')
+    expect(dialogCalls(fake)[0][0]).not.toHaveProperty('isDestroyed')
     expect(logs).toContain('picker-open-dialog parent=none')
   })
 
@@ -111,7 +123,7 @@ describe('pickVoiceFiles', () => {
     const picked = await pickVoiceFiles(fake, { extensions: ['.wav', '.flac'], multiple: true })
 
     expect(picked).toHaveLength(2)
-    const options = fake.dialog.mock.calls[0][1] as { filters: Array<{ extensions: string[] }>, properties: string[] }
+    const options = dialogCalls(fake)[0][1] as { filters: Array<{ extensions: string[] }>, properties: string[] }
     expect(options.properties).toContain('multiSelections')
     expect(options.filters[0].extensions).toEqual(['wav', 'flac'])
   })

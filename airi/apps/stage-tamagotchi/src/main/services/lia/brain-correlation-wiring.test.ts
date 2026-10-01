@@ -524,6 +524,23 @@ function observedStates(probe: ReturnType<typeof observerProbe>): string[] {
     : facts.status)
 }
 
+/**
+ * The observed attempts of one read, through the union's OWN discriminant.
+ *
+ * `LiaBrainCorrelationReadFacts` includes the `correlationNotObserved` arm,
+ * which carries no `attempts` member at all - so the member is only readable
+ * after narrowing on `status`. The attempt element type is derived from the
+ * same union, which also gives the callback below its real parameter type
+ * instead of an implicit `any`. A key with no snapshot honestly yields no
+ * attempts; nothing is fabricated for it.
+ */
+type ObservedReadAttempt
+  = Exclude<LiaBrainCorrelationReadFacts, { status: 'correlationNotObserved' }>['attempts'][number]
+
+function observedAttempts(facts: LiaBrainCorrelationReadFacts): readonly ObservedReadAttempt[] {
+  return facts.status === 'correlationNotObserved' ? [] : facts.attempts
+}
+
 describe('lia brain correlation dual trigger - factual progression (Phase 8.0D-10B-4C4C)', () => {
   it('the dual trigger is real: both producers observe the ONE probe, once each, with their own keys', () => {
     const { probe } = wireDualTrigger()
@@ -564,7 +581,7 @@ describe('lia brain correlation dual trigger - factual progression (Phase 8.0D-1
     // decision exists; the already-observed attempt is preserved as factual
     // metadata (that is the `[A]` the phase notation records).
     expect(observedStates(probe)).toEqual(['decisionNotObserved', 'attemptIdentityFacts[A]'])
-    expect(probe.seen[0]!.facts.attempts?.map(attempt => attempt.roundId)).toEqual(['A'])
+    expect(observedAttempts(probe.seen[0]!.facts).map(attempt => attempt.roundId)).toEqual(['A'])
     expect(probe.seen).toHaveLength(2)
   })
 
@@ -584,7 +601,7 @@ describe('lia brain correlation dual trigger - factual progression (Phase 8.0D-1
     // sorting, no aggregation, no verdict.
     const last = probe.seen[2]!.facts
     expect(last.status).toBe('attemptIdentityFacts')
-    expect(last.attempts.map(attempt => [attempt.arrivalIndex, attempt.roundId])).toEqual([[0, 'A'], [1, 'B']])
+    expect(observedAttempts(last).map(attempt => [attempt.arrivalIndex, attempt.roundId])).toEqual([[0, 'A'], [1, 'B']])
     expect(probe.seen).toHaveLength(3)
   })
 
@@ -603,8 +620,8 @@ describe('lia brain correlation dual trigger - factual progression (Phase 8.0D-1
       'decisionNotObserved',
       'attemptIdentityFacts[A,B]',
     ])
-    expect(probe.seen[0]!.facts.attempts?.map(attempt => attempt.roundId)).toEqual(['A'])
-    expect(probe.seen[1]!.facts.attempts?.map(attempt => attempt.roundId)).toEqual(['A', 'B'])
+    expect(observedAttempts(probe.seen[0]!.facts).map(attempt => attempt.roundId)).toEqual(['A'])
+    expect(observedAttempts(probe.seen[1]!.facts).map(attempt => attempt.roundId)).toEqual(['A', 'B'])
     expect(probe.seen).toHaveLength(3)
   })
 

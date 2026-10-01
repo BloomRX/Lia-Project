@@ -404,7 +404,7 @@ describe('execution identity facts - purity and trust boundary (Phase 8.0D-10B-4
     first.attempts[0]!.providerId = 'mutated-in-output'
     first.attempts[0]!.providerIdentityEqual = true
     first.expected.providerId = 'mutated-in-output'
-    first.attempts.push({ arrivalIndex: 99, modelId: 'injected', providerId: 'injected', roundId: 'injected' })
+    first.attempts.push({ arrivalIndex: 99, modelId: 'injected', modelIdentityEqual: false, providerId: 'injected', providerIdentityEqual: false, roundId: 'injected' })
     expect(executions[0]!.providerId).toBe('groq')
     expect(executions).toHaveLength(2)
 

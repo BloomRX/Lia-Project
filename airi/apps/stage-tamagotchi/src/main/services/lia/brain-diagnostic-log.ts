@@ -49,6 +49,29 @@ import { useLogg } from '@guiiai/logg'
  */
 const log = useLogg('lia:brain').useGlobalConfig()
 
+/**
+ * Both attempt shapes, DERIVED from the entry type this adapter already
+ * imports. The 55/56 invariant forbids importing the facts layer here (the
+ * adapter receives facts that are already final), so the real production types
+ * are read off the entry contract instead of being re-declared or imported.
+ */
+type LiaBrainLoggedAttempt
+  = Exclude<LiaBrainDiagnosticEntry['facts'], { status: 'correlationNotObserved' }>['attempts'][number]
+type LiaBrainLoggedIdentityAttempt
+  = Extract<LiaBrainDiagnosticEntry['facts'], { status: 'attemptIdentityFacts' }>['attempts'][number]
+
+/**
+ * Sound narrowing for the two equality facts.
+ *
+ * Both members are proven present before either is read - nothing is inferred
+ * from one to the other, so an attempt carrying only one of them (which the
+ * facts layer never produces) would emit neither field rather than a fabricated
+ * partner.
+ */
+function isAttemptIdentityFact(attempt: LiaBrainLoggedAttempt): attempt is LiaBrainLoggedIdentityAttempt {
+  return 'providerIdentityEqual' in attempt && 'modelIdentityEqual' in attempt
+}
+
 /** The fixed technical prefix every line carries. */
 const PREFIX = '[LIA-BRAIN-DIAG]'
 
@@ -127,7 +150,7 @@ export function formatLiaBrainDiagnosticEntry(entry: LiaBrainDiagnosticEntry): s
       `${prefix}.providerId=${quoted(attempt.providerId)}`,
       `${prefix}.modelId=${quoted(attempt.modelId)}`,
     )
-    if ('providerIdentityEqual' in attempt) {
+    if (isAttemptIdentityFact(attempt)) {
       fields.push(
         `${prefix}.providerIdentityEqual=${attempt.providerIdentityEqual}`,
         `${prefix}.modelIdentityEqual=${attempt.modelIdentityEqual}`,
@@ -171,7 +194,7 @@ export function formatLiaBrainDiagnosticEntry(entry: LiaBrainDiagnosticEntry): s
  * nothing - so it is directly assignable to the observer's optional `log`.
  */
 export function logLiaBrainDiagnostic(entry: LiaBrainDiagnosticEntry): void {
-  log.info(formatLiaBrainDiagnosticEntry(entry))
+  log.log(formatLiaBrainDiagnosticEntry(entry))
 }
 
 /**
