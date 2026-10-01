@@ -97,6 +97,58 @@ describe('classification: required evidence', () => {
   })
 })
 
+describe('classification: D2B9-D missing browser executable precedence', () => {
+  // The real Windows evidence for the stage-ui node command: every collected
+  // suite passed, and the single error is the absent headless shell.
+  const STAGE_UI_MIXED = [
+    'Test Files  149 passed (149)',
+    'Tests  1041 passed (1041)',
+    'Errors  1',
+    'Unhandled Error  browserType.launch: Executable doesn\'t exist at C:\\Users\\lia\\AppData\\Local\\ms-playwright\\chromium_headless_shell-1234\\chrome-win64\\headless_shell',
+  ].join('\n')
+
+  it('A: stage-ui node results fully passing with only the missing executable -> ENVIRONMENT-LIMITED', () => {
+    const out = classifyCommandOutcome({ id: 'stage-ui', exitCode: 1, stdout: STAGE_UI_MIXED, stderr: '' })
+    assert.equal(out, 'environment-limited')
+    const bench = classifyBenchmark({ commands: [{ id: 'stage-ui', status: out }, { id: 'core-agent', status: 'passed' }, { id: 'lia-core', status: 'passed' }] })
+    assert.equal(bench, 'ENVIRONMENT-LIMITED')
+  })
+
+  it('B: Stage full with real failed Node tests stays FAILED even when the executable is missing', () => {
+    const out = classifyCommandOutcome({
+      id: 'stage-vitest',
+      exitCode: 1,
+      stdout: [
+        'Test Files  14 failed | 128 passed (142)',
+        'Tests  14 failed | 1531 passed | 4 skipped (1549)',
+        'browserType.launch: Executable doesn\'t exist',
+      ].join('\n'),
+      stderr: '',
+    })
+    assert.equal(out, 'failed')
+    assert.equal(classifyBenchmark({ commands: [{ id: 'stage-vitest', status: out }] }), 'FAIL')
+  })
+
+  it('C: browser command with no tests and only the missing executable -> ENVIRONMENT-LIMITED', () => {
+    const out = classifyCommandOutcome({ id: 'browser', exitCode: 1, stdout: 'Errors  1', stderr: 'browserType.launch: Executable doesn\'t exist' })
+    assert.equal(out, 'environment-limited')
+    assert.equal(classifyBenchmark({ commands: [{ id: 'browser', status: out }] }), 'ENVIRONMENT-LIMITED')
+  })
+
+  it('D: no regression - TS diagnostics, lint errors and real FAIL lines stay FAILED', () => {
+    assert.equal(classifyCommandOutcome({ id: 'typecheck', exitCode: 2, stderr: 'error TS2554: Expected 2 arguments, but got 1.' }), 'failed')
+    assert.equal(classifyCommandOutcome({ id: 'lint', exitCode: 1, stderr: '✖ 4 problems (4 errors, 0 warnings)' }), 'failed')
+    assert.equal(classifyCommandOutcome({ id: 'stage-vitest', exitCode: 1, stdout: 'FAIL  src/renderer/services/lia/execution-reporter.test.ts' }), 'failed')
+    // A missing executable can never outrank a real failure in the same run.
+    assert.equal(classifyCommandOutcome({
+      id: 'stage-ui',
+      exitCode: 1,
+      stdout: `Test Files  1 failed | 148 passed (149)\nbrowserType.launch: Executable doesn't exist`,
+      stderr: '',
+    }), 'failed')
+  })
+})
+
 describe('classification: isEnvironmentFailure pure', () => {
   it('recognizes ENOENT', () => {
     assert.ok(isEnvironmentFailure({ id: 'core-agent', error: new Error('spawn ENOENT') }))

@@ -8,7 +8,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ref } from 'vue'
 
-import { normalizeLineEndings } from '../../../test-helpers'
+import { authoredSourceEntry, normalizeLineEndings } from '../../../test-helpers'
 
 /**
  * Phase 8.0D-10B-4D4C4-B2: the Lia logical-send terminal reporter.
@@ -96,8 +96,10 @@ function productionSources(roots: string[]): string[] {
     for (const entry of readdirSync(join(airiRoot, root), { recursive: true, withFileTypes: true })) {
       if (!entry.isFile() || !/\.(?:ts|vue)$/.test(entry.name) || entry.name.includes('.test.'))
         continue
-      const file = `${entry.parentPath}/${entry.name}`
-      files.push(file.slice(join(airiRoot, '/').length))
+      const authored = authoredSourceEntry(airiRoot, entry)
+      if (!authored)
+        continue
+      files.push(authored.relativePosix)
     }
   }
   return files

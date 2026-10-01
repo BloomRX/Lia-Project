@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { normalizeLineEndings } from '../../../test-helpers'
+import { authoredSourceEntry, normalizeLineEndings } from '../../../test-helpers'
 import { createLiaBrainService } from './lia-brain-service'
 
 /**
@@ -86,9 +86,12 @@ function productionSources(roots: string[]): string[] {
   const files: string[] = []
   for (const root of roots) {
     for (const entry of readdirSync(new URL(root, REPO_ROOT), { recursive: true, withFileTypes: true })) {
-      if (!entry.isFile() || !/\.(?:ts|vue)$/.test(entry.name) || entry.name.includes('.test.'))
+      if (!/\.(?:ts|vue)$/.test(entry.name) || entry.name.includes('.test.'))
         continue
-      files.push(`${entry.parentPath}/${entry.name}`.slice(repoRoot.length))
+      const authored = authoredSourceEntry(repoRoot, entry)
+      if (!authored)
+        continue
+      files.push(authored.relativePosix)
     }
   }
   return files.sort()
@@ -548,8 +551,10 @@ describe('lia brain decision bridge (Phase 8.0D-8)', () => {
     for (const entry of readdirSync(stageSrc, { recursive: true, withFileTypes: true })) {
       if (!entry.isFile() || !/\.(?:ts|vue)$/.test(entry.name) || entry.name.includes('.test.'))
         continue
-      const file = `${entry.parentPath}/${entry.name}`
-      const relative = file.slice(stageSrc.length)
+      const authored = authoredSourceEntry(stageSrc, entry)
+      if (!authored)
+        continue
+      const { file, relativePosix: relative } = authored
       if (
         relative.startsWith('main/services/lia/brain-decision-service')
         || relative === 'main/index.ts'

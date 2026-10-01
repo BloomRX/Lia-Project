@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { createContainer, provide, resolve } from 'injeca'
 import { describe, expect, it, vi } from 'vitest'
 
-import { normalizeLineEndings, repoRelativePosix } from '../../../test-helpers'
+import { authoredSourceEntry, normalizeLineEndings } from '../../../test-helpers'
 import { createLiaBrainCorrelationService, LIA_BRAIN_CORRELATION_MAX_ENTRIES, LIA_BRAIN_CORRELATION_TTL_MS } from './brain-correlation-service'
 
 /**
@@ -49,7 +49,10 @@ function productionSources(roots: string[]): string[] {
     for (const entry of readdirSync(new URL(root, REPO_ROOT), { recursive: true, withFileTypes: true })) {
       if (!entry.isFile() || !/\.(?:ts|vue)$/.test(entry.name) || entry.name.includes('.test.'))
         continue
-      files.push(`${repoRelativePosix(REPO_ROOT_PATH, entry.parentPath)}/${entry.name}`)
+      const authored = authoredSourceEntry(REPO_ROOT_PATH, entry)
+      if (!authored)
+        continue
+      files.push(authored.relativePosix)
     }
   }
   return files

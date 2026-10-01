@@ -18,7 +18,7 @@ import { fileURLToPath } from 'node:url'
 import { createProductionBrainAutomaticPolicy, createProductionBrainCatalog, decideBrainRoute } from '@lia/core'
 import { describe, expect, it } from 'vitest'
 
-import { normalizeLineEndings, repoRelativePosix } from '../../../test-helpers'
+import { authoredSourceEntry, normalizeLineEndings } from '../../../test-helpers'
 import { readLiaBrainExecutionIdentityFacts } from './brain-correlation-reader'
 import { createLiaBrainCorrelationStore } from './brain-correlation-store'
 import { LIA_BRAIN_ENGINE_PROVIDER_MAPPING } from './brain-expected-route'
@@ -462,7 +462,10 @@ function productionSources(roots: string[]): string[] {
     for (const entry of readdirSync(new URL(root, REPO_ROOT), { recursive: true, withFileTypes: true })) {
       if (!entry.isFile() || !/\.(?:ts|vue)$/.test(entry.name) || entry.name.includes('.test.'))
         continue
-      files.push(`${repoRelativePosix(REPO_ROOT_PATH, entry.parentPath)}/${entry.name}`)
+      const authored = authoredSourceEntry(REPO_ROOT_PATH, entry)
+      if (!authored)
+        continue
+      files.push(authored.relativePosix)
     }
   }
   return files

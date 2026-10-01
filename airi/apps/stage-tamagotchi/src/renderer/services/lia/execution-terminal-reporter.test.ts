@@ -7,7 +7,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ref } from 'vue'
 
-import { normalizeLineEndings } from '../../../test-helpers'
+import { authoredSourceEntry, normalizeLineEndings } from '../../../test-helpers'
 
 /**
  * Phase 8.0D-10B-4D4C1: the Lia terminal execution reporter.
@@ -256,9 +256,11 @@ describe('lia terminal execution reporter (Phase 8.0D-10B-4D4C1)', () => {
       for (const entry of readdirSync(join(airiRoot, root), { recursive: true, withFileTypes: true })) {
         if (!entry.isFile() || !/\.(?:ts|vue)$/.test(entry.name) || entry.name.includes('.test.'))
           continue
-        const file = `${entry.parentPath}/${entry.name}`
+        const authored = authoredSourceEntry(airiRoot, entry)
+        if (!authored)
+          continue
+        const { file, relativePosix: relative } = authored
         const source = normalizeLineEndings(readFileSync(file, 'utf-8'))
-        const relative = file.slice(join(airiRoot, '/').length)
         // The registration SIGNAL: CALLING the installer, never defining it.
         if (/(?<!function )registerLiaBrainExecutionTerminalObserver\(\)/.test(source))
           settledRegistrarSites.push(relative)

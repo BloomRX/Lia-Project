@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url'
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { normalizeLineEndings } from '../../../test-helpers'
+import { authoredSourceEntry, normalizeLineEndings } from '../../../test-helpers'
 import { createLiaBrainService } from './lia-brain-service'
 
 /**
@@ -240,8 +240,10 @@ describe('lia brain host service (Phase 8.0D-4)', () => {
     for (const entry of readdirSync(stageSrc, { recursive: true, withFileTypes: true })) {
       if (!entry.isFile() || !/\.(?:ts|vue)$/.test(entry.name))
         continue
-      const file = `${entry.parentPath}/${entry.name}`
-      const relative = file.slice(stageSrc.length)
+      const authored = authoredSourceEntry(stageSrc, entry)
+      if (!authored)
+        continue
+      const { file, relativePosix: relative } = authored
       if (relative === 'main/services/lia/lia-brain-service.ts' || relative === 'main/index.ts' || relative.endsWith('.test.ts'))
         continue
       if (/createLiaBrainService|LiaBrainDecisionRequest|LiaBrainService\b/.test(normalizeLineEndings(readFileSync(file, 'utf-8'))))

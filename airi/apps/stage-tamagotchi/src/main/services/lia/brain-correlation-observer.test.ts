@@ -20,7 +20,7 @@ import { createProductionBrainAutomaticPolicy, createProductionBrainCatalog, dec
 import { createContainer, provide, resolve } from 'injeca'
 import { describe, expect, it, vi } from 'vitest'
 
-import { normalizeLineEndings, repoRelativePosix } from '../../../test-helpers'
+import { authoredSourceEntry, normalizeLineEndings } from '../../../test-helpers'
 import { createLiaBrainCorrelationObserver } from './brain-correlation-observer'
 import { createLiaBrainCorrelationService } from './brain-correlation-service'
 import { createLiaBrainCorrelationStore } from './brain-correlation-store'
@@ -627,9 +627,15 @@ function productionSources(roots: string[]): string[] {
   const files: string[] = []
   for (const root of roots) {
     for (const entry of readdirSync(new URL(root, REPO_ROOT), { recursive: true, withFileTypes: true })) {
-      if (!entry.isFile() || !/\.(?:ts|vue)$/.test(entry.name) || entry.name.includes('.test.'))
+      if (!/\.(?:ts|vue)$/.test(entry.name) || entry.name.includes('.test.'))
         continue
-      files.push(`${repoRelativePosix(REPO_ROOT_PATH, entry.parentPath)}/${entry.name}`)
+      // Generated output (e.g. a Windows `renderer/.cache/...` SDK copy) must be
+      // rejected here, before anything reads it, or a vendored sample file is
+      // counted as a production producer.
+      const authored = authoredSourceEntry(REPO_ROOT_PATH, entry)
+      if (!authored)
+        continue
+      files.push(authored.relativePosix)
     }
   }
   return files

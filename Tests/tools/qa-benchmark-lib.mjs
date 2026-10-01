@@ -406,6 +406,19 @@ export function parseTypecheckMetrics(text) {
 // ---------------------------------------------------------------------------
 // Environment failure normalization — pure, testable
 // ---------------------------------------------------------------------------
+/**
+ * Commands that may be limited by an absent Playwright browser executable.
+ *
+ * Every one of these still has to pass the attributable-failure checks in
+ * classifyCommandOutcome first, so a command with real failed Node tests can
+ * never be excused as environment-limited.
+ */
+export const MISSING_BROWSER_EXECUTABLE_COMMANDS = new Set([
+  'browser',
+  'stage-ui',
+  'stage-vitest',
+])
+
 export function isEnvironmentFailure({ id, exitCode, error, stdout = '', stderr = '', timedOut = false }) {
   const combined = `${stdout}\n${stderr}`.toLowerCase()
   if (error) {
@@ -416,8 +429,16 @@ export function isEnvironmentFailure({ id, exitCode, error, stdout = '', stderr 
   if (timedOut) return true
   // Narrow timeout: only ETIMEDOUT or explicit process timed out, not generic setTimeout
   if (combined.includes('etimedout') || combined.includes('process timed out')) return true
-  // Browser precise: only infrastructure signatures, not generic mention
-  if (id === 'browser') {
+  // Browser precise: only infrastructure signatures, not generic mention.
+  //
+  // D2B9-D: the missing-executable limitation is not exclusive to the `browser`
+  // command. The stage-ui and stage-vitest node commands also collect a browser
+  // suite; when the headless shell is absent that surfaces as an unhandled
+  // "browserType.launch: Executable doesn't exist" next to otherwise fully
+  // passing node tests (149 files / 1041 tests, Errors 1). classifyCommandOutcome
+  // runs every attributable-failure check FIRST, so reaching this point already
+  // proves there are no real Vitest/TS/lint failures to blame.
+  if (MISSING_BROWSER_EXECUTABLE_COMMANDS.has(id)) {
     if (combined.includes("executable doesn't exist")) return true
     if (combined.includes('chromium executable missing')) return true
     if (combined.includes('browser executable not found')) return true

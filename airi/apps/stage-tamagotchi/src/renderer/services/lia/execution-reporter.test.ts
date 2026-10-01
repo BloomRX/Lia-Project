@@ -5,10 +5,10 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { createPinia, setActivePinia } from 'pinia'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { reactive, ref } from 'vue'
 
-import { normalizeLineEndings } from '../../../test-helpers'
+import { authoredSourceEntry, normalizeLineEndings } from '../../../test-helpers'
 
 /**
  * Phase 8.0D-10B-4A: the Lia execution reporter.
@@ -53,6 +53,66 @@ const activeModel = ref('gpt-test')
 vi.hoisted(() => {
   ;(globalThis as any).window ??= {}
   ;(globalThis as any).window.location ??= { origin: 'http://localhost' }
+
+  // D2B9-D: this harness must never touch the network. The real send pulls in
+  // stores whose side channels (channel-server WebSocket, credits fetch) open
+  // real sockets; on a host where those hang in DNS/TCP/TLS the send's wall time
+  // is decided by the OS timeout - which is how the Windows run blew the 15s
+  // budget and left its reports to leak into the next test. Both are replaced by
+  // inert doubles: no socket, no timer, no retry clock.
+  class InertWebSocket {
+    static CONNECTING = 0
+
+    static OPEN = 1
+
+    static CLOSING = 2
+
+    static CLOSED = 3
+
+    CONNECTING = 0
+
+    OPEN = 1
+
+    CLOSING = 2
+
+    CLOSED = 3
+
+    readyState = 3
+
+    url = ''
+
+    binaryType = 'blob'
+
+    bufferedAmount = 0
+
+    protocol = ''
+
+    extensions = ''
+
+    onopen: ((event: unknown) => void) | null = null
+
+    onclose: ((event: unknown) => void) | null = null
+
+    onerror: ((event: unknown) => void) | null = null
+
+    onmessage: ((event: unknown) => void) | null = null
+
+    addEventListener() {}
+
+    removeEventListener() {}
+
+    dispatchEvent() { return false }
+
+    send() {}
+
+    close() {}
+  }
+  ;(globalThis as any).WebSocket = InertWebSocket
+  ;(globalThis as any).window.WebSocket = InertWebSocket
+  ;(globalThis as any).fetch = async () => {
+    throw new Error('network is disabled in the execution-reporter harness')
+  }
+  ;(globalThis as any).window.fetch = (globalThis as any).fetch
 })
 
 const sessionState = vi.hoisted(() => ({
@@ -162,6 +222,16 @@ vi.mock('@proj-airi/stage-ui/stores/ai/chat-llm/toolset-prompts', () => ({
 const { registerLiaBrainExecutionObserver, reportLiaBrainExecutionObservation } = await import('./execution-reporter')
 const { registerChatFallbackResolver, resetChatProviderRuntimeExtensionsForTesting } = await import('@proj-airi/stage-ui/stores/chat/chat-provider-runtime')
 const { electronLiaBrainExecutionObservation } = await import('../../../shared/eventa')
+/**
+ * D2B9-D: the real chat store is imported ONCE, at module scope.
+ *
+ * Loading this module graph measured 4.6s while the send itself measured 37ms.
+ * Importing it inside each test made every store-driven test pay that load
+ * again, which is what pushed the fallback test past its 15s budget on Windows
+ * and left its reports to leak into the next test. Hoisting it makes the send
+ * the only thing being measured - and the assertions stay real ones.
+ */
+const { useChatStore } = await import('@proj-airi/stage-ui/stores/chat')
 
 /** An observation carrying every forbidden payload a hostile runtime could add. */
 function correlatedObservation(overrides: Partial<ChatRequestStartedObservation> = {}): ChatRequestStartedObservation & Record<string, unknown> {
@@ -238,9 +308,11 @@ describe('lia execution reporter (Phase 8.0D-10B-4A)', () => {
       for (const entry of readdirSync(join(airiRoot, root), { recursive: true, withFileTypes: true })) {
         if (!entry.isFile() || !/\.(?:ts|vue)$/.test(entry.name) || entry.name.includes('.test.'))
           continue
-        const file = `${entry.parentPath}/${entry.name}`
+        const authored = authoredSourceEntry(airiRoot, entry)
+        if (!authored)
+          continue
+        const { file, relativePosix: relative } = authored
         const source = normalizeLineEndings(readFileSync(file, 'utf-8'))
-        const relative = file.slice(join(airiRoot, '/').length)
         // The registration SIGNAL: CALLING the installer, never defining it.
         if (/(?<!function )registerLiaBrainExecutionObserver\(\)/.test(source))
           registrarSites.push(relative)
@@ -387,9 +459,25 @@ describe('lia execution reporter (Phase 8.0D-10B-4A)', () => {
 })
 
 describe('lia execution reporter across provider attempts (Phase 8.0D-10B-4A)', () => {
+  /**
+   * D2B9-D: nothing may outlive its test.
+   *
+   * q2 previously saw the TWO reports of the preceding fallback send because
+   * that send was cut short by a timeout and kept running. Every test now awaits
+   * complete settlement; this hook is the second line of defence - it lets any
+   * straggler land here, drops the resolver/observer registration and clears the
+   * spy, so the next test starts from zero reports by construction.
+   */
+  afterEach(async () => {
+    await new Promise(resolve => setTimeout(resolve, 0))
+    resetChatProviderRuntimeExtensionsForTesting()
+    electron.context.emit.mockClear()
+    storeMocks.llmStream.mockReset()
+    storeMocks.getChatProviderInstance.mockReset()
+  })
+
   /** The REAL chat store send: one logical send, a fallback resolver, two attempts. */
   async function sendWithFallbackOnce(): Promise<void> {
-    const { useChatStore } = await import('@proj-airi/stage-ui/stores/chat')
     storeMocks.llmStream.mockImplementation(async () => {
       if (storeMocks.llmStream.mock.calls.length === 1)
         throw new Error('provider a is down')
@@ -428,13 +516,9 @@ describe('lia execution reporter across provider attempts (Phase 8.0D-10B-4A)', 
     // The report never invents extra identity for the attempts.
     for (const report of reports)
       expect(Object.keys(report).sort()).toEqual(['conversationId', 'correlationId', 'modelId', 'providerId', 'roundId'])
-    // This is the only test in this file that drives the REAL store send
-    // through a fallback: on a small (2-vCPU) machine the two attempts measure
-    // ~9s, well past the suite's generic 5s budget. A local budget keeps every
-    // assertion above a real one - a genuinely hung send still fails - while
-    // the generic default can no longer cut the send short and let its later
-    // reports leak into the next test.
-  }, 15000)
+    // No local timeout override: the store module is imported once at module
+    // scope, so this test measures the send itself (~40ms), not a module load.
+  })
 
   it('q2: an uncorrelated send of the same shape reports nothing', async () => {
     const provider = { chat: () => ({ baseURL: 'https://example.com/' }) }
@@ -442,7 +526,6 @@ describe('lia execution reporter across provider attempts (Phase 8.0D-10B-4A)', 
     storeMocks.llmStream.mockImplementation(async () => undefined)
     registerLiaBrainExecutionObserver()
 
-    const { useChatStore } = await import('@proj-airi/stage-ui/stores/chat')
     await useChatStore().send({ sessionId: 'session-1', text: 'voice or spotlight send' })
 
     expect(electron.context.emit).not.toHaveBeenCalled()

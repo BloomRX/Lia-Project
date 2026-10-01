@@ -5,10 +5,10 @@ import { describe, expect, it } from 'vitest'
 import { retrySourceIndexFrom, retrySourceMessageIdFrom } from './retry-source'
 
 function msg(over: Partial<ChatHistoryItem> & { role: ChatHistoryItem['role'], id?: string }): ChatHistoryItem {
+  // Defaults first, overrides second: every field is specified exactly once
+  // (`role`/`id` come only from `over`), so no property is written twice.
   return {
-    role: over.role,
-    content: over.content ?? '',
-    id: over.id,
+    content: '',
     ...over,
   } as ChatHistoryItem
 }
