@@ -98,16 +98,50 @@ describe('path privacy masking', () => {
     assert.ok(!masked.includes('C:\\Users\\Alice\\Documents'))
     assert.ok(!masked.includes(fakeRepo))
   })
-  it('masks HOME and TEMP', () => {
-    const home = os.homedir()
-    const tmp = os.tmpdir()
-    const text = `home ${home}/file and tmp ${tmp}/file`
-    const masked = maskPrivatePaths(text, { repoRoot: REPO_ROOT, homedir: home, tmpdir: tmp })
-    assert.ok(masked.includes('<HOME>'))
-    assert.ok(masked.includes('<TEMP>'))
-    assert.ok(!masked.includes(home))
-    // tmp may be substring of home? still check
-    if (tmp !== home) assert.ok(!masked.includes(tmp) || masked.includes('<TEMP>'))
+  // Deterministic and OS-independent. These roots deliberately do NOT overlap,
+  // so each token is attributable to its own root. Deriving this expectation
+  // from os.homedir()/os.tmpdir() made it OS-dependent: Windows nests TEMP
+  // below HOME while Linux does not. The privacy contract is "no private bytes
+  // remain", not "a TEMP path always renders as the literal <TEMP>".
+  it('masks HOME and TEMP for non-overlapping roots', () => {
+    const home = 'C:\\Users\\Alice'
+    const tmp = 'D:\\Temp'
+    const repo = 'J:\\Lia-Project'
+    const ctx = { repoRoot: repo, homedir: home, tmpdir: tmp }
+    const text = `home ${home}\\file and tmp ${tmp}\\file`
+    const masked = maskPrivatePaths(text, ctx)
+
+    assert.ok(masked.includes('<HOME>'), '<HOME> token must be present')
+    assert.ok(masked.includes('<TEMP>'), '<TEMP> token must be present')
+    assert.ok(!masked.includes(home), 'raw HOME must be absent')
+    assert.ok(!masked.includes(tmp), 'raw TEMP must be absent')
+    assert.ok(!masked.includes('Alice'), 'no username may remain')
+    assert.equal(containsPrivatePath(masked, ctx), false)
+  })
+  // The real Windows shape: TEMP is nested below HOME. Under the frozen
+  // repo -> home -> temp precedence HOME is replaced first, so a temp path
+  // legitimately renders as <HOME>\AppData\Local\Temp\... instead of <TEMP>.
+  // That is acceptable - the contract is that no private bytes survive - and
+  // this test pins the behavior so it stays documented rather than surprising.
+  it('nested TEMP under HOME (Windows shape) leaves no private bytes', () => {
+    const home = 'C:\\Users\\Alice'
+    const tmp = 'C:\\Users\\Alice\\AppData\\Local\\Temp'
+    const repo = 'J:\\Lia-Project'
+    const ctx = { repoRoot: repo, homedir: home, tmpdir: tmp }
+    const input = `${tmp}\\something\\file.log`
+
+    assert.equal(containsPrivatePath(input, ctx), true, 'private path must be detected before masking')
+
+    const masked = maskPrivatePaths(input, ctx)
+    assert.ok(!masked.includes('Alice'), 'no username may remain')
+    assert.ok(!masked.includes(home), 'raw HOME must be absent')
+    assert.ok(!masked.includes(tmp), 'raw TEMP must be absent')
+    assert.equal(containsPrivatePath(masked, ctx), false)
+
+    // Documents current precedence: <HOME> owns the nested prefix, and literal
+    // <TEMP> is deliberately NOT required for the nested case.
+    assert.ok(masked.includes('<HOME>'), 'HOME token owns the nested prefix')
+    assert.ok(!masked.includes('<TEMP>'), 'nested TEMP renders under <HOME> with frozen precedence')
   })
   it('handles both slash representations', () => {
     const repo = '/home/user/Lia-Project'
