@@ -567,3 +567,141 @@ describe('integration: U INCOMPLETE never published', () => {
     assert.notEqual(afterLs.status, 0)
   })
 })
+
+// ---------------------------------------------------------------------------
+// V staged-manifest integrity under Git EOL normalization (D2B9-I)
+//
+// Regression for a real publication failure. On Windows the security bridge
+// returns redacted text through Python's TEXT-mode stdout, which translates
+// '\n' to '\r\n'. The publish logs therefore became CRLF, the manifest was
+// hashed over those CRLF bytes, and `git add` then normalized them to LF - so
+// the committed blob no longer matched its own manifest. Every pre-existing
+// check re-read the worktree and could not see it.
+//
+// Reproduced on Linux: a bridge stub emits CRLF exactly as Windows Python does,
+// and the source repo runs with core.autocrlf=true.
+// ---------------------------------------------------------------------------
+
+/** A command runner that writes Windows-shaped CRLF raw logs. */
+function mockRunnerCrlf() {
+  return ({ id, label, cwd, argv, logPath, repoRoot }) => {
+    const stdout = 'Test Files 1 passed'
+    const stderr = ''
+    try {
+      mkdirSync(nodePath.dirname(logPath), { recursive: true })
+      writeFileSync(logPath, `STDOUT:\r\n${stdout}\r\nSTDERR:\r\n${stderr}\r\n`, 'utf-8')
+    } catch {}
+    const rel = nodePath.relative(repoRoot, logPath).replace(/\\/g, '/')
+    return { id, label, cwd: nodePath.relative(repoRoot, cwd).replace(/\\/g, '/'), argv, startedAt: new Date().toISOString(), endedAt: new Date().toISOString(), durationMs: 10, exitCode: 0, status: 'passed', stdout, stderr, logPath: rel, truncated: false }
+  }
+}
+
+/**
+ * Replace the test repo's security bridge with a stub that reproduces the
+ * Windows behaviour: the redacted text comes back over stdout with CRLF line
+ * endings. Written via sys.stdout.buffer so the CRLF is byte-exact on Linux
+ * too, and scan keeps the real JSON contract so publication stays honest.
+ */
+function installWindowsLikeBridge({ src, branch }) {
+  const bridge = nodePath.join(src, 'Tests', 'tools', 'qa-security-bridge.py')
+  const py = [
+    'import json, pathlib, sys',
+    'a = sys.argv[1:]',
+    'if a and a[0] == "redact":',
+    '    t = pathlib.Path(a[1]).read_text(encoding="utf-8", errors="replace")',
+    '    crlf = t.replace("\\r\\n", "\\n").replace("\\n", "\\r\\n")',
+    '    sys.stdout.buffer.write(crlf.encode("utf-8"))',
+    '    sys.stdout.buffer.flush()',
+    'elif a and a[0] == "scan":',
+    '    paths = [x for x in a[1:] if not x.startswith("--")]',
+    '    res = {"hasSecret": False, "hasError": False, "safeToPublish": True,',
+    '           "results": [{"path": x, "hasSecret": False} for x in paths]}',
+    '    json.dump(res, sys.stdout, indent=2)',
+    '    sys.stdout.write("\\n")',
+    '    sys.exit(0)',
+    'else:',
+    '    sys.exit(2)',
+    '',
+  ].join('\n')
+  writeFileSync(bridge, py, 'utf-8')
+  // The bridge is a TRACKED file, so committing it keeps the source worktree
+  // clean - preflight refuses to run on a dirty tree.
+  gitOk(src, ['add', 'Tests/tools/qa-security-bridge.py'])
+  gitOk(src, ['commit', '-m', 'test: windows-like security bridge stub'])
+  gitOk(src, ['push', 'origin', branch])
+}
+
+describe('integration: V staged-manifest integrity under Git EOL normalization', () => {
+  it('first publication: committed manifest verifies against committed bytes, publish logs are canonical LF', async () => {
+    const bare = initBareRemote(); tmpToClean.push(bare)
+    const { src, branch } = initSourceRepo(bare); tmpToClean.push(src)
+    installWindowsLikeBridge({ src, branch })
+    // The Windows condition: Git normalizes CRLF -> LF at the worktree -> index
+    // boundary for this repository, and therefore for its worktrees.
+    gitOk(src, ['config', 'core.autocrlf', 'true'])
+
+    const res = await runBenchmark({ repoRoot: src, args: [], now: new Date('2026-09-29T19:00:00Z'), commandRunner: mockRunnerCrlf(), hardwareCollector: mockHardware })
+    assert.ok(res)
+    assert.equal(res.status, 'PASS')
+    assert.equal(res.publication.committed, true, 'publication must have committed')
+    assert.equal(res.publication.pushed, true, 'publication must have pushed')
+
+    // The INPUT really was CRLF before the harness sanitized it.
+    const rawDir = nodePath.join(src, 'Tests', 'runs', res.runId, 'logs', 'raw')
+    const rawLogs = readdirSync(rawDir).filter(f => f.endsWith('.log'))
+    assert.ok(rawLogs.length > 0, 'raw logs must exist')
+    const rawWithCrlf = rawLogs.filter(f => readFileSync(nodePath.join(rawDir, f)).includes(Buffer.from('\r\n')))
+    assert.ok(rawWithCrlf.length > 0, 'at least one raw log must contain CRLF before sanitization')
+
+    // Clone the QA branch WITHOUT re-expanding LF into CRLF.
+    const cloneQa = mkdtempSync(nodePath.join(os.tmpdir(), 'lia-qa-v1-')); tmpToClean.push(cloneQa)
+    gitOk(cloneQa, ['-c', 'core.autocrlf=false', 'clone', bare, '.'])
+    gitOk(cloneQa, ['checkout', 'qa/windows-benchmarks'])
+
+    const benchDir = nodePath.join(cloneQa, 'benchmarks', res.runId)
+    const manifest = readFileSync(nodePath.join(benchDir, 'SHA256SUMS.txt'), 'utf-8')
+
+    // The contract the old R test lacked: manifest == COMMITTED bytes.
+    const v = verifyShaManifest(manifest, benchDir)
+    assert.equal(v.ok, true, `committed manifest must verify: ${v.reason ?? ''}`)
+
+    // The published representation is canonical LF; raw evidence is untouched.
+    let checkedPublished = 0
+    for (const f of rawWithCrlf) {
+      const rel = nodePath.join('benchmarks', res.runId, 'logs', f)
+      if (!existsSync(nodePath.join(cloneQa, rel))) continue
+      assert.ok(!readFileSync(nodePath.join(cloneQa, rel)).includes(Buffer.from('\r\n')), `published ${f} must be canonical LF`)
+      checkedPublished += 1
+    }
+    assert.ok(checkedPublished > 0, 'at least one published log must have been inspected')
+    assert.ok(readFileSync(nodePath.join(rawDir, rawWithCrlf[0])).includes(Buffer.from('\r\n')), 'raw evidence keeps its captured CRLF')
+  })
+
+  it('existing QA branch append: second run committed manifest verifies against committed bytes', async () => {
+    const bare = initBareRemote(); tmpToClean.push(bare)
+    const { src, branch } = initSourceRepo(bare); tmpToClean.push(src)
+    installWindowsLikeBridge({ src, branch })
+    gitOk(src, ['config', 'core.autocrlf', 'true'])
+
+    const first = await runBenchmark({ repoRoot: src, args: [], now: new Date('2026-09-29T19:00:00Z'), commandRunner: mockRunnerCrlf(), hardwareCollector: mockHardware })
+    assert.equal(first.publication.committed, true)
+    // Second publication exercises the APPEND path, which must run the same gate.
+    const second = await runBenchmark({ repoRoot: src, args: [], now: new Date('2026-09-29T20:00:00Z'), commandRunner: mockRunnerCrlf(), hardwareCollector: mockHardware })
+    assert.equal(second.publication.committed, true, 'append path must also publish')
+    assert.notEqual(second.runId, first.runId)
+
+    const cloneQa = mkdtempSync(nodePath.join(os.tmpdir(), 'lia-qa-v2-')); tmpToClean.push(cloneQa)
+    gitOk(cloneQa, ['-c', 'core.autocrlf=false', 'clone', bare, '.'])
+    gitOk(cloneQa, ['checkout', 'qa/windows-benchmarks'])
+
+    const idx = JSON.parse(readFileSync(nodePath.join(cloneQa, 'index.json'), 'utf-8'))
+    assert.equal(idx.length, 2)
+
+    for (const runId of [first.runId, second.runId]) {
+      const benchDir = nodePath.join(cloneQa, 'benchmarks', runId)
+      const manifest = readFileSync(nodePath.join(benchDir, 'SHA256SUMS.txt'), 'utf-8')
+      const v = verifyShaManifest(manifest, benchDir)
+      assert.equal(v.ok, true, `committed manifest for ${runId} must verify: ${v.reason ?? ''}`)
+    }
+  })
+})

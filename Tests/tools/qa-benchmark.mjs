@@ -9,6 +9,7 @@
  */
 
 import { spawnSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import nodePath from 'node:path'
 import os from 'node:os'
@@ -140,6 +141,72 @@ export function ensurePublishStaging({ runId, repoRoot = REPO_ROOT }) {
   mkdirSync(nodePath.join(staging, 'benchmarks', runId, 'metrics'), { recursive: true })
   mkdirSync(nodePath.join(staging, 'benchmarks', runId, 'logs'), { recursive: true })
   return nodePath.join(staging, 'benchmarks', runId)
+}
+
+// ---------------------------------------------------------------------------
+// Staged-blob manifest integrity (D2B9-I)
+// ---------------------------------------------------------------------------
+
+/**
+ * Read one blob from the Git INDEX of `worktreeDir`, as exact bytes.
+ *
+ * argv-native on purpose: the staged path is passed as its own argument and is
+ * never interpolated into a command string, and `shell` is explicitly false.
+ * `encoding: 'buffer'` returns a Buffer, so what is hashed is precisely the
+ * blob Git holds - not a re-decoded string.
+ */
+function stagedBlob(stagedPath, { worktreeDir, spawn, maxBuffer }) {
+  return spawn('git', ['show', `:${stagedPath}`], {
+    cwd: worktreeDir,
+    env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+    encoding: 'buffer',
+    shell: false,
+    maxBuffer,
+  })
+}
+
+/**
+ * Verify SHA256SUMS.txt against the bytes Git actually STAGED.
+ *
+ * Why this exists: the manifest is generated over worktree bytes, but a Git
+ * clean filter / core.autocrlf normalizes CRLF to LF at the worktree -> index
+ * boundary. A manifest built over CRLF staging bytes then describes content
+ * that was never committed, and the mismatch is invisible to any check that
+ * re-reads the worktree. So both the manifest and every payload it lists are
+ * read back out of the index.
+ *
+ * Fails closed: any entry that cannot be read, is absent, or hashes
+ * differently produces a mismatch, and `ok` is false.
+ */
+export function verifyStagedShaManifest({ runId, worktreeDir, spawn = spawnSync, maxBuffer = PUBLISH_FILE_HARD_MAX + 1024 * 1024 } = {}) {
+  const manifestStagedPath = `benchmarks/${runId}/SHA256SUMS.txt`
+  const manifestRes = stagedBlob(manifestStagedPath, { worktreeDir, spawn, maxBuffer })
+  if (manifestRes.error) return { ok: false, checked: 0, mismatches: [], reason: `staged manifest unreadable: ${manifestRes.error.message}` }
+  if (manifestRes.status !== 0) return { ok: false, checked: 0, mismatches: [], reason: 'staged manifest absent' }
+
+  const lines = Buffer.from(manifestRes.stdout).toString('utf-8').split(/\r?\n/).map(l => l.trim()).filter(Boolean)
+  if (lines.length === 0) return { ok: false, checked: 0, mismatches: [], reason: 'staged manifest is empty' }
+
+  const mismatches = []
+  let checked = 0
+  for (const line of lines) {
+    const m = line.match(/^([0-9a-f]{64})\s+(.+)$/)
+    if (!m) return { ok: false, checked, mismatches, reason: `malformed manifest line: ${line}` }
+    const [, expected, rel] = m
+    const stagedPath = `benchmarks/${runId}/${rel}`
+    const r = stagedBlob(stagedPath, { worktreeDir, spawn, maxBuffer })
+    if (r.error) { mismatches.push({ rel, expected, actual: null, reason: `cannot read staged blob: ${r.error.message}` }); continue }
+    if (r.status !== 0) { mismatches.push({ rel, expected, actual: null, reason: 'staged blob absent' }); continue }
+    const actual = createHash('sha256').update(Buffer.from(r.stdout)).digest('hex')
+    checked += 1
+    if (actual !== expected) mismatches.push({ rel, expected, actual, reason: 'staged blob hash differs from manifest' })
+  }
+  return {
+    ok: mismatches.length === 0,
+    checked,
+    mismatches,
+    reason: mismatches.length === 0 ? null : 'staged-manifest-verification-failed',
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -622,6 +689,16 @@ export async function runBenchmark({ repoRoot = REPO_ROOT, args = process.argv.s
     const red = redactWithBridge(text, repoRoot)
     if (red.applied) { text=red.text; redactionApplied=true }
     else if (red.unavailable) pythonUnavailableForPublish=true
+    // Publication copies are canonical LF, and this MUST sit after redaction:
+    // the bridge hands the text back over Python's text-mode stdout, which on
+    // Windows translates every '\n' to '\r\n'. So redaction - not the captured
+    // raw log - is what makes publish text CRLF. The manifest is hashed over
+    // these bytes, but Git normalizes CRLF -> LF at the worktree -> index
+    // boundary, so a CRLF publish log hashes differently once committed and
+    // silently invalidates SHA256SUMS.txt. Only CRLF PAIRS are folded: a bare
+    // CR can be a meaningful terminal control byte and is left alone. The
+    // captured raw evidence under Tests/runs/<run>/logs/raw/ is untouched.
+    text = text.replace(/\r\n/g, '\n')
     // Mask private paths before bounding
     text = maskPrivatePaths(text, { repoRoot, homedir: os.homedir(), tmpdir: os.tmpdir() })
     const bounded = boundText(text, PUBLISH_PER_LOG_MAX)
@@ -856,6 +933,12 @@ export async function runBenchmark({ repoRoot = REPO_ROOT, args = process.argv.s
       const cached=gitCapture(['diff','--cached','--name-only'], tmpWorktree)
       const cachedFiles=cached ? cached.split('\n').filter(Boolean) : []
       if (!cachedFiles.every(f=> f==='README.md' || f==='index.json' || f.startsWith(`benchmarks/${runId}/`))) throw new Error(`cached allowlist violation: ${cachedFiles}`)
+      // Integrity gate: verify the manifest against the bytes Git actually
+      // STAGED, not the worktree bytes that were hashed. Git normalizes
+      // CRLF -> LF at the worktree -> index boundary, which is exactly where a
+      // manifest can be silently invalidated after it was generated.
+      const stagedVerify = verifyStagedShaManifest({ runId, worktreeDir: tmpWorktree })
+      if (!stagedVerify.ok) throw new Error(`staged-manifest-verification-failed (${stagedVerify.reason}) checked=${stagedVerify.checked} ${stagedVerify.mismatches.map(mm => `${mm.rel}: ${mm.reason}`).join('; ')}`)
       const toScan=cachedFiles.map(f=> nodePath.join(tmpWorktree,f))
       const scanRes=scanWithBridge(toScan, repoRoot)
       if (scanRes.unavailable || scanRes.hasError || scanRes.hasSecret || !scanRes.safeToPublish) throw new Error(`secret or scan error in staged files, aborting commit: ${scanRes.error || 'hasSecret'}`)
@@ -908,6 +991,12 @@ export async function runBenchmark({ repoRoot = REPO_ROOT, args = process.argv.s
       const cached2=gitCapture(['diff','--cached','--name-only'], tmpWorktree)
       const cachedFiles2=cached2 ? cached2.split('\n').filter(Boolean) : []
       if (!cachedFiles2.every(f=> f==='index.json' || f.startsWith(`benchmarks/${runId}/`))) throw new Error(`cached violation existing: ${cachedFiles2}`)
+      // Integrity gate: verify the manifest against the bytes Git actually
+      // STAGED, not the worktree bytes that were hashed. Git normalizes
+      // CRLF -> LF at the worktree -> index boundary, which is exactly where a
+      // manifest can be silently invalidated after it was generated.
+      const stagedVerify2 = verifyStagedShaManifest({ runId, worktreeDir: tmpWorktree })
+      if (!stagedVerify2.ok) throw new Error(`staged-manifest-verification-failed (${stagedVerify2.reason}) checked=${stagedVerify2.checked} ${stagedVerify2.mismatches.map(mm => `${mm.rel}: ${mm.reason}`).join('; ')}`)
       const toScan2=cachedFiles2.map(f=> nodePath.join(tmpWorktree,f))
       const scan2=scanWithBridge(toScan2, repoRoot)
       if (scan2.unavailable || scan2.hasError || scan2.hasSecret || !scan2.safeToPublish) throw new Error(`secret or scan error in staged existing: ${scan2.error || 'hasSecret'}`)
