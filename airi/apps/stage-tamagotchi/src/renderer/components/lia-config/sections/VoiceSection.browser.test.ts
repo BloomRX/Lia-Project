@@ -108,6 +108,22 @@ const CONFIGURED = {
   },
 }
 
+/**
+ * A configured target with NO reserve.
+ *
+ * The "choose a voice" case cannot reuse `CONFIGURED`: its reserve IS `bf_emma`,
+ * so picking `bf_emma` as the preferred voice would make the preferred and
+ * reserve targets identical - and `commit` deliberately refuses that with
+ * `fallbackIdentical`, saving nothing. That guard is correct product behavior,
+ * so the fixture steps out of its way instead of the guard being weakened.
+ */
+const PREFERRED_ONLY = {
+  tts: {
+    preferred: { providerId: 'kokoro-local', voiceId: 'af_heart' },
+    fallback: [],
+  },
+}
+
 /** Mounts the section on a fresh pinia. Deliberately does NOT load the config. */
 async function mountSection(persisted: unknown = { tts: {} }) {
   const pinia = createPinia()
@@ -120,6 +136,21 @@ async function mountSection(persisted: unknown = { tts: {} }) {
 
   const screen = await render(VoiceSection, { global: { plugins: [pinia] } })
   return { pinia, screen, store: useLiaVoiceStore(pinia), speech: useSpeechStore(pinia) }
+}
+
+/**
+ * Opens Advanced Settings through the rendered `<summary>`, exactly as a user
+ * does.
+ *
+ * The provider, model and reserve controls live inside a `<details>` that is
+ * CLOSED by default, so they are legitimately invisible until this runs. A real
+ * click on the disclosure is the only honest way to reach them - the closure
+ * stays a product decision, and nothing here pries the element open behind the
+ * component's back.
+ */
+async function openAdvanced(screen: Awaited<ReturnType<typeof mountSection>>['screen']) {
+  await screen.getByText(`${TT}.advanced.title`).click()
+  await expect.element(screen.getByTestId('lia-config-voice-provider')).toBeVisible()
 }
 
 function lastSent(): LiaVoiceConfig | undefined {
@@ -168,6 +199,8 @@ describe('voice section mounting (4E-2 voice UI)', () => {
 
   it('persists a provider chosen from the dropdown', async () => {
     const { screen } = await mountSection()
+    // The provider select sits inside the closed Advanced disclosure.
+    await openAdvanced(screen)
 
     await screen.getByTestId('lia-config-voice-provider').selectOptions('kokoro-local')
 
@@ -176,17 +209,22 @@ describe('voice section mounting (4E-2 voice UI)', () => {
   })
 
   it('persists the whole target when a voice is chosen', async () => {
-    const { screen } = await mountSection(CONFIGURED)
+    const { screen } = await mountSection(PREFERRED_ONLY)
     await vi.waitFor(() => expect(screen.getByTestId('lia-config-voice-voice').element()).toBeTruthy())
 
     await screen.getByTestId('lia-config-voice-voice').selectOptions('bf_emma')
 
     await vi.waitFor(() =>
       expect(lastSent()?.tts?.preferred).toEqual({ providerId: 'kokoro-local', voiceId: 'bf_emma' }))
+    // The WHOLE target persists, reserve included: an empty reserve stays empty
+    // rather than being dropped, dropped-in-on, or silently re-derived.
+    expect(lastSent()?.tts?.fallback).toEqual([])
   })
 
   it('turns "Nenhuma" into an empty fallback array', async () => {
     const { screen } = await mountSection(CONFIGURED)
+    // The reserve controls sit inside the closed Advanced disclosure too.
+    await openAdvanced(screen)
     await vi.waitFor(() => expect(screen.getByTestId('lia-config-voice-reserve-voice').element()).toBeTruthy())
 
     await screen.getByTestId('lia-config-voice-reserve-provider').selectOptions('')
@@ -213,6 +251,11 @@ describe('voice section mounting (4E-2 voice UI)', () => {
   it('shows the persisted values again after a restart', async () => {
     const first = await mountSection(CONFIGURED)
     await vi.waitFor(() => expect(first.store.isLoaded).toBe(true))
+
+    // A restart means ONE section alive at a time. Without this the strict
+    // locators below would resolve to two mounted sections, and the test would
+    // be asserting about a duplicate instead of about persistence.
+    await first.screen.unmount()
 
     const second = await mountSection(CONFIGURED)
     await vi.waitFor(() => expect(second.store.isLoaded).toBe(true))
