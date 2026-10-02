@@ -156,3 +156,100 @@ describe('browser precise classifier', () => {
     assert.equal(out, 'environment-limited')
   })
 })
+
+// ---------------------------------------------------------------------------
+// JSON-escaped private paths (D2B9-H)
+//
+// The real failure class: a Windows temp path nested below HOME reached a
+// publication staging through a JSON-serialized log, where every backslash is
+// doubled. The unescaped form never matches those bytes, so the old masker left
+// them in place AND the residual gate reported the evidence clean.
+//
+// Identities here are fake (Alice) - never real user data.
+// ---------------------------------------------------------------------------
+describe('JSON-escaped private paths', () => {
+  const HOME = 'C:\\Users\\Alice'
+  const TMP = 'C:\\Users\\Alice\\AppData\\Local\\Temp'
+  const REPO = 'J:\\Lia-Project'
+  const ctx = { repoRoot: REPO, homedir: HOME, tmpdir: TMP }
+
+  /** Real JSON string escaping, not a hand-assumed Windows shape. */
+  const jsonEscaped = value => JSON.stringify(value).slice(1, -1)
+
+  it('TEMP under HOME: detects the JSON-escaped bytes before masking (§9)', () => {
+    const structured = {
+      fields: {
+        extensionsRoot: `${TMP}\\airi-plugins-AbCd12\\extensions\\v1`,
+      },
+    }
+    const jsonLog = JSON.stringify(structured)
+
+    // The exact representation that escaped into the real staging.
+    assert.ok(jsonLog.includes(jsonEscaped(TMP)), 'json log must contain the escaped temp path')
+    assert.ok(!jsonLog.includes(TMP), 'the unescaped form must NOT be what is present')
+
+    // The essential assertion: the residual gate catches those exact bytes.
+    assert.equal(containsPrivatePath(jsonLog, ctx), true)
+  })
+
+  it('TEMP under HOME: masking removes it and keeps the JSON parseable (§10)', () => {
+    const structured = {
+      fields: {
+        extensionsRoot: `${TMP}\\airi-plugins-AbCd12\\extensions\\v1`,
+      },
+    }
+    const jsonLog = JSON.stringify(structured)
+    const masked = maskPrivatePaths(jsonLog, ctx)
+
+    assert.ok(!masked.includes('Alice'), 'no username may remain')
+    assert.ok(!masked.includes(jsonEscaped(HOME)), 'no JSON-escaped HOME may remain')
+    assert.ok(!masked.includes(HOME), 'no ordinary HOME may remain')
+    assert.equal(containsPrivatePath(masked, ctx), false)
+
+    // Masking must not corrupt the log syntax.
+    const reparsed = JSON.parse(masked)
+    assert.ok(reparsed.fields.extensionsRoot.includes('<HOME>'))
+  })
+
+  it('REPO: detects and masks the JSON-escaped repo path (§11)', () => {
+    const jsonLog = JSON.stringify({ file: `${REPO}\\airi\\foo.ts` })
+
+    assert.ok(jsonLog.includes(jsonEscaped(REPO)), 'escaped repo path must be present')
+    assert.equal(containsPrivatePath(jsonLog, ctx), true)
+
+    const masked = maskPrivatePaths(jsonLog, ctx)
+    assert.ok(masked.includes('<REPO>'), '<REPO> token must be present')
+    assert.ok(!masked.includes(jsonEscaped(REPO)), 'escaped repo bytes must be gone')
+    assert.ok(!masked.includes('Lia-Project'), 'no private repo bytes may remain')
+    assert.equal(containsPrivatePath(masked, ctx), false)
+    assert.ok(JSON.parse(masked).file.includes('<REPO>'))
+  })
+
+  it('HOME and TEMP are each covered on their own, not only via repoRoot (§12)', () => {
+    for (const [label, value] of [['HOME', HOME], ['TEMP', TMP]]) {
+      const jsonLog = JSON.stringify({ p: value })
+      assert.ok(jsonLog.includes(jsonEscaped(value)), `${label}: escaped form must be present`)
+      assert.equal(containsPrivatePath(jsonLog, ctx), true, `${label}: must be detected`)
+
+      const masked = maskPrivatePaths(jsonLog, ctx)
+      assert.ok(!masked.includes(jsonEscaped(value)), `${label}: escaped bytes must be gone`)
+      assert.ok(!masked.includes('Alice'), `${label}: no username may remain`)
+      assert.equal(containsPrivatePath(masked, ctx), false, `${label}: must be clean`)
+    }
+  })
+
+  it('double-encoded evidence is still detected and masked (§13)', () => {
+    const twice = JSON.stringify(JSON.stringify({ path: `${TMP}\\airi-plugins-AbCd12` }))
+
+    assert.equal(containsPrivatePath(twice, ctx), true)
+    const masked = maskPrivatePaths(twice, ctx)
+    assert.ok(!masked.includes('Alice'), 'no username may remain')
+    assert.equal(containsPrivatePath(masked, ctx), false)
+  })
+
+  it('masked ordinary text stays clean - no false positive from the new variants', () => {
+    const benign = JSON.stringify({ note: 'all good', count: 3, token: '<HOME>' })
+    assert.equal(containsPrivatePath(benign, ctx), false)
+    assert.equal(maskPrivatePaths(benign, ctx), benign)
+  })
+})

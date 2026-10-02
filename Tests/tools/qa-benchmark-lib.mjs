@@ -563,14 +563,49 @@ export function publicCommandResult(cmd) {
   return publicFields
 }
 
+/**
+ * Every textual representation of ONE private path that can legitimately show
+ * up in QA evidence, so that masking and residual detection always agree.
+ *
+ * Base forms: the value as given, its forward-slash form, and its backslash
+ * form. On top of each base we add the JSON-string-escaped form, because a
+ * path that has been through JSON.stringify has every backslash doubled -
+ * `C:\Users\Alice` becomes `C:\\Users\Alice` - and the unescaped form never
+ * matches those bytes. That gap is what let a private Windows temp path reach
+ * a publication staging while the residual gate reported the evidence clean.
+ *
+ * One further BOUNDED escape level covers a JSON string embedded inside another
+ * JSON string (double-encoded evidence). The depth is fixed at two on purpose:
+ * this never recurses, so pathological input cannot make it loop.
+ *
+ * Escaping is delegated to JSON.stringify rather than hand-rolled, so the set
+ * stays correct for whatever characters a path actually contains instead of
+ * assuming one specific Windows shape.
+ *
+ * Returned longest-first so a shorter variant can never mask a prefix of a
+ * longer, more specific one.
+ */
+export function privatePathVariants(value) {
+  const raw = String(value ?? '')
+  if (!raw) return []
+  const bases = new Set([raw, raw.replace(/\\/g, '/'), raw.replace(/\//g, '\\')])
+  const variants = new Set()
+  for (const base of bases) {
+    if (!base) continue
+    variants.add(base)
+    const escapedOnce = JSON.stringify(base).slice(1, -1)
+    variants.add(escapedOnce)
+    variants.add(JSON.stringify(escapedOnce).slice(1, -1))
+  }
+  return [...variants].filter(Boolean).sort((a, b) => b.length - a.length)
+}
+
 export function maskPrivatePaths(text, { repoRoot, homedir, tmpdir } = {}) {
   let out = String(text)
   const repo = repoRoot || REPO_ROOT
   const home = homedir || os.homedir()
   const tmp = tmpdir || os.tmpdir()
-  // Order: repoRoot first, home second, temp third
-  // Handle both / and \ representations
-  const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  // Order: repoRoot first, home second, temp third.
   const replacements = [
     { val: repo, token: '<REPO>' },
     { val: home, token: '<HOME>' },
@@ -578,22 +613,12 @@ export function maskPrivatePaths(text, { repoRoot, homedir, tmpdir } = {}) {
   ]
   for (const { val, token } of replacements) {
     if (!val) continue
-    const re1 = new RegExp(esc(val), 'g')
-    out = out.replace(re1, token)
-    // Also handle opposite slash direction
-    const alt = val.replace(/\\/g, '/').replace(/\//g, '\\')
-    // Try both slash variants
-    const vSlash = val.replace(/\\/g, '/')
-    const vBack = val.replace(/\//g, '\\')
-    if (vSlash !== val) {
-      const re2 = new RegExp(esc(vSlash), 'g')
-      out = out.replace(re2, token)
+    // privatePathVariants is already longest-first, so an escaped form is
+    // replaced before any shorter form that could shadow it. Literal
+    // split/join rather than a RegExp: these variants are data, not patterns.
+    for (const variant of privatePathVariants(val)) {
+      out = out.split(variant).join(token)
     }
-    if (vBack !== val && vBack !== vSlash) {
-      const re3 = new RegExp(esc(vBack), 'g')
-      out = out.replace(re3, token)
-    }
-    // Windows drive letter case-insensitive? keep simple
   }
   return out
 }
@@ -603,14 +628,12 @@ export function containsPrivatePath(text, { repoRoot, homedir, tmpdir } = {}) {
   const repo = repoRoot || REPO_ROOT
   const home = homedir || os.homedir()
   const tmp = tmpdir || os.tmpdir()
-  const checks = [repo, home, tmp]
-  for (const v of checks) {
+  for (const v of [repo, home, tmp]) {
     if (!v) continue
-    if (t.includes(v)) return true
-    const vSlash = v.replace(/\\/g, '/')
-    if (vSlash !== v && t.includes(vSlash)) return true
-    const vBack = v.replace(/\//g, '\\')
-    if (vBack !== v && t.includes(vBack)) return true
+    // The SAME variant helper maskPrivatePaths uses. This is the whole point:
+    // the residual gate must understand exactly the representations the masker
+    // is able to remove, or it will keep blessing evidence it cannot clean.
+    if (privatePathVariants(v).some(variant => t.includes(variant))) return true
   }
   return false
 }
