@@ -1,0 +1,830 @@
+STDOUT:
+
+   • Packages in scope: @lia/core, @proj-airi/audio, @proj-airi/better-ws, @proj-airi/cap-vite, @proj-airi/ccc, @proj-airi/core-agent, @proj-airi/core-character, @proj-airi/electron-eventa, @proj-airi/electron-screen-capture, @proj-airi/electron-vueuse, @proj-airi/font-chillroundm, @proj-airi/font-cjkfonts-allseto, @proj-airi/font-departure-mono, @proj-airi/font-xiaolai, @proj-airi/i18n, @proj-airi/input-gamepad, @proj-airi/input-gamepad-vueuse, @proj-airi/input-playstation-dualsense-5, @proj-airi/memory-pgvector, @proj-airi/model-driver-lipsync, @proj-airi/model-driver-magic-live2d, @proj-airi/model-driver-mediapipe, @proj-airi/motion-driver-magic, @proj-airi/pipelines-audio, @proj-airi/plugin-protocol, @proj-airi/plugin-sdk, @proj-airi/plugin-sdk-tamagotchi, @proj-airi/scenarios-stage-tamagotchi-browser, @proj-airi/scenarios-stage-tamagotchi-electron, @proj-airi/server-runtime, @proj-airi/server-sdk, @proj-airi/server-shared, @proj-airi/stage-layouts, @proj-airi/stage-pages, @proj-airi/stage-shared, @proj-airi/stage-ui, @proj-airi/stage-ui-live2d, @proj-airi/stage-ui-mmd, @proj-airi/stage-ui-spine, @proj-airi/stage-ui-tachie, @proj-airi/stage-ui-three, @proj-airi/stream-kit, @proj-airi/testing-audio, @proj-airi/ui, @proj-airi/ui-loading-screens, @proj-airi/ui-transitions, @proj-airi/unocss-preset-fonts, @proj-airi/vitest-plugin-fakemic
+   • Running build in 48 packages
+   • Remote caching disabled
+
+@proj-airi/pipelines-audio:build: cache hit, replaying logs 0f87909ce1f77476
+@proj-airi/stream-kit:build: cache hit, replaying logs c3d94265388e4582
+@proj-airi/ui-transitions:build: cache hit, replaying logs 3ffbaf2e47a7f286
+@proj-airi/font-departure-mono:build: cache hit, replaying logs 24a6f87b1d9a6f45
+@proj-airi/font-cjkfonts-allseto:build: cache hit, replaying logs d2c7e8580d9defcc
+@proj-airi/plugin-protocol:build: cache hit, replaying logs 2a9b6503d2ad97b6
+@proj-airi/input-playstation-dualsense-5:build: cache hit, replaying logs d6251d5e0e083e0d
+@proj-airi/electron-eventa:build: cache hit, replaying logs 28937c719d79165e
+@proj-airi/better-ws:build: cache hit, replaying logs f4a52e6945bba633
+@proj-airi/stream-kit:build: $ tsdown
+@proj-airi/stream-kit:build: ℹ tsdown v0.22.14 powered by rolldown v1.2.5
+@proj-airi/stream-kit:build: ℹ config file: <REPO>\airi\packages\stream-kit\tsdown.config.ts 
+@proj-airi/stream-kit:build: ℹ entry: src/index.ts
+@proj-airi/stream-kit:build: ℹ tsconfig: tsconfig.json
+@proj-airi/stream-kit:build: ℹ Build start
+@proj-airi/stream-kit:build: ℹ Cleaning 3 files
+@proj-airi/stream-kit:build: ℹ dist\index.mjs    1.63 kB │ gzip: 0.55 kB
+@proj-airi/pipelines-audio:build: $ tsdown
+@proj-airi/stream-kit:build: ℹ dist\index.d.mts  1.11 kB │ gzip: 0.43 kB
+@proj-airi/stream-kit:build: ℹ 2 files, total: 2.73 kB
+@proj-airi/stream-kit:build: ✔ Build complete in 3229ms
+@proj-airi/pipelines-audio:build: ℹ tsdown v0.22.14 powered by rolldown v1.2.5
+@proj-airi/pipelines-audio:build: ℹ config file: <REPO>\airi\packages\pipelines-audio\tsdown.config.ts 
+@proj-airi/pipelines-audio:build: ℹ entry: src/index.ts
+@proj-airi/pipelines-audio:build: ℹ tsconfig: tsconfig.json
+@proj-airi/pipelines-audio:build: ℹ Build start
+@proj-airi/pipelines-audio:build: ℹ Cleaning 3 files
+@proj-airi/pipelines-audio:build: ℹ dist\index.mjs    49.03 kB │ gzip: 12.72 kB
+@proj-airi/pipelines-audio:build: ℹ dist\index.d.mts  24.12 kB │ gzip:  5.62 kB
+@proj-airi/pipelines-audio:build: ℹ 2 files, total: 73.15 kB
+@proj-airi/pipelines-audio:build: ✔ Build complete in 1870ms
+@proj-airi/font-departure-mono:build: $ tsdown
+@proj-airi/font-departure-mono:build: ℹ tsdown v0.22.14 powered by rolldown v1.2.5
+@proj-airi/font-departure-mono:build: ℹ config file: <REPO>\airi\packages\font-departure-mono\tsdown.config.ts 
+@proj-airi/font-departure-mono:build: ℹ entry: src/index.ts
+@proj-airi/font-departure-mono:build: ℹ tsconfig: tsconfig.json
+@proj-airi/font-departure-mono:build: 
+@proj-airi/font-departure-mono:build:  WARN  `external` is deprecated. Use `deps.neverBundle` instead.
+@proj-airi/font-departure-mono:build: 
+@proj-airi/font-departure-mono:build: ℹ Build start
+@proj-airi/font-departure-mono:build: ℹ Cleaning 7 files
+@proj-airi/font-departure-mono:build: ℹ dist\index.mjs  0.03 kB │ gzip: 0.05 kB
+@proj-airi/font-departure-mono:build: ℹ 1 files, total: 0.03 kB
+@proj-airi/font-departure-mono:build: ✔ Build complete in 248ms
+@proj-airi/ui-transitions:build: $ echo "No build step required"
+@proj-airi/ui-transitions:build: No build step required
+@proj-airi/font-cjkfonts-allseto:build: $ tsdown
+@proj-airi/font-cjkfonts-allseto:build: ℹ tsdown v0.22.14 powered by rolldown v1.2.5
+@proj-airi/font-cjkfonts-allseto:build: ℹ config file: <REPO>\airi\packages\font-cjkfonts-allseto\tsdown.config.ts 
+@proj-airi/font-cjkfonts-allseto:build: ℹ entry: src/index.ts
+@proj-airi/font-cjkfonts-allseto:build: ℹ tsconfig: tsconfig.json
+@proj-airi/font-cjkfonts-allseto:build: 
+@proj-airi/font-cjkfonts-allseto:build:  WARN  `external` is deprecated. Use `deps.neverBundle` instead.
+@proj-airi/font-cjkfonts-allseto:build: 
+@proj-airi/font-cjkfonts-allseto:build: ℹ Build start
+@proj-airi/font-cjkfonts-allseto:build: ℹ Cleaning 5 files
+@proj-airi/font-cjkfonts-allseto:build: ℹ dist\index.mjs  0.03 kB │ gzip: 0.05 kB
+@proj-airi/font-cjkfonts-allseto:build: ℹ 1 files, total: 0.03 kB
+@proj-airi/font-cjkfonts-allseto:build: ✔ Build complete in 154ms
+@proj-airi/electron-eventa:build: $ tsdown
+@proj-airi/electron-eventa:build: ℹ tsdown v0.22.14 powered by rolldown v1.2.5
+@proj-airi/electron-eventa:build: ℹ config file: <REPO>\airi\packages\electron-eventa\tsdown.config.ts 
+@proj-airi/electron-eventa:build: ℹ entry: ./src/index.ts, ./src/electron/index.ts, ./src/electron-updater/index.ts
+@proj-airi/electron-eventa:build: ℹ tsconfig: tsconfig.json
+@proj-airi/electron-eventa:build: ℹ Build start
+@proj-airi/electron-eventa:build: ℹ Cleaning 11 files
+@proj-airi/electron-eventa:build: ℹ dist\electron-updater\index.mjs     0.67 kB │ gzip: 0.27 kB
+@proj-airi/electron-eventa:build: ℹ dist\electron\index.mjs             0.29 kB │ gzip: 0.16 kB
+@proj-airi/electron-eventa:build: ℹ dist\index.mjs                      0.29 kB │ gzip: 0.16 kB
+@proj-airi/electron-eventa:build: ℹ dist\electron-DESet3NS.mjs          3.08 kB │ gzip: 0.71 kB
+@proj-airi/electron-eventa:build: ℹ dist\electron-updater\index.d.mts   4.75 kB │ gzip: 0.70 kB
+@proj-airi/electron-eventa:build: ℹ dist\electron\index.d.mts           0.43 kB │ gzip: 0.22 kB
+@proj-airi/electron-eventa:build: ℹ dist\index.d.mts                    0.43 kB │ gzip: 0.22 kB
+@proj-airi/electron-eventa:build: ℹ dist\index-BIOt-Eq_.d.mts          24.97 kB │ gzip: 1.56 kB
+@proj-airi/electron-eventa:build: ℹ 8 files, total: 34.90 kB
+@proj-airi/electron-eventa:build: [33m[PLUGIN_TIMINGS] [0mYour build spent 99% of 7.9s inside plugin hooks (7.8s).
+@proj-airi/electron-eventa:build: Measured inside the callback, so queue time is excluded and time the callback itself awaited is not:
+@proj-airi/electron-eventa:build:   - rolldown-plugin-dts:generate load (75%, 6.0s, 5 calls)
+@proj-airi/electron-eventa:build: Those rows are 75% of the build; the rest of the 99% is below.
+@proj-airi/electron-eventa:build: Not measurable — 2 hooks whose calls overlap, so elapsed time covers work other calls were doing. Profile with `node --cpu-prof`:
+@proj-airi/electron-eventa:build:   - rolldown-plugin-dts:resolver resolveId (610 calls)
+@proj-airi/electron-eventa:build:   - rolldown-plugin-dts:fake-js transform (5 calls)
+@proj-airi/electron-eventa:build: See https://rolldown.rs/reference/InputOptions.checks#plugintimings for more details.
+@proj-airi/electron-eventa:build: 
+@proj-airi/electron-eventa:build: ✔ Build complete in 8892ms
+@proj-airi/better-ws:build: $ tsdown
+@proj-airi/better-ws:build: ℹ tsdown v0.22.14 powered by rolldown v1.2.5
+@proj-airi/better-ws:build: ℹ config file: <REPO>\airi\packages\better-ws\tsdown.config.ts 
+@proj-airi/better-ws:build: ℹ entry: src/index.ts, src/client/crossws/index.ts, src/server/index.ts, src/server/h3/index.ts
+@proj-airi/better-ws:build: ℹ tsconfig: tsconfig.json
+@proj-airi/better-ws:build: ℹ Build start
+@proj-airi/better-ws:build: ℹ Cleaning 15 files
+@proj-airi/better-ws:build: ℹ dist\index.mjs             14.78 kB │ gzip: 3.51 kB
+@proj-airi/better-ws:build: ℹ dist\client\crossws.mjs     2.01 kB │ gzip: 0.77 kB
+@proj-airi/better-ws:build: ℹ dist\server\h3.mjs          0.78 kB │ gzip: 0.42 kB
+@proj-airi/better-ws:build: ℹ dist\server.mjs             0.12 kB │ gzip: 0.11 kB
+@proj-airi/better-ws:build: ℹ dist\server-CuYDhVE9.mjs   15.49 kB │ gzip: 3.84 kB
+@proj-airi/better-ws:build: ℹ dist\shared-bfFfBlz_.mjs    3.77 kB │ gzip: 1.44 kB
+@proj-airi/better-ws:build: ℹ dist\index.d.mts            9.86 kB │ gzip: 3.08 kB
+@proj-airi/better-ws:build: ℹ dist\client\crossws.d.mts   1.82 kB │ gzip: 0.68 kB
+@proj-airi/better-ws:build: ℹ dist\server\h3.d.mts        1.04 kB │ gzip: 0.52 kB
+@proj-airi/better-ws:build: ℹ dist\server.d.mts           0.88 kB │ gzip: 0.34 kB
+@proj-airi/better-ws:build: ℹ dist\index-C8ZIv-7w.d.mts  12.41 kB │ gzip: 3.14 kB
+@proj-airi/better-ws:build: ℹ dist\index-FChaQGBC.d.mts   1.58 kB │ gzip: 0.76 kB
+@proj-airi/better-ws:build: ℹ 12 files, total: 64.54 kB
+@proj-airi/better-ws:build: [33m[PLUGIN_TIMINGS] [0mYour build spent 98% of 6.4s inside plugin hooks (6.3s).
+@proj-airi/better-ws:build: Measured inside the callback, so queue time is excluded and time the callback itself awaited is not:
+@proj-airi/better-ws:build:   - rolldown-plugin-dts:generate load (93%, 6.0s, 9 calls)
+@proj-airi/better-ws:build: Those rows are 93% of the build; the rest of the 98% is below.
+@proj-airi/better-ws:build: Not measurable — 3 hooks whose calls overlap, so elapsed time covers work other calls were doing. Profile with `node --cpu-prof`:
+@proj-airi/better-ws:build:   - rolldown-plugin-dts:resolver resolveId (38 calls)
+@proj-airi/better-ws:build:   - tsdown:deps resolveId (24 calls)
+@proj-airi/better-ws:build:   - rolldown-plugin-dts:fake-js transform (9 calls)
+@proj-airi/better-ws:build: See https://rolldown.rs/reference/InputOptions.checks#plugintimings for more details.
+@proj-airi/better-ws:build: 
+@proj-airi/better-ws:build: ✔ Build complete in 7353ms
+@proj-airi/input-playstation-dualsense-5:build: $ tsdown
+@proj-airi/input-playstation-dualsense-5:build: ℹ tsdown v0.22.14 powered by rolldown v1.2.5
+@proj-airi/input-playstation-dualsense-5:build: ℹ config file: <REPO>\airi\packages\input-playstation-dualsense-5\tsdown.config.ts 
+@proj-airi/input-playstation-dualsense-5:build: ℹ entry: src/index.ts
+@proj-airi/input-playstation-dualsense-5:build: ℹ tsconfig: tsconfig.json
+@proj-airi/input-playstation-dualsense-5:build: ℹ Build start
+@proj-airi/input-playstation-dualsense-5:build: ℹ Cleaning 3 files
+@proj-airi/input-playstation-dualsense-5:build: ℹ dist\index.js    16.30 kB │ gzip: 4.41 kB
+@proj-airi/input-playstation-dualsense-5:build: ℹ dist\index.d.ts   9.51 kB │ gzip: 2.56 kB
+@proj-airi/input-playstation-dualsense-5:build: ℹ 2 files, total: 25.81 kB
+@proj-airi/input-playstation-dualsense-5:build: [33m[PLUGIN_TIMINGS] [0mYour build spent 96% of 3.3s inside plugin hooks (3.1s).
+@proj-airi/input-playstation-dualsense-5:build: Measured inside the callback, so queue time is excluded and time the callback itself awaited is not:
+@proj-airi/input-playstation-dualsense-5:build:   - rolldown-plugin-dts:generate load (85%, 2.8s, 6 calls)
+@proj-airi/input-playstation-dualsense-5:build: Those rows are 85% of the build; the rest of the 96% is below.
+@proj-airi/input-playstation-dualsense-5:build: Not measurable — 1 hook whose calls overlap, so elapsed time covers work other calls were doing. Profile with `node --cpu-prof`:
+@proj-airi/input-playstation-dualsense-5:build:   - rolldown-plugin-dts:resolver resolveId (28 calls)
+@proj-airi/input-playstation-dualsense-5:build: See https://rolldown.rs/reference/InputOptions.checks#plugintimings for more details.
+@proj-airi/font-chillroundm:build: cache hit, replaying logs 89c69b4b4ad3be48
+@proj-airi/input-playstation-dualsense-5:build: 
+@proj-airi/input-playstation-dualsense-5:build: ✔ Build complete in 3777ms
+@proj-airi/server-sdk-shared:build: cache hit, replaying logs 79237941ce557dfc
+@proj-airi/motion-driver-magic:build: cache hit, replaying logs 2770e90d0a8ee284
+@proj-airi/input-gamepad:build: cache hit, replaying logs c67a8aeef202c554
+@proj-airi/font-xiaolai:build: cache hit, replaying logs 3b3f438c17880d38
+@proj-airi/motion-driver-magic:build: $ tsdown
+@proj-airi/motion-driver-magic:build: ℹ tsdown v0.22.14 powered by rolldown v1.2.5
+@proj-airi/motion-driver-magic:build: ℹ config file: <REPO>\airi\packages\motion-driver-magic\tsdown.config.ts 
+@proj-airi/motion-driver-magic:build: ℹ entry: src/index.ts
+@proj-airi/motion-driver-magic:build: ℹ tsconfig: tsconfig.json
+@proj-airi/cap-vite:build: cache hit, replaying logs 021c1677a4c9da82
+@proj-airi/motion-driver-magic:build: ℹ Build start
+@proj-airi/motion-driver-magic:build: ℹ Cleaning 3 files
+@proj-airi/motion-driver-magic:build: ℹ dist\index.js    26.60 kB │ gzip: 6.01 kB
+@proj-airi/motion-driver-magic:build: ℹ dist\index.d.ts   5.54 kB │ gzip: 1.65 kB
+@proj-airi/motion-driver-magic:build: ℹ 2 files, total: 32.14 kB
+@proj-airi/motion-driver-magic:build: ✔ Build complete in 3112ms
+@proj-airi/plugin-protocol:build: $ tsdown
+@proj-airi/plugin-protocol:build: ℹ tsdown v0.22.14 powered by rolldown v1.2.5
+@proj-airi/plugin-protocol:build: ℹ config file: <REPO>\airi\packages\plugin-protocol\tsdown.config.ts 
+@proj-airi/plugin-protocol:build: ℹ entry: src/types/index.ts
+@proj-airi/plugin-protocol:build: ℹ tsconfig: tsconfig.json
+@proj-airi/plugin-protocol:build: ℹ Build start
+@proj-airi/plugin-protocol:build: ℹ Cleaning 5 files
+@proj-airi/plugin-protocol:build: ℹ dist\types\index.mjs      10.10 kB │ gzip:  1.79 kB
+@proj-airi/plugin-protocol:build: ℹ dist\types\index.mjs.map  59.26 kB │ gzip: 12.82 kB
+@proj-airi/plugin-protocol:build: ℹ dist\types\index.d.mts    51.87 kB │ gzip: 11.38 kB
+@proj-airi/plugin-protocol:build: ℹ 3 files, total: 121.22 kB
+@proj-airi/plugin-protocol:build: [33m[PLUGIN_TIMINGS] [0mYour build spent 97% of 3.7s inside plugin hooks (3.6s).
+@proj-airi/plugin-protocol:build: Measured inside the callback, so queue time is excluded and time the callback itself awaited is not:
+@proj-airi/plugin-protocol:build:   - rolldown-plugin-dts:generate load (85%, 3.2s, 2 calls)
+@proj-airi/plugin-protocol:build: Those rows are 85% of the build; the rest of the 97% is below.
+@proj-airi/plugin-protocol:build: Not measurable — 1 hook whose calls overlap, so elapsed time covers work other calls were doing. Profile with `node --cpu-prof`:
+@proj-airi/plugin-protocol:build:   - rolldown-plugin-dts:resolver resolveId (8 calls)
+@proj-airi/plugin-protocol:build: See https://rolldown.rs/reference/InputOptions.checks#plugintimings for more details.
+@proj-airi/plugin-protocol:build: 
+@proj-airi/plugin-protocol:build: ✔ Build complete in 5138ms
+@proj-airi/font-xiaolai:build: $ tsdown
+@proj-airi/font-xiaolai:build: ℹ tsdown v0.22.14 powered by rolldown v1.2.5
+@proj-airi/font-xiaolai:build: ℹ config file: <REPO>\airi\packages\font-xiaolai\tsdown.config.ts 
+@proj-airi/font-xiaolai:build: 
+@proj-airi/font-xiaolai:build:  WARN  `external` is deprecated. Use `deps.neverBundle` instead.
+@proj-airi/font-xiaolai:build: ℹ entry: src/index.ts
+@proj-airi/font-xiaolai:build: 
+@proj-airi/font-xiaolai:build: ℹ tsconfig: tsconfig.json
+@proj-airi/font-xiaolai:build: ℹ Build start
+@proj-airi/font-xiaolai:build: ℹ Cleaning 5 files
+@proj-airi/font-xiaolai:build: ℹ dist\index.mjs  0.03 kB │ gzip: 0.05 kB
+@proj-airi/font-xiaolai:build: ℹ 1 files, total: 0.03 kB
+@proj-airi/font-xiaolai:build: ✔ Build complete in 246ms
+@proj-airi/audio:build: cache hit, replaying logs 86cb68c7d4fd29f3
+@proj-airi/ui-loading-screens:build: cache hit, replaying logs 8584c0ed678153d5
+@proj-airi/core-character:build: cache hit, replaying logs 647f2e10f8c35118
+@proj-airi/ui-loading-screens:build: $ echo "No build step required"
+@proj-airi/ui-loading-screens:build: No build step required
+@proj-airi/font-chillroundm:build: $ tsdown
+@proj-airi/font-chillroundm:build: ℹ tsdown v0.22.14 powered by rolldown v1.2.5
+@proj-airi/font-chillroundm:build: ℹ config file: <REPO>\airi\packages\font-chillroundm\tsdown.config.ts 
+@proj-airi/font-chillroundm:build: ℹ entry: src/index.ts
+@proj-airi/font-chillroundm:build: ℹ tsconfig: tsconfig.json
+@proj-airi/font-chillroundm:build: 
+@proj-airi/font-chillroundm:build:  WARN  `external` is deprecated. Use `deps.neverBundle` instead.
+@proj-airi/font-chillroundm:build: 
+@proj-airi/font-chillroundm:build: ℹ Build start
+@proj-airi/font-chillroundm:build: ℹ Cleaning 6 files
+@proj-airi/font-chillroundm:build: ℹ dist\index.mjs  0.03 kB │ gzip: 0.05 kB
+@proj-airi/font-chillroundm:build: ℹ 1 files, total: 0.03 kB
+@proj-airi/font-chillroundm:build: ✔ Build complete in 203ms
+@lia/core:build: cache hit, replaying logs 1bc6cd840cb9e17a
+@proj-airi/electron-vueuse:build: cache hit, replaying logs 2afff09beb8e4cd1
+@proj-airi/model-driver-magic-live2d:build: cache hit, replaying logs b7e5bcb1497b9127
+@proj-airi/input-gamepad:build: $ tsdown
+@proj-airi/input-gamepad:build: ℹ tsdown v0.22.14 powered by rolldown v1.2.5
+@proj-airi/input-gamepad:build: ℹ config file: <REPO>\airi\packages\input-gamepad\tsdown.config.ts 
+@proj-airi/input-gamepad:build: ℹ entry: src/index.ts
+@proj-airi/input-gamepad:build: ℹ tsconfig: tsconfig.json
+@proj-airi/input-gamepad:build: ℹ Build start
+@proj-airi/input-gamepad:build: ℹ Cleaning 3 files
+@proj-airi/input-gamepad:build: ℹ dist\index.js    7.56 kB │ gzip: 2.46 kB
+@proj-airi/input-gamepad:build: ℹ dist\index.d.ts  4.85 kB │ gzip: 1.58 kB
+@proj-airi/input-gamepad:build: ℹ 2 files, total: 12.41 kB
+@proj-airi/input-gamepad:build: ✔ Build complete in 3596ms
+@proj-airi/cap-vite:build: $ tsdown
+@proj-airi/cap-vite:build: ℹ tsdown v0.22.14 powered by rolldown v1.2.5
+@proj-airi/cap-vite:build: ℹ config file: <REPO>\airi\packages\cap-vite\tsdown.config.ts 
+@proj-airi/cap-vite:build: ℹ entry: src/index.ts, src/bin/run.ts, src/vite-plugin.ts, src/vite-wrapper-config.ts
+@proj-airi/cap-vite:build: ℹ target: node18
+@proj-airi/cap-vite:build: ℹ tsconfig: tsconfig.json
+@proj-airi/cap-vite:build: ℹ Build start
+@proj-airi/cap-vite:build: ℹ Cleaning 18 files
+@proj-airi/cap-vite:build: ℹ Granting execute permission to dist\bin\run.mjs
+@proj-airi/cap-vite:build: ℹ dist\vite-plugin.mjs                  5.26 kB │ gzip: 1.81 kB
+@proj-airi/cap-vite:build: ℹ dist\index.mjs                        3.63 kB │ gzip: 1.22 kB
+@proj-airi/cap-vite:build: ℹ dist\bin\run.mjs                      1.82 kB │ gzip: 0.86 kB
+@proj-airi/cap-vite:build: ℹ dist\vite-wrapper-config.mjs          1.22 kB │ gzip: 0.58 kB
+@proj-airi/cap-vite:build: ℹ dist\vite-plugin.mjs.map             10.07 kB │ gzip: 3.14 kB
+@proj-airi/cap-vite:build: ℹ dist\native-CYj1OOIY.mjs.map          8.83 kB │ gzip: 3.10 kB
+@proj-airi/cap-vite:build: ℹ dist\index.mjs.map                    7.65 kB │ gzip: 2.30 kB
+@proj-airi/cap-vite:build: ℹ dist\native-CYj1OOIY.mjs              4.69 kB │ gzip: 1.83 kB
+@proj-airi/cap-vite:build: ℹ dist\bin\run.mjs.map                  3.71 kB │ gzip: 1.53 kB
+@proj-airi/cap-vite:build: ℹ dist\vite-wrapper-config.mjs.map      2.14 kB │ gzip: 0.90 kB
+@proj-airi/cap-vite:build: ℹ dist\error-message-C5s8-wu6.mjs.map   0.74 kB │ gzip: 0.43 kB
+@proj-airi/cap-vite:build: ℹ dist\error-message-C5s8-wu6.mjs       0.57 kB │ gzip: 0.34 kB
+@proj-airi/cap-vite:build: ℹ dist\index.d.mts                      0.73 kB │ gzip: 0.36 kB
+@proj-airi/cap-vite:build: ℹ dist\vite-plugin.d.mts                0.29 kB │ gzip: 0.19 kB
+@proj-airi/core-character:build: $ tsdown
+@proj-airi/cap-vite:build: ℹ dist\vite-wrapper-config.d.mts        0.19 kB │ gzip: 0.16 kB
+@proj-airi/core-character:build: ℹ tsdown v0.22.14 powered by rolldown v1.2.5
+@proj-airi/cap-vite:build: ℹ dist\bin\run.d.mts                    0.01 kB │ gzip: 0.03 kB
+@proj-airi/cap-vite:build: ℹ 16 files, total: 51.56 kB
+@proj-airi/cap-vite:build: [33m[PLUGIN_TIMINGS] [0mYour build spent 99% of 6.3s inside plugin hooks (6.2s).
+@proj-airi/cap-vite:build: Measured inside the callback, so queue time is excluded and time the callback itself awaited is not:
+@proj-airi/cap-vite:build:   - rolldown-plugin-dts:generate load (94%, 5.9s, 5 calls)
+@proj-airi/cap-vite:build: Those rows are 94% of the build; the rest of the 99% is below.
+@proj-airi/cap-vite:build: Not measurable — 3 hooks whose calls overlap, so elapsed time covers work other calls were doing. Profile with `node --cpu-prof`:
+@proj-airi/cap-vite:build:   - tsdown:deps resolveId (44 calls)
+@proj-airi/cap-vite:build:   - rolldown-plugin-dts:resolver resolveId (12 calls)
+@proj-airi/cap-vite:build:   - rolldown-plugin-dts:fake-js transform (5 calls)
+@proj-airi/cap-vite:build: See https://rolldown.rs/reference/InputOptions.checks#plugintimings for more details.
+@proj-airi/cap-vite:build: 
+@proj-airi/cap-vite:build: ✔ Build complete in 6722ms
+@proj-airi/core-character:build: ℹ config file: <REPO>\airi\packages\core-character\tsdown.config.ts 
+@proj-airi/core-character:build: ℹ entry: src/index.ts
+@proj-airi/core-character:build: ℹ tsconfig: tsconfig.json
+@proj-airi/core-character:build: ℹ Build start
+@proj-airi/core-character:build: ℹ Cleaning 3 files
+@proj-airi/core-character:build: ℹ dist\index.mjs    0.01 kB │ gzip: 0.03 kB
+@proj-airi/core-character:build: ℹ dist\index.d.mts  0.01 kB │ gzip: 0.03 kB
+@proj-airi/core-character:build: ℹ 2 files, total: 0.02 kB
+@proj-airi/core-character:build: ✔ Build complete in 2116ms
+@proj-airi/server-sdk-shared:build: $ tsdown
+@proj-airi/server-sdk-shared:build: ℹ tsdown v0.22.14 powered by rolldown v1.2.5
+@proj-airi/server-sdk-shared:build: ℹ config file: <REPO>\airi\server\packages\server-sdk-shared\tsdown.config.ts 
+@proj-airi/server-sdk-shared:build: ℹ entry: src/index.ts, src/v2.ts
+@proj-airi/server-sdk-shared:build: ℹ tsconfig: tsconfig.json
+@proj-airi/server-sdk-shared:build: 
+@proj-airi/server-sdk-shared:build:  WARN  `inlineOnly` is deprecated. Use `deps.onlyBundle` instead.
+@proj-airi/server-sdk-shared:build: 
+@proj-airi/server-sdk-shared:build: ℹ Build start
+@proj-airi/server-sdk-shared:build: ℹ Cleaning 8 files
+@proj-airi/server-sdk-shared:build: ℹ dist\index.mjs            0.65 kB │ gzip: 0.22 kB
+@proj-airi/server-sdk-shared:build: ℹ dist\v2.mjs               0.65 kB │ gzip: 0.22 kB
+@proj-airi/server-sdk-shared:build: ℹ dist\v2-Dke4mPry.mjs.map  4.95 kB │ gzip: 1.26 kB
+@proj-airi/server-sdk-shared:build: ℹ dist\v2-Dke4mPry.mjs      2.19 kB │ gzip: 0.66 kB
+@proj-airi/server-sdk-shared:build: ℹ dist\index.d.mts          1.07 kB │ gzip: 0.31 kB
+@proj-airi/server-sdk-shared:build: ℹ dist\v2.d.mts             1.07 kB │ gzip: 0.31 kB
+@proj-airi/server-sdk-shared:build: ℹ dist\v2-BiT6PkwY.d.mts    7.79 kB │ gzip: 1.16 kB
+@proj-airi/server-sdk-shared:build: ℹ 7 files, total: 18.37 kB
+@proj-airi/server-sdk-shared:build: [33m[PLUGIN_TIMINGS] [0mYour build spent 97% of 3.5s inside plugin hooks (3.4s).
+@proj-airi/server-sdk-shared:build: Measured inside the callback, so queue time is excluded and time the callback itself awaited is not:
+@proj-airi/server-sdk-shared:build:   - tsdown:deps resolveId (87%, 3.1s, 80 calls)
+@proj-airi/server-sdk-shared:build:   - rolldown-plugin-dts:generate load (87%, 3.1s, 3 calls)
+@proj-airi/server-sdk-shared:build: Those rows are 100% of the build; the rest of the 97% is below.
+@proj-airi/server-sdk-shared:build: Not measurable — 2 hooks whose calls overlap, so elapsed time covers work other calls were doing. Profile with `node --cpu-prof`:
+@proj-airi/server-sdk-shared:build:   - rolldown-plugin-dts:resolver resolveId (58 calls)
+@proj-airi/server-sdk-shared:build:   - rolldown-plugin-dts:fake-js transform (3 calls)
+@proj-airi/server-sdk-shared:build: See https://rolldown.rs/reference/InputOptions.checks#plugintimings for more details.
+@proj-airi/server-sdk-shared:build: 
+@proj-airi/server-sdk-shared:build: ✔ Build complete in 4410ms
+@proj-airi/unocss-preset-fonts:build: cache hit, replaying logs cd195f80fd81886d
+@proj-airi/server-shared:build: cache hit, replaying logs 5272329c03ccac69
+@proj-airi/electron-screen-capture:build: cache hit, replaying logs bb658444ce2379d8
+@proj-airi/audio:build: $ tsdown
+@proj-airi/audio:build: ℹ tsdown v0.22.14 powered by rolldown v1.2.5
+@proj-airi/audio:build: ℹ config file: <REPO>\airi\packages\audio\tsdown.config.ts 
+@proj-airi/audio:build: ℹ entry: src/index.ts, src/audio-context/index.ts, src/audio-context/processor.worklet.ts, src/encoding/index.ts
+@proj-airi/audio:build: ℹ tsconfig: tsconfig.json
+@proj-airi/audio:build: 
+@proj-airi/audio:build:  WARN  `external` is deprecated. Use `deps.neverBundle` instead.
+@proj-airi/audio:build: 
+@proj-airi/audio:build: ℹ Build start
+@proj-airi/audio:build: ℹ Cleaning 15 files
+@proj-airi/audio:build: ℹ dist\audio-context\index.mjs                6.49 kB │ gzip: 1.80 kB
+@proj-airi/audio:build: ℹ dist\audio-context\processor.worklet.mjs    3.71 kB │ gzip: 1.17 kB
+@proj-airi/audio:build: ℹ dist\index.mjs                              0.23 kB │ gzip: 0.12 kB
+@proj-airi/audio:build: ℹ dist\encoding\index.mjs                     0.19 kB │ gzip: 0.10 kB
+@proj-airi/audio:build: ℹ dist\encoding\wav.mjs                       3.27 kB │ gzip: 1.09 kB
+@proj-airi/audio:build: ℹ dist\utils\error-message.mjs                0.51 kB │ gzip: 0.30 kB
+@proj-airi/audio:build: ℹ dist\audio-context\index.d.mts              2.05 kB │ gzip: 0.64 kB
+@proj-airi/audio:build: ℹ dist\index.d.mts                            0.20 kB │ gzip: 0.11 kB
+@proj-airi/audio:build: ℹ dist\encoding\index.d.mts                   0.19 kB │ gzip: 0.10 kB
+@proj-airi/audio:build: ℹ dist\audio-context\processor.worklet.d.mts  0.01 kB │ gzip: 0.03 kB
+@proj-airi/audio:build: ℹ dist\encoding\wav.d.mts                     1.37 kB │ gzip: 0.51 kB
+@proj-airi/audio:build: ℹ 11 files, total: 18.21 kB
+@proj-airi/audio:build: [33m[PLUGIN_TIMINGS] [0mYour build spent 95% of 3.1s inside plugin hooks (2.9s).
+@proj-airi/audio:build: Measured inside the callback, so queue time is excluded and time the callback itself awaited is not:
+@proj-airi/audio:build:   - rolldown-plugin-dts:generate load (85%, 2.6s, 5 calls)
+@proj-airi/audio:build: Those rows are 85% of the build; the rest of the 95% is below.
+@proj-airi/audio:build: Not measurable — 2 hooks whose calls overlap, so elapsed time covers work other calls were doing. Profile with `node --cpu-prof`:
+@proj-airi/audio:build:   - rolldown-plugin-dts:fake-js transform (5 calls)
+@proj-airi/audio:build:   - rolldown-plugin-dts:resolver resolveId (8 calls)
+@proj-airi/audio:build: See https://rolldown.rs/reference/InputOptions.checks#plugintimings for more details.
+@proj-airi/audio:build: 
+@proj-airi/audio:build: ✔ Build complete in 4041ms
+@proj-airi/input-gamepad-vueuse:build: cache hit, replaying logs fbf075a5360e471b
+@proj-airi/plugin-sdk:build: cache hit, replaying logs 8a458b737be1726a
+@proj-airi/electron-vueuse:build: $ tsdown
+@proj-airi/electron-vueuse:build: ℹ tsdown v0.22.14 powered by rolldown v1.2.5
+@proj-airi/electron-vueuse:build: ℹ config file: <REPO>\airi\packages\electron-vueuse\tsdown.config.ts 
+@proj-airi/electron-vueuse:build: ℹ entry: src/index.ts, src/main/index.ts
+@proj-airi/electron-vueuse:build: ℹ tsconfig: tsconfig.json
+@proj-airi/electron-vueuse:build: 
+@proj-airi/electron-vueuse:build:  WARN  `inlineOnly` is deprecated. Use `deps.onlyBundle` instead.
+@proj-airi/electron-vueuse:build: 
+@proj-airi/electron-vueuse:build: ℹ Build start
+@proj-airi/electron-vueuse:build: ℹ Cleaning 6 files
+@proj-airi/electron-vueuse:build: ℹ dist\index.mjs         13.50 kB │ gzip: 3.39 kB
+@proj-airi/electron-vueuse:build: ℹ dist\main\index.mjs     2.76 kB │ gzip: 0.94 kB
+@proj-airi/electron-vueuse:build: ℹ dist\index.d.mts       12.36 kB │ gzip: 2.75 kB
+@proj-airi/electron-vueuse:build: ℹ dist\main\index.d.mts   1.02 kB │ gzip: 0.39 kB
+@proj-airi/electron-vueuse:build: ℹ 4 files, total: 29.65 kB
+@proj-airi/electron-vueuse:build: [33m[PLUGIN_TIMINGS] [0mYour build spent 100% of 7.3s inside plugin hooks (7.3s).
+@proj-airi/electron-vueuse:build: Measured inside the callback, so queue time is excluded and time the callback itself awaited is not:
+@proj-airi/electron-vueuse:build:   - rolldown-plugin-dts:generate load (94%, 6.8s, 17 calls)
+@proj-airi/electron-vueuse:build: Those rows are 94% of the build; the rest of the 100% is below.
+@proj-airi/electron-vueuse:build: Not measurable — 3 hooks whose calls overlap, so elapsed time covers work other calls were doing. Profile with `node --cpu-prof`:
+@proj-airi/electron-vueuse:build:   - rolldown-plugin-dts:resolver resolveId (640 calls)
+@proj-airi/electron-vueuse:build:   - rolldown-plugin-dts:fake-js transform (31 calls)
+@proj-airi/electron-vueuse:build:   - tsdown:deps resolveId (841 calls)
+@proj-airi/electron-vueuse:build: See https://rolldown.rs/reference/InputOptions.checks#plugintimings for more details.
+@proj-airi/electron-vueuse:build: 
+@proj-airi/electron-vueuse:build: ✔ Build complete in 7865ms
+@proj-airi/api-server:build: cache hit, replaying logs 9c8ff9ec1bda1526
+@proj-airi/model-driver-magic-live2d:build: $ tsdown
+@proj-airi/model-driver-magic-live2d:build: ℹ tsdown v0.22.14 powered by rolldown v1.2.5
+@proj-airi/model-driver-magic-live2d:build: ℹ config file: <REPO>\airi\packages\model-driver-magic-live2d\tsdown.config.ts 
+@proj-airi/model-driver-magic-live2d:build: ℹ entry: src/index.ts
+@proj-airi/model-driver-magic-live2d:build: ℹ tsconfig: tsconfig.json
+@proj-airi/model-driver-magic-live2d:build: ℹ Build start
+@proj-airi/model-driver-magic-live2d:build: ℹ Cleaning 3 files
+@proj-airi/model-driver-magic-live2d:build: ℹ dist\index.js    6.85 kB │ gzip: 2.05 kB
+@proj-airi/model-driver-magic-live2d:build: ℹ dist\index.d.ts  5.63 kB │ gzip: 1.90 kB
+@proj-airi/model-driver-magic-live2d:build: ℹ 2 files, total: 12.48 kB
+@proj-airi/model-driver-magic-live2d:build: ✔ Build complete in 3230ms
+@lia/core:build: $ tsdown
+@lia/core:build: ℹ tsdown v0.22.14 powered by rolldown v1.2.5
+@lia/core:build: ℹ config file: <REPO>\airi\packages\lia-core\tsdown.config.ts 
+@lia/core:build: ℹ entry: ./src/index.ts, ./src/bootstrap/runtime-root.ts, ./src/bridge/lia-config.ts, ./src/voice/config.ts, ./src/voice/engines/kokoro/index.ts, ./src/voice/engines/registry.ts, ./src/voice/engines/types.ts, ./src/voice/voice-service.ts, ./src/paths/product-paths.ts, ./src/paths/install-location.ts, ./src/product/config.ts, ./src/secrets/vault.ts, ./src/voice/shared.ts, ./src/voices/profiles.ts, ./src/voices/types.ts
+@lia/core:build: ℹ tsconfig: tsconfig.json
+@lia/core:build: ℹ Build start
+@lia/core:build: ℹ Cleaning 41 files
+@lia/core:build: ℹ dist\voice\engines\kokoro\index.mjs    44.49 kB │ gzip: 13.34 kB
+@lia/core:build: ℹ dist\index.mjs                         23.37 kB │ gzip:  7.63 kB
+@lia/core:build: ℹ dist\product\config.mjs                14.43 kB │ gzip:  4.18 kB
+@lia/core:build: ℹ dist\voices\profiles.mjs               10.53 kB │ gzip:  4.02 kB
+@lia/core:build: ℹ dist\bootstrap\runtime-root.mjs        10.06 kB │ gzip:  3.89 kB
+@lia/core:build: ℹ dist\voice\voice-service.mjs            6.26 kB │ gzip:  1.99 kB
+@lia/core:build: ℹ dist\paths\product-paths.mjs            3.41 kB │ gzip:  1.42 kB
+@lia/core:build: ℹ dist\voice\engines\registry.mjs         3.23 kB │ gzip:  1.24 kB
+@lia/core:build: ℹ dist\paths\install-location.mjs         3.09 kB │ gzip:  1.22 kB
+@lia/core:build: ℹ dist\voice\config.mjs                   2.59 kB │ gzip:  0.84 kB
+@lia/core:build: ℹ dist\secrets\vault.mjs                  2.52 kB │ gzip:  1.03 kB
+@lia/core:build: ℹ dist\bridge\lia-config.mjs              1.96 kB │ gzip:  0.83 kB
+@lia/core:build: ℹ dist\voice\shared.mjs                   1.01 kB │ gzip:  0.56 kB
+@lia/core:build: ℹ dist\voice\engines\types.mjs            0.29 kB │ gzip:  0.19 kB
+@lia/core:build: ℹ dist\voices\types.mjs                   0.01 kB │ gzip:  0.03 kB
+@lia/core:build: ℹ dist\index.d.mts                       33.41 kB │ gzip: 10.32 kB
+@lia/core:build: ℹ dist\voice\engines\kokoro\index.d.mts  10.76 kB │ gzip:  3.76 kB
+@lia/core:build: ℹ dist\product\config.d.mts              10.15 kB │ gzip:  3.28 kB
+@lia/core:build: ℹ dist\bootstrap\runtime-root.d.mts       8.46 kB │ gzip:  3.51 kB
+@lia/core:build: ℹ dist\voices\profiles.d.mts              5.40 kB │ gzip:  2.29 kB
+@lia/core:build: ℹ dist\voice\engines\registry.d.mts       5.09 kB │ gzip:  1.98 kB
+@lia/core:build: ℹ dist\bridge\lia-config.d.mts            4.66 kB │ gzip:  1.79 kB
+@lia/core:build: ℹ dist\voice\engines\types.d.mts          3.52 kB │ gzip:  1.47 kB
+@lia/core:build: ℹ dist\voice\voice-service.d.mts          3.40 kB │ gzip:  1.50 kB
+@lia/core:build: ℹ dist\paths\product-paths.d.mts          2.80 kB │ gzip:  1.21 kB
+@lia/core:build: ℹ dist\voice\config.d.mts                 2.58 kB │ gzip:  1.08 kB
+@lia/core:build: ℹ dist\paths\install-location.d.mts       2.55 kB │ gzip:  1.19 kB
+@lia/core:build: ℹ dist\secrets\vault.d.mts                2.37 kB │ gzip:  1.01 kB
+@lia/core:build: ℹ dist\voice\shared.d.mts                 1.04 kB │ gzip:  0.57 kB
+@lia/core:build: ℹ dist\voices\types.d.mts                 0.37 kB │ gzip:  0.17 kB
+@lia/core:build: ℹ dist\types-CaWGtYud.d.mts               3.17 kB │ gzip:  1.47 kB
+@lia/core:build: ℹ 31 files, total: 226.99 kB
+@lia/core:build: ✔ Build complete in 2024ms
+@proj-airi/unocss-preset-fonts:build: $ tsdown
+@proj-airi/unocss-preset-fonts:build: ℹ tsdown v0.22.14 powered by rolldown v1.2.5
+@proj-airi/unocss-preset-fonts:build: ℹ config file: <REPO>\airi\packages\unocss-preset-fonts\tsdown.config.ts 
+@proj-airi/unocss-preset-fonts:build: ℹ entry: ./src/index.ts
+@proj-airi/unocss-preset-fonts:build: 
+@proj-airi/unocss-preset-fonts:build:  WARN  `noExternal` is deprecated. Use `deps.alwaysBundle` instead.
+@proj-airi/unocss-preset-fonts:build: 
+@proj-airi/unocss-preset-fonts:build: ℹ tsconfig: tsconfig.json
+@proj-airi/unocss-preset-fonts:build: ℹ Build start
+@proj-airi/unocss-preset-fonts:build: ℹ Cleaning 4 files
+@proj-airi/unocss-preset-fonts:build: ℹ dist\index.mjs      0.81 kB │ gzip: 0.40 kB
+@proj-airi/unocss-preset-fonts:build: ℹ dist\index.mjs.map  1.37 kB │ gzip: 0.55 kB
+@proj-airi/unocss-preset-fonts:build: ℹ dist\index.d.mts    0.18 kB │ gzip: 0.16 kB
+@proj-airi/unocss-preset-fonts:build: ℹ 3 files, total: 2.37 kB
+@proj-airi/unocss-preset-fonts:build: ✔ Build complete in 2474ms
+@proj-airi/server-shared:build: $ tsdown
+@proj-airi/server-shared:build: ℹ tsdown v0.22.14 powered by rolldown v1.2.5
+@proj-airi/server-shared:build: ℹ config file: <REPO>\airi\packages\server-shared\tsdown.config.ts 
+@proj-airi/server-shared:build: 
+@proj-airi/server-shared:build: ℹ entry: src/index.ts, src/types/index.ts
+@proj-airi/server-shared:build:  WARN  `inlineOnly` is deprecated. Use `deps.onlyBundle` instead.
+@proj-airi/server-shared:build: 
+@proj-airi/server-shared:build: ℹ tsconfig: tsconfig.json
+@proj-airi/server-shared:build: ℹ Build start
+@proj-airi/server-shared:build: ℹ Cleaning 7 files
+@proj-airi/server-shared:build: ℹ dist\index.mjs          4.94 kB │ gzip: 1.27 kB
+@proj-airi/server-shared:build: ℹ dist\types\index.mjs    0.06 kB │ gzip: 0.08 kB
+@proj-airi/server-shared:build: ℹ dist\index.mjs.map      7.86 kB │ gzip: 1.86 kB
+@proj-airi/server-shared:build: ℹ dist\index.d.mts        3.46 kB │ gzip: 1.07 kB
+@proj-airi/server-shared:build: ℹ dist\types\index.d.mts  1.81 kB │ gzip: 0.57 kB
+@proj-airi/server-shared:build: ℹ 5 files, total: 18.13 kB
+@proj-airi/server-shared:build: ✔ Build complete in 2824ms
+@proj-airi/input-gamepad-vueuse:build: $ tsdown
+@proj-airi/input-gamepad-vueuse:build: ℹ tsdown v0.22.14 powered by rolldown v1.2.5
+@proj-airi/input-gamepad-vueuse:build: ℹ config file: <REPO>\airi\packages\input-gamepad-vueuse\tsdown.config.ts 
+@proj-airi/input-gamepad-vueuse:build: ℹ entry: src/index.ts
+@proj-airi/input-gamepad-vueuse:build: ℹ tsconfig: tsconfig.json
+@proj-airi/input-gamepad-vueuse:build: ℹ Build start
+@proj-airi/input-gamepad-vueuse:build: ℹ Cleaning 3 files
+@proj-airi/input-gamepad-vueuse:build: ℹ dist\index.js    2.38 kB │ gzip: 0.89 kB
+@proj-airi/input-gamepad-vueuse:build: ℹ dist\index.d.ts  2.53 kB │ gzip: 0.87 kB
+@proj-airi/input-gamepad-vueuse:build: ℹ 2 files, total: 4.92 kB
+@proj-airi/input-gamepad-vueuse:build: [33m[PLUGIN_TIMINGS] [0mYour build spent 97% of 3.9s inside plugin hooks (3.8s).
+@proj-airi/input-gamepad-vueuse:build: Measured inside the callback, so queue time is excluded and time the callback itself awaited is not:
+@proj-airi/input-gamepad-vueuse:build:   - rolldown-plugin-dts:generate load (89%, 3.5s, 2 calls)
+@proj-airi/input-gamepad-vueuse:build: Those rows are 89% of the build; the rest of the 97% is below.
+@proj-airi/input-gamepad-vueuse:build: Not measurable — 1 hook whose calls overlap, so elapsed time covers work other calls were doing. Profile with `node --cpu-prof`:
+@proj-airi/input-gamepad-vueuse:build:   - rolldown-plugin-dts:resolver resolveId (10 calls)
+@proj-airi/input-gamepad-vueuse:build: See https://rolldown.rs/reference/InputOptions.checks#plugintimings for more details.
+@proj-airi/input-gamepad-vueuse:build: 
+@proj-airi/input-gamepad-vueuse:build: ✔ Build complete in 4394ms
+@proj-airi/server-sdk:build: cache hit, replaying logs 1786b5acbe13c325
+@proj-airi/server-runtime:build: cache hit, replaying logs 45c90fcdc0b396b4
+@proj-airi/api-server:build: $ tsc -b
+@proj-airi/plugin-sdk:build: $ tsdown
+@proj-airi/plugin-sdk:build: ℹ tsdown v0.22.14 powered by rolldown v1.2.5
+@proj-airi/plugin-sdk:build: ℹ config file: <REPO>\airi\packages\plugin-sdk\tsdown.config.ts 
+@proj-airi/plugin-sdk:build: ℹ entry: src/index.ts, src/plugin-host/index.ts, src/plugin-host/runtimes/node/index.ts, src/plugin-host/runtimes/web/index.ts
+@proj-airi/plugin-sdk:build: ℹ tsconfig: tsconfig.json
+@proj-airi/plugin-sdk:build: ℹ Build start
+@proj-airi/plugin-sdk:build: ℹ Cleaning 16 files
+@proj-airi/plugin-sdk:build: ℹ Hint: consider adding deps.onlyBundle option to avoid unintended bundling of dependencies, or set deps.onlyBundle: false to disable this hint.
+@proj-airi/plugin-sdk:build: See more at https://tsdown.dev/options/dependencies#deps-onlybundle
+@proj-airi/plugin-sdk:build: Detected dependencies in bundle:
+@proj-airi/plugin-sdk:build: - es-toolkit
+@proj-airi/plugin-sdk:build: ℹ dist\index.mjs                               8.17 kB │ gzip:  2.32 kB
+@proj-airi/plugin-sdk:build: ℹ dist\plugin-host\runtimes\node\index.mjs     1.68 kB │ gzip:  0.66 kB
+@proj-airi/plugin-sdk:build: ℹ dist\plugin-host\runtimes\web\index.mjs      1.65 kB │ gzip:  0.64 kB
+@proj-airi/plugin-sdk:build: ℹ dist\plugin-host\index.mjs                   1.05 kB │ gzip:  0.38 kB
+@proj-airi/plugin-sdk:build: ℹ dist\shared-CVNh9t5P.mjs                    60.28 kB │ gzip: 14.69 kB
+@proj-airi/plugin-sdk:build: ℹ dist\providers-CNsFjM8A.mjs                  7.75 kB │ gzip:  2.16 kB
+@proj-airi/plugin-sdk:build: ℹ dist\index.d.mts                             2.57 kB │ gzip:  0.69 kB
+@proj-airi/plugin-sdk:build: ℹ dist\plugin-host\runtimes\web\index.d.mts    2.25 kB │ gzip:  0.77 kB
+@proj-airi/plugin-sdk:build: ℹ dist\plugin-host\index.d.mts                 2.24 kB │ gzip:  0.66 kB
+@proj-airi/plugin-sdk:build: ℹ dist\plugin-host\runtimes\node\index.d.mts   1.79 kB │ gzip:  0.54 kB
+@proj-airi/plugin-sdk:build: ℹ dist\index-DBkkMBoj.d.mts                   87.13 kB │ gzip: 17.13 kB
+@proj-airi/plugin-sdk:build: ℹ 11 files, total: 176.56 kB
+@proj-airi/plugin-sdk:build: [33m[PLUGIN_TIMINGS] [0mYour build spent 99% of 8.1s inside plugin hooks (8.0s).
+@proj-airi/plugin-sdk:build: Measured inside the callback, so queue time is excluded and time the callback itself awaited is not:
+@proj-airi/plugin-sdk:build:   - rolldown-plugin-dts:generate load (90%, 7.3s, 37 calls)
+@proj-airi/plugin-sdk:build: Those rows are 90% of the build; the rest of the 99% is below.
+@proj-airi/plugin-sdk:build: Not measurable — 3 hooks whose calls overlap, so elapsed time covers work other calls were doing. Profile with `node --cpu-prof`:
+@proj-airi/plugin-sdk:build:   - rolldown-plugin-dts:resolver resolveId (868 calls)
+@proj-airi/plugin-sdk:build:   - rolldown-plugin-dts:fake-js transform (37 calls)
+@proj-airi/plugin-sdk:build:   - tsdown:deps resolveId (940 calls)
+@proj-airi/plugin-sdk:build: See https://rolldown.rs/reference/InputOptions.checks#plugintimings for more details.
+@proj-airi/plugin-sdk:build: 
+@proj-airi/plugin-sdk:build: ✔ Build complete in 8476ms
+@proj-airi/plugin-sdk-tamagotchi:build: cache hit, replaying logs 1c913476421b2725
+@proj-airi/electron-screen-capture:build: $ tsdown
+@proj-airi/electron-screen-capture:build: ℹ tsdown v0.22.14 powered by rolldown v1.2.5
+@proj-airi/electron-screen-capture:build: ℹ config file: <REPO>\airi\packages\electron-screen-capture\tsdown.config.ts 
+@proj-airi/electron-screen-capture:build: ℹ entry: src/main/index.ts
+@proj-airi/electron-screen-capture:build: ℹ tsconfig: tsconfig.json
+@proj-airi/electron-screen-capture:build: 
+@proj-airi/electron-screen-capture:build:  WARN  `external` is deprecated. Use `deps.neverBundle` instead.
+@proj-airi/electron-screen-capture:build: 
+@proj-airi/electron-screen-capture:build: 
+@proj-airi/electron-screen-capture:build:  WARN  `inlineOnly` is deprecated. Use `deps.onlyBundle` instead.
+@proj-airi/electron-screen-capture:build: 
+@proj-airi/electron-screen-capture:build: ℹ entry: src/index.ts
+@proj-airi/electron-screen-capture:build: ℹ tsconfig: tsconfig.json
+@proj-airi/electron-screen-capture:build: 
+@proj-airi/electron-screen-capture:build:  WARN  `external` is deprecated. Use `deps.neverBundle` instead.
+@proj-airi/electron-screen-capture:build: 
+@proj-airi/electron-screen-capture:build: 
+@proj-airi/electron-screen-capture:build:  WARN  `inlineOnly` is deprecated. Use `deps.onlyBundle` instead.
+@proj-airi/electron-screen-capture:build: 
+@proj-airi/electron-screen-capture:build: ℹ entry: src/vue/index.ts, src/renderer.ts
+@proj-airi/electron-screen-capture:build: ℹ tsconfig: tsconfig.json
+@proj-airi/electron-screen-capture:build: ℹ Build start
+@proj-airi/electron-screen-capture:build: 
+@proj-airi/electron-screen-capture:build:  WARN  `external` is deprecated. Use `deps.neverBundle` instead.
+@proj-airi/electron-screen-capture:build: 
+@proj-airi/electron-screen-capture:build: 
+@proj-airi/electron-screen-capture:build:  WARN  `inlineOnly` is deprecated. Use `deps.onlyBundle` instead.
+@proj-airi/electron-screen-capture:build: 
+@proj-airi/electron-screen-capture:build: ℹ Cleaning 53 files
+@proj-airi/electron-screen-capture:build: ℹ dist\main.mjs    105.31 kB │ gzip: 25.11 kB
+@proj-airi/electron-screen-capture:build: ℹ dist\main.d.mts    1.91 kB │ gzip:  0.77 kB
+@proj-airi/electron-screen-capture:build: ℹ 2 files, total: 107.22 kB
+@proj-airi/electron-screen-capture:build: [33m[PLUGIN_TIMINGS] [0mYour build spent 99% of 17.8s inside plugin hooks (17.6s).
+@proj-airi/electron-screen-capture:build: Measured inside the callback, so queue time is excluded and time the callback itself awaited is not:
+@proj-airi/electron-screen-capture:build:   - rolldown-plugin-dts:generate load (33%, 5.8s, 1 call)
+@proj-airi/electron-screen-capture:build: Those rows are 33% of the build; the rest of the 99% is below.
+@proj-airi/electron-screen-capture:build: Not measurable — 1 hook whose calls overlap, so elapsed time covers work other calls were doing. Profile with `node --cpu-prof`:
+@proj-airi/electron-screen-capture:build:   - tsdown:deps resolveId (20 calls)
+@proj-airi/electron-screen-capture:build: See https://rolldown.rs/reference/InputOptions.checks#plugintimings for more details.
+@proj-airi/electron-screen-capture:build: 
+@proj-airi/electron-screen-capture:build: ✔ Build complete in 18363ms
+@proj-airi/electron-screen-capture:build: ℹ dist\index.js     3.55 kB │ gzip: 0.93 kB
+@proj-airi/electron-screen-capture:build: ℹ dist\index.d.ts  13.01 kB │ gzip: 1.81 kB
+@proj-airi/electron-screen-capture:build: ℹ 2 files, total: 16.55 kB
+@proj-airi/electron-screen-capture:build: [33m[PLUGIN_TIMINGS] [0mYour build spent 99% of 17.9s inside plugin hooks (17.8s).
+@proj-airi/electron-screen-capture:build: Measured inside the callback, so queue time is excluded and time the callback itself awaited is not:
+@proj-airi/electron-screen-capture:build:   - tsdown:deps resolveId (82%, 14.7s, 219 calls)
+@proj-airi/electron-screen-capture:build:   - rolldown-plugin-dts:generate load (27%, 4.8s, 1 call)
+@proj-airi/electron-screen-capture:build:   - rolldown-plugin-dts:fake-js transform (19%, 3.3s, 4 calls)
+@proj-airi/electron-screen-capture:build:   - rolldown-plugin-dts:resolver resolveId (18%, 3.2s, 148 calls)
+@proj-airi/electron-screen-capture:build: See https://rolldown.rs/reference/InputOptions.checks#plugintimings for more details.
+@proj-airi/electron-screen-capture:build: 
+@proj-airi/electron-screen-capture:build: ✔ Build complete in 18511ms
+@proj-airi/electron-screen-capture:build: ℹ dist\renderer.js                                                                                                                                       1.46 kB │ gzip: 0.54 kB
+@proj-airi/electron-screen-capture:build: ℹ dist\vue.js                                                                                                                                            0.12 kB │ gzip: 0.10 kB
+@proj-airi/electron-screen-capture:build: ℹ dist\node_modules\.pnpm\picomatch@4.0.5\node_modules\picomatch\lib\parse.js                                                                           30.66 kB │ gzip: 7.34 kB
+@proj-airi/electron-screen-capture:build: ℹ dist\node_modules\.pnpm\@moeru_eventa@1.0.0_electro_dc45396baa567477a65d15d59667f6fa\node_modules\@moeru\eventa\dist\context-Do0TNnqd.js              11.55 kB │ gzip: 2.99 kB
+@proj-airi/electron-screen-capture:build: ℹ dist\node_modules\.pnpm\picomatch@4.0.5\node_modules\picomatch\lib\picomatch.js                                                                       11.06 kB │ gzip: 3.13 kB
+@proj-airi/electron-screen-capture:build: ℹ dist\node_modules\.pnpm\picomatch@4.0.5\node_modules\picomatch\lib\scan.js                                                                             8.43 kB │ gzip: 2.20 kB
+@proj-airi/electron-screen-capture:build: ℹ dist\node_modules\.pnpm\@moeru_eventa@1.0.0_electro_dc45396baa567477a65d15d59667f6fa\node_modules\@moeru\eventa\dist\invoke-BPvOIpeR.js                6.82 kB │ gzip: 2.15 kB
+@proj-airi/electron-screen-capture:build: ℹ dist\node_modules\.pnpm\picomatch@4.0.5\node_modules\picomatch\lib\constants.js                                                                        4.27 kB │ gzip: 1.66 kB
+@proj-airi/electron-screen-capture:build: ℹ dist\node_modules\.pnpm\@moeru_eventa@1.0.0_electro_dc45396baa567477a65d15d59667f6fa\node_modules\@moeru\eventa\dist\adapters\electron\renderer.js     2.77 kB │ gzip: 0.99 kB
+@proj-airi/electron-screen-capture:build: ℹ dist\node_modules\.pnpm\picomatch@4.0.5\node_modules\picomatch\lib\utils.js                                                                            2.24 kB │ gzip: 0.93 kB
+@proj-airi/electron-screen-capture:build: ℹ dist\node_modules\.pnpm\@moeru_eventa@1.0.0_electro_dc45396baa567477a65d15d59667f6fa\node_modules\@moeru\eventa\dist\internal-CpuCilTX.js              2.02 kB │ gzip: 0.88 kB
+@proj-airi/electron-screen-capture:build: ℹ dist\vue\use-electron-screen-capture.js                                                                                                                1.61 kB │ gzip: 0.59 kB
+@proj-airi/electron-screen-capture:build: ℹ dist\node_modules\.pnpm\@moeru_eventa@1.0.0_electro_dc45396baa567477a65d15d59667f6fa\node_modules\@moeru\eventa\dist\invoke-shared-DIUqKwUl.js         1.55 kB │ gzip: 0.43 kB
+@proj-airi/electron-screen-capture:build: ℹ dist\index.js                                                                                                                                          1.23 kB │ gzip: 0.38 kB
+@proj-airi/electron-screen-capture:build: ℹ dist\_virtual\_rolldown\runtime.js                                                                                                                     1.17 kB │ gzip: 0.57 kB
+@proj-airi/electron-screen-capture:build: ℹ dist\node_modules\.pnpm\picomatch@4.0.5\node_modules\picomatch\index.js                                                                                0.82 kB │ gzip: 0.40 kB
+@proj-airi/electron-screen-capture:build: ℹ dist\node_modules\.pnpm\nanoid@6.0.1\node_modules\nanoid\non-secure\index.js                                                                           0.34 kB │ gzip: 0.24 kB
+@proj-airi/electron-screen-capture:build: ℹ dist\node_modules\.pnpm\@moeru_eventa@1.0.0_electro_dc45396baa567477a65d15d59667f6fa\node_modules\@moeru\eventa\dist\shared-B22kScbA.js                0.29 kB │ gzip: 0.23 kB
+@proj-airi/electron-screen-capture:build: ℹ dist\renderer.d.ts                                                                                                                                     1.48 kB │ gzip: 0.58 kB
+@proj-airi/electron-screen-capture:build: ℹ dist\vue.d.ts                                                                                                                                          0.12 kB │ gzip: 0.09 kB
+@proj-airi/electron-screen-capture:build: ℹ dist\node_modules\.pnpm\@moeru_eventa@1.0.0_electro_dc45396baa567477a65d15d59667f6fa\node_modules\@moeru\eventa\dist\adapters\electron\renderer.d.ts   7.29 kB │ gzip: 2.14 kB
+@proj-airi/electron-screen-capture:build: ℹ dist\node_modules\.pnpm\@electron-toolkit_preload@3_4bfaf910079fb9605c93b6322d0ba988\node_modules\@electron-toolkit\preload\dist\index.d.ts            5.93 kB │ gzip: 1.67 kB
+@proj-airi/electron-screen-capture:build: ℹ dist\node_modules\.pnpm\@moeru_eventa@1.0.0_electro_dc45396baa567477a65d15d59667f6fa\node_modules\@moeru\eventa\dist\context-Bg87voO3.d.ts             5.06 kB │ gzip: 1.91 kB
+@proj-airi/electron-screen-capture:build: ℹ dist\vue\use-electron-screen-capture.d.ts                                                                                                              1.36 kB │ gzip: 0.54 kB
+@proj-airi/electron-screen-capture:build: ℹ dist\index.d.ts                                                                                                                                        0.55 kB │ gzip: 0.32 kB
+@proj-airi/electron-screen-capture:build: ℹ 25 files, total: 110.19 kB
+@proj-airi/electron-screen-capture:build: [33m[PLUGIN_TIMINGS] [0mYour build spent 40% of 18.1s inside plugin hooks (7.2s).
+@proj-airi/electron-screen-capture:build: Measured inside the callback, so queue time is excluded and time the callback itself awaited is not:
+@proj-airi/electron-screen-capture:build:   - rolldown-plugin-dts:generate load (38%, 6.9s, 4 calls)
+@proj-airi/electron-screen-capture:build:   - rolldown-plugin-dts:fake-js transform (18%, 3.3s, 10 calls)
+@proj-airi/electron-screen-capture:build: Those rows are 56% of the build; the rest of the 40% is below.
+@proj-airi/electron-screen-capture:build: Not measurable — 2 hooks whose calls overlap, so elapsed time covers work other calls were doing. Profile with `node --cpu-prof`:
+@proj-airi/electron-screen-capture:build:   - rolldown-plugin-dts:resolver resolveId (166 calls)
+@proj-airi/electron-screen-capture:build:   - tsdown:deps resolveId (231 calls)
+@proj-airi/electron-screen-capture:build: See https://rolldown.rs/reference/InputOptions.checks#plugintimings for more details.
+@proj-airi/electron-screen-capture:build: 
+@proj-airi/electron-screen-capture:build: ✔ Build complete in 18630ms
+@proj-airi/i18n:build: cache hit, replaying logs 701118d82142e38b
+@proj-airi/server-runtime:build: $ tsdown
+@proj-airi/server-sdk:build: $ tsdown
+@proj-airi/server-sdk:build: ℹ tsdown v0.22.14 powered by rolldown v1.2.5
+@proj-airi/server-runtime:build: ℹ tsdown v0.22.14 powered by rolldown v1.2.5
+@proj-airi/server-sdk:build: ℹ config file: <REPO>\airi\packages\server-sdk\tsdown.config.ts 
+@proj-airi/server-runtime:build: ℹ config file: <REPO>\airi\packages\server-runtime\tsdown.config.ts 
+@proj-airi/server-runtime:build: ℹ entry: src/index.ts, src/server/index.ts, src/bin/run.ts
+@proj-airi/server-runtime:build: ℹ target: node18
+@proj-airi/server-sdk:build: ℹ entry: ./src/index.ts, ./src/utils/node/index.ts
+@proj-airi/server-sdk:build: ℹ tsconfig: tsconfig.json
+@proj-airi/server-runtime:build: ℹ tsconfig: tsconfig.json
+@proj-airi/server-runtime:build: ℹ Build start
+@proj-airi/server-runtime:build: ℹ Cleaning 10 files
+@proj-airi/server-sdk:build: 
+@proj-airi/server-runtime:build: ℹ Granting execute permission to dist\bin\run.mjs
+@proj-airi/server-sdk:build:  WARN  `inlineOnly` is deprecated. Use `deps.onlyBundle` instead.
+@proj-airi/server-sdk:build: 
+@proj-airi/server-runtime:build: ℹ dist\server.mjs             5.44 kB │ gzip:  2.07 kB
+@proj-airi/server-runtime:build: ℹ dist\bin\run.mjs            0.46 kB │ gzip:  0.30 kB
+@proj-airi/server-sdk:build: ℹ Build start
+@proj-airi/server-sdk:build: ℹ Cleaning 9 files
+@proj-airi/server-runtime:build: ℹ dist\index.mjs              0.12 kB │ gzip:  0.11 kB
+@proj-airi/server-sdk:build: ℹ dist\index.mjs                 17.63 kB │ gzip: 4.55 kB
+@proj-airi/server-runtime:build: ℹ dist\src-BbriBofK.mjs      49.21 kB │ gzip: 11.30 kB
+@proj-airi/server-sdk:build: ℹ dist\utils\node\index.mjs       0.48 kB │ gzip: 0.28 kB
+@proj-airi/server-runtime:build: ℹ dist\server.d.mts           1.45 kB │ gzip:  0.69 kB
+@proj-airi/server-sdk:build: ℹ dist\index.mjs.map             41.46 kB │ gzip: 9.71 kB
+@proj-airi/server-runtime:build: ℹ dist\index.d.mts            0.15 kB │ gzip:  0.13 kB
+@proj-airi/server-runtime:build: ℹ dist\bin\run.d.mts          0.01 kB │ gzip:  0.03 kB
+@proj-airi/server-sdk:build: ℹ dist\utils\node\index.mjs.map   0.86 kB │ gzip: 0.43 kB
+@proj-airi/server-sdk:build: ℹ dist\index.d.mts                8.19 kB │ gzip: 2.32 kB
+@proj-airi/server-runtime:build: ℹ dist\index-BFHmulfx.d.mts   4.73 kB │ gzip:  1.91 kB
+@proj-airi/server-runtime:build: ℹ 8 files, total: 61.58 kB
+@proj-airi/server-runtime:build: [33m[PLUGIN_TIMINGS] [0mYour build spent 99% of 4.2s inside plugin hooks (4.1s).
+@proj-airi/server-sdk:build: ℹ dist\utils\node\index.d.mts     0.15 kB │ gzip: 0.14 kB
+@proj-airi/server-runtime:build: Measured inside the callback, so queue time is excluded and time the callback itself awaited is not:
+@proj-airi/server-runtime:build:   - rolldown-plugin-dts:generate load (93%, 3.9s, 8 calls)
+@proj-airi/server-sdk:build: ℹ 6 files, total: 68.77 kB
+@proj-airi/server-sdk:build: [33m[PLUGIN_TIMINGS] [0mYour build spent 99% of 3.6s inside plugin hooks (3.6s).
+@proj-airi/server-runtime:build: Those rows are 93% of the build; the rest of the 99% is below.
+@proj-airi/server-sdk:build: Measured inside the callback, so queue time is excluded and time the callback itself awaited is not:
+@proj-airi/server-sdk:build:   - rolldown-plugin-dts:generate load (94%, 3.4s, 6 calls)
+@proj-airi/server-runtime:build: Not measurable — 2 hooks whose calls overlap, so elapsed time covers work other calls were doing. Profile with `node --cpu-prof`:
+@proj-airi/server-sdk:build: Those rows are 94% of the build; the rest of the 99% is below.
+@proj-airi/server-runtime:build:   - tsdown:deps resolveId (70 calls)
+@proj-airi/server-sdk:build: Not measurable — 3 hooks whose calls overlap, so elapsed time covers work other calls were doing. Profile with `node --cpu-prof`:
+@proj-airi/server-sdk:build:   - tsdown:deps resolveId (44 calls)
+@proj-airi/server-runtime:build:   - rolldown-plugin-dts:resolver resolveId (30 calls)
+@proj-airi/server-runtime:build: See https://rolldown.rs/reference/InputOptions.checks#plugintimings for more details.
+@proj-airi/server-sdk:build:   - rolldown-plugin-dts:resolver resolveId (34 calls)
+@proj-airi/server-sdk:build:   - rolldown-plugin-dts:fake-js transform (6 calls)
+@proj-airi/server-runtime:build: 
+@proj-airi/server-sdk:build: See https://rolldown.rs/reference/InputOptions.checks#plugintimings for more details.
+@proj-airi/server-sdk:build: 
+@proj-airi/server-runtime:build: ✔ Build complete in 4485ms
+@proj-airi/server-sdk:build: ✔ Build complete in 4013ms
+@proj-airi/core-agent:build: cache hit, replaying logs 3a4e72258eec1e7f
+@proj-airi/plugin-sdk-tamagotchi:build: $ tsdown
+@proj-airi/plugin-sdk-tamagotchi:build: ℹ tsdown v0.22.14 powered by rolldown v1.2.5
+@proj-airi/plugin-sdk-tamagotchi:build: ℹ config file: <REPO>\airi\packages\plugin-sdk-tamagotchi\tsdown.config.ts 
+@proj-airi/plugin-sdk-tamagotchi:build: ℹ entry: src/index.ts, src/widgets/index.ts, src/gamelet/index.ts, src/kits/gamelet/index.ts, src/kits/tool/index.ts, src/tools/index.ts
+@proj-airi/plugin-sdk-tamagotchi:build: ℹ tsconfig: tsconfig.json
+@proj-airi/plugin-sdk-tamagotchi:build: ℹ Build start
+@proj-airi/plugin-sdk-tamagotchi:build: ℹ Cleaning 21 files
+@proj-airi/plugin-sdk-tamagotchi:build: ℹ dist\kits\gamelet\index.mjs    2.13 kB │ gzip: 0.86 kB
+@proj-airi/plugin-sdk-tamagotchi:build: ℹ dist\gamelet\index.mjs         2.00 kB │ gzip: 0.87 kB
+@proj-airi/plugin-sdk-tamagotchi:build: ℹ dist\kits\tool\index.mjs       1.24 kB │ gzip: 0.59 kB
+@proj-airi/plugin-sdk-tamagotchi:build: ℹ dist\widgets\index.mjs         0.75 kB │ gzip: 0.29 kB
+@proj-airi/plugin-sdk-tamagotchi:build: ℹ dist\index.mjs                 0.59 kB │ gzip: 0.21 kB
+@proj-airi/plugin-sdk-tamagotchi:build: ℹ dist\tools\index.mjs           0.13 kB │ gzip: 0.11 kB
+@proj-airi/plugin-sdk-tamagotchi:build: ℹ dist\tools-DJRNBtfm.mjs        9.54 kB │ gzip: 2.80 kB
+@proj-airi/plugin-sdk-tamagotchi:build: ℹ dist\gamelet\index.d.mts       3.58 kB │ gzip: 1.06 kB
+@proj-airi/plugin-sdk-tamagotchi:build: ℹ dist\kits\gamelet\index.d.mts  2.99 kB │ gzip: 1.06 kB
+@proj-airi/plugin-sdk-tamagotchi:build: ℹ dist\kits\tool\index.d.mts     1.88 kB │ gzip: 0.76 kB
+@proj-airi/plugin-sdk-tamagotchi:build: ℹ dist\index.d.mts               1.75 kB │ gzip: 0.45 kB
+@proj-airi/plugin-sdk-tamagotchi:build: ℹ dist\widgets\index.d.mts       1.52 kB │ gzip: 0.53 kB
+@proj-airi/plugin-sdk-tamagotchi:build: ℹ dist\tools\index.d.mts         1.01 kB │ gzip: 0.31 kB
+@proj-airi/plugin-sdk-tamagotchi:build: ℹ dist\index-C9OLC_SK.d.mts      7.01 kB │ gzip: 1.92 kB
+@proj-airi/plugin-sdk-tamagotchi:build: ℹ 14 files, total: 36.13 kB
+@proj-airi/plugin-sdk-tamagotchi:build: ✔ Build complete in 2371ms
+@proj-airi/i18n:build: $ tsdown
+@proj-airi/i18n:build: ℹ tsdown v0.22.14 powered by rolldown v1.2.5
+@proj-airi/i18n:build: ℹ config file: <REPO>\airi\packages\i18n\tsdown.config.ts 
+@proj-airi/i18n:build: ℹ entry: src/index.ts, src/locales/index.ts, src/locales/en/index.ts, src/locales/zh-Hans/index.ts
+@proj-airi/i18n:build: ℹ tsconfig: tsconfig.json
+@proj-airi/i18n:build: ℹ Build start
+@proj-airi/i18n:build: ℹ Cleaning 334 files
+@proj-airi/i18n:build: ℹ dist\index.mjs                                       1.06 kB │ gzip:  0.52 kB
+@proj-airi/i18n:build: ℹ dist\locales\index.mjs                               0.75 kB │ gzip:  0.26 kB
+@proj-airi/i18n:build: ℹ dist\locales\en\index.mjs                            0.48 kB │ gzip:  0.22 kB
+@proj-airi/i18n:build: ℹ dist\locales\zh-Hans\index.mjs                       0.42 kB │ gzip:  0.21 kB
+@proj-airi/i18n:build: ℹ dist\locales\ru\settings.mjs                        99.56 kB │ gzip: 25.89 kB
+@proj-airi/i18n:build: ℹ dist\locales\ja\settings.mjs                        80.35 kB │ gzip: 24.35 kB
+@proj-airi/i18n:build: ℹ dist\locales\vi\settings.mjs                        79.49 kB │ gzip: 22.71 kB
+@proj-airi/i18n:build: ℹ dist\locales\es\settings.mjs                        76.92 kB │ gzip: 22.92 kB
+@proj-airi/i18n:build: ℹ dist\locales\en\settings.mjs                        76.42 kB │ gzip: 21.90 kB
+@proj-airi/i18n:build: ℹ dist\locales\fr\settings.mjs                        75.92 kB │ gzip: 22.68 kB
+@proj-airi/i18n:build: ℹ dist\locales\ko\settings.mjs                        75.41 kB │ gzip: 23.63 kB
+@proj-airi/i18n:build: ℹ dist\locales\zh-Hans\settings.mjs                   74.55 kB │ gzip: 24.57 kB
+@proj-airi/i18n:build: ℹ dist\locales\zh-Hant\settings.mjs                   71.12 kB │ gzip: 23.70 kB
+@proj-airi/i18n:build: ℹ dist\locales\en\tamagotchi\settings.mjs             15.24 kB │ gzip:  4.71 kB
+@proj-airi/i18n:build: ℹ dist\locales\zh-Hant\tamagotchi\settings.mjs        12.38 kB │ gzip:  4.54 kB
+@proj-airi/i18n:build: ℹ dist\locales\en\server\auth.mjs                      8.45 kB │ gzip:  2.65 kB
+@proj-airi/i18n:build: ℹ dist\locales\pt-BR\home.mjs                          7.99 kB │ gzip:  2.67 kB
+@proj-airi/i18n:build: ℹ dist\locales\en\tamagotchi\home.mjs                  7.50 kB │ gzip:  2.48 kB
+@proj-airi/i18n:build: ℹ dist\locales\ru\tamagotchi\stage.mjs                 5.22 kB │ gzip:  2.08 kB
+@proj-airi/i18n:build: ℹ dist\locales\ru\stage.mjs                            5.10 kB │ gzip:  2.07 kB
+@proj-airi/i18n:build: ℹ dist\locales\ru\base.mjs                             4.46 kB │ gzip:  1.98 kB
+@proj-airi/i18n:build: ℹ dist\locales\zh-Hans\tamagotchi\settings.mjs         4.34 kB │ gzip:  2.06 kB
+@proj-airi/i18n:build: ℹ dist\locales\ru\tamagotchi\settings.mjs              4.32 kB │ gzip:  1.82 kB
+@proj-airi/i18n:build: ℹ dist\locales\vi\stage.mjs                            4.32 kB │ gzip:  1.87 kB
+@proj-airi/i18n:build: ℹ dist\locales\ja\tamagotchi\stage.mjs                 4.21 kB │ gzip:  1.99 kB
+@proj-airi/i18n:build: ℹ dist\locales\ja\stage.mjs                            4.18 kB │ gzip:  1.93 kB
+@proj-airi/i18n:build: ℹ dist\locales\vi\tamagotchi\stage.mjs                 4.16 kB │ gzip:  1.84 kB
+@proj-airi/i18n:build: ℹ dist\locales\fr\tamagotchi\stage.mjs                 4.15 kB │ gzip:  1.80 kB
+@proj-airi/i18n:build: ℹ dist\locales\fr\stage.mjs                            4.09 kB │ gzip:  1.74 kB
+@proj-airi/i18n:build: ℹ dist\locales\ko\tamagotchi\stage.mjs                 4.03 kB │ gzip:  1.95 kB
+@proj-airi/i18n:build: ℹ dist\locales\es\tamagotchi\stage.mjs                 3.97 kB │ gzip:  1.68 kB
+@proj-airi/i18n:build: ℹ dist\locales\ja\base.mjs                             3.85 kB │ gzip:  1.97 kB
+@proj-airi/i18n:build: ℹ dist\locales\es\stage.mjs                            3.83 kB │ gzip:  1.67 kB
+@proj-airi/i18n:build: ℹ dist\locales\ja\tamagotchi\settings.mjs              3.78 kB │ gzip:  1.68 kB
+@proj-airi/i18n:build: ℹ dist\locales\en\tamagotchi\stage.mjs                 3.65 kB │ gzip:  1.50 kB
+@proj-airi/i18n:build: ℹ dist\locales\zh-Hans\tamagotchi\stage.mjs            3.60 kB │ gzip:  1.83 kB
+@proj-airi/i18n:build: ℹ dist\locales\zh-Hant\tamagotchi\stage.mjs            3.57 kB │ gzip:  1.75 kB
+@proj-airi/i18n:build: ℹ dist\locales\ko\stage.mjs                            3.55 kB │ gzip:  1.71 kB
+@proj-airi/i18n:build: ℹ dist\locales\en\stage.mjs                            3.48 kB │ gzip:  1.48 kB
+@proj-airi/i18n:build: ℹ dist\locales\vi\base.mjs                             3.47 kB │ gzip:  1.70 kB
+@proj-airi/i18n:build: ℹ dist\locales\zh-Hant\stage.mjs                       3.46 kB │ gzip:  1.73 kB
+@proj-airi/i18n:build: ℹ dist\locales\zh-Hans\stage.mjs                       3.46 kB │ gzip:  1.74 kB
+@proj-airi/i18n:build: ℹ dist\locales\vi\tamagotchi\settings.mjs              3.42 kB │ gzip:  1.58 kB
+@proj-airi/i18n:build: ℹ dist\locales\fr\tamagotchi\settings.mjs              3.37 kB │ gzip:  1.43 kB
+@proj-airi/i18n:build: ℹ dist\locales\ko\tamagotchi\settings.mjs              3.29 kB │ gzip:  1.60 kB
+@proj-airi/i18n:build: ℹ dist\locales\es\tamagotchi\settings.mjs              3.17 kB │ gzip:  1.37 kB
+@proj-airi/i18n:build: ℹ dist\locales\fr\base.mjs                             3.13 kB │ gzip:  1.58 kB
+@proj-airi/i18n:build: ℹ dist\locales\es\base.mjs                             3.08 kB │ gzip:  1.56 kB
+@proj-airi/i18n:build: ℹ dist\locales\ko\base.mjs                             3.07 kB │ gzip:  1.71 kB
+@proj-airi/i18n:build: ℹ dist\locales\en\base.mjs                             2.85 kB │ gzip:  1.44 kB
+@proj-airi/i18n:build: ℹ dist\locales\zh-Hant\base.mjs                        2.76 kB │ gzip:  1.73 kB
+@proj-airi/i18n:build: ℹ dist\locales\zh-Hans\base.mjs                        2.75 kB │ gzip:  1.72 kB
+@proj-airi/i18n:build: ℹ dist\locales\ru\docs\theme.mjs                       1.76 kB │ gzip:  0.88 kB
+@proj-airi/i18n:build: ℹ dist\locales\ja\docs\theme.mjs                       1.53 kB │ gzip:  0.84 kB
+@proj-airi/i18n:build: ℹ dist\locales\vi\docs\theme.mjs                       1.51 kB │ gzip:  0.80 kB
+@proj-airi/i18n:build: ℹ dist\locales\ko\docs\theme.mjs                       1.47 kB │ gzip:  0.83 kB
+@proj-airi/i18n:build: ℹ dist\locales\es\docs\theme.mjs                       1.42 kB │ gzip:  0.69 kB
+@proj-airi/i18n:build: ℹ dist\locales\fr\docs\theme.mjs                       1.41 kB │ gzip:  0.70 kB
+@proj-airi/i18n:build: ℹ dist\locales\zh-Hant\docs\theme.mjs                  1.38 kB │ gzip:  0.83 kB
+@proj-airi/i18n:build: ℹ dist\locales\zh-Hans\docs\theme.mjs                  1.37 kB │ gzip:  0.83 kB
+@proj-airi/i18n:build: ℹ dist\locales\en\docs\theme.mjs                       1.35 kB │ gzip:  0.63 kB
+@proj-airi/i18n:build: ℹ dist\locales\ru\tamagotchi\electron\tray.mjs         1.35 kB │ gzip:  0.70 kB
+@proj-airi/i18n:build: ℹ dist\locales\ja\docs\versions.mjs                    1.33 kB │ gzip:  0.66 kB
+@proj-airi/i18n:build: ℹ dist\locales\ko\docs\versions.mjs                    1.23 kB │ gzip:  0.67 kB
+@proj-airi/i18n:build: ℹ dist\locales\en\docs\versions.mjs                    1.10 kB │ gzip:  0.49 kB
+@proj-airi/i18n:build: ℹ dist\locales\vi\tamagotchi\electron\tray.mjs         1.07 kB │ gzip:  0.61 kB
+@proj-airi/i18n:build: ℹ dist\locales\zh-Hans\docs\versions.mjs               1.06 kB │ gzip:  0.59 kB
+@proj-airi/i18n:build: ℹ dist\locales\zh-Hant\docs\versions.mjs               1.04 kB │ gzip:  0.57 kB
+@proj-airi/i18n:build: ℹ dist\locales\fr\tamagotchi\electron\tray.mjs         1.04 kB │ gzip:  0.55 kB
+@proj-airi/i18n:build: ℹ dist\locales\ja\tamagotchi\electron\tray.mjs         1.04 kB │ gzip:  0.63 kB
+@proj-airi/i18n:build: ℹ dist\locales\es\tamagotchi\electron\tray.mjs         1.02 kB │ gzip:  0.55 kB
+@proj-airi/i18n:build: ℹ dist\locales\pt-BR\tamagotchi\electron\tray.mjs      0.98 kB │ gzip:  0.53 kB
+@proj-airi/i18n:build: ℹ dist\locales\ko\tamagotchi\electron\tray.mjs         0.95 kB │ gzip:  0.57 kB
+@proj-airi/i18n:build: ℹ dist\locales\zh-Hant\tamagotchi\electron\tray.mjs    0.93 kB │ gzip:  0.58 kB
+@proj-airi/i18n:build: ℹ dist\locales\zh-Hans\tamagotchi\electron\tray.mjs    0.91 kB │ gzip:  0.58 kB
+@proj-airi/i18n:build: ℹ dist\locales\en\tamagotchi\electron\tray.mjs         0.90 kB │ gzip:  0.45 kB
+@proj-airi/i18n:build: ℹ dist\locales\zh-Hant\index.mjs                       0.42 kB │ gzip:  0.21 kB
+@proj-airi/i18n:build: ℹ dist\locales\es\index.mjs                            0.41 kB │ gzip:  0.20 kB
+@proj-airi/i18n:build: ℹ dist\locales\fr\index.mjs                            0.41 kB │ gzip:  0.20 kB
+@proj-airi/i18n:build: ℹ dist\locales\ja\index.mjs                            0.41 kB │ gzip:  0.20 kB
+@proj-airi/i18n:build: ℹ dist\locales\ko\index.mjs                            0.41 kB │ gzip:  0.20 kB
+@proj-airi/i18n:build: ℹ dist\locales\ru\index.mjs                            0.41 kB │ gzip:  0.20 kB
+@proj-airi/i18n:build: ℹ dist\locales\vi\index.mjs                            0.41 kB │ gzip:  0.20 kB
+@proj-airi/i18n:build: ℹ dist\locales\en\tamagotchi\index.mjs                 0.36 kB │ gzip:  0.19 kB
+@proj-airi/i18n:build: ℹ dist\locales\zh-Hans\tamagotchi\index.mjs            0.32 kB │ gzip:  0.18 kB
+@proj-airi/i18n:build: ℹ dist\locales\zh-Hant\tamagotchi\index.mjs            0.32 kB │ gzip:  0.18 kB
+@proj-airi/i18n:build: ℹ dist\locales\es\tamagotchi\index.mjs                 0.31 kB │ gzip:  0.18 kB
+@proj-airi/i18n:build: ℹ dist\locales\fr\tamagotchi\index.mjs                 0.31 kB │ gzip:  0.18 kB
+@proj-airi/i18n:build: ℹ dist\locales\ja\tamagotchi\index.mjs                 0.31 kB │ gzip:  0.18 kB
+@proj-airi/i18n:build: ℹ dist\locales\ko\tamagotchi\index.mjs                 0.31 kB │ gzip:  0.18 kB
+@proj-airi/i18n:build: ℹ dist\locales\ru\tamagotchi\index.mjs                 0.31 kB │ gzip:  0.18 kB
+@proj-airi/i18n:build: ℹ dist\locales\vi\tamagotchi\index.mjs                 0.31 kB │ gzip:  0.18 kB
+@proj-airi/i18n:build: ℹ dist\locales\pt-BR\tamagotchi\index.mjs              0.26 kB │ gzip:  0.17 kB
+@proj-airi/i18n:build: ℹ dist\locales\zh-Hans\docs\index.mjs                  0.22 kB │ gzip:  0.16 kB
+@proj-airi/i18n:build: ℹ dist\locales\zh-Hant\docs\index.mjs                  0.22 kB │ gzip:  0.16 kB
+@proj-airi/i18n:build: ℹ dist\locales\en\docs\index.mjs                       0.21 kB │ gzip:  0.15 kB
+@proj-airi/i18n:build: ℹ dist\locales\ja\docs\index.mjs                       0.21 kB │ gzip:  0.15 kB
+@proj-airi/i18n:build: ℹ dist\locales\ko\docs\index.mjs                       0.21 kB │ gzip:  0.15 kB
+@proj-airi/i18n:build: ℹ dist\locales\pt-BR\index.mjs                         0.20 kB │ gzip:  0.14 kB
+@proj-airi/i18n:build: ℹ dist\locales\zh-Hans\tamagotchi\electron\index.mjs   0.18 kB │ gzip:  0.15 kB
+@proj-airi/i18n:build: ℹ dist\locales\zh-Hant\tamagotchi\electron\index.mjs   0.18 kB │ gzip:  0.15 kB
+@proj-airi/i18n:build: ℹ dist\locales\pt-BR\tamagotchi\electron\index.mjs     0.18 kB │ gzip:  0.15 kB
+@proj-airi/i18n:build: ℹ dist\locales\en\tamagotchi\electron\index.mjs        0.18 kB │ gzip:  0.14 kB
+@proj-airi/i18n:build: ℹ dist\locales\es\tamagotchi\electron\index.mjs        0.18 kB │ gzip:  0.14 kB
+@proj-airi/i18n:build: ℹ dist\locales\fr\tamagotchi\electron\index.mjs        0.18 kB │ gzip:  0.14 kB
+@proj-airi/i18n:build: ℹ dist\locales\ja\tamagotchi\electron\index.mjs        0.18 kB │ gzip:  0.14 kB
+@proj-airi/i18n:build: ℹ dist\locales\ko\tamagotchi\electron\index.mjs        0.18 kB │ gzip:  0.14 kB
+@proj-airi/i18n:build: ℹ dist\locales\ru\tamagotchi\electron\index.mjs        0.18 kB │ gzip:  0.14 kB
+@proj-airi/i18n:build: ℹ dist\locales\vi\tamagotchi\electron\index.mjs        0.18 kB │ gzip:  0.14 kB
+@proj-airi/i18n:build: ℹ dist\locales\en\server\index.mjs                     0.16 kB │ gzip:  0.13 kB
+@proj-airi/i18n:build: ℹ dist\locales\es\docs\index.mjs                       0.16 kB │ gzip:  0.13 kB
+@proj-airi/i18n:build: ℹ dist\locales\fr\docs\index.mjs                       0.16 kB │ gzip:  0.13 kB
+@proj-airi/i18n:build: ℹ dist\locales\ru\docs\index.mjs                       0.16 kB │ gzip:  0.13 kB
+@proj-airi/i18n:build: ℹ dist\locales\vi\docs\index.mjs                       0.16 kB │ gzip:  0.13 kB
+@proj-airi/i18n:build: ℹ dist\locales\index.d.mts                             3.72 kB │ gzip:  0.30 kB
+@proj-airi/i18n:build: ℹ dist\locales\en\index.d.mts                          0.55 kB │ gzip:  0.21 kB
+@proj-airi/i18n:build: ℹ dist\index.d.mts                                     0.47 kB │ gzip:  0.25 kB
+@proj-airi/i18n:build: ℹ dist\locales\zh-Hans\index.d.mts                     0.46 kB │ gzip:  0.20 kB
+@proj-airi/i18n:build: ℹ 118 files, total: 935.36 kB
+@proj-airi/i18n:build: ✔ Build complete in 1511ms
+@proj-airi/core-agent:build: $ tsdown
+@proj-airi/core-agent:build: ℹ tsdown v0.22.14 powered by rolldown v1.2.5
+@proj-airi/core-agent:build: ℹ config file: <REPO>\airi\packages\core-agent\tsdown.config.ts 
+@proj-airi/core-agent:build: ℹ entry: src/index.ts, src/agents/spark-notify/index.ts
+@proj-airi/core-agent:build: ℹ tsconfig: tsconfig.json
+@proj-airi/core-agent:build: ℹ Build start
+@proj-airi/core-agent:build: ℹ Cleaning 8 files
+@proj-airi/core-agent:build: ℹ dist\index.mjs                        53.79 kB │ gzip: 13.97 kB
+@proj-airi/core-agent:build: ℹ dist\agents\spark-notify\index.mjs    17.57 kB │ gzip:  4.99 kB
+@proj-airi/core-agent:build: ℹ dist\index.d.mts                      34.44 kB │ gzip:  9.68 kB
+@proj-airi/core-agent:build: ℹ dist\agents\spark-notify\index.d.mts  18.67 kB │ gzip:  4.93 kB
+@proj-airi/core-agent:build: ℹ dist\llm-BOt4Ly1k.d.mts                3.00 kB │ gzip:  1.29 kB
+@proj-airi/core-agent:build: ℹ 5 files, total: 127.46 kB
+@proj-airi/core-agent:build: ✔ Build complete in 2576ms
+@proj-airi/stage-ui:build: cache hit, replaying logs 9fde06550ea1ba17
+@proj-airi/stage-ui:build: $ echo "No build step required"
+@proj-airi/stage-ui:build: No build step required
+
+ Tasks:    33 successful, 33 total
+Cached:    33 cached, 33 total
+  Time:    1.583s >>> FULL TURBO
+
+
+
+STDERR:
+$ turbo run build -F="./packages/*"
+• turbo 2.10.11
+

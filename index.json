@@ -1,0 +1,12 @@
+[
+  {
+    "runId": "20261002-141203-cfd8d7f",
+    "sourceSha": "cfd8d7fc54a0401163486170476a5c4b2d3558ee",
+    "sourceBranch": "arena/01a09ddb-lia-project",
+    "status": "PASS",
+    "startedAt": "2026-10-02T17:12:04.784Z",
+    "endedAt": "2026-10-02T17:23:10.008Z",
+    "durationMs": 665224,
+    "reportPath": "benchmarks/20261002-141203-cfd8d7f/REPORT.md"
+  }
+]

@@ -1,0 +1,55 @@
+{
+  "totalDurationMs": 665224,
+  "commands": [
+    {
+      "id": "core-agent",
+      "durationMs": 3777,
+      "exitCode": 0,
+      "status": "passed"
+    },
+    {
+      "id": "lia-core",
+      "durationMs": 3820,
+      "exitCode": 0,
+      "status": "passed"
+    },
+    {
+      "id": "browser",
+      "durationMs": 20051,
+      "exitCode": 0,
+      "status": "passed"
+    },
+    {
+      "id": "lint",
+      "durationMs": 19705,
+      "exitCode": 0,
+      "status": "passed"
+    },
+    {
+      "id": "typecheck",
+      "durationMs": 149805,
+      "exitCode": 0,
+      "status": "passed"
+    },
+    {
+      "id": "build-packages",
+      "durationMs": 5146,
+      "exitCode": 0,
+      "status": "passed"
+    },
+    {
+      "id": "stage-vitest",
+      "durationMs": 271418,
+      "exitCode": 0,
+      "status": "passed"
+    },
+    {
+      "id": "stage-ui",
+      "durationMs": 187078,
+      "exitCode": 0,
+      "status": "passed"
+    }
+  ],
+  "ramBefore": 10145771520,
+  "diskBefore": null
+}

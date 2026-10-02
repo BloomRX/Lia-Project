@@ -1,0 +1,27 @@
+{
+  "os": "win32 10.0.26200 x64",
+  "platform": "win32",
+  "arch": "x64",
+  "release": "10.0.26200",
+  "cpuModel": "AMD Ryzen 5 5500                               ",
+  "logicalCores": 12,
+  "physicalCores": 6,
+  "totalRamBytes": 17063882752,
+  "nodeVersion": "v26.8.1",
+  "pnpmVersion": "11.24.0",
+  "gitVersion": "2.52.0.windows.1",
+  "pythonVersion": "3.14.7",
+  "chromiumAvailable": true,
+  "gpu": [
+    {
+      "name": "Parsec Virtual Display Adapter",
+      "vram": null
+    },
+    {
+      "name": "AMD Radeon RX 580 2048SP",
+      "vram": 4293918720
+    }
+  ],
+  "osCaption": "Microsoft Windows 11 Home",
+  "osVersion": "10.0.26200"
+}

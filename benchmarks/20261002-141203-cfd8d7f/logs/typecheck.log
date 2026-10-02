@@ -1,0 +1,111 @@
+STDOUT:
+Scope: 59 of 74 workspace projects
+apps/lia-app typecheck$ tsc --noEmit
+apps/stage-tamagotchi typecheck$ vue-tsc --noEmit
+apps/stage-pocket typecheck$ vue-tsc --noEmit
+apps/component-calling typecheck$ vue-tsc --noEmit
+apps/stage-web typecheck$ vue-tsc --noEmit
+docs typecheck$ vue-tsc --noEmit
+apps/ui-server-auth typecheck$ vue-tsc --noEmit
+packages/audio typecheck$ tsc --noEmit
+packages/better-ws typecheck$ tsc --noEmit
+packages/cap-vite typecheck$ tsc --noEmit
+packages/ccc typecheck$ tsc --noEmit
+packages/core-agent typecheck$ tsc --noEmit
+packages/core-character typecheck$ tsc --noEmit
+packages/electron-eventa typecheck$ tsc --noEmit
+packages/electron-screen-capture typecheck$ tsc --noEmit
+packages/input-gamepad typecheck$ tsc --noEmit
+packages/electron-vueuse typecheck$ tsc --noEmit
+packages/input-gamepad-vueuse typecheck$ tsc --noEmit
+packages/i18n typecheck$ tsc --noEmit
+packages/input-playstation-dualsense-5 typecheck$ tsc --noEmit
+packages/lia-core typecheck$ tsc --noEmit
+packages/model-driver-magic-live2d typecheck$ tsc --noEmit
+packages/model-driver-mediapipe typecheck$ tsc --noEmit
+packages/pipelines-audio typecheck$ tsc --noEmit
+packages/plugin-protocol typecheck$ tsc --noEmit
+packages/motion-driver-magic typecheck$ tsc --noEmit
+packages/plugin-sdk-tamagotchi typecheck$ tsc --noEmit
+.../scenarios-stage-tamagotchi-browser typecheck$ vue-tsc --noEmit
+packages/plugin-sdk typecheck$ tsc --noEmit
+.../scenarios-stage-tamagotchi-electron typecheck$ tsc --noEmit
+packages/server-sdk typecheck$ tsc --noEmit
+packages/server-shared typecheck$ tsc --noEmit
+packages/server-runtime typecheck$ tsc --noEmit
+packages/stage-pages typecheck$ vue-tsc --noEmit
+packages/stage-layouts typecheck$ vue-tsc --noEmit
+packages/stage-shared typecheck$ tsc --noEmit
+packages/stage-ui typecheck$ vue-tsc --noEmit
+packages/stage-ui-mmd typecheck$ vue-tsc --noEmit
+packages/stage-ui-live2d typecheck$ vue-tsc --noEmit
+packages/stage-ui-spine typecheck$ vue-tsc --noEmit
+packages/stage-ui-tachie typecheck$ vue-tsc --noEmit
+packages/stream-kit typecheck$ tsc --noEmit
+packages/stage-ui-three typecheck$ vue-tsc --noEmit
+packages/testing-audio typecheck$ tsc --noEmit
+packages/ui typecheck$ vue-tsc --noEmit
+packages/ui-transitions typecheck$ vue-tsc --noEmit
+packages/vitest-plugin-fakemic typecheck$ tsc --noEmit
+packages/ui-loading-screens typecheck$ vue-tsc --noEmit
+server/apps/api typecheck$ tsc --noEmit
+server/apps/auth typecheck$ tsc --noEmit
+server/packages/auth-shared typecheck$ tsc --noEmit
+server/packages/server-sdk-shared typecheck$ tsc --noEmit
+packages/core-character typecheck: Done
+packages/i18n typecheck: Done
+packages/server-shared typecheck: Done
+packages/stream-kit typecheck: Done
+server/packages/server-sdk-shared typecheck: Done
+packages/ccc typecheck: Done
+packages/audio typecheck: Done
+packages/plugin-protocol typecheck: Done
+packages/electron-screen-capture typecheck: Done
+server/packages/auth-shared typecheck: Done
+packages/electron-eventa typecheck: Done
+packages/ui-transitions typecheck: Done
+packages/pipelines-audio typecheck: Done
+packages/electron-vueuse typecheck: Done
+packages/server-sdk typecheck: Done
+packages/cap-vite typecheck: Done
+packages/plugin-sdk-tamagotchi typecheck: Done
+.../scenarios-stage-tamagotchi-electron typecheck: Done
+packages/better-ws typecheck: Done
+packages/server-runtime typecheck: Done
+packages/lia-core typecheck: Done
+packages/plugin-sdk typecheck: Done
+apps/component-calling typecheck: Done
+packages/model-driver-mediapipe typecheck: Done
+packages/stage-shared typecheck: Done
+packages/ui typecheck: Done
+packages/core-agent typecheck: Done
+packages/ui-loading-screens typecheck: Done
+apps/lia-app typecheck: Done
+.../scenarios-stage-tamagotchi-browser typecheck: Done
+packages/model-driver-magic-live2d typecheck: Done
+packages/stage-ui-tachie typecheck: Done
+packages/input-gamepad typecheck: Done
+packages/motion-driver-magic typecheck: Done
+packages/input-playstation-dualsense-5 typecheck: Done
+packages/vitest-plugin-fakemic typecheck: Done
+packages/stage-ui-spine typecheck: Done
+packages/input-gamepad-vueuse typecheck: Done
+packages/testing-audio typecheck: Done
+docs typecheck: Done
+packages/stage-ui-mmd typecheck: Done
+server/apps/auth typecheck: Done
+packages/stage-ui-live2d typecheck: Done
+packages/stage-ui-three typecheck: Done
+server/apps/api typecheck: Done
+apps/ui-server-auth typecheck: Done
+packages/stage-layouts typecheck: Done
+apps/stage-pocket typecheck: Done
+packages/stage-pages typecheck: Done
+apps/stage-web typecheck: Done
+packages/stage-ui typecheck: Done
+apps/stage-tamagotchi typecheck: Done
+
+
+STDERR:
+$ pnpm -rF="./packages/*" -F="./apps/*" -F="./server/**" -F="./docs" --parallel typecheck
+

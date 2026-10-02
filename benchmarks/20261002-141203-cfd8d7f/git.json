@@ -1,0 +1,9 @@
+{
+  "sourceSha": "cfd8d7fc54a0401163486170476a5c4b2d3558ee",
+  "sourceBranch": "arena/01a09ddb-lia-project",
+  "remoteSourceSha": "cfd8d7fc54a0401163486170476a5c4b2d3558ee",
+  "gitVersion": "2.52.0.windows.1",
+  "nodeVersion": "v26.8.1",
+  "pnpmVersion": "11.24.0",
+  "pythonVersion": "3.14.7"
+}

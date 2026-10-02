@@ -1,0 +1,160 @@
+STDOUT:
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.11 [39m[90m<REPO>/airi/apps/stage-tamagotchi[39m
+
+ [32m✓[39m [30m[42m browser (chromium) [49m[39m src/renderer/components/chat-viewport-layout.browser.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 50[2mms[22m[39m
+ [32m✓[39m [30m[42m browser (chromium) [49m[39m src/renderer/pages/chat.browser.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 41[2mms[22m[39m
+ [32m✓[39m [30m[42m browser (chromium) [49m[39m src/renderer/components/lia-config/sections/VoiceSection.browser.test.ts [2m([22m[2m7 tests[22m[2m)[22m[33m 569[2mms[22m[39m
+ [32m✓[39m [30m[42m browser (chromium) [49m[39m src/renderer/components/InteractiveArea.browser.test.ts [2m([22m[2m13 tests[22m[2m)[22m[33m 2295[2mms[22m[39m
+     [33m[2m✓[22m[39m routes a mobile send through the synchronized chat action [33m 350[2mms[22m[39m
+     [33m[2m✓[22m[39m keeps a failed mobile draft out of a newly selected session for Issue #2085 [33m 373[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m4 passed[39m[22m[90m (4)[39m
+[2m      Tests [22m [1m[32m22 passed[39m[22m[90m (22)[39m
+[2m   Start at [22m 14:12:19
+[2m   Duration [22m 17.20s[2m (transform 0ms, setup 0ms, import 41.33s, tests 2.95s, environment 0ms)[22m
+
+
+
+STDERR:
+[unocss] unmatched utility "scrollbar-color-[var(--scrollbar-thumb)_var(--scrollbar-track)]" in shortcut "scrollbar"
+[unocss] unmatched utility "scrollbar-width-auto" in shortcut "scrollbar"
+[90mstderr[2m | src/renderer/pages/chat.browser.test.ts[2m > [22m[2mdesktop chat page scrolling[2m > [22m[2mleaves scrolling to the rendered chat history viewport
+[22m[39m[@vue/compiler-core] decodeEntities option is passed but will be ignored in non-browser builds.
+[90mstderr[2m | src/renderer/components/chat-viewport-layout.browser.test.ts[2m > [22m[2mdesktop chat viewport layout[2m > [22m[2mkeeps the message viewport above a fixed composer
+[22m[39m[@vue/compiler-core] decodeEntities option is passed but will be ignored in non-browser builds.
+[90mstderr[2m | src/renderer/components/lia-config/sections/VoiceSection.browser.test.ts[2m > [22m[2mvoice section mounting (4E-2 voice UI)[2m > [22m[2mloads the persisted configuration on mount, with no explicit load call
+[22m[39m[PINIA_COLADA_R0001] useQueryCache() was called outside of an injection context (component setup, store, navigation guard). You will get a warning about "inject" being used incorrectly from Vue.
+├▶ fix: Make sure to use it only in allowed places. See https://vuejs.org/guide/reusability/composables.html#usage-restrictions
+╰▶ see: https://pinia-colada.esm.dev/errors/pinia_colada_r0001.md
+[90mstderr[2m | src/renderer/components/lia-config/sections/VoiceSection.browser.test.ts[2m > [22m[2mvoice section mounting (4E-2 voice UI)[2m > [22m[2mloads the persisted configuration on mount, with no explicit load call
+[22m[39m[Vue warn]: inject() can only be used inside setup() or functional components.
+[90mstderr[2m | src/renderer/components/lia-config/sections/VoiceSection.browser.test.ts[2m > [22m[2mvoice section mounting (4E-2 voice UI)[2m > [22m[2mloads the persisted configuration on mount, with no explicit load call
+[22m[39m[Vue warn]: inject() can only be used inside setup() or functional components.
+[90mstderr[2m | src/renderer/components/lia-config/sections/VoiceSection.browser.test.ts[2m > [22m[2mvoice section mounting (4E-2 voice UI)[2m > [22m[2mloads the persisted configuration on mount, with no explicit load call
+[22m[39m[PINIA_COLADA_R0001] useMutationCache() was called outside of an injection context (component setup, store, navigation guard). You will get a warning about "inject" being used incorrectly from Vue.
+├▶ fix: Make sure to use it only in allowed places. See https://vuejs.org/guide/reusability/composables.html#usage-restrictions
+╰▶ see: https://pinia-colada.esm.dev/errors/pinia_colada_r0001.md
+[90mstderr[2m | src/renderer/components/lia-config/sections/VoiceSection.browser.test.ts[2m > [22m[2mvoice section mounting (4E-2 voice UI)[2m > [22m[2mloads the persisted configuration on mount, with no explicit load call
+[22m[39m[Vue warn]: inject() can only be used inside setup() or functional components.
+[90mstderr[2m | src/renderer/components/lia-config/sections/VoiceSection.browser.test.ts[2m > [22m[2mvoice section mounting (4E-2 voice UI)[2m > [22m[2mloads the persisted configuration on mount, with no explicit load call
+[22m[39m[Vue warn]: inject() can only be used inside setup() or functional components.
+[90mstderr[2m | src/renderer/components/lia-config/sections/VoiceSection.browser.test.ts[2m > [22m[2mvoice section mounting (4E-2 voice UI)[2m > [22m[2mloads the persisted configuration on mount, with no explicit load call
+[22m[39m[Vue warn]: inject() can only be used inside setup() or functional components.
+[90mstderr[2m | src/renderer/components/lia-config/sections/VoiceSection.browser.test.ts[2m > [22m[2mvoice section mounting (4E-2 voice UI)[2m > [22m[2mloads the persisted configuration on mount, with no explicit load call
+[22m[39m[Vue warn]: inject() can only be used inside setup() or functional components.
+[90mstderr[2m | src/renderer/components/lia-config/sections/VoiceSection.browser.test.ts[2m > [22m[2mvoice section mounting (4E-2 voice UI)[2m > [22m[2mnever writes the configuration just for being opened
+[22m[39m[Vue warn]: inject() can only be used inside setup() or functional components.
+[90mstderr[2m | src/renderer/components/lia-config/sections/VoiceSection.browser.test.ts[2m > [22m[2mvoice section mounting (4E-2 voice UI)[2m > [22m[2mnever writes the configuration just for being opened
+[22m[39m[Vue warn]: inject() can only be used inside setup() or functional components.
+[90mstderr[2m | src/renderer/components/lia-config/sections/VoiceSection.browser.test.ts[2m > [22m[2mvoice section mounting (4E-2 voice UI)[2m > [22m[2mnever writes the configuration just for being opened
+[22m[39m[Vue warn]: inject() can only be used inside setup() or functional components.
+[90mstderr[2m | src/renderer/components/lia-config/sections/VoiceSection.browser.test.ts[2m > [22m[2mvoice section mounting (4E-2 voice UI)[2m > [22m[2mnever writes the configuration just for being opened
+[22m[39m[Vue warn]: inject() can only be used inside setup() or functional components.
+[90mstderr[2m | src/renderer/components/lia-config/sections/VoiceSection.browser.test.ts[2m > [22m[2mvoice section mounting (4E-2 voice UI)[2m > [22m[2mnever writes the configuration just for being opened
+[22m[39m[Vue warn]: inject() can only be used inside setup() or functional components.
+[90mstderr[2m | src/renderer/components/lia-config/sections/VoiceSection.browser.test.ts[2m > [22m[2mvoice section mounting (4E-2 voice UI)[2m > [22m[2mnever writes the configuration just for being opened
+[22m[39m[Vue warn]: inject() can only be used inside setup() or functional components.
+[90mstderr[2m | src/renderer/components/lia-config/sections/VoiceSection.browser.test.ts[2m > [22m[2mvoice section mounting (4E-2 voice UI)[2m > [22m[2mpersists a provider chosen from the dropdown
+[22m[39m[Vue warn]: inject() can only be used inside setup() or functional components.
+[90mstderr[2m | src/renderer/components/lia-config/sections/VoiceSection.browser.test.ts[2m > [22m[2mvoice section mounting (4E-2 voice UI)[2m > [22m[2mpersists a provider chosen from the dropdown
+[22m[39m[Vue warn]: inject() can only be used inside setup() or functional components.
+[90mstderr[2m | src/renderer/components/lia-config/sections/VoiceSection.browser.test.ts[2m > [22m[2mvoice section mounting (4E-2 voice UI)[2m > [22m[2mpersists a provider chosen from the dropdown
+[22m[39m[Vue warn]: inject() can only be used inside setup() or functional components.
+[90mstderr[2m | src/renderer/components/lia-config/sections/VoiceSection.browser.test.ts[2m > [22m[2mvoice section mounting (4E-2 voice UI)[2m > [22m[2mpersists a provider chosen from the dropdown
+[22m[39m[Vue warn]: inject() can only be used inside setup() or functional components.
+[90mstderr[2m | src/renderer/components/lia-config/sections/VoiceSection.browser.test.ts[2m > [22m[2mvoice section mounting (4E-2 voice UI)[2m > [22m[2mpersists a provider chosen from the dropdown
+[22m[39m[Vue warn]: inject() can only be used inside setup() or functional components.
+[90mstderr[2m | src/renderer/components/lia-config/sections/VoiceSection.browser.test.ts[2m > [22m[2mvoice section mounting (4E-2 voice UI)[2m > [22m[2mpersists a provider chosen from the dropdown
+[22m[39m[Vue warn]: inject() can only be used inside setup() or functional components.
+[90mstderr[2m | src/renderer/components/InteractiveArea.browser.test.ts[2m > [22m[2minteractive area synchronized state[2m > [22m[2mkeeps the input visible when a short window contains many attachments
+[22m[39m[Error: ResizeObserver loop completed with undelivered notifications.]
+[90mstderr[2m | src/renderer/components/lia-config/sections/VoiceSection.browser.test.ts[2m > [22m[2mvoice section mounting (4E-2 voice UI)[2m > [22m[2mpersists the whole target when a voice is chosen
+[22m[39m[Vue warn]: inject() can only be used inside setup() or functional components.
+[90mstderr[2m | src/renderer/components/lia-config/sections/VoiceSection.browser.test.ts[2m > [22m[2mvoice section mounting (4E-2 voice UI)[2m > [22m[2mpersists the whole target when a voice is chosen
+[22m[39m[Vue warn]: inject() can only be used inside setup() or functional components.
+[90mstderr[2m | src/renderer/components/lia-config/sections/VoiceSection.browser.test.ts[2m > [22m[2mvoice section mounting (4E-2 voice UI)[2m > [22m[2mpersists the whole target when a voice is chosen
+[22m[39m[Vue warn]: inject() can only be used inside setup() or functional components.
+[90mstderr[2m | src/renderer/components/lia-config/sections/VoiceSection.browser.test.ts[2m > [22m[2mvoice section mounting (4E-2 voice UI)[2m > [22m[2mpersists the whole target when a voice is chosen
+[22m[39m[Vue warn]: inject() can only be used inside setup() or functional components.
+[90mstderr[2m | src/renderer/components/lia-config/sections/VoiceSection.browser.test.ts[2m > [22m[2mvoice section mounting (4E-2 voice UI)[2m > [22m[2mpersists the whole target when a voice is chosen
+[22m[39m[Vue warn]: inject() can only be used inside setup() or functional components.
+[90mstderr[2m | src/renderer/components/lia-config/sections/VoiceSection.browser.test.ts[2m > [22m[2mvoice section mounting (4E-2 voice UI)[2m > [22m[2mpersists the whole target when a voice is chosen
+[22m[39m[Vue warn]: inject() can only be used inside setup() or functional components.
+[90mstderr[2m | src/renderer/components/lia-config/sections/VoiceSection.browser.test.ts[2m > [22m[2mvoice section mounting (4E-2 voice UI)[2m > [22m[2mturns "Nenhuma" into an empty fallback array
+[22m[39m[Vue warn]: inject() can only be used inside setup() or functional components.
+[90mstderr[2m | src/renderer/components/lia-config/sections/VoiceSection.browser.test.ts[2m > [22m[2mvoice section mounting (4E-2 voice UI)[2m > [22m[2mturns "Nenhuma" into an empty fallback array
+[22m[39m[Vue warn]: inject() can only be used inside setup() or functional components.
+[90mstderr[2m | src/renderer/components/lia-config/sections/VoiceSection.browser.test.ts[2m > [22m[2mvoice section mounting (4E-2 voice UI)[2m > [22m[2mturns "Nenhuma" into an empty fallback array
+[22m[39m[Vue warn]: inject() can only be used inside setup() or functional components.
+[90mstderr[2m | src/renderer/components/lia-config/sections/VoiceSection.browser.test.ts[2m > [22m[2mvoice section mounting (4E-2 voice UI)[2m > [22m[2mturns "Nenhuma" into an empty fallback array
+[22m[39m[Vue warn]: inject() can only be used inside setup() or functional components.
+[90mstderr[2m | src/renderer/components/lia-config/sections/VoiceSection.browser.test.ts[2m > [22m[2mvoice section mounting (4E-2 voice UI)[2m > [22m[2mturns "Nenhuma" into an empty fallback array
+[22m[39m[Vue warn]: inject() can only be used inside setup() or functional components.
+[90mstderr[2m | src/renderer/components/lia-config/sections/VoiceSection.browser.test.ts[2m > [22m[2mvoice section mounting (4E-2 voice UI)[2m > [22m[2mturns "Nenhuma" into an empty fallback array
+[22m[39m[Vue warn]: inject() can only be used inside setup() or functional components.
+[90mstderr[2m | src/renderer/components/InteractiveArea.browser.test.ts[2m > [22m[2minteractive area synchronized state[2m > [22m[2mconnects the production history viewport to the fixed composer
+[22m[39m[Error: ResizeObserver loop completed with undelivered notifications.]
+[90mstderr[2m | src/renderer/components/lia-config/sections/VoiceSection.browser.test.ts[2m > [22m[2mvoice section mounting (4E-2 voice UI)[2m > [22m[2mpreviews the selected voice and writes nothing while doing it
+[22m[39m[Vue warn]: inject() can only be used inside setup() or functional components.
+[90mstderr[2m | src/renderer/components/lia-config/sections/VoiceSection.browser.test.ts[2m > [22m[2mvoice section mounting (4E-2 voice UI)[2m > [22m[2mpreviews the selected voice and writes nothing while doing it
+[22m[39m[Vue warn]: inject() can only be used inside setup() or functional components.
+[90mstderr[2m | src/renderer/components/lia-config/sections/VoiceSection.browser.test.ts[2m > [22m[2mvoice section mounting (4E-2 voice UI)[2m > [22m[2mpreviews the selected voice and writes nothing while doing it
+[22m[39m[Vue warn]: inject() can only be used inside setup() or functional components.
+[90mstderr[2m | src/renderer/components/lia-config/sections/VoiceSection.browser.test.ts[2m > [22m[2mvoice section mounting (4E-2 voice UI)[2m > [22m[2mpreviews the selected voice and writes nothing while doing it
+[22m[39m[Vue warn]: inject() can only be used inside setup() or functional components.
+[90mstderr[2m | src/renderer/components/lia-config/sections/VoiceSection.browser.test.ts[2m > [22m[2mvoice section mounting (4E-2 voice UI)[2m > [22m[2mpreviews the selected voice and writes nothing while doing it
+[22m[39m[Vue warn]: inject() can only be used inside setup() or functional components.
+[90mstderr[2m | src/renderer/components/lia-config/sections/VoiceSection.browser.test.ts[2m > [22m[2mvoice section mounting (4E-2 voice UI)[2m > [22m[2mpreviews the selected voice and writes nothing while doing it
+[22m[39m[Vue warn]: inject() can only be used inside setup() or functional components.
+[90mstderr[2m | src/renderer/components/InteractiveArea.browser.test.ts[2m > [22m[2minteractive area synchronized state[2m > [22m[2mrenders the active synchronized stream through the real chat history for Issue #2085
+[22m[39m[Error: ResizeObserver loop completed with undelivered notifications.]
+[90mstderr[2m | src/renderer/components/lia-config/sections/VoiceSection.browser.test.ts[2m > [22m[2mvoice section mounting (4E-2 voice UI)[2m > [22m[2mshows the persisted values again after a restart
+[22m[39m[Vue warn]: inject() can only be used inside setup() or functional components.
+[90mstderr[2m | src/renderer/components/lia-config/sections/VoiceSection.browser.test.ts[2m > [22m[2mvoice section mounting (4E-2 voice UI)[2m > [22m[2mshows the persisted values again after a restart
+[22m[39m[Vue warn]: inject() can only be used inside setup() or functional components.
+[90mstderr[2m | src/renderer/components/lia-config/sections/VoiceSection.browser.test.ts[2m > [22m[2mvoice section mounting (4E-2 voice UI)[2m > [22m[2mshows the persisted values again after a restart
+[22m[39m[Vue warn]: inject() can only be used inside setup() or functional components.
+[90mstderr[2m | src/renderer/components/lia-config/sections/VoiceSection.browser.test.ts[2m > [22m[2mvoice section mounting (4E-2 voice UI)[2m > [22m[2mshows the persisted values again after a restart
+[22m[39m[Vue warn]: inject() can only be used inside setup() or functional components.
+[90mstderr[2m | src/renderer/components/lia-config/sections/VoiceSection.browser.test.ts[2m > [22m[2mvoice section mounting (4E-2 voice UI)[2m > [22m[2mshows the persisted values again after a restart
+[22m[39m[Vue warn]: inject() can only be used inside setup() or functional components.
+[90mstderr[2m | src/renderer/components/lia-config/sections/VoiceSection.browser.test.ts[2m > [22m[2mvoice section mounting (4E-2 voice UI)[2m > [22m[2mshows the persisted values again after a restart
+[22m[39m[Vue warn]: inject() can only be used inside setup() or functional components.
+[90mstderr[2m | src/renderer/components/lia-config/sections/VoiceSection.browser.test.ts[2m > [22m[2mvoice section mounting (4E-2 voice UI)[2m > [22m[2mshows the persisted values again after a restart
+[22m[39m[Vue warn]: inject() can only be used inside setup() or functional components.
+[90mstderr[2m | src/renderer/components/lia-config/sections/VoiceSection.browser.test.ts[2m > [22m[2mvoice section mounting (4E-2 voice UI)[2m > [22m[2mshows the persisted values again after a restart
+[22m[39m[Vue warn]: inject() can only be used inside setup() or functional components.
+[90mstderr[2m | src/renderer/components/lia-config/sections/VoiceSection.browser.test.ts[2m > [22m[2mvoice section mounting (4E-2 voice UI)[2m > [22m[2mshows the persisted values again after a restart
+[22m[39m[Vue warn]: inject() can only be used inside setup() or functional components.
+[90mstderr[2m | src/renderer/components/lia-config/sections/VoiceSection.browser.test.ts[2m > [22m[2mvoice section mounting (4E-2 voice UI)[2m > [22m[2mshows the persisted values again after a restart
+[22m[39m[Vue warn]: inject() can only be used inside setup() or functional components.
+[90mstderr[2m | src/renderer/components/lia-config/sections/VoiceSection.browser.test.ts[2m > [22m[2mvoice section mounting (4E-2 voice UI)[2m > [22m[2mshows the persisted values again after a restart
+[22m[39m[Vue warn]: inject() can only be used inside setup() or functional components.
+[90mstderr[2m | src/renderer/components/lia-config/sections/VoiceSection.browser.test.ts[2m > [22m[2mvoice section mounting (4E-2 voice UI)[2m > [22m[2mshows the persisted values again after a restart
+[22m[39m[Vue warn]: inject() can only be used inside setup() or functional components.
+[90mstderr[2m | src/renderer/components/InteractiveArea.browser.test.ts[2m > [22m[2minteractive area synchronized state[2m > [22m[2mscopes the mobile synchronized stream to its local session for Issue #2085
+[22m[39m[VUE_ROUTER_R0004] No match found for location with path "/settings"
+├▶ fix: Add a route matching this path or check for typos in the location.
+╰▶ see: https://router.vuejs.org/guide/essentials/dynamic-matching.html#Catch-all-404-Not-found-Route
+[90mstderr[2m | src/renderer/components/InteractiveArea.browser.test.ts[2m > [22m[2minteractive area synchronized state[2m > [22m[2mscopes the stage-web desktop synchronized stream to its local session for Issue #2085
+[22m[39m[Error: ResizeObserver loop completed with undelivered notifications.]
+[90mstderr[2m | src/renderer/components/InteractiveArea.browser.test.ts[2m > [22m[2minteractive area synchronized state[2m > [22m[2mroutes a stage-web send through the synchronized chat action
+[22m[39m[Error: ResizeObserver loop completed with undelivered notifications.]
+[90mstderr[2m | src/renderer/components/InteractiveArea.browser.test.ts[2m > [22m[2minteractive area synchronized state[2m > [22m[2mroutes a mobile send through the synchronized chat action
+[22m[39m[VUE_ROUTER_R0004] No match found for location with path "/settings"
+├▶ fix: Add a route matching this path or check for typos in the location.
+╰▶ see: https://router.vuejs.org/guide/essentials/dynamic-matching.html#Catch-all-404-Not-found-Route
+[90mstderr[2m | src/renderer/components/InteractiveArea.browser.test.ts[2m > [22m[2minteractive area synchronized state[2m > [22m[2mkeeps a failed mobile draft out of a newly selected session for Issue #2085
+[22m[39m[VUE_ROUTER_R0004] No match found for location with path "/settings"
+├▶ fix: Add a route matching this path or check for typos in the location.
+╰▶ see: https://router.vuejs.org/guide/essentials/dynamic-matching.html#Catch-all-404-Not-found-Route
+[90mstderr[2m | src/renderer/components/InteractiveArea.browser.test.ts[2m > [22m[2minteractive area synchronized state[2m > [22m[2mdoes not restore a failed draft into a newly selected session for Issue #2085
+[22m[39m[Error: ResizeObserver loop completed with undelivered notifications.]
+[90mstderr[2m | src/renderer/components/InteractiveArea.browser.test.ts[2m > [22m[2minteractive area synchronized state[2m > [22m[2mrestores a failed draft when its captured session is still active for Issue #2085
+[22m[39m[Error: ResizeObserver loop completed with undelivered notifications.]
+[90mstderr[2m | src/renderer/components/InteractiveArea.browser.test.ts[2m > [22m[2minteractive area synchronized state[2m > [22m[2mkeeps a newer draft when an earlier send fails
+[22m[39m[Error: ResizeObserver loop completed with undelivered notifications.]
+[90mstderr[2m | src/renderer/components/InteractiveArea.browser.test.ts[2m > [22m[2minteractive area synchronized state[2m > [22m[2mdiscards a queued draft when deletion cancels its send for Issue #2085
+[22m[39m[Error: ResizeObserver loop completed with undelivered notifications.]
+

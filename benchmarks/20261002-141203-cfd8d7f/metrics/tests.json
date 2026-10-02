@@ -1,0 +1,192 @@
+{
+  "commands": [
+    {
+      "id": "core-agent",
+      "label": "Core Agent",
+      "cwd": "airi",
+      "argv": [
+        "pnpm",
+        "exec",
+        "vitest",
+        "run",
+        "--project",
+        "@proj-airi/core-agent"
+      ],
+      "startedAt": "2026-10-02T17:12:09.155Z",
+      "endedAt": "2026-10-02T17:12:12.932Z",
+      "durationMs": 3777,
+      "exitCode": 0,
+      "status": "passed",
+      "testFiles": 12,
+      "passed": 124,
+      "failed": 0,
+      "skipped": null,
+      "errors": null,
+      "warnings": null,
+      "logPath": "Tests/runs/20261002-141203-cfd8d7f/logs/raw/core-agent.log",
+      "truncated": false
+    },
+    {
+      "id": "lia-core",
+      "label": "Lia Core",
+      "cwd": "airi/packages/lia-core",
+      "argv": [
+        "pnpm",
+        "test"
+      ],
+      "startedAt": "2026-10-02T17:12:12.936Z",
+      "endedAt": "2026-10-02T17:12:16.756Z",
+      "durationMs": 3820,
+      "exitCode": 0,
+      "status": "passed",
+      "testFiles": 27,
+      "passed": 333,
+      "failed": 0,
+      "skipped": null,
+      "errors": null,
+      "warnings": null,
+      "logPath": "Tests/runs/20261002-141203-cfd8d7f/logs/raw/lia-core.log",
+      "truncated": false
+    },
+    {
+      "id": "browser",
+      "label": "Browser Stage",
+      "cwd": "airi/apps/stage-tamagotchi",
+      "argv": [
+        "pnpm",
+        "exec",
+        "vitest",
+        "run",
+        "--project",
+        "browser"
+      ],
+      "startedAt": "2026-10-02T17:12:16.757Z",
+      "endedAt": "2026-10-02T17:12:36.808Z",
+      "durationMs": 20051,
+      "exitCode": 0,
+      "status": "passed",
+      "testFiles": 4,
+      "passed": 22,
+      "failed": 0,
+      "skipped": null,
+      "errors": null,
+      "warnings": null,
+      "logPath": "Tests/runs/20261002-141203-cfd8d7f/logs/raw/browser.log",
+      "truncated": false
+    },
+    {
+      "id": "lint",
+      "label": "Lint",
+      "cwd": "airi",
+      "argv": [
+        "pnpm",
+        "lint"
+      ],
+      "startedAt": "2026-10-02T17:12:36.811Z",
+      "endedAt": "2026-10-02T17:12:56.516Z",
+      "durationMs": 19705,
+      "exitCode": 0,
+      "status": "passed",
+      "testFiles": null,
+      "passed": null,
+      "failed": null,
+      "skipped": null,
+      "errors": null,
+      "warnings": null,
+      "logPath": "Tests/runs/20261002-141203-cfd8d7f/logs/raw/lint.log",
+      "truncated": false
+    },
+    {
+      "id": "typecheck",
+      "label": "Typecheck",
+      "cwd": "airi",
+      "argv": [
+        "pnpm",
+        "typecheck"
+      ],
+      "startedAt": "2026-10-02T17:12:56.517Z",
+      "endedAt": "2026-10-02T17:15:26.322Z",
+      "durationMs": 149805,
+      "exitCode": 0,
+      "status": "passed",
+      "testFiles": null,
+      "passed": null,
+      "failed": null,
+      "skipped": null,
+      "errors": null,
+      "warnings": null,
+      "logPath": "Tests/runs/20261002-141203-cfd8d7f/logs/raw/typecheck.log",
+      "truncated": false
+    },
+    {
+      "id": "build-packages",
+      "label": "Build packages",
+      "cwd": "airi",
+      "argv": [
+        "pnpm",
+        "run",
+        "build:packages"
+      ],
+      "startedAt": "2026-10-02T17:15:26.336Z",
+      "endedAt": "2026-10-02T17:15:31.482Z",
+      "durationMs": 5146,
+      "exitCode": 0,
+      "status": "passed",
+      "testFiles": null,
+      "passed": null,
+      "failed": null,
+      "skipped": null,
+      "errors": null,
+      "warnings": null,
+      "logPath": "Tests/runs/20261002-141203-cfd8d7f/logs/raw/build-packages.log",
+      "truncated": false
+    },
+    {
+      "id": "stage-vitest",
+      "label": "Stage full",
+      "cwd": "airi/apps/stage-tamagotchi",
+      "argv": [
+        "pnpm",
+        "exec",
+        "vitest",
+        "run"
+      ],
+      "startedAt": "2026-10-02T17:15:31.489Z",
+      "endedAt": "2026-10-02T17:20:02.907Z",
+      "durationMs": 271418,
+      "exitCode": 0,
+      "status": "passed",
+      "testFiles": 142,
+      "passed": 1576,
+      "failed": 0,
+      "skipped": 4,
+      "errors": null,
+      "warnings": null,
+      "logPath": "Tests/runs/20261002-141203-cfd8d7f/logs/raw/stage-vitest.log",
+      "truncated": false
+    },
+    {
+      "id": "stage-ui",
+      "label": "Stage UI",
+      "cwd": "airi",
+      "argv": [
+        "pnpm",
+        "run",
+        "test-ui:run"
+      ],
+      "startedAt": "2026-10-02T17:20:02.919Z",
+      "endedAt": "2026-10-02T17:23:09.997Z",
+      "durationMs": 187078,
+      "exitCode": 0,
+      "status": "passed",
+      "testFiles": 166,
+      "passed": 1103,
+      "failed": 0,
+      "skipped": null,
+      "errors": null,
+      "warnings": null,
+      "logPath": "Tests/runs/20261002-141203-cfd8d7f/logs/raw/stage-ui.log",
+      "truncated": false
+    }
+  ]
+}

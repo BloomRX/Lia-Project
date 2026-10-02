@@ -1,0 +1,158 @@
+STDOUT:
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.11 [39m[90m<REPO>/airi[39m
+
+ [32m✓[39m [30m[45m @proj-airi/core-agent [49m[39m src/messages/types.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m [30m[45m @proj-airi/core-agent [49m[39m src/runtime/llm-marker-parser.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 18[2mms[22m[39m
+ [32m✓[39m [30m[45m @proj-airi/core-agent [49m[39m src/messages/projection.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m [30m[45m @proj-airi/core-agent [49m[39m src/messages/compaction.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m [30m[45m @proj-airi/core-agent [49m[39m src/messages/datetime-prefix.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m [30m[45m @proj-airi/core-agent [49m[39m src/messages/context-prompt.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m [30m[45m @proj-airi/core-agent [49m[39m src/runtime/llm-service.test.ts [2m([22m[2m18 tests[22m[2m)[22m[32m 81[2mms[22m[39m
+ [32m✓[39m [30m[45m @proj-airi/core-agent [49m[39m src/runtime/context-registry.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 19[2mms[22m[39m
+[90mstdout[2m | src/runtime/response-categoriser.test.ts[2m > [22m[2mcreateStreamingCategorizer[2m > [22m[2mshould handle <think> tag with special tokens in between
+[22m[39m{
+  input: [32m'Hello <think>thinking <|ACT {"emotion":{"name":"curious","intensity":1}}|> about this <|DELAY:2|> and that</think> world!'[39m,
+  segmentsFound: [33m1[39m,
+  tagName: [32m'think'[39m,
+  segmentContent: [32m'thinking <|ACT {"emotion":{"name":"curious","intensity":1}}|> about this <|DELAY:2|> and that'[39m,
+  reasoning: [32m'thinking <|ACT {"emotion":{"name":"curious","intensity":1}}|> about this <|DELAY:2|> and that'[39m,
+  speech: [32m'Hello world!'[39m
+}
+
+[90mstdout[2m | src/runtime/response-categoriser.test.ts[2m > [22m[2mcreateStreamingCategorizer[2m > [22m[2mshould handle <think> with special tokens like <|ACT {"emotion":{"name":"happy","intensity":1}}|> in between
+[22m[39m{
+  input: [32m'Hello <think>thinking <|ACT {"emotion":{"name":"happy","intensity":1}}|> about this <|DELAY:1|> and that</think> world!'[39m,
+  segmentsFound: [33m1[39m,
+  tagName: [32m'think'[39m,
+  segmentContent: [32m'thinking <|ACT {"emotion":{"name":"happy","intensity":1}}|> about this <|DELAY:1|> and that'[39m,
+  reasoning: [32m'thinking <|ACT {"emotion":{"name":"happy","intensity":1}}|> about this <|DELAY:1|> and that'[39m,
+  speech: [32m'Hello world!'[39m
+}
+
+ [32m✓[39m [30m[45m @proj-airi/core-agent [49m[39m src/runtime/response-categoriser.test.ts [2m([22m[2m20 tests[22m[2m)[22m[32m 30[2mms[22m[39m
+ [32m✓[39m [30m[45m @proj-airi/core-agent [49m[39m src/agents/spark-notify/agent.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+ [32m✓[39m [30m[45m @proj-airi/core-agent [49m[39m src/messages/render-provider-chat.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m [30m[45m @proj-airi/core-agent [49m[39m src/runtime/chat-orchestrator-runtime.test.ts [2m([22m[2m56 tests[22m[2m)[22m[33m 481[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m12 passed[39m[22m[90m (12)[39m
+[2m      Tests [22m [1m[32m124 passed[39m[22m[90m (124)[39m
+[2m   Start at [22m 14:12:11
+[2m   Duration [22m 1.67s[2m (transform 1.79s, setup 0ms, import 3.57s, tests 681ms, environment 2ms)[22m
+
+
+
+STDERR:
+[90mstderr[2m | src/runtime/llm-service.test.ts[2m > [22m[2mstreamFrom tool errors[2m > [22m[2mconsumes totalUsage rejection when the stream fails before usage can be awaited
+[22m[39mStream totalUsage error: Error: provider usage failed
+    at <REPO>/airi/packages/core-agent/src/runtime/llm-service.test.ts:176:29
+    at [90mfile:///<REPO>/airi/[39mnode_modules/[4m.pnpm[24m/@vitest+runner@4.1.11/node_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:302:11
+    at [90mfile:///<REPO>/airi/[39mnode_modules/[4m.pnpm[24m/@vitest+runner@4.1.11/node_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:1903:26
+    at [90mfile:///<REPO>/airi/[39mnode_modules/[4m.pnpm[24m/@vitest+runner@4.1.11/node_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:2326:20
+    at new Promise (<anonymous>)
+    at runWithCancel [90m(file:///<REPO>/airi/[39mnode_modules/[4m.pnpm[24m/@vitest+runner@4.1.11/node_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:2323:10[90m)[39m
+    at [90mfile:///<REPO>/airi/[39mnode_modules/[4m.pnpm[24m/@vitest+runner@4.1.11/node_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:2305:20
+    at new Promise (<anonymous>)
+    at runWithTimeout [90m(file:///<REPO>/airi/[39mnode_modules/[4m.pnpm[24m/@vitest+runner@4.1.11/node_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:2272:10[90m)[39m
+    at [90mfile:///<REPO>/airi/[39mnode_modules/[4m.pnpm[24m/@vitest+runner@4.1.11/node_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:2956:64
+Stream steps error: Error: provider stream failed
+    at <REPO>/airi/packages/core-agent/src/runtime/llm-service.test.ts:175:25
+    at [90mfile:///<REPO>/airi/[39mnode_modules/[4m.pnpm[24m/@vitest+runner@4.1.11/node_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:302:11
+    at [90mfile:///<REPO>/airi/[39mnode_modules/[4m.pnpm[24m/@vitest+runner@4.1.11/node_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:1903:26
+    at [90mfile:///<REPO>/airi/[39mnode_modules/[4m.pnpm[24m/@vitest+runner@4.1.11/node_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:2326:20
+    at new Promise (<anonymous>)
+    at runWithCancel [90m(file:///<REPO>/airi/[39mnode_modules/[4m.pnpm[24m/@vitest+runner@4.1.11/node_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:2323:10[90m)[39m
+    at [90mfile:///<REPO>/airi/[39mnode_modules/[4m.pnpm[24m/@vitest+runner@4.1.11/node_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:2305:20
+    at new Promise (<anonymous>)
+    at runWithTimeout [90m(file:///<REPO>/airi/[39mnode_modules/[4m.pnpm[24m/@vitest+runner@4.1.11/node_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:2272:10[90m)[39m
+    at [90mfile:///<REPO>/airi/[39mnode_modules/[4m.pnpm[24m/@vitest+runner@4.1.11/node_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:2956:64
+
+[90mstderr[2m | src/runtime/llm-service.test.ts[2m > [22m[2mstreamFrom tool errors[2m > [22m[2mdoes not fail a completed generation when the usage observer throws
+[22m[39mStream usage callback error: Error: analytics unavailable
+    at Object.onUsage (<REPO>/airi/packages/core-agent/src/runtime/llm-service.test.ts:211:17)
+    at <REPO>/airi/packages/core-agent/src/runtime/llm-service.ts:263:26
+
+[90mstderr[2m | src/runtime/chat-orchestrator-runtime.test.ts[2m > [22m[2mcreateChatOrchestratorRuntime[2m > [22m[2memits chat activation failure telemetry without raw provider messages
+[22m[39mError sending message: Error: provider rejected with sensitive details
+    at <REPO>/airi/packages/core-agent/src/runtime/chat-orchestrator-runtime.test.ts:712:42
+    at [90mfile:///<REPO>/airi/[39mnode_modules/[4m.pnpm[24m/@vitest+runner@4.1.11/node_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:302:11
+    at [90mfile:///<REPO>/airi/[39mnode_modules/[4m.pnpm[24m/@vitest+runner@4.1.11/node_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:1903:26
+    at [90mfile:///<REPO>/airi/[39mnode_modules/[4m.pnpm[24m/@vitest+runner@4.1.11/node_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:2326:20
+    at new Promise (<anonymous>)
+    at runWithCancel [90m(file:///<REPO>/airi/[39mnode_modules/[4m.pnpm[24m/@vitest+runner@4.1.11/node_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:2323:10[90m)[39m
+    at [90mfile:///<REPO>/airi/[39mnode_modules/[4m.pnpm[24m/@vitest+runner@4.1.11/node_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:2305:20
+    at new Promise (<anonymous>)
+    at runWithTimeout [90m(file:///<REPO>/airi/[39mnode_modules/[4m.pnpm[24m/@vitest+runner@4.1.11/node_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:2272:10[90m)[39m
+    at [90mfile:///<REPO>/airi/[39mnode_modules/[4m.pnpm[24m/@vitest+runner@4.1.11/node_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:2956:64
+
+[90mstderr[2m | src/runtime/chat-orchestrator-runtime.test.ts[2m > [22m[2mcreateChatOrchestratorRuntime[2m > [22m[2memits a round failure for later turns without repeating activation failure
+[22m[39mError sending message: Error: later turn rejected
+    at <REPO>/airi/packages/core-agent/src/runtime/chat-orchestrator-runtime.test.ts:757:42
+[90m    at processTicksAndRejections (node:internal/process/task_queues:104:5)[39m
+    at [90mfile:///<REPO>/airi/[39mnode_modules/[4m.pnpm[24m/@vitest+runner@4.1.11/node_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:1903:20
+
+[90mstderr[2m | src/runtime/chat-orchestrator-runtime.test.ts[2m > [22m[2mcarried provider identity[2m > [22m[2mreports the carried identity on a failed round too
+[22m[39mError sending message: Error: provider rejected
+    at <REPO>/airi/packages/core-agent/src/runtime/chat-orchestrator-runtime.test.ts:1182:42
+    at [90mfile:///<REPO>/airi/[39mnode_modules/[4m.pnpm[24m/@vitest+runner@4.1.11/node_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:302:11
+    at [90mfile:///<REPO>/airi/[39mnode_modules/[4m.pnpm[24m/@vitest+runner@4.1.11/node_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:1903:26
+    at [90mfile:///<REPO>/airi/[39mnode_modules/[4m.pnpm[24m/@vitest+runner@4.1.11/node_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:2326:20
+    at new Promise (<anonymous>)
+    at runWithCancel [90m(file:///<REPO>/airi/[39mnode_modules/[4m.pnpm[24m/@vitest+runner@4.1.11/node_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:2323:10[90m)[39m
+    at [90mfile:///<REPO>/airi/[39mnode_modules/[4m.pnpm[24m/@vitest+runner@4.1.11/node_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:2305:20
+    at new Promise (<anonymous>)
+    at runWithTimeout [90m(file:///<REPO>/airi/[39mnode_modules/[4m.pnpm[24m/@vitest+runner@4.1.11/node_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:2272:10[90m)[39m
+    at [90mfile:///<REPO>/airi/[39mnode_modules/[4m.pnpm[24m/@vitest+runner@4.1.11/node_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:2956:64
+
+[90mstderr[2m | src/runtime/chat-orchestrator-runtime.test.ts[2m > [22m[2mchat round settled seam (Phase 8.0D-10B-4D4B1)[2m > [22m[2m35: a throw after onMessageRound, inside the activation milestone, settles as failed
+[22m[39mError sending message: Error: activation milestone exploded
+    at <REPO>/airi/packages/core-agent/src/runtime/chat-orchestrator-runtime.test.ts:1382:49
+    at [90mfile:///<REPO>/airi/[39mnode_modules/[4m.pnpm[24m/@vitest+runner@4.1.11/node_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:302:11
+    at [90mfile:///<REPO>/airi/[39mnode_modules/[4m.pnpm[24m/@vitest+runner@4.1.11/node_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:1903:26
+    at [90mfile:///<REPO>/airi/[39mnode_modules/[4m.pnpm[24m/@vitest+runner@4.1.11/node_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:2326:20
+    at new Promise (<anonymous>)
+    at runWithCancel [90m(file:///<REPO>/airi/[39mnode_modules/[4m.pnpm[24m/@vitest+runner@4.1.11/node_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:2323:10[90m)[39m
+    at [90mfile:///<REPO>/airi/[39mnode_modules/[4m.pnpm[24m/@vitest+runner@4.1.11/node_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:2305:20
+    at new Promise (<anonymous>)
+    at runWithTimeout [90m(file:///<REPO>/airi/[39mnode_modules/[4m.pnpm[24m/@vitest+runner@4.1.11/node_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:2272:10[90m)[39m
+    at [90mfile:///<REPO>/airi/[39mnode_modules/[4m.pnpm[24m/@vitest+runner@4.1.11/node_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:2956:64
+
+[90mstderr[2m | src/runtime/chat-orchestrator-runtime.test.ts[2m > [22m[2mchat round settled seam (Phase 8.0D-10B-4D4B1)[2m > [22m[2m36: a non-stale stream failure settles once as failed and keeps the original error
+[22m[39mError sending message: Error: provider exploded
+    at <REPO>/airi/packages/core-agent/src/runtime/chat-orchestrator-runtime.test.ts:1397:42
+    at [90mfile:///<REPO>/airi/[39mnode_modules/[4m.pnpm[24m/@vitest+runner@4.1.11/node_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:302:11
+    at [90mfile:///<REPO>/airi/[39mnode_modules/[4m.pnpm[24m/@vitest+runner@4.1.11/node_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:1903:26
+    at [90mfile:///<REPO>/airi/[39mnode_modules/[4m.pnpm[24m/@vitest+runner@4.1.11/node_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:2326:20
+    at new Promise (<anonymous>)
+    at runWithCancel [90m(file:///<REPO>/airi/[39mnode_modules/[4m.pnpm[24m/@vitest+runner@4.1.11/node_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:2323:10[90m)[39m
+    at [90mfile:///<REPO>/airi/[39mnode_modules/[4m.pnpm[24m/@vitest+runner@4.1.11/node_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:2305:20
+    at new Promise (<anonymous>)
+    at runWithTimeout [90m(file:///<REPO>/airi/[39mnode_modules/[4m.pnpm[24m/@vitest+runner@4.1.11/node_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:2272:10[90m)[39m
+    at [90mfile:///<REPO>/airi/[39mnode_modules/[4m.pnpm[24m/@vitest+runner@4.1.11/node_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:2956:64
+
+[90mstderr[2m | src/runtime/chat-orchestrator-runtime.test.ts[2m > [22m[2mchat round settled seam (Phase 8.0D-10B-4D4B1)[2m > [22m[2m43: an in-try failure before the request start settles as failed, with no start observation
+[22m[39mError sending message: Error: composition hook exploded
+    at <REPO>/airi/packages/core-agent/src/runtime/chat-orchestrator-runtime.test.ts:1688:13
+    at Object.emitAfterMessageComposedHooks (<REPO>/airi/packages/core-agent/src/runtime/agent-hooks.ts:128:13)
+    at performSend (<REPO>/airi/packages/core-agent/src/runtime/chat-orchestrator-runtime.ts:828:19)
+    at sendQueue.handlers (<REPO>/airi/packages/core-agent/src/runtime/chat-orchestrator-runtime.ts:1119:11)
+    at drain (<REPO>/airi/packages/stream-kit/dist/index.mjs:42:30)
+
+[90mstderr[2m | src/runtime/chat-orchestrator-runtime.test.ts[2m > [22m[2mchat round settled seam (Phase 8.0D-10B-4D4B1)[2m > [22m[2m46: a throwing settled listener never replaces the original stream error
+[22m[39mError sending message: Error: provider exploded
+    at <REPO>/airi/packages/core-agent/src/runtime/chat-orchestrator-runtime.test.ts:1721:42
+    at [90mfile:///<REPO>/airi/[39mnode_modules/[4m.pnpm[24m/@vitest+runner@4.1.11/node_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:302:11
+    at [90mfile:///<REPO>/airi/[39mnode_modules/[4m.pnpm[24m/@vitest+runner@4.1.11/node_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:1903:26
+    at [90mfile:///<REPO>/airi/[39mnode_modules/[4m.pnpm[24m/@vitest+runner@4.1.11/node_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:2326:20
+    at new Promise (<anonymous>)
+    at runWithCancel [90m(file:///<REPO>/airi/[39mnode_modules/[4m.pnpm[24m/@vitest+runner@4.1.11/node_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:2323:10[90m)[39m
+    at [90mfile:///<REPO>/airi/[39mnode_modules/[4m.pnpm[24m/@vitest+runner@4.1.11/node_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:2305:20
+    at new Promise (<anonymous>)
+    at runWithTimeout [90m(file:///<REPO>/airi/[39mnode_modules/[4m.pnpm[24m/@vitest+runner@4.1.11/node_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:2272:10[90m)[39m
+    at [90mfile:///<REPO>/airi/[39mnode_modules/[4m.pnpm[24m/@vitest+runner@4.1.11/node_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:2956:64
+
+[90mstderr[2m | src/runtime/chat-orchestrator-runtime.test.ts[2m > [22m[2mchat round settled seam (Phase 8.0D-10B-4D4B1)[2m > [22m[2m48: a failing state-change path still escapes and settles the round as failed
+[22m[39mError sending message: Error: state exploded
+    at Object.<anonymous> (<REPO>/airi/packages/core-agent/src/runtime/chat-orchestrator-runtime.test.ts:1751:39)
+
+

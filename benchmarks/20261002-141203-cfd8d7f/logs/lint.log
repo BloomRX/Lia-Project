@@ -1,0 +1,8 @@
+STDOUT:
+Found 0 warnings and 0 errors.
+Finished in 529ms on 3286 files with 96 rules using 12 threads.
+
+
+STDERR:
+$ moeru-lint .
+

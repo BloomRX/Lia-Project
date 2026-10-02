@@ -1,0 +1,46 @@
+STDOUT:
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.11 [39m[90m<REPO>/airi/packages/lia-core[39m
+
+ [32m✓[39m src/test-helpers-guard.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 36[2mms[22m[39m
+ [32m✓[39m src/brain/routes.test.ts [2m([22m[2m17 tests[22m[2m)[22m[32m 19[2mms[22m[39m
+ [32m✓[39m src/product/brain-policy.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 66[2mms[22m[39m
+ [32m✓[39m src/voice/voice-service.test.ts [2m([22m[2m19 tests[22m[2m)[22m[32m 109[2mms[22m[39m
+ [32m✓[39m src/product/config.test.ts [2m([22m[2m24 tests[22m[2m)[22m[32m 128[2mms[22m[39m
+ [32m✓[39m src/brain/catalog.test.ts [2m([22m[2m15 tests[22m[2m)[22m[32m 40[2mms[22m[39m
+ [32m✓[39m src/product/config-write.test.ts [2m([22m[2m25 tests[22m[2m)[22m[32m 201[2mms[22m[39m
+ [32m✓[39m src/brain/runtime.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 62[2mms[22m[39m
+ [32m✓[39m src/voice/engines/kokoro/engine.test.ts [2m([22m[2m17 tests[22m[2m)[22m[32m 127[2mms[22m[39m
+ [32m✓[39m src/brain/engine-registry.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 23[2mms[22m[39m
+ [32m✓[39m src/brain/decision.test.ts [2m([22m[2m30 tests[22m[2m)[22m[32m 33[2mms[22m[39m
+ [32m✓[39m src/voice/engines/registry.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 16[2mms[22m[39m
+ [32m✓[39m src/voice/engines/kokoro/install.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 29[2mms[22m[39m
+ [32m✓[39m src/brain/resolver.test.ts [2m([22m[2m15 tests[22m[2m)[22m[32m 17[2mms[22m[39m
+ [32m✓[39m src/brain/readiness.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 24[2mms[22m[39m
+ [32m✓[39m src/brain/capabilities.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 20[2mms[22m[39m
+ [32m✓[39m src/brain/selection.test.ts [2m([22m[2m16 tests[22m[2m)[22m[32m 21[2mms[22m[39m
+ [32m✓[39m src/voice/engines/kokoro/smoke.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 18[2mms[22m[39m
+ [32m✓[39m src/windows-portability.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 14[2mms[22m[39m
+ [32m✓[39m src/test-helpers.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 22[2mms[22m[39m
+ [32m✓[39m src/voice/engines/kokoro/layout.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+ [32m✓[39m src/voice/config.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m src/bridge/lia-config.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m src/paths/product-paths.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m src/paths/install-location.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m src/brain/adapters/groq.test.ts [2m([22m[2m15 tests[22m[2m)[22m[33m 1901[2mms[22m[39m
+     [33m[2m✓[22m[39m o: the current chat/provider execution path does not consume the adapter [33m 1861[2mms[22m[39m
+ [32m✓[39m src/brain/chat-requirement.test.ts [2m([22m[2m15 tests[22m[2m)[22m[33m 2037[2mms[22m[39m
+     [33m[2m✓[22m[39m t: the current chat execution path neither routes through Brain nor consumes this helper yet [33m 2019[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m27 passed[39m[22m[90m (27)[39m
+[2m      Tests [22m [1m[32m333 passed[39m[22m[90m (333)[39m
+[2m   Start at [22m 14:12:13
+[2m   Duration [22m 2.72s[2m (transform 2.14s, setup 0ms, import 4.07s, tests 5.01s, environment 5ms)[22m
+
+
+
+STDERR:
+$ vitest run
+(node:13584) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
