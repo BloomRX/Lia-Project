@@ -208,3 +208,75 @@ describe('qa-benchmark-lib: powershellCommands CIM', () => {
     assert.ok(joined.includes('Win32_VideoController'))
   })
 })
+// ---------------------------------------------------------------------------
+// Chromium inventory: the field must mean the EXECUTABLE exists (D2B9-G)
+// ---------------------------------------------------------------------------
+describe('qa-benchmark: detectPlaywrightChromiumAvailability', () => {
+  /** A spawn double that records the call and answers with a fixed status. */
+  function recordingSpawn({ status = 0, throws = false } = {}) {
+    const calls = []
+    const spawn = (command, args, options) => {
+      calls.push({ command, args, options })
+      if (throws) throw new Error('spawn exploded')
+      return { status, stdout: '', stderr: '' }
+    }
+    return { calls, spawn }
+  }
+
+  it('A: a child probe exiting 0 reports the executable as available', async () => {
+    const { detectPlaywrightChromiumAvailability } = await import('./qa-benchmark.mjs')
+    const { spawn } = recordingSpawn({ status: 0 })
+    assert.equal(detectPlaywrightChromiumAvailability({ platform: 'linux', spawn, repoRoot: '/fake/repo' }), true)
+  })
+
+  it('B: a child probe exiting nonzero reports it as unavailable', async () => {
+    const { detectPlaywrightChromiumAvailability } = await import('./qa-benchmark.mjs')
+    for (const status of [1, 2, null]) {
+      const { spawn } = recordingSpawn({ status })
+      assert.equal(
+        detectPlaywrightChromiumAvailability({ platform: 'linux', spawn, repoRoot: '/fake/repo' }),
+        false,
+        `status ${status} must be unavailable`,
+      )
+    }
+  })
+
+  it('C: a throwing spawn reports it as unavailable instead of failing the run', async () => {
+    const { detectPlaywrightChromiumAvailability } = await import('./qa-benchmark.mjs')
+    const { spawn } = recordingSpawn({ throws: true })
+    assert.equal(detectPlaywrightChromiumAvailability({ platform: 'linux', spawn, repoRoot: '/fake/repo' }), false)
+  })
+
+  it('D: probes from the AIRI workspace, not the repository root', async () => {
+    const { detectPlaywrightChromiumAvailability } = await import('./qa-benchmark.mjs')
+    const { calls, spawn } = recordingSpawn({ status: 0 })
+    detectPlaywrightChromiumAvailability({ platform: 'linux', spawn, repoRoot: '/fake/repo' })
+
+    assert.equal(calls.length, 1)
+    assert.equal(calls[0].options.cwd, nodePath.join('/fake/repo', 'airi'))
+    assert.notEqual(calls[0].options.cwd, '/fake/repo')
+  })
+
+  it('E: asks for the Chromium executable path, never a CLI version string', async () => {
+    const { detectPlaywrightChromiumAvailability } = await import('./qa-benchmark.mjs')
+    const { calls, spawn } = recordingSpawn({ status: 0 })
+    detectPlaywrightChromiumAvailability({ platform: 'linux', spawn, repoRoot: '/fake/repo' })
+
+    const { command, args } = calls[0]
+    // Through pnpm, in the workspace, as an ES module probe - no shell involved.
+    assert.equal(command, 'pnpm')
+    assert.deepEqual(args.slice(0, 4), ['exec', 'node', '--input-type=module', '-e'])
+
+    const probe = args.at(-1)
+    // The semantics that make the field mean what its name says.
+    assert.ok(probe.includes('chromium.executablePath()'), 'must ask Playwright for the executable path')
+    assert.ok(probe.includes('existsSync('), 'must check that the file exists')
+    assert.ok(probe.includes('process.exit('), 'must answer through the exit code only')
+    // A CLI version string proves the npm package, not a runnable browser.
+    assert.ok(!probe.includes('--version'), 'must not fall back to a version probe')
+    assert.ok(!probe.includes('playwright --version'))
+    // No absolute path is emitted by the child, and the probe stays one line so
+    // Windows cmd.exe quoting cannot truncate it.
+    assert.ok(!probe.includes('\n'), 'probe must stay a single line')
+  })
+})

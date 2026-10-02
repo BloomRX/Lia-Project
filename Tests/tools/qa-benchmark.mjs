@@ -145,6 +145,46 @@ export function ensurePublishStaging({ runId, repoRoot = REPO_ROOT }) {
 // ---------------------------------------------------------------------------
 // Hardware via portable runner for pnpm etc., git stays argv-native
 // ---------------------------------------------------------------------------
+
+/**
+ * The child probe for Chromium availability.
+ *
+ * It asks Playwright where its Chromium binary actually lives and reports ONLY
+ * whether that file exists, through the process exit code - so no absolute
+ * executable path ever leaves the child, and none can reach persisted output.
+ *
+ * Written as ONE line on purpose: on Windows the portable runner quotes
+ * arguments into a cmd.exe command line, where a literal newline would end the
+ * command. No `shell: true`, no browser launch, no network, no install.
+ */
+const CHROMIUM_EXECUTABLE_PROBE = "import { existsSync } from 'node:fs'; import { chromium } from 'playwright'; let available = false; try { available = existsSync(chromium.executablePath()) } catch {} process.exit(available ? 0 : 1)"
+
+/**
+ * Whether the Playwright Chromium EXECUTABLE exists - what the field's name
+ * promises, and what the previous `playwright --version` probe could not tell.
+ *
+ * Two corrections at once:
+ * - Playwright belongs to the AIRI workspace, not the repository root, so the
+ *   probe runs from `<repo>/airi` where the dependency is actually resolvable;
+ * - a CLI version string only proves the npm package is installed. This asks
+ *   for `chromium.executablePath()` and checks that file, which is the only
+ *   thing that means a browser can run.
+ *
+ * Any failure - missing package, throwing probe, spawn error - is honestly
+ * `false`; the inventory never claims a browser it cannot prove.
+ */
+export function detectPlaywrightChromiumAvailability({ platform = process.platform, spawn = spawnSync, repoRoot = REPO_ROOT } = {}) {
+  try {
+    const r = runWithRunner(
+      ['pnpm', 'exec', 'node', '--input-type=module', '-e', CHROMIUM_EXECUTABLE_PROBE],
+      { cwd: nodePath.join(repoRoot, 'airi'), platform, spawn },
+    )
+    return r.status === 0
+  } catch {
+    return false
+  }
+}
+
 export function collectHardware({ platform = process.platform, spawn = spawnSync } = {}) {
   const base = hardwareFromNode()
   try {
@@ -180,10 +220,7 @@ export function collectHardware({ platform = process.platform, spawn = spawnSync
       if (p.status === 0) base.diskFree = p.stdout
     } catch {}
   }
-  try {
-    const r = runWithRunner(['pnpm', 'exec', 'playwright', '--version'], { cwd: REPO_ROOT, platform, spawn })
-    base.chromiumAvailable = r.status === 0
-  } catch { base.chromiumAvailable = false }
+  base.chromiumAvailable = detectPlaywrightChromiumAvailability({ platform, spawn })
   delete base.freeRamBytes
   return base
 }

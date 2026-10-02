@@ -8,6 +8,7 @@ import { createI18n } from 'vue-i18n'
 
 import SessionsDrawer from './sessions-drawer.vue'
 
+import { LIA_BUILT_IN_CARD_ID } from '../../../../constants/lia-default-card'
 import { useChatStore } from '../../../../stores/chat'
 import { useChatSessionStore } from '../../../../stores/chat/session-store'
 
@@ -135,7 +136,11 @@ describe('sessions drawer orchestration', () => {
     await screen.rerender({ modelValue: true })
 
     await screen.getByRole('button', { name: 'New chat' }).click()
-    await vi.waitFor(() => expect(chatSession.createSession).toHaveBeenCalledWith('default', { setActive: false }))
+    // The new session is created for the ACTIVE card, and the card store's
+    // built-in default is Lia - the legacy `'default'` id this used to pin
+    // belongs to the old ReLU built-in and is not part of this test's purpose,
+    // which is that a pending creation cannot overwrite a newer selection.
+    await vi.waitFor(() => expect(chatSession.createSession).toHaveBeenCalledWith(LIA_BUILT_IN_CARD_ID, { setActive: false }))
 
     await screen.getByRole('button', { name: /^Chat C / }).click()
     expect(chatSession.activeSessionId).toBe('session-c')

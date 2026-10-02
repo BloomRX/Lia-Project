@@ -73,26 +73,73 @@ const REPO_ROOT = new URL('../../../../../../', import.meta.url)
 /** `fileURLToPath` keeps the trailing separator of a directory URL. */
 const REPO_ROOT_PATH = fileURLToPath(REPO_ROOT)
 
-/** Every production (non-test) `.ts`/`.vue` file under the repo-relative roots. */
-function productionSources(roots: string[]): string[] {
-  const files: string[] = []
-  for (const root of roots) {
-    for (const entry of readdirSync(new URL(root, REPO_ROOT), { recursive: true, withFileTypes: true })) {
-      if (!entry.isFile() || !/\.(?:ts|vue)$/.test(entry.name) || entry.name.includes('.test.'))
-        continue
-      const authored = authoredSourceEntry(REPO_ROOT_PATH, entry)
-      if (!authored)
-        continue
-      files.push(authored.relativePosix)
-    }
+/** One authored production source: its repo-relative path and its text. */
+interface ProductionSourceEntry {
+  relativePosix: string
+  source: string
+}
+
+/**
+ * The authored production inventory of one root, built lazily and then reused.
+ *
+ * These allowlist guards run a dozen times inside a single test, and each call
+ * used to walk every root and reread every authored file from scratch - the
+ * same trees traversed and the same bytes read over and over, which is what
+ * pushed the test past the default timeout on a real machine. Each root is now
+ * enumerated once and each authored source read once for the whole module.
+ *
+ * Nothing about WHAT is scanned changes: the same `.ts`/`.vue` filter, the same
+ * `.test.` exclusion, and the same `authoredSourceEntry` gate, so generated
+ * directories and Windows path shapes stay excluded exactly as before.
+ */
+const productionInventory = new Map<string, readonly ProductionSourceEntry[]>()
+
+function inventoryForRoot(root: string): readonly ProductionSourceEntry[] {
+  const cached = productionInventory.get(root)
+  if (cached)
+    return cached
+
+  const entries: ProductionSourceEntry[] = []
+  for (const entry of readdirSync(new URL(root, REPO_ROOT), { recursive: true, withFileTypes: true })) {
+    if (!entry.isFile() || !/\.(?:ts|vue)$/.test(entry.name) || entry.name.includes('.test.'))
+      continue
+    const authored = authoredSourceEntry(REPO_ROOT_PATH, entry)
+    if (!authored)
+      continue
+    entries.push({
+      relativePosix: authored.relativePosix,
+      source: normalizeLineEndings(readFileSync(new URL(authored.relativePosix, REPO_ROOT), 'utf-8')),
+    })
   }
-  return files
+
+  const inventory: readonly ProductionSourceEntry[] = Object.freeze(entries)
+  productionInventory.set(root, inventory)
+  return inventory
+}
+
+/** The cached authored sources under the given roots, in root order. */
+function productionSourceEntries(roots: string[]): readonly ProductionSourceEntry[] {
+  return roots.flatMap(root => inventoryForRoot(root))
+}
+
+/**
+ * Tests one pattern against one cached source.
+ *
+ * `lastIndex` is reset first: the cache means the SAME pattern now runs across
+ * many sources in sequence, which is exactly where a future `/g` pattern would
+ * otherwise carry sticky state from one file into the next and silently change
+ * an allowlist result.
+ */
+function matchesPattern(pattern: RegExp, source: string): boolean {
+  pattern.lastIndex = 0
+  return pattern.test(source)
 }
 
 /** Production sources whose content matches the pattern, in stable order. */
 function productionSourcesMatching(roots: string[], pattern: RegExp): string[] {
-  return productionSources(roots)
-    .filter(relative => pattern.test(normalizeLineEndings(readFileSync(new URL(relative, REPO_ROOT), 'utf-8'))))
+  return productionSourceEntries(roots)
+    .filter(entry => matchesPattern(pattern, entry.source))
+    .map(entry => entry.relativePosix)
     .sort()
 }
 
@@ -643,8 +690,8 @@ describe('lia send terminal wiring invariants (Phase 8.0D-10B-4D4C4-B3B2)', () =
       'eventa:event:lia:brain:send-terminal-observation',
     ])
     const tags = new Set<string>()
-    for (const relative of productionSources(BRAIN_ROOTS)) {
-      for (const match of normalizeLineEndings(readFileSync(new URL(relative, REPO_ROOT), 'utf-8')).matchAll(/eventa:(?:invoke|event):lia:brain[^'"]*/g))
+    for (const entry of productionSourceEntries(BRAIN_ROOTS)) {
+      for (const match of entry.source.matchAll(/eventa:(?:invoke|event):lia:brain[^'"]*/g))
         tags.add(match[0])
     }
     expect([...tags].sort()).toEqual([
