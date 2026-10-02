@@ -263,9 +263,9 @@ describe('qa-benchmark: detectPlaywrightChromiumAvailability', () => {
     detectPlaywrightChromiumAvailability({ platform: 'linux', spawn, repoRoot: '/fake/repo' })
 
     const { command, args } = calls[0]
-    // Through pnpm, in the workspace, as an ES module probe - no shell involved.
-    assert.equal(command, 'pnpm')
-    assert.deepEqual(args.slice(0, 4), ['exec', 'node', '--input-type=module', '-e'])
+    // Native node, in the workspace, as an ES module probe - no shell involved.
+    assert.equal(command, 'node')
+    assert.deepEqual(args.slice(0, 2), ['--input-type=module', '-e'])
 
     const probe = args.at(-1)
     // The semantics that make the field mean what its name says.
@@ -275,8 +275,81 @@ describe('qa-benchmark: detectPlaywrightChromiumAvailability', () => {
     // A CLI version string proves the npm package, not a runnable browser.
     assert.ok(!probe.includes('--version'), 'must not fall back to a version probe')
     assert.ok(!probe.includes('playwright --version'))
+    // G1: the probe must not be routed through pnpm at all. That is the
+    // pnpm.cmd / ComSpec path whose quoting broke the `-e` payload on Windows.
+    assert.ok(!command.includes('pnpm'), 'probe must run as native node, not pnpm')
     // No absolute path is emitted by the child, and the probe stays one line so
-    // Windows cmd.exe quoting cannot truncate it.
+    // the argv element stays simple and stable.
     assert.ok(!probe.includes('\n'), 'probe must stay a single line')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Chromium probe on win32: native node.exe, never pnpm.cmd / cmd.exe (D2B9-G1)
+// ---------------------------------------------------------------------------
+describe('qa-benchmark: detectPlaywrightChromiumAvailability on win32', () => {
+  const NODE_EXE = 'C:\\Program Files\\nodejs\\node.exe'
+
+  /**
+   * A win32 spawn double: answers `where.exe node` with a NATIVE node.exe and
+   * answers every other spawn with a fixed status. This reproduces the real
+   * Windows routing, where `where pnpm` yields pnpm.cmd (a cmd shim) but
+   * `where node` yields node.exe (spawned directly, with no ComSpec).
+   */
+  function windowsSpawn({ status = 0 } = {}) {
+    const calls = []
+    const spawn = (command, args, options) => {
+      calls.push({ command, args, options })
+      if (/^where(\.exe)?$/i.test(command)) {
+        return { status: 0, stdout: `${NODE_EXE}\r\n`, stderr: '' }
+      }
+      return { status, stdout: '', stderr: '' }
+    }
+    return { calls, spawn }
+  }
+
+  it('routes the probe to native node.exe, bypassing pnpm.cmd and cmd.exe', async () => {
+    const { detectPlaywrightChromiumAvailability } = await import('./qa-benchmark.mjs')
+    const { calls, spawn } = windowsSpawn({ status: 0 })
+
+    assert.equal(
+      detectPlaywrightChromiumAvailability({ platform: 'win32', spawn, repoRoot: 'C:\\fake\\repo' }),
+      true,
+      'a probe exiting 0 on win32 must report the executable as available',
+    )
+
+    // where.exe was consulted, and specifically for `node`.
+    const whereCalls = calls.filter(c => /^where(\.exe)?$/i.test(c.command))
+    assert.ok(whereCalls.length > 0, 'where.exe must be consulted on win32')
+    assert.ok(whereCalls.some(c => c.args.includes('node')), 'where.exe must be queried for node')
+
+    // The thing actually spawned was native node.exe, exactly once.
+    const nodeCalls = calls.filter(c => c.command === NODE_EXE)
+    assert.equal(nodeCalls.length, 1, 'native node.exe must be spawned exactly once')
+
+    // node.exe receives the probe as real argv elements, not a shell string.
+    const { args } = nodeCalls[0]
+    assert.deepEqual(args.slice(0, 2), ['--input-type=module', '-e'])
+    const probe = args.at(-1)
+    assert.ok(probe.includes('chromium.executablePath()'), 'probe must ask for the executable path')
+    assert.ok(probe.includes('existsSync('), 'probe must check that the file exists')
+
+    // The routing that actually broke on Windows must be entirely absent.
+    assert.ok(!calls.some(c => /cmd\.exe$/i.test(c.command)), 'cmd.exe must NOT be spawned')
+    assert.ok(!calls.some(c => /pnpm/i.test(c.command)), 'pnpm must NOT be invoked')
+    assert.ok(!calls.some(c => c.args.some(a => /pnpm/i.test(String(a)))), 'pnpm must NOT appear in argv')
+    assert.ok(!calls.some(c => c.options && c.options.shell === true), 'shell:true must NEVER be used')
+
+    // Still the AIRI workspace, so `import { chromium } from 'playwright'` resolves.
+    assert.equal(nodeCalls[0].options.cwd, nodePath.join('C:\\fake\\repo', 'airi'))
+  })
+
+  it('reports unavailable when native node.exe exits nonzero', async () => {
+    const { detectPlaywrightChromiumAvailability } = await import('./qa-benchmark.mjs')
+    const { spawn } = windowsSpawn({ status: 1 })
+    assert.equal(
+      detectPlaywrightChromiumAvailability({ platform: 'win32', spawn, repoRoot: 'C:\\fake\\repo' }),
+      false,
+    )
   })
 })

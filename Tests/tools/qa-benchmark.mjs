@@ -153,9 +153,17 @@ export function ensurePublishStaging({ runId, repoRoot = REPO_ROOT }) {
  * whether that file exists, through the process exit code - so no absolute
  * executable path ever leaves the child, and none can reach persisted output.
  *
- * Written as ONE line on purpose: on Windows the portable runner quotes
- * arguments into a cmd.exe command line, where a literal newline would end the
- * command. No `shell: true`, no browser launch, no network, no install.
+ * Written as ONE line to keep the argv element simple and stable.
+ *
+ * Routing is what matters here: the probe runs as NATIVE node through
+ * runWithRunner. On Windows `node` resolves via where.exe to node.exe, which is
+ * not a .cmd/.bat shim, so the runner spawns it DIRECTLY - this probe never
+ * traverses pnpm.cmd, ComSpec, cmd.exe or PowerShell, and `shell: true` is
+ * never used. The JavaScript therefore reaches Node as a real argv element with
+ * no shell re-parsing, which is exactly what a multi-word `-e` payload needs.
+ *
+ * It answers through the process exit code only, so no executable path is ever
+ * persisted. No browser launch, no network, no install.
  */
 const CHROMIUM_EXECUTABLE_PROBE = "import { existsSync } from 'node:fs'; import { chromium } from 'playwright'; let available = false; try { available = existsSync(chromium.executablePath()) } catch {} process.exit(available ? 0 : 1)"
 
@@ -176,7 +184,7 @@ const CHROMIUM_EXECUTABLE_PROBE = "import { existsSync } from 'node:fs'; import 
 export function detectPlaywrightChromiumAvailability({ platform = process.platform, spawn = spawnSync, repoRoot = REPO_ROOT } = {}) {
   try {
     const r = runWithRunner(
-      ['pnpm', 'exec', 'node', '--input-type=module', '-e', CHROMIUM_EXECUTABLE_PROBE],
+      ['node', '--input-type=module', '-e', CHROMIUM_EXECUTABLE_PROBE],
       { cwd: nodePath.join(repoRoot, 'airi'), platform, spawn },
     )
     return r.status === 0
