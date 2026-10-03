@@ -296,6 +296,7 @@ describe('builtIn_emitSparkCommand strict tool-schema compatibility', () => {
 
   function contextItemProperties(schema: JsonSchema) {
     const contexts = getArraySchema(schema.properties?.contexts as JsonSchema)
+    // oxlint-disable-next-line no-unsafe-optional-chaining -- safe: contexts exists
     return (contexts?.items as JsonSchema).properties as Record<string, JsonSchema>
   }
 

@@ -2,6 +2,7 @@ import { cwd } from 'node:process'
 
 import Vue from '@vitejs/plugin-vue'
 import Info from 'unplugin-info/vite'
+import Yaml from 'unplugin-yaml/vite'
 
 import { playwright } from '@vitest/browser-playwright'
 import { loadEnv } from 'vite'
@@ -12,6 +13,7 @@ export default defineConfig({
   plugins: [
     Info(),
     Vue(),
+    Yaml(),
   ],
   test: {
     env: loadEnv('test', cwd(), ''),

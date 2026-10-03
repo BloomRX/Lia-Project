@@ -282,5 +282,94 @@ class GitFlowTests(unittest.TestCase):
         self.assertIn('ainda não existe',result.stdout)
         self.assertEqual(self.git('rev-parse','HEAD').stdout.strip(),self.initial)
 
+
+class KokoroSmokeTests(unittest.TestCase):
+    """Lia (fase 7.9D): entrada DevKit `kokoro-smoke` para o smoke dev-only
+    do engine Kokoro real. Nenhum teste aqui instala nada nem roda o engine:
+    o subprocesso e o PATH sao mockados; o que se fixa e' o CONTRATO."""
+    REPO = CLI.parent.parent
+    DIST_RELS = ('voice/engines/kokoro/index.mjs', 'bootstrap/runtime-root.mjs')
+
+    def _fake_root(self, *, script=True, dists=True):
+        tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp, True)
+        if script:
+            target = tmp / 'tools' / 'kokoro-smoke.mjs'
+            target.parent.mkdir(parents=True)
+            target.write_text('// stub\n', encoding='utf-8')
+        if dists:
+            for rel in self.DIST_RELS:
+                target = tmp / 'airi' / 'packages' / 'lia-core' / 'dist' / Path(rel)
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text('// stub\n', encoding='utf-8')
+        return tmp
+
+    def _run_smoke(self, root, *, which='C:/node/node.exe', returncode=0):
+        calls = []
+        def fake_run(cmd, cwd=None):
+            calls.append((list(cmd), cwd))
+            return subprocess.CompletedProcess(args=cmd, returncode=returncode)
+        with patch.object(kit, 'KIT', root), \
+             patch.object(kit.shutil, 'which', return_value=which), \
+             patch.object(kit.subprocess, 'run', side_effect=fake_run):
+            return kit.kokoro_smoke(), calls
+
+    def test_dispatch_passes_node_then_script_with_repo_cwd(self):
+        root = self._fake_root()
+        result, calls = self._run_smoke(root)
+        self.assertIsNone(result)
+        (cmd, cwd), = calls
+        self.assertEqual(cmd[0], 'C:/node/node.exe')
+        self.assertEqual(Path(cmd[1]), root / 'tools' / 'kokoro-smoke.mjs')
+        self.assertEqual(Path(cwd), root)
+
+    def test_runner_failure_propagates_the_exit_code(self):
+        root = self._fake_root()
+        with self.assertRaises(RuntimeError) as ctx:
+            self._run_smoke(root, returncode=7)
+        self.assertIn('exit 7', str(ctx.exception))
+
+    def test_missing_node_fails_before_any_subprocess(self):
+        root = self._fake_root()
+        with self.assertRaises(RuntimeError) as ctx:
+            self._run_smoke(root, which=None)
+        self.assertIn('Node.js nao encontrado', str(ctx.exception))
+
+    def test_missing_production_dist_names_the_build_command(self):
+        root = self._fake_root(dists=False)
+        with self.assertRaises(RuntimeError) as ctx:
+            self._run_smoke(root)
+        self.assertIn('pnpm run build', str(ctx.exception))
+
+    def test_missing_runner_script_fails_closed(self):
+        root = self._fake_root(script=False)
+        with self.assertRaises(RuntimeError) as ctx:
+            self._run_smoke(root)
+        self.assertIn('kokoro-smoke.mjs', str(ctx.exception))
+
+    def test_real_argparse_dispatch_recognizes_the_subcommand(self):
+        """`python project_cli.py kokoro-smoke` sem PATH: deve cair no caminho
+        do smoke (ERRO: exit 1), jamais no usage do argparse (exit 2)."""
+        env = dict(os.environ); env['PATH'] = ''
+        result = subprocess.run([sys.executable, str(CLI), 'kokoro-smoke'],
+                                capture_output=True, text=True, env=env, cwd=str(self.REPO))
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('ERRO:', result.stdout)
+        self.assertNotIn('usage:', result.stderr)
+
+    def test_the_runner_wires_production_modules_only(self):
+        """Guard estatico: o arquivo .mjs importa os dists de PRODUCAO e nao
+        contem TTS proprio nem provedor acelerado."""
+        content = (self.REPO / 'tools' / 'kokoro-smoke.mjs').read_text(encoding='utf-8')
+        for marker in ('createKokoroVoiceEngine', 'resolveKokoroLayout',
+                       'runKokoroSmoke', 'resolveVoiceRuntimeHome',
+                       'voice', 'engines', 'kokoro', 'bootstrap', 'runtime-root'):
+            self.assertIn(marker, content)
+        self.assertNotIn('directml', content.lower())
+        self.assertNotIn('async function synthesize', content)
+
+    def test_qa_dir_is_gitignored(self):
+        self.assertIn('.devkit-qa/', (self.REPO / '.gitignore').read_text(encoding='utf-8'))
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

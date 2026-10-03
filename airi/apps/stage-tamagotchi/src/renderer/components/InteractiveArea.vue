@@ -8,10 +8,12 @@ import { ChatHistory, JournalPreviewModal } from '@proj-airi/stage-ui/components
 import { useAnalytics } from '@proj-airi/stage-ui/composables/use-analytics'
 import { useBackgroundStore } from '@proj-airi/stage-ui/stores/background'
 import { useChatStore } from '@proj-airi/stage-ui/stores/chat'
+import { retrySourceMessageIdFrom } from '@proj-airi/stage-ui/stores/chat/retry-source'
 import { useChatSessionStore } from '@proj-airi/stage-ui/stores/chat/session-store'
 import { useChatStreamStore } from '@proj-airi/stage-ui/stores/chat/stream-store'
 import { useJournalPreviewStore } from '@proj-airi/stage-ui/stores/journal-preview'
 import { useAiriCardStore } from '@proj-airi/stage-ui/stores/modules/airi-card'
+import { useConsciousnessSettingsStore } from '@proj-airi/stage-ui/stores/modules/consciousness-settings'
 import { BasicTextarea } from '@proj-airi/ui'
 import { useLocalStorage } from '@vueuse/core'
 import { storeToRefs } from 'pinia'
@@ -24,6 +26,9 @@ import JournalToolCallBlock from './chat-tool-renderers/journal-tool-call-block.
 import ChatViewportLayout from './chat-viewport-layout.vue'
 
 import { useHearingInputChannel } from '../composables/use-hearing-input-channel'
+import { chatTurnFactsFromSend } from '../services/lia/brain-shadow'
+import { executeLiaAuthoritativeRetry } from '../services/lia/lia-authoritative-retry'
+import { resolveLiaAuthoritativeSendRoute } from '../services/lia/lia-authoritative-route-resolver'
 import { artistryToolReferences, widgetToolReferences } from '../stores/tools'
 
 const router = useRouter()
@@ -38,6 +43,9 @@ const chatStream = useChatStreamStore()
 const backgroundStore = useBackgroundStore()
 const journalPreviewStore = useJournalPreviewStore()
 const airiCardStore = useAiriCardStore()
+// Existing session-level reasoning request - the same value consciousness
+// chat request preparation reads (no new state is introduced for the shadow).
+const consciousnessSettings = useConsciousnessSettingsStore()
 
 const { activeSessionId, messages } = storeToRefs(chatSession)
 const { streamingMessage } = storeToRefs(chatStream)
@@ -94,16 +102,45 @@ async function handleSend() {
   // Keep one correlation key for both the send and its failure recovery.
   const targetSessionId = chatSession.activeSessionId
 
+  // Phase 8.0D-10B-3B1: one opaque key for this LOGICAL send, minted once here
+  // - the seam that owns the user submission - and carried unchanged through
+  // the leader-routed send into per-attempt request metadata, so every attempt
+  // of this send (fallback included) reports the same value. Opaque by design:
+  // it encodes nothing and selects nothing.
+  const correlationId = crypto.randomUUID()
+
   // optimistic clear
   messageInput.value = ''
   attachments.value = []
+
+  // Phase 8.0D-10B-4D4C4-D2B2-D2: freeze reasoning + tools before awaiting Lia authority
+  // so in-flight logical send keeps its snapshot even if live settings change.
+  const reasoningToSend = consciousnessSettings.reasoning
+  const toolsToSend = [...artistryToolReferences]
+
+  // One fact snapshot from frozen values — Brain decides from SAME values payload will carry
+  const facts = chatTurnFactsFromSend({
+    attachments: attachmentsToSend,
+    reasoning: reasoningToSend,
+    tools: toolsToSend,
+  })
+
+  // Awaited authoritative INITIAL route — resolver reuses canonical requestLiaBrainDecisionForChatTurn
+  // failure/non-routable/no credential → undefined → normal Stage send continues without override
+  const routeOverride = await resolveLiaAuthoritativeSendRoute({
+    correlationId,
+    facts,
+  })
 
   try {
     await chatStore.send({
       sessionId: targetSessionId,
       text: textToSend,
+      correlationId,
       attachments: attachmentsToSend,
-      tools: artistryToolReferences,
+      tools: toolsToSend,
+      reasoning: reasoningToSend,
+      ...(routeOverride === undefined ? {} : { routeOverride }),
     })
 
     attachmentsToSend.forEach(att => URL.revokeObjectURL(att.url))
@@ -235,11 +272,36 @@ onMounted(() => {
 })
 
 async function handleRetryMessage(index: number) {
-  await chatStore.retry({
-    sessionId: chatSession.activeSessionId,
-    index,
-    tools: widgetToolReferences,
-  })
+  // Phase 8.0D-10B-4D4C4-D2B6 corrective: thin owner — capture synchronously, delegate authoritative sequence
+  const targetSessionId = chatSession.activeSessionId
+  const reasoningToRetry = consciousnessSettings.reasoning
+  const toolsToRetry = [...widgetToolReferences]
+  // Synchronous stable source capture before any await
+  const sourceMessageId = retrySourceMessageIdFrom(messages.value as unknown as ChatHistoryItem[], index)
+
+  if (sourceMessageId === undefined) {
+    // id-less legacy: preserve legacy non-authoritative path, no Brain await
+    await chatStore.retry({
+      sessionId: targetSessionId,
+      index,
+      tools: toolsToRetry,
+    })
+    trackChatMessageRetried({ source: 'history' })
+    return
+  }
+
+  await executeLiaAuthoritativeRetry(
+    {
+      sessionId: targetSessionId,
+      index,
+      sourceMessageId,
+      reasoning: reasoningToRetry,
+      tools: toolsToRetry,
+    },
+    {
+      retry: payload => chatStore.retry(payload),
+    },
+  )
   trackChatMessageRetried({
     source: 'history',
   })

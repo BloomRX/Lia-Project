@@ -31,8 +31,8 @@ import {
   validateProvider as runProviderValidation,
 } from '../../libs/providers'
 import { selectProviderMetadata, selectProvidersMetadata } from '../../libs/providers/metadata'
-import { getProviderCredentialResolver } from '../chat/chat-provider-runtime'
 import { useAuthStore } from '../auth'
+import { getProviderCredentialResolver } from '../chat/chat-provider-runtime'
 import { useProviderConfigStore } from './config'
 import { normalizeProviderConfigDefaults } from './config-defaults'
 
@@ -94,7 +94,7 @@ const useProviderStateStore = defineStore('provider-state', () => {
  * The merged credential lives only in the in-memory config passed to
  * `createProvider`; it is never persisted or logged.
  */
-async function withResolvedCredential(providerId: string, config: Record<string, unknown>): Promise<Record<string, unknown>> {
+export async function withResolvedCredential(providerId: string, config: Record<string, unknown>): Promise<Record<string, unknown>> {
   const resolver = getProviderCredentialResolver()
   if (!resolver)
     return config

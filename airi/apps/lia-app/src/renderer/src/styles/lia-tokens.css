@@ -1,0 +1,72 @@
+/**
+ * Phase 8.0A-1: the Lia design-token foundation.
+ *
+ * The raw palette declared in `styles.css` stays the SINGLE source of
+ * color values; these SEMANTIC tokens are the layer primitives and future
+ * screens consume - backgrounds/surfaces, borders, text, the Lia identity
+ * accent, status semantics, radius/spacing scales, typography roles, the
+ * focus ring and the basic motion duration (LIA-UI-DESIGN-SYSTEM §2,
+ * §20-27). No page-specific names, no enormous catalog - only the
+ * reusable foundation the upcoming phases build on.
+ */
+:root {
+  /* Backgrounds & surfaces */
+  --lia-bg-app: var(--lia-bg);
+  --lia-bg-surface: var(--lia-panel);
+  --lia-bg-surface-raised: var(--lia-panel-2);
+
+  /* Borders */
+  --lia-border-subtle: var(--lia-border);
+  --lia-border-accent: var(--lia-magenta);
+
+  /* Text */
+  --lia-text-primary: var(--lia-text);
+  --lia-text-secondary: var(--lia-text-dim);
+
+  /* Identity accent (magenta/violet, §21: selected states, primary
+     actions, focus, key borders - used sparingly, never everywhere). */
+  --lia-accent: var(--lia-magenta);
+  --lia-accent-soft: var(--lia-magenta-soft);
+  --lia-accent-contrast: #fff;
+
+  /* Status semantics (§27: state must be readable, never color-only). */
+  --lia-status-ready: var(--lia-ok);
+  --lia-status-warning: var(--lia-warn);
+  --lia-status-error: var(--lia-err);
+  --lia-status-disabled: var(--lia-text-dim);
+
+  /* Radius scale (§24: shared radii, never arbitrary per component). */
+  --lia-radius-sm: 8px;
+  --lia-radius-md: 10px;
+  --lia-radius-lg: 14px;
+  --lia-radius-xl: 18px;
+  --lia-radius-pill: 999px;
+
+  /* Spacing scale (§25). */
+  --lia-space-1: 4px;
+  --lia-space-2: 8px;
+  --lia-space-3: 12px;
+  --lia-space-4: 16px;
+  --lia-space-6: 24px;
+  --lia-space-8: 32px;
+  --lia-space-12: 48px;
+
+  /* Typography roles (§26: compact status -> page title). */
+  --lia-font-family: 'Segoe UI', system-ui, sans-serif;
+  --lia-text-xs: 12px;
+  --lia-text-sm: 13px;
+  --lia-text-md: 14px;
+  --lia-text-lg: 16px;
+  --lia-text-xl: 20px;
+  --lia-text-2xl: 24px;
+  --lia-font-normal: 400;
+  --lia-font-medium: 600;
+  --lia-font-bold: 700;
+
+  /* Focus ring: visible keyboard focus built from the app background
+     gap + the identity accent (§21 accent-for-focus). */
+  --lia-focus-ring: 0 0 0 2px var(--lia-bg-app), 0 0 0 4px var(--lia-accent);
+
+  /* Motion: the one basic transition duration. */
+  --lia-transition-fast: 150ms;
+}

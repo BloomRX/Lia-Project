@@ -42,15 +42,22 @@ import { setupArtistryBridge } from './services/airi/widgets/artistry-bridge'
 import { setupAutoUpdater } from './services/electron/auto-updater'
 import { setupGlobalShortcutService } from './services/electron/global-shortcut'
 import { setupPermissionHandlers } from './services/electron/media-permissions'
-import { registerLiaRuntimeBridge } from './services/lia/alltalk-runtime-service'
-import { registerLiaAllTalkBridge } from './services/lia/alltalk-service'
-import { createAllTalkSyncService } from './services/lia/alltalk-voices-sync'
+import { createLiaBrainCorrelationObserver } from './services/lia/brain-correlation-observer'
+import { createLiaBrainCorrelationService } from './services/lia/brain-correlation-service'
+import { registerLiaBrainDecisionBridge } from './services/lia/brain-decision-service'
+import { selectLiaBrainDiagnosticLog } from './services/lia/brain-diagnostic-log'
+import { registerLiaBrainExecutionReportHandler } from './services/lia/brain-execution-report-service'
+import { registerLiaBrainExecutionTerminalReportListener } from './services/lia/brain-execution-terminal-report-listener'
+import { createLiaBrainExecutionTerminalReportService } from './services/lia/brain-execution-terminal-report-service'
+import { registerLiaBrainSendTerminalReportListener } from './services/lia/brain-send-terminal-report-listener'
+import { createLiaBrainSendTerminalReportService } from './services/lia/brain-send-terminal-report-service'
+import { createLiaBrainService } from './services/lia/lia-brain-service'
+import { startLiaMainWindowVoiceRuntime } from './services/lia/main-window-voice-runtime'
 import { registerLiaProviderConfigBridge } from './services/lia/provider-config-service'
 import { createLiaSecretVault, registerLiaSecretsBridge } from './services/lia/secrets-service'
 import { registerLiaVoiceConfigBridge } from './services/lia/voice-config-service'
 import { createLiaVoiceProfileStore } from './services/lia/voice-profiles'
 import { registerLiaVoiceProfilesBridge } from './services/lia/voice-profiles-service'
-import { registerLiaBootstrapBridge } from './services/lia/voice-runtime-bootstrap-service'
 import { setupTray } from './tray'
 import { setupAboutWindowReusable } from './windows/about'
 import { setupBeatSync } from './windows/beat-sync'
@@ -193,11 +200,50 @@ app.whenReady().then(async () => {
   // Lia secure secret vault (M1 Phase 4C). Provider API keys live encrypted in
   // the Electron main process, never in renderer localStorage or lia-product.json.
   const liaSecrets = injeca.provide('services:lia-secrets', () => createLiaSecretVault())
-  // One voice-library instance for the whole main process. The AllTalk bridge and
-  // the profiles bridge must read and write the same registry, otherwise a
-  // published voice would not be visible to the code that removes it.
+  // One voice-library instance for the whole main process: the voice bridge
+  // and the profiles bridge read and write the same registry.
   const liaVoiceProfiles = injeca.provide('services:lia-voice-profiles', () =>
     createLiaVoiceProfileStore({ rootDir: join(app.getPath('userData'), 'lia-voices') }))
+  // Phase 8.0D-5: the Lia Brain service - ONE instance per main-process
+  // lifetime, created through its own factory so the production Brain catalog
+  // (composed and validated during construction) has a single owner. It has
+  // NO consumers yet: the boot invoke below only materializes the instance so
+  // a broken catalog invariant fails loudly at startup instead of at a future
+  // first use. Startup evaluates nothing about routing - brain mode,
+  // preferences, capability requirements and selection policies are all
+  // caller inputs that arrive only through the service's own decide(...).
+  const liaBrain = injeca.provide('services:lia-brain', {
+    dependsOn: { liaProductConfig },
+    build: ({ dependsOn }) => createLiaBrainService({ liaProductConfig: dependsOn.liaProductConfig }),
+  })
+  // Phase 8.0D-10B-4B2: the Lia Brain correlation store - ONE ephemeral,
+  // bounded, diagnostic-only in-memory instance for the whole main process,
+  // built by its own factory with the production bounds it owns. It depends on
+  // nothing (the store is pure memory), and nothing records into it yet: the
+  // decision bridge and the execution report handler stay unaware of it in
+  // this phase.
+  const liaBrainCorrelation = injeca.provide('services:lia-brain-correlation', () =>
+    createLiaBrainCorrelationService())
+  // Phase 8.0D-10B-4C4B: the Lia Brain correlation OBSERVER - ONE instance per
+  // main-process lifetime, created through its own factory over the canonical
+  // correlation service (which structurally satisfies its read contract, so no
+  // adapter and no second memory exist). It owns the diagnostic invocation, the
+  // trusted engine -> provider mapping and the read-failure isolation boundary -
+  // and nothing else: creating it reads nothing, records nothing and emits
+  // nothing by itself. No producer calls it yet.
+  // Phase 8.0D-10B-4D2B: the diagnostic LOG callback is selected HERE, in the
+  // trusted composition root, from the build mode alone - a development build
+  // gets the one adapter line ("[LIA-BRAIN-DIAG] ...", informational), and
+  // every other build gets `undefined`, which is the reader-only shape: facts
+  // are still read on every observation and simply have no destination. No
+  // renderer value, storage or product config participates in this decision.
+  const liaBrainCorrelationObserver = injeca.provide('services:lia-brain-correlation-observer', {
+    dependsOn: { liaBrainCorrelation },
+    build: ({ dependsOn }) => createLiaBrainCorrelationObserver({
+      correlationReader: dependsOn.liaBrainCorrelation,
+      log: selectLiaBrainDiagnosticLog(import.meta.env.DEV),
+    }),
+  })
   const electronApp = injeca.provide('host:electron:app', () => app)
   const autoUpdater = injeca.provide('services:auto-updater', {
     dependsOn: { appConfig },
@@ -305,16 +351,28 @@ app.whenReady().then(async () => {
   })
 
   const mainWindow = injeca.provide('windows:main', {
-    dependsOn: { editorWindow, settingsWindow, chatWindow, widgetsManager, noticeWindow, beatSync, autoUpdater, serverChannel, godotStageManager, mcpStdioManager, i18n, onboardingWindowManager, appleSpeechTranscription },
-    build: async ({ dependsOn }) => setupMainWindow({
-      ...dependsOn,
-      onWindowCreated: (window) => {
-        userFacingMainWindow = window
-      },
-      onSizeSettingsReady: (controller) => {
-        userFacingMainWindowSizeSettings = controller
-      },
-    }),
+    dependsOn: { editorWindow, settingsWindow, chatWindow, widgetsManager, noticeWindow, beatSync, autoUpdater, serverChannel, godotStageManager, mcpStdioManager, i18n, onboardingWindowManager, appleSpeechTranscription, liaProductConfig, liaVoiceProfiles },
+    build: async ({ dependsOn }) => {
+      // Phase 7.9E.4: the voice runtime must register BEFORE the renderer
+      // loads. `onWindowCreated` runs right after `new BrowserWindow`, so
+      // these handles travel INTO that hook instead of arriving through
+      // this provider's own (post-load) resolution.
+      const { liaProductConfig: liaProductCfg, liaVoiceProfiles: voiceProfileStore, ...windowDeps } = dependsOn
+      return setupMainWindow({
+        ...windowDeps,
+        onWindowCreated: (window) => {
+          userFacingMainWindow = window
+          startLiaMainWindowVoiceRuntime({
+            liaProductConfig: liaProductCfg,
+            liaVoiceProfiles: voiceProfileStore,
+            window,
+          })
+        },
+        onSizeSettingsReady: (controller) => {
+          userFacingMainWindowSizeSettings = controller
+        },
+      })
+    },
   })
 
   const captionWindow = injeca.provide('windows:caption', {
@@ -371,6 +429,95 @@ app.whenReady().then(async () => {
     },
   })
 
+  // Phase 8.0D-7: the read-only Brain decision bridge. It reuses the ONE
+  // Brain service owned by this lifecycle (see the provider above) and grants
+  // no execution authority - it answers a routing question about a described
+  // chat turn and returns the canonical decision unchanged. No production
+  // chat code calls it yet.
+  // Phase 8.0D-10B-4B3: the bridge also receives the canonical correlation
+  // store, so the canonical decision it returns is recorded as a diagnostic
+  // fact for that logical send. Injection stays HERE: the bridge never resolves
+  // a store, and it only writes.
+  // Phase 8.0D-10B-4C4C: the bridge also receives the observer instance this
+  // lifecycle owns, so one successful decision write triggers exactly one
+  // factual observation of the same key. The entry injects; the bridge never
+  // creates and never resolves an observer.
+  injeca.invoke({
+    dependsOn: { liaBrain, liaBrainCorrelation, liaBrainCorrelationObserver },
+    callback: async (deps) => {
+      const { context } = createContext(ipcMain)
+      registerLiaBrainDecisionBridge({
+        context,
+        brain: deps.liaBrain,
+        correlationStore: deps.liaBrainCorrelation,
+        correlationObserver: deps.liaBrainCorrelationObserver,
+      })
+    },
+  })
+
+  // Phase 8.0D-10B-4A: the one-way Lia execution observation report. It stays
+  // diagnostic only - it depends on the correlation store (never on the Brain
+  // service nor on product config): the handler sanitizes, requires the
+  // logical-send key and records the five-field fact.
+  // Phase 8.0D-10B-4C4C: it receives the SAME lifecycle-owned observer the
+  // decision side uses - one canonical instance, never a second one - so one
+  // successful report write triggers exactly one observation of its key.
+  injeca.invoke({
+    dependsOn: { liaBrainCorrelation, liaBrainCorrelationObserver },
+    callback: async (deps) => {
+      const { context } = createContext(ipcMain)
+      registerLiaBrainExecutionReportHandler({
+        context,
+        correlationStore: deps.liaBrainCorrelation,
+        correlationObserver: deps.liaBrainCorrelationObserver,
+      })
+    },
+  })
+
+  // Phase 8.0D-10B-4D4C2B2: the THIRD Brain channel - the one-way terminal
+  // execution report. It depends on the correlation store and, since
+  // 8.0D-10B-4D4C3B2-B3, on the SAME lifecycle-owned observer the decision
+  // bridge and the execution report handler already receive - one canonical
+  // instance, never a second one - so one accepted terminal report triggers
+  // exactly one observation of its key, after the write. The entry creates the
+  // ONE terminal ingress instance over the SAME lifecycle handle, and the
+  // listener forwards the raw payload to it; nothing here inspects the payload.
+  injeca.invoke({
+    dependsOn: { liaBrainCorrelation, liaBrainCorrelationObserver },
+    callback: async (deps) => {
+      const { context } = createContext(ipcMain)
+      const terminalReportService = createLiaBrainExecutionTerminalReportService({
+        correlationStore: deps.liaBrainCorrelation,
+        correlationObserver: deps.liaBrainCorrelationObserver,
+      })
+      registerLiaBrainExecutionTerminalReportListener({ context, terminalReportService })
+    },
+  })
+
+  // Phase 8.0D-10B-4D4C4-B3B2: the FOURTH Brain channel - the one-way
+  // logical-send terminal report. It depends on the correlation store and on
+  // NOTHING else: this path deliberately receives no observer, because the
+  // diagnostic reader/composition does not expose the send-level fact yet, so
+  // an observation here could not represent it. The entry creates the ONE
+  // send-terminal ingress instance over the SAME lifecycle handle the other
+  // producers write through - one canonical store, never a second one - and the
+  // listener forwards the raw payload to it; nothing here inspects the payload.
+  // Phase 8.0D-10B-4D4C4-B4B5: the ingress now receives the SAME canonical
+  // observer the other three terminal/decision producers already receive - one
+  // canonical instance, never a second one - so one accepted send-terminal
+  // report triggers exactly one observation of its key, after the write.
+  injeca.invoke({
+    dependsOn: { liaBrainCorrelation, liaBrainCorrelationObserver },
+    callback: async (deps) => {
+      const { context } = createContext(ipcMain)
+      const sendTerminalReportService = createLiaBrainSendTerminalReportService({
+        correlationStore: deps.liaBrainCorrelation,
+        correlationObserver: deps.liaBrainCorrelationObserver,
+      })
+      registerLiaBrainSendTerminalReportListener({ context, sendTerminalReportService })
+    },
+  })
+
   // Private voice library: import/remove imported voices. Kept separate from the
   // bridge above on purpose - selecting a voice still goes through
   // `electronLiaVoiceConfigSet`, so `voice.tts` keeps exactly one writer.
@@ -378,61 +525,21 @@ app.whenReady().then(async () => {
     dependsOn: { liaProductConfig, liaVoiceProfiles },
     callback: async (deps) => {
       const { context } = createContext(ipcMain)
-      registerLiaVoiceProfilesBridge({
-        context,
-        store: deps.liaVoiceProfiles,
-        // Deleting a profile also unpublishes the copy the Lia put in AllTalk's
-        // folder. `removeManagedVoice` re-derives the filename from the profile
-        // id and refuses anything it does not own, so a same-named file the user
-        // placed there by hand survives.
-        beforeRemove: id => createAllTalkSyncService({
-          store: deps.liaVoiceProfiles,
-          voicesDir: deps.liaProductConfig.get()?.voice?.runtime?.alltalk?.voicesDir,
-        }).removeManagedVoice(id).then(() => undefined),
-      })
+      // Phase 7.8: there are NO engine-managed voice copies anymore - a
+      // modular engine reads the canonical reference from the profile's own
+      // directory directly, so removing a profile needs no engine cleanup.
+      registerLiaVoiceProfilesBridge({ context, store: deps.liaVoiceProfiles })
     },
   })
 
-  // Local AllTalk runtime: connection settings, voices folder, publish/synthesize.
-  injeca.invoke({
-    dependsOn: { liaProductConfig, liaVoiceProfiles },
-    callback: async (deps) => {
-      const { context } = createContext(ipcMain)
-      registerLiaAllTalkBridge({
-        context,
-        liaProductConfig: deps.liaProductConfig,
-        store: deps.liaVoiceProfiles,
-      })
-    },
-  })
-
-  // Managed speech runtime: detect, start, health-check and stop the local voice
-  // server, so a custom voice works without the user opening a terminal.
-  injeca.invoke({
-    dependsOn: { liaProductConfig },
-    callback: async (deps) => {
-      const { context } = createContext(ipcMain)
-      const runtime = registerLiaRuntimeBridge({
-        context,
-        liaProductConfig: deps.liaProductConfig,
-      })
-
-      // Registered for its IPC handlers; the renderer talks to it directly, so
-      // nothing else here needs to hold the handle.
-      const bootstrap = registerLiaBootstrapBridge({ context, runtime })
-
-      // Autostart. Only when the persisted voice selection actually needs the
-      // local runtime, and never fatal: if the server cannot come up the chat
-      // keeps working as text and the UI offers "Try again".
-      //
-      // Skipped while an install is in flight. Starting a server whose files are
-      // still being written would report a failure the user did nothing to cause,
-      // and the bootstrap's own final step starts it anyway.
-      void runtime.autostartIfNeeded({ installing: bootstrap.isInstalling() }).catch((error) => {
-        console.warn('[lia-runtime] autostart failed, continuing without custom voice:', error)
-      })
-    },
-  })
+  // Lia Voice bridge: the engine-neutral IPC surface over the Lia Voice
+  // Phase 7.9E.4: the Lia voice runtime (bridge + capabilities + managed
+  // prewarm + greeting latch) no longer lives here as an injeca.invoke on
+  // `mainWindow` - that was the renderer<->main race: the provider only
+  // resolves after the renderer load begins. It now starts inside the
+  // windows:main `onWindowCreated` hook (see main-window-voice-runtime.ts),
+  // i.e. strictly BEFORE `load(...)`. One registration per process, as
+  // before.
 
   injeca.invoke({
     dependsOn: { mainWindow, tray, serverChannel, airiHttpServer, godotStageManager, pluginHost, mcpStdioManager, onboardingWindow: onboardingWindowManager, widgetsWindow: widgetsManager, spotlightWindow, artistryConfig },
@@ -454,6 +561,42 @@ app.whenReady().then(async () => {
     dependsOn: { liaProductConfig },
     callback: (deps) => {
       deps.liaProductConfig.get()
+    },
+  })
+
+  // Phase 8.0D-5: materialize the Lia Brain service at boot (same eager
+  // pattern as the product config above) so the production catalog is
+  // composed and validated exactly once per process. Touching the handle
+  // constructs the service; it calls nothing on it, so no routing decision -
+  // and no read of mode, preferences, requirement or policy - happens here.
+  injeca.invoke({
+    dependsOn: { liaBrain },
+    callback: (deps) => {
+      void deps.liaBrain
+    },
+  })
+
+  // Phase 8.0D-10B-4B2: materialize the correlation store at boot (same eager
+  // pattern as the Brain service above) so its ONE instance exists from
+  // startup with the explicit production bounds. The callback only touches the
+  // handle: it records nothing, so the store is born empty and stays empty
+  // until a future explicit caller records data.
+  injeca.invoke({
+    dependsOn: { liaBrainCorrelation },
+    callback: (deps) => {
+      void deps.liaBrainCorrelation
+    },
+  })
+
+  // Phase 8.0D-10B-4C4B: materialize the diagnostic observer at boot (same
+  // eager pattern as the services above) so its ONE instance exists from
+  // startup, wired to the correlation instance the lifecycle already owns. The
+  // callback only touches the handle: it observes nothing, so no snapshot is
+  // read and the correlation memory stays exactly as it was.
+  injeca.invoke({
+    dependsOn: { liaBrainCorrelationObserver },
+    callback: (deps) => {
+      void deps.liaBrainCorrelationObserver
     },
   })
 

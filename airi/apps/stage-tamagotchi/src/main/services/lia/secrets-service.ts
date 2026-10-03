@@ -1,5 +1,7 @@
 import type { createContext } from '@moeru/eventa/adapters/electron/main'
 
+import type { LiaSecretVault } from './secrets'
+
 import { useLogg } from '@guiiai/logg'
 import { defineInvokeHandler } from '@moeru/eventa'
 
@@ -10,7 +12,7 @@ import {
   electronLiaSecretHas,
   electronLiaSecretSet,
 } from '../../../shared/eventa'
-import { createLiaSecretVault, type LiaSecretVault } from './secrets'
+import { createLiaSecretVault } from './secrets'
 
 const log = useLogg('lia:secrets').useGlobalConfig()
 

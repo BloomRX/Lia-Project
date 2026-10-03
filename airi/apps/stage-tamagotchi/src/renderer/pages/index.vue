@@ -27,6 +27,7 @@ import { useCanvasPixelIsTransparentAtPoint } from '@proj-airi/stage-ui/composab
 import { useSpeakingStore } from '@proj-airi/stage-ui/stores/audio'
 import { useChatStore } from '@proj-airi/stage-ui/stores/chat'
 import { useChatSessionStore } from '@proj-airi/stage-ui/stores/chat/session-store'
+import { useConsciousnessSettingsStore } from '@proj-airi/stage-ui/stores/modules/consciousness-settings'
 import { useHearingSpeechInputPipeline, useHearingStore } from '@proj-airi/stage-ui/stores/modules/hearing'
 import { useOnboardingStore } from '@proj-airi/stage-ui/stores/onboarding'
 import { useSettings, useSettingsAudioDevice } from '@proj-airi/stage-ui/stores/settings'
@@ -41,6 +42,9 @@ import ResourceStatusIsland from '../components/stage-islands/resource-status-is
 
 import { electronOpenOnboarding } from '../../shared/eventa'
 import { modelSettingsRuntimeSnapshotChannelName } from '../../shared/model-settings-runtime'
+import { chatTurnFactsFromSend } from '../services/lia/brain-shadow'
+import { resolveLiaAuthoritativeSendRoute } from '../services/lia/lia-authoritative-route-resolver'
+import { createOrderedVoiceSendSequence } from '../services/lia/voice-send-sequence'
 import { useControlsIslandStore } from '../stores/controls-island'
 import { shouldAutoOpenAiriWelcome } from '../stores/lia/airi-onboarding-policy'
 import { useStageWindowLifecycleStore } from '../stores/stage-window-lifecycle'
@@ -331,6 +335,37 @@ const { error: transcriptionError, supportsStreamInput } = storeToRefs(hearingPi
 const transcriptionConsumerId = 'stage-tamagotchi:voice-input'
 const chatStore = useChatStore()
 const chatSession = useChatSessionStore()
+const consciousnessSettings = useConsciousnessSettingsStore()
+const voiceSendSequence = createOrderedVoiceSendSequence({
+  capture: (text: string) => {
+    const textToSend = text
+    const targetSessionId = chatSession.activeSessionId
+    const correlationId = crypto.randomUUID()
+    const reasoningToSend = consciousnessSettings.reasoning
+    const attachmentsToSend = [] as const
+    const toolsToSend = [] as const
+    const facts = chatTurnFactsFromSend({
+      attachments: attachmentsToSend,
+      reasoning: reasoningToSend,
+      tools: toolsToSend,
+    })
+    return { textToSend, targetSessionId, correlationId, reasoningToSend, facts }
+  },
+  execute: async (captured) => {
+    const routeOverride = await resolveLiaAuthoritativeSendRoute({
+      correlationId: captured.correlationId,
+      facts: captured.facts,
+    })
+    await chatStore.send({
+      sessionId: captured.targetSessionId,
+      text: captured.textToSend,
+      correlationId: captured.correlationId,
+      reasoning: captured.reasoningToSend,
+      ...(routeOverride === undefined ? {} : { routeOverride }),
+    })
+  },
+  reportFailure: reportVoiceInputFailure,
+})
 const streamingTranscriptionUnavailable = ref(false)
 const shouldUseStreamInput = computed(() => supportsStreamInput.value && !!stream.value && !streamingTranscriptionUnavailable.value)
 const voiceTranscriptBuffer = createTranscriptBuffer({
@@ -544,17 +579,18 @@ function postSpeakerCaption(text: string, operation: NonNullable<CaptionChannelE
 
 /**
  * Sends buffered voice input text to the active chat session.
+ *
+ * Phase 8.0D-10B-4D4C4-D2B5: ordered direct-voice authoritative routing.
+ * One accepted voice sentence = one logical send. Snapshot is captured
+ * synchronously at call time (text, session, correlationId, reasoning) before
+ * waiting behind earlier voice jobs. The serialized job then awaits Lia
+ * authority and the complete chatStore.send settlement. One chain preserves
+ * FIFO order without touching Stage/Core. Delegates to the extracted
+ * voice-send-sequence helper so behavioral tests execute the real production
+ * sequencing code.
  */
-async function sendVoiceInputTextToChat(text: string) {
-  try {
-    await chatStore.send({
-      sessionId: chatSession.activeSessionId,
-      text,
-    })
-  }
-  catch (err) {
-    reportVoiceInputFailure('send to chat', err)
-  }
+function sendVoiceInputTextToChat(text: string): Promise<void> {
+  return voiceSendSequence.enqueue(text)
 }
 
 /** Sends completed streaming-ASR sentences to captions and chat. */

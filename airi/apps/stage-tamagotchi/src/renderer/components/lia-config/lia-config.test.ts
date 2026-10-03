@@ -25,8 +25,12 @@ const PANEL_SOURCES = [
   'components/lia-config/sections/AppearanceSection.vue',
 ]
 
+function normalizeLineEndings(value: string): string {
+  return value.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+}
+
 function readSource(relative: string): string {
-  return readFileSync(join(RENDERER, relative), 'utf8')
+  return normalizeLineEndings(readFileSync(join(RENDERER, relative), 'utf8'))
 }
 
 /** Parses a flat YAML mapping into dotted keys. Enough for these locale files. */
@@ -34,10 +38,13 @@ function yamlKeys(path: string): Set<string> {
   const keys = new Set<string>()
   const stack: string[] = []
 
-  for (const rawLine of readFileSync(path, 'utf8').split('\n')) {
+  for (const rawLine of normalizeLineEndings(readFileSync(path, 'utf8')).split('\n')) {
     if (!rawLine.trim() || rawLine.trim().startsWith('#'))
       continue
-    const match = /^(\s*)(\w+):(.*)$/.exec(rawLine)
+    // Keys carry hyphens too ('check-environment'): YAML allows them and the
+    // bootstrap step labels depend on it. `\w` alone would silently skip
+    // exactly the keys this file is scanned for.
+    const match = /^(\s*)([\w-]+):(.*)$/.exec(rawLine)
     if (!match)
       continue
     const [, indent, key, rest] = match
@@ -200,31 +207,44 @@ describe('lia config i18n coverage', () => {
 
   /**
    * Keys the custom voice panel builds at runtime, which the regex scanner above
-   * cannot see: `tt(statusKey)` where statusKey is `states.${...}`, and
-   * `tt(profileStatusKey(...))`. A typo in either renders the raw key on screen,
+   * cannot see: `tt(profileStatusKey(...))` where the key is
+   * `profiles.status.${...}`. A typo in either renders the raw key on screen,
    * and no other test would notice.
    *
-   * The value lists are duplicated from the component's unions on purpose - if a
-   * state is added there and not here, the assertion below still holds, and if it
-   * is added here and not to the locales, the test fails, which is the direction
-   * that matters.
+   * The transitional contract (Phase 7.8E) trims the set on purpose: no server
+   * states may ever come back, so the only runtime-built statuses left are the
+   * two plain truths - in use, or saved idle - plus the neutral missing-engine
+   * note.
    */
   it('resolves every runtime-built key of the custom voice panel', () => {
-    const states = ['checking', 'connected', 'offline', 'notConfigured', 'error']
-    const profileStates = ['ready', 'inUse', 'notConfigured', 'serverOffline', 'syncFailed']
+    const profileStates = ['idle', 'inUse']
 
     const keys = [
-      ...states.map(state => `config.sections.voice.custom.states.${state}`),
       ...profileStates.map(state => `config.sections.voice.custom.profiles.status.${state}`),
+      'config.sections.voice.custom.engine.missing.title',
+      'config.sections.voice.custom.engine.missing.hint',
     ]
 
-    expect(keys).toHaveLength(10)
+    expect(keys).toHaveLength(4)
     expect(keys.filter(key => !ptBr.has(key)), 'missing in pt-BR').toEqual([])
     expect(keys.filter(key => !en.has(key)), 'missing in en').toEqual([])
+    // ...and none of the AllTalk-era statuses exists in either locale anymore.
+    for (const gone of ['ready', 'notConfigured', 'serverOffline', 'syncFailed', 'notPrepared']) {
+      expect(ptBr.has(`config.sections.voice.custom.profiles.status.${gone}`), gone).toBe(false)
+      expect(en.has(`config.sections.voice.custom.profiles.status.${gone}`), gone).toBe(false)
+    }
   })
 
   it('keeps the two locale files in sync for the whole home namespace', () => {
     expect([...ptBr].filter(key => !en.has(key)).sort()).toEqual([])
     expect([...en].filter(key => !ptBr.has(key)).sort()).toEqual([])
   })
+
+  /**
+   * The install card builds step keys at runtime from the main process's step
+   * ids (`tt(\`runtime.step.${step.id}\`)`), so the scanner above cannot see
+   * them. Importing the real list is the point: a step id renamed in the main
+   * process without its locale line would render the raw key on screen, in
+   * the exact UI the round-2 brief cares about.
+   */
 })

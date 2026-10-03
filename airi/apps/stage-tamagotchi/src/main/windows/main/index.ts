@@ -8,6 +8,7 @@ import type { NoticeWindowManager } from '../notice'
 import type { OnboardingWindowManager } from '../onboarding'
 import type { SettingsWindowManager } from '../settings'
 import type { WidgetsWindowManager } from '../widgets'
+import type { MainWindowSizeSettingsController } from './window-size-settings'
 import type { MainWindowContext } from './window-sizing'
 
 import { dirname, join, resolve } from 'node:path'
@@ -27,18 +28,20 @@ import { electronStartDraggingWindow } from '../../../shared/eventa'
 import { onAppBeforeQuit } from '../../libs/bootkit/lifecycle'
 import { baseUrl, getElectronMainDirname, load, withHashRoute } from '../../libs/electron/location'
 import { createConfig } from '../../libs/electron/persistence'
+import { initialMainWindowContext, initialMainWindowRoute } from '../../services/lia/initial-route'
+import { isLauncherManaged } from '../../services/lia/lia-managed'
 import { protectPrivilegedWindowNavigation, setWindowAlwaysOnTop, transparentWindowConfig } from '../shared'
 import { setupMainWindowElectronInvokes } from './rpc/index.electron'
+import {
+  createMainWindowSizeSettingsController,
+
+} from './window-size-settings'
 import {
   createMainWindowContextSizing,
   HOME_WINDOW_PRESET,
   liaMainWindowStateSchema,
   MAIN_WINDOW_MIN_SIZE,
 } from './window-sizing'
-import {
-  createMainWindowSizeSettingsController,
-  type MainWindowSizeSettingsController,
-} from './window-size-settings'
 
 export async function setupMainWindow(params: {
   editorWindow: EditorWindowManager
@@ -104,9 +107,11 @@ export async function setupMainWindow(params: {
   })
   params.onSizeSettingsReady?.(sizeSettings)
 
-  // First open / relaunch always lands on the launcher: apply the Home mode
-  // (persisted Home size or the Home preset) and center it on its display.
-  sizing.setContext('home', { recenter: true })
+  // First open / relaunch applies the mode matching the initial route
+  // (Phase 7.2: a Lia-managed stage lands on the companion directly, so it
+  // opens at the stage preset - never at the small launcher size).
+  const initialContext = initialMainWindowContext()
+  sizing.setContext(initialContext, { recenter: true })
 
   // Persist the *active* mode's size on user resize (not the legacy global
   // bounds), so Home and Stage never overwrite each other silently.
@@ -153,9 +158,10 @@ export async function setupMainWindow(params: {
 
   window.on('ready-to-show', () => {
     window!.show()
-    // Startup Home bounds (preset or persisted override) are now applied and the
-    // window is visible. Only now may genuine user resizes be persisted, so a
-    // transient startup resize can never overwrite the Home override.
+    // Startup bounds (preset or the persisted override of the ACTIVE mode)
+    // are now applied and the window is visible. Only now may genuine user
+    // resizes be persisted, so a transient startup resize can never
+    // overwrite the mode's override.
     sizing.armUserResizeCapture()
   })
   protectPrivilegedWindowNavigation(window)
@@ -176,10 +182,18 @@ export async function setupMainWindow(params: {
     setMainWindowContext,
   })
 
-  // M1 Phase 2 (Lia): launcher-first. The main window lands on the Lia Home;
-  // "Talk" navigates to the existing Stage at '/' (index.vue).
-  await load(window, withHashRoute(baseUrl(resolve(getElectronMainDirname(), '..', 'renderer')), '/home', {
-    query: { 'synced-leader': 'true' },
+  // M1 Phase 2 (Lia): launcher-first WHEN STANDALONE. When the Lia App is
+  // the supervisor (LIA_MANAGED=1, Phase 7.2) the stage IS the companion
+  // engine and the window lands directly on it - never a second launcher.
+  await load(window, withHashRoute(baseUrl(resolve(getElectronMainDirname(), '..', 'renderer')), initialMainWindowRoute(), {
+    // `lia-managed` mirrors LIA_MANAGED into the RENDERER read path (the
+    // window-context query convention, synced-leader style): env vars stay
+    // in the main process, the renderer gets the one boolean it needs for
+    // its central managed-route policy - Phase 7.3.
+    query: {
+      'synced-leader': 'true',
+      ...(isLauncherManaged() ? { 'lia-managed': 'true' } : {}),
+    },
   }))
 
   /**

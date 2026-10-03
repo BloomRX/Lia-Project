@@ -1,3 +1,5 @@
+import { Buffer } from 'node:buffer'
+
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
@@ -69,7 +71,7 @@ async function loadVault(fs: { disk: string }, { encryptionAvailable = true }: {
   return { vault, safeStorage, readDisk: () => fs.disk, decodedDisk }
 }
 
-describe('Lia secret vault', () => {
+describe('lia secret vault', () => {
   beforeEach(() => {
     vi.resetModules()
     vi.clearAllMocks()

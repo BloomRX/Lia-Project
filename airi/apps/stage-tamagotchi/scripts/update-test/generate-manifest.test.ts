@@ -7,7 +7,6 @@ import { afterEach, describe, expect, it } from 'vitest'
 import * as yaml from 'yaml'
 
 import { getElectronBuilderConfig } from '../utils'
-
 import { generateManifestFixtures, resolveLatestFilenameForTarget } from './generate-manifest'
 
 describe('generateManifestFixtures', () => {

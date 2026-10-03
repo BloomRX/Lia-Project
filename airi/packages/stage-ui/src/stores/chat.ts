@@ -5,6 +5,7 @@ import type { Message } from '@xsai/shared-chat'
 import type { SyncedPiniaRuntime } from 'pinia-plugin-synced'
 
 import type { ChatHistoryItem, ChatToolReference, StreamingAssistantMessage } from '../types/chat'
+import type { ChatSendOutcome } from './chat/chat-provider-runtime'
 import type { ToolCallRerunPayload } from './tool-call-rerun'
 
 import { errorMessageFrom } from '@moeru/std'
@@ -27,9 +28,12 @@ import { useLLM } from './ai/chat-llm/llm'
 import { resolveLlmTools } from './ai/chat-llm/tool-resolver'
 import { useLlmToolsStore } from './ai/chat-llm/tools'
 import { useLlmToolsetPromptsStore } from './ai/chat-llm/toolset-prompts'
-import { CHAT_FALLBACK_MAX_ATTEMPTS, getChatFallbackResolver } from './chat/chat-provider-runtime'
+import { CHAT_FALLBACK_MAX_ATTEMPTS, getChatFallbackResolver, notifyChatRequestStarted, notifyChatRoundSettled, notifyChatSendSettled } from './chat/chat-provider-runtime'
 import { createMinecraftContext } from './chat/context-providers'
+import { liaCapabilityPromptSupplement } from './chat/context-providers/lia-capabilities'
 import { useChatContextStore } from './chat/context-store'
+import { retrySourceIndexFrom } from './chat/retry-source'
+import { humanizeSendErrorMessage } from './chat/send-error'
 import { useChatSessionStore } from './chat/session-store'
 import { useChatStreamStore } from './chat/stream-store'
 import { useContextObservabilityStore } from './devtools/context-observability'
@@ -37,6 +41,7 @@ import { useAiriCardStore } from './modules/airi-card'
 import { useAutonomousArtistryStore } from './modules/artistry-autonomous'
 import { useConsciousnessStore } from './modules/consciousness'
 import { useWebSearchStore } from './modules/web-search'
+import { useProviderStore } from './providers/provider'
 import { executeToolCallRerun } from './tool-call-rerun'
 
 interface ForkOptions {
@@ -46,10 +51,54 @@ interface ForkOptions {
   hidden?: boolean
 }
 
+/**
+ * Phase 8.0D-10B-4D4C4-D2A: generic per-send route override — ONE logical send
+ * may carry an optional provider/model pair without mutating global
+ * activeProvider/activeModel. Generic only: no Lia, no engineId, no
+ * correlationId, no attempt index. Optional, never mutated, never persisted.
+ */
+export interface ChatSendRouteOverride {
+  readonly providerId: string
+  readonly modelId: string
+}
+
+/**
+ * Phase 8.0D-10B-4D4C4-D2A-V: mirrors the consciousness-store watcher
+ * (`watch(activeProvider, …, {flush:'sync'})` → `activeModel=''`) for the
+ * local effectiveRoute. Provider change clears model unless the candidate
+ * supplies one; otherwise only supplied fields are updated.
+ */
+function applyFallbackCandidateToRoute(
+  current: ChatSendRouteOverride,
+  next: { providerId: string, modelId?: string },
+): ChatSendRouteOverride {
+  if (next.providerId !== current.providerId) {
+    return {
+      providerId: next.providerId,
+      modelId: next.modelId ?? '',
+    }
+  }
+  return {
+    providerId: next.providerId,
+    modelId: next.modelId ?? current.modelId,
+  }
+}
+
 /** A serializable chat request that any application context can send to the leader. */
 export interface ChatSendPayload {
   /** Image attachments for the new user message. */
   attachments?: { type: 'image', data: string, mimeType: string }[]
+  /**
+   * Phase 8.0D-10B-3B1: opaque key for ONE logical user send, spanning every
+   * provider attempt of that send.
+   *
+   * Optional by design: the payload itself is the authoritative sender ->
+   * leader carrier, so callers that predate this field (voice input, spotlight,
+   * context bridges, other apps and tests) keep working unchanged, and an
+   * absent value is never synthesized. It identifies a send; it never selects,
+   * routes or authorizes anything.
+   */
+  correlationId?: string
   /** Original input metadata for chat hooks and telemetry. */
   input?: WebSocketEventInputs
   /** Session that owns the new turn. */
@@ -58,6 +107,22 @@ export interface ChatSendPayload {
   text: string
   /** Request-specific tools selected by their model-facing names. */
   tools?: ChatToolReference[]
+  /**
+   * Phase 8.0D-10B-4D4C4-D2A: optional generic route for the INITIAL attempt
+   * only. When supplied, attempt 0 uses this provider/model without touching
+   * global activeProvider/activeModel; later fallback attempts use the
+   * existing fallback resolver. Absent = current Stage behavior.
+   */
+  routeOverride?: ChatSendRouteOverride
+  /**
+   * Phase 8.0D-10B-4D4C4-D2B2-C1: optional generic per-send reasoning intent,
+   * frozen at logical-send construction. When defined (true/false), the same
+   * value survives every attempt of this logical send (including fallbacks)
+   * and is converted at the provider border to { reasoning: 'enabled' | 'disabled' }.
+   * Undefined preserves live global behavior (consciousnessSettings.reasoning).
+   * Independent of routeOverride; no Lia authority, no global mutation.
+   */
+  reasoning?: boolean
 }
 
 /** The durable messages appended while one chat request executes. */
@@ -71,6 +136,14 @@ export interface ChatRetryPayload {
   index: number
   sessionId: string
   tools?: ChatToolReference[]
+  /** Phase 8.0D-10B-4D4C4-D2B6: new logical-send correlation for the retry — optional to preserve legacy index-only callers. */
+  correlationId?: string
+  /** Phase 8.0D-10B-4D4C4-D2B6: frozen reasoning for the retry — optional, absent preserves live global behavior. */
+  reasoning?: boolean
+  /** Phase 8.0D-10B-4D4C4-D2B6: authoritative initial route for the retry — optional, absent preserves existing behavior. */
+  routeOverride?: ChatSendRouteOverride
+  /** Phase 8.0D-10B-4D4C4-D2B6 corrective: stable identity for the RETRIABLE USER source — when supplied, retry resolves CURRENT user index by message.id (role must be user). */
+  sourceMessageId?: string
 }
 
 /** Identifies one stored tool call that must run again in the leader. */
@@ -112,25 +185,6 @@ function retryTextFrom(message: ChatHistoryItem | undefined): string | null {
   }, []).join('\n\n')
 
   return text || null
-}
-
-function retrySourceIndexFrom(messages: ChatHistoryItem[], index: number): number {
-  const targetMessage = messages[index]
-  if (!targetMessage)
-    return -1
-
-  if (targetMessage.role === 'user')
-    return index
-
-  if (targetMessage.role !== 'assistant' && targetMessage.role !== 'error')
-    return -1
-
-  for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
-    if (messages[cursor]?.role === 'user')
-      return cursor
-  }
-
-  return -1
 }
 
 export type { QueuedSendSnapshot } from '@proj-airi/core-agent'
@@ -296,14 +350,56 @@ export const useChatStore = defineStore('chat', () => {
     },
     getActiveSessionId: () => activeSessionId.value,
     getActiveProvider: () => activeProvider.value,
-    getSystemPromptSupplement: () => llmToolsetPromptsStore.activeToolsetPrompt,
+    getSystemPromptSupplement: () => {
+      // Phase 7.7.1, parts A/B: the persona's capability truth must sit at the
+      // SAME authority as the system/developer message - never as weak side
+      // context appended near the user turn (that is where context providers
+      // land, and where a "you are a text model" default wins the argument
+      // the QA's reasoning trace showed). Injecting here puts
+      // "you DO have a voice in this application" INSIDE the system prompt.
+      // Under LIA_MANAGEMENT the managed semantics rule; standalone AIRI has
+      // no capability snapshot installed and gets no text at all (unchanged).
+      const capability = liaCapabilityPromptSupplement()
+      const toolset = llmToolsetPromptsStore.activeToolsetPrompt
+      return [capability, toolset].filter(Boolean).join('\n\n') || undefined
+    },
     runtimeContextProviders: [
+      // (Phase 7.7.1, parts A/B: capability truth MOVED to the system-prompt
+      // supplement above - side-context authority was the QA's A-failure.)
       createMinecraftContext,
     ],
     createId: nanoid,
     unwrapMessage: message => toRaw(message),
     onStateChange: syncRuntimeState,
     onSendSettled: settleOwnedActiveTurnSpan,
+    // Phase 8.0D-10B-2: the existing authoritative request-start moment is
+    // forwarded - unchanged, and only as metadata - to the optional observer
+    // registered through the shared chat-provider-runtime extension point. The
+    // payload already carries the per-attempt identity (8.0D-10B-1), so this is
+    // a pure field mapping: no identity lookup, no store read, no provider
+    // resolution, no catalog. Observation only: it is never awaited, cannot
+    // return an execution input, and a failing observer is isolated by
+    // `notifyChatRequestStarted`.
+    onLlmRequestStarted: (event) => {
+      notifyChatRequestStarted({
+        conversationId: event.conversationId,
+        roundId: event.roundId,
+        providerId: event.provider,
+        modelId: event.model,
+        // Phase 8.0D-10B-3B1: the logical-send key joins the per-attempt
+        // metadata, so one send's attempts can be recognised as one send.
+        // Absent when the caller carried none - never synthesized here.
+        ...(event.correlationId === undefined ? {} : { correlationId: event.correlationId }),
+      })
+    },
+    // Phase 8.0D-10B-4D4B2: the factual terminal treatment of every round that
+    // entered the send body is forwarded, unchanged, into the same generic seam
+    // convention the request-start observation uses. Field mapping only: this
+    // adapter neither inspects the outcome nor branches on it, and the notifier
+    // owns the isolation.
+    onChatRoundSettled: (observation) => {
+      notifyChatRoundSettled(observation)
+    },
     ...analyticsHooks,
     onLifecycle: record => contextObservability.recordLifecycle(record),
     onPromptProjection: payload => contextObservability.capturePromptProjection(payload),
@@ -373,15 +469,29 @@ export const useChatStore = defineStore('chat', () => {
     if (!chatSession.getSessionMessagesIfLoaded(sessionId))
       return
 
+    const raw = errorMessageFrom(error) ?? 'Unknown chat operation failure'
+    // Phase 7.3 (QA item 10): the bubble gets the human mapping; the raw
+    // provider error ALWAYS stays in the diagnostic log. Raw text never
+    // contains secrets - transport errors carry status/code, not keys.
+    const humanized = humanizeSendErrorMessage(raw, {
+      authHint: 'the Lia Settings',
+      fallback: 'Unknown chat operation failure',
+    })
+    if (humanized.kind === 'auth-failure')
+      console.warn('[lia] chat send auth failure (raw provider detail follows):', raw)
+
     chatSession.appendSessionMessage(sessionId, {
       role: 'error',
-      content: errorMessageFrom(error) ?? 'Unknown chat operation failure',
+      content: humanized.humanText,
     })
   }
 
-  async function executeSendAttempt(payload: ChatSendPayload): Promise<ChatSendResult> {
-    const providerId = activeProvider.value
-    const modelId = activeModel.value
+  async function executeSendAttempt(payload: ChatSendPayload, effectiveRoute?: ChatSendRouteOverride): Promise<ChatSendResult> {
+    // Phase 8.0D-10B-4D4C4-D2A: per-send override takes precedence over global,
+    // with explicit effectiveRoute (fallback next) taking precedence over the
+    // payload's initial override. No global is mutated here.
+    const providerId = effectiveRoute?.providerId ?? payload.routeOverride?.providerId ?? activeProvider.value
+    const modelId = effectiveRoute?.modelId ?? payload.routeOverride?.modelId ?? activeModel.value
     if (!providerId || !modelId)
       throw new Error('No active chat provider or model configured')
 
@@ -389,13 +499,30 @@ export const useChatStore = defineStore('chat', () => {
       throw new Error('Failed to load the target chat session')
 
     const messageCount = chatSession.getSessionMessages(payload.sessionId).length
-    const chatProvider = await consciousnessStore.getChatProviderInstance(providerId)
+    // Phase 8.0D-10B-4D4C4-D2B2-C1: generic per-send reasoning frozen at payload
+    // construction. Undefined preserves live global behavior via consciousness
+    // store; defined true/false is reused verbatim for every attempt (incl.
+    // fallback) and converted here at the provider border. Provider store is
+    // resolved lazily only when per-send reasoning is present to avoid
+    // eagerly pulling the provider config query (document) in node tests.
+    const chatProvider = payload.reasoning !== undefined
+      ? await useProviderStore().getChatProviderInstance(providerId, { reasoning: payload.reasoning ? 'enabled' : 'disabled' })
+      : await consciousnessStore.getChatProviderInstance(providerId)
     if (!chatProvider)
       throw new Error(`Failed to resolve chat provider "${providerId}"`)
 
     await runtime.ingest(payload.text, {
       model: modelId,
       chatProvider,
+      // Phase 8.0D-10B-1: the SAME provider id resolved above for this attempt
+      // (never a re-read) travels with the request as observational metadata,
+      // so per-round telemetry reports what actually ran here. Execution is
+      // untouched: `chatProvider` remains the executable provider.
+      providerId,
+      // Phase 8.0D-10B-3B1: the logical-send key is forwarded unchanged from
+      // the payload - the same value for every attempt of this send, and
+      // absent when the caller supplied none (nothing is synthesized here).
+      ...(payload.correlationId === undefined ? {} : { correlationId: payload.correlationId }),
       attachments: payload.attachments,
       input: payload.input,
       toolReferences: payload.tools,
@@ -431,14 +558,62 @@ export const useChatStore = defineStore('chat', () => {
    */
   async function executeSend(payload: ChatSendPayload): Promise<ChatSendResult> {
     const fallbackResolver = getChatFallbackResolver()
-    if (!fallbackResolver)
-      return executeSendAttempt(payload)
+    const hasRouteOverride = !!payload.routeOverride
+    if (!fallbackResolver) {
+      return executeSendAttempt(payload, hasRouteOverride ? payload.routeOverride : undefined)
+    }
 
     // Snapshot the conversation before the send so a failed attempt can be
     // rolled back precisely without duplicating messages or touching history.
     if (!await chatSession.loadSession(payload.sessionId))
       throw new Error('Failed to load the target chat session')
     const messageCountBefore = chatSession.getSessionMessages(payload.sessionId).length
+
+    if (hasRouteOverride) {
+      // Phase 8.0D-10B-4D4C4-D2A: per-send override path — never mutates
+      // global activeProvider/activeModel. The initial attempt uses
+      // payload.routeOverride; fallback updates the local effectiveRoute.
+      let effectiveRoute: ChatSendRouteOverride = payload.routeOverride!
+      let lastError: unknown
+      for (let attempt = 0; attempt < CHAT_FALLBACK_MAX_ATTEMPTS; attempt += 1) {
+        try {
+          return await executeSendAttempt(payload, effectiveRoute)
+        }
+        catch (error) {
+          lastError = error
+          const next = await fallbackResolver({
+            error,
+            providerId: effectiveRoute.providerId,
+            modelId: effectiveRoute.modelId,
+            attemptIndex: attempt,
+          })
+          if (!next)
+            throw error
+
+          // Sanitized technical log: never the error/secret, only provider ids.
+          console.warn('[chat] provider failover', {
+            from: effectiveRoute.providerId,
+            to: next.providerId,
+            attempt: attempt + 1,
+          })
+
+          // Remove exactly what this failed attempt appended (the rolled turn), so
+          // the retry re-runs the same user message without duplicating it. If
+          // nothing was appended (e.g. a provider-resolution failure before the
+          // message reached the queue) there is nothing to roll back — retry safe.
+          const current = chatSession.getSessionMessages(payload.sessionId)
+          if (current.length > messageCountBefore) {
+            chatSession.setSessionMessages(payload.sessionId, current.slice(0, messageCountBefore))
+          }
+
+          effectiveRoute = applyFallbackCandidateToRoute(effectiveRoute, next)
+        }
+      }
+
+      // All bounded attempts exhausted; surface the last error to the caller
+      // (which appends a friendly, sanitized error for the user).
+      throw lastError ?? new Error('Chat send failed')
+    }
 
     const originalProviderId = activeProvider.value
     const originalModelId = activeModel.value
@@ -506,15 +681,55 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  /** Sends one serializable chat request through the elected leader. */
-  async function send(payload: ChatSendPayload): Promise<ChatSendResult> {
+  /**
+   * Phase 8.0D-10B-4D4C4-B1: runs ONE logical send and reports its factual
+   * settlement.
+   *
+   * The settlement boundary is exactly `executeSend(payload)` as a whole: the
+   * whole fallback loop with all of its attempts, rollback and restore work.
+   * It resolves -> `succeeded`; it rejects - for ANY reason - -> `failed`. No
+   * round outcome, request start, attempt count or error shape is inspected,
+   * and nothing is inferred from them: the send either settled or it did not.
+   *
+   * Ownership: this is the single caller of `executeSend`, so the notification
+   * happens at most once per logical send, and the existing error bubble is
+   * still appended exactly once on failure, after the notification. The result
+   * and the error are passed through with their original identity - this
+   * wrapper neither clones nor rewraps them, and it adds no authority: the
+   * observer can neither change an outcome, trigger a retry nor reach a
+   * fallback decision (`notifyChatSendSettled` owns that isolation).
+   *
+   * The key is forwarded exactly as the payload carried it (absent stays
+   * absent, and this layer applies no filtering of its own).
+   */
+  async function executeSettledSend(payload: ChatSendPayload): Promise<ChatSendResult> {
+    const initialRouteOverride = payload.routeOverride === undefined
+      ? null
+      : {
+          providerId: payload.routeOverride.providerId,
+          modelId: payload.routeOverride.modelId,
+        }
+    const settle = (outcome: ChatSendOutcome) => notifyChatSendSettled(
+      payload.correlationId === undefined
+        ? { outcome, initialRouteOverride }
+        : { correlationId: payload.correlationId, outcome, initialRouteOverride },
+    )
+
     try {
-      return await executeSend(payload)
+      const result = await executeSend(payload)
+      settle('succeeded')
+      return result
     }
     catch (error) {
+      settle('failed')
       appendSendError(payload.sessionId, error)
       throw error
     }
+  }
+
+  /** Sends one serializable chat request through the elected leader. */
+  async function send(payload: ChatSendPayload): Promise<ChatSendResult> {
+    return executeSettledSend(payload)
   }
 
   /** Replaces one stored turn with a new execution of its user message. */
@@ -523,9 +738,21 @@ export const useChatStore = defineStore('chat', () => {
       throw new Error('Failed to load the target chat session')
 
     const currentMessages = chatSession.getSessionMessages(payload.sessionId)
-    const sourceIndex = retrySourceIndexFrom(currentMessages, payload.index)
-    if (sourceIndex < 0)
-      throw new Error('Retry target has no retriable source message')
+    // Phase 8.0D-10B-4D4C4-D2B6 corrective: stable SOURCE identity — when sourceMessageId is supplied, locate CURRENT user by id
+    let sourceIndex: number
+    if (payload.sourceMessageId !== undefined) {
+      const found = currentMessages.findIndex(
+        message => (message as { id?: string }).id === payload.sourceMessageId && message.role === 'user',
+      )
+      if (found < 0)
+        throw new Error('Retry target has no retriable source message: stale sourceMessageId')
+      sourceIndex = found
+    }
+    else {
+      sourceIndex = retrySourceIndexFrom(currentMessages, payload.index)
+      if (sourceIndex < 0)
+        throw new Error('Retry target has no retriable source message')
+    }
 
     const sourceMessage = currentMessages[sourceIndex]
     const text = retryTextFrom(sourceMessage)
@@ -534,17 +761,18 @@ export const useChatStore = defineStore('chat', () => {
 
     chatSession.setSessionMessages(payload.sessionId, currentMessages.slice(0, sourceIndex))
 
-    try {
-      return await executeSend({
-        sessionId: payload.sessionId,
-        text,
-        tools: payload.tools ?? sourceMessage?.tools,
-      })
-    }
-    catch (error) {
-      appendSendError(payload.sessionId, error)
-      throw error
-    }
+    // Phase 8.0D-10B-4D4C4-B1: the retry only replaces its own try/catch with the
+    // shared settlement wrapper - its preprocessing above is untouched, and a
+    // retry that exits before this point settles nothing and observes nothing.
+    // Phase 8.0D-10B-4D4C4-D2B6: retry is a NEW logical send — correlationId, reasoning and routeOverride are forwarded only when supplied, preserving absence semantics for legacy callers.
+    return executeSettledSend({
+      sessionId: payload.sessionId,
+      text,
+      tools: payload.tools ?? sourceMessage?.tools,
+      ...(payload.correlationId === undefined ? {} : { correlationId: payload.correlationId }),
+      ...(payload.reasoning === undefined ? {} : { reasoning: payload.reasoning }),
+      ...(payload.routeOverride === undefined ? {} : { routeOverride: payload.routeOverride }),
+    })
   }
 
   /** Runs one stored tool call again and replaces its stored result. */

@@ -143,6 +143,7 @@ describe('createPlaybackManager', () => {
     let resolvePlayback: (() => void) | undefined
     const play = vi.fn((_item, signal) => new Promise<void>((resolve) => {
       resolvePlayback = () => {
+        // oxlint-disable-next-line no-unused-expressions -- intentional ternary as effect
         signal.aborted ? resolve() : signal.addEventListener('abort', () => resolve(), { once: true })
         resolve()
       }

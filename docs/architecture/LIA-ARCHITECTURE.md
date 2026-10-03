@@ -178,6 +178,45 @@ Voice System
 ```
 - Voz customizada é **requisito futuro, não bloqueia Fase 1** (AGENTS §87). Primeiro voz padrão/fallback + pipeline; depois customização; depois Voice Studio. AllTalk/XTTS/RVC testados no hardware real (RX 580 8 GB) **posteriormente**, documentando compatibilidade.
 
+### 4.1 Readiness e provisionamento automático da voz (Fase 7.9H)
+
+Experiência normal: a Lia inicia, verifica as capacidades necessárias
+habilitadas, prepara sozinha os componentes da voz local básica, mostra
+progresso compreensível e fica pronta para falar — sem visita a tela
+técnica e sem botão de "instalar voz" no caminho do usuário comum.
+
+**Modelo de readiness (produto):** `disabled | checking | missing |
+preparing | ready | error`. Regras:
+
+- **Automático e idempotente:** no boot e após cada `config:update`
+  persistido, o launcher reconcilia: voz habilitada + engine suportado
+  (Kokoro) + instalação ausente ⇒ provisiona; instalação já provada
+  (inspeção real de disco) ⇒ `ready` sem redownload. Decisões são
+  serializadas e uma tentativa em andamento é **aderida**, nunca
+  duplicada (checks/retries concorrentes entram na mesma tentativa).
+- **Reuso do caminho existente:** o provisionamento delega para o mesmo
+  fluxo de instalação single-flight do cartão de voz (Fase 7.9G) e para a
+  inspeção real de instalação (7.9E.2) — nenhum instalador paralelo. O
+  override QA de `voice.runtime.installDir` continua honrado.
+- **Progresso honesto:** apenas rótulos de etapa deriváveis da instalação
+  real (Configurando ambiente… / Baixando voz… / Finalizando…). Nunca
+  percentuais inventados.
+- **Voz desativada (`voice.enabled: false`):** sem auto-instalação;
+  representada como "Desativada" (nunca Erro/Não instalada); conversa por
+  texto e launch permanecem intactos. Reativar reconcilia e provisiona.
+- **Conversar nunca bloqueia por voz preparando:** o caminho de texto
+  abre e a ausência de voz é anunciada com honestidade; a fala entra
+  quando fica pronta. Bloqueio só por capacidade genuinamente requerida.
+- **Falha:** estado `error` estável com `retryable`; "Tentar novamente"
+  inicia exatamente UMA nova tentativa pelo mesmo fluxo. Erro
+  não-tentável (ex.: engine configurado que o build não constrói) fica
+  honesto, sem troca silenciosa de engine e sem semântica
+  primary/fallback inventada.
+- **Papel da instalação manual:** a ação manual da Fase 7.9G permanece
+  apenas como retry/recovery — nunca como passo obrigatório.
+- **Vocabulário:** labels normais nunca citam Python/ONNX/pip/paths/
+  backends; esses detalhes existem só em logs/diagnósticos (metadata).
+
 ---
 
 ## 5. Voz / LLM provider-agnostic

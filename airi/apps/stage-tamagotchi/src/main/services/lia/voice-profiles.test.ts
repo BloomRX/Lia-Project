@@ -11,6 +11,7 @@ import {
   createLiaVoiceProfileStore,
   findMissingFiles,
   isInside,
+  LEGACY_VOICE_ENGINES,
   MAX_FILE_BYTES,
   safeFilename,
   VOICE_ENGINES,
@@ -32,10 +33,23 @@ async function makeSource(dir: string, filename: string, bytes = 64): Promise<st
   return path
 }
 
+/**
+ * A TEST-ONLY engine declaration registered via the store's injection seam.
+ * It is deliberately not a product id: the production registry is empty
+ * (Phase 7.8D), and success-path import tests exercise the seam the same
+ * way a real modular engine (Kokoro first) will.
+ */
+const TEST_ENGINE = {
+  extensions: ['.pth'],
+  id: 'test-engine',
+  label: 'Test Engine',
+  roles: ['model'],
+} as const
+
 function importRequest(overrides: Partial<LiaVoiceProfileImportRequest> = {}, sources: Array<{ path: string, role: string }>): LiaVoiceProfileImportRequest {
   return {
     name: 'Minha voz',
-    engine: 'generic',
+    engine: TEST_ENGINE.id,
     sources: sources.map(source => ({ role: source.role, path: source.path })),
     ...overrides,
   }
@@ -75,13 +89,16 @@ describe('lia voice profile store', () => {
   let rootDir = ''
   let sourceDir = ''
 
+  /** A store with the test engine registered - the success path. */
+  const makeStore = (dir: string) => createLiaVoiceProfileStore({ rootDir: dir, engines: [TEST_ENGINE] })
+
   beforeEach(async () => {
     rootDir = await mkdtemp(join(tmpdir(), 'lia-voices-'))
     sourceDir = await mkdtemp(join(tmpdir(), 'lia-src-'))
   })
 
   it('imports a valid profile and copies the files into its own folder', async () => {
-    const store = createLiaVoiceProfileStore({ rootDir })
+    const store = makeStore(rootDir)
     const model = await makeSource(sourceDir, 'model.pth', 1024)
 
     const result = await store.importProfile(
@@ -96,7 +113,7 @@ describe('lia voice profile store', () => {
     const profile = result.value
     expect(profile.id).toMatch(/^[0-9a-f-]{36}$/)
     expect(profile.name).toBe('Minha voz')
-    expect(profile.engine).toBe('generic')
+    expect(profile.engine).toBe(TEST_ENGINE.id)
     expect(profile.files).toEqual([{ role: 'model', filename: 'model.pth', bytes: 1024 }])
 
     // The bytes really moved into userData/<id>/, and only the name was kept.
@@ -106,7 +123,7 @@ describe('lia voice profile store', () => {
   })
 
   it('persists metadata only - never a path and never the bytes', async () => {
-    const store = createLiaVoiceProfileStore({ rootDir })
+    const store = makeStore(rootDir)
     const model = await makeSource(sourceDir, 'model.pth', 512)
     const result = await store.importProfile(
       importRequest({}, [{ path: model, role: 'model' }]),
@@ -125,12 +142,12 @@ describe('lia voice profile store', () => {
   })
 
   it('survives a restart: a fresh store over the same directory reloads the library', async () => {
-    const first = createLiaVoiceProfileStore({ rootDir })
+    const first = makeStore(rootDir)
     const model = await makeSource(sourceDir, 'model.pth')
     const imported = await first.importProfile(importRequest({}, [{ path: model, role: 'model' }]), new Set([model]))
     expect(imported.ok).toBe(true)
 
-    const second = createLiaVoiceProfileStore({ rootDir })
+    const second = makeStore(rootDir)
     const profiles = await second.list()
 
     expect(profiles).toHaveLength(1)
@@ -140,7 +157,7 @@ describe('lia voice profile store', () => {
   })
 
   it('removes a profile and its files', async () => {
-    const store = createLiaVoiceProfileStore({ rootDir })
+    const store = makeStore(rootDir)
     const model = await makeSource(sourceDir, 'model.pth')
     const imported = await store.importProfile(importRequest({}, [{ path: model, role: 'model' }]), new Set([model]))
     expect(imported.ok).toBe(true)
@@ -157,7 +174,7 @@ describe('lia voice profile store', () => {
   })
 
   it('refuses a path that the file dialog never returned', async () => {
-    const store = createLiaVoiceProfileStore({ rootDir })
+    const store = makeStore(rootDir)
     const model = await makeSource(sourceDir, 'model.pth')
     const secret = await makeSource(sourceDir, 'not-selected.pth')
 
@@ -174,7 +191,7 @@ describe('lia voice profile store', () => {
   })
 
   it('refuses a wrong extension, an empty name and a duplicate name', async () => {
-    const store = createLiaVoiceProfileStore({ rootDir })
+    const store = makeStore(rootDir)
     const wrong = await makeSource(sourceDir, 'notes.txt')
     const model = await makeSource(sourceDir, 'model.pth')
     const allowed = new Set([wrong, model])
@@ -200,29 +217,62 @@ describe('lia voice profile store', () => {
     expect(await store.list()).toHaveLength(1)
   })
 
-  it('refuses an unknown engine and an unknown role', async () => {
+  it('defers every NEW import while no runnable engine is registered (7.8D)', async () => {
+    // The production registry is empty, so the store's default registry
+    // contains no engine: imports refuse cleanly instead of writing a fake
+    // engine id - including ids that never were engines, the legacy one and
+    // an absent engine field.
     const store = createLiaVoiceProfileStore({ rootDir })
     const model = await makeSource(sourceDir, 'model.pth')
+    const allowed = new Set([model])
 
-    const badEngine = await store.importProfile(
-      importRequest({ engine: 'rvc-webui-v9' }, [{ path: model, role: 'model' }]),
-      new Set([model]),
-    )
-    expect(badEngine.ok).toBe(false)
-    if (!badEngine.ok)
-      expect(badEngine.error).toBe('engineUnknown')
+    for (const engine of ['rvc-webui-v9', 'alltalk', 'lia-cloning', undefined]) {
+      const result = await store.importProfile(
+        importRequest(engine === undefined ? { engine: undefined } : { engine }, [{ path: model, role: 'model' }]),
+        allowed,
+      )
+      expect(result.ok).toBe(false)
+      if (!result.ok)
+        expect(result.error).toBe('engineUnknown')
+    }
+    // Nothing was written by any of the refusals.
+    expect(await store.list()).toHaveLength(0)
 
-    const badRole = await store.importProfile(
-      importRequest({ engine: 'rvc' }, [{ path: model, role: 'weights' }]),
-      new Set([model]),
+    // With a registered engine the role check still applies: the right id
+    // and a wrong role refuse too.
+    const badRole = await makeStore(rootDir).importProfile(
+      importRequest({}, [{ path: model, role: 'weights' }]),
+      allowed,
     )
     expect(badRole.ok).toBe(false)
     if (!badRole.ok)
       expect(badRole.error).toBe('engineUnknown')
   })
 
+  it('keeps old alltalk-era profiles readable - read-compatibility only, never a new import', async () => {
+    // Data written by older builds must survive untouched: the registry
+    // lists the profile with its original engine id and resolves its files.
+    const profileId = 'legacy-profile-1'
+    await writeFile(join(rootDir, 'index.json'), `${JSON.stringify({
+      profiles: [{
+        createdAt: '2025-06-01T12:00:00.000Z',
+        engine: 'alltalk',
+        files: [{ bytes: 4, filename: 'reference.wav', role: 'referenceAudio' }],
+        id: profileId,
+        name: 'Voz antiga',
+      }],
+    }, null, 2)}\n`, 'utf8')
+
+    const store = makeStore(rootDir)
+    const listed = await store.list()
+    expect(listed).toHaveLength(1)
+    expect(listed[0]?.engine).toBe('alltalk')
+    expect((await store.get(profileId))?.name).toBe('Voz antiga')
+    expect(store.resolveFile(profileId, 'reference.wav')).toContain(profileId)
+  })
+
   it('reports a missing file as a clear condition instead of throwing', async () => {
-    const store = createLiaVoiceProfileStore({ rootDir })
+    const store = makeStore(rootDir)
     const model = await makeSource(sourceDir, 'model.pth')
     const imported = await store.importProfile(importRequest({}, [{ path: model, role: 'model' }]), new Set([model]))
     expect(imported.ok).toBe(true)
@@ -268,10 +318,22 @@ describe('lia voice profile store', () => {
     expect(store.resolveFile('abc', '.hidden')).toBeNull()
   })
 
-  it('declares a size ceiling and engines with explicit roles', () => {
+  it('holds the engine-registry contract: real runnable engines only, legacy data read-compatible', () => {
     expect(MAX_FILE_BYTES).toBeGreaterThan(1024 * 1024 * 1024)
-    expect(VOICE_ENGINES.length).toBeGreaterThan(0)
-    for (const engine of VOICE_ENGINES) {
+
+    // Phase 7.8D: NO runnable TTS engine is registered yet - there is no
+    // 'lia-cloning'-style placeholder, and no other fake generic id either.
+    expect(VOICE_ENGINES).toEqual([])
+
+    // Legacy ids resolve old documents only; they are always flagged and
+    // never leak into the runnable registry above.
+    expect(LEGACY_VOICE_ENGINES.map(engine => engine.id)).toEqual(['alltalk'])
+    expect(LEGACY_VOICE_ENGINES.every(engine => engine.legacy)).toBe(true)
+
+    // A registered engine declaration (real or test fixture) must still be
+    // well-formed: roles and dotted extensions are what import validates
+    // against.
+    for (const engine of [TEST_ENGINE]) {
       expect(engine.roles.length).toBeGreaterThan(0)
       expect(engine.extensions.length).toBeGreaterThan(0)
       expect(engine.extensions.every(extension => extension.startsWith('.'))).toBe(true)

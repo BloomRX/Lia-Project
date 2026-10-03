@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { defaultLiaProductConfig } from '../../../main/configs/lia'
+import { normalizeLineEndings } from '../../../test-helpers'
 import { normalizeLiaVoiceTts } from './voice'
 
 /**
@@ -134,10 +135,10 @@ describe('lia voice hydration chain (4E-1 investigation)', () => {
           walk(full)
           continue
         }
-        if (!/\.(?:ts|vue)$/.test(entry) || /\.test\.ts$/.test(entry))
+        if (!/\.(?:ts|vue)$/.test(entry) || entry.endsWith('.test.ts'))
           continue
 
-        const text = readFileSync(full, 'utf8')
+        const text = normalizeLineEndings(readFileSync(full, 'utf8'))
         if (writers.some(writer => writer.test(text)))
           hits.push(full.slice(renderer.length + 1).split('\\').join('/'))
       }

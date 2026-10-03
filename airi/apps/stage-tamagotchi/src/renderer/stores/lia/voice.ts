@@ -3,7 +3,7 @@ import type { LiaVoiceConfig, LiaVoiceTtsConfig, LiaVoiceTtsTarget } from '../..
 import { errorMessageFrom } from '@moeru/std'
 import { useElectronEventaInvoke } from '@proj-airi/electron-vueuse'
 import { logAudioDiagnostics } from '@proj-airi/stage-ui/libs/diagnostics/audio-probe'
-import { registerSpeechTtsFallbackPolicy } from '@proj-airi/stage-ui/libs/speech/tts-fallback'
+import { registerSpeechTtsFallbackPolicy, speechTtsTerminalCategory } from '@proj-airi/stage-ui/libs/speech/tts-fallback'
 import { useAiriCardStore } from '@proj-airi/stage-ui/stores/modules/airi-card'
 import { useSpeechStore } from '@proj-airi/stage-ui/stores/modules/speech'
 import { defineStore } from 'pinia'
@@ -392,8 +392,33 @@ export const useLiaVoiceStore = defineStore('lia-voice', () => {
   }
 
   function registerRuntimeExtensions(): void {
+    // Phase 7.5, Part 11 (test H): a terminal SETUP failure is terminal for
+    // the whole TURN, not just the segment. The memo lives at this scope so
+    // `onTurnEnded` clears it exactly at the pipeline boundary.
+    const terminalNotifiedByTurn = new Map<string, string>()
+
     registerSpeechTtsFallbackPolicy({
       onAttemptFailed: async (ctx) => {
+        // Setup failures cannot be fixed by switching voice target: the
+        // problem is in the voice files or the engine itself, not in the
+        // provider choice. Falling back would replay the SAME failure on
+        // another chain and flood the console with identical chunks.
+        const terminalCategory = speechTtsTerminalCategory(ctx.error)
+        if (terminalCategory) {
+          const turnKey = ctx.turnId ?? ''
+          const alreadyNotified = terminalNotifiedByTurn.get(turnKey)
+          if (!alreadyNotified) {
+            terminalNotifiedByTurn.set(turnKey, terminalCategory)
+            // ONE warning per turn, then silent drops. The human-readable
+            // sentence itself is already in the thrown error's message.
+            console.warn('[Lia Voice] setup failure is terminal for this turn; remaining chunks drop without retry', {
+              category: terminalCategory,
+              turnId: ctx.turnId,
+            })
+          }
+          return false
+        }
+
         // Read BEFORE the switch: this is the provider that just failed.
         const failedProviderId = speechStore.activeSpeechProvider
 
@@ -419,6 +444,9 @@ export const useLiaVoiceStore = defineStore('lia-voice', () => {
       },
 
       onTurnEnded: async () => {
+        // The turn boundary clears the terminal memo with it.
+        terminalNotifiedByTurn.clear()
+
         // Nothing to restore unless a fallback actually took over this turn.
         if (activeTargetIndex.value === 0)
           return

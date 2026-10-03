@@ -52,6 +52,28 @@ export interface ChatOrchestratorSendOptions {
   model: string
   /** Concrete chat provider implementation selected by the caller. */
   chatProvider: ChatProvider
+  /**
+   * Exact provider id the caller resolved for THIS execution attempt.
+   *
+   * Phase 8.0D-10B-1: carried by value so per-round observational metadata
+   * reports the provider that actually ran this attempt instead of re-reading
+   * live store state. Optional and descriptive only - the executable provider
+   * is `chatProvider`, and nothing in this runtime resolves, selects, routes,
+   * retries or falls back on this value. Callers that omit it keep the
+   * previous `deps.getActiveProvider()` behaviour.
+   */
+  providerId?: string
+  /**
+   * Opaque caller-owned key for ONE logical send, spanning every attempt of
+   * that send (provider fallback included).
+   *
+   * Phase 8.0D-10B-3B1: carried through to the request-start metadata so an
+   * execution observation can be joined to the decision that preceded the
+   * send. Descriptive only - this runtime never reads it to resolve, select,
+   * route, retry, fall back, order, cancel or compose anything, and it never
+   * synthesizes one: an absent value stays absent.
+   */
+  correlationId?: string
   /** Provider-specific request options, currently used for headers. */
   providerConfig?: Record<string, unknown>
   /** Image attachments appended to the user message content parts. */
@@ -173,6 +195,38 @@ interface ChatRoundCorrelation {
 }
 
 /**
+ * The factual terminal treatment of ONE Core Agent round (Phase 8.0D-10B-4D4B1).
+ *
+ * - `succeeded`  every statement of the successful path completed, including the
+ *   activation milestone;
+ * - `failed`     a real provider/runtime error left the round while the session
+ *   generation it captured was still current;
+ * - `abandoned`  processing of an ALREADY-CREATED round stopped because that
+ *   captured generation became stale. It does NOT mean that no provider error
+ *   occurred, that a user cancelled, or that the round was superseded.
+ *
+ * These three are the whole vocabulary: there is no `timeout`, no `cancelled`,
+ * no `fallback`, no `retry` and no `winning`/`final` - the current control flow
+ * proves no such distinct terminal path.
+ */
+export type ChatRoundOutcome = 'succeeded' | 'failed' | 'abandoned'
+
+/**
+ * One factual terminal observation of a Core Agent round.
+ *
+ * Exactly three keys - the caller's opaque logical-send key when it has one
+ * (forwarded verbatim, never synthesized), the round's own id, and the factual
+ * outcome. Deliberately NOT built from `ChatRoundCorrelation`: no conversation,
+ * turn position, provider/model identity, session, timing, usage, error, prompt
+ * or message data belongs here. The runtime ignores whatever a listener returns.
+ */
+export interface ChatRoundSettledObservation {
+  correlationId?: string
+  roundId: string
+  outcome: ChatRoundOutcome
+}
+
+/**
  * Dependency surface used by the platform-agnostic chat orchestrator runtime.
  */
 export interface ChatOrchestratorRuntimeDeps {
@@ -204,6 +258,13 @@ export interface ChatOrchestratorRuntimeDeps {
   onStateChange?: (state: ChatOrchestratorRuntimeState) => void
   /** Called after a runtime-owned send completes or fails and `sending` has been cleared. */
   onSendSettled?: (event: { sessionId: string }) => void
+  /**
+   * Called exactly once per round that ENTERS the send body, with the round's
+   * factual terminal treatment - after the existing `onSendSettled` work of the
+   * same finalization. Observation only: the return value is ignored, and a
+   * throwing listener is contained so it cannot change what the send does.
+   */
+  onChatRoundSettled?: (observation: ChatRoundSettledObservation) => void
   /** Called when a send starts and the first assistant placeholder is created. */
   onTrackFirstMessage?: () => void
   /** Called for attempts made before the conversation has its first assistant response. */
@@ -237,6 +298,12 @@ export interface ChatOrchestratorRuntimeDeps {
     model: string
     provider: string
     hasVoice: boolean
+    /**
+     * Phase 8.0D-10B-3B1: the caller's opaque logical-send key, forwarded
+     * verbatim from the send options. Absent whenever the caller supplied
+     * none - this runtime never synthesizes one.
+     */
+    correlationId?: string
   }) => void
   /** Called when the first text token arrives from the provider stream. */
   onLlmFirstToken?: (event: ChatRoundCorrelation & {
@@ -522,7 +589,12 @@ export function createChatOrchestratorRuntime(deps: ChatOrchestratorRuntimeDeps)
     const hasVoice = options.input?.type === 'input:voice'
       || options.input?.type === 'input:text:voice'
     const sendSource = hasVoice ? 'voice' : 'text'
-    const activeProvider = deps.getActiveProvider?.() ?? ''
+    // Phase 8.0D-10B-1: prefer the provider id the caller resolved for THIS
+    // attempt (carried by value) so one round can never report an identity
+    // other than the one that executed it. The live-store read stays as the
+    // fallback for callers that carry nothing. Metadata only: the executable
+    // provider is `options.chatProvider` and no routing decision reads this.
+    const activeProvider = options.providerId ?? deps.getActiveProvider?.() ?? ''
     // The user message is the durable start of a round, so its ID also serves
     // as the correlation key for every telemetry milestone emitted by it.
     const correlation: ChatRoundCorrelation = {
@@ -545,6 +617,21 @@ export function createChatOrchestratorRuntime(deps: ChatOrchestratorRuntimeDeps)
       model: options.model,
     })
     const roundStartedAt = monotonicNow()
+
+    // Phase 8.0D-10B-4D4B1: per-invocation terminal state, local to this send.
+    // It stays UNCLASSIFIED until a modelled terminal path assigns it, so an
+    // unexamined path can never be reported as a factual outcome by accident.
+    let terminalOutcome: ChatRoundOutcome | undefined
+    // The single abandonment classifier: it is used ONLY where the round really
+    // returns from this function (never in the callback-local guards, whose
+    // returns leave a callback, not the round).
+    const abandonIfStale = () => {
+      if (!shouldAbort())
+        return false
+
+      terminalOutcome = 'abandoned'
+      return true
+    }
 
     try {
       await hooks.emitBeforeMessageComposedHooks(sendingMessage, streamingMessageContext)
@@ -574,7 +661,7 @@ export function createChatOrchestratorRuntime(deps: ChatOrchestratorRuntimeDeps)
         }
       }
 
-      if (shouldAbort())
+      if (abandonIfStale())
         return
 
       const userMessage = {
@@ -744,7 +831,7 @@ export function createChatOrchestratorRuntime(deps: ChatOrchestratorRuntimeDeps)
       let fullText = ''
       const headers = (options.providerConfig?.headers || {}) as Record<string, string>
 
-      if (shouldAbort())
+      if (abandonIfStale())
         return
 
       const llmRequestStartedAt = monotonicNow()
@@ -755,8 +842,14 @@ export function createChatOrchestratorRuntime(deps: ChatOrchestratorRuntimeDeps)
       deps.onLlmRequestStarted?.({
         ...correlation,
         model: options.model,
-        provider: deps.getActiveProvider() || 'unknown',
+        // Same captured value as every other per-round milestone; the
+        // `'unknown'` default for a genuinely unidentified provider stays.
+        provider: activeProvider || 'unknown',
         hasVoice,
+        // Phase 8.0D-10B-3B1: forwarded as-is (absent stays absent). This is
+        // the logical send's key, not the round's - `roundId` above remains
+        // the per-attempt identity.
+        ...(options.correlationId === undefined ? {} : { correlationId: options.correlationId }),
       })
 
       await deps.llm.stream(options.model, options.chatProvider, newMessages as Message[], {
@@ -861,11 +954,11 @@ export function createChatOrchestratorRuntime(deps: ChatOrchestratorRuntimeDeps)
       // Session generation is the lifecycle correlation key. Re-check it
       // after every awaited completion boundary so deleting a session while a
       // plugin hook runs cannot leak later hooks or success analytics.
-      if (shouldAbort())
+      if (abandonIfStale())
         return
 
       await parser.end()
-      if (shouldAbort())
+      if (abandonIfStale())
         return
 
       buildingMessage.providerTranscript = providerTranscript
@@ -885,20 +978,20 @@ export function createChatOrchestratorRuntime(deps: ChatOrchestratorRuntimeDeps)
         })
       }
 
-      if (shouldAbort())
+      if (abandonIfStale())
         return
       await hooks.emitStreamEndHooks(streamingMessageContext)
-      if (shouldAbort())
+      if (abandonIfStale())
         return
       await hooks.emitAssistantResponseEndHooks(fullText, streamingMessageContext)
 
-      if (shouldAbort())
+      if (abandonIfStale())
         return
       await hooks.emitAfterSendHooks(sendingMessage, streamingMessageContext)
-      if (shouldAbort())
+      if (abandonIfStale())
         return
       await hooks.emitAssistantMessageHooks({ ...buildingMessage }, fullText, streamingMessageContext)
-      if (shouldAbort())
+      if (abandonIfStale())
         return
       await hooks.emitChatTurnCompleteHooks({
         output: { ...buildingMessage },
@@ -906,7 +999,7 @@ export function createChatOrchestratorRuntime(deps: ChatOrchestratorRuntimeDeps)
         toolCalls: sessionMessagesForSend.filter(msg => msg.role === 'tool') as ToolMessage[],
       }, streamingMessageContext)
 
-      if (shouldAbort())
+      if (abandonIfStale())
         return
       deps.onAssistantTurnReady?.({
         messageText: fullText,
@@ -934,11 +1027,26 @@ export function createChatOrchestratorRuntime(deps: ChatOrchestratorRuntimeDeps)
           provider: activeProvider,
         })
       }
+
+      // Terminal success, as the LAST statement of the successful path: nothing
+      // that can still throw runs between this assignment and the natural exit
+      // of the try, so a failure inside the activation milestone above is
+      // reported as `failed` instead of being masked by a premature success.
+      terminalOutcome = 'succeeded'
     }
     catch (error) {
-      if (isStaleGeneration())
+      if (isStaleGeneration()) {
+        // Unchanged execution semantics: a generation that went stale discards
+        // this error entirely. The factual treatment is therefore `abandoned`,
+        // not `failed`.
+        terminalOutcome = 'abandoned'
         return
+      }
 
+      // Assigned BEFORE the failure callbacks below: any of them may throw and
+      // replace the escaping error, and the treatment of this round stays
+      // `failed` either way.
+      terminalOutcome = 'failed'
       console.error('Error sending message:', error)
       deps.onMessageRoundFailed?.({
         ...correlation,
@@ -961,8 +1069,36 @@ export function createChatOrchestratorRuntime(deps: ChatOrchestratorRuntimeDeps)
       throw error
     }
     finally {
-      setSending(false)
-      deps.onSendSettled?.({ sessionId })
+      try {
+        setSending(false)
+        deps.onSendSettled?.({ sessionId })
+      }
+      catch (error) {
+        // Existing behavior preserved exactly: this error still escapes and
+        // still replaces any earlier completion - and it is the factual
+        // terminal treatment of the round that performed the send.
+        terminalOutcome = 'failed'
+        // oxlint-disable-next-line no-unsafe-finally -- throw in finally is intentional
+        throw error
+      }
+      finally {
+        // Terminal observation, once per entered round, from the one place that
+        // sees every outcome above. It is emitted last, sees the FINAL outcome,
+        // and is fully isolated: a throwing listener cannot change the send.
+        const settledOutcome = terminalOutcome
+        if (settledOutcome !== undefined) {
+          try {
+            deps.onChatRoundSettled?.({
+              roundId,
+              outcome: settledOutcome,
+              ...(options.correlationId === undefined ? {} : { correlationId: options.correlationId }),
+            })
+          }
+          catch {
+            // Best-effort observation only: nothing is retried or reported.
+          }
+        }
+      }
     }
   }
 

@@ -18,13 +18,10 @@ const ipc = vi.hoisted(() => ({
     structuredClone(_config)
   }),
   list: vi.fn(async (): Promise<LiaCustomVoiceProfile[]> => []),
-  engines: vi.fn(async () => [
-    { extensions: ['.pth'], id: 'generic', label: 'Generic (local server)', roles: ['model'] },
-  ]),
+  engines: vi.fn(async () => []),
   pick: vi.fn(async (_options: unknown): Promise<string[] | null> => null),
   importProfile: vi.fn(async (_request: unknown): Promise<unknown> => ({ error: 'fileMissing', message: 'x', ok: false })),
   remove: vi.fn(async (_payload: unknown): Promise<unknown> => ({ ok: true, value: { id: 'x' } })),
-  sync: vi.fn(async (_payload: unknown): Promise<unknown> => ({ ok: true, copied: true, filename: 'lia.wav' })),
 }))
 
 const card = vi.hoisted(() => ({
@@ -54,8 +51,6 @@ vi.mock('@proj-airi/electron-vueuse', () => ({
       return ipc.importProfile
     if (id === 'eventa:invoke:lia:voice:profiles:remove-receive')
       return ipc.remove
-    if (id === 'eventa:invoke:lia:alltalk:sync-receive')
-      return ipc.sync
     throw new Error(`Unexpected eventa invoke: ${JSON.stringify(invoke)}`)
   },
 }))
@@ -71,9 +66,10 @@ vi.mock('@proj-airi/stage-ui/stores/modules/airi-card', () => ({
 const PROFILE: LiaCustomVoiceProfile = {
   id: 'aaaa-bbbb',
   name: 'Minha voz',
-  engine: 'generic',
+  // Legacy-era id: existing documents carry it and stay readable.
+  engine: 'alltalk',
   createdAt: '2026-01-01T00:00:00.000Z',
-  files: [{ role: 'model', filename: 'model.pth', bytes: 1024 }],
+  files: [{ role: 'referenceAudio', filename: 'reference.wav', bytes: 1024 }],
 }
 
 const CUSTOM = 'custom-local-voice'
@@ -108,12 +104,12 @@ describe('lia voice profiles store', async () => {
     expect(isCustomVoiceTarget({ providerId: 'kokoro-local', voiceId: 'af_heart' })).toBe(false)
 
     const serialized = JSON.stringify(target)
-    expect(serialized).not.toContain('model.pth')
+    expect(serialized).not.toContain('reference.wav')
     expect(serialized).not.toContain('/')
     expect(serialized.length).toBeLessThan(120)
   })
 
-  it('loads the library and the engine list', async () => {
+  it('loads the library - and offers NO engines while none is runnable (7.8D/E)', async () => {
     ipc.list.mockResolvedValue([PROFILE])
     const store = useLiaVoiceProfilesStore()
 
@@ -121,7 +117,9 @@ describe('lia voice profiles store', async () => {
 
     expect(store.profiles).toHaveLength(1)
     expect(store.byId.get(PROFILE.id)?.name).toBe('Minha voz')
-    expect(store.engineFor('generic')?.extensions).toEqual(['.pth'])
+    // Transitional product truth: the picker has nothing to offer.
+    expect(store.engines).toEqual([])
+    expect(store.engineFor('alltalk')).toBeUndefined()
     expect(store.engineFor('nope')).toBeUndefined()
   })
 
@@ -130,7 +128,7 @@ describe('lia voice profiles store', async () => {
     const store = useLiaVoiceProfilesStore()
     await store.refresh()
 
-    const picked = await store.pickFiles('generic', ['model'])
+    const picked = await store.pickFiles('alltalk', ['referenceAudio'])
 
     expect(picked).toBeNull()
     expect(store.profiles).toHaveLength(0)
@@ -138,26 +136,35 @@ describe('lia voice profiles store', async () => {
     expect(ipc.importProfile).not.toHaveBeenCalled()
   })
 
-  it('passes the engine extensions to the picker', async () => {
-    ipc.pick.mockResolvedValue(['/picked/model.pth'])
+  it('the picker opens unrestricted while no engine offers extensions', async () => {
+    ipc.pick.mockResolvedValue(['/picked/reference.wav'])
     const store = useLiaVoiceProfilesStore()
     await store.refresh()
 
-    const picked = await store.pickFiles('generic', ['model'])
+    const picked = await store.pickFiles('alltalk', ['referenceAudio'])
 
-    expect(picked).toEqual(['/picked/model.pth'])
-    expect(ipc.pick).toHaveBeenCalledWith(expect.objectContaining({ extensions: ['.pth'] }))
+    expect(picked).toEqual(['/picked/reference.wav'])
+    // No engine registered → no extension filter; and the import itself still
+    // defers in the core until one exists.
+    expect(ipc.pick).toHaveBeenCalledWith(expect.objectContaining({ extensions: [] }))
   })
 
   it('records a failed import as a friendly code instead of throwing', async () => {
-    ipc.importProfile.mockResolvedValue({ error: 'tooLarge', message: 'Too big.', ok: false })
+    ipc.importProfile.mockResolvedValue({ error: 'engineUnknown', message: 'Imports are temporarily disabled.', ok: false })
     const store = useLiaVoiceProfilesStore()
 
-    const result = await store.importProfile({ name: 'X', engine: 'generic', sources: [{ path: '/a.pth', role: 'model' }] })
+    const result = await store.importProfile({ name: 'X', sources: [{ path: '/a.wav', role: 'referenceAudio' }] })
 
     expect(result.ok).toBe(false)
-    expect(store.lastError).toEqual({ code: 'tooLarge', message: 'Too big.' })
+    expect(store.lastError).toEqual({ code: 'engineUnknown', message: 'Imports are temporarily disabled.' })
     expect(store.profiles).toHaveLength(0)
+  })
+
+  it('exposes no publish/sync primitive - there is no engine to sync to', () => {
+    const store = useLiaVoiceProfilesStore()
+
+    expect('syncProfile' in store).toBe(false)
+    expect('syncErrors' in store).toBe(false)
   })
 
   it('removing a profile that is not in use does not touch voice.tts', async () => {

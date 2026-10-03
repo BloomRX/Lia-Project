@@ -26,9 +26,14 @@ export interface SpeechPipelineOptions<TAudio> {
   /**
    * Maximum number of concurrent TTS generation tasks. Default is 4. Must be at least 1.
    *
+   * May be a FUNCTION, resolved per intent (Phase 7.6): a serialized local
+   * engine (AllTalk/XTTS v2 runs one inference at a time internally) asks
+   * for 1 - parallel HTTP jobs then queue blindly on the server and only
+   * add contention - while a remote multi-slot provider keeps its 4.
+   *
    * @default 4
    */
-  ttsMaxConcurrent?: number
+  ttsMaxConcurrent?: number | (() => number)
   playback: {
     schedule: (item: PlaybackItem<TAudio>) => void
     stopAll: (reason: string) => void
@@ -66,7 +71,12 @@ export function createSpeechPipeline<TAudio>(options: SpeechPipelineOptions<TAud
   const logger = options.logger ?? console
   const priorityResolver = options.priority ?? createPriorityResolver()
   const segmenter = options.segmenter ?? createTtsSegmentStream
-  const ttsMaxConcurrent = Math.max(1, options.ttsMaxConcurrent ?? 4)
+  function ttsMaxConcurrent(): number {
+    const cap = typeof options.ttsMaxConcurrent === 'function'
+      ? options.ttsMaxConcurrent()
+      : options.ttsMaxConcurrent ?? 4
+    return Math.max(1, Number.isFinite(cap) ? cap : 4)
+  }
   const context = createContext()
   const timeline = createTimeline()
 
@@ -256,7 +266,7 @@ export function createSpeechPipeline<TAudio>(options: SpeechPipelineOptions<TAud
       const reader = segmentStream.getReader()
 
       while (true) {
-        while (!intent.controller.signal.aborted && inFlightTasks.size >= ttsMaxConcurrent) {
+        while (!intent.controller.signal.aborted && inFlightTasks.size >= ttsMaxConcurrent()) {
           await Promise.race(inFlightTasks)
         }
 

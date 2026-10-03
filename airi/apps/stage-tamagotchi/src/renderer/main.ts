@@ -20,7 +20,13 @@ import App from './App.vue'
 
 import { shouldInstallRealChatObserver } from './diagnostics/gate'
 import { i18n } from './modules/i18n'
+import { managedRoutePolicyGuard } from './navigation/managed-route-policy'
+import { registerLiaBrainExecutionObserver } from './services/lia/execution-reporter'
+import { registerLiaBrainExecutionTerminalObserver } from './services/lia/execution-terminal-reporter'
+import { registerLiaBrainSendTerminalObserver } from './services/lia/send-terminal-reporter'
+import { useLiaCapabilitiesStore } from './stores/lia/capabilities'
 import { installCustomVoiceTransport } from './stores/lia/custom-voice-transport'
+import { installLiaStartupGreeting } from './stores/lia/startup-greeting'
 import { resolveRendererWindowContext } from './window-context'
 
 import '@unocss/reset/tailwind.css'
@@ -79,11 +85,61 @@ if (import.meta.env.DEV)
 // app connects the two.
 installCustomVoiceTransport()
 
+// Phase 8.0D-10B-4A: the ONE production registration of the Lia execution
+// observer. It hooks the generic request-start seam the chat runtime already
+// exposes (the shared layers stay Brain-blind) so that the window which
+// actually executes an LLM request reports the identity of that attempt to
+// main. Diagnostic only: it reads correlated request-start metadata and pushes
+// one one-way report - it never reads a decision, never chooses execution and
+// never stores anything.
+registerLiaBrainExecutionObserver()
+
+// Phase 8.0D-10B-4D4C1: the ONE production registration of the Lia terminal
+// observer - the sibling of the request-start installation above, on the
+// generic settled-round seam. It reports the factual terminal treatment of a
+// round the same window ran (succeeded / failed / abandoned), one one-way push
+// per settled round. Diagnostic only: it reads that observation, narrows it to
+// three fields and reports it - the outcome is never interpreted and never
+// influences execution.
+registerLiaBrainExecutionTerminalObserver()
+
+// Phase 8.0D-10B-4D4C4-B2: the ONE production registration of the Lia
+// send-terminal observer - the sibling of the two installations above, on the
+// generic logical-send settlement seam. It reports the factual settlement of a
+// whole send the same window ran (succeeded / failed), one one-way push per
+// settle. Diagnostic only: it reads that observation, narrows it to two fields
+// and reports it - the settlement is never interpreted, never joined to a round
+// and never influences execution.
+registerLiaBrainSendTerminalObserver()
+
+// Phase 7.7 (Parts 7-11): install the capability bridge so the persona
+// always answers from the product's CURRENT truth (voice configured?
+// available right now?). The main process computes it; this store carries
+// it into the shared chat context at turn boundaries.
+const liaCapabilities = useLiaCapabilitiesStore(pinia)
+liaCapabilities.initialize()
+
+// Phase 7.9E, items 2-3: ONE startup greeting per REAL managed launch,
+// through the normal speech pipeline (normalizer -> selected TTS engine ->
+// playback), doubling as the first real inference warmup. Scheduling is
+// asynchronous fire-and-forget: this neither awaits voice readiness nor
+// delays the renderer boot by a millisecond; the main process holds the
+// exactly-once latch so a reload/HMR cannot greet twice, and a window
+// unload cancels a still-pending greeting honestly.
+installLiaStartupGreeting(pinia)
+
 const router = createRouter({
   history: createWebHashHistory(),
   // TODO: vite-plugin-vue-layouts is long deprecated, replace with another layout solution
   routes: setupLayouts(routes as RouteRecordRaw[]),
 })
+
+/**
+ * Phase 7.3 central managed-route policy: under LIA_MANAGED the legacy
+ * launcher shell is not a destination (guard replaces it with the
+ * companion). Standalone is untouched - the guard then always allows.
+ */
+router.beforeEach(managedRoutePolicyGuard(resolveRendererWindowContext().liaManaged))
 
 if (import.meta.hot) {
   handleHotUpdate(router, (updatedRoutes) => {

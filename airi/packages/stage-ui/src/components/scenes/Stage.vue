@@ -8,13 +8,14 @@ import type { SpeechProviderWithExtraOptions } from '@xsai-ext/providers/utils'
 import type { UnElevenLabsOptions } from 'unspeech'
 
 import type { EmotionPayload } from '../../constants/emotions'
+import type { TextForSpeechDiagnostics } from '../../libs/speech/text-for-speech'
 import type { SpeechTransport, StageTtsSession, StreamingSessionSnapshot } from '../../libs/speech/tts-session'
 
 import { defineInvokeHandler } from '@moeru/eventa'
 import { sleep } from '@moeru/std'
 import { createLive2DLipSync } from '@proj-airi/model-driver-lipsync'
 import { wlipsyncProfile } from '@proj-airi/model-driver-lipsync/shared/wlipsync'
-import { createPlaybackManager, createSpeechPipeline, normalizeActPayload } from '@proj-airi/pipelines-audio'
+import { createPlaybackManager, createSpeechPipeline, createTtsSegmentStream, normalizeActPayload } from '@proj-airi/pipelines-audio'
 import { defaultLive2DMotionControlDynamics, Live2DScene, useLive2DMotionControl, useLive2dParams, useSettingsLive2d } from '@proj-airi/stage-ui-live2d'
 import { MMDScene } from '@proj-airi/stage-ui-mmd'
 import { SpineScene } from '@proj-airi/stage-ui-spine'
@@ -37,10 +38,14 @@ import { useIOTraceBridge } from '../../composables/use-io-trace-bridge'
 import { initIOTracer } from '../../composables/use-io-tracer'
 import { Emotion, EMOTION_EmotionMotionName_value, EMOTION_VRMExpressionName_value, EmotionThinkMotionName } from '../../constants/emotions'
 import { live2dMotionMagicProfiles, useLive2DMotionMagic, useLive2DMotionMagicSettings } from '../../features/motions/live2d'
+import { getLiaCapabilityRefreshHook } from '../../libs/capabilities/lia-capability-port'
 import { getDefaultStreamingModel, getDefinedProvider } from '../../libs/providers/providers'
 import { OFFICIAL_SPEECH_PROVIDER_ID, OFFICIAL_SPEECH_STREAMING_PROVIDER_ID } from '../../libs/providers/providers/official'
+import { recordSpeechLatency } from '../../libs/speech/latency-probe'
+import { resolveSpeechPipelineTuning } from '../../libs/speech/pipeline-tuning'
 import { bindSpeakingStateToPlaybackManager } from '../../libs/speech/playback-speaking-state'
 import { isModellessTarget, resolveSynthesisTarget } from '../../libs/speech/synthesize-target'
+import { isSpeechChunkSpeakable, normalizeTextForSpeech } from '../../libs/speech/text-for-speech'
 import { getSpeechTtsFallbackPolicy, notifySpeechTtsTurnEnded, withSpeechTtsSegmentFallback } from '../../libs/speech/tts-fallback'
 import { createStageTtsSession } from '../../libs/speech/tts-session'
 import { getSpeechBusContext, speechOutputGetPlaybackState } from '../../services/speech/bus'
@@ -53,6 +58,7 @@ import { useSpeechStore } from '../../stores/modules/speech'
 import { useProviderConfigStore } from '../../stores/providers/config'
 import { useProviderStore } from '../../stores/providers/provider'
 import { useSettings } from '../../stores/settings'
+import { useSettingsDeveloper } from '../../stores/settings/developer'
 import { useSpeechOutputControlStore } from '../../stores/speech-output-control'
 import { useSpeechRuntimeStore } from '../../stores/speech-runtime'
 
@@ -77,6 +83,7 @@ const tachieSceneRef = ref<InstanceType<typeof TachieScene>>()
 const mmdSceneRef = ref<InstanceType<typeof MMDScene>>()
 
 const settingsStore = useSettings()
+const settingsDeveloper = useSettingsDeveloper()
 const {
   stageModelRenderer,
   stageViewControlsEnabled,
@@ -438,6 +445,54 @@ function resolveStageVoiceType(): 'official_selected' | 'custom_configured' {
 }
 
 /**
+ * Phase 7.7.2, item 12: bounded, PII-free diagnostics for the speech-input
+ * transformation - structure counters only, never a character of content.
+ * Throttled to transitions that actually changed something, so a normal
+ * sentence costs zero lines.
+ */
+/**
+ * Phase 7.7.2, item 14-F: one dev-gated line - `{provider, bytes, sha256}` -
+ * emitted just before decodeAudioData consumes a TTS payload. The main
+ * process logs wavSha256 for the same bytes; equality proves no transport
+ * or pipeline layer altered the audio before playback.
+ */
+async function logSpeechBytesHash(res: ArrayBuffer, providerId: string): Promise<void> {
+  if (!settingsDeveloper.inspectAudioPayloadHashes)
+    return
+  try {
+    const digest = await crypto.subtle.digest('SHA-256', res.slice(0))
+    const hash = Array.from(new Uint8Array(digest)).map(byte => byte.toString(16).padStart(2, '0')).join('')
+    console.info('[lia.voice.speech-bytes]', {
+      audioContextSampleRate: audioContext.sampleRate,
+      bytes: res.byteLength,
+      provider: providerId,
+      sha256: hash,
+    })
+  }
+  catch {
+    // Diagnostics never break playback.
+  }
+}
+
+function speechInputDiagnosticsLog(diagnostics: TextForSpeechDiagnostics): void {
+  if (diagnostics.inputLength === diagnostics.normalizedLength
+    && diagnostics.removedCodeChars === 0
+    && diagnostics.removedMarkupCount === 0
+    && diagnostics.removedUrlCount === 0
+    && diagnostics.emojiRemovedCount === 0) {
+    return
+  }
+  console.info('[lia.voice.speech-input]', {
+    emojiRemovedCount: diagnostics.emojiRemovedCount,
+    inputLength: diagnostics.inputLength,
+    normalizedLength: diagnostics.normalizedLength,
+    removedCodeChars: diagnostics.removedCodeChars,
+    removedMarkupCount: diagnostics.removedMarkupCount,
+    removedUrlCount: diagnostics.removedUrlCount,
+  })
+}
+
+/**
  * One synthesis attempt for one segment.
  *
  * Returns `null` when there is legitimately nothing to speak (aborted, muted,
@@ -543,7 +598,14 @@ async function stageSynthesizeSegment(request: TtsRequest, signal: AbortSignal):
   if (!synthesisTarget)
     return null
 
-  if (isModellessTarget(synthesisTarget)) {
+  // Phase 7.4 Part F: warn about a missing model id only when the provider
+  // PUBLISHES a model catalogue. Providers without one (Kokoro, Edge TTS,
+  // custom voices served by AllTalk) select nothing here because the model
+  // is the BACKEND's business - XTTS lives where the AllTalk server is
+  // configured, never in an AIRI modelId riding the chat bridge. An empty
+  // model id for them is by-design, and the warning was false noise.
+  const providerPublishesModels = providersStore.getModelsForProvider(activeSpeechProvider.value).length > 0
+  if (isModellessTarget(synthesisTarget) && providerPublishesModels) {
     // Loud, not silent: a provider that truly needs a model should surface here
     // and reach the fallback policy rather than mute the conversation.
     console.warn('[Speech Pipeline] synthesizing without a model id', {
@@ -555,9 +617,20 @@ async function stageSynthesizeSegment(request: TtsRequest, signal: AbortSignal):
   model = synthesisTarget.model
   voice = synthesisTarget.voice
 
+  // Phase 7.7.2, items 12-13: the deterministic text-for-speech layer runs
+  // HERE, on the speech path only - the visible message text is a different
+  // string and is never touched (item L). Markdown/code/URLs/emoji do not
+  // reach the engine, punctuation stays attached to its word, and a
+  // punctuation-only segment is dropped before it can cost a 40s backend
+  // round trip.
+  const normalized = normalizeTextForSpeech(request.text)
+  speechInputDiagnosticsLog(normalized.diagnostics)
+  if (!isSpeechChunkSpeakable(normalized.text))
+    return null
+
   try {
     const speechRequest = speechStore.resolveSpeechInput({
-      text: request.text,
+      text: normalized.text,
       voice,
       providerConfig: {
         ...providerConfig,
@@ -585,6 +658,9 @@ async function stageSynthesizeSegment(request: TtsRequest, signal: AbortSignal):
 
     if (signal.aborted || !res || res.byteLength === 0)
       return null
+
+    // Phase 7.7.2, item 14-F: byte-identity proof at the decode boundary.
+    await logSpeechBytesHash(res, activeSpeechProvider.value)
 
     const audioBuffer = await audioContext.decodeAudioData(res)
     return audioBuffer
@@ -616,6 +692,29 @@ const speechPipeline = createSpeechPipeline<AudioBuffer>({
   // this is exactly one attempt followed by the historical `null`.
   tts: withSpeechTtsSegmentFallback(stageSynthesizeSegment),
   playback: playbackManager,
+
+  // Phase 7.6: per-provider pipeline tuning (libs/speech/pipeline-tuning).
+  // Some engines are serialized internally (the local custom voice runs one
+  // XTTS inference at a time), in which case tiny fast-path fragments are
+  // pure overhead and parallel requests only blind-queue on the server:
+  // the tuning record may re-chunk the segmenter (merge fragments up to
+  // natural-sentence size) and bound synthesis concurrency accordingly.
+  // Stage.vue itself stays provider-agnostic (4E-2 convergence rule).
+  segmenter: (tokens, meta) => {
+    const tuning = resolveSpeechPipelineTuning(activeSpeechProvider.value)
+    const base = createTtsSegmentStream
+    return (tuning.wrapSegmenter?.(base) ?? base)(tokens, meta)
+  },
+  ttsMaxConcurrent: () => resolveSpeechPipelineTuning(activeSpeechProvider.value).maxConcurrent,
+})
+
+// Phase 7.6, item 3: bounded, metadata-only latency instrumentation. Only
+// numbers/ids/flags cross this log - never segment text - so operators can
+// separate \"engine inference\", \"AllTalk queue\", \"local HTTP\" and \"renderer
+// scheduling\" from a Windows QA run without reading anyone's messages.
+recordSpeechLatency(speechPipeline, {
+  onEntry: entry => console.info('[lia.voice.latency]', entry),
+  onTurnSummary: summary => console.info('[lia.voice.latency.turn]', summary),
 })
 
 initIOTracer()
@@ -889,6 +988,12 @@ watch(speechMuted, (muted) => {
 }, { immediate: true })
 
 chatHookCleanups.push(onBeforeMessageComposed(async (_message, context) => {
+  // Phase 7.7, Part 11: refresh the persona's capability truth AT THIS turn
+  // boundary - never mid-generation. The refresh re-resolves the port's
+  // last-good snapshot; the provider the chat core composes with reads it
+  // synchronously, so what this turn says about her voice is current.
+  void getLiaCapabilityRefreshHook()?.().catch(() => undefined)
+
   playbackManager.stopAll('new-message')
   resetAssistantSpeechSurface('new-message')
 

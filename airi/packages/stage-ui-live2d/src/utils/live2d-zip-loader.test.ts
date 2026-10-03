@@ -1,6 +1,19 @@
+import type { ModelSettings } from 'pixi-live2d-display/cubism4'
+
 import JSZip from 'jszip'
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+// TEST-ONLY: `createSettings` is typed against the base ModelSettings, while the
+// Cubism4 settings the loader actually produces also carry expressions/motions.
+// Narrowed here in the test only - production types are untouched.
+interface LoadedLive2DExpression { File: string, Name: string }
+interface LoadedLive2DMotion { File: string }
+
+type LoadedCubism4Settings = ModelSettings & {
+  expressions?: LoadedLive2DExpression[]
+  motions?: Record<string, LoadedLive2DMotion[]>
+}
 
 function blobFromBytes(data: Uint8Array): Blob {
   const buffer = new ArrayBuffer(data.byteLength)
@@ -94,7 +107,7 @@ describe('live2d zip loader settings sanitization', () => {
 
     const zipBytes = await zip.generateAsync({ type: 'uint8array' })
     const reader = await JSZip.loadAsync(await blobFromBytes(zipBytes).arrayBuffer())
-    const settings = await ZipLoader.createSettings(reader)
+    const settings = await ZipLoader.createSettings(reader) as LoadedCubism4Settings
     const files = await ZipLoader.unzip(reader, settings)
 
     expect(settings.physics).toBeUndefined()
@@ -271,7 +284,7 @@ describe('live2d zip loader settings sanitization', () => {
 
     const zipBytes = await zip.generateAsync({ type: 'uint8array' })
     const reader = await JSZip.loadAsync(await blobFromBytes(zipBytes).arrayBuffer())
-    const settings = await ZipLoader.createSettings(reader)
+    const settings = await ZipLoader.createSettings(reader) as LoadedCubism4Settings
     const files = await ZipLoader.unzip(reader, settings)
 
     expect(settings.expressions).toEqual([

@@ -188,7 +188,7 @@ export function createStreamingControlParser(
       }
 
       // snapshot prevents mutation during iteration
-      for (const handler of [...signalHandlers]) {
+      for (const handler of Array.from(signalHandlers)) {
         try {
           await handler(parsed, signalContext)
         }

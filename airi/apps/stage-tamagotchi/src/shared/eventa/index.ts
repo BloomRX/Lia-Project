@@ -1,5 +1,17 @@
 import type { Locale } from '@intlify/core'
 import type {
+  LiaBrainRoutingDecision as LiaCoreBrainRoutingDecision,
+  LiaChatTurnBrainFacts as LiaCoreChatTurnBrainFacts,
+} from '@lia/core'
+import type {
+  LiaCustomVoiceFile as LiaCoreCustomVoiceFile,
+  LiaCustomVoiceProfile as LiaCoreCustomVoiceProfile,
+  LiaVoiceProfileErrorCode as LiaCoreVoiceProfileErrorCode,
+  LiaVoiceProfileImportRequest as LiaCoreVoiceProfileImportRequest,
+  LiaVoiceProfileResult as LiaCoreVoiceProfileResult,
+  LiaVoiceProfileSource as LiaCoreVoiceProfileSource,
+} from '@lia/core/voices/types'
+import type {
   GameletIframeRequestPayload as GameletIframeInvokePayload,
   GameletIframeResponsePayload,
 } from '@proj-airi/plugin-sdk-tamagotchi/gamelet'
@@ -27,8 +39,6 @@ import type {
   VrmUpdateFrameTracePayload,
 } from '@proj-airi/stage-ui-three/trace'
 import type { Rectangle } from 'electron'
-
-import type { LiaBootstrapState } from '../lia-voice'
 
 import { defineEventa, defineInvokeEventa } from '@moeru/eventa'
 
@@ -603,145 +613,18 @@ export interface LiaVoiceConfig {
 }
 
 /**
- * One file belonging to a custom voice profile.
- *
- * `filename` is a bare name inside the profile's own directory under
- * `userData/lia-voices/<id>/` - never an absolute path and never a separator, so
- * a stored profile cannot point outside its own folder.
+ * The canonical definitions of these voice-profile shapes moved to Lia Core
+ * (`@lia/core/voices/types`) when the Lia product became independent of its
+ * stage host. They are re-exported here so the AIRI-side IPC contract keeps
+ * compiling against exactly one source of truth.
  */
-export interface LiaCustomVoiceFile {
-  /** Stable role within the profile, e.g. `model` or `index`. */
-  role: string
-  filename: string
-  bytes: number
-}
 
-/**
- * A user's private, imported voice.
- *
- * Deliberately engine-agnostic: the core knows a voice has an `engine` and some
- * files, not what RVC or XTTS or AllTalk need. Nothing here is a binary or
- * base64 - the bytes stay on disk and only names and sizes are persisted.
- *
- * `voice.tts` references a profile by `voiceId === id`, so no second config
- * writer is needed: the existing `preferred`/`fallback` targets and
- * `saveTtsConfiguration()` remain the only route that selects a voice.
- */
-export interface LiaCustomVoiceProfile {
-  id: string
-  name: string
-  engine: string
-  /** ISO timestamp. */
-  createdAt: string
-  files: LiaCustomVoiceFile[]
-  /** Free-form, string-valued, UI-displayable. Never credentials. */
-  metadata?: Record<string, string>
-}
-
-/**
- * Why an import or a load failed, in terms a user can act on. The UI maps these
- * to friendly strings; a stack trace never reaches it.
- */
-export type LiaVoiceProfileErrorCode
-  = | 'cancelled'
-    | 'duplicateId'
-    | 'duplicateName'
-    | 'emptyName'
-    | 'engineUnknown'
-    | 'fileMissing'
-    | 'invalidExtension'
-    | 'notFound'
-    | 'pathTraversal'
-    | 'tooLarge'
-
-export type LiaVoiceProfileResult<T>
-  = | { ok: true, value: T }
-    | { error: LiaVoiceProfileErrorCode, message: string, ok: false }
-
-/** A source file the user picked, as handed back by the main-process dialog. */
-export interface LiaVoiceProfileSource {
-  role: string
-  /** Absolute path, validated by the main process against what the dialog returned. */
-  path: string
-}
-
-export interface LiaVoiceProfileImportRequest {
-  name: string
-  engine: string
-  sources: LiaVoiceProfileSource[]
-  metadata?: Record<string, string>
-}
-
-/**
- * How to reach the local AllTalk server. Runtime configuration only - it lives
- * in `voice.runtime.alltalk` inside `lia-product.json`, never inside a voice
- * profile, because one server serves every imported voice.
- *
- * No secret and no audio: AllTalk on localhost takes no credential, and the
- * reference WAV stays on disk under `userData/lia-voices/<id>/`.
- */
-export interface LiaAllTalkRuntimeConfig {
-  /** Base URL without a trailing slash, e.g. `http://127.0.0.1:7851`. */
-  baseUrl: string
-  /** AllTalk's own voices folder, chosen through the OS directory picker. */
-  voicesDir?: string
-  /** Where AllTalk is installed, chosen through the OS directory picker. */
-  installDir?: string
-  /** Per-request timeout in milliseconds. */
-  timeoutMs?: number
-}
-
-/**
- * What the Lia knows about the speech runtime it manages.
- *
- * Deliberately free of technical vocabulary: the UI turns `notInstalled` into
- * "we need to install the voice system", never "AllTalk is missing from
- * installDir".
- */
-export type LiaRuntimeState
-  = | { state: 'checking' }
-    | { state: 'error', message: string }
-    | { state: 'notInstalled' }
-    | { state: 'ready' }
-    | { state: 'starting' }
-    | { state: 'stopped' }
-
-/** Install steps the guided wizard walks the user through. */
-export interface LiaRuntimeInstallStep {
-  /** Stable id, so the UI can mark progress without parsing labels. */
-  id: string
-  title: string
-  detail: string
-  /** External documentation, opened only on an explicit user click. */
-  link?: string
-  done: boolean
-}
-
-/**
- * What the UI shows about AllTalk. `notConfigured` is distinct from `offline`:
- * one says "point me at your server", the other says "the server is not
- * running". Conflating them sends the user to the wrong fix.
- */
-export type LiaAllTalkStatus
-  = | { state: 'checking' }
-    | { state: 'connected', voices: string[] }
-    | { state: 'error', error: string }
-    | { state: 'notConfigured' }
-    | { state: 'offline' }
-
-/** A synthesis request from the renderer, resolved to a profile in the main process. */
-export interface LiaAllTalkSynthesisRequest {
-  /** The custom voice profile id - never a path, never a filename. */
-  profileId: string
-  text: string
-  /** BCP-47 tag, e.g. `pt-BR`. Normalized to AllTalk's `pt` in the main process. */
-  language?: string
-}
-
-/** Outcome of publishing a profile's reference audio into AllTalk's voices folder. */
-export type LiaAllTalkSyncResult
-  = | { copied: boolean, filename: string, ok: true }
-    | { error: LiaVoiceProfileErrorCode | 'notConfigured', message: string, ok: false }
+export type LiaCustomVoiceFile = LiaCoreCustomVoiceFile
+export type LiaCustomVoiceProfile = LiaCoreCustomVoiceProfile
+export type LiaVoiceProfileErrorCode = LiaCoreVoiceProfileErrorCode
+export type LiaVoiceProfileImportRequest = LiaCoreVoiceProfileImportRequest
+export type LiaVoiceProfileResult<T> = LiaCoreVoiceProfileResult<T>
+export type LiaVoiceProfileSource = LiaCoreVoiceProfileSource
 
 export const electronLiaVoiceConfigGet = defineInvokeEventa<LiaVoiceConfig>('eventa:invoke:lia:voice:config:get')
 export const electronLiaVoiceConfigSet = defineInvokeEventa<void, LiaVoiceConfig>('eventa:invoke:lia:voice:config:set')
@@ -760,81 +643,286 @@ export const electronLiaVoiceProfilesImport = defineInvokeEventa<LiaVoiceProfile
 
 export const electronLiaVoiceProfilesRemove = defineInvokeEventa<LiaVoiceProfileResult<{ id: string }>, { id: string }>('eventa:invoke:lia:voice:profiles:remove')
 
-/**
- * AllTalk runtime.
- *
- * The voices directory is only ever produced by the main process's own
- * `showOpenDialog`: there is no channel through which the renderer can set a
- * path, so a compromised renderer cannot point the sync at an arbitrary folder.
- */
-export const electronLiaAllTalkConfigGet = defineInvokeEventa<LiaAllTalkRuntimeConfig>('eventa:invoke:lia:alltalk:config:get')
-
-/** Writes only `baseUrl`/`timeoutMs`. `voicesDir` is ignored here on purpose. */
-export const electronLiaAllTalkConfigSet = defineInvokeEventa<LiaAllTalkRuntimeConfig, Partial<LiaAllTalkRuntimeConfig>>('eventa:invoke:lia:alltalk:config:set')
-
-/** Opens the OS directory picker and persists the choice. Resolves `null` on cancel. */
-export const electronLiaAllTalkVoicesDirPick = defineInvokeEventa<string | null, { clear?: boolean }>('eventa:invoke:lia:alltalk:voices-dir:pick')
-
-export const electronLiaAllTalkStatus = defineInvokeEventa<LiaAllTalkStatus>('eventa:invoke:lia:alltalk:status')
-
-/** Publishes a profile's reference audio into AllTalk's voices folder. */
-export const electronLiaAllTalkSync = defineInvokeEventa<LiaAllTalkSyncResult, { profileId: string }>('eventa:invoke:lia:alltalk:sync')
-
-/** Resolves the profile, publishes it if needed, and returns the generated WAV. */
-export const electronLiaAllTalkSynthesize = defineInvokeEventa<ArrayBuffer, LiaAllTalkSynthesisRequest>('eventa:invoke:lia:alltalk:synthesize')
-
 /* --------------------------------------------------------------------------
- * Managed speech runtime
+ * Lia Voice (Phase 7.8): the ONLY speech path the Stage knows.
  *
- * The Lia starts and stops the local voice server itself. The renderer only
- * ever asks about state or requests a transition; it never runs a process.
+ * Engine-agnostic by contract: the renderer asks the Lia Voice Service, the
+ * main process routes to the selected engine or - only when enabled - a
+ * fallback engine. No engine name reaches normal UI.
  * -------------------------------------------------------------------------- */
 
-/** Current lifecycle state of the managed voice runtime. */
-export const electronLiaRuntimeState = defineInvokeEventa<LiaRuntimeState>('eventa:invoke:lia:runtime:state')
+/** Outcome of the whole voice product, engine-neutral on purpose. */
+export type LiaVoiceStatus
+  = | { state: 'checking' }
+    | { state: 'ready', engine: string }
+    | { state: 'unavailable', note?: string }
 
-/** Detects the install and, when present, starts it and waits for health. */
-export const electronLiaRuntimeStart = defineInvokeEventa<LiaRuntimeState>('eventa:invoke:lia:runtime:start')
+/** A synthesis request from the renderer. The profile id is never a path. */
+export interface LiaVoiceSynthesisRequest {
+  /**
+   * User-imported voice profile. Optional since Phase 7.9C: stock engines
+   * (Kokoro ships its own pt-BR voices) synthesize with their engine
+   * default when no profile is selected.
+   */
+  profileId?: string
+  text: string
+  /** BCP-47 tag, e.g. `pt-BR`. */
+  language?: string
+}
 
-/** Stops the managed process. Used by advanced settings and app shutdown. */
-export const electronLiaRuntimeStop = defineInvokeEventa<LiaRuntimeState>('eventa:invoke:lia:runtime:stop')
+/** The audio plus the engine fact - diagnostics metadata, not persona text. */
+export interface LiaVoiceSynthesisResult {
+  audio: ArrayBuffer
+  engine: string
+}
+
+export const electronLiaVoiceStatus = defineInvokeEventa<LiaVoiceStatus>('eventa:invoke:lia:voice:status')
+
+export const electronLiaVoiceSynthesize = defineInvokeEventa<LiaVoiceSynthesisResult, LiaVoiceSynthesisRequest>('eventa:invoke:lia:voice:synthesize')
 
 /**
- * OS directory picker for the install location.
- *
- * Like `voicesDir`, the path can only enter the config from here - there is no
- * channel that accepts an install directory from the renderer.
+ * Phase 7.9E: the startup-greeting claim. The MAIN process keeps the
+ * exactly-once latch so a renderer reload/HMR cannot greet twice - the
+ * latch dies with the launch, which is precisely "once per real managed
+ * Stage launch". The channel carries no text: the greeting pool and policy
+ * are renderer-side product orchestration.
  */
-export const electronLiaRuntimeInstallDirPick = defineInvokeEventa<string | null, { clear?: boolean }>('eventa:invoke:lia:runtime:install-dir:pick')
+export interface LiaStartupGreetingClaim {
+  /** True exactly once per real managed Stage launch. */
+  granted: boolean
+}
 
-/** The guided install wizard's steps, with completion flags. */
-export const electronLiaRuntimeInstallSteps = defineInvokeEventa<LiaRuntimeInstallStep[]>('eventa:invoke:lia:runtime:install-steps')
+export const electronLiaVoiceStartupGreetingClaim = defineInvokeEventa<LiaStartupGreetingClaim>('eventa:invoke:lia:voice:startup-greeting:claim')
+
+/** The voice-engine product config (normal UI sees only the fallback toggle). */
+export interface LiaVoiceEngineConfig {
+  /** Selected engine id, when one was selected. The UI never hard-codes one. */
+  engine?: { preferred?: string }
+  fallback?: {
+    /** A non-preferred engine MAY answer only when true. */
+    enabled?: boolean
+    /** Explicit fallback engine id when the operator pinned one. */
+    engineId?: string
+  }
+}
+
+export const electronLiaVoiceEngineConfigGet = defineInvokeEventa<LiaVoiceEngineConfig>('eventa:invoke:lia:voice:engine-config:get')
+
+export const electronLiaVoiceEngineConfigSet = defineInvokeEventa<void, LiaVoiceEngineConfig>('eventa:invoke:lia:voice:engine-config:set')
 
 /* --------------------------------------------------------------------------
- * Managed voice runtime: install, repair, remove
+ * Lia product capabilities (Phase 7.7, Parts 7-11)
  *
- * An install is long-running, so its state is a snapshot the renderer pulls plus
- * an event pushed on every change - the same shape the runtime control above
- * already uses.
+ * A tiny, dynamic product-truth snapshot for the persona: what the product
+ * can currently DO for the user, never HOW (no AllTalk, no XTTS, no ports,
+ * no paths). The main process is the single authority; the renderer only
+ * carries it into the LLM context at a turn boundary.
  * -------------------------------------------------------------------------- */
 
-/** Current bootstrap state, so a reopened UI resumes instead of guessing. */
-export const electronLiaBootstrapState = defineInvokeEventa<LiaBootstrapState>('eventa:invoke:lia:bootstrap:state')
+export interface LiaCapabilitySnapshot {
+  voice: {
+    /** A voice is selected and its profile is valid. */
+    configured: boolean
+    /** The voice output can actually play right now (runtime usable). */
+    available: boolean
+  }
+  avatar: {
+    /** A stage avatar is present and rendering. */
+    available: boolean
+  }
+}
 
-/** Starts install, or repair when the runtime is already present. */
-export const electronLiaBootstrapRun = defineInvokeEventa<LiaBootstrapState, boolean>('eventa:invoke:lia:bootstrap:run')
+/** Pull: the current capability snapshot, always fresh (cached seconds only). */
+export const electronLiaCapabilitiesGet = defineInvokeEventa<LiaCapabilitySnapshot, { avatarAvailable?: boolean } | undefined>('eventa:invoke:lia:capabilities:get')
 
-/** Asks a running install to stop at the next step boundary. */
-export const electronLiaBootstrapCancel = defineInvokeEventa<void>('eventa:invoke:lia:bootstrap:cancel')
-
-/** Removes only what the Lia installed. */
-export const electronLiaBootstrapRemove = defineInvokeEventa<void>('eventa:invoke:lia:bootstrap:remove')
-
-/** Emitted on every bootstrap state change. */
-export const electronLiaBootstrapChanged = defineEventa<LiaBootstrapState>('eventa:lia:bootstrap:changed')
+/** Push: fired when any derived truth changes (config or runtime). */
+export const electronLiaCapabilitiesUpdated = defineEventa<LiaCapabilitySnapshot>('eventa:event:lia:capabilities:updated')
 
 /** Engines the current build knows how to drive, with what each expects. */
 export const electronLiaVoiceEnginesList = defineInvokeEventa<Array<{ extensions: string[], id: string, label: string, roles: string[] }>>('eventa:invoke:lia:voice:engines:list')
+
+/* -------------------------------------------------------------------------- */
+/* Lia Brain chat decision (Phases 8.0D-7, 8.0D-7A)                          */
+/*                                                                            */
+/* READ-ONLY contract: the renderer describes WHAT the turn needs (chat turn  */
+/* facts) plus one opaque logical-send correlation key, and NOTHING ELSE. It  */
+/* never names a provider, engine or model, and it never supplies routing     */
+/* policy - route identity and policy ownership belong to the trusted         */
+/* main/product layer. The response is the canonical Lia Core routing         */
+/* decision, returned unchanged: normal outcomes (modeUnspecified, disabled,  */
+/* manual failures, automaticPolicyMissing, noCandidates, noPolicyMatch,      */
+/* ambiguous) are DATA.                                                       */
+/* -------------------------------------------------------------------------- */
+
+/** What one chat turn needs, exactly as the chat path already describes it. */
+export type LiaBrainChatTurnFacts = LiaCoreChatTurnBrainFacts
+
+/**
+ * The whole request: turn facts plus, since 8.0D-10B-3B2, ONE opaque join key.
+ *
+ * No identity and no authority cross this boundary - no providerId, no
+ * engineId/modelId, no route refs, no keys, endpoints or options. The
+ * correlationId is transport metadata that lets the trusted side associate
+ * this decision request with the logical send it describes; it is opaque,
+ * optional, never interpreted and never routed on.
+ */
+export interface LiaBrainChatDecisionRequest {
+  /**
+   * Opaque key of the logical user send this request describes - the SAME
+   * value the execution path carries for that send. Absent when the caller
+   * has none; it is never synthesized.
+   */
+  correlationId?: string
+  facts: LiaBrainChatTurnFacts
+}
+
+/** The canonical decision, unflattened. */
+export type LiaBrainChatDecision = LiaCoreBrainRoutingDecision
+
+/** Pull: the routing decision for one described chat turn (read-only). */
+export const electronLiaBrainChatDecision = defineInvokeEventa<LiaBrainChatDecision, LiaBrainChatDecisionRequest>('eventa:invoke:lia:brain:chat-decision')
+
+/* -------------------------------------------------------------------------- */
+/* Lia Brain execution observation (Phase 8.0D-10B-4A)                        */
+/*                                                                            */
+/* ONE-WAY report, renderer (the window that actually executes the request)   */
+/* -> trusted main process, and nothing else. It carries the identity of one  */
+/* attempt that is starting right now - never a prompt, a message, a tool, an */
+/* attachment, a credential, an endpoint, a provider object, a Brain decision */
+/* or a routing policy.                                                       */
+/*                                                                            */
+/* It is a REPORT, not a request: no response is read, no command is granted  */
+/* and no setter authority exists on this channel. Main sanitizes the five    */
+/* string fields and DISCARDS them; nothing is retained and nothing is        */
+/* compared. The identities are UNTRUSTED diagnostic claims - they can never  */
+/* select a route, change a policy, choose a provider/model, trigger a        */
+/* fallback or authorize anything.                                            */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The whole execution report: five string identities, exactly.
+ *
+ * `correlationId` is the opaque logical-send key the execution path already
+ * carries for the attempt (the same value the Brain shadow request carries);
+ * the other four describe the attempt main is being told about. All five are
+ * plain strings by contract - anything else is dropped by the tolerant readers
+ * on either side.
+ */
+export interface LiaBrainExecutionObservationReport {
+  /** Opaque key of the logical user send this attempt belongs to. */
+  correlationId: string
+  /** Application conversation that owns the round. */
+  conversationId: string
+  /** Stable round key of the attempt that is starting. */
+  roundId: string
+  /** Provider id that executes this attempt (untrusted diagnostic claim). */
+  providerId: string
+  /** Model id that executes this attempt (untrusted diagnostic claim). */
+  modelId: string
+}
+
+/** Push: one attempt of a correlated logical send started executing (write-only report). */
+export const electronLiaBrainExecutionObservation = defineEventa<LiaBrainExecutionObservationReport>('eventa:event:lia:brain:execution-observation')
+
+/* -------------------------------------------------------------------------- */
+/* Lia Brain execution TERMINAL observation (Phase 8.0D-10B-4D4C1)            */
+/*                                                                            */
+/* ONE-WAY report, renderer (the window that actually ran the round) ->       */
+/* trusted main process, and nothing else. It carries the FACTUAL terminal    */
+/* treatment of one already-created round - `succeeded`, `failed` or          */
+/* `abandoned`, exactly as the Core Agent runtime classified it - plus the     */
+/* two opaque join keys of that round.                                        */
+/*                                                                            */
+/* It is a REPORT, not a request: no response is read and no setter authority  */
+/* exists on this channel. It carries NO provider/model identity, NO           */
+/* conversation, NO timings, NO usage, NO error, failure stage or code - and   */
+/* it can never select a route, change a policy, choose a provider/model,      */
+/* trigger a fallback, retry a send or authorize anything: the outcome is      */
+/* UNTRUSTED execution metadata describing what already happened.              */
+/*                                                                            */
+/* Deliberately SEPARATE from the request-start observation channel: that one  */
+/* reports an identity at a start boundary, this one reports an outcome at a   */
+/* terminal boundary. Different lifecycle, different shape, independent        */
+/* sanitizers, and a future store must be able to tell them apart.             */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The factual terminal treatment of ONE round, plus its two opaque join keys.
+ *
+ * `correlationId` is the same logical-send key the brain shadow request and
+ * the request-start report carry; `roundId` identifies the attempt (round)
+ * that settled. The outcome is a finite, closed vocabulary - the renderer
+ * never invents, normalizes or extends it.
+ */
+export interface LiaBrainExecutionTerminalReport {
+  /** Opaque key of the logical user send this round belongs to. */
+  correlationId: string
+  /** Stable round key of the round that settled. */
+  roundId: string
+  /**
+   * The factual terminal treatment of that round, exactly as the Core Agent
+   * runtime reported it: the successful path completed, a real error left the
+   * round, or processing stopped because the round's captured session
+   * generation went stale.
+   */
+  outcome: 'succeeded' | 'failed' | 'abandoned'
+}
+
+/** Push: one correlated round reached its terminal treatment (write-only report). */
+export const electronLiaBrainExecutionTerminalObservation = defineEventa<LiaBrainExecutionTerminalReport>('eventa:event:lia:brain:execution-terminal-observation')
+
+/* -------------------------------------------------------------------------- */
+/* Lia Brain logical-send TERMINAL observation (Phase 8.0D-10B-4D4C4-B2)      */
+/*                                                                            */
+/* ONE-WAY report, renderer (the window that actually ran the logical send) ->  */
+/* trusted main process, and nothing else. It carries the FACTUAL settlement    */
+/* of one whole logical send - `succeeded` or `failed` - plus the opaque join   */
+/* key of that send.                                                           */
+/*                                                                            */
+/* It is a REPORT, not a request: no response is read and no setter authority   */
+/* exists on this channel. It carries NO round, NO provider/model identity,     */
+/* NO attempt count, NO error, NO message or usage - and it can never select a  */
+/* route, change a policy, choose a provider/model, trigger a fallback, retry   */
+/* a send or authorize anything: the settlement is UNTRUSTED renderer metadata  */
+/* describing what already happened to one logical send.                       */
+/*                                                                            */
+/* Deliberately SEPARATE from the two round-level channels: a logical send may  */
+/* legitimately settle with NO final Core round of its own (and a round may be  */
+/* abandoned while the send still resolves), so the send lifecycle is its own   */
+/* contract with its own shape and its own sanitizer. It is likewise separate   */
+/* from the request-start report: different lifecycle, different payload.       */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The factual settlement of ONE logical send, plus its opaque join key.
+ *
+ * `correlationId` is the same logical-send key the brain shadow request and the
+ * execution reports carry, and it is REQUIRED here: a send without a usable key
+ * is not part of this diagnostic and is never reported. The outcome is a
+ * finite, closed vocabulary - the renderer never invents, normalizes or
+ * extends it.
+ */
+export interface LiaBrainSendTerminalReport {
+  /** Opaque key of the logical user send that settled. */
+  correlationId: string
+  /**
+   * The factual settlement of that logical send as a whole, exactly as the
+   * Stage send observed it: the send resolved, or the send rejected.
+   */
+  outcome: 'succeeded' | 'failed'
+  /**
+   * Phase 8.0D-10B-4D4C4-D2B7: factual initial routeOverride snapshot.
+   * undefined = not observed (legacy), null = observed absent, object = observed present.
+   * Optional for backward compatibility and truthful not-observed semantics.
+   */
+  initialRouteOverride?: {
+    providerId: string
+    modelId: string
+  } | null
+}
+
+/** Push: one correlated logical send reached its settlement (write-only report). */
+export const electronLiaBrainSendTerminalObservation = defineEventa<LiaBrainSendTerminalReport>('eventa:event:lia:brain:send-terminal-observation')
 
 export { electron } from '@proj-airi/electron-eventa'
 export * from '@proj-airi/electron-eventa/electron-updater'

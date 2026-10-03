@@ -103,7 +103,33 @@ const sttTargetSchema = object({
   modelId: optional(string()),
 })
 
+/**
+ * Phase 7.8C: the engine-neutral voice-engine config. `alltalk` below
+ * stays in the schema for one reason only - legacy documents must still
+ * LOAD - and is deprecated/inert from here on.
+ */
+const voiceEngineSchema = object({
+  /** Selected voice engine id; the config layer itself never names one. */
+  preferred: optional(string()),
+})
+
+const voiceFallbackSchema = object({
+  /** A non-preferred engine MAY answer only when true. */
+  enabled: optional(boolean()),
+  /** Explicit fallback engine id when the operator pinned one. */
+  engineId: optional(string()),
+})
+
 const voiceConfigSchema = object({
+  /**
+   * Phase 7.9H: the product-level voice switch. Absent means enabled (voice
+   * is part of Lia's default experience); only an explicit `false` opts the
+   * user out of spoken output. The Stage honors it at its ONE central
+   * speech-output gate; runtime management keeps running either way.
+   * Keeping it in the schema also guarantees the Stage's own config writes
+   * round-trip the key instead of silently stripping it from the document.
+   */
+  enabled: optional(boolean()),
   tts: optional(object({
     /** Preferred primary TTS (voice) target. */
     preferred: optional(ttsTargetSchema),
@@ -118,14 +144,51 @@ const voiceConfigSchema = object({
    * to `tts`/`stt` inside the existing `voice` domain rather than in a new
    * config file, so `lia-product.json` stays the single Lia product document.
    */
+  engine: optional(voiceEngineSchema),
+  fallback: optional(voiceFallbackSchema),
   runtime: optional(object({
+    /** DEPRECATED: readable for legacy document compatibility; drives nothing. */
     alltalk: optional(alltalkRuntimeSchema),
+    /** Engine-neutral managed-runtime home override. */
+    installDir: optional(string()),
   })),
 })
 
 const preferencesSchema = object({
   /** Product language preference ('' = inherit AIRI language detection). */
   language: optional(string()),
+})
+
+/**
+ * Phase 7.9H-B3: the launcher's first-run setup marker. The Stage only
+ * needs to round-trip it: valibot drops unknown keys on parse, and any
+ * Stage-side config write persists the parsed copy - so a field missing
+ * here would silently un-complete the setup on the next Stage save.
+ * Additive/optional: existing documents without it stay valid.
+ */
+const setupSchema = object({
+  completed: optional(boolean()),
+})
+
+/**
+ * Phase 8.0B-2: the persistent Brain selection preference. Same round-trip
+ * duty as the setup marker: a field missing here would silently drop the
+ * user's Brain choice on the next Stage save. The ids are OPAQUE (Brain
+ * Engine Registry / Brain Model ids) - the Stage never resolves them, so
+ * no provider/vendor field belongs in this shape. Additive/optional.
+ *
+ * Phase 8.0C-3A: `mode` persists the user's routing intent. Only the three
+ * canonical literals round-trip; anything else falls away on parse, and a
+ * document WITHOUT it stays valid (absence = no explicit routing mode).
+ */
+const brainSelectionTargetSchema = object({
+  preferred: optional(string()),
+})
+
+const brainConfigSchema = object({
+  mode: optional(union([literal('automatic'), literal('manual'), literal('disabled')])),
+  engine: optional(brainSelectionTargetSchema),
+  model: optional(brainSelectionTargetSchema),
 })
 
 export const liaProductConfigSchema = object({
@@ -135,6 +198,8 @@ export const liaProductConfigSchema = object({
   provider: optional(providerConfigSchema, {}),
   voice: optional(voiceConfigSchema, {}),
   preferences: optional(preferencesSchema, {}),
+  setup: optional(setupSchema),
+  brain: optional(brainConfigSchema),
 })
 
 export type LiaProductConfig = InferOutput<typeof liaProductConfigSchema>
