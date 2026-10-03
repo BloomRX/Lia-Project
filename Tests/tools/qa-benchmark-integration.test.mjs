@@ -656,10 +656,19 @@ describe('integration: V staged-manifest integrity under Git EOL normalization',
     // Clone the QA branch WITHOUT re-expanding LF into CRLF.
     const cloneQa = mkdtempSync(nodePath.join(os.tmpdir(), 'lia-qa-v1-')); tmpToClean.push(cloneQa)
     gitOk(cloneQa, ['-c', 'core.autocrlf=false', 'clone', bare, '.'])
+    // `-c` binds to that ONE invocation only. The checkout below is a separate
+    // git process, so without a persisted setting it inherits the host config
+    // (core.autocrlf=true on Windows) and re-expands committed LF into CRLF.
+    // Only this temporary clone is configured - never user/global/system.
+    gitOk(cloneQa, ['config', 'core.autocrlf', 'false'])
+    assert.equal(gitOk(cloneQa, ['config', '--get', 'core.autocrlf']).stdout.trim(), 'false', 'core.autocrlf=false must persist in the temporary QA clone')
     gitOk(cloneQa, ['checkout', 'qa/windows-benchmarks'])
 
     const benchDir = nodePath.join(cloneQa, 'benchmarks', res.runId)
     const manifest = readFileSync(nodePath.join(benchDir, 'SHA256SUMS.txt'), 'utf-8')
+    // Why the persisted setting matters: a re-expanded line would carry a
+    // trailing CR and be rejected as malformed by the manifest parser.
+    assert.ok(!manifest.includes('\r\n'), 'committed SHA256SUMS.txt must stay canonical LF in the checkout')
 
     // The contract the old R test lacked: manifest == COMMITTED bytes.
     const v = verifyShaManifest(manifest, benchDir)
@@ -692,6 +701,12 @@ describe('integration: V staged-manifest integrity under Git EOL normalization',
 
     const cloneQa = mkdtempSync(nodePath.join(os.tmpdir(), 'lia-qa-v2-')); tmpToClean.push(cloneQa)
     gitOk(cloneQa, ['-c', 'core.autocrlf=false', 'clone', bare, '.'])
+    // `-c` binds to that ONE invocation only. The checkout below is a separate
+    // git process, so without a persisted setting it inherits the host config
+    // (core.autocrlf=true on Windows) and re-expands committed LF into CRLF.
+    // Only this temporary clone is configured - never user/global/system.
+    gitOk(cloneQa, ['config', 'core.autocrlf', 'false'])
+    assert.equal(gitOk(cloneQa, ['config', '--get', 'core.autocrlf']).stdout.trim(), 'false', 'core.autocrlf=false must persist in the temporary QA clone')
     gitOk(cloneQa, ['checkout', 'qa/windows-benchmarks'])
 
     const idx = JSON.parse(readFileSync(nodePath.join(cloneQa, 'index.json'), 'utf-8'))
@@ -700,6 +715,7 @@ describe('integration: V staged-manifest integrity under Git EOL normalization',
     for (const runId of [first.runId, second.runId]) {
       const benchDir = nodePath.join(cloneQa, 'benchmarks', runId)
       const manifest = readFileSync(nodePath.join(benchDir, 'SHA256SUMS.txt'), 'utf-8')
+      assert.ok(!manifest.includes('\r\n'), 'committed SHA256SUMS.txt must stay canonical LF in the checkout')
       const v = verifyShaManifest(manifest, benchDir)
       assert.equal(v.ok, true, `committed manifest for ${runId} must verify: ${v.reason ?? ''}`)
     }
