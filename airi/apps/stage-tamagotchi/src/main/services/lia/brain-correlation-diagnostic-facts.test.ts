@@ -8,6 +8,7 @@ import type { LiaBrainTerminalObservationFacts, LiaBrainTerminalObservationSnaps
 import type { LiaBrainEngineProviderMapping } from './brain-expected-route'
 import type { LiaBrainFinalSuccessfulExecutionFacts, LiaBrainFinalSuccessfulExecutionSnapshot } from './brain-final-successful-execution-facts'
 import type { LiaBrainInitialRouteObservationFacts } from './brain-initial-route-facts'
+import type { LiaBrainRouteConformanceFacts } from './brain-route-conformance-facts'
 import type { LiaBrainSendTerminalObservationFacts, LiaBrainSendTerminalObservationSnapshot } from './brain-send-terminal-facts'
 
 import { readdirSync, readFileSync } from 'node:fs'
@@ -40,8 +41,9 @@ const probes = vi.hoisted(() => ({
   identity: { inputs: [] as unknown[], mappings: [] as unknown[] },
   terminal: { argumentCounts: [] as number[], inputs: [] as unknown[] },
   send: { argumentCounts: [] as number[], inputs: [] as unknown[] },
-  final: { argumentCounts: [] as number[], inputs: [] as unknown[] },
-  initialRoute: { argumentCounts: [] as number[], inputs: [] as unknown[] },
+  final: { argumentCounts: [] as number[], inputs: [] as unknown[], outputs: [] as unknown[] },
+  initialRoute: { argumentCounts: [] as number[], inputs: [] as unknown[], outputs: [] as unknown[] },
+  routeConformance: { argumentCounts: [] as number[], initialInputs: [] as unknown[], finalInputs: [] as unknown[] },
 }))
 
 vi.mock('./brain-execution-identity-facts', async (importOriginal) => {
@@ -87,7 +89,9 @@ vi.mock('./brain-final-successful-execution-facts', async (importOriginal) => {
     deriveLiaBrainFinalSuccessfulExecutionFacts(...args: Parameters<typeof actual.deriveLiaBrainFinalSuccessfulExecutionFacts>) {
       probes.final.argumentCounts.push(args.length)
       probes.final.inputs.push(args[0])
-      return actual.deriveLiaBrainFinalSuccessfulExecutionFacts(...args)
+      const result = actual.deriveLiaBrainFinalSuccessfulExecutionFacts(...args)
+      probes.final.outputs.push(result)
+      return result
     },
   }
 })
@@ -99,7 +103,27 @@ vi.mock('./brain-initial-route-facts', async (importOriginal) => {
     deriveLiaBrainInitialRouteObservationFacts(...args: Parameters<typeof actual.deriveLiaBrainInitialRouteObservationFacts>) {
       probes.initialRoute.argumentCounts.push(args.length)
       probes.initialRoute.inputs.push(args[0])
-      return actual.deriveLiaBrainInitialRouteObservationFacts(...args)
+      const result = actual.deriveLiaBrainInitialRouteObservationFacts(...args)
+      probes.initialRoute.outputs.push(result)
+      return result
+    },
+  }
+})
+
+/**
+ * Phase 8.0D-10B-4D4C4-D2B10: the sixth derivation is FACTS-TO-FACTS, so its
+ * double records the two arguments it is handed instead of a snapshot. The real
+ * implementation still runs, so the composed value stays the real one.
+ */
+vi.mock('./brain-route-conformance-facts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./brain-route-conformance-facts')>()
+  return {
+    ...actual,
+    deriveLiaBrainRouteConformanceFacts(...args: Parameters<typeof actual.deriveLiaBrainRouteConformanceFacts>) {
+      probes.routeConformance.argumentCounts.push(args.length)
+      probes.routeConformance.initialInputs.push(args[0])
+      probes.routeConformance.finalInputs.push(args[1])
+      return actual.deriveLiaBrainRouteConformanceFacts(...args)
     },
   }
 })
@@ -114,8 +138,13 @@ function resetProbes(): void {
   probes.send.inputs.length = 0
   probes.final.argumentCounts.length = 0
   probes.final.inputs.length = 0
+  probes.final.outputs.length = 0
   probes.initialRoute.argumentCounts.length = 0
   probes.initialRoute.inputs.length = 0
+  probes.initialRoute.outputs.length = 0
+  probes.routeConformance.argumentCounts.length = 0
+  probes.routeConformance.initialInputs.length = 0
+  probes.routeConformance.finalInputs.length = 0
 }
 
 beforeEach(resetProbes)
@@ -232,10 +261,12 @@ function observed(result: LiaBrainCorrelationDiagnosticFacts): {
   terminalFacts: LiaBrainTerminalObservationFacts
   sendTerminalFacts: LiaBrainSendTerminalObservationFacts
   finalSuccessfulExecutionFacts: LiaBrainFinalSuccessfulExecutionFacts
+  initialRouteOverrideFacts: LiaBrainInitialRouteObservationFacts
+  routeConformanceFacts: LiaBrainRouteConformanceFacts
 } {
   if (!('terminalFacts' in result))
     throw new Error('expected a present correlation')
-  return { facts: result.facts, sendTerminalFacts: result.sendTerminalFacts, terminalFacts: result.terminalFacts, finalSuccessfulExecutionFacts: result.finalSuccessfulExecutionFacts }
+  return { facts: result.facts, sendTerminalFacts: result.sendTerminalFacts, terminalFacts: result.terminalFacts, finalSuccessfulExecutionFacts: result.finalSuccessfulExecutionFacts, initialRouteOverrideFacts: result.initialRouteOverrideFacts, routeConformanceFacts: result.routeConformanceFacts }
 }
 
 const ZERO_TERMINALS: LiaBrainTerminalObservationFacts = {
@@ -483,6 +514,17 @@ describe('correlation diagnostic facts - the single-snapshot invariant (Phase 8.
     expect('terminalFacts' in result).toBe(true)
     expect('sendTerminalFacts' in result).toBe(true)
     expect('finalSuccessfulExecutionFacts' in result).toBe(true)
+    // Phase 8.0D-10B-4D4C4-D2B10: the sixth derivation is the ONE that must NOT
+    // see the snapshot. It is handed the two route facts instead, and those are
+    // the exact objects the two snapshot derivations returned.
+    expect(probes.routeConformance.initialInputs).toHaveLength(1)
+    expect(probes.routeConformance.finalInputs).toHaveLength(1)
+    expect(probes.routeConformance.initialInputs[0]).not.toBe(S)
+    expect(probes.routeConformance.finalInputs[0]).not.toBe(S)
+    expect(probes.routeConformance.initialInputs[0]).toBe(probes.initialRoute.outputs[0])
+    expect(probes.routeConformance.finalInputs[0]).toBe(probes.final.outputs[0])
+    expect('initialRouteOverrideFacts' in result).toBe(true)
+    expect('routeConformanceFacts' in result).toBe(true)
   })
 
   it('l: the mapping reaches ONLY the identity derivation, unchanged', () => {
@@ -501,6 +543,12 @@ describe('correlation diagnostic facts - the single-snapshot invariant (Phase 8.
     expect(probes.terminal.argumentCounts).toEqual([1])
     expect(probes.send.argumentCounts).toEqual([1])
     expect(probes.final.argumentCounts).toEqual([1])
+    expect(probes.initialRoute.argumentCounts).toEqual([1])
+    // The sixth derivation takes exactly TWO arguments - the two route facts -
+    // and never the mapping, the key or the snapshot.
+    expect(probes.routeConformance.argumentCounts).toEqual([2])
+    expect(probes.routeConformance.initialInputs).not.toContain(mapping)
+    expect(probes.routeConformance.finalInputs).not.toContain(mapping)
   })
 
   it('m/n: a present snapshot is read exactly once, and each derivation runs exactly once per call', () => {
@@ -514,6 +562,9 @@ describe('correlation diagnostic facts - the single-snapshot invariant (Phase 8.
     expect(probes.terminal.inputs).toHaveLength(1)
     expect(probes.send.inputs).toHaveLength(1)
     expect(probes.final.inputs).toHaveLength(1)
+    expect(probes.initialRoute.inputs).toHaveLength(1)
+    expect(probes.routeConformance.initialInputs).toHaveLength(1)
+    expect(probes.routeConformance.finalInputs).toHaveLength(1)
 
     composeLiaBrainCorrelationDiagnosticFacts(reader, 'X', LIA_BRAIN_ENGINE_PROVIDER_MAPPING)
 
@@ -522,6 +573,14 @@ describe('correlation diagnostic facts - the single-snapshot invariant (Phase 8.
     expect(probes.terminal.inputs).toHaveLength(2)
     expect(probes.send.inputs).toHaveLength(2)
     expect(probes.final.inputs).toHaveLength(2)
+    // The two route derivations still run EXACTLY once per composition, even
+    // though a sixth derivation now consumes their results: the conformance
+    // derivation reuses the local, it never re-derives either side.
+    expect(probes.initialRoute.inputs).toHaveLength(2)
+    expect(probes.routeConformance.initialInputs).toHaveLength(2)
+    expect(probes.routeConformance.finalInputs).toHaveLength(2)
+    expect(probes.routeConformance.initialInputs[1]).toBe(probes.initialRoute.outputs[1])
+    expect(probes.routeConformance.finalInputs[1]).toBe(probes.final.outputs[1])
   })
 })
 
@@ -539,13 +598,13 @@ describe('correlation diagnostic facts - composed output shape (Phase 8.0D-10B-4
     expect(serialized).not.toContain('sendTerminal')
   })
 
-  it('p/q: the present result carries exactly the five approved keys and no raw snapshot escape', () => {
+  it('p/q: the present result carries exactly the six approved keys and no raw snapshot escape', () => {
     const { store } = realStore()
     store.recordExecutionTerminal(terminalReport('X', 'R', 'succeeded'))
 
     const result = composeLiaBrainCorrelationDiagnosticFacts(store, 'X', LIA_BRAIN_ENGINE_PROVIDER_MAPPING)
 
-    expect(Object.keys(result).sort()).toEqual(['facts', 'finalSuccessfulExecutionFacts', 'initialRouteOverrideFacts', 'sendTerminalFacts', 'terminalFacts'])
+    expect(Object.keys(result).sort()).toEqual(['facts', 'finalSuccessfulExecutionFacts', 'initialRouteOverrideFacts', 'routeConformanceFacts', 'sendTerminalFacts', 'terminalFacts'])
     expect('correlationId' in result).toBe(false)
     expect(Object.keys(observed(result).terminalFacts).sort()).toEqual([
       'abandonedTerminalObservationCount',
@@ -570,7 +629,7 @@ describe('correlation diagnostic facts - composed output shape (Phase 8.0D-10B-4
     const result = composeLiaBrainCorrelationDiagnosticFacts(store, 'X', LIA_BRAIN_ENGINE_PROVIDER_MAPPING)
     const serialized = JSON.stringify(result)
 
-    expect(Object.keys(result).sort()).toEqual(['facts', 'finalSuccessfulExecutionFacts', 'initialRouteOverrideFacts', 'sendTerminalFacts', 'terminalFacts'])
+    expect(Object.keys(result).sort()).toEqual(['facts', 'finalSuccessfulExecutionFacts', 'initialRouteOverrideFacts', 'routeConformanceFacts', 'sendTerminalFacts', 'terminalFacts'])
     expect(observed(result).sendTerminalFacts).toEqual({ sendTerminalOutcome: 'failed' })
     // The raw key exists ONLY inside the derived sibling path, never as the raw
     // record object, and no snapshot metadata travels.
@@ -640,7 +699,10 @@ describe('correlation diagnostic facts - composed output shape (Phase 8.0D-10B-4
     const withoutTerminal: { facts: LiaBrainExecutionIdentityFacts } extends LiaBrainCorrelationDiagnosticFacts ? true : false = false
     const withoutSend: { facts: LiaBrainExecutionIdentityFacts, terminalFacts: LiaBrainTerminalObservationFacts } extends LiaBrainCorrelationDiagnosticFacts ? true : false = false
     const withoutFinal: { facts: LiaBrainExecutionIdentityFacts, terminalFacts: LiaBrainTerminalObservationFacts, sendTerminalFacts: LiaBrainSendTerminalObservationFacts } extends LiaBrainCorrelationDiagnosticFacts ? true : false = false
-    const presentComplete: { facts: LiaBrainExecutionIdentityFacts, finalSuccessfulExecutionFacts: LiaBrainFinalSuccessfulExecutionFacts, initialRouteOverrideFacts: LiaBrainInitialRouteObservationFacts, sendTerminalFacts: LiaBrainSendTerminalObservationFacts, terminalFacts: LiaBrainTerminalObservationFacts } extends LiaBrainCorrelationDiagnosticFacts ? true : false = true
+    // Phase 8.0D-10B-4D4C4-D2B10: a present result missing the sixth sibling is
+    // not a composed result either.
+    const withoutRouteConformance: { facts: LiaBrainExecutionIdentityFacts, finalSuccessfulExecutionFacts: LiaBrainFinalSuccessfulExecutionFacts, initialRouteOverrideFacts: LiaBrainInitialRouteObservationFacts, sendTerminalFacts: LiaBrainSendTerminalObservationFacts, terminalFacts: LiaBrainTerminalObservationFacts } extends LiaBrainCorrelationDiagnosticFacts ? true : false = false
+    const presentComplete: { facts: LiaBrainExecutionIdentityFacts, finalSuccessfulExecutionFacts: LiaBrainFinalSuccessfulExecutionFacts, initialRouteOverrideFacts: LiaBrainInitialRouteObservationFacts, routeConformanceFacts: LiaBrainRouteConformanceFacts, sendTerminalFacts: LiaBrainSendTerminalObservationFacts, terminalFacts: LiaBrainTerminalObservationFacts } extends LiaBrainCorrelationDiagnosticFacts ? true : false = true
     const absentIsTheOnlyAbsence: { facts: { status: 'correlationNotObserved' } } extends LiaBrainCorrelationDiagnosticFacts ? true : false = true
     // The absence arm DECLARES no sibling. Assignability cannot prove that:
     // an excess property on a NON-fresh object type is still assignable, so an
@@ -649,13 +711,26 @@ describe('correlation diagnostic facts - composed output shape (Phase 8.0D-10B-4
     type AbsenceArm = Extract<LiaBrainCorrelationDiagnosticFacts, { facts: { status: 'correlationNotObserved' } }>
     const absenceDeclaresNoSend: 'sendTerminalFacts' extends keyof AbsenceArm ? true : false = false
     const absenceDeclaresNoFinal: 'finalSuccessfulExecutionFacts' extends keyof AbsenceArm ? true : false = false
+    const absenceDeclaresNoRouteConformance: 'routeConformanceFacts' extends keyof AbsenceArm ? true : false = false
+    // Phase 8.0D-10B-4D4C4-D2B10: the second discriminator makes the two
+    // semantically invalid shapes UNREPRESENTABLE, not merely discouraged - an
+    // unavailability with no side named, and a difference with both components
+    // equal.
+    const bareUnavailableIsNotAFact: { status: 'routeComparisonUnavailable' } extends LiaBrainRouteConformanceFacts ? true : false = false
+    const differedWithBothTrueIsUnrepresentable: { status: 'routeIdentityDiffered', providerMatches: true, modelMatches: true } extends LiaBrainRouteConformanceFacts ? true : false = false
+    const matchedWithAFalseIsUnrepresentable: { status: 'routeIdentityMatched', providerMatches: true, modelMatches: false } extends LiaBrainRouteConformanceFacts ? true : false = false
     expect(withoutTerminal).toBe(false)
     expect(withoutSend).toBe(false)
     expect(withoutFinal).toBe(false)
+    expect(withoutRouteConformance).toBe(false)
     expect(presentComplete).toBe(true)
     expect(absentIsTheOnlyAbsence).toBe(true)
     expect(absenceDeclaresNoSend).toBe(false)
     expect(absenceDeclaresNoFinal).toBe(false)
+    expect(absenceDeclaresNoRouteConformance).toBe(false)
+    expect(bareUnavailableIsNotAFact).toBe(false)
+    expect(differedWithBothTrueIsUnrepresentable).toBe(false)
+    expect(matchedWithAFalseIsUnrepresentable).toBe(false)
   })
 })
 
@@ -672,11 +747,13 @@ describe('correlation diagnostic facts - source guards (Phase 8.0D-10B-4D4C3B2)'
       `import type { LiaBrainTerminalObservationFacts } from './brain-execution-terminal-facts'`,
       `import type { LiaBrainFinalSuccessfulExecutionFacts } from './brain-final-successful-execution-facts'`,
       `import type { LiaBrainInitialRouteObservationFacts } from './brain-initial-route-facts'`,
+      `import type { LiaBrainRouteConformanceFacts } from './brain-route-conformance-facts'`,
       `import type { LiaBrainSendTerminalObservationFacts } from './brain-send-terminal-facts'`,
       `import { deriveLiaBrainExecutionIdentityFacts } from './brain-execution-identity-facts'`,
       `import { deriveLiaBrainTerminalObservationFacts } from './brain-execution-terminal-facts'`,
       `import { deriveLiaBrainFinalSuccessfulExecutionFacts } from './brain-final-successful-execution-facts'`,
       `import { deriveLiaBrainInitialRouteObservationFacts } from './brain-initial-route-facts'`,
+      `import { deriveLiaBrainRouteConformanceFacts } from './brain-route-conformance-facts'`,
       `import { deriveLiaBrainSendTerminalObservationFacts } from './brain-send-terminal-facts'`,
     ])
 
@@ -738,7 +815,14 @@ describe('correlation diagnostic facts - source guards (Phase 8.0D-10B-4D4C3B2)'
     // value: it receives the pure result structurally.
     expect(code).not.toMatch(/sendTerminalOutcome/)
     expect(code).toMatch(/sendTerminalFacts: deriveLiaBrainSendTerminalObservationFacts\(snapshot\)/)
-    expect(code).toMatch(/finalSuccessfulExecutionFacts: deriveLiaBrainFinalSuccessfulExecutionFacts\(snapshot\)/)
+    // Phase 8.0D-10B-4D4C4-D2B10: the two route sides are bound to locals so the
+    // sixth derivation can consume their RESULTS, and the sixth is handed those
+    // two locals - never the snapshot.
+    expect(code).toMatch(/const initialRouteOverrideFacts = deriveLiaBrainInitialRouteObservationFacts\(snapshot\)/)
+    expect(code).toMatch(/const finalSuccessfulExecutionFacts = deriveLiaBrainFinalSuccessfulExecutionFacts\(snapshot\)/)
+    expect(code).toMatch(/deriveLiaBrainRouteConformanceFacts\(initialRouteOverrideFacts, finalSuccessfulExecutionFacts\)/)
+    // The sixth derivation must never be handed the snapshot.
+    expect(runtime).not.toMatch(/deriveLiaBrainRouteConformanceFacts\([^)]*snapshot/)
   })
 
   it('u: the composition has exactly ONE production caller - the diagnostic observer', () => {
@@ -825,5 +909,138 @@ describe('lia correlation diagnostic facts - initialRouteOverride sibling (Phase
     expect(JSON.stringify(result)).not.toContain('routeMatched')
     expect(JSON.stringify(result)).not.toContain('mismatch')
     expect(JSON.stringify(result)).not.toContain('divergence')
+  })
+})
+
+describe('lia correlation diagnostic facts - routeConformance sibling (Phase 8.0D-10B-4D4C4-D2B10)', () => {
+  it('absent correlation returns ONLY facts - no routeConformanceFacts is fabricated', () => {
+    const { store } = realStore()
+    const result: any = composeLiaBrainCorrelationDiagnosticFacts(store, 'missing', LIA_BRAIN_ENGINE_PROVIDER_MAPPING)
+    expect(result).toEqual({ facts: { status: 'correlationNotObserved' } })
+    expect(Object.keys(result).sort()).toEqual(['facts'])
+    expect('routeConformanceFacts' in result).toBe(false)
+    // No comparison state is invented for a key with no live snapshot.
+    expect(JSON.stringify(result)).not.toContain('routeIdentityMatched')
+    expect(JSON.stringify(result)).not.toContain('routeIdentityDiffered')
+    expect(JSON.stringify(result)).not.toContain('routeComparisonUnavailable')
+  })
+
+  it('a present snapshot always carries routeConformanceFacts, even with nothing else retained', () => {
+    const { store } = realStore()
+    store.recordDecision('X', productionDecision())
+    const result = composeLiaBrainCorrelationDiagnosticFacts(store, 'X', LIA_BRAIN_ENGINE_PROVIDER_MAPPING)
+    expect(observed(result).routeConformanceFacts).toEqual({
+      finalUnavailableReason: 'sendTerminalNotObserved',
+      initialUnavailableReason: 'initialRouteOverrideNotObserved',
+      status: 'routeComparisonUnavailable',
+      unavailableSide: 'both',
+    })
+  })
+
+  it('an observed-absent initial route against a known final execution stays unavailable, never a difference', () => {
+    const { store } = realStore()
+    store.recordExecution({ correlationId: 'X', conversationId: 'c', roundId: 'r', providerId: 'groq', modelId: 'm' })
+    store.recordExecutionTerminal({ correlationId: 'X', roundId: 'r', outcome: 'succeeded' })
+    store.recordSendTerminal({ correlationId: 'X', outcome: 'succeeded', initialRouteOverride: null })
+    const result = observed(composeLiaBrainCorrelationDiagnosticFacts(store, 'X', LIA_BRAIN_ENGINE_PROVIDER_MAPPING))
+    expect(result.initialRouteOverrideFacts).toEqual({ status: 'noInitialRouteOverride' })
+    expect(result.finalSuccessfulExecutionFacts.status).toBe('finalSuccessfulExecutionObserved')
+    expect(result.routeConformanceFacts).toEqual({
+      initialUnavailableReason: 'noInitialRouteOverride',
+      status: 'routeComparisonUnavailable',
+      unavailableSide: 'initial',
+    })
+    expect(result.routeConformanceFacts.status).not.toBe('routeIdentityDiffered')
+  })
+
+  it('a comparable send with equal identities reports a match, and the sibling never duplicates an identity', () => {
+    const { store } = realStore()
+    store.recordExecution({ correlationId: 'X', conversationId: 'c', roundId: 'r', providerId: 'groq', modelId: 'm' })
+    store.recordExecutionTerminal({ correlationId: 'X', roundId: 'r', outcome: 'succeeded' })
+    store.recordSendTerminal({ correlationId: 'X', outcome: 'succeeded', initialRouteOverride: { providerId: 'groq', modelId: 'm' } })
+    const result = observed(composeLiaBrainCorrelationDiagnosticFacts(store, 'X', LIA_BRAIN_ENGINE_PROVIDER_MAPPING))
+    expect(result.routeConformanceFacts).toEqual({ modelMatches: true, providerMatches: true, status: 'routeIdentityMatched' })
+    // The two route siblings beside it still own the identities.
+    expect(result.initialRouteOverrideFacts).toEqual({ status: 'initialRouteOverrideObserved', providerId: 'groq', modelId: 'm' })
+    expect(result.finalSuccessfulExecutionFacts).toEqual({ executionArrivalIndex: 0, modelId: 'm', providerId: 'groq', roundId: 'r', status: 'finalSuccessfulExecutionObserved' })
+    expect(Object.keys(result.routeConformanceFacts).sort()).toEqual(['modelMatches', 'providerMatches', 'status'])
+  })
+
+  it('a comparable send with different identities reports a difference without any causal vocabulary', () => {
+    const { store } = realStore()
+    store.recordExecution({ correlationId: 'X', conversationId: 'c', roundId: 'r', providerId: 'openai', modelId: 'gpt-oss-120b' })
+    store.recordExecutionTerminal({ correlationId: 'X', roundId: 'r', outcome: 'succeeded' })
+    store.recordSendTerminal({ correlationId: 'X', outcome: 'succeeded', initialRouteOverride: { providerId: 'groq', modelId: 'llama-3.3-70b' } })
+    const result = observed(composeLiaBrainCorrelationDiagnosticFacts(store, 'X', LIA_BRAIN_ENGINE_PROVIDER_MAPPING))
+    expect(result.routeConformanceFacts).toEqual({ modelMatches: false, providerMatches: false, status: 'routeIdentityDiffered' })
+    const serialized = JSON.stringify(result.routeConformanceFacts)
+    for (const forbidden of ['fallback', 'retry', 'winner', 'mismatch', 'divergence', 'violation', 'incorrect', 'unexpected', 'roundId', 'providerId', 'modelId'])
+      expect(serialized, forbidden).not.toContain(forbidden)
+  })
+
+  it('the sixth sibling leaves the other five untouched', () => {
+    const build = (routeOverride: { providerId: string, modelId: string } | null) => {
+      const { store } = realStore()
+      store.recordDecision('X', productionDecision())
+      store.recordExecution({ correlationId: 'X', conversationId: 'c', roundId: 'r', providerId: 'p', modelId: 'm' })
+      store.recordExecutionTerminal({ correlationId: 'X', roundId: 'r', outcome: 'succeeded' })
+      store.recordSendTerminal({ correlationId: 'X', outcome: 'succeeded', initialRouteOverride: routeOverride })
+      return observed(composeLiaBrainCorrelationDiagnosticFacts(store, 'X', LIA_BRAIN_ENGINE_PROVIDER_MAPPING))
+    }
+    const absent = build(null)
+    const present = build({ providerId: 'groq', modelId: 'm' })
+    expect(present.facts).toEqual(absent.facts)
+    expect(present.terminalFacts).toEqual(absent.terminalFacts)
+    expect(present.sendTerminalFacts).toEqual(absent.sendTerminalFacts)
+    expect(present.finalSuccessfulExecutionFacts).toEqual(absent.finalSuccessfulExecutionFacts)
+    expect(present.routeConformanceFacts).not.toEqual(absent.routeConformanceFacts)
+  })
+
+  it('the sixth derivation NEVER receives the snapshot, in any state', () => {
+    const snapshots: LiaBrainCorrelationSnapshot[] = [
+      snapshot(),
+      snapshot({ initialRouteOverride: null }),
+      snapshot({ initialRouteOverride: { modelId: 'm', providerId: 'groq' } }),
+      snapshot({ executions: [{ modelId: 'm', providerId: 'groq', roundId: 'r' }], initialRouteOverride: { modelId: 'm', providerId: 'groq' } }),
+      snapshot({
+        executionTerminals: [{ outcome: 'succeeded', roundId: 'r' }],
+        executions: [{ modelId: 'm', providerId: 'groq', roundId: 'r' }],
+        initialRouteOverride: { modelId: 'm', providerId: 'groq' },
+        sendTerminal: { outcome: 'succeeded' },
+      }),
+    ]
+    for (const [index, entry] of snapshots.entries()) {
+      resetProbes()
+      const frozen = deepFreeze(entry)
+      const { reader } = recordingReader({ X: frozen })
+      composeLiaBrainCorrelationDiagnosticFacts(reader, 'X', LIA_BRAIN_ENGINE_PROVIDER_MAPPING)
+      expect(probes.routeConformance.initialInputs, `state ${index}`).toHaveLength(1)
+      expect(probes.routeConformance.initialInputs[0], `state ${index}`).not.toBe(frozen)
+      expect(probes.routeConformance.finalInputs[0], `state ${index}`).not.toBe(frozen)
+      // The five snapshot derivations each still saw exactly that one object.
+      expect(probes.identity.inputs[0], `state ${index}`).toBe(frozen)
+      expect(probes.initialRoute.inputs[0], `state ${index}`).toBe(frozen)
+      expect(probes.final.inputs[0], `state ${index}`).toBe(frozen)
+    }
+  })
+
+  it('no transport, store or producer addition: the existing surface is unchanged', () => {
+    // Eventa still declares exactly FOUR lia Brain channels: one invoke plus
+    // three one-way events. D2B10-B adds none.
+    const shared = stripComments(readSource('apps/stage-tamagotchi/src/shared/eventa/index.ts'))
+    expect(shared.match(/export const electronLiaBrain\w+ = define(?:Invoke)?Eventa</g)).toHaveLength(4)
+    expect(shared.match(/export const electronLiaBrain\w+ = defineInvokeEventa</g)).toHaveLength(1)
+    expect(shared.match(/export const electronLiaBrain\w+ = defineEventa</g)).toHaveLength(3)
+    // The store still exposes exactly the same six write/read members.
+    const storeSource = stripComments(readSource('apps/stage-tamagotchi/src/main/services/lia/brain-correlation-store.ts'))
+    expect(storeSource.match(/recordDecision,|recordExecution,|recordExecutionTerminal,|recordSendTerminal,|get,|get size\(\)/g)).toHaveLength(6)
+    // The new module never reaches a raw snapshot FIELD, a store member or a
+    // channel: it only ever reads the two facts it is handed.
+    const routeSource = readSource('apps/stage-tamagotchi/src/main/services/lia/brain-route-conformance-facts.ts')
+    expect(routeSource).not.toMatch(/recordDecision|recordExecution|recordSendTerminal|electronLiaBrain/)
+    expect(routeSource).not.toMatch(/snapshot\.\w+|\.initialRouteOverride\b|\.executionTerminals\b|\.sendTerminal\b|\.executions\b/)
+    // The observer and the formatter were not touched: neither names the sibling.
+    expect(readSource('apps/stage-tamagotchi/src/main/services/lia/brain-correlation-observer.ts')).not.toMatch(/routeConformanceFacts|deriveLiaBrain/)
+    expect(readSource('apps/stage-tamagotchi/src/main/services/lia/brain-diagnostic-log.ts')).not.toMatch(/routeConformanceFacts|routeIdentity|routeComparison/)
   })
 })

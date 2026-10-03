@@ -12,6 +12,8 @@ import type { LiaBrainCorrelationSnapshotReader } from './brain-correlation-read
 import type { LiaBrainExecutionIdentityFacts, LiaBrainExecutionIdentitySnapshot, LiaObservedExecutionIdentity } from './brain-execution-identity-facts'
 import type { LiaBrainTerminalObservationFacts } from './brain-execution-terminal-facts'
 import type { LiaBrainFinalSuccessfulExecutionFacts } from './brain-final-successful-execution-facts'
+import type { LiaBrainInitialRouteObservationFacts } from './brain-initial-route-facts'
+import type { LiaBrainRouteConformanceFacts } from './brain-route-conformance-facts'
 import type { LiaBrainSendTerminalObservationFacts } from './brain-send-terminal-facts'
 
 import { readdirSync, readFileSync } from 'node:fs'
@@ -230,10 +232,12 @@ function presentEntry(entry: LiaBrainDiagnosticEntry): {
   terminalFacts: LiaBrainTerminalObservationFacts
   sendTerminalFacts: LiaBrainSendTerminalObservationFacts
   finalSuccessfulExecutionFacts: LiaBrainFinalSuccessfulExecutionFacts
+  initialRouteOverrideFacts: LiaBrainInitialRouteObservationFacts
+  routeConformanceFacts: LiaBrainRouteConformanceFacts
 } {
   if (!('terminalFacts' in entry))
     throw new Error('expected a present correlation entry')
-  return { facts: entry.facts, sendTerminalFacts: entry.sendTerminalFacts, terminalFacts: entry.terminalFacts, finalSuccessfulExecutionFacts: entry.finalSuccessfulExecutionFacts }
+  return { facts: entry.facts, sendTerminalFacts: entry.sendTerminalFacts, terminalFacts: entry.terminalFacts, finalSuccessfulExecutionFacts: entry.finalSuccessfulExecutionFacts, initialRouteOverrideFacts: entry.initialRouteOverrideFacts, routeConformanceFacts: entry.routeConformanceFacts }
 }
 
 /** The present arm of a composed value a delegation returned, narrowed once. */
@@ -242,6 +246,8 @@ function composedPresent(index = 0): {
   terminalFacts: LiaBrainTerminalObservationFacts
   sendTerminalFacts: LiaBrainSendTerminalObservationFacts
   finalSuccessfulExecutionFacts: LiaBrainFinalSuccessfulExecutionFacts
+  initialRouteOverrideFacts: LiaBrainInitialRouteObservationFacts
+  routeConformanceFacts: LiaBrainRouteConformanceFacts
 } {
   const composed = probes.composition.returned[index]
   if (typeof composed !== 'object' || composed === null || !('terminalFacts' in composed))
@@ -251,6 +257,8 @@ function composedPresent(index = 0): {
     terminalFacts: LiaBrainTerminalObservationFacts
     sendTerminalFacts: LiaBrainSendTerminalObservationFacts
     finalSuccessfulExecutionFacts: LiaBrainFinalSuccessfulExecutionFacts
+    initialRouteOverrideFacts: LiaBrainInitialRouteObservationFacts
+    routeConformanceFacts: LiaBrainRouteConformanceFacts
   }
 }
 
@@ -988,7 +996,7 @@ describe('correlation observer - structured diagnostic log seam (Phase 8.0D-10B-
     // composed members. No timestamp, no sequence number, no environment or
     // window id, no provider/model/status duplicate, no raw snapshot, no
     // terminal record and no derived verdict.
-    expect(Object.keys(entry).sort()).toEqual(['correlationId', 'facts', 'finalSuccessfulExecutionFacts', 'initialRouteOverrideFacts', 'sendTerminalFacts', 'terminalFacts'])
+    expect(Object.keys(entry).sort()).toEqual(['correlationId', 'facts', 'finalSuccessfulExecutionFacts', 'initialRouteOverrideFacts', 'routeConformanceFacts', 'sendTerminalFacts', 'terminalFacts'])
     // H: the caller's key is forwarded verbatim, never trimmed or rewritten.
     expect(entry.correlationId).toBe('logical-send-X')
     // I: the entry carries the EXACT members the composition produced - the seam
@@ -1000,7 +1008,10 @@ describe('correlation observer - structured diagnostic log seam (Phase 8.0D-10B-
     expect('terminalFacts' in entry && entry.terminalFacts).toBe(composed.terminalFacts)
     expect('sendTerminalFacts' in entry && entry.sendTerminalFacts).toBe(composed.sendTerminalFacts)
     expect('finalSuccessfulExecutionFacts' in entry && entry.finalSuccessfulExecutionFacts).toBe(composed.finalSuccessfulExecutionFacts)
-    expect('initialRouteOverrideFacts' in entry && (entry as any).initialRouteOverrideFacts).toBe((composed as any).initialRouteOverrideFacts)
+    expect('initialRouteOverrideFacts' in entry && entry.initialRouteOverrideFacts).toBe(composed.initialRouteOverrideFacts)
+    // Phase 8.0D-10B-4D4C4-D2B10: the sixth sibling travels by the SAME spread -
+    // the very object the composition derived, not a clone and not a re-derivation.
+    expect('routeConformanceFacts' in entry && entry.routeConformanceFacts).toBe(composed.routeConformanceFacts)
     expect(entry.facts.status).toBe('decisionNotObserved')
     // J: no time of any kind was added by this module.
     expect(entry).not.toHaveProperty('timestamp')
@@ -1141,7 +1152,7 @@ describe('correlation observer - structured diagnostic log seam (Phase 8.0D-10B-
     for (const forbidden of ['prompt', 'messages', 'attachments', 'tools', 'apiKey', 'secret', 'baseURL', 'chatProvider', 'credentials', 'conversationId', 'executionTerminals', 'snapshot', 'createdAt'])
       expect(serialized, forbidden).not.toContain(forbidden)
     // And the only keys are the approved five.
-    expect(Object.keys(JSON.parse(serialized))).toEqual(['correlationId', 'facts', 'terminalFacts', 'sendTerminalFacts', 'initialRouteOverrideFacts', 'finalSuccessfulExecutionFacts'])
+    expect(Object.keys(JSON.parse(serialized))).toEqual(['correlationId', 'facts', 'terminalFacts', 'sendTerminalFacts', 'initialRouteOverrideFacts', 'finalSuccessfulExecutionFacts', 'routeConformanceFacts'])
     // The counts are the only terminal data, and they carry no record.
     expect(Object.keys(JSON.parse(serialized).terminalFacts).sort()).toEqual([
       'abandonedTerminalObservationCount',
@@ -1232,7 +1243,7 @@ describe('correlation observer - terminals reach the entry as counts only (Phase
 
     // The structured entry is exactly the composed shape: the opaque key, the
     // identity facts, the three counts and the send sibling.
-    expect(Object.keys(entry).sort()).toEqual(['correlationId', 'facts', 'finalSuccessfulExecutionFacts', 'initialRouteOverrideFacts', 'sendTerminalFacts', 'terminalFacts'])
+    expect(Object.keys(entry).sort()).toEqual(['correlationId', 'facts', 'finalSuccessfulExecutionFacts', 'initialRouteOverrideFacts', 'routeConformanceFacts', 'sendTerminalFacts', 'terminalFacts'])
     // The forwarded identity facts neither declare nor carry a terminal collection.
     expect('executionTerminals' in entry.facts).toBe(false)
     expect('outcome' in entry.facts).toBe(false)
@@ -1374,7 +1385,7 @@ describe('correlation observer - composed entry states (Phase 8.0D-10B-4D4C3B2-B
       store.recordDecision('X', productionDecision())
     })
 
-    expect(Object.keys(entry).sort()).toEqual(['correlationId', 'facts', 'finalSuccessfulExecutionFacts', 'initialRouteOverrideFacts', 'sendTerminalFacts', 'terminalFacts'])
+    expect(Object.keys(entry).sort()).toEqual(['correlationId', 'facts', 'finalSuccessfulExecutionFacts', 'initialRouteOverrideFacts', 'routeConformanceFacts', 'sendTerminalFacts', 'terminalFacts'])
     const { facts, terminalFacts, sendTerminalFacts } = presentEntry(entry)
     expect(facts.status).toBe('noExecutionObserved')
     if (facts.status !== 'noExecutionObserved')
@@ -1479,5 +1490,67 @@ describe('correlation observer - composed entry states (Phase 8.0D-10B-4D4C3B2-B
     })
     expect('total' in terminalFacts).toBe(false)
     expect(facts.attempts).toHaveLength(1)
+  })
+})
+
+describe('correlation observer - the sixth sibling travels without a production edit (Phase 8.0D-10B-4D4C4-D2B10)', () => {
+  it('the observer source names neither the new sibling nor any derivation - it needed no change', () => {
+    const source = stripComments(readSource('./brain-correlation-observer.ts'))
+    // The entry type is an INTERSECTION over the composed union, so widening the
+    // composition widens the entry automatically: nothing here had to be edited.
+    expect(source).not.toMatch(/routeConformanceFacts|LiaBrainRouteConformanceFacts|deriveLiaBrainRouteConformanceFacts/)
+    expect(source).not.toMatch(/deriveLiaBrain/)
+    expect(source).toContain('log?.({ correlationId, ...diagnosticFacts })')
+    expect(source.match(/composeLiaBrainCorrelationDiagnosticFacts\(/g)).toHaveLength(1)
+    // Still exactly the two injected bindings, so nothing new is retained.
+    expect(source.match(/^\s*(?:const|let|var) /gm)).toHaveLength(2)
+  })
+
+  it('the composed sixth sibling reaches the callback by reference, unfiltered', async () => {
+    resetProbes()
+    const { reader } = recordingReader({ X: STATE_SNAPSHOTS.attemptIdentityFacts })
+    const recorded = recordingLog()
+    const observer = await loadObserver(reader, recorded.log)
+
+    observer.observe('X')
+
+    expect(recorded.entries).toHaveLength(1)
+    const entry = recorded.entries[0]!
+    const composed = composedPresent()
+    expect('routeConformanceFacts' in entry && entry.routeConformanceFacts).toBe(composed.routeConformanceFacts)
+    // Not a clone and not a re-derivation: one entry, one composition call.
+    expect(probes.composition.returned).toHaveLength(1)
+    expect('routeConformanceFacts' in entry && entry.routeConformanceFacts).toEqual(composed.routeConformanceFacts)
+    // No top-level identity leaked out of the new sibling.
+    for (const duplicated of ['providerId', 'modelId', 'roundId', 'unavailableSide', 'providerMatches', 'modelMatches'])
+      expect(entry).not.toHaveProperty(duplicated)
+  })
+
+  it('the absent entry still fabricates no comparison fact at all', async () => {
+    resetProbes()
+    const { reader } = recordingReader({})
+    const recorded = recordingLog()
+    const observer = await loadObserver(reader, recorded.log)
+
+    observer.observe('logical-send-absent')
+
+    const entry = recorded.entries[0]!
+    expect(Object.keys(entry).sort()).toEqual(['correlationId', 'facts'])
+    expect('routeConformanceFacts' in entry).toBe(false)
+    expect(JSON.stringify(entry)).not.toContain('routeIdentity')
+    expect(JSON.stringify(entry)).not.toContain('routeComparison')
+  })
+
+  it('the widened entry still carries none of the forbidden data classes', async () => {
+    resetProbes()
+    const { reader } = recordingReader({ X: STATE_SNAPSHOTS.attemptIdentityFacts })
+    const recorded = recordingLog()
+    const observer = await loadObserver(reader, recorded.log)
+
+    observer.observe('X')
+
+    const serialized = JSON.stringify(recorded.entries[0]!)
+    for (const forbidden of ['prompt', 'messages', 'attachments', 'tools', 'apiKey', 'secret', 'baseURL', 'chatProvider', 'credentials', 'conversationId', 'executionTerminals', 'snapshot', 'createdAt'])
+      expect(serialized, forbidden).not.toContain(forbidden)
   })
 })

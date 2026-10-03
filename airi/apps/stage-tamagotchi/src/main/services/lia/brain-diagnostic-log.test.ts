@@ -4,6 +4,7 @@ import type { LiaBrainExecutionIdentityFacts } from './brain-execution-identity-
 import type { LiaBrainTerminalObservationFacts } from './brain-execution-terminal-facts'
 import type { LiaBrainFinalSuccessfulExecutionFacts } from './brain-final-successful-execution-facts'
 import type { LiaBrainInitialRouteObservationFacts } from './brain-initial-route-facts'
+import type { LiaBrainRouteConformanceFacts } from './brain-route-conformance-facts'
 import type { LiaBrainSendTerminalObservationFacts } from './brain-send-terminal-facts'
 
 import { readdirSync, readFileSync } from 'node:fs'
@@ -86,6 +87,16 @@ function occurrences(line: string, token: string): number {
  */
 const NOT_OBSERVED_INITIAL_ROUTE: LiaBrainInitialRouteObservationFacts = { status: 'initialRouteOverrideNotObserved' }
 const NOT_OBSERVED_FINAL_EXECUTION: LiaBrainFinalSuccessfulExecutionFacts = { status: 'sendTerminalNotObserved' }
+/**
+ * Phase 8.0D-10B-4D4C4-D2B10: the sixth sibling. The formatter deliberately does
+ * NOT print it, so every fixture uses one factual unavailability value.
+ */
+const NOT_OBSERVED_ROUTE_CONFORMANCE: LiaBrainRouteConformanceFacts = {
+  finalUnavailableReason: 'sendTerminalNotObserved',
+  initialUnavailableReason: 'initialRouteOverrideNotObserved',
+  status: 'routeComparisonUnavailable',
+  unavailableSide: 'both',
+}
 
 /**
  * One structured entry for an arbitrary factual state.
@@ -111,6 +122,7 @@ function entry(
         facts,
         finalSuccessfulExecutionFacts: NOT_OBSERVED_FINAL_EXECUTION,
         initialRouteOverrideFacts: NOT_OBSERVED_INITIAL_ROUTE,
+        routeConformanceFacts: NOT_OBSERVED_ROUTE_CONFORMANCE,
         sendTerminalFacts,
         terminalFacts,
       }
@@ -460,6 +472,7 @@ describe('lia brain diagnostic log - terminal counts (Phase 8.0D-10B-4D4C3B2-B4)
       facts,
       finalSuccessfulExecutionFacts: NOT_OBSERVED_FINAL_EXECUTION,
       initialRouteOverrideFacts: NOT_OBSERVED_INITIAL_ROUTE,
+      routeConformanceFacts: NOT_OBSERVED_ROUTE_CONFORMANCE,
       sendTerminalFacts,
       terminalFacts,
     }
@@ -1054,5 +1067,55 @@ describe('lia brain diagnostic log - source invariants (Phase 8.0D-10B-4D2B)', (
       'eventa:event:lia:brain:send-terminal-observation',
       'eventa:invoke:lia:brain:chat-decision',
     ])
+  })
+})
+
+describe('diagnostic log - the route-conformance sibling is structured-only (Phase 8.0D-10B-4D4C4-D2B10)', () => {
+  /** The present arm only - so the sixth sibling is statically guaranteed present. */
+  type PresentEntry = Extract<LiaBrainDiagnosticEntry, { terminalFacts: LiaBrainTerminalObservationFacts }>
+  const baseEntry = (routeConformanceFacts: LiaBrainRouteConformanceFacts): PresentEntry => ({
+    correlationId: 'X',
+    facts: { attempts: [attempt()], status: 'decisionNotObserved' },
+    finalSuccessfulExecutionFacts: NOT_OBSERVED_FINAL_EXECUTION,
+    initialRouteOverrideFacts: NOT_OBSERVED_INITIAL_ROUTE,
+    routeConformanceFacts,
+    sendTerminalFacts: {},
+    terminalFacts: ZERO_TERMINALS,
+  })
+
+  it('the formatted line is byte-identical for every conformance state', () => {
+    const expected = `[LIA-BRAIN-DIAG] correlationId="X" status="decisionNotObserved" attempt0.arrivalIndex=0 attempt0.roundId="A" attempt0.providerId="groq" attempt0.modelId="openai/gpt-oss-120b" ${ZERO_COUNTS}`
+    const states: LiaBrainRouteConformanceFacts[] = [
+      NOT_OBSERVED_ROUTE_CONFORMANCE,
+      { initialUnavailableReason: 'noInitialRouteOverride', status: 'routeComparisonUnavailable', unavailableSide: 'initial' },
+      { finalUnavailableReason: 'sendFailed', status: 'routeComparisonUnavailable', unavailableSide: 'final' },
+      { modelMatches: true, providerMatches: true, status: 'routeIdentityMatched' },
+      { modelMatches: false, providerMatches: true, status: 'routeIdentityDiffered' },
+      { modelMatches: true, providerMatches: false, status: 'routeIdentityDiffered' },
+      { modelMatches: false, providerMatches: false, status: 'routeIdentityDiffered' },
+    ]
+    for (const [index, state] of states.entries()) {
+      const line = formatLiaBrainDiagnosticEntry(baseEntry(state))
+      expect(line, `state ${index}`).toBe(expected)
+      expect(line.split('\n'), `state ${index}`).toHaveLength(1)
+    }
+  })
+
+  it('no conformance vocabulary or equality boolean leaks into the text', () => {
+    const line = formatLiaBrainDiagnosticEntry(baseEntry({ modelMatches: true, providerMatches: true, status: 'routeIdentityMatched' }))
+    for (const forbidden of ['routeConformance', 'routeIdentityMatched', 'routeIdentityDiffered', 'routeComparisonUnavailable', 'providerMatches', 'modelMatches', 'unavailableSide', 'initialUnavailableReason', 'finalUnavailableReason'])
+      expect(line, forbidden).not.toContain(forbidden)
+  })
+
+  it('the formatter source names no conformance concept and needed no change', () => {
+    const source = normalizeLineEndings(readFileSync(fileURLToPath(new URL('./brain-diagnostic-log.ts', import.meta.url)), 'utf-8'))
+    expect(source).not.toMatch(/routeConformanceFacts|LiaBrainRouteConformanceFacts|routeIdentityMatched|routeIdentityDiffered|routeComparisonUnavailable|providerMatches|modelMatches|unavailableSide/)
+  })
+
+  it('the structured entry the observer forwards DOES carry the sibling - only the text does not', () => {
+    const matched = baseEntry({ modelMatches: true, providerMatches: true, status: 'routeIdentityMatched' })
+    expect(matched.routeConformanceFacts).toEqual({ modelMatches: true, providerMatches: true, status: 'routeIdentityMatched' })
+    expect(JSON.stringify(matched)).toContain('routeIdentityMatched')
+    expect(formatLiaBrainDiagnosticEntry(matched)).not.toContain('routeIdentityMatched')
   })
 })
