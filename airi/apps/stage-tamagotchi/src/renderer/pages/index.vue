@@ -48,6 +48,7 @@ import { createOrderedVoiceSendSequence } from '../services/lia/voice-send-seque
 import { useControlsIslandStore } from '../stores/controls-island'
 import { shouldAutoOpenAiriWelcome } from '../stores/lia/airi-onboarding-policy'
 import { useStageWindowLifecycleStore } from '../stores/stage-window-lifecycle'
+import { artistryToolReferences } from '../stores/tools'
 import { resolveFadeOnHoverInteraction } from '../utils/fade-on-hover'
 import { shouldSampleStageTransparency } from '../utils/stage-three-transparency'
 import { createVoiceInputInteractionLifecycle } from '../utils/voice-input-lifecycle'
@@ -343,13 +344,17 @@ const voiceSendSequence = createOrderedVoiceSendSequence({
     const correlationId = crypto.randomUUID()
     const reasoningToSend = consciousnessSettings.reasoning
     const attachmentsToSend = [] as const
-    const toolsToSend = [] as const
+    // Phase 8.0D-10B-4D4C4-D2B12-B: voice turns snapshot the SAME artistry tool
+    // reference set that typed InteractiveArea sends use, so Brain's `usesTools`
+    // describes the exact frozen set the logical send below receives. Brain still
+    // receives only the derived boolean, never the tool names.
+    const toolsToSend = [...artistryToolReferences]
     const facts = chatTurnFactsFromSend({
       attachments: attachmentsToSend,
       reasoning: reasoningToSend,
       tools: toolsToSend,
     })
-    return { textToSend, targetSessionId, correlationId, reasoningToSend, facts }
+    return { textToSend, targetSessionId, correlationId, reasoningToSend, toolsToSend, facts }
   },
   execute: async (captured) => {
     const routeOverride = await resolveLiaAuthoritativeSendRoute({
@@ -361,6 +366,7 @@ const voiceSendSequence = createOrderedVoiceSendSequence({
       text: captured.textToSend,
       correlationId: captured.correlationId,
       reasoning: captured.reasoningToSend,
+      tools: captured.toolsToSend,
       ...(routeOverride === undefined ? {} : { routeOverride }),
     })
   },
@@ -593,7 +599,15 @@ function sendVoiceInputTextToChat(text: string): Promise<void> {
   return voiceSendSequence.enqueue(text)
 }
 
-/** Sends completed streaming-ASR sentences to captions and chat. */
+/**
+ * Buffers completed streaming-ASR fragments into the shared spoken turn.
+ *
+ * Phase 8.0D-10B-4D4C4-D2B12-B: providers such as Web Speech API emit one final
+ * result per recognized phrase, and each one used to become its own logical chat
+ * turn. Accepted fragments now join the same transcript buffer the recorder-backed
+ * path already uses, so nearby fragments aggregate into ONE voice turn and the
+ * Brain/correlation/send sequence runs only when that aggregate flushes.
+ */
 function handleStreamingSentenceEnd(delta: string) {
   if (isVoiceInputSuppressed())
     return
@@ -607,7 +621,7 @@ function handleStreamingSentenceEnd(delta: string) {
   scheduleHearingInputClear(sourceId)
   activeHearingInputSourceId = undefined
   postSpeakerCaption(finalText, 'replace')
-  void sendVoiceInputTextToChat(finalText)
+  voiceTranscriptBuffer.push(finalText)
 }
 
 /** Replaces the caption with the provider's current volatile transcript. */
@@ -619,12 +633,24 @@ function handleStreamingTranscriptionUpdate(text: string) {
   postSpeakerCaption(text, 'replace')
 }
 
-/** Publishes the provider's final streaming-ASR text to the caption overlay. */
+/**
+ * Publishes the provider's final streaming-ASR text to the caption overlay and
+ * flushes the spoken turn.
+ *
+ * Phase 8.0D-10B-4D4C4-D2B12-B: a provider speech-end is the natural turn
+ * boundary, so pending buffered fragments flush now instead of waiting out the
+ * full delay window. Snapshot/VAD providers get an immediate single logical turn;
+ * the buffer's delayed timer remains the fallback for continuous providers such
+ * as Web Speech, where a speech-end may not follow every natural phrase. The
+ * buffer itself owns timer cancellation and empty-buffer behavior, so this cannot
+ * produce a duplicate send.
+ */
 function handleStreamingSpeechEnd(text: string) {
   if (isVoiceInputSuppressed())
     return
 
   postSpeakerCaption(text, 'replace')
+  void voiceTranscriptBuffer.flushNow()
 }
 
 /** Reads the listening generation attached to recorder-backed transcription metadata. */

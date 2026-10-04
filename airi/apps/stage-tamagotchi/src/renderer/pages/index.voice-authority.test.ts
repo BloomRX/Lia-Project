@@ -4,10 +4,12 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 // @vitest-environment happy-dom
+import { createTranscriptBuffer } from '@proj-airi/pipelines-audio'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { normalizeLineEndings } from '../../test-helpers'
 import { createOrderedVoiceSendSequence } from '../services/lia/voice-send-sequence'
+import { artistryToolReferences } from '../stores/tools'
 
 function chatTurnFactsFromSend(input: {
   attachments: readonly unknown[]
@@ -46,12 +48,68 @@ function stripComments(s: string): string {
  * that prove index.vue contains the same shape.
  */
 
+/**
+ * Resolves the tool reference set that production's voice capture actually
+ * snapshots, by reading the production expression out of index.vue.
+ *
+ * index.vue is a page SFC that cannot be mounted here, so the behavioral proofs
+ * below would otherwise exercise a hand-copied literal and stay green even if
+ * production regressed. Reading the identifier production spreads means a
+ * production mutation away from the artistry reference set fails these tests
+ * instead of silently passing.
+ */
+function productionVoiceToolSnapshot(): readonly { name: string }[] {
+  const stripped = stripComments(readSource('index.vue'))
+  const spread = /const toolsToSend = \[\.\.\.(\w+)\]/.exec(stripped)
+  if (spread) {
+    const known: Record<string, readonly { name: string }[]> = { artistryToolReferences }
+    const resolved = known[spread[1]!]
+    if (!resolved)
+      throw new Error(`voice capture snapshots an unrecognised tool set: ${spread[1]}`)
+
+    return [...resolved]
+  }
+
+  // Production snapshots no tools at all. Return that faithfully so the tool
+  // parity assertions fail precisely, instead of cascading an unrelated error
+  // through every test that builds a voice pipeline.
+  if (/const toolsToSend = \[\] as const/.test(stripped))
+    return []
+
+  throw new Error('voice capture tool snapshot expression is not recognisable')
+}
+
+/**
+ * Returns the delivery function production's streaming sentence-end handler uses
+ * for an accepted final fragment: buffering into the shared transcript buffer, or
+ * a direct per-fragment chat send. Executing production's own routing decision
+ * means restoring direct per-fragment sends fails the aggregation proofs.
+ */
+function productionStreamingFragmentDelivery(
+  buffer: ReturnType<typeof createTranscriptBuffer>,
+  directSend: (text: string) => void,
+): (finalText: string) => void {
+  const stripped = stripComments(readSource('index.vue'))
+  const start = stripped.indexOf('function handleStreamingSentenceEnd')
+  if (start < 0)
+    throw new Error('handleStreamingSentenceEnd missing from index.vue')
+
+  const body = stripped.slice(start, stripped.indexOf('\nfunction ', start + 1))
+  if (/voiceTranscriptBuffer\.push\(finalText\)/.test(body))
+    return finalText => buffer.push(finalText)
+
+  if (/sendVoiceInputTextToChat\(finalText\)/.test(body))
+    return finalText => directSend(finalText)
+
+  throw new Error('handleStreamingSentenceEnd no longer routes accepted final fragments')
+}
+
 // Real production helper — tests now execute the actual sequencing code
 function createVoiceSendSequence(deps: {
   getActiveSessionId: () => string
   getReasoning: () => boolean
   resolveRoute: (input: { correlationId: string, facts: ReturnType<typeof chatTurnFactsFromSend> }) => Promise<{ providerId: string, modelId: string } | undefined>
-  send: (payload: { sessionId: string, text: string, correlationId: string, reasoning: boolean, routeOverride?: { providerId: string, modelId: string } }) => Promise<void>
+  send: (payload: { sessionId: string, text: string, correlationId: string, reasoning: boolean, tools: readonly { name: string }[], routeOverride?: { providerId: string, modelId: string } }) => Promise<void>
   reportFailure: (action: string, error: unknown) => void
 }) {
   const sequence = createOrderedVoiceSendSequence({
@@ -61,13 +119,14 @@ function createVoiceSendSequence(deps: {
       const correlationId = crypto.randomUUID()
       const reasoningToSend = deps.getReasoning()
       const attachmentsToSend = [] as const
-      const toolsToSend = [] as const
+      // D2B12-B: resolves the SAME tool set production's voice capture snapshots.
+      const toolsToSend = productionVoiceToolSnapshot()
       const facts = chatTurnFactsFromSend({
         attachments: attachmentsToSend,
         reasoning: reasoningToSend,
         tools: toolsToSend,
       })
-      return { textToSend, targetSessionId, correlationId, reasoningToSend, facts }
+      return { textToSend, targetSessionId, correlationId, reasoningToSend, toolsToSend, facts }
     },
     execute: async (captured) => {
       const routeOverride = await deps.resolveRoute({ correlationId: captured.correlationId, facts: captured.facts })
@@ -76,6 +135,7 @@ function createVoiceSendSequence(deps: {
         text: captured.textToSend,
         correlationId: captured.correlationId,
         reasoning: captured.reasoningToSend,
+        tools: captured.toolsToSend,
         ...(routeOverride === undefined ? {} : { routeOverride }),
       })
     },
@@ -111,7 +171,7 @@ describe('direct voice authoritative routing (Phase 8.0D-10B-4D4C4-D2B5)', () =>
     expect(send).toHaveBeenCalledTimes(1)
     expect(report).not.toHaveBeenCalled()
     const facts = (resolveRoute.mock.calls[0]![0] as any).facts
-    expect(facts).toEqual({ hasImageInput: false, reasoningRequested: false, usesTools: false })
+    expect(facts).toEqual({ hasImageInput: false, reasoningRequested: false, usesTools: true })
   })
 
   it('29: authority is actually awaited — deferred Brain blocks send', async () => {
@@ -216,7 +276,7 @@ describe('direct voice authoritative routing (Phase 8.0D-10B-4D4C4-D2B5)', () =>
     expect(crypto.randomUUID).toHaveBeenCalledTimes(1)
   })
 
-  it('33: facts hasImageInput=false usesTools=false reasoningRequested=reasoningToSend', async () => {
+  it('33: facts hasImageInput=false usesTools=true reasoningRequested=reasoningToSend (D2B12-B tool parity)', async () => {
     const resolveRoute = vi.fn().mockResolvedValue(undefined)
     const send = vi.fn().mockResolvedValue(undefined)
     const seq = createVoiceSendSequence({
@@ -229,7 +289,7 @@ describe('direct voice authoritative routing (Phase 8.0D-10B-4D4C4-D2B5)', () =>
     await seq.enqueue('facts')
     const facts = (resolveRoute.mock.calls[0]![0] as any).facts
     expect(facts.hasImageInput).toBe(false)
-    expect(facts.usesTools).toBe(false)
+    expect(facts.usesTools).toBe(true)
     expect(facts.reasoningRequested).toBe(true)
   })
 
@@ -665,7 +725,7 @@ describe('direct voice authoritative routing (Phase 8.0D-10B-4D4C4-D2B5)', () =>
     expect(resolverCalls).toBe(2)
   })
 
-  it('46: payload exactness — required sessionId text correlationId reasoning, optional routeOverride only', async () => {
+  it('46: payload exactness — required sessionId text correlationId reasoning tools, optional routeOverride only (D2B12-B)', async () => {
     const resolveRoute = vi.fn().mockResolvedValue({ providerId: 'groq', modelId: 'openai/gpt-oss-120b' })
     const send = vi.fn().mockResolvedValue(undefined)
     const seq = createVoiceSendSequence({
@@ -677,10 +737,12 @@ describe('direct voice authoritative routing (Phase 8.0D-10B-4D4C4-D2B5)', () =>
     })
     await seq.enqueue('exact')
     const payload = send.mock.calls[0]![0] as any
-    expect(Object.keys(payload).sort()).toEqual(['correlationId', 'reasoning', 'routeOverride', 'sessionId', 'text'])
+    expect(Object.keys(payload).sort()).toEqual(['correlationId', 'reasoning', 'routeOverride', 'sessionId', 'text', 'tools'])
     expect(payload).not.toHaveProperty('attachments')
-    expect(payload).not.toHaveProperty('tools')
     expect(payload).not.toHaveProperty('input')
+    // No voice-origin schema additions may appear on the logical send payload.
+    for (const forbidden of ['source', 'modality', 'voice', 'speech', 'transcription', 'provider', 'confidence', 'language', 'locale', 'utteranceId', 'sourceId'])
+      expect(payload).not.toHaveProperty(forbidden)
     // Without route
     const resolve2 = vi.fn().mockResolvedValue(undefined)
     const send2 = vi.fn().mockResolvedValue(undefined)
@@ -693,7 +755,7 @@ describe('direct voice authoritative routing (Phase 8.0D-10B-4D4C4-D2B5)', () =>
     })
     await seq2.enqueue('no route')
     const payload2 = send2.mock.calls[0]![0] as any
-    expect(Object.keys(payload2).sort()).toEqual(['correlationId', 'reasoning', 'sessionId', 'text'])
+    expect(Object.keys(payload2).sort()).toEqual(['correlationId', 'reasoning', 'sessionId', 'text', 'tools'])
   })
 
   it('47: global activeProvider/activeModel writes = 0', async () => {
@@ -745,22 +807,279 @@ describe('direct voice authoritative routing (Phase 8.0D-10B-4D4C4-D2B5)', () =>
     expect(captureIdx).toBeLessThan(executeIdx)
   })
 
-  it('source guards: no new attachments/tools/input', async () => {
+  it('source guards: tools snapshot parity, no new attachments/input (D2B12-B)', async () => {
     const source = readSource('index.vue')
     const seqIdx = source.indexOf('const voiceSendSequence = createOrderedVoiceSendSequence')
     const seqBody = source.slice(seqIdx, seqIdx + 2500)
     // Facts may use attachments/tools via chatTurnFactsFromSend — allowed in capture
     expect(seqBody).toMatch(/attachments: attachmentsToSend/)
     expect(seqBody).toMatch(/tools: toolsToSend/)
-    // Payload to chatStore.send must NOT contain attachments/tools/input (preserve no-tools/no-attachments)
+    // D2B12-B: capture must snapshot the SAME artistry tool set typed sends use,
+    // and image attachments must stay frozen-empty on the microphone path.
+    expect(seqBody).toMatch(/const toolsToSend = \[\.\.\.artistryToolReferences\]/)
+    expect(seqBody).toMatch(/const attachmentsToSend = \[\] as const/)
+    // Voice payload MUST forward the captured tool snapshot, and still must not
+    // carry attachments, provider input metadata, or any voice-origin schema.
     const sendIdx = seqBody.indexOf('chatStore.send({')
     const sendBlock = seqBody.slice(sendIdx, sendIdx + 600)
+    expect(sendBlock).toMatch(/tools: captured\.toolsToSend/)
     expect(sendBlock).not.toMatch(/attachments:/)
-    expect(sendBlock).not.toMatch(/\btools:/)
     expect(sendBlock).not.toMatch(/\binput:/)
     expect(sendBlock).toMatch(/captured\.reasoningToSend/)
     expect(sendBlock).toMatch(/captured\.correlationId/)
     expect(sendBlock).toMatch(/captured\.targetSessionId/)
     expect(sendBlock).toMatch(/captured\.textToSend/)
+    // Brain receives only derived facts — never the tool names themselves.
+    const factsIdx = seqBody.indexOf('const facts = chatTurnFactsFromSend')
+    const factsBlock = seqBody.slice(factsIdx, factsIdx + 300)
+    expect(factsBlock).toMatch(/tools: toolsToSend/)
+    expect(factsBlock).not.toMatch(/\.name/)
+    // The page imports the real exported reference set, not a duplicated literal.
+    expect(source).toMatch(/import \{ artistryToolReferences \} from '\.\.\/stores\/tools'/)
+  })
+})
+
+describe('voice turn fidelity (D2B12-B) — streaming aggregation and tool parity', () => {
+  let idSeq = 0
+
+  beforeEach(() => {
+    vi.restoreAllMocks()
+    idSeq = 0
+    vi.spyOn(crypto, 'randomUUID').mockImplementation(() => `cid-${++idSeq}` as never)
+  })
+
+  /**
+   * Wires the REAL transcript buffer to the REAL ordered voice send sequence
+   * exactly the way index.vue wires them, so these tests execute both production
+   * primitives rather than a replica of either.
+   */
+  function createVoicePipeline(options?: {
+    reasoning?: boolean
+    sessionId?: string
+    route?: { providerId: string, modelId: string }
+  }) {
+    const resolveRoute = vi.fn().mockResolvedValue(options?.route)
+    const send = vi.fn().mockResolvedValue(undefined)
+    const reportFailure = vi.fn()
+    const seq = createVoiceSendSequence({
+      getActiveSessionId: () => options?.sessionId ?? 'S1',
+      getReasoning: () => options?.reasoning ?? true,
+      resolveRoute,
+      send,
+      reportFailure,
+    })
+    const buffer = createTranscriptBuffer({
+      flushDelayMs: 1200,
+      maxBufferedTextLength: 90,
+      async flush(text) {
+        await seq.enqueue(text)
+      },
+    })
+    return {
+      buffer,
+      resolveRoute,
+      send,
+      reportFailure,
+      getChain: seq.getChain,
+      enqueueDirect: seq.enqueue,
+      // Delivers an accepted final fragment exactly the way production routes it.
+      deliver: productionStreamingFragmentDelivery(buffer, text => void seq.enqueue(text)),
+    }
+  }
+
+  it('aggregates two nearby latin streaming finals into ONE logical voice turn', async () => {
+    const pipeline = createVoicePipeline()
+    pipeline.deliver('hello')
+    pipeline.deliver('world')
+    await pipeline.buffer.flushNow()
+    expect(pipeline.resolveRoute).toHaveBeenCalledTimes(1)
+    expect(pipeline.send).toHaveBeenCalledTimes(1)
+    expect(pipeline.send.mock.calls[0]![0]!.text).toBe('hello world')
+  })
+
+  it('aggregates three nearby streaming finals into ONE logical voice turn', async () => {
+    const pipeline = createVoicePipeline()
+    pipeline.deliver('hello')
+    pipeline.deliver('beautiful')
+    pipeline.deliver('world')
+    await pipeline.buffer.flushNow()
+    expect(pipeline.resolveRoute).toHaveBeenCalledTimes(1)
+    expect(pipeline.send).toHaveBeenCalledTimes(1)
+    expect(pipeline.send.mock.calls[0]![0]!.text).toBe('hello beautiful world')
+  })
+
+  it('mints one correlationId, one authority request and one send per buffer flush', async () => {
+    const pipeline = createVoicePipeline()
+    pipeline.deliver('one turn')
+    await pipeline.buffer.flushNow()
+    const payload = pipeline.send.mock.calls[0]![0]!
+    expect(pipeline.resolveRoute).toHaveBeenCalledTimes(1)
+    expect(pipeline.send).toHaveBeenCalledTimes(1)
+    expect(pipeline.resolveRoute.mock.calls[0]![0]!.correlationId).toBe(payload.correlationId)
+    expect(payload.correlationId).toBe('cid-1')
+  })
+
+  it('gives a second spoken turn its own correlationId, authority request and send', async () => {
+    const pipeline = createVoicePipeline()
+    pipeline.deliver('first')
+    await pipeline.buffer.flushNow()
+    pipeline.deliver('second')
+    await pipeline.buffer.flushNow()
+    expect(pipeline.resolveRoute).toHaveBeenCalledTimes(2)
+    expect(pipeline.send).toHaveBeenCalledTimes(2)
+    const first = pipeline.send.mock.calls[0]![0]!
+    const second = pipeline.send.mock.calls[1]![0]!
+    expect(first.text).toBe('first')
+    expect(second.text).toBe('second')
+    expect(second.correlationId).not.toBe(first.correlationId)
+    expect(pipeline.resolveRoute.mock.calls[1]![0]!.correlationId).toBe(second.correlationId)
+  })
+
+  it('sends exactly once on explicit flushNow and never duplicates from the old delayed timer', async () => {
+    vi.useFakeTimers()
+    try {
+      const pipeline = createVoicePipeline()
+      pipeline.deliver('hello')
+      pipeline.deliver('world')
+      await pipeline.buffer.flushNow()
+      expect(pipeline.send).toHaveBeenCalledTimes(1)
+      // The pending 1200 ms window must already be cancelled by the buffer.
+      await vi.advanceTimersByTimeAsync(1200)
+      await vi.advanceTimersByTimeAsync(1200)
+      expect(pipeline.send).toHaveBeenCalledTimes(1)
+      expect(pipeline.resolveRoute).toHaveBeenCalledTimes(1)
+    }
+    finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('flushes without waiting once a fragment reaches the max buffered length', async () => {
+    vi.useFakeTimers()
+    try {
+      const pipeline = createVoicePipeline()
+      const longFragment = 'x'.repeat(90)
+      pipeline.buffer.push(longFragment)
+      // Advance far below the 1200 ms window: the delivery must already be
+      // complete, proving the buffer's own max-length rule flushed without
+      // waiting out the delay window.
+      await vi.advanceTimersByTimeAsync(100)
+      expect(pipeline.send).toHaveBeenCalledTimes(1)
+      expect(pipeline.send.mock.calls[0]![0]!.text).toBe(longFragment)
+    }
+    finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('sends the exact artistry tool reference set that typed InteractiveArea sends use', async () => {
+    const pipeline = createVoicePipeline()
+    pipeline.deliver('parity')
+    await pipeline.buffer.flushNow()
+    const payload = pipeline.send.mock.calls[0]![0]!
+    expect(artistryToolReferences.length).toBeGreaterThan(0)
+    expect(payload.tools).toEqual(artistryToolReferences)
+    // A fresh snapshot, never the live container itself.
+    expect(payload.tools).not.toBe(artistryToolReferences)
+  })
+
+  it('retains the captured tool snapshot when the live container mutates after enqueue', async () => {
+    let release = () => {}
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const resolveRoute = vi.fn(async () => {
+      await gate
+      return undefined
+    })
+    const send = vi.fn().mockResolvedValue(undefined)
+    const seq = createVoiceSendSequence({
+      getActiveSessionId: () => 'S1',
+      getReasoning: () => true,
+      resolveRoute,
+      send,
+      reportFailure: vi.fn(),
+    })
+    const buffer = createTranscriptBuffer({
+      flushDelayMs: 1200,
+      maxBufferedTextLength: 90,
+      async flush(text) {
+        await seq.enqueue(text)
+      },
+    })
+
+    const baseline = artistryToolReferences.map(tool => ({ ...tool }))
+    buffer.push('snapshot')
+    const flushed = buffer.flushNow()
+    // Capture provably completed once Brain has been asked, because execute()
+    // runs after capture(); the gated Brain call keeps the send from running.
+    await vi.waitFor(() => expect(resolveRoute).toHaveBeenCalledTimes(1))
+    expect(send).not.toHaveBeenCalled()
+    const lateTool = { name: 'late_added_tool' }
+    ;(artistryToolReferences as unknown as unknown[]).push(lateTool)
+    try {
+      release()
+      await flushed
+      const payload = send.mock.calls[0]![0]!
+      expect(payload.tools).toEqual(baseline)
+      expect(payload.tools).not.toContainEqual(lateTool)
+    }
+    finally {
+      artistryToolReferences.pop()
+    }
+    expect(artistryToolReferences).toEqual(baseline)
+  })
+
+  it('derives Brain usesTools from the same tool snapshot the logical send receives', async () => {
+    const pipeline = createVoicePipeline()
+    pipeline.deliver('same snapshot')
+    await pipeline.buffer.flushNow()
+    const facts = pipeline.resolveRoute.mock.calls[0]![0]!.facts
+    const payload = pipeline.send.mock.calls[0]![0]!
+    expect(facts.usesTools).toBe(true)
+    expect(payload.tools.length).toBeGreaterThan(0)
+    expect(facts.usesTools).toBe(payload.tools.length > 0)
+  })
+
+  it('freezes the exact reasoning value into both Brain facts and the voice payload', async () => {
+    for (const reasoning of [true, false]) {
+      const pipeline = createVoicePipeline({ reasoning })
+      pipeline.deliver(`reasoning ${String(reasoning)}`)
+      await pipeline.buffer.flushNow()
+      const facts = pipeline.resolveRoute.mock.calls[0]![0]!.facts
+      const payload = pipeline.send.mock.calls[0]![0]!
+      expect(facts.reasoningRequested).toBe(reasoning)
+      expect(payload.reasoning).toBe(reasoning)
+      expect(facts.usesTools).toBe(true)
+      expect(facts.hasImageInput).toBe(false)
+    }
+  })
+
+  it('source guards: sentence-end buffers instead of sending, speech-end flushes', async () => {
+    const stripped = stripComments(readSource('index.vue'))
+    const sentenceIdx = stripped.indexOf('function handleStreamingSentenceEnd')
+    expect(sentenceIdx).toBeGreaterThan(-1)
+    const sentenceBody = stripped.slice(sentenceIdx, stripped.indexOf('\nfunction ', sentenceIdx + 1))
+    expect(sentenceBody).toMatch(/voiceTranscriptBuffer\.push\(finalText\)/)
+    expect(sentenceBody).not.toMatch(/sendVoiceInputTextToChat/)
+
+    const speechIdx = stripped.indexOf('function handleStreamingSpeechEnd')
+    expect(speechIdx).toBeGreaterThan(-1)
+    const speechBody = stripped.slice(speechIdx, stripped.indexOf('\nfunction ', speechIdx + 1))
+    expect(speechBody).toMatch(/postSpeakerCaption/)
+    expect(speechBody).toMatch(/voiceTranscriptBuffer\.flushNow\(\)/)
+    // The speech-end handler still must not mint, authorize or send by itself.
+    expect(speechBody).not.toMatch(/randomUUID/)
+    expect(speechBody).not.toMatch(/resolveLiaAuthoritativeSendRoute/)
+    expect(speechBody).not.toMatch(/chatStore\.send/)
+  })
+
+  it('source guards: both ASR modes converge on ONE shared transcript buffer', async () => {
+    const stripped = stripComments(readSource('index.vue'))
+    expect(stripped).toMatch(/const voiceTranscriptBuffer = createTranscriptBuffer\(\{/)
+    // Recorder-backed aggregation is preserved and no second buffer exists.
+    expect(stripped).toMatch(/voiceTranscriptBuffer\.push\(text\)/)
+    expect(stripped).toMatch(/voiceTranscriptBuffer\.push\(finalText\)/)
+    expect((stripped.match(/const voiceTranscriptBuffer = /g) ?? []).length).toBe(1)
   })
 })
