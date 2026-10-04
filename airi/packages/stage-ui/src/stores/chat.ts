@@ -32,6 +32,7 @@ import { CHAT_FALLBACK_MAX_ATTEMPTS, getChatFallbackResolver, notifyChatRequestS
 import { createMinecraftContext } from './chat/context-providers'
 import { liaCapabilityPromptSupplement } from './chat/context-providers/lia-capabilities'
 import { useChatContextStore } from './chat/context-store'
+import { cloneRetryAttachments, retryContentFromUserMessage } from './chat/retry-content'
 import { retrySourceIndexFrom } from './chat/retry-source'
 import { humanizeSendErrorMessage } from './chat/send-error'
 import { useChatSessionStore } from './chat/session-store'
@@ -144,6 +145,20 @@ export interface ChatRetryPayload {
   routeOverride?: ChatSendRouteOverride
   /** Phase 8.0D-10B-4D4C4-D2B6 corrective: stable identity for the RETRIABLE USER source — when supplied, retry resolves CURRENT user index by message.id (role must be user). */
   sourceMessageId?: string
+  /**
+   * Phase 8.0D-10B-4D4C4-D2B11: optional AUTHORITATIVE image attachment
+   * snapshot, captured by the caller before any awaited decision.
+   *
+   * Supplied means "retry with exactly these attachments" - the authoritative
+   * path captures them so the decision and the outgoing retry describe the
+   * same user turn. Absent means the generic path reconstructs attachments
+   * from the CURRENT source USER message, preserving legacy id-less callers.
+   *
+   * Either way the source USER is still resolved and validated against
+   * current history: a captured snapshot never authorizes retrying a source
+   * that no longer exists.
+   */
+  attachments?: NonNullable<ChatSendPayload['attachments']>
 }
 
 /** Identifies one stored tool call that must run again in the leader. */
@@ -159,32 +174,6 @@ function toProviderHistory(messages: ChatHistoryItem[]): Message[] {
 
 function isTextDelta(event: StreamEvent): event is Extract<StreamEvent, { type: 'text-delta' }> {
   return event.type === 'text-delta'
-}
-
-function retryTextFrom(message: ChatHistoryItem | undefined): string | null {
-  if (!message || message.role !== 'user')
-    return null
-
-  if (typeof message.content === 'string') {
-    const text = message.content.trim()
-    return text || null
-  }
-
-  if (!Array.isArray(message.content))
-    return null
-
-  const text = message.content.reduce<string[]>((texts, part) => {
-    if (part.type !== 'text')
-      return texts
-
-    const value = part.text?.trim()
-    if (value)
-      texts.push(value)
-
-    return texts
-  }, []).join('\n\n')
-
-  return text || null
 }
 
 export type { QueuedSendSnapshot } from '@proj-airi/core-agent'
@@ -755,9 +744,20 @@ export const useChatStore = defineStore('chat', () => {
     }
 
     const sourceMessage = currentMessages[sourceIndex]
-    const text = retryTextFrom(sourceMessage)
-    if (!text)
+    // Phase 8.0D-10B-4D4C4-D2B11: derive the FULL retry content of the resolved
+    // source USER - text and images - BEFORE truncating history, so the source
+    // is still present while it is read. An image-only turn is retryable with
+    // empty text, matching what a normal image-only send already allows.
+    const sourceContent = retryContentFromUserMessage(sourceMessage)
+    if (!sourceContent)
       throw new Error('Retry target has no retriable user message')
+
+    // Phase 8.0D-10B-4D4C4-D2B11: a supplied snapshot is authoritative and is
+    // copied, never retained by alias; otherwise the attachments come from the
+    // source USER just resolved.
+    const effectiveAttachments = payload.attachments === undefined
+      ? sourceContent.attachments
+      : cloneRetryAttachments(payload.attachments)
 
     chatSession.setSessionMessages(payload.sessionId, currentMessages.slice(0, sourceIndex))
 
@@ -767,7 +767,11 @@ export const useChatStore = defineStore('chat', () => {
     // Phase 8.0D-10B-4D4C4-D2B6: retry is a NEW logical send — correlationId, reasoning and routeOverride are forwarded only when supplied, preserving absence semantics for legacy callers.
     return executeSettledSend({
       sessionId: payload.sessionId,
-      text,
+      text: sourceContent.text,
+      // Phase 8.0D-10B-4D4C4-D2B11: the retry re-enters the SAME generic send
+      // path a normal send uses, so every fallback attempt reuses this one
+      // payload - and therefore these attachments - unchanged.
+      attachments: effectiveAttachments,
       tools: payload.tools ?? sourceMessage?.tools,
       ...(payload.correlationId === undefined ? {} : { correlationId: payload.correlationId }),
       ...(payload.reasoning === undefined ? {} : { reasoning: payload.reasoning }),

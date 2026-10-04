@@ -216,3 +216,153 @@ describe('lia authoritative retry (Phase 8.0D-10B-4D4C4-D2B6 corrective)', () =>
     expect(JSON.stringify(input)).toBe(snapshot)
   })
 })
+
+describe('lia authoritative retry image fidelity (Phase 8.0D-10B-4D4C4-D2B11)', () => {
+  const IMAGES = [
+    { type: 'image' as const, data: 'QUJD', mimeType: 'image/png' },
+    { type: 'image' as const, data: 'REVG', mimeType: 'image/jpeg' },
+  ]
+
+  function factsOf(): Record<string, unknown> {
+    const [req] = mocks.requestDecision.mock.calls[0] as [{ facts: Record<string, unknown> }]
+    return req.facts
+  }
+
+  let currentRetry: ReturnType<typeof vi.fn>
+
+  async function run(input: Record<string, unknown>, overrides: Record<string, unknown> = {}) {
+    currentRetry = vi.fn().mockResolvedValue({})
+    await executeLiaAuthoritativeRetry(
+      { sessionId: 's1', index: 1, sourceMessageId: 'u1', reasoning: false, tools: [], ...input } as never,
+      { retry: currentRetry, mintCorrelationId: () => MINTED, ...overrides } as never,
+    )
+    return currentRetry
+  }
+
+  it('case A: a text-only retry reports hasImageInput=false', async () => {
+    await run({})
+    expect(factsOf().hasImageInput).toBe(false)
+  })
+
+  it('case A2: an explicitly empty attachment snapshot reports hasImageInput=false', async () => {
+    await run({ attachments: [] })
+    expect(factsOf().hasImageInput).toBe(false)
+  })
+
+  it('case B: text + one image reports hasImageInput=true', async () => {
+    await run({ attachments: [IMAGES[0]] })
+    expect(factsOf().hasImageInput).toBe(true)
+  })
+
+  it('case C: an image-only retry reports hasImageInput=true', async () => {
+    await run({ attachments: [IMAGES[0]] })
+    expect(factsOf()).toEqual({ hasImageInput: true, reasoningRequested: false, usesTools: false })
+  })
+
+  it('case D: multiple images report hasImageInput=true', async () => {
+    await run({ attachments: IMAGES })
+    expect(factsOf().hasImageInput).toBe(true)
+  })
+
+  it('e + F + G + H: the exact snapshot - values, order, data and MIME - reaches the retry', async () => {
+    const retry = await run({ attachments: IMAGES })
+    expect(retry.mock.calls[0]![0]).toMatchObject({
+      attachments: [
+        { type: 'image', data: 'QUJD', mimeType: 'image/png' },
+        { type: 'image', data: 'REVG', mimeType: 'image/jpeg' },
+      ],
+    })
+  })
+
+  it('case E2: a repeated image is forwarded twice, in order', async () => {
+    const repeated = [IMAGES[0], IMAGES[0], IMAGES[1]]
+    const retry = await run({ attachments: repeated })
+    const forwarded = (retry.mock.calls[0]![0] as { attachments: typeof IMAGES }).attachments
+    expect(forwarded.map(attachment => attachment.data)).toEqual(['QUJD', 'QUJD', 'REVG'])
+  })
+
+  it('case I: the caller mutating the attachment ARRAY while the Brain decision is pending cannot change the retry', async () => {
+    const caller = [{ ...IMAGES[0]! }]
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const resolveRoute = vi.fn(async () => {
+      await gate
+      return undefined
+    })
+    currentRetry = vi.fn().mockResolvedValue({})
+    const pending = executeLiaAuthoritativeRetry(
+      { sessionId: 's1', index: 1, sourceMessageId: 'u1', reasoning: false, tools: [], attachments: caller } as never,
+      { retry: currentRetry, resolveRoute, mintCorrelationId: () => MINTED } as never,
+    )
+    // Brain decision is now in flight: mutate the caller's own array.
+    caller.push({ type: 'image', data: 'SU5KRUNURUQ', mimeType: 'image/png' })
+    caller.length = 0
+    release()
+    await pending
+    expect((currentRetry.mock.calls[0]![0] as { attachments: typeof IMAGES }).attachments)
+      .toEqual([{ type: 'image', data: 'QUJD', mimeType: 'image/png' }])
+  })
+
+  it('case J: the caller replacing or editing an attachment OBJECT while the Brain decision is pending cannot change the retry', async () => {
+    const caller = [{ ...IMAGES[0]! }, { ...IMAGES[1]! }]
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const resolveRoute = vi.fn(async () => {
+      await gate
+      return undefined
+    })
+    currentRetry = vi.fn().mockResolvedValue({})
+    const pending = executeLiaAuthoritativeRetry(
+      { sessionId: 's1', index: 1, sourceMessageId: 'u1', reasoning: false, tools: [], attachments: caller } as never,
+      { retry: currentRetry, resolveRoute, mintCorrelationId: () => MINTED } as never,
+    )
+    caller[0]!.data = 'T1ZFUldSSVRURU4'
+    caller[0]!.mimeType = 'image/gif'
+    caller[1] = { type: 'image', data: 'UkVQTEFDRUQ', mimeType: 'image/bmp' }
+    release()
+    await pending
+    expect((currentRetry.mock.calls[0]![0] as { attachments: typeof IMAGES }).attachments).toEqual(IMAGES)
+  })
+
+  it('case S: the Brain request carries no image data, MIME, data URL or user text', async () => {
+    await run({ attachments: IMAGES })
+    const [request] = mocks.requestDecision.mock.calls[0] as [Record<string, unknown>]
+    const serialized = JSON.stringify(request)
+    for (const leaked of ['QUJD', 'REVG', 'image/png', 'image/jpeg', 'base64', 'data:', 'mimeType', 'attachments'])
+      expect(serialized).not.toContain(leaked)
+    // The only image-related fact that crosses the boundary.
+    expect(factsOf()).toEqual({ hasImageInput: true, reasoningRequested: false, usesTools: false })
+  })
+
+  it('case M2: the same minted correlationId reaches both the Brain request and the image-bearing retry', async () => {
+    const retry = await run({ attachments: IMAGES })
+    const [request] = mocks.requestDecision.mock.calls[0] as [{ correlationId: string }]
+    expect(request.correlationId).toBe(MINTED)
+    expect((retry.mock.calls[0]![0] as { correlationId: string }).correlationId).toBe(MINTED)
+  })
+
+  it('case O2: a selected route is still forwarded unchanged alongside the image snapshot', async () => {
+    const retry = await run({ attachments: IMAGES })
+    expect(retry.mock.calls[0]![0]).toHaveProperty('routeOverride')
+    expect((retry.mock.calls[0]![0] as { attachments: unknown[] }).attachments).toEqual(IMAGES)
+  })
+
+  it('case P2: a non-routable decision still retries with the image snapshot and no routeOverride', async () => {
+    mocks.requestDecision.mockResolvedValue({ status: 'modeUnspecified' })
+    const retry = await run({ attachments: IMAGES })
+    expect(retry.mock.calls[0]![0]).not.toHaveProperty('routeOverride')
+    expect((retry.mock.calls[0]![0] as { attachments: unknown[] }).attachments).toEqual(IMAGES)
+  })
+
+  it('case Q2: a Brain failure still degrades to a retry that keeps the image snapshot', async () => {
+    mocks.requestDecision.mockRejectedValue(new Error('brain unavailable'))
+    const retry = await run({ attachments: IMAGES })
+    expect(retry).toHaveBeenCalledTimes(1)
+    expect(retry.mock.calls[0]![0]).not.toHaveProperty('routeOverride')
+    expect((retry.mock.calls[0]![0] as { attachments: unknown[] }).attachments).toEqual(IMAGES)
+  })
+})

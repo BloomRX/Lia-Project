@@ -1,5 +1,8 @@
 import type { ChatRetryPayload } from '@proj-airi/stage-ui/stores/chat'
+import type { RetryImageAttachment } from '@proj-airi/stage-ui/stores/chat/retry-content'
 import type { ChatToolReference } from '@proj-airi/stage-ui/types/chat'
+
+import { cloneRetryAttachments } from '@proj-airi/stage-ui/stores/chat/retry-content'
 
 import { chatTurnFactsFromSend } from './brain-shadow'
 import { resolveLiaAuthoritativeSendRoute } from './lia-authoritative-route-resolver'
@@ -8,11 +11,11 @@ import { resolveLiaAuthoritativeSendRoute } from './lia-authoritative-route-reso
  * Phase 8.0D-10B-4D4C4-D2B6 corrective: Lia-specific awaited authoritative retry sequence.
  *
  * Thin, testable owner of the stable-ID authoritative path. It owns:
- *   correlation mint → facts construction → awaited canonical resolver → retry callback
+ *   correlation mint -> facts construction -> awaited canonical resolver -> retry callback
  *
  * No second Brain invoke implementation, no duplicated resolver logic, no state,
  * no provider mutation, no cache. Facts are derived from the ACTUAL retry payload
- * (attachments=[], reasoning/tools frozen at capture).
+ * (attachments, reasoning and tools all frozen at capture).
  *
  * Dependency injection for retry/resolver/mint keeps it mount-free for tests.
  */
@@ -23,6 +26,18 @@ export interface LiaAuthoritativeRetryInput {
   sourceMessageId: string
   reasoning: boolean
   tools: ChatToolReference[]
+  /**
+   * Phase 8.0D-10B-4D4C4-D2B11: image attachments of the source USER turn,
+   * captured SYNCHRONOUSLY by the caller before this sequence awaits anything.
+   *
+   * One snapshot serves two linked purposes: it reduces to the Brain's
+   * `hasImageInput` fact, and it is the attachment list the retry actually
+   * carries. The decision and the outgoing turn therefore describe the same
+   * captured user turn. Absent means the source turn carried no images.
+   *
+   * Image content never crosses the Brain boundary - only the boolean does.
+   */
+  attachments?: readonly RetryImageAttachment[]
 }
 
 export interface LiaAuthoritativeRetryDeps {
@@ -38,11 +53,15 @@ export async function executeLiaAuthoritativeRetry(
   const mint = deps.mintCorrelationId ?? (() => crypto.randomUUID())
   const correlationId = mint()
 
-  // Freeze tools snapshot before any await
+  // Freeze BOTH snapshots before any await, each independently owned from the
+  // caller. A caller that mutates its own array, replaces an attachment object
+  // or edits a field while the Brain decision is in flight cannot reach either
+  // the facts already sent or the retry that follows.
   const toolsSnapshot = [...input.tools]
+  const attachmentsSnapshot = cloneRetryAttachments(input.attachments ?? [])
 
   const facts = chatTurnFactsFromSend({
-    attachments: [] as const,
+    attachments: attachmentsSnapshot,
     reasoning: input.reasoning,
     tools: toolsSnapshot,
   })
@@ -60,6 +79,9 @@ export async function executeLiaAuthoritativeRetry(
     correlationId,
     reasoning: input.reasoning,
     tools: toolsSnapshot,
+    // Phase 8.0D-10B-4D4C4-D2B11: the SAME frozen snapshot the facts were
+    // derived from, so hasImageInput describes this exact outgoing payload.
+    attachments: attachmentsSnapshot,
     ...(routeOverride === undefined ? {} : { routeOverride }),
   })
 }

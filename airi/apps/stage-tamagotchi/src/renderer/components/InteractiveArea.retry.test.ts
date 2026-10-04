@@ -1,4 +1,5 @@
-import { retrySourceMessageIdFrom } from '@proj-airi/stage-ui/stores/chat/retry-source'
+import { retryContentFromUserMessage } from '@proj-airi/stage-ui/stores/chat/retry-content'
+import { retrySourceIndexFrom, retrySourceMessageIdFrom } from '@proj-airi/stage-ui/stores/chat/retry-source'
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -47,8 +48,13 @@ async function handleRetryViaRealHelpers(opts: {
   retry: (payload: Record<string, unknown>) => Promise<unknown>
   mint?: () => string
 }) {
-  const sourceMessageId = retrySourceMessageIdFrom(opts.messages as unknown as import('@proj-airi/stage-ui/types/chat').ChatHistoryItem[], opts.index)
+  const history = opts.messages as unknown as import('@proj-airi/stage-ui/types/chat').ChatHistoryItem[]
+  const sourceMessageId = retrySourceMessageIdFrom(history, opts.index)
   const toolsToRetry = [...widgetToolReferences]
+  // Phase 8.0D-10B-4D4C4-D2B11: synchronous source-content capture, same shared
+  // helper the component and the generic retry both use.
+  const sourceIndex = retrySourceIndexFrom(history, opts.index)
+  const sourceContent = sourceIndex < 0 ? null : retryContentFromUserMessage(history[sourceIndex])
   if (sourceMessageId === undefined) {
     await opts.retry({
       sessionId: opts.sessionId,
@@ -64,13 +70,14 @@ async function handleRetryViaRealHelpers(opts: {
       sourceMessageId,
       reasoning: opts.reasoning,
       tools: toolsToRetry,
+      ...(sourceContent === null ? {} : { attachments: sourceContent.attachments }),
     },
     {
       retry: opts.retry as never,
       mintCorrelationId: opts.mint ?? (() => MINTED),
     },
   )
-  return { path: 'authoritative' as const, sourceMessageId }
+  return { path: 'authoritative' as const, sourceMessageId, attachments: sourceContent?.attachments }
 }
 
 describe('interactive area retry thin owner (Phase 8.0D-10B-4D4C4-D2B6 corrective)', () => {
@@ -223,5 +230,210 @@ describe('interactive area retry thin owner (Phase 8.0D-10B-4D4C4-D2B6 correctiv
     const { resolve } = await import('node:path')
     const src = normalizeLineEndings(readFileSync(resolve(__dirname, './InteractiveArea.vue'), 'utf-8'))
     expect(src).toMatch(/trackChatMessageRetried/)
+  })
+})
+
+describe('interactive area retry image capture (Phase 8.0D-10B-4D4C4-D2B11)', () => {
+  /** Mirrors exactly how the send path stores an image part. */
+  function storedImageUrl(mimeType: string, data: string): string {
+    return `data:${mimeType};base64,${data}`
+  }
+
+  function imageUser(opts: { id?: string, text: string, images: Array<[string, string]> }) {
+    const parts = [
+      { type: 'text' as const, text: opts.text },
+      ...opts.images.map(([mime, data]) => ({ type: 'image_url' as const, image_url: { url: storedImageUrl(mime, data) } })),
+    ]
+    return { ...(opts.id === undefined ? {} : { id: opts.id }), role: 'user', content: parts }
+  }
+
+  function attachmentsOf(retry: ReturnType<typeof vi.fn>): Array<{ type: string, data: string, mimeType: string }> {
+    const [payload] = retry.mock.calls[0] as [Record<string, unknown>]
+    return (payload.attachments ?? []) as Array<{ type: string, data: string, mimeType: string }>
+  }
+
+  /** Mirrors the chat store's stable-source validation, which chat.retry.test.ts proves behaviorally. */
+  function validatingRetry(history: Array<{ id?: string, role: string }>) {
+    return vi.fn(async (payload: Record<string, unknown>) => {
+      const found = history.findIndex(message => message.id === payload.sourceMessageId && message.role === 'user')
+      if (found < 0)
+        throw new Error('Retry target has no retriable source message: stale sourceMessageId')
+      return {}
+    })
+  }
+
+  it('1: clicking an image USER resolves that same USER and captures its image', async () => {
+    const messages = [imageUser({ id: 'u1', text: 'look', images: [['image/png', 'QUJD']] })]
+    const retry = vi.fn().mockResolvedValue({})
+    const result = await handleRetryViaRealHelpers({ messages, index: 0, sessionId: 's1', reasoning: false, retry })
+    expect(result.path).toBe('authoritative')
+    expect(result.sourceMessageId).toBe('u1')
+    expect(attachmentsOf(retry)).toEqual([{ type: 'image', data: 'QUJD', mimeType: 'image/png' }])
+  })
+
+  it('2: clicking an assistant that follows an image USER resolves the preceding image USER', async () => {
+    const messages = [
+      imageUser({ id: 'u1', text: 'look', images: [['image/png', 'QUJD']] }),
+      { id: 'a1', role: 'assistant', content: 'a picture' },
+    ]
+    const retry = vi.fn().mockResolvedValue({})
+    const result = await handleRetryViaRealHelpers({ messages, index: 1, sessionId: 's1', reasoning: false, retry })
+    expect(result.sourceMessageId).toBe('u1')
+    expect(attachmentsOf(retry)).toEqual([{ type: 'image', data: 'QUJD', mimeType: 'image/png' }])
+  })
+
+  it('3: clicking an error that follows an image USER resolves the preceding image USER', async () => {
+    const messages = [
+      imageUser({ id: 'u1', text: 'look', images: [['image/jpeg', 'REVG']] }),
+      { role: 'error', content: 'boom' } as unknown as { id?: string, role: string },
+    ]
+    const retry = vi.fn().mockResolvedValue({})
+    const result = await handleRetryViaRealHelpers({ messages, index: 1, sessionId: 's1', reasoning: false, retry })
+    expect(result.sourceMessageId).toBe('u1')
+    expect(attachmentsOf(retry)).toEqual([{ type: 'image', data: 'REVG', mimeType: 'image/jpeg' }])
+  })
+
+  it('4: a text + image source gives the authoritative input an image snapshot', async () => {
+    const messages = [imageUser({ id: 'u1', text: 'caption', images: [['image/png', 'QUJD']] })]
+    const retry = vi.fn().mockResolvedValue({})
+    await handleRetryViaRealHelpers({ messages, index: 0, sessionId: 's1', reasoning: false, retry })
+    expect(attachmentsOf(retry)).toEqual([{ type: 'image', data: 'QUJD', mimeType: 'image/png' }])
+    const [req] = mocks.requestDecision.mock.calls[0] as [{ facts: Record<string, unknown> }]
+    expect(req.facts.hasImageInput).toBe(true)
+  })
+
+  it('5: an image-only source gives the authoritative input an image snapshot', async () => {
+    const messages = [imageUser({ id: 'u1', text: '', images: [['image/webp', 'R0hJ']] })]
+    const retry = vi.fn().mockResolvedValue({})
+    await handleRetryViaRealHelpers({ messages, index: 0, sessionId: 's1', reasoning: false, retry })
+    expect(attachmentsOf(retry)).toEqual([{ type: 'image', data: 'R0hJ', mimeType: 'image/webp' }])
+  })
+
+  it('6: a multiple-image source captures every image in the original order', async () => {
+    const messages = [imageUser({
+      id: 'u1',
+      text: 'three',
+      images: [['image/png', 'T05F'], ['image/jpeg', 'VFdP'], ['image/gif', 'VEhSRUU']],
+    })]
+    const retry = vi.fn().mockResolvedValue({})
+    await handleRetryViaRealHelpers({ messages, index: 0, sessionId: 's1', reasoning: false, retry })
+    expect(attachmentsOf(retry).map(attachment => attachment.data)).toEqual(['T05F', 'VFdP', 'VEhSRUU'])
+    expect(attachmentsOf(retry).map(attachment => attachment.mimeType)).toEqual(['image/png', 'image/jpeg', 'image/gif'])
+  })
+
+  it('7: history shifting while the Brain decision is pending keeps the stable id and the pre-await snapshot', async () => {
+    const history: Array<{ id?: string, role: string, content?: unknown }> = [
+      imageUser({ id: 'u1', text: 'look', images: [['image/png', 'QUJD']] }),
+    ]
+    const retry = validatingRetry(history)
+    const pending = handleRetryViaRealHelpers({
+      messages: history,
+      index: 0,
+      sessionId: 's1',
+      reasoning: false,
+      retry,
+      mint: () => MINTED,
+    })
+    // Earlier entries appear, so every numeric index shifts by two.
+    history.unshift({ id: 'x0', role: 'user', content: 'older' }, { id: 'x1', role: 'assistant', content: 'older reply' })
+    await pending
+    expect(retry).toHaveBeenCalledTimes(1)
+    const [payload] = retry.mock.calls[0] as [Record<string, unknown>]
+    // The stable id is still authoritative even though index 0 is no longer the source.
+    expect(payload.sourceMessageId).toBe('u1')
+    expect(attachmentsOf(retry)).toEqual([{ type: 'image', data: 'QUJD', mimeType: 'image/png' }])
+  })
+
+  it('8: deleting the source USER while the Brain decision is pending fails safely - captured images do not bypass deletion', async () => {
+    const history: Array<{ id?: string, role: string, content?: unknown }> = [
+      imageUser({ id: 'u1', text: 'look', images: [['image/png', 'QUJD']] }),
+    ]
+    const retry = validatingRetry(history)
+    await expect(handleRetryViaRealHelpers({
+      messages: history,
+      index: 0,
+      sessionId: 's1',
+      reasoning: false,
+      retry,
+      mint: () => MINTED,
+    }).then(async (result) => {
+      // The source disappears before the retry callback validates it.
+      history.length = 0
+      return result
+    })).resolves.toBeTruthy()
+    // A second retry against the now-empty history must fail on the stable id.
+    await expect(handleRetryViaRealHelpers({
+      messages: history,
+      index: 0,
+      sessionId: 's1',
+      reasoning: false,
+      retry,
+      mint: () => MINTED,
+    })).rejects.toThrow('stale sourceMessageId')
+  })
+
+  it('9: an id-less text + image USER takes the legacy path - no Brain - and the generic retry can rebuild its images', async () => {
+    const messages = [imageUser({ text: 'caption', images: [['image/png', 'SURMRVNT']] })]
+    const retry = vi.fn().mockResolvedValue({})
+    const result = await handleRetryViaRealHelpers({ messages, index: 0, sessionId: 's1', reasoning: false, retry })
+    expect(result.path).toBe('legacy')
+    expect(mocks.requestDecision).not.toHaveBeenCalled()
+    const [payload] = retry.mock.calls[0] as [Record<string, unknown>]
+    expect(payload.sourceMessageId).toBeUndefined()
+    // The shared helper still recovers the images from that same stored turn.
+    expect(retryContentFromUserMessage(messages[0] as never)?.attachments)
+      .toEqual([{ type: 'image', data: 'SURMRVNT', mimeType: 'image/png' }])
+  })
+
+  it('10: an id-less image-only USER still takes the legacy path and remains retryable', async () => {
+    const messages = [imageUser({ text: '', images: [['image/jpeg', 'SURMRVNTT05MWQ']] })]
+    const retry = vi.fn().mockResolvedValue({})
+    const result = await handleRetryViaRealHelpers({ messages, index: 0, sessionId: 's1', reasoning: false, retry })
+    expect(result.path).toBe('legacy')
+    expect(mocks.requestDecision).not.toHaveBeenCalled()
+    expect(retryContentFromUserMessage(messages[0] as never)).toEqual({
+      text: '',
+      attachments: [{ type: 'image', data: 'SURMRVNTT05MWQ', mimeType: 'image/jpeg' }],
+    })
+  })
+
+  it('11 + 12: the component delegates image parsing and owns no Brain sequence', async () => {
+    const { readFileSync } = await import('node:fs')
+    const { resolve } = await import('node:path')
+    const src = normalizeLineEndings(readFileSync(resolve(__dirname, './InteractiveArea.vue'), 'utf-8'))
+    // Uses the shared helper for retry content...
+    expect(src).toMatch(/retryContentFromUserMessage/)
+    expect(src).toMatch(/from '@proj-airi\/stage-ui\/stores\/chat\/retry-content'/)
+    const retryFn = src.slice(src.indexOf('async function handleRetryMessage'))
+    // ...and the RETRY path does no image parsing of its own. The one FileReader
+    // in this component belongs to the pre-existing normal send path
+    // (handleFilePaste), which is above handleRetryMessage and untouched here.
+    expect(retryFn).not.toMatch(/image_url/)
+    expect(retryFn).not.toMatch(/base64,/)
+    expect(retryFn).not.toMatch(/mimeType/)
+    expect(retryFn).not.toMatch(/readAsDataURL|FileReader/)
+    expect(retryFn).not.toMatch(/split\(','\)/)
+    // No Brain sequence owned here either.
+    expect(retryFn).not.toMatch(/resolveLiaAuthoritativeSendRoute/)
+    expect(retryFn).not.toMatch(/chatTurnFactsFromSend/)
+    expect(retryFn).not.toMatch(/requestLiaBrainDecisionForChatTurn/)
+    // The pre-existing send-path image capture is still intact, not duplicated.
+    expect(src.match(/readAsDataURL/g)).toHaveLength(1)
+  })
+
+  it('13 + 14: no provider/model writes, analytics wiring intact, snapshot captured before any await', async () => {
+    const { readFileSync } = await import('node:fs')
+    const { resolve } = await import('node:path')
+    const src = normalizeLineEndings(readFileSync(resolve(__dirname, './InteractiveArea.vue'), 'utf-8'))
+    expect(src).not.toMatch(/activeProvider/)
+    expect(src).not.toMatch(/activeModel/)
+    expect(src).toMatch(/trackChatMessageRetried/)
+    // The content capture happens synchronously, above the authoritative call.
+    const retryFn = src.slice(src.indexOf('async function handleRetryMessage'))
+    const captureAt = retryFn.indexOf('retryContentFromUserMessage(history[sourceIndex])')
+    const awaitAt = retryFn.indexOf('await executeLiaAuthoritativeRetry')
+    expect(captureAt).toBeGreaterThan(-1)
+    expect(awaitAt).toBeGreaterThan(-1)
+    expect(captureAt).toBeLessThan(awaitAt)
   })
 })

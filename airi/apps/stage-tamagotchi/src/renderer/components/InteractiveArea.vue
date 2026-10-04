@@ -8,7 +8,8 @@ import { ChatHistory, JournalPreviewModal } from '@proj-airi/stage-ui/components
 import { useAnalytics } from '@proj-airi/stage-ui/composables/use-analytics'
 import { useBackgroundStore } from '@proj-airi/stage-ui/stores/background'
 import { useChatStore } from '@proj-airi/stage-ui/stores/chat'
-import { retrySourceMessageIdFrom } from '@proj-airi/stage-ui/stores/chat/retry-source'
+import { retryContentFromUserMessage } from '@proj-airi/stage-ui/stores/chat/retry-content'
+import { retrySourceIndexFrom, retrySourceMessageIdFrom } from '@proj-airi/stage-ui/stores/chat/retry-source'
 import { useChatSessionStore } from '@proj-airi/stage-ui/stores/chat/session-store'
 import { useChatStreamStore } from '@proj-airi/stage-ui/stores/chat/stream-store'
 import { useJournalPreviewStore } from '@proj-airi/stage-ui/stores/journal-preview'
@@ -277,7 +278,14 @@ async function handleRetryMessage(index: number) {
   const reasoningToRetry = consciousnessSettings.reasoning
   const toolsToRetry = [...widgetToolReferences]
   // Synchronous stable source capture before any await
-  const sourceMessageId = retrySourceMessageIdFrom(messages.value as unknown as ChatHistoryItem[], index)
+  const history = messages.value as unknown as ChatHistoryItem[]
+  const sourceMessageId = retrySourceMessageIdFrom(history, index)
+  // Phase 8.0D-10B-4D4C4-D2B11: capture the source turn's image attachments
+  // with the SAME shared helper the generic retry uses — no image parsing here.
+  // Captured synchronously so the awaited Brain decision and the retry that
+  // follows describe one and the same user turn.
+  const sourceIndex = retrySourceIndexFrom(history, index)
+  const sourceContent = sourceIndex < 0 ? null : retryContentFromUserMessage(history[sourceIndex])
 
   if (sourceMessageId === undefined) {
     // id-less legacy: preserve legacy non-authoritative path, no Brain await
@@ -297,6 +305,7 @@ async function handleRetryMessage(index: number) {
       sourceMessageId,
       reasoning: reasoningToRetry,
       tools: toolsToRetry,
+      ...(sourceContent === null ? {} : { attachments: sourceContent.attachments }),
     },
     {
       retry: payload => chatStore.retry(payload),
