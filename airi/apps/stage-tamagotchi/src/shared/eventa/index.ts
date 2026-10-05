@@ -613,6 +613,29 @@ export interface LiaVoiceConfig {
 }
 
 /**
+ * Phase 8.0D-10B-4D4C4-SHELL-B1: the canonical speech-to-text selection, as the
+ * Lia Launcher resolved it. Reference metadata only - a provider id plus an
+ * optional model id. Never a credential, never a base URL: those are derived at
+ * runtime in the renderer and resolved from the main-process vault.
+ */
+export interface LiaHearingSttTarget {
+  providerId: string
+  modelId?: string
+}
+
+/**
+ * The READ-ONLY managed Hearing facts.
+ *
+ * `enabled` is a tri-state: absent means enabled (the product default), and only
+ * an explicit `false` opts out of voice - so the renderer must never read
+ * absence as "off".
+ */
+export interface LiaHearingConfig {
+  enabled?: boolean
+  preferred?: LiaHearingSttTarget
+}
+
+/**
  * The canonical definitions of these voice-profile shapes moved to Lia Core
  * (`@lia/core/voices/types`) when the Lia product became independent of its
  * stage host. They are re-exported here so the AIRI-side IPC contract keeps
@@ -628,6 +651,17 @@ export type LiaVoiceProfileSource = LiaCoreVoiceProfileSource
 
 export const electronLiaVoiceConfigGet = defineInvokeEventa<LiaVoiceConfig>('eventa:invoke:lia:voice:config:get')
 export const electronLiaVoiceConfigSet = defineInvokeEventa<void, LiaVoiceConfig>('eventa:invoke:lia:voice:config:set')
+
+/**
+ * Phase 8.0D-10B-4D4C4-SHELL-B1: read-only access to the managed Hearing facts,
+ * so the Stage can project the Launcher's speech-to-text decision into the
+ * existing AIRI Hearing runtime and the user never opens AIRI Settings.
+ *
+ * Deliberately there is NO `electronLiaHearingConfigSet`: the Lia Launcher and
+ * Lia Core are the only authorities for canonical product configuration, and a
+ * renderer setter would make AIRI a second writer of speech-to-text state.
+ */
+export const electronLiaHearingConfigGet = defineInvokeEventa<LiaHearingConfig>('eventa:invoke:lia:hearing:config:get')
 
 /**
  * Custom voice library. These manage the profiles themselves; selecting one for

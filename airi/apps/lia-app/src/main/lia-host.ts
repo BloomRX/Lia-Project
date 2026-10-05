@@ -1,6 +1,6 @@
 import type { LiaBridgeConfig } from '@lia/core/bridge/lia-config'
 import type { LiaProductPaths } from '@lia/core/paths/product-paths'
-import type { LiaProductConfigSnapshot, LiaProductConfigUpdate } from '@lia/core/product/config'
+import type { LiaProductConfigSnapshot, LiaProductConfigUpdate, LiaProductSttTarget } from '@lia/core/product/config'
 import type { LiaSecretCipher, LiaSecretVault } from '@lia/core/secrets/vault'
 import type { LiaCustomVoiceProfile, LiaVoiceProfileImportRequest } from '@lia/core/voices/types'
 
@@ -38,6 +38,39 @@ import { ShutdownCoordinator } from './shutdown-coordinator'
  * no stage UI - "Conversar com Lia" delegates the entire companion
  * experience to the stage child.
  */
+
+/**
+ * The chat provider whose vault credential the derived Lia transcription target
+ * reuses.
+ */
+const GROQ_CHAT_PROVIDER_ID = 'groq'
+
+/**
+ * Phase 8.0D-10B-4D4C4-SHELL-B1: the derived Lia-managed speech-to-text target
+ * the Launcher writes when it is eligible to.
+ *
+ * `LIA_GROQ_TRANSCRIPTION_PROVIDER_ID` is a DERIVED runtime provider id, not a
+ * new protocol and not a credential holder: the managed Stage projects it onto
+ * the existing OpenAI-compatible transcription adapter and resolves its
+ * credential from the user's EXISTING Groq vault entry - one secret, one scope,
+ * zero duplication. The spelling is a product policy decision, so it lives with
+ * the Launcher rather than in the vendor-neutral generic config layer.
+ */
+const LIA_GROQ_TRANSCRIPTION_PROVIDER_ID = 'lia-groq-transcription'
+
+/**
+ * Groq Whisper is multilingual and auto-detects the spoken language, so no
+ * language hint is stored anywhere in the canonical document.
+ */
+const LIA_GROQ_TRANSCRIPTION_MODEL_ID = 'whisper-large-v3-turbo'
+
+/** The canonical default STT target, metadata only - never a credential. */
+function liaGroqTranscriptionTarget(): LiaProductSttTarget {
+  return {
+    modelId: LIA_GROQ_TRANSCRIPTION_MODEL_ID,
+    providerId: LIA_GROQ_TRANSCRIPTION_PROVIDER_ID,
+  }
+}
 
 export interface LiaHomeStatus {
   /** Chat provider onboarding: has a preferred target AND its key present. */
@@ -283,6 +316,62 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
    * Every refusal is a human pt-BR message plus a machine-readable event
    * (safe metadata only). A non-custom provider starts NOTHING.
    */
+  /**
+   * Phase 8.0D-10B-4D4C4-SHELL-B1: materialize the canonical speech-to-text
+   * selection BEFORE the Stage child launches, so the managed Stage reads an
+   * already-resolved hearing target and the user never opens AIRI Settings.
+   *
+   * The gate is deliberately narrow. All four must hold:
+   *   1. voice is not explicitly opted out (`voice.enabled !== false`);
+   *   2. no STT selection exists yet - an explicit one is authoritative;
+   *   3. the selected chat provider is the one with a proven transcription
+   *      target that can REUSE an already-stored credential;
+   *   4. that credential actually exists in the vault.
+   *
+   * Otherwise the Launcher refuses to guess. In particular it never selects
+   * Web Speech - the Windows runtime evidence showed it starting, reporting
+   * `network`, then restarting indefinitely without producing a transcript, so
+   * being keyless is not the same as being reliable.
+   *
+   * Returns whether a usable canonical STT target exists afterwards.
+   */
+  async function ensureSttReadyForConversar(snapshot: LiaProductConfigSnapshot | undefined): Promise<'configured' | 'not-configured'> {
+    // An explicit voice opt-out is respected absolutely: text-only mode never
+    // grows a microphone preference behind the user's back.
+    if (snapshot?.voice?.enabled === false)
+      return 'not-configured'
+
+    // An existing selection is authoritative and preserved exactly. The launcher
+    // never overrides a deliberate user or operator choice.
+    if (snapshot?.voice?.stt?.preferred)
+      return 'configured'
+
+    const preferredAi = snapshot?.provider?.chat?.preferred
+    // Only the Groq chat path has a proven transcription target today, because
+    // only it can reuse an already-stored credential without duplicating it.
+    if (preferredAi?.providerId !== GROQ_CHAT_PROVIDER_ID)
+      return 'not-configured'
+
+    // Without the existing Groq secret there is nothing to reuse, and writing a
+    // target anyway would advertise a false-ready capability.
+    if (!vault.hasSecret(preferredAi.providerId, 'apiKey'))
+      return 'not-configured'
+
+    const written = await updateLiaProductConfig(paths.productConfigFile, {
+      voice: { stt: { preferred: liaGroqTranscriptionTarget() } },
+    })
+    if (written.status !== 'ok') {
+      // Degraded, never corrupting: the document is left exactly as it was, no
+      // secret is touched, and text conversation still proceeds. STT is simply
+      // reported as unconfigured for a later Launcher surface to own.
+      emit('lia-app.conversar-stt-not-ready', `reason=config-write-failed status=${written.status}`)
+      return 'not-configured'
+    }
+
+    emit('lia-app.conversar-stt-defaulted', `target=${LIA_GROQ_TRANSCRIPTION_PROVIDER_ID}`)
+    return 'configured'
+  }
+
   async function ensureVoiceReadyForConversar(snapshot: LiaProductConfigSnapshot | undefined): Promise<void> {
     const preferredVoice = snapshot?.voice?.tts?.preferred
     if (preferredVoice?.providerId !== 'custom-local-voice')
@@ -567,6 +656,10 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
         throw new Error('Lia is not fully configured yet. Finish the AI setup first.')
       }
       await ensureVoiceReadyForConversar(snapshot)
+      // Phase 8.0D-10B-4D4C4-SHELL-B1: the canonical STT default is materialized
+      // BEFORE the child launches, so the managed Stage reads an already-resolved
+      // hearing target. A degraded STT never blocks text conversation.
+      await ensureSttReadyForConversar(snapshot)
       return await stage.start({ env: await hostStageEnv() })
     },
     homeStatus,

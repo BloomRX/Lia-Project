@@ -64,6 +64,7 @@ import { electronPluginToolsChanged } from '../shared/eventa/plugin/tools'
 import { initializeElectronAuthCallbackBridge } from './bridges/electron-auth-callback'
 import { initializeStageThreeRuntimeTraceBridge } from './bridges/stage-three-runtime-trace'
 import { useLanguage } from './composables/use-language'
+import { useLiaHearingStore } from './stores/lia/hearing'
 import { useLiaProviderStore } from './stores/lia/provider'
 import { useLiaVoiceStore } from './stores/lia/voice'
 import { useServerChannelSettingsStore } from './stores/settings/server-channel'
@@ -86,6 +87,7 @@ const setLocale = useElectronEventaInvoke(i18nSetLocale)
 const windowContext = resolveRendererWindowContext()
 const initialRoutePath = resolveInitialRendererRoutePath(route.path)
 const chatStore = useChatStore()
+const liaHearingStore = useLiaHearingStore()
 const liaProviderStore = useLiaProviderStore()
 const liaVoiceStore = useLiaVoiceStore()
 const builtinToolsStore = useTamagotchiBuiltinToolsStore()
@@ -344,6 +346,14 @@ onMounted(() => {
   if (windowContext.leadership === 'leader-only') {
     liaProviderStore.registerRuntimeExtensions()
     liaVoiceStore.registerRuntimeExtensions()
+    // Phase 8.0D-10B-4D4C4-SHELL-B1: managed Hearing projection rides the SAME
+    // leader-only mount, so exactly one window applies the canonical STT target
+    // and secondary renderers never rewrite runtime projection. It runs after
+    // registerRuntimeExtensions() on purpose: the vault credential resolver must
+    // already be installed before a transcription instance can be built.
+    // Idempotent, one-shot, and never throws - a degraded STT leaves text
+    // conversation untouched.
+    void liaHearingStore.initialize()
   }
 })
 

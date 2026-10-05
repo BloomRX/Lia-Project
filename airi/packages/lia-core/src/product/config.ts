@@ -35,6 +35,25 @@ export interface LiaProductTtsTarget {
   voiceId?: string
 }
 
+/**
+ * Phase 8.0D-10B-4D4C4-SHELL-B1: the canonical speech-to-text selection.
+ *
+ * Metadata only - an opaque provider id plus an optional model id, mirroring
+ * `LiaProductTtsTarget` minus the voice selection (a transcription target has
+ * no voice). Credentials never appear here.
+ *
+ * `voice.stt.preferred` is stored as an OPAQUE pair. This generic config layer
+ * deliberately names no vendor and derives no endpoint: which provider the Lia
+ * product ships by default, and how a derived provider id maps onto a runtime
+ * adapter and base URL, belong to the apps that own that policy (the Launcher
+ * writes the selection, the managed Stage projects it). Keeping vendor knowledge
+ * out of here is the same invariant the routing mode relies on.
+ */
+export interface LiaProductSttTarget {
+  providerId: string
+  modelId?: string
+}
+
 export interface LiaProductAllTalkRuntime {
   baseUrl?: string
   voicesDir?: string
@@ -73,7 +92,7 @@ export interface LiaProductVoiceConfig {
     fallback?: LiaProductTtsTarget[]
   }
   stt?: {
-    preferred?: { providerId: string, modelId?: string }
+    preferred?: LiaProductSttTarget
   }
   engine?: LiaProductVoiceEngine
   fallback?: LiaProductVoiceFallback
@@ -374,6 +393,13 @@ export interface LiaProductConfigUpdate {
       installDir?: string
     }
     tts?: { preferred?: LiaProductTtsTarget }
+    /**
+     * Phase 8.0D-10B-4D4C4-SHELL-B1: the canonical STT selection becomes
+     * writable. Metadata only - never a credential, a baseUrl or a runtime
+     * object. An explicit `null` clears the selection back to the product
+     * default rather than storing an inferred empty target.
+     */
+    stt?: { preferred?: LiaProductSttTarget | null }
   }
 }
 
@@ -599,6 +625,19 @@ function mergeProductUpdate(raw: Record<string, unknown>, update: LiaProductConf
       // two different picks into one Franken-target.
       tts.preferred = definedOnly(update.voice.tts.preferred)
       voice.tts = tts
+    }
+    if (update.voice.stt?.preferred !== undefined) {
+      const stt = { ...asRecord(voice.stt) }
+      if (update.voice.stt.preferred === null) {
+        // An explicit clear returns the document to "no explicit selection"
+        // (the product default) instead of storing an inferred empty target.
+        delete stt.preferred
+      }
+      else {
+        // A selection is atomic, exactly like `voice.tts.preferred` above.
+        stt.preferred = definedOnly(update.voice.stt.preferred)
+      }
+      voice.stt = stt
     }
     if (update.voice.engine) {
       const engine = { ...asRecord(voice.engine) }

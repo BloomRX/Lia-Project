@@ -178,6 +178,32 @@ export function recommendedModelFor(providerId: string): string | undefined {
 const API_KEY_NAME = 'apiKey'
 
 /**
+ * Phase 8.0D-10B-4D4C4-SHELL-B1: derived Lia provider ids that REUSE an
+ * existing vault credential instead of owning one.
+ *
+ * `lia-groq-transcription` is a derived runtime id projected onto the existing
+ * OpenAI-compatible transcription adapter. It has no credential of its own: the
+ * user already stored one Groq key for chat, and duplicating it would mean two
+ * copies of one secret to rotate. So the resolver reads the `groq` scope.
+ *
+ * This mapping is READ-ONLY and deliberately total (identity for everything
+ * else). It is applied on the resolver's read path ONLY - `secretHas`,
+ * `setApiKey` and `deleteApiKey` keep exact identity, so no caller can write a
+ * second secret into `groq` under an alias.
+ */
+export const CREDENTIAL_SCOPE_ALIASES: Readonly<Record<string, string>> = {
+  'lia-groq-transcription': 'groq',
+}
+
+/** The derived Lia transcription provider id the Launcher writes by default. */
+export const LIA_GROQ_TRANSCRIPTION_PROVIDER_ID = 'lia-groq-transcription'
+
+/** Maps a provider id to the vault scope holding its credential. */
+export function secretScopeFor(providerId: string): string {
+  return CREDENTIAL_SCOPE_ALIASES[providerId] ?? providerId
+}
+
+/**
  * Rebuilds a chat config as plain, structured-clonable data.
  *
  * `loadedConfig` is a `ref`, so every value read back out of it — the nested
@@ -294,7 +320,8 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
 
   /** Resolves the vault apiKey for one provider build. Never persisted/logged. */
   async function resolveApiKey(providerId: string): Promise<string | undefined> {
-    return secretGet({ scope: providerId, key: API_KEY_NAME })
+    // Derived targets resolve through their alias; everything else is identity.
+    return secretGet({ scope: secretScopeFor(providerId), key: API_KEY_NAME })
   }
 
   function optionFor(providerId: string) {
@@ -494,8 +521,11 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
       // Phase 7.3 safe bridge evidence (items 7/J): METADATA ONLY. The vault
       // value stays inside the resolver closure - never logged, never in a
       // payload beyond this in-memory build.
+      // Phase 8.0D-10B-4D4C4-SHELL-B1: wording generalized - this resolver now
+      // also serves derived transcription targets, not just chat providers.
       console.info(
-        `[lia] chat credential resolved: providerId=${providerId}`
+        `[lia] provider credential resolved: providerId=${providerId}`
+        + ` scope=${secretScopeFor(providerId)}`
         + ` secretSource=${key ? 'lia-vault' : 'missing'} hasApiKey=${String(Boolean(key))}`,
       )
       return key ? { apiKey: key } : undefined

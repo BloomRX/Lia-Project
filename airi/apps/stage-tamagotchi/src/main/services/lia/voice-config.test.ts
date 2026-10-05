@@ -78,6 +78,9 @@ function mockEnv(fs: FsMocks) {
     },
   }))
   vi.doMock('../../../shared/eventa', () => ({
+    // Phase 8.0D-10B-4D4C4-SHELL-B1: the voice bridge now also registers the
+    // read-only managed Hearing getter, so the mocked contract must expose it.
+    electronLiaHearingConfigGet: { id: 'eventa:invoke:lia:hearing:config:get' },
     electronLiaVoiceConfigGet: voiceConfigGetChannel,
     electronLiaVoiceConfigSet: voiceConfigSetChannel,
   }))

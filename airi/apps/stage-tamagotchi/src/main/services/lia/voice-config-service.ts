@@ -1,11 +1,12 @@
 import type { createContext } from '@moeru/eventa/adapters/electron/main'
 
-import type { LiaVoiceConfig, LiaVoiceTtsConfig, LiaVoiceTtsTarget } from '../../../shared/eventa'
+import type { LiaHearingConfig, LiaHearingSttTarget, LiaVoiceConfig, LiaVoiceTtsConfig, LiaVoiceTtsTarget } from '../../../shared/eventa'
 import type { LiaProductConfig } from '../../configs/lia'
 
 import { defineInvokeHandler } from '@moeru/eventa'
 
 import {
+  electronLiaHearingConfigGet,
   electronLiaVoiceConfigGet,
   electronLiaVoiceConfigSet,
 } from '../../../shared/eventa'
@@ -93,12 +94,21 @@ function normalizeTtsConfig(value: unknown): LiaVoiceTtsConfig | undefined {
  * `preferences` are carried over verbatim, and `voice.stt` is preserved even
  * though this bridge (4D-1) exposes no STT surface. An unrecognized or
  * non-object payload is a no-op — the previous config stays untouched.
+ *
+ * Phase 8.0D-10B-4D4C4-SHELL-B1: this is also the single registration point for
+ * the READ-ONLY managed Hearing facts ({@link registerLiaHearingConfigBridge}).
+ * Both bridges serve the same canonical `voice` domain through the same config
+ * handle, so wiring them together keeps one seam and guarantees the STT read
+ * surface can never be registered without the voice bridge it depends on. The
+ * STT surface remains getter-only — this bridge still never writes `voice.stt`.
  */
 export function registerLiaVoiceConfigBridge(params: {
   context: MainContext
   liaProductConfig: { get: () => LiaProductConfig | undefined, update: (value: LiaProductConfig) => void }
 }): void {
   const { context, liaProductConfig } = params
+
+  registerLiaHearingConfigBridge({ context, liaProductConfig })
 
   defineInvokeHandler(context, electronLiaVoiceConfigGet, (): LiaVoiceConfig => {
     const voice = liaProductConfig.get()?.voice
@@ -127,5 +137,59 @@ export function registerLiaVoiceConfigBridge(params: {
       voice: { ...current.voice, tts: persistedTts },
       preferences: current.preferences ?? {},
     })
+  })
+}
+
+/**
+ * Keeps exactly the two reference fields an STT target is made of. Anything else
+ * present in the stored document — a credential, a base URL, a stray runtime
+ * object — is dropped here rather than forwarded, so this read-only surface can
+ * never become a channel for secret material.
+ */
+function normalizeSttTarget(value: unknown): LiaHearingSttTarget | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value))
+    return undefined
+
+  const { providerId, modelId } = value as Record<string, unknown>
+  if (!isNonEmptyString(providerId))
+    return undefined
+
+  const target: LiaHearingSttTarget = { providerId }
+  if (isNonEmptyString(modelId))
+    target.modelId = modelId
+  return target
+}
+
+/**
+ * Phase 8.0D-10B-4D4C4-SHELL-B1: the READ-ONLY managed Hearing facts bridge.
+ *
+ * Exposes the product-level voice switch and the canonical STT selection the Lia
+ * Launcher resolved, so the managed Stage can project them into the existing AIRI
+ * Hearing runtime and the user never has to open AIRI Settings > Hearing.
+ *
+ * Deliberately asymmetric with {@link registerLiaVoiceConfigBridge}: there is NO
+ * setter. AIRI must not become a second writer of speech-to-text configuration —
+ * the Launcher and Lia Core stay the only authorities. This bridge also never
+ * touches the document, so the existing TTS get/set behavior is unchanged.
+ */
+export function registerLiaHearingConfigBridge(params: {
+  context: MainContext
+  liaProductConfig: { get: () => LiaProductConfig | undefined }
+}): void {
+  const { context, liaProductConfig } = params
+
+  defineInvokeHandler(context, electronLiaHearingConfigGet, (): LiaHearingConfig => {
+    const voice = liaProductConfig.get()?.voice
+    const config: LiaHearingConfig = {}
+    // Absent means enabled (the product default); only an explicit false opts
+    // out. Forward the tri-state as-is rather than inventing a boolean.
+    if (typeof voice?.enabled === 'boolean')
+      config.enabled = voice.enabled
+
+    const preferred = normalizeSttTarget(voice?.stt?.preferred)
+    if (preferred)
+      config.preferred = preferred
+
+    return config
   })
 }

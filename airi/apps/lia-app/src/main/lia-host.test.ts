@@ -1,3 +1,4 @@
+import { chmod, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
@@ -414,5 +415,213 @@ describe('voice import through the host', () => {
     if (!refused.ok) {
       expect(refused.error).toBe('engineUnknown')
     }
+  })
+})
+
+/**
+ * Phase 8.0D-10B-4D4C4-SHELL-B1: the Launcher is the product-configuration
+ * authority for speech-to-text, so the canonical default is materialized HERE,
+ * before the Stage child launches - never by the Stage guessing at runtime.
+ *
+ * The eligibility gate is deliberately narrow (§14): voice not opted out, no
+ * existing selection, the Groq chat path selected, and the EXISTING Groq vault
+ * key present. Otherwise the Launcher refuses to guess - and specifically never
+ * falls back to Web Speech, which the Windows runtime evidence showed reporting
+ * `network` and restarting forever without a transcript.
+ */
+describe('conversar() - managed STT default (Phase 8.0D SHELL-B1)', () => {
+  const SECRET = 'gsk-test-not-a-real-key'
+  const STT_TARGET = { modelId: 'whisper-large-v3-turbo', providerId: 'lia-groq-transcription' }
+
+  function groqDoc(voice: Record<string, unknown> = {}) {
+    return {
+      persona: { activeCardId: 'lia-default' },
+      preferences: { language: 'pt-BR' },
+      provider: {
+        chat: { onboarded: true, preferred: { modelId: 'llama-3.3-70b-versatile', providerId: 'groq' } },
+      },
+      schemaVersion: 1,
+      voice: { tts: { preferred: { providerId: 'cloud-voice-provider', voiceId: 'nova' } }, ...voice },
+    }
+  }
+
+  /** A host whose stage manager records the launch env and the doc at launch. */
+  function hostFor(home: { userData: string }, events: Array<{ detail?: string, event: string }>) {
+    const startedWith: Array<Record<string, string | undefined> | undefined> = []
+    let docAtStart: string | undefined
+    const host = createLiaHost({
+      cipher: identityCipher,
+      env: fixtureEnv(home as never),
+      onEvent: (event, detail) => events.push({ detail, event }),
+      stageManagerFactory: () => ({
+        isAvailable: () => true,
+        start: async (options?: { env?: Record<string, string | undefined> }) => {
+          startedWith.push(options?.env)
+          // Snapshot the canonical document at the exact moment of launch, so
+          // "written before the Stage launches" is proven, not assumed.
+          docAtStart = await readFile(join(home.userData, 'lia-product.json'), 'utf8')
+          return { logTail: [], phase: 'running' as const }
+        },
+        state: () => ({ logTail: [], phase: 'stopped' as const }),
+        stop: async () => {},
+      }) as never,
+      workspaceRoot: '/missing',
+    })
+    return {
+      docAtStart: () => docAtStart,
+      host,
+      startedWith,
+    }
+  }
+
+  const readDoc = async (home: { userData: string }) =>
+    JSON.parse(await readFile(join(home.userData, 'lia-product.json'), 'utf8')) as Record<string, any>
+
+  it('case 1: an eligible launch writes the canonical default BEFORE the stage starts', async () => {
+    const home = await makeLiaHome({ productConfig: groqDoc() })
+    const events: Array<{ detail?: string, event: string }> = []
+    const { docAtStart, host, startedWith } = hostFor(home, events)
+    await host.vault.setSecret('groq', 'apiKey', SECRET)
+
+    const state = await host.conversar()
+
+    // The Stage still launches normally, with the SAME shared userData.
+    expect(state.phase).toBe('running')
+    expect(startedWith).toHaveLength(1)
+    expect(startedWith[0]).toMatchObject({ LIA_MANAGED: '1', APP_USER_DATA_PATH: home.userData })
+
+    // ...and the target was already in the document at launch time.
+    expect(JSON.parse(docAtStart()!).voice.stt.preferred).toEqual(STT_TARGET)
+    expect(await readDoc(home)).toMatchObject({ voice: { stt: { preferred: STT_TARGET } } })
+    expect(events.some(e => e.event === 'lia-app.conversar-stt-defaulted')).toBe(true)
+
+    // The default is metadata only: no credential, no derived base URL.
+    const raw = await readFile(join(home.userData, 'lia-product.json'), 'utf8')
+    expect(raw).not.toContain(SECRET)
+    expect(raw).not.toContain('apiKey')
+    expect(raw).not.toContain('api.groq.com')
+    // The pre-existing TTS selection survived.
+    expect((await readDoc(home)).voice.tts.preferred).toEqual({
+      providerId: 'cloud-voice-provider',
+      voiceId: 'nova',
+    })
+  })
+
+  it('case 2: an explicit STT selection is preserved exactly and never overridden', async () => {
+    const chosen = { providerId: 'browser-web-speech-api' }
+    const home = await makeLiaHome({ productConfig: groqDoc({ stt: { preferred: chosen } }) })
+    const events: Array<{ detail?: string, event: string }> = []
+    const { host, startedWith } = hostFor(home, events)
+    await host.vault.setSecret('groq', 'apiKey', SECRET)
+
+    await host.conversar()
+
+    expect(startedWith).toHaveLength(1)
+    // Untouched: the operator's choice wins over the product default.
+    expect((await readDoc(home)).voice.stt.preferred).toEqual(chosen)
+    expect(events.some(e => e.event === 'lia-app.conversar-stt-defaulted')).toBe(false)
+  })
+
+  it('case 3: voice.enabled=false writes no STT default at all', async () => {
+    const home = await makeLiaHome({ productConfig: groqDoc({ enabled: false }) })
+    const events: Array<{ detail?: string, event: string }> = []
+    const { host, startedWith } = hostFor(home, events)
+    await host.vault.setSecret('groq', 'apiKey', SECRET)
+
+    await host.conversar()
+
+    // Text conversation still works; the microphone preference is not invented.
+    expect(startedWith).toHaveLength(1)
+    const doc = await readDoc(home)
+    expect(doc.voice.enabled).toBe(false)
+    expect(doc.voice.stt).toBeUndefined()
+    expect(events.some(e => e.event === 'lia-app.conversar-stt-defaulted')).toBe(false)
+  })
+
+  it('case 4: a non-Groq chat provider gets no guessed STT target', async () => {
+    const home = await makeLiaHome() // fixture default: preferred = openrouter
+    const events: Array<{ detail?: string, event: string }> = []
+    const { host, startedWith } = hostFor(home, events)
+    await host.vault.setSecret('openrouter', 'apiKey', SECRET)
+
+    await host.conversar()
+
+    expect(startedWith).toHaveLength(1)
+    // No provider is invented, and Web Speech is never selected for the user.
+    expect((await readDoc(home)).voice.stt).toBeUndefined()
+    expect(events.some(e => e.event === 'lia-app.conversar-stt-defaulted')).toBe(false)
+  })
+
+  it('case 5: a missing Groq key yields no false-ready STT target', async () => {
+    const home = await makeLiaHome({ productConfig: groqDoc() })
+    const events: Array<{ detail?: string, event: string }> = []
+    const { host, startedWith } = hostFor(home, events)
+    // Deliberately NO vault secret for groq.
+
+    // The conversation itself is gated earlier by the existing readiness check.
+    await expect(host.conversar()).rejects.toThrow(/not fully configured/)
+    expect(startedWith).toHaveLength(0)
+
+    // Advertising a target with no credential behind it would be a lie.
+    expect((await readDoc(home)).voice.stt).toBeUndefined()
+    expect(events.some(e => e.event === 'lia-app.conversar-stt-defaulted')).toBe(false)
+  })
+
+  it('case 6: a failed canonical write degrades STT without corrupting config or blocking chat', async () => {
+    const home = await makeLiaHome({ productConfig: groqDoc() })
+    const events: Array<{ detail?: string, event: string }> = []
+    const { host, startedWith } = hostFor(home, events)
+    await host.vault.setSecret('groq', 'apiKey', SECRET)
+
+    const before = await readFile(join(home.userData, 'lia-product.json'), 'utf8')
+    // Make the canonical document's directory unwritable so the atomic
+    // temp-file write cannot land.
+    await chmod(home.userData, 0o500)
+    try {
+      const state = await host.conversar()
+
+      // CHOSEN BEHAVIOR (documented, not silent): the write fails, so STT is
+      // reported degraded and text conversation still proceeds. Rationale -
+      // the document is left byte-identical, no secret is touched, and the
+      // existing voice-readiness precedent already downgrades a missing voice
+      // runtime to an event rather than a hard stop. Nothing in the source
+      // architecture requires aborting the conversation here.
+      expect(state.phase).toBe('running')
+      expect(startedWith).toHaveLength(1)
+
+      // The document is neither corrupted nor partially written.
+      expect(await readFile(join(home.userData, 'lia-product.json'), 'utf8')).toBe(before)
+      expect(JSON.parse(before).voice.stt).toBeUndefined()
+
+      // STT is honestly reported as not ready, with a machine-readable reason.
+      const notReady = events.find(e => e.event === 'lia-app.conversar-stt-not-ready')
+      expect(notReady, 'degraded STT is reported').toBeDefined()
+      expect(notReady!.detail).toContain('reason=config-write-failed')
+      expect(events.some(e => e.event === 'lia-app.conversar-stt-defaulted')).toBe(false)
+
+      // And the secret never reaches an event.
+      expect(events.every(e => !`${e.event} ${e.detail ?? ''}`.includes(SECRET))).toBe(true)
+    }
+    finally {
+      await chmod(home.userData, 0o700)
+    }
+  })
+
+  it('the STT default is idempotent across launches and never duplicates a credential', async () => {
+    const home = await makeLiaHome({ productConfig: groqDoc() })
+    const events: Array<{ detail?: string, event: string }> = []
+    const { host, startedWith } = hostFor(home, events)
+    await host.vault.setSecret('groq', 'apiKey', SECRET)
+
+    await host.conversar()
+    const afterFirst = await readFile(join(home.userData, 'lia-product.json'), 'utf8')
+    await host.conversar()
+
+    // The second launch finds the selection already present and preserves it.
+    expect(await readFile(join(home.userData, 'lia-product.json'), 'utf8')).toBe(afterFirst)
+    expect(startedWith).toHaveLength(2)
+    // One secret, one scope: nothing was written to the vault.
+    expect(host.vault.hasSecret('groq', 'apiKey')).toBe(true)
+    expect(host.vault.hasSecret('lia-groq-transcription', 'apiKey')).toBe(false)
   })
 })
