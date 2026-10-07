@@ -5,7 +5,7 @@ import { useProviderConfigStore } from '@proj-airi/stage-ui/stores/providers/con
 import { useProviderStore } from '@proj-airi/stage-ui/stores/providers/provider'
 import { useSettingsAudioDevice } from '@proj-airi/stage-ui/stores/settings'
 import { createPinia, setActivePinia } from 'pinia'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
  * Phase 8.0D-10B-4D4C4-SHELL-B1: managed Hearing projection plus the credential
@@ -43,6 +43,96 @@ const ipc = vi.hoisted(() => {
     encryptionAvailable: vi.fn(async () => true),
     getChatConfig: vi.fn(async (): Promise<unknown> => ({})),
     saveChatConfig: vi.fn(async () => {}),
+  }
+})
+
+/**
+ * The browser media boundary is the ONLY thing replaced in the microphone tests.
+ * `@vueuse/core`'s `useDevicesList`/`useUserMedia` stand in for a real
+ * microphone, so the REAL `composables/audio/audio-device.ts` and the REAL
+ * `stores/settings/audio-device.ts` - including the permission handshake, the
+ * device-selection sync and the watcher that reverts `enabled` on failure - are
+ * all still executed. What is asserted is therefore the real store's behaviour,
+ * not a replica's.
+ */
+const media = vi.hoisted(() => ({
+  handshakeCalls: 0,
+  handshakeFailure: undefined as undefined | { message: string, name: string },
+  handshakeGrants: true,
+  inputs: [] as Array<{ deviceId: string, kind: string, label: string }>,
+  permissionGranted: false,
+  startCalls: 0,
+  startFailure: undefined as undefined | { message: string, name: string },
+  /** A healthy machine: one usable microphone, permission grantable. */
+  healthy() {
+    media.permissionGranted = false
+    media.handshakeFailure = undefined
+    media.handshakeGrants = true
+    media.startFailure = undefined
+    media.inputs = [{ deviceId: 'default', kind: 'audioinput', label: 'Simulated Microphone' }]
+  },
+  reset() {
+    media.handshakeCalls = 0
+    media.startCalls = 0
+    media.inputs = []
+    media.permissionGranted = false
+    media.handshakeFailure = undefined
+    media.handshakeGrants = true
+    media.startFailure = undefined
+  },
+}))
+
+vi.mock('@vueuse/core', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@vueuse/core')>()
+  const { computed, ref } = await import('vue')
+
+  const failureFrom = (failure: { message: string, name: string }) => {
+    const error = new Error(failure.message)
+    error.name = failure.name
+    return error
+  }
+
+  return {
+    ...actual,
+    useDevicesList: () => {
+      const devices = ref(media.inputs.map(device => ({ ...device })))
+      const permissionGranted = ref(media.permissionGranted)
+      return {
+        audioInputs: computed(() => devices.value.filter(device => device.kind === 'audioinput')),
+        devices,
+        ensurePermissions: async () => {
+          media.handshakeCalls += 1
+          if (media.handshakeFailure)
+            throw failureFrom(media.handshakeFailure)
+
+          if (!media.handshakeGrants)
+            return false
+
+          // What the real handshake does once permission lands: the device list
+          // becomes identifiable and a device gets selected.
+          permissionGranted.value = true
+          media.permissionGranted = true
+          devices.value = media.inputs.map(device => ({ ...device }))
+          return true
+        },
+        permissionGranted,
+      }
+    },
+    useUserMedia: () => {
+      const stream = ref<MediaStream | null>(null)
+      return {
+        start: async () => {
+          media.startCalls += 1
+          if (media.startFailure)
+            throw failureFrom(media.startFailure)
+
+          stream.value = {} as MediaStream
+          return stream.value
+        },
+        stop: () => { stream.value = null },
+        stream,
+      }
+    },
   }
 })
 
@@ -86,6 +176,21 @@ function stripComments(source: string): string {
     .replace(/(^|[^:])\/\/.*$/gm, '$1')
 }
 
+/**
+ * Collects the `[LIA-HEARING]` event names in emission order, so ordering
+ * claims (handshake before enable) are proven from the real log rather than
+ * from an assumption about the code.
+ */
+function captureDiagnostics(): string[] {
+  const events: string[] = []
+  vi.spyOn(console, 'info').mockImplementation((message?: unknown) => {
+    const match = /^\[LIA-HEARING\] (\S+)/.exec(typeof message === 'string' ? message : '')
+    if (match)
+      events.push(match[1])
+  })
+  return events
+}
+
 /** The Lia hearing store source, with comments removed. */
 async function hearingStoreCode(): Promise<string> {
   const { readFileSync } = await import('node:fs')
@@ -103,6 +208,31 @@ function managedGroqDoc(modelId = 'whisper-large-v3-turbo') {
 function voiceDisabledDoc() {
   return { enabled: false, preferred: { modelId: 'whisper-large-v3-turbo', providerId: 'lia-groq-transcription' } }
 }
+
+beforeEach(() => {
+  // A healthy machine unless a test says otherwise: one usable microphone and a
+  // grantable permission, which is what the earlier suite implicitly assumed.
+  media.reset()
+  media.healthy()
+  // `askPermission()` calls `enumerateDevices()` directly after the handshake
+  // resolves, so the browser boundary has to exist even though the rest of
+  // `@vueuse/core` is stubbed above.
+  vi.stubGlobal('navigator', {
+    ...globalThis.navigator,
+    mediaDevices: {
+      addEventListener: () => {},
+      enumerateDevices: async () => media.inputs.map(device => ({ ...device })),
+      getUserMedia: async () => ({}) as MediaStream,
+      removeEventListener: () => {},
+    },
+    permissions: { query: async () => ({ onchange: null, state: 'granted' }) },
+  })
+})
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+  vi.restoreAllMocks()
+})
 
 describe('credential scope alias (Phase 8.0D SHELL-B1 §22)', () => {
   beforeEach(() => {
@@ -375,6 +505,222 @@ describe('managed hearing projection (Phase 8.0D SHELL-B1 §23)', () => {
     expect(typeof store.degradedReason).toBe('string')
     // The failure never reaches the user as a broken microphone switch.
     expect(useSettingsAudioDevice().enabled).toBe(false)
+  })
+})
+
+/**
+ * Phase 8.0D SHELL-B1.1: the managed microphone bootstrap.
+ *
+ * The shipped B1 assigned `enabled = true` directly. That fires the store's
+ * watcher while permission is still unrequested and the device list is still
+ * anonymous, so `getUserMedia` fails and the store reverts `enabled`, and the
+ * one-shot flag was already consumed - the microphone stayed dead for the whole
+ * session. These gates pin the corrected contract: the same functional
+ * preconditions as the proven manual path, and a one-shot consumed only by
+ * success.
+ */
+describe('managed microphone bootstrap (Phase 8.0D SHELL-B1.1)', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    resetChatProviderRuntimeExtensionsForTesting()
+    ipc.fixture({})
+    vi.clearAllMocks()
+    media.healthy()
+  })
+
+  it('gate 1: permission already granted with a usable input enables the microphone', async () => {
+    ipc.fixture(managedGroqDoc())
+    media.permissionGranted = true
+
+    await useLiaHearingStore().initialize()
+
+    expect(useSettingsAudioDevice().enabled).toBe(true)
+    expect(useLiaHearingStore().microphoneReady).toBe(true)
+    // The stream was really started, not merely flagged.
+    expect(media.startCalls).toBeGreaterThan(0)
+  })
+
+  it('gate 2: a missing permission triggers the handshake before any enable attempt', async () => {
+    ipc.fixture(managedGroqDoc())
+    expect(media.permissionGranted, 'not granted at boot').toBe(false)
+    const events = captureDiagnostics()
+
+    await useLiaHearingStore().initialize()
+
+    expect(media.handshakeCalls).toBe(1)
+    const handshake = events.indexOf('microphone-handshake-attempted')
+    const enable = events.indexOf('microphone-enable-attempted')
+    expect(handshake, 'handshake attempted').toBeGreaterThanOrEqual(0)
+    expect(enable, 'enable attempted').toBeGreaterThanOrEqual(0)
+    expect(handshake, 'handshake precedes enable').toBeLessThan(enable)
+  })
+
+  it('gate 3: a permission granted by the handshake leads to an enabled microphone', async () => {
+    ipc.fixture(managedGroqDoc())
+    expect(media.permissionGranted, 'not granted at boot').toBe(false)
+
+    await useLiaHearingStore().initialize()
+
+    expect(media.permissionGranted, 'the handshake granted it').toBe(true)
+    expect(useSettingsAudioDevice().enabled).toBe(true)
+    expect(useLiaHearingStore().microphoneReady).toBe(true)
+  })
+
+  it('gate 4: a permission that stays denied never announces a ready microphone', async () => {
+    ipc.fixture(managedGroqDoc())
+    media.handshakeFailure = { message: 'Permission denied by user', name: 'NotAllowedError' }
+
+    await useLiaHearingStore().initialize()
+
+    const store = useLiaHearingStore()
+    expect(store.microphoneReady).toBe(false)
+    expect(useSettingsAudioDevice().enabled).toBe(false)
+    expect(store.degradedReason).toBe('microphone-permission-denied')
+    // The runtime projection still landed, so text conversation is untouched.
+    expect(store.projected).toBe(true)
+  })
+
+  it('gate 4b: a handshake that resolves without granting is still not a ready microphone', async () => {
+    ipc.fixture(managedGroqDoc())
+    media.handshakeGrants = false
+
+    await useLiaHearingStore().initialize()
+
+    const store = useLiaHearingStore()
+    expect(store.microphoneReady).toBe(false)
+    expect(useSettingsAudioDevice().enabled).toBe(false)
+    expect(store.degradedReason).toBe('microphone-permission-denied')
+  })
+
+  it('gate 5: a first stream failure does not consume the one-shot', async () => {
+    ipc.fixture(managedGroqDoc())
+    media.startFailure = { message: 'Requested device not found', name: 'NotFoundError' }
+
+    await useLiaHearingStore().initialize()
+
+    const store = useLiaHearingStore()
+    expect(store.microphoneReady).toBe(false)
+    expect(useSettingsAudioDevice().enabled).toBe(false)
+    expect(store.degradedReason).toBe('microphone-stream-failed')
+  })
+
+  it('gate 6: a later initialization succeeds after a transient first failure', async () => {
+    ipc.fixture(managedGroqDoc())
+    const store = useLiaHearingStore()
+    media.startFailure = { message: 'Requested device not found', name: 'NotFoundError' }
+
+    await store.initialize()
+    expect(useSettingsAudioDevice().enabled, 'first attempt failed').toBe(false)
+
+    // The device appeared / the prompt was accepted: the retry must work.
+    media.startFailure = undefined
+    await store.initialize()
+
+    expect(useSettingsAudioDevice().enabled).toBe(true)
+    expect(store.microphoneReady).toBe(true)
+    expect(store.degradedReason).toBeUndefined()
+  })
+
+  it('gate 7: voice.enabled=false never reaches the microphone handshake', async () => {
+    ipc.fixture(voiceDisabledDoc())
+
+    await useLiaHearingStore().initialize()
+
+    expect(media.handshakeCalls).toBe(0)
+    expect(useSettingsAudioDevice().enabled).toBe(false)
+    expect(useLiaHearingStore().microphoneReady).toBe(false)
+    expect(useLiaHearingStore().degradedReason).toBe('voice-disabled')
+  })
+
+  it('gate 8: a deliberate mic-off after bootstrap survives later initialization', async () => {
+    ipc.fixture(managedGroqDoc())
+    const store = useLiaHearingStore()
+    const audio = useSettingsAudioDevice()
+
+    await store.initialize()
+    expect(audio.enabled).toBe(true)
+
+    audio.enabled = false
+    const handshakesBefore = media.handshakeCalls
+    await store.initialize()
+
+    expect(audio.enabled, 'the user choice is not overridden').toBe(false)
+    expect(media.handshakeCalls, 'not even re-handshaked').toBe(handshakesBefore)
+    expect(store.microphoneReady).toBe(true)
+  })
+
+  it('gate 9: a missing canonical target still invents no fallback provider', async () => {
+    ipc.fixture({})
+    const events = captureDiagnostics()
+
+    await useLiaHearingStore().initialize()
+
+    expect(Object.keys(useProviderConfigStore().providers)).toEqual([])
+    expect(media.handshakeCalls).toBe(0)
+    expect(useSettingsAudioDevice().enabled).toBe(false)
+    expect(useLiaHearingStore().degradedReason).toBe('stt-not-configured')
+    expect(events).not.toContain('microphone-handshake-attempted')
+  })
+
+  it('gate 10: no credential or device identity reaches the diagnostics log', async () => {
+    ipc.fixture(managedGroqDoc(), { groq: SIMULATED_KEY })
+    const logged: string[] = []
+    vi.spyOn(console, 'info').mockImplementation((message?: unknown) => {
+      logged.push(typeof message === 'string' ? message : String(message))
+    })
+
+    await useLiaHearingStore().initialize()
+
+    const allLogs = logged.join('\n')
+    // Positive first: the diagnostics really ran, so the negatives are not vacuous.
+    expect(allLogs).toContain('[LIA-HEARING]')
+    expect(allLogs).not.toContain(SIMULATED_KEY)
+    expect(allLogs).not.toContain('apiKey')
+    // Neither a device id nor a device label.
+    expect(allLogs).not.toContain('default')
+    expect(allLogs).not.toContain('Simulated Microphone')
+
+    const record = useProviderConfigStore().providers[LIA_GROQ_TRANSCRIPTION_PROVIDER_ID]
+    expect(JSON.stringify(record.config)).not.toContain(SIMULATED_KEY)
+  })
+
+  it('gate 11: the diagnostics trail covers every stage the next windows run needs', async () => {
+    ipc.fixture(managedGroqDoc())
+    const events = captureDiagnostics()
+
+    await useLiaHearingStore().initialize()
+
+    for (const event of [
+      'canonical-target-received',
+      'initialize-complete',
+      'initialize-started',
+      'microphone-enable-attempted',
+      'microphone-handshake-attempted',
+      'microphone-preconditions',
+      'microphone-ready',
+      'projection-completed',
+    ])
+      expect(events, `${event} was logged`).toContain(event)
+  })
+
+  it('gate 12: a raw failure message is sanitized before it is logged', async () => {
+    ipc.fixture(managedGroqDoc())
+    media.startFailure = {
+      message: 'capture failed for https://api.groq.com/openai/v1/ using gsk-ABCDEFGHIJKLMNOP1234567890 on device 0123456789abcdef0123456789abcdef',
+      name: 'NotReadableError',
+    }
+    const logged: string[] = []
+    vi.spyOn(console, 'info').mockImplementation((message?: unknown) => {
+      logged.push(typeof message === 'string' ? message : String(message))
+    })
+
+    await useLiaHearingStore().initialize()
+
+    const allLogs = logged.join('\n')
+    expect(allLogs).toContain('NotReadableError')
+    expect(allLogs).not.toContain('api.groq.com')
+    expect(allLogs).not.toContain('gsk-ABCDEFGHIJKLMNOP1234567890')
+    expect(allLogs).not.toContain('0123456789abcdef0123456789abcdef')
   })
 })
 

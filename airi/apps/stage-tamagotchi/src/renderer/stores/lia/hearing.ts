@@ -105,6 +105,62 @@ export function projectSttTarget(preferred: LiaHearingSttSelection): LiaHearingR
   }
 }
 
+/**
+ * Reduces arbitrary text to a bounded, low-cardinality, non-secret form.
+ *
+ * Diagnostics must be safe to read from a support log, so anything that could
+ * be a URL, a credential, or a device identifier is replaced by a placeholder
+ * before it is printed. Only the shape of the failure survives.
+ */
+function sanitizeDiagnosticText(raw: string): string {
+  return raw
+    .replace(/[a-z][a-z0-9+.-]*:\/\/\S+/gi, '[url]')
+    .replace(/\b[\w-]{16,}\b/g, '[redacted]')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 120)
+}
+
+/** The browser failure names this bootstrap can actually produce. */
+const KNOWN_AUDIO_FAILURE_NAMES = new Set([
+  'AbortError',
+  'NotAllowedError',
+  'NotFoundError',
+  'NotReadableError',
+  'OverconstrainedError',
+  'PermissionDeniedError',
+  'SecurityError',
+  'TypeError',
+])
+
+/**
+ * Reduces an unknown failure to `name` plus a sanitized message.
+ *
+ * Anything outside the known DOMException set collapses to `UnknownError`, so a
+ * novel error message can never be echoed verbatim into a log.
+ */
+function describeFailure(error: unknown): { message: string, name: string } {
+  if (!(error instanceof Error))
+    return { message: 'non-error', name: 'UnknownError' }
+
+  const name = KNOWN_AUDIO_FAILURE_NAMES.has(error.name) ? error.name : 'UnknownError'
+  return { message: sanitizeDiagnosticText(error.message), name }
+}
+
+/**
+ * Emits one metadata-only diagnostics line for the next real Windows E2E.
+ *
+ * Values are constructed here from booleans, counts, fixed enums, provider ids
+ * and already-sanitized failure names. Never a credential, never a device id or
+ * label, never captured audio, never recognized text.
+ */
+function reportDiagnostic(event: string, detail?: Record<string, boolean | number | string>): void {
+  const pairs = Object.entries(detail ?? {})
+    .map(([key, value]) => `${key}=${value}`)
+    .join(' ')
+  console.info(`[LIA-HEARING] ${event}${pairs ? ` ${pairs}` : ''}`)
+}
+
 export const useLiaHearingStore = defineStore('lia-hearing', () => {
   const getHearingConfig = useElectronEventaInvoke(electronLiaHearingConfigGet)
   const hearingStore = useHearingStore()
@@ -114,6 +170,8 @@ export const useLiaHearingStore = defineStore('lia-hearing', () => {
 
   /** Set once the canonical selection has been applied to the runtime stores. */
   const projected = ref(false)
+  /** Set only when a microphone is genuinely usable - never on a failed attempt. */
+  const microphoneReady = ref(false)
   /** Why no projection happened, for diagnostics. Never a secret. */
   const degradedReason = ref<string | undefined>(undefined)
   /** Guards against concurrent initialization from more than one caller. */
@@ -121,9 +179,13 @@ export const useLiaHearingStore = defineStore('lia-hearing', () => {
   /** Identity of the applied projection, so stale instances are rebuilt. */
   let appliedSignature: string | undefined
   /**
-   * The microphone bootstrap runs at most once per session. It is a flag, never
-   * a watcher: re-asserting the microphone after the user turns it off would
-   * fight an intentional runtime choice.
+   * The microphone bootstrap is consumed by SUCCESS, not by an attempt.
+   *
+   * It is a flag, never a watcher: re-asserting the microphone after the user
+   * turns it off would fight an intentional runtime choice. A failed attempt
+   * therefore leaves it clear, so a transient boot-time failure (devices still
+   * enumerating, a dismissed prompt) can be retried by a later `initialize()`
+   * instead of costing the session its microphone.
    */
   let microphoneBootstrapped = false
 
@@ -151,6 +213,87 @@ export const useLiaHearingStore = defineStore('lia-hearing', () => {
   }
 
   /**
+   * Brings the microphone up through the same functional preconditions the
+   * proven manual path enforces, adapted for programmatic bootstrap: permission
+   * handshake first, a real input device resolved, then a confirmed stream.
+   *
+   * Assigning `enabled = true` on its own cannot do this. It fires the store's
+   * watcher while permission is still unrequested and the device list is still
+   * anonymous and empty, so `getUserMedia` is attempted with neither, fails, and
+   * the store reverts `enabled` to false. The handshake is what resolves a
+   * device: `askPermission()` awaits the post-permission device enumeration and
+   * selects the preferred input before returning. It is idempotent when
+   * permission is already granted, so one unconditional call is both the smaller
+   * design and the correct one.
+   *
+   * Returns once the outcome is known, and latches only on a usable microphone.
+   */
+  async function bootstrapMicrophone(): Promise<void> {
+    reportDiagnostic('microphone-preconditions', {
+      audioInputCount: audioDeviceStore.audioInputs.length,
+      hasSelectedInput: Boolean(audioDeviceStore.selectedAudioInput),
+      permissionGranted: audioDeviceStore.permissionGranted,
+    })
+
+    reportDiagnostic('microphone-handshake-attempted', {
+      permissionGranted: audioDeviceStore.permissionGranted,
+    })
+    try {
+      await audioDeviceStore.askPermission()
+    }
+    catch (error) {
+      reportDiagnostic('microphone-handshake-failed', describeFailure(error))
+      degradedReason.value = 'microphone-permission-denied'
+      return
+    }
+
+    if (!audioDeviceStore.permissionGranted) {
+      reportDiagnostic('microphone-permission-unavailable')
+      degradedReason.value = 'microphone-permission-denied'
+      return
+    }
+
+    if (!audioDeviceStore.selectedAudioInput) {
+      reportDiagnostic('microphone-input-unavailable', {
+        audioInputCount: audioDeviceStore.audioInputs.length,
+      })
+      degradedReason.value = 'microphone-no-input'
+      return
+    }
+
+    reportDiagnostic('microphone-enable-attempted', {
+      audioInputCount: audioDeviceStore.audioInputs.length,
+      hasSelectedInput: true,
+      permissionGranted: audioDeviceStore.permissionGranted,
+    })
+    audioDeviceStore.enabled = true
+
+    try {
+      // Awaits the same in-flight request the store's own watcher allocated, so
+      // no second stream is created and the outcome is observed, not raced.
+      await audioDeviceStore.startStream()
+    }
+    catch (error) {
+      audioDeviceStore.enabled = false
+      reportDiagnostic('microphone-stream-failed', describeFailure(error))
+      degradedReason.value = 'microphone-stream-failed'
+      return
+    }
+
+    if (!audioDeviceStore.enabled) {
+      // The store reverted it underneath us: permission revoked mid-start, or
+      // its own start failed for a reason it does not surface as a throw.
+      reportDiagnostic('microphone-reverted-after-start')
+      degradedReason.value = 'microphone-stream-failed'
+      return
+    }
+
+    microphoneReady.value = true
+    microphoneBootstrapped = true
+    reportDiagnostic('microphone-ready', { enabled: true })
+  }
+
+  /**
    * Reads the canonical Hearing facts and projects them. Safe to call more than
    * once: the projection is idempotent and the microphone is enabled at most once.
    *
@@ -162,6 +305,7 @@ export const useLiaHearingStore = defineStore('lia-hearing', () => {
       return initializing
 
     const run = (async () => {
+      reportDiagnostic('initialize-started')
       try {
         const config = await getHearingConfig()
         const preferred = config?.preferred
@@ -173,6 +317,8 @@ export const useLiaHearingStore = defineStore('lia-hearing', () => {
           return
         }
 
+        reportDiagnostic('canonical-target-received', { providerId: preferred.providerId })
+
         const target = projectSttTarget(preferred)
         await applyProviderProjection(target)
 
@@ -180,6 +326,7 @@ export const useLiaHearingStore = defineStore('lia-hearing', () => {
         hearingStore.activeTranscriptionModel = target.config.model ?? ''
         projected.value = true
         degradedReason.value = undefined
+        reportDiagnostic('projection-completed', { providerId: target.providerId })
 
         // Text-only mode never auto-enables the microphone.
         if (config?.enabled === false) {
@@ -187,19 +334,31 @@ export const useLiaHearingStore = defineStore('lia-hearing', () => {
           return
         }
 
-        if (!microphoneBootstrapped) {
-          audioDeviceStore.enabled = true
-          microphoneBootstrapped = true
+        // A usable microphone was already brought up, so this run never touches
+        // it again: a later deliberate mic-off stays off.
+        if (microphoneBootstrapped) {
+          reportDiagnostic('microphone-bootstrap-skipped', { reason: 'already-bootstrapped' })
+          return
         }
+
+        await bootstrapMicrophone()
       }
       catch (error) {
         // Degraded, not fatal: record a non-secret reason and leave the text
         // path untouched.
-        degradedReason.value = error instanceof Error ? error.name : 'projection-failed'
+        const failure = describeFailure(error)
+        reportDiagnostic('projection-failed', failure)
+        degradedReason.value = failure.name === 'UnknownError' ? 'projection-failed' : failure.name
         projected.value = false
       }
       finally {
         initializing = undefined
+        reportDiagnostic('initialize-complete', {
+          degradedReason: degradedReason.value ?? 'none',
+          enabled: audioDeviceStore.enabled,
+          microphoneReady: microphoneReady.value,
+          projected: projected.value,
+        })
       }
     })()
 
@@ -210,6 +369,7 @@ export const useLiaHearingStore = defineStore('lia-hearing', () => {
   return {
     degradedReason,
     initialize,
+    microphoneReady,
     projected,
   }
 })
