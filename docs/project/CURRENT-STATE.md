@@ -12,27 +12,52 @@ premissa falsa.
 
 ---
 
-## 1. Repositório e branch
+## 1. Repositório, branch e baseline validado
 
 | Item | Valor |
 | --- | --- |
 | Repositório | `BloomRX/Lia-Project` |
 | Branch de trabalho | `arena/01a10290-lia-project` |
-| HEAD | `3ef6d11618f787dae6d197645d440a5775a60ad6` |
-| Branch remota | sincronizada (`git ls-remote` retorna o mesmo SHA) |
+| **Último commit funcional validado em Windows** | `3ef6d11618f787dae6d197645d440a5775a60ad6` |
 | `main` | `db99c709059a6d074b18361bfb32c9f144620632` — **não recebeu merge** |
-| Commits à frente de `main` | 5, todos `phase 8.0D` |
-| Worktree | limpo |
 | Prefixo de código | tudo sob `airi/` |
 
-Commits da fase atual, do mais antigo ao mais recente:
+### O tip da branch não é registrado aqui
+
+A branch pode conter commits documentais posteriores ao baseline funcional, então
+qualquer SHA de tip gravado neste arquivo nasceria obsoleto no commit seguinte. **O tip é
+sempre verificado dinamicamente no preflight**, nunca lido deste arquivo:
+
+```bash
+git rev-parse HEAD                                            # tip local
+git ls-remote origin refs/heads/arena/01a10290-lia-project    # tip remoto (devem bater)
+git fetch -q origin main && git rev-list --count FETCH_HEAD..HEAD   # à frente de main
+git status --porcelain | wc -l                                # deve ser 0
+```
+
+Pelo mesmo motivo **não existe contagem fixa de commits à frente de `main`** neste
+arquivo: ela muda a cada commit e deve ser calculada no preflight. O que este arquivo
+fixa são apenas duas coisas — o `main` de referência (`db99c709…`, válido enquanto
+`main` não se mover) e o baseline funcional validado.
+
+### Baseline funcional validado
+
+`3ef6d11618f787dae6d197645d440a5775a60ad6` — **B1.1 / last Windows-validated functional
+commit**.
+
+É o último commit **de código** que passou pelo gate de runtime real. Commits posteriores
+na branch podem ser puramente documentais; eles não alteram o baseline e não precisam
+atualizar este arquivo. Quando um novo commit de código passar por um gate real novo, o
+baseline passa a ser ele.
+
+Commits funcionais da fase atual, do mais antigo ao mais recente:
 
 ```
 d819397  phase 8.0D: derive final route conformance facts
 8ddcbd2  phase 8.0D: preserve image attachments on retry
 9ad9119  phase 8.0D: preserve voice turn fidelity
 27ba585  phase 8.0D: bootstrap Lia-managed transcription      <- B1
-3ef6d11  phase 8.0D: harden managed microphone bootstrap      <- B1.1 (HEAD)
+3ef6d11  phase 8.0D: harden managed microphone bootstrap      <- B1.1 / last Windows-validated functional commit
 ```
 
 **Nenhuma sessão deve criar outra branch, fazer merge em `main` ou abrir PR por conta
@@ -141,25 +166,39 @@ Armadilhas de tooling que continuam valendo:
 
 ---
 
-## 5. Próximo ponto do roadmap
+## 5. Transição 8.0D → 8.0E
 
 Conforme `docs/product/lia-ui-implementation-roadmap.md`, a família de fases é
 `8.0A → 8.0J` e o trabalho atual está em **8.0D — First Multimodal Brain Adapter**.
 
-**Próximo ponto real: `8.0E — Perception Foundation`**
-(`docs/product/lia-ui-implementation-roadmap.md`, seção 8.0E).
+**Próxima fase nomeada no roadmap após 8.0D: `8.0E — Perception Foundation`.**
+**Antes de iniciar implementação 8.0E, fazer uma reconciliação curta dos critérios de
+8.0D e confirmar quais estão DONE / PARTIAL / NOT STARTED.**
 
-Objetivo declarado no roadmap: estabelecer entradas de percepção independentemente da
-escolha de modelo — microfone, screenshot, window capture e, no futuro, câmera/vídeo —
-alimentando o Capability Router.
+Essa reconciliação é necessária porque B1/B1.1 fecharam especificamente o managed
+STT/microphone no Windows E2E, e isso **não prova sozinho** que todos os critérios de
+8.0D foram concluídos.
 
-Observação factual, não uma nova prioridade: **a primeira dessas entradas, o microfone,
-já foi entregue por B1/B1.1** e está validada em Windows real. Ou seja, 8.0E começa com
-a entrada de áudio já funcionando; o que resta dela são as demais entradas e a ligação
-formal com o Capability Router (`8.0C`).
+### O que está registrado como fato
 
-Dentro de 8.0D permanece válida a ressalva do próprio roadmap: *"Do not make a model the
-permanent default until measured on the target Windows machine."*
+- **B1, B1.1 e o blocker Voice/STT estão CLOSED** — gate de runtime real PASS na seção 2.
+- Isso **não equivale automaticamente a encerrar toda a 8.0D.** O roadmap lista para 8.0D
+  uma validação mais ampla (conversa de texto, compreensão de imagem/tela, compreensão
+  de áudio onde suportado, tool calling, latência, impacto de região/rede e comportamento
+  de falha), além da ressalva *"Do not make a model the permanent default until measured
+  on the target Windows machine."* Esses critérios **não foram avaliados** por B1/B1.1.
+- **O microfone é uma capacidade já funcional** e poderá ser reaproveitada em 8.0E —
+  é a primeira das entradas que 8.0E lista (microfone, screenshot, window capture e, no
+  futuro, câmera/vídeo).
+- **O requisito de 8.0E de os perception producers alimentarem o Capability Router
+  (`8.0C`) ainda deve ser verificado e implementado — não presumido entregue.** B1/B1.1
+  projetam o STT nos stores do AIRI e entregam o transcript ao fluxo de conversa
+  existente; eles não implementam um perception producer ligado ao Capability Router.
+
+### Próxima rodada
+
+Auditoria curta de fechamento da 8.0D — **não implementação**. Só depois dessa
+reconciliação é que se decide o escopo real de 8.0E.
 
 ---
 
@@ -189,10 +228,16 @@ Resumo operacional. A lista completa e o histórico de armadilhas estão em
 
 Atualizar aqui, no mesmo commit, sempre que mudar:
 
-1. branch, HEAD ou o estado de `main`;
-2. o resultado de um gate de runtime real (PASS/FAIL e o commit testado);
+1. a branch de trabalho, ou o `main` de referência;
+2. **o baseline funcional validado** — ou seja, quando um novo commit **de código** passar
+   por um gate de runtime real (registrar o SHA, o gate e o resultado);
 3. uma decisão de produto que altere o comportamento visível;
-4. o próximo ponto do roadmap.
+4. a transição de fase no roadmap.
+
+**Não exigir atualização deste arquivo a cada commit documental.** Commits que só mudam
+`docs/` não alteram o baseline funcional e não precisam tocá-lo. É exatamente por isso
+que o tip da branch e a contagem de commits à frente de `main` **não** são registrados
+aqui: seriam obsoletos no commit seguinte. Ambos se verificam no preflight (seção 1).
 
 Não transformar este arquivo em relatório de rodada. Relatório de rodada vai para
 `docs/product/` com nome próprio; aqui entra só o estado resultante.

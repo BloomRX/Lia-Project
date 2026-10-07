@@ -12,9 +12,22 @@ Copiar tudo abaixo do separador para a nova sessão.
 > abaixo foram atualizadas, mas o estado corrente vive lá.
 
 Você está continuando o trabalho no repositório `BloomRX/Lia-Project`, branch
-`arena/01a10290-lia-project`. **HEAD = `3ef6d11`, já pushado e confirmado**
-(`git ls-remote` retorna `3ef6d11618f787dae6d197645d440a5775a60ad6`). Árvore limpa.
-`main` está em `db99c709` e **não** recebeu merge.
+`arena/01a10290-lia-project`.
+
+**`3ef6d11618f787dae6d197645d440a5775a60ad6` é o baseline funcional validado em
+runtime** (B1.1 — cadeia de voz completa PASS em Windows real). **Não é o tip da
+branch.** A branch pode conter commits documentais posteriores a ele, então **o tip é
+verificado dinamicamente, nunca assumido**:
+
+```bash
+git rev-parse HEAD                                            # tip local
+git ls-remote origin refs/heads/arena/01a10290-lia-project    # tip remoto (devem bater)
+git fetch -q origin main && git rev-list --count FETCH_HEAD..HEAD   # à frente de main
+git status --porcelain | wc -l                                # deve ser 0
+```
+
+`main` está em `db99c709` e **não** recebeu merge. Não existe contagem fixa de commits à
+frente de `main` a decorar — calcular no preflight.
 
 Todo o código fica sob o prefixo `airi/`. A raiz git do checkout muda conforme o
 ambiente — confirmar com `git rev-parse --show-toplevel`, nunca assumir um caminho.
@@ -227,9 +240,11 @@ fonte de verdade das categorias** — o bootstrapper só tem um alias.
 
 ## Primeira coisa a fazer
 
-1. `git log --oneline -1`, `git status` e `git ls-remote origin refs/heads/<branch>` —
-   confirmar branch, HEAD `3ef6d11` e worktree limpo. Se o checkout sumiu, clonar de
-   novo (ver "O ambiente reverte sozinho", acima).
+1. `git rev-parse HEAD`, `git status` e `git ls-remote origin refs/heads/<branch>` —
+   confirmar branch, tip local batendo com o remoto e worktree limpo. **Não esperar um
+   SHA específico no tip:** o tip se move com commits documentais. O que é fixo é o
+   baseline funcional `3ef6d11`. Se o checkout sumiu, clonar de novo (ver "O ambiente
+   reverte sozinho", acima).
 2. **Ler `docs/project/CURRENT-STATE.md`** — estado operacional corrente.
 3. Ler o relatório da área em que vai mexer. Para voz/Hearing, o contrato está na
    seção 3 de `CURRENT-STATE.md`.

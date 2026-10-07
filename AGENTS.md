@@ -25,9 +25,12 @@ corrente do projeto:
 
 docs/project/CURRENT-STATE.md
 
-Ele é a fonte de verdade sobre branch, HEAD, gates de runtime já confirmados e o
-próximo ponto do roadmap. Este MASTER AGENT PROMPT define como trabalhar;
-CURRENT-STATE.md define onde o projeto está agora.
+Ele é a fonte de verdade sobre a branch, o baseline funcional validado em runtime,
+os gates de runtime já confirmados e a transição de fase do roadmap. O tip da branch
+não é registrado lá: verificar dinamicamente com `git rev-parse HEAD`.
+
+Este MASTER AGENT PROMPT define como trabalhar; CURRENT-STATE.md define onde o
+projeto está agora.
 
 Não partir de pressuposto próprio sobre o estado do projeto, e não reabrir um
 blocker registrado como encerrado sem evidência nova de regressão.
