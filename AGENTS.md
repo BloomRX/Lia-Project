@@ -17,6 +17,25 @@ Você deve atuar simultaneamente como:
 Você está trabalhando diretamente no repository Git do projeto.
 
 ==================================================
+0. ANTES DE QUALQUER TRABALHO
+==================================================
+
+Antes de analisar código ou propor qualquer mudança, ler o estado operacional
+corrente do projeto:
+
+docs/project/CURRENT-STATE.md
+
+Ele é a fonte de verdade sobre branch, HEAD, gates de runtime já confirmados e o
+próximo ponto do roadmap. Este MASTER AGENT PROMPT define como trabalhar;
+CURRENT-STATE.md define onde o projeto está agora.
+
+Não partir de pressuposto próprio sobre o estado do projeto, e não reabrir um
+blocker registrado como encerrado sem evidência nova de regressão.
+
+Sempre que uma decisão de produto ou um gate de runtime mudar, atualizar
+CURRENT-STATE.md no mesmo commit.
+
+==================================================
 1. VISÃO DO PRODUTO
 ==================================================
 

@@ -6,29 +6,45 @@ Copiar tudo abaixo do separador para a nova sessão.
 
 ## Contexto
 
+> **Leia primeiro `docs/project/CURRENT-STATE.md`.** Ele é a fonte de verdade
+> operacional (branch, HEAD, gates de runtime, próximo ponto do roadmap). Este
+> arquivo é referência técnica e armadilhas históricas; as seções operacionais
+> abaixo foram atualizadas, mas o estado corrente vive lá.
+
 Você está continuando o trabalho no repositório `BloomRX/Lia-Project`, branch
-`arena/01a07b6d-lia-project`. **HEAD = `db019f6`, já pushado e confirmado**
-(`git ls-remote` retorna `db019f6cd429fa673ce7e07461491f4283b49fdc`). Árvore limpa.
+`arena/01a10290-lia-project`. **HEAD = `3ef6d11`, já pushado e confirmado**
+(`git ls-remote` retorna `3ef6d11618f787dae6d197645d440a5775a60ad6`). Árvore limpa.
+`main` está em `db99c709` e **não** recebeu merge.
 
-Raiz git: `/home/user/Lia-Project`. Todo o código fica sob o prefixo `airi/`.
+Todo o código fica sob o prefixo `airi/`. A raiz git do checkout muda conforme o
+ambiente — confirmar com `git rev-parse --show-toplevel`, nunca assumir um caminho.
 
-## Estado da validação (números confirmados em `db019f6`)
+## Estado da validação (números confirmados em `3ef6d11`)
 
-- Suíte tamagotchi: **102 arquivos / 921 passed / 1 skipped**
-- `vue-tsc`: **3 erros, todos baseline pré-existente** —
-  `provider-config-service.ts(41,32) TS2322`, `home.vue(85,9) TS6133`,
-  `lia-persona.ts(383,42) TS6133`. **Não corrigir esses 3**; qualquer erro novo é seu.
-- ESLint: 0
+- Stage `vitest run --project node`: **141 arquivos / 1718 passed / 1 skipped**
+- `@lia/core`: **27 arquivos / 343 passed** · `@lia/lia-app`: **18 arquivos / 191 passed / 2 skipped**
+- `vue-tsc` (`stage-tamagotchi`, `@lia/core`, `@lia/lia-app`): **0 `error TS`**
+- ESLint (`pnpm lint`, sem `--fix`): **0 warnings / 0 errors em 3293 arquivos**
+- **Gate real: cadeia de voz completa PASS em Windows real** — ver
+  `docs/project/CURRENT-STATE.md` seção 2. Teste automatizado verde **não** substitui
+  esse gate.
 
 Comandos (rodar de `airi/`):
 
 ```bash
-./node_modules/.bin/vitest run --config apps/stage-tamagotchi/vitest.node.config.ts [arquivo]
-cd apps/stage-tamagotchi && NODE_OPTIONS=--max-old-space-size=3300 ./node_modules/.bin/vue-tsc --noEmit
-./node_modules/.bin/eslint --quiet <arquivos listados um a um>
+cd apps/stage-tamagotchi && npx vitest run --project node [arquivo]
+cd apps/stage-tamagotchi && NODE_OPTIONS=--max-old-space-size=3072 npx vue-tsc --noEmit -p tsconfig.json
+pnpm lint
 ```
 
-## O que foi feito na rodada anterior (13 commits, `3aae478..db019f6`)
+Em `apps/stage-tamagotchi` passar **sempre** `--project node`: o default roteia para o
+projeto `browser` (chromium), ausente neste ambiente. `pnpm typecheck` na raiz **não
+completa** aqui — nunca declarar como PASS.
+
+## Histórico — M1 Phase 5 (13 commits, `3aae478..db019f6`)
+
+> Registro histórico, já encerrado. Mantido porque as armadilhas continuam úteis.
+> A rodada atual é `phase 8.0D`; ver `docs/project/CURRENT-STATE.md`.
 
 O blocker era: no Windows real, `fetch-source` baixava 97 MB e depois falhava com
 `archive entry escapes the destination directory`.
@@ -70,16 +86,27 @@ O relatório completo está em **`docs/product/M1-PHASE5-ARCHIVE-EXTRACTION-FIX.
 
 ## ★ O que está pendente
 
-**QA no Windows real.** O usuário precisa clicar em Instalar. Esperado:
-`fetch-source downloaded → extract-source complete → próxima etapa`.
+O próximo ponto do roadmap é **`8.0E — Perception Foundation`** — ver
+`docs/project/CURRENT-STATE.md` seção 5 e
+`docs/product/lia-ui-implementation-roadmap.md`.
 
-**NÃO declarar installer PASS.** Extração corrigida não é o mesmo que instalação
-funcionando. A lista do que ainda precisa rodar em máquina real está na seção 7 do
-relatório. Um item foi parcialmente reduzido (seção 8.6): os 6 prompts
-`choice /C YN` do `atsetup.bat` estão todos dentro de blocos `if errorlevel 1 (`,
-ou seja, só são alcançáveis quando um passo conda já falhou — mas **o que `choice`
-retorna com stdin fechado e sem console não foi observado**, é inferência do fluxo
-de controle.
+### Encerrado — não reabrir sem evidência nova
+
+A cadeia de voz completa está **PASS em Windows real** no commit `3ef6d11`:
+
+```
+Lia.bat → managed STT → microphone → transcription → D2B12 → Brain → response → Kokoro TTS
+```
+
+Hearing é configurado automaticamente no modo Complete, sem nenhuma seleção manual de
+STT, usando Groq (definição OpenAI-compatible) com `whisper-large-v3-turbo`. Web Speech
+permanece **apenas como diagnóstico histórico — não é fallback**.
+
+O blocker antigo desta seção ("QA da extração/instalação do AllTalk no Windows") e o
+blocker de microfone/transcrição **não** devem ser reabertos por leitura de código nem
+por teste automatizado isolado. Só reabrir com comportamento novo observado em máquina
+real. O estado do QA de instalação do AllTalk (M1 Phase 5) **não foi re-verificado**
+depois daquela rodada — tratar como desconhecido, não como PASS nem como FAIL.
 
 ## Restrições permanentes (o usuário já corrigiu isso antes — não repetir)
 
@@ -148,12 +175,21 @@ de controle.
   precisa rodar de `airi/`.
 - **Dois `vue-tsc` em paralelo ⇒ saída vazia enganosa.**
 - **Glob de shell não expande `src/**/x.test.ts` no vitest.**
-- **O ambiente reverte sozinho** (já aconteceu 21×), apagando `airi/`, `/tmp`,
-  `node_modules` e o `pnpm` global. Receita de recuperação:
-  `git fetch origin arena/01a07b6d-lia-project` → `merge-base --is-ancestor HEAD FETCH_HEAD`
-  → backup de `docs` em `/tmp` → `git reset --hard FETCH_HEAD` →
-  `npm i -g pnpm@11.24.0` → `cd airi && pnpm install --ignore-scripts && pnpm rebuild esbuild`
-  → `pnpm -r --no-bail --filter "./packages/**" build` → idem `./server/packages/**`.
+- **O ambiente reverte sozinho** (21× registradas até M1, e continuou acontecendo nas
+  rodadas de 8.0D — inclusive no meio de uma investigação), apagando o checkout,
+  `/tmp`, `node_modules` e o `pnpm` global. **Receita atual:** conferir
+  `git status`/HEAD no início de toda rodada; se o checkout sumiu ou não bate, fazer
+  **clone novo da URL do GitHub na branch da sessão** e conferir HEAD + worktree limpo.
+  **Não usar `git reset --hard`** — está proibido. Depois:
+  `corepack enable pnpm && corepack prepare pnpm@11.24.0 --activate` (nunca
+  `npm i -g pnpm`) → `cd airi && pnpm install --ignore-scripts` (sem
+  `--ignore-scripts` o postinstall do `onnxruntime-node` falha com
+  `UNABLE_TO_VERIFY_LEAF_SIGNATURE`; nunca desligar verificação TLS) →
+  `pnpm --filter "@proj-airi/stage-tamagotchi^..." --filter "@lia/lia-app^..." run build`.
+  Um clone novo não tem identidade git: configurar `user.name`/`user.email`
+  **no escopo do repositório**.
+- **Nunca reparar um clone antigo.** Se `status` não estiver vazio, ou a branch/HEAD não
+  bater, clonar de novo.
 - **Nunca fabricar resultado.** Se não deu para rodar, dizer isso explicitamente.
 
 ## Fatos externos verificados (não precisa re-baixar)
@@ -191,7 +227,11 @@ fonte de verdade das categorias** — o bootstrapper só tem um alias.
 
 ## Primeira coisa a fazer
 
-1. `git log --oneline -1` e `git status` — confirmar que está em `db019f6` e limpo.
-2. Ler `docs/product/M1-PHASE5-ARCHIVE-EXTRACTION-FIX.md`.
-3. Perguntar ao usuário qual é a tarefa da rodada. **Não assumir que é continuar o
-   QA** — o QA depende dele clicar em Instalar no Windows.
+1. `git log --oneline -1`, `git status` e `git ls-remote origin refs/heads/<branch>` —
+   confirmar branch, HEAD `3ef6d11` e worktree limpo. Se o checkout sumiu, clonar de
+   novo (ver "O ambiente reverte sozinho", acima).
+2. **Ler `docs/project/CURRENT-STATE.md`** — estado operacional corrente.
+3. Ler o relatório da área em que vai mexer. Para voz/Hearing, o contrato está na
+   seção 3 de `CURRENT-STATE.md`.
+4. Perguntar ao usuário qual é a tarefa da rodada. **Não assumir** que é continuar um
+   gate antigo: gates de runtime dependem de o usuário executar no Windows.
