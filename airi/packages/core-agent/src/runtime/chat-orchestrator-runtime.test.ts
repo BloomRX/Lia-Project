@@ -11,6 +11,7 @@ import { ContextUpdateStrategy } from '@proj-airi/server-shared/types'
 import { describe, expect, it, vi } from 'vitest'
 
 import { createChatOrchestratorRuntime } from './chat-orchestrator-runtime'
+import { sanitizeMessages } from './llm-service'
 // TEST-ONLY helper: keep source guards stable across CRLF/LF checkouts
 function normalizeLineEndings(value: string): string {
   return value.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
@@ -1017,6 +1018,48 @@ describe('createChatOrchestratorRuntime', () => {
 
     await expect(secondSend).rejects.toThrow('Chat session was reset before send could start')
     await firstSend
+  })
+
+  /**
+   * Phase 8.0D-M1 gate 7: the image must reach the provider request boundary
+   * intact. Two layers could lose it - the composition of content parts, and
+   * `sanitizeMessages` on the way out (which flattens non-text parts once a
+   * model key is known to reject content arrays). Both are asserted here, so a
+   * regression in either is caught at the boundary rather than in production.
+   */
+  it('gate 7 (Phase 8.0D-M1): an image attachment reaches the provider request boundary intact', async () => {
+    const harness = createHarness()
+    let composedMessages: Message[] = []
+    harness.stream.mockImplementationOnce(async (_model, _chatProvider, messages, options) => {
+      composedMessages = messages
+      await options?.onStreamEvent?.({ type: 'text-delta', text: 'a cat' })
+      await options?.onStreamEvent?.({ type: 'finish', finishReason: 'stop' })
+    })
+
+    await harness.runtime.ingest('what is in this image', {
+      // The vision route's model id, verbatim: the transport is model-agnostic
+      // and must not behave differently for it.
+      model: 'qwen/qwen3.8-27b',
+      chatProvider: provider,
+      attachments: [{ type: 'image', data: 'aW1hZ2U=', mimeType: 'image/png' }],
+    })
+
+    const userContent = composedMessages.at(-1)?.content
+    const composedParts = Array.isArray(userContent) ? userContent : []
+    expect(composedParts.find(part => part?.type === 'image_url')).toEqual({
+      image_url: { url: 'data:image/png;base64,aW1hZ2U=' },
+      type: 'image_url',
+    })
+
+    // Second gate: with the default content-array compatibility the non-text
+    // part survives sanitisation, so the provider really receives the image.
+    const sanitized = sanitizeMessages(composedMessages as unknown[])
+    const sanitizedContent = sanitized.at(-1)?.content
+    const sanitizedParts = Array.isArray(sanitizedContent) ? sanitizedContent : []
+    expect(sanitizedParts.find(part => part?.type === 'image_url')).toEqual({
+      image_url: { url: 'data:image/png;base64,aW1hZ2U=' },
+      type: 'image_url',
+    })
   })
 
   it('handles attachments, reasoning deltas, tool events, and assistant finalization', async () => {

@@ -180,9 +180,16 @@ const SENTINEL: LiaBrainRoutingDecision = {
   status: 'manual',
 }
 
-/** The trusted production policy, as the product factory declares it. */
+/**
+ * The trusted production policy, spelled out as a literal so these assertions
+ * are an oracle rather than a restatement of the factory: text brain first,
+ * vision route second, both on the same engine.
+ */
 const TRUSTED_POLICY: LiaBrainAutomaticSelectionPolicy = {
-  routes: [{ engineId: 'groq', modelId: 'openai/gpt-oss-120b' }],
+  routes: [
+    { engineId: 'groq', modelId: 'openai/gpt-oss-120b' },
+    { engineId: 'groq', modelId: 'qwen/qwen3.8-27b' },
+  ],
 }
 
 beforeEach(() => {
@@ -493,14 +500,28 @@ describe('lia brain decision bridge (Phase 8.0D-8)', () => {
     }
   })
 
-  it('t: automatic mode + image facts reports noCandidates - no fallback to an ineligible route', async () => {
+  it('t: automatic mode + image facts resolves the vision route, and never substitutes an ineligible one', async () => {
     const handler = await realServiceBridge({ brain: { mode: 'automatic' } })
 
     const decision = handler({ facts: { hasImageInput: true } })
 
-    expect(decision).toEqual({ selection: { status: 'noCandidates' }, status: 'automatic' })
-    // The policy keeps naming the route; eligibility simply excludes it.
+    // Phase 8.0D-M1: an image turn is now served - by the vision route, because
+    // eligibility excludes the text brain and the policy names the vision route
+    // second. It is selected on capability, not substituted as a fallback.
+    expect(decision.status).toBe('automatic')
+    if (decision.status !== 'automatic')
+      return
+    expect(decision.selection.status).toBe('selected')
+    if (decision.selection.status !== 'selected')
+      return
+    expect(decision.selection.route.model.id).toBe('qwen/qwen3.8-27b')
+    expect(decision.selection.route.engine.id).toBe('groq')
     expect(mocks.automaticPolicy).toHaveBeenCalled()
+    // The bridge's own guarantee is unchanged: it applied the TRUSTED policy
+    // verbatim. The "no silent substitute" half of this gate now lives where
+    // the capability truth does - see the lia-core multimodal routing suite,
+    // which proves a capability no model has yields no route at all.
+    expect(mocks.automaticPolicy).toHaveReturnedWith(TRUSTED_POLICY)
   })
 
   it('u/v/w: manual, disabled and unspecified modes keep their canonical semantics', async () => {

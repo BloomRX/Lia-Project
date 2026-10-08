@@ -22,6 +22,11 @@ premissa falsa.
 | `main` | `db99c709059a6d074b18361bfb32c9f144620632` — **não recebeu merge** |
 | Prefixo de código | tudo sob `airi/` |
 
+**Atenção:** a branch contém código funcional **posterior** ao baseline acima — a rota
+Brain multimodal da Phase 8.0D-M1 (seção 5). Esse código está verde em testes
+automatizados mas **ainda não passou por gate de runtime real**. O baseline só avança
+quando um commit passar por um gate Windows; até lá ele permanece `3ef6d11`.
+
 ### O tip da branch não é registrado aqui
 
 A branch pode conter commits documentais posteriores ao baseline funcional, então
@@ -133,18 +138,28 @@ Invariantes que B1/B1.1 estabeleceram e que valem como contrato:
 
 ---
 
-## 4. Estado da validação automatizada em `3ef6d11`
+## 4. Estado da validação automatizada
 
-Re-verificado nesta rodada no checkout `3ef6d11`: `hearing.test.ts` **30 passed**, exit 0.
+Números da Phase 8.0D-M1 (o commit que contém a rota multimodal). **Teste automatizado
+verde não é gate de runtime** — ver a seção 5 para o gate Windows pendente.
 
 | Verificação | Resultado |
 | --- | --- |
-| `hearing.test.ts` (focused, `--project node`) | 30 passed |
-| Stage `vitest run --project node` | 141 arquivos, 1718 passed, 1 skipped |
-| `@lia/core` | 27 arquivos, 343 passed |
-| `@lia/lia-app` | 18 arquivos, 191 passed, 2 skipped |
-| typecheck `stage-tamagotchi` / `@lia/core` / `@lia/lia-app` | 0 `error TS` |
-| `pnpm lint` (sem `--fix`) | 0 warnings, 0 errors em 3293 arquivos |
+| Stage `vitest run --project node` | 141 arquivos, **1725 passed**, 1 skipped |
+| `@lia/core` | 28 arquivos, **353 passed** |
+| `@proj-airi/core-agent` | 12 arquivos, **127 passed** |
+| `@lia/lia-app` | 18 arquivos, **191 passed**, 2 skipped |
+| typecheck `stage-tamagotchi` | **0 `error TS`** |
+| typecheck `@lia/core` / `core-agent` / `@lia/lia-app` | **0 `error TS`** |
+| `pnpm lint` (sem `--fix`) | **0 warnings, 0 errors em 3294 arquivos** |
+
+Mutation tests desta fase (cada mutação restaurada e confirmada por `md5sum -c`):
+
+| Mutação | Falhas |
+| --- | --- |
+| `imageInput: true` removido do Qwen | 13 (8 lia-core + 5 Stage) |
+| segunda rota removida da política | 12 (gates 3, 4, 5, 6, 6c, 8 + testes de política) |
+| transporte do attachment até a request removido | 2 (gate 7 + o teste de attachments pré-existente) |
 
 Comandos (a partir de `airi/`):
 
@@ -166,39 +181,77 @@ Armadilhas de tooling que continuam valendo:
 
 ---
 
-## 5. Transição 8.0D → 8.0E
+## 5. Estado da 8.0D e a rota multimodal (Phase 8.0D-M1)
 
 Conforme `docs/product/lia-ui-implementation-roadmap.md`, a família de fases é
 `8.0A → 8.0J` e o trabalho atual está em **8.0D — First Multimodal Brain Adapter**.
 
-**Próxima fase nomeada no roadmap após 8.0D: `8.0E — Perception Foundation`.**
-**Antes de iniciar implementação 8.0E, fazer uma reconciliação curta dos critérios de
-8.0D e confirmar quais estão DONE / PARTIAL / NOT STARTED.**
+A reconciliação curta dos critérios de 8.0D **já foi feita** (auditoria read-only aceita).
+Resultado, com a Phase 8.0D-M1 já aplicada:
 
-Essa reconciliação é necessária porque B1/B1.1 fecharam especificamente o managed
-STT/microphone no Windows E2E, e isso **não prova sozinho** que todos os critérios de
-8.0D foram concluídos.
+| critério | status | observação |
+| --- | --- | --- |
+| text conversation | **DONE** | validado em Windows real no baseline `3ef6d11` |
+| image/screen understanding | **IMPLEMENTADO, gate Windows PENDENTE** | rota Qwen adicionada nesta fase; ver abaixo |
+| audio understanding ("where supported") | **NOT STARTED** | o candidato aprovado é text+image; B1/B1.1 é STT *antes* do brain, não áudio nativo no brain |
+| tool calling | **PARTIAL** | transporte + gate de compatibilidade provados no seam da Lia; o *loop* completo pertence ao `@xsai/stream-text` e segue como item de closure |
+| latency | **NOT STARTED** | nenhuma medição existe; o contrato de telemetria exclui timing por desenho |
+| region/network impact | **NOT STARTED** | nenhuma referência no escopo Brain |
+| failure behavior | **PARTIAL** | failover real registrado e classificado; falta teste dirigido recoverable→failover / permanent→não |
+| default não medido no alvo | **PARTIAL** | medido só pelo E2E de voz |
 
-### O que está registrado como fato
+### O que a Phase 8.0D-M1 entregou
 
-- **B1, B1.1 e o blocker Voice/STT estão CLOSED** — gate de runtime real PASS na seção 2.
-- Isso **não equivale automaticamente a encerrar toda a 8.0D.** O roadmap lista para 8.0D
-  uma validação mais ampla (conversa de texto, compreensão de imagem/tela, compreensão
-  de áudio onde suportado, tool calling, latência, impacto de região/rede e comportamento
-  de falha), além da ressalva *"Do not make a model the permanent default until measured
-  on the target Windows machine."* Esses critérios **não foram avaliados** por B1/B1.1.
-- **O microfone é uma capacidade já funcional** e poderá ser reaproveitada em 8.0E —
-  é a primeira das entradas que 8.0E lista (microfone, screenshot, window capture e, no
-  futuro, câmera/vídeo).
-- **O requisito de 8.0E de os perception producers alimentarem o Capability Router
-  (`8.0C`) ainda deve ser verificado e implementado — não presumido entregue.** B1/B1.1
-  projetam o STT nos stores do AIRI e entregam o transcript ao fluxo de conversa
-  existente; eles não implementam um perception producer ligado ao Capability Router.
+Uma rota Brain **realmente multimodal**, sem substituir o brain textual:
 
-### Próxima rodada
+- engine `groq`, agora com **dois** modelos: `openai/gpt-oss-120b` (textual, primeira rota)
+  e `qwen/qwen3.8-27b` (visão, segunda rota);
+- o engine declara o **superset** de capabilities; cada modelo declara as suas. É o
+  contrato que já existia (`routes.ts`/`resolver.ts` julgam engine **e** modelo pelos
+  próprios descritores), não um contorno;
+- um turno que exige `imageInput` torna o GPT-OSS inelegível e resolve para o Qwen **por
+  capability**, através da política declarada — sem heurística de filename, prompt,
+  provider ativo ou UI;
+- turno **sem** imagem continua resolvendo para `openai/gpt-oss-120b`; o Qwen nunca é
+  promovido por acidente;
+- mesma credencial Groq, mesmo provider, nenhuma key nova, nenhum provider novo,
+  `activeProvider`/`activeModel` globais intactos;
+- Voice/STT/TTS intocados (gate automatizado pinça as identidades do B1/B1.1).
 
-Auditoria curta de fechamento da 8.0D — **não implementação**. Só depois dessa
-reconciliação é que se decide o escopo real de 8.0E.
+O transporte de imagem já existia e é **agnóstico de modelo**:
+`core-agent/src/runtime/chat-orchestrator-runtime.ts` monta partes `image_url` em data URL
+base64, e `sanitizeMessages` as preserva enquanto `streamOptionsContentArrayCompatibilityOk`
+é verdadeiro (default por model key). Limite publicado do modelo: **3 imagens** por turno,
+cada uma contando 2048 tokens de entrada.
+
+### Gate de saída PENDENTE — Windows E2E visual
+
+Testes automatizados verdes **não** são este gate. Roteiro exato:
+
+1. abrir a Lia pelo fluxo normal (`Lia.bat`), sem configurar nada;
+2. **anexar uma imagem** numa conversa;
+3. perguntar algo **determinístico** sobre o conteúdo dela (ex.: texto legível na imagem,
+   contagem de objetos, cor dominante);
+4. confirmar que a rota usada foi **`groq` + `qwen/qwen3.8-27b`**;
+5. confirmar que a resposta está **correta com base no conteúdo da imagem** — não uma
+   resposta genérica plausível;
+6. confirmar de passagem que um turno **só de texto** continua no GPT-OSS.
+
+Só depois desse gate o baseline funcional avança e `image/screen understanding` pode ser
+marcado DONE.
+
+### Itens de closure restantes da 8.0D (fora desta fase)
+
+1. **tool-calling closure** — teste dirigido do loop completo: rota resolvida → modelo
+   devolve `tool_call` → ferramenta executa → resultado volta ao modelo. O loop vive no
+   `@xsai/stream-text`; prová-lo exige modelo real ou um mock arquitetural pesado, por
+   isso não foi alargado o escopo nesta fase.
+2. **latency measurement** (Windows real).
+3. **region/network measurement** (Windows real).
+4. **directed failure-behavior test** (automatizável).
+
+**8.0D não está CLOSED.** E **8.0E não foi iniciado**: nenhum screenshot capture, window
+capture, câmera, audio input nativo, nova UI de provider, novo provider ou mudança de key.
 
 ---
 

@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 
 import { describe, expect, it } from 'vitest'
 
-import { GROQ_BRAIN_ENGINE_ID, GROQ_BRAIN_MODEL_ID } from '../brain/adapters/groq'
+import { GROQ_BRAIN_ENGINE_ID, GROQ_BRAIN_MODEL_ID, GROQ_BRAIN_VISION_MODEL_ID } from '../brain/adapters/groq'
 import { createProductionBrainAutomaticPolicy } from './brain-policy'
 
 /**
@@ -26,10 +26,13 @@ function stripComments(source: string): string {
 }
 
 describe('production automatic brain policy (Phase 8.0D-8)', () => {
-  it('a: the policy declares exactly one route', () => {
+  it('a: the policy declares the text brain first and the vision route second', () => {
     const policy = createProductionBrainAutomaticPolicy()
-    expect(policy.routes).toHaveLength(1)
+    expect(policy.routes).toHaveLength(2)
     expect(policy.routes[0]).toEqual({ engineId: GROQ_BRAIN_ENGINE_ID, modelId: GROQ_BRAIN_MODEL_ID })
+    expect(policy.routes[1]).toEqual({ engineId: GROQ_BRAIN_ENGINE_ID, modelId: GROQ_BRAIN_VISION_MODEL_ID })
+    // Both routes ride the SAME engine - no second provider is introduced.
+    expect(new Set(policy.routes.map(route => route.engineId)).size).toBe(1)
   })
 
   it('b/c: the route reuses the canonical adapter ids - no restated literals', () => {
@@ -79,10 +82,16 @@ describe('production automatic brain policy (Phase 8.0D-8)', () => {
     ;(first.routes as LiaBrainRouteRef[]).push({ engineId: 'other-engine', modelId: 'other-model' })
     ;(first.routes[0] as { engineId: string }).engineId = 'mutated'
     const third = createProductionBrainAutomaticPolicy()
-    expect(third.routes).toHaveLength(1)
+    expect(third.routes).toHaveLength(2)
     expect(third.routes[0]).toEqual({ engineId: GROQ_BRAIN_ENGINE_ID, modelId: GROQ_BRAIN_MODEL_ID })
-    // The FIRST shape is still the declared one when read through a fresh call.
-    expect(createProductionBrainAutomaticPolicy()).toEqual({ routes: [{ engineId: GROQ_BRAIN_ENGINE_ID, modelId: GROQ_BRAIN_MODEL_ID }] })
+    expect(third.routes[1]).toEqual({ engineId: GROQ_BRAIN_ENGINE_ID, modelId: GROQ_BRAIN_VISION_MODEL_ID })
+    // The declared shape is still intact when read through a fresh call.
+    expect(createProductionBrainAutomaticPolicy()).toEqual({
+      routes: [
+        { engineId: GROQ_BRAIN_ENGINE_ID, modelId: GROQ_BRAIN_MODEL_ID },
+        { engineId: GROQ_BRAIN_ENGINE_ID, modelId: GROQ_BRAIN_VISION_MODEL_ID },
+      ],
+    })
   })
 
   it('h: the declaration itself carries no mutable shared array', () => {

@@ -1,8 +1,14 @@
 import type { LiaBrainRoutingDecision } from '@lia/core'
 
-import { groqBrainDescriptors } from '@lia/core'
+import { brainRequirementForChatTurn, createProductionBrainAutomaticPolicy, createProductionBrainCatalog, decideBrainRoute, groqBrainDescriptors } from '@lia/core'
 import { describe, expect, it } from 'vitest'
 
+import {
+  LIA_GROQ_TRANSCRIPTION_BASE_URL,
+  LIA_GROQ_TRANSCRIPTION_DEFINITION_ID,
+  LIA_GROQ_TRANSCRIPTION_MODEL_ID,
+  LIA_GROQ_TRANSCRIPTION_PROVIDER_ID,
+} from '../../stores/lia/hearing'
 import { resolveLiaBrainSendRouteCandidate } from './brain-send-route-candidate'
 
 function makeAutomaticSelected(): LiaBrainRoutingDecision {
@@ -175,5 +181,89 @@ describe('lia brain send route candidate adapter (D2B1)', () => {
     expect((result as any).engineId).toBeUndefined()
     expect(result).toHaveProperty('providerId')
     expect(result).toHaveProperty('modelId')
+  })
+})
+
+/** A selected automatic decision for the engine's vision route. */
+function makeAutomaticSelectedForVision(): LiaBrainRoutingDecision {
+  const { engines, models } = groqBrainDescriptors()
+  const vision = models.find(model => model.id === 'qwen/qwen3.8-27b')!
+  return {
+    status: 'automatic',
+    selection: {
+      status: 'selected',
+      route: { engine: engines[0]!, model: vision },
+    },
+  }
+}
+
+/**
+ * Phase 8.0D-M1 gate 6: the routeOverride that actually reaches the chat send,
+ * derived from the REAL production catalog, policy, requirement derivation and
+ * decision - not from a hand-built decision object. The expected model id is a
+ * LITERAL on purpose: recomputing it from the adapter's own constant would make
+ * the assertion tautological.
+ */
+describe('multimodal routeOverride at the send seam (Phase 8.0D-M1)', () => {
+  function candidateFor(facts: { hasImageInput?: boolean, reasoningRequested?: boolean, usesTools?: boolean }) {
+    const { engines, models } = createProductionBrainCatalog()
+    const decision = decideBrainRoute({
+      automaticPolicy: createProductionBrainAutomaticPolicy(),
+      engines,
+      mode: 'automatic',
+      models,
+      requirement: brainRequirementForChatTurn({
+        hasImageInput: facts.hasImageInput === true,
+        reasoningRequested: facts.reasoningRequested === true,
+        usesTools: facts.usesTools === true,
+      }),
+    })
+    return resolveLiaBrainSendRouteCandidate(decision)
+  }
+
+  it('gate 6: an image turn produces exactly the Groq provider plus the Qwen model', () => {
+    const override = candidateFor({ hasImageInput: true })
+    expect(override).toEqual({ modelId: 'qwen/qwen3.8-27b', providerId: 'groq' })
+    // Exactly two keys - the override carries no engineId, no capability data
+    // and nothing a provider could misread.
+    expect(Object.keys(override!).sort()).toEqual(['modelId', 'providerId'])
+  })
+
+  it('gate 6b: a text turn keeps producing exactly the Groq provider plus GPT-OSS', () => {
+    expect(candidateFor({})).toEqual({ modelId: 'openai/gpt-oss-120b', providerId: 'groq' })
+  })
+
+  it('gate 6c: the provider stays Groq for both routes - no second provider is introduced', () => {
+    const text = candidateFor({})
+    const image = candidateFor({ hasImageInput: true })
+    expect(text?.providerId).toBe('groq')
+    expect(image?.providerId).toBe('groq')
+    expect(text?.modelId).not.toBe(image?.modelId)
+  })
+})
+
+/**
+ * Phase 8.0D-M1 gate 10: the validated voice pipeline is untouched by the
+ * multimodal slice. B1/B1.1 shipped these identities and passed a real Windows
+ * E2E against them, so they are pinned here as literal oracles - a change to
+ * any of them is a voice regression, not a Brain change, and must fail loudly.
+ */
+describe('voice pipeline untouched by the multimodal slice (Phase 8.0D-M1 gate 10)', () => {
+  it('the managed STT identities are still exactly what B1/B1.1 validated', () => {
+    expect(LIA_GROQ_TRANSCRIPTION_PROVIDER_ID).toBe('lia-groq-transcription')
+    expect(LIA_GROQ_TRANSCRIPTION_DEFINITION_ID).toBe('openai-compatible-audio-transcription')
+    expect(LIA_GROQ_TRANSCRIPTION_MODEL_ID).toBe('whisper-large-v3-turbo')
+    expect(LIA_GROQ_TRANSCRIPTION_BASE_URL).toBe('https://api.groq.com/openai/v1/')
+  })
+
+  it('the vision route is a distinct identity from the transcription target', () => {
+    // The Brain vision route and the STT target must never be conflated: one is
+    // a chat model, the other a transcription provider record. Sharing an id
+    // would mean the multimodal slice reached into the voice pipeline.
+    const vision = resolveLiaBrainSendRouteCandidate(makeAutomaticSelectedForVision())
+    expect(vision?.modelId).toBe('qwen/qwen3.8-27b')
+    expect(vision?.modelId).not.toBe(LIA_GROQ_TRANSCRIPTION_MODEL_ID)
+    expect(vision?.providerId).toBe('groq')
+    expect(vision?.providerId).not.toBe(LIA_GROQ_TRANSCRIPTION_PROVIDER_ID)
   })
 })

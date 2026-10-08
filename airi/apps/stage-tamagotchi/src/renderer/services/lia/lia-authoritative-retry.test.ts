@@ -1,4 +1,4 @@
-import { groqBrainDescriptors } from '@lia/core'
+import { brainRequirementForChatTurn, createProductionBrainAutomaticPolicy, createProductionBrainCatalog, decideBrainRoute, groqBrainDescriptors } from '@lia/core'
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -364,5 +364,71 @@ describe('lia authoritative retry image fidelity (Phase 8.0D-10B-4D4C4-D2B11)', 
     expect(retry).toHaveBeenCalledTimes(1)
     expect(retry.mock.calls[0]![0]).not.toHaveProperty('routeOverride')
     expect((retry.mock.calls[0]![0] as { attachments: unknown[] }).attachments).toEqual(IMAGES)
+  })
+})
+
+/**
+ * Phase 8.0D-M1 gate 8: a retried image turn keeps its image AND keeps
+ * resolving the vision route.
+ *
+ * Only the IPC boundary is mocked. The decision it returns is computed by the
+ * REAL catalog, policy, requirement derivation and decision layer from the
+ * facts the retry actually derived, so the chain under test - frozen snapshot
+ * -> facts -> real Brain routing -> routeOverride -> outgoing retry - is real
+ * end to end.
+ */
+describe('multimodal retry (Phase 8.0D-M1)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.requestDecision.mockImplementation(async (input: { facts: { hasImageInput: boolean, reasoningRequested: boolean, usesTools: boolean } }) => {
+      const { engines, models } = createProductionBrainCatalog()
+      return decideBrainRoute({
+        automaticPolicy: createProductionBrainAutomaticPolicy(),
+        engines,
+        mode: 'automatic',
+        models,
+        requirement: brainRequirementForChatTurn(input.facts),
+      })
+    })
+    mocks.hasApiKey.mockResolvedValue(true)
+  })
+
+  it('gate 8: the retried turn carries the same image and resolves the vision route', async () => {
+    const attachments = [{ type: 'image' as const, data: 'aW1hZ2U=', mimeType: 'image/png' }]
+    const retry = vi.fn(async (_payload: unknown) => {})
+
+    await executeLiaAuthoritativeRetry(
+      {
+        attachments,
+        index: 3,
+        reasoning: false,
+        sessionId: 'session-1',
+        sourceMessageId: 'message-1',
+        tools: [],
+      },
+      { retry },
+    )
+
+    expect(retry).toHaveBeenCalledTimes(1)
+    const payload = retry.mock.calls[0]![0] as { attachments?: unknown, routeOverride?: unknown }
+    // The image itself is carried, byte-identical.
+    expect(payload.attachments).toEqual(attachments)
+    // ...and the turn resolved to the vision route, not the text brain.
+    expect(payload.routeOverride).toEqual({ modelId: 'qwen/qwen3.8-27b', providerId: 'groq' })
+    // The fact that drove it really described an image turn.
+    expect(mocks.requestDecision.mock.calls[0]![0].facts.hasImageInput).toBe(true)
+  })
+
+  it('gate 8b: a retried text-only turn does not promote the vision route', async () => {
+    const retry = vi.fn(async (_payload: unknown) => {})
+
+    await executeLiaAuthoritativeRetry(
+      { index: 3, reasoning: false, sessionId: 'session-1', sourceMessageId: 'message-1', tools: [] },
+      { retry },
+    )
+
+    const payload = retry.mock.calls[0]![0] as { routeOverride?: unknown }
+    expect(payload.routeOverride).toEqual({ modelId: 'openai/gpt-oss-120b', providerId: 'groq' })
+    expect(mocks.requestDecision.mock.calls[0]![0].facts.hasImageInput).toBe(false)
   })
 })

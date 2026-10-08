@@ -1,6 +1,6 @@
 import type { LiaBrainAutomaticSelectionPolicy } from '../brain/selection'
 
-import { GROQ_BRAIN_ENGINE_ID, GROQ_BRAIN_MODEL_ID } from '../brain/adapters/groq'
+import { GROQ_BRAIN_ENGINE_ID, GROQ_BRAIN_MODEL_ID, GROQ_BRAIN_VISION_MODEL_ID } from '../brain/adapters/groq'
 
 /**
  * Phase 8.0D-8: Lia's PRODUCTION automatic Brain selection policy.
@@ -31,15 +31,28 @@ import { GROQ_BRAIN_ENGINE_ID, GROQ_BRAIN_MODEL_ID } from '../brain/adapters/gro
  */
 
 /**
- * The production automatic policy, as of this phase: exactly ONE route -
- * Lia's current chat brain (Groq + openai/gpt-oss-120b). Adding or
- * reordering future production routes is an explicit product-policy change
- * here, and precedence remains this declared order.
+ * The production automatic policy: two declared routes on one engine, in this
+ * order. Adding or reordering production routes is an explicit product-policy
+ * change here, and precedence remains this declared order.
+ *
+ * 1. the text chat brain - first, so a text-only turn keeps resolving to
+ *    exactly what it always did;
+ * 2. the engine's vision route - reached only when capability eligibility puts
+ *    the first route out of the candidate set.
+ *
+ * This order is a precedence declaration and nothing more. It contains no
+ * image detection, no filename or prompt inspection, no provider or UI state:
+ * the selector visits these entries in order and settles on the first one that
+ * is an eligible candidate, so a turn that does not require `imageInput`
+ * selects route 1 and can never reach route 2 by accident, while a turn that
+ * does drops route 1 at the eligibility layer and settles on route 2. The
+ * capability requirement - not this list - is what decides.
  */
 export function createProductionBrainAutomaticPolicy(): LiaBrainAutomaticSelectionPolicy {
   return {
     routes: [
       { engineId: GROQ_BRAIN_ENGINE_ID, modelId: GROQ_BRAIN_MODEL_ID },
+      { engineId: GROQ_BRAIN_ENGINE_ID, modelId: GROQ_BRAIN_VISION_MODEL_ID },
     ],
   }
 }

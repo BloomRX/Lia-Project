@@ -5,7 +5,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { isContentArrayRelatedError, sanitizeMessages, streamFrom } from './llm-service'
 
-const { streamTextMock } = vi.hoisted(() => ({
+const { stepCountAtLeastMock, streamTextMock } = vi.hoisted(() => ({
+  stepCountAtLeastMock: vi.fn(),
   streamTextMock: vi.fn(),
 }))
 
@@ -17,7 +18,7 @@ vi.mock('@xsai/shared-chat', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@xsai/shared-chat')>()
   return {
     ...actual,
-    stepCountAtLeast: vi.fn(),
+    stepCountAtLeast: stepCountAtLeastMock,
   }
 })
 
@@ -39,6 +40,70 @@ function createMockStreamResult(
     totalUsage,
   }
 }
+
+/**
+ * Phase 8.0D-M1: Lia's half of the tool-calling contract, at the seam it owns.
+ *
+ * The tool execution LOOP itself lives inside `@xsai/stream-text` (the model
+ * emits a tool_call, xsai runs it and feeds the result back, bounded by
+ * `stopWhen`). Proving that loop end to end needs either a live model or a
+ * rewrite of the xsai mock, so it is reported as a separate closure item
+ * rather than faked here. What IS provable at this seam, and is asserted
+ * below, is that Lia hands the resolved route's model a non-empty tool set and
+ * permits more than one step - without which no loop could ever run.
+ */
+describe('streamFrom tool-calling seam (Phase 8.0D-M1)', () => {
+  beforeEach(() => {
+    streamTextMock.mockReset()
+  })
+
+  it('hands the resolved model a non-empty tool set and permits multiple steps', async () => {
+    streamTextMock.mockReturnValueOnce(createMockStreamResult())
+    // The model identity travels through chatProvider.chat(model), so that call
+    // is where the resolved route's model is observable.
+    const chat = vi.fn(() => ({ baseURL: 'https://example.com/' }))
+    const routedProvider = { chat } as unknown as ChatProvider
+
+    await streamFrom({
+      model: 'qwen/qwen3.8-27b',
+      chatProvider: routedProvider,
+      messages: [{ role: 'user', content: 'weather please' }] as Message[],
+      builtinToolsResolver: async () => [{ weather: { description: 'weather', parameters: {} } }] as never,
+      options: {},
+    })
+
+    // The resolved route's model reaches the provider verbatim.
+    expect(chat).toHaveBeenCalledWith('qwen/qwen3.8-27b')
+
+    expect(streamTextMock).toHaveBeenCalledTimes(1)
+    const call = streamTextMock.mock.calls[0]![0] as { tools: Record<string, unknown> | undefined }
+    // Tools are actually composed - not undefined, not an empty object.
+    expect(call.tools).toBeDefined()
+    expect(Object.keys(call.tools!)).toHaveLength(1)
+    // And the multi-step stop condition is armed at 10 steps, so a tool result
+    // CAN return to the model instead of ending the turn after one step.
+    expect(stepCountAtLeastMock).toHaveBeenCalledWith(10)
+  })
+
+  it('omits tools entirely once a model key is known to be incompatible', async () => {
+    streamTextMock.mockReturnValueOnce(createMockStreamResult())
+
+    await streamFrom({
+      model: 'qwen/qwen3.8-27b',
+      chatProvider: provider,
+      messages: [{ role: 'user', content: 'weather please' }] as Message[],
+      builtinToolsResolver: async () => [{ weather: { description: 'weather', parameters: {} } }] as never,
+      options: {
+        // Keyed by `${baseURL}-${model}`, which is how the runtime identifies a
+        // model+provider pair it has already seen fail.
+        toolsCompatibility: new Map([['https://example.com/-qwen/qwen3.8-27b', false]]),
+      },
+    })
+
+    const call = streamTextMock.mock.calls[0]![0] as { tools: unknown }
+    expect(call.tools).toBeUndefined()
+  })
+})
 
 describe('streamFrom tool errors', () => {
   beforeEach(() => {

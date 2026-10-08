@@ -264,7 +264,10 @@ describe('runtime brain decision context (8.0D-1)', () => {
     const srcDir = fileURLToPath(new URL('..', import.meta.url))
     const consumers: string[] = []
     for (const entry of readdirSync(srcDir, { recursive: true, withFileTypes: true })) {
-      if (!entry.isFile() || !entry.name.endsWith('.ts'))
+      // Test files are excluded, as the equivalent consumer scan in
+      // product/brain-policy.test.ts does: the guard is that no EXECUTION path
+      // imports the decision, and a test is not one.
+      if (!entry.isFile() || !entry.name.endsWith('.ts') || entry.name.includes('.test.'))
         continue
       const file = join(entry.parentPath, entry.name)
       // Compare in POSIX form: on Windows parentPath carries backslashes, so a
