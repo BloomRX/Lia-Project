@@ -44,6 +44,7 @@ import { setupGlobalShortcutService } from './services/electron/global-shortcut'
 import { setupPermissionHandlers } from './services/electron/media-permissions'
 import { createLiaBrainCorrelationObserver } from './services/lia/brain-correlation-observer'
 import { createLiaBrainCorrelationService } from './services/lia/brain-correlation-service'
+import { selectLiaBrainDecisionDiagnosticLog } from './services/lia/brain-decision-diagnostic'
 import { registerLiaBrainDecisionBridge } from './services/lia/brain-decision-service'
 import { selectLiaBrainDiagnosticLog } from './services/lia/brain-diagnostic-log'
 import { registerLiaBrainExecutionReportHandler } from './services/lia/brain-execution-report-service'
@@ -451,6 +452,11 @@ app.whenReady().then(async () => {
         brain: deps.liaBrain,
         correlationStore: deps.liaBrainCorrelation,
         correlationObserver: deps.liaBrainCorrelationObserver,
+        // Phase 8.0D-M2: a dev build gets the decision's own status as one
+        // metadata-only adapter line ("[LIA-BRAIN-DECISION] ..."); every other
+        // build gets `undefined` and the bridge publishes nothing. The
+        // composition root owns that choice - the bridge never resolves a sink.
+        decisionLog: selectLiaBrainDecisionDiagnosticLog(import.meta.env.DEV),
       })
     },
   })

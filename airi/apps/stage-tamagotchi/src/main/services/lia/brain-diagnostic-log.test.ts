@@ -81,9 +81,14 @@ function occurrences(line: string, token: string): number {
 }
 
 /**
- * The two siblings this suite never exercises, in their neutral factual
- * states. The composition always supplies all five, so a present entry must
- * carry them; the formatter reads neither, so no emitted token changes.
+ * The siblings this suite exercises only in their neutral factual states, in
+ * those states. The composition always supplies all of them, so a present
+ * entry must carry them.
+ *
+ * Phase 8.0D-M2: the initial-route sibling is now PRINTED when it retains an
+ * observation, and this neutral not-observed value is exactly the state that
+ * emits no token at all - which is why every pre-existing exact-line
+ * assertion in this file is still literally true.
  */
 const NOT_OBSERVED_INITIAL_ROUTE: LiaBrainInitialRouteObservationFacts = { status: 'initialRouteOverrideNotObserved' }
 const NOT_OBSERVED_FINAL_EXECUTION: LiaBrainFinalSuccessfulExecutionFacts = { status: 'sendTerminalNotObserved' }
@@ -114,6 +119,7 @@ function entry(
   correlationId = 'X',
   terminalFacts: LiaBrainTerminalObservationFacts = ZERO_TERMINALS,
   sendTerminalFacts: LiaBrainSendTerminalObservationFacts = {},
+  initialRouteOverrideFacts: LiaBrainInitialRouteObservationFacts = NOT_OBSERVED_INITIAL_ROUTE,
 ): LiaBrainDiagnosticEntry {
   return facts.status === 'correlationNotObserved'
     ? { correlationId, facts }
@@ -121,7 +127,7 @@ function entry(
         correlationId,
         facts,
         finalSuccessfulExecutionFacts: NOT_OBSERVED_FINAL_EXECUTION,
-        initialRouteOverrideFacts: NOT_OBSERVED_INITIAL_ROUTE,
+        initialRouteOverrideFacts,
         routeConformanceFacts: NOT_OBSERVED_ROUTE_CONFORMANCE,
         sendTerminalFacts,
         terminalFacts,
@@ -1117,5 +1123,98 @@ describe('diagnostic log - the route-conformance sibling is structured-only (Pha
     expect(matched.routeConformanceFacts).toEqual({ modelMatches: true, providerMatches: true, status: 'routeIdentityMatched' })
     expect(JSON.stringify(matched)).toContain('routeIdentityMatched')
     expect(formatLiaBrainDiagnosticEntry(matched)).not.toContain('routeIdentityMatched')
+  })
+})
+
+/**
+ * Phase 8.0D-M2: the authoritative initial routeOverride observation.
+ *
+ * This is the field that answers the question the first Windows gate of the
+ * multimodal route could not answer from the line alone: did the Brain hand
+ * the execution a route at all? Every value is copied verbatim from the
+ * already-derived projection - the formatter never re-derives a route, never
+ * compares it with the expectation and never turns the difference into a
+ * verdict.
+ */
+describe('lia brain diagnostic log - authoritative initial routeOverride (Phase 8.0D-M2)', () => {
+  const IDENTITY_ONLY = '[LIA-BRAIN-DIAG] correlationId="X" status="noBrainRouteSelected" attempt0.arrivalIndex=0 attempt0.roundId="A" attempt0.providerId="groq" attempt0.modelId="openai/gpt-oss-120b"'
+
+  it('m1: an observed routeOverride is appended LAST, after the counts and the settlement', () => {
+    const line = formatLiaBrainDiagnosticEntry(entry(
+      { attempts: [attempt()], status: 'noBrainRouteSelected' },
+      'X',
+      ZERO_TERMINALS,
+      { sendTerminalOutcome: 'failed' },
+      { modelId: 'qwen/qwen3.8-27b', providerId: 'groq', status: 'initialRouteOverrideObserved' },
+    ))
+
+    expect(line).toBe(
+      `${IDENTITY_ONLY} ${ZERO_COUNTS} sendTerminalOutcome="failed" initialRouteOverrideStatus="initialRouteOverrideObserved" initialRouteOverrideProviderId="groq" initialRouteOverrideModelId="qwen/qwen3.8-27b"`,
+    )
+    // Exactly once each, and after every pre-existing field.
+    for (const field of ['initialRouteOverrideStatus=', 'initialRouteOverrideProviderId=', 'initialRouteOverrideModelId='])
+      expect(occurrences(line, field), field).toBe(1)
+    expect(line.indexOf('initialRouteOverrideStatus=')).toBeGreaterThan(line.indexOf('sendTerminalOutcome='))
+    expect(line.indexOf('sendTerminalOutcome=')).toBeGreaterThan(line.indexOf('abandonedTerminalObservationCount='))
+  })
+
+  it('m2: an observed-ABSENT routeOverride is reported as a fact, with no identities invented', () => {
+    const line = formatLiaBrainDiagnosticEntry(entry(
+      { attempts: [attempt()], status: 'noBrainRouteSelected' },
+      'X',
+      ZERO_TERMINALS,
+      {},
+      { status: 'noInitialRouteOverride' },
+    ))
+
+    expect(line).toBe(`${IDENTITY_ONLY} ${ZERO_COUNTS} initialRouteOverrideStatus="noInitialRouteOverride"`)
+    expect(line).not.toMatch(/initialRouteOverrideProviderId|initialRouteOverrideModelId/)
+  })
+
+  it('m3: the not-observed state emits no token at all - absence is never printed as a value', () => {
+    const line = formatLiaBrainDiagnosticEntry(entry({ attempts: [attempt()], status: 'noBrainRouteSelected' }))
+
+    expect(line).toBe(`${IDENTITY_ONLY} ${ZERO_COUNTS}`)
+    expect(line).not.toContain('initialRouteOverride')
+    // No placeholder of any kind stands in for the absent observation.
+    expect(line).not.toMatch(/initialRouteOverride\w*=(?:""|null|undefined|pending|none|0)/)
+  })
+
+  it('m4: the absence state still carries no terminal member and prints no routeOverride field', () => {
+    const absent = entry({ status: 'correlationNotObserved' }, 'logical-send-X')
+    expect('initialRouteOverrideFacts' in absent).toBe(false)
+    expect(formatLiaBrainDiagnosticEntry(absent)).toBe('[LIA-BRAIN-DIAG] correlationId="logical-send-X" status="correlationNotObserved"')
+  })
+
+  it('m5: the two identities are JSON-quoted verbatim, so a hostile id cannot break the line', () => {
+    const hostile = 'a" b\\ c'
+    const line = formatLiaBrainDiagnosticEntry(entry(
+      { attempts: [], status: 'decisionNotObserved' },
+      'X',
+      ZERO_TERMINALS,
+      {},
+      { modelId: hostile, providerId: hostile, status: 'initialRouteOverrideObserved' },
+    ))
+
+    expect(line).toContain(`initialRouteOverrideProviderId=${JSON.stringify(hostile)}`)
+    expect(line).toContain(`initialRouteOverrideModelId=${JSON.stringify(hostile)}`)
+    // One line, always.
+    expect(line.split('\n')).toHaveLength(1)
+  })
+
+  it('m6: no verdict, comparison or recommendation vocabulary is introduced', () => {
+    const line = formatLiaBrainDiagnosticEntry(entry(
+      {
+        attempts: [{ arrivalIndex: 0, modelId: GROQ_MODEL_ID, modelIdentityEqual: true, providerId: GROQ_ENGINE_ID, providerIdentityEqual: true, roundId: 'A' }],
+        expected: { engineId: 'groq', modelId: 'openai/gpt-oss-120b', providerId: 'groq' },
+        status: 'attemptIdentityFacts',
+      },
+      'X',
+      ZERO_TERMINALS,
+      {},
+      { modelId: 'qwen/qwen3.8-27b', providerId: 'groq', status: 'initialRouteOverrideObserved' },
+    ))
+
+    expect(line).not.toMatch(/Matches|Match\b|mismatch|divergence|aligned|correct|incorrect|success|failure|verdict|score|recommendation|expectedRouteOverride/i)
   })
 })

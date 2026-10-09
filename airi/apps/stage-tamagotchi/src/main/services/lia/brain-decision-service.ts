@@ -128,8 +128,22 @@ export function registerLiaBrainDecisionBridge(params: {
    * and returns nothing: the bridge never reads, stores or branches on it.
    */
   correlationObserver: LiaBrainCorrelationObserver
+  /**
+   * Phase 8.0D-M2: an OPTIONAL metadata-only decision sink, injected by the
+   * lifecycle and never resolved or created here.
+   *
+   * The correlation line reports the EXECUTION identity of a send, and every
+   * decision carrying no route collapses there into one factual state. This
+   * sink publishes the decision's OWN status beside it, so the canonical
+   * routing outcome of a turn is readable directly instead of being inferred
+   * from an execution-side state. It receives the very decision object the
+   * Brain service returned, is called at most once per request, returns
+   * nothing, and can influence nothing: the decision is already computed before
+   * it runs and is returned unchanged afterwards.
+   */
+  decisionLog?: (decision: LiaBrainChatDecision) => void
 }): void {
-  const { context, brain, correlationStore, correlationObserver } = params
+  const { context, brain, correlationStore, correlationObserver, decisionLog } = params
   const trustedAutomaticPolicy = createProductionBrainAutomaticPolicy()
 
   defineInvokeHandler(context, electronLiaBrainChatDecision, (request: LiaBrainChatDecisionRequest): LiaBrainChatDecision => {
@@ -143,6 +157,11 @@ export function registerLiaBrainDecisionBridge(params: {
       automaticPolicy: trustedAutomaticPolicy,
       requirement: brainRequirementForChatTurn(readFacts(request?.facts)),
     })
+
+    // Phase 8.0D-M2: the decision's OWN status, published as metadata for the
+    // operational gate. Strictly after the decision exists: the sink receives
+    // that same object, returns nothing, and cannot alter what is returned.
+    decisionLog?.(decision)
 
     // Phase 8.0D-10B-4B3: after a canonical decision exists, the diagnostic
     // record is filled with THAT decision - the very object the Brain service

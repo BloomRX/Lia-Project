@@ -27,8 +27,9 @@ import { useLogg } from '@guiiai/logg'
  * discriminator, the expected route ids, per observed attempt its arrival index
  * plus the ids (and, for the identity-facts state, the two equality booleans),
  * and - for a present correlation - the three terminal observation counts of
- * the SAME snapshot plus the optional logical-send terminal settlement of that
- * same snapshot. No prompt, message, attachment, tool data, credential, API
+ * the SAME snapshot, the optional logical-send terminal settlement of that same
+ * snapshot and the optional authoritative initial routeOverride observation of
+ * that same snapshot. No prompt, message, attachment, tool data, credential, API
  * key, baseURL, provider object or chat payload is reachable from here.
  *
  * Authority: none. A log line cannot select a route, change a policy, pick a
@@ -102,13 +103,20 @@ function quoted(value: string): string {
  * none of them: zero retained observations is a fact about a present snapshot,
  * and is never fabricated for a key that has no snapshot.
  *
- * The logical-send terminal settlement, when one was retained, is the very LAST
- * field of the line: it is appended after all three counts, so no existing field
- * ever moves. It is optional by contract - an empty sibling emits no token at
- * all (no empty string, no null, no undefined, no pending, no zero) - and its
- * value is copied verbatim from the already-derived projection: never re-derived
- * from a count or an attempt, never joined with a round, and never turned into a
- * count, a boolean, a status or a verdict.
+ * The logical-send terminal settlement, when one was retained, is appended
+ * after all three counts, so no existing field ever moves. It is optional by
+ * contract - an empty sibling emits no token at all (no empty string, no null,
+ * no undefined, no pending, no zero) - and its value is copied verbatim from
+ * the already-derived projection: never re-derived from a count or an attempt,
+ * never joined with a round, and never turned into a count, a boolean, a
+ * status or a verdict.
+ *
+ * The authoritative initial routeOverride observation, when one was retained,
+ * is the LAST field of the line: it is appended after the settlement above by
+ * the same rule, so no existing field ever moves either. It obeys the same
+ * absence convention - the not-observed state emits no token at all - and its
+ * status and two identities are copied verbatim from the already-derived
+ * projection.
  */
 export function formatLiaBrainDiagnosticEntry(entry: LiaBrainDiagnosticEntry): string {
   const { correlationId, facts } = entry
@@ -184,6 +192,27 @@ export function formatLiaBrainDiagnosticEntry(entry: LiaBrainDiagnosticEntry): s
   // with a count or a round and never aggregates it.
   if ('sendTerminalFacts' in entry && entry.sendTerminalFacts.sendTerminalOutcome !== undefined)
     fields.push(`sendTerminalOutcome=${quoted(entry.sendTerminalFacts.sendTerminalOutcome)}`)
+
+  // Phase 8.0D-M2: the AUTHORITATIVE initial routeOverride the generic Stage
+  // seam observed for this logical send, appended AFTER the settlement above so
+  // no existing field moves. This is the field that answers "did the Brain hand
+  // the execution a route at all?": `noInitialRouteOverride` means the payload
+  // carried none, and the observed state carries the two identities it carried.
+  // It follows the sibling convention directly above - the not-observed state
+  // emits NO token at all, because an absence is never printed as an empty
+  // value, a null, an undefined, a pending marker or a zero. Both values are
+  // copied verbatim from the already-derived projection: this module never
+  // re-derives a route, never compares it with the expectation above and never
+  // turns the difference into a verdict.
+  if ('initialRouteOverrideFacts' in entry && entry.initialRouteOverrideFacts.status !== 'initialRouteOverrideNotObserved') {
+    fields.push(`initialRouteOverrideStatus=${quoted(entry.initialRouteOverrideFacts.status)}`)
+    if (entry.initialRouteOverrideFacts.status === 'initialRouteOverrideObserved') {
+      fields.push(
+        `initialRouteOverrideProviderId=${quoted(entry.initialRouteOverrideFacts.providerId)}`,
+        `initialRouteOverrideModelId=${quoted(entry.initialRouteOverrideFacts.modelId)}`,
+      )
+    }
+  }
 
   return [PREFIX, ...fields].join(' ')
 }

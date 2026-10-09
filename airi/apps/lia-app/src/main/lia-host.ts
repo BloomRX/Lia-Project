@@ -13,11 +13,17 @@ import { access, stat } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import {
+  brainRequirementForChatTurn,
+  createProductionBrainAutomaticPolicy,
+  createProductionBrainCatalog,
+  decideBrainRouteFromProductState,
+} from '@lia/core'
 import { resolveVoiceRuntimeHome } from '@lia/core/bootstrap/runtime-root'
 import { buildLiaBridgeConfig, stageEnvFor } from '@lia/core/bridge/lia-config'
 import { classifyInstallLocation, inspectInstallLocationTarget } from '@lia/core/paths/install-location'
 import { liaProductPaths } from '@lia/core/paths/product-paths'
-import { readLiaProductConfig, updateLiaProductConfig } from '@lia/core/product/config'
+import { brainRoutingModeUpdate, readBrainRoutingMode, readLiaProductConfig, updateLiaProductConfig } from '@lia/core/product/config'
 import { createLiaSecretVault } from '@lia/core/secrets/vault'
 import { createLiaVoiceProfileStore, findMissingFiles } from '@lia/core/voices/profiles'
 
@@ -372,6 +378,108 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
     return 'configured'
   }
 
+  /**
+   * Phase 8.0D-M2: materialize the canonical Brain ROUTING MODE BEFORE the
+   * Stage child launches, so the managed Stage's Brain can route at all.
+   *
+   * Why this belongs to the Launcher: `brain.mode` is optional in the canonical
+   * schema and its absence is preserved deliberately, so an absent mode answers
+   * `modeUnspecified` - which selects no route and leaves an image-bearing turn
+   * on the globally active chat model. Nothing else in the product writes the
+   * field, and the Launcher is already the product-configuration authority for
+   * the managed speech-to-text default above. This is the Brain analogue of it:
+   * one product-layer default, owned here, persisted through the same canonical
+   * writer. It is NOT a second routing authority - the routing decision stays
+   * owned by Lia Core's canonical router, and the Stage still makes it.
+   *
+   * The gate is deliberately narrow. An EXPLICIT mode is absolute and is never
+   * touched: `disabled` and `manual` are the user's authority, and an existing
+   * `automatic` is preserved without a redundant write. Only an ABSENT mode may
+   * be defaulted, and only when ALL of these hold:
+   *   1. a chat provider is configured at all;
+   *   2. the REAL production Brain - the same catalog, the same product policy
+   *      and the same canonical decision the Stage runs - would actually SELECT
+   *      a route for a plain text turn under automatic mode. Eligibility is
+   *      ASKED of the router, never assumed here;
+   *   3. that selected route's engine IS the configured chat provider. A Brain
+   *      engine id is the canonical chat provider id by construction, so this
+   *      is an identity check and not a second mapping table - and it is what
+   *      keeps a Brain engine this user's chat configuration does not justify
+   *      from being selected for them;
+   *   4. that provider's EXISTING vault credential is present. Only its
+   *      presence is consulted: the value is never read, copied or reported.
+   *
+   * Otherwise the Launcher refuses to guess and says why, in metadata.
+   *
+   * A degraded default never blocks conversation: the document is left exactly
+   * as it was and text chat proceeds exactly as before.
+   *
+   * Returns whether the canonical document declares automatic Brain routing
+   * afterwards.
+   */
+  async function ensureBrainReadyForConversar(snapshot: LiaProductConfigSnapshot | undefined): Promise<'automatic' | 'not-automatic'> {
+    const mode = readBrainRoutingMode(snapshot)
+    // The canonical routing intent this launch runs with, reported by the owner
+    // of the field - metadata only, so nobody has to infer it from a routing
+    // outcome downstream.
+    emit('lia-app.conversar-brain-mode', `mode=${mode ?? 'absent'}`)
+
+    // An explicit mode is absolute: never overridden, never re-written.
+    if (mode !== undefined)
+      return mode === 'automatic' ? 'automatic' : 'not-automatic'
+
+    const preferredAi = snapshot?.provider?.chat?.preferred
+    if (!preferredAi) {
+      emit('lia-app.conversar-brain-not-ready', 'reason=chat-provider-unset')
+      return 'not-automatic'
+    }
+
+    // Ask the REAL Brain, against a PROBE snapshot that exists only inside this
+    // call: the persisted document is not touched by asking the question. The
+    // requirement is a plain text turn - the baseline every conversation starts
+    // with - so the default never depends on a capability this turn may not use.
+    const catalog = createProductionBrainCatalog()
+    const probe = decideBrainRouteFromProductState({
+      automaticPolicy: createProductionBrainAutomaticPolicy(),
+      engines: catalog.engines,
+      models: catalog.models,
+      requirement: brainRequirementForChatTurn({}),
+      snapshot: { brain: { ...snapshot?.brain, mode: 'automatic' } },
+    })
+    const selected = probe.status === 'automatic' && probe.selection.status === 'selected'
+      ? probe.selection.route
+      : undefined
+    if (selected === undefined) {
+      emit('lia-app.conversar-brain-not-ready', `reason=automatic-route-unavailable status=${probe.status}`)
+      return 'not-automatic'
+    }
+
+    // No silent provider selection: the route the Brain would run has to belong
+    // to the engine this user already chats through.
+    if (selected.engine.id !== preferredAi.providerId) {
+      emit('lia-app.conversar-brain-not-ready', 'reason=chat-provider-not-eligible')
+      return 'not-automatic'
+    }
+
+    // Reuse the EXISTING credential. Presence only - never the value.
+    if (!vault.hasSecret(preferredAi.providerId, 'apiKey')) {
+      emit('lia-app.conversar-brain-not-ready', 'reason=credential-missing')
+      return 'not-automatic'
+    }
+
+    const written = await updateLiaProductConfig(paths.productConfigFile, brainRoutingModeUpdate('automatic'))
+    if (written.status !== 'ok') {
+      // Degraded, never corrupting: the document is left exactly as it was, no
+      // secret is touched, and conversation still proceeds. Brain routing is
+      // simply reported as unconfigured.
+      emit('lia-app.conversar-brain-not-ready', `reason=config-write-failed status=${written.status}`)
+      return 'not-automatic'
+    }
+
+    emit('lia-app.conversar-brain-defaulted', 'mode=automatic')
+    return 'automatic'
+  }
+
   async function ensureVoiceReadyForConversar(snapshot: LiaProductConfigSnapshot | undefined): Promise<void> {
     const preferredVoice = snapshot?.voice?.tts?.preferred
     if (preferredVoice?.providerId !== 'custom-local-voice')
@@ -660,6 +768,10 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
       // BEFORE the child launches, so the managed Stage reads an already-resolved
       // hearing target. A degraded STT never blocks text conversation.
       await ensureSttReadyForConversar(snapshot)
+      // Phase 8.0D-M2: the canonical Brain routing mode is materialized BEFORE
+      // the child launches, so the managed Stage's Brain can select a route at
+      // all. A degraded Brain default never blocks conversation.
+      await ensureBrainReadyForConversar(snapshot)
       return await stage.start({ env: await hostStageEnv() })
     },
     homeStatus,

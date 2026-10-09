@@ -23,9 +23,10 @@ premissa falsa.
 | Prefixo de código | tudo sob `airi/` |
 
 **Atenção:** a branch contém código funcional **posterior** ao baseline acima — a rota
-Brain multimodal da Phase 8.0D-M1 (seção 5). Esse código está verde em testes
-automatizados mas **ainda não passou por gate de runtime real**. O baseline só avança
-quando um commit passar por um gate Windows; até lá ele permanece `3ef6d11`.
+Brain multimodal da Phase 8.0D-M1 e o bootstrap de roteamento da Phase 8.0D-M2 (seção 5).
+Esse código está verde em testes automatizados mas **ainda não passou por gate de runtime
+real**: o primeiro gate Windows da M1 **FALHOU** e o reteste está pendente. O baseline só
+avança quando um commit passar por um gate Windows; até lá ele permanece `3ef6d11`.
 
 ### O tip da branch não é registrado aqui
 
@@ -140,26 +141,31 @@ Invariantes que B1/B1.1 estabeleceram e que valem como contrato:
 
 ## 4. Estado da validação automatizada
 
-Números da Phase 8.0D-M1 (o commit que contém a rota multimodal). **Teste automatizado
-verde não é gate de runtime** — ver a seção 5 para o gate Windows pendente.
+Números da Phase 8.0D-M2 (o commit que contém a rota multimodal **e** o bootstrap de
+roteamento). **Teste automatizado verde não é gate de runtime** — ver a seção 5 para o
+gate Windows pendente.
 
 | Verificação | Resultado |
 | --- | --- |
-| Stage `vitest run --project node` | 141 arquivos, **1725 passed**, 1 skipped |
+| Stage `vitest run --project node` | 142 arquivos, **1750 passed**, 1 skipped |
 | `@lia/core` | 28 arquivos, **353 passed** |
 | `@proj-airi/core-agent` | 12 arquivos, **127 passed** |
-| `@lia/lia-app` | 18 arquivos, **191 passed**, 2 skipped |
+| `@lia/lia-app` | 19 arquivos, **202 passed**, 2 skipped |
 | typecheck `stage-tamagotchi` | **0 `error TS`** |
 | typecheck `@lia/core` / `core-agent` / `@lia/lia-app` | **0 `error TS`** |
-| `pnpm lint` (sem `--fix`) | **0 warnings, 0 errors em 3294 arquivos** |
+| `pnpm lint` (sem `--fix`) | **0 warnings, 0 errors em 3297 arquivos** |
 
-Mutation tests desta fase (cada mutação restaurada e confirmada por `md5sum -c`):
+Mutation tests (cada mutação restaurada e confirmada por `md5sum -c`):
 
 | Mutação | Falhas |
 | --- | --- |
-| `imageInput: true` removido do Qwen | 13 (8 lia-core + 5 Stage) |
-| segunda rota removida da política | 12 (gates 3, 4, 5, 6, 6c, 8 + testes de política) |
-| transporte do attachment até a request removido | 2 (gate 7 + o teste de attachments pré-existente) |
+| **M2** chamada `ensureBrainReadyForConversar(snapshot)` removida de `conversar()` | **10 de 11** testes do ciclo de vida gerenciado |
+| **M2** sonda de elegibilidade + gate de identidade do engine removidos | **1** (o teste “provider que o Brain não atende não fabrica automatic”) |
+| **M2** chamada `decisionLog?.(decision)` removida da ponte | **3** (s1, s2, s3) |
+| **M2** bloco `initialRouteOverride*` removido do formatador | **3** (m1, m2, m5) |
+| **M1** `imageInput: true` removido do Qwen | 13 (8 lia-core + 5 Stage) |
+| **M1** segunda rota removida da política | 12 (gates 3, 4, 5, 6, 6c, 8 + testes de política) |
+| **M1** transporte do attachment até a request removido | 2 (gate 7 + o teste de attachments pré-existente) |
 
 Comandos (a partir de `airi/`):
 
@@ -181,7 +187,11 @@ Armadilhas de tooling que continuam valendo:
 
 ---
 
-## 5. Estado da 8.0D e a rota multimodal (Phase 8.0D-M1)
+## 5. Estado da 8.0D e a rota multimodal (Phase 8.0D-M1 / M2)
+
+> **Status do gate Windows da M1: FAIL / NÃO VALIDADO.** O Qwen **não chegou a
+> executar** — não falhou: não foi testado. Ver “Primeiro gate Windows da M1” abaixo.
+> O baseline funcional **não avança**; continua `3ef6d11`.
 
 Conforme `docs/product/lia-ui-implementation-roadmap.md`, a família de fases é
 `8.0A → 8.0J` e o trabalho atual está em **8.0D — First Multimodal Brain Adapter**.
@@ -192,7 +202,7 @@ Resultado, com a Phase 8.0D-M1 já aplicada:
 | critério | status | observação |
 | --- | --- | --- |
 | text conversation | **DONE** | validado em Windows real no baseline `3ef6d11` |
-| image/screen understanding | **IMPLEMENTADO, gate Windows PENDENTE** | rota Qwen adicionada nesta fase; ver abaixo |
+| image/screen understanding | **IMPLEMENTADO, gate Windows FALHOU uma vez, reteste PENDENTE** | rota Qwen (M1) + bootstrap de roteamento (M2). O Qwen **nunca executou** — não falhou, não foi testado. Ver abaixo |
 | audio understanding ("where supported") | **NOT STARTED** | o candidato aprovado é text+image; B1/B1.1 é STT *antes* do brain, não áudio nativo no brain |
 | tool calling | **PARTIAL** | transporte + gate de compatibilidade provados no seam da Lia; o *loop* completo pertence ao `@xsai/stream-text` e segue como item de closure |
 | latency | **NOT STARTED** | nenhuma medição existe; o contrato de telemetria exclui timing por desenho |
@@ -224,6 +234,90 @@ base64, e `sanitizeMessages` as preserva enquanto `streamOptionsContentArrayComp
 é verdadeiro (default por model key). Limite publicado do modelo: **3 imagens** por turno,
 cada uma contando 2048 tokens de entrada.
 
+### Primeiro gate Windows da M1 — **FALHOU** (evidência real)
+
+O usuário rodou o fluxo normal em Windows (`Lia.bat` → Conversar), anexou uma imagem e
+enviou o prompt determinístico. Resultado:
+
+```
+Remote sent 400 response: {"error":{"message":"messages[9].content must be a string",
+"type":"invalid_request_error","param":"messages[9].content"}}
+```
+
+e, no log do Launcher/Stage para os mesmos envios lógicos:
+
+```
+status="noBrainRouteSelected"  attempt0.providerId="groq"
+attempt0.modelId="openai/gpt-oss-120b"  → terminal failed
+```
+
+Ou seja: **o Qwen não foi executado**. O turno com imagem caiu na rota globalmente ativa
+(GPT-OSS), e o Groq rejeitou o array de conteúdo.
+
+**Causa raiz exata — provada por execução, não por leitura de código.** Rodando o código
+de produção real do `@lia/core` (catálogo de produção + política de produção +
+`decideBrainRouteFromProductState`) sobre o documento canônico que um Launcher normal
+produz:
+
+| estado do documento | turno com imagem | `routeOverride` |
+| --- | --- | --- |
+| como o Launcher deixa (`brain` ausente) | `{"status":"modeUnspecified"}` | `undefined` |
+| com `brain.mode="automatic"` | `automatic` / `selected` → `groq` + `qwen/qwen3.8-27b` | presente |
+
+`readBrainRoutingMode` devolve `undefined` porque **nada no produto escreve `brain.mode`**:
+`brainRoutingModeUpdate` não tinha nenhum call site de produção, `defaultLiaProductConfig`
+não tem a chave `brain`, o Launcher não tinha nenhuma referência a `brain`, e não existe
+IPC nem UI que grave o campo. `modeUnspecified` → sem rota → `resolveLiaBrainSendRouteCandidate`
+devolve `undefined` → o envio mantém o provider/modelo ativo → a imagem chega a um modelo
+textual.
+
+**Dívida de compatibilidade separada (registrada, NÃO usada para mascarar o defeito):** a
+string de erro do Groq `messages[N].content must be a string` **não** casa com nenhum dos
+padrões de `CONTENT_ARRAY_RELATED_ERROR_PATTERNS` (`core-agent/src/runtime/llm-service.ts`),
+que cobrem “invalid type: sequence, expected a string” e “expected/should be … string”.
+Portanto o auto-degrade de content-array não dispara para essa variante. **Isto não foi
+“corrigido” de propósito**: fazer um turno com imagem passar como texto-only seria um falso
+PASS. O comportamento exigido continua sendo
+`imageInput → Brain autoritativo → qwen/qwen3.8-27b → imagem chega ao provider`.
+
+### O que a Phase 8.0D-M2 entregou (correção autorizada)
+
+O menor bootstrap de produto possível, análogo em espírito ao STT gerenciado, e dono do
+mesmo princípio: **o Launcher é a autoridade de configuração de produto**.
+
+`ensureBrainReadyForConversar(snapshot)` em `airi/apps/lia-app/src/main/lia-host.ts`,
+chamado em `conversar()` antes de o filho subir:
+
+- `brain.mode` **explícito** é absoluto: `disabled` e `manual` nunca são sobrescritos, e um
+  `automatic` existente é preservado sem regravação;
+- **só** um modo ausente pode ser default, e só quando **todos** valem:
+  1. existe chat provider configurado;
+  2. o **Brain real de produção** — mesmo catálogo, mesma política, mesma decisão canônica
+     que o Stage roda — **selecionaria** uma rota para um turno de texto simples em modo
+     automático (a elegibilidade é **perguntada** ao roteador, nunca presumida);
+  3. o engine dessa rota **é** o chat provider configurado (identidade engine↔provider,
+     sem segunda tabela de mapping) — é isso que impede selecionar o Groq Brain para quem
+     não o justifica;
+  4. a credencial **existente** daquele provider está presente (só a presença; o valor nunca
+     é lido, copiado ou logado);
+- persiste pelo writer canônico (`brainRoutingModeUpdate`); sem mutação de config no
+  renderer, sem tocar `activeProvider`/`activeModel`, sem B1/B1.1/STT/TTS, sem 8.0E;
+- falha de escrita degrada honestamente: documento intacto, conversa segue, motivo emitido.
+
+Não é uma segunda autoridade de roteamento: a decisão continua sendo do roteador canônico,
+feita pelo Stage.
+
+**Diagnóstico metadata-only adicionado** (para o próximo gate não precisar inferir nada):
+
+| fato | onde |
+| --- | --- |
+| modo canônico recebido (owner do campo) | evento `lia-app.conversar-brain-mode mode=automatic\|manual\|disabled\|absent` |
+| default aplicado / recusa e motivo | `lia-app.conversar-brain-defaulted mode=automatic` / `lia-app.conversar-brain-not-ready reason=…` |
+| **status da decisão** + engine/modelo selecionados | linha nova `[LIA-BRAIN-DECISION]` (`brain-decision-diagnostic.ts`, dev-gated) |
+| resultado do `routeOverride` autoritativo | campos `initialRouteOverride*` acrescentados ao fim da linha `[LIA-BRAIN-DIAG]` |
+
+Nada de prompt, imagem, ferramenta ou credencial em nenhum deles.
+
 ### Gate de saída PENDENTE — Windows E2E visual
 
 Testes automatizados verdes **não** são este gate. Roteiro exato:
@@ -237,6 +331,20 @@ Testes automatizados verdes **não** são este gate. Roteiro exato:
    resposta genérica plausível;
 6. confirmar de passagem que um turno **só de texto** continua no GPT-OSS.
 
+Provas de runtime a ler no log (todas metadata-only; **não** inferir nada
+indiretamente desta vez):
+
+| o que procurar | onde | o que significa |
+| --- | --- | --- |
+| `lia-app.conversar-brain-mode mode=…` | log do Launcher | modo canônico que este lançamento recebeu. Na primeira execução de um install existente espera-se `mode=absent`; da segunda em diante, `mode=automatic` |
+| `lia-app.conversar-brain-defaulted mode=automatic` | log do Launcher | o default foi gravado (só na primeira execução) |
+| `lia-app.conversar-brain-not-ready reason=…` | log do Launcher | o default foi recusado — o motivo está no próprio evento |
+| `[LIA-BRAIN-DECISION] status=… selection=… selectedEngineId=… selectedModelId=…` | log do Stage | **status real da decisão**. Para o turno com imagem espera-se `status="automatic" selection="selected" selectedEngineId="groq" selectedModelId="qwen/qwen3.8-27b"` |
+| `initialRouteOverrideStatus=… initialRouteOverrideProviderId=… initialRouteOverrideModelId=…` | fim da linha `[LIA-BRAIN-DIAG]` | o `routeOverride` autoritativo que a execução recebeu de fato |
+
+`noBrainRouteSelected` **não** deve mais aparecer. Se aparecer, a linha
+`[LIA-BRAIN-DECISION]` diz qual foi o status da decisão — não é preciso deduzir.
+
 Só depois desse gate o baseline funcional avança e `image/screen understanding` pode ser
 marcado DONE.
 
@@ -249,6 +357,11 @@ marcado DONE.
 2. **latency measurement** (Windows real).
 3. **region/network measurement** (Windows real).
 4. **directed failure-behavior test** (automatizável).
+5. **variante de string de erro do Groq para content-array** — `messages[N].content must
+   be a string` não casa com `CONTENT_ARRAY_RELATED_ERROR_PATTERNS`
+   (`core-agent/src/runtime/llm-service.ts`). Registrado como dívida; **não** alargar o
+   auto-degrade para “resolver” a M1, porque isso transformaria um turno com imagem num
+   falso PASS textual.
 
 **8.0D não está CLOSED.** E **8.0E não foi iniciado**: nenhum screenshot capture, window
 capture, câmera, audio input nativo, nova UI de provider, novo provider ou mudança de key.
