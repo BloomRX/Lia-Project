@@ -936,11 +936,54 @@ describe('brain decision bridge - the injected decision sink (Phase 8.0D-M2)', (
     expect(received[1].selection.route.model.id).toBe('openai/gpt-oss-120b')
   })
 
-  it('s3: a throwing sink cannot change the decision the renderer receives', async () => {
-    // The sink is diagnostic: like the correlation write, it has no path to
-    // the returned value. (Containment itself is owned by the injected sink's
-    // caller in production; what is proven here is that the bridge never
-    // branches on, awaits or reads a sink result.)
+  it('s3: a THROWING sink is contained - the decision still returns and the correlation path still runs', async () => {
+    // EXECUTABLE proof, not a source scan: the injected sink really throws, and
+    // every consequence the isolation boundary promises is observed at runtime.
+    // The adapter module deliberately wraps no logger call of its own, so this
+    // containment is the bridge's duty - the same duty the block below owes the
+    // correlation store and observer.
+    const handler = await register(
+      { decide: mocks.decide },
+      correlationStoreDouble(),
+      correlationObserverDouble(),
+      () => {
+        throw new Error('diagnostic boom')
+      },
+    )
+    mocks.decide.mockReturnValue(SENTINEL)
+
+    // 1. The handler does not throw - the sink's exception never escapes.
+    let returned: LiaBrainRoutingDecision | undefined
+    expect(() => {
+      returned = handler({ correlationId: 'logical-send-X', facts: {} })
+    }).not.toThrow()
+
+    // 2. It returns the EXACT object `brain.decide` produced: not a copy, not a
+    //    replacement, not a substitute of any kind.
+    expect(returned).toBe(SENTINEL)
+    expect(returned).toBe(mocks.decide.mock.results[0].value)
+
+    // 3. The correlation write still executes, with the same key and the same
+    //    decision object.
+    expect(mocks.recordDecision).toHaveBeenCalledTimes(1)
+    expect(mocks.recordDecision).toHaveBeenCalledWith('logical-send-X', SENTINEL)
+
+    // 4. The observation still follows that successful write, and only after it.
+    expect(mocks.observe).toHaveBeenCalledTimes(1)
+    expect(mocks.observe).toHaveBeenCalledWith('logical-send-X')
+    expect(mocks.recordDecision.mock.invocationCallOrder[0])
+      .toBeLessThan(mocks.observe.mock.invocationCallOrder[0])
+
+    // 5/6. Exactly ONE routing call: no retry, no second decision, and therefore
+    //      no fallback that could have produced a different value.
+    expect(mocks.decide).toHaveBeenCalledTimes(1)
+    expect(mocks.decide.mock.results).toHaveLength(1)
+  })
+
+  it('s3b: the sink stays a bare optional call inside its own isolation block (additive source guard)', () => {
+    // Additive to s3, never a substitute for it: this pins the SHAPE the
+    // executable test depends on, so a future refactor cannot quietly move the
+    // call out of its try/catch while s3 keeps passing on a stub.
     const source = stripComments(readSource('./brain-decision-service.ts'))
     // Named exactly three times: the optional contract member, the destructured
     // parameter and one bare optional call - never read, never assigned from,
@@ -948,6 +991,10 @@ describe('brain decision bridge - the injected decision sink (Phase 8.0D-M2)', (
     expect(source.match(/decisionLog/g)).toHaveLength(3)
     expect(source).toMatch(/^\s*decisionLog\?\.\(decision\)$/m)
     expect(source).not.toMatch(/=\s*decisionLog|await decisionLog|decisionLog\?\.\(decision\)[ \t]*[.\w[]/)
+    // The call sits inside its own try block, and that block swallows nothing
+    // but the sink's own exception: no retry, no fallback, no second decision.
+    expect(source).toMatch(/try \{\s*decisionLog\?\.\(decision\)\s*\}\s*catch \{/)
+    expect(source.match(/\btry \{/g)).toHaveLength(2)
     // Synchronous, same-tick: no queue, no second memory, no timer.
     expect(source).not.toMatch(/async |await |Promise|queueMicrotask|setTimeout|setInterval/)
   })

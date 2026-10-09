@@ -159,9 +159,20 @@ export function registerLiaBrainDecisionBridge(params: {
     })
 
     // Phase 8.0D-M2: the decision's OWN status, published as metadata for the
-    // operational gate. Strictly after the decision exists: the sink receives
-    // that same object, returns nothing, and cannot alter what is returned.
-    decisionLog?.(decision)
+    // operational gate. Strictly after the decision exists, and inside its OWN
+    // isolation boundary: the injected adapter deliberately wraps no logger
+    // call, so containing it is this bridge's duty - exactly as the correlation
+    // block below contains the store and the observer. A sink that throws is
+    // contained here: it cannot alter or replace the decision, cannot keep it
+    // from being returned, cannot stop the correlation write that follows,
+    // cannot cause a second `decide(...)` and cannot surface an error to the
+    // caller. Nothing here is retried, queued or deferred.
+    try {
+      decisionLog?.(decision)
+    }
+    catch {
+      // Diagnostic line only: the canonical decision below is unaffected.
+    }
 
     // Phase 8.0D-10B-4B3: after a canonical decision exists, the diagnostic
     // record is filled with THAT decision - the very object the Brain service
