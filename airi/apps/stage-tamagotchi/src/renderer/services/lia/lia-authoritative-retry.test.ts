@@ -64,7 +64,7 @@ describe('lia authoritative retry (Phase 8.0D-10B-4D4C4-D2B6 corrective)', () =>
     const retry = vi.fn().mockResolvedValue({})
     const mint = vi.fn(() => MINTED)
     await executeLiaAuthoritativeRetry(
-      { sessionId: 's1', index: 1, sourceMessageId: 'u1', reasoning: false, tools: [...widgetToolReferences] },
+      { sessionId: 's1', index: 1, providerHistory: [], sourceMessageId: 'u1', reasoning: false, tools: [...widgetToolReferences] },
       { retry, mintCorrelationId: mint },
     )
     expect(mint).toHaveBeenCalledTimes(1)
@@ -78,7 +78,7 @@ describe('lia authoritative retry (Phase 8.0D-10B-4D4C4-D2B6 corrective)', () =>
   it('facts: hasImageInput=false, usesTools=true, reasoningRequested exact', async () => {
     const retry = vi.fn().mockResolvedValue({})
     await executeLiaAuthoritativeRetry(
-      { sessionId: 's1', index: 1, sourceMessageId: 'u1', reasoning: false, tools: [...widgetToolReferences] },
+      { sessionId: 's1', index: 1, providerHistory: [], sourceMessageId: 'u1', reasoning: false, tools: [...widgetToolReferences] },
       { retry, mintCorrelationId: () => MINTED },
     )
     const [req] = mocks.requestDecision.mock.calls[0] as [{ facts: Record<string, unknown> }]
@@ -87,7 +87,7 @@ describe('lia authoritative retry (Phase 8.0D-10B-4D4C4-D2B6 corrective)', () =>
     vi.clearAllMocks()
     mocks.requestDecision.mockResolvedValue(makeAutomaticSelected())
     await executeLiaAuthoritativeRetry(
-      { sessionId: 's1', index: 1, sourceMessageId: 'u1', reasoning: true, tools: [...widgetToolReferences] },
+      { sessionId: 's1', index: 1, providerHistory: [], sourceMessageId: 'u1', reasoning: true, tools: [...widgetToolReferences] },
       { retry: vi.fn().mockResolvedValue({}), mintCorrelationId: () => MINTED },
     )
     const [req2] = mocks.requestDecision.mock.calls[0] as [{ facts: Record<string, unknown> }]
@@ -100,7 +100,7 @@ describe('lia authoritative retry (Phase 8.0D-10B-4D4C4-D2B6 corrective)', () =>
       mocks.requestDecision.mockResolvedValue(makeAutomaticSelected())
       const retry = vi.fn().mockResolvedValue({})
       await executeLiaAuthoritativeRetry(
-        { sessionId: 's1', index: 2, sourceMessageId: 'u2', reasoning, tools: [...widgetToolReferences] },
+        { sessionId: 's1', index: 2, providerHistory: [], sourceMessageId: 'u2', reasoning, tools: [...widgetToolReferences] },
         { retry, mintCorrelationId: () => MINTED },
       )
       const [payload] = retry.mock.calls[0] as [Record<string, unknown>]
@@ -117,7 +117,7 @@ describe('lia authoritative retry (Phase 8.0D-10B-4D4C4-D2B6 corrective)', () =>
     )
     const retry = vi.fn().mockResolvedValue({})
     const pending = executeLiaAuthoritativeRetry(
-      { sessionId: 's1', index: 1, sourceMessageId: 'u1', reasoning: false, tools: [...widgetToolReferences] },
+      { sessionId: 's1', index: 1, providerHistory: [], sourceMessageId: 'u1', reasoning: false, tools: [...widgetToolReferences] },
       { retry, mintCorrelationId: () => MINTED },
     )
     await new Promise(r => setTimeout(r, 10))
@@ -132,7 +132,7 @@ describe('lia authoritative retry (Phase 8.0D-10B-4D4C4-D2B6 corrective)', () =>
     const retry = vi.fn().mockResolvedValue({})
     mocks.requestDecision.mockResolvedValue(makeAutomaticSelected())
     await executeLiaAuthoritativeRetry(
-      { sessionId: 's1', index: 1, sourceMessageId: 'u1', reasoning: false, tools: [...widgetToolReferences] },
+      { sessionId: 's1', index: 1, providerHistory: [], sourceMessageId: 'u1', reasoning: false, tools: [...widgetToolReferences] },
       { retry, mintCorrelationId: () => MINTED },
     )
     const [payload] = retry.mock.calls[0] as [Record<string, unknown>]
@@ -144,7 +144,7 @@ describe('lia authoritative retry (Phase 8.0D-10B-4D4C4-D2B6 corrective)', () =>
     mocks.requestDecision.mockResolvedValue({ status: 'modeUnspecified' })
     const retry = vi.fn().mockResolvedValue({})
     await executeLiaAuthoritativeRetry(
-      { sessionId: 's1', index: 1, sourceMessageId: 'u1', reasoning: false, tools: [...widgetToolReferences] },
+      { sessionId: 's1', index: 1, providerHistory: [], sourceMessageId: 'u1', reasoning: false, tools: [...widgetToolReferences] },
       { retry, mintCorrelationId: () => MINTED },
     )
     const [payload] = retry.mock.calls[0] as [Record<string, unknown>]
@@ -156,7 +156,7 @@ describe('lia authoritative retry (Phase 8.0D-10B-4D4C4-D2B6 corrective)', () =>
     mocks.requestDecision.mockRejectedValue(new Error('brain fail'))
     const retry = vi.fn().mockResolvedValue({})
     await executeLiaAuthoritativeRetry(
-      { sessionId: 's1', index: 1, sourceMessageId: 'u1', reasoning: false, tools: [...widgetToolReferences] },
+      { sessionId: 's1', index: 1, providerHistory: [], sourceMessageId: 'u1', reasoning: false, tools: [...widgetToolReferences] },
       { retry, mintCorrelationId: () => MINTED },
     )
     const [payload] = retry.mock.calls[0] as [Record<string, unknown>]
@@ -169,7 +169,7 @@ describe('lia authoritative retry (Phase 8.0D-10B-4D4C4-D2B6 corrective)', () =>
     mocks.hasApiKey.mockResolvedValue(false)
     const retry = vi.fn().mockResolvedValue({})
     await executeLiaAuthoritativeRetry(
-      { sessionId: 's1', index: 1, sourceMessageId: 'u1', reasoning: false, tools: [...widgetToolReferences] },
+      { sessionId: 's1', index: 1, providerHistory: [], sourceMessageId: 'u1', reasoning: false, tools: [...widgetToolReferences] },
       { retry, mintCorrelationId: () => MINTED },
     )
     const [payload] = retry.mock.calls[0] as [Record<string, unknown>]
@@ -182,7 +182,7 @@ describe('lia authoritative retry (Phase 8.0D-10B-4D4C4-D2B6 corrective)', () =>
     const tools = [...widgetToolReferences]
     const retry = vi.fn().mockResolvedValue({})
     await executeLiaAuthoritativeRetry(
-      { sessionId: 's1', index: 1, sourceMessageId: 'u1', reasoning: false, tools },
+      { sessionId: 's1', index: 1, providerHistory: [], sourceMessageId: 'u1', reasoning: false, tools },
       { retry, mintCorrelationId: () => MINTED },
     )
     const [req] = mocks.requestDecision.mock.calls[0] as [{ facts: Record<string, unknown> }]
@@ -197,7 +197,7 @@ describe('lia authoritative retry (Phase 8.0D-10B-4D4C4-D2B6 corrective)', () =>
   it('new logical-send identity: retry payload correlation not original id and contains sourceMessageId', async () => {
     const retry = vi.fn().mockResolvedValue({})
     await executeLiaAuthoritativeRetry(
-      { sessionId: 's1', index: 3, sourceMessageId: 'u1', reasoning: false, tools: [...widgetToolReferences] },
+      { sessionId: 's1', index: 3, providerHistory: [], sourceMessageId: 'u1', reasoning: false, tools: [...widgetToolReferences] },
       { retry, mintCorrelationId: () => MINTED },
     )
     const [payload] = retry.mock.calls[0] as [Record<string, unknown>]
@@ -209,7 +209,7 @@ describe('lia authoritative retry (Phase 8.0D-10B-4D4C4-D2B6 corrective)', () =>
   })
 
   it('does not mutate input', async () => {
-    const input = { sessionId: 's1', index: 1, sourceMessageId: 'u1', reasoning: false as boolean, tools: [...widgetToolReferences] }
+    const input = { sessionId: 's1', index: 1, providerHistory: [], sourceMessageId: 'u1', reasoning: false as boolean, tools: [...widgetToolReferences] }
     const snapshot = JSON.stringify(input)
     const retry = vi.fn().mockResolvedValue({})
     await executeLiaAuthoritativeRetry(input, { retry, mintCorrelationId: () => MINTED })
@@ -233,7 +233,7 @@ describe('lia authoritative retry image fidelity (Phase 8.0D-10B-4D4C4-D2B11)', 
   async function run(input: Record<string, unknown>, overrides: Record<string, unknown> = {}) {
     currentRetry = vi.fn().mockResolvedValue({})
     await executeLiaAuthoritativeRetry(
-      { sessionId: 's1', index: 1, sourceMessageId: 'u1', reasoning: false, tools: [], ...input } as never,
+      { sessionId: 's1', index: 1, providerHistory: [], sourceMessageId: 'u1', reasoning: false, tools: [], ...input } as never,
       { retry: currentRetry, mintCorrelationId: () => MINTED, ...overrides } as never,
     )
     return currentRetry
@@ -293,7 +293,7 @@ describe('lia authoritative retry image fidelity (Phase 8.0D-10B-4D4C4-D2B11)', 
     })
     currentRetry = vi.fn().mockResolvedValue({})
     const pending = executeLiaAuthoritativeRetry(
-      { sessionId: 's1', index: 1, sourceMessageId: 'u1', reasoning: false, tools: [], attachments: caller } as never,
+      { sessionId: 's1', index: 1, providerHistory: [], sourceMessageId: 'u1', reasoning: false, tools: [], attachments: caller } as never,
       { retry: currentRetry, resolveRoute, mintCorrelationId: () => MINTED } as never,
     )
     // Brain decision is now in flight: mutate the caller's own array.
@@ -317,7 +317,7 @@ describe('lia authoritative retry image fidelity (Phase 8.0D-10B-4D4C4-D2B11)', 
     })
     currentRetry = vi.fn().mockResolvedValue({})
     const pending = executeLiaAuthoritativeRetry(
-      { sessionId: 's1', index: 1, sourceMessageId: 'u1', reasoning: false, tools: [], attachments: caller } as never,
+      { sessionId: 's1', index: 1, providerHistory: [], sourceMessageId: 'u1', reasoning: false, tools: [], attachments: caller } as never,
       { retry: currentRetry, resolveRoute, mintCorrelationId: () => MINTED } as never,
     )
     caller[0]!.data = 'T1ZFUldSSVRURU4'
@@ -401,6 +401,7 @@ describe('multimodal retry (Phase 8.0D-M1)', () => {
       {
         attachments,
         index: 3,
+        providerHistory: [],
         reasoning: false,
         sessionId: 'session-1',
         sourceMessageId: 'message-1',
@@ -423,12 +424,79 @@ describe('multimodal retry (Phase 8.0D-M1)', () => {
     const retry = vi.fn(async (_payload: unknown) => {})
 
     await executeLiaAuthoritativeRetry(
-      { index: 3, reasoning: false, sessionId: 'session-1', sourceMessageId: 'message-1', tools: [] },
+      { index: 3, providerHistory: [], reasoning: false, sessionId: 'session-1', sourceMessageId: 'message-1', tools: [] },
       { retry },
     )
 
     const payload = retry.mock.calls[0]![0] as { routeOverride?: unknown }
     expect(payload.routeOverride).toEqual({ modelId: 'openai/gpt-oss-120b', providerId: 'groq' })
     expect(mocks.requestDecision.mock.calls[0]![0].facts.hasImageInput).toBe(false)
+  })
+  /**
+   * Phase 8.0D-M3 gate 8c: the requirement describes the EFFECTIVE provider
+   * prompt, not just the current turn.
+   *
+   * A retried TEXT-ONLY turn whose still-provider-visible history carries an
+   * image is an image turn, because that image is part of the same request. It
+   * must resolve the vision route - sending it to a text-only model while the
+   * request carries an image is exactly the Windows failure.
+   */
+  it('gate 8c: a text-only retry over image history still resolves the vision route', async () => {
+    const retry = vi.fn(async (_payload: unknown) => {})
+    const historyWithImage = [
+      { role: 'system' as const, content: 'persona' },
+      {
+        role: 'user' as const,
+        content: [
+          { type: 'text' as const, text: 'earlier picture' },
+          { type: 'image_url' as const, image_url: { url: 'data:image/png;base64,ZWFybGllcg==' } },
+        ],
+      },
+      { role: 'assistant' as const, content: 'I can see it' },
+    ]
+
+    await executeLiaAuthoritativeRetry(
+      { index: 3, providerHistory: historyWithImage as never, reasoning: false, sessionId: 'session-1', sourceMessageId: 'message-1', tools: [] },
+      { retry },
+    )
+
+    // The consequence first: without the effective-history contribution this
+    // text-only turn resolves the TEXT brain while the request it sends still
+    // carries the historical image - the exact Windows failure.
+    const payload = retry.mock.calls[0]![0] as { routeOverride?: unknown }
+    expect(payload.routeOverride).toEqual({ modelId: 'qwen/qwen3.8-27b', providerId: 'groq' })
+    // And the fact that drove it.
+    expect(mocks.requestDecision.mock.calls[0]![0].facts.hasImageInput).toBe(true)
+  })
+
+  /**
+   * Phase 8.0D-M3 gate 8d: the converse, and the agreement proof.
+   *
+   * The same history with its image turn provider-EXCLUDED (a failed send that
+   * is still on screen) is NOT an image turn, because that image is not being
+   * sent. Routing and projection have to reach the same answer.
+   */
+  it('gate 8d: excluded failed image history does not promote the vision route', async () => {
+    const retry = vi.fn(async (_payload: unknown) => {})
+    const historyWithExcludedImage = [
+      {
+        role: 'user' as const,
+        content: [
+          { type: 'text' as const, text: 'failed picture' },
+          { type: 'image_url' as const, image_url: { url: 'data:image/png;base64,ZmFpbGVk' } },
+        ],
+        excludedFromProviderContext: true,
+      },
+      { role: 'error' as const, content: 'Too many images provided' },
+    ]
+
+    await executeLiaAuthoritativeRetry(
+      { index: 3, providerHistory: historyWithExcludedImage as never, reasoning: false, sessionId: 'session-1', sourceMessageId: 'message-1', tools: [] },
+      { retry },
+    )
+
+    expect(mocks.requestDecision.mock.calls[0]![0].facts.hasImageInput).toBe(false)
+    const payload = retry.mock.calls[0]![0] as { routeOverride?: unknown }
+    expect(payload.routeOverride).toEqual({ modelId: 'openai/gpt-oss-120b', providerId: 'groq' })
   })
 })

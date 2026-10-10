@@ -1,6 +1,6 @@
 import type { ChatRetryPayload } from '@proj-airi/stage-ui/stores/chat'
 import type { RetryImageAttachment } from '@proj-airi/stage-ui/stores/chat/retry-content'
-import type { ChatToolReference } from '@proj-airi/stage-ui/types/chat'
+import type { ChatHistoryItem, ChatToolReference } from '@proj-airi/stage-ui/types/chat'
 
 import { cloneRetryAttachments } from '@proj-airi/stage-ui/stores/chat/retry-content'
 
@@ -38,6 +38,15 @@ export interface LiaAuthoritativeRetryInput {
    * Image content never crosses the Brain boundary - only the boolean does.
    */
   attachments?: readonly RetryImageAttachment[]
+  /**
+   * Phase 8.0D-M3: the conversation that still stands in provider context once
+   * this retry truncates at the source turn - everything BEFORE it.
+   *
+   * The source turn itself is re-sent as a fresh user message and is described
+   * by `attachments`, so it must not be counted twice here. Required, so no
+   * caller can silently ask for a current-attachment-only reading of the facts.
+   */
+  providerHistory: readonly ChatHistoryItem[]
 }
 
 export interface LiaAuthoritativeRetryDeps {
@@ -62,6 +71,7 @@ export async function executeLiaAuthoritativeRetry(
 
   const facts = chatTurnFactsFromSend({
     attachments: attachmentsSnapshot,
+    providerHistory: input.providerHistory,
     reasoning: input.reasoning,
     tools: toolsSnapshot,
   })

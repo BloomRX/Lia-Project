@@ -32,6 +32,7 @@ import { CHAT_FALLBACK_MAX_ATTEMPTS, getChatFallbackResolver, notifyChatRequestS
 import { createMinecraftContext } from './chat/context-providers'
 import { liaCapabilityPromptSupplement } from './chat/context-providers/lia-capabilities'
 import { useChatContextStore } from './chat/context-store'
+import { selectProviderContextMessages } from './chat/provider-context'
 import { cloneRetryAttachments, retryContentFromUserMessage } from './chat/retry-content'
 import { retrySourceIndexFrom } from './chat/retry-source'
 import { humanizeSendErrorMessage } from './chat/send-error'
@@ -166,10 +167,17 @@ export interface ChatToolCallRerunPayload extends Omit<ToolCallRerunPayload, 'se
   sessionId: string
 }
 
-type ProviderHistoryMessage = Exclude<ChatHistoryItem, { role: 'error' }>
-
-function toProviderHistory(messages: ChatHistoryItem[]): Message[] {
-  return messages.filter((message): message is ProviderHistoryMessage => message.role !== 'error')
+/**
+ * Phase 8.0D-M3: where one logical send's appended tail starts.
+ *
+ * An attempt publishes it right after the session is hydrated and before
+ * anything is appended, so a send that later fails terminally can be
+ * attributed to exactly its own messages. `count` stays `undefined` when no
+ * attempt ever reached that point - nothing was appended, so there is nothing
+ * to withhold.
+ */
+interface SendTailBoundary {
+  count?: number
 }
 
 function isTextDelta(event: StreamEvent): event is Extract<StreamEvent, { type: 'text-delta' }> {
@@ -423,12 +431,12 @@ export const useChatStore = defineStore('chat', () => {
     onUserTurnReady: ({ messageText, sessionMessages }) => {
       const autonomousTarget = cardStore.activeCard?.extensions?.airi?.modules?.artistry?.autonomousTarget || 'user'
       if (autonomousTarget === 'user')
-        void artistryAutonomousStore.runArtistTask(messageText, toProviderHistory(sessionMessages))
+        void artistryAutonomousStore.runArtistTask(messageText, selectProviderContextMessages(sessionMessages))
     },
     onAssistantTurnReady: ({ messageText, sessionMessages }) => {
       const artistry = cardStore.activeCard?.extensions?.airi?.modules?.artistry
       if (artistry?.autonomousEnabled && artistry?.autonomousTarget === 'assistant')
-        void artistryAutonomousStore.runArtistTask(messageText, toProviderHistory(sessionMessages))
+        void artistryAutonomousStore.runArtistTask(messageText, selectProviderContextMessages(sessionMessages))
     },
   })
 
@@ -454,6 +462,35 @@ export const useChatStore = defineStore('chat', () => {
     return [...names].map(name => ({ name }))
   }
 
+  /**
+   * Phase 8.0D-M3: withholds one logically failed send's appended tail from
+   * every later provider request.
+   *
+   * The messages are MARKED, never removed: the user turn stays visible in the
+   * conversation, stays persisted across restarts, and stays retriable with
+   * its original text and image attachments. Only provider projection changes,
+   * and only from the canonical seam that builds the prompt - so a failed image
+   * send can no longer donate its images to the next request, and repeated
+   * failed sends can no longer accumulate invisible effective images.
+   *
+   * Deliberately generic: nothing here knows about a provider, a model or an
+   * error string. Any terminal failure of a logical send reaches it.
+   */
+  function excludeSendTailFromProviderContext(sessionId: string, fromIndex: number | undefined) {
+    if (fromIndex === undefined)
+      return
+
+    const current = chatSession.getSessionMessagesIfLoaded(sessionId)
+    if (!current || current.length <= fromIndex)
+      return
+
+    chatSession.setSessionMessages(sessionId, current.map((message, index) => (
+      index < fromIndex || message.excludedFromProviderContext === true
+        ? message
+        : { ...message, excludedFromProviderContext: true }
+    )))
+  }
+
   function appendSendError(sessionId: string, error: unknown) {
     if (!chatSession.getSessionMessagesIfLoaded(sessionId))
       return
@@ -475,7 +512,7 @@ export const useChatStore = defineStore('chat', () => {
     })
   }
 
-  async function executeSendAttempt(payload: ChatSendPayload, effectiveRoute?: ChatSendRouteOverride): Promise<ChatSendResult> {
+  async function executeSendAttempt(payload: ChatSendPayload, effectiveRoute?: ChatSendRouteOverride, tailBoundary?: SendTailBoundary): Promise<ChatSendResult> {
     // Phase 8.0D-10B-4D4C4-D2A: per-send override takes precedence over global,
     // with explicit effectiveRoute (fallback next) taking precedence over the
     // payload's initial override. No global is mutated here.
@@ -488,6 +525,12 @@ export const useChatStore = defineStore('chat', () => {
       throw new Error('Failed to load the target chat session')
 
     const messageCount = chatSession.getSessionMessages(payload.sessionId).length
+    // Phase 8.0D-M3: the session is hydrated and nothing has been appended yet,
+    // so this is exactly where this attempt's tail will start. Published to the
+    // caller so a terminal failure can mark its own messages and nobody
+    // else's. Read-only here - the attempt itself never marks anything.
+    if (tailBoundary)
+      tailBoundary.count = messageCount
     // Phase 8.0D-10B-4D4C4-D2B2-C1: generic per-send reasoning frozen at payload
     // construction. Undefined preserves live global behavior via consciousness
     // store; defined true/false is reused verbatim for every attempt (incl.
@@ -536,6 +579,33 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   /**
+   * Phase 8.0D-M3: the failed-turn durability boundary for ONE logical send.
+   *
+   * Every way a send can end badly converges here - a provider rejection with
+   * no fallback resolver registered, a resolver that declines to offer a next
+   * route, a bounded fallback loop exhausted, or a failure before any provider
+   * was reached. In all of them the tail this send appended is withheld from
+   * future provider context BEFORE the error bubble is added (the bubble is
+   * appended by the settlement wrapper above this one, which only runs after
+   * this rethrows).
+   *
+   * The invariant is deliberately not tied to the Lia fallback branch: a
+   * terminal failure with no resolver at all obeys it identically. It also
+   * never inspects the error - the outcome alone decides, so no provider,
+   * status code or message text is matched here.
+   */
+  async function executeSend(payload: ChatSendPayload): Promise<ChatSendResult> {
+    const tailBoundary: SendTailBoundary = {}
+    try {
+      return await executeSendWithTailBoundary(payload, tailBoundary)
+    }
+    catch (error) {
+      excludeSendTailFromProviderContext(payload.sessionId, tailBoundary.count)
+      throw error
+    }
+  }
+
+  /**
    * Runs one chat send, optionally failing over to another provider/model when a
    * registered fallback policy decides a failure is recoverable.
    *
@@ -545,11 +615,11 @@ export const useChatStore = defineStore('chat', () => {
    * (so no user message is duplicated and history/persona/session are preserved)
    * and retries with the policy-chosen provider, bounded by a hard ceiling.
    */
-  async function executeSend(payload: ChatSendPayload): Promise<ChatSendResult> {
+  async function executeSendWithTailBoundary(payload: ChatSendPayload, tailBoundary: SendTailBoundary): Promise<ChatSendResult> {
     const fallbackResolver = getChatFallbackResolver()
     const hasRouteOverride = !!payload.routeOverride
     if (!fallbackResolver) {
-      return executeSendAttempt(payload, hasRouteOverride ? payload.routeOverride : undefined)
+      return executeSendAttempt(payload, hasRouteOverride ? payload.routeOverride : undefined, tailBoundary)
     }
 
     // Snapshot the conversation before the send so a failed attempt can be
@@ -566,7 +636,7 @@ export const useChatStore = defineStore('chat', () => {
       let lastError: unknown
       for (let attempt = 0; attempt < CHAT_FALLBACK_MAX_ATTEMPTS; attempt += 1) {
         try {
-          return await executeSendAttempt(payload, effectiveRoute)
+          return await executeSendAttempt(payload, effectiveRoute, tailBoundary)
         }
         catch (error) {
           lastError = error
@@ -612,7 +682,7 @@ export const useChatStore = defineStore('chat', () => {
     try {
       for (let attempt = 0; attempt < CHAT_FALLBACK_MAX_ATTEMPTS; attempt += 1) {
         try {
-          return await executeSendAttempt(payload)
+          return await executeSendAttempt(payload, undefined, tailBoundary)
         }
         catch (error) {
           lastError = error

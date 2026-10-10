@@ -10,6 +10,14 @@ export {
 } from './messages/context-prompt'
 export type { ContextSnapshot } from './messages/context-prompt'
 export { formatTimePrefix } from './messages/datetime-prefix'
+export type { ProviderContextMessage } from './messages/provider-context'
+export {
+  countImagePartsInMessage,
+  countProviderContextImageParts,
+  hasProviderContextImageInput,
+  isProviderContextMessage,
+  selectProviderContextMessages,
+} from './messages/provider-context'
 export { createChatHooks } from './runtime/agent-hooks'
 export type {
   ChatOrchestratorLifecycleRecord,

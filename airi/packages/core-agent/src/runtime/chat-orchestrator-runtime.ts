@@ -3,13 +3,14 @@ import type { CommonContentPart, Message, ToolMessage } from '@xsai/shared-chat'
 
 import type { AgentContextPort } from '../contracts/context-port'
 import type { AgentForegroundStreamPort } from '../contracts/stream-port'
-import type { ChatAssistantMessage, ChatHistoryItem, ChatSlices, ChatStreamEventContext, ChatToolReference, ContextMessage, ErrorMessage, StreamingAssistantMessage } from '../types/chat'
+import type { ChatAssistantMessage, ChatHistoryItem, ChatSlices, ChatStreamEventContext, ChatToolReference, ContextMessage, StreamingAssistantMessage } from '../types/chat'
 import type { LlmUsage, StreamEvent, StreamOptions } from '../types/llm'
 
 import { createQueue } from '@proj-airi/stream-kit'
 
 import { formatContextPromptText } from '../messages/context-prompt'
 import { formatTimePrefix } from '../messages/datetime-prefix'
+import { selectProviderContextMessages } from '../messages/provider-context'
 import { createChatHooks } from './agent-hooks'
 import { useLlmmarkerParser } from './llm-marker-parser'
 import { categorizeResponse, createStreamingCategorizer } from './response-categoriser'
@@ -492,10 +493,16 @@ export function createChatOrchestratorRuntime(deps: ChatOrchestratorRuntimeDeps)
     return fallbackCreatedAt
   }
 
-  function buildProviderMessages(sessionMessagesForSend: ChatHistoryItem[]): Array<Message | ErrorMessage> {
+  function buildProviderMessages(sessionMessagesForSend: ChatHistoryItem[]): Array<Message> {
     const nowTs = now()
 
-    return sessionMessagesForSend.flatMap<Message | ErrorMessage>((msg) => {
+    // Phase 8.0D-M3: the provider prompt is built from the provider-visible
+    // subset only. A user turn whose logical send failed, and every
+    // `role: 'error'` diagnostic bubble, stay in the stored conversation for
+    // the UI and for retry but are withheld here - so a failed image send can
+    // never re-enter a later request, and an error bubble is never re-authored
+    // into the prompt as synthetic user text.
+    return selectProviderContextMessages(sessionMessagesForSend).flatMap<Message>((msg) => {
       const { context: _context, id: _id, createdAt: _createdAt, tools: _tools, ...withoutContext } = msg
       const rawMessage = unwrapMessage(withoutContext)
 

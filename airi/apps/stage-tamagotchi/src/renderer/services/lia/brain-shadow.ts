@@ -1,7 +1,10 @@
+import type { ChatHistoryItem } from '@proj-airi/stage-ui/types/chat'
+
 import type { LiaBrainChatDecision, LiaBrainChatTurnFacts } from '../../../shared/eventa'
 
 import { errorMessageFrom } from '@moeru/std'
 import { useElectronEventaInvoke } from '@proj-airi/electron-vueuse'
+import { hasProviderContextImageInput } from '@proj-airi/stage-ui/stores/chat/provider-context'
 
 import { electronLiaBrainChatDecision } from '../../../shared/eventa'
 
@@ -30,17 +33,39 @@ import { electronLiaBrainChatDecision } from '../../../shared/eventa'
  * outgoing tool references and the existing session-level reasoning flag.
  */
 
-/** The three facts, read off the values the outgoing turn already carries. */
+/**
+ * The three facts, read off the values the outgoing request already carries.
+ *
+ * Phase 8.0D-M3: `hasImageInput` describes the EFFECTIVE provider prompt, not
+ * just the composer. A turn is an image turn when either this turn carries an
+ * attachment OR the provider-visible history still carries one - because that
+ * earlier image is part of the very same request being composed, and a model
+ * that cannot take images would reject it. Deriving the fact from the current
+ * attachment alone is what let a text-only turn be routed to a text-only model
+ * while the request it sent still contained an image.
+ *
+ * The history side is NOT re-implemented here: it delegates to the one
+ * provider-context rule the runtime's own prompt projection uses, so route
+ * eligibility and the content actually sent cannot drift apart again.
+ * Provider-excluded turns (failed sends) and error bubbles therefore
+ * contribute nothing, exactly as they contribute nothing to the prompt.
+ */
 export function chatTurnFactsFromSend(input: {
   /** The attachments actually being sent with this turn. */
   attachments: readonly unknown[]
+  /**
+   * The conversation as stored BEFORE this turn is appended. Required, not
+   * optional: every caller has to state which history this send builds on, so
+   * no call site can silently fall back to a current-turn-only reading.
+   */
+  providerHistory: readonly ChatHistoryItem[]
   /** The existing session-level reasoning request (consciousness settings). */
   reasoning: boolean
   /** The tool references supplied with this turn. */
   tools: readonly unknown[]
 }): LiaBrainChatTurnFacts {
   return {
-    hasImageInput: input.attachments.length > 0,
+    hasImageInput: input.attachments.length > 0 || hasProviderContextImageInput(input.providerHistory),
     reasoningRequested: input.reasoning,
     usesTools: input.tools.length > 0,
   }

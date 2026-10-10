@@ -70,6 +70,9 @@ async function handleRetryViaRealHelpers(opts: {
       sourceMessageId,
       reasoning: opts.reasoning,
       tools: toolsToRetry,
+      // Phase 8.0D-M3: mirrors the component exactly - the retry truncates at
+      // the source turn, so what remains provider-visible is what precedes it.
+      providerHistory: sourceIndex < 0 ? [] : history.slice(0, sourceIndex),
       ...(sourceContent === null ? {} : { attachments: sourceContent.attachments }),
     },
     {
@@ -127,7 +130,7 @@ describe('interactive area retry thin owner (Phase 8.0D-10B-4D4C4-D2B6 correctiv
       return {}
     })
     const pending = executeLiaAuthoritativeRetry(
-      { sessionId: 's1', index: 1, sourceMessageId: sourceAtClick!, reasoning: false, tools: [...widgetToolReferences] },
+      { sessionId: 's1', index: 1, providerHistory: [], sourceMessageId: sourceAtClick!, reasoning: false, tools: [...widgetToolReferences] },
       { retry: retry as never, mintCorrelationId: () => MINTED },
     )
     await new Promise(r => setTimeout(r, 5))
@@ -159,7 +162,7 @@ describe('interactive area retry thin owner (Phase 8.0D-10B-4D4C4-D2B6 correctiv
       return {}
     })
     const pending = executeLiaAuthoritativeRetry(
-      { sessionId: 's1', index: 1, sourceMessageId: sourceAtClick, reasoning: false, tools: [...widgetToolReferences] },
+      { sessionId: 's1', index: 1, providerHistory: [], sourceMessageId: sourceAtClick, reasoning: false, tools: [...widgetToolReferences] },
       { retry: retry as never, mintCorrelationId: () => MINTED },
     )
     await new Promise(r => setTimeout(r, 5))

@@ -1,23 +1,31 @@
 /* eslint-disable style/max-statements-per-line -- test helper intentional patterns */
+import type { ChatHistoryItem } from '@proj-airi/stage-ui/types/chat'
+
 // Helper to read production source for guards
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 // @vitest-environment happy-dom
 import { createTranscriptBuffer } from '@proj-airi/pipelines-audio'
+import { hasProviderContextImageInput } from '@proj-airi/stage-ui/stores/chat/provider-context'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { normalizeLineEndings } from '../../test-helpers'
 import { createOrderedVoiceSendSequence } from '../services/lia/voice-send-sequence'
 import { artistryToolReferences } from '../stores/tools'
 
+// Phase 8.0D-M3: this stand-in used to restate the image rule locally. It now
+// delegates that decision to the SAME pure provider-context rule the runtime's
+// prompt projection uses, so the replica cannot drift away from production:
+// an image still provider-visible in history makes the turn an image turn.
 function chatTurnFactsFromSend(input: {
   attachments: readonly unknown[]
+  providerHistory: readonly ChatHistoryItem[]
   reasoning: boolean
   tools: readonly unknown[]
 }): { hasImageInput: boolean, reasoningRequested: boolean, usesTools: boolean } {
   return {
-    hasImageInput: input.attachments.length > 0,
+    hasImageInput: input.attachments.length > 0 || hasProviderContextImageInput(input.providerHistory),
     reasoningRequested: input.reasoning,
     usesTools: input.tools.length > 0,
   }
@@ -108,6 +116,8 @@ function productionStreamingFragmentDelivery(
 function createVoiceSendSequence(deps: {
   getActiveSessionId: () => string
   getReasoning: () => boolean
+  /** Phase 8.0D-M3: production reads the stored conversation here. Absent = empty. */
+  getProviderHistory?: () => readonly ChatHistoryItem[]
   resolveRoute: (input: { correlationId: string, facts: ReturnType<typeof chatTurnFactsFromSend> }) => Promise<{ providerId: string, modelId: string } | undefined>
   send: (payload: { sessionId: string, text: string, correlationId: string, reasoning: boolean, tools: readonly { name: string }[], routeOverride?: { providerId: string, modelId: string } }) => Promise<void>
   reportFailure: (action: string, error: unknown) => void
@@ -123,6 +133,7 @@ function createVoiceSendSequence(deps: {
       const toolsToSend = productionVoiceToolSnapshot()
       const facts = chatTurnFactsFromSend({
         attachments: attachmentsToSend,
+        providerHistory: deps.getProviderHistory?.() ?? [],
         reasoning: reasoningToSend,
         tools: toolsToSend,
       })
@@ -409,7 +420,7 @@ describe('direct voice authoritative routing (Phase 8.0D-10B-4D4C4-D2B5)', () =>
         const targetSessionId = 'S1'
         const correlationId = crypto.randomUUID()
         const reasoningToSend = reasoning
-        const facts = chatTurnFactsFromSend({ attachments: [] as const, reasoning: reasoningToSend, tools: [] as const })
+        const facts = chatTurnFactsFromSend({ attachments: [] as const, providerHistory: [], reasoning: reasoningToSend, tools: [] as const })
         const runJob = async () => {
           if (textToSend === 'A') {
             aStarted = true
@@ -463,7 +474,7 @@ describe('direct voice authoritative routing (Phase 8.0D-10B-4D4C4-D2B5)', () =>
         const targetSessionId = session
         const correlationId = crypto.randomUUID()
         const reasoningToSend = false
-        const facts = chatTurnFactsFromSend({ attachments: [] as const, reasoning: reasoningToSend, tools: [] as const })
+        const facts = chatTurnFactsFromSend({ attachments: [] as const, providerHistory: [], reasoning: reasoningToSend, tools: [] as const })
         const runJob = async () => {
           if (textToSend === 'A')
             await new Promise<void>((res) => { releaseA = res })
@@ -620,7 +631,7 @@ describe('direct voice authoritative routing (Phase 8.0D-10B-4D4C4-D2B5)', () =>
         const targetSessionId = session
         const reasoningToSend = reasoning
         const correlationId = crypto.randomUUID()
-        const facts = chatTurnFactsFromSend({ attachments: [] as const, reasoning: reasoningToSend, tools: [] as const })
+        const facts = chatTurnFactsFromSend({ attachments: [] as const, providerHistory: [], reasoning: reasoningToSend, tools: [] as const })
         captured.push({ session: targetSessionId, reasoning: reasoningToSend })
         const runJob = async () => {
           if (text === 'A')
@@ -665,7 +676,7 @@ describe('direct voice authoritative routing (Phase 8.0D-10B-4D4C4-D2B5)', () =>
       function enqueue(text: string) {
         const correlationId = crypto.randomUUID()
         countAtEnqueue++
-        const facts = chatTurnFactsFromSend({ attachments: [] as const, reasoning: false, tools: [] as const })
+        const facts = chatTurnFactsFromSend({ attachments: [] as const, providerHistory: [], reasoning: false, tools: [] as const })
         const runJob = async () => {
           await resolveRoute({ correlationId, facts })
           await send({ sessionId: 'S1', text, correlationId, reasoning: false })

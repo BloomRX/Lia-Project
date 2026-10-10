@@ -63,6 +63,18 @@ export interface ContextMessage extends ContextUpdate<Record<string, unknown>, u
 export type ChatHistoryItem = (ChatMessage | ErrorMessage) & {
   context?: ContextMessage
   createdAt?: number
+  /**
+   * Retained for the conversation record (UI, history, retry) but withheld
+   * from the provider prompt.
+   *
+   * Phase 8.0D-M3: a logical send that failed terminally keeps its user turn
+   * visible and retriable, while that turn stops taking part in the context of
+   * every later model call. Absent or `false` is the historical behaviour -
+   * the message is projected as usual - so only an explicit `true` withholds
+   * one. Projection is the ONLY thing this flag changes: what the UI renders,
+   * what session persistence stores and what retry resolves are untouched.
+   */
+  excludedFromProviderContext?: boolean
   id?: string
   /** Tools selected for this message. The runtime rebuilds executors from these names. */
   tools?: ChatToolReference[]

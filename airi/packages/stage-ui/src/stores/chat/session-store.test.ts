@@ -1,5 +1,6 @@
 import type { ChatSessionMeta, ChatSessionRecord, ChatSessionsIndex } from '../../types/chat-session'
 
+import { isProviderContextMessage } from '@proj-airi/core-agent'
 import { createPinia, disposePinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { nextTick, ref } from 'vue'
@@ -1040,5 +1041,95 @@ describe('chat-session-store · synchronized data actions', () => {
     expect(store.activeSessionId).toBe('window-local-session')
     expect(store.$state).not.toHaveProperty('activeSessionId')
     expect(store.getSnapshot().index?.characters.default?.activeSessionId).toBe('persisted-session')
+  })
+})
+
+describe('chat-session-store · phase 8.0D-M3 provider-exclusion persistence', () => {
+  /**
+   * The exclusion flag is authoritative in LOCAL session persistence: it has to
+   * survive a restart, otherwise a reload would put a failed turn's images back
+   * into the provider context. Cloud Sync v1 is not part of this - it uploads
+   * plain text only, so image parts (and therefore this flag's subject) do not
+   * round-trip cross-device yet.
+   */
+  function indexWith(meta: ChatSessionMeta): ChatSessionsIndex {
+    return {
+      userId: meta.userId,
+      characters: {
+        default: {
+          activeSessionId: meta.sessionId,
+          sessions: { [meta.sessionId]: meta },
+        },
+      },
+    }
+  }
+
+  const META: ChatSessionMeta = {
+    sessionId: 'sess-m3',
+    userId: 'local',
+    characterId: 'default',
+    createdAt: 1,
+    updatedAt: 1,
+  }
+
+  const FAILED_IMAGE_TURN = {
+    role: 'user',
+    content: [
+      { type: 'text', text: 'what is in this picture' },
+      { type: 'image_url', image_url: { url: 'data:image/png;base64,aW1hZ2Utb25l' } },
+    ],
+    createdAt: 2,
+    id: 'failed-image-turn',
+    excludedFromProviderContext: true,
+  }
+  const ERROR_BUBBLE = { role: 'error', content: 'Something went wrong', createdAt: 3, id: 'err-1' }
+
+  it('3: the exclusion state survives persist → reload, stays visible, and stays withheld', async () => {
+    getIndexMock.mockResolvedValue(indexWith(META))
+    getSessionMock.mockResolvedValue({ meta: META, messages: [] })
+
+    const store = useChatSessionStore()
+    await store.initialize()
+    expect(await store.loadSession('sess-m3')).toBe(true)
+
+    // A failed send marks its tail through this exact seam.
+    store.setSessionMessages('sess-m3', [
+      { role: 'system', content: 'system prompt', createdAt: 1, id: 'system' },
+      FAILED_IMAGE_TURN,
+      ERROR_BUBBLE,
+    ] as any)
+    await flushMicrotasks()
+
+    // (a) the mark reached the persisting write, byte-identical.
+    const saved = saveSessionMock.mock.calls.at(-1)?.[1]
+    expect(saved).toBeDefined()
+    const savedFailed = saved!.messages.find((message: any) => message.id === 'failed-image-turn')
+    expect(savedFailed?.excludedFromProviderContext).toBe(true)
+    expect(savedFailed?.content).toEqual(FAILED_IMAGE_TURN.content)
+
+    // (b) hydrate as a fresh process would: a brand-new pinia with nothing in
+    // memory, reading the very record that was just written.
+    getSessionMock.mockResolvedValue({ meta: META, messages: saved!.messages as any })
+    disposePinia(pinia)
+    pinia = createPinia()
+    setActivePinia(pinia)
+    const fresh = useChatSessionStore()
+    await fresh.initialize()
+    expect(await fresh.loadSession('sess-m3')).toBe(true)
+
+    const hydrated = fresh.getSessionMessages('sess-m3')
+    const hydratedFailed = hydrated.find(message => message.id === 'failed-image-turn')
+    // Still there - visible to the UI and available to retry.
+    expect(hydratedFailed).toBeDefined()
+    expect(hydratedFailed?.content).toEqual(FAILED_IMAGE_TURN.content)
+    // Still withheld from provider context, after the restart.
+    expect(hydratedFailed?.excludedFromProviderContext).toBe(true)
+    expect(isProviderContextMessage(hydratedFailed!)).toBe(false)
+    // The error bubble is withheld by role, not by the flag.
+    const hydratedError = hydrated.find(message => message.role === 'error')
+    expect(hydratedError).toBeDefined()
+    expect(isProviderContextMessage(hydratedError!)).toBe(false)
+    // A normal turn in the same session is still projected.
+    expect(isProviderContextMessage(hydrated.find(message => message.id === 'system')!)).toBe(true)
   })
 })

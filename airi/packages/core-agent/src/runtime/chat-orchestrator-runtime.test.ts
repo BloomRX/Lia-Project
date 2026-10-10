@@ -1835,3 +1835,118 @@ describe('chat round settled seam (Phase 8.0D-10B-4D4B1)', () => {
     expect(CODE.match(/deps\.onSendSettled\?\.\(\{ sessionId \}\)/g)).toHaveLength(1)
   })
 })
+
+describe('phase 8.0D-M3 provider projection', () => {
+  /** One stored user turn carrying `count` image parts. */
+  function imageTurn(count: number, extra?: Record<string, unknown>): ChatHistoryItem {
+    return {
+      role: 'user',
+      content: [
+        { type: 'text', text: 'look at this' },
+        ...Array.from({ length: count }, (_, index) => ({
+          type: 'image_url',
+          image_url: { url: `data:image/png;base64,${index}` },
+        })),
+      ],
+      createdAt: new Date(2026, 3, 25, 18, 1).getTime(),
+      id: `image-turn-${count}-${extra?.id ?? ''}`,
+      ...extra,
+    } as unknown as ChatHistoryItem
+  }
+
+  function imagePartsOf(messages: Message[]) {
+    return messages.flatMap((message) => {
+      const content = (message as { content?: unknown }).content
+      return Array.isArray(content)
+        ? content.filter((part: any) => part?.type === 'image_url')
+        : []
+    })
+  }
+
+  it('7: an error bubble never reaches the provider prompt, and is never re-authored as user text', async () => {
+    const harness = createHarness()
+    harness.sessionMessages['session-1'].push({
+      role: 'error',
+      content: 'Remote sent 400 response: Too many images provided. This model supports up to 3 images',
+    } as unknown as ChatHistoryItem)
+
+    await harness.runtime.ingest('next turn', { model: 'gpt-test', chatProvider: provider })
+
+    const [, , messages] = harness.stream.mock.calls[0] as [string, ChatProvider, Message[]]
+    expect(messages.filter(message => (message as { role: string }).role === 'error')).toEqual([])
+    const asText = JSON.stringify(messages)
+    expect(asText).not.toContain('Too many images')
+    expect(asText).not.toContain('User encountered error')
+    expect(asText).toContain('next turn')
+  })
+
+  it('8: a provider-visible image is projected intact - never flattened, never dropped', async () => {
+    const harness = createHarness()
+    harness.sessionMessages['session-1'].push(imageTurn(2))
+
+    await harness.runtime.ingest('and now text only', { model: 'gpt-test', chatProvider: provider })
+
+    const [, , messages] = harness.stream.mock.calls[0] as [string, ChatProvider, Message[]]
+    // Both historical images are still there, with their original data URLs.
+    expect(imagePartsOf(messages)).toEqual([
+      { type: 'image_url', image_url: { url: 'data:image/png;base64,0' } },
+      { type: 'image_url', image_url: { url: 'data:image/png;base64,1' } },
+    ])
+    // The turn is still a content ARRAY, not a text-only rendering of it.
+    const historical = messages.find(
+      message => message.role === 'user' && Array.isArray((message as { content?: unknown }).content),
+    )
+    expect(historical).toBeDefined()
+    // And the provider-border sanitizer keeps it that way for a vision model.
+    expect(imagePartsOf(sanitizeMessages(messages, true))).toHaveLength(2)
+  })
+
+  it('a provider-excluded turn contributes nothing - not its text, not its images', async () => {
+    const harness = createHarness()
+    harness.sessionMessages['session-1'].push(
+      imageTurn(1, { excludedFromProviderContext: true, id: 'failed' }),
+    )
+
+    await harness.runtime.ingest('after the failure', { model: 'gpt-test', chatProvider: provider })
+
+    const [, , messages] = harness.stream.mock.calls[0] as [string, ChatProvider, Message[]]
+    expect(imagePartsOf(messages)).toEqual([])
+    expect(JSON.stringify(messages)).not.toContain('look at this')
+    expect(JSON.stringify(messages)).toContain('after the failure')
+  })
+
+  it('a failed image send followed by a new one sends exactly one image', async () => {
+    const harness = createHarness()
+    // Three rejected attempts stay in the record, all withheld.
+    for (let i = 0; i < 3; i += 1)
+      harness.sessionMessages['session-1'].push(imageTurn(1, { excludedFromProviderContext: true, id: `stale-${i}` }))
+
+    await harness.runtime.ingest('fourth picture', {
+      model: 'gpt-test',
+      chatProvider: provider,
+      attachments: [{ type: 'image', data: 'bmV3LWltYWdl', mimeType: 'image/png' }],
+    })
+
+    const [, , messages] = harness.stream.mock.calls[0] as [string, ChatProvider, Message[]]
+    expect(imagePartsOf(messages)).toEqual([
+      { type: 'image_url', image_url: { url: 'data:image/png;base64,bmV3LWltYWdl' } },
+    ])
+  })
+
+  it('exclusion changes projection only - the stored conversation keeps every message', async () => {
+    const harness = createHarness()
+    harness.sessionMessages['session-1'].push(
+      imageTurn(1, { excludedFromProviderContext: true, id: 'kept' }),
+      { role: 'error', content: 'Something went wrong' } as unknown as ChatHistoryItem,
+    )
+    const before = harness.sessionMessages['session-1'].length
+
+    await harness.runtime.ingest('still here', { model: 'gpt-test', chatProvider: provider })
+
+    // Nothing was removed from the record: UI, history and retry still see it.
+    // The send itself appends its own user turn and the assistant reply.
+    expect(harness.sessionMessages['session-1']).toHaveLength(before + 2)
+    expect(harness.sessionMessages['session-1'].some(message => (message as { id?: string }).id === 'kept')).toBe(true)
+    expect(harness.sessionMessages['session-1'].some(message => message.role === 'error')).toBe(true)
+  })
+})

@@ -119,9 +119,15 @@ async function handleSend() {
   const reasoningToSend = consciousnessSettings.reasoning
   const toolsToSend = [...artistryToolReferences]
 
-  // One fact snapshot from frozen values — Brain decides from SAME values payload will carry
+  // One fact snapshot from frozen values — Brain decides from SAME values payload will carry.
+  // Phase 8.0D-M3: the stored conversation is part of that snapshot, because the
+  // request about to be composed carries this history too. An image that is
+  // still provider-visible from an earlier turn makes THIS turn an image turn,
+  // so it cannot be routed to a model that would reject the image it is really
+  // being sent.
   const facts = chatTurnFactsFromSend({
     attachments: attachmentsToSend,
+    providerHistory: messages.value as unknown as ChatHistoryItem[],
     reasoning: reasoningToSend,
     tools: toolsToSend,
   })
@@ -305,6 +311,10 @@ async function handleRetryMessage(index: number) {
       sourceMessageId,
       reasoning: reasoningToRetry,
       tools: toolsToRetry,
+      // Phase 8.0D-M3: the retry truncates at the source turn, so the history
+      // left standing in provider context is exactly what precedes it. The
+      // source turn comes back as a fresh user message via `attachments`.
+      providerHistory: sourceIndex < 0 ? [] : history.slice(0, sourceIndex),
       ...(sourceContent === null ? {} : { attachments: sourceContent.attachments }),
     },
     {

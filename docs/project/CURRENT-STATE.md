@@ -23,10 +23,12 @@ premissa falsa.
 | Prefixo de código | tudo sob `airi/` |
 
 **Atenção:** a branch contém código funcional **posterior** ao baseline acima — a rota
-Brain multimodal da Phase 8.0D-M1 e o bootstrap de roteamento da Phase 8.0D-M2 (seção 5).
-Esse código está verde em testes automatizados mas **ainda não passou por gate de runtime
-real**: o primeiro gate Windows da M1 **FALHOU** e o reteste está pendente. O baseline só
-avança quando um commit passar por um gate Windows; até lá ele permanece `3ef6d11`.
+Brain multimodal da Phase 8.0D-M1, o bootstrap de roteamento da Phase 8.0D-M2 e a retenção
+de turno falho da Phase 8.0D-M3 (seção 5). O reteste Windows da M2 **provou** o bootstrap
+gerenciado do Brain e a seleção de rota (`mode=absent` → `automatic`; Qwen selecionado;
+`initialRouteOverride*` observado na execução). O que continua **pendente** é o gate de
+conteúdo da imagem: entender a imagem de fato, com resposta correta. O baseline só avança
+quando um commit passar por esse gate Windows; até lá ele permanece `3ef6d11`.
 
 ### O tip da branch não é registrado aqui
 
@@ -141,24 +143,28 @@ Invariantes que B1/B1.1 estabeleceram e que valem como contrato:
 
 ## 4. Estado da validação automatizada
 
-Números da Phase 8.0D-M2 (o commit que contém a rota multimodal **e** o bootstrap de
-roteamento). **Teste automatizado verde não é gate de runtime** — ver a seção 5 para o
-gate Windows pendente.
+Números da Phase 8.0D-M3 (retenção de turno falho + roteamento pelo prompt efetivo).
+**Teste automatizado verde não é gate de runtime** — ver a seção 5 para o gate Windows
+pendente.
 
 | Verificação | Resultado |
 | --- | --- |
-| Stage `vitest run --project node` | 142 arquivos, **1750 passed**, 1 skipped |
+| Stage `vitest run --project node` | 142 arquivos, **1757 passed**, 1 skipped |
+| `@proj-airi/stage-ui` `--project node` | 151 arquivos, **1095 passed** |
 | `@lia/core` | 28 arquivos, **353 passed** |
-| `@proj-airi/core-agent` | 12 arquivos, **127 passed** |
+| `@proj-airi/core-agent` | 13 arquivos, **142 passed** |
 | `@lia/lia-app` | 19 arquivos, **202 passed**, 2 skipped |
 | typecheck `stage-tamagotchi` | **0 `error TS`** |
-| typecheck `@lia/core` / `core-agent` / `@lia/lia-app` | **0 `error TS`** |
-| `pnpm lint` (sem `--fix`) | **0 warnings, 0 errors em 3297 arquivos** |
+| typecheck `stage-ui` / `@lia/core` / `core-agent` / `@lia/lia-app` | **0 `error TS`** |
+| `pnpm lint` (sem `--fix`) | **0 warnings, 0 errors em 3301 arquivos** |
 
 Mutation tests (cada mutação restaurada e confirmada por `md5sum -c`):
 
 | Mutação | Falhas |
 | --- | --- |
+| **M3** marcação da cauda do envio falho desativada em `executeSend` | **6 de 7** testes de exclusão; a requisição seguinte volta a levar **4 imagens** em vez de 1 — exatamente o `Too many images` do Windows |
+| **M3** contribuição do histórico efetivo removida de `hasImageInput` | **3**; o retry só-texto sobre histórico com imagem volta a resolver **`openai/gpt-oss-120b`** em vez de `qwen/qwen3.8-27b` |
+| **M3** filtro de `role: 'error'` removido da projeção | **5** (3 core-agent + 2 stage-ui); a bolha de erro volta a entrar no prompt do provider |
 | **M2** chamada `ensureBrainReadyForConversar(snapshot)` removida de `conversar()` | **10 de 11** testes do ciclo de vida gerenciado |
 | **M2** sonda de elegibilidade + gate de identidade do engine removidos | **1** (o teste “provider que o Brain não atende não fabrica automatic”) |
 | **M2** chamada `decisionLog?.(decision)` removida da ponte | **3** (s1, s2, s3) |
@@ -171,6 +177,8 @@ Comandos (a partir de `airi/`):
 
 ```bash
 cd apps/stage-tamagotchi && npx vitest run --project node [arquivo]
+cd packages/stage-ui && npx vitest run --project node [arquivo]
+npx vitest run packages/core-agent          # a partir de airi/; @proj-airi/core-agent não tem script test
 NODE_OPTIONS=--max-old-space-size=3072 npx vue-tsc --noEmit -p tsconfig.json   # em apps/stage-tamagotchi
 pnpm lint
 ```
@@ -202,12 +210,12 @@ Resultado, com a Phase 8.0D-M1 já aplicada:
 | critério | status | observação |
 | --- | --- | --- |
 | text conversation | **DONE** | validado em Windows real no baseline `3ef6d11` |
-| image/screen understanding | **IMPLEMENTADO, gate Windows FALHOU uma vez, reteste PENDENTE** | rota Qwen (M1) + bootstrap de roteamento (M2). O Qwen **nunca executou** — não falhou, não foi testado. Ver abaixo |
+| image/screen understanding | **IMPLEMENTADO, bootstrap+rota PROVADOS em Windows, gate de conteúdo da imagem PENDENTE** | rota Qwen (M1) + bootstrap de roteamento (M2, provado em Windows) + retenção de turno falho (M3). Falta o sucesso do turno de imagem no provider. Ver abaixo |
 | audio understanding ("where supported") | **NOT STARTED** | o candidato aprovado é text+image; B1/B1.1 é STT *antes* do brain, não áudio nativo no brain |
 | tool calling | **PARTIAL** | transporte + gate de compatibilidade provados no seam da Lia; o *loop* completo pertence ao `@xsai/stream-text` e segue como item de closure |
 | latency | **NOT STARTED** | nenhuma medição existe; o contrato de telemetria exclui timing por desenho |
 | region/network impact | **NOT STARTED** | nenhuma referência no escopo Brain |
-| failure behavior | **PARTIAL** | failover real registrado e classificado; falta teste dirigido recoverable→failover / permanent→não |
+| failure behavior | **PARTIAL** | failover real registrado e classificado; a **retenção de turno falho** foi corrigida na M3 (um envio que falhou não participa mais do contexto de provider futuro). Falta teste dirigido recoverable→failover / permanent→não |
 | default não medido no alvo | **PARTIAL** | medido só pelo E2E de voz |
 
 ### O que a Phase 8.0D-M1 entregou
@@ -348,6 +356,67 @@ indiretamente desta vez):
 Só depois desse gate o baseline funcional avança e `image/screen understanding` pode ser
 marcado DONE.
 
+### O que a Phase 8.0D-M3 entregou — retenção de turno falho e roteamento pelo prompt efetivo
+
+Duas falhas reais observadas em Windows depois que a M2 fez o Qwen finalmente executar:
+
+1. `Too many images provided. This model supports up to 3 images`;
+2. num turno posterior **só de texto**, `messages[9].content must be a string` com GPT-OSS.
+
+A auditoria read-only (aceita em `a8900b7`) provou as duas por execução, e a causa raiz é
+uma só: **o registro da conversa e o prompt do provider eram a mesma lista**. Um envio que
+o provider rejeitou continuava durável, visível **e** projetado — então cada tentativa
+falha de imagem doava a sua imagem ao pedido seguinte, e um turno só de texto herdava a
+imagem de um turno antigo sem que o requisito de rota soubesse disso.
+
+O que mudou:
+
+- **`excludedFromProviderContext`** — campo **genérico** em `ChatHistoryItem`
+  (`core-agent/src/types/chat.ts`). Ausente/`false` é o comportamento histórico. Só um
+  `true` explícito retira a mensagem da projeção; UI, persistência e retry continuam
+  vendo-a.
+- **Uma única regra de contexto de provider** — `core-agent/src/messages/provider-context.ts`
+  (`isProviderContextMessage`, `selectProviderContextMessages`,
+  `countProviderContextImageParts`, `hasProviderContextImageInput`). É a **única**
+  definição de “o que chega ao provider”, consumida pela projeção do runtime **e** pelos
+  fatos de capacidade do Brain. A segunda definição que existia em
+  `stage-ui/src/stores/chat.ts` (`toProviderHistory`, que alimentava o artist task) foi
+  **removida** e passou a usar a mesma regra.
+- **Marcação na fronteira de settlement** — `executeSend` marca a cauda que o envio lógico
+  acrescentou **antes** de a bolha de erro ser acrescentada. Vale para **qualquer** falha
+  terminal, com ou sem fallback resolver registrado; nada inspeciona o erro.
+- **`role: 'error'` nunca entra no prompt** — filtrado na costura canônica de projeção.
+  Uma bolha de erro deixa de ser reescrita como texto de usuário sintético nos pedidos
+  seguintes.
+- **Requisito de Brain pelo prompt efetivo** — `chatTurnFactsFromSend` recebe agora
+  `providerHistory` (obrigatório em todos os call sites) e deriva `hasImageInput` da
+  attachment atual **ou** do histórico ainda visível ao provider. Consequência aceita de
+  produto: enquanto uma imagem bem-sucedida estiver no contexto efetivo, um turno novo só
+  de texto **também** exige `imageInput` e vai para `groq` + `qwen/qwen3.8-27b`.
+
+Nada foi achatado: nenhuma imagem histórica é convertida em texto nem removida
+silenciosamente para “caber” num modelo.
+
+**Não entregue nesta fase — dividido como 8.0D-M3.1:** o preflight do limite de **3
+imagens** do modelo de visão. Expressar um limite numérico exige alargar o schema de
+capacidades, que hoje é booleano por construção (`LiaBrainCapabilities`, nove campos, e
+`satisfiesBrainCapabilities` compara `!== true`); o lugar natural é
+`LiaBrainModelDescriptor.metadata`, hoje documentado como opaco e nunca lido pelo
+registry. Fazer o registry lê-lo **é** o alargamento, então foi parado e reportado em vez
+de alargado. A M3 já elimina a causa observada em Windows (imagens de tentativas falhas);
+o teto continua real para **4 ou mais imagens bem-sucedidas** na mesma conversa, e o M3.1
+deve rejeitar o envio **antes** do pedido com erro determinístico de produto — nunca
+descartando imagens.
+
+**Dívida de Cloud Sync registrada:** o Cloud Sync v1 envia texto puro para user/assistant,
+partes de imagem não fazem round-trip e mensagens de erro são locais. Portanto a marca de
+exclusão é autoritativa na **persistência local** e a semântica de turno falho **não é
+plenamente representável entre dispositivos** no v1. A M3 não amplia o schema de wire e
+não é uma migração de protocolo.
+
+**Gate:** testes automatizados verdes **não** são este gate. O E2E multimodal em Windows
+continua **NOT PASS**; o baseline funcional validado continua sendo `3ef6d11`.
+
 ### Itens de closure restantes da 8.0D (fora desta fase)
 
 1. **tool-calling closure** — teste dirigido do loop completo: rota resolvida → modelo
@@ -356,12 +425,22 @@ marcado DONE.
    isso não foi alargado o escopo nesta fase.
 2. **latency measurement** (Windows real).
 3. **region/network measurement** (Windows real).
-4. **directed failure-behavior test** (automatizável).
-5. **variante de string de erro do Groq para content-array** — `messages[N].content must
+4. **directed failure-behavior test** (automatizável) — recoverable→failover /
+   permanent→não-failover. A parte de **retenção** do turno falho já está coberta pela M3.
+5. **8.0D-M3.1 — preflight do limite de imagens do modelo de visão.** Rejeitar o envio
+   antes do pedido, com erro determinístico de produto, quando o contexto visual efetivo
+   exceder o limite do modelo selecionado. Exige metadata de capacidade numérica; ver
+   acima. Nunca resolver descartando ou achatando imagens.
+6. **Cloud Sync v1 — semântica de turno falho entre dispositivos.** A marca de exclusão é
+   local; partes de imagem não fazem round-trip no v1. Registrado como dívida de sync, não
+   como migração de protocolo.
+7. **variante de string de erro do Groq para content-array** — `messages[N].content must
    be a string` não casa com `CONTENT_ARRAY_RELATED_ERROR_PATTERNS`
    (`core-agent/src/runtime/llm-service.ts`). Registrado como dívida; **não** alargar o
    auto-degrade para “resolver” a M1, porque isso transformaria um turno com imagem num
-   falso PASS textual.
+   falso PASS textual. A M3 remove a **causa** observada (um turno só de texto não é mais
+   roteado a um modelo textual enquanto uma imagem vai no mesmo pedido); a dívida de
+   casamento de string permanece para os demais casos.
 
 **8.0D não está CLOSED.** E **8.0E não foi iniciado**: nenhum screenshot capture, window
 capture, câmera, audio input nativo, nova UI de provider, novo provider ou mudança de key.

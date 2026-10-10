@@ -351,6 +351,8 @@ const voiceSendSequence = createOrderedVoiceSendSequence({
     const toolsToSend = [...artistryToolReferences]
     const facts = chatTurnFactsFromSend({
       attachments: attachmentsToSend,
+      // Phase 8.0D-M3: the stored conversation is part of this request too.
+      providerHistory: chatSession.getSessionMessagesIfLoaded(targetSessionId) ?? [],
       reasoning: reasoningToSend,
       tools: toolsToSend,
     })
