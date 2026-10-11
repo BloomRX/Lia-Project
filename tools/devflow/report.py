@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 import importlib.util
 import json
 from pathlib import Path
+import re
 
 from . import filesystem
 
@@ -76,6 +77,85 @@ def sanitize_line(line: str) -> str:
 def is_keeper(line: str) -> bool:
     stripped = line.lstrip()
     return stripped.startswith(SAFE_LINE_PREFIXES)
+
+
+# ---------------------------------------------------------------------------
+# ONE bounded, redacted summary of a failing automated test.
+#
+# Every consumer of test output goes through `sanitize_test_output` - the human
+# console summary, `TestResult.detail`, REPORT.txt and run.json. There is
+# deliberately no second, weaker path: no raw subprocess output may reach a
+# persisted artifact.
+# ---------------------------------------------------------------------------
+
+ANSI_RE = re.compile(r'\x1b\[[0-9;]*[A-Za-z]')
+MAX_DETAIL_CHARS = 1200
+MAX_DETAIL_LINES = 14
+_TRUNCATION = '…[truncado]'
+
+# Enough to identify WHICH test failed and WHICH exception it raised, without
+# dumping thousands of lines.
+_DETAIL_PREFIXES = (
+    'FAIL:', 'ERROR:', 'FAILED', 'Ran ', 'Traceback (most recent call last)',
+    'AssertionError', 'AssertionError:', 'assert', 'raise ',
+)
+_DETAIL_TOKENS = ('Error', 'Exception', 'failed', 'falhou', 'Falhou')
+
+
+# Conversation-shaped lines carry no diagnostic value and may carry session
+# content, so they are dropped before anything is echoed or persisted. This is
+# pattern-based best effort; the hard guarantee for secrets is the universal
+# redactor applied by `sanitize_line`.
+_CONVERSATION_RE = re.compile(
+    r"(?i)^\s*(?:\[\s*)?(?:system|user|assistant|developer|human|tool)\s*(?:\]|:)\s*\S",
+)
+_PAYLOAD_RE = re.compile(
+    r"(?i)\b(?:prompt|messages|conversation|transcript|system_message)\s*[:=]\s*\S",
+)
+
+
+def _is_conversation(line: str) -> bool:
+    return bool(_CONVERSATION_RE.match(line) or _PAYLOAD_RE.search(line))
+
+
+def _is_detail_line(line: str) -> bool:
+    stripped = line.strip()
+    if not stripped:
+        return False
+    if stripped.startswith(_DETAIL_PREFIXES):
+        return True
+    return any(token in stripped for token in _DETAIL_TOKENS)
+
+
+def sanitize_test_output(
+    stdout: str,
+    stderr: str,
+    *,
+    max_chars: int = MAX_DETAIL_CHARS,
+    max_lines: int = MAX_DETAIL_LINES,
+) -> str:
+    """
+    Bounded, redacted, home-collapsed summary of a test command's output.
+
+    unittest and vitest write their failure report to stderr, so stderr wins
+    when it carries anything; stdout is the fallback, never both concatenated,
+    so the useful stream is not diluted or pushed out of the budget.
+    """
+    stream = (stderr or '').strip() or (stdout or '').strip()
+    if not stream:
+        return ''
+    lines = [line for line in
+             (ANSI_RE.sub('', raw).rstrip() for raw in stream.splitlines())
+             if line.strip() and not _is_conversation(line)]
+    picked = [line for line in lines if _is_detail_line(line)]
+    if len(picked) < max_lines:
+        # Keep the tail as context so a bare "exit 1" is still explainable.
+        extra = [line for line in lines if line not in picked]
+        picked = picked + extra[-(max_lines - len(picked)):]
+    out = '\n'.join(sanitize_line(line) for line in picked[:max_lines])
+    if len(out) > max_chars:
+        out = _TRUNCATION + out[-(max_chars - len(_TRUNCATION)):]
+    return out
 
 
 @dataclass

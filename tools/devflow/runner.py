@@ -31,7 +31,8 @@ from typing import Callable, Protocol
 
 from . import processes, safe_paths
 from .markers import MarkerReport, evaluate_markers
-from .report import SanitizedLog, prune_runs, run_dir, sanitize_console, utc_stamp, write_run
+from .report import (SanitizedLog, prune_runs, run_dir, sanitize_console,
+                     sanitize_test_output, utc_stamp, write_run)
 from .schema import Round
 
 
@@ -83,12 +84,21 @@ class RoundOutcome:
 
 
 def run_test_command(argv: list[str], cwd: Path) -> tuple[int, str]:
-    """Runs one declared test. A missing tool is reported as failure, not pass."""
+    """
+    Runs one declared test. A missing tool is reported as failure, not pass.
+
+    The returned detail is already bounded and redacted by the ONE test-output
+    sanitizer, because this same string is echoed to the console, stored in
+    `TestResult.detail`, written to REPORT.txt and persisted into run.json.
+    `encoding='utf-8'` is explicit so a Windows console codepage cannot turn a
+    test failure into a decode error.
+    """
     try:
-        probe = subprocess.run(argv, cwd=cwd, capture_output=True, text=True, timeout=1800)
+        probe = subprocess.run(argv, cwd=cwd, capture_output=True, text=True,
+                               encoding='utf-8', errors='replace', timeout=1800)
     except (OSError, subprocess.SubprocessError) as exc:
-        return 127, str(exc)
-    return probe.returncode, (probe.stdout or probe.stderr or '')[-400:]
+        return 127, sanitize_test_output('', f'{type(exc).__name__}: {exc}')
+    return probe.returncode, sanitize_test_output(probe.stdout or '', probe.stderr or '')
 
 
 def default_git(args: list[str], cwd: Path) -> tuple[int, str]:
@@ -279,14 +289,21 @@ class RoundRunner:
                 note(f'teste {spec.id}: PULADO (diretório ausente) - não conta como sucesso')
                 decision = 'refused'
                 continue
-            code, tail = self._invoke(argv, cwd)
+            code, raw = self._invoke(argv, cwd)
             status = 'pass' if code == 0 else 'fail'
+            # Sanitised HERE, at the persistence boundary, and not only inside
+            # the default invoker: no pluggable invoker and no future call path
+            # may put raw subprocess output into detail, REPORT.txt or run.json.
+            tail = sanitize_test_output('', raw) if raw else ''
             outcome.tests.append(TestResult(
                 id=spec.id, label=spec.label, status=status, exit_code=code, detail=tail,
             ))
             note(f'teste {spec.id}: {"OK" if code == 0 else f"FALHOU (exit {code})"}')
             if code != 0:
                 decision = 'fail'
+                # A bare "FALHOU (exit 1)" defeats the point of a unified DevKit.
+                for detail_line in (tail or '(sem saída capturada)').splitlines():
+                    note(f'  detalhe: {detail_line}')
         return decision
 
     def _invoke(self, argv: list[str], cwd: Path) -> tuple[int, str]:
@@ -479,8 +496,10 @@ def render_report(payload: dict) -> str:
     ]
     for test in payload['tests']:
         lines.append(f'  - {test["id"]}: {test["status"]}'
-                     + (f' (exit {test["exit_code"]})' if test['exit_code'] is not None else '')
-                     + (f' - {test["detail"]}' if test['status'] == 'skipped' else ''))
+                     + (f' (exit {test["exit_code"]})' if test['exit_code'] is not None else ''))
+        if test['status'] in ('fail', 'skipped') and test.get('detail'):
+            for detail_line in str(test['detail']).splitlines():
+                lines.append(f'    detail: {detail_line}')
     if not payload['tests']:
         lines.append('  - nenhum executado')
     lines += ['', 'marcadores de diagnóstico (ordem exigida):']

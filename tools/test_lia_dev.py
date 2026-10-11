@@ -11,6 +11,7 @@ fato de que um log nunca vira um PASS visual.
 """
 from __future__ import annotations
 
+import ast
 import copy
 from datetime import datetime, timezone
 import json
@@ -19,6 +20,7 @@ from pathlib import Path, PurePosixPath
 import shutil
 import subprocess
 import sys
+import time
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -27,6 +29,9 @@ TOOLS = Path(__file__).resolve().parent
 sys.path.insert(0, str(TOOLS))
 
 from devflow import filesystem, processes, report, safe_paths  # noqa: E402
+from devflow.report import (MAX_DETAIL_CHARS, MAX_DETAIL_LINES,  # noqa: E402
+                            sanitize_test_output)
+from devflow.runner import run_test_command  # noqa: E402
 from devflow.markers import evaluate_markers  # noqa: E402
 from devflow.report import is_keeper, sanitize_console, sanitize_line  # noqa: E402
 from devflow.runner import RoundOutcome, RoundRunner, latest_run, pass_validity, render_report  # noqa: E402
@@ -158,6 +163,62 @@ MARKER_LINES = [
     '[lia] 2026-10-11T00:00:10.000Z lia-app.stage-log spawn: node C:\\repo\\airi\\apps\\stage-tamagotchi\\node_modules\\electron-vite\\bin\\electron-vite.js dev (pid 1234)\n',
     '> ready in 512 ms\n',
 ]
+
+
+# A disposable process tree made only of Python: the parent spawns a
+# grandchild, prints its PID, then both sleep with time.sleep(). Nothing here
+# depends on an external POSIX executable.
+_PARENT_SCRIPT = (
+    "import subprocess, sys, time\n"
+    "kid = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(180)'])\n"
+    "print(kid.pid, flush=True)\n"
+    "time.sleep(180)\n"
+)
+
+
+def process_alive(pid: int | None) -> bool:
+    """
+    Liveness by PID using only the standard library - no kill/tasklist/PowerShell.
+    """
+    if not pid:
+        return False
+    if os.name == 'nt':
+        import ctypes
+        from ctypes import wintypes
+
+        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+        STILL_ACTIVE = 259
+        kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+        kernel32.OpenProcess.restype = wintypes.HANDLE
+        handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, int(pid))
+        if not handle:
+            return False
+        try:
+            code = wintypes.DWORD()
+            if not kernel32.GetExitCodeProcess(handle, ctypes.byref(code)):
+                return True  # unreadable => assume alive, so a kill claim must prove itself
+            return code.value == STILL_ACTIVE
+        finally:
+            kernel32.CloseHandle(handle)
+    try:
+        os.kill(int(pid), 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+    return True
+
+
+def _wait_gone(pid: int, timeout_s: float = 15.0) -> bool:
+    """Bounded wait, because a signal is asynchronous on POSIX."""
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        if not process_alive(pid):
+            return True
+        time.sleep(0.1)
+    return not process_alive(pid)
 
 
 def passing_tests(argv: list[str], cwd: Path) -> tuple[int, str]:
@@ -833,7 +894,23 @@ class ReparseSafetyTests(unittest.TestCase):
         self.repo = make_repo(self.base)
 
     def tearDown(self) -> None:
+        # On Windows with Python < 3.12, `shutil.rmtree` does not recognise a
+        # junction as a link and would descend into it. Detach every reparse
+        # point first, using the same authority the production code uses.
+        for entry in sorted(self.base.rglob('*'), key=lambda item: len(item.parts), reverse=True):
+            try:
+                if filesystem.is_redirection(entry) and not entry.is_symlink():
+                    entry.rmdir()
+            except OSError:
+                pass
         shutil.rmtree(self.base, ignore_errors=True)
+
+    def test_fixture_repo_is_a_temporary_directory_and_never_the_real_repo(self):
+        """The junction test must not be able to touch a real checkout."""
+        real_root = SUITE_PATH.parents[1]
+        self.assertTrue(self.repo.is_relative_to(self.base))
+        self.assertNotEqual(self.repo.resolve(), real_root.resolve())
+        self.assertIn(tempfile.gettempdir(), str(self.base.resolve()))
 
     def test_attribute_table_matches_win32_semantics(self):
         R = filesystem.FILE_ATTRIBUTE_REPARSE_POINT
@@ -911,21 +988,47 @@ class ReparseSafetyTests(unittest.TestCase):
                 'a lógica está coberta pelo teste de atributo acima')
         import subprocess as _sp
 
-        outside = self.base / 'junction-target'
+        real_root = SUITE_PATH.parents[1]
+        outside = self.base / 'junction-target'          # temporary target only
         outside.mkdir()
-        link = self.repo / CORE_DIST
+        (outside / 'nao-apague.txt').write_text('fixture\n', encoding='utf-8')
+        link = self.repo / CORE_DIST                     # temporary repo only
+        self.assertTrue(link.is_relative_to(self.base))
+        self.assertNotEqual(self.repo.resolve(), real_root.resolve())
         shutil.rmtree(link)
         probe = _sp.run(['cmd', '/c', 'mklink', '/J', str(link), str(outside)],
                         capture_output=True, text=True)
         if probe.returncode != 0:
+            # An inability to CREATE a junction is never a pass.
             self.skipTest(f'mklink indisponível: {probe.stderr.strip()}')
-        with self.assertRaises(safe_paths.PathSafetyError):
-            safe_paths.plan_removal(self.repo, CORE_DIST, [CORE_DIST])
+        try:
+            with self.assertRaises(safe_paths.PathSafetyError):
+                safe_paths.plan_removal(self.repo, CORE_DIST, [CORE_DIST])
+        finally:
+            # Detach the junction itself, never the tree it points at.
+            try:
+                link.rmdir()
+            except OSError:
+                pass
+        self.assertTrue((outside / 'nao-apague.txt').exists(),
+                        'a limpeza do teste alcançou o alvo da junction')
 
 
 # ---------------------------------------------------------------------------
 class OwnedProcessTests(unittest.TestCase):
     """D1.1 defect 5: teardown must reach the tree, not just the wrapper."""
+
+    def setUp(self) -> None:
+        self._bystanders: list[subprocess.Popen] = []
+
+    def tearDown(self) -> None:
+        for proc in self._bystanders:
+            try:
+                proc.kill()
+                proc.wait(timeout=10)
+            except (OSError, subprocess.SubprocessError):
+                pass
+
 
     def test_launch_argv_runs_a_bat_through_comspec_on_windows(self):
         with patch.object(processes.os, 'name', 'nt'), \
@@ -958,32 +1061,58 @@ class OwnedProcessTests(unittest.TestCase):
             self.skipTest(' POSIX-only')
         self.assertTrue(processes._popen_kwargs()['start_new_session'])
 
-    def test_posix_teardown_kills_the_whole_group(self):
-        if os.name == 'nt':
-            self.skipTest('GATE WINDOWS PENDENTE: taskkill /T só pode ser provado no Windows')
-        script = 'sleep 30 & echo $!; wait'
-        process = subprocess.Popen(
-            ['sh', '-c', script], stdout=subprocess.PIPE, text=True,
-            start_new_session=True)
-        assert process.stdout is not None
-        grandchild = int(process.stdout.readline().strip())
-        handle = processes.OwnedProcess(process)
-        alive = subprocess.run(['kill', '-0', str(grandchild)], capture_output=True)
-        self.assertEqual(alive.returncode, 0, 'o neto deveria estar vivo antes do teardown')
-        handle.terminate()
-        probe = subprocess.run(['kill', '-0', str(grandchild)], capture_output=True)
-        self.assertNotEqual(probe.returncode, 0, 'o neto sobreviveu ao teardown')
+    def test_teardown_kills_the_owned_tree_and_nothing_else(self):
+        """
+        Cross-platform proof of process-tree ownership (A-H).
 
-    def test_teardown_is_idempotent_and_scoped_to_the_owned_pid(self):
-        process = subprocess.Popen(['sleep', '30'], start_new_session=True)
-        pid = process.pid
-        handle = processes.OwnedProcess(process)
+        Everything here is Python: the parent, the grandchild and the unrelated
+        bystander are all `sys.executable` processes sleeping with `time.sleep`.
+        No `sleep`/`sh`/`kill` executable, no PowerShell, no WMIC. The parent is
+        spawned with the SAME platform flags DevFlow uses, so this exercises the
+        real production path on both systems:
+
+          Windows -> CREATE_NEW_PROCESS_GROUP, then taskkill /PID <root> /T /F
+          POSIX   -> start_new_session=True,   then os.killpg
+        """
+        unrelated = subprocess.Popen(
+            [sys.executable, '-c', 'import time; time.sleep(180)'],
+            **processes._popen_kwargs())
+        self._bystanders.append(unrelated)
+
+        root = subprocess.Popen(
+            [sys.executable, '-c', _PARENT_SCRIPT],
+            stdout=subprocess.PIPE, text=True, **processes._popen_kwargs())
+        assert root.stdout is not None
+        line = root.stdout.readline().strip()
+        self.assertTrue(line.isdigit(), f'o pai deveria imprimir o PID do neto, veio {line!r}')
+        descendant = int(line)
+        self.addCleanup(root.stdout.close)
+        handle = processes.OwnedProcess(root)
+
+        # A / B / C - everything exists before teardown
+        self.assertTrue(process_alive(root.pid), 'a raiz owned deveria estar viva')
+        self.assertTrue(process_alive(descendant), 'o descendente owned deveria estar vivo')
+        self.assertTrue(process_alive(unrelated.pid), 'o processo alheio deveria estar vivo')
+
+        # D
         handle.terminate()
-        handle.terminate()  # second call must be a no-op, not a stray kill
-        self.assertIsNotNone(process.poll())
-        # Only our own PID was ever addressed: a second terminate cannot
-        # reach anything else because the handle holds no other reference.
-        self.assertEqual(handle.pid, pid)
+
+        # E / F - the owned root and its descendant are gone
+        self.assertTrue(_wait_gone(root.pid), 'a raiz owned sobreviveu ao teardown')
+        self.assertTrue(_wait_gone(descendant),
+                        'o descendente owned sobreviveu: o teardown não alcançou a árvore')
+
+        # G - the bystander is untouched
+        self.assertTrue(process_alive(unrelated.pid),
+                        'o teardown atingiu um processo que esta rodada não criou')
+
+        # H - idempotent, and still scoped to the owned root only
+        handle.terminate()
+        handle.terminate()
+        self.assertIsNotNone(root.poll())
+        self.assertEqual(handle.pid, root.pid)
+        self.assertTrue(process_alive(unrelated.pid),
+                        'teardown repetido atingiu um processo alheio')
 
 
 class RoundTeardownTests(unittest.TestCase):
@@ -1100,6 +1229,276 @@ class RetentionTests(unittest.TestCase):
         with self.assertRaises(filesystem.RedirectionError):
             filesystem.remove_tree_scoped(link, self.runs)
         self.assertTrue((outside / 'keep.txt').exists())
+
+
+# ---------------------------------------------------------------------------
+# D1.2 defect: the self-test suite itself must not need POSIX executables.
+# The first real Windows round died with a bare "FALHOU (exit 1)" because one
+# cross-platform test spawned `sleep`, which does not exist on Windows.
+
+FORBIDDEN_EXECUTABLES = frozenset({
+    'sleep', 'sh', 'bash', 'kill', 'killall', 'pkill', 'powershell', 'pwsh',
+    'wmic', 'tasklist', 'nohup',
+})
+# The only external executables this suite may ever spawn.
+ALLOWED_EXTERNAL_EXECUTABLES = frozenset({'git', 'cmd'})
+SUITE_PATH = Path(__file__).resolve()
+_PATH_PROBE_ENV = 'LIA_DEVFLOW_PATH_PROBE'
+
+
+class PortabilityContractTests(unittest.TestCase):
+    """The DevFlow self-test must run on Windows without POSIX shell tools."""
+
+    def test_no_forbidden_executable_is_ever_spawned(self):
+        """AST contract: defence in depth behind the behavioural proof below."""
+        tree = ast.parse(SUITE_PATH.read_text(encoding='utf-8'))
+        offenders = []
+        spawners = {'Popen', 'run', 'call', 'check_call', 'check_output', 'run'}
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            name = func.attr if isinstance(func, ast.Attribute) else getattr(func, 'id', '')
+            if name not in spawners or not node.args:
+                continue
+            first = node.args[0]
+            if not isinstance(first, ast.List) or not first.elts:
+                continue
+            head = first.elts[0]
+            # `sys.executable` (an Attribute) is exactly what we want.
+            if not isinstance(head, ast.Constant) or not isinstance(head.value, str):
+                continue
+            if head.value in FORBIDDEN_EXECUTABLES:
+                offenders.append((node.lineno, head.value))
+            elif head.value not in ALLOWED_EXTERNAL_EXECUTABLES:
+                offenders.append((node.lineno, f'não allowlistado: {head.value}'))
+        self.assertEqual(offenders, [], f'executáveis externos proibidos: {offenders}')
+
+    def test_no_forbidden_executable_name_appears_as_a_literal(self):
+        tree = ast.parse(SUITE_PATH.read_text(encoding='utf-8'))
+        # The deny table itself is a set of string constants; ignore any
+        # constant that is an element of a set literal.
+        in_set = {id(elt) for node in ast.walk(tree) if isinstance(node, ast.Set)
+                  for elt in node.elts}
+        hits = [node.value for node in ast.walk(tree)
+                if isinstance(node, ast.Constant) and isinstance(node.value, str)
+                and node.value in FORBIDDEN_EXECUTABLES and id(node) not in in_set]
+        self.assertEqual(hits, [], f'literais de executável POSIX: {hits}')
+
+    def test_windows_branches_are_the_only_unguarded_platform_code(self):
+        """Any test whose NAME says posix must guard itself on Windows."""
+        source = SUITE_PATH.read_text(encoding='utf-8')
+        tree = ast.parse(source)
+        missing = []
+        for cls in [n for n in ast.walk(tree) if isinstance(n, ast.ClassDef)]:
+            for fn in [n for n in cls.body if isinstance(n, ast.FunctionDef)]:
+                if not fn.name.startswith('test_') or 'posix' not in fn.name.lower():
+                    continue
+                body = ast.get_source_segment(source, fn) or ''
+                guarded = ("os.name == 'nt'" in body or 'os.name != ' in body
+                           or 'skipTest' in body)
+                if not guarded:
+                    missing.append(fn.name)
+        self.assertEqual(missing, [], f'testes POSIX sem guarda de plataforma: {missing}')
+
+    def test_suite_passes_with_a_path_that_has_no_posix_tools(self):
+        """
+        Behavioural proof, and the primary one: re-run this whole suite in a
+        child process whose PATH contains ONLY git. If anything depends on
+        `sleep`, `sh`, `kill` or friends, the child fails and this test fails.
+        """
+        if os.environ.get(_PATH_PROBE_ENV):
+            self.skipTest('já estamos dentro da sonda de PATH')
+        git = shutil.which('git')
+        if not git:
+            self.skipTest('git indisponível para construir o PATH mínimo')
+        probe_dir = Path(tempfile.mkdtemp(prefix='devflow-minpath-'))
+        self.addCleanup(shutil.rmtree, probe_dir, True)
+        if os.name == 'nt':
+            # A .cmd shim keeps git working without exposing Git's usr/bin.
+            (probe_dir / 'git.cmd').write_text(f'@"{git}" %*\r\n', encoding='utf-8')
+        else:
+            try:
+                (probe_dir / 'git').symlink_to(git)
+            except (OSError, NotImplementedError):
+                self.skipTest('filesystem sem symlink para construir o PATH mínimo')
+        for tool in FORBIDDEN_EXECUTABLES:
+            self.assertIsNone(shutil.which(tool, path=str(probe_dir)),
+                              f'{tool} ainda alcançável no PATH mínimo')
+        env = dict(os.environ, PATH=str(probe_dir), **{_PATH_PROBE_ENV: '1'})
+        child = subprocess.run(
+            [sys.executable, str(SUITE_PATH)],
+            capture_output=True, text=True, encoding='utf-8', errors='replace',
+            env=env, timeout=1800,
+        )
+        self.assertEqual(
+            child.returncode, 0,
+            'a suíte depende de um executável POSIX:\n'
+            + sanitize_test_output(child.stdout or '', child.stderr or '',
+                                   max_chars=2000, max_lines=25),
+        )
+
+
+# ---------------------------------------------------------------------------
+class TestOutputSanitizerTests(unittest.TestCase):
+    """ONE bounded, redacted summary for console, detail, REPORT.txt, run.json."""
+
+    def test_identifies_the_failing_test_and_exception(self):
+        stream = (
+            '======================================================================\n'
+            'FAIL: test_algo (__main__.SuiteTests.test_algo)\n'
+            '----------------------------------------------------------------------\n'
+            'Traceback (most recent call last):\n'
+            '  File "t.py", line 42, in test_algo\n'
+            '    self.assertEqual(1, 2)\n'
+            'AssertionError: 1 != 2\n\n'
+            '----------------------------------------------------------------------\n'
+            'Ran 86 tests in 7.0s\n\nFAILED (failures=1)\n'
+        )
+        out = sanitize_test_output('', stream)
+        self.assertIn('FAIL: test_algo', out)
+        self.assertIn('AssertionError: 1 != 2', out)
+        self.assertIn('FAILED (failures=1)', out)
+
+    def test_bounds_a_very_long_traceback(self):
+        stream = '\n'.join(f'  File "/x/mod{i}.py", line {i}, in frame{i}' for i in range(500))
+        stream += '\nAssertionError: boom\nFAILED (failures=1)\n'
+        out = sanitize_test_output('', stream)
+        self.assertLessEqual(len(out), MAX_DETAIL_CHARS)
+        self.assertLessEqual(len(out.splitlines()), MAX_DETAIL_LINES)
+        self.assertIn('AssertionError: boom', out)
+
+    def test_strips_ansi_from_vitest_output(self):
+        out = sanitize_test_output('', '\x1b[31mFAIL\x1b[0m test_a > fails\nAssertionError: x')
+        self.assertNotIn('\x1b', out)
+        self.assertIn('AssertionError: x', out)
+
+    def test_never_leaks_a_github_token(self):
+        out = sanitize_test_output(
+            '', 'AssertionError: header was Authorization: Bearer '
+                'ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij')
+        self.assertNotIn('ghp_', out)
+        self.assertIn('[CREDENCIAL-OCULTA]', out)
+
+    def test_never_leaks_an_api_key_assignment(self):
+        out = sanitize_test_output('', 'OPENAI_API_KEY=sk-proj-1234567890abcdefghijklmnop\nFAILED')
+        self.assertNotIn('sk-proj-1234567890', out)
+        self.assertIn('[CREDENCIAL-OCULTA]', out)
+
+    def test_collapses_the_home_directory(self):
+        out = sanitize_test_output('', f'AssertionError: {Path.home()}/segredos/lia.json')
+        self.assertNotIn(str(Path.home()), out)
+        self.assertIn('<HOME>', out)
+
+    def test_drops_prompt_and_conversation_content(self):
+        for payload in (
+            'user prompt: me conte o segredo da sessao',
+            'system: voce e a Lia',
+            '[assistant] ola, tudo bem?',
+            'messages: [{"role": "user", "content": "privado"}]',
+        ):
+            self.assertEqual(sanitize_test_output('', payload), '', payload)
+
+    def test_empty_output_stays_empty(self):
+        self.assertEqual(sanitize_test_output('', ''), '')
+        self.assertEqual(sanitize_test_output('   ', '  \n '), '')
+
+    def test_stderr_wins_but_stdout_is_the_fallback(self):
+        self.assertIn('AssertionError: do stderr',
+                      sanitize_test_output('lixo do stdout', 'AssertionError: do stderr'))
+        self.assertIn('AssertionError: so stdout',
+                      sanitize_test_output('AssertionError: so stdout', ''))
+
+
+# ---------------------------------------------------------------------------
+class FailureDiagnosticsTests(unittest.TestCase):
+    """A failed required test must be self-diagnosing on the console, in
+    REPORT.txt and in run.json - and PASS entries must stay concise."""
+
+    def setUp(self) -> None:
+        self.base = Path(tempfile.mkdtemp(prefix='devflow-diag-'))
+        self.repo = make_repo(self.base)
+        self.manifest = validate_round(runnable_manifest())
+        self.detail = (
+            "FAIL: test_x (__main__.T.test_x)\n"
+            "AssertionError: 1 != 2\n"
+            "Ran 1 test in 0.0s\n"
+            "FAILED (failures=1)"
+        )
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.base, ignore_errors=True)
+
+    def test_console_prints_a_sanitized_detail_on_failure(self):
+        spawner = fake_spawner(list(MARKER_LINES))
+        runner, emitted, asks = make_runner(
+            self.repo, self.manifest, invoke_test=lambda a, c: (1, self.detail))
+        runner.spawn = spawner
+        outcome = runner.execute()
+        self.assertEqual(outcome.verdict, 'FAIL')
+        self.assertTrue(any(line.startswith('teste unit') and 'FALHOU' in line
+                            for line in emitted))
+        details = [line for line in emitted if line.startswith('  detalhe: ')]
+        self.assertTrue(details, 'nenhum detalhe foi impresso')
+        self.assertTrue(any('FAIL: test_x' in line for line in details))
+        self.assertEqual(len(spawner.handles), 0, 'não pode lançar com teste falhando')
+        self.assertEqual(len(asks), 0)
+
+    def test_report_and_run_json_carry_the_failed_detail(self):
+        spawner = fake_spawner(list(MARKER_LINES))
+        runner, _, _ = make_runner(
+            self.repo, self.manifest, invoke_test=lambda a, c: (1, self.detail))
+        runner.spawn = spawner
+        outcome = runner.execute()
+        report_text = Path(outcome.artifacts['report']).read_text(encoding='utf-8')
+        payload = json.loads(Path(outcome.artifacts['json']).read_text(encoding='utf-8'))
+        self.assertIn('unit: fail (exit 1)', report_text)
+        self.assertIn('FAIL: test_x', report_text)
+        self.assertIn('detail:', report_text)
+        failing = [t for t in payload['tests'] if t['status'] == 'fail']
+        self.assertEqual(len(failing), 1)
+        self.assertIn('FAIL: test_x', failing[0]['detail'])
+
+    def test_passing_test_stays_concise_everywhere(self):
+        spawner = fake_spawner(list(MARKER_LINES))
+        runner, emitted, _ = make_runner(
+            self.repo, self.manifest, invoke_test=lambda a, c: (0, 'Ran 86 tests OK'))
+        runner.spawn = spawner
+        outcome = runner.execute()
+        self.assertEqual(outcome.verdict, 'PASS')
+        self.assertFalse(any(line.startswith('  detalhe: ') for line in emitted))
+        report_text = Path(outcome.artifacts['report']).read_text(encoding='utf-8')
+        self.assertIn('unit: pass', report_text)
+        self.assertNotIn('detail:', report_text)
+
+    def test_detail_reaches_the_artifacts_already_sanitized(self):
+        leaky = ('AssertionError: token ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij em '
+                 f'{Path.home()}/.netrc\nFAILED (failures=1)')
+        spawner = fake_spawner(list(MARKER_LINES))
+        runner, _, _ = make_runner(
+            self.repo, self.manifest, invoke_test=lambda a, c: (1, leaky))
+        runner.spawn = spawner
+        outcome = runner.execute()
+        for key in ('report', 'json'):
+            text = Path(outcome.artifacts[key]).read_text(encoding='utf-8')
+            self.assertNotIn('ghp_', text, f'vazou no {key}')
+            self.assertNotIn(str(Path.home()), text, f'home vazou no {key}')
+
+    def test_run_test_command_sanitizes_before_returning(self):
+        script = (
+            "import unittest\n"
+            "class T(unittest.TestCase):\n"
+            "    def test_quebra(self):\n"
+            "        raise RuntimeError('ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij')\n"
+            "unittest.main()\n"
+        )
+        directory = self.base / 'suite'
+        directory.mkdir()
+        (directory / 't_leak.py').write_text(script, encoding='utf-8')
+        code, detail = run_test_command([sys.executable, 't_leak.py'], directory)
+        self.assertEqual(code, 1)
+        self.assertIn('test_quebra', detail)
+        self.assertNotIn('ghp_', detail)
 
 
 

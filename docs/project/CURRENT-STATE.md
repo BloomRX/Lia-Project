@@ -557,6 +557,44 @@ testes obrigatórios passando, marcadores ordenados e afirmação humana aceita 
 rebaixa para `NOT_PASS` se faltar evidência. O `tested_sha` do manifesto pode seguir `null`:
 o runtime **não** o escreve, porque isso sujaria o repositório no meio da rodada.
 
+**A D1.1 existiu em `12ab92e`.** A **primeira rodada real no Windows** (`DevKit.bat →
+1) Executar rodada atual`) alcançou o HEAD exato `12ab92e759f9` com `alteracoes_nao_commitadas=0`,
+removeu `airi/packages/core-agent/dist` com segurança e **o fail-closed funcionou**: o teste
+automatizado `devflow` saiu com `exit 1` e a rodada parou **antes** de lançar a Lia. Isso é o
+comportamento correto.
+
+O que estava errado era o **auto-teste**, não o gate. Causa-raiz confirmada por reprodução:
+`OwnedProcessTests.test_teardown_is_idempotent_and_scoped_to_the_owned_pid` fazia
+`subprocess.Popen(['sleep', '30'], start_new_session=True)` **sem guarda de plataforma**.
+`sleep` não é um executável padrão do Windows, então o teste estourava com
+`FileNotFoundError` e a suíte inteira devolvia `exit 1`. (`start_new_session` não era o
+problema: no CPython ele é aceito e ignorado no Windows — `unused_start_new_session`.)
+Era o **único** executável externo sem guarda em toda a suíte; os outros quatro (`git`, e
+`sh`/`kill`/`cmd` dentro de testes guardados) estavam corretos.
+
+A **D1.2** fecha isso:
+
+1. **auto-teste portável** — pai, neto e espectador viraram processos `sys.executable`
+   dormindo com `time.sleep`. Um único teste cross-platform prova agora os pontos A–H
+   (raiz viva, descendente vivo, espectador vivo → `terminate()` → raiz morta, descendente
+   morto, espectador **vivo**, `terminate()` repetido idempotente), usando as mesmas flags
+   de plataforma do DevFlow. Sem `sleep`, `sh`, `kill`, PowerShell ou WMIC;
+2. **prova comportamental** — a suíte inteira é re-executada num subprocesso com `PATH`
+   contendo **só o git**; se algo depender de ferramenta POSIX, a sonda falha. Há também um
+   contrato por AST como defesa em profundidade;
+3. **falha autodiagnosticável** — existe **um único** sanitizador
+   (`report.sanitize_test_output`), aplicado **na fronteira de persistência**, alimentando
+   console, `TestResult.detail`, `REPORT.txt` e `run.json`. Bounded (14 linhas / 1200
+   caracteres), reusa o redator universal, colapsa `<HOME>`, descarta linhas com formato de
+   conversa e preserva o fluxo útil (stderr vence, stdout é fallback). Antes,
+   `TestResult.detail` recebia os **últimos 400 caracteres crus** do subprocesso e ia
+   direto para `run.json` e `REPORT.txt` — isso foi corrigido;
+4. **`REPORT.txt` mostra o detalhe de teste que falhou**, mantendo os que passaram concisos.
+
+A ordem fail-closed da D1.1 foi preservada sem enfraquecimento: branch/worktree limpo →
+preparo seguro → **todos** os testes obrigatórios → só então o gate do Windows → marcadores
+ordenados → pergunta visual → relatório.
+
 **O gate gerenciado da M3.0b no Windows continua `NOT PASS`** e o baseline funcional continua
 **`3ef6d11`**. Nenhum commit de ferramenta foi ou será promovido a baseline funcional.
 

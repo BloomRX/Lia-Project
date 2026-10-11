@@ -136,6 +136,54 @@ Nunca há kill global por nome de imagem: nada que o DevFlow não iniciou é sin
 teardown roda no `finally`, então acontece após PASS, após falha de marcador, após `N` e
 após Ctrl+C.
 
+### Falha de teste é autodiagnosticável (D1.2)
+
+Um `FALHOU (exit 1)` sozinho inutiliza o DevKit. Por isso, quando um teste obrigatório
+falha, o console imprime automaticamente um resumo curto:
+
+```
+teste devflow: FALHOU (exit 1)
+  detalhe: FAIL: test_algo (__main__.Suite.test_algo)
+  detalhe: AssertionError: 1 != 2
+  detalhe: Ran 86 tests in 7.0s
+  detalhe: FAILED (failures=1)
+```
+
+Existe **um único** sanitizador de saída de teste, `report.sanitize_test_output`, e ele é
+aplicado **na fronteira de persistência**, dentro de `_run_tests`, ao montar
+`TestResult.detail` — não apenas dentro do invocador padrão. Nenhum invocador plugável e
+nenhum caminho futuro consegue colocar saída crua de subprocesso num artefato. O mesmo
+resultado alimenta as quatro superfícies: resumo no console, `TestResult.detail`,
+`REPORT.txt` e `run.json`. Não há segundo sanitizador mais fraco.
+
+Contrato dele:
+
+- **bounded** — no máximo 14 linhas e 1200 caracteres;
+- reutiliza o **redator universal** do DevKit (`project_cli.redact`) e o colapso de home
+  (`<HOME>`) que o DevFlow já usava no console;
+- preserva o fluxo útil: unittest/vitest escrevem a falha em **stderr**, então stderr vence
+  quando tem conteúdo; stdout é o fallback, nunca os dois concatenados;
+- remove sequências ANSI;
+- **descarta** linhas com formato de conversa (`user:`, `system:`, `assistant:`,
+  `prompt:`, `messages:`) — não têm valor de diagnóstico e podem carregar conteúdo;
+- mantém o suficiente para identificar **qual teste** falhou e **qual exceção** estourou.
+
+Em `REPORT.txt`, testes com falha (ou pulados) exibem o detalhe; testes que passaram ficam
+concisos. Isso permite mandar só o `REPORT.txt` para análise.
+
+### Auto-teste portável (D1.2)
+
+A suíte do DevFlow **não pode** depender de executáveis POSIX. A primeira rodada real no
+Windows morreu com um `exit 1` opaco porque um teste cross-platform spawnava `sleep`, que
+não existe no Windows. Hoje:
+
+- pai, neto e espectador são todos `sys.executable` dormindo com `time.sleep` — nenhum
+  `sleep`/`sh`/`kill`, nenhum PowerShell, nenhum WMIC;
+- o teste de árvore usa as **mesmas** flags de plataforma do DevFlow, então exercita o
+  caminho de produção real nos dois sistemas;
+- há uma prova **comportamental**: a suíte inteira é re-executada num subprocesso com um
+  `PATH` contendo **só o git**; e um contrato por AST como defesa em profundidade.
+
 ### Invocação de batch (auditada)
 
 `processes.launch_argv` é o **único** seam de plataforma. No Windows, um `.bat`/`.cmd` é
@@ -192,7 +240,10 @@ limpo. Não há contradição: `run.json` prova o que foi testado; o manifesto d
 
 ## Estado
 
-- **D1 existiu** no commit `32025ab`.
+- **D1 existiu** no commit `32025ab`; **D1.1** no `12ab92e`. A primeira rodada real no
+  Windows alcançou o HEAD exato e limpo, removeu `core-agent/dist` com segurança e o
+  fail-closed funcionou (o teste automatizado com `exit 1` impediu o lançamento da Lia);
+  **D1.2** torna o auto-teste portável e a falha autodiagnosticável.
 - Uma **auditoria independente** encontrou defeitos de correção/segurança limitados, antes
   da primeira rodada real no Windows. **D1.1 os fecha**: falso PASS por teste pulado, falso
   PASS com checkout sujo, afirmação visual pedida antes do gate automático, proteção de
