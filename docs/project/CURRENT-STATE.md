@@ -417,6 +417,48 @@ não é uma migração de protocolo.
 **Gate:** testes automatizados verdes **não** são este gate. O E2E multimodal em Windows
 continua **NOT PASS**; o baseline funcional validado continua sendo `3ef6d11`.
 
+### 8.0D-M3.0a — Stage invisível no Windows por `dist` obsoleto do core-agent
+
+**O que aconteceu, observado no Windows real:** depois de puxar o código da M3, o Stage
+abria como ícone na barra de tarefas mas **nada aparecia na tela** — janela presente,
+invisível. Não era regressão de produto: era artefato de build obsoleto.
+
+**Causa raiz (invariante quebrado):** *código-fonte do renderer e o `dist` compilado de
+cada pacote de workspace que ele importa precisam estar consistentes quando o Stage dev
+inicia.* A cadeia que quebrou:
+
+- `@proj-airi/core-agent` publica pelo `dist/` compilado (`main: ./dist/index.mjs`), e
+  `dist/` é **gitignored** (`airi/.gitignore`) — ou seja, nunca vem no pull;
+- a M3 adicionou exports públicos novos (`selectProviderContextMessages`,
+  `isProviderContextMessage`, `countImagePartsInMessage`, `countProviderContextImageParts`,
+  `hasProviderContextImageInput`), re-exportados **em runtime** por
+  `stage-ui/src/stores/chat/provider-context.ts` a partir do **código-fonte** do renderer;
+- `Lia.bat → pnpm dev:lia → @lia/lia-app dev` reconstrói apenas `@lia/core`, e o Stage
+  gerenciado roda `@proj-airi/stage-tamagotchi dev` = `install-electron && electron-vite dev`
+  — **nenhum dos dois construía o core-agent**;
+- com o `dist` pré-M3, o import falha no **link** ESM (`does not provide an export named
+  'selectProviderContextMessages'`) antes de qualquer código rodar: nada monta, nada é
+  logado, e como a janela é `transparent: true` o Stage fica só como ícone.
+
+**Prova no Windows (executada pelo usuário):**
+`findstr /C:"selectProviderContextMessages" packages\core-agent\dist\index.mjs` → **vazio**;
+em seguida `pnpm -F @proj-airi/core-agent run build` → **o Stage abriu imediatamente**.
+`dist` obsoleto, confirmado — não hipótese.
+
+**Correção durável (não workaround):** `apps/stage-tamagotchi/package.json` — `dev` e
+`dev:xwayland` agora começam com `pnpm -F @proj-airi/core-agent run build && `. Ninguém
+precisa mais construir o core-agent manualmente depois de um pull. Somente os scripts
+`dev` foram alterados: `build`, `start`, `start:xwayland`, `app:build` continuam idênticos,
+porque release já é ordenado pelo turbo (`build.dependsOn: ["^build"]` + a dependência
+`workspace:^` da `stage-ui`). O contrato está pinado por
+`apps/stage-tamagotchi/src/main/dev-build-contract.test.ts`, que **executa** a string real
+do script num shell com comandos stub (ordem + abortar em falha) e roda módulos ES reais em
+processo Node filho para provar a falha de link.
+
+**Isto NÃO é o PASS multimodal no Windows.** O Stage abrir prova apenas que o contrato de
+build do dev voltou a ser consistente. O baseline funcional validado continua sendo
+`3ef6d11`; o gate de conteúdo visual da 8.0D continua **PENDENTE**.
+
 ### Itens de closure restantes da 8.0D (fora desta fase)
 
 1. **tool-calling closure** — teste dirigido do loop completo: rota resolvida → modelo
