@@ -1,0 +1,87 @@
+{
+  "schema_version": 1,
+  "round": {
+    "id": "M3.0b",
+    "title": "Pre-requisito de build gerenciado do Stage (core-agent/dist)",
+    "phase": "8.0D-M3.0b",
+    "ready_for_publish": false,
+    "tested_sha": null
+  },
+  "git": {
+    "expected_branch": "arena/01a10290-lia-project"
+  },
+  "prepare": [
+    {
+      "kind": "remove_generated",
+      "path": "airi/packages/core-agent/dist",
+      "why": "Reproduz o estado de um pull fresco: dist e gitignored, entao remove-lo forca o pre-requisito gerenciado a reconstruir do zero em vez de herdar um artefato ja pronto."
+    }
+  ],
+  "cleanup_profile": {
+    "id": "core-agent-dist-only",
+    "allowlisted_generated": [
+      "airi/packages/core-agent/dist"
+    ]
+  },
+  "tests": [
+    {
+      "id": "devflow",
+      "label": "DevFlow (contrato da rodada, limpeza segura, gate de log)",
+      "cwd": ".",
+      "argv": ["python", "tools/test_lia_dev.py"]
+    },
+    {
+      "id": "lia-app",
+      "label": "Lia App (manager + pre-requisito + ownership)",
+      "cwd": "airi/apps/lia-app",
+      "argv": ["node", "../../node_modules/vitest/vitest.mjs", "run"]
+    },
+    {
+      "id": "stage-m30a",
+      "label": "Contrato manual dev:tamagotchi (8.0D-M3.0a)",
+      "cwd": "airi/apps/stage-tamagotchi",
+      "argv": ["node", "../../node_modules/vitest/vitest.mjs", "run", "--project", "node", "src/main/dev-build-contract.test.ts"]
+    }
+  ],
+  "launch": {
+    "kind": "managed-launcher",
+    "command": ["Lia.bat"],
+    "operator_hint": "Aguarde o Launcher abrir e clique em 'Conversar com Lia'. Nao rode nenhum build manual: a rodada precisa provar que o Launcher reconstruiu o core-agent sozinho."
+  },
+  "diagnostics": {
+    "ordered_markers": [
+      {
+        "id": "prerequisite-starting",
+        "pattern": "stage-prerequisite name=core-agent-build state=starting"
+      },
+      {
+        "id": "prerequisite-succeeded",
+        "pattern": "stage-prerequisite name=core-agent-build state=succeeded",
+        "also": "reason=build-succeeded"
+      },
+      {
+        "id": "stage-spawn",
+        "pattern": "spawn: node",
+        "also": "electron-vite.js dev"
+      }
+    ],
+    "optional_markers": [
+      {
+        "id": "stage-ready",
+        "pattern": "ready in"
+      }
+    ]
+  },
+  "manual_assertions": [
+    {
+      "id": "character-visible",
+      "question": "A personagem apareceu normalmente?",
+      "accept": ["S"],
+      "reject": ["N"]
+    }
+  ],
+  "retention": {
+    "keep_runs": 20,
+    "max_age_days": 30
+  }
+}

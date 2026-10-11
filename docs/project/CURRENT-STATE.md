@@ -506,6 +506,33 @@ lança contra um `dist` sabidamente obsoleto.
 **Isto NÃO é o PASS multimodal no Windows.** O baseline funcional validado continua sendo
 `3ef6d11`; o gate de conteúdo visual da 8.0D continua **PENDENTE**.
 
+### DEVFLOW-D1 — entrypoint único de desenvolvimento (só ferramenta)
+
+O código da M3.0b existe em **`c65de97`**. Mas o **gate gerenciado durável no Windows
+continua `NOT PASS`**: ele só será provado quando o DevFlow o executar numa máquina real.
+Nenhum teste automatizado desta fase prova runtime.
+
+**O que a D1 entregou:** `DevKit.bat` na raiz virou o entrypoint humano único — dois cliques
+e `1) Executar rodada atual`. A orquestração Lia vive em `tools/lia_dev.py` +
+`tools/devflow/`, separada das primitivas Git universais de `tools/project_cli.py`. A rodada
+ativa é um contrato **machine-readable** (`tools/devflow/rounds/m3_0b.json`), nunca prosa
+deste arquivo. Documentação: `docs/project/DEVFLOW.md`.
+
+A rodada exige a branch, identifica o HEAD, remove **só** `airi/packages/core-agent/dist`
+(gerado), roda os testes direcionados, lança o caminho gerenciado, detecta os três marcadores
+**na ordem** e só então pergunta `A personagem apareceu normalmente? [S/N]`. **Log nunca vira
+PASS visual.** Artefatos em `Tests/runs/devflow/<timestamp>-<round>/` (gitignored, retidos 20
+execuções / 30 dias), sanitizados com o redator universal.
+
+**A D1 é somente ferramenta:** não altera código de produto, não toca
+Brain/provider/voz/vision, e **não avança o baseline funcional — que continua `3ef6d11`**.
+
+**Nada foi apagado.** Os `.bat`/`.ps1` históricos estão inventariados e classificados
+(KEEP / INTERNAL / CANDIDATE-MERGE / CANDIDATE-DELETE) em
+`tools/devflow/script-inventory.json`, como entrada para o **D3**. `devkit.json` continua
+com `ignore_dirs: ["airi"]` — a razão está documentada em `DEVFLOW.md` e a decisão é do
+**D2**.
+
 ### Itens de closure restantes da 8.0D (fora desta fase)
 
 1. **tool-calling closure** — teste dirigido do loop completo: rota resolvida → modelo

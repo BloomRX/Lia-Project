@@ -1,0 +1,101 @@
+{
+  "schema_version": 1,
+  "generated_by": "DEVFLOW-D1",
+  "note": "Inventario auditado dos scripts de desenvolvimento Windows. D1 NAO apaga nada: isto e a lista de entrada para o D3. 'classification' diz o que o D3 deveria fazer, nao o que foi feito. As evidencias sao referencias reais medidas no repositorio, nao opiniao.",
+  "classifications": {
+    "KEEP": "funcao unica e referencias vivas; permanece como esta",
+    "INTERNAL": "usado por outra ferramenta ou protegido por restricao explicita; nao expor ao usuario nem remover",
+    "CANDIDATE-MERGE": "sobrepoe outro entrypoint; consolidar no D3",
+    "CANDIDATE-DELETE": "arco encerrado ou duplicata sem referencia funcional; remover no D3 apos confirmar"
+  },
+  "entries": [
+    {
+      "path": "DevKit.bat",
+      "classification": "KEEP",
+      "unique": true,
+      "references": 13,
+      "reason": "Entrypoint humano da raiz. Dispatcher fino para tools/project_cli.py (Git universal) e, desde o D1, para tools/lia_dev.py (menu por rodada). Nao contem logica de orquestracao.",
+      "d3_action": "manter como unico entrypoint duplo-clique"
+    },
+    {
+      "path": "Lia.bat",
+      "classification": "KEEP",
+      "unique": true,
+      "references": 11,
+      "reason": "Lancador gerenciado canonico: pushd airi && pnpm dev:lia. E exatamente o processo que a rodada M3.0b lanca e captura. Remover ou alterar quebraria o gate.",
+      "d3_action": "manter; o DevFlow o invoca por manifest"
+    },
+    {
+      "path": "LiaTests.bat",
+      "classification": "KEEP",
+      "unique": true,
+      "references": 6,
+      "reason": "Arnese de QA de voz: kokoro-smoke real e fluxo clean-install com pastas de run em Tests/runs. Coberto por Tests/tools/qa-bat-validation.test.mjs, que falha se o arquivo mudar de forma.",
+      "d3_action": "manter; integrar ao menu Lia no D3 sem alterar o contrato testado"
+    },
+    {
+      "path": "LiaBenchmark.bat",
+      "classification": "INTERNAL",
+      "unique": true,
+      "references": 4,
+      "reason": "Arnese de benchmark Windows. Existe restricao de projeto explicita e anterior: nao mexer nem publicar qa/windows-benchmarks. Fora do escopo do DevFlow.",
+      "d3_action": "nao tocar"
+    },
+    {
+      "path": "airi/DevKit.bat",
+      "classification": "CANDIDATE-MERGE",
+      "unique": false,
+      "references": 13,
+      "reason": "Menu do workspace pnpm (QA completo, Tamagotchi, web...). O proprio cabecalho declara que NAO reusa o DevKit Python da raiz, entao hoje existem dois menus concorrentes. Suas opcoes ja existem como scripts pnpm.",
+      "d3_action": "consolidar as opcoes no menu do DevKit raiz e aposentar este arquivo"
+    },
+    {
+      "path": "airi/QA.bat",
+      "classification": "KEEP",
+      "unique": true,
+      "references": 4,
+      "reason": "Unica ordem completa de QA do AIRI (pnpm test:run -> typecheck -> build:web), com parada na primeira falha. Invocado por airi/DevKit.bat. Nao ha equivalente no DevFlow, que hoje so roda testes direcionados da rodada.",
+      "d3_action": "manter como comando; expor no menu Lia no D3"
+    },
+    {
+      "path": "airi/QA-Miniconda.bat",
+      "classification": "CANDIDATE-DELETE",
+      "unique": true,
+      "references": 4,
+      "reason": "NAO e uma variante de QA: e um diagnostico do instalador silencioso do Miniconda (Phase 5, rounds 3-5). O proprio cabecalho registra que o arco foi encerrado. As unicas referencias sao 3 documentos historicos de fase.",
+      "d3_action": "remover apos mover o registro historico para docs; nenhuma referencia funcional"
+    },
+    {
+      "path": "airi/DevTamagotchi.bat",
+      "classification": "CANDIDATE-MERGE",
+      "unique": false,
+      "references": 6,
+      "reason": "Executa exatamente 'pnpm dev:tamagotchi', que ja e a opcao [2] de airi/DevKit.bat. Duplicata de entrypoint. As demais referencias sao documentos e um COMENTARIO em audio-probe.test.ts (nao ha dependencia funcional do arquivo).",
+      "d3_action": "consolidar no menu e aposentar, ajustando o comentario do teste"
+    },
+    {
+      "path": "airi/DiagnoseLiaProvider.ps1",
+      "classification": "KEEP",
+      "unique": true,
+      "references": 4,
+      "reason": "Dependencia funcional viva: referenciado por diagnose-lia-provider-core.ts, diagnose-lia-provider.probe.ts, diagnose-lia-provider.ts e vitest.diagnose.config.ts.",
+      "d3_action": "manter"
+    },
+    {
+      "path": "airi/engines/stage-tamagotchi-godot/tools/captureWindowClientPng.ps1",
+      "classification": "KEEP",
+      "unique": true,
+      "references": 1,
+      "reason": "Dependencia funcional viva: chamado por tools/dumpRenderStages.mjs.",
+      "d3_action": "manter"
+    },
+    {
+      "path": "airi/apps/stage-pocket/android/gradlew.bat",
+      "classification": "INTERNAL",
+      "unique": true,
+      "references": 0,
+      "reason": "Wrapper gerado pelo Gradle para o target Android do stage-pocket. Nao e ferramenta nossa e nao pertence ao fluxo Windows da Lia.",
+      "d3_action": "nao tocar"
+    }
+  ]
+}

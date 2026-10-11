@@ -4,8 +4,16 @@ cd /d "%~dp0"
 set "PYTHONUTF8=1"
 chcp 65001 >nul 2>nul
 
-if not exist "%~dp0tools\project_cli.py" (
-    echo ERRO: tools\project_cli.py nao encontrado ao lado do DevKit.bat.
+rem ==========================================================================
+rem  DevKit.bat - unico entrypoint de desenvolvimento Windows da Lia.
+rem
+rem  Fina de proposito: descobre o Python e delega. Sem orquestracao em batch.
+rem    sem argumentos -> tools\lia_dev.py menu  (rodada atual, estado, diagnostico)
+rem    com argumentos -> tools\project_cli.py    (DevKit universal / Git)
+rem ==========================================================================
+
+if not exist "%~dp0tools\lia_dev.py" (
+    echo ERRO: tools\lia_dev.py nao encontrado ao lado do DevKit.bat.
     set "RC=1"
     goto :finish
 )
@@ -28,12 +36,21 @@ set "RC=1"
 goto :finish
 
 :use_py
-py -3 "%~dp0tools\project_cli.py" %*
+set "RUNPY=py -3"
+goto :dispatch
+
+:use_python
+set "RUNPY=python"
+goto :dispatch
+
+:dispatch
+if "%~1"=="" goto :lia_menu
+%RUNPY% "%~dp0tools\project_cli.py" %*
 set "RC=%ERRORLEVEL%"
 goto :finish
 
-:use_python
-python "%~dp0tools\project_cli.py" %*
+:lia_menu
+%RUNPY% "%~dp0tools\lia_dev.py" menu
 set "RC=%ERRORLEVEL%"
 
 :finish
