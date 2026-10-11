@@ -1,7 +1,11 @@
+import type { StageBuildPrerequisite } from './stage-build-prerequisite'
+
 import { execFile, spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { env as nodeEnv, execPath as nodeExecPath, platform as nodePlatform } from 'node:process'
+
+import { createCoreAgentBuildPrerequisite } from './stage-build-prerequisite'
 
 /**
  * AiriStageManager (Phase 7, architecture items 9-10).
@@ -27,8 +31,11 @@ import { env as nodeEnv, execPath as nodeExecPath, platform as nodePlatform } fr
  *    exit code.
  *
  * Deliberately NOT here (contract items 10/19): updaters, package
- * installers, health probes of the stage UI. Dev launches `pnpm dev:
- * tamagotchi` in the AIRI workspace; production will point at the packaged
+ * installers, health probes of the stage UI. Dev launches the stage's
+ * electron-vite entrypoint DIRECTLY with `node` inside the AIRI workspace -
+ * it does NOT run `pnpm dev:tamagotchi` and never reads the stage's
+ * `package.json`, which is why the Phase 8.0D-M3.0b build prerequisite lives
+ * here rather than in that script. Production will point at the packaged
  * executable through the same call shape.
  */
 
@@ -57,6 +64,18 @@ export interface AiriStageManagerDeps {
   onState?: (state: AiriStageState) => void
   /** Platform override for tests. */
   platform?: NodeJS.Platform
+  /**
+   * Dev-only build prerequisite that must SUCCEED before the stage child is
+   * spawned (Phase 8.0D-M3.0b). Default: rebuild `@proj-airi/core-agent`,
+   * whose gitignored `dist/` the stage renderer imports and which nothing on
+   * the managed launch path used to compile. It runs INSIDE `start()`'s
+   * single-flight promise, so a double click cannot start two builds, and a
+   * failure aborts the launch instead of serving a stale renderer.
+   *
+   * It is a prerequisite, NOT the owned process: the stage child stays
+   * `node electron-vite.js dev` exactly as Phase 7.2 requires.
+   */
+  prerequisite?: StageBuildPrerequisite
   spawnImpl?: typeof spawn
   /**
    * The dev-server entry script the manager launches with `node`. Default:
@@ -238,6 +257,38 @@ export class AiriStageManager {
     }
 
     this.setState({ phase: 'starting' })
+
+    // Phase 8.0D-M3.0b: the managed launch compiles the stage's workspace
+    // dependencies BEFORE the renderer is served, because the renderer imports
+    // them from their built `dist/` and a stale artifact fails at ESM link time
+    // - a transparent window with nothing in it and nothing in the log.
+    //
+    // `applies()` is checked first and is synchronous on purpose: when there is
+    // no source workspace (packaged production) nothing is awaited, so the
+    // spawn below still happens in the same tick and the Phase 7.2 ownership
+    // semantics the tests pin are byte-for-byte unchanged.
+    const prerequisite = this.deps.prerequisite
+      ?? createCoreAgentBuildPrerequisite({ workspaceRoot: this.deps.workspaceRoot })
+    if (prerequisite.applies()) {
+      this.deps.onLog?.(`stage-prerequisite name=${prerequisite.name} state=starting`)
+      const outcome = await prerequisite.run()
+      if (!outcome.ok) {
+        this.deps.onLog?.(
+          `stage-prerequisite name=${prerequisite.name} state=failed reason=${outcome.reason ?? 'unknown'}`,
+        )
+        // Honest error, no invented cause and no launch: starting the stage
+        // against a known-stale artifact is the bug this prevents.
+        this.setState({
+          message: 'The Lia stage could not be prepared: its build did not succeed.',
+          phase: 'error',
+        })
+        return this.state()
+      }
+      this.deps.onLog?.(
+        `stage-prerequisite name=${prerequisite.name} state=${outcome.skipped ? 'skipped' : 'succeeded'}`
+        + `${outcome.reason ? ` reason=${outcome.reason}` : ''}`,
+      )
+    }
 
     /**
      * THE ownership fix (QA items 5-7). The old chain was

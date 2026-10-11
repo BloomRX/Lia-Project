@@ -8,12 +8,22 @@
  *   - M3 added new public exports to it (`selectProviderContextMessages` and
  *     friends) that `stage-ui` consumes from **renderer source**;
  *   - `Lia.bat -> pnpm dev:lia -> @lia/lia-app dev` rebuilds `@lia/core`, and
- *     the managed Stage launch runs `@proj-airi/stage-tamagotchi dev` - neither
- *     built core-agent;
+ *     a manual `pnpm dev:tamagotchi` ran
+ *     `install-electron && electron-vite dev` - neither built core-agent;
  *   - so pulling product code could leave renderer source and package `dist`
  *     inconsistent. The renderer then fails at ESM **link** time on a missing
  *     named export, nothing mounts, and because the main window is
  *     `transparent: true` the Stage exists only as a taskbar icon.
+ *
+ * SCOPE, corrected by Phase 8.0D-M3.0b. This contract covers the MANUAL path
+ * only - `pnpm dev:tamagotchi` (and `dev:xwayland`). It does NOT cover
+ * `Lia.bat -> Conversar com Lia`: the managed launch spawns
+ * `node <stage>/node_modules/electron-vite/bin/electron-vite.js dev` directly
+ * and never reads this `package.json`, which the Windows runtime log proved
+ * (`lia-app.stage-log spawn: node ...\electron-vite.js dev`). An earlier
+ * revision of this header claimed otherwise; that claim was wrong. The managed
+ * path is pinned by `apps/lia-app/src/main/stage-managed-build-prerequisite
+ * .test.ts` instead.
  *
  * Release is NOT affected and must stay that way: `stage-ui` declares
  * `@proj-airi/core-agent` as a workspace dependency and turbo's `build` task

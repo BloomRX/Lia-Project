@@ -445,18 +445,65 @@ inicia.* A cadeia que quebrou:
 em seguida `pnpm -F @proj-airi/core-agent run build` → **o Stage abriu imediatamente**.
 `dist` obsoleto, confirmado — não hipótese.
 
-**Correção durável (não workaround):** `apps/stage-tamagotchi/package.json` — `dev` e
-`dev:xwayland` agora começam com `pnpm -F @proj-airi/core-agent run build && `. Ninguém
-precisa mais construir o core-agent manualmente depois de um pull. Somente os scripts
-`dev` foram alterados: `build`, `start`, `start:xwayland`, `app:build` continuam idênticos,
-porque release já é ordenado pelo turbo (`build.dependsOn: ["^build"]` + a dependência
-`workspace:^` da `stage-ui`). O contrato está pinado por
+**Correção da M3.0a — e o seu limite real (corrigido pela M3.0b):**
+`apps/stage-tamagotchi/package.json` — `dev` e `dev:xwayland` agora começam com
+`pnpm -F @proj-airi/core-agent run build && `. Somente os scripts `dev` foram alterados:
+`build`, `start`, `start:xwayland`, `app:build` continuam idênticos, porque release já é
+ordenado pelo turbo (`build.dependsOn: ["^build"]` + a dependência `workspace:^` da
+`stage-ui`). O contrato está pinado por
 `apps/stage-tamagotchi/src/main/dev-build-contract.test.ts`, que **executa** a string real
 do script num shell com comandos stub (ordem + abortar em falha) e roda módulos ES reais em
 processo Node filho para provar a falha de link.
 
-**Isto NÃO é o PASS multimodal no Windows.** O Stage abrir prova apenas que o contrato de
-build do dev voltou a ser consistente. O baseline funcional validado continua sendo
+**Essa correção cobre APENAS o caminho manual** (`pnpm dev:tamagotchi`). Ela **não** protege
+`Lia.bat → Conversar com Lia`, e a documentação desta seção afirmava que protegia — essa
+afirmação estava **errada** e foi corrigida. O log de runtime do Windows mostrou o motivo:
+
+```
+lia-app.conversar-brain-mode mode=automatic
+lia-app.stage-log spawn: node ...\apps\stage-tamagotchi\node_modules\electron-vite\bin\electron-vite.js dev
+```
+
+O `AiriStageManager` lança o entrypoint do electron-vite **diretamente com Node**, sem shell
+e sem package manager (é a correção de ownership da Phase 7.2, e os testes existentes
+assertam `command()` sem `pnpm`, `execPath`, `argv = [electron-vite.js, "dev"]`,
+`shell === undefined`). Ele nunca lê o `package.json` do Stage. O run do Windows que abriu
+só passou porque um `postinstall`/`build:packages` tinha acabado de rodar
+(`@proj-airi/core-agent:build ✔ Build complete`) — ou seja, **não** é prova de frescor
+durável no caminho gerenciado.
+
+### 8.0D-M3.0b — pré-requisito de build no caminho gerenciado
+
+**Invariante fechado:** `Lia.bat → Launcher → Conversar → pré-requisito de build garante o
+artefato do core-agent → só depois de sucesso, spawn direto do electron-vite`.
+
+**Implementação:** módulo novo `apps/lia-app/src/main/stage-build-prerequisite.ts`, chamado
+dentro de `AiriStageManager.spawnStage()` — portanto **dentro da promise single-flight de
+`start()`**, antes do spawn. Um duplo clique não dispara dois builds nem dois stages.
+
+**Portabilidade no Windows (verificada, não suposta):** `execFile('pnpm', ...)` **não
+funciona**. Medido aqui: `execFile('pnpm', ['--version'])` → `ERR ENOENT` (pnpm nem está no
+PATH num workspace Corepack), e no Windows o shim é `pnpm.cmd`, que o Node recusa spawnar
+sem `shell: true` desde o hardening CVE-2024-27980 — exatamente a rota DEP0190 que a Phase
+7.2 removeu. Por isso o build roda **como o próprio Stage roda**: resolve o `bin` da
+ferramenta como um ARQUIVO concreto e executa com `process.execPath`
+(`node <tsdown>/dist/run.mjs`, cwd `packages/core-agent`). Um único caminho de código, sem
+shell, sem PATHEXT, sem cmd.exe; o pré-requisito é um filho curto e aguardado, **nunca** o
+processo owned.
+
+**Ownership preservado:** o filho Stage continua `process.execPath [electron-vite.js, dev]`
+com `shell` undefined. `applies()` é síncrono de propósito: quando não há
+`packages/core-agent/package.json` (produção empacotada) nada é aguardado, o spawn continua
+no mesmo tick e os **13 testes existentes de ownership/stop passam sem alteração**.
+
+**Fail-closed:** build com exit ≠ 0, ferramenta não resolvida, script composto (exigiria
+shell) ou manifest ilegível ⇒ `phase: 'error'`, **zero** spawns, mensagem honesta. Nunca
+lança contra um `dist` sabidamente obsoleto.
+
+**Diagnóstico (só metadados, sem caminhos/segredos/conteúdo):**
+`stage-prerequisite name=core-agent-build state=starting|succeeded|failed|skipped reason=…`.
+
+**Isto NÃO é o PASS multimodal no Windows.** O baseline funcional validado continua sendo
 `3ef6d11`; o gate de conteúdo visual da 8.0D continua **PENDENTE**.
 
 ### Itens de closure restantes da 8.0D (fora desta fase)
