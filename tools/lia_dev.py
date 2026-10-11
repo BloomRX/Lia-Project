@@ -94,6 +94,11 @@ def cmd_status(_args: argparse.Namespace) -> int:
     print(f'  veredito      : {last.get("verdict")}')
     print(f'  SHA registrado: {recorded}')
     print(f'  validade      : {validity}')
+    dirty_now = len([x for x in _git(repo, ['status', '--porcelain']).splitlines() if x.strip()])
+    if validity == 'current' and dirty_now:
+        print(f'  ATENÇÃO       : o checkout atual tem {dirty_now} alteração(ões) não commitada(s).')
+        print('                  Um PASS descreve um checkout EXATO; este não é "validado atual".')
+        validity = 'dirty'
     if validity == 'stale':
         print('  ATENÇÃO       : o HEAD mudou desde aquela execução.')
         print('                  Um PASS anterior NÃO vale mais para este código; rode a rodada de novo.')

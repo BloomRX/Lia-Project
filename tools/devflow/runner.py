@@ -29,7 +29,7 @@ import sys
 import threading
 from typing import Callable, Protocol
 
-from . import safe_paths
+from . import processes, safe_paths
 from .markers import MarkerReport, evaluate_markers
 from .report import SanitizedLog, prune_runs, run_dir, sanitize_console, utc_stamp, write_run
 from .schema import Round
@@ -71,6 +71,8 @@ class RoundOutcome:
     markers: MarkerReport | None = None
     optional_seen: list[str] = field(default_factory=list)
     manual: dict[str, str] = field(default_factory=dict)
+    launch_pid: int | None = None
+    tree_cleaned: bool = False
     notes: list[str] = field(default_factory=list)
     artifacts: dict[str, str] = field(default_factory=dict)
     console_withheld: int = 0
@@ -78,6 +80,15 @@ class RoundOutcome:
     @property
     def is_pass(self) -> bool:
         return self.verdict == 'PASS'
+
+
+def run_test_command(argv: list[str], cwd: Path) -> tuple[int, str]:
+    """Runs one declared test. A missing tool is reported as failure, not pass."""
+    try:
+        probe = subprocess.run(argv, cwd=cwd, capture_output=True, text=True, timeout=1800)
+    except (OSError, subprocess.SubprocessError) as exc:
+        return 127, str(exc)
+    return probe.returncode, (probe.stdout or probe.stderr or '')[-400:]
 
 
 def default_git(args: list[str], cwd: Path) -> tuple[int, str]:
@@ -96,50 +107,13 @@ def git_facts(repo: Path, run_git: GitRunner) -> tuple[str, str, int]:
     return branch.strip(), head.strip(), dirty
 
 
-class _ThreadedSpawn:
-    """Reads the child's stdout on a thread and replays it line by line."""
-
-    def __init__(self, process: subprocess.Popen) -> None:
-        self._process = process
-
-    def wait(self, timeout: float) -> int | None:
-        try:
-            return self._process.wait(timeout=timeout)
-        except subprocess.TimeoutExpired:
-            return None
-
-    def terminate(self) -> None:
-        if self._process.poll() is None:
-            self._process.terminate()
-            try:
-                self._process.wait(timeout=15)
-            except subprocess.TimeoutExpired:
-                self._process.kill()
-
-
 def default_spawner(command: list[str], cwd: Path, on_line: Callable[[str], None]) -> SpawnHandle:
     """
-    Runs the managed launcher with its console captured. No `shell=True`:
-    the argv list is passed straight through, so nothing is interpolated.
+    Launches the managed path in its OWN process group, so teardown can reach
+    the whole tree (cmd -> Lia.bat -> pnpm -> Launcher -> Stage) instead of
+    stranding grandchildren. Fixed argv, no shell - see `processes`.
     """
-    process = subprocess.Popen(  # noqa: S603 - fixed argv, no shell
-        command,
-        cwd=cwd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        encoding='utf-8',
-        errors='replace',
-        bufsize=1,
-    )
-
-    def pump() -> None:
-        assert process.stdout is not None
-        for line in process.stdout:
-            on_line(line)
-
-    threading.Thread(target=pump, daemon=True).start()
-    return _ThreadedSpawn(process)
+    return processes.spawn_owned(command, cwd, on_line)
 
 
 def console_asker(question: str, options: tuple[str, ...]) -> str:
@@ -160,7 +134,7 @@ class RoundRunner:
     clock: Clock = field(default=lambda: datetime.now(timezone.utc))
     marker_timeout_s: float = 600.0
     emit: Callable[[str], None] = field(default=print)
-    run_tests: bool = True
+    invoke_test: Callable[[list[str], Path], tuple[int, str]] | None = None
     _console: SanitizedLog | None = None
 
     def __post_init__(self) -> None:
@@ -168,6 +142,8 @@ class RoundRunner:
             self.run_git = lambda args: default_git(args, self.repo)
         if self.spawn is None:
             self.spawn = default_spawner
+        if self.invoke_test is None:
+            self.invoke_test = run_test_command
 
     # -- public ---------------------------------------------------------
     def execute(self) -> RoundOutcome:
@@ -220,9 +196,33 @@ class RoundRunner:
             note('RECUSADO: branch inesperada. Nenhuma limpeza, teste ou lançamento foi feito.')
             return
 
+        # A PASS belongs to an EXACT checkout, not only to a SHA. Git's
+        # porcelain already excludes ignored files (Tests/runs, core-agent/dist),
+        # so anything it reports is real source drift. Only the count is
+        # printed: filenames are not needed to refuse.
+        if dirty > 0:
+            outcome.verdict = 'REFUSED'
+            outcome.notes.append(
+                f'{dirty} alteração(ões) não commitada(s); um PASS precisa descrever um '
+                'checkout exato. Nada foi limpo, testado ou lançado.',
+            )
+            note(f'RECUSADO: {dirty} alteração(ões) não commitada(s). '
+                 'Faça commit (ou desfaça) antes de rodar a rodada.')
+            return
+
         self._prepare(outcome, note)
-        if self.run_tests:
-            self._run_tests(outcome, note)
+
+        # EVERY declared test is required. A skip means the environment is not
+        # ready, which is a REFUSAL - never a silent pass.
+        gate = self._run_tests(outcome, note)
+        if gate == 'refused':
+            outcome.verdict = 'REFUSED'
+            outcome.notes.append('teste obrigatório não pôde executar; o gate do Windows não foi lançado')
+            return
+        if gate == 'fail':
+            outcome.verdict = 'FAIL'
+            outcome.notes.append('teste obrigatório falhou; o gate do Windows não foi lançado')
+            return
 
         self._launch_and_gate(outcome, note)
         self._decide(outcome, note)
@@ -246,7 +246,14 @@ class RoundRunner:
             report = safe_paths.execute_removal(plan)
             outcome.cleanup.extend(report.lines)
 
-    def _run_tests(self, outcome: RoundOutcome, note: Callable[[str], None]) -> None:
+    def _run_tests(self, outcome: RoundOutcome, note: Callable[[str], None]) -> str:
+        """
+        Runs every declared test. Returns 'proceed', 'fail' or 'refused'.
+
+        Skipped is NOT neutral: a test that could not run proves nothing, so it
+        refuses the round instead of letting a launch happen unguarded.
+        """
+        decision = 'proceed'
         for spec in self.round_manifest.tests:
             cwd = self.repo / spec.cwd
             argv = list(spec.argv)
@@ -262,6 +269,7 @@ class RoundRunner:
                     detail='dependências não instaladas neste checkout',
                 ))
                 note(f'teste {spec.id}: PULADO (ambiente indisponível) - não conta como sucesso')
+                decision = 'refused'
                 continue
             if not cwd.is_dir():
                 outcome.tests.append(TestResult(
@@ -269,6 +277,7 @@ class RoundRunner:
                     detail='diretório ausente',
                 ))
                 note(f'teste {spec.id}: PULADO (diretório ausente) - não conta como sucesso')
+                decision = 'refused'
                 continue
             code, tail = self._invoke(argv, cwd)
             status = 'pass' if code == 0 else 'fail'
@@ -276,13 +285,12 @@ class RoundRunner:
                 id=spec.id, label=spec.label, status=status, exit_code=code, detail=tail,
             ))
             note(f'teste {spec.id}: {"OK" if code == 0 else f"FALHOU (exit {code})"}')
+            if code != 0:
+                decision = 'fail'
+        return decision
 
     def _invoke(self, argv: list[str], cwd: Path) -> tuple[int, str]:
-        try:
-            probe = subprocess.run(argv, cwd=cwd, capture_output=True, text=True, timeout=1800)
-        except (OSError, subprocess.SubprocessError) as exc:
-            return 127, str(exc)
-        return probe.returncode, (probe.stdout or probe.stderr or '')[-400:]
+        return self.invoke_test(argv, cwd)
 
     def _launch_and_gate(self, outcome: RoundOutcome, note: Callable[[str], None]) -> None:
         # No early return here: a refused round never reaches this method, it
@@ -300,6 +308,7 @@ class RoundRunner:
         note(f'lançamento gerenciado: {" ".join(manifest.launch.command)}')
         note(f'operador: {manifest.launch.operator_hint}')
         handle = self.spawn(list(manifest.launch.command), self.repo, on_line)
+        outcome.launch_pid = getattr(handle, 'pid', None)
 
         deadline = self.clock().timestamp() + self.marker_timeout_s
         pending = list(manifest.ordered_markers)
@@ -308,38 +317,55 @@ class RoundRunner:
             while pending:
                 remaining = deadline - self.clock().timestamp()
                 if remaining <= 0:
+                    note('gate: tempo esgotado aguardando os marcadores')
                     break
                 try:
                     line = gate.get(timeout=min(remaining, 1.0))
                 except queue.Empty:
                     if handle.wait(0) is not None:
+                        note('gate: o processo gerenciado encerrou antes dos marcadores')
                         break
                     continue
                 if pending[0].matches(line):
                     matched.append((pending[0].id, len(lines) - 1))
                     note(f'marcador {pending[0].id}: OK')
                     pending.pop(0)
-        finally:
-            self._collect_manual(outcome, note)
-            handle.terminate()
 
-        optional_seen = [
-            marker.id
-            for marker in manifest.optional_markers
-            if any(marker.matches(line) for line in lines)
-        ]
-        outcome.optional_seen = optional_seen
-        if pending:
-            outcome.markers = MarkerReport(
-                ok=False, matched=matched, missing=pending[0].id,
-                reason=f'marcador {pending[0].id!r} não apareceu: {pending[0].pattern!r}',
-            )
-        else:
-            outcome.markers = MarkerReport(ok=True, matched=matched)
-        for line in outcome.markers.describe():
-            note(f'gate: {line}')
-        if optional_seen:
-            note(f'gate: opcionais vistos: {", ".join(optional_seen)}')
+            # The marker verdict is decided BEFORE any human is involved.
+            optional_seen = [
+                marker.id
+                for marker in manifest.optional_markers
+                if any(marker.matches(line) for line in lines)
+            ]
+            outcome.optional_seen = optional_seen
+            if pending:
+                outcome.markers = MarkerReport(
+                    ok=False, matched=matched, missing=pending[0].id,
+                    reason=f'marcador {pending[0].id!r} não apareceu: {pending[0].pattern!r}',
+                )
+            else:
+                outcome.markers = MarkerReport(ok=True, matched=matched)
+            for line in outcome.markers.describe():
+                note(f'gate: {line}')
+
+            # Section 4 of D1.1: the visual question is asked ONLY when the
+            # automatic gate passed. Asking after a dead stage, a missing
+            # marker or a timeout would invite a meaningless answer.
+            if outcome.markers.ok:
+                self._collect_manual(outcome, note)
+            else:
+                outcome.notes.append(
+                    'afirmação visual não foi perguntada: o gate automático não passou',
+                )
+                note('gate: afirmação visual NÃO perguntada - o gate automático não passou')
+        finally:
+            # Always clean up the tree THIS round started - on success, on
+            # marker failure, and on Ctrl+C. Rooted at our own PID only.
+            handle.terminate()
+            outcome.tree_cleaned = True
+
+        if outcome.optional_seen:
+            note(f'gate: opcionais vistos: {", ".join(outcome.optional_seen)}')
         self._console = sanitize_console(lines)
         outcome.console_withheld = self._console.withheld
         note(f'log sanitizado: {len(self._console.kept)} linhas mantidas, '
@@ -354,7 +380,7 @@ class RoundRunner:
 
     def _decide(self, outcome: RoundOutcome, note: Callable[[str], None]) -> None:
         manifest = self.round_manifest
-        tests_failed = any(test.status == 'fail' for test in outcome.tests)
+        tests_failed = any(test.status != 'pass' for test in outcome.tests)
         markers_ok = bool(outcome.markers and outcome.markers.ok)
         accepted = all(
             outcome.manual.get(assertion.id, '') in assertion.accept
@@ -376,6 +402,21 @@ class RoundRunner:
         note(f'verdicto: {outcome.verdict}')
         if not manifest.ready_for_publish:
             note('round.ready_for_publish=false: esta rodada não está marcada para publicar')
+        if outcome.verdict == 'PASS':
+            # A PASS is a claim about an EXACT checkout. Assert its
+            # preconditions here so a future edit cannot silently weaken it.
+            evidence = {
+                'worktree limpo': outcome.dirty == 0,
+                'todos os testes obrigatórios passaram':
+                    bool(outcome.tests) and all(t.status == 'pass' for t in outcome.tests),
+                'marcadores ordenados': markers_ok,
+                'afirmação humana aceita': accepted,
+            }
+            missing = [name for name, ok in evidence.items() if not ok]
+            if missing:
+                outcome.verdict = 'NOT_PASS'
+                outcome.notes.append(f'PASS negado por falta de evidência: {missing}')
+                note(f'verdicto rebaixado para NOT_PASS: {missing}')
 
     def _persist(self, outcome: RoundOutcome, captured: list[str], directory: Path) -> None:
         console: SanitizedLog = self._console or sanitize_console(captured)
@@ -393,8 +434,10 @@ class RoundRunner:
                 'branch': outcome.branch,
                 'head_sha': outcome.head_sha,
                 'uncommitted_changes': outcome.dirty,
+                'worktree_clean': outcome.dirty == 0,
             },
             'verdict': outcome.verdict,
+            'launch': {'pid': outcome.launch_pid, 'tree_cleaned': outcome.tree_cleaned},
             'cleanup': outcome.cleanup,
             'tests': [test.__dict__ for test in outcome.tests],
             'markers': {

@@ -68,10 +68,26 @@ Equivalente em terminal: `python tools/lia_dev.py round|status|open|diagnose|rou
    `A personagem apareceu normalmente? [S|N]`
 9. grava um relatório compacto e sanitizado.
 
+**Ordem obrigatória (D1.1):** checkout limpo → limpeza → **todos** os testes obrigatórios
+passando → lançamento → **todos** os marcadores na ordem → só então a pergunta visual. Se os
+marcadores falharem, faltarem, expirarem ou o processo morrer antes, a pergunta **não é
+feita**, a árvore é encerrada e o veredito é `FAIL`.
+
 **Um log nunca vira PASS visual.** O veredito é `PASS` somente se todos os marcadores
 casarem **e** a pessoa responder `S`. Resposta vazia, `N` ou qualquer outra coisa ⇒
 `NOT_PASS`. Interrupção (Ctrl+C) ⇒ `INTERRUPTED`, registrado — nunca um silêncio e nunca um
-sucesso.
+sucesso, e com a mesma limpeza da árvore owned.
+
+**Teste pulado nunca é sucesso (D1.1).** Todo teste declarado em `round.tests` é
+**obrigatório**. Teste com falha ⇒ rodada `FAIL` e **sem lançamento**. Teste indisponível
+(dependências não instaladas, diretório ausente) ⇒ rodada `REFUSED` e **sem lançamento**.
+Não existe teste opcional inferido: se um dia houver, precisa ser explícito no schema.
+
+**Checkout limpo é pré-condição (D1.1).** Antes de qualquer limpeza, teste ou lançamento:
+branch esperada **e** `git status --porcelain` vazio. Arquivos gerados e ignorados
+(`Tests/runs/`, `core-agent/dist`) não bloqueiam — o porcelain já os exclui. Havendo
+alterações não ignoradas, a rodada é `REFUSED`, nada é apagado, nada roda e nada é lançado;
+só a **contagem** é impressa, nunca os nomes. A D1.1 **não** commita nem descarta nada.
 
 ## Artefatos
 
@@ -94,11 +110,40 @@ diagnóstico do launcher são **descartadas** (a quantidade descartada é report
 - nenhum `git clean`, `git reset --hard`, force-push ou recursão fora de allowlist;
 - a rodada **não muta** o Git: só lê (`rev-parse`, `status`, `check-ignore`);
 - limpeza exige, nesta ordem: estar no allowlist do perfil da rodada → caminho relativo
-  simples (sem `..`, sem drive, sem UNC) → resolver para dentro do repositório → nenhum
-  componente symlink/reparse → o Git confirmar que é **ignorado** (gerado). Qualquer
-  falha ⇒ recusa, com o motivo;
-- o relatório é amarrado ao SHA exato; se o HEAD mudar, `status` reporta `stale` e o PASS
-  anterior deixa de valer.
+  simples (sem `..`, sem drive, sem UNC) → **nenhum componente é redireção de filesystem**
+  (symlink POSIX, symlink Windows, junction ou qualquer reparse point) — inspecionado
+  **lexicamente, componente a componente, antes de resolver**, porque resolver primeiro
+  apagaria a evidência → resolver para dentro do repositório → o Git confirmar que é
+  **ignorado** (gerado). Qualquer falha ⇒ recusa, com o motivo. Erro de inspeção ⇒ recusa;
+- `tools/devflow/filesystem.py` é a **única** autoridade de redireção/remoção: a limpeza da
+  rodada e a retenção usam o mesmo helper. Não há segunda lógica mais fraca;
+- a retenção recebe a raiz permitida do **argumento `repo`**, nunca da localização do
+  próprio arquivo — por isso funciona igual em worktrees, repositórios temporários e CI;
+- o relatório é amarrado ao SHA exato **e** a `dirty=0`; se o HEAD mudar, `status` reporta
+  `stale`. Um checkout sujo nunca é chamado de "validado atual".
+
+### Processo owned e teardown (D1.1)
+
+A cadeia real é `DevFlow → cmd.exe → Lia.bat → pnpm dev:lia → Launcher → Stage`. Encerrar só
+o processo que o Python criou deixaria órfãos. Por isso a rodada dona do lançamento cria o
+filho em **grupo de processo próprio** e o teardown é sempre enraizado no **PID que esta
+rodada criou**:
+
+- Windows: `taskkill /PID <raiz> /T /F`, com `CREATE_NEW_PROCESS_GROUP`;
+- POSIX: `start_new_session=True` + `os.killpg` (SIGTERM e, se preciso, SIGKILL).
+
+Nunca há kill global por nome de imagem: nada que o DevFlow não iniciou é sinalizado. O
+teardown roda no `finally`, então acontece após PASS, após falha de marcador, após `N` e
+após Ctrl+C.
+
+### Invocação de batch (auditada)
+
+`processes.launch_argv` é o **único** seam de plataforma. No Windows, um `.bat`/`.cmd` é
+executado pelo interpretador indicado pela variável documentada `%COMSPEC%` (fallback
+`cmd.exe`) com `/d /s /c` — `/d` ignora AutoRun, `/s /c` preserva as regras de quoting do
+cmd. Fora isso o argv passa intacto. O argv é sempre uma lista fixa e confiável construída
+nesse seam: **não** há `shell=True` e nenhuma string do usuário é interpolada. stdout e
+stderr são unidos num único pipe, e o diretório de trabalho é a raiz passada pelo chamador.
 
 ## Fronteira Git (por que `devkit.json` ignora `airi`)
 
@@ -129,12 +174,35 @@ sem afirmação humana é recusada pelo schema) e `retention`.
 **Nunca** dirija execução a partir da prosa de `CURRENT-STATE.md`. A documentação pode
 espelhar o manifesto; o contrato é o JSON.
 
+## `tested_sha` e a autoridade de evidência
+
+A autoridade de evidência de runtime é o **`run.json`** de cada execução: é ele que registra
+o SHA exato do HEAD, `dirty=0`, o resultado de cada teste obrigatório, os marcadores
+ordenados e a afirmação humana. Um `PASS` só existe com tudo isso presente — o runner
+rebaixa para `NOT_PASS` se faltar evidência.
+
+O `tested_sha` do **manifesto versionado** pode permanecer `null` até uma atualização de
+docs/estado revisada por gente. **O runtime nunca escreve `tested_sha` no manifesto**: fazer
+isso sujaria o repositório no meio da rodada e quebraria a própria pré-condição de checkout
+limpo. Não há contradição: `run.json` prova o que foi testado; o manifesto declara o que foi
+**revisado e aceito**.
+
+`status` reporta: último SHA com PASS, HEAD atual, e `current` / `stale` / `dirty` /
+`unknown`. Um checkout com alterações não commitadas **nunca** é chamado de "validado atual".
+
 ## Estado
 
-- **M3.0b existe em código** no commit `c65de97`.
+- **D1 existiu** no commit `32025ab`.
+- Uma **auditoria independente** encontrou defeitos de correção/segurança limitados, antes
+  da primeira rodada real no Windows. **D1.1 os fecha**: falso PASS por teste pulado, falso
+  PASS com checkout sujo, afirmação visual pedida antes do gate automático, proteção de
+  reparse/junction superestimada, teardown que não alcançava a árvore, e retenção acoplada
+  ao checkout de origem.
+- **M3.0b existe em código** desde `c65de97`.
 - O **gate gerenciado durável no Windows continua `NOT PASS`** até o DevFlow executá-lo numa
   máquina real. Nada aqui prova runtime.
-- **D1 é só ferramenta**: não avança o baseline funcional, que continua **`3ef6d11`**.
+- **D1/D1.1 são só ferramenta**: não alteram código de produto, não tocam
+  Brain/provider/voz/vision, e **não avançam o baseline funcional, que continua `3ef6d11`**.
 
 ## Roteiro
 

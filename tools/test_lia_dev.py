@@ -12,19 +12,21 @@ fato de que um log nunca vira um PASS visual.
 from __future__ import annotations
 
 import copy
+from datetime import datetime, timezone
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 TOOLS = Path(__file__).resolve().parent
 sys.path.insert(0, str(TOOLS))
 
-from devflow import safe_paths  # noqa: E402
+from devflow import filesystem, processes, report, safe_paths  # noqa: E402
 from devflow.markers import evaluate_markers  # noqa: E402
 from devflow.report import is_keeper, sanitize_console, sanitize_line  # noqa: E402
 from devflow.runner import RoundOutcome, RoundRunner, latest_run, pass_validity, render_report  # noqa: E402
@@ -69,25 +71,29 @@ def base_manifest() -> dict:
 
 
 class FakeHandle:
-    def __init__(self, exit_code: int = 0) -> None:
+    def __init__(self, exit_code: int = 0, alive: bool = False, pid: int = 4242) -> None:
         self.exit_code = exit_code
+        self.alive = alive
+        self.pid = pid
         self.terminated = False
+        self.terminate_calls = 0
 
     def wait(self, timeout: float) -> int | None:
-        return self.exit_code
+        return None if self.alive else self.exit_code
 
     def terminate(self) -> None:
         self.terminated = True
+        self.terminate_calls += 1
 
 
-def fake_spawner(lines: list[str], exit_code: int = 0):
-    """Emits the scripted console up front, then hands back a dead handle."""
+def fake_spawner(lines: list[str], exit_code: int = 0, alive: bool = False):
+    """Emits the scripted console up front, then hands back a handle."""
     handles: list[FakeHandle] = []
 
     def spawn(command: list[str], cwd: Path, on_line) -> FakeHandle:
         for line in lines:
             on_line(line)
-        handle = FakeHandle(exit_code)
+        handle = FakeHandle(exit_code, alive=alive)
         handles.append(handle)
         return handle
 
@@ -95,7 +101,22 @@ def fake_spawner(lines: list[str], exit_code: int = 0):
     return spawn
 
 
-def fixed_git(branch: str, sha: str, calls: list[list[str]] | None = None):
+class SteppingClock:
+    """A clock that advances, so marker timeouts are reachable in tests."""
+
+    def __init__(self, step_s: float = 1.0) -> None:
+        self.calls = 0
+        self.step_s = step_s
+
+    def __call__(self):
+        import datetime as _dt
+
+        self.calls += 1
+        return _dt.datetime(2026, 10, 11, 12, 0, 0) + _dt.timedelta(seconds=self.step_s * self.calls)
+
+
+def fixed_git(branch: str, sha: str, calls: list[list[str]] | None = None,
+              porcelain: str = ''):
     def run_git(args: list[str]) -> tuple[int, str]:
         if calls is not None:
             calls.append(list(args))
@@ -104,9 +125,31 @@ def fixed_git(branch: str, sha: str, calls: list[list[str]] | None = None):
         if args[:1] == ['rev-parse']:
             return 0, sha
         if args[:1] == ['status']:
-            return 0, ''
+            return 0, porcelain
         return 0, ''
     return run_git
+
+
+def runnable_manifest() -> dict:
+    """Same round, but with ONE test that exists in any checkout, so the
+    pass/fail/skip decision is driven by the injected invoker and not by
+    whether node_modules happens to be installed."""
+    data = base_manifest()
+    data['tests'] = [{
+        'id': 'unit', 'label': 'unitário', 'cwd': '.',
+        'argv': ['python', 'tools/test_lia_dev.py'],
+    }]
+    return data
+
+
+def skipping_manifest() -> dict:
+    """A declared test whose script does not exist => status 'skipped'."""
+    data = base_manifest()
+    data['tests'] = [{
+        'id': 'missing', 'label': 'ausente', 'cwd': '.',
+        'argv': ['node', 'node_modules/definitely-not-here/vitest.mjs', 'run'],
+    }]
+    return data
 
 
 MARKER_LINES = [
@@ -117,22 +160,33 @@ MARKER_LINES = [
 ]
 
 
+def passing_tests(argv: list[str], cwd: Path) -> tuple[int, str]:
+    return 0, 'ok'
+
+
 def make_runner(repo: Path, manifest: Round, *, lines=None, ask=lambda q, o: 'S',
                 branch='arena/01a10290-lia-project', sha='a' * 40, git_calls=None,
-                run_tests: bool = False):
+                invoke_test=passing_tests, porcelain: str = '', alive: bool = False,
+                clock=None):
     emitted: list[str] = []
+    asks: list[str] = []
+
+    def counting_ask(question: str, options: tuple) -> str:
+        asks.append(question)
+        return ask(question, options)
+
     runner = RoundRunner(
         round_manifest=manifest,
         repo=repo,
-        run_git=fixed_git(branch, sha, git_calls),
-        spawn=fake_spawner(list(MARKER_LINES if lines is None else lines)),
-        ask=ask,
-        clock=lambda: __import__('datetime').datetime(2026, 10, 11, 12, 0, 0),
+        run_git=fixed_git(branch, sha, git_calls, porcelain=porcelain),
+        spawn=fake_spawner(list(MARKER_LINES if lines is None else lines), alive=alive),
+        ask=counting_ask,
+        clock=clock or (lambda: __import__('datetime').datetime(2026, 10, 11, 12, 0, 0)),
         marker_timeout_s=5.0,
         emit=emitted.append,
-        run_tests=run_tests,
+        invoke_test=invoke_test,
     )
-    return runner, emitted
+    return runner, emitted, asks
 
 
 # ---------------------------------------------------------------------------
@@ -257,7 +311,7 @@ class CleanupSafetyTests(unittest.TestCase):
             link.symlink_to(outside, target_is_directory=True)
         except (OSError, NotImplementedError):
             self.skipTest('este sistema de arquivos não permite symlink')
-        with self.assertRaisesRegex(safe_paths.PathSafetyError, 'link/reparse'):
+        with self.assertRaisesRegex(safe_paths.PathSafetyError, 'link/junction/reparse'):
             safe_paths.plan_removal(self.repo, CORE_DIST, self.allow)
         self.assertTrue((outside / 'precious.txt').exists())
 
@@ -273,7 +327,7 @@ class CleanupSafetyTests(unittest.TestCase):
             airi.symlink_to(outside, target_is_directory=True)
         except (OSError, NotImplementedError):
             self.skipTest('este sistema de arquivos não permite symlink')
-        with self.assertRaisesRegex(safe_paths.PathSafetyError, 'link/reparse'):
+        with self.assertRaisesRegex(safe_paths.PathSafetyError, 'link/junction/reparse'):
             safe_paths.plan_removal(self.repo, CORE_DIST, self.allow)
 
     def test_tracked_path_is_refused_even_when_allowlisted(self):
@@ -336,14 +390,14 @@ class RoundExecutionTests(unittest.TestCase):
     def setUp(self) -> None:
         self.base = Path(tempfile.mkdtemp(prefix='devflow-run-'))
         self.repo = make_repo(self.base)
-        self.manifest = validate_round(base_manifest())
+        self.manifest = validate_round(runnable_manifest())
 
     def tearDown(self) -> None:
         shutil.rmtree(self.base, ignore_errors=True)
 
     def test_full_round_passes_and_writes_artifacts_tied_to_the_sha(self):
         sha = 'c' * 40
-        runner, _ = make_runner(self.repo, self.manifest, sha=sha)
+        runner, _emitted, _asks = make_runner(self.repo, self.manifest, sha=sha)
         outcome = runner.execute()
         self.assertEqual(outcome.verdict, 'PASS')
         self.assertTrue(outcome.markers.ok)
@@ -358,7 +412,7 @@ class RoundExecutionTests(unittest.TestCase):
         self.assertFalse((self.repo / CORE_DIST).exists())
 
     def test_wrong_branch_is_refused_before_anything_runs(self):
-        runner, emitted = make_runner(self.repo, self.manifest, branch='main')
+        runner, emitted, _asks = make_runner(self.repo, self.manifest, branch='main')
         outcome = runner.execute()
         self.assertEqual(outcome.verdict, 'REFUSED')
         self.assertIsNone(outcome.markers)
@@ -367,38 +421,38 @@ class RoundExecutionTests(unittest.TestCase):
         self.assertTrue(any('RECUSADO' in line for line in emitted))
 
     def test_missing_marker_fails_the_round(self):
-        runner, _ = make_runner(self.repo, self.manifest, lines=[MARKER_LINES[0]])
+        runner, _emitted, _asks = make_runner(self.repo, self.manifest, lines=[MARKER_LINES[0]])
         outcome = runner.execute()
         self.assertEqual(outcome.verdict, 'FAIL')
         self.assertFalse(outcome.markers.ok)
 
     def test_out_of_order_marker_fails_the_round(self):
-        runner, _ = make_runner(self.repo, self.manifest,
+        runner, _emitted, _asks = make_runner(self.repo, self.manifest,
                                 lines=[MARKER_LINES[2], MARKER_LINES[0], MARKER_LINES[1]])
         outcome = runner.execute()
         self.assertEqual(outcome.verdict, 'FAIL')
 
     def test_visual_pass_is_never_inferred_from_logs(self):
         # Every marker matched, the operator said NO: that is NOT PASS.
-        runner, _ = make_runner(self.repo, self.manifest, ask=lambda q, o: 'N')
+        runner, _emitted, _asks = make_runner(self.repo, self.manifest, ask=lambda q, o: 'N')
         outcome = runner.execute()
         self.assertTrue(outcome.markers.ok)
         self.assertEqual(outcome.verdict, 'NOT_PASS')
 
     def test_unanswered_visual_assertion_is_not_a_pass(self):
         # EOF / empty answer must never be read as agreement.
-        runner, _ = make_runner(self.repo, self.manifest, ask=lambda q, o: '')
+        runner, _emitted, _asks = make_runner(self.repo, self.manifest, ask=lambda q, o: '')
         self.assertEqual(runner.execute().verdict, 'NOT_PASS')
 
     def test_unknown_visual_answer_is_not_a_pass(self):
-        runner, _ = make_runner(self.repo, self.manifest, ask=lambda q, o: 'talvez')
+        runner, _emitted, _asks = make_runner(self.repo, self.manifest, ask=lambda q, o: 'talvez')
         self.assertEqual(runner.execute().verdict, 'NOT_PASS')
 
     def test_interrupted_run_stays_honest(self):
         def boom(question, options):
             raise KeyboardInterrupt
 
-        runner, _ = make_runner(self.repo, self.manifest, ask=boom)
+        runner, _emitted, _asks = make_runner(self.repo, self.manifest, ask=boom)
         outcome = runner.execute()
         self.assertEqual(outcome.verdict, 'INTERRUPTED')
         # Artifacts still exist, so the interruption is on the record.
@@ -410,7 +464,7 @@ class RoundExecutionTests(unittest.TestCase):
         calls: list[list[str]] = []
         before = _git(self.repo, 'status', '--porcelain')
         head_before = _git(self.repo, 'rev-parse', 'HEAD')
-        runner, _ = make_runner(self.repo, self.manifest, git_calls=calls)
+        runner, _emitted, _asks = make_runner(self.repo, self.manifest, git_calls=calls)
         runner.execute()
         # 1) only read-only verbs were ever issued
         allowed = {'rev-parse', 'status', 'check-ignore'}
@@ -430,7 +484,7 @@ class RoundExecutionTests(unittest.TestCase):
             f'[lia] token {secret} nao deveria aparecer\n',
             *MARKER_LINES,
         ]
-        runner, _ = make_runner(self.repo, self.manifest, lines=lines)
+        runner, _emitted, _asks = make_runner(self.repo, self.manifest, lines=lines)
         outcome = runner.execute()
         console = Path(outcome.artifacts['console']).read_text(encoding='utf-8')
         report = Path(outcome.artifacts['report']).read_text(encoding='utf-8')
@@ -443,14 +497,14 @@ class RoundExecutionTests(unittest.TestCase):
             'usuario escreveu: ola lia, meu segredo e 1234\n',
             *MARKER_LINES,
         ]
-        runner, _ = make_runner(self.repo, self.manifest, lines=lines)
+        runner, _emitted, _asks = make_runner(self.repo, self.manifest, lines=lines)
         outcome = runner.execute()
         console = Path(outcome.artifacts['console']).read_text(encoding='utf-8')
         self.assertNotIn('meu segredo', console)
         self.assertGreaterEqual(outcome.console_withheld, 1)
 
     def test_run_json_records_every_section(self):
-        runner, _ = make_runner(self.repo, self.manifest)
+        runner, _emitted, _asks = make_runner(self.repo, self.manifest)
         outcome = runner.execute()
         payload = json.loads(Path(outcome.artifacts['json']).read_text(encoding='utf-8'))
         for key in ('schema_version', 'round', 'git', 'verdict', 'cleanup', 'tests',
@@ -565,6 +619,488 @@ class DevKitBatTests(unittest.TestCase):
             self.assertIn(label, source)
         # Git consolidation is visibly marked as future work, not silently absent.
         self.assertIn('D2', source)
+
+# ---------------------------------------------------------------------------
+class RequiredTestsTests(unittest.TestCase):
+    """D1.1 defect 1: a skipped test used to be invisible to the verdict."""
+
+    def setUp(self) -> None:
+        self.base = Path(tempfile.mkdtemp(prefix='devflow-req-'))
+        self.repo = make_repo(self.base)
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.base, ignore_errors=True)
+
+    def test_all_tests_passing_lets_the_launch_happen(self):
+        spawner = fake_spawner(list(MARKER_LINES))
+        runner, _, asks = make_runner(
+            self.repo, validate_round(runnable_manifest()), invoke_test=lambda a, c: (0, 'ok'))
+        runner.spawn = spawner
+        outcome = runner.execute()
+        self.assertEqual(outcome.verdict, 'PASS')
+        self.assertEqual([t.status for t in outcome.tests], ['pass'])
+        self.assertEqual(len(spawner.handles), 1)
+        self.assertEqual(len(asks), 1)
+
+    def test_one_skipped_test_prevents_pass_and_prevents_launch(self):
+        spawner = fake_spawner(list(MARKER_LINES))
+        data = runnable_manifest()
+        # A declared test whose script is absent is SKIPPED, which is the case
+        # that used to be invisible to the verdict.
+        data['tests'].append({'id': 'unavailable', 'label': 'indisponível', 'cwd': '.',
+                              'argv': ['node', 'node_modules/not-here/vitest.mjs', 'run']})
+        runner, _, asks = make_runner(self.repo, validate_round(data), invoke_test=passing_tests)
+        runner.spawn = spawner
+        outcome = runner.execute()
+        self.assertEqual(outcome.verdict, 'REFUSED')
+        self.assertEqual(len(spawner.handles), 0, 'o gate do Windows não pode ser lançado')
+        self.assertEqual(len(asks), 0)
+
+    def test_all_skipped_tests_prevent_pass_and_prevent_launch(self):
+        spawner = fake_spawner(list(MARKER_LINES))
+        runner, emitted, asks = make_runner(
+            self.repo, validate_round(skipping_manifest()), invoke_test=lambda a, c: (0, 'ok'))
+        runner.spawn = spawner
+        outcome = runner.execute()
+        self.assertEqual(outcome.verdict, 'REFUSED')
+        self.assertEqual([t.status for t in outcome.tests], ['skipped'])
+        self.assertEqual(len(spawner.handles), 0)
+        self.assertEqual(len(asks), 0)
+        self.assertTrue(any('PULADO' in line for line in emitted))
+
+    def test_failed_test_prevents_launch(self):
+        spawner = fake_spawner(list(MARKER_LINES))
+        runner, _, asks = make_runner(
+            self.repo, validate_round(runnable_manifest()), invoke_test=lambda a, c: (1, 'falhou'))
+        runner.spawn = spawner
+        outcome = runner.execute()
+        self.assertEqual(outcome.verdict, 'FAIL')
+        self.assertEqual([t.status for t in outcome.tests], ['fail'])
+        self.assertEqual(len(spawner.handles), 0)
+        self.assertEqual(len(asks), 0)
+
+    def test_pass_cannot_be_reached_with_zero_executed_tests(self):
+        data = runnable_manifest()
+        data['tests'] = []
+        # Schema requires nothing here, so prove the runner itself refuses to
+        # call an unguarded launch a PASS.
+        runner, _, _asks = make_runner(self.repo, validate_round(data))
+        outcome = runner.execute()
+        self.assertNotEqual(outcome.verdict, 'PASS')
+
+
+# ---------------------------------------------------------------------------
+class CleanWorktreeTests(unittest.TestCase):
+    """D1.1 defect 2: a PASS must describe an exact checkout."""
+
+    def setUp(self) -> None:
+        self.base = Path(tempfile.mkdtemp(prefix='devflow-clean-'))
+        self.repo = make_repo(self.base)
+        self.manifest = validate_round(runnable_manifest())
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.base, ignore_errors=True)
+
+    def test_dirty_tracked_file_is_refused_before_cleanup(self):
+        (self.repo / 'Lia.bat').write_text('@echo off\r\nrem editado\r\n')
+        porcelain = _git(self.repo, 'status', '--porcelain')
+        self.assertTrue(porcelain, 'a fixture precisa estar realmente suja')
+        spawner = fake_spawner(list(MARKER_LINES))
+        runner, emitted, asks = make_runner(self.repo, self.manifest, porcelain=porcelain)
+        runner.spawn = spawner
+        outcome = runner.execute()
+        self.assertEqual(outcome.verdict, 'REFUSED')
+        self.assertTrue((self.repo / CORE_DIST).exists(), 'nada pode ser limpo antes do gate')
+        self.assertEqual(len(spawner.handles), 0)
+        self.assertEqual(len(asks), 0)
+        self.assertTrue(any('não commitada' in line for line in emitted))
+
+    def test_untracked_non_ignored_file_is_refused(self):
+        (self.repo / 'notas-soltas.txt').write_text('rascunho\n')
+        porcelain = _git(self.repo, 'status', '--porcelain')
+        self.assertIn('notas-soltas.txt', porcelain)
+        spawner = fake_spawner(list(MARKER_LINES))
+        runner, _, asks = make_runner(self.repo, self.manifest, porcelain=porcelain)
+        runner.spawn = spawner
+        self.assertEqual(runner.execute().verdict, 'REFUSED')
+        self.assertEqual(len(spawner.handles), 0)
+        self.assertEqual(len(asks), 0)
+
+    def test_ignored_run_artifacts_do_not_block(self):
+        run = self.repo / 'Tests' / 'runs' / 'devflow' / '20260101T000000Z-M3.0b'
+        run.mkdir(parents=True)
+        (run / 'REPORT.txt').write_text('x\n')
+        self.assertEqual(_git(self.repo, 'status', '--porcelain'), '')
+        spawner = fake_spawner(list(MARKER_LINES))
+        runner, _, _ = make_runner(self.repo, self.manifest)
+        runner.spawn = spawner
+        self.assertEqual(runner.execute().verdict, 'PASS')
+
+    def test_ignored_generated_dist_does_not_block(self):
+        # dist exists and is gitignored: porcelain must stay clean.
+        self.assertTrue((self.repo / CORE_DIST / 'index.mjs').exists())
+        self.assertEqual(_git(self.repo, 'status', '--porcelain'), '')
+        spawner = fake_spawner(list(MARKER_LINES))
+        runner, _, _ = make_runner(self.repo, self.manifest)
+        runner.spawn = spawner
+        outcome = runner.execute()
+        self.assertEqual(outcome.verdict, 'PASS')
+        self.assertFalse((self.repo / CORE_DIST).exists())
+
+    def test_reported_pass_records_dirty_zero(self):
+        spawner = fake_spawner(list(MARKER_LINES))
+        runner, _, _ = make_runner(self.repo, self.manifest)
+        runner.spawn = spawner
+        outcome = runner.execute()
+        self.assertEqual(outcome.verdict, 'PASS')
+        payload = json.loads(Path(outcome.artifacts['json']).read_text(encoding='utf-8'))
+        self.assertEqual(payload['git']['uncommitted_changes'], 0)
+        self.assertTrue(payload['git']['worktree_clean'])
+
+    def test_filenames_are_not_printed_when_refusing(self):
+        (self.repo / 'segredo-local.txt').write_text('x\n')
+        porcelain = _git(self.repo, 'status', '--porcelain')
+        spawner = fake_spawner(list(MARKER_LINES))
+        runner, emitted, _ = make_runner(self.repo, self.manifest, porcelain=porcelain)
+        runner.spawn = spawner
+        runner.execute()
+        self.assertFalse(any('segredo-local.txt' in line for line in emitted))
+
+
+# ---------------------------------------------------------------------------
+class ManualOrderingTests(unittest.TestCase):
+    """D1.1 defect 4: the human question comes only after the automatic gate."""
+
+    def setUp(self) -> None:
+        self.base = Path(tempfile.mkdtemp(prefix='devflow-order-'))
+        self.repo = make_repo(self.base)
+        self.manifest = validate_round(runnable_manifest())
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.base, ignore_errors=True)
+
+    def test_all_markers_asks_exactly_once(self):
+        runner, _, asks = make_runner(self.repo, self.manifest)
+        outcome = runner.execute()
+        self.assertEqual(len(asks), 1)
+        self.assertEqual(asks[0], 'A personagem apareceu normalmente?')
+        self.assertEqual(outcome.verdict, 'PASS')
+
+    def test_marker_failure_asks_nothing(self):
+        spawner = fake_spawner([MARKER_LINES[0]])
+        runner, _, asks = make_runner(self.repo, self.manifest, lines=[MARKER_LINES[0]])
+        runner.spawn = spawner
+        outcome = runner.execute()
+        self.assertEqual(len(asks), 0)
+        self.assertEqual(outcome.verdict, 'FAIL')
+        self.assertTrue(spawner.handles[0].terminated)
+
+    def test_out_of_order_markers_ask_nothing(self):
+        runner, _, asks = make_runner(
+            self.repo, self.manifest,
+            lines=[MARKER_LINES[2], MARKER_LINES[0], MARKER_LINES[1]])
+        outcome = runner.execute()
+        self.assertEqual(len(asks), 0)
+        self.assertEqual(outcome.verdict, 'FAIL')
+
+    def test_timeout_asks_nothing_and_still_cleans_up(self):
+        spawner = fake_spawner([], alive=True)
+        runner, _, asks = make_runner(
+            self.repo, self.manifest, lines=[], alive=True,
+            clock=SteppingClock(step_s=3.0))
+        runner.marker_timeout_s = 1.0
+        runner.spawn = spawner
+        outcome = runner.execute()
+        self.assertEqual(len(asks), 0)
+        self.assertEqual(outcome.verdict, 'FAIL')
+        self.assertEqual(spawner.handles[0].terminate_calls, 1)
+
+    def test_process_exit_before_markers_asks_nothing(self):
+        spawner = fake_spawner([], exit_code=3)
+        runner, _, asks = make_runner(self.repo, self.manifest, lines=[])
+        runner.spawn = spawner
+        outcome = runner.execute()
+        self.assertEqual(len(asks), 0)
+        self.assertEqual(outcome.verdict, 'FAIL')
+
+
+# ---------------------------------------------------------------------------
+class ReparseSafetyTests(unittest.TestCase):
+    """D1.1 defect 3: symlinks are not the same thing as Windows reparse points."""
+
+    def setUp(self) -> None:
+        self.base = Path(tempfile.mkdtemp(prefix='devflow-reparse-'))
+        self.repo = make_repo(self.base)
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.base, ignore_errors=True)
+
+    def test_attribute_table_matches_win32_semantics(self):
+        R = filesystem.FILE_ATTRIBUTE_REPARSE_POINT
+        self.assertTrue(filesystem.reparse_from_attributes(R, 0))
+        self.assertTrue(filesystem.reparse_from_attributes(0x410, 0))   # dir + reparse
+        self.assertFalse(filesystem.reparse_from_attributes(0x10, 0))   # plain dir
+        self.assertFalse(filesystem.reparse_from_attributes(0x20, 0))   # archive
+        # INVALID + FILE_NOT_FOUND / PATH_NOT_FOUND => nothing there
+        self.assertFalse(filesystem.reparse_from_attributes(0xFFFFFFFF, 2))
+        self.assertFalse(filesystem.reparse_from_attributes(0xFFFFFFFF, 3))
+        # INVALID for any other reason => fail closed
+        self.assertTrue(filesystem.reparse_from_attributes(0xFFFFFFFF, 5))
+        self.assertTrue(filesystem.reparse_from_attributes(0xFFFFFFFF, 0))
+
+    def test_plain_directory_is_allowed(self):
+        plan = safe_paths.plan_removal(self.repo, CORE_DIST, [CORE_DIST])
+        self.assertTrue(plan.existed)
+
+    def test_windows_reparse_attribute_is_honoured_on_any_platform(self):
+        # Simulates a Windows junction: POSIX says "not a symlink", the Win32
+        # attribute probe says "reparse point". The helper must refuse.
+        target = self.repo / CORE_DIST
+        with patch.object(filesystem.os, 'name', 'nt'), \
+                patch.object(filesystem, '_windows_reparse', lambda path: True):
+            with self.assertRaisesRegex(filesystem.RedirectionError, 'junction/reparse'):
+                filesystem.assert_no_redirection(self.repo, PurePosixPath(CORE_DIST).parts)
+        # And the round cleanup refuses through the same shared helper.
+        with patch.object(filesystem.os, 'name', 'nt'), \
+                patch.object(filesystem, '_windows_reparse', lambda path: True):
+            with self.assertRaises(safe_paths.PathSafetyError):
+                safe_paths.plan_removal(self.repo, CORE_DIST, [CORE_DIST])
+        self.assertTrue(target.exists(), 'nada pode ter sido removido')
+
+    def test_windows_probe_failure_fails_closed(self):
+        def explode(path):
+            raise OSError('probe indisponível')
+
+        with patch.object(filesystem, '_probe_attributes', explode):
+            self.assertTrue(filesystem._windows_reparse(self.repo / CORE_DIST))
+        with patch.object(filesystem.os, 'name', 'nt'), \
+                patch.object(filesystem, '_probe_attributes', explode):
+            self.assertTrue(filesystem.is_redirection(self.repo / CORE_DIST))
+
+    def test_posix_symlink_target_refused(self):
+        outside = self.base / 'outside'
+        outside.mkdir()
+        (outside / 'precious.txt').write_text('não apague\n')
+        link = self.repo / CORE_DIST
+        shutil.rmtree(link)
+        try:
+            link.symlink_to(outside, target_is_directory=True)
+        except (OSError, NotImplementedError):
+            self.skipTest('filesystem sem symlink')
+        with self.assertRaises(safe_paths.PathSafetyError):
+            safe_paths.plan_removal(self.repo, CORE_DIST, [CORE_DIST])
+        self.assertTrue((outside / 'precious.txt').exists())
+
+    def test_symlink_ancestor_refused(self):
+        outside = self.base / 'elsewhere'
+        (outside / 'dist').mkdir(parents=True)
+        (outside / 'dist' / 'index.mjs').write_text('x\n')
+        airi = self.repo / 'airi'
+        shutil.rmtree(airi)
+        try:
+            airi.symlink_to(outside, target_is_directory=True)
+        except (OSError, NotImplementedError):
+            self.skipTest('filesystem sem symlink')
+        with self.assertRaises(safe_paths.PathSafetyError):
+            safe_paths.plan_removal(self.repo, CORE_DIST, [CORE_DIST])
+
+    def test_real_windows_junction(self):
+        if os.name != 'nt':
+            self.skipTest(
+                'GATE WINDOWS PENDENTE: junction real só pode ser provada no Windows; '
+                'a lógica está coberta pelo teste de atributo acima')
+        import subprocess as _sp
+
+        outside = self.base / 'junction-target'
+        outside.mkdir()
+        link = self.repo / CORE_DIST
+        shutil.rmtree(link)
+        probe = _sp.run(['cmd', '/c', 'mklink', '/J', str(link), str(outside)],
+                        capture_output=True, text=True)
+        if probe.returncode != 0:
+            self.skipTest(f'mklink indisponível: {probe.stderr.strip()}')
+        with self.assertRaises(safe_paths.PathSafetyError):
+            safe_paths.plan_removal(self.repo, CORE_DIST, [CORE_DIST])
+
+
+# ---------------------------------------------------------------------------
+class OwnedProcessTests(unittest.TestCase):
+    """D1.1 defect 5: teardown must reach the tree, not just the wrapper."""
+
+    def test_launch_argv_runs_a_bat_through_comspec_on_windows(self):
+        with patch.object(processes.os, 'name', 'nt'), \
+                patch.dict(processes.os.environ, {'COMSPEC': r'C:\Windows\system32\cmd.exe'}):
+            argv, extra = processes.launch_argv(['Lia.bat'])
+        self.assertEqual(argv, [r'C:\Windows\system32\cmd.exe', '/d', '/s', '/c', 'Lia.bat'])
+        self.assertEqual(extra, {})
+
+    def test_launch_argv_falls_back_to_cmd_exe_without_comspec(self):
+        env = {k: v for k, v in processes.os.environ.items() if k != 'COMSPEC'}
+        with patch.object(processes.os, 'name', 'nt'), patch.dict(processes.os.environ, env, clear=True):
+            argv, _ = processes.launch_argv(['Lia.bat'])
+        self.assertEqual(argv[:4], ['cmd.exe', '/d', '/s', '/c'])
+
+    def test_launch_argv_passes_non_batch_commands_untouched(self):
+        argv, _ = processes.launch_argv(['node', 'x.mjs', 'run'])
+        self.assertEqual(argv, ['node', 'x.mjs', 'run'])
+
+    def test_launch_argv_rejects_empty(self):
+        with self.assertRaises(ValueError):
+            processes.launch_argv([])
+
+    def test_windows_popens_a_new_process_group(self):
+        with patch.object(processes.os, 'name', 'nt'):
+            flags = processes._popen_kwargs()['creationflags']
+        self.assertTrue(flags & processes.CREATE_NEW_PROCESS_GROUP)
+
+    def test_posix_popens_a_new_session(self):
+        if os.name == 'nt':
+            self.skipTest(' POSIX-only')
+        self.assertTrue(processes._popen_kwargs()['start_new_session'])
+
+    def test_posix_teardown_kills_the_whole_group(self):
+        if os.name == 'nt':
+            self.skipTest('GATE WINDOWS PENDENTE: taskkill /T só pode ser provado no Windows')
+        script = 'sleep 30 & echo $!; wait'
+        process = subprocess.Popen(
+            ['sh', '-c', script], stdout=subprocess.PIPE, text=True,
+            start_new_session=True)
+        assert process.stdout is not None
+        grandchild = int(process.stdout.readline().strip())
+        handle = processes.OwnedProcess(process)
+        alive = subprocess.run(['kill', '-0', str(grandchild)], capture_output=True)
+        self.assertEqual(alive.returncode, 0, 'o neto deveria estar vivo antes do teardown')
+        handle.terminate()
+        probe = subprocess.run(['kill', '-0', str(grandchild)], capture_output=True)
+        self.assertNotEqual(probe.returncode, 0, 'o neto sobreviveu ao teardown')
+
+    def test_teardown_is_idempotent_and_scoped_to_the_owned_pid(self):
+        process = subprocess.Popen(['sleep', '30'], start_new_session=True)
+        pid = process.pid
+        handle = processes.OwnedProcess(process)
+        handle.terminate()
+        handle.terminate()  # second call must be a no-op, not a stray kill
+        self.assertIsNotNone(process.poll())
+        # Only our own PID was ever addressed: a second terminate cannot
+        # reach anything else because the handle holds no other reference.
+        self.assertEqual(handle.pid, pid)
+
+
+class RoundTeardownTests(unittest.TestCase):
+    """The owned tree is cleaned up on every exit path of the round."""
+
+    def setUp(self) -> None:
+        self.base = Path(tempfile.mkdtemp(prefix='devflow-teardown-'))
+        self.repo = make_repo(self.base)
+        self.manifest = validate_round(runnable_manifest())
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.base, ignore_errors=True)
+
+    def test_teardown_after_pass(self):
+        spawner = fake_spawner(list(MARKER_LINES))
+        runner, _, _ = make_runner(self.repo, self.manifest)
+        runner.spawn = spawner
+        outcome = runner.execute()
+        self.assertEqual(outcome.verdict, 'PASS')
+        self.assertEqual(spawner.handles[0].terminate_calls, 1)
+        self.assertTrue(outcome.tree_cleaned)
+        self.assertEqual(outcome.launch_pid, 4242)
+
+    def test_teardown_after_marker_failure(self):
+        spawner = fake_spawner([MARKER_LINES[0]])
+        runner, _, _ = make_runner(self.repo, self.manifest, lines=[MARKER_LINES[0]])
+        runner.spawn = spawner
+        runner.execute()
+        self.assertEqual(spawner.handles[0].terminate_calls, 1)
+
+    def test_teardown_after_human_says_no(self):
+        spawner = fake_spawner(list(MARKER_LINES))
+        runner, _, _ = make_runner(self.repo, self.manifest, ask=lambda q, o: 'N')
+        runner.spawn = spawner
+        outcome = runner.execute()
+        self.assertEqual(outcome.verdict, 'NOT_PASS')
+        self.assertEqual(spawner.handles[0].terminate_calls, 1)
+
+    def test_teardown_after_ctrl_c(self):
+        spawner = fake_spawner(list(MARKER_LINES))
+
+        def boom(question, options):
+            raise KeyboardInterrupt
+
+        runner, _, _ = make_runner(self.repo, self.manifest, ask=boom)
+        runner.spawn = spawner
+        outcome = runner.execute()
+        self.assertEqual(outcome.verdict, 'INTERRUPTED')
+        self.assertEqual(spawner.handles[0].terminate_calls, 1)
+        self.assertTrue(outcome.tree_cleaned)
+
+
+# ---------------------------------------------------------------------------
+class RetentionTests(unittest.TestCase):
+    """D1.1 defect 6: retention authority is the repo argument, not __file__."""
+
+    def setUp(self) -> None:
+        self.base = Path(tempfile.mkdtemp(prefix='devflow-retention-'))
+        self.repo = make_repo(self.base)
+        self.runs = self.repo / 'Tests' / 'runs' / 'devflow'
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.base, ignore_errors=True)
+
+    def _make_runs(self, count: int) -> list[Path]:
+        made = []
+        for index in range(count):
+            entry = self.runs / f'2026010{index}T000000Z-M3.0b'
+            entry.mkdir(parents=True)
+            (entry / 'run.json').write_text('{}\n')
+            made.append(entry)
+        return made
+
+    def test_retention_works_in_an_arbitrary_repo_root(self):
+        made = self._make_runs(4)
+        removed = report.prune_runs(self.repo, keep=2, max_age_days=3650)
+        self.assertEqual(len(removed), 2)
+        survivors = sorted(item.name for item in self.runs.iterdir())
+        self.assertEqual(survivors, sorted(item.name for item in made[-2:]))
+
+    def test_retention_removes_by_age(self):
+        entry = self._make_runs(1)[0]
+        old = datetime.now(timezone.utc).timestamp() - 400 * 86400
+        os.utime(entry, (old, old))
+        removed = report.prune_runs(self.repo, keep=50, max_age_days=30)
+        self.assertEqual(removed, [entry.name])
+        self.assertFalse(entry.exists())
+
+    def test_retention_cannot_escape_the_run_root(self):
+        outside = self.base / 'outside'
+        outside.mkdir()
+        victim = outside / 'victim'
+        victim.mkdir()
+        (victim / 'keep.txt').write_text('x\n')
+        with self.assertRaises(filesystem.RedirectionError):
+            filesystem.remove_tree_scoped(victim, self.runs)
+        self.assertTrue((victim / 'keep.txt').exists())
+
+    def test_retention_refuses_the_run_root_itself(self):
+        self.runs.mkdir(parents=True, exist_ok=True)
+        with self.assertRaises(filesystem.RedirectionError):
+            filesystem.remove_tree_scoped(self.runs, self.runs)
+
+    def test_retention_refuses_a_symlinked_run_folder(self):
+        self._make_runs(1)
+        outside = self.base / 'linked-target'
+        outside.mkdir()
+        (outside / 'keep.txt').write_text('x\n')
+        link = self.runs / '20260109T000000Z-M3.0b'
+        try:
+            link.symlink_to(outside, target_is_directory=True)
+        except (OSError, NotImplementedError):
+            self.skipTest('filesystem sem symlink')
+        with self.assertRaises(filesystem.RedirectionError):
+            filesystem.remove_tree_scoped(link, self.runs)
+        self.assertTrue((outside / 'keep.txt').exists())
+
 
 
 if __name__ == '__main__':

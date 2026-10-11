@@ -9,8 +9,9 @@ is deliberately paranoid. The rules, in the order they are enforced:
   2. the path must be a plain relative POSIX path: no drive letter, no
      leading slash, no UNC, no `..`, no NUL;
   3. the resolved path must be strictly INSIDE the repository;
-  4. no path component between the repository root and the target may be a
-     symlink/reparse point, so a link cannot smuggle the deletion outside;
+  4. no path component between the repository root and the target - the
+     target included - may be a symlink, a Windows junction or any other
+     reparse point, so nothing can smuggle the deletion outside;
   5. Git must confirm the target is IGNORED - i.e. generated. A tracked path
      is refused even when it is on the allowlist.
 
@@ -24,6 +25,8 @@ from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 import shutil
 import subprocess
+
+from . import filesystem
 
 
 class PathSafetyError(RuntimeError):
@@ -88,17 +91,6 @@ def _reject_unsafe_relative(relative: str) -> PurePosixPath:
     return PurePosixPath(text)
 
 
-def _assert_no_symlink_escape(root: Path, relative: PurePosixPath) -> None:
-    """Rule 4: every component from the root down must be a real directory."""
-    walk = root
-    for part in relative.parts:
-        walk = walk / part
-        if walk.is_symlink():
-            raise PathSafetyError(
-                f'componente {part!r} é um link/reparse point; recuso para evitar fuga da raiz',
-            )
-
-
 def _assert_git_ignored(root: Path, relative: PurePosixPath) -> None:
     """Rule 5: Git must confirm the target is generated (ignored)."""
     posix = '/'.join(relative.parts)
@@ -135,7 +127,13 @@ def plan_removal(
         )
 
     resolved_root = root.resolve()
-    _assert_no_symlink_escape(resolved_root, wanted)
+    try:
+        # Rule 4, via the ONE shared helper: symlinks AND Windows
+        # junctions/reparse points, target included, inspected lexically
+        # before any resolution.
+        filesystem.assert_no_redirection(resolved_root, wanted.parts)
+    except filesystem.RedirectionError as exc:
+        raise PathSafetyError(str(exc)) from exc
 
     target = resolved_root.joinpath(*wanted.parts)
     resolved = target.resolve()

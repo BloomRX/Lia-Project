@@ -18,9 +18,9 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 import importlib.util
 import json
-import os
 from pathlib import Path
 
+from . import filesystem
 
 RUN_ROOT_NAME = ('Tests', 'runs', 'devflow')
 MAX_KEPT_LINES = 400
@@ -146,19 +146,11 @@ def prune_runs(repo: Path, *, keep: int, max_age_days: int) -> list[str]:
         too_many = index >= keep
         too_old = entry.stat().st_mtime < cutoff
         if too_many or too_old:
-            _remove_tree(entry)
+            # The allowed root comes from the REPO ARGUMENT, not from this
+            # file's location, so retention behaves identically in worktrees,
+            # temp repos and CI checkouts.
+            filesystem.remove_tree_scoped(entry, root)
             removed.append(entry.name)
     return removed
 
 
-def _remove_tree(target: Path) -> None:
-    import shutil
-
-    root = Path(__file__).resolve().parents[2].joinpath(*RUN_ROOT_NAME).resolve()
-    resolved = target.resolve()
-    # Belt and braces: retention must never reach outside the run root.
-    if resolved == root or not resolved.is_relative_to(root):
-        raise RuntimeError(f'retention recusou remover {resolved} (fora de {root})')
-    if os.path.islink(resolved):
-        raise RuntimeError(f'retention recusou remover o link {resolved}')
-    shutil.rmtree(resolved, ignore_errors=True)

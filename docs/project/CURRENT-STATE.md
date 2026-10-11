@@ -527,6 +527,39 @@ execuções / 30 dias), sanitizados com o redator universal.
 **A D1 é somente ferramenta:** não altera código de produto, não toca
 Brain/provider/voz/vision, e **não avança o baseline funcional — que continua `3ef6d11`**.
 
+**A D1 existiu em `32025ab`.** Antes da primeira rodada real no Windows, uma **auditoria
+independente** encontrou defeitos limitados de correção e segurança. A **D1.1 os fecha**:
+
+1. **falso PASS por teste pulado** — testes indisponíveis eram ignorados no veredito; agora
+   todo teste declarado é **obrigatório**: falha ⇒ `FAIL` sem lançamento, indisponível ⇒
+   `REFUSED` sem lançamento;
+2. **falso PASS com checkout sujo** — `dirty` era registrado mas não barrava nada; agora
+   `git status --porcelain` não vazio ⇒ `REFUSED` **antes** de qualquer limpeza, teste ou
+   lançamento (só a contagem é impressa);
+3. **afirmação visual pedida cedo demais** — estava num `finally`, então podia perguntar
+   "A personagem apareceu?" com o Stage morto, marcador ausente ou timeout; agora só é
+   perguntada **depois** de todos os marcadores na ordem;
+4. **proteção reparse/junction superestimada** — usava só `Path.is_symlink()`, que no
+   Windows não detecta junction; agora `tools/devflow/filesystem.py` é a **única**
+   autoridade (bit `FILE_ATTRIBUTE_REPARSE_POINT`, compatível com Python 3.10, inspeção
+   lexical antes de resolver, erro de inspeção ⇒ recusa), usada pela limpeza **e** pela
+   retenção;
+5. **teardown que não alcançava a árvore** — encerrava só o filho direto, podendo deixar
+   `pnpm`/Electron/Stage órfãos; agora o filho nasce em grupo de processo próprio e o
+   teardown é enraizado no PID da rodada (`taskkill /PID <raiz> /T /F` no Windows,
+   `os.killpg` no POSIX), no `finally`, também após Ctrl+C;
+6. **retenção acoplada ao checkout de origem** — derivava a raiz permitida de
+   `Path(__file__).parents[2]`, então nunca funcionava em repositório temporário/worktree;
+   agora a autoridade é o argumento `repo`.
+
+Um `PASS` continua exigindo, e agora **prova no `run.json`**: SHA exato, `dirty=0`, todos os
+testes obrigatórios passando, marcadores ordenados e afirmação humana aceita — o runner
+rebaixa para `NOT_PASS` se faltar evidência. O `tested_sha` do manifesto pode seguir `null`:
+o runtime **não** o escreve, porque isso sujaria o repositório no meio da rodada.
+
+**O gate gerenciado da M3.0b no Windows continua `NOT PASS`** e o baseline funcional continua
+**`3ef6d11`**. Nenhum commit de ferramenta foi ou será promovido a baseline funcional.
+
 **Nada foi apagado.** Os `.bat`/`.ps1` históricos estão inventariados e classificados
 (KEEP / INTERNAL / CANDIDATE-MERGE / CANDIDATE-DELETE) em
 `tools/devflow/script-inventory.json`, como entrada para o **D3**. `devkit.json` continua
