@@ -595,8 +595,40 @@ A ordem fail-closed da D1.1 foi preservada sem enfraquecimento: branch/worktree 
 preparo seguro → **todos** os testes obrigatórios → só então o gate do Windows → marcadores
 ordenados → pergunta visual → relatório.
 
+**A D1.2 existiu em `e204ecb`.** O **DEVFLOW-AUTO-1** muda o contrato com o dono do projeto:
+não existe mais menu no duplo clique.
+
+- **`DevKit.bat` é o único entrypoint humano e duplo clique = AUTO.** Ele se copia para
+  `%TEMP%` (o `cmd.exe` lê `.bat` por deslocamento de byte, então sobrescrever o original no
+  meio da execução o corromperia), descobre o Python e chama `lia_dev.py bootstrap`.
+- **Bootstrap auto-atualizável:** sincroniza o branch de trabalho e depois lança um **processo
+  novo** com `auto --post-sync`. O manifesto também é lido depois do sync. É isso que garante
+  que o código que avalia o gate é o recém-atualizado, e não módulos antigos já importados.
+- **Política Git de zero escolha:** branch de trabalho **configurado** em
+  `tools/devflow/devflow-config.json`; checkout limpo ⇒ `fetch`+`rebase` sem perguntar;
+  alterações locais são **classificadas** (segredo, caminho fora da política, peso de modelo,
+  binário >5 MB ⇒ bloqueiam; código-fonte do projeto ⇒ checkpoint local determinístico após
+  o verificador de segredos universal). Ambíguo ⇒ FAIL CLOSED, sem descartar nada. Nunca
+  `main`, nunca `--force`, nunca conflito resolvido sozinho. Depois do gate, só o **HEAD exato
+  testado** e limpo é publicado; se o remote avançou, a publicação é recusada e pede
+  revalidação. Gate reprovado nunca publica.
+- **O clique em "Conversar" virou automático:** `LIA_DEVFLOW_AUTORUN=conversar` faz o Launcher
+  chamar **exatamente** `host.conversar()`, a mesma função que o botão alcança via
+  `lia:stage:start`. Sem caminho alternativo de Stage: a cadeia
+  `Lia.bat → Launcher → AiriStageManager → Stage` continua sendo o que é validado. Fora da
+  flag, nada muda no produto.
+- **O S/N virou evidência de máquina.** Além da cadeia ordenada, a rodada exige três fatos
+  terminais: `lia-stage renderer=ready`, `lia-stage window=visible` e
+  `lia-stage avatar-scene=mounted` (renderer → IPC → main). Faltar um ⇒ FAIL; marcador
+  proibido ⇒ FAIL. Tudo inerte sem `LIA_DEVFLOW_DIAGNOSTICS=1`. "ready in 512 ms" continua
+  sendo apenas opcional e nunca é evidência terminal.
+- **Schema v2:** `runtime_assertions` (ordered/terminal/forbidden/optional), `launch.env`,
+  `launch.auto_action` e um `scenario { driver, steps }` genérico. Nenhuma rodada futura foi
+  implementada — só a arquitetura que as torna dirigíveis.
+
 **O gate gerenciado da M3.0b no Windows continua `NOT PASS`** e o baseline funcional continua
-**`3ef6d11`**. Nenhum commit de ferramenta foi ou será promovido a baseline funcional.
+**`3ef6d11`**. Nenhum commit de ferramenta foi ou será promovido a baseline funcional. A
+próxima prova é **um único duplo clique** do dono do projeto no Windows.
 
 **Nada foi apagado.** Os `.bat`/`.ps1` históricos estão inventariados e classificados
 (KEEP / INTERNAL / CANDIDATE-MERGE / CANDIDATE-DELETE) em

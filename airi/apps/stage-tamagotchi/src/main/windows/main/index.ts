@@ -25,6 +25,7 @@ import { isLinux, isMacOS } from 'std-env'
 import icon from '../../../../resources/icon.png?asset'
 
 import { electronStartDraggingWindow } from '../../../shared/eventa'
+import { liaDevflowMark } from '../../devflow-diagnostics'
 import { onAppBeforeQuit } from '../../libs/bootkit/lifecycle'
 import { baseUrl, getElectronMainDirname, load, withHashRoute } from '../../libs/electron/location'
 import { createConfig } from '../../libs/electron/persistence'
@@ -163,6 +164,17 @@ export async function setupMainWindow(params: {
     // resizes be persisted, so a transient startup resize can never
     // overwrite the mode's override.
     sizing.armUserResizeCapture()
+    // DEVFLOW-ONLY: proof the BrowserWindow really reached the shown state.
+    // Inert unless LIA_DEVFLOW_DIAGNOSTICS=1, which only the Lia development
+    // autopilot sets. A taskbar icon alone is exactly the false positive the
+    // M3.0b round was created to stop trusting.
+    liaDevflowMark('window=visible')
+  })
+
+  // DEVFLOW-ONLY: proof the renderer document actually finished loading, which
+  // is a different fact from the window being shown.
+  window.webContents.on('did-finish-load', () => {
+    liaDevflowMark('renderer=ready')
   })
   protectPrivilegedWindowNavigation(window)
 

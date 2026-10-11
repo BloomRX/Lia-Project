@@ -29,6 +29,7 @@ import { installSingleInstanceGuard } from './app/single-instance'
 import { createArtistryConfig } from './configs/artistry'
 import { createGlobalAppConfig } from './configs/global'
 import { createLiaProductConfig } from './configs/lia'
+import { registerLiaDevflowSceneBridge } from './devflow-diagnostics'
 import { emitAppBeforeQuit, emitAppReady, emitAppWindowAllClosed } from './libs/bootkit/lifecycle'
 import { setElectronMainDirname } from './libs/electron/location'
 import { createI18n } from './libs/i18n'
@@ -166,6 +167,10 @@ let userFacingMainWindowSizeSettings: MainWindowSizeSettingsController | undefin
 
 if (shouldStartMainProcess) {
   initScreenCaptureForMain()
+  // DEVFLOW-ONLY: listens for the renderer's scene-mounted report so the
+  // development autopilot can prove the Vue app really instantiated. Returns
+  // false - registering nothing at all - unless LIA_DEVFLOW_DIAGNOSTICS=1.
+  registerLiaDevflowSceneBridge()
 }
 
 let fileLogger: FileLoggerHandle = nullFileLoggerHandle

@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "round": {
     "id": "M3.0b",
     "title": "Pre-requisito de build gerenciado do Stage (core-agent/dist)",
@@ -32,7 +32,7 @@
     },
     {
       "id": "lia-app",
-      "label": "Lia App (manager + pre-requisito + ownership)",
+      "label": "Lia App (manager + pre-requisito + ownership + autorun)",
       "cwd": "airi/apps/lia-app",
       "argv": ["node", "../../node_modules/vitest/vitest.mjs", "run"]
     },
@@ -41,15 +41,35 @@
       "label": "Contrato manual dev:tamagotchi (8.0D-M3.0a)",
       "cwd": "airi/apps/stage-tamagotchi",
       "argv": ["node", "../../node_modules/vitest/vitest.mjs", "run", "--project", "node", "src/main/dev-build-contract.test.ts"]
+    },
+    {
+      "id": "stage-devflow",
+      "label": "Diagnostico DEVFLOW do Stage (renderer, janela, cena montada)",
+      "cwd": "airi/apps/stage-tamagotchi",
+      "argv": ["node", "../../node_modules/vitest/vitest.mjs", "run", "src/main/devflow-diagnostics.test.ts"]
     }
   ],
   "launch": {
     "kind": "managed-launcher",
     "command": ["Lia.bat"],
-    "operator_hint": "Aguarde o Launcher abrir e clique em 'Conversar com Lia'. Nao rode nenhum build manual: a rodada precisa provar que o Launcher reconstruiu o core-agent sozinho."
+    "operator_hint": "Nada a fazer. A rodada abre o Launcher, aciona Conversar sozinha e lê a propria evidencia. Nao rode nenhum build manual: a rodada precisa provar que o Launcher reconstruiu o core-agent sozinho.",
+    "env": {
+      "LIA_DEVFLOW_AUTORUN": "conversar",
+      "LIA_DEVFLOW_DIAGNOSTICS": "1"
+    },
+    "auto_action": "conversar"
   },
-  "diagnostics": {
+  "scenario": {
+    "driver": "autorun",
+    "steps": ["conversar"]
+  },
+  "runtime_assertions": {
     "ordered_markers": [
+      {
+        "id": "autorun-invoked",
+        "pattern": "lia-devflow autorun=invoked",
+        "also": "action=conversar"
+      },
       {
         "id": "prerequisite-starting",
         "pattern": "stage-prerequisite name=core-agent-build state=starting"
@@ -65,21 +85,38 @@
         "also": "electron-vite.js dev"
       }
     ],
+    "terminal_markers": [
+      {
+        "id": "stage-renderer-ready",
+        "pattern": "lia-stage renderer=ready"
+      },
+      {
+        "id": "stage-window-visible",
+        "pattern": "lia-stage window=visible"
+      },
+      {
+        "id": "stage-avatar-scene-mounted",
+        "pattern": "lia-stage avatar-scene=mounted"
+      }
+    ],
+    "forbidden_markers": [
+      {
+        "id": "prerequisite-failed",
+        "pattern": "stage-prerequisite name=core-agent-build state=failed"
+      },
+      {
+        "id": "autorun-failed",
+        "pattern": "lia-devflow autorun=failed"
+      }
+    ],
     "optional_markers": [
       {
-        "id": "stage-ready",
+        "id": "stage-dev-server-ready",
         "pattern": "ready in"
       }
     ]
   },
-  "manual_assertions": [
-    {
-      "id": "character-visible",
-      "question": "A personagem apareceu normalmente?",
-      "accept": ["S"],
-      "reject": ["N"]
-    }
-  ],
+  "manual_assertions": [],
   "retention": {
     "keep_runs": 20,
     "max_age_days": 30

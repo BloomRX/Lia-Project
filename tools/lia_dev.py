@@ -235,10 +235,89 @@ def _git(repo: Path, args: list[str]) -> str:
     return (probe.stdout or '').strip()
 
 
+def cmd_bootstrap(_args: argparse.Namespace) -> int:
+    """
+    Atualiza o branch de trabalho PRIMEIRO e só depois roda o DevFlow.
+
+    O processo atual importa apenas o módulo de sincronização; a rodada em si é
+    executada por um processo NOVO, lançado depois do sync. É isso que garante
+    que o código que avalia o gate é o recém-atualizado, e não uma mistura de
+    módulos antigos já importados com novos.
+    """
+    from devflow.pipeline import AutoResult, render_final_block
+    from devflow.sync import SyncRefused, WorkBranchSync, load_devflow_config
+
+    print('== LIA DEVFLOW BOOTSTRAP ==')
+    try:
+        config = load_devflow_config()
+    except SyncRefused as exc:
+        print(render_final_block(AutoResult(stage='bootstrap', reason=str(exc))))
+        return 1
+    print(f'branch de trabalho: {config.work_branch} (configurado, não adivinhado)')
+    sync = WorkBranchSync(
+        repo_root(), work_branch=config.work_branch, remote=config.remote,
+        main_branch=config.main_branch,
+    )
+    outcome = sync.pre_sync()
+    for line in outcome.facts.notes:
+        print(f'  {line}')
+    if not outcome.ok:
+        result = AutoResult(
+            stage=outcome.stage, reason=outcome.reason,
+            initial_head=outcome.facts.initial_head,
+            remote_head=outcome.facts.remote_head,
+        )
+        print()
+        print(render_final_block(result))
+        return 1
+    print(f'checkout pronto em {outcome.facts.final_head[:12]}; executando o DevFlow atualizado')
+    # Fresh interpreter, fresh imports: the gate is evaluated by the code that
+    # was just fetched, never by this process's already-imported modules.
+    probe = subprocess.run(
+        [sys.executable, str(Path(__file__).resolve()), 'auto', '--post-sync'],
+        cwd=repo_root(),
+    )
+    return probe.returncode
+
+
+def cmd_auto(args: argparse.Namespace) -> int:
+    """
+    O modo padrão: ZERO escolha. Sincroniza, resolve a rodada ativa, limpa,
+    testa, lança o gate de runtime sozinho, encerra a árvore que criou,
+    publica se a política permitir e imprime um veredito. Nenhum input().
+    """
+    from devflow.pipeline import render_final_block, run_auto
+    from devflow.sync import SyncRefused, load_devflow_config
+
+    try:
+        config = load_devflow_config()
+    except SyncRefused as exc:
+        return _fail(str(exc))
+    result = run_auto(
+        repo_root(),
+        work_branch=config.work_branch,
+        remote=config.remote,
+        main_branch=config.main_branch,
+        do_sync=not (getattr(args, 'no_sync', False) or getattr(args, 'post_sync', False)),
+        do_publish=not getattr(args, 'no_publish', False),
+    )
+    print()
+    print(render_final_block(result))
+    return 0 if result.is_pass else 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog='lia_dev', description='DevKit Lia por rodada')
     sub = parser.add_subparsers(dest='cmd')
-    sub.add_parser('menu', help='menu interativo (padrão)')
+    auto = sub.add_parser('auto', help='piloto automático sem nenhuma escolha (padrão)')
+    auto.add_argument('--no-sync', action='store_true',
+                      help='não sincroniza com o remote (avançado)')
+    auto.add_argument('--no-publish', action='store_true',
+                      help='não publica ao final (avançado)')
+    auto.add_argument('--post-sync', action='store_true',
+                      help='uso interno: o bootstrap já sincronizou este checkout')
+    sub.add_parser('bootstrap', help='uso interno: sincroniza e reexecuta o auto')
+    sub.add_parser('menu', help='menu interativo (avançado)')
     sub.add_parser('round', help='executa a rodada ativa')
     sub.add_parser('status', help='rodada ativa + validade do último PASS')
     sub.add_parser('open', help='abre o Lia normalmente, sem gate')
@@ -248,6 +327,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 HANDLERS = {
+    'bootstrap': cmd_bootstrap,
+    'auto': cmd_auto,
     'round': cmd_round,
     'status': cmd_status,
     'open': cmd_open,
@@ -259,7 +340,8 @@ HANDLERS = {
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    handler = HANDLERS.get(args.cmd or 'menu', cmd_menu)
+    # DOUBLE-CLICK / no arguments means AUTO. The menu is advanced-only now.
+    handler = HANDLERS.get(args.cmd or 'auto', cmd_auto)
     try:
         return handler(args)
     except KeyboardInterrupt:

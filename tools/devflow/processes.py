@@ -139,15 +139,26 @@ def spawn_owned(
     command: list[str],
     cwd: Path,
     on_line: Callable[[str], None],
+    env: dict[str, str] | None = None,
 ) -> OwnedProcess:
     """
     Starts the managed launch with its console captured, in a new process
     group so teardown can reach the whole tree. Fixed argv, no shell.
+
+    `env` is ADDED to the inherited environment, never a replacement: the
+    launch chain (cmd -> Lia.bat -> pnpm -> Launcher -> Stage) needs PATH and
+    friends to work. The Stage inherits the Launcher's whole environment, which
+    is how the DevFlow diagnostics flag reaches the renderer process.
     """
     argv, extra = launch_argv(list(command))
+    child_env = None
+    if env:
+        child_env = dict(os.environ)
+        child_env.update({str(k): str(v) for k, v in env.items()})
     process = subprocess.Popen(  # noqa: S603 - fixed argv, no shell
         argv,
         cwd=cwd,
+        env=child_env,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,

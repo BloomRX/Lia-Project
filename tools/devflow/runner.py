@@ -74,6 +74,11 @@ class RoundOutcome:
     manual: dict[str, str] = field(default_factory=dict)
     launch_pid: int | None = None
     tree_cleaned: bool = False
+    # Machine-verifiable runtime evidence (§F): every terminal marker seen, and
+    # any forbidden marker that appeared at all.
+    terminal_seen: list[str] = field(default_factory=list)
+    forbidden_seen: list[str] = field(default_factory=list)
+    stage: str = ''
     notes: list[str] = field(default_factory=list)
     artifacts: dict[str, str] = field(default_factory=dict)
     console_withheld: int = 0
@@ -117,13 +122,14 @@ def git_facts(repo: Path, run_git: GitRunner) -> tuple[str, str, int]:
     return branch.strip(), head.strip(), dirty
 
 
-def default_spawner(command: list[str], cwd: Path, on_line: Callable[[str], None]) -> SpawnHandle:
+def default_spawner(command: list[str], cwd: Path, on_line: Callable[[str], None],
+                    env: dict[str, str] | None = None) -> SpawnHandle:
     """
     Launches the managed path in its OWN process group, so teardown can reach
     the whole tree (cmd -> Lia.bat -> pnpm -> Launcher -> Stage) instead of
     stranding grandchildren. Fixed argv, no shell - see `processes`.
     """
-    return processes.spawn_owned(command, cwd, on_line)
+    return processes.spawn_owned(command, cwd, on_line, env=env)
 
 
 def console_asker(question: str, options: tuple[str, ...]) -> str:
@@ -171,6 +177,7 @@ class RoundRunner:
             self._execute(outcome, note)
         except RoundAborted as exc:
             outcome.verdict = 'REFUSED'
+            outcome.stage = 'prepare'
             outcome.notes.append(f'rodada recusada: {exc}')
         except KeyboardInterrupt:
             outcome.verdict = 'INTERRUPTED'
@@ -324,7 +331,12 @@ class RoundRunner:
 
         note(f'lançamento gerenciado: {" ".join(manifest.launch.command)}')
         note(f'operador: {manifest.launch.operator_hint}')
-        handle = self.spawn(list(manifest.launch.command), self.repo, on_line)
+        launch_env = dict(manifest.launch.env)
+        if launch_env:
+            note(f'ambiente DEVFLOW do lançamento: '
+                 f'{", ".join(sorted(launch_env))}')
+        handle = self.spawn(list(manifest.launch.command), self.repo, on_line,
+                            env=launch_env or None)
         outcome.launch_pid = getattr(handle, 'pid', None)
 
         deadline = self.clock().timestamp() + self.marker_timeout_s
@@ -348,6 +360,17 @@ class RoundRunner:
                     note(f'marcador {pending[0].id}: OK')
                     pending.pop(0)
 
+            # Terminal markers are order-insensitive but ALL are required, and
+            # a forbidden marker appearing anywhere is an immediate failure.
+            outcome.terminal_seen = [
+                marker.id for marker in manifest.runtime.terminal
+                if any(marker.matches(line) for line in lines)
+            ]
+            outcome.forbidden_seen = [
+                marker.id for marker in manifest.runtime.forbidden
+                if any(marker.matches(line) for line in lines)
+            ]
+
             # The marker verdict is decided BEFORE any human is involved.
             optional_seen = [
                 marker.id
@@ -368,9 +391,18 @@ class RoundRunner:
             # Section 4 of D1.1: the visual question is asked ONLY when the
             # automatic gate passed. Asking after a dead stage, a missing
             # marker or a timeout would invite a meaningless answer.
-            if outcome.markers.ok:
+            for marker_id in outcome.terminal_seen:
+                note(f'evidência terminal {marker_id}: OK')
+            missing_terminal = [marker.id for marker in manifest.runtime.terminal
+                                if marker.id not in outcome.terminal_seen]
+            if missing_terminal:
+                note(f'evidência terminal AUSENTE: {", ".join(missing_terminal)}')
+            if outcome.forbidden_seen:
+                note(f'marcador PROIBIDO visto: {", ".join(outcome.forbidden_seen)}')
+
+            if outcome.markers.ok and not outcome.forbidden_seen and not missing_terminal:
                 self._collect_manual(outcome, note)
-            else:
+            elif not outcome.markers.ok:
                 outcome.notes.append(
                     'afirmação visual não foi perguntada: o gate automático não passou',
                 )
@@ -399,23 +431,31 @@ class RoundRunner:
         manifest = self.round_manifest
         tests_failed = any(test.status != 'pass' for test in outcome.tests)
         markers_ok = bool(outcome.markers and outcome.markers.ok)
+        terminal_required = tuple(manifest.runtime.terminal)
+        terminal_ok = all(marker.id in outcome.terminal_seen for marker in terminal_required)
+        forbidden_hit = list(outcome.forbidden_seen)
         accepted = all(
             outcome.manual.get(assertion.id, '') in assertion.accept
             for assertion in manifest.manual_assertions
-        )
+        ) if manifest.manual_assertions else True
 
-        if not markers_ok:
+        if forbidden_hit:
             outcome.verdict = 'FAIL'
-        elif not accepted:
-            outcome.verdict = 'NOT_PASS'
+            outcome.stage = 'runtime'
+        elif not markers_ok:
+            outcome.verdict = 'FAIL'
+            outcome.stage = 'runtime'
+        elif not terminal_ok:
+            outcome.verdict = 'FAIL'
+            outcome.stage = 'runtime'
         elif tests_failed:
             outcome.verdict = 'FAIL'
+            outcome.stage = 'tests'
+        elif not accepted:
+            outcome.verdict = 'NOT_PASS'
+            outcome.stage = 'runtime'
         else:
             outcome.verdict = 'PASS'
-
-        # A log-only run is never a visual pass, by construction.
-        if outcome.verdict == 'PASS' and not manifest.manual_assertions:
-            outcome.verdict = 'NOT_PASS'
         note(f'verdicto: {outcome.verdict}')
         if not manifest.ready_for_publish:
             note('round.ready_for_publish=false: esta rodada não está marcada para publicar')
@@ -427,6 +467,12 @@ class RoundRunner:
                 'todos os testes obrigatórios passaram':
                     bool(outcome.tests) and all(t.status == 'pass' for t in outcome.tests),
                 'marcadores ordenados': markers_ok,
+                'evidência terminal completa': terminal_ok,
+                'nenhum marcador proibido': not forbidden_hit,
+                # A round must prove itself by machine evidence or by a human.
+                # The schema forbids having neither; this enforces it at runtime.
+                'evidência suficiente (terminal ou humana)':
+                    bool(terminal_required) or bool(manifest.manual_assertions),
                 'afirmação humana aceita': accepted,
             }
             missing = [name for name, ok in evidence.items() if not ok]
@@ -457,11 +503,18 @@ class RoundRunner:
             'launch': {'pid': outcome.launch_pid, 'tree_cleaned': outcome.tree_cleaned},
             'cleanup': outcome.cleanup,
             'tests': [test.__dict__ for test in outcome.tests],
+            'stage': outcome.stage,
             'markers': {
                 'ok': bool(outcome.markers and outcome.markers.ok),
                 'matched': outcome.markers.matched if outcome.markers else [],
                 'missing': outcome.markers.missing if outcome.markers else None,
                 'optional_seen': outcome.optional_seen,
+                # The machine evidence that replaced the human S/N (§F).
+                'terminal_required': [m.id for m in self.round_manifest.runtime.terminal],
+                'terminal_seen': outcome.terminal_seen,
+                'terminal_missing': [m.id for m in self.round_manifest.runtime.terminal
+                                     if m.id not in outcome.terminal_seen],
+                'forbidden_seen': outcome.forbidden_seen,
             },
             'manual_assertions': outcome.manual,
             'notes': outcome.notes,
@@ -507,6 +560,13 @@ def render_report(payload: dict) -> str:
         lines.append(f'  - {name}: linha {index + 1}')
     if payload['markers']['missing']:
         lines.append(f'  - FALTANDO: {payload["markers"]["missing"]}')
+    if payload['markers'].get('terminal_required'):
+        lines.append('  evidência terminal (substitui a confirmação visual humana):')
+        for name in payload['markers']['terminal_required']:
+            seen = name in payload['markers'].get('terminal_seen', [])
+            lines.append(f'    - {name}: {"OK" if seen else "AUSENTE"}')
+    if payload['markers'].get('forbidden_seen'):
+        lines.append(f'  - PROIBIDO VISTO: {", ".join(payload["markers"]["forbidden_seen"])}')
     if payload['markers']['optional_seen']:
         lines.append(f'  - opcionais: {", ".join(payload["markers"]["optional_seen"])}')
     lines += ['', 'afirmações humanas (nunca inferidas de log):']

@@ -11,6 +11,7 @@ fato de que um log nunca vira um PASS visual.
 """
 from __future__ import annotations
 
+import argparse
 import ast
 import copy
 from datetime import datetime, timezone
@@ -28,10 +29,12 @@ from unittest.mock import patch
 TOOLS = Path(__file__).resolve().parent
 sys.path.insert(0, str(TOOLS))
 
-from devflow import filesystem, processes, report, safe_paths  # noqa: E402
+from devflow import (filesystem, pipeline, processes, report,  # noqa: E402
+                     safe_paths, sync)
+import lia_dev  # noqa: E402
 from devflow.report import (MAX_DETAIL_CHARS, MAX_DETAIL_LINES,  # noqa: E402
                             sanitize_test_output)
-from devflow.runner import run_test_command  # noqa: E402
+from devflow.runner import RoundRunner, run_test_command  # noqa: E402
 from devflow.markers import evaluate_markers  # noqa: E402
 from devflow.report import is_keeper, sanitize_console, sanitize_line  # noqa: E402
 from devflow.runner import RoundOutcome, RoundRunner, latest_run, pass_validity, render_report  # noqa: E402
@@ -95,7 +98,8 @@ def fake_spawner(lines: list[str], exit_code: int = 0, alive: bool = False):
     """Emits the scripted console up front, then hands back a handle."""
     handles: list[FakeHandle] = []
 
-    def spawn(command: list[str], cwd: Path, on_line) -> FakeHandle:
+    def spawn(command: list[str], cwd: Path, on_line, env=None) -> FakeHandle:
+        spawn.envs.append(dict(env or {}))
         for line in lines:
             on_line(line)
         handle = FakeHandle(exit_code, alive=alive)
@@ -103,6 +107,7 @@ def fake_spawner(lines: list[str], exit_code: int = 0, alive: bool = False):
         return handle
 
     spawn.handles = handles  # type: ignore[attr-defined]
+    spawn.envs = []  # type: ignore[attr-defined]
     return spawn
 
 
@@ -135,6 +140,18 @@ def fixed_git(branch: str, sha: str, calls: list[list[str]] | None = None,
     return run_git
 
 
+def manual_manifest() -> dict:
+    """The active round plus one human assertion, to keep testing the rule that
+    the question may only be asked AFTER the automatic gate passed."""
+    data = runnable_manifest()
+    data['manual_assertions'] = [{
+        'id': 'character-visible',
+        'question': 'A personagem apareceu normalmente?',
+        'accept': ['S'], 'reject': ['N'],
+    }]
+    return data
+
+
 def runnable_manifest() -> dict:
     """Same round, but with ONE test that exists in any checkout, so the
     pass/fail/skip decision is driven by the injected invoker and not by
@@ -157,12 +174,25 @@ def skipping_manifest() -> dict:
     return data
 
 
+# Named so a test never depends on a marker's position in the list.
 MARKER_LINES = [
-    '[lia] 2026-10-11T00:00:00.000Z lia-app.stage-log stage-prerequisite name=core-agent-build state=starting\n',
+    '[lia] 2026-10-11T00:00:00.000Z lia-devflow autorun=invoked action=conversar\n',
+    '[lia] 2026-10-11T00:00:01.000Z lia-app.stage-log stage-prerequisite name=core-agent-build state=starting\n',
     '[lia] 2026-10-11T00:00:09.000Z lia-app.stage-log stage-prerequisite name=core-agent-build state=succeeded reason=build-succeeded\n',
     '[lia] 2026-10-11T00:00:10.000Z lia-app.stage-log spawn: node C:\\repo\\airi\\apps\\stage-tamagotchi\\node_modules\\electron-vite\\bin\\electron-vite.js dev (pid 1234)\n',
+    '[lia] 2026-10-11T00:00:14.000Z lia-app.stage-log lia-stage renderer=ready\n',
+    '[lia] 2026-10-11T00:00:15.000Z lia-app.stage-log lia-stage window=visible\n',
+    '[lia] 2026-10-11T00:00:16.000Z lia-app.stage-log lia-stage avatar-scene=mounted\n',
     '> ready in 512 ms\n',
 ]
+(LINE_AUTORUN, LINE_PREREQ_STARTING, LINE_PREREQ_SUCCEEDED, LINE_STAGE_SPAWN,
+ LINE_RENDERER_READY, LINE_WINDOW_VISIBLE, LINE_AVATAR_MOUNTED,
+ LINE_DEV_SERVER_READY) = MARKER_LINES
+
+# The ordered chain and the terminal facts, spelled out for the tests that
+# reason about the gate rather than about the console text.
+TERMINAL_LINES = [LINE_RENDERER_READY, LINE_WINDOW_VISIBLE, LINE_AVATAR_MOUNTED]
+ORDERED_LINES = [LINE_AUTORUN, LINE_PREREQ_STARTING, LINE_PREREQ_SUCCEEDED, LINE_STAGE_SPAWN]
 
 
 # A disposable process tree made only of Python: the parent spawns a
@@ -262,8 +292,24 @@ class SchemaTests(unittest.TestCase):
         self.assertTrue(manifest.tests)
         self.assertEqual(manifest.launch.kind, 'managed-launcher')
         self.assertEqual([marker.id for marker in manifest.ordered_markers],
-                         ['prerequisite-starting', 'prerequisite-succeeded', 'stage-spawn'])
-        self.assertEqual([item.id for item in manifest.manual_assertions], ['character-visible'])
+                         ['autorun-invoked', 'prerequisite-starting',
+                          'prerequisite-succeeded', 'stage-spawn'])
+        # §F: the human S/N is replaced by machine evidence, so the active round
+        # carries NO manual assertion and instead requires three terminal facts.
+        self.assertEqual([item.id for item in manifest.manual_assertions], [])
+        self.assertEqual([m.id for m in manifest.runtime.terminal],
+                         ['stage-renderer-ready', 'stage-window-visible',
+                          'stage-avatar-scene-mounted'])
+        self.assertTrue(manifest.runtime.forbidden)
+        # §E: the launcher is told to run the canonical Conversar itself.
+        self.assertEqual(manifest.launch.auto_action, 'conversar')
+        self.assertEqual(dict(manifest.launch.env),
+                         {'LIA_DEVFLOW_AUTORUN': 'conversar',
+                          'LIA_DEVFLOW_DIAGNOSTICS': '1'})
+        # §G: the generic driver hook exists and is wired to the autorun.
+        self.assertIsNotNone(manifest.scenario)
+        self.assertEqual(manifest.scenario.driver, 'autorun')
+        self.assertEqual(manifest.scenario.steps, ('conversar',))
         self.assertFalse(manifest.ready_for_publish)
         self.assertIsNone(manifest.tested_sha)
 
@@ -275,11 +321,50 @@ class SchemaTests(unittest.TestCase):
 
     def test_missing_required_key_is_an_error(self):
         for key in ('round', 'git', 'prepare', 'cleanup_profile', 'tests',
-                    'launch', 'diagnostics', 'manual_assertions', 'retention'):
+                    'launch', 'runtime_assertions', 'retention'):
             data = base_manifest()
             del data[key]
             with self.assertRaisesRegex(RoundSchemaError, key):
                 validate_round(data)
+
+    def test_a_round_needs_machine_evidence_or_a_human_never_neither(self):
+        data = base_manifest()
+        data['runtime_assertions']['terminal_markers'] = []
+        data['manual_assertions'] = []
+        with self.assertRaisesRegex(RoundSchemaError, 'terminal_markers'):
+            validate_round(data)
+        # Either one alone is enough.
+        data['manual_assertions'] = [{
+            'id': 'x', 'question': 'viu?', 'accept': ['S'], 'reject': ['N'],
+        }]
+        validate_round(data)
+
+    def test_launch_env_may_not_hijack_process_resolution(self):
+        for key in ('PATH', 'COMSPEC', 'SYSTEMROOT', 'PATHEXT', 'USERPROFILE'):
+            data = base_manifest()
+            data['launch']['env'] = {key: 'x'}
+            with self.assertRaisesRegex(RoundSchemaError, 'crítica'):
+                validate_round(data)
+
+    def test_unimplemented_auto_action_is_refused(self):
+        data = base_manifest()
+        data['launch']['auto_action'] = 'abrir-tudo'
+        with self.assertRaisesRegex(RoundSchemaError, 'não implementado'):
+            validate_round(data)
+
+    def test_unimplemented_scenario_driver_is_refused(self):
+        data = base_manifest()
+        data['scenario'] = {'driver': 'imagem-multimodal', 'steps': ['envie 3 imagens']}
+        with self.assertRaisesRegex(RoundSchemaError, 'não implementado'):
+            validate_round(data)
+
+    def test_diagnostics_key_from_v1_is_rejected(self):
+        data = base_manifest()
+        data['diagnostics'] = data.pop('runtime_assertions')
+        # The strict unknown-key check fires first, which is the point: a v1
+        # manifest is refused outright rather than silently half-migrated.
+        with self.assertRaisesRegex(RoundSchemaError, 'diagnostics'):
+            validate_round(data)
 
     def test_unknown_key_is_refused(self):
         data = base_manifest()
@@ -287,12 +372,24 @@ class SchemaTests(unittest.TestCase):
         with self.assertRaisesRegex(RoundSchemaError, 'surpresa'):
             validate_round(data)
 
-    def test_round_without_manual_assertion_is_refused(self):
-        # A round whose only evidence is a log could never prove a visual pass.
+    def test_a_round_without_evidence_of_any_kind_is_refused(self):
+        # A round whose only evidence is an ordinary log could never prove that
+        # anything appeared on screen. Machine evidence OR a human - not neither.
         data = base_manifest()
         data['manual_assertions'] = []
-        with self.assertRaisesRegex(RoundSchemaError, 'manual_assertions'):
+        data['runtime_assertions']['terminal_markers'] = []
+        with self.assertRaisesRegex(RoundSchemaError, 'terminal_markers'):
             validate_round(data)
+
+    def test_machine_evidence_alone_is_enough_but_common_logs_are_not(self):
+        data = base_manifest()
+        data['manual_assertions'] = []
+        validate_round(data)  # the active round itself: terminal markers only
+        # A dev-server "ready in" line is optional and must never be terminal.
+        optional = [m.id for m in validate_round(base_manifest()).runtime.optional]
+        terminal = [m.id for m in validate_round(base_manifest()).runtime.terminal]
+        self.assertIn('stage-dev-server-ready', optional)
+        self.assertNotIn('stage-dev-server-ready', terminal)
 
     def test_prepare_path_outside_cleanup_profile_is_refused(self):
         data = base_manifest()
@@ -411,10 +508,11 @@ class MarkerGateTests(unittest.TestCase):
         report = evaluate_markers(MARKER_LINES, self.ordered)
         self.assertTrue(report.ok)
         self.assertEqual([name for name, _ in report.matched],
-                         ['prerequisite-starting', 'prerequisite-succeeded', 'stage-spawn'])
+                         ['autorun-invoked', 'prerequisite-starting',
+                          'prerequisite-succeeded', 'stage-spawn'])
 
     def test_missing_marker_fails(self):
-        lines = [MARKER_LINES[0], MARKER_LINES[2]]
+        lines = [LINE_AUTORUN, LINE_PREREQ_STARTING, LINE_STAGE_SPAWN]
         report = evaluate_markers(lines, self.ordered)
         self.assertFalse(report.ok)
         self.assertEqual(report.missing, 'prerequisite-succeeded')
@@ -422,36 +520,41 @@ class MarkerGateTests(unittest.TestCase):
     def test_out_of_order_marker_fails(self):
         # Spawn BEFORE the prerequisite succeeded is exactly the M3.0a bug:
         # the renderer would be served against a stale artifact.
-        lines = [MARKER_LINES[2], MARKER_LINES[0], MARKER_LINES[1]]
+        lines = [LINE_AUTORUN, LINE_STAGE_SPAWN, LINE_PREREQ_STARTING,
+                 LINE_PREREQ_SUCCEEDED]
         report = evaluate_markers(lines, self.ordered)
         self.assertFalse(report.ok)
 
     def test_reason_must_match_too(self):
         lines = [
-            MARKER_LINES[0],
+            LINE_AUTORUN, LINE_PREREQ_STARTING,
             'stage-prerequisite name=core-agent-build state=succeeded reason=build-succeeded\n',
-            MARKER_LINES[2],
+            LINE_STAGE_SPAWN,
         ]
         self.assertTrue(evaluate_markers(lines, self.ordered).ok)
         wrong_reason = [
-            MARKER_LINES[0],
+            LINE_AUTORUN, LINE_PREREQ_STARTING,
             'stage-prerequisite name=core-agent-build state=succeeded reason=no-source-workspace\n',
-            MARKER_LINES[2],
+            LINE_STAGE_SPAWN,
         ]
         self.assertFalse(evaluate_markers(wrong_reason, self.ordered).ok)
 
     def test_optional_marker_never_gates(self):
-        report = evaluate_markers(MARKER_LINES, self.ordered, validate_round(base_manifest()).optional_markers)
+        report = evaluate_markers(MARKER_LINES, self.ordered,
+                                  validate_round(base_manifest()).optional_markers)
         self.assertTrue(report.ok)
-        self.assertIn('stage-ready', [name for name, _ in report.matched])
+        self.assertIn('stage-dev-server-ready', [name for name, _ in report.matched])
 
 
 # ---------------------------------------------------------------------------
 class RoundExecutionTests(unittest.TestCase):
+    """Uses the assertion-bearing manifest: these tests are about the human
+    step and about a full PASS being tied to an exact SHA."""
+
     def setUp(self) -> None:
         self.base = Path(tempfile.mkdtemp(prefix='devflow-run-'))
         self.repo = make_repo(self.base)
-        self.manifest = validate_round(runnable_manifest())
+        self.manifest = validate_round(manual_manifest())
 
     def tearDown(self) -> None:
         shutil.rmtree(self.base, ignore_errors=True)
@@ -482,14 +585,14 @@ class RoundExecutionTests(unittest.TestCase):
         self.assertTrue(any('RECUSADO' in line for line in emitted))
 
     def test_missing_marker_fails_the_round(self):
-        runner, _emitted, _asks = make_runner(self.repo, self.manifest, lines=[MARKER_LINES[0]])
+        runner, _emitted, _asks = make_runner(self.repo, self.manifest, lines=[LINE_AUTORUN])
         outcome = runner.execute()
         self.assertEqual(outcome.verdict, 'FAIL')
         self.assertFalse(outcome.markers.ok)
 
     def test_out_of_order_marker_fails_the_round(self):
         runner, _emitted, _asks = make_runner(self.repo, self.manifest,
-                                lines=[MARKER_LINES[2], MARKER_LINES[0], MARKER_LINES[1]])
+                                lines=[LINE_STAGE_SPAWN, LINE_AUTORUN, LINE_PREREQ_STARTING])
         outcome = runner.execute()
         self.assertEqual(outcome.verdict, 'FAIL')
 
@@ -695,7 +798,7 @@ class RequiredTestsTests(unittest.TestCase):
     def test_all_tests_passing_lets_the_launch_happen(self):
         spawner = fake_spawner(list(MARKER_LINES))
         runner, _, asks = make_runner(
-            self.repo, validate_round(runnable_manifest()), invoke_test=lambda a, c: (0, 'ok'))
+            self.repo, validate_round(manual_manifest()), invoke_test=lambda a, c: (0, 'ok'))
         runner.spawn = spawner
         outcome = runner.execute()
         self.assertEqual(outcome.verdict, 'PASS')
@@ -835,7 +938,7 @@ class ManualOrderingTests(unittest.TestCase):
     def setUp(self) -> None:
         self.base = Path(tempfile.mkdtemp(prefix='devflow-order-'))
         self.repo = make_repo(self.base)
-        self.manifest = validate_round(runnable_manifest())
+        self.manifest = validate_round(manual_manifest())
 
     def tearDown(self) -> None:
         shutil.rmtree(self.base, ignore_errors=True)
@@ -848,8 +951,8 @@ class ManualOrderingTests(unittest.TestCase):
         self.assertEqual(outcome.verdict, 'PASS')
 
     def test_marker_failure_asks_nothing(self):
-        spawner = fake_spawner([MARKER_LINES[0]])
-        runner, _, asks = make_runner(self.repo, self.manifest, lines=[MARKER_LINES[0]])
+        spawner = fake_spawner([LINE_AUTORUN])
+        runner, _, asks = make_runner(self.repo, self.manifest, lines=[LINE_AUTORUN])
         runner.spawn = spawner
         outcome = runner.execute()
         self.assertEqual(len(asks), 0)
@@ -859,7 +962,7 @@ class ManualOrderingTests(unittest.TestCase):
     def test_out_of_order_markers_ask_nothing(self):
         runner, _, asks = make_runner(
             self.repo, self.manifest,
-            lines=[MARKER_LINES[2], MARKER_LINES[0], MARKER_LINES[1]])
+            lines=[LINE_STAGE_SPAWN, LINE_AUTORUN, LINE_PREREQ_STARTING])
         outcome = runner.execute()
         self.assertEqual(len(asks), 0)
         self.assertEqual(outcome.verdict, 'FAIL')
@@ -1121,7 +1224,7 @@ class RoundTeardownTests(unittest.TestCase):
     def setUp(self) -> None:
         self.base = Path(tempfile.mkdtemp(prefix='devflow-teardown-'))
         self.repo = make_repo(self.base)
-        self.manifest = validate_round(runnable_manifest())
+        self.manifest = validate_round(manual_manifest())
 
     def tearDown(self) -> None:
         shutil.rmtree(self.base, ignore_errors=True)
@@ -1137,8 +1240,8 @@ class RoundTeardownTests(unittest.TestCase):
         self.assertEqual(outcome.launch_pid, 4242)
 
     def test_teardown_after_marker_failure(self):
-        spawner = fake_spawner([MARKER_LINES[0]])
-        runner, _, _ = make_runner(self.repo, self.manifest, lines=[MARKER_LINES[0]])
+        spawner = fake_spawner([LINE_AUTORUN])
+        runner, _, _ = make_runner(self.repo, self.manifest, lines=[LINE_AUTORUN])
         runner.spawn = spawner
         runner.execute()
         self.assertEqual(spawner.handles[0].terminate_calls, 1)
@@ -1499,6 +1602,555 @@ class FailureDiagnosticsTests(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn('test_quebra', detail)
         self.assertNotIn('ghp_', detail)
+
+
+# ---------------------------------------------------------------------------
+# DEVFLOW-AUTO: the fake Git used by the sync, checkpoint and publish tests.
+
+WORK = 'arena/01a10290-lia-project'
+
+
+class FakeGit:
+    """Scriptable git: records every argv and answers from a small state dict."""
+
+    def __init__(self, *, branch=WORK, head='a' * 40, remote_head=None,
+                 porcelain='', fetch_ok=True, rebase_ok=True, push_ok=True,
+                 remote_url='https://github.com/BloomRX/Lia-Project.git'):
+        self.branch = branch
+        self.head = head
+        self.remote_head = remote_head if remote_head is not None else head
+        self.porcelain = porcelain
+        self.fetch_ok = fetch_ok
+        self.rebase_ok = rebase_ok
+        self.push_ok = push_ok
+        self.remote_url = remote_url
+        self.calls: list[list[str]] = []
+        self.committed: list[str] = []
+
+    def __call__(self, args: list[str]) -> tuple[int, str]:
+        self.calls.append(list(args))
+        head = args[:1]
+        if head == ['remote'] and args[1:2] == ['get-url']:
+            return 0, self.remote_url
+        if head == ['rev-parse'] and args[1:2] == ['--abbrev-ref']:
+            return 0, self.branch
+        if head == ['rev-parse']:
+            if args[1].startswith('origin/'):
+                return (0, self.remote_head) if self.remote_head else (1, '')
+            return 0, self.head
+        if head == ['status']:
+            return 0, self.porcelain
+        if head == ['fetch']:
+            return (0, '') if self.fetch_ok else (1, 'fatal: unable to access remote')
+        if head == ['rebase']:
+            if args[1:2] == ['--abort']:
+                return 0, ''
+            if self.rebase_ok:
+                self.head = self.remote_head
+                return 0, ''
+            return 1, 'CONFLICT (content): Merge conflict in tools/x.py'
+        if head == ['commit']:
+            self.committed.append(args[args.index('-m') + 1])
+            self.head = 'c' * 40
+            return 0, ''
+        if head == ['push']:
+            return (0, '') if self.push_ok else (1, 'remote rejected')
+        if head == ['add']:
+            return 0, ''
+        return 0, ''
+
+    def argvs(self) -> list[str]:
+        return [' '.join(call) for call in self.calls]
+
+
+def make_sync(fake: FakeGit, **kwargs) -> 'sync.WorkBranchSync':
+    return sync.WorkBranchSync(Path('/repo'), work_branch=WORK, run_git=fake, **kwargs)
+
+
+class SyncPolicyTests(unittest.TestCase):
+    """§B/§C: deterministic sync, fail closed, never touch main."""
+
+    def test_clean_checkout_updates_without_asking_anything(self):
+        fake = FakeGit(head='a' * 40, remote_head='b' * 40)
+        outcome = make_sync(fake).pre_sync()
+        self.assertTrue(outcome.ok, outcome.reason)
+        self.assertTrue(outcome.facts.updated)
+        self.assertEqual(outcome.facts.final_head, 'b' * 40)
+        self.assertIn('fetch origin ' + WORK, fake.argvs())
+        self.assertIn('rebase origin/' + WORK, fake.argvs())
+
+    def test_already_current_branch_does_nothing_destructive(self):
+        fake = FakeGit(head='a' * 40, remote_head='a' * 40)
+        outcome = make_sync(fake).pre_sync()
+        self.assertTrue(outcome.ok)
+        self.assertFalse(outcome.facts.updated)
+        self.assertNotIn('rebase origin/' + WORK, fake.argvs())
+
+    def test_remote_unavailable_fails_closed(self):
+        fake = FakeGit(fetch_ok=False)
+        outcome = make_sync(fake).pre_sync()
+        self.assertFalse(outcome.ok)
+        self.assertEqual(outcome.stage, 'fetch')
+        self.assertIn('remote indisponível', outcome.reason)
+
+    def test_rebase_conflict_fails_closed_and_aborts(self):
+        fake = FakeGit(head='a' * 40, remote_head='b' * 40, rebase_ok=False)
+        outcome = make_sync(fake).pre_sync()
+        self.assertFalse(outcome.ok)
+        self.assertEqual(outcome.stage, 'rebase')
+        self.assertIn('CONFLICT', outcome.reason)
+        self.assertIn('rebase --abort', fake.argvs())
+        self.assertNotIn('push', ' '.join(fake.argvs()))
+
+    def test_main_is_never_synced(self):
+        for branch in ('main', 'master'):
+            fake = FakeGit(branch=branch)
+            outcome = make_sync(fake, main_branch=branch).pre_sync()
+            self.assertFalse(outcome.ok)
+            self.assertEqual(outcome.stage, 'identity')
+            self.assertIn('main', outcome.reason)
+
+    def test_wrong_repository_fails_closed(self):
+        fake = FakeGit(remote_url='https://github.com/someone/other-project.git')
+        outcome = make_sync(fake).pre_sync()
+        self.assertFalse(outcome.ok)
+        self.assertEqual(outcome.stage, 'identity')
+        self.assertIn('repositório inesperado', outcome.reason)
+
+    def test_wrong_branch_fails_closed(self):
+        fake = FakeGit(branch='feature/outra')
+        outcome = make_sync(fake).pre_sync()
+        self.assertFalse(outcome.ok)
+        self.assertIn('branch de trabalho', outcome.reason)
+
+    def test_no_force_and_no_main_anywhere_in_the_argv(self):
+        fake = FakeGit(head='a' * 40, remote_head='b' * 40)
+        make_sync(fake).pre_sync()
+        make_sync(fake).publish('b' * 40)
+        joined = ' '.join(fake.argvs())
+        for forbidden in ('--force', '-f ', 'reset --hard', 'clean ', 'stash'):
+            self.assertNotIn(forbidden, joined)
+        self.assertNotIn('push origin main', joined)
+
+    def test_the_work_branch_is_configured_not_guessed(self):
+        config = sync.load_devflow_config()
+        self.assertEqual(config.work_branch, WORK)
+        self.assertNotEqual(config.work_branch, config.main_branch)
+
+
+class LocalChangePolicyTests(unittest.TestCase):
+    """§C: local changes are classified; nothing is discarded."""
+
+    def setUp(self) -> None:
+        self.base = Path(tempfile.mkdtemp(prefix='devflow-local-'))
+        self.repo = make_repo(self.base)
+        (self.repo / 'tools').mkdir(parents=True, exist_ok=True)
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.base, ignore_errors=True)
+
+    def test_safe_source_diff_becomes_a_local_checkpoint(self):
+        (self.repo / 'tools' / 'novo.py').write_text('print(1)\n', encoding='utf-8')
+        fake = FakeGit(porcelain='?? tools/novo.py', head='a' * 40, remote_head='b' * 40)
+        outcome = sync.WorkBranchSync(self.repo, work_branch=WORK, run_git=fake).pre_sync()
+        self.assertTrue(outcome.ok, outcome.reason)
+        self.assertTrue(outcome.facts.checkpoint)
+        self.assertEqual(fake.committed, [sync.CHECKPOINT_MESSAGE])
+        self.assertTrue((self.repo / 'tools' / 'novo.py').exists())
+
+    def test_secret_blocks_the_checkpoint(self):
+        target = self.repo / 'tools' / 'nota.py'
+        target.write_text('KEY = "ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij"\n', encoding='utf-8')
+        fake = FakeGit(porcelain=' M tools/nota.py', head='a' * 40, remote_head='a' * 40)
+        outcome = sync.WorkBranchSync(self.repo, work_branch=WORK, run_git=fake).pre_sync()
+        self.assertFalse(outcome.ok)
+        self.assertEqual(outcome.stage, 'classify')
+        self.assertIn('segredos', outcome.reason)
+        self.assertEqual(fake.committed, [])
+
+    def test_forbidden_path_blocks_the_checkpoint(self):
+        (self.repo / 'airi' / '.env').write_text('X=1\n', encoding='utf-8')
+        fake = FakeGit(porcelain='?? airi/.env', head='a' * 40, remote_head='a' * 40)
+        outcome = sync.WorkBranchSync(self.repo, work_branch=WORK, run_git=fake).pre_sync()
+        self.assertFalse(outcome.ok)
+        self.assertIn('.env', outcome.reason)
+        self.assertEqual(fake.committed, [])
+
+    def test_huge_binary_blocks_the_checkpoint(self):
+        blob = self.repo / 'tools' / 'grande.ts'
+        blob.write_bytes(b'x' * (sync.MAX_CHECKPOINT_BYTES + 1))
+        fake = FakeGit(porcelain='?? tools/grande.ts', head='a' * 40, remote_head='a' * 40)
+        outcome = sync.WorkBranchSync(self.repo, work_branch=WORK, run_git=fake).pre_sync()
+        self.assertFalse(outcome.ok)
+        self.assertIn('maior que', outcome.reason)
+
+    def test_unknown_classification_blocks_the_checkpoint(self):
+        (self.repo / 'solto.py').write_text('x = 1\n', encoding='utf-8')
+        fake = FakeGit(porcelain='?? solto.py', head='a' * 40, remote_head='a' * 40)
+        outcome = sync.WorkBranchSync(self.repo, work_branch=WORK, run_git=fake).pre_sync()
+        self.assertFalse(outcome.ok)
+        self.assertIn('fora das raízes', outcome.reason)
+
+    def test_nothing_is_discarded_when_refusing(self):
+        (self.repo / 'airi' / '.env').write_text('SEGREDO=1\n', encoding='utf-8')
+        fake = FakeGit(porcelain='?? airi/.env', head='a' * 40, remote_head='a' * 40)
+        sync.WorkBranchSync(self.repo, work_branch=WORK, run_git=fake).pre_sync()
+        self.assertTrue((self.repo / 'airi' / '.env').exists())
+        self.assertNotIn('reset', ' '.join(fake.argvs()))
+        self.assertNotIn('clean', ' '.join(fake.argvs()))
+        self.assertNotIn('stash', ' '.join(fake.argvs()))
+        self.assertNotIn('checkout', ' '.join(fake.argvs()))
+
+
+class PublishPolicyTests(unittest.TestCase):
+    """§C post-gate: only the exact tested clean HEAD may be pushed."""
+
+    def test_only_the_exact_tested_head_may_push(self):
+        fake = FakeGit(head='a' * 40, remote_head='a' * 40)
+        outcome = make_sync(fake).publish('b' * 40)
+        self.assertFalse(outcome.ok)
+        self.assertIn('não é o HEAD testado', outcome.reason)
+        self.assertNotIn('push', ' '.join(fake.argvs()))
+
+    def test_head_changing_after_the_gate_invalidates_the_push(self):
+        fake = FakeGit(head='c' * 40, remote_head='a' * 40)
+        self.assertFalse(make_sync(fake).publish('a' * 40).ok)
+
+    def test_dirty_checkout_may_not_push(self):
+        fake = FakeGit(head='a' * 40, remote_head='a' * 40, porcelain=' M tools/x.py')
+        outcome = make_sync(fake).publish('a' * 40)
+        self.assertFalse(outcome.ok)
+        self.assertIn('não está limpo', outcome.reason)
+
+    def test_remote_moving_between_gate_and_publish_forces_revalidation(self):
+        fake = FakeGit(head='a' * 40, remote_head='d' * 40)
+        outcome = make_sync(fake).publish('a' * 40)
+        self.assertFalse(outcome.ok)
+        self.assertIn('remote avançou', outcome.reason)
+        self.assertNotIn('push', ' '.join(fake.argvs()))
+
+    def test_clean_exact_head_pushes_without_force(self):
+        fake = FakeGit(head='a' * 40, remote_head='a' * 40)
+        outcome = make_sync(fake).publish('a' * 40)
+        self.assertTrue(outcome.ok, outcome.reason)
+        self.assertIn('push origin HEAD:' + WORK, fake.argvs())
+        self.assertNotIn('--force', ' '.join(fake.argvs()))
+
+    def test_main_can_never_be_published(self):
+        fake = FakeGit(branch='main', head='a' * 40, remote_head='a' * 40)
+        outcome = make_sync(fake, main_branch='main').publish('a' * 40)
+        self.assertFalse(outcome.ok)
+        self.assertNotIn('push', ' '.join(fake.argvs()))
+
+
+class RuntimeGateTests(unittest.TestCase):
+    """§F: the machine evidence that replaced the human S/N."""
+
+    def setUp(self) -> None:
+        self.base = Path(tempfile.mkdtemp(prefix='devflow-gate-'))
+        self.repo = make_repo(self.base)
+        self.manifest = validate_round(runnable_manifest())
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.base, ignore_errors=True)
+
+    def _run(self, lines, ask=lambda q, o: 'S'):
+        spawner = fake_spawner(lines)
+        runner, emitted, asks = make_runner(self.repo, self.manifest, lines=lines, ask=ask)
+        runner.spawn = spawner
+        return runner.execute(), emitted, asks, spawner
+
+    def test_all_evidence_passes_with_no_human_question(self):
+        outcome, _, asks, _ = self._run(list(MARKER_LINES))
+        self.assertEqual(outcome.verdict, 'PASS')
+        self.assertEqual(len(asks), 0, 'esta rodada não exige afirmação humana')
+        self.assertEqual(outcome.terminal_seen,
+                         ['stage-renderer-ready', 'stage-window-visible',
+                          'stage-avatar-scene-mounted'])
+
+    def test_missing_renderer_ready_fails(self):
+        lines = [line for line in MARKER_LINES if line is not LINE_RENDERER_READY]
+        outcome, emitted, _, _ = self._run(lines)
+        self.assertEqual(outcome.verdict, 'FAIL')
+        self.assertNotIn('stage-renderer-ready', outcome.terminal_seen)
+        self.assertTrue(any('AUSENTE' in line for line in emitted))
+
+    def test_missing_visible_window_fails(self):
+        lines = [line for line in MARKER_LINES if line is not LINE_WINDOW_VISIBLE]
+        self.assertEqual(self._run(lines)[0].verdict, 'FAIL')
+
+    def test_missing_avatar_scene_fails(self):
+        lines = [line for line in MARKER_LINES if line is not LINE_AVATAR_MOUNTED]
+        outcome, _, _, _ = self._run(lines)
+        self.assertEqual(outcome.verdict, 'FAIL')
+        self.assertNotIn('stage-avatar-scene-mounted', outcome.terminal_seen)
+
+    def test_process_exiting_early_fails(self):
+        outcome, _, asks, _ = self._run([], )
+        self.assertEqual(outcome.verdict, 'FAIL')
+        self.assertEqual(len(asks), 0)
+
+    def test_forbidden_marker_fails_even_with_everything_else(self):
+        lines = list(MARKER_LINES) + [
+            '[lia] stage-prerequisite name=core-agent-build state=failed reason=exit:1\n']
+        outcome, emitted, _, _ = self._run(lines)
+        self.assertEqual(outcome.verdict, 'FAIL')
+        self.assertIn('prerequisite-failed', outcome.forbidden_seen)
+        self.assertTrue(any('PROIBIDO' in line for line in emitted))
+
+    def test_a_dev_server_ready_line_alone_is_never_enough(self):
+        outcome, _, _, _ = self._run([LINE_AUTORUN, LINE_PREREQ_STARTING,
+                                      LINE_PREREQ_SUCCEEDED, LINE_STAGE_SPAWN,
+                                      LINE_DEV_SERVER_READY])
+        self.assertEqual(outcome.verdict, 'FAIL')
+
+    def test_the_launcher_receives_the_devflow_environment(self):
+        _, _, _, spawner = self._run(list(MARKER_LINES))
+        self.assertEqual(spawner.envs[0], {'LIA_DEVFLOW_AUTORUN': 'conversar',
+                                           'LIA_DEVFLOW_DIAGNOSTICS': '1'})
+
+    def test_the_failed_round_reports_its_stage_and_evidence(self):
+        lines = [line for line in MARKER_LINES if line is not LINE_AVATAR_MOUNTED]
+        outcome, _, _, _ = self._run(lines)
+        payload = json.loads(Path(outcome.artifacts['json']).read_text(encoding='utf-8'))
+        self.assertEqual(payload['stage'], 'runtime')
+        self.assertIn('stage-avatar-scene-mounted', payload['markers']['terminal_missing'])
+        report_text = Path(outcome.artifacts['report']).read_text(encoding='utf-8')
+        self.assertIn('stage-avatar-scene-mounted: AUSENTE', report_text)
+
+
+class BootstrapTests(unittest.TestCase):
+    """§B: the bootstrap updates first, then runs the UPDATED code."""
+
+    def test_bootstrap_resyncs_and_reexecutes_a_fresh_interpreter(self):
+        fake = FakeGit(head='a' * 40, remote_head='b' * 40)
+        calls: list[list[str]] = []
+
+        class Done(Exception):
+            pass
+
+        def fake_run(argv, **kwargs):
+            calls.append(list(argv))
+            raise Done
+
+        real_run = lia_dev.subprocess.run
+        real_git = lia_dev_subsync = None
+        lia_dev.subprocess.run = fake_run
+        try:
+            with patch.object(sync, '_git', lambda repo, args: fake(args)):
+                with self.assertRaises(Done):
+                    lia_dev.cmd_bootstrap(argparse.Namespace())
+        finally:
+            lia_dev.subprocess.run = real_run
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0][0], sys.executable)
+        self.assertEqual(calls[0][-2:], ['auto', '--post-sync'])
+
+    def test_bootstrap_refuses_without_touching_the_checkout_on_fetch_failure(self):
+        fake = FakeGit(fetch_ok=False)
+        with patch.object(sync, '_git', lambda repo, args: fake(args)):
+            code = lia_dev.cmd_bootstrap(argparse.Namespace())
+        self.assertEqual(code, 1)
+        self.assertNotIn('push', ' '.join(fake.argvs()))
+
+    def test_the_bootstrap_imports_nothing_heavy_before_the_sync(self):
+        """A stale in-memory module must never evaluate the gate."""
+        source = SUITE_PATH.parent.joinpath('devflow', 'pipeline.py').read_text(encoding='utf-8')
+        lia_source = (SUITE_PATH.parent / 'lia_dev.py').read_text(encoding='utf-8')
+        start = lia_source.index('def cmd_bootstrap')
+        end = lia_source.index('def cmd_auto')
+        body = lia_source[start:end]
+        self.assertNotIn('import pipeline', body)
+        self.assertNotIn('RoundRunner(', body)
+        self.assertIn("'auto', '--post-sync'", body)
+        self.assertIn('pipeline', source)  # the fresh process is what loads it
+
+
+class DefaultUxTests(unittest.TestCase):
+    """§A/§M: double-click means AUTO and nothing asks anything."""
+
+    def test_no_arguments_means_auto(self):
+        args = lia_dev.build_parser().parse_args([])
+        handler = lia_dev.HANDLERS.get(args.cmd or 'auto', lia_dev.cmd_auto)
+        self.assertIs(handler, lia_dev.cmd_auto)
+
+    def test_advanced_commands_still_exist_behind_arguments(self):
+        for name in ('menu', 'round', 'status', 'open', 'diagnose', 'rounds'):
+            self.assertIn(name, lia_dev.HANDLERS)
+
+    def test_devkit_bat_double_click_runs_the_bootstrap(self):
+        bat = (SUITE_PATH.parent.parent / 'DevKit.bat').read_text(encoding='utf-8')
+        self.assertIn('lia_dev.py" bootstrap', bat)
+        # A bare double-click must never land in a menu or a Git submenu.
+        self.assertNotIn('lia_dev.py" menu', bat)
+
+    def test_devkit_bat_copies_itself_before_running(self):
+        bat = (SUITE_PATH.parent.parent / 'DevKit.bat').read_text(encoding='utf-8')
+        self.assertIn('LIA_DEVKIT_BOOTSTRAP_COPY', bat)
+        self.assertIn('lia-devkit-bootstrap.bat', bat)
+
+    def test_auto_never_prompts_on_a_healthy_path(self):
+        """Behavioural: any input() anywhere in AUTO raises and fails this."""
+        fake = FakeGit(head='a' * 40, remote_head='a' * 40)
+        base = Path(tempfile.mkdtemp(prefix='devflow-ux-'))
+        self.addCleanup(shutil.rmtree, base, True)
+        repo = make_repo(base)
+        manifest = validate_round(runnable_manifest())
+
+        def exploding_ask(question, options):
+            raise AssertionError(f'AUTO perguntou algo ao usuário: {question!r}')
+
+        runner = RoundRunner(round_manifest=manifest, repo=repo,
+                             run_git=lambda args: fake(args),
+                             spawn=fake_spawner(list(MARKER_LINES)),
+                             ask=exploding_ask, invoke_test=passing_tests)
+        emitted: list[str] = []
+
+        def boom(*_a, **_k):
+            raise AssertionError('AUTO chamou input()')
+
+        with patch('builtins.input', boom):
+            with patch.object(sync, '_git', lambda r, args: fake(args)):
+                result = pipeline.run_auto(
+                    repo, work_branch=WORK, run_git=lambda args: fake(args),
+                    emit=emitted.append, runner_factory=lambda m: runner,
+                    load_round=lambda: manifest)
+        self.assertEqual(result.result, 'PASS', result.reason)
+
+    def test_no_input_call_exists_in_the_auto_path(self):
+        """Defence in depth behind the behavioural proof above."""
+        tree = ast.parse((SUITE_PATH.parent / 'lia_dev.py').read_text(encoding='utf-8'))
+        offenders = []
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call):
+                func = node.func
+                name = func.id if isinstance(func, ast.Name) else getattr(func, 'attr', '')
+                if name == 'input':
+                    offenders.append(node.lineno)
+        allowed = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef) and node.name in ('cmd_menu', '_universal_devkit'):
+                for inner in ast.walk(node):
+                    if isinstance(inner, ast.Call):
+                        f = inner.func
+                        n = f.id if isinstance(f, ast.Name) else getattr(f, 'attr', '')
+                        if n == 'input':
+                            allowed.add(inner.lineno)
+        self.assertEqual(sorted(set(offenders) - allowed), [],
+                         'input() fora do menu interativo')
+        pipeline_source = (SUITE_PATH.parent / 'devflow' / 'pipeline.py').read_text(encoding='utf-8')
+        self.assertNotIn('input(', pipeline_source, 'input() em pipeline.py')
+        # runner.py keeps console_asker for rounds that still carry a human
+        # assertion; the only input() allowed there is inside that one function.
+        runner_tree = ast.parse(
+            (SUITE_PATH.parent / 'devflow' / 'runner.py').read_text(encoding='utf-8'))
+        for node in ast.walk(runner_tree):
+            if isinstance(node, ast.Call):
+                func = node.func
+                name = func.id if isinstance(func, ast.Name) else getattr(func, 'attr', '')
+                if name != 'input':
+                    continue
+                owners = [parent.name for parent in ast.walk(runner_tree)
+                          if isinstance(parent, ast.FunctionDef)
+                          and any(child is node for child in ast.walk(parent))]
+                self.assertEqual(owners, ['console_asker'],
+                                 'input() fora de console_asker no runner')
+
+    def test_the_final_block_is_a_verdict_not_a_menu(self):
+        result = pipeline.AutoResult(result='PASS', round_id='M3.0b',
+                                     tested_head='a' * 40, sync_ok=True, tests_ok=True,
+                                     runtime_ok=True, publish='nothing-to-push', stage='publish')
+        block = pipeline.render_final_block(result)
+        self.assertIn('LIA DEVFLOW', block)
+        self.assertIn('Result: PASS', block)
+        self.assertIn('Push: nothing-to-push', block)
+        self.assertNotIn('Escolha', block)
+        self.assertNotIn('Pressione 1', block)
+
+    def test_the_failure_block_names_the_stage_and_promises_nothing_destructive(self):
+        result = pipeline.AutoResult(result='FAIL', stage='runtime', reason='sem evidência')
+        block = pipeline.render_final_block(result)
+        self.assertIn('Result: FAIL', block)
+        self.assertIn('Stage: runtime', block)
+        self.assertIn('No destructive recovery was attempted.', block)
+
+
+class AutoPipelineTests(unittest.TestCase):
+    """§D/§K: the whole pipeline, stage by stage."""
+
+    def setUp(self) -> None:
+        self.base = Path(tempfile.mkdtemp(prefix='devflow-auto-'))
+        self.repo = make_repo(self.base)
+        (self.repo / 'tools').mkdir(parents=True, exist_ok=True)
+        self.manifest = validate_round(runnable_manifest())
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.base, ignore_errors=True)
+
+    def _pipeline(self, fake, lines=None, invoke=passing_tests):
+        runner = RoundRunner(
+            round_manifest=self.manifest, repo=self.repo,
+            run_git=lambda args: fake(args),
+            spawn=fake_spawner(list(MARKER_LINES if lines is None else lines)),
+            ask=lambda q, o: 'S', invoke_test=invoke)
+        return pipeline.run_auto(
+            self.repo, work_branch=WORK, run_git=lambda args: fake(args),
+            emit=lambda _line: None, runner_factory=lambda m: runner,
+            load_round=lambda: self.manifest)
+
+    def test_a_healthy_run_records_every_stage_and_passes(self):
+        fake = FakeGit(head='a' * 40, remote_head='a' * 40)
+        result = self._pipeline(fake)
+        self.assertEqual(result.result, 'PASS', result.reason)
+        names = [stage.name for stage in result.stages]
+        for expected in ('bootstrap', 'sync', 'tests', 'runtime', 'teardown', 'publish'):
+            self.assertIn(expected, names)
+        self.assertTrue(result.sync_ok and result.tests_ok and result.runtime_ok)
+        self.assertTrue(result.report_path)
+        # ready_for_publish=false, so nothing may be pushed.
+        self.assertEqual(result.publish, 'skipped')
+        self.assertNotIn('push', ' '.join(fake.argvs()))
+
+    def test_a_failed_gate_never_publishes_a_local_checkpoint(self):
+        fake = FakeGit(porcelain='?? tools/novo.py', head='a' * 40, remote_head='b' * 40)
+        (self.repo / 'tools' / 'novo.py').write_text('x = 1\n', encoding='utf-8')
+        result = self._pipeline(fake, lines=[LINE_AUTORUN])
+        self.assertEqual(result.result, 'FAIL')
+        self.assertNotIn('push', ' '.join(fake.argvs()))
+        self.assertTrue((self.repo / 'tools' / 'novo.py').exists())
+
+    def test_a_failing_required_test_stops_before_the_runtime_gate(self):
+        fake = FakeGit(head='a' * 40, remote_head='a' * 40)
+        result = self._pipeline(fake, invoke=lambda a, c: (1, 'FAILED (failures=1)'))
+        self.assertEqual(result.result, 'FAIL')
+        self.assertFalse(result.tests_ok)
+        self.assertNotIn('push', ' '.join(fake.argvs()))
+
+    def test_sync_refusal_stops_everything(self):
+        fake = FakeGit(fetch_ok=False)
+        result = self._pipeline(fake)
+        self.assertEqual(result.result, 'FAIL')
+        self.assertEqual(result.stage, 'fetch')
+        self.assertIn('remote indisponível', result.reason)
+
+    def test_the_round_is_resolved_after_the_sync(self):
+        """Running the pre-sync manifest would validate code that moved."""
+        seen: list[str] = []
+        fake = FakeGit(head='a' * 40, remote_head='b' * 40)
+
+        def loader():
+            seen.append(fake.head)
+            return self.manifest
+
+        runner = RoundRunner(
+            round_manifest=self.manifest, repo=self.repo,
+            run_git=lambda args: fake(args),
+            spawn=fake_spawner(list(MARKER_LINES)),
+            ask=lambda q, o: 'S', invoke_test=passing_tests)
+        pipeline.run_auto(self.repo, work_branch=WORK, run_git=lambda args: fake(args),
+                          emit=lambda _l: None, runner_factory=lambda m: runner,
+                          load_round=loader)
+        self.assertEqual(seen, ['b' * 40], 'a rodada deve ser lida DEPOIS do sync')
 
 
 

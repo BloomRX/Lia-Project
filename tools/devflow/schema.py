@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 DEVFLOW_DIR = Path(__file__).resolve().parent
 ROUNDS_DIR = DEVFLOW_DIR / 'rounds'
@@ -58,11 +58,55 @@ class Marker:
         return self.pattern in line and (not self.also or self.also in line)
 
 
+# A round must prove its outcome by machine evidence, by a human assertion, or
+# by both. It may never prove it by neither: "the dev server said ready" is not
+# evidence that anything the user can see actually appeared.
+SUPPORTED_AUTO_ACTIONS = ('', 'conversar')
+SUPPORTED_SCENARIO_DRIVERS = ('', 'autorun')
+# Env keys that would let a manifest hijack process resolution. Never allowed.
+FORBIDDEN_ENV_KEYS = frozenset({
+    'PATH', 'PATHEXT', 'SYSTEMROOT', 'WINDIR', 'COMSPEC', 'HOME', 'USERPROFILE',
+    'SYSTEMDRIVE', 'TEMP', 'TMP', 'APPDATA', 'LOCALAPPDATA', 'PROGRAMFILES',
+})
+
+
 @dataclass(frozen=True)
 class LaunchSpec:
     kind: str
     command: tuple[str, ...]
     operator_hint: str
+    # Extra environment for the launched process. Fixed strings from the
+    # manifest only - never interpolated from anything user supplied.
+    env: tuple[tuple[str, str], ...] = ()
+    # The DEVFLOW-only autorun the launcher performs (see devflow-autorun.ts).
+    auto_action: str = ''
+
+
+@dataclass(frozen=True)
+class RuntimeAssertions:
+    """Machine-verifiable runtime evidence, in the order it must appear."""
+
+    ordered: tuple[Marker, ...]
+    # Every one of these must appear (after the ordered chain) for a PASS.
+    terminal: tuple[Marker, ...] = ()
+    # Any one of these appearing at all is an immediate FAIL.
+    forbidden: tuple[Marker, ...] = ()
+    optional: tuple[Marker, ...] = ()
+
+
+@dataclass(frozen=True)
+class Scenario:
+    """
+    Generic zero-choice driver hook.
+
+    Present so future rounds (multimodal image gate, historical-image context,
+    text-only routing, provider budget, tool calls) can be driven without a
+    human typing a prompt. Only the driver named here is implemented; an
+    unimplemented driver is a schema error, never a silent no-op.
+    """
+
+    driver: str
+    steps: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -91,10 +135,18 @@ class Round:
     cleanup: CleanupProfile
     tests: tuple[RoundTest, ...]
     launch: LaunchSpec
-    ordered_markers: tuple[Marker, ...]
-    optional_markers: tuple[Marker, ...]
+    runtime: RuntimeAssertions
+    scenario: Scenario | None
     manual_assertions: tuple[ManualAssertion, ...]
     retention: Retention
+
+    @property
+    def ordered_markers(self) -> tuple[Marker, ...]:
+        return self.runtime.ordered
+
+    @property
+    def optional_markers(self) -> tuple[Marker, ...]:
+        return self.runtime.optional
     source: Path = field(default=Path('.'), compare=False)
 
 
@@ -143,7 +195,7 @@ def validate_round(data: Any, source: Path | None = None) -> Round:
     _reject_unknown(
         data,
         {'schema_version', 'round', 'git', 'prepare', 'cleanup_profile', 'tests',
-         'launch', 'diagnostics', 'manual_assertions', 'retention'},
+         'launch', 'runtime_assertions', 'scenario', 'manual_assertions', 'retention'},
         'manifesto',
     )
 
@@ -198,22 +250,67 @@ def validate_round(data: Any, source: Path | None = None) -> Round:
         ))
 
     launch = _require(data, 'launch', 'manifesto')
-    _reject_unknown(launch, {'kind', 'command', 'operator_hint'}, 'launch')
+    _reject_unknown(launch, {'kind', 'command', 'operator_hint', 'env', 'auto_action'}, 'launch')
     launch_kind = _as_str(_require(launch, 'kind', 'launch'), 'launch.kind')
     if launch_kind != 'managed-launcher':
-        raise RoundSchemaError(f'launch.kind={launch_kind!r} não suportado em D1')
+        raise RoundSchemaError(f'launch.kind={launch_kind!r} não suportado')
 
-    diagnostics = _require(data, 'diagnostics', 'manifesto')
-    _reject_unknown(diagnostics, {'ordered_markers', 'optional_markers'}, 'diagnostics')
-    ordered = [_marker(item, f'ordered_markers[{i}]')
-               for i, item in enumerate(_require(diagnostics, 'ordered_markers', 'diagnostics'))]
-    optional = [_marker(item, f'optional_markers[{i}]')
-                for i, item in enumerate(diagnostics.get('optional_markers', []))]
+    raw_env = launch.get('env', {})
+    if not isinstance(raw_env, dict):
+        raise RoundSchemaError('launch.env: esperado um objeto de texto->texto')
+    launch_env: list[tuple[str, str]] = []
+    for key, value in raw_env.items():
+        name = _as_str(key, 'launch.env[chave]')
+        if name.upper() in FORBIDDEN_ENV_KEYS:
+            raise RoundSchemaError(
+                f'launch.env[{name!r}]: variável crítica de processo; um manifesto não pode defini-la',
+            )
+        launch_env.append((name, _as_str(value, f'launch.env.{name}', allow_empty=True)))
+
+    auto_action = _as_str(launch.get('auto_action', ''), 'launch.auto_action', allow_empty=True)
+    if auto_action not in SUPPORTED_AUTO_ACTIONS:
+        raise RoundSchemaError(
+            f'launch.auto_action={auto_action!r} não implementado '
+            f'(suportados: {sorted(SUPPORTED_AUTO_ACTIONS)})',
+        )
+
+    runtime = _require(data, 'runtime_assertions', 'manifesto')
+    _reject_unknown(
+        runtime,
+        {'ordered_markers', 'terminal_markers', 'forbidden_markers', 'optional_markers'},
+        'runtime_assertions',
+    )
+
+    def _markers(key: str) -> list[Marker]:
+        return [_marker(item, f'{key}[{i}]') for i, item in enumerate(runtime.get(key, []))]
+
+    ordered = _markers('ordered_markers')
+    terminal = _markers('terminal_markers')
+    forbidden = _markers('forbidden_markers')
+    optional = _markers('optional_markers')
     if not ordered:
-        raise RoundSchemaError('diagnostics.ordered_markers: precisa de ao menos um marcador')
+        raise RoundSchemaError('runtime_assertions.ordered_markers: precisa de ao menos um marcador')
+
+    scenario: Scenario | None = None
+    if 'scenario' in data:
+        raw_scenario = data['scenario']
+        _reject_unknown(raw_scenario, {'driver', 'steps'}, 'scenario')
+        driver = _as_str(_require(raw_scenario, 'driver', 'scenario'), 'scenario.driver')
+        if driver not in SUPPORTED_SCENARIO_DRIVERS:
+            raise RoundSchemaError(
+                f'scenario.driver={driver!r} não implementado '
+                f'(suportados: {sorted(SUPPORTED_SCENARIO_DRIVERS)})',
+            )
+        steps = raw_scenario.get('steps', [])
+        if not isinstance(steps, list):
+            raise RoundSchemaError('scenario.steps: esperado uma lista de textos')
+        scenario = Scenario(
+            driver=driver,
+            steps=tuple(_as_str(item, f'scenario.steps[{i}]') for i, item in enumerate(steps)),
+        )
 
     manuals: list[ManualAssertion] = []
-    for index, item in enumerate(_require(data, 'manual_assertions', 'manifesto')):
+    for index, item in enumerate(data.get('manual_assertions', [])):
         where = f'manual_assertions[{index}]'
         _reject_unknown(item, {'id', 'question', 'accept', 'reject'}, where)
         manuals.append(ManualAssertion(
@@ -222,10 +319,10 @@ def validate_round(data: Any, source: Path | None = None) -> Round:
             accept=_as_str_tuple(_require(item, 'accept', where), f'{where}.accept'),
             reject=_as_str_tuple(_require(item, 'reject', where), f'{where}.reject'),
         ))
-    if not manuals:
+    if not manuals and not terminal:
         raise RoundSchemaError(
-            'manual_assertions: uma rodada precisa de ao menos uma afirmação humana; '
-            'logs nunca provam o que a pessoa viu',
+            'a rodada precisa de terminal_markers verificáveis por máquina OU de ao menos '
+            'uma afirmação humana; logs comuns nunca provam o que apareceu na tela',
         )
 
     retention = _require(data, 'retention', 'manifesto')
@@ -261,9 +358,16 @@ def validate_round(data: Any, source: Path | None = None) -> Round:
             kind=launch_kind,
             command=_as_str_tuple(_require(launch, 'command', 'launch'), 'launch.command'),
             operator_hint=_as_str(_require(launch, 'operator_hint', 'launch'), 'launch.operator_hint'),
+            env=tuple(launch_env),
+            auto_action=auto_action,
         ),
-        ordered_markers=tuple(ordered),
-        optional_markers=tuple(optional),
+        runtime=RuntimeAssertions(
+            ordered=tuple(ordered),
+            terminal=tuple(terminal),
+            forbidden=tuple(forbidden),
+            optional=tuple(optional),
+        ),
+        scenario=scenario,
         manual_assertions=tuple(manuals),
         retention=Retention(
             keep_runs=int(_require(retention, 'keep_runs', 'retention')),

@@ -161,3 +161,12 @@ createApp(App)
   .use(Tres)
   .use(trackButtonPlugin)
   .mount('#app')
+
+// DEVFLOW-ONLY evidence that the scene graph really mounted. This is the exact
+// fact that a stale core-agent/dist used to destroy while the window still
+// showed a taskbar icon. Fire-and-forget and inert in a normal launch: the main
+// process registers no listener unless LIA_DEVFLOW_DIAGNOSTICS=1.
+try {
+  window.electron?.ipcRenderer?.send?.('lia-devflow:scene-mounted')
+}
+catch {}

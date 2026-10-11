@@ -105,6 +105,100 @@ vault, imagem, prompt ou conversa é gravado: toda linha passa pelo redator univ
 `tools/project_cli.py`, o diretório home vira `<HOME>`, e linhas que não têm forma de
 diagnóstico do launcher são **descartadas** (a quantidade descartada é reportada).
 
+## AUTO: o piloto automático de um clique
+
+O contrato humano é **um só**: duplo clique em `DevKit.bat`. Sem menu, sem número, sem
+submenu Git, sem pull manual, sem build manual, sem clique em "Conversar com Lia", sem
+resposta S/N. No caminho saudável a contagem de interações é **zero**.
+
+```
+DevKit.bat  ->  copia a si mesmo para %TEMP% e reexecuta a cópia
+            ->  tools/lia_dev.py bootstrap
+            ->  sincroniza o branch de trabalho
+            ->  processo NOVO: tools/lia_dev.py auto --post-sync
+            ->  bootstrap | sync | classificação | checkpoint | prepare
+                | tests | runtime | teardown | publish
+            ->  bloco final PASS/FAIL
+```
+
+Comandos avançados continuam existindo **só com argumento explícito**:
+`DevKit.bat menu|round|status|open|diagnose|rounds` e `DevKit.bat git <subcomando>`.
+
+### Por que o .bat se copia
+
+O `cmd.exe` lê o `.bat` incrementalmente, por deslocamento de byte. Se o checkout for
+atualizado por cima dele no meio da execução, o script em andamento se corrompe. A cópia em
+`%TEMP%` elimina isso: o original pode ser sobrescrito à vontade.
+
+### Por que um processo novo depois do sync
+
+O bootstrap importa apenas o módulo de sincronização. A rodada em si roda num **processo
+novo**, lançado depois do sync — é isso que garante que o código que avalia o gate é o
+recém-atualizado, e não uma mistura de módulos antigos já importados com novos. O manifesto
+da rodada também é lido **depois** do sync, pelo mesmo motivo.
+
+### Política Git de zero escolha
+
+O branch de trabalho é **configurado** em `tools/devflow/devflow-config.json`, nunca
+adivinhado. Regras duras: nunca atualiza nem publica o `main`; nunca `--force`; nunca
+`reset --hard`, `clean` ou `stash`; nenhum conflito resolvido automaticamente.
+
+Antes do sync, com o checkout limpo: `fetch` + `rebase` sem perguntar nada. Com alterações
+locais, elas são **classificadas**:
+
+- segredo (`.env`, credencial, token, vault, `lia-product.json`) ⇒ **bloqueia**;
+- caminho fora das raízes de código do projeto (classificação desconhecida) ⇒ **bloqueia**;
+- peso de modelo ou binário opaco (`.safetensors`, `.onnx`, `.bin`, `.exe`, …) ⇒ **bloqueia**;
+- arquivo acima de 5 MB ⇒ **bloqueia**;
+- tudo o resto é código-fonte do projeto ⇒ passa pelo verificador de segredos **universal**
+  e vira um **checkpoint local** com mensagem determinística.
+
+Ambíguo ⇒ **FAIL CLOSED**: nada é descartado, nada é escondido em stash, o motivo é impresso.
+
+Depois do gate: só o **HEAD exato testado** e com checkout limpo pode ser publicado. Se o
+HEAD mudou, ou o remote avançou entre o gate e a publicação, a publicação é recusada e a
+rodada pede revalidação. Gate reprovado **nunca** publica um checkpoint local "para salvar o
+progresso".
+
+### O clique em "Conversar" virou automático
+
+`LIA_DEVFLOW_AUTORUN=conversar` faz o Launcher chamar **exatamente** `host.conversar()` — a
+mesma função que o botão alcança pelo handler IPC `lia:stage:start`. Não há caminho
+alternativo de Stage: a rodada continua validando
+`Lia.bat → Launcher → AiriStageManager → Stage`, que é justamente o que a M3.0b existe para
+provar. Fora desse valor exato de flag, o Launcher não inicia nada sozinho e o clique
+explícito continua obrigatório.
+
+### O S/N virou evidência de máquina
+
+A M3.0b nasceu porque o Stage já teve ícone na barra **sem superfície visível**: um
+`core-agent/dist` obsoleto fazia o renderer falhar ao instanciar seus módulos. "ready in
+512 ms" não prova nada disso. Por isso o gate exige, além da cadeia ordenada, três fatos
+terminais vindos de quem realmente os conhece:
+
+| marcador | quem emite | o que prova |
+| --- | --- | --- |
+| `lia-stage renderer=ready` | main do Stage, `did-finish-load` | o documento do renderer carregou |
+| `lia-stage window=visible` | main do Stage, depois de `show()` | a `BrowserWindow` chegou ao estado visível |
+| `lia-stage avatar-scene=mounted` | renderer → IPC → main | o Vue montou, ou seja, os módulos instanciaram |
+
+Faltar qualquer um ⇒ **FAIL**. Marcador proibido (`state=failed`, `autorun=failed`) ⇒
+**FAIL**. Tudo isso é inerte sem `LIA_DEVFLOW_DIAGNOSTICS=1`, que só o DevFlow define; num
+launch normal nenhum listener é registrado e nada é logado. São apenas metadados: nenhum
+prompt, imagem, mensagem, chave ou dado de vault.
+
+O schema passou para **v2**: `diagnostics` virou `runtime_assertions`
+(`ordered_markers` / `terminal_markers` / `forbidden_markers` / `optional_markers`),
+`launch` ganhou `env` e `auto_action`, e existe um `scenario { driver, steps }` genérico para
+que rodadas futuras (gate de imagem multimodal, contexto de imagens históricas, roteamento
+só-texto, orçamento de provedor, chamadas de ferramenta) sejam dirigíveis sem ninguém digitar
+prompt. **Nenhuma dessas rodadas foi implementada** — só a arquitetura.
+
+Invariantes que o schema impõe: uma rodada precisa de `terminal_markers` **ou** de ao menos
+uma afirmação humana, **nunca de nenhum dos dois**; `launch.env` não pode definir variáveis
+críticas de processo (`PATH`, `COMSPEC`, `SYSTEMROOT`, …); `auto_action` e `scenario.driver`
+não implementados são erro, não no-op silencioso.
+
 ## Segurança
 
 - nenhum `git clean`, `git reset --hard`, force-push ou recursão fora de allowlist;
@@ -240,7 +334,10 @@ limpo. Não há contradição: `run.json` prova o que foi testado; o manifesto d
 
 ## Estado
 
-- **D1 existiu** no commit `32025ab`; **D1.1** no `12ab92e`. A primeira rodada real no
+- **O entrypoint humano é `DevKit.bat` e duplo clique significa AUTO.** `Lia.bat` passou a
+  entrypoint interno/de runtime (o DevFlow o invoca por manifesto); os demais BAT/PS1
+  históricos permanecem internos até o D3, que fará as fusões/remoções.
+- **D1 existiu** no commit `32025ab`; **D1.1** no `12ab92e`; **D1.2** no `e204ecb`. A primeira rodada real no
   Windows alcançou o HEAD exato e limpo, removeu `core-agent/dist` com segurança e o
   fail-closed funcionou (o teste automatizado com `exit 1` impediu o lançamento da Lia);
   **D1.2** torna o auto-teste portável e a falha autodiagnosticável.

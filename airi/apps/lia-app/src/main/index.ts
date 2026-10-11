@@ -6,6 +6,7 @@ import { join } from 'node:path'
 
 import { app, BrowserWindow, dialog, safeStorage } from 'electron'
 
+import { createLiaDevflowAutorun } from './devflow-autorun'
 import { createLiaEventPublisher } from './event-publisher'
 import { registerLiaIpc } from './ipc'
 import { createLiaHost } from './lia-host'
@@ -152,6 +153,11 @@ async function bootstrap(): Promise<void> {
     log: line => console.info(line),
   })
 
+  const devflowAutorun = createLiaDevflowAutorun({
+    conversar: () => host.conversar(),
+    log: line => console.info(line),
+  })
+
   registerLiaIpc(host, timer, {
     pickVoiceFiles: async () => {
       if (!mainWindow)
@@ -205,6 +211,18 @@ async function bootstrap(): Promise<void> {
   }
   else {
     await mainWindow.loadFile(join(import.meta.dirname, '../renderer/index.html'))
+  }
+
+  // DEVFLOW-ONLY. Replaces the human "click Conversar com Lia" step by calling
+  // the SAME host.conversar() the button reaches through lia:stage:start, so
+  // the round still validates Lia.bat -> Launcher -> AiriStageManager -> Stage.
+  // Inert unless LIA_DEVFLOW_AUTORUN=conversar; a normal launch still needs the
+  // explicit click. Not awaited: boot must not block on the stage, and the
+  // stage manager's single-flight already collapses any concurrent start.
+  if (devflowAutorun.applies()) {
+    void devflowAutorun.run().catch((error: unknown) => {
+      console.info(`lia-devflow autorun=failed reason=${error instanceof Error ? error.name : 'unknown'}`)
+    })
   }
 }
 
