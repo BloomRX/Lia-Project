@@ -503,7 +503,8 @@ class RoundRunner:
                 note(f'teste {spec.id}: PULADO (diretório ausente) - não conta como sucesso')
                 decision = 'refused'
                 continue
-            code, raw = self._invoke(argv, cwd, spec.timeout_s)
+            code, raw = self._invoke(argv, cwd, spec.timeout_s,
+                                     label=spec.id, progress=note)
             status = 'pass' if code == 0 else 'fail'
             # Sanitised HERE, at the persistence boundary, and not only inside
             # the default invoker: no pluggable invoker and no future call path
@@ -521,13 +522,15 @@ class RoundRunner:
         return decision
 
     def _invoke(self, argv: list[str], cwd: Path,
-                timeout_s: float = DEFAULT_TEST_TIMEOUT_S) -> tuple[int, str]:
+                timeout_s: float = DEFAULT_TEST_TIMEOUT_S, *, label: str = '',
+                progress: Callable[[str], None] | None = None) -> tuple[int, str]:
         # `invoke_test` is a two-argument seam so tests can inject a fake. Only
-        # the real invoker has a wall-clock budget to honour, so the declared
-        # timeout is passed to it and to nothing else.
+        # the real invoker has a wall-clock budget to honour and progress to
+        # report, so those are passed to it and to nothing else - an injected
+        # fake keeps working unchanged.
         invoker = self.invoke_test
         if invoker is run_test_command:
-            return invoker(argv, cwd, timeout_s)
+            return invoker(argv, cwd, timeout_s, label=label, progress=progress)
         return invoker(argv, cwd)
 
     def _launch_and_gate(self, outcome: RoundOutcome, note: Callable[[str], None]) -> None:

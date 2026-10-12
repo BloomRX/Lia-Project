@@ -68,13 +68,56 @@ ASSIGN_RE = re.compile(
     (?:api[_-]?key|api[_-]?token|access[_-]?token|auth[_-]?token|secret[_-]?key|token|password|passwd|client[_-]?secret)
     ["']? \s* [=:] \s* (["']) ([^\r\n"']{6,}) \1'''
 )
+# Credenciais SEM aspas: `api_key=synthetic-long-credential-value`. ASSIGN_RE
+# acima exige um valor entre aspas (`(["']) ... \1`), então uma atribuição não
+# aspada atravessava intacta o único redator compartilhado e ia parar em
+# REPORT.txt e run.json - que é justamente o que o DevFlow persiste.
+#
+# A classe de valor é estreita de propósito (letras, dígitos, sublinhado e
+# hífen). Isso é o que impede falso positivo em código: `token=os.getenv("X")`
+# para em `os` (2 caracteres) e `token=process.env.GROQ` é rejeitado pelo
+# lookahead, porque um valor seguido de `.identificador` ou `(` é uma expressão,
+# não um literal.
+ASSIGN_UNQUOTED_RE = re.compile(
+    r"""(?ix)(?<![\w]) ["']?
+    (?:(?:github|gitlab|openai|anthropic|google|gemini|xai|groq|deepseek|aws|azure|hf|huggingface|access|auth|secret)[_-])?
+    (?:api[_-]?key|api[_-]?token|access[_-]?token|auth[_-]?token|secret[_-]?key|token|password|passwd|client[_-]?secret)
+    ["']? \s* [=:] \s*
+    ([a-z0-9_\-]{6,})
+    # Maximal munch first: without this the quantifier backtracks to a shorter
+    # value and slips past the expression lookahead below (`process.env.X`
+    # used to redact `proces` and leave `s.env.X` behind). Atomic groups would
+    # say this more directly but need Python 3.11.
+    (?![a-z0-9_\-])
+    # ...then reject a value that is really the head of an expression.
+    (?!\.[a-z_(]) (?!\()"""
+)
 PLACEHOLDER_RE = re.compile(r"(?i)(your[_ -]|seu[_ -]|sua[_ -]|example|exemplo|placeholder|changeme|change_me|replace[_ -]?me|not[_ -]?a[_ -]?real|dummy|token_aqui|chave_aqui)")
 
 
+def _hide_value(pattern, text):
+    """Replaces group 1 (the value) of `pattern` matches, keeping the key."""
+    def replace(m):
+        return (m.group(0)[:m.start(1) - m.start()] + "[CREDENCIAL-OCULTA]"
+                + m.group(0)[m.end(1) - m.start():])
+    return pattern.sub(replace, text)
+
+
 def redact(text: str) -> str:
+    """
+    The ONE shared redactor. Reused by DevFlow, so everything it persists -
+    console, TestResult.detail, REPORT.txt, run.json - goes through here.
+
+    Pattern-based and best effort: it catches the credential SHAPES it knows
+    (known key names with a literal value, provider key prefixes, private key
+    blocks, credentials embedded in URLs). It is not a parser and does not
+    guarantee protection against arbitrary conversation text, unknown key
+    names, or a secret that appears with no recognisable shape at all.
+    """
     text = re.sub(r"(https?://)[^/\s@]+@", r"\1[CREDENCIAL-OCULTA]@", text)
     text = KEY_RE.sub("[CREDENCIAL-OCULTA]", text)
-    return ASSIGN_RE.sub(lambda m: m.group(0)[:m.start(2)-m.start()] + "[CREDENCIAL-OCULTA]" + m.group(0)[m.end(2)-m.start():], text)
+    text = ASSIGN_RE.sub(lambda m: m.group(0)[:m.start(2)-m.start()] + "[CREDENCIAL-OCULTA]" + m.group(0)[m.end(2)-m.start():], text)
+    return _hide_value(ASSIGN_UNQUOTED_RE, text)
 
 
 def run(args, cwd=None, check=True, capture=False, input_text=None, env_overrides=None):
@@ -462,7 +505,10 @@ def placeholder(value):
 
 def secret_in_text(text):
     if KEY_RE.search(text) or PRIVATE_KEY_RE.search(text): return True
-    return any(not placeholder(match.group(2)) for match in ASSIGN_RE.finditer(text))
+    if any(not placeholder(match.group(2)) for match in ASSIGN_RE.finditer(text)):
+        return True
+    return any(not placeholder(match.group(1))
+               for match in ASSIGN_UNQUOTED_RE.finditer(text))
 
 
 def json_strings(value):

@@ -20,6 +20,7 @@ import json
 import atexit
 import os
 from pathlib import Path, PurePosixPath
+import shlex
 import shutil
 import subprocess
 import sys
@@ -35,6 +36,7 @@ sys.path.insert(0, str(TOOLS))
 from devflow import (filesystem, pipeline, processes, report,  # noqa: E402
                      safe_paths, sync)
 import lia_dev  # noqa: E402
+import project_cli  # noqa: E402
 from devflow.report import (MAX_DETAIL_CHARS, MAX_DETAIL_LINES,  # noqa: E402
                             sanitize_test_output)
 from devflow.processes import TeardownResult  # noqa: E402
@@ -1537,17 +1539,98 @@ _REAL_POPEN = subprocess.Popen
 _REAL_SYSTEM = os.system
 
 
-def _record_spawn(args) -> None:
+#: Recorded when a spawn cannot be reduced to an executable name safely. The
+#: guard FAILS CLOSED on it: "I could not tell" must never read as "allowed".
+UNCLASSIFIED_SPAWN = '<spawn-nao-classificado>'
+
+#: Windows resolves these interchangeably with the bare name, so `sh.exe` is
+#: `sh` for the purposes of a deny set.
+_WINDOWS_EXEC_SUFFIXES = ('.exe', '.cmd', '.bat', '.com')
+
+
+def _bare_executable_name(raw: str) -> str:
+    """
+    Reduce one command token to a bare, lowercase executable name.
+
+    Both separators are split on: `os.path.basename` only knows the running
+    platform's separator, so a Windows path passed on POSIX would otherwise
+    survive intact and match nothing. Surrounding quotes are stripped and the
+    Windows executable suffixes are removed, so `sh.exe` classifies as `sh`.
+    """
+    text = raw.strip().strip('"').strip("'").strip()
+    for sep in ('/', chr(92)):
+        if sep in text:
+            text = text.rsplit(sep, 1)[-1]
+    lowered = text.strip('"').strip("'").strip().lower()
+    changed = True
+    while changed:
+        changed = False
+        for suffix in _WINDOWS_EXEC_SUFFIXES:
+            if lowered.endswith(suffix) and len(lowered) > len(suffix):
+                lowered = lowered[:-len(suffix)]
+                changed = True
+    return lowered
+
+
+def _first_shell_word(command: str) -> str:
+    """
+    The program name of a shell command string, WITHOUT executing anything.
+
+    `os.system('sleep 5')` hands over the entire command line; compared
+    against a bare-name deny set that text matches nothing, which is the
+    bypass this closes. `shlex` is used strictly as a tokenizer - no command
+    is run, expanded or evaluated here. An unparseable string yields '' so the
+    caller fails closed instead of guessing.
+    """
     try:
-        if isinstance(args, (str, bytes, os.PathLike)):
-            head = str(os.fspath(args))
+        # posix=False ALWAYS, on every platform. In POSIX mode shlex treats
+        # backslash as an escape and silently eats it, so a Windows path such
+        # as C:\\Windows\\System32\\sh.exe arrived here as
+        # 'c:windowssystem32sh.exe' and matched nothing - the exact bypass this
+        # guard exists to close. posix=False keeps quotes and backslashes
+        # intact; the quotes are stripped afterwards by the basename reducer.
+        words = shlex.split(command, posix=False, comments=False)
+    except ValueError:
+        return ''
+    return words[0] if words else ''
+
+
+def _classify_spawn(args) -> str:
+    """Bare executable name, or UNCLASSIFIED_SPAWN when it cannot be told."""
+    try:
+        if isinstance(args, (bytes, bytearray)):
+            raw, shell_form = bytes(args).decode('utf-8', 'replace'), True
+        elif isinstance(args, str):
+            raw, shell_form = args, True
+        elif isinstance(args, os.PathLike):
+            raw, shell_form = str(os.fspath(args)), False
+        elif isinstance(args, (list, tuple)):
+            if not args:
+                return UNCLASSIFIED_SPAWN
+            first = args[0]
+            if isinstance(first, (bytes, bytearray)):
+                raw = bytes(first).decode('utf-8', 'replace')
+            elif isinstance(first, os.PathLike):
+                raw = str(os.fspath(first))
+            else:
+                raw = str(first)
+            shell_form = False
         else:
-            head = str(next(iter(args), ''))
+            return UNCLASSIFIED_SPAWN
     except Exception:  # a guard must never be the reason a test fails
-        return
-    head = os.path.basename(head.strip().strip('"'))
-    if head:
-        SPAWNED_HEADS.append(head)
+        return UNCLASSIFIED_SPAWN
+    head = _first_shell_word(raw) if shell_form else raw
+    return _bare_executable_name(head) or UNCLASSIFIED_SPAWN
+
+
+def _spawn_violations(heads) -> list[str]:
+    """Forbidden names, plus anything that could not be classified at all."""
+    return sorted({head for head in heads
+                   if head in FORBIDDEN_EXECUTABLES or head == UNCLASSIFIED_SPAWN})
+
+
+def _record_spawn(args) -> None:
+    SPAWNED_HEADS.append(_classify_spawn(args))
 
 
 class _GuardedPopen(_REAL_POPEN):  # type: ignore[misc,valid-type]
@@ -1562,7 +1645,9 @@ def _guarded_system(command):
 
 
 # `subprocess.run`/`check_output`/`check_call` all resolve `Popen` from the
-# module globals at call time, so patching the name covers them too.
+# module globals at call time, so patching the name covers them too. This is
+# patched in the TEST PROCESS ONLY, at import of this module: no DevFlow
+# production module is touched, and nothing leaks into the code under test.
 subprocess.Popen = _GuardedPopen  # type: ignore[misc]
 os.system = _guarded_system  # type: ignore[assignment]
 
@@ -1571,14 +1656,15 @@ def _enforce_spawn_guard() -> None:
     """
     Fails the run if any forbidden executable was spawned, even by a test that
     ran after the last assertion about it. Registered with atexit because no
-    test can observe the tests that run after it.
+    test can observe the tests that run after it - and it forces a NONZERO
+    PROCESS EXIT, so a forbidden spawn cannot hide behind a green summary.
     """
-    forbidden = sorted({head for head in SPAWNED_HEADS if head in FORBIDDEN_EXECUTABLES})
-    if not forbidden:
+    violations = _spawn_violations(SPAWNED_HEADS)
+    if not violations:
         return
     sys.stderr.write(
-        '\nGUARDA DE SPAWN: esta suíte lançou executável(is) proibido(s): '
-        + ', '.join(forbidden)
+        '\nGUARDA DE SPAWN: esta suíte lançou executável(is) proibido(s) ou '
+        'não classificáveis: ' + ', '.join(violations)
         + '\nA portabilidade do DevFlow não pode depender de ferramentas POSIX.\n',
     )
     sys.stderr.flush()
@@ -1712,8 +1798,7 @@ class PortabilityContractTests(unittest.TestCase):
         self.assertEqual(SPAWNED_HEADS[-1], os.path.basename(sys.executable))
 
     def test_no_forbidden_executable_has_been_spawned_so_far(self):
-        spawned = {head for head in SPAWNED_HEADS if head in FORBIDDEN_EXECUTABLES}
-        self.assertEqual(spawned, set())
+        self.assertEqual(_spawn_violations(SPAWNED_HEADS), [])
 
     def test_the_guard_would_reject_a_forbidden_head(self):
         """
@@ -5052,6 +5137,418 @@ class TimeoutHonestyTests(unittest.TestCase):
         code, detail = run_test_command(
             [str(self.base / 'definitely-not-here')], self.base, 30.0, label='x')
         self.assertEqual(code, 127, detail)
+
+
+class RealProgressWiringTests(unittest.TestCase):
+    """
+    REGRESSION - progress existed but nothing was ever connected to it.
+
+    `run_test_command` accepted `label` and `progress`, while `_run_tests`
+    called `self._invoke(argv, cwd, spec.timeout_s)` and `_invoke` called
+    `run_test_command(argv, cwd, timeout_s)`. The canonical automatic round
+    therefore never passed a callback, and a twenty-minute required test was
+    completely silent. A unit test of `run_test_command` cannot catch that:
+    the defect was in the wiring, so these tests drive a real `RoundRunner`
+    with the REAL executor and read what it actually emitted.
+    """
+
+    SLOW_ID = 'slow-suite'
+
+    def setUp(self) -> None:
+        self.base = Path(tempfile.mkdtemp(prefix='devflow-progress-'))
+        self.repo = make_repo(self.base)
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.base, ignore_errors=True)
+
+    def _manifest(self, body: str, timeout_s: float) -> Round:
+        data = runnable_manifest()
+        data['tests'] = [{
+            'id': self.SLOW_ID, 'label': 'suíte lenta', 'cwd': '.',
+            'argv': ['python', '-c', body], 'timeout_s': timeout_s,
+        }]
+        return validate_round(data)
+
+    def _run(self, body: str, timeout_s: float):
+        runner, emitted, asks = make_runner(
+            self.repo, self._manifest(body, timeout_s),
+            invoke_test=run_test_command)
+        with patch.object(runner_module, 'PROGRESS_INTERVAL_S', 0.2):
+            outcome = runner.execute()
+        return outcome, emitted, asks
+
+    def test_a_slow_required_test_emits_progress_naming_its_own_id(self) -> None:
+        outcome, emitted, _asks = self._run('import time; time.sleep(1.2)', 60.0)
+        beats = [line for line in emitted if 'em andamento' in line]
+        self.assertTrue(beats, 'um teste obrigatório longo não pode ser mudo:\n'
+                        + '\n'.join(emitted))
+        self.assertTrue(all(self.SLOW_ID in line for line in beats), beats)
+        self.assertTrue(all('decorridos' in line for line in beats), beats)
+
+    def test_progress_is_bounded(self) -> None:
+        _outcome, emitted, _asks = self._run('import time; time.sleep(2.0)', 60.0)
+        beats = [line for line in emitted if 'em andamento' in line]
+        self.assertLessEqual(len(beats), PROGRESS_MAX_LINES)
+
+    def test_no_input_or_menu_is_requested_while_a_test_runs(self) -> None:
+        _outcome, _emitted, asks = self._run('import time; time.sleep(1.0)', 60.0)
+        self.assertEqual(asks, [], 'a rodada automática não pode pedir nada')
+
+    def test_progress_never_carries_the_childs_raw_output(self) -> None:
+        body = 'import time; print("MARCADOR-CRU-DE-STDOUT", flush=True); time.sleep(1.2)'
+        _outcome, emitted, _asks = self._run(body, 60.0)
+        beats = [line for line in emitted if 'em andamento' in line]
+        self.assertTrue(beats)
+        for line in beats:
+            self.assertNotIn('MARCADOR-CRU-DE-STDOUT', line)
+            self.assertNotIn('import time', line)
+
+    def test_the_same_real_executor_still_enforces_the_declared_timeout(self) -> None:
+        outcome, emitted, _asks = self._run('import time; time.sleep(30)', 1.0)
+        result = next(t for t in outcome.tests if t.id == self.SLOW_ID)
+        self.assertEqual(result.status, 'fail')
+        self.assertEqual(result.exit_code, 124, result.detail)
+        self.assertIn(self.SLOW_ID, result.detail)
+        self.assertIn('orçamento', result.detail)
+        self.assertEqual(outcome.verdict, 'FAIL')
+        self.assertTrue(any('FALHOU' in line for line in emitted), emitted)
+
+    def test_an_injected_two_argument_invoker_still_works_unchanged(self) -> None:
+        seen: list[tuple] = []
+
+        def fake(argv, cwd):
+            seen.append((tuple(argv), cwd))
+            return 0, ''
+
+        runner, _emitted, _asks = make_runner(
+            self.repo, self._manifest('import time', 60.0), invoke_test=fake)
+        outcome = runner.execute()
+        self.assertEqual(len(seen), 1, 'um injetor de 2 argumentos não pode quebrar')
+        self.assertEqual(outcome.tests[0].status, 'pass')
+
+
+class SpawnGuardBypassTests(unittest.TestCase):
+    """
+    REGRESSION - the guard compared bare names against unnormalised text.
+
+    `_record_spawn` took `os.path.basename()` of whatever it was handed and
+    `_enforce_spawn_guard` compared that against names like 'sh'. Two concrete
+    bypasses: `os.system('sleep 5')` recorded the whole command line, and
+    `Popen(['sh.exe', ...])` recorded a filename that is not in a bare-name
+    set. Both walked straight through a suite that reported itself portable.
+    """
+
+    #: A forbidden name that does not exist on this machine, so exercising the
+    #: guard never actually runs a forbidden tool.
+    @staticmethod
+    def _absent_forbidden() -> str:
+        for name in sorted(FORBIDDEN_EXECUTABLES):
+            if shutil.which(name) is None:
+                return name
+        raise AssertionError('nenhum executável proibido está ausente nesta máquina')
+
+    def test_a_shell_command_is_classified_by_its_program_name(self) -> None:
+        name = self._absent_forbidden()
+        self.assertEqual(_classify_spawn(f'{name} 5'), name)
+        self.assertEqual(_spawn_violations([_classify_spawn(f'{name} 5')]), [name])
+
+    def test_windows_executable_suffixes_do_not_hide_a_forbidden_name(self) -> None:
+        name = self._absent_forbidden()
+        for form in (f'{name}.exe', f'{name}.cmd', f'{name}.bat', f'{name}.EXE'):
+            with self.subTest(form=form):
+                self.assertEqual(_spawn_violations([_classify_spawn(form)]), [name])
+                self.assertEqual(_spawn_violations([_classify_spawn([form])]), [name])
+
+    def test_directories_do_not_hide_a_forbidden_name(self) -> None:
+        name = self._absent_forbidden()
+        for form in (f'C:{chr(92)}Windows{chr(92)}System32{chr(92)}{name}.exe',
+                     f'/usr/local/bin/{name}',
+                     f'{name} --flag',
+                     f'"{chr(67)}:{chr(92)}Program Files{chr(92)}x{chr(92)}{name}.exe" -c y'):
+            with self.subTest(form=form):
+                self.assertEqual(_spawn_violations([_classify_spawn(form)]), [name])
+
+    def test_argv_paths_with_spaces_are_one_program_name(self) -> None:
+        # In ARGV form a path containing spaces is a single program, so it must
+        # classify. In SHELL form the same unquoted text is genuinely two words
+        # - the program is the first one - and that is not a bypass, it is what
+        # a shell would actually execute.
+        name = self._absent_forbidden()
+        argv = [f'/opt/my tools/{name}', '--flag']
+        self.assertEqual(_spawn_violations([_classify_spawn(argv)]), [name])
+        self.assertEqual(_classify_spawn(f'/opt/my tools/{name}'), 'my')
+
+    def test_a_permitted_subprocess_is_never_a_violation(self) -> None:
+        for argv in ([sys.executable, '-c', 'pass'],
+                     ['C:\\Program Files\\Git\\bin\\git.exe', 'status'],
+                     ['/usr/bin/git', 'status'],
+                     [str(SUITE_PATH)],
+                     ['git', 'rev-parse', 'HEAD']):
+            with self.subTest(argv=argv):
+                self.assertEqual(_spawn_violations([_classify_spawn(argv)]), [])
+
+    def test_an_unclassifiable_command_fails_closed(self) -> None:
+        for args in ([], '', '"unclosed', 42, None, object()):
+            with self.subTest(args=type(args).__name__):
+                self.assertEqual(_classify_spawn(args), UNCLASSIFIED_SPAWN)
+                self.assertEqual(_spawn_violations([_classify_spawn(args)]),
+                                 [UNCLASSIFIED_SPAWN])
+
+    def _isolated_records(self) -> list[str]:
+        """
+        Records made from here on, removed again on cleanup.
+
+        These tests deliberately attempt a forbidden spawn, so they poison the
+        module-wide list. Left in place, the atexit guard would force a nonzero
+        exit AFTER a green summary and fail the whole suite - which is exactly
+        the behaviour the guard is supposed to have, pointed at the wrong run.
+        """
+        before = len(SPAWNED_HEADS)
+        self.addCleanup(lambda: SPAWNED_HEADS.__delitem__(slice(before, None)))
+        return SPAWNED_HEADS[before:]
+
+    def test_the_guard_records_what_a_real_os_system_call_attempts(self) -> None:
+        name = self._absent_forbidden()
+        self._isolated_records()
+        os.system(f'{name} --definitely-not-a-real-flag')
+        self.assertEqual(_spawn_violations(SPAWNED_HEADS), [name])
+
+    def test_the_guard_records_a_list_spawn_with_a_windows_suffix(self) -> None:
+        name = self._absent_forbidden()
+        self._isolated_records()
+        try:
+            subprocess.Popen([f'{name}.exe'], stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL)
+        except OSError:
+            pass  # não existe - o que importa é o que foi REGISTRADO
+        self.assertEqual(_spawn_violations(SPAWNED_HEADS), [name])
+
+    def test_a_forbidden_spawn_makes_the_process_exit_nonzero(self) -> None:
+        """
+        The guard must fail the RUN, not merely log after a green summary.
+
+        A child imports this module (which installs the guard and registers the
+        atexit hook), attempts one forbidden spawn, then exits 0 on purpose. If
+        the guard only asserted inside a test, the child would still exit 0.
+        """
+        name = self._absent_forbidden()
+        script = (
+            'import sys, os\n'
+            f'sys.path.insert(0, {str(TOOLS)!r})\n'
+            'import test_lia_dev\n'
+            f'os.system({name!r} + " --definitely-not-a-real-flag")\n'
+            'sys.exit(0)\n'
+        )
+        child = subprocess.run([sys.executable, '-c', script],
+                               capture_output=True, text=True,
+                               encoding='utf-8', errors='replace', timeout=300)
+        self.assertNotEqual(child.returncode, 0,
+                            'um spawn proibido tem que tornar a suíte não-zero')
+        self.assertIn('GUARDA DE SPAWN', child.stderr or '')
+
+    def test_a_clean_child_still_exits_zero(self) -> None:
+        script = (
+            'import sys, subprocess\n'
+            f'sys.path.insert(0, {str(TOOLS)!r})\n'
+            'import test_lia_dev\n'
+            'subprocess.run([sys.executable, "-c", "pass"], capture_output=True)\n'
+            'sys.exit(0)\n'
+        )
+        child = subprocess.run([sys.executable, '-c', script],
+                               capture_output=True, text=True,
+                               encoding='utf-8', errors='replace', timeout=300)
+        self.assertEqual(child.returncode, 0, child.stderr)
+
+    def test_no_devflow_production_module_patches_process_apis(self) -> None:
+        """
+        The guard belongs to the test process alone. If it ever leaked into
+        DevFlow's own modules it would change the behaviour of the code under
+        test, and the portability proof would be measuring the patch.
+        """
+        root = TOOLS / 'devflow'
+        scanned = 0
+        for path in sorted(root.rglob('*.py')):
+            tree = ast.parse(path.read_text(encoding='utf-8'))
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Assign):
+                    continue
+                for target in node.targets:
+                    if (isinstance(target, ast.Attribute)
+                            and isinstance(target.value, ast.Name)
+                            and target.value.id in ('subprocess', 'os')
+                            and target.attr in ('Popen', 'system')):
+                        self.fail(f'{path} remenda {target.value.id}.{target.attr}')
+            scanned += 1
+        self.assertGreater(scanned, 5, 'a varredura não viu os módulos do DevFlow')
+
+
+#: Synthetic only. Built by concatenation so the literal pair `api_key=<value>`
+#: never appears in this file and the DevKit's own secret scan stays clean.
+FAKE_SECRET = 'synthetic-long-credential-' + 'value'
+FAKE_KEY = 'gsk_synthetic' + 'longcredentialvalue'
+
+
+class UnquotedCredentialRedactionTests(unittest.TestCase):
+    """
+    REGRESSION - the shared redactor only recognised QUOTED values.
+
+    `ASSIGN_RE` ends in `(["']) ([^\r\n"']{6,}) \1`, so an unquoted
+    `api_key=synthetic-long-credential-value` matched nothing. DevFlow persists
+    automated test output through that one redactor into REPORT.txt and
+    run.json, so an unquoted credential in any test's output was written to
+    disk intact. This is not an acceptable "out of scope" privacy exception:
+    the destinations are ours.
+    """
+
+    def test_unquoted_assignments_are_redacted(self) -> None:
+        for text in (f'api_key={FAKE_SECRET}', f'token={FAKE_SECRET}',
+                     f'GROQ_API_KEY={FAKE_SECRET}', f'api_key={FAKE_KEY}',
+                     f'password: {FAKE_SECRET}', f'client_secret={FAKE_SECRET}',
+                     f'access_token={FAKE_SECRET}', f'secret_key={FAKE_SECRET}'):
+            with self.subTest(text=text):
+                redacted = project_cli.redact(text)
+                self.assertNotIn(FAKE_SECRET, redacted)
+                self.assertNotIn(FAKE_KEY, redacted)
+                self.assertIn('[CREDENCIAL-OCULTA]', redacted)
+
+    def test_quoted_assignments_are_still_redacted(self) -> None:
+        for text in (f'api_key="{FAKE_SECRET}"', f"token='{FAKE_SECRET}'"):
+            with self.subTest(text=text):
+                self.assertNotIn(FAKE_SECRET, project_cli.redact(text))
+
+    def test_a_value_surviving_a_maximal_munch_boundary_is_redacted(self) -> None:
+        # `process.env.X` used to backtrack to `proces`, redact that, and leave
+        # `s.env.X` behind - which both mangles code and proves the lookahead
+        # was being defeated.
+        self.assertEqual(project_cli.redact('token=process.env.GROQ_API_KEY'),
+                         'token=process.env.GROQ_API_KEY')
+        self.assertNotIn(FAKE_SECRET, project_cli.redact(f'api_key={FAKE_SECRET}.'))
+
+    def test_urls_code_and_assertions_are_preserved(self) -> None:
+        for text in ('https://api.groq.com/openai/v1/chat/completions',
+                     'https://github.com/BloomRX/Lia-Project',
+                     "expected '/a/b' to be '/a\\b'",
+                     'src/main/voice-install-inspector.test.ts:82',
+                     'token=os.getenv("GROQ")',
+                     'const apiKey = readEnv("GROQ_API_KEY")',
+                     'rebuildToken = 0',
+                     'Test Files  1 failed | 21 passed (22)',
+                     'AssertionError: expected true to be false'):
+            with self.subTest(text=text):
+                self.assertEqual(project_cli.redact(text), text,
+                                 'texto benigno não pode ser alterado')
+
+    def test_a_placeholder_is_not_treated_as_a_real_secret(self) -> None:
+        self.assertFalse(project_cli.secret_in_text('api_key=your_key_here'))
+        self.assertTrue(project_cli.secret_in_text(f'api_key={FAKE_SECRET}'))
+
+    def test_the_limitation_is_documented_not_overclaimed(self) -> None:
+        # Honest boundary: the redactor is pattern-based. A secret with no
+        # recognisable shape is NOT caught, and the docstring must say so
+        # rather than implying a guarantee.
+        self.assertEqual(project_cli.redact('the answer is 8h2k9f3a7q'),
+                         'the answer is 8h2k9f3a7q')
+        self.assertIn('best effort', project_cli.redact.__doc__.lower())
+        self.assertIn('not a parser', project_cli.redact.__doc__.lower())
+
+
+class DiagnosticDestinationRedactionTests(unittest.TestCase):
+    """
+    The same unquoted credential, pushed through the REAL executor and checked
+    at every destination DevFlow persists: the console, TestResult.detail,
+    REPORT.txt, run.json and console.sanitized.log.
+
+    Deliberately end-to-end: the leak was in what gets written, so a unit test
+    of `redact` alone would not prove any destination is clean.
+    """
+
+    def setUp(self) -> None:
+        self.base = Path(tempfile.mkdtemp(prefix='devflow-redact-'))
+        self.repo = make_repo(self.base)
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.base, ignore_errors=True)
+
+    def test_an_unquoted_credential_reaches_no_persisted_destination(self) -> None:
+        home = str(Path.home())
+        body = (
+            'import sys\n'
+            f'print("api_key={FAKE_SECRET}")\n'
+            f'print("\\x1b[31mtoken={FAKE_SECRET}\\x1b[0m", file=sys.stderr)\n'
+            f'print("GROQ_API_KEY={FAKE_KEY}", file=sys.stderr)\n'
+            f'print("home was {home}/some/path")\n'
+            'print("FAIL src/main/example.test.ts > leaks")\n'
+            'print("x" * 3000)\n'
+            'sys.exit(1)\n'
+        )
+        data = runnable_manifest()
+        data['tests'] = [{'id': 'leaky', 'label': 'vaza', 'cwd': '.',
+                          'argv': ['python', '-c', body], 'timeout_s': 60.0}]
+        runner, emitted, _asks = make_runner(
+            self.repo, validate_round(data), invoke_test=run_test_command)
+        outcome = runner.execute()
+
+        self.assertEqual(outcome.verdict, 'FAIL')
+        result = next(t for t in outcome.tests if t.id == 'leaky')
+        self.assertEqual(result.status, 'fail')
+        # The failure identity still survives - redaction must not eat it.
+        self.assertIn('example.test.ts', result.detail)
+
+        destinations = {
+            'TestResult.detail': result.detail,
+            'console': '\n'.join(emitted),
+            'REPORT.txt': Path(outcome.artifacts['report']).read_text(encoding='utf-8'),
+            'run.json': Path(outcome.artifacts['json']).read_text(encoding='utf-8'),
+            'console.sanitized.log':
+                Path(outcome.artifacts['console']).read_text(encoding='utf-8'),
+        }
+        for name, content in destinations.items():
+            with self.subTest(destino=name):
+                self.assertNotIn(FAKE_SECRET, content, f'{name} vazou a credencial')
+                self.assertNotIn(FAKE_KEY, content, f'{name} vazou a credencial')
+                self.assertNotIn(home, content, f'{name} vazou o home')
+        # The redaction MARKER is only expected where the credential actually
+        # arrived. console.sanitized.log keeps launcher diagnostics only
+        # (SAFE_LINE_PREFIXES), and this round dies at the tests, so it is
+        # legitimately empty here - asserted clean above, not asserted to
+        # contain a marker it never had a chance to receive.
+        for name in ('TestResult.detail', 'console', 'REPORT.txt', 'run.json'):
+            with self.subTest(marcador=name):
+                self.assertIn('[CREDENCIAL-OCULTA]', destinations[name],
+                              f'{name} deveria mostrar o marcador de redação')
+
+    def test_a_credential_that_reaches_the_console_sanitizer_is_redacted(self) -> None:
+        """
+        Closes the gap the test above cannot: the console log only keeps lines
+        with a launcher prefix, so feed it one that qualifies and prove the
+        value does not survive it either.
+        """
+        log = sanitize_console([
+            f'[lia] api_key={FAKE_SECRET}',
+            f'spawn: node token={FAKE_SECRET}',
+            f'[lia] caminho {Path.home()}/x',
+        ])
+        joined = '\n'.join(log.kept)
+        self.assertEqual(len(log.kept), 3, 'as três linhas têm prefixo seguro')
+        self.assertNotIn(FAKE_SECRET, joined)
+        self.assertIn('[CREDENCIAL-OCULTA]', joined)
+        self.assertNotIn(str(Path.home()), joined)
+
+    def test_long_output_cannot_push_the_credential_past_the_budget_unredacted(self) -> None:
+        body = (
+            f'print("api_key={FAKE_SECRET}")\n'
+            'print("padding " * 400)\n'
+            'import sys; sys.exit(1)\n'
+        )
+        data = runnable_manifest()
+        data['tests'] = [{'id': 'long', 'label': 'longo', 'cwd': '.',
+                          'argv': ['python', '-c', body], 'timeout_s': 60.0}]
+        runner, _e, _a = make_runner(
+            self.repo, validate_round(data), invoke_test=run_test_command)
+        outcome = runner.execute()
+        for path in outcome.artifacts.values():
+            content = Path(path).read_text(encoding='utf-8')
+            self.assertNotIn(FAKE_SECRET, content, f'{path} vazou')
 
 
 if __name__ == '__main__':
