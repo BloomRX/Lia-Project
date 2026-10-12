@@ -32,6 +32,17 @@
   },
   "tests": [
     {
+      "id": "preflight",
+      "label": "pré-voo do workspace",
+      "cwd": ".",
+      "argv": [
+        "python",
+        "tools/devflow/preflight.py"
+      ],
+      "timeout_s": 120.0,
+      "blocking": true
+    },
+    {
       "id": "devflow",
       "label": "DevFlow (contrato da rodada, limpeza segura, gate de log)",
       "cwd": ".",

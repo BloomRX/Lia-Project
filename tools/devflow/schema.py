@@ -61,6 +61,13 @@ class RoundTest:
     cwd: str
     argv: tuple[str, ...]
     timeout_s: float = DEFAULT_TEST_TIMEOUT_S
+    #: A blocking test stops the round as soon as it does not pass. This is for
+    #: cheap diagnostics that make an expensive run pointless: if a required
+    #: build artifact is missing, the suites behind it cannot collect a single
+    #: test, and burning their budgets first only delays the same answer.
+    #: Opt-in - the default keeps every declared test running so a real
+    #: failure still yields the full diagnostic picture.
+    blocking: bool = False
 
 
 @dataclass(frozen=True)
@@ -275,7 +282,8 @@ def validate_round(data: Any, source: Path | None = None) -> Round:
     tests: list[RoundTest] = []
     for index, item in enumerate(_require(data, 'tests', 'manifesto')):
         where = f'tests[{index}]'
-        _reject_unknown(item, {'id', 'label', 'cwd', 'argv', 'timeout_s'}, where)
+        _reject_unknown(item, {'id', 'label', 'cwd', 'argv', 'timeout_s', 'blocking'},
+                        where)
         raw_timeout = item.get('timeout_s', DEFAULT_TEST_TIMEOUT_S)
         if not isinstance(raw_timeout, (int, float)) or isinstance(raw_timeout, bool) \
                 or not raw_timeout > 0:
@@ -283,12 +291,16 @@ def validate_round(data: Any, source: Path | None = None) -> Round:
         if raw_timeout > MAX_TEST_TIMEOUT_S:
             raise RoundSchemaError(
                 f'{where}.timeout_s={raw_timeout} excede o teto de {MAX_TEST_TIMEOUT_S}s')
+        raw_blocking = item.get('blocking', False)
+        if not isinstance(raw_blocking, bool):
+            raise RoundSchemaError(f'{where}.blocking: esperado true/false')
         tests.append(RoundTest(
             id=_as_str(_require(item, 'id', where), f'{where}.id'),
             label=_as_str(_require(item, 'label', where), f'{where}.label'),
             cwd=_as_str(_require(item, 'cwd', where), f'{where}.cwd'),
             argv=_as_str_tuple(_require(item, 'argv', where), f'{where}.argv'),
             timeout_s=float(raw_timeout),
+            blocking=raw_blocking,
         ))
 
     launch = _require(data, 'launch', 'manifesto')

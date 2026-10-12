@@ -23,6 +23,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 import queue
+import re
 import time
 import os
 from pathlib import Path
@@ -130,6 +131,42 @@ PROGRESS_INTERVAL_S = 60.0
 PROGRESS_MAX_LINES = 40
 
 
+#: The suite's own progress journal. Only these shapes are ever salvaged out
+#: of a killed child, so no arbitrary captured output can reach an artifact:
+#: a status word, a millisecond count and a dotted test id, nothing else.
+PROGRESS_LINE_RE = re.compile(
+    r'(?m)^\[devflow-test\] (?:start|pass|fail|error|skip|class|timeout|blocked|summary) \S.*$')
+#: How many journal lines a timeout report keeps. Enough to show the last
+#: completed test, the one that was running, and the aggregate.
+PROGRESS_SALVAGE_MAX = 12
+#: Partial output is held only long enough to be filtered, and it is bounded on
+#: both axes: a chatty child must not be able to turn a 3600 s timeout into an
+#: unbounded allocation. We keep the most recent window, on the reasoning that
+#: a hang is late and the running test's identity is in the newest output.
+PROGRESS_PARTIAL_MAX_CHUNKS = 8
+PROGRESS_PARTIAL_MAX_BYTES = 64 * 1024
+
+
+def salvage_progress(*chunks) -> list[str]:
+    """
+    Allowlisted progress lines recovered from partial child output.
+
+    A timed-out child has usually already printed which test it was on. That
+    is the single most useful fact in the whole report, and `communicate`
+    hands it over on the exception - but only if somebody looks. Nothing
+    outside the allowlist is returned, so this cannot become a channel for
+    raw captured output.
+    """
+    found: list[str] = []
+    for chunk in chunks[-PROGRESS_PARTIAL_MAX_CHUNKS:]:
+        if not chunk:
+            continue
+        raw = bytes(chunk) if isinstance(chunk, (bytes, bytearray)) else str(chunk).encode()
+        text = raw[:PROGRESS_PARTIAL_MAX_BYTES].decode('utf-8', 'replace')
+        found.extend(PROGRESS_LINE_RE.findall(text))
+    return found[-PROGRESS_SALVAGE_MAX:]
+
+
 def _terminate_timed_out(proc: 'subprocess.Popen') -> str:
     """
     Best-effort SCOPED cleanup of a test process that outlived its budget.
@@ -215,18 +252,27 @@ def run_test_command(argv: list[str], cwd: Path,
     except OSError as exc:
         return 127, sanitize_test_output('', f'{type(exc).__name__}: {exc}')
 
-    def expired_detail(cleanup: str) -> str:
+    def expired_detail(cleanup: str, journal: list[str]) -> str:
         # Deliberately no claim about WHY: slow and hung are indistinguishable
         # from outside, and saying "just slow" is how a real deadlock gets
         # closed as noise.
-        return sanitize_test_output('', (
+        head = (
             f'TimeoutExpired: o estágio de teste {who!r} atingiu o orçamento '
             f'declarado de {timeout_s:.0f}s e foi encerrado. Causa NÃO '
             f'diagnosticada: lentidão e travamento produzem o mesmo prazo. '
-            f'Limpeza: {cleanup}. Se o trabalho for legítimo nesta máquina, '
-            f'aumente tests[].timeout_s no manifesto da rodada.'))
+            f'Limpeza: {cleanup}.')
+        if journal:
+            head += '\nÚltimos eventos do journal de testes:'
+        else:
+            head += ('\nNenhum evento de journal recuperado: o filho não '
+                     'chegou a reportar progresso.')
+        body = '\n'.join([head, *journal])
+        body += ('\nSe o trabalho for legítimo nesta máquina, aumente '
+                 'tests[].timeout_s no manifesto da rodada.')
+        return sanitize_test_output('', body)
 
     beats = 0
+    partial: list = []
     while True:
         # The wait is clamped to what is LEFT of the budget. Waiting a full
         # progress interval when only a fraction of the budget remains would
@@ -234,14 +280,20 @@ def run_test_command(argv: list[str], cwd: Path,
         # the bug this loop exists to prevent.
         remaining = timeout_s - (time.monotonic() - started)
         if remaining <= 0:
-            return 124, expired_detail(_terminate_timed_out(proc))
+            cleanup = _terminate_timed_out(proc)
+            return 124, expired_detail(cleanup, salvage_progress(*partial))
         try:
             stdout, stderr = proc.communicate(
                 timeout=min(PROGRESS_INTERVAL_S, remaining))
             break
-        except subprocess.TimeoutExpired:
+        except subprocess.TimeoutExpired as exc:
+            # `communicate` hands over whatever it managed to read before the
+            # deadline. Keep it: that is where the running test's identity is.
+            partial.extend([exc.stdout, exc.stderr])
+            del partial[:-PROGRESS_PARTIAL_MAX_CHUNKS]
             if time.monotonic() - started >= timeout_s:
-                return 124, expired_detail(_terminate_timed_out(proc))
+                cleanup = _terminate_timed_out(proc)
+                return 124, expired_detail(cleanup, salvage_progress(*partial))
             if progress is not None and beats < PROGRESS_MAX_LINES:
                 beats += 1
                 progress(f'  {who}: em andamento, '
@@ -519,6 +571,12 @@ class RoundRunner:
                 # A bare "FALHOU (exit 1)" defeats the point of a unified DevKit.
                 for detail_line in (tail or '(sem saída capturada)').splitlines():
                     note(f'  detalhe: {detail_line}')
+                if spec.blocking:
+                    rest = [t.id for t in self.round_manifest.tests
+                            if t.id not in {x.id for x in outcome.tests}]
+                    note(f'teste {spec.id} é BLOCKING: a rodada para aqui. '
+                         f'Não executados: {", ".join(rest) or "nenhum"}.')
+                    break
         return decision
 
     def _invoke(self, argv: list[str], cwd: Path,
