@@ -24,7 +24,8 @@ from typing import Callable
 
 from .runner import RoundOutcome, RoundRunner
 from .schema import Round, RoundSchemaError, load_active_round
-from .sync import SyncOutcome, WorkBranchSync
+from .sync import (DEFAULT_EXPECTED_OWNER, DEFAULT_EXPECTED_REPO,
+                  SyncOutcome, WorkBranchSync)
 
 STAGES = (
     'bootstrap', 'sync', 'local_change_classification', 'checkpoint', 'prepare',
@@ -57,7 +58,12 @@ class AutoResult:
     tests_ok: bool = False
     runtime_ok: bool = False
     cleanup_ok: bool = False
-    publish: str = 'skipped'  # 'ok' | 'nothing-to-push' | 'skipped' | 'refused'
+    # What teardown PROVED, not what it attempted. 'N/A' means the round never
+    # launched anything, which is the honest answer for a refusal at prepare.
+    cleanup_state: str = 'UNKNOWN'  # 'PASS' | 'FAIL' | 'N/A' | 'UNKNOWN'
+    cleanup_detail: str = ''
+    publish: str = 'skipped'  # 'ok' | 'nothing-to-push' | 'skipped-by-round-policy' |
+    #                         'skipped' | 'refused'
     report_path: str = ''
     stages: list[StageRecord] = field(default_factory=list)
 
@@ -81,6 +87,10 @@ def run_auto(
     do_publish: bool = True,
     emit: Callable[[str], None] = print,
     run_git: Callable[[list[str]], tuple[int, str]] | None = None,
+    run_git_raw: Callable[[list[str]], tuple[int, bytes]] | None = None,
+    allow_checkpoint: bool = False,
+    expected_owner: str = DEFAULT_EXPECTED_OWNER,
+    expected_repo: str = DEFAULT_EXPECTED_REPO,
     runner_factory: Callable[[Round], RoundRunner] | None = None,
     load_round: Callable[[], Round] = load_active_round,
 ) -> AutoResult:
@@ -98,7 +108,9 @@ def run_auto(
     # -- 2/3/4. sync, classification, checkpoint -------------------------
     sync = WorkBranchSync(
         repo, work_branch=work_branch, remote=remote, main_branch=main_branch,
-        run_git=run_git,
+        run_git=run_git, run_git_raw=run_git_raw,
+        allow_checkpoint=allow_checkpoint,
+        expected_owner=expected_owner, expected_repo=expected_repo,
     )
     if do_sync:
         say('etapa sync: buscando o branch de trabalho')
@@ -146,7 +158,16 @@ def run_auto(
     result.dirty_after = round_outcome.dirty or 0
     result.tests_ok = bool(round_outcome.tests) and all(
         test.status == 'pass' for test in round_outcome.tests)
-    result.cleanup_ok = not any('recusada' in note for note in round_outcome.notes)
+    # The cleanup verdict comes from teardown evidence only. The old version
+    # derived it from the absence of the word 'recusada' in the notes and then
+    # rendered `"PASS" if result.stage`, which is not a cleanup proof at all.
+    result.cleanup_ok = round_outcome.tree_cleaned
+    if round_outcome.launch_pid is None and not round_outcome.teardown:
+        result.cleanup_state = 'N/A'
+        result.cleanup_detail = 'nada foi lançado nesta rodada'
+    else:
+        result.cleanup_state = 'PASS' if round_outcome.tree_cleaned else 'FAIL'
+        result.cleanup_detail = round_outcome.teardown_detail
     result.runtime_ok = round_outcome.is_pass
     result.report_path = str(round_outcome.artifacts.get('report', ''))
     _record(result, 'tests', result.tests_ok,
@@ -159,13 +180,22 @@ def run_auto(
             verdict=round_outcome.verdict,
             terminal_missing=terminal_missing,
             forbidden=round_outcome.forbidden_seen)
-    _record(result, 'teardown', round_outcome.tree_cleaned,
-            '' if round_outcome.tree_cleaned else 'a árvore owned não foi encerrada')
+    _record(result, 'teardown',
+            result.cleanup_state in ('PASS', 'N/A'),
+            result.cleanup_detail
+            or ('a árvore owned não foi encerrada' if result.cleanup_state == 'FAIL' else ''),
+            state=result.cleanup_state,
+            descendants=round_outcome.teardown_descendants,
+            pid=round_outcome.launch_pid)
 
     if not round_outcome.is_pass:
         result.result = 'FAIL'
         result.stage = round_outcome.stage or ('tests' if not result.tests_ok else 'runtime')
-        result.cleanup_ok = result.cleanup_ok and round_outcome.stage != 'prepare'
+        # A refusal at prepare never launched anything: teardown was not
+        # skipped, it was never applicable. Say so instead of printing FAIL.
+        if result.cleanup_state == 'UNKNOWN':
+            result.cleanup_state = 'N/A'
+            result.cleanup_detail = result.cleanup_detail or 'nada foi lançado nesta rodada'
         refusal = next((note for note in round_outcome.notes
                         if 'RECUSADO' in note or 'recusada' in note), None)
         if not result.tests_ok:
@@ -189,7 +219,7 @@ def run_auto(
         result.publish = 'skipped'
         _record(result, 'publish', True, 'publicação desativada nesta invocação')
     elif not manifest.ready_for_publish:
-        result.publish = 'skipped'
+        result.publish = 'skipped-by-round-policy'
         _record(result, 'publish', True,
                 'round.ready_for_publish=false: nada é publicado por política')
     else:
@@ -209,6 +239,17 @@ def run_auto(
     return result
 
 
+# §J: the Push line must not imply that a PASS publishes source. M3.0b is not
+# marked ready_for_publish, so the honest label is an explicit skip.
+PUBLISH_LABELS = {
+    'ok': 'PUSHED',
+    'nothing-to-push': 'NOTHING TO PUSH',
+    'skipped-by-round-policy': 'SKIPPED BY ROUND POLICY',
+    'skipped': 'SKIPPED',
+    'refused': 'REFUSED',
+}
+
+
 def render_final_block(result: AutoResult) -> str:
     """The §J console block: a verdict, no menu, no decision to make."""
     bar = '=' * 40
@@ -220,8 +261,8 @@ def render_final_block(result: AutoResult) -> str:
             f'Sync: {"OK" if result.sync_ok else "FALHOU"}',
             f'Tests: {"PASS" if result.tests_ok else "FAIL"}',
             f'Runtime gate: {"PASS" if result.runtime_ok else "FAIL"}',
-            f'Process cleanup: {"PASS" if result.stage else "FAIL"}',
-            f'Push: {result.publish}',
+            f'Process cleanup: {result.cleanup_state}',
+            f'Push: {PUBLISH_LABELS.get(result.publish, result.publish)}',
         ]
     else:
         lines += [

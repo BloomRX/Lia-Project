@@ -23,6 +23,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 import queue
+import time
 from pathlib import Path
 import subprocess
 import sys
@@ -33,6 +34,7 @@ from . import processes, safe_paths
 from .markers import MarkerReport, evaluate_markers
 from .report import (SanitizedLog, prune_runs, run_dir, sanitize_console,
                      sanitize_test_output, utc_stamp, write_run)
+from .sync import git_executable
 from .schema import Round
 
 
@@ -74,6 +76,13 @@ class RoundOutcome:
     manual: dict[str, str] = field(default_factory=dict)
     launch_pid: int | None = None
     tree_cleaned: bool = False
+    # Cleanup is a CLAIM about evidence, not about intent. `teardown` carries
+    # what was actually proven; `tree_cleaned` stays a derived convenience.
+    teardown: str = ''
+    teardown_detail: str = ''
+    teardown_descendants: int = -1
+    timed_out: bool = False
+    gate_phase: str = ''
     # Machine-verifiable runtime evidence (§F): every terminal marker seen, and
     # any forbidden marker that appeared at all.
     terminal_seen: list[str] = field(default_factory=list)
@@ -108,7 +117,8 @@ def run_test_command(argv: list[str], cwd: Path) -> tuple[int, str]:
 
 def default_git(args: list[str], cwd: Path) -> tuple[int, str]:
     try:
-        probe = subprocess.run(['git', *args], cwd=cwd, capture_output=True, text=True, timeout=60)
+        probe = subprocess.run([git_executable(), *args], cwd=cwd,
+                               capture_output=True, text=True, timeout=60)
     except (OSError, subprocess.SubprocessError) as exc:
         return 128, str(exc)
     return probe.returncode, (probe.stdout or probe.stderr or '').strip()
@@ -149,6 +159,13 @@ class RoundRunner:
     ask: Asker = field(default=console_asker)
     clock: Clock = field(default=lambda: datetime.now(timezone.utc))
     marker_timeout_s: float = 600.0
+    # Phase B budget, counted from the moment the ordered chain completed. The
+    # renderer mounts asynchronously long after `spawn: node`, so it gets its
+    # own bound instead of sharing the startup one.
+    terminal_timeout_s: float = 300.0
+    # Bounded window for catching a forbidden marker that lands right after the
+    # last piece of required evidence. Never waits for NEW evidence.
+    forbidden_drain_s: float = 1.0
     emit: Callable[[str], None] = field(default=print)
     invoke_test: Callable[[list[str], Path], tuple[int, str]] | None = None
     _console: SanitizedLog | None = None
@@ -326,8 +343,13 @@ class RoundRunner:
         gate = queue.Queue()
 
         def on_line(line: str) -> None:
+            # The sequence number is stamped at EMISSION time. Deriving it from
+            # len(lines) on the consumer side would be wrong whenever the child
+            # writes faster than the gate reads, and every line would then look
+            # like the same one to the "one line, one marker" rule.
+            index = len(lines)
             lines.append(line)
-            gate.put(line)
+            gate.put((index, line))
 
         note(f'lançamento gerenciado: {" ".join(manifest.launch.command)}')
         note(f'operador: {manifest.launch.operator_hint}')
@@ -339,38 +361,108 @@ class RoundRunner:
                             env=launch_env or None)
         outcome.launch_pid = getattr(handle, 'pid', None)
 
-        deadline = self.clock().timestamp() + self.marker_timeout_s
+        # ------------------------------------------------------------------
+        # TWO PHASES, both bounded, both watching the same three things:
+        #
+        #   A  the ordered startup chain (prerequisite -> build -> spawn);
+        #   B  ALL terminal markers, which arrive ASYNCHRONOUSLY after the
+        #      child is spawned - the renderer mounts seconds later.
+        #
+        # The previous version read `terminal_seen` out of the lines it already
+        # had as soon as phase A finished, so a perfectly healthy Lia was torn
+        # down before its renderer mounted and reported as FAIL. Timeouts use
+        # time.monotonic(): a wall-clock jump must never shorten a gate.
+        # ------------------------------------------------------------------
         pending = list(manifest.ordered_markers)
+        terminal_pending = list(manifest.runtime.terminal)
         matched: list[tuple[str, int]] = []
-        try:
-            while pending:
-                remaining = deadline - self.clock().timestamp()
+        outcome.terminal_seen = []
+        outcome.forbidden_seen = []
+        # A line is attributed to at most ONE marker, so a terminal pattern can
+        # never double as an ordered marker or the other way round.
+        consumed: set[int] = set()
+        phase_deadline = time.monotonic() + self.marker_timeout_s
+        outcome.gate_phase = 'A'
+        early_exit = False
+
+        def scan_forbidden(line: str, index: int) -> None:
+            for marker in manifest.runtime.forbidden:
+                if marker.id not in outcome.forbidden_seen and marker.matches(line):
+                    outcome.forbidden_seen.append(marker.id)
+                    consumed.add(index)
+                    note(f'marcador PROIBIDO visto: {marker.id}')
+
+        while (pending or terminal_pending) and not outcome.forbidden_seen:
+            remaining = phase_deadline - time.monotonic()
+            if remaining <= 0:
+                outcome.timed_out = True
+                if pending:
+                    note(f'gate fase A: tempo esgotado aguardando {pending[0].id}')
+                else:
+                    note('gate fase B: tempo esgotado aguardando a evidência terminal: '
+                         + ', '.join(marker.id for marker in terminal_pending))
+                break
+            try:
+                index, line = gate.get(timeout=min(remaining, 1.0))
+            except queue.Empty:
+                if handle.wait(0) is not None:
+                    early_exit = True
+                    note('gate: o processo gerenciado encerrou antes da evidência completa')
+                    break
+                continue
+
+            # Forbidden evidence wins over everything, at any point.
+            scan_forbidden(line, index)
+            if outcome.forbidden_seen:
+                break
+            if pending and index not in consumed and pending[0].matches(line):
+                matched.append((pending[0].id, index))
+                consumed.add(index)
+                note(f'marcador {pending[0].id}: OK')
+                pending.pop(0)
+                if not pending:
+                    outcome.gate_phase = 'B'
+                    phase_deadline = time.monotonic() + self.terminal_timeout_s
+                    note('gate fase B: cadeia de inicialização completa; aguardando a '
+                         'evidência terminal do Stage')
+            else:
+                for marker in list(terminal_pending):
+                    if index in consumed:
+                        break
+                    if marker.matches(line):
+                        terminal_pending.remove(marker)
+                        consumed.add(index)
+                        outcome.terminal_seen.append(marker.id)
+                        note(f'evidência terminal {marker.id}: OK')
+                        break
+
+        # Evidence is complete, but forbidden evidence must not be dropped just
+        # because it landed a moment later. This drain is BOUNDED (nothing new
+        # is waited for beyond one short window) so it cannot stall the gate,
+        # and it cannot invent evidence either: it only reads lines the child
+        # already wrote.
+        if not outcome.forbidden_seen and not early_exit:
+            drain_until = time.monotonic() + self.forbidden_drain_s
+            while True:
+                remaining = drain_until - time.monotonic()
                 if remaining <= 0:
-                    note('gate: tempo esgotado aguardando os marcadores')
                     break
                 try:
-                    line = gate.get(timeout=min(remaining, 1.0))
+                    index, line = gate.get(timeout=min(remaining, 0.25))
                 except queue.Empty:
-                    if handle.wait(0) is not None:
-                        note('gate: o processo gerenciado encerrou antes dos marcadores')
-                        break
+                    # Keep waiting until the window closes: an empty queue right
+                    # now says nothing about the next line the child will write.
                     continue
-                if pending[0].matches(line):
-                    matched.append((pending[0].id, len(lines) - 1))
-                    note(f'marcador {pending[0].id}: OK')
-                    pending.pop(0)
+                scan_forbidden(line, index)
+                if outcome.forbidden_seen:
+                    break
 
-            # Terminal markers are order-insensitive but ALL are required, and
-            # a forbidden marker appearing anywhere is an immediate failure.
-            outcome.terminal_seen = [
-                marker.id for marker in manifest.runtime.terminal
-                if any(marker.matches(line) for line in lines)
-            ]
-            outcome.forbidden_seen = [
-                marker.id for marker in manifest.runtime.forbidden
-                if any(marker.matches(line) for line in lines)
-            ]
-
+        missing_terminal = [marker.id for marker in terminal_pending]
+        if early_exit:
+            outcome.notes.append(
+                'o processo encerrou antes da evidência completa; nada foi inferido',
+            )
+        try:
             # The marker verdict is decided BEFORE any human is involved.
             optional_seen = [
                 marker.id
@@ -388,17 +480,14 @@ class RoundRunner:
             for line in outcome.markers.describe():
                 note(f'gate: {line}')
 
-            # Section 4 of D1.1: the visual question is asked ONLY when the
-            # automatic gate passed. Asking after a dead stage, a missing
-            # marker or a timeout would invite a meaningless answer.
-            for marker_id in outcome.terminal_seen:
-                note(f'evidência terminal {marker_id}: OK')
-            missing_terminal = [marker.id for marker in manifest.runtime.terminal
-                                if marker.id not in outcome.terminal_seen]
+            # Section 4 of D1.1: the human question (when a round declares one)
+            # is asked ONLY when the automatic gate passed. Asking after a dead
+            # stage, a missing marker or a timeout would invite a meaningless
+            # answer.
             if missing_terminal:
                 note(f'evidência terminal AUSENTE: {", ".join(missing_terminal)}')
             if outcome.forbidden_seen:
-                note(f'marcador PROIBIDO visto: {", ".join(outcome.forbidden_seen)}')
+                note(f'marcadores PROIBIDOS: {", ".join(outcome.forbidden_seen)}')
 
             if outcome.markers.ok and not outcome.forbidden_seen and not missing_terminal:
                 self._collect_manual(outcome, note)
@@ -409,9 +498,15 @@ class RoundRunner:
                 note('gate: afirmação visual NÃO perguntada - o gate automático não passou')
         finally:
             # Always clean up the tree THIS round started - on success, on
-            # marker failure, and on Ctrl+C. Rooted at our own PID only.
-            handle.terminate()
-            outcome.tree_cleaned = True
+            # marker failure, and on Ctrl+C. Rooted at our own PID only. The
+            # result is RECORDED, because terminate() used to return None and
+            # the caller then asserted a cleanup it had never verified.
+            teardown = handle.terminate()
+            outcome.tree_cleaned = teardown.ok
+            outcome.teardown = 'PASS' if teardown.ok else 'FAIL'
+            outcome.teardown_detail = teardown.describe()
+            outcome.teardown_descendants = teardown.descendants
+            note(f'limpeza da árvore própria: {outcome.teardown} ({teardown.describe()})')
 
         if outcome.optional_seen:
             note(f'gate: opcionais vistos: {", ".join(outcome.optional_seen)}')

@@ -5,27 +5,32 @@ produto e **não** avança o baseline funcional.
 
 ## Resumo em uma linha
 
-Dê dois cliques em **`DevKit.bat`** na raiz do repositório e escolha
-**`1) Executar rodada atual`**. Você não precisa lembrar comandos Git, pré-requisitos de
-build, comandos de teste nem o gate manual da rodada: tudo vem de um manifesto
-machine-readable.
+Dê **dois cliques** em **`DevKit.bat`** na raiz do repositório. Não há menu, não há número,
+não há confirmação: o piloto automático sincroniza, testa, lança a Lia, aciona *Conversar*
+sozinho, lê a própria evidência de runtime, encerra a árvore que criou e imprime um
+veredito **PASS/FAIL** com o caminho do relatório. Comandos avançados existem, mas só com
+argumento explícito.
 
 ## Arquitetura
 
 ```
-DevKit.bat                     fino: descobre o Python e delega (sem lógica em batch)
-  ├─ sem argumentos → tools/lia_dev.py menu        (Lia, por rodada)
-  └─ com argumentos → tools/project_cli.py         (DevKit universal / Git)
+DevKit.bat                     bootstrap fino: copia a si mesmo para %TEMP% e delega
+  ├─ sem argumentos → tools/lia_dev.py bootstrap   (sincroniza e reexecuta o auto)
+  └─ com argumentos → tools/lia_dev.py <verbo>     (auto|menu|round|status|git|…)
 
-tools/lia_dev.py               camada Lia: menu + subcomandos, sem lógica de gate
+tools/lia_dev.py               camada Lia: verbos, sem lógica de gate
   └─ tools/devflow/
-       ├─ schema.py            contrato do manifesto (estrito, falha fechado)
+       ├─ pipeline.py          o piloto automático (9 etapas) + bloco final
+       ├─ sync.py              política Git de zero escolha + prova do payload stageado
+       ├─ devflow-config.json  branch de trabalho e identidade FIXADA do repositório
+       ├─ schema.py            contrato do manifesto v2 (estrito, falha fechado)
        ├─ safe_paths.py        ÚNICO lugar que apaga algo
-       ├─ markers.py           gate de marcadores ORDENADOS
+       ├─ processes.py         árvore owned + teardown com evidência
        ├─ report.py            sanitização + artefatos + retenção
-       ├─ runner.py            execução da rodada
+       ├─ runner.py            execução da rodada e gate em duas fases
        ├─ rounds/m3_0b.json    rodada ativa (contrato machine-readable)
        ├─ active-round.json    ponteiro da rodada ativa
+       ├─ upgrades/            bootstrap de transição, entregue FORA do checkout
        └─ script-inventory.json inventário auditado dos .bat/.ps1 históricos
 ```
 
@@ -33,21 +38,22 @@ O gate em si **não** está no batch nem no menu: está em `tools/devflow/`, com
 injetáveis (`run_git`, `spawn`, `ask`, `clock`), para ser testável sem Windows, sem
 Electron e sem operador.
 
-## Menu do `DevKit.bat`
+## O que o duplo clique faz, e o que exige argumento
 
-```
-DevKit Lia - desenvolvimento por rodada
-  rodada ativa: M3.0b - Pre-requisito de build gerenciado do Stage (core-agent/dist)
-  1) Executar rodada atual
-  2) Abrir Lia normalmente
-  3) Mostrar rodada / estado atual
-  4) Diagnóstico do ambiente
-  5) Listar rodadas
-  6) DevKit universal (Git)  [futuro/D2: consolidação de publish]
-  0) Sair
-```
+| invocação | efeito |
+| --- | --- |
+| `DevKit.bat` | **AUTO** — o piloto completo, zero escolha |
+| `DevKit.bat status` | rodada ativa + validade do último PASS |
+| `DevKit.bat rounds` | lista as rodadas |
+| `DevKit.bat diagnose` | fatos do ambiente |
+| `DevKit.bat open` | abre a Lia normalmente, sem gate |
+| `DevKit.bat round` | só a rodada, sem sincronizar nem publicar |
+| `DevKit.bat menu` | o menu antigo, para uso avançado |
+| `DevKit.bat git <sub>` | DevKit universal (`publish`, `pull`, `validate`, …) |
 
-Equivalente em terminal: `python tools/lia_dev.py round|status|open|diagnose|rounds|menu`.
+O `.bat` **não usa `SHIFT`**: no `cmd.exe` o `SHIFT` não reescreve `%*`, então
+`DevKit.bat git publish` repassaria o token `git` junto. O token é descartado em
+`lia_dev.git_forward_argv`, onde é testável e onde o quoting já foi resolvido.
 
 ## O que a rodada M3.0b faz, na ordem
 
@@ -56,27 +62,28 @@ Equivalente em terminal: `python tools/lia_dev.py round|status|open|diagnose|rou
 3. remove **apenas** `airi/packages/core-agent/dist` (gerado e gitignored) para reproduzir um
    pull fresco. **Nenhum build manual** — a rodada precisa provar que o Launcher reconstrói
    sozinho;
-4. roda os testes direcionados: DevFlow, Lia App, contrato M3.0a;
-5. lança o caminho gerenciado canônico (`Lia.bat`) com console capturado;
-6. **você** clica em *Conversar com Lia*;
+4. roda os testes obrigatórios: DevFlow, Lia App, contrato M3.0a, DevFlow do Stage;
+5. lança o caminho gerenciado canônico (`Lia.bat`) com o ambiente DevFlow;
+6. o próprio Launcher aciona *Conversar* (`LIA_DEVFLOW_AUTORUN=conversar`);
 7. detecta, **nesta ordem**:
    1. `stage-prerequisite name=core-agent-build state=starting`
    2. `stage-prerequisite name=core-agent-build state=succeeded` + `reason=build-succeeded`
    3. `spawn: node … electron-vite.js dev`
    (opcional, não gateia: `ready in`);
-8. pergunta **uma única** coisa que log não prova:
-   `A personagem apareceu normalmente? [S|N]`
-9. grava um relatório compacto e sanitizado.
+8. **aguarda** a evidência terminal, que chega depois: `renderer=ready`,
+   `window=visible`, `renderer-app=mounted` e `avatar-scene=mounted`;
+9. encerra **somente** a árvore que iniciou e grava um relatório sanitizado.
 
-**Ordem obrigatória (D1.1):** checkout limpo → limpeza → **todos** os testes obrigatórios
-passando → lançamento → **todos** os marcadores na ordem → só então a pergunta visual. Se os
-marcadores falharem, faltarem, expirarem ou o processo morrer antes, a pergunta **não é
-feita**, a árvore é encerrada e o veredito é `FAIL`.
+**Ordem obrigatória:** checkout exato → limpeza → **todos** os testes obrigatórios passando
+→ lançamento → cadeia ordenada → **toda** a evidência terminal → veredito. Se algo faltar,
+expirar, aparecer fora de ordem ou o processo morrer antes, a árvore é encerrada e o
+veredito é `FAIL`.
 
-**Um log nunca vira PASS visual.** O veredito é `PASS` somente se todos os marcadores
-casarem **e** a pessoa responder `S`. Resposta vazia, `N` ou qualquer outra coisa ⇒
-`NOT_PASS`. Interrupção (Ctrl+C) ⇒ `INTERRUPTED`, registrado — nunca um silêncio e nunca um
-sucesso, e com a mesma limpeza da árvore owned.
+**Um log nunca vira PASS.** `PASS` exige a cadeia ordenada completa **e** os quatro fatos
+terminais **e** nenhum marcador proibido **e** todos os testes passando. Interrupção
+(Ctrl+C) ⇒ `INTERRUPTED`, registrado — nunca um silêncio e nunca um sucesso, e com a mesma
+limpeza da árvore owned. A M3.0b não declara nenhuma afirmação humana: o `S/N` foi
+substituído por evidência de máquina.
 
 **Teste pulado nunca é sucesso (D1.1).** Todo teste declarado em `round.tests` é
 **obrigatório**. Teste com falha ⇒ rodada `FAIL` e **sem lançamento**. Teste indisponível
@@ -199,6 +206,142 @@ uma afirmação humana, **nunca de nenhum dos dois**; `launch.env` não pode def
 críticas de processo (`PATH`, `COMSPEC`, `SYSTEMROOT`, …); `auto_action` e `scenario.driver`
 não implementados são erro, não no-op silencioso.
 
+## AUTO-1a: o que uma auditoria independente encontrou, e como foi fechado
+
+Uma auditoria do commit AUTO-1 confirmou a arquitetura e apontou defeitos que impediriam a
+primeira execução real. Todos foram corrigidos aqui; nenhum foi considerado falso.
+
+### 1. A cópia em `%TEMP%` perdia a raiz do repositório
+
+O `DevKit.bat` se copiava para `%TEMP%` e reexecutava a cópia — mas `%~dp0` **dentro da
+cópia é `%TEMP%`**, não o repositório. O resultado era determinístico: `ERRO:
+tools\lia_dev.py nao encontrado ao lado do DevKit.bat`. Ou seja, o duplo clique **sempre**
+falharia.
+
+Hoje a raiz original é verificada e exportada em `LIA_DEVKIT_ROOT` **antes** da cópia, e o
+corpo do script só usa essa variável — `%~dp0` não aparece mais depois de `:body`. A cópia
+tem **nome único por execução** (`%RANDOM%-%RANDOM%`); colisão de nome recusa em vez de
+reutilizar; falha de `copy` é **FAIL CLOSED** (nada roda a partir do original, que pode ser
+sobrescrito durante a atualização); o código de saída do filho é propagado; os artefatos
+temporários são removidos. Não há caminho de máquina embutido.
+
+### 2. O gate parava de esperar a evidência terminal
+
+`_launch_and_gate` saía do laço assim que a cadeia ordenada completava e lia
+`terminal_seen` **das linhas que já tinha**. Como `renderer=ready`, `window=visible` e
+`avatar-scene=mounted` chegam **depois** do `spawn: node`, uma Lia perfeitamente saudável
+era encerrada antes de o renderer montar e reportada como `FAIL`.
+
+O gate agora tem duas fases, ambas com limite de tempo em `time.monotonic()`:
+
+- **fase A** — a cadeia ordenada de inicialização;
+- **fase B** — **todos** os marcadores terminais, com orçamento próprio contado a partir do
+  fim da fase A.
+
+Ambas vigiam saída do processo e marcador proibido; marcador proibido falha na hora. Uma
+linha satisfaz **no máximo um** marcador (o índice é carimbado na emissão, não no consumo),
+então um padrão terminal nunca conta como ordenado nem o contrário. Depois da evidência
+completa há uma janela **limitada** para capturar um marcador proibido que chegue logo em
+seguida — ela nunca espera por evidência nova.
+
+Os testes usam um spawner que emite de uma thread em background, com atrasos reais. Um
+spawner que empurra tudo antes de retornar é exatamente o formato que escondia o defeito.
+
+### 3. Identidade do repositório e prova do que é stageado
+
+A verificação era `if 'Lia-Project' not in url`. Isso aceita qualquer host ou dono que
+contenha a substring — não é verificação de identidade. Agora o repositório é **fixado**
+(`BloomRX/Lia-Project` em `github.com`) e a URL é normalizada nas formas canônicas HTTPS e
+SSH; qualquer outro host, dono ou repositório é recusado. Credenciais embutidas na URL são
+**redigidas** antes de qualquer mensagem.
+
+O checkpoint usava `git add -A`, que stageia o checkout inteiro em vez dos caminhos
+revisados. Agora:
+
+- o `git status` é lido com **`-z -uall`**: `-z` porque sem ele o git cita caminhos com
+  espaço ou byte não-ASCII em octal (e o texto classificado não seria o caminho no disco),
+  `-uall` porque um diretório não rastreado chegaria colapsado como `tools/`;
+- renomeação, cópia e caminho em conflito são **recusados**, não interpretados;
+- caminho absoluto, com `..`, symlink/reparse que escapa do repositório e arquivo não
+  regular são recusados **antes** de stagear;
+- só os caminhos aprovados são stageados, com `git add -- <paths>`;
+- depois, `verify_staged_payload` prova que o índice contém **exatamente** o conjunto
+  aprovado, que o modo é de arquivo regular (symlink `120000` e submódulo `160000` são
+  recusados), que o blob stageado é **igual** ao working tree, e roda a verificação de
+  segredo e tamanho **sobre o blob stageado**, não sobre o texto do disco.
+
+`allow_checkpoint` fica **desligado** por padrão: para esta primeira execução no Windows o
+contrato é checkout limpo. O caminho endurecido está implementado e testado, mas só roda se
+for ligado explicitamente.
+
+### 4. Fast-forward correto na publicação
+
+`publish()` recusava sempre que `remote_head != current` — o que recusa justamente o caso
+para o qual publicar existe: um commit local à frente do remote. A semântica correta é:
+HEAD igual ao testado, checkout limpo, branch de trabalho, remote verificado como o
+repositório esperado, `fetch` imediatamente antes do push, e **a ponta do remote precisa ser
+ancestral do HEAD testado** (`git merge-base --is-ancestor`). Aí o push normal, sem
+`--force`, é permitido. Divergência ⇒ recusa e revalidação. Nenhum rebase acontece depois do
+gate: isso colocaria um SHA diferente sob um PASS medido contra o anterior.
+
+Como `M3.0b.ready_for_publish=false`, o bloco final imprime
+**`Push: SKIPPED BY ROUND POLICY`** — um PASS da M3.0b **não** publica código.
+
+### 5. Limpeza de processo com evidência
+
+`render_final_block` imprimia `Process cleanup: PASS` quando `result.stage` era não-vazio —
+ou seja, qualquer string de estágio virava PASS. E `terminate()` retornava `None` engolindo
+falha de `taskkill`, enquanto o runner gravava `tree_cleaned = True` incondicionalmente.
+
+`terminate()` agora devolve um `TeardownResult` com o que foi **provado**: raiz confirmada
+morta, método, detalhe e evidência de descendentes (`-1` quando a plataforma não sabe —
+incerteza continua incerteza). No Windows o `taskkill` tem o retorno e o `SUCCESS:` lidos;
+no POSIX a sobrevivência do grupo é sondada com `os.killpg(pgid, 0)`. O bloco final lê esse
+fato e pode imprimir `PASS`, `FAIL`, `N/A` (nada foi lançado) ou `UNKNOWN`.
+
+### 6. Resolução de executável no Windows
+
+A sonda de PATH mínimo criava um `git.cmd` no PATH isolado. Mas `CreateProcess` só anexa
+`.exe` e **não consulta `PATHEXT`**, então `subprocess(['git'], shell=False)` não acharia o
+shim: a sonda mediria "o git sumiu" em vez de "nenhuma ferramenta POSIX é necessária".
+
+Agora existe `LIA_DEVFLOW_GIT` com o caminho **absoluto** do git, e todos os pontos de
+chamada o consomem (`sync._git`, `sync._git_raw`, `runner.default_git`,
+`safe_paths._assert_git_ignored`, `lia_dev._git`). A sonda remove o git do PATH de verdade e
+passa o caminho absoluto. Fazer isso expôs três chamadas literais que ainda existiam — é
+para isso que a prova comportamental serve.
+
+### 7. Evidência de avatar nomeada com honestidade
+
+O renderer emitia `avatar-scene=mounted` logo depois de `createApp(App).mount('#app')`. Isso
+prova que o **app raiz** montou, não que um avatar foi carregado ou desenhado. Ficou o
+desenho A: o sinal raiz foi renomeado para **`renderer-app=mounted`**, e o sinal de avatar
+passou a vir de quem realmente sabe — `componentStateStage === 'mounted'` em
+`pages/index.vue`, escrito pelo próprio componente de cena (`WidgetStage` → `Stage.vue`).
+
+`window=visible` também foi auditado: `show()` é um **pedido**, não um fato. O marcador agora
+só é emitido se `isVisible()` confirmar; caso contrário ele simplesmente não aparece e o
+gate falha por evidência ausente, em vez de confiar na chamada.
+
+Nenhum dos dois carrega conteúdo: são metadados, sem prompt, imagem, mensagem, chave ou dado
+de vault, e nada é persistido como imagem.
+
+### 8. Caminho de atualização única, entregue FORA do checkout
+
+Limitação real de transição: o checkout do dono do projeto ainda tem o `DevKit.bat`
+**anterior** ao AUTO. Um recurso do DevKit novo não pode rodar dentro do antigo antes de ser
+baixado — então **não é verdade** que dois cliques no DevKit antigo usem o código novo.
+
+`tools/devflow/upgrades/LIA-DEVFLOW-UPGRADE.bat` é o bootstrap de transição: só precisa do
+`git`, confere repositório/remote fixado/branch, recusa com checkout sujo, faz `fetch` e
+avança **somente por fast-forward** até o commit revisado, e então chama o `DevKit.bat`
+novo. Nada é forçado, mesclado ou descartado.
+
+**Entrega:** o arquivo é versionado aqui para revisão, mas precisa chegar **FORA do
+checkout** — anexo da conversa ou download. Colocá-lo apenas no Git não resolve o problema:
+não haveria como executá-lo antes do update que ele próprio faz. Ele **não** deve ser
+executado pelo dono do projeto antes da revisão independente do commit final.
+
 ## Segurança
 
 - nenhum `git clean`, `git reset --hard`, force-push ou recursão fora de allowlist;
@@ -310,8 +453,10 @@ desligar a exclusão e explodir o custo.
 
 O manifesto precisa declarar: `round` (id, título, fase, `ready_for_publish`, `tested_sha`),
 `git.expected_branch`, `prepare`, `cleanup_profile.allowlisted_generated`, `tests`,
-`launch`, `diagnostics.ordered_markers`, `manual_assertions` (**obrigatório** — uma rodada
-sem afirmação humana é recusada pelo schema) e `retention`.
+`launch` (com `env` e `auto_action`), `runtime_assertions` (ordenados, **terminais**,
+proibidos, opcionais), `scenario`, `manual_assertions` e `retention`. O schema exige
+evidência **terminal ou humana** — nunca a ausência das duas, e nunca as duas obrigatórias
+ao mesmo tempo.
 
 **Nunca** dirija execução a partir da prosa de `CURRENT-STATE.md`. A documentação pode
 espelhar o manifesto; o contrato é o JSON.
@@ -337,6 +482,11 @@ limpo. Não há contradição: `run.json` prova o que foi testado; o manifesto d
 - **O entrypoint humano é `DevKit.bat` e duplo clique significa AUTO.** `Lia.bat` passou a
   entrypoint interno/de runtime (o DevFlow o invoca por manifesto); os demais BAT/PS1
   históricos permanecem internos até o D3, que fará as fusões/remoções.
+- **AUTO-1a** corrige os defeitos auditados do AUTO-1 antes da primeira execução real:
+  a raiz perdida na cópia em `%TEMP%`, o gate que parava de esperar a evidência terminal, a
+  identidade de repositório por substring, o `git add -A`, a semântica de fast-forward, o
+  PASS de limpeza fabricado, o shim `git.cmd` inalcançável e o nome desonesto do marcador de
+  avatar.
 - **D1 existiu** no commit `32025ab`; **D1.1** no `12ab92e`; **D1.2** no `e204ecb`. A primeira rodada real no
   Windows alcançou o HEAD exato e limpo, removeu `core-agent/dist` com segurança e o
   fail-closed funcionou (o teste automatizado com `exit 1` impediu o lançamento da Lia);

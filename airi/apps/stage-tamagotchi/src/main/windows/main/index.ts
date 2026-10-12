@@ -168,7 +168,12 @@ export async function setupMainWindow(params: {
     // Inert unless LIA_DEVFLOW_DIAGNOSTICS=1, which only the Lia development
     // autopilot sets. A taskbar icon alone is exactly the false positive the
     // M3.0b round was created to stop trusting.
-    liaDevflowMark('window=visible')
+    //
+    // show() is a REQUEST, not a fact, so the marker is gated on isVisible().
+    // If the window somehow is not visible the marker is simply not emitted and
+    // the gate fails on missing evidence instead of trusting the call.
+    if (window?.isVisible())
+      liaDevflowMark('window=visible')
   })
 
   // DEVFLOW-ONLY: proof the renderer document actually finished loading, which

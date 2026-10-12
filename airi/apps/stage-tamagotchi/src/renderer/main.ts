@@ -162,11 +162,15 @@ createApp(App)
   .use(trackButtonPlugin)
   .mount('#app')
 
-// DEVFLOW-ONLY evidence that the scene graph really mounted. This is the exact
-// fact that a stale core-agent/dist used to destroy while the window still
-// showed a taskbar icon. Fire-and-forget and inert in a normal launch: the main
-// process registers no listener unless LIA_DEVFLOW_DIAGNOSTICS=1.
+// DEVFLOW-ONLY evidence that the ROOT Vue app mounted. This is the exact fact a
+// stale core-agent/dist used to destroy while the window still showed a taskbar
+// icon: module instantiation failed and nothing rendered.
+//
+// It is named `app-mounted` because it proves the root app, NOT an avatar. The
+// avatar claim comes from the Stage scene component instead.
+// Fire-and-forget and inert in a normal launch: the main process registers no
+// listener unless LIA_DEVFLOW_DIAGNOSTICS=1.
 try {
-  window.electron?.ipcRenderer?.send?.('lia-devflow:scene-mounted')
+  window.electron?.ipcRenderer?.send?.('lia-devflow:app-mounted')
 }
 catch {}

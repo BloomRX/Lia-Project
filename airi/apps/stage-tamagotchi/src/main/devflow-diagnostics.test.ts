@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   __resetLiaDevflowMarksForTest,
+  LIA_DEVFLOW_APP_MOUNTED_CHANNEL,
   LIA_DEVFLOW_DIAGNOSTICS_ENV,
   LIA_DEVFLOW_SCENE_MOUNTED_CHANNEL,
   liaDevflowDiagnosticsEnabled,
@@ -54,6 +55,20 @@ beforeEach(() => {
   __resetLiaDevflowMarksForTest()
   on.mockClear()
 })
+
+// From src/main to airi/packages/stage-ui: four levels up, then into the package.
+const STAGE_SCENE_COMPONENT_RELATIVE = join(
+  '..',
+  '..',
+  '..',
+  '..',
+  'packages',
+  'stage-ui',
+  'src',
+  'components',
+  'scenes',
+  'Stage.vue',
+)
 
 describe('diagnostics are inert without the DevFlow flag', () => {
   it('is disabled by default', () => {
@@ -105,14 +120,29 @@ describe('diagnostics emit the three runtime facts under the flag', () => {
 
   it('the renderer bridge reports the mounted scene exactly once', () => {
     expect(registerLiaDevflowSceneBridge(env)).toBe(true)
-    expect(on).toHaveBeenCalledTimes(1)
-    expect(on.mock.calls[0][0]).toBe(LIA_DEVFLOW_SCENE_MOUNTED_CHANNEL)
-    const handler = on.mock.calls[0][1] as () => void
+    const channels = on.mock.calls.map(call => call[0])
+    expect(channels).toContain(LIA_DEVFLOW_SCENE_MOUNTED_CHANNEL)
+    const handler = on.mock.calls.find(
+      call => call[0] === LIA_DEVFLOW_SCENE_MOUNTED_CHANNEL,
+    )![1] as () => void
     const lines = captureLogs(() => {
       handler()
       handler()
     })
     expect(lines).toEqual(['lia-stage avatar-scene=mounted'])
+  })
+
+  it('the root app mount is a SEPARATE claim from the avatar scene', () => {
+    // Renaming matters: `createApp(App).mount('#app')` proves the root app
+    // mounted, not that an avatar loaded. Two channels, two marker names, and
+    // neither can satisfy the other.
+    expect(registerLiaDevflowSceneBridge(env)).toBe(true)
+    const channels = on.mock.calls.map(call => call[0])
+    expect(channels).toContain(LIA_DEVFLOW_APP_MOUNTED_CHANNEL)
+    const appHandler = on.mock.calls.find(
+      call => call[0] === LIA_DEVFLOW_APP_MOUNTED_CHANNEL,
+    )![1] as () => void
+    expect(captureLogs(() => appHandler())).toEqual(['lia-stage renderer-app=mounted'])
   })
 
   it('carries metadata only - no prompt, image, key or vault content', () => {
@@ -142,11 +172,40 @@ describe('the markers are wired to the facts they claim', () => {
     const source = stripComments(readHere('devflow-diagnostics.ts'))
     expect(source.match(/avatar-scene=mounted/g)).toHaveLength(1)
     expect(readHere('index.ts')).toContain('registerLiaDevflowSceneBridge()')
-    const rendererSource = readHere('..', 'renderer', 'main.ts')
+    // The ROOT app mount reports from main.ts, after mounting, under its own name.
+    const rendererSource = stripComments(readHere('..', 'renderer', 'main.ts'))
     const mountAt = rendererSource.indexOf('.mount(\'#app\')')
-    const sendAt = rendererSource.indexOf('lia-devflow:scene-mounted')
+    const sendAt = rendererSource.indexOf('lia-devflow:app-mounted')
     expect(mountAt).toBeGreaterThan(-1)
     expect(sendAt, 'the renderer must report AFTER mounting').toBeGreaterThan(mountAt)
+    expect(rendererSource).not.toContain('lia-devflow:scene-mounted')
+  })
+
+  it('the avatar claim comes from the scene component, not the root mount', () => {
+    // `pages/index.vue` watches the state the Stage scene component itself
+    // writes, which is the only honest source for an avatar-scene claim.
+    const pageSource = stripComments(readHere('..', 'renderer', 'pages', 'index.vue'))
+    const watchAt = pageSource.indexOf('watch(stageMounted')
+    const sendAt = pageSource.indexOf('lia-devflow:scene-mounted')
+    expect(watchAt, 'index.vue must watch the scene state').toBeGreaterThan(-1)
+    expect(sendAt, 'the scene claim must be sent from the scene watcher')
+      .toBeGreaterThan(watchAt)
+    // The claim is only honest if the scene component really writes that state.
+    const stageVue = join(HERE, STAGE_SCENE_COMPONENT_RELATIVE)
+    expect(readFileSync(stageVue, { encoding: 'utf-8' }))
+      .toContain('componentState.value = \'mounted\'')
+  })
+
+  it('window=visible is verified, not assumed from the show() call', () => {
+    // show() is a request. The marker must be gated on isVisible(), otherwise
+    // the gate would trust a call instead of the fact.
+    const windowSource = readHere('windows', 'main', 'index.ts')
+    const showAt = windowSource.indexOf('window!.show()')
+    const markAt = windowSource.indexOf('liaDevflowMark(\'window=visible\')')
+    expect(showAt).toBeGreaterThan(-1)
+    expect(markAt).toBeGreaterThan(showAt)
+    const between = windowSource.slice(showAt, markAt)
+    expect(between, 'the marker must be gated on isVisible()').toContain('isVisible()')
   })
 
   it('a dev-server ready line is never treated as stage evidence', () => {

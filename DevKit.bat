@@ -1,6 +1,5 @@
 @echo off
 setlocal EnableExtensions DisableDelayedExpansion
-cd /d "%~dp0"
 set "PYTHONUTF8=1"
 chcp 65001 >nul 2>nul
 
@@ -10,30 +9,69 @@ rem
 rem  CONTRATO: duplo clique = AUTO. Sem menu, sem numero, sem submenu Git,
 rem  sem pull manual, sem build manual, sem clique em Conversar, sem S/N.
 rem
-rem  Comandos avancados (explicitos):
+rem  Comandos avancados (somente com argumento explicito):
 rem      DevKit.bat auto|menu|round|status|open|diagnose|rounds
 rem      DevKit.bat git <subcomando do DevKit universal>
 rem
 rem  Este arquivo e fino de proposito. Ele se COPIA para %TEMP% e reexecuta a
-rem  copia: o checkout pode ser atualizado por cima sem que o cmd.exe continue
-rem  lendo um .bat que mudou de tamanho no meio da execucao.
+rem  copia, porque o cmd.exe le um .bat por deslocamento de byte: se o checkout
+rem  for atualizado por cima dele no meio da execucao, o script em andamento se
+rem  corrompe.
+rem
+rem  PONTO CRITICO: dentro da copia, %~dp0 e o %TEMP%, NAO o repositorio. A raiz
+rem  ORIGINAL e verificada aqui e exportada em LIA_DEVKIT_ROOT antes da copia;
+rem  a copia so usa essa variavel. Nenhum caminho de maquina e embutido.
 rem ==========================================================================
 
-if not defined LIA_DEVKIT_BOOTSTRAP_COPY (
-    set "LIA_DEVKIT_BOOTSTRAP_COPY=1"
-    set "LIA_DEVKIT_COPY=%TEMP%\lia-devkit-bootstrap.bat"
-    copy /y "%~f0" "%LIA_DEVKIT_COPY%" >nul 2>nul
-    if exist "%LIA_DEVKIT_COPY%" "%LIA_DEVKIT_COPY%" %*
-    if exist "%LIA_DEVKIT_COPY%" exit /b %ERRORLEVEL%
+if defined LIA_DEVKIT_BOOTSTRAP_COPY goto :body
+
+rem ---- raiz original, capturada e verificada ANTES de qualquer copia --------
+set "LIA_DEVKIT_ROOT=%~dp0"
+if not exist "%LIA_DEVKIT_ROOT%tools\lia_dev.py" (
+    echo ERRO: tools\lia_dev.py nao encontrado em "%LIA_DEVKIT_ROOT%".
+    echo Rode o DevKit.bat que esta na raiz do repositorio Lia.
+    goto :fail
 )
 
-if not exist "%~dp0tools\lia_dev.py" (
-    echo ERRO: tools\lia_dev.py nao encontrado ao lado do DevKit.bat.
-    set "RC=1"
-    goto :finish
+rem ---- copia temporaria com nome unico por execucao -------------------------
+rem Nome unico de proposito: duas sessoes simultaneas nao podem compartilhar um
+rem arquivo, e uma copia antiga nunca pode ser confundida com a desta execucao.
+set "LIA_DEVKIT_COPY=%TEMP%\lia-devkit-%RANDOM%-%RANDOM%.bat"
+if exist "%LIA_DEVKIT_COPY%" (
+    echo ERRO: a copia temporaria "%LIA_DEVKIT_COPY%" ja existe.
+    echo Nada sera executado a partir de uma copia de origem desconhecida.
+    goto :fail
+)
+copy /y "%~f0" "%LIA_DEVKIT_COPY%" >nul 2>nul
+if errorlevel 1 (
+    echo ERRO: nao consegui copiar o DevKit.bat para "%LIA_DEVKIT_COPY%".
+    echo FAIL CLOSED: nada sera executado a partir do arquivo original, que
+    echo pode ser sobrescrito durante a atualizacao.
+    goto :fail
+)
+if not exist "%LIA_DEVKIT_COPY%" (
+    echo ERRO: a copia temporaria nao foi criada.
+    goto :fail
 )
 
-rem ---- descoberta do Python (>= 3.10) -------------------------------------
+set "LIA_DEVKIT_BOOTSTRAP_COPY=%LIA_DEVKIT_COPY%"
+"%LIA_DEVKIT_COPY%" %*
+set "LIA_DEVKIT_RC=%ERRORLEVEL%"
+del "%LIA_DEVKIT_COPY%" >nul 2>nul
+exit /b %LIA_DEVKIT_RC%
+
+:body
+rem ---- a partir daqui roda a COPIA; a raiz vem de LIA_DEVKIT_ROOT -----------
+if not defined LIA_DEVKIT_ROOT (
+    echo ERRO: LIA_DEVKIT_ROOT ausente; a raiz do repositorio nao foi herdada.
+    goto :fail
+)
+if not exist "%LIA_DEVKIT_ROOT%tools\lia_dev.py" (
+    echo ERRO: tools\lia_dev.py nao encontrado em "%LIA_DEVKIT_ROOT%".
+    goto :fail
+)
+
+rem ---- descoberta do Python (>= 3.10) ---------------------------------------
 where py >nul 2>nul
 if not errorlevel 1 (
     py -3 -c "import sys; raise SystemExit(sys.version_info < (3, 10))" >nul 2>nul
@@ -52,33 +90,33 @@ if not errorlevel 1 (
 )
 echo ERRO: Python 3.10 ou superior nao encontrado.
 echo Instale o Python com o launcher py ou marque Add Python to PATH.
-set "RC=1"
-goto :finish
+goto :fail
 
 :dispatch
-rem ---- DevKit universal (Git) apenas com argumento explicito --------------
-if /I "%~1"=="git" (
-    shift
-    %RUNPY% "%~dp0tools\project_cli.py" %*
-    set "RC=%ERRORLEVEL%"
-    goto :finish
-)
-
-rem ---- duplo clique / sem argumentos = BOOTSTRAP + AUTO -------------------
+rem ---- duplo clique / sem argumentos = BOOTSTRAP + AUTO ---------------------
+rem Nao ha SHIFT aqui. No cmd.exe o SHIFT nao reescreve %*, entao "DevKit.bat
+rem git publish" repassaria o token "git" junto. Quem descarta o primeiro token
+rem e o proprio Python, com a linha de comando original intacta.
 if "%~1"=="" (
-    %RUNPY% "%~dp0tools\lia_dev.py" bootstrap
-    set "RC=%ERRORLEVEL%"
+    %RUNPY% "%LIA_DEVKIT_ROOT%tools\lia_dev.py" bootstrap
+    set "LIA_DEVKIT_RC=%ERRORLEVEL%"
     goto :finish
 )
 
-%RUNPY% "%~dp0tools\lia_dev.py" %*
-set "RC=%ERRORLEVEL%"
+%RUNPY% "%LIA_DEVKIT_ROOT%tools\lia_dev.py" %*
+set "LIA_DEVKIT_RC=%ERRORLEVEL%"
+goto :finish
+
+:fail
+set "LIA_DEVKIT_RC=1"
 
 :finish
-if not "%RC%"=="0" echo O DevKit terminou com erro. Leia a mensagem acima.
+if not "%LIA_DEVKIT_RC%"=="0" echo O DevKit terminou com erro. Leia a mensagem acima.
 if "%LIA_DEVKIT_NO_PAUSE%"=="" (
     echo.
     echo Pressione qualquer tecla para fechar.
     pause >nul
 )
-exit /b %RC%
+rem A copia se remove: o nome e unico, entao uma sobra nunca e reutilizada.
+if defined LIA_DEVKIT_BOOTSTRAP_COPY del "%~f0" >nul 2>nul
+exit /b %LIA_DEVKIT_RC%

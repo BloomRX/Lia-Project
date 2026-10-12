@@ -67,6 +67,23 @@ const componentStateStage = ref<'pending' | 'loading' | 'mounted'>('pending')
 const stageMounted = computed(() => componentStateStage.value === 'mounted')
 const isLoading = computed(() => !stageMounted.value)
 
+// DEVFLOW-ONLY. `componentStateStage` is written by the Stage scene component
+// itself (`WidgetStage` -> `Stage.vue`), so this is the one place that can
+// honestly say an avatar scene was mounted - a different fact from the root Vue
+// app mounting, which is reported separately from `main.ts`.
+//
+// Fire-and-forget and inert in a normal launch: the main process registers no
+// listener unless LIA_DEVFLOW_DIAGNOSTICS=1, which only the Lia development
+// autopilot sets. Metadata only - no prompt, image, message, key or vault data.
+watch(stageMounted, (mounted) => {
+  if (!mounted)
+    return
+  try {
+    window.electron?.ipcRenderer?.send?.('lia-devflow:scene-mounted')
+  }
+  catch {}
+}, { immediate: true })
+
 const isIgnoringMouseEvents = ref(false)
 const shouldFadeOnCursorWithin = ref(false)
 

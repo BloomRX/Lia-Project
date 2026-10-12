@@ -27,6 +27,7 @@ import shutil
 import subprocess
 
 from . import filesystem
+from .sync import git_executable
 
 
 class PathSafetyError(RuntimeError):
@@ -95,8 +96,11 @@ def _assert_git_ignored(root: Path, relative: PurePosixPath) -> None:
     """Rule 5: Git must confirm the target is generated (ignored)."""
     posix = '/'.join(relative.parts)
     try:
+        # Absolute path when one is configured: this proof has to keep working
+        # under the minimum-PATH self-test, where git is deliberately NOT on
+        # PATH and a `.cmd` shim would not resolve anyway.
         probe = subprocess.run(
-            ['git', 'check-ignore', '--quiet', '--', posix],
+            [git_executable(), 'check-ignore', '--quiet', '--', posix],
             cwd=root, capture_output=True, timeout=30,
         )
     except (OSError, subprocess.SubprocessError) as exc:

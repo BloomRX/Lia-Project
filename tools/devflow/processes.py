@@ -31,6 +31,7 @@ working directory is the repository root passed by the caller.
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
 import os
 from pathlib import Path
 import signal
@@ -66,6 +67,38 @@ def _popen_kwargs() -> dict:
     return {'start_new_session': True}
 
 
+@dataclass
+class TeardownResult:
+    """
+    What teardown actually PROVED, as opposed to what it attempted.
+
+    `ok` is deliberately narrow: only a confirmed-dead root counts. Uncertainty
+    stays uncertainty, so the report can never claim a cleanup it did not see.
+    """
+
+    requested: bool = False
+    root_terminated: bool = False
+    method: str = ''
+    detail: str = ''
+    descendants: int = -1  # -1 = this platform cannot tell us
+
+    @property
+    def ok(self) -> bool:
+        return self.root_terminated
+
+    def describe(self) -> str:
+        parts = [self.method or 'sem método registrado']
+        if self.detail:
+            parts.append(self.detail)
+        if self.descendants == 0:
+            parts.append('nenhum descendente vivo')
+        elif self.descendants > 0:
+            parts.append(f'ainda há descendente(s) vivo(s): {self.descendants}+')
+        elif self.requested:
+            parts.append('descendentes: desconhecido nesta plataforma')
+        return '; '.join(parts)
+
+
 class OwnedProcess:
     """
     A spawned root process plus teardown of the tree rooted at its PID.
@@ -88,41 +121,89 @@ class OwnedProcess:
         except subprocess.TimeoutExpired:
             return None
 
-    def terminate(self) -> None:
-        """Kills the owned tree, then waits for the root to confirm it died."""
+    def terminate(self) -> TeardownResult:
+        """
+        Kills the owned tree and REPORTS what was actually proven.
+
+        The old version returned None and the caller wrote `tree_cleaned = True`
+        unconditionally, so a failed `taskkill` was reported to the user as
+        `Process cleanup: PASS`. A cleanup claim has to come from evidence:
+        the root process confirmed dead, plus whatever descendant evidence this
+        platform can honestly produce.
+        """
+        result = TeardownResult()
         if self._process.poll() is not None:
-            return
+            result.requested = False
+            result.root_terminated = True
+            result.method = 'já havia encerrado'
+            result.descendants = self._alive_descendants()
+            return result
         pid = self._process.pid
         if pid is None:
-            return
-        if os.name == 'nt':
-            self._taskkill(pid)
-        else:
-            self._kill_group(pid, signal.SIGTERM)
+            result.method = 'sem PID para encerrar'
+            result.detail = 'o processo gerenciado não expôs PID'
+            return result
+        result.requested = True
+        for attempt, sig in ((0, signal.SIGTERM), (1, signal.SIGKILL)):
+            if attempt:
+                result.detail = (result.detail + '; ' if result.detail else '') \
+                    + 'SIGTERM não bastou, escalando'
+            if os.name == 'nt':
+                # Scoped to ONE root PID. /T walks only that process's
+                # descendants; there is no kill-by-image-name anywhere here.
+                ok, killed, detail = self._taskkill(pid)
+                result.method = 'taskkill /T /F'
+                result.detail = detail
+                if killed >= 0:
+                    result.descendants = killed
+                if not ok and attempt:
+                    break
+            else:
+                result.method = 'grupo de processo (SIGTERM/SIGKILL)'
+                self._kill_group(pid, sig)
+            try:
+                self._process.wait(timeout=15 if not attempt else 5)
+                result.root_terminated = True
+                break
+            except subprocess.TimeoutExpired:
+                continue
+        result.root_terminated = self._process.poll() is not None
+        if result.descendants < 0:
+            result.descendants = self._alive_descendants()
+        return result
+
+    def _alive_descendants(self) -> int:
+        """
+        How many processes of the owned group are still alive, or -1 when this
+        platform cannot tell us. Never a guess presented as a count.
+        """
+        pid = self._process.pid
+        if pid is None or os.name == 'nt':
+            return -1
         try:
-            self._process.wait(timeout=15)
-            return
-        except subprocess.TimeoutExpired:
-            pass
-        if os.name == 'nt':
-            self._taskkill(pid)
-        else:
-            self._kill_group(pid, signal.SIGKILL)
-        try:
-            self._process.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            pass
+            os.killpg(os.getpgid(pid), 0)
+        except ProcessLookupError:
+            return 0
+        except (OSError, PermissionError):
+            return -1
+        return 1  # at least the group still answers; the exact count is unknown
 
     @staticmethod
-    def _taskkill(pid: int) -> None:
-        # Scoped to ONE root PID. /T walks only that process's descendants.
+    def _taskkill(pid: int) -> tuple[bool, int, str]:
+        """(succeeded, descendants_killed_or_-1, detail). Never a silent pass."""
         try:
-            subprocess.run(
+            probe = subprocess.run(
                 ['taskkill', '/PID', str(pid), '/T', '/F'],
-                capture_output=True, timeout=30, check=False,
+                capture_output=True, text=True, encoding='utf-8',
+                errors='replace', timeout=30, check=False,
             )
-        except (OSError, subprocess.SubprocessError):
-            pass
+        except (OSError, subprocess.SubprocessError) as exc:
+            return False, -1, f'taskkill não pôde ser executado: {type(exc).__name__}'
+        text = ((probe.stdout or '') + (probe.stderr or '')).strip()
+        killed = text.upper().count('SUCCESS:')
+        if probe.returncode != 0:
+            return False, -1, f'taskkill retornou {probe.returncode}: {text[:160]}'
+        return True, killed, f'taskkill encerrou {killed} processo(s)'
 
     @staticmethod
     def _kill_group(pid: int, sig: int) -> None:

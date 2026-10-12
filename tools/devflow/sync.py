@@ -20,11 +20,32 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+import os
+import re
 import subprocess
 from typing import Callable
 
 DEFAULT_MAIN_BRANCH = 'main'
 MAX_CHECKPOINT_BYTES = 5 * 1024 * 1024
+
+# The repository identity is PINNED, not matched by substring. A substring
+# check accepts any host or owner that happens to contain 'Lia-Project', which
+# is not identity verification at all.
+EXPECTED_HOST = 'github.com'
+DEFAULT_EXPECTED_OWNER = 'BloomRX'
+DEFAULT_EXPECTED_REPO = 'Lia-Project'
+
+# An absolute git executable, for callers that must work with a minimal PATH.
+# CreateProcess only ever appends '.exe' - it does not consult PATHEXT - so a
+# `git.cmd` shim is NOT reachable from subprocess(['git'], shell=False).
+GIT_EXECUTABLE_ENV = 'LIA_DEVFLOW_GIT'
+
+_URL_WITH_SCHEME = re.compile(
+    r'^(?P<scheme>[A-Za-z][A-Za-z0-9+.-]*)://'
+    r'(?P<auth>[^/@]*@)?(?P<host>[^/:?#]+)(?::\d+)?/(?P<path>.*)$',
+)
+_URL_SCP_LIKE = re.compile(r'^(?P<user>[^@/:\s]+)@(?P<host>[^/:\s]+):(?P<path>.+)$')
+_CREDENTIALS_IN_URL = re.compile(r'://[^/@\s]*@')
 
 # Paths that must never be committed automatically, whatever they contain.
 FORBIDDEN_NAME_PARTS = (
@@ -61,6 +82,12 @@ class DevflowConfig:
     work_branch: str
     remote: str = 'origin'
     main_branch: str = DEFAULT_MAIN_BRANCH
+    expected_owner: str = DEFAULT_EXPECTED_OWNER
+    expected_repo: str = DEFAULT_EXPECTED_REPO
+    # Off by default: for the first managed M3.0b run a CLEAN checkout is the
+    # contract. The hardened checkpoint path below is implemented and tested,
+    # but it only runs when it is explicitly switched on.
+    allow_checkpoint: bool = False
 
 
 def load_devflow_config(path: Path = CONFIG_PATH) -> DevflowConfig:
@@ -76,10 +103,23 @@ def load_devflow_config(path: Path = CONFIG_PATH) -> DevflowConfig:
     main = str(data.get('main_branch', DEFAULT_MAIN_BRANCH)).strip() or DEFAULT_MAIN_BRANCH
     if branch == main:
         raise SyncRefused('devflow-config.json: work_branch não pode ser o branch main')
+    owner = str(data.get('expected_owner', DEFAULT_EXPECTED_OWNER)).strip()
+    repo = str(data.get('expected_repo', DEFAULT_EXPECTED_REPO)).strip()
+    if not owner or not repo:
+        raise SyncRefused(
+            'devflow-config.json: expected_owner/expected_repo vazios; '
+            'a identidade do repositório não é adivinhada',
+        )
+    flag = data.get('allow_checkpoint', False)
+    if not isinstance(flag, bool):
+        raise SyncRefused('devflow-config.json: allow_checkpoint precisa ser booleano')
     return DevflowConfig(
         work_branch=branch,
         remote=str(data.get('remote', 'origin')).strip() or 'origin',
         main_branch=main,
+        expected_owner=owner,
+        expected_repo=repo,
+        allow_checkpoint=flag,
     )
 
 
@@ -121,28 +161,275 @@ class SyncOutcome:
     facts: SyncFacts
 
 
+def git_executable(env: dict[str, str] | None = None) -> str:
+    """
+    The git executable to invoke.
+
+    `LIA_DEVFLOW_GIT` carries an ABSOLUTE path. It exists because the minimum-PATH
+    self-test has to hide the POSIX tools from Git's `usr/bin` without breaking
+    Git itself, and on Windows `CreateProcess` only ever appends `.exe` - it does
+    not consult PATHEXT - so a `git.cmd` shim is unreachable from
+    `subprocess(['git'], shell=False)`.
+    """
+    source = os.environ if env is None else env
+    configured = (source.get(GIT_EXECUTABLE_ENV) or '').strip()
+    return configured or 'git'
+
+
 def _git(repo: Path, args: list[str]) -> tuple[int, str]:
     probe = subprocess.run(
-        ['git', *args], cwd=repo, capture_output=True, text=True,
+        [git_executable(), *args], cwd=repo, capture_output=True, text=True,
         encoding='utf-8', errors='replace',
     )
     return probe.returncode, (probe.stdout or probe.stderr or '').strip()
 
 
-def porcelain_paths(repo: Path, run_git: GitRunner | None = None) -> list[tuple[str, str]]:
-    """(status, path) pairs for every non-ignored change, or [] when clean."""
-    runner = run_git or (lambda args: _git(repo, args))
-    code, out = runner(['status', '--porcelain'])
-    if code != 0:
-        raise SyncRefused(f'git status falhou: {out[:200]}')
-    entries = []
-    for line in out.splitlines():
-        if len(line) < 4 or not line.strip():
-            continue
-        status, _, raw = line[:2], line[2], line[3:]
-        path = raw.split(' -> ')[-1].strip().strip('"')
+def _git_raw(repo: Path, args: list[str]) -> tuple[int, bytes]:
+    """Raw bytes, for `-z` output that must never be re-encoded by git."""
+    probe = subprocess.run(
+        [git_executable(), *args], cwd=repo, capture_output=True,
+    )
+    return probe.returncode, probe.stdout or b''
+
+
+def redact_url(url: str) -> str:
+    """Strips `user:token@` so a remote URL can never leak credentials."""
+    return _CREDENTIALS_IN_URL.sub('://***@', url)
+
+
+def normalize_remote_url(url: str) -> tuple[str, str] | None:
+    """
+    (owner, repo) for the pinned host, or None for anything else.
+
+    Accepts the canonical GitHub HTTPS and SSH spellings and rejects every
+    other host, owner and repository. Lookalike hosts are rejected because the
+    authority is compared exactly, not searched for.
+    """
+    candidate = url.strip()
+    if not candidate:
+        return None
+    match = _URL_WITH_SCHEME.match(candidate)
+    if match:
+        host, path = match.group('host').lower(), match.group('path')
+    else:
+        match = _URL_SCP_LIKE.match(candidate)
+        if not match:
+            return None
+        host, path = match.group('host').lower(), match.group('path')
+    if host != EXPECTED_HOST:
+        return None
+    parts = [part for part in path.split('/') if part]
+    if len(parts) != 2:
+        return None
+    owner, repo = parts
+    if repo.endswith('.git'):
+        repo = repo[:-4]
+    if not owner or not repo:
+        return None
+    return owner, repo
+
+
+RawGitRunner = Callable[[list[str]], tuple[int, bytes]]
+
+# Modes a checkpoint may contain. Anything else - a symlink (120000) or a
+# submodule (160000) - is refused rather than interpreted.
+REGULAR_FILE_MODES = frozenset({'100644', '100755'})
+
+
+def _parse_porcelain_z(payload: bytes) -> list[tuple[str, str]]:
+    """
+    Parses `git status --porcelain -z`.
+
+    `-z` is not cosmetic: without it git quotes any path containing a space or
+    a non-ASCII byte and writes octal escapes, so the string we classify would
+    not be the path on disk. `-z` gives raw bytes and one NUL per record.
+    Renames, copies and unmerged paths are REFUSED, not guessed: a rename has
+    two paths and the old one matters as much as the new one.
+    """
+    records = payload.split(b'\0')
+    if records and records[-1] == b'':
+        records.pop()
+    entries: list[tuple[str, str]] = []
+    index = 0
+    while index < len(records):
+        record = records[index]
+        if len(record) < 4 or record[2:3] != b' ':
+            raise SyncRefused('git status -z devolveu um registro malformado')
+        status = record[:2].decode('ascii', 'replace')
+        if 'R' in status or 'C' in status:
+            raise SyncRefused(
+                'renomeação ou cópia não é commitada automaticamente: '
+                'os dois caminhos teriam de ser revisados',
+            )
+        if 'U' in status or status in ('AA', 'DD'):
+            raise SyncRefused('caminho em conflito não é commitado automaticamente')
+        try:
+            path = record[3:].decode('utf-8')
+        except UnicodeDecodeError as exc:
+            raise SyncRefused('git devolveu um caminho que não é UTF-8; nada é adivinhado') from exc
         entries.append((status.strip() or '?', path))
+        index += 1
     return entries
+
+
+def _split_z(payload: bytes) -> list[str]:
+    records = payload.split(b'\0')
+    if records and records[-1] == b'':
+        records.pop()
+    out = []
+    for record in records:
+        try:
+            out.append(record.decode('utf-8'))
+        except UnicodeDecodeError as exc:
+            raise SyncRefused('git devolveu um caminho que não é UTF-8; nada é adivinhado') from exc
+    return out
+
+
+def validate_local_path(repo: Path, path: str) -> None:
+    """
+    Refuses any path that is not an ordinary regular file inside the repo.
+
+    Absolute paths, `..` escapes, symlink/reparse escapes and non-regular files
+    are all refused BEFORE anything is staged.
+    """
+    if not path:
+        raise SyncRefused('git devolveu um caminho vazio')
+    if path.startswith('/') or path.startswith('~') or path.startswith('\\'):
+        raise SyncRefused(f'caminho absoluto ou de home não é aceito: {path!r}')
+    parts = path.replace('\\', '/').split('/')
+    if any(part in ('', '..', '.') for part in parts):
+        raise SyncRefused(f'caminho com componente vazio ou de subida: {path!r}')
+    root = repo.resolve()
+    full = (repo / path)
+    try:
+        resolved = full.resolve()
+    except (OSError, ValueError) as exc:
+        raise SyncRefused(f'caminho não resolve dentro do repositório: {path!r}') from exc
+    if resolved != root and root not in resolved.parents:
+        raise SyncRefused(f'caminho escapa do repositório (symlink/reparse): {path!r}')
+    if full.is_symlink():
+        raise SyncRefused(f'symlink não é commitado automaticamente: {path!r}')
+    if full.exists() and not full.is_file():
+        raise SyncRefused(f'não é um arquivo regular: {path!r}')
+
+
+def porcelain_paths(
+    repo: Path,
+    run_git: GitRunner | None = None,
+    run_git_raw: RawGitRunner | None = None,
+) -> list[tuple[str, str]]:
+    """(status, path) pairs for every non-ignored change, or [] when clean."""
+    if run_git_raw is None:
+        if run_git is not None:
+            code, out = run_git(['status', '--porcelain', '-z', '-uall'])
+            if code != 0:
+                raise SyncRefused(f'git status falhou: {out[:200]}')
+            payload = out.encode('utf-8')
+        else:
+            code, payload = _git_raw(repo, ['status', '--porcelain', '-z', '-uall'])
+            if code != 0:
+                raise SyncRefused(f'git status falhou: {payload[:200]!r}')
+    else:
+        code, payload = run_git_raw(['status', '--porcelain', '-z', '-uall'])
+        if code != 0:
+            raise SyncRefused(f'git status falhou: {payload[:200]!r}')
+    entries = _parse_porcelain_z(payload)
+    for _status, path in entries:
+        validate_local_path(repo, path)
+    return entries
+
+
+def staged_index_entries(repo: Path, paths: list[str],
+                         run_git_raw: RawGitRunner | None = None) -> list[tuple[str, str, str]]:
+    """(mode, blob_sha, path) for what is actually in the index."""
+    runner = run_git_raw or (lambda args: _git_raw(repo, args))
+    code, payload = runner(['ls-files', '-s', '-z', '--', *paths])
+    if code != 0:
+        raise SyncRefused(f'git ls-files falhou: {payload[:200]!r}')
+    out = []
+    for record in _split_z(payload):
+        head, _, path = record.partition('\t')
+        fields = head.split()
+        if len(fields) != 3:
+            raise SyncRefused(f'git ls-files devolveu um registro malformado: {record[:80]!r}')
+        out.append((fields[0], fields[1], path))
+    return out
+
+
+def staged_paths(repo: Path, run_git_raw: RawGitRunner | None = None) -> list[str]:
+    """Every path currently staged against HEAD."""
+    runner = run_git_raw or (lambda args: _git_raw(repo, args))
+    code, payload = runner(['diff', '--cached', '--name-only', '-z'])
+    if code != 0:
+        raise SyncRefused(f'git diff --cached falhou: {payload[:200]!r}')
+    return _split_z(payload)
+
+
+def staged_blob(repo: Path, blob_sha: str,
+                run_git_raw: RawGitRunner | None = None) -> bytes:
+    """The bytes that would actually be committed, read from the index object."""
+    runner = run_git_raw or (lambda args: _git_raw(repo, args))
+    code, payload = runner(['cat-file', 'blob', blob_sha])
+    if code != 0:
+        raise SyncRefused(f'não consegui ler o blob {blob_sha[:12]} do índice')
+    return payload
+
+
+def worktree_hash(repo: Path, path: str) -> str:
+    """Hash of the working-tree file, to compare against the staged blob."""
+    code, out = _git(repo, ['hash-object', '--', path])
+    if code != 0:
+        raise SyncRefused(f'git hash-object falhou para {path!r}: {out[:160]}')
+    return out.strip()
+
+
+def scan_payload_for_secrets(payload: list[tuple[str, bytes]],
+                             max_bytes: int = MAX_CHECKPOINT_BYTES) -> list[str]:
+    """Secret + size checks over the EFFECTIVE payload, not the file on disk."""
+    hits: list[str] = []
+    for path, blob in payload:
+        if len(blob) > max_bytes:
+            hits.append(f'{path}: {len(blob)} bytes acima do limite de {max_bytes}')
+            continue
+        if SECRET_IN_TEXT(blob.decode('utf-8', errors='replace')):
+            hits.append(f'{path}: contém algo parecido com credencial')
+    return hits
+
+
+def verify_staged_payload(repo: Path, approved: list[str],
+                          run_git_raw: RawGitRunner | None = None) -> tuple[list[str], list[str]]:
+    """
+    Proves the index holds exactly the approved paths, with regular-file modes,
+    blob content equal to the working tree, and no secret or oversize payload.
+
+    Returns (staged_paths, secret_hits). Raises SyncRefused on any ambiguity.
+    """
+    approved_set = set(approved)
+    staged = staged_paths(repo, run_git_raw)
+    extra = sorted(set(staged) - approved_set)
+    if extra:
+        raise SyncRefused(
+            'o índice contém caminhos não aprovados: ' + ', '.join(extra[:5]),
+        )
+    missing = sorted(approved_set - set(staged))
+    if missing:
+        raise SyncRefused(
+            'caminhos aprovados não foram stageados: ' + ', '.join(missing[:5]),
+        )
+    entries = staged_index_entries(repo, staged, run_git_raw)
+    if len(entries) != len(staged):
+        raise SyncRefused('git ls-files e git diff --cached discordam sobre o índice')
+    payload: list[tuple[str, bytes]] = []
+    for mode, blob_sha, path in entries:
+        if mode not in REGULAR_FILE_MODES:
+            raise SyncRefused(f'{path}: modo {mode} não é um arquivo regular')
+        if worktree_hash(repo, path) != blob_sha:
+            raise SyncRefused(
+                f'{path}: o conteúdo stageado difere do working tree; '
+                'nada é commitado a partir de uma dúvida',
+            )
+        payload.append((path, staged_blob(repo, blob_sha, run_git_raw)))
+    return staged, scan_payload_for_secrets(payload)
 
 
 def classify_path(path: str) -> tuple[bool, str]:
@@ -232,14 +519,31 @@ class WorkBranchSync:
         remote: str = 'origin',
         main_branch: str = DEFAULT_MAIN_BRANCH,
         run_git: GitRunner | None = None,
-        allow_checkpoint: bool = True,
+        run_git_raw: RawGitRunner | None = None,
+        allow_checkpoint: bool = False,
+        expected_owner: str = DEFAULT_EXPECTED_OWNER,
+        expected_repo: str = DEFAULT_EXPECTED_REPO,
     ) -> None:
         self.repo = repo
         self.work_branch = work_branch
         self.remote = remote
         self.main_branch = main_branch
         self.run_git = run_git or (lambda args: _git(repo, args))
+        if run_git_raw is not None:
+            self.run_git_raw = run_git_raw
+        elif run_git is not None:
+            # Derive the raw runner from the injected text runner so a single
+            # fake git can answer both shapes and the two cannot disagree.
+            def _adapt(args: list[str]) -> tuple[int, bytes]:
+                code, out = run_git(args)
+                return code, out.encode('utf-8')
+
+            self.run_git_raw = _adapt
+        else:
+            self.run_git_raw = lambda args: _git_raw(repo, args)
         self.allow_checkpoint = allow_checkpoint
+        self.expected_owner = expected_owner
+        self.expected_repo = expected_repo
 
     # -- helpers --------------------------------------------------------
     def _git(self, args: list[str]) -> tuple[int, str]:
@@ -255,9 +559,20 @@ class WorkBranchSync:
         facts = SyncFacts()
         code, url = self._git(['remote', 'get-url', self.remote])
         if code != 0:
-            raise SyncRefused(f'repositório sem remote {self.remote!r}: {url[:200]}')
-        if 'Lia-Project' not in url:
-            raise SyncRefused(f'repositório inesperado: remote {self.remote!r} = {url!r}')
+            raise SyncRefused(
+                f'repositório sem remote {self.remote!r}: {redact_url(url)[:200]}',
+            )
+        # PINNED identity. A substring match on 'Lia-Project' would accept any
+        # host or owner containing it, which is not identity verification.
+        parsed = normalize_remote_url(url)
+        wanted = (self.expected_owner, self.expected_repo)
+        if parsed != wanted:
+            shown = f'{parsed[0]}/{parsed[1]}' if parsed else 'irreconhecível'
+            raise SyncRefused(
+                f'repositório inesperado: remote {self.remote!r} aponta para '
+                f'{shown}, esperado {wanted[0]}/{wanted[1]} '
+                f'({redact_url(url)[:160]})',
+            )
         code, branch = self._git(['rev-parse', '--abbrev-ref', 'HEAD'])
         if code != 0:
             raise SyncRefused('não consegui descobrir o branch atual')
@@ -283,7 +598,7 @@ class WorkBranchSync:
         except SyncRefused as exc:
             return SyncOutcome(ok=False, stage='identity', reason=str(exc), facts=facts)
 
-        entries = porcelain_paths(self.repo, self.run_git)
+        entries = porcelain_paths(self.repo, self.run_git, self.run_git_raw)
         facts.dirty_before = len(entries)
         classification = classify_changes(self.repo, entries)
         facts.notes.append(
@@ -309,10 +624,36 @@ class WorkBranchSync:
                     ok=False, stage='classify', facts=facts,
                     reason='checkpoint local desativado e há alterações não commitadas',
                 )
-            code, out = self._git(['add', '-A'])
+            approved = sorted(path for _status, path in entries)
+            for path in approved:
+                validate_local_path(self.repo, path)
+            # NEVER `git add -A`: that would stage the whole checkout, not the
+            # paths classification actually reviewed. `--` also stops a path
+            # that looks like an option from being parsed as one.
+            code, out = self._git(['add', '--', *approved])
             if code != 0:
                 return SyncOutcome(ok=False, stage='checkpoint', facts=facts,
                                    reason=f'git add falhou: {out[:200]}')
+            try:
+                staged, staged_hits = verify_staged_payload(
+                    self.repo, approved, self.run_git_raw,
+                )
+            except SyncRefused as exc:
+                # The index may now hold entries, but the working tree is
+                # untouched and nothing was committed. We report instead of
+                # running a reset/clean to "tidy up".
+                return SyncOutcome(
+                    ok=False, stage='checkpoint', facts=facts,
+                    reason=f'prova do payload stageado falhou: {exc} '
+                           '(índice pode conter caminhos stageados; nada foi commitado)',
+                )
+            if staged_hits:
+                return SyncOutcome(
+                    ok=False, stage='checkpoint', facts=facts,
+                    reason='verificação do payload stageado bloqueou o checkpoint: '
+                           + '; '.join(staged_hits[:5]),
+                )
+            facts.notes.append(f'payload stageado verificado: {len(staged)} caminho(s)')
             code, out = self._git(['commit', '-m', CHECKPOINT_MESSAGE])
             if code != 0:
                 return SyncOutcome(ok=False, stage='checkpoint', facts=facts,
@@ -349,7 +690,7 @@ class WorkBranchSync:
             )
         facts.updated = True
         facts.final_head = self._ref('HEAD')
-        facts.dirty_after = len(porcelain_paths(self.repo, self.run_git))
+        facts.dirty_after = len(porcelain_paths(self.repo, self.run_git, self.run_git_raw))
         facts.notes.append(f'atualizado {local[:12]} -> {facts.final_head[:12]}')
         return SyncOutcome(ok=True, stage='rebase', reason='', facts=facts)
 
@@ -373,7 +714,7 @@ class WorkBranchSync:
                 ok=False, stage='publish', facts=facts,
                 reason=f'HEAD atual {current[:12]} não é o HEAD testado {tested_head[:12]}',
             )
-        if len(porcelain_paths(self.repo, self.run_git)):
+        if len(porcelain_paths(self.repo, self.run_git, self.run_git_raw)):
             return SyncOutcome(
                 ok=False, stage='publish', facts=facts,
                 reason='o checkout não está limpo; um push precisa descrever um commit exato',
@@ -385,13 +726,26 @@ class WorkBranchSync:
                                reason=f'remote indisponível: {out[:200]}')
         remote_ref = f'{self.remote}/{self.work_branch}'
         facts.remote_head = self._ref(remote_ref) or None
-        if facts.remote_head and facts.remote_head != current:
+        if not facts.remote_head:
+            return SyncOutcome(ok=False, stage='publish', facts=facts,
+                               reason=f'não consegui resolver {remote_ref} antes do push')
+        if facts.remote_head == current:
+            facts.notes.append('remote já está no HEAD testado; nada a publicar')
+            facts.final_head = current
+            return SyncOutcome(ok=True, stage='publish', reason='', facts=facts)
+        # A legitimate fast-forward is local-ahead-of-remote, which the old
+        # `!=` test refused. What must be refused is divergence: the remote tip
+        # has to be an ANCESTOR of the tested HEAD, otherwise the push would not
+        # be a fast-forward and only --force could do it.
+        code, _ = self._git(['merge-base', '--is-ancestor', facts.remote_head, current])
+        if code != 0:
             return SyncOutcome(
                 ok=False, stage='publish', facts=facts,
-                reason=f'o remote avançou para {facts.remote_head[:12]} depois do gate; '
-                       'revalide antes de publicar',
+                reason=f'o remote {facts.remote_head[:12]} não é ancestral do HEAD testado '
+                       f'{current[:12]}; houve divergência e nada é forçado - revalide',
             )
-
+        # No rebase happens here, ever: rebasing after the gate would put a
+        # different SHA under a PASS that was measured against this one.
         code, out = self._git(['push', self.remote, f'HEAD:{self.work_branch}'])
         if code != 0:
             return SyncOutcome(ok=False, stage='publish', facts=facts,

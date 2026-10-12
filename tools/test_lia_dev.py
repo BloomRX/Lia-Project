@@ -21,6 +21,7 @@ from pathlib import Path, PurePosixPath
 import shutil
 import subprocess
 import sys
+import threading
 import time
 import tempfile
 import unittest
@@ -34,6 +35,7 @@ from devflow import (filesystem, pipeline, processes, report,  # noqa: E402
 import lia_dev  # noqa: E402
 from devflow.report import (MAX_DETAIL_CHARS, MAX_DETAIL_LINES,  # noqa: E402
                             sanitize_test_output)
+from devflow.processes import TeardownResult  # noqa: E402
 from devflow.runner import RoundRunner, run_test_command  # noqa: E402
 from devflow.markers import evaluate_markers  # noqa: E402
 from devflow.report import is_keeper, sanitize_console, sanitize_line  # noqa: E402
@@ -50,8 +52,55 @@ CORE_DIST = 'airi/packages/core-agent/dist'
 
 
 def _git(repo: Path, *args: str) -> str:
-    probe = subprocess.run(['git', *args], cwd=repo, capture_output=True, text=True)
+    # Goes through sync.git_executable() for the same reason production does:
+    # the minimum-PATH probe removes git from PATH and supplies the absolute
+    # path instead, so anything spawning a bare 'git' would fail there.
+    probe = subprocess.run([sync.git_executable(), *args], cwd=repo,
+                           capture_output=True, text=True)
     return (probe.stdout or probe.stderr).strip()
+
+
+PINNED_REMOTE_URL = 'https://github.com/BloomRX/Lia-Project.git'
+
+
+def real_git_runner(repo: Path, remote_url: str | None = None):
+    """
+    A real `git` bound to `repo`, in the text-runner shape DevFlow injects.
+
+    Used wherever a scripted FakeGit would only prove what the script says: the
+    checkpoint path really runs `git add`, `git ls-files -s`, `git cat-file` and
+    `git hash-object`, and the fast-forward question really runs
+    `git merge-base --is-ancestor`.
+
+    `remote_url` only answers `remote get-url`. A temp repository cannot have a
+    github.com URL, and the pinned-identity check rightly refuses one that does
+    not, so the identity is supplied while every other call stays real.
+    """
+
+    def run(args: list[str]) -> tuple[int, str]:
+        if remote_url is not None and args[:2] == ['remote', 'get-url']:
+            return 0, remote_url
+        probe = subprocess.run(
+            [sync.git_executable(), *args], cwd=repo, capture_output=True,
+            text=True, encoding='utf-8', errors='replace',
+        )
+        return probe.returncode, (probe.stdout or probe.stderr or '').strip()
+
+    return run
+
+
+def with_local_origin(repo: Path) -> Path:
+    """
+    Gives `repo` a real `origin` it can fetch from and push to.
+
+    A bare sibling seeded from the same history, so pre_sync/publish exercise
+    fetch, merge-base and push for real instead of against a script.
+    """
+    bare = repo.parent / 'origin.git'
+    _git(repo, 'clone', '-q', '--bare', str(repo), str(bare))
+    _git(repo, 'remote', 'add', 'origin', str(bare))
+    _git(repo, 'fetch', '-q', 'origin')
+    return bare
 
 
 def make_repo(base: Path) -> Path:
@@ -79,35 +128,95 @@ def base_manifest() -> dict:
 
 
 class FakeHandle:
-    def __init__(self, exit_code: int = 0, alive: bool = False, pid: int = 4242) -> None:
+    """
+    Stands in for OwnedProcess.
+
+    `terminate()` returns a TeardownResult because the real one does: teardown
+    is now a claim about evidence, and a fake that returned None would let a
+    fabricated cleanup PASS slip back in unnoticed.
+    """
+
+    def __init__(self, exit_code: int = 0, alive: bool = False, pid: int = 4242,
+                 teardown_ok: bool = True, teardown_detail: str = 'fake: root morto',
+                 descendants: int = 0) -> None:
         self.exit_code = exit_code
         self.alive = alive
         self.pid = pid
+        self.teardown_ok = teardown_ok
+        self.teardown_detail = teardown_detail
+        self.descendants = descendants
         self.terminated = False
         self.terminate_calls = 0
+        self.terminated_at_line: int | None = None
+        self.lines_seen = 0
 
     def wait(self, timeout: float) -> int | None:
         return None if self.alive else self.exit_code
 
-    def terminate(self) -> None:
+    def terminate(self) -> TeardownResult:
         self.terminated = True
         self.terminate_calls += 1
+        return TeardownResult(
+            requested=True,
+            root_terminated=self.teardown_ok,
+            method='fake',
+            detail=self.teardown_detail,
+            descendants=self.descendants if self.teardown_ok else -1,
+        )
 
 
-def fake_spawner(lines: list[str], exit_code: int = 0, alive: bool = False):
+def fake_spawner(lines: list[str], exit_code: int = 0, alive: bool = False,
+                 **handle_kwargs):
     """Emits the scripted console up front, then hands back a handle."""
     handles: list[FakeHandle] = []
 
     def spawn(command: list[str], cwd: Path, on_line, env=None) -> FakeHandle:
         spawn.envs.append(dict(env or {}))
-        for line in lines:
-            on_line(line)
-        handle = FakeHandle(exit_code, alive=alive)
+        handle = FakeHandle(exit_code, alive=alive, **handle_kwargs)
         handles.append(handle)
+        for line in lines:
+            handle.lines_seen += 1
+            on_line(line)
         return handle
 
     spawn.handles = handles  # type: ignore[attr-defined]
     spawn.envs = []  # type: ignore[attr-defined]
+    return spawn
+
+
+def delayed_spawner(script: list[tuple[float, str]], exit_code: int = 0,
+                    alive: bool = True, **handle_kwargs):
+    """
+    Emits (delay_seconds, line) pairs from a BACKGROUND thread.
+
+    `fake_spawner` pushes every line before it even returns, which is exactly
+    the shape that hid the phase-B defect: a gate that only reads what is
+    already buffered looks correct against it. Real markers arrive seconds
+    apart, so the delayed terminal-marker tests have to drive real wall-clock
+    gaps and prove the gate is still waiting.
+    """
+    handles: list[FakeHandle] = []
+
+    def spawn(command: list[str], cwd: Path, on_line, env=None) -> FakeHandle:
+        spawn.envs.append(dict(env or {}))
+        handle = FakeHandle(exit_code, alive=alive, **handle_kwargs)
+        handles.append(handle)
+
+        def emit() -> None:
+            for delay, line in script:
+                if delay:
+                    time.sleep(delay)
+                handle.lines_seen += 1
+                on_line(line)
+
+        thread = threading.Thread(target=emit, daemon=True)
+        spawn.threads.append(thread)
+        thread.start()
+        return handle
+
+    spawn.handles = handles  # type: ignore[attr-defined]
+    spawn.envs = []  # type: ignore[attr-defined]
+    spawn.threads = []  # type: ignore[attr-defined]
     return spawn
 
 
@@ -182,16 +291,18 @@ MARKER_LINES = [
     '[lia] 2026-10-11T00:00:10.000Z lia-app.stage-log spawn: node C:\\repo\\airi\\apps\\stage-tamagotchi\\node_modules\\electron-vite\\bin\\electron-vite.js dev (pid 1234)\n',
     '[lia] 2026-10-11T00:00:14.000Z lia-app.stage-log lia-stage renderer=ready\n',
     '[lia] 2026-10-11T00:00:15.000Z lia-app.stage-log lia-stage window=visible\n',
+    '[lia] 2026-10-11T00:00:15.500Z lia-app.stage-log lia-stage renderer-app=mounted\n',
     '[lia] 2026-10-11T00:00:16.000Z lia-app.stage-log lia-stage avatar-scene=mounted\n',
     '> ready in 512 ms\n',
 ]
 (LINE_AUTORUN, LINE_PREREQ_STARTING, LINE_PREREQ_SUCCEEDED, LINE_STAGE_SPAWN,
- LINE_RENDERER_READY, LINE_WINDOW_VISIBLE, LINE_AVATAR_MOUNTED,
+ LINE_RENDERER_READY, LINE_WINDOW_VISIBLE, LINE_APP_MOUNTED, LINE_AVATAR_MOUNTED,
  LINE_DEV_SERVER_READY) = MARKER_LINES
 
 # The ordered chain and the terminal facts, spelled out for the tests that
 # reason about the gate rather than about the console text.
-TERMINAL_LINES = [LINE_RENDERER_READY, LINE_WINDOW_VISIBLE, LINE_AVATAR_MOUNTED]
+TERMINAL_LINES = [LINE_RENDERER_READY, LINE_WINDOW_VISIBLE, LINE_APP_MOUNTED,
+                  LINE_AVATAR_MOUNTED]
 ORDERED_LINES = [LINE_AUTORUN, LINE_PREREQ_STARTING, LINE_PREREQ_SUCCEEDED, LINE_STAGE_SPAWN]
 
 
@@ -299,6 +410,7 @@ class SchemaTests(unittest.TestCase):
         self.assertEqual([item.id for item in manifest.manual_assertions], [])
         self.assertEqual([m.id for m in manifest.runtime.terminal],
                          ['stage-renderer-ready', 'stage-window-visible',
+                          'stage-renderer-app-mounted',
                           'stage-avatar-scene-mounted'])
         self.assertTrue(manifest.runtime.forbidden)
         # §E: the launcher is told to run the canonical Conversar itself.
@@ -770,11 +882,12 @@ class DevKitBatTests(unittest.TestCase):
     def test_bat_is_thin_and_routes_to_lia_dev(self):
         text = (TOOLS.parent / 'DevKit.bat').read_text(encoding='utf-8', errors='replace')
         self.assertIn('lia_dev.py', text)
-        self.assertIn('project_cli.py', text)
-        # No orchestration logic in batch syntax.
+        # The universal DevKit is reached THROUGH lia_dev.py: cmd.exe SHIFT does
+        # not rewrite %*, so the .bat must not try to strip the `git` token.
+        self.assertNotIn('project_cli.py', text)
         self.assertNotIn('git clean', text.lower())
         self.assertNotIn('reset --hard', text.lower())
-        self.assertLess(len(text.splitlines()), 90)
+        self.assertLess(len(text.splitlines()), 140)
 
     def test_menu_offers_the_required_actions(self):
         source = (TOOLS / 'lia_dev.py').read_text(encoding='utf-8')
@@ -1344,7 +1457,10 @@ FORBIDDEN_EXECUTABLES = frozenset({
     'wmic', 'tasklist', 'nohup',
 })
 # The only external executables this suite may ever spawn.
-ALLOWED_EXTERNAL_EXECUTABLES = frozenset({'git', 'cmd'})
+# 'cmd.exe' is allowed for exactly one purpose: DevKitHandoffExecutionTests runs
+# the real DevKit.bat, which is the only way to prove the %TEMP% handoff. It is
+# skipped on every platform without cmd.exe and is never used to shell out.
+ALLOWED_EXTERNAL_EXECUTABLES = frozenset({'git', 'cmd', 'cmd.exe'})
 SUITE_PATH = Path(__file__).resolve()
 _PATH_PROBE_ENV = 'LIA_DEVFLOW_PATH_PROBE'
 
@@ -1417,18 +1533,19 @@ class PortabilityContractTests(unittest.TestCase):
             self.skipTest('git indisponível para construir o PATH mínimo')
         probe_dir = Path(tempfile.mkdtemp(prefix='devflow-minpath-'))
         self.addCleanup(shutil.rmtree, probe_dir, True)
-        if os.name == 'nt':
-            # A .cmd shim keeps git working without exposing Git's usr/bin.
-            (probe_dir / 'git.cmd').write_text(f'@"{git}" %*\r\n', encoding='utf-8')
-        else:
-            try:
-                (probe_dir / 'git').symlink_to(git)
-            except (OSError, NotImplementedError):
-                self.skipTest('filesystem sem symlink para construir o PATH mínimo')
+        # Git is reached by ABSOLUTE PATH through LIA_DEVFLOW_GIT, not by a shim
+        # dropped into the minimal PATH. A `git.cmd` shim is unreachable from
+        # subprocess(['git'], shell=False): CreateProcess only ever appends
+        # '.exe' and never consults PATHEXT, so the shim would resolve for
+        # cmd.exe and silently NOT resolve for us - the probe would then be
+        # measuring "git is missing" instead of "no POSIX tool is needed".
         for tool in FORBIDDEN_EXECUTABLES:
             self.assertIsNone(shutil.which(tool, path=str(probe_dir)),
                               f'{tool} ainda alcançável no PATH mínimo')
-        env = dict(os.environ, PATH=str(probe_dir), **{_PATH_PROBE_ENV: '1'})
+        self.assertIsNone(shutil.which('git', path=str(probe_dir)),
+                          'git deveria estar FORA do PATH mínimo para a sonda provar algo')
+        env = dict(os.environ, PATH=str(probe_dir),
+                   **{_PATH_PROBE_ENV: '1', sync.GIT_EXECUTABLE_ENV: git})
         child = subprocess.run(
             [sys.executable, str(SUITE_PATH)],
             capture_output=True, text=True, encoding='utf-8', errors='replace',
@@ -1440,6 +1557,75 @@ class PortabilityContractTests(unittest.TestCase):
             + sanitize_test_output(child.stdout or '', child.stderr or '',
                                    max_chars=2000, max_lines=25),
         )
+
+
+class GitExecutableResolutionTests(unittest.TestCase):
+    """
+    The Windows executable-resolution contract, stated as behaviour.
+
+    CreateProcess appends only '.exe' and never consults PATHEXT, so an
+    extensionless name cannot resolve a `.cmd`/`.bat` shim. DevFlow therefore
+    carries an absolute git path instead of relying on PATH resolution.
+    """
+
+    def test_the_configured_absolute_path_wins_over_path_lookup(self):
+        env = {'PATH': '/definitely/not/here', sync.GIT_EXECUTABLE_ENV: '/opt/git/bin/git'}
+        self.assertEqual(sync.git_executable(env), '/opt/git/bin/git')
+
+    def test_it_falls_back_to_a_bare_name_only_when_nothing_is_configured(self):
+        self.assertEqual(sync.git_executable({}), 'git')
+        self.assertEqual(sync.git_executable({sync.GIT_EXECUTABLE_ENV: '   '}), 'git')
+
+    def test_a_cmd_shim_is_not_reachable_by_an_extensionless_spawn(self):
+        """
+        The executable probe itself: build a directory holding ONLY `git.cmd`,
+        put it on PATH, and show that resolving the bare name `git` finds
+        nothing - which is exactly why the minimum-PATH probe must not use a
+        shim. `shutil.which` mirrors PATHEXT the way cmd.exe does; `subprocess`
+        with shell=False does not, so this is the conservative direction.
+        """
+        probe_dir = Path(tempfile.mkdtemp(prefix='devflow-cmdshim-'))
+        self.addCleanup(shutil.rmtree, probe_dir, True)
+        (probe_dir / 'git.cmd').write_text('@echo off\r\n', encoding='utf-8')
+        # The portable design: resolve the absolute path, never the shim.
+        self.assertEqual(
+            sync.git_executable({sync.GIT_EXECUTABLE_ENV: str(probe_dir / 'git.cmd')}),
+            str(probe_dir / 'git.cmd'),
+        )
+
+    def test_the_git_runner_actually_uses_the_configured_executable(self):
+        """Not just the helper: the call site has to consume it."""
+        seen: list[list[str]] = []
+        real_run = sync.subprocess.run
+
+        def spy(argv, **kwargs):
+            seen.append(list(argv))
+
+            class Done:
+                returncode = 0
+                stdout = ''
+                stderr = ''
+
+            return Done()
+
+        # Save and RESTORE, never pop: inside the minimum-PATH probe this
+        # variable is already carrying the only reachable git, and popping it
+        # would break every later test in that child process.
+        previous = os.environ.get(sync.GIT_EXECUTABLE_ENV)
+        sync.subprocess.run = spy
+        try:
+            os.environ[sync.GIT_EXECUTABLE_ENV] = '/opt/git/bin/git'
+            sync._git(Path('.'), ['status'])
+            sync._git_raw(Path('.'), ['status'])
+        finally:
+            sync.subprocess.run = real_run
+            if previous is None:
+                os.environ.pop(sync.GIT_EXECUTABLE_ENV, None)
+            else:
+                os.environ[sync.GIT_EXECUTABLE_ENV] = previous
+        self.assertEqual(seen[0][0], '/opt/git/bin/git')
+        self.assertEqual(seen[1][0], '/opt/git/bin/git')
+        self.assertTrue(real_run is not None)
 
 
 # ---------------------------------------------------------------------------
@@ -1615,7 +1801,8 @@ class FakeGit:
 
     def __init__(self, *, branch=WORK, head='a' * 40, remote_head=None,
                  porcelain='', fetch_ok=True, rebase_ok=True, push_ok=True,
-                 remote_url='https://github.com/BloomRX/Lia-Project.git'):
+                 remote_url='https://github.com/BloomRX/Lia-Project.git',
+                 ancestors_of=None, staged=(), blobs=None):
         self.branch = branch
         self.head = head
         self.remote_head = remote_head if remote_head is not None else head
@@ -1624,8 +1811,17 @@ class FakeGit:
         self.rebase_ok = rebase_ok
         self.push_ok = push_ok
         self.remote_url = remote_url
+        # descendant -> ancestors. Anything not listed is treated as divergent.
+        self.ancestors_of = dict(ancestors_of or {})
+        self.staged = list(staged)
+        self.blobs = dict(blobs or {})
         self.calls: list[list[str]] = []
         self.committed: list[str] = []
+
+    def blob_sha(self, path: str) -> str:
+        import hashlib
+
+        return hashlib.sha1(path.encode()).hexdigest()
 
     def __call__(self, args: list[str]) -> tuple[int, str]:
         self.calls.append(list(args))
@@ -1639,7 +1835,31 @@ class FakeGit:
                 return (0, self.remote_head) if self.remote_head else (1, '')
             return 0, self.head
         if head == ['status']:
+            # The real runner asks for `-z -uall`. Answer in that shape, because
+            # `-z` is what makes an unusual pathname unambiguous and `-uall` is
+            # what stops an untracked directory from arriving collapsed.
+            if '-z' in args:
+                records = [line for line in self.porcelain.splitlines() if line.strip()]
+                return 0, ''.join(f'{line}\0' for line in records)
             return 0, self.porcelain
+        if head == ['merge-base'] and '--is-ancestor' in args:
+            # Explicit, never a silent 0: a fast-forward question that defaults
+            # to "yes" would let a divergent remote be force-published.
+            _flag, ancestor, descendant = args[1], args[2], args[3]
+            return (0, '') if ancestor in self.ancestors_of.get(descendant, ()) else (1, '')
+        if head == ['diff'] and '--cached' in args and '--name-only' in args:
+            return 0, ''.join(f'{path}\0' for path in self.staged)
+        if head == ['ls-files'] and '-s' in args:
+            requested = args[args.index('--') + 1:] if '--' in args else []
+            wanted = requested or list(self.staged)
+            return 0, ''.join(
+                f'100644 {self.blob_sha(path)} 0\t{path}\0' for path in wanted
+            )
+        if head == ['cat-file'] and args[1:2] == ['blob']:
+            return 0, self.blobs.get(args[2], '')
+        if head == ['hash-object']:
+            path = args[args.index('--') + 1]
+            return 0, self.blob_sha(path)
         if head == ['fetch']:
             return (0, '') if self.fetch_ok else (1, 'fatal: unable to access remote')
         if head == ['rebase']:
@@ -1656,8 +1876,10 @@ class FakeGit:
         if head == ['push']:
             return (0, '') if self.push_ok else (1, 'remote rejected')
         if head == ['add']:
+            after = args.index('--') + 1 if '--' in args else 1
+            self.staged = list(args[after:])
             return 0, ''
-        return 0, ''
+        raise AssertionError(f'FakeGit não modela este comando: {args}')
 
     def argvs(self) -> list[str]:
         return [' '.join(call) for call in self.calls]
@@ -1750,13 +1972,24 @@ class LocalChangePolicyTests(unittest.TestCase):
         shutil.rmtree(self.base, ignore_errors=True)
 
     def test_safe_source_diff_becomes_a_local_checkpoint(self):
+        """
+        Driven against a REAL git repository: the checkpoint path has to survive
+        `git add -- <paths>` plus a proof that the index holds exactly those
+        paths, which a scripted fake cannot demonstrate.
+        """
+        with_local_origin(self.repo)
         (self.repo / 'tools' / 'novo.py').write_text('print(1)\n', encoding='utf-8')
-        fake = FakeGit(porcelain='?? tools/novo.py', head='a' * 40, remote_head='b' * 40)
-        outcome = sync.WorkBranchSync(self.repo, work_branch=WORK, run_git=fake).pre_sync()
+        runner = real_git_runner(self.repo, remote_url=PINNED_REMOTE_URL)
+        outcome = sync.WorkBranchSync(
+            self.repo, work_branch=WORK, run_git=runner, allow_checkpoint=True,
+        ).pre_sync()
         self.assertTrue(outcome.ok, outcome.reason)
         self.assertTrue(outcome.facts.checkpoint)
-        self.assertEqual(fake.committed, [sync.CHECKPOINT_MESSAGE])
+        self.assertTrue(any('payload stageado verificado' in note
+                            for note in outcome.facts.notes), outcome.facts.notes)
         self.assertTrue((self.repo / 'tools' / 'novo.py').exists())
+        code, out = runner(['status', '--porcelain', '-z', '-uall'])
+        self.assertEqual(out, '', 'o checkpoint deveria ter deixado o checkout limpo')
 
     def test_secret_blocks_the_checkpoint(self):
         target = self.repo / 'tools' / 'nota.py'
@@ -1823,18 +2056,51 @@ class PublishPolicyTests(unittest.TestCase):
         self.assertIn('não está limpo', outcome.reason)
 
     def test_remote_moving_between_gate_and_publish_forces_revalidation(self):
-        fake = FakeGit(head='a' * 40, remote_head='d' * 40)
+        """A remote tip that is NOT an ancestor means divergence, never a push."""
+        fake = FakeGit(head='a' * 40, remote_head='d' * 40, ancestors_of={})
         outcome = make_sync(fake).publish('a' * 40)
         self.assertFalse(outcome.ok)
-        self.assertIn('remote avançou', outcome.reason)
+        self.assertIn('divergência', outcome.reason)
         self.assertNotIn('push', ' '.join(fake.argvs()))
+        self.assertNotIn('--force', ' '.join(fake.argvs()))
 
-    def test_clean_exact_head_pushes_without_force(self):
+    def test_publish_never_rebases_after_the_gate(self):
+        """
+        Rebasing after the gate would put a different SHA under a PASS that was
+        measured against the old one. publish() must not contain a rebase at all.
+        """
+        fake = FakeGit(head='b' * 40, remote_head='a' * 40,
+                       ancestors_of={'b' * 40: ('a' * 40,)})
+        make_sync(fake).publish('b' * 40)
+        self.assertNotIn('rebase', ' '.join(fake.argvs()))
+
+    def test_remote_already_at_the_tested_head_pushes_nothing(self):
         fake = FakeGit(head='a' * 40, remote_head='a' * 40)
         outcome = make_sync(fake).publish('a' * 40)
         self.assertTrue(outcome.ok, outcome.reason)
+        self.assertIn('nada a publicar', ' '.join(outcome.facts.notes))
+        self.assertNotIn('push', ' '.join(fake.argvs()))
+
+    def test_a_local_commit_ahead_of_the_remote_is_a_valid_fast_forward(self):
+        """
+        The old `remote_head != current` test refused THIS, which is the one
+        case publishing exists for. Ancestor + clean + exact HEAD = fast-forward.
+        """
+        fake = FakeGit(head='b' * 40, remote_head='a' * 40,
+                       ancestors_of={'b' * 40: ('a' * 40,)})
+        outcome = make_sync(fake).publish('b' * 40)
+        self.assertTrue(outcome.ok, outcome.reason)
         self.assertIn('push origin HEAD:' + WORK, fake.argvs())
         self.assertNotIn('--force', ' '.join(fake.argvs()))
+
+    def test_publish_fetches_again_immediately_before_pushing(self):
+        fake = FakeGit(head='b' * 40, remote_head='a' * 40,
+                       ancestors_of={'b' * 40: ('a' * 40,)})
+        make_sync(fake).publish('b' * 40)
+        argvs = fake.argvs()
+        self.assertIn('fetch origin ' + WORK, argvs)
+        self.assertLess(argvs.index('fetch origin ' + WORK),
+                        argvs.index('push origin HEAD:' + WORK))
 
     def test_main_can_never_be_published(self):
         fake = FakeGit(branch='main', head='a' * 40, remote_head='a' * 40)
@@ -1866,6 +2132,7 @@ class RuntimeGateTests(unittest.TestCase):
         self.assertEqual(len(asks), 0, 'esta rodada não exige afirmação humana')
         self.assertEqual(outcome.terminal_seen,
                          ['stage-renderer-ready', 'stage-window-visible',
+                          'stage-renderer-app-mounted',
                           'stage-avatar-scene-mounted'])
 
     def test_missing_renderer_ready_fails(self):
@@ -1934,10 +2201,15 @@ class BootstrapTests(unittest.TestCase):
             raise Done
 
         real_run = lia_dev.subprocess.run
-        real_git = lia_dev_subsync = None
         lia_dev.subprocess.run = fake_run
         try:
-            with patch.object(sync, '_git', lambda repo, args: fake(args)):
+            # Both runners have to be scripted: pre_sync reads the worktree with
+            # the RAW runner (`status -z`), and patching only `_git` would let a
+            # real git call slip into what is meant to be a pure policy test.
+            with patch.object(sync, '_git', lambda repo, args: fake(args)), \
+                    patch.object(sync, '_git_raw',
+                                 lambda repo, args: (fake(args)[0],
+                                                     fake(args)[1].encode())):
                 with self.assertRaises(Done):
                     lia_dev.cmd_bootstrap(argparse.Namespace())
         finally:
@@ -1987,7 +2259,10 @@ class DefaultUxTests(unittest.TestCase):
     def test_devkit_bat_copies_itself_before_running(self):
         bat = (SUITE_PATH.parent.parent / 'DevKit.bat').read_text(encoding='utf-8')
         self.assertIn('LIA_DEVKIT_BOOTSTRAP_COPY', bat)
-        self.assertIn('lia-devkit-bootstrap.bat', bat)
+        self.assertIn('LIA_DEVKIT_ROOT', bat)
+        # Unique per run, never one globally shared filename.
+        self.assertIn('RANDOM', bat)
+        self.assertNotIn('lia-devkit-bootstrap.bat', bat)
 
     def test_auto_never_prompts_on_a_healthy_path(self):
         """Behavioural: any input() anywhere in AUTO raises and fails this."""
@@ -2059,13 +2334,32 @@ class DefaultUxTests(unittest.TestCase):
     def test_the_final_block_is_a_verdict_not_a_menu(self):
         result = pipeline.AutoResult(result='PASS', round_id='M3.0b',
                                      tested_head='a' * 40, sync_ok=True, tests_ok=True,
-                                     runtime_ok=True, publish='nothing-to-push', stage='publish')
+                                     runtime_ok=True, cleanup_state='PASS',
+                                     publish='skipped-by-round-policy', stage='publish')
         block = pipeline.render_final_block(result)
         self.assertIn('LIA DEVFLOW', block)
         self.assertIn('Result: PASS', block)
-        self.assertIn('Push: nothing-to-push', block)
+        # M3.0b is not ready_for_publish, so the block must SAY that instead of
+        # implying a PASS publishes source.
+        self.assertIn('Push: SKIPPED BY ROUND POLICY', block)
+        self.assertIn('Process cleanup: PASS', block)
         self.assertNotIn('Escolha', block)
         self.assertNotIn('Pressione 1', block)
+
+    def test_the_cleanup_line_reads_the_real_teardown_fact(self):
+        """
+        `"PASS" if result.stage` was not a cleanup proof - any non-empty stage
+        string printed PASS. The line now reads the recorded teardown evidence.
+        """
+        base = dict(result='PASS', round_id='M3.0b', tested_head='a' * 40,
+                    sync_ok=True, tests_ok=True, runtime_ok=True, stage='runtime')
+        failed = pipeline.AutoResult(cleanup_state='FAIL', **base)
+        self.assertIn('Process cleanup: FAIL', pipeline.render_final_block(failed))
+        not_applicable = pipeline.AutoResult(cleanup_state='N/A', **base)
+        self.assertIn('Process cleanup: N/A', pipeline.render_final_block(not_applicable))
+        unknown = pipeline.AutoResult(cleanup_state='UNKNOWN', **base)
+        self.assertIn('Process cleanup: UNKNOWN', pipeline.render_final_block(unknown))
+        self.assertNotIn('Process cleanup: PASS', pipeline.render_final_block(unknown))
 
     def test_the_failure_block_names_the_stage_and_promises_nothing_destructive(self):
         result = pipeline.AutoResult(result='FAIL', stage='runtime', reason='sem evidência')
@@ -2108,7 +2402,7 @@ class AutoPipelineTests(unittest.TestCase):
         self.assertTrue(result.sync_ok and result.tests_ok and result.runtime_ok)
         self.assertTrue(result.report_path)
         # ready_for_publish=false, so nothing may be pushed.
-        self.assertEqual(result.publish, 'skipped')
+        self.assertEqual(result.publish, 'skipped-by-round-policy')
         self.assertNotIn('push', ' '.join(fake.argvs()))
 
     def test_a_failed_gate_never_publishes_a_local_checkpoint(self):
@@ -2151,6 +2445,629 @@ class AutoPipelineTests(unittest.TestCase):
                           emit=lambda _l: None, runner_factory=lambda m: runner,
                           load_round=loader)
         self.assertEqual(seen, ['b' * 40], 'a rodada deve ser lida DEPOIS do sync')
+
+
+# ===========================================================================
+# DEVFLOW-AUTO-1a: regressions for the audited defects.
+# ===========================================================================
+DEVKIT_BAT = SUITE_PATH.parent.parent / 'DevKit.bat'
+
+
+class DevKitHandoffContractTests(unittest.TestCase):
+    """
+    §1: the temporary copy must not lose the repository root.
+
+    Inside `%TEMP%`, `%~dp0` IS the temp directory, so the previous script could
+    only ever print "tools\\lia_dev.py nao encontrado". These assertions state
+    the executable contract; `DevKitHandoffExecutionTests` below actually runs
+    the .bat when cmd.exe exists.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.text = DEVKIT_BAT.read_text(encoding='utf-8', errors='replace')
+        cls.head, cls.body = cls.text.split('\n:body\n', 1)
+
+    def test_the_original_root_is_captured_before_the_copy(self):
+        head = self.head
+        self.assertIn('set "LIA_DEVKIT_ROOT=%~dp0"', head)
+        self.assertLess(head.index('set "LIA_DEVKIT_ROOT=%~dp0"'), head.index('copy /y'),
+                        'a raiz tem de ser capturada antes da cópia')
+
+    def test_the_copy_never_reads_its_own_directory(self):
+        # After :body the script IS the temp copy, so %~dp0 would be %TEMP%.
+        code = '\n'.join(
+            line for line in self.body.splitlines() if not line.lstrip().lower().startswith('rem')
+        )
+        self.assertNotIn('%~dp0', code,
+                         'a cópia não pode derivar a raiz do próprio diretório')
+        self.assertIn('%LIA_DEVKIT_ROOT%tools\\lia_dev.py', code)
+
+    def test_no_machine_specific_path_is_hardcoded(self):
+        for drive in ('C:\\', 'D:\\', 'J:\\'):
+            self.assertNotIn(drive, self.text, f'caminho de máquina embutido: {drive}')
+        self.assertNotIn('/home/', self.text)
+
+    def test_the_temp_copy_name_is_unique_per_run(self):
+        self.assertIn('%RANDOM%', self.text)
+        self.assertNotIn('lia-devkit-bootstrap.bat', self.text,
+                         'um nome global fixo não é seguro para concorrência')
+
+    def test_a_failed_copy_fails_closed_instead_of_running_the_original(self):
+        head = self.head
+        after_copy = head.split('copy /y', 1)[1]
+        self.assertIn('if errorlevel 1', after_copy,
+                      'falha de cópia tem de ser detectada')
+        self.assertIn('goto :fail', after_copy)
+        # And the copy is verified to exist before being executed.
+        self.assertIn('if not exist "%LIA_DEVKIT_COPY%"', after_copy)
+
+    def test_an_existing_temp_copy_is_never_reused(self):
+        head = self.head
+        self.assertIn('if exist "%LIA_DEVKIT_COPY%"', head,
+                      'colisão de nome tem de falhar, nunca reutilizar')
+
+    def test_the_child_exit_code_is_propagated(self):
+        head = self.head
+        after = head.split('"%LIA_DEVKIT_COPY%" %*', 1)[1]
+        self.assertIn('set "LIA_DEVKIT_RC=%ERRORLEVEL%"', after)
+        self.assertIn('exit /b %LIA_DEVKIT_RC%', after)
+
+    def test_temporary_artifacts_are_cleaned(self):
+        self.assertIn('del "%LIA_DEVKIT_COPY%"', self.text)
+        self.assertIn('del "%~f0"', self.body)
+
+    def test_paths_are_quoted_for_spaces(self):
+        for fragment in ('"%LIA_DEVKIT_ROOT%tools\\lia_dev.py"',
+                         '"%LIA_DEVKIT_COPY%"', '"%~f0"'):
+            self.assertIn(fragment, self.text)
+
+    def test_shift_is_not_used_so_the_git_token_cannot_leak(self):
+        code = '\n'.join(
+            line for line in self.text.splitlines()
+            if not line.lstrip().lower().startswith('rem')
+        )
+        self.assertNotRegex(code, r'(?im)^\s*shift\b',
+                            'SHIFT não reescreve %* no cmd.exe')
+
+    def test_no_menu_or_prompt_on_the_default_path(self):
+        self.assertNotIn('choice ', self.text.lower())
+        self.assertNotIn('set /p', self.text.lower())
+        # `pause` only exists to keep the window open, and is skippable.
+        self.assertIn('LIA_DEVKIT_NO_PAUSE', self.text)
+
+    def test_the_bat_uses_crlf_line_endings(self):
+        raw = DEVKIT_BAT.read_bytes()
+        self.assertEqual(raw.count(b'\r\n'), raw.count(b'\n'),
+                         'um .bat com LF puro quebra no cmd.exe')
+
+
+@unittest.skipUnless(os.name == 'nt' and shutil.which('cmd.exe'),
+                     'cmd.exe indisponível nesta plataforma')
+class DevKitHandoffExecutionTests(unittest.TestCase):
+    """
+    The REAL Windows executable contract: run DevKit.bat for real.
+
+    A source-text test alone cannot prove the handoff, so this drives cmd.exe
+    against a throwaway repository whose `tools/lia_dev.py` records the working
+    directory and the arguments it received. Skipped where cmd.exe does not
+    exist; that skip is the honest boundary of this platform.
+    """
+
+    def setUp(self):
+        self.base = Path(tempfile.mkdtemp(prefix='devkit-exec-'))
+        self.repo = self.base / 'repo with space'
+        (self.repo / 'tools').mkdir(parents=True)
+        self.probe = self.repo / 'tools' / 'probe.txt'
+        (self.repo / 'tools' / 'lia_dev.py').write_text(
+            'import os, sys\n'
+            'from pathlib import Path\n'
+            f'Path(r"{self.probe}").write_text(\n'
+            '    "cwd=" + os.getcwd() + "\\n"\n'
+            '    + "argv=" + " ".join(sys.argv[1:]) + "\\n"\n'
+            '    + "root=" + os.environ.get("LIA_DEVKIT_ROOT", "") + "\\n",\n'
+            '    encoding="utf-8")\n'
+            'raise SystemExit(7)\n',
+            encoding='utf-8',
+        )
+        shutil.copy2(DEVKIT_BAT, self.repo / 'DevKit.bat')
+
+    def tearDown(self):
+        shutil.rmtree(self.base, ignore_errors=True)
+
+    def _run(self, *args):
+        env = dict(os.environ, LIA_DEVKIT_NO_PAUSE='1')
+        return subprocess.run(
+            ['cmd.exe', '/d', '/s', '/c', 'DevKit.bat', *args],
+            cwd=self.repo, capture_output=True, text=True,
+            encoding='utf-8', errors='replace', env=env, timeout=180,
+        )
+
+    def test_the_copy_still_finds_the_original_repository_root(self):
+        probe = self._run()
+        self.assertTrue(self.probe.exists(),
+                        'a cópia em %TEMP% não achou tools\\lia_dev.py:\n'
+                        + (probe.stdout or '') + (probe.stderr or ''))
+        recorded = self.probe.read_text(encoding='utf-8')
+        self.assertIn('cwd=' + str(self.repo), recorded)
+        self.assertIn('root=' + str(self.repo) + '\\', recorded)
+
+    def test_the_exit_code_survives_the_handoff(self):
+        probe = self._run()
+        self.assertTrue(self.probe.exists())
+        self.assertEqual(probe.returncode, 7)
+
+    def test_arguments_are_forwarded_without_a_shift(self):
+        probe = self._run('status')
+        self.assertTrue(self.probe.exists())
+        self.assertIn('argv=status', self.probe.read_text(encoding='utf-8'))
+
+    def test_the_git_token_is_forwarded_once(self):
+        probe = self._run('git', 'validate')
+        self.assertTrue(self.probe.exists())
+        self.assertIn('argv=git validate', self.probe.read_text(encoding='utf-8'))
+
+
+class DevKitArgumentForwardingTests(unittest.TestCase):
+    """§9: the `git` token is dropped in Python, where it is testable."""
+
+    def test_the_leading_git_token_is_dropped(self):
+        self.assertEqual(lia_dev.git_forward_argv(['git', 'publish']), ['publish'])
+
+    def test_the_rest_of_the_line_is_untouched(self):
+        self.assertEqual(
+            lia_dev.git_forward_argv(['git', 'checkout', 'arena/x', '--force-ish']),
+            ['checkout', 'arena/x', '--force-ish'],
+        )
+
+    def test_a_line_without_the_token_passes_through(self):
+        self.assertEqual(lia_dev.git_forward_argv(['validate', '--full']),
+                         ['validate', '--full'])
+
+    def test_an_empty_line_stays_empty_so_the_usage_is_shown(self):
+        self.assertEqual(lia_dev.git_forward_argv(['git']), [])
+        self.assertEqual(lia_dev.git_forward_argv([]), [])
+
+    def test_the_git_verb_is_registered(self):
+        self.assertIn('git', lia_dev.HANDLERS)
+        self.assertEqual(lia_dev.cmd_git(argparse.Namespace(rest=['git'])), 2)
+
+
+class DelayedTerminalMarkerTests(unittest.TestCase):
+    """
+    §2: terminal evidence arrives AFTER the ordered chain, with real delays.
+
+    Every one of these drives `delayed_spawner`, which emits from a background
+    thread. A spawner that pushes all lines before returning cannot see the
+    defect: the gate looked correct because the evidence was already buffered.
+    """
+
+    def setUp(self):
+        self.base = Path(tempfile.mkdtemp(prefix='devflow-delay-'))
+        self.repo = make_repo(self.base)
+        self.manifest = validate_round(manual_manifest())
+
+    def tearDown(self):
+        shutil.rmtree(self.base, ignore_errors=True)
+
+    def _runner(self, script, **kwargs):
+        runner, _, asks = make_runner(self.repo, self.manifest)
+        runner.spawn = delayed_spawner(script, **kwargs)
+        runner.marker_timeout_s = 20.0
+        runner.terminal_timeout_s = 20.0
+        runner.forbidden_drain_s = 0.5
+        runner.emit = lambda line: None
+        return runner, asks
+
+    def test_the_gate_waits_for_terminal_evidence_that_arrives_late(self):
+        script = [(0.0, line) for line in ORDERED_LINES]
+        script += [(0.6, line) for line in TERMINAL_LINES]
+        started = time.monotonic()
+        runner, _asks = self._runner(script)
+        outcome = runner.execute()
+        elapsed = time.monotonic() - started
+        self.assertEqual(outcome.verdict, 'PASS', outcome.notes)
+        self.assertEqual(outcome.gate_phase, 'B')
+        self.assertGreaterEqual(elapsed, 1.5,
+                                'o gate terminou antes dos marcadores atrasados')
+
+    def test_missing_terminal_evidence_times_out_as_fail(self):
+        script = [(0.0, line) for line in ORDERED_LINES]
+        script += [(0.2, LINE_RENDERER_READY), (0.2, LINE_WINDOW_VISIBLE)]
+        runner, _ = self._runner(script)
+        runner.terminal_timeout_s = 1.5
+        outcome = runner.execute()
+        self.assertEqual(outcome.verdict, 'FAIL')
+        self.assertTrue(outcome.timed_out)
+        self.assertEqual(outcome.gate_phase, 'B')
+        self.assertIn('stage-avatar-scene-mounted',
+                      [m.id for m in self.manifest.runtime.terminal
+                       if m.id not in outcome.terminal_seen])
+
+    def test_a_forbidden_marker_after_spawn_still_fails(self):
+        script = [(0.0, line) for line in ORDERED_LINES]
+        script += [(0.2, line) for line in TERMINAL_LINES]
+        script += [(0.4, '[lia] stage-prerequisite name=core-agent-build '
+                         'state=failed reason=exit:1\n')]
+        runner, _ = self._runner(script)
+        outcome = runner.execute()
+        self.assertEqual(outcome.verdict, 'FAIL')
+        self.assertIn('prerequisite-failed', outcome.forbidden_seen)
+
+    def test_the_process_exiting_before_terminal_evidence_fails(self):
+        script = [(0.0, line) for line in ORDERED_LINES]
+        script += [(0.2, LINE_RENDERER_READY)]
+        runner, _ = self._runner(script, alive=False, exit_code=3)
+        outcome = runner.execute()
+        self.assertEqual(outcome.verdict, 'FAIL')
+        self.assertIn('stage-window-visible',
+                      [m.id for m in self.manifest.runtime.terminal
+                       if m.id not in outcome.terminal_seen])
+
+    def test_teardown_happens_only_after_the_evidence_is_complete(self):
+        script = [(0.0, line) for line in ORDERED_LINES]
+        script += [(0.5, line) for line in TERMINAL_LINES]
+        runner, _ = self._runner(script)
+        outcome = runner.execute()
+        handle = runner.spawn.handles[0]
+        self.assertEqual(outcome.verdict, 'PASS')
+        self.assertEqual(handle.terminate_calls, 1)
+        self.assertGreaterEqual(handle.lines_seen, len(script),
+                                'a árvore foi encerrada antes de toda a evidência')
+
+    def test_a_terminal_pattern_cannot_double_as_an_ordered_marker(self):
+        """
+        One line satisfies at most one marker, so a terminal line arriving while
+        the ordered chain is still pending cannot be consumed as the next
+        ordered marker and silently satisfy both.
+        """
+        script = [(0.0, LINE_AUTORUN), (0.1, LINE_RENDERER_READY),
+                  (0.1, LINE_PREREQ_STARTING), (0.1, LINE_PREREQ_SUCCEEDED),
+                  (0.1, LINE_STAGE_SPAWN)]
+        script += [(0.3, line) for line in TERMINAL_LINES[1:]]
+        runner, _ = self._runner(script)
+        outcome = runner.execute()
+        self.assertEqual(outcome.verdict, 'PASS', outcome.notes)
+        matched = dict(outcome.markers.matched)
+        self.assertNotIn('stage-renderer-ready', matched)
+        self.assertIn('stage-renderer-ready', outcome.terminal_seen)
+
+
+class RepositoryIdentityTests(unittest.TestCase):
+    """§3: the remote is PINNED, not matched by substring."""
+
+    def test_wrong_github_owner_is_refused(self):
+        fake = FakeGit(remote_url='https://github.com/someone-else/Lia-Project.git')
+        outcome = make_sync(fake).pre_sync()
+        self.assertFalse(outcome.ok)
+        self.assertEqual(outcome.stage, 'identity')
+        self.assertIn('BloomRX/Lia-Project', outcome.reason)
+
+    def test_a_lookalike_host_is_refused(self):
+        for url in ('https://github.com.evil.example/BloomRX/Lia-Project.git',
+                    'https://notgithub.com/BloomRX/Lia-Project.git',
+                    'git@gitlab.com:BloomRX/Lia-Project.git'):
+            with self.subTest(url=url):
+                fake = FakeGit(remote_url=url)
+                outcome = make_sync(fake).pre_sync()
+                self.assertFalse(outcome.ok)
+                self.assertEqual(outcome.stage, 'identity')
+
+    def test_a_lookalike_repository_name_is_refused(self):
+        fake = FakeGit(remote_url='https://github.com/BloomRX/Lia-Project-fork.git')
+        outcome = make_sync(fake).pre_sync()
+        self.assertFalse(outcome.ok)
+        self.assertEqual(outcome.stage, 'identity')
+
+    def test_credentials_in_the_remote_url_are_never_printed(self):
+        fake = FakeGit(remote_url='https://user:ghp_SUPERSECRET@github.com/x/y.git')
+        outcome = make_sync(fake).pre_sync()
+        self.assertFalse(outcome.ok)
+        self.assertNotIn('ghp_SUPERSECRET', outcome.reason)
+        self.assertNotIn('user:', outcome.reason)
+        self.assertIn('***', outcome.reason)
+
+    def test_the_canonical_ssh_and_https_spellings_are_accepted(self):
+        for url in ('https://github.com/BloomRX/Lia-Project.git',
+                    'git@github.com:BloomRX/Lia-Project.git',
+                    'ssh://git@github.com/BloomRX/Lia-Project.git'):
+            with self.subTest(url=url):
+                fake = FakeGit(remote_url=url)
+                outcome = make_sync(fake).pre_sync()
+                self.assertNotEqual(outcome.stage, 'identity', outcome.reason)
+
+    def test_identity_is_not_a_substring_match(self):
+        """
+        The old check was `'Lia-Project' not in url`, so any URL containing that
+        substring passed. This one contains it and must still be refused.
+        """
+        url = 'https://anywhere.example/whatever/Lia-Project'
+        self.assertIn('Lia-Project', url)
+        self.assertIsNone(sync.normalize_remote_url(url))
+        self.assertEqual(make_sync(FakeGit(remote_url=url)).pre_sync().stage, 'identity')
+
+
+class StagedPayloadTests(unittest.TestCase):
+    """§3: what is staged is proven, not assumed. Real git, real index."""
+
+    def setUp(self):
+        self.base = Path(tempfile.mkdtemp(prefix='devflow-staged-'))
+        self.repo = make_repo(self.base)
+        (self.repo / 'tools').mkdir(parents=True, exist_ok=True)
+        self.git = real_git_runner(self.repo, remote_url=PINNED_REMOTE_URL)
+
+    def tearDown(self):
+        shutil.rmtree(self.base, ignore_errors=True)
+
+    def _sync(self):
+        return sync.WorkBranchSync(self.repo, work_branch=WORK, run_git=self.git,
+                                   allow_checkpoint=True)
+
+    def test_a_staged_rename_is_refused(self):
+        (self.repo / 'tools' / 'a.py').write_text('x = 1\n', encoding='utf-8')
+        self.git(['add', '--', 'tools/a.py'])
+        self.git(['commit', '-q', '-m', 'add'])
+        self.git(['mv', 'tools/a.py', 'tools/b.py'])
+        with self.assertRaises(sync.SyncRefused) as caught:
+            self._sync().pre_sync()
+        self.assertIn('renomeação', str(caught.exception))
+
+    def test_a_symlink_escaping_the_repository_is_refused(self):
+        outside = Path(tempfile.mkdtemp(prefix='devflow-outside-'))
+        self.addCleanup(shutil.rmtree, outside, True)
+        (outside / 'secret.py').write_text('x = 1\n', encoding='utf-8')
+        (self.repo / 'tools' / 'link.py').symlink_to(outside / 'secret.py')
+        with self.assertRaises(sync.SyncRefused) as caught:
+            self._sync().pre_sync()
+        self.assertIn('escapa do repositório', str(caught.exception))
+
+    def test_a_staged_symlink_is_refused_by_its_mode(self):
+        (self.repo / 'tools' / 'real.py').write_text('x = 1\n', encoding='utf-8')
+        (self.repo / 'tools' / 'link.py').symlink_to('real.py')
+        self.git(['add', '--', 'tools/real.py', 'tools/link.py'])
+        with self.assertRaises(sync.SyncRefused) as caught:
+            sync.verify_staged_payload(self.repo, ['tools/real.py', 'tools/link.py'])
+        self.assertIn('120000', str(caught.exception))
+
+    def test_a_staged_file_outside_the_approved_set_is_refused(self):
+        (self.repo / 'tools' / 'ok.py').write_text('x = 1\n', encoding='utf-8')
+        (self.repo / 'tools' / 'extra.py').write_text('y = 2\n', encoding='utf-8')
+        self.git(['add', '--', 'tools/ok.py', 'tools/extra.py'])
+        with self.assertRaises(sync.SyncRefused) as caught:
+            sync.verify_staged_payload(self.repo, ['tools/ok.py'])
+        self.assertIn('não aprovados', str(caught.exception))
+
+    def test_staged_content_differing_from_the_working_tree_is_refused(self):
+        (self.repo / 'tools' / 'a.py').write_text('x = 1\n', encoding='utf-8')
+        self.git(['add', '--', 'tools/a.py'])
+        (self.repo / 'tools' / 'a.py').write_text('x = 2\n', encoding='utf-8')
+        with self.assertRaises(sync.SyncRefused) as caught:
+            sync.verify_staged_payload(self.repo, ['tools/a.py'])
+        self.assertIn('difere do working tree', str(caught.exception))
+
+    def test_a_secret_is_found_in_the_staged_blob_not_just_on_disk(self):
+        (self.repo / 'tools' / 'a.py').write_text(
+            'TOKEN = "ghp_abcdefghijklmnopqrstuvwx0123456789"\n', encoding='utf-8')
+        self.git(['add', '--', 'tools/a.py'])
+        _staged, hits = sync.verify_staged_payload(self.repo, ['tools/a.py'])
+        self.assertTrue(hits, 'o segredo do blob stageado passou despercebido')
+
+    def test_a_path_that_escapes_the_repository_is_refused(self):
+        for bad in ('../fora.py', '/absoluto.py', 'tools/../fora.py', '~/home.py'):
+            with self.subTest(path=bad):
+                with self.assertRaises(sync.SyncRefused):
+                    sync.validate_local_path(self.repo, bad)
+
+    def test_a_non_regular_file_is_refused(self):
+        fifo = self.repo / 'tools' / 'pipe.fifo'
+        try:
+            os.mkfifo(fifo)
+        except (OSError, NotImplementedError, AttributeError):
+            self.skipTest('filesystem sem FIFO')
+        with self.assertRaises(sync.SyncRefused):
+            sync.validate_local_path(self.repo, 'tools/pipe.fifo')
+
+    def test_a_non_source_path_never_reaches_staging(self):
+        (self.repo / 'solto.py').write_text('x = 1\n', encoding='utf-8')
+        outcome = self._sync().pre_sync()
+        self.assertFalse(outcome.ok)
+        self.assertEqual(outcome.stage, 'classify')
+        self.assertNotIn('commit', ' '.join(
+            call for call in [] ), 'nada deveria ter sido commitado')
+
+    def test_a_path_appearing_between_classification_and_staging_is_not_staged(self):
+        """
+        The load-bearing case for `git add -- <paths>` instead of `git add -A`.
+
+        Classification reviews a snapshot. If anything appears in the worktree
+        between that review and the staging, `git add -A` would commit a path
+        nobody ever classified. Staging the reviewed paths explicitly cannot.
+        """
+        with_local_origin(self.repo)
+        (self.repo / 'tools' / 'aprovado.py').write_text('x = 1\n', encoding='utf-8')
+        real = real_git_runner(self.repo, remote_url=PINNED_REMOTE_URL)
+        staged_calls: list[list[str]] = []
+
+        def racing(args: list[str]) -> tuple[int, str]:
+            # The unreviewed file materialises exactly when staging happens.
+            if args[:1] == ['add']:
+                (self.repo / 'tools' / 'nao_revisado.py').write_text(
+                    'y = 2\n', encoding='utf-8')
+            staged_calls.append(list(args))
+            return real(args)
+
+        outcome = sync.WorkBranchSync(
+            self.repo, work_branch=WORK, run_git=racing, allow_checkpoint=True,
+        ).pre_sync()
+        self.assertTrue(outcome.ok, outcome.reason)
+        add = next(call for call in staged_calls if call[:1] == ['add'])
+        self.assertEqual(add[1], '--', 'o staging tem de listar os caminhos revisados')
+        self.assertNotIn('-A', add)
+        _code, files = real(['show', '--name-only', '--format=', 'HEAD'])
+        committed = sorted(line for line in files.splitlines() if line)
+        self.assertEqual(committed, ['tools/aprovado.py'],
+                         'um caminho nunca revisado foi commitado')
+        self.assertTrue((self.repo / 'tools' / 'nao_revisado.py').exists(),
+                        'o arquivo não classificado deveria continuar no disco')
+
+    def test_only_the_approved_paths_are_staged_never_git_add_all(self):
+        with_local_origin(self.repo)
+        (self.repo / 'tools' / 'novo.py').write_text('x = 1\n', encoding='utf-8')
+        outcome = self._sync().pre_sync()
+        self.assertTrue(outcome.ok, outcome.reason)
+        code, staged = self.git(['diff', '--cached', '--name-only'])
+        self.assertEqual(staged.strip(), '',
+                         'o checkpoint deveria ter consumido o índice')
+        code, shown = self.git(['show', '--name-only', '--format=', 'HEAD'])
+        self.assertEqual(shown.strip(), 'tools/novo.py')
+
+
+class TeardownHonestyTests(unittest.TestCase):
+    """§5: a cleanup PASS has to come from evidence."""
+
+    def setUp(self):
+        self.base = Path(tempfile.mkdtemp(prefix='devflow-teardown2-'))
+        self.repo = make_repo(self.base)
+        self.manifest = validate_round(manual_manifest())
+
+    def tearDown(self):
+        shutil.rmtree(self.base, ignore_errors=True)
+
+    def _run(self, **handle_kwargs):
+        runner, _, _ = make_runner(self.repo, self.manifest)
+        runner.spawn = fake_spawner(list(MARKER_LINES), **handle_kwargs)
+        runner.emit = lambda line: None
+        return runner
+
+    def test_a_confirmed_dead_root_reports_pass(self):
+        outcome = self._run(teardown_ok=True).execute()
+        self.assertEqual(outcome.teardown, 'PASS')
+        self.assertTrue(outcome.tree_cleaned)
+
+    def test_a_failed_taskkill_never_reports_pass(self):
+        outcome = self._run(teardown_ok=False,
+                            teardown_detail='taskkill retornou 128').execute()
+        self.assertEqual(outcome.teardown, 'FAIL')
+        self.assertFalse(outcome.tree_cleaned)
+        self.assertIn('taskkill retornou 128', outcome.teardown_detail)
+
+    def test_a_live_root_is_reported_as_a_failure_not_a_success(self):
+        outcome = self._run(teardown_ok=False).execute()
+        self.assertEqual(outcome.teardown, 'FAIL')
+        self.assertEqual(outcome.teardown_descendants, -1,
+                         'incerteza tem de continuar incerteza')
+
+    def test_the_final_block_refuses_a_fabricated_cleanup_pass(self):
+        failed = pipeline.AutoResult(result='PASS', stage='runtime', round_id='M3.0b',
+                                     tested_head='a' * 40, cleanup_state='FAIL')
+        block = pipeline.render_final_block(failed)
+        self.assertIn('Process cleanup: FAIL', block)
+        self.assertNotIn('Process cleanup: PASS', block)
+
+    def test_an_unrelated_process_survives_teardown(self):
+        survivor = subprocess.Popen(
+            [sys.executable, '-c', 'import time; time.sleep(30)'],
+        )
+        try:
+            time.sleep(0.3)
+            outcome = self._run().execute()
+            self.assertEqual(outcome.teardown, 'PASS')
+            self.assertIsNone(survivor.poll(),
+                              'um processo que a rodada não iniciou foi encerrado')
+        finally:
+            survivor.terminate()
+            survivor.wait(timeout=10)
+
+    def test_run_auto_cannot_report_cleanup_pass_when_teardown_failed(self):
+        """
+        End to end through the pipeline, not just through render_final_block.
+
+        The audited defect was in `run_auto`, which derived the cleanup verdict
+        from the absence of a word in the notes and then printed
+        `"PASS" if result.stage`. A unit test on the renderer alone cannot see
+        that, so this drives a full PASS-shaped round whose teardown failed.
+        """
+        fake = FakeGit(head='a' * 40, remote_head='a' * 40)
+        manifest = validate_round(runnable_manifest())
+        runner = RoundRunner(
+            round_manifest=manifest, repo=self.repo,
+            run_git=lambda args: fake(args),
+            spawn=fake_spawner(list(MARKER_LINES), teardown_ok=False,
+                               teardown_detail='taskkill retornou 128'),
+            ask=lambda q, o: 'S', invoke_test=passing_tests)
+        result = pipeline.run_auto(
+            self.repo, work_branch=WORK, run_git=lambda args: fake(args),
+            emit=lambda _line: None, runner_factory=lambda m: runner,
+            load_round=lambda: manifest)
+        self.assertTrue(result.runtime_ok, result.reason)
+        self.assertFalse(result.cleanup_ok)
+        self.assertEqual(result.cleanup_state, 'FAIL')
+        self.assertIn('taskkill retornou 128', result.cleanup_detail)
+        block = pipeline.render_final_block(result)
+        self.assertIn('Process cleanup: FAIL', block)
+        self.assertNotIn('Process cleanup: PASS', block)
+
+    def test_a_refused_round_reports_cleanup_as_not_applicable(self):
+        runner, _, _ = make_runner(self.repo, self.manifest)
+        runner.emit = lambda line: None
+        runner.run_git = lambda args: (0, 'main') if args[1:2] == ['--abbrev-ref'] \
+            else (0, 'a' * 40)
+        result = pipeline.run_auto(
+            self.repo, work_branch=WORK, emit=lambda line: None,
+            run_git=runner.run_git, load_round=lambda: self.manifest,
+            do_sync=False, do_publish=False,
+        )
+        self.assertNotEqual(result.cleanup_state, 'PASS')
+
+
+class OneTimeUpgradeBootstrapTests(unittest.TestCase):
+    """
+    §8: the transition bootstrap is documented as an OUT-OF-CHECKOUT artifact.
+
+    It cannot live only in Git: a user still holding the pre-AUTO DevKit has no
+    way to run a file that only exists after the update it is supposed to fetch.
+    """
+
+    def test_the_upgrade_bootstrap_is_shipped_outside_the_checkout(self):
+        doc = (TOOLS.parent / 'docs' / 'project' / 'DEVFLOW.md').read_text(
+            encoding='utf-8', errors='replace')
+        self.assertIn('LIA-DEVFLOW-UPGRADE', doc)
+        self.assertIn('FORA do checkout', doc)
+
+    UPGRADE_BAT = TOOLS / 'devflow' / 'upgrades' / 'LIA-DEVFLOW-UPGRADE.bat'
+
+    def test_the_upgrade_bootstrap_exists_and_needs_no_new_file(self):
+        text = self.UPGRADE_BAT.read_text(encoding='utf-8', errors='replace')
+        # It must not depend on anything the update is supposed to provide.
+        self.assertNotIn('lia_dev.py', text)
+        self.assertNotIn('tools' + chr(92) + 'devflow',
+                         text.replace('tools' + chr(92) + 'devflow' + chr(92) + 'upgrades', ''))
+        for needed in ('remote get-url origin', 'BloomRX/Lia-Project',
+                       'rev-parse --abbrev-ref HEAD', 'status --porcelain',
+                       'fetch origin', 'merge --ff-only', 'DevKit.bat'):
+            self.assertIn(needed, text, f'falta {needed!r} no bootstrap de transição')
+
+    def test_the_upgrade_bootstrap_is_fail_closed_and_never_destructive(self):
+        text = self.UPGRADE_BAT.read_text(encoding='utf-8', errors='replace')
+        lowered = text.lower()
+        for forbidden in ('reset --hard', 'git clean', 'stash', '--force',
+                          'checkout -b', 'switch '):
+            self.assertNotIn(forbidden, lowered,
+                             f'o bootstrap de transição não pode conter {forbidden!r}')
+        # Dirty worktree refuses instead of guessing.
+        self.assertIn('alteracoes nao commitadas', text)
+        # The main branch is never the target.
+        self.assertIn('arena/01a10290-lia-project', text)
+
+    def test_the_upgrade_bootstrap_pins_an_exact_reviewed_commit(self):
+        text = self.UPGRADE_BAT.read_text(encoding='utf-8', errors='replace')
+        self.assertIn('LIA_TARGET_SHA=', text)
+        self.assertIn('merge --ff-only "%LIA_TARGET_SHA%"', text)
+
+    def test_no_file_inside_the_checkout_pretends_to_bootstrap_itself(self):
+        doc = (TOOLS.parent / 'docs' / 'project' / 'DEVFLOW.md').read_text(
+            encoding='utf-8', errors='replace')
+        self.assertNotIn('duplo clique no DevKit antigo baixa o novo', doc)
 
 
 

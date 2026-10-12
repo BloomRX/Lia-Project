@@ -229,7 +229,10 @@ def _universal_devkit() -> None:
 
 def _git(repo: Path, args: list[str]) -> str:
     try:
-        probe = subprocess.run(['git', *args], cwd=repo, capture_output=True, text=True, timeout=60)
+        from devflow.sync import git_executable
+
+        probe = subprocess.run([git_executable(), *args], cwd=repo,
+                               capture_output=True, text=True, timeout=60)
     except (OSError, subprocess.SubprocessError):
         return ''
     return (probe.stdout or '').strip()
@@ -257,6 +260,8 @@ def cmd_bootstrap(_args: argparse.Namespace) -> int:
     sync = WorkBranchSync(
         repo_root(), work_branch=config.work_branch, remote=config.remote,
         main_branch=config.main_branch,
+        allow_checkpoint=config.allow_checkpoint,
+        expected_owner=config.expected_owner, expected_repo=config.expected_repo,
     )
     outcome = sync.pre_sync()
     for line in outcome.facts.notes:
@@ -300,6 +305,9 @@ def cmd_auto(args: argparse.Namespace) -> int:
         main_branch=config.main_branch,
         do_sync=not (getattr(args, 'no_sync', False) or getattr(args, 'post_sync', False)),
         do_publish=not getattr(args, 'no_publish', False),
+        allow_checkpoint=config.allow_checkpoint,
+        expected_owner=config.expected_owner,
+        expected_repo=config.expected_repo,
     )
     print()
     print(render_final_block(result))
@@ -317,6 +325,11 @@ def build_parser() -> argparse.ArgumentParser:
     auto.add_argument('--post-sync', action='store_true',
                       help='uso interno: o bootstrap já sincronizou este checkout')
     sub.add_parser('bootstrap', help='uso interno: sincroniza e reexecuta o auto')
+    universal = sub.add_parser(
+        'git', help='DevKit universal (publish, pull, validate, ...)',
+    )
+    # REMAINDER keeps the user's own quoting intact; `git` is dropped in Python.
+    universal.add_argument('rest', nargs=argparse.REMAINDER)
     sub.add_parser('menu', help='menu interativo (avançado)')
     sub.add_parser('round', help='executa a rodada ativa')
     sub.add_parser('status', help='rodada ativa + validade do último PASS')
@@ -326,7 +339,40 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def git_forward_argv(rest: list[str]) -> list[str]:
+    """
+    The argv for the universal DevKit, with the leading `git` token dropped.
+
+    This exists because `DevKit.bat` must not use SHIFT: in cmd.exe SHIFT does
+    not rewrite `%*`, so `DevKit.bat git publish` would forward the token `git`
+    along with the real subcommand. The .bat therefore passes its argument line
+    through untouched and the token is dropped HERE, where it is testable and
+    where quoting is already parsed by Python.
+    """
+    forwarded = list(rest)
+    if forwarded and forwarded[0] == 'git':
+        forwarded.pop(0)
+    return forwarded
+
+
+def cmd_git(args: argparse.Namespace) -> int:
+    """`DevKit.bat git <sub>` -> tools/project_cli.py <sub>, sem o token 'git'."""
+    forwarded = git_forward_argv(list(getattr(args, 'rest', []) or []))
+    if not forwarded:
+        print('uso: DevKit.bat git <subcomando> [args]')
+        print('subcomandos: publish, pull, validate, branches, checkout, '
+              'new-branch, create-repo, resume-repo, pr, diagnose, kokoro-smoke')
+        return 2
+    probe = subprocess.run(
+        [sys.executable, str(Path(__file__).resolve().parent / 'project_cli.py'),
+         *forwarded],
+        cwd=repo_root(),
+    )
+    return probe.returncode
+
+
 HANDLERS = {
+    'git': cmd_git,
     'bootstrap': cmd_bootstrap,
     'auto': cmd_auto,
     'round': cmd_round,

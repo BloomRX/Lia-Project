@@ -28,30 +28,51 @@
       "id": "devflow",
       "label": "DevFlow (contrato da rodada, limpeza segura, gate de log)",
       "cwd": ".",
-      "argv": ["python", "tools/test_lia_dev.py"]
+      "argv": [
+        "python",
+        "tools/test_lia_dev.py"
+      ]
     },
     {
       "id": "lia-app",
       "label": "Lia App (manager + pre-requisito + ownership + autorun)",
       "cwd": "airi/apps/lia-app",
-      "argv": ["node", "../../node_modules/vitest/vitest.mjs", "run"]
+      "argv": [
+        "node",
+        "../../node_modules/vitest/vitest.mjs",
+        "run"
+      ]
     },
     {
       "id": "stage-m30a",
       "label": "Contrato manual dev:tamagotchi (8.0D-M3.0a)",
       "cwd": "airi/apps/stage-tamagotchi",
-      "argv": ["node", "../../node_modules/vitest/vitest.mjs", "run", "--project", "node", "src/main/dev-build-contract.test.ts"]
+      "argv": [
+        "node",
+        "../../node_modules/vitest/vitest.mjs",
+        "run",
+        "--project",
+        "node",
+        "src/main/dev-build-contract.test.ts"
+      ]
     },
     {
       "id": "stage-devflow",
       "label": "Diagnostico DEVFLOW do Stage (renderer, janela, cena montada)",
       "cwd": "airi/apps/stage-tamagotchi",
-      "argv": ["node", "../../node_modules/vitest/vitest.mjs", "run", "src/main/devflow-diagnostics.test.ts"]
+      "argv": [
+        "node",
+        "../../node_modules/vitest/vitest.mjs",
+        "run",
+        "src/main/devflow-diagnostics.test.ts"
+      ]
     }
   ],
   "launch": {
     "kind": "managed-launcher",
-    "command": ["Lia.bat"],
+    "command": [
+      "Lia.bat"
+    ],
     "operator_hint": "Nada a fazer. A rodada abre o Launcher, aciona Conversar sozinha e lê a propria evidencia. Nao rode nenhum build manual: a rodada precisa provar que o Launcher reconstruiu o core-agent sozinho.",
     "env": {
       "LIA_DEVFLOW_AUTORUN": "conversar",
@@ -61,7 +82,9 @@
   },
   "scenario": {
     "driver": "autorun",
-    "steps": ["conversar"]
+    "steps": [
+      "conversar"
+    ]
   },
   "runtime_assertions": {
     "ordered_markers": [
@@ -93,6 +116,10 @@
       {
         "id": "stage-window-visible",
         "pattern": "lia-stage window=visible"
+      },
+      {
+        "id": "stage-renderer-app-mounted",
+        "pattern": "lia-stage renderer-app=mounted"
       },
       {
         "id": "stage-avatar-scene-mounted",

@@ -626,9 +626,37 @@ não existe mais menu no duplo clique.
   `launch.auto_action` e um `scenario { driver, steps }` genérico. Nenhuma rodada futura foi
   implementada — só a arquitetura que as torna dirigíveis.
 
+**AUTO-1a existiu para corrigir defeitos que impediriam essa primeira execução.** Uma
+auditoria independente do commit AUTO-1 confirmou a arquitetura e apontou problemas reais:
+
+- o `DevKit.bat` se copiava para `%TEMP%` e a cópia usava `%~dp0`, que lá é o próprio
+  `%TEMP%` — o duplo clique **sempre** falharia com "tools\lia_dev.py nao encontrado";
+- o gate parava de esperar assim que a cadeia ordenada completava, então lia a evidência
+  terminal de linhas que ainda não tinham chegado e reprovava uma Lia saudável;
+- a identidade do repositório era `'Lia-Project' in url`, que aceita qualquer host ou dono
+  com essa substring;
+- o checkpoint usava `git add -A`, stageando o checkout inteiro em vez dos caminhos
+  revisados;
+- `publish()` recusava um fast-forward legítimo;
+- `Process cleanup: PASS` saía de qualquer string de estágio não vazia, e `terminate()`
+  engolia falha de `taskkill`;
+- a sonda de PATH criava um `git.cmd` que `subprocess(shell=False)` não alcança no Windows;
+- o marcador `avatar-scene=mounted` vinha do mount do app raiz, não do avatar.
+
+Todos foram corrigidos. O marcador raiz foi renomeado para `renderer-app=mounted` e o sinal
+de avatar passou a vir do próprio componente de cena; `window=visible` agora exige
+`isVisible()`. `allow_checkpoint` fica desligado por padrão — para esta execução o contrato
+é checkout limpo.
+
+**Limitação de transição:** o checkout do dono do projeto ainda tem o `DevKit.bat` anterior
+ao AUTO, e um recurso do DevKit novo não roda dentro do antigo antes de ser baixado. Por
+isso existe `tools/devflow/upgrades/LIA-DEVFLOW-UPGRADE.bat`, que só precisa do `git` e deve
+ser entregue **FORA do checkout** (anexo ou download). Ele ainda **não** deve ser executado.
+
 **O gate gerenciado da M3.0b no Windows continua `NOT PASS`** e o baseline funcional continua
 **`3ef6d11`**. Nenhum commit de ferramenta foi ou será promovido a baseline funcional. A
-próxima prova é **um único duplo clique** do dono do projeto no Windows.
+próxima prova é **um único duplo clique** do dono do projeto no Windows, e ele **ainda não
+foi solicitado**.
 
 **Nada foi apagado.** Os `.bat`/`.ps1` históricos estão inventariados e classificados
 (KEEP / INTERNAL / CANDIDATE-MERGE / CANDIDATE-DELETE) em
