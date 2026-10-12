@@ -528,7 +528,10 @@ class RoundRunner:
             # cleanup it had never verified.
             teardown = handle.terminate()
             outcome.tree_cleaned = teardown.ok
-            outcome.teardown = 'PASS' if teardown.ok else 'FAIL'
+            # The tri-state, verbatim. Collapsing UNKNOWN into FAIL here would
+            # claim a failure we did not observe; the pipeline treats FAIL and
+            # UNKNOWN identically, so honesty costs nothing.
+            outcome.teardown = teardown.state
             outcome.teardown_detail = teardown.describe()
             outcome.teardown_descendants = teardown.descendants
             note(f'limpeza da árvore própria: {outcome.teardown} ({teardown.describe()})')

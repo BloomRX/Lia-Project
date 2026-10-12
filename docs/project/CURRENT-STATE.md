@@ -672,6 +672,30 @@ inteiro; identidade da árvore gravada no spawn e `TeardownResult.state` tri-est
 remote por **igualdade exata** contra seis formas canônicas, sem imprimir a URL e com o SHA
 resultante relido e comparado.
 
+**AUTO-1c fechou os cinco bloqueadores de Windows apontados pela terceira auditoria.** Eram
+todos defeitos que só aparecem na máquina real:
+
+- `for attempt, sig in ((0, signal.SIGTERM), (1, signal.SIGKILL))` é um literal avaliado na
+  construção, e `signal.SIGKILL` não existe no Windows Python: **todo** teardown no Windows
+  levantava `AttributeError` antes de chegar ao `taskkill`, e por estar num `finally` ainda
+  mascarava o relatório do gate;
+- nenhuma função de `kernel32` tinha `restype`/`argtypes`; o `c_int` padrão trunca um HANDLE de
+  64 bits, então a comparação com `INVALID_HANDLE_VALUE` nunca casava e
+  `ctypes.get_last_error()` lia um slot que `ctypes.windll` nunca preenche;
+- `OpenProcess` ou `GetExitCodeProcess` falhando era contado como "processo morto", e a soma
+  virava `descendentes: nenhum vivo`;
+- `TeardownResult.state` não conhecia o resultado do `taskkill`, então um kill recusado com a
+  raiz já morta lia como `PASS`;
+- o bootstrap de transição resolvia o SHA alvo **antes** do `fetch`, ou seja, desistia no único
+  cenário que ele existe para resolver.
+
+Hoje: ramos Windows/POSIX separados e `_escalation_signals` devolvendo `()` no Windows; tabela
+`WIN32_PROTOTYPES` completa aplicada sobre `ctypes.WinDLL('kernel32', use_last_error=True)`,
+com `HANDLE = c_void_p`, `th32DefaultHeapID` como `ULONG_PTR` e `PROCESSENTRY32` de 304/296
+bytes; inspeção de PID tri-estado onde só `ERROR_INVALID_PARAMETER` ou um código de saída real
+provam ausência; `kill_ok` dominando o `state`; e a ordem identidade → branch → status
+verificado → fetch → resolução → ancestralidade → `--ff-only` → SHA resultante → DevKit.
+
 **Limitação de transição:** o checkout do dono do projeto ainda tem o `DevKit.bat` anterior
 ao AUTO, e um recurso do DevKit novo não roda dentro do antigo antes de ser baixado. Por
 isso existe `tools/devflow/upgrades/LIA-DEVFLOW-UPGRADE.bat`, que só precisa do `git` e deve

@@ -410,6 +410,88 @@ variável e **nunca** é impressa, gravada ou ecoada, nenhum arquivo temporário
 comparado — `merge --ff-only` sair com 0 não prova onde o checkout parou, e é desse checkout
 que o DevKit novo vai carregar código.
 
+## AUTO-1c: o que a terceira auditoria encontrou, e como foi fechado
+
+Uma terceira revisão do commit AUTO-1b aprovou a direção e apontou cinco bloqueadores de
+compatibilidade com Windows e de primeira execução. Todos foram confirmados no código e
+fechados. Nenhum código de produto mudou.
+
+### 1. `signal.SIGKILL` não existe no Windows
+
+`terminate()` tinha um laço compartilhado
+`for attempt, sig in ((0, signal.SIGTERM), (1, signal.SIGKILL))`. Um literal de tupla é
+avaliado quando é **construído**, não quando é usado — então todo teardown no Windows
+levantava `AttributeError: module 'signal' has no attribute 'SIGKILL'` antes de chegar ao
+`taskkill`. E como esse código estava dentro de um `finally`, o `AttributeError` ainda
+mascarava o que o gate estivesse reportando.
+
+Hoje os ramos são métodos separados, `_terminate_windows` e `_terminate_posix`, e
+`_escalation_signals(is_windows)` devolve `()` no Windows. É o **único** lugar do módulo onde
+`SIGKILL` pode ser nomeado. O `taskkill /PID /T /F` já é forçado e já cobre a árvore, então não
+há escada de sinais no Windows.
+
+A regressão é executável em Linux: o teste troca `processes.signal` por um stand-in com a
+forma real do Windows (SIGTERM sim, SIGKILL não) e roda o ramo Windows. O mesmo teste prova que
+o stand-in não é vazio, exigindo que o ramo POSIX **levante** `AttributeError` sob ele.
+
+### 2. ABI de HANDLE nas chamadas Win32
+
+Nenhuma função de `kernel32` tinha `restype`/`argtypes` declarados. O padrão do ctypes é
+`restype = c_int`, que **trunca um HANDLE de 64 bits para 32**. Duas consequências silenciosas:
+o `INVALID_HANDLE_VALUE` comparado contra um `c_int` truncado nunca casava, então a verificação
+de falha do snapshot nunca disparava; e `ctypes.windll` não preenche o slot privado de
+last-error, então `ctypes.get_last_error()` devolvia o resíduo de outra chamada.
+
+Hoje existe uma tabela `WIN32_PROTOTYPES` com `(nome, restype, argtypes)` para as seis funções
+usadas — `CreateToolhelp32Snapshot`, `Process32First`, `Process32Next`, `CloseHandle`,
+`OpenProcess`, `GetExitCodeProcess` — aplicada uma única vez sobre
+`ctypes.WinDLL('kernel32', use_last_error=True)`. `HANDLE` é `c_void_p`, e
+`th32DefaultHeapID` é `ULONG_PTR` (tamanho de ponteiro), o que faz `PROCESSENTRY32` ter 304
+bytes em 64 bits e 296 em 32. As declarações usam ctypes puro, **não** `ctypes.wintypes`,
+porque wintypes não importa fora do Windows — assim o contrato de declaração é testável em
+Linux. A execução Win32 real continua sendo Windows-only.
+
+### 3. `UNKNOWN` não pode virar "processo morto"
+
+`_pid_alive_windows` devolvia `False` quando `OpenProcess` falhava e quando
+`GetExitCodeProcess` falhava. `count_alive` somava esses `False` como zero sobreviventes,
+então um filho com acesso negado virava `descendentes: nenhum vivo` e depois `PASS`.
+
+Hoje a inspeção é tri-estado — `ALIVE` / `DEAD` / `UNKNOWN` — e só duas respostas são `DEAD`: o
+erro documentado `ERROR_INVALID_PARAMETER` (87), que é a resposta do Windows para um PID que
+não identifica processo vivo, ou um código de saída real diferente de `STILL_ACTIVE`.
+`ERROR_ACCESS_DENIED` (5) é o **oposto**: prova que o processo existe. `summarize_descendants`
+devolve `(vivos, não_verificáveis)` e `TeardownResult` ganhou o campo `unverified`, então
+"nenhum vivo" e "não consegui conferir" deixaram de ser a mesma coisa.
+
+### 4. A falha do `taskkill` passou a ser load-bearing
+
+`TeardownResult.state` derivava só de `root_terminated` e `descendants`. Um `taskkill` que
+retornava não-zero, sobre uma raiz que por acaso encerrou sozinha e sem descendentes
+verificáveis, produzia `root_terminated=True, descendants=0` — ou seja, `PASS`.
+
+Hoje `TeardownResult.kill_ok` registra o resultado do `taskkill` explicitamente e **domina** o
+`state`: `kill_ok is False` ⇒ `FAIL`, aconteça o que mais acontecer. Falta do executável
+(`FileNotFoundError`) cai no mesmo caminho. `kill_ok = None` significa "não houve ferramenta
+externa", que é o caso POSIX. Continua não existindo kill por nome de imagem em lugar nenhum: o
+único alvo é o PID raiz que o DevFlow iniciou.
+
+### 5. A ordem do `fetch` no bootstrap de transição
+
+`rev-list -n 1 "%LIA_TARGET_SHA%"` rodava **antes** do `git fetch`. Um checkout antigo não tem o
+objeto do commit revisado ainda, então o bootstrap desistia exatamente no caso que ele existe
+para resolver: a máquina do dono do projeto, atualizando pela primeira vez.
+
+A ordem contratada agora é: identidade exata → branch → worktree/index limpos **com
+conferência do código de saída do `git status`** → `fetch` do branch autorizado → resolução do
+alvo → prova de que o alvo pertence à história buscada (`merge-base --is-ancestor <alvo>
+FETCH_HEAD`) → prova de que o HEAD local é ancestral do alvo → `merge --ff-only` → conferência
+do SHA resultante → chamada ao DevKit novo com o código de saída propagado.
+
+O `git status` mereceu atenção própria: um `status` que falha **não imprime nada**, e "nenhuma
+linha" era indistinguível de "checkout limpo". O script agora exige um marcador de código de
+saída e recusa se ele não for zero.
+
 ## Segurança
 
 - nenhum `git clean`, `git reset --hard`, force-push ou recursão fora de allowlist;
@@ -550,6 +632,10 @@ limpo. Não há contradição: `run.json` prova o que foi testado; o manifesto d
 - **O entrypoint humano é `DevKit.bat` e duplo clique significa AUTO.** `Lia.bat` passou a
   entrypoint interno/de runtime (o DevFlow o invoca por manifesto); os demais BAT/PS1
   históricos permanecem internos até o D3, que fará as fusões/remoções.
+- **AUTO-1c** fecha os cinco bloqueadores de Windows da terceira auditoria: o
+  `signal.SIGKILL` avaliado no Windows, o ABI de HANDLE sem `restype`/`argtypes`, a falha de
+  API Win32 contada como processo morto, a falha do `taskkill` que não era load-bearing, e o
+  alvo resolvido antes do `fetch`. Nenhum código de produto mudou.
 - **AUTO-1b** fecha os cinco defeitos da segunda auditoria: o `%ERRORLEVEL%` expandido no
   parse do `:dispatch`, o `finally` que não cobria o gate, o snapshot de descendentes colhido
   depois de a raiz morrer, o PASS que ignorava `cleanup_state`, e a identidade por substring

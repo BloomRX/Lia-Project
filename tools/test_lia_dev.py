@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import ast
 import copy
+import ctypes
 from datetime import datetime, timezone
 import json
 import os
@@ -3375,9 +3376,13 @@ class TeardownEvidenceTests(unittest.TestCase):
         finally:
             shutil.rmtree(survivor, ignore_errors=True)
 
-    def test_count_alive_reports_only_processes_that_really_answer(self):
-        self.assertEqual(0, processes.count_alive([]))
-        self.assertGreaterEqual(processes.count_alive([os.getpid()]), 1)
+    def test_summarize_descendants_separates_alive_from_unverifiable(self):
+        self.assertEqual((0, 0), processes.summarize_descendants(frozenset()))
+        self.assertEqual((-1, 0), processes.summarize_descendants(None))
+        alive, unverified = processes.summarize_descendants(
+            frozenset({os.getpid()}))
+        self.assertEqual(1, alive)
+        self.assertEqual(0, unverified)
 
 
 class VerdictConsistencyTests(unittest.TestCase):
@@ -3578,6 +3583,870 @@ class UpgradeBootstrapSecurityTests(unittest.TestCase):
     def test_the_bootstrap_still_uses_crlf(self):
         raw = self.BAT.read_bytes()
         self.assertNotIn(b'\n', raw.replace(b'\r\n', b''))
+
+
+# ---------------------------------------------------------------------------
+# AUTO-1c regressions: Windows compatibility and first-run bootstrap.
+# ---------------------------------------------------------------------------
+
+PROCESSES_PY = TOOLS / 'devflow' / 'processes.py'
+
+
+def _module_ast() -> ast.Module:
+    return ast.parse(PROCESSES_PY.read_text(encoding='utf-8'))
+
+
+def _function_node(tree: ast.Module, name: str) -> ast.FunctionDef:
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) \
+                and node.name == name:
+            return node
+    raise AssertionError(f'função {name!r} não existe em processes.py')
+
+
+def _attribute_reads(node: ast.AST) -> list[str]:
+    """Every `x.y` read inside `node`, as 'x.y'."""
+    return [f'{ast.unparse(n.value)}.{n.attr}'
+            for n in ast.walk(node) if isinstance(n, ast.Attribute)]
+
+
+class _WindowsShapedSignal:
+    """
+    A stand-in for the Windows `signal` module: SIGTERM yes, SIGKILL no.
+
+    This is deliberately NOT a mock that pretends SIGKILL exists. Windows
+    Python genuinely has no `signal.SIGKILL`, and the audited defect was code
+    that named it on a path Windows executes. The stand-in reproduces the real
+    AttributeError so the regression fires on Linux.
+    """
+
+    SIGTERM = 15
+    SIGINT = 2
+    SIGBREAK = 21
+
+    def __getattr__(self, name: str):
+        raise AttributeError(f"module 'signal' has no attribute {name!r}")
+
+
+class WindowsSignalContractTests(unittest.TestCase):
+    """
+    §1: Windows must never evaluate `signal.SIGKILL`.
+
+    `signal.SIGKILL` does not exist in Windows Python. Naming it inside a tuple
+    literal that BOTH platforms build - `for attempt, sig in ((0, SIGTERM),
+    (1, SIGKILL))` - raises AttributeError on every Windows teardown, before
+    taskkill is ever reached. And because that code sat in a `finally`, the
+    AttributeError also masked whatever the gate was reporting.
+    """
+
+    def test_the_windows_escalation_list_is_empty(self):
+        self.assertEqual((), processes._escalation_signals(True))
+
+    def test_the_windows_path_never_touches_sigkill(self):
+        """
+        Executable proof, not a grep: run the Windows arm with a signal module
+        that has no SIGKILL, exactly like Windows Python.
+        """
+        real = processes.signal
+        processes.signal = _WindowsShapedSignal()
+        try:
+            self.assertEqual((), processes._escalation_signals(True))
+            # Guard against a vacuous test: the POSIX arm MUST blow up under
+            # this stand-in, otherwise the stand-in is not Windows-shaped and
+            # the assertion above proves nothing.
+            with self.assertRaises(AttributeError):
+                processes._escalation_signals(False)
+        finally:
+            processes.signal = real
+
+    def test_sigkill_is_named_only_inside_the_signal_helper(self):
+        tree = _module_ast()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Attribute) and node.attr == 'SIGKILL':
+                self.assertIn(
+                    '_escalation_signals',
+                    [f.name for f in ast.walk(tree)
+                     if isinstance(f, ast.FunctionDef)
+                     and f.lineno <= node.lineno <= (f.end_lineno or f.lineno)],
+                    f'signal.SIGKILL na linha {node.lineno} está fora de '
+                    '_escalation_signals; o Windows avaliaria isso')
+
+    def test_terminate_dispatches_to_separate_platform_branches(self):
+        tree = _module_ast()
+        body = _function_node(tree, 'terminate')
+        called = [n for n in _attribute_reads(body) + [
+            n.func.id for n in ast.walk(body) if isinstance(n, ast.Call)
+            and isinstance(n.func, ast.Name)] if n]
+        self.assertIn('self._terminate_windows', called)
+        self.assertIn('self._terminate_posix', called)
+        # Neither the dispatcher nor the Windows branch may name a signal.
+        for name in ('terminate', '_terminate_windows'):
+            reads = _attribute_reads(_function_node(tree, name))
+            self.assertEqual(
+                [], [r for r in reads if r.startswith('signal.')],
+                f'{name} ainda referencia o módulo signal')
+
+    def test_the_posix_ladder_has_two_rungs(self):
+        # Genuinely POSIX-only: Windows Python has no SIGKILL to escalate to,
+        # which is the whole reason the Windows branch has no ladder at all.
+        if os.name == 'nt':
+            self.skipTest('Windows não tem signal.SIGKILL; o ramo Windows não '
+                          'tem escada de sinais')
+        self.assertEqual(2, len(processes._escalation_signals(False)))
+
+
+class Win32DeclarationContractTests(unittest.TestCase):
+    """
+    §2: every Win32 call needs a complete ctypes prototype.
+
+    Without `restype`, ctypes assumes `c_int` and truncates a 64-bit HANDLE to
+    32 bits. Without `use_last_error=True` on the library handle,
+    `ctypes.get_last_error()` reads a slot nobody wrote and reports a stale
+    WinError. Both are silent, and both are checkable on Linux because the
+    declarations are plain ctypes - `ctypes.wintypes` is what cannot be
+    imported off Windows, so it is not used.
+    """
+
+    def test_processentry32_layout_matches_the_win32_struct(self):
+        size = ctypes.sizeof(processes.PROCESSENTRY32)
+        pointer_bytes = ctypes.sizeof(ctypes.c_void_p)
+        expected = 304 if pointer_bytes == 8 else 296
+        self.assertEqual(
+            expected, size,
+            f'PROCESSENTRY32 tem {size} bytes; o struct do Windows tem '
+            f'{expected} para ponteiros de {pointer_bytes} bytes. Um layout '
+            'errado não levanta exceção: desloca th32ParentProcessID e a '
+            'tabela pai/filho inteira vira lixo.')
+
+    def test_the_fields_this_module_reads_sit_at_the_documented_offsets(self):
+        offsets = {name: getattr(processes.PROCESSENTRY32, name).offset
+                   for name, *_ in processes.PROCESSENTRY32._fields_}
+        pointer_bytes = ctypes.sizeof(ctypes.c_void_p)
+        if pointer_bytes == 8:
+            self.assertEqual(8, offsets['th32ProcessID'])
+            self.assertEqual(16, offsets['th32DefaultHeapID'])
+            self.assertEqual(32, offsets['th32ParentProcessID'])
+        else:
+            self.assertEqual(8, offsets['th32ProcessID'])
+            self.assertEqual(12, offsets['th32DefaultHeapID'])
+            self.assertEqual(24, offsets['th32ParentProcessID'])
+
+    def test_th32defaultheapid_is_pointer_sized_not_a_ulong(self):
+        field = dict((name, typ) for name, typ, *_
+                     in [(f[0], f[1]) for f in processes.PROCESSENTRY32._fields_])
+        self.assertIs(processes.ULONG_PTR, field['th32DefaultHeapID'])
+        self.assertEqual(ctypes.sizeof(ctypes.c_void_p),
+                         ctypes.sizeof(processes.ULONG_PTR))
+
+    def test_every_handle_returning_api_declares_a_pointer_sized_restype(self):
+        table = dict((name, (restype, argtypes))
+                     for name, restype, argtypes in processes.WIN32_PROTOTYPES)
+        for name in processes.WIN32_HANDLE_FUNCTIONS:
+            self.assertIn(name, table, f'{name} não tem protótipo declarado')
+            restype, _ = table[name]
+            self.assertIs(
+                ctypes.c_void_p, restype,
+                f'{name} devolve HANDLE; restype tem de ser c_void_p, não o '
+                'c_int padrão que trunca o ponteiro em 64 bits')
+
+    def test_the_prototype_table_covers_every_kernel32_call_made(self):
+        declared = {name for name, _, _ in processes.WIN32_PROTOTYPES}
+        tree = _module_ast()
+        used: set[str] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+                target = ast.unparse(node.func.value)
+                if target in ('kernel32', '_kernel32()'):
+                    used.add(node.func.attr)
+        self.assertTrue(used, 'nenhuma chamada a kernel32 foi encontrada')
+        self.assertEqual(
+            set(), used - declared,
+            'chamadas a kernel32 sem protótipo: usam restype c_int e sem '
+            'last-error real')
+
+    def test_the_declared_arities_match_the_documented_signatures(self):
+        expected = {
+            'CreateToolhelp32Snapshot': 2,
+            'Process32First': 2,
+            'Process32Next': 2,
+            'CloseHandle': 1,
+            'OpenProcess': 3,
+            'GetExitCodeProcess': 2,
+        }
+        for name, _restype, argtypes in processes.WIN32_PROTOTYPES:
+            self.assertEqual(expected[name], len(argtypes), name)
+
+    def test_invalid_handle_value_is_computed_at_the_running_width(self):
+        expected = ctypes.sizeof(ctypes.c_void_p)
+        value = processes.invalid_handle_value()
+        self.assertEqual((1 << (expected * 8)) - 1, value)
+        # A 32-bit -1 compared against a 64-bit constant never matches, which
+        # is how the snapshot-failure check silently stopped firing.
+        self.assertNotEqual(-1, value)
+
+    def test_kernel32_is_opened_with_use_last_error_and_not_via_windll(self):
+        source = PROCESSES_PY.read_text(encoding='utf-8')
+        self.assertIn("ctypes.WinDLL('kernel32', use_last_error=True)", source,
+                      'sem use_last_error, get_last_error() devolve lixo')
+        # `ctypes.windll` may appear in prose; what matters is that no CODE
+        # path reaches for it, because windll never fills the ctypes
+        # last-error slot.
+        tree = _module_ast()
+        offenders = [ast.unparse(n) for n in ast.walk(tree)
+                     if isinstance(n, ast.Attribute)
+                     and ast.unparse(n.value) == 'ctypes.windll']
+        self.assertEqual([], offenders,
+                         'windll não preenche o slot de last-error do ctypes')
+
+    def test_the_last_error_slot_is_read_through_the_defensive_seam(self):
+        # ctypes has no get/set_last_error off Windows; touching it directly
+        # would make the Windows-only helper unrunnable anywhere else.
+        tree = _module_ast()
+        direct = [ast.unparse(n) for n in ast.walk(tree)
+                  if isinstance(n, ast.Attribute) and ast.unparse(n) in
+                  ('ctypes.get_last_error', 'ctypes.set_last_error')]
+        self.assertEqual([], direct,
+                         'use os seams _win32_error/_reset_win32_error')
+        self.assertEqual(0, processes._win32_error())
+        processes._reset_win32_error()      # must not raise off Windows
+
+
+class _FakeKernel32:
+    """
+    Stands in for the typed kernel32 facade, on Linux.
+
+    It writes the REAL ctypes last-error slot, so the code under test reads
+    `ctypes.get_last_error()` exactly as it would on Windows.
+    """
+
+    def __init__(self, open_handle, open_error=0, exit_call_ok=True,
+                 exit_code=processes.STILL_ACTIVE):
+        self.last_error = 0
+        self.open_handle = open_handle
+        self.open_error = open_error
+        self.exit_call_ok = exit_call_ok
+        self.exit_code = exit_code
+        self.opened: list[int] = []
+        self.closed = 0
+
+    def OpenProcess(self, access, inherit, pid):
+        self.opened.append(pid)
+        self.last_error = self.open_error
+        return self.open_handle
+
+    def GetExitCodeProcess(self, handle, code_ref):
+        if not self.exit_call_ok:
+            return 0
+        code_ref._obj.value = self.exit_code
+        return 1
+
+    def CloseHandle(self, handle):
+        self.closed += 1
+        return 1
+
+
+class PidTriStateTests(unittest.TestCase):
+    """
+    §3: a Win32 inspection failure is UNKNOWN, never "process dead".
+
+    The audited `_pid_alive_windows` returned False when OpenProcess failed and
+    when GetExitCodeProcess failed. `count_alive` then summed those as zero
+    survivors, so an access-denied child became `descendentes: nenhum vivo` and
+    the round reported a cleanup it had not verified.
+    """
+
+    def test_a_live_pid_is_alive_and_a_absent_one_is_dead(self):
+        self.assertEqual(processes.ALIVE, processes.pid_state_posix(os.getpid()))
+        self.assertEqual(processes.DEAD, processes.pid_state_posix(0x7FFFFFFE))
+
+    def test_permission_denied_proves_existence_not_absence(self):
+        real = os.kill
+        with patch('os.kill', side_effect=PermissionError(13, 'EPERM')):
+            self.assertEqual(processes.ALIVE, processes.pid_state_posix(4242))
+        os.kill = real
+
+    def test_an_unexpected_oserror_is_unknown_not_dead(self):
+        with patch('os.kill', side_effect=OSError(22, 'EINVAL')):
+            self.assertEqual(processes.UNKNOWN, processes.pid_state_posix(4242))
+
+    def _windows_state(self, **kwargs) -> str:
+        fake = _FakeKernel32(**kwargs)
+        # The ctypes last-error slot does not exist off Windows, so the module
+        # reads it through a seam; this drives that seam with the fake's error.
+        with patch.object(processes, '_kernel32', return_value=fake), \
+                patch.object(processes, '_win32_error',
+                             side_effect=lambda: fake.last_error):
+            state = processes.pid_state_windows(4242)
+        # CloseHandle is due exactly when a handle came back. Closing a NULL
+        # handle would itself be a Win32 error.
+        self.assertEqual(1 if kwargs.get('open_handle') else 0, fake.closed,
+                         'o HANDLE vazou (ou um HANDLE nulo foi fechado)')
+        return state
+
+    def test_openprocess_access_denied_is_unknown_not_dead(self):
+        state = self._windows_state(open_handle=None,
+                                    open_error=processes.ERROR_ACCESS_DENIED)
+        self.assertEqual(processes.UNKNOWN, state,
+                         'ERROR_ACCESS_DENIED prova que o processo EXISTE')
+
+    def test_openprocess_failing_for_an_unknown_reason_is_unknown(self):
+        for error in (0, 8, 87 + 1, 1132):
+            with self.subTest(error=error):
+                self.assertEqual(
+                    processes.UNKNOWN,
+                    self._windows_state(open_handle=None, open_error=error))
+
+    def test_only_the_documented_absent_pid_error_counts_as_dead(self):
+        self.assertEqual(
+            processes.DEAD,
+            self._windows_state(open_handle=None,
+                                open_error=processes.ERROR_INVALID_PARAMETER))
+
+    def test_a_failed_getexitcodeprocess_is_unknown_not_dead(self):
+        self.assertEqual(
+            processes.UNKNOWN,
+            self._windows_state(open_handle=0x1234, exit_call_ok=False))
+
+    def test_still_active_is_alive_and_any_other_exit_code_is_dead(self):
+        self.assertEqual(
+            processes.ALIVE,
+            self._windows_state(open_handle=0x1234,
+                                exit_code=processes.STILL_ACTIVE))
+        self.assertEqual(processes.DEAD,
+                         self._windows_state(open_handle=0x1234, exit_code=0))
+        self.assertEqual(processes.DEAD,
+                         self._windows_state(open_handle=0x1234, exit_code=1))
+
+    def test_an_unverifiable_descendant_is_counted_as_unverified(self):
+        real = processes.pid_state
+        with patch.object(processes, 'pid_state',
+                          side_effect=lambda pid: processes.UNKNOWN):
+            self.assertEqual((0, 3),
+                             processes.summarize_descendants(frozenset({1, 2, 3})))
+        processes.pid_state = real
+
+    def test_a_mixed_tree_reports_alive_and_unverified_separately(self):
+        answers = {1: processes.ALIVE, 2: processes.DEAD, 3: processes.UNKNOWN}
+        with patch.object(processes, 'pid_state', side_effect=lambda pid: answers[pid]):
+            self.assertEqual((1, 1),
+                             processes.summarize_descendants(frozenset({1, 2, 3})))
+
+    def test_unverified_descendants_make_the_teardown_unknown_not_pass(self):
+        result = TeardownResult(requested=True, root_terminated=True,
+                                method='m', descendants=0, unverified=2)
+        self.assertEqual('UNKNOWN', result.state)
+        self.assertFalse(result.ok)
+        self.assertIn('NÃO VERIFICÁVEL', result.describe())
+
+
+class TaskkillLoadBearingTests(unittest.TestCase):
+    """
+    §4: a failed taskkill must be load-bearing.
+
+    `TeardownResult.state` was derived from `root_terminated` and `descendants`
+    alone. A taskkill that returned nonzero, on a root that happened to exit on
+    its own with no verifiable descendants, therefore produced
+    `root_terminated=True, descendants=0` and read as PASS.
+    """
+
+    def setUp(self):
+        self.base = Path(tempfile.mkdtemp(prefix='taskkill-'))
+
+    def tearDown(self):
+        shutil.rmtree(self.base, ignore_errors=True)
+
+    def _spawn(self) -> subprocess.Popen:
+        return subprocess.Popen(
+            [sys.executable, '-c', 'import time; time.sleep(30)'],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    def _terminate_windows(self, kill_ok: bool, detail: str):
+        """
+        Drives the real `_terminate_windows` against a real child process.
+
+        A fake taskkill that reports success without killing would be testing
+        nothing, so the success case actually terminates the child - which is
+        what `taskkill /PID /T /F` does - and the failure case leaves it alive,
+        exactly as a refused taskkill does.
+        """
+        process = self._spawn()
+        try:
+            handle = processes.OwnedProcess(process)
+
+            def fake_taskkill(pid):
+                if kill_ok:
+                    process.terminate()
+                return kill_ok, detail
+
+            with patch.object(processes.OwnedProcess, '_taskkill',
+                              side_effect=fake_taskkill):
+                result = TeardownResult(requested=True)
+                handle._terminate_windows(result, process.pid, None, None)
+            self.assertEqual(kill_ok, result.root_terminated,
+                             'a raiz viva/morta tem de refletir o taskkill')
+            return result
+        finally:
+            if process.poll() is None:
+                process.kill()
+            process.wait(timeout=10)
+
+    def test_a_failed_taskkill_is_never_a_pass(self):
+        result = self._terminate_windows(False, 'taskkill retornou 128: acesso negado')
+        self.assertFalse(result.kill_ok)
+        self.assertEqual('FAIL', result.state,
+                         'um taskkill recusado virou limpeza verificada')
+        self.assertIn('taskkill', result.describe())
+
+    def test_a_missing_taskkill_executable_is_not_a_cleanup(self):
+        result = self._terminate_windows(
+            False, 'taskkill nao pode ser executado: FileNotFoundError')
+        self.assertEqual('FAIL', result.state)
+
+    def test_a_successful_kill_with_a_dead_root_can_pass(self):
+        result = self._terminate_windows(True, 'taskkill retornou 0')
+        self.assertTrue(result.kill_ok)
+        self.assertIn(result.state, ('PASS', 'UNKNOWN'),
+                      'com kill ok e raiz morta, só a evidência de '
+                      'descendentes decide')
+
+    def test_state_treats_a_failed_kill_as_dominating(self):
+        # Every other fact says clean; only kill_ok says otherwise.
+        result = TeardownResult(requested=True, root_terminated=True,
+                                method='taskkill /PID /T /F',
+                                descendants=0, unverified=0, kill_ok=False)
+        self.assertEqual('FAIL', result.state)
+
+    def test_signal_teardown_leaves_kill_ok_unset_so_it_can_pass(self):
+        result = TeardownResult(requested=True, root_terminated=True,
+                                method='grupo', descendants=0, kill_ok=None)
+        self.assertEqual('PASS', result.state)
+
+    def test_nothing_in_this_module_kills_by_image_name(self):
+        """
+        Scans the string constants the code can actually build a command from,
+        not the prose: a docstring is allowed to say "no WMIC".
+        """
+        tree = _module_ast()
+        constants = [n.value for n in ast.walk(tree)
+                     if isinstance(n, ast.Constant) and isinstance(n.value, str)]
+        forbidden_executables = {'wmic', 'powershell', 'powershell.exe',
+                                 'killall', 'pkill', 'tasklist', 'tasklist.exe'}
+        for text in constants:
+            lowered = text.strip().lower()
+            self.assertNotIn(lowered, forbidden_executables,
+                             f'comando proibido construído no módulo: {text!r}')
+            self.assertNotEqual('/im', lowered,
+                                'taskkill /IM mataria por nome de imagem, '
+                                'inclusive uma Lia que o DevFlow não iniciou')
+        taskkill_argv = [c for c in constants if c.lower() == 'taskkill']
+        self.assertEqual(1, len(taskkill_argv),
+                         'esperava exatamente uma invocação de taskkill')
+
+    def test_the_pipeline_refuses_an_unknown_cleanup_too(self):
+        """§4: PASS stays impossible while cleanup is FAIL *or* UNKNOWN."""
+        for state in ('FAIL', 'UNKNOWN'):
+            with self.subTest(state=state):
+                base = Path(tempfile.mkdtemp(prefix='cleanup-unknown-'))
+                try:
+                    repo = make_repo(base)
+                    runner, _, _ = make_runner(
+                        repo, validate_round(runnable_manifest()))
+                    runner.emit = lambda line: None
+                    # FAIL  = the root never died.  UNKNOWN = it died but the
+                    # descendants could not be verified. Neither may pass.
+                    fake = FakeGit(head='a' * 40, remote_head='a' * 40)
+                    runner.spawn = fake_spawner(
+                        list(MARKER_LINES),
+                        teardown_ok=state != 'FAIL',
+                        teardown_detail='taskkill retornou 0'
+                        if state != 'FAIL' else 'taskkill retornou 128',
+                        # -1 in both cases: FAIL because the root never died,
+                        # UNKNOWN because the root died but the descendants
+                        # could not be verified. Neither is a count of zero.
+                        descendants=-1)
+                    result = pipeline.run_auto(
+                        repo, work_branch=WORK, emit=lambda line: None,
+                        run_git=lambda args: fake(args),
+                        runner_factory=lambda m: runner,
+                        load_round=lambda: validate_round(runnable_manifest()))
+                    self.assertEqual(state, result.cleanup_state)
+                    self.assertEqual('FAIL', result.result)
+                    self.assertTrue(result.runtime_ok)
+                finally:
+                    shutil.rmtree(base, ignore_errors=True)
+
+
+UPGRADE_BAT = TOOLS / 'devflow' / 'upgrades' / 'LIA-DEVFLOW-UPGRADE.bat'
+
+
+def _upgrade_lines() -> list[str]:
+    return UPGRADE_BAT.read_text(encoding='utf-8', errors='replace') \
+        .replace('\r\n', '\n').split('\n')
+
+
+def _first_line_containing(needle: str, lines: list[str] | None = None) -> int:
+    for index, line in enumerate(lines or _upgrade_lines()):
+        if line.strip().startswith('rem'):
+            continue
+        if needle in line:
+            return index
+    raise AssertionError(f'{needle!r} não está no bootstrap de transição')
+
+
+class UpgradeFetchOrderTests(unittest.TestCase):
+    """
+    §5: the pinned target must be resolved AFTER the fetch.
+
+    The audited script ran `rev-list -n 1 "%LIA_TARGET_SHA%"` BEFORE
+    `git fetch`. A stale checkout does not have the reviewed commit object yet,
+    so the script gave up in exactly the situation it exists to fix - the
+    owner's machine, updating for the first time.
+    """
+
+    def test_the_target_is_resolved_only_after_the_fetch(self):
+        lines = _upgrade_lines()
+        fetch = _first_line_containing('fetch origin', lines)
+        resolve = _first_line_containing('rev-list -n 1', lines)
+        self.assertLess(
+            fetch, resolve,
+            'rev-list roda antes do fetch: um checkout antigo nao tem o objeto '
+            'do alvo e o bootstrap desiste no unico caso que ele resolve')
+
+    def test_every_required_step_appears_in_the_required_order(self):
+        lines = _upgrade_lines()
+        ordered = [
+            ('identidade', 'remote get-url origin'),
+            ('branch', 'rev-parse --abbrev-ref HEAD'),
+            ('worktree limpo', 'status --porcelain -uall'),
+            ('fetch', 'fetch origin'),
+            ('ponta buscada', 'rev-parse FETCH_HEAD'),
+            ('resolucao do alvo', 'rev-list -n 1'),
+            ('alvo na historia autorizada',
+             'merge-base --is-ancestor "%LIA_TARGET_RESOLVED%" FETCH_HEAD'),
+            ('head pode avancar',
+             'merge-base --is-ancestor HEAD "%LIA_TARGET_RESOLVED%"'),
+            ('fast-forward', 'merge --ff-only'),
+            ('sha resultante', 'rev-parse HEAD'),
+            ('chamada ao devkit', 'call "%LIA_REPO%\\DevKit.bat"'),
+        ]
+        positions = []
+        for label, needle in ordered:
+            index = _first_line_containing(needle, lines)
+            positions.append((index, label))
+        self.assertEqual(
+            sorted(positions), positions,
+            'a ordem das etapas nao e a contratada: '
+            + ' -> '.join(label for _, label in sorted(positions)))
+
+    def test_a_failed_git_status_is_refused_not_read_as_clean(self):
+        """
+        `git status` that fails produces NO output. Without an explicit exit
+        code check, "no output" was indistinguishable from "clean checkout".
+        """
+        text = '\n'.join(_upgrade_lines())
+        self.assertIn('LIA_RC_ZERO', text)
+        self.assertIn('LIA_RC_NONZERO', text)
+        status_line = _first_line_containing('status --porcelain -uall')
+        after = _upgrade_lines()[status_line + 1:status_line + 12]
+        self.assertTrue(
+            any('if not "%LIA_STATUS_RC%"=="0"' in line for line in after),
+            'o codigo de saida do git status nao e conferido antes de '
+            'concluir que o checkout esta limpo')
+
+    def test_the_target_must_belong_to_the_fetched_authorized_history(self):
+        text = '\n'.join(_upgrade_lines())
+        self.assertIn('merge-base --is-ancestor "%LIA_TARGET_RESOLVED%" FETCH_HEAD',
+                      text,
+                      'sem isto qualquer commit alcancavel localmente serviria '
+                      'de alvo, inclusive um de outro branch')
+
+    def test_the_local_head_must_be_an_ancestor_of_the_target(self):
+        self.assertIn('merge-base --is-ancestor HEAD "%LIA_TARGET_RESOLVED%"',
+                      '\n'.join(_upgrade_lines()),
+                      'historia divergida tem de falhar fechado')
+
+    def test_the_shipped_template_is_still_pinned_to_the_session_repository(self):
+        self.assertEqual('BloomRX/Lia-Project',
+                         _batch_constant('\n'.join(_upgrade_lines()),
+                                         'LIA_EXPECTED_OWNER_REPO'))
+        self.assertEqual('arena/01a10290-lia-project',
+                         _batch_constant('\n'.join(_upgrade_lines()),
+                                         'LIA_EXPECTED_BRANCH'))
+        self.assertEqual('PLACEHOLDER-REVIEWED-SHA',
+                         _batch_constant('\n'.join(_upgrade_lines()),
+                                         'LIA_TARGET_SHA'),
+                         'o template versionado tem de continuar fail-closed '
+                         'ate o SHA auditado existir')
+
+
+class UpgradeGitSemanticsTests(unittest.TestCase):
+    """
+    §5: the git commands the bootstrap relies on, against a REAL repository.
+
+    The BAT itself needs cmd.exe, so its execution is covered by
+    UpgradeBootstrapExecutionTests on Windows. What is proved here is that the
+    assumptions the script makes about git are true: an absent target becomes
+    resolvable only after a fetch, `merge-base --is-ancestor` distinguishes
+    authorized history from a foreign or divergent commit, and a failing
+    `status` is distinguishable from a clean one.
+    """
+
+    def setUp(self):
+        """
+        Two clones, on purpose.
+
+        Committing the target in the same clone and then `reset --hard` back
+        does NOT make it absent: the object stays in that clone's database and
+        `rev-list` still finds it, so the scenario would prove nothing. The
+        stale checkout has to be a clone made before the target existed.
+        """
+        self.base = Path(tempfile.mkdtemp(prefix='upgrade-git-'))
+        self.remote = self.base / 'remote.git'
+        self.author = self.base / 'author'
+        self.repo = self.base / 'work'
+        self._git(self.base, 'init', '--bare', '-q', '-b',
+                  'arena/01a10290-lia-project', str(self.remote))
+        self._git(self.base, 'clone', '-q', str(self.remote), str(self.author))
+        self._configure(self.author)
+        self.old = self._commit_in(self.author, 'base')
+        self._git(self.author, 'push', '-q', 'origin', 'arena/01a10290-lia-project')
+        # The owner's checkout, cloned while `base` was still the tip.
+        self._git(self.base, 'clone', '-q', str(self.remote), str(self.repo))
+        self._configure(self.repo)
+        # The reviewed target, created afterwards and present only remotely.
+        self.target = self._commit_in(self.author, 'reviewed')
+        self._git(self.author, 'push', '-q', 'origin', 'arena/01a10290-lia-project')
+
+    def tearDown(self):
+        shutil.rmtree(self.base, ignore_errors=True)
+
+    def _configure(self, repo: Path) -> None:
+        self._git(repo, 'config', 'user.email', 'devflow@test.local')
+        self._git(repo, 'config', 'user.name', 'DevFlow Test')
+
+    def _git(self, cwd: Path, *args) -> subprocess.CompletedProcess:
+        return subprocess.run([sync.git_executable(), '-C', str(cwd), *args],
+                              capture_output=True, text=True,
+                              encoding='utf-8', errors='replace', timeout=120)
+
+    def _commit_in(self, repo: Path, name: str) -> str:
+        (repo / name).write_text(name + '\n', encoding='utf-8')
+        self._git(repo, 'add', name)
+        self._git(repo, 'commit', '-q', '-m', name)
+        return self._git(repo, 'rev-parse', 'HEAD').stdout.strip()
+
+    def _commit(self, name: str) -> str:
+        return self._commit_in(self.repo, name)
+
+    def _stale_clone_behind_the_remote(self) -> tuple[str, str]:
+        """(old local HEAD, reviewed target that exists only on the remote)."""
+        return self.old, self.target
+
+    def test_the_target_is_absent_locally_until_the_fetch(self):
+        old, target = self._stale_clone_behind_the_remote()
+        before = self._git(self.repo, 'rev-list', '-n', '1', target)
+        self.assertNotEqual(0, before.returncode,
+                            'o alvo ja existia localmente; o cenario nao prova nada')
+        fetch = self._git(self.repo, 'fetch', 'origin', 'arena/01a10290-lia-project')
+        self.assertEqual(0, fetch.returncode)
+        after = self._git(self.repo, 'rev-list', '-n', '1', target)
+        self.assertEqual(0, after.returncode)
+        self.assertEqual(target, after.stdout.strip())
+        self.assertEqual(old, self._git(self.repo, 'rev-parse', 'HEAD').stdout.strip(),
+                         'o fetch nao deveria ter movido o HEAD')
+
+    def test_merge_base_accepts_a_target_inside_the_fetched_history(self):
+        _old, target = self._stale_clone_behind_the_remote()
+        self._git(self.repo, 'fetch', 'origin', 'arena/01a10290-lia-project')
+        check = self._git(self.repo, 'merge-base', '--is-ancestor', target, 'FETCH_HEAD')
+        self.assertEqual(0, check.returncode)
+
+    def test_merge_base_rejects_a_target_outside_the_fetched_branch(self):
+        _old, _target = self._stale_clone_behind_the_remote()
+        # A commit that exists locally but was never pushed to the branch.
+        side = self._commit('not-pushed')
+        self._git(self.repo, 'fetch', 'origin', 'arena/01a10290-lia-project')
+        check = self._git(self.repo, 'merge-base', '--is-ancestor', side, 'FETCH_HEAD')
+        self.assertNotEqual(0, check.returncode)
+
+    def test_merge_base_rejects_a_divergent_local_head(self):
+        _old, target = self._stale_clone_behind_the_remote()
+        self._git(self.repo, 'fetch', 'origin', 'arena/01a10290-lia-project')
+        self._commit('divergent-local')
+        check = self._git(self.repo, 'merge-base', '--is-ancestor', 'HEAD', target)
+        self.assertNotEqual(0, check.returncode,
+                           'historia divergida tem de ser recusada')
+
+    def test_ff_only_merge_advances_exactly_to_the_target(self):
+        _old, target = self._stale_clone_behind_the_remote()
+        self._git(self.repo, 'fetch', 'origin', 'arena/01a10290-lia-project')
+        self.assertEqual(0, self._git(self.repo, 'merge-base', '--is-ancestor',
+                                      'HEAD', target).returncode)
+        merge = self._git(self.repo, 'merge', '--ff-only', target)
+        self.assertEqual(0, merge.returncode)
+        self.assertEqual(target, self._git(self.repo, 'rev-parse', 'HEAD').stdout.strip())
+
+    def test_a_clean_worktree_prints_nothing_and_exits_zero(self):
+        probe = self._git(self.repo, 'status', '--porcelain', '-uall')
+        self.assertEqual(0, probe.returncode)
+        self.assertEqual('', probe.stdout)
+
+    def test_a_dirty_worktree_prints_something_and_still_exits_zero(self):
+        (self.repo / 'novo.txt').write_text('x\n', encoding='utf-8')
+        probe = self._git(self.repo, 'status', '--porcelain', '-uall')
+        self.assertEqual(0, probe.returncode)
+        self.assertNotEqual('', probe.stdout)
+
+    def test_a_failing_status_is_distinguishable_from_a_clean_one(self):
+        """
+        The exact confusion the bootstrap has to avoid: a status that fails
+        also prints nothing, so only the exit code separates the two.
+        """
+        not_a_repo = self.base / 'vazio'
+        not_a_repo.mkdir()
+        probe = self._git(not_a_repo, 'status', '--porcelain', '-uall')
+        self.assertNotEqual(0, probe.returncode)
+        self.assertEqual('', probe.stdout,
+                         'se um status quebrado imprimisse algo, a saida '
+                         'resolveria a ambiguidade - e nao imprime')
+
+    def test_a_missing_target_stays_missing_after_the_fetch(self):
+        _old, _target = self._stale_clone_behind_the_remote()
+        self._git(self.repo, 'fetch', 'origin', 'arena/01a10290-lia-project')
+        probe = self._git(self.repo, 'rev-list', '-n', '1', 'deadbeef' * 5)
+        self.assertNotEqual(0, probe.returncode)
+
+
+@unittest.skipUnless(shutil.which('cmd.exe'), 'cmd.exe indisponível nesta plataforma')
+class UpgradeBootstrapExecutionTests(unittest.TestCase):
+    """
+    §5: run the REAL bootstrap against a real repository, on Windows.
+
+    The copy differs from the shipped file in exactly two places: the list of
+    canonical remote URLs (so a local test remote passes the identity gate,
+    which has its own tests) and the pinned target SHA. Every `git` command
+    line is asserted byte-identical to the shipped file, so the ordering under
+    test is the shipped one. Skipped where cmd.exe does not exist - that skip
+    is the honest boundary of this platform.
+    """
+
+    BRANCH = 'arena/01a10290-lia-project'
+
+    def setUp(self):
+        """
+        `author` writes the history; `work` is the owner's stale checkout.
+
+        A single clone plus `reset --hard` would leave the target object in the
+        local database, and `rev-list` would find it - so the test would pass
+        even with the fetch in the wrong place. Two clones make "target absent
+        locally" literally true.
+        """
+        self.base = Path(tempfile.mkdtemp(prefix='upgrade-exec-'))
+        self.remote = self.base / 'remote.git'
+        self.author = self.base / 'author'
+        self.repo = self.base / 'work'
+        self._git(self.base, 'init', '--bare', '-q', '-b', self.BRANCH,
+                  str(self.remote))
+        self._git(self.base, 'clone', '-q', str(self.remote), str(self.author))
+        for repo in (self.author,):
+            self._git(repo, 'config', 'user.email', 'devflow@test.local')
+            self._git(repo, 'config', 'user.name', 'DevFlow Test')
+        # Tracked entrypoints, so neither clone is dirty and the upgraded
+        # checkout still has a DevKit.bat to hand over to.
+        (self.author / 'Lia.bat').write_text('@echo off\r\n', encoding='utf-8')
+        (self.author / 'DevKit.bat').write_text(
+            '@echo off\r\nexit /b 7\r\n', encoding='utf-8')
+        self._git(self.author, 'add', '-A')
+        self._git(self.author, 'commit', '-q', '-m', 'base')
+        self._git(self.author, 'push', '-q', 'origin', self.BRANCH)
+
+        self._git(self.base, 'clone', '-q', str(self.remote), str(self.repo))
+        self._git(self.repo, 'config', 'user.email', 'devflow@test.local')
+        self._git(self.repo, 'config', 'user.name', 'DevFlow Test')
+        self.old = self._git(self.repo, 'rev-parse', 'HEAD').stdout.strip()
+
+        (self.author / 'reviewed.txt').write_text('reviewed\n', encoding='utf-8')
+        self._git(self.author, 'add', 'reviewed.txt')
+        self._git(self.author, 'commit', '-q', '-m', 'reviewed')
+        self.target = self._git(self.author, 'rev-parse', 'HEAD').stdout.strip()
+        self._git(self.author, 'push', '-q', 'origin', self.BRANCH)
+        self.bat = self._localized_bootstrap()
+
+    def tearDown(self):
+        shutil.rmtree(self.base, ignore_errors=True)
+
+    def _git(self, cwd: Path, *args) -> subprocess.CompletedProcess:
+        return subprocess.run([sync.git_executable(), '-C', str(cwd), *args],
+                              capture_output=True, text=True,
+                              encoding='utf-8', errors='replace', timeout=120)
+
+    def _commit(self, name: str) -> str:
+        (self.repo / name).write_text(name + '\n', encoding='utf-8')
+        self._git(self.repo, 'add', name)
+        self._git(self.repo, 'commit', '-q', '-m', name)
+        return self._git(self.repo, 'rev-parse', 'HEAD').stdout.strip()
+
+    def _localized_bootstrap(self) -> Path:
+        shipped = UPGRADE_BAT.read_text(encoding='utf-8', errors='replace')
+        lines = shipped.replace('\r\n', '\n').split('\n')
+        start = next(i for i, l in enumerate(lines)
+                     if l.strip().startswith('for %%F in ('))
+        end = next(i for i in range(start + 1, len(lines))
+                   if lines[i].strip().startswith(') do'))
+        canonical = str(self.remote).replace('\\', '/')
+        lines[start + 1:end] = [f'    "{canonical}"']
+        lines = [l.replace('PLACEHOLDER-REVIEWED-SHA', self.target)
+                 for l in lines]
+        # The git command lines must be untouched.
+        shipped_git = [l for l in shipped.replace('\r\n', '\n').split('\n')
+                       if ' git -C ' in l or l.startswith('git -C ')]
+        new_git = [l for l in lines if ' git -C ' in l or l.startswith('git -C ')]
+        self.assertEqual(
+            [l.replace(self.target, 'PLACEHOLDER-REVIEWED-SHA') for l in new_git],
+            shipped_git, 'as linhas de git do bootstrap foram alteradas')
+        path = self.base / 'UPGRADE.bat'
+        path.write_bytes(('\r\n'.join(lines)).encode('utf-8'))
+        return path
+
+    def _run(self) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            ['cmd.exe', '/d', '/s', '/c', str(self.bat), str(self.repo)],
+            cwd=self.base, capture_output=True, text=True,
+            encoding='utf-8', errors='replace', timeout=300)
+
+    def test_a_stale_checkout_is_advanced_to_the_reviewed_sha(self):
+        self.assertNotEqual(0, self._git(self.repo, 'rev-list', '-n', '1',
+                                         self.target).returncode,
+                            'o alvo ja existia localmente; o cenario nao prova nada')
+        probe = self._run()
+        self.assertEqual(
+            self.target, self._git(self.repo, 'rev-parse', 'HEAD').stdout.strip(),
+            'o bootstrap nao avancou o checkout:\n' + probe.stdout + probe.stderr)
+
+    def test_the_devkit_exit_code_is_propagated(self):
+        probe = self._run()
+        self.assertEqual(7, probe.returncode,
+                         'o codigo do DevKit novo foi engolido:\n'
+                         + probe.stdout + probe.stderr)
+
+    def test_a_dirty_checkout_is_refused_untouched(self):
+        before = self._git(self.repo, 'rev-parse', 'HEAD').stdout.strip()
+        (self.repo / 'sujo.txt').write_text('x\n', encoding='utf-8')
+        probe = self._run()
+        self.assertNotEqual(0, probe.returncode)
+        self.assertEqual(before, self._git(self.repo, 'rev-parse', 'HEAD').stdout.strip())
+
+    def test_the_wrong_branch_is_refused(self):
+        self._git(self.repo, 'checkout', '-q', '-b', 'outro-branch')
+        probe = self._run()
+        self.assertNotEqual(0, probe.returncode)
+
+    def test_a_divergent_history_is_refused_not_forced(self):
+        self._commit('divergente')
+        probe = self._run()
+        self.assertNotEqual(0, probe.returncode)
+        self.assertIn('divergente',
+                      self._git(self.repo, 'log', '--format=%s', '-1').stdout)
 
 
 if __name__ == '__main__':
