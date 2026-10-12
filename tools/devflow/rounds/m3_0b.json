@@ -17,6 +17,13 @@
       "why": "Reproduz o estado de um pull fresco: dist e gitignored, entao remove-lo forca o pre-requisito gerenciado a reconstruir do zero em vez de herdar um artefato ja pronto."
     }
   ],
+  "prelaunch_prepare": [
+    {
+      "kind": "remove_generated",
+      "path": "airi/packages/core-agent/dist",
+      "why": "Um teste OBRIGATORIO (lia-app \"rebuilds the real core-agent artifact\") roda o mesmo pre-requisito contra o workspace real e reconstroi o dist que o prepare removeu. Sem re-aplicar o passo aqui, o lancamento comecaria com o artefato ja presente e os marcadores starting/succeeded nao provariam a condicao de checkout fresco que define esta rodada."
+    }
+  ],
   "cleanup_profile": {
     "id": "core-agent-dist-only",
     "allowlisted_generated": [

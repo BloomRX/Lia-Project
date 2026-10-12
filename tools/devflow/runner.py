@@ -24,7 +24,9 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 import queue
 import time
+import os
 from pathlib import Path
+import signal
 import subprocess
 import sys
 import threading
@@ -70,6 +72,12 @@ class RoundOutcome:
     head_sha: str = ''
     dirty: int | None = None
     cleanup: list[str] = field(default_factory=list)
+    # What was proven about the generated tree IMMEDIATELY BEFORE the managed
+    # launch. A mandatory test may legitimately rebuild an artifact that
+    # `prepare` removed, so "prepare ran" is not evidence about launch time.
+    # Only the safe fact is recorded - path plus presence - never a directory
+    # listing.
+    prelaunch: list[str] = field(default_factory=list)
     tests: list[TestResult] = field(default_factory=list)
     markers: MarkerReport | None = None
     optional_seen: list[str] = field(default_factory=list)
@@ -115,17 +123,77 @@ class RoundOutcome:
         return 'PASS'
 
 
+#: How often a long-running test command reports that it is still alive, and
+#: how many such lines it may emit. Bounded on purpose: progress must make a
+#: 20-minute stage legible, not bury the report.
+PROGRESS_INTERVAL_S = 60.0
+PROGRESS_MAX_LINES = 40
+
+
+def _terminate_timed_out(proc: 'subprocess.Popen') -> str:
+    """
+    Best-effort SCOPED cleanup of a test process that outlived its budget.
+
+    Scoped means "this process and its own tree", never an image name: killing
+    by name would take down unrelated work on a developer machine. On POSIX the
+    child is its own session leader, so the whole group goes. On Windows the
+    tree is taken with `taskkill /T`; if that is unavailable the child alone is
+    killed and the report says so instead of implying the tree was verified.
+    """
+    pid = proc.pid
+    try:
+        if os.name == 'posix':
+            os.killpg(os.getpgid(pid), signal.SIGKILL)
+            note = 'grupo de processos terminado'
+        elif sys.platform == 'win32':
+            probe = subprocess.run(['taskkill', '/PID', str(pid), '/T', '/F'],
+                                   capture_output=True, text=True,
+                                   encoding='utf-8', errors='replace', timeout=60)
+            note = ('árvore terminada' if probe.returncode == 0
+                    else f'taskkill rc={probe.returncode}; apenas o processo raiz '
+                         'foi morto, a árvore NÃO foi verificada')
+        else:
+            proc.kill()
+            note = 'processo raiz morto; árvore não verificada'
+    except (OSError, subprocess.SubprocessError) as exc:
+        try:
+            proc.kill()
+        except OSError:
+            pass
+        note = f'limpeza falhou ({type(exc).__name__}); processo raiz morto à força'
+    try:
+        proc.wait(timeout=30)
+    except subprocess.SubprocessError:
+        note += '; o processo não encerrou em 30s'
+    # The captured pipes must not outlive the command. A gate that leaks one
+    # file descriptor per timed-out stage is how "leaked inherited pipe" stops
+    # being a hypothesis and becomes the next incident.
+    for stream in (proc.stdout, proc.stderr):
+        try:
+            if stream is not None:
+                stream.close()
+        except OSError:
+            pass
+    return note
+
+
 def run_test_command(argv: list[str], cwd: Path,
-                     timeout_s: float = DEFAULT_TEST_TIMEOUT_S) -> tuple[int, str]:
+                     timeout_s: float = DEFAULT_TEST_TIMEOUT_S,
+                     label: str = '',
+                     progress: Callable[[str], None] | None = None,
+                     ) -> tuple[int, str]:
     """
     Runs one declared test. A missing tool is reported as failure, not pass.
 
-    `timeout_s` comes from the round manifest, because the honest budget for a
-    suite is a property of that suite and of the machine, not a constant baked
-    into the runner. The first real Windows run of M3.0b proved it: the DevFlow
-    suite spawns ~1800 git processes and the fixed 1800 s expired mid-run, so
-    the gate reported "FALHOU (exit 127)" for a suite that was merely still
-    working - indistinguishable from a hang.
+    `timeout_s` comes from the round manifest: the honest budget for a suite is
+    a property of that suite and of the machine, not a constant baked into the
+    runner. What is NOT claimed is a diagnosis. This suite is measurably
+    expensive (~1800 git process spawns, ~131 s on Linux), so a slow platform
+    is a sufficient explanation for the 1800 s the first real Windows run
+    consumed - but "expensive" is not proof that the run was merely slow. A
+    deadlock, a blocked child or a leaked inherited pipe reaches the same
+    deadline and looks identical from here. The detail below therefore names
+    the stage and the budget that expired and stops there.
 
     The returned detail is already bounded and redacted by the ONE test-output
     sanitizer, because this same string is echoed to the console, stored in
@@ -133,20 +201,53 @@ def run_test_command(argv: list[str], cwd: Path,
     `encoding='utf-8'` is explicit so a Windows console codepage cannot turn a
     test failure into a decode error.
     """
+    who = label or (argv[0] if argv else 'teste')
+    popen_kwargs: dict = {}
+    if os.name == 'posix':
+        # Own session, so a timeout can take the whole group and not just the
+        # shell that started it.
+        popen_kwargs['start_new_session'] = True
+    started = time.monotonic()
     try:
-        probe = subprocess.run(argv, cwd=cwd, capture_output=True, text=True,
-                               encoding='utf-8', errors='replace', timeout=timeout_s)
-    except subprocess.TimeoutExpired as exc:
-        # A timeout is a timeout, not a mystery: name the budget that expired so
-        # the report distinguishes "ran out of budget" from "crashed".
-        return 124, sanitize_test_output(
-            '', f'TimeoutExpired: o teste excedeu o orçamento declarado de '
-                f'{timeout_s:.0f}s. Não é uma trava: é orçamento. '
-                f'Aumente tests[].timeout_s no manifesto da rodada se o '
-                f'trabalho for legítimo nesta máquina.')
-    except (OSError, subprocess.SubprocessError) as exc:
+        proc = subprocess.Popen(argv, cwd=cwd, stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE, text=True,
+                                encoding='utf-8', errors='replace', **popen_kwargs)
+    except OSError as exc:
         return 127, sanitize_test_output('', f'{type(exc).__name__}: {exc}')
-    return probe.returncode, sanitize_test_output(probe.stdout or '', probe.stderr or '')
+
+    def expired_detail(cleanup: str) -> str:
+        # Deliberately no claim about WHY: slow and hung are indistinguishable
+        # from outside, and saying "just slow" is how a real deadlock gets
+        # closed as noise.
+        return sanitize_test_output('', (
+            f'TimeoutExpired: o estágio de teste {who!r} atingiu o orçamento '
+            f'declarado de {timeout_s:.0f}s e foi encerrado. Causa NÃO '
+            f'diagnosticada: lentidão e travamento produzem o mesmo prazo. '
+            f'Limpeza: {cleanup}. Se o trabalho for legítimo nesta máquina, '
+            f'aumente tests[].timeout_s no manifesto da rodada.'))
+
+    beats = 0
+    while True:
+        # The wait is clamped to what is LEFT of the budget. Waiting a full
+        # progress interval when only a fraction of the budget remains would
+        # let a command overrun its own deadline unnoticed - which is exactly
+        # the bug this loop exists to prevent.
+        remaining = timeout_s - (time.monotonic() - started)
+        if remaining <= 0:
+            return 124, expired_detail(_terminate_timed_out(proc))
+        try:
+            stdout, stderr = proc.communicate(
+                timeout=min(PROGRESS_INTERVAL_S, remaining))
+            break
+        except subprocess.TimeoutExpired:
+            if time.monotonic() - started >= timeout_s:
+                return 124, expired_detail(_terminate_timed_out(proc))
+            if progress is not None and beats < PROGRESS_MAX_LINES:
+                beats += 1
+                progress(f'  {who}: em andamento, '
+                         f'{int(time.monotonic() - started)}s de '
+                         f'{timeout_s:.0f}s decorridos')
+    return proc.returncode, sanitize_test_output(stdout or '', stderr or '')
 
 
 def default_git(args: list[str], cwd: Path) -> tuple[int, str]:
@@ -292,17 +393,72 @@ class RoundRunner:
             outcome.notes.append('teste obrigatório falhou; o gate do Windows não foi lançado')
             return
 
+        # AFTER the tests passed and BEFORE the launch: a mandatory test may
+        # have rebuilt the very artifact `prepare` removed.
+        self._prelaunch_prepare(outcome, note)
+
         self._launch_and_gate(outcome, note)
         self._decide(outcome, note)
 
     def _prepare(self, outcome: RoundOutcome, note: Callable[[str], None]) -> None:
         manifest = self.round_manifest
-        allowlist = list(manifest.cleanup.allowlisted_generated)
         if not manifest.prepare:
             note('preparo: nenhum passo declarado')
             return
-        for step in manifest.prepare:
-            note(f'preparo: {step.kind} {step.path} - {step.why}')
+        self._apply_prepare_steps(
+            manifest.prepare, outcome, note, label='preparo', sink=outcome.cleanup)
+
+    def _prelaunch_prepare(self, outcome: RoundOutcome,
+                           note: Callable[[str], None]) -> None:
+        """
+        Re-establishes the declared launch-time state, after the tests ran.
+
+        M3.0b's whole premise is "fresh checkout": `prepare` deletes
+        `core-agent/dist` so the managed prerequisite has to rebuild it. But a
+        MANDATORY test - lia-app's "rebuilds the real core-agent artifact" -
+        runs that same prerequisite against the real workspace and puts the
+        artifact back. `_prepare` therefore proves nothing about the moment the
+        Launcher starts, and the prerequisite's starting/succeeded markers can
+        appear without the fresh-checkout condition ever having held.
+
+        So the declared step is applied AGAIN here, immediately before the
+        launch, and the resulting absence is verified and recorded. Refusal
+        aborts the round: launching without the declared precondition would
+        make the round's evidence describe a different setup than the one it
+        claims.
+        """
+        manifest = self.round_manifest
+        if not manifest.prelaunch_prepare:
+            return
+        self._apply_prepare_steps(
+            manifest.prelaunch_prepare, outcome, note,
+            label='pré-lançamento', sink=outcome.prelaunch)
+        for step in manifest.prelaunch_prepare:
+            target = self.repo / step.path
+            absent = not target.exists()
+            fact = f'{step.path} {"AUSENTE" if absent else "PRESENTE"} imediatamente antes do lançamento'
+            outcome.prelaunch.append(fact)
+            note(f'  {fact}')
+            if not absent:
+                message = (f'{step.path} ainda existe imediatamente antes do lançamento; '
+                           'a condição de checkout fresco desta rodada não está provada')
+                outcome.notes.append(message)
+                raise RoundAborted(message)
+
+    def _apply_prepare_steps(self, steps, outcome: RoundOutcome,
+                             note: Callable[[str], None], *, label: str,
+                             sink: list[str]) -> None:
+        """
+        Removes declared generated artifacts through the ONE safe-path seam.
+
+        Both `prepare` and `prelaunch_prepare` go through here, so there is no
+        second removal path and no ad-hoc rmtree in the launcher: the allowlist,
+        the symlink/junction/reparse escape checks and the staged planning all
+        come from `safe_paths`, exactly as they do for cleanup.
+        """
+        allowlist = list(self.round_manifest.cleanup.allowlisted_generated)
+        for step in steps:
+            note(f'{label}: {step.kind} {step.path} - {step.why}')
             try:
                 plan = safe_paths.plan_removal(self.repo, step.path, allowlist)
             except safe_paths.PathSafetyError as exc:
@@ -312,7 +468,7 @@ class RoundRunner:
             for line in plan.describe():
                 note(f'  {line}')
             report = safe_paths.execute_removal(plan)
-            outcome.cleanup.extend(report.lines)
+            sink.extend(report.lines)
 
     def _run_tests(self, outcome: RoundOutcome, note: Callable[[str], None]) -> str:
         """
@@ -665,6 +821,7 @@ class RoundRunner:
                 'teardown_descendants': outcome.teardown_descendants,
             },
             'cleanup': outcome.cleanup,
+            'prelaunch': outcome.prelaunch,
             'tests': [test.__dict__ for test in outcome.tests],
             'stage': outcome.stage,
             'markers': {
@@ -714,6 +871,10 @@ def render_report(payload: dict) -> str:
         '',
         'limpeza (perfis gerados, allowlist):',
         *([f'  - {line}' for line in payload['cleanup']] or ['  - nenhuma']),
+        '',
+        'estado imediatamente antes do lançamento:',
+        *([f'  - {line}' for line in payload.get('prelaunch', [])]
+          or ['  - nenhum passo declarado']),
         '',
         'testes automatizados:',
     ]

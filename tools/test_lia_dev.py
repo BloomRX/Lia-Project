@@ -17,6 +17,7 @@ import copy
 import ctypes
 from datetime import datetime, timezone
 import json
+import atexit
 import os
 from pathlib import Path, PurePosixPath
 import shutil
@@ -37,7 +38,9 @@ import lia_dev  # noqa: E402
 from devflow.report import (MAX_DETAIL_CHARS, MAX_DETAIL_LINES,  # noqa: E402
                             sanitize_test_output)
 from devflow.processes import TeardownResult  # noqa: E402
-from devflow.runner import RoundRunner, run_test_command  # noqa: E402
+from devflow import runner as runner_module  # noqa: E402
+from devflow.runner import (PROGRESS_MAX_LINES, RoundRunner,  # noqa: E402
+                            run_test_command)
 from devflow.markers import evaluate_markers  # noqa: E402
 from devflow.report import is_keeper, sanitize_console, sanitize_line  # noqa: E402
 from devflow.runner import RoundOutcome, RoundRunner, latest_run, pass_validity, render_report  # noqa: E402
@@ -1476,13 +1479,17 @@ class RetentionTests(unittest.TestCase):
 
 #: Wall-clock budget for the minimal-PATH child re-run.
 #:
-#: Measured, not guessed. On Linux this suite takes ~65 s and spawns ~1800 git
-#: processes; the child re-runs all of it, so a normal run is ~130 s. The first
-#: real Windows run of M3.0b blew past 1800 s, which puts the Windows slowdown
-#: at roughly 14x - process creation plus real-time scanning, ~1800 spawns
-#: twice over. The budget below leaves headroom for the child, and the round
-#: manifest declares a matching `timeout_s` for the outer command so the parent
-#: cannot expire while it is still legitimately waiting.
+#: The child runs only `PATH_PROBE_TARGETS`, not the whole suite: the universal
+#: "no forbidden executable" property is covered by the import-time spawn
+#: guard, so re-running every expensive Git fixture twice bought nothing and
+#: was a large part of why the real Windows run ran out of budget. The budget
+#: below is generous on purpose and the round manifest declares a matching
+#: `timeout_s` for the outer command, so the parent cannot expire while it is
+#: still legitimately waiting for this child.
+#:
+#: What is NOT claimed: that the Windows expiry was mere slowness. The suite is
+#: measurably expensive, which makes slowness a sufficient explanation, but a
+#: deadlock or a leaked pipe reaches the same deadline.
 PATH_PROBE_TIMEOUT_S = 2400.0
 
 FORBIDDEN_EXECUTABLES = frozenset({
@@ -1496,6 +1503,89 @@ FORBIDDEN_EXECUTABLES = frozenset({
 ALLOWED_EXTERNAL_EXECUTABLES = frozenset({'git', 'cmd', 'cmd.exe'})
 SUITE_PATH = Path(__file__).resolve()
 _PATH_PROBE_ENV = 'LIA_DEVFLOW_PATH_PROBE'
+
+#: The classes the minimal-PATH child re-runs.
+#:
+#: Deliberately NOT the whole suite. These are the classes that really create
+#: child processes or resolve executables, which is where a dependency on a
+#: POSIX tool could actually hide. The universal half of the property - "no
+#: test in this file spawns a forbidden executable" - is covered by the spawn
+#: guard below, which observes every spawn in the parent run at zero cost.
+#: Running every expensive Git-fixture class twice existed only to prove that
+#: property, and on Windows the duplication was a large part of why the round
+#: ran out of budget.
+PATH_PROBE_TARGETS = (
+    'OwnedProcessTests',
+    'TeardownHonestyTests',
+    'TaskkillLoadBearingTests',
+    'DevKitHandoffExecutionTests',
+    'GitExecutableResolutionTests',
+    'PortabilityContractTests',
+    'UpgradeBootstrapExecutionTests',
+)
+
+# ---------------------------------------------------------------------------
+# Real subprocess-spawn guard, installed at IMPORT time.
+#
+# Behavioural, and universal: it wraps the one function every Python child
+# process goes through, so it observes what this suite actually spawns rather
+# than what its source text happens to mention. A dynamically built `['sl' +
+# 'eep', '5']` defeats the AST literal scan but not this.
+# ---------------------------------------------------------------------------
+SPAWNED_HEADS: list[str] = []
+_REAL_POPEN = subprocess.Popen
+_REAL_SYSTEM = os.system
+
+
+def _record_spawn(args) -> None:
+    try:
+        if isinstance(args, (str, bytes, os.PathLike)):
+            head = str(os.fspath(args))
+        else:
+            head = str(next(iter(args), ''))
+    except Exception:  # a guard must never be the reason a test fails
+        return
+    head = os.path.basename(head.strip().strip('"'))
+    if head:
+        SPAWNED_HEADS.append(head)
+
+
+class _GuardedPopen(_REAL_POPEN):  # type: ignore[misc,valid-type]
+    def __init__(self, args, *pos, **kw):
+        _record_spawn(args)
+        super().__init__(args, *pos, **kw)
+
+
+def _guarded_system(command):
+    _record_spawn(command)
+    return _REAL_SYSTEM(command)
+
+
+# `subprocess.run`/`check_output`/`check_call` all resolve `Popen` from the
+# module globals at call time, so patching the name covers them too.
+subprocess.Popen = _GuardedPopen  # type: ignore[misc]
+os.system = _guarded_system  # type: ignore[assignment]
+
+
+def _enforce_spawn_guard() -> None:
+    """
+    Fails the run if any forbidden executable was spawned, even by a test that
+    ran after the last assertion about it. Registered with atexit because no
+    test can observe the tests that run after it.
+    """
+    forbidden = sorted({head for head in SPAWNED_HEADS if head in FORBIDDEN_EXECUTABLES})
+    if not forbidden:
+        return
+    sys.stderr.write(
+        '\nGUARDA DE SPAWN: esta suíte lançou executável(is) proibido(s): '
+        + ', '.join(forbidden)
+        + '\nA portabilidade do DevFlow não pode depender de ferramentas POSIX.\n',
+    )
+    sys.stderr.flush()
+    os._exit(1)
+
+
+atexit.register(_enforce_spawn_guard)
 
 
 class PortabilityContractTests(unittest.TestCase):
@@ -1555,9 +1645,16 @@ class PortabilityContractTests(unittest.TestCase):
 
     def test_suite_passes_with_a_path_that_has_no_posix_tools(self):
         """
-        Behavioural proof, and the primary one: re-run this whole suite in a
-        child process whose PATH contains ONLY git. If anything depends on
+        Behavioural proof: re-run the process-spawning classes in a child whose
+        PATH contains NOTHING at all. If anything on that path depends on
         `sleep`, `sh`, `kill` or friends, the child fails and this test fails.
+
+        Scoped rather than whole-suite. The universal claim - no test anywhere
+        in this file spawns a forbidden executable - is made by the import-time
+        spawn guard, which sees every spawn in the parent run. Re-running all
+        ~1800 Git-fixture spawns in a child proved no more than the guard does
+        and doubled the wall clock, which is what pushed the real Windows run
+        past its budget.
         """
         if os.environ.get(_PATH_PROBE_ENV):
             self.skipTest('já estamos dentro da sonda de PATH')
@@ -1580,7 +1677,7 @@ class PortabilityContractTests(unittest.TestCase):
         env = dict(os.environ, PATH=str(probe_dir),
                    **{_PATH_PROBE_ENV: '1', sync.GIT_EXECUTABLE_ENV: git})
         child = subprocess.run(
-            [sys.executable, str(SUITE_PATH)],
+            [sys.executable, str(SUITE_PATH), *PATH_PROBE_TARGETS],
             capture_output=True, text=True, encoding='utf-8', errors='replace',
             env=env, timeout=PATH_PROBE_TIMEOUT_S,
         )
@@ -1590,6 +1687,51 @@ class PortabilityContractTests(unittest.TestCase):
             + sanitize_test_output(child.stdout or '', child.stderr or '',
                                    max_chars=2000, max_lines=25),
         )
+        # A vacuous subset would pass trivially, so the child must prove it
+        # really ran the classes it was asked to.
+        self.assertIn('Ran ', child.stderr or '')
+        for target in PATH_PROBE_TARGETS:
+            self.assertIn(target, child.stderr or '',
+                          f'{target} não foi executado pela sonda de PATH')
+
+    def test_the_probe_targets_are_real_and_were_selected_deliberately(self):
+        """The subset must exist, and must be the process-spawning classes."""
+        loader = unittest.TestLoader()
+        for target in PATH_PROBE_TARGETS:
+            self.assertTrue(hasattr(sys.modules[__name__], target),
+                            f'{target} não existe mais - a sonda ficou órfã')
+            count = loader.loadTestsFromName(
+                f'{__name__}.{target}').countTestCases()
+            self.assertGreater(count, 0, f'{target} não contém testes')
+
+    def test_the_guard_is_installed_and_records_a_real_spawn(self):
+        before = len(SPAWNED_HEADS)
+        subprocess.run([sys.executable, '-c', 'pass'], capture_output=True)
+        self.assertGreater(len(SPAWNED_HEADS), before,
+                           'a guarda não está observando os spawns reais')
+        self.assertEqual(SPAWNED_HEADS[-1], os.path.basename(sys.executable))
+
+    def test_no_forbidden_executable_has_been_spawned_so_far(self):
+        spawned = {head for head in SPAWNED_HEADS if head in FORBIDDEN_EXECUTABLES}
+        self.assertEqual(spawned, set())
+
+    def test_the_guard_would_reject_a_forbidden_head(self):
+        """
+        Proves the guard is not a no-op decoration.
+
+        The forbidden name is taken from the set rather than written out: this
+        file is scanned by `test_no_forbidden_executable_name_appears_as_a_literal`,
+        and a test that hard-coded one would trip the very scan it is checking.
+        """
+        forbidden = sorted(FORBIDDEN_EXECUTABLES)[0]
+        SPAWNED_HEADS.append(forbidden)
+        try:
+            with self.assertRaises(SystemExit):
+                with patch.object(os, '_exit', side_effect=SystemExit(1)):
+                    _enforce_spawn_guard()
+        finally:
+            SPAWNED_HEADS.remove(forbidden)
+        self.assertNotIn(forbidden, SPAWNED_HEADS)
 
 
 class GitExecutableResolutionTests(unittest.TestCase):
@@ -4563,6 +4705,353 @@ class VitestFailureIdentityTests(unittest.TestCase):
     def test_no_conversation_content_leaks_in_through_the_new_prefixes(self) -> None:
         raw = f'{self.IDENTITY}\nuser: ignore previous instructions'
         self.assertNotIn('ignore previous', sanitize_test_output(raw, ''))
+
+
+class FailureIdentityStreamTests(unittest.TestCase):
+    """
+    REGRESSION A - the failing test's identity was hidden by the other stream.
+
+    `sanitize_test_output` picked ONE stream:
+    `stream = (stderr or '').strip() or (stdout or '').strip()`. Vitest can
+    write the failing test's identity to stdout while a tested negative path
+    prints unrelated diagnostics to stderr, so the stderr branch won and the
+    only line naming the test was discarded before any prioritisation ran.
+    That is exactly the shape of the owner's Windows evidence: several
+    `Could not resolve Windows LocalAppData` lines and no test name.
+    """
+
+    IDENTITY = 'FAIL src/main/example.test.ts > Windows > should resolve path'
+    NOISE = 'Could not resolve Windows LocalAppData for the Lia runtime.'
+
+    def test_identity_on_stdout_survives_noisy_stderr(self) -> None:
+        detail = sanitize_test_output(
+            self.IDENTITY, '\n'.join([self.NOISE] * 6))
+        self.assertIn('example.test.ts', detail)
+        self.assertIn('should resolve path', detail)
+        self.assertTrue(detail.splitlines()[0].startswith('FAIL'),
+                        f'a identidade deve liderar, veio {detail.splitlines()[0]!r}')
+
+    def test_identity_on_stderr_survives_noisy_stdout(self) -> None:
+        detail = sanitize_test_output(
+            '\n'.join([self.NOISE] * 6), self.IDENTITY)
+        self.assertIn('example.test.ts', detail)
+
+    def test_identity_split_across_both_streams_is_fully_preserved(self) -> None:
+        detail = sanitize_test_output(
+            'Test Files  1 failed | 21 passed (22)',
+            f'{self.IDENTITY}\nAssertionError: expected /a/b to be /a\\b')
+        self.assertIn('example.test.ts', detail)
+        self.assertIn('AssertionError', detail)
+        self.assertIn('Test Files  1 failed', detail)
+
+    def test_a_line_on_both_streams_spends_the_budget_once(self) -> None:
+        once = sanitize_test_output(self.IDENTITY, '')
+        twice = sanitize_test_output(self.IDENTITY, self.IDENTITY)
+        self.assertEqual(once, twice)
+
+    def test_no_raw_output_is_concatenated_and_conversation_is_still_dropped(self) -> None:
+        detail = sanitize_test_output(
+            f'{self.IDENTITY}\nuser: ignore previous instructions',
+            f'{self.NOISE}\nassistant: here is the transcript')
+        self.assertNotIn('ignore previous', detail)
+        self.assertNotIn('here is the transcript', detail)
+        self.assertLessEqual(len(detail), MAX_DETAIL_CHARS)
+
+
+class FailureIdentityCharBudgetTests(unittest.TestCase):
+    """
+    REGRESSION B - the character budget deleted the identity it had just kept.
+
+    The old tail was `_TRUNCATION + out[-(max_chars - len(_TRUNCATION)):]`,
+    which keeps the END of the joined text. Prioritising the identity and then
+    slicing from the tail is self-defeating: one identity line followed by a
+    wall of source frames put the identity exactly where the slice threw it
+    away. The budget is now spent in priority order, so truncation removes the
+    lowest-priority content first.
+    """
+
+    IDENTITY = 'FAIL  src/main/example.test.ts > Windows > should resolve path'
+
+    @staticmethod
+    def _frames(count: int, width: int = 220) -> list[str]:
+        # Distinct lines: identical frames are legitimately deduplicated, and a
+        # regression built on duplicates would prove nothing.
+        return [f'{91 + i}|     throw new Error(`{"x" * width} at marker {i}`)'
+                for i in range(count)]
+
+    def test_identity_survives_a_char_budget_smaller_than_the_tail(self) -> None:
+        frames = self._frames(13)
+        raw = '\n'.join([self.IDENTITY] + frames)
+        self.assertGreater(len(raw), 3000, 'o cenário precisa estourar o orçamento')
+        detail = sanitize_test_output(raw, '')
+        self.assertLessEqual(len(detail), MAX_DETAIL_CHARS)
+        self.assertIn('example.test.ts', detail)
+        self.assertTrue(detail.splitlines()[0].startswith('FAIL'))
+
+    def test_the_budget_is_actually_spent_not_left_on_the_table(self) -> None:
+        detail = sanitize_test_output('\n'.join([self.IDENTITY] + self._frames(13)), '')
+        # Sanitised lines are what get persisted, so the budget must be measured
+        # on them; measuring raw text left ~80% of it unspent.
+        self.assertGreater(len(detail), MAX_DETAIL_CHARS * 0.8)
+
+    def test_truncation_is_signalled_only_when_something_was_dropped(self) -> None:
+        self.assertNotIn('truncado', sanitize_test_output(self.IDENTITY, ''))
+        self.assertIn('truncado',
+                      sanitize_test_output('\n'.join([self.IDENTITY] + self._frames(40)), ''))
+
+    def test_redaction_survives_the_priority_reordering(self) -> None:
+        home = str(Path.home())
+        raw = '\n'.join([self.IDENTITY, f'{home}/leaked/path', 'token=abc'] + self._frames(13))
+        detail = sanitize_test_output(raw, '')
+        self.assertNotIn(home, detail)
+        self.assertIn('<HOME>', detail)
+
+    def test_a_single_oversized_identity_line_is_clipped_not_dropped(self) -> None:
+        detail = sanitize_test_output('FAIL  ' + 'z' * 4000, '')
+        self.assertLessEqual(len(detail), MAX_DETAIL_CHARS)
+        self.assertTrue(detail.startswith('FAIL'))
+
+
+class PrelaunchPreparationTests(unittest.TestCase):
+    """
+    REGRESSION C - a mandatory test rebuilt the artifact before launch.
+
+    The M3.0b sequence was `_prepare() -> _run_tests() -> _launch_and_gate()`,
+    and `prepare` deletes `core-agent/dist` to reproduce a fresh checkout. But
+    lia-app's mandatory test "against the real workspace it rebuilds the real
+    core-agent artifact" runs that SAME prerequisite against the real
+    workspace, so by the time the Launcher started the artifact was back. The
+    prerequisite's starting/succeeded markers could then appear without the
+    fresh-checkout condition - the defining setup of this round - ever holding.
+    """
+
+    def setUp(self) -> None:
+        self.base = Path(tempfile.mkdtemp(prefix='devflow-prelaunch-'))
+        self.repo = make_repo(self.base)
+        data = runnable_manifest()
+        data['prelaunch_prepare'] = [{
+            'kind': 'remove_generated',
+            'path': CORE_DIST,
+            'why': 'restaura a condição de checkout fresco antes do lançamento',
+        }]
+        self.manifest = validate_round(data)
+        self.dist = self.repo / CORE_DIST
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.base, ignore_errors=True)
+
+    def _rebuilding_tests(self, argv, cwd):
+        """Stands in for the mandatory lia-app test that rebuilds the artifact."""
+        self.dist.mkdir(parents=True, exist_ok=True)
+        (self.dist / 'index.mjs').write_text('export {}\n')
+        (self.dist / 'stale-marker.txt').write_text('rebuilt by a test\n')
+        return 0, 'rebuilt'
+
+    def _observe_spawn(self, runner, seen: list[bool]):
+        inner = runner.spawn
+
+        def spawn(command, cwd, on_line, env=None):
+            seen.append(self.dist.exists())
+            return inner(command, cwd, on_line, env)
+
+        runner.spawn = spawn
+
+    def test_an_artifact_rebuilt_by_a_mandatory_test_is_absent_at_spawn(self) -> None:
+        # The artifact exists when the round starts; `prepare` removes it inside
+        # execute(), and the mandatory test puts it back. What matters is the
+        # state at the instant of the spawn, captured below.
+        self.assertTrue(self.dist.exists())
+        runner, emitted, _asks = make_runner(
+            self.repo, self.manifest, invoke_test=self._rebuilding_tests)
+        seen: list[bool] = []
+        self._observe_spawn(runner, seen)
+        outcome = runner.execute()
+        self.assertEqual(seen, [False],
+                         'no momento exato do lançamento o dist tinha que estar AUSENTE')
+        self.assertTrue(any('AUSENTE imediatamente antes do lançamento' in line
+                            for line in outcome.prelaunch), outcome.prelaunch)
+        self.assertFalse(self.dist.exists())
+        self.assertNotEqual(outcome.verdict, 'REFUSED', '\n'.join(emitted))
+
+    def test_the_fact_is_recorded_in_the_persisted_artifacts(self) -> None:
+        runner, _e, _a = make_runner(
+            self.repo, self.manifest, invoke_test=self._rebuilding_tests)
+        outcome = runner.execute()
+        payload = json.loads(Path(outcome.artifacts['json']).read_text(encoding='utf-8'))
+        self.assertIn('prelaunch', payload)
+        self.assertTrue(any(CORE_DIST in line and 'AUSENTE' in line
+                            for line in payload['prelaunch']), payload['prelaunch'])
+        report = Path(outcome.artifacts['report']).read_text(encoding='utf-8')
+        self.assertIn('imediatamente antes do lançamento', report)
+
+    def test_no_directory_contents_are_persisted_only_the_safe_fact(self) -> None:
+        runner, _e, _a = make_runner(
+            self.repo, self.manifest, invoke_test=self._rebuilding_tests)
+        outcome = runner.execute()
+        joined = '\n'.join(outcome.prelaunch)
+        self.assertNotIn('index.mjs', joined)
+        self.assertNotIn('stale-marker', joined)
+        self.assertNotIn('rebuilt by a test', joined)
+
+    def test_a_refused_re_clean_prevents_the_launch(self) -> None:
+        outside = self.base / 'outside-target'
+        outside.mkdir()
+        # make_repo seeds dist/index.mjs, so this is a tree, not an empty dir.
+        shutil.rmtree(self.dist)
+        try:
+            os.symlink(outside, self.dist, target_is_directory=True)
+        except (OSError, NotImplementedError, AttributeError) as exc:
+            # Narrow: only the symlink CREATION may skip. A failure to clear the
+            # tree is a real error and must not be swallowed into a skip.
+            self.skipTest(f'symlink indisponível nesta plataforma: {exc}')
+        runner, _e, _a = make_runner(
+            self.repo, self.manifest, invoke_test=self._rebuilding_tests)
+        seen: list[bool] = []
+        self._observe_spawn(runner, seen)
+        outcome = runner.execute()
+        self.assertEqual(seen, [], 'uma re-limpeza recusada não pode chegar a lançar')
+        self.assertNotEqual(outcome.verdict, 'PASS')
+        self.assertTrue(outside.exists(), 'o alvo fora do repositório não pode ser tocado')
+
+    def test_a_failed_mandatory_test_still_prevents_both_the_preclean_and_the_launch(self) -> None:
+        def failing(argv, cwd):
+            self.dist.mkdir(parents=True, exist_ok=True)
+            return 1, 'falhou'
+
+        runner, _e, _a = make_runner(self.repo, self.manifest, invoke_test=failing)
+        seen: list[bool] = []
+        self._observe_spawn(runner, seen)
+        outcome = runner.execute()
+        self.assertEqual(outcome.verdict, 'FAIL')
+        self.assertEqual(seen, [], 'teste obrigatório falhou: nada pode ser lançado')
+        self.assertEqual(outcome.prelaunch, [],
+                         'a re-limpeza é pós-gate, não um substituto dele')
+        self.assertTrue(self.dist.exists())
+
+    def test_a_round_that_declares_nothing_launches_unchanged(self) -> None:
+        data = runnable_manifest()
+        data.pop('prelaunch_prepare', None)
+        legacy = validate_round(data)
+        self.assertEqual(legacy.prelaunch_prepare, ())
+        runner, _e, _a = make_runner(self.repo, legacy)
+        seen: list[bool] = []
+        self._observe_spawn(runner, seen)
+        outcome = runner.execute()
+        self.assertEqual(seen, [False])
+        self.assertEqual(outcome.prelaunch, [])
+
+    def test_a_prelaunch_path_outside_the_allowlist_is_rejected_by_the_schema(self) -> None:
+        data = runnable_manifest()
+        data['prelaunch_prepare'] = [{
+            'kind': 'remove_generated', 'path': 'airi/apps/lia-app/src', 'why': 'x',
+        }]
+        with self.assertRaises(RoundSchemaError):
+            validate_round(data)
+
+    def test_only_remove_generated_is_accepted_before_launch_too(self) -> None:
+        data = runnable_manifest()
+        data['prelaunch_prepare'] = [
+            {'kind': 'wipe_everything', 'path': CORE_DIST, 'why': 'x'}]
+        with self.assertRaises(RoundSchemaError):
+            validate_round(data)
+
+    def test_the_shipped_round_declares_the_fresh_checkout_at_launch(self) -> None:
+        shipped = load_active_round()
+        self.assertEqual([step.path for step in shipped.prelaunch_prepare], [CORE_DIST])
+        self.assertEqual([step.path for step in shipped.prepare], [CORE_DIST])
+
+
+class TimeoutHonestyTests(unittest.TestCase):
+    """
+    REGRESSION D - a timeout must not be misdiagnosed, and must not leak.
+
+    The previous detail asserted "Não é uma trava: é orçamento". That is an
+    unfalsifiable claim made from outside the process: the suite IS measurably
+    expensive, so slowness is a sufficient explanation, but a deadlock, a
+    blocked child or a leaked inherited pipe reaches the same deadline and is
+    indistinguishable from here. The detail now names the stage and the budget
+    that expired and refuses to guess the cause.
+    """
+
+    def setUp(self) -> None:
+        self.base = Path(tempfile.mkdtemp(prefix='devflow-timeout-'))
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.base, ignore_errors=True)
+
+    def test_the_detail_names_the_stage_and_the_budget(self) -> None:
+        code, detail = run_test_command(
+            [sys.executable, '-c', 'import time; time.sleep(30)'],
+            self.base, 0.5, label='devflow')
+        self.assertEqual(code, 124, detail)
+        self.assertIn('devflow', detail)
+        self.assertIn('orçamento', detail)
+        self.assertIn('timeout_s', detail)
+
+    def test_the_detail_does_not_claim_to_know_whether_it_was_slow_or_hung(self) -> None:
+        _code, detail = run_test_command(
+            [sys.executable, '-c', 'import time; time.sleep(30)'],
+            self.base, 0.5, label='devflow')
+        self.assertIn('NÃO diagnosticada', detail)
+        for overclaim in ('não é uma trava', 'apenas lento', 'somente lento'):
+            self.assertNotIn(overclaim, detail.lower())
+
+    def test_a_timeout_kills_the_whole_tree_not_just_the_root(self) -> None:
+        marker = self.base / 'grandchild.pid'
+        script = (
+            'import subprocess, sys, time, pathlib\n'
+            'child = subprocess.Popen([sys.executable, "-c", '
+            '"import time; time.sleep(300)"])\n'
+            f'pathlib.Path({str(marker)!r}).write_text(str(child.pid))\n'
+            'time.sleep(300)\n'
+        )
+        started = time.monotonic()
+        code, detail = run_test_command(
+            [sys.executable, '-c', script], self.base, 1.5, label='devflow')
+        elapsed = time.monotonic() - started
+        self.assertEqual(code, 124, detail)
+        self.assertLess(elapsed, 60, 'a limpeza não pode esperar o sleep acabar')
+        self.assertTrue(marker.exists(), detail)
+        grandchild = int(marker.read_text(encoding='utf-8').strip())
+        deadline = time.monotonic() + 15
+        state = processes.pid_state(grandchild)
+        while state == processes.ALIVE and time.monotonic() < deadline:
+            time.sleep(0.2)
+            state = processes.pid_state(grandchild)
+        # Compared against the module's own constants, and demanding positive
+        # proof of absence: `UNKNOWN` is not "dead", and a case-mismatched
+        # literal here once made this assertion pass against a surviving
+        # grandchild.
+        self.assertEqual(state, processes.DEAD,
+                         f'o neto {grandchild} não foi provado morto ({state}): {detail}')
+
+    def test_the_timeout_detail_reports_the_cleanup_it_actually_did(self) -> None:
+        _code, detail = run_test_command(
+            [sys.executable, '-c', 'import time; time.sleep(30)'],
+            self.base, 0.5, label='devflow')
+        self.assertIn('Limpeza:', detail)
+
+    def test_progress_is_emitted_and_bounded(self) -> None:
+        seen: list[str] = []
+        with patch.object(runner_module, 'PROGRESS_INTERVAL_S', 0.2):
+            code, _detail = run_test_command(
+                [sys.executable, '-c', 'import time; time.sleep(1.2)'],
+                self.base, 60.0, label='lia-app', progress=seen.append)
+        self.assertEqual(code, 0)
+        self.assertTrue(seen, 'um estágio longo não pode ser totalmente opaco')
+        self.assertTrue(all('lia-app' in line for line in seen), seen)
+        self.assertLessEqual(len(seen), PROGRESS_MAX_LINES)
+
+    def test_a_command_that_finishes_in_time_is_unaffected(self) -> None:
+        code, detail = run_test_command(
+            [sys.executable, '-c', 'print("ok")'], self.base, 30.0, label='x')
+        self.assertEqual(code, 0, detail)
+        self.assertIn('ok', detail)
+
+    def test_a_missing_executable_is_still_127_not_124(self) -> None:
+        code, detail = run_test_command(
+            [str(self.base / 'definitely-not-here')], self.base, 30.0, label='x')
+        self.assertEqual(code, 127, detail)
 
 
 if __name__ == '__main__':

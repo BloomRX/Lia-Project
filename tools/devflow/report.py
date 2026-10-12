@@ -95,29 +95,36 @@ _TRUNCATION = '…[truncado]'
 
 # Enough to identify WHICH test failed and WHICH exception it raised, without
 # dumping thousands of lines.
-_DETAIL_PREFIXES = (
-    'FAIL:', 'ERROR:', 'FAILED', 'Ran ', 'Traceback (most recent call last)',
-    'AssertionError', 'AssertionError:', 'assert', 'raise ',
+#
+# Lines are split into three priority tiers instead of one flat "is this a
+# detail?" predicate, because a flat predicate cannot express "the test name
+# matters more than the stack frame around it". The first real Windows run of
+# M3.0b lost the failing test's identity twice over: the flat picker preferred
+# source frames (loose `Error` token) over the vitest header, and the character
+# budget then kept the TAIL of the joined text, deleting whatever had been
+# placed first. Both are fixed by making priority explicit and by spending the
+# budget in priority order.
+_TIER_IDENTITY = 0
+_TIER_ASSERTION = 1
+_TIER_CONTEXT = 2
+
+#: Which test failed, and the suite's own verdict line.
+_IDENTITY_PREFIXES = (
+    'FAIL:', 'ERROR:', 'FAIL ', 'FAIL\t', 'FAILED', 'Ran ',
+    '\u274c', '\u2716', '\u00d7', '\u274f', '\u276f', '\u203a',
+    'Test Files ', 'Tests  ',
 )
-# Lines that carry a vitest/unittest failure IDENTITY. The first real Windows
-# run of M3.0b lost the name of the failing test entirely: `_DETAIL_PREFIXES`
-# knew about Python's `FAIL:` but not about vitest's `FAIL ` / `x` / `>` markers,
-# while the loose `Error` token happily kept the source frames around it. The
-# budget filled up with `91|  throw new Error(...)` and the one line that says
-# WHAT failed never made it into the report - which made the failure
-# undiagnosable, the worst possible outcome for a gate.
-_DETAIL_PREFIXES = _DETAIL_PREFIXES + (
-    'FAIL ', 'FAIL\t', '❌', '✖', '×', '❏', '❯', '›',
-    'Test Files ', 'Tests  ', 'Unhandled ', 'Serialized Error',
-    'Expected', 'Received', '→ ',
+#: Why it failed.
+_ASSERTION_PREFIXES = (
+    'AssertionError', 'Expected', 'Received', 'Traceback (most recent call last)',
+    'assert', 'raise ', 'Unhandled ', 'Serialized Error',
 )
+_ASSERTION_TOKENS = ('Error', 'Exception', 'failed', 'falhou', 'Falhou')
 
 #: A vitest/vite source frame: `91|  throw new Error(...)`, or the blank
-#: `   |` gutter beside it. Useful context, but never more important than the
-#: line that names the failing test, so it is kept only as tail filler.
+#: `   |` gutter beside it. Context, never identity: it matches the loose
+#: `Error` token and would otherwise push the test name out of the budget.
 _CODE_FRAME_RE = re.compile(r'^\s*\d*\s*\|')
-
-_DETAIL_TOKENS = ('Error', 'Exception', 'failed', 'falhou', 'Falhou')
 
 
 # Conversation-shaped lines carry no diagnostic value and may carry session
@@ -136,18 +143,76 @@ def _is_conversation(line: str) -> bool:
     return bool(_CONVERSATION_RE.match(line) or _PAYLOAD_RE.search(line))
 
 
-def _is_detail_line(line: str) -> bool:
+def _classify(line: str) -> int:
+    """Priority tier of one output line. Lower is more important."""
     stripped = line.strip()
     if not stripped:
-        return False
-    # A source frame is context, not identity: `91|  throw new Error(...)`
-    # matches the `Error` token and would otherwise push the test name out of
-    # the budget. Demote it so it only survives as tail filler.
+        return _TIER_CONTEXT
+    if stripped.startswith(_IDENTITY_PREFIXES):
+        return _TIER_IDENTITY
+    # A source frame is context even when it quotes an `Error`, so the check
+    # comes before the assertion heuristics.
     if _CODE_FRAME_RE.match(line):
-        return False
-    if stripped.startswith(_DETAIL_PREFIXES):
-        return True
-    return any(token in stripped for token in _DETAIL_TOKENS)
+        return _TIER_CONTEXT
+    if stripped.startswith(_ASSERTION_PREFIXES):
+        return _TIER_ASSERTION
+    if any(token in stripped for token in _ASSERTION_TOKENS):
+        return _TIER_ASSERTION
+    return _TIER_CONTEXT
+
+
+def _clean_lines(*streams: str) -> list[str]:
+    """
+    ANSI-stripped, conversation-filtered lines from EVERY stream given.
+
+    Both stdout and stderr are inspected. Vitest can put the failing test's
+    identity on stdout while a tested negative path prints unrelated
+    diagnostics on stderr, so preferring one stream over the other can throw
+    away the only line that says what failed. Duplicates are dropped so the
+    same line printed to both streams does not spend the budget twice.
+    """
+    out: list[str] = []
+    seen: set[str] = set()
+    for stream in streams:
+        for raw in (stream or '').splitlines():
+            line = ANSI_RE.sub('', raw).rstrip()
+            if not line.strip() or _is_conversation(line):
+                continue
+            if line in seen:
+                continue
+            seen.add(line)
+            out.append(line)
+    return out
+
+
+def _fill(budget: int, tiers: list[list[str]]) -> tuple[list[str], bool]:
+    """
+    Spends a CHARACTER budget in priority order and returns the kept lines.
+
+    Higher tiers are filled first and in full whenever they fit; whatever is
+    left goes to the next tier. Truncation therefore always removes the
+    LOWEST-priority content, and an identity line placed first can no longer be
+    deleted by a wall of source frames behind it. The boolean reports whether
+    anything had to be dropped, so the marker is only emitted when true.
+
+    Lines arrive ALREADY SANITIZED and the budget is measured on that final
+    form: `sanitize_line` clips long lines, so budgeting on the raw text would
+    over-count and silently leave part of the budget unspent.
+    """
+    kept: list[str] = []
+    used = 0
+    truncated = False
+    for tier in tiers:
+        for line in tier:
+            cost = len(line) + (1 if kept else 0)
+            if used + cost > budget:
+                # Not an early exit: a shorter line further down can still fit,
+                # and dropping it would waste budget we already reserved.
+                truncated = True
+                continue
+            kept.append(line)
+            used += cost
+    return kept, truncated
 
 
 def sanitize_test_output(
@@ -160,24 +225,47 @@ def sanitize_test_output(
     """
     Bounded, redacted, home-collapsed summary of a test command's output.
 
-    unittest and vitest write their failure report to stderr, so stderr wins
-    when it carries anything; stdout is the fallback, never both concatenated,
-    so the useful stream is not diluted or pushed out of the budget.
+    Both streams are inspected and the result is assembled by priority: the
+    failing test's identity first, then the assertion, then whatever context
+    still fits. Both budgets - `max_lines` and `max_chars` - are spent in that
+    order, so the identity survives a long tail instead of being truncated
+    away by it. Nothing raw is concatenated into the result: every kept line
+    goes through `sanitize_line`, and conversation-shaped lines never get this
+    far.
     """
-    stream = (stderr or '').strip() or (stdout or '').strip()
-    if not stream:
+    lines = _clean_lines(stdout, stderr)
+    if not lines:
         return ''
-    lines = [line for line in
-             (ANSI_RE.sub('', raw).rstrip() for raw in stream.splitlines())
-             if line.strip() and not _is_conversation(line)]
-    picked = [line for line in lines if _is_detail_line(line)]
-    if len(picked) < max_lines:
-        # Keep the tail as context so a bare "exit 1" is still explainable.
-        extra = [line for line in lines if line not in picked]
-        picked = picked + extra[-(max_lines - len(picked)):]
-    out = '\n'.join(sanitize_line(line) for line in picked[:max_lines])
-    if len(out) > max_chars:
-        out = _TRUNCATION + out[-(max_chars - len(_TRUNCATION)):]
+
+    buckets: list[list[str]] = [[], [], []]
+    for line in lines:
+        buckets[_classify(line)].append(line)
+
+    # Line budget, highest tier first; then sanitise, then spend the character
+    # budget on what the lines will actually cost once persisted.
+    room = max_lines
+    selected: list[list[str]] = []
+    for tier in buckets:
+        selected.append([sanitize_line(line) for line in tier[:room]])
+        room -= len(selected[-1])
+
+    kept, truncated = _fill(max_chars, selected)
+    if not kept:
+        # Every candidate line was individually longer than the whole budget.
+        # Keep the head of the most important one: a clipped test name still
+        # beats an empty detail.
+        first = (buckets[_TIER_IDENTITY] or buckets[_TIER_ASSERTION]
+                 or buckets[_TIER_CONTEXT])[0]
+        head = sanitize_line(first)[:max(0, max_chars - len(_TRUNCATION))]
+        return head + _TRUNCATION if head else ''
+
+    out = '\n'.join(kept)
+    if truncated:
+        room_left = max_chars - len(out) - len(_TRUNCATION) - 1
+        if room_left > 0:
+            out = f'{out}\n{_TRUNCATION}'
+        else:
+            out = out[:max(0, max_chars - len(_TRUNCATION))] + _TRUNCATION
     return out
 
 

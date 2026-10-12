@@ -43,10 +43,11 @@ class CleanupProfile:
 #:
 #: It is a DEFAULT, not a policy. A suite that legitimately needs longer on a
 #: slow platform must declare its own `timeout_s` in the round manifest; the
-#: alternative is a hidden ceiling that turns "slow" into "failed" with no
-#: diagnosis. Measured on the first real Windows run of M3.0b: the DevFlow
-#: suite spawns ~1800 git processes, and Windows process creation plus
-#: real-time scanning made the default 1800 s expire mid-run.
+#: alternative is a hidden ceiling with nothing a manifest can do about it.
+#: The DevFlow suite is measurably expensive (~1800 git process spawns, ~131 s
+#: on Linux) and the first real Windows run consumed the whole default 1800 s.
+#: Cost is established; the CAUSE of that particular expiry is not - slowness
+#: and a hang reach the same deadline and are indistinguishable from outside.
 DEFAULT_TEST_TIMEOUT_S = 1800.0
 
 #: Hard ceiling a manifest may declare. Nothing here should need an hour.
@@ -147,6 +148,7 @@ class Round:
     tested_sha: str | None
     expected_branch: str
     prepare: tuple[PrepareStep, ...]
+    prelaunch_prepare: tuple[PrepareStep, ...]
     cleanup: CleanupProfile
     tests: tuple[RoundTest, ...]
     launch: LaunchSpec
@@ -203,14 +205,40 @@ def _marker(item: Any, where: str) -> Marker:
     return marker
 
 
+def _parse_prepare_steps(raw: Any, label: str) -> list[PrepareStep]:
+    """
+    Parses one collection of generated-artifact removal steps.
+
+    Shared by `prepare` and `prelaunch_prepare` so the two cannot drift: the
+    same `kind` restriction, the same required keys, and - enforced by the
+    caller - the same allowlist cross-check.
+    """
+    if not isinstance(raw, list):
+        raise RoundSchemaError(f'{label}: esperado uma lista')
+    steps: list[PrepareStep] = []
+    for index, item in enumerate(raw):
+        where = f'{label}[{index}]'
+        _reject_unknown(item, {'kind', 'path', 'why'}, where)
+        kind = _as_str(_require(item, 'kind', where), f'{where}.kind')
+        if kind != 'remove_generated':
+            raise RoundSchemaError(f'{where}.kind={kind!r} não suportado (só remove_generated em D1)')
+        steps.append(PrepareStep(
+            kind=kind,
+            path=_as_str(_require(item, 'path', where), f'{where}.path'),
+            why=_as_str(_require(item, 'why', where), f'{where}.why'),
+        ))
+    return steps
+
+
 def validate_round(data: Any, source: Path | None = None) -> Round:
     """Strictly validates a parsed manifest and returns an immutable Round."""
     if not isinstance(data, dict):
         raise RoundSchemaError('manifesto: esperado um objeto JSON')
     _reject_unknown(
         data,
-        {'schema_version', 'round', 'git', 'prepare', 'cleanup_profile', 'tests',
-         'launch', 'runtime_assertions', 'scenario', 'manual_assertions', 'retention'},
+        {'schema_version', 'round', 'git', 'prepare', 'prelaunch_prepare',
+         'cleanup_profile', 'tests', 'launch', 'runtime_assertions', 'scenario',
+         'manual_assertions', 'retention'},
         'manifesto',
     )
 
@@ -237,21 +265,12 @@ def validate_round(data: Any, source: Path | None = None) -> Round:
     profile = _require(data, 'cleanup_profile', 'manifesto')
     _reject_unknown(profile, {'id', 'allowlisted_generated'}, 'cleanup_profile')
 
-    raw_prepare = _require(data, 'prepare', 'manifesto')
-    if not isinstance(raw_prepare, list):
-        raise RoundSchemaError('prepare: esperado uma lista')
-    prepare: list[PrepareStep] = []
-    for index, item in enumerate(raw_prepare):
-        where = f'prepare[{index}]'
-        _reject_unknown(item, {'kind', 'path', 'why'}, where)
-        kind = _as_str(_require(item, 'kind', where), f'{where}.kind')
-        if kind != 'remove_generated':
-            raise RoundSchemaError(f'{where}.kind={kind!r} não suportado (só remove_generated em D1)')
-        prepare.append(PrepareStep(
-            kind=kind,
-            path=_as_str(_require(item, 'path', where), f'{where}.path'),
-            why=_as_str(_require(item, 'why', where), f'{where}.why'),
-        ))
+    prepare = _parse_prepare_steps(_require(data, 'prepare', 'manifesto'), 'prepare')
+    # OPTIONAL, and deliberately so: a round that does not care about the state
+    # of a generated tree at launch time simply omits it, and every manifest
+    # written before this key existed still loads unchanged.
+    prelaunch_prepare = _parse_prepare_steps(
+        data.get('prelaunch_prepare', []), 'prelaunch_prepare')
 
     tests: list[RoundTest] = []
     for index, item in enumerate(_require(data, 'tests', 'manifesto')):
@@ -358,7 +377,7 @@ def validate_round(data: Any, source: Path | None = None) -> Round:
     # Cross-check: every prepare path must be covered by the cleanup profile.
     allowlist = _as_str_tuple(_require(profile, 'allowlisted_generated', 'cleanup_profile'),
                               'cleanup_profile.allowlisted_generated')
-    for step in prepare:
+    for step in (*prepare, *prelaunch_prepare):
         if step.path not in allowlist:
             raise RoundSchemaError(
                 f'prepare path {step.path!r} não está em cleanup_profile.allowlisted_generated',
@@ -372,6 +391,7 @@ def validate_round(data: Any, source: Path | None = None) -> Round:
         tested_sha=tested_sha,
         expected_branch=_as_str(_require(git, 'expected_branch', 'git'), 'git.expected_branch'),
         prepare=tuple(prepare),
+        prelaunch_prepare=tuple(prelaunch_prepare),
         cleanup=CleanupProfile(
             id=_as_str(_require(profile, 'id', 'cleanup_profile'), 'cleanup_profile.id'),
             allowlisted_generated=allowlist,
