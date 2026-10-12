@@ -166,9 +166,14 @@ def run_auto(
         result.cleanup_state = 'N/A'
         result.cleanup_detail = 'nada foi lançado nesta rodada'
     else:
-        result.cleanup_state = 'PASS' if round_outcome.tree_cleaned else 'FAIL'
+        # Read the teardown verdict straight from the evidence: PASS, FAIL or
+        # UNKNOWN. UNKNOWN is never coerced into PASS here.
+        result.cleanup_state = round_outcome.teardown or 'UNKNOWN'
         result.cleanup_detail = round_outcome.teardown_detail
-    result.runtime_ok = round_outcome.is_pass
+    # RUNTIME evidence only. The overall verdict additionally requires a
+    # verified teardown, and conflating the two is what let a leaked process
+    # tree hide behind a "PASS" runtime line.
+    result.runtime_ok = round_outcome.verdict == 'PASS'
     result.report_path = str(round_outcome.artifacts.get('report', ''))
     _record(result, 'tests', result.tests_ok,
             '' if result.tests_ok else 'um teste obrigatório não passou',
@@ -181,14 +186,19 @@ def run_auto(
             terminal_missing=terminal_missing,
             forbidden=round_outcome.forbidden_seen)
     _record(result, 'teardown',
-            result.cleanup_state in ('PASS', 'N/A'),
+            result.cleanup_state in ('PASS', 'N/A'),  # UNKNOWN is not a pass
             result.cleanup_detail
             or ('a árvore owned não foi encerrada' if result.cleanup_state == 'FAIL' else ''),
             state=result.cleanup_state,
             descendants=round_outcome.teardown_descendants,
             pid=round_outcome.launch_pid)
 
-    if not round_outcome.is_pass:
+    # Branch on the RUNTIME verdict here, not on the overall one. The overall
+    # verdict also covers teardown; if this test used `is_pass`, a round that
+    # proved every marker but leaked its process tree would be reported as
+    # `Stage: runtime / Reason: o gate de runtime nao provou o necessario`,
+    # which blames the wrong evidence. Teardown failures fall through to 8b.
+    if round_outcome.verdict != 'PASS':
         result.result = 'FAIL'
         result.stage = round_outcome.stage or ('tests' if not result.tests_ok else 'runtime')
         # A refusal at prepare never launched anything: teardown was not
@@ -212,6 +222,21 @@ def run_auto(
         else:
             result.reason = f'o gate de runtime não provou o necessário ({round_outcome.verdict})'
         say('Nenhum commit local foi publicado: o gate não passou.')
+        return result
+
+    # -- 8b. a verified teardown is part of PASS --------------------------
+    # Runtime evidence and process ownership are separate claims. A round that
+    # proved every marker but left Lia and Electron running is NOT a pass: the
+    # report would say PASS while the machine is left dirty. UNKNOWN counts as
+    # not-passed, because unverified is not verified.
+    if result.cleanup_state in ('FAIL', 'UNKNOWN'):
+        result.result = 'FAIL'
+        result.stage = 'teardown'
+        result.reason = (
+            f'evidência de runtime passou, mas a limpeza da árvore própria é '
+            f'{result.cleanup_state}: {result.cleanup_detail or "sem detalhe"}'
+        )
+        say('Nenhum commit local foi publicado: a limpeza da árvore não foi verificada.')
         return result
 
     # -- 9. publish -------------------------------------------------------
@@ -262,14 +287,24 @@ def render_final_block(result: AutoResult) -> str:
             f'Tests: {"PASS" if result.tests_ok else "FAIL"}',
             f'Runtime gate: {"PASS" if result.runtime_ok else "FAIL"}',
             f'Process cleanup: {result.cleanup_state}',
+            *([f'Cleanup detail: {result.cleanup_detail}']
+              if result.cleanup_state not in ('PASS',) and result.cleanup_detail else []),
             f'Push: {PUBLISH_LABELS.get(result.publish, result.publish)}',
         ]
     else:
         lines += [
             f'Stage: {result.stage}',
             f'Reason: {result.reason}',
-            'No destructive recovery was attempted.',
         ]
+        # A round that failed AFTER the runtime gate proved itself still has to
+        # tell the operator what happened to the processes it launched. Hiding
+        # the cleanup fact behind a bare reason line is how a leaked Lia +
+        # Electron tree goes unnoticed.
+        if result.cleanup_state not in ('PASS', 'N/A'):
+            lines.append(f'Process cleanup: {result.cleanup_state}')
+        if result.cleanup_state not in ('PASS',) and result.cleanup_detail:
+            lines.append(f'Cleanup detail: {result.cleanup_detail}')
+        lines.append('No destructive recovery was attempted.')
     if result.report_path:
         lines.append(f'Report: {result.report_path}')
     lines.append(bar)

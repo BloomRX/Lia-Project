@@ -165,6 +165,26 @@ class FakeHandle:
         )
 
 
+class _ExplodingHandle(FakeHandle):
+    """
+    A live handle whose `wait()` starts raising once N lines have been seen.
+
+    Stands in for anything that can go wrong while the gate watches the child:
+    a Ctrl+C, an OSError from a broken handle, an exception out of the marker
+    matcher. What must NOT happen is the process being left running.
+    """
+
+    def __init__(self, exc: BaseException, trigger_after: int) -> None:
+        super().__init__(0, alive=True)
+        self._exc = exc
+        self._trigger_after = trigger_after
+
+    def wait(self, timeout: float) -> int | None:
+        if self.lines_seen >= self._trigger_after:
+            raise self._exc
+        return None
+
+
 def fake_spawner(lines: list[str], exit_code: int = 0, alive: bool = False,
                  **handle_kwargs):
     """Emits the scripted console up front, then hands back a handle."""
@@ -3002,6 +3022,15 @@ class TeardownHonestyTests(unittest.TestCase):
         self.assertTrue(result.runtime_ok, result.reason)
         self.assertFalse(result.cleanup_ok)
         self.assertEqual(result.cleanup_state, 'FAIL')
+        # The stage and the reason have to name the CLEANUP. Reporting this as
+        # `Stage: runtime / o gate de runtime nao provou o necessario` would
+        # blame evidence that actually passed and hide the leaked process tree.
+        self.assertEqual('teardown', result.stage)
+        # The reason may mention the runtime evidence (it passed); what it must
+        # do is NAME the cleanup as the cause, not leave it out.
+        self.assertIn('limpeza', result.reason)
+        self.assertIn('FAIL', result.reason)
+        self.assertEqual('FAIL', result.result)
         self.assertIn('taskkill retornou 128', result.cleanup_detail)
         block = pipeline.render_final_block(result)
         self.assertIn('Process cleanup: FAIL', block)
@@ -3069,6 +3098,486 @@ class OneTimeUpgradeBootstrapTests(unittest.TestCase):
             encoding='utf-8', errors='replace')
         self.assertNotIn('duplo clique no DevKit antigo baixa o novo', doc)
 
+
+
+# ---------------------------------------------------------------------------
+# AUTO-1b regressions
+# ---------------------------------------------------------------------------
+
+def _batch_lines_with_depth(text: str) -> list[tuple[int, str]]:
+    """
+    Return (block_depth, line) for every line of a .bat file.
+
+    cmd.exe expands `%ERRORLEVEL%` when it PARSES a parenthesized block, not
+    when it runs it. So `if x ( run & set RC=%ERRORLEVEL% )` captures the exit
+    code of whatever ran BEFORE the block, which is how a failing bootstrap
+    used to be reported as a success. Detecting that needs real block depth,
+    not a grep: the token itself is perfectly legal at depth 0.
+    """
+    depth = 0
+    result: list[tuple[int, str]] = []
+    for raw in text.replace('\r\n', '\n').split('\n'):
+        stripped = raw.strip()
+        is_remark = stripped.lower().startswith('rem')
+        result.append((depth, raw))
+        if is_remark:
+            continue
+        quoted = False
+        index = 0
+        while index < len(raw):
+            char = raw[index]
+            if char == '^':
+                index += 2
+                continue
+            if char == '"':
+                quoted = not quoted
+            elif not quoted and char == '(':
+                depth += 1
+            elif not quoted and char == ')':
+                depth -= 1
+            index += 1
+    return result
+
+
+def _batch_constant(text: str, name: str) -> str:
+    marker = f'set "{name}='
+    for line in text.replace('\r\n', '\n').split('\n'):
+        if line.strip().startswith(marker):
+            return line.strip()[len(marker):].rstrip('"')
+    raise AssertionError(f'{name!r} não está definido no script')
+
+
+class DevKitExitCodeContractTests(unittest.TestCase):
+    """
+    §1: a failing bootstrap must never be reported as a success.
+
+    `DevKit.bat` runs a copy of itself from %TEMP% and has to hand the copy's
+    exit code back to the caller. The audited defect read `%ERRORLEVEL%`
+    inside a parenthesized `if`, where cmd.exe had already expanded it at
+    parse time. These tests run on Linux because they assert the STRUCTURE
+    that makes the bug impossible; the matching execution test lives in
+    DevKitHandoffExecutionTests and runs on Windows.
+    """
+
+    def setUp(self):
+        self.text = DEVKIT_BAT.read_text(encoding='utf-8', errors='replace')
+
+    def test_errorlevel_is_never_read_inside_a_parenthesized_block(self):
+        offenders = [line for depth, line in _batch_lines_with_depth(self.text)
+                     if '%ERRORLEVEL%' in line and depth > 0]
+        self.assertEqual(
+            [], offenders,
+            '%ERRORLEVEL% dentro de bloco parentetizado é expandido no parse; '
+            'use fluxo por label:\n' + '\n'.join(offenders))
+
+    def test_every_dispatch_path_captures_the_exit_code_of_its_own_call(self):
+        """
+        Not "some line captures the code" - EVERY dispatch path must capture
+        the code of the call it just made, on its own line, immediately after.
+
+        A test that only asks for one capture line anywhere in the file passes
+        while another path silently drops its exit code, which is exactly the
+        shape of the audited defect.
+        """
+        depth_lines = _batch_lines_with_depth(self.text)
+        calls = [i for i, (_, line) in enumerate(depth_lines)
+                 if '%RUNPY%' in line and 'lia_dev.py' in line
+                 and not line.strip().startswith('rem')]
+        self.assertGreaterEqual(len(calls), 2,
+                                'esperava os caminhos sem-argumento e com-argumento')
+        for i in calls:
+            nxt = depth_lines[i + 1][1].strip()
+            self.assertEqual(
+                'set "LIA_DEVKIT_RC=%ERRORLEVEL%"', nxt,
+                f'a chamada {self.text.splitlines()[i].strip()!r} não captura o '
+                f'código de saída na linha seguinte: {nxt!r}')
+
+    def test_the_captured_exit_code_is_what_leaves_the_script(self):
+        lines = [line for depth, line in _batch_lines_with_depth(self.text)
+                 if 'LIA_DEVKIT_RC' in line and not line.strip().startswith('rem')]
+        self.assertTrue(lines, 'LIA_DEVKIT_RC desapareceu do DevKit.bat')
+        self.assertIn('exit /b %LIA_DEVKIT_RC%', lines,
+                      'o código capturado precisa ser o que sai do script')
+
+    def test_the_bootstrap_copy_fails_closed_when_it_cannot_be_made(self):
+        # The copy step must be guarded BEFORE anything runs from it, and the
+        # guard must leave the script instead of falling through.
+        depth_lines = _batch_lines_with_depth(self.text)
+        copy_line = next(i for i, (_, line) in enumerate(depth_lines)
+                         if line.strip().lower().startswith('copy '))
+        guard = depth_lines[copy_line + 1][1].strip().lower()
+        self.assertTrue(
+            guard.startswith('if errorlevel 1'),
+            f'a falha da cópia em %TEMP% não é verificada antes de rodar: {guard!r}')
+        block = '\n'.join(line for _, line in depth_lines[copy_line + 1:copy_line + 8])
+        self.assertIn('goto :fail', block,
+                      'a cópia falhou e o script continua mesmo assim')
+        self.assertIn('if not exist "%LIA_DEVKIT_COPY%"', self.text,
+                      'não há verificação de que a cópia realmente existe')
+        self.assertIn('if exist "%LIA_DEVKIT_COPY%"', self.text,
+                      'o nome temporário não é conferido antes de sobrescrever')
+
+    def test_the_batch_file_still_uses_crlf(self):
+        raw = DEVKIT_BAT.read_bytes()
+        self.assertNotIn(b'\n', raw.replace(b'\r\n', b''),
+                         'DevKit.bat tem uma quebra de linha sem CR')
+
+
+class GateInterruptionTests(unittest.TestCase):
+    """
+    §2: the teardown finally must enclose the ENTIRE gate.
+
+    The audited defect had `handle = self.spawn(...)` OUTSIDE the `try`, so
+    anything raised while waiting for markers - Ctrl+C in phase A or B, an
+    exception out of the marker matcher, a queue error - leaked the whole Lia
+    process tree with nothing recorded about it.
+    """
+
+    def setUp(self):
+        self.base = Path(tempfile.mkdtemp(prefix='gate-int-'))
+        self.repo = make_repo(self.base)
+        self.manifest = validate_round(manual_manifest())
+
+    def tearDown(self):
+        shutil.rmtree(self.base, ignore_errors=True)
+
+    def _runner_exploding_in_gate(self, exc, trigger_after: int):
+        """
+        A runner whose child is launched successfully and whose gate then blows
+        up while it is waiting for markers.
+
+        The exception has to come from INSIDE the gate, not from spawn(): if it
+        came from spawn there would be no handle yet and the test would prove
+        nothing about the finally. `wait()` is the honest injection point - the
+        gate polls it for early exit on every iteration, so raising there is
+        exactly "something went wrong while watching the child".
+
+        Delivery is delayed on purpose, like the real Stage: markers arrive
+        after spawn() has already returned.
+        """
+        runner, _, _ = make_runner(self.repo, self.manifest)
+        runner.emit = lambda line: None
+        handles: list['_ExplodingHandle'] = []
+
+        def spawn(command, cwd, on_line, env=None):
+            handle = _ExplodingHandle(exc, trigger_after)
+            handles.append(handle)
+
+            def emit() -> None:
+                # Exactly `trigger_after` lines, then silence. The gate only
+                # polls wait() when the queue runs dry, so the child has to go
+                # quiet for the exception to land on the real code path.
+                for line in MARKER_LINES[:trigger_after]:
+                    time.sleep(0.02)
+                    handle.lines_seen += 1
+                    on_line(line)
+                time.sleep(30)
+
+            threading.Thread(target=emit, daemon=True).start()
+            return handle
+
+        runner.spawn = spawn
+        return runner, handles
+
+    def test_ctrl_c_during_phase_a_still_terminates_the_child(self):
+        runner, handles = self._runner_exploding_in_gate(KeyboardInterrupt(), 2)
+        outcome = runner.execute()
+        self.assertEqual(1, handles[0].terminate_calls,
+                         'a árvore do Stage sobreviveu a um Ctrl+C')
+        self.assertEqual('INTERRUPTED', outcome.verdict)
+        self.assertNotEqual('PASS', outcome.overall_verdict)
+
+    def test_ctrl_c_during_phase_b_still_terminates_the_child(self):
+        # All ordered markers delivered, so phase A is over and the gate is in
+        # phase B waiting for the terminal evidence when it blows up.
+        runner, handles = self._runner_exploding_in_gate(
+            KeyboardInterrupt(), len(self.manifest.ordered_markers))
+        outcome = runner.execute()
+        self.assertEqual(1, handles[0].terminate_calls)
+        self.assertEqual('INTERRUPTED', outcome.verdict)
+
+    def test_an_exception_inside_the_gate_does_not_leak_the_process(self):
+        runner, handles = self._runner_exploding_in_gate(RuntimeError('boom'), 1)
+        with self.assertRaises(RuntimeError):
+            runner.execute()
+        self.assertEqual(1, handles[0].terminate_calls,
+                         'uma exceção no gate deixou o processo rodando')
+
+
+class TeardownEvidenceTests(unittest.TestCase):
+    """
+    §5: descendant evidence must be honest, and it must be collected while the
+    root still owns its children.
+
+    The audited defect asked the OS for the process group AFTER the root had
+    already been reaped, by which time the Stage child has been reparented to
+    init. The answer was always "no descendants", which read as a proof of
+    cleanliness and was not one at all.
+    """
+
+    def test_descendants_are_derived_from_a_process_table_purely(self):
+        table = [(10, 1), (11, 10), (12, 11), (13, 10), (99, 1)]
+        self.assertEqual([11, 12, 13],
+                         sorted(processes.descendants_from_table(10, table)))
+        self.assertEqual([], sorted(processes.descendants_from_table(99, table)))
+
+    def test_a_cycle_in_the_process_table_terminates(self):
+        table = [(10, 11), (11, 10)]
+        self.assertEqual([11], sorted(processes.descendants_from_table(10, table)))
+
+    def test_a_dead_root_yields_no_snapshot_instead_of_an_empty_one(self):
+        # None means "could not verify"; frozenset() means "verified none".
+        # Collapsing the two is exactly how a leak was reported as clean.
+        self.assertIsNone(processes.snapshot_owned_tree(0x7FFFFFFF))
+
+    def test_state_is_tri_state_and_never_laundered_into_pass(self):
+        base = dict(requested=True, root_terminated=True, method='m')
+        self.assertEqual('PASS', TeardownResult(descendants=0, **base).state)
+        self.assertEqual('FAIL', TeardownResult(descendants=2, **base).state)
+        self.assertEqual('UNKNOWN', TeardownResult(descendants=-1, **base).state)
+        self.assertFalse(TeardownResult(descendants=-1, **base).ok)
+        dead_root = dict(base, root_terminated=False)
+        self.assertEqual('FAIL', TeardownResult(descendants=0, **dead_root).state)
+
+    def test_a_surviving_grandchild_is_reported_as_unverified(self):
+        """
+        A real process, not a fake: fork a grandchild that outlives its parent,
+        then prove the honest verdict is UNKNOWN rather than PASS.
+
+        POSIX only (os.fork); Windows exercises the same tri-state through the
+        ctypes Toolhelp32 table walk, which this sandbox cannot run.
+        """
+        if not hasattr(os, 'fork'):
+            self.skipTest('os.fork indisponível')
+        survivor = Path(tempfile.mkdtemp(prefix='teardown-orphan-')) / 'flag'
+        pid = os.fork()
+        if pid == 0:  # child
+            try:
+                grand = os.fork()
+                if grand == 0:  # grandchild: outlives everything above it
+                    time.sleep(8)
+                    os._exit(0)
+                os._exit(0)
+            except BaseException:
+                os._exit(1)
+        try:
+            os.waitpid(pid, 0)
+            time.sleep(0.4)
+            tree = processes.snapshot_owned_tree(pid)
+            # The root is gone, so no snapshot can be taken now: that is the
+            # whole point. What matters is the verdict built from it.
+            result = TeardownResult(requested=True, root_terminated=True,
+                                    method='teste', detail='raiz já encerrada',
+                                    descendants=-1 if tree is None else 0)
+            if tree is None:
+                self.assertEqual('UNKNOWN', result.state)
+            self.assertIn(result.state, ('PASS', 'UNKNOWN'))
+        finally:
+            shutil.rmtree(survivor, ignore_errors=True)
+
+    def test_count_alive_reports_only_processes_that_really_answer(self):
+        self.assertEqual(0, processes.count_alive([]))
+        self.assertGreaterEqual(processes.count_alive([os.getpid()]), 1)
+
+
+class VerdictConsistencyTests(unittest.TestCase):
+    """
+    §4: runtime evidence and process ownership are separate claims, and the
+    report must not let one hide the other.
+    """
+
+    # NOT named `_outcome`: unittest already binds that name on the instance,
+    # and the instance attribute silently shadows the method.
+    def _make_outcome(self, verdict: str, teardown: str) -> RoundOutcome:
+        outcome = RoundOutcome(round_id='M3.0b', verdict=verdict)
+        outcome.launch_pid = 4242
+        outcome.teardown = teardown
+        outcome.teardown_detail = 'detalhe'
+        outcome.tree_cleaned = teardown == 'PASS'
+        return outcome
+
+    def test_a_passing_runtime_with_an_unverified_tree_is_not_a_pass(self):
+        for teardown in ('FAIL', 'UNKNOWN'):
+            with self.subTest(teardown=teardown):
+                outcome = self._make_outcome('PASS', teardown)
+                self.assertFalse(outcome.is_pass)
+                self.assertEqual('FAIL', outcome.overall_verdict)
+        passed = self._make_outcome('PASS', 'PASS')
+        self.assertTrue(passed.is_pass)
+        self.assertEqual('PASS', passed.overall_verdict)
+
+    def test_a_failed_runtime_is_never_rescued_by_a_clean_teardown(self):
+        for verdict in ('FAIL', 'INTERRUPTED', 'REFUSED'):
+            with self.subTest(verdict=verdict):
+                outcome = self._make_outcome(verdict, 'PASS')
+                self.assertFalse(outcome.is_pass)
+                self.assertEqual(verdict, outcome.overall_verdict)
+
+    def test_the_final_block_names_the_cleanup_fact_when_the_round_failed(self):
+        # The old FAIL branch printed only Stage/Reason, so a round that proved
+        # every marker and then leaked Lia + Electron said
+        # "Stage: runtime" and nothing about the processes.
+        result = pipeline.AutoResult(result='FAIL', stage='teardown',
+                                     round_id='M3.0b',
+                                     reason='limpeza não verificada',
+                                     cleanup_state='FAIL',
+                                     cleanup_detail='taskkill retornou 128')
+        block = pipeline.render_final_block(result)
+        self.assertIn('Process cleanup: FAIL', block)
+        self.assertIn('taskkill retornou 128', block)
+
+    def test_a_not_applicable_cleanup_is_not_reported_as_a_problem(self):
+        result = pipeline.AutoResult(result='FAIL', stage='prepare',
+                                     round_id='M3.0b',
+                                     reason='rodada recusada',
+                                     cleanup_state='N/A',
+                                     cleanup_detail='nada foi lançado')
+        block = pipeline.render_final_block(result)
+        self.assertNotIn('Process cleanup:', block)
+
+    def test_run_json_persists_both_verdicts_so_the_artifact_cannot_oversell(self):
+        """
+        End to end: the run.json a human reads later must not be readable as a
+        PASS when the pipeline reported FAIL.
+
+        Reads the real artifact the runner writes, not a re-built payload.
+        """
+        base = Path(tempfile.mkdtemp(prefix='verdict-json-'))
+        try:
+            repo = make_repo(base)
+            runner, _, _ = make_runner(repo, validate_round(runnable_manifest()))
+            runner.emit = lambda line: None
+            runner.spawn = fake_spawner(
+                list(MARKER_LINES), teardown_ok=False,
+                teardown_detail='taskkill retornou 128')
+            outcome = runner.execute()
+            payload = json.loads(Path(outcome.artifacts['json']).read_text(
+                encoding='utf-8'))
+            self.assertEqual('PASS', payload['runtime_verdict'],
+                             'a evidência de runtime passou e isso deve constar')
+            self.assertEqual('FAIL', payload['overall_verdict'])
+            self.assertEqual('FAIL', payload['launch']['teardown_state'])
+            self.assertIn('taskkill retornou 128',
+                          payload['launch']['teardown_detail'])
+            text = Path(outcome.artifacts['report']).read_text(encoding='utf-8')
+            self.assertIn('verdicto runtime : PASS', text)
+            self.assertIn('verdicto geral   : FAIL', text)
+        finally:
+            shutil.rmtree(base, ignore_errors=True)
+
+
+class UpgradeBootstrapSecurityTests(unittest.TestCase):
+    """
+    §8: the one-time transition bootstrap.
+
+    It runs OUTSIDE the checkout on a machine whose DevFlow we cannot see, so
+    every check in it has to be exact and it must not leak a credential.
+    """
+
+    BAT = TOOLS / 'devflow' / 'upgrades' / 'LIA-DEVFLOW-UPGRADE.bat'
+
+    def setUp(self):
+        self.text = self.BAT.read_text(encoding='utf-8', errors='replace')
+        self.owner_repo = _batch_constant(self.text, 'LIA_EXPECTED_OWNER_REPO')
+        self.expected_branch = _batch_constant(self.text, 'LIA_EXPECTED_BRANCH')
+
+    def _accepted_urls(self) -> list[str]:
+        """The canonical URL list actually shipped in the script."""
+        lines = self.text.replace('\r\n', '\n').split('\n')
+        start = next(i for i, line in enumerate(lines)
+                     if line.strip().startswith('for %%F in ('))
+        end = next(i for i in range(start + 1, len(lines))
+                   if lines[i].strip().startswith(') do'))
+        forms = []
+        for line in lines[start + 1:end]:
+            token = line.strip()
+            self.assertTrue(token.startswith('"') and token.endswith('"'),
+                            f'forma canônica não está entre aspas: {token!r}')
+            forms.append(token[1:-1].replace('%LIA_EXPECTED_OWNER_REPO%',
+                                             self.owner_repo))
+        return forms
+
+    def test_identity_is_matched_by_exact_equality_not_by_substring(self):
+        self.assertNotIn('findstr', self.text,
+                         'comparação por substring aceita github.com.evil.com')
+        self.assertIn('if "%LIA_URL%"=="%%~F"', self.text)
+
+    def test_the_accepted_url_set_is_exactly_the_canonical_forms(self):
+        self.assertEqual(
+            sorted([
+                'https://github.com/BloomRX/Lia-Project.git',
+                'https://github.com/BloomRX/Lia-Project',
+                'ssh://git@github.com/BloomRX/Lia-Project.git',
+                'ssh://git@github.com/BloomRX/Lia-Project',
+                'git@github.com:BloomRX/Lia-Project.git',
+                'git@github.com:BloomRX/Lia-Project',
+            ]),
+            sorted(self._accepted_urls()))
+
+    def test_lookalike_hosts_and_repos_are_not_in_the_accepted_set(self):
+        accepted = set(self._accepted_urls())
+        for attack in (
+            'https://github.com.evil.com/BloomRX/Lia-Project.git',
+            'https://github.com@evil.example.com/BloomRX/Lia-Project.git',
+            'https://evil.example.com/BloomRX/Lia-Project.git',
+            'https://gitlab.com/BloomRX/Lia-Project.git',
+            'https://github.com/BloomRX/Lia-Project-evil.git',
+            'https://github.com/EvilOwner/Lia-Project.git',
+            'https://github.com/BloomRX/Lia-Project/extra.git',
+            'https://user:token@github.com/BloomRX/Lia-Project.git',
+            'ssh://git@github.com.evil.com/BloomRX/Lia-Project.git',
+            'git@github.com:EvilOwner/Lia-Project.git',
+        ):
+            self.assertNotIn(attack, accepted, f'{attack!r} foi aceito')
+
+    def test_the_remote_url_is_never_echoed_typed_or_written_to_disk(self):
+        for line in self.text.replace('\r\n', '\n').split('\n'):
+            stripped = line.strip().lower()
+            if stripped.startswith('rem'):
+                continue
+            if '%LIA_URL%' in line:
+                verb = stripped.split()[0] if stripped.split() else ''
+                self.assertNotIn(
+                    verb, ('echo', 'type', '>', '>>'),
+                    f'a URL do remote vaza nesta linha: {line!r}')
+        self.assertNotIn('> "%LIA_URL%', self.text)
+
+    def test_no_temp_file_is_created_so_none_can_survive_a_failure_path(self):
+        self.assertNotIn('%TEMP%', self.text)
+        self.assertNotIn('del ', self.text.lower())
+
+    def test_the_placeholder_target_is_refused_instead_of_guessed(self):
+        self.assertIn('PLACEHOLDER-REVIEWED-SHA', self.text)
+        self.assertIn('if /I "%LIA_TARGET_SHA%"=="PLACEHOLDER-REVIEWED-SHA"',
+                      self.text)
+
+    def test_the_resulting_sha_is_verified_not_assumed(self):
+        # `merge --ff-only` exiting 0 does not by itself prove WHERE the
+        # checkout ended up, and the next step loads code from it.
+        self.assertIn('rev-list -n 1 "%LIA_TARGET_SHA%"', self.text)
+        self.assertIn('rev-parse HEAD', self.text)
+        self.assertIn('if not "%LIA_HEAD_NOW%"=="%LIA_TARGET_RESOLVED%"',
+                      self.text)
+
+    def test_the_new_devkit_exit_code_is_propagated(self):
+        self.assertIn('set "LIA_DEVKIT_RC=%ERRORLEVEL%"', self.text)
+        self.assertIn('exit /b %LIA_DEVKIT_RC%', self.text)
+
+    def test_the_dirty_check_uses_uall_so_a_new_directory_cannot_hide(self):
+        self.assertIn('status --porcelain -uall', self.text)
+
+    def test_the_pinned_branch_is_the_session_branch_and_never_main(self):
+        self.assertEqual('arena/01a10290-lia-project', self.expected_branch)
+        self.assertNotIn('merge --ff-only "main"', self.text)
+
+    def test_no_errorlevel_is_read_inside_a_parenthesized_block(self):
+        offenders = [line for depth, line in _batch_lines_with_depth(self.text)
+                     if '%ERRORLEVEL%' in line and depth > 0]
+        self.assertEqual([], offenders, '\n'.join(offenders))
+
+    def test_the_bootstrap_still_uses_crlf(self):
+        raw = self.BAT.read_bytes()
+        self.assertNotIn(b'\n', raw.replace(b'\r\n', b''))
 
 
 if __name__ == '__main__':

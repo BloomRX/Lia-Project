@@ -617,11 +617,12 @@ não existe mais menu no duplo clique.
   `lia:stage:start`. Sem caminho alternativo de Stage: a cadeia
   `Lia.bat → Launcher → AiriStageManager → Stage` continua sendo o que é validado. Fora da
   flag, nada muda no produto.
-- **O S/N virou evidência de máquina.** Além da cadeia ordenada, a rodada exige três fatos
-  terminais: `lia-stage renderer=ready`, `lia-stage window=visible` e
-  `lia-stage avatar-scene=mounted` (renderer → IPC → main). Faltar um ⇒ FAIL; marcador
-  proibido ⇒ FAIL. Tudo inerte sem `LIA_DEVFLOW_DIAGNOSTICS=1`. "ready in 512 ms" continua
-  sendo apenas opcional e nunca é evidência terminal.
+- **O S/N virou evidência de máquina.** Além da cadeia ordenada, a rodada exige **quatro**
+  fatos terminais, em qualquer ordem: `lia-stage renderer=ready`, `lia-stage window=visible`,
+  `lia-stage renderer-app=mounted` e `lia-stage avatar-scene=mounted` (renderer → IPC →
+  main). Faltar um ⇒ FAIL; marcador proibido ⇒ FAIL. Tudo inerte sem
+  `LIA_DEVFLOW_DIAGNOSTICS=1`. "ready in 512 ms" continua sendo apenas opcional e nunca é
+  evidência terminal.
 - **Schema v2:** `runtime_assertions` (ordered/terminal/forbidden/optional), `launch.env`,
   `launch.auto_action` e um `scenario { driver, steps }` genérico. Nenhuma rodada futura foi
   implementada — só a arquitetura que as torna dirigíveis.
@@ -647,6 +648,29 @@ Todos foram corrigidos. O marcador raiz foi renomeado para `renderer-app=mounted
 de avatar passou a vir do próprio componente de cena; `window=visible` agora exige
 `isVisible()`. `allow_checkpoint` fica desligado por padrão — para esta execução o contrato
 é checkout limpo.
+
+**AUTO-1b fechou os cinco defeitos que a segunda auditoria encontrou no AUTO-1a.** Todos
+permitiam um relatório mais otimista do que a evidência:
+
+- `%ERRORLEVEL%` dentro do bloco parentetizado do `:dispatch` era expandido no **parse**,
+  então um bootstrap com falha saía com código 0;
+- `handle = self.spawn(...)` ficava fora do `try`, e qualquer exceção durante a espera pelos
+  marcadores (inclusive Ctrl+C) vazava a árvore inteira da Lia;
+- o snapshot de descendentes era pedido **depois** de a raiz morrer, quando o filho do Stage
+  já foi reparentado — a resposta era sempre "nenhum descendente". Prova observada: um neto
+  criado por `fork` sobreviveu com `descendants=0` e `ok=True`;
+- `result.result = 'PASS'` nunca consultava `cleanup_state`, e o `run.json` persistia só
+  `verdict`, então uma Lia deixada rodando era publicada como PASS;
+- o bootstrap de transição conferia o remote com `findstr` por substring
+  (`github.com.evil.com` passava), gravava a URL num arquivo de nome fixo no `%TEMP%` e a
+  imprimia na recusa.
+
+Hoje: fluxo por rótulo com captura de código em cada caminho; `finally` cobrindo o gate
+inteiro; identidade da árvore gravada no spawn e `TeardownResult.state` tri-estado
+(`PASS`/`FAIL`/`UNKNOWN`, onde `UNKNOWN` nunca vira `PASS`); `overall_verdict` separado de
+`runtime_verdict` no `run.json` e um passo 8b que reprova antes de publicar; e identidade de
+remote por **igualdade exata** contra seis formas canônicas, sem imprimir a URL e com o SHA
+resultante relido e comparado.
 
 **Limitação de transição:** o checkout do dono do projeto ainda tem o `DevKit.bat` anterior
 ao AUTO, e um recurso do DevKit novo não roda dentro do antigo antes de ser baixado. Por

@@ -94,7 +94,25 @@ class RoundOutcome:
 
     @property
     def is_pass(self) -> bool:
-        return self.verdict == 'PASS'
+        return self.overall_verdict == 'PASS'
+
+    @property
+    def overall_verdict(self) -> str:
+        """
+        The verdict the outside world is allowed to act on.
+
+        `verdict` describes the RUNTIME evidence only. A round can prove every
+        marker and still have leaked its whole process tree, and that is not a
+        PASS: it leaves Lia and Electron running behind the report. So the
+        overall verdict additionally requires teardown to be PASS - FAIL and
+        UNKNOWN both downgrade it. INTERRUPTED and REFUSED pass through
+        unchanged, because they are already not a PASS.
+        """
+        if self.verdict != 'PASS':
+            return self.verdict
+        if self.teardown in ('FAIL', 'UNKNOWN'):
+            return 'FAIL'
+        return 'PASS'
 
 
 def run_test_command(argv: list[str], cwd: Path) -> tuple[int, str]:
@@ -360,109 +378,109 @@ class RoundRunner:
         handle = self.spawn(list(manifest.launch.command), self.repo, on_line,
                             env=launch_env or None)
         outcome.launch_pid = getattr(handle, 'pid', None)
+        try:
 
-        # ------------------------------------------------------------------
-        # TWO PHASES, both bounded, both watching the same three things:
-        #
-        #   A  the ordered startup chain (prerequisite -> build -> spawn);
-        #   B  ALL terminal markers, which arrive ASYNCHRONOUSLY after the
-        #      child is spawned - the renderer mounts seconds later.
-        #
-        # The previous version read `terminal_seen` out of the lines it already
-        # had as soon as phase A finished, so a perfectly healthy Lia was torn
-        # down before its renderer mounted and reported as FAIL. Timeouts use
-        # time.monotonic(): a wall-clock jump must never shorten a gate.
-        # ------------------------------------------------------------------
-        pending = list(manifest.ordered_markers)
-        terminal_pending = list(manifest.runtime.terminal)
-        matched: list[tuple[str, int]] = []
-        outcome.terminal_seen = []
-        outcome.forbidden_seen = []
-        # A line is attributed to at most ONE marker, so a terminal pattern can
-        # never double as an ordered marker or the other way round.
-        consumed: set[int] = set()
-        phase_deadline = time.monotonic() + self.marker_timeout_s
-        outcome.gate_phase = 'A'
-        early_exit = False
+            # ------------------------------------------------------------------
+            # TWO PHASES, both bounded, both watching the same three things:
+            #
+            #   A  the ordered startup chain (prerequisite -> build -> spawn);
+            #   B  ALL terminal markers, which arrive ASYNCHRONOUSLY after the
+            #      child is spawned - the renderer mounts seconds later.
+            #
+            # The previous version read `terminal_seen` out of the lines it already
+            # had as soon as phase A finished, so a perfectly healthy Lia was torn
+            # down before its renderer mounted and reported as FAIL. Timeouts use
+            # time.monotonic(): a wall-clock jump must never shorten a gate.
+            # ------------------------------------------------------------------
+            pending = list(manifest.ordered_markers)
+            terminal_pending = list(manifest.runtime.terminal)
+            matched: list[tuple[str, int]] = []
+            outcome.terminal_seen = []
+            outcome.forbidden_seen = []
+            # A line is attributed to at most ONE marker, so a terminal pattern can
+            # never double as an ordered marker or the other way round.
+            consumed: set[int] = set()
+            phase_deadline = time.monotonic() + self.marker_timeout_s
+            outcome.gate_phase = 'A'
+            early_exit = False
 
-        def scan_forbidden(line: str, index: int) -> None:
-            for marker in manifest.runtime.forbidden:
-                if marker.id not in outcome.forbidden_seen and marker.matches(line):
-                    outcome.forbidden_seen.append(marker.id)
-                    consumed.add(index)
-                    note(f'marcador PROIBIDO visto: {marker.id}')
-
-        while (pending or terminal_pending) and not outcome.forbidden_seen:
-            remaining = phase_deadline - time.monotonic()
-            if remaining <= 0:
-                outcome.timed_out = True
-                if pending:
-                    note(f'gate fase A: tempo esgotado aguardando {pending[0].id}')
-                else:
-                    note('gate fase B: tempo esgotado aguardando a evidência terminal: '
-                         + ', '.join(marker.id for marker in terminal_pending))
-                break
-            try:
-                index, line = gate.get(timeout=min(remaining, 1.0))
-            except queue.Empty:
-                if handle.wait(0) is not None:
-                    early_exit = True
-                    note('gate: o processo gerenciado encerrou antes da evidência completa')
-                    break
-                continue
-
-            # Forbidden evidence wins over everything, at any point.
-            scan_forbidden(line, index)
-            if outcome.forbidden_seen:
-                break
-            if pending and index not in consumed and pending[0].matches(line):
-                matched.append((pending[0].id, index))
-                consumed.add(index)
-                note(f'marcador {pending[0].id}: OK')
-                pending.pop(0)
-                if not pending:
-                    outcome.gate_phase = 'B'
-                    phase_deadline = time.monotonic() + self.terminal_timeout_s
-                    note('gate fase B: cadeia de inicialização completa; aguardando a '
-                         'evidência terminal do Stage')
-            else:
-                for marker in list(terminal_pending):
-                    if index in consumed:
-                        break
-                    if marker.matches(line):
-                        terminal_pending.remove(marker)
+            def scan_forbidden(line: str, index: int) -> None:
+                for marker in manifest.runtime.forbidden:
+                    if marker.id not in outcome.forbidden_seen and marker.matches(line):
+                        outcome.forbidden_seen.append(marker.id)
                         consumed.add(index)
-                        outcome.terminal_seen.append(marker.id)
-                        note(f'evidência terminal {marker.id}: OK')
-                        break
+                        note(f'marcador PROIBIDO visto: {marker.id}')
 
-        # Evidence is complete, but forbidden evidence must not be dropped just
-        # because it landed a moment later. This drain is BOUNDED (nothing new
-        # is waited for beyond one short window) so it cannot stall the gate,
-        # and it cannot invent evidence either: it only reads lines the child
-        # already wrote.
-        if not outcome.forbidden_seen and not early_exit:
-            drain_until = time.monotonic() + self.forbidden_drain_s
-            while True:
-                remaining = drain_until - time.monotonic()
+            while (pending or terminal_pending) and not outcome.forbidden_seen:
+                remaining = phase_deadline - time.monotonic()
                 if remaining <= 0:
+                    outcome.timed_out = True
+                    if pending:
+                        note(f'gate fase A: tempo esgotado aguardando {pending[0].id}')
+                    else:
+                        note('gate fase B: tempo esgotado aguardando a evidência terminal: '
+                             + ', '.join(marker.id for marker in terminal_pending))
                     break
                 try:
-                    index, line = gate.get(timeout=min(remaining, 0.25))
+                    index, line = gate.get(timeout=min(remaining, 1.0))
                 except queue.Empty:
-                    # Keep waiting until the window closes: an empty queue right
-                    # now says nothing about the next line the child will write.
+                    if handle.wait(0) is not None:
+                        early_exit = True
+                        note('gate: o processo gerenciado encerrou antes da evidência completa')
+                        break
                     continue
+
+                # Forbidden evidence wins over everything, at any point.
                 scan_forbidden(line, index)
                 if outcome.forbidden_seen:
                     break
+                if pending and index not in consumed and pending[0].matches(line):
+                    matched.append((pending[0].id, index))
+                    consumed.add(index)
+                    note(f'marcador {pending[0].id}: OK')
+                    pending.pop(0)
+                    if not pending:
+                        outcome.gate_phase = 'B'
+                        phase_deadline = time.monotonic() + self.terminal_timeout_s
+                        note('gate fase B: cadeia de inicialização completa; aguardando a '
+                             'evidência terminal do Stage')
+                else:
+                    for marker in list(terminal_pending):
+                        if index in consumed:
+                            break
+                        if marker.matches(line):
+                            terminal_pending.remove(marker)
+                            consumed.add(index)
+                            outcome.terminal_seen.append(marker.id)
+                            note(f'evidência terminal {marker.id}: OK')
+                            break
 
-        missing_terminal = [marker.id for marker in terminal_pending]
-        if early_exit:
-            outcome.notes.append(
-                'o processo encerrou antes da evidência completa; nada foi inferido',
-            )
-        try:
+            # Evidence is complete, but forbidden evidence must not be dropped just
+            # because it landed a moment later. This drain is BOUNDED (nothing new
+            # is waited for beyond one short window) so it cannot stall the gate,
+            # and it cannot invent evidence either: it only reads lines the child
+            # already wrote.
+            if not outcome.forbidden_seen and not early_exit:
+                drain_until = time.monotonic() + self.forbidden_drain_s
+                while True:
+                    remaining = drain_until - time.monotonic()
+                    if remaining <= 0:
+                        break
+                    try:
+                        index, line = gate.get(timeout=min(remaining, 0.25))
+                    except queue.Empty:
+                        # Keep waiting until the window closes: an empty queue right
+                        # now says nothing about the next line the child will write.
+                        continue
+                    scan_forbidden(line, index)
+                    if outcome.forbidden_seen:
+                        break
+
+            missing_terminal = [marker.id for marker in terminal_pending]
+            if early_exit:
+                outcome.notes.append(
+                    'o processo encerrou antes da evidência completa; nada foi inferido',
+                )
             # The marker verdict is decided BEFORE any human is involved.
             optional_seen = [
                 marker.id
@@ -497,10 +515,17 @@ class RoundRunner:
                 )
                 note('gate: afirmação visual NÃO perguntada - o gate automático não passou')
         finally:
-            # Always clean up the tree THIS round started - on success, on
-            # marker failure, and on Ctrl+C. Rooted at our own PID only. The
-            # result is RECORDED, because terminate() used to return None and
-            # the caller then asserted a cleanup it had never verified.
+            # OWNERSHIP SCOPE: this finally encloses the ENTIRE gate, from the
+            # instant spawn() returned. Every exit path is covered - phase A
+            # success or timeout, phase B success or timeout, a forbidden
+            # marker, an early child exit, Ctrl+C in either phase, an exception
+            # out of the queue or the marker matching, and an interrupt during
+            # the forbidden-marker drain. The previous version opened the try
+            # only around the reporting section, so anything raised while
+            # waiting for markers leaked the whole Lia process tree.
+            # Rooted at our own PID only; the result is RECORDED, because
+            # terminate() used to return None and the caller then asserted a
+            # cleanup it had never verified.
             teardown = handle.terminate()
             outcome.tree_cleaned = teardown.ok
             outcome.teardown = 'PASS' if teardown.ok else 'FAIL'
@@ -551,7 +576,11 @@ class RoundRunner:
             outcome.stage = 'runtime'
         else:
             outcome.verdict = 'PASS'
-        note(f'verdicto: {outcome.verdict}')
+        note(f'verdicto de runtime: {outcome.verdict}')
+        if outcome.overall_verdict != outcome.verdict:
+            note(f'verdicto geral: {outcome.overall_verdict} '
+                 f'(limpeza da árvore = {outcome.teardown or "N/A"}; '
+                 'evidência de runtime não basta sozinha)')
         if not manifest.ready_for_publish:
             note('round.ready_for_publish=false: esta rodada não está marcada para publicar')
         if outcome.verdict == 'PASS':
@@ -594,8 +623,21 @@ class RoundRunner:
                 'uncommitted_changes': outcome.dirty,
                 'worktree_clean': outcome.dirty == 0,
             },
+            # Two different claims, both persisted. `runtime_verdict` is what
+            # the markers and tests proved; `overall_verdict` is what the
+            # outside world may act on, and it also requires a verified
+            # teardown. A run.json must never be readable as PASS while the
+            # pipeline reports FAIL.
             'verdict': outcome.verdict,
-            'launch': {'pid': outcome.launch_pid, 'tree_cleaned': outcome.tree_cleaned},
+            'runtime_verdict': outcome.verdict,
+            'overall_verdict': outcome.overall_verdict,
+            'launch': {
+                'pid': outcome.launch_pid,
+                'tree_cleaned': outcome.tree_cleaned,
+                'teardown_state': outcome.teardown or 'N/A',
+                'teardown_detail': outcome.teardown_detail,
+                'teardown_descendants': outcome.teardown_descendants,
+            },
             'cleanup': outcome.cleanup,
             'tests': [test.__dict__ for test in outcome.tests],
             'stage': outcome.stage,
@@ -627,12 +669,19 @@ class RoundRunner:
 
 
 def render_report(payload: dict) -> str:
+    # Tolerates a payload written before the two verdicts were split, so an old
+    # run.json still renders instead of raising.
+    runtime_verdict = payload.get('runtime_verdict') or payload.get('verdict', '')
+    overall_verdict = payload.get('overall_verdict') or runtime_verdict
     lines = [
         'DevFlow - relatório de rodada',
         '=' * 40,
         f'rodada      : {payload["round"]["id"]} - {payload["round"]["title"]}',
         f'fase        : {payload["round"]["phase"]}',
-        f'verdicto    : {payload["verdict"]}',
+        f'verdicto runtime : {runtime_verdict}',
+        f'verdicto geral   : {overall_verdict}'
+        + ('' if runtime_verdict == overall_verdict
+           else '  (rebaixado pela limpeza de processo)'),
         f'branch      : {payload["git"]["branch"]}',
         f'HEAD        : {payload["git"]["head_sha"]}',
         f'nao commitadas: {payload["git"]["uncommitted_changes"]}',

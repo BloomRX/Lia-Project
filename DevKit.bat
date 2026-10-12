@@ -97,12 +97,17 @@ rem ---- duplo clique / sem argumentos = BOOTSTRAP + AUTO ---------------------
 rem Nao ha SHIFT aqui. No cmd.exe o SHIFT nao reescreve %*, entao "DevKit.bat
 rem git publish" repassaria o token "git" junto. Quem descarta o primeiro token
 rem e o proprio Python, com a linha de comando original intacta.
-if "%~1"=="" (
-    %RUNPY% "%LIA_DEVKIT_ROOT%tools\lia_dev.py" bootstrap
-    set "LIA_DEVKIT_RC=%ERRORLEVEL%"
-    goto :finish
-)
+rem Fluxo por rotulo, NAO por bloco parentetizado. O cmd.exe expande
+rem %ERRORLEVEL% quando o bloco inteiro e lido, antes de o Python rodar, entao
+rem `if ... ( cmd & set RC=%ERRORLEVEL% )` gravaria o codigo ANTERIOR e um
+rem bootstrap com falha seria reportado como sucesso.
+if not "%~1"=="" goto :with_args
 
+%RUNPY% "%LIA_DEVKIT_ROOT%tools\lia_dev.py" bootstrap
+set "LIA_DEVKIT_RC=%ERRORLEVEL%"
+goto :finish
+
+:with_args
 %RUNPY% "%LIA_DEVKIT_ROOT%tools\lia_dev.py" %*
 set "LIA_DEVKIT_RC=%ERRORLEVEL%"
 goto :finish

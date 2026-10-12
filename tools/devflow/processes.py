@@ -32,6 +32,7 @@ working directory is the repository root passed by the caller.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Iterable
 import os
 from pathlib import Path
 import signal
@@ -80,23 +81,214 @@ class TeardownResult:
     root_terminated: bool = False
     method: str = ''
     detail: str = ''
-    descendants: int = -1  # -1 = this platform cannot tell us
+    # -1 = we could not verify. 0 = verified gone. >0 = verified still alive.
+    descendants: int = -1
+
+    @property
+    def state(self) -> str:
+        """
+        'PASS' | 'FAIL' | 'UNKNOWN'.
+
+        A dead root is NOT proof the tree is gone: the Stage child is
+        reparented to init and keeps running. So PASS requires a dead root AND
+        descendants verified gone. Anything we could not verify stays UNKNOWN
+        and is never laundered into PASS by the caller.
+        """
+        if not self.root_terminated:
+            return 'FAIL'
+        if self.descendants > 0:
+            return 'FAIL'
+        # Unverified is unverified even when the root had already exited on its
+        # own: an early-exiting launcher is exactly when a Stage child is left
+        # running with nobody watching it.
+        if self.descendants < 0:
+            return 'UNKNOWN'
+        return 'PASS'
 
     @property
     def ok(self) -> bool:
-        return self.root_terminated
+        return self.state == 'PASS'
 
     def describe(self) -> str:
-        parts = [self.method or 'sem método registrado']
+        parts = [f'[{self.state}]', self.method or 'sem método registrado']
         if self.detail:
             parts.append(self.detail)
         if self.descendants == 0:
-            parts.append('nenhum descendente vivo')
+            parts.append('descendentes verificados: nenhum vivo')
         elif self.descendants > 0:
-            parts.append(f'ainda há descendente(s) vivo(s): {self.descendants}+')
-        elif self.requested:
-            parts.append('descendentes: desconhecido nesta plataforma')
+            parts.append(f'descendentes verificados: {self.descendants} ainda vivo(s)')
+        else:
+            parts.append('descendentes: NÃO VERIFICADOS')
         return '; '.join(parts)
+
+
+# --------------------------------------------------------------------------
+# Owned-tree verification.
+#
+# A dead root proves nothing about its children: the Stage child survives and
+# is reparented to init. So teardown records the tree BEFORE killing it and
+# then checks those exact PIDs. Nothing here is a guess, and nothing here ever
+# targets a process by image name.
+# --------------------------------------------------------------------------
+STILL_ACTIVE = 259
+
+
+def descendants_from_table(root_pid: int,
+                           table: Iterable[tuple[int, int]]) -> frozenset[int]:
+    """
+    Pure transitive-children walk over a (pid, ppid) table.
+
+    Kept free of platform calls so the traversal - the part that can actually
+    be wrong - is testable on any OS. Cycles and self-parenting are handled
+    because a PID is only ever visited once.
+    """
+    children: dict[int, list[int]] = {}
+    for pid, ppid in table:
+        if pid == ppid:
+            continue
+        children.setdefault(ppid, []).append(pid)
+    seen: set[int] = set()
+    stack = [root_pid]
+    while stack:
+        current = stack.pop()
+        for child in children.get(current, ()):
+            if child in seen or child == root_pid:
+                continue
+            seen.add(child)
+            stack.append(child)
+    return frozenset(seen)
+
+
+def _posix_process_table() -> list[tuple[int, int]]:
+    """(pid, ppid) for every process, from /proc. Raises when unavailable."""
+    proc = Path('/proc')
+    if not proc.is_dir():
+        raise OSError('/proc indisponível')
+    table: list[tuple[int, int]] = []
+    for entry in proc.iterdir():
+        if not entry.name.isdigit():
+            continue
+        try:
+            stat = (entry / 'stat').read_text(encoding='utf-8', errors='replace')
+        except OSError:
+            continue  # the process exited between readdir and read
+        # comm may contain spaces and parentheses, so split from the last ')'.
+        _, _, rest = stat.rpartition(')')
+        fields = rest.split()
+        if len(fields) < 2:
+            continue
+        try:
+            table.append((int(entry.name), int(fields[1])))
+        except ValueError:
+            continue
+    return table
+
+
+def _windows_process_table() -> list[tuple[int, int]]:
+    """
+    (pid, ppid) via a Toolhelp32 snapshot.
+
+    kernel32 only - no WMIC, no PowerShell, no localized output to parse, and
+    available on every Windows the launcher can run on.
+    """
+    import ctypes
+    from ctypes import wintypes
+
+    class PROCESSENTRY32(ctypes.Structure):
+        _fields_ = [
+            ('dwSize', wintypes.DWORD),
+            ('cntUsage', wintypes.DWORD),
+            ('th32ProcessID', wintypes.DWORD),
+            ('th32DefaultHeapID', ctypes.POINTER(ctypes.c_ulong)),
+            ('th32ModuleID', wintypes.DWORD),
+            ('cntThreads', wintypes.DWORD),
+            ('th32ParentProcessID', wintypes.DWORD),
+            ('pcPriClassBase', ctypes.c_long),
+            ('dwFlags', wintypes.DWORD),
+            ('szExeFile', ctypes.c_char * 260),
+        ]
+
+    TH32CS_SNAPPROCESS = 0x2
+    INVALID_HANDLE_VALUE = ctypes.c_void_p(-1).value
+    kernel32 = ctypes.windll.kernel32
+    snapshot = kernel32.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
+    if snapshot == INVALID_HANDLE_VALUE:
+        raise OSError(f'CreateToolhelp32Snapshot falhou: {ctypes.get_last_error()}')
+    table: list[tuple[int, int]] = []
+    try:
+        entry = PROCESSENTRY32()
+        entry.dwSize = ctypes.sizeof(PROCESSENTRY32)
+        if not kernel32.Process32First(snapshot, ctypes.byref(entry)):
+            raise OSError('Process32First falhou')
+        while True:
+            table.append((int(entry.th32ProcessID), int(entry.th32ParentProcessID)))
+            if not kernel32.Process32Next(snapshot, ctypes.byref(entry)):
+                break
+    finally:
+        kernel32.CloseHandle(snapshot)
+    return table
+
+
+def _pid_alive_posix(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True  # it exists, we just may not signal it
+    except OSError:
+        return False
+    return True
+
+
+def _pid_alive_windows(pid: int) -> bool:
+    import ctypes
+    from ctypes import wintypes
+
+    PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+    kernel32 = ctypes.windll.kernel32
+    handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+    if not handle:
+        return False
+    try:
+        code = wintypes.DWORD(0)
+        if not kernel32.GetExitCodeProcess(handle, ctypes.byref(code)):
+            return False
+        return code.value == STILL_ACTIVE
+    finally:
+        kernel32.CloseHandle(handle)
+
+
+def _pid_alive(pid: int) -> bool:
+    return _pid_alive_windows(pid) if os.name == 'nt' else _pid_alive_posix(pid)
+
+
+def snapshot_owned_tree(root_pid: int | None) -> frozenset[int] | None:
+    """
+    The PIDs of the tree rooted at `root_pid`, or None when we cannot tell.
+
+    Called BEFORE killing, because a parent-child map is only meaningful while
+    the parent is still alive to appear in it.
+    """
+    if root_pid is None:
+        return None
+    try:
+        table = _windows_process_table() if os.name == 'nt' else _posix_process_table()
+    except (OSError, AttributeError, ImportError):
+        return None
+    # A snapshot taken after the root died is worthless: its children have
+    # already been reparented, so the walk would find nothing and report "no
+    # descendants" for a tree that is still running.
+    if root_pid not in {pid for pid, _ppid in table}:
+        return None
+    return descendants_from_table(root_pid, table)
+
+
+def count_alive(pids: frozenset[int] | None) -> int:
+    """How many of the recorded PIDs are still alive. None counts as unknown."""
+    if pids is None:
+        return -1
+    return sum(1 for pid in pids if _pid_alive(pid))
 
 
 class OwnedProcess:
@@ -110,6 +302,11 @@ class OwnedProcess:
     def __init__(self, process: subprocess.Popen) -> None:
         self._process = process
         self._pumped = False
+        # Owned-tree identity, captured while the root is unambiguously alive.
+        # The process group is the durable part on POSIX: children inherit it,
+        # and it keeps answering even after the root is reaped.
+        self._pgid = self._process_group(process.pid)
+        self._tree: set[int] = set(snapshot_owned_tree(process.pid) or ())
 
     @property
     def pid(self) -> int | None:
@@ -132,13 +329,28 @@ class OwnedProcess:
         platform can honestly produce.
         """
         result = TeardownResult()
+        pid = self._process.pid
+
+        # Record the tree and the process group BEFORE anything dies. Both are
+        # only meaningful while the root is alive: after we reap it,
+        # os.getpgid(pid) fails with ESRCH even when children still belong to
+        # the group, which is exactly how a surviving Stage child used to be
+        # reported as "nenhum descendente vivo".
+        # Union of every snapshot we managed to take. The one from spawn misses
+        # children created later; the one taken here misses children whose
+        # parent already died. Either alone can under-report.
+        fresh = snapshot_owned_tree(pid)
+        if fresh:
+            self._tree.update(fresh)
+        tree = frozenset(self._tree) if self._tree else None
+        pgid = self._pgid if self._pgid is not None else self._process_group(pid)
+
         if self._process.poll() is not None:
             result.requested = False
             result.root_terminated = True
             result.method = 'já havia encerrado'
-            result.descendants = self._alive_descendants()
+            result.descendants = self._verify_descendants(tree, pgid)
             return result
-        pid = self._process.pid
         if pid is None:
             result.method = 'sem PID para encerrar'
             result.detail = 'o processo gerenciado não expôs PID'
@@ -151,46 +363,67 @@ class OwnedProcess:
             if os.name == 'nt':
                 # Scoped to ONE root PID. /T walks only that process's
                 # descendants; there is no kill-by-image-name anywhere here.
-                ok, killed, detail = self._taskkill(pid)
+                ok, detail = self._taskkill(pid)
                 result.method = 'taskkill /T /F'
                 result.detail = detail
-                if killed >= 0:
-                    result.descendants = killed
-                if not ok and attempt:
-                    break
+                if not ok:
+                    # A failed taskkill is a failure even if the root later dies
+                    # on its own: we did not do the killing.
+                    result.root_terminated = self._process.poll() is not None
+                    result.descendants = self._verify_descendants(tree, pgid)
+                    return result
             else:
                 result.method = 'grupo de processo (SIGTERM/SIGKILL)'
-                self._kill_group(pid, sig)
+                self._kill_group(pgid if pgid is not None else pid, sig)
             try:
                 self._process.wait(timeout=15 if not attempt else 5)
-                result.root_terminated = True
                 break
             except subprocess.TimeoutExpired:
                 continue
         result.root_terminated = self._process.poll() is not None
-        if result.descendants < 0:
-            result.descendants = self._alive_descendants()
+        result.descendants = self._verify_descendants(tree, pgid)
         return result
 
-    def _alive_descendants(self) -> int:
-        """
-        How many processes of the owned group are still alive, or -1 when this
-        platform cannot tell us. Never a guess presented as a count.
-        """
-        pid = self._process.pid
+    @staticmethod
+    def _process_group(pid: int | None) -> int | None:
+        """The process group id, captured while the root is still alive."""
         if pid is None or os.name == 'nt':
+            return None
+        try:
+            return os.getpgid(pid)
+        except (OSError, ProcessLookupError):
+            return None
+
+    def _verify_descendants(self, tree: frozenset[int] | None,
+                            pgid: int | None) -> int:
+        """
+        How many owned descendants are still alive: an exact count, or -1 when
+        this platform could not verify. Never a guess dressed as a count.
+        """
+        if tree is not None:
+            return count_alive(tree)
+        # No tree snapshot: fall back to the recorded group, which can only
+        # answer "gone" or "something is still there" - never a count.
+        if pgid is None:
             return -1
         try:
-            os.killpg(os.getpgid(pid), 0)
+            os.killpg(pgid, 0)
         except ProcessLookupError:
             return 0
         except (OSError, PermissionError):
             return -1
-        return 1  # at least the group still answers; the exact count is unknown
+        return -1
 
     @staticmethod
-    def _taskkill(pid: int) -> tuple[bool, int, str]:
-        """(succeeded, descendants_killed_or_-1, detail). Never a silent pass."""
+    def _taskkill(pid: int) -> tuple[bool, str]:
+        """
+        (succeeded, detail). Never a silent pass.
+
+        The exit status is the only signal taken from taskkill. Its stdout is
+        localized - a pt-BR Windows prints 'EXITO:' where an en-US one prints
+        'SUCCESS:' - so counting a literal string there is not a reliable way
+        to prove how many descendants died, and it is not used.
+        """
         try:
             probe = subprocess.run(
                 ['taskkill', '/PID', str(pid), '/T', '/F'],
@@ -198,20 +431,20 @@ class OwnedProcess:
                 errors='replace', timeout=30, check=False,
             )
         except (OSError, subprocess.SubprocessError) as exc:
-            return False, -1, f'taskkill não pôde ser executado: {type(exc).__name__}'
+            return False, f'taskkill nao pode ser executado: {type(exc).__name__}'
         text = ((probe.stdout or '') + (probe.stderr or '')).strip()
-        killed = text.upper().count('SUCCESS:')
         if probe.returncode != 0:
-            return False, -1, f'taskkill retornou {probe.returncode}: {text[:160]}'
-        return True, killed, f'taskkill encerrou {killed} processo(s)'
+            return False, f'taskkill retornou {probe.returncode}: {text[:160]}'
+        return True, 'taskkill retornou 0'
 
     @staticmethod
-    def _kill_group(pid: int, sig: int) -> None:
+    def _kill_group(target: int, sig: int) -> None:
+        """Signals the recorded group; falls back to the single root PID."""
         try:
-            os.killpg(os.getpgid(pid), sig)
+            os.killpg(target, sig)
         except (OSError, ProcessLookupError):
             try:
-                os.kill(pid, sig)
+                os.kill(target, sig)
             except (OSError, ProcessLookupError):
                 pass
 

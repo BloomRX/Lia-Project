@@ -342,6 +342,74 @@ checkout** — anexo da conversa ou download. Colocá-lo apenas no Git não reso
 não haveria como executá-lo antes do update que ele próprio faz. Ele **não** deve ser
 executado pelo dono do projeto antes da revisão independente do commit final.
 
+## AUTO-1b: o que a segunda auditoria encontrou, e como foi fechado
+
+Uma segunda revisão do commit AUTO-1a encontrou cinco defeitos que continuavam permitindo
+um relatório mais otimista do que a evidência. Todos foram confirmados no código e fechados.
+
+### 1. `DevKit.bat` lia `%ERRORLEVEL%` dentro de bloco parentetizado
+
+O `cmd.exe` expande `%ERRORLEVEL%` quando **lê** o bloco `if ... ( ... )`, não quando o
+executa. O `:dispatch` tinha `if "%~1"=="" ( %RUNPY% ... bootstrap & set "LIA_DEVKIT_RC=%ERRORLEVEL%" )`,
+portanto gravava o código de saída de algo que rodou **antes** do Python — um bootstrap com
+falha era reportado como sucesso. Hoje o fluxo é por rótulo (`goto :with_args` / `:finish`),
+cada chamada ao Python é seguida, na linha seguinte e fora de qualquer bloco, por
+`set "LIA_DEVKIT_RC=%ERRORLEVEL%"`, e `exit /b %LIA_DEVKIT_RC%` é o que sai do script.
+O teste não pergunta "existe uma linha que captura": ele exige que **todo** caminho de
+dispatch capture o código da própria chamada.
+
+### 2. O `finally` do teardown não cobria o gate inteiro
+
+`handle = self.spawn(...)` ficava **fora** do `try`. Qualquer coisa levantada enquanto o gate
+esperava os marcadores — Ctrl+C na fase A ou B, uma exceção no casamento de marcador, um erro
+de fila — vazava a árvore inteira da Lia sem registrar nada. O `try` agora começa na linha
+seguinte ao `spawn()` e o `finally` cobre as duas fases, o dreno de marcadores proibidos e a
+seção de relatório. Três testes levantam exceção de dentro do gate, com entrega de marcador
+atrasada, e exigem `terminate_calls == 1`.
+
+### 3. A evidência de descendentes era colhida tarde demais
+
+O snapshot do grupo de processo era pedido **depois** de a raiz já ter sido colhida, quando o
+filho do Stage já foi reparentado para o init: a resposta era sempre "nenhum descendente", o
+que lia como prova de limpeza e não era. Prova observada antes da correção: um neto criado por
+`fork` sobreviveu e o `TeardownResult` disse `descendants=0`, `ok=True`. Agora a identidade da
+árvore é gravada **no spawn** e unida ao snapshot do teardown, a tabela de processos é lida de
+`/proc` (POSIX) ou do Toolhelp32 via `ctypes` (Windows), e `TeardownResult.state` é
+**tri-estado**: `PASS` exige raiz morta **e** descendentes verificados; descendentes vivos é
+`FAIL`; não verificado é `UNKNOWN` e nunca é lavado em `PASS`. `snapshot_owned_tree` devolve
+`None` (não verificado) e não `frozenset()` (verificado como nenhum) quando a raiz já sumiu.
+
+### 4. Evidência de runtime e posse de processo são afirmações diferentes
+
+`result.result = 'PASS'` nunca consultava `cleanup_state`, e o `run.json` persistia só
+`verdict`. Uma rodada que provou todos os marcadores e deixou Lia + Electron rodando era
+publicada como `PASS`. Hoje `RoundOutcome.overall_verdict` exige teardown `PASS`, o passo
+**8b** do `pipeline` retorna `FAIL` quando `cleanup_state ∈ {FAIL, UNKNOWN}` **antes** de
+qualquer publicação, e o `run.json` grava os dois: `runtime_verdict` (o que os marcadores e
+testes provaram) e `overall_verdict` (o que alguém de fora pode usar). O `REPORT.txt` imprime
+as duas linhas e o `Process cleanup:` aparece também no caminho de falha — antes o bloco
+`FAIL` só imprimia `Stage`/`Reason` e escondia o fato da limpeza.
+
+Uma consequência direta: `result.runtime_ok` voltou a ler `round_outcome.verdict`, não
+`overall_verdict`. E o desvio de falha do pipeline testa o veredito de **runtime**: com
+`is_pass` ali, uma falha de limpeza entrava no ramo que culpa o runtime e imprimia
+`Stage: runtime / o gate de runtime não provou o necessário` sobre evidência que passou.
+
+### 5. O bootstrap de transição aceitava identidade por substring
+
+`findstr /I /C:"github.com"` e `/C:"BloomRX/Lia-Project"` são comparações por substring:
+`github.com.evil.com` e `BloomRX/Lia-Project-evil` passavam. Além disso a URL do remote era
+gravada num `%TEMP%\lia-upgrade-url.txt` de nome fixo, impressa com `type` na recusa (uma URL
+pode carregar credencial embutida) e o `del` só existia no caminho de sucesso.
+
+Hoje a identidade é **igualdade exata** contra seis formas canônicas completas
+(`https://`, `ssh://git@`, `git@github.com:`, com e sem `.git`), a URL é capturada em
+variável e **nunca** é impressa, gravada ou ecoada, nenhum arquivo temporário é criado (o
+`status --porcelain -uall` é lido por `for /f`, sem arquivo), o placeholder
+`PLACEHOLDER-REVIEWED-SHA` é recusado, e o SHA **resultante** é relido com `rev-parse HEAD` e
+comparado — `merge --ff-only` sair com 0 não prova onde o checkout parou, e é desse checkout
+que o DevKit novo vai carregar código.
+
 ## Segurança
 
 - nenhum `git clean`, `git reset --hard`, force-push ou recursão fora de allowlist;
@@ -482,6 +550,10 @@ limpo. Não há contradição: `run.json` prova o que foi testado; o manifesto d
 - **O entrypoint humano é `DevKit.bat` e duplo clique significa AUTO.** `Lia.bat` passou a
   entrypoint interno/de runtime (o DevFlow o invoca por manifesto); os demais BAT/PS1
   históricos permanecem internos até o D3, que fará as fusões/remoções.
+- **AUTO-1b** fecha os cinco defeitos da segunda auditoria: o `%ERRORLEVEL%` expandido no
+  parse do `:dispatch`, o `finally` que não cobria o gate, o snapshot de descendentes colhido
+  depois de a raiz morrer, o PASS que ignorava `cleanup_state`, e a identidade por substring
+  do bootstrap de transição. Nenhum arquivo de produto mudou.
 - **AUTO-1a** corrige os defeitos auditados do AUTO-1 antes da primeira execução real:
   a raiz perdida na cópia em `%TEMP%`, o gate que parava de esperar a evidência terminal, a
   identidade de repositório por substring, o `git add -A`, a semântica de fast-forward, o
