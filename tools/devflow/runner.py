@@ -35,7 +35,7 @@ from .markers import MarkerReport, evaluate_markers
 from .report import (SanitizedLog, prune_runs, run_dir, sanitize_console,
                      sanitize_test_output, utc_stamp, write_run)
 from .sync import git_executable
-from .schema import Round
+from .schema import DEFAULT_TEST_TIMEOUT_S, Round
 
 
 class RoundAborted(RuntimeError):
@@ -115,9 +115,17 @@ class RoundOutcome:
         return 'PASS'
 
 
-def run_test_command(argv: list[str], cwd: Path) -> tuple[int, str]:
+def run_test_command(argv: list[str], cwd: Path,
+                     timeout_s: float = DEFAULT_TEST_TIMEOUT_S) -> tuple[int, str]:
     """
     Runs one declared test. A missing tool is reported as failure, not pass.
+
+    `timeout_s` comes from the round manifest, because the honest budget for a
+    suite is a property of that suite and of the machine, not a constant baked
+    into the runner. The first real Windows run of M3.0b proved it: the DevFlow
+    suite spawns ~1800 git processes and the fixed 1800 s expired mid-run, so
+    the gate reported "FALHOU (exit 127)" for a suite that was merely still
+    working - indistinguishable from a hang.
 
     The returned detail is already bounded and redacted by the ONE test-output
     sanitizer, because this same string is echoed to the console, stored in
@@ -127,7 +135,15 @@ def run_test_command(argv: list[str], cwd: Path) -> tuple[int, str]:
     """
     try:
         probe = subprocess.run(argv, cwd=cwd, capture_output=True, text=True,
-                               encoding='utf-8', errors='replace', timeout=1800)
+                               encoding='utf-8', errors='replace', timeout=timeout_s)
+    except subprocess.TimeoutExpired as exc:
+        # A timeout is a timeout, not a mystery: name the budget that expired so
+        # the report distinguishes "ran out of budget" from "crashed".
+        return 124, sanitize_test_output(
+            '', f'TimeoutExpired: o teste excedeu o orçamento declarado de '
+                f'{timeout_s:.0f}s. Não é uma trava: é orçamento. '
+                f'Aumente tests[].timeout_s no manifesto da rodada se o '
+                f'trabalho for legítimo nesta máquina.')
     except (OSError, subprocess.SubprocessError) as exc:
         return 127, sanitize_test_output('', f'{type(exc).__name__}: {exc}')
     return probe.returncode, sanitize_test_output(probe.stdout or '', probe.stderr or '')
@@ -331,7 +347,7 @@ class RoundRunner:
                 note(f'teste {spec.id}: PULADO (diretório ausente) - não conta como sucesso')
                 decision = 'refused'
                 continue
-            code, raw = self._invoke(argv, cwd)
+            code, raw = self._invoke(argv, cwd, spec.timeout_s)
             status = 'pass' if code == 0 else 'fail'
             # Sanitised HERE, at the persistence boundary, and not only inside
             # the default invoker: no pluggable invoker and no future call path
@@ -348,8 +364,15 @@ class RoundRunner:
                     note(f'  detalhe: {detail_line}')
         return decision
 
-    def _invoke(self, argv: list[str], cwd: Path) -> tuple[int, str]:
-        return self.invoke_test(argv, cwd)
+    def _invoke(self, argv: list[str], cwd: Path,
+                timeout_s: float = DEFAULT_TEST_TIMEOUT_S) -> tuple[int, str]:
+        # `invoke_test` is a two-argument seam so tests can inject a fake. Only
+        # the real invoker has a wall-clock budget to honour, so the declared
+        # timeout is passed to it and to nothing else.
+        invoker = self.invoke_test
+        if invoker is run_test_command:
+            return invoker(argv, cwd, timeout_s)
+        return invoker(argv, cwd)
 
     def _launch_and_gate(self, outcome: RoundOutcome, note: Callable[[str], None]) -> None:
         # No early return here: a refused round never reaches this method, it

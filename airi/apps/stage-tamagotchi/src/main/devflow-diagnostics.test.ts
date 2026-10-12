@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url'
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { normalizeLineEndings } from '../test-helpers'
 import {
   __resetLiaDevflowMarksForTest,
   LIA_DEVFLOW_APP_MOUNTED_CHANNEL,
@@ -21,8 +22,17 @@ vi.mock('electron', () => ({ ipcMain: { on: (...args: unknown[]) => on(...args) 
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 
+/**
+ * Reads a sibling source file for a source-scan assertion.
+ *
+ * Line endings are normalised because a Windows checkout materialises CRLF.
+ * An assertion that embeds a real newline - `toContain('... () => {\n    ...')` -
+ * silently fails against CRLF even though the code it describes is correct.
+ * That is a checkout artefact, not a product defect, and it must not be able to
+ * fail the runtime gate.
+ */
 function readHere(...parts: string[]): string {
-  return readFileSync(join(HERE, ...parts), 'utf-8')
+  return normalizeLineEndings(readFileSync(join(HERE, ...parts), 'utf-8'))
 }
 
 /**
@@ -166,6 +176,20 @@ describe('the markers are wired to the facts they claim', () => {
     expect(shownAt).toBeGreaterThan(-1)
     expect(visibleAt, 'window=visible must follow show()').toBeGreaterThan(shownAt)
     expect(source).toContain('window.webContents.on(\'did-finish-load\', () => {\n    liaDevflowMark(\'renderer=ready\')')
+  })
+
+  it('a CRLF checkout cannot break a newline-bearing source assertion', () => {
+    // REGRESSION - first real Windows run of M3.0b. Git materialises CRLF on a
+    // Windows checkout, and this repo has no .gitattributes pinning LF, so the
+    // assertion above was comparing an LF-only literal against CRLF bytes and
+    // failed there while passing on every POSIX machine. readHere() now
+    // normalises; this proves that normalisation is load-bearing rather than
+    // incidental, so removing it fails here instead of on the owner's machine.
+    const crlf = readHere('windows', 'main', 'index.ts').replace(/\n/g, '\r\n')
+    const needle = 'window.webContents.on(\'did-finish-load\', () => {\n    liaDevflowMark(\'renderer=ready\')'
+    expect(crlf).toContain('\r\n')
+    expect(crlf).not.toContain(needle)
+    expect(normalizeLineEndings(crlf)).toContain(needle)
   })
 
   it('avatar-scene=mounted is only reachable from the renderer bridge', () => {

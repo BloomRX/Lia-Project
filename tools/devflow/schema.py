@@ -39,12 +39,27 @@ class CleanupProfile:
     allowlisted_generated: tuple[str, ...]
 
 
+#: Default wall-clock budget for one declared test command, in seconds.
+#:
+#: It is a DEFAULT, not a policy. A suite that legitimately needs longer on a
+#: slow platform must declare its own `timeout_s` in the round manifest; the
+#: alternative is a hidden ceiling that turns "slow" into "failed" with no
+#: diagnosis. Measured on the first real Windows run of M3.0b: the DevFlow
+#: suite spawns ~1800 git processes, and Windows process creation plus
+#: real-time scanning made the default 1800 s expire mid-run.
+DEFAULT_TEST_TIMEOUT_S = 1800.0
+
+#: Hard ceiling a manifest may declare. Nothing here should need an hour.
+MAX_TEST_TIMEOUT_S = 7200.0
+
+
 @dataclass(frozen=True)
 class RoundTest:
     id: str
     label: str
     cwd: str
     argv: tuple[str, ...]
+    timeout_s: float = DEFAULT_TEST_TIMEOUT_S
 
 
 @dataclass(frozen=True)
@@ -241,12 +256,20 @@ def validate_round(data: Any, source: Path | None = None) -> Round:
     tests: list[RoundTest] = []
     for index, item in enumerate(_require(data, 'tests', 'manifesto')):
         where = f'tests[{index}]'
-        _reject_unknown(item, {'id', 'label', 'cwd', 'argv'}, where)
+        _reject_unknown(item, {'id', 'label', 'cwd', 'argv', 'timeout_s'}, where)
+        raw_timeout = item.get('timeout_s', DEFAULT_TEST_TIMEOUT_S)
+        if not isinstance(raw_timeout, (int, float)) or isinstance(raw_timeout, bool) \
+                or not raw_timeout > 0:
+            raise RoundSchemaError(f'{where}.timeout_s precisa ser um número de segundos > 0')
+        if raw_timeout > MAX_TEST_TIMEOUT_S:
+            raise RoundSchemaError(
+                f'{where}.timeout_s={raw_timeout} excede o teto de {MAX_TEST_TIMEOUT_S}s')
         tests.append(RoundTest(
             id=_as_str(_require(item, 'id', where), f'{where}.id'),
             label=_as_str(_require(item, 'label', where), f'{where}.label'),
             cwd=_as_str(_require(item, 'cwd', where), f'{where}.cwd'),
             argv=_as_str_tuple(_require(item, 'argv', where), f'{where}.argv'),
+            timeout_s=float(raw_timeout),
         ))
 
     launch = _require(data, 'launch', 'manifesto')

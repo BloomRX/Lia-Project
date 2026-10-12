@@ -31,7 +31,8 @@
       "argv": [
         "python",
         "tools/test_lia_dev.py"
-      ]
+      ],
+      "timeout_s": 3600
     },
     {
       "id": "lia-app",

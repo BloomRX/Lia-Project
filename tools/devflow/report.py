@@ -99,6 +99,24 @@ _DETAIL_PREFIXES = (
     'FAIL:', 'ERROR:', 'FAILED', 'Ran ', 'Traceback (most recent call last)',
     'AssertionError', 'AssertionError:', 'assert', 'raise ',
 )
+# Lines that carry a vitest/unittest failure IDENTITY. The first real Windows
+# run of M3.0b lost the name of the failing test entirely: `_DETAIL_PREFIXES`
+# knew about Python's `FAIL:` but not about vitest's `FAIL ` / `x` / `>` markers,
+# while the loose `Error` token happily kept the source frames around it. The
+# budget filled up with `91|  throw new Error(...)` and the one line that says
+# WHAT failed never made it into the report - which made the failure
+# undiagnosable, the worst possible outcome for a gate.
+_DETAIL_PREFIXES = _DETAIL_PREFIXES + (
+    'FAIL ', 'FAIL\t', '❌', '✖', '×', '❏', '❯', '›',
+    'Test Files ', 'Tests  ', 'Unhandled ', 'Serialized Error',
+    'Expected', 'Received', '→ ',
+)
+
+#: A vitest/vite source frame: `91|  throw new Error(...)`, or the blank
+#: `   |` gutter beside it. Useful context, but never more important than the
+#: line that names the failing test, so it is kept only as tail filler.
+_CODE_FRAME_RE = re.compile(r'^\s*\d*\s*\|')
+
 _DETAIL_TOKENS = ('Error', 'Exception', 'failed', 'falhou', 'Falhou')
 
 
@@ -121,6 +139,11 @@ def _is_conversation(line: str) -> bool:
 def _is_detail_line(line: str) -> bool:
     stripped = line.strip()
     if not stripped:
+        return False
+    # A source frame is context, not identity: `91|  throw new Error(...)`
+    # matches the `Error` token and would otherwise push the test name out of
+    # the budget. Demote it so it only survives as tail filler.
+    if _CODE_FRAME_RE.match(line):
         return False
     if stripped.startswith(_DETAIL_PREFIXES):
         return True

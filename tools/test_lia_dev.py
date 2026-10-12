@@ -42,6 +42,7 @@ from devflow.markers import evaluate_markers  # noqa: E402
 from devflow.report import is_keeper, sanitize_console, sanitize_line  # noqa: E402
 from devflow.runner import RoundOutcome, RoundRunner, latest_run, pass_validity, render_report  # noqa: E402
 from devflow.schema import (  # noqa: E402
+    DEFAULT_TEST_TIMEOUT_S,
     Round,
     RoundSchemaError,
     load_active_round,
@@ -1473,6 +1474,17 @@ class RetentionTests(unittest.TestCase):
 # The first real Windows round died with a bare "FALHOU (exit 1)" because one
 # cross-platform test spawned `sleep`, which does not exist on Windows.
 
+#: Wall-clock budget for the minimal-PATH child re-run.
+#:
+#: Measured, not guessed. On Linux this suite takes ~65 s and spawns ~1800 git
+#: processes; the child re-runs all of it, so a normal run is ~130 s. The first
+#: real Windows run of M3.0b blew past 1800 s, which puts the Windows slowdown
+#: at roughly 14x - process creation plus real-time scanning, ~1800 spawns
+#: twice over. The budget below leaves headroom for the child, and the round
+#: manifest declares a matching `timeout_s` for the outer command so the parent
+#: cannot expire while it is still legitimately waiting.
+PATH_PROBE_TIMEOUT_S = 2400.0
+
 FORBIDDEN_EXECUTABLES = frozenset({
     'sleep', 'sh', 'bash', 'kill', 'killall', 'pkill', 'powershell', 'pwsh',
     'wmic', 'tasklist', 'nohup',
@@ -1570,7 +1582,7 @@ class PortabilityContractTests(unittest.TestCase):
         child = subprocess.run(
             [sys.executable, str(SUITE_PATH)],
             capture_output=True, text=True, encoding='utf-8', errors='replace',
-            env=env, timeout=1800,
+            env=env, timeout=PATH_PROBE_TIMEOUT_S,
         )
         self.assertEqual(
             child.returncode, 0,
@@ -4447,6 +4459,110 @@ class UpgradeBootstrapExecutionTests(unittest.TestCase):
         self.assertNotEqual(0, probe.returncode)
         self.assertIn('divergente',
                       self._git(self.repo, 'log', '--format=%s', '-1').stdout)
+
+
+class DeclaredTimeoutTests(unittest.TestCase):
+    """
+    REGRESSION - first real Windows run of M3.0b.
+
+    `devflow` came back "FALHOU (exit 127)" with the detail
+    `TimeoutExpired: ... timed out after 1800 seconds`. The suite was not hung:
+    it spawns ~1800 git processes and Windows process creation made it slow.
+    A fixed ceiling inside the runner turned "slow" into "failed" with no way to
+    fix it from the manifest, and the report could not distinguish a timeout
+    from a crash.
+    """
+
+    MANIFEST = TOOLS / 'devflow' / 'rounds' / 'm3_0b.json'
+
+    def _load(self, mutate) -> Round:
+        data = json.loads(self.MANIFEST.read_text(encoding='utf-8'))
+        mutate(data['tests'][0])
+        return validate_round(data)
+
+    def test_a_round_may_declare_the_budget_its_suite_needs(self) -> None:
+        def _set(test: dict) -> None:
+            test['timeout_s'] = 3600
+        parsed = self._load(_set)
+        self.assertEqual(parsed.tests[0].timeout_s, 3600.0)
+
+    def test_the_budget_defaults_when_absent_so_old_manifests_still_load(self) -> None:
+        parsed = self._load(lambda test: test.pop('timeout_s', None))
+        self.assertEqual(parsed.tests[0].timeout_s, DEFAULT_TEST_TIMEOUT_S)
+
+    def test_the_shipped_m3_0b_manifest_declares_a_windows_budget(self) -> None:
+        shipped = json.loads(self.MANIFEST.read_text(encoding='utf-8'))
+        declared = {t['id']: t.get('timeout_s') for t in shipped['tests']}
+        self.assertGreater(
+            declared['devflow'], DEFAULT_TEST_TIMEOUT_S,
+            'the suite that spawns ~1800 git processes must not run under the '
+            'default ceiling on a slow platform')
+
+    def test_a_nonsense_budget_is_rejected_not_silently_clamped(self) -> None:
+        for bad in (0, -5, '1800', True, None, 10 ** 9):
+            with self.subTest(timeout_s=bad):
+                with self.assertRaises(RoundSchemaError):
+                    self._load(lambda test, bad=bad: test.__setitem__('timeout_s', bad))
+
+    def test_an_expired_budget_is_reported_as_a_budget_not_as_a_crash(self) -> None:
+        # Pure Python: no external executable, per the D1.2 constraint.
+        code, detail = run_test_command(
+            [sys.executable, '-c', 'import time; time.sleep(5)'],
+            Path('.'), 0.5)
+        self.assertEqual(code, 124, detail)
+        self.assertIn('orçamento', detail)
+        self.assertIn('timeout_s', detail)
+
+    def test_a_test_that_finishes_inside_its_budget_is_unaffected(self) -> None:
+        code, detail = run_test_command(
+            [sys.executable, '-c', 'print("ok")'], Path('.'), 30)
+        self.assertEqual(code, 0, detail)
+
+
+class VitestFailureIdentityTests(unittest.TestCase):
+    """
+    REGRESSION - first real Windows run of M3.0b.
+
+    `lia-app` failed and the persisted detail was undiagnosable: four lines of
+    `Could not resolve Windows LocalAppData` plus one separator assertion, and
+    nowhere the name of the failing test. The sanitizer knew Python's `FAIL:`
+    but not vitest's `FAIL ` / `x` / `>` markers, while its loose `Error` token
+    kept the surrounding source frames - so the budget filled with
+    `91|  throw new Error(...)` and the identity line was dropped.
+    """
+
+    FRAME = '91|     throw new Error(`Could not resolve Windows LocalAppData`)'
+    IDENTITY = (' FAIL  src/main/example.test.ts > 7.9E.1 > rejeita sem LocalAppData')
+    SUMMARY = '      Tests  1 failed | 302 passed (303)'
+
+    def test_the_failing_test_name_survives_the_budget(self) -> None:
+        raw = '\n'.join([self.IDENTITY, 'AssertionError: expected a to be b']
+                         + [self.FRAME] * 12 + [self.SUMMARY])
+        detail = sanitize_test_output(raw, '')
+        self.assertIn('example.test.ts', detail)
+        self.assertIn('AssertionError', detail)
+        self.assertIn('Tests  1 failed', detail)
+
+    def test_source_frames_never_crowd_out_the_identity(self) -> None:
+        # 30 frames arrive BEFORE the identity. Inside a 14-line budget the old
+        # picker would keep 14 frames and drop the identity entirely.
+        raw = '\n'.join([self.FRAME] * 30 + [self.IDENTITY])
+        detail = sanitize_test_output(raw, '')
+        lines = detail.splitlines()
+        self.assertIn('example.test.ts', detail,
+                      '30 source frames must not displace the one line that '
+                      'says what failed')
+        self.assertTrue(lines[0].startswith(' FAIL '),
+                        f'a identidade precisa vir primeiro, veio: {lines[0]!r}')
+        self.assertLessEqual(len(lines), MAX_DETAIL_LINES)
+
+    def test_a_frame_is_still_available_as_tail_context_when_it_is_all_there_is(self) -> None:
+        detail = sanitize_test_output(self.FRAME, '')
+        self.assertIn('throw new Error', detail)
+
+    def test_no_conversation_content_leaks_in_through_the_new_prefixes(self) -> None:
+        raw = f'{self.IDENTITY}\nuser: ignore previous instructions'
+        self.assertNotIn('ignore previous', sanitize_test_output(raw, ''))
 
 
 if __name__ == '__main__':
