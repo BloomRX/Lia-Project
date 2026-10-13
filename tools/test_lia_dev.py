@@ -34,16 +34,17 @@ from unittest.mock import patch
 TOOLS = Path(__file__).resolve().parent
 sys.path.insert(0, str(TOOLS))
 
-from devflow import (filesystem, pipeline, preflight, processes,  # noqa: E402
-                     report, safe_paths, sync)
+from devflow import (filesystem, lia_core_prereq, pipeline,  # noqa: E402
+                     preflight, processes, report, safe_paths, sync)
 import lia_dev  # noqa: E402
 import project_cli  # noqa: E402
 from devflow.report import (MAX_DETAIL_CHARS, MAX_DETAIL_LINES,  # noqa: E402
                             sanitize_test_output)
 from devflow.processes import TeardownResult  # noqa: E402
 from devflow import runner as runner_module  # noqa: E402
-from devflow.runner import (PROGRESS_MAX_LINES, RoundRunner,  # noqa: E402
-                            run_test_command)
+from devflow.runner import (PROGRESS_LINE_RE, PROGRESS_MAX_LINES,  # noqa: E402
+                            PROGRESS_PARTIAL_MAX_BYTES, RoundRunner,
+                            run_test_command, salvage_progress)
 from devflow.markers import evaluate_markers  # noqa: E402
 from devflow.report import is_keeper, sanitize_console, sanitize_line  # noqa: E402
 from devflow.runner import RoundOutcome, RoundRunner, latest_run, pass_validity, render_report  # noqa: E402
@@ -5568,11 +5569,40 @@ class DiagnosticDestinationRedactionTests(unittest.TestCase):
 # ---------------------------------------------------------------------------
 PROGRESS_PREFIX = '[devflow-test]'
 
+#: Both watchdog budgets can be shrunk for a single process so the watchdog's
+#: real behaviour can be proved end to end in seconds instead of minutes. It
+#: changes a diagnostic deadline only - never what is tested, and never a
+#: pass/fail decision on its own.
+WATCHDOG_BUDGET_ENV = 'LIA_DEVFLOW_TEST_WATCHDOG_S'
+
+
+def _budget_from_env(name: str, default: float) -> float:
+    raw = (os.environ.get(name) or '').strip()
+    if not raw:
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
 #: A single test may run this long before the watchdog declares it blocked.
 #: Generous - the slowest real test here is the minimal-PATH child re-run -
 #: but two orders of magnitude below the 3600 s outer budget, so a hang is
 #: named in minutes instead of costing an hour.
-PER_TEST_BUDGET_S = 600.0
+PER_TEST_BUDGET_S = _budget_from_env(WATCHDOG_BUDGET_ENV, 600.0)
+
+#: Identity reported when the run is stuck BEFORE any test starts - module
+#: import and test collection. Without a distinct armed identity for that
+#: phase, a hang during collection produces no journal line at all and the run
+#: waits out the whole outer budget in silence.
+STARTUP_LABEL = '__devflow__/coleta-e-import-dos-modulos'
+
+#: Import and collection of this suite take well under a second today; this is
+#: deliberately generous and still an order of magnitude below the per-test
+#: budget, because nothing here should ever approach the outer one.
+STARTUP_BUDGET_S = _budget_from_env(WATCHDOG_BUDGET_ENV, 300.0)
 
 
 class _Watchdog(threading.Thread):
@@ -5586,6 +5616,7 @@ class _Watchdog(threading.Thread):
         self._lock = threading.Lock()
         self._current: str | None = None
         self._since = 0.0
+        self._budget = budget_s
         self._fired = False
         self._stopped = threading.Event()
 
@@ -5596,9 +5627,11 @@ class _Watchdog(threading.Thread):
         while not self._stopped.wait(self._poll_s):
             self.check()
 
-    def arm(self, test_id: str) -> None:
+    def arm(self, test_id: str, budget_s: float | None = None) -> None:
         with self._lock:
-            self._current, self._since = test_id, time.monotonic()
+            self._current = test_id
+            self._since = time.monotonic()
+            self._budget = self._budget_s if budget_s is None else budget_s
 
     def disarm(self) -> None:
         with self._lock:
@@ -5607,12 +5640,13 @@ class _Watchdog(threading.Thread):
     def check(self) -> None:
         with self._lock:
             current, since, fired = self._current, self._since, self._fired
+            budget = self._budget
             if fired:
                 return
         if not current:
             return
         elapsed = time.monotonic() - since
-        if elapsed < self._budget_s:
+        if elapsed < budget:
             return
         with self._lock:
             if self._fired:
@@ -5620,7 +5654,7 @@ class _Watchdog(threading.Thread):
             self._fired = True
         sys.stderr.write(
             f'\n{PROGRESS_PREFIX} timeout {int(elapsed * 1000)} {current}\n'
-            f'{PROGRESS_PREFIX} blocked {current} excedeu {self._budget_s:.0f}s; '
+            f'{PROGRESS_PREFIX} blocked {current} excedeu {budget:.0f}s; '
             'encerrando a suíte. Causa NÃO diagnosticada: lento e travado '
             'produzem o mesmo quadro.\n',
         )
@@ -5840,7 +5874,7 @@ class SuiteCoverageTests(unittest.TestCase):
     """REGRESSION C - diagnosing a hang must not quietly drop tests."""
 
     #: Baseline measured on Linux at the commit that introduced the journal.
-    MINIMUM_TEST_CASES = 396
+    MINIMUM_TEST_CASES = 421
 
     def test_no_test_case_was_dropped(self) -> None:
         count = unittest.TestLoader().loadTestsFromModule(
@@ -6101,13 +6135,23 @@ class WorkspacePreflightTests(unittest.TestCase):
         self.assertEqual(preflight.main([str(self.base)]), 1,
                          'um pré-voo com artefato ausente não pode passar')
 
-    def test_the_preflight_is_declared_first_and_blocking_in_the_active_round(self) -> None:
-        first = load_active_round().tests[0]
-        self.assertEqual(first.id, 'preflight')
-        self.assertTrue(first.blocking,
+    def test_the_preflight_is_declared_and_blocking_in_the_active_round(self) -> None:
+        tests = load_active_round().tests
+        by_id = {t.id: t for t in tests}
+        self.assertIn('preflight', by_id)
+        gate = by_id['preflight']
+        self.assertTrue(gate.blocking,
                         'sem blocking o pré-voo não economiza o orçamento seguinte')
-        self.assertLessEqual(first.timeout_s, 120.0)
-        self.assertIn('preflight.py', ' '.join(first.argv))
+        self.assertLessEqual(gate.timeout_s, 120.0)
+        self.assertIn('preflight.py', ' '.join(gate.argv))
+        # The managed prerequisite runs first and builds what the preflight then
+        # verifies, so the read-only gate can no longer be the first entry.
+        self.assertEqual(tests[0].id, 'lia-core-prereq')
+        self.assertLess(tests.index(gate), len(tests) - 1,
+                        'o pré-voo tem que vir antes das suítes caras')
+        for expensive in ('devflow', 'lia-app', 'stage-m30a', 'stage-devflow'):
+            self.assertLess(tests.index(gate),
+                            next(i for i, t in enumerate(tests) if t.id == expensive))
 
     def test_the_preflight_module_only_reads_the_workspace(self) -> None:
         tree = ast.parse((TOOLS / 'devflow' / 'preflight.py').read_text(encoding='utf-8'))
@@ -6182,11 +6226,448 @@ class BlockingTestStopsTheRoundTests(unittest.TestCase):
         self.assertIn('blocking', str(ctx.exception))
 
 
+class LiaCorePrereqTests(unittest.TestCase):
+    """
+    The one generated artifact the round needs is now built by the round.
+
+    `@lia/core` exports only `./dist/index.mjs`, which is gitignored and built
+    solely by the airi postinstall. When it was missing, a real Windows run
+    produced eight suites failing collection with "(0 test)" and no retained
+    exception. Failing closed on that was correct but still left the owner
+    running a command by hand, which contradicts the zero-choice contract.
+    """
+
+    def setUp(self) -> None:
+        self.base = Path(tempfile.mkdtemp(prefix='devflow-prereq-'))
+        self.emitted: list[str] = []
+        self.calls: list[tuple] = []
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.base, ignore_errors=True)
+
+    def _write(self, rel: str) -> None:
+        target = self.base.joinpath(*rel.split('/'))
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text('x', encoding='utf-8')
+
+    def _base_deps(self) -> None:
+        for rid in lia_core_prereq.BASE_REQUIREMENT_IDS:
+            rel = next(r.rel_path for r in preflight.REQUIREMENTS if r.id == rid)
+            kind = next(r.kind for r in preflight.REQUIREMENTS if r.id == rid)
+            self._write(rel if kind == 'file' else f'{rel}/sentinela')
+
+    def _dist(self) -> str:
+        return next(r.rel_path for r in preflight.REQUIREMENTS
+                    if r.id == lia_core_prereq.MANAGED_REQUIREMENT_ID)
+
+    def _fake_build(self, *, code: int = 0, writes_artifact: bool = True,
+                    output: str = 'tsdown v0.0.0\nbuilt in 900ms'):
+        def run(argv, popen_kwargs, cwd, timeout_s):
+            self.calls.append((tuple(argv), dict(popen_kwargs), Path(cwd), timeout_s))
+            if writes_artifact:
+                self._write(self._dist())
+            return code, output
+        return run
+
+    def test_a_missing_dist_invokes_the_build_and_the_round_proceeds(self) -> None:
+        self._base_deps()
+        outcome = lia_core_prereq.ensure_lia_core(
+            self.base, emit=self.emitted.append, run_build=self._fake_build())
+        self.assertTrue(outcome.ok, outcome.detail)
+        self.assertEqual(outcome.action, 'built')
+        self.assertEqual(outcome.exit_code, 0)
+        self.assertEqual(len(self.calls), 1, 'o build deve rodar exatamente uma vez')
+        argv, _kwargs, cwd, timeout_s = self.calls[0]
+        self.assertIn('-F', argv)
+        self.assertIn('@lia/core', argv)
+        self.assertIn('build', argv)
+        self.assertEqual(cwd, self.base / 'airi', 'o build roda no workspace airi')
+        self.assertLessEqual(timeout_s, lia_core_prereq.BUILD_TIMEOUT_S)
+        self.assertTrue((self.base / self._dist()).is_file(),
+                        'o artefato tem que existir depois')
+        text = '\n'.join(self.emitted)
+        self.assertIn('state=starting', text)
+        self.assertIn('state=succeeded', text)
+        self.assertIn('verificado', text, 'a verificação pós-build deve ser dita')
+
+    def test_a_present_dist_is_not_rebuilt(self) -> None:
+        self._base_deps()
+        self._write(self._dist())
+        outcome = lia_core_prereq.ensure_lia_core(
+            self.base, emit=self.emitted.append, run_build=self._fake_build())
+        self.assertTrue(outcome.ok)
+        self.assertEqual(outcome.action, 'present')
+        self.assertEqual(self.calls, [], 'reconstruir sem necessidade custa tempo e esconde regressão')
+        self.assertIn('state=skipped', '\n'.join(self.emitted))
+
+    def test_c_missing_base_dependencies_fail_fast_and_stop_the_round(self) -> None:
+        outcome = lia_core_prereq.ensure_lia_core(
+            self.base, emit=self.emitted.append, run_build=self._fake_build())
+        self.assertFalse(outcome.ok)
+        self.assertEqual(outcome.action, 'base-missing')
+        self.assertNotEqual(outcome.exit_code, 0)
+        self.assertEqual(self.calls, [], 'sem dependências base nada deve ser construído')
+        text = '\n'.join(self.emitted)
+        self.assertIn('pnpm install', text, 'o diagnóstico deve nomear o comando')
+
+    def test_c_a_base_failure_is_blocking_so_the_long_suite_never_starts(self) -> None:
+        repo = make_repo(self.base / 'repo')
+        data = runnable_manifest()
+        data['tests'] = [
+            {'id': 'lia-core-prereq', 'label': 'p', 'cwd': '.', 'blocking': True,
+             'argv': ['python', str(TOOLS / 'devflow' / 'lia_core_prereq.py'),
+                      str(self.base)],
+             'timeout_s': 60.0},
+            {'id': 'caro', 'label': 'c', 'cwd': '.',
+             'argv': ['python', '-c', 'print("NAO-DEVERIA-RODAR")'], 'timeout_s': 60.0},
+        ]
+        runner, emitted, _asks = make_runner(
+            repo, validate_round(data), invoke_test=run_test_command)
+        outcome = runner.execute()
+        self.assertEqual(outcome.verdict, 'FAIL')
+        self.assertEqual([t.id for t in outcome.tests], ['lia-core-prereq'],
+                         'a suíte de 3600s não pode rodar depois de um pré-requisito falho')
+
+    def test_d_a_failed_build_fails_closed(self) -> None:
+        self._base_deps()
+        outcome = lia_core_prereq.ensure_lia_core(
+            self.base, emit=self.emitted.append,
+            run_build=self._fake_build(code=1, writes_artifact=False))
+        self.assertFalse(outcome.ok)
+        self.assertEqual(outcome.action, 'build-failed')
+        self.assertIn('state=failed', '\n'.join(self.emitted))
+        self.assertIn('reason=build-failed', '\n'.join(self.emitted))
+
+    def test_e_a_zero_exit_without_the_artifact_still_fails_closed(self) -> None:
+        """Exit status alone is not proof: this is the eight-suite failure again."""
+        self._base_deps()
+        outcome = lia_core_prereq.ensure_lia_core(
+            self.base, emit=self.emitted.append,
+            run_build=self._fake_build(code=0, writes_artifact=False))
+        self.assertFalse(outcome.ok)
+        self.assertEqual(outcome.action, 'artifact-missing')
+        self.assertIn('AUSENTE após o build', outcome.detail)
+
+    def test_f_a_build_timeout_is_bounded_and_nonzero(self) -> None:
+        self._base_deps()
+
+        def hang(argv, popen_kwargs, cwd, timeout_s):
+            self.calls.append((tuple(argv), dict(popen_kwargs), Path(cwd), timeout_s))
+            raise subprocess.TimeoutExpired(cmd=list(argv), timeout=timeout_s)
+
+        outcome = lia_core_prereq.ensure_lia_core(
+            self.base, emit=self.emitted.append, run_build=hang, timeout_s=1.0)
+        self.assertFalse(outcome.ok)
+        self.assertEqual(outcome.action, 'build-timeout')
+        self.assertEqual(outcome.exit_code, 124)
+        self.assertEqual(self.calls[0][3], 1.0, 'o orçamento declarado tem que ser honrado')
+        self.assertIn('NÃO diagnosticada', outcome.detail)
+
+    def test_g_no_tracked_product_source_is_touched(self) -> None:
+        self._base_deps()
+        before = sorted(str(p.relative_to(self.base)) for p in self.base.rglob('*')
+                        if p.is_file())
+        lia_core_prereq.ensure_lia_core(
+            self.base, emit=self.emitted.append, run_build=self._fake_build())
+        after = sorted(str(p.relative_to(self.base)) for p in self.base.rglob('*')
+                       if p.is_file())
+        added = set(after) - set(before)
+        self.assertEqual(added, {self._dist().replace('/', os.sep)},
+                         f'só o artefato gerado pode aparecer, surgiu: {added}')
+
+    def test_the_build_never_mentions_core_agent(self) -> None:
+        argv, _kwargs = lia_core_prereq.build_argv(['/usr/bin/pnpm'])
+        joined = ' '.join(argv)
+        self.assertNotIn('core-agent', joined,
+                         'este pré-requisito não pode tocar core-agent/dist')
+        self.assertIn('@lia/core', joined)
+
+    def test_the_round_still_clears_core_agent_dist_at_prelaunch(self) -> None:
+        steps = load_active_round().prelaunch_prepare
+        self.assertTrue(any('core-agent' in step.path for step in steps),
+                        'a limpeza de core-agent/dist no prelaunch foi perdida')
+
+    def test_no_shell_is_used_and_the_platform_seam_is_applied(self) -> None:
+        argv, kwargs = lia_core_prereq.build_argv(['/usr/bin/pnpm'])
+        self.assertEqual(kwargs, {}, 'nenhum kwarg de shell pode aparecer')
+        self.assertEqual(argv[0], '/usr/bin/pnpm')
+        tree = ast.parse((TOOLS / 'devflow' / 'lia_core_prereq.py')
+                         .read_text(encoding='utf-8'))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.keyword) and node.arg == 'shell':
+                self.fail('shell= em lia_core_prereq.py')
+
+    def test_build_output_is_sanitized_before_it_is_persisted(self) -> None:
+        self._base_deps()
+        outcome = lia_core_prereq.ensure_lia_core(
+            self.base, emit=lambda _l: None,
+            run_build=self._fake_build(
+                code=1, writes_artifact=False,
+                output=f'npm ERR! token={FAKE_SECRET} api_key={FAKE_SECRET}'))
+        self.assertFalse(outcome.ok)
+        self.assertNotIn(FAKE_SECRET, outcome.detail)
+        self.assertLessEqual(len(outcome.detail), MAX_DETAIL_CHARS)
+
+    def test_the_declared_prerequisite_is_first_blocking_and_bounded(self) -> None:
+        first = load_active_round().tests[0]
+        self.assertEqual(first.id, 'lia-core-prereq')
+        self.assertTrue(first.blocking)
+        self.assertLessEqual(first.timeout_s, 300.0)
+        self.assertIn('lia_core_prereq.py', ' '.join(first.argv))
+
+
+class TailSalvageTests(unittest.TestCase):
+    """
+    The salvage kept the HEAD of each captured snapshot while its comment
+    claimed the most recent window. After enough output the identity of the
+    stuck test sits past the byte cap and was silently dropped.
+    """
+
+    @staticmethod
+    def _blob(lines: int) -> bytes:
+        body = [f'[devflow-test] pass {i} __main__.Enorme.teste_{i:05d}'
+                for i in range(lines)]
+        body.append('[devflow-test] pass 9 __main__.Enorme.ultimo_concluido')
+        body.append('[devflow-test] start 0 __main__.Enorme.teste_QUE_TRAVA')
+        return '\n'.join(body).encode()
+
+    def test_the_identity_survives_more_than_a_hundred_kilobytes(self) -> None:
+        blob = self._blob(2600)
+        self.assertGreater(len(blob), 100 * 1024,
+                           f'o fixture precisa passar de 100 KB, tem {len(blob)}')
+        found = salvage_progress(blob)
+        self.assertTrue(any('teste_QUE_TRAVA' in line for line in found),
+                        'o teste em execução é a linha que o relatório existe para guardar')
+        self.assertTrue(any('ultimo_concluido' in line for line in found),
+                        'o último teste concluído também é evidência')
+        self.assertEqual(found[-1].split()[-1], '__main__.Enorme.teste_QUE_TRAVA')
+
+    def test_a_head_slice_would_have_lost_it(self) -> None:
+        """Proves the regression above is load-bearing, not decorative."""
+        blob = self._blob(2600)
+        head = blob[:PROGRESS_PARTIAL_MAX_BYTES].decode('utf-8', 'replace')
+        self.assertFalse(any('QUE_TRAVA' in line
+                             for line in PROGRESS_LINE_RE.findall(head)))
+
+    def test_a_truncated_leading_fragment_is_never_reported(self) -> None:
+        blob = self._blob(2600)
+        for line in salvage_progress(blob):
+            self.assertTrue(line.startswith('[devflow-test] '),
+                            f'fragmento de linha vazou: {line!r}')
+            self.assertEqual(len(line.split()), 4, f'linha corrompida: {line!r}')
+
+    def test_text_chunks_are_handled_as_well_as_bytes(self) -> None:
+        blob = self._blob(2600).decode()
+        found = salvage_progress(blob)
+        self.assertTrue(any('teste_QUE_TRAVA' in line for line in found))
+
+    def test_a_fragment_at_the_cut_is_not_promoted_to_an_identity(self) -> None:
+        """
+        The byte cap can land so that the window opens exactly on a
+        journal-shaped string that is NOT at a line start - printed by a test
+        with no preceding newline, for instance. `(?m)^` also matches at the
+        start of the window, so without dropping the leading fragment that
+        string would be reported as a real test identity.
+        """
+        marker = b'[devflow-test] pass 7 __main__.Falso.nao_existe\n'
+        cap = PROGRESS_PARTIAL_MAX_BYTES
+        prefix = b'x' * (cap + 10)                       # junk, sem newline
+        suffix = b'y' * (cap - len(marker))
+        raw = prefix + marker + suffix
+        # len(raw) == 2*cap + 10, so raw[-cap:] opens exactly on the marker.
+        self.assertEqual(len(raw), 2 * cap + 10)
+        found = salvage_progress(raw)
+        self.assertFalse(any('nao_existe' in line for line in found),
+                         f'fragmento promovido a identidade: {found!r}')
+
+    def test_a_synthetic_secret_cannot_ride_along(self) -> None:
+        lines = [f'[devflow-test] pass {i} __main__.C.teste_{i}' for i in range(2600)]
+        lines.append(f'[devflow-test] start 0 api_key={FAKE_SECRET}')
+        lines.append('[devflow-test] start 0 __main__.C.travado')
+        blob = ('\n'.join(lines) + f'\ntoken={FAKE_SECRET}\n').encode()
+        for line in salvage_progress(blob):
+            self.assertNotIn(FAKE_SECRET, line)
+
+
+class JournalDoesNotCrowdOutRealFailuresTests(unittest.TestCase):
+    """
+    Journal lines were briefly identity-tier, and that was a regression.
+
+    On an ordinary failing run - exit 1, no timeout involved - promoting every
+    journal line to identity filled the bounded detail with `pass 0..12` noise
+    and pushed out the FAIL line and the Ran/FAILED summary, so the report
+    named no failing test at all. The timeout paths build their own body, so
+    they never needed the tier; these tests pin the revert in place.
+    """
+
+    def test_an_ordinary_failure_keeps_its_identity_and_summary(self) -> None:
+        lines = [f'[devflow-test] pass {i} __main__.C{i % 40}.teste_{i:03d}'
+                 for i in range(300)]
+        lines += ['[devflow-test] fail 5 __main__.Importante.teste_que_falhou',
+                  'FAIL: teste_que_falhou (__main__.Importante)',
+                  'AssertionError: 3 != 4 : o cálculo está errado',
+                  'Ran 301 tests in 90.0s', 'FAILED (failures=1)']
+        detail = sanitize_test_output('', '\n'.join(lines))
+        self.assertIn('AssertionError', detail)
+        self.assertIn('FAIL: teste_que_falhou', detail,
+                      'o teste que falhou não pode ser expulso pelo journal')
+        self.assertIn('Ran 301 tests', detail, 'o resumo também é evidência')
+        self.assertIn('FAILED (failures=1)', detail)
+
+    def test_a_timeout_verdict_still_survives_a_full_journal(self) -> None:
+        """The one tier addition that IS load-bearing, proven rather than assumed."""
+        base = Path(tempfile.mkdtemp(prefix='devflow-verdict-'))
+        self.addCleanup(shutil.rmtree, base, True)
+        noise = ''.join(
+            f'sys.stderr.write("\\n[devflow-test] pass {i} __main__.C.teste_{i:02d}\\n")\n'
+            for i in range(20))
+        script = 'import sys, time\n' + noise + 'sys.stderr.flush()\ntime.sleep(60)\n'
+        code, detail = run_test_command(
+            [sys.executable, '-c', script], base, 2.0, label='devflow')
+        self.assertEqual(code, 124, detail)
+        self.assertTrue(detail.splitlines()[0].startswith('TimeoutExpired'),
+                        f'o veredito tem que liderar: {detail.splitlines()[0]!r}')
+        self.assertIn('orçamento', detail)
+
+
+class WatchdogReportEndToEndTests(unittest.TestCase):
+    """
+    When the suite stops itself, `communicate` returns NORMALLY - there is no
+    TimeoutExpired - so the watchdog verdict used to go through the generic
+    sanitizer, which filled its budget with the OLDEST lines of a long run and
+    dropped the one line naming the stuck test.
+    """
+
+    def setUp(self) -> None:
+        self.base = Path(tempfile.mkdtemp(prefix='devflow-watchdog-'))
+        self.repo = make_repo(self.base)
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.base, ignore_errors=True)
+
+    def _hang_script(self, prior: int) -> str:
+        noise = ''.join(
+            f'sys.stderr.write("\\n[devflow-test] pass {i} __main__.C{i % 40}.teste_{i:03d}\\n")\n'
+            for i in range(prior))
+        return (
+            'import sys, time\n'
+            + noise +
+            'sys.stderr.flush()\n'
+            f'sys.path.insert(0, {str(TOOLS)!r})\n'
+            'import test_lia_dev as T\n'
+            'w = T._Watchdog(budget_s=0.4, poll_s=0.05)\n'
+            'w.start()\n'
+            'w.arm("__main__.Lenta.teste_real_que_trava")\n'
+            'time.sleep(60)\n'
+        )
+
+    def test_the_persisted_report_names_the_blocked_test(self) -> None:
+        data = runnable_manifest()
+        data['tests'] = [{'id': 'devflow', 'label': 'd', 'cwd': '.',
+                          'argv': ['python', '-c', self._hang_script(300)],
+                          'timeout_s': 120.0}]
+        runner, emitted, asks = make_runner(
+            self.repo, validate_round(data), invoke_test=run_test_command)
+        outcome = runner.execute()
+
+        result = next(t for t in outcome.tests if t.id == 'devflow')
+        self.assertEqual(result.exit_code, 124,
+                         f'a saída tem que ser não nula: {result.detail!r}')
+        self.assertEqual(result.status, 'fail')
+        self.assertEqual(outcome.verdict, 'FAIL')
+        self.assertEqual(asks, [])
+
+        report = Path(outcome.artifacts['report']).read_text(encoding='utf-8')
+        run_json = Path(outcome.artifacts['json']).read_text(encoding='utf-8')
+        payload = json.loads(run_json)
+
+        for name, content in (('TestResult.detail', result.detail),
+                              ('console', '\n'.join(emitted)),
+                              ('REPORT.txt', report), ('run.json', run_json)):
+            with self.subTest(destino=name):
+                self.assertIn('teste_real_que_trava', content,
+                              'a identidade travada tem que chegar a todo destino')
+                self.assertIn('NÃO diagnosticada', content)
+        self.assertEqual(payload['tests'][0]['detail'], result.detail,
+                         'run.json e TestResult.detail devem ser o mesmo texto')
+        self.assertLessEqual(len(result.detail), MAX_DETAIL_CHARS)
+        self.assertLessEqual(len(result.detail.splitlines()), MAX_DETAIL_LINES)
+
+    def test_no_launcher_is_started_after_the_failure(self) -> None:
+        data = runnable_manifest()
+        data['tests'] = [{'id': 'devflow', 'label': 'd', 'cwd': '.',
+                          'argv': ['python', '-c', self._hang_script(30)],
+                          'timeout_s': 120.0}]
+        launched: list[list[str]] = []
+
+        def recording_spawn(command, cwd, on_line, env=None):
+            launched.append(list(command))
+            return fake_spawner([], alive=False)(command, cwd, on_line, env)
+
+        runner = RoundRunner(
+            round_manifest=validate_round(data), repo=self.repo,
+            run_git=fixed_git('arena/01a10290-lia-project', 'a' * 40, None,
+                              porcelain=''),
+            spawn=recording_spawn, ask=lambda q, o: 'S',
+            clock=lambda: datetime(2026, 10, 11, 12, 0, 0),
+            marker_timeout_s=5.0, emit=lambda _l: None,
+            invoke_test=run_test_command)
+        outcome = runner.execute()
+        self.assertEqual(outcome.verdict, 'FAIL')
+        self.assertEqual(launched, [], 'nenhum Launcher pode subir depois de uma falha')
+
+    def test_a_hang_before_the_first_test_is_named_as_startup(self) -> None:
+        script = (
+            'import sys, time\n'
+            f'sys.path.insert(0, {str(TOOLS)!r})\n'
+            'import test_lia_dev as T\n'
+            'w = T._Watchdog(budget_s=0.3, poll_s=0.05)\n'
+            'w.start()\n'
+            # A short budget, not STARTUP_BUDGET_S: the point is to prove the
+            # pre-test phase has its own identity, and the real 300 s value
+            # would simply be overtaken by the outer budget below.
+            'w.arm(T.STARTUP_LABEL, 0.3)\n'
+            'time.sleep(60)\n'
+        )
+        code, detail = run_test_command(
+            [sys.executable, '-c', script], self.base, 60.0, label='devflow')
+        self.assertEqual(code, 124, detail)
+        self.assertIn(STARTUP_LABEL, detail,
+                      'um travamento na coleta tem que ter identidade própria')
+        self.assertIn('NÃO diagnosticada', detail)
+
+    def test_the_real_suite_arms_the_startup_watchdog_before_collection(self) -> None:
+        # Source-level, and deliberately so: the startup phase cannot be forced
+        # to hang from outside. Two traps this avoids - the marker is built by
+        # concatenation so this test's own source does not contain it (an
+        # `index` on the raw text used to find the test itself and pass
+        # tautologically), and `rindex` takes the real entry point rather than
+        # any earlier mention of it.
+        marker = "if __name__ == " + "'__main__':"
+        source = SUITE_PATH.read_text(encoding='utf-8')
+        main_block = source[source.rindex(marker):]
+        arm_call = '_WATCHDOG.arm(' + 'STARTUP_LABEL'
+        self.assertIn(arm_call, main_block,
+                      'a coleta ficou sem watchdog: um travamento na importação '
+                      'esperaria o orçamento externo inteiro em silêncio')
+        arm_at = main_block.index(arm_call)
+        collect_at = main_block.index('unittest.main(')
+        self.assertLess(arm_at, collect_at,
+                        'o watchdog de coleta precisa estar armado ANTES de coletar')
+        self.assertGreater(STARTUP_BUDGET_S, 0)
+        self.assertLess(STARTUP_BUDGET_S, 3600.0,
+                        'o orçamento de coleta não pode se aproximar do externo')
+
+
 if __name__ == '__main__':
     for _stream in (sys.stdout, sys.stderr):
         if hasattr(_stream, 'reconfigure'):
             _stream.reconfigure(errors='replace')
     _WATCHDOG.start()
+    # Armed BEFORE collection. A hang while importing a module or collecting
+    # tests happens before any startTest, so without this the run would sit in
+    # silence until the outer budget killed it, reporting nothing at all.
+    _WATCHDOG.arm(STARTUP_LABEL, STARTUP_BUDGET_S)
     _begin = time.monotonic()
     # The CLASS, not an instance or a factory: unittest.main only constructs a
     # testRunner when `isinstance(it, type)`, and silently treats anything else

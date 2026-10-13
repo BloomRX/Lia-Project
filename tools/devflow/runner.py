@@ -134,8 +134,18 @@ PROGRESS_MAX_LINES = 40
 #: The suite's own progress journal. Only these shapes are ever salvaged out
 #: of a killed child, so no arbitrary captured output can reach an artifact:
 #: a status word, a millisecond count and a dotted test id, nothing else.
+#: A test identity is a dotted Python id - or the startup label - and nothing
+#: else. This used to be `\S.*`, which let anything the child printed ride
+#: along inside the "identity" field, secret included. Every shape the suite
+#: actually emits is spelled out instead.
+_TEST_ID = r'[A-Za-z0-9_./-]+'
 PROGRESS_LINE_RE = re.compile(
-    r'(?m)^\[devflow-test\] (?:start|pass|fail|error|skip|class|timeout|blocked|summary) \S.*$')
+    r'(?m)^\[devflow-test\] (?:'
+    r'(?:start|pass|fail|error|skip|class|timeout) \d+ ' + _TEST_ID +
+    r'|blocked ' + _TEST_ID + r' excedeu \d+s; encerrando a suíte\. '
+    r'Causa NÃO diagnosticada: lento e travado produzem o mesmo quadro\.'
+    r'|summary \d+ pass=\d+ fail=\d+ error=\d+ skip=\d+ classes=\d+ \d+'
+    r')$')
 #: How many journal lines a timeout report keeps. Enough to show the last
 #: completed test, the one that was running, and the aggregate.
 PROGRESS_SALVAGE_MAX = 12
@@ -161,10 +171,55 @@ def salvage_progress(*chunks) -> list[str]:
     for chunk in chunks[-PROGRESS_PARTIAL_MAX_CHUNKS:]:
         if not chunk:
             continue
-        raw = bytes(chunk) if isinstance(chunk, (bytes, bytearray)) else str(chunk).encode()
-        text = raw[:PROGRESS_PARTIAL_MAX_BYTES].decode('utf-8', 'replace')
-        found.extend(PROGRESS_LINE_RE.findall(text))
+        raw = (bytes(chunk) if isinstance(chunk, (bytes, bytearray))
+               else str(chunk).encode('utf-8', 'replace'))
+        # A TAIL, not a head. `communicate` hands over a cumulative snapshot,
+        # so after enough output the identity of the test that is actually
+        # stuck lives past the first PROGRESS_PARTIAL_MAX_BYTES and a head
+        # slice would silently discard the one line the report exists to keep.
+        truncated = len(raw) > PROGRESS_PARTIAL_MAX_BYTES
+        window = raw[-PROGRESS_PARTIAL_MAX_BYTES:] if truncated else raw
+        if truncated:
+            # Drop the leading fragment. A cut can land mid-line, and a
+            # half-line must never be mistaken for a test identity; dropping
+            # it costs one line and makes the boundary unambiguous.
+            _head, _sep, window = window.partition(b'\n')
+        found.extend(PROGRESS_LINE_RE.findall(window.decode('utf-8', 'replace')))
     return found[-PROGRESS_SALVAGE_MAX:]
+
+
+#: The exit code the suite's own watchdog uses when it stops a blocked test.
+#: `run_test_command` uses the same code for its own outer budget, which is
+#: deliberate: both mean "a declared budget was exhausted", and neither may be
+#: reported as an ordinary failure.
+WATCHDOG_EXIT_CODE = 124
+
+
+def watchdog_detail(stdout: str, stderr: str, who: str, timeout_s: float) -> str:
+    """
+    The report for a child that ended on the watchdog's exit code.
+
+    When the suite stops itself, `communicate` returns NORMALLY - there is no
+    `TimeoutExpired` to hook - so this path used to fall through to the generic
+    sanitizer. On a long run that sanitizer fills its budget with the EARLIEST
+    lines of output, and the watchdog's verdict, which is the last thing
+    printed, was dropped entirely: the report named test 000 and said nothing
+    about the test that was actually stuck.
+
+    The journal is salvaged from the tail and its verdict lines are put first.
+    The cause stays UNKNOWN: slow and hung are still indistinguishable.
+    """
+    events = salvage_progress(stdout, stderr)
+    verdict = [e for e in events
+               if e.split(' ', 2)[1:2] and e.split(' ', 2)[1] in ('timeout', 'blocked')]
+    recent = [e for e in events if e not in verdict]
+    head = (
+        f'[devflow-timeout] o estágio de teste {who!r} encerrou com código '
+        f'{WATCHDOG_EXIT_CODE} (orçamento por teste da suíte esgotado; '
+        f'orçamento externo {timeout_s:.0f}s). Causa NÃO diagnosticada: '
+        f'lentidão e travamento produzem o mesmo quadro.')
+    body = '\n'.join([head, *verdict, *recent])
+    return sanitize_test_output('', body)
 
 
 def _terminate_timed_out(proc: 'subprocess.Popen') -> str:
@@ -299,6 +354,12 @@ def run_test_command(argv: list[str], cwd: Path,
                 progress(f'  {who}: em andamento, '
                          f'{int(time.monotonic() - started)}s de '
                          f'{timeout_s:.0f}s decorridos')
+    if proc.returncode == WATCHDOG_EXIT_CODE:
+        # The suite stopped itself. Route through the watchdog report instead
+        # of the generic sanitizer, which would keep the oldest lines and lose
+        # the verdict.
+        return proc.returncode, watchdog_detail(
+            stdout or '', stderr or '', who, timeout_s)
     return proc.returncode, sanitize_test_output(stdout or '', stderr or '')
 
 

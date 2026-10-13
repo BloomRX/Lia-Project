@@ -145,6 +145,14 @@ _IDENTITY_PREFIXES = (
     # outrank ordinary context or the budget drops exactly the line that
     # explains why so little is listed.
     '[resumo]',
+    # Deliberately NOT extended to '[devflow-test]' or 'TimeoutExpired'.
+    # Journal lines were briefly identity-tier and that was actively harmful:
+    # on an ordinary failing run it filled the bounded detail with `pass 0..12`
+    # noise and pushed out the FAIL line and the Ran/FAILED summary. The
+    # timeout paths build their own body out of journal lines only, so every
+    # line in it is already the same tier and a stable sort keeps the verdict
+    # first without any help from here. Adding a prefix "just in case" would be
+    # unproven config that only makes the next regression harder to see.
 )
 #: Why it failed.
 _ASSERTION_PREFIXES = (
