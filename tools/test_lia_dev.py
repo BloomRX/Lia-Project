@@ -4890,6 +4890,31 @@ class StatusCheckProbeTests(unittest.TestCase):
                          'um status que falhou nao pode render lista de sujeira')
 
 
+    def test_the_status_marker_is_emitted_without_a_trailing_space(self) -> None:
+        """
+        `echo LIA_RC_ZERO || ...` echoes "LIA_RC_ZERO " WITH the space, because
+        cmd's echo takes everything up to the operator.
+
+        Measured on a real Windows runner, not inferred: the probe loop received
+        `[LIA_RC_ZERO ]` while `git status` had exited 0, so the comparison
+        against "LIA_RC_ZERO" failed, LIA_STATUS_RC stayed empty and a clean
+        checkout was refused as if the status had failed. The marker has to butt
+        against the operator. Portable on purpose - this must also fail on
+        Linux, where the bootstrap itself never runs.
+        """
+        text = UPGRADE_BAT.read_text(encoding='utf-8', errors='replace')
+        lines = text.replace('\r\n', '\n').split('\n')
+        hits = [line for line in lines
+                if 'LIA_RC_ZERO' in line and line.strip().startswith('for /f')]
+        self.assertEqual(1, len(hits), f'esperava um for /f de status: {hits}')
+        line = hits[0]
+        self.assertIn('echo LIA_RC_ZERO' + '^|^|', line,
+                      'o marcador perdeu o contato com o operador: ' + line)
+        self.assertNotIn('echo LIA_RC_ZERO ', line,
+                         'eco com espaco vira "LIA_RC_ZERO " e nunca compara '
+                         'igual: ' + line)
+
+
 @unittest.skipUnless(shutil.which('cmd.exe'), 'cmd.exe indisponível nesta plataforma')
 class StatusMarkerProbeTests(unittest.TestCase):
     """
@@ -6221,7 +6246,7 @@ class SuiteCoverageTests(unittest.TestCase):
     """REGRESSION C - diagnosing a hang must not quietly drop tests."""
 
     #: Baseline measured on Linux at the commit that introduced the journal.
-    MINIMUM_TEST_CASES = 430
+    MINIMUM_TEST_CASES = 431
 
     def test_no_test_case_was_dropped(self) -> None:
         count = unittest.TestLoader().loadTestsFromModule(

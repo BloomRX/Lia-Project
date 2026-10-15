@@ -133,7 +133,7 @@ rem falhou nao produz linha nenhuma, e "nenhuma linha" nao e "checkout limpo".
 rem Sem arquivo temporario e sem %ERRORLEVEL% dentro de bloco parentetizado.
 set "LIA_DIRTY="
 set "LIA_STATUS_RC="
-for /f "usebackq delims=" %%L in (`git -C "%LIA_REPO%" status --porcelain -uall 2^>nul ^&^& echo LIA_RC_ZERO ^|^| echo LIA_RC_NONZERO`) do (
+for /f "usebackq delims=" %%L in (`git -C "%LIA_REPO%" status --porcelain -uall 2^>nul ^&^& echo LIA_RC_ZERO^|^| echo LIA_RC_NONZERO`) do (
     if "%%L"=="LIA_RC_ZERO" set "LIA_STATUS_RC=0"
     if not "%%L"=="LIA_RC_ZERO" if not "%%L"=="LIA_RC_NONZERO" set "LIA_DIRTY=1"
 )
