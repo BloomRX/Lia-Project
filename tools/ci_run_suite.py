@@ -131,6 +131,23 @@ def _chunks(message: str, ceiling: int = ANNOTATION_CHUNK_CHARS) -> list[str]:
     return parts or ['']
 
 
+def suite_counts(lines: list[str]) -> str:
+    """
+    The unittest tally, published as its own annotation.
+
+    A green run published nothing, and both channels that could have carried
+    the numbers are unreadable from outside the runner: the job log lives on a
+    blob host that is not reachable here, and `check-runs.output.summary` comes
+    back empty. So "how many tests ran and how many were skipped" - the exact
+    figures that prove no test was quietly dropped or newly skipped - could only
+    be inferred from an earlier failing run. Publishing them on success removes
+    the inference.
+    """
+    kept = [line.strip() for line in lines
+            if line.strip().startswith(('Ran ', 'OK', 'FAILED'))]
+    return '\n'.join(kept[-3:]) or '(resumo da suite nao encontrado)'
+
+
 def emit_annotation(title: str, message: str, level: str = 'error') -> None:
     """
     Publish a workflow annotation, in as many parts as the ceiling requires.
@@ -200,6 +217,9 @@ def main(argv: list[str] | None = None) -> int:
             with open(summary_path, 'a', encoding='utf-8') as handle:
                 handle.write(f'### `{suite}` FALHOU (exit {code})\n\n```\n'
                              f'{failure_excerpt(snapshot)}\n```\n')
+    else:
+        emit_annotation(f'{suite} - resumo', suite_counts(list(tail)),
+                        level='notice')
     # The child's own status, unmodified.
     return code
 
