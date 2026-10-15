@@ -219,5 +219,9 @@ exit /b %LIA_DEVKIT_RC%
 :fail
 echo.
 echo O bootstrap terminou sem alterar o checkout.
-pause
+rem O pause e CONDICIONAL: num console real um pause sem guarda espera
+rem uma tecla para sempre, e todo teste que dirige este arquivo travaria
+rem na maquina do dono continuando verde no CI, onde nao ha console.
+rem No duplo clique a variavel nao existe, entao a pausa continua.
+if "%LIA_DEVKIT_NO_PAUSE%"=="" pause
 exit /b 1

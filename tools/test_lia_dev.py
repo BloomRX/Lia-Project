@@ -21,6 +21,7 @@ import atexit
 import faulthandler
 import os
 from pathlib import Path, PurePosixPath
+import re
 import shlex
 import shutil
 import subprocess
@@ -2846,6 +2847,94 @@ class DevKitHandoffContractTests(unittest.TestCase):
                          'um .bat com LF puro quebra no cmd.exe')
 
 
+def run_bat(argv: list[str], cwd: Path, *, timeout_s: float,
+            env: dict | None = None) -> subprocess.CompletedProcess:
+    """
+    Run a .bat the way these tests need to, and actually honour the budget.
+
+    `subprocess.run(timeout=...)` cannot be used here, for a reason that is
+    specific to Windows and documented in CPython's own `run()`: after the
+    timeout it calls `process.kill()` and then `process.communicate()` AGAIN,
+    with no timeout ("communicate() _after_ kill() is required to collect
+    that"). `kill()` reaches only the direct child. A grandchild that inherited
+    the stdout/stderr pipe handles keeps them open, so that second call blocks
+    for as long as the grandchild lives. Measured on the owner's machine: a
+    180 s bound turned into a 600 s suite kill, and the suite watchdog - not
+    the test - was what finally stopped it.
+
+    stdin is redirected to DEVNULL for the same class of reason. A `pause`
+    anywhere in the batch tree waits for a keypress; GitHub runners have no
+    interactive console so it returns immediately, while on a desktop it waits
+    forever. That difference is exactly what this suite exists to cover, so it
+    must not be hidden by an absent console.
+    """
+    proc = subprocess.Popen(
+        argv, cwd=str(cwd), stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        stdin=subprocess.DEVNULL, text=True, encoding='utf-8',
+        errors='replace', env=env)
+    try:
+        stdout, stderr = proc.communicate(timeout=timeout_s)
+    except subprocess.TimeoutExpired:
+        # Scoped tree kill: this child and its descendants, never an image
+        # name. Then a BOUNDED drain - an unbounded one is the bug above.
+        cleanup = runner_module._terminate_timed_out(proc)
+        try:
+            stdout, stderr = proc.communicate(timeout=30)
+        except subprocess.TimeoutExpired:
+            stdout, stderr = '', ''
+        for stream in (proc.stdout, proc.stderr):
+            if stream is not None:
+                try:
+                    stream.close()
+                except (ValueError, OSError):
+                    pass
+        raise AssertionError(
+            f'{argv} excedeu {timeout_s:.0f}s e foi encerrado ({cleanup}). '
+            f'Um `pause` sem guarda ou um neto que nao termina produzem este '
+            f'quadro. Saida capturada:\n{(stdout or "") + (stderr or "")}')
+    return subprocess.CompletedProcess(argv, proc.returncode, stdout, stderr)
+
+
+class BatchPauseGuardTests(unittest.TestCase):
+    """
+    No shipped batch file may wait for a keypress unconditionally.
+
+    A `pause` is invisible on a CI runner - stdin is not a console, so it
+    returns at once - and unbounded on the owner's desktop, where it waits for
+    a human. The upgrade bootstrap shipped exactly that in its `:fail` path, so
+    every test that drives it would have hung on a real machine while staying
+    green in CI. The guard is the same `LIA_DEVKIT_NO_PAUSE` switch DevKit.bat
+    already uses; double-clicking still pauses, so the owner still gets to read
+    the message.
+    """
+
+    def test_every_pause_is_behind_the_no_pause_switch(self) -> None:
+        checked = 0
+        for path in (DEVKIT_BAT, UPGRADE_BAT):
+            text = path.read_text(encoding='utf-8', errors='replace')
+            lines = text.replace('\r\n', '\n').split('\n')
+            for index, line in enumerate(lines):
+                stripped = line.strip()
+                # Comments are prose, not commands - and the ones explaining
+                # this very guard mention the word.
+                if stripped.lower().startswith(('rem ', '::')):
+                    continue
+                if not re.search(r'\bpause\b', stripped, re.IGNORECASE):
+                    continue
+                checked += 1
+                # The guard is either on the pause line itself or on the `if`
+                # that opened the block containing it.
+                window = lines[max(0, index - 5):index + 1]
+                self.assertTrue(
+                    any('LIA_DEVKIT_NO_PAUSE' in seen for seen in window),
+                    f'{path.name}:{index + 1} tem um `pause` sem guarda - num '
+                    f'console real isso espera uma tecla para sempre:\n'
+                    + '\n'.join(window))
+        self.assertGreaterEqual(checked, 2,
+                                'esperava achar os pause do DevKit e do '
+                                'bootstrap; a sonda parou de ver algum')
+
+
 @unittest.skipUnless(os.name == 'nt' and shutil.which('cmd.exe'),
                      'cmd.exe indisponível nesta plataforma')
 class DevKitHandoffExecutionTests(unittest.TestCase):
@@ -2881,11 +2970,8 @@ class DevKitHandoffExecutionTests(unittest.TestCase):
 
     def _run(self, *args):
         env = dict(os.environ, LIA_DEVKIT_NO_PAUSE='1')
-        return subprocess.run(
-            ['cmd.exe', '/d', '/s', '/c', 'DevKit.bat', *args],
-            cwd=self.repo, capture_output=True, text=True,
-            encoding='utf-8', errors='replace', env=env, timeout=180,
-        )
+        return run_bat(['cmd.exe', '/d', '/s', '/c', 'DevKit.bat', *args],
+                       self.repo, timeout_s=180.0, env=env)
 
     def test_the_copy_still_finds_the_original_repository_root(self):
         probe = self._run()
@@ -4760,10 +4846,11 @@ class UpgradeBootstrapExecutionTests(unittest.TestCase):
         return path
 
     def _run(self) -> subprocess.CompletedProcess:
-        return subprocess.run(
-            ['cmd.exe', '/d', '/s', '/c', str(self.bat), str(self.repo)],
-            cwd=self.base, capture_output=True, text=True,
-            encoding='utf-8', errors='replace', timeout=300)
+        # LIA_DEVKIT_NO_PAUSE also silences the bootstrap's own :fail pause,
+        # which otherwise waits for a keypress on any machine with a console.
+        env = dict(os.environ, LIA_DEVKIT_NO_PAUSE='1')
+        return run_bat(['cmd.exe', '/d', '/s', '/c', str(self.bat),
+                        str(self.repo)], self.base, timeout_s=300.0, env=env)
 
     def test_a_stale_checkout_is_advanced_to_the_reviewed_sha(self):
         self.assertNotEqual(0, self._git(self.repo, 'rev-list', '-n', '1',
@@ -6246,7 +6333,7 @@ class SuiteCoverageTests(unittest.TestCase):
     """REGRESSION C - diagnosing a hang must not quietly drop tests."""
 
     #: Baseline measured on Linux at the commit that introduced the journal.
-    MINIMUM_TEST_CASES = 431
+    MINIMUM_TEST_CASES = 432
 
     def test_no_test_case_was_dropped(self) -> None:
         count = unittest.TestLoader().loadTestsFromModule(
