@@ -81,6 +81,24 @@ def render(suite: str, code: int, stdout: str, stderr: str) -> str:
     return '\n'.join(part for part in parts if part is not None)
 
 
+def emit_annotation(suite: str, code: int, stderr: str, stdout: str) -> None:
+    """
+    Publish the failure as a workflow annotation.
+
+    Chosen over the job summary because the summary is not reliably readable
+    back through the repository API, while annotations are: a failure detail
+    that only a human sitting in the web UI can see is not much use to an
+    independent reviewer working through the API. Newlines are percent-encoded
+    as the workflow-command format requires.
+    """
+    excerpt = failure_excerpt(stderr or stdout)
+    encoded = excerpt.replace('%', '%25').replace('\r', '').replace('\n', '%0A')
+    sys.stdout.write(
+        f'::error title={suite} falhou com exit {code}::'
+        f'{encoded[:MAX_SUMMARY_CHARS]}\n')
+    sys.stdout.flush()
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     if not argv:
@@ -102,6 +120,8 @@ def main(argv: list[str] | None = None) -> int:
         sys.stderr.flush()
 
     if proc.returncode != 0:
+        emit_annotation(suite, proc.returncode, proc.stderr or '',
+                        proc.stdout or '')
         summary_path = os.environ.get('GITHUB_STEP_SUMMARY')
         if summary_path:
             with open(summary_path, 'a', encoding='utf-8') as handle:
