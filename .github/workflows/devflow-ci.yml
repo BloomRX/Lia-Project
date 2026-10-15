@@ -1,0 +1,77 @@
+name: DevFlow CI
+
+# Why this exists: the DevFlow suite carries Windows-only tests that have never
+# been observed executing - the DevKit handoff, the upgrade bootstrap and the
+# real junction checks all skip on Linux. Running the suite here is the only way
+# to get that evidence without asking anyone to drive a machine by hand.
+#
+# Scope: repository-owned Python suites only. No application dependencies are
+# installed, Lia/Electron/Stage are never launched, no browser opens, no AI
+# service is called, and no credential of any kind is read.
+
+on:
+  push:
+    branches:
+      - 'arena/**'
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A newer push to the same branch makes the older run pointless.
+concurrency:
+  group: devflow-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  devflow-tests:
+    name: DevFlow (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      # Both halves of the matrix must finish even when one fails - the whole
+      # point is to compare Windows against Linux, and fail-fast would cancel
+      # the surviving job and take the comparison with it.
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+
+    env:
+      PYTHONUNBUFFERED: '1'
+      PYTHONIOENCODING: 'utf-8'
+
+    steps:
+      - name: Check out the working branch
+        uses: actions/checkout@v7.0.1
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v7.0.0
+        with:
+          # 3.10 is the project's documented minimum supported version, so this
+          # gate proves the floor rather than whatever happens to be newest.
+          python-version: '3.10'
+
+      - name: Record the environment under test
+        run: |
+          python --version
+          python -c "import platform, sys; print(platform.platform()); print(sys.executable)"
+          git --version
+
+      # Each suite is its own step so that a timeout or a failure in one is
+      # attributable to it, and the fast suites still report when the slow one
+      # does not finish.
+
+      - name: Byte-compile tools
+        run: python -m compileall -q tools
+
+      - name: Universal DevKit suite (tools/test_project_cli.py)
+        run: python tools/test_project_cli.py
+
+      - name: Creation suite (tools/test_creation.py)
+        run: python tools/test_creation.py
+
+      - name: DevFlow suite (tools/test_lia_dev.py)
+        run: python tools/test_lia_dev.py
