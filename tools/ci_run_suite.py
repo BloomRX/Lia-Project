@@ -60,6 +60,26 @@ def failure_excerpt(stderr: str) -> str:
     return text
 
 
+def short_failure_lines(output: str, limit: int = 40) -> str:
+    """
+    Only the failing test identities, the counts and the first assertion.
+
+    This is the version that has to get through: a handful of short lines,
+    no traceback, nothing that could trip a length or encoding limit.
+    """
+    kept: list[str] = []
+    for line in output.splitlines():
+        stripped = line.strip()
+        if (stripped.startswith(('FAIL:', 'ERROR:', 'Ran ', 'OK', 'FAILED'))
+                or stripped.startswith('AssertionError')
+                or stripped.startswith('[devflow-test] blocked')
+                or stripped.startswith('[devflow-test] timeout')):
+            kept.append(stripped[:200])
+        if len(kept) >= limit:
+            break
+    return '\n'.join(kept) or '(nenhuma linha de falha reconhecível)'
+
+
 def render(suite: str, code: int, stdout: str, stderr: str) -> str:
     counts = next((line for line in stderr.splitlines()
                    if line.startswith('Ran ')), '')
@@ -91,11 +111,15 @@ def emit_annotation(suite: str, code: int, stderr: str, stdout: str) -> None:
     independent reviewer working through the API. Newlines are percent-encoded
     as the workflow-command format requires.
     """
-    excerpt = failure_excerpt(stderr or stdout)
-    encoded = excerpt.replace('%', '%25').replace('\r', '').replace('\n', '%0A')
-    sys.stdout.write(
-        f'::error title={suite} falhou com exit {code}::'
-        f'{encoded[:MAX_SUMMARY_CHARS]}\n')
+    # Two annotations, deliberately. A short one carrying only the failing
+    # test ids and the first assertion survives any length or parsing limit
+    # the annotation channel imposes; the long excerpt is best-effort on top
+    # of it. Both go out on their own line, because a workflow command that
+    # does not start a line is silently ignored.
+    short = short_failure_lines(stderr or stdout)
+    for level, text in (('error', short), ('error', failure_excerpt(stderr or stdout))):
+        encoded = text.replace('%', '%25').replace('\r', '').replace('\n', '%0A')
+        sys.stdout.write(f'\n::{level} title={suite} exit {code}::{encoded}\n')
     sys.stdout.flush()
 
 

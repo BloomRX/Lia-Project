@@ -67,6 +67,13 @@ jobs:
       - name: Byte-compile tools
         run: python -m compileall -q tools
 
+      # Canary: proves the annotation channel itself works on this runner, so
+      # that an absent failure annotation can be read as "no failure detail
+      # was produced" rather than being indistinguishable from "the channel
+      # does not deliver".
+      - name: Verify the annotation channel
+        run: echo "::notice title=canal-de-anotacoes::OK em ${{ matrix.os }}"
+
       # Each suite runs through tools/ci_run_suite.py, which invokes exactly
       # `python <suite>` and propagates the child's exit code unchanged. Its
       # only addition is to publish a bounded excerpt of the unittest failure
