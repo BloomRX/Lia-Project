@@ -2767,6 +2767,14 @@ class DevKitHandoffContractTests(unittest.TestCase):
         self.assertIn('%RANDOM%', self.text)
         self.assertNotIn('lia-devkit-bootstrap.bat', self.text,
                          'um nome global fixo não é seguro para concorrência')
+        # %RANDOM% alone is NOT unique: cmd.exe seeds it from the clock, so two
+        # processes opened in the same tick produce the same sequence. Observed
+        # in CI - two consecutive runs built the same name, the second found the
+        # first one's copy and failed closed. The HHMMSScc stamp breaks the tie.
+        self.assertIn('LIA_DEVKIT_STAMP', self.text,
+                      'o nome da cópia voltou a depender só de %RANDOM%')
+        self.assertIn('%TIME: =0%', self.text,
+                      'a hora com espaço inicial entraria no nome do arquivo')
 
     def test_a_failed_copy_fails_closed_instead_of_running_the_original(self):
         head = self.head
@@ -4718,7 +4726,16 @@ class UpgradeBootstrapExecutionTests(unittest.TestCase):
                      if l.strip().startswith('for %%F in ('))
         end = next(i for i in range(start + 1, len(lines))
                    if lines[i].strip().startswith(') do'))
-        canonical = str(self.remote).replace('\\', '/')
+        # The canonical form is whatever git itself reports, not a spelling
+        # guessed from `Path`. Observed on Windows: the gate rejected the local
+        # test remote because `%TEMP%` is an 8.3 short path
+        # (C:\\Users\\RUNNER~1\\...) while git normalizes to the long form, so a
+        # string built from `str(self.remote)` could never match. Asking git
+        # removes the guess on every platform and leaves the SHIPPED gate - and
+        # every `git` line, asserted byte-identical below - untouched.
+        canonical = self._git(
+            self.repo, 'remote', 'get-url', 'origin').stdout.strip()
+        self.assertTrue(canonical, 'o clone de teste ficou sem remote origin')
         lines[start + 1:end] = [f'    "{canonical}"']
         # Only the assignment is localized. The placeholder also appears in the
         # guard that refuses to run without a reviewed commit; replacing it

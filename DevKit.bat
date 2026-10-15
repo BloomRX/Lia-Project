@@ -36,7 +36,12 @@ if not exist "%LIA_DEVKIT_ROOT%tools\lia_dev.py" (
 rem ---- copia temporaria com nome unico por execucao -------------------------
 rem Nome unico de proposito: duas sessoes simultaneas nao podem compartilhar um
 rem arquivo, e uma copia antiga nunca pode ser confundida com a desta execucao.
-set "LIA_DEVKIT_COPY=%TEMP%\lia-devkit-%RANDOM%-%RANDOM%.bat"
+rem %RANDOM% SOZINHO NAO E UNICO: o cmd.exe semeia por relogio, entao dois
+rem processos abertos no mesmo tick geram a mesma sequencia. Observado em CI:
+rem duas execucoes seguidas produziram o mesmo nome, a segunda achou a copia
+rem da primeira e falhou fechada. O carimbo HHMMSScc quebra o empate.
+set "LIA_DEVKIT_STAMP=%TIME: =0%"
+set "LIA_DEVKIT_COPY=%TEMP%\lia-devkit-%RANDOM%-%RANDOM%-%LIA_DEVKIT_STAMP:~0,2%%LIA_DEVKIT_STAMP:~3,2%%LIA_DEVKIT_STAMP:~6,2%%LIA_DEVKIT_STAMP:~9,2%.bat"
 if exist "%LIA_DEVKIT_COPY%" (
     echo ERRO: a copia temporaria "%LIA_DEVKIT_COPY%" ja existe.
     echo Nada sera executado a partir de uma copia de origem desconhecida.
