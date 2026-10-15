@@ -4096,18 +4096,59 @@ class PidTriStateTests(unittest.TestCase):
     the round reported a cleanup it had not verified.
     """
 
-    def test_a_live_pid_is_alive_and_a_absent_one_is_dead(self):
-        self.assertEqual(processes.ALIVE, processes.pid_state_posix(os.getpid()))
-        self.assertEqual(processes.DEAD, processes.pid_state_posix(0x7FFFFFFE))
+    def test_a_live_pid_is_alive_and_an_absent_one_is_dead(self):
+        """
+        Liveness, through the dispatching entry point, on the platform running.
+
+        This used to call `pid_state_posix` unconditionally. On Windows that is
+        not a probe: `signal.CTRL_C_EVENT` is 0, so `os.kill(pid, 0)` becomes
+        `GenerateConsoleCtrlEvent` and the assertion delivered a real Ctrl+C to
+        its own console group, interrupting the CI job with a bare
+        `KeyboardInterrupt` and no test named anywhere. Going through
+        `pid_state` exercises the genuine OpenProcess path on Windows instead
+        of skipping it.
+        """
+        self.assertEqual(processes.ALIVE, processes.pid_state(os.getpid()))
+        self.assertEqual(processes.DEAD, processes.pid_state(0x7FFFFFFE))
+        if os.name == 'nt':
+            with self.assertRaises(RuntimeError):
+                processes.pid_state_posix(os.getpid())
+        else:
+            self.assertEqual(processes.ALIVE,
+                             processes.pid_state_posix(os.getpid()))
+            self.assertEqual(processes.DEAD,
+                             processes.pid_state_posix(0x7FFFFFFE))
+
+    def test_the_posix_probe_never_reaches_os_kill_on_windows(self):
+        """
+        REGRESSION for the Ctrl+C above, asserted directly: on Windows the
+        POSIX probe must refuse BEFORE touching os.kill, because touching it is
+        the whole bug.
+        """
+        with patch('os.name', 'nt'), patch('os.kill') as killed:
+            with self.assertRaises(RuntimeError):
+                processes.pid_state_posix(os.getpid())
+            killed.assert_not_called()
+        # And the refusal is specifically a Windows rule rather than a blanket
+        # one: with a POSIX os.name the same call must go through and answer.
+        # Stated on the host rather than pinned, so this half is real.
+        if os.name != 'nt':
+            with patch('os.kill', return_value=None):
+                self.assertEqual(processes.ALIVE,
+                                 processes.pid_state_posix(4242))
 
     def test_permission_denied_proves_existence_not_absence(self):
-        real = os.kill
-        with patch('os.kill', side_effect=PermissionError(13, 'EPERM')):
+        # os.name is pinned so the POSIX classification is exercised on every
+        # platform. What is under test is the exception mapping - "EPERM means
+        # it exists" - which is a statement about the logic, not about this
+        # machine, and os.kill is mocked so nothing real is ever signalled.
+        with patch('os.name', 'posix'), \
+                patch('os.kill', side_effect=PermissionError(13, 'EPERM')):
             self.assertEqual(processes.ALIVE, processes.pid_state_posix(4242))
-        os.kill = real
 
     def test_an_unexpected_oserror_is_unknown_not_dead(self):
-        with patch('os.kill', side_effect=OSError(22, 'EINVAL')):
+        with patch('os.name', 'posix'), \
+                patch('os.kill', side_effect=OSError(22, 'EINVAL')):
             self.assertEqual(processes.UNKNOWN, processes.pid_state_posix(4242))
 
     def _windows_state(self, **kwargs) -> str:
@@ -5874,7 +5915,7 @@ class SuiteCoverageTests(unittest.TestCase):
     """REGRESSION C - diagnosing a hang must not quietly drop tests."""
 
     #: Baseline measured on Linux at the commit that introduced the journal.
-    MINIMUM_TEST_CASES = 421
+    MINIMUM_TEST_CASES = 422
 
     def test_no_test_case_was_dropped(self) -> None:
         count = unittest.TestLoader().loadTestsFromModule(

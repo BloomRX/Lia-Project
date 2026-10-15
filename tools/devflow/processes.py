@@ -377,7 +377,23 @@ def _windows_process_table() -> list[tuple[int, int]]:
 
 
 def pid_state_posix(pid: int) -> str:
-    """ALIVE / DEAD / UNKNOWN from signal 0. Only ESRCH proves absence."""
+    """
+    ALIVE / DEAD / UNKNOWN from signal 0. Only ESRCH proves absence.
+
+    POSIX ONLY, and that is enforced rather than documented. On Windows
+    `signal.CTRL_C_EVENT` is 0, so `os.kill(pid, 0)` is not a liveness probe at
+    all - CPython routes it to `GenerateConsoleCtrlEvent` and it really does
+    deliver Ctrl+C to the console group. Called on a CI runner that meant
+    interrupting the whole job, which surfaced as a bare `KeyboardInterrupt`
+    in an ancestor process with no test named anywhere. Refusing loudly is the
+    difference between a bug that announces itself and one that takes the run
+    down and blames nothing.
+    """
+    if os.name == 'nt':
+        raise RuntimeError(
+            'pid_state_posix não é seguro no Windows: os.kill(pid, 0) envia '
+            'CTRL_C_EVENT. Use pid_state(), que despacha para '
+            'pid_state_windows.')
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
