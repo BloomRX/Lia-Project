@@ -2890,17 +2890,26 @@ class DevKitHandoffExecutionTests(unittest.TestCase):
 
     def test_the_exit_code_survives_the_handoff(self):
         probe = self._run()
-        self.assertTrue(self.probe.exists())
+        self.assertTrue(
+            self.probe.exists(),
+            'tools\\lia_dev.py nao chegou a rodar. Saida do DevKit.bat:\n'
+            + (probe.stdout or '') + (probe.stderr or ''))
         self.assertEqual(probe.returncode, 7)
 
     def test_arguments_are_forwarded_without_a_shift(self):
         probe = self._run('status')
-        self.assertTrue(self.probe.exists())
+        self.assertTrue(
+            self.probe.exists(),
+            'tools\\lia_dev.py nao chegou a rodar. Saida do DevKit.bat:\n'
+            + (probe.stdout or '') + (probe.stderr or ''))
         self.assertIn('argv=status', self.probe.read_text(encoding='utf-8'))
 
     def test_the_git_token_is_forwarded_once(self):
         probe = self._run('git', 'validate')
-        self.assertTrue(self.probe.exists())
+        self.assertTrue(
+            self.probe.exists(),
+            'tools\\lia_dev.py nao chegou a rodar. Saida do DevKit.bat:\n'
+            + (probe.stdout or '') + (probe.stderr or ''))
         self.assertIn('argv=git validate', self.probe.read_text(encoding='utf-8'))
 
 
@@ -4711,8 +4720,17 @@ class UpgradeBootstrapExecutionTests(unittest.TestCase):
                    if lines[i].strip().startswith(') do'))
         canonical = str(self.remote).replace('\\', '/')
         lines[start + 1:end] = [f'    "{canonical}"']
+        # Only the assignment is localized. The placeholder also appears in the
+        # guard that refuses to run without a reviewed commit; replacing it
+        # THERE turns the guard into `%SHA%==%SHA%`, which is always true, so
+        # the bootstrap refused every run and the checkout never advanced.
         lines = [l.replace('PLACEHOLDER-REVIEWED-SHA', self.target)
+                 if l.strip().startswith('set "LIA_TARGET_SHA=') else l
                  for l in lines]
+        guards = [l for l in lines if 'PLACEHOLDER-REVIEWED-SHA' in l]
+        self.assertEqual(1, len(guards),
+                         'o guarda do placeholder deixou de existir na cópia: '
+                         + repr(guards))
         # The git command lines must be untouched.
         shipped_git = [l for l in shipped.replace('\r\n', '\n').split('\n')
                        if ' git -C ' in l or l.startswith('git -C ')]
@@ -5546,6 +5564,25 @@ class DiagnosticDestinationRedactionTests(unittest.TestCase):
     def tearDown(self) -> None:
         shutil.rmtree(self.base, ignore_errors=True)
 
+    def test_the_progress_stream_is_sanitized_like_every_other_destination(self) -> None:
+        """
+        The console is a persistence destination.
+
+        On a real Windows run the prepare stage printed the resolved removal
+        target and the artifacts line printed %TEMP% - both absolute, both
+        under the account name. `emitted` is exactly what the console sink
+        receives, so this drives a real runner and reads back what arrived.
+        """
+        data = runnable_manifest()
+        runner, emitted, _asks = make_runner(self.repo, validate_round(data))
+        home = str(Path.home())
+        runner.say(f'  alvo: dir -> {home}/algum/caminho')
+        self.assertTrue(emitted, 'nada chegou ao console')
+        joined = '\n'.join(emitted)
+        self.assertNotIn(home, joined,
+                         f'o console vazou o home: {emitted[-1]!r}')
+        self.assertIn('<HOME>', joined)
+
     def test_an_unquoted_credential_reaches_no_persisted_destination(self) -> None:
         home = str(Path.home())
         body = (
@@ -6003,7 +6040,7 @@ class SuiteCoverageTests(unittest.TestCase):
     """REGRESSION C - diagnosing a hang must not quietly drop tests."""
 
     #: Baseline measured on Linux at the commit that introduced the journal.
-    MINIMUM_TEST_CASES = 425
+    MINIMUM_TEST_CASES = 426
 
     def test_no_test_case_was_dropped(self) -> None:
         count = unittest.TestLoader().loadTestsFromModule(

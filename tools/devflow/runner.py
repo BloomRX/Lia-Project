@@ -36,7 +36,8 @@ from typing import Callable, Protocol
 from . import processes, safe_paths
 from .markers import MarkerReport, evaluate_markers
 from .report import (REDACT, SanitizedLog, collapse_home, prune_runs, run_dir,
-                     sanitize_console, sanitize_test_output, utc_stamp,
+                     sanitize_console, sanitize_line,
+                     sanitize_test_output, utc_stamp,
                      write_run)
 from .sync import git_executable
 from .schema import DEFAULT_TEST_TIMEOUT_S, Round
@@ -471,6 +472,19 @@ class RoundRunner:
         if self.invoke_test is None:
             self.invoke_test = run_test_command
 
+    def say(self, line: str) -> None:
+        """
+        The console is a persistence destination too.
+
+        It therefore goes through the ONE sanitizer, exactly like REPORT.txt,
+        run.json and `console.sanitized.log` already do. Before this, the
+        progress lines were the only destination that could carry an absolute
+        path - observed on a real Windows run, where the prepare stage printed
+        the resolved removal target and the artifacts line printed %TEMP%,
+        which on that runner is an 8.3 short path under the account name.
+        """
+        self.emit(sanitize_line(line))
+
     # -- public ---------------------------------------------------------
     def execute(self) -> RoundOutcome:
         moment = self.clock()
@@ -480,7 +494,7 @@ class RoundRunner:
 
         def note(line: str) -> None:
             captured.append(line)
-            self.emit(line)
+            self.say(line)
 
         outcome = RoundOutcome(round_id=self.round_manifest.id, verdict='REFUSED')
         try:
@@ -1015,7 +1029,7 @@ class RoundRunner:
             outcome.notes.append(f'não consegui gravar artefatos: {exc}')
             return
         outcome.artifacts = {key: str(value) for key, value in paths.items()}
-        self.emit(f'artefatos: {directory}')
+        self.say(f'artefatos: {directory}')
 
 
 def render_report(payload: dict) -> str:

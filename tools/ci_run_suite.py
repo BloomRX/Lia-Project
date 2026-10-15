@@ -47,10 +47,17 @@ TAIL_LINES = 400
 #: line cap was hit first (the char cap was never reached). The failures that
 #: still needed diagnosing were exactly the ones amputated - so the bound that
 #: was meant to keep the annotation small was the thing hiding the evidence.
-#: GitHub allows 64 KB per annotation message; the values below leave room for
-#: the `%25`/`%0A` escaping this file applies before emitting.
+#: The excerpt is deliberately generous because it is then CHUNKED, not cut:
+#: measured on a real Windows run, an annotation message came back truncated at
+#: exactly 4096 characters regardless of what was written, so one large
+#: annotation silently loses its tail - and the tail is where the last failures
+#: are. These bounds only matter together with `_chunks`.
 MAX_SUMMARY_LINES = 400
 MAX_SUMMARY_CHARS = 24000
+
+#: Ceiling for ONE annotation, measured on the ENCODED form: the `%25`/`%0A`
+#: escaping expands the payload, and it is the emitted command that is bounded.
+ANNOTATION_CHUNK_CHARS = 3800
 
 
 def _reconfigure(stream) -> None:
@@ -101,15 +108,43 @@ def short_failure_lines(lines: list[str], limit: int = 40) -> str:
     return '\n'.join(kept) or '(nenhuma linha de falha reconhecível)'
 
 
+def _chunks(message: str, ceiling: int = ANNOTATION_CHUNK_CHARS) -> list[str]:
+    """
+    Split on line boundaries so the encoded form of each part fits.
+
+    Measured bound, not a guess: a real run returned a message cut at exactly
+    4096 characters, in the middle of `Ran 425 tests in 21`. Cutting is what
+    loses evidence, so anything over the ceiling is published as several
+    annotations instead of one truncated one.
+    """
+    parts: list[str] = []
+    current: list[str] = []
+    for line in message.split('\n'):
+        candidate = current + [line]
+        if current and len(_encode('\n'.join(candidate))) > ceiling:
+            parts.append('\n'.join(current))
+            current = [line]
+        else:
+            current = candidate
+    if current:
+        parts.append('\n'.join(current))
+    return parts or ['']
+
+
 def emit_annotation(title: str, message: str, level: str = 'error') -> None:
     """
-    Publish a workflow annotation.
+    Publish a workflow annotation, in as many parts as the ceiling requires.
 
     Written on its own line, because a workflow command that does not start a
-    line is silently ignored - the child's output is not guaranteed to end in a
-    newline, so the leading one is not decoration.
+    line is silently ignored - the child's output is not guaranteed to end in
+    a newline, so the leading one is not decoration.
     """
-    sys.stdout.write(f'\n::{level} title={title}::{_encode(message)}\n')
+    parts = _chunks(message)
+    total = len(parts)
+    for index, part in enumerate(parts, start=1):
+        suffix = '' if total == 1 else f' [{index}/{total}]'
+        sys.stdout.write(
+            f'\n::{level} title={title}{suffix}::{_encode(part)}\n')
     sys.stdout.flush()
 
 

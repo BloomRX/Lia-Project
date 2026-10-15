@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 import importlib.util
 import json
+import os
 from pathlib import Path
 import re
 
@@ -57,11 +58,46 @@ def _load_universal_redactor():
 REDACT = _load_universal_redactor()
 
 
+_SHORT_HOME: str | None = None
+
+
+def _short_home() -> str:
+    """
+    The 8.3 short form of the home directory - Windows only, '' elsewhere.
+
+    On a Windows runner `%TEMP%` is normally a short path
+    (`C:\\Users\\RUNNER~1\\...`) while `Path.home()` is the long form, so matching
+    only the long form leaves the short one - and the account name inside it -
+    in the persisted text. Observed, not hypothetical: a real CI run leaked
+    `C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\...` into the console.
+    """
+    global _SHORT_HOME
+    if _SHORT_HOME is None:
+        _SHORT_HOME = ''
+        if os.name == 'nt':
+            try:
+                import ctypes
+                home = str(Path.home())
+                needed = ctypes.windll.kernel32.GetShortPathNameW(home, None, 0)
+                if needed:
+                    buf = ctypes.create_unicode_buffer(needed + 1)
+                    if ctypes.windll.kernel32.GetShortPathNameW(home, buf,
+                                                                needed + 1):
+                        _SHORT_HOME = buf.value
+            except Exception:  # noqa: BLE001 - nunca é motivo para vazar
+                _SHORT_HOME = ''
+    return _SHORT_HOME
+
+
 def collapse_home(text: str) -> str:
     home = str(Path.home()).replace('\\', '/')
     if not home or home == '/':
         return text
-    for variant in {home, str(Path.home())}:
+    variants = {home, str(Path.home())}
+    short = _short_home()
+    if short:
+        variants |= {short, short.replace('\\', '/')}
+    for variant in variants:
         if variant and variant in text:
             text = text.replace(variant, '<HOME>')
     return text
