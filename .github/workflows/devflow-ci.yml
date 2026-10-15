@@ -67,11 +67,17 @@ jobs:
       - name: Byte-compile tools
         run: python -m compileall -q tools
 
+      # Each suite runs through tools/ci_run_suite.py, which invokes exactly
+      # `python <suite>` and propagates the child's exit code unchanged. Its
+      # only addition is to publish a bounded excerpt of the unittest failure
+      # block to the job summary when a suite fails, because a failure whose
+      # detail lives only in a downloadable log archive cannot be reviewed.
+      # It never skips, filters or reinterprets a test.
       - name: Universal DevKit suite (tools/test_project_cli.py)
-        run: python tools/test_project_cli.py
+        run: python tools/ci_run_suite.py tools/test_project_cli.py
 
       - name: Creation suite (tools/test_creation.py)
-        run: python tools/test_creation.py
+        run: python tools/ci_run_suite.py tools/test_creation.py
 
       - name: DevFlow suite (tools/test_lia_dev.py)
-        run: python tools/test_lia_dev.py
+        run: python tools/ci_run_suite.py tools/test_lia_dev.py
