@@ -3,31 +3,43 @@ Run one repository test suite in CI and surface a bounded failure excerpt.
 
 Why this exists
 ---------------
-A CI failure whose only detail lives in a downloadable log archive is useless
-to anyone who cannot fetch that archive. This wrapper runs the suite exactly as
+A CI failure whose only detail lives in a downloadable log archive is useless to
+anyone who cannot fetch that archive. This wrapper runs the suite exactly as
 declared - same interpreter, same path, same exit code propagated unchanged -
-and, only when it fails, appends a bounded excerpt of the unittest failure
-section to the job summary, which is readable through the ordinary repository
-API.
+and, only when it fails, publishes a bounded excerpt of the unittest failure
+block as a workflow annotation, which is readable through the ordinary
+repository API.
 
-It never changes a result. The exit code is the child's own, verbatim: a
-failure stays a failure and a timeout stays a timeout. Nothing here skips,
-filters or reinterprets a test.
+It never changes a result. The exit code is the child's own, verbatim: a failure
+stays a failure and a timeout stays a timeout. Nothing here skips, filters or
+reinterprets a test.
 
-What it publishes is bounded on purpose. Only the unittest failure block is
-excerpted, capped in both lines and characters, so the summary carries the
-failing assertion rather than a raw log dump.
+Two deliberate design points, both learned from a run that produced no
+diagnostic at all:
+
+  * Output is STREAMED, not buffered. `capture_output=True` holds the whole
+    suite output in memory and defers every byte until the child exits; on a
+    slow runner with a verbose suite that is a large allocation whose only
+    purpose is a diagnostic. A bounded ring buffer of the most recent lines
+    gives the same excerpt with none of the cost.
+  * The diagnostic path cannot itself fail silently. The annotation is emitted
+    the moment the child returns, before anything else happens, and the whole
+    body is wrapped so that an internal error in this wrapper is also reported
+    rather than appearing as a bare exit code.
 """
 
 from __future__ import annotations
 
+from collections import deque
 import os
 import subprocess
 import sys
 
-#: Bounds on what may reach the job summary. A single unittest failure block is
-#: a few dozen lines; these caps keep a pathological run from turning the
-#: summary into a log dump.
+#: Lines of child output retained for the failure excerpt. The unittest failure
+#: block is at the end, so a tail window is what matters.
+TAIL_LINES = 400
+
+#: Bounds on what may reach an annotation.
 MAX_SUMMARY_LINES = 120
 MAX_SUMMARY_CHARS = 8000
 
@@ -37,7 +49,12 @@ def _reconfigure(stream) -> None:
         stream.reconfigure(errors='replace')
 
 
-def failure_excerpt(stderr: str) -> str:
+def _encode(text: str) -> str:
+    """Percent-encode for the workflow-command format."""
+    return text.replace('%', '%25').replace('\r', '').replace('\n', '%0A')
+
+
+def failure_excerpt(lines: list[str]) -> str:
     """
     The unittest failure section, bounded.
 
@@ -45,30 +62,25 @@ def failure_excerpt(stderr: str) -> str:
     Everything from the first banner to the end is the part worth reading; the
     per-test progress before it is noise once something has failed.
     """
-    lines = stderr.splitlines()
     start = next((i for i, line in enumerate(lines)
                   if line.startswith('=' * 20)), None)
-    if start is None:
-        # No recognisable banner - the process died before unittest reported.
-        # The tail is then the only evidence there is.
-        selected = lines[-MAX_SUMMARY_LINES:]
-    else:
-        selected = lines[start:start + MAX_SUMMARY_LINES]
+    selected = lines[-MAX_SUMMARY_LINES:] if start is None else lines[start:]
+    selected = selected[:MAX_SUMMARY_LINES]
     text = '\n'.join(selected)
     if len(text) > MAX_SUMMARY_CHARS:
         text = text[:MAX_SUMMARY_CHARS] + '\n... [resumo truncado]'
     return text
 
 
-def short_failure_lines(output: str, limit: int = 40) -> str:
+def short_failure_lines(lines: list[str], limit: int = 40) -> str:
     """
     Only the failing test identities, the counts and the first assertion.
 
-    This is the version that has to get through: a handful of short lines,
-    no traceback, nothing that could trip a length or encoding limit.
+    This is the version that has to get through: a handful of short lines, no
+    traceback, nothing that could trip a length or encoding limit.
     """
     kept: list[str] = []
-    for line in output.splitlines():
+    for line in lines:
         stripped = line.strip()
         if (stripped.startswith(('FAIL:', 'ERROR:', 'Ran ', 'OK', 'FAILED'))
                 or stripped.startswith('AssertionError')
@@ -80,46 +92,15 @@ def short_failure_lines(output: str, limit: int = 40) -> str:
     return '\n'.join(kept) or '(nenhuma linha de falha reconhecível)'
 
 
-def render(suite: str, code: int, stdout: str, stderr: str) -> str:
-    counts = next((line for line in stderr.splitlines()
-                   if line.startswith('Ran ')), '')
-    verdict = next((line for line in stderr.splitlines()
-                    if line.startswith(('OK', 'FAILED'))), '')
-    parts = [
-        f'### DevFlow CI - `{suite}` FALHOU',
-        '',
-        f'- plataforma: `{os.environ.get("RUNNER_OS", "?")}`',
-        f'- exit code: `{code}`',
-        f'- `{counts}`' if counts else '- contagem indisponível',
-        f'- `{verdict}`' if verdict else '',
-        '',
-        '```',
-        failure_excerpt(stderr or stdout),
-        '```',
-        '',
-    ]
-    return '\n'.join(part for part in parts if part is not None)
-
-
-def emit_annotation(suite: str, code: int, stderr: str, stdout: str) -> None:
+def emit_annotation(title: str, message: str, level: str = 'error') -> None:
     """
-    Publish the failure as a workflow annotation.
+    Publish a workflow annotation.
 
-    Chosen over the job summary because the summary is not reliably readable
-    back through the repository API, while annotations are: a failure detail
-    that only a human sitting in the web UI can see is not much use to an
-    independent reviewer working through the API. Newlines are percent-encoded
-    as the workflow-command format requires.
+    Written on its own line, because a workflow command that does not start a
+    line is silently ignored - the child's output is not guaranteed to end in a
+    newline, so the leading one is not decoration.
     """
-    # Two annotations, deliberately. A short one carrying only the failing
-    # test ids and the first assertion survives any length or parsing limit
-    # the annotation channel imposes; the long excerpt is best-effort on top
-    # of it. Both go out on their own line, because a workflow command that
-    # does not start a line is silently ignored.
-    short = short_failure_lines(stderr or stdout)
-    for level, text in (('error', short), ('error', failure_excerpt(stderr or stdout))):
-        encoded = text.replace('%', '%25').replace('\r', '').replace('\n', '%0A')
-        sys.stdout.write(f'\n::{level} title={suite} exit {code}::{encoded}\n')
+    sys.stdout.write(f'\n::{level} title={title}::{_encode(message)}\n')
     sys.stdout.flush()
 
 
@@ -129,30 +110,42 @@ def main(argv: list[str] | None = None) -> int:
         print('uso: ci_run_suite.py <caminho/da/suite.py>', file=sys.stderr)
         return 2
     suite = argv[0]
-
-    proc = subprocess.run([sys.executable, suite], capture_output=True,
-                          text=True, encoding='utf-8', errors='replace')
     _reconfigure(sys.stdout)
     _reconfigure(sys.stderr)
-    # Re-emit everything so the ordinary job log stays complete and this
-    # wrapper is never the reason a line went missing.
-    if proc.stdout:
-        sys.stdout.write(proc.stdout)
-        sys.stdout.flush()
-    if proc.stderr:
-        sys.stderr.write(proc.stderr)
-        sys.stderr.flush()
 
-    if proc.returncode != 0:
-        emit_annotation(suite, proc.returncode, proc.stderr or '',
-                        proc.stdout or '')
+    tail: deque[str] = deque(maxlen=TAIL_LINES)
+    code = 1
+    try:
+        # stderr is merged into stdout so one stream can be both forwarded and
+        # tailed; the unittest failure block survives the merge intact.
+        proc = subprocess.Popen(
+            [sys.executable, suite], stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT, text=True, encoding='utf-8',
+            errors='replace', bufsize=1)
+        assert proc.stdout is not None
+        for line in proc.stdout:
+            sys.stdout.write(line)
+            tail.append(line.rstrip('\n'))
+        sys.stdout.flush()
+        code = proc.wait()
+    except BaseException as exc:  # noqa: BLE001 - the diagnostic must not vanish
+        emit_annotation(f'{suite} - erro interno do wrapper',
+                        f'{type(exc).__name__}: {exc}')
+        raise
+
+    if code != 0:
+        snapshot = list(tail)
+        # Short one first: it is the version most likely to survive.
+        emit_annotation(f'{suite} exit {code}', short_failure_lines(snapshot))
+        emit_annotation(f'{suite} exit {code} (detalhe)',
+                        failure_excerpt(snapshot))
         summary_path = os.environ.get('GITHUB_STEP_SUMMARY')
         if summary_path:
             with open(summary_path, 'a', encoding='utf-8') as handle:
-                handle.write(render(suite, proc.returncode,
-                                    proc.stdout or '', proc.stderr or ''))
+                handle.write(f'### `{suite}` FALHOU (exit {code})\n\n```\n'
+                             f'{failure_excerpt(snapshot)}\n```\n')
     # The child's own status, unmodified.
-    return proc.returncode
+    return code
 
 
 if __name__ == '__main__':
