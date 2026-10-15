@@ -4780,6 +4780,29 @@ class UpgradeBootstrapExecutionTests(unittest.TestCase):
                          'o codigo do DevKit novo foi engolido:\n'
                          + probe.stdout + probe.stderr)
 
+    def test_a_genuine_status_failure_is_refused_and_never_read_as_clean(self):
+        """
+        A status that FAILS is not a clean checkout.
+
+        The index is corrupted so `git status` exits nonzero with a fatal - a
+        real failure of the command, not a simulated one. Step 3 exists exactly
+        for this: an empty status output must never be read as "nothing to
+        worry about" when the command that would have produced it did not run.
+        """
+        before = self._git(self.repo, 'rev-parse', 'HEAD').stdout.strip()
+        (self.repo / '.git' / 'index').write_bytes(b'CORROMPIDO-DE-PROPOSITO')
+        self.assertNotEqual(
+            0, self._git(self.repo, 'status', '--porcelain',
+                         '-uall').returncode,
+            'o cenario nao produz uma falha real de git status')
+        probe = self._run()
+        self.assertNotEqual(0, probe.returncode,
+                            'um git status que falhou foi aceito como limpo:\n'
+                            + probe.stdout + probe.stderr)
+        self.assertEqual(
+            before, self._git(self.repo, 'rev-parse', 'HEAD').stdout.strip(),
+            'o checkout foi tocado apesar de o status ter falhado')
+
     def test_a_dirty_checkout_is_refused_untouched(self):
         before = self._git(self.repo, 'rev-parse', 'HEAD').stdout.strip()
         (self.repo / 'sujo.txt').write_text('x\n', encoding='utf-8')
@@ -4798,6 +4821,147 @@ class UpgradeBootstrapExecutionTests(unittest.TestCase):
         self.assertNotEqual(0, probe.returncode)
         self.assertIn('divergente',
                       self._git(self.repo, 'log', '--format=%s', '-1').stdout)
+
+
+class StatusCheckProbeTests(unittest.TestCase):
+    """
+    The git half of the bootstrap's step 3, on every platform.
+
+    The bootstrap refuses to touch a checkout unless `git status --porcelain
+    -uall` SUCCEEDED, and its message ("git status nao respondeu com sucesso")
+    is emitted both when git really fails and when the exit-code marker is lost
+    on the way out of `for /f`. Those are different defects with different
+    fixes, so each half is measured separately instead of being read off the
+    message. These two are the git half and need no shell.
+    """
+
+    BRANCH = 'arena/01a10290-lia-project'
+
+    def setUp(self) -> None:
+        self.base = Path(tempfile.mkdtemp(prefix='status-probe-'))
+        self.remote = self.base / 'remote.git'
+        self.author = self.base / 'author'
+        self.repo = self.base / 'work'
+        self._git(self.base, 'init', '--bare', '-q', '-b', self.BRANCH,
+                  str(self.remote))
+        self._git(self.base, 'clone', '-q', str(self.remote), str(self.author))
+        self._git(self.author, 'config', 'user.email', 'devflow@test.local')
+        self._git(self.author, 'config', 'user.name', 'DevFlow Test')
+        (self.author / 'Lia.bat').write_text('@echo off\r\n', encoding='utf-8')
+        self._git(self.author, 'add', '-A')
+        self._git(self.author, 'commit', '-q', '-m', 'base')
+        self._git(self.author, 'push', '-q', 'origin', self.BRANCH)
+        self._git(self.base, 'clone', '-q', str(self.remote), str(self.repo))
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.base, ignore_errors=True)
+
+    def _git(self, cwd: Path, *args) -> subprocess.CompletedProcess:
+        return subprocess.run([sync.git_executable(), '-C', str(cwd), *args],
+                              capture_output=True, text=True,
+                              encoding='utf-8', errors='replace', timeout=120)
+
+    def test_a_clean_clone_makes_the_status_command_succeed(self) -> None:
+        """
+        The exact command the bootstrap runs, against the exact shape of
+        repository the bootstrap is handed. If this ever fails, the bootstrap
+        is refusing correctly and the fault is in the fixture, not in cmd.exe.
+        """
+        probe = self._git(self.repo, 'status', '--porcelain', '-uall')
+        self.assertEqual(0, probe.returncode,
+                         'git status falhou num clone limpo:\n'
+                         + probe.stdout + probe.stderr)
+        self.assertEqual('', probe.stdout,
+                         'um clone fresco nao deveria ter sujeira:\n'
+                         + probe.stdout)
+
+    def test_a_corrupt_index_is_a_real_status_failure_not_a_clean_checkout(self) -> None:
+        """
+        The counter-case: a status that genuinely fails, constructed by
+        corrupting the index rather than by pretending. This is what step 3
+        must refuse, and it is the scenario the regression below drives
+        through the real bootstrap.
+        """
+        (self.repo / '.git' / 'index').write_bytes(b'CORROMPIDO-DE-PROPOSITO')
+        probe = self._git(self.repo, 'status', '--porcelain', '-uall')
+        self.assertNotEqual(0, probe.returncode,
+                            'corromper o indice nao fez o status falhar')
+        self.assertEqual('', probe.stdout,
+                         'um status que falhou nao pode render lista de sujeira')
+
+
+@unittest.skipUnless(shutil.which('cmd.exe'), 'cmd.exe indisponível nesta plataforma')
+class StatusMarkerProbeTests(unittest.TestCase):
+    """
+    The cmd.exe half of step 3, isolated.
+
+    Steps 1 and 2 of the shipped bootstrap read git through the same
+    `for /f "usebackq delims="` shape and they work, so the shape itself is not
+    in doubt. Step 3 differs in one respect only: its backquoted command carries
+    an `&& echo LIA_RC_ZERO || echo LIA_RC_NONZERO` marker. This runs that exact
+    shipped line - extracted byte for byte, not retyped - and prints what the
+    loop body receives, so "git failed" and "the marker was lost" stop looking
+    identical.
+    """
+
+    def setUp(self) -> None:
+        self.base = Path(tempfile.mkdtemp(prefix='marker-probe-'))
+        self.repo = self.base / 'repo'
+        self.repo.mkdir()
+        subprocess.run([sync.git_executable(), '-C', str(self.repo), 'init',
+                        '-q', '-b', 'sonda'],
+                       capture_output=True, text=True, timeout=120)
+        (self.repo / 'a.txt').write_text('a\n', encoding='utf-8')
+        for args in (['config', 'user.email', 'devflow@test.local'],
+                     ['config', 'user.name', 'DevFlow Test'],
+                     ['add', '-A'], ['commit', '-q', '-m', 'base']):
+            subprocess.run([sync.git_executable(), '-C', str(self.repo), *args],
+                           capture_output=True, text=True, timeout=120)
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.base, ignore_errors=True)
+
+    def _shipped_marker_line(self) -> str:
+        text = UPGRADE_BAT.read_text(encoding='utf-8', errors='replace')
+        lines = text.replace('\r\n', '\n').split('\n')
+        hits = [line for line in lines
+                if line.strip().startswith('for /f') and 'LIA_RC_ZERO' in line]
+        self.assertEqual(1, len(hits),
+                         f'esperava exatamente um for /f de status: {hits}')
+        return hits[0]
+
+    def test_the_shipped_marker_reaches_the_for_loop(self) -> None:
+        shipped = self._shipped_marker_line()
+        head, sep, _tail = shipped.partition(') do (')
+        self.assertTrue(sep, f'a linha embarcada mudou de forma: {shipped!r}')
+        # The loop body is swapped for an echo of what it received; the
+        # backquoted command - the part under test - is untouched.
+        probe_bat = self.base / 'probe.bat'
+        # The raw exit code is read on its OWN line, outside any block, so
+        # %ERRORLEVEL% is live rather than expanded when the block was parsed.
+        probe_bat.write_bytes(
+            ('@echo off\r\n'
+             'set "LIA_REPO=%~1"\r\n'
+             'git -C "%LIA_REPO%" status --porcelain -uall >nul 2>nul\r\n'
+             'echo [RC=%ERRORLEVEL%]\r\n'
+             + head + ') do echo [%%L]\r\n').encode('utf-8'))
+        proc = subprocess.run(
+            ['cmd.exe', '/d', '/s', '/c', str(probe_bat), str(self.repo)],
+            cwd=self.base, capture_output=True, text=True,
+            encoding='utf-8', errors='replace', timeout=180)
+        out = proc.stdout + proc.stderr
+        # Both halves are reported together because they discriminate the two
+        # candidate causes: a nonzero [RC] means git genuinely failed, while
+        # [RC=0] with no marker means cmd.exe lost the marker on the way out of
+        # `for /f`. Guessing between them from the bootstrap's message alone is
+        # exactly what produced a wrong diagnosis before.
+        self.assertIn('[RC=0]', out,
+                      'git status falhou DE VERDADE sob cmd.exe - a recusa do '
+                      'bootstrap esta correta e o defeito nao e de parsing:\n'
+                      + out)
+        self.assertIn('[LIA_RC_ZERO]', out,
+                      'git status saiu 0 mas o marcador NAO chegou ao laco '
+                      'for /f - a falha e de parsing do cmd.exe:\n' + out)
 
 
 class DeclaredTimeoutTests(unittest.TestCase):
@@ -6057,7 +6221,7 @@ class SuiteCoverageTests(unittest.TestCase):
     """REGRESSION C - diagnosing a hang must not quietly drop tests."""
 
     #: Baseline measured on Linux at the commit that introduced the journal.
-    MINIMUM_TEST_CASES = 426
+    MINIMUM_TEST_CASES = 430
 
     def test_no_test_case_was_dropped(self) -> None:
         count = unittest.TestLoader().loadTestsFromModule(
