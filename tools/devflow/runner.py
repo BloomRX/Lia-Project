@@ -35,8 +35,9 @@ from typing import Callable, Protocol
 
 from . import processes, safe_paths
 from .markers import MarkerReport, evaluate_markers
-from .report import (SanitizedLog, prune_runs, run_dir, sanitize_console,
-                     sanitize_test_output, utc_stamp, write_run)
+from .report import (REDACT, SanitizedLog, collapse_home, prune_runs, run_dir,
+                     sanitize_console, sanitize_test_output, utc_stamp,
+                     write_run)
 from .sync import git_executable
 from .schema import DEFAULT_TEST_TIMEOUT_S, Round
 
@@ -326,8 +327,40 @@ def run_test_command(argv: list[str], cwd: Path,
                  'tests[].timeout_s no manifesto da rodada.')
         return sanitize_test_output('', body)
 
+    # Output is drained by reader threads rather than collected by
+    # `communicate()`, and this is not a style choice. On POSIX a timed-out
+    # `communicate` raises `TimeoutExpired(self.args, t, output=..., stderr=...)`
+    # and hands over everything read so far; the Windows implementation raises
+    # `TimeoutExpired(self.args, t)` with no output at all. Salvaging the
+    # exception payload therefore worked on one platform and silently returned
+    # nothing on the other - which is precisely the platform whose hangs this
+    # reporting exists to explain. Reading continuously makes the tail
+    # available everywhere.
+    out_parts: list[str] = []
+    err_parts: list[str] = []
+
+    def _drain(stream, sink: list[str]) -> None:
+        if stream is None:
+            return
+        try:
+            for line in stream:
+                sink.append(line)
+        except (ValueError, OSError):
+            # The pipe was closed under us by the timeout cleanup. Whatever was
+            # already captured stays captured; that is the evidence we have.
+            pass
+
+    readers = [threading.Thread(target=_drain, args=(proc.stdout, out_parts),
+                                daemon=True),
+               threading.Thread(target=_drain, args=(proc.stderr, err_parts),
+                                daemon=True)]
+    for reader in readers:
+        reader.start()
+
+    def _captured() -> str:
+        return ''.join(out_parts) + '\n' + ''.join(err_parts)
+
     beats = 0
-    partial: list = []
     while True:
         # The wait is clamped to what is LEFT of the budget. Waiting a full
         # progress interval when only a fraction of the budget remains would
@@ -336,24 +369,36 @@ def run_test_command(argv: list[str], cwd: Path,
         remaining = timeout_s - (time.monotonic() - started)
         if remaining <= 0:
             cleanup = _terminate_timed_out(proc)
-            return 124, expired_detail(cleanup, salvage_progress(*partial))
+            for reader in readers:
+                reader.join(timeout=5)
+            return 124, expired_detail(cleanup, salvage_progress(_captured()))
         try:
-            stdout, stderr = proc.communicate(
-                timeout=min(PROGRESS_INTERVAL_S, remaining))
+            proc.wait(timeout=min(PROGRESS_INTERVAL_S, remaining))
             break
-        except subprocess.TimeoutExpired as exc:
-            # `communicate` hands over whatever it managed to read before the
-            # deadline. Keep it: that is where the running test's identity is.
-            partial.extend([exc.stdout, exc.stderr])
-            del partial[:-PROGRESS_PARTIAL_MAX_CHUNKS]
+        except subprocess.TimeoutExpired:
             if time.monotonic() - started >= timeout_s:
                 cleanup = _terminate_timed_out(proc)
-                return 124, expired_detail(cleanup, salvage_progress(*partial))
+                for reader in readers:
+                    reader.join(timeout=5)
+                return 124, expired_detail(cleanup,
+                                           salvage_progress(_captured()))
             if progress is not None and beats < PROGRESS_MAX_LINES:
                 beats += 1
                 progress(f'  {who}: em andamento, '
                          f'{int(time.monotonic() - started)}s de '
                          f'{timeout_s:.0f}s decorridos')
+
+    for reader in readers:
+        reader.join(timeout=30)
+    # `communicate` used to close these for us; draining by hand does not, and
+    # an unclosed pipe per declared test is a leak the round would carry.
+    for stream in (proc.stdout, proc.stderr):
+        if stream is not None:
+            try:
+                stream.close()
+            except (ValueError, OSError):
+                pass
+    stdout, stderr = ''.join(out_parts), ''.join(err_parts)
     if proc.returncode == WATCHDOG_EXIT_CODE:
         # The suite stopped itself. Route through the watchdog report instead
         # of the generic sanitizer, which would keep the oldest lines and lose
@@ -1034,7 +1079,14 @@ def render_report(payload: dict) -> str:
         f'pronto para publicar: {str(payload["round"]["ready_for_publish"]).lower()}',
         f'finalizado em: {payload["finished_at"]}',
     ]
-    return '\n'.join(lines) + '\n'
+    # The report is a persisted artifact, so it is a persistence boundary like
+    # any other. Several sections interpolate absolute paths that came from
+    # elsewhere - cleanup targets, prelaunch steps, notes - and none of them
+    # passed through the redactor on the way in. On Linux that was invisible
+    # because the temporary directory lives in /tmp, outside the home
+    # directory; on Windows it lives under %USERPROFILE%, so the operator's
+    # home path was written straight into REPORT.txt.
+    return '\n'.join(REDACT(collapse_home(line)) for line in lines) + '\n'
 
 
 def pass_validity(recorded_sha: str, current_sha: str) -> str:

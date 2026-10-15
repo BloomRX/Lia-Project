@@ -41,8 +41,16 @@ import traceback
 TAIL_LINES = 400
 
 #: Bounds on what may reach an annotation.
-MAX_SUMMARY_LINES = 120
-MAX_SUMMARY_CHARS = 8000
+#:
+#: Measured, not guessed: a Windows run with 10 failures produced a 4097-char
+#: excerpt that stopped BEFORE the last four failure blocks, because the 120
+#: line cap was hit first (the char cap was never reached). The failures that
+#: still needed diagnosing were exactly the ones amputated - so the bound that
+#: was meant to keep the annotation small was the thing hiding the evidence.
+#: GitHub allows 64 KB per annotation message; the values below leave room for
+#: the `%25`/`%0A` escaping this file applies before emitting.
+MAX_SUMMARY_LINES = 400
+MAX_SUMMARY_CHARS = 24000
 
 
 def _reconfigure(stream) -> None:

@@ -1155,7 +1155,15 @@ class ReparseSafetyTests(unittest.TestCase):
         real_root = SUITE_PATH.parents[1]
         self.assertTrue(self.repo.is_relative_to(self.base))
         self.assertNotEqual(self.repo.resolve(), real_root.resolve())
-        self.assertIn(tempfile.gettempdir(), str(self.base.resolve()))
+        # Not a substring comparison of the two raw strings: on Windows %TEMP%
+        # is very often an 8.3 short path (C:\Users\RUNNER~1\...) while a
+        # resolved fixture path is the long form, so the two never matched even
+        # though the fixture was exactly where it belongs. samefile compares
+        # what the paths denote rather than how they are spelled.
+        self.assertTrue(
+            os.path.samefile(self.base.resolve().parent,
+                             tempfile.gettempdir()),
+            f'{self.base} não está diretamente sob {tempfile.gettempdir()}')
 
     def test_attribute_table_matches_win32_semantics(self):
         R = filesystem.FILE_ATTRIBUTE_REPARSE_POINT
@@ -1797,7 +1805,12 @@ class PortabilityContractTests(unittest.TestCase):
         subprocess.run([sys.executable, '-c', 'pass'], capture_output=True)
         self.assertGreater(len(SPAWNED_HEADS), before,
                            'a guarda não está observando os spawns reais')
-        self.assertEqual(SPAWNED_HEADS[-1], os.path.basename(sys.executable))
+        # Compared against the BARE name, which is what the guard records.
+        # `os.path.basename(sys.executable)` is `python.exe` on Windows while
+        # the guard deliberately strips the executable suffix so that `sh.exe`
+        # classifies as `sh`, so comparing the two only ever matched on POSIX.
+        self.assertEqual(SPAWNED_HEADS[-1],
+                         _bare_executable_name(sys.executable))
 
     def test_no_forbidden_executable_has_been_spawned_so_far(self):
         self.assertEqual(_spawn_violations(SPAWNED_HEADS), [])
@@ -2777,7 +2790,28 @@ class DevKitHandoffContractTests(unittest.TestCase):
 
     def test_temporary_artifacts_are_cleaned(self):
         self.assertIn('del "%LIA_DEVKIT_COPY%"', self.text)
-        self.assertIn('del "%~f0"', self.body)
+
+    def test_the_owner_removes_the_copy_only_after_capturing_the_code(self):
+        """The cleanup must not precede the capture it would destroy."""
+        captured = self.head.index('set "LIA_DEVKIT_RC=%ERRORLEVEL%"')
+        removed = self.head.index('del "%LIA_DEVKIT_COPY%"')
+        self.assertLess(captured, removed,
+                        'o dono apagou a cópia antes de ler o ERRORLEVEL')
+
+    def test_the_copy_never_deletes_itself_before_exiting(self):
+        """
+        cmd.exe reads a .bat by byte offset, so a copy that deletes itself
+        leaves the following `exit /b` with no file to be read from and the
+        real code is lost - Windows reported 1 where Python had exited 7.
+        Cleanup belongs to the owner. The forbidden fragment is assembled so
+        this assertion cannot be satisfied by its own source text.
+        """
+        forbidden = 'del ' + '"%' + '~f0"'
+        self.assertNotIn(forbidden, self.body,
+                         'a cópia voltou a se apagar antes do exit /b')
+        self.assertTrue(self.body.rstrip().endswith('exit /b %LIA_DEVKIT_RC%'),
+                        f'o corpo não termina devolvendo o código: '
+                        f'{self.body[-90:]!r}')
 
     def test_paths_are_quoted_for_spaces(self):
         for fragment in ('"%LIA_DEVKIT_ROOT%tools\\lia_dev.py"',
@@ -5519,7 +5553,11 @@ class DiagnosticDestinationRedactionTests(unittest.TestCase):
             f'print("api_key={FAKE_SECRET}")\n'
             f'print("\\x1b[31mtoken={FAKE_SECRET}\\x1b[0m", file=sys.stderr)\n'
             f'print("GROQ_API_KEY={FAKE_KEY}", file=sys.stderr)\n'
-            f'print("home was {home}/some/path")\n'
+            # Backslashes doubled: `home` is C:\Users\<name> on Windows, and
+            # embedding it raw in a NON-raw string literal makes \U start a
+            # unicode escape, so the child died with a SyntaxError before it
+            # could print anything the test was looking for.
+            f'print("home was {home.replace(chr(92), chr(92) * 2)}/some/path")\n'
             'print("FAIL src/main/example.test.ts > leaks")\n'
             'print("x" * 3000)\n'
             'sys.exit(1)\n'
@@ -5839,6 +5877,56 @@ class TestIdentityOnTimeoutTests(unittest.TestCase):
                       'o último teste CONCLUÍDO também é evidência')
         self.assertIn('orçamento', detail)
 
+    def test_the_timeout_tail_never_comes_from_the_exception_payload(self) -> None:
+        """
+        The salvage must not read `TimeoutExpired.stdout`/`.stderr`.
+
+        POSIX attaches the partial output to the exception; the Windows
+        implementation raises it bare. Code that salvages the payload is
+        therefore correct on one platform and empty on the other. This wraps
+        `Popen` and asserts `communicate` - the call whose timeout semantics
+        differ by platform - is never used, so a rewrite cannot quietly
+        reintroduce the dependency.
+        """
+        built = []
+        real_subprocess = runner_module.subprocess
+        real_popen = real_subprocess.Popen
+
+        class SpyPopen:
+            def __init__(self, *args, **kwargs):
+                self._inner = real_popen(*args, **kwargs)
+                built.append(self)
+
+            def communicate(self, *args, **kwargs):
+                raise AssertionError(
+                    'o runner voltou a depender de communicate(), cujo '
+                    'payload de timeout e vazio no Windows')
+
+            def __getattr__(self, name):
+                return getattr(self._inner, name)
+
+        class SubprocessView:
+            """Only the runner sees the spy; the real module stays intact."""
+
+            Popen = SpyPopen
+
+            def __getattr__(self, name):
+                return getattr(real_subprocess, name)
+
+        # Rebinding the module attribute (not `subprocess.Popen` itself) keeps
+        # the patch inside the runner's namespace instead of mutating the
+        # shared module for the rest of the suite.
+        self.addCleanup(setattr, runner_module, 'subprocess', real_subprocess)
+        runner_module.subprocess = SubprocessView()
+        hung = '__main__.Lenta.teste_sem_payload'
+        code, detail = run_test_command(
+            [sys.executable, '-c', self._journal_body(hung)],
+            cwd=self.base, timeout_s=2.0, label='sem-payload')
+        self.assertEqual(124, code, detail)
+        self.assertEqual(1, len(built), 'esperava exatamente um filho')
+        self.assertIn(hung, detail,
+                      f'a cauda veio de outro lugar: {detail[:200]}')
+
     def test_a_timeout_detail_never_carries_raw_child_output(self) -> None:
         _code, detail = run_test_command(
             [sys.executable, '-c',
@@ -5915,7 +6003,7 @@ class SuiteCoverageTests(unittest.TestCase):
     """REGRESSION C - diagnosing a hang must not quietly drop tests."""
 
     #: Baseline measured on Linux at the commit that introduced the journal.
-    MINIMUM_TEST_CASES = 422
+    MINIMUM_TEST_CASES = 425
 
     def test_no_test_case_was_dropped(self) -> None:
         count = unittest.TestLoader().loadTestsFromModule(

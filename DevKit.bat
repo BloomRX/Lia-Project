@@ -122,6 +122,10 @@ if "%LIA_DEVKIT_NO_PAUSE%"=="" (
     echo Pressione qualquer tecla para fechar.
     pause >nul
 )
-rem A copia se remove: o nome e unico, entao uma sobra nunca e reutilizada.
-if defined LIA_DEVKIT_BOOTSTRAP_COPY del "%~f0" >nul 2>nul
+rem A COPIA NAO SE REMOVE. O cmd.exe le um .bat por deslocamento de byte,
+rem entao apagar "%~f0" aqui deixaria a linha seguinte - justamente o
+rem "exit /b" que devolve o codigo real - sem arquivo de onde ser lida, e o
+rem DevKit reportaria 1 em vez do codigo do Python. Quem remove a copia e o
+rem dono, depois de capturar o ERRORLEVEL. O nome e unico por execucao, entao
+rem uma sobra nunca e reutilizada.
 exit /b %LIA_DEVKIT_RC%
