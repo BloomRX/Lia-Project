@@ -2847,6 +2847,22 @@ class DevKitHandoffContractTests(unittest.TestCase):
                          'um .bat com LF puro quebra no cmd.exe')
 
 
+def _describe_survivors(tree: frozenset[int] | None,
+                        names: dict[int, str]) -> str:
+    """
+    Name what was still running, or say plainly that it could not be checked.
+
+    An unnamed PID list would be decoration; an empty one would be a lie on a
+    platform that cannot enumerate. Both cases are spelled out instead.
+    """
+    if tree is None:
+        return 'Ainda vivos: NAO foi possivel verificar a arvore.'
+    if not tree:
+        return 'Ainda vivos: nenhum processo alem do proprio filho.'
+    listed = ', '.join(f'{names.get(pid) or "?"} ({pid})' for pid in sorted(tree))
+    return f'Ainda vivos na arvore: {listed}.'
+
+
 def run_bat(argv: list[str], cwd: Path, *, timeout_s: float,
             env: dict | None = None) -> subprocess.CompletedProcess:
     """
@@ -2868,13 +2884,25 @@ def run_bat(argv: list[str], cwd: Path, *, timeout_s: float,
     forever. That difference is exactly what this suite exists to cover, so it
     must not be hidden by an absent console.
     """
+    popen_kwargs: dict = {}
+    if os.name == 'posix':
+        # `_terminate_timed_out` kills the process GROUP, which is only safe
+        # when the child leads one. Without this the cleanup on a timeout would
+        # take the test runner itself down with it.
+        popen_kwargs['start_new_session'] = True
     proc = subprocess.Popen(
         argv, cwd=str(cwd), stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         stdin=subprocess.DEVNULL, text=True, encoding='utf-8',
-        errors='replace', env=env)
+        errors='replace', env=env, **popen_kwargs)
     try:
         stdout, stderr = proc.communicate(timeout=timeout_s)
     except subprocess.TimeoutExpired:
+        # Snapshot BEFORE killing: a parent/child map is only meaningful while
+        # the parent is still alive to appear in it. The names are the point -
+        # "python.exe was still alive" is a diagnosis, "the child hung" is not,
+        # and this suite runs on machines nobody can attach a debugger to.
+        tree = processes.snapshot_owned_tree(proc.pid)
+        survivors = _describe_survivors(tree, processes.process_names(tree))
         # Scoped tree kill: this child and its descendants, never an image
         # name. Then a BOUNDED drain - an unbounded one is the bug above.
         cleanup = runner_module._terminate_timed_out(proc)
@@ -2890,8 +2918,9 @@ def run_bat(argv: list[str], cwd: Path, *, timeout_s: float,
                     pass
         raise AssertionError(
             f'{argv} excedeu {timeout_s:.0f}s e foi encerrado ({cleanup}). '
-            f'Um `pause` sem guarda ou um neto que nao termina produzem este '
-            f'quadro. Saida capturada:\n{(stdout or "") + (stderr or "")}')
+            f'{survivors} Um `pause` sem guarda ou um neto que nao termina '
+            f'produzem este quadro. Saida capturada:\n'
+            f'{(stdout or "") + (stderr or "")}')
     return subprocess.CompletedProcess(argv, proc.returncode, stdout, stderr)
 
 
@@ -2933,6 +2962,56 @@ class BatchPauseGuardTests(unittest.TestCase):
         self.assertGreaterEqual(checked, 2,
                                 'esperava achar os pause do DevKit e do '
                                 'bootstrap; a sonda parou de ver algum')
+
+
+class RunBatBudgetTests(unittest.TestCase):
+    """
+    The declared budget holds even when the child spawns a grandchild.
+
+    `subprocess.run(timeout=...)` does NOT give this on Windows: after the
+    timeout it kills only the direct child and then calls `communicate()` with
+    no timeout at all, so a grandchild still holding the inherited pipe handles
+    blocks it for as long as it lives. Measured on the owner's machine, that
+    turned a 180 s budget into a 600 s suite kill - the watchdog, not the test,
+    is what finally stopped it. Portable on purpose: it exercises the POSIX
+    branch of the cleanup as well.
+    """
+
+    def test_a_grandchild_cannot_outlive_the_declared_budget(self) -> None:
+        base = Path(tempfile.mkdtemp(prefix='runbat-budget-'))
+        self.addCleanup(shutil.rmtree, base, True)
+        body = (
+            'import subprocess, sys, time\n'
+            'subprocess.Popen([sys.executable, "-c", '
+            '"import time; time.sleep(120)"])\n'
+            'print("comecei", flush=True)\n'
+            'time.sleep(120)\n'
+        )
+        started = time.monotonic()
+        with self.assertRaises(AssertionError) as caught:
+            run_bat([sys.executable, '-c', body], base, timeout_s=3.0)
+        elapsed = time.monotonic() - started
+        self.assertLess(elapsed, 60.0,
+                        f'o orcamento nao foi respeitado: {elapsed:.1f}s')
+        message = str(caught.exception)
+        self.assertIn('comecei', message,
+                      'a saida do filho se perdeu no caminho')
+        self.assertIn('Ainda vivos', message,
+                      'a mensagem nao diz o que continuava rodando')
+
+    def test_a_survivor_list_is_never_reported_as_a_verified_empty_tree(self):
+        """
+        "Could not check" and "checked, none left" are different claims.
+
+        A helper that returns an empty map on a platform without process names
+        must not let the caller print "no processes were alive".
+        """
+        self.assertIn('NAO foi possivel', _describe_survivors(None, {}))
+        self.assertIn('nenhum processo', _describe_survivors(frozenset(), {}))
+        named = _describe_survivors(frozenset({4321}), {4321: 'python.exe'})
+        self.assertIn('python.exe (4321)', named)
+        self.assertIn('?', _describe_survivors(frozenset({9}), {}),
+                      'um pid sem nome conhecido virou silencio')
 
 
 @unittest.skipUnless(os.name == 'nt' and shutil.which('cmd.exe'),
@@ -6333,7 +6412,7 @@ class SuiteCoverageTests(unittest.TestCase):
     """REGRESSION C - diagnosing a hang must not quietly drop tests."""
 
     #: Baseline measured on Linux at the commit that introduced the journal.
-    MINIMUM_TEST_CASES = 432
+    MINIMUM_TEST_CASES = 434
 
     def test_no_test_case_was_dropped(self) -> None:
         count = unittest.TestLoader().loadTestsFromModule(

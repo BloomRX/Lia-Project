@@ -345,12 +345,17 @@ def _posix_process_table() -> list[tuple[int, int]]:
     return table
 
 
-def _windows_process_table() -> list[tuple[int, int]]:
+def _toolhelp_walk() -> list[tuple[int, int, str]]:
     """
-    (pid, ppid) via a Toolhelp32 snapshot.
+    (pid, ppid, executable name) via a Toolhelp32 snapshot.
 
     kernel32 only - no WMIC, no PowerShell, no localized output to parse, and
     available on every Windows the launcher can run on.
+
+    `PROCESSENTRY32` has always carried `szExeFile`; the (pid, ppid) table
+    simply never read it. Naming a process is what turns "the child hung" into
+    "python.exe was still alive", and on a machine nobody can attach a debugger
+    to that is the difference between a diagnosis and a guess.
     """
     kernel32 = _kernel32()
     snapshot = kernel32.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
@@ -360,20 +365,45 @@ def _windows_process_table() -> list[tuple[int, int]]:
     if snapshot is None or snapshot == invalid_handle_value():
         raise OSError(
             f'CreateToolhelp32Snapshot falhou: WinError {_win32_error()}')
-    table: list[tuple[int, int]] = []
+    table: list[tuple[int, int, str]] = []
     try:
         entry = PROCESSENTRY32()
         entry.dwSize = ctypes.sizeof(PROCESSENTRY32)
         if not kernel32.Process32First(snapshot, ctypes.byref(entry)):
             raise OSError(f'Process32First falhou: WinError {_win32_error()}')
         while True:
-            table.append((int(entry.th32ProcessID), int(entry.th32ParentProcessID)))
+            name = entry.szExeFile.split(b'\x00', 1)[0].decode(
+                'utf-8', errors='replace')
+            table.append((int(entry.th32ProcessID),
+                          int(entry.th32ParentProcessID), name))
             if not kernel32.Process32Next(snapshot, ctypes.byref(entry)):
                 # ERROR_NO_MORE_FILES is the normal terminator, not an error.
                 break
     finally:
         kernel32.CloseHandle(snapshot)
     return table
+
+
+def _windows_process_table() -> list[tuple[int, int]]:
+    """(pid, ppid), for callers that only need the tree shape."""
+    return [(pid, ppid) for pid, ppid, _name in _toolhelp_walk()]
+
+
+def process_names(pids: frozenset[int] | None) -> dict[int, str]:
+    """
+    pid -> executable name, best effort, for the pids already recorded.
+
+    An empty result is NOT "there were no processes": it also covers "this
+    platform gives no names" and "the snapshot failed". Callers must say which
+    they mean instead of reporting an empty tree.
+    """
+    if not pids or os.name != 'nt':
+        return {}
+    try:
+        walk = _toolhelp_walk()
+    except (OSError, AttributeError, ImportError, ValueError):
+        return {}
+    return {pid: name for pid, _ppid, name in walk if pid in pids}
 
 
 def pid_state_posix(pid: int) -> str:
