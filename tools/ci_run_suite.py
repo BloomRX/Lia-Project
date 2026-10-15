@@ -34,6 +34,7 @@ from collections import deque
 import os
 import subprocess
 import sys
+import traceback
 
 #: Lines of child output retained for the failure excerpt. The unittest failure
 #: block is at the end, so a tail window is what matters.
@@ -129,8 +130,20 @@ def main(argv: list[str] | None = None) -> int:
         sys.stdout.flush()
         code = proc.wait()
     except BaseException as exc:  # noqa: BLE001 - the diagnostic must not vanish
-        emit_annotation(f'{suite} - erro interno do wrapper',
-                        f'{type(exc).__name__}: {exc}')
+        # Traceback AND the child output seen so far, because the exception
+        # type alone did not identify the cause: an earlier run reported a bare
+        # "KeyboardInterrupt:" on Windows, which says a console control event
+        # reached this process but not which line received it or what the
+        # suite was doing at the time.
+        snapshot = list(tail)
+        detail = '\n'.join([
+            f'{type(exc).__name__}: {exc}',
+            '--- traceback do wrapper ---',
+            traceback.format_exc().strip(),
+            f'--- últimas {min(len(snapshot), 25)} linhas da suíte ---',
+            *snapshot[-25:],
+        ])
+        emit_annotation(f'{suite} - erro interno do wrapper', detail)
         raise
 
     if code != 0:
