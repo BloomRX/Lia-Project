@@ -2847,6 +2847,30 @@ class DevKitHandoffContractTests(unittest.TestCase):
                          'um .bat com LF puro quebra no cmd.exe')
 
 
+#: Environment a DevKit invocation sets for itself and its descendants.
+#:
+#: `DevKit.bat` does `set "LIA_DEVKIT_ROOT=%~dp0"` and
+#: `set "LIA_DEVKIT_BOOTSTRAP_COPY=%LIA_DEVKIT_COPY%"`, and a batch `set` is
+#: inherited by every child. So when the suite runs FROM INSIDE a DevKit - the
+#: normal way to run it - a nested `cmd /c DevKit.bat` sees those variables,
+#: takes the `if defined LIA_DEVKIT_BOOTSTRAP_COPY goto :body` shortcut, skips
+#: capturing its own root, and runs the REAL repository's `lia_dev.py bootstrap`
+#: instead of the throwaway one. Measured on the owner's machine: the probe was
+#: never written, the test burned its whole 180 s budget and the process tree
+#: filled with py.exe/python.exe from a genuine DevFlow round. CI never showed
+#: it because there the suite is launched by the workflow, not by the DevKit.
+DEVKIT_INVOCATION_VARS = ('LIA_DEVKIT_BOOTSTRAP_COPY', 'LIA_DEVKIT_ROOT',
+                          'LIA_DEVKIT_COPY', 'RUNPY')
+
+
+def _clean_bat_env(env: dict | None) -> dict:
+    """The child env, with another DevKit invocation's state removed."""
+    child = dict(os.environ if env is None else env)
+    for name in DEVKIT_INVOCATION_VARS:
+        child.pop(name, None)
+    return child
+
+
 def _describe_survivors(tree: frozenset[int] | None,
                         names: dict[int, str]) -> str:
     """
@@ -2884,6 +2908,7 @@ def run_bat(argv: list[str], cwd: Path, *, timeout_s: float,
     forever. That difference is exactly what this suite exists to cover, so it
     must not be hidden by an absent console.
     """
+    env = _clean_bat_env(env)
     popen_kwargs: dict = {}
     if os.name == 'posix':
         # `_terminate_timed_out` kills the process GROUP, which is only safe
@@ -2962,6 +2987,30 @@ class BatchPauseGuardTests(unittest.TestCase):
         self.assertGreaterEqual(checked, 2,
                                 'esperava achar os pause do DevKit e do '
                                 'bootstrap; a sonda parou de ver algum')
+
+
+class RunBatEnvIsolationTests(unittest.TestCase):
+    """
+    A .bat test must never inherit another DevKit invocation's environment.
+
+    Pinned because the leak was invisible in CI: only a run launched FROM the
+    DevKit carries the variables, and that is how the owner runs the suite.
+    """
+
+    def test_another_devkit_invocation_does_not_leak_into_the_child(self):
+        for name in DEVKIT_INVOCATION_VARS:
+            os.environ[name] = 'J:\\Lia-Project\\'
+            self.addCleanup(os.environ.pop, name, None)
+            done = run_bat(
+                [sys.executable, '-c',
+                 f'import os,sys; sys.stdout.write(str({name!r} in os.environ))'],
+                cwd=Path.cwd(), timeout_s=30.0)
+            code, out = done.returncode, done.stdout or ''
+            self.assertEqual(0, code, f'{name}: {out}')
+            self.assertEqual(
+                'False', out.strip(),
+                f'{name} vazou para o filho: um DevKit.bat aninhado tomaria o '
+                'atalho "goto :body" e executaria o repositorio real')
 
 
 class RunBatBudgetTests(unittest.TestCase):
@@ -3265,6 +3314,34 @@ class RepositoryIdentityTests(unittest.TestCase):
         self.assertEqual(make_sync(FakeGit(remote_url=url)).pre_sync().stage, 'identity')
 
 
+def _make_escape_link(link: Path, target: Path) -> None:
+    """
+    A reparse point that leaves the repository, on whatever platform runs this.
+
+    A FILE symlink on Windows needs SeCreateSymbolicLinkPrivilege: a normal
+    account gets WinError 1314. That is why these tests errored on the owner's
+    machine while staying green in CI, whose runners are administrators - the
+    exact platform difference this suite exists to cover, hidden by the one
+    environment that could not reproduce it. A directory junction needs no
+    privilege, so Windows gets that. If neither is available the test SKIPS; it
+    never reports a refusal it did not actually prove.
+    """
+    try:
+        link.symlink_to(target, target_is_directory=True)
+        return
+    except (OSError, NotImplementedError, AttributeError) as symlink_error:
+        if os.name != 'nt':
+            raise
+        try:
+            import _winapi  # existe apenas no Windows
+            _winapi.CreateJunction(str(target), str(link))
+            return
+        except (OSError, AttributeError, ImportError) as junction_error:
+            raise unittest.SkipTest(
+                'nenhum reparse point foi possivel nesta conta: '
+                f'symlink={symlink_error}; junction={junction_error}')
+
+
 class StagedPayloadTests(unittest.TestCase):
     """§3: what is staged is proven, not assumed. Real git, real index."""
 
@@ -3294,15 +3371,28 @@ class StagedPayloadTests(unittest.TestCase):
         outside = Path(tempfile.mkdtemp(prefix='devflow-outside-'))
         self.addCleanup(shutil.rmtree, outside, True)
         (outside / 'secret.py').write_text('x = 1\n', encoding='utf-8')
-        (self.repo / 'tools' / 'link.py').symlink_to(outside / 'secret.py')
+        # A DIRECTORY link, not a file one: git reports the link itself as an
+        # untracked entry on both platforms, and `resolve()` then lands outside
+        # the repository - which is precisely what the guard rejects.
+        _make_escape_link(self.repo / 'tools' / 'link', outside)
         with self.assertRaises(sync.SyncRefused) as caught:
             self._sync().pre_sync()
         self.assertIn('escapa do repositório', str(caught.exception))
 
     def test_a_staged_symlink_is_refused_by_its_mode(self):
         (self.repo / 'tools' / 'real.py').write_text('x = 1\n', encoding='utf-8')
-        (self.repo / 'tools' / 'link.py').symlink_to('real.py')
-        self.git(['add', '--', 'tools/real.py', 'tools/link.py'])
+        self.git(['add', '--', 'tools/real.py'])
+        # The guard reads the INDEX MODE, so the symlink entry is staged
+        # directly instead of being created on disk. That is both portable - no
+        # SeCreateSymbolicLinkPrivilege, no WinError 1314 - and more faithful:
+        # mode 120000 in the index is literally what the guard inspects, while
+        # a filesystem symlink is only one way to get it there.
+        code, blob = self.git(['hash-object', '-w', '--', 'tools/real.py'])
+        self.assertEqual(0, code, 'hash-object falhou')
+        sha = (blob if isinstance(blob, str)
+               else blob.decode('utf-8', errors='replace')).strip()
+        self.git(['update-index', '--add', '--cacheinfo',
+                  f'120000,{sha},tools/link.py'])
         with self.assertRaises(sync.SyncRefused) as caught:
             sync.verify_staged_payload(self.repo, ['tools/real.py', 'tools/link.py'])
         self.assertIn('120000', str(caught.exception))
@@ -6412,7 +6502,7 @@ class SuiteCoverageTests(unittest.TestCase):
     """REGRESSION C - diagnosing a hang must not quietly drop tests."""
 
     #: Baseline measured on Linux at the commit that introduced the journal.
-    MINIMUM_TEST_CASES = 434
+    MINIMUM_TEST_CASES = 435
 
     def test_no_test_case_was_dropped(self) -> None:
         count = unittest.TestLoader().loadTestsFromModule(
