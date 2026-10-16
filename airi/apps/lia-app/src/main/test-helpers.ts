@@ -19,6 +19,8 @@ export const identityCipher: LiaSecretCipher = {
 export interface LiaHomeFixture {
   appData: string
   installDir: string
+  /** `%LOCALAPPDATA%` of the fixture. The win32 voice-runtime branch reads it. */
+  localAppData: string
   userData: string
   voicesRoot: string
 }
@@ -47,6 +49,7 @@ export async function makeLiaHome(options: {
 } = {}): Promise<LiaHomeFixture> {
   const root = await mkdtemp(join(tmpdir(), 'lia-app-test-'))
   const appData = join(root, 'AppData', 'Roaming')
+  const localAppData = join(root, 'AppData', 'Local')
   const userData = join(appData, 'Lia')
   const installDir = join(root, 'runtimes', 'lia-voice')
 
@@ -101,12 +104,23 @@ export async function makeLiaHome(options: {
   // never baked into the fixture itself.
   await mkdir(installDir, { recursive: true })
 
-  return { appData, installDir, userData, voicesRoot }
+  return { appData, installDir, localAppData, userData, voicesRoot }
 }
 
 /** Env pointing the host at the fixture home (never at the real machine). */
 export function fixtureEnv(home: LiaHomeFixture): Record<string, string> {
   return {
     APPDATA: home.appData,
+    // resolveVoiceRuntimeHome takes a DIFFERENT branch per platform: POSIX
+    // resolves `<userData>/runtimes`, while win32 resolves
+    // `%LOCALAPPDATA%\Lia\runtimes` from LOCALAPPDATA (then USERPROFILE) and
+    // THROWS when neither is present. Supplying only APPDATA therefore made
+    // every host that resolves a runtime home throw on a real Windows machine -
+    // 5 of the 7 runtime-location tests and the Kokoro-tree voice-activation
+    // tests - while POSIX CI never took that branch. Pointing both variables at
+    // the fixture also keeps the host from ever reading the developer's real
+    // %LOCALAPPDATA%.
+    LOCALAPPDATA: home.localAppData,
+    USERPROFILE: home.localAppData,
   }
 }

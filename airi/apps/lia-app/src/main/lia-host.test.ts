@@ -1,5 +1,5 @@
 import { chmod, readFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { join, sep } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
 
@@ -82,7 +82,7 @@ describe('j. The launcher does not duplicate canonical data', () => {
     const { paths } = host
     expect(paths.userDataDir.startsWith(home.appData)).toBe(true)
     for (const file of [paths.productConfigFile, paths.vaultFile, paths.voicesRoot]) {
-      expect(file.startsWith(`${paths.userDataDir}/`)).toBe(true)
+      expect(file.startsWith(paths.userDataDir + sep)).toBe(true)
     }
   })
 
