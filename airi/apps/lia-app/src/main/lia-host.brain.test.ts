@@ -233,14 +233,23 @@ describe('conversar() - managed Brain routing default (Phase 8.0D-M2)', () => {
     expect(host.vault.hasSecret('groq', 'apiKey')).toBe(false)
   })
 
-  it('6: a failed canonical write degrades honestly - no mutation, no blocked conversation', async () => {
+  it('6: a failed canonical write degrades honestly - no mutation, no blocked conversation', async (ctx) => {
     const home = await makeLiaHome({ productConfig: groqDoc() })
     const events: Array<{ detail?: string, event: string }> = []
     const { host, startedWith } = hostFor(home, events)
     await host.vault.setSecret('groq', 'apiKey', SECRET)
 
     const before = await readFile(join(home.userData, 'lia-product.json'), 'utf8')
-    await chmod(home.userData, 0o500)
+
+    // The premise of this test is a FAILED canonical write, forced with POSIX
+    // permission bits. The Windows filesystem does not enforce them, so there
+    // the write SUCCEEDS and the premise does not exist. The assertions that
+    // depend on it are skipped EXPLICITLY and visibly - never silently dropped,
+    // never faked, never turned into a pass. The write-failure degradation path
+    // is therefore NOT covered on Windows by this test.
+    const writeFailureCanBeForced = process.platform !== 'win32'
+    if (writeFailureCanBeForced)
+      await chmod(home.userData, 0o500)
     try {
       const state = await host.conversar()
 
@@ -248,18 +257,28 @@ describe('conversar() - managed Brain routing default (Phase 8.0D-M2)', () => {
       // exactly as usable as it was before this phase existed.
       expect(state.phase).toBe('running')
       expect(startedWith).toHaveLength(1)
-      expect(await readFile(join(home.userData, 'lia-product.json'), 'utf8')).toBe(before)
-      expect(JSON.parse(before).brain).toBeUndefined()
 
+      // Platform-neutral, and asserted on EVERY platform.
+      expect(JSON.parse(before).brain).toBeUndefined()
+      // The secret never reaches an event.
+      expect(events.every(e => !`${e.event} ${e.detail ?? ''}`.includes(SECRET))).toBe(true)
+
+      if (!writeFailureCanBeForced) {
+        // Explicit and visible: everything below needs a write that actually
+        // failed, and on Windows this test cannot make one happen.
+        ctx.skip()
+        return
+      }
+
+      expect(await readFile(join(home.userData, 'lia-product.json'), 'utf8')).toBe(before)
       const notReady = detailOf(events, 'lia-app.conversar-brain-not-ready')
       expect(notReady, 'a degraded default is reported').toBeDefined()
       expect(notReady!).toContain('reason=config-write-failed')
       expect(events.some(e => e.event === 'lia-app.conversar-brain-defaulted')).toBe(false)
-      // The secret never reaches an event.
-      expect(events.every(e => !`${e.event} ${e.detail ?? ''}`.includes(SECRET))).toBe(true)
     }
     finally {
-      await chmod(home.userData, 0o700)
+      if (writeFailureCanBeForced)
+        await chmod(home.userData, 0o700)
     }
   })
 
