@@ -120,7 +120,12 @@ export function fixtureEnv(home: LiaHomeFixture): Record<string, string> {
     // tests - while POSIX CI never took that branch. Pointing both variables at
     // the fixture also keeps the host from ever reading the developer's real
     // %LOCALAPPDATA%.
+    // USERPROFILE is deliberately NOT supplied: it is the resolver's ONE
+    // defensive fallback, and a valid value here would rescue a deliberately
+    // invalid LOCALAPPDATA and silence the operational error that
+    // "an INVALID Windows LOCALAPPDATA still surfaces the resolver's own
+    // operational error" exists to prove. LOCALAPPDATA alone is enough for the
+    // happy path.
     LOCALAPPDATA: home.localAppData,
-    USERPROFILE: home.localAppData,
   }
 }

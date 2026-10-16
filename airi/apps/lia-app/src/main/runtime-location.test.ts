@@ -3,12 +3,34 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
  * Phase 7.4 G/H/I integration: the persisted runtime location, through the
  * REAL host, REAL validation chain and REAL fixture disk.
  */
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
 
 import { createLiaHost } from './lia-host'
 import { fixtureEnv, identityCipher, makeLiaHome } from './test-helpers'
+
+/**
+ * True when two paths name the same place, ignoring separator spelling.
+ *
+ * The separator convention for a PERSISTED install dir is a separate, still
+ * open product decision (`lexicalNormalize` collapses `\` to `/` on every
+ * platform and that value is what lands in `lia-product.json`). These tests are
+ * about persistence, precedence and the engine seam - not about which
+ * separator the document stores - so they compare through this instead of
+ * hardcoding either convention.
+ */
+function samePath(actual: string, expected: string): boolean {
+  return actual.replace(/[\\/]+/g, '/') === expected.replace(/[\\/]+/g, '/')
+}
+
+/** The canonical voice-runtime root, per the documented per-platform rule. */
+function canonicalRuntimeRoot(home: { localAppData: string, userData: string }): string {
+  return process.platform === 'win32'
+    ? join(home.localAppData, 'Lia', 'runtimes')
+    : join(home.userData, 'runtimes')
+}
 
 async function makeLocationHost() {
   const home = await makeLiaHome()
@@ -42,7 +64,7 @@ describe('phase 7.4 G/H/I - the configured runtime root (generic, engine-neutral
     expect(status.effectiveInstallDir).toBe(status.canonicalDefaultDir)
     // The canonical home carries no engine name - an engine (Kokoro first)
     // composes its own subdir under it when it lands.
-    expect(status.canonicalDefaultDir).toBe(join(home.userData, 'runtimes'))
+    expect(status.canonicalDefaultDir).toBe(canonicalRuntimeRoot(home))
 
     // Transitional truth (Phase 7.8E): no engine is hosted, so the honest
     // default answer is installed = false. Directory existence is never proof.
@@ -63,7 +85,7 @@ describe('phase 7.4 G/H/I - the configured runtime root (generic, engine-neutral
     // The document carries the exact normalized path from the picker, in the
     // neutral runtime block - never inside an engine's name.
     const document = JSON.parse(await readFile(join(home.userData, 'lia-product.json'), 'utf8'))
-    expect(document.voice.runtime.installDir).toBe(chosen)
+    expect(samePath(document.voice.runtime.installDir, chosen)).toBe(true)
     expect(document.voice.runtime.f5).toBeUndefined()
 
     // Directory existence alone proves nothing: installed stays false until
@@ -85,7 +107,7 @@ describe('phase 7.4 G/H/I - the configured runtime root (generic, engine-neutral
     await proven.host.applyRuntimeLocation(chosen)
     const status = await proven.host.runtimeLocationStatus()
     expect(status.customActive).toBe(true)
-    expect(status.effectiveInstallDir).toBe(chosen)
+    expect(samePath(status.effectiveInstallDir, chosen)).toBe(true)
     expect(status.installed).toBe(true)
   })
 
@@ -134,17 +156,20 @@ describe('phase 7.4 G/H/I - the configured runtime root (generic, engine-neutral
 
   it('h: a CONFIGURED path always wins as the effective dir - the canonical default never outranks an explicit valid config', async () => {
     const { host } = await makeLocationHost()
-    const chosen = (await import('node:path')).join('/tmp', 'Lia Explicit Root')
+    // tmpdir(), not '/tmp': on Windows a rooted-but-driveless path fails the
+    // resolver's absolute-Windows-path check, so the pick is rejected and the
+    // test would measure the wrong thing.
+    const chosen = (await import('node:path')).join(tmpdir(), 'Lia Explicit Root')
     // The canonical home even existing somewhere does not matter: the config
     // is the single source of truth for WHERE the voice runtime lives.
     const picked = await host.applyRuntimeLocation(chosen)
     expect(picked.status === 'ok' || picked.status === 'rejected').toBe(true)
 
     const { host: host2 } = await makeLocationHost()
-    const chosen2 = join('/tmp', 'Lia Explicit Root 2')
+    const chosen2 = join(tmpdir(), 'Lia Explicit Root 2')
     await host2.applyRuntimeLocation(chosen2)
     const status = await host2.runtimeLocationStatus()
-    expect(status.effectiveInstallDir).toBe(chosen2)
+    expect(samePath(status.effectiveInstallDir, chosen2)).toBe(true)
     expect(status.customActive).toBe(true)
   })
 
@@ -157,7 +182,7 @@ describe('phase 7.4 G/H/I - the configured runtime root (generic, engine-neutral
     await mkdir(chosen, { recursive: true })
     await host.applyRuntimeLocation(chosen)
     const status = await host.runtimeLocationStatus()
-    expect(status.effectiveInstallDir).toBe(chosen)
+    expect(samePath(status.effectiveInstallDir, chosen)).toBe(true)
     expect(status.installed).toBe(false)
   })
 })
