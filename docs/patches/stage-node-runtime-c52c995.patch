@@ -1,0 +1,960 @@
+diff --git a/airi/apps/lia-app/src/main/airi-stage-manager.test.ts b/airi/apps/lia-app/src/main/airi-stage-manager.test.ts
+index 84d1216..8bf7eaa 100644
+--- a/airi/apps/lia-app/src/main/airi-stage-manager.test.ts
++++ b/airi/apps/lia-app/src/main/airi-stage-manager.test.ts
+@@ -1,7 +1,7 @@
+ import { EventEmitter } from 'node:events'
+ import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
+ import { tmpdir } from 'node:os'
+-import { join } from 'node:path'
++import { join, win32 } from 'node:path'
+ import { execPath } from 'node:process'
+ 
+ import { describe, expect, it, vi } from 'vitest'
+@@ -65,6 +65,78 @@ describe('phase 7.2: ownership retained, spawn without shell (tests C/D/G)', ()
+     }
+   })
+ 
++  it('h: the stage child NEVER carries ELECTRON_RUN_AS_NODE - it would leak into the window', async () => {
++    const root = await makeStageWorkspace()
++    const child = fakeChild()
++    const spawnImpl = vi.fn((..._args: unknown[]) => child as never)
++    for (const platform of ['win32', 'linux'] as const) {
++      const manager = new AiriStageManager({
++        platform,
++        spawnImpl: spawnImpl as never,
++        workspaceRoot: root,
++      })
++      void manager.start()
++      const options = spawnImpl.mock.calls.at(-1)?.[2] as
++        | { env?: Record<string, string | undefined> }
++        | undefined
++      // The build prerequisite MAY need that variable; the stage child must
++      // never get it. `electron-vite` launches the window with
++      // `spawn(electronPath, [entry], { stdio: 'inherit' })` - no `env` option -
++      // so everything here reaches the Electron app verbatim, and a leaked
++      // ELECTRON_RUN_AS_NODE would start the WINDOW as plain Node: no window.
++      expect(
++        options?.env?.ELECTRON_RUN_AS_NODE,
++        `${platform} must not leak ELECTRON_RUN_AS_NODE into the stage child`,
++      ).toBeUndefined()
++    }
++  })
++
++  it('i: under Electron the Stage child is a REAL node from PATH, never the Electron binary', async () => {
++    const root = await makeStageWorkspace()
++    const child = fakeChild()
++    const spawnImpl = vi.fn((..._args: unknown[]) => child as never)
++    const nodeBin = win32.join('C:', 'tools', 'node.exe')
++    const logs: string[] = []
++    const manager = new AiriStageManager({
++      existsImpl: (path: string) => path === nodeBin,
++      onLog: line => logs.push(line),
++      platform: 'win32',
++      runtimeEnv: { PATH: ['C:\\nowhere', 'C:\\tools'].join(';') },
++      runtimeVersions: { electron: '43.4.1' },
++      spawnImpl: spawnImpl as never,
++      workspaceRoot: root,
++    })
++    void manager.start()
++    const command = spawnImpl.mock.calls.at(-1)?.[0] as string
++    expect(command).toBe(nodeBin)
++    expect(command).not.toBe(execPath)
++    // The chosen runtime is recorded, so a future Windows log says what ran.
++    expect(logs.includes('stage-runtime kind=node-from-path')).toBe(true)
++  })
++
++  it('j: under Electron with NO node on PATH it refuses to spawn instead of launching an app', async () => {
++    const root = await makeStageWorkspace()
++    const spawnImpl = vi.fn((..._args: unknown[]) => fakeChild() as never)
++    const logs: string[] = []
++    const manager = new AiriStageManager({
++      existsImpl: () => false,
++      // Even a provably enabled fuse must not buy this child the fallback.
++      fuseImpl: () => 'enabled',
++      onLog: line => logs.push(line),
++      platform: 'win32',
++      runtimeEnv: { PATH: 'C:\\nowhere' },
++      runtimeVersions: { electron: '43.4.1' },
++      spawnImpl: spawnImpl as never,
++      workspaceRoot: root,
++    })
++    const state = await manager.start()
++    // Fail closed. Spawning the Electron binary here would start an app that
++    // parents no window - the exact M3.0b failure mode, in a second place.
++    expect(spawnImpl).not.toHaveBeenCalled()
++    expect(state.phase).toBe('error')
++    expect(logs.some(l => l.startsWith('stage-runtime state=unavailable'))).toBe(true)
++  })
++
+   it('c: a session spawn retains truthful ownership while the dev-server lives', async () => {
+     const root = await makeStageWorkspace()
+     const child = fakeChild({ pid: 4242 })
+diff --git a/airi/apps/lia-app/src/main/airi-stage-manager.ts b/airi/apps/lia-app/src/main/airi-stage-manager.ts
+index bf83672..242af97 100644
+--- a/airi/apps/lia-app/src/main/airi-stage-manager.ts
++++ b/airi/apps/lia-app/src/main/airi-stage-manager.ts
+@@ -1,10 +1,12 @@
++import type { RunAsNodeFuseState } from './node-runtime'
+ import type { StageBuildPrerequisite } from './stage-build-prerequisite'
+ 
+ import { execFile, spawn } from 'node:child_process'
+ import { existsSync } from 'node:fs'
+-import { join } from 'node:path'
+-import { env as nodeEnv, execPath as nodeExecPath, platform as nodePlatform } from 'node:process'
++import { basename, join } from 'node:path'
++import { env as nodeEnv, platform as nodePlatform } from 'node:process'
+ 
++import { resolveNodeInvocation } from './node-runtime'
+ import { createCoreAgentBuildPrerequisite } from './stage-build-prerequisite'
+ 
+ /**
+@@ -77,6 +79,18 @@ export interface AiriStageManagerDeps {
+    */
+   prerequisite?: StageBuildPrerequisite
+   spawnImpl?: typeof spawn
++  /** For tests: resolving the Node runtime without touching the disk. */
++  existsImpl?: (path: string) => boolean
++  /** For tests: answering the runAsNode fuse read without a real binary. */
++  fuseImpl?: (execPath: string) => RunAsNodeFuseState
++  /** For tests: the environment the PATH scan reads, instead of `process.env`. */
++  runtimeEnv?: Record<string, string | undefined>
++  /**
++   * For tests: the runtime facts behind the executable decision. Under Vitest
++   * `process.versions` is plain Node, which is the blind spot that shipped the
++   * M3.0b defect, so tests inject an Electron-shaped value.
++   */
++  runtimeVersions?: { electron?: string }
+   /**
+    * The dev-server entry script the manager launches with `node`. Default:
+    * the stage package's own electron-vite bin, resolved as a FILE - never
+@@ -307,13 +321,45 @@ export class AiriStageManager {
+     const stageDir = this.stageDir()
+     const entrypoint = stageDevEntrypointFor(stageDir, this.deps)
+     const spawnImpl = this.deps.spawnImpl ?? spawn
+-    const child = spawnImpl(nodeExecPath, [entrypoint, 'dev'], {
++    // This is the one child that must never be given `ELECTRON_RUN_AS_NODE`:
++    // `electron-vite` launches the window with
++    // `spawn(electronPath, [entry], { stdio: 'inherit' })` - no `env` option -
++    // so the child's environment reaches the Electron app verbatim, and a
++    // leaked variable would start the WINDOW as plain Node: no window at all.
++    // `resolveNodeInvocation` therefore refuses here rather than falling back
++    // to Electron-as-Node, and we fail closed instead of spawning an Electron
++    // app that would parent nothing. Ownership is unchanged: the build stays an
++    // awaited prerequisite, never the owned Stage process.
++    const runtime = resolveNodeInvocation({
++      childLaunchesElectron: true,
++      env: this.deps.runtimeEnv,
++      existsImpl: this.deps.existsImpl,
++      fuseImpl: this.deps.fuseImpl,
++      platform: this.deps.platform ?? nodePlatform,
++      versions: this.deps.runtimeVersions,
++    })
++    if (runtime.kind === 'unavailable') {
++      // The reason is a static string from node-runtime.ts: no PATH entries,
++      // no environment values, no secrets.
++      this.deps.onLog?.(`stage-runtime state=unavailable reason=${runtime.reason}`)
++      this.setState({
++        message: 'The Lia stage could not start: no Node runtime was available to run it.',
++        phase: 'error',
++      })
++      return this.state()
++    }
++    this.deps.onLog?.(`stage-runtime kind=${runtime.kind}`)
++    const child = spawnImpl(runtime.command, [entrypoint, 'dev'], {
+       cwd: stageDir,
+       env: { ...nodeEnv, ...this.deps.childEnv, ...passEnv },
+     })
+     this.child = child
+     this.setState({ phase: 'starting', pid: child.pid })
+-    this.deps.onLog?.(`spawn: node ${entrypoint} dev (pid ${String(child.pid)})`)
++    // The real executable, never a hardcoded "node": this line is the only
++    // evidence of what was actually spawned, and printing a word that is only
++    // sometimes true is how an Electron executable stayed invisible in the
++    // Windows logs.
++    this.deps.onLog?.(`spawn: ${basename(runtime.command)} ${entrypoint} dev (pid ${String(child.pid)})`)
+ 
+     return await new Promise<AiriStageState>((resolve) => {
+       const grace = this.deps.startGraceMs ?? 180_000
+diff --git a/airi/apps/lia-app/src/main/stage-build-prerequisite.test.ts b/airi/apps/lia-app/src/main/stage-build-prerequisite.test.ts
+index 8d9850e..e6e12bc 100644
+--- a/airi/apps/lia-app/src/main/stage-build-prerequisite.test.ts
++++ b/airi/apps/lia-app/src/main/stage-build-prerequisite.test.ts
+@@ -19,7 +19,7 @@
+ import { existsSync, readFileSync } from 'node:fs'
+ import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
+ import { tmpdir } from 'node:os'
+-import { join } from 'node:path'
++import { join, win32 } from 'node:path'
+ import { execPath } from 'node:process'
+ 
+ import { describe, expect, it, vi } from 'vitest'
+@@ -172,6 +172,93 @@ describe('phase 8.0D-M3.0b: core-agent build prerequisite', () => {
+     expect(outcome).toEqual({ ok: false, reason: 'manifest-unreadable' })
+   })
+ 
++  it('j: under Electron it runs the build with a REAL node from PATH, not with Electron', async () => {
++    const exec = fakeExec()
++    const root = await makeWorkspace(resolvableToolFixture('mytool --build'))
++    // Windows-shaped values: the host here is Linux, so the candidate and the
++    // PATH have to be spelled the way Windows would spell them.
++    const nodeBin = win32.join('C:', 'tools', 'node.exe')
++    const prerequisite = createCoreAgentBuildPrerequisite({
++      execFileImpl: exec.impl as never,
++      // The PATH scan is answered by the injected probe, so the decision is
++      // exercised without depending on this machine's real PATH.
++      existsImpl: (path: string) => path === nodeBin,
++      platform: 'win32',
++      runtimeEnv: { PATH: ['C:\\nowhere', 'C:\\tools'].join(';') },
++      runtimeVersions: { electron: '43.4.1' },
++      workspaceRoot: root,
++    })
++    const outcome = await prerequisite.run()
++    expect(outcome).toMatchObject({ ok: true, reason: 'build-succeeded' })
++    const call = exec.calls.at(-1)!
++    // THE regression: this used to be `process.execPath`, i.e. electron.exe,
++    // and the Windows process tree showed electron.exe running tsdown.
++    expect(call.command).toBe(nodeBin)
++    expect(call.command).not.toBe(execPath)
++    // A real Node needs no Electron-mode variable at all.
++    expect(call.opts.env).toBeUndefined()
++  })
++
++  it('k: the Electron fallback is taken ONLY on a positive fuse read, and keeps the environment', async () => {
++    const exec = fakeExec()
++    const root = await makeWorkspace(resolvableToolFixture('mytool --build'))
++    const prerequisite = createCoreAgentBuildPrerequisite({
++      execFileImpl: exec.impl as never,
++      existsImpl: () => false,
++      fuseImpl: () => 'enabled',
++      platform: 'win32',
++      runtimeEnv: { PATH: 'C:\\nowhere' },
++      runtimeVersions: { electron: '43.4.1' },
++      workspaceRoot: root,
++    })
++    const outcome = await prerequisite.run()
++    expect(outcome).toMatchObject({ ok: true })
++    const call = exec.calls.at(-1)!
++    const env = call.opts.env as Record<string, string | undefined> | undefined
++    // Electron's documented switch: without it the binary starts an APP, whose
++    // lifetime is app-governed, so the child never exits and the prerequisite
++    // never reaches a terminal marker.
++    expect(env?.ELECTRON_RUN_AS_NODE).toBe('1')
++    // And the fallback must not COST the build its environment.
++    expect(env?.PATH).toBe('C:\\nowhere')
++  })
++
++  it('l: a fuse that is not provably enabled FAILS the build instead of hanging it', async () => {
++    for (const fuse of ['disabled', 'unknown'] as const) {
++      const exec = fakeExec()
++      const root = await makeWorkspace(resolvableToolFixture('mytool --build'))
++      const prerequisite = createCoreAgentBuildPrerequisite({
++        execFileImpl: exec.impl as never,
++        existsImpl: () => false,
++        fuseImpl: () => fuse,
++        platform: 'win32',
++        runtimeEnv: { PATH: 'C:\\nowhere' },
++        runtimeVersions: { electron: '43.4.1' },
++        workspaceRoot: root,
++      })
++      const outcome = await prerequisite.run()
++      // A terminal, diagnosable outcome - not a child that never exits.
++      expect(outcome, `fuse=${fuse}`).toEqual({ ok: false, reason: 'no-node-runtime' })
++      // Nothing was spawned at all: the variable would have been ignored.
++      expect(exec.calls, `fuse=${fuse} must not spawn`).toHaveLength(0)
++    }
++  })
++
++  it('m: under plain Node nothing changes - this executable is already the runtime', async () => {
++    const exec = fakeExec()
++    const root = await makeWorkspace(resolvableToolFixture('mytool --build'))
++    const prerequisite = createCoreAgentBuildPrerequisite({
++      execFileImpl: exec.impl as never,
++      runtimeVersions: {},
++      workspaceRoot: root,
++    })
++    const outcome = await prerequisite.run()
++    expect(outcome).toMatchObject({ ok: true })
++    const call = exec.calls.at(-1)!
++    expect(call.command).toBe(execPath)
++    expect(call.opts.env).toBeUndefined()
++  })
++
+   it('i: it names itself for diagnostics', () => {
+     expect(CORE_AGENT_BUILD_PREREQUISITE_NAME).toBe('core-agent-build')
+     expect(createCoreAgentBuildPrerequisite({ workspaceRoot: '/nonexistent' }).name)
+diff --git a/airi/apps/lia-app/src/main/stage-build-prerequisite.ts b/airi/apps/lia-app/src/main/stage-build-prerequisite.ts
+index 3cf3dc1..b97f0e7 100644
+--- a/airi/apps/lia-app/src/main/stage-build-prerequisite.ts
++++ b/airi/apps/lia-app/src/main/stage-build-prerequisite.ts
+@@ -1,8 +1,11 @@
++import type { RunAsNodeFuseState } from './node-runtime'
++
+ import { execFile } from 'node:child_process'
+ import { existsSync, readFileSync } from 'node:fs'
+ import { createRequire } from 'node:module'
+ import { dirname, join } from 'node:path'
+-import { execPath as nodeExecPath } from 'node:process'
++
++import { resolveNodeInvocation } from './node-runtime'
+ 
+ /**
+  * Phase 8.0D-M3.0b: the managed Stage build prerequisite.
+@@ -36,6 +39,13 @@ import { execPath as nodeExecPath } from 'node:process'
+  * it with `process.execPath`. One code path, every platform, no shell, no
+  * PATHEXT, no cmd.exe, and the prerequisite is a short-lived awaited child
+  * that is never owned by the launcher.
++ *
++ * `process.execPath` is NOT Node here, and that was the M3.0b defect - see
++ * `node-runtime.ts`, which owns the executable strategy and records the
++ * measured Windows process tree that proved it (electron.exe running
++ * `tsdown/dist/run.mjs` as a child of the Lia main process). This module only
++ * consumes the decision. It fails closed on `unavailable` rather than spawning
++ * an Electron app that would never exit.
+  */
+ 
+ /**
+@@ -68,6 +78,21 @@ export interface StageBuildPrerequisite {
+ export interface CoreAgentBuildPrerequisiteDeps {
+   /** For tests: injecting exec keeps this module electron-free. */
+   execFileImpl?: typeof execFile
++  /** For tests: resolving the Node runtime without touching the disk. */
++  existsImpl?: (path: string) => boolean
++  /** For tests: answering the runAsNode fuse read without a real binary. */
++  fuseImpl?: (execPath: string) => RunAsNodeFuseState
++  /** For tests: the platform the PATH scan should use. */
++  platform?: string
++  /** For tests: the environment the PATH scan should read. */
++  runtimeEnv?: Record<string, string | undefined>
++  /**
++   * For tests: the runtime facts behind the executable decision. They default
++   * to this process's own `process.versions`, which under Vitest is plain Node
++   * - exactly the blind spot that let the defect ship, so tests inject an
++   * Electron-shaped value.
++   */
++  runtimeVersions?: { electron?: string }
+   /** Milliseconds before a build that never finishes is failed. */
+   timeoutMs?: number
+   /** The AIRI monorepo root that holds `packages/core-agent`. */
+@@ -166,7 +191,11 @@ function resolveToolCli(packageDir: string, tool: string): string | undefined {
+   }
+ }
+ 
+-/** Runs `process.execPath <cli> ...args` in the package directory. No shell. */
++/**
++ * Runs `<resolved node> <cli> ...args` in the package directory. No shell, and
++ * the executable comes from the shared strategy - never a blind
++ * `process.execPath`, which under Electron would start an app instead.
++ */
+ function runTool(
+   cli: string,
+   args: string[],
+@@ -174,11 +203,33 @@ function runTool(
+   deps: CoreAgentBuildPrerequisiteDeps,
+ ): Promise<StagePrerequisiteOutcome> {
+   const execFileImpl = deps.execFileImpl ?? execFile
++  const runtime = resolveNodeInvocation({
++    // The build CLI spawns no Electron, so Electron-as-Node is an acceptable
++    // substitute for it - but only once the fuse proves the variable works.
++    childLaunchesElectron: false,
++    env: deps.runtimeEnv,
++    existsImpl: deps.existsImpl,
++    fuseImpl: deps.fuseImpl,
++    platform: deps.platform,
++    versions: deps.runtimeVersions,
++  })
++  if (runtime.kind === 'unavailable') {
++    // Fail closed with a stable reason: a build that cannot run is not a build
++    // that succeeded, and the manager must refuse to serve a stale renderer.
++    // An explicit terminal marker is diagnosable; a child that never exits is
++    // not, and that silence is what M3.0b looked like.
++    return Promise.resolve({ ok: false, reason: 'no-node-runtime' })
++  }
+   return new Promise<StagePrerequisiteOutcome>((resolve) => {
+     execFileImpl(
+-      nodeExecPath,
++      runtime.command,
+       [cli, ...args],
+-      { cwd, timeout: deps.timeoutMs ?? 600_000, windowsHide: true },
++      {
++        cwd,
++        ...(runtime.env ? { env: runtime.env } : {}),
++        timeout: deps.timeoutMs ?? 600_000,
++        windowsHide: true,
++      },
+       (error) => {
+         if (!error) {
+           resolve({ ok: true, reason: 'build-succeeded' })
+diff --git a/airi/apps/lia-app/src/main/node-runtime.ts b/airi/apps/lia-app/src/main/node-runtime.ts
+new file mode 100644
+index 0000000..a7a254c
+--- /dev/null
++++ b/airi/apps/lia-app/src/main/node-runtime.ts
+@@ -0,0 +1,333 @@
++/**
++ * Phase 8.0D-M3.0b: the single place that decides WHICH executable runs a Node
++ * CLI on behalf of Lia.
++ *
++ * `src/main/*` runs inside the Electron MAIN process (`main: ./out/main/index.js`,
++ * `dev: electron-vite dev`), so `process.execPath` is the Electron binary, not
++ * Node. Spawning it as if it were Node starts an Electron APP instead, whose
++ * lifetime is governed by the app rather than by the script - which is exactly
++ * the measured M3.0b failure: on Windows the tree showed `electron.exe`
++ * (PID 83592) running `tsdown/dist/run.mjs` as a child of the Lia main process
++ * (PID 85772), with GPU and network helpers alongside it, and no `node.exe`
++ * anywhere. The child never exited, `execFile`'s callback never fired, and the
++ * prerequisite stayed in `starting` with no terminal marker.
++ *
++ * `ELECTRON_RUN_AS_NODE` is the documented switch that makes the binary start
++ * "as a normal Node.js process" - but Electron's own fuses documentation adds
++ * that with the `runAsNode` fuse DISABLED the variable is IGNORED, and that
++ * `child_process.fork` then throws. So setting the variable is not by itself a
++ * fix: it is a bet on a fuse nobody has read. An earlier attempt at this
++ * problem shipped exactly that bet and left the command as `process.execPath`.
++ *
++ * This module does not bet. The Electron-as-Node fallback is taken ONLY after
++ * the `runAsNode` byte has been read out of the executable that would be
++ * spawned, and anything short of a positive `enabled` fails the caller closed.
++ *
++ * The asymmetry between the two callers is load-bearing and intentional:
++ * - the build CLI (`tsdown`) spawns no Electron, so Electron-as-Node is a valid
++ *   substitute for it - once the fuse proves it works;
++ * - the Stage child (`electron-vite dev`) launches the window with
++ *   `spawn(electronPath, [entry], { stdio: 'inherit' })` and NO `env` option,
++ *   so its environment reaches the Electron app verbatim. A leaked
++ *   `ELECTRON_RUN_AS_NODE` would start the WINDOW as plain Node - no window at
++ *   all. That child is therefore never given the fallback, whatever the fuse.
++ *
++ * Neither caller's ownership contract changes: the build stays an awaited
++ * prerequisite, never the Stage process the launcher owns.
++ */
++import { Buffer } from 'node:buffer'
++import { closeSync, existsSync, openSync, readSync } from 'node:fs'
++import { posix as posixPath, win32 as win32Path } from 'node:path'
++import {
++  env as processEnv,
++  execPath as processExecPath,
++  platform as processPlatform,
++  versions as processVersions,
++} from 'node:process'
++
++/**
++ * Precedes the Electron fuse wire inside the binary. Value, state bytes and
++ * layout taken from `@electron/fuses@1.8.0` (`dist/constants.js`,
++ * `getCurrentFuseWire`) - the package that electron-builder itself uses, so
++ * this is the same wire the packager would have flipped.
++ */
++const FUSE_SENTINEL = 'dL7pKGdnNz796PbbjQWNKmHXBZaB9tsX'
++/** `FuseState.ENABLE` - the ASCII digit `'1'`. */
++const FUSE_ENABLE = 49
++/** `FuseState.DISABLE` - the ASCII digit `'0'`. */
++const FUSE_DISABLE = 48
++const FUSE_WIRE_VERSION_V1 = 1
++/** `FuseV1Options.RunAsNode` is the first entry of the V1 wire. */
++const FUSE_RUN_AS_NODE_INDEX = 0
++/** 1 MiB per read: a 250 MB Electron binary never has to fit in memory. */
++const FUSE_SCAN_CHUNK_BYTES = 1024 * 1024
++/**
++ * Sanity bound on the wire length. V1 defines 9 fuses; anything outside a
++ * generous range means the bytes are not a wire we understand.
++ */
++const FUSE_WIRE_MAX_LENGTH = 64
++
++export type NodeRuntimeKind = 'electron-as-node' | 'node-execpath' | 'node-from-path'
++
++/**
++ * Whether the `ELECTRON_RUN_AS_NODE` variable can be trusted on `execPath`.
++ * `unknown` covers an unreadable file, a missing sentinel, an unrecognised wire
++ * version, and the `REMOVED`/`INHERIT` byte values - none of which is proof.
++ */
++export type RunAsNodeFuseState = 'disabled' | 'enabled' | 'unknown'
++
++export interface NodeInvocation {
++  /** Absolute path of the executable to spawn. */
++  command: string
++  /**
++   * Full environment for the child, present ONLY for `electron-as-node`. Every
++   * other kind omits it so the child inherits `process.env` untouched.
++   */
++  env?: Record<string, string | undefined>
++  kind: NodeRuntimeKind
++}
++
++export type NodeRuntimeResolution
++  = | NodeInvocation
++    | { kind: 'unavailable', reason: string }
++
++export interface NodeRuntimeRequest {
++  /**
++   * `true` when the child will itself launch Electron (the Stage). Such a child
++   * is NEVER given Electron-as-Node, because the variable would leak into the
++   * window it is supposed to open.
++   */
++  childLaunchesElectron: boolean
++  /** Environment to scan for PATH and to hand to the child. Default: `process.env`. */
++  env?: Record<string, string | undefined>
++  /** Default: `process.execPath`. */
++  execPath?: string
++  /** For tests: answering the PATH scan without touching the disk. */
++  existsImpl?: (path: string) => boolean
++  /** For tests: answering the fuse read without a real binary. */
++  fuseImpl?: (execPath: string) => RunAsNodeFuseState
++  /** For tests: the platform the PATH scan uses. Default: `process.platform`. */
++  platform?: string
++  /**
++   * For tests: the runtime facts behind the executable decision. Default: this
++   * process's own `process.versions`, which under Vitest is plain Node - the
++   * blind spot that let the original defect ship, so tests inject an
++   * Electron-shaped value.
++   */
++  versions?: { electron?: string }
++}
++
++/** The three filesystem calls the fuse scan needs, so tests can serve bytes. */
++export interface FuseBinaryReader {
++  closeSync: (fd: number) => void
++  openSync: (path: string, flags: string) => number
++  readSync: (
++    fd: number,
++    buffer: Buffer,
++    offset: number,
++    length: number,
++    position: number,
++  ) => number
++}
++
++const defaultFuseReader: FuseBinaryReader = { closeSync, openSync, readSync }
++
++/**
++ * `process.versions.electron` exists only under Electron. A packaged build
++ * renames the binary to the product, so the executable's NAME cannot answer
++ * this - only the runtime facts can.
++ */
++export function isElectronRuntime(versions?: { electron?: string }): boolean {
++  return (versions ?? processVersions).electron !== undefined
++}
++
++/**
++ * First real Node found by scanning PATH, or `undefined`.
++ *
++ * Scanning PATH deliberately does NOT consult PATHEXT and does NOT use a shell:
++ * the caller spawns the resolved path directly, so an entry that is not the
++ * platform's Node spelling is not a candidate.
++ *
++ * The delimiter and the path spelling follow the REQUESTED platform, never the
++ * host's. Reading `node:path`'s module-level `delimiter` would make this parse a
++ * Windows PATH with `:` on a Linux test host, silently finding nothing - a
++ * win32 regression that only ever shows up on Windows.
++ */
++export function findNodeOnPath(options: {
++  env?: Record<string, string | undefined>
++  existsImpl?: (path: string) => boolean
++  platform?: string
++}): string | undefined {
++  const platform = options.platform ?? processPlatform
++  const pathImpl = platform === 'win32' ? win32Path : posixPath
++  const env = options.env ?? processEnv
++  const existsImpl = options.existsImpl ?? existsSync
++  const exe = platform === 'win32' ? 'node.exe' : 'node'
++  for (const dir of (env.PATH ?? '').split(pathImpl.delimiter)) {
++    if (!dir)
++      continue
++    const candidate = pathImpl.join(dir, exe)
++    if (existsImpl(candidate))
++      return candidate
++  }
++  return undefined
++}
++
++/**
++ * Where the fuse wire lives for a given executable.
++ *
++ * Mirrors `pathToFuseFile` in `@electron/fuses`: on macOS the wire is in the
++ * framework binary inside the bundle, not in the `.app` executable itself. On
++ * Windows and Linux it is the executable.
++ */
++export function fuseFilePathFor(execPath: string, platform?: string): string {
++  if ((platform ?? processPlatform) !== 'darwin')
++    return execPath
++  // This branch is darwin-only, so the POSIX spelling is the right one.
++  if (execPath.endsWith('.app')) {
++    return posixPath.resolve(
++      execPath,
++      'Contents',
++      'Frameworks',
++      'Electron Framework.framework',
++      'Electron Framework',
++    )
++  }
++  if (execPath.includes('.app')) {
++    return posixPath.resolve(
++      execPath,
++      '..',
++      '..',
++      'Frameworks',
++      'Electron Framework.framework',
++      'Electron Framework',
++    )
++  }
++  return execPath
++}
++
++/**
++ * Reads the `runAsNode` fuse out of the executable, scanning in 1 MiB windows
++ * so a large binary is never buffered whole.
++ *
++ * Returns `unknown` - never a guess - when the file cannot be opened, the
++ * sentinel is absent, the wire version is not V1, or the state byte is
++ * `REMOVED`/`INHERIT` rather than an explicit enable or disable.
++ */
++export function readRunAsNodeFuse(
++  execPath: string,
++  reader: FuseBinaryReader = defaultFuseReader,
++  platform?: string,
++): RunAsNodeFuseState {
++  const target = fuseFilePathFor(execPath, platform)
++  let fd: number | undefined
++  try {
++    fd = reader.openSync(target, 'r')
++    const chunk = Buffer.allocUnsafe(FUSE_SCAN_CHUNK_BYTES)
++    // Reads overlap by one sentinel-minus-one so a wire that straddles a chunk
++    // boundary still appears whole inside a single window.
++    const overlap = FUSE_SENTINEL.length - 1
++    let readAt = 0
++    for (;;) {
++      const read = reader.readSync(fd, chunk, 0, chunk.length, readAt)
++      if (read <= 0)
++        return 'unknown'
++      const hit = chunk.subarray(0, read).indexOf(FUSE_SENTINEL)
++      if (hit !== -1) {
++        const wireAt = readAt + hit + FUSE_SENTINEL.length
++        const header = Buffer.alloc(2)
++        if (reader.readSync(fd, header, 0, 2, wireAt) !== 2)
++          return 'unknown'
++        const [version, length] = header
++        if (version !== FUSE_WIRE_VERSION_V1)
++          return 'unknown'
++        if (length < FUSE_RUN_AS_NODE_INDEX + 1 || length > FUSE_WIRE_MAX_LENGTH)
++          return 'unknown'
++        const states = Buffer.alloc(length)
++        if (reader.readSync(fd, states, 0, length, wireAt + 2) !== length)
++          return 'unknown'
++        const byte = states[FUSE_RUN_AS_NODE_INDEX]
++        if (byte === FUSE_ENABLE)
++          return 'enabled'
++        if (byte === FUSE_DISABLE)
++          return 'disabled'
++        return 'unknown'
++      }
++      if (read < chunk.length)
++        return 'unknown'
++      readAt += read - overlap
++    }
++  }
++  catch {
++    // An unreadable binary is not proof of anything: report `unknown` and let
++    // the caller fail closed with a reason it can log.
++    return 'unknown'
++  }
++  finally {
++    if (fd !== undefined) {
++      try {
++        reader.closeSync(fd)
++      }
++      catch {
++        // Nothing useful to do with a failed close on a read-only descriptor.
++      }
++    }
++  }
++}
++
++/**
++ * Decides the executable for one child process.
++ *
++ * 1. Not Electron: this process IS Node, so `process.execPath` is correct.
++ * 2. Electron with a real Node on PATH: use it. Preferred in every case, since
++ *    it needs no fuse and no environment variable.
++ * 3. Electron, no Node on PATH, child launches Electron: unavailable. The
++ *    variable must never reach that child.
++ * 4. Electron, no Node on PATH, child is a plain CLI: use Electron-as-Node ONLY
++ *    when the `runAsNode` fuse reads `enabled`; otherwise unavailable.
++ *
++ * Every `unavailable` carries a static reason - no PATH entries, no environment
++ * values - so callers can log it verbatim without leaking anything sensitive.
++ */
++export function resolveNodeInvocation(request: NodeRuntimeRequest): NodeRuntimeResolution {
++  const versions = request.versions ?? processVersions
++  const execPath = request.execPath ?? processExecPath
++
++  if (!isElectronRuntime(versions))
++    return { command: execPath, kind: 'node-execpath' }
++
++  const fromPath = findNodeOnPath({
++    env: request.env,
++    existsImpl: request.existsImpl,
++    platform: request.platform,
++  })
++  if (fromPath)
++    return { command: fromPath, kind: 'node-from-path' }
++
++  if (request.childLaunchesElectron) {
++    return {
++      kind: 'unavailable',
++      reason:
++        'no-node-runtime-for-stage: PATH has no node, and the stage child launches '
++        + 'Electron itself, so ELECTRON_RUN_AS_NODE must never be passed to it',
++    }
++  }
++
++  const fuse = (request.fuseImpl ?? readRunAsNodeFuse)(execPath)
++  if (fuse === 'enabled') {
++    return {
++      command: execPath,
++      // The parent environment is spread in full: the fallback must not COST
++      // the child its PATH, proxy or locale settings.
++      env: { ...(request.env ?? processEnv), ELECTRON_RUN_AS_NODE: '1' },
++      kind: 'electron-as-node',
++    }
++  }
++
++  return {
++    kind: 'unavailable',
++    reason:
++      'no-node-runtime: PATH has no node and the Electron runAsNode fuse reads '
++      + `${fuse}, so ELECTRON_RUN_AS_NODE cannot be trusted to start a Node CLI`,
++  }
++}
+diff --git a/airi/apps/lia-app/src/main/node-runtime.test.ts b/airi/apps/lia-app/src/main/node-runtime.test.ts
+new file mode 100644
+index 0000000..6d13750
+--- /dev/null
++++ b/airi/apps/lia-app/src/main/node-runtime.test.ts
+@@ -0,0 +1,228 @@
++/**
++ * Tests for the executable decision itself - not for "did we call the injected
++ * executable", which would only prove the injection worked.
++ *
++ * The load-bearing cases are the ones that distinguish the four outcomes, and
++ * the fuse decoder, which is exercised against real bytes on disk so a wrong
++ * offset or a wrong state byte fails here rather than in production.
++ */
++import { Buffer } from 'node:buffer'
++import { mkdtemp, writeFile } from 'node:fs/promises'
++import { tmpdir } from 'node:os'
++import { join, resolve, win32 } from 'node:path'
++import { execPath } from 'node:process'
++
++import { describe, expect, it } from 'vitest'
++
++import {
++  findNodeOnPath,
++  fuseFilePathFor,
++  isElectronRuntime,
++  readRunAsNodeFuse,
++  resolveNodeInvocation,
++} from './node-runtime'
++
++const ELECTRON = { electron: '43.4.1' }
++/** Must match `FUSE_SENTINEL` in node-runtime.ts, sourced from @electron/fuses. */
++const SENTINEL = 'dL7pKGdnNz796PbbjQWNKmHXBZaB9tsX'
++
++describe('isElectronRuntime', () => {
++  it('a: the runtime fact, not the executable name, decides', () => {
++    // A packaged build renames electron.exe to the product, so only the
++    // runtime fact can answer this.
++    expect(isElectronRuntime(ELECTRON)).toBe(true)
++    expect(isElectronRuntime({})).toBe(false)
++    expect(isElectronRuntime({ electron: undefined })).toBe(false)
++  })
++})
++
++describe('findNodeOnPath', () => {
++  it('b: it scans PATH with the platform spelling and ignores dead entries', () => {
++    // Windows-shaped values on a Linux host: the delimiter must come from the
++    // REQUESTED platform, or this scan silently finds nothing here and only
++    // ever fails on Windows.
++    const winBin = win32.join('C:', 'bin', 'node.exe')
++    const env = { PATH: ['C:\\gone', 'C:\\bin'].join(';') }
++    const win = findNodeOnPath({
++      env,
++      existsImpl: path => path === winBin,
++      platform: 'win32',
++    })
++    expect(win).toBe(winBin)
++
++    // Same PATH, POSIX spelling: a `node.exe` match is not a `node` match.
++    expect(
++      findNodeOnPath({
++        env: { PATH: '/gone:/bin' },
++        existsImpl: path => path === '/bin/node',
++        platform: 'linux',
++      }),
++    ).toBe('/bin/node')
++
++    // Nothing there, and no PATH at all.
++    expect(findNodeOnPath({ env, existsImpl: () => false, platform: 'win32' })).toBeUndefined()
++    expect(findNodeOnPath({ env: {}, existsImpl: () => true, platform: 'win32' })).toBeUndefined()
++    // A bare `node` is not a candidate on Windows: PATHEXT is deliberately
++    // never consulted, because the caller spawns the resolved path directly.
++    expect(
++      findNodeOnPath({
++        env: { PATH: 'C:\\bin' },
++        existsImpl: path => path === '/bin/node',
++        platform: 'win32',
++      }),
++    ).toBeUndefined()
++  })
++})
++
++describe('readRunAsNodeFuse', () => {
++  /** Builds a binary with `wire` appended after `sentinelOffset` zero bytes. */
++  async function fakeBinary(sentinelOffset: number, wire?: number[]): Promise<string> {
++    const dir = await mkdtemp(join(tmpdir(), 'lia-fuse-'))
++    const target = join(dir, 'electron')
++    const pad = Buffer.alloc(sentinelOffset)
++    const parts = [pad, Buffer.from(SENTINEL, 'utf-8')]
++    if (wire)
++      parts.push(Buffer.from(wire))
++    await writeFile(target, Buffer.concat(parts))
++    return target
++  }
++
++  it('c: it reads the runAsNode byte out of a real binary', async () => {
++    // V1 wire: [version, length, ...states], RunAsNode first.
++    expect(await readRunAsNodeFuse(await fakeBinary(64, [1, 9, 49, 49, 49, 49, 48, 48, 48, 48, 49]))).toBe('enabled')
++    expect(await readRunAsNodeFuse(await fakeBinary(64, [1, 9, 48, 49, 49, 49, 48, 48, 48, 48, 49]))).toBe('disabled')
++  })
++
++  it('d: it finds a wire that straddles the 1 MiB scan boundary', async () => {
++    // The sentinel starts 16 bytes before the chunk boundary, so it cannot be
++    // found unless the reads overlap.
++    const offset = 1024 * 1024 - 16
++    expect(await readRunAsNodeFuse(await fakeBinary(offset, [1, 9, 49, 49, 49, 49, 48, 48, 48, 48, 49]))).toBe('enabled')
++  })
++
++  it('e: anything short of an explicit enable or disable is unknown', async () => {
++    // REMOVED (114) and INHERIT (144) are not proof of anything.
++    expect(await readRunAsNodeFuse(await fakeBinary(64, [1, 9, 114, 49, 49, 49, 48, 48, 48, 48, 49]))).toBe('unknown')
++    expect(await readRunAsNodeFuse(await fakeBinary(64, [1, 9, 144, 49, 49, 49, 48, 48, 48, 48, 49]))).toBe('unknown')
++    // A wire version this code does not understand.
++    expect(await readRunAsNodeFuse(await fakeBinary(64, [2, 9, 49, 49, 49, 49, 48, 48, 48, 48, 49]))).toBe('unknown')
++    // A sentinel with a truncated wire.
++    expect(await readRunAsNodeFuse(await fakeBinary(64, [1]))).toBe('unknown')
++    // No sentinel at all: pre-fuse Electron, or not an Electron binary.
++    expect(await readRunAsNodeFuse(await fakeBinary(64))).toBe('unknown')
++  })
++
++  it('f: an unreadable binary is unknown, not a crash', async () => {
++    expect(await readRunAsNodeFuse(join(tmpdir(), 'lia-fuse-nope', 'electron'))).toBe('unknown')
++  })
++
++  it('g: on macOS the wire lives in the framework binary, not the executable', () => {
++    const app = '/Applications/Lia.app/Contents/MacOS/Lia'
++    expect(fuseFilePathFor(app, 'darwin')).toBe(
++      resolve('/Applications/Lia.app/Contents/Frameworks/Electron Framework.framework/Electron Framework'),
++    )
++    // Everywhere else the executable carries the wire itself.
++    expect(fuseFilePathFor('C:\\Lia\\Lia.exe', 'win32')).toBe('C:\\Lia\\Lia.exe')
++    expect(fuseFilePathFor('/opt/lia/lia', 'linux')).toBe('/opt/lia/lia')
++  })
++})
++
++describe('resolveNodeInvocation', () => {
++  it('h: under Electron it prefers a real node from PATH, needing no fuse at all', () => {
++    const resolution = resolveNodeInvocation({
++      childLaunchesElectron: false,
++      env: { PATH: 'C:\\bin' },
++      execPath: 'C:\\Lia\\electron.exe',
++      existsImpl: path => path === win32.join('C:', 'bin', 'node.exe'),
++      // The fuse must not even be consulted on this path.
++      fuseImpl: () => {
++        throw new Error('the fuse must not be read when PATH has a real node')
++      },
++      platform: 'win32',
++      versions: ELECTRON,
++    })
++    expect(resolution).toEqual({
++      command: win32.join('C:', 'bin', 'node.exe'),
++      kind: 'node-from-path',
++    })
++  })
++
++  it('i: the Electron fallback needs a POSITIVE fuse read, and keeps the environment', () => {
++    const base = {
++      childLaunchesElectron: false,
++      env: { PATH: join('C:', 'nowhere'), PROXY: 'http://corp:3128' },
++      execPath: 'C:\\Lia\\electron.exe',
++      existsImpl: () => false,
++      platform: 'win32',
++      versions: ELECTRON,
++    }
++
++    const enabled = resolveNodeInvocation({ ...base, fuseImpl: () => 'enabled' })
++    expect(enabled.kind).toBe('electron-as-node')
++    if ('command' in enabled) {
++      const env = enabled.env as Record<string, string | undefined>
++      expect(enabled.command).toBe('C:\\Lia\\electron.exe')
++      expect(env.ELECTRON_RUN_AS_NODE).toBe('1')
++      // The fallback must not COST the child its own environment.
++      expect(env.PATH).toBe(join('C:', 'nowhere'))
++      expect(env.PROXY).toBe('http://corp:3128')
++    }
++
++    // A disabled fuse means the variable is IGNORED: betting on it reproduces
++    // the exact hang this module exists to prevent.
++    const disabled = resolveNodeInvocation({ ...base, fuseImpl: () => 'disabled' })
++    expect(disabled.kind).toBe('unavailable')
++    if (!('command' in disabled))
++      expect(disabled.reason).toContain('runAsNode fuse reads disabled')
++
++    // Neither does an unreadable one.
++    const unknown = resolveNodeInvocation({ ...base, fuseImpl: () => 'unknown' })
++    expect(unknown.kind).toBe('unavailable')
++    if (!('command' in unknown))
++      expect(unknown.reason).toContain('runAsNode fuse reads unknown')
++  })
++
++  it('j: the Stage child is NEVER given Electron-as-Node, whatever the fuse says', () => {
++    // `electron-vite` launches the window with no `env` option, so the child's
++    // environment reaches the Electron app verbatim; a leaked variable would
++    // start the WINDOW as plain Node and no window would open.
++    for (const fuse of ['enabled', 'disabled', 'unknown'] as const) {
++      const resolution = resolveNodeInvocation({
++        childLaunchesElectron: true,
++        env: { PATH: join('C:', 'nowhere') },
++        execPath: 'C:\\Lia\\electron.exe',
++        existsImpl: () => false,
++        fuseImpl: () => fuse,
++        platform: 'win32',
++        versions: ELECTRON,
++      })
++      expect('command' in resolution, `fuse=${fuse} must not yield an invocation`).toBe(false)
++      if (!('command' in resolution))
++        expect(resolution.kind).toBe('unavailable')
++    }
++  })
++
++  it('k: under plain Node nothing changes - this executable is already the runtime', () => {
++    for (const childLaunchesElectron of [false, true]) {
++      const resolution = resolveNodeInvocation({ childLaunchesElectron, versions: {} })
++      expect(resolution).toEqual({ command: execPath, kind: 'node-execpath' })
++    }
++  })
++
++  it('l: no reason ever leaks PATH contents or environment values', () => {
++    const secret = 'http://user:hunter2@corp:3128'
++    const resolution = resolveNodeInvocation({
++      childLaunchesElectron: true,
++      env: { PATH: 'C:\\secret\\dir', PROXY: secret },
++      execPath: 'C:\\Lia\\electron.exe',
++      existsImpl: () => false,
++      platform: 'win32',
++      versions: ELECTRON,
++    })
++    expect('command' in resolution).toBe(false)
++    if (!('command' in resolution)) {
++      expect(resolution.reason).not.toContain(secret)
++      expect(resolution.reason).not.toContain('C:\\secret\\dir')
++    }
++  })
++})
