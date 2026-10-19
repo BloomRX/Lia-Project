@@ -2188,6 +2188,7 @@ Local / Cloud / Hybrid
 
 A estrutura concreta deve ser baseada no repository real.
 
+==================================================
 87. VOICE IMPLEMENTATION PRIORITY
 ==================================================
 
