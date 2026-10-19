@@ -1,14 +1,51 @@
 # LIA — Estado operacional atual (living state)
 
-**Este arquivo é a fonte de verdade operacional do projeto.** Qualquer sessão nova deve
-lê-lo antes de trabalhar. Quando uma decisão de produto ou um estado de validação mudar,
-este arquivo é atualizado no mesmo commit — conforme a regra já estabelecida em
-`docs/product/lia-ui-implementation-roadmap.md` ("Update documentation whenever a
-deliberate product-level decision changes").
+**Fonte de verdade operacional do projeto.** Uma sessão nova lê o **§0 — Estado agora**,
+logo abaixo; o restante é histórico consultável, aberto quando a tarefa exigir. Quando uma
+decisão de produto ou um estado de validação mudar, este arquivo é atualizado no mesmo
+commit. Registra **estado**, não narrativa: relatório de rodada vai para
+`docs/product/`.
 
-Ele registra **estado**, não narrativa. Relatórios longos de rodada continuam em
-`docs/product/`. Aqui fica só o que uma próxima sessão precisa para não partir de
-premissa falsa.
+---
+
+<!-- CABEÇALHO DE ESTADO: uma sessão nova lê só o §0. O resto é histórico
+     consultável. A §6 (regras permanentes) é obrigatória antes de alterar código. -->
+
+## 0. Estado agora
+
+**Posição**
+
+| Item | Valor |
+| --- | --- |
+| Branch | `arena/01a10290-lia-project` — tip via `git rev-parse HEAD`, não registrado aqui |
+| Baseline validado em Windows | `3ef6d11618f787dae6d197645d440a5775a60ad6` — **não promover commit posterior** |
+| `main` | `db99c709059a6d074b18361bfb32c9f144620632` — **sem merge** |
+| Prefixo de código | tudo sob `airi/` |
+| Fase | **8.0D — First Multimodal Brain Adapter**, não CLOSED; **8.0E não iniciado** |
+
+**Provado em Windows real:** cadeia de voz gerenciada B1/B1.1 (**E2E PASS**; blocker
+encerrado, §2) · bootstrap de roteamento do Brain e seleção de rota (**M2**) · conversa só
+de texto (**DONE**). Automatizado na §4; verde **não é** gate de runtime.
+
+**Quebrou por último**
+
+- **M3.0a** — Stage invisível no Windows por `dist` obsoleto do `core-agent` (§5).
+- **M3.0b** — pré-requisito de build preso em `starting`, sem estado final. Causa medida:
+  `process.execPath` no processo main é o binário Electron, não Node. Correção escrita e
+  coberta por teste de unidade, **não executada no Windows** — gate **NÃO aprovado** (§5).
+
+**Gate que falta:** Windows E2E **visual** (§5) — abrir pelo `Lia.bat`, anexar imagem,
+pergunta determinística sobre o conteúdo, rota `groq` + `qwen/qwen3.8-27b`, resposta
+correta pela imagem, e turno só de texto permanecendo no GPT-OSS.
+
+**Em andamento:** reorganização dos arquivos de instrução (medição em
+`tools/agents-docs/`).
+
+**Próximos passos:** (1) gate Windows E2E visual; (2) reteste no Windows do pré-requisito
+do Stage (M3.0b); (3) `docs/compatibility/MATRIX.md`, exigido pela §81 do `AGENTS.md`,
+**não existe** — dívida em aberto, não histórico; (4) itens de closure da 8.0D, na §5.
+
+**Antes de alterar código:** ler a **§6 — Regras permanentes**.
 
 ---
 
@@ -21,6 +58,7 @@ premissa falsa.
 | **Último commit funcional validado em Windows** | `3ef6d11618f787dae6d197645d440a5775a60ad6` |
 | `main` | `db99c709059a6d074b18361bfb32c9f144620632` — **não recebeu merge** |
 | Prefixo de código | tudo sob `airi/` |
+| Máquina de desenvolvimento/teste | Ryzen 5 5500 · AMD RX 580 8 GB · 16 GB RAM — perfil de compatibilidade importante; **nunca** otimizar a arquitetura exclusivamente para ela (migrado da §88 do `AGENTS.md`) |
 
 **Atenção:** a branch contém código funcional **posterior** ao baseline acima — a rota
 Brain multimodal da Phase 8.0D-M1, o bootstrap de roteamento da Phase 8.0D-M2 e a retenção

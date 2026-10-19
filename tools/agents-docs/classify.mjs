@@ -58,7 +58,7 @@ const C = {
   'i18n.md           locale/**, **/*.vue': [67, 98],
   'hardware.md       bootstrap/, detection': [12, 13, 14, 15, 52],
   'acessibilidade.md **/*.vue, *.css': [68, 69],
-  'testes.md         **/*.test.ts, Tests/**': [80, 81],
+  'testes.md         **/*.test.ts, Tests/**': [80],
   'licencas.md       package.json, docs/licenses': [74, 97],
   'diagnostico.md    diagnostics/, repair': [56, 59, 60, 61],
   'distribuicao.md   installer/, updates': [10, 53, 75],
@@ -66,6 +66,10 @@ const C = {
   'adr.md            docs/architecture/**': [92],
 }
 const D = [9, 88, 95, 96]
+
+// 81 manda consultar docs/compatibility/MATRIX.md, que NAO EXISTE. Isso e divida
+// aberta, nao regra por caminho: fora dos baldes ate a matriz existir.
+const E = [81]
 
 // ---- guarda de completude: nenhuma secao pode ficar de fora ou duplicada ----
 const seen = new Set()
@@ -78,6 +82,7 @@ take(A)
 take(B)
 Object.values(C).forEach(take)
 take(D)
+take(E)
 const orphans = sections.map(s => s.n).filter(n => !seen.has(n))
 if (orphans.length) throw new Error(`secoes sem balde: ${orphans.join(', ')}`)
 
@@ -87,24 +92,39 @@ const cAll = Object.values(C).flat()
 
 // ---- o anexo da secao 0, medido de verdade ----
 const statePath = resolve(ROOT, 'docs', 'project', 'CURRENT-STATE.md')
-const stateTok = getEncoding(ENCODING).encode(readFileSync(statePath, 'utf-8')).length
+const stateLines = readFileSync(statePath, 'utf-8').split(/\r?\n/)
+// Depois da Etapa 1 a secao 0 manda ler so o CABECALHO: do inicio do arquivo ate o
+// '---' que precede a §1. Medir o arquivo inteiro aqui seria reportar um custo que
+// a ordem nao cobra mais.
+const firstH2 = stateLines.findIndex(l => /^## 1\. /.test(l))
+if (firstH2 < 0) throw new Error('CURRENT-STATE.md: inicio da §1 nao encontrado')
+let sep = firstH2
+while (sep > 0 && !/^---\s*$/.test(stateLines[sep])) sep--
+if (sep === 0) throw new Error('CURRENT-STATE.md: separador antes da §1 nao encontrado')
+const enc = getEncoding(ENCODING)
+const stateHeadTok = enc.encode(stateLines.slice(0, sep).join('\n')).length
+const stateTok = enc.encode(stateLines.join('\n')).length
 
 const line = (label, n, t) =>
   `${label.padEnd(38)} ${String(n).padStart(3)} secoes  ${String(t).padStart(6)} tok  ${(100 * t / total).toFixed(1).padStart(5)}%`
 
 process.stdout.write(`AGENTS.md: ${sections.length} secoes, ${total} tok\n`)
-process.stdout.write(`CURRENT-STATE.md: ${stateTok} tok\n\n`)
+process.stdout.write(`CURRENT-STATE.md: ${stateTok} tok no total; cabecalho (§0) = ${stateHeadTok} tok\n\n`)
 process.stdout.write(`${line('A) nucleo literal na raiz', A.length, sum(A))}\n`)
 process.stdout.write(`${line('B) rules SEM paths:', B.length, sum(B))}\n`)
 process.stdout.write(`${line('C) rules COM paths:', cAll.length, sum(cAll))}\n`)
-process.stdout.write(`${line('D) sobra', D.length, sum(D))}\n\n`)
+process.stdout.write(`${line('D) sobra', D.length, sum(D))}\n`)
+process.stdout.write(`${line('E) divida aberta (nao conta):', E.length, sum(E))}\n\n`)
 process.stdout.write(`sempre carregado (A+B) : ${sum(A) + sum(B)} tok\n`)
 process.stdout.write(`sai do fixo    (C+D)   : ${sum(cAll) + sum(D)} tok\n\n`)
 process.stdout.write(
-  `CUSTO EFETIVO DO NUCLEO = A (${sum(A)}) + anexo da secao 0 (${stateTok}) = ${sum(A) + stateTok} tok\n`,
+  `CUSTO EFETIVO DO NUCLEO = A (${sum(A)}) + anexo da secao 0 (${stateHeadTok}) = ${sum(A) + stateHeadTok} tok\n`,
 )
 process.stdout.write(
-  `  -> o texto da ordem custa ${tok[0]} tok; o que ela manda ler custa ${stateTok} tok\n`,
+  `  -> o texto da ordem custa ${tok[0]} tok; o que ela manda ler custa ${stateHeadTok} tok\n`,
+)
+process.stdout.write(
+  `  -> antes da Etapa 1 o anexo era o arquivo inteiro: ${stateTok} tok\n`,
 )
 
 process.stdout.write('\n--- detalhe de C ---\n')

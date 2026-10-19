@@ -20,14 +20,19 @@ Você está trabalhando diretamente no repository Git do projeto.
 0. ANTES DE QUALQUER TRABALHO
 ==================================================
 
-Antes de analisar código ou propor qualquer mudança, ler o estado operacional
-corrente do projeto:
+Antes de analisar código ou propor qualquer mudança, ler o CABEÇALHO DE ESTADO:
 
-docs/project/CURRENT-STATE.md
+docs/project/CURRENT-STATE.md  →  §0. Estado agora  (do início do arquivo até a §1)
 
-Ele é a fonte de verdade sobre a branch, o baseline funcional validado em runtime,
-os gates de runtime já confirmados e a transição de fase do roadmap. O tip da branch
-não é registrado lá: verificar dinamicamente com `git rev-parse HEAD`.
+Ler SÓ esse bloco. O restante do arquivo é histórico consultável: abrir a seção
+correspondente quando a tarefa exigir, nunca por padrão.
+
+Exceção permanente: a §6 — Regras permanentes vale sempre e deve ser lida antes de
+alterar qualquer código.
+
+O cabeçalho é a fonte de verdade sobre a branch, o baseline funcional validado em
+runtime, os gates já confirmados, o que quebrou por último e os próximos passos.
+O tip da branch não é registrado lá: verificar com `git rev-parse HEAD`.
 
 Este MASTER AGENT PROMPT define como trabalhar; CURRENT-STATE.md define onde o
 projeto está agora.
@@ -35,8 +40,8 @@ projeto está agora.
 Não partir de pressuposto próprio sobre o estado do projeto, e não reabrir um
 blocker registrado como encerrado sem evidência nova de regressão.
 
-Sempre que uma decisão de produto ou um gate de runtime mudar, atualizar
-CURRENT-STATE.md no mesmo commit.
+Sempre que uma decisão de produto ou um gate de runtime mudar, atualizar o
+cabeçalho de CURRENT-STATE.md no mesmo commit.
 
 ==================================================
 1. VISÃO DO PRODUTO
@@ -2219,29 +2224,14 @@ Testar AllTalk/XTTS/RVC no hardware real posteriormente.
 88. CURRENT DEVELOPMENT MACHINE
 ==================================================
 
-O ambiente principal de desenvolvimento/teste inicial possui:
+A especificação da máquina de desenvolvimento/teste é ESTADO, não instrução:
+migrou para docs/project/CURRENT-STATE.md (§1). Não duplicar aqui.
 
-CPU:
-Ryzen 5 5500
+O que continua sendo regra, e fica aqui:
 
-GPU:
-AMD RX 580 8 GB
-
-RAM:
-16 GB
-
-Essa máquina deve ser utilizada como um importante perfil de compatibilidade.
-
-Porém:
-
-NUNCA otimizar a arquitetura exclusivamente para esse hardware.
-
-A Lia deve continuar agnóstica a:
-
-- AMD;
-- NVIDIA;
-- Intel;
-- CPU-only.
+Essa máquina é um perfil de compatibilidade importante, porém NUNCA otimizar a
+arquitetura exclusivamente para ela. A Lia continua agnóstica a AMD, NVIDIA,
+Intel e CPU-only (ver seção 14).
 
 
 ==================================================
