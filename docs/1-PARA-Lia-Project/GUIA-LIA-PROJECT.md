@@ -44,22 +44,38 @@ Na segunda linha somem: falar pt-BR, nunca `git reset --hard`, nunca declarar PA
 executar, provider nunca hardcoded, STOP AND REPORT, ler o `CURRENT-STATE.md` primeiro.
 Sem erro e sem aviso. E `airi/` é a pasta natural de abrir, porque é onde está o código.
 
-**Verificação (10 segundos):** rode `/memory` com o editor aberto na raiz, depois em `airi/`.
-Ele lista os arquivos de instrução carregados. Compare com a tabela.
+**Verificação (10 segundos):** rode `/context` com o editor aberto na raiz, depois em `airi/`.
+A lista **Memory files** mostra os arquivos de instrução carregados. Compare com a tabela.
 
-**Conserto, se confirmado:** um `CLAUDE.md` em `airi/` que importe os dois níveis.
+**Conserto, se confirmado:** um `CLAUDE.md` curto na **raiz**, com o núcleo das regras em
+**texto literal**.
 
 ```
-@../AGENTS.md
-@AGENTS.md
+# Lia — regras que valem em qualquer pasta
+
+<o núcleo escrito por extenso, não por referência>
 ```
+
+**Por que texto literal e não `@import`:** `@../` não resolve, e um `@import` dentro de um
+`CLAUDE.md` que foi carregado por estar **acima** da pasta aberta é pulado inteiro — sem
+erro e sem aviso. Texto literal não depende de resolver caminho nenhum.
+
+**Por que na raiz, e não em `airi/`:** os `CLAUDE.md` da hierarquia **concatenam**. O da
+raiz é carregado **junto** com o de `airi/`, não no lugar dele. Então um núcleo curto na
+raiz garante as regras da Lia em qualquer pasta aberta abaixo dela, e o `CLAUDE.md` de
+`airi/` continua valendo por cima.
+
+**E o detalhe de cada área vai para `.claude/rules/` com `paths:`** — é o único mecanismo
+que reduz contexto de verdade, porque a regra só entra quando se toca num arquivo que casa
+com o caminho declarado. Repetir núcleo não economiza token nenhum; tirar detalhe do
+sempre-carregado economiza.
 
 Ou, se preferir explícito, o `/config` tem a opção **Project instructions** com o valor
 `claude-md-and-agents-md`, que manda ler os dois. O arquivo é mais confiável que a config,
 porque viaja no git e vale pra qualquer máquina.
 
 > Isto é dedução da regra documentada + o layout dos arquivos. Não foi executado nesta
-> máquina. O `/memory` confirma ou derruba.
+> máquina. O `/context` confirma ou derruba.
 
 ## A1. O custo fixo de contexto, e como derrubá-lo
 
@@ -380,7 +396,7 @@ aleatoriamente a cada execução — número fixo acaba memorizado pelo reposit�
 
 - **Nada foi executado nesta máquina.** Tudo é leitura de código e documentação.
 - **A precedência `CLAUDE.md` × `AGENTS.md` (A0)** é dedução da regra documentada mais o
-  layout dos arquivos. O `/memory` resolve em 10 segundos.
+  layout dos arquivos. O `/context` resolve em 10 segundos.
 - **As contagens de token são estimativas** por caractere, não medidas com tokenizador.
 - **`groq` em 503** é o canário de 18/10/2026. Pode ter voltado.
 - **O tier de visão segue sem prova** de que algum modelo enxerga de fato.
