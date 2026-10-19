@@ -1,0 +1,15 @@
+{
+  "name": "@lia/agents-docs-metrics",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Medicao de tokens e extracao de secoes dos arquivos de instrucao da Lia (AGENTS.md, CURRENT-STATE.md).",
+  "scripts": {
+    "measure": "node measure.mjs",
+    "extract": "node extract.mjs",
+    "classify": "node classify.mjs"
+  },
+  "dependencies": {
+    "js-tiktoken": "^1.0.20"
+  }
+}
