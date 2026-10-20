@@ -11,6 +11,15 @@ Fonte: [`CURRENT-STATE.md`](CURRENT-STATE.md) §0 e §5, medido em
 
 ## Onde o projeto está
 
+Atualização local de 20/10/2026: a finalização Windows foi autorizada pelo Dev.
+O fluxo `Lia.bat → Launcher → Conversar → Stage visível` e o encerramento foram
+executados no PC. Uma rejeição inesperada do pré-requisito agora termina em erro
+com retry, coberto por regressão. **A release não está pronta:** a janela Chat
+voltou ao histórico anterior após envio de QA; o gate de imagem segue pendente.
+Inventário dos sete concepts, resultados e checklist:
+[`RELEASE-WINDOWS-2026-10-20.md`](../product/RELEASE-WINDOWS-2026-10-20.md).
+O plano local está em `docs/product/PLANO-FINALIZACAO-LIA.md`.
+
 - **Branch:** `arena/01a10290-lia-project`. `main` não recebeu merge.
 - **Baseline funcional validado em Windows:** `3ef6d11618f787dae6d197645d440a5775a60ad6`.
   **Não promover commit posterior a baseline.**
@@ -50,8 +59,8 @@ vitest `airi/apps/lia-app` (246 + 2 skip), `moeru-lint`, build `@proj-airi/core-
    É o único critério PARTIAL que se fecha sem Windows.
 2. **8.0D-M3.1** — preflight do limite de 3 imagens. Foi explicitamente dividido
    para fora da M3 e nunca entregue.
-3. **`docs/compatibility/MATRIX.md`** — a §81 do `AGENTS.md` exige esse arquivo e
-   ele **não existe**. Dívida em aberto, não histórico.
+3. **`docs/compatibility/MATRIX.md`** — criado com estados conservadores e evidência
+   parcial Windows. Ampliar após os próximos gates; não declarar suporte total.
 4. **Dívida de Cloud Sync v1** — envia texto puro para user/assistant. Registrada
    na §5, não corrigida.
 5. **Fatiamento portátil do `AGENTS.md`** — hoje são ~10 800 tok carregados sempre.
@@ -68,10 +77,10 @@ executar.
    abrir pelo `Lia.bat` · anexar imagem · pergunta determinística sobre o conteúdo ·
    rota `groq` + `qwen/qwen3.8-27b` · resposta correta **pela imagem** · e um turno
    só de texto permanecendo no GPT-OSS.
-2. **Reteste do pré-requisito do Stage (M3.0b).** A correção está escrita e coberta
-   por teste de unidade, **não executada no Windows**. Gate **NÃO aprovado**.
-   O invariante a observar: build termina, o pré-requisito registra estado final,
-   o Stage abre.
+2. **Reteste do pré-requisito do Stage (M3.0b).** **PASS Windows real em
+   20/10/2026 nesta rodada:** build termina, pré-requisito registra sucesso,
+   personagem aparece e encerramento gerenciado remove os processos da sessão.
+   Baseline funcional preservado em `3ef6d11`; isso não aprova o gate de imagem.
 3. **Qualquer validação de runtime, voz, instalador ou benchmark.**
 
 Um agente pode *preparar* tudo isso — código, testes, roteiro, diagnóstico — mas

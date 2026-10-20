@@ -244,6 +244,35 @@ describe('d. Conversar spawns the stage once', () => {
 })
 
 describe('e. Repeated Conversar is single-flight', () => {
+  it('a rejected prerequisite reaches a terminal error and a later start retries', async () => {
+    const root = await makeStageWorkspace()
+    const child = fakeChild()
+    const spawnImpl = vi.fn(() => child as never)
+    const run = vi.fn()
+      .mockRejectedValueOnce(new Error('private build output'))
+      .mockResolvedValueOnce({ ok: true })
+    const logs: string[] = []
+    const manager = new AiriStageManager({
+      onLog: line => logs.push(line),
+      prerequisite: { applies: () => true, name: 'core-agent-build', run },
+      spawnImpl: spawnImpl as never,
+      workspaceRoot: root,
+    })
+
+    const failed = await manager.start()
+    expect(failed.phase).toBe('error')
+    expect(manager.state().phase).toBe('error')
+    expect(spawnImpl).not.toHaveBeenCalled()
+    expect(logs).toContain('stage-prerequisite name=core-agent-build state=failed reason=unexpected-error')
+    expect(logs.join('\n')).not.toContain('private build output')
+
+    const retried = manager.start()
+    await vi.waitFor(() => expect(spawnImpl).toHaveBeenCalledTimes(1))
+    child.stdout.emit('data', 'ready in 50 ms')
+    expect((await retried).phase).toBe('running')
+    expect(run).toHaveBeenCalledTimes(2)
+  })
+
   it('concurrent starts share one spawn; starts after running do not respawn', async () => {
     const root = await makeStageWorkspace()
     const child = fakeChild()

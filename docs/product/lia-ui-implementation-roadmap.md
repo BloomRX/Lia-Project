@@ -3,6 +3,13 @@
 **Status:** Draft baseline  
 **Purpose:** Keep product UI work aligned with the runtime architecture while implementation proceeds in small phases.
 
+**Windows verification, 2026-10-20:** the launcher opened the Stage through the
+normal button and completed managed shutdown. Phase 8.0D remains open: session
+selection in Chat failed during the live test and the image-content gate is
+pending. See [the release checklist](RELEASE-WINDOWS-2026-10-20.md). The local
+finalization plan extends the presence target to multiple monitors; the original
+8.0J experiment below remains the first implementation step.
+
 ---
 
 ## Principle

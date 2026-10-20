@@ -1,6 +1,6 @@
 # docs/ — índice
 
-63 documentos nossos (fora do `airi/` vendado). Nenhum é duplicado: cada linha
+Índice dos documentos do produto (fora do `airi/` vendado). Cada linha
 abaixo tem um papel distinto. Se você procura **onde o projeto está agora**, não
 é aqui — é [`project/CURRENT-STATE.md`](project/CURRENT-STATE.md), §0.
 
@@ -18,6 +18,8 @@ o documento da área que você vai tocar.
 | [`project/DEVFLOW.md`](project/DEVFLOW.md) | O pipeline DevFlow: estágios, marcadores, vereditos, retenção |
 | [`qa-benchmark.md`](qa-benchmark.md) | O harness de benchmark Windows (`Tests/LiaBenchmark.bat`) |
 | [`airi-modificacoes-registro.md`](airi-modificacoes-registro.md) | O que a Lia modificou no AIRI vendado, e o risco de re-aplicação |
+| [`product/RELEASE-WINDOWS-2026-10-20.md`](product/RELEASE-WINDOWS-2026-10-20.md) | Inventário de recursos, gates executados e checklist da finalização Windows |
+| [`compatibility/MATRIX.md`](compatibility/MATRIX.md) | Compatibilidade por plataforma, com evidência e limitações |
 
 ## Sessão de trabalho
 

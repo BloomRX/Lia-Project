@@ -41,24 +41,31 @@ correta pela imagem, e turno só de texto permanecendo no GPT-OSS.
 **Em andamento:** reorganização dos arquivos de instrução (medição em
 `tools/agents-docs/`).
 
-**Ponto de retomada — 19/10/2026:** seção A de `QUANTO-FALTA.md` ainda não
-iniciada. O preflight encontrou fixtures dependentes de fuso e encoding; as
-correções são restritas aos testes. Falta resolver a aplicação do lint aos
-arquivos de ferramentas fora de `airi/`: o comando obrigatório não encontra
-configuração na raiz, e aplicar a configuração do AIRI exige mudanças no runner
-e nos imports dos testes Node. Não migrar nem desabilitar regras como contorno.
-O Python também segue vermelho: 487 casos, 2 erros de limpeza `WinError 32` e
-10 skips na repetição; o processo que mantém os diretórios abertos não foi
-identificado. Node: 267 testes aprovados; launcher: 246 aprovados + 2 skips;
-builds `@lia/core` e `@proj-airi/core-agent` concluídos.
-Detalhes e resultados em `docs/product/PREFLIGHT-2026-10-19.md`.
-**Próximo item de produto: A1 — teste dirigido de failure behavior**, após
-concluir esse preflight. Os gates Windows continuam pendentes e o baseline
-funcional permanece `3ef6d11`.
+**Retomada — 20/10/2026:** finalização Windows autorizada pelo Dev, com plano
+local em `docs/product/PLANO-FINALIZACAO-LIA.md` (não em `docs/project/`).
+**M3.0b: abertura e encerramento PASS Windows real nesta rodada**:
+`Lia.bat` → Launcher → clique Conversar → build concluído em 3,6 s →
+`node-from-path` → personagem visível; encerramento gerenciado em 606 ms.
+O patch Node já estava aplicado. Uma rejeição inesperada do pré-requisito ainda
+deixava `starting`; reprodução automatizada falhou antes e passou após correção,
+com erro terminal e retry. Launcher: 247 aprovados + 2 skips; testes dirigidos:
+43 aprovados; lint, typecheck e build do launcher: PASS automatizado.
 
-**Próximos passos:** (1) gate Windows E2E visual; (2) reteste no Windows do pré-requisito
-do Stage (M3.0b); (3) `docs/compatibility/MATRIX.md`, exigido pela §81 do `AGENTS.md`,
-**não existe** — dívida em aberto, não histórico; (4) itens de closure da 8.0D, na §5.
+**Bloqueios ativos:** nova sessão do Chat voltou ao histórico antigo após um
+envio bem-sucedido no provider; investigar seleção por janela antes do gate
+visual. Python Store (`python3`): 487 casos, 1 erro de limpeza e 10 skips;
+Python nativo (`python`): 12 testes GitFlow aprovados, suíte completa em
+verificação. O detentor do lock não foi identificado. Node: 267 aprovados.
+Detalhes, inventário dos sete concepts e checklist em
+`docs/product/RELEASE-WINDOWS-2026-10-20.md`.
+**Próximo item:** corrigir a seleção de sessão do Chat, retestar texto/imagem,
+depois testes de failure behavior e preflight numérico de imagens (8.0D).
+Gate de conteúdo de imagem pendente; baseline funcional permanece `3ef6d11`.
+
+**Próximos passos:** (1) corrigir seleção local de conversa; (2) gate Windows E2E
+visual; (3) fechar itens automatizáveis da 8.0D; (4) Launcher e presença conforme
+o plano de finalização. A matriz de compatibilidade registra evidência parcial,
+sem declarar a release suportada.
 
 **Quanto falta:** [`QUANTO-FALTA.md`](QUANTO-FALTA.md) — o que resta, separado
 entre o que um agente faz sozinho em Linux e o que exige o Windows do Dev.

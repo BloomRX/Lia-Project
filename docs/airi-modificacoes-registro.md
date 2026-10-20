@@ -1,5 +1,12 @@
 # Registro das modificações feitas no AIRI vendado
 
+**Atualização local — 20/10/2026:** o patch Node da seção 4 já existe no checkout,
+com correções posteriores; não o reaplicar. Nesta rodada, a abertura do Stage e
+o encerramento passaram no Windows real. O manager também recebeu tratamento
+de rejeição inesperada do pré-requisito, com regressão e retry. A descrição de
+trabalho perdido abaixo é histórica. Evidências e limites em
+[`product/RELEASE-WINDOWS-2026-10-20.md`](product/RELEASE-WINDOWS-2026-10-20.md).
+
 > **Para que serve este arquivo.** O diretório `airi/` é uma cópia do projeto
 > upstream [`moeru-ai/airi`](https://github.com/moeru-ai/airi) com trabalho da
 > Lia aplicado por cima. Se um dia for preciso re-clonar o AIRI do zero, este

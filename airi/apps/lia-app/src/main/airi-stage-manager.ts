@@ -1,5 +1,5 @@
 import type { RunAsNodeFuseState } from './node-runtime'
-import type { StageBuildPrerequisite } from './stage-build-prerequisite'
+import type { StageBuildPrerequisite, StagePrerequisiteOutcome } from './stage-build-prerequisite'
 
 import { execFile, spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
@@ -285,7 +285,15 @@ export class AiriStageManager {
       ?? createCoreAgentBuildPrerequisite({ workspaceRoot: this.deps.workspaceRoot })
     if (prerequisite.applies()) {
       this.deps.onLog?.(`stage-prerequisite name=${prerequisite.name} state=starting`)
-      const outcome = await prerequisite.run()
+      let outcome: StagePrerequisiteOutcome
+      try {
+        outcome = await prerequisite.run()
+      }
+      catch {
+        // A rejected build must leave starting and release the single-flight
+        // launch for retry. Exception bodies can contain private build output.
+        outcome = { ok: false, reason: 'unexpected-error' }
+      }
       if (!outcome.ok) {
         this.deps.onLog?.(
           `stage-prerequisite name=${prerequisite.name} state=failed reason=${outcome.reason ?? 'unknown'}`,
