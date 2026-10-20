@@ -44,19 +44,30 @@ Na segunda linha somem: falar pt-BR, nunca `git reset --hard`, nunca declarar PA
 executar, provider nunca hardcoded, STOP AND REPORT, ler o `CURRENT-STATE.md` primeiro.
 Sem erro e sem aviso. E `airi/` é a pasta natural de abrir, porque é onde está o código.
 
-**Verificação (10 segundos):** rode `/memory` com o editor aberto na raiz, depois em `airi/`.
-Ele lista os arquivos de instrução carregados. Compare com a tabela.
+**Verificação (10 segundos):** rode `/context` com o editor aberto na raiz, depois em
+`airi/`. Olhe a seção **Memory files** — é ela que lista os arquivos de instrução
+carregados. Compare com a tabela.
 
-**Conserto, se confirmado:** um `CLAUDE.md` em `airi/` que importe os dois níveis.
+**Conserto, se confirmado:** um `CLAUDE.md` curto na raiz, com o núcleo das regras em
+**texto literal**.
 
-```
-@../AGENTS.md
-@AGENTS.md
-```
+> ⚠ **Correção da versão anterior deste guia.** Aqui estava escrito para pôr
+> `@../AGENTS.md` e `@AGENTS.md` dentro do `airi/CLAUDE.md`. **Não faça isso.** O `@../`
+> não resolve, e um `@import` dentro de um `CLAUDE.md` carregado por estar *acima* da
+> pasta aberta é pulado inteiro. Os dois casos falham **sem erro e sem aviso**.
+>
+> O que funciona é texto literal — e funciona porque os `CLAUDE.md` da hierarquia
+> **concatenam**: o da raiz é carregado **junto** com o de `airi/`, não substituído. Então
+> o núcleo literal na raiz chega em `airi/` sem precisar de import nenhum.
+>
+> O detalhe de cada área (voz, UI, i18n) vai pra `.claude/rules/` com `paths:` no topo —
+> é o único mecanismo que realmente reduz contexto. Fatiar em `@import` não reduz nada:
+> arquivo importado carrega na inicialização do mesmo jeito.
 
-Ou, se preferir explícito, o `/config` tem a opção **Project instructions** com o valor
-`claude-md-and-agents-md`, que manda ler os dois. O arquivo é mais confiável que a config,
-porque viaja no git e vale pra qualquer máquina.
+O `/config` também tem **Project instructions** com o valor `claude-md-and-agents-md`,
+que manda ler os dois. Mas é configuração de máquina: vale em `~/.claude/settings.json`,
+em arquivo `--settings` ou em managed settings, e **é ignorada na configuração de
+projeto** — então não viaja no git como o arquivo viaja.
 
 > Isto é dedução da regra documentada + o layout dos arquivos. Não foi executado nesta
 > máquina. O `/memory` confirma ou derruba.
