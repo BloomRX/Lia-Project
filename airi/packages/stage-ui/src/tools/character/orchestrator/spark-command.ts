@@ -1,5 +1,4 @@
 import type { WebSocketEvents } from '@proj-airi/server-sdk'
-import type z from 'zod/v4'
 
 import { rawTool } from '@xsai/tool'
 import { nanoid } from 'nanoid'
@@ -15,6 +14,12 @@ import {
   sparkCommandToolSchema,
 } from './spark-command-shared'
 
+// Internal callers also support an empty destination list for broadcast.
+// Validate that existing runtime contract before emitting any command.
+const sparkCommandRuntimeSchema = sparkCommandToolSchema.extend({
+  destinations: sparkCommandToolSchema.shape.destinations.element.array(),
+})
+
 export interface CreateSparkCommandToolOptions {
   sendSparkCommand: (command: WebSocketEvents['spark:command']) => void
 }
@@ -29,8 +34,12 @@ export async function createSparkCommandTool(options: CreateSparkCommandToolOpti
       name: 'builtIn_emitSparkCommand',
       description: 'Send a spark:command to one or more frontend-connected modules or sub-agents.',
       parameters,
+      // Qwen/Groq ended even a minimal image request with an empty response
+      // when constrained decoding was enabled for this schema. Keep the schema
+      // and the tool, but enforce arguments locally before dispatch instead.
+      strict: false,
       execute: async (rawPayload) => {
-        const payload = rawPayload as z.infer<typeof sparkCommandToolSchema>
+        const payload = sparkCommandRuntimeSchema.parse(rawPayload)
         const command = {
           id: nanoid(),
           eventId: nanoid(),

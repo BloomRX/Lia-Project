@@ -226,6 +226,62 @@ Limites: apenas modelos resolvidos com limite declarado podem ser verificados.
 Não é um limitador de tokens/quota da conta, nem prova reconhecimento da imagem.
 O gate de imagem+texto na UI continua FAIL por resposta vazia com ferramentas.
 
+## Compatibilidade Spark — resposta vazia isolada e corrigida
+
+Comparação controlada com fixture sintética e apenas a ferramenta Spark pública,
+sem Persona/histórico, mesmos parâmetros SSE e limite de saída 128:
+`strict=true` → HTTP 200/stop, um token EOS e nenhuma resposta;
+`strict=false` → descrição correta de retângulo vermelho e círculo azul.
+Ambos consumiram 3503 tokens de entrada. Não foi identificado um nó específico
+do schema nem comprovado um defeito interno do serviço.
+
+A ferramenta continua disponível com o mesmo schema, com `strict: false` e
+validação Zod local antes do despacho. O contrato interno de broadcast com
+destinos vazios foi mantido. Argumentos inválidos rejeitam antes de emitir
+comandos. Persona, configuração, fallback e cadeia de voz não foram alterados.
+
+| Verificação | Resultado |
+| --- | --- |
+| Regressões de strict e argumentos inválidos antes da correção | RED confirmado |
+| Spark, tool-resolver e tool-call-rerun | PASS automatizado: 29 testes |
+| Lint dos dois arquivos e typecheck Stage UI | PASS automatizado |
+| `pnpm --filter @proj-airi/stage-tamagotchi build` | PASS automatizado: main, preload e renderer gerados |
+| Node `node --test Tests/tools/*.test.mjs` | PASS automatizado: 267 testes |
+| Launcher `../../node_modules/.bin/vitest run` | PASS automatizado: 247 testes, 2 skips |
+| Python `python3 -m unittest discover -s . -p "test_*.py" -t .` em tools | FAIL: 487 casos, 10 skips, 1 erro de limpeza, 279 s |
+| Imagem na UI com as sete ferramentas | FAIL de conteúdo: resposta visível, mas retângulo chamado de quadrado |
+| Texto independente em nova conversa após imagem | PASS Windows real: GPT-OSS respondeu 42 |
+
+Imagem: correlação `3eaf9a12-d099-4a3a-8bf9-12570666d095`, `23:22:05Z`.
+Resposta observada: “Primeiro vem um quadrado vermelho e, depois, um círculoazul.”
+Também há perda de espaço no texto transmitido, pendente de regressão dirigida.
+Texto independente: correlação `9080dbe5-2459-4d5b-b686-a7c5115475fe`, `23:24:28Z`.
+Screenshot mostra ainda prévia de raciocínio em inglês; não aprova a UX final.
+
+Evidências ignoradas: `qwen-spark-minimal-comparison.json`,
+`vision-fixed-tool-metadata.json` (sete ferramentas; apenas Spark strict=false),
+`vision-gate-fixed-result.png`, `text-after-spark-fix.png`,
+`spark-decoding-{red,tests,lint,typecheck}.log`, `stage-production-build.log`,
+`node-after-spark.log`, `launcher-after-spark.log`, `launcher-tool-diagnostic.log`.
+As imagens foram inspecionadas. O app foi encerrado normalmente às `23:27:07Z`
+em 518 ms; PID 15268 ausente após fechar. Não foram alteradas preferências de
+voz/setup; sondagens temporárias restauradas. Instalador e instalação limpa
+continuam NÃO EXECUTADOS. Baseline funcional continua `3ef6d11`.
+
+Arquivos de código: `airi/packages/stage-ui/src/tools/character/orchestrator/`:
+`spark-command.ts` e `spark-command.test.ts`. Registro upstream e matriz
+atualizados com os limites desta evidência.
+
+**Barreira ao próximo item:** a repetição Python falhou no `tearDown` de
+`GitFlowTests.test_no_push_commits_offline_without_remote`, removendo
+`.devkit-tests-dk7yqlg1/repo com espaços` (WinError 32/5). A asserção funcional
+não falhou; isso também não autoriza considerar a suíte verde. O detentor e a
+causa permanecem desconhecidos após as sondagens registradas nesta rodada.
+Log: `python-after-spark.log`. Nenhuma exceção foi suprimida, timeout aumentado
+ou processo alheio encerrado. Aplicado STOP AND REPORT antes de iniciar a
+correção de whitespace. Próximo passo: investigar esse erro e restabelecer o
+baseline verificável, depois a regressão de espaços e o gate de imagem.
+
 ## Problemas ativos
 
 - **Imagem — FAIL:** anexo sintético de 240×160, retângulo vermelho à esquerda
@@ -234,8 +290,11 @@ O gate de imagem+texto na UI continua FAIL por resposta vazia com ferramentas.
   (saída: 1000 tokens/minuto) e HTTP 413 (entrada: 7000 tokens/minuto).
   Em conversa nova, correlação `93e70252-ebbf-41cf-8a8f-c88c88565d0b`
   às `03:18:57.782Z`, o log registrou sucesso, mas **não houve mensagem
-  assistant** no store nem resposta visível. O stream vazio foi medido; a causa do comportamento do modelo ainda não está
-  isolada. Requisição mínima ao mesmo serviço descreveu a imagem corretamente.
+  assistant** no store nem resposta visível. O stream vazio foi medido e,
+  posteriormente, isolado na interação strict/schema Spark descrita acima.
+  Depois da correção, o bloqueio restante é conteúdo incorreto (quadrado em vez
+  de retângulo), além da perda de espaço observada. Requisição mínima ao mesmo
+  serviço descreveu a imagem corretamente.
   Evidências: `image-preview.png`, `image-first-result.png` e log do runtime.
 - **9router — BLOCKED para envio:** catálogo acessível em
   `http://localhost:20128/v1/models`; requisição com a mesma imagem sintética ao
@@ -263,7 +322,8 @@ O gate de imagem+texto na UI continua FAIL por resposta vazia com ferramentas.
 - [x] PASS Windows real: encerramento gerenciado sem processo do checkout remanescente.
 - [x] PASS Windows real: conversa de texto isolada mantém sessão e resposta 42 visível.
 - [x] PASS automatizado e Windows real: stream vazio gera erro visível e estado terminal failed.
-- [ ] FAIL: imagem determinística sem resposta visível; texto após imagem ainda NÃO EXECUTADO.
+- [ ] FAIL: imagem determinística com resposta visível, mas geometria incorreta.
+- [x] PASS Windows real: texto independente após imagem respondeu 42 pela rota GPT-OSS.
 - [ ] NÃO EXECUTADO: novo teste humano de microfone; baseline de voz preservado.
 - [x] PASS automatizado: política real de failover recuperável/permanente, fim da cadeia e opt-out.
 - [x] PASS automatizado e Windows real: preflight numérico recusa excesso sem perder rascunho/anexos.

@@ -16,9 +16,10 @@ O fluxo `Lia.bat → Launcher → Conversar → Stage visível` e o encerramento
 executados no PC. Uma rejeição inesperada do pré-requisito agora termina em erro
 com retry, coberto por regressão. A seleção local da janela Chat foi corrigida
 e a resposta 42 ficou visível no Electron. **A release não está pronta:** imagem
-chegou ao Qwen, mas sem resposta assistant; houve também erros de quota Groq.
+agora recebe resposta após correção da compatibilidade Spark, mas o modelo
+confundiu retângulo com quadrado; houve também erros de quota Groq.
 O 9router exige autenticação no envio (401). A mesma imagem foi reconhecida
-em requisição mínima pela Groq, mas o gate na UI segue FAIL. O erro de stream
+em requisição mínima pela Groq, mas o gate na UI segue FAIL de conteúdo. O erro de stream
 vazio agora aparece em pt-BR e termina em failed, validado no Windows e em testes.
 Inventário dos sete concepts, resultados e checklist:
 [`RELEASE-WINDOWS-2026-10-20.md`](../product/RELEASE-WINDOWS-2026-10-20.md).

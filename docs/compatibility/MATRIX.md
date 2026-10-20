@@ -23,7 +23,10 @@ Os estados de suporte não substituem os resultados de cada verificação.
 | Avatar Tamagotchi | PASS Windows real | Personagem Live2D upstream renderizada, não o modelo canônico da Lia |
 | Encerramento gerenciado | PASS Windows real | 606 ms; PID do Stage e processos Electron do checkout ausentes após fechar |
 | Conversa de texto desta rodada | PASS Windows real | Após corrigir seleção local, nova conversa manteve sessão e resposta 42 visível |
-| Imagem determinística na UI | FAIL | Stream vazio medido; causa ainda em investigação; sete ferramentas no pedido completo |
+| Imagem determinística na UI | FAIL de conteúdo | Após correção Spark, resposta visível com sete ferramentas, mas retângulo descrito como quadrado |
+| Schema Spark e constrained decoding | PASS automatizado e integração Windows | Comparação mínima: strict=true encerra vazio; strict=false responde. Validação local antes do despacho; não aprova loop real de ferramentas |
+| Texto independente após imagem | PASS Windows real | Nova conversa, rota GPT-OSS, resultado 42 visível |
+| Build de produção do Stage | PASS automatizado | electron-vite build concluído; não equivale a instalador nem instalação limpa |
 | Visão Groq em pedido mínimo | PASS integração direta no Windows | Descrição correta em JSON e SSE; não substitui o fluxo da UI |
 | Stream vazio no Chat | PASS Windows real | Erro em pt-BR, anexo/pergunta e retry preservados, log terminal failed |
 | Política de failover Lia | PASS automatizado | 15 casos no store real com IPC simulado; não aprova E2E em rede |

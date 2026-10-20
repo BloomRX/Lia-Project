@@ -43,22 +43,35 @@ Python teve FAIL intermitente em limpeza de fixtures (WinError 32/5), inclusive
 na repetição após A1; a repetição após A2 passou em 272 s. Detentor/causa não
 identificados; não ignorar, aumentar timeout ou declarar esse problema resolvido.
 
-**Bloqueio de saída da 8.0D:** o Qwen descreveu corretamente a imagem em pedidos
-mínimos JSON/SSE. Comparação controlada com as MESMAS mensagens, SSE e limite
-128: sete ferramentas → stop sem conteúdo; sem ferramentas → descrição correta.
-O conjunto altera o resultado, mas o defeito específico de schema/modelo ainda
-não foi localizado. Não desativar capacidades como workaround nem alterar Persona.
+**Compatibilidade Spark corrigida:** comparação mínima sem Persona/histórico,
+mesma imagem/SSE/limite 128: schema Spark com strict=true → stop vazio/um EOS;
+strict=false → descrição correta. Mantidos schema e ferramenta, validação Zod
+local antes do despacho e contrato interno de broadcast. Sem hardcode de modelo.
+29 testes dirigidos, lint e typecheck Stage UI PASS. Build de produção Stage PASS;
+Node 267 e Launcher 247 + 2 skips PASS nesta repetição.
+Python após Spark: **FAIL**, 487 casos/10 skips, um erro na limpeza do teste
+`GitFlowTests.test_no_push_commits_offline_without_remote` (WinError 32/5,
+279 s). Causa/detentor continuam não identificados. **STOP AND REPORT:** não
+iniciar outro item com a suíte obrigatória falhando; não ignorar a limpeza.
+
+**Bloqueio de saída da 8.0D:** no Windows, as sete ferramentas foram mantidas e
+a resposta voltou a aparecer, mas o retângulo foi chamado de quadrado: conteúdo
+da imagem **FAIL**. Texto independente em nova conversa GPT-OSS mostrou **42**:
+PASS Windows real. Também foi observada perda de espaço (“círculoazul”) e prévia
+de raciocínio em inglês. Não promover gate nem baseline por sucesso do stream.
 9router `http://localhost:20128/v1`: último reteste de envio manteve HTTP 401
 `invalid_api_key` (catálogo era acessível). Nenhuma chave foi lida/impressa para contornar.
 
 **Onde parou:** A1 e A2 concluídos; A3 (matriz inicial) criado e atualizado com
 estados conservadores. Cloud Sync v1 (A4) e fatiamento de instruções (A5) pendentes.
-**Próximo item exato:** retirar o bloqueio imagem+ferramentas da 8.0D: isolar o
-conjunto/schema enviado ao Qwen com fixture sintética e parâmetros iguais, sem
-alterar fallback, Persona, secrets ou STT/TTS. Depois repetir imagem correta na
-UI + texto independente no GPT-OSS, antes de avançar Launcher/presença/release.
+**Próximo item exato:** investigar a falha de limpeza Python registrada em
+`python-after-spark.log` e obter baseline verificável antes de nova alteração.
+Depois, regressão RED e correção dos espaços perdidos no Chat
+quando chunks seguros contêm apenas whitespace, preservando os hooks de voz.
+Depois continuar o gate de conteúdo da imagem e as pendências da 8.0D antes
+de avançar Launcher/presença/release. Não alterar fallback, Persona ou secrets.
 
-Execução de QA encerrada normalmente às `22:50:57Z`; PID 17048 e Electron do
+Execução de QA encerrada normalmente às `23:27:07Z` em 518 ms; PID 15268 e Electron do
 checkout ausentes. Sondagens temporárias restauradas. Evidências locais em
 `Tests/runs/release-20261019/` (ignorado). Relatório, arquivos, comandos e DoD:
 [`RELEASE-WINDOWS-2026-10-20.md`](../product/RELEASE-WINDOWS-2026-10-20.md).

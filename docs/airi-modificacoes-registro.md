@@ -227,7 +227,23 @@ Windows nunca revelaram o executável real.
 
 ---
 
-## 6. O que NÃO foi verificado
+## Atualização Windows de 20/10/2026 — ferramenta Spark
+
+Em `packages/stage-ui/src/tools/character/orchestrator/spark-command.ts`, a
+ferramenta mantém seu schema público e disponibilidade, com `strict: false` e
+validação Zod local antes do despacho. O contrato interno de broadcast com
+destinos vazios foi preservado. Não há alteração de Persona, fallback ou voz.
+
+Reprodução mínima com imagem sintética, sem Persona/histórico e parâmetros
+iguais: apenas o schema Spark com strict=true produziu HTTP 200/stop/um token
+EOS sem conteúdo; strict=false retornou descrição correta. Isso comprova a
+interação observada, sem atribuir a um nó específico do schema ou ao backend.
+Regressão RED → GREEN, 29 testes dirigidos, lint e typecheck Stage UI aprovados.
+No Electron, as sete ferramentas permaneceram disponíveis e a resposta voltou,
+mas o modelo chamou retângulo de quadrado: gate de conteúdo permanece FAIL.
+Evidências e build: `docs/product/RELEASE-WINDOWS-2026-10-20.md`.
+
+## 6. O que NÃO foi verificado na rodada histórica abaixo
 
 - **Nenhum comportamento foi observado em Electron neste ambiente.** O binário do
   Electron não é baixável no sandbox (o download redireciona para
