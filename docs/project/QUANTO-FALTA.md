@@ -49,7 +49,7 @@ como PASS.
 | tool calling | **PARTIAL** | transporte e gate de compatibilidade provados; o *loop* completo é do `@xsai/stream-text` |
 | latency | **NOT STARTED** | nenhuma medição existe; o contrato de telemetria exclui timing por desenho |
 | region/network impact | **NOT STARTED** | nenhuma referência no escopo Brain |
-| failure behavior | **PARTIAL** | falta teste dirigido recoverable→failover / permanent→não |
+| failure behavior | **PASS automatizado / runtime pendente** | política real: recoverable→próximo, permanent→não, fim da cadeia e opt-out; E2E em rede NÃO EXECUTADO |
 | default não medido no alvo | **PARTIAL** | medido só pelo E2E de voz |
 
 ---
@@ -59,8 +59,10 @@ como PASS.
 Verificável aqui: suíte Python `tools/` (487 testes), Node `Tests/tools` (267),
 vitest `airi/apps/lia-app` (246 + 2 skip), `moeru-lint`, build `@proj-airi/core-agent`.
 
-1. **Teste dirigido de `failure behavior`** — recoverable→failover, permanent→não.
-   É o único critério PARTIAL que se fecha sem Windows.
+1. **Teste dirigido de `failure behavior` — CONCLUÍDO (PASS automatizado).**
+   11 casos novos, 15 aprovados no harness do store real. Recuperáveis,
+   permanentes, fim da cadeia, opt-out e preferência intacta. Não aprova E2E
+   contra dois serviços reais. Próximo item executável: A2.
 2. **8.0D-M3.1** — preflight do limite de 3 imagens. Foi explicitamente dividido
    para fora da M3 e nunca entregue.
 3. **`docs/compatibility/MATRIX.md`** — criado com estados conservadores e evidência

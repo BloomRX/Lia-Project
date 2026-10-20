@@ -70,19 +70,29 @@ preservados, mensagem em pt-BR e retry, log `sendTerminalOutcome=failed`
 pedido completo. Requisição mínima ao mesmo Qwen/Groq, JSON e SSE, descreveu
 corretamente o retângulo vermelho à esquerda e círculo azul à direita. Isso
 valida a integração direta, **não o gate da Lia**. Pedido completo tem sete
-ferramentas; comparação sem elas + limite 128 + JSON funcionou, mas as
-variáveis ainda não foram isoladas. Não atribuir causa a ferramentas/Persona.
+ferramentas. Comparação controlada manteve mensagens, SSE e limite 128:
+com ferramentas, stop e zero conteúdo; sem elas, descrição correta da imagem.
+A presença desse conjunto muda o resultado; ainda não foi localizado o defeito
+específico de schema/modelo. Não desativar recursos como workaround nem alterar Persona.
 9router `http://localhost:20128/v1`: catálogo acessível; envio deu 401
 `Missing API key`. Não ler/imprimir credenciais para contornar.
 Python: repetição após seleção PASS (487 casos, 10 skips, exit 0); falhas
 anteriores de limpeza WinError 32/5 em ambos os interpretadores seguem
 intermitentes, detentor não identificado. Node: 267 PASS; Launcher: 247 + 2 skips.
 Detalhes, inventário e checklist: `docs/product/RELEASE-WINDOWS-2026-10-20.md`.
-**Próximo item exato:** comparar o pedido de imagem completo com/sem ferramentas
-mantendo streaming e limite de saída iguais; preservar Persona, fallback e voz.
-Depois continuar failure behavior e preflight numérico de imagens (8.0D).
+**A1 concluído:** 11 novos casos dirigidos da política real de failover,
+15 aprovados no arquivo de testes do store Lia. Erros recuperáveis/permanentes,
+fim da cadeia, opt-out e preferência intacta; nenhuma mudança no fallback de
+produção. Typecheck Stage e lint do arquivo: PASS. E2E de failover em rede NÃO EXECUTADO.
+Suítes repetidas após `457b5b1`: Python 487/10 skips, Node 267, Launcher
+247 + 2 skips, todos PASS automatizado.
+**Próximo item exato:** A2 — preflight numérico do limite de imagens, com limite
+no descritor do modelo e contagem do contexto efetivamente enviado (incluindo
+histórico elegível). Preservar rascunho/anexos na recusa e impedir envio legado
+quando houver excesso; não hardcode no componente. Depois retomar o defeito
+imagem+ferramentas, preservando Persona, fallback e voz.
 Launcher de diagnóstico aberto com CDP 9250, sem alteração de `Lia.bat`;
-sondagens temporárias devem ser restauradas antes de encerrar. Evidências em
+sondagens temporárias de fetch já restauradas. Evidências em
 `Tests/runs/release-20261019/`. Gate de conteúdo da imagem na UI segue FAIL;
 baseline funcional permanece `3ef6d11`.
 
@@ -301,7 +311,7 @@ Resultado, com a Phase 8.0D-M1 já aplicada:
 | tool calling | **PARTIAL** | transporte + gate de compatibilidade provados no seam da Lia; o *loop* completo pertence ao `@xsai/stream-text` e segue como item de closure |
 | latency | **NOT STARTED** | nenhuma medição existe; o contrato de telemetria exclui timing por desenho |
 | region/network impact | **NOT STARTED** | nenhuma referência no escopo Brain |
-| failure behavior | **PARTIAL** | failover real registrado e classificado; a **retenção de turno falho** foi corrigida na M3 (um envio que falhou não participa mais do contexto de provider futuro). Falta teste dirigido recoverable→failover / permanent→não |
+| failure behavior | **PARTIAL** | failover real registrado e classificado; a **retenção de turno falho** foi corrigida na M3 (um envio que falhou não participa mais do contexto de provider futuro). Teste dirigido da política real PASS em 20/10/2026 (15 casos, incluindo 11 novos); recuperação E2E contra serviços reais NÃO EXECUTADA |
 | default não medido no alvo | **PARTIAL** | medido só pelo E2E de voz |
 
 ### O que a Phase 8.0D-M1 entregou

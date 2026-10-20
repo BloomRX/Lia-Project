@@ -127,10 +127,43 @@ O pedido completo do app contém system de 7182 caracteres, pergunta+imagem e
 sete ferramentas, sem limite explícito de saída. Uma comparação conservando o
 contexto, retirando ferramentas, limitando saída a 128 e usando JSON respondeu
 corretamente, 3758 tokens de entrada/25 de saída. Como há múltiplas variáveis,
-a causa **ainda não está isolada**. Próximo experimento: comparar com/sem
-ferramentas mantendo streaming e limite iguais. Não remover ferramentas ou
-mudar Persona por suspeita. Documentação consultada: [visão Groq](https://console.groq.com/docs/vision)
+a causa **ainda não estava isolada** nessa comparação inicial.
+
+A comparação controlada seguinte manteve exatamente as mesmas mensagens, SSE
+e limite de saída 128. Com as sete ferramentas: HTTP 200, stop, zero conteúdo,
+6736 tokens de entrada e 1 de saída. Sem ferramentas: HTTP 200, stop, descrição
+correta, 3758 de entrada e 28 de saída. Evidência:
+`groq-image-controlled-tools.json`. O conjunto de ferramentas altera o resultado
+nesse pedido; o defeito específico de schema/modelo ainda não está localizado.
+Não foi removida capacidade declarada nem desativado recurso como workaround.
+As sondagens de fetch foram restauradas após o experimento. Documentação consultada: [visão Groq](https://console.groq.com/docs/vision)
 e [Qwen](https://console.groq.com/docs/model/qwen/qwen3.8-27b).
+
+## A1 — testes dirigidos de failure behavior
+
+**PASS automatizado**: 11 novos casos, 15 aprovados no arquivo
+`src/renderer/stores/lia/secret-bridge.test.ts` do Stage. O teste usa o store
+Pinia real e a política registrada de produção; somente o IPC e i18n são
+simulados, como no harness existente. Não lê nenhuma credencial real.
+
+- 429, 500, 503 e ECONNRESET retornam o próximo destino configurado; ao fim
+  da cadeia retornam undefined.
+- 400, 401, 403, 404, modelo incompatível e configuração inválida não mudam
+  de destino, mesmo com failover habilitado.
+- Opt-out bloqueia também um erro recuperável 503.
+- Preferência canônica permanece intacta; nenhum salvamento de configuração
+  ou leitura de segredo acontece na decisão.
+
+Comandos em `airi/apps/stage-tamagotchi/`: `vitest run --project node
+src/renderer/stores/lia/secret-bridge.test.ts` (15 PASS). Typecheck do Stage
+`pnpm --filter @proj-airi/stage-tamagotchi typecheck`, com heap 3072 conforme
+orientação existente: PASS. `moeru-lint` no arquivo alterado: PASS.
+Isso fecha o teste dirigido A1, **não** prova uma recuperação de rede contra dois
+serviços reais. O loop de execução é coberto separadamente pelos contratos de
+Chat (255 PASS na rodada anterior); E2E de failover em rede segue NÃO EXECUTADO.
+
+Após `457b5b1`, as suítes da raiz repetiram PASS: Node 267; Python 487 casos,
+10 skips, em 320,6 s; Launcher 247 + 2 skips. Logs `*-after-empty-stream.log`.
 
 ## Problemas ativos
 
@@ -170,7 +203,8 @@ e [Qwen](https://console.groq.com/docs/model/qwen/qwen3.8-27b).
 - [x] PASS automatizado e Windows real: stream vazio gera erro visível e estado terminal failed.
 - [ ] FAIL: imagem determinística sem resposta visível; texto após imagem ainda NÃO EXECUTADO.
 - [ ] NÃO EXECUTADO: novo teste humano de microfone; baseline de voz preservado.
-- [ ] NÃO EXECUTADO: failover recuperável/permanente e preflight numérico de imagens.
+- [x] PASS automatizado: política real de failover recuperável/permanente, fim da cadeia e opt-out.
+- [ ] NÃO EXECUTADO: failover E2E contra serviços reais; preflight numérico de imagens.
 - [ ] NÃO EXECUTADO: loop real de ferramentas e medições de latência/rede.
 - [ ] PARCIAL: Launcher corresponde aos concepts e oferece apenas controles funcionais.
 - [ ] NÃO EXECUTADO: presença Livre e multi-monitor, persistência e recuperação.
