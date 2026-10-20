@@ -880,7 +880,8 @@ class SanitizationTests(unittest.TestCase):
 
 # ---------------------------------------------------------------------------
 class InventoryTests(unittest.TestCase):
-    """D1 inventories the historical scripts; it must not delete them."""
+    """The inventory classifies every historical script; D3 moved two of them
+    out of the repository root, it did not delete them."""
 
     def test_inventory_exists_and_classifies_every_listed_script(self):
         inventory = json.loads(
@@ -891,18 +892,25 @@ class InventoryTests(unittest.TestCase):
             self.assertIn(entry['classification'], allowed, entry['path'])
             self.assertTrue(entry['reason'], entry['path'])
         # Every script the D1 brief named must be classified.
-        named = {'DevKit.bat', 'Lia.bat', 'LiaTests.bat', 'LiaBenchmark.bat',
+        named = {'DevKit.bat', 'Lia.bat', 'Tests/LiaTests.bat',
+                 'Tests/LiaBenchmark.bat',
                  'airi/DevKit.bat', 'airi/QA.bat', 'airi/QA-Miniconda.bat',
                  'airi/DevTamagotchi.bat'}
         listed = {entry['path'] for entry in inventory['entries']}
         self.assertTrue(named.issubset(listed), sorted(named - listed))
 
-    def test_d1_deleted_nothing(self):
+    def test_consolidation_moved_scripts_without_deleting_them(self):
         repo = TOOLS.parent
-        for relative in ('DevKit.bat', 'Lia.bat', 'LiaTests.bat', 'LiaBenchmark.bat',
+        # A raiz fica com exatamente dois BAT: DevKit.bat (AUTO) e Lia.bat
+        # (abrir o app / processo do gate). Os arneses de QA moram em Tests/.
+        for relative in ('DevKit.bat', 'Lia.bat',
+                         'Tests/LiaTests.bat', 'Tests/LiaBenchmark.bat',
                          'airi/DevKit.bat', 'airi/QA.bat', 'airi/QA-Miniconda.bat',
                          'airi/DevTamagotchi.bat'):
-            self.assertTrue((repo / relative).exists(), f'{relative} sumiu no D1')
+            self.assertTrue((repo / relative).exists(), f'{relative} sumiu')
+        for gone in ('LiaTests.bat', 'LiaBenchmark.bat'):
+            self.assertFalse((repo / gone).exists(),
+                             f'{gone} ainda esta na raiz; deveria estar em Tests/')
 
 
 # ---------------------------------------------------------------------------

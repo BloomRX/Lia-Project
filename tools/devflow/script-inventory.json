@@ -26,20 +26,20 @@
       "d3_action": "manter como runtime interno; nao expor como passo de desenvolvimento"
     },
     {
-      "path": "LiaTests.bat",
+      "path": "Tests/LiaTests.bat",
       "classification": "KEEP",
       "unique": true,
       "references": 6,
       "reason": "Arnese de QA de voz: kokoro-smoke real e fluxo clean-install com pastas de run em Tests/runs. Coberto por Tests/tools/qa-bat-validation.test.mjs, que falha se o arquivo mudar de forma.",
-      "d3_action": "manter; integrar ao menu Lia no D3 sem alterar o contrato testado"
+      "d3_action": "FEITO no D3: movido para Tests/; o contrato testado por qa-bat-validation.test.mjs foi preservado inteiro"
     },
     {
-      "path": "LiaBenchmark.bat",
+      "path": "Tests/LiaBenchmark.bat",
       "classification": "INTERNAL",
       "unique": true,
       "references": 4,
       "reason": "Arnese de benchmark Windows. Existe restricao de projeto explicita e anterior: nao mexer nem publicar qa/windows-benchmarks. Fora do escopo do DevFlow.",
-      "d3_action": "nao tocar"
+      "d3_action": "FEITO no D3: movido para Tests/; wrapper e contrato estaticos inalterados"
     },
     {
       "path": "airi/DevKit.bat",
@@ -95,7 +95,7 @@
       "unique": true,
       "references": 0,
       "reason": "Wrapper gerado pelo Gradle para o target Android do stage-pocket. Nao e ferramenta nossa e nao pertence ao fluxo Windows da Lia.",
-      "d3_action": "nao tocar"
+      "d3_action": "FEITO no D3: movido para Tests/; wrapper e contrato estaticos inalterados"
     }
   ],
   "human_contract": {
@@ -111,6 +111,6 @@
       "rounds",
       "git"
     ],
-    "note": "Desde o DEVFLOW-AUTO-1 o contrato humano e um so: duplo clique em DevKit.bat. Lia.bat passa a ser entrypoint interno/de runtime - o DevFlow o invoca por manifesto e ele continua servindo para abrir a Lia normalmente, mas o dono do projeto nao precisa dele durante uma rodada. Os demais BAT/PS1 historicos permanecem internos ate o D3."
+    "note": "Apos o D3 a raiz tem exatamente dois BAT: DevKit.bat (AUTO) e Lia.bat (abrir o app). Os arneses de QA moram em Tests/. Desde o DEVFLOW-AUTO-1 o contrato humano e um so: duplo clique em DevKit.bat. Lia.bat passa a ser entrypoint interno/de runtime - o DevFlow o invoca por manifesto e ele continua servindo para abrir a Lia normalmente, mas o dono do projeto nao precisa dele durante uma rodada. Os demais BAT/PS1 historicos permanecem internos ate o D3."
   }
 }

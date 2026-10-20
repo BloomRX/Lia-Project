@@ -1,6 +1,6 @@
 @echo off
 setlocal EnableExtensions DisableDelayedExpansion
-cd /d "%~dp0"
+cd /d "%~dp0.."
 chcp 65001 >nul 2>nul
 title Lia Benchmark
 
@@ -10,11 +10,11 @@ if errorlevel 1 (
     exit /b 1
 )
 
-if not exist "Tests\tools\qa-benchmark.mjs" (
-    echo [LiaBenchmark] Tests\tools\qa-benchmark.mjs is missing. Run from repository checkout.
+if not exist "tools\qa-benchmark.mjs" (
+    echo [LiaBenchmark] tools\qa-benchmark.mjs is missing. Run from repository checkout.
     exit /b 1
 )
 
-node "Tests\tools\qa-benchmark.mjs" %*
+node "tools\qa-benchmark.mjs" %*
 set "RC=%ERRORLEVEL%"
 exit /b %RC%

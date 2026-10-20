@@ -71,7 +71,7 @@ export function activateRun({ environment = process.env, now = new Date(), runDi
     `original voice.runtime.installDir : ${originalInstallDir}`,
     `QA value (isolated runtime root)  : ${isolatedRoot}`,
     '',
-    'How to restore: run LiaTests.bat -> option 4 (Restore normal Lia configuration).',
+    'How to restore: run Tests\\LiaTests.bat -> option 4 (Restore normal Lia configuration).',
     'Restore semantics: the single key voice.runtime.installDir is reverted to the',
     'original value above (or removed when it was absent). Every other setting the',
     'user may have changed during QA is left untouched. The full backup above is',

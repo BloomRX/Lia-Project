@@ -14,7 +14,7 @@ import { REPO_ROOT } from './qa-shared.mjs'
 const SMOKE_SOURCE = readFileSync(nodePath.join(REPO_ROOT, 'tools', 'kokoro-smoke.mjs'), 'utf-8')
 
 describe('kokoro-smoke.mjs: output-dir seam is tooling-only and backward compatible', () => {
-  it('accepts an optional outDir argument (what LiaTests.bat passes)', () => {
+  it('accepts an optional outDir argument (what Tests/LiaTests.bat passes)', () => {
     assert.match(SMOKE_SOURCE, /process\.argv\[2\]/)
     assert.match(SMOKE_SOURCE, /nodePath\.resolve\(REPO_ROOT, outDirArg\)/)
   })

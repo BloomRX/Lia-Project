@@ -456,7 +456,7 @@ export function writeReport({ publishDir, summary, hardware, git }) {
     `- Reason: ${summary.publication.pushSkippedReason ?? '—'}`,
     ``,
     `## Reproduction`,
-    `\`LiaBenchmark.bat --report-only ${summary.runId}\``,
+    `\`Tests\\LiaBenchmark.bat --report-only ${summary.runId}\``,
   ]
   writeFileSync(p, lines.join('\n')+'\n', 'utf-8'); return p
 }

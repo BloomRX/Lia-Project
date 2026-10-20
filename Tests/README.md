@@ -1,11 +1,11 @@
 # Lia QA Harness (Phase 7.9G-QA)
 
 Reusable Windows QA harness for manual Lia product tests: isolated workspaces,
-automatic log/metric collection, safe cleanup. Launch it from the repository
-root:
+automatic log/metric collection, safe cleanup. Launch it from anywhere in the
+checkout:
 
 ```
-LiaTests.bat
+Tests\LiaTests.bat
 ```
 
 Requires Node.js on PATH (the same Node the product dev flow uses). The harness
@@ -131,5 +131,5 @@ node --test "Tests/tools/*.test.mjs"
 ```
 
 covers the config backup/restore logic, run-folder lifecycle, voice log
-parsing, storage guards/inventory, and a static validation of `LiaTests.bat`
+parsing, storage guards/inventory, and a static validation of `Tests\LiaTests.bat`
 plus the gitignore behavior.

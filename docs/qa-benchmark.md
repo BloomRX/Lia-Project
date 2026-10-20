@@ -6,12 +6,12 @@ Automated, forensically strict Windows benchmark harness that produces a
 ## Entry point
 
 ```
-LiaBenchmark.bat            (thin CRLF wrapper, Windows)
+Tests/LiaBenchmark.bat         (thin CRLF wrapper, Windows)
 Tests/tools/qa-benchmark.mjs   (Node orchestrator, no prod runtime change)
 ```
 
 ```
-LiaBenchmark.bat [--no-push] [--report-only <runId>] [--with-smoke]
+Tests\LiaBenchmark.bat [--no-push] [--report-only <runId>] [--with-smoke]
 ```
 
 - `--no-push`      run everything locally, do not commit/push
@@ -21,7 +21,7 @@ LiaBenchmark.bat [--no-push] [--report-only <runId>] [--with-smoke]
 Both `--report-only` and `--no-push` are **local-only** (no commit/push, no
 remote verification).
 
-`LiaBenchmark.bat` does nothing but set console code page, verify Node exists,
+`Tests/LiaBenchmark.bat` does nothing but set console code page, verify Node exists,
 and delegate to `Tests/tools/qa-benchmark.mjs`. No `git reset/clean/stash`,
 no `npx`, no network install, no force.
 

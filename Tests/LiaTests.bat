@@ -1,11 +1,14 @@
 @echo off
 setlocal EnableExtensions DisableDelayedExpansion
-cd /d "%~dp0"
+cd /d "%~dp0.."
 chcp 65001 >nul 2>nul
 title Lia QA Harness
 
 rem ============================================================
 rem  LiaTests.bat - Lia QA harness (Phase 7.9G-QA)
+rem
+rem  Mora em Tests\. A raiz do repositorio e derivada de %~dp0..,
+rem  resolvida pelo proprio Windows: nenhum caminho de maquina embutido.
 rem
 rem  Thin menu only: every real operation (run folders, config
 rem  backup/restore, log metrics, deletion, inventory) runs in
@@ -13,7 +16,7 @@ rem  the guarded Node helpers under Tests\tools. This file
 rem  contains NO destructive command of its own.
 rem ============================================================
 
-set "REPO=%~dp0"
+set "REPO=%~dp0..\"
 set "TOOLS=%REPO%Tests\tools"
 
 where node >nul 2>nul

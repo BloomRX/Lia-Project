@@ -34,7 +34,7 @@ const CLEAN_INSTALL_CHECKLIST = `Lia QA - VOICE CLEAN-INSTALL CHECKLIST (run: {I
 =============================================================
 Isolated runtime root : {RUNTIME_ROOT}
 Product config backup : snapshots\\lia-product.before.json
-Restore               : LiaTests.bat -> option 4
+Restore               : Tests\\LiaTests.bat -> option 4
 
 Confirm each item while Lia is running, then fill USER-NOTES.txt:
 
@@ -50,7 +50,7 @@ Confirm each item while Lia is running, then fill USER-NOTES.txt:
 [ ] Normal chat reply is spoken
 [ ] No technical backend jargon appears in normal UI
 
-When finished: close Lia, then run LiaTests.bat -> option 4 to restore
+When finished: close Lia, then run Tests\\LiaTests.bat -> option 4 to restore
 the normal configuration. Logs/metrics are extracted during the restore.
 `
 
