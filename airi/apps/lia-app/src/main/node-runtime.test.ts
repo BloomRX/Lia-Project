@@ -9,7 +9,7 @@
 import { Buffer } from 'node:buffer'
 import { mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join, posix, win32 } from 'node:path'
+import { join, resolve, win32 } from 'node:path'
 import { execPath } from 'node:process'
 
 import { describe, expect, it } from 'vitest'
@@ -119,7 +119,7 @@ describe('readRunAsNodeFuse', () => {
   it('g: on macOS the wire lives in the framework binary, not the executable', () => {
     const app = '/Applications/Lia.app/Contents/MacOS/Lia'
     expect(fuseFilePathFor(app, 'darwin')).toBe(
-      posix.resolve('/Applications/Lia.app/Contents/Frameworks/Electron Framework.framework/Electron Framework'),
+      resolve('/Applications/Lia.app/Contents/Frameworks/Electron Framework.framework/Electron Framework'),
     )
     // Everywhere else the executable carries the wire itself.
     expect(fuseFilePathFor('C:\\Lia\\Lia.exe', 'win32')).toBe('C:\\Lia\\Lia.exe')

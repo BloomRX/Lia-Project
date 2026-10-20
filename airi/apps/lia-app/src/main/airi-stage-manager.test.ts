@@ -71,11 +71,12 @@ describe('phase 7.2: ownership retained, spawn without shell (tests C/D/G)', () 
     const spawnImpl = vi.fn((..._args: unknown[]) => child as never)
     for (const platform of ['win32', 'linux'] as const) {
       const manager = new AiriStageManager({
+        childEnv: { ELECTRON_RUN_AS_NODE: '1' },
         platform,
         spawnImpl: spawnImpl as never,
         workspaceRoot: root,
       })
-      void manager.start()
+      void manager.start({ env: { ELECTRON_RUN_AS_NODE: '1' } })
       const options = spawnImpl.mock.calls.at(-1)?.[2] as
         | { env?: Record<string, string | undefined> }
         | undefined

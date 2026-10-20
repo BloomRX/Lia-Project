@@ -349,9 +349,12 @@ export class AiriStageManager {
       return this.state()
     }
     this.deps.onLog?.(`stage-runtime kind=${runtime.kind}`)
+    const stageEnv = { ...nodeEnv, ...this.deps.childEnv, ...passEnv }
+    delete stageEnv.ELECTRON_RUN_AS_NODE
+
     const child = spawnImpl(runtime.command, [entrypoint, 'dev'], {
       cwd: stageDir,
-      env: { ...nodeEnv, ...this.deps.childEnv, ...passEnv },
+      env: stageEnv,
     })
     this.child = child
     this.setState({ phase: 'starting', pid: child.pid })
