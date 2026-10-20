@@ -31,8 +31,8 @@ de texto (**DONE**). Automatizado na §4; verde **não é** gate de runtime.
 
 - **M3.0a** — Stage invisível no Windows por `dist` obsoleto do `core-agent` (§5).
 - **M3.0b** — pré-requisito de build preso em `starting`, sem estado final. Causa medida:
-  `process.execPath` no processo main é o binário Electron, não Node. Correção escrita e
-  coberta por teste de unidade, **não executada no Windows** — gate **NÃO aprovado** (§5).
+  `process.execPath` no processo main é o binário Electron, não Node. Correção coberta por teste e abertura/encerramento **PASS Windows real** em
+  20/10/2026 nesta rodada (detalhes abaixo); gate de imagem permanece pendente (§5).
 
 **Gate que falta:** Windows E2E **visual** (§5) — abrir pelo `Lia.bat`, anexar imagem,
 pergunta determinística sobre o conteúdo, rota `groq` + `qwen/qwen3.8-27b`, resposta
@@ -51,21 +51,34 @@ deixava `starting`; reprodução automatizada falhou antes e passou após corre�
 com erro terminal e retry. Launcher: 247 aprovados + 2 skips; testes dirigidos:
 43 aprovados; lint, typecheck e build do launcher: PASS automatizado.
 
-**Bloqueios ativos:** nova sessão do Chat voltou ao histórico antigo após um
-envio bem-sucedido no provider; investigar seleção por janela antes do gate
-visual. Python Store (`python3`): 487 casos, 1 erro de limpeza e 10 skips;
-Python nativo (`python`): 12 testes GitFlow aprovados, suíte completa em
-verificação. O detentor do lock não foi identificado. Node: 267 aprovados.
+**Seleção de sessão corrigida:** o snapshot do índice sincronizado substituía
+uma seleção local válida pela sessão padrão do líder. Regressão reproduzida
+antes da correção com dois contextos Pinia reais; agora 5 testes browser e
+20 node aprovados; lint e typecheck Stage UI: PASS automatizado.
+No Electron, nova conversa manteve seleção e resposta **42** para 19 + 23:
+**PASS Windows real** (`text-after-selection-fix.png`).
+
+**Bloqueios ativos:** imagem sintética chega à rota Qwen; houve recusas de
+quota Groq (429/413). Em conversa nova, o log registrou sucesso, mas não existe
+mensagem assistant nem resposta visível: **FAIL**, causa não confirmada.
+9router `http://localhost:20128/v1`: catálogo acessível; envio ao `visao` deu
+401, autenticação local solicitada ao Dev sem pedir chave no chat.
+Python Store: 487 casos, 1 erro de limpeza e 10 skips; Python nativo: 487,
+3 erros de limpeza e 10 skips. Sondagem imediata Handle não identificou detentor.
+Node: 267 aprovados. Não ignorar o erro nem atribuir causa sem evidência.
 Detalhes, inventário dos sete concepts e checklist em
 `docs/product/RELEASE-WINDOWS-2026-10-20.md`.
-**Próximo item:** corrigir a seleção de sessão do Chat, retestar texto/imagem,
-depois testes de failure behavior e preflight numérico de imagens (8.0D).
+**Próximo item exato:** investigar a ausência de resposta de imagem, começando
+pelos metadados do stream na janela líder do Stage. Continuar testes dirigidos
+de failure behavior e preflight numérico de imagens (8.0D) após este bloqueio.
+O Launcher de diagnóstico foi encerrado normalmente às 03:25:27Z;
+para nova captura, reabrir com CDP local na porta 9250 por ambiente, sem alterar
+`Lia.bat`. Evidências em `Tests/runs/release-20261019/`.
 Gate de conteúdo de imagem pendente; baseline funcional permanece `3ef6d11`.
 
-**Próximos passos:** (1) corrigir seleção local de conversa; (2) gate Windows E2E
-visual; (3) fechar itens automatizáveis da 8.0D; (4) Launcher e presença conforme
-o plano de finalização. A matriz de compatibilidade registra evidência parcial,
-sem declarar a release suportada.
+**Próximos passos:** (1) gate Windows E2E visual; (2) fechar itens automatizáveis
+da 8.0D; (3) Launcher e presença conforme o plano de finalização. A matriz de
+compatibilidade registra evidência parcial, sem declarar a release suportada.
 
 **Quanto falta:** [`QUANTO-FALTA.md`](QUANTO-FALTA.md) — o que resta, separado
 entre o que um agente faz sozinho em Linux e o que exige o Windows do Dev.

@@ -46,7 +46,9 @@ O nome da pasta corresponde ao início da sessão no dia 19.
 | `node --test Tests/tools/*.test.mjs` | PASS automatizado: 267 aprovados |
 | `vitest run`, em `airi/apps/lia-app/` | PASS automatizado: baseline 246 + 2 skips; após correção 247 + 2 skips |
 | Vitest: `airi-stage-manager`, `node-runtime`, `stage-build-prerequisite` | PASS automatizado: 43 aprovados |
-| `moeru-lint` nos dois arquivos alterados do Stage manager | PASS automatizado |
+| `moeru-lint` nos arquivos alterados do Stage manager e seleção de sessão | PASS automatizado |
+| Vitest da seleção de sessão: projeto browser / projeto node | PASS automatizado: 5 / 20 aprovados |
+| `pnpm --filter @proj-airi/stage-ui typecheck` | PASS automatizado |
 | `tsc --noEmit -p apps/lia-app/tsconfig.json`, em `airi/` | PASS automatizado |
 | `pnpm --filter @lia/lia-app build`, em `airi/` | PASS automatizado; build de aplicação, não instalador |
 
@@ -81,21 +83,45 @@ escapava sem estado terminal. O novo teste falhou antes da correção. Agora o
 manager retorna erro, emite `state=failed reason=unexpected-error`, não registra
 o corpo da exceção e permite nova tentativa. O teste também prova o retry.
 
+## Seleção local de conversa — corrigida
+
+Um snapshot do índice sincronizado reaplicava a sessão padrão do líder à janela
+Chat, substituindo a escolha local. Agora o índice só restaura a seleção quando
+a sessão local não é válida para o usuário e a personagem atuais. Não foi
+alterado nem apagado o histórico do Dev.
+
+O teste com dois contextos Pinia e sincronização real reproduziu o erro antes
+da correção e passou depois. No Electron, uma conversa nova respondeu **42**
+a “19 + 23” e permaneceu selecionada: **PASS Windows real**. Evidências:
+`text-after-selection-fix.png`, `launcher-debug-runtime.log`, correlação
+`b8e7c765` às `03:11:08.543Z` na rota GPT-OSS.
+
 ## Problemas ativos
 
-- **Chat:** após criar sessão de QA e enviar pergunta determinística, o provider
-  concluiu na rota `groq/openai/gpt-oss-120b`, mas a janela voltou à sessão
-  anterior. A resposta visível não foi aprovada. Investigar seleção por janela
-  e atualização do índice sincronizado. Não alterar nem apagar o histórico do Dev.
-- **Python:** o executável `python3` da Store falha em limpezas de fixtures sob
-  o checkout. O caso afetado varia. Uma leitura tardia com Handle não encontrou
-  detentor. A tentativa de diagnóstico dentro desse Python não enxerga o
-  executável instalado em AppData. O `python` nativo enxerga o mesmo arquivo e
-  passou os 12 testes GitFlow. Isso não prova a causa dos locks. A suíte completa
-  no Python nativo está em verificação.
+- **Imagem — FAIL:** anexo sintético de 240×160, retângulo vermelho à esquerda
+  e círculo azul à direita, com pergunta determinística. A rota Qwen foi
+  selecionada. Tentativas com contexto receberam limites Groq HTTP 429
+  (saída: 1000 tokens/minuto) e HTTP 413 (entrada: 7000 tokens/minuto).
+  Em conversa nova, correlação `93e70252-ebbf-41cf-8a8f-c88c88565d0b`
+  às `03:18:57.782Z`, o log registrou sucesso, mas **não houve mensagem
+  assistant** no store nem resposta visível. Causa ainda não confirmada;
+  investigar metadados do stream sem registrar prompts, imagens ou chaves.
+  Evidências: `image-preview.png`, `image-first-result.png` e log do runtime.
+- **9router — BLOCKED para envio:** catálogo acessível em
+  `http://localhost:20128/v1/models`; requisição com a mesma imagem sintética ao
+  modelo `visao` respondeu HTTP 401. Nenhuma credencial foi lida ou exposta.
+  O Dev foi solicitado a configurar a autenticação por mecanismo local.
+  Isso não substitui o gate original da Groq.
+- **Python — FAIL:** `python3` da Store: 487 casos, 1 erro de limpeza e
+  10 skips. `python` nativo: 487 casos, 3 erros de limpeza e 10 skips.
+  Os testes GitFlow isolados variam entre aprovação e erro WinError 32/5
+  ao remover fixtures. Uma sondagem imediata com Handle em uma execução
+  com falha não encontrou detentor. A causa dos locks continua desconhecida;
+  a diferença entre os interpretadores não a comprova. Logs:
+  `python-native-full.log`, `lock-probe-repeat-1.log`.
 - **Lint da raiz:** permanece a dívida registrada no preflight anterior. Nenhum
   arquivo Node de ferramentas foi alterado nesta rodada. O lint dos arquivos
-  TypeScript desta correção passou pela configuração própria do workspace.
+  TypeScript alterados passou pela configuração própria do workspace.
 
 ## Checklist de aceite
 
@@ -103,8 +129,8 @@ o corpo da exceção e permite nova tentativa. O teste também prova o retry.
 - [x] PASS Windows real: build termina e Stage aparece.
 - [x] PASS automatizado: rejeição do pré-requisito termina em erro e permite retry.
 - [x] PASS Windows real: encerramento gerenciado sem processo do checkout remanescente.
-- [ ] FAIL: conversa de texto isolada mantém sessão e resposta visível.
-- [ ] NÃO EXECUTADO: imagem determinística e rota visual, seguida de texto independente.
+- [x] PASS Windows real: conversa de texto isolada mantém sessão e resposta 42 visível.
+- [ ] FAIL: imagem determinística sem resposta visível; texto após imagem ainda NÃO EXECUTADO.
 - [ ] NÃO EXECUTADO: novo teste humano de microfone; baseline de voz preservado.
 - [ ] NÃO EXECUTADO: failover recuperável/permanente e preflight numérico de imagens.
 - [ ] NÃO EXECUTADO: loop real de ferramentas e medições de latência/rede.

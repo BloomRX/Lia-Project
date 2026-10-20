@@ -1334,13 +1334,19 @@ export const useChatSessionStore = defineStore('chat-session', () => {
       || !!Object.values(index.value?.characters ?? {}).some(character => character.sessions[sessionId])
   }
 
-  /** Selects the persisted session for this window without changing synchronized session data. */
+  /** Restores selection only when this window has no valid local selection. */
   function selectWindowSessionFromIndex() {
     const currentUserId = getCurrentUserId()
     if (!index.value || index.value.userId !== currentUserId) {
       activeSessionId.value = ''
       return
     }
+
+    // Index snapshots also arrive after messages and sessions change elsewhere.
+    // They carry a restore default, not a navigation command for this window.
+    const selected = sessionMetas.value[activeSessionId.value]
+    if (selected?.userId === currentUserId && selected.characterId === getCurrentCharacterId())
+      return
 
     activeSessionId.value = getCharacterIndex(getCurrentCharacterId())?.activeSessionId ?? ''
   }

@@ -14,8 +14,10 @@ Fonte: [`CURRENT-STATE.md`](CURRENT-STATE.md) §0 e §5, medido em
 Atualização local de 20/10/2026: a finalização Windows foi autorizada pelo Dev.
 O fluxo `Lia.bat → Launcher → Conversar → Stage visível` e o encerramento foram
 executados no PC. Uma rejeição inesperada do pré-requisito agora termina em erro
-com retry, coberto por regressão. **A release não está pronta:** a janela Chat
-voltou ao histórico anterior após envio de QA; o gate de imagem segue pendente.
+com retry, coberto por regressão. A seleção local da janela Chat foi corrigida
+e a resposta 42 ficou visível no Electron. **A release não está pronta:** imagem
+chegou ao Qwen, mas sem resposta assistant; houve também erros de quota Groq.
+O 9router exige autenticação no envio (401). O gate de imagem segue FAIL.
 Inventário dos sete concepts, resultados e checklist:
 [`RELEASE-WINDOWS-2026-10-20.md`](../product/RELEASE-WINDOWS-2026-10-20.md).
 O plano local está em `docs/product/PLANO-FINALIZACAO-LIA.md`.
