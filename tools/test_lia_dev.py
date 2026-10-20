@@ -2504,7 +2504,14 @@ class BootstrapTests(unittest.TestCase):
 
     def test_bootstrap_refuses_without_touching_the_checkout_on_fetch_failure(self):
         fake = FakeGit(fetch_ok=False)
-        with patch.object(sync, '_git', lambda repo, args: fake(args)):
+        # Os dois runners precisam ser scriptados: pre_sync le o worktree com o
+        # runner RAW (`status -z`). Patcheando so `_git`, um rename staged no
+        # checkout real vazava para dentro do teste e o SyncRefused do guarda de
+        # renomeacao aparecia no lugar do codigo 1 que este teste quer provar.
+        with patch.object(sync, '_git', lambda repo, args: fake(args)), \
+                patch.object(sync, '_git_raw',
+                             lambda repo, args: (fake(args)[0],
+                                                 fake(args)[1].encode())):
             code = lia_dev.cmd_bootstrap(argparse.Namespace())
         self.assertEqual(code, 1)
         self.assertNotIn('push', ' '.join(fake.argvs()))
