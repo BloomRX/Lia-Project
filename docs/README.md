@@ -14,6 +14,7 @@ o documento da área que você vai tocar.
 | Documento | Papel |
 |---|---|
 | [`project/CURRENT-STATE.md`](project/CURRENT-STATE.md) | **Fonte de verdade operacional.** §0 é o cabeçalho de estado; o resto é histórico consultável |
+| [`project/QUANTO-FALTA.md`](project/QUANTO-FALTA.md) | **O que resta**, separado em "agente faz sozinho" e "exige o Windows do Dev" |
 | [`project/DEVFLOW.md`](project/DEVFLOW.md) | O pipeline DevFlow: estágios, marcadores, vereditos, retenção |
 | [`qa-benchmark.md`](qa-benchmark.md) | O harness de benchmark Windows (`Tests/LiaBenchmark.bat`) |
 | [`airi-modificacoes-registro.md`](airi-modificacoes-registro.md) | O que a Lia modificou no AIRI vendado, e o risco de re-aplicação |

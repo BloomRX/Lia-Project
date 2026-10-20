@@ -45,6 +45,9 @@ correta pela imagem, e turno só de texto permanecendo no GPT-OSS.
 do Stage (M3.0b); (3) `docs/compatibility/MATRIX.md`, exigido pela §81 do `AGENTS.md`,
 **não existe** — dívida em aberto, não histórico; (4) itens de closure da 8.0D, na §5.
 
+**Quanto falta:** [`QUANTO-FALTA.md`](QUANTO-FALTA.md) — o que resta, separado
+entre o que um agente faz sozinho em Linux e o que exige o Windows do Dev.
+
 **Antes de alterar código:** ler a **§6 — Regras permanentes**.
 
 ---

@@ -20,6 +20,18 @@ Você está trabalhando diretamente no repository Git do projeto.
 0. ANTES DE QUALQUER TRABALHO
 ==================================================
 
+Estas instruções valem para QUALQUER agente de código — Codex, Claude Code,
+Cursor, Copilot, Cline. Se a sua ferramenta lê AGENTS.md, você já está no lugar
+certo: ESTE ARQUIVO É A AUTORIDADE. Não procure CLAUDE.md.
+
+O que é exclusivo do Claude Code, e você deve IGNORAR se não for ele: a
+precedência CLAUDE.md × AGENTS.md, @import, .claude/rules/, /context, /memory.
+Nada disso existe para as demais ferramentas.
+
+Armadilha válida para TODOS: airi/AGENTS.md é o rulebook do AIRI upstream e não
+contém NENHUMA regra da Lia. Abrir a sessão dentro de airi/ faz perder pt-BR,
+STOP AND REPORT, o baseline e o gate — sem erro e sem aviso. Abra na raiz.
+
 Antes de analisar código ou propor qualquer mudança, ler o CABEÇALHO DE ESTADO:
 
 docs/project/CURRENT-STATE.md  →  §0. Estado agora  (do início do arquivo até a §1)

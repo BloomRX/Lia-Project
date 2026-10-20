@@ -1,0 +1,101 @@
+# Quanto falta — Lia-Project
+
+Escrito para responder, sem precisar perguntar ao Dev: **o que resta, o que um
+agente pode fazer sozinho e o que exige a máquina dele.**
+
+Fonte: [`CURRENT-STATE.md`](CURRENT-STATE.md) §0 e §5, medido em
+`4a6a811`. Se este arquivo e o `CURRENT-STATE.md` divergirem, **o
+`CURRENT-STATE.md` vence** — ele é a fonte de verdade operacional.
+
+---
+
+## Onde o projeto está
+
+- **Branch:** `arena/01a10290-lia-project`. `main` não recebeu merge.
+- **Baseline funcional validado em Windows:** `3ef6d11618f787dae6d197645d440a5775a60ad6`.
+  **Não promover commit posterior a baseline.**
+- **Fase:** 8.0D — First Multimodal Brain Adapter. **Não CLOSED.** 8.0E não iniciado.
+- **Código:** tudo sob `airi/`.
+
+## O que já está provado em Windows real
+
+- Cadeia de voz gerenciada B1/B1.1 — **E2E PASS**. Blocker encerrado (§2).
+- Bootstrap de roteamento do Brain e seleção de rota — **M2**.
+- Conversa só de texto — **DONE**.
+
+Automatizado verde **não é** gate de runtime. Nunca reportar um gate não executado
+como PASS.
+
+## Tabela de critérios da 8.0D (transcrita da §5)
+
+| Critério | Estado | O que falta |
+|---|---|---|
+| text conversation | **DONE** | — |
+| image/screen understanding | **PENDENTE** | bootstrap e rota provados em Windows; falta o **gate de conteúdo da imagem** no provider |
+| audio understanding | **NOT STARTED** | o candidato aprovado é text+image; B1/B1.1 é STT *antes* do brain |
+| tool calling | **PARTIAL** | transporte e gate de compatibilidade provados; o *loop* completo é do `@xsai/stream-text` |
+| latency | **NOT STARTED** | nenhuma medição existe; o contrato de telemetria exclui timing por desenho |
+| region/network impact | **NOT STARTED** | nenhuma referência no escopo Brain |
+| failure behavior | **PARTIAL** | falta teste dirigido recoverable→failover / permanent→não |
+| default não medido no alvo | **PARTIAL** | medido só pelo E2E de voz |
+
+---
+
+## A) Um agente pode fazer sozinho, em Linux
+
+Verificável aqui: suíte Python `tools/` (487 testes), Node `Tests/tools` (267),
+vitest `airi/apps/lia-app` (246 + 2 skip), `moeru-lint`, build `@proj-airi/core-agent`.
+
+1. **Teste dirigido de `failure behavior`** — recoverable→failover, permanent→não.
+   É o único critério PARTIAL que se fecha sem Windows.
+2. **8.0D-M3.1** — preflight do limite de 3 imagens. Foi explicitamente dividido
+   para fora da M3 e nunca entregue.
+3. **`docs/compatibility/MATRIX.md`** — a §81 do `AGENTS.md` exige esse arquivo e
+   ele **não existe**. Dívida em aberto, não histórico.
+4. **Dívida de Cloud Sync v1** — envia texto puro para user/assistant. Registrada
+   na §5, não corrigida.
+5. **Fatiamento portátil do `AGENTS.md`** — hoje são ~10 800 tok carregados sempre.
+   Fatiar em `.claude/rules/` **só** ajuda o Claude Code; a via portátil é núcleo
+   curto no `AGENTS.md` + detalhe em documentos abertos sob demanda.
+
+Regras que valem para tudo isso: §6 do `CURRENT-STATE.md` e o `AGENTS.md` inteiro.
+Em particular — **STOP AND REPORT em vez de contornar**, e não declarar PASS sem
+executar.
+
+## B) Exige o Windows do Dev — nenhum agente na nuvem faz
+
+1. **Gate Windows E2E visual** (o gate de saída da 8.0D). Roteiro na §5:
+   abrir pelo `Lia.bat` · anexar imagem · pergunta determinística sobre o conteúdo ·
+   rota `groq` + `qwen/qwen3.8-27b` · resposta correta **pela imagem** · e um turno
+   só de texto permanecendo no GPT-OSS.
+2. **Reteste do pré-requisito do Stage (M3.0b).** A correção está escrita e coberta
+   por teste de unidade, **não executada no Windows**. Gate **NÃO aprovado**.
+   O invariante a observar: build termina, o pré-requisito registra estado final,
+   o Stage abre.
+3. **Qualquer validação de runtime, voz, instalador ou benchmark.**
+
+Um agente pode *preparar* tudo isso — código, testes, roteiro, diagnóstico — mas
+**não pode aprovar**. Se o seu plano termina em "gate aprovado", ele não termina
+sozinho.
+
+---
+
+## O que um agente novo deve fazer na primeira hora
+
+1. Abrir a sessão **na raiz do repositório**, nunca dentro de `airi/`.
+2. Ler `CURRENT-STATE.md` §0 (cabeçalho de estado, ~700 tok) e a §6 (regras permanentes).
+3. Ler [`../README.md`](../README.md) e [`../docs/README.md`](../README.md) para o mapa dos documentos.
+4. Rodar as quatro suítes da seção A e conferir que estão verdes **antes** de mudar algo.
+5. Escolher um item da seção A. Um por vez. Commit pequeno.
+
+## O que ele nunca deve fazer
+
+- Tocar em Persona, secrets, TTS runtime, fallback de chat, web/pocket ou live
+  model discovery sem autorização explícita.
+- Alterar `DevKit.bat` da raiz ou `Lia.bat` — `Lia.bat` é o processo que o gate
+  M3.0b captura.
+- Promover commit posterior a `3ef6d11` a baseline funcional.
+- Fazer merge em `main`.
+- Reportar um gate não executado como PASS.
+- Aumentar timeout como forma de correção.
+- Tratar suspeita como causa confirmada.

@@ -17,6 +17,12 @@ live model discovery. `DevKit.bat` da raiz não se altera. STOP AND REPORT em ve
 
 ## A0. Regra zero: descobrir qual rulebook está carregado
 
+> **Esta seção inteira é específica do Claude Code.** Ela trata da precedência
+> `CLAUDE.md` × `AGENTS.md` e dos comandos `/context` e `/memory`, que só existem
+> nele. Se você é outro agente — Codex, Cursor, Copilot, Cline — **pule para A1**.
+> O seu arquivo de instruções é o `AGENTS.md` da raiz, lido diretamente, e não há
+> nada a consertar.
+
 **Faça isto antes de qualquer outra coisa deste guia.**
 
 Desde a v2.1.277 o Claude Code lê `AGENTS.md` sozinho — **mas só quando não existe nenhum
@@ -63,6 +69,12 @@ carregados. Compare com a tabela.
 > O detalhe de cada área (voz, UI, i18n) vai pra `.claude/rules/` com `paths:` no topo —
 > é o único mecanismo que realmente reduz contexto. Fatiar em `@import` não reduz nada:
 > arquivo importado carrega na inicialização do mesmo jeito.
+>
+> ⚠ **`.claude/rules/` só existe para o Claude Code.** Para um agente que lê
+> `AGENTS.md` (Codex e afins) esse mecanismo é invisível, e ele continua pagando o
+> arquivo inteiro. A redução de contexto **portátil** é fatiar o próprio `AGENTS.md`:
+> núcleo curto no arquivo + detalhe em documentos que a §0 manda abrir sob demanda.
+> Prefira essa via se o projeto for tocado por mais de uma ferramenta.
 
 O `/config` também tem **Project instructions** com o valor `claude-md-and-agents-md`,
 que manda ler os dois. Mas é configuração de máquina: vale em `~/.claude/settings.json`,
