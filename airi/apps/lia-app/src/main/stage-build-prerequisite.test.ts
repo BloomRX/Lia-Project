@@ -19,7 +19,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, win32 } from 'node:path'
 import { execPath } from 'node:process'
 
 import { describe, expect, it, vi } from 'vitest'
@@ -170,6 +170,93 @@ describe('phase 8.0D-M3.0b: core-agent build prerequisite', () => {
     const root = await makeWorkspace({ 'packages/core-agent/package.json': '{ not json' })
     const outcome = await createCoreAgentBuildPrerequisite({ workspaceRoot: root }).run()
     expect(outcome).toEqual({ ok: false, reason: 'manifest-unreadable' })
+  })
+
+  it('j: under Electron it runs the build with a REAL node from PATH, not with Electron', async () => {
+    const exec = fakeExec()
+    const root = await makeWorkspace(resolvableToolFixture('mytool --build'))
+    // Windows-shaped values: the host here is Linux, so the candidate and the
+    // PATH have to be spelled the way Windows would spell them.
+    const nodeBin = win32.join('C:', 'tools', 'node.exe')
+    const prerequisite = createCoreAgentBuildPrerequisite({
+      execFileImpl: exec.impl as never,
+      // The PATH scan is answered by the injected probe, so the decision is
+      // exercised without depending on this machine's real PATH.
+      existsImpl: (path: string) => path === nodeBin,
+      platform: 'win32',
+      runtimeEnv: { PATH: ['C:\\nowhere', 'C:\\tools'].join(';') },
+      runtimeVersions: { electron: '43.4.1' },
+      workspaceRoot: root,
+    })
+    const outcome = await prerequisite.run()
+    expect(outcome).toMatchObject({ ok: true, reason: 'build-succeeded' })
+    const call = exec.calls.at(-1)!
+    // THE regression: this used to be `process.execPath`, i.e. electron.exe,
+    // and the Windows process tree showed electron.exe running tsdown.
+    expect(call.command).toBe(nodeBin)
+    expect(call.command).not.toBe(execPath)
+    // A real Node needs no Electron-mode variable at all.
+    expect(call.opts.env).toBeUndefined()
+  })
+
+  it('k: the Electron fallback is taken ONLY on a positive fuse read, and keeps the environment', async () => {
+    const exec = fakeExec()
+    const root = await makeWorkspace(resolvableToolFixture('mytool --build'))
+    const prerequisite = createCoreAgentBuildPrerequisite({
+      execFileImpl: exec.impl as never,
+      existsImpl: () => false,
+      fuseImpl: () => 'enabled',
+      platform: 'win32',
+      runtimeEnv: { PATH: 'C:\\nowhere' },
+      runtimeVersions: { electron: '43.4.1' },
+      workspaceRoot: root,
+    })
+    const outcome = await prerequisite.run()
+    expect(outcome).toMatchObject({ ok: true })
+    const call = exec.calls.at(-1)!
+    const env = call.opts.env as Record<string, string | undefined> | undefined
+    // Electron's documented switch: without it the binary starts an APP, whose
+    // lifetime is app-governed, so the child never exits and the prerequisite
+    // never reaches a terminal marker.
+    expect(env?.ELECTRON_RUN_AS_NODE).toBe('1')
+    // And the fallback must not COST the build its environment.
+    expect(env?.PATH).toBe('C:\\nowhere')
+  })
+
+  it('l: a fuse that is not provably enabled FAILS the build instead of hanging it', async () => {
+    for (const fuse of ['disabled', 'unknown'] as const) {
+      const exec = fakeExec()
+      const root = await makeWorkspace(resolvableToolFixture('mytool --build'))
+      const prerequisite = createCoreAgentBuildPrerequisite({
+        execFileImpl: exec.impl as never,
+        existsImpl: () => false,
+        fuseImpl: () => fuse,
+        platform: 'win32',
+        runtimeEnv: { PATH: 'C:\\nowhere' },
+        runtimeVersions: { electron: '43.4.1' },
+        workspaceRoot: root,
+      })
+      const outcome = await prerequisite.run()
+      // A terminal, diagnosable outcome - not a child that never exits.
+      expect(outcome, `fuse=${fuse}`).toEqual({ ok: false, reason: 'no-node-runtime' })
+      // Nothing was spawned at all: the variable would have been ignored.
+      expect(exec.calls, `fuse=${fuse} must not spawn`).toHaveLength(0)
+    }
+  })
+
+  it('m: under plain Node nothing changes - this executable is already the runtime', async () => {
+    const exec = fakeExec()
+    const root = await makeWorkspace(resolvableToolFixture('mytool --build'))
+    const prerequisite = createCoreAgentBuildPrerequisite({
+      execFileImpl: exec.impl as never,
+      runtimeVersions: {},
+      workspaceRoot: root,
+    })
+    const outcome = await prerequisite.run()
+    expect(outcome).toMatchObject({ ok: true })
+    const call = exec.calls.at(-1)!
+    expect(call.command).toBe(execPath)
+    expect(call.opts.env).toBeUndefined()
   })
 
   it('i: it names itself for diagnostics', () => {

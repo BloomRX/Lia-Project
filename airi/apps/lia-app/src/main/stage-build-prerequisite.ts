@@ -1,8 +1,11 @@
+import type { RunAsNodeFuseState } from './node-runtime'
+
 import { execFile } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
-import { execPath as nodeExecPath } from 'node:process'
+
+import { resolveNodeInvocation } from './node-runtime'
 
 /**
  * Phase 8.0D-M3.0b: the managed Stage build prerequisite.
@@ -36,6 +39,13 @@ import { execPath as nodeExecPath } from 'node:process'
  * it with `process.execPath`. One code path, every platform, no shell, no
  * PATHEXT, no cmd.exe, and the prerequisite is a short-lived awaited child
  * that is never owned by the launcher.
+ *
+ * `process.execPath` is NOT Node here, and that was the M3.0b defect - see
+ * `node-runtime.ts`, which owns the executable strategy and records the
+ * measured Windows process tree that proved it (electron.exe running
+ * `tsdown/dist/run.mjs` as a child of the Lia main process). This module only
+ * consumes the decision. It fails closed on `unavailable` rather than spawning
+ * an Electron app that would never exit.
  */
 
 /**
@@ -68,6 +78,21 @@ export interface StageBuildPrerequisite {
 export interface CoreAgentBuildPrerequisiteDeps {
   /** For tests: injecting exec keeps this module electron-free. */
   execFileImpl?: typeof execFile
+  /** For tests: resolving the Node runtime without touching the disk. */
+  existsImpl?: (path: string) => boolean
+  /** For tests: answering the runAsNode fuse read without a real binary. */
+  fuseImpl?: (execPath: string) => RunAsNodeFuseState
+  /** For tests: the platform the PATH scan should use. */
+  platform?: string
+  /** For tests: the environment the PATH scan should read. */
+  runtimeEnv?: Record<string, string | undefined>
+  /**
+   * For tests: the runtime facts behind the executable decision. They default
+   * to this process's own `process.versions`, which under Vitest is plain Node
+   * - exactly the blind spot that let the defect ship, so tests inject an
+   * Electron-shaped value.
+   */
+  runtimeVersions?: { electron?: string }
   /** Milliseconds before a build that never finishes is failed. */
   timeoutMs?: number
   /** The AIRI monorepo root that holds `packages/core-agent`. */
@@ -166,7 +191,11 @@ function resolveToolCli(packageDir: string, tool: string): string | undefined {
   }
 }
 
-/** Runs `process.execPath <cli> ...args` in the package directory. No shell. */
+/**
+ * Runs `<resolved node> <cli> ...args` in the package directory. No shell, and
+ * the executable comes from the shared strategy - never a blind
+ * `process.execPath`, which under Electron would start an app instead.
+ */
 function runTool(
   cli: string,
   args: string[],
@@ -174,11 +203,33 @@ function runTool(
   deps: CoreAgentBuildPrerequisiteDeps,
 ): Promise<StagePrerequisiteOutcome> {
   const execFileImpl = deps.execFileImpl ?? execFile
+  const runtime = resolveNodeInvocation({
+    // The build CLI spawns no Electron, so Electron-as-Node is an acceptable
+    // substitute for it - but only once the fuse proves the variable works.
+    childLaunchesElectron: false,
+    env: deps.runtimeEnv,
+    existsImpl: deps.existsImpl,
+    fuseImpl: deps.fuseImpl,
+    platform: deps.platform,
+    versions: deps.runtimeVersions,
+  })
+  if (runtime.kind === 'unavailable') {
+    // Fail closed with a stable reason: a build that cannot run is not a build
+    // that succeeded, and the manager must refuse to serve a stale renderer.
+    // An explicit terminal marker is diagnosable; a child that never exits is
+    // not, and that silence is what M3.0b looked like.
+    return Promise.resolve({ ok: false, reason: 'no-node-runtime' })
+  }
   return new Promise<StagePrerequisiteOutcome>((resolve) => {
     execFileImpl(
-      nodeExecPath,
+      runtime.command,
       [cli, ...args],
-      { cwd, timeout: deps.timeoutMs ?? 600_000, windowsHide: true },
+      {
+        cwd,
+        ...(runtime.env ? { env: runtime.env } : {}),
+        timeout: deps.timeoutMs ?? 600_000,
+        windowsHide: true,
+      },
       (error) => {
         if (!error) {
           resolve({ ok: true, reason: 'build-succeeded' })

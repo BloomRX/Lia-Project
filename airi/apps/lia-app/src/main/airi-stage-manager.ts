@@ -1,10 +1,12 @@
+import type { RunAsNodeFuseState } from './node-runtime'
 import type { StageBuildPrerequisite } from './stage-build-prerequisite'
 
 import { execFile, spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { join } from 'node:path'
-import { env as nodeEnv, execPath as nodeExecPath, platform as nodePlatform } from 'node:process'
+import { basename, join } from 'node:path'
+import { env as nodeEnv, platform as nodePlatform } from 'node:process'
 
+import { resolveNodeInvocation } from './node-runtime'
 import { createCoreAgentBuildPrerequisite } from './stage-build-prerequisite'
 
 /**
@@ -77,6 +79,18 @@ export interface AiriStageManagerDeps {
    */
   prerequisite?: StageBuildPrerequisite
   spawnImpl?: typeof spawn
+  /** For tests: resolving the Node runtime without touching the disk. */
+  existsImpl?: (path: string) => boolean
+  /** For tests: answering the runAsNode fuse read without a real binary. */
+  fuseImpl?: (execPath: string) => RunAsNodeFuseState
+  /** For tests: the environment the PATH scan reads, instead of `process.env`. */
+  runtimeEnv?: Record<string, string | undefined>
+  /**
+   * For tests: the runtime facts behind the executable decision. Under Vitest
+   * `process.versions` is plain Node, which is the blind spot that shipped the
+   * M3.0b defect, so tests inject an Electron-shaped value.
+   */
+  runtimeVersions?: { electron?: string }
   /**
    * The dev-server entry script the manager launches with `node`. Default:
    * the stage package's own electron-vite bin, resolved as a FILE - never
@@ -307,13 +321,45 @@ export class AiriStageManager {
     const stageDir = this.stageDir()
     const entrypoint = stageDevEntrypointFor(stageDir, this.deps)
     const spawnImpl = this.deps.spawnImpl ?? spawn
-    const child = spawnImpl(nodeExecPath, [entrypoint, 'dev'], {
+    // This is the one child that must never be given `ELECTRON_RUN_AS_NODE`:
+    // `electron-vite` launches the window with
+    // `spawn(electronPath, [entry], { stdio: 'inherit' })` - no `env` option -
+    // so the child's environment reaches the Electron app verbatim, and a
+    // leaked variable would start the WINDOW as plain Node: no window at all.
+    // `resolveNodeInvocation` therefore refuses here rather than falling back
+    // to Electron-as-Node, and we fail closed instead of spawning an Electron
+    // app that would parent nothing. Ownership is unchanged: the build stays an
+    // awaited prerequisite, never the owned Stage process.
+    const runtime = resolveNodeInvocation({
+      childLaunchesElectron: true,
+      env: this.deps.runtimeEnv,
+      existsImpl: this.deps.existsImpl,
+      fuseImpl: this.deps.fuseImpl,
+      platform: this.deps.platform ?? nodePlatform,
+      versions: this.deps.runtimeVersions,
+    })
+    if (runtime.kind === 'unavailable') {
+      // The reason is a static string from node-runtime.ts: no PATH entries,
+      // no environment values, no secrets.
+      this.deps.onLog?.(`stage-runtime state=unavailable reason=${runtime.reason}`)
+      this.setState({
+        message: 'The Lia stage could not start: no Node runtime was available to run it.',
+        phase: 'error',
+      })
+      return this.state()
+    }
+    this.deps.onLog?.(`stage-runtime kind=${runtime.kind}`)
+    const child = spawnImpl(runtime.command, [entrypoint, 'dev'], {
       cwd: stageDir,
       env: { ...nodeEnv, ...this.deps.childEnv, ...passEnv },
     })
     this.child = child
     this.setState({ phase: 'starting', pid: child.pid })
-    this.deps.onLog?.(`spawn: node ${entrypoint} dev (pid ${String(child.pid)})`)
+    // The real executable, never a hardcoded "node": this line is the only
+    // evidence of what was actually spawned, and printing a word that is only
+    // sometimes true is how an Electron executable stayed invisible in the
+    // Windows logs.
+    this.deps.onLog?.(`spawn: ${basename(runtime.command)} ${entrypoint} dev (pid ${String(child.pid)})`)
 
     return await new Promise<AiriStageState>((resolve) => {
       const grace = this.deps.startGraceMs ?? 180_000
