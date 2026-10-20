@@ -58,23 +58,33 @@ antes da correção com dois contextos Pinia reais; agora 5 testes browser e
 No Electron, nova conversa manteve seleção e resposta **42** para 19 + 23:
 **PASS Windows real** (`text-after-selection-fix.png`).
 
-**Bloqueios ativos:** imagem sintética chega à rota Qwen; houve recusas de
-quota Groq (429/413). Em conversa nova, o log registrou sucesso, mas não existe
-mensagem assistant nem resposta visível: **FAIL**, causa não confirmada.
-9router `http://localhost:20128/v1`: catálogo acessível; envio ao `visao` deu
-401, autenticação local solicitada ao Dev sem pedir chave no chat.
-Python Store: 487 casos, 1 erro de limpeza e 10 skips; Python nativo: 487,
-3 erros de limpeza e 10 skips. Sondagem imediata Handle não identificou detentor.
-Node: 267 aprovados. Não ignorar o erro nem atribuir causa sem evidência.
-Detalhes, inventário dos sete concepts e checklist em
-`docs/product/RELEASE-WINDOWS-2026-10-20.md`.
-**Próximo item exato:** investigar a ausência de resposta de imagem, começando
-pelos metadados do stream na janela líder do Stage. Continuar testes dirigidos
-de failure behavior e preflight numérico de imagens (8.0D) após este bloqueio.
-O Launcher de diagnóstico foi encerrado normalmente às 03:25:27Z;
-para nova captura, reabrir com CDP local na porta 9250 por ambiente, sem alterar
-`Lia.bat`. Evidências em `Tests/runs/release-20261019/`.
-Gate de conteúdo de imagem pendente; baseline funcional permanece `3ef6d11`.
+**Resposta vazia corrigida:** o runtime agora falha quando o serviço termina
+sem conteúdo nem ferramentas, em vez de registrar sucesso sem mensagem.
+Reprodução falhou antes da correção; núcleo: 143 testes aprovados; Chat Stage UI:
+255 aprovados; lint dos três arquivos, typechecks core-agent/Stage UI e build
+core-agent: PASS automatizado. **PASS Windows real do erro:** anexo/pergunta
+preservados, mensagem em pt-BR e retry, log `sendTerminalOutcome=failed`
+(`image-empty-error-visible.png`, correlação `556292c8` às 03:47:10.353Z).
+
+**Bloqueio de imagem:** sondagem mediu HTTP 200 + stop com zero conteúdo no
+pedido completo. Requisição mínima ao mesmo Qwen/Groq, JSON e SSE, descreveu
+corretamente o retângulo vermelho à esquerda e círculo azul à direita. Isso
+valida a integração direta, **não o gate da Lia**. Pedido completo tem sete
+ferramentas; comparação sem elas + limite 128 + JSON funcionou, mas as
+variáveis ainda não foram isoladas. Não atribuir causa a ferramentas/Persona.
+9router `http://localhost:20128/v1`: catálogo acessível; envio deu 401
+`Missing API key`. Não ler/imprimir credenciais para contornar.
+Python: repetição após seleção PASS (487 casos, 10 skips, exit 0); falhas
+anteriores de limpeza WinError 32/5 em ambos os interpretadores seguem
+intermitentes, detentor não identificado. Node: 267 PASS; Launcher: 247 + 2 skips.
+Detalhes, inventário e checklist: `docs/product/RELEASE-WINDOWS-2026-10-20.md`.
+**Próximo item exato:** comparar o pedido de imagem completo com/sem ferramentas
+mantendo streaming e limite de saída iguais; preservar Persona, fallback e voz.
+Depois continuar failure behavior e preflight numérico de imagens (8.0D).
+Launcher de diagnóstico aberto com CDP 9250, sem alteração de `Lia.bat`;
+sondagens temporárias devem ser restauradas antes de encerrar. Evidências em
+`Tests/runs/release-20261019/`. Gate de conteúdo da imagem na UI segue FAIL;
+baseline funcional permanece `3ef6d11`.
 
 **Próximos passos:** (1) gate Windows E2E visual; (2) fechar itens automatizáveis
 da 8.0D; (3) Launcher e presença conforme o plano de finalização. A matriz de

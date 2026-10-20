@@ -42,13 +42,16 @@ O nome da pasta corresponde ao início da sessão no dia 19.
 | --- | --- |
 | `corepack pnpm install --ignore-scripts`, em `airi/` | PASS automatizado, pnpm 11.24.0 |
 | `corepack pnpm --filter @lia/core run build`, em `airi/` | PASS automatizado |
-| `python3 -m unittest discover -s . -p "test_*.py" -t .`, em `tools/` | FAIL: 487 casos, 1 erro de limpeza `WinError 32`, 10 skips |
+| `python3 -m unittest discover -s . -p "test_*.py" -t .`, em `tools/` | Baseline FAIL: 487 casos, 1 erro de limpeza; repetição após seleção PASS automatizado: 487 casos, 10 skips |
 | `node --test Tests/tools/*.test.mjs` | PASS automatizado: 267 aprovados |
 | `vitest run`, em `airi/apps/lia-app/` | PASS automatizado: baseline 246 + 2 skips; após correção 247 + 2 skips |
 | Vitest: `airi-stage-manager`, `node-runtime`, `stage-build-prerequisite` | PASS automatizado: 43 aprovados |
 | `moeru-lint` nos arquivos alterados do Stage manager e seleção de sessão | PASS automatizado |
 | Vitest da seleção de sessão: projeto browser / projeto node | PASS automatizado: 5 / 20 aprovados |
 | `pnpm --filter @proj-airi/stage-ui typecheck` | PASS automatizado |
+| Vitest `--project @proj-airi/core-agent` após proteção contra resposta vazia | PASS automatizado: 143 aprovados, 13 arquivos |
+| Vitest Stage UI `--project node src/stores/chat` após proteção | PASS automatizado: 255 aprovados, 17 arquivos |
+| Lint dos três arquivos da proteção; typecheck core-agent e Stage UI; build core-agent | PASS automatizado |
 | `tsc --noEmit -p apps/lia-app/tsconfig.json`, em `airi/` | PASS automatizado |
 | `pnpm --filter @lia/lia-app build`, em `airi/` | PASS automatizado; build de aplicação, não instalador |
 
@@ -96,6 +99,39 @@ a “19 + 23” e permaneceu selecionada: **PASS Windows real**. Evidências:
 `text-after-selection-fix.png`, `launcher-debug-runtime.log`, correlação
 `b8e7c765` às `03:11:08.543Z` na rota GPT-OSS.
 
+## Resposta vazia — correção e diagnóstico
+
+Uma sondagem temporária, apenas com metadados, observou HTTP 200, três chunks,
+`finish_reason=stop`, um token de saída e nenhum texto, raciocínio ou ferramenta.
+Isso prova ausência de conteúdo naquela resposta recebida, não a causa do
+comportamento do modelo. O runtime tratava esse caso como sucesso sem mensagem.
+Agora ele rejeita um stream sem conteúdo nem ferramentas, preserva o tratamento
+de geração obsoleta e usa o caminho de erro já existente. Não altera fallback,
+Persona, credenciais ou voz.
+
+Regressão reproduzida antes da correção. As fixtures de pedidos bem-sucedidos
+em testes de timestamp/fila passaram a emitir uma resposta real. Gate de erro:
+**PASS Windows real** — anexo e pergunta preservados, erro em pt-BR visível e
+retry disponível, com `sendTerminalOutcome=failed`. Correlação
+`556292c8-c31b-4868-8ec3-a75f600b6f41`, `03:47:10.353Z`, evidência
+`image-empty-error-visible.png`, inspecionada visualmente.
+
+Alternativa simples avaliada: requisição mínima à Groq já configurada, somente
+com a imagem sintética e a pergunta, limite de saída 128. Tanto JSON quanto SSE
+retornaram descrição correta do retângulo vermelho e círculo azul. SSE: 1826
+tokens de entrada, 18 de saída. Evidência `groq-minimal-stream-vision.json`.
+É **PASS de integração direta do serviço**, sem aprovar o gate do aplicativo.
+A autenticação foi usada pela instância existente, sem imprimir chaves.
+
+O pedido completo do app contém system de 7182 caracteres, pergunta+imagem e
+sete ferramentas, sem limite explícito de saída. Uma comparação conservando o
+contexto, retirando ferramentas, limitando saída a 128 e usando JSON respondeu
+corretamente, 3758 tokens de entrada/25 de saída. Como há múltiplas variáveis,
+a causa **ainda não está isolada**. Próximo experimento: comparar com/sem
+ferramentas mantendo streaming e limite iguais. Não remover ferramentas ou
+mudar Persona por suspeita. Documentação consultada: [visão Groq](https://console.groq.com/docs/vision)
+e [Qwen](https://console.groq.com/docs/model/qwen/qwen3.8-27b).
+
 ## Problemas ativos
 
 - **Imagem — FAIL:** anexo sintético de 240×160, retângulo vermelho à esquerda
@@ -104,21 +140,22 @@ a “19 + 23” e permaneceu selecionada: **PASS Windows real**. Evidências:
   (saída: 1000 tokens/minuto) e HTTP 413 (entrada: 7000 tokens/minuto).
   Em conversa nova, correlação `93e70252-ebbf-41cf-8a8f-c88c88565d0b`
   às `03:18:57.782Z`, o log registrou sucesso, mas **não houve mensagem
-  assistant** no store nem resposta visível. Causa ainda não confirmada;
-  investigar metadados do stream sem registrar prompts, imagens ou chaves.
+  assistant** no store nem resposta visível. O stream vazio foi medido; a causa do comportamento do modelo ainda não está
+  isolada. Requisição mínima ao mesmo serviço descreveu a imagem corretamente.
   Evidências: `image-preview.png`, `image-first-result.png` e log do runtime.
 - **9router — BLOCKED para envio:** catálogo acessível em
   `http://localhost:20128/v1/models`; requisição com a mesma imagem sintética ao
   modelo `visao` respondeu HTTP 401. Nenhuma credencial foi lida ou exposta.
   O Dev foi solicitado a configurar a autenticação por mecanismo local.
   Isso não substitui o gate original da Groq.
-- **Python — FAIL:** `python3` da Store: 487 casos, 1 erro de limpeza e
+- **Python — intermitência:** `python3` da Store: 487 casos, 1 erro de limpeza e
   10 skips. `python` nativo: 487 casos, 3 erros de limpeza e 10 skips.
   Os testes GitFlow isolados variam entre aprovação e erro WinError 32/5
   ao remover fixtures. Uma sondagem imediata com Handle em uma execução
   com falha não encontrou detentor. A causa dos locks continua desconhecida;
-  a diferença entre os interpretadores não a comprova. Logs:
-  `python-native-full.log`, `lock-probe-repeat-1.log`.
+  a diferença entre os interpretadores não a comprova. A repetição `python3` após
+  o commit de seleção passou: 487 casos, 10 skips, exit 0, em 327,8 s. Logs:
+  `python-native-full.log`, `lock-probe-repeat-1.log`, `python-after-session.log`.
 - **Lint da raiz:** permanece a dívida registrada no preflight anterior. Nenhum
   arquivo Node de ferramentas foi alterado nesta rodada. O lint dos arquivos
   TypeScript alterados passou pela configuração própria do workspace.
@@ -130,6 +167,7 @@ a “19 + 23” e permaneceu selecionada: **PASS Windows real**. Evidências:
 - [x] PASS automatizado: rejeição do pré-requisito termina em erro e permite retry.
 - [x] PASS Windows real: encerramento gerenciado sem processo do checkout remanescente.
 - [x] PASS Windows real: conversa de texto isolada mantém sessão e resposta 42 visível.
+- [x] PASS automatizado e Windows real: stream vazio gera erro visível e estado terminal failed.
 - [ ] FAIL: imagem determinística sem resposta visível; texto após imagem ainda NÃO EXECUTADO.
 - [ ] NÃO EXECUTADO: novo teste humano de microfone; baseline de voz preservado.
 - [ ] NÃO EXECUTADO: failover recuperável/permanente e preflight numérico de imagens.

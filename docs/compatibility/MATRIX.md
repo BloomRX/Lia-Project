@@ -23,7 +23,9 @@ Os estados de suporte não substituem os resultados de cada verificação.
 | Avatar Tamagotchi | PASS Windows real | Personagem Live2D upstream renderizada, não o modelo canônico da Lia |
 | Encerramento gerenciado | PASS Windows real | 606 ms; PID do Stage e processos Electron do checkout ausentes após fechar |
 | Conversa de texto desta rodada | PASS Windows real | Após corrigir seleção local, nova conversa manteve sessão e resposta 42 visível |
-| Imagem determinística | FAIL | Rota Qwen observada; quotas 429/413 e tentativa com log de sucesso sem resposta assistant; causa ainda em investigação |
+| Imagem determinística na UI | FAIL | Stream vazio medido; causa ainda em investigação; sete ferramentas no pedido completo |
+| Visão Groq em pedido mínimo | PASS integração direta no Windows | Descrição correta em JSON e SSE; não substitui o fluxo da UI |
+| Stream vazio no Chat | PASS Windows real | Erro em pt-BR, anexo/pergunta e retry preservados, log terminal failed |
 | Cadeia de voz B1/B1.1 | PASS Windows real histórico | Baseline `3ef6d11`; esta rodada observou prewarm/síntese, sem novo teste de microfone humano |
 | Lia Livre / múltiplos monitores | NÃO EXECUTADO | Implementação de produto ausente |
 | Instalador e instalação limpa | NÃO EXECUTADO | Launcher ainda sem contrato de empacotamento de release |

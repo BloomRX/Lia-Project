@@ -4,7 +4,11 @@
 com correções posteriores; não o reaplicar. Nesta rodada, a abertura do Stage e
 o encerramento passaram no Windows real. O manager também recebeu tratamento
 de rejeição inesperada do pré-requisito, com regressão e retry. A descrição de
-trabalho perdido abaixo é histórica. Evidências e limites em
+trabalho perdido abaixo é histórica. Também foram corrigidos o restauro de
+seleção local em `packages/stage-ui/src/stores/chat/session-store.ts` e o falso
+sucesso de stream vazio em `packages/core-agent/src/runtime/chat-orchestrator-runtime.ts`.
+São diffs pequenos sobre o runtime compartilhado, com regressões; preservar
+na próxima atualização upstream. Evidências e limites em
 [`product/RELEASE-WINDOWS-2026-10-20.md`](product/RELEASE-WINDOWS-2026-10-20.md).
 
 > **Para que serve este arquivo.** O diretório `airi/` é uma cópia do projeto

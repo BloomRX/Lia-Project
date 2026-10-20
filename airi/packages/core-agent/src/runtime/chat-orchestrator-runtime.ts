@@ -836,6 +836,7 @@ export function createChatOrchestratorRuntime(deps: ChatOrchestratorRuntimeDeps)
       await hooks.emitBeforeSendHooks(sendingMessage, streamingMessageContext)
 
       let fullText = ''
+      let receivedResponse = false
       const headers = (options.providerConfig?.headers || {}) as Record<string, string>
 
       if (abandonIfStale())
@@ -898,6 +899,7 @@ export function createChatOrchestratorRuntime(deps: ChatOrchestratorRuntimeDeps)
 
           switch (event.type) {
             case 'tool-call':
+              receivedResponse = true
               toolCallQueue.enqueue({
                 type: 'tool-call',
                 toolCall: event,
@@ -905,6 +907,7 @@ export function createChatOrchestratorRuntime(deps: ChatOrchestratorRuntimeDeps)
 
               break
             case 'tool-result':
+              receivedResponse = true
               toolCallQueue.enqueue({
                 type: 'tool-call-result',
                 id: event.toolCallId,
@@ -913,6 +916,7 @@ export function createChatOrchestratorRuntime(deps: ChatOrchestratorRuntimeDeps)
 
               break
             case 'tool-error':
+              receivedResponse = true
               toolCallQueue.enqueue({
                 type: 'tool-call-result',
                 id: event.toolCallId,
@@ -922,6 +926,7 @@ export function createChatOrchestratorRuntime(deps: ChatOrchestratorRuntimeDeps)
 
               break
             case 'text-delta':
+              receivedResponse ||= event.text.length > 0
               if (!llmFirstTokenEmitted) {
                 llmFirstTokenEmitted = true
                 deps.onLlmFirstToken?.({
@@ -934,6 +939,7 @@ export function createChatOrchestratorRuntime(deps: ChatOrchestratorRuntimeDeps)
               await parser.consume(event.text)
               break
             case 'reasoning-delta': {
+              receivedResponse ||= event.text.length > 0
               if (shouldAbort())
                 return
 
@@ -967,6 +973,11 @@ export function createChatOrchestratorRuntime(deps: ChatOrchestratorRuntimeDeps)
       await parser.end()
       if (abandonIfStale())
         return
+
+      // A transport-level success can contain only an end-of-stream marker.
+      // Report a failed round instead of success with no assistant response.
+      if (!receivedResponse && !providerTranscript?.length)
+        throw new Error('O serviço de IA terminou sem enviar uma resposta. Tente novamente.')
 
       buildingMessage.providerTranscript = providerTranscript
       deps.onAssistantResponseRendered?.({

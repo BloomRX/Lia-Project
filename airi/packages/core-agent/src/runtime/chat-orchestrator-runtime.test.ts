@@ -219,6 +219,28 @@ function createHarness(options: { getActiveProvider?: () => string | undefined }
 }
 
 describe('createChatOrchestratorRuntime', () => {
+  // Windows QA: HTTP 200 + finish=stop with no content was reported as success,
+  // although no assistant message could be displayed or persisted.
+  it('fails a completed provider stream that contains no response', async () => {
+    const harness = createHarness()
+    harness.stream.mockImplementationOnce(async (_model, _chatProvider, _messages, options) => {
+      await options?.onStreamEvent?.({ type: 'finish', finishReason: 'stop' })
+    })
+
+    await expect(harness.runtime.ingest('describe the image', {
+      model: 'gpt-test',
+      chatProvider: provider,
+    })).rejects.toThrow('O serviço de IA terminou sem enviar uma resposta. Tente novamente.')
+
+    expect(harness.assistantAppended).toHaveLength(0)
+    expect(harness.telemetry.assistantResponseRendered).toHaveLength(0)
+    expect(harness.telemetry.messageRound).toHaveLength(0)
+    expect(harness.telemetry.messageRoundFailed).toHaveLength(1)
+    expect(harness.settled.calls).toEqual([
+      expect.objectContaining({ outcome: 'failed' }),
+    ])
+  })
+
   // ROOT CAUSE:
   //
   // The marker parser buffered 24 literal characters plus its marker-safety tail.
@@ -489,6 +511,7 @@ describe('createChatOrchestratorRuntime', () => {
 
     harness.stream.mockImplementationOnce(async (_model, _chatProvider, messages, options) => {
       firstMessages.push(structuredClone(messages))
+      await options?.onStreamEvent?.({ type: 'text-delta', text: 'reply' })
       await options?.onStreamEvent?.({ type: 'finish', finishReason: 'stop' })
     })
     harness.now.set(new Date(2026, 3, 25, 18, 47).getTime())
@@ -500,6 +523,7 @@ describe('createChatOrchestratorRuntime', () => {
 
     harness.stream.mockImplementationOnce(async (_model, _chatProvider, messages, options) => {
       secondMessages.push(structuredClone(messages))
+      await options?.onStreamEvent?.({ type: 'text-delta', text: 'reply' })
       await options?.onStreamEvent?.({ type: 'finish', finishReason: 'stop' })
     })
     harness.now.set(new Date(2026, 3, 25, 19, 12).getTime())
@@ -777,10 +801,11 @@ describe('createChatOrchestratorRuntime', () => {
   it('rejects cancelled queued sends before they start', async () => {
     const harness = createHarness()
     let releaseFirstSend: (() => void) | undefined
-    harness.stream.mockImplementationOnce(async () => {
+    harness.stream.mockImplementationOnce(async (_model, _chatProvider, _messages, options) => {
       await new Promise<void>((resolve) => {
         releaseFirstSend = resolve
       })
+      await options?.onStreamEvent?.({ type: 'text-delta', text: 'first reply' })
     })
 
     const firstSend = harness.runtime.ingest('hold queue', {
@@ -859,10 +884,11 @@ describe('createChatOrchestratorRuntime', () => {
   it('rejects stale generation sends before they start', async () => {
     const harness = createHarness()
     let releaseFirstSend: (() => void) | undefined
-    harness.stream.mockImplementationOnce(async () => {
+    harness.stream.mockImplementationOnce(async (_model, _chatProvider, _messages, options) => {
       await new Promise<void>((resolve) => {
         releaseFirstSend = resolve
       })
+      await options?.onStreamEvent?.({ type: 'text-delta', text: 'first reply' })
     })
 
     const firstSend = harness.runtime.ingest('hold queue', {
@@ -966,10 +992,11 @@ describe('createChatOrchestratorRuntime', () => {
   it('returns pending queued send snapshots with public fields', async () => {
     const harness = createHarness()
     let releaseFirstSend: (() => void) | undefined
-    harness.stream.mockImplementationOnce(async () => {
+    harness.stream.mockImplementationOnce(async (_model, _chatProvider, _messages, options) => {
       await new Promise<void>((resolve) => {
         releaseFirstSend = resolve
       })
+      await options?.onStreamEvent?.({ type: 'text-delta', text: 'first reply' })
     })
 
     const queuedMessage = 'queued-message-'.repeat(12)
@@ -1659,10 +1686,11 @@ describe('chat round settled seam (Phase 8.0D-10B-4D4B1)', () => {
   it('41: a queued cancellation settles nothing of its own', async () => {
     const harness = createHarness()
     let releaseFirstSend: (() => void) | undefined
-    harness.stream.mockImplementationOnce(async () => {
+    harness.stream.mockImplementationOnce(async (_model, _chatProvider, _messages, options) => {
       await new Promise<void>((resolve) => {
         releaseFirstSend = resolve
       })
+      await options?.onStreamEvent?.({ type: 'text-delta', text: 'first reply' })
     })
 
     const firstSend = harness.runtime.ingest('hold queue', {
@@ -1693,10 +1721,11 @@ describe('chat round settled seam (Phase 8.0D-10B-4D4B1)', () => {
   it('42: a generation-invalidated pre-start rejection settles nothing of its own', async () => {
     const harness = createHarness()
     let releaseFirstSend: (() => void) | undefined
-    harness.stream.mockImplementationOnce(async () => {
+    harness.stream.mockImplementationOnce(async (_model, _chatProvider, _messages, options) => {
       await new Promise<void>((resolve) => {
         releaseFirstSend = resolve
       })
+      await options?.onStreamEvent?.({ type: 'text-delta', text: 'first reply' })
     })
 
     const firstSend = harness.runtime.ingest('hold queue', {
