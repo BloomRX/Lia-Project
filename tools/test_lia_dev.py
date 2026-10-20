@@ -6671,6 +6671,7 @@ class PersistedRootCauseConsistencyTests(unittest.TestCase):
         root = ('Error: Failed to resolve entry for package "@lia/core".')
         body = (
             'import sys\n'
+            'sys.stdout.reconfigure(encoding="utf-8")\n'
             + ''.join(f'print(" \u276f src/main/f{i}.test.ts (0 test)")\n'
                       for i in range(8))
             + f'print({root!r})\n'

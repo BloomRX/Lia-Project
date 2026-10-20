@@ -41,6 +41,21 @@ correta pela imagem, e turno só de texto permanecendo no GPT-OSS.
 **Em andamento:** reorganização dos arquivos de instrução (medição em
 `tools/agents-docs/`).
 
+**Ponto de retomada — 19/10/2026:** seção A de `QUANTO-FALTA.md` ainda não
+iniciada. O preflight encontrou fixtures dependentes de fuso e encoding; as
+correções são restritas aos testes. Falta resolver a aplicação do lint aos
+arquivos de ferramentas fora de `airi/`: o comando obrigatório não encontra
+configuração na raiz, e aplicar a configuração do AIRI exige mudanças no runner
+e nos imports dos testes Node. Não migrar nem desabilitar regras como contorno.
+O Python também segue vermelho: 487 casos, 2 erros de limpeza `WinError 32` e
+10 skips na repetição; o processo que mantém os diretórios abertos não foi
+identificado. Node: 267 testes aprovados; launcher: 246 aprovados + 2 skips;
+builds `@lia/core` e `@proj-airi/core-agent` concluídos.
+Detalhes e resultados em `docs/product/PREFLIGHT-2026-10-19.md`.
+**Próximo item de produto: A1 — teste dirigido de failure behavior**, após
+concluir esse preflight. Os gates Windows continuam pendentes e o baseline
+funcional permanece `3ef6d11`.
+
 **Próximos passos:** (1) gate Windows E2E visual; (2) reteste no Windows do pré-requisito
 do Stage (M3.0b); (3) `docs/compatibility/MATRIX.md`, exigido pela §81 do `AGENTS.md`,
 **não existe** — dívida em aberto, não histórico; (4) itens de closure da 8.0D, na §5.
