@@ -1,3 +1,4 @@
+import type { LiaBrainRoutingDecision } from '@lia/core'
 import type { ChatSessionMeta } from '@proj-airi/stage-ui/types/chat-session'
 import type { Component } from 'vue'
 
@@ -10,7 +11,7 @@ import { useChatStore } from '@proj-airi/stage-ui/stores/chat'
 import { useChatSessionStore } from '@proj-airi/stage-ui/stores/chat/session-store'
 import { useChatStreamStore } from '@proj-airi/stage-ui/stores/chat/stream-store'
 import { createPinia } from 'pinia'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render } from 'vitest-browser-vue'
 import { userEvent } from 'vitest/browser'
 import { nextTick } from 'vue'
@@ -21,6 +22,52 @@ import InteractiveArea from './InteractiveArea.vue'
 
 import '@unocss/reset/tailwind.css'
 import 'virtual:uno.css'
+
+const brainIPC = vi.hoisted(() => ({ decision: vi.fn() }))
+
+// The browser receives a plain IPC decision, not the Node product-config module.
+function visionDecision(): LiaBrainRoutingDecision {
+  const capabilities = {
+    audioInput: false,
+    audioOutput: false,
+    imageInput: true,
+    realtime: false,
+    reasoning: false,
+    textInput: true,
+    textOutput: true,
+    toolCalling: false,
+    videoInput: false,
+  }
+  return {
+    status: 'automatic',
+    selection: {
+      status: 'selected',
+      route: {
+        engine: { id: 'groq', name: 'QA', availability: 'available', capabilities, modelIds: ['vision-qa'] },
+        model: { id: 'vision-qa', engineId: 'groq', name: 'QA', capabilities, maxImagesPerRequest: 3 },
+      },
+    },
+  }
+}
+
+vi.mock('@proj-airi/electron-vueuse', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@proj-airi/electron-vueuse')>()
+  return {
+    ...actual,
+    useElectronEventaInvoke: (event: Parameters<typeof actual.useElectronEventaInvoke>[0]) => {
+      const id = event.receiveEvent?.id
+      if (id === 'eventa:invoke:lia:brain:chat-decision-receive')
+        return brainIPC.decision
+      if (id === 'eventa:invoke:lia:secret:has-receive')
+        return vi.fn(async () => true)
+      return actual.useElectronEventaInvoke(event)
+    },
+  }
+})
+
+beforeEach(() => {
+  brainIPC.decision.mockReset().mockResolvedValue({ status: 'disabled' })
+})
 
 function createTestI18n() {
   return createI18n({
@@ -102,6 +149,27 @@ async function attachImages(screen: Awaited<ReturnType<typeof renderArea>>['scre
 }
 
 describe('interactive area synchronized state', () => {
+  it.each([{ stored: 0, attached: 4 }, { stored: 3, attached: 1 }])('refuses excess images before sending and preserves the draft and previews: %o', async ({ stored, attached }) => {
+    brainIPC.decision.mockResolvedValue(visionDecision())
+    const { screen, chat, chatSession } = await renderArea()
+    if (stored > 0) {
+      chatSession.appendSessionMessage('session-b', {
+        id: 'stored-image-turn',
+        role: 'user',
+        content: Array.from({ length: stored }, () => ({ type: 'image_url' as const, image_url: { url: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aWo0AAAAASUVORK5CYII=' } })),
+      })
+    }
+    const send = vi.spyOn(chat, 'send').mockResolvedValue({ sessionId: 'session-b', messages: [] })
+    await attachImages(screen, attached)
+
+    const input = await submitDraft(screen, 'Descreva estas imagens.')
+
+    await expect.element(screen.getByRole('alert')).toHaveTextContent('Esta conversa enviaria 4 imagens; o limite é 3.')
+    await expect.element(input).toHaveValue('Descreva estas imagens.')
+    expect(screen.container.querySelectorAll('img[src^="blob:"]')).toHaveLength(attached)
+    expect(send).not.toHaveBeenCalled()
+  })
+
   // https://github.com/moeru-ai/airi/pull/2399
   it('keeps the input visible when a short window contains many attachments', async () => {
     // ROOT CAUSE:

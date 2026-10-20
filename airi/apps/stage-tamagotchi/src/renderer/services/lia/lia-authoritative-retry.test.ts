@@ -60,6 +60,45 @@ beforeEach(() => {
 })
 
 describe('lia authoritative retry (Phase 8.0D-10B-4D4C4-D2B6 corrective)', () => {
+  it('preflights an id-less legacy retry without inventing a source id', async () => {
+    const descriptors = groqBrainDescriptors()
+    mocks.requestDecision.mockResolvedValue({
+      status: 'automatic',
+      selection: { status: 'selected', route: { engine: descriptors.engines[0], model: descriptors.models[1] } },
+    })
+    const retry = vi.fn().mockResolvedValue({})
+    await executeLiaAuthoritativeRetry({
+      sessionId: 's1',
+      index: 1,
+      providerHistory: [],
+      reasoning: false,
+      tools: [],
+      attachments: [{ type: 'image', mimeType: 'image/png', data: 'QA' }],
+    }, { retry })
+    expect(retry).toHaveBeenCalledTimes(1)
+    expect(retry.mock.calls[0]![0]).not.toHaveProperty('sourceMessageId')
+    expect(retry.mock.calls[0]![0].routeOverride).toEqual({ providerId: 'groq', modelId: descriptors.models[1]!.id })
+  })
+
+  it.each(['source-id', undefined])('refuses an oversized retry before truncating history, source=%s', async (sourceMessageId) => {
+    const descriptors = groqBrainDescriptors()
+    mocks.requestDecision.mockResolvedValue({
+      status: 'automatic',
+      selection: { status: 'selected', route: { engine: descriptors.engines[0], model: descriptors.models[1] } },
+    })
+    const retry = vi.fn()
+    await expect(executeLiaAuthoritativeRetry({
+      sessionId: 's1',
+      index: 1,
+      sourceMessageId,
+      providerHistory: [],
+      reasoning: false,
+      tools: [],
+      attachments: Array.from({ length: 4 }, () => ({ type: 'image' as const, mimeType: 'image/png', data: 'QA' })),
+    }, { retry })).rejects.toThrow('Esta conversa enviaria 4 imagens; o limite é 3.')
+    expect(retry).not.toHaveBeenCalled()
+  })
+
   it('exactly one correlationId and same for Brain and retry', async () => {
     const retry = vi.fn().mockResolvedValue({})
     const mint = vi.fn(() => MINTED)

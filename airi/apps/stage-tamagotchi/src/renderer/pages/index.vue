@@ -42,7 +42,7 @@ import ResourceStatusIsland from '../components/stage-islands/resource-status-is
 
 import { electronOpenOnboarding } from '../../shared/eventa'
 import { modelSettingsRuntimeSnapshotChannelName } from '../../shared/model-settings-runtime'
-import { chatTurnFactsFromSend } from '../services/lia/brain-shadow'
+import { chatTurnFactsFromSend, chatTurnImageInputCount } from '../services/lia/brain-shadow'
 import { resolveLiaAuthoritativeSendRoute } from '../services/lia/lia-authoritative-route-resolver'
 import { createOrderedVoiceSendSequence } from '../services/lia/voice-send-sequence'
 import { useControlsIslandStore } from '../stores/controls-island'
@@ -366,19 +366,22 @@ const voiceSendSequence = createOrderedVoiceSendSequence({
     // describes the exact frozen set the logical send below receives. Brain still
     // receives only the derived boolean, never the tool names.
     const toolsToSend = [...artistryToolReferences]
+    const providerHistory = chatSession.getSessionMessagesIfLoaded(targetSessionId) ?? []
     const facts = chatTurnFactsFromSend({
       attachments: attachmentsToSend,
       // Phase 8.0D-M3: the stored conversation is part of this request too.
-      providerHistory: chatSession.getSessionMessagesIfLoaded(targetSessionId) ?? [],
+      providerHistory,
       reasoning: reasoningToSend,
       tools: toolsToSend,
     })
-    return { textToSend, targetSessionId, correlationId, reasoningToSend, toolsToSend, facts }
+    const imageInputCount = chatTurnImageInputCount({ attachments: attachmentsToSend, providerHistory })
+    return { textToSend, targetSessionId, correlationId, reasoningToSend, toolsToSend, facts, imageInputCount }
   },
   execute: async (captured) => {
     const routeOverride = await resolveLiaAuthoritativeSendRoute({
       correlationId: captured.correlationId,
       facts: captured.facts,
+      imageInputCount: captured.imageInputCount,
     })
     await chatStore.send({
       sessionId: captured.targetSessionId,

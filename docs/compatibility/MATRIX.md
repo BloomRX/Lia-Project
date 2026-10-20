@@ -27,6 +27,7 @@ Os estados de suporte não substituem os resultados de cada verificação.
 | Visão Groq em pedido mínimo | PASS integração direta no Windows | Descrição correta em JSON e SSE; não substitui o fluxo da UI |
 | Stream vazio no Chat | PASS Windows real | Erro em pt-BR, anexo/pergunta e retry preservados, log terminal failed |
 | Política de failover Lia | PASS automatizado | 15 casos no store real com IPC simulado; não aprova E2E em rede |
+| Limite numérico de imagens | PASS automatizado e Windows real | 4 imagens recusadas antes do envio; rascunho e anexos preservados. Não valida conteúdo de imagem |
 | Cadeia de voz B1/B1.1 | PASS Windows real histórico | Baseline `3ef6d11`; esta rodada observou prewarm/síntese, sem novo teste de microfone humano |
 | Lia Livre / múltiplos monitores | NÃO EXECUTADO | Implementação de produto ausente |
 | Instalador e instalação limpa | NÃO EXECUTADO | Launcher ainda sem contrato de empacotamento de release |

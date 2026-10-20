@@ -27,13 +27,14 @@ import JournalToolCallBlock from './chat-tool-renderers/journal-tool-call-block.
 import ChatViewportLayout from './chat-viewport-layout.vue'
 
 import { useHearingInputChannel } from '../composables/use-hearing-input-channel'
-import { chatTurnFactsFromSend } from '../services/lia/brain-shadow'
+import { chatTurnFactsFromSend, chatTurnImageInputCount } from '../services/lia/brain-shadow'
 import { executeLiaAuthoritativeRetry } from '../services/lia/lia-authoritative-retry'
-import { resolveLiaAuthoritativeSendRoute } from '../services/lia/lia-authoritative-route-resolver'
+import { LiaImageLimitError, resolveLiaAuthoritativeSendRoute } from '../services/lia/lia-authoritative-route-resolver'
 import { artistryToolReferences, widgetToolReferences } from '../stores/tools'
 
 const router = useRouter()
 const messageInput = ref('')
+const imageLimitMessage = ref('')
 useHearingInputChannel(messageInput)
 const lastEnterTime = ref(0)
 const attachments = ref<{ type: 'image', data: string, mimeType: string, url: string }[]>([])
@@ -98,6 +99,7 @@ async function handleSend() {
   }
 
   const textToSend = messageInput.value
+  imageLimitMessage.value = ''
   const attachmentsToSend = attachments.value.map(att => ({ ...att }))
   // The active session can change while the cross-window request is pending.
   // Keep one correlation key for both the send and its failure recovery.
@@ -134,12 +136,12 @@ async function handleSend() {
 
   // Awaited authoritative INITIAL route — resolver reuses canonical requestLiaBrainDecisionForChatTurn
   // failure/non-routable/no credential → undefined → normal Stage send continues without override
-  const routeOverride = await resolveLiaAuthoritativeSendRoute({
-    correlationId,
-    facts,
-  })
-
   try {
+    const routeOverride = await resolveLiaAuthoritativeSendRoute({
+      correlationId,
+      facts,
+      imageInputCount: chatTurnImageInputCount({ attachments: attachmentsToSend, providerHistory: messages.value as unknown as ChatHistoryItem[] }),
+    })
     await chatStore.send({
       sessionId: targetSessionId,
       text: textToSend,
@@ -153,6 +155,8 @@ async function handleSend() {
     attachmentsToSend.forEach(att => URL.revokeObjectURL(att.url))
   }
   catch (error) {
+    if (error instanceof LiaImageLimitError && chatSession.activeSessionId === targetSessionId)
+      imageLimitMessage.value = error.message
     const errorMessage = errorMessageFrom(error) ?? String(error)
     const wasCancelledForDeletedSession
       = errorMessage.includes('Chat session was reset before send could start')
@@ -244,6 +248,7 @@ async function handleFilePaste(files: File[]) {
 }
 
 function removeAttachment(index: number) {
+  imageLimitMessage.value = ''
   const attachment = attachments.value[index]
   if (attachment) {
     URL.revokeObjectURL(attachment.url)
@@ -253,6 +258,10 @@ function removeAttachment(index: number) {
 
 watch(sendMode, () => {
   lastEnterTime.value = 0
+})
+
+watch(activeSessionId, () => {
+  imageLimitMessage.value = ''
 })
 
 const historyMessages = computed(() => messages.value as unknown as ChatHistoryItem[])
@@ -293,34 +302,33 @@ async function handleRetryMessage(index: number) {
   const sourceIndex = retrySourceIndexFrom(history, index)
   const sourceContent = sourceIndex < 0 ? null : retryContentFromUserMessage(history[sourceIndex])
 
-  if (sourceMessageId === undefined) {
-    // id-less legacy: preserve legacy non-authoritative path, no Brain await
-    await chatStore.retry({
-      sessionId: targetSessionId,
-      index,
-      tools: toolsToRetry,
-    })
-    trackChatMessageRetried({ source: 'history' })
+  imageLimitMessage.value = ''
+  try {
+    await executeLiaAuthoritativeRetry(
+      {
+        sessionId: targetSessionId,
+        index,
+        sourceMessageId,
+        reasoning: reasoningToRetry,
+        tools: toolsToRetry,
+        // Phase 8.0D-M3: the retry truncates at the source turn, so the history
+        // left standing in provider context is exactly what precedes it. The
+        // source turn comes back as a fresh user message via `attachments`.
+        providerHistory: sourceIndex < 0 ? [] : history.slice(0, sourceIndex),
+        ...(sourceContent === null ? {} : { attachments: sourceContent.attachments }),
+      },
+      {
+        retry: payload => chatStore.retry(payload),
+      },
+    )
+  }
+  catch (error) {
+    if (!(error instanceof LiaImageLimitError))
+      throw error
+    if (chatSession.activeSessionId === targetSessionId)
+      imageLimitMessage.value = error.message
     return
   }
-
-  await executeLiaAuthoritativeRetry(
-    {
-      sessionId: targetSessionId,
-      index,
-      sourceMessageId,
-      reasoning: reasoningToRetry,
-      tools: toolsToRetry,
-      // Phase 8.0D-M3: the retry truncates at the source turn, so the history
-      // left standing in provider context is exactly what precedes it. The
-      // source turn comes back as a fresh user message via `attachments`.
-      providerHistory: sourceIndex < 0 ? [] : history.slice(0, sourceIndex),
-      ...(sourceContent === null ? {} : { attachments: sourceContent.attachments }),
-    },
-    {
-      retry: payload => chatStore.retry(payload),
-    },
-  )
   trackChatMessageRetried({
     source: 'history',
   })
@@ -363,6 +371,9 @@ async function handleCleanupMessages() {
     </template>
 
     <template #composer>
+      <p v-if="imageLimitMessage" role="alert" :class="['px-2 text-sm text-red-600 dark:text-red-300']">
+        {{ imageLimitMessage }}
+      </p>
       <div
         :class="[
           'min-h-0 max-h-full flex flex-col gap-1 overflow-hidden',

@@ -63,10 +63,13 @@ vitest `airi/apps/lia-app` (246 + 2 skip), `moeru-lint`, build `@proj-airi/core-
    11 casos novos, 15 aprovados no harness do store real. Recuperáveis,
    permanentes, fim da cadeia, opt-out e preferência intacta. Não aprova E2E
    contra dois serviços reais. Próximo item executável: A2.
-2. **8.0D-M3.1** — preflight do limite de 3 imagens. Foi explicitamente dividido
-   para fora da M3 e nunca entregue.
-3. **`docs/compatibility/MATRIX.md`** — criado com estados conservadores e evidência
-   parcial Windows. Ampliar após os próximos gates; não declarar suporte total.
+2. **8.0D-M3.1 — CONCLUÍDO.** Limite no descritor do modelo; contagem
+   inclui histórico elegível. Envio e retry recusam excesso preservando dados.
+   PASS automatizado e PASS Windows real do bloqueio de quatro imagens.
+   Isso não aprova o gate de reconhecimento do conteúdo.
+3. **`docs/compatibility/MATRIX.md` — CONCLUÍDO como inventário inicial.**
+   Atualizado com gates Windows e estados conservadores. Manutenção continua;
+   nenhuma plataforma foi promovida a suporte total.
 4. **Dívida de Cloud Sync v1** — envia texto puro para user/assistant. Registrada
    na §5, não corrigida.
 5. **Fatiamento portátil do `AGENTS.md`** — hoje são ~10 800 tok carregados sempre.

@@ -4,13 +4,14 @@ import type { ChatHistoryItem, ChatToolReference } from '@proj-airi/stage-ui/typ
 
 import { cloneRetryAttachments } from '@proj-airi/stage-ui/stores/chat/retry-content'
 
-import { chatTurnFactsFromSend } from './brain-shadow'
+import { chatTurnFactsFromSend, chatTurnImageInputCount } from './brain-shadow'
 import { resolveLiaAuthoritativeSendRoute } from './lia-authoritative-route-resolver'
 
 /**
  * Phase 8.0D-10B-4D4C4-D2B6 corrective: Lia-specific awaited authoritative retry sequence.
  *
- * Thin, testable owner of the stable-ID authoritative path. It owns:
+ * Thin, testable owner of the authoritative retry path. M3.1 also preflights
+ * id-less legacy messages, retaining their index instead of inventing an id. It owns:
  *   correlation mint -> facts construction -> awaited canonical resolver -> retry callback
  *
  * No second Brain invoke implementation, no duplicated resolver logic, no state,
@@ -23,7 +24,7 @@ import { resolveLiaAuthoritativeSendRoute } from './lia-authoritative-route-reso
 export interface LiaAuthoritativeRetryInput {
   sessionId: string
   index: number
-  sourceMessageId: string
+  sourceMessageId?: string
   reasoning: boolean
   tools: ChatToolReference[]
   /**
@@ -80,12 +81,13 @@ export async function executeLiaAuthoritativeRetry(
   const routeOverride = await resolveRoute({
     correlationId,
     facts,
+    imageInputCount: chatTurnImageInputCount({ attachments: attachmentsSnapshot, providerHistory: input.providerHistory }),
   })
 
   await deps.retry({
     sessionId: input.sessionId,
     index: input.index,
-    sourceMessageId: input.sourceMessageId,
+    ...(input.sourceMessageId === undefined ? {} : { sourceMessageId: input.sourceMessageId }),
     correlationId,
     reasoning: input.reasoning,
     tools: toolsSnapshot,

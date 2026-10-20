@@ -55,31 +55,78 @@ beforeEach(() => {
 })
 
 describe('lia authoritative route resolver (D1)', () => {
+  it('rejects an image count above the selected model limit before credential lookup', async () => {
+    const descriptors = groqBrainDescriptors()
+    const model = descriptors.models[1]!
+    mocks.requestDecision.mockResolvedValue({
+      status: 'automatic',
+      selection: {
+        status: 'selected',
+        route: { engine: descriptors.engines[0]!, model },
+      },
+    })
+
+    await expect(resolveLiaAuthoritativeSendRoute({
+      correlationId: CORRELATION_ID,
+      facts: { ...FACTS, hasImageInput: true },
+      imageInputCount: 4,
+    })).rejects.toThrow('Esta conversa enviaria 4 imagens; o limite é 3.')
+    expect(mocks.hasApiKey).not.toHaveBeenCalled()
+  })
+
+  it.each([0, 3])('accepts the selected model image limit boundary: %i', async (count) => {
+    const descriptors = groqBrainDescriptors()
+    mocks.requestDecision.mockResolvedValue({
+      status: 'automatic',
+      selection: { status: 'selected', route: { engine: descriptors.engines[0], model: descriptors.models[1] } },
+    })
+    await expect(resolveLiaAuthoritativeSendRoute({
+      correlationId: CORRELATION_ID,
+      facts: { ...FACTS, hasImageInput: count > 0 },
+      imageInputCount: count,
+    })).resolves.toEqual({ providerId: 'groq', modelId: descriptors.models[1]!.id })
+  })
+
+  it('uses the descriptor limit for a manual model without inventing a replacement route', async () => {
+    const descriptors = groqBrainDescriptors()
+    mocks.requestDecision.mockResolvedValue({
+      status: 'manual',
+      readiness: { status: 'ready' },
+      resolution: { status: 'resolvedModel', engine: descriptors.engines[0], model: { ...descriptors.models[1], maxImagesPerRequest: 2 } },
+    })
+    await expect(resolveLiaAuthoritativeSendRoute({
+      correlationId: CORRELATION_ID,
+      facts: { ...FACTS, hasImageInput: true },
+      imageInputCount: 3,
+    })).rejects.toThrow('Esta conversa enviaria 3 imagens; o limite é 2.')
+    expect(mocks.hasApiKey).not.toHaveBeenCalled()
+  })
+
   it('resolved + credential true → exact providerId/modelId', async () => {
-    const result = await resolveLiaAuthoritativeSendRoute({ correlationId: CORRELATION_ID, facts: FACTS })
+    const result = await resolveLiaAuthoritativeSendRoute({ correlationId: CORRELATION_ID, facts: FACTS, imageInputCount: 0 })
     expect(result).toEqual({ providerId: 'groq', modelId: 'openai/gpt-oss-120b' })
     expect(Object.keys(result!).sort()).toEqual(['modelId', 'providerId'])
   })
 
   it('resolved + credential false → undefined', async () => {
     mocks.hasApiKey.mockResolvedValue(false)
-    const result = await resolveLiaAuthoritativeSendRoute({ correlationId: CORRELATION_ID, facts: FACTS })
+    const result = await resolveLiaAuthoritativeSendRoute({ correlationId: CORRELATION_ID, facts: FACTS, imageInputCount: 0 })
     expect(result).toBeUndefined()
   })
 
   it('decision rejects → undefined and no credential lookup', async () => {
     mocks.requestDecision.mockRejectedValue(new Error('bridge down'))
-    const result = await resolveLiaAuthoritativeSendRoute({ correlationId: CORRELATION_ID, facts: FACTS })
+    const result = await resolveLiaAuthoritativeSendRoute({ correlationId: CORRELATION_ID, facts: FACTS, imageInputCount: 0 })
     expect(result).toBeUndefined()
     expect(mocks.hasApiKey).not.toHaveBeenCalled()
   })
 
   it('credential lookup rejects → undefined, not throw', async () => {
     mocks.hasApiKey.mockRejectedValue(new Error('vault error'))
-    const result = await resolveLiaAuthoritativeSendRoute({ correlationId: CORRELATION_ID, facts: FACTS })
+    const result = await resolveLiaAuthoritativeSendRoute({ correlationId: CORRELATION_ID, facts: FACTS, imageInputCount: 0 })
     expect(result).toBeUndefined()
     // should not throw
-    await expect(resolveLiaAuthoritativeSendRoute({ correlationId: CORRELATION_ID, facts: FACTS })).resolves.toBeUndefined()
+    await expect(resolveLiaAuthoritativeSendRoute({ correlationId: CORRELATION_ID, facts: FACTS, imageInputCount: 0 })).resolves.toBeUndefined()
   })
 
   it('non-routable matrix → undefined and credential zero calls', async () => {
@@ -96,7 +143,7 @@ describe('lia authoritative route resolver (D1)', () => {
     for (const decision of cases) {
       mocks.requestDecision.mockResolvedValueOnce(decision)
       mocks.hasApiKey.mockClear()
-      const result = await resolveLiaAuthoritativeSendRoute({ correlationId: CORRELATION_ID, facts: FACTS })
+      const result = await resolveLiaAuthoritativeSendRoute({ correlationId: CORRELATION_ID, facts: FACTS, imageInputCount: 0 })
       expect(result, `status=${(decision as any).status} ${(decision as any).selection?.status ?? ''}`).toBeUndefined()
       expect(mocks.hasApiKey).not.toHaveBeenCalled()
     }
@@ -114,14 +161,14 @@ describe('lia authoritative route resolver (D1)', () => {
       },
     }
     mocks.requestDecision.mockResolvedValue(unknown)
-    const result = await resolveLiaAuthoritativeSendRoute({ correlationId: CORRELATION_ID, facts: FACTS })
+    const result = await resolveLiaAuthoritativeSendRoute({ correlationId: CORRELATION_ID, facts: FACTS, imageInputCount: 0 })
     expect(result).toBeUndefined()
     expect(mocks.hasApiKey).not.toHaveBeenCalled()
   })
 
   it('exact credential providerId → candidate.providerId, not engineId nor global', async () => {
     mocks.requestDecision.mockResolvedValue(makeAutomaticSelected())
-    await resolveLiaAuthoritativeSendRoute({ correlationId: CORRELATION_ID, facts: FACTS })
+    await resolveLiaAuthoritativeSendRoute({ correlationId: CORRELATION_ID, facts: FACTS, imageInputCount: 0 })
     expect(mocks.hasApiKey).toHaveBeenCalledTimes(1)
     expect(mocks.hasApiKey).toHaveBeenCalledWith('groq')
     // ensure not called with engineId separate or with global activeProvider
@@ -129,28 +176,28 @@ describe('lia authoritative route resolver (D1)', () => {
   })
 
   it('one decision request per resolver call', async () => {
-    await resolveLiaAuthoritativeSendRoute({ correlationId: CORRELATION_ID, facts: FACTS })
+    await resolveLiaAuthoritativeSendRoute({ correlationId: CORRELATION_ID, facts: FACTS, imageInputCount: 0 })
     expect(mocks.requestDecision).toHaveBeenCalledTimes(1)
-    expect(mocks.requestDecision).toHaveBeenCalledWith({ correlationId: CORRELATION_ID, facts: FACTS })
+    expect(mocks.requestDecision).toHaveBeenCalledWith({ correlationId: CORRELATION_ID, facts: FACTS, imageInputCount: 0 })
   })
 
   it('one credential check max — candidate exists → once, no candidate → zero', async () => {
     // exists → once
     mocks.requestDecision.mockResolvedValue(makeAutomaticSelected())
     mocks.hasApiKey.mockClear()
-    await resolveLiaAuthoritativeSendRoute({ correlationId: CORRELATION_ID, facts: FACTS })
+    await resolveLiaAuthoritativeSendRoute({ correlationId: CORRELATION_ID, facts: FACTS, imageInputCount: 0 })
     expect(mocks.hasApiKey).toHaveBeenCalledTimes(1)
 
     // no candidate → zero
     mocks.requestDecision.mockResolvedValue({ status: 'disabled' } as any)
     mocks.hasApiKey.mockClear()
-    await resolveLiaAuthoritativeSendRoute({ correlationId: CORRELATION_ID, facts: FACTS })
+    await resolveLiaAuthoritativeSendRoute({ correlationId: CORRELATION_ID, facts: FACTS, imageInputCount: 0 })
     expect(mocks.hasApiKey).not.toHaveBeenCalled()
   })
 
   it('input immutability — facts and correlationId not mutated', async () => {
     const facts = { hasImageInput: true, reasoningRequested: true, usesTools: true }
-    const input = { correlationId: CORRELATION_ID, facts }
+    const input = { correlationId: CORRELATION_ID, facts, imageInputCount: 1 }
     const factsSnapshot = JSON.stringify(facts)
     const inputSnapshot = JSON.stringify(input)
     const decision = makeAutomaticSelected()
@@ -163,7 +210,7 @@ describe('lia authoritative route resolver (D1)', () => {
     expect(JSON.stringify(input)).toBe(inputSnapshot)
     expect(JSON.stringify(decision)).toBe(decisionSnapshot)
     // returned candidate is fresh, not input
-    const result = await resolveLiaAuthoritativeSendRoute({ correlationId: CORRELATION_ID, facts: FACTS })
+    const result = await resolveLiaAuthoritativeSendRoute({ correlationId: CORRELATION_ID, facts: FACTS, imageInputCount: 0 })
     expect(result).not.toBe(input as any)
   })
 
@@ -172,15 +219,15 @@ describe('lia authoritative route resolver (D1)', () => {
     mocks.requestDecision.mockResolvedValue(makeAutomaticSelected())
     mocks.hasApiKey.mockResolvedValue(true)
 
-    const first = await resolveLiaAuthoritativeSendRoute({ correlationId: 'id-1', facts: FACTS })
-    const second = await resolveLiaAuthoritativeSendRoute({ correlationId: 'id-2', facts: facts2 })
+    const first = await resolveLiaAuthoritativeSendRoute({ correlationId: 'id-1', facts: FACTS, imageInputCount: 0 })
+    const second = await resolveLiaAuthoritativeSendRoute({ correlationId: 'id-2', facts: facts2, imageInputCount: 0 })
 
     expect(first).toEqual({ providerId: 'groq', modelId: 'openai/gpt-oss-120b' })
     expect(second).toEqual({ providerId: 'groq', modelId: 'openai/gpt-oss-120b' })
     expect(mocks.requestDecision).toHaveBeenCalledTimes(2)
     expect(mocks.hasApiKey).toHaveBeenCalledTimes(2)
-    expect(mocks.requestDecision.mock.calls[0]![0]).toEqual({ correlationId: 'id-1', facts: FACTS })
-    expect(mocks.requestDecision.mock.calls[1]![0]).toEqual({ correlationId: 'id-2', facts: facts2 })
+    expect(mocks.requestDecision.mock.calls[0]![0]).toEqual({ correlationId: 'id-1', facts: FACTS, imageInputCount: 0 })
+    expect(mocks.requestDecision.mock.calls[1]![0]).toEqual({ correlationId: 'id-2', facts: facts2, imageInputCount: 0 })
   })
 
   it('no credential cache — source has no Map/Set/ref holding readiness', async () => {
@@ -205,7 +252,7 @@ describe('lia authoritative route resolver (D1)', () => {
   })
 
   it('return type — Promise<ChatSendRouteOverride|undefined> (no extra fields)', async () => {
-    const result = await resolveLiaAuthoritativeSendRoute({ correlationId: CORRELATION_ID, facts: FACTS })
+    const result = await resolveLiaAuthoritativeSendRoute({ correlationId: CORRELATION_ID, facts: FACTS, imageInputCount: 0 })
     expect(result).toEqual({ providerId: 'groq', modelId: 'openai/gpt-oss-120b' })
     expect(Object.keys(result!).sort()).toEqual(['modelId', 'providerId'])
     // ensure no extra fields like correlationId, engineId, readiness etc.
@@ -221,7 +268,7 @@ describe('lia authoritative route resolver (D1)', () => {
     const candidate = resolveLiaBrainSendRouteCandidate(decision)!
     // ensure resolver does not mutate the candidate returned by adapter
     const snapshot = JSON.stringify(candidate)
-    await resolveLiaAuthoritativeSendRoute({ correlationId: CORRELATION_ID, facts: FACTS })
+    await resolveLiaAuthoritativeSendRoute({ correlationId: CORRELATION_ID, facts: FACTS, imageInputCount: 0 })
     expect(JSON.stringify(candidate)).toBe(snapshot)
   })
 })

@@ -13,97 +13,61 @@ commit. Registra **estado**, não narrativa: relatório de rodada vai para
 
 ## 0. Estado agora
 
-**Posição**
-
 | Item | Valor |
 | --- | --- |
-| Branch | `arena/01a10290-lia-project` — tip via `git rev-parse HEAD`, não registrado aqui |
-| Baseline validado em Windows | `3ef6d11618f787dae6d197645d440a5775a60ad6` — **não promover commit posterior** |
-| `main` | `db99c709059a6d074b18361bfb32c9f144620632` — **sem merge** |
-| Prefixo de código | tudo sob `airi/` |
-| Fase | **8.0D — First Multimodal Brain Adapter**, não CLOSED; **8.0E não iniciado** |
+| Branch | `arena/01a10290-lia-project`; tip sempre via `git rev-parse HEAD` |
+| Baseline funcional Windows | `3ef6d11618f787dae6d197645d440a5775a60ad6` — **não promover commit posterior** |
+| `main` | `db99c709059a6d074b18361bfb32c9f144620632` — sem merge |
+| Fase | **8.0D aberta**, gate de conteúdo da imagem ainda FAIL; 8.0E não iniciada |
+| Plano local | `docs/product/PLANO-FINALIZACAO-LIA.md` (o caminho em `docs/project/` não existe) |
 
-**Provado em Windows real:** cadeia de voz gerenciada B1/B1.1 (**E2E PASS**; blocker
-encerrado, §2) · bootstrap de roteamento do Brain e seleção de rota (**M2**) · conversa só
-de texto (**DONE**). Automatizado na §4; verde **não é** gate de runtime.
+**Windows real comprovado nesta rodada de 20/10/2026:**
 
-**Quebrou por último**
+- `Lia.bat` original → Launcher → Conversar → build concluído → Node real →
+  Stage visível. Encerramento gerenciado observado e processos removidos.
+- Chat: corrigida seleção por janela; nova conversa manteve a resposta **42**.
+- Stream vazio agora produz erro em pt-BR e terminal `failed`, com retry e
+  rascunho/anexos preservados. Não aprovar apenas o HTTP 200 do serviço.
+- **A2 / M3.1 concluído:** quatro imagens recusadas pelo limite do modelo (3),
+  aviso em pt-BR, texto e quatro prévias preservados, zero requisições do prompt
+  sintético ao serviço. Contagem inclui histórico elegível e cobre envio/retry/
+  captura de voz. Retry antigo sem ID mantém alvo por índice e passa pelo preflight.
+- Voz B1/B1.1 continua PASS **histórico**, sem novo teste humano de microfone.
 
-- **M3.0a** — Stage invisível no Windows por `dist` obsoleto do `core-agent` (§5).
-- **M3.0b** — pré-requisito de build preso em `starting`, sem estado final. Causa medida:
-  `process.execPath` no processo main é o binário Electron, não Node. Correção coberta por teste e abertura/encerramento **PASS Windows real** em
-  20/10/2026 nesta rodada (detalhes abaixo); gate de imagem permanece pendente (§5).
+**Automatizado final da A2:** Core 353 testes, serviços de autoridade 76,
+browser 15, Launcher 247 + 2 skips, Node 267, Python 487 casos/10 skips:
+**PASS**. Lint dos arquivos alterados, typechecks Core/Stage e build Core: PASS.
+A1 concluído: 11 casos novos da política real, 15 aprovados; opt-out e preferência
+intactos. Isso não aprova failover E2E contra serviços reais.
+Python teve FAIL intermitente em limpeza de fixtures (WinError 32/5), inclusive
+na repetição após A1; a repetição após A2 passou em 272 s. Detentor/causa não
+identificados; não ignorar, aumentar timeout ou declarar esse problema resolvido.
 
-**Gate que falta:** Windows E2E **visual** (§5) — abrir pelo `Lia.bat`, anexar imagem,
-pergunta determinística sobre o conteúdo, rota `groq` + `qwen/qwen3.8-27b`, resposta
-correta pela imagem, e turno só de texto permanecendo no GPT-OSS.
+**Bloqueio de saída da 8.0D:** o Qwen descreveu corretamente a imagem em pedidos
+mínimos JSON/SSE. Comparação controlada com as MESMAS mensagens, SSE e limite
+128: sete ferramentas → stop sem conteúdo; sem ferramentas → descrição correta.
+O conjunto altera o resultado, mas o defeito específico de schema/modelo ainda
+não foi localizado. Não desativar capacidades como workaround nem alterar Persona.
+9router `http://localhost:20128/v1`: último reteste de envio manteve HTTP 401
+`invalid_api_key` (catálogo era acessível). Nenhuma chave foi lida/impressa para contornar.
 
-**Em andamento:** reorganização dos arquivos de instrução (medição em
-`tools/agents-docs/`).
+**Onde parou:** A1 e A2 concluídos; A3 (matriz inicial) criado e atualizado com
+estados conservadores. Cloud Sync v1 (A4) e fatiamento de instruções (A5) pendentes.
+**Próximo item exato:** retirar o bloqueio imagem+ferramentas da 8.0D: isolar o
+conjunto/schema enviado ao Qwen com fixture sintética e parâmetros iguais, sem
+alterar fallback, Persona, secrets ou STT/TTS. Depois repetir imagem correta na
+UI + texto independente no GPT-OSS, antes de avançar Launcher/presença/release.
 
-**Retomada — 20/10/2026:** finalização Windows autorizada pelo Dev, com plano
-local em `docs/product/PLANO-FINALIZACAO-LIA.md` (não em `docs/project/`).
-**M3.0b: abertura e encerramento PASS Windows real nesta rodada**:
-`Lia.bat` → Launcher → clique Conversar → build concluído em 3,6 s →
-`node-from-path` → personagem visível; encerramento gerenciado em 606 ms.
-O patch Node já estava aplicado. Uma rejeição inesperada do pré-requisito ainda
-deixava `starting`; reprodução automatizada falhou antes e passou após correção,
-com erro terminal e retry. Launcher: 247 aprovados + 2 skips; testes dirigidos:
-43 aprovados; lint, typecheck e build do launcher: PASS automatizado.
+Execução de QA encerrada normalmente às `22:50:57Z`; PID 17048 e Electron do
+checkout ausentes. Sondagens temporárias restauradas. Evidências locais em
+`Tests/runs/release-20261019/` (ignorado). Relatório, arquivos, comandos e DoD:
+[`RELEASE-WINDOWS-2026-10-20.md`](../product/RELEASE-WINDOWS-2026-10-20.md).
+Instalador/instalação limpa NÃO EXECUTADOS; release incompleta, baseline inalterado.
 
-**Seleção de sessão corrigida:** o snapshot do índice sincronizado substituía
-uma seleção local válida pela sessão padrão do líder. Regressão reproduzida
-antes da correção com dois contextos Pinia reais; agora 5 testes browser e
-20 node aprovados; lint e typecheck Stage UI: PASS automatizado.
-No Electron, nova conversa manteve seleção e resposta **42** para 19 + 23:
-**PASS Windows real** (`text-after-selection-fix.png`).
-
-**Resposta vazia corrigida:** o runtime agora falha quando o serviço termina
-sem conteúdo nem ferramentas, em vez de registrar sucesso sem mensagem.
-Reprodução falhou antes da correção; núcleo: 143 testes aprovados; Chat Stage UI:
-255 aprovados; lint dos três arquivos, typechecks core-agent/Stage UI e build
-core-agent: PASS automatizado. **PASS Windows real do erro:** anexo/pergunta
-preservados, mensagem em pt-BR e retry, log `sendTerminalOutcome=failed`
-(`image-empty-error-visible.png`, correlação `556292c8` às 03:47:10.353Z).
-
-**Bloqueio de imagem:** sondagem mediu HTTP 200 + stop com zero conteúdo no
-pedido completo. Requisição mínima ao mesmo Qwen/Groq, JSON e SSE, descreveu
-corretamente o retângulo vermelho à esquerda e círculo azul à direita. Isso
-valida a integração direta, **não o gate da Lia**. Pedido completo tem sete
-ferramentas. Comparação controlada manteve mensagens, SSE e limite 128:
-com ferramentas, stop e zero conteúdo; sem elas, descrição correta da imagem.
-A presença desse conjunto muda o resultado; ainda não foi localizado o defeito
-específico de schema/modelo. Não desativar recursos como workaround nem alterar Persona.
-9router `http://localhost:20128/v1`: catálogo acessível; envio deu 401
-`Missing API key`. Não ler/imprimir credenciais para contornar.
-Python: repetição após seleção PASS (487 casos, 10 skips, exit 0); falhas
-anteriores de limpeza WinError 32/5 em ambos os interpretadores seguem
-intermitentes, detentor não identificado. Node: 267 PASS; Launcher: 247 + 2 skips.
-Detalhes, inventário e checklist: `docs/product/RELEASE-WINDOWS-2026-10-20.md`.
-**A1 concluído:** 11 novos casos dirigidos da política real de failover,
-15 aprovados no arquivo de testes do store Lia. Erros recuperáveis/permanentes,
-fim da cadeia, opt-out e preferência intacta; nenhuma mudança no fallback de
-produção. Typecheck Stage e lint do arquivo: PASS. E2E de failover em rede NÃO EXECUTADO.
-Suítes repetidas após `457b5b1`: Python 487/10 skips, Node 267, Launcher
-247 + 2 skips, todos PASS automatizado.
-**Próximo item exato:** A2 — preflight numérico do limite de imagens, com limite
-no descritor do modelo e contagem do contexto efetivamente enviado (incluindo
-histórico elegível). Preservar rascunho/anexos na recusa e impedir envio legado
-quando houver excesso; não hardcode no componente. Depois retomar o defeito
-imagem+ferramentas, preservando Persona, fallback e voz.
-Launcher de diagnóstico aberto com CDP 9250, sem alteração de `Lia.bat`;
-sondagens temporárias de fetch já restauradas. Evidências em
-`Tests/runs/release-20261019/`. Gate de conteúdo da imagem na UI segue FAIL;
-baseline funcional permanece `3ef6d11`.
-
-**Próximos passos:** (1) gate Windows E2E visual; (2) fechar itens automatizáveis
-da 8.0D; (3) Launcher e presença conforme o plano de finalização. A matriz de
-compatibilidade registra evidência parcial, sem declarar a release suportada.
-
-**Quanto falta:** [`QUANTO-FALTA.md`](QUANTO-FALTA.md) — o que resta, separado
-entre o que um agente faz sozinho em Linux e o que exige o Windows do Dev.
-
-**Antes de alterar código:** ler a **§6 — Regras permanentes**.
+**Restrições de continuidade:** preservar a remoção preexistente de
+`docs/Concepts/LauncherConcept.png` e o plano não rastreado; sem reset/clean/rebase/
+merge/push, nova branch ou mudanças em `Lia.bat`/`DevKit.bat`.
+**Quanto falta:** [`QUANTO-FALTA.md`](QUANTO-FALTA.md). **Antes de código:** §6.
 
 ---
 

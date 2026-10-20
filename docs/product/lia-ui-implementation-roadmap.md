@@ -279,3 +279,12 @@ Concept PNGs should be committed under:
 Production assets should live in the application's normal asset tree.
 
 Update documentation whenever a deliberate product-level decision changes.
+
+
+### Verificação local — 20/10/2026, M3.1
+
+O Chat recusa excesso de imagens antes do serviço, com aviso em pt-BR e
+rascunho/anexos preservados. Limite no modelo e histórico elegível incluído;
+retry e captura de voz usam a mesma contagem. PASS automatizado e Windows real
+para quatro imagens. Isso fecha A2; não fecha a 8.0D nem aprova imagem com
+ferramentas. Evidência e Definition of Done: [rodada Windows](RELEASE-WINDOWS-2026-10-20.md).

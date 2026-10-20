@@ -165,6 +165,67 @@ Chat (255 PASS na rodada anterior); E2E de failover em rede segue NÃO EXECUTADO
 Após `457b5b1`, as suítes da raiz repetiram PASS: Node 267; Python 487 casos,
 10 skips, em 320,6 s; Launcher 247 + 2 skips. Logs `*-after-empty-stream.log`.
 
+## A2 / 8.0D-M3.1 — preflight de imagens
+
+**PASS automatizado e PASS Windows real da recusa por excesso.** O limite fica
+no descritor do modelo (`maxImagesPerRequest`), com 3 no Qwen configurado, e não
+no componente. O contador reutiliza a projeção canônica do Core: anexos novos +
+imagens do histórico elegível. Turnos falhos e erros não aumentam a contagem.
+
+A autoridade verifica modelos resolvidos nos modos automático e manual antes
+de consultar presença de credencial. Excesso gera erro explícito; não retorna
+undefined para cair no envio legado. Nenhum conteúdo ou contador novo atravessa
+o IPC do Brain. A UI preserva rascunho/anexos, mostra aviso em pt-BR e não move
+o aviso para outra sessão. Retry verifica antes de truncar histórico, inclusive
+mensagens antigas sem ID: mantém o índice, sem inventar identidade, mas passa
+pela mesma autoridade. A captura de voz carrega a contagem do histórico sem
+alterar STT/TTS, providers ou o sequenciamento de voz.
+
+Verificações:
+
+| Comando/roteiro | Resultado |
+| --- | --- |
+| Teste de regressão do resolver antes da implementação | RED: 4 imagens ainda retornavam uma rota |
+| Vitest node: brain-shadow, authoritative resolver e retry | PASS automatizado: 76 casos |
+| Vitest browser: `InteractiveArea.browser.test.ts` | PASS automatizado: 15 casos; inclui 4 anexos e 3 imagens no histórico + 1 anexo |
+| `pnpm --filter @lia/core test` | PASS automatizado: 353 casos |
+| `pnpm --filter @lia/core build` | PASS automatizado |
+| Typechecks Lia Core e Stage | PASS automatizado |
+| `moeru-lint` nos arquivos tocados | PASS automatizado |
+| Windows: Lia.bat → Conversar → nova sessão → anexar 4 PNGs → enviar | PASS Windows real: aviso 4 > 3, rascunho e quatro prévias preservados |
+
+Evidências locais: `image-limit-refused.png` (inspecionada visualmente),
+`image-limit-before.png`, `image-limit-composer-state.json`,
+`image-limit-network-counter.json`, `launcher-image-limit.log` e
+`image-limit-*.log`. O contador é restrito ao prompt sintético de QA e mediu
+zero requisições desse prompt; conversas de fundo não são contadas nem retidas.
+A sondagem foi restaurada. O Launcher foi encerrado normalmente às
+`22:50:57.289Z`, em 538 ms; PID 17048 e Electron do checkout estavam ausentes.
+
+O navegador registrou avisos de ResizeObserver, sem falha da suíte. Uma tentativa
+de teste foi interrompida por `dist` sendo reconstruído pelo Launcher ao mesmo
+tempo; a execução sequencial posterior do resolver passou. Não houve alteração
+de timeout, supressão de erro, instalação ou baseline funcional.
+
+Arquivos da A2:
+
+- `airi/packages/lia-core/src/brain/types.ts`
+- `airi/packages/lia-core/src/brain/adapters/groq.ts`
+- `airi/apps/stage-tamagotchi/src/renderer/services/lia/brain-shadow.ts` e teste
+- `airi/apps/stage-tamagotchi/src/renderer/services/lia/lia-authoritative-route-resolver.ts` e teste
+- `airi/apps/stage-tamagotchi/src/renderer/services/lia/lia-authoritative-retry.ts` e teste
+- `airi/apps/stage-tamagotchi/src/renderer/components/InteractiveArea.vue` e teste browser
+- `airi/apps/stage-tamagotchi/src/renderer/pages/index.vue`
+
+Suítes finais após A2: Node 267 PASS; Launcher 247 + 2 skips PASS;
+Python 487 casos/10 skips PASS em 272 s (logs `*-after-a2.log`). A repetição
+Python imediatamente após A1 havia falhado na limpeza de fixture Git, sem
+mudança nessas ferramentas nesta feature. Intermitência continua registrada.
+
+Limites: apenas modelos resolvidos com limite declarado podem ser verificados.
+Não é um limitador de tokens/quota da conta, nem prova reconhecimento da imagem.
+O gate de imagem+texto na UI continua FAIL por resposta vazia com ferramentas.
+
 ## Problemas ativos
 
 - **Imagem — FAIL:** anexo sintético de 240×160, retângulo vermelho à esquerda
@@ -179,7 +240,8 @@ Após `457b5b1`, as suítes da raiz repetiram PASS: Node 267; Python 487 casos,
 - **9router — BLOCKED para envio:** catálogo acessível em
   `http://localhost:20128/v1/models`; requisição com a mesma imagem sintética ao
   modelo `visao` respondeu HTTP 401. Nenhuma credencial foi lida ou exposta.
-  O Dev foi solicitado a configurar a autenticação por mecanismo local.
+  O Dev foi solicitado a configurar a autenticação por mecanismo local. Reteste
+  nesta retomada manteve 401/invalid_api_key, sem ler nenhuma chave.
   Isso não substitui o gate original da Groq.
 - **Python — intermitência:** `python3` da Store: 487 casos, 1 erro de limpeza e
   10 skips. `python` nativo: 487 casos, 3 erros de limpeza e 10 skips.
@@ -204,7 +266,8 @@ Após `457b5b1`, as suítes da raiz repetiram PASS: Node 267; Python 487 casos,
 - [ ] FAIL: imagem determinística sem resposta visível; texto após imagem ainda NÃO EXECUTADO.
 - [ ] NÃO EXECUTADO: novo teste humano de microfone; baseline de voz preservado.
 - [x] PASS automatizado: política real de failover recuperável/permanente, fim da cadeia e opt-out.
-- [ ] NÃO EXECUTADO: failover E2E contra serviços reais; preflight numérico de imagens.
+- [x] PASS automatizado e Windows real: preflight numérico recusa excesso sem perder rascunho/anexos.
+- [ ] NÃO EXECUTADO: failover E2E contra serviços reais.
 - [ ] NÃO EXECUTADO: loop real de ferramentas e medições de latência/rede.
 - [ ] PARCIAL: Launcher corresponde aos concepts e oferece apenas controles funcionais.
 - [ ] NÃO EXECUTADO: presença Livre e multi-monitor, persistência e recuperação.

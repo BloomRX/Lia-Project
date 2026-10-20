@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { electronLiaBrainChatDecision } from '../../../shared/eventa'
 import { normalizeLineEndings } from '../../../test-helpers'
-import { chatTurnFactsFromSend, observeLiaBrainDecisionForChatTurn, requestLiaBrainDecisionForChatTurn } from './brain-shadow'
+import { chatTurnFactsFromSend, chatTurnImageInputCount, observeLiaBrainDecisionForChatTurn, requestLiaBrainDecisionForChatTurn } from './brain-shadow'
 
 /**
  * Phases 8.0D-9 / 8.0D-10B-3B2: the shadow Brain observer.
@@ -269,6 +269,17 @@ describe('shadow brain observer (Phase 8.0D-9)', () => {
     const before = JSON.stringify(input)
     expect(Object.keys(chatTurnFactsFromSend(input)).sort()).toEqual(['hasImageInput', 'reasoningRequested', 'usesTools'])
     expect(JSON.stringify(input)).toBe(before)
+  })
+
+  it('counts new images and eligible history without counting failed turns', () => {
+    const input = {
+      attachments: [{}, {}],
+      providerHistory: [imageTurn(1), imageTurn(4, { excludedFromProviderContext: true })],
+    }
+    const snapshot = JSON.stringify(input)
+    expect(chatTurnImageInputCount(input)).toBe(3)
+    expect(chatTurnImageInputCount({ attachments: [], providerHistory: [] })).toBe(0)
+    expect(JSON.stringify(input)).toBe(snapshot)
   })
 
   /** One stored user turn carrying exactly `count` image parts. */

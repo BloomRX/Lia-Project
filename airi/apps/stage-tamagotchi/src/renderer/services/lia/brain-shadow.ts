@@ -4,7 +4,7 @@ import type { LiaBrainChatDecision, LiaBrainChatTurnFacts } from '../../../share
 
 import { errorMessageFrom } from '@moeru/std'
 import { useElectronEventaInvoke } from '@proj-airi/electron-vueuse'
-import { hasProviderContextImageInput } from '@proj-airi/stage-ui/stores/chat/provider-context'
+import { countProviderContextImageParts } from '@proj-airi/stage-ui/stores/chat/provider-context'
 
 import { electronLiaBrainChatDecision } from '../../../shared/eventa'
 
@@ -50,7 +50,7 @@ import { electronLiaBrainChatDecision } from '../../../shared/eventa'
  * Provider-excluded turns (failed sends) and error bubbles therefore
  * contribute nothing, exactly as they contribute nothing to the prompt.
  */
-export function chatTurnFactsFromSend(input: {
+interface ChatTurnInputSnapshot {
   /** The attachments actually being sent with this turn. */
   attachments: readonly unknown[]
   /**
@@ -63,9 +63,16 @@ export function chatTurnFactsFromSend(input: {
   reasoning: boolean
   /** The tool references supplied with this turn. */
   tools: readonly unknown[]
-}): LiaBrainChatTurnFacts {
+}
+
+/** Counts exactly the new attachments plus the eligible stored image parts. */
+export function chatTurnImageInputCount(input: Pick<ChatTurnInputSnapshot, 'attachments' | 'providerHistory'>): number {
+  return input.attachments.length + countProviderContextImageParts(input.providerHistory)
+}
+
+export function chatTurnFactsFromSend(input: ChatTurnInputSnapshot): LiaBrainChatTurnFacts {
   return {
-    hasImageInput: input.attachments.length > 0 || hasProviderContextImageInput(input.providerHistory),
+    hasImageInput: chatTurnImageInputCount(input) > 0,
     reasoningRequested: input.reasoning,
     usesTools: input.tools.length > 0,
   }

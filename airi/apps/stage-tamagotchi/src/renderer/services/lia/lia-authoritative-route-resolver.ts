@@ -1,3 +1,4 @@
+import type { LiaBrainRoutingDecision } from '@lia/core'
 import type { ChatSendRouteOverride } from '@proj-airi/stage-ui/stores/chat'
 
 import type { LiaBrainChatTurnFacts } from '../../../shared/eventa'
@@ -15,6 +16,10 @@ import { requestLiaBrainDecisionForChatTurn } from './brain-shadow'
  *     → existing sanitized credential-presence seam (hasApiKey → electronLiaSecretHas)
  *     → ChatSendRouteOverride | undefined
  *
+ * M3.1: before selecting a candidate, enforce the resolved model image limit.
+ * The caller count includes eligible history and stays local (never sent over IPC).
+ * An excess throws explicitly so it cannot fall through to a legacy send.
+ *
  * Freshness / immutability: does not mutate input, facts, decision, candidate or provider state.
  * No fallback, no send, no payload construction, no tools/reasoning capture, no cache,
  * no secret value read, no provider registry precheck, no Core coupling.
@@ -28,13 +33,22 @@ import { requestLiaBrainDecisionForChatTurn } from './brain-shadow'
 export interface ResolveLiaAuthoritativeSendRouteInput {
   correlationId: string
   facts: LiaBrainChatTurnFacts
+  imageInputCount: number
+}
+
+/** A refused request is not an invitation to send through the legacy route. */
+export class LiaImageLimitError extends Error {
+  constructor(count: number, limit: number) {
+    super(`Esta conversa enviaria ${count} imagens; o limite é ${limit}. Remova anexos ou comece uma nova conversa.`)
+    this.name = 'LiaImageLimitError'
+  }
 }
 
 export async function resolveLiaAuthoritativeSendRoute(
   input: ResolveLiaAuthoritativeSendRouteInput,
 ): Promise<ChatSendRouteOverride | undefined> {
   // 1. request Brain decision via canonical awaited primitive
-  let decision: unknown
+  let decision: LiaBrainRoutingDecision
   try {
     decision = await requestLiaBrainDecisionForChatTurn(input)
   }
@@ -42,8 +56,17 @@ export async function resolveLiaAuthoritativeSendRoute(
     return undefined
   }
 
+  const model = decision.status === 'automatic' && decision.selection.status === 'selected'
+    ? decision.selection.route.model
+    : decision.status === 'manual' && decision.resolution.status === 'resolvedModel'
+      ? decision.resolution.model
+      : undefined
+  const limit = model?.maxImagesPerRequest
+  if (limit !== undefined && input.imageInputCount > limit)
+    throw new LiaImageLimitError(input.imageInputCount, limit)
+
   // 2. convert with adapter
-  const candidate = resolveLiaBrainSendRouteCandidate(decision as never)
+  const candidate = resolveLiaBrainSendRouteCandidate(decision)
   if (candidate === undefined)
     return undefined
 

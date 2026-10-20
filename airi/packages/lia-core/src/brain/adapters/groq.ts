@@ -165,6 +165,7 @@ export function groqBrainDescriptors(): LiaBrainDescriptorSet {
         capabilities: { ...VISION_BRAIN_CAPABILITIES },
         engineId: GROQ_BRAIN_ENGINE_ID,
         id: GROQ_BRAIN_VISION_MODEL_ID,
+        maxImagesPerRequest: 3,
         name: 'Qwen3.8 27B',
       },
     ],

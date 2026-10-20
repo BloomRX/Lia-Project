@@ -7,6 +7,11 @@ de rejeição inesperada do pré-requisito, com regressão e retry. A descriçã
 trabalho perdido abaixo é histórica. Também foram corrigidos o restauro de
 seleção local em `packages/stage-ui/src/stores/chat/session-store.ts` e o falso
 sucesso de stream vazio em `packages/core-agent/src/runtime/chat-orchestrator-runtime.ts`.
+O preflight M3.1 declara `maxImagesPerRequest` no modelo de Lia Core e aplica
+a recusa no adaptador Stage, contando também histórico elegível. Retry antigo
+sem ID passa pela autoridade antes de reenviar, preservando seu alvo por índice.
+Nenhum patch Node foi reaplicado; Persona, credenciais, STT/TTS e política de
+fallback de produção foram preservados.
 São diffs pequenos sobre o runtime compartilhado, com regressões; preservar
 na próxima atualização upstream. Evidências e limites em
 [`product/RELEASE-WINDOWS-2026-10-20.md`](product/RELEASE-WINDOWS-2026-10-20.md).

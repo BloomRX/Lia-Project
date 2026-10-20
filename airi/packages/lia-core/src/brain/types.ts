@@ -74,6 +74,8 @@ export interface LiaBrainModelDescriptor {
   engineId: string
   /** Stable model id. */
   id: string
+  /** Maximum images in one request, including provider-visible history. */
+  maxImagesPerRequest?: number
   /**
    * Optional metadata for FUTURE routing (context size, quality hints...).
    * Opaque in this phase - the registry never reads it.
