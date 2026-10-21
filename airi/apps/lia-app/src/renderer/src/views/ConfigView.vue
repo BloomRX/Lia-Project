@@ -89,12 +89,12 @@ async function save() {
       <div class="card">
         <h3>IA</h3>
         <label class="field">
-          Provedor preferido
-          <input v-model="form.providerId" placeholder="openrouter" spellcheck="false">
+          Serviço de IA
+          <input v-model="form.providerId" placeholder="identificador do serviço" spellcheck="false">
         </label>
         <label class="field">
           Modelo
-          <input v-model="form.modelId" placeholder="ex.: anthropic/claude-sonnet-4" spellcheck="false">
+          <input v-model="form.modelId" placeholder="ex.: modelo oferecido pelo serviço" spellcheck="false">
         </label>
         <label class="field">
           Chave de API <span class="dim">({{ status?.ai?.ready ? 'uma chave já está guardada' : 'nenhuma guardada ainda' }})</span>

@@ -580,14 +580,13 @@ Criar ou utilizar uma abstração adequada de provider.
 
 A arquitetura deve permitir:
 
-- Groq;
-- Cerebras;
-- OpenAI-compatible APIs;
-- OpenRouter;
-- outros serviços cloud;
-- Ollama;
-- llama.cpp;
-- outros runtimes locais.
+- qualquer endpoint compatível com OpenAI;
+- serviços cloud;
+- runtimes locais;
+- outros serviços.
+
+A lista é de capacidades de transporte, não de marcas.
+Qualquer serviço que fale o protocolo entra sem alterar código.
 
 ==================================================
 17. OPENAI-COMPATIBLE
@@ -595,10 +594,7 @@ A arquitetura deve permitir:
 
 A Lia deve aproveitar APIs OpenAI-compatible quando possível.
 
-Não hardcode:
-
-Groq = determinado modelo
-Cerebras = determinado modelo
+Não amarrar fornecedor a modelo fixo.
 
 Em vez disso:
 
@@ -614,6 +610,60 @@ Modelos podem mudar.
 
 O catálogo não deve ficar espalhado em código.
 
+REGRA DE MARCA
+
+Nome de fornecedor de IA não entra no código nem na interface.
+
+Nem como identidade, nem como exemplo, nem em comentário, nem em placeholder.
+
+Também não entra:
+
+porta fixa de serviço
+nome de combo
+endereço de serviço de terceiro embutido no código
+
+O produto guarda apenas:
+
+endereço
++
+chave
+
+E pergunta ao endereço o que ele sabe fazer:
+
+GET /v1/models
+
+O que o serviço oferece é descoberto em tempo de execução, nunca presumido.
+
+Na interface, escrever sempre "serviço de IA".
+
+Nunca a marca.
+
+Motivo: o serviço muda de endereço, de dono e de nome.
+Código que depende do nome quebra quando o nome muda.
+
+TESTE DE CONEXÃO
+
+Teste de conexão não pode ser só um "oi".
+
+Se o aplicativo pede ferramenta ao modelo, o teste tem que pedir ferramenta.
+
+O teste manda uma ida-e-volta completa:
+
+tool_use
+    ↓
+tool_result
+    ↓
+resposta final
+
+E confere se a volta chegou inteira.
+
+Existe provedor que conversa normalmente em texto e rejeita o formato em blocos.
+Descoberto na prática.
+
+Um ping de texto aprova esse provedor, e ele quebra na primeira ferramenta real.
+
+Aprovar conexão com um "oi" não é aprovar conexão.
+
 ==================================================
 18. PROVIDER ROUTING
 ==================================================
@@ -625,22 +675,33 @@ Criar mentalidade de routing.
 Exemplo futuro:
 
 Normal chat:
-→ Groq
+→ serviço de IA configurado
 
 Complex task:
-→ outro provider
+→ serviço com capacidade de raciocínio
 
 Offline:
-→ local
+→ serviço local
 
 Vision:
-→ vision provider
+→ serviço com capacidade de imagem
 
 Cheap mode:
-→ provider econômico
+→ serviço econômico
 
 Advanced reasoning:
-→ provider especializado
+→ serviço especializado
+
+A regra de marca do §17 vale para o roteamento também.
+
+A rota é escolhida por capacidade descoberta no endereço, nunca por nome de
+fornecedor.
+
+Nenhum nome de fornecedor, porta fixa ou nome de combo entra na tabela de
+rotas, no código de seleção ou no texto que o usuário lê.
+
+E nenhuma rota é aprovada por um ping de texto: se a rota declara ferramenta,
+o teste de conexão dela inclui a ida-e-volta de ferramenta (§17).
 
 Portanto:
 
@@ -672,6 +733,14 @@ TTS
 → Voice service
 
 Criar arquitetura que permita encaminhar cada tarefa ao componente apropriado.
+
+Nenhuma tarefa é encaminhada por nome de fornecedor.
+
+O encaminhamento usa a capacidade declarada e confirmada pela rota:
+texto, imagem, ferramenta, voz.
+
+Se duas rotas servem, a escolha é por capacidade e disponibilidade,
+nunca por marca.
 
 Conceito:
 
