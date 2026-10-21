@@ -8,8 +8,8 @@ import { REPO_ROOT } from './qa-shared.mjs'
 /**
  * The real smoke (production runtime + model download) must NOT run in the
  * Agent sandbox, so these are static guarantees over the runner source:
- * the 7.9G-QA output-dir seam exists, and ordinary standalone behavior is
- * byte-for-byte the historical one.
+ * the output-dir seam exists and standalone artifacts stay inside Tests.
+ * The production runtime-home resolution remains unchanged.
  */
 const SMOKE_SOURCE = readFileSync(nodePath.join(REPO_ROOT, 'tools', 'kokoro-smoke.mjs'), 'utf-8')
 
@@ -19,8 +19,8 @@ describe('kokoro-smoke.mjs: output-dir seam is tooling-only and backward compati
     assert.match(SMOKE_SOURCE, /nodePath\.resolve\(REPO_ROOT, outDirArg\)/)
   })
 
-  it('without the argument, the historical .devkit-qa destination stays the default', () => {
-    assert.match(SMOKE_SOURCE, /'\.devkit-qa'/)
+  it('without the argument, artifacts stay inside the Tests workspace', () => {
+    assert.match(SMOKE_SOURCE, /nodePath\.join\(REPO_ROOT, 'Tests', 'artifacts'\)/)
     assert.match(SMOKE_SOURCE, /'kokoro-smoke'/)
     // The default is chosen when no argument was given.
     assert.match(SMOKE_SOURCE, /outDirArg \? .* : nodePath\.join\(QA_DIR, 'kokoro-smoke'\)/)

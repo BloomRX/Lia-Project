@@ -12,3 +12,5 @@ Tests/runs/
 Tests/runtimes/
 Tests/logs/
 Tests/inventory/
+Tests/tmp/
+Tests/artifacts/

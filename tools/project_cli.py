@@ -1191,7 +1191,7 @@ def kokoro_smoke():
     dists de producao do lia-core (createKokoroVoiceEngine, resolveKokoroLayout,
     resolveVoiceRuntimeHome, runKokoroSmoke): nada de harness de QA duplicado.
     Primeira execucao instala o runtime (venv + modelo sha256-pinado); as demais
-    reutilizam sem redownload se os hashes conferem. WAVs ficam em .devkit-qa/.
+    reutilizam sem redownload se os hashes conferem. WAVs ficam em Tests/artifacts/kokoro-smoke/.
     """
     script = KIT / "tools" / "kokoro-smoke.mjs"
     if not script.is_file():

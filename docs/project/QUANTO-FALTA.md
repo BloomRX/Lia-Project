@@ -11,6 +11,12 @@ Fonte: [`CURRENT-STATE.md`](CURRENT-STATE.md) §0 e §5, medido em
 
 ## Onde o projeto está
 
+Retomada de 21/10: preflight Python 495/10 skips, Node 267, Launcher 247/2 skips
+e core-agent 144 PASS. Fixtures e artefatos reorganizados sob `Tests/tmp` e
+`Tests/artifacts`; evidências e limites em
+[`RELEASE-WINDOWS-2026-10-21.md`](../product/RELEASE-WINDOWS-2026-10-21.md).
+O gate de conteúdo de imagem permanece aberto.
+
 Atualização local de 20/10/2026: a finalização Windows foi autorizada pelo Dev.
 O fluxo `Lia.bat → Launcher → Conversar → Stage visível` e o encerramento foram
 executados no PC. Uma rejeição inesperada do pré-requisito agora termina em erro

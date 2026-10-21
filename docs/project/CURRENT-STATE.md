@@ -49,10 +49,12 @@ strict=false → descrição correta. Mantidos schema e ferramenta, validação 
 local antes do despacho e contrato interno de broadcast. Sem hardcode de modelo.
 29 testes dirigidos, lint e typecheck Stage UI PASS. Build de produção Stage PASS;
 Node 267 e Launcher 247 + 2 skips PASS nesta repetição.
-Python após Spark: **FAIL**, 487 casos/10 skips, um erro na limpeza do teste
-`GitFlowTests.test_no_push_commits_offline_without_remote` (WinError 32/5,
-279 s). Causa/detentor continuam não identificados. **STOP AND REPORT:** não
-iniciar outro item com a suíte obrigatória falhando; não ignorar a limpeza.
+Python após Spark teve FAIL de limpeza. O checkout recebeu posteriormente
+limpeza resiliente e evidência de cinco repetições aprovadas. **Preflight de
+21/10:** Python 495/10 skips PASS, Node 267 PASS, Launcher 247/2 skips PASS e
+core-agent 144 PASS; instalação e builds de pré-requisito PASS. Isso não prova
+quem detinha os handles antigos. A hipótese de `trim()` para o espaço foi
+refutada pelo caso exercitado no commit `9267a50`; não reaplicar correção especulativa.
 
 **Bloqueio de saída da 8.0D:** no Windows, as sete ferramentas foram mantidas e
 a resposta voltou a aparecer, mas o retângulo foi chamado de quadrado: conteúdo
@@ -64,22 +66,28 @@ de raciocínio em inglês. Não promover gate nem baseline por sucesso do stream
 
 **Onde parou:** A1 e A2 concluídos; A3 (matriz inicial) criado e atualizado com
 estados conservadores. Cloud Sync v1 (A4) e fatiamento de instruções (A5) pendentes.
-**Próximo item exato:** investigar a falha de limpeza Python registrada em
-`python-after-spark.log` e obter baseline verificável antes de nova alteração.
-Depois, regressão RED e correção dos espaços perdidos no Chat
-quando chunks seguros contêm apenas whitespace, preservando os hooks de voz.
-Depois continuar o gate de conteúdo da imagem e as pendências da 8.0D antes
+**Organização em 21/10:** fixtures em `Tests/tmp/`; saída de QA avulsa e staging
+de benchmark em `Tests/artifacts/`. 157 arquivos legados movidos com SHA-256
+conferido; 14 diretórios vazios arquivados sob `Tests/tmp/legacy-20261021/`.
+Raiz sem `.devkit-*`. Runtime e dados de usuário preservados.
+Validação final: Python 496/10 skips, Node 267 e Launcher 247/2 skips PASS;
+sem novas fixtures residuais. Lint de ferramentas da raiz BLOCKED por falta
+de configuração ESLint aplicável (exit 2); não foi declarado PASS.
+
+**Próximo item exato:** comparar deltas SSE sintéticos com conteúdo/slices do
+Chat para localizar a perda de espaço; escrever regressão que falhe no harness
+real antes de corrigir. Continuar o gate de conteúdo da imagem e as pendências da 8.0D antes
 de avançar Launcher/presença/release. Não alterar fallback, Persona ou secrets.
 
-Execução de QA encerrada normalmente às `23:27:07Z` em 518 ms; PID 15268 e Electron do
+Execução de QA de 21/10 encerrada normalmente às `23:54:39Z` em 740 ms; PID 24132 e Electron do
 checkout ausentes. Sondagens temporárias restauradas. Evidências locais em
 `Tests/runs/release-20261019/` (ignorado). Relatório, arquivos, comandos e DoD:
-[`RELEASE-WINDOWS-2026-10-20.md`](../product/RELEASE-WINDOWS-2026-10-20.md).
+[`RELEASE-WINDOWS-2026-10-21.md`](../product/RELEASE-WINDOWS-2026-10-21.md).
 Instalador/instalação limpa NÃO EXECUTADOS; release incompleta, baseline inalterado.
 
-**Restrições de continuidade:** preservar a remoção preexistente de
-`docs/Concepts/LauncherConcept.png` e o plano não rastreado; sem reset/clean/rebase/
-merge/push, nova branch ou mudanças em `Lia.bat`/`DevKit.bat`.
+**Restrições de continuidade:** o preflight em `20b9da7` encontrou árvore limpa;
+o plano está versionado. Sem reset/clean/rebase/merge/push, nova branch ou
+mudanças em `Lia.bat`/`DevKit.bat`.
 **Quanto falta:** [`QUANTO-FALTA.md`](QUANTO-FALTA.md). **Antes de código:** §6.
 
 ---

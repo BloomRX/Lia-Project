@@ -18,7 +18,7 @@ execução diferentes. Rodar a errada devolve verde que não prova nada.
 | App Lia | `airi/apps/lia-app/` | `pnpm run test` |
 | Pacote core-agent | `airi/` | `pnpm exec vitest run --root packages/core-agent --project @proj-airi/core-agent` |
 
-Números de referência: Python **495** casos (4 arquivos), Node **267**
+Números de referência: Python **496** casos (4 arquivos), Node **267**
 (14 arquivos), `lia-app` **23** arquivos de teste, `core-agent` **13** arquivos
 / **144** casos. Se a contagem cair sem que testes tenham sido removidos de
 propósito, algo deixou de ser descoberto.

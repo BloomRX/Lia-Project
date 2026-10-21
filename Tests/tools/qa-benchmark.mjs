@@ -131,13 +131,13 @@ export function createBenchmarkRawRun({ runId, repoRoot = REPO_ROOT }) {
   return rawRoot
 }
 export function createPublishStaging({ runId, repoRoot = REPO_ROOT }) {
-  const staging = nodePath.join(repoRoot, '.devkit-qa', 'benchmark-publish', runId)
+  const staging = nodePath.join(repoRoot, 'Tests', 'artifacts', 'benchmark-publish', runId)
   if (existsSync(staging)) throw new Error(`publish staging already exists: ${runId}`)
   for (const sub of ['metrics','logs']) mkdirSync(nodePath.join(staging, 'benchmarks', runId, sub), { recursive: true })
   return nodePath.join(staging, 'benchmarks', runId)
 }
 export function ensurePublishStaging({ runId, repoRoot = REPO_ROOT }) {
-  const staging = nodePath.join(repoRoot, '.devkit-qa', 'benchmark-publish', runId)
+  const staging = nodePath.join(repoRoot, 'Tests', 'artifacts', 'benchmark-publish', runId)
   mkdirSync(nodePath.join(staging, 'benchmarks', runId, 'metrics'), { recursive: true })
   mkdirSync(nodePath.join(staging, 'benchmarks', runId, 'logs'), { recursive: true })
   return nodePath.join(staging, 'benchmarks', runId)
@@ -544,7 +544,7 @@ export async function runBenchmark({ repoRoot = REPO_ROOT, args = process.argv.s
     ]
     writeFileSync(reportPath, lines.join('\n')+'\n', 'utf-8')
     // Verify publish staging unchanged (if exists)
-    const publishDir = nodePath.join(repoRoot, '.devkit-qa', 'benchmark-publish', reportOnlyId, 'benchmarks', reportOnlyId)
+    const publishDir = nodePath.join(repoRoot, 'Tests', 'artifacts', 'benchmark-publish', reportOnlyId, 'benchmarks', reportOnlyId)
     let publishUnchanged = true
     let manifestOk = null
     if (existsSync(nodePath.join(publishDir, 'SHA256SUMS.txt'))) {
@@ -577,7 +577,7 @@ export async function runBenchmark({ repoRoot = REPO_ROOT, args = process.argv.s
   const baseId = benchmarkRunId(now, shortSha)
   const existingIds = new Set()
   try { const runs = readdirSync(nodePath.join(repoRoot, 'Tests', 'runs')).filter(n => n.match(/^\d{8}-\d{6}-/)); runs.forEach(r=>existingIds.add(r)) } catch {}
-  try { const stages = readdirSync(nodePath.join(repoRoot, '.devkit-qa', 'benchmark-publish')).filter(n => n.match(/^\d{8}-\d{6}-/)); stages.forEach(r=>existingIds.add(r)) } catch {}
+  try { const stages = readdirSync(nodePath.join(repoRoot, 'Tests', 'artifacts', 'benchmark-publish')).filter(n => n.match(/^\d{8}-\d{6}-/)); stages.forEach(r=>existingIds.add(r)) } catch {}
   const runId = existingIds.has(baseId) ? nextBenchmarkRunId(baseId, existingIds) : baseId
   console.log(`[benchmark] Run ID ${runId}`)
 

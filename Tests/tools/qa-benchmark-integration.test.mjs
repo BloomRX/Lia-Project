@@ -448,7 +448,7 @@ describe('integration: R SHA manifest', () => {
     const bare = initBareRemote(); tmpToClean.push(bare)
     const { src } = initSourceRepo(bare); tmpToClean.push(src)
     const res = await runBenchmark({ repoRoot: src, args: [], now: new Date('2026-09-29T18:00:00Z'), commandRunner: mockRunner('passed'), hardwareCollector: mockHardware })
-    const publishDir = nodePath.join(src, '.devkit-qa', 'benchmark-publish', res.runId, 'benchmarks', res.runId)
+    const publishDir = nodePath.join(src, 'Tests', 'artifacts', 'benchmark-publish', res.runId, 'benchmarks', res.runId)
     const manifest = readFileSync(nodePath.join(publishDir, 'SHA256SUMS.txt'), 'utf-8')
     const v = verifyShaManifest(manifest, publishDir)
     assert.equal(v.ok, true)
@@ -474,7 +474,7 @@ describe('integration: S collision', () => {
     const first = await runBenchmark({ repoRoot: src, args: [], now, commandRunner: mockRunner('passed'), hardwareCollector: mockHardware })
     const firstId = first.runId
     assert.ok(existsSync(nodePath.join(src, 'Tests', 'runs', firstId)))
-    const publishFirst = nodePath.join(src, '.devkit-qa', 'benchmark-publish', firstId)
+    const publishFirst = nodePath.join(src, 'Tests', 'artifacts', 'benchmark-publish', firstId)
     assert.ok(existsSync(publishFirst))
     const second = await runBenchmark({ repoRoot: src, args: [], now, commandRunner: mockRunner('passed'), hardwareCollector: mockHardware })
     assert.notEqual(second.runId, firstId)

@@ -23,6 +23,13 @@ kit = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(kit)
 
 
+def fixture_temp_root() -> Path:
+    """Keep disposable test repositories inside the ignored test workspace."""
+    root = CLI.parent.parent / 'Tests' / 'tmp'
+    root.mkdir(parents=True, exist_ok=True)
+    return root
+
+
 def _force_writable(func, path, _exc):
     """Callback do rmtree, para duas causas distintas.
 
@@ -149,8 +156,8 @@ class UniversalKitTests(unittest.TestCase):
 @unittest.skipUnless(shutil.which('git'), 'Git necessário')
 class GitFlowTests(unittest.TestCase):
     def setUp(self):
-        # Fica no diretório do projeto, não usa nem altera configurações globais.
-        self.temp = tempfile.TemporaryDirectory(prefix='.devkit-tests-', dir=CLI.parent.parent)
+        # Isolated fixtures stay inside Tests/tmp, never at the repository root.
+        self.temp = tempfile.TemporaryDirectory(prefix='gitflow-', dir=fixture_temp_root())
         self.base = Path(self.temp.name)
         self.repo = self.base / 'repo com espaços'
         self.remote = self.base / 'remote.git'
@@ -181,6 +188,10 @@ class GitFlowTests(unittest.TestCase):
         # no Windows sobre os arquivos 0444 que o git cria (pack, idx,
         # commit-graph) e sobre handles de antivirus/indexador.
         cleanup_tree(self.base)
+        self.temp.cleanup()
+
+    def test_fixture_is_inside_test_workspace(self):
+        self.assertEqual(self.base.parent, CLI.parent.parent / 'Tests' / 'tmp')
 
     def git(self, *args, cwd=None, expected=0):
         result = subprocess.run(['git', *map(str,args)], cwd=cwd or self.repo, text=True, encoding='utf-8', errors='replace', capture_output=True, env=self.env)
@@ -338,8 +349,7 @@ class FixtureCleanupTests(unittest.TestCase):
     """
 
     def _fixture(self):
-        base = Path(tempfile.mkdtemp(prefix='.devkit-cleanup-',
-                                     dir=CLI.parent.parent))
+        base = Path(tempfile.mkdtemp(prefix='cleanup-', dir=fixture_temp_root()))
         pack_dir = base / 'repo com espaços' / '.git' / 'objects' / 'pack'
         pack_dir.mkdir(parents=True)
         pack = pack_dir / 'pack-fixture.pack'
@@ -369,8 +379,7 @@ class FixtureCleanupTests(unittest.TestCase):
 
     def test_cleanup_tree_raises_instead_of_leaking_silently(self):
         """Limpeza que falha tem que aparecer, nao virar vazamento mudo."""
-        base = Path(tempfile.mkdtemp(prefix='.devkit-cleanup-',
-                                     dir=CLI.parent.parent))
+        base = Path(tempfile.mkdtemp(prefix='cleanup-', dir=fixture_temp_root()))
         with patch('shutil.rmtree', side_effect=OSError(13, ' Permission denied')):
             with self.assertRaises(OSError):
                 cleanup_tree(base, attempts=2, delay=0)

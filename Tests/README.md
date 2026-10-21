@@ -16,7 +16,7 @@ once the normal way (`cd airi && pnpm install`).
 
 | # | Option | What happens |
 |---|--------|--------------|
-| 1 | Voice QA — existing runtime smoke | Runs the existing `tools\kokoro-smoke.mjs` against the **production** runtime home. Nothing is installed or moved. Console is captured into a timestamped run folder, and the smoke's WAV artifacts are written to `<run>\artifacts\smoke` (the runner accepts an optional output-dir argument; invoked normally, its `.devkit-qa` default is unchanged). |
+| 1 | Voice QA — existing runtime smoke | Runs the existing `tools\kokoro-smoke.mjs` against the **production** runtime home. Nothing is installed or moved. Console is captured into a timestamped run folder, and the smoke's WAV artifacts are written to `<run>\artifacts\smoke` (the runner accepts an optional output-dir argument; invoked normally, the standalone default is `Tests/artifacts/kokoro-smoke`). |
 | 2 | Voice QA — isolated clean install | Creates `Tests\runs\<timestamp>\`, backs up the product config, points Lia at the run's isolated runtime root, launches Lia via the supported `Lia.bat`, and leaves a restore marker. |
 | 3 | Open latest test folder | Opens the newest `Tests\runs\<run>` in Explorer. |
 | 4 | Restore normal Lia configuration | Reverts the single `voice.runtime.installDir` key to its saved original value and extracts the run's voice metrics. |
@@ -24,6 +24,19 @@ once the normal way (`cd airi && pnpm install`).
 | 6 | Storage / cleanup | Usage, guarded run deletion, **non-destructive** legacy inventory, retention policy (dry-run default), log pruning. |
 
 ## Run folder layout
+
+Generated files stay inside `Tests/`:
+
+- `tmp/`: disposable Python fixtures; each test removes its own directory.
+- `artifacts/kokoro-smoke/`: standalone smoke WAVs.
+- `artifacts/benchmark-publish/`: prepared benchmark publication files.
+- `runs/`: per-run logs and evidence, as described below.
+
+These directories are ignored by Git. Do not write `.devkit-tests-*` fixtures
+at the repository root. Existing `.devkit-qa` output can be moved into
+`Tests/artifacts` while no QA process is using it, preserving relative paths.
+The legacy inventory still recognizes the old location. Runtime/user-data
+locations are separate and must not be moved with QA output.
 
 ```
 Tests\runs\<YYYYMMDD-HHMMSS>\
@@ -103,7 +116,7 @@ Deletion lives exclusively in the guarded helpers (`Tests\tools\qa-storage.mjs`)
 - legacy/unknown artifacts are inventory-only in this phase;
 - retention and log pruning default to dry-run.
 
-The legacy inventory scans: `.devkit-qa`, `Tests\runs|runtimes|logs`,
+The legacy inventory scans: `.devkit-qa`, `Tests\runs|runtimes|logs|tmp|artifacts`,
 `%LOCALAPPDATA%\Lia` (+ `\runtimes`), `%LOCALAPPDATA%\Lia-QA`,
 `%APPDATA%\Lia`, `%APPDATA%\@proj-airi\stage-tamagotchi`,
 `%APPDATA%\stage-tamagotchi`, `%APPDATA%\Electron`, `%TEMP%\lia*|kokoro*`, and
