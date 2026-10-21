@@ -9,9 +9,11 @@ import json
 import os
 from pathlib import Path
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from unittest.mock import patch
 
@@ -19,6 +21,45 @@ CLI = Path(__file__).with_name('project_cli.py').resolve()
 spec = importlib.util.spec_from_file_location('devkit_under_test', CLI)
 kit = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(kit)
+
+
+def _force_writable(func, path, _exc):
+    """Callback do rmtree, para duas causas distintas.
+
+    1. O alvo e somente-leitura - o git deixa pack/idx/commit-graph em 0444,
+       que no Windows vira FILE_ATTRIBUTE_READONLY.
+    2. O DIRETORIO PAI nao tem permissao de escrita. Aí chmod no arquivo nao
+       adianta: quem bloqueia o unlink e o pai. Por isso os dois recebem chmod.
+    """
+    for target in (path, os.path.dirname(path)):
+        try:
+            os.chmod(target, stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR)
+        except OSError:
+            pass
+    func(path)
+
+
+def cleanup_tree(path, attempts: int = 5, delay: float = 0.2) -> None:
+    """Remove uma fixture sem mascarar falha real.
+
+    No Windows o modo 0444 vira FILE_ATTRIBUTE_READONLY, e o shutil.rmtree por
+    tras de TemporaryDirectory.cleanup() falha com WinError 5 nesses arquivos.
+    WinError 32 e a variante de compartilhamento: antivirus ou indexador ainda
+    segurando um handle. Trata os dois - limpa o atributo e tenta de novo, com
+    numero limitado de tentativas. Se nao conseguir, LEVANTA: deixar diretorio
+    para tras em silencio transformaria um defeito real em vazamento invisivel.
+    """
+    kwargs = ({'onexc': _force_writable} if sys.version_info >= (3, 12)
+              else {'onerror': _force_writable})
+    last = None
+    for _ in range(attempts):
+        try:
+            shutil.rmtree(str(path), **kwargs)
+            return
+        except OSError as exc:
+            last = exc
+            time.sleep(delay)
+    raise last
 
 class ScannerTests(unittest.TestCase):
     def test_counters_and_environment_are_not_credentials(self):
@@ -136,7 +177,10 @@ class GitFlowTests(unittest.TestCase):
         self.initial = self.git('rev-parse', 'HEAD').stdout.strip()
 
     def tearDown(self):
-        self.temp.cleanup()
+        # NAO usar self.temp.cleanup() direto: o rmtree por tras dele falha
+        # no Windows sobre os arquivos 0444 que o git cria (pack, idx,
+        # commit-graph) e sobre handles de antivirus/indexador.
+        cleanup_tree(self.base)
 
     def git(self, *args, cwd=None, expected=0):
         result = subprocess.run(['git', *map(str,args)], cwd=cwd or self.repo, text=True, encoding='utf-8', errors='replace', capture_output=True, env=self.env)
@@ -281,6 +325,56 @@ class GitFlowTests(unittest.TestCase):
         result = self.cli('pull',expected=1)
         self.assertIn('ainda não existe',result.stdout)
         self.assertEqual(self.git('rev-parse','HEAD').stdout.strip(),self.initial)
+
+
+class FixtureCleanupTests(unittest.TestCase):
+    """Regressao da limpeza de fixture que falhava no Windows (WinError 5/32).
+
+    O git marca pack/idx/commit-graph como modo 0444, que no Windows vira
+    FILE_ATTRIBUTE_READONLY; o shutil.rmtree por tras de
+    TemporaryDirectory.cleanup() falha ai. Um diretorio sem permissao de
+    escrita reproduz a MESMA falha no Linux, entao a regressao e
+    deterministica nas duas plataformas em vez de depender do Windows.
+    """
+
+    def _fixture(self):
+        base = Path(tempfile.mkdtemp(prefix='.devkit-cleanup-',
+                                     dir=CLI.parent.parent))
+        pack_dir = base / 'repo com espaços' / '.git' / 'objects' / 'pack'
+        pack_dir.mkdir(parents=True)
+        pack = pack_dir / 'pack-fixture.pack'
+        pack.write_bytes(b'PACK fixture')
+        pack.chmod(0o444)                    # como o git deixa o pack
+        locked = base / 'trancado'
+        locked.mkdir()
+        (locked / 'dentro.txt').write_text('x', encoding='utf-8')
+        locked.chmod(0o500)                  # sem escrita: rmtree puro falha
+        return base
+
+    def test_plain_rmtree_cannot_remove_the_fixture(self):
+        """Documenta o defeito original: sem handler a limpeza nao termina."""
+        base = self._fixture()
+        try:
+            with self.assertRaises(OSError):
+                shutil.rmtree(str(base))
+        finally:
+            cleanup_tree(base)
+
+    def test_cleanup_tree_removes_readonly_files_and_locked_dirs(self):
+        base = self._fixture()
+        cleanup_tree(base)
+        self.assertFalse(base.exists(),
+                         'a fixture sobreviveu a limpeza; no Windows isso '
+                         'aparece como WinError 5 no tearDown')
+
+    def test_cleanup_tree_raises_instead_of_leaking_silently(self):
+        """Limpeza que falha tem que aparecer, nao virar vazamento mudo."""
+        base = Path(tempfile.mkdtemp(prefix='.devkit-cleanup-',
+                                     dir=CLI.parent.parent))
+        with patch('shutil.rmtree', side_effect=OSError(13, ' Permission denied')):
+            with self.assertRaises(OSError):
+                cleanup_tree(base, attempts=2, delay=0)
+        cleanup_tree(base)
 
 
 class KokoroSmokeTests(unittest.TestCase):
