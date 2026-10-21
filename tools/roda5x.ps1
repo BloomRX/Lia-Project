@@ -9,6 +9,10 @@
 # dependia de o git ter empacotado objetos naquela execucao. Uma rodada verde
 # nao prova nada; a repeticao e que prova.
 #
+# Quanto tempo leva: varios minutos por rodada. O script avisa antes de cada
+# uma comecar e grava a evidencia parcial depois de cada uma terminar, entao
+# uma rodada ja concluida nunca se perde.
+#
 # Este arquivo e ASCII de proposito. O PowerShell 5.1 le .ps1 como ANSI quando
 # nao ha BOM, e acento aqui viraria lixo.
 
@@ -43,12 +47,45 @@ $pyVersion = (& $pyExe @pyPre --version 2>&1) -join ' '
 Write-Host "interpretador: $pyVersion ($pyExe)"
 Write-Host ''
 
+$cabecalho = @()
+$cabecalho += '# Python tools/ - 5 repeticoes no Windows'
+$cabecalho += ''
+$cabecalho += "Gerado por tools/roda5x.ps1 em $(Get-Date -Format 'yyyy-MM-dd HH:mm')."
+$cabecalho += ''
+$cabecalho += "- Interpretador: $pyVersion"
+$cabecalho += '- cwd: tools/'
+$cabecalho += '- Comando: -m unittest discover -s . -p "test_*.py" -t .'
+$cabecalho += "- Host: $env:COMPUTERNAME"
+
+$destino = Join-Path $repo 'docs\product\python-cleanup-5x.md'
+
+# Grava o que existe ate agora. E chamado depois de CADA rodada para que uma
+# interrupcao no meio nao apague as rodadas ja pagas.
+function Grava-Evidencia {
+  param([int]$Rodada, [int]$Total, [int]$Verdes, [object[]]$Bloco)
+  $l = @()
+  $l += $cabecalho
+  $l += ''
+  if ($Rodada -lt $Total) {
+    $l += "Progresso: $Rodada de $Total rodadas concluidas; $Verdes em exit 0. Rodada em andamento."
+  }
+  else {
+    $l += "Resumo: $Verdes de $Total rodadas terminaram em exit 0."
+  }
+  $l += ''
+  $l += $Bloco
+  $enc = New-Object System.Text.UTF8Encoding $false
+  [System.IO.File]::WriteAllText($destino, ($l -join "`r`n") + "`r`n", $enc)
+}
+
 Set-Location (Join-Path $repo 'tools')
 
 $bloco = @()
 $verdes = 0
+$total = 5
 
-for ($n = 1; $n -le 5; $n++) {
+for ($n = 1; $n -le $total; $n++) {
+  Write-Host ("rodada {0} de {1}: rodando, leva alguns minutos..." -f $n, $total)
   $inicio = Get-Date
   $out = & $pyExe @pyPre -m unittest discover -s . -p 'test_*.py' -t . 2>&1 | Out-String
   $code = $LASTEXITCODE
@@ -61,31 +98,15 @@ for ($n = 1; $n -le 5; $n++) {
   $bloco += "===== rodada $n | exit $code | ${seg}s ====="
   $bloco += $out.TrimEnd()
   $bloco += ''
+
+  Grava-Evidencia -Rodada $n -Total $total -Verdes $verdes -Bloco $bloco
 }
 
 Set-Location $repo
 
-$linhas = @()
-$linhas += '# Python tools/ - 5 repeticoes no Windows'
-$linhas += ''
-$linhas += "Gerado por tools/roda5x.ps1 em $(Get-Date -Format 'yyyy-MM-dd HH:mm')."
-$linhas += ''
-$linhas += "- Interpretador: $pyVersion"
-$linhas += '- cwd: tools/'
-$linhas += '- Comando: -m unittest discover -s . -p "test_*.py" -t .'
-$linhas += "- Host: $env:COMPUTERNAME"
-$linhas += ''
-$linhas += "Resumo: $verdes de 5 rodadas terminaram em exit 0."
-$linhas += ''
-$linhas += $bloco
-
-$destino = Join-Path $repo 'docs\product\python-cleanup-5x.md'
-$enc = New-Object System.Text.UTF8Encoding $false
-[System.IO.File]::WriteAllText($destino, ($linhas -join "`r`n") + "`r`n", $enc)
-
 Write-Host ''
 Write-Host "gravado em $destino"
-Write-Host "resumo: $verdes de 5 em exit 0"
+Write-Host "resumo: $verdes de $total em exit 0"
 Write-Host ''
 Write-Host '--- linhas que importam ---'
 
