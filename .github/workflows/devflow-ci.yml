@@ -88,3 +88,11 @@ jobs:
 
       - name: DevFlow suite (tools/test_lia_dev.py)
         run: python tools/ci_run_suite.py tools/test_lia_dev.py
+
+      # Contrato das skills de agente. O Codex descobre .agents/skills/<nome>/
+      # SKILL.md; um name que nao case com o diretorio, ou uma referencia a um
+      # documento que sumiu, quebra a descoberta sem quebrar nenhum teste de
+      # produto. Nomeado explicitamente porque a suite e enumerada passo a passo,
+      # nao por discover.
+      - name: Agent skills contract (tools/test_agent_skills.py)
+        run: python tools/ci_run_suite.py tools/test_agent_skills.py
