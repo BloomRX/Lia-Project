@@ -268,6 +268,42 @@ describe('createChatOrchestratorRuntime', () => {
     expect(harness.foregroundPatches.some(message => message.content === '1234')).toBe(true)
   })
 
+  // CONTRATO, não regressão de um defeito confirmado.
+  //
+  // Rodada de 20/10/2026: a resposta da imagem sintética veio como
+  // "círculoazul", sem o espaço. A hipótese de que o guarda `if
+  // (speechOnly.trim())` descartava um literal só de espaço foi TESTADA E
+  // REFUTADA: com este teste o código original também passa, porque o parser
+  // de marcadores funde o espaço ao literal vizinho. A causa segue aberta; o
+  // suspeito restante é filterToSpeech em response-categoriser.ts. Este teste
+  // apenas fixa o comportamento esperado na fronteira do runtime.
+  it('preserva espaço que chega como delta próprio em vez de colar as palavras', async () => {
+    const harness = createHarness()
+
+    harness.stream.mockImplementationOnce(async (_model, _chatProvider, _messages, options) => {
+      for (const text of ['Primeiro vem um círculo', ' ', 'azul.'])
+        await options?.onStreamEvent?.({ type: 'text-delta', text })
+
+      await options?.onStreamEvent?.({ type: 'finish', finishReason: 'stop' })
+    })
+
+    await harness.runtime.ingest('descreva a imagem', {
+      model: 'gpt-test',
+      chatProvider: provider,
+    })
+
+    const esperado = 'Primeiro vem um círculo azul.'
+    const final = harness.foregroundPatches.at(-1)
+
+    expect(final.content).toBe(esperado)
+    expect(
+      final.slices
+        .filter(slice => slice.type === 'text')
+        .map(slice => slice.text)
+        .join(''),
+    ).toBe(esperado)
+  })
+
   it('stores tool names with the user message and omits them from provider messages', async () => {
     const harness = createHarness()
 
