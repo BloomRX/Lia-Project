@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import type { StreamOptions } from '@proj-airi/core-agent'
+import type { StreamOptions } from '@proj-airi/stage-ui/stores/ai/chat-llm/llm'
 import type { ChatRequestStartedObservation } from '@proj-airi/stage-ui/stores/chat/chat-provider-runtime'
 
 import { readdirSync, readFileSync } from 'node:fs'
