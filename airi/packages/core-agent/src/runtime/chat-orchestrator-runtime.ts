@@ -712,7 +712,9 @@ export function createChatOrchestratorRuntime(deps: ChatOrchestratorRuntimeDeps)
           const speechOnly = categorizer.filterToSpeech(literal, streamPosition)
           streamPosition += literal.length
 
-          if (speechOnly.trim()) {
+          // Whitespace is part of the response, including when it arrives as
+          // its own safe literal. Keep it in storage and synchronized streams.
+          if (speechOnly.length > 0) {
             buildingMessage.content += speechOnly
 
             await hooks.emitTokenLiteralHooks(speechOnly, streamingMessageContext)

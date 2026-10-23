@@ -53,8 +53,15 @@ Python após Spark teve FAIL de limpeza. O checkout recebeu posteriormente
 limpeza resiliente e evidência de cinco repetições aprovadas. **Preflight de
 21/10:** Python 495/10 skips PASS, Node 267 PASS, Launcher 247/2 skips PASS e
 core-agent 144 PASS; instalação e builds de pré-requisito PASS. Isso não prova
-quem detinha os handles antigos. A hipótese de `trim()` para o espaço foi
-refutada pelo caso exercitado no commit `9267a50`; não reaplicar correção especulativa.
+quem detinha os handles antigos. O contrato de três chunks do commit `9267a50`
+não reproduzia a perda de espaço. Em 22/10, um teste com deltas unitários
+reproduziu no harness real: a guarda `trim()` descartava whitespace isolado.
+Correção mínima aprovada com RED → GREEN e contraprova contra a guarda antiga.
+Conteúdo, slices, histórico e hooks preservam espaços/quebras. 145 testes
+core-agent, 255 Chat/Stage UI, 15 browser; lint, typecheck e build PASS.
+Python 496/10 skips, Node 267, Launcher 247/2 skips PASS na repetição.
+Windows com **transporte SSE sintético** mostrou palavras separadas e conteúdo
+salvo exato; sonda restaurada. Não equivale a novo gate do serviço/modelo/voz.
 
 **Bloqueio de saída da 8.0D:** no Windows, as sete ferramentas foram mantidas e
 a resposta voltou a aparecer, mas o retângulo foi chamado de quadrado: conteúdo
@@ -74,15 +81,18 @@ Validação final: Python 496/10 skips, Node 267 e Launcher 247/2 skips PASS;
 sem novas fixtures residuais. Lint de ferramentas da raiz BLOCKED por falta
 de configuração ESLint aplicável (exit 2); não foi declarado PASS.
 
-**Próximo item exato:** comparar deltas SSE sintéticos com conteúdo/slices do
-Chat para localizar a perda de espaço; escrever regressão que falhe no harness
-real antes de corrigir. Continuar o gate de conteúdo da imagem e as pendências da 8.0D antes
+**Próximo item exato:** repetir o gate real de imagem em conversa QA isolada,
+com as sete ferramentas, comparando hash/dimensões do anexo enviado e a
+resposta bruta do prompt de QA com conteúdo salvo. Depois, texto independente e
+loop real de ferramentas; a sonda de conexão atual só usa ping e não aprova loop.
+Continuar as pendências da 8.0D antes
 de avançar Launcher/presença/release. Não alterar fallback, Persona ou secrets.
 
-Execução de QA de 21/10 encerrada normalmente às `23:54:39Z` em 740 ms; PID 24132 e Electron do
-checkout ausentes. Sondagens temporárias restauradas. Evidências locais em
-`Tests/runs/release-20261019/` (ignorado). Relatório, arquivos, comandos e DoD:
-[`RELEASE-WINDOWS-2026-10-21.md`](../product/RELEASE-WINDOWS-2026-10-21.md).
+Execução de QA de 22/10 **aberta** pelo Launcher (Stage PID 2356), em conversa
+sintética nova; sonda de fetch restaurada. Evidências ignoradas em
+`Tests/runs/release-20261022/`, com testes da execução iniciada em 21/10.
+Relatório, arquivos, comandos e DoD:
+[`RELEASE-WINDOWS-2026-10-22.md`](../product/RELEASE-WINDOWS-2026-10-22.md).
 Instalador/instalação limpa NÃO EXECUTADOS; release incompleta, baseline inalterado.
 
 **Restrições de continuidade:** o preflight em `20b9da7` encontrou árvore limpa;

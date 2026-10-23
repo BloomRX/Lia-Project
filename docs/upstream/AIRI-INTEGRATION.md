@@ -220,6 +220,14 @@ git remote -v                                # origin=Lia, upstream=airi
 
 ## 11. Histórico de mudanças
 
+Em 22/10/2026, corrigida perda de whitespace no orchestrator do core-agent
+vendado: uma guarda descartava literais compostos apenas de espaços/quebras.
+Diff de produção de quatro linhas, com RED no harness real, contraprova,
+145 testes e UI Windows com transporte sintético. Não foi possível encapsular
+na Lia: a perda ocorria antes dos hooks e da persistência. Sem alteração de
+filtro de reasoning ou implementação TTS. Detalhes e limites no
+[relatório de streaming](../product/RELEASE-WINDOWS-2026-10-22.md).
+
 | Data | Arquivo/item | Mudança |
 |---|---|---|
 | 07/09/2026 | `airi/` (subtree) | Integrado AIRI v0.12.0-beta.5 (commit `2c1e223c…`) via `git subtree add --squash` |

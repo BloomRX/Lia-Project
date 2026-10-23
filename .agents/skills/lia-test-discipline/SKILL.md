@@ -20,7 +20,7 @@ execução diferentes. Rodar a errada devolve verde que não prova nada.
 
 Números de referência: Python **496** casos (4 arquivos), Node **267**
 (14 arquivos), `lia-app` **23** arquivos de teste, `core-agent` **13** arquivos
-/ **144** casos. Se a contagem cair sem que testes tenham sido removidos de
+/ **145** casos. Se a contagem cair sem que testes tenham sido removidos de
 propósito, algo deixou de ser descoberto.
 
 ## 2. As quatro armadilhas que já custaram rodadas

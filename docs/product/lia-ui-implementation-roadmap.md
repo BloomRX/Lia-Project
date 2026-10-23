@@ -3,6 +3,11 @@
 **Status:** Draft baseline  
 **Purpose:** Keep product UI work aligned with the runtime architecture while implementation proceeds in small phases.
 
+**Streaming verification, 2026-10-22:** character-sized deltas now preserve
+whitespace in content, history and synchronized events. Unit regressions and
+the Windows Chat with a synthetic SSE transport passed. The image-content
+gate remains open. See [the streaming report](RELEASE-WINDOWS-2026-10-22.md).
+
 **Windows verification, 2026-10-20:** the launcher opened the Stage through the
 normal button and completed managed shutdown. Chat session selection was fixed;
 an independent text conversation displayed 42. Phase 8.0D remains open: the

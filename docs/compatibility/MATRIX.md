@@ -29,6 +29,7 @@ Os estados de suporte não substituem os resultados de cada verificação.
 | Build de produção do Stage | PASS automatizado | electron-vite build concluído; não equivale a instalador nem instalação limpa |
 | Visão Groq em pedido mínimo | PASS integração direta no Windows | Descrição correta em JSON e SSE; não substitui o fluxo da UI |
 | Stream vazio no Chat | PASS Windows real | Erro em pt-BR, anexo/pergunta e retry preservados, log terminal failed |
+| Espaços em streaming | PASS automatizado e Windows com transporte de teste | Deltas unitários preservam conteúdo/histórico/hooks; screenshot e store confirmados com SSE sintético. Não aprova serviço real |
 | Política de failover Lia | PASS automatizado | 15 casos no store real com IPC simulado; não aprova E2E em rede |
 | Limite numérico de imagens | PASS automatizado e Windows real | 4 imagens recusadas antes do envio; rascunho e anexos preservados. Não valida conteúdo de imagem |
 | Cadeia de voz B1/B1.1 | PASS Windows real histórico | Baseline `3ef6d11`; esta rodada observou prewarm/síntese, sem novo teste de microfone humano |

@@ -11,6 +11,12 @@ Fonte: [`CURRENT-STATE.md`](CURRENT-STATE.md) §0 e §5, medido em
 
 ## Onde o projeto está
 
+22/10: perda de espaços reproduzida com deltas unitários e corrigida com
+contraprova. Core-agent 145, Chat/Stage UI 255, browser 15, Python 496/10 skips,
+Node 267 e Launcher 247/2 skips PASS. UI Windows com transporte SSE sintético
+confirmou palavras separadas e conteúdo salvo exato. O gate do serviço real
+continua separado. [Evidência](../product/RELEASE-WINDOWS-2026-10-22.md).
+
 Retomada de 21/10: preflight Python 495/10 skips, Node 267, Launcher 247/2 skips
 e core-agent 144 PASS. Fixtures e artefatos reorganizados sob `Tests/tmp` e
 `Tests/artifacts`; evidências e limites em

@@ -295,13 +295,42 @@ describe('createChatOrchestratorRuntime', () => {
     const esperado = 'Primeiro vem um círculo azul.'
     const final = harness.foregroundPatches.at(-1)
 
-    expect(final.content).toBe(esperado)
+    expect(final?.content).toBe(esperado)
     expect(
-      final.slices
+      final?.slices
         .filter(slice => slice.type === 'text')
         .map(slice => slice.text)
         .join(''),
     ).toBe(esperado)
+  })
+
+  // The three-chunk contract above does not cover single-character literals
+  // emitted after the marker parser's safety tail has filled.
+  it('preserves spaces and line breaks when the provider streams one character at a time', async () => {
+    const harness = createHarness()
+    const answer = 'Um círculo azul.\nOutra linha com espaços.'
+    const literalHooks: string[] = []
+    harness.runtime.hooks.onTokenLiteral(async (literal) => {
+      literalHooks.push(literal)
+    })
+    harness.stream.mockImplementationOnce(async (_model, _chatProvider, _messages, options) => {
+      for (const text of answer)
+        await options?.onStreamEvent?.({ type: 'text-delta', text })
+      await options?.onStreamEvent?.({ type: 'finish', finishReason: 'stop' })
+    })
+
+    await harness.runtime.ingest('responda em duas linhas', {
+      model: 'gpt-test',
+      chatProvider: provider,
+    })
+
+    const final = harness.foregroundPatches.at(-1)
+    expect(final?.content).toBe(answer)
+    expect(final?.slices.filter(slice => slice.type === 'text').map(slice => slice.text).join('')).toBe(answer)
+    expect(harness.sessionMessages['session-1'].at(-1)?.content).toBe(answer)
+    expect(literalHooks.length).toBeGreaterThan(0)
+    expect(literalHooks.join('')).toBe(answer)
+    expect(literalHooks.every(literal => literal.length > 0)).toBe(true)
   })
 
   it('stores tool names with the user message and omits them from provider messages', async () => {
