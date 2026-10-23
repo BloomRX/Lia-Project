@@ -31,10 +31,12 @@ const props = withDefaults(defineProps<{
   userLabel?: string
   errorLabel?: string
   retryLabel?: string
+  reasoningVisibility?: 'auto' | 'visible' | 'hidden'
   variant?: 'desktop' | 'mobile'
   toolCallRenderers?: ChatToolCallRendererRegistry
 }>(), {
   sending: false,
+  reasoningVisibility: 'auto',
   variant: 'desktop',
   toolCallRenderers: () => ({}),
 })
@@ -179,6 +181,7 @@ function emitToolCallRerun(
             :scroll-container="chatHistoryRef"
             :variant="variant"
             :tool-call-renderers="toolCallRenderers"
+            :reasoning-visibility="reasoningVisibility"
             @copy="emitCopyMessage(message, index)"
             @delete="emitDeleteMessage(message, index)"
             @tool-call-rerun="emitToolCallRerun(message, index, $event)"

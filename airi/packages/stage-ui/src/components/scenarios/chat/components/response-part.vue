@@ -9,10 +9,13 @@ import { shouldShowChatReasoning } from '../../../../stores/chat/reasoning-visib
 import { useSettingsDeveloper } from '../../../../stores/settings/developer'
 import { MarkdownRenderer } from '../../../markdown'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   message: ChatAssistantMessage
+  reasoningVisibility?: 'auto' | 'visible' | 'hidden'
   variant?: 'desktop' | 'mobile'
-}>()
+}>(), {
+  reasoningVisibility: 'auto',
+})
 
 const developer = useSettingsDeveloper()
 
@@ -25,11 +28,19 @@ const reasoningContent = computed(() => props.message.categorization?.reasoning?
 // it ("We have a conflict..." while she was speaking). The pure rule lives
 // in stores/chat/reasoning-visibility.ts (unit-pinned there); standalone
 // AIRI (no capability truth installed) keeps today's behavior verbatim.
-const hasReasoning = computed(() => shouldShowChatReasoning({
-  developerShowChatReasoning: developer.showChatReasoning,
-  hasReasoningText: reasoningContent.value.length > 0,
-  liaManaged: getLiaCapabilitySnapshot() !== undefined,
-}))
+// Secondary Chat windows can apply their host policy without bootstrapping
+// runtime capabilities. Auto preserves the existing standalone/managed rule.
+const hasReasoning = computed(() => {
+  if (!reasoningContent.value || props.reasoningVisibility === 'hidden')
+    return false
+  if (props.reasoningVisibility === 'visible')
+    return true
+  return shouldShowChatReasoning({
+    developerShowChatReasoning: developer.showChatReasoning,
+    hasReasoningText: true,
+    liaManaged: getLiaCapabilitySnapshot() !== undefined,
+  })
+})
 
 const containerClasses = computed(() => [
   props.variant === 'mobile' ? 'text-xs' : 'text-sm',

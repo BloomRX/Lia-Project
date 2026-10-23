@@ -20,8 +20,15 @@ continua separado. [Evidência](../product/RELEASE-WINDOWS-2026-10-22.md).
 Erros de envio agora usam texto seguro no novo histórico e tradução pt-BR/en
 na tela/cópia, inclusive para legado sem regravar dados. 111 testes dirigidos,
 275 de regressão Chat e 13 browser, lint/typecheck/builds e suítes gerais PASS.
-Windows com transporte sintético validou 413→retry 200 com rascunho preservado. Reasoning inglês ainda
-visível: runtime identificou snapshot ausente na janela Chat; próximo item.
+Windows com transporte sintético validou 413→retry 200 com rascunho preservado.
+23/10: corrigida fronteira de apresentação do reasoning sem depender de snapshot;
+standalone preservado, flag reativa e conteúdo intacto. 22 browser dirigidos,
+11 contratos, 18 browser de regressão, lint/typechecks/build PASS. Windows real
+mostrou 42 sem prévia técnica e placeholder pt-BR; raciocínio segue salvo.
+Stage Node completo passou: 1798 testes e 4 skips em 144 arquivos, após
+corrigir contexto de fixtures e respostas simuladas vazias preexistentes.
+Python 496/10 skips, Node 267 e Launcher 247/2 skips PASS. Próximo item:
+logs brutos do Core. [Evidência](../product/RELEASE-WINDOWS-2026-10-23.md).
 
 Retomada de 21/10: preflight Python 495/10 skips, Node 267, Launcher 247/2 skips
 e core-agent 144 PASS. Fixtures e artefatos reorganizados sob `Tests/tmp` e

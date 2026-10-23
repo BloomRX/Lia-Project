@@ -7,11 +7,13 @@ import MobileInteractiveArea from '@proj-airi/stage-layouts/components/Layouts/M
 import ChatArea from '@proj-airi/stage-layouts/components/Widgets/ChatArea'
 
 import { PiniaColada } from '@pinia/colada'
+import { getLiaCapabilitySnapshot } from '@proj-airi/stage-ui/libs/capabilities/lia-capability-port'
 import { useChatStore } from '@proj-airi/stage-ui/stores/chat'
 import { useChatSessionStore } from '@proj-airi/stage-ui/stores/chat/session-store'
 import { useChatStreamStore } from '@proj-airi/stage-ui/stores/chat/stream-store'
+import { useSettingsDeveloper } from '@proj-airi/stage-ui/stores/settings/developer'
 import { createPinia } from 'pinia'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { render } from 'vitest-browser-vue'
 import { userEvent } from 'vitest/browser'
 import { nextTick } from 'vue'
@@ -24,6 +26,7 @@ import '@unocss/reset/tailwind.css'
 import 'virtual:uno.css'
 
 const brainIPC = vi.hoisted(() => ({ decision: vi.fn() }))
+const originalLocation = window.location.href
 
 // The browser receives a plain IPC decision, not the Node product-config module.
 function visionDecision(): LiaBrainRoutingDecision {
@@ -69,6 +72,10 @@ beforeEach(() => {
   brainIPC.decision.mockReset().mockResolvedValue({ status: 'disabled' })
 })
 
+afterEach(() => {
+  window.history.replaceState(null, '', originalLocation)
+})
+
 function createTestI18n() {
   return createI18n({
     legacy: false,
@@ -79,7 +86,16 @@ function createTestI18n() {
   })
 }
 
-async function renderArea(component: Component = InteractiveArea) {
+async function renderArea(component: Component = InteractiveArea, { liaManaged = true } = {}) {
+  const location = new URL(window.location.href)
+  location.searchParams.set('synced-leader', 'false')
+  location.searchParams.set('stage-runtime', 'minimal')
+  if (liaManaged)
+    location.searchParams.set('lia-managed', 'true')
+  else
+    location.searchParams.delete('lia-managed')
+  window.history.replaceState(null, '', location)
+
   const sessionB: ChatSessionMeta = {
     sessionId: 'session-b',
     userId: 'local',
@@ -118,6 +134,7 @@ async function renderArea(component: Component = InteractiveArea) {
     chat: useChatStore(pinia),
     chatSession: useChatSessionStore(pinia),
     chatStream: useChatStreamStore(pinia),
+    developer: useSettingsDeveloper(pinia),
     screen,
   }
 }
@@ -149,6 +166,61 @@ async function attachImages(screen: Awaited<ReturnType<typeof renderArea>>['scre
 }
 
 describe('interactive area synchronized state', () => {
+  it('preserves reasoning in the standalone Stage Chat when the developer flag is off', async () => {
+    expect(getLiaCapabilitySnapshot()).toBeUndefined()
+    const { screen, chatSession, developer } = await renderArea(InteractiveArea, { liaManaged: false })
+    developer.showChatReasoning = false
+    chatSession.appendSessionMessage('session-b', {
+      id: 'standalone-reasoning',
+      role: 'assistant',
+      content: 'Standalone final answer',
+      slices: [{ type: 'text', text: 'Standalone final answer' }],
+      tool_results: [],
+      categorization: { speech: 'Standalone final answer', reasoning: 'QA_STANDALONE_REASONING' },
+    })
+
+    await expect.element(screen.getByText('Standalone final answer', { exact: true })).toBeVisible()
+    expect(screen.container.textContent).toContain('QA_STANDALONE_REASONING')
+  })
+
+  it('hides internal reasoning in Lia Chat without capability bootstrap and reveals it only through the existing developer flag', async () => {
+    expect(getLiaCapabilitySnapshot()).toBeUndefined()
+    const { screen, chat, chatSession, developer } = await renderArea()
+    developer.showChatReasoning = false
+    const stored = {
+      id: 'reasoning-stored',
+      role: 'assistant' as const,
+      content: 'Final stored answer',
+      slices: [{ type: 'text' as const, text: 'Final stored answer' }],
+      tool_results: [],
+      categorization: { speech: 'Final stored answer', reasoning: 'QA_INTERNAL_STORED_REASONING' },
+    }
+    const streaming = {
+      id: 'reasoning-stream',
+      role: 'assistant' as const,
+      content: 'Final live answer',
+      slices: [{ type: 'text' as const, text: 'Final live answer' }],
+      tool_results: [],
+      categorization: { speech: 'Final live answer', reasoning: 'QA_INTERNAL_LIVE_REASONING' },
+    }
+    const original = JSON.stringify([stored, streaming])
+    chatSession.appendSessionMessage('session-b', stored)
+    chat.$patch({ activeSendSessionId: 'session-b', activeStreamingMessage: streaming, sending: true })
+
+    await expect.element(screen.getByText('Final stored answer', { exact: true })).toBeVisible()
+    await expect.element(screen.getByText('Final live answer', { exact: true })).toBeVisible()
+    expect(screen.container.textContent).not.toContain('QA_INTERNAL_')
+    developer.showChatReasoning = true
+    await vi.waitFor(() => expect(screen.container.textContent).toContain('QA_INTERNAL_STORED_REASONING'))
+    expect(screen.container.textContent).toContain('QA_INTERNAL_LIVE_REASONING')
+    developer.showChatReasoning = false
+    await vi.waitFor(() => expect(screen.container.textContent).not.toContain('QA_INTERNAL_'))
+    expect(chatSession.getSessionMessages('session-b').find(message => message.id === stored.id)).toMatchObject(stored)
+    expect(chat.activeStreamingMessage).toMatchObject(streaming)
+    expect(JSON.stringify([stored, streaming])).toBe(original)
+    expect(getLiaCapabilitySnapshot()).toBeUndefined()
+  })
+
   it.each([{ stored: 0, attached: 4 }, { stored: 3, attached: 1 }])('refuses excess images before sending and preserves the draft and previews: %o', async ({ stored, attached }) => {
     brainIPC.decision.mockResolvedValue(visionDecision())
     const { screen, chat, chatSession } = await renderArea()

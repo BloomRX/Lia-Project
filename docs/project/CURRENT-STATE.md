@@ -97,20 +97,39 @@ rascunho preservado, retry 200 concluído; duas requisições e sondas restaurad
 Python 496/10 skips, Node 267 e Launcher 247/2 skips PASS. Um console.error
 bruto antigo no Core segue pendente.
 
-**Próximo item exato:** corrigir a fronteira de apresentação da janela Lia Chat
-para respeitar a política de reasoning sem depender de snapshot de capacidades.
-Runtime confirmou snapshot ausente, flag desenvolvedor false e query sem
-lia-managed; defaults standalone devem permanecer intactos. Gate de conteúdo
-da imagem continua FAIL; loop real de ferramentas pendente. A sonda de conexão
-atual só usa ping e não aprova loop.
+**Reasoning concluído em 23/10:** janela Chat recebe marcador gerenciado pela
+autoridade já usada na principal; política explícita de apresentação não depende
+de snapshot. Flag desenvolvedor reativa, histórico/stream intactos e standalone
+preservado. RED funcional, contraprova e correção de regressão standalone na
+revisão; 22 browser dirigidos, 11 contratos e 18 browser de regressão PASS.
+Lint de 8 arquivos, typechecks Stage/Stage UI e build Stage PASS. Typecheck teve
+TS2307 de pré-requisito em execução intermediária; repetição com dist estável
+passou, sem atribuir causa confirmada à concorrência.
+Fixtures do host agora fornecem contexto real (28 PASS, lint +2 arquivos).
+Fixtures antigas do reporter foram corrigidas em commit separado para emitir
+resposta real no mock (12 PASS), preservando política/asserções. Tipo usa API
+pública do Stage UI após corrigir import TS2307. Stage Node completo final:
+1798 PASS/4 skips em 144 arquivos; falhas intermediárias preservadas no relatório.
+Python 496/10 skips, Node 267 e Launcher 247/2 skips PASS. Windows real sem transporte de teste:
+resposta 42, raciocínio salvo e ausente do DOM, flag false e placeholder pt-BR;
+captura aprovada. Sessão encerrada às `2026-10-23T12:54:23.461Z` em 584 ms,
+Launcher exit 0, Electron do checkout ausente. Baseline inalterado.
+
+**Próximo item exato:** proteger logs brutos de falha de envio do Core,
+incluindo orquestrador, promises/callbacks do llm-service e parser de resposta.
+Preservar identidade da rejeição, sinks e estados terminais, com sentinelas
+sintéticas em testes antes da correção. Gate de conteúdo da imagem continua
+FAIL; loop real de ferramentas pendente. A sonda de conexão atual só usa ping
+e não aprova loop.
 Continuar as pendências da 8.0D antes
 de avançar Launcher/presença/release. Não alterar fallback, Persona ou secrets.
 
-Execução de QA de 22/10 encerrada normalmente às `01:54:46Z` em 491 ms;
-Stage PID 2356 e Electron do checkout ausentes. Sondas restauradas. Evidências em
-`Tests/runs/release-20261022/`, com testes da execução iniciada em 21/10.
-Relatório, arquivos, comandos e DoD:
-[`RELEASE-WINDOWS-2026-10-22.md`](../product/RELEASE-WINDOWS-2026-10-22.md).
+Execução de QA de 23/10 encerrada normalmente às `12:54:23.461Z` em 584 ms;
+Electron do checkout ausente. O gate de apresentação desta rodada não usou
+sonda de transporte. Evidências locais em `Tests/runs/release-20261022/`.
+Relatório atual, arquivos, comandos e DoD em
+[`RELEASE-WINDOWS-2026-10-23.md`](../product/RELEASE-WINDOWS-2026-10-23.md).
+Histórico de imagem e erros no relatório de 22/10.
 Instalador/instalação limpa NÃO EXECUTADOS; release incompleta, baseline inalterado.
 
 **Restrições de continuidade:** o preflight em `20b9da7` encontrou árvore limpa;

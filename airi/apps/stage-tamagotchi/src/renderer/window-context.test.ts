@@ -36,6 +36,16 @@ describe('resolveRendererWindowContext', () => {
     expect(resolveRendererWindowContext('?synced-leader=false&stage-runtime=minimal').stageRuntime).toBe('minimal')
   })
 
+  it('identifies a managed minimal Chat only through the explicit main-process query', () => {
+    expect(resolveRendererWindowContext('?synced-leader=false&stage-runtime=minimal&lia-managed=true')).toEqual({
+      leadership: 'follower-only',
+      liaManaged: true,
+      stageRuntime: 'minimal',
+    })
+    expect(resolveRendererWindowContext('?synced-leader=false&stage-runtime=minimal').liaManaged).toBe(false)
+    expect(() => resolveRendererWindowContext('?synced-leader=false&lia-managed=false')).toThrow('Invalid lia-managed query: false')
+  })
+
   it('rejects a renderer URL without an explicit leadership query', () => {
     expect(() => resolveRendererWindowContext('')).toThrow('Missing synced-leader query')
     expect(() => resolveRendererWindowContext('?synced-leader=unknown')).toThrow('Invalid synced-leader query: unknown')

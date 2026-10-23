@@ -230,6 +230,7 @@ filtro de reasoning ou implementação TTS. Detalhes e limites no
 
 | Data | Arquivo/item | Mudança |
 |---|---|---|
+| 23/10/2026 | Stage Chat query/context e stage-ui Chat presentation | Reutilizado marcador de gerenciamento do main e contrato auto/visible/hidden para ocultar reasoning na Lia, preservando standalone e dados; testes e gate Windows restrito no relatório de 23/10 |
 | 22/10/2026 | `stage-ui` Chat/send-error e locales stage | Catálogo seguro antes da persistência, tradução reativa na UI/cópia, retry preservado. RED, contraprova, testes e Windows com transporte sintético no relatório de 22/10; sem alteração de fallback/TTS |
 | 07/09/2026 | `airi/` (subtree) | Integrado AIRI v0.12.0-beta.5 (commit `2c1e223c…`) via `git subtree add --squash` |
 | 07/09/2026 | `devkit.json` | `airi/` em `ignore_dirs` (baseline vendado fora do escopo de validação/commit do DevKit) |

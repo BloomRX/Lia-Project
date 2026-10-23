@@ -1,6 +1,6 @@
 # Matriz de compatibilidade da Lia
 
-Atualização: 20/10/2026. Baseline funcional permanece `3ef6d11`.
+Atualização: 23/10/2026. Baseline funcional permanece `3ef6d11`.
 Os estados de suporte não substituem os resultados de cada verificação.
 
 | Plataforma | GPU | Estado de suporte | Evidência |
@@ -25,7 +25,8 @@ Os estados de suporte não substituem os resultados de cada verificação.
 | Conversa de texto desta rodada | PASS Windows real | Após corrigir seleção local, nova conversa manteve sessão e resposta 42 visível |
 | Imagem determinística na UI | FAIL de conteúdo | Reteste 22/10: sete ferramentas, PNG intacto por SHA-256/dimensões; resposta bruta confunde retângulo com quadrado e inventa terceira forma. Primeiro envio BLOCKED por quota413 |
 | Schema Spark e constrained decoding | PASS automatizado e integração Windows | Comparação mínima: strict=true encerra vazio; strict=false responde. Validação local antes do despacho; não aprova loop real de ferramentas |
-| Texto independente após imagem | PASS Windows real funcional / FAIL de UX | Nova conversa, rota de texto, pedido sem imagem e 42 visível em 22/10; preview reasoning e placeholder inglês pendentes |
+| Texto independente após imagem | PASS Windows real funcional | Nova conversa, rota de texto, pedido sem imagem e 42 visível em 22/10; correção de apresentação validada separadamente em 23/10 |
+| Apresentação de reasoning no Chat Lia | PASS automatizado e Windows real | 23/10: 42 do serviço configurado sem sonda, reasoning preservado no store e ausente do DOM, flag false e placeholder pt-BR. Reatividade e standalone cobertos por browser tests; não aprova UI completa |
 | Build de produção do Stage | PASS automatizado | electron-vite build concluído; não equivale a instalador nem instalação limpa |
 | Visão Groq em pedido mínimo | PASS integração direta no Windows | Descrição correta em JSON e SSE; não substitui o fluxo da UI |
 | Stream vazio no Chat | PASS Windows real | Erro em pt-BR, anexo/pergunta e retry preservados, log terminal failed |
@@ -37,4 +38,4 @@ Os estados de suporte não substituem os resultados de cada verificação.
 | Lia Livre / múltiplos monitores | NÃO EXECUTADO | Implementação de produto ausente |
 | Instalador e instalação limpa | NÃO EXECUTADO | Launcher ainda sem contrato de empacotamento de release |
 
-Evidências e limitações: [relatório da rodada](../product/RELEASE-WINDOWS-2026-10-20.md).
+Evidências e limitações: [relatório da rodada](../product/RELEASE-WINDOWS-2026-10-23.md).

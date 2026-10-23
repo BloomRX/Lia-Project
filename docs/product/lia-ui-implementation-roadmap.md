@@ -3,6 +3,13 @@
 **Status:** Draft baseline  
 **Purpose:** Keep product UI work aligned with the runtime architecture while implementation proceeds in small phases.
 
+**Chat presentation, 2026-10-23:** managed secondary windows now hide internal
+reasoning by default without requiring capability bootstrap. Stored content,
+the reactive developer preference and standalone behavior are preserved. A
+real Windows request displayed 42 with a pt-BR composer and no reasoning
+preview. Browser regressions, typechecks, lint and Stage build passed; image
+content and installer gates remain open. See [the report](RELEASE-WINDOWS-2026-10-23.md).
+
 **Streaming verification, 2026-10-22:** character-sized deltas now preserve
 whitespace in content, history and synchronized events. Unit regressions and
 the Windows Chat with a synthetic SSE transport passed. The image-content

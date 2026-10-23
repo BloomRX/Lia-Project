@@ -989,6 +989,13 @@ its Copy action. Preserve the user's draft and attachments when sending fails.
 The 2026-10-22 implementation covers safe error storage/display and live
 pt-BR/English translation; see the release validation report for its limits.
 
+Managed Lia Chat hides internal reasoning by default, including secondary
+windows without a capability snapshot. The existing developer preference may
+reveal it reactively. This presentation rule preserves stored content and the
+standalone AIRI default. The 2026-10-23 Windows gate confirmed a real final
+answer and a localized composer without a technical preview; this is a scoped
+check, not approval of the complete Chat layout.
+
 ---
 
 ## 32. Accessibility

@@ -15,6 +15,7 @@ import { useChatStreamStore } from '@proj-airi/stage-ui/stores/chat/stream-store
 import { useJournalPreviewStore } from '@proj-airi/stage-ui/stores/journal-preview'
 import { useAiriCardStore } from '@proj-airi/stage-ui/stores/modules/airi-card'
 import { useConsciousnessSettingsStore } from '@proj-airi/stage-ui/stores/modules/consciousness-settings'
+import { useSettingsDeveloper } from '@proj-airi/stage-ui/stores/settings/developer'
 import { BasicTextarea } from '@proj-airi/ui'
 import { useLocalStorage } from '@vueuse/core'
 import { storeToRefs } from 'pinia'
@@ -31,6 +32,7 @@ import { chatTurnFactsFromSend, chatTurnImageInputCount } from '../services/lia/
 import { executeLiaAuthoritativeRetry } from '../services/lia/lia-authoritative-retry'
 import { LiaImageLimitError, resolveLiaAuthoritativeSendRoute } from '../services/lia/lia-authoritative-route-resolver'
 import { artistryToolReferences, widgetToolReferences } from '../stores/tools'
+import { resolveRendererWindowContext } from '../window-context'
 
 const router = useRouter()
 const messageInput = ref('')
@@ -48,6 +50,11 @@ const airiCardStore = useAiriCardStore()
 // Existing session-level reasoning request - the same value consciousness
 // chat request preparation reads (no new state is introduced for the shadow).
 const consciousnessSettings = useConsciousnessSettingsStore()
+const developer = useSettingsDeveloper()
+const windowContext = resolveRendererWindowContext()
+const reasoningVisibility = computed(() => windowContext.liaManaged
+  ? developer.showChatReasoning ? 'visible' : 'hidden'
+  : 'auto')
 
 const { activeSessionId, messages } = storeToRefs(chatSession)
 const { streamingMessage } = storeToRefs(chatStream)
@@ -364,6 +371,7 @@ async function handleCleanupMessages() {
         :sending="isActiveSessionSending"
         :streaming-message="visibleStreamingMessage"
         :tool-call-renderers="toolCallRenderers"
+        :reasoning-visibility="reasoningVisibility"
         @delete-message="handleDeleteMessage($event.index)"
         @retry-message="handleRetryMessage($event.index)"
         @tool-call-rerun="handleToolCallRerun"

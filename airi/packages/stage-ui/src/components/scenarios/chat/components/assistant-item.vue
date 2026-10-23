@@ -18,10 +18,12 @@ const props = withDefaults(defineProps<{
   label: string
   scrollContainer?: HTMLElement | null
   showPlaceholder?: boolean
+  reasoningVisibility?: 'auto' | 'visible' | 'hidden'
   variant?: 'desktop' | 'mobile'
   toolCallRenderers?: ChatToolCallRendererRegistry
 }>(), {
   showPlaceholder: false,
+  reasoningVisibility: 'auto',
   scrollContainer: null,
   variant: 'desktop',
   toolCallRenderers: () => ({}),
@@ -108,6 +110,7 @@ const copyText = computed(() => getChatHistoryItemCopyText(props.message as Chat
           <ChatResponsePart
             v-if="message.categorization"
             :message="message"
+            :reasoning-visibility="reasoningVisibility"
             :variant="variant"
           />
           <div class="<sm:hidden">

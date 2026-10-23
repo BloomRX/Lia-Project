@@ -11,6 +11,7 @@ import icon from '../../../../resources/icon.png?asset'
 
 import { baseUrl, getElectronMainDirname, load, withHashRoute } from '../../libs/electron/location'
 import { createReusableWindow } from '../../libs/electron/window-manager'
+import { isLauncherManaged } from '../../services/lia/lia-managed'
 import { protectPrivilegedWindowNavigation } from '../shared'
 import { setupChatWindowElectronInvokes } from './rpc/index.electron'
 
@@ -48,6 +49,7 @@ export function setupChatWindowReusableFunc(params: {
       query: {
         'stage-runtime': 'minimal',
         'synced-leader': 'false',
+        ...(isLauncherManaged() ? { 'lia-managed': 'true' } : {}),
       },
     }))
 
