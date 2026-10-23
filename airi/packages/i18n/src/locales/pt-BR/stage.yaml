@@ -1,0 +1,39 @@
+chat:
+  actions:
+    retry: Tentar novamente
+  errors:
+    auth-failure: O serviço de IA não conseguiu verificar o acesso. Confira a conexão nas configurações e tente novamente.
+    permission-failure: O serviço de IA recusou o acesso. Confira a conexão nas configurações e tente novamente.
+    input-limit: Esta conversa ou seus anexos são grandes demais. Inicie uma nova conversa ou use menos imagens, com tamanho menor.
+    quota: O serviço de IA atingiu o limite de uso. Aguarde um pouco e tente novamente ou confira os limites do serviço nas configurações.
+    network: Não foi possível conectar ao serviço de IA. Confira sua conexão e tente novamente.
+    service-unavailable: O serviço de IA está temporariamente indisponível. Aguarde um pouco e tente novamente.
+    empty-response: O serviço de IA terminou sem enviar uma resposta. Tente novamente.
+    other: Não foi possível enviar sua mensagem. Tente novamente. Se o problema continuar, confira a conexão nas configurações.
+  message:
+    character-name:
+      airi: Lia
+      core-system: Sistema
+      you: Você
+  reasoning: Raciocínio
+  sessions:
+    title: Conversas
+    new: + Nova
+    empty: Nenhuma conversa ainda
+    cloud-badge: Sincronizada na nuvem
+    new-chat-fallback: Nova conversa
+    delete: Excluir conversa
+message: Escreva uma mensagem...
+send-mode:
+  title: Tecla para enviar
+  enter: Enter
+  ctrl-enter: Ctrl + Enter
+  double-enter: Enter duas vezes
+speech-output:
+  mute: Silenciar voz
+  unmute: Ativar voz
+waiting: Aguardando
+websocket-status:
+  connected: Conectado
+  disconnected: Sem conexão
+  open-settings: Abrir configurações da conexão

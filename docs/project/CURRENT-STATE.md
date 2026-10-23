@@ -81,15 +81,33 @@ Validação final: Python 496/10 skips, Node 267 e Launcher 247/2 skips PASS;
 sem novas fixtures residuais. Lint de ferramentas da raiz BLOCKED por falta
 de configuração ESLint aplicável (exit 2); não foi declarado PASS.
 
-**Próximo item exato:** repetir o gate real de imagem em conversa QA isolada,
-com as sete ferramentas, comparando hash/dimensões do anexo enviado e a
-resposta bruta do prompt de QA com conteúdo salvo. Depois, texto independente e
-loop real de ferramentas; a sonda de conexão atual só usa ping e não aprova loop.
+**Reteste real em 22/10:** primeiro pedido BLOCKED 413 (7006 > 7000 tokens de
+entrada). Pergunta mais curta recebeu resposta, mas conteúdo FAIL: quadrado
+em vez de retângulo e terceira forma inventada. PNG enviado intacto por hash,
+842 bytes/240×160; sete ferramentas mantidas. Texto bruto errado já veio do
+serviço. Whitespace preservado no store, inclusive três deltas só de espaços.
+Texto independente: 42 visível, rota de texto e zero imagens no pedido, PASS
+funcional; UX FAIL por reasoning inglês/placeholder. Sondas restauradas.
+
+**Erros de envio concluídos em 22/10:** catálogo seguro antes da persistência,
+exibição/cópia pt-BR/en reativa e legado sem reescrita. 111 testes dirigidos,
+275 de regressão Chat, 13 browser; lint de 9 arquivos, typecheck Stage UI,
+build i18n/Stage PASS. Windows com transporte sintético: 413 seguro na tela/store,
+rascunho preservado, retry 200 concluído; duas requisições e sondas restauradas.
+Python 496/10 skips, Node 267 e Launcher 247/2 skips PASS. Um console.error
+bruto antigo no Core segue pendente.
+
+**Próximo item exato:** corrigir a fronteira de apresentação da janela Lia Chat
+para respeitar a política de reasoning sem depender de snapshot de capacidades.
+Runtime confirmou snapshot ausente, flag desenvolvedor false e query sem
+lia-managed; defaults standalone devem permanecer intactos. Gate de conteúdo
+da imagem continua FAIL; loop real de ferramentas pendente. A sonda de conexão
+atual só usa ping e não aprova loop.
 Continuar as pendências da 8.0D antes
 de avançar Launcher/presença/release. Não alterar fallback, Persona ou secrets.
 
-Execução de QA de 22/10 **aberta** pelo Launcher (Stage PID 2356), em conversa
-sintética nova; sonda de fetch restaurada. Evidências ignoradas em
+Execução de QA de 22/10 encerrada normalmente às `01:54:46Z` em 491 ms;
+Stage PID 2356 e Electron do checkout ausentes. Sondas restauradas. Evidências em
 `Tests/runs/release-20261022/`, com testes da execução iniciada em 21/10.
 Relatório, arquivos, comandos e DoD:
 [`RELEASE-WINDOWS-2026-10-22.md`](../product/RELEASE-WINDOWS-2026-10-22.md).

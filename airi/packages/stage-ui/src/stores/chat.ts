@@ -496,15 +496,9 @@ export const useChatStore = defineStore('chat', () => {
       return
 
     const raw = errorMessageFrom(error) ?? 'Unknown chat operation failure'
-    // Phase 7.3 (QA item 10): the bubble gets the human mapping; the raw
-    // provider error ALWAYS stays in the diagnostic log. Raw text never
-    // contains secrets - transport errors carry status/code, not keys.
-    const humanized = humanizeSendErrorMessage(raw, {
-      authHint: 'the Lia Settings',
-      fallback: 'Unknown chat operation failure',
-    })
-    if (humanized.kind === 'auth-failure')
-      console.warn('[lia] chat send auth failure (raw provider detail follows):', raw)
+    // Persist only safe canonical text. The UI localizes it at render time;
+    // legacy transport payloads are also replaced before rendering or copying.
+    const humanized = humanizeSendErrorMessage(raw)
 
     chatSession.appendSessionMessage(sessionId, {
       role: 'error',

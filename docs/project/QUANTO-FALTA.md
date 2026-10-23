@@ -17,6 +17,12 @@ Node 267 e Launcher 247/2 skips PASS. UI Windows com transporte SSE sintético
 confirmou palavras separadas e conteúdo salvo exato. O gate do serviço real
 continua separado. [Evidência](../product/RELEASE-WINDOWS-2026-10-22.md).
 
+Erros de envio agora usam texto seguro no novo histórico e tradução pt-BR/en
+na tela/cópia, inclusive para legado sem regravar dados. 111 testes dirigidos,
+275 de regressão Chat e 13 browser, lint/typecheck/builds e suítes gerais PASS.
+Windows com transporte sintético validou 413→retry 200 com rascunho preservado. Reasoning inglês ainda
+visível: runtime identificou snapshot ausente na janela Chat; próximo item.
+
 Retomada de 21/10: preflight Python 495/10 skips, Node 267, Launcher 247/2 skips
 e core-agent 144 PASS. Fixtures e artefatos reorganizados sob `Tests/tmp` e
 `Tests/artifacts`; evidências e limites em

@@ -1,8 +1,9 @@
-// pt-BR locale (M1). Ships the Lia Home and the Electron tray menu in pt-BR;
-// other namespaces still fall back to `en`. The complete pt-BR locale is
-// expanded in M1 Phase 4 (i18n).
+// Ships Lia Home, tray and chat basics in pt-BR. Untranslated namespaces
+// continue to fall back to `en`.
+import stage from './stage.yaml'
 import tamagotchi from './tamagotchi'
 
 export default {
+  stage,
   tamagotchi,
 }

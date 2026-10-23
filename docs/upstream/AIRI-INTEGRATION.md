@@ -230,10 +230,11 @@ filtro de reasoning ou implementação TTS. Detalhes e limites no
 
 | Data | Arquivo/item | Mudança |
 |---|---|---|
+| 22/10/2026 | `stage-ui` Chat/send-error e locales stage | Catálogo seguro antes da persistência, tradução reativa na UI/cópia, retry preservado. RED, contraprova, testes e Windows com transporte sintético no relatório de 22/10; sem alteração de fallback/TTS |
 | 07/09/2026 | `airi/` (subtree) | Integrado AIRI v0.12.0-beta.5 (commit `2c1e223c…`) via `git subtree add --squash` |
 | 07/09/2026 | `devkit.json` | `airi/` em `ignore_dirs` (baseline vendado fora do escopo de validação/commit do DevKit) |
 | 07/09/2026 | `docs/upstream/AIRI-INTEGRATION.md` | Atualizado com método, estrutura, verificações e procedimento |
 | 07/09/2026 | `docs/upstream/AIRI-INTEGRATION.md` | Registrados resultados reais (install OK, typecheck 56/57, achado upstream `d8e62f12`) |
 | 07/09/2026 | `docs/upstream/AIRI-INTEGRATION.md` | Registrados `build:web` OK (22/22) e `dev:tamagotchi` OK (janela abriu) → **baseline AIRI validado no runtime desktop** |
 
-Nenhum código do AIRI foi modificado; nenhuma feature/UI/provider/installer da Lia foi iniciada; nenhuma dependência instalada nesta etapa.
+Na etapa inicial M0-A, nenhum código do AIRI foi modificado e nenhuma feature/UI/provider/installer da Lia foi iniciada. As adaptações posteriores estão registradas acima.

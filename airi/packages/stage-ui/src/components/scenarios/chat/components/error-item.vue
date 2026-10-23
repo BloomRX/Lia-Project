@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import type { ChatHistoryItem, ErrorMessage } from '../../../../types/chat'
+import type { ErrorMessage } from '../../../../types/chat'
 
 import { isStageCapacitor, isStageWeb } from '@proj-airi/stage-shared'
 import { IconButton } from '@proj-airi/ui'
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 
+import { humanizeSendErrorMessage } from '../../../../stores/chat/send-error'
 import { MarkdownRenderer } from '../../../markdown'
-import { getChatHistoryItemCopyText } from '../utils'
 import { ChatActionMenu } from './action-menu'
 
 const props = withDefaults(defineProps<{
@@ -37,7 +38,8 @@ const boxClasses = computed(() => [
     ? ['px-2 py-2 text-sm', 'bg-violet-100/60 backdrop-blur-xl dark:bg-violet-950/60']
     : ['px-3 py-3', 'bg-violet-100/80 dark:bg-violet-950/80'],
 ])
-const copyText = computed(() => getChatHistoryItemCopyText(props.message as ChatHistoryItem))
+const { t } = useI18n()
+const safeText = computed(() => humanizeSendErrorMessage(props.message.content, { translate: t }).humanText)
 </script>
 
 <template>
@@ -49,7 +51,7 @@ const copyText = computed(() => getChatHistoryItemCopyText(props.message as Chat
     ]"
   >
     <ChatActionMenu
-      :copy-text="copyText"
+      :copy-text="safeText"
       :can-delete="!showPlaceholder"
       :can-retry="canRetry && !showPlaceholder"
       :scroll-container="scrollContainer"
@@ -80,7 +82,7 @@ const copyText = computed(() => getChatHistoryItemCopyText(props.message as Chat
           <div v-if="showPlaceholder" i-eos-icons:three-dots-loading />
           <MarkdownRenderer
             v-else
-            :content="message.content"
+            :content="safeText"
             class="whitespace-pre-wrap break-all text-violet-500 dark:text-violet-300"
           />
         </div>

@@ -983,6 +983,12 @@ Keyboard navigation and visible focus must be maintained.
 
 Do not use glow as the only focus indicator.
 
+Chat send errors use localized human messages with a clear retry action.
+Transport JSON, service URLs and credentials never belong in the message or
+its Copy action. Preserve the user's draft and attachments when sending fails.
+The 2026-10-22 implementation covers safe error storage/display and live
+pt-BR/English translation; see the release validation report for its limits.
+
 ---
 
 ## 32. Accessibility

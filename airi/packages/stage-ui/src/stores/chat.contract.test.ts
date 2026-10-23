@@ -372,10 +372,31 @@ describe('chat store contract', () => {
 
     expect(sessionMessages['session-1']?.at(-1)).toMatchObject({
       role: 'error',
-      content: 'O serviço de IA terminou sem enviar uma resposta. Tente novamente.',
+      content: 'The AI service finished without sending a response. Try again.',
     })
     expect(sessionMessages['session-1']?.some(message => message.role === 'assistant')).toBe(false)
     expect(store.sending).toBe(false)
+  })
+
+  it.each([413, 429, 503, 401])('persists a safe error for HTTP %s without copying transport details into its warning', async (status) => {
+    const raw = `Remote sent ${status} response: {"error":{"message":"SENTINEL_PRIVATE https://service.invalid/account user-qa"}}`
+    const failure = new Error(raw)
+    llmStreamMock.mockRejectedValueOnce(failure)
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      const store = useChatStore()
+      await expect(store.send({ sessionId: 'session-1', text: 'synthetic QA input' })).rejects.toBe(failure)
+      const storedError = sessionMessages['session-1']?.find(message => message.role === 'error')
+      expect(storedError).toBeDefined()
+      expect(storedError.content).not.toContain('SENTINEL_PRIVATE')
+      expect(storedError.content).not.toContain('https://')
+      expect(storedError.content).not.toContain('{')
+      expect(JSON.stringify(warning.mock.calls)).not.toContain('SENTINEL_PRIVATE')
+      expect(store.sending).toBe(false)
+    }
+    finally {
+      warning.mockRestore()
+    }
   })
 
   it('passes the current consciousness reasoning option to the chat provider', async () => {
