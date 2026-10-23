@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import type { StreamOptions } from '@proj-airi/core-agent'
 import type { ChatRequestStartedObservation } from '@proj-airi/stage-ui/stores/chat/chat-provider-runtime'
 
 import { readdirSync, readFileSync } from 'node:fs'
@@ -478,10 +479,11 @@ describe('lia execution reporter across provider attempts (Phase 8.0D-10B-4A)', 
 
   /** The REAL chat store send: one logical send, a fallback resolver, two attempts. */
   async function sendWithFallbackOnce(): Promise<void> {
-    storeMocks.llmStream.mockImplementation(async () => {
+    storeMocks.llmStream.mockImplementation(async (_model: unknown, _chatProvider: unknown, _messages: unknown, options: StreamOptions) => {
       if (storeMocks.llmStream.mock.calls.length === 1)
         throw new Error('provider a is down')
-      return undefined
+      await options.onStreamEvent?.({ type: 'text-delta', text: 'synthetic reply' })
+      await options.onStreamEvent?.({ type: 'finish', finishReason: 'stop' })
     })
     registerChatFallbackResolver(() => ({ providerId: 'fallback-provider', modelId: 'fallback-model' }))
 
@@ -523,7 +525,10 @@ describe('lia execution reporter across provider attempts (Phase 8.0D-10B-4A)', 
   it('q2: an uncorrelated send of the same shape reports nothing', async () => {
     const provider = { chat: () => ({ baseURL: 'https://example.com/' }) }
     storeMocks.getChatProviderInstance.mockImplementation((providerId: string) => ({ provider, providerId }))
-    storeMocks.llmStream.mockImplementation(async () => undefined)
+    storeMocks.llmStream.mockImplementation(async (_model: unknown, _chatProvider: unknown, _messages: unknown, options: StreamOptions) => {
+      await options.onStreamEvent?.({ type: 'text-delta', text: 'synthetic reply' })
+      await options.onStreamEvent?.({ type: 'finish', finishReason: 'stop' })
+    })
     registerLiaBrainExecutionObserver()
 
     await useChatStore().send({ sessionId: 'session-1', text: 'voice or spotlight send' })
