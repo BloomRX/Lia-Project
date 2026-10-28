@@ -13,6 +13,16 @@ commit. Registra **estado**, não narrativa: relatório de rodada vai para
 
 ## 0. Estado agora
 
+**Hardening Alethe em 28/10/2026:** editor com texto DOM inerte e URLs HTTP(S)
+sem credenciais; reserva atômica de estimativas e diagnóstico de excedentes.
+Chromium real: 1 PASS; orçamento: 10 PASS, incluindo processos Windows;
+estrutura skills: 5 PASS. Sete referências reparadas. Tokens reportados seguem
+posteriores à chamada, sem promessa de teto rígido. Não houve nova chamada de IA,
+gate de produto ou promoção do baseline. Seis Core preexistentes preservados.
+Relatório atual: `docs/architecture/ALETHE-HARDENING-2026-10-28.md`.
+A restrição histórica do editor citada na auditoria abaixo é atualizada por este
+relatório; não equivale a aprovação de sandbox adversarial ou de todos providers.
+
 **Auditoria em 28/10/2026:** inspecionadas 21 skills raiz e 28 AIRI, incluindo
 Alethe 19 integrado em `a0e56fa8`. Nenhuma funcionalidade nova nesta tarefa.
 Seis arquivos Core preexistentes continuam modificados e excluídos dos commits

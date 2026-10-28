@@ -3239,6 +3239,7 @@ class BudgetTracker:
         self.reserved: Dict[str, float] = {}
         self.lock = threading.Lock()
         self.calls = 0
+        self.estimated_prompt_tokens = 0
         self.started_clock = time.monotonic()
         self.reported_cost = 0.0
         self.cost_seen = False
@@ -3282,11 +3283,16 @@ class BudgetTracker:
             self.reported_tokens if self.tokens_seen else None,
         )
 
-    def admit(self, worker_id: str, wants_cost_cap: bool = False) -> Tuple[Optional[str], Optional[float]]:
+    def admit(self, worker_id: str, wants_cost_cap: bool = False, estimated_prompt_tokens: int = 0) -> Tuple[Optional[str], Optional[float]]:
         with self.lock:
             refusal = self.refusal()
             if refusal is not None:
                 return refusal, None
+            if type(estimated_prompt_tokens) is not int or estimated_prompt_tokens < 0:
+                return "invalid estimated prompt token count", None
+            estimate_limit = self.budget.get("maxEstimatedPromptTokens")
+            if estimate_limit is not None and self.estimated_prompt_tokens + estimated_prompt_tokens > estimate_limit:
+                return f"budget maxEstimatedPromptTokens {estimate_limit} exhausted", None
             cap = None
             remaining = self.remaining_cost() if wants_cost_cap else None
             if remaining is not None:
@@ -3298,6 +3304,7 @@ class BudgetTracker:
                     return "budget maxReportedCostUsd leaves less than $0.01 for this worker", None
                 self.reserved[worker_id] = cap
             self.calls += 1
+            self.estimated_prompt_tokens += estimated_prompt_tokens
             if self.state is not None:
                 self.state.update_budget(self.usage_snapshot())
             return None, cap
@@ -3309,18 +3316,30 @@ class BudgetTracker:
             self.finished.add(worker_id)
             self.reserved.pop(worker_id, None)
             cost = metrics.get("totalCostUsd")
-            if isinstance(cost, (int, float)) and not isinstance(cost, bool):
+            if isinstance(cost, (int, float)) and not isinstance(cost, bool) and math.isfinite(cost) and cost >= 0:
                 self.cost_seen = True
                 self.reported_cost += cost
             tokens = reported_total_tokens(metrics.get("usage"))
-            if tokens is not None:
+            if tokens is not None and tokens >= 0:
                 self.tokens_seen = True
                 self.reported_tokens += tokens
             if self.state is not None:
                 self.state.update_budget(self.usage_snapshot())
 
     def usage_snapshot(self) -> Dict[str, Any]:
+        actuals = {
+            "maxCalls": self.calls,
+            "maxEstimatedPromptTokens": self.estimated_prompt_tokens,
+            "maxWallSeconds": time.monotonic() - self.started_clock,
+            "maxReportedTokens": self.reported_tokens if self.tokens_seen else None,
+            "maxReportedCostUsd": self.reported_cost if self.cost_seen else None,
+        }
+        exceeded = {key: {"limit": self.budget[key], "actual": value}
+                    for key, value in actuals.items()
+                    if key in self.budget and value is not None and value > self.budget[key]}
         return {
+            "exceededLimits": exceeded,
+            "estimatedPromptTokens": self.estimated_prompt_tokens,
             "calls": self.calls,
             "wallSeconds": round(time.monotonic() - self.started_clock, 3),
             "reportedCostUsd": round(self.reported_cost, 6) if self.cost_seen else None,
@@ -3413,7 +3432,7 @@ def run_worker(
         if quota_stop is not None:
             tracker.finish(worker_id, {})
             return settle(status="skipped", error=quota_stop, failureKind="quota_low")
-    refusal, cost_cap = tracker.admit(worker_id, worker["provider"] == "claude")
+    refusal, cost_cap = tracker.admit(worker_id, worker["provider"] == "claude", worker["estimatedPromptTokens"])
     if refusal is not None:
         tracker.finish(worker_id, {})
         return settle(status="skipped", error=refusal, failureKind="budget")

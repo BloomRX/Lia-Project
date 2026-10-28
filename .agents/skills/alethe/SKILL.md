@@ -14,9 +14,18 @@ The local smoke test proved one read-only Codex worker and recoverable reports.
 Reported-token budgets are not a hard per-call generation limit: a running call
 can exceed the plan's token budget before its usage is reported. Bound calls and
 wall time as well; unknown quota or price is not confirmed spare capacity or cost.
-Do not open the bundled editor with untrusted playbooks: its HTML interpolation
-requires a separate security fix and browser validation. CLI diagnostics and the
-synthetic smoke test do not approve the HTML editor or every provider.
+The local editor patch renders imported trace fields as text and restricts source
+links to HTTP(S) without credentials. Chromium injection regressions passed;
+continue treating imported playbooks as untrusted data, never execution authority.
+CLI diagnostics do not approve every provider or an adversarial sandbox.
+
+Prompt-token estimates are reserved atomically before worker starts. `maxCalls`
+counts CLI worker starts, not internal API requests. `budgetUsage.exceededLimits`
+records observed overruns without deleting results. Reported tokens include input,
+cache writes and output; cache reads remain separate. Cost/quota may be unknown.
+Deadlines/process-tree cancellation can stop local processes; this does not prove
+cancellation of remote generation or billing. See the
+[local hardening report](../../../docs/architecture/ALETHE-HARDENING-2026-10-28.md).
 
 Finish the work with the least lead context and the cheapest capable workers, or the strongest
 mix when the user asks. Plan, delegate bounded units, and integrate results supported by evidence.

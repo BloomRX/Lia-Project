@@ -1,5 +1,13 @@
 # Origem e manutenção
 
+## Patches locais de segurança — 28/10/2026
+
+Sobre v19, comparada anteriormente com `c36c341c34360f970a07fe3e2d2600ca2bba8ed2`:
+editor com DOM/textContent e filtro de URL; runner com reserva atômica de
+estimativas e diagnóstico de excedentes. Não é nova versão upstream.
+Preservar esses patches ao comparar atualizações. Testes e limites em
+`docs/architecture/ALETHE-HARDENING-2026-10-28.md` na raiz do repositório Lia.
+
 - Projeto original: https://github.com/Kc1t/alethe-orchestrate-skill
 - Versão upstream: 19 (2026-10-23)
 - Licença: MIT; cópia em `LICENSE`

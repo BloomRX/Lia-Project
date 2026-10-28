@@ -1,5 +1,10 @@
 # Auditoria operacional de skills — 28/10/2026
 
+**Atualização posterior:** editor e admissão de orçamento endurecidos com
+regressões executadas; sete referências upstream reparadas sem remover skills.
+O histórico desta auditoria permanece abaixo. Evidências e limites atuais:
+[hardening de 28/10](ALETHE-HARDENING-2026-10-28.md).
+
 ## Resumo executivo
 
 Auditadas **49 skills: 21 na raiz e 28 no AIRI**. A leitura individual,
