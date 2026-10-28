@@ -4,6 +4,15 @@ description: Localiza e executa a suíte certa da Lia entre Python tools/, Node 
 compatibility: Exige Node, pnpm e Python. Suítes Vitest exigem dependências do workspace instaladas.
 ---
 # Testes na Lia
+
+## Concorrência com runtime Windows
+
+O teste `j` em `airi/apps/lia-app/src/main/stage-build-prerequisite.test.ts`
+executa build do Core no checkout real. O tsdown limpa `core-agent/dist` antes
+de reescrever os arquivos. Não execute a suíte Launcher junto do Stage aberto,
+de typechecks ou de testes consumidores desse dist. Ordem: Launcher termina,
+demais verificações/builds terminam, então gate Windows. Um 404 durante essa
+janela não prova regressão do aplicativo; registre o evento e investigue.
 ## 1. Suíte, diretório e comando
 | Alvo | Diretório | Comando |
 |---|---|---|

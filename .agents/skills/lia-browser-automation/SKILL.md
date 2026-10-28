@@ -13,5 +13,5 @@ compatibility: Requer agent-browser instalado e endpoint CDP ativo; não instala
 7. Não altere o estado interno via eval para fazer um teste passar. Instrumentação diagnóstica não prova o fluxo do usuário.
 8. Upload, processamento, persistência e renderização são verificações separadas.
 9. Use perfis de teste e dados sintéticos. Não exponha cookies, tokens, transcrições ou nomes privados nos logs.
-10. Feche sessões e encerre apenas processos iniciados para o teste.
+10. Feche sessões e encerre apenas processos iniciados para o teste. Não use `close --all` contra sessões compartilhadas ou de outros agentes.
 Registre comando, alvo, estado esperado, resultado e erros. Screenshot não prova teclado, acessibilidade ou backend. Se CDP não estiver disponível, reporte BLOCKED; não alegue que a UI foi testada.

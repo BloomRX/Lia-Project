@@ -1,6 +1,6 @@
 ---
 name: lia-vue-development
-description: Desenvolve e revisa Vue 3, TypeScript, Pinia e VueUse na Lia, quando a área afetada realmente usa essa stack.
+description: Desenvolve e revisa Vue 3, TypeScript, Pinia e VueUse na Lia, quando a área afetada realmente usa essa stack. Use ao implementar componentes, stores ou composables Vue.
 ---
 # Desenvolvimento Vue na Lia
 - Leia regras locais e confirme versões e padrões dos componentes vizinhos.

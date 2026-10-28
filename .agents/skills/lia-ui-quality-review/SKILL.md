@@ -1,6 +1,6 @@
 ---
 name: lia-ui-quality-review
-description: Revisa telas e fluxos da Lia quanto a clareza, acessibilidade, consistência visual e usabilidade para pessoas não técnicas.
+description: Revisa telas e fluxos da Lia quanto a clareza, acessibilidade, consistência visual e usabilidade para pessoas não técnicas. Use ao revisar uma tela ou fluxo de usuário.
 ---
 # Revisão de qualidade da interface Lia
 1. Leia as especificações em `docs/product/`, `docs/design/` e a implementação atual. Identifique público, tarefa principal e estados de sucesso, erro, carregamento, vazio e cancelamento.

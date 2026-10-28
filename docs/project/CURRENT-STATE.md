@@ -13,6 +13,19 @@ commit. Registra **estado**, não narrativa: relatório de rodada vai para
 
 ## 0. Estado agora
 
+**Auditoria em 28/10/2026:** inspecionadas 21 skills raiz e 28 AIRI, incluindo
+Alethe 19 integrado em `a0e56fa8`. Nenhuma funcionalidade nova nesta tarefa.
+Seis arquivos Core preexistentes continuam modificados e excluídos dos commits
+da auditoria. A regra permanente de commit/push em AGENTS.md substitui a antiga
+proibição de push nesta branch, preservando baseline e demais salvaguardas.
+Resultados e pendências em `docs/architecture/AGENT-SKILLS-AUDIT.md`.
+Teste estrutural das skills: 5 PASS após 10 subfalhas iniciais. Alethe: um
+worker CLI real read-only, soma 5, processo encerrado e relatório recuperado.
+Limites: tokens reportados não são teto por chamada; editor HTML não aprovado
+para playbooks não confiáveis; gates do aplicativo não executados nesta auditoria.
+Próximo trabalho de produto continua sendo revisar os seis Core preservados;
+pendências de skills/editor exigem correção e validação próprias, sem remover AIRI.
+
 | Item | Valor |
 | --- | --- |
 | Branch | `arena/01a10290-lia-project`; tip sempre via `git rev-parse HEAD` |
@@ -164,8 +177,9 @@ Histórico de imagem e erros no relatório de 22/10.
 Instalador/instalação limpa NÃO EXECUTADOS; release incompleta, baseline inalterado.
 
 **Restrições de continuidade:** o preflight em `20b9da7` encontrou árvore limpa;
-o plano está versionado. Sem reset/clean/rebase/merge/push, nova branch ou
+o plano está versionado. Sem reset/clean/rebase/merge, nova branch ou
 mudanças em `Lia.bat`/`DevKit.bat`.
+Push normal somente na branch acordada, seguindo a regra permanente de AGENTS.md.
 **Quanto falta:** [`QUANTO-FALTA.md`](QUANTO-FALTA.md). **Antes de código:** §6.
 
 ---

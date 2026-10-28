@@ -1,6 +1,6 @@
 ---
 name: lia-eventa-ipc
-description: Usa @moeru/eventa para eventos tipados, RPC ou streaming quando a dependência estiver presente.
+description: Usa @moeru/eventa para eventos tipados, RPC ou streaming quando a dependência estiver presente. Use ao implementar ou revisar IPC com Eventa já instalado.
 license: MIT
 ---
 # Eventa e fronteiras IPC

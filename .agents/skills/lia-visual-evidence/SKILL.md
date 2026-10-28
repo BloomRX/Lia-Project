@@ -1,6 +1,6 @@
 ---
 name: lia-visual-evidence
-description: Produz evidência visual repetível de fluxos da Lia em Electron ou navegador usando Vishot quando disponível.
+description: Produz evidência visual repetível de fluxos da Lia em Electron ou navegador usando Vishot quando disponível. Use ao registrar um gate visual com a ferramenta disponível.
 compatibility: Requer Vishot e runtime disponível; não instala Playwright/Chromium sem autorização.
 ---
 # Evidência visual reproduzível

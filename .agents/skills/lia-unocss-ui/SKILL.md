@@ -1,6 +1,6 @@
 ---
 name: lia-unocss-ui
-description: Trabalha com UnoCSS em partes da Lia que realmente usam essa tecnologia.
+description: Trabalha com UnoCSS em partes da Lia que realmente usam essa tecnologia. Use ao editar estilos em uma área que usa UnoCSS.
 ---
 # UnoCSS na Lia
 1. Confirme que a área usa UnoCSS e leia configuração, presets e atalhos efetivos.

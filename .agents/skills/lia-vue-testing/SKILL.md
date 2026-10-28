@@ -1,6 +1,6 @@
 ---
 name: lia-vue-testing
-description: Escreve e depura testes de componentes Vue, composables, stores Pinia e interfaces DOM.
+description: Escreve e depura testes de componentes Vue, composables, stores Pinia e interfaces DOM. Use ao escrever ou investigar testes de Vue e Pinia.
 ---
 # Testes Vue na Lia
 1. Confirme runner, versão, projeto Vitest e comando local. Leia `.agents/skills/lia-test-discipline/SKILL.md`.

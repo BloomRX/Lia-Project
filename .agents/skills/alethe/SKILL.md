@@ -1,12 +1,22 @@
 ---
 name: alethe
 description: Orchestrate bounded Codex, Claude Code, Agy, Kimi, or custom CLI workers to finish work with the least lead context and provider usage, following playbooks such as plan big, execute small. Use when the user asks to orchestrate, delegate, compare agents, conserve agent tokens or quota, recover a worker, report what an orchestration did and cost, or work without MCP or Python, when the user types /alethe or a short command such as "alethe report" or "alethe stop", and when they want it on from now on, at any point of a task and alongside other skills. Also use it proactively, without being asked, when a request is large enough to split into bounded independent units, such as a multi-file refactor, a migration, an audit or research across many files. Do not use for a small mechanical task unless explicitly requested.
-argument-hint: "[task or standing instruction] | on | off | save | max | careful | report | status | usage | models | editor | list | stop | skip <phase> | switch <playbook> | freeform | budget <limit> | mark <worker> <used|partial|discarded> | setup | help"
 metadata:
+  argument-hint: "[task or standing instruction] | on | off | save | max | careful | report | status | usage | models | editor | list | stop | skip <phase> | switch <playbook> | freeform | budget <limit> | mark <worker> <used|partial|discarded> | setup | help"
   version: "19"
 ---
 
 # Orchestrate CLI workers
+
+## Local audit constraints (Lia, 2026-10-28)
+
+The local smoke test proved one read-only Codex worker and recoverable reports.
+Reported-token budgets are not a hard per-call generation limit: a running call
+can exceed the plan's token budget before its usage is reported. Bound calls and
+wall time as well; unknown quota or price is not confirmed spare capacity or cost.
+Do not open the bundled editor with untrusted playbooks: its HTML interpolation
+requires a separate security fix and browser validation. CLI diagnostics and the
+synthetic smoke test do not approve the HTML editor or every provider.
 
 Finish the work with the least lead context and the cheapest capable workers, or the strongest
 mix when the user asks. Plan, delegate bounded units, and integrate results supported by evidence.

@@ -10,15 +10,14 @@ compatibility: Requer git e acesso a github.com. O clone de comparacao vive fora
 `airi/.git` nem `.gitmodules`. Isso muda o método — não há `git diff` contra o
 upstream, e um re-clone apaga as modificações da Lia.
 
-## 0. Antes de tudo: o commit-base é desconhecido
+## 0. Confirmar a proveniência registrada
 
-`docs/airi-modificacoes-registro.md` §1 registra que **não existe no repositório
-o commit exato do upstream** de onde a cópia veio. O `package.json` diz
-`0.12.0-beta.5`; o README cita a release `v0.11.3`; os dois não coincidem.
+`docs/airi-modificacoes-registro.md` §1 e `docs/upstream/AIRI-INTEGRATION.md`
+registram a base `2c1e223c8dd813d7c74a324d7fd7399fbf47e8bf`, tag
+`v0.12.0-beta.5`. CURRENT-STATE §0.1 confirmou a comparação em 27/10/2026.
 
-Não invente o base. Se a tarefa exigir comparar, primeiro **determine** o base
-(compare arquivos contra tags candidatas do upstream) e **registre** o resultado
-na §1 antes de qualquer integração.
+Não reabra a proveniência como desconhecida sem evidência nova. Confira o
+registro antes de comparar; se houver divergência, investigue e documente.
 
 ## 1. O que nunca fazer
 
@@ -34,7 +33,7 @@ na §1 antes de qualquer integração.
 
 | Seção | O que responde |
 | --- | --- |
-| §1 Proveniência | versão vendada e base (desconhecido) |
+| §1 Proveniência | versão vendada e commit-base confirmado |
 | §2.1 Risco ZERO | `apps/lia-app` e `packages/lia-core` **não existem** no upstream — criação integral da Lia |
 | §2.3 RISCO REAL | arquivos do upstream que **nós** modificamos — os que um re-clone sobrescreveria |
 | §5 | como reaplicar cada modificação |
@@ -57,11 +56,13 @@ cuja árvore mais se aproxima de `airi/`.
 Depois compare arquivo a arquivo. No PowerShell:
 
 ```powershell
-# lista o que difere, sem escrever nada dentro do repositorio
-Compare-Object (Get-ChildItem -Recurse -File $env:TEMP\airi-upstream\packages) `
-               (Get-ChildItem -Recurse -File .\airi\packages) -Property Name
+# exemplo de comparação de conteúdo, sem alterar os arquivos
+git diff --no-index -- "$env:TEMP\airi-upstream\package.json" ".\airi\package.json"
 ```
 
+Confirme também caminhos relativos: comparar apenas `Name` com Compare-Object
+não prova igualdade. Exit 1 do diff acima indica diferenças, não erro de execução;
+SHA-256 também permite conferir igualdade dos arquivos relevantes.
 Compare **os arquivos realmente afetados**, não o diff inteiro. Um relatório
 com 400 arquivos não é análise.
 

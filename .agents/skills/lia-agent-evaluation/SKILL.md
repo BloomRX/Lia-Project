@@ -101,6 +101,10 @@ Speech como fallback automático.
 
 ## 9. Registrar
 
-Para cada rodada: o que foi fixado, o que variou, saída bruta relevante, veredito
+Para cada rodada: o que foi fixado, o que variou, saída relevante de fixture
+sintética sem dados privados, veredito
 (PASS / FAIL / BLOCKED / NOT RUN) e o que **não** foi provado. Entregue ao
 `lia-release-gate` — ele é quem decide se isso aprova alguma coisa.
+
+Não grave payloads reais, credenciais, prompts privados ou conteúdo pessoal.
+Para tráfego real, registre apenas metadados seguros e o resultado do critério.

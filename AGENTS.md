@@ -2932,3 +2932,34 @@ Toda feature de UI da Lia está completa apenas quando:
 END OF MASTER PROMPT
 ==================================================
 
+## Regra permanente de encerramento — commit e push (28/10/2026)
+
+Toda tarefa autorizada termina com commit e push para a branch de trabalho
+acordada, atualmente `arena/01a10290-lia-project`, remoto `origin` de
+`BloomRX/Lia-Project`. Esta é autorização permanente do usuário para esse
+encerramento; não autoriza publicação em main, release ou alteração de credenciais.
+
+Antes de commitar/publicar, confirmar branch, URL remota, HEAD local/remoto,
+status e diff completo. Incluir somente arquivos da tarefa por caminhos explícitos;
+preservar alterações preexistentes, inclusive não commitadas. Executar verificações
+pertinentes e atualizar CURRENT-STATE §0 no mesmo commit quando estado, decisão
+ou gate mudar. Workers delegados não publicam: o agente principal integra e valida.
+
+Após o commit, revisar conteúdo e mensagem; fazer push normal para a branch
+acordada e consultar novamente o HEAD remoto para comprovar alinhamento com
+o local. Sem mudanças, não criar commit vazio: verificar e relatar alinhamento.
+
+Falhas de testes/gates devem constar como FAIL/BLOCKED/NÃO EXECUTADO, com causa
+conhecida ou desconhecida. Trabalho incompleto seguro pode ser commitado e
+publicado nessa branch, explicitamente identificado como incompleto; isso não
+aprova release nem promove baseline. Segredos expostos, conflito não resolvido
+ou risco de perda/dano impedem o push: parar e explicar precisamente.
+
+Se o remoto divergir, buscar e analisar os dois históricos antes de integrar,
+preservando ambos. Nunca force push, reset, rebase, descarte ou merge cego.
+Quando a integração exigir operação ainda não autorizada pelas salvaguardas,
+parar e reportar. A regra não enfraquece as restrições existentes.
+
+No encerramento informar alterações, comandos/resultados, falhas pendentes,
+hash/mensagem do commit, branch, confirmação do push e igualdade dos HEADs.
+

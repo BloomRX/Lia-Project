@@ -37,4 +37,4 @@ Não instale dependências, altere lockfiles, baixe runtimes, mude credenciais, 
 
 ## 5. Encerramento
 
-Informe arquivos alterados, razão, comandos executados, códigos de saída, resultados, limitações e próximos passos. Não faça commit ou push, a menos que a tarefa peça explicitamente. Se houver risco de perda de trabalho, falta de acesso ou falha não explicada, STOP AND REPORT.
+Informe arquivos alterados, razão, comandos executados, códigos de saída, resultados, limitações e próximos passos. A regra permanente de encerramento em AGENTS.md autoriza e exige commit/push na branch acordada para tarefas autorizadas, preservando trabalho alheio. Workers delegados entregam ao agente principal sem publicar. Se houver risco de perda de trabalho, segredo, conflito ou falta de acesso, STOP AND REPORT antes do push.

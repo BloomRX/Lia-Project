@@ -1,6 +1,6 @@
 ---
 name: lia-electron-cdp-debugging
-description: Descobre a janela renderer correta de um app Electron por CDP quando há várias janelas, rotas duplicadas ou alvos criados sob demanda.
+description: Descobre a janela renderer correta de um app Electron por CDP quando há várias janelas, rotas duplicadas ou alvos criados sob demanda. Use ao selecionar ou recuperar um renderer Electron por CDP.
 ---
 # Diagnóstico CDP para Electron
 1. Confirme que o processo foi iniciado com a opção de depuração aprovada. Não habilite CDP em produção como atalho.

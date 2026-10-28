@@ -1,5 +1,14 @@
 # Catálogo de skills de agentes da Lia
 
+Revisão local de 28/10/2026: **21 skills raiz (20 Lia + Alethe), 28 AIRI**.
+Auditoria atual por conteúdo, descoberta, ferramentas e validação real:
+[AGENT-SKILLS-AUDIT.md](AGENT-SKILLS-AUDIT.md). Existência de arquivo não é
+aprovação de runtime. Nenhuma skill upstream foi removida.
+
+`alethe` v19 coordena CLIs externas; não instala nem prova subagents nativos
+do Arena. Foi descoberta nesta sessão pelo caminho do repositório, sem cópia
+global. Validação executável e limites constam no relatório específico.
+
 Auditoria por conteúdo das 28 skills encontradas em `airi/.agents/skills/` na branch `arena/01a10290-lia-project`. A meta é que instruções úteis sobrevivam à futura remoção do AIRI, sem copiar regras incompatíveis nem arquivos que dependem de referências ausentes.
 
 ## Regras de independência

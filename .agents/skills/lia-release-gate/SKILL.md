@@ -88,10 +88,14 @@ experimento seguro. Release não aprovada é uma resposta legítima.
 
 ## 7. O que este gate não cobre
 
-Estes itens exigem o PC do Dev e **não** podem ser substituídos por automação:
+Estes itens exigem runtime/hardware reais e **não** podem ser substituídos por
+testes unitários ou mocks:
 teste humano de microfone, failover E2E contra serviços reais, loop real de
 ferramentas, medição de latência e rede, comparação visual completa dos
 concepts, presença Free/multimonitor e instalação limpa/atualização/desinstalação
 do instalador.
 
-Automatizado verde nesses itens é zero evidência de runtime.
+Automação no Windows pode executar e registrar gates reais quando controla a
+aplicação e o serviço efetivos. Ela não substitui confirmação humana de áudio
+ou hardware que não consiga observar. Registre separadamente runtime real,
+transporte sintético e teste unitário; um resultado simulado não aprova runtime.

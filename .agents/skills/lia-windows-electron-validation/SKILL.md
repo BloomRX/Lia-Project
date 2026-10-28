@@ -1,7 +1,7 @@
 ---
 name: lia-windows-electron-validation
-description: Valida o comportamento real do Launcher e do Stage Electron da Lia no Windows, incluindo janela visível, processos filhos, logs e encerramento limpo.
-compatibility: Exige Windows e checkout local. Automação CDP não substitui interação real do usuário.
+description: Valida o comportamento real do Launcher e do Stage Electron da Lia no Windows, incluindo janela visível, processos filhos, logs e encerramento limpo. Use ao executar gates reais do Launcher ou Stage no Windows.
+compatibility: Exige Windows e checkout local. Automação controlada prova critérios observáveis; áudio físico exige teste apropriado.
 ---
 # Validação Windows/Electron da Lia
 ## Ler antes de testar
