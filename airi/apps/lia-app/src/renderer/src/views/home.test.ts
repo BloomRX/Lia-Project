@@ -59,7 +59,7 @@ describe('the primary action keeps the existing launch path (B, F)', () => {
     const source = HOME_VUE()
     expect(source).toContain('await props.api.conversar()')
     expect(source).toContain('emit(\'refresh\')')
-    expect(source).toContain(':disabled="busy || conversationStarting"')
+    expect(source).toContain(':disabled="busy || conversationStarting || conversationStopping"')
     expect(source).toContain('{{ conversationLabel }}')
   })
 
@@ -196,8 +196,8 @@ describe('8.0A-5 minimal first-run choice', () => {
 
   it('g: the first-run marker never blocks Conversar (no modal, no gate)', () => {
     const source = HOME_VUE()
-    // Conversar stays disabled ONLY by its own launch state...
-    expect(source).toContain(':disabled="busy || conversationStarting"')
+    // Conversar follows only conversation lifecycle, never the setup marker...
+    expect(source).toContain(':disabled="busy || conversationStarting || conversationStopping"')
     // ...the first-run flag gates the panel and NOTHING else...
     expect((source.match(/v-if="firstRunVisible"/g) ?? []).length).toBe(1)
     expect(source).not.toMatch(/firstRun(Visible|Done|Busy).*conversar|conversar.*firstRun/i)

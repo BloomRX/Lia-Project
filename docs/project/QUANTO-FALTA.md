@@ -11,6 +11,14 @@ Fonte: [`CURRENT-STATE.md`](CURRENT-STATE.md) §0 e §5, medido em
 
 ## Onde o projeto está
 
+28/10: Home ganhou **Encerrar conversa**, progresso, sucesso confirmado e erro
+com retry. Launcher 247 PASS/2 skips, browser Home 7 PASS, lint/typechecks/build
+PASS. Windows com Launcher/IPC reais e processo controlado confirmou o controle
+de parada e reabertura; **não é gate do AIRI Stage nem conversa/voz reais**.
+Baseline e fase 8.0D permanecem. Próximo item de Launcher: feedback de salvar em
+ConfigView apagado por reload. Seis arquivos Core preexistentes seguem separados.
+[Evidência e limites](../product/RELEASE-WINDOWS-2026-10-28-HOME-STOP.md).
+
 22/10: perda de espaços reproduzida com deltas unitários e corrigida com
 contraprova. Core-agent 145, Chat/Stage UI 255, browser 15, Python 496/10 skips,
 Node 267 e Launcher 247/2 skips PASS. UI Windows com transporte SSE sintético

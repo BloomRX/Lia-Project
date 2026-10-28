@@ -13,6 +13,22 @@ commit. Registra **estado**, não narrativa: relatório de rodada vai para
 
 ## 0. Estado agora
 
+**Entrega funcional de 28/10/2026 — Home:** ação **Encerrar conversa** usa o
+`stopStage()` existente, bloqueia duplicatas durante a parada e só mostra sucesso
+quando a resposta confirma `stopped`. Erro seguro permite retry; PID histórico
+não impede o caminho canônico de iniciar. Launcher: **247 PASS / 2 skips**;
+Home em Chromium: **7 PASS**; lint, typechecks e build de produção PASS.
+Windows: Launcher compilado + IPC/gerenciador reais com processo Node controlado
+confirmaram iniciar, parar pela Home e reabrir sem duplicar a instância. Isso
+**não aprova AIRI Stage, conversa, imagem ou voz reais**, NÃO EXECUTADOS nesta
+rodada sem chamadas externas. Um descendente apareceu na segunda checagem
+imediata e estava ausente depois; latência de saída não medida. Baseline mantido.
+Seis Core preexistentes preservados e excluídos do commit. Evidências e comandos:
+`docs/product/RELEASE-WINDOWS-2026-10-28-HOME-STOP.md`.
+**Próximo item:** corrigir feedback de salvar em ConfigView (reload apaga a
+mensagem), com regressão no componente e estados de carregamento/erro. A revisão
+dos seis Core preservados continua separada; não os incluir em entregas da Home.
+
 **Hardening Alethe em 28/10/2026:** editor com texto DOM inerte e URLs HTTP(S)
 sem credenciais; reserva atômica de estimativas e diagnóstico de excedentes.
 Chromium real: 1 PASS; orçamento: 10 PASS, incluindo processos Windows;
@@ -33,7 +49,7 @@ Teste estrutural das skills: 5 PASS após 10 subfalhas iniciais. Alethe: um
 worker CLI real read-only, soma 5, processo encerrado e relatório recuperado.
 Limites: tokens reportados não são teto por chamada; editor HTML não aprovado
 para playbooks não confiáveis; gates do aplicativo não executados nesta auditoria.
-Próximo trabalho de produto continua sendo revisar os seis Core preservados;
+Na auditoria, o próximo trabalho de produto era revisar os seis Core preservados;
 pendências de skills/editor exigem correção e validação próprias, sem remover AIRI.
 
 | Item | Valor |
