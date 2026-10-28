@@ -35,7 +35,7 @@ o documento da área que você vai tocar.
 
 | Documento | Papel |
 |---|---|
-| [`architecture/AGENT-SKILLS-CATALOG.md`](architecture/AGENT-SKILLS-CATALOG.md) | Inventário das skills próprias, skills vendadas do AIRI, referências externas e futuras capacidades de runtime da Lia |
+| [`architecture/AGENT-SKILLS-CATALOG.md`](architecture/AGENT-SKILLS-CATALOG.md) | Auditoria por conteúdo das 28 skills do AIRI, conflitos, decisões de migração e skills independentes da Lia |
 
 ## Arquitetura
 
