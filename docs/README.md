@@ -31,6 +31,12 @@ o documento da área que você vai tocar.
 | [`1-PARA-Lia-Project/PADRAO-DA-MARCA.md`](1-PARA-Lia-Project/PADRAO-DA-MARCA.md) | Identidade visual da Lia |
 | [`product/HANDOFF-PROMPT.md`](product/HANDOFF-PROMPT.md) | Prompt de handoff copiável + armadilhas históricas |
 
+## Skills de agentes
+
+| Documento | Papel |
+|---|---|
+| [`architecture/AGENT-SKILLS-CATALOG.md`](architecture/AGENT-SKILLS-CATALOG.md) | Inventário das skills próprias, skills vendadas do AIRI, referências externas e futuras capacidades de runtime da Lia |
+
 ## Arquitetura
 
 | Documento | Papel |
