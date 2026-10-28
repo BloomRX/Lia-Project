@@ -84,3 +84,19 @@ Organização de arquivos, leitura de documentos, pesquisa web, planejamento/lem
 ## Verificação e remoção futura do AIRI
 
 Esta auditoria leu os `SKILL.md` das 28 skills vendadas e comparou propósito, instruções, dependências e referências. As originais ainda não foram removidas de `airi/`; ficam como fonte temporária enquanto o AIRI permanece. Antes de remover `airi/`, pesquisar referências residuais em todo o repo, conferir scripts/references e validar descoberta das skills pelo agente efetivamente usado.
+
+
+## Alethe Orchestrate (orquestração de agentes)
+
+A skill upstream `alethe` foi incorporada em `.agents/skills/alethe/` a partir de [Kc1t/alethe-orchestrate-skill](https://github.com/Kc1t/alethe-orchestrate-skill), versão upstream 19 (2026-10-23), sob licença MIT. A origem, a licença e a estratégia de atualização estão documentadas em `.agents/skills/alethe/UPSTREAM.md`. Ela coordena CLIs externas como processos separados; **não cria subagents nativos do Arena** nem substitui os gates do projeto.
+
+### Regras de uso na Lia
+
+- Usar quando houver unidades realmente independentes (auditoria, pesquisa, migração ou revisão); tarefas pequenas ou fortemente acopladas ficam com o agente principal.
+- O agente principal continua responsável por ler `docs/project/CURRENT-STATE.md`, preservar alterações existentes, integrar resultados e executar os gates da Lia.
+- Writers paralelos devem ter caminhos sem sobreposição e worktrees isoladas; resultados dos workers são alegações até o diff e os testes serem conferidos.
+- Antes de executar workers, verificar CLIs disponíveis/autenticadas, limites de quota/orçamento e o dry-run; não habilitar modo permanente nem persistir preferências sem pedido explícito.
+- A skill não autoriza commit, push, release, instalação de CLIs ou alteração de configurações fora do escopo autorizado.
+- O cookbook Anthropic `plan-big-execute-small` é referência conceitual; o app Alethe e o dashboard não são dependências desta integração.
+
+**Ainda precisa ser validado no PC:** descoberta da skill pelo Codex instalado, versão de Python (3.9+ para o runner; existe modo manual), compatibilidade das flags das CLIs e execução real de uma orquestração pequena. A inclusão no GitHub não comprova esses pontos.
