@@ -13,6 +13,17 @@ commit. Registra **estado**, não narrativa: relatório de rodada vai para
 
 ## 0. Estado agora
 
+**Análise comparativa em 28/10/2026 — AIRI estável:** consultada a stable
+**`v0.13.0`** (`3c4aca209330f1a78fe7288e8c4ca75639cd10e6`); a Lia permanece em
+**`v0.12.0-beta.5`** (`2c1e223`), com **529 commits** de distância e **zero**
+merges de subtree desde a integração. Nenhum código foi integrado nesta tarefa.
+Três itens classificados como *Vale aproveitar*: grapheme clusters no TTS
+(**defeito presente** em `tts-chunker.ts:72`), IPC uma vez por request
+(`onlySameWindow`, já disponível no `eventa` 1.0.0 fixado) e resolução de
+caminhos de renderer/preload num só lugar. O item de maior prioridade é o TTS.
+Relatório: `docs/architecture/AIRI-UPDATE-REVIEW-2026-10-28.md`. Nada foi
+compilado nem executado; conclusões vêm de leitura e comparação de arquivos.
+
 **Entrega funcional de 28/10/2026 — Home:** ação **Encerrar conversa** usa o
 `stopStage()` existente, bloqueia duplicatas durante a parada e só mostra sucesso
 quando a resposta confirma `stopped`. Erro seguro permite retry; PID histórico

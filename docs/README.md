@@ -45,6 +45,7 @@ o documento da área que você vai tocar.
 | [`architecture/AIRI-COMPARISON.md`](architecture/AIRI-COMPARISON.md) | **AIRI limpo × AIRI da Lia**, medido contra clone em `2c1e223`: 353 criados, 95 modificados, 0 removidos |
 | [`architecture/LIA-STAGE-ARCHITECTURE.md`](architecture/LIA-STAGE-ARCHITECTURE.md) | Os três níveis do Stage (próprio / reutilizado / terceiro) e os contratos |
 | [`architecture/LIA-MIGRATION-PLAN.md`](architecture/LIA-MIGRATION-PLAN.md) | Ordem da migração para `lia/`, critério de rollback e gate honesto |
+| [`architecture/AIRI-UPDATE-REVIEW-2026-10-28.md`](architecture/AIRI-UPDATE-REVIEW-2026-10-28.md) | O que a stable `v0.13.0` traz de útil à Lia, classificado; análise, sem integração |
 | [`architecture/LIA-INTEGRATION-PLAN.md`](architecture/LIA-INTEGRATION-PLAN.md) | Plano de integração com o AIRI |
 | [`architecture/AIRI-ANALYSIS.md`](architecture/AIRI-ANALYSIS.md) | Auditoria da base AIRI (Fase 0) |
 | [`architecture/M1-IMPLEMENTATION-PLAN.md`](architecture/M1-IMPLEMENTATION-PLAN.md) | Plano de implementação M1 |
