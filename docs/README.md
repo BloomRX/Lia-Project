@@ -58,6 +58,7 @@ o documento da área que você vai tocar.
 
 | Documento | Papel |
 |---|---|
+| [`product/ESPECIFICACAO-GERAL-DO-PRODUTO-LIA.md`](product/ESPECIFICACAO-GERAL-DO-PRODUTO-LIA.md) | **Visão consolidada do produto:** comportamentos desejados, estado conhecido, prioridades e critérios de conclusão |
 | [`product/M1-SCOPE.md`](product/M1-SCOPE.md) | Escopo M1 |
 | [`product/M1-I18N-DEBT.md`](product/M1-I18N-DEBT.md) | Dívida de i18n |
 | [`product/M1-PERSONAL-VOICE-ARCHITECTURE.md`](product/M1-PERSONAL-VOICE-ARCHITECTURE.md) | Arquitetura de voz pessoal |
