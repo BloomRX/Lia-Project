@@ -26,11 +26,11 @@ Os três números que definem o problema:
 | Medida | Valor | Confiança |
 | --- | --- | --- |
 | Código da Lia no renderer | **27 arquivos, 5 224 linhas** | [C] |
-| Alcançado por `pages/index.vue` (a Home da Lia) | **675 arquivos locais, 31 pacotes `@proj-airi`** | [C] |
+| Alcançado por `pages/index.vue` (a Home da Lia) | ~~675~~ **771 em runtime, 24 pacotes** — ver §11.2 | [C] |
 | Código da Lia no processo principal | **38 entradas → 46 arquivos** | [C] |
 
 **A assimetria é a descoberta principal:** no processo principal, a Lia é quase
-independente. No renderer, ela é uma camada fina sobre 675 arquivos de AIRI.
+independente. No renderer, ela é uma camada fina sobre ~771 arquivos de AIRI (§11.2).
 
 O que isso significa na prática:
 
@@ -110,7 +110,9 @@ widgets, captura de tela — features do AIRI que a Lia não chama.
 
 **Entrada real:** `renderer/pages/index.vue` (1 029 linhas, modificado pela Lia).
 
-Fecho: **675 arquivos locais, 31 pacotes `@proj-airi`**:
+Fecho: **675 arquivos locais, 31 pacotes `@proj-airi`** — *número superado por §11.2
+(resolvedor completo: 771 em runtime); a tabela abaixo mede o mesmo alcance com
+resolvedor parcial e serve como piso, não como teto.*
 
 ```
 stage-shared 73 · ui 66 · stage-ui 53 · core-agent 25 · electron-vueuse 13
@@ -175,8 +177,9 @@ O que **não** pode ser simplesmente trocado por biblioteca pública:
 
 ### 3.5 Bibliotecas que funcionam sem o AIRI
 
-Verificadas no registro npm em 28/10/2026 **[C]**:
-`@xsai/*` (0.5.1, MIT) · `@moeru/eventa` (1.0.2, MIT) · `@moeru/std` (MIT) ·
+Verificadas no registro npm em 28/10/2026 **[C]** — *corrigido em §11.5: `@xsai/*` é
+`0.5.0-beta.8`, e `@proj-airi/*` é publicado em parte*:
+`@xsai/*` (0.5.0-beta.8, MIT) · `@moeru/eventa` (1.0.2, MIT) · `@moeru/std` (MIT) ·
 `pinia`, `vue`, `@vueuse/core`, `es-toolkit`, `valibot`, `destr` · `kokoro-js` ·
 `@pixiv/three-vrm` e `pixi-live2d-display` (usados pelo AIRI, publicados).
 
@@ -371,3 +374,342 @@ repetir com o mesmo critério.
 - Não mediu uso em runtime — apenas alcançabilidade por import.
 - Não decidiu a estratégia do chat nem do avatar; ambos exigem histórico e
   julgamento do dono.
+
+---
+
+## 11. B0.1 — Validação dos limites da migração (28/10/2026)
+
+Rodada **B0.1**: reexame dos limites que o B0 deixou abertos (R5) e das premissas
+que ele não tinha medido em runtime. Base de trabalho: HEAD `ad5c5f7`, árvore limpa,
+`airi/` intocado. Nenhum build, nenhum teste, nenhuma sincronização.
+
+Método: resolvedor de imports próprio, que segue **todas** as packages do workspace
+(`@proj-airi/<pacote>` → `packages/<pacote>/src`), distingue `import type` de import
+de runtime, e permite remover arestas para medir contra-factuais. Nenhuma conclusão
+desta seção depende de execução do aplicativo.
+
+### 11.1 R5 — encerrado: não havia divergência; a base da comparação estava errada
+
+**Resultado: o R5 não descreve um defeito da árvore `airi/`. Descreve um defeito da
+comparação que o B0 fez.** [C]
+
+Impressão digital da árvore local contra as tags do clone de referência, por hash de
+blob do Git (`git ls-tree` × `git hash-object`), nas três subárvores que importam
+(`apps/stage-tamagotchi/src`, `packages/stage-ui/src`, `packages/stage-shared/src`):
+
+| Referência | Idênticos | Diferentes | Ausentes localmente | Igualdade |
+| --- | --- | --- | --- | --- |
+| **`v0.12.0-beta.5`** (`2c1e223`) | **1 040** | **56** | **0** | **94,9 %** |
+| `v0.12.0-beta.6` | 606 | 364 | 594 | 62,5 % |
+| `v0.13.0` (`3c4aca2`) | 590 | 378 | 619 | 61,0 % |
+| `HEAD` do clone (`b9d0bb34a`) | 585 | 383 | 625 | 60,4 % |
+
+A árvore local é `v0.12.0-beta.5` + as modificações da Lia: **zero arquivos ausentes**
+contra essa tag, 56 modificados. Contra o `HEAD` do clone faltam 625 arquivos — e é
+por isso que `FullscreenMode` e `IOTraceRecordingService` "não existem" localmente.
+
+**Quando esses símbolos entraram:** [C]
+
+| Símbolo | Commit | Assinatura | Data | Primeira tag que o contém |
+| --- | --- | --- | --- | --- |
+| `FullscreenMode` | `d79a54894` | `feat(stage-tamagotchi): add a fullscreen workspace experiment with two window modes (#2926)` | 2026-10-15 | `v0.12.0-beta.6~85` |
+| `IOTraceRecordingService` | `a4da7edd7` | `refactor(stage-tamagotchi): persist local IO traces (#2774)` | 2026-10-03 | `v0.12.0-beta.6~259` |
+
+Ambos são **posteriores** à base fixada. A base fixada tem 229 linhas nesse arquivo;
+`v0.12.0-beta.6` em diante tem 467; a árvore local tem **252** — ou seja, 229 + 23
+linhas de trabalho da Lia, não uma versão truncada do AIRI.
+
+O clone `/home/user/ref-airi` não está em `v0.13.0`: está em
+`v0.13.0-25-gb9d0bb34a`, **25 commits depois** da tag. O `diff -u` do B0 usou esse
+`HEAD` como se fosse a base, e daí a impressão de que a árvore local "estava atrás".
+
+**O que a árvore local realmente acrescenta nesse arquivo** (delta contra
+`v0.12.0-beta.5`: 84 linhas acrescentadas, 59 removidas), todo ele atribuível à Lia: `./window-sizing`
+(`createMainWindowContextSizing`, `HOME_WINDOW_PRESET`, `liaMainWindowStateSchema`,
+`MAIN_WINDOW_MIN_SIZE`), `./window-size-settings`
+(`createMainWindowSizeSettingsController`), `../../services/lia/initial-route`
+(`initialMainWindowContext`, `initialMainWindowRoute`), `../../services/lia/lia-managed`
+(`isLauncherManaged`), `../../devflow-diagnostics` (`liaDevflowMark`), e a troca da
+config genérica `createConfig('app', 'config.json', …)` por
+`createConfig('lia', 'main-window.json', liaMainWindowStateSchema, …)`.
+
+**Isso afeta a precisão das comparações arquiteturais? Não, para `AIRI-COMPARISON.md`.**
+Esse documento declara a própria base nas linhas 20 e 39 (`2c1e223…`, com o comando
+`git checkout` explícito), e os 353/95/0 foram medidos contra ela. O erro de base
+estava **dentro do B0**, na seção 3.1, não naquele relatório. [C]
+
+Consequência prática: **nenhuma sincronização, nenhum `subtree pull`, nenhuma cópia.**
+A árvore é fiel à base; o que ela não tem é o que o upstream ganhou depois — e isso é
+esperado, não é corrupção. O B0 §3.1 fica corrigido por esta seção.
+
+### 11.2 Acoplamento real do renderer — medido em runtime, não em contagem de arquivos
+
+O B0 contou arquivos alcançáveis incluindo `import type`. A distinção que decidiu o
+processo principal (9 pacotes → 2 pontos reais) **não decide o renderer**. Medido de
+novo, com resolvedor completo e separando runtime de tipo: [C]
+
+| Entrada | Runtime | Incluindo tipos | Desconto por tipo |
+| --- | --- | --- | --- |
+| Todo o código da Lia no renderer | **390** | 540 | 28 % |
+| `stores/lia/provider.ts` | **176** | 271 | 35 % |
+| `stores/lia/voice.ts` | **178** | 273 | 35 % |
+| `stores/lia/hearing.ts` | **335** | 436 | 23 % |
+| `stores/lia/capabilities.ts` | **336** | 437 | 23 % |
+| `pages/index.vue` (Home) | **771** | 887 | 13 % |
+| `pages/chat.vue` | **593** | 848 | 30 % |
+| `pages/settings/system/index.vue` | **539** | 732 | 26 % |
+
+**A conclusão do B0 se sustenta e fica mais forte:** o acoplamento do renderer é
+genuinamente de runtime. O desconto por tipos fica entre 13 % e 35 %, contra ~78 % no
+processo principal. Não existe "cortar os tipos e sobra pouco" no renderer.
+
+**Correção de números:** os valores do B0 §3.2 (675 para a Home, 641 para o chat, 598
+para as configurações) saíram de um fecho que **não atravessava todas as packages** —
+paravam em `@proj-airi/ui`, `core-agent`, `pipelines-audio`, `i18n`, entre outras. Com
+o resolvedor completo, a Home alcança **771 arquivos em 24 packages** (381 deles em
+`stage-ui`). Os números do B0 eram portanto um piso, não um teto.
+
+**Limite honesto desta medição:** alcançabilidade estática não é bundle. Os barris
+`packages/ui/src/index.ts` (7 linhas de `export *`, 68 arquivos) e
+`stage-shared/src/index.ts` (11 `export *`) inflam o fecho: tocar em qualquer símbolo
+arrasta a biblioteca inteira na contagem, mas o Vite faz tree-shaking no artefato
+final. Por isso **nenhuma decisão de corte deve ser tomada por contagem de arquivos** —
+o critério útil é a aresta que cruza uma fronteira semântica, medido a seguir.
+
+**A fronteira Lia → `stage-ui` é estreita e enumerável:** 17 módulos distintos, **15
+com uso de runtime e 2 apenas de tipo**. [C]
+
+| Módulo `stage-ui` | Usos runtime | Usos só de tipo |
+| --- | --- | --- |
+| `stores/providers/provider` | 4 | 0 |
+| `stores/providers/config` | 4 | 0 |
+| `stores/chat/chat-provider-runtime` | 4 | 3 |
+| `stores/modules/speech` | 3 | 0 |
+| `stores/settings` | 2 | 0 |
+| `stores/modules/airi-card` | 2 | 0 |
+| `libs/speech/tts-fallback`, `libs/providers/providers/custom-local-voice`, `libs/capabilities/lia-capability-port`, `libs/diagnostics/audio-probe`, `stores/modules/consciousness`, `stores/modules/hearing`, `stores/speech-runtime`, `stores/chat/provider-context`, `stores/chat/retry-content`, `stores/onboarding`, `stores/auth`, `stores/ai/chat-llm/llm`, `libs/providers/providers/registry` | 1 cada | — |
+| **`stores/chat`** | **0** | **3** |
+| **`types/chat`** | **0** | **2** |
+
+Isso corrige uma implicação do B0 §3.2: `stores/chat` (o store de 173 arquivos de
+fecho) é importado pela Lia **apenas como tipo**. O consumidor real de chat no runtime
+é `stores/chat/chat-provider-runtime`, com 4 usos.
+
+**Massa que a Lia carrega sem usar como produto.** Removendo as arestas de
+autenticação, analytics e beat-sync do grafo e recomputando: [I, por contra-factual
+estático]
+
+| Fecho | Real | Sem auth/analytics/beat-sync | Removível |
+| --- | --- | --- | --- |
+| Código da Lia no renderer | 390 | 349 | **41 (11 %)** — 32 em `stage-ui`, 7 em `stage-shared` |
+| `stores/lia/provider.ts` | 176 | 141 | 35 (20 %) |
+| `stores/lia/voice.ts` | 178 | 143 | 35 (20 %) |
+| `stores/lia/hearing.ts` | 335 | 294 | 41 (12 %) |
+
+Os arquivos que saem são `stage-shared/src/auth/*` (OIDC, PKCE),
+`stage-shared/src/beat-sync/*`, `stage-ui/src/libs/analytics/**` (21 arquivos de
+telemetria) e `steam-auth-client`. **Nenhum deles é funcionalidade da Lia**; todos
+entram por dois módulos-ponte: `stores/providers/provider.ts:34` (`useAuthStore`) e
+`stores/providers/config.ts:10` (`client` de `composables/api` → `libs/auth-fetch`).
+
+**O hub de providers é uma fronteira fina, apesar do fecho grande.** `provider.ts`
+(1 109 linhas) tem **quatro** arestas internas para fora de si: [C]
+
+1. `../auth` → `useAuthStore` — usado em `provider.ts:995` como
+   `providerConfiguredBy(id) !== 'authentication' || authStore.isAuthenticated`
+2. `../chat/chat-provider-runtime` → `getProviderCredentialResolver`
+3. `./config` → `useProviderConfigStore`
+4. `../../composables/api` (via `config.ts:10`) → `client` → `libs/auth-fetch`
+
+Quatro arestas, duas delas carregando exatamente a massa de auth/analytics que a Lia
+não usa. **É a fronteira semanticamente mais estreita do renderer** — o que sustenta a
+prioridade do hub na migração, desde que as quatro arestas sejam resolvidas antes.
+
+### 11.3 O avatar — o contrato existe, mas não onde parecia
+
+**O B0 tratou `WidgetStage` como "o componente de avatar". Não é.** `Stage.vue` tem
+1 353 linhas, das quais 1 228 são script, e é o **hospedeiro de runtime** da fala e do
+chat: [C]
+
+- 107 referências a `speech`/`Speech` e 35 a `tts`/`TTS` no arquivo;
+- **12 linhas** de import de `../../stores/`, que trazem **13 stores** (`useChatStore`, `useSpeechStore`, `useProviderStore`,
+  `useProviderConfigStore`, `useSettings`, `useSettingsDeveloper`, `useAudioContext`,
+  `useSpeakingStore`, `useBackgroundStore`, `useAiriCardStore`,
+  `useSpeechRuntimeStore`, `useSpeechOutputControlStore`, `useLlmStreamingControlStore`);
+- **12** linhas de import de `../../libs/*`, 9 delas de fala (`tts-session`, `tts-fallback`,
+  `synthesize-target`, `latency-probe`, `pipeline-tuning`, `text-for-speech`,
+  `playback-speaking-state`) e ainda DuckDB (`useDuckDb`) e observabilidade
+  (`useIOTraceBridge`, `initIOTracer`).
+
+**A assinatura pública de `Stage.vue` parece limpa — e isso é uma armadilha:**
+
+```
+props: cursorPosition?, enableOrbitControls?, paused?      (3 props)
+v-model:state                                             ('pending'|'loading'|'mounted')
+defineExpose: canvasElement, captureFrame, readRenderTargetRegionAtClientPoint
+```
+
+Três props e três métodos sugerem um componente substituível. Mas o componente lê o
+resto do mundo por **store global**, não por prop. Ou seja: um componente de avatar
+independente **não pode ser obtido ligando-se nessas três props** — o corpo precisa ser
+reescrito para receber por injeção o que hoje lê de 13 stores.
+
+**Os renderizadores, ao contrário, já estão separados e têm um contrato real:** [C]
+
+| Pacote | Arquivos | Dependências `@proj-airi` declaradas |
+| --- | --- | --- |
+| `stage-ui-live2d` | 32 | `stage-shared`, `ui`, `model-driver-magic-live2d` |
+| `stage-ui-three` (VRM) | 37 | `stage-shared`, `ui` |
+| `stage-ui-mmd` | 25 | `stage-shared`, `ui` |
+| `stage-ui-spine` | 19 | `stage-shared`, `ui` |
+| `stage-ui-tachie` | 12 | `stage-shared`, `ui` |
+
+Fecho transitivo dos cinco juntos: **207 arquivos** — 111 alcançáveis a partir dos
+respectivos `index.ts` (dos 125 arquivos que os cinco têm), mais
+`ui` 68, `stage-shared` 21, `model-driver-magic-live2d` 4, `electron-screen-capture` 2
+e **exatamente 1 arquivo de `stage-ui`**. Cada pacote define os próprios stores locais
+(`useSettingsLive2d`, `model-store`, `expression-store`, `spine`, `tachie`, `mmd`). [C]
+
+**O contrato que os renderizadores recebem de `Stage.vue`** — enumerável, e é ele que
+uma interface própria precisa reproduzir: `model-src`, `model-id`, `cursor-position`,
+`mouth-open-size`, `now-speaking`, `paused`, `theme-colors-hue`,
+`theme-colors-hue-dynamic`, `current-audio-source`, `show-axes`, `enable-orbit-controls`,
+`idle-animation`, mais afinação por renderizador (`live2d-shadow-enabled`,
+`live2d-max-fps`, `live2d-render-scale`, `premultiplied-alpha`,
+`default-mix-duration`, `idle-animation-enabled`, `max-fps`, `render-scale`), e os
+eventos `@error`, `@vrm-interact`, `v-model:state`. [C]
+
+**A ressalva que impede chamar isso de simples:** o único arquivo de `stage-ui` que os
+renderizadores usam — `stores/audio.ts`, para `useAudioContext` no lip-sync — é
+importado por **caminho relativo que atravessa a fronteira de pacote**:
+`stage-ui-three/src/composables/vrm/lip-sync.ts:11` e
+`stage-ui-mmd/src/composables/mmd/lip-sync.ts:21` fazem
+`import { useAudioContext } from '../../../../stage-ui/src/stores/audio'`. Isso não é
+dependência declarada em `package.json`: é acesso ao código-fonte do vizinho. **Quebra
+em silêncio** quando `stage-ui` se move, e não aparece em nenhuma checagem de
+dependências. [C]
+
+**Veredito sobre o avatar:** existe contrato viável, e ele é pequeno — mas para os
+**renderizadores**, não para `Stage.vue`. O trabalho não é "extrair o avatar": é
+(a) declarar o contrato dos renderizadores como pacote próprio, (b) resolver o
+`useAudioContext` por injeção em vez de caminho relativo, e (c) **reescrever a
+orquestração** que hoje vive em `Stage.vue` — o que é a maior parte das 1 353 linhas.
+Tratar isso como extração de componente subestima o trabalho em uma ordem de grandeza.
+
+### 11.4 Sequência incremental — o que a evidência sustenta e o que não
+
+**A premissa "hub de providers primeiro" resiste**, mas não pelo motivo do B0. Não é
+porque o hub seja pequeno em arquivos (o fecho é 176) — é porque a **fronteira
+semântica é de quatro arestas** (§11.2). O que precisa ser feito antes de mover o hub
+é resolver essas quatro, e duas delas são justamente os portadores de auth.
+
+**Precedente real do padrão de porta, já funcionando neste código:** [C]
+`stage-ui/src/libs/capabilities/lia-capability-port.ts` — 65 linhas, **zero imports**,
+snapshot de dados sem campo para vazar detalhe interno, injetado pelo host
+(`stores/lia/capabilities.ts`, 5 referências) e consumido por `stage-ui`
+(`stores/chat/context-providers/lia-capabilities.ts` e `Stage.vue`). A direção é
+invertida — o AIRI hospeda a porta da Lia — mas a mecânica está provada e é o modelo a
+repetir.
+
+Sequência proposta, com a propriedade de reversibilidade de cada passo:
+
+| # | Corte | Por que é reversível | Evidência |
+| --- | --- | --- | --- |
+| 1 | **Contrato IPC** (`shared/eventa`, 26 eventos `electronLia*` de 85) | é superfície declarativa; nada executa sem os dois lados | B0 §3.1 [C] |
+| 2 | **Extrair o `main` da Lia** (46 arquivos, 2 pontos de AIRI: `eventa/index.ts:961-962`, `voice-profile-picker.ts:23`) | o processo principal já é quase independente; a Lia pode continuar usando o renderer do Stage | B0 §3.1 [C] |
+| 3 | **Janela própria** (~50 linhas de `BrowserWindow`) | não toca em store nem em fluxo | B0 §8 [C] |
+| 4 | **Hub de providers** — resolver as 4 arestas (`auth`, `chat-provider-runtime`, `config`, `composables/api`) | o hub não importa nenhuma package AIRI diretamente; a troca é de 4 símbolos | §11.2 [C] |
+| 5 | **Porta de chat** (`LiaChatPort`, molde do `lia-capability-port`) | porta de dados puros; falha fechada sem snapshot | §11.4 [C] |
+| 6 | **Voz** — só depois de medir `pipelines-audio` (17 arquivos no fecho) e os 3 stores de fala | `speech`/`tts` é o maior bloco de `Stage.vue` | §11.3 [C] |
+| 7 | **Avatar** — contrato dos renderizadores, depois orquestração | 207 arquivos, mas só 1 ponto de `stage-ui`, hoje por caminho relativo | §11.3 [C] |
+
+**O que a evidência NÃO sustenta:**
+
+- **Avatar primeiro.** É o item de menor risco conceitual e maior custo real: 111
+  arquivos próprios + a reescrita da orquestração de 1 228 linhas de script. Fica por
+  último.
+- **`hearing` antes de `speech`.** `hearing.ts` é o maior fecho (335) e ainda carrega
+  `audio-probe`, `streaming-transcription-consumers` e consumidores de fala. Não é
+  passo inicial.
+- **`settings` como corte.** O store de settings é atravessado por quase tudo
+  (`stores:settings` tem 12 arestas de saída no grafo de clusters). Cortá-lo cedo
+  quebra os outros passos.
+- **Ordem "ideal" garantida.** Os passos 1–4 são seguros por serem declarativos ou de
+  fronteira fina; 5–7 não têm evidência de execução — nenhum foi rodado. A ordem é
+  uma hipótese fundamentada, não um resultado medido. [P]
+
+### 11.5 Licenças — o que fecha e o que continua aberto
+
+Escopo: **apenas** os itens que o B0 §3.5 deixou pendentes, mais o que apareceu no
+caminho por ser dependência direta dos renderizadores. Não é auditoria geral.
+
+| Item | Versão | Licença identificada | Fonte | Restrição de redistribuição | Estado |
+| --- | --- | --- | --- | --- | --- |
+| `@xsai/*` | **`0.5.0-beta.8`** | MIT | `registry.npmjs.org`, campo `license` | nenhuma | **[C]** |
+| `@moeru/eventa` | `1.0.0` (catálogo) | MIT | registry; `1.0.0` e `1.0.2` conferidos | nenhuma | **[C]** |
+| `@pixiv/three-vrm` | `^3.5.5` → `3.5.5` | MIT | registry | nenhuma na lib | **[C]** |
+| `pixi-live2d-display` | `^0.4.0` → `0.4.0` | MIT (o wrapper) | registry | **patch local de 198 linhas** (`patches/pixi-live2d-display.patch`) que remove `core/` e `cubism/` do pacote | **[C]** |
+| **Live2D Cubism Core** | `CubismSdkForWeb-5-r.3` | **termos Live2D — não é MIT** | `index.html:18` carrega `/assets/js/CubismSdkForWeb-5-r.3/Core/live2dcubismcore.min.js`; o arquivo **não está no repositório**, é baixado no build por `DownloadLive2DSDK` (`@proj-airi/unplugin-live2d-sdk`) | o binário **é redistribuído dentro do artefato construído**; uso e redistribuição regidos pelo contrato Live2D | mecanismo **[C]**, texto dos termos **[P]** |
+| **Spine Runtimes** | `~4.2.0`, `~4.0.31`, `~4.1.56` | **Spine Runtimes License Agreement — não é MIT** | `packages/stage-ui-spine/LICENSE.md:34-53`, declaração do próprio repositório | **exige licença do Spine Editor para integrar em produto**; proíbe sublicenciar (inclusive sob MIT); redistribuição deve incluir o acordo e o copyright | **[C]** |
+| `@proj-airi/ui` | workspace `0.12.0-beta.5` · npm `0.13.0` | MIT | registry + `packages/ui/package.json` | disponível publicamente, **mas a versão publicada é outra** | **[C]** |
+| `@proj-airi/stage-shared` | — | — | **404 no registry** | precisa ser carregado ou reimplementado | **[C]** |
+| Modelos de avatar (VRM/Live2D) | — | — | **nenhum modelo versionado** no repositório | — | **[C]** |
+
+**Duas correções ao B0 §3.5:**
+
+1. `@xsai/*` é **`0.5.0-beta.8`**, não `0.5.1`. O catálogo está em
+   `pnpm-workspace.yaml:237-247`. O B0 afirmou "[C] verificado no registro" para um
+   número de versão que não existe no projeto.
+2. `@proj-airi/*` **não é uniformemente 404**. `@proj-airi/ui` (0.13.0) e
+   `@proj-airi/unplugin-live2d-sdk` (0.1.7) **estão publicados, ambos MIT**.
+   Confirmados como 404: `stage-shared`, `electron-eventa`, `core-agent`, `stage-ui`,
+   `i18n`, `pipelines-audio`, `stage-ui-three`, `stage-ui-live2d`. A regra correta é
+   "verificar por pacote", não "assumir não publicado".
+
+**O achado que muda o cálculo de migração:** o renderizador **Spine não é livre de
+licença**. `packages/stage-ui-spine/LICENSE.md` separa explicitamente o código MIT do
+projeto das Spine Runtimes, que *"NOT covered by the MIT License"*, exigem licença
+paga do Spine Editor para integração em produto e proíbem sublicenciamento. Um dos
+cinco renderizadores do avatar, portanto, **carrega obrigação comercial** que os outros
+quatro não carregam. O B0 tratou os cinco como equivalentes — não são.
+
+O mesmo raciocínio, em menor grau, vale para o Live2D: o Core não está versionado
+(nenhum risco de licença no Git), mas é baixado e **embutido no artefato final**. Quem
+distribuir o instalador da Lia distribui código Live2D sob o contrato da Live2D.
+
+**Continua pendente [P]:** o texto integral do contrato Live2D (não foi buscado nesta
+rodada, por disciplina de escopo); se o Spine Editor já está licenciado para o dono do
+produto; e se o uso pretendido se enquadra nas faixas de isenção de cada fornecedor.
+Nenhuma dessas três perguntas se responde lendo código.
+
+### 11.6 Decisões ainda abertas
+
+| # | Decisão | Por que não foi tomada aqui |
+| --- | --- | --- |
+| D1 | **Spine entra no produto?** | depende de licença comercial; é decisão do dono, não de arquitetura |
+| D2 | **Live2D entra no produto?** | idem, e depende de o Core ser embutido ou servido |
+| D3 | Os 4 renderizadores livres (VRM, MMD, Tachie, Live2D) cobrem a necessidade de avatar? | só o dono sabe qual formato o produto exige |
+| D4 | O hub de providers corta `auth` ou mantém um adaptador? | exige decidir se a Lia terá conta de usuário |
+| D5 | A ordem 5–7 (chat, voz, avatar) se confirma? | nenhum passo foi executado; a ordem é hipótese |
+| D6 | `@proj-airi/ui`: usar do npm (0.13.0) ou carregar o do workspace? | versões divergem; escolha afeta os 5 renderizadores |
+| D7 | `stage-shared` (404): carregar ou reimplementar? | 21 arquivos no fecho dos renderizadores; reimplementar é trabalho real |
+
+### 11.7 O que mudou em relação ao B0
+
+| Item do B0 | Antes | Depois desta seção |
+| --- | --- | --- |
+| **R5** (divergência da árvore) | "divergência não explicada" [P] | **encerrado**: árvore fiel a `v0.12.0-beta.5` (94,9 %); erro era a base da comparação (§11.1) |
+| Home alcança | 675 arquivos | **771 em runtime** / 887 com tipos; 24 packages (§11.2) |
+| Acoplamento do renderer | contagem de arquivos | **runtime separado de tipo**; desconto de 13–35 %, não 78 % (§11.2) |
+| `stores/chat` | implicado como acoplamento de runtime | **apenas tipo** (0 usos runtime) (§11.2) |
+| `WidgetStage` = componente de avatar | tratado como o avatar | **é hospedeiro de runtime** (13 stores, 1228 linhas de script); o contrato está nos renderizadores (§11.3) |
+| Renderizadores | "cinco renderizadores" | **5 pacotes separados, 207 arquivos, 1 ponto de `stage-ui` via caminho relativo** (§11.3) |
+| Ordem de implementação | hub de providers primeiro | **mantida**, mas justificada por 4 arestas, não por tamanho; avatar explicitamente por último (§11.4) |
+| `@xsai/*` | `0.5.1` | **`0.5.0-beta.8`** (§11.5) |
+| `@proj-airi/*` | "não publicado" | **publicado em parte**: `ui`, `unplugin-live2d-sdk` (§11.5) |
+| Licença dos renderizadores | tratados como equivalentes | **Spine não é MIT**; Live2D Core embutido no artefato (§11.5) |
+
+**O que esta seção não fez:** não alterou código, dependência, build ou instalador;
+não sincronizou nem copiou nada de `airi/`; não executou build nem teste; não buscou o
+texto integral das licenças de terceiros. Todas as medições são estáticas, sobre a
+árvore local, e nenhuma afirma que um fluxo funciona — apenas o que ele alcança.
