@@ -72,15 +72,17 @@ A Lia deve ser uma experiência semelhante a um launcher de jogo:
 
 O usuário final não deve precisar entender a infraestrutura técnica que existe por trás da aplicação.
 
-A Lia utilizará o PROJECT AIRI como uma das principais bases tecnológicas/runtime.
+A Lia é um produto independente. O PROJECT AIRI é uma referência técnica externa.
 
-Repository de referência:
+Repository de referência (estudo, não dependência):
 
 https://github.com/moeru-ai/airi
 
-AIRI deve ser tratado como uma base tecnológica, e não como a identidade completa do produto Lia.
+A arquitetura e as decisões técnicas da Lia são orientadas pelas necessidades
+da própria Lia. A origem de uma ideia não determina a arquitetura do produto.
 
-A identidade, UX, configuração e experiência de usuário pertencem à Lia.
+A identidade, UX, arquitetura, configuração e experiência de usuário
+pertencem à Lia.
 
 ==================================================
 2. PRINCÍPIO MAIS IMPORTANTE
@@ -209,58 +211,53 @@ Lia = primeiro personagem/produto padrão.
 Character System = arquitetura genérica.
 
 ==================================================
-6. AIRI COMO BASE
+6. AIRI COMO REFERÊNCIA EXTERNA
 ==================================================
 
-Antes de modificar ou duplicar funcionalidades:
+O AIRI é uma referência técnica externa. Não é base, runtime obrigatório nem
+camada da arquitetura da Lia.
 
-1. pesquisar o repository atual do AIRI;
-2. localizar código relacionado;
-3. verificar packages;
-4. verificar apps;
-5. verificar plugins;
-6. verificar services;
-7. verificar providers;
-8. verificar memória;
-9. verificar voz;
-10. verificar avatar;
-11. verificar Discord;
-12. verificar computer-use;
-13. verificar IPC;
-14. verificar documentação existente.
+Antes de implementar uma funcionalidade, é útil e permitido estudar como o
+AIRI — ou qualquer outro projeto — resolveu o mesmo problema:
 
-Nunca assumir que AIRI não possui determinada funcionalidade sem pesquisar o código atual.
+1. localizar o código relacionado;
+2. entender a solução e suas limitações;
+3. avaliar se serve às necessidades da Lia;
+4. registrar a decisão e a justificativa.
+
+Nunca assumir que uma solução externa serve sem avaliá-la no contexto da Lia.
 
 PRIORIDADE:
 
-Reutilizar > adaptar > encapsular > extender > implementar do zero.
+Implementar o que a Lia precisa > adaptar uma boa ideia > reutilizar um pacote
+independente > copiar um trecho grande de outro projeto.
 
-Evitar duplicar funcionalidades existentes no AIRI.
+Estudar o AIRI antes de criar algo não é pré-requisito e não bloqueia trabalho.
+Copiar código do AIRI não é caminho preferencial e nunca é obrigatório.
 
 ==================================================
-7. NÃO TRANSFORMAR A LIA EM UM FORK CAÓTICO
+7. NÃO TRANSFORMAR A LIA EM UM FORK DISFARÇADO
 ==================================================
 
-Sempre que possível:
+A Lia é o produto. A arquitetura pertence a ela:
 
 Lia
     ↓
-Adapter / Wrapper / Integration Layer
+Interfaces e adaptadores próprios da Lia
     ↓
-AIRI
-    ↓
-Runtime / Services / Providers
+Bibliotecas independentes (npm público, MIT e afins)
 
-Evitar modificar diretamente o core do AIRI.
+O AIRI não ocupa posição nessa pilha. Ele é referência de estudo.
 
-Se alterações no AIRI forem inevitáveis:
+Regra prática:
 
-- isolar;
-- documentar;
-- manter o diff pequeno;
-- registrar a razão;
-- registrar a versão/commit;
-- facilitar futuros upgrades.
+- não copiar grandes partes do AIRI;
+- não criar um fork do AIRI usando outro nome;
+- não manter airi/ como dependência estrutural no longo prazo.
+
+Enquanto airi/ existir no repositório, ela é legado em remoção planejada e
+não deve crescer: nenhuma dependência nova pode ser criada contra ela sem
+decisão explícita registrada (§99).
 
 Registrar informações relacionadas ao upstream em:
 
@@ -291,13 +288,14 @@ Arquitetura desejada:
        |          +----+----+      +----+----+
        |          |         |      |         |
        v          v         v      v         v
-      AIRI       LLM       Memory Vision   Tools
-       |
-    Avatar
+    Avatar      LLM       Memory Vision   Tools
 
-A implementação concreta deve ser definida após análise do AIRI atual.
+Cada nó é um contrato da Lia, implementado por biblioteca independente ou por
+código próprio.
 
-Não impor abstrações sem verificar como o AIRI já funciona.
+A implementação concreta deve ser definida a partir das necessidades da Lia.
+
+Não impor abstrações sem antes verificar o que a Lia realmente precisa.
 
 ==================================================
 9. PRIMEIRA TAREFA DA AGENT
@@ -574,7 +572,7 @@ O LLM é o cérebro responsável por:
 
 O LLM deve ser completamente desacoplado do avatar.
 
-O AIRI/character/avatar NÃO deve assumir que existe apenas um provider.
+Nenhum componente de character/avatar deve assumir que existe apenas um provider.
 
 Criar ou utilizar uma abstração adequada de provider.
 
@@ -1008,7 +1006,9 @@ A aplicação deve permitir:
 - configurar;
 - remover.
 
-O sistema visual deve reutilizar AIRI quando possível.
+O sistema visual deve priorizar bibliotecas independentes de avatar
+(renderizadores VRM/Live2D disponíveis publicamente), avaliadas por licença,
+manutenção e impacto no empacotamento.
 
 ==================================================
 32. PERSONALITY SYSTEM
@@ -1082,7 +1082,8 @@ O usuário deve poder:
 - limpar;
 - controlar.
 
-Não assumir um banco específico sem analisar as capacidades existentes do AIRI.
+Não assumir um banco específico sem antes definir o que a Lia precisa armazenar,
+com que frequência, por quanto tempo e sob qual política de privacidade.
 
 ==================================================
 35. VISION
@@ -1121,7 +1122,8 @@ LLM
 
 O LLM NÃO deve possuir acesso irrestrito ao computador.
 
-Estudar o computer-use/MCP do AIRI antes de criar outro sistema.
+Pode-se estudar como o AIRI ou outros projetos resolvem computer-use/MCP, mas a
+decisão deve partir das necessidades e do modelo de permissões da Lia.
 
 ==================================================
 37. PERMISSION SYSTEM
@@ -1540,7 +1542,7 @@ Cache
 Logs
 Temporary
 
-A localização concreta deve respeitar boas práticas do sistema operacional e o funcionamento do Electron/AIRI.
+A localização concreta deve respeitar boas práticas do sistema operacional e o funcionamento do Electron.
 
 ==================================================
 55. CONFIG SCHEMA
@@ -1927,14 +1929,17 @@ Cada módulo deve possuir responsabilidade clara.
 Antes de adicionar uma biblioteca:
 
 1. verificar se já existe uma dependency adequada;
-2. verificar se o AIRI possui solução;
-3. verificar se o runtime já resolve;
-4. avaliar tamanho;
-5. manutenção;
-6. segurança;
-7. licença;
-8. impacto no build;
-9. compatibilidade desktop.
+2. verificar se o runtime já resolve;
+3. verificar se código próprio da Lia resolve;
+4. avaliar licença;
+5. avaliar manutenção;
+6. avaliar dependências que ela arrasta;
+7. avaliar segurança;
+8. avaliar compatibilidade desktop;
+9. avaliar custo e impacto na distribuição.
+
+Uma solução vista no AIRI é apenas uma candidata entre outras, e não tem
+prioridade por vir de lá.
 
 Não adicionar dependency apenas por conveniência.
 
@@ -1946,7 +1951,7 @@ Como Lia será distribuída, rastrear licenças.
 
 Verificar:
 
-- AIRI;
+- bibliotecas e trechos adaptados de outros projetos, incluindo o AIRI;
 - dependencies;
 - models;
 - voice models;
@@ -1974,7 +1979,7 @@ ASSET-LICENSES.md
 Separar:
 
 Lia App
-AIRI Runtime
+Bibliotecas independentes
 Models
 Voice Models
 Components
@@ -1986,8 +1991,8 @@ Exemplo:
 Lia:
 1.2.0
 
-AIRI:
-0.x
+UI:
+1.0
 
 Character Pack:
 2.1
@@ -2048,7 +2053,7 @@ ANTES DE ALTERAR CÓDIGO:
 2. Ler documentação relevante.
 3. Inspecionar código existente.
 4. Encontrar implementações relacionadas.
-5. Identificar integração com AIRI.
+5. Separar o que é próprio da Lia do que ainda vem de externos;
 6. Definir menor solução viável.
 7. Implementar.
 8. Rodar typecheck.
@@ -2266,7 +2271,7 @@ Arquitetura alvo:
   AI   Voice  Memory Vision Tools
    |      |      |      |      |
    v      v      v      v      v
-Providers TTS  AIRI  Vision MCP/Tools
+Providers TTS  Store Vision MCP/Tools
    |
    +------------------------------+
    |
@@ -2388,7 +2393,7 @@ Para decisões arquiteturais importantes, criar ADR quando necessário.
 Exemplos:
 
 ADR:
-Why AIRI is the runtime foundation
+Why Lia is independent of any single upstream
 
 ADR:
 Why provider abstraction exists
@@ -2431,7 +2436,10 @@ Pesquisar no código, documentação ou fontes relevantes.
 
 NÃO:
 
-- reescrever AIRI desnecessariamente;
+- recriar do zero o que já funciona, sem justificativa;
+- introduzir dependência do AIRI sem decisão registrada (§99);
+- copiar grandes partes do AIRI como estratégia padrão;
+- remover airi/ antes de cumprir os critérios de §99;
 - criar código duplicado;
 - criar abstrações duplicadas;
 - hardcode da personalidade Tsundere;
@@ -2461,7 +2469,7 @@ NÃO comece implementando features.
 Primeiro:
 
 1. analisar repository;
-2. analisar AIRI;
+2. separar o que é próprio da Lia do que vem de externos;
 3. identificar stack;
 4. identificar build;
 5. identificar package manager;
@@ -2523,7 +2531,7 @@ Para desenvolvedores:
 O produto final deve parecer um aplicativo próprio,
 não uma ferramenta técnica montada em cima de vários engines.
 
-AIRI é uma fundação tecnológica.
+AIRI é uma referência externa.
 
 Lia é o produto.
 
@@ -2636,7 +2644,7 @@ strings ou formatações específicas de pt-BR.
 
 NÃO hardcodar texto de UI visível ao usuário dentro de componentes quando evitável.
 
-Usar um sistema de i18n adequado à stack existente (AIRI/Lia).
+Usar um sistema de i18n adequado à stack vigente da Lia.
 
 Todas as strings de UI devem ter chaves de tradução.
 
@@ -2666,9 +2674,9 @@ locales/
 └── en-US/
     └── messages.*
 
-Adaptar a estrutura exata à arquitetura de i18n existente do AIRI/Lia.
+Adaptar a estrutura exata à arquitetura de i18n vigente na Lia.
 
-NÃO criar um segundo framework de i18n se o AIRI já oferece um adequado.
+NÃO criar um segundo framework de i18n se o atual já atende.
 
 --------------------------------------------------
 98.5 PORTUGUESE (BRAZIL)
@@ -2887,17 +2895,18 @@ Quando uma nova feature de UI for criada:
 Uma feature sem ambos os locales iniciais está incompleta.
 
 --------------------------------------------------
-98.18 AIRI INTEGRATION
+98.18 I18N E DEPENDÊNCIAS EXTERNAS
 --------------------------------------------------
 
 Antes de adicionar um novo framework de i18n:
 
-1. inspecionar a implementação de i18n existente do AIRI;
-2. determinar se pode ser reutilizada;
-3. determinar se pt-BR pode ser adicionado de forma limpa;
-4. evitar sistemas de tradução duplicados.
+1. definir as necessidades de tradução da Lia;
+2. avaliar se a solução atual ainda atende;
+3. verificar se pt-BR e en-US podem ser mantidos de forma limpa;
+4. evitar sistemas de tradução duplicados no mesmo escopo.
 
-Lia deve estender/reutilizar o sistema existente sempre que prático.
+Reutilizar a solução existente é preferível enquanto ela for adequada,
+independentemente de sua origem.
 
 --------------------------------------------------
 98.19 UI LANGUAGE MUST BE A PRODUCT FEATURE
@@ -2927,6 +2936,93 @@ Toda feature de UI da Lia está completa apenas quando:
 - labels de acessibilidade estão traduzidos;
 - a troca de idioma funciona.
 
+
+==================================================
+99. INDEPENDÊNCIA ARQUITETURAL DO AIRI
+==================================================
+
+Direção arquitetural permanente do projeto.
+Em conflito com qualquer documento anterior, esta seção prevalece.
+
+FATOS DE PARTIDA (verificados em 28/10/2026):
+
+- airi/ ocupa 5 687 dos 5 908 arquivos rastreados e 580 MB;
+- o Launcher (@lia/lia-app) e o @lia/core não importam nada de @proj-airi/*;
+- o Stage é o app AIRI: 21 pacotes do workspace e ~260 mil linhas;
+- @proj-airi/* não é publicado no npm; @xsai/* e @moeru/* são (MIT).
+
+Detalhes em docs/architecture/AIRI-INDEPENDENCE-2026-10-28.md.
+
+REGRA 1 — A LIA É O PRODUTO
+
+A arquitetura e as decisões técnicas são orientadas pelas necessidades da Lia.
+Nenhuma escolha se justifica apenas porque o AIRI faz assim.
+
+REGRA 2 — O AIRI É REFERÊNCIA EXTERNA
+
+Estudar, comparar e adaptar soluções do AIRI é permitido e útil.
+A origem de uma ideia não determina a arquitetura da Lia.
+
+REGRA 3 — DEPENDÊNCIA NOVA EXIGE DECISÃO
+
+Nenhum recurso novo pode introduzir dependência do AIRI sem decisão explícita
+e justificada, registrada no mesmo commit.
+
+REGRA 4 — AVALIAÇÃO DE SOLUÇÃO EXTERNA
+
+Antes de adotar qualquer solução externa, avaliar: licença, manutenção,
+dependências arrastadas, segurança, compatibilidade, custo e impacto na
+distribuição.
+
+REGRA 5 — PRIORIDADE
+
+Bibliotecas independentes e interfaces próprias da Lia vêm antes de copiar
+código de outro projeto.
+
+REGRA 6 — NÃO AO FORK DISFARÇADO
+
+Não copiar grandes partes do AIRI. Não recriar o AIRI com outro nome.
+
+REGRA 7 — PRESERVAÇÃO
+
+Toda mudança arquitetural preserva funcionalidades existentes, é testada e
+documentada. Nada é removido para simplificar sem substituto validado.
+
+REGRA 8 — airi/ É LEGADO EM REMOÇÃO PLANEJADA
+
+A remoção de airi/ é objetivo futuro, não tarefa corrente. Só pode ocorrer
+depois de eliminar e validar todas as dependências necessárias.
+
+É PROIBIDO, sem autorização explícita da rodada:
+
+- remover airi/;
+- extrair ou substituir o Stage inteiro;
+- reescrever a interface do produto;
+- mover arquivos ou criar workspace novo.
+
+REGRA 9 — SEQUÊNCIA OBRIGATÓRIA
+
+Qualquer etapa de desacoplamento segue
+docs/architecture/AIRI-DECOUPLING-PLAN-2026-10-28.md,
+uma etapa por vez, com critério objetivo de conclusão antes da seguinte.
+
+REGRA 10 — ESTADO HONESTO
+
+Fatos verificados, hipóteses e decisões pendentes são registrados
+separadamente. Estimativa de esforço nunca é apresentada como fato.
+
+CRITÉRIOS PARA REMOVER airi/ (todos, verificados):
+
+1. Lia.bat inicia a Lia sem airi/ na árvore;
+2. install e build funcionam a partir da raiz do repositório;
+3. nenhum import @proj-airi/ fora de documentação;
+4. nenhum script em tools/, Tests/ ou .github/ referencia caminho em airi/;
+5. conversa, voz e avatar funcionando em Windows real;
+6. instalador gera, instala, abre, conversa e fecha sem órfão;
+7. docs/upstream/AIRI-INTEGRATION.md marcado como histórico.
+
+Critério 5 é o único aceito pelo projeto como gate: teste automatizado verde
+não é PASS de runtime.
 
 ==================================================
 END OF MASTER PROMPT

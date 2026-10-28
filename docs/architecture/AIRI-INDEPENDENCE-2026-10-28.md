@@ -47,6 +47,11 @@ plano — não depois. Registro aqui como **B1**.
 
 **O repositório hoje é, em massa, uma cópia do AIRI.** A Lia são 219 arquivos.
 
+> **Nota de 28/10/2026:** os totais acima foram medidos **antes** de este
+> relatório existir. Depois do commit dos dois documentos desta investigação, o
+> total passou a **5 908 arquivos rastreados** e **221 fora de `airi/`** — a
+> diferença é exatamente os dois arquivos novos. `airi/` continua com **5 687**.
+
 ---
 
 ## 2. Mapa de dependências — seis camadas
@@ -203,7 +208,7 @@ copiada ou reescrita. Não há terceira via.
 | `@lia/core` | **Extrair do workspace** | código já é nosso; só precisa de catálogo próprio |
 | Launcher | **Extrair** | idem, e sem imports do AIRI |
 | `pipelines-audio` | **Reimplementar** (médio prazo) | 4 293 linhas; interface de fila + TTS é conhecida |
-| `stage-ui` (109k linhas) | **Não copiar** | copiar contradiz o objetivo; ver §5.1 |
+| `stage-ui` (109k linhas) | **Não copiar inteiro** | copiar o pacote todo contradiz o objetivo; a opção concreta está em aberto em §5.1 (lacuna B2) |
 | Avatar (three/live2d) | **Substituir por lib independente** | `@pixiv/three-vrm` e `pixi-live2d-display` são npm público; o AIRI só embrulha |
 | `i18n` | **Reimplementar** | a Lia só precisa do pt-BR |
 | `airi/docs`, `server`, `integrations` | **Descartar** | sem uso |

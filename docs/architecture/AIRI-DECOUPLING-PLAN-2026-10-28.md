@@ -3,8 +3,23 @@
 **Data:** 28/10/2026 · **Natureza:** planejamento. **Nada foi implementado.**
 Report principal: [`AIRI-INDEPENDENCE-2026-10-28.md`](AIRI-INDEPENDENCE-2026-10-28.md).
 
+**Autoridade:** as regras que orientam este plano estão em **`AGENTS.md` §99 —
+Independência arquitetural do AIRI** (28/10/2026). Em conflito com qualquer
+documento anterior, §99 prevalece.
+
 Este documento transforma as conclusões daquele relatório em etapas executáveis,
 cada uma com critério objetivo de conclusão. Não repete a investigação.
+
+### Premissas que este plano registra explicitamente
+
+| # | Premissa | Situação |
+| --- | --- | --- |
+| P1 | O launcher e o `@lia/core` precisam ser avaliados para execução **fora** do workspace AIRI | verificado: não importam `@proj-airi/*`, mas usam `catalog:` do workspace |
+| P2 | As ferramentas de desenvolvimento e validação **ainda contêm referências a `airi/`** | verificado: 12 arquivos em `tools/`, 13 em `Tests/`, `Lia.bat` e `devkit.json` |
+| P3 | O **Stage é o principal bloqueio arquitetural** e exige análise de dependências antes de qualquer decisão de migração | verificado: 110 dependências, 21 pacotes do workspace |
+| P4 | É necessário **medir** quais componentes, stores e funcionalidades do `stage-ui` a Lia realmente usa | **pendente** — não medido (C2) |
+| P5 | A futura interface própria deve **preservar e testar** as funcionalidades da Lia, não apenas remover o Stage atual | decisão registrada em `AGENTS.md` §99, Regra 7 |
+| P6 | O instalador Windows só será independente depois de **validar build e execução** do produto resultante | pendente — exige Windows real (C4) |
 
 ---
 
@@ -26,11 +41,12 @@ Trabalho mecânico, verificável por build ou por `grep`, com teste claro.
 | --- | --- |
 | Resultado | `AGENTS.md` §6–§7 deixa de mandar depender do AIRI e passa a descrevê-lo como referência histórica |
 | Arquivos | `AGENTS.md` (§6, §7), `docs/project/CURRENT-STATE.md` §0 |
-| Pré-requisito | **decisão do dono** (o rulebook atual contradiz esta missão) |
+| Pré-requisito | — (decisão do dono tomada em 28/10/2026) |
 | Risco | baixo — texto; alto se ficar ambíguo, porque todo agente segue esse arquivo |
 | Teste | revisão do dono; nenhum automatizável |
 | Concluído quando | o documento e a missão dizem a mesma coisa |
 | Independente? | **sim**, e deve ser a primeira |
+| **Estado** | **CONCLUÍDA em 28/10/2026** — 22 passagens corrigidas em `AGENTS.md` (§1, §6, §7, §8, §16, §31, §34, §36, §54, §73, §74, §75, §78, §86, §92, §94, §95, §96, §98.3, §98.4, §98.18) e a nova §99. `LIA-ARCHITECTURE.md` recebeu nota de supersessão. |
 
 ### A2 — Catálogo e workspace próprios
 
@@ -67,6 +83,7 @@ Trabalho mecânico, verificável por build ou por `grep`, com teste claro.
 | Teste | gerar o instalador e instalar em Windows real |
 | Concluído quando | app instalado abre, conversa e fecha sem órfão |
 | Independente? | **não** — depende de B2 |
+| Ressalva | o instalador só é considerado independente depois de **validar o build e a execução do produto resultante** em Windows real. Gerar o `.exe` não prova nada sozinho. |
 
 ---
 
@@ -74,6 +91,22 @@ Trabalho mecânico, verificável por build ou por `grep`, com teste claro.
 
 Trabalho arquitetural, com risco de regressão em funcionalidade que o dono já
 validou.
+
+### B0 — Análise de dependências do Stage (ainda não feita)
+
+O Stage é o **principal bloqueio arquitetural** e não pode ser migrado antes de
+esta análise existir. Ela é pré-requisito de B2 e de qualquer decisão sobre a UI.
+
+| Campo | Valor |
+| --- | --- |
+| Resultado | inventário do que o Stage usa de fato: quais dos 21 pacotes do workspace, quais stores do `stage-ui`, quais funcionalidades |
+| Arquivos | nenhum — é análise, gera relatório em `docs/architecture/` |
+| Pré-requisito | — |
+| Risco | nenhum (leitura) |
+| Teste | não aplicável |
+| Concluído quando | existe mapa de uso real, com caminhos e contagem, distinguindo o que a Lia precisa do que é recurso do AIRI sem uso |
+| Quem | **Codex** — exige leitura profunda de 109k+ linhas |
+| Independente? | **sim**, pode começar a qualquer momento |
 
 ### B1 — Porta `LiaChatPort` sobre `@xsai/*`
 
@@ -93,7 +126,7 @@ validou.
 | --- | --- |
 | Resultado | Stage abre, renderiza, conversa e fecha — sem avatar |
 | Arquivos | `lia/stage/*` (hoje placeholder de 22 linhas de HTML) |
-| Pré-requisito | B1 (precisa de conversa para exibir) |
+| Pré-requisito | **B0 — análise de dependências do Stage** (acima); B1 (precisa de conversa para exibir) |
 | Risco | **alto** — é a superfície de UI |
 | Teste | abrir, conversar, fechar; conferir processos no Windows |
 | Concluído quando | o fluxo `Lia.bat → janela → conversa → fechar` roda sem AIRI |
@@ -129,43 +162,74 @@ validou.
 
 | # | Item | O que falta |
 | --- | --- | --- |
-| **C1** | Aprovar a mudança de arquitetura | decisão do dono — `AGENTS.md` §6–§7 hoje diz o contrário |
+| **C1** | ~~Aprovar a mudança de arquitetura~~ | **RESOLVIDO em 28/10/2026** — direção registrada em `AGENTS.md` §99 |
 | **C2** | Escolher A/B/C para o `stage-ui` | medir quanto do `stage-ui` a Lia realmente alcança |
 | **C3** | Remover `airi/` | todos os critérios de §8 do report principal |
 | **C4** | Gate de Windows | o dono precisa executar; nenhum agente na nuvem aprova |
 | **C5** | Licenças de modelos/avatar | auditoria não feita (`LIA-STAGE-ARCHITECTURE.md` §7) |
 
-`C1` bloqueia **A1**, que bloqueia todo o resto. É o gargalo real do projeto —
-não é técnico.
+`C1` e `A1` foram resolvidos em 28/10/2026. O gargalo agora é **C2** (medir o
+`stage-ui`) e, depois dele, **C4** (gate de Windows real). `C3` só se move depois
+de todos os critérios de §8 do report principal.
 
 ---
 
 ## Ordem recomendada
 
 ```text
-C1 (decisão)
- └─ A1 (AGENTS.md)
-     └─ A2 (workspace próprio)   ← primeiro valor: constrói sozinho
-         ├─ A3 (tooling)
-         └─ B1 (LiaChatPort)     ← primeiro ponto que exige Codex
+A1 ✔ AGENTS.md §99 (concluída 28/10/2026)
+ └─ A2 (workspace próprio)   ← primeiro valor: constrói sozinho
+     ├─ A3 (tooling)
+     └─ C2 (medir stage-ui)  ← destrava a decisão sobre a UI
+         └─ B1 (LiaChatPort) ← primeiro ponto que exige Codex
              └─ B2 (Stage)
                  ├─ B3 (voz)
                  └─ B4 (avatar)
-                     └─ A4 (instalador)
+                     └─ A4 (instalador)  → C4 (Windows real)
                          └─ C3 (remover airi/)
 ```
 
 ### Primeira etapa de baixo risco para começar
 
-**A2** (depois de A1). É mecânica, verificável por um build que passa ou falha,
-não toca em nenhuma lógica da Lia e não altera `airi/`. Entrega imediata: a Lia
-constrói sem depender do workspace do AIRI.
+**A2**. É mecânica, verificável por um build que passa ou falha, não toca em
+nenhuma lógica da Lia e não altera `airi/`. Entrega imediata: a Lia constrói sem
+depender do workspace do AIRI.
+
+A1 já foi concluída, então A2 está desbloqueada.
 
 ### Primeiro ponto em que o Codex se torna necessário
 
 **B1** — a porta de conversa. Antes disso, tudo é caminho e configuração. Em B1
 começa a decisão sobre o que preservar das correções que o dono já pagou caro
 para encontrar (perda de espaço, resposta vazia, recusa de imagens).
+
+---
+
+## Fatos verificados, hipóteses e decisões pendentes
+
+**Fatos verificados** (por execução, em 28/10/2026):
+
+- `airi/` = 5 687 dos 5 908 arquivos rastreados, 580 MB, dos quais 465 MB de documentação do AIRI;
+- Launcher e `@lia/core` não importam `@proj-airi/*`;
+- Stage tem 110 dependências (21 do workspace + 89 externas) e ~260 mil linhas com os pacotes irmãos;
+- `@proj-airi/*` retorna 404 no npm; `@xsai/*` e `@moeru/*` são publicados, MIT;
+- 12 arquivos em `tools/`, 13 em `Tests/`, `Lia.bat` e `devkit.json` citam `airi`;
+- o instalador Windows é o `electron-builder` do `stage-tamagotchi` com `appId: ai.lia.app`.
+
+**Hipóteses** (não provadas):
+
+- que reescrever a UI custe menos que manter uma cópia sincronizada do `stage-ui`;
+- que o esforço de extrair `@lia/core` do workspace seja pequeno — a inspeção de imports sugere isso, mas nenhum build fora do workspace foi tentado;
+- que os 89 pacotes externos do Stage sejam todos necessários.
+
+**Decisões pendentes:**
+
+- `C2` — quais partes do `stage-ui` a Lia usa (bloqueia a escolha reescrever/copiar/híbrido);
+- `C5` — licenças de modelos e assets de avatar;
+- se a Lia publicará `@lia/core` no npm ou o manterá local.
+
+**Não estimado:** nenhum prazo, esforço ou ordem de grandeza de tempo. Nada aqui
+foi cronometrado.
 
 ---
 

@@ -13,6 +13,18 @@ commit. Registra **estado**, não narrativa: relatório de rodada vai para
 
 ## 0. Estado agora
 
+**Governança de arquitetura em 28/10/2026:** `AGENTS.md` ganhou a **§99 —
+Independência arquitetural do AIRI**, que passa a ser a direção permanente e
+prevalece sobre qualquer documento anterior. A Lia é o produto; o AIRI é
+referência técnica externa. Foram corrigidas 22 passagens que ainda tratavam o
+AIRI como base ou stack (§1, §6, §7, §8, §16, §31, §34, §36, §54, §73, §74, §75,
+§78, §86, §92, §94, §95, §96, §98.3, §98.4, §98.18), e a §99 é nova.
+`LIA-ARCHITECTURE.md` recebeu nota de supersessão e
+segue como registro histórico. Tarefa **documental**: nenhum código, dependência,
+lockfile, build ou instalador alterado; `airi/` intocado. Plano atualizado em
+`docs/architecture/AIRI-DECOUPLING-PLAN-2026-10-28.md` (A1 concluída, C1
+resolvido, B0 adicionada).
+
 **Investigação de independência em 28/10/2026:** mapeado o que falta para remover
 `airi/` com segurança. Nada foi alterado. Fatos: `airi/` são **5 687 dos 5 906**
 arquivos rastreados (96%) e **580 MB**, dos quais 465 MB são a documentação do
