@@ -13,6 +13,17 @@ commit. Registra **estado**, não narrativa: relatório de rodada vai para
 
 ## 0. Estado agora
 
+**Investigação de independência em 28/10/2026:** mapeado o que falta para remover
+`airi/` com segurança. Nada foi alterado. Fatos: `airi/` são **5 687 dos 5 906**
+arquivos rastreados (96%) e **580 MB**, dos quais 465 MB são a documentação do
+próprio AIRI, sem uso pela Lia. Launcher e `@lia/core` **não importam nada do
+AIRI** — a dependência real é o Stage, que **é** o app AIRI (~260 mil linhas,
+21 pacotes do workspace), e o instalador Windows é esse mesmo app rebatizado.
+`@proj-airi/*` **não é publicado no npm** (404); `@xsai/*` e `@moeru/*` são (MIT).
+Bloqueio principal: `AGENTS.md` §6–§7 manda **depender** do AIRI, o oposto desta
+missão. Relatórios: `docs/architecture/AIRI-INDEPENDENCE-2026-10-28.md` e
+`AIRI-DECOUPLING-PLAN-2026-10-28.md`.
+
 **Análise comparativa em 28/10/2026 — AIRI estável:** consultada a stable
 **`v0.13.0`** (`3c4aca209330f1a78fe7288e8c4ca75639cd10e6`); a Lia permanece em
 **`v0.12.0-beta.5`** (`2c1e223`), com **529 commits** de distância e **zero**
