@@ -38,10 +38,41 @@ na próxima atualização upstream. Evidências e limites em
 | Commits da branch que tocaram `airi/` | **17 de 45** | `git log --oneline db99c70..HEAD -- airi/` |
 | Volume total da diferença | **76 arquivos, +10438 / −272** | `git diff --stat db99c70..HEAD -- airi/` |
 
-> A versão do `package.json` (`0.12.0-beta.5`) e a release do badge (`v0.11.3`)
+> ~~A versão do `package.json` (`0.12.0-beta.5`) e a release do badge (`v0.11.3`)
 > **não coincidem**. Não há no repositório nenhum registro do commit exato do
-> upstream de onde a cópia foi feita. Se o re-clone for feito, esse commit precisa
-> ser decidido e registrado aqui — hoje ele é desconhecido.
+> upstream de onde a cópia foi feita.~~ — **CORRIGIDO em 27/10/2026.**
+>
+> A afirmação acima era falsa em duas partes:
+>
+> 1. `v0.11.3` não é a versão da cópia. É o texto de um **badge de download** no
+>    README do upstream. Não há contradição a resolver.
+> 2. O commit **está** registrado, em
+>    [`docs/upstream/AIRI-INTEGRATION.md`](upstream/AIRI-INTEGRATION.md) §1.
+>
+> ### Commit-base — verificado por evidência externa
+>
+> | Item | Valor |
+> |---|---|
+> | Commit | `2c1e223c8dd813d7c74a324d7fd7399fbf47e8bf` |
+> | Mensagem | `release: v0.12.0-beta.5` |
+> | Data | 2026-08-29T18:31:30Z (committer) |
+> | Tag anotada | `v0.12.0-beta.5` → objeto `6ea680f51486d257f9b0eeda3bdc25db4307d3bb` |
+>
+> Verificado em 27/10/2026 por `api.github.com/repos/moeru-ai/airi/commits/2c1e223…`
+> e `…/git/ref/tags/v0.12.0-beta.5`, e confirmado por um clone real: `git describe
+> --tags` devolve `v0.12.0-beta.5` naquele commit.
+>
+> **Consequência para o re-clone:** o commit deixou de ser uma decisão em aberto.
+> Comando exato em [`docs/architecture/AIRI-COMPARISON.md`](architecture/AIRI-COMPARISON.md) §1.
+>
+> ### Os números de "volume total" da tabela acima estão desatualizados
+>
+> A linha "76 arquivos, +10438 / −272" (`git diff --stat db99c70..HEAD -- airi/`)
+> mede o **histórico da branch**, não a diferença real contra o upstream. A
+> medição contra o clone limpo em `2c1e223` encontrou **353 arquivos criados, 95
+> modificados e 0 removidos**. O `git diff` entre branches não vê o trabalho que
+> já estava na `main` antes de `db99c70`. A tabela de §1 fica como registro
+> histórico; a medição válida está em `AIRI-COMPARISON.md` §2.
 
 ---
 

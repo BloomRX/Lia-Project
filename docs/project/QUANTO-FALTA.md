@@ -101,6 +101,14 @@ vitest `airi/apps/lia-app` (246 + 2 skip), `moeru-lint`, build `@proj-airi/core-
 5. **Fatiamento portátil do `AGENTS.md`** — hoje são ~10 800 tok carregados sempre.
    Fatiar em `.claude/rules/` **só** ajuda o Claude Code; a via portátil é núcleo
    curto no `AGENTS.md` + detalhe em documentos abertos sob demanda.
+6. **Independência do AIRI — em andamento (27/10/2026).** `lia/{core,stage,launcher}`
+   existem com **43 testes verdes** (`@lia/contracts` sem nenhuma dependência).
+   Feito: comparação contra clone limpo em `2c1e223`, contratos de ciclo de vida e
+   protocolo, host do Stage testável sem display, decisão do Launcher em função pura.
+   **Falta:** portar os 70 arquivos de `stage-tamagotchi/src/main/services/lia`,
+   criar o `LiaChatPort` e ligá-lo ao `core-agent`, migrar as configs, e — só então —
+   trocar o `AiriStageManager` pelo `createLauncher`. Ordem e rollback em
+   `docs/architecture/LIA-MIGRATION-PLAN.md`.
 
 Regras que valem para tudo isso: §6 do `CURRENT-STATE.md` e o `AGENTS.md` inteiro.
 Em particular — **STOP AND REPORT em vez de contornar**, e não declarar PASS sem
@@ -117,6 +125,11 @@ executar.
    personagem aparece e encerramento gerenciado remove os processos da sessão.
    Baseline funcional preservado em `3ef6d11`; isso não aprova o gate de imagem.
 3. **Qualquer validação de runtime, voz, instalador ou benchmark.**
+4. **Gate do Stage próprio.** `lia/stage` só foi provado em Linux headless: a
+   janela nunca abriu de verdade, o "personagem" é um placeholder declarado e o
+   encerramento sem órfão no Windows nunca foi observado. O que precisa rodar no
+   Windows do Dev: abrir o Stage, ver a janela, fechar, e conferir na lista de
+   processos que nada ficou para trás.
 
 Um agente pode *preparar* tudo isso — código, testes, roteiro, diagnóstico — mas
 **não pode aprovar**. Se o seu plano termina em "gate aprovado", ele não termina

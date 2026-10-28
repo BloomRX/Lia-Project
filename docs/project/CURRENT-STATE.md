@@ -20,6 +20,37 @@ commit. Registra **estado**, não narrativa: relatório de rodada vai para
 | `main` | `db99c709059a6d074b18361bfb32c9f144620632` — sem merge |
 | Fase | **8.0D aberta**, gate de conteúdo da imagem ainda FAIL; 8.0E não iniciada |
 | Plano local | `docs/product/PLANO-FINALIZACAO-LIA.md` (o caminho em `docs/project/` não existe) |
+| Independência do AIRI | `lia/` criado: `core` (contratos, **26 testes**), `stage` (**9**), `launcher` (**8**) — ver §0.1 |
+
+### 0.1 Independência do AIRI — 27/10/2026
+
+Medido contra um clone limpo do `moeru-ai/airi` em `2c1e223`
+(`v0.12.0-beta.5`), **fora** da árvore do repositório:
+**353 arquivos criados pela Lia, 95 do upstream modificados, 0 removidos.**
+
+O commit-base deixou de ser desconhecido — era a única pergunta de proveniência
+em aberto, e a resposta já estava em `docs/upstream/AIRI-INTEGRATION.md` §1. O
+registro em `docs/airi-modificacoes-registro.md` §1 foi corrigido.
+
+**Código novo em `lia/`** — ao lado de `airi/`, jamais dentro, e **fora** do
+`pnpm-workspace.yaml` do AIRI:
+
+| Módulo | Conteúdo | Testes |
+| --- | --- | --- |
+| `lia/core` | `@lia/contracts`: ciclo de vida + protocolo, **zero dependências** | 26 PASS |
+| `lia/stage` | host do Stage com plataforma injetada; `index.ts` é o único que importa Electron | 9 PASS |
+| `lia/launcher` | decisão `packaged` × `development` em função pura | 8 PASS |
+
+**Isto NÃO é o Stage pronto.** Abrir janela, renderizar personagem e encerrar
+sem órfão no Windows estão **NÃO EXECUTADOS** — o ambiente do agente não tem
+display nem binário do Electron. Teste unitário verde não é o gate visual.
+
+**Achado que condiciona o resto:** a Lia hoje não é um app separado do AIRI, é
+o AIRI com 353 arquivos injetados — 165 deles dentro de
+`apps/stage-tamagotchi`, e com alterações em `packages/core-agent` e
+`packages/stage-ui`, que são compartilhados e seriam sobrescritos por um
+`subtree pull`.
+
 
 **Windows real comprovado nesta rodada de 20/10/2026:**
 
