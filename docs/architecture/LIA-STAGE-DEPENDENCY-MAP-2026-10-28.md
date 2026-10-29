@@ -375,6 +375,10 @@ repetir com o mesmo critério.
 - Não decidiu a estratégia do chat nem do avatar; ambos exigem histórico e
   julgamento do dono.
 
+> As seções **11** (B0.1) e **12** (B0.2) vêm depois desta e são rodadas
+> posteriores: a 11 corrige números e encerra o R5; a 12 investiga as quatro
+> arestas do hub de provedores. Onde houver divergência, vale a seção mais nova.
+
 ---
 
 ## 11. B0.1 — Validação dos limites da migração (28/10/2026)
@@ -713,3 +717,357 @@ Nenhuma dessas três perguntas se responde lendo código.
 não sincronizou nem copiou nada de `airi/`; não executou build nem teste; não buscou o
 texto integral das licenças de terceiros. Todas as medições são estáticas, sobre a
 árvore local, e nenhuma afirma que um fluxo funciona — apenas o que ele alcança.
+
+---
+
+## 12. B0.2 — Preparação do desacoplamento do hub de providers (28/10/2026)
+
+Terceira rodada. Escopo: **apenas as quatro arestas** que o B0.1 nomeou em
+`stores/providers/provider.ts`. Nenhum código alterado, nada movido ou copiado,
+`airi/` intocado. Nenhum build, nenhum teste executado nesta rodada.
+
+> **Nota de recuperação de ambiente.** O workspace foi reinicializado antes desta
+> rodada e `/home/user/lw` não existia mais. O trabalho sobreviveu porque estava
+> comitado e enviado (`1ba42a3`); a árvore foi reobtida por `git clone` da branch
+> e o HEAD conferido contra o remoto antes de qualquer leitura. Nada foi perdido.
+
+### 12.1 Resultado que muda a decisão
+
+O B0.1 recomendou resolver as quatro arestas "antes de mover o hub", tratando-as
+como quatro problemas do mesmo tipo. **Não são.** Três medições mudam a leitura:
+
+**1. A aresta 2 não é uma dependência — é uma porta.** `chat-provider-runtime.ts`
+tem **um único import, e é `import type`** (`@proj-airi/core-agent`, apagado na
+compilação). Fecho de runtime: **1 arquivo** — ela própria. É um registro de cinco
+pares `register*/get*` sem estado persistido, sem I/O e sem semântica de chat. O
+nome no caminho é o que induz ao erro. [C]
+
+**2. A aresta 1 é morta em runtime para os provedores da Lia.** O uso é uma
+expressão booleana em `provider.ts:995`:
+
+```
+providerConfiguredBy(providerId) !== 'authentication' || authStore.isAuthenticated
+```
+
+`providerConfiguredBy` devolve `definition.configuredBy ?? 'user'`. Só quatro
+definições declaram `'authentication'` — as quatro `official-*`
+(`libs/providers/providers/official/index.ts:67,105,223,348`). Os dez provedores
+que a Lia oferece (`LIA_CHAT_PROVIDER_OPTIONS`, `stores/lia/provider.ts:44-55`) não
+declaram nada, logo são `'user'`, logo o lado esquerdo do `||` é `true` e
+`authStore.isAuthenticated` **nunca é lido** — curto-circuito. [C]
+
+O que a Lia *realmente* carrega pela aresta 1 é a **instanciação do store** em
+`provider.ts:116` (`const authStore = useAuthStore()`), que existe só para
+satisfazer essa leitura que nunca acontece. É isso que arrasta o grafo de auth.
+
+**3. A aresta 4 nunca é executada pela Lia.** `client` só é usado em
+`createProvidersQueryOptions` (`config.ts:28-37`) e nas três mutações remotas.
+O único chamador de `fetchProviders` em todo o repositório é
+`packages/stage-pages/src/pages/v2/settings/providers.vue:18` — a página de
+configurações do AIRI, que não é a da Lia. O painel da Lia monta
+`LiaProviderConfig.vue`, que lê `LIA_CHAT_PROVIDER_OPTIONS` de uma lista curada
+local. [C]
+
+**Consequência:** a aresta 4 é peso morto — mas peso morto **carregado no grafo de
+módulos**, porque importar `config.ts` importa `composables/api.ts`, que importa
+`auth-fetch`, que importa `analytics`. Não executar não é não carregar.
+
+### 12.2 Medições
+
+Fecho de runtime de `stores/providers/provider.ts`, com o resolvedor que segue
+todas as packages do workspace: [C]
+
+| Cenário | Arquivos |
+| --- | --- |
+| Real | **151** |
+| Sem as arestas 1 e 4 (`auth` + `api`) | 148 |
+| Só sem os provedores `official` | 140 |
+| **Sem as arestas 1 e 4 e sem `official`** | **28** |
+
+Os 123 arquivos que caem (81 %) vêm de dois portadores, e só dois:
+
+- `auth.ts` → `composables/api.ts` → `auth-fetch.ts` → `libs/analytics/index.ts`
+  (21 arquivos) → `airi-card` → `vision` → `server-sdk` → `better-ws`;
+- `libs/providers` (barril) → `official/index.ts` → `official/shared.ts` →
+  `chat/session-store.ts` → `core-agent` (20 arquivos) + `database` (2).
+
+Composição dos 151: `stage-ui` 95 · `core-agent` 20 · `stage-shared` 18 ·
+`server-sdk` 4 · `better-ws` 4 · `server-shared` 5 · demais 5. Preocupações
+estranhas à configuração de provedores: **analytics 21, auth 5, database 2 — 28
+arquivos, 18,5 %**. [C]
+
+**A ressalva que impede vender isso como redução de pegada.** Aplicando os mesmos
+cortes ao fecho do código da Lia no renderer, o ganho é de **6 %** (390 → 367), não
+81 %. Motivo: `stores/lia/voice.ts` e `hearing.ts` alcançam `stores/modules/speech.ts`,
+que importa `OFFICIAL_SPEECH_PROVIDER_ID` e `setupOfficialSpeechAutoPick`
+(`speech.ts:17`) e tem ramos explícitos para o provedor oficial (`:208`, `:213`,
+`:302`), além de chegar a `analytics` por caminhos próprios. **O corte libera o hub
+para ser movido; não reduz a pegada total da Lia**, que só cai quando ela deixar de
+usar o runtime de fala e chat do Stage. [C]
+
+Também medido: trocar o barril `libs/providers` por um import direto de
+`providers/registry.ts` (onde vive `getDefinedProvider`) economiza **6 arquivos**
+(151 → 145). É ganho real mas pequeno; o grosso do fecho é a **máquina de
+provedores**, que é intrínseca ao hub, não uma aresta. [C]
+
+### 12.3 As quatro arestas
+
+#### Aresta 1 — `../auth`
+
+| | |
+| --- | --- |
+| **Arquivo / símbolo** | `stores/providers/provider.ts:34` importa `useAuthStore` de `stores/auth.ts`; usado em `:116` (instanciação) e `:995` (única leitura, `.isAuthenticated`) |
+| **Comportamento atual** | Um provedor só conta como configurado para um módulo se estiver em `configuredProviders` **e** (não for `configuredBy: 'authentication'` **ou** houver sessão) |
+| **O que a Lia usa** | **Nada em runtime.** Para os dez provedores dela o lado esquerdo do `||` é sempre `true`; o booleano nunca é avaliado. A Lia funciona sem conta hoje — não por desenho, por curto-circuito |
+| **Dependências transitivas** | `auth.ts` (434 linhas) → `composables/api.ts` → `auth-fetch` → `analytics` (21) → `airi-card` → `vision` → `server-sdk` → `better-ws`. Total com `auth` como entrada: **151 arquivos**; sem `analytics`: **24** |
+| **Contrato mínimo a preservar** | "Um provedor de propriedade da autenticação só está configurado se houver sessão." Para a Lia, nenhum provedor é dessa classe |
+| **Alternativa proposta** | Trocar o **store** por uma **porta de uma função**: `isAuthenticationOwnedProvider(id) => boolean` (ou um `isSessionPresent: () => boolean` injetado, com padrão `false`). O hub fica sem `useAuthStore` e sem instanciar auth |
+| **Riscos** | Se o produto passar a usar os provedores `official-*`, a porta precisa virar real. Enquanto a Lia não os usa, `false` é fiel ao comportamento observado — mas é uma **escolha**, não uma equivalência com a sessão real |
+| **Testes existentes** | `provider.test.ts` (8 testes) já injeta sessão via `useAuthStore().$patch({ user, session })` (`:150`) — cobre o ramo de auth |
+| **Testes necessários** | (a) provedor `user` listado com sessão ausente; (b) provedor `authentication` **não** listado sem sessão e listado com ela; (c) o hub não instancia o store de auth |
+
+#### Aresta 2 — `../chat/chat-provider-runtime`
+
+| | |
+| --- | --- |
+| **Arquivo / símbolo** | `provider.ts:35` importa `getProviderCredentialResolver`; usado em `withResolvedCredential` (`:97-107`) |
+| **Comportamento atual** | Ao construir a instância do provedor, funde em memória as credenciais que o host registrou. Sem resolver, devolve a config intacta. O valor fundido **nunca é persistido nem logado** |
+| **O que a Lia usa** | **Tudo.** `stores/lia/provider.ts:519` registra o resolver que lê do cofre da Lia; é assim que a `apiKey` chega ao provedor sem tocar localStorage |
+| **Dependências transitivas** | **1 arquivo** (ela própria). Import único é `import type`. Cinco pares `register*/get*` sobre variáveis de módulo |
+| **Contrato mínimo** | `(providerId) => Promise<Record<string, unknown> \| undefined>`, fundido na config só no build da instância |
+| **Alternativa proposta** | **Nenhuma.** Esta aresta já é o que o B0.2 quer construir: uma porta sem dependências, com o host injetando. O erro seria movê-la para dentro de um "módulo de chat" da Lia — o lugar dela é um módulo de portas do host |
+| **Riscos** | O nome do arquivo sugere acoplamento com chat e convida a "extrair de chat", o que arrastaria `core-agent` junto. Manter o módulo como está e apenas reconhecê-lo como porta é o caminho de menor custo |
+| **Testes existentes** | `chat-provider-runtime.test.ts`, `send-error.test.ts` (usa `LIA_VAULT_KEY`), `provider-schema-defaults.test.ts` (4 usos) e, do lado Lia, `runtime-wiring.test.ts` — 9 testes, incluindo *"builds the chat provider instance with the vault credential"* e *"keeps the secret out of the provider record, the product config and the logs"* |
+| **Testes necessários** | Nenhum novo para mover. Falta apenas um teste que prove a **ausência de dependência de runtime** do módulo (ex.: que o fecho seja ele mesmo) |
+
+#### Aresta 3 — `./config`
+
+| | |
+| --- | --- |
+| **Arquivo / símbolo** | `stores/providers/config.ts:10` importa `client`; `provider.ts:36` importa `useProviderConfigStore` |
+| **Comportamento atual** | Store de 276 linhas que **possui o estado persistido** dos provedores, sincroniza entre janelas (`pinia-plugin-synced`, `state: true`, 9 ações sincronizadas) e replica cada mutação no backend |
+| **O que a Lia usa** | **6 membros**: `getProvider`, `getProviderConfig`, `ensureProvider`, `updateProviderConfig`, `providers`, `configuredProviders` |
+| **Dependências transitivas** | 151 arquivos; sem `analytics`, 127; sem `official`, 140 |
+| **Contrato mínimo** | O registro `Record<id, InferenceServiceProvider>` com `{ id, definitionId, config, status, configuredBy }`, persistido, mais as duas derivadas |
+| **Alternativa proposta** | Manter o store (o estado é dele e é bem modelado) e **remover dele a replicação remota**. A Lia precisa do registro local, não do backend |
+| **Riscos** | (a) `pinia-plugin-synced` é a **única** via de propagação entre janelas desta store (`listenToStorageChanges: false`, comentário em `config.ts:16-19`); uma implementação própria teria de reproduzir isso; (b) há uma **migração legada** que roda na construção do store (`config.ts:52-68`), copiando `settings/credentials/providers` para `settings/providers/configured` — precisa ser preservada ou descartada conscientemente |
+| **Testes existentes** | `config.test.ts` (5 testes), `provider-schema-defaults.test.ts` (8) |
+| **Testes necessários** | (a) migração legada roda uma única vez; (b) o registro sobrevive a recarregar sem backend disponível; (c) sincronização entre duas instâncias Pinia |
+
+#### Aresta 4 — `../../composables/api`
+
+| | |
+| --- | --- |
+| **Arquivo / símbolo** | `config.ts:10` importa `client`; consumido apenas em `createProvidersQueryOptions` (`:28-37`) e nas três mutações (`:85-98`) |
+| **Comportamento atual** | Cliente Hono tipado contra `SERVER_URL`, com `authedFetch` que injeta Bearer, renova em 401 e anexa cabeçalhos de analytics |
+| **O que a Lia usa** | **Nada.** `fetchProviders` nunca é chamado pela Lia. **Mas `updateProviderConfig` é** — e ele dispara `patchConfigRemote` **sempre**, em `config.ts:224`, dentro de `try/catch`: a falha é silenciosa, a requisição acontece |
+| **Dependências transitivas** | 151; com `analytics` bloqueado, 24. É o portador do maior bloco |
+| **Contrato mínimo** | Nenhum. A Lia não tem contrato com o backend do AIRI |
+| **Alternativa proposta** | Remover a replicação remota da store. A Lia mantém só o snapshot local |
+| **Riscos** | **Este é o achado mais sério da rodada** — ver §12.4 |
+| **Testes existentes** | `config.test.ts` mocka `patchConfigRemote` (`:17`) e **afirma o envio de `{ apiKey: 'sk-test' }`** para o serviço (`:105-121`) |
+| **Testes necessários** | (a) `updateProviderConfig` **não** faz rede quando a replicação está desligada; (b) nenhuma config com campo de segredo sai do processo |
+
+#### A quinta coisa que não é aresta
+
+`setProviderAvailabilityOverride` (`provider.ts:201`) é exposto na store (`:1071`) e
+na lista de ações sincronizadas (`:1102`), mas **não tem nenhum chamador no
+repositório** — nem em testes. O comentário em `provider.ts:192-194` afirma que é
+"escrito pela cola de auth-sync depois de sondar o servidor"; essa cola não existe.
+Um seam morto, com comentário obsoleto. Para a Lia, o mapa de overrides é sempre
+`{}` e não tem efeito. **Não remover** — é código do upstream e a remoção seria uma
+alteração não autorizada; apenas registrar que ele não é dependência. [C]
+
+### 12.4 Configurações e segredos — o que a evidência mostra
+
+O desenho é correto **no caminho da Lia** e permissivo **na store**. As duas coisas
+são verdadeiras ao mesmo tempo.
+
+**O que a Lia garante, com teste.** `ensureProviderRecord`
+(`stores/lia/provider.ts:346-358`) grava apenas `{ baseUrl }`; o comentário declara
+que a `apiKey` fica no cofre e o resolver a injeta em memória. `testConnection`
+monta `config.apiKey` **transitoriamente** e o passa a `validateProviderConfig`,
+que valida sem persistir (`provider.ts:240-300`). O teste
+*"keeps the secret out of the provider record, the product config and the logs"*
+(`runtime-wiring.test.ts:257`) verifica que o segredo não aparece em
+`settings/providers/configured`, no config do produto nem nos logs. [C]
+
+**O que a store permite.** A invariante "config não contém segredo" é **convenção
+por chamador**, não tipo nem validação:
+
+1. `patchConfigRemote` (`services/inference-service-providers.ts:181-206`) envia
+   `json: { config }` **sem redação**.
+2. `updateProviderConfig` chama a mutação **incondicionalmente** (`config.ts:224`),
+   dentro de `try/catch`.
+3. A página de edição do AIRI escreve `apiKey` **dentro** de `config`:
+   `setFieldValue` (`pages/v2/settings/providers/edit/[providerId]/index.vue:192-198`)
+   grava `config[key] = value`, e `commitEditedConfig` (`:375`) envia
+   `updateProviderConfig(id, { ...config }, status)`.
+4. `config.test.ts:105-121` **afirma** que `{ apiKey: 'sk-test' }` chega a
+   `patchConfigRemote`.
+
+Somando 1–4: **pelo caminho do AIRI, uma chave de API digitada pelo usuário é
+persistida em localStorage e enviada ao backend em `SERVER_URL`.** [C]
+
+`SERVER_URL` (`libs/server.ts:1`) é
+`import.meta.env.VITE_SERVER_URL || 'https://api.airi.build'` — um domínio de
+fornecedor **fixo no código**, alcançável a partir do grafo do hub via aresta 4.
+O B0.1 já registrou a regra de marca; aqui aparece o mecanismo concreto. Se a
+constante sobrevive ao empacotamento depende de tree-shaking do `client`, que
+**não foi medido** — a árvore de módulos incluí-la é fato; o bundle final não foi
+verificado. [P para o bundle, C para o grafo]
+
+**O que isso significa para a Lia, sem exagero.** A Lia hoje não vaza nada: ela não
+chama `updateProviderConfig` com chave e não monta a página de edição do AIRI. O
+risco é de **fronteira compartilhada**: enquanto a Lia usar a mesma store, a
+garantia dependerá de nenhum outro chamador fazer o que a página do AIRI faz. Uma
+store própria da Lia, sem replicação remota, converte a convenção em estrutura.
+
+**Não examinado nesta rodada, e assim declarado:** o cofre (implementação, onde
+grava, como cifra) e o formato real do `lia-product.json`. Lê-los exigiria tocar
+em arquivos do usuário; ficou fora por decisão de escopo. Nenhum valor de segredo
+foi lido, impresso ou copiado.
+
+### 12.5 Conta da Lia × autenticação de provedor
+
+A decisão de produto é que a Lia funcione **sem conta própria obrigatória**. A
+evidência mostra que as duas coisas já estão separadas no código, e que só uma
+delas existe hoje:
+
+| Conceito | Existe? | Onde | Precisa para configurar provedor? |
+| --- | --- | --- | --- |
+| **Autenticação de provedor** (a `apiKey` do usuário para OpenAI, Groq, etc.) | **sim** | cofre da Lia + resolver registrado em `stores/lia/provider.ts:519` | **sim** |
+| **Conta do AIRI** (sessão OIDC, `useAuthStore`) | **sim**, mas só serve aos provedores `official-*` | `stores/auth.ts`, `libs/auth-oidc.ts` | **não** — os dez provedores da Lia são `'user'` |
+| **Conta da Lia** | **não existe** | — | não |
+
+Ou seja: "funcionar sem conta" não exige apagar autenticação nenhuma. Exige
+apenas que a fronteira da Lia **não pergunte** por sessão. A forma é a da aresta 1:
+uma porta `isAuthenticationOwnedProvider(id)` que a Lia responde com `false`, e o
+Stage responde com a consulta real à sessão. Nenhuma linha de `stores/auth.ts`
+precisa mudar, e o Stage continua funcionando com os provedores `official-*`. [I,
+quanto à forma; C, quanto à separação atual]
+
+**Decisão pendente D-A:** o produto terá conta própria? Se sim, ela é outro
+conceito, com outra porta — e não deve reutilizar `useAuthStore`, cujo modelo é a
+sessão do AIRI.
+
+### 12.6 Fronteira própria proposta
+
+O que a Lia consome hoje do hub são **13 membros** em quatro arquivos: [C]
+
+| Store | Membros usados | Onde |
+| --- | --- | --- |
+| `providerConfigStore` | `getProvider`, `getProviderConfig`, `ensureProvider`, `updateProviderConfig`, `providers`, `configuredProviders` | `stores/lia/provider.ts`, `stores/lia/hearing.ts`, `stores/lia/voice-editor.ts` |
+| `providersStore` | `validateProviderConfig`, `disposeProviderInstance`, `initializeProvider`, `forceProviderConfigured`, `getModelsForProvider`, `supportsModelListing`, `getProviderInstance` | `stores/lia/provider.ts`, `voice-editor.ts`, `voice-preview.ts` |
+
+Treze é pouco o bastante para uma interface própria. O contrato conceitual, sem
+depender de store global:
+
+```
+LiaProviderRegistry                      // o que a Lia precisa saber e gravar
+  list(): LiaProviderRecord[]            // { id, definitionId, config, status, configuredBy }
+  get(id): LiaProviderRecord | undefined
+  ensure(id, definitionId, config): void // cria registro sem segredo
+  updateConfig(id, config, status): void // config NUNCA contém segredo (tipo sem campo livre)
+
+LiaProviderRuntime                       // o que a Lia precisa executar
+  validate(id, transientConfig): { valid, reason }
+  initialize(id): void
+  dispose(id): Promise<void>
+  markConfigured(id): void
+  listModels(id): Promise<ModelInfo[]>
+  supportsModelListing(id): boolean
+  instance(id): ProviderInstance | undefined
+
+LiaCredentialPort                        // já existe; é a aresta 2
+  resolve(providerId): Promise<{ apiKey } | undefined>
+
+LiaSessionPort                           // substitui a aresta 1 para a Lia
+  isAuthenticationOwned(providerId): boolean   // Lia responde sempre false
+```
+
+Duas propriedades que tornam isso testável sem Electron e sem rede:
+
+- **Nenhum membro é assíncrono por causa de rede.** `updateConfig` grava local;
+  não existe caminho para `patchConfigRemote` na interface.
+- **O segredo não cabe no tipo.** `updateConfig` recebe um tipo de config sem
+  campo de credencial; a credencial só entra por `LiaCredentialPort`, em memória,
+  no build da instância. A garantia deixa de ser comentário e passa a ser
+  compilação.
+
+**Como seria testado.** Três camadas, todas executáveis sem Electron:
+
+1. **Contrato** — um teste de conformidade que roda a mesma bateria contra a
+   implementação atual (adaptador sobre os stores do Stage) e contra a futura. Se
+   as duas passarem na mesma bateria, a troca é segura.
+2. **Comportamento** — portar os 9 testes de `runtime-wiring.test.ts` para rodar
+   contra a interface. Eles já cobrem exatamente a superfície dos 13 membros,
+   incluindo *"never claims a keyed provider is configured when its secret is
+   missing"*.
+3. **Fronteira** — um teste que falha se a implementação da interface voltar a
+   importar `stores/auth`, `composables/api` ou `libs/analytics`. É o único jeito
+   de a fronteira não regredir silenciosamente.
+
+### 12.7 Sequência mínima recomendada
+
+Ordenada por **reversibilidade**, não por tamanho. Cada passo é um commit que
+deixa o aplicativo funcionando e pode ser revertido sozinho. [I, quanto à ordem;
+C, quanto aos fatos que a sustentam]
+
+| # | Passo | Por que é o menor passo que prova algo | Reversível? |
+| --- | --- | --- | --- |
+| **1** | Teste de conformidade dos 13 membros contra os stores atuais | Fixa o comportamento **antes** de tocar em nada. Sem isso, qualquer passo seguinte é fé | sim — só acrescenta teste |
+| **2** | Aresta 1: introduzir `isAuthenticationOwnedProvider`, responder `false` na Lia | Remove `useAuthStore` do hub sem mudar comportamento observado (o booleano já não era lido) | sim |
+| **3** | Aresta 4: desligar a replicação remota em `updateProviderConfig` | A Lia nunca dependeu dela; o `try/catch` já tratava a ausência do backend. É o passo de maior ganho de grafo | sim |
+| **4** | Aresta 3: extrair o adaptador que implementa a interface sobre `providerConfigStore` | Move a fronteira para o lugar certo sem mover arquivo nenhum | sim |
+| **5** | Provar a fronteira: teste que falha se `auth`/`api`/`analytics` voltarem | Torna o desacoplamento verificável, não declarado | sim |
+| **6** | (depois) Substituir o adaptador por uma implementação própria | Só faz sentido após 1–5 | sim |
+
+**Por que a aresta 2 não aparece na sequência:** não há o que fazer. Já é uma
+porta sem dependências; movê-la é risco sem ganho. O que falta é apenas
+reconhecê-la como tal e não deixá-la ser arrastada para um "módulo de chat".
+
+**O que a evidência NÃO sustenta:**
+
+- **Passo 3 sem o passo 1.** Desligar a replicação remota muda o comportamento do
+  Stage para usuários com backend. Precisa da bateria de conformidade antes.
+- **Cortar os provedores `official` do hub.** Dá o maior número isolado (151 → 140
+  sozinho, e compõe os 81 % com a aresta 4), mas `stores/modules/speech.ts` tem
+  ramos de runtime para o provedor oficial de fala (`:208`, `:213`, `:302`). Cortar
+  no hub sem tratar a fala quebra o caminho de voz. **Não é passo inicial.**
+- **Declarar a pegada reduzida.** O corte dá 6 % no fecho total da Lia. A pegada
+  cai quando ela deixar de usar o runtime de fala e chat do Stage — que é outro
+  trabalho, explicitamente fora do escopo desta rodada.
+- **Que os 13 membros sejam o contrato final.** São o que a Lia usa **hoje**. Se o
+  painel ganhar edição de modelo por provedor ou descoberta de modelos, a interface
+  cresce. [P]
+
+### 12.8 Decisões ainda abertas
+
+| # | Decisão | Por que não foi tomada aqui |
+| --- | --- | --- |
+| **D-A** | A Lia terá conta própria? | é decisão de produto; define se `LiaSessionPort` fica em `false` para sempre |
+| **D-B** | A migração legada de `settings/credentials/providers` é preservada ou descartada? | depende de haver instalações em campo com o formato antigo |
+| **D-C** | A sincronização entre janelas continua necessária quando a Lia tiver janela própria? | depende do desenho de janelas, que é passo posterior |
+| **D-D** | O `SERVER_URL` fixo deve sair do código da Lia? | o B0.1 já fixou a regra de marca; a remoção toca código de aplicação, fora desta rodada |
+| **D-E** | O passo 3 é aceitável para o Stage, ou só para a Lia? | desligar a replicação afeta o comportamento do AIRI na mesma árvore |
+
+### 12.9 O que mudou em relação ao B0.1
+
+| Item | B0.1 | Depois desta seção |
+| --- | --- | --- |
+| As quatro arestas | "quatro arestas do mesmo tipo" | **três tipos distintos**: uma porta já pronta (2), um booleano morto (1), peso morto importado (4), e a única dependência real (3) |
+| Aresta 2 | dependência de chat | **porta sem dependências** — 1 arquivo, import só de tipo |
+| Aresta 1 | "booleano em uma linha" | **nunca lido** para os provedores da Lia (curto-circuito) |
+| Aresta 4 | "nunca invocada pela Lia" | confirmado — e **`updateProviderConfig` dispara rede sempre**, dentro de `try/catch` |
+| Fecho do hub | 176 (B0.1) | **151** medido; **28** com os dois portadores cortados (81 %) |
+| Ganho para a Lia | implícito | **6 %** no fecho total — o corte libera o hub, não reduz a pegada |
+| Segredos | "config é não-secreto por construção" | verdade **no caminho da Lia**; **falso** no caminho do AIRI, que grava `apiKey` em `config` e o envia ao backend — afirmado por teste existente |
+| `setProviderAvailabilityOverride` | não citado | **seam morto**: exposto e sincronizado, sem nenhum chamador |
+| Sequência | hub primeiro, por 4 arestas | **conformidade primeiro**, depois arestas 1 e 4, adaptador, prova de fronteira; `official` explicitamente fora |
+
+**O que esta seção não fez:** não alterou código, dependência, lockfile, build ou
+instalador; não moveu nem copiou pacote; não tocou em `airi/`; não resolveu o
+avatar; não tomou decisão de licenciamento. Nenhum teste foi executado — todos os
+"testes existentes" foram lidos, não rodados. Nenhum valor de segredo foi lido ou
+impresso, e nenhum arquivo pessoal do usuário foi aberto.
