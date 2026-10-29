@@ -330,11 +330,17 @@ describe('lia provider config facade — the import frontier (B0.7.1, T-A)', () 
    */
   const root = import.meta.dirname
 
-  const scanned = collectProductionSources(root).map(path => ({
-    path,
-    relativePath: relative(root, path),
-    imports: scanModuleImports(readFileSync(path, 'utf8')).map(found => found.specifier),
-  }))
+  const scanned = collectProductionSources(root).map((path) => {
+    const source = readFileSync(path, 'utf8')
+    return {
+      // Kept so the activation check below can look at member access, not just
+      // at module specifiers, without reading every file a second time.
+      source,
+      path,
+      relativePath: relative(root, path),
+      imports: scanModuleImports(source).map(found => found.specifier),
+    }
+  })
 
   it('scanned the Lia store layer recursively, including every production module', () => {
     const files = scanned.map(file => file.relativePath).sort()
@@ -366,6 +372,71 @@ describe('lia provider config facade — the import frontier (B0.7.1, T-A)', () 
       .map(specifier => `${file.relativePath} -> ${specifier}`))
 
     expect(violations).toEqual([])
+  })
+
+  /**
+   * T-H (B0.8-lite) — the provider runtime store.
+   *
+   * Scoped to the two ACTIVATION operations, not to the module. `stores/lia`
+   * legitimately uses the same store for `validateProviderConfig`,
+   * `disposeProviderInstance`, `getProviderInstance`, `supportsModelListing` and
+   * `getModelsForProvider`; banning the module outright would require migrating
+   * all of those, which is explicitly out of scope for this step. What must not
+   * happen any more is reaching the activation pair directly: it has a port.
+   */
+  const ACTIVATION_MEMBERS = ['initializeProvider', 'forceProviderConfigured']
+  const ACTIVATION_MODULE = 'provider-activation.ts'
+
+  it('t-h: the only module touching the activation operations is the port', () => {
+    const offenders = scanned
+      .filter(file => referencedMembers(file.source, ACTIVATION_MEMBERS).length > 0)
+      .map(file => file.relativePath)
+
+    expect(offenders).toEqual([ACTIVATION_MODULE])
+  })
+
+  it('t-h: the port is scanned and the call sites really moved off the store', () => {
+    const port = scanned.find(file => file.relativePath === ACTIVATION_MODULE)
+    expect(port, 'the activation port must be part of the scanned set').toBeDefined()
+    // It imports the shared runtime store — that is its whole job.
+    expect(port?.imports).toContain('@proj-airi/stage-ui/stores/providers/provider')
+
+    // And `provider.ts` still uses the store for members that are not activation,
+    // which proves this check is scoped rather than accidentally passing on a
+    // module that stopped importing the store altogether.
+    const providerStoreUsers = scanned
+      .filter(file => file.imports.includes('@proj-airi/stage-ui/stores/providers/provider'))
+      .map(file => file.relativePath)
+      .sort()
+
+    expect(providerStoreUsers).toEqual([
+      ACTIVATION_MODULE,
+      'hearing.ts',
+      'provider.ts',
+      'voice-editor.ts',
+      'voice-preview.ts',
+    ].sort())
+  })
+
+  it('t-h: self-test of the member detector — blind to prose, alive to code', () => {
+    // Prose is masked: this is exactly the case the real `provider.ts` presents.
+    expect(referencedMembers(`/** We used to call forceProviderConfigured here. */`, ACTIVATION_MEMBERS))
+      .toEqual([])
+    expect(referencedMembers(`// initializeProvider is not called any more`, ACTIVATION_MEMBERS))
+      .toEqual([])
+    expect(referencedMembers(`const note = 'forceProviderConfigured'`, ACTIVATION_MEMBERS))
+      .toEqual([])
+
+    // Code is caught, in every shape it can take.
+    expect(referencedMembers(`await store.initializeProvider(id)`, ACTIVATION_MEMBERS))
+      .toEqual(['initializeProvider'])
+    expect(referencedMembers(`const { forceProviderConfigured } = useProviderStore()`, ACTIVATION_MEMBERS))
+      .toEqual(['forceProviderConfigured'])
+    expect(referencedMembers(`const mark = forceProviderConfigured`, ACTIVATION_MEMBERS))
+      .toEqual(['forceProviderConfigured'])
+
+    // A longer identifier that merely starts with the member name is not a hit.
+    expect(referencedMembers(`initializeProviderRuntimeState(id)`, ACTIVATION_MEMBERS)).toEqual([])
   })
 
   it('does not reach the shared modules through the bare stage-ui barrel', () => {
@@ -502,7 +573,26 @@ function maskModuleSource(source: string): { masked: string, strings: string[] }
   return { masked, strings }
 }
 
-/** Extracts every import/re-export specifier from one module's source. */
+/**
+ * Which of `members` a module's *code* touches (T-H).
+ *
+ * A bare identifier in the masked source, not a `.member` access, so the check
+ * also catches destructuring (`const { forceProviderConfigured } = store`),
+ * aliasing and a call made through an intermediate variable. Masking removes
+ * comments and string literals first, so a doc comment that merely names the
+ * member cannot trip it — which matters here, because `provider.ts` documents
+ * the pair it used to call.
+ *
+ * `\b` keeps `initializeProvider` from matching `initializeProviderRuntimeState`.
+ */
+function referencedMembers(source: string, members: string[]): string[] {
+  const { masked } = maskModuleSource(source)
+  return members.filter(member => new RegExp(`\\b${member}\\b`).test(masked))
+}
+
+/**
+ * Extracts every import/re-export specifier from one module's source.
+ */
 export function scanModuleImports(source: string): ScannedImport[] {
   const { masked, strings } = maskModuleSource(source)
   // Collapsing whitespace is what makes a specifier split across lines look

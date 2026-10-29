@@ -17,6 +17,7 @@ import {
   electronLiaSecretHas,
   electronLiaSecretSet,
 } from '../../../shared/eventa'
+import { useLiaProviderActivation } from './provider-activation'
 import { isUsableWithoutAiriSession } from './provider-auth-policy'
 import { useLiaProviderConfigFacade } from './provider-config-facade'
 
@@ -279,6 +280,7 @@ function isRecoverableChatError(error: unknown): boolean {
  */
 export const useLiaProviderStore = defineStore('lia-provider', () => {
   const providersStore = useProviderStore()
+  const providerActivation = useLiaProviderActivation()
   const providerConfig = useLiaProviderConfigFacade()
   const consciousnessStore = useConsciousnessStore()
 
@@ -448,8 +450,11 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
     // runtime still reports it as not configured. Same pair the AIRI defaults
     // command uses, and it writes no credential anywhere: the record keeps only
     // references/metadata while the vault resolver supplies the key per build.
-    await providersStore.initializeProvider(preferred.providerId)
-    providersStore.forceProviderConfigured(preferred.providerId)
+    // Through the Lia's own boundary rather than the shared store directly.
+    // Same two operations, same order, same implementation underneath: the port
+    // exists so this dependency has one address (see provider-activation.ts).
+    await providerActivation.activate(preferred.providerId)
+    providerActivation.markConfigured(preferred.providerId)
     return true
   }
 
