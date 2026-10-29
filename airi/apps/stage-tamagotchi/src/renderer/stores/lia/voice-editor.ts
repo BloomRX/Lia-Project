@@ -3,10 +3,10 @@ import type { VoicePreviewDriver } from './voice-preview'
 
 import { errorMessageFrom } from '@moeru/std'
 import { useSpeechStore } from '@proj-airi/stage-ui/stores/modules/speech'
-import { useProviderStore } from '@proj-airi/stage-ui/stores/providers/provider'
 import { computed, ref } from 'vue'
 
 import { useLiaProviderConfigFacade } from './provider-config-facade'
+import { useLiaProviderRuntime } from './provider-runtime'
 import { useLiaVoiceStore } from './voice'
 
 /**
@@ -112,7 +112,7 @@ function isSameTarget(a: LiaVoiceTtsTarget | undefined, b: LiaVoiceTtsTarget | u
 export function useVoiceEditor(options: { preview?: VoicePreviewDriver } = {}) {
   const voiceStore = useLiaVoiceStore()
   const speechStore = useSpeechStore()
-  const providersStore = useProviderStore()
+  const providerRuntime = useLiaProviderRuntime()
   const providerConfig = useLiaProviderConfigFacade()
 
   const previewDriver = options.preview
@@ -176,14 +176,15 @@ export function useVoiceEditor(options: { preview?: VoicePreviewDriver } = {}) {
    * The speech store exposes `supportsModelListing` and `providerModels` as
    * computeds bound to the *active* provider, which is the wrong axis for an
    * editor describing whichever provider the user picked. Both are thin
-   * delegations to `useProviderStore()`, so calling them with an explicit id
-   * reuses that exact contract instead of duplicating the logic here.
+   * delegations to the shared provider runtime, reached through
+   * `provider-runtime.ts`, so calling them with an explicit id reuses that
+   * exact contract instead of duplicating the logic here.
    */
   function modelsFor(providerId: string): VoiceEditorOption[] {
-    if (!providerId || !providersStore.supportsModelListing(providerId))
+    if (!providerId || !providerRuntime.canListModels(providerId))
       return []
 
-    return providersStore.getModelsForProvider(providerId).map(toOption)
+    return providerRuntime.listModels(providerId).map(toOption)
   }
 
   // ---------------------------------------------------------------------------

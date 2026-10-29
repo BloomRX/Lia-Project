@@ -1,9 +1,9 @@
 import type { LiaVoiceTtsTarget } from '../../../shared/eventa'
 
 import { useSpeechStore } from '@proj-airi/stage-ui/stores/modules/speech'
-import { useProviderStore } from '@proj-airi/stage-ui/stores/providers/provider'
 
 import { useLiaProviderConfigFacade } from './provider-config-facade'
+import { useLiaProviderRuntime } from './provider-runtime'
 
 /**
  * The audio boundary of the voice preview (M1 Phase 4E-2, commit 2).
@@ -14,9 +14,9 @@ import { useLiaProviderConfigFacade } from './provider-config-facade'
  *
  * It changes no runtime. The synthesis call is the same
  * `speechStore.speech(provider, model, input, voice, config, analytics)` the
- * stage already uses, the provider instance comes from the existing
- * `getProviderInstance`, and the credential is read from the existing
- * provider-config store only to be handed straight to the provider.
+ * stage already uses, the provider instance comes from the existing shared
+ * runtime through `provider-runtime.ts`, and the credential is read from the
+ * existing provider-config store only to be handed straight to the provider.
  */
 
 /**
@@ -77,10 +77,10 @@ async function playAudio(audio: ArrayBuffer, signal: AbortSignal, onPlaybackStar
 export function createVoicePreviewDriver(): VoicePreviewDriver {
   return async (target, text, signal, onPlaybackStart) => {
     const speechStore = useSpeechStore()
-    const providersStore = useProviderStore()
+    const providerRuntime = useLiaProviderRuntime()
     const providerConfig = useLiaProviderConfigFacade()
 
-    const provider = await providersStore.getProviderInstance<PreviewSpeechProvider>(target.providerId)
+    const provider = await providerRuntime.getInstance<PreviewSpeechProvider>(target.providerId)
     if (!provider)
       throw new Error(`Speech provider "${target.providerId}" is not available`)
 

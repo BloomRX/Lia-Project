@@ -1,12 +1,12 @@
 import { useElectronEventaInvoke } from '@proj-airi/electron-vueuse'
 import { useHearingStore } from '@proj-airi/stage-ui/stores/modules/hearing'
-import { useProviderStore } from '@proj-airi/stage-ui/stores/providers/provider'
 import { useSettingsAudioDevice } from '@proj-airi/stage-ui/stores/settings'
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
 import { electronLiaHearingConfigGet } from '../../../shared/eventa'
 import { useLiaProviderConfigFacade } from './provider-config-facade'
+import { useLiaProviderRuntime } from './provider-runtime'
 
 /**
  * Phase 8.0D-10B-4D4C4-SHELL-B1: the ONE Lia renderer owner of managed Hearing
@@ -165,7 +165,7 @@ export const useLiaHearingStore = defineStore('lia-hearing', () => {
   const getHearingConfig = useElectronEventaInvoke(electronLiaHearingConfigGet)
   const hearingStore = useHearingStore()
   const providerConfig = useLiaProviderConfigFacade()
-  const providerStore = useProviderStore()
+  const providerRuntime = useLiaProviderRuntime()
   const audioDeviceStore = useSettingsAudioDevice()
 
   /** Set once the canonical selection has been applied to the runtime stores. */
@@ -202,7 +202,7 @@ export const useLiaHearingStore = defineStore('lia-hearing', () => {
       if (appliedSignature === signature)
         return
 
-      await providerStore.disposeProviderInstance(target.providerId)
+      await providerRuntime.dispose(target.providerId)
       // Same remote effect as before the facade: the shared store replicates
       // this projection with a PATCH. Kept on deliberately in B0.7.
       await providerConfig.updateConfig(target.providerId, { ...target.config }, 'unconfigured')

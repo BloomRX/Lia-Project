@@ -375,14 +375,15 @@ describe('lia provider config facade — the import frontier (B0.7.1, T-A)', () 
   })
 
   /**
-   * T-H (B0.8-lite) — the provider runtime store.
+   * T-H (B0.8-lite) — the activation operations.
    *
-   * Scoped to the two ACTIVATION operations, not to the module. `stores/lia`
-   * legitimately uses the same store for `validateProviderConfig`,
-   * `disposeProviderInstance`, `getProviderInstance`, `supportsModelListing` and
-   * `getModelsForProvider`; banning the module outright would require migrating
-   * all of those, which is explicitly out of scope for this step. What must not
-   * happen any more is reaching the activation pair directly: it has a port.
+   * Scoped to operations, not to the module, and that is still the right shape
+   * after E2: `provider.ts` keeps importing the shared store for
+   * `validateProviderConfig`, which is E3's subject and not this step's. Banning
+   * the module would ban that legitimate use; banning the operations is exact.
+   *
+   * The other half of the store (the instance lifecycle and the model reads) is
+   * covered separately by T-I below.
    */
   const ACTIVATION_MEMBERS = ['initializeProvider', 'forceProviderConfigured']
   const ACTIVATION_MODULE = 'provider-activation.ts'
@@ -409,12 +410,12 @@ describe('lia provider config facade — the import frontier (B0.7.1, T-A)', () 
       .map(file => file.relativePath)
       .sort()
 
+    // E2 removed three of these. What remains is the two ports and the one
+    // module that still reaches the store legitimately (for validation).
     expect(providerStoreUsers).toEqual([
       ACTIVATION_MODULE,
-      'hearing.ts',
+      'provider-runtime.ts',
       'provider.ts',
-      'voice-editor.ts',
-      'voice-preview.ts',
     ].sort())
   })
 
@@ -437,6 +438,76 @@ describe('lia provider config facade — the import frontier (B0.7.1, T-A)', () 
 
     // A longer identifier that merely starts with the member name is not a hit.
     expect(referencedMembers(`initializeProviderRuntimeState(id)`, ACTIVATION_MEMBERS)).toEqual([])
+  })
+
+  /**
+   * T-I (E2) — the four instance-lifecycle operations.
+   *
+   * Same detector, same masking, applied to the half of the store that still had
+   * four direct call sites. `provider.ts` remains in the scanned set and remains
+   * an importer of the shared store, which is what makes this check meaningful:
+   * it proves the ban is on the operations, not on a module that happened to be
+   * renamed.
+   */
+  const RUNTIME_MEMBERS = [
+    'getProviderInstance',
+    'disposeProviderInstance',
+    'supportsModelListing',
+    'getModelsForProvider',
+  ]
+  const RUNTIME_MODULE = 'provider-runtime.ts'
+
+  it('t-i: the only module touching the runtime operations is the port', () => {
+    const offenders = scanned
+      .filter(file => referencedMembers(file.source, RUNTIME_MEMBERS).length > 0)
+      .map(file => file.relativePath)
+
+    expect(offenders).toEqual([RUNTIME_MODULE])
+  })
+
+  it('t-i: the port is scanned, owns all four operations, and the call sites moved off the store', () => {
+    const port = scanned.find(file => file.relativePath === RUNTIME_MODULE)
+    expect(port, 'the runtime port must be part of the scanned set').toBeDefined()
+    // It imports the shared runtime store — that is its whole job.
+    expect(port?.imports).toContain('@proj-airi/stage-ui/stores/providers/provider')
+    // And it really names all four, so "one offender" above cannot be a port
+    // that merely stopped mentioning them.
+    expect(referencedMembers(port?.source ?? '', RUNTIME_MEMBERS).sort())
+      .toEqual([...RUNTIME_MEMBERS].sort())
+
+    // `provider.ts` is the only non-port module that still imports the store,
+    // and it does so for validation only.
+    const providerModule = scanned.find(file => file.relativePath === 'provider.ts')
+    expect(providerModule?.imports).toContain('@proj-airi/stage-ui/stores/providers/provider')
+    expect(referencedMembers(providerModule?.source ?? '', ['validateProviderConfig']))
+      .toEqual(['validateProviderConfig'])
+    expect(referencedMembers(providerModule?.source ?? '', RUNTIME_MEMBERS)).toEqual([])
+  })
+
+  it('t-i: self-test of the runtime member detector — blind to prose and to the port names', () => {
+    // Prose naming an operation is not a call. Both `provider-activation.ts` and
+    // `voice-editor.ts` carry comments that name these.
+    expect(referencedMembers(`/** It no longer calls getProviderInstance. */`, RUNTIME_MEMBERS)).toEqual([])
+    expect(referencedMembers(`// disposeProviderInstance is gone from here`, RUNTIME_MEMBERS)).toEqual([])
+    expect(referencedMembers(`const note = 'supportsModelListing'`, RUNTIME_MEMBERS)).toEqual([])
+
+    // A real access is caught, however it is spelled.
+    expect(referencedMembers(`await store.getProviderInstance(id)`, RUNTIME_MEMBERS))
+      .toEqual(['getProviderInstance'])
+    expect(referencedMembers(`const { getModelsForProvider } = useProviderStore()`, RUNTIME_MEMBERS))
+      .toEqual(['getModelsForProvider'])
+    // The exact line that used to live in `hearing.ts`: reverting the migration
+    // would re-introduce this shape, and this is the string it would have.
+    expect(referencedMembers(`await providerStore.disposeProviderInstance(target.providerId)`, RUNTIME_MEMBERS))
+      .toEqual(['disposeProviderInstance'])
+
+    // The port's own names are deliberately distinct from the store's, so a
+    // call through the port is not mistaken for a direct store access. If these
+    // ever collided, this check could no longer tell the two apart.
+    expect(referencedMembers(`runtime.canListModels(id)`, RUNTIME_MEMBERS)).toEqual([])
+    expect(referencedMembers(`runtime.listModels(id)`, RUNTIME_MEMBERS)).toEqual([])
+    expect(referencedMembers(`await runtime.getInstance(id)`, RUNTIME_MEMBERS)).toEqual([])
+    expect(referencedMembers(`await runtime.dispose(id)`, RUNTIME_MEMBERS)).toEqual([])
   })
 
   it('does not reach the shared modules through the bare stage-ui barrel', () => {

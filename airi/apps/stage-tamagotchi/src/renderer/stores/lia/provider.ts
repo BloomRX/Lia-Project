@@ -20,6 +20,7 @@ import {
 import { useLiaProviderActivation } from './provider-activation'
 import { isUsableWithoutAiriSession } from './provider-auth-policy'
 import { useLiaProviderConfigFacade } from './provider-config-facade'
+import { useLiaProviderRuntime } from './provider-runtime'
 
 /**
  * Curated chat provider choices surfaced to the user (real AIRI catalog ids —
@@ -282,6 +283,7 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
   const providersStore = useProviderStore()
   const providerActivation = useLiaProviderActivation()
   const providerConfig = useLiaProviderConfigFacade()
+  const providerRuntime = useLiaProviderRuntime()
   const consciousnessStore = useConsciousnessStore()
 
   const getChatConfig = useElectronEventaInvoke(electronLiaProviderChatConfigGet)
@@ -396,7 +398,7 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
       return
     // Drop any cached provider instance so the next build re-resolves the vault
     // key (in case the user updated it since the last build).
-    await providersStore.disposeProviderInstance(target.providerId)
+    await providerRuntime.dispose(target.providerId)
     await ensureProviderRecord(target.providerId, baseUrl)
     // Watcher flushes synchronously on provider change and clears the model, so
     // set provider first, then model (safe, ordered operation).
