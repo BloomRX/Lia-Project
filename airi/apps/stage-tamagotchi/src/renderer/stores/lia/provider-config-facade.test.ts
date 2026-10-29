@@ -2,8 +2,9 @@ import type { InferenceServiceProvider } from '@proj-airi/stage-ui/libs/provider
 
 import type { LiaProviderConfigSource } from './provider-config-facade'
 
-import { readdirSync, readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join, relative } from 'node:path'
 
 import { PiniaColada } from '@pinia/colada'
 import { useProviderConfigStore } from '@proj-airi/stage-ui/stores/providers/config'
@@ -251,6 +252,21 @@ describe('lia provider config facade — the shared store stays the source of tr
     expect(facade.isConfigured('groq')).toBe(true)
   })
 
+  it('propagates the shared store refusal when ensure gets an unknown definition (T-E)', () => {
+    const { config, facade } = installStores()
+
+    // The shared store throws for a definition the registry does not know, and
+    // the facade neither swallows nor rewrites that: a caller cannot end up
+    // believing a record was created. This is pinned because a future Lia-owned
+    // implementation would have to decide the same thing explicitly.
+    expect(() => facade.ensure('ghost', 'no-such-definition', { baseUrl: 'https://ghost.invalid/v1' }))
+      .toThrow(/no-such-definition/)
+
+    expect(config.getProvider('ghost')).toBeUndefined()
+    expect(config.configs.ghost).toBeUndefined()
+    expect(observed.requests).toEqual([])
+  })
+
   it('never adds a credential to the payload it writes', async () => {
     const { config, facade } = installStores()
     facade.ensure('groq', 'groq', { baseUrl: 'https://example.invalid/v1' })
@@ -280,18 +296,318 @@ describe('lia provider config facade — the remote-effect inventory', () => {
   })
 })
 
-describe('lia provider config facade — the import frontier', () => {
-  it('is the only Lia production module that imports the shared provider-config store', () => {
-    const directory = import.meta.dirname
-    const offenders = readdirSync(directory)
-      .filter(file => file.endsWith('.ts') && !file.endsWith('.test.ts'))
-      .filter(file => readFileSync(join(directory, file), 'utf8')
-        .split('\n')
-        // Anchored on the import statement itself, never on prose: a doc comment
-        // mentioning the module path must not satisfy or break this check.
-        .some(line => /^import\b/.test(line)
-          && line.includes('@proj-airi/stage-ui/stores/providers/config')))
+/**
+ * Every production source under a directory, recursively.
+ *
+ * Only tests are excluded: they may import the store under test directly, and
+ * scanning them would make the frontier check fire on its own fixtures.
+ */
+function collectProductionSources(directory: string): string[] {
+  const found: string[] = []
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const path = join(directory, entry.name)
+    if (entry.isDirectory()) {
+      found.push(...collectProductionSources(path))
+      continue
+    }
+    if (!/\.[cm]?[jt]sx?$/.test(entry.name) && !entry.name.endsWith('.vue'))
+      continue
+    if (/\.test\.tsx?$/.test(entry.name))
+      continue
+    found.push(path)
+  }
+  return found
+}
+
+describe('lia provider config facade — the import frontier (B0.7.1, T-A)', () => {
+  /**
+   * The frontier is a property of the Lia's own store layer, so the scan root is
+   * this directory and it is read **recursively**. The rest of `src/renderer` is
+   * deliberately out of scope: `App.vue`, `main.ts`, `bridges/` and
+   * `pages/onboarding.vue` are the Stage's own shell and legitimately import
+   * `stores/auth` and `libs/analytics` — that is the remaining dependency work,
+   * not a B0.7 regression.
+   */
+  const root = import.meta.dirname
+
+  const scanned = collectProductionSources(root).map(path => ({
+    path,
+    relativePath: relative(root, path),
+    imports: scanModuleImports(readFileSync(path, 'utf8')).map(found => found.specifier),
+  }))
+
+  it('scanned the Lia store layer recursively, including every production module', () => {
+    const files = scanned.map(file => file.relativePath).sort()
+
+    // The scan must be non-empty and must include the modules that do the
+    // writing, or "no violations" below would be vacuous.
+    expect(files.length).toBeGreaterThanOrEqual(5)
+    expect(files).toContain('provider-config-facade.ts')
+    expect(files).toContain('provider.ts')
+    expect(files).toContain('hearing.ts')
+    // No test file leaks into the scanned set.
+    expect(files.some(file => file.endsWith('.test.ts'))).toBe(false)
+  })
+
+  it('has exactly one module importing the shared provider-config store: the facade', () => {
+    const offenders = scanned
+      .filter(file => file.imports.some(specifier => specifier.endsWith('/stores/providers/config')))
+      .map(file => file.relativePath)
 
     expect(offenders).toEqual(['provider-config-facade.ts'])
+  })
+
+  it('keeps the three dependencies B0.6 T11 forbids out of the whole Lia store layer', () => {
+    // The families are matched by suffix so an alias, a barrel or a relative
+    // path to the same module all count as the same violation.
+    const forbidden = ['/stores/auth', '/composables/api', '/libs/analytics']
+    const violations = scanned.flatMap(file => file.imports
+      .filter(specifier => forbidden.some(family => specifier.endsWith(family)))
+      .map(specifier => `${file.relativePath} -> ${specifier}`))
+
+    expect(violations).toEqual([])
+  })
+
+  it('does not reach the shared modules through the bare stage-ui barrel', () => {
+    // A barrel import would defeat the suffix check above: it names no module
+    // and could re-export the store. Nothing imports the bare barrel today, and
+    // this keeps it that way instead of leaving a silent hole.
+    const barrel = scanned
+      .filter(file => file.imports.includes('@proj-airi/stage-ui'))
+      .map(file => file.relativePath)
+
+    expect(barrel).toEqual([])
+  })
+})
+/**
+ * B0.7.1, T-A — a scanner for the import formats the previous line-based check
+ * could not see (multi-line specifiers, dynamic `import()`, re-exports), while
+ * staying blind to prose.
+ *
+ * Written by hand instead of pulled from a parser because the app declares no
+ * parser dependency of its own, and adding one would mean touching the lockfile
+ * for a test. It is deliberately small: comments are dropped, string literals
+ * become numbered placeholders (so the specifier survives masking while the
+ * text of a doc comment can never match), whitespace is collapsed so a
+ * multi-line import reads like a single line, and only then are the import
+ * forms matched.
+ *
+ * Known and accepted limits: template literals are opaque, so an `import()`
+ * built by interpolation is not resolved (it cannot be judged statically
+ * anyway); `.vue` files are scanned as text, which is sound for imports because
+ * they only occur inside `<script>`.
+ */
+export interface ScannedImport {
+  /** The module specifier, unmasked. */
+  specifier: string
+  /** Which syntax produced it. */
+  kind: 'static' | 'side-effect' | 're-export' | 'dynamic' | 'require'
+}
+
+/**
+ * Replaces comments with nothing and string literals with `__STR_<n>__`
+ * placeholders, keeping the original values in order.
+ *
+ * Regex literals are skipped with the usual "what came before the slash"
+ * heuristic so a quote inside `/['"]/` cannot desynchronise the scanner.
+ */
+function maskModuleSource(source: string): { masked: string, strings: string[] } {
+  const strings: string[] = []
+  let masked = ''
+  let index = 0
+  let previousSignificant = ''
+
+  const readQuoted = (quote: string): void => {
+    index += 1
+    let value = ''
+    while (index < source.length && source[index] !== quote) {
+      if (source[index] === '\\') {
+        value += source[index + 1] ?? ''
+        index += 2
+        continue
+      }
+      value += source[index]
+      index += 1
+    }
+    index += 1
+    strings.push(value)
+    masked += `__STR_${strings.length - 1}__`
+    previousSignificant = 'S'
+  }
+
+  while (index < source.length) {
+    const char = source[index]
+    const next = source[index + 1]
+
+    if (char === '/' && next === '/') {
+      while (index < source.length && source[index] !== '\n')
+        index += 1
+      continue
+    }
+
+    if (char === '/' && next === '*') {
+      index += 2
+      while (index < source.length && (source[index] !== '*' || source[index + 1] !== '/'))
+        index += 1
+      index += 2
+      continue
+    }
+
+    if (char === '\'' || char === '"' || char === '`') {
+      readQuoted(char)
+      continue
+    }
+
+    if (char === '/' && (previousSignificant === '' || '([{,;:=!&|?+*%<>~^'.includes(previousSignificant))) {
+      // Regex literal: skip it whole. A newline before the closing slash means
+      // it was not a regex after all, in which case nothing is skipped.
+      let cursor = index + 1
+      let inClass = false
+      let closed = false
+      while (cursor < source.length) {
+        const current = source[cursor]
+        if (current === '\\') {
+          cursor += 2
+          continue
+        }
+        if (current === '\n')
+          break
+        if (current === '[') {
+          inClass = true
+        }
+        else if (current === ']') {
+          inClass = false
+        }
+        else if (current === '/' && !inClass) {
+          closed = true
+          cursor += 1
+          break
+        }
+        cursor += 1
+      }
+      if (closed) {
+        index = cursor
+        masked += '__REGEX__'
+        previousSignificant = 'R'
+        continue
+      }
+    }
+
+    masked += char
+    if (!/\s/.test(char))
+      previousSignificant = char
+    index += 1
+  }
+
+  return { masked, strings }
+}
+
+/** Extracts every import/re-export specifier from one module's source. */
+export function scanModuleImports(source: string): ScannedImport[] {
+  const { masked, strings } = maskModuleSource(source)
+  // Collapsing whitespace is what makes a specifier split across lines look
+  // like the single-line form, without any regex having to model line breaks.
+  const flat = masked.replace(/\s+/g, ' ')
+  const found: ScannedImport[] = []
+
+  // Each pattern captures only the placeholder's digits; the value itself stays
+  // in the table, so the masked text never needs to carry the specifier.
+  const specifierAt = (capture: string | undefined): string | undefined => {
+    const index = Number.parseInt(capture ?? '', 10)
+    return Number.isNaN(index) ? undefined : strings[index]
+  }
+
+  const collect = (pattern: RegExp, kind: ScannedImport['kind']): void => {
+    for (const match of flat.matchAll(pattern)) {
+      const specifier = specifierAt(match[1])
+      if (specifier !== undefined)
+        found.push({ kind, specifier })
+    }
+  }
+
+  // `import x from 'm'`, `import { a, b } from 'm'`, `import type { T } from 'm'`.
+  // The binding list is lazy and bounded by `;`, so one statement cannot swallow
+  // the next.
+  collect(/\bimport\b[^;]+?\bfrom __STR_(\d+)__/g, 'static')
+  // `import 'm'`
+  collect(/\bimport __STR_(\d+)__/g, 'side-effect')
+  // `import('m')`
+  collect(/\bimport\s*\(\s*__STR_(\d+)__\s*[,)]/g, 'dynamic')
+  // `export { a } from 'm'`, `export * from 'm'`, `export type { T } from 'm'`
+  collect(/\bexport\b[^;]+?\bfrom __STR_(\d+)__/g, 're-export')
+  // `require('m')`
+  collect(/\brequire\s*\(\s*__STR_(\d+)__\s*\)/g, 'require')
+
+  return found
+}
+
+describe('lia provider config facade — the import scanner itself (B0.7.1, T-A)', () => {
+  it('detects the four import forms a line-based check would miss', () => {
+    expect(scanModuleImports(`import { a } from '@scope/pkg/one'`))
+      .toEqual([{ kind: 'static', specifier: '@scope/pkg/one' }])
+
+    expect(scanModuleImports(`import {\n  a,\n  b,\n} from '@scope/pkg/two'`))
+      .toEqual([{ kind: 'static', specifier: '@scope/pkg/two' }])
+
+    expect(scanModuleImports(`const mod = await import('@scope/pkg/three')`))
+      .toEqual([{ kind: 'dynamic', specifier: '@scope/pkg/three' }])
+
+    expect(scanModuleImports(`export { a } from '@scope/pkg/four'`))
+      .toEqual([{ kind: 're-export', specifier: '@scope/pkg/four' }])
+
+    expect(scanModuleImports(`import '@scope/pkg/five'`))
+      .toEqual([{ kind: 'side-effect', specifier: '@scope/pkg/five' }])
+  })
+
+  it('ignores imports that only appear in comments or prose', () => {
+    expect(scanModuleImports(`// import { a } from '@scope/pkg/commented'`)).toEqual([])
+    expect(scanModuleImports(`/* import { a } from '@scope/pkg/block' */`)).toEqual([])
+    expect(scanModuleImports(`/**\n * It never imports '@scope/pkg/doc' from here.\n */\nconst x = 1`))
+      .toEqual([])
+    expect(scanModuleImports(`const message = "import { a } from '@scope/pkg/string'"`)).toEqual([])
+  })
+
+  it('survives a regex literal containing quotes and a comment marker', () => {
+    const source = `const quotes = /['"]/\nimport { a } from '@scope/pkg/real'`
+
+    expect(scanModuleImports(source)).toEqual([{ kind: 'static', specifier: '@scope/pkg/real' }])
+  })
+
+  it('reads a multi-line import whose path sits on the from-line, the audit case', () => {
+    const source = `import {\n  alpha,\n  beta,\n}\n  from '@proj-airi/stage-ui/stores/providers/config'`
+
+    expect(scanModuleImports(source)).toEqual([
+      { kind: 'static', specifier: '@proj-airi/stage-ui/stores/providers/config' },
+    ])
+  })
+
+  it('does not report one import twice', () => {
+    const found = scanModuleImports(`import { a } from '@scope/pkg/x'\nimport type { B } from '@scope/pkg/x'`)
+
+    expect(found).toHaveLength(2)
+    expect(found.every(entry => entry.specifier === '@scope/pkg/x')).toBe(true)
+  })
+
+  it('walks nested directories and filters by kind, the property the audit found missing', () => {
+    // A throwaway tree, so the recursion is proven on files that really exist
+    // instead of only on the flat directory the project happens to have today.
+    const root = mkdtempSync(join(tmpdir(), 'lia-frontier-'))
+    try {
+      mkdirSync(join(root, 'nested', 'deeper'), { recursive: true })
+      writeFileSync(join(root, 'top.ts'), 'export const a = 1')
+      writeFileSync(join(root, 'top.test.ts'), 'export const b = 2')
+      writeFileSync(join(root, 'nested', 'deep.ts'), 'export const c = 3')
+      writeFileSync(join(root, 'nested', 'deeper', 'page.vue'), '<script setup lang="ts"></script>')
+      writeFileSync(join(root, 'nested', 'notes.md'), 'not source')
+
+      const found = collectProductionSources(root)
+        .map(path => relative(root, path).replace(/\\/g, '/'))
+        .sort()
+
+      expect(found).toEqual(['nested/deep.ts', 'nested/deeper/page.vue', 'top.ts'])
+    }
+    finally {
+      rmSync(root, { force: true, recursive: true })
+    }
   })
 })

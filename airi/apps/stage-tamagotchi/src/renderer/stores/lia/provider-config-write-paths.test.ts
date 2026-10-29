@@ -30,10 +30,45 @@ import { createApp } from 'vue'
  * and §6.1 (T2/T3).
  */
 
-const observed = vi.hoisted(() => ({ requests: [] as string[] }))
+const observed = vi.hoisted(() => ({ requests: [] as { url: string, method: string }[] }))
+
+/**
+ * Minimal IPC seam: the chat config the store reads, and a vault that reports
+ * the credential as present (never its value). Everything else is unused by the
+ * flows under test.
+ */
+const ipc = vi.hoisted(() => {
+  let chat: Record<string, unknown> = {}
+  return {
+    fixture(next: Record<string, unknown>) {
+      chat = next
+    },
+    getChatConfig: vi.fn(async () => chat),
+    saveChatConfig: vi.fn(async () => {}),
+    secretHas: vi.fn(async () => true),
+    secretGet: vi.fn(async () => undefined),
+    secretSet: vi.fn(async () => true),
+    secretDelete: vi.fn(async () => true),
+    encryptionAvailable: vi.fn(async () => true),
+  }
+})
 
 vi.mock('@proj-airi/electron-vueuse', () => ({
-  useElectronEventaInvoke: () => vi.fn(async () => undefined),
+  useElectronEventaInvoke: (invoke: { receiveEvent?: { id?: string } }) => {
+    const handlers: Record<string, unknown> = {
+      'eventa:invoke:lia:provider:chat:config:get-receive': ipc.getChatConfig,
+      'eventa:invoke:lia:provider:chat:config:set-receive': ipc.saveChatConfig,
+      'eventa:invoke:lia:secret:encryption-available-receive': ipc.encryptionAvailable,
+      'eventa:invoke:lia:secret:has-receive': ipc.secretHas,
+      'eventa:invoke:lia:secret:get-receive': ipc.secretGet,
+      'eventa:invoke:lia:secret:set-receive': ipc.secretSet,
+      'eventa:invoke:lia:secret:delete-receive': ipc.secretDelete,
+    }
+    const id = invoke?.receiveEvent?.id ?? ''
+    if (id in handlers)
+      return handlers[id]
+    throw new Error(`Unexpected eventa invoke: ${id}`)
+  },
 }))
 
 vi.mock('vue-i18n', () => ({
@@ -47,9 +82,9 @@ const { useLiaProviderStore } = await import('./provider')
 
 function installStores() {
   observed.requests = []
-  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
-    observed.requests.push(url)
+    observed.requests.push({ url, method: init?.method ?? 'GET' })
     return new Response(JSON.stringify({
       id: 'groq',
       definitionId: 'groq',
@@ -70,6 +105,8 @@ function installStores() {
 describe('lia provider config write paths — remote effects are unchanged', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
+    ipc.fixture({})
+    vi.clearAllMocks()
   })
 
   afterEach(() => {
@@ -94,7 +131,10 @@ describe('lia provider config write paths — remote effects are unchanged', () 
     await store.ensureProviderRecord('groq', 'https://custom.invalid/v1')
 
     expect(observed.requests).toHaveLength(1)
-    expect(observed.requests[0]).toContain('groq')
+    // T-D: the replication is a PATCH of the provider config, not a POST/PUT, and
+    // the assertion reads the method the runtime actually sent.
+    expect(observed.requests[0].method).toBe('PATCH')
+    expect(observed.requests[0].url).toContain('groq')
     // Exactly one request: the Lia's flow still replicates once, which is what
     // B0.7 promised not to disable. The URL survives in the shared record, the
     // only place it is stored.
@@ -121,5 +161,42 @@ describe('lia provider config write paths — remote effects are unchanged', () 
     await store.activateTarget({ providerId: 'groq', modelId: 'llama-3.3-70b-versatile' })
 
     expect(observed.requests).toEqual([])
+  })
+
+  /**
+   * T-C — the two REAL activation entries, not just `activateTarget`.
+   *
+   * `activateTarget` alone was the weaker half of the claim: both public entries
+   * also call `initializeProvider` and `forceProviderConfigured`, which write
+   * through the shared runtime store. Those writes are local by construction
+   * (status + added flag); this pins that they stay local, because that is the
+   * dependency the audit flagged as invisible to the config facade.
+   */
+  it('t-c: activatePreferred() as the real entry makes no configuration request', async () => {
+    ipc.fixture({ preferred: { providerId: 'groq', modelId: 'llama-3.3-70b-versatile' } })
+    const store = installStores()
+
+    await expect(store.activatePreferred()).resolves.toBe(true)
+
+    expect(observed.requests).toEqual([])
+    expect(useProviderConfigStore().getProvider('groq')).toBeDefined()
+  })
+
+  it('t-c: activateConfiguredProvider() as the real entry makes no configuration request', async () => {
+    ipc.fixture({
+      onboarded: true,
+      preferred: { providerId: 'groq', modelId: 'llama-3.3-70b-versatile' },
+      strategy: 'manual',
+    })
+    const store = installStores()
+
+    await expect(store.activateConfiguredProvider()).resolves.toBe(true)
+
+    expect(observed.requests).toEqual([])
+    // The runtime-side writes still happen locally, which is the behaviour the
+    // Lia depends on to be seen as configured at all.
+    const config = useProviderConfigStore()
+    expect(config.configuredProviders.groq).toBe(true)
+    expect(config.getProvider('groq')?.status).toBe('configured')
   })
 })
