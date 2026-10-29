@@ -3,10 +3,10 @@ import type { VoicePreviewDriver } from './voice-preview'
 
 import { errorMessageFrom } from '@moeru/std'
 import { useSpeechStore } from '@proj-airi/stage-ui/stores/modules/speech'
-import { useProviderConfigStore } from '@proj-airi/stage-ui/stores/providers/config'
 import { useProviderStore } from '@proj-airi/stage-ui/stores/providers/provider'
 import { computed, ref } from 'vue'
 
+import { useLiaProviderConfigFacade } from './provider-config-facade'
 import { useLiaVoiceStore } from './voice'
 
 /**
@@ -113,7 +113,7 @@ export function useVoiceEditor(options: { preview?: VoicePreviewDriver } = {}) {
   const voiceStore = useLiaVoiceStore()
   const speechStore = useSpeechStore()
   const providersStore = useProviderStore()
-  const providerConfigStore = useProviderConfigStore()
+  const providerConfig = useLiaProviderConfigFacade()
 
   const previewDriver = options.preview
 
@@ -150,7 +150,7 @@ export function useVoiceEditor(options: { preview?: VoicePreviewDriver } = {}) {
       return false
 
     // The registry already tracks readiness; nothing here re-derives it.
-    if (meta.configured || providerConfigStore.configuredProviders[providerId])
+    if (meta.configured || providerConfig.isConfigured(providerId))
       return false
 
     // A `configuredBy: 'authentication'` provider holds no user-supplied key, so

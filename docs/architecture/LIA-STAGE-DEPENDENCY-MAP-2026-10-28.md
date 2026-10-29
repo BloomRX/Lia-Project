@@ -1174,3 +1174,83 @@ não mexeu em persistência, replicação, migração, credenciais ou sincroniza
 mexeu no seletor de voz nem no `official-provider-speech`; não leu cofre, segredo ou
 `lia-product.json`. A mudança proposta pelo B0.5 **não foi aplicada**, por evidência
 contrária, e o motivo está acima.
+
+---
+
+## 14. B0.7 — a fachada de configuração (implementada)
+
+Esta seção registra o que o **B0.7** efetivamente entregou, para que o passo
+seguinte não precise reconstruir o desenho a partir do código. O desenho
+correspondente está em
+[`LIA-PROVIDER-ADAPTER-DESIGN-2026-10-29.md`](LIA-PROVIDER-ADAPTER-DESIGN-2026-10-29.md).
+
+### 14.1 A fronteira
+
+`apps/stage-tamagotchi/src/renderer/stores/lia/provider-config-facade.ts` é agora o
+**único** módulo de produção em `stores/lia/` que importa
+`@proj-airi/stage-ui/stores/providers/config`. [C]
+
+Cinco membros, todos delegando à store compartilhada, que continua sendo a fonte
+de verdade (mesmas chaves de `localStorage`, mesma migração, mesma sincronização
+entre janelas):
+
+| Membro | Delega para | Efeito remoto |
+| --- | --- | --- |
+| `get` | `getProvider` | **não** |
+| `getConfig` | `getProviderConfig` | **não** |
+| `isConfigured` | `configuredProviders` (lido na hora, não capturado) | **não** |
+| `ensure` | `ensureProvider` | **não** |
+| `updateConfig` | `updateProviderConfig` | **sim** — um `PATCH`, mantido ligado |
+
+A tabela existe também como dado (`LIA_PROVIDER_CONFIG_REMOTE_EFFECTS`) e um
+teste verifica que ela cobre exatamente os membros expostos, para que um membro
+novo não entre sem declarar efeito. [C]
+
+### 14.2 Dois estreitamentos que o B0.6 propôs e a realidade recusou
+
+O desenho do B0.6 propunha `LiaProviderConfig = Record<string, string>` e um
+status de três valores. Nenhum dos dois sobreviveu ao contato com a store: [C]
+
+- **Payload ficou `Record<string, unknown>`.** A assinatura real da store é
+  `Record<string, unknown>`, e registros migrados de
+  `settings/credentials/providers` são copiados literalmente. Estreitar exigiria
+  um `cast` sem verificação no ponto de delegação.
+- **Status ficou `'unconfigured' | 'configured'`.** São os dois únicos valores que
+  algum fluxo da Lia escreve; `'bypassed'` só é lido, e `'validating'`/`'invalid'`
+  pertencem ao ciclo de validação do Stage.
+
+Também foi rejeitado, e por um motivo concreto, o guarda de runtime "config não
+pode conter credencial": a chave legada de migração é literalmente
+`settings/credentials/providers`, então uma instalação anterior à migração pode
+carregar `apiKey` dentro de `config`. Lançar sobre isso transformaria um estado
+histórico suportado em crash. [C]
+
+### 14.3 O que continua igual de propósito
+
+- Os dois caminhos de escrita da Lia replicam como antes: `provider.ts:356`
+  (painel, com `baseUrl`) e `hearing.ts:208` (projeção de STT). Os números são os
+  de **depois** do B0.7; antes da fachada eram `:354` e `:206`. [C]
+- `config.ts`, `inference-service-providers.ts` e as páginas de `stage-pages`
+  **não foram tocados**. [C]
+- Nenhuma ordem de inicialização mudou: `useLiaProviderConfigFacade()` instancia a
+  store compartilhada no mesmo ponto do setup em que a chamada direta instanciava.
+  Em `voice-preview.ts` a leitura continua acontecendo na hora da chamada, não na
+  construção. [C]
+
+### 14.4 Evidência automatizada
+
+`provider-config-facade.test.ts` (15 testes) e
+`provider-config-write-paths.test.ts` (4) fixam: delegação pura, fonte de verdade
+compartilhada (`configs` — o caminho que `useProviderStore` lê), zero rede em
+`ensure`, **uma** requisição em `updateConfig`, URL personalizada preservada com a
+rede fora, ausência de credencial no que é gravado, inventário de efeitos remotos
+e a fronteira de imports. A suíte `stores/lia/` foi de 244 para 263 testes, sem
+alterar nenhum teste existente. [C]
+
+### 14.5 O que esta seção não fez
+
+Não desativou a replicação, não criou store própria, não mudou
+persistência/migração/sincronização/credenciais/autenticação, não tocou em
+`lia-product.json` nem migrou `baseUrl`, e não iniciou o B0.8. Não houve execução
+no Windows nem em Electron real: os resultados acima são de teste automatizado em
+`node`, não gate de runtime.

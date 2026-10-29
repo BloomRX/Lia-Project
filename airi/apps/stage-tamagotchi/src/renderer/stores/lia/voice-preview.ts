@@ -1,8 +1,9 @@
 import type { LiaVoiceTtsTarget } from '../../../shared/eventa'
 
 import { useSpeechStore } from '@proj-airi/stage-ui/stores/modules/speech'
-import { useProviderConfigStore } from '@proj-airi/stage-ui/stores/providers/config'
 import { useProviderStore } from '@proj-airi/stage-ui/stores/providers/provider'
+
+import { useLiaProviderConfigFacade } from './provider-config-facade'
 
 /**
  * The audio boundary of the voice preview (M1 Phase 4E-2, commit 2).
@@ -77,7 +78,7 @@ export function createVoicePreviewDriver(): VoicePreviewDriver {
   return async (target, text, signal, onPlaybackStart) => {
     const speechStore = useSpeechStore()
     const providersStore = useProviderStore()
-    const configStore = useProviderConfigStore()
+    const providerConfig = useLiaProviderConfigFacade()
 
     const provider = await providersStore.getProviderInstance<PreviewSpeechProvider>(target.providerId)
     if (!provider)
@@ -89,14 +90,14 @@ export function createVoicePreviewDriver(): VoicePreviewDriver {
     // Read at call time and passed straight through. It is never assigned to a
     // ref, never returned by the editor and never rendered, so no credential can
     // reach the UI state or the persisted payload.
-    const providerConfig = configStore.getProviderConfig(target.providerId) ?? {}
+    const targetConfig = providerConfig.getConfig(target.providerId) ?? {}
 
     const audio = await speechStore.speech(
       provider,
       target.modelId ?? '',
       text,
       target.voiceId ?? '',
-      providerConfig,
+      targetConfig,
       { trigger: 'manual', source: 'manual_preview', voice_type: 'custom_configured' },
     )
 

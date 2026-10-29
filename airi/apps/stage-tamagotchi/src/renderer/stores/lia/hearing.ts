@@ -1,12 +1,12 @@
 import { useElectronEventaInvoke } from '@proj-airi/electron-vueuse'
 import { useHearingStore } from '@proj-airi/stage-ui/stores/modules/hearing'
-import { useProviderConfigStore } from '@proj-airi/stage-ui/stores/providers/config'
 import { useProviderStore } from '@proj-airi/stage-ui/stores/providers/provider'
 import { useSettingsAudioDevice } from '@proj-airi/stage-ui/stores/settings'
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
 import { electronLiaHearingConfigGet } from '../../../shared/eventa'
+import { useLiaProviderConfigFacade } from './provider-config-facade'
 
 /**
  * Phase 8.0D-10B-4D4C4-SHELL-B1: the ONE Lia renderer owner of managed Hearing
@@ -164,7 +164,7 @@ function reportDiagnostic(event: string, detail?: Record<string, boolean | numbe
 export const useLiaHearingStore = defineStore('lia-hearing', () => {
   const getHearingConfig = useElectronEventaInvoke(electronLiaHearingConfigGet)
   const hearingStore = useHearingStore()
-  const providerConfigStore = useProviderConfigStore()
+  const providerConfig = useLiaProviderConfigFacade()
   const providerStore = useProviderStore()
   const audioDeviceStore = useSettingsAudioDevice()
 
@@ -198,15 +198,17 @@ export const useLiaHearingStore = defineStore('lia-hearing', () => {
    */
   async function applyProviderProjection(target: LiaHearingRuntimeTarget): Promise<void> {
     const signature = `${target.providerId}\u0000${target.definitionId}\u0000${JSON.stringify(target.config)}`
-    if (providerConfigStore.providers[target.providerId]) {
+    if (providerConfig.get(target.providerId)) {
       if (appliedSignature === signature)
         return
 
       await providerStore.disposeProviderInstance(target.providerId)
-      await providerConfigStore.updateProviderConfig(target.providerId, { ...target.config }, 'unconfigured')
+      // Same remote effect as before the facade: the shared store replicates
+      // this projection with a PATCH. Kept on deliberately in B0.7.
+      await providerConfig.updateConfig(target.providerId, { ...target.config }, 'unconfigured')
     }
     else {
-      providerConfigStore.ensureProvider(target.providerId, target.definitionId, { ...target.config })
+      providerConfig.ensure(target.providerId, target.definitionId, { ...target.config })
     }
 
     appliedSignature = signature

@@ -4,7 +4,6 @@ import { errorMessageFrom } from '@moeru/std'
 import { useElectronEventaInvoke } from '@proj-airi/electron-vueuse'
 import { registerChatFallbackResolver, registerProviderCredentialResolver } from '@proj-airi/stage-ui/stores/chat/chat-provider-runtime'
 import { useConsciousnessStore } from '@proj-airi/stage-ui/stores/modules/consciousness'
-import { useProviderConfigStore } from '@proj-airi/stage-ui/stores/providers/config'
 import { useProviderStore } from '@proj-airi/stage-ui/stores/providers/provider'
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
@@ -19,6 +18,7 @@ import {
   electronLiaSecretSet,
 } from '../../../shared/eventa'
 import { isUsableWithoutAiriSession } from './provider-auth-policy'
+import { useLiaProviderConfigFacade } from './provider-config-facade'
 
 /**
  * Curated chat provider choices surfaced to the user (real AIRI catalog ids —
@@ -279,7 +279,7 @@ function isRecoverableChatError(error: unknown): boolean {
  */
 export const useLiaProviderStore = defineStore('lia-provider', () => {
   const providersStore = useProviderStore()
-  const providerConfigStore = useProviderConfigStore()
+  const providerConfig = useLiaProviderConfigFacade()
   const consciousnessStore = useConsciousnessStore()
 
   const getChatConfig = useElectronEventaInvoke(electronLiaProviderChatConfigGet)
@@ -346,16 +346,18 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
    */
   async function ensureProviderRecord(providerId: string, baseUrl?: string) {
     const definitionId = providerId
-    if (!providerConfigStore.getProvider(providerId)) {
-      providerConfigStore.ensureProvider(providerId, definitionId, baseUrl ? { baseUrl } : {})
+    if (!providerConfig.get(providerId)) {
+      providerConfig.ensure(providerId, definitionId, baseUrl ? { baseUrl } : {})
     }
     else if (baseUrl) {
-      const current = providerConfigStore.getProviderConfig(providerId) ?? {}
-      await providerConfigStore.updateProviderConfig(providerId, { ...current, baseUrl }, 'unconfigured')
+      const current = providerConfig.getConfig(providerId) ?? {}
+      // The only Lia configuration write with a remote effect: the shared store
+      // still replicates this payload with a PATCH. B0.7 keeps it switched on.
+      await providerConfig.updateConfig(providerId, { ...current, baseUrl }, 'unconfigured')
     }
     // The provider config store writes only references/metadata. The resolver
     // below will add the transient apiKey when the instance is actually built.
-    return providerConfigStore.getProvider(providerId)
+    return providerConfig.get(providerId)
   }
 
   /** Test the configured provider/model + endpoint using the vault key on demand. */
@@ -473,7 +475,7 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
     // that session can never be ready here — regardless of a stored key. This is
     // a no-op for every provider the Lia curates (all user-owned) and fails
     // closed if one ever is not.
-    if (!isUsableWithoutAiriSession(providerConfigStore.getProvider(preferred.providerId)))
+    if (!isUsableWithoutAiriSession(providerConfig.get(preferred.providerId)))
       return false
     if (!providerNeedsKey(preferred.providerId))
       return true
