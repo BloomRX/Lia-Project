@@ -1071,3 +1071,106 @@ instalador; não moveu nem copiou pacote; não tocou em `airi/`; não resolveu o
 avatar; não tomou decisão de licenciamento. Nenhum teste foi executado — todos os
 "testes existentes" foram lidos, não rodados. Nenhum valor de segredo foi lido ou
 impresso, e nenhum arquivo pessoal do usuário foi aberto.
+
+---
+
+## 13. B0.5 — A aresta `composables/api` não pode ser removida agora (28/10/2026)
+
+Investigação do passo que o B0.2 numerou como aresta 4. **Conclusão: não remover.**
+Nenhum arquivo de código foi alterado nesta rodada. As validações abaixo foram
+executadas sobre `64525a1`, sem modificação.
+
+### 13.1 A premissa do B0.5 não se confirma
+
+A tarefa partiu de "importada, mas não utilizada pela Lia". Metade disso é verdade
+e metade é falso, e a diferença decide a remoção. O próprio B0.2 já continha as duas
+afirmações em linhas vizinhas: o título dizia "O que a Lia usa: **Nada**", e a
+mesma célula continuava "**Mas `updateProviderConfig` é** — e ele dispara
+`patchConfigRemote` **sempre**". O título estava errado; a célula estava certa.
+
+**A dependência é alcançada em runtime pelo caminho da Lia.** [C]
+
+`config.ts:10` importa `client`, e ele é usado em **quatro** sítios, não um:
+
+| Sítio | Chamado por | A Lia chama? |
+| --- | --- | --- |
+| `:32` `service.fetchRemote` | `fetchProviders` (`:164`), via `providersQuery` com `enabled: false` | **não** |
+| `:87` `service.createRemote` | `addProvider` (`:183`) | **não** |
+| `:90` `service.deleteRemote` | `removeProvider` (`:204`) | **não** |
+| `:97` `service.patchConfigRemote` | `updateProviderConfig` (`:224`) | **sim** |
+
+E a Lia chama `updateProviderConfig` em **dois** pontos de produto, não em teste:
+
+- `stores/lia/provider.ts:354` — grava o `baseUrl` de um provedor personalizado;
+- `stores/lia/hearing.ts:206` — projeta o alvo de transcrição derivado.
+
+`updateProviderConfig` não tem guarda: se o registro existe, `mutateAsync` roda
+(`config.ts:224`), dentro de `try/catch`. A falha é silenciosa; a requisição não é.
+
+**Observação empírica, não leitura de código.** O teste que o B0.3 fixou —
+*"replicates an update to the remote service — current Stage behaviour"* — afirma
+`observed.requests.length > 0` e **passa**. Ou seja: com o `PiniaColada` instalado,
+como no renderer real (`main.ts:159`), a atualização de um provedor da Lia produz um
+`fetch` de verdade. Não é uma aresta morta que aparenta vida: é uma aresta viva.
+
+### 13.2 Por que a remoção não é segura
+
+Remover o import deixa `client` sem definição em quatro sítios. Não há como remover
+"só a parte não usada": o **query** (`fetchProviders`) e as **três mutações**
+compartilham a mesma importação. Tirar uma exige reescrever a outra, e é isso que
+está fora de escopo:
+
+| O que a remoção quebraria | Por que impede o passo |
+| --- | --- |
+| Replicação remota das três mutações | proibido alterar replicação remota |
+| Bateria de conformidade B0.3 (21 testes) | precisa ser preservada; o teste de replicação passaria a falhar por desenho |
+| Código do AIRI compartilhado (`config.ts`, `services/inference-service-providers.ts`) | a mudança sairia do escopo da Lia |
+| `packages/stage-pages/src/pages/v2/settings/providers.vue:18`, que chama `fetchProviders` | a query não é código morto dentro do Stage |
+
+**Não há código morto estritamente relacionado a esta dependência.** `client` tem 4
+usos, `createProvidersQueryOptions` alimenta `providersQuery`, as três mutações
+alimentam as três ações, e `providersQuery` alimenta `isLoading`/`error` expostos
+pela store. Nada é órfão.
+
+**Nuance que explica a confusão:** a Lia **nunca** importa `composables/api`
+diretamente. Verificado: nenhuma ocorrência em `stores/lia/` nem em `services/lia/`.
+A dependência entra exclusivamente por dentro de `config.ts`, um arquivo do AIRI.
+Portanto "remover do provider hub da Lia" não tem onde acontecer sem tocar código
+compartilhado.
+
+### 13.3 Risco não resolvido que a remoção deixaria no lugar
+
+Como a aresta está viva, vale registrar o que ela carrega. `authedFetch`
+(`libs/auth-fetch.ts`) trata resposta diferente de 401 devolvendo-a; mas, em 401,
+chama `refreshTokenNow()` e, sem token, `promptReLogin` → `clearAllAuthState()` +
+`needsLogin = true`. Em Electron, `whenever(needsLogin)` retorna cedo
+(`auth.ts:103-105`), então não há redirecionamento OIDC; o estado de auth da Lia é
+vazio, então o `clear` é inócuo na prática.
+
+**Não observado [P]:** se `api.airi.build` responde 401 em vez de falhar na rede.
+Neste ambiente a conexão dá `ECONNRESET`, o `fetch` lança, a mutação rejeita e o
+`try/catch` preserva a configuração local. Um usuário com conectividade poderia ver
+outro caminho. Não afirmo qual — não foi medido.
+
+### 13.4 Onde esta aresta deve morrer
+
+Não é aqui. O passo correto continua sendo o **passo 4 do B0.2**: extrair o
+adaptador que a Lia usa, de modo que a store da Lia leia o registro local e **não
+tenha nada para replicar**. Aí a dependência cai por consequência, não por cirurgia.
+
+Ordem sugerida para quando esse passo for autorizado:
+
+1. Adaptador cobrindo os 13 membros, com a bateria B0.3 verde antes e depois;
+2. verificação de que o adaptador não importa `composables/api`;
+3. **só então** remover a replicação do caminho da Lia — e nessa altura o diff
+   inclui, de propósito, a mudança do teste de replicação do B0.3, que hoje falha
+   por desenho justamente para marcar essa decisão.
+
+### 13.5 O que esta seção não fez
+
+Não alterou código, dependência, lockfile, build ou instalador; não removeu nem
+tornou lazy `useAuthStore`; não tocou em `isReadyToChat` nem na política do B0.4;
+não mexeu em persistência, replicação, migração, credenciais ou sincronização; não
+mexeu no seletor de voz nem no `official-provider-speech`; não leu cofre, segredo ou
+`lia-product.json`. A mudança proposta pelo B0.5 **não foi aplicada**, por evidência
+contrária, e o motivo está acima.
