@@ -4,7 +4,6 @@ import { errorMessageFrom } from '@moeru/std'
 import { useElectronEventaInvoke } from '@proj-airi/electron-vueuse'
 import { registerChatFallbackResolver, registerProviderCredentialResolver } from '@proj-airi/stage-ui/stores/chat/chat-provider-runtime'
 import { useConsciousnessStore } from '@proj-airi/stage-ui/stores/modules/consciousness'
-import { useProviderStore } from '@proj-airi/stage-ui/stores/providers/provider'
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
@@ -21,6 +20,7 @@ import { useLiaProviderActivation } from './provider-activation'
 import { isUsableWithoutAiriSession } from './provider-auth-policy'
 import { useLiaProviderConfigFacade } from './provider-config-facade'
 import { useLiaProviderRuntime } from './provider-runtime'
+import { useLiaProviderValidation } from './provider-validation'
 
 /**
  * Curated chat provider choices surfaced to the user (real AIRI catalog ids —
@@ -280,10 +280,10 @@ function isRecoverableChatError(error: unknown): boolean {
  *   errors.
  */
 export const useLiaProviderStore = defineStore('lia-provider', () => {
-  const providersStore = useProviderStore()
   const providerActivation = useLiaProviderActivation()
   const providerConfig = useLiaProviderConfigFacade()
   const providerRuntime = useLiaProviderRuntime()
+  const providerValidation = useLiaProviderValidation()
   const consciousnessStore = useConsciousnessStore()
 
   const getChatConfig = useElectronEventaInvoke(electronLiaProviderChatConfigGet)
@@ -380,7 +380,7 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
       config.apiKey = apiKey
 
     try {
-      const result = await providersStore.validateProviderConfig(providerId, config)
+      const result = await providerValidation.validate(providerId, config)
       return {
         ok: result.valid,
         message: result.valid ? '' : (result.reason || 'Connection failed'),

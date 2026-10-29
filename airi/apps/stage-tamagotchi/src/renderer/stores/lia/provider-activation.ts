@@ -35,11 +35,11 @@ import { useProviderStore } from '@proj-airi/stage-ui/stores/providers/provider'
  * body without touching a single call site in the Lia.
  *
  * What it does NOT unlock, and must not be sold as unlocking: the Lia still
- * reads `configuredProviders` (through the config facade), still calls
- * `validateProviderConfig` on the shared store, reaches the instance
- * lifecycle only through `provider-runtime.ts`, and still depends on the
- * shared store keeping the records where the Stage expects them. Migrating
- * those reads is a separate, larger step.
+ * reads `configuredProviders` (through the config facade), reaches validation
+ * only through `provider-validation.ts` and the instance lifecycle only
+ * through `provider-runtime.ts`, and still depends on the shared store
+ * keeping the records where the Stage expects them. Migrating those reads is
+ * a separate, larger step.
  *
  * Why the order is load-bearing
  * -----------------------------

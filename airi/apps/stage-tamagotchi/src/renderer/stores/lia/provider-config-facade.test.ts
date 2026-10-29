@@ -377,13 +377,10 @@ describe('lia provider config facade — the import frontier (B0.7.1, T-A)', () 
   /**
    * T-H (B0.8-lite) — the activation operations.
    *
-   * Scoped to operations, not to the module, and that is still the right shape
-   * after E2: `provider.ts` keeps importing the shared store for
-   * `validateProviderConfig`, which is E3's subject and not this step's. Banning
-   * the module would ban that legitimate use; banning the operations is exact.
-   *
-   * The other half of the store (the instance lifecycle and the model reads) is
-   * covered separately by T-I below.
+   * Scoped to operations, not to the module. By E3 no Lia flow module imports
+   * the shared store at all — `provider.ts` was the last one, and it now reaches
+   * the store only through the three ports. The per-operation checks below and
+   * in T-I/T-J are kept anyway: they are what keeps it that way.
    */
   const ACTIVATION_MEMBERS = ['initializeProvider', 'forceProviderConfigured']
   const ACTIVATION_MODULE = 'provider-activation.ts'
@@ -410,12 +407,12 @@ describe('lia provider config facade — the import frontier (B0.7.1, T-A)', () 
       .map(file => file.relativePath)
       .sort()
 
-    // E2 removed three of these. What remains is the two ports and the one
-    // module that still reaches the store legitimately (for validation).
+    // E2 and E3 removed every flow module from this list. What remains is the
+    // three ports, and only them.
     expect(providerStoreUsers).toEqual([
       ACTIVATION_MODULE,
       'provider-runtime.ts',
-      'provider.ts',
+      'provider-validation.ts',
     ].sort())
   })
 
@@ -444,10 +441,9 @@ describe('lia provider config facade — the import frontier (B0.7.1, T-A)', () 
    * T-I (E2) — the four instance-lifecycle operations.
    *
    * Same detector, same masking, applied to the half of the store that still had
-   * four direct call sites. `provider.ts` remains in the scanned set and remains
-   * an importer of the shared store, which is what makes this check meaningful:
-   * it proves the ban is on the operations, not on a module that happened to be
-   * renamed.
+   * four direct call sites. `provider.ts` is the module those sites used to live
+   * in, and it is still in the scanned set, so the check proves the ban is on the
+   * operations rather than on a module that was emptied and forgotten.
    */
   const RUNTIME_MEMBERS = [
     'getProviderInstance',
@@ -475,12 +471,10 @@ describe('lia provider config facade — the import frontier (B0.7.1, T-A)', () 
     expect(referencedMembers(port?.source ?? '', RUNTIME_MEMBERS).sort())
       .toEqual([...RUNTIME_MEMBERS].sort())
 
-    // `provider.ts` is the only non-port module that still imports the store,
-    // and it does so for validation only.
+    // `provider.ts` is where all four used to be called from. It now names none
+    // of them, which is the migration this check exists to protect.
     const providerModule = scanned.find(file => file.relativePath === 'provider.ts')
-    expect(providerModule?.imports).toContain('@proj-airi/stage-ui/stores/providers/provider')
-    expect(referencedMembers(providerModule?.source ?? '', ['validateProviderConfig']))
-      .toEqual(['validateProviderConfig'])
+    expect(providerModule, 'provider.ts must stay in the scanned set').toBeDefined()
     expect(referencedMembers(providerModule?.source ?? '', RUNTIME_MEMBERS)).toEqual([])
   })
 
@@ -508,6 +502,57 @@ describe('lia provider config facade — the import frontier (B0.7.1, T-A)', () 
     expect(referencedMembers(`runtime.listModels(id)`, RUNTIME_MEMBERS)).toEqual([])
     expect(referencedMembers(`await runtime.getInstance(id)`, RUNTIME_MEMBERS)).toEqual([])
     expect(referencedMembers(`await runtime.dispose(id)`, RUNTIME_MEMBERS)).toEqual([])
+  })
+
+  /**
+   * T-J (E3) — validation.
+   *
+   * The last operation the Lia reached directly on the shared store. With it
+   * migrated, `provider.ts` stops importing the store altogether, so the module
+   * check above now yields three ports and nothing else.
+   */
+  const VALIDATION_MEMBER = 'validateProviderConfig'
+  const VALIDATION_MODULE = 'provider-validation.ts'
+
+  it('t-j: the only module touching validation is the port', () => {
+    const offenders = scanned
+      .filter(file => referencedMembers(file.source, [VALIDATION_MEMBER]).length > 0)
+      .map(file => file.relativePath)
+
+    expect(offenders).toEqual([VALIDATION_MODULE])
+  })
+
+  it('t-j: the port names the delegate, and the call site stopped naming it', () => {
+    const port = scanned.find(file => file.relativePath === VALIDATION_MODULE)
+    expect(port, 'the validation port must be part of the scanned set').toBeDefined()
+    // It imports the shared store — that is its whole job.
+    expect(port?.imports).toContain('@proj-airi/stage-ui/stores/providers/provider')
+    // And it really names the operation, so "one offender" cannot be a port
+    // that stopped mentioning it.
+    expect(referencedMembers(port?.source ?? '', [VALIDATION_MEMBER])).toEqual([VALIDATION_MEMBER])
+
+    // `provider.ts` used to call it. It must not name it any more, and — since
+    // validation was its last use of the store — must not import the store.
+    const providerModule = scanned.find(file => file.relativePath === 'provider.ts')
+    expect(providerModule, 'provider.ts must stay in the scanned set').toBeDefined()
+    expect(referencedMembers(providerModule?.source ?? '', [VALIDATION_MEMBER])).toEqual([])
+    expect(providerModule?.imports).not.toContain('@proj-airi/stage-ui/stores/providers/provider')
+  })
+
+  it('t-j: self-test of the validation detector', () => {
+    // Prose is masked. `provider-validation.ts` itself documents the operation.
+    expect(referencedMembers(`/** The store exposes validateProviderConfig. */`, [VALIDATION_MEMBER])).toEqual([])
+    expect(referencedMembers(`// validateProviderConfig is no longer called here`, [VALIDATION_MEMBER])).toEqual([])
+    expect(referencedMembers(`const note = 'validateProviderConfig'`, [VALIDATION_MEMBER])).toEqual([])
+
+    // The exact shape the Lia used to have.
+    expect(referencedMembers(`await providersStore.validateProviderConfig(providerId, config)`, [VALIDATION_MEMBER]))
+      .toEqual(['validateProviderConfig'])
+
+    // The port's own name is deliberately distinct, so a call through it is not
+    // mistaken for a direct store access.
+    expect(referencedMembers(`await providerValidation.validate(providerId, config)`, [VALIDATION_MEMBER]))
+      .toEqual([])
   })
 
   it('does not reach the shared modules through the bare stage-ui barrel', () => {

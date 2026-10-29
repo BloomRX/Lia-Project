@@ -35,11 +35,11 @@ import { useProviderStore } from '@proj-airi/stage-ui/stores/providers/provider'
  * provider. A future implementation can replace this module's body without
  * touching a call site.
  *
- * What it does NOT unlock, and must not be sold as unlocking: `provider.ts`
- * still calls `validateProviderConfig` on the same shared store, activation
- * still goes through `provider-activation.ts`, and the Lia still reads the
- * provider configuration through `provider-config-facade.ts`. Those are three
- * separate boundaries on purpose.
+ * What it does NOT unlock, and must not be sold as unlocking: validation goes
+ * through `provider-validation.ts`, activation through
+ * `provider-activation.ts`, and the Lia still reads the provider
+ * configuration through `provider-config-facade.ts`. Those are three separate
+ * boundaries on purpose.
  *
  * Why `canListModels` and not `supportsModelListing`
  * --------------------------------------------------
