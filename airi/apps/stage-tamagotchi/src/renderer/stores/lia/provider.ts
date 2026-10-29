@@ -18,6 +18,7 @@ import {
   electronLiaSecretHas,
   electronLiaSecretSet,
 } from '../../../shared/eventa'
+import { isUsableWithoutAiriSession } from './provider-auth-policy'
 
 /**
  * Curated chat provider choices surfaced to the user (real AIRI catalog ids —
@@ -467,6 +468,12 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
     if (!preferred?.providerId || !preferred.modelId)
       return false
     if (config.onboarded !== true)
+      return false
+    // The Lia has no AIRI account flow, so a provider whose lifecycle belongs to
+    // that session can never be ready here — regardless of a stored key. This is
+    // a no-op for every provider the Lia curates (all user-owned) and fails
+    // closed if one ever is not.
+    if (!isUsableWithoutAiriSession(providerConfigStore.getProvider(preferred.providerId)))
       return false
     if (!providerNeedsKey(preferred.providerId))
       return true
