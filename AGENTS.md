@@ -881,7 +881,7 @@ A aplicação deve permitir:
 - configurar;
 - remover.
 
-O sistema visual deve reutilizar AIRI quando possível.
+A identidade visual e a experiência pertencem à Lia. Reaproveite componentes técnicos de interface somente após verificar adequação, acessibilidade, licença e acoplamento; não importe a identidade visual nem a UX do AIRI.
 
 ==================================================
 32. PERSONALITY SYSTEM
@@ -1847,28 +1847,15 @@ ASSET-LICENSES.md
 Separar:
 
 Lia App
-AIRI Runtime
-Models
+Lia-owned Runtime / Compatibility Adapters
+Modelos e provedores externos
 Voice Models
-Components
+Character / Avatar Assets
+Product Services
 
-Atualizações devem ser independentes quando possível.
+Atualizações devem ser independentes quando possível. Componentes AIRI ainda presentes são dependências legadas transitórias durante o desacoplamento; registre a versão e o motivo de cada retenção, sem tratá-los como runtime-alvo obrigatório.
 
-Exemplo:
-
-Lia:
-1.2.0
-
-AIRI:
-0.x
-
-Character Pack:
-2.1
-
-Voice:
-3.0
-
-Não amarrar tudo em um único pacote monolítico se não for necessário.
+Não amarrar todos os componentes em um único pacote monolítico se não for necessário.
 
 ==================================================
 76. GIT
@@ -1921,7 +1908,7 @@ ANTES DE ALTERAR CÓDIGO:
 2. Ler documentação relevante.
 3. Inspecionar código existente.
 4. Encontrar implementações relacionadas.
-5. Identificar integração com AIRI.
+5. Identificar dependências legadas de AIRI que ainda existem e procurar contratos/alternativas próprias da Lia; não introduzir novas dependências sem decisão registrada.
 6. Definir menor solução viável.
 7. Implementar.
 8. Rodar typecheck.
@@ -2275,7 +2262,7 @@ Para decisões arquiteturais importantes, criar ADR quando necessário.
 Exemplos:
 
 ADR:
-Why AIRI is the runtime foundation
+Why a specific legacy AIRI component is temporarily retained or removed
 
 ADR:
 Why provider abstraction exists
@@ -2779,12 +2766,13 @@ Uma feature sem ambos os locales iniciais está incompleta.
 
 Antes de adicionar um novo framework de i18n:
 
-1. inspecionar a implementação de i18n existente do AIRI;
-2. determinar se pode ser reutilizada;
-3. determinar se pt-BR pode ser adicionado de forma limpa;
-4. evitar sistemas de tradução duplicados.
+1. inspecionar a implementação de i18n que a própria Lia mantém;
+2. identificar contratos, chaves e locales existentes;
+3. validar pt-BR e en-US no fluxo de produto;
+4. avaliar o i18n legado do AIRI apenas como referência ou compatibilidade transitória;
+5. evitar duplicação e não adicionar nova dependência sem decisão registrada.
 
-Lia deve estender/reutilizar o sistema existente sempre que prático.
+A fonte de verdade de i18n deve pertencer à arquitetura da Lia.
 
 --------------------------------------------------
 98.19 UI LANGUAGE MUST BE A PRODUCT FEATURE
