@@ -72,13 +72,13 @@ A Lia deve ser uma experiência semelhante a um launcher de jogo:
 
 O usuário final não deve precisar entender a infraestrutura técnica que existe por trás da aplicação.
 
-A Lia utilizará o PROJECT AIRI como uma das principais bases tecnológicas/runtime.
+A Lia é um produto independente. AIRI é referência técnica e fonte de estudo, não uma dependência arquitetural permanente. Consulte `docs/BRAND-STANDARDS.md` e `docs/project/CURRENT-STATE.md` para os princípios comuns e o estado de desacoplamento validado.
 
 Repository de referência:
 
 https://github.com/moeru-ai/airi
 
-AIRI deve ser tratado como uma base tecnológica, e não como a identidade completa do produto Lia.
+AIRI deve ser tratado como referência técnica e fonte de estudo, não como base arquitetural obrigatória nem dependência permanente da Lia.
 
 A identidade, UX, configuração e experiência de usuário pertencem à Lia.
 
@@ -208,98 +208,47 @@ Lia = primeiro personagem/produto padrão.
 
 Character System = arquitetura genérica.
 
-==================================================
-6. AIRI COMO BASE
-==================================================
-
-Antes de modificar ou duplicar funcionalidades:
-
-1. pesquisar o repository atual do AIRI;
-2. localizar código relacionado;
-3. verificar packages;
-4. verificar apps;
-5. verificar plugins;
-6. verificar services;
-7. verificar providers;
-8. verificar memória;
-9. verificar voz;
-10. verificar avatar;
-11. verificar Discord;
-12. verificar computer-use;
-13. verificar IPC;
-14. verificar documentação existente.
-
-Nunca assumir que AIRI não possui determinada funcionalidade sem pesquisar o código atual.
-
-PRIORIDADE:
-
-Reutilizar > adaptar > encapsular > extender > implementar do zero.
-
-Evitar duplicar funcionalidades existentes no AIRI.
-
-==================================================
-7. NÃO TRANSFORMAR A LIA EM UM FORK CAÓTICO
+====================================================
+6. AIRI COMO REFERÊNCIA TÉCNICA
 ==================================================
 
-Sempre que possível:
+AIRI é fonte de estudo e comparação, não a arquitetura-alvo nem uma dependência
+permanente que novas funcionalidades devam adotar.
 
-Lia
-    ↓
-Adapter / Wrapper / Integration Layer
-    ↓
-AIRI
-    ↓
-Runtime / Services / Providers
-
-Evitar modificar diretamente o core do AIRI.
-
-Se alterações no AIRI forem inevitáveis:
-
-- isolar;
-- documentar;
-- manter o diff pequeno;
-- registrar a razão;
-- registrar a versão/commit;
-- facilitar futuros upgrades.
-
-Registrar informações relacionadas ao upstream em:
-
-docs/upstream/
-
-Exemplo:
-
-docs/upstream/AIRI-INTEGRATION.md
-docs/upstream/AIRI-UPGRADE.md
-docs/upstream/AIRI-PATCHES.md
+Antes de estudar uma capacidade do upstream, identifique a versão/commit,
+consulte documentação e código, distinga recurso documentado de comportamento
+executado e compare o conceito com contratos próprios da Lia. Não introduza
+novas dependências do runtime AIRI por conveniência; justifique qualquer
+exceção em decisão registrada.
 
 ==================================================
-8. ARQUITETURA CONCEITUAL
+7. INDEPENDÊNCIA PROGRESSIVA DA LIA
 ==================================================
 
-Arquitetura desejada:
+A direção de produto é uma aplicação própria. Enquanto componentes legados
+forem necessários, o desacoplamento deve ser gradual e comprovado.
 
-                    LIA APP
-                       |
-                       v
-              LIA ORCHESTRATOR
-                       |
-       +---------------+---------------+
-       |               |               |
-       v               v               v
-  CHARACTER        AI SYSTEM       SERVICES
-       |               |               |
-       |          +----+----+      +----+----+
-       |          |         |      |         |
-       v          v         v      v         v
-      AIRI       LLM       Memory Vision   Tools
-       |
-    Avatar
-
-A implementação concreta deve ser definida após análise do AIRI atual.
-
-Não impor abstrações sem verificar como o AIRI já funciona.
+- Mapeie os consumidores e o caminho real de execução.
+- Defina o contrato mínimo que a Lia precisa preservar.
+- Use adapters/compatibilidade isolada quando necessário.
+- Crie testes de conformidade antes de remover o caminho anterior.
+- Registre versão, motivo e risco de cada dependência remanescente.
+- Não remova o diretório airi/ nem dependências em massa sem plano, gate e evidência.
 
 ==================================================
+8. ARQUITETURA CONCEITUAL ALVO
+==================================================
+
+A arquitetura de destino pertence à Lia: experiência/app, orquestração, runtime
+próprio, provedores/modelos externos, memória, ferramentas, serviços de produto
+e assets de personagem com contratos separados. Memória persistente, credenciais,
+permissões, ações externas e interface continuam fora dos pesos.
+
+AIRI pode informar decisões e componentes legados temporários, mas não é
+requisito arquitetural do destino. Consulte docs/project/CURRENT-STATE.md e
+docs/architecture/ antes de qualquer migração ou abstração.
+
+================================================
 9. PRIMEIRA TAREFA DA AGENT
 ==================================================
 
@@ -1008,7 +957,7 @@ A aplicação deve permitir:
 - configurar;
 - remover.
 
-O sistema visual deve reutilizar AIRI quando possível.
+A identidade visual e a experiência pertencem à Lia. Reaproveite componentes técnicos de interface somente após verificar adequação, acessibilidade, licença e acoplamento; não importe a identidade visual nem a UX do AIRI.
 
 ==================================================
 32. PERSONALITY SYSTEM
@@ -1974,7 +1923,7 @@ ASSET-LICENSES.md
 Separar:
 
 Lia App
-AIRI Runtime
+Lia-owned Runtime / Compatibility Adapters
 Models
 Voice Models
 Components
@@ -2388,7 +2337,7 @@ Para decisões arquiteturais importantes, criar ADR quando necessário.
 Exemplos:
 
 ADR:
-Why AIRI is the runtime foundation
+Why a specific legacy AIRI component is temporarily retained or removed
 
 ADR:
 Why provider abstraction exists
