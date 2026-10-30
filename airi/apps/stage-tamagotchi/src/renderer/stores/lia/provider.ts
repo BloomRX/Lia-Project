@@ -20,7 +20,6 @@ import { useLiaProviderActivation } from './provider-activation'
 import { isUsableWithoutAiriSession } from './provider-auth-policy'
 import { useLiaProviderConfigFacade } from './provider-config-facade'
 import { useLiaProviderRuntime } from './provider-runtime'
-import { useLiaProviderValidation } from './provider-validation'
 
 /**
  * Curated chat provider choices surfaced to the user (real AIRI catalog ids —
@@ -57,42 +56,14 @@ export const LIA_CHAT_PROVIDER_OPTIONS: LiaChatProviderOption[] = [
   { id: 'ollama', label: 'Ollama', requiresBaseUrl: true, needsApiKey: false },
 ]
 
-/**
- * One selectable chat model for a provider. `id` is the technical id that is
- * persisted and sent to the API; `label` is the human-friendly name shown in
- * the dropdown (never shown to the user to type). `recommended` flags the
- * default to auto-select when the user first picks the provider (or when the
- * previously chosen model is no longer offered for it).
- */
+/** A suggestion, never an allowlist or a reason to replace a user's ID. */
 export interface LiaModelOption {
   id: string
   label: string
   recommended?: boolean
 }
 
-/**
- * Curated chat model choices per provider (real model ids — not invented).
- *
- * Source notes:
- * - The Anthropic entries are copied verbatim from the real AIRI provider
- *   catalog (`stage-ui/.../providers/anthropic` `extraMethods.listModels`).
- * - The other cloud providers (OpenAI, Groq, Cerebras, xAI, Mistral,
- *   OpenRouter) ship NO static catalog in AIRI — their models are fetched live
- *   from the provider API once a key exists. Because the Lia API key lives only
- *   in the main-process vault (never in the provider-config store that AIRI's
- *   live fetcher reads), those providers can't be live-listed from the vault
- *   here. So we keep a small, current set of real ids as the always-available
- *   dropdown source; the "Test connection" step validates the chosen one.
- * - Local/self-hosted providers (Ollama, LM Studio, OpenAI-compatible) expose
- *   whatever the user has loaded/serves, so we offer a small set of common
- *   known models rather than forcing the user to type an id. Providers without
- *   a curated entry degrade to a single controlled option instead of a free
- *   field.
- *
- * These ids can drift as providers deprecate/rename models; that is handled at
- * the "Test connection" step (friendly error, model stays selectable/switchable)
- * and never by asking the user to type an id.
- */
+/** Offline suggestions retained for compatibility; discovery and manual IDs take precedence. */
 export const LIA_MODEL_CATALOG: Record<string, LiaModelOption[]> = {
   'openai': [
     { id: 'gpt-5.4', label: 'GPT-5.4', recommended: true },
@@ -171,7 +142,7 @@ export function isModelInCatalog(providerId: string, modelId?: string): boolean 
 /**
  * The model to auto-select for a provider: its `recommended` entry when one is
  * flagged, otherwise the first curated entry. Returns undefined only when the
- * provider has no curated catalog (callers must not open a free field then).
+ * provider has no curated catalog. A manual ID is always allowed.
  */
 export function recommendedModelFor(providerId: string): string | undefined {
   return curatedModelsFor(providerId).find(option => option.recommended)?.id
@@ -283,7 +254,6 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
   const providerActivation = useLiaProviderActivation()
   const providerConfig = useLiaProviderConfigFacade()
   const providerRuntime = useLiaProviderRuntime()
-  const providerValidation = useLiaProviderValidation()
   const consciousnessStore = useConsciousnessStore()
 
   const getChatConfig = useElectronEventaInvoke(electronLiaProviderChatConfigGet)
@@ -364,31 +334,60 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
     return providerConfig.get(providerId)
   }
 
-  /** Test the configured provider/model + endpoint using the vault key on demand. */
+  /** Metadata read only; never returns the vault key. */
+  function providerBaseUrl(providerId: string): string | undefined {
+    const value = providerConfig.getConfig(providerId)?.baseUrl
+    return typeof value === 'string' ? value : undefined
+  }
+
+  async function draftConfig(args: { providerId: string, apiKey?: string, baseUrl?: string }) {
+    const config = { ...providerConfig.getConfig(args.providerId) }
+    // Stored keys never enter the shared record; only this transient draft.
+    const apiKey = args.apiKey ?? await resolveApiKey(args.providerId)
+    if (args.baseUrl !== undefined)
+      config.baseUrl = args.baseUrl
+    if (apiKey)
+      config.apiKey = apiKey
+    return config
+  }
+
+  // In-flight only, never persisted or placed in Pinia state. Also deduplicates
+  // primary and backup looking up the same effective draft at the same time.
+  const discoveryPending = new Map<string, Promise<Awaited<ReturnType<typeof providerRuntime.discover>>>>()
+  async function discoverModels(args: { providerId: string, apiKey?: string, baseUrl?: string }) {
+    try {
+      const config = await draftConfig(args)
+      const requestKey = JSON.stringify([args.providerId, config])
+      const pending = discoveryPending.get(requestKey)
+      if (pending)
+        return await pending
+      const request = providerRuntime.discover(args.providerId, config)
+      discoveryPending.set(requestKey, request)
+      try {
+        return await request
+      }
+      finally {
+        discoveryPending.delete(requestKey)
+      }
+    }
+    catch {
+      return { status: 'error' as const, models: [] }
+    }
+  }
+
+  /** Explicit text probe of the selected model, NOT approval of tools or vision. */
   async function testConnection(args: {
     providerId: string
     modelId?: string
     apiKey?: string
     baseUrl?: string
-  }): Promise<{ ok: boolean, message: string }> {
-    const { providerId, baseUrl } = args
-    const apiKey = args.apiKey ?? (await resolveApiKey(providerId))
-    const config: Record<string, unknown> = {}
-    if (baseUrl)
-      config.baseUrl = baseUrl
-    if (apiKey)
-      config.apiKey = apiKey
-
+  }) {
     try {
-      const result = await providerValidation.validate(providerId, config)
-      return {
-        ok: result.valid,
-        message: result.valid ? '' : (result.reason || 'Connection failed'),
-      }
+      const result = await providerRuntime.probe(args.providerId, args.modelId ?? '', await draftConfig(args))
+      return { ...result, message: '' }
     }
-    catch (error) {
-      // Friendly, sanitized message — no stack trace, no secret material.
-      return { ok: false, message: errorMessageFrom(error) ?? 'Connection failed' }
+    catch {
+      return { ok: false, scope: 'text' as const, failure: 'configuration' as const, message: '' }
     }
   }
 
@@ -579,6 +578,8 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
     deleteApiKey,
     resolveApiKey,
     testConnection,
+    discoverModels,
+    providerBaseUrl,
     ensureProviderRecord,
     activateTarget,
     activatePreferred,

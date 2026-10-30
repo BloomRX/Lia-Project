@@ -23,9 +23,9 @@ import { createLiaProviderValidation, useLiaProviderValidation } from './provide
  *     empty config must be `valid` for a definition with no validators and
  *     `invalid` for one that requires a key, with the definition's own message.
  *     A Lia-side copy of the rules could not produce that difference.
- *  3. **Did the call site really move?** The real `useLiaProviderStore` is driven
- *     with the IPC seam mocked and `fetch` stubbed, so `testConnection` is
- *     exercised end to end: store → port → shared store → definition validators.
+ *  3. The editor now uses a selected-model text probe (provider-models.test.ts).
+ *     The last cases here guard against treating these historical validators
+ *     as approval of a missing model or returning raw reasons to the editor.
  *
  * Credentials, deliberately: the shared operation does **not** use the credential
  * resolver that `getProviderInstance` uses — it builds its validation instance
@@ -306,32 +306,34 @@ describe('lia provider validation — credentials', () => {
   })
 })
 
-describe('lia provider validation — the Lia call site uses the port', () => {
-  it('reports a valid connection for a provider whose definition has no validators', async () => {
+describe('lia provider connection — selected-model probe is separate from definition validation', () => {
+  it('does not approve a model merely because a definition has no validators', async () => {
     installStores()
     const store = useLiaProviderStore()
 
     const result = await store.testConnection({ providerId: NO_VALIDATOR_PROVIDER })
 
-    expect(result).toStrictEqual({ ok: true, message: '' })
+    expect(result).toStrictEqual({ ok: false, scope: 'text', failure: 'configuration', message: '' })
     // No key was supplied, so the call site asked the vault — and the vault had
     // nothing. That is the existing lookup, unchanged.
     expect(ipc.secretGet).toHaveBeenCalled()
     expect(observed.requests).toEqual([])
   })
 
-  it('reports the definition reason as the message when the configuration is invalid', async () => {
+  it('reports a safe configuration failure without exposing the definition reason', async () => {
     installStores()
     const store = useLiaProviderStore()
 
     const result = await store.testConnection({
       apiKey: FAKE_KEY,
+      modelId: 'manual/model',
       baseUrl: 'not a url',
       providerId: CREDENTIALED_PROVIDER,
     })
 
     expect(result.ok).toBe(false)
-    expect(result.message).toContain('Base URL is invalid')
+    expect(result.failure).toBe('configuration')
+    expect(result.message).toBe('')
     // The sanitized message the UI shows carries no secret.
     expect(result.message).not.toContain(FAKE_KEY)
     expect(observed.requests).toEqual([])
@@ -341,10 +343,11 @@ describe('lia provider validation — the Lia call site uses the port', () => {
     installStores()
     const store = useLiaProviderStore()
 
-    const result = await store.testConnection({ apiKey: FAKE_KEY, providerId: UNKNOWN_PROVIDER })
+    const result = await store.testConnection({ apiKey: FAKE_KEY, modelId: 'manual/model', providerId: UNKNOWN_PROVIDER })
 
     expect(result.ok).toBe(false)
-    expect(result.message).toBe(`Provider definition for ${UNKNOWN_PROVIDER} not found`)
+    expect(result.failure).toBe('configuration')
+    expect(result.message).toBe('')
     expect(result.message).not.toContain(FAKE_KEY)
   })
 })

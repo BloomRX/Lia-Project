@@ -1,58 +1,20 @@
+import type { ComposerTranslation } from 'vue-i18n'
+
 import { useProviderStore } from '@proj-airi/stage-ui/stores/providers/provider'
+import { generateText } from '@xsai/generate-text'
+import { listModels as queryModels } from '@xsai/model'
+import { useI18n } from 'vue-i18n'
+import { z } from 'zod'
 
 /**
- * The Lia's own boundary for provider *runtime* access (E2).
+ * Lia runtime boundary. The four E2 lifecycle/cache operations still delegate
+ * unchanged (pinned by provider-runtime-semantics and provider-runtime tests).
  *
- * Why this file exists
- * --------------------
- *
- * Building a provider instance is not a read. `getProviderInstance` looks the
- * credential up, may create the provider record as a side effect when the
- * definition needs none, resolves the per-build secret, applies the schema
- * defaults and caches the instance. Four Lia modules reached that operation and
- * its three siblings by importing the shared Stage store directly, which made
- * one dependency appear in four places with four different names for it
- * (`providersStore`, `providerStore`).
- *
- * This module is the single address for those four operations. Nothing else.
- *
- * **It still delegates.** Every member below calls the shared Stage store,
- * untouched, on every invocation. There is no cache here, no second copy of the
- * credential logic, no fallback and no reimplementation: this is an extraction
- * of interface, not a Lia runtime. The provider records, the instance cache and
- * the runtime state all still live in the shared stores, and every Stage
- * consumer of them keeps looking at exactly the same objects.
- *
- * The semantics this port must not disturb are pinned in
- * `provider-runtime-semantics.test.ts` (E1) against the shared store directly,
- * and re-asserted through the port in `provider-runtime.test.ts`.
- *
- * What this unlocks
- * -----------------
- *
- * The dependency that becomes swappable is the **instance lifecycle**: building,
- * discarding, and the two model-listing reads bound to an explicitly chosen
- * provider. A future implementation can replace this module's body without
- * touching a call site.
- *
- * What it does NOT unlock, and must not be sold as unlocking: validation goes
- * through `provider-validation.ts`, activation through
- * `provider-activation.ts`, and the Lia still reads the provider
- * configuration through `provider-config-facade.ts`. Those are three separate
- * boundaries on purpose.
- *
- * Why `canListModels` and not `supportsModelListing`
- * --------------------------------------------------
- *
- * The static frontier in `provider-config-facade.test.ts` works by looking for
- * the shared store's member names outside the module that is allowed to use
- * them. A port member spelled exactly like the delegate would make a port call
- * and a direct store call indistinguishable to that check, so the predicate is
- * named for what the caller gets, not for what the store calls it. `listModels`
- * and `getInstance` differ for the same reason; `dispose` was already distinct.
- *
- * Reference: docs/architecture/LIA-STAGE-DEPENDENCY-MAP-2026-10-28.md and the
- * B0.9 dependency map, section 6, candidate P1.
+ * Draft discovery and the explicit selected-model text probe below use temporary
+ * instances, provider schemas and existing SDK operations. They never write the
+ * draft or credentials to the shared store, nor reuse its credential-blind list
+ * cache. The shared Stage implementation remains untouched. This is the only
+ * address for its definitions in the Lia model-selection flow.
  */
 
 /**
@@ -119,6 +81,112 @@ export function createLiaProviderRuntime(
  * The import of the shared store lives here and only here for these four
  * operations.
  */
-export function useLiaProviderRuntime(): LiaProviderRuntime {
-  return createLiaProviderRuntime(useProviderStore())
+export function useLiaProviderRuntime(): LiaProviderRuntime & ReturnType<typeof createLiaDraftProviderRuntime> {
+  const source = useProviderStore()
+  const { t } = useI18n()
+  return { ...createLiaProviderRuntime(source), ...createLiaDraftProviderRuntime(source, t) }
+}
+
+export interface LiaModelDiscoveryResult {
+  status: 'ready' | 'unsupported' | 'error'
+  models: Array<{ id: string, label: string }>
+}
+
+export interface LiaModelProbeResult {
+  ok: boolean
+  scope: 'text'
+  failure?: 'configuration' | 'endpoint' | 'request' | 'empty' | 'unsupported'
+}
+
+/** Draft-only operations: no shared cache, configuration write or secret-bearing error. */
+export function createLiaDraftProviderRuntime(
+  source: Pick<SharedProviderRuntimeStore, 'findProviderDefinition'>,
+  t: ComposerTranslation,
+) {
+  async function draft(providerId: string, config: Record<string, unknown>) {
+    const definition = source.findProviderDefinition(providerId)
+    if (!definition)
+      throw new Error('Unknown service')
+    const schema = await definition.createProviderConfig({ t, config })
+    const effective = await z.parseAsync(schema, config)
+    if (effective.baseUrl) {
+      const url = new URL(effective.baseUrl)
+      if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password)
+        throw new Error('Invalid service address')
+    }
+    return { definition, effective, provider: await definition.createProvider(effective) }
+  }
+
+  async function discover(providerId: string, config: Record<string, unknown>): Promise<LiaModelDiscoveryResult> {
+    try {
+      const { definition, effective, provider } = await draft(providerId, config)
+      try {
+        let models
+        if (definition.extraMethods?.listModels)
+          models = await definition.extraMethods.listModels(effective, provider, { t })
+        else if ('model' in provider && typeof provider.model === 'function')
+          models = await queryModels({ ...provider.model(), abortSignal: AbortSignal.timeout(15000) })
+        else
+          return { status: 'unsupported', models: [] }
+        const seen = new Set<string>()
+        return {
+          status: 'ready',
+          models: models.filter((model) => {
+            if (typeof model.id !== 'string' || !model.id.trim() || seen.has(model.id))
+              return false
+            seen.add(model.id)
+            return true
+          }).map(model => ({ id: model.id, label: ('name' in model && typeof model.name === 'string') ? model.name : model.id })),
+        }
+      }
+      finally {
+        await dispose(provider)
+      }
+    }
+    catch {
+      // Includes cleanup failure; neither a successful catalog nor the raw error escapes.
+      return { status: 'error', models: [] }
+    }
+  }
+
+  async function dispose(provider: object) {
+    await (provider as { dispose?: () => Promise<void> | void }).dispose?.()
+  }
+
+  async function probe(providerId: string, modelId: string, config: Record<string, unknown>): Promise<LiaModelProbeResult> {
+    if (!modelId.trim())
+      return { ok: false, scope: 'text', failure: 'configuration' }
+    let instance: Awaited<ReturnType<typeof draft>>
+    try {
+      instance = await draft(providerId, config)
+    }
+    catch {
+      return { ok: false, scope: 'text', failure: 'configuration' }
+    }
+    try {
+      try {
+        if (!('chat' in instance.provider) || typeof instance.provider.chat !== 'function')
+          return { ok: false, scope: 'text', failure: 'unsupported' }
+        const response = await generateText({
+          ...instance.provider.chat(modelId),
+          messages: [{ role: 'user', content: 'Reply with OK.' }],
+          // Token-limit parameter names vary between services. Let the adapter
+          // choose its defaults rather than rejecting a valid custom model.
+          abortSignal: AbortSignal.timeout(15000),
+        })
+        return response.text?.trim()
+          ? { ok: true, scope: 'text' }
+          : { ok: false, scope: 'text', failure: 'empty' }
+      }
+      finally {
+        await dispose(instance.provider)
+      }
+    }
+    catch (error) {
+      // Rejection can mean address, credential OR model: never guess from a body.
+      return { ok: false, scope: 'text', failure: error instanceof TypeError ? 'endpoint' : 'request' }
+    }
+  }
+
+  return { discover, probe }
 }

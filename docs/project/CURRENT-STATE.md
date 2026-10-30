@@ -13,6 +13,24 @@ commit. Registra **estado**, não narrativa: relatório de rodada vai para
 
 ## 0. Estado agora
 
+**Modelos livres em 29/10/2026:** removida coerção de IDs fora do catálogo no
+editor de serviço/modelo. Principal e reserva aceitam IDs manuais; sugestões
+locais e descobertas são opcionais, com estados pt-BR/en, debounce, deduplicação
+e descarte de respostas antigas. Chaves de rascunho/vault continuam transitórias.
+Teste de conexão agora envia o modelo escolhido em uma requisição de **texto**,
+sem exigir listagem; não aprova ferramentas ou imagem. Salvar ativa a preferência
+pelo mecanismo existente e preserva campos opcionais do documento (`brain` e
+`setup` eram descartados pelo handler anterior, reproduzido antes da correção).
+**PASS automatizado:** stores/lia 365, browser 11, persistência/lifecycle 11;
+lint de 13 arquivos, vue-tsc, build i18n e build Stage. Sem alteração no runtime
+compartilhado Stage UI, dependências ou schema. **NÃO EXECUTADO:** serviço/modelo
+real, reinício instalado e gate Windows completo; nenhuma chamada externa nesta
+rodada. Seis Core preexistentes preservados; baseline funcional inalterado.
+Evidências e lista de arquivos: `docs/product/MODELOS-LIVRES-2026-10-29.md`.
+**Próximo passo desta entrega:** gate Windows com serviço autorizado e limites
+explícitos; rotas Brain por envio continuam tendo precedência quando configuradas.
+Não retomar remoção AIRI nem alterar políticas de roteamento nesta entrega.
+
 **Governança de arquitetura em 28/10/2026:** `AGENTS.md` ganhou a **§99 —
 Independência arquitetural do AIRI**, que passa a ser a direção permanente e
 prevalece sobre qualquer documento anterior. A Lia é o produto; o AIRI é

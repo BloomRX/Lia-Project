@@ -5,7 +5,8 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { toast } from 'vue-sonner'
 
-import { curatedModelsFor, isModelInCatalog, LIA_CHAT_PROVIDER_OPTIONS, recommendedModelFor, useLiaProviderStore } from '../stores/lia/provider'
+import { useLiaModelDiscovery } from '../stores/lia/model-discovery'
+import { curatedModelsFor, LIA_CHAT_PROVIDER_OPTIONS, useLiaProviderStore } from '../stores/lia/provider'
 
 const props = withDefaults(defineProps<{
   /** 'onboarding' (first run: must test + conclude) or 'manage' (later edits). */
@@ -55,19 +56,23 @@ const isOnboarding = () => props.mode === 'onboarding'
 const primaryOption = () => LIA_CHAT_PROVIDER_OPTIONS.find(option => option.id === providerId.value)
 const needsBaseUrl = () => primaryOption()?.requiresBaseUrl === true
 
-// Model options follow the selected provider (dropdown, never a free "model id"
-// field). Both the primary and the fallback selectors resolve through the same
-// curated catalog, so switching provider always refreshes the options and any
-// model that is no longer offered is replaced by a valid default.
-const primaryModelOptions = computed(() => curatedModelsFor(providerId.value))
-const fallbackModelOptions = computed(() => curatedModelsFor(fallbackProviderId.value))
-
-/** Returns `modelId` when it is still offered, otherwise the recommended one. */
-function coerceModel(pid: string, modelId: string): string {
-  if (isModelInCatalog(pid, modelId))
-    return modelId
-  return recommendedModelFor(pid) ?? ''
+const primaryDiscovery = useLiaModelDiscovery(computed(() => ({
+  providerId: providerId.value,
+  baseUrl: baseUrl.value || undefined,
+  apiKey: apiKey.value || undefined,
+})), args => store.discoverModels(args))
+const fallbackDiscovery = useLiaModelDiscovery(computed(() => ({
+  providerId: fallbackEnabled.value ? fallbackProviderId.value : '',
+  baseUrl: fallbackProviderId.value === providerId.value ? baseUrl.value || undefined : undefined,
+  apiKey: fallbackProviderId.value === providerId.value ? apiKey.value || undefined : fallbackApiKey.value || undefined,
+})), args => store.discoverModels(args))
+function suggestions(pid: string, discovered: Array<{ id: string, label: string }>) {
+  return [...new Map([...curatedModelsFor(pid), ...discovered].map(model => [model.id, model])).values()]
 }
+const primaryModelOptions = computed(() => suggestions(providerId.value, primaryDiscovery.models.value))
+const fallbackModelOptions = computed(() => suggestions(fallbackProviderId.value, fallbackDiscovery.models.value))
+const testFailure = ref('')
+
 const primaryNeedsKey = () => store.providerNeedsKey(providerId.value)
 
 // Official API-key pages for the currently selected primary/fallback providers
@@ -95,10 +100,10 @@ async function refreshKeyState() {
     keySaved.value = false
     return
   }
-  keySaved.value = store.providerNeedsKey(providerId.value) && await store.hasApiKey(providerId.value)
-  if (keySaved.value) {
-    apiKey.value = ''
-  }
+  const id = providerId.value
+  const saved = store.providerNeedsKey(id) && await store.hasApiKey(id)
+  if (id === providerId.value)
+    keySaved.value = saved
 }
 
 async function refreshFallbackKeyState() {
@@ -112,13 +117,12 @@ async function refreshFallbackKeyState() {
     fallbackKeySaved.value = fallbackProviderId.value === providerId.value
       ? await store.hasApiKey(providerId.value)
       : true
-    fallbackApiKey.value = ''
     return
   }
-  fallbackKeySaved.value = await store.hasApiKey(fallbackProviderId.value)
-  if (fallbackKeySaved.value) {
-    fallbackApiKey.value = ''
-  }
+  const id = fallbackProviderId.value
+  const saved = await store.hasApiKey(id)
+  if (id === fallbackProviderId.value)
+    fallbackKeySaved.value = saved
 }
 
 async function loadExisting() {
@@ -126,10 +130,7 @@ async function loadExisting() {
   const preferred = config.preferred
   if (preferred?.providerId) {
     providerId.value = preferred.providerId
-    // Preserve the persisted model only while it is still offered for this
-    // provider; otherwise fall back to the provider's recommended model (never
-    // a stale/invalid id and never an empty prompt to type one).
-    modelId.value = coerceModel(providerId.value, preferred.modelId ?? '')
+    modelId.value = preferred.modelId ?? ''
   }
   if (config.fallbackEnabled !== undefined) {
     fallbackEnabled.value = config.fallbackEnabled
@@ -140,10 +141,10 @@ async function loadExisting() {
   const fb = config.fallback?.[0]
   if (fb?.providerId) {
     fallbackProviderId.value = fb.providerId
-    fallbackModelId.value = coerceModel(fallbackProviderId.value, fb.modelId ?? '')
+    fallbackModelId.value = fb.modelId ?? ''
   }
   else if (fb?.modelId) {
-    fallbackModelId.value = coerceModel(fallbackProviderId.value, fb.modelId)
+    fallbackModelId.value = fb.modelId
   }
   await refreshKeyState()
   await refreshFallbackKeyState()
@@ -151,6 +152,7 @@ async function loadExisting() {
 
 function invalidateTest() {
   lastTestOk.value = false
+  testFailure.value = ''
 }
 
 /** Persists each provider's own key when one was entered for it. */
@@ -182,12 +184,12 @@ function buildConfig(): LiaProviderChatConfig {
   if (fallbackEnabled.value && fallbackProviderId.value) {
     fallback.push({
       providerId: fallbackProviderId.value,
-      modelId: fallbackModelId.value.trim() || undefined,
+      modelId: fallbackModelId.value || undefined,
     })
   }
   const preferred: LiaProviderChatTarget = {
     providerId: providerId.value,
-    modelId: modelId.value.trim(),
+    modelId: modelId.value,
   }
   return {
     ...current,
@@ -207,14 +209,21 @@ async function save() {
     toast.error(tt('errors.modelRequired'))
     return false
   }
+  if (fallbackEnabled.value && fallbackProviderId.value && !fallbackModelId.value.trim()) {
+    toast.error(tt('errors.modelRequired'))
+    return false
+  }
   busy.value = true
   try {
     if (!await storeKeys())
       return false
     await store.persistConfig(buildConfig())
     await store.ensureProviderRecord(providerId.value, baseUrl.value.trim() || undefined)
+    await store.activatePreferred()
     apiKey.value = ''
     fallbackApiKey.value = ''
+    primaryDiscovery.refresh()
+    fallbackDiscovery.refresh()
     keySaved.value = await store.hasApiKey(providerId.value)
     if (fallbackEnabled.value && fallbackProviderId.value) {
       await refreshFallbackKeyState()
@@ -238,6 +247,7 @@ async function testOne(args: {
   baseUrl?: string
 }): Promise<boolean> {
   const result = await store.testConnection(args)
+  testFailure.value = result.ok ? '' : tt(`connection.${result.failure ?? 'request'}`)
   return result.ok
 }
 
@@ -250,24 +260,24 @@ async function testConnection() {
   try {
     let allOk = await testOne({
       providerId: providerId.value,
-      modelId: modelId.value.trim(),
+      modelId: modelId.value,
       apiKey: apiKey.value.trim() || undefined,
       baseUrl: baseUrl.value.trim() || undefined,
     })
     if (!allOk) {
-      toast.error(tt('connection.failed'))
+      toast.error(testFailure.value)
     }
 
     // A distinct, key-requiring fallback is validated separately with its own key.
     if (allOk && fallbackEnabled.value && fallbackProviderId.value && fallbackProviderId.value !== providerId.value) {
       const fbOk = await testOne({
         providerId: fallbackProviderId.value,
-        modelId: fallbackModelId.value.trim() || undefined,
+        modelId: fallbackModelId.value || undefined,
         apiKey: fallbackApiKey.value.trim() || undefined,
       })
       if (!fbOk) {
         allOk = false
-        toast.error(tt('connection.fallbackFailed'))
+        toast.error(testFailure.value)
       }
     }
 
@@ -339,29 +349,23 @@ async function removeProvider() {
   }
 }
 
-watch(providerId, () => {
-  if (!needsBaseUrl()) {
-    baseUrl.value = ''
-  }
-  // Provider change refreshes the model options: keep the current model only if
-  // it is still offered by the new provider, otherwise auto-select a valid one.
-  modelId.value = coerceModel(providerId.value, modelId.value)
+watch(providerId, (id) => {
+  baseUrl.value = store.providerBaseUrl(id) ?? ''
+  apiKey.value = ''
+  keySaved.value = false
+  // A provider change never rewrites a model ID, even if it is absent from its suggestions.
   void refreshKeyState()
   void refreshFallbackKeyState()
   invalidateTest()
 })
 
 watch([fallbackEnabled, fallbackProviderId], () => {
-  if (fallbackEnabled.value && fallbackProviderId.value) {
-    fallbackModelId.value = coerceModel(fallbackProviderId.value, fallbackModelId.value)
-  }
+  fallbackApiKey.value = ''
   void refreshFallbackKeyState()
   invalidateTest()
 })
 
-watch([modelId, fallbackModelId, apiKey, fallbackApiKey], () => {
-  invalidateTest()
-})
+watch([modelId, fallbackModelId, apiKey, fallbackApiKey, baseUrl], invalidateTest)
 
 onMounted(() => {
   void loadExisting()
@@ -386,6 +390,7 @@ onMounted(() => {
         </label>
         <select
           v-model="providerId"
+          :disabled="busy"
           class="w-full border border-neutral-300 rounded-lg bg-white px-2.5 py-2 text-sm text-neutral-800 outline-none dark:border-neutral-600 focus:border-primary-400 dark:bg-neutral-800 dark:text-neutral-100"
         >
           <option value="" disabled>
@@ -401,21 +406,30 @@ onMounted(() => {
         <label class="text-xs text-neutral-600 font-medium dark:text-neutral-300">
           {{ tt('fields.model.label') }}
         </label>
-        <!-- Model is a dropdown driven by the selected provider (see the primary
-             provider <select> above). The user only ever picks a friendly name;
-             the technical model id is the option's value. -->
-        <select
+        <input
+          id="lia-model"
           v-model="modelId"
-          :disabled="!providerId || primaryModelOptions.length === 0"
+          list="lia-model-suggestions"
+          :disabled="!providerId || busy"
+          :placeholder="tt('fields.model.placeholder')"
+          :aria-label="tt('fields.model.label')"
+          aria-describedby="lia-model-help"
           class="w-full border border-neutral-300 rounded-lg bg-white px-2.5 py-2 text-sm text-neutral-800 outline-none dark:border-neutral-600 focus:border-primary-400 dark:bg-neutral-800 dark:text-neutral-100 disabled:opacity-60"
         >
-          <option value="" disabled>
-            {{ tt('fields.model.placeholder') }}
-          </option>
+        <datalist id="lia-model-suggestions">
           <option v-for="option in primaryModelOptions" :key="option.id" :value="option.id">
             {{ option.label }}
           </option>
-        </select>
+        </datalist>
+        <p id="lia-model-help" class="text-xs text-neutral-500 dark:text-neutral-400">
+          {{ tt('discovery.manual') }}
+        </p>
+        <p role="status" class="text-xs text-neutral-500 dark:text-neutral-400">
+          {{ tt(`discovery.${primaryDiscovery.state.value === 'ready' && primaryDiscovery.models.value.length === 0 ? 'empty' : primaryDiscovery.state.value}`) }}
+        </p>
+        <button type="button" class="self-start text-xs text-primary-600 dark:text-primary-400" :disabled="!providerId || primaryDiscovery.state.value === 'loading' || busy" @click="primaryDiscovery.refresh">
+          {{ tt('discovery.refresh') }}
+        </button>
       </div>
 
       <div v-if="needsBaseUrl()" class="flex flex-col gap-1">
@@ -424,6 +438,7 @@ onMounted(() => {
         </label>
         <input
           v-model="baseUrl"
+          :disabled="busy"
           type="text"
           :placeholder="tt('fields.endpoint.placeholder')"
           class="w-full border border-neutral-300 rounded-lg bg-white px-2.5 py-2 text-sm text-neutral-800 outline-none dark:border-neutral-600 focus:border-primary-400 dark:bg-neutral-800 dark:text-neutral-100"
@@ -437,6 +452,7 @@ onMounted(() => {
         <div class="relative">
           <input
             v-model="apiKey"
+            :disabled="busy"
             type="password"
             autocomplete="off"
             :placeholder="keySaved ? tt('fields.key.replace') : tt('fields.key.placeholder')"
@@ -462,7 +478,7 @@ onMounted(() => {
 
       <div class="flex items-center justify-between gap-2 rounded-lg bg-neutral-100/60 px-3 py-2 dark:bg-white/5">
         <label class="flex items-center gap-2 text-sm text-neutral-700 dark:text-neutral-200">
-          <input v-model="fallbackEnabled" type="checkbox" class="size-4 accent-primary-500">
+          <input v-model="fallbackEnabled" :disabled="busy" type="checkbox" class="size-4 accent-primary-500">
           {{ tt('fallback.label') }}
         </label>
         <span class="text-[10px] text-neutral-400 dark:text-neutral-500">{{ tt('fallback.hint') }}</span>
@@ -474,6 +490,7 @@ onMounted(() => {
         </label>
         <select
           v-model="fallbackProviderId"
+          :disabled="busy"
           class="w-full border border-neutral-300 rounded-lg bg-white px-2.5 py-2 text-sm text-neutral-800 outline-none dark:border-neutral-600 focus:border-primary-400 dark:bg-neutral-800 dark:text-neutral-100"
         >
           <option value="" disabled>
@@ -489,19 +506,23 @@ onMounted(() => {
         <label class="text-xs text-neutral-600 font-medium dark:text-neutral-300">
           {{ tt('fields.fallbackModel.label') }}
         </label>
-        <!-- Fallback model is a dropdown mirroring the primary one. -->
-        <select
+        <input
+          id="lia-fallback-model"
           v-model="fallbackModelId"
-          :disabled="fallbackModelOptions.length === 0"
+          list="lia-fallback-model-suggestions"
+          :disabled="busy"
+          :aria-label="tt('fields.fallbackModel.label')"
+          :placeholder="tt('fields.model.placeholder')"
           class="w-full border border-neutral-300 rounded-lg bg-white px-2.5 py-2 text-sm text-neutral-800 outline-none dark:border-neutral-600 focus:border-primary-400 dark:bg-neutral-800 dark:text-neutral-100 disabled:opacity-60"
         >
-          <option value="" disabled>
-            {{ tt('fields.model.placeholder') }}
-          </option>
+        <datalist id="lia-fallback-model-suggestions">
           <option v-for="option in fallbackModelOptions" :key="option.id" :value="option.id">
             {{ option.label }}
           </option>
-        </select>
+        </datalist>
+        <p role="status" class="text-xs text-neutral-500 dark:text-neutral-400">
+          {{ tt(`discovery.${fallbackDiscovery.state.value === 'ready' && fallbackDiscovery.models.value.length === 0 ? 'empty' : fallbackDiscovery.state.value}`) }}
+        </p>
       </div>
 
       <!-- Separate key field ONLY when the fallback is a DIFFERENT key-requiring provider. -->
@@ -512,6 +533,7 @@ onMounted(() => {
         <div class="relative">
           <input
             v-model="fallbackApiKey"
+            :disabled="busy"
             type="password"
             autocomplete="off"
             :placeholder="fallbackKeySaved ? tt('fields.key.replace') : tt('fields.key.placeholder')"
@@ -541,6 +563,12 @@ onMounted(() => {
     </div>
 
     <div class="flex flex-wrap items-center gap-2 border-t border-neutral-200/70 pt-3 dark:border-neutral-700/70">
+      <p v-if="testFailure" role="alert" class="w-full text-xs text-red-600 dark:text-red-400">
+        {{ testFailure }}
+      </p>
+      <p v-if="lastTestOk && !isOnboarding()" role="status" class="w-full text-xs text-green-600 dark:text-green-400">
+        {{ tt('connection.ok') }}
+      </p>
       <template v-if="isOnboarding()">
         <button
           type="button"

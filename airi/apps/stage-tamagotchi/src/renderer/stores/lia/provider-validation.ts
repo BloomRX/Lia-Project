@@ -1,6 +1,11 @@
 import { useProviderStore } from '@proj-airi/stage-ui/stores/providers/provider'
 
 /**
+ * E3 historical validator boundary retained unchanged for conformance.
+ * The model editor now uses the explicit draft probe in provider-runtime.ts;
+ * these validators may list models or ping another model and cannot approve
+ * the user's selected ID. The description below records the E3 extraction.
+ *
  * The Lia's own boundary for provider *validation* (E3).
  *
  * Why this file exists

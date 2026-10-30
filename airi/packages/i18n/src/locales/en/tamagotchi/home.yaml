@@ -58,7 +58,7 @@ provider:
       placeholder: 'Provider'
     model:
       label: 'Model'
-      placeholder: 'Select a model'
+      placeholder: 'Choose a suggestion or enter an ID'
     endpoint:
       label: 'Endpoint'
       placeholder: 'Base URL (endpoint)'
@@ -88,9 +88,23 @@ provider:
   saved: 'Provider saved'
   removed: 'Provider removed'
   connection:
-    ok: 'Connection OK'
+    ok: 'The model answered the text test. Images and tools were not verified.'
+    configuration: 'Check the service, address and model ID.'
+    endpoint: 'Could not reach the service. Check the address and connection.'
+    request: 'The service did not complete the test. Check the key, model and compatibility.'
+    empty: 'The service returned no text. Retry or choose another model.'
+    unsupported: 'This service does not offer a text test. Manual configuration remains available.'
     failed: 'Connection failed. Check the provider, model and key.'
     fallbackFailed: 'Fallback connection failed. Check its provider, model and key.'
+  discovery:
+    manual: 'Suggestions are optional. You can enter an ID accepted by your service.'
+    idle: 'Select a service to find suggestions.'
+    loading: 'Finding models…'
+    ready: 'Suggestions received. This does not confirm model execution or capabilities.'
+    empty: 'The service returned no suggestions. Enter the model ID.'
+    unsupported: 'This service does not list models. Enter the ID manually.'
+    error: 'Could not find models. You can enter the ID and continue.'
+    refresh: 'Refresh suggestions'
   errors:
     providerRequired: 'Select a provider first.'
     modelRequired: 'Select a model.'

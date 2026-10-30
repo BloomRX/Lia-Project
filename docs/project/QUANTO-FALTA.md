@@ -11,6 +11,14 @@ Fonte: [`CURRENT-STATE.md`](CURRENT-STATE.md) §0 e §5, medido em
 
 ## Onde o projeto está
 
+29/10: editor aceita IDs livres de modelo principal/reserva, preservados ao editar,
+salvar, reabrir e trocar serviço. Descoberta usa rascunho/vault sem persistir chaves;
+falha não bloqueia manual. Sonda envia o ID escolhido e só aprova texto, sem afirmar
+compatibilidade de ferramentas/imagem. Handler de salvar preserva `brain`/`setup`.
+Stores 365, browser 11, persistência/lifecycle 11, lint/typecheck/builds PASS
+automatizados. Rede real, reinício instalado e gate Windows completo NÃO EXECUTADOS;
+fase 8.0D/baseline mantidos. [Evidências](../product/MODELOS-LIVRES-2026-10-29.md).
+
 28/10: Home ganhou **Encerrar conversa**, progresso, sucesso confirmado e erro
 com retry. Launcher 247 PASS/2 skips, browser Home 7 PASS, lint/typechecks/build
 PASS. Windows com Launcher/IPC reais e processo controlado confirmou o controle

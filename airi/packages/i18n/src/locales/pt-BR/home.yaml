@@ -58,7 +58,7 @@ provider:
       placeholder: 'Provedor'
     model:
       label: 'Modelo'
-      placeholder: 'Selecione um modelo'
+      placeholder: 'Escolha uma sugestão ou digite o ID'
     endpoint:
       label: 'Endpoint'
       placeholder: 'URL base (endpoint)'
@@ -88,9 +88,23 @@ provider:
   saved: 'Provider salvo'
   removed: 'Provider removido'
   connection:
-    ok: 'Conexão OK'
+    ok: 'O modelo respondeu ao teste de texto. Imagens e ferramentas não foram verificadas.'
+    configuration: 'Confira o serviço, o endereço e o ID do modelo.'
+    endpoint: 'Não foi possível acessar o serviço. Confira o endereço e a conexão.'
+    request: 'O serviço não concluiu o teste. Confira a chave, o modelo e a compatibilidade.'
+    empty: 'O serviço respondeu sem texto. Tente novamente ou escolha outro modelo.'
+    unsupported: 'Este serviço não oferece o teste de texto. A configuração manual continua disponível.'
     failed: 'Falha na conexão. Verifique o provider, o modelo e a chave.'
     fallbackFailed: 'Falha na conexão do fallback. Verifique o provider, o modelo e a chave do fallback.'
+  discovery:
+    manual: 'Sugestões são opcionais. Você pode digitar o ID aceito pelo seu serviço.'
+    idle: 'Selecione um serviço para buscar sugestões.'
+    loading: 'Buscando modelos…'
+    ready: 'Sugestões recebidas. Isso não confirma execução ou capacidades do modelo.'
+    empty: 'O serviço não retornou sugestões. Digite o ID do modelo.'
+    unsupported: 'Este serviço não lista modelos. Digite o ID manualmente.'
+    error: 'Não foi possível buscar modelos. Você pode digitar o ID e continuar.'
+    refresh: 'Atualizar sugestões'
   errors:
     providerRequired: 'Selecione um provider primeiro.'
     modelRequired: 'Selecione um modelo.'

@@ -405,6 +405,12 @@ Avoid normal-mode jargon such as:
 - backend implementation;
 - raw model IDs unless needed.
 
+Model configuration (29/10/2026): suggestions are optional. The model field must
+also accept an editable ID and preserve it across edits, provider changes and
+reloads. Discovery failure keeps manual entry available. Discovery does not
+confirm capabilities; a text probe must explicitly state that images and tools
+were not verified. Labels and feedback must exist in pt-BR and English.
+
 ### Perception
 
 Typical cards:

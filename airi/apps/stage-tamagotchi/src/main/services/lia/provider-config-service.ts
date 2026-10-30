@@ -36,6 +36,7 @@ export function registerLiaProviderConfigBridge(params: {
     const current = liaProductConfig.get() ?? defaultLiaProductConfig
     const provider = current.provider ?? {}
     liaProductConfig.update({
+      ...current,
       schemaVersion: current.schemaVersion ?? defaultLiaProductConfig.schemaVersion,
       persona: current.persona ?? {},
       // The persisted shape (valibot output: fallback defaulted to []) and the
