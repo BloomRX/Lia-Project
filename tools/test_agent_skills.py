@@ -27,6 +27,7 @@ SKILLS = ROOT / '.agents' / 'skills'
 REQUIRED = {
     'airi-upstream-integration',
     'lia-agent-evaluation',
+    'lia-agent-orchestration',
     'lia-regression-investigation',
     'lia-release-gate',
     'lia-test-discipline',
@@ -45,6 +46,24 @@ ALLOWED_KEYS = {
 
 #: `name`: 1-64 caracteres, minusculas, digitos e hifen simples.
 NAME_PATTERN = re.compile(r'^[a-z0-9]+(-[a-z0-9]+)*$')
+
+#: Orcamento de descoberta: as `description` de TODAS as skills sao carregadas
+#: em toda sessao, so para o agente decidir qual abrir. O documento de manutencao
+#: (docs/project/AGENT-SKILLS.md, secao 4) registra a regra: acima de ~2% da
+#: janela o runner encurta descricoes e pode omitir skills - o pior modo de falha
+#: possivel, porque nada quebra e a skill simplesmente deixa de existir.
+#:
+#: Medido em 30/10/2026, depois da entrada de `lia-agent-orchestration`: 22
+#: skills, 5396 caracteres de descricao (1227 tokens na regua o200k_base).
+#: O teto e ~20% acima disso: da para acrescentar algumas skills antes de a
+#: decisao virar consciente, e nao tanto que a degradacao chegue sem aviso.
+#: Nao e economia de token: e o limite que impede a descoberta de se degradar
+#: em silencio.
+DESCRIPTION_BUDGET_CHARS = 6500
+
+#: Indice canonico que precisa citar toda skill versionada. Um diretorio que
+#: ninguem indexa e uma skill que o agente descobre e o time nao sabe que existe.
+CATALOG = ROOT / 'docs' / 'architecture' / 'AGENT-SKILLS-CATALOG.md'
 
 PLACEHOLDERS = re.compile(r'\b(TODO|TBD|CHANGEME|FIXME|lorem ipsum|YOUR_[A-Z]+)\b',
                           re.IGNORECASE)
@@ -134,6 +153,31 @@ class AgentSkillsTests(unittest.TestCase):
                 leftover = PLACEHOLDERS.search(text)
                 self.assertIsNone(leftover,
                                   f'{directory.name}: placeholder esquecido {leftover!r}')
+
+    def test_discovery_budget_is_respected(self):
+        """Somar descricao de skill nova nao pode degradar a descoberta de
+        todas as outras. O teto e do repositorio, nao do runner."""
+        total = 0
+        for directory in self.skills():
+            front, _body, _ = parse_skill(directory / 'SKILL.md')
+            total += len(front.get('description', ''))
+
+        self.assertLessEqual(
+            total, DESCRIPTION_BUDGET_CHARS,
+            f'descricoes somam {total} caracteres, acima do orcamento '
+            f'de {DESCRIPTION_BUDGET_CHARS} de docs/project/AGENT-ORCHESTRATION.md secao 7')
+
+    def test_every_skill_is_in_the_catalog(self):
+        """O catalogo e o indice que um humano le. Skill fora dele fica
+        invisivel para quem revisa, mesmo funcionando para o agente."""
+        self.assertTrue(CATALOG.is_file(), f'{CATALOG} nao existe')
+        catalog = CATALOG.read_text(encoding='utf-8')
+        for directory in self.skills():
+            with self.subTest(skill=directory.name):
+                # assertTrue com a mensagem curta: assertIn despejaria o
+                # catalogo inteiro no relatorio de falha.
+                self.assertTrue(f'`{directory.name}`' in catalog,
+                                f'{directory.name}: ausente de docs/architecture/AGENT-SKILLS-CATALOG.md')
 
     def test_referenced_docs_exist(self):
         """Uma skill que aponta para um documento inexistente manda o agente

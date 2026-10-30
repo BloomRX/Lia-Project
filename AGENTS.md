@@ -49,6 +49,11 @@ O tip da branch não é registrado lá: verificar com `git rev-parse HEAD`.
 Este MASTER AGENT PROMPT define como trabalhar; CURRENT-STATE.md define onde o
 projeto está agora.
 
+Quando a tarefa envolver delegar, dividir em etapas, paralelizar agentes ou
+escolher modelo e nível de raciocínio, ler docs/project/AGENT-ORCHESTRATION.md
+(§2 a §5): é o contrato de delegação, propriedade de escrita e economia de
+testes. Tarefa pequena de um arquivo só não precisa — execute.
+
 Não partir de pressuposto próprio sobre o estado do projeto, e não reabrir um
 blocker registrado como encerrado sem evidência nova de regressão.
 

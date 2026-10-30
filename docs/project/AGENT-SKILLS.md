@@ -1,6 +1,17 @@
 # Skills do agente — Lia
 
 Estado: inventário levantado e skills validadas estruturalmente em 21/10/2026.
+
+> **Atualização de 30/10/2026 — leia antes das tabelas abaixo.** Este documento
+> foi escrito quando a raiz tinha **6** skills. Hoje tem **22** (21 da Lia +
+> Alethe). A contagem e as tabelas das seções 1 e 2 ficaram para trás; o índice
+> canônico é `docs/architecture/AGENT-SKILLS-CATALOG.md`, e um teste
+> (`test_every_skill_is_in_the_catalog`) reprova a suíte se uma skill nova não
+> aparecer nele. O que continua válido aqui é o **método**: regra de descoberta
+> (§4), orçamento de descrição e armadilha de manutenção (§8), e a lista de
+> skills avaliadas e não criadas (§1). Não reescrevemos o histórico — a
+> divergência de contagem é a prova de que ele precisa ser conferido, não lido.
+
 Escopo: **infraestrutura do agente**. Nenhuma funcionalidade da Lia foi alterada.
 
 > **O que este documento não afirma.** Não houve execução no Codex: não existe

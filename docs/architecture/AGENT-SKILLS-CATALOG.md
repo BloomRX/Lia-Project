@@ -1,6 +1,6 @@
 # Catálogo de skills de agentes da Lia
 
-Revisão local de 28/10/2026: **21 skills raiz (20 Lia + Alethe), 28 AIRI**.
+Revisão local de 30/10/2026: **22 skills raiz (21 Lia + Alethe), 28 AIRI**.
 Auditoria atual por conteúdo, descoberta, ferramentas e validação real:
 [AGENT-SKILLS-AUDIT.md](AGENT-SKILLS-AUDIT.md). Existência de arquivo não é
 aprovação de runtime. Nenhuma skill upstream foi removida.
@@ -8,6 +8,12 @@ aprovação de runtime. Nenhuma skill upstream foi removida.
 `alethe` v19 coordena CLIs externas; não instala nem prova subagents nativos
 do Arena. Foi descoberta nesta sessão pelo caminho do repositório, sem cópia
 global. Validação executável e limites constam no relatório específico.
+
+`lia-agent-orchestration` entrou em 30/10/2026 e é o contrato operacional curto;
+a política completa, com a matriz de quem controla o quê e a medição de contexto,
+está em [AGENT-ORCHESTRATION](../project/AGENT-ORCHESTRATION.md). Este catálogo é
+verificado pelo teste `test_every_skill_is_in_the_catalog`: skill nova sem linha
+aqui reprova a suíte.
 
 Auditoria por conteúdo das 28 skills encontradas em `airi/.agents/skills/` na branch `arena/01a10290-lia-project`. A meta é que instruções úteis sobrevivam à futura remoção do AIRI, sem copiar regras incompatíveis nem arquivos que dependem de referências ausentes.
 
@@ -39,6 +45,7 @@ Auditoria por conteúdo das 28 skills encontradas em `airi/.agents/skills/` na b
 | `lia-ai-sdk-integration` | SDKs de IA e APIs compatíveis |
 | `lia-eventa-ipc` | Eventa/RPC/IPC |
 | `lia-agent-evaluation` | Avaliação de modelo e ferramentas |
+| `lia-agent-orchestration` | Delegação com contexto mínimo, faixa de capacidade, propriedade de escrita e economia de testes |
 | `lia-voice-diagnostics` | Diagnóstico de voz |
 | `lia-ui-quality-review` | UX, acessibilidade e estados de interface |
 | `lia-security-review` | Segurança e permissões |
