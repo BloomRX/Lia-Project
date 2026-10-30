@@ -16,6 +16,7 @@ import {
   electronLiaSecretHas,
   electronLiaSecretSet,
 } from '../../../shared/eventa'
+import { createNativeProviderRuntime } from '../../services/lia/native-provider-runtime'
 import { useLiaProviderActivation } from './provider-activation'
 import { isUsableWithoutAiriSession } from './provider-auth-policy'
 import { useLiaProviderConfigFacade } from './provider-config-facade'
@@ -264,6 +265,11 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
   const secretGet = useElectronEventaInvoke(electronLiaSecretGet)
   const secretDelete = useElectronEventaInvoke(electronLiaSecretDelete)
 
+  const nativeRuntime = createNativeProviderRuntime({
+    readConfig: id => providerConfig.getConfig(id),
+    resolveCredential: resolveApiKey,
+  })
+
   const loadedConfig = ref<LiaProviderChatConfig | undefined>(undefined)
 
   async function refreshConfig(): Promise<LiaProviderChatConfig> {
@@ -361,7 +367,9 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
       const pending = discoveryPending.get(requestKey)
       if (pending)
         return await pending
-      const request = providerRuntime.discover(args.providerId, config)
+      const request = nativeRuntime.owns(args.providerId)
+        ? nativeRuntime.discover(args.providerId, config)
+        : providerRuntime.discover(args.providerId, config)
       discoveryPending.set(requestKey, request)
       try {
         return await request
@@ -383,7 +391,10 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
     baseUrl?: string
   }) {
     try {
-      const result = await providerRuntime.probe(args.providerId, args.modelId ?? '', await draftConfig(args))
+      const config = await draftConfig(args)
+      const result = nativeRuntime.owns(args.providerId)
+        ? await nativeRuntime.probe(args.providerId, args.modelId ?? '', config)
+        : await providerRuntime.probe(args.providerId, args.modelId ?? '', config)
       return { ...result, message: '' }
     }
     catch {
@@ -397,6 +408,7 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
       return
     // Drop any cached provider instance so the next build re-resolves the vault
     // key (in case the user updated it since the last build).
+    nativeRuntime.dispose(target.providerId)
     await providerRuntime.dispose(target.providerId)
     await ensureProviderRecord(target.providerId, baseUrl)
     // Watcher flushes synchronously on provider change and clears the model, so
@@ -528,6 +540,10 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
    * Called once by the Lia Home (main window). Idempotent.
    */
   function registerRuntimeExtensions() {
+    // Leader-local, idempotent bridge. Only the migrated transport uses the Lia
+    // registry/cache/HTTP runtime. Every other target keeps its prior executor.
+    providerRuntime.installChatFactory(nativeRuntime.getChatProvider)
+
     // Supply the per-use vault apiKey when the provider runtime builds an
     // instance for a Lia-configured provider. Absent a stored secret it returns
     // undefined and behaviour is unchanged.

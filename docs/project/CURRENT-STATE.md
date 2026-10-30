@@ -13,6 +13,26 @@ commit. Registra **estado**, não narrativa: relatório de rodada vai para
 
 ## 0. Estado agora
 
+**Runtime próprio de providers em 30/10/2026 — primeira fatia:** implementados
+contratos, registry, cache, HTTP/SSE, descoberta, texto, cancelamento, prazo e
+descarte em `lia/core/src/providers/`, sem imports AIRI/SDK. O ID genérico
+persistido `openai-compatible`, com endpoint explícito, usa esse transporte no
+chat real via ponte local do host; não chama a fábrica AIRI nesse ramo. Teste
+com Core/xsAI reais comprovou texto/espaços e duas rodadas de ferramenta com
+credencial por requisição; rede simulada. Servidor HTTP local real confirmou
+API nativa sem SDK. Corrida de factory antiga após troca de endereço corrigida
+com contraprova. **PASS:** núcleo 56, stores 371, UI Chromium 11, Web Platform
+nativa Chromium 2, lint, typechecks e build Stage. Seis Core preexistentes
+preservados e excluídos da entrega. Baseline Windows inalterado.
+**Independência permanece parcial:** Core/xsAI, dispatcher/config/ativação do
+Stage, outros IDs e voz/visão ainda legados; nenhum Stage UI compartilhado foi
+alterado. Modelos reais, janela Electron neste fluxo, hardware e instalador
+**NÃO EXECUTADOS**. Relatório/matriz:
+`docs/architecture/LIA-PROVIDER-RUNTIME-2026-10-30.md`.
+**Próximo estágio:** configuração própria de transportes, preservando os registros
+antigos, e adapters de protocolos adicionais com fixtures antes de ampliar a
+migração. Não remover AIRI nem declarar o chat inteiro independente.
+
 **Modelos livres em 29/10/2026:** removida coerção de IDs fora do catálogo no
 editor de serviço/modelo. Principal e reserva aceitam IDs manuais; sugestões
 locais e descobertas são opcionais, com estados pt-BR/en, debounce, deduplicação

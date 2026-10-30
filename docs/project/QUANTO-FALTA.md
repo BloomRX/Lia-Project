@@ -11,6 +11,15 @@ Fonte: [`CURRENT-STATE.md`](CURRENT-STATE.md) §0 e §5, medido em
 
 ## Onde o projeto está
 
+30/10: primeira fatia do runtime próprio executa o transporte do alvo genérico
+com endpoint explícito, com registry/cache/HTTP/SSE/credenciais da Lia. Núcleo
+nativo 56, stores 371, UI browser 11 e Web Platform browser 2 PASS; lint,
+typechecks e build PASS. O loop de ferramentas ainda é Core/xsAI, exercitado
+com rede simulada. Servidor HTTP local foi testado sem SDK. Outros providers,
+config/dispatcher/ativação, voz/visão e Stage continuam legados; remoção AIRI e
+independência total não concluídas. Gates reais de modelo/Electron/hardware e
+instalador NÃO EXECUTADOS. [Matriz e evidências](../architecture/LIA-PROVIDER-RUNTIME-2026-10-30.md).
+
 29/10: editor aceita IDs livres de modelo principal/reserva, preservados ao editar,
 salvar, reabrir e trocar serviço. Descoberta usa rascunho/vault sem persistir chaves;
 falha não bloqueia manual. Sonda envia o ID escolhido e só aprova texto, sem afirmar

@@ -1,5 +1,7 @@
 import type { ComposerTranslation } from 'vue-i18n'
 
+import type { NativeChatProvider } from '../../services/lia/native-provider-runtime'
+
 import { useProviderStore } from '@proj-airi/stage-ui/stores/providers/provider'
 import { generateText } from '@xsai/generate-text'
 import { listModels as queryModels } from '@xsai/model'
@@ -15,6 +17,8 @@ import { z } from 'zod'
  * draft or credentials to the shared store, nor reuse its credential-blind list
  * cache. The shared Stage implementation remains untouched. This is the only
  * address for its definitions in the Lia model-selection flow.
+ * These definition-backed operations remain legacy. The migrated generic target
+ * uses lia/core's native runtime; installChatFactory is its temporary host seam.
  */
 
 /**
@@ -81,10 +85,33 @@ export function createLiaProviderRuntime(
  * The import of the shared store lives here and only here for these four
  * operations.
  */
-export function useLiaProviderRuntime(): LiaProviderRuntime & ReturnType<typeof createLiaDraftProviderRuntime> {
+const chatInstallations = new WeakMap<SharedProviderRuntimeStore, () => void>()
+
+export function useLiaProviderRuntime() {
   const source = useProviderStore()
   const { t } = useI18n()
-  return { ...createLiaProviderRuntime(source), ...createLiaDraftProviderRuntime(source, t) }
+  return {
+    ...createLiaProviderRuntime(source),
+    ...createLiaDraftProviderRuntime(source, t),
+    installChatFactory(factory: (providerId: string) => Promise<NativeChatProvider | undefined>) {
+      const installed = chatInstallations.get(source)
+      if (installed)
+        return installed
+      const previous = source.getChatProviderInstance
+      const dispatch: typeof previous = async (providerId, options) => {
+        const native = await factory(providerId)
+        return native ?? previous(providerId, options)
+      }
+      source.getChatProviderInstance = dispatch
+      const uninstall = () => {
+        if (source.getChatProviderInstance === dispatch)
+          source.getChatProviderInstance = previous
+        chatInstallations.delete(source)
+      }
+      chatInstallations.set(source, uninstall)
+      return uninstall
+    },
+  }
 }
 
 export interface LiaModelDiscoveryResult {
