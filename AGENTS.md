@@ -22,7 +22,7 @@ Você está trabalhando diretamente no repository Git do projeto.
 
 Lia é uma aplicação desktop de AI Companion / personagem virtual.
 
-A Lia deve ser uma experiência semelhante a um launcher de jogo:
+A Lia deve ser uma experiência própria, com launcher e Stage independentes da arquitetura de referência:
 
 - fácil de instalar;
 - fácil de configurar;
@@ -33,7 +33,7 @@ A Lia deve ser uma experiência semelhante a um launcher de jogo:
 
 O usuário final não deve precisar entender a infraestrutura técnica que existe por trás da aplicação.
 
-A Lia utilizará o PROJECT AIRI como uma das principais bases tecnológicas/runtime.
+A Lia é um produto independente. AIRI é referência técnica e fonte de estudo, não uma dependência arquitetural permanente. Consulte `docs/BRAND-STANDARDS.md` para as regras comuns de marca e `docs/project/CURRENT-STATE.md` para o estado de desacoplamento validado.
 
 Repository de referência:
 

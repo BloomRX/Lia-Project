@@ -1,6 +1,6 @@
 # Lia-Project
 
-**Lia** — companheira virtual (AI companion) construída sobre a base do [Project AIRI](https://github.com/moeru-ai/airi).
+**Lia** — companheira virtual (AI companion), um produto próprio em processo de desacoplamento técnico. O [Project AIRI](https://github.com/moeru-ai/airi) é mantido como referência e fonte de estudo, não como a arquitetura final obrigatória.
 
 ## Status
 
@@ -9,6 +9,10 @@
 - ✅ **M0-A (bootstrap do AIRI no repositório) documentado** → [`docs/upstream/AIRI-INTEGRATION.md`](docs/upstream/AIRI-INTEGRATION.md) — status: *BOOTSTRAP DOCUMENTED — BUILD NOT VALIDATED IN SANDBOX*
 - 🎯 **Decisão:** fork da versão **`v0.12.0-beta.5`** (a mais recente disponível, mesmo sendo beta — 29/08/2026; tag confirmada upstream → commit `2c1e223c…`), licença MIT, com remote `upstream` para absorver evoluções.
 - 🗺️ **Roadmap:** Fase 0 (análise/arquitetura) → M0 (base/toolchain do AIRI) → Fase 1 (identidade "Lia" + pt-BR) → Fase 2 (corpo/voz: avatar Live2D + TTS/STT) → Fase 3 (habilidades: plugins, memória, integrações) → Fase 4 (distribuição).
+
+## Padrão da marca
+
+Consulte [`docs/BRAND-STANDARDS.md`](docs/BRAND-STANDARDS.md) para identidade, linguagem, nomenclatura e princípios comuns dos produtos Lia.
 
 ## Documentação
 
