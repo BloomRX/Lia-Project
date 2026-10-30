@@ -11,6 +11,18 @@ Fonte: [`CURRENT-STATE.md`](CURRENT-STATE.md) §0 e §5, medido em
 
 ## Onde o projeto está
 
+30/10, Runtime E2E: **PASS Windows real de componentes** em Electron com IPC,
+cofre criptografado e perfil isolado; JSON/SSE, autenticação sintética por serviço,
+erros, cancelamento, timeout padrão, reinício e crash do renderer com encerramento
+limpo. Servidor HTTP local, sem modelo externo e sem Launcher/Stage completo.
+Segundo ID persistido migrado com endereço explícito; registros sem endereço
+mantêm executor legado. Corrigido cancelamento infinito com fonte travada.
+Núcleo 62, stores 377, Chromium 13, lint/typechecks/build Stage PASS. A matriz
+atual e os limites estão em [Runtime E2E](../product/RELEASE-WINDOWS-2026-10-30-RUNTIME-E2E.md).
+Próximo: configuração própria de transportes preservando registros antigos;
+Core/xsAI/configuração/ativação/voz/avatar ainda legados. Release e fase 8.0D
+continuam abertas, baseline inalterado.
+
 30/10: primeira fatia do runtime próprio executa o transporte do alvo genérico
 com endpoint explícito, com registry/cache/HTTP/SSE/credenciais da Lia. Núcleo
 nativo 56, stores 371, UI browser 11 e Web Platform browser 2 PASS; lint,

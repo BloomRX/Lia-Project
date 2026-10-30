@@ -13,6 +13,27 @@ commit. Registra **estado**, não narrativa: relatório de rodada vai para
 
 ## 0. Estado agora
 
+**Runtime E2E em 30/10/2026 — componentes Electron reais:** cofre `safeStorage`,
+IPC Eventa, preload de produção, persistência e transporte próprios exercitados
+em janela Electron 43.4.1 com perfil isolado e servidor HTTP local. **PASS Windows
+real de componentes:** JSON/SSE, descoberta, duas credenciais sintéticas separadas,
+modelo livre, vazio/HTTP/SSE seguros, cancelamento, prazo padrão (30 034 ms),
+reinício com descriptografia e saída inesperada do renderer sem pedido/processo
+remanescente. Não é gate do Launcher/Stage completo nem de modelo externo.
+Corrigida espera infinita quando `cancel()` da fonte nunca resolve: prazo e
+descarte agora continuam ativos e liberam o reader. RED 6 → GREEN 35 casos de
+provider. Migração adicional do ID persistido `lm-studio` com endereço explícito;
+sem endereço preserva executor/default legado, endereço inválido não faz fallback.
+**PASS automatizado:** núcleo 62, stores 377, Chromium 13, lint, typechecks e build
+Stage. Nenhuma chamada externa ou chave real; seis Core preexistentes preservados.
+**Independência parcial:** configuração/ativação/dispatcher, Core/xsAI, outros
+protocolos, voz e avatar continuam necessários. Baseline funcional inalterado.
+Relatório/matriz/roteiro: `docs/product/RELEASE-WINDOWS-2026-10-30-RUNTIME-E2E.md`.
+**Próximo item:** configuração própria de transporte/protocolo com compatibilidade
+dos registros antigos; depois adapter de protocolo adicional com fixtures. Gate
+do Stage completo/serviço externo e instalador continuam **NÃO EXECUTADOS** nesta
+rodada; não remover AIRI nem declarar a release pronta.
+
 **Runtime próprio de providers em 30/10/2026 — primeira fatia:** implementados
 contratos, registry, cache, HTTP/SSE, descoberta, texto, cancelamento, prazo e
 descarte em `lia/core/src/providers/`, sem imports AIRI/SDK. O ID genérico

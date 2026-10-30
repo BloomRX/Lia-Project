@@ -38,10 +38,12 @@ SDK, sem chave. O fetch ignora o destino fornecido pelo SDK e usa o endereço
 validado da instância própria; preserva corpo JSON, ferramentas, partes de imagem
 e opções de transporte. Autenticação e cancelamento são aplicados dentro dele.
 
-O ID persistido `openai-compatible` identifica o alvo migrado nesta fatia. É uma
-compatibilidade com a configuração existente, não um catálogo do núcleo. Outros
-IDs preservam o executor anterior explicitamente. Uma configuração inválida no
-alvo migrado falha com erro seguro, sem fallback oculto para a fábrica antiga.
+Os IDs persistidos `openai-compatible` e `lm-studio` identificam os dois alvos
+migrados. São compatibilidade com a configuração existente, não um catálogo do
+núcleo. O segundo exige endereço explícito; registros históricos sem endereço
+preservam o executor/default legado. Rascunhos explícitos de descoberta/sonda
+usam o runtime próprio. Endereço explícito inválido falha com erro seguro, sem
+fallback oculto para a fábrica antiga. Outros IDs preservam o executor anterior.
 
 Após mudança de endereço, factories antigas são recusadas antes de consultar o
 vault. Isso impede uma rodada tardia de enviar a chave atual ao endereço antigo
@@ -55,6 +57,9 @@ ou de cancelar as operações do endereço novo ao ressuscitar o cache anterior.
   como correção.
 - Timeout e cancelamento abrangem resolução da credencial, fetch e consumo do
   corpo. Descarte aborta operações e remove instâncias.
+- Se a fonte nunca concluir `cancel()`, o prazo e o descarte continuam ativos;
+  o reader é liberado antes de aguardar a limpeza. Erro secundário de limpeza
+  não substitui o erro primário nem expõe a exceção do transporte.
 - SSE exige MIME próprio, UTF-8 válido e eventos limitados a 1 MiB. Envelopes de
   erro são recusados antes de chegar ao SDK; frames normais preservam bytes.
 - Erros contêm somente código fechado e status HTTP opcional. Status é mantido
@@ -73,3 +78,18 @@ Esta implementação não conclui a independência do aplicativo ou a remoção 
 Stage. O próximo passo é definir configuração própria de transporte/protocolo
 para substituir o registro legado sem perder compatibilidade, seguido por
 adapters específicos com fixtures de seus protocolos reais.
+
+## Fronteira Electron validada
+
+O transporte roda no renderer. O main atende configuração e cofre pelos canais
+Eventa existentes; não é um executor de geração novo. O resolver devolve somente
+a chave do escopo solicitado, transitoriamente para montar a requisição. Ela não
+entra na factory, cache, config, localStorage ou erros públicos. Isso preserva o
+modelo de confiança existente; não promete isolamento da chave de todo código
+do renderer nem apagamento verificável de strings pelo coletor de lixo.
+
+O teste reproduzível `scripts/provider-runtime-electron/gate.test.mjs` usa janela
+Electron real, preload compilado, handlers de produção, `safeStorage` real e HTTP
+local autenticado. Perfil e dumps ficam isolados no temporário do Windows; logs
+e captura ficam em `Tests/artifacts/provider-runtime-electron/`. O painel de teste
+não substitui o Stage. [Resultados e limites](../product/RELEASE-WINDOWS-2026-10-30-RUNTIME-E2E.md).

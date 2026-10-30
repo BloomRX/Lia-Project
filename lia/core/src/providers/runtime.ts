@@ -112,13 +112,23 @@ function createSseGuard() {
 function raceAbort<T>(promise: Promise<T>, operation: ActiveOperation): Promise<T> {
   const signal = operation.controller.signal
   return new Promise((resolve, reject) => {
-    if (signal.aborted) {
+    const abort = () => {
+      signal.removeEventListener('abort', abort)
       reject(abortError(operation))
-      return
     }
-    const abort = () => reject(abortError(operation))
-    signal.addEventListener('abort', abort, { once: true })
-    promise.then(resolve, reject).finally(() => signal.removeEventListener('abort', abort))
+    // Observe both outcomes even if cancellation already won. A late transport
+    // rejection must not become an unhandled, potentially sensitive exception.
+    promise.then((value) => {
+      signal.removeEventListener('abort', abort)
+      resolve(value)
+    }, (error) => {
+      signal.removeEventListener('abort', abort)
+      reject(error)
+    })
+    if (signal.aborted)
+      abort()
+    else
+      signal.addEventListener('abort', abort, { once: true })
   })
 }
 
@@ -268,6 +278,13 @@ export class ProviderRuntime {
       operation.controller.signal.removeEventListener('abort', abort)
       operation.finish()
     }
+    const cancelReader = async () => {
+      const pending = reader.cancel()
+      // Cancellation closes pending reads synchronously, but a source's cancel
+      // callback may never settle. Release ownership before awaiting that task.
+      reader.releaseLock()
+      await pending
+    }
     const body = new ReadableStream<Uint8Array>({
       start: (controller) => {
         abort = () => {
@@ -276,7 +293,7 @@ export class ProviderRuntime {
           controller.error(abortError(operation))
           finish()
           // The operation is already failed; cleanup must not leak a raw exception.
-          void reader.cancel().catch(() => {})
+          void cancelReader().catch(() => {})
         }
         operation.controller.signal.addEventListener('abort', abort, { once: true })
         if (operation.controller.signal.aborted)
@@ -307,18 +324,28 @@ export class ProviderRuntime {
           if (!closed) {
             controller.error(error instanceof ProviderError ? error : operation.controller.signal.aborted ? abortError(operation) : new ProviderError('network'))
             finish()
-            void reader.cancel().catch(() => {})
+            operation.controller.abort()
+            // The primary failure is already observable; discard only a
+            // secondary cleanup exception after releasing the reader lock.
+            void cancelReader().catch(() => {})
           }
         }
       },
       cancel: async () => {
-        finish()
+        // The consumer has closed this body; do not error its controller again.
+        // Keep the deadline, caller cancellation and active operation until the
+        // upstream cleanup finishes or is bounded by that same operation.
+        closed = true
+        operation.controller.signal.removeEventListener('abort', abort)
         try {
-          await reader.cancel()
-          reader.releaseLock()
+          await raceAbort(cancelReader(), operation)
         }
         catch {
-          throw new ProviderError('network')
+          throw operation.controller.signal.aborted ? abortError(operation) : new ProviderError('network')
+        }
+        finally {
+          operation.finish()
+          operation.controller.abort()
         }
       },
     })

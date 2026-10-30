@@ -4,6 +4,8 @@ import { ProviderError, ProviderRegistry, ProviderRuntime } from '../../../../..
 
 /** Persisted compatibility ID, not a model/vendor catalogue. Other IDs stay legacy. */
 export const NATIVE_CHAT_PROVIDER_ID = 'openai-compatible'
+/** Existing local-compatible configuration ID; no service address is inferred. */
+export const NATIVE_LOCAL_CHAT_PROVIDER_ID = 'lm-studio'
 
 export interface NativeChatProvider {
   chat: (model: string) => { model: string, baseURL: string, fetch: typeof globalThis.fetch }
@@ -16,10 +18,18 @@ export function createNativeProviderRuntime(options: {
 }) {
   const registry = new ProviderRegistry()
   registry.register({ id: NATIVE_CHAT_PROVIDER_ID, protocol: 'chat-completions' })
+  registry.register({ id: NATIVE_LOCAL_CHAT_PROVIDER_ID, protocol: 'chat-completions' })
   const runtime = new ProviderRuntime(registry, { resolveCredential: options.resolveCredential })
 
-  function owns(providerId: string) {
-    return registry.has(providerId)
+  function owns(providerId: string, draft?: Record<string, unknown>) {
+    if (!registry.has(providerId))
+      return false
+    if (providerId !== NATIVE_LOCAL_CHAT_PROVIDER_ID)
+      return true
+    // Endpoint-less historical local records keep their previous default path.
+    // A supplied but malformed address stays native and fails safely there.
+    const effective = draft ?? options.readConfig(providerId)
+    return typeof effective?.baseUrl === 'string' && effective.baseUrl.trim().length > 0
   }
 
   function configFor(providerId: string, draft = options.readConfig(providerId)): ProviderConfig {

@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; connect-src 'self' http://127.0.0.1:*; style-src 'self'"><title>Lia — Gate Electron local</title></head>
+<body>
+  <h1>Gate de integração Electron</h1>
+  <p>Perfil temporário e servidor local de teste. Este painel não é o Launcher.</p>
+  <label>Serviço <select id="provider"><option value="openai-compatible">Compatível</option><option value="lm-studio">Compatível local</option></select></label>
+  <label>Endereço <input id="endpoint" size="48"></label>
+  <label>Modelo <input id="model" value="custom/Electron:Q4"></label>
+  <button id="json">Executar JSON</button><button id="stream">Executar streaming</button><button id="discover">Descobrir</button><button id="cancel">Cancelar</button>
+  <p id="status" role="status">Preparando</p><pre id="result"></pre>
+  <script type="module" src="./renderer.ts"></script>
+</body>
+</html>

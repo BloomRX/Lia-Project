@@ -231,6 +231,22 @@ function delta(text: string): string {
   return `data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\n`
 }
 
+/** Diagnostic bound only: a broken cleanup must fail instead of hanging this suite. */
+async function settleCleanup<T>(task: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      task,
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error('Cleanup remained pending beyond the operation deadline')), 150)
+      }),
+    ])
+  }
+  finally {
+    clearTimeout(timer)
+  }
+}
+
 describe('Lia streaming, cancellation and lifetime', () => {
   it('streams exact spaces/newlines and a terminal event across arbitrary network boundaries', async () => {
     const wire = `${delta('Olá') + delta(' ') + delta('mundo\n')}data: [DONE]\n\n`
@@ -378,5 +394,90 @@ describe('Lia streaming, cancellation and lifetime', () => {
     await stream.next()
     await stream.return(undefined)
     assert.equal(runtime.activeOperationCount, 0)
+  })
+  it('keeps the operation deadline while upstream body cancellation is pending', async () => {
+    let cancelled = false
+    const source = new ReadableStream<Uint8Array>({
+      cancel() {
+        cancelled = true
+        return new Promise<void>(() => {})
+      },
+    })
+    const { runtime } = setup(async () => new Response(source))
+    const response = await runtime.dispatch({ ...config, timeoutMs: 10 }, request)
+    const cancellation = response.body!.cancel()
+    assert.equal(runtime.activeOperationCount, 1)
+    await errorCode(settleCleanup(cancellation), 'timeout')
+    assert.equal(cancelled, true)
+    assert.equal(runtime.activeOperationCount, 0)
+    assert.equal(source.locked, false)
+  })
+
+  it('disposal settles an already pending body cancellation', async () => {
+    const source = new ReadableStream<Uint8Array>({
+      cancel: () => new Promise<void>(() => {}),
+    })
+    const { runtime } = setup(async () => new Response(source))
+    const response = await runtime.dispatch(config, request)
+    const cancellation = response.body!.cancel()
+    runtime.dispose(config.providerId)
+    await errorCode(settleCleanup(cancellation), 'cancelled')
+    assert.equal(runtime.activeOperationCount, 0)
+    assert.equal(source.locked, false)
+  })
+
+  it('bounds an early normalized stream return when the source cancellation stalls', async () => {
+    const source = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(delta('first')))
+      },
+      cancel: () => new Promise<void>(() => {}),
+    })
+    const { runtime } = setup(async () => new Response(source, { headers: { 'content-type': 'text/event-stream' } }))
+    const stream = runtime.stream({ ...config, timeoutMs: 10 }, request)
+    assert.deepEqual(await stream.next(), { done: false, value: { type: 'text', text: 'first' } })
+    await errorCode(settleCleanup(stream.return(undefined)), 'timeout')
+    assert.equal(runtime.activeOperationCount, 0)
+    assert.equal(source.locked, false)
+  })
+
+  it('reports a safe cleanup failure and releases the upstream reader', async () => {
+    const source = new ReadableStream<Uint8Array>({
+      cancel() {
+        throw new Error(KEY)
+      },
+    })
+    const { runtime } = setup(async () => new Response(source))
+    const response = await runtime.dispatch(config, request)
+    await errorCode(settleCleanup(response.body!.cancel()), 'network')
+    assert.equal(runtime.activeOperationCount, 0)
+    assert.equal(source.locked, false)
+  })
+
+  it('releases the upstream reader after timeout even if cancelling the source stalls', async () => {
+    const source = new ReadableStream<Uint8Array>({
+      cancel: () => new Promise<void>(() => {}),
+    })
+    const { runtime } = setup(async () => new Response(source))
+    const response = await runtime.dispatch({ ...config, timeoutMs: 10 }, request)
+    await errorCode(settleCleanup(response.text()), 'timeout')
+    assert.equal(runtime.activeOperationCount, 0)
+    assert.equal(source.locked, false)
+  })
+
+  it('releases the upstream reader after an SSE protocol failure without leaking cancellation errors', async () => {
+    const source = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ error: KEY })}\n\n`))
+      },
+      cancel() {
+        throw new Error(KEY)
+      },
+    })
+    const { runtime } = setup(async () => new Response(source, { headers: { 'content-type': 'text/event-stream' } }))
+    const response = await runtime.dispatch(config, { ...request, stream: true })
+    await errorCode(response.text(), 'protocol')
+    assert.equal(runtime.activeOperationCount, 0)
+    assert.equal(source.locked, false)
   })
 })

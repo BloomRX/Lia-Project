@@ -1,5 +1,9 @@
 # Runtime próprio de providers — execução de 30/10/2026
 
+Registro da primeira fatia, preservado como evidência histórica. A evolução com
+segundo ID migrado, correção de cancelamento e gate Electron de componentes está
+em [Runtime E2E — matriz atual](../product/RELEASE-WINDOWS-2026-10-30-RUNTIME-E2E.md).
+
 ## Resultado e limite da entrega
 
 **Primeira fatia vertical funcional**, não independência total. O alvo genérico

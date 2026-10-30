@@ -367,7 +367,7 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
       const pending = discoveryPending.get(requestKey)
       if (pending)
         return await pending
-      const request = nativeRuntime.owns(args.providerId)
+      const request = nativeRuntime.owns(args.providerId, config)
         ? nativeRuntime.discover(args.providerId, config)
         : providerRuntime.discover(args.providerId, config)
       discoveryPending.set(requestKey, request)
@@ -392,7 +392,7 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
   }) {
     try {
       const config = await draftConfig(args)
-      const result = nativeRuntime.owns(args.providerId)
+      const result = nativeRuntime.owns(args.providerId, config)
         ? await nativeRuntime.probe(args.providerId, args.modelId ?? '', config)
         : await providerRuntime.probe(args.providerId, args.modelId ?? '', config)
       return { ...result, message: '' }
