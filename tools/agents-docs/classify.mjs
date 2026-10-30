@@ -50,13 +50,13 @@ const tok = Object.fromEntries(sections.map(s => [s.n, s.tokens]))
 const title = Object.fromEntries(sections.map(s => [s.n, s.title]))
 
 const A = [0, 2, 3, 6, 7, 62, 64, 65, 66, 71, 72, 73, 76, 77, 78, 79, 90, 93, 94]
-const B = [1, 4, 5, 8, 11, 16, 30, 32, 34, 37, 38, 42, 46, 51, 54, 55, 57, 58, 63, 82, 86, 89, 91]
+const B = [1, 4, 5, 8, 11, 16, 30, 32, 34, 37, 38, 42, 46, 51, 54, 55, 57, 58, 63, 82, 86, 89, 91, 99]
 const C = {
   'voz.md            voz/TTS/STT/audio': [20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 33, 87],
   'llm.md            provider/routing/chat': [17, 18, 19],
   'ui.md             **/*.vue, componentes': [43, 44, 45, 47, 48, 49, 50, 70, 83, 84, 85],
   'i18n.md           locale/**, **/*.vue': [67, 98],
-  'hardware.md       bootstrap/, detection': [12, 13, 14, 15, 52],
+  'hardware.md       bootstrap/, detection': [12, 13, 14, 15, 52, 81],
   'acessibilidade.md **/*.vue, *.css': [68, 69],
   'testes.md         **/*.test.ts, Tests/**': [80],
   'licencas.md       package.json, docs/licenses': [74, 97],
@@ -67,9 +67,13 @@ const C = {
 }
 const D = [9, 88, 95, 96]
 
-// 81 manda consultar docs/compatibility/MATRIX.md, que NAO EXISTE. Isso e divida
-// aberta, nao regra por caminho: fora dos baldes ate a matriz existir.
-const E = [81]
+// O balde E existe para secao que hoje so manda consultar um documento que NAO
+// existe: isso e divida aberta, nao regra por caminho, e conta-lo como regra
+// inflaria a economia estimada. Esta vazio porque a unica pendencia que ocupava
+// o balde (a 81, que manda consultar docs/compatibility/MATRIX.md) foi paga: a
+// matriz existe e tem conteudo. A 81 passou para hardware.md no balde C.
+// Mantenha o balde vazio, e nao remova: a proxima divida precisa de um lugar.
+const E = []
 
 // ---- guarda de completude: nenhuma secao pode ficar de fora ou duplicada ----
 const seen = new Set()
