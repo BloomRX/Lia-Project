@@ -39,7 +39,7 @@ Repository de referência:
 
 https://github.com/moeru-ai/airi
 
-AIRI deve ser tratado como uma base tecnológica, e não como a identidade completa do produto Lia.
+AIRI deve ser tratado como referência técnica e fonte de estudo, não como base arquitetural obrigatória nem dependência permanente da Lia.
 
 A identidade, UX, configuração e experiência de usuário pertencem à Lia.
 

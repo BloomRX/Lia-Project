@@ -7,7 +7,7 @@
 - ✅ **Estudo técnico completo do AIRI concluído** → [`docs/estudo-airi.md`](docs/estudo-airi.md)
 - ✅ **Fase 0 (análise + arquitetura) concluída** → [`docs/architecture/`](docs/architecture/)
 - ✅ **M0-A (bootstrap do AIRI no repositório) documentado** → [`docs/upstream/AIRI-INTEGRATION.md`](docs/upstream/AIRI-INTEGRATION.md) — status: *BOOTSTRAP DOCUMENTED — BUILD NOT VALIDATED IN SANDBOX*
-- 🎯 **Decisão:** fork da versão **`v0.12.0-beta.5`** (a mais recente disponível, mesmo sendo beta — 29/08/2026; tag confirmada upstream → commit `2c1e223c…`), licença MIT, com remote `upstream` para absorver evoluções.
+- 🎯 **Decisão:** fork da versão **`v0.12.0-beta.5`** (a mais recente disponível, mesmo sendo beta — 29/08/2026; tag confirmada upstream → commit `2c1e223c…`), licença MIT, com remote `upstream` para acompanhar evoluções durante a transição. **Nota:** esse fork é a base legada atualmente mantida no repositório; não representa a arquitetura-alvo permanente. O desacoplamento da Lia continua em andamento e deve ser acompanhado em `docs/project/CURRENT-STATE.md`.
 - 🗺️ **Roadmap:** Fase 0 (análise/arquitetura) → M0 (base/toolchain do AIRI) → Fase 1 (identidade "Lia" + pt-BR) → Fase 2 (corpo/voz: avatar Live2D + TTS/STT) → Fase 3 (habilidades: plugins, memória, integrações) → Fase 4 (distribuição).
 
 ## Padrão da marca
