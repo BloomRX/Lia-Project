@@ -2932,3 +2932,8 @@ Toda feature de UI da Lia está completa apenas quando:
 END OF MASTER PROMPT
 ==================================================
 
+
+
+## Padrão comum da marca
+
+Antes de definir identidade, nomenclatura, linguagem, distribuição ou integração com outros produtos Lia, consulte `docs/BRAND-STANDARDS.md`. Regras específicas da Waifu e de seu desacoplamento continuam neste repositório.
