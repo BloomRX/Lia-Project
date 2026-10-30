@@ -26,7 +26,7 @@ Consulte [`docs/BRAND-STANDARDS.md`](docs/BRAND-STANDARDS.md) para identidade, l
 
 ## Credits / Third-party projects
 
-A Lia é construída sobre o **[Project AIRI](https://github.com/moeru-ai/airi)** (runtime/base tecnológica) e será distribuída sobre outras bibliotecas, engines, modelos e assets de terceiros. Licenças e atribuições detalhadas são registradas em `docs/licenses/` (ver [`THIRD-PARTY-NOTICES.md`](docs/licenses/THIRD-PARTY-NOTICES.md) e [`ASSET-LICENSES.md`](docs/licenses/ASSET-LICENSES.md)).
+Este repositório contém código e componentes de terceiros, incluindo um fork/referência do **[Project AIRI](https://github.com/moeru-ai/airi)**. Alguns caminhos legados ainda dependem de componentes AIRI enquanto o desacoplamento avança. AIRI é referência técnica e origem de parte do código atual, não a arquitetura-alvo nem uma dependência permanente desejada. A Lia também utiliza bibliotecas, engines, modelos e assets de terceiros. Licenças e atribuições detalhadas são registradas em `docs/licenses/` (ver [`THIRD-PARTY-NOTICES.md`](docs/licenses/THIRD-PARTY-NOTICES.md) e [`ASSET-LICENSES.md`](docs/licenses/ASSET-LICENSES.md)).
 
 ## DevKit
 

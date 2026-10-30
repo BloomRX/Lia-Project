@@ -169,98 +169,79 @@ Lia = primeiro personagem/produto padrão.
 
 Character System = arquitetura genérica.
 
-==================================================
-6. AIRI COMO BASE
-==================================================
-
-Antes de modificar ou duplicar funcionalidades:
-
-1. pesquisar o repository atual do AIRI;
-2. localizar código relacionado;
-3. verificar packages;
-4. verificar apps;
-5. verificar plugins;
-6. verificar services;
-7. verificar providers;
-8. verificar memória;
-9. verificar voz;
-10. verificar avatar;
-11. verificar Discord;
-12. verificar computer-use;
-13. verificar IPC;
-14. verificar documentação existente.
-
-Nunca assumir que AIRI não possui determinada funcionalidade sem pesquisar o código atual.
-
-PRIORIDADE:
-
-Reutilizar > adaptar > encapsular > extender > implementar do zero.
-
-Evitar duplicar funcionalidades existentes no AIRI.
-
-==================================================
-7. NÃO TRANSFORMAR A LIA EM UM FORK CAÓTICO
+====================================================
+6. AIRI COMO REFERÊNCIA TÉCNICA
 ==================================================
 
-Sempre que possível:
+AIRI é uma fonte de estudo e comparação, não a arquitetura-alvo nem uma
+dependência permanente que novas funcionalidades devam adotar.
 
-Lia
-    ↓
-Adapter / Wrapper / Integration Layer
-    ↓
-AIRI
-    ↓
-Runtime / Services / Providers
+Antes de estudar uma capacidade do upstream:
 
-Evitar modificar diretamente o core do AIRI.
+1. identificar a versão e o commit exatos;
+2. verificar documentação e código realmente presentes no fork;
+3. separar recurso documentado, código presente e comportamento executado;
+4. registrar o que é reaproveitável como conhecimento, ideia ou componente;
+5. comparar com a arquitetura e os contratos próprios da Lia.
 
-Se alterações no AIRI forem inevitáveis:
-
-- isolar;
-- documentar;
-- manter o diff pequeno;
-- registrar a razão;
-- registrar a versão/commit;
-- facilitar futuros upgrades.
-
-Registrar informações relacionadas ao upstream em:
-
-docs/upstream/
-
-Exemplo:
-
-docs/upstream/AIRI-INTEGRATION.md
-docs/upstream/AIRI-UPGRADE.md
-docs/upstream/AIRI-PATCHES.md
+Não iniciar novas dependências do runtime AIRI por conveniência. Qualquer
+reintrodução ou expansão de dependência precisa de justificativa técnica e
+decisão registrada. Não assumir que AIRI não tem uma capacidade sem pesquisa;
+essa pesquisa informa alternativas, não determina automaticamente a arquitetura.
 
 ==================================================
-8. ARQUITETURA CONCEITUAL
+7. INDEPENDÊNCIA PROGRESSIVA DA LIA
 ==================================================
 
-Arquitetura desejada:
+A direção de produto é uma aplicação própria. O desacoplamento, contudo,
+permanece parcial enquanto componentes legados forem necessários.
 
-                    LIA APP
-                       |
-                       v
-              LIA ORCHESTRATOR
-                       |
-       +---------------+---------------+
-       |               |               |
-       v               v               v
-  CHARACTER        AI SYSTEM       SERVICES
-       |               |               |
-       |          +----+----+      +----+----+
-       |          |         |      |         |
-       v          v         v      v         v
-      AIRI       LLM       Memory Vision   Tools
-       |
-    Avatar
+Ao trabalhar em código que ainda usa AIRI:
 
-A implementação concreta deve ser definida após análise do AIRI atual.
+- mapear o caminho real de execução e a dependência exata;
+- identificar o contrato mínimo que a Lia precisa preservar;
+- preferir adapter/compatibilidade isolada quando necessária para migração;
+- criar testes de conformidade antes de remover o caminho anterior;
+- documentar dependência remanescente, fallback e limitações;
+- remover somente depois de comprovar substituição e ausência de consumidores.
 
-Não impor abstrações sem verificar como o AIRI já funciona.
+Não converter estudo do upstream em import novo, nem remover o diretório
+airi/ ou dependências legadas em massa sem gate, plano de migração e evidência.
 
 ==================================================
+8. ARQUITETURA CONCEITUAL ALVO
+==================================================
+
+A arquitetura de destino pertence à Lia e deve ser definida por contratos
+próprios:
+
+                    LIA APP / EXPERIENCE
+                             |
+                             v
+                   LIA ORCHESTRATION
+                             |
+             +---------------+---------------+
+             |               |               |
+             v               v               v
+        LIA RUNTIME       MODEL LAB       PRODUCT SERVICES
+             |               |               |
+        +----+----+      +---+---+       +---+----+
+        |         |      |       |       |        |
+     Providers  Tools  Weights  Adapters Memory  Integrations
+        |                |
+        v                v
+   External APIs    Specialist models
+
+A camada de personagem/avatar é um asset e sistema de apresentação próprio.
+Memória persistente, permissões, ações externas, credenciais, integrações e
+interface continuam fora dos pesos de IA.
+
+AIRI pode informar decisões e oferecer componentes temporários já existentes,
+mas não é requisito arquitetural do destino. Antes de criar uma abstração ou
+migrar componente, confira o código atual, docs/project/CURRENT-STATE.md e os
+documentos em docs/architecture/.
+
+================================================
 9. PRIMEIRA TAREFA DA AGENT
 ==================================================
 
