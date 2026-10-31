@@ -7,7 +7,6 @@ import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
-import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
 import { _electron as electron } from 'playwright'
@@ -56,7 +55,7 @@ function descendants(rootPid) {
   return [...owned]
 }
 
-test('Electron real: production IPC, encrypted vault and native provider runtime against local HTTP', { skip: process.platform !== 'win32' && 'Requires Windows for the real safeStorage gate', timeout: 180000 }, async (t) => {
+it('electron real: production IPC, encrypted vault and native provider runtime against local HTTP', { skip: process.platform !== 'win32' && 'Requires Windows for the real safeStorage gate', timeout: 180000 }, async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'lia-provider-electron-'))
   const artifacts = join(repo, 'Tests/artifacts/provider-runtime-electron', `${Date.now()}`)
   await mkdir(artifacts, { recursive: true })
@@ -168,6 +167,17 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
     assert.deepEqual(initialState.readScopes, [])
     report.checks.push('real safeStorage encryption and zero credential reads before operation')
 
+    const legacyFixture = { id: 'legacy/custom-instance', providerId: 'legacy/custom-instance', definitionId: 'openai-compatible', type: 'http', protocol: 'chat-completions', baseUrl: `${base}/json/v1/`, adapterOptions: { temperature: 0.25, nested: { enabled: true } }, modelIds: ['manual/legacy:Q4'], enabled: true, metadata: {}, credentialRef: { scope: 'legacy/custom-instance', key: 'apiKey' } }
+    const oldConfigured = { [legacyFixture.id]: { id: legacyFixture.id, definitionId: legacyFixture.definitionId, config: { baseUrl: legacyFixture.baseUrl, ...legacyFixture.adapterOptions }, status: 'configured', configuredBy: 'user' } }
+    const oldCredentials = { 'openai-compatible': { baseUrl: `${base}/old-source/v1/`, legacyFlag: true } }
+    const migrated = await page.evaluate(({ configured, credentials, modelIds }) => window.providerGate.migrateLegacy(configured, credentials, modelIds), { configured: oldConfigured, credentials: oldCredentials, modelIds: legacyFixture.modelIds })
+    assert.equal(migrated.ok, true)
+    assert.deepEqual(migrated.snapshot.records.find(record => record.id === legacyFixture.id), legacyFixture)
+    assert.deepEqual(migrated.snapshot.records.find(record => record.id === 'openai-compatible').adapterOptions, { legacyFlag: true })
+    const repeated = await page.evaluate(({ record, revision }) => window.providerGate.mutate({ kind: 'migrate', expectedRevision: revision, records: [record] }), { record: legacyFixture, revision: migrated.snapshot.revision })
+    assert.deepEqual(repeated, migrated)
+    report.checks.push('production decoders import both unversioned legacy shapes preserving IDs, options, model and credential reference; main migration is idempotent')
+
     const run = async (mode, button = 'Executar JSON', provider = 'openai-compatible') => {
       await page.getByLabel('Serviço').selectOption(provider)
       await page.getByLabel('Endereço').fill(`${base}/${mode}/v1/`)
@@ -183,6 +193,63 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
     const operationState = JSON.parse(await readFile(join(root, 'main-state.json'), 'utf8'))
     assert.deepEqual(operationState.readScopes, ['openai-compatible', 'openai-compatible', 'openai-compatible', 'lm-studio'])
     report.checks.push('JSON, SSE, discovery, custom model and separate provider credentials')
+
+    const secondWindowId = await application.evaluate(async ({ BrowserWindow }, preloadPath) => {
+      const first = BrowserWindow.getAllWindows()[0]
+      const second = new BrowserWindow({ show: true, webPreferences: { preload: preloadPath, contextIsolation: true, nodeIntegration: false, sandbox: false } })
+      await second.loadURL(first.webContents.getURL())
+      return second.id
+    }, preload)
+    const secondPage = application.windows().find(window => window !== page)
+    assert.ok(secondPage)
+    secondPage.on('pageerror', () => { report.secondRendererError = true })
+    report.secondRenderer = await secondPage.evaluate(() => ({ bridge: typeof window.electron?.ipcRenderer, status: document.querySelector('#status')?.textContent }))
+    await secondPage.getByRole('status').filter({ hasText: 'Pronto' }).waitFor()
+    const prior = await page.evaluate(() => window.providerGate.transports())
+    assert.equal(prior.ok, true)
+    const firstRecord = prior.snapshot.records.find(record => record.id === 'openai-compatible')
+    const concurrent = await Promise.all([
+      page.evaluate(({ record, revision }) => window.providerGate.mutate({ kind: 'put', expectedRevision: revision, record: { ...record, metadata: { label: 'Janela A' } } }), { record: firstRecord, revision: prior.snapshot.revision }),
+      secondPage.evaluate(({ record, revision }) => window.providerGate.mutate({ kind: 'put', expectedRevision: revision, record: { ...record, metadata: { label: 'Janela B' } } }), { record: firstRecord, revision: prior.snapshot.revision }),
+    ])
+    assert.equal(concurrent.filter(reply => reply.ok).length, 1)
+    assert.equal(concurrent.find(reply => !reply.ok).code, 'conflict')
+    const left = await page.evaluate(() => window.providerGate.transports())
+    const right = await secondPage.evaluate(() => window.providerGate.transports())
+    assert.deepEqual(left, right)
+    report.processes.push(...descendants(applicationProcess.pid))
+    await application.evaluate(({ BrowserWindow }, id) => BrowserWindow.fromId(id).close(), secondWindowId)
+    report.checks.push('two real renderers share main authority and reject stale concurrent writes')
+
+    await page.getByLabel('Serviço').selectOption('openai-compatible')
+    const changed = await page.evaluate(async () => {
+      const state = await window.providerGate.transports()
+      if (!state.ok)
+        throw new Error('Repository unavailable')
+      const record = state.snapshot.records.find(item => item.id === 'openai-compatible')
+      if (!record)
+        throw new Error('Record unavailable')
+      return window.providerGate.mutate({ kind: 'put', expectedRevision: state.snapshot.revision, record: { ...record, enabled: false } })
+    })
+    assert.equal(changed.ok, true)
+    const requestsBeforeDisable = report.requests.length
+    assert.equal((await page.evaluate(() => window.providerGate.executeStored())).code, 'configuration')
+    assert.equal(report.requests.length, requestsBeforeDisable)
+    const blockedState = JSON.parse(await readFile(join(root, 'main-state.json'), 'utf8'))
+    assert.deepEqual(blockedState.readScopes, operationState.readScopes)
+    const removed = await page.evaluate(async () => {
+      const state = await window.providerGate.transports()
+      if (!state.ok)
+        throw new Error('Repository unavailable')
+      return window.providerGate.mutate({ kind: 'remove', expectedRevision: state.snapshot.revision, id: 'openai-compatible' })
+    })
+    assert.equal(removed.ok, true)
+    assert.equal((await page.evaluate(() => window.providerGate.executeStored())).code, 'configuration')
+    assert.equal(report.requests.length, requestsBeforeDisable)
+    const replay = await page.evaluate(({ record, revision }) => window.providerGate.mutate({ kind: 'migrate', expectedRevision: revision, records: [record] }), { record: firstRecord, revision: removed.snapshot.revision })
+    assert.equal(replay.ok, true)
+    assert.ok(!replay.snapshot.records.some(record => record.id === 'openai-compatible'))
+    report.checks.push('disable and remove block execution; migration cannot resurrect a tombstone; vault credentials retained')
     assert.equal((await run('empty')).code, 'empty')
     const failed = await run('http-error')
     assert.equal(failed.phase, 'error')
@@ -220,8 +287,9 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
     }, 'production config did not persist')
     report.processes.push(...descendants(applicationProcess.pid))
     const product = await readFile(join(root, 'profile/lia-product.json'), 'utf8')
+    const transports = await readFile(join(root, 'profile/lia-transports.json'), 'utf8')
     const rendererState = await page.evaluate(() => JSON.stringify({ html: document.body.textContent, storage: { ...localStorage } }))
-    assert.ok(!Object.values(secrets).some(value => product.includes(value) || rendererState.includes(value)))
+    assert.ok(!Object.values(secrets).some(value => product.includes(value) || transports.includes(value) || rendererState.includes(value)))
     await application.close()
     report.exitCode = applicationProcess.exitCode
     assert.equal(report.exitCode, 0)
@@ -229,6 +297,16 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
     const restored = await page.evaluate(() => window.providerGate.config())
     assert.equal(restored.preferred.modelId, 'custom/Electron:Q4')
     assert.equal(restored.preferred.providerId, 'lm-studio')
+    const restoredTransports = await page.evaluate(() => window.providerGate.transports())
+    assert.equal(restoredTransports.ok, true)
+    const restoredLocal = restoredTransports.snapshot.records.find(record => record.id === 'lm-studio')
+    assert.equal(restoredLocal.baseUrl, `${base}/local/v1/`)
+    assert.deepEqual(restoredLocal.modelIds, ['custom/Electron:Q4'])
+    // Change the visible draft without saving. Execution must retain the main
+    // repository endpoint, rather than reading renderer form state.
+    await page.getByLabel('Endereço').fill(`${base}/wrong-unsaved/v1/`)
+    assert.equal((await page.evaluate(() => window.providerGate.executeStored())).phase, 'done')
+    assert.equal(report.requests.at(-1).path, '/local/v1/chat/completions')
     assert.equal((await run('json')).phase, 'done')
     assert.equal(report.requests.at(-1).authenticated, true)
     report.checks.push('real application restart restores product model and decrypts stored key')

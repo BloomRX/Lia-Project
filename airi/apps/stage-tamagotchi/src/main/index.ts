@@ -57,6 +57,7 @@ import { createLiaBrainService } from './services/lia/lia-brain-service'
 import { startLiaMainWindowVoiceRuntime } from './services/lia/main-window-voice-runtime'
 import { registerLiaProviderConfigBridge } from './services/lia/provider-config-service'
 import { createLiaSecretVault, registerLiaSecretsBridge } from './services/lia/secrets-service'
+import { registerLiaTransportConfigBridge } from './services/lia/transport-config-service'
 import { registerLiaVoiceConfigBridge } from './services/lia/voice-config-service'
 import { createLiaVoiceProfileStore } from './services/lia/voice-profiles'
 import { registerLiaVoiceProfilesBridge } from './services/lia/voice-profiles-service'
@@ -422,6 +423,7 @@ app.whenReady().then(async () => {
     callback: async (deps) => {
       const { context } = createContext(ipcMain)
       registerLiaProviderConfigBridge({ context, liaProductConfig: deps.liaProductConfig })
+      registerLiaTransportConfigBridge({ context })
     },
   })
 

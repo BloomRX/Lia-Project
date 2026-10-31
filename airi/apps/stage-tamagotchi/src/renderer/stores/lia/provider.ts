@@ -7,6 +7,8 @@ import { useConsciousnessStore } from '@proj-airi/stage-ui/stores/modules/consci
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
+import { ProviderError } from '../../../../../../../lia/core/src/providers/index'
+import { isTransportRecord } from '../../../../../../../lia/core/src/transports/validation'
 import {
   electronLiaProviderChatConfigGet,
   electronLiaProviderChatConfigSet,
@@ -17,6 +19,7 @@ import {
   electronLiaSecretSet,
 } from '../../../shared/eventa'
 import { createNativeProviderRuntime } from '../../services/lia/native-provider-runtime'
+import { createLiaTransportClient, isNativeTransportDefinition, legacyTransportCandidates, toTransportRecord } from '../../services/lia/transport-config'
 import { useLiaProviderActivation } from './provider-activation'
 import { isUsableWithoutAiriSession } from './provider-auth-policy'
 import { useLiaProviderConfigFacade } from './provider-config-facade'
@@ -265,8 +268,80 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
   const secretGet = useElectronEventaInvoke(electronLiaSecretGet)
   const secretDelete = useElectronEventaInvoke(electronLiaSecretDelete)
 
+  const transports = createLiaTransportClient()
+  const rejectedTransports = new Set<string>()
+  let migration: Promise<void> | undefined
+  async function initializeTransports() {
+    if (!migration) {
+      migration = (async () => {
+        await transports.refresh()
+        const readLegacy = (key: string) => {
+          try { return JSON.parse(localStorage.getItem(key) ?? '{}') }
+          catch { return {} }
+        }
+        const value = readLegacy('settings/providers/configured')
+        const configured = value && typeof value === 'object' && !Array.isArray(value) ? value : {}
+        // Include the already-hydrated store snapshot; never write it here.
+        for (const id of ['openai-compatible', 'lm-studio']) {
+          const record = providerConfig.get(id)
+          if (record)
+            configured[id] = record
+        }
+        const records = []
+        let retryCredentialMigration = false
+        for (const candidate of legacyTransportCandidates(configured, readLegacy('settings/credentials/providers'))) {
+          if (transports.get(candidate.id) || transports.hasRemoved(candidate.id))
+            continue
+          const models = [loadedConfig.value?.preferred, ...(loadedConfig.value?.fallback ?? [])]
+            .filter(target => target?.providerId === candidate.id)
+            .flatMap(target => target?.modelId ? [target.modelId] : [])
+          const record = toTransportRecord(candidate.id, candidate.definitionId, candidate.config, models)
+          if (!isTransportRecord(record)) {
+            if (typeof candidate.config.baseUrl === 'string' && candidate.config.baseUrl.trim())
+              rejectedTransports.add(candidate.id)
+            continue
+          }
+          const key = candidate.config.apiKey
+          if (typeof key === 'string' && key && !await secretHas({ scope: candidate.id, key: API_KEY_NAME })) {
+            if (!await getEncryptionAvailable() || !await secretSet({ scope: candidate.id, key: API_KEY_NAME, value: key })) {
+              rejectedTransports.add(candidate.id)
+              retryCredentialMigration = true
+              continue
+            }
+          }
+          records.push(record)
+        }
+        if (records.length) {
+          // A competing window may have imported first. Migration never overwrites.
+          await transports.refresh()
+          await transports.migrate(records)
+        }
+        if (retryCredentialMigration)
+          migration = undefined
+      })().catch(() => {
+        migration = undefined
+        throw new Error('Transport migration unavailable')
+      })
+    }
+    await migration
+  }
+
   const nativeRuntime = createNativeProviderRuntime({
-    readConfig: id => providerConfig.getConfig(id),
+    readConfig: (id) => {
+      const record = transports.get(id)
+      if (record) {
+        if (!record.enabled)
+          throw new ProviderError('configuration')
+        return { ...record.adapterOptions, baseUrl: record.baseUrl, _liaTransport: true }
+      }
+      if (transports.hasRemoved(id) || rejectedTransports.has(id))
+        throw new ProviderError('configuration')
+      return undefined
+    },
+    beforeRead: async () => {
+      await initializeTransports()
+      await transports.refresh()
+    },
     resolveCredential: resolveApiKey,
   })
 
@@ -274,6 +349,8 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
 
   async function refreshConfig(): Promise<LiaProviderChatConfig> {
     loadedConfig.value = await getChatConfig()
+    await initializeTransports()
+    await transports.refresh()
     return loadedConfig.value ?? {}
   }
 
@@ -325,6 +402,22 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
    * here — the registered credential resolver supplies it in memory.
    */
   async function ensureProviderRecord(providerId: string, baseUrl?: string) {
+    if (isNativeTransportDefinition(providerId) || transports.get(providerId)) {
+      await initializeTransports()
+      await transports.refresh()
+      const previous = transports.get(providerId)
+      if (baseUrl || previous) {
+        const models = [loadedConfig.value?.preferred, ...(loadedConfig.value?.fallback ?? [])]
+          .filter(target => target?.providerId === providerId)
+          .flatMap(target => target?.modelId ? [target.modelId] : [])
+        const record = previous
+          ? { ...previous, ...(baseUrl ? { baseUrl } : {}), modelIds: [...new Set([...previous.modelIds, ...models])] }
+          : toTransportRecord(providerId, providerId, { baseUrl }, models)
+        await transports.put(record)
+      }
+      // Metadata compatibility for consumers not migrated yet. No endpoint write/PATCH.
+      return providerConfig.get(providerId) ?? providerConfig.ensure(providerId, providerId, {})
+    }
     const definitionId = providerId
     if (!providerConfig.get(providerId)) {
       providerConfig.ensure(providerId, definitionId, baseUrl ? { baseUrl } : {})
@@ -342,12 +435,32 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
 
   /** Metadata read only; never returns the vault key. */
   function providerBaseUrl(providerId: string): string | undefined {
+    const record = transports.get(providerId)
+    if (record)
+      return record.baseUrl
+    if (isNativeTransportDefinition(providerId) || transports.hasRemoved(providerId))
+      return undefined
     const value = providerConfig.getConfig(providerId)?.baseUrl
     return typeof value === 'string' ? value : undefined
   }
 
+  /** Removal retains the vault entry; deleting a saved key is a separate explicit action. */
+  async function removeTransport(providerId: string) {
+    await initializeTransports()
+    await transports.refresh()
+    const record = transports.get(providerId)
+    if (record)
+      await transports.remove(record.id)
+    nativeRuntime.dispose(providerId)
+  }
+
   async function draftConfig(args: { providerId: string, apiKey?: string, baseUrl?: string }) {
-    const config = { ...providerConfig.getConfig(args.providerId) }
+    await initializeTransports()
+    await transports.refresh()
+    const record = transports.get(args.providerId)
+    const config: Record<string, unknown> = record
+      ? { ...record.adapterOptions, baseUrl: record.baseUrl, _liaTransport: true }
+      : isNativeTransportDefinition(args.providerId) ? {} : { ...providerConfig.getConfig(args.providerId) }
     // Stored keys never enter the shared record; only this transient draft.
     const apiKey = args.apiKey ?? await resolveApiKey(args.providerId)
     if (args.baseUrl !== undefined)
@@ -542,7 +655,11 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
   function registerRuntimeExtensions() {
     // Leader-local, idempotent bridge. Only the migrated transport uses the Lia
     // registry/cache/HTTP runtime. Every other target keeps its prior executor.
-    providerRuntime.installChatFactory(nativeRuntime.getChatProvider)
+    providerRuntime.installChatFactory(async (id) => {
+      if (!isNativeTransportDefinition(id) && !transports.get(id))
+        return undefined
+      return nativeRuntime.getChatProvider(id)
+    })
 
     // Supply the per-use vault apiKey when the provider runtime builds an
     // instance for a Lia-configured provider. Absent a stored secret it returns
@@ -597,6 +714,7 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
     discoverModels,
     providerBaseUrl,
     ensureProviderRecord,
+    removeTransport,
     activateTarget,
     activatePreferred,
     activateConfiguredProvider,

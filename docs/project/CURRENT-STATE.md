@@ -13,6 +13,21 @@ commit. Registra **estado**, não narrativa: relatório de rodada vai para
 
 ## 0. Estado agora
 
+**Checkpoint de transportes em 30/10/2026 — INCOMPLETO:** implementação local
+preservada em commit WIP para sincronização Git, após os commits de governança
+do Dev. Inclui contratos/repositório próprios, IPC, importação dos registros e
+integração inicial do consumidor. **Não é entrega funcional aprovada.** Nesta
+retomada, 13 testes do repositório PASS e diff sem erros de whitespace. A última
+validação de lint continua FAIL: runner Electron foi alterado indevidamente por
+auto-fix (`it` sem definição), além de estilo/ordem de declaração no store.
+Não houve novo gate de aplicativo, build ou aprovação de migração completa.
+Seis Core preexistentes, cópia local da auditoria e cache ficaram fora do commit.
+Detalhes: `docs/product/TRANSPORT-CONFIGURATION-WIP-2026-10-30.md`.
+**Próximo item:** corrigir o runner com seu perfil Node e o lint do store;
+concluir revisão de segurança/concorrência, rodar validações pertinentes e gate
+Electron sobre o código final antes de declarar a fatia concluída. Baseline
+funcional permanece `3ef6d11618f787dae6d197645d440a5775a60ad6`.
+
 **Runtime E2E em 30/10/2026 — componentes Electron reais:** cofre `safeStorage`,
 IPC Eventa, preload de produção, persistência e transporte próprios exercitados
 em janela Electron 43.4.1 com perfil isolado e servidor HTTP local. **PASS Windows

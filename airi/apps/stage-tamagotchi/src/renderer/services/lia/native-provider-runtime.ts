@@ -15,6 +15,7 @@ export interface NativeChatProvider {
 export function createNativeProviderRuntime(options: {
   readConfig: (providerId: string) => Record<string, unknown> | undefined
   resolveCredential: (providerId: string) => Promise<string | undefined>
+  beforeRead?: () => Promise<void>
 }) {
   const registry = new ProviderRegistry()
   registry.register({ id: NATIVE_CHAT_PROVIDER_ID, protocol: 'chat-completions' })
@@ -22,6 +23,11 @@ export function createNativeProviderRuntime(options: {
   const runtime = new ProviderRuntime(registry, { resolveCredential: options.resolveCredential })
 
   function owns(providerId: string, draft?: Record<string, unknown>) {
+    if ((draft ?? options.readConfig(providerId))?._liaTransport === true) {
+      if (!registry.has(providerId))
+        registry.register({ id: providerId, protocol: 'chat-completions' })
+      return true
+    }
     if (!registry.has(providerId))
       return false
     if (providerId !== NATIVE_LOCAL_CHAT_PROVIDER_ID)
@@ -37,8 +43,11 @@ export function createNativeProviderRuntime(options: {
   }
 
   async function getChatProvider(providerId: string): Promise<NativeChatProvider | undefined> {
+    await options.beforeRead?.()
     if (!owns(providerId))
       return undefined
+    if (!registry.has(providerId))
+      registry.register({ id: providerId, protocol: 'chat-completions' })
     // This resolves no upstream instance and retains no credential in the factory.
     const config = runtime.getInstance(configFor(providerId)).config
     return {
@@ -47,6 +56,7 @@ export function createNativeProviderRuntime(options: {
           model,
           baseURL: config.baseUrl,
           fetch: async (_input, init) => {
+            await options.beforeRead?.()
             // A tool round can outlive an endpoint edit. Never resurrect the
             // old endpoint or send a newly resolved credential to that address.
             const current = runtime.getInstance(configFor(providerId)).config

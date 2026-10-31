@@ -9,6 +9,7 @@ import { app, BrowserWindow, ipcMain, safeStorage } from 'electron'
 import { createLiaProductConfig } from '../../src/main/configs/lia'
 import { registerLiaProviderConfigBridge } from '../../src/main/services/lia/provider-config-service'
 import { createLiaSecretVault, registerLiaSecretsBridge } from '../../src/main/services/lia/secrets-service'
+import { registerLiaTransportConfigBridge } from '../../src/main/services/lia/transport-config-service'
 
 const root = process.env.LIA_PROVIDER_GATE_DIR
 const preload = process.env.LIA_PROVIDER_GATE_PRELOAD
@@ -36,6 +37,7 @@ void app.whenReady().then(async () => {
     },
   } })
   registerLiaProviderConfigBridge({ context, liaProductConfig: createLiaProductConfig() })
+  registerLiaTransportConfigBridge({ context })
 
   const window = new BrowserWindow({
     title: 'Lia — Gate Electron local',

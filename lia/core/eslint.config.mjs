@@ -11,10 +11,10 @@ if (!owner)
 export default [
   ...inherited,
   {
-    files: ['lia/core/src/providers/**/*.ts', 'lia/core/test/providers*.test.ts', 'lia/core/eslint.config.mjs'],
+    files: ['lia/core/src/providers/**/*.ts', 'lia/core/src/transports/**/*.ts', 'lia/core/test/providers*.test.ts', 'lia/core/test/transports.test.ts', 'lia/core/eslint.config.mjs'],
     rules: {
       'no-restricted-syntax': owner.rules['no-restricted-syntax'].filter(rule => !rule?.message?.startsWith('Omit TypeScript and JavaScript source extensions')),
     },
   },
-  { files: ['lia/core/test/providers*.test.ts'], rules: { 'test/no-import-node-test': 'off' } },
+  { files: ['lia/core/test/providers*.test.ts', 'lia/core/test/transports.test.ts'], rules: { 'test/no-import-node-test': 'off' } },
 ]

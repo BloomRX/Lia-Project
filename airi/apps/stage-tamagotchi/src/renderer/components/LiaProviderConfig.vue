@@ -320,6 +320,7 @@ async function removeProvider() {
     return
   busy.value = true
   try {
+    await store.removeTransport(providerId.value)
     await store.deleteApiKey(providerId.value)
     // Also drop a distinct fallback's own key (explicit removal of this setup).
     if (fallbackProviderId.value && fallbackProviderId.value !== providerId.value) {

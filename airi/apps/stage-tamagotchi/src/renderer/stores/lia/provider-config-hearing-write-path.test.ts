@@ -48,24 +48,30 @@ const ipc = vi.hoisted(() => {
   }
 })
 
-vi.mock('@proj-airi/electron-vueuse', () => ({
-  useElectronEventaInvoke: (invoke: { receiveEvent?: { id?: string } }) => {
-    const handlers: Record<string, unknown> = {
-      'eventa:invoke:lia:hearing:config:get-receive': ipc.getHearingConfig,
-      'eventa:invoke:lia:provider:chat:config:get-receive': ipc.getChatConfig,
-      'eventa:invoke:lia:provider:chat:config:set-receive': ipc.saveChatConfig,
-      'eventa:invoke:lia:secret:delete-receive': ipc.secretDelete,
-      'eventa:invoke:lia:secret:encryption-available-receive': ipc.encryptionAvailable,
-      'eventa:invoke:lia:secret:get-receive': ipc.secretGet,
-      'eventa:invoke:lia:secret:has-receive': ipc.secretHas,
-      'eventa:invoke:lia:secret:set-receive': ipc.secretSet,
-    }
-    const id = invoke?.receiveEvent?.id ?? ''
-    if (id in handlers)
-      return handlers[id]
-    throw new Error(`Unexpected eventa invoke: ${id}`)
-  },
-}))
+vi.mock('@proj-airi/electron-vueuse', async () => {
+  const { transportTestInvoke } = await import('../../services/lia/transport-config.fixture')
+  return ({
+    useElectronEventaInvoke: (invoke: { receiveEvent?: { id?: string } }) => {
+      const handlers: Record<string, unknown> = {
+        'eventa:invoke:lia:hearing:config:get-receive': ipc.getHearingConfig,
+        'eventa:invoke:lia:provider:chat:config:get-receive': ipc.getChatConfig,
+        'eventa:invoke:lia:provider:chat:config:set-receive': ipc.saveChatConfig,
+        'eventa:invoke:lia:secret:delete-receive': ipc.secretDelete,
+        'eventa:invoke:lia:secret:encryption-available-receive': ipc.encryptionAvailable,
+        'eventa:invoke:lia:secret:get-receive': ipc.secretGet,
+        'eventa:invoke:lia:secret:has-receive': ipc.secretHas,
+        'eventa:invoke:lia:secret:set-receive': ipc.secretSet,
+      }
+      const id = invoke?.receiveEvent?.id ?? ''
+      const transport = transportTestInvoke(id)
+      if (transport)
+        return transport
+      if (id in handlers)
+        return handlers[id]
+      throw new Error(`Unexpected eventa invoke: ${id}`)
+    },
+  })
+})
 
 /**
  * The audio device store is constructed with the hearing store, so the browser
