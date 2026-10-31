@@ -13,7 +13,7 @@ commit. Registra **estado**, não narrativa: relatório de rodada vai para
 
 ## 0. Estado agora
 
-**Transport Configuration — revisão de 30/10/2026, sem novo commit/push:**
+**Transport Configuration — revisão de 30/10 e P2 de 31/10/2026, versionamento autorizado:**
 persistência própria no main, CAS, migração idempotente e execução HTTP/SSE por
 IPC revisados. A execução migrada não devolve chaves do cofre ao renderer; getter negado
 para seus escopos, inclusive removidos. Corrigidos alias de credencial, retorno
@@ -26,8 +26,13 @@ encerrados. Não equivale a modelo externo nem Stage completo com personagem.
 **Limitação de segurança global:** leitores legados fora dos escopos protegidos
 e cópias históricas ainda podem expor credenciais no renderer. Não fechar esse canal sem migrar seus
 consumidores, preservando voz. Relatório: `docs/product/RELEASE-WINDOWS-2026-10-30-TRANSPORT-CONFIGURATION.md`.
-Seis Core e relatórios de auditoria preservados. HEAD local WIP anterior mantido;
-esta revisão fica no working tree para avaliação do Dev, sem publicação.
+P2 revisado: registro antes do IPC, bloqueio após descarte, cancelamento único
+do ID tardio e descarte do buffer de resposta incompleta. Teste direto: 10 PASS;
+conferência para publicação: 57 PASS / 4 arquivos (port/main/IPC de segredos/cache).
+Lint/typecheck do P2 e diff check PASS. Gates completos/externos não repetidos.
+Seis Core e relatórios de auditoria preservados por SHA-256. O Dev criou
+`b34a70f`; os oito arquivos novos restantes são incluídos na consolidação desta
+rodada. Commit/push autorizados pelo Dev na branch de trabalho, sem promover baseline.
 **Próximo:** migrar leitores legados de credenciais/protocolos; validar Stage
 completo/serviço externo e instalador. Baseline funcional permanece `3ef6d11`.
 

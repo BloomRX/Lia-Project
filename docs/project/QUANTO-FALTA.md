@@ -17,8 +17,10 @@ Core-agent 156, stores/main/cache/cofre 449, Chromium 16, lint/typechecks/builds
 Electron real com HTTP local e rede do renderer bloqueada confirmou 11 grupos.
 **Segurança global permanece parcial:** consumidores legados ainda usam getter
 de credenciais no renderer fora dos escopos protegidos. Stage completo, modelo
-externo e instalador não foram aprovados. Revisão não publicada, aguardando o Dev;
-seis Core/auditorias preservados, baseline mantido. [Relatório e matriz](../product/RELEASE-WINDOWS-2026-10-30-TRANSPORT-CONFIGURATION.md).
+externo e instalador não foram aprovados. P2 de descarte encerrado em 31/10:
+10 testes diretos PASS; conferência para publicação 57 PASS / 4 arquivos.
+Versionamento/publicação autorizados pelo Dev; seis Core/auditorias preservados,
+baseline mantido. [Relatório e matriz](../product/RELEASE-WINDOWS-2026-10-30-TRANSPORT-CONFIGURATION.md).
 
 30/10, Runtime E2E: **PASS Windows real de componentes** em Electron com IPC,
 cofre criptografado e perfil isolado; JSON/SSE, autenticação sintética por serviço,
