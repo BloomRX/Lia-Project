@@ -4,6 +4,7 @@ import { useElectronEventaInvoke } from '@proj-airi/electron-vueuse'
 import { generateText } from '@xsai/generate-text'
 import { streamText } from '@xsai/stream-text'
 
+import { createMainTransportExecution } from '../../src/renderer/services/lia/main-transport-execution'
 import { createNativeProviderRuntime } from '../../src/renderer/services/lia/native-provider-runtime'
 import { legacyTransportCandidates, toTransportRecord } from '../../src/renderer/services/lia/transport-config'
 import {
@@ -15,7 +16,6 @@ import {
 } from '../../src/shared/eventa'
 import { electronLiaTransportsGet, electronLiaTransportsMutate } from '../../src/shared/eventa/lia-transports'
 
-const invokeGet = useElectronEventaInvoke(electronLiaSecretGet)
 const invokeSet = useElectronEventaInvoke(electronLiaSecretSet)
 const invokeAvailable = useElectronEventaInvoke(electronLiaSecretEncryptionAvailable)
 const getConfig = useElectronEventaInvoke(electronLiaProviderChatConfigGet)
@@ -38,6 +38,7 @@ async function refreshTransports() {
   snapshot = reply.snapshot
 }
 const native = createNativeProviderRuntime({
+  execution: createMainTransportExecution(),
   beforeRead: refreshTransports,
   readConfig: (providerId) => {
     const record = snapshot?.records.find(item => item.providerId === providerId)
@@ -45,7 +46,6 @@ const native = createNativeProviderRuntime({
       throw Object.assign(new Error('Transport unavailable'), { code: 'configuration' })
     return { baseUrl: record.baseUrl }
   },
-  resolveCredential: providerId => invokeGet({ scope: providerId, key: 'apiKey' }),
 })
 
 function safeCode(error: unknown) {
@@ -92,9 +92,8 @@ async function execute(kind: 'json' | 'stream' | 'discover', persist = true) {
     }
     await setConfig({ preferred: { providerId, modelId: model }, fallbackEnabled: false })
     if (kind === 'discover') {
-      const key = await invokeGet({ scope: providerId, key: 'apiKey' })
       const record = snapshot!.records.find(item => item.providerId === providerId)
-      const discovered = await native.discover(providerId, { baseUrl: record?.baseUrl, apiKey: key })
+      const discovered = await native.discover(providerId, { baseUrl: record?.baseUrl })
       if (discovered.status !== 'ready')
         throw new Error('Discovery did not complete')
       result.textContent = discovered.models.map(item => item.id).join('\n')
@@ -145,6 +144,8 @@ document.querySelector('#cancel')!.addEventListener('click', () => controller?.a
 window.addEventListener('beforeunload', () => native.dispose())
 
 const api = {
+  // Adversarial probe only: production execution does not use this getter.
+  readProtectedSecret: (scope: string) => useElectronEventaInvoke(electronLiaSecretGet)({ scope, key: 'apiKey' }),
   seed: (scope: string, value: string) => invokeSet({ scope, key: 'apiKey', value }),
   encryptionAvailable: () => invokeAvailable(),
   config: () => getConfig(),

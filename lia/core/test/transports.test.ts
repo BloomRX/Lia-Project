@@ -39,6 +39,27 @@ function success(result: TransportResult) {
 }
 
 describe('Lia transport repository', () => {
+  it('bounds mutation envelopes and preserves unknown legacy removal protection', async () => {
+    const { path, repository } = await fixture()
+    assert.deepEqual(await repository.mutate({ kind: 'migrate', expectedRevision: 0, records: Array.from({ length: 1001 }, () => record()) }), { ok: false, code: 'invalid' })
+    assert.deepEqual(await repository.mutate({ kind: 'remove', expectedRevision: 0, id: 'x', secret: 'SYNTHETIC_PRIVATE' } as never), { ok: false, code: 'invalid' })
+    await writeFile(path, JSON.stringify({ schemaVersion: 1, revision: 1, records: [record()], tombstones: ['old-record'], migration: { version: 1, imported: [] } }))
+    const legacy = await repository.read()
+    assert.equal(legacy.credentialProtectionIncomplete, true)
+    const saved = success(await repository.mutate({ kind: 'put', expectedRevision: 1, record: record() }))
+    assert.equal(saved.credentialProtectionIncomplete, true)
+    assert.equal((await createTransportRepository(path).read()).credentialProtectionIncomplete, true)
+  })
+  it('retains credential protection after removing a transport whose ID differs from its provider', async () => {
+    const { path, repository } = await fixture()
+    const inserted = success(await repository.mutate({ kind: 'put', expectedRevision: 0, record: record('transport-A', 'provider-B') }))
+    const removed = success(await repository.mutate({ kind: 'remove', expectedRevision: inserted.revision, id: 'transport-A' }))
+    assert.deepEqual(removed.records, [])
+    assert.ok(removed.protectedCredentialScopes?.includes('provider-B'))
+    const reopened = await createTransportRepository(path).read()
+    assert.ok(reopened.protectedCredentialScopes?.includes('provider-B'))
+    assert.ok(reopened.tombstones.includes('transport-A'))
+  })
   it('creates, edits, disables, removes and reopens custom records without changing references', async () => {
     const { path, repository } = await fixture()
     assert.equal((await repository.read()).revision, 0)

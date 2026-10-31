@@ -1,4 +1,5 @@
 import type { ChatRequest, ProviderConfig } from '../../../../../../../lia/core/src/providers/index'
+import type { createMainTransportExecution } from './main-transport-execution'
 
 import { ProviderError, ProviderRegistry, ProviderRuntime } from '../../../../../../../lia/core/src/providers/index'
 
@@ -14,8 +15,9 @@ export interface NativeChatProvider {
 /** Production bridge: the SDK keeps the tool loop; Lia owns actual HTTP execution. */
 export function createNativeProviderRuntime(options: {
   readConfig: (providerId: string) => Record<string, unknown> | undefined
-  resolveCredential: (providerId: string) => Promise<string | undefined>
+  resolveCredential?: (providerId: string) => Promise<string | undefined>
   beforeRead?: () => Promise<void>
+  execution?: ReturnType<typeof createMainTransportExecution>
 }) {
   const registry = new ProviderRegistry()
   registry.register({ id: NATIVE_CHAT_PROVIDER_ID, protocol: 'chat-completions' })
@@ -75,7 +77,9 @@ export function createNativeProviderRuntime(options: {
             }
             // Preserve the wire payload (tools/images/reasoning included). The
             // runtime validates it, applies authentication and manages the body.
-            return runtime.dispatch(config, request, { signal: init.signal ?? undefined })
+            return options.execution
+              ? options.execution.dispatch(config, request, init.signal ?? undefined)
+              : runtime.dispatch(config, request, { signal: init.signal ?? undefined })
           },
         }
       },
@@ -83,6 +87,8 @@ export function createNativeProviderRuntime(options: {
   }
 
   async function discover(providerId: string, draft: Record<string, unknown>) {
+    if (options.execution)
+      return options.execution.discover(providerId, draft)
     const temporary = new ProviderRuntime(registry, {
       resolveCredential: () => typeof draft.apiKey === 'string' ? draft.apiKey : undefined,
     })
@@ -98,6 +104,8 @@ export function createNativeProviderRuntime(options: {
   }
 
   async function probe(providerId: string, model: string, draft: Record<string, unknown>) {
+    if (options.execution)
+      return options.execution.probe(providerId, model, draft)
     const temporary = new ProviderRuntime(registry, {
       resolveCredential: () => typeof draft.apiKey === 'string' ? draft.apiKey : undefined,
     })
@@ -119,5 +127,8 @@ export function createNativeProviderRuntime(options: {
     }
   }
 
-  return { owns, getChatProvider, discover, probe, dispose: (providerId?: string) => runtime.dispose(providerId) }
+  return { owns, getChatProvider, discover, probe, dispose: (providerId?: string) => {
+    runtime.dispose(providerId)
+    options.execution?.dispose(providerId)
+  } }
 }

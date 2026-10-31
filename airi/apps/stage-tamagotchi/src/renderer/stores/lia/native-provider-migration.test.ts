@@ -7,12 +7,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createApp } from 'vue'
 
 import { createNativeProviderRuntime } from '../../services/lia/native-provider-runtime'
+import { setTransportTestVaultResolver } from '../../services/lia/transport-config.fixture'
 
 const ipc = vi.hoisted(() => ({
   chatConfig: vi.fn(async (): Promise<import('../../../shared/eventa').LiaProviderChatConfig> => ({})),
   encryptionAvailable: vi.fn(async () => true),
   saveChatConfig: vi.fn(async (_config: import('../../../shared/eventa').LiaProviderChatConfig) => {}),
   secretDelete: vi.fn(async () => true),
+  vaultGet: vi.fn(async (_payload: { scope: string, key: string }): Promise<string | undefined> => undefined),
   secretGet: vi.fn(async (_payload: { scope: string, key: string }): Promise<string | undefined> => undefined),
   secretHas: vi.fn(async () => false),
   secretSet: vi.fn(async () => true),
@@ -55,13 +57,15 @@ beforeEach(() => {
   app.use(pinia)
   app.use(PiniaColada)
   setActivePinia(pinia)
-  ipc.secretGet.mockResolvedValue(undefined)
+  setTransportTestVaultResolver(pinia, ipc.vaultGet)
+  ipc.vaultGet.mockResolvedValue(undefined)
   fetchMock = vi.fn(async (input: RequestInfo | URL) => String(input).endsWith('/models')
     ? Response.json({ data: [{ id: 'custom/Local:Q4' }] })
     : Response.json({ choices: [{ message: { content: 'OK' } }] }))
   vi.stubGlobal('fetch', fetchMock)
 })
 afterEach(() => {
+  expect(ipc.secretGet).not.toHaveBeenCalled()
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
   resetChatProviderRuntimeExtensionsForTesting()
@@ -118,6 +122,9 @@ describe('additional compatible transport migration', () => {
     const prior = await legacy(localId, { reasoning: 'disabled' })
     legacy.mockClear()
     const selected = await source.getChatProviderInstance(localId, { reasoning: 'disabled' })
+    // This endpoint-less compatibility record deliberately retains the legacy executor.
+    expect(ipc.secretGet).toHaveBeenCalledExactlyOnceWith({ scope: localId, key: 'apiKey' })
+    ipc.secretGet.mockClear()
     expect(selected).toBe(prior)
     expect(legacy).toHaveBeenCalledExactlyOnceWith(localId, { reasoning: 'disabled' })
     expect(fetchMock).not.toHaveBeenCalled()
@@ -139,7 +146,7 @@ describe('additional compatible transport migration', () => {
   it('does not reuse another provider credential when switching to a keyless compatible target', async () => {
     const logs = vi.spyOn(console, 'info').mockImplementation(() => {})
     const { source, legacy, config } = install({ [genericId]: { baseUrl: 'https://primary-service.invalid/v1/' }, [localId]: { baseUrl: address } })
-    ipc.secretGet.mockImplementation(async ({ scope }) => scope === genericId ? KEY : undefined)
+    ipc.vaultGet.mockImplementation(async ({ scope }) => scope === genericId ? KEY : undefined)
     for (const id of [genericId, localId]) {
       const provider = await source.getChatProviderInstance(id, { reasoning: 'disabled' })
       const response = await provider!.chat(model).fetch!(new URL('https://ignored.invalid'), { method: 'POST', body: JSON.stringify(wire) })
@@ -148,7 +155,7 @@ describe('additional compatible transport migration', () => {
     expect(legacy).not.toHaveBeenCalled()
     expect(new Headers(fetchMock.mock.calls[0][1].headers).get('authorization')).toBe(`Bearer ${KEY}`)
     expect(new Headers(fetchMock.mock.calls[1][1].headers).has('authorization')).toBe(false)
-    expect(ipc.secretGet.mock.calls.map(([payload]) => payload.scope)).toEqual([genericId, localId])
+    expect(ipc.vaultGet.mock.calls.map(([payload]) => payload.scope)).toEqual([genericId, localId])
     expect(JSON.stringify(config.$state)).not.toContain(KEY)
     expect(JSON.stringify(logs.mock.calls)).not.toContain(KEY)
   })
@@ -158,6 +165,6 @@ describe('additional compatible transport migration', () => {
     await expect(source.getChatProviderInstance(localId, { reasoning: 'disabled' })).rejects.toMatchObject({ code: 'configuration' })
     expect(legacy).not.toHaveBeenCalled()
     expect(fetchMock).not.toHaveBeenCalled()
-    expect(ipc.secretGet).not.toHaveBeenCalled()
+    expect(ipc.vaultGet).not.toHaveBeenCalled()
   })
 })

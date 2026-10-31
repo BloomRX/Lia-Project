@@ -19,6 +19,10 @@ const fixture = vi.hoisted(() => ({
   discoverModels: vi.fn(async (): Promise<LiaModelDiscoveryResult> => ({ status: 'ready', models: [{ id: 'discovered/model', label: 'Discovered model' }] })),
   persistConfig: vi.fn(async (config: LiaProviderChatConfig) => { fixture.config = structuredClone(config) }),
   testConnection: vi.fn(async () => ({ ok: true, message: '', scope: 'text' })),
+  removeTransport: vi.fn(async (_id: string) => {}),
+  deleteApiKey: vi.fn(async (_id: string) => true),
+  ensureProviderRecord: vi.fn(async () => {}),
+  error: vi.fn(),
 }))
 
 vi.mock('../stores/lia/provider', async (original) => {
@@ -35,12 +39,14 @@ vi.mock('../stores/lia/provider', async (original) => {
       providerApiKeyUrl: () => undefined,
       providerBaseUrl: () => 'https://service.invalid/v1/',
       hasApiKey: async () => false,
-      ensureProviderRecord: async () => {},
+      ensureProviderRecord: fixture.ensureProviderRecord,
+      removeTransport: fixture.removeTransport,
+      deleteApiKey: fixture.deleteApiKey,
       activatePreferred: async () => true,
     }),
   }
 })
-vi.mock('vue-sonner', () => ({ toast: { error: vi.fn(), success: vi.fn() } }))
+vi.mock('vue-sonner', () => ({ toast: { error: fixture.error, success: vi.fn() } }))
 
 function input(container: HTMLElement, id: string) {
   const element = container.querySelector<HTMLInputElement>(`#${id}`)
@@ -62,6 +68,24 @@ async function mount(locale = 'pt-BR') {
 }
 
 describe('editable model selection', () => {
+  it('removes the own transport before explicitly deleting the saved key', async () => {
+    const screen = await mount()
+    await vi.waitFor(() => expect(input(screen.container, 'lia-model').value).toBe('custom/Meu-modelo:Q4'))
+    await page.screenshot({ path: '../../../Tests/artifacts/transport-review-20261030/provider-config-ui.png' })
+    await screen.getByRole('button', { name: 'Remover', exact: true }).click()
+    await vi.waitFor(() => expect(fixture.deleteApiKey).toHaveBeenCalledWith('openai-compatible'))
+    expect(fixture.removeTransport.mock.invocationCallOrder[0]).toBeLessThan(fixture.deleteApiKey.mock.invocationCallOrder[0])
+    expect(fixture.config.preferred).toBeUndefined()
+  })
+  it.each([['pt-BR', 'Não foi possível remover o serviço de IA. Tente novamente.'], ['en', 'Could not remove the AI service. Try again.']])('keeps the key and reports a failed removal in %s', async (locale, message) => {
+    fixture.removeTransport.mockRejectedValueOnce(new Error('SYNTHETIC_PRIVATE_BODY'))
+    const screen = await mount(locale)
+    await vi.waitFor(() => expect(input(screen.container, 'lia-model').value).toBe('custom/Meu-modelo:Q4'))
+    await screen.getByRole('button', { name: locale === 'en' ? 'Remove' : 'Remover', exact: true }).click()
+    await vi.waitFor(() => expect(fixture.error).toHaveBeenCalledWith(message))
+    expect(fixture.deleteApiKey).not.toHaveBeenCalled()
+    expect(fixture.config.preferred?.providerId).toBe('openai-compatible')
+  })
   it('preserves a custom model on load, edit, save and provider change', async () => {
     const screen = await mount()
     await vi.waitFor(() => expect(input(screen.container, 'lia-model').value).toBe('custom/Meu-modelo:Q4'))

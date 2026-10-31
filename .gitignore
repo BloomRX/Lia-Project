@@ -14,3 +14,7 @@ Tests/logs/
 Tests/inventory/
 Tests/tmp/
 Tests/artifacts/
+
+# Workspace tooling may create a root cache; dependencies are never source.
+/node_modules/
+/airi/apps/stage-tamagotchi/Tests/artifacts/

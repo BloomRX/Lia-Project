@@ -555,7 +555,7 @@ export interface LiaSecretPayload {
 
 export const electronLiaSecretEncryptionAvailable = defineInvokeEventa<boolean>('eventa:invoke:lia:secret:encryption-available')
 export const electronLiaSecretHas = defineInvokeEventa<boolean, LiaSecretPayload>('eventa:invoke:lia:secret:has')
-export const electronLiaSecretSet = defineInvokeEventa<boolean, LiaSecretPayload & { value: string }>('eventa:invoke:lia:secret:set')
+export const electronLiaSecretSet = defineInvokeEventa<boolean, LiaSecretPayload & { value: string, onlyIfMissing?: boolean }>('eventa:invoke:lia:secret:set')
 export const electronLiaSecretGet = defineInvokeEventa<string | undefined, LiaSecretPayload>('eventa:invoke:lia:secret:get')
 export const electronLiaSecretDelete = defineInvokeEventa<boolean, LiaSecretPayload>('eventa:invoke:lia:secret:delete')
 

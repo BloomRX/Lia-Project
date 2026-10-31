@@ -11,6 +11,15 @@ Fonte: [`CURRENT-STATE.md`](CURRENT-STATE.md) §0 e §5, medido em
 
 ## Onde o projeto está
 
+30/10, revisão de Transport Configuration: persistência e consumidor HTTP/SSE
+próprios no main, migração/CAS e proteções de remoção/escopos testadas. Núcleo 77,
+Core-agent 156, stores/main/cache/cofre 449, Chromium 16, lint/typechecks/builds PASS;
+Electron real com HTTP local e rede do renderer bloqueada confirmou 11 grupos.
+**Segurança global permanece parcial:** consumidores legados ainda usam getter
+de credenciais no renderer fora dos escopos protegidos. Stage completo, modelo
+externo e instalador não foram aprovados. Revisão não publicada, aguardando o Dev;
+seis Core/auditorias preservados, baseline mantido. [Relatório e matriz](../product/RELEASE-WINDOWS-2026-10-30-TRANSPORT-CONFIGURATION.md).
+
 30/10, Runtime E2E: **PASS Windows real de componentes** em Electron com IPC,
 cofre criptografado e perfil isolado; JSON/SSE, autenticação sintética por serviço,
 erros, cancelamento, timeout padrão, reinício e crash do renderer com encerramento

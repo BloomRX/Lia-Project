@@ -7,11 +7,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createApp } from 'vue'
 import { useI18n } from 'vue-i18n'
 
+import { setTransportTestVaultResolver } from '../../services/lia/transport-config.fixture'
+
 const ipc = vi.hoisted(() => ({
   chatConfig: vi.fn(async (): Promise<import('../../../shared/eventa').LiaProviderChatConfig> => ({})),
   encryptionAvailable: vi.fn(async () => true),
   saveChatConfig: vi.fn(async (_config: import('../../../shared/eventa').LiaProviderChatConfig) => {}),
   secretDelete: vi.fn(async () => true),
+  vaultGet: vi.fn(async (_payload: { scope: string, key: string }): Promise<string | undefined> => undefined),
   secretGet: vi.fn(async (): Promise<string | undefined> => undefined),
   secretHas: vi.fn(async () => false),
   secretSet: vi.fn(async () => true),
@@ -55,11 +58,13 @@ beforeEach(() => {
   app.use(pinia)
   app.use(PiniaColada)
   setActivePinia(pinia)
-  ipc.secretGet.mockResolvedValue(KEY)
+  setTransportTestVaultResolver(pinia, ipc.vaultGet)
+  ipc.vaultGet.mockResolvedValue(KEY)
   fetchMock = vi.fn(async () => new Response(JSON.stringify({ data: [{ id: 'custom/Listed:Q4' }, { id: 'custom/Listed:Q4' }] }), { status: 200 }))
   vi.stubGlobal('fetch', fetchMock)
 })
 afterEach(() => {
+  expect(ipc.secretGet).not.toHaveBeenCalled()
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
 })
@@ -88,7 +93,7 @@ describe('draft models through the real Lia ports and provider definition', () =
   it('uses the vault key and saved endpoint when no draft replacement was supplied', async () => {
     useProviderConfigStore().ensureProvider(target.providerId, target.providerId, { baseUrl: draft.baseUrl })
     await useLiaProviderStore().discoverModels({ providerId: target.providerId })
-    expect(ipc.secretGet).toHaveBeenCalled()
+    expect(ipc.vaultGet).toHaveBeenCalled()
     expect(String(fetchMock.mock.calls[0][0])).toBe('https://service.invalid/v1/models')
   })
 
@@ -113,6 +118,10 @@ describe('draft models through the real Lia ports and provider definition', () =
     const store = useLiaProviderStore()
     expect(await store.discoverModels({ providerId: 'speech-noop' })).toEqual({ status: 'ready', models: [] })
     expect(await store.testConnection({ providerId: 'speech-noop', modelId: 'manual' })).toMatchObject({ ok: false, failure: 'unsupported' })
+    // This definition remains outside the migrated HTTP transport slice.
+    expect(ipc.secretGet).toHaveBeenCalledTimes(2)
+    expect(ipc.secretGet).toHaveBeenCalledWith({ scope: 'speech-noop', key: 'apiKey' })
+    ipc.secretGet.mockClear()
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
@@ -196,5 +205,14 @@ describe('draft models through the real Lia ports and provider definition', () =
     expect(result.failure).toBe('endpoint')
     expect(result.failure).not.toBe('configuration')
     expect(JSON.stringify(result)).not.toContain(KEY)
+  })
+
+  it('does not send the saved credential to a changed draft address without an explicit replacement', async () => {
+    useProviderConfigStore().ensureProvider(target.providerId, target.providerId, { baseUrl: draft.baseUrl })
+    const result = await useLiaProviderStore().discoverModels({ providerId: target.providerId, baseUrl: 'https://changed-draft.invalid/v1/' })
+    expect(result.status).toBe('ready')
+    expect(String(fetchMock.mock.calls[0][0])).toBe('https://changed-draft.invalid/v1/models')
+    expect(new Headers(fetchMock.mock.calls[0][1].headers).has('authorization')).toBe(false)
+    expect(ipc.vaultGet).not.toHaveBeenCalled()
   })
 })

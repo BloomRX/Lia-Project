@@ -217,8 +217,8 @@ async function save() {
   try {
     if (!await storeKeys())
       return false
-    await store.persistConfig(buildConfig())
     await store.ensureProviderRecord(providerId.value, baseUrl.value.trim() || undefined)
+    await store.persistConfig(buildConfig())
     await store.activatePreferred()
     apiKey.value = ''
     fallbackApiKey.value = ''
@@ -344,6 +344,9 @@ async function removeProvider() {
     keySaved.value = false
     lastTestOk.value = false
     toast.success(tt('removed'))
+  }
+  catch {
+    toast.error(tt('errors.remove'))
   }
   finally {
     busy.value = false

@@ -9,7 +9,7 @@ import { app, BrowserWindow, ipcMain, safeStorage } from 'electron'
 import { createLiaProductConfig } from '../../src/main/configs/lia'
 import { registerLiaProviderConfigBridge } from '../../src/main/services/lia/provider-config-service'
 import { createLiaSecretVault, registerLiaSecretsBridge } from '../../src/main/services/lia/secrets-service'
-import { registerLiaTransportConfigBridge } from '../../src/main/services/lia/transport-config-service'
+import { canRendererReadLegacySecret, registerLiaTransportConfigBridge } from '../../src/main/services/lia/transport-config-service'
 
 const root = process.env.LIA_PROVIDER_GATE_DIR
 const preload = process.env.LIA_PROVIDER_GATE_PRELOAD
@@ -28,16 +28,17 @@ void app.whenReady().then(async () => {
   metrics.encryptionAvailable = safeStorage.isEncryptionAvailable()
   const vault = createLiaSecretVault()
   const { context } = createContext(ipcMain)
-  registerLiaSecretsBridge({ context, vault: {
+  const measuredVault = {
     ...vault,
-    getSecret(scope, key) {
+    getSecret(scope: string, key: string) {
       metrics.readScopes.push(scope)
       saveMetrics()
       return vault.getSecret(scope, key)
     },
-  } })
+  }
+  registerLiaSecretsBridge({ context, vault: measuredVault, allowRendererRead: canRendererReadLegacySecret })
   registerLiaProviderConfigBridge({ context, liaProductConfig: createLiaProductConfig() })
-  registerLiaTransportConfigBridge({ context })
+  registerLiaTransportConfigBridge({ context, vault: measuredVault })
 
   const window = new BrowserWindow({
     title: 'Lia — Gate Electron local',

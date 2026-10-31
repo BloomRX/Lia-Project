@@ -1,6 +1,39 @@
-import { describe, expect, it } from 'vitest'
+import { unified } from 'unified'
+import { describe, expect, it, vi } from 'vitest'
 
-import { createStreamingCategorizer } from './response-categoriser'
+import { categorizeResponse, createStreamingCategorizer } from './response-categoriser'
+
+describe('categorizeResponse parser failure privacy', () => {
+  it('preserves the raw speech fallback without logging an external parser failure', () => {
+    const response = 'Resposta <think>raciocínio</think> concluída.'
+    expect(categorizeResponse(response).reasoning).toBe('raciocínio')
+    const error = Object.assign(new Error('PRIVATE_RESPONSE https://example.invalid/private?key=FAKE_KEY'), {
+      cause: new Error('PRIVATE_CAUSE'),
+      name: 'PRIVATE_NAME',
+      code: 'PRIVATE_CODE',
+      status: 'PRIVATE_STATUS',
+      requestId: 'PRIVATE_REQUEST_ID',
+      body: { content: 'PRIVATE_CONTENT' },
+    })
+    // Fault the public parsing dependency while exercising the real categorizer.
+    // No alternate import or invalid response type is needed to reach its guard.
+    const processor: Pick<typeof unified, 'parse'> = Object.getPrototypeOf(unified)
+    const parse = vi.spyOn(processor, 'parse').mockImplementationOnce(() => {
+      throw error
+    })
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    try {
+      expect(categorizeResponse(response)).toEqual({ segments: [], speech: response, reasoning: '', raw: response })
+      expect(parse).toHaveBeenCalledWith(response)
+      expect(log.mock.calls).toEqual([['Failed to parse response for tag extraction:']])
+    }
+    finally {
+      parse.mockRestore()
+      log.mockRestore()
+    }
+  })
+})
 
 describe('createStreamingCategorizer', () => {
   it('should handle pure speech without tags', () => {

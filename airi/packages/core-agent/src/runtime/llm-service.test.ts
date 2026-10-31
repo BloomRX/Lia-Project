@@ -364,6 +364,154 @@ describe('streamFrom tool errors', () => {
   })
 })
 
+describe('streamFrom failure log privacy', () => {
+  function externalError() {
+    return Object.assign(new Error('PRIVATE_RESPONSE https://example.invalid/private?key=FAKE_KEY'), {
+      cause: new Error('PRIVATE_CAUSE'),
+      name: 'PRIVATE_NAME',
+      code: 'PRIVATE_CODE',
+      status: 'PRIVATE_STATUS',
+      requestId: 'PRIVATE_REQUEST_ID',
+      body: { content: 'PRIVATE_CONTENT' },
+    })
+  }
+
+  beforeEach(() => {
+    streamTextMock.mockReset()
+  })
+
+  it('consumes independent rejected promises without logging their payloads or changing the rejected error', async () => {
+    const error = externalError()
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const unhandled: unknown[] = []
+    const onUnhandled = (reason: unknown) => unhandled.push(reason)
+    process.on('unhandledRejection', onUnhandled)
+    streamTextMock.mockReturnValueOnce({
+      steps: Promise.reject(error),
+      messages: Promise.reject(externalError()),
+      usage: Promise.reject(externalError()),
+      totalUsage: Promise.reject(externalError()),
+    })
+
+    try {
+      await expect(streamFrom({ model: 'model-a', chatProvider: provider, messages: [] })).rejects.toBe(error)
+      await new Promise(resolve => setImmediate(resolve))
+      expect(unhandled).toEqual([])
+      expect(log.mock.calls).toHaveLength(4)
+      expect(log.mock.calls).toEqual(expect.arrayContaining([
+        ['Stream steps error:'],
+        ['Stream messages error:'],
+        ['Stream usage error:'],
+        ['Stream totalUsage error:'],
+      ]))
+    }
+    finally {
+      process.off('unhandledRejection', onUnhandled)
+      log.mockRestore()
+    }
+  })
+
+  it('keeps a final transcript rejection intact and its rejection sink private', async () => {
+    const error = externalError()
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    streamTextMock.mockReturnValueOnce(createMockStreamResult(Promise.resolve([]), Promise.resolve(undefined), Promise.reject(error)))
+
+    try {
+      await expect(streamFrom({ model: 'model-a', chatProvider: provider, messages: [] })).rejects.toBe(error)
+      expect(log.mock.calls).toEqual([['Stream messages error:']])
+    }
+    finally {
+      log.mockRestore()
+    }
+  })
+
+  it.each(['transcript', 'finish'] as const)('keeps the original %s observer failure without logging its payload', async (stage) => {
+    const error = externalError()
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const observer = vi.fn(() => {
+      throw error
+    })
+    streamTextMock.mockReturnValueOnce(createMockStreamResult())
+
+    try {
+      await expect(streamFrom({
+        model: 'model-a',
+        chatProvider: provider,
+        messages: [],
+        options: stage === 'transcript' ? { onMessages: observer } : { onStreamEvent: observer },
+      })).rejects.toBe(error)
+      expect(observer).toHaveBeenCalledTimes(1)
+      expect(log.mock.calls).toEqual([])
+    }
+    finally {
+      log.mockRestore()
+    }
+  })
+
+  it('keeps a completed response successful when total usage rejects and emits only fixed stage logs', async () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const onUsage = vi.fn()
+    const onMessages = vi.fn()
+    const onStreamEvent = vi.fn()
+    const messages: Message[] = [{ role: 'assistant', content: 'Resposta concluída.' }]
+    streamTextMock.mockReturnValueOnce(createMockStreamResult(Promise.resolve([]), Promise.reject(externalError()), Promise.resolve(messages)))
+
+    try {
+      await expect(streamFrom({
+        model: 'model-a',
+        chatProvider: provider,
+        messages: [],
+        options: { onUsage, onMessages, onStreamEvent },
+      })).resolves.toBeUndefined()
+      expect(onMessages).toHaveBeenCalledWith(messages)
+      expect(onStreamEvent).toHaveBeenCalledWith({ type: 'finish' })
+      expect(onUsage).toHaveBeenCalledWith({ source: 'unavailable' })
+      expect(log.mock.calls).toEqual([['Stream totalUsage error:'], ['Stream totalUsage error:']])
+    }
+    finally {
+      log.mockRestore()
+    }
+  })
+
+  it('keeps a completed response successful and private when the usage observer throws', async () => {
+    const error = externalError()
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const onUsage = vi.fn(() => {
+      throw error
+    })
+    const onMessages = vi.fn()
+    streamTextMock.mockReturnValueOnce(createMockStreamResult())
+
+    try {
+      await expect(streamFrom({ model: 'model-a', chatProvider: provider, messages: [], options: { onUsage, onMessages } })).resolves.toBeUndefined()
+      expect(onMessages).toHaveBeenCalledTimes(1)
+      expect(onUsage).toHaveBeenCalledWith({ source: 'unavailable' })
+      expect(log.mock.calls).toEqual([['Stream usage callback error:']])
+    }
+    finally {
+      log.mockRestore()
+    }
+  })
+
+  it('also keeps the last observation failure private if the usage logger itself throws', async () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {}).mockImplementationOnce(() => {
+      throw externalError()
+    })
+    const onUsage = vi.fn(() => {
+      throw externalError()
+    })
+    streamTextMock.mockReturnValueOnce(createMockStreamResult())
+
+    try {
+      await expect(streamFrom({ model: 'model-a', chatProvider: provider, messages: [], options: { onUsage } })).resolves.toBeUndefined()
+      expect(log.mock.calls).toEqual([['Stream usage callback error:'], ['Stream usage observation error:']])
+    }
+    finally {
+      log.mockRestore()
+    }
+  })
+})
+
 describe('sanitizeMessages', () => {
   it('rewrites internal `error`-role messages as user-role narrations', () => {
     /**

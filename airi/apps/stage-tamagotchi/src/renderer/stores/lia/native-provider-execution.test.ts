@@ -8,12 +8,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createApp } from 'vue'
 
 import { createNativeProviderRuntime } from '../../services/lia/native-provider-runtime'
+import { setTransportTestVaultResolver } from '../../services/lia/transport-config.fixture'
 
 const ipc = vi.hoisted(() => ({
   chatConfig: vi.fn(async (): Promise<import('../../../shared/eventa').LiaProviderChatConfig> => ({})),
   encryptionAvailable: vi.fn(async () => true),
   saveChatConfig: vi.fn(async (_config: import('../../../shared/eventa').LiaProviderChatConfig) => {}),
   secretDelete: vi.fn(async () => true),
+  vaultGet: vi.fn(async (_payload: { scope: string, key: string }): Promise<string | undefined> => undefined),
   secretGet: vi.fn(async (): Promise<string | undefined> => undefined),
   secretHas: vi.fn(async () => false),
   secretSet: vi.fn(async () => true),
@@ -68,11 +70,13 @@ beforeEach(() => {
   app.use(pinia)
   app.use(PiniaColada)
   setActivePinia(pinia)
-  ipc.secretGet.mockResolvedValue(KEY)
+  setTransportTestVaultResolver(pinia, ipc.vaultGet)
+  ipc.vaultGet.mockResolvedValue(KEY)
   fetchMock = vi.fn(async () => new Response(JSON.stringify({ data: [{ id: 'custom/Listed:Q4' }, { id: 'custom/Listed:Q4' }] }), { status: 200 }))
   vi.stubGlobal('fetch', fetchMock)
 })
 afterEach(() => {
+  expect(ipc.secretGet).not.toHaveBeenCalled()
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
   resetChatProviderRuntimeExtensionsForTesting()
@@ -98,6 +102,19 @@ function install() {
 }
 
 describe('native provider production bridge', () => {
+  it('cancels a pending main request when the owning store is disposed', async () => {
+    const { lia, source } = install()
+    fetchMock.mockImplementationOnce(async () => new Promise<Response>(() => {}))
+    const provider = await source.getChatProviderInstance(target.providerId, { reasoning: 'disabled' })
+    const pending = provider!.chat(target.modelId).fetch!(new URL('https://ignored.invalid'), {
+      method: 'POST',
+      body: JSON.stringify({ model: target.modelId, messages: [{ role: 'user', content: 'synthetic' }] }),
+    })
+    const outcome = expect(pending).rejects.toMatchObject({ code: 'cancelled' })
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+    lia.$dispose()
+    await outcome
+  })
   it('executes the existing Core/xsAI stream through Lia HTTP without creating a legacy instance or exposing the vault key to SDK options', async () => {
     const { source, legacy } = install()
     fetchMock.mockResolvedValueOnce(sse(['Lia', ' ', 'nativa', '\n', '42']))
@@ -119,7 +136,7 @@ describe('native provider production bridge', () => {
     expect(String(url)).toBe(`${address}chat/completions`)
     expect(new Headers(init.headers).get('authorization')).toBe(`Bearer ${KEY}`)
     expect(JSON.parse(init.body).model).toBe(target.modelId)
-    expect(ipc.secretGet).toHaveBeenCalled()
+    expect(ipc.vaultGet).toHaveBeenCalled()
     expect(JSON.stringify(useProviderConfigStore().$state)).not.toContain(KEY)
   })
 
@@ -165,7 +182,7 @@ describe('native provider production bridge', () => {
     fetchMock.mockResolvedValueOnce(new Response(`${first}data: [DONE]\n\n`, { headers: { 'content-type': 'text/event-stream' } }))
       .mockResolvedValueOnce(sse(['Concluído']))
     const execute = vi.fn(async () => {
-      ipc.secretGet.mockResolvedValueOnce('ROTATED_SYNTHETIC_SECRET')
+      ipc.vaultGet.mockResolvedValueOnce('ROTATED_SYNTHETIC_SECRET')
       return 'fixture-ok'
     })
     const provider = await source.getChatProviderInstance(target.providerId, { reasoning: 'disabled' })
@@ -203,5 +220,27 @@ describe('native provider production bridge', () => {
     await response.text()
     expect(String(fetchMock.mock.calls[0][0])).toBe('https://changed.invalid/v1/chat/completions')
     native.dispose()
+  })
+
+  it('cancels a main-owned HTTP request while waiting for response headers', async () => {
+    const { source } = install()
+    let mainSignal: AbortSignal | undefined
+    fetchMock.mockImplementationOnce((_url, init) => new Promise<Response>((_resolve, reject) => {
+      mainSignal = init.signal
+      mainSignal!.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true })
+    }))
+    const provider = await source.getChatProviderInstance(target.providerId, { reasoning: 'disabled' })
+    const controller = new AbortController()
+    const pending = provider!.chat(target.modelId).fetch!(new URL('https://ignored.invalid'), {
+      method: 'POST',
+      signal: controller.signal,
+      body: JSON.stringify({ model: target.modelId, messages: [{ role: 'user', content: 'synthetic' }] }),
+    })
+    const rejected = expect(pending).rejects.toMatchObject({ code: 'cancelled' })
+    await vi.waitFor(() => expect(mainSignal).toBeDefined())
+    controller.abort()
+    await rejected
+    expect(mainSignal!.aborted).toBe(true)
+    expect(ipc.vaultGet).toHaveBeenCalledTimes(1)
   })
 })

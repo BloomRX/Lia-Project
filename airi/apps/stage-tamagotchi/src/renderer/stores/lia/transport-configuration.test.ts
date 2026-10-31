@@ -8,13 +8,15 @@ import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createApp } from 'vue'
 
-import { createLiaTransportClient, legacyTransportCandidates } from '../../services/lia/transport-config'
+import { createLiaTransportClient, legacyTransportCandidates, toTransportRecord } from '../../services/lia/transport-config'
+import { setTransportTestVaultResolver } from '../../services/lia/transport-config.fixture'
 
 const ipc = vi.hoisted(() => ({
   chat: vi.fn(async (): Promise<LiaProviderChatConfig> => ({})),
   save: vi.fn(async () => {}),
   available: vi.fn(async () => true),
   has: vi.fn(async () => false),
+  vaultGet: vi.fn(async (_payload: { scope: string, key: string }): Promise<string | undefined> => undefined),
   get: vi.fn(async (_value: { scope: string, key: string }): Promise<string | undefined> => undefined),
   set: vi.fn(async () => true),
   delete: vi.fn(async () => true),
@@ -64,16 +66,18 @@ beforeEach(() => {
   app.use(pinia)
   app.use(PiniaColada)
   setActivePinia(pinia)
+  setTransportTestVaultResolver(pinia, ipc.vaultGet)
   ipc.chat.mockResolvedValue({ preferred: { providerId: 'openai-compatible', modelId: model } })
   ipc.available.mockResolvedValue(true)
   ipc.has.mockResolvedValue(false)
   ipc.set.mockResolvedValue(true)
-  ipc.get.mockResolvedValue(undefined)
+  ipc.vaultGet.mockResolvedValue(undefined)
   fetchMock = vi.fn(async () => Response.json({ choices: [{ message: { content: 'OK' } }] }))
   vi.stubGlobal('fetch', fetchMock)
 })
 
 afterEach(() => {
+  expect(ipc.get).not.toHaveBeenCalled()
   resetChatProviderRuntimeExtensionsForTesting()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
@@ -131,7 +135,7 @@ describe('lia-owned transport configuration integration', () => {
     })
     expect(JSON.stringify(stored)).not.toContain(key)
     expect(stored.adapterOptions).not.toHaveProperty('apiKey')
-    expect(ipc.set).toHaveBeenCalledExactlyOnceWith({ scope: 'personal-service', key: 'apiKey', value: key })
+    expect(ipc.set).toHaveBeenCalledExactlyOnceWith({ scope: 'personal-service', key: 'apiKey', value: key, onlyIfMissing: true })
     expect(ipc.delete).not.toHaveBeenCalled()
   })
 
@@ -187,7 +191,7 @@ describe('lia-owned transport configuration integration', () => {
       'personal-service': { id: 'personal-service', definitionId: 'openai-compatible', config: { baseUrl } },
     }))
     ipc.chat.mockResolvedValue({ preferred: { providerId: 'personal-service', modelId: model } })
-    ipc.get.mockResolvedValue(key)
+    ipc.vaultGet.mockResolvedValue(key)
     const lia = useLiaProviderStore()
     await lia.refreshConfig()
     const source = useProviderStore()
@@ -196,14 +200,14 @@ describe('lia-owned transport configuration integration', () => {
     lia.registerRuntimeExtensions()
     const provider = await source.getChatProviderInstance('personal-service', { reasoning: 'disabled' })
     expect(provider).toBeDefined()
-    const response = await provider!.chat(model).fetch!('https://ignored-fixture.invalid', {
+    const response = await provider!.chat(model).fetch!(new URL('https://ignored-fixture.invalid'), {
       method: 'POST',
       body: JSON.stringify({ model, messages: [{ role: 'user', content: 'fixture' }] }),
     })
     expect(await response.json()).toEqual({ choices: [{ message: { content: 'OK' } }] })
     expect(legacy).not.toHaveBeenCalled()
     expect(String(fetchMock.mock.calls[0][0])).toBe(`${baseUrl}chat/completions`)
-    expect(ipc.get).toHaveBeenCalledExactlyOnceWith({ scope: 'personal-service', key: 'apiKey' })
+    expect(ipc.vaultGet).toHaveBeenCalledExactlyOnceWith({ scope: 'personal-service', key: 'apiKey' })
     expect(JSON.stringify((await snapshot()).records)).not.toContain(key)
   })
 
@@ -238,15 +242,81 @@ describe('lia-owned transport configuration integration', () => {
     const source = useProviderStore()
     lia.registerRuntimeExtensions()
     await expect(source.getChatProviderInstance('first-service', { reasoning: 'disabled' })).rejects.toThrow()
-    expect(ipc.get).not.toHaveBeenCalled()
+    expect(ipc.vaultGet).not.toHaveBeenCalled()
     const second = await source.getChatProviderInstance('second-service', { reasoning: 'disabled' })
-    const response = await second!.chat(model).fetch!('https://ignored-fixture.invalid', {
+    const response = await second!.chat(model).fetch!(new URL('https://ignored-fixture.invalid'), {
       method: 'POST',
       body: JSON.stringify({ model, messages: [{ role: 'user', content: 'fixture' }] }),
     })
     await response.text()
     expect(String(fetchMock.mock.calls[0][0])).toBe('https://second-fixture.invalid/v1/chat/completions')
-    expect(ipc.get).toHaveBeenCalledExactlyOnceWith({ scope: 'second-service', key: 'apiKey' })
+    expect(ipc.vaultGet).toHaveBeenCalledExactlyOnceWith({ scope: 'second-service', key: 'apiKey' })
     expect((await snapshot()).records).toHaveLength(2)
+  })
+
+  it('restores metadata for a custom keyless provider from its own saved definition without a legacy endpoint', async () => {
+    const client = createLiaTransportClient()
+    await client.refresh()
+    await client.put(toTransportRecord('personal-local', 'lm-studio', { baseUrl }))
+    const lia = useLiaProviderStore()
+    await lia.refreshConfig()
+    expect(lia.providerNeedsKey('personal-local')).toBe(false)
+    const metadata = await lia.ensureProviderRecord('personal-local')
+    expect(metadata?.definitionId).toBe('lm-studio')
+    expect(metadata?.config).toEqual({})
+    expect(lia.providerBaseUrl('personal-local')).toBe(baseUrl)
+  })
+
+  it.each([false, true])('never delegates a removed custom transport back to legacy when transport/provider IDs differ: %s', async (differentId) => {
+    localStorage.setItem('settings/providers/configured', JSON.stringify({
+      'removed-service': { id: 'removed-service', definitionId: 'openai-compatible', config: { baseUrl } },
+    }))
+    if (differentId) {
+      const client = createLiaTransportClient()
+      await client.refresh()
+      await client.put({ ...toTransportRecord('removed-service', 'openai-compatible', { baseUrl }), id: 'transport-123' })
+    }
+    const lia = useLiaProviderStore()
+    await lia.refreshConfig()
+    await lia.removeTransport('removed-service')
+    const source = useProviderStore()
+    const legacy = vi.fn(source.getChatProviderInstance)
+    source.getChatProviderInstance = legacy
+    lia.registerRuntimeExtensions()
+    await expect(source.getChatProviderInstance('removed-service', { reasoning: 'disabled' })).rejects.toThrow()
+    expect(legacy).not.toHaveBeenCalled()
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(ipc.vaultGet).not.toHaveBeenCalled()
+  })
+
+  it('keeps an aliased custom ID on its own credential scope and isolates a keyless record at the same address', async () => {
+    const alias = 'lia-groq-transcription'
+    localStorage.setItem('settings/providers/configured', JSON.stringify({
+      [alias]: { id: alias, definitionId: 'openai-compatible', config: { baseUrl } },
+      'keyless-service': { id: 'keyless-service', definitionId: 'openai-compatible', config: { baseUrl } },
+    }))
+    ipc.vaultGet.mockImplementation(async ({ scope }) => scope === alias ? key : undefined)
+    const log = vi.spyOn(console, 'info').mockImplementation(() => {})
+    const lia = useLiaProviderStore()
+    await lia.refreshConfig()
+    const source = useProviderStore()
+    const legacy = vi.fn(source.getChatProviderInstance)
+    source.getChatProviderInstance = legacy
+    lia.registerRuntimeExtensions()
+    for (const id of [alias, 'keyless-service']) {
+      const provider = await source.getChatProviderInstance(id, { reasoning: 'disabled' })
+      const response = await provider!.chat(model).fetch!(new URL('https://ignored-fixture.invalid'), {
+        method: 'POST',
+        body: JSON.stringify({ model, messages: [{ role: 'user', content: 'fixture' }] }),
+      })
+      expect(await response.json()).toEqual({ choices: [{ message: { content: 'OK' } }] })
+    }
+    expect(ipc.vaultGet.mock.calls.map(([payload]) => payload.scope)).toEqual([alias, 'keyless-service'])
+    expect(ipc.vaultGet).not.toHaveBeenCalledWith({ scope: 'groq', key: 'apiKey' })
+    expect(new Headers(fetchMock.mock.calls[0][1].headers).get('authorization')).toBe(`Bearer ${key}`)
+    expect(new Headers(fetchMock.mock.calls[1][1].headers).has('authorization')).toBe(false)
+    expect(legacy).not.toHaveBeenCalled()
+    expect(JSON.stringify(log.mock.calls)).not.toContain(key)
+    expect(JSON.stringify((await snapshot()).records)).not.toContain(key)
   })
 })

@@ -11,12 +11,16 @@ export function isNativeTransportDefinition(id: string) {
 /** Main owns persistence and revision. This closure is a read cache, never Pinia/storage. */
 export function createLiaTransportClient() {
   let snapshot: TransportSnapshot | undefined
+  function accept(next: TransportSnapshot) {
+    if (!snapshot || next.revision >= snapshot.revision)
+      snapshot = structuredClone(next)
+    return structuredClone(snapshot)
+  }
   async function refresh() {
     const result = await useElectronEventaInvoke(electronLiaTransportsGet)()
     if (!result?.ok)
       throw new Error('Transport configuration unavailable')
-    snapshot = result.snapshot
-    return snapshot
+    return accept(result.snapshot)
   }
   async function mutate(change: Omit<Extract<TransportMutation, { kind: 'put' }>, 'expectedRevision'> | Omit<Extract<TransportMutation, { kind: 'remove' }>, 'expectedRevision'> | Omit<Extract<TransportMutation, { kind: 'migrate' }>, 'expectedRevision'>) {
     if (!snapshot)
@@ -24,19 +28,19 @@ export function createLiaTransportClient() {
     const result: TransportResult = await useElectronEventaInvoke(electronLiaTransportsMutate)({ ...change, expectedRevision: snapshot!.revision })
     if (!result?.ok)
       throw new Error('Transport configuration could not be saved')
-    snapshot = result.snapshot
-    return snapshot
+    return accept(result.snapshot)
   }
   const get = (providerId: string) => {
     const records = snapshot?.records.filter(record => record.providerId === providerId) ?? []
     if (records.length > 1)
       throw new Error('Ambiguous transport selection')
-    return records[0]
+    return records[0] ? structuredClone(records[0]) : undefined
   }
   return {
     refresh,
     get,
-    hasRemoved: (id: string) => snapshot?.tombstones.includes(id) === true,
+    hasRemoved: (id: string) => !snapshot?.records.some(record => record.providerId === id)
+      && (snapshot?.tombstones.includes(id) === true || snapshot?.protectedCredentialScopes?.includes(id) === true),
     put: (record: TransportRecord) => mutate({ kind: 'put', record }),
     remove: (id: string) => mutate({ kind: 'remove', id }),
     migrate: (records: TransportRecord[]) => mutate({ kind: 'migrate', records }),

@@ -13,6 +13,24 @@ commit. Registra **estado**, não narrativa: relatório de rodada vai para
 
 ## 0. Estado agora
 
+**Transport Configuration — revisão de 30/10/2026, sem novo commit/push:**
+persistência própria no main, CAS, migração idempotente e execução HTTP/SSE por
+IPC revisados. A execução migrada não devolve chaves do cofre ao renderer; getter negado
+para seus escopos, inclusive removidos. Corrigidos alias de credencial, retorno
+ao legado após remoção (IDs distintos incluídos), cache atrasado, importação
+concorrente e descarte do store. UI trata erro de remoção em pt-BR/en.
+**PASS:** núcleo próprio 77, Core-agent 156, stores/main/cache/cofre 449, Chromium 16,
+typechecks, lint e builds Core/Stage/i18n. Electron real com HTTP local: 11 grupos,
+rede do renderer bloqueada, cofre real, restart/cancelamento/crash e processos
+encerrados. Não equivale a modelo externo nem Stage completo com personagem.
+**Limitação de segurança global:** leitores legados fora dos escopos protegidos
+e cópias históricas ainda podem expor credenciais no renderer. Não fechar esse canal sem migrar seus
+consumidores, preservando voz. Relatório: `docs/product/RELEASE-WINDOWS-2026-10-30-TRANSPORT-CONFIGURATION.md`.
+Seis Core e relatórios de auditoria preservados. HEAD local WIP anterior mantido;
+esta revisão fica no working tree para avaliação do Dev, sem publicação.
+**Próximo:** migrar leitores legados de credenciais/protocolos; validar Stage
+completo/serviço externo e instalador. Baseline funcional permanece `3ef6d11`.
+
 **Checkpoint de transportes em 30/10/2026 — INCOMPLETO:** implementação local
 preservada em commit WIP para sincronização Git, após os commits de governança
 do Dev. Inclui contratos/repositório próprios, IPC, importação dos registros e

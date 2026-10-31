@@ -1067,7 +1067,9 @@ export function createChatOrchestratorRuntime(deps: ChatOrchestratorRuntimeDeps)
       // replace the escaping error, and the treatment of this round stays
       // `failed` either way.
       terminalOutcome = 'failed'
-      console.error('Error sending message:', error)
+      // External failures may contain credentials, URLs or conversation data.
+      // Keep diagnostics to a closed stage label; the original error still escapes.
+      console.error('Error sending message:')
       deps.onMessageRoundFailed?.({
         ...correlation,
         source: sendSource,

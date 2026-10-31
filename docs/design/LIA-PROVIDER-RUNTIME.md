@@ -2,6 +2,8 @@
 
 Implementação de 30/10/2026. Estado e evidências em
 [`LIA-PROVIDER-RUNTIME-2026-10-30.md`](../architecture/LIA-PROVIDER-RUNTIME-2026-10-30.md).
+Evolução de configuração e execução no main:
+[`Transport Configuration`](../product/RELEASE-WINDOWS-2026-10-30-TRANSPORT-CONFIGURATION.md).
 
 ## Contrato e implementação próprios
 
@@ -30,13 +32,15 @@ Editor / lia-product.json
   → action de resolução do host (ponte Lia, instalada no renderer líder)
   → factory e registry Lia para o ID genérico persistido
   → Core/xsAI montam mensagens e loop de ferramentas
-  → fetch da Lia → ProviderRuntime → serviço configurado
+  → fetch da Lia → IPC de execução → ProviderRuntime no main → serviço configurado
 ```
 
 A ponte `native-provider-runtime.ts` fornece apenas `{model, baseURL, fetch}` ao
-SDK, sem chave. O fetch ignora o destino fornecido pelo SDK e usa o endereço
-validado da instância própria; preserva corpo JSON, ferramentas, partes de imagem
-e opções de transporte. Autenticação e cancelamento são aplicados dentro dele.
+SDK, sem chave. Na integração de produção, esse fetch usa o port
+`main-transport-execution.ts`: start, cabeçalho, pulls de bytes e cancelamento.
+O main lê o endereço habilitado do repositório próprio, confere o endereço esperado
+e resolve a referência exata do cofre. O corpo existente de chat/ferramentas é
+preservado; autenticação nunca precisa voltar ao renderer nesse caminho.
 
 Os IDs persistidos `openai-compatible` e `lm-studio` identificam os dois alvos
 migrados. São compatibilidade com a configuração existente, não um catálogo do
@@ -69,27 +73,40 @@ ou de cancelar as operações do endereço novo ao ressuscitar o cache anterior.
 
 ## O que permanece temporário
 
-Configuração de endpoint/registro visual, sincronização, ativação e ponto de
-despacho ainda usam os stores do host legado. Core/xsAI continuam responsáveis
-por histórico, interpretação do stream no chat e ciclo de ferramentas. Voz,
-visão/Brain, avatar e demais protocolos não foram migrados.
+Endpoint, protocolo, opções e habilitação dos registros migrados pertencem a
+`userData/lia-transports.json`, com dono singleton no main, CAS por revisão e
+substituição atômica. O renderer mantém apenas cópias de leitura e não aceita
+respostas de revisão inferior à já observada. A ativação visual/metadata e o
+despacho ainda usam o host legado. Core/xsAI continuam responsáveis por histórico,
+interpretação do stream e ferramentas. Voz, visão/Brain, avatar e demais
+protocolos não foram migrados.
 
 Esta implementação não conclui a independência do aplicativo ou a remoção do
-Stage. O próximo passo é definir configuração própria de transporte/protocolo
-para substituir o registro legado sem perder compatibilidade, seguido por
-adapters específicos com fixtures de seus protocolos reais.
+Stage. O próximo passo é migrar seletivamente as outras capacidades e retirar
+o getter de credenciais dos consumidores legados antes de aprovar confidencialidade
+global. Novos protocolos precisam de adapters e fixtures próprios.
 
 ## Fronteira Electron validada
 
-O transporte roda no renderer. O main atende configuração e cofre pelos canais
-Eventa existentes; não é um executor de geração novo. O resolver devolve somente
-a chave do escopo solicitado, transitoriamente para montar a requisição. Ela não
-entra na factory, cache, config, localStorage ou erros públicos. Isso preserva o
-modelo de confiança existente; não promete isolamento da chave de todo código
-do renderer nem apagamento verificável de strings pelo coletor de lixo.
+O transporte autenticado dos registros migrados roda no main. A rede do renderer
+não é usada pelo port de produção. O getter antigo é negado para seus escopos,
+inclusive após remoção/reinício. O histórico de proteção guarda provider IDs
+separadamente dos IDs de transporte. O runtime não usa aliases de voz.
+
+Jobs têm dono `WebContents` obtido do IPC real; outra janela não pode ler ou
+cancelá-los. Limites: 32 jobs totais, 8 por janela, pulls de até 64 KiB e corpo
+de requisição de até 16 MiB. Os prazos são 30 s no envio e 15 s na sonda, cobrindo
+cofre, rede e corpo. Cancelamento, fechamento/crash, alterações do registro e
+descarte do store encerram operações.
+
+Rascunho com endereço diferente do salvo não recebe a chave do cofre: usa somente
+uma chave digitada explicitamente ou autenticação ausente. Chave digitada existe
+transitoriamente no formulário antes de ser enviada ao main; não é uma leitura
+do cofre. Os consumidores legados ainda podem usar o getter anterior fora dos
+escopos protegidos. **Isso impede afirmar confidencialidade global de todo o app.**
 
 O teste reproduzível `scripts/provider-runtime-electron/gate.test.mjs` usa janela
 Electron real, preload compilado, handlers de produção, `safeStorage` real e HTTP
 local autenticado. Perfil e dumps ficam isolados no temporário do Windows; logs
 e captura ficam em `Tests/artifacts/provider-runtime-electron/`. O painel de teste
-não substitui o Stage. [Resultados e limites](../product/RELEASE-WINDOWS-2026-10-30-RUNTIME-E2E.md).
+não substitui o Stage. [Resultados e limites atuais](../product/RELEASE-WINDOWS-2026-10-30-TRANSPORT-CONFIGURATION.md).

@@ -28,6 +28,9 @@ function parse(value: unknown): { snapshot: TransportSnapshot, rejected: boolean
   if (!object(value) || value.schemaVersion !== 1 || !Number.isSafeInteger(value.revision) || Number(value.revision) < 0
     || !Array.isArray(value.records) || value.records.length > MAX_RECORDS
     || !Array.isArray(value.tombstones) || !value.tombstones.every(identifier) || value.tombstones.length > MAX_RECORDS
+    || (value.protectedCredentialScopes !== undefined && (!Array.isArray(value.protectedCredentialScopes)
+      || !value.protectedCredentialScopes.every(identifier) || value.protectedCredentialScopes.length > MAX_RECORDS))
+    || (value.credentialProtectionIncomplete !== undefined && typeof value.credentialProtectionIncomplete !== 'boolean')
     || !object(value.migration) || value.migration.version !== 1
     || !Array.isArray(value.migration.imported) || !value.migration.imported.every(identifier) || value.migration.imported.length > MAX_RECORDS) {
     throw new Error('Transport configuration unavailable')
@@ -36,6 +39,7 @@ function parse(value: unknown): { snapshot: TransportSnapshot, rejected: boolean
   const seen = new Set<string>()
   let rejected = new Set(value.tombstones).size !== value.tombstones.length
     || new Set(value.migration.imported).size !== value.migration.imported.length
+    || (Array.isArray(value.protectedCredentialScopes) && new Set(value.protectedCredentialScopes).size !== value.protectedCredentialScopes.length)
   for (const candidate of value.records) {
     if (isTransportRecord(candidate) && !seen.has(candidate.id) && !value.tombstones.includes(candidate.id)) {
       records.push(candidate)
@@ -51,6 +55,12 @@ function parse(value: unknown): { snapshot: TransportSnapshot, rejected: boolean
       revision: Number(value.revision),
       records,
       tombstones: [...new Set(value.tombstones)] as string[],
+      ...(value.credentialProtectionIncomplete === true || (value.tombstones.length > 0 && value.protectedCredentialScopes === undefined)
+        ? { credentialProtectionIncomplete: true }
+        : {}),
+      ...(value.protectedCredentialScopes !== undefined || records.length > 0
+        ? { protectedCredentialScopes: [...new Set([...(value.protectedCredentialScopes as string[] ?? []), ...records.map(record => record.providerId)])] }
+        : {}),
       migration: { version: 1, imported: [...new Set(value.migration.imported)] as string[] },
     },
     rejected,
@@ -164,7 +174,8 @@ export function createTransportRepository(filePath: string) {
       else {
         return { ok: false, code: 'invalid' }
       }
-      if (next.records.length > MAX_RECORDS || next.tombstones.length > MAX_RECORDS || next.migration.imported.length > MAX_RECORDS)
+      next.protectedCredentialScopes = [...new Set([...(current.protectedCredentialScopes ?? []), ...current.records.map(record => record.providerId), ...next.records.map(record => record.providerId)])]
+      if (next.records.length > MAX_RECORDS || next.tombstones.length > MAX_RECORDS || next.migration.imported.length > MAX_RECORDS || next.protectedCredentialScopes.length > MAX_RECORDS)
         return { ok: false, code: 'invalid' }
       if (JSON.stringify(next) === JSON.stringify(current))
         return { ok: true, snapshot: current }
@@ -183,6 +194,21 @@ export function createTransportRepository(filePath: string) {
     // Snapshot synchronously so caller mutation cannot race a queued operation.
     let input: TransportMutation
     try {
+      // Reject oversized/unknown IPC envelopes before cloning their contents.
+      if (!object(mutation) || !Number.isSafeInteger(mutation.expectedRevision) || mutation.expectedRevision < 0)
+        return Promise.resolve({ ok: false, code: 'invalid' })
+      const allowed = mutation.kind === 'put'
+        ? ['kind', 'expectedRevision', 'record']
+        : mutation.kind === 'remove'
+          ? ['kind', 'expectedRevision', 'id']
+          : mutation.kind === 'migrate' ? ['kind', 'expectedRevision', 'records'] : []
+      if (!Object.keys(mutation).every(key => allowed.includes(key))
+        || (mutation.kind === 'put' && !isTransportRecord(mutation.record))
+        || (mutation.kind === 'remove' && !identifier(mutation.id))
+        || (mutation.kind === 'migrate' && (!Array.isArray(mutation.records) || mutation.records.length > MAX_RECORDS || !mutation.records.every(isTransportRecord)))
+        || Buffer.byteLength(JSON.stringify(mutation)) > MAX_FILE_BYTES) {
+        return Promise.resolve({ ok: false, code: 'invalid' })
+      }
       input = structuredClone(mutation)
     }
     catch {

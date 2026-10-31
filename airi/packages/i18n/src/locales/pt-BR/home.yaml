@@ -110,6 +110,7 @@ provider:
     modelRequired: 'Selecione um modelo.'
     keyStoreUnavailable: 'O armazenamento seguro de chaves não está disponível neste dispositivo.'
     save: 'Não foi possível salvar o provider.'
+    remove: 'Não foi possível remover o serviço de IA. Tente novamente.'
     fillFirst: 'Selecione um provider e um modelo para testar a conexão.'
     testFirst: 'Teste a conexão antes de concluir.'
     concludeFailed: 'Não foi possível concluir a configuração. Tente novamente.'

@@ -7,6 +7,7 @@ import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
+import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
 import { _electron as electron } from 'playwright'
@@ -55,7 +56,7 @@ function descendants(rootPid) {
   return [...owned]
 }
 
-it('electron real: production IPC, encrypted vault and native provider runtime against local HTTP', { skip: process.platform !== 'win32' && 'Requires Windows for the real safeStorage gate', timeout: 180000 }, async (t) => {
+test('Electron real: production IPC, encrypted vault and native provider runtime against local HTTP', { skip: process.platform !== 'win32' && 'Requires Windows for the real safeStorage gate', timeout: 180000 }, async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'lia-provider-electron-'))
   const artifacts = join(repo, 'Tests/artifacts/provider-runtime-electron', `${Date.now()}`)
   await mkdir(artifacts, { recursive: true })
@@ -153,6 +154,11 @@ it('electron real: production IPC, encrypted vault and native provider runtime a
       assert.ok(security.windows.every(window => window.contextIsolation && !window.nodeIntegration && window.webSecurity !== false))
       report.versions = await application.evaluate(() => ({ electron: process.versions.electron, node: process.versions.node, chrome: process.versions.chrome }))
       report.processes.push(...security.pids)
+      await page.evaluate(() => {
+        window.fetch = async () => {
+          throw new Error('Renderer network is forbidden in this security gate')
+        }
+      })
       return page
     }
     let page = await launch()
@@ -161,6 +167,9 @@ it('electron real: production IPC, encrypted vault and native provider runtime a
       if (!await window.providerGate.seed('openai-compatible', generic) || !await window.providerGate.seed('lm-studio', local))
         throw new Error('Could not seed synthetic fixture credentials')
     }, secrets)
+    for (const id of ['openai-compatible', 'lm-studio'])
+      assert.equal(await page.evaluate(scope => window.providerGate.readProtectedSecret(scope), id), undefined)
+    report.checks.push('raw credential reads are denied; renderer network disabled while real main performs HTTP')
     const vault = await readFile(join(root, 'profile/lia-secrets.json'), 'utf8')
     assert.ok(!Object.values(secrets).some(value => vault.includes(value)))
     const initialState = JSON.parse(await readFile(join(root, 'main-state.json'), 'utf8'))
@@ -173,6 +182,7 @@ it('electron real: production IPC, encrypted vault and native provider runtime a
     const migrated = await page.evaluate(({ configured, credentials, modelIds }) => window.providerGate.migrateLegacy(configured, credentials, modelIds), { configured: oldConfigured, credentials: oldCredentials, modelIds: legacyFixture.modelIds })
     assert.equal(migrated.ok, true)
     assert.deepEqual(migrated.snapshot.records.find(record => record.id === legacyFixture.id), legacyFixture)
+    assert.equal(await page.evaluate(scope => window.providerGate.readProtectedSecret(scope), legacyFixture.id), undefined)
     assert.deepEqual(migrated.snapshot.records.find(record => record.id === 'openai-compatible').adapterOptions, { legacyFlag: true })
     const repeated = await page.evaluate(({ record, revision }) => window.providerGate.mutate({ kind: 'migrate', expectedRevision: revision, records: [record] }), { record: legacyFixture, revision: migrated.snapshot.revision })
     assert.deepEqual(repeated, migrated)
@@ -202,7 +212,9 @@ it('electron real: production IPC, encrypted vault and native provider runtime a
     }, preload)
     const secondPage = application.windows().find(window => window !== page)
     assert.ok(secondPage)
-    secondPage.on('pageerror', () => { report.secondRendererError = true })
+    secondPage.on('pageerror', () => {
+      report.secondRendererError = true
+    })
     report.secondRenderer = await secondPage.evaluate(() => ({ bridge: typeof window.electron?.ipcRenderer, status: document.querySelector('#status')?.textContent }))
     await secondPage.getByRole('status').filter({ hasText: 'Pronto' }).waitFor()
     const prior = await page.evaluate(() => window.providerGate.transports())
@@ -244,6 +256,7 @@ it('electron real: production IPC, encrypted vault and native provider runtime a
       return window.providerGate.mutate({ kind: 'remove', expectedRevision: state.snapshot.revision, id: 'openai-compatible' })
     })
     assert.equal(removed.ok, true)
+    assert.equal(await page.evaluate(() => window.providerGate.readProtectedSecret('openai-compatible')), undefined)
     assert.equal((await page.evaluate(() => window.providerGate.executeStored())).code, 'configuration')
     assert.equal(report.requests.length, requestsBeforeDisable)
     const replay = await page.evaluate(({ record, revision }) => window.providerGate.mutate({ kind: 'migrate', expectedRevision: revision, records: [record] }), { record: firstRecord, revision: removed.snapshot.revision })

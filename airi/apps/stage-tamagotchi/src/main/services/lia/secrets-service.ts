@@ -15,6 +15,13 @@ import {
 import { createLiaSecretVault } from './secrets'
 
 const log = useLogg('lia:secrets').useGlobalConfig()
+const writes = new WeakMap<LiaSecretVault, Promise<unknown>>()
+
+function serializeWrite<T>(vault: LiaSecretVault, action: () => Promise<T>): Promise<T> {
+  const result = (writes.get(vault) ?? Promise.resolve()).then(action)
+  writes.set(vault, result.catch(() => {}))
+  return result
+}
 
 type MainContext = ReturnType<typeof createContext>['context']
 
@@ -23,33 +30,44 @@ type MainContext = ReturnType<typeof createContext>['context']
  * scoped IPC contract.
  *
  * The renderer can ask whether encryption is available, test presence, and
- * store/read/delete a single opaque `scope:key` secret. Reads are returned so
- * the renderer can use the value transiently (e.g. to build one provider
- * instance) — it is never persisted by the renderer. Secret values are never
- * written to logs or to `lia-product.json`.
+ * store/delete a single opaque `scope:key` secret. Migrated transports deny
+ * reads and execute authenticated requests in main. The optional legacy read
+ * policy exists for consumers not migrated yet; it is not a privacy guarantee
+ * for those legacy consumers. Values never enter logs or product configuration.
  */
 export function registerLiaSecretsBridge(params: {
   context: MainContext
   vault: LiaSecretVault
+  /** Migrated transports execute in main and may not export stored credentials. */
+  allowRendererRead?: (scope: string) => Promise<boolean>
 }): void {
   const { context, vault } = params
+  const validReference = (payload: { scope?: string, key?: string } | undefined) =>
+    typeof payload?.scope === 'string' && payload.scope.length > 0 && payload.scope.length <= 256
+    && typeof payload.key === 'string' && payload.key.length > 0 && payload.key.length <= 64
+    && ![...payload.scope + payload.key].some(character => character.codePointAt(0)! < 32 || character.codePointAt(0) === 127)
 
   defineInvokeHandler(context, electronLiaSecretEncryptionAvailable, () => {
     return vault.isEncryptionAvailable()
   })
 
   defineInvokeHandler(context, electronLiaSecretHas, (payload) => {
-    if (!payload?.scope || !payload?.key)
+    if (!validReference(payload))
       return false
     return vault.hasSecret(payload.scope, payload.key)
   })
 
   defineInvokeHandler(context, electronLiaSecretSet, async (payload) => {
-    if (!payload?.scope || !payload?.key || typeof payload.value !== 'string' || payload.value.length === 0) {
+    if (!validReference(payload) || typeof payload.value !== 'string' || payload.value.length === 0 || payload.value.length > 16384
+      || (payload.onlyIfMissing !== undefined && typeof payload.onlyIfMissing !== 'boolean')) {
       log.warn('Rejected secret store request with missing/invalid fields')
       return false
     }
-    const stored = await vault.setSecret(payload.scope, payload.key, payload.value)
+    const stored = await serializeWrite(vault, async () => {
+      if (payload.onlyIfMissing === true && vault.hasSecret(payload.scope, payload.key))
+        return true
+      return vault.setSecret(payload.scope, payload.key, payload.value)
+    })
     if (!stored) {
       // Never echo the value. Only report outcome + whether it was a platform
       // limitation so the UI can show a friendly, non-revealing message.
@@ -59,15 +77,20 @@ export function registerLiaSecretsBridge(params: {
   })
 
   defineInvokeHandler(context, electronLiaSecretGet, (payload) => {
-    if (!payload?.scope || !payload?.key)
+    if (!validReference(payload))
       return undefined
+    if (params.allowRendererRead) {
+      return params.allowRendererRead(payload.scope)
+        .then(allowed => allowed ? vault.getSecret(payload.scope, payload.key) : undefined)
+        .catch(() => undefined)
+    }
     return vault.getSecret(payload.scope, payload.key)
   })
 
   defineInvokeHandler(context, electronLiaSecretDelete, async (payload) => {
-    if (!payload?.scope || !payload?.key)
+    if (!validReference(payload))
       return false
-    return vault.deleteSecret(payload.scope, payload.key)
+    return serializeWrite(vault, () => vault.deleteSecret(payload.scope, payload.key))
   })
 }
 

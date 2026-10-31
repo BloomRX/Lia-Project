@@ -219,6 +219,54 @@ function createHarness(options: { getActiveProvider?: () => string | undefined }
 }
 
 describe('createChatOrchestratorRuntime', () => {
+  it.each(['stream', 'activation observer'] as const)('keeps the original %s failure and terminal state without logging external error data', async (source) => {
+    const error = Object.assign(new Error('PRIVATE_RESPONSE https://example.invalid/private?key=FAKE_KEY'), {
+      cause: new Error('PRIVATE_CAUSE'),
+      name: 'PRIVATE_NAME',
+      code: 'PRIVATE_CODE',
+      status: 'PRIVATE_STATUS',
+      requestId: 'PRIVATE_REQUEST_ID',
+      body: { content: 'PRIVATE_CONTENT' },
+    })
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const harness = createHarness()
+    if (source === 'stream')
+      harness.stream.mockRejectedValueOnce(error)
+    else
+      harness.knobs.chatActivationSucceededThrows(error)
+
+    try {
+      await expect(harness.runtime.ingest('hello', { model: 'model-a', chatProvider: provider })).rejects.toBe(error)
+      expect(harness.settled.calls).toEqual([expect.objectContaining({ outcome: 'failed' })])
+      expect(harness.telemetry.messageRoundFailed).toHaveLength(1)
+      expect(harness.telemetry.chatActivationFailed).toHaveLength(1)
+      expect(harness.sendSettledSessions).toEqual(['session-1'])
+      expect(log.mock.calls).toEqual([['Error sending message:']])
+    }
+    finally {
+      log.mockRestore()
+    }
+  })
+
+  it('keeps stale failures abandoned without adding an error log', async () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const harness = createHarness()
+    harness.stream.mockImplementationOnce(async () => {
+      harness.generation.set(2)
+      throw new Error('PRIVATE_STALE_RESPONSE https://example.invalid/?key=FAKE_KEY')
+    })
+
+    try {
+      await expect(harness.runtime.ingest('hello', { model: 'model-a', chatProvider: provider })).resolves.toBeUndefined()
+      expect(harness.settled.calls).toEqual([expect.objectContaining({ outcome: 'abandoned' })])
+      expect(harness.telemetry.messageRoundFailed).toEqual([])
+      expect(log.mock.calls).toEqual([])
+    }
+    finally {
+      log.mockRestore()
+    }
+  })
+
   // Windows QA: HTTP 200 + finish=stop with no content was reported as success,
   // although no assistant message could be displayed or persisted.
   it('fails a completed provider stream that contains no response', async () => {

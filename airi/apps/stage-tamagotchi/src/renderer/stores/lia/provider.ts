@@ -5,7 +5,7 @@ import { useElectronEventaInvoke } from '@proj-airi/electron-vueuse'
 import { registerChatFallbackResolver, registerProviderCredentialResolver } from '@proj-airi/stage-ui/stores/chat/chat-provider-runtime'
 import { useConsciousnessStore } from '@proj-airi/stage-ui/stores/modules/consciousness'
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { onScopeDispose, ref } from 'vue'
 
 import { ProviderError } from '../../../../../../../lia/core/src/providers/index'
 import { isTransportRecord } from '../../../../../../../lia/core/src/transports/validation'
@@ -18,6 +18,7 @@ import {
   electronLiaSecretHas,
   electronLiaSecretSet,
 } from '../../../shared/eventa'
+import { createMainTransportExecution } from '../../services/lia/main-transport-execution'
 import { createNativeProviderRuntime } from '../../services/lia/native-provider-runtime'
 import { createLiaTransportClient, isNativeTransportDefinition, legacyTransportCandidates, toTransportRecord } from '../../services/lia/transport-config'
 import { useLiaProviderActivation } from './provider-activation'
@@ -267,17 +268,24 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
   const secretSet = useElectronEventaInvoke(electronLiaSecretSet)
   const secretGet = useElectronEventaInvoke(electronLiaSecretGet)
   const secretDelete = useElectronEventaInvoke(electronLiaSecretDelete)
+  const loadedConfig = ref<LiaProviderChatConfig | undefined>(undefined)
 
   const transports = createLiaTransportClient()
   const rejectedTransports = new Set<string>()
+  let disposed = false
+  let uninstallFactory: (() => void) | undefined
   let migration: Promise<void> | undefined
   async function initializeTransports() {
     if (!migration) {
       migration = (async () => {
         await transports.refresh()
         const readLegacy = (key: string) => {
-          try { return JSON.parse(localStorage.getItem(key) ?? '{}') }
-          catch { return {} }
+          try {
+            return JSON.parse(localStorage.getItem(key) ?? '{}')
+          }
+          catch {
+            return {}
+          }
         }
         const value = readLegacy('settings/providers/configured')
         const configured = value && typeof value === 'object' && !Array.isArray(value) ? value : {}
@@ -303,7 +311,7 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
           }
           const key = candidate.config.apiKey
           if (typeof key === 'string' && key && !await secretHas({ scope: candidate.id, key: API_KEY_NAME })) {
-            if (!await getEncryptionAvailable() || !await secretSet({ scope: candidate.id, key: API_KEY_NAME, value: key })) {
+            if (!await getEncryptionAvailable() || !await secretSet({ scope: candidate.id, key: API_KEY_NAME, value: key, onlyIfMissing: true })) {
               rejectedTransports.add(candidate.id)
               retryCredentialMigration = true
               continue
@@ -327,6 +335,7 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
   }
 
   const nativeRuntime = createNativeProviderRuntime({
+    execution: createMainTransportExecution(),
     readConfig: (id) => {
       const record = transports.get(id)
       if (record) {
@@ -339,13 +348,19 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
       return undefined
     },
     beforeRead: async () => {
+      if (disposed)
+        throw new ProviderError('cancelled')
       await initializeTransports()
       await transports.refresh()
+      if (disposed)
+        throw new ProviderError('cancelled')
     },
-    resolveCredential: resolveApiKey,
   })
-
-  const loadedConfig = ref<LiaProviderChatConfig | undefined>(undefined)
+  onScopeDispose(() => {
+    disposed = true
+    uninstallFactory?.()
+    nativeRuntime.dispose()
+  })
 
   async function refreshConfig(): Promise<LiaProviderChatConfig> {
     loadedConfig.value = await getChatConfig()
@@ -383,7 +398,8 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
   }
 
   function optionFor(providerId: string) {
-    return LIA_CHAT_PROVIDER_OPTIONS.find(option => option.id === providerId)
+    const definitionId = transports.get(providerId)?.definitionId ?? providerId
+    return LIA_CHAT_PROVIDER_OPTIONS.find(option => option.id === definitionId)
   }
 
   /** Whether a given provider requires an API key credential (defaults true). */
@@ -416,7 +432,8 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
         await transports.put(record)
       }
       // Metadata compatibility for consumers not migrated yet. No endpoint write/PATCH.
-      return providerConfig.get(providerId) ?? providerConfig.ensure(providerId, providerId, {})
+      const owned = transports.get(providerId)
+      return providerConfig.get(providerId) ?? providerConfig.ensure(providerId, owned?.definitionId ?? providerId, {})
     }
     const definitionId = providerId
     if (!providerConfig.get(providerId)) {
@@ -458,11 +475,14 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
     await initializeTransports()
     await transports.refresh()
     const record = transports.get(args.providerId)
+    if (transports.hasRemoved(args.providerId) || record?.enabled === false)
+      throw new ProviderError('configuration')
     const config: Record<string, unknown> = record
       ? { ...record.adapterOptions, baseUrl: record.baseUrl, _liaTransport: true }
       : isNativeTransportDefinition(args.providerId) ? {} : { ...providerConfig.getConfig(args.providerId) }
     // Stored keys never enter the shared record; only this transient draft.
-    const apiKey = args.apiKey ?? await resolveApiKey(args.providerId)
+    const native = Boolean(record) || isNativeTransportDefinition(args.providerId)
+    const apiKey = args.apiKey ?? (native ? undefined : await resolveApiKey(args.providerId))
     if (args.baseUrl !== undefined)
       config.baseUrl = args.baseUrl
     if (apiKey)
@@ -655,7 +675,13 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
   function registerRuntimeExtensions() {
     // Leader-local, idempotent bridge. Only the migrated transport uses the Lia
     // registry/cache/HTTP runtime. Every other target keeps its prior executor.
-    providerRuntime.installChatFactory(async (id) => {
+    uninstallFactory = providerRuntime.installChatFactory(async (id) => {
+      if (disposed)
+        throw new ProviderError('cancelled')
+      await initializeTransports()
+      await transports.refresh()
+      if (transports.hasRemoved(id) || rejectedTransports.has(id))
+        throw new ProviderError('configuration')
       if (!isNativeTransportDefinition(id) && !transports.get(id))
         return undefined
       return nativeRuntime.getChatProvider(id)

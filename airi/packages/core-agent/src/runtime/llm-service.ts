@@ -252,8 +252,8 @@ export async function streamFrom({
         try {
           usage = await streamResult.totalUsage
         }
-        catch (error) {
-          console.error('Stream totalUsage error:', error)
+        catch {
+          console.error('Stream totalUsage error:')
         }
         try {
           const normalizedUsage = !usage
@@ -262,31 +262,33 @@ export async function streamFrom({
             : { ...usage, source: 'reported' as const }
           await options?.onUsage?.(normalizedUsage)
         }
-        catch (error) {
+        catch {
           // Usage observers are telemetry-only and must not turn a completed
           // provider response into a failed user message.
-          console.error('Stream usage callback error:', error)
+          console.error('Stream usage callback error:')
         }
         resolveOnce()
       }).catch((error) => {
         // A failure after `steps` resolved belongs to optional usage
         // observation and cannot invalidate the completed response.
         if (stepsSettled) {
-          console.error('Stream usage observation error:', error)
+          console.error('Stream usage observation error:')
           resolveOnce()
           return
         }
         rejectOnce(error)
-        console.error('Stream steps error:', error)
+        console.error('Stream steps error:')
       })
       // `steps` can reject before the success path awaits `messages`.
       // Keep this rejection sink so xsAI cannot create an unhandled rejection.
-      void streamResult.messages.catch(error => console.error('Stream messages error:', error))
-      void streamResult.usage.catch(error => console.error('Stream usage error:', error))
+      // Rejection payloads can include credentials and transcript data. Logs use
+      // closed stage labels while rejection sinks and error identity stay intact.
+      void streamResult.messages.catch(() => console.error('Stream messages error:'))
+      void streamResult.usage.catch(() => console.error('Stream usage error:'))
       // `steps` and `totalUsage` reject independently when xsAI fails a
       // stream. The success path awaits `totalUsage`, but if `steps` rejects
       // first that await never runs, so keep this unconditional rejection sink.
-      void streamResult.totalUsage.catch(error => console.error('Stream totalUsage error:', error))
+      void streamResult.totalUsage.catch(() => console.error('Stream totalUsage error:'))
     }
     catch (error) {
       rejectOnce(error)

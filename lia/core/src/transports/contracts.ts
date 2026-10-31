@@ -20,6 +20,10 @@ export interface TransportSnapshot {
   revision: number
   records: TransportRecord[]
   tombstones: string[]
+  /** Persistent protection survives removal even when transport ID differs from provider ID. */
+  protectedCredentialScopes?: string[]
+  /** Older removals may not retain the provider-to-transport association. Fail closed. */
+  credentialProtectionIncomplete?: boolean
   migration: { version: 1, imported: string[] }
 }
 
