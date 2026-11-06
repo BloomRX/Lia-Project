@@ -13,6 +13,22 @@ const vaultResolvers = new WeakMap<object, VaultResolver>()
 const executions = new WeakMap<object, ReturnType<typeof createLiaTransportExecutionService>>()
 const owners = new WeakMap<object, EventEmitter & { id: number, isDestroyed: () => boolean }>()
 const emptySnapshot = (): TransportSnapshot => ({ schemaVersion: 1, revision: 0, records: [], tombstones: [], migration: { version: 1, imported: [] } })
+/** Test-only: a main process that must refuse every write, for one owner. */
+const writeFailures = new WeakMap<object, 'conflict' | 'storage'>()
+
+/**
+ * Makes the fake main reject every transport mutation, the way a real one does
+ * when the disk is unavailable or another window keeps winning the CAS.
+ *
+ * Exists so a test can prove the renderer stops BEFORE executing a provider
+ * whose endpoint could not be persisted — the ordering Corte B requires.
+ */
+export function setTransportTestWriteFailure(owner: object, code: 'conflict' | 'storage' | undefined) {
+  if (code)
+    writeFailures.set(owner, code)
+  else
+    writeFailures.delete(owner)
+}
 
 export function setTransportTestVaultResolver(owner: object, resolver: VaultResolver) {
   vaultResolvers.set(owner, resolver)
@@ -51,6 +67,9 @@ export function transportTestInvoke(id: string) {
   return async (mutation?: TransportMutation) => {
     const owner = getActivePinia()!
     const state = states.get(owner) ?? emptySnapshot()
+    const forced = writeFailures.get(owner)
+    if (mutation && forced)
+      return { ok: false, code: forced }
     if (mutation) {
       if (mutation.expectedRevision !== state.revision)
         return { ok: false, code: 'conflict' }

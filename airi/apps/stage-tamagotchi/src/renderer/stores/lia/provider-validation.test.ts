@@ -8,6 +8,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createApp } from 'vue'
 
+import { createSecretAdoptHandler } from '../../services/lia/secret-adopt.fixture'
 import { useLiaProviderRuntime } from './provider-runtime'
 import { createLiaProviderValidation, useLiaProviderValidation } from './provider-validation'
 
@@ -82,6 +83,7 @@ vi.mock('@proj-airi/electron-vueuse', async () => {
         'eventa:invoke:lia:secret:get-receive': ipc.secretGet,
         'eventa:invoke:lia:secret:has-receive': ipc.secretHas,
         'eventa:invoke:lia:secret:set-receive': ipc.secretSet,
+        'eventa:invoke:lia:secret:adopt-receive': createSecretAdoptHandler({ secretHas: ipc.secretHas, secretGet: ipc.secretGet, secretSet: ipc.secretSet }),
       }
       const id = invoke?.receiveEvent?.id ?? ''
       const transport = transportTestInvoke(id)
@@ -320,9 +322,11 @@ describe('lia provider connection — selected-model probe is separate from defi
     const result = await store.testConnection({ providerId: NO_VALIDATOR_PROVIDER })
 
     expect(result).toStrictEqual({ ok: false, scope: 'text', failure: 'configuration', message: '' })
-    // No key was supplied, so the call site asked the vault — and the vault had
-    // nothing. That is the existing lookup, unchanged.
-    expect(ipc.secretGet).toHaveBeenCalled()
+    // No key was supplied. The call site would ask the vault, but this provider
+    // declares `text-to-speech` only, so the resolver refuses before touching it
+    // (PROMPT-28). The verdict is the same configuration failure it always was,
+    // now reached without a secret lookup that could never have helped.
+    expect(ipc.secretGet).not.toHaveBeenCalled()
     expect(observed.requests).toEqual([])
   })
 

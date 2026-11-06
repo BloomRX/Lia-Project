@@ -16,6 +16,8 @@ import { getChatFallbackResolver, getProviderCredentialResolver, resetChatProvid
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { createSecretAdoptHandler } from '../../services/lia/secret-adopt.fixture'
+
 const ipc = vi.hoisted(() => {
   let chat: Record<string, unknown> = {}
   const vault = new Map<string, string>()
@@ -52,6 +54,7 @@ vi.mock('@proj-airi/electron-vueuse', async () => {
         'eventa:invoke:lia:secret:encryption-available-receive': ipc.encryptionAvailable,
         'eventa:invoke:lia:secret:has-receive': ipc.secretHas,
         'eventa:invoke:lia:secret:set-receive': ipc.secretSet,
+        'eventa:invoke:lia:secret:adopt-receive': createSecretAdoptHandler({ secretHas: ipc.secretHas, secretGet: ipc.secretGet, secretSet: ipc.secretSet }),
         'eventa:invoke:lia:secret:get-receive': ipc.secretGet,
         'eventa:invoke:lia:secret:delete-receive': ipc.secretDelete,
       }
@@ -95,16 +98,27 @@ describe('phase 7.3 secret bridge (F/H/I/J)', () => {
     vi.clearAllMocks()
   })
 
-  it('f: the vault credential reaches the provider build for the preferred id', async () => {
-    ipc.fixture(validConfig(), { groq: SIMULATED_KEY })
+  /**
+   * PROMPT-26: the preferred id is `groq`, a curated provider, so the resolver
+   * must refuse it — its chat executes in main now. The vault channel must not
+   * even be touched. The path that still resolves here is a provider OUTSIDE
+   * the catalog, asserted below so the two halves stay distinguishable.
+   */
+  it('f: the resolver refuses the curated preferred id and still serves a non-curated one', async () => {
+    ipc.fixture(validConfig(), { groq: SIMULATED_KEY, deepseek: SIMULATED_KEY })
     const store = useLiaProviderStore()
     store.registerRuntimeExtensions()
     await store.refreshConfig()
 
     const resolver = getProviderCredentialResolver()
     expect(resolver).toBeDefined()
-    const credential = await resolver!('groq')
-    expect(credential).toEqual({ apiKey: SIMULATED_KEY })
+    expect(await resolver!('groq')).toBeUndefined()
+    expect(ipc.secretGet).not.toHaveBeenCalled()
+
+    // Documented debt, pinned so it cannot be forgotten: non-curated ids still
+    // resolve in this process until their consumers are migrated.
+    expect(await resolver!('deepseek')).toEqual({ apiKey: SIMULATED_KEY })
+    expect(ipc.secretGet).toHaveBeenCalledWith({ scope: 'deepseek', key: 'apiKey' })
   })
 
   it('h: a missing vault secret yields the explicit missing state (undefined), never a fabricated key', async () => {
@@ -137,16 +151,20 @@ describe('phase 7.3 secret bridge (F/H/I/J)', () => {
 
   it('j: resolver diagnostics carry metadata only - never the literal secret', async () => {
     const info = vi.spyOn(console, 'info').mockImplementation(() => {})
-    ipc.fixture(validConfig(), { groq: SIMULATED_KEY })
+    ipc.fixture(validConfig(), { groq: SIMULATED_KEY, deepseek: SIMULATED_KEY })
     const store = useLiaProviderStore()
     store.registerRuntimeExtensions()
     await store.refreshConfig()
 
+    // The curated id is refused before any lookup, so it logs nothing at all…
     await getProviderCredentialResolver()!('groq')
+    // …and the non-curated path logs its metadata without the value.
+    await getProviderCredentialResolver()!('deepseek')
     const logged = info.mock.calls.map(call => call.join(' ')).join(' ')
-    expect(logged).toContain('providerId=groq')
+    expect(logged).toContain('providerId=deepseek')
     expect(logged).toContain('secretSource=lia-vault')
     expect(logged).toContain('hasApiKey=true')
+    expect(logged).not.toContain('providerId=groq')
     expect(logged).not.toContain(SIMULATED_KEY)
     info.mockRestore()
   })

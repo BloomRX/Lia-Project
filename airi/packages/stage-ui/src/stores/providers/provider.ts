@@ -12,6 +12,7 @@ import type {} from 'pinia-plugin-synced'
 
 import type { ProviderMetadata, ProviderValidationPlan } from '../../libs/providers'
 import type { ChatRequestOptions, ModelInfo, ProviderDefinition, ProviderInstance, VoiceInfo } from '../../libs/providers/types'
+import type { ProviderModelLister } from '../chat/chat-provider-runtime'
 
 import { errorMessageFrom } from '@moeru/std'
 import { isCustomProvidersDisabled } from '@proj-airi/stage-shared'
@@ -32,7 +33,7 @@ import {
 } from '../../libs/providers'
 import { selectProviderMetadata, selectProvidersMetadata } from '../../libs/providers/metadata'
 import { useAuthStore } from '../auth'
-import { getProviderCredentialResolver } from '../chat/chat-provider-runtime'
+import { getProviderCredentialResolver, getProviderModelLister } from '../chat/chat-provider-runtime'
 import { useProviderConfigStore } from './config'
 import { normalizeProviderConfigDefaults } from './config-defaults'
 
@@ -665,16 +666,55 @@ export const useProviderStore = defineStore('provider', () => {
     }
   }
 
-  // Function to fetch models for a specific provider
-  async function fetchModelsForProvider(providerId: string) {
-    const definition = findProviderDefinition(providerId)
-    if (!definition)
-      return []
+  function normalizeListedModels(providerId: string, models: Array<{ id: string, name?: string, description?: string, contextLength?: number, deprecated?: boolean }>) {
+    return uniqBy(models.filter(model => !!model.id), m => m.id)
+      .map(model => ({
+        id: model.id,
+        name: model.name ?? model.id,
+        description: model.description ?? '',
+        contextLength: model.contextLength ?? 0,
+        deprecated: model.deprecated ?? false,
+        provider: providerId,
+      }))
+  }
 
-    const config = providerCredentials.value[providerId]
-    if (!config && definition.requiresCredentials !== false)
+  function publishModels(providerId: string, normalizedModels: ReturnType<typeof normalizeListedModels>) {
+    // A synced snapshot can replace this provider entry while the request is
+    // pending. Read the current entry after await instead of updating the
+    // detached object that entered the request.
+    const currentRuntimeState = providerRuntimeState.value[providerId]
+    if (!currentRuntimeState)
       return []
+    providerRuntimeState.value = {
+      ...providerRuntimeState.value,
+      [providerId]: {
+        ...currentRuntimeState,
+        models: normalizedModels,
+        modelStatus: 'ready',
+        modelError: null,
+      },
+    }
+    // Synced action results pass through structuredClone. Return the local
+    // array because reading the same array from state returns a Vue proxy.
+    return normalizedModels
+  }
 
+  function publishModelError(providerId: string, error: unknown) {
+    const currentRuntimeState = providerRuntimeState.value[providerId]
+    if (currentRuntimeState) {
+      providerRuntimeState.value = {
+        ...providerRuntimeState.value,
+        [providerId]: {
+          ...currentRuntimeState,
+          modelStatus: 'error',
+          modelError: errorMessageFrom(error) ?? 'Unknown error',
+        },
+      }
+    }
+    return []
+  }
+
+  function beginModelFetch(providerId: string) {
     initializeProviderRuntimeState(providerId)
     providerRuntimeState.value = {
       ...providerRuntimeState.value,
@@ -684,55 +724,63 @@ export const useProviderStore = defineStore('provider', () => {
         modelError: null,
       },
     }
+  }
 
+  /**
+   * The legacy, in-renderer listing.
+   *
+   * Kept byte-for-byte as its own function so the host branch below cannot
+   * change its timing: callers observe `modelStatus: 'loading'` synchronously
+   * after the call, which the synchronization tests pin.
+   */
+  async function fetchModelsInRenderer(providerId: string, definition: ProviderDefinition) {
+    const config = providerCredentials.value[providerId]
+    if (!config && definition.requiresCredentials !== false)
+      return []
+
+    beginModelFetch(providerId)
     try {
       const models = await listProviderModels(providerId, await withResolvedCredential(providerId, config || {}))
-      const normalizedModels = uniqBy(models.filter(model => !!model.id), m => m.id)
-        .map(model => ({
-          id: model.id,
-          name: model.name,
-          description: model.description,
-          contextLength: model.contextLength,
-          deprecated: model.deprecated,
-          provider: providerId,
-        }))
-
-      // Transform and store the models
-      // A synced snapshot can replace this provider entry while the request is
-      // pending. Read the current entry after await instead of updating the
-      // detached object that entered the request.
-      const currentRuntimeState = providerRuntimeState.value[providerId]
-      if (currentRuntimeState) {
-        providerRuntimeState.value = {
-          ...providerRuntimeState.value,
-          [providerId]: {
-            ...currentRuntimeState,
-            models: normalizedModels,
-            modelStatus: 'ready',
-            modelError: null,
-          },
-        }
-        // Synced action results pass through structuredClone. Return the local
-        // array because reading the same array from state returns a Vue proxy.
-        return normalizedModels
-      }
-      return []
+      return publishModels(providerId, normalizeListedModels(providerId, models))
     }
     catch (error) {
       console.error(`Error fetching models for ${providerId}:`, error)
-      const currentRuntimeState = providerRuntimeState.value[providerId]
-      if (currentRuntimeState) {
-        providerRuntimeState.value = {
-          ...providerRuntimeState.value,
-          [providerId]: {
-            ...currentRuntimeState,
-            modelStatus: 'error',
-            modelError: errorMessageFrom(error) ?? 'Unknown error',
-          },
-        }
-      }
-      return []
+      return publishModelError(providerId, error)
     }
+  }
+
+  // Function to fetch models for a specific provider
+  async function fetchModelsForProvider(providerId: string) {
+    const definition = findProviderDefinition(providerId)
+    if (!definition)
+      return []
+
+    /*
+     * The host decides ownership. `undefined` means "not mine": the legacy path
+     * runs exactly as before, which is what keeps every non-migrated provider
+     * working. An ARRAY claims the provider - including an empty one - so a
+     * failed host listing can never be retried with a client built from a
+     * renderer credential.
+     */
+    const lister = getProviderModelLister()
+    if (!lister)
+      return await fetchModelsInRenderer(providerId, definition)
+
+    let throughHost: Awaited<ReturnType<ProviderModelLister>> | undefined
+    try {
+      throughHost = await lister(providerId)
+    }
+    catch (error) {
+      console.error(`Error fetching models for ${providerId}:`, error)
+      beginModelFetch(providerId)
+      return publishModelError(providerId, error)
+    }
+
+    if (throughHost === undefined)
+      return await fetchModelsInRenderer(providerId, definition)
+
+    beginModelFetch(providerId)
+    return publishModels(providerId, normalizeListedModels(providerId, throughHost))
   }
 
   // Get models for a specific provider

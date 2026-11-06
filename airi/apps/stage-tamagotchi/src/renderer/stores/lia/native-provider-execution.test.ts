@@ -9,6 +9,7 @@ import { createApp } from 'vue'
 
 import { createNativeProviderRuntime } from '../../services/lia/native-provider-runtime'
 import { setTransportTestVaultResolver } from '../../services/lia/transport-config.fixture'
+import { createSecretAdoptHandler } from '../../services/lia/secret-adopt.fixture'
 
 const ipc = vi.hoisted(() => ({
   chatConfig: vi.fn(async (): Promise<import('../../../shared/eventa').LiaProviderChatConfig> => ({})),
@@ -33,6 +34,7 @@ vi.mock('@proj-airi/electron-vueuse', async () => {
         'eventa:invoke:lia:secret:get-receive': ipc.secretGet,
         'eventa:invoke:lia:secret:has-receive': ipc.secretHas,
         'eventa:invoke:lia:secret:set-receive': ipc.secretSet,
+        'eventa:invoke:lia:secret:adopt-receive': createSecretAdoptHandler({ secretHas: ipc.secretHas, secretGet: ipc.secretGet, secretSet: ipc.secretSet }),
       }
       const id = invoke?.receiveEvent?.id ?? ''
       const transport = transportTestInvoke(id)

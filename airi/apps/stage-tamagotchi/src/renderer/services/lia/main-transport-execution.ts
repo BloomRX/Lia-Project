@@ -106,9 +106,15 @@ export function createMainTransportExecution() {
       throw error instanceof ProviderError ? error : new ProviderError('network')
     }
   }
+  /**
+   * An endpoint may cross this port; a credential may not.
+   *
+   * The draft used to forward `apiKey` too, which is why "test this key" needed
+   * the key in the renderer. `secrets:set` owns that now, and main reads the
+   * value from the vault.
+   */
   const draft = (value: Record<string, unknown>) => ({
     baseUrl: typeof value.baseUrl === 'string' ? value.baseUrl : '',
-    ...(typeof value.apiKey === 'string' ? { apiKey: value.apiKey } : {}),
   })
   return {
     dispatch: (config: ProviderConfig, body: ChatRequest, signal?: AbortSignal) => execute({ providerId: config.providerId, expectedBaseUrl: config.baseUrl, operation: 'chat', body }, signal),

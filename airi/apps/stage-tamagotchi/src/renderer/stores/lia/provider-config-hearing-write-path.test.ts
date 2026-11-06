@@ -3,6 +3,7 @@ import { useProviderConfigStore } from '@proj-airi/stage-ui/stores/providers/con
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { computed, createApp, ref } from 'vue'
+import { createSecretAdoptHandler } from '../../services/lia/secret-adopt.fixture'
 
 /**
  * B0.7.1, T-B — the hearing store's configuration write path, with a request
@@ -61,6 +62,7 @@ vi.mock('@proj-airi/electron-vueuse', async () => {
         'eventa:invoke:lia:secret:get-receive': ipc.secretGet,
         'eventa:invoke:lia:secret:has-receive': ipc.secretHas,
         'eventa:invoke:lia:secret:set-receive': ipc.secretSet,
+        'eventa:invoke:lia:secret:adopt-receive': createSecretAdoptHandler({ secretHas: ipc.secretHas, secretGet: ipc.secretGet, secretSet: ipc.secretSet }),
       }
       const id = invoke?.receiveEvent?.id ?? ''
       const transport = transportTestInvoke(id)

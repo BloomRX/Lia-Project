@@ -56,13 +56,40 @@ function descendants(rootPid) {
   return [...owned]
 }
 
+/*
+ * How to run this gate (it is not part of any pnpm script on purpose: it needs
+ * a machine with a display and the OS keychain):
+ *
+ *   1. install the runtime from the OFFICIAL package installer, which downloads
+ *      the asset matching the locked version and verifies checksums.json:
+ *        pnpm --filter @proj-airi/stage-tamagotchi exec node node_modules/electron/install.js
+ *      (no version, lockfile or dependency change; `ELECTRON_MIRROR` must point
+ *      at an official mirror, never at a third-party host)
+ *   2. build the Stage's preload, which the gate reads:
+ *        pnpm --filter @proj-airi/stage-tamagotchi build
+ *   3. run the gate from the package directory:
+ *        node --test scripts/provider-runtime-electron/gate.test.mjs
+ *      or, to watch it as a Vitest file, `node --test --test-reporter spec ...`.
+ *
+ * It skips itself outside Windows because the teardown proof enumerates
+ * processes with `Get-CimInstance` and launches `dist/electron.exe`.
+ */
 test('Electron real: production IPC, encrypted vault and native provider runtime against local HTTP', { skip: process.platform !== 'win32' && 'Requires Windows for the real safeStorage gate', timeout: 180000 }, async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'lia-provider-electron-'))
   const artifacts = join(repo, 'Tests/artifacts/provider-runtime-electron', `${Date.now()}`)
   await mkdir(artifacts, { recursive: true })
   const preload = join(stage, 'out/preload/index.mjs')
   await readFile(preload)
+  // One synthetic credential per curated provider, plus the two historical
+  // scopes the earlier checks already use. Local providers are keyless, exactly
+  // as the product treats them.
+  const curated = ['openai', 'groq', 'cerebras-ai', 'anthropic', 'xai', 'mistral-ai', 'openrouter-ai', 'openai-compatible', 'lm-studio', 'ollama']
+  const keyless = new Set(['lm-studio', 'ollama'])
   const secrets = { generic: `synthetic-A-${randomUUID()}`, local: `synthetic-B-${randomUUID()}` }
+  for (const id of curated) {
+    if (!keyless.has(id))
+      secrets[id] = `synthetic-${id}-${randomUUID()}`
+  }
   const report = { preexistingProcesses: electronProcesses(), scope: 'real Electron components + local HTTP fixture; not full Stage or external model', root, startedAt: new Date().toISOString(), checks: [], requests: [], processes: [], exitCode: null }
   let logs = ''
   let application
@@ -82,8 +109,21 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
       body += chunk.toString()
     const data = body ? JSON.parse(body) : {}
     const path = request.url
-    const expected = path.startsWith('/local/') ? secrets.local : secrets.generic
-    const entry = { path, model: data.model, authenticated: request.headers.authorization === `Bearer ${expected}`, closed: false }
+    // The first path segment names the provider under test, so each curated
+    // provider is authenticated with its own credential and nothing else.
+    const segment = path.split('/')[1]
+    const expected = segment in secrets ? secrets[segment] : secrets.generic
+    const authorization = request.headers.authorization ?? null
+    const entry = {
+      path,
+      segment,
+      model: data.model,
+      // Never store the value itself, only whether a header was present.
+      authorization: authorization === null ? 'absent' : 'present',
+      title: request.headers['x-openrouter-title'] ?? null,
+      authenticated: expected ? authorization === `Bearer ${expected}` : authorization === null,
+      closed: false,
+    }
     report.requests.push(entry)
     response.on('close', () => {
       entry.closed = true
@@ -94,6 +134,10 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
     }
     if (path.includes('/http-error/')) {
       response.writeHead(401, { 'content-type': 'application/json' }).end(JSON.stringify({ error: { message: expected } }))
+      return
+    }
+    if (path.includes('/unavailable/')) {
+      response.writeHead(503, { 'content-type': 'application/json' }).end(JSON.stringify({ error: { message: expected } }))
       return
     }
     if (path.includes('/timeout/'))
@@ -233,6 +277,82 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
     await application.evaluate(({ BrowserWindow }, id) => BrowserWindow.fromId(id).close(), secondWindowId)
     report.checks.push('two real renderers share main authority and reject stale concurrent writes')
 
+    // ── curated provider matrix ────────────────────────────────────────────
+    // Ten records, each with its own synthetic credential (or none, for the
+    // keyless local providers), each executed against its own local endpoint.
+    // Main resolves the credential; the renderer only sees response bytes.
+    const models = Object.fromEntries(curated.map((id, index) => [id, `fixture/${id}:Q4-${index}`]))
+    for (const id of curated.filter(item => !keyless.has(item))) {
+      if (!await page.evaluate(({ scope, value }) => window.providerGate.seed(scope, value), { scope: id, value: secrets[id] }))
+        throw new Error(`Could not seed a synthetic credential for ${id}`)
+    }
+    const seededIds = await page.evaluate(entries => window.providerGate.seedRecords(entries), curated.map(id => ({ providerId: id, baseUrl: `${base}/${id}/v1/`, model: models[id] })))
+    for (const id of curated)
+      assert.ok(seededIds.includes(id), `no transport record was stored for ${id}`)
+    // A raw read must stay denied for every curated scope, with a record or not.
+    for (const id of curated)
+      assert.equal(await page.evaluate(scope => window.providerGate.readProtectedSecret(scope), id), undefined)
+
+    const matrixResults = []
+    for (const id of curated) {
+      const result = await page.evaluate(({ id, model }) => window.providerGate.executeProvider(id, model, 'json'), { id, model: models[id] })
+      assert.deepEqual(result, { phase: 'done', code: '', text: 'Electron Lia\n42' }, `${id} did not complete over its own endpoint`)
+      matrixResults.push(result)
+    }
+    for (const id of curated) {
+      const request = report.requests.find(entry => entry.path === `/${id}/v1/chat/completions`)
+      assert.ok(request, `main never reached the local endpoint of ${id}`)
+      assert.equal(request.model, models[id], `${id} sent a different model than its record`)
+      assert.equal(request.authorization, keyless.has(id) ? 'absent' : 'present', `${id} credential header mismatch`)
+      // The Lia title header belongs to OpenRouter alone.
+      assert.equal(request.title, id === 'openrouter-ai' ? 'Lia' : null, `${id} leaked a service-specific header`)
+    }
+    for (const id of curated) {
+      const streamed = await page.evaluate(({ id, model }) => window.providerGate.executeProvider(id, model, 'stream'), { id, model: models[id] })
+      assert.deepEqual(streamed, { phase: 'done', code: '', text: 'Electron Lia\n42' }, `${id} did not stream over its own endpoint`)
+    }
+    const matrixState = JSON.parse(await readFile(join(root, 'main-state.json'), 'utf8'))
+    for (const id of curated.filter(item => !keyless.has(item)))
+      assert.ok(matrixState.readScopes.includes(id), `main did not read the vault for ${id}`)
+    assert.ok(!curated.some(id => JSON.stringify(matrixResults).includes(secrets[id] ?? '\u0000')))
+    report.checks.push('ten curated providers resolve their own credential in main, address their own endpoint and stream without touching renderer state')
+
+    // Concurrency: five providers at once, each on its own channel.
+    const parallelIds = ['openai', 'cerebras-ai', 'anthropic', 'mistral-ai', 'ollama']
+    const parallel = await page.evaluate(entries => window.providerGate.concurrent(entries), parallelIds.map(id => ({ providerId: id, model: models[id] })))
+    for (const result of parallel) {
+      assert.equal(result.code, '', `${result.providerId} failed while running concurrently`)
+      assert.equal(result.text, 'Electron Lia\n42', `${result.providerId} received another provider response`)
+    }
+    for (const id of parallelIds) {
+      const request = report.requests.filter(entry => entry.path === `/${id}/v1/chat/completions`).at(-1)
+      assert.equal(request.model, models[id])
+    }
+    report.checks.push('concurrent curated executions stay isolated per provider')
+
+    // A 503 body is never surfaced, not even its error text.
+    await page.evaluate(entries => window.providerGate.seedRecords(entries), [{ providerId: 'xai', baseUrl: `${base}/xai/unavailable/v1/`, model: models.xai }])
+    const unavailable = await page.evaluate(({ id, model }) => window.providerGate.executeProvider(id, model, 'json'), { id: 'xai', model: models.xai })
+    assert.equal(unavailable.phase, 'error')
+    assert.equal(unavailable.code, 'http')
+    assert.ok(!JSON.stringify(unavailable).includes(secrets.xai))
+    report.checks.push('an invalid curated response fails with a sanitized class only')
+
+    // Cancellation on a curated endpoint releases the socket.
+    await page.evaluate(entries => window.providerGate.seedRecords(entries), [{ providerId: 'groq', baseUrl: `${base}/groq/cancel/v1/`, model: models.groq }])
+    const curatedCancel = page.evaluate(({ id, model }) => window.providerGate.executeProvider(id, model, 'stream'), { id: 'groq', model: models.groq })
+    await waitUntil(() => report.requests.some(entry => entry.path === '/groq/cancel/v1/chat/completions'), 'curated cancel request was not observed')
+    await page.getByRole('button', { name: 'Cancelar', exact: true }).click()
+    assert.equal((await curatedCancel).code, 'cancelled')
+    await waitUntil(() => report.requests.find(entry => entry.path === '/groq/cancel/v1/chat/completions').closed, 'curated cancel did not release the real HTTP response')
+    report.checks.push('cancellation on a curated provider closes the real HTTP response')
+
+    // A disposed port refuses new work instead of silently re-opening a channel.
+    const disposed = await page.evaluate(({ id, model }) => window.providerGate.disposeAndExecute(id, model), { id: 'ollama', model: models.ollama })
+    assert.equal(disposed.phase, 'error')
+    assert.equal(disposed.code, 'cancelled')
+    report.checks.push('a disposed execution port refuses further curated sends')
+
     await page.getByLabel('Serviço').selectOption('openai-compatible')
     const changed = await page.evaluate(async () => {
       const state = await window.providerGate.transports()
@@ -303,6 +423,7 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
     const transports = await readFile(join(root, 'profile/lia-transports.json'), 'utf8')
     const rendererState = await page.evaluate(() => JSON.stringify({ html: document.body.textContent, storage: { ...localStorage } }))
     assert.ok(!Object.values(secrets).some(value => product.includes(value) || transports.includes(value) || rendererState.includes(value)))
+    assert.ok(!curated.some(id => rendererState.includes(secrets[id] ?? '\u0000')))
     await application.close()
     report.exitCode = applicationProcess.exitCode
     assert.equal(report.exitCode, 0)

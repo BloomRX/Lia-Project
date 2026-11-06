@@ -80,7 +80,27 @@ export function createVoicePreviewDriver(): VoicePreviewDriver {
     const providerRuntime = useLiaProviderRuntime()
     const providerConfig = useLiaProviderConfigFacade()
 
-    const provider = await providerRuntime.getInstance<PreviewSpeechProvider>(target.providerId)
+    /*
+     * A voice provider whose credential cannot live in this window fails here,
+     * at build time: the credential resolver refuses every text-to-speech
+     * definition (see `resolveApiKey`), and providers that need a key build from
+     * an empty one. That is the safe outcome, but the raw error is a TypeError
+     * from inside a provider's `createProvider`, which tells the user nothing.
+     *
+     * Re-thrown with a reason, and with `cause` kept for diagnostics. Nothing
+     * about the failure can carry a secret: the credential was never obtained.
+     * Local engines build normally and never reach this branch.
+     */
+    let provider: PreviewSpeechProvider | undefined
+    try {
+      provider = await providerRuntime.getInstance<PreviewSpeechProvider>(target.providerId)
+    }
+    catch (error) {
+      throw new Error(
+        `Voice provider "${target.providerId}" cannot be prepared in this window`,
+        { cause: error },
+      )
+    }
     if (!provider)
       throw new Error(`Speech provider "${target.providerId}" is not available`)
 

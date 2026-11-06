@@ -1,5 +1,6 @@
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { createSecretAdoptHandler } from '../../services/lia/secret-adopt.fixture'
 
 /**
  * Onboarding completion gate (M1 blocker fix).
@@ -66,6 +67,7 @@ vi.mock('@proj-airi/electron-vueuse', async () => {
         'eventa:invoke:lia:secret:encryption-available-receive': ipc.encryptionAvailable,
         'eventa:invoke:lia:secret:has-receive': ipc.secretHas,
         'eventa:invoke:lia:secret:set-receive': ipc.secretSet,
+        'eventa:invoke:lia:secret:adopt-receive': createSecretAdoptHandler({ secretHas: ipc.secretHas, secretGet: ipc.secretGet, secretSet: ipc.secretSet }),
         'eventa:invoke:lia:secret:get-receive': ipc.secretGet,
         'eventa:invoke:lia:secret:delete-receive': ipc.secretDelete,
       }

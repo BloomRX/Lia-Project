@@ -7,6 +7,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createApp } from 'vue'
 import { useI18n } from 'vue-i18n'
 
+import { createSecretAdoptHandler } from '../../services/lia/secret-adopt.fixture'
+import { createLiaTransportClient } from '../../services/lia/transport-config'
 import { setTransportTestVaultResolver } from '../../services/lia/transport-config.fixture'
 
 const ipc = vi.hoisted(() => ({
@@ -32,6 +34,7 @@ vi.mock('@proj-airi/electron-vueuse', async () => {
         'eventa:invoke:lia:secret:get-receive': ipc.secretGet,
         'eventa:invoke:lia:secret:has-receive': ipc.secretHas,
         'eventa:invoke:lia:secret:set-receive': ipc.secretSet,
+        'eventa:invoke:lia:secret:adopt-receive': createSecretAdoptHandler({ secretHas: ipc.secretHas, secretGet: ipc.secretGet, secretSet: ipc.secretSet }),
       }
       const id = invoke?.receiveEvent?.id ?? ''
       const transport = transportTestInvoke(id)
@@ -119,8 +122,13 @@ describe('draft models through the real Lia ports and provider definition', () =
     expect(await store.discoverModels({ providerId: 'speech-noop' })).toEqual({ status: 'ready', models: [] })
     expect(await store.testConnection({ providerId: 'speech-noop', modelId: 'manual' })).toMatchObject({ ok: false, failure: 'unsupported' })
     // This definition remains outside the migrated HTTP transport slice.
-    expect(ipc.secretGet).toHaveBeenCalledTimes(2)
-    expect(ipc.secretGet).toHaveBeenCalledWith({ scope: 'speech-noop', key: 'apiKey' })
+    //
+    // It also declares `text-to-speech` only and `requiresCredentials: false`,
+    // so the draft path no longer asks the vault for it (PROMPT-28): a provider
+    // whose task the Lia never executes in this window cannot obtain a secret
+    // here, and `speech-noop` never needed one anyway. Both calls still run to
+    // the same verdicts above without a credential.
+    expect(ipc.secretGet).not.toHaveBeenCalled()
     ipc.secretGet.mockClear()
     expect(fetchMock).not.toHaveBeenCalled()
   })
@@ -207,12 +215,42 @@ describe('draft models through the real Lia ports and provider definition', () =
     expect(JSON.stringify(result)).not.toContain(KEY)
   })
 
-  it('does not send the saved credential to a changed draft address without an explicit replacement', async () => {
+  /**
+   * Corte B changed WHICH rule protects a changed address, so this test asserts
+   * the surviving one.
+   *
+   * The old rule was "a draft may not borrow the vault key for an address the
+   * record does not have". It was enforced by comparing the draft URL against
+   * the saved one — and it cannot survive the removal of `draft.apiKey`,
+   * because testing an unsaved address now requires that address to become the
+   * record first. The rule that replaces it is stricter in the part that
+   * matters: the credential only ever reaches an endpoint that is PERSISTED and
+   * therefore visible, auditable and revocable, never an address that exists
+   * only inside a request payload.
+   *
+   * The main-service test 'never sends a saved vault credential to a changed or
+   * unsaved draft endpoint' still pins the payload-level rule for anything that
+   * bypasses this seam.
+   */
+  it('persists a changed endpoint before the credential is allowed to reach it', async () => {
     useProviderConfigStore().ensureProvider(target.providerId, target.providerId, { baseUrl: draft.baseUrl })
     const result = await useLiaProviderStore().discoverModels({ providerId: target.providerId, baseUrl: 'https://changed-draft.invalid/v1/' })
     expect(result.status).toBe('ready')
     expect(String(fetchMock.mock.calls[0][0])).toBe('https://changed-draft.invalid/v1/models')
-    expect(new Headers(fetchMock.mock.calls[0][1].headers).has('authorization')).toBe(false)
-    expect(ipc.vaultGet).not.toHaveBeenCalled()
+    // The address the credential is sent to is the one the record now holds —
+    // not a value that lived only in the call.
+    const record = await createLiaTransportClient().refresh()
+    expect(record.records.find(entry => entry.providerId === target.providerId)?.baseUrl).toBe('https://changed-draft.invalid/v1/')
+    expect(new Headers(fetchMock.mock.calls[0][1].headers).get('authorization')).toBe(`Bearer ${KEY}`)
+  })
+
+  it('still refuses to execute a curated provider whose record is missing, so no key leaves this renderer', async () => {
+    const result = await useLiaProviderStore().discoverModels({ providerId: 'openrouter-ai', baseUrl: 'https://unsaved.invalid/v1/' })
+    // The record is created by the preparation step, so discovery succeeds —
+    // and that is exactly the ordering this cut enforces: persist, then execute.
+    expect(result.status).toBe('ready')
+    const records = (await createLiaTransportClient().refresh()).records
+    expect(records.some(entry => entry.providerId === 'openrouter-ai')).toBe(true)
+    expect(JSON.stringify(records)).not.toContain(KEY)
   })
 })

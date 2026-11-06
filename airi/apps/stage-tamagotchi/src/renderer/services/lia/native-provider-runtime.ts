@@ -2,8 +2,9 @@ import type { ChatRequest, ProviderConfig } from '../../../../../../../lia/core/
 import type { createMainTransportExecution } from './main-transport-execution'
 
 import { ProviderError, ProviderRegistry, ProviderRuntime } from '../../../../../../../lia/core/src/providers/index'
+import { CURATED_CHAT_PROVIDER_IDS } from '../../../shared/lia/provider-catalog'
 
-/** Persisted compatibility ID, not a model/vendor catalogue. Other IDs stay legacy. */
+/** Persisted compatibility ID, not a model/vendor catalogue. */
 export const NATIVE_CHAT_PROVIDER_ID = 'openai-compatible'
 /** Existing local-compatible configuration ID; no service address is inferred. */
 export const NATIVE_LOCAL_CHAT_PROVIDER_ID = 'lm-studio'
@@ -20,8 +21,11 @@ export function createNativeProviderRuntime(options: {
   execution?: ReturnType<typeof createMainTransportExecution>
 }) {
   const registry = new ProviderRegistry()
-  registry.register({ id: NATIVE_CHAT_PROVIDER_ID, protocol: 'chat-completions' })
-  registry.register({ id: NATIVE_LOCAL_CHAT_PROVIDER_ID, protocol: 'chat-completions' })
+  // Every curated provider is registered up front. Registrations are ids only:
+  // the endpoint comes from the transport record, so registering `openai` here
+  // states "this id is executed by main", not "this id is api.openai.com".
+  for (const id of CURATED_CHAT_PROVIDER_IDS)
+    registry.register({ id, protocol: 'chat-completions' })
   const runtime = new ProviderRuntime(registry, { resolveCredential: options.resolveCredential })
 
   function owns(providerId: string, draft?: Record<string, unknown>) {
@@ -89,9 +93,10 @@ export function createNativeProviderRuntime(options: {
   async function discover(providerId: string, draft: Record<string, unknown>) {
     if (options.execution)
       return options.execution.discover(providerId, draft)
-    const temporary = new ProviderRuntime(registry, {
-      resolveCredential: () => typeof draft.apiKey === 'string' ? draft.apiKey : undefined,
-    })
+    // No credential is taken from the draft. A host without the execution port
+    // (unit fixtures, browser) simply makes an unauthenticated request, which is
+    // the honest outcome: this renderer cannot supply a key it must not hold.
+    const temporary = new ProviderRuntime(registry, { resolveCredential: options.resolveCredential })
     try {
       return { status: 'ready' as const, models: await temporary.discover({ ...configFor(providerId, draft), timeoutMs: 15000 }) }
     }
@@ -106,9 +111,7 @@ export function createNativeProviderRuntime(options: {
   async function probe(providerId: string, model: string, draft: Record<string, unknown>) {
     if (options.execution)
       return options.execution.probe(providerId, model, draft)
-    const temporary = new ProviderRuntime(registry, {
-      resolveCredential: () => typeof draft.apiKey === 'string' ? draft.apiKey : undefined,
-    })
+    const temporary = new ProviderRuntime(registry, { resolveCredential: options.resolveCredential })
     try {
       await temporary.chat({ ...configFor(providerId, draft), timeoutMs: 15000 }, { model, messages: [{ role: 'user', content: 'Reply with OK.' }] })
       return { ok: true, scope: 'text' as const }

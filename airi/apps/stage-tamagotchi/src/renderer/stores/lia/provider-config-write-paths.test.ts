@@ -3,6 +3,7 @@ import { useProviderConfigStore } from '@proj-airi/stage-ui/stores/providers/con
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createApp } from 'vue'
+import { createSecretAdoptHandler } from '../../services/lia/secret-adopt.fixture'
 
 /**
  * B0.7 — the Lia's two configuration write paths, after the facade.
@@ -20,6 +21,12 @@ import { createApp } from 'vue'
  *  - **Flow A, record present + baseUrl** — the one live Lia path with a remote
  *    effect: exactly one `PATCH`, and the local payload keeps the custom URL.
  *  - **Flow C, activation** — `activateTarget` without a base URL: local only.
+ *
+ * The provider id used here is `deepseek` — one the Lia's chat catalog does NOT
+ * curate. Since Corte B every curated chat provider takes the transport branch
+ * of `ensureProviderRecord` and performs no `providerConfig.updateConfig` at all,
+ * so using one of those ids would test the wrong branch. The facade's contract
+ * being pinned is unchanged; only the id that reaches it is.
  *
  * Flow B (`hearing` → `applyProviderProjection`) calls the same
  * `updateConfig` delegate as flow A; it is covered by the facade test and by
@@ -64,6 +71,7 @@ vi.mock('@proj-airi/electron-vueuse', async () => {
         'eventa:invoke:lia:secret:has-receive': ipc.secretHas,
         'eventa:invoke:lia:secret:get-receive': ipc.secretGet,
         'eventa:invoke:lia:secret:set-receive': ipc.secretSet,
+        'eventa:invoke:lia:secret:adopt-receive': createSecretAdoptHandler({ secretHas: ipc.secretHas, secretGet: ipc.secretGet, secretSet: ipc.secretSet }),
         'eventa:invoke:lia:secret:delete-receive': ipc.secretDelete,
       }
       const id = invoke?.receiveEvent?.id ?? ''
@@ -92,8 +100,8 @@ function installStores() {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
     observed.requests.push({ url, method: init?.method ?? 'GET' })
     return new Response(JSON.stringify({
-      id: 'groq',
-      definitionId: 'groq',
+      id: 'deepseek',
+      definitionId: 'deepseek',
       config: { baseUrl: 'https://custom.invalid/v1' },
       status: 'unconfigured',
       configuredBy: 'user',
@@ -123,7 +131,7 @@ describe('lia provider config write paths — remote effects are unchanged', () 
   it('flow A, absent record: writes locally with the custom URL and stays offline', async () => {
     const store = installStores()
 
-    const record = await store.ensureProviderRecord('groq', 'https://custom.invalid/v1')
+    const record = await store.ensureProviderRecord('deepseek', 'https://custom.invalid/v1')
 
     expect(record?.config).toEqual({ baseUrl: 'https://custom.invalid/v1' })
     expect(observed.requests).toEqual([])
@@ -131,40 +139,40 @@ describe('lia provider config write paths — remote effects are unchanged', () 
 
   it('flow A, existing record: still replicates exactly one PATCH, as before the facade', async () => {
     const store = installStores()
-    await store.ensureProviderRecord('groq')
+    await store.ensureProviderRecord('deepseek')
     const config = useProviderConfigStore()
 
-    await store.ensureProviderRecord('groq', 'https://custom.invalid/v1')
+    await store.ensureProviderRecord('deepseek', 'https://custom.invalid/v1')
 
     expect(observed.requests).toHaveLength(1)
     // T-D: the replication is a PATCH of the provider config, not a POST/PUT, and
     // the assertion reads the method the runtime actually sent.
     expect(observed.requests[0].method).toBe('PATCH')
-    expect(observed.requests[0].url).toContain('groq')
+    expect(observed.requests[0].url).toContain('deepseek')
     // Exactly one request: the Lia's flow still replicates once, which is what
     // B0.7 promised not to disable. The URL survives in the shared record, the
     // only place it is stored.
-    expect(config.getProviderConfig('groq')).toEqual({ baseUrl: 'https://custom.invalid/v1' })
+    expect(config.getProviderConfig('deepseek')).toEqual({ baseUrl: 'https://custom.invalid/v1' })
   })
 
   it('flow A, existing record, remote unavailable: the custom URL is kept locally', async () => {
     const store = installStores()
-    await store.ensureProviderRecord('groq')
+    await store.ensureProviderRecord('deepseek')
     vi.stubGlobal('fetch', vi.fn(async () => {
       throw new Error('remote unavailable')
     }))
 
-    await store.ensureProviderRecord('groq', 'https://offline.invalid/v1')
+    await store.ensureProviderRecord('deepseek', 'https://offline.invalid/v1')
 
     // The replication was attempted and failed; the user's URL is not lost and
     // nothing was thrown at the caller.
-    expect(useProviderConfigStore().getProviderConfig('groq')).toEqual({ baseUrl: 'https://offline.invalid/v1' })
+    expect(useProviderConfigStore().getProviderConfig('deepseek')).toEqual({ baseUrl: 'https://offline.invalid/v1' })
   })
 
   it('flow C, activation: ensures the record without touching the network', async () => {
     const store = installStores()
 
-    await store.activateTarget({ providerId: 'groq', modelId: 'llama-3.3-70b-versatile' })
+    await store.activateTarget({ providerId: 'deepseek', modelId: 'deepseek-chat' })
 
     expect(observed.requests).toEqual([])
   })
@@ -179,19 +187,19 @@ describe('lia provider config write paths — remote effects are unchanged', () 
    * dependency the audit flagged as invisible to the config facade.
    */
   it('t-c: activatePreferred() as the real entry makes no configuration request', async () => {
-    ipc.fixture({ preferred: { providerId: 'groq', modelId: 'llama-3.3-70b-versatile' } })
+    ipc.fixture({ preferred: { providerId: 'deepseek', modelId: 'deepseek-chat' } })
     const store = installStores()
 
     await expect(store.activatePreferred()).resolves.toBe(true)
 
     expect(observed.requests).toEqual([])
-    expect(useProviderConfigStore().getProvider('groq')).toBeDefined()
+    expect(useProviderConfigStore().getProvider('deepseek')).toBeDefined()
   })
 
   it('t-c: activateConfiguredProvider() as the real entry makes no configuration request', async () => {
     ipc.fixture({
       onboarded: true,
-      preferred: { providerId: 'groq', modelId: 'llama-3.3-70b-versatile' },
+      preferred: { providerId: 'deepseek', modelId: 'deepseek-chat' },
       strategy: 'manual',
     })
     const store = installStores()
@@ -202,7 +210,7 @@ describe('lia provider config write paths — remote effects are unchanged', () 
     // The runtime-side writes still happen locally, which is the behaviour the
     // Lia depends on to be seen as configured at all.
     const config = useProviderConfigStore()
-    expect(config.configuredProviders.groq).toBe(true)
-    expect(config.getProvider('groq')?.status).toBe('configured')
+    expect(config.configuredProviders.deepseek).toBe(true)
+    expect(config.getProvider('deepseek')?.status).toBe('configured')
   })
 })

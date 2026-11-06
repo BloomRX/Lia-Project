@@ -3,6 +3,8 @@ import { useConsciousnessStore } from '@proj-airi/stage-ui/stores/modules/consci
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { createSecretAdoptHandler } from '../../services/lia/secret-adopt.fixture'
+
 /**
  * Config → runtime activation (M1 blocker fix).
  *
@@ -60,6 +62,7 @@ vi.mock('@proj-airi/electron-vueuse', async () => {
         'eventa:invoke:lia:secret:encryption-available-receive': ipc.encryptionAvailable,
         'eventa:invoke:lia:secret:has-receive': ipc.secretHas,
         'eventa:invoke:lia:secret:set-receive': ipc.secretSet,
+        'eventa:invoke:lia:secret:adopt-receive': createSecretAdoptHandler({ secretHas: ipc.secretHas, secretGet: ipc.secretGet, secretSet: ipc.secretSet }),
         'eventa:invoke:lia:secret:get-receive': ipc.secretGet,
         'eventa:invoke:lia:secret:delete-receive': ipc.secretDelete,
       }
@@ -188,16 +191,24 @@ describe('lia chat provider activation (M1)', () => {
     expect(consciousness.activeProvider).toBe('')
   })
 
-  it('resolves the key from the vault, never from the persisted config', async () => {
+  /**
+   * PROMPT-26: this test used to assert that the resolver handed `openai`'s
+   * vault key to a renderer build. That is the exposure the boundary exists to
+   * close — every curated id executes in main, so no consumer here needs the
+   * key. The assertion is now the opposite, and stronger: asking for a curated
+   * id returns nothing AND never touches the vault channel.
+   */
+  it('never resolves a curated provider key in this process, even when asked', async () => {
     ipc.fixture(validConfig('openai', 'gpt-5.5'), { openai: 'sk-from-vault' })
     const store = useLiaProviderStore()
     store.registerRuntimeExtensions()
 
     const resolver = getProviderCredentialResolver()
     expect(resolver).toBeTypeOf('function')
-    expect(await resolver!('openai')).toEqual({ apiKey: 'sk-from-vault' })
+    expect(await resolver!('openai')).toBeUndefined()
+    expect(ipc.secretGet).not.toHaveBeenCalled()
 
-    // The secret never reaches the persisted document.
+    // The secret never reaches the persisted document either.
     await store.activateConfiguredProvider()
     expect(JSON.stringify(ipc.persistedChat)).not.toContain('sk-from-vault')
   })

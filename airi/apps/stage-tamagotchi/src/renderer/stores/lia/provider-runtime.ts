@@ -93,19 +93,85 @@ export function useLiaProviderRuntime() {
   return {
     ...createLiaProviderRuntime(source),
     ...createLiaDraftProviderRuntime(source, t),
+    /**
+     * The endpoint a provider schema declares for itself, when the user has not
+     * supplied one.
+     *
+     * Read from the shared provider metadata rather than copied into a Lia
+     * table, so `https://api.openai.com/v1` is still written in exactly one
+     * place — the provider definition that owns it. Returns `undefined` rather
+     * than an empty string when the definition declares no default, so a caller
+     * can tell "no endpoint known" from "the empty endpoint".
+     *
+     * Not part of {@link LiaProviderRuntime}: that port is the four lifecycle
+     * operations tests pin. This is configuration metadata, and it is added on
+     * the bound port only, so `createLiaProviderRuntime(double)` keeps the
+     * shape its tests assert.
+     */
+    defaultBaseUrl(providerId: string): string | undefined {
+      const value = source.getDefaultProviderConfig(providerId)?.baseUrl
+      return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined
+    },
+    /**
+     * The inference tasks a provider's definition declares.
+     *
+     * Read from the shared registry through the store's own lookup, so the Lia
+     * never keeps a second table of which providers are chat, speech or
+     * transcription — the same reason `defaultBaseUrl` reads the definition
+     * instead of copying endpoints.
+     *
+     * An id with no definition answers with an empty list. That is not an
+     * error: derived targets (`lia-groq-transcription`) and ids a future
+     * version adds are exactly the cases the caller must treat as "declares
+     * nothing", which is what makes the credential policy fail closed.
+     *
+     * Configuration metadata, like `defaultBaseUrl`: added on the bound port
+     * only, so `createLiaProviderRuntime(double)` keeps the shape its tests
+     * assert.
+     */
+    providerTasks(providerId: string): string[] {
+      return [...(source.findProviderDefinition(providerId)?.tasks ?? [])]
+    },
+    /**
+     * Installs the native chat factory as the execution path for chat builds.
+     *
+     * Two accessors are wrapped, because chat is built through both of them:
+     *
+     *  - `getChatProviderInstance` is the explicit chat accessor;
+     *  - `getProviderInstance` is what chat-shaped consumers that predate it
+     *    still call (vision inference, the autonomous artistry director, the
+     *    markdown stress devtool). Wrapping it is what keeps them working while
+     *    the credential stays in main: without this, those consumers would build
+     *    an SDK client around the vault key inside this renderer, which is the
+     *    exposure this cut exists to close.
+     *
+     * Both dispatches ask the same factory, and both fall back to the untouched
+     * implementation when it answers `undefined` - so a provider the Lia does
+     * not own behaves exactly as before. Only the curated ids are claimed.
+     *
+     * Idempotent per store instance; one uninstall restores both accessors.
+     */
     installChatFactory(factory: (providerId: string) => Promise<NativeChatProvider | undefined>) {
       const installed = chatInstallations.get(source)
       if (installed)
         return installed
-      const previous = source.getChatProviderInstance
-      const dispatch: typeof previous = async (providerId, options) => {
+      const previousChat = source.getChatProviderInstance
+      const previousInstance = source.getProviderInstance
+      const dispatch: typeof previousChat = async (providerId, options) => {
         const native = await factory(providerId)
-        return native ?? previous(providerId, options)
+        return native ?? previousChat(providerId, options)
+      }
+      const instanceDispatch: typeof previousInstance = async (providerId) => {
+        const native = await factory(providerId)
+        return (native ?? await previousInstance(providerId)) as never
       }
       source.getChatProviderInstance = dispatch
+      source.getProviderInstance = instanceDispatch
       const uninstall = () => {
         if (source.getChatProviderInstance === dispatch)
-          source.getChatProviderInstance = previous
+          source.getChatProviderInstance = previousChat
+        if (source.getProviderInstance === instanceDispatch)
+          source.getProviderInstance = previousInstance
         chatInstallations.delete(source)
       }
       chatInstallations.set(source, uninstall)

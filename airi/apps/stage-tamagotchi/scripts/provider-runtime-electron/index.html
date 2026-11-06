@@ -4,7 +4,18 @@
 <body>
   <h1>Gate de integração Electron</h1>
   <p>Perfil temporário e servidor local de teste. Este painel não é o Launcher.</p>
-  <label>Serviço <select id="provider"><option value="openai-compatible">Compatível</option><option value="lm-studio">Compatível local</option></select></label>
+  <label>Serviço <select id="provider">
+    <option value="openai">OpenAI</option>
+    <option value="groq">Groq</option>
+    <option value="cerebras-ai">Cerebras</option>
+    <option value="anthropic">Anthropic</option>
+    <option value="xai">xAI</option>
+    <option value="mistral-ai">Mistral</option>
+    <option value="openrouter-ai">OpenRouter</option>
+    <option value="openai-compatible">Compatível</option>
+    <option value="lm-studio">Compatível local</option>
+    <option value="ollama">Ollama</option>
+  </select></label>
   <label>Endereço <input id="endpoint" size="48"></label>
   <label>Modelo <input id="model" value="custom/Electron:Q4"></label>
   <button id="json">Executar JSON</button><button id="stream">Executar streaming</button><button id="discover">Descobrir</button><button id="cancel">Cancelar</button>

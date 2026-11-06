@@ -556,6 +556,18 @@ export interface LiaSecretPayload {
 export const electronLiaSecretEncryptionAvailable = defineInvokeEventa<boolean>('eventa:invoke:lia:secret:encryption-available')
 export const electronLiaSecretHas = defineInvokeEventa<boolean, LiaSecretPayload>('eventa:invoke:lia:secret:has')
 export const electronLiaSecretSet = defineInvokeEventa<boolean, LiaSecretPayload & { value: string, onlyIfMissing?: boolean }>('eventa:invoke:lia:secret:set')
+/**
+ * Outcome of adopting a secret that already exists somewhere else — the legacy
+ * `localStorage` copy being folded into the vault.
+ *
+ * The caller needs to distinguish "the vault now holds this exact value" from
+ * "the vault holds a different value", because only the first one licenses
+ * deleting the old copy. It cannot answer that itself without reading the
+ * secret back into the renderer, so main compares in-process and reports one of
+ * these four words. No value is ever returned.
+ */
+export type LiaSecretAdoptResult = 'stored' | 'matching' | 'conflict' | 'unavailable'
+export const electronLiaSecretAdopt = defineInvokeEventa<LiaSecretAdoptResult, LiaSecretPayload & { value: string }>('eventa:invoke:lia:secret:adopt')
 export const electronLiaSecretGet = defineInvokeEventa<string | undefined, LiaSecretPayload>('eventa:invoke:lia:secret:get')
 export const electronLiaSecretDelete = defineInvokeEventa<boolean, LiaSecretPayload>('eventa:invoke:lia:secret:delete')
 

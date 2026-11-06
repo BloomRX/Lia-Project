@@ -1,6 +1,8 @@
 import type { LiaSecretVault } from '@lia/core/secrets/vault'
 import type { createContext } from '@moeru/eventa/adapters/electron/main'
 
+import type { TransportSnapshot } from '../../../../../../../lia/core/src/transports/contracts'
+
 import { join } from 'node:path'
 
 import { defineInvokeHandler } from '@moeru/eventa'
@@ -8,20 +10,46 @@ import { app } from 'electron'
 
 import { createTransportRepository } from '../../../../../../../lia/core/src/transports/repository'
 import { electronLiaTransportsGet, electronLiaTransportsMutate } from '../../../shared/eventa/lia-transports'
+import { isCuratedChatProvider } from '../../../shared/lia/provider-catalog'
 import { registerLiaTransportExecutionBridge } from './transport-execution-service'
 
 let applicationRepository: ReturnType<typeof createTransportRepository> | undefined
 
-function getApplicationRepository() {
+/**
+ * The single application-wide transport repository.
+ *
+ * Exported so the transcription service reads the SAME file and the same
+ * revision that chat executes against, instead of opening a second view of the
+ * user's configuration. One process, one writer, one authority.
+ */
+export function getApplicationRepository() {
   return applicationRepository ??= createTransportRepository(join(app.getPath('userData'), 'lia-transports.json'))
 }
 
-/** Raw secret reads remain available only for scopes outside the migrated transport boundary. */
-export async function canRendererReadLegacySecret(scope: string): Promise<boolean> {
-  if (scope === 'openai-compatible' || scope === 'lm-studio')
+/**
+ * Whether the renderer may read a stored secret.
+ *
+ * Denies every curated chat provider, because those execute in the main process
+ * and nothing in the renderer needs their key; and denies every scope that a
+ * transport record or tombstone covers, because that record means the same
+ * thing. Anything else — a provider the Lia does not curate — keeps its
+ * previous behaviour.
+ *
+ * There is no exception list any more. Corte B's first pass kept one for `groq`,
+ * because the hearing pipeline built its transcription client in the renderer
+ * and therefore needed the key there. Speech-to-text now runs in the main
+ * process (`transcription-service.ts`), so that consumer is gone and the last
+ * curated credential stopped being readable. Adding an exception back would
+ * re-open renderer read access and must be argued in review.
+ */
+export async function canRendererReadLegacySecret(
+  scope: string,
+  repository: { read: () => Promise<TransportSnapshot> } = getApplicationRepository(),
+): Promise<boolean> {
+  if (isCuratedChatProvider(scope))
     return false
   try {
-    const snapshot = await getApplicationRepository().read()
+    const snapshot = await repository.read()
     if (snapshot.credentialProtectionIncomplete || (snapshot.tombstones.length > 0 && !snapshot.protectedCredentialScopes))
       return false
     return !snapshot.protectedCredentialScopes?.includes(scope)

@@ -343,7 +343,16 @@ onMounted(() => updateThemeColor())
  * inert-by-default.
  */
 onMounted(() => {
+  // Corte B: EVERY window that can send a chat needs the transport bridge,
+  // because a curated provider's request is executed in the main process and
+  // this renderer only forwards it. Installing it here is safe in both roles —
+  // it reads no credential. Leaving it leader-only is what made `#/chat`, a
+  // follower-only window, fall back to the legacy executor that has no
+  // credential resolver and therefore no `Authorization` header.
+  liaProviderStore.registerChatTransport()
   if (windowContext.leadership === 'leader-only') {
+    // Leader-only from here down: the vault credential resolver, the fallback
+    // chain, voice and hearing all belong to exactly one window.
     liaProviderStore.registerRuntimeExtensions()
     liaVoiceStore.registerRuntimeExtensions()
     // Phase 8.0D-10B-4D4C4-SHELL-B1: managed Hearing projection rides the SAME

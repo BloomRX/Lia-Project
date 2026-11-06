@@ -2,7 +2,7 @@ import type { LiaProviderChatConfig, LiaProviderChatTarget } from '../../../shar
 
 import { errorMessageFrom } from '@moeru/std'
 import { useElectronEventaInvoke } from '@proj-airi/electron-vueuse'
-import { registerChatFallbackResolver, registerProviderCredentialResolver } from '@proj-airi/stage-ui/stores/chat/chat-provider-runtime'
+import { registerChatFallbackResolver, registerProviderCredentialResolver, registerProviderModelLister } from '@proj-airi/stage-ui/stores/chat/chat-provider-runtime'
 import { useConsciousnessStore } from '@proj-airi/stage-ui/stores/modules/consciousness'
 import { defineStore } from 'pinia'
 import { onScopeDispose, ref } from 'vue'
@@ -12,12 +12,14 @@ import { isTransportRecord } from '../../../../../../../lia/core/src/transports/
 import {
   electronLiaProviderChatConfigGet,
   electronLiaProviderChatConfigSet,
+  electronLiaSecretAdopt,
   electronLiaSecretDelete,
   electronLiaSecretEncryptionAvailable,
   electronLiaSecretGet,
   electronLiaSecretHas,
   electronLiaSecretSet,
 } from '../../../shared/eventa'
+import { removeLegacyApiKey, stripCredentialField } from '../../services/lia/legacy-credential-cleanup'
 import { createMainTransportExecution } from '../../services/lia/main-transport-execution'
 import { createNativeProviderRuntime } from '../../services/lia/native-provider-runtime'
 import { createLiaTransportClient, isNativeTransportDefinition, legacyTransportCandidates, toTransportRecord } from '../../services/lia/transport-config'
@@ -267,8 +269,57 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
   const secretHas = useElectronEventaInvoke(electronLiaSecretHas)
   const secretSet = useElectronEventaInvoke(electronLiaSecretSet)
   const secretGet = useElectronEventaInvoke(electronLiaSecretGet)
+  const secretAdopt = useElectronEventaInvoke(electronLiaSecretAdopt)
   const secretDelete = useElectronEventaInvoke(electronLiaSecretDelete)
   const loadedConfig = ref<LiaProviderChatConfig | undefined>(undefined)
+
+  /**
+   * Folds one legacy plaintext key into the vault and reports whether main now
+   * holds THAT value.
+   *
+   * `retry` means "not yet, and the caller must not treat the provider as
+   * configured": the platform keychain is unavailable or the write failed. That
+   * is the same fail-closed rule the migration already applied with `secretSet`,
+   * kept because a provider whose key silently failed to store would send
+   * unauthenticated requests instead of surfacing the problem.
+   *
+   * `conflict` is deliberately NOT a retry and NOT an adoption: the vault holds a
+   * different value, which is newer by construction (it was written after the
+   * local copy), so the local copy is left alone rather than overwritten.
+   */
+  async function adoptCredential(providerId: string, encryptionAvailable: boolean, value: string): Promise<'adopted' | 'conflict' | 'retry'> {
+    if (!encryptionAvailable)
+      return 'retry'
+    const outcome = await secretAdopt({ scope: providerId, key: API_KEY_NAME, value })
+    if (outcome === 'unavailable')
+      return 'retry'
+    return outcome === 'conflict' ? 'conflict' : 'adopted'
+  }
+
+  /**
+   * Deletes the plaintext copy main just confirmed it holds.
+   *
+   * Best-effort by design: failing to clean `localStorage` must not abort a
+   * migration whose important half (the vault write) already succeeded, and the
+   * next launch retries because the key is still there to be adopted.
+   */
+  function clearLegacyCredential(providerId: string) {
+    try {
+      if (typeof localStorage === 'undefined')
+        return
+      const changed = removeLegacyApiKey(localStorage, providerId)
+      // The shared store's own record is deep-watched and re-serialised on the
+      // next provider write, so deleting the field from storage alone would be
+      // undone. Keep the reactive copy and the stored copy in step.
+      const current = changed.configured ? providerConfig.getConfig(providerId) : undefined
+      const withoutKey = stripCredentialField(current)
+      if (current && withoutKey)
+        providerConfig.replaceConfig(providerId, withoutKey)
+    }
+    catch {
+      // See above: storage access is the best-effort half of this repair.
+    }
+  }
 
   const transports = createLiaTransportClient()
   const rejectedTransports = new Set<string>()
@@ -297,7 +348,20 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
         }
         const records = []
         let retryCredentialMigration = false
+        /** Provider ids whose plaintext key main confirmed it now holds verbatim. */
+        const adopted = new Set<string>()
         for (const candidate of legacyTransportCandidates(configured, readLegacy('settings/credentials/providers'))) {
+          const key = candidate.config.apiKey
+          if (typeof key === 'string' && key) {
+            const outcome = await adoptCredential(candidate.id, await getEncryptionAvailable(), key)
+            if (outcome === 'retry') {
+              rejectedTransports.add(candidate.id)
+              retryCredentialMigration = true
+              continue
+            }
+            if (outcome === 'adopted')
+              adopted.add(candidate.id)
+          }
           if (transports.get(candidate.id) || transports.hasRemoved(candidate.id))
             continue
           const models = [loadedConfig.value?.preferred, ...(loadedConfig.value?.fallback ?? [])]
@@ -309,14 +373,6 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
               rejectedTransports.add(candidate.id)
             continue
           }
-          const key = candidate.config.apiKey
-          if (typeof key === 'string' && key && !await secretHas({ scope: candidate.id, key: API_KEY_NAME })) {
-            if (!await getEncryptionAvailable() || !await secretSet({ scope: candidate.id, key: API_KEY_NAME, value: key, onlyIfMissing: true })) {
-              rejectedTransports.add(candidate.id)
-              retryCredentialMigration = true
-              continue
-            }
-          }
           records.push(record)
         }
         if (records.length) {
@@ -324,6 +380,14 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
           await transports.refresh()
           await transports.migrate(records)
         }
+        /**
+         * Only after the record migration has actually landed: the vault holds
+         * the value and the transport that will use it exists. Cleaning before
+         * this point could destroy the only copy of a key whose record then
+         * failed to persist.
+         */
+        for (const providerId of adopted)
+          clearLegacyCredential(providerId)
         if (retryCredentialMigration)
           migration = undefined
       })().catch(() => {
@@ -359,6 +423,7 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
   onScopeDispose(() => {
     disposed = true
     uninstallFactory?.()
+    registerProviderModelLister(undefined)
     nativeRuntime.dispose()
   })
 
@@ -391,8 +456,65 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
     return secretDelete({ scope: providerId, key: API_KEY_NAME })
   }
 
-  /** Resolves the vault apiKey for one provider build. Never persisted/logged. */
+  /**
+   * The inference tasks whose credential this renderer is still allowed to hold.
+   *
+   * The Lia executes in main every task it can (chat for the ten curated ids,
+   * transcription for the derived Groq target, model discovery and probe). What
+   * remains here is the AIRI legacy that has not been migrated, and only two of
+   * those tasks have any renderer-side consumer left:
+   *
+   *  - `chat` — a provider outside the curated catalog still builds its client
+   *    in this process. Documented debt, deliberately unchanged here.
+   *  - speech-to-text — the product document may point STT at any provider;
+   *    Groq runs in main, the rest keeps the legacy path.
+   *
+   * `text-to-speech` is deliberately absent. The voice preview (and the Stage's
+   * speech output) synthesise in this renderer, so handing them a vault key is
+   * precisely the exposure this policy closes: no TTS consumer in the Lia
+   * receives one any more. Local engines (`voicevox`, `app-local-audio-speech`,
+   * `index-tts-vllm`, `kokoro-local`, …) declare no credential to begin with, so
+   * refusing it changes nothing for them — which is why this is a task-based
+   * rule and not a blanket "block every voice provider".
+   *
+   * Embeddings, image and any future task are excluded for the same reason as
+   * TTS: nothing in the Lia executes them in this renderer.
+   */
+  const RENDERER_CREDENTIAL_TASKS: ReadonlySet<string> = new Set([
+    'chat',
+    'speech-to-text',
+    'automatic-speech-recognition',
+    'asr',
+    'stt',
+  ])
+
+  /**
+   * Whether the declared capabilities of a provider allow its credential to
+   * exist in this renderer at all.
+   *
+   * Derived from the provider definition's own `tasks` — never from a Lia-side
+   * list — so a provider added upstream is classified without anyone editing
+   * this file, and an id with no definition (a derived target, or a typo) fails
+   * closed.
+   */
+  function rendererMayHoldCredential(providerId: string): boolean {
+    return providerRuntime.providerTasks(providerId)
+      .some(task => RENDERER_CREDENTIAL_TASKS.has(String(task).toLowerCase()))
+  }
+
+  /**
+   * Resolves the vault apiKey for one provider build. Never persisted/logged.
+   *
+   * The only path from this renderer to a stored secret, so the capability
+   * policy is enforced here rather than at each caller: a provider whose
+   * definition declares no renderer-eligible task answers `undefined` without
+   * the vault ever being read. Callers see the same "no credential" they see
+   * for a provider the user never configured, and the build proceeds without
+   * one — never with someone else's.
+   */
   async function resolveApiKey(providerId: string): Promise<string | undefined> {
+    if (!rendererMayHoldCredential(providerId))
+      return undefined
     // Derived targets resolve through their alias; everything else is identity.
     return secretGet({ scope: secretScopeFor(providerId), key: API_KEY_NAME })
   }
@@ -422,14 +544,40 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
       await initializeTransports()
       await transports.refresh()
       const previous = transports.get(providerId)
-      if (baseUrl || previous) {
+      /**
+       * The endpoint this record will carry, in order of authority:
+       *
+       *  1. what the caller just typed;
+       *  2. what the record already saved;
+       *  3. what the user saved for this provider in the shared config —
+       *     including a URL migrated from the legacy keys, which is the only
+       *     copy an upgrading install has;
+       *  4. the endpoint the provider's own schema declares.
+       *
+       * Step 4 is what makes a curated provider migratable at all: without it,
+       * choosing `openai` and typing only a key produced no record, no record
+       * meant no native ownership, and chat fell silently back to the legacy
+       * path — the one that resolves the vault key inside this renderer.
+       * Reading the default from the schema keeps that URL written once.
+       */
+      const stored = providerConfig.getConfig(providerId)?.baseUrl
+      const endpoint = baseUrl
+        ?? previous?.baseUrl
+        ?? (typeof stored === 'string' && stored.trim() ? stored.trim() : undefined)
+        ?? providerRuntime.defaultBaseUrl(providerId)
+      if (endpoint) {
         const models = [loadedConfig.value?.preferred, ...(loadedConfig.value?.fallback ?? [])]
           .filter(target => target?.providerId === providerId)
           .flatMap(target => target?.modelId ? [target.modelId] : [])
-        const record = previous
-          ? { ...previous, ...(baseUrl ? { baseUrl } : {}), modelIds: [...new Set([...previous.modelIds, ...models])] }
-          : toTransportRecord(providerId, providerId, { baseUrl }, models)
-        await transports.put(record)
+        const build = (current: typeof previous) => current
+          ? { ...current, baseUrl: endpoint, modelIds: [...new Set([...current.modelIds, ...models])] }
+          : toTransportRecord(providerId, providerId, { baseUrl: endpoint }, models)
+        // Activation runs before every send, so an unconditional write would
+        // bump the revision — and the main process invalidates in-flight jobs on
+        // every revision — for a record that did not change.
+        const record = build(previous)
+        if (!previous || previous.baseUrl !== record.baseUrl || previous.modelIds.join('\u0000') !== record.modelIds.join('\u0000'))
+          await putRecord(providerId, endpoint, build)
       }
       // Metadata compatibility for consumers not migrated yet. No endpoint write/PATCH.
       const owned = transports.get(providerId)
@@ -471,6 +619,77 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
     nativeRuntime.dispose(providerId)
   }
 
+  /**
+   * Writes a provider record, converging instead of failing when another window
+   * wrote first.
+   *
+   * `transports.put` is compare-and-swap: a stale revision is rejected, which is
+   * right for a user edit ("someone else changed this, show them") but wrong for
+   * "ensure this provider has an endpoint". Two windows activating the same
+   * provider — or two concurrent preparations of the same unsaved provider —
+   * would otherwise turn a benign race into a failed send.
+   *
+   * So: on a rejected write, refresh and re-decide against the snapshot that
+   * won. If that snapshot already carries the same endpoint (and the models this
+   * caller wanted are present, or it is the same record), the intent is
+   * satisfied and nothing else is written. Only a genuinely different endpoint
+   * retries once, and a second rejection is surfaced rather than looped.
+   */
+  async function putRecord(
+    providerId: string,
+    endpoint: string,
+    build: (current: ReturnType<typeof transports.get>) => ReturnType<typeof transports.get>,
+  ) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        return await transports.put(build(transports.get(providerId))!)
+      }
+      catch (error) {
+        if (attempt === 1)
+          throw error
+        await transports.refresh()
+        const current = transports.get(providerId)
+        if (current && current.baseUrl === endpoint)
+          return current
+      }
+    }
+  }
+
+  /**
+   * Persists the credential and the endpoint a native provider needs before it
+   * may be executed, and proves both landed.
+   *
+   * This is the ordering Corte B requires, expressed once so no caller can skip
+   * a step: a secret reaches main only through `secrets:set`, main confirms the
+   * vault write, the transport record is persisted WITHOUT the credential, and
+   * only then is the provider executable. Before it, "test connection" shipped
+   * the typed key inside the execution payload because that was the only way to
+   * try a key that was not saved yet.
+   *
+   * Failures are hard: a key that did not store, or a record that did not
+   * persist, must surface as `configuration` rather than degrade into a request
+   * that goes out unauthenticated or to an endpoint nobody saved.
+   *
+   * Idempotent and safe to repeat: `secretSet` overwrites the same address with
+   * the same value, and `ensureProviderRecord` writes only when the record
+   * actually changed. Two concurrent preparations for the same provider converge
+   * because main serialises vault writes and the transport repository rejects a
+   * stale revision instead of duplicating the record.
+   */
+  async function prepareNativeExecution(args: { providerId: string, apiKey?: string, baseUrl?: string }): Promise<void> {
+    const record = transports.get(args.providerId)
+    if (!record && !isNativeTransportDefinition(args.providerId))
+      return
+    if (typeof args.apiKey === 'string' && args.apiKey) {
+      if (!await secretSet({ scope: args.providerId, key: API_KEY_NAME, value: args.apiKey }))
+        throw new ProviderError('credentials')
+    }
+    await ensureProviderRecord(args.providerId, args.baseUrl)
+    const persisted = transports.get(args.providerId)
+    if (!persisted || persisted.enabled === false)
+      throw new ProviderError('configuration')
+  }
+
   async function draftConfig(args: { providerId: string, apiKey?: string, baseUrl?: string }) {
     await initializeTransports()
     await transports.refresh()
@@ -480,13 +699,21 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
     const config: Record<string, unknown> = record
       ? { ...record.adapterOptions, baseUrl: record.baseUrl, _liaTransport: true }
       : isNativeTransportDefinition(args.providerId) ? {} : { ...providerConfig.getConfig(args.providerId) }
-    // Stored keys never enter the shared record; only this transient draft.
+    // A curated provider never receives a key here: it is executed in main, and
+    // a host without that port gets an unauthenticated request rather than a
+    // secret in this renderer. Only the legacy, non-curated path still resolves
+    // one, and that path is unchanged by this cut.
     const native = Boolean(record) || isNativeTransportDefinition(args.providerId)
-    const apiKey = args.apiKey ?? (native ? undefined : await resolveApiKey(args.providerId))
+    if (!native && !args.apiKey) {
+      const apiKey = await resolveApiKey(args.providerId)
+      if (apiKey)
+        config.apiKey = apiKey
+    }
+    else if (!native && args.apiKey) {
+      config.apiKey = args.apiKey
+    }
     if (args.baseUrl !== undefined)
       config.baseUrl = args.baseUrl
-    if (apiKey)
-      config.apiKey = apiKey
     return config
   }
 
@@ -495,6 +722,8 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
   const discoveryPending = new Map<string, Promise<Awaited<ReturnType<typeof providerRuntime.discover>>>>()
   async function discoverModels(args: { providerId: string, apiKey?: string, baseUrl?: string }) {
     try {
+      await initializeTransports()
+      await prepareNativeExecution(args)
       const config = await draftConfig(args)
       const requestKey = JSON.stringify([args.providerId, config])
       const pending = discoveryPending.get(requestKey)
@@ -524,6 +753,8 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
     baseUrl?: string
   }) {
     try {
+      await initializeTransports()
+      await prepareNativeExecution(args)
       const config = await draftConfig(args)
       const result = nativeRuntime.owns(args.providerId, config)
         ? await nativeRuntime.probe(args.providerId, args.modelId ?? '', config)
@@ -669,12 +900,65 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
   }
 
   /**
-   * Installs the inert-by-default runtime hooks for the current renderer session.
-   * Called once by the Lia Home (main window). Idempotent.
+   * Installs the chat transport bridge for THIS renderer session.
+   *
+   * Safe in any window, including a follower-only one, because it resolves no
+   * credential and writes no shared state: it only teaches the local Pinia
+   * instance to forward a curated provider's request to the main process over
+   * IPC. The main process owns the endpoint lookup and the key.
+   *
+   * It exists separately from {@link registerRuntimeExtensions} because those
+   * two responsibilities used to be welded together, and the leader-only gate
+   * around them is what left `#/chat` — a follower-only window — with no bridge
+   * at all. There, `getChatProviderInstance` was the untouched legacy function,
+   * so every send resolved a credential in a window that never registered the
+   * resolver and therefore sent no `Authorization` header: a 401, from a window
+   * the transport tests never exercised.
+   *
+   * Idempotent: `installChatFactory` is keyed by the store instance and returns
+   * the existing uninstaller.
    */
-  function registerRuntimeExtensions() {
-    // Leader-local, idempotent bridge. Only the migrated transport uses the Lia
-    // registry/cache/HTTP runtime. Every other target keeps its prior executor.
+  /**
+   * Creates the curated provider's record if it is missing, and gives a
+   * concurrently-starting window one short chance to be the one that wrote it.
+   *
+   * Throws `configuration` only when the record still cannot be read: the
+   * caller must keep failing closed rather than send without an endpoint.
+   */
+  async function ensureCuratedRecordAvailable(providerId: string) {
+    /*
+     * Only a provider the user actually configured is recovered. The saved
+     * address is the evidence: it is the value the settings screen writes, it is
+     * already replicated to every window, and it is what a leader would have used
+     * to create the record. Without it this stops at `configuration` instead of
+     * inventing an endpoint from the provider schema - sending to a host the
+     * user never chose is worse than a visible failure.
+     */
+    const stored = providerConfig.getConfig(providerId)?.baseUrl
+    const endpoint = transports.get(providerId)?.baseUrl
+      ?? (typeof stored === 'string' && stored.trim() ? stored.trim() : undefined)
+    if (!endpoint)
+      throw new ProviderError('configuration')
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        await ensureProviderRecord(providerId, endpoint)
+      }
+      catch {
+        // Falls through to the read: a failed write may still have been won by
+        // the other window, and the repository is the authority either way.
+      }
+      await transports.refresh()
+      if (transports.get(providerId))
+        return
+      if (attempt === 0)
+        await new Promise(resolve => setTimeout(resolve, 150))
+    }
+    throw new ProviderError('configuration')
+  }
+
+  function registerChatTransport() {
+    if (disposed || uninstallFactory)
+      return
     uninstallFactory = providerRuntime.installChatFactory(async (id) => {
       if (disposed)
         throw new ProviderError('cancelled')
@@ -682,15 +966,114 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
       await transports.refresh()
       if (transports.hasRemoved(id) || rejectedTransports.has(id))
         throw new ProviderError('configuration')
+      // A provider without a record and outside the catalog keeps its previous
+      // executor: the Lia does not own that id, so it has nothing to route.
       if (!isNativeTransportDefinition(id) && !transports.get(id))
         return undefined
-      return nativeRuntime.getChatProvider(id)
+      /*
+       * A curated provider with no record yet is a WINDOW-ORDER problem, not a
+       * configuration error.
+       *
+       * Until this cut the record was only ever created by the leader window
+       * (`ensureProviderRecord`, on configuration), so a follower-only window
+       * opened first had nothing to read and failed every send with
+       * `configuration`. The fix does not introduce a second source of truth:
+       * the record is still created by the same idempotent call, into the same
+       * main-process repository, with no credential attached. A tombstone was
+       * already refused above, so this cannot resurrect a removed provider.
+       *
+       * One bounded retry covers the other order of events - main still
+       * answering an empty snapshot while the leader writes - without turning a
+       * real failure into a silent wait.
+       */
+      if (!transports.get(id))
+        await ensureCuratedRecordAvailable(id)
+      const native = await nativeRuntime.getChatProvider(id)
+      if (native)
+        return native
+      /**
+       * A curated provider must never fall through to the legacy executor.
+       *
+       * `getChatProvider` returns `undefined` only for a local-compatible record
+       * with no address. Returning `undefined` here would hand the send to
+       * `providerStore.getChatProviderInstance`, which resolves the vault
+       * credential inside this renderer and builds an SDK client with it — the
+       * exact exposure this cut exists to close, and silent, because the send
+       * would otherwise appear to work. An explicit `configuration` error is
+       * visible and keeps the credential in main.
+       */
+      throw new ProviderError('configuration')
     })
+
+    /*
+     * Model listing follows the same split as chat: the transport bridge is
+     * installed in EVERY window (it reads no credential), so a follower-only
+     * window can list a curated provider's models too. `undefined` means "not
+     * mine" and leaves the shared implementation untouched; an array claims the
+     * id, including an empty one, so a failure can never fall back to a client
+     * built from a renderer credential.
+     */
+    registerProviderModelLister(async (providerId) => {
+      if (disposed)
+        return undefined
+      await initializeTransports()
+      await transports.refresh()
+      if (!isNativeTransportDefinition(providerId) && !transports.get(providerId))
+        return undefined
+      const discovery = await discoverModels({ providerId })
+      // Sanitized: the class of failure, never the body or the URL.
+      if (discovery.status === 'error')
+        throw new ProviderError('network')
+      return discovery.models.map(model => ({ id: model.id, name: model.label }))
+    })
+  }
+
+  /**
+   * Installs the runtime extensions for the current renderer session.
+   *
+   * Leader-only by design: the credential resolver and the fallback chain below
+   * serve the consumers that still build an SDK client in the renderer (legacy
+   * chat outside the catalog, legacy speech-to-text), and exactly one window
+   * should own that. Callers must also call {@link registerChatTransport} — a
+   * follower window gets only that, which is precisely what it needs to chat.
+   *
+   * Idempotent.
+   */
+  function registerRuntimeExtensions() {
+    registerChatTransport()
 
     // Supply the per-use vault apiKey when the provider runtime builds an
     // instance for a Lia-configured provider. Absent a stored secret it returns
     // undefined and behaviour is unchanged.
     registerProviderCredentialResolver(async (providerId) => {
+      /**
+       * No curated provider ever receives a credential in this process.
+       *
+       * Every curated id is executed in main - chat through the transport
+       * bridge, discovery and probe through the execution port, transcription
+       * through the main-process service. A build asking this resolver for one
+       * of them is therefore never the Lia's own path: it is a consumer that
+       * still constructs an SDK client here (vision inference, the autonomous
+       * artistry director, a transcription branch, a devtool). Handing it the
+       * key would rebuild in one call the exposure this cut removed.
+       *
+       * Refusing is the chokepoint the whole boundary rests on: the consumer
+       * degrades to an unauthenticated request or an explicit error, and the key
+       * stays where it already was. It also covers `lia-groq-transcription`,
+       * which is a derived transcription target rather than a catalog id.
+       */
+      if (isNativeTransportDefinition(providerId) || providerId === LIA_GROQ_TRANSCRIPTION_PROVIDER_ID)
+        return undefined
+      /**
+       * The same refusal, by capability, for everything else.
+       *
+       * `resolveApiKey` enforces it too — this early return exists so the audit
+       * line below never claims a resolution attempt for a provider whose task
+       * the Lia does not run here (a TTS voice, an embedding model). Keeping it
+       * at the chokepoint is what makes the policy legible in one place.
+       */
+      if (!rendererMayHoldCredential(providerId))
+        return undefined
       const key = await resolveApiKey(providerId)
       // Phase 7.3 safe bridge evidence (items 7/J): METADATA ONLY. The vault
       // value stays inside the resolver closure - never logged, never in a
@@ -737,6 +1120,7 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
     deleteApiKey,
     resolveApiKey,
     testConnection,
+    prepareNativeExecution,
     discoverModels,
     providerBaseUrl,
     ensureProviderRecord,
@@ -752,6 +1136,7 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
     curatedModelsFor,
     isModelInCatalog,
     recommendedModelFor,
+    registerChatTransport,
     registerRuntimeExtensions,
   }
 })

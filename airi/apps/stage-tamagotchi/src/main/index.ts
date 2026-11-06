@@ -57,7 +57,8 @@ import { createLiaBrainService } from './services/lia/lia-brain-service'
 import { startLiaMainWindowVoiceRuntime } from './services/lia/main-window-voice-runtime'
 import { registerLiaProviderConfigBridge } from './services/lia/provider-config-service'
 import { createLiaSecretVault, registerLiaSecretsBridge } from './services/lia/secrets-service'
-import { canRendererReadLegacySecret, registerLiaTransportConfigBridge } from './services/lia/transport-config-service'
+import { canRendererReadLegacySecret, getApplicationRepository, registerLiaTransportConfigBridge } from './services/lia/transport-config-service'
+import { registerLiaTranscriptionBridge } from './services/lia/transcription-service'
 import { registerLiaVoiceConfigBridge } from './services/lia/voice-config-service'
 import { createLiaVoiceProfileStore } from './services/lia/voice-profiles'
 import { registerLiaVoiceProfilesBridge } from './services/lia/voice-profiles-service'
@@ -424,6 +425,11 @@ app.whenReady().then(async () => {
       const { context } = createContext(ipcMain)
       registerLiaProviderConfigBridge({ context, liaProductConfig: deps.liaProductConfig })
       registerLiaTransportConfigBridge({ context, vault: deps.liaSecrets })
+      // Speech-to-text runs here for the same reason chat does: the curated
+      // provider's credential must not be readable by the renderer. It shares
+      // the transport repository above, so a removed provider stops transcribing
+      // exactly as it stops chatting.
+      registerLiaTranscriptionBridge({ context, repository: getApplicationRepository(), vault: deps.liaSecrets })
     },
   })
 

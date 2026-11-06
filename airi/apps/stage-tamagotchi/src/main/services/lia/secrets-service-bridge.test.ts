@@ -65,3 +65,43 @@ describe('secret bridge ownership and migration', () => {
     expect(vault.deleteSecret).not.toHaveBeenCalled()
   })
 })
+
+describe('secret adoption (legacy plaintext folded into the vault)', () => {
+  it('stores an absent secret and reports that the vault now holds it', async () => {
+    const { values } = setup()
+    expect(await handler('adopt')({ scope: 'protected', key: 'apiKey', value: 'SYNTHETIC_LEGACY' })).toBe('stored')
+    expect(values.get('protected:apiKey')).toBe('SYNTHETIC_LEGACY')
+  })
+
+  it('reports a match without writing again, so a repeated launch is idempotent', async () => {
+    const { vault, values } = setup()
+    values.set('protected:apiKey', 'SYNTHETIC_LEGACY')
+    expect(await handler('adopt')({ scope: 'protected', key: 'apiKey', value: 'SYNTHETIC_LEGACY' })).toBe('matching')
+    expect(vault.setSecret).not.toHaveBeenCalled()
+  })
+
+  it('reports a conflict and leaves the newer stored value untouched', async () => {
+    const { vault, values } = setup()
+    values.set('protected:apiKey', 'SYNTHETIC_NEWER')
+    expect(await handler('adopt')({ scope: 'protected', key: 'apiKey', value: 'SYNTHETIC_LEGACY' })).toBe('conflict')
+    expect(values.get('protected:apiKey')).toBe('SYNTHETIC_NEWER')
+    expect(vault.setSecret).not.toHaveBeenCalled()
+  })
+
+  it('reports unavailable instead of throwing when the payload is not a valid reference', async () => {
+    const { vault } = setup()
+    expect(await handler('adopt')({ scope: 'bad\u0000scope', key: 'apiKey', value: 'SYNTHETIC_LEGACY' })).toBe('unavailable')
+    expect(await handler('adopt')({ scope: 'protected', key: 'apiKey', value: '' })).toBe('unavailable')
+    expect(await handler('adopt')({ scope: 'protected', key: 'apiKey', value: 'x'.repeat(16385) })).toBe('unavailable')
+    expect(vault.setSecret).not.toHaveBeenCalled()
+    expect(vault.getSecret).not.toHaveBeenCalled()
+  })
+
+  it('never returns the stored value, only the verdict', async () => {
+    const { values } = setup()
+    values.set('protected:apiKey', 'SYNTHETIC_NEWER')
+    const outcome = await handler('adopt')({ scope: 'protected', key: 'apiKey', value: 'SYNTHETIC_LEGACY' })
+    expect(typeof outcome).toBe('string')
+    expect(JSON.stringify(outcome)).not.toContain('SYNTHETIC_NEWER')
+  })
+})

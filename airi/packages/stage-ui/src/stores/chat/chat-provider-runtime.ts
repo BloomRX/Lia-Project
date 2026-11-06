@@ -47,6 +47,19 @@ export type ProviderCredentialResolver = (
   providerId: string,
 ) => Promise<Record<string, unknown> | undefined> | Record<string, unknown> | undefined
 
+/**
+ * Lists a provider's models in the host process.
+ *
+ * Returns `undefined` when the host does not own this provider, which is the
+ * signal for the caller to keep using its own, in-renderer implementation.
+ * Returning an array (even an empty one) claims the provider: the caller must
+ * NOT fall back, because a fallback would rebuild a client from a credential
+ * the host deliberately keeps out of this process.
+ */
+export type ProviderModelLister = (
+  providerId: string,
+) => Promise<Array<{ id: string, name?: string, description?: string, contextLength?: number, deprecated?: boolean }> | undefined> | Array<{ id: string, name?: string, description?: string, contextLength?: number, deprecated?: boolean }> | undefined
+
 /** Context describing a failed chat send that a fallback policy may act on. */
 export interface ChatFallbackContext {
   /** The error thrown by the send attempt. */
@@ -163,6 +176,7 @@ export interface ChatSendSettledObservation {
 export type ChatSendSettledObserver = (observation: ChatSendSettledObservation) => void
 
 let providerCredentialResolver: ProviderCredentialResolver | undefined
+let providerModelLister: ProviderModelLister | undefined
 let chatFallbackResolver: ChatFallbackResolver | undefined
 let chatRequestStartedObserver: ChatRequestStartedObserver | undefined
 let chatRoundSettledObserver: ChatRoundSettledObserver | undefined
@@ -177,6 +191,17 @@ export function registerProviderCredentialResolver(resolver?: ProviderCredential
 
 export function registerChatFallbackResolver(resolver?: ChatFallbackResolver): void {
   chatFallbackResolver = resolver
+}
+
+/**
+ * Installs (or with `undefined` clears) the single model-listing hook.
+ *
+ * Same convention as every other extension here: one slot, replacement on
+ * re-register, no subscribers. Registration alone lists nothing - the hook runs
+ * only when a provider's models are actually requested.
+ */
+export function registerProviderModelLister(lister?: ProviderModelLister): void {
+  providerModelLister = lister
 }
 
 /**
@@ -211,6 +236,10 @@ export function registerChatSendSettledObserver(observer?: ChatSendSettledObserv
 
 export function getProviderCredentialResolver(): ProviderCredentialResolver | undefined {
   return providerCredentialResolver
+}
+
+export function getProviderModelLister(): ProviderModelLister | undefined {
+  return providerModelLister
 }
 
 export function getChatFallbackResolver(): ChatFallbackResolver | undefined {
@@ -300,6 +329,7 @@ export function notifyChatSendSettled(observation: ChatSendSettledObservation): 
 
 export function resetChatProviderRuntimeExtensionsForTesting(): void {
   providerCredentialResolver = undefined
+  providerModelLister = undefined
   chatFallbackResolver = undefined
   chatRequestStartedObserver = undefined
   chatRoundSettledObserver = undefined

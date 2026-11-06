@@ -5,6 +5,8 @@ import { useProviderStore } from '@proj-airi/stage-ui/stores/providers/provider'
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { createSecretAdoptHandler } from '../../services/lia/secret-adopt.fixture'
+
 /**
  * Lia config → AIRI provider runtime wiring (M1 blocker fix).
  *
@@ -92,6 +94,7 @@ vi.mock('@proj-airi/electron-vueuse', async () => {
         'eventa:invoke:lia:secret:encryption-available-receive': ipc.encryptionAvailable,
         'eventa:invoke:lia:secret:has-receive': ipc.secretHas,
         'eventa:invoke:lia:secret:set-receive': ipc.secretSet,
+        'eventa:invoke:lia:secret:adopt-receive': createSecretAdoptHandler({ secretHas: ipc.secretHas, secretGet: ipc.secretGet, secretSet: ipc.secretSet }),
         'eventa:invoke:lia:secret:get-receive': ipc.secretGet,
         'eventa:invoke:lia:secret:delete-receive': ipc.secretDelete,
       }
@@ -178,7 +181,18 @@ describe('lia provider runtime wiring (M1)', () => {
     expect(providerConfigs.getProvider('openrouter-ai')?.status).toBe('configured')
   })
 
-  it('builds the chat provider instance with the vault credential', async () => {
+  /**
+   * Corte B inverted this assertion.
+   *
+   * It used to require that the vault credential reached
+   * `createOpenRouter`, which meant the secret crossed IPC into this renderer
+   * and lived in an SDK client's closure for the rest of the session. The chat
+   * boundary is now the main process: the provider handed to the chat runtime is
+   * a transport shim whose only job is to forward the request. So the test
+   * asserts the absence of what it used to require — no factory call, no vault
+   * read, and no `apiKey` on the object the SDK will use.
+   */
+  it('builds the chat provider instance WITHOUT resolving the vault credential in the renderer', async () => {
     ipc.fixture(keyedConfig(), { 'openrouter-ai': SECRET })
     const store = useLiaProviderStore()
     const consciousness = useConsciousnessStore()
@@ -186,14 +200,29 @@ describe('lia provider runtime wiring (M1)', () => {
     await store.activateConfiguredProvider()
 
     factory.calls = []
+    ipc.secretGet.mockClear()
     const instance = await consciousness.getChatProviderInstance('openrouter-ai')
 
     expect(instance).toBeTruthy()
-    expect(factory.calls.length).toBeGreaterThan(0)
-    expect(factory.calls.some(call => call.hadCredential)).toBe(true)
+    // The provider factory never ran, so no SDK client was built around the key.
+    expect(factory.calls).toHaveLength(0)
+    // And the credential was never pulled out of the vault for it.
+    expect(ipc.secretGet).not.toHaveBeenCalled()
+    const options = instance.chat('openai/gpt-oss-120b') as unknown as Record<string, unknown>
+    expect(options).not.toHaveProperty('apiKey')
+    expect(options.baseURL).toBe('https://openrouter.ai/api/v1/')
+    expect(typeof options.fetch).toBe('function')
   })
 
-  it('lists models with the vault credential, not with an empty config', async () => {
+  /**
+   * Corte B, Fase 2 reversed this test's expectation, and that is the point.
+   *
+   * It used to assert that listing models built a client WITH the vault
+   * credential inside this renderer - the last place a curated provider's key
+   * still crossed back. Now the shared selector delegates to main, so the
+   * factory must not run and the renderer must not read its own vault.
+   */
+  it('lists models through main, without building a client or reading the vault here', async () => {
     ipc.fixture(keyedConfig(), { 'openrouter-ai': SECRET })
     const store = useLiaProviderStore()
     const providers = useProviderStore()
@@ -201,11 +230,12 @@ describe('lia provider runtime wiring (M1)', () => {
     await store.activateConfiguredProvider()
 
     factory.calls = []
+    ipc.secretGet.mockClear()
     // No network in this environment; the point is what the factory was handed.
     await providers.fetchModelsForProvider('openrouter-ai').catch(() => {})
 
-    expect(factory.calls.length).toBeGreaterThan(0)
-    expect(factory.calls.some(call => call.hadCredential)).toBe(true)
+    expect(factory.calls).toHaveLength(0)
+    expect(ipc.secretGet).not.toHaveBeenCalled()
   })
 
   it('configures a keyless provider without any secret', async () => {
@@ -281,13 +311,20 @@ describe('lia provider runtime wiring (M1)', () => {
     expect(logged.join('\n')).not.toContain(SECRET)
   })
 
-  it('still resolves the credential only through the registered resolver', async () => {
+  /**
+   * PROMPT-26: the resolver is still the ONLY credential source in this
+   * process, but it now refuses curated ids, because every one of them is
+   * executed in main. What used to be asserted here (that asking for
+   * `openrouter-ai` returned the key) is the exposure being closed.
+   */
+  it('registers a resolver that refuses curated ids and never reads the vault for them', async () => {
     ipc.fixture(keyedConfig(), { 'openrouter-ai': SECRET })
     const store = useLiaProviderStore()
     store.registerRuntimeExtensions()
 
     const resolver = getProviderCredentialResolver()
     expect(resolver).toBeTypeOf('function')
-    expect(await resolver!('openrouter-ai')).toEqual({ apiKey: SECRET })
+    expect(await resolver!('openrouter-ai')).toBeUndefined()
+    expect(ipc.secretGet).not.toHaveBeenCalled()
   })
 })

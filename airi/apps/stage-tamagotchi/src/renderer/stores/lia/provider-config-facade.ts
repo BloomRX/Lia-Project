@@ -103,6 +103,8 @@ export type LiaProviderConfig = Record<string, unknown>
  */
 export interface LiaProviderConfigSource {
   getProvider: (providerId: string) => InferenceServiceProvider | undefined
+  /** The live, reactive map the shared store persists and synchronises. */
+  providers: Record<string, InferenceServiceProvider>
   getProviderConfig: (providerId: string) => Record<string, unknown> | undefined
   configuredProviders: Record<string, boolean>
   ensureProvider: (providerId: string, definitionId: string, config?: Record<string, unknown>) => InferenceServiceProvider
@@ -141,6 +143,22 @@ export interface LiaProviderConfigFacade {
     config: LiaProviderConfig,
     status: LiaProviderStatus,
   ) => Promise<InferenceServiceProvider | undefined>
+  /**
+   * Replaces one provider's stored payload in place, locally.
+   *
+   * A migration repair, not a flow: its single caller removes a plaintext
+   * `apiKey` that the pre-Corte-B migration had copied into this store, once the
+   * vault is confirmed to hold it. It has no remote effect — announcing the
+   * removal with a `PATCH` would be the opposite of the point — so it is
+   * deliberately not `updateConfig` with a filtered payload.
+   *
+   * Writing through `providers` (rather than deleting the field from the
+   * existing object) matters: that ref is deep-watched by `useLocalStorage` and
+   * transported by `pinia-plugin-synced`, and the next unrelated provider write
+   * re-serialises the whole map. A key removed only from `localStorage` would
+   * therefore come back on the next activation.
+   */
+  replaceConfig: (providerId: string, config: LiaProviderConfig) => void
 }
 
 /**
@@ -156,6 +174,7 @@ export const LIA_PROVIDER_CONFIG_REMOTE_EFFECTS = {
   isConfigured: false,
   ensure: false,
   updateConfig: true,
+  replaceConfig: false,
 } as const
 
 /**
@@ -176,6 +195,12 @@ export function createLiaProviderConfigFacade(source: LiaProviderConfigSource): 
       source.ensureProvider(providerId, definitionId, config),
     updateConfig: (providerId, config, status) =>
       source.updateProviderConfig(providerId, config, status),
+    replaceConfig: (providerId, config) => {
+      const current = source.getProvider(providerId)
+      if (!current)
+        return
+      source.providers[providerId] = { ...current, config }
+    },
   }
 }
 

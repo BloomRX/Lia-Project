@@ -1,11 +1,13 @@
 import type { createContext } from '@moeru/eventa/adapters/electron/main'
 
+import type { LiaSecretAdoptResult } from '../../../shared/eventa'
 import type { LiaSecretVault } from './secrets'
 
 import { useLogg } from '@guiiai/logg'
 import { defineInvokeHandler } from '@moeru/eventa'
 
 import {
+  electronLiaSecretAdopt,
   electronLiaSecretDelete,
   electronLiaSecretEncryptionAvailable,
   electronLiaSecretGet,
@@ -74,6 +76,36 @@ export function registerLiaSecretsBridge(params: {
       log.warn('Failed to store secret (keychain may be unavailable)')
     }
     return stored
+  })
+
+  /**
+   * Folds an already-stored secret (the legacy `localStorage` copy) into the
+   * vault, and reports whether the vault now holds THAT value.
+   *
+   * This exists because `set` with `onlyIfMissing` cannot answer the only
+   * question that licenses deleting the old copy: "does the vault hold my
+   * value, or a different one?". Comparing requires reading the secret, and
+   * reading it in the renderer is the exposure this whole cut removes — so the
+   * comparison happens here and only a word crosses the boundary.
+   *
+   * Never overwrites. A vault value that differs is reported as `conflict` and
+   * left alone: it may be newer, and the old copy is the one that can be
+   * discarded later by a decision, not by this call.
+   */
+  defineInvokeHandler(context, electronLiaSecretAdopt, async (payload): Promise<LiaSecretAdoptResult> => {
+    if (!validReference(payload) || typeof payload.value !== 'string' || payload.value.length === 0 || payload.value.length > 16384) {
+      log.warn('Rejected secret adopt request with missing/invalid fields')
+      return 'unavailable'
+    }
+    return serializeWrite(vault, async () => {
+      if (vault.hasSecret(payload.scope, payload.key)) {
+        // Compared inside main. Only the verdict leaves.
+        if (vault.getSecret(payload.scope, payload.key) === payload.value)
+          return 'matching' as const
+        return 'conflict' as const
+      }
+      return await vault.setSecret(payload.scope, payload.key, payload.value) ? 'stored' as const : 'unavailable' as const
+    })
   })
 
   defineInvokeHandler(context, electronLiaSecretGet, (payload) => {

@@ -163,9 +163,80 @@ const api = {
     await execute('json', false)
     return { ...last, text: result.textContent }
   },
+  /**
+   * Runs one stored record for `providerId` without touching the form.
+   *
+   * Used by the curated-provider matrix: the record is written first (the
+   * configuration the gate is testing), then executed through the same
+   * production bridge the Launcher uses.
+   */
+  executeProvider: async (providerId: string, model: string, mode: 'json' | 'stream' = 'json') => {
+    providerInput.value = providerId
+    modelInput.value = model
+    await execute(mode, false)
+    return { ...last, text: result.textContent }
+  },
+  /**
+   * Sends several providers at once. Each call owns its own provider instance,
+   * so one failure must not surface on another provider's channel.
+   */
+  concurrent: async (entries: Array<{ providerId: string, model: string }>) => {
+    await refreshTransports()
+    return Promise.all(entries.map(async ({ providerId, model }) => {
+      try {
+        const provider = await native.getChatProvider(providerId)
+        if (!provider)
+          return { providerId, code: 'unmigrated', text: '' }
+        const response = await generateText({ ...provider.chat(model), messages: [{ role: 'user' as const, content: 'Synthetic concurrency fixture.' }] })
+        return { providerId, code: '', text: response.text }
+      }
+      catch (error) {
+        return { providerId, code: safeCode(error), text: '' }
+      }
+    }))
+  },
+  /** Seeds one record per provider, all pointing at the local fixture server. */
+  seedRecords: async (entries: Array<{ providerId: string, baseUrl: string, model: string }>) => {
+    await refreshTransports()
+    let revision = snapshot!.revision
+    for (const entry of entries) {
+      const current = snapshot!.records.find(item => item.id === entry.providerId)
+      const record: TransportRecord = {
+        id: entry.providerId,
+        providerId: entry.providerId,
+        definitionId: entry.providerId,
+        type: 'http',
+        protocol: 'chat-completions',
+        baseUrl: entry.baseUrl,
+        adapterOptions: current?.adapterOptions ?? {},
+        modelIds: [entry.model],
+        enabled: true,
+        metadata: current?.metadata ?? {},
+        credentialRef: { scope: entry.providerId, key: 'apiKey' },
+      }
+      const reply = await mutateTransports({ kind: 'put', expectedRevision: revision, record })
+      if (!reply.ok)
+        throw Object.assign(new Error('Transport update failed'), { code: 'configuration' })
+      snapshot = reply.snapshot
+      revision = reply.snapshot.revision
+    }
+    return snapshot!.records.map(item => item.id)
+  },
   wait: async () => {
     await pending
     return { ...last, text: result.textContent }
+  },
+  /**
+   * Tears the transport bridge down and proves the next send is refused instead
+   * of reaching the network — the same `dispose()` the Stage calls on unmount.
+   * Returns the sanitized class, never the body.
+   */
+  disposeAndExecute: async (providerId: string, model: string) => {
+    native.dispose(providerId)
+    providerInput.value = providerId
+    modelInput.value = model
+    await execute('json', false)
+    return { ...last }
   },
 }
 declare global {

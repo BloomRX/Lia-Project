@@ -1,10 +1,12 @@
 import { useElectronEventaInvoke } from '@proj-airi/electron-vueuse'
-import { useHearingStore } from '@proj-airi/stage-ui/stores/modules/hearing'
+import { registerRecordingTranscriptionExecutor, useHearingStore } from '@proj-airi/stage-ui/stores/modules/hearing'
 import { useSettingsAudioDevice } from '@proj-airi/stage-ui/stores/settings'
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
 import { electronLiaHearingConfigGet } from '../../../shared/eventa'
+import { createMainTranscription, transcribeThroughMain } from '../../services/lia/main-transcription'
+import { LIA_GROQ_TRANSCRIPTION_PROVIDER_ID as TRANSCRIPTION_PROVIDER_ID, useLiaProviderStore } from './provider'
 import { useLiaProviderConfigFacade } from './provider-config-facade'
 import { useLiaProviderRuntime } from './provider-runtime'
 
@@ -47,6 +49,15 @@ export const LIA_GROQ_TRANSCRIPTION_DEFINITION_ID = 'openai-compatible-audio-tra
 
 /** Trailing slash required by the adapter's own base URL validator. */
 export const LIA_GROQ_TRANSCRIPTION_BASE_URL = 'https://api.groq.com/openai/v1/'
+
+/**
+ * The vault scope the derived target spends, i.e. the user's own Groq key.
+ *
+ * The transcription executes in main under this provider id, so this constant
+ * names both the credential scope and the transport record main authorizes. It
+ * is the SAME scope chat uses, which is why the record can be shared.
+ */
+const TRANSCRIPTION_SCOPE = 'groq'
 
 /**
  * This definition's `listModels` returns an empty list, so the model can never
@@ -164,8 +175,10 @@ function reportDiagnostic(event: string, detail?: Record<string, boolean | numbe
 export const useLiaHearingStore = defineStore('lia-hearing', () => {
   const getHearingConfig = useElectronEventaInvoke(electronLiaHearingConfigGet)
   const hearingStore = useHearingStore()
+  const transcription = createMainTranscription()
   const providerConfig = useLiaProviderConfigFacade()
   const providerRuntime = useLiaProviderRuntime()
+  const liaProviderStore = useLiaProviderStore()
   const audioDeviceStore = useSettingsAudioDevice()
 
   /** Set once the canonical selection has been applied to the runtime stores. */
@@ -296,6 +309,42 @@ export const useLiaHearingStore = defineStore('lia-hearing', () => {
   }
 
   /**
+   * Makes the projected target executable in the main process.
+   *
+   * Two things must be true before the first recording is transcribed, and both
+   * belong to main:
+   *
+   *  1. the provider has a transport record, because that record is the only
+   *     thing that authorizes an endpoint for a stored credential — main refuses
+   *     to guess one;
+   *  2. the credential is in the vault, which it already is when the user typed
+   *     it in the Launcher. Nothing is read here.
+   *
+   * The record is created WITHOUT an explicit endpoint on purpose: the cascade in
+   * `ensureProviderRecord` prefers a record that already exists, so a user who
+   * configured Groq for chat with their own endpoint keeps it for speech too.
+   *
+   * Failure is soft. A projection that cannot be prepared leaves `projected`
+   * true — text conversation is unaffected — and the transcription itself will
+   * report a coded failure when it is attempted.
+   */
+  async function prepareTranscriptionExecution(providerId: string): Promise<void> {
+    // A host that has no main-process transcription bridge (unit fixtures, the
+    // browser build) keeps the previous in-process path.
+    if (providerId !== TRANSCRIPTION_PROVIDER_ID)
+      return
+    try {
+      await liaProviderStore.ensureProviderRecord(TRANSCRIPTION_SCOPE)
+      registerRecordingTranscriptionExecutor(TRANSCRIPTION_PROVIDER_ID, request =>
+        transcribeThroughMain(transcription, TRANSCRIPTION_SCOPE, request))
+      reportDiagnostic('transcription-bridge-installed', { providerId })
+    }
+    catch (error) {
+      reportDiagnostic('transcription-bridge-skipped', describeFailure(error))
+    }
+  }
+
+  /**
    * Reads the canonical Hearing facts and projects them. Safe to call more than
    * once: the projection is idempotent and the microphone is enabled at most once.
    *
@@ -328,6 +377,7 @@ export const useLiaHearingStore = defineStore('lia-hearing', () => {
         hearingStore.activeTranscriptionModel = target.config.model ?? ''
         projected.value = true
         degradedReason.value = undefined
+        await prepareTranscriptionExecution(target.providerId)
         reportDiagnostic('projection-completed', { providerId: target.providerId })
 
         // Text-only mode never auto-enables the microphone.

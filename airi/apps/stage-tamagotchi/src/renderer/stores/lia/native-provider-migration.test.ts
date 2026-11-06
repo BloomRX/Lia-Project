@@ -2,12 +2,14 @@ import { PiniaColada } from '@pinia/colada'
 import { resetChatProviderRuntimeExtensionsForTesting } from '@proj-airi/stage-ui/stores/chat/chat-provider-runtime'
 import { useProviderConfigStore } from '@proj-airi/stage-ui/stores/providers/config'
 import { useProviderStore } from '@proj-airi/stage-ui/stores/providers/provider'
-import { createPinia, setActivePinia } from 'pinia'
+import { createPinia, getActivePinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createApp } from 'vue'
 
 import { createNativeProviderRuntime } from '../../services/lia/native-provider-runtime'
-import { setTransportTestVaultResolver } from '../../services/lia/transport-config.fixture'
+import { createSecretAdoptHandler } from '../../services/lia/secret-adopt.fixture'
+import { createLiaTransportClient } from '../../services/lia/transport-config'
+import { setTransportTestVaultResolver, setTransportTestWriteFailure } from '../../services/lia/transport-config.fixture'
 
 const ipc = vi.hoisted(() => ({
   chatConfig: vi.fn(async (): Promise<import('../../../shared/eventa').LiaProviderChatConfig> => ({})),
@@ -17,7 +19,7 @@ const ipc = vi.hoisted(() => ({
   vaultGet: vi.fn(async (_payload: { scope: string, key: string }): Promise<string | undefined> => undefined),
   secretGet: vi.fn(async (_payload: { scope: string, key: string }): Promise<string | undefined> => undefined),
   secretHas: vi.fn(async () => false),
-  secretSet: vi.fn(async () => true),
+  secretSet: vi.fn(async (_payload: { scope: string, key: string, value: string }) => true),
 }))
 
 vi.mock('@proj-airi/electron-vueuse', async () => {
@@ -32,6 +34,7 @@ vi.mock('@proj-airi/electron-vueuse', async () => {
         'eventa:invoke:lia:secret:get-receive': ipc.secretGet,
         'eventa:invoke:lia:secret:has-receive': ipc.secretHas,
         'eventa:invoke:lia:secret:set-receive': ipc.secretSet,
+        'eventa:invoke:lia:secret:adopt-receive': createSecretAdoptHandler({ secretHas: ipc.secretHas, secretGet: ipc.secretGet, secretSet: ipc.secretSet }),
       }
       const id = invoke?.receiveEvent?.id ?? ''
       const transport = transportTestInvoke(id)
@@ -117,30 +120,88 @@ describe('additional compatible transport migration', () => {
     expect(JSON.stringify(config.$state)).not.toContain(KEY)
   })
 
-  it('keeps an existing endpoint-less record on the unchanged legacy/default path', async () => {
+  /**
+   * Corte B changed this from "delegates to the legacy executor" to "fails
+   * closed", and the change is the point of the cut.
+   *
+   * The delegation was safe only because `lm-studio` is keyless. For any
+   * curated provider that does need a key, returning `undefined` from the
+   * factory hands the send to `providerStore.getChatProviderInstance`, which
+   * resolves the vault credential *inside this renderer* and builds an SDK
+   * client around it. Keeping the old assertion would have kept an audit trail
+   * that said that fallback is acceptable. It is not: an endpoint-less record is
+   * a configuration error, and it must be visible as one.
+   */
+  it('fails a curated provider closed instead of delegating to the legacy executor', async () => {
     const { source, legacy } = install({ [localId]: {} })
     const prior = await legacy(localId, { reasoning: 'disabled' })
     legacy.mockClear()
-    const selected = await source.getChatProviderInstance(localId, { reasoning: 'disabled' })
-    // This endpoint-less compatibility record deliberately retains the legacy executor.
-    expect(ipc.secretGet).toHaveBeenCalledExactlyOnceWith({ scope: localId, key: 'apiKey' })
     ipc.secretGet.mockClear()
-    expect(selected).toBe(prior)
-    expect(legacy).toHaveBeenCalledExactlyOnceWith(localId, { reasoning: 'disabled' })
+
+    await expect(source.getChatProviderInstance(localId, { reasoning: 'disabled' }))
+      .rejects
+      .toMatchObject({ code: 'configuration' })
+
+    // Nothing read the vault, and nothing reached the legacy executor.
+    expect(ipc.secretGet).not.toHaveBeenCalled()
+    expect(legacy).not.toHaveBeenCalled()
     expect(fetchMock).not.toHaveBeenCalled()
+    expect(prior).toBeDefined()
   })
 
-  it('uses an explicit draft for discovery/probe even without a persisted endpoint', async () => {
+  /**
+   * Corte B: a provider with no persisted endpoint is configured BEFORE it is
+   * exercised — key into the vault, record onto disk — instead of travelling to
+   * the request as a draft credential. The wire result is the same; the path the
+   * secret takes is not.
+   */
+  it('configures an unsaved provider first, then discovers and probes it without a payload credential', async () => {
     const { lia, source } = install({})
     const find = vi.spyOn(source, 'findProviderDefinition')
+    // The fake main reads its OWN vault, so the credential channel has to feed
+    // it — the same way the real `secrets:set` handler writes the value that
+    // `getSecret` later returns.
+    ipc.secretSet.mockImplementationOnce(async ({ scope, value }: { scope: string, value: string }): Promise<boolean> => {
+      ipc.vaultGet.mockResolvedValue(value)
+      return scope === localId
+    })
     const args = { providerId: localId, baseUrl: address, modelId: model, apiKey: KEY }
     expect(await lia.discoverModels(args)).toEqual({ status: 'ready', models: [{ id: 'custom/Local:Q4', label: 'custom/Local:Q4' }] })
     expect(await lia.testConnection(args)).toEqual({ ok: true, scope: 'text', message: '' })
     expect(find).not.toHaveBeenCalled()
     expect(fetchMock).toHaveBeenCalledTimes(2)
+    // The key reached main through the credential channel, not the execution one.
+    expect(ipc.secretSet).toHaveBeenCalledWith({ scope: localId, key: 'apiKey', value: KEY })
     expect(new Headers(fetchMock.mock.calls[0][1].headers).get('authorization')).toBe(`Bearer ${KEY}`)
     expect(JSON.parse(fetchMock.mock.calls[1][1].body).model).toBe(model)
     expect(ipc.saveChatConfig).not.toHaveBeenCalled()
+    // And the persisted record carries the endpoint, never the secret.
+    const records = (await createLiaTransportClient().refresh()).records
+    expect(records.find(entry => entry.providerId === localId)?.baseUrl).toBe(address)
+    expect(JSON.stringify(records)).not.toContain(KEY)
+  })
+
+  it('stops before any request when the credential cannot be stored', async () => {
+    const { lia } = install({})
+    ipc.secretSet.mockResolvedValueOnce(false)
+    const result = await lia.testConnection({ providerId: localId, baseUrl: address, modelId: model, apiKey: KEY })
+    expect(result).toMatchObject({ ok: false, failure: 'configuration' })
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('stops before any request when the provider record cannot be persisted', async () => {
+    const { lia } = install({})
+    // Main refuses every write: the endpoint can never be recorded, so execution
+    // must not proceed against an address main cannot see.
+    setTransportTestWriteFailure(getActivePinia()!, 'storage')
+    try {
+      const result = await lia.testConnection({ providerId: localId, baseUrl: address, modelId: model, apiKey: KEY })
+      expect(result).toMatchObject({ ok: false, failure: 'configuration' })
+      expect(fetchMock).not.toHaveBeenCalled()
+    }
+    finally {
+      setTransportTestWriteFailure(getActivePinia()!, undefined)
+    }
   })
 
   it('does not reuse another provider credential when switching to a keyless compatible target', async () => {

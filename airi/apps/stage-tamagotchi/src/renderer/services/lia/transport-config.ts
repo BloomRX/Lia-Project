@@ -3,9 +3,19 @@ import type { TransportMutation, TransportRecord, TransportResult, TransportSnap
 import { useElectronEventaInvoke } from '@proj-airi/electron-vueuse'
 
 import { electronLiaTransportsGet, electronLiaTransportsMutate } from '../../../shared/eventa/lia-transports'
+import { isCuratedChatProvider } from '../../../shared/lia/provider-catalog'
 
+/**
+ * Whether this provider id is executed by the main process.
+ *
+ * Delegates to the shared catalog instead of naming two ids here, so the
+ * renderer and the main-process execution service cannot disagree about which
+ * providers are migrated. Kept as a named export because every existing call
+ * site (and its test) already reads it under this name, and because the rename
+ * to "curated" should not be a mechanical rewrite of unrelated code.
+ */
 export function isNativeTransportDefinition(id: string) {
-  return id === 'openai-compatible' || id === 'lm-studio'
+  return isCuratedChatProvider(id)
 }
 
 /** Main owns persistence and revision. This closure is a read cache, never Pinia/storage. */

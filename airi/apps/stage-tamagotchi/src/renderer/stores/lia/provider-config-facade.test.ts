@@ -66,6 +66,9 @@ function createRecordingSource() {
   }
   const source = {
     configuredProviders: { groq: true, other: false } as Record<string, boolean>,
+    // The reactive map `replaceConfig` writes through; empty is enough here
+    // because the recording source's `getProvider` never consults it.
+    providers: {} as Record<string, InferenceServiceProvider>,
     getProvider: vi.fn((providerId: string) => (providerId === 'groq' ? record : undefined)),
     getProviderConfig: vi.fn((providerId: string) => (providerId === 'groq' ? record.config : undefined)),
     ensureProvider: vi.fn((providerId: string, definitionId: string, config?: Record<string, unknown>) => ({
@@ -285,7 +288,31 @@ describe('lia provider config facade — the remote-effect inventory', () => {
       .filter(([, effect]) => effect)
       .map(([member]) => member)
 
+    // `replaceConfig` is deliberately local: it exists to remove a plaintext key
+    // from this window's copy, and announcing that with a PATCH would spread the
+    // removal (and the fact of it) to every other window for no benefit.
     expect(remote).toEqual(['updateConfig'])
+  })
+
+  it('replaceConfig rewrites the provider payload in place and touches nothing remote', () => {
+    const { source, record } = createRecordingSource()
+    const facade = createLiaProviderConfigFacade(source)
+    ;(source.providers as Record<string, InferenceServiceProvider>).groq = record
+
+    facade.replaceConfig('groq', { baseUrl: 'https://recorded.invalid/v1', temperature: 0.2 })
+
+    expect(source.providers.groq.config).toEqual({ baseUrl: 'https://recorded.invalid/v1', temperature: 0.2 })
+    expect(source.providers.groq).not.toBe(record)
+    expect(source.updateProviderConfig).not.toHaveBeenCalled()
+    expect(source.ensureProvider).not.toHaveBeenCalled()
+  })
+
+  it('replaceConfig is a no-op for a provider this window does not know', () => {
+    const { source } = createRecordingSource()
+    const facade = createLiaProviderConfigFacade(source)
+
+    expect(() => facade.replaceConfig('absent', {})).not.toThrow()
+    expect(Object.keys(source.providers)).toEqual([])
   })
 
   it('declares exactly the members the facade exposes, so a new member cannot skip the inventory', () => {

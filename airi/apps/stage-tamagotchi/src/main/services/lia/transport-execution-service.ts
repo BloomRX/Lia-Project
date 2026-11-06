@@ -15,6 +15,8 @@ import { ProviderError } from '../../../../../../../lia/core/src/providers/contr
 import { ProviderRegistry } from '../../../../../../../lia/core/src/providers/registry'
 import { ProviderRuntime } from '../../../../../../../lia/core/src/providers/runtime'
 import { electronLiaTransportCancel, electronLiaTransportPull, electronLiaTransportStart } from '../../../shared/eventa/lia-transport-execution'
+import { isCuratedChatProvider } from '../../../shared/lia/provider-catalog'
+import { withLiaProviderHeaders } from './provider-request-headers'
 
 interface Owner {
   id: number
@@ -31,8 +33,20 @@ interface Owner {
 type Repository = Pick<ReturnType<typeof createTransportRepository>, 'read'>
 const MAX_BODY = 16 * 1024 * 1024
 const MAX_CHUNK = 64 * 1024
-// Persisted compatibility IDs only; they supply no endpoint, model or vendor defaults.
-const knownDraftIds = new Set(['openai-compatible', 'lm-studio'])
+/**
+ * Which provider ids may be exercised by a *draft* (a request carrying its own
+ * endpoint and key) before any record exists.
+ *
+ * A draft is the "test this configuration before saving it" path. It is allowed
+ * only for a curated provider, because that is the only case where the id
+ * carries no vendor behaviour of its own: the request is whatever the catalogue
+ * says it is. A user's own transport must be saved first, so its endpoint has
+ * been through `isTransportRecord` before anything is sent to it.
+ *
+ * Derived from the shared catalog rather than listed again here — the literal
+ * this replaced was the reason the two halves could disagree.
+ */
+const knownDraftIds = { has: (id: string) => isCuratedChatProvider(id) }
 const chatKeys = new Set(['model', 'messages', 'stream', 'temperature', 'top_p', 'tools', 'tool_choice', 'parallel_tool_calls', 'max_tokens', 'max_completion_tokens', 'presence_penalty', 'frequency_penalty', 'stop', 'response_format', 'seed', 'reasoning_effort', 'reasoning', 'service_tier', 'user', 'stream_options', 'logprobs', 'top_logprobs', 'modalities', 'audio', 'prediction', 'store', 'metadata', 'verbosity'])
 
 function object(value: unknown): value is Record<string, unknown> {
@@ -99,10 +113,12 @@ function validateStart(value: unknown): LiaTransportStartRequest {
   if (value.operation === 'chat' ? !validBody(value.body) : value.body !== undefined)
     throw new ProviderError('configuration')
   if (value.draft !== undefined) {
-    if (!object(value.draft) || !keys(value.draft, ['baseUrl', 'apiKey'])
-      || (value.draft.apiKey !== undefined && (typeof value.draft.apiKey !== 'string' || Buffer.byteLength(value.draft.apiKey) > 16384))) {
+    // `baseUrl` only. A payload that still carries `apiKey` is REJECTED rather
+    // than silently ignored: an old renderer sending one is a client that still
+    // believes the execution channel transports credentials, and it must be told
+    // by failing, not by having its secret quietly dropped after the fact.
+    if (!object(value.draft) || !keys(value.draft, ['baseUrl']))
       throw new ProviderError('configuration')
-    }
     endpoint(value.draft.baseUrl)
   }
   return structuredClone(value) as unknown as LiaTransportStartRequest
@@ -248,11 +264,15 @@ export function createLiaTransportExecutionService(params: { repository: Reposit
       const registry = new ProviderRegistry()
       registry.register({ id: record.providerId, protocol: record.protocol })
       const runtime = new ProviderRuntime(registry, {
-        fetch,
+        // Lia-owned headers (attribution and nothing else) are added here, in
+        // the process that can see the provider id and the endpoint together.
+        fetch: withLiaProviderHeaders(fetch, record.providerId),
         resolveCredential: () => {
           if (job.controller.signal.aborted)
             throw new ProviderError('cancelled')
-          return request.draft?.apiKey ?? (mayUseVault ? params.vault.getSecret(record.credentialRef.scope, record.credentialRef.key) : undefined)
+          // The vault is the only source. A draft can point somewhere new, but it
+          // can no longer carry a secret to that address.
+          return mayUseVault ? params.vault.getSecret(record.credentialRef.scope, record.credentialRef.key) : undefined
         },
       })
       job.runtime = runtime
@@ -270,11 +290,8 @@ export function createLiaTransportExecutionService(params: { repository: Reposit
     catch (error) {
       finish(job, job.error ?? failure(error))
     }
-    finally {
-      // Do not retain a draft key after resolving request headers.
-      if (request.draft)
-        delete request.draft.apiKey
-    }
+    // Nothing secret is retained from the request: the payload no longer has a
+    // field that could hold one.
   }
 
   function start(owner: Owner | undefined, input: unknown): LiaTransportStartResult {

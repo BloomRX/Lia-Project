@@ -7,6 +7,8 @@ import { useSettingsAudioDevice } from '@proj-airi/stage-ui/stores/settings'
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { createSecretAdoptHandler } from '../../services/lia/secret-adopt.fixture'
+
 /**
  * Phase 8.0D-10B-4D4C4-SHELL-B1: managed Hearing projection plus the credential
  * alias that makes it work without duplicating a secret.
@@ -149,6 +151,7 @@ vi.mock('@proj-airi/electron-vueuse', async () => {
         'eventa:invoke:lia:secret:get-receive': ipc.secretGet,
         'eventa:invoke:lia:secret:has-receive': ipc.secretHas,
         'eventa:invoke:lia:secret:set-receive': ipc.secretSet,
+        'eventa:invoke:lia:secret:adopt-receive': createSecretAdoptHandler({ secretHas: ipc.secretHas, secretGet: ipc.secretGet, secretSet: ipc.secretSet }),
       }
       const id = invoke?.receiveEvent?.id ?? ''
       const transport = transportTestInvoke(id)
@@ -263,21 +266,26 @@ describe('credential scope alias (Phase 8.0D SHELL-B1 §22)', () => {
       expect(secretScopeFor(providerId), `secretScopeFor(${providerId})`).toBe(expected)
   })
 
-  it('the derived target resolves the EXISTING groq vault secret', async () => {
-    // The vault holds ONE secret, under the chat provider's own scope.
+  /**
+   * Corte B moved the last consumer of this alias out of the renderer.
+   *
+   * The resolver used to resolve `lia-groq-transcription` to the user's Groq key,
+   * because the hearing pipeline built its transcription client here. That
+   * client now lives in main (`transcription-service.ts`) and takes the key from
+   * the vault itself, so this renderer must resolve NOTHING for the derived
+   * target — not even by alias. The mapping is kept for the vault scope it
+   * names, which is what main uses to find the record and the credential.
+   */
+  it('the derived target resolves no credential here at all — main owns speech-to-text now', async () => {
     ipc.fixture({}, { groq: SIMULATED_KEY })
     const store = useLiaProviderStore()
     store.registerRuntimeExtensions()
 
     const resolver = getProviderCredentialResolver()
     expect(resolver).toBeDefined()
-    const credential = await resolver!('lia-groq-transcription')
-
-    expect(credential).toEqual({ apiKey: SIMULATED_KEY })
-    // The lookup went to `groq`, never to a second scope of its own.
-    expect(ipc.secretGet).toHaveBeenCalledWith({ key: 'apiKey', scope: 'groq' })
-    const scopes = ipc.secretGet.mock.calls.map(call => call[0].scope)
-    expect(scopes).not.toContain('lia-groq-transcription')
+    expect(await resolver!('lia-groq-transcription')).toBeUndefined()
+    // And it declines before touching the vault, so no alias lookup happens.
+    expect(ipc.secretGet).not.toHaveBeenCalled()
   })
 
   it('there is no second credential store: an alias-only vault resolves nothing', async () => {
@@ -290,22 +298,32 @@ describe('credential scope alias (Phase 8.0D SHELL-B1 §22)', () => {
     const credential = await getProviderCredentialResolver()!('lia-groq-transcription')
 
     expect(credential).toBeUndefined()
-    expect(ipc.secretGet).toHaveBeenCalledWith({ key: 'apiKey', scope: 'groq' })
+    expect(ipc.secretGet).not.toHaveBeenCalled()
     // Nothing was ever written to the vault: zero duplication, zero migration.
     expect(ipc.secretSet).not.toHaveBeenCalled()
   })
 
-  it('the chat provider still resolves through its own identity', async () => {
+  /**
+   * PROMPT-26 widened the rule from the derived target to the whole catalog.
+   *
+   * `groq` is a curated id, so its chat also executes in main now. This test
+   * previously pinned that resolving `groq` here returned the vault key; that
+   * is exactly the channel being closed, so the assertion is inverted.
+   */
+  it('a curated chat provider resolves nothing here either — main executes it', async () => {
     ipc.fixture({}, { groq: SIMULATED_KEY })
     const store = useLiaProviderStore()
     store.registerRuntimeExtensions()
 
-    expect(await getProviderCredentialResolver()!('groq')).toEqual({ apiKey: SIMULATED_KEY })
-    expect(ipc.secretGet).toHaveBeenCalledWith({ key: 'apiKey', scope: 'groq' })
+    expect(await getProviderCredentialResolver()!('groq')).toBeUndefined()
+    expect(ipc.secretGet).not.toHaveBeenCalled()
   })
 
   it('the resolver log carries metadata only - never the literal key', async () => {
-    ipc.fixture({}, { groq: SIMULATED_KEY })
+    // A provider OUTSIDE the catalog still resolves here (documented debt), so
+    // it is the one that can still log. The discipline on that path is what this
+    // test exists to protect.
+    ipc.fixture({}, { deepseek: SIMULATED_KEY })
     const logs: string[] = []
     const info = vi.spyOn(console, 'info').mockImplementation((...args: unknown[]) => {
       logs.push(args.map(arg => String(arg)).join(' '))
@@ -313,12 +331,18 @@ describe('credential scope alias (Phase 8.0D SHELL-B1 §22)', () => {
 
     const store = useLiaProviderStore()
     store.registerRuntimeExtensions()
+    // A non-curated provider still logs the metadata line...
+    expect(await getProviderCredentialResolver()!('deepseek')).toEqual({ apiKey: SIMULATED_KEY })
+    // ...and a curated one logs nothing, because it resolved nothing.
+    await getProviderCredentialResolver()!('groq')
     await getProviderCredentialResolver()!('lia-groq-transcription')
 
     const joined = logs.join('\n')
-    expect(joined).toContain('providerId=lia-groq-transcription')
-    expect(joined).toContain('scope=groq')
+    expect(joined).toContain('providerId=deepseek')
+    expect(joined).toContain('scope=deepseek')
     expect(joined).toContain('secretSource=lia-vault')
+    expect(joined).not.toContain('providerId=groq')
+    expect(joined).not.toContain('providerId=lia-groq-transcription')
     expect(joined).not.toContain(SIMULATED_KEY)
     expect(joined).not.toContain('gsk-simulated')
     info.mockRestore()

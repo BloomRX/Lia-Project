@@ -13,6 +13,257 @@ commit. Registra **estado**, não narrativa: relatório de rodada vai para
 
 ## 0. Estado agora
 
+### 0.0 PROMPT-28 — o cofre fecha por capacidade: nenhum provedor de voz recebe credencial no Renderer (02/11/2026, sem commit)
+
+**O que estava aberto.** O `resolveApiKey` do store de provedores da Lia era o
+único caminho do renderer ao cofre e recusava só dois casos: provedor de
+transporte nativo (os dez curados) e o alvo derivado
+`lia-groq-transcription`. **Todo outro id** — inclusive cada provedor de voz
+remoto (`openai-audio-speech`, `elevenlabs`, `minimax-speech`) e qualquer id sem
+definição — recebia `{ apiKey }` do cofre. O preview de voz monta o cliente TTS
+**neste** renderer (`voice-preview.ts` → `providerRuntime.getInstance` →
+`speechStore.speech`), então a chave de voz chegava aqui. O main não barrava
+nada: `secrets-service.ts` só confere o escopo do cofre pedido.
+
+**A regra agora.** Uma definição só entrega credencial a este processo se
+declarar, no próprio registro, uma task que a Lia ainda executa no renderer:
+`chat` ou equivalente de transcrição (`speech-to-text`,
+`automatic-speech-recognition`, `asr`, `stt`). A lista mora em
+`RENDERER_CREDENTIAL_TASKS` e a decisão em `rendererMayHoldCredential`, ambas em
+`renderer/stores/lia/provider.ts`; a leitura das tasks vem do registro real
+(`providerRuntime.providerTasks`, novo acessor bound-only em
+`provider-runtime.ts`, lendo `findProviderDefinition(id)?.tasks`). Id sem
+definição → lista vazia → **fail-closed**.
+
+**Por que por capacidade, e não "bloquear voz".** Medido no catálogo (63
+definições): 18 declaram fala sem `chat` e **cinco** — `voicevox`,
+`app-local-audio-speech`, `index-tts-vllm`, `kokoro-local`, `custom-local-voice`
+— declaram `requiresCredentials: false`. Um predicado por voz teria bloqueado
+justamente os motores locais que nunca precisaram de segredo. O predicado que o
+PROMPT-27 rascunhou ("sem `chat` → negar") foi **descartado** por esse motivo.
+
+**Efeito por operação:**
+
+| Operação | Antes | Agora |
+|---|---|---|
+| chat curado (10) | shim no main, resolver recusa | inalterado |
+| descoberta de modelos / probe | main, sem chave | inalterado |
+| Groq transcription | recusa explícita, roda no main | inalterado |
+| preview TTS remoto | **recebia a chave do cofre** | falha segura, chave nunca lida |
+| voz local sem segredo | funcionava | inalterado |
+| chat fora do catálogo | legado com chave | legado com chave (dívida mantida, de propósito) |
+| STT legado (não-Groq) | legado com chave | legado com chave |
+| id sem definição | **recebia a chave** | recusado |
+
+**Falha do preview agora é explícita, não `TypeError`.** Um TTS remoto sem
+credencial quebra dentro de `createProvider` (`config.apiKey.trim()`); o driver
+em `voice-preview.ts` reembrulha isso em `Error("Voice provider \"…\" cannot be
+prepared in this window")` com `cause`, e o `voice-editor` já converte erro em
+`previewState = 'error'` — o botão mostra o estado de erro, nada de silêncio.
+
+**Medido nesta rodada (Linux, deps instaladas nesta sessão):** suíte Lia
+**91 arquivos / 1524 casos, exit 0**; `vue-tsc --noEmit` no Stage **exit 0**;
+ESLint nos 7 arquivos tocados **exit 0**; `git diff --check` **exit 0**. Arquivo
+novo de prova: `voice-preview-credentials.probe.test.ts` (9 casos, era sonda de
+3). Dois testes existentes que **pinavam o comportamento antigo** de
+`speech-noop` (`secretGet` chamado) foram atualizados para pinar o novo contrato
+**sem perder o que provavam** — ambos seguem verificando o mesmo veredito de
+configuração/`unsupported`; os imports desses dois arquivos também foram
+reordenados porque o `perfectionist` já acusava erro neles antes desta rodada.
+
+**Gate Electron: NÃO EXECUTADO** — segue dependente de Windows. Nada aqui
+autoriza declará-lo aprovado.
+
+### 0.1 PROMPT-27 — gate não executado (Linux, sem binário), build do Stage bloqueado em asset externo, preview de voz medido (01/11/2026, sem commit)
+
+**Tentado e não concluído, com causa medida.** O **gate Electron** não rodou:
+`electron@43.4.1` está no `node_modules` **sem `dist/` e sem `path.txt`**, não há
+cache em `~/.cache/electron`, `install.js` falha em `fetch failed` (o asset
+oficial responde 302 e o host que serve o conteúdo, `objects.githubusercontent.com`,
+sai com exit 35), e o gate é `skip` fora do Windows — `node --test` devolveu
+`# pass 0 / # fail 0 / # skipped 1`. **Skip não é aprovação.** O ambiente desta
+rodada é Linux sem `DISPLAY`, sem `powershell.exe` e sem `wine`.
+**Build do Stage:** `electron-vite build` compila **main** (541 módulos,
+`out/main/index.js` 2,4 MB) e **preload** (`out/preload/index.mjs` — o
+pré-requisito que o gate lê) e falha no **renderer**, em `configResolved`, porque
+o plugin `Download` busca modelos Live2D/VRM em `dist.ayaka.moe` e no
+`cubism.live2d.com` (ambos exit 35). **Falha de infraestrutura, não de código.**
+Corrige-se aqui a afirmação anterior de que o build falhava “antes de compilar
+qualquer fonte”: ele falha antes do renderer, depois de main e preload.
+**Auditoria do preview de voz (medida):** o caminho está vivo ponta a ponta —
+`LiaConfigPanel.vue:97` → `VoiceSection.vue` → `voice-preview.ts:83`
+`getInstance()` → `provider.ts:1008` resolver → `secretGet`, e a chave devolvida
+aparece em `provider.speech('tts-1').apiKey`; no Main,
+`canRendererReadLegacySecret` devolve `true` para escopo fora do catálogo. O que
+**não** existe é escritor: `setApiKey`, `prepareNativeExecution` e `adoptCredential`
+só recebem ids curados, e o Stage não tem página de provedores. Classificação:
+**exposição possível, não comprovada** (caminho de cofre) e **legado fora do
+escopo** (`apiKey` em texto claro de instalação pré-cofre). Correção mínima
+proposta — recusar no resolver ids cujas `tasks` não incluem `chat` — **não foi
+implementada**, por falta de necessidade demonstrada; aguarda autorização.
+**PASS automatizado (medido agora):** suítes da Lia **1515 casos em 91 arquivos
+(exit 0)**, incluindo a sonda nova do preview de voz (**3/3**); `vue-tsc` exit 0;
+`tsc` do harness do gate exit 0; ESLint do arquivo novo exit 0; `git diff
+--check` exit 0.
+**Continua aberto:** gate de runtime, build do renderer, preview de voz, ids fora
+do catálogo, transcrição sem cancelamento, Anthropic sem chave real.
+Detalhes: [`../architecture/LIA-NATIVE-PROVIDER-COVERAGE.md`](../architecture/LIA-NATIVE-PROVIDER-COVERAGE.md) §14.
+
+#### 0.1.1 Roteiro Windows entregue (mesma missão, rodada 2)
+
+Novo arquivo `airi/apps/stage-tamagotchi/scripts/provider-runtime-electron/run-gate-windows.ps1`:
+runner **fino** que executa os comandos que o repositório já declara, na ordem
+documentada, e não toca em Git. Verifica branch/HEAD/working tree, node e pnpm,
+`playwright`/`vite` resolvendo do app, versão do `electron` = `43.4.1` e o
+SHA-256 do asset contra o `checksums.json` **do próprio pacote** (confere:
+`c2ef9a5f…0e13a`); instala o runtime só pelo `install.js` oficial (ou aceita um
+zip local com hash conferido via `-ElectronZip`); roda `pnpm run build`; roda
+`node --test`; localiza a pasta de artefatos **desta** execução e re-checa de
+forma independente a ausência de credencial sintética no `electron.log` (procura
+os prefixos, nunca os valores). Sai 1 se o gate falhar, se alguma etapa falhar ou
+se aparecer credencial. **Não foi executado aqui — não há `pwsh` neste ambiente**;
+foi revisado estaticamente e os três comandos centrais foram confirmados no
+checkout.
+**Re-medido nesta rodada:** suítes da Lia **1515 casos / 91 arquivos, exit 0**;
+sonda do preview + consumidores AIRI + transcrição **23 casos, exit 0**;
+`vue-tsc` exit 0; ESLint exit 0; `git diff --check` exit 0; gate
+`# pass 0 / # skipped 1`; `pnpm run build` exit 1 no download Live2D (main e
+preload compilam). Detalhes: §15 do documento de cobertura.
+
+### 0.2 PROMPT-26 — consumidores AIRI do chat fechados, gate Windows com procedimento completo (01/11/2026, sem commit)
+
+**Fechado:** os três consumidores do AIRI que ainda construíam cliente de chat no
+renderer — `use-vision-inference` (devtools de visão), `markdown-stress`
+(Configurações → Sistema → Developer) e `artistry-autonomous` (diretor autônomo,
+disparado por `chat.ts` quando o card liga `artistry.autonomousEnabled`) — deixaram
+de receber credencial. Duas camadas, ambas necessárias: `installChatFactory` em
+`provider-runtime.ts` passou a envolver **também `getProviderInstance`**, então
+esses consumidores executam no Main pelo mesmo shim do chat, sem transporte novo;
+e o resolver de `provider.ts` recusa **todo id curado** e o alvo derivado
+`lia-groq-transcription` **antes de tocar o cofre**, então qualquer caminho que
+escape da primeira camada falha fechado em vez de autenticar no renderer.
+**Medido agora:** suítes da Lia `stores/lia` + `services/lia` + `main/services/lia`
+**1512 casos em 90 arquivos (exit 0)**, incluindo o arquivo novo
+`renderer-airi-consumers.test.ts` (**15/15**); `tsc` do harness do gate exit 0;
+`vue-tsc` do Stage exit 0; ESLint nos oito arquivos tocados exit 0; `git diff
+--check` exit 0.
+**Gate Electron:** continua **não executado** e não foi trocado por unitários. O
+procedimento ficou completo e reproduzível — versão travada `43.4.1`, binário
+oficial em `node_modules/electron/dist/electron.exe`, sha256 do asset
+`win32-x64` publicado no próprio pacote, os três comandos na ordem, PowerShell e
+sessão de desktop como pré-requisitos, e o modo de preservar log sem credencial.
+**Continua exposto:** provedores fora do catálogo ainda resolvem no renderer
+(pinado em teste como dívida) e `voice-preview` lê config de provedor de **áudio**,
+que não é curado — sem escritor de segredo para esses escopos na UI distribuída,
+mas a exposição é latente. Também seguem abertos: transcrição sem cancelamento do
+chamador e Anthropic sem validação com chave real.
+Detalhes: [`../architecture/LIA-NATIVE-PROVIDER-COVERAGE.md`](../architecture/LIA-NATIVE-PROVIDER-COVERAGE.md) §13.
+
+### 0.3 PROMPT-25 — descoberta genérica no Main, follower-only recuperado, gate ainda não executado (01/11/2026, sem commit)
+
+**Fechado:** (a) o **seletor compartilhado de modelos** (`providerStore.fetchModelsForProvider`,
+usado por consciousness/hearing/vision/editor de voz) deixou de resolver credencial
+no renderer para os dez curados — um slot opcional (`registerProviderModelLister`)
+delega a listagem ao Main, e um id sem dono segue o caminho legado; (b) a **janela
+follower-only aberta antes da líder** deixou de falhar por ordem de janelas: se há
+endpoint configurado, o factory cria o registro pelo mesmo `ensureProviderRecord`,
+no mesmo repositório do Main, sem credencial, e relê; sem endpoint, falha fechado;
+tombstone continua não ressuscitando.
+**Decidido com evidência:** **não** implementar cancelamento de transcrição nesta
+rodada — nenhum chamador tem `AbortSignal` para oferecer, o modelo atual é “ticket
+obsoleto”, e o caminho exigiria contrato IPC novo (jobId + cancel) sem consumidor.
+O deadline do Main continua e agora tem prova de que é reportado como `timeout`.
+**PASS automatizado (medido agora):** `stores/lia` + `services/lia` +
+`main/services/lia` **1497 casos em 89 arquivos (exit 0)**; `packages/stage-ui`
+(`hearing`, `providers`, `chat`, `composables/audio`) **341 casos em 28 arquivos,
+todos PASS** (a execução sai 1 por uma rejeição não tratada de rede em
+`updateCredits` — `api.airi.build` bloqueado no sandbox, pré-existente);
+`vue-tsc` do Stage exit 0; `tsc` do harness do gate exit 0; ESLint nos arquivos
+tocados exit 0.
+**NÃO executados:** **gate Electron real** (sem `dist/` do Electron — o asset
+oficial responde 302 e o TLS de `objects.githubusercontent.com` falha com exit 35 —,
+Linux sem display e gate Windows-only; **não substituído por unitários**), build do
+Stage (falha em `configResolved` baixando modelos Live2D de `dist.ayaka.moe`,
+antes de compilar), Stage completo, modelo externo.
+**Auditoria de credenciais:** chat, descoberta, probe e transcrição dos dez curados
+não leem credencial no renderer. **Não** é verdade que nenhuma chega: o resolver
+do líder ainda pode alimentar consumidores AIRI que constroem cliente no renderer
+(`use-vision-inference`, `markdown-stress`, `artistry-autonomous` e os ramos
+legados de `hearing`), e provedores fora do catálogo seguem legados.
+Detalhes: [`../architecture/LIA-NATIVE-PROVIDER-COVERAGE.md`](../architecture/LIA-NATIVE-PROVIDER-COVERAGE.md) §12.
+
+### 0.4 PROMPT-24 — credenciais fechadas, gate Electron ampliado, 01/11/2026 (sem commit)
+
+**Fechado nesta rodada:** (a) o **primeiro envio** de um provedor sem registro não
+leva mais credencial no payload IPC — `draft` carrega só `baseUrl`, o main rejeita
+qualquer campo de credencial antes do fetch e do cofre, e o renderer não recebe a
+chave de volta; a ordem é gravar credencial → persistir registro → confirmar →
+executar; (b) a **transcrição de `groq`** executa no main (`lia:transcription:run`,
+payload sem endpoint e sem chave, multipart no main, cofre lido lá), e a exceção
+`groq` de `canRendererReadLegacySecret` **foi removida** — todo curado é negado ao
+renderer, com ou sem registro.
+**PASS automatizado (medido):** `stores/lia` + `services/lia` + `main/services/lia`
+**1488 casos em 88 arquivos (exit 0)**; `packages/stage-ui` (`hearing` +
+`libs/providers`) 140 casos em 23 arquivos (exit 0); `vue-tsc --noEmit` do Stage
+exit 0; ESLint nos arquivos tocados exit 0. Novos testes desta rodada:
+`curated-providers-local-http.test.ts` (21, servidor HTTP real, dez provedores no
+serviço de execução real do main), `model-listing-scope.test.ts` (11),
+`transcription-service.test.ts` (9), `transcription-bridge.test.ts` (5),
+`first-send-credential.test.ts` (9).
+**NÃO executados:** **gate Electron real** (sem binário do Electron no ambiente —
+`electron@43.4.1` sem `dist/`, download do asset falha com exit 35 — e o gate é
+Windows-only; **não foi substituído por unitários**), Stage completo, Chromium,
+build do Stage, modelo externo, núcleo `lia/core`.
+**Limitações que continuam:** listagem de modelos segue no caminho legado do AIRI
+(`providerStore.fetchModelsForProvider`) para o seletor genérico — para curado ela
+agora sai sem autenticação (sem vazamento, mas pode falhar); provedores fora do
+catálogo continuam resolvendo credencial no renderer; Anthropic usa a camada
+OpenAI-compatible (`/v1/chat/completions` existe — 405 no GET e ausência de 404 —
+mas **não** foi exercitada com chave real); transcrição de arquivo não tem
+cancelamento do chamador (nunca teve; o main impõe deadline).
+**Próximo:** rodar o gate Electron ampliado em Windows; migrar o seletor genérico
+de modelos; validar Anthropic com uma requisição real e curta (Dev).
+Detalhes: [`../architecture/LIA-NATIVE-PROVIDER-COVERAGE.md`](../architecture/LIA-NATIVE-PROVIDER-COVERAGE.md) §11.
+
+### Corte B — provedores de chat nativos no main, 31/10/2026 (histórico da rodada anterior)
+
+> **Nota de leitura (01/11/2026):** o texto abaixo é o registro da rodada
+> anterior, preservado como histórico. O item (d) — exceção `groq` — e as
+> limitações sobre `draft.apiKey` e transcrição foram **superados pelo §0.4**
+> (PROMPT-24; era §0.1 quando a nota foi escrita, §0.3 antes da entrada do
+> PROMPT-28).
+ os dez
+provedores curados (`openai`, `groq`, `cerebras-ai`, `anthropic`, `xai`,
+`mistral-ai`, `openrouter-ai`, `openai-compatible`, `lm-studio`, `ollama`) passam a
+executar no processo main pelo transporte próprio já existente; o renderer monta
+um shim e encaminha a requisição por IPC. **Nenhum segundo sistema de transportes**
+foi criado e nenhum contrato de `lia/core` foi alterado. Efeitos:
+(a) a lista de dez IDs virou uma só fonte (`shared/lia/provider-catalog.ts`) —
+antes estava triplicada entre renderer e main; (b) endpoint padrão passou a ser
+resolvido em cascata no `ensureProviderRecord`, sem regravar registro inalterado;
+(c) provedor curado sem nativo **falha fechado** (`ProviderError('configuration')`)
+em vez de cair em `withResolvedCredential`; (d) `canRendererReadLegacySecret` nega
+todo ID curado — exceção única e fixada em teste: `groq`, pela transcrição;
+(e) a ponte de chat saiu do bloco líder-only e instala em toda janela, corrigindo
+o 401 da janela follower-only `#/chat`; (f) identidade AIRI removida do OpenRouter
+(título neutro `Lia`, sem `HTTP-Referer`); (g) a cópia em texto claro da chave no
+`localStorage` passa a ser removida **somente** após o main confirmar, em
+processo, que o cofre guarda aquele mesmo valor (`secret:adopt` →
+`stored`/`matching`), preservando `conflict`.
+**PASS automatizado:** stores/renderer-services/main-lia **643 casos em 49
+arquivos** (exit 0), `vue-tsc --noEmit` do Stage exit 0, ESLint nos arquivos
+tocados exit 0. **NÃO executados:** núcleo `lia/core` (nada nele foi alterado),
+Chromium, build do Stage, Electron real, modelo externo. Não há gate de runtime
+nesta rodada e nada foi commitado nem publicado.
+**Limitações:** `groq` continua legível no renderer para a transcrição; o primeiro
+envio de um provedor sem registro ainda leva a chave no payload IPC (o main a
+descarta); Anthropic reproduz a suposição AIRI de `/v1/chat/completions`, não
+verificada contra a API real; listagem de modelos segue legada.
+**Próximo:** migrar a transcrição para remover a exceção, gravar o registro antes
+do primeiro envio, e rodar o gate Electron com os dez sobre servidor local.
+Detalhes: [`../architecture/LIA-NATIVE-PROVIDER-COVERAGE.md`](../architecture/LIA-NATIVE-PROVIDER-COVERAGE.md).
+Baseline funcional permanece `3ef6d11618f787dae6d197645d440a5775a60ad6`.
+
 **Transport Configuration — revisão de 30/10 e P2 de 31/10/2026, versionamento autorizado:**
 persistência própria no main, CAS, migração idempotente e execução HTTP/SSE por
 IPC revisados. A execução migrada não devolve chaves do cofre ao renderer; getter negado
@@ -190,9 +441,9 @@ pendências de skills/editor exigem correção e validação próprias, sem remo
 | `main` | `db99c709059a6d074b18361bfb32c9f144620632` — sem merge |
 | Fase | **8.0D aberta**, gate de conteúdo da imagem ainda FAIL; 8.0E não iniciada |
 | Plano local | `docs/product/PLANO-FINALIZACAO-LIA.md` (o caminho em `docs/project/` não existe) |
-| Independência do AIRI | `lia/` criado: `core` (contratos, **26 testes**), `stage` (**9**), `launcher` (**8**) — ver §0.1 |
+| Independência do AIRI | `lia/` criado: `core` (contratos, **26 testes**), `stage` (**9**), `launcher` (**8**) — ver a seção *Independência do AIRI*, abaixo |
 
-### 0.1 Independência do AIRI — 27/10/2026
+### Independência do AIRI — 27/10/2026
 
 Medido contra um clone limpo do `moeru-ai/airi` em `2c1e223`
 (`v0.12.0-beta.5`), **fora** da árvore do repositório:

@@ -11,16 +11,35 @@ import { createApp } from 'vue'
 import { createLiaTransportClient, legacyTransportCandidates, toTransportRecord } from '../../services/lia/transport-config'
 import { setTransportTestVaultResolver } from '../../services/lia/transport-config.fixture'
 
-const ipc = vi.hoisted(() => ({
-  chat: vi.fn(async (): Promise<LiaProviderChatConfig> => ({})),
-  save: vi.fn(async () => {}),
-  available: vi.fn(async () => true),
-  has: vi.fn(async () => false),
-  vaultGet: vi.fn(async (_payload: { scope: string, key: string }): Promise<string | undefined> => undefined),
-  get: vi.fn(async (_value: { scope: string, key: string }): Promise<string | undefined> => undefined),
-  set: vi.fn(async () => true),
-  delete: vi.fn(async () => true),
-}))
+const ipc = vi.hoisted(() => {
+  /**
+   * A stand-in for the main-process vault, keyed the way the vault is keyed.
+   *
+   * It is deliberately NOT `ipc.set`/`ipc.get`: this file's `afterEach` asserts
+   * that no renderer code ever calls `secret:get`, and routing the adoption
+   * through the same spies would make the simulated main process look like a
+   * renderer read. Keeping the fake vault separate keeps that guard honest.
+   */
+  const adoptVault = new Map<string, string>()
+  return {
+    chat: vi.fn(async (): Promise<LiaProviderChatConfig> => ({})),
+    save: vi.fn(async () => {}),
+    available: vi.fn(async () => true),
+    has: vi.fn(async () => false),
+    vaultGet: vi.fn(async (_payload: { scope: string, key: string }): Promise<string | undefined> => undefined),
+    get: vi.fn(async (_value: { scope: string, key: string }): Promise<string | undefined> => undefined),
+    set: vi.fn(async () => true),
+    delete: vi.fn(async () => true),
+    adoptVault,
+    adopt: vi.fn(async (payload: { scope: string, key: string, value: string }): Promise<'stored' | 'matching' | 'conflict' | 'unavailable'> => {
+      const address = `${payload.scope}\u0000${payload.key}`
+      if (adoptVault.has(address))
+        return adoptVault.get(address) === payload.value ? 'matching' : 'conflict'
+      adoptVault.set(address, payload.value)
+      return 'stored'
+    }),
+  }
+})
 
 vi.mock('@proj-airi/electron-vueuse', async () => {
   const { transportTestInvoke } = await import('../../services/lia/transport-config.fixture')
@@ -37,6 +56,7 @@ vi.mock('@proj-airi/electron-vueuse', async () => {
         'eventa:invoke:lia:secret:has-receive': ipc.has,
         'eventa:invoke:lia:secret:get-receive': ipc.get,
         'eventa:invoke:lia:secret:set-receive': ipc.set,
+        'eventa:invoke:lia:secret:adopt-receive': ipc.adopt,
         'eventa:invoke:lia:secret:delete-receive': ipc.delete,
       }
       if (id in handlers)
@@ -55,6 +75,7 @@ let fetchMock: ReturnType<typeof vi.fn>
 
 beforeEach(() => {
   vi.resetAllMocks()
+  ipc.adoptVault.clear()
   const storage = new Map<string, string>()
   vi.stubGlobal('localStorage', {
     getItem: (id: string) => storage.get(id) ?? null,
@@ -135,20 +156,30 @@ describe('lia-owned transport configuration integration', () => {
     })
     expect(JSON.stringify(stored)).not.toContain(key)
     expect(stored.adapterOptions).not.toHaveProperty('apiKey')
-    expect(ipc.set).toHaveBeenCalledExactlyOnceWith({ scope: 'personal-service', key: 'apiKey', value: key, onlyIfMissing: true })
+    // Corte B: the renderer asks main to adopt the legacy value and never writes
+    // a secret itself. `set`/`get` staying silent is the point.
+    expect(ipc.adopt).toHaveBeenCalledExactlyOnceWith({ scope: 'personal-service', key: 'apiKey', value: key })
+    expect(ipc.set).not.toHaveBeenCalled()
     expect(ipc.delete).not.toHaveBeenCalled()
+    // And once main holds it, the plaintext copy is gone from local storage.
+    expect(localStorage.getItem('settings/providers/configured')).not.toContain(key)
   })
 
   it('imports the original credentials-map format without overwriting an existing vault entry', async () => {
     localStorage.setItem('settings/credentials/providers', JSON.stringify({ 'openai-compatible': { baseUrl, apiKey: key, seed: 7 } }))
-    ipc.has.mockResolvedValue(true)
+    // The vault already holds a DIFFERENT value for this address: it is the
+    // newer one, so migration must leave it alone — and, since the local copy
+    // was never adopted, must not delete it either.
+    ipc.adoptVault.set('openai-compatible\u0000apiKey', 'A_DIFFERENT_STORED_SECRET')
     await useLiaProviderStore().refreshConfig()
     const stored = (await snapshot()).records.find(record => record.providerId === 'openai-compatible')!
     expect(stored).toMatchObject({ baseUrl, modelIds: [model], adapterOptions: { seed: 7 } })
     expect(JSON.stringify(stored)).not.toContain(key)
-    expect(ipc.has).toHaveBeenCalledWith({ scope: 'openai-compatible', key: 'apiKey' })
+    expect(ipc.adopt).toHaveBeenCalledWith({ scope: 'openai-compatible', key: 'apiKey', value: key })
+    expect(ipc.adoptVault.get('openai-compatible\u0000apiKey')).toBe('A_DIFFERENT_STORED_SECRET')
     expect(ipc.set).not.toHaveBeenCalled()
     expect(ipc.delete).not.toHaveBeenCalled()
+    expect(localStorage.getItem('settings/credentials/providers')).toContain(key)
   })
 
   it('keeps an own edit authoritative across repeated imports and a fresh client cache', async () => {
@@ -214,13 +245,14 @@ describe('lia-owned transport configuration integration', () => {
   it('can resume an interrupted credential import in a fresh store without dropping the legacy record', async () => {
     const original = JSON.stringify({ 'openai-compatible': { baseUrl, apiKey: key } })
     localStorage.setItem('settings/credentials/providers', original)
-    ipc.set.mockResolvedValue(false)
+    // The first attempt cannot write to the vault (keychain locked, say), so the
+    // record must NOT be created and the legacy blob must survive untouched.
+    ipc.adopt.mockResolvedValueOnce('unavailable')
     const first = useLiaProviderStore()
     await first.refreshConfig()
     expect((await snapshot()).records).toEqual([])
     expect(localStorage.getItem('settings/credentials/providers')).toBe(original)
     first.$dispose()
-    ipc.set.mockResolvedValue(true)
     const reopened = useLiaProviderStore()
     await reopened.refreshConfig()
     expect((await snapshot()).records).toHaveLength(1)

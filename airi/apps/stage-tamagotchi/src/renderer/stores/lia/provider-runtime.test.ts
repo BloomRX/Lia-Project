@@ -244,3 +244,44 @@ describe('lia provider runtime — the shared store is still the implementation'
     expect(captureState(UNKNOWN_PROVIDER).record).toBeUndefined()
   })
 })
+
+/**
+ * PROMPT-28 — the capability metadata the credential policy reads.
+ *
+ * `providerTasks` is not a lifecycle operation, so it lives on the bound port
+ * only (like `defaultBaseUrl`) and must not grow `LiaProviderRuntime`. What it
+ * has to be is *the definition's own answer*, not a Lia-side table: that is
+ * what lets the credential policy classify a provider nobody edited this file
+ * for, and what makes an id with no definition fail closed.
+ */
+describe('lia provider runtime — declared capabilities come from the definition', () => {
+  it('returns the tasks the definition declares, and nothing invented', () => {
+    installStores()
+    const port = useLiaProviderRuntime()
+
+    // `speech-noop` declares exactly these two, both text-to-speech.
+    expect(port.providerTasks('speech-noop')).toEqual(['text-to-speech', 'tts'])
+
+    // A curated chat provider declares `chat` — the task that keeps its legacy
+    // path out of scope and lets the resolver answer "no" for a different one.
+    expect(port.providerTasks(CREDENTIALED_PROVIDER)).toContain('chat')
+  })
+
+  it('answers an empty list for an id no definition claims, instead of guessing', () => {
+    installStores()
+    const port = useLiaProviderRuntime()
+
+    // Fail closed: no tasks means no renderer-eligible task, means no credential.
+    expect(port.providerTasks(UNKNOWN_PROVIDER)).toEqual([])
+  })
+
+  it('hands back a copy, so a caller cannot rewrite the registry through it', () => {
+    installStores()
+    const port = useLiaProviderRuntime()
+
+    const tasks = port.providerTasks('speech-noop')
+    tasks.push('chat')
+
+    expect(port.providerTasks('speech-noop')).toEqual(['text-to-speech', 'tts'])
+  })
+})

@@ -247,6 +247,64 @@ export function resolveStreamTranscriptionExecutor(providerId: string): StreamTr
 }
 
 /**
+ * What a host needs to transcribe one finished recording itself.
+ *
+ * `file` is the exact File the pipeline built (same bytes, name and MIME type),
+ * so a host that forwards it is not re-encoding audio.
+ */
+export interface RecordingTranscriptionExecution {
+  providerId: string
+  model: string
+  file: File
+  /** `json` unless the confidence filter asked for `verbose_json`. */
+  responseFormat?: 'json' | 'verbose_json'
+  providerOptions?: Record<string, unknown>
+}
+
+export interface RecordingTranscriptionExecutionResult {
+  text: string
+  /** Kept for parity with the xsai response the caller used to receive. */
+  segments?: unknown
+}
+
+export type RecordingTranscriptionExecutor = (
+  request: RecordingTranscriptionExecution,
+) => Promise<RecordingTranscriptionExecutionResult>
+
+/**
+ * Host-registered executors for the non-streaming `generate` path, keyed by
+ * provider id.
+ *
+ * The browser application always transcribes in process. A desktop host that
+ * keeps credentials out of the renderer cannot: the transcription client is
+ * built from an apiKey, so building it here would mean resolving the key here.
+ * Registering an executor lets that host run the request where the key already
+ * lives — and, crucially, lets it do so WITHOUT instantiating a provider at all,
+ * which is what removes the renderer-side credential read rather than merely
+ * moving it.
+ *
+ * A registry, not a replacement: when nothing is registered for an id, the
+ * existing `generateTranscription` path runs exactly as before.
+ */
+const RECORDING_TRANSCRIPTION_EXECUTORS = new Map<string, RecordingTranscriptionExecutor>()
+
+export function registerRecordingTranscriptionExecutor(providerId: string, executor: RecordingTranscriptionExecutor | undefined): void {
+  if (executor)
+    RECORDING_TRANSCRIPTION_EXECUTORS.set(providerId, executor)
+  else
+    RECORDING_TRANSCRIPTION_EXECUTORS.delete(providerId)
+}
+
+export function resolveRecordingTranscriptionExecutor(providerId: string): RecordingTranscriptionExecutor | undefined {
+  return RECORDING_TRANSCRIPTION_EXECUTORS.get(providerId)
+}
+
+/** Test-only: forget every registration so suites stay independent. */
+export function resetRecordingTranscriptionExecutorsForTesting(): void {
+  RECORDING_TRANSCRIPTION_EXECUTORS.clear()
+}
+
+/**
  * Resolves the setup error for the selected transcription provider.
  *
  * Use when:
@@ -1195,11 +1253,6 @@ export const useHearingSpeechInputPipeline = defineStore('modules:hearing:speech
         return
       }
 
-      const provider = await providersStore.getProviderInstance<TranscriptionProviderWithExtraOptions<string, any>>(providerId)
-      if (!provider) {
-        throw new Error('Failed to initialize speech provider')
-      }
-
       const providerConfig = providerStore.getProviderConfig(providerId)
       const model = resolveActiveTranscriptionModel(activeTranscriptionModel.value, providerConfig)
       const providerOptions = resolveTranscriptionProviderOptions(providerConfig)
@@ -1210,11 +1263,33 @@ export const useHearingSpeechInputPipeline = defineStore('modules:hearing:speech
         recordingSize: recording.size,
         recordingType: recording.type,
       })
+      const file = new File([recording], 'recording.wav', { type: recording.type || 'audio/wav' })
+
+      // A host-registered executor runs the SAME file, model and options without
+      // building a provider — which is what keeps a credential out of this
+      // renderer entirely. Everything below this point is unchanged: the fetch
+      // falls through to the in-process client exactly as before.
+      const executor = resolveRecordingTranscriptionExecutor(providerId)
+      if (executor) {
+        const executed = await executor({ providerId, model, file, providerOptions })
+        const text = executed.text?.trim() ?? ''
+        if (!text) {
+          error.value = `No transcription result returned from provider (empty response for ${model})`
+          return
+        }
+        return text
+      }
+
+      const provider = await providersStore.getProviderInstance<TranscriptionProviderWithExtraOptions<string, any>>(providerId)
+      if (!provider) {
+        throw new Error('Failed to initialize speech provider')
+      }
+
       const result = await hearingStore.transcription(
         providerId,
         provider,
         model,
-        new File([recording], 'recording.wav', { type: recording.type || 'audio/wav' }),
+        file,
         undefined,
         { providerOptions },
       )

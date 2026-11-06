@@ -277,21 +277,51 @@ describe('main transport execution', () => {
     expect(getSecret).not.toHaveBeenCalled()
   })
 
-  it('supports known unsaved drafts with only a transient typed credential, and denies removed/custom drafts', async () => {
-    const fetch = vi.fn(async (_url, init) => new Response(new Headers(init?.headers).get('authorization')))
+  /**
+   * Corte B removed the typed credential from the execution payload.
+   *
+   * A draft may still name an endpoint that is not persisted yet, because that
+   * is how "try this address" works; it may not name a secret. The old test
+   * asserted the opposite — that `draft.apiKey` reached the wire — which is
+   * precisely the property this cut deletes.
+   */
+  it('refuses a draft that still carries a credential, and never puts one on the wire', async () => {
+    const fetch = vi.fn(async (_url, init) => new Response(new Headers(init?.headers).get('authorization') ?? 'anonymous'))
     const { service, getSecret, snapshot } = fixture(fetch as typeof globalThis.fetch, [])
     const sender = owner()
-    const draft = { baseUrl: 'https://draft.invalid/v1', apiKey: 'typed-synthetic' }
-    const jobId = id(service.start(sender, { ...startInput('openai-compatible'), draft }))
-    expect(await allBytes(service, sender, jobId)).toBe('Bearer typed-synthetic')
+
+    // An old client that still sends the key is rejected, not silently stripped:
+    // it believes the execution channel transports credentials, and must learn
+    // otherwise by failing.
+    const legacy = service.start(sender, { ...startInput('openai-compatible'), draft: { baseUrl: 'https://draft.invalid/v1', apiKey: 'typed-synthetic' } } as never)
+    expect(legacy.ok).toBe(false)
+    expect(fetch).not.toHaveBeenCalled()
     expect(getSecret).not.toHaveBeenCalled()
-    expect(draft.apiKey).toBe('typed-synthetic')
+
+    // Without the key, a known unsaved draft executes unauthenticated — the vault
+    // is not consulted for an address with no record, so nothing is leaked to it.
+    const jobId = id(service.start(sender, { ...startInput('openai-compatible'), draft: { baseUrl: 'https://draft.invalid/v1' } }))
+    expect(await allBytes(service, sender, jobId)).toBe('anonymous')
+    expect(getSecret).not.toHaveBeenCalled()
+
     snapshot.tombstones.push('openai-compatible')
     for (const providerId of ['openai-compatible', 'custom-unsaved']) {
-      const rejectedId = id(service.start(sender, { ...startInput(providerId), draft }))
+      const rejectedId = id(service.start(sender, { ...startInput(providerId), draft: { baseUrl: 'https://draft.invalid/v1' } }))
       expect(await service.pull(sender, { id: rejectedId, action: 'head' })).toEqual({ ok: false, code: 'unknown-provider' })
     }
     expect(fetch).toHaveBeenCalledOnce()
+  })
+
+  it('rejects any credential-looking field on a draft before touching the network or the vault', async () => {
+    const fetch = vi.fn(async () => new Response('ok'))
+    const { service, getSecret } = fixture(fetch as typeof globalThis.fetch, [])
+    const sender = owner()
+    for (const draft of [{ baseUrl: 'https://draft.invalid/v1', apiKey: 'x' }, { baseUrl: 'https://draft.invalid/v1', apiKey: '' }, { baseUrl: 'https://draft.invalid/v1', authorization: 'Bearer x' }]) {
+      const result = service.start(sender, { ...startInput('openai-compatible'), draft } as never)
+      expect(result).toMatchObject({ ok: false, code: 'configuration' })
+    }
+    expect(fetch).not.toHaveBeenCalled()
+    expect(getSecret).not.toHaveBeenCalled()
   })
 
   it('bounds draft probes at 15 seconds', async () => {
