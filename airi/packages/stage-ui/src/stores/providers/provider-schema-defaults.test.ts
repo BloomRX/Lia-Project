@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { registerProviderCredentialResolver, resetChatProviderRuntimeExtensionsForTesting } from '../chat/chat-provider-runtime'
 import { useProviderConfigStore } from './config'
-import { useProviderStore } from './provider'
+import { useProviderStore, withResolvedCredential } from './provider'
 
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({
@@ -56,6 +56,51 @@ vi.mock('../../libs/providers', async (importOriginal) => {
 function lastCallFor(providerId: string) {
   return [...observed.createProviderCalls].reverse().find(call => call.providerId === providerId)
 }
+
+describe('provider credential resolver authority', () => {
+  afterEach(() => {
+    resetChatProviderRuntimeExtensionsForTesting()
+  })
+
+  it.each([
+    ['undefined', undefined],
+    ['empty object', {}],
+  ])('removes a legacy key when the resolver returns %s', async (_label, resolution) => {
+    registerProviderCredentialResolver(async () => resolution)
+    const config = { apiKey: FAKE_KEY, baseUrl: 'https://service.example/v1/' }
+
+    const resolved = await withResolvedCredential('configured-service', config)
+
+    expect(resolved).not.toHaveProperty('apiKey')
+    expect(resolved.baseUrl).toBe(config.baseUrl)
+    expect(resolved).not.toBe(config)
+    expect(config).toEqual({ apiKey: FAKE_KEY, baseUrl: 'https://service.example/v1/' })
+  })
+
+  it('preserves legacy config when no resolver is registered', async () => {
+    const config = { apiKey: FAKE_KEY }
+
+    expect(await withResolvedCredential('configured-service', config)).toBe(config)
+  })
+
+  it('uses only the explicitly resolved key without changing stored config', async () => {
+    registerProviderCredentialResolver(async () => ({ apiKey: FAKE_KEY }))
+    const config = { apiKey: 'legacy-test-value', baseUrl: 'https://service.example/v1/' }
+
+    const resolved = await withResolvedCredential('configured-service', config)
+
+    expect(resolved).toEqual({ apiKey: FAKE_KEY, baseUrl: config.baseUrl })
+    expect(config.apiKey).toBe('legacy-test-value')
+  })
+
+  it('preserves local config without a key when the resolver declines', async () => {
+    registerProviderCredentialResolver(async () => undefined)
+    const config = { baseUrl: 'https://local-service.example/v1/' }
+
+    expect(await withResolvedCredential('local-service', config)).toEqual(config)
+    expect(config).not.toHaveProperty('apiKey')
+  })
+})
 
 describe('provider schema defaults are applied before creation', () => {
   beforeEach(() => {

@@ -4,6 +4,7 @@ import { useElectronEventaInvoke } from '@proj-airi/electron-vueuse'
 
 import { electronLiaTransportsGet, electronLiaTransportsMutate } from '../../../shared/eventa/lia-transports'
 import { isCuratedChatProvider } from '../../../shared/lia/provider-catalog'
+import { supportsMainTranscription } from '../../../shared/lia/transcription-transport'
 
 /**
  * Whether this provider id is executed by the main process.
@@ -62,7 +63,7 @@ export function legacyTransportCandidates(configured: unknown, credentials: unkn
   const candidates = new Map<string, { id: string, definitionId: string, config: Record<string, unknown> }>()
   if (credentials && typeof credentials === 'object' && !Array.isArray(credentials)) {
     for (const [id, config] of Object.entries(credentials)) {
-      if (config && typeof config === 'object' && !Array.isArray(config) && isNativeTransportDefinition(id))
+      if (config && typeof config === 'object' && !Array.isArray(config) && (isNativeTransportDefinition(id) || supportsMainTranscription(id)))
         candidates.set(id, { id, definitionId: id, config })
     }
   }
@@ -71,7 +72,7 @@ export function legacyTransportCandidates(configured: unknown, credentials: unkn
       if (!value || typeof value !== 'object')
         continue
       const record = value as Record<string, unknown>
-      if (typeof record.definitionId === 'string' && isNativeTransportDefinition(record.definitionId) && record.config && typeof record.config === 'object' && !Array.isArray(record.config))
+      if (typeof record.definitionId === 'string' && (isNativeTransportDefinition(record.definitionId) || supportsMainTranscription(record.definitionId)) && record.config && typeof record.config === 'object' && !Array.isArray(record.config))
         candidates.set(id, { id, definitionId: record.definitionId, config: record.config as Record<string, unknown> })
     }
   }
@@ -86,7 +87,7 @@ export function toTransportRecord(id: string, definitionId: string, config: Reco
     providerId: id,
     definitionId,
     type: 'http',
-    protocol: 'chat-completions',
+    protocol: supportsMainTranscription(definitionId) ? 'audio-transcription' : 'chat-completions',
     baseUrl: typeof baseUrl === 'string' ? baseUrl : '',
     adapterOptions: adapterOptions as TransportRecord['adapterOptions'],
     modelIds,

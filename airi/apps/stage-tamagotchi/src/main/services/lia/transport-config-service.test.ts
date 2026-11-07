@@ -3,6 +3,7 @@ import type { TransportRecord, TransportSnapshot } from '../../../../../../../li
 import { describe, expect, it, vi } from 'vitest'
 
 import { CURATED_CHAT_PROVIDER_IDS } from '../../../shared/lia/provider-catalog'
+import { NATIVE_RECORDING_TRANSCRIPTION_IDS } from '../../../shared/lia/transcription-transport'
 import { canRendererReadLegacySecret } from './transport-config-service'
 
 /**
@@ -48,6 +49,9 @@ function record(scope: string): TransportRecord {
 }
 
 describe('renderer read access to stored credentials', () => {
+  it.each(NATIVE_RECORDING_TRANSCRIPTION_IDS)('denies native recording scope %s before migration', async (id) => {
+    expect(await canRendererReadLegacySecret(id, repository())).toBe(false)
+  })
   it.each(CURATED_CHAT_PROVIDER_IDS)(
     'denies %s: a curated provider executes in main, so the renderer has no use for its key',
     async (id) => {

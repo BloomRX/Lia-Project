@@ -155,6 +155,12 @@ final para segmentos vazios).
 
 ### Transcrição e credenciais restantes
 
+O bloco abaixo registra o estado no corte `e152900`. A transcrição gravada,
+seu cancelamento e a edição nativa de credenciais foram ampliados no corte
+seguinte: [arquitetura, matriz atual e roteiro](LIA-NATIVE-TRANSCRIPTION.md).
+Os protocolos de sessão e leitores legados identificados nessa matriz
+continuam pendentes; não há alegação de segurança global do Renderer.
+
 A rota de gravação padrão derivada de Groq já vai ao Main. O adaptador
 `RecordingTranscriptionExecution` de gravações ainda não recebe o sinal do
 ciclo da captura. O timeout existe no Main, mas fechar ou trocar a captura

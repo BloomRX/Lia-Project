@@ -495,7 +495,10 @@ describe('managed hearing projection (Phase 8.0D SHELL-B1 §23)', () => {
     // Structural proof: the store installs no watcher at all, so nothing can
     // re-assert the microphone after this turn ends.
     const source = await hearingStoreCode()
-    expect(source).not.toMatch(/\bwatch\s*\(/)
+    // A provider-selection watcher now installs Main recording executors; it
+    // must not watch or re-enable the microphone. Behavioral assertions above
+    // verify mic-off survives a second initialization.
+    expect(source).not.toMatch(/\bwatch\s*\(\s*(?:audioDeviceStore|microphoneReady|microphoneBootstrapped)/)
     expect(source).not.toMatch(/\bwatchEffect\s*\(/)
     expect(source).not.toMatch(/\bwatchPostEffect\s*\(/)
     expect(source).not.toMatch(/\bstoreToRefs\s*\(/)

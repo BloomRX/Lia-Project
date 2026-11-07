@@ -14,7 +14,7 @@ import { useLocalStorageManualReset } from '@proj-airi/stage-shared/composables'
 import { refManualReset } from '@vueuse/core'
 import { generateTranscription } from '@xsai/generate-transcription'
 import { defineStore, storeToRefs } from 'pinia'
-import { computed, ref, shallowRef, watch } from 'vue'
+import { computed, onScopeDispose, ref, shallowRef, watch } from 'vue'
 
 import vadWorkletUrl from '../../workers/vad/process.worklet?worker&url'
 
@@ -97,7 +97,7 @@ export interface StreamTranscriptionStreamInputOptions extends Omit<XSAIStreamTr
 export type StreamTranscription = (options: WithUnknown<StreamTranscriptionFileInputOptions | StreamTranscriptionStreamInputOptions>) => AIRIStreamTranscriptionResult
 
 type GenerateTranscriptionResponse = Awaited<ReturnType<typeof generateTranscription>>
-type HearingTranscriptionGenerateResult = GenerateTranscriptionResponse & { mode: 'generate' }
+type HearingTranscriptionGenerateResult = Omit<Partial<GenerateTranscriptionResponse>, 'segments'> & RecordingTranscriptionExecutionResult & { mode: 'generate' }
 type HearingTranscriptionStreamResult = AIRIStreamTranscriptionResult & { mode: 'stream' }
 export type HearingTranscriptionResult = HearingTranscriptionGenerateResult | HearingTranscriptionStreamResult
 
@@ -253,6 +253,7 @@ export function resolveStreamTranscriptionExecutor(providerId: string): StreamTr
  * so a host that forwards it is not re-encoding audio.
  */
 export interface RecordingTranscriptionExecution {
+  signal?: AbortSignal
   providerId: string
   model: string
   file: File
@@ -264,7 +265,7 @@ export interface RecordingTranscriptionExecution {
 export interface RecordingTranscriptionExecutionResult {
   text: string
   /** Kept for parity with the xsai response the caller used to receive. */
-  segments?: unknown
+  segments?: Array<{ text?: string, start?: number, end?: number, avg_logprob?: number, no_speech_prob?: number }>
 }
 
 export type RecordingTranscriptionExecutor = (
@@ -558,12 +559,22 @@ export const useHearingStore = defineStore('hearing-store', () => {
       }
 
       const useVerboseJson = !format && confidenceThreshold.value > CONFIDENCE_THRESHOLD_DISABLED
-      const response = await generateTranscription({
-        ...provider.transcription(model, options?.providerOptions),
-        file: normalizedInput.file,
-        fileName: resolveTranscriptionFileName(normalizedInput.file, normalizedInput.fileName),
-        responseFormat: useVerboseJson ? 'verbose_json' : format,
-      })
+      const recordingExecutor = resolveRecordingTranscriptionExecutor(providerId)
+      const response = recordingExecutor
+        ? await recordingExecutor({
+            providerId,
+            model,
+            file: normalizedInput.file,
+            responseFormat: useVerboseJson ? 'verbose_json' : format,
+            providerOptions: options?.providerOptions,
+            signal: options?.providerOptions?.abortSignal as AbortSignal | undefined,
+          })
+        : await generateTranscription({
+            ...provider.transcription(model, options?.providerOptions),
+            file: normalizedInput.file,
+            fileName: resolveTranscriptionFileName(normalizedInput.file, normalizedInput.fileName),
+            responseFormat: useVerboseJson ? 'verbose_json' : format,
+          })
 
       if (useVerboseJson) {
         if (response.segments) {
@@ -631,6 +642,13 @@ export const useHearingSpeechInputPipeline = defineStore('modules:hearing:speech
   const { activeTranscriptionProvider, activeTranscriptionModel } = storeToRefs(hearingStore)
   const providersStore = useProviderStore()
   const providerStore = useProviderConfigStore()
+  let recordingController: AbortController | undefined
+  function cancelRecordingTranscription() {
+    recordingController?.abort()
+    recordingController = undefined
+  }
+  watch([activeTranscriptionProvider, activeTranscriptionModel], cancelRecordingTranscription, { flush: 'sync' })
+  onScopeDispose(cancelRecordingTranscription)
   const streamingConsumers = new StreamingTranscriptionConsumers()
   const streamingCallbacks = {
     onSentenceEnd: (delta: string) => streamingConsumers.emitSentenceEnd(delta),
@@ -1230,7 +1248,13 @@ export const useHearingSpeechInputPipeline = defineStore('modules:hearing:speech
     }
   }
 
-  async function transcribeForRecording(recording: Blob | null | undefined) {
+  async function transcribeForRecording(recording: Blob | null | undefined, signal?: AbortSignal) {
+    cancelRecordingTranscription()
+    if (signal?.aborted)
+      return
+    const controller = new AbortController()
+    recordingController = controller
+    signal = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal
     error.value = undefined
 
     if (!recording) {
@@ -1271,8 +1295,15 @@ export const useHearingSpeechInputPipeline = defineStore('modules:hearing:speech
       // falls through to the in-process client exactly as before.
       const executor = resolveRecordingTranscriptionExecutor(providerId)
       if (executor) {
-        const executed = await executor({ providerId, model, file, providerOptions })
-        const text = executed.text?.trim() ?? ''
+        const verbose = hearingStore.confidenceThreshold > CONFIDENCE_THRESHOLD_DISABLED
+        const executed = await executor({ providerId, model, file, providerOptions, signal, responseFormat: verbose ? 'verbose_json' : 'json' })
+        if (signal?.aborted)
+          return
+        if (verbose)
+          hearingStore.verboseJsonNotSupported = !Array.isArray(executed.segments)
+        const text = verbose && Array.isArray(executed.segments)
+          ? filterTranscriptionByConfidence(executed.segments, hearingStore.confidenceThreshold)
+          : executed.text?.trim() ?? ''
         if (!text) {
           error.value = `No transcription result returned from provider (empty response for ${model})`
           return
@@ -1281,6 +1312,8 @@ export const useHearingSpeechInputPipeline = defineStore('modules:hearing:speech
       }
 
       const provider = await providersStore.getProviderInstance<TranscriptionProviderWithExtraOptions<string, any>>(providerId)
+      if (signal?.aborted)
+        return
       if (!provider) {
         throw new Error('Failed to initialize speech provider')
       }
@@ -1291,9 +1324,11 @@ export const useHearingSpeechInputPipeline = defineStore('modules:hearing:speech
         model,
         file,
         undefined,
-        { providerOptions },
+        { providerOptions: { ...providerOptions, abortSignal: signal } },
       )
       const text = result.mode === 'stream' ? await result.text : result.text
+      if (signal?.aborted)
+        return
       if (!text || !text.trim()) {
         const responseSummary = result.mode === 'generate'
           ? describeEmptyTranscriptionResponse(result)
@@ -1305,8 +1340,14 @@ export const useHearingSpeechInputPipeline = defineStore('modules:hearing:speech
       return text
     }
     catch (err) {
+      if (signal?.aborted || (err instanceof DOMException && err.name === 'AbortError'))
+        return
       error.value = errorMessage(err)
       console.error('Error generating transcription:', error.value)
+    }
+    finally {
+      if (recordingController === controller)
+        recordingController = undefined
     }
   }
 
@@ -1314,6 +1355,7 @@ export const useHearingSpeechInputPipeline = defineStore('modules:hearing:speech
     error,
 
     transcribeForRecording,
+    cancelRecordingTranscription,
     transcribeForMediaStream,
     removeStreamingTranscriptionConsumer,
     stopStreamingTranscription,

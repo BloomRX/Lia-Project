@@ -13,6 +13,21 @@ commit. Registra **estado**, não narrativa: relatório de rodada vai para
 
 ## 0. Estado agora
 
+**Transcrição gravada nativa — 07/11.** Cancelamento atravessa sessão, Renderer,
+IPC e HTTP Main, com UUID, isolamento por janela, deadline distinta e descarte
+de respostas tardias. Cinco definições de gravação usam `audio-transcription`
+no mesmo repository; o alvo derivado padrão mantém seu registro de chat.
+Playgrounds e filtro de confiança preservados. Quatro editores remotos salvam
+chave explicitamente no cofre, inclusive em settings follower, sem persistir a
+digitação. 760 testes Lia, 78 Core, conjuntos compartilhados e Chromium,
+lint, typechecks e build Stage aprovados. Gate Electron local: 16/16 grupos
+em PowerShell 5.1 e 7; evidências e limites em
+[Transcrição nativa](../architecture/LIA-NATIVE-TRANSCRIPTION.md).
+Não é fechamento global de credenciais: chat fora do catálogo, STT de sessão,
+editor genérico e outros consumidores legados continuam pendentes. Próximo:
+migrar esses consumidores por protocolo e executar o roteiro físico com serviço
+autorizado. Baseline funcional continua `3ef6d11`; nenhum instalador foi validado.
+
 **Fala automática nativa.** O Stage da Lia usa a mesma síntese da prévia para
 as duas definições compatíveis com `audio/speech`. O host injeta a síntese,
 preservando a fila, normalização, reprodução e interrupção do Stage. O painel

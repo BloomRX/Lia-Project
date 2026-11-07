@@ -1,9 +1,10 @@
+import type { RecordingTranscriptionExecution, RecordingTranscriptionExecutionResult } from '@proj-airi/stage-ui/stores/modules/hearing'
+
 import type { LiaTranscriptionRunOutcome, LiaTranscriptionRunRequest } from '../../../shared/eventa/lia-transcription'
-import type { RecordingTranscriptionExecution } from '@proj-airi/stage-ui/stores/modules/hearing'
 
 import { useElectronEventaInvoke } from '@proj-airi/electron-vueuse'
 
-import { electronLiaTranscriptionRun } from '../../../shared/eventa/lia-transcription'
+import { electronLiaTranscriptionCancel, electronLiaTranscriptionRun } from '../../../shared/eventa/lia-transcription'
 
 /**
  * Renderer side of the main-process transcription port.
@@ -14,7 +15,8 @@ import { electronLiaTranscriptionRun } from '../../../shared/eventa/lia-transcri
  * spent.
  */
 export interface MainTranscriptionPort {
-  run: (request: LiaTranscriptionRunRequest) => Promise<LiaTranscriptionRunOutcome>
+  run: (request: LiaTranscriptionRunRequest, signal?: AbortSignal) => Promise<LiaTranscriptionRunOutcome>
+  dispose?: () => void
 }
 
 export function createMainTranscription(): MainTranscriptionPort {
@@ -25,8 +27,54 @@ export function createMainTranscription(): MainTranscriptionPort {
   // host without it (a unit fixture, the browser build) must keep working
   // untouched rather than fail to boot.
   let invoke: ((request: LiaTranscriptionRunRequest) => Promise<LiaTranscriptionRunOutcome>) | undefined
+  let disposed = false
+  const active = new Set<() => void>()
   return {
-    run: request => (invoke ??= useElectronEventaInvoke(electronLiaTranscriptionRun))(request),
+    run(request, signal) {
+      if (disposed || signal?.aborted)
+        return Promise.resolve({ ok: false, code: 'cancelled' })
+      const requestId = crypto.randomUUID()
+      return new Promise<LiaTranscriptionRunOutcome>((resolve) => {
+        let settled = false
+        let dispatched = false
+        let cancelled = false
+        const finish = (outcome: LiaTranscriptionRunOutcome) => {
+          if (settled)
+            return
+          settled = true
+          active.delete(abort)
+          signal?.removeEventListener('abort', abort)
+          resolve(outcome)
+        }
+        function abort() {
+          if (settled)
+            return
+          if (dispatched && !cancelled) {
+            cancelled = true
+            try {
+              void useElectronEventaInvoke(electronLiaTranscriptionCancel)({ requestId }).catch(() => {})
+            }
+            catch { /* Context teardown can make IPC unavailable. Main owns window cleanup. */ }
+          }
+          finish({ ok: false, code: 'cancelled' })
+        }
+        active.add(abort)
+        signal?.addEventListener('abort', abort, { once: true })
+        try {
+          invoke ??= useElectronEventaInvoke(electronLiaTranscriptionRun)
+          dispatched = true
+          void invoke({ ...request, requestId }).then(finish, () => finish({ ok: false, code: 'network' }))
+        }
+        catch {
+          finish({ ok: false, code: 'network' })
+        }
+      })
+    },
+    dispose() {
+      disposed = true
+      for (const abort of active)
+        abort()
+    },
   }
 }
 
@@ -43,8 +91,12 @@ export async function transcribeThroughMain(
   port: MainTranscriptionPort,
   providerId: string,
   request: RecordingTranscriptionExecution,
-): Promise<{ text: string, segments?: unknown }> {
+): Promise<RecordingTranscriptionExecutionResult> {
+  request.signal?.throwIfAborted()
+  if (request.file.size === 0 || request.file.size > 24 * 1024 * 1024)
+    throw new Error('Transcription failed: configuration')
   const bytes = new Uint8Array(await request.file.arrayBuffer())
+  request.signal?.throwIfAborted()
   const options = request.providerOptions ?? {}
   const language = typeof options.language === 'string' ? options.language : undefined
   const prompt = typeof options.prompt === 'string' ? options.prompt : undefined
@@ -59,9 +111,10 @@ export async function transcribeThroughMain(
     ...(language ? { language } : {}),
     ...(prompt ? { prompt } : {}),
     ...(temperature === undefined ? {} : { temperature }),
-  })
+  }, request.signal)
+  request.signal?.throwIfAborted()
   if (!outcome.ok)
-    throw new Error(`Transcription failed: ${outcome.code}`)
+    throw outcome.code === 'cancelled' ? new DOMException('Cancelled', 'AbortError') : new Error(`Transcription failed: ${outcome.code}`)
   return outcome.segments === undefined
     ? { text: outcome.text }
     : { text: outcome.text, segments: outcome.segments }

@@ -4,6 +4,7 @@ import { errorMessageFrom } from '@moeru/std'
 import { useElectronEventaInvoke } from '@proj-airi/electron-vueuse'
 import { registerChatFallbackResolver, registerProviderCredentialResolver, registerProviderModelLister } from '@proj-airi/stage-ui/stores/chat/chat-provider-runtime'
 import { useConsciousnessStore } from '@proj-airi/stage-ui/stores/modules/consciousness'
+import { registerProviderCredentialConfigPort } from '@proj-airi/stage-ui/stores/providers/credential-config-port'
 import { defineStore } from 'pinia'
 import { onScopeDispose, ref } from 'vue'
 
@@ -19,6 +20,7 @@ import {
   electronLiaSecretHas,
   electronLiaSecretSet,
 } from '../../../shared/eventa'
+import { supportsMainTranscription } from '../../../shared/lia/transcription-transport'
 import { removeLegacyApiKey, stripCredentialField } from '../../services/lia/legacy-credential-cleanup'
 import { createMainTransportExecution } from '../../services/lia/main-transport-execution'
 import { createNativeProviderRuntime } from '../../services/lia/native-provider-runtime'
@@ -325,6 +327,7 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
   const rejectedTransports = new Set<string>()
   let disposed = false
   let uninstallFactory: (() => void) | undefined
+  let uninstallCredentialConfig: (() => void) | undefined
   let migration: Promise<void> | undefined
   async function initializeTransports() {
     if (!migration) {
@@ -423,6 +426,7 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
   onScopeDispose(() => {
     disposed = true
     uninstallFactory?.()
+    uninstallCredentialConfig?.()
     registerProviderModelLister(undefined)
     nativeRuntime.dispose()
   })
@@ -513,7 +517,7 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
    * one — never with someone else's.
    */
   async function resolveApiKey(providerId: string): Promise<string | undefined> {
-    if (!rendererMayHoldCredential(providerId))
+    if (isNativeTransportDefinition(providerId) || supportsMainTranscription(providerConfig.get(providerId)?.definitionId ?? providerId) || !rendererMayHoldCredential(providerId))
       return undefined
     // Derived targets resolve through their alias; everything else is identity.
     return secretGet({ scope: secretScopeFor(providerId), key: API_KEY_NAME })
@@ -540,7 +544,8 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
    * here — the registered credential resolver supplies it in memory.
    */
   async function ensureProviderRecord(providerId: string, baseUrl?: string) {
-    if (isNativeTransportDefinition(providerId) || transports.get(providerId)) {
+    const definitionId = providerConfig.get(providerId)?.definitionId ?? providerId
+    if (isNativeTransportDefinition(providerId) || supportsMainTranscription(definitionId) || transports.get(providerId)) {
       await initializeTransports()
       await transports.refresh()
       const previous = transports.get(providerId)
@@ -571,7 +576,7 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
           .flatMap(target => target?.modelId ? [target.modelId] : [])
         const build = (current: typeof previous) => current
           ? { ...current, baseUrl: endpoint, modelIds: [...new Set([...current.modelIds, ...models])] }
-          : toTransportRecord(providerId, providerId, { baseUrl: endpoint }, models)
+          : toTransportRecord(providerId, definitionId, { baseUrl: endpoint }, models)
         // Activation runs before every send, so an unconditional write would
         // bump the revision — and the main process invalidates in-flight jobs on
         // every revision — for a record that did not change.
@@ -583,7 +588,6 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
       const owned = transports.get(providerId)
       return providerConfig.get(providerId) ?? providerConfig.ensure(providerId, owned?.definitionId ?? providerId, {})
     }
-    const definitionId = providerId
     if (!providerConfig.get(providerId)) {
       providerConfig.ensure(providerId, definitionId, baseUrl ? { baseUrl } : {})
     }
@@ -1039,8 +1043,28 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
    *
    * Idempotent.
    */
+  function installCredentialConfig() {
+    uninstallCredentialConfig ??= registerProviderCredentialConfigPort({
+      owns: id => supportsMainTranscription(providerConfig.get(id)?.definitionId ?? id) && (providerConfig.get(id)?.definitionId ?? id) !== 'app-local-audio-transcription',
+      has: hasApiKey,
+      async save(id, value) {
+        if (!supportsMainTranscription(providerConfig.get(id)?.definitionId ?? id) || !/^[\x21-\x7E]{1,16384}$/.test(value))
+          return false
+        const endpoint = providerConfig.getConfig(id)?.baseUrl
+        await ensureProviderRecord(id, typeof endpoint === 'string' && endpoint.trim() ? endpoint : undefined)
+        const saved = await setApiKey(id, value)
+        if (saved) {
+          clearLegacyCredential(id)
+          providerActivation.markConfigured(id)
+        }
+        return saved
+      },
+    })
+  }
+
   function registerRuntimeExtensions() {
     registerChatTransport()
+    installCredentialConfig()
 
     // Supply the per-use vault apiKey when the provider runtime builds an
     // instance for a Lia-configured provider. Absent a stored secret it returns
@@ -1062,7 +1086,7 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
        * stays where it already was. It also covers `lia-groq-transcription`,
        * which is a derived transcription target rather than a catalog id.
        */
-      if (isNativeTransportDefinition(providerId) || providerId === LIA_GROQ_TRANSCRIPTION_PROVIDER_ID)
+      if (isNativeTransportDefinition(providerId) || supportsMainTranscription(providerConfig.get(providerId)?.definitionId ?? providerId) || providerId === LIA_GROQ_TRANSCRIPTION_PROVIDER_ID)
         return undefined
       /**
        * The same refusal, by capability, for everything else.
@@ -1109,6 +1133,9 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
       return next ? { providerId: next.providerId, modelId: next.modelId } : undefined
     })
   }
+
+  // Install before child components render, including follower settings windows.
+  installCredentialConfig()
 
   return {
     loadedConfig,

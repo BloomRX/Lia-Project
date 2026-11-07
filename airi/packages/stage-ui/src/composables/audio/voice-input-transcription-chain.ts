@@ -1,4 +1,5 @@
 export interface VoiceInputTranscriptionTicket {
+  signal: AbortSignal
   /** Returns whether this queued transcription still belongs to the active listening session. */
   isCurrent: () => boolean
 }
@@ -15,10 +16,12 @@ export interface VoiceInputTranscriptionChain {
 export function createVoiceInputTranscriptionChain(): VoiceInputTranscriptionChain {
   let tail = Promise.resolve()
   let generation = 0
+  let controller = new AbortController()
 
   function enqueue<T>(task: (ticket: VoiceInputTranscriptionTicket) => Promise<T> | T) {
     const taskGeneration = generation
     const ticket: VoiceInputTranscriptionTicket = {
+      signal: controller.signal,
       isCurrent: () => taskGeneration === generation,
     }
 
@@ -38,6 +41,8 @@ export function createVoiceInputTranscriptionChain(): VoiceInputTranscriptionCha
   }
 
   function reset() {
+    controller.abort()
+    controller = new AbortController()
     generation += 1
     tail = Promise.resolve()
   }

@@ -243,13 +243,13 @@ describe('the boundary of the rule — legacy consumers are not broken', () => {
     expect(ipc.secretGet).toHaveBeenCalledWith({ scope: LEGACY_CHAT, key: 'apiKey' })
   })
 
-  it('still resolves a speech-to-text provider, the other renderer task', async () => {
+  it('refuses recording transcription credentials now executed by Main', async () => {
     installRuntime()
     useProviderConfigStore().ensureProvider(LEGACY_STT, LEGACY_STT, { baseUrl: 'https://api.openai.com/v1/', model: 'whisper-1' })
 
-    await useProviderStore().getProviderInstance(LEGACY_STT)
-
-    expect(ipc.secretGet).toHaveBeenCalledWith({ scope: LEGACY_STT, key: 'apiKey' })
+    const { getProviderCredentialResolver } = await import('@proj-airi/stage-ui/stores/chat/chat-provider-runtime')
+    expect(await getProviderCredentialResolver()!(LEGACY_STT)).toBeUndefined()
+    expect(ipc.secretGet).not.toHaveBeenCalled()
   })
 
   it('keeps every curated id refused, including the derived transcription target', async () => {

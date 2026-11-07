@@ -22,6 +22,8 @@ import { defineInvokeEventa } from '@moeru/eventa'
  * sides of the boundary.
  */
 export interface LiaTranscriptionRunRequest {
+  /** Correlation generated before dispatch, scoped to the calling window. */
+  requestId?: string
   /** A curated provider id whose transport record authorizes the endpoint. */
   providerId: string
   model: string
@@ -41,7 +43,7 @@ export interface LiaTranscriptionRunResult {
   status: number
   text: string
   /** `verbose_json` segments, when the provider returned them. */
-  segments?: Array<{ text?: string, start?: number, end?: number, [key: string]: unknown }>
+  segments?: Array<{ text?: string, start?: number, end?: number, avg_logprob?: number, no_speech_prob?: number }>
   language?: string
 }
 
@@ -55,4 +57,8 @@ export type LiaTranscriptionRunOutcome = LiaTranscriptionRunResult | LiaTranscri
 
 export const electronLiaTranscriptionRun = defineInvokeEventa<LiaTranscriptionRunOutcome, LiaTranscriptionRunRequest>(
   'eventa:invoke:lia:transcription:run',
+)
+
+export const electronLiaTranscriptionCancel = defineInvokeEventa<{ ok: boolean }, { requestId: string }>(
+  'eventa:invoke:lia:transcription:cancel',
 )

@@ -6,6 +6,7 @@ import { generateText } from '@xsai/generate-text'
 import { streamText } from '@xsai/stream-text'
 
 import { createNativeSpeechSynthesis } from '../../src/renderer/services/lia/main-speech'
+import { createMainTranscription } from '../../src/renderer/services/lia/main-transcription'
 import { createMainTransportExecution } from '../../src/renderer/services/lia/main-transport-execution'
 import { createNativeProviderRuntime } from '../../src/renderer/services/lia/native-provider-runtime'
 import { legacyTransportCandidates, toTransportRecord } from '../../src/renderer/services/lia/transport-config'
@@ -19,6 +20,9 @@ import {
 } from '../../src/shared/eventa'
 import { electronLiaSpeechConfigGet, electronLiaSpeechConfigSave } from '../../src/shared/eventa/lia-speech-config'
 import { electronLiaTransportsGet, electronLiaTransportsMutate } from '../../src/shared/eventa/lia-transports'
+
+const transcription = createMainTranscription()
+let transcriptionController: AbortController | undefined
 
 const invokeSet = useElectronEventaInvoke(electronLiaSecretSet)
 const invokeAvailable = useElectronEventaInvoke(electronLiaSecretEncryptionAvailable)
@@ -145,9 +149,24 @@ for (const kind of ['json', 'stream', 'discover'] as const) {
   })
 }
 document.querySelector('#cancel')!.addEventListener('click', () => controller?.abort())
-window.addEventListener('beforeunload', () => native.dispose())
+window.addEventListener('beforeunload', () => {
+  native.dispose()
+  transcription.dispose?.()
+})
 
 const api = {
+  transcribeFixtureRecording: async (providerId: string) => {
+    transcriptionController = new AbortController()
+    return transcription.run({
+      providerId,
+      model: 'fixture-transcription',
+      bytes: new TextEncoder().encode('RIFF-LIA-SYNTHETIC-AUDIO'),
+      fileName: 'fixture.wav',
+      mimeType: 'audio/wav',
+      language: 'pt',
+    }, transcriptionController.signal)
+  },
+  cancelFixtureTranscription: () => transcriptionController?.abort(),
   speechConfig: (providerId: string) => useElectronEventaInvoke(electronLiaSpeechConfigGet)({ providerId }),
   saveSpeechConfig: (input: LiaSpeechConfigSaveInput) =>
     useElectronEventaInvoke(electronLiaSpeechConfigSave)(input),

@@ -3,6 +3,8 @@ import { getProviderCredentialResolver } from '@proj-airi/stage-ui/stores/chat/c
 import {
   resetRecordingTranscriptionExecutorsForTesting,
   resolveRecordingTranscriptionExecutor,
+  useHearingSpeechInputPipeline,
+  useHearingStore,
 } from '@proj-airi/stage-ui/stores/modules/hearing'
 import { useProviderConfigStore } from '@proj-airi/stage-ui/stores/providers/config'
 import { useProviderStore } from '@proj-airi/stage-ui/stores/providers/provider'
@@ -115,6 +117,51 @@ function audio() {
 }
 
 describe('speech-to-text through the main process', () => {
+  it('rotates a native recording credential only on explicit save and never returns it', async () => {
+    const id = 'openai-compatible-audio-transcription'
+    useProviderConfigStore().ensureProvider(id, id, { baseUrl: 'https://speech.invalid/v1/' })
+    ipc.seed(id, 'synthetic-old')
+    // Store construction installs the port in follower settings windows too.
+    useLiaProviderStore()
+    const { getProviderCredentialConfigPort } = await import('@proj-airi/stage-ui/stores/providers/credential-config-port')
+    const port = getProviderCredentialConfigPort(id)!
+    expect(await port.has(id)).toBe(true)
+    expect(await port.save(id, 'synthetic-rotated')).toBe(true)
+    expect(ipc.secretSet).toHaveBeenCalledWith({ scope: id, key: 'apiKey', value: 'synthetic-rotated' })
+    expect(useProviderConfigStore().getProviderConfig(id)).not.toHaveProperty('apiKey')
+    expect(ipc.secretGet).not.toHaveBeenCalled()
+  })
+  it('runs legacy file playground requests through Main without building an SDK client', async () => {
+    useProviderConfigStore().ensureProvider('openai-compatible-audio-transcription', 'openai-compatible-audio-transcription', { baseUrl: 'https://speech.invalid/v1/' })
+    useLiaProviderStore().registerChatTransport()
+    await useLiaHearingStore().initialize()
+    const provider = await useProviderStore().getProviderInstance('openai-compatible-audio-transcription')
+    const result = await useHearingStore().transcription('openai-compatible-audio-transcription', provider as never, 'custom-model', audio(), 'json')
+    expect(result).toMatchObject({ text: 'transcrição sintética' })
+    expect(ipc.transcriptionRun).toHaveBeenCalledWith(expect.objectContaining({ providerId: 'openai-compatible-audio-transcription', model: 'custom-model' }))
+    expect(ipc.secretGet).not.toHaveBeenCalled()
+  })
+
+  it('preserves the confidence filter for native recording and sends the edited endpoint to Main', async () => {
+    const id = 'openai-compatible-audio-transcription'
+    const config = useProviderConfigStore()
+    config.ensureProvider(id, id, { baseUrl: 'https://first.invalid/v1/' })
+    useLiaProviderStore().registerChatTransport()
+    await useLiaHearingStore().initialize()
+    const hearing = useHearingStore()
+    hearing.activeTranscriptionProvider = id
+    hearing.activeTranscriptionModel = 'selected'
+    hearing.confidenceThreshold = -1
+    ipc.transcriptionRun.mockResolvedValueOnce({ ok: true, status: 200, text: 'good noise', segments: [{ text: 'good', avg_logprob: -0.2 }, { text: 'noise', avg_logprob: -2 }] } as never)
+    const pipeline = useHearingSpeechInputPipeline()
+    expect(await pipeline.transcribeForRecording(audio())).toBe('good')
+    expect(ipc.transcriptionRun).toHaveBeenLastCalledWith(expect.objectContaining({ responseFormat: 'verbose_json' }))
+    config.ensureProvider(id, id).config.baseUrl = 'https://second.invalid/v1/'
+    await pipeline.transcribeForRecording(audio())
+    expect(useLiaProviderStore().providerBaseUrl(id)).toBe('https://second.invalid/v1/')
+    expect(ipc.secretGet).not.toHaveBeenCalled()
+  })
+
   it('registers an executor for the projected target and persists a record main can authorize', async () => {
     // The state a user reaches by saving a Groq key in the Launcher: the shared
     // provider config carries the endpoint. The provider metadata catalogue is
@@ -150,7 +197,7 @@ describe('speech-to-text through the main process', () => {
     expect(ipc.transcriptions).toHaveLength(1)
     const [request] = ipc.transcriptions as Array<Record<string, unknown>>
     expect(request).toMatchObject({ providerId: 'groq', model: MODEL, language: 'pt', fileName: 'recording.wav', mimeType: 'audio/wav' })
-    expect(Object.keys(request).sort()).toEqual(['bytes', 'fileName', 'language', 'mimeType', 'model', 'providerId'])
+    expect(Object.keys(request).sort()).toEqual(['bytes', 'fileName', 'language', 'mimeType', 'model', 'providerId', 'requestId'])
     expect(JSON.stringify(ipc.transcriptions)).not.toContain(SECRET)
     // The audio survived as bytes, not as a re-encoded string.
     expect(Array.from(request.bytes as Uint8Array)).toEqual([0x52, 0x49, 0x46, 0x46, 0x00, 0x2A])

@@ -13,6 +13,7 @@ import { electronLiaSpeechConfigGet, electronLiaSpeechConfigSave } from '../../.
 import { electronLiaTransportsGet, electronLiaTransportsMutate } from '../../../shared/eventa/lia-transports'
 import { isCuratedChatProvider } from '../../../shared/lia/provider-catalog'
 import { supportsMainSpeech } from '../../../shared/lia/speech-transport'
+import { supportsMainTranscription } from '../../../shared/lia/transcription-transport'
 import { createSpeechConfigService } from './speech-config-service'
 import { registerLiaTransportExecutionBridge } from './transport-execution-service'
 
@@ -49,7 +50,7 @@ export async function canRendererReadLegacySecret(
   scope: string,
   repository: { read: () => Promise<TransportSnapshot> } = getApplicationRepository(),
 ): Promise<boolean> {
-  if (isCuratedChatProvider(scope) || supportsMainSpeech(scope))
+  if (isCuratedChatProvider(scope) || supportsMainSpeech(scope) || supportsMainTranscription(scope))
     return false
   try {
     const snapshot = await repository.read()

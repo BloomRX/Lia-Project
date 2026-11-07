@@ -136,7 +136,8 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
   const curated = ['openai', 'groq', 'cerebras-ai', 'anthropic', 'xai', 'mistral-ai', 'openrouter-ai', 'openai-compatible', 'lm-studio', 'ollama']
   const keyless = new Set(['lm-studio', 'ollama'])
   const speechProvider = 'openai-audio-speech'
-  const secrets = { generic: `synthetic-A-${randomUUID()}`, local: `synthetic-B-${randomUUID()}`, [speechProvider]: `synthetic-speech-${randomUUID()}` }
+  const transcriptionProvider = 'openai-compatible-audio-transcription'
+  const secrets = { [transcriptionProvider]: `synthetic-transcription-${randomUUID()}`, generic: `synthetic-A-${randomUUID()}`, local: `synthetic-B-${randomUUID()}`, [speechProvider]: `synthetic-speech-${randomUUID()}` }
   for (const id of curated) {
     if (!keyless.has(id))
       secrets[id] = `synthetic-${id}-${randomUUID()}`
@@ -186,7 +187,8 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
     let body = ''
     for await (const chunk of request)
       body += chunk.toString()
-    const data = body ? JSON.parse(body) : {}
+    const multipart = String(request.headers['content-type'] ?? '').startsWith('multipart/form-data;')
+    const data = multipart ? { model: body.match(/name="model"\r\n\r\n([^\r\n]*)/)?.[1] } : body ? JSON.parse(body) : {}
     const path = request.url
     // The first path segment names the provider under test, so each curated
     // provider is authenticated with its own credential and nothing else.
@@ -209,6 +211,25 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
     })
     if (!entry.authenticated) {
       response.writeHead(401, { 'content-type': 'application/json' }).end('{}')
+      return
+    }
+    if (segment === transcriptionProvider && path.endsWith('/audio/transcriptions')) {
+      entry.validTranscription = multipart && data.model === 'fixture-transcription'
+        && body.includes('name="file"; filename="fixture.wav"')
+        && body.includes('Content-Type: audio/wav')
+        && body.includes('RIFF-LIA-SYNTHETIC-AUDIO')
+        && body.includes('name="language"\r\n\r\npt')
+      if (!entry.validTranscription) {
+        response.writeHead(400, { 'content-type': 'application/json' }).end('{}')
+        return
+      }
+      response.writeHead(200, { 'content-type': 'application/json' })
+      if (path.includes('/cancel/')) {
+        // Deliver a partial body so cancellation must also interrupt body reads.
+        response.write('{"text":"uncommitted')
+        return
+      }
+      response.end(JSON.stringify({ text: 'Transcri��o Electron Lia', language: 'pt' }))
       return
     }
     if (path === `/${speechProvider}/v1/audio/speech`) {
@@ -365,7 +386,36 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
     assert.equal(await page.evaluate(id => window.providerGate.readProtectedSecret(id), speechProvider), undefined)
     assert.deepEqual(await page.evaluate(id => window.providerGate.synthesizeFixtureSpeech(id), speechProvider), [1, 2, 3])
     assert.equal(report.requests.at(-1).authenticated, true)
-    groups.pass(4, 'JSON, SSE, discovery, custom model, separate credentials and Main-native speech bytes')
+    assert.equal(await page.evaluate(({ id, value }) => window.providerGate.seed(id, value), { id: transcriptionProvider, value: secrets[transcriptionProvider] }), true)
+    const seedTranscription = async (suffix = '') => {
+      const reply = await page.evaluate(() => window.providerGate.transports())
+      assert.equal(reply.ok, true)
+      const record = {
+        id: transcriptionProvider,
+        providerId: transcriptionProvider,
+        definitionId: transcriptionProvider,
+        type: 'http',
+        protocol: 'audio-transcription',
+        baseUrl: `${base}/${transcriptionProvider}/${suffix}v1/`,
+        adapterOptions: {},
+        modelIds: ['fixture-transcription'],
+        enabled: true,
+        metadata: {},
+        credentialRef: { scope: transcriptionProvider, key: 'apiKey' },
+      }
+      const saved = await page.evaluate(input => window.providerGate.mutate(input), { kind: 'put', expectedRevision: reply.snapshot.revision, record })
+      assert.equal(saved.ok, true)
+    }
+    await seedTranscription()
+    assert.equal(await page.evaluate(id => window.providerGate.readProtectedSecret(id), transcriptionProvider), undefined)
+    const recognized = await page.evaluate(id => window.providerGate.transcribeFixtureRecording(id), transcriptionProvider)
+    assert.deepEqual(recognized, { ok: true, status: 200, text: 'Transcri��o Electron Lia', language: 'pt' })
+    assert.equal(report.requests.at(-1).authenticated, true)
+    assert.equal(report.requests.at(-1).validTranscription, true)
+    const transcriptionState = JSON.parse(await readFile(join(root, 'main-state.json'), 'utf8'))
+    assert.ok(transcriptionState.readScopes.includes(transcriptionProvider), 'transcription must resolve its credential in Main')
+    assert.ok(!JSON.stringify(recognized).includes(secrets[transcriptionProvider]))
+    groups.pass(4, 'JSON, SSE, discovery, custom model, separate credentials, Main-native speech and recording transcription')
 
     groups.begin(5)
     const secondWindowId = await application.evaluate(async ({ BrowserWindow }, preloadPath) => {
@@ -470,7 +520,18 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
     await page.getByRole('button', { name: 'Cancelar', exact: true }).click()
     assert.equal((await curatedCancel).code, 'cancelled')
     await waitUntil(() => report.requests.find(entry => entry.path === '/groq/cancel/v1/chat/completions').closed, 'curated cancel did not release the real HTTP response')
-    groups.pass(9, 'cancellation on a curated provider closes the real HTTP response')
+    await seedTranscription('cancel/')
+    const cancelledTranscription = page.evaluate(id => window.providerGate.transcribeFixtureRecording(id), transcriptionProvider)
+    const transcriptionCancelPath = `/${transcriptionProvider}/cancel/v1/audio/transcriptions`
+    await waitUntil(() => report.requests.some(entry => entry.path === transcriptionCancelPath), 'transcription cancel request was not observed')
+    await page.evaluate(() => window.providerGate.cancelFixtureTranscription())
+    assert.deepEqual(await cancelledTranscription, { ok: false, code: 'cancelled' })
+    await waitUntil(() => report.requests.find(entry => entry.path === transcriptionCancelPath).closed, 'transcription cancellation did not close the real HTTP response')
+    const transcriptionCancelledRequest = report.requests.find(entry => entry.path === transcriptionCancelPath)
+    assert.equal(transcriptionCancelledRequest.authenticated, true)
+    assert.equal(transcriptionCancelledRequest.validTranscription, true)
+    assert.equal(await page.evaluate(id => window.providerGate.readProtectedSecret(id), transcriptionProvider), undefined)
+    groups.pass(9, 'curated chat and recording transcription cancellation close their real HTTP responses')
 
     groups.begin(10)
     // A disposed port refuses new work instead of silently re-opening a channel.

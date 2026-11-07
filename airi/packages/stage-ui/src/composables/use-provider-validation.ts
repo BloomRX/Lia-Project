@@ -12,6 +12,7 @@ import { useRouter } from 'vue-router'
 
 import { selectProviderMetadata } from '../libs/providers/metadata'
 import { useProviderConfigStore } from '../stores/providers/config'
+import { getProviderCredentialConfigPort } from '../stores/providers/credential-config-port'
 import { useProviderStore } from '../stores/providers/provider'
 import { useAnalytics } from './use-analytics'
 
@@ -28,7 +29,7 @@ function providerModeForAnalytics(providerId: string): ProviderMode {
 }
 
 export function useProviderValidation(providerId: string) {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const router = useRouter()
   const providersStore = useProviderStore()
   const providerStore = useProviderConfigStore()
@@ -125,6 +126,23 @@ export function useProviderValidation(providerId: string) {
     let finalValidationMessage = ''
 
     try {
+      const host = getProviderCredentialConfigPort(providerId)
+      if (host) {
+        // Configuration readiness only. The file playground performs the real
+        // transcription; never build an authenticated validator in Renderer.
+        const endpoint = credentials.value.baseUrl || providersStore.getDefaultProviderConfig(providerId)?.baseUrl
+        const url = new URL(typeof endpoint === 'string' ? endpoint : '')
+        const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)
+        const safe = (url.protocol === 'https:' || (url.protocol === 'http:' && loopback)) && !url.username && !url.password && !url.search && !url.hash
+        isValid.value = safe && await host.has(providerId)
+        providerStore.setProviderStatus(providerId, isValid.value ? 'configured' : 'unconfigured')
+        if (isValid.value)
+          providerStore.markProviderAdded(providerId)
+        finalValidationMessage = locale.value.startsWith('pt')
+          ? (isValid.value ? 'Configuração salva. Transcreva um áudio para testar a conexão.' : 'Confira o endereço e salve uma chave para transcrever.')
+          : (isValid.value ? 'Configuration saved. Transcribe audio to test the connection.' : 'Check the address and save a key to transcribe.')
+        return
+      }
       // Settings pages always skip chat ping check during automatic validation
       // to avoid unexpected API billing. Users can trigger it manually.
       const validationResult = await providersStore.validateProviderConfig(providerId, configToValidate(), {
@@ -207,6 +225,8 @@ export function useProviderValidation(providerId: string) {
   }
 
   async function shouldValidateConfiguration() {
+    if (getProviderCredentialConfigPort(providerId))
+      return true
     const definition = providersStore.getProviderDefinition(providerId)
     return await definition.validationRequiredWhen?.(credentials.value) ?? false
   }
@@ -240,6 +260,11 @@ export function useProviderValidation(providerId: string) {
     // Reset manual test state when credentials actually change
     manualTestPassed.value = false
     manualTestMessage.value = ''
+  })
+
+  watch(() => providerStore.getProvider(providerId)?.status, () => {
+    if (getProviderCredentialConfigPort(providerId))
+      debouncedValidateConfiguration()
   })
 
   function handleResetSettings() {

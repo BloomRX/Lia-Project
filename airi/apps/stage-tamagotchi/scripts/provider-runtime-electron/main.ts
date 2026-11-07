@@ -9,7 +9,8 @@ import { app, BrowserWindow, ipcMain, safeStorage } from 'electron'
 import { createLiaProductConfig } from '../../src/main/configs/lia'
 import { registerLiaProviderConfigBridge } from '../../src/main/services/lia/provider-config-service'
 import { createLiaSecretVault, registerLiaSecretsBridge } from '../../src/main/services/lia/secrets-service'
-import { canRendererReadLegacySecret, registerLiaTransportConfigBridge } from '../../src/main/services/lia/transport-config-service'
+import { registerLiaTranscriptionBridge } from '../../src/main/services/lia/transcription-service'
+import { canRendererReadLegacySecret, getApplicationRepository, registerLiaTransportConfigBridge } from '../../src/main/services/lia/transport-config-service'
 
 const root = process.env.LIA_PROVIDER_GATE_DIR
 const preload = process.env.LIA_PROVIDER_GATE_PRELOAD
@@ -39,6 +40,8 @@ void app.whenReady().then(async () => {
   registerLiaSecretsBridge({ context, vault: measuredVault, allowRendererRead: canRendererReadLegacySecret })
   registerLiaProviderConfigBridge({ context, liaProductConfig: createLiaProductConfig() })
   registerLiaTransportConfigBridge({ context, vault: measuredVault })
+  const transcription = registerLiaTranscriptionBridge({ context, repository: getApplicationRepository(), vault: measuredVault })
+  app.on('before-quit', () => transcription.dispose())
 
   const window = new BrowserWindow({
     title: 'Lia — Gate Electron local',

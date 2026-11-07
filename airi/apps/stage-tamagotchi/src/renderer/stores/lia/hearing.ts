@@ -2,9 +2,10 @@ import { useElectronEventaInvoke } from '@proj-airi/electron-vueuse'
 import { registerRecordingTranscriptionExecutor, useHearingStore } from '@proj-airi/stage-ui/stores/modules/hearing'
 import { useSettingsAudioDevice } from '@proj-airi/stage-ui/stores/settings'
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { onScopeDispose, ref, watch } from 'vue'
 
 import { electronLiaHearingConfigGet } from '../../../shared/eventa'
+import { NATIVE_RECORDING_TRANSCRIPTION_IDS, supportsMainTranscription } from '../../../shared/lia/transcription-transport'
 import { createMainTranscription, transcribeThroughMain } from '../../services/lia/main-transcription'
 import { LIA_GROQ_TRANSCRIPTION_PROVIDER_ID as TRANSCRIPTION_PROVIDER_ID, useLiaProviderStore } from './provider'
 import { useLiaProviderConfigFacade } from './provider-config-facade'
@@ -176,6 +177,12 @@ export const useLiaHearingStore = defineStore('lia-hearing', () => {
   const getHearingConfig = useElectronEventaInvoke(electronLiaHearingConfigGet)
   const hearingStore = useHearingStore()
   const transcription = createMainTranscription()
+  onScopeDispose(() => transcription.dispose?.())
+  const registrations = new Set<string>()
+  onScopeDispose(() => {
+    for (const id of registrations)
+      registerRecordingTranscriptionExecutor(id, undefined)
+  })
   const providerConfig = useLiaProviderConfigFacade()
   const providerRuntime = useLiaProviderRuntime()
   const liaProviderStore = useLiaProviderStore()
@@ -328,21 +335,41 @@ export const useLiaHearingStore = defineStore('lia-hearing', () => {
    * true — text conversation is unaffected — and the transcription itself will
    * report a coded failure when it is attempted.
    */
-  async function prepareTranscriptionExecution(providerId: string): Promise<void> {
+  async function prepareTranscriptionExecution(providerId: string, eager = true): Promise<void> {
     // A host that has no main-process transcription bridge (unit fixtures, the
     // browser build) keeps the previous in-process path.
-    if (providerId !== TRANSCRIPTION_PROVIDER_ID)
+    const definitionId = providerConfig.get(providerId)?.definitionId ?? providerId
+    if (providerId !== TRANSCRIPTION_PROVIDER_ID && !supportsMainTranscription(definitionId))
+      return
+    const scope = providerId === TRANSCRIPTION_PROVIDER_ID ? TRANSCRIPTION_SCOPE : providerId
+    // Register before any await: preparation failures must never fall through
+    // to an authenticated legacy client in this renderer.
+    registrations.add(providerId)
+    registerRecordingTranscriptionExecutor(providerId, async (request) => {
+      request.signal?.throwIfAborted()
+      const endpoint = scope !== TRANSCRIPTION_SCOPE ? providerConfig.getConfig(scope)?.baseUrl : undefined
+      await liaProviderStore.ensureProviderRecord(scope, typeof endpoint === 'string' && endpoint.trim() ? endpoint : undefined)
+      request.signal?.throwIfAborted()
+      return transcribeThroughMain(transcription, scope, request)
+    })
+    if (!eager)
       return
     try {
-      await liaProviderStore.ensureProviderRecord(TRANSCRIPTION_SCOPE)
-      registerRecordingTranscriptionExecutor(TRANSCRIPTION_PROVIDER_ID, request =>
-        transcribeThroughMain(transcription, TRANSCRIPTION_SCOPE, request))
+      await liaProviderStore.ensureProviderRecord(scope)
       reportDiagnostic('transcription-bridge-installed', { providerId })
     }
     catch (error) {
       reportDiagnostic('transcription-bridge-skipped', describeFailure(error))
     }
   }
+
+  for (const id of NATIVE_RECORDING_TRANSCRIPTION_IDS)
+    void prepareTranscriptionExecution(id, false)
+
+  watch(() => hearingStore.activeTranscriptionProvider, (id) => {
+    if (id !== TRANSCRIPTION_PROVIDER_ID)
+      void prepareTranscriptionExecution(id)
+  }, { flush: 'sync' })
 
   /**
    * Reads the canonical Hearing facts and projects them. Safe to call more than

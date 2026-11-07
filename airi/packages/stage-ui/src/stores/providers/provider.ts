@@ -94,17 +94,22 @@ const useProviderStateStore = defineStore('provider-state', () => {
  * that is deliberately kept out of localStorage and out of its own config file.
  * The merged credential lives only in the in-memory config passed to
  * `createProvider`; it is never persisted or logged.
+ * With a resolver installed, legacy config keys are excluded even when the
+ * resolver declines: only an explicitly resolved key may reach the provider.
  */
 export async function withResolvedCredential(providerId: string, config: Record<string, unknown>): Promise<Record<string, unknown>> {
   const resolver = getProviderCredentialResolver()
   if (!resolver)
     return config
 
+  const resolvedConfig = { ...config }
+  delete resolvedConfig.apiKey
+
   const extra = await resolver(providerId)
   if (!extra || typeof extra !== 'object')
-    return config
+    return resolvedConfig
 
-  return { ...config, ...extra }
+  return { ...resolvedConfig, ...extra }
 }
 
 /**

@@ -1696,3 +1696,22 @@ Cada pacote contém `report.json`, `electron.log`, `electron.png`,
 frame descartado. A coleta de processos é amostral e pode perder processos
 muito breves. Reinstalação de dependências/runtime, Stage completo, provedores
 externos, voz remota e instalador não foram exercitados nesta rodada.
+
+
+## 19. Transcrição gravada e cancelamento nativos — 07/11/2026
+
+A rota derivada padrão e cinco definições de gravação executam no Main,
+com UUID por operação, cancelamento HTTP, deadline distinta, isolamento por
+janela e limpeza no encerramento. Registros usam o mesmo repository de
+transportes, com protocolo `audio-transcription`; modelos e IDs personalizados
+são preservados. Os quatro editores remotos salvam a chave explicitamente no
+cofre, incluindo janelas follower, sem persistir a digitação no v-model.
+
+Corrigido o bypass de `apiKey` histórico quando o resolver recusava fornecê-lo.
+Isso não fecha todos os leitores do Stage: chat fora do catálogo, autenticação
+de sessão STT, catálogo/editor genérico e outros consumidores legados continuam
+identificados. Não removemos dependências AIRI nem declaramos desacoplamento.
+
+A [matriz atual, evidências e roteiro manual](LIA-NATIVE-TRANSCRIPTION.md)
+diferencia execução Main, preservação local e pendências. Os resultados de
+cortes anteriores acima são históricos e não substituem essa matriz.

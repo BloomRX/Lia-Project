@@ -40,8 +40,9 @@ export interface ChatProviderCandidate {
 
 /**
  * Returns per-use credentials (e.g. `{ apiKey: '…' }`) to merge into a
- * provider config at instance-build time. Returning `undefined` leaves the
- * config untouched. Values are held in memory only for the current build.
+ * provider config at instance-build time. With a resolver installed, legacy
+ * apiKey fields are removed before merging its explicit result. Returning
+ * undefined declines the credential. Without a resolver, web behavior remains.
  */
 export type ProviderCredentialResolver = (
   providerId: string,

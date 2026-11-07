@@ -39,6 +39,13 @@ function success(result: TransportResult) {
 }
 
 describe('Lia transport repository', () => {
+  it('persists native recording transcription independently from chat and speech', async () => {
+    const { path, repository } = await fixture()
+    const transcription = { ...record(), protocol: 'audio-transcription' as const }
+    assert.equal(isTransportRecord(transcription), true)
+    success(await repository.mutate({ kind: 'put', expectedRevision: 0, record: transcription }))
+    assert.equal((await createTransportRepository(path).read()).records[0].protocol, 'audio-transcription')
+  })
   it('bounds mutation envelopes and preserves unknown legacy removal protection', async () => {
     const { path, repository } = await fixture()
     assert.deepEqual(await repository.mutate({ kind: 'migrate', expectedRevision: 0, records: Array.from({ length: 1001 }, () => record()) }), { ok: false, code: 'invalid' })

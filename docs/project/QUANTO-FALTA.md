@@ -11,10 +11,19 @@ Fonte: [`CURRENT-STATE.md`](CURRENT-STATE.md) §0 e §5, medido em
 
 ## Onde o projeto está
 
+07/11 — **Gravações de transcrição pelo Main e cancelamento ponta a ponta**:
+cinco definições de gravação, playgrounds, filtro de confiança e edição explícita
+de chave no cofre. Respostas antigas não substituem a nova gravação. O monitor
+do gate também distingue ancestralidade impossível por reutilização de PID.
+[Matriz atual, evidências e roteiro físico](../architecture/LIA-NATIVE-TRANSCRIPTION.md).
+Continuam abertos: chat não migrado, STT WebSocket/HTTP contínuo com sessão,
+editor genérico de credenciais, hardware/serviço externo e instalador. Não há
+alegação de segurança global ou independência completa do AIRI.
+
 A configuração pelo painel Voz, a prévia e a fala automática das duas
 definições `audio/speech` usam o transporte Main. Gate Electron local
-aprovado em 5.1 e 7. Escuta real, protocolos adicionais, cancelamento de
-transcrição de gravações e leitores legados continuam abertos.
+aprovado em 5.1 e 7. Escuta real, protocolos adicionais de sessão e leitores
+legados continuam abertos; o cancelamento de gravações foi implementado em 07/11.
 [Evidências](../architecture/LIA-NATIVE-SPEECH-PREVIEW.md).
 
 06/11 — **PROMPT-31 validado no Windows para o gate de componentes do Corte B**.

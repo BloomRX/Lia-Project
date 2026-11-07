@@ -721,6 +721,10 @@ const voiceInputSession = useVoiceInputSession(stream, {
   },
 })
 
+watch(() => chatSession.activeSessionId, () => {
+  void voiceInputSession.cancelPendingTranscriptions()
+}, { flush: 'sync' })
+
 /** Starts the active streaming or recorder-backed voice-input consumers. */
 async function startAudioInteractionConsumers() {
   if (isVoiceInputSuppressed()) {

@@ -2,6 +2,7 @@ import type { ComposerTranslation } from 'vue-i18n'
 
 import type { NativeChatProvider } from '../../services/lia/native-provider-runtime'
 
+import { resolveRecordingTranscriptionExecutor } from '@proj-airi/stage-ui/stores/modules/hearing'
 import { useProviderStore } from '@proj-airi/stage-ui/stores/providers/provider'
 import { generateText } from '@xsai/generate-text'
 import { listModels as queryModels } from '@xsai/model'
@@ -162,6 +163,13 @@ export function useLiaProviderRuntime() {
         return native ?? previousChat(providerId, options)
       }
       const instanceDispatch: typeof previousInstance = async (providerId) => {
+        if (resolveRecordingTranscriptionExecutor(providerId)) {
+          // Legacy file playgrounds obtain a provider before calling Hearing.
+          // The host executor owns that call; no SDK client or key is needed.
+          return { transcription: () => {
+            throw new Error('Use the host transcription pipeline')
+          } } as never
+        }
         const native = await factory(providerId)
         return (native ?? await previousInstance(providerId)) as never
       }
