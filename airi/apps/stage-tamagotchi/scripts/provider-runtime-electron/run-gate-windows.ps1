@@ -49,6 +49,19 @@
     Expected hash of the win32-x64 asset. Defaults to the value published in
     the locked package's own checksums.json (cross-checked at runtime).
 
+.PARAMETER ExportRoot
+    Directory the exportable evidence package is written to. Defaults to
+    $env:LIA_GATE_EXPORT_ROOT when set, otherwise
+    <repo>\Tests\exports\provider-runtime-electron. The package contains
+    report.json, electron.log, environment.json and manifest.json (plus
+    electron.png when the gate produced one) and is meant to be copied off this
+    machine — it is not committed, and it does not depend on the workspace
+    surviving.
+
+.EXAMPLE
+    # Keep the evidence somewhere that is not the clone.
+    .\run-gate-windows.ps1 -ExportRoot D:\lia-evidence
+
 .EXAMPLE
     cd J:\Lia-Project\airi\apps\stage-tamagotchi
     .\scripts\provider-runtime-electron\run-gate-windows.ps1
@@ -67,7 +80,13 @@
 param(
     [switch] $SkipBuild,
     [string] $ElectronZip,
-    [string] $ExpectedSha256 = 'c2ef9a5f65472c34d14bd3e67b7d14e66b0c01f124aba45263d6a4232160e13a'
+    [string] $ExpectedSha256 = 'c2ef9a5f65472c34d14bd3e67b7d14e66b0c01f124aba45263d6a4232160e13a',
+
+    # Where the exportable package is written. Defaults to the environment
+    # variable when set, otherwise `<repo>\Tests\exports\provider-runtime-electron`.
+    # Deliberately NOT under Tests/artifacts: that folder is disposable (and
+    # git-ignored), and the whole point of the package is to survive it.
+    [string] $ExportRoot
 )
 
 $ErrorActionPreference = 'Stop'
@@ -86,6 +105,17 @@ $ElectronExe = Join-Path $ElectronDir 'dist\electron.exe'
 $PreloadFile = Join-Path $StageDir 'out\preload\index.mjs'
 $ChecksumsFile = Join-Path $ElectronDir 'checksums.json'
 $ArtifactsRoot = Join-Path $RepoDir 'Tests\artifacts\provider-runtime-electron'
+
+# The exportable package. Kept outside Tests/artifacts on purpose: that folder is
+# git-ignored and disposable, which is exactly how the previous evidence was lost.
+if (-not $ExportRoot) {
+    if ($env:LIA_GATE_EXPORT_ROOT) { $ExportRoot = $env:LIA_GATE_EXPORT_ROOT }
+    else { $ExportRoot = Join-Path $RepoDir 'Tests\exports\provider-runtime-electron' }
+}
+
+# A run id that does not depend on a folder name, a clock format or the locale.
+$RunId = [guid]::NewGuid().ToString()
+$RunStartedAt = Get-Date
 
 $script:Results = New-Object System.Collections.ArrayList
 $script:OriginalLocation = (Get-Location).Path
@@ -506,10 +536,183 @@ if ($gateExit -eq 0 -and $secretFailures -gt 0) {
     $gateExit = 1
 }
 
+
 # ---------------------------------------------------------------------------
-# 9. Summary. No Git operation was performed.
+# 9. Environment: what this run actually ran on
 # ---------------------------------------------------------------------------
-Write-Step '9. Resumo'
+Write-Step '9. Ambiente de execucao'
+
+# The version a report cannot be trusted without: 5.1 (Desktop) and 7 (Core) do
+# not serialize dates, errors or native output the same way, and the gate has to
+# be read in the light of one of them. Recorded here, in a file, so the answer
+# does not depend on the name of a folder.
+$psVersion = $PSVersionTable.PSVersion
+$psEdition = 'unknown'
+if ($PSVersionTable.PSEdition) { $psEdition = $PSVersionTable.PSEdition }
+elseif ($psVersion.Major -ge 6) { $psEdition = 'Core' }
+else { $psEdition = 'Desktop' }
+
+$windows = @{ version = 'unknown'; build = 'unknown'; caption = 'unknown'; arch = 'unknown' }
+try {
+    $os = Get-CimInstance Win32_OperatingSystem
+    if ($os.Version) { $windows.version = [string]$os.Version }
+    if ($os.BuildNumber) { $windows.build = [string]$os.BuildNumber }
+    if ($os.Caption) { $windows.caption = [string]$os.Caption }
+}
+catch {
+    Write-Host '  AVISO: Win32_OperatingSystem nao respondeu; versao do Windows = unknown.' -ForegroundColor Yellow
+}
+if ($env:PROCESSOR_ARCHITECTURE) { $windows.arch = $env:PROCESSOR_ARCHITECTURE }
+
+$pnpmVersion = 'unknown'
+try {
+    $probe = & pnpm --version 2>$null
+    if ($LASTEXITCODE -eq 0 -and $probe) { $pnpmVersion = ($probe | Select-Object -First 1).ToString().Trim() }
+}
+catch {
+    Write-Host '  AVISO: pnpm nao respondeu --version; registrado como unknown.' -ForegroundColor Yellow
+}
+
+$environment = [ordered]@{
+    runId      = $RunId
+    powershell = [ordered]@{
+        version = $psVersion.ToString()
+        edition = $psEdition
+        major   = $psVersion.Major
+        host    = 'unknown'
+    }
+    windows    = $windows
+    node       = $nodeVersion
+    electron   = $ExpectedElectron
+    pnpm       = $pnpmVersion
+    git        = [ordered]@{ branch = $branch; commit = $head; dirtyEntries = $dirty.Count }
+    startedAt  = $RunStartedAt.ToUniversalTime().ToString('o')
+}
+
+if ($PSVersionTable.PSHostName) { $environment.powershell.host = 'powershell' }
+if (Get-Command pwsh -ErrorAction SilentlyContinue) {
+    if ($PSVersionTable.PSEdition -eq 'Core') { $environment.powershell.host = 'pwsh' }
+}
+if ($environment.powershell.host -eq 'unknown') {
+    if ($PSVersionTable.PSEdition -eq 'Core') { $environment.powershell.host = 'pwsh' } else { $environment.powershell.host = 'powershell' }
+}
+
+Write-Host ("  PowerShell : {0} ({1})" -f $environment.powershell.version, $environment.powershell.edition)
+Write-Host ("  Windows    : {0} build {1}" -f $windows.version, $windows.build)
+Write-Host ("  node       : {0}" -f $environment.node)
+Write-Host ("  electron   : {0}" -f $environment.electron)
+Write-Host ("  pnpm       : {0}" -f $environment.pnpm)
+Write-Host ("  runId      : {0}" -f $RunId)
+
+$environmentFile = $null
+if ($run) {
+    $environmentFile = Join-Path $run.FullName 'environment.json'
+    # UTF-8 without BOM: `Set-Content -Encoding UTF8` on 5.1 prepends one, and a
+    # consumer parsing this as JSON would then fail on the first character.
+    [System.IO.File]::WriteAllText($environmentFile, ($environment | ConvertTo-Json -Depth 6), (New-Object System.Text.UTF8Encoding $false))
+    Write-Host ("  gravado    : {0}" -f $environmentFile)
+}
+
+# A version string is the thing that makes the report falsifiable; if it is
+# missing, say so loudly instead of shipping a nameless run.
+if ($psVersion.Major -lt 5) {
+    Add-Result 'ambiente' 'FAIL' 'versao do PowerShell nao identificada'
+}
+else {
+    Add-Result 'ambiente' 'PASS' ("PS {0} {1}; Windows {2}; node {3}" -f $psVersion.ToString(), $psEdition, $windows.build, $environment.node)
+}
+
+# ---------------------------------------------------------------------------
+# 10. Export: a package that survives this workspace
+# ---------------------------------------------------------------------------
+Write-Step '10. Exportacao do pacote de evidencias'
+
+<#
+    The gate writes into Tests/artifacts, which is git-ignored and disposable.
+    The previous evidence died exactly that way. This step COPIES (never moves)
+    the artifacts into $ExportRoot/<runId>/, together with environment.json and a
+    manifest carrying a SHA-256 per file, the branch, the commit and the result.
+
+    Nothing secret goes in: the gate already redacted its artifacts, and the
+    manifest holds only names, sizes, hashes and version strings.
+#>
+$exportFolder = $null
+if (-not $run) {
+    Add-Result 'exportacao' 'FAIL' 'sem pasta de artefatos para exportar'
+}
+else {
+    try {
+        $exportFolder = Join-Path $ExportRoot $RunId
+        New-Item -ItemType Directory -Path $exportFolder -Force | Out-Null
+
+        $exported = @()
+        foreach ($name in @('report.json', 'electron.log', 'environment.json', 'electron.png')) {
+            $source = Join-Path $run.FullName $name
+            if (Test-Path $source) {
+                Copy-Item -Path $source -Destination (Join-Path $exportFolder $name) -Force
+                $exported += $name
+            }
+        }
+
+        $hashEntries = @()
+        foreach ($name in $exported) {
+            $file = Join-Path $exportFolder $name
+            $hash = Get-FileHash -Path $file -Algorithm SHA256
+            $hashEntries += [ordered]@{
+                name   = $name
+                bytes  = (Get-Item $file).Length
+                sha256 = $hash.Hash.ToLowerInvariant()
+            }
+        }
+
+        $reportResult = 'unknown'
+        $groupsInfo = $null
+        if ($report) {
+            if ($report.result) { $reportResult = [string]$report.result }
+            if ($report.groups) { $groupsInfo = $report.groups }
+        }
+
+        $manifest = [ordered]@{
+            formatVersion = 1
+            runId         = $RunId
+            git           = [ordered]@{ branch = $branch; commit = $head; dirtyEntries = $dirty.Count }
+            environment   = $environment
+            startedAt     = $RunStartedAt.ToUniversalTime().ToString('o')
+            finishedAt    = (Get-Date).ToUniversalTime().ToString('o')
+            result        = $reportResult
+            groups        = $groupsInfo
+            gateExit      = $gateExit
+            files         = $hashEntries
+            verification  = "Get-FileHash -Algorithm SHA256 <arquivo>; compare com files[].sha256 deste manifesto"
+        }
+        $manifestPath = Join-Path $exportFolder 'manifest.json'
+        [System.IO.File]::WriteAllText($manifestPath, ($manifest | ConvertTo-Json -Depth 8), (New-Object System.Text.UTF8Encoding $false))
+
+        Write-Host ("  pacote     : {0}" -f $exportFolder)
+        foreach ($entry in $hashEntries) {
+            Write-Host ("    {0,-16} {1,10} bytes  {2}" -f $entry.name, $entry.bytes, $entry.sha256)
+        }
+        Write-Host '  Copie essa pasta para fora do clone. Ela nao e versionada.'
+
+        $required = @('report.json', 'electron.log', 'environment.json', 'manifest.json')
+        $missing = @($required | Where-Object { $exported -notcontains $_ })
+        if ($missing.Count -gt 0) {
+            Add-Result 'exportacao' 'FAIL' ("faltando: " + ($missing -join ', '))
+        }
+        else {
+            Add-Result 'exportacao' 'PASS' ("{0} arquivos + manifest em {1}" -f $exported.Count, $exportFolder)
+        }
+    }
+    catch {
+        Add-Result 'exportacao' 'FAIL' ("falhou: " + $_.Exception.Message)
+        Write-Host ("  AVISO: a exportacao falhou: {0}" -f $_.Exception.Message) -ForegroundColor Yellow
+    }
+}
+
+# ---------------------------------------------------------------------------
+# 11. Summary. No Git operation was performed.
+# ---------------------------------------------------------------------------
+Write-Step '11. Resumo'
 
 $script:Results | Format-Table -AutoSize | Out-String | Write-Host
 
@@ -523,9 +726,18 @@ if ($after.Count -ne $dirty.Count) {
 Set-Location $script:OriginalLocation
 
 $failed = @($script:Results | Where-Object { $_.Status -eq 'FAIL' })
+$exportHint = if ($exportFolder) { $exportFolder } else { '(exportacao indisponivel — ver as etapas com FAIL acima)' }
+
+Write-Host ''
+Write-Host ("runId: {0}" -f $RunId)
+Write-Host ("pacote de evidencias: {0}" -f $exportHint)
+
 if ($gateExit -eq 0 -and $failed.Count -eq 0) {
     Write-Host ''
-    Write-Host 'GATE EXECUTADO E APROVADO. Anexe o caminho da pasta de artefatos ao relatorio.' -ForegroundColor Green
+    Write-Host 'GATE EXECUTADO E APROVADO.' -ForegroundColor Green
+    Write-Host '  Isto cobre os dez provedores curados de chat sobre HTTP local, neste Windows,' -ForegroundColor Green
+    Write-Host '  com esta versao de PowerShell. NAO cobre voz remota, instalador nem servico externo.' -ForegroundColor Green
+    Write-Host '  Copie a pasta acima para fora do clone e anexe o caminho ao relatorio.' -ForegroundColor Green
     exit 0
 }
 

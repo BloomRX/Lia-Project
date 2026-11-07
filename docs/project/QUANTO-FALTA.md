@@ -11,6 +11,22 @@ Fonte: [`CURRENT-STATE.md`](CURRENT-STATE.md) §0 e §5, medido em
 
 ## Onde o projeto está
 
+06/11 (PROMPT-31): **o harness do gate Electron foi corrigido**, não o produto.
+Cinco defeitos medidos pelo PROMPT-30 deixaram de existir: a liveness deixou de
+usar PID cru e passou a comparar `(pid, createdAt)`; filhos efêmeros passaram a
+ser rastreados por um monitor contínuo em vez de quatro snapshots; o log deixou
+de mascarar 2 de 10 segredos (um registro único redige todos, e a escrita recusa
+gravar o que ainda contiver valor); o runner passou a registrar a versão do
+PowerShell num `environment.json`; e a evidência passou a ser exportada para
+`<ExportRoot>/<runId>/` com `manifest.json` e SHA-256, fora da pasta que o
+workspace recria. Os 16 grupos ganharam contabilidade que distingue `passed`,
+`failed`, `running` e `not-run` — código presente não conta como executado.
+Medido no Linux: **142 casos novos, 0 falhas**; suíte da Lia **1524 casos / 91
+arquivos, exit 0**; `vue-tsc` exit 0; ESLint exit 0; `git diff --check` exit 0.
+**O gate Electron continua NÃO EXECUTADO** (`# pass 0 / # skipped 1`), PowerShell
+5.1 e 7 continuam por validar, e o aviso de frame descartado segue como análise
+estática. Estado e instruções: [`../architecture/LIA-NATIVE-PROVIDER-COVERAGE.md`](../architecture/LIA-NATIVE-PROVIDER-COVERAGE.md) §17.
+
 02/11 (PROMPT-28): **o cofre do renderer fechou por capacidade** — a correção
 mínima que o PROMPT-27 só tinha descrito agora existe em código. `resolveApiKey`
 recusa antes de ler o cofre todo provedor cuja definição não declare `chat` ou
@@ -315,6 +331,38 @@ Em particular — **STOP AND REPORT em vez de contornar**, e não declarar PASS 
 executar.
 
 ## B) Exige o Windows do Dev — nenhum agente na nuvem faz
+
+**Como rodar o gate (PROMPT-31).** Duas execuções, uma por host, e cada uma
+produz uma pasta exportável diferente:
+
+```powershell
+# PowerShell 5.1 (Windows PowerShell)
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File `
+  airi\apps\stage-tamagotchi\scripts\provider-runtime-electron\run-gate-windows.ps1
+
+# PowerShell 7
+pwsh -NoProfile -File `
+  airi\apps\stage-tamagotchi\scripts\provider-runtime-electron\run-gate-windows.ps1
+```
+
+Em ambas, aponte a exportação para fora do clone e copie o resultado:
+
+```powershell
+-ExportRoot D:\lia-evidence     # ou $env:LIA_GATE_EXPORT_ROOT
+```
+
+Cada execução grava `D:\lia-evidence\<runId>\` com `report.json`,
+`electron.log`, `environment.json`, `manifest.json` e (se houver) `electron.png`.
+O `environment.json` responde "5.1 ou 7?" sem depender do nome da pasta. Para
+conferir a integridade:
+
+```powershell
+Get-FileHash D:\lia-evidence\<runId>\report.json -Algorithm SHA256
+# compare com files[].sha256 em manifest.json
+```
+
+O que ainda **não** está coberto por nenhuma dessas execuções: voz remota,
+instalador, atualização e qualquer serviço externo.
 
 1. **Gate Windows E2E visual** (o gate de saída da 8.0D). Roteiro na §5:
    abrir pelo `Lia.bat` · anexar imagem · pergunta determinística sobre o conteúdo ·

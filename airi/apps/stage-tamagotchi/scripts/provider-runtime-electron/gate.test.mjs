@@ -13,6 +13,12 @@ import { fileURLToPath } from 'node:url'
 import { _electron as electron } from 'playwright'
 import { build } from 'vite'
 
+import { errorText } from './lib/errors.mjs'
+import { classifyAll, isSameProcess } from './lib/process-identity.mjs'
+import { createPowerShellSnapshot, createProcessMonitor } from './lib/process-monitor.mjs'
+import { createGroupRecorder, describeGroups } from './lib/run-groups.mjs'
+import { createSecretRegistry, redactionSummary, writeArtifact } from './lib/secret-redaction.mjs'
+
 const here = dirname(fileURLToPath(import.meta.url))
 const stage = resolve(here, '../..')
 const repo = resolve(stage, '../../..')
@@ -25,35 +31,70 @@ async function waitUntil(predicate, label, milliseconds = 5000) {
   }
 }
 
-function exists(pid) {
-  try {
-    process.kill(pid, 0)
-    return true
-  }
-  catch (error) {
-    return error.code !== 'ESRCH'
-  }
-}
+/*
+ * Process identity and descendant tracking live in `./lib`, so both are testable
+ * on Linux without an Electron host. What remains here is the wiring:
+ *
+ *   - `snapshot()` reads the live table once, carrying creation stamps;
+ *   - one monitor per Electron lifetime samples it continuously, so a child that
+ *     starts and exits is no longer invisible between two fixed snapshots;
+ *   - `tracked` is the union of every identity ever observed, and the teardown
+ *     check classifies all of them by PID **and** creation time.
+ *
+ * `monitor` is per lifetime; the previous one is stopped before the next launch.
+ */
+const snapshot = createPowerShellSnapshot({ execFileSync })
 
-function electronProcesses() {
-  const output = execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `$rows = @(Get-CimInstance Win32_Process -Filter "Name='electron.exe'" | Select-Object ProcessId,ParentProcessId); ConvertTo-Json -InputObject $rows -Compress`], { encoding: 'utf8', windowsHide: true })
-  return JSON.parse(output)
-}
+/** Everything ever observed, across every Electron lifetime in this run. */
+const tracked = []
 
-function descendants(rootPid) {
-  const processes = electronProcesses()
-  const owned = new Set([rootPid])
-  let changed = true
-  while (changed) {
-    changed = false
-    for (const entry of processes) {
-      if (owned.has(entry.ParentProcessId) && !owned.has(entry.ProcessId)) {
-        owned.add(entry.ProcessId)
-        changed = true
-      }
+let monitor
+
+/**
+ * The report object. Declared here, assigned inside the test, because
+ * `settleProcesses()` is module-scoped and reads it.
+ */
+let report
+
+/**
+ * Fold the monitor's observations into `tracked` and mirror them into the
+ * report. Deduplicated by identity, so a recycled PID contributes twice — as the
+ * two processes it actually was.
+ *
+ * The report keeps `processes` as plain PIDs for continuity with the previous
+ * shape, and adds `processIdentity` with the creation stamps a reviewer needs to
+ * replay the teardown reasoning.
+ */
+function settleProcesses() {
+  if (monitor) {
+    monitor.rescan()
+    for (const identity of monitor.identities()) {
+      if (!tracked.some(existing => isSameProcess(existing, identity)))
+        tracked.push(identity)
     }
   }
-  return [...owned]
+  report.processes = [...new Set(tracked.map(identity => identity.pid))]
+  report.processIdentity = tracked.map(identity => ({
+    pid: identity.pid,
+    createdAt: identity.createdAt === undefined ? 'unknown' : new Date(identity.createdAt).toISOString(),
+  }))
+  return tracked
+}
+
+/**
+ * Stop the current lifetime's monitor after taking a last reading.
+ *
+ * Called before every `application.close()`, so the observations of a lifetime
+ * are complete before the processes it tracked disappear.
+ */
+function stopMonitor() {
+  if (!monitor)
+    return
+  settleProcesses()
+  monitor.stop()
+  report.processTracking ??= []
+  report.processTracking.push(monitor.stats())
+  monitor = undefined
 }
 
 /*
@@ -90,7 +131,35 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
     if (!keyless.has(id))
       secrets[id] = `synthetic-${id}-${randomUUID()}`
   }
-  const report = { preexistingProcesses: electronProcesses(), scope: 'real Electron components + local HTTP fixture; not full Stage or external model', root, startedAt: new Date().toISOString(), checks: [], requests: [], processes: [], exitCode: null }
+  /*
+   * One registry for every credential this run mints, built here so no writer
+   * can be the one that "forgot a secret": all of them go through it.
+   */
+  const secretRegistry = createSecretRegistry(secrets)
+  const groups = createGroupRecorder()
+  report = {
+    runId: randomUUID(),
+    scope: 'real Electron components + local HTTP fixture; not full Stage or external model',
+    preexistingProcesses: [],
+    root,
+    startedAt: new Date().toISOString(),
+    environment: { platform: process.platform, arch: process.arch, node: process.version, electron: 'unknown', chrome: 'unknown' },
+    redaction: redactionSummary(secretRegistry),
+    checks: [],
+    requests: [],
+    processes: [],
+    exitCode: null,
+  }
+  try {
+    // Recorded, never fatal: this only says what was already running before the
+    // gate started, and a machine with an unrelated Electron open is not a gate
+    // failure.
+    report.preexistingProcesses = snapshot().map(identity => ({ pid: identity.pid, createdAt: identity.createdAt === undefined ? 'unknown' : new Date(identity.createdAt).toISOString() }))
+  }
+  catch (error) {
+    report.preexistingProcesses = []
+    report.preexistingProcessesError = errorText(error)
+  }
   let logs = ''
   let application
   let applicationProcess
@@ -197,7 +266,20 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
       assert.equal(security.userData, join(root, 'profile'))
       assert.ok(security.windows.every(window => window.contextIsolation && !window.nodeIntegration && window.webSecurity !== false))
       report.versions = await application.evaluate(() => ({ electron: process.versions.electron, node: process.versions.node, chrome: process.versions.chrome }))
-      report.processes.push(...security.pids)
+      report.environment.electron = report.versions.electron
+      report.environment.chrome = report.versions.chrome
+      /*
+       * Start sampling now, not at the next `descendants()` call. Electron
+       * spawns zygotes, GPU and utility children within moments of launch, and
+       * the point of the monitor is to see the short-lived ones too.
+       */
+      monitor = createProcessMonitor({ rootPid: applicationProcess.pid, snapshot })
+      monitor.start()
+      report.trackedRoots ??= []
+      report.trackedRoots.push(applicationProcess.pid)
+      report.processTracking ??= []
+      report.processTracking.push({ rootPid: applicationProcess.pid, intervalMs: monitor.stats().intervalMs })
+      settleProcesses()
       await page.evaluate(() => {
         window.fetch = async () => {
           throw new Error('Renderer network is forbidden in this security gate')
@@ -206,6 +288,7 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
       return page
     }
     let page = await launch()
+    groups.begin(1)
     assert.equal(await page.evaluate(() => window.providerGate.encryptionAvailable()), true)
     await page.evaluate(async ({ generic, local }) => {
       if (!await window.providerGate.seed('openai-compatible', generic) || !await window.providerGate.seed('lm-studio', local))
@@ -213,13 +296,15 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
     }, secrets)
     for (const id of ['openai-compatible', 'lm-studio'])
       assert.equal(await page.evaluate(scope => window.providerGate.readProtectedSecret(scope), id), undefined)
-    report.checks.push('raw credential reads are denied; renderer network disabled while real main performs HTTP')
+    groups.pass(1, 'raw credential reads are denied; renderer network disabled while real main performs HTTP')
+    groups.begin(2)
     const vault = await readFile(join(root, 'profile/lia-secrets.json'), 'utf8')
     assert.ok(!Object.values(secrets).some(value => vault.includes(value)))
     const initialState = JSON.parse(await readFile(join(root, 'main-state.json'), 'utf8'))
     assert.deepEqual(initialState.readScopes, [])
-    report.checks.push('real safeStorage encryption and zero credential reads before operation')
+    groups.pass(2, 'real safeStorage encryption and zero credential reads before operation')
 
+    groups.begin(3)
     const legacyFixture = { id: 'legacy/custom-instance', providerId: 'legacy/custom-instance', definitionId: 'openai-compatible', type: 'http', protocol: 'chat-completions', baseUrl: `${base}/json/v1/`, adapterOptions: { temperature: 0.25, nested: { enabled: true } }, modelIds: ['manual/legacy:Q4'], enabled: true, metadata: {}, credentialRef: { scope: 'legacy/custom-instance', key: 'apiKey' } }
     const oldConfigured = { [legacyFixture.id]: { id: legacyFixture.id, definitionId: legacyFixture.definitionId, config: { baseUrl: legacyFixture.baseUrl, ...legacyFixture.adapterOptions }, status: 'configured', configuredBy: 'user' } }
     const oldCredentials = { 'openai-compatible': { baseUrl: `${base}/old-source/v1/`, legacyFlag: true } }
@@ -230,8 +315,9 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
     assert.deepEqual(migrated.snapshot.records.find(record => record.id === 'openai-compatible').adapterOptions, { legacyFlag: true })
     const repeated = await page.evaluate(({ record, revision }) => window.providerGate.mutate({ kind: 'migrate', expectedRevision: revision, records: [record] }), { record: legacyFixture, revision: migrated.snapshot.revision })
     assert.deepEqual(repeated, migrated)
-    report.checks.push('production decoders import both unversioned legacy shapes preserving IDs, options, model and credential reference; main migration is idempotent')
+    groups.pass(3, 'production decoders import both unversioned legacy shapes preserving IDs, options, model and credential reference; main migration is idempotent')
 
+    groups.begin(4)
     const run = async (mode, button = 'Executar JSON', provider = 'openai-compatible') => {
       await page.getByLabel('Serviço').selectOption(provider)
       await page.getByLabel('Endereço').fill(`${base}/${mode}/v1/`)
@@ -246,8 +332,9 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
     assert.ok(report.requests.filter(entry => entry.model).every(entry => entry.model === 'custom/Electron:Q4'))
     const operationState = JSON.parse(await readFile(join(root, 'main-state.json'), 'utf8'))
     assert.deepEqual(operationState.readScopes, ['openai-compatible', 'openai-compatible', 'openai-compatible', 'lm-studio'])
-    report.checks.push('JSON, SSE, discovery, custom model and separate provider credentials')
+    groups.pass(4, 'JSON, SSE, discovery, custom model and separate provider credentials')
 
+    groups.begin(5)
     const secondWindowId = await application.evaluate(async ({ BrowserWindow }, preloadPath) => {
       const first = BrowserWindow.getAllWindows()[0]
       const second = new BrowserWindow({ show: true, webPreferences: { preload: preloadPath, contextIsolation: true, nodeIntegration: false, sandbox: false } })
@@ -273,14 +360,15 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
     const left = await page.evaluate(() => window.providerGate.transports())
     const right = await secondPage.evaluate(() => window.providerGate.transports())
     assert.deepEqual(left, right)
-    report.processes.push(...descendants(applicationProcess.pid))
+    settleProcesses()
     await application.evaluate(({ BrowserWindow }, id) => BrowserWindow.fromId(id).close(), secondWindowId)
-    report.checks.push('two real renderers share main authority and reject stale concurrent writes')
+    groups.pass(5, 'two real renderers share main authority and reject stale concurrent writes')
 
     // ── curated provider matrix ────────────────────────────────────────────
     // Ten records, each with its own synthetic credential (or none, for the
     // keyless local providers), each executed against its own local endpoint.
     // Main resolves the credential; the renderer only sees response bytes.
+    groups.begin(6)
     const models = Object.fromEntries(curated.map((id, index) => [id, `fixture/${id}:Q4-${index}`]))
     for (const id of curated.filter(item => !keyless.has(item))) {
       if (!await page.evaluate(({ scope, value }) => window.providerGate.seed(scope, value), { scope: id, value: secrets[id] }))
@@ -315,9 +403,10 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
     for (const id of curated.filter(item => !keyless.has(item)))
       assert.ok(matrixState.readScopes.includes(id), `main did not read the vault for ${id}`)
     assert.ok(!curated.some(id => JSON.stringify(matrixResults).includes(secrets[id] ?? '\u0000')))
-    report.checks.push('ten curated providers resolve their own credential in main, address their own endpoint and stream without touching renderer state')
+    groups.pass(6, 'ten curated providers resolve their own credential in main, address their own endpoint and stream without touching renderer state')
 
     // Concurrency: five providers at once, each on its own channel.
+    groups.begin(7)
     const parallelIds = ['openai', 'cerebras-ai', 'anthropic', 'mistral-ai', 'ollama']
     const parallel = await page.evaluate(entries => window.providerGate.concurrent(entries), parallelIds.map(id => ({ providerId: id, model: models[id] })))
     for (const result of parallel) {
@@ -328,16 +417,18 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
       const request = report.requests.filter(entry => entry.path === `/${id}/v1/chat/completions`).at(-1)
       assert.equal(request.model, models[id])
     }
-    report.checks.push('concurrent curated executions stay isolated per provider')
+    groups.pass(7, 'concurrent curated executions stay isolated per provider')
 
     // A 503 body is never surfaced, not even its error text.
+    groups.begin(8)
     await page.evaluate(entries => window.providerGate.seedRecords(entries), [{ providerId: 'xai', baseUrl: `${base}/xai/unavailable/v1/`, model: models.xai }])
     const unavailable = await page.evaluate(({ id, model }) => window.providerGate.executeProvider(id, model, 'json'), { id: 'xai', model: models.xai })
     assert.equal(unavailable.phase, 'error')
     assert.equal(unavailable.code, 'http')
     assert.ok(!JSON.stringify(unavailable).includes(secrets.xai))
-    report.checks.push('an invalid curated response fails with a sanitized class only')
+    groups.pass(8, 'an invalid curated response fails with a sanitized class only')
 
+    groups.begin(9)
     // Cancellation on a curated endpoint releases the socket.
     await page.evaluate(entries => window.providerGate.seedRecords(entries), [{ providerId: 'groq', baseUrl: `${base}/groq/cancel/v1/`, model: models.groq }])
     const curatedCancel = page.evaluate(({ id, model }) => window.providerGate.executeProvider(id, model, 'stream'), { id: 'groq', model: models.groq })
@@ -345,14 +436,16 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
     await page.getByRole('button', { name: 'Cancelar', exact: true }).click()
     assert.equal((await curatedCancel).code, 'cancelled')
     await waitUntil(() => report.requests.find(entry => entry.path === '/groq/cancel/v1/chat/completions').closed, 'curated cancel did not release the real HTTP response')
-    report.checks.push('cancellation on a curated provider closes the real HTTP response')
+    groups.pass(9, 'cancellation on a curated provider closes the real HTTP response')
 
+    groups.begin(10)
     // A disposed port refuses new work instead of silently re-opening a channel.
     const disposed = await page.evaluate(({ id, model }) => window.providerGate.disposeAndExecute(id, model), { id: 'ollama', model: models.ollama })
     assert.equal(disposed.phase, 'error')
     assert.equal(disposed.code, 'cancelled')
-    report.checks.push('a disposed execution port refuses further curated sends')
+    groups.pass(10, 'a disposed execution port refuses further curated sends')
 
+    groups.begin(11)
     await page.getByLabel('Serviço').selectOption('openai-compatible')
     const changed = await page.evaluate(async () => {
       const state = await window.providerGate.transports()
@@ -382,15 +475,17 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
     const replay = await page.evaluate(({ record, revision }) => window.providerGate.mutate({ kind: 'migrate', expectedRevision: revision, records: [record] }), { record: firstRecord, revision: removed.snapshot.revision })
     assert.equal(replay.ok, true)
     assert.ok(!replay.snapshot.records.some(record => record.id === 'openai-compatible'))
-    report.checks.push('disable and remove block execution; migration cannot resurrect a tombstone; vault credentials retained')
+    groups.pass(11, 'disable and remove block execution; migration cannot resurrect a tombstone; vault credentials retained')
+    groups.begin(12)
     assert.equal((await run('empty')).code, 'empty')
     const failed = await run('http-error')
     assert.equal(failed.phase, 'error')
     assert.equal(failed.code, 'credentials')
     assert.ok(!Object.values(secrets).some(value => JSON.stringify(failed).includes(value)))
     assert.equal((await run('sse-error', 'Executar streaming')).code, 'protocol')
-    report.checks.push('empty, HTTP and SSE errors are safe and terminal')
+    groups.pass(12, 'empty, HTTP and SSE errors are safe and terminal')
 
+    groups.begin(13)
     await page.getByLabel('Endereço').fill(`${base}/cancel/v1/`)
     await page.getByRole('button', { name: 'Executar streaming', exact: true }).click()
     await waitUntil(() => report.requests.some(entry => entry.path.includes('/cancel/')), 'cancel request was not observed')
@@ -399,16 +494,18 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
     assert.equal(cancelled.phase, 'error')
     assert.equal(cancelled.code, 'cancelled')
     await waitUntil(() => report.requests.find(entry => entry.path.includes('/cancel/')).closed, 'cancel did not release the real HTTP response')
-    report.checks.push('caller cancellation closes HTTP response and reaches terminal UI')
+    groups.pass(13, 'caller cancellation closes HTTP response and reaches terminal UI')
 
+    groups.begin(14)
     const timeoutStart = Date.now()
     const timedOut = await run('timeout')
     assert.equal(timedOut.phase, 'error')
     assert.equal(timedOut.code, 'timeout')
     report.timeoutElapsedMs = Date.now() - timeoutStart
     await waitUntil(() => report.requests.find(entry => entry.path.includes('/timeout/')).closed, 'timeout did not release HTTP response')
-    report.checks.push('production default timeout reaches terminal UI and closes HTTP response')
+    groups.pass(14, 'production default timeout reaches terminal UI and closes HTTP response')
 
+    groups.begin(15)
     await run('local', 'Executar JSON', 'lm-studio')
     await page.screenshot({ path: join(artifacts, 'electron.png') })
     await waitUntil(async () => {
@@ -418,7 +515,7 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
       }
       catch { return false }
     }, 'production config did not persist')
-    report.processes.push(...descendants(applicationProcess.pid))
+    settleProcesses()
     const product = await readFile(join(root, 'profile/lia-product.json'), 'utf8')
     const transports = await readFile(join(root, 'profile/lia-transports.json'), 'utf8')
     const rendererState = await page.evaluate(() => JSON.stringify({ html: document.body.textContent, storage: { ...localStorage } }))
@@ -443,27 +540,94 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
     assert.equal(report.requests.at(-1).path, '/local/v1/chat/completions')
     assert.equal((await run('json')).phase, 'done')
     assert.equal(report.requests.at(-1).authenticated, true)
-    report.checks.push('real application restart restores product model and decrypts stored key')
+    groups.pass(15, 'real application restart restores product model and decrypts stored key')
 
+    groups.begin(16)
     await page.getByLabel('Endereço').fill(`${base}/crash/v1/`)
     await page.getByRole('button', { name: 'Executar streaming', exact: true }).click()
     await waitUntil(() => report.requests.some(entry => entry.path.includes('/crash/')), 'crash request was not observed')
-    report.processes.push(...descendants(applicationProcess.pid))
+    settleProcesses()
     await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.forcefullyCrashRenderer())
     await waitUntil(() => report.requests.find(entry => entry.path.includes('/crash/')).closed, 'renderer crash did not release HTTP response')
     const crashed = JSON.parse(await readFile(join(root, 'main-state.json'), 'utf8'))
     assert.ok(crashed.rendererGone.length > 0)
-    report.processes.push(...descendants(applicationProcess.pid))
+    settleProcesses()
     await application.close()
     closed = true
+    stopMonitor()
     report.exitCode = applicationProcess.exitCode
     assert.equal(report.exitCode, 0)
     assert.ok(report.requests.every(entry => entry.authenticated && entry.closed))
-    await waitUntil(() => [...new Set(report.processes)].every(pid => !exists(pid)), 'a gate Electron process remained alive')
+
+    /*
+     * Teardown by identity, not by PID.
+     *
+     * A bare PID probe used to answer "is any process using this number?", which
+     * a recycled PID makes true for a process that is long gone. Here every
+     * observation is checked against the live table by PID **and** creation
+     * time, and a table that cannot be read yields `unknown` — never `gone`.
+     */
+    const finalProcessCheck = () => {
+      let live
+      try {
+        live = snapshot()
+      }
+      catch (error) {
+        live = undefined
+        report.processSnapshotError = errorText(error)
+      }
+      const verdict = classifyAll({ processes: tracked, live })
+      report.finalProcessCheck = {
+        alive: verdict.alive.map(entry => entry.pid),
+        gone: verdict.gone.length,
+        unknown: verdict.unknown.map(entry => ({ pid: entry.pid, reason: entry.reason })),
+        unverifiable: verdict.unverifiable,
+        roles: { roots: report.trackedRoots ?? [], descendants: verdict.classified.filter(entry => entry.role === 'descendant').length },
+      }
+      return verdict
+    }
+    await waitUntil(
+      () => {
+        const verdict = finalProcessCheck()
+        return verdict.alive.length === 0 && verdict.unknown.length === 0
+      },
+      'a gate Electron process remained alive, or its shutdown could not be confirmed (see report.finalProcessCheck)',
+      20_000,
+    )
+    const settled = finalProcessCheck()
+    assert.equal(settled.alive.length, 0, `still alive: ${settled.alive.map(entry => entry.pid).join(', ')}`)
+    // Requirement: an unverifiable shutdown is not a pass. Name the reason.
+    assert.equal(
+      settled.unknown.length,
+      0,
+      `shutdown unconfirmed: ${settled.unknown.map(entry => `${entry.pid} (${entry.reason})`).join('; ')}`,
+    )
     assert.ok(!Object.values(secrets).some(value => logs.includes(value)))
-    report.checks.push('unexpected renderer exit releases request; owned Electron processes terminate; no secret in logs')
+    groups.pass(16, 'unexpected renderer exit releases request; owned Electron processes terminate by identity; no secret in logs')
     report.result = 'PASS Electron components with local HTTP fixture'
     t.diagnostic(`Evidence: ${artifacts}`)
+  }
+  catch (error) {
+    /*
+     * Attribute the failure to the group that was running.
+     *
+     * Without this, a failure in group 7 and a failure in group 12 both left a
+     * short `checks` array, and the only way to tell them apart was to count the
+     * entries by heart. The group number is recorded, the remaining groups stay
+     * `not-run`, and the report says so in words.
+     */
+    const running = groups.summary().groups.find(group => group.status === 'running')
+    groups.fail(running?.id, errorText(error))
+    report.failure = {
+      group: running?.id ?? null,
+      message: errorText(error),
+      name: error instanceof Error ? error.name : 'Error',
+      // The stack can name internal paths; it is redacted like everything else.
+      stack: error instanceof Error ? error.stack : undefined,
+    }
+    // A failing group can never coexist with a PASS verdict.
+    report.result = `FAIL${running ? ` in group ${running.id}` : ''}`
+    throw error
   }
   finally {
     if (application && !closed) {
@@ -484,8 +648,37 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
       await once(server, 'close')
     }
     report.finishedAt = new Date().toISOString()
-    report.logSecretsAbsent = !Object.values(secrets).some(value => logs.includes(value))
-    await writeFile(join(artifacts, 'report.json'), JSON.stringify(report, null, 2))
-    await writeFile(join(artifacts, 'electron.log'), logs.replaceAll(secrets.generic, '[REDACTED]').replaceAll(secrets.local, '[REDACTED]'))
+    /*
+     * Every value, not two of them. The old code substituted `generic` and
+     * `local` only, so the eight per-provider keys survived into the log — and
+     * because this block runs on the failure path, that was exactly when the log
+     * was written.
+     *
+     * `writeArtifact` redacts and then refuses to write anything that still
+     * carries a registered value, so a bug in redaction cannot leak by omission.
+     */
+    report.logSecretsAbsent = secretRegistry.findLeaks(logs).length === 0
+    const groupSummary = groups.summary()
+    report.groups = groupSummary
+    report.groupsDescription = describeGroups(groupSummary)
+    // Continuity with the previous shape: `checks` keeps one line per group
+    // that actually passed, taken from the text the gate recorded.
+    report.checks = groupSummary.groups
+      .filter(group => group.status === 'passed')
+      .map(group => group.detail ?? group.title)
+    if (!groupSummary.complete && !report.result?.startsWith('FAIL'))
+      report.result = 'FAIL groups incomplete'
+    try {
+      const reportWrite = await writeArtifact({ writeFile, join }, artifacts, 'report.json', report, secretRegistry)
+      const logWrite = await writeArtifact({ writeFile, join }, artifacts, 'electron.log', logs, secretRegistry)
+      report.artifactsWritten = { report: reportWrite.redacted, log: logWrite.redacted }
+    }
+    catch (error) {
+      // The one case where no artifact may be written at all: the payload still
+      // held a credential after redaction. Leave a marker instead of the file.
+      report.artifactWriteError = errorText(error)
+      process.exitCode = 1
+      await writeFile(join(artifacts, 'ARTIFACTS-WITHHELD.txt'), 'An artifact was withheld because redaction did not remove a registered credential.\nNo credential was written. Inspect the gate run directly.\n')
+    }
   }
 })

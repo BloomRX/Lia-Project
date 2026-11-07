@@ -13,7 +13,44 @@ commit. Registra **estado**, não narrativa: relatório de rodada vai para
 
 ## 0. Estado agora
 
-### 0.0 PROMPT-28 — o cofre fecha por capacidade: nenhum provedor de voz recebe credencial no Renderer (02/11/2026, sem commit)
+### 0.0 PROMPT-31 — harness do gate corrigido: identidade de processo, segredos e exportação (06/11/2026, sem commit)
+
+**O que foi corrigido, e por quê.** O PROMPT-30 mediu seis defeitos no harness do
+gate Electron. Nenhum deles toca o produto: as alterações estão em
+`airi/apps/stage-tamagotchi/scripts/provider-runtime-electron/` e nestes
+documentos. `transport-execution-service.ts`, o catálogo, o fluxo de credenciais
+e a interface **não foram alterados**.
+
+| Defeito | Correção |
+|---|---|
+| liveness por `process.kill(pid, 0)` confundia PID reciclado com processo vivo | identidade `(pid, createdAt)` comparada exatamente, em `lib/process-identity.mjs` |
+| `descendants()` via 4 snapshots perdia filhos efêmeros | monitor contínuo, um por tempo de vida do Electron (`lib/process-monitor.mjs`) |
+| log mascarava 2 de 10 segredos, justamente no caminho de falha | registro único + `writeArtifact`, que redige e **recusa gravar** o que ainda contiver valor (`lib/secret-redaction.mjs`) |
+| versão do PowerShell não registrada | `environment.json` com PSVersion, edição, Windows, node, electron, pnpm (`run-gate-windows.ps1` §9) |
+| evidência só em `Tests/artifacts/`, apagada com o workspace | pacote exportável em `<ExportRoot>/<runId>/` com `manifest.json` e SHA-256 (§10) |
+| `checks` sem contabilidade de grupo | `begin`/`pass`/`fail` por grupo; `report.groups` distingue `passed`, `failed`, `running` e `not-run` |
+
+**Medido nesta rodada (Linux, dependências instaladas nesta sessão):**
+
+| Verificação | Resultado |
+|---|---|
+| `node --test lib/*.test.mjs gate-integrity.test.mjs` | **142 casos, 0 falhas** |
+| suíte Lia (`stores/lia` + `services/lia` + `main/services/lia`) | **1524 casos / 91 arquivos, exit 0** |
+| `vue-tsc --noEmit` (Stage) | **exit 0** |
+| ESLint na pasta do harness | **exit 0** |
+| `git diff --check` | **exit 0** |
+| `node --test gate.test.mjs` | **`# pass 0 / # skipped 1` — NÃO EXECUTADO** |
+
+**O que isso NÃO prova.** O gate Electron continua **não executado**. O parser de
+`CreationDate` é testado contra as duas formas documentadas (5.1 e 7), não contra
+um Windows real. O aviso de frame descartado segue baseado em análise estática.
+PowerShell 5.1 e 7 continuam por validar. **Corte B não está aprovado**, e a
+cobertura do gate é dos dez provedores curados de chat sobre HTTP local — não de
+voz remota, instalador ou serviço externo.
+
+Detalhe completo: [`../architecture/LIA-NATIVE-PROVIDER-COVERAGE.md`](../architecture/LIA-NATIVE-PROVIDER-COVERAGE.md) §17.
+
+### 0.1 PROMPT-28 — o cofre fecha por capacidade: nenhum provedor de voz recebe credencial no Renderer (02/11/2026, sem commit)
 
 **O que estava aberto.** O `resolveApiKey` do store de provedores da Lia era o
 único caminho do renderer ao cofre e recusava só dois casos: provedor de
@@ -74,7 +111,7 @@ reordenados porque o `perfectionist` já acusava erro neles antes desta rodada.
 **Gate Electron: NÃO EXECUTADO** — segue dependente de Windows. Nada aqui
 autoriza declará-lo aprovado.
 
-### 0.1 PROMPT-27 — gate não executado (Linux, sem binário), build do Stage bloqueado em asset externo, preview de voz medido (01/11/2026, sem commit)
+### 0.2 PROMPT-27 — gate não executado (Linux, sem binário), build do Stage bloqueado em asset externo, preview de voz medido (01/11/2026, sem commit)
 
 **Tentado e não concluído, com causa medida.** O **gate Electron** não rodou:
 `electron@43.4.1` está no `node_modules` **sem `dist/` e sem `path.txt`**, não há
@@ -109,7 +146,7 @@ implementada**, por falta de necessidade demonstrada; aguarda autorização.
 do catálogo, transcrição sem cancelamento, Anthropic sem chave real.
 Detalhes: [`../architecture/LIA-NATIVE-PROVIDER-COVERAGE.md`](../architecture/LIA-NATIVE-PROVIDER-COVERAGE.md) §14.
 
-#### 0.1.1 Roteiro Windows entregue (mesma missão, rodada 2)
+#### 0.2.1 Roteiro Windows entregue (mesma missão, rodada 2)
 
 Novo arquivo `airi/apps/stage-tamagotchi/scripts/provider-runtime-electron/run-gate-windows.ps1`:
 runner **fino** que executa os comandos que o repositório já declara, na ordem
@@ -130,7 +167,7 @@ sonda do preview + consumidores AIRI + transcrição **23 casos, exit 0**;
 `# pass 0 / # skipped 1`; `pnpm run build` exit 1 no download Live2D (main e
 preload compilam). Detalhes: §15 do documento de cobertura.
 
-### 0.2 PROMPT-26 — consumidores AIRI do chat fechados, gate Windows com procedimento completo (01/11/2026, sem commit)
+### 0.3 PROMPT-26 — consumidores AIRI do chat fechados, gate Windows com procedimento completo (01/11/2026, sem commit)
 
 **Fechado:** os três consumidores do AIRI que ainda construíam cliente de chat no
 renderer — `use-vision-inference` (devtools de visão), `markdown-stress`
@@ -159,7 +196,7 @@ mas a exposição é latente. Também seguem abertos: transcrição sem cancelam
 chamador e Anthropic sem validação com chave real.
 Detalhes: [`../architecture/LIA-NATIVE-PROVIDER-COVERAGE.md`](../architecture/LIA-NATIVE-PROVIDER-COVERAGE.md) §13.
 
-### 0.3 PROMPT-25 — descoberta genérica no Main, follower-only recuperado, gate ainda não executado (01/11/2026, sem commit)
+### 0.4 PROMPT-25 — descoberta genérica no Main, follower-only recuperado, gate ainda não executado (01/11/2026, sem commit)
 
 **Fechado:** (a) o **seletor compartilhado de modelos** (`providerStore.fetchModelsForProvider`,
 usado por consciousness/hearing/vision/editor de voz) deixou de resolver credencial
@@ -192,7 +229,7 @@ do líder ainda pode alimentar consumidores AIRI que constroem cliente no render
 legados de `hearing`), e provedores fora do catálogo seguem legados.
 Detalhes: [`../architecture/LIA-NATIVE-PROVIDER-COVERAGE.md`](../architecture/LIA-NATIVE-PROVIDER-COVERAGE.md) §12.
 
-### 0.4 PROMPT-24 — credenciais fechadas, gate Electron ampliado, 01/11/2026 (sem commit)
+### 0.5 PROMPT-24 — credenciais fechadas, gate Electron ampliado, 01/11/2026 (sem commit)
 
 **Fechado nesta rodada:** (a) o **primeiro envio** de um provedor sem registro não
 leva mais credencial no payload IPC — `draft` carrega só `baseUrl`, o main rejeita
@@ -229,9 +266,9 @@ Detalhes: [`../architecture/LIA-NATIVE-PROVIDER-COVERAGE.md`](../architecture/LI
 
 > **Nota de leitura (01/11/2026):** o texto abaixo é o registro da rodada
 > anterior, preservado como histórico. O item (d) — exceção `groq` — e as
-> limitações sobre `draft.apiKey` e transcrição foram **superados pelo §0.4**
-> (PROMPT-24; era §0.1 quando a nota foi escrita, §0.3 antes da entrada do
-> PROMPT-28).
+> limitações sobre `draft.apiKey` e transcrição foram **superados pelo §0.5**
+> (PROMPT-24; era §0.1 quando a nota foi escrita; já foi §0.3 e §0.4 conforme
+> novas rodadas entraram no topo).
  os dez
 provedores curados (`openai`, `groq`, `cerebras-ai`, `anthropic`, `xai`,
 `mistral-ai`, `openrouter-ai`, `openai-compatible`, `lm-studio`, `ollama`) passam a

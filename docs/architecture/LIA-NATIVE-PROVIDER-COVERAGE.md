@@ -1463,3 +1463,170 @@ TTS com `requiresCredentials: false` consultasse o cofre.
    efeito é idêntico — voz local funciona, voz remota falha. É a consequência
    direta de fechar a capacidade, não um vazamento.
 5. **Gate Electron segue NÃO EXECUTADO.** Nada nesta rodada o promove.
+
+---
+
+## 17. PROMPT-31 — harness do gate corrigido: identidade de processo, segredos e exportação (06/11/2026)
+
+Missão de **qualidade do harness**, não de produto. Nenhum módulo de produção foi
+tocado: `transport-execution-service.ts`, o catálogo de provedores, o fluxo de
+credenciais e a interface da Lia ficaram exatamente como estavam em `91f0e99`.
+Tudo o que mudou está em `apps/stage-tamagotchi/scripts/provider-runtime-electron/`
+e nos três documentos de estado.
+
+### 17.1 O que estava errado antes desta rodada
+
+O PROMPT-30 mediu seis defeitos no harness. O commit `91f0e99` não os corrige:
+
+| # | Defeito | Consequência medida |
+|---|---|---|
+| A | Liveness por `process.kill(pid, 0)` | PID reciclado = processo encerrado parece vivo → falha espúria; PASS dependia de sorte |
+| B | `descendants()` por 4 snapshots | filho nascido e morto entre dois snapshots nunca entrava no conjunto verificado |
+| C | `electron.log` com `replaceAll` de 2 valores | as 8 chaves por provedor iam em texto claro para o log, justamente no caminho de falha |
+| D | versão do PowerShell não registrada | "5.1 e 7" não era auditável a partir do artefato |
+| E | evidência só em `Tests/artifacts/` (git-ignored) | recriação do workspace apagou os dois relatórios |
+| F | `checks` sem contabilidade de grupo | falha no grupo 7 e no 12 produziam a mesma lista curta |
+| G | aviso de frame descartado | conclusão por análise estática (§17.7) |
+
+### 17.2 Correção A — identidade de processo
+
+Novo módulo `lib/process-identity.mjs`. A identidade é o par **`(pid, createdAt)`**,
+comparado como instante exato — sem janela de tolerância:
+
+```js
+export function isSameProcess(left, right) {
+  if (left.pid !== right.pid) return false
+  if (left.createdAt === UNKNOWN_CREATED_AT || right.createdAt === UNKNOWN_CREATED_AT) return false
+  return left.createdAt === right.createdAt
+}
+```
+
+`parseCimDate` aceita as duas formas que o PowerShell produz — `\/Date(ms)\/`
+(5.1) e ISO 8601 com 7 dígitos de fração (7) — e recusa uma data sem fuso em vez
+de resolvê-la em hora local. A consulta converte o carimbo **dentro** do
+PowerShell (`CreationDate.ToUniversalTime().ToString('o')`), para 5.1 e 7
+concordarem na origem.
+
+Três estados, e o terceiro é o que importa:
+
+- `alive` — mesmo PID **e** mesmo instante;
+- `gone` — PID livre, ou PID usado por outro instante (reciclado);
+- `unknown` — identidade incompleta ou tabela ilegível. **Nunca** colapsado em
+  `gone`.
+
+O gate trata `unknown` como "encerramento não confirmado": continua amostrando
+até 20 s e, se persistir, falha citando o PID e o motivo.
+
+### 17.3 Correção B — rastreamento contínuo de descendentes
+
+`lib/process-monitor.mjs`: um monitor por tempo de vida do Electron, iniciado
+imediatamente após o launch e parado antes de cada `close()`. Cada leitura
+acumula identidades num mapa indexado por `pid:createdAt`, então duas encarnações
+do mesmo PID sobrevivem as duas.
+
+**Limitação registrada, não escondida:** continua sendo amostragem. Um processo
+que nasce e morre dentro de um intervalo (150 ms por padrão) pode escapar. Fechar
+essa janela exigiria Job Object do Windows (impossível sem addon nativo) ou
+`Win32_ProcessStartTrace` via WMI (exige sessão elevada). Ambos foram rejeitados:
+o gate tem de rodar na conta normal do Dev. O relatório publica o intervalo, para
+que o leitor julgue — `report.processTracking[].coverage`.
+
+### 17.4 Correção C — segredos
+
+`lib/secret-redaction.mjs`. Um registro único, criado a partir do objeto de
+segredos do gate, substitui os valores **exatos** (mais longos primeiro) e depois
+aplica uma regra de forma (`synthetic-*`) como defesa em profundidade.
+
+A escrita passa a ter uma porta só:
+
+```js
+await writeArtifact({ writeFile, join }, artifacts, 'report.json', report, secretRegistry)
+await writeArtifact({ writeFile, join }, artifacts, 'electron.log', logs, secretRegistry)
+```
+
+`writeArtifact` redige e **reverifica o próprio resultado**; se ainda houver um
+valor registrado, lança e não cria o arquivo — o `finally` grava então
+`ARTIFACTS-WITHHELD.txt`. O critério da missão é coberto por um teste de ponta a
+ponta com sistema de arquivos real (`lib/artifact-leak.test.mjs`, 6 casos): dez
+provedores + genérica + local, falha depois de geradas, falha no teardown, e
+varredura de **todos** os bytes gravados contra **todos** os valores daquela
+execução.
+
+### 17.5 Correções D e E — ambiente e exportação
+
+`run-gate-windows.ps1` ganhou duas etapas novas (a numeração passou de 9 para 11
+seções):
+
+- **9. Ambiente** — grava `environment.json` com `PowerShell` (versão completa,
+  edição Desktop/Core, host), Windows (versão, build, caption, arch), node,
+  electron, pnpm, branch/commit e `startedAt`. Valor indisponível é `'unknown'`,
+  nunca inventado. BOM não é escrito (5.1 prepende um).
+- **10. Exportação** — copia (nunca move) `report.json`, `electron.log`,
+  `environment.json` e, se existir, `electron.png` para
+  `<ExportRoot>/<runId>/`, mais um `manifest.json` com SHA-256 por arquivo,
+  branch, commit, resultado e o resumo dos grupos.
+
+`$ExportRoot` é configurável por parâmetro ou `$env:LIA_GATE_EXPORT_ROOT`;
+padrão `Tests/exports/provider-runtime-electron`. **Fora** de `Tests/artifacts`
+de propósito: era exatamente a pasta descartável que apagou a evidência anterior.
+
+Verificação do pacote:
+
+```powershell
+Get-FileHash -Algorithm SHA256 <arquivo>
+# compare com files[].sha256 em manifest.json
+```
+
+### 17.6 Correção F — os 16 grupos
+
+`lib/run-groups.mjs` mantém a lista canônica dos 16 grupos (a mesma numeração do
+PROMPT-30) e um gravador com `begin(n)` / `pass(n)` / `fail(n, motivo)`. A
+execução continua **linear** — o gate não foi fragmentado em subtests que possam
+ser pulados —, mas a contabilidade passa a distinguir:
+
+- `passed` — o grupo começou **e** chegou ao fim;
+- `failed` — começou e quebrou (o `catch` atribui a falha ao grupo em execução);
+- `running` — interrompido;
+- `not-run` — nunca começou.
+
+`report.groups` traz `total`, `executed`, `passed`, `failed`, `notRun`,
+`complete` e `interruptedAt`; `report.groupsDescription` diz em uma frase onde
+parou. **Código presente não conta como executado.**
+
+### 17.7 Correção G — aviso de frame descartado
+
+Nenhuma alteração preventiva. A análise estática do PROMPT-30 se sustenta: o
+produto não referencia `mainFrame`/`webFrameMain`, o `main.ts` da fixture só
+grava métricas no `render-process-gone`, e `transport-execution-service.ts`
+remove os dois listeners em `detach()` (pinado por teste). Não há observação
+direta no Arena — **a confirmação depende do próximo gate no Windows**, e o
+`electron.log` do pacote exportado é o lugar onde ela aparece.
+
+### 17.8 Testes desta rodada (Linux, medidos agora)
+
+| Comando | Resultado |
+|---|---|
+| `node --test lib/*.test.mjs gate-integrity.test.mjs` | **142 casos, 0 falhas** |
+| `vitest run --project node` (stores/lia + services/lia + main/services/lia) | **1524 casos / 91 arquivos, exit 0** |
+| `vue-tsc --noEmit` (Stage) | **exit 0** |
+| `eslint --config …/eslint.config.mjs` na pasta do harness | **exit 0** |
+| `node --test gate.test.mjs` | **# pass 0 / # skipped 1 — NÃO EXECUTADO** |
+| `git diff --check` | **exit 0** |
+
+Distribuição dos 142: identidade de processo 36, monitor 15, redação 23,
+exportação/manifesto 23, grupos 17, vazamento ponta a ponta 6, integridade
+estrutural do gate 22.
+
+### 17.9 O que continua pendente de Windows
+
+1. **Execução real do gate** — `node --test scripts/provider-runtime-electron/gate.test.mjs`
+   numa sessão com desktop e keychain.
+2. **`Get-CimInstance` / `CreationDate` reais** — o parser e a normalização são
+   testados contra as duas formas documentadas, não contra um host Windows.
+3. **Aviso de frame** — observação direta, não inferida.
+4. **PowerShell 5.1 e 7** — as duas execuções continuam por fazer. O runner agora
+   registra a versão, então a próxima evidência será conclusiva.
+5. **Build completo do Stage** — bloqueado neste sandbox por asset externo.
+
+Nada nesta rodada promove o gate a aprovado, e o Corte B continua **não
+validado**.
