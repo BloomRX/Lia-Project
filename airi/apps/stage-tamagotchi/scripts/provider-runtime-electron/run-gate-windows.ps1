@@ -5,7 +5,7 @@
 
 .DESCRIPTION
     This is a thin RUNNER. It executes the commands the repository already
-    declares — it does not reimplement, weaken or replace the gate, and it does
+    declares - it does not reimplement, weaken or replace the gate, and it does
     not touch Git.
 
     The gate itself is `scripts/provider-runtime-electron/gate.test.mjs`, which
@@ -17,7 +17,7 @@
         1. install the Electron runtime from the OFFICIAL package installer
            (downloads the asset matching the locked version and verifies it
            against the package's own checksums.json);
-        2. build the Stage, which produces out/preload/index.mjs — the gate
+        2. build the Stage, which produces out/preload/index.mjs - the gate
            reads that file before doing anything else;
         3. run `node --test` on the gate.
 
@@ -30,7 +30,7 @@
     Tests/artifacts/provider-runtime-electron/<timestamp>/, with the exit code
     of every step and an independent re-check of the "no synthetic secret in the
     logs" assertion (report.json -> logSecretsAbsent, plus a scan of electron.log
-    for the synthetic PREFIXES the gate uses — never the values).
+    for the synthetic PREFIXES the gate uses - never the values).
 
     It never prints a credential. It creates no commit, no branch and no push:
     `git status` is printed at the end only so the operator can confirm that.
@@ -41,13 +41,8 @@
 
 .PARAMETER ElectronZip
     Path to an ALREADY DOWNLOADED `electron-v43.4.1-win32-x64.zip` obtained from
-    the official GitHub release. When given, the script verifies its SHA-256
-    against the expected value before handing it to the official installer.
-    When omitted, the official installer downloads it itself.
-
-.PARAMETER ExpectedSha256
-    Expected hash of the win32-x64 asset. Defaults to the value published in
-    the locked package's own checksums.json (cross-checked at runtime).
+    the official GitHub release. Otherwise the runner downloads that asset.
+    The pinned SHA-256 and each runtime file are verified before execution.
 
 .PARAMETER ExportRoot
     Directory the exportable evidence package is written to. Defaults to
@@ -55,7 +50,7 @@
     <repo>\Tests\exports\provider-runtime-electron. The package contains
     report.json, electron.log, environment.json and manifest.json (plus
     electron.png when the gate produced one) and is meant to be copied off this
-    machine — it is not committed, and it does not depend on the workspace
+    machine - it is not committed, and it does not depend on the workspace
     surviving.
 
 .EXAMPLE
@@ -80,7 +75,6 @@
 param(
     [switch] $SkipBuild,
     [string] $ElectronZip,
-    [string] $ExpectedSha256 = 'c2ef9a5f65472c34d14bd3e67b7d14e66b0c01f124aba45263d6a4232160e13a',
 
     # Where the exportable package is written. Defaults to the environment
     # variable when set, otherwise `<repo>\Tests\exports\provider-runtime-electron`.
@@ -98,6 +92,7 @@ $AiriDir = Split-Path -Parent (Split-Path -Parent $StageDir)
 $RepoDir = Split-Path -Parent $AiriDir
 
 $ExpectedElectron = '43.4.1'
+$ExpectedSha256 = 'c2ef9a5f65472c34d14bd3e67b7d14e66b0c01f124aba45263d6a4232160e13a'
 $ExpectedPnpm = '11.24.0'
 $GateRelative = 'scripts/provider-runtime-electron/gate.test.mjs'
 $ElectronDir = Join-Path $StageDir 'node_modules\electron'
@@ -285,7 +280,7 @@ finally {
 Write-Step "4. Electron $ExpectedElectron"
 
 if (-not (Test-Path $ElectronDir)) {
-    Stop-With "pacote electron ausente em $ElectronDir — rode 'pnpm install --frozen-lockfile' na raiz (airi/)"
+    Stop-With "pacote electron ausente em $ElectronDir - rode 'pnpm install --frozen-lockfile' na raiz (airi/)"
 }
 
 $installedVersion = (& node -e "console.log(require(process.argv[1]).version)" (Join-Path $ElectronDir 'package.json')).ToString().Trim()
@@ -294,103 +289,89 @@ if ($installedVersion -ne $ExpectedElectron) {
     Stop-With "versao instalada ($installedVersion) difere da exigida ($ExpectedElectron). Nao altere versao nem lockfile."
 }
 
-# The expected hash is cross-checked against the LOCKED PACKAGE's own
-# checksums.json — not taken on faith from any document.
-if (Test-Path $ChecksumsFile) {
-    $checksums = Get-Content $ChecksumsFile -Raw | ConvertFrom-Json
-    $assetName = "electron-v$ExpectedElectron-win32-x64.zip"
-    $published = Get-Prop $checksums $assetName
-    if ($published) {
-        Write-Host "  SHA-256 publicado (checksums.json do pacote): $published"
-        if ($published.ToLowerInvariant() -ne $ExpectedSha256.ToLowerInvariant()) {
-            Stop-With "o hash do pacote difere do esperado. Nao prossiga sem entender por que."
+$assetName = "electron-v$ExpectedElectron-win32-x64.zip"
+$checksums = Get-Content -LiteralPath $ChecksumsFile -Raw | ConvertFrom-Json
+if ((Get-Prop $checksums $assetName) -ne $ExpectedSha256) {
+    Stop-With 'SHA-256 do pacote diverge do asset oficial.'
+}
+if ((& node -p "process.platform + '-' + process.arch") -ne 'win32-x64') {
+    Stop-With 'este roteiro exige Node para Windows x64.'
+}
+if ($env:ELECTRON_OVERRIDE_DIST_PATH -or $env:ELECTRON_RUN_AS_NODE) {
+    Stop-With 'remova overrides do Electron da sessao antes de executar.'
+}
+if (-not $ElectronZip) {
+    $downloadDir = Join-Path $env:TEMP ("lia-electron-" + [guid]::NewGuid().ToString())
+    [void](New-Item -ItemType Directory -Path $downloadDir)
+    $ElectronZip = Join-Path $downloadDir $assetName
+    $uri = "https://github.com/electron/electron/releases/download/v$ExpectedElectron/$assetName"
+    Invoke-WebRequest -UseBasicParsing -Uri $uri -OutFile $ElectronZip
+}
+$ElectronZip = (Resolve-Path -LiteralPath $ElectronZip).ProviderPath
+$actual = (Get-FileHash -LiteralPath $ElectronZip -Algorithm SHA256).Hash
+if ($actual -ne $ExpectedSha256) {
+    Stop-With 'SHA-256 do ZIP diverge do asset oficial.'
+}
+Add-Result 'SHA-256 do ZIP oficial' 'PASS' $ExpectedSha256
+
+Write-Step '5. Preparacao e integridade do runtime'
+$dist = Join-Path $ElectronDir 'dist'
+$pathFile = Join-Path $ElectronDir 'path.txt'
+if (-not (Test-Path -LiteralPath $ElectronExe)) {
+    if ((Test-Path -LiteralPath $dist) -or (Test-Path -LiteralPath $pathFile)) {
+        Stop-With 'instalacao parcial encontrada. Nenhum arquivo do runtime foi sobrescrito.'
+    }
+    Expand-Archive -LiteralPath $ElectronZip -DestinationPath $dist
+    [IO.File]::WriteAllText($pathFile, 'electron.exe')
+    Add-Result 'instalacao do runtime' 'PASS' 'ZIP oficial verificado'
+}
+else {
+    Add-Result 'instalacao do runtime' 'SKIP' 'runtime existente'
+}
+if ((Get-Content -LiteralPath $pathFile -Raw).Trim() -ne 'electron.exe') {
+    Stop-With 'path.txt nao aponta para electron.exe.'
+}
+
+# Check the entire extracted distribution before running any Electron binary.
+# The official package installer moves electron.d.ts out of dist.
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$archive = [IO.Compression.ZipFile]::OpenRead($ElectronZip)
+$sha = [Security.Cryptography.SHA256]::Create()
+$expectedFiles = @{}
+try {
+    foreach ($entry in $archive.Entries) {
+        if (-not $entry.Name) { continue }
+        $relative = $entry.FullName.Replace('/', '\')
+        $target = Join-Path $dist $relative
+        $expectedFiles[$relative] = $true
+        if ($relative -eq 'electron.d.ts' -and -not (Test-Path -LiteralPath $target)) {
+            $target = Join-Path $ElectronDir $relative
         }
-        Add-Result 'sha256 publicado' 'PASS' 'confere com checksums.json do pacote'
-    }
-    else {
-        Write-Host "  AVISO: checksums.json sem entrada para $assetName" -ForegroundColor Yellow
-        Add-Result 'sha256 publicado' 'SKIP' 'entrada ausente no checksums.json'
-    }
-}
-else {
-    Write-Host '  AVISO: checksums.json ausente no pacote electron.' -ForegroundColor Yellow
-    Add-Result 'sha256 publicado' 'SKIP' 'checksums.json ausente'
-}
-
-$runtimeReady = (Test-Path $ElectronExe) -and (Test-Path (Join-Path $ElectronDir 'path.txt'))
-if ($runtimeReady) {
-    $runtimeVersion = Get-ExeVersion $ElectronExe @('--version')
-    Write-Host "  runtime presente: $ElectronExe"
-    Write-Host "  versao reportada: $runtimeVersion"
-    if (-not $runtimeVersion -or $runtimeVersion -notmatch [regex]::Escape($ExpectedElectron)) {
-        Stop-With "o runtime respondeu '$runtimeVersion', que nao e $ExpectedElectron"
-    }
-    Add-Result 'runtime Electron' 'PASS' ("ja instalado, {0}" -f $runtimeVersion)
-}
-else {
-    Write-Host '  runtime ausente (sem dist/electron.exe). Sera instalado no passo 5.' -ForegroundColor Yellow
-    Add-Result 'runtime Electron' 'SKIP' 'ausente antes do passo 5'
-}
-
-# ---------------------------------------------------------------------------
-# 5. Install the runtime from the OFFICIAL source only
-# ---------------------------------------------------------------------------
-Write-Step '5. Instalacao do runtime (origem oficial, hash publicado)'
-
-if ($runtimeReady) {
-    Write-Host '  nada a fazer: runtime ja presente e conferido.'
-}
-else {
-    $overrodeDist = $false
-    if ($ElectronZip) {
-        if (-not (Test-Path $ElectronZip)) { Stop-With "zip informado nao existe: $ElectronZip" }
-        $actual = (Get-FileHash -Path $ElectronZip -Algorithm SHA256).Hash.ToLowerInvariant()
-        Write-Host "  zip local     : $ElectronZip"
-        Write-Host "  SHA-256 obtido: $actual"
-        if ($actual -ne $ExpectedSha256.ToLowerInvariant()) {
-            Stop-With 'SHA-256 do zip NAO confere. Nao instale este arquivo.'
+        if (-not (Test-Path -LiteralPath $target -PathType Leaf)) {
+            Stop-With "arquivo do runtime ausente: $relative"
         }
-        Write-Host '  SHA-256 confere.' -ForegroundColor Green
-        # @electron/get honours ELECTRON_OVERRIDE_DIST_PATH: point it at the
-        # unpacked zip so the official installer uses this exact artifact.
-        $extract = Join-Path $env:TEMP "electron-$ExpectedElectron-win32-x64"
-        if (Test-Path $extract) { Remove-Item $extract -Recurse -Force }
-        Expand-Archive -Path $ElectronZip -DestinationPath $extract -Force
-        $env:ELECTRON_OVERRIDE_DIST_PATH = $extract
-        $overrodeDist = $true
-        Write-Host "  ELECTRON_OVERRIDE_DIST_PATH=$extract"
+        $stream = $entry.Open()
+        try { $entryHash = [BitConverter]::ToString($sha.ComputeHash($stream)).Replace('-', '') }
+        finally { $stream.Dispose() }
+        if ((Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash -ne $entryHash) {
+            Stop-With "arquivo do runtime diverge do ZIP oficial: $relative"
+        }
     }
-
-    Write-Host '  executando o instalador do proprio pacote (asset da versao travada,'
-    Write-Host '  conferido contra checksums.json, extraido em node_modules/electron/dist).'
-    Write-Host '  Nenhum host de terceiros: ELECTRON_MIRROR, se existir no ambiente, deve'
-    Write-Host '  apontar para espelho OFICIAL — este script nao define essa variavel.'
-
-    & pnpm --filter '@proj-airi/stage-tamagotchi' exec node 'node_modules/electron/install.js'
-    $installExit = $LASTEXITCODE
-    Write-Host "  exit code do instalador: $installExit"
-
-    if ($overrodeDist) {
-        Remove-Item Env:\ELECTRON_OVERRIDE_DIST_PATH -ErrorAction SilentlyContinue
+    foreach ($file in Get-ChildItem -LiteralPath $dist -Recurse -File -Force) {
+        $relative = $file.FullName.Substring($dist.Length + 1)
+        if (-not $expectedFiles.ContainsKey($relative)) {
+            Stop-With "arquivo adicional no runtime: $relative"
+        }
     }
-
-    if ($installExit -ne 0 -or -not (Test-Path $ElectronExe)) {
-        Write-Host ''
-        Write-Host '  FALHA na instalacao do runtime.' -ForegroundColor Red
-        Write-Host '  Causas tipicas: rede/proxy bloqueando a release oficial do GitHub, ou o' -ForegroundColor Yellow
-        Write-Host '  host que entrega o asset inacessivel. Nesse caso o gate NAO pode rodar.' -ForegroundColor Yellow
-        Write-Host '  NAO use binario de origem nao oficial e NAO altere versao nem lockfile.' -ForegroundColor Yellow
-        Add-Result 'instalacao do runtime' 'FAIL' ("exit={0}" -f $installExit)
-        Stop-With 'runtime do Electron indisponivel'
-    }
-    Add-Result 'instalacao do runtime' 'PASS' ("exit={0}" -f $installExit)
 }
-
-if (-not (Test-Path $ElectronExe)) { Stop-With "dist/electron.exe continua ausente em $ElectronDir" }
-$runtimeVersion = Get-ExeVersion $ElectronExe @('--version')
-Write-Host "  runtime: $runtimeVersion"
-if (-not $runtimeVersion -or $runtimeVersion -notmatch [regex]::Escape($ExpectedElectron)) {
-    Stop-With "runtime respondeu '$runtimeVersion', esperado $ExpectedElectron"
+finally {
+    $sha.Dispose()
+    $archive.Dispose()
+}
+Add-Result 'integridade do runtime' 'PASS' "$($expectedFiles.Count) arquivos conferidos"
+$runtimeVersion = (Get-Content -LiteralPath (Join-Path $dist 'version') -Raw).Trim().TrimStart('v')
+if ($runtimeVersion -ne $ExpectedElectron) {
+    Stop-With "manifesto do runtime informa '$runtimeVersion', esperado $ExpectedElectron"
 }
 Add-Result 'versao do runtime' 'PASS' $runtimeVersion
 
@@ -418,7 +399,7 @@ else {
         Write-Host '  O build FALHOU. Etapas conhecidas: main e preload costumam compilar; o' -ForegroundColor Yellow
         Write-Host '  renderer resolve plugins que baixam modelos Live2D/VRM de hosts externos' -ForegroundColor Yellow
         Write-Host '  (dist.ayaka.moe, cubism.live2d.com). Falha de download e infraestrutura,' -ForegroundColor Yellow
-        Write-Host '  nao codigo — mas o gate depende do preload. Nao altere lockfile nem a' -ForegroundColor Yellow
+        Write-Host '  nao codigo - mas o gate depende do preload. Nao altere lockfile nem a' -ForegroundColor Yellow
         Write-Host '  configuracao do build para contornar.' -ForegroundColor Yellow
         Add-Result 'build do Stage' 'FAIL' ("exit={0}" -f $buildExit)
         Stop-With 'build do Stage falhou'
@@ -427,7 +408,7 @@ else {
 }
 
 if (-not (Test-Path $PreloadFile)) {
-    Stop-With "o gate le $PreloadFile antes de tudo e ele nao existe — rode sem -SkipBuild"
+    Stop-With "o gate le $PreloadFile antes de tudo e ele nao existe - rode sem -SkipBuild"
 }
 $preloadSize = (Get-Item $PreloadFile).Length
 Write-Host "  preload: $PreloadFile ($preloadSize bytes)"
@@ -442,11 +423,20 @@ Write-Host '  requer  : sessao Windows com desktop (o cofre usa o keychain do SO
 Write-Host '  escopo  : os dez provedores curados, sobre um servidor HTTP local.'
 Write-Host ''
 
-$startedAt = Get-Date
+$previousRuns = @(Get-ChildItem -LiteralPath $ArtifactsRoot -Directory -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name)
 Push-Location $StageDir
 try {
-    & node --test $GateRelative
-    $gateExit = $LASTEXITCODE
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $gateOutput = @(& node --test --test-reporter=tap $GateRelative 2>&1 | ForEach-Object { $_.ToString() })
+        $gateExit = $LASTEXITCODE
+    }
+    finally { $ErrorActionPreference = $previous }
+    $credentialPattern = 'synthetic-[a-z0-9-]+-[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}'
+    $tapContainsCredentials = [bool]($gateOutput -match $credentialPattern)
+    $gateOutput = @($gateOutput -replace $credentialPattern, '[REDACTED]')
+    $gateOutput | Write-Host
 }
 finally { Pop-Location }
 
@@ -460,13 +450,13 @@ Write-Step '8. Evidencias'
 
 $secretFailures = 0
 if (-not (Test-Path $ArtifactsRoot)) {
-    Write-Host "  AVISO: $ArtifactsRoot nao existe — o gate nao escreveu artefatos." -ForegroundColor Yellow
+    Write-Host "  AVISO: $ArtifactsRoot nao existe - o gate nao escreveu artefatos." -ForegroundColor Yellow
     Add-Result 'artefatos' 'FAIL' 'diretorio nao criado'
 }
 else {
-    $run = Get-ChildItem $ArtifactsRoot -Directory |
-        Where-Object { $_.CreationTime -ge $startedAt.AddMinutes(-1) } |
-        Sort-Object Name -Descending | Select-Object -First 1
+    $newRuns = @(Get-ChildItem -LiteralPath $ArtifactsRoot -Directory |
+        Where-Object { $_.Name -notin $previousRuns })
+    $run = if ($newRuns.Count -eq 1) { $newRuns[0] }
 
     if (-not $run) {
         Write-Host '  AVISO: nenhuma pasta de artefatos desta execucao encontrada.' -ForegroundColor Yellow
@@ -486,11 +476,19 @@ else {
 
         $reportFile = Join-Path $run.FullName 'report.json'
         if (-not (Test-Path $reportFile)) {
-            Add-Result 'report.json' 'FAIL' 'ausente — o gate falhou antes do finally'
+            Add-Result 'report.json' 'FAIL' 'ausente - o gate falhou antes do finally'
             $secretFailures++
         }
         else {
             $report = Get-Content $reportFile -Raw | ConvertFrom-Json
+            if ($gateExit -eq 0 -and (
+                $report.result -ne 'PASS Electron components with local HTTP fixture' -or
+                $report.versions.electron -ne $ExpectedElectron -or
+                $report.exitCode -ne 0 -or $report.groups.complete -ne $true -or
+                -not (Test-Path -LiteralPath (Join-Path $run.FullName 'electron.png')) -or
+                -not ($gateOutput -match '^# pass 1$') -or -not ($gateOutput -match '^# skipped 0$'))) {
+                Add-Result 'resultado do gate' 'FAIL' 'TAP ou report.json nao confirmou aprovacao'
+            }
             $requests = @(Get-Prop $report 'requests')
             $checks = @(Get-Prop $report 'checks')
             Write-Host ("    report.result           : {0}" -f (Get-Prop $report 'result'))
@@ -519,7 +517,7 @@ else {
                 Add-Result 'credencial nos logs' 'PASS' 'nenhum prefixo sintetico no electron.log'
             }
 
-            if ((Get-Prop $report 'logSecretsAbsent') -eq $false) {
+            if ((Get-Prop $report 'logSecretsAbsent') -ne $true -or $tapContainsCredentials -or -not (Test-Path -LiteralPath $logFile)) {
                 Add-Result 'logSecretsAbsent' 'FAIL' 'relatorio do gate acusa credencial nos logs'
                 $secretFailures++
             }
@@ -547,10 +545,10 @@ Write-Step '9. Ambiente de execucao'
 # be read in the light of one of them. Recorded here, in a file, so the answer
 # does not depend on the name of a folder.
 $psVersion = $PSVersionTable.PSVersion
-$psEdition = 'unknown'
-if ($PSVersionTable.PSEdition) { $psEdition = $PSVersionTable.PSEdition }
-elseif ($psVersion.Major -ge 6) { $psEdition = 'Core' }
-else { $psEdition = 'Desktop' }
+$gatePsEdition = 'unknown'
+if ($PSVersionTable.PSEdition) { $gatePsEdition = $PSVersionTable.PSEdition }
+elseif ($psVersion.Major -ge 6) { $gatePsEdition = 'Core' }
+else { $gatePsEdition = 'Desktop' }
 
 $windows = @{ version = 'unknown'; build = 'unknown'; caption = 'unknown'; arch = 'unknown' }
 try {
@@ -577,7 +575,7 @@ $environment = [ordered]@{
     runId      = $RunId
     powershell = [ordered]@{
         version = $psVersion.ToString()
-        edition = $psEdition
+        edition = $gatePsEdition
         major   = $psVersion.Major
         host    = 'unknown'
     }
@@ -619,7 +617,7 @@ if ($psVersion.Major -lt 5) {
     Add-Result 'ambiente' 'FAIL' 'versao do PowerShell nao identificada'
 }
 else {
-    Add-Result 'ambiente' 'PASS' ("PS {0} {1}; Windows {2}; node {3}" -f $psVersion.ToString(), $psEdition, $windows.build, $environment.node)
+    Add-Result 'ambiente' 'PASS' ("PS {0} {1}; Windows {2}; node {3}" -f $psVersion.ToString(), $gatePsEdition, $windows.build, $environment.node)
 }
 
 # ---------------------------------------------------------------------------
@@ -695,7 +693,7 @@ else {
         Write-Host '  Copie essa pasta para fora do clone. Ela nao e versionada.'
 
         $required = @('report.json', 'electron.log', 'environment.json', 'manifest.json')
-        $missing = @($required | Where-Object { $exported -notcontains $_ })
+        $missing = @($required | Where-Object { -not (Test-Path -LiteralPath (Join-Path $exportFolder $_) -PathType Leaf) })
         if ($missing.Count -gt 0) {
             Add-Result 'exportacao' 'FAIL' ("faltando: " + ($missing -join ', '))
         }
@@ -726,7 +724,7 @@ if ($after.Count -ne $dirty.Count) {
 Set-Location $script:OriginalLocation
 
 $failed = @($script:Results | Where-Object { $_.Status -eq 'FAIL' })
-$exportHint = if ($exportFolder) { $exportFolder } else { '(exportacao indisponivel — ver as etapas com FAIL acima)' }
+$exportHint = if ($exportFolder) { $exportFolder } else { '(exportacao indisponivel - ver as etapas com FAIL acima)' }
 
 Write-Host ''
 Write-Host ("runId: {0}" -f $RunId)

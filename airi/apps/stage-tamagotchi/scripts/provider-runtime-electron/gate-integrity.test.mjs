@@ -115,7 +115,7 @@ describe('gate.test.mjs — process teardown is identity-based', () => {
   })
 
   it('starts a monitor for every Electron lifetime', () => {
-    assert.match(gate, /createProcessMonitor\(\{ rootPid: applicationProcess\.pid, snapshot \}\)/)
+    assert.match(gate, /createProcessMonitor\(\{ rootPid: applicationProcess\.pid, snapshot, asyncSnapshot \}\)/)
     assert.match(gate, /monitor\.start\(\)/)
   })
 

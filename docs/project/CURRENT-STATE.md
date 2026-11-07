@@ -13,6 +13,15 @@ commit. Registra **estado**, não narrativa: relatório de rodada vai para
 
 ## 0. Estado agora
 
+**PROMPT-31 no Windows (06/11/2026) — gate de componentes do Corte B PASS.**
+No working tree sobre `9d7a831`, o build completo do Stage passou, os 142 testes
+originais do harness passaram e a suíte final tem 143 PASS. PowerShell 5.1 e 7
+executaram separadamente os 16 grupos, com exportações verificadas por SHA-256,
+sem processos rastreados remanescentes nem credenciais sintéticas nos logs.
+O backup do PROMPT-29 preserva os seis arquivos anteriores. Alterações locais
+aguardam revisão. Baseline funcional `3ef6d11`.
+[Relatório e evidências](../architecture/LIA-NATIVE-PROVIDER-COVERAGE.md#18-prompt-31--integração-e-validação-no-windows).
+
 ### 0.0 PROMPT-31 — harness do gate corrigido: identidade de processo, segredos e exportação (06/11/2026, sem commit)
 
 **O que foi corrigido, e por quê.** O PROMPT-30 mediu seis defeitos no harness do

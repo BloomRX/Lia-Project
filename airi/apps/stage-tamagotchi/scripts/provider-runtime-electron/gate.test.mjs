@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 
-import { execFileSync } from 'node:child_process'
+import { execFile, execFileSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { once } from 'node:events'
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
@@ -9,12 +9,13 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
+import { promisify } from 'node:util'
 
 import { _electron as electron } from 'playwright'
 import { build } from 'vite'
 
 import { errorText } from './lib/errors.mjs'
-import { classifyAll, isSameProcess } from './lib/process-identity.mjs'
+import { classifyAll, isSameProcess, parseProcessTable, processTableCommand } from './lib/process-identity.mjs'
 import { createPowerShellSnapshot, createProcessMonitor } from './lib/process-monitor.mjs'
 import { createGroupRecorder, describeGroups } from './lib/run-groups.mjs'
 import { createSecretRegistry, redactionSummary, writeArtifact } from './lib/secret-redaction.mjs'
@@ -43,7 +44,14 @@ async function waitUntil(predicate, label, milliseconds = 5000) {
  *
  * `monitor` is per lifetime; the previous one is stopped before the next launch.
  */
-const snapshot = createPowerShellSnapshot({ execFileSync })
+// Playwright launches Electron through cmd.exe on Windows. Keep the wrapper
+// and its descendants in the same process table for the teardown proof.
+const snapshot = createPowerShellSnapshot({ execFileSync, processName: null })
+const execFileAsync = promisify(execFile)
+async function asyncSnapshot() {
+  const { stdout } = await execFileAsync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', processTableCommand(null)], { encoding: 'utf8', windowsHide: true })
+  return parseProcessTable(stdout)
+}
 
 /** Everything ever observed, across every Electron lifetime in this run. */
 const tracked = []
@@ -87,11 +95,12 @@ function settleProcesses() {
  * Called before every `application.close()`, so the observations of a lifetime
  * are complete before the processes it tracked disappear.
  */
-function stopMonitor() {
+async function stopMonitor() {
   if (!monitor)
     return
-  settleProcesses()
   monitor.stop()
+  await monitor.drain()
+  settleProcesses()
   report.processTracking ??= []
   report.processTracking.push(monitor.stats())
   monitor = undefined
@@ -154,7 +163,7 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
     // Recorded, never fatal: this only says what was already running before the
     // gate started, and a machine with an unrelated Electron open is not a gate
     // failure.
-    report.preexistingProcesses = snapshot().map(identity => ({ pid: identity.pid, createdAt: identity.createdAt === undefined ? 'unknown' : new Date(identity.createdAt).toISOString() }))
+    report.preexistingProcesses = createPowerShellSnapshot({ execFileSync })().map(identity => ({ pid: identity.pid, createdAt: identity.createdAt === undefined ? 'unknown' : new Date(identity.createdAt).toISOString() }))
   }
   catch (error) {
     report.preexistingProcesses = []
@@ -181,7 +190,7 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
     // The first path segment names the provider under test, so each curated
     // provider is authenticated with its own credential and nothing else.
     const segment = path.split('/')[1]
-    const expected = segment in secrets ? secrets[segment] : secrets.generic
+    const expected = keyless.has(segment) ? undefined : secrets[segment] ?? secrets.generic
     const authorization = request.headers.authorization ?? null
     const entry = {
       path,
@@ -273,8 +282,10 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
        * spawns zygotes, GPU and utility children within moments of launch, and
        * the point of the monitor is to see the short-lived ones too.
        */
-      monitor = createProcessMonitor({ rootPid: applicationProcess.pid, snapshot })
+      monitor = createProcessMonitor({ rootPid: applicationProcess.pid, snapshot, asyncSnapshot })
       monitor.start()
+      const electronPid = await application.evaluate(() => process.pid)
+      assert.ok(monitor.identities().some(identity => identity.pid === electronPid && identity.createdAt !== undefined), 'could not identify the Electron main process')
       report.trackedRoots ??= []
       report.trackedRoots.push(applicationProcess.pid)
       report.processTracking ??= []
@@ -321,6 +332,7 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
     const run = async (mode, button = 'Executar JSON', provider = 'openai-compatible') => {
       await page.getByLabel('Serviço').selectOption(provider)
       await page.getByLabel('Endereço').fill(`${base}/${mode}/v1/`)
+      await page.getByLabel('Modelo', { exact: true }).fill('custom/Electron:Q4')
       await page.getByRole('button', { name: button, exact: true }).click()
       return page.evaluate(() => window.providerGate.wait())
     }
@@ -370,6 +382,7 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
     // Main resolves the credential; the renderer only sees response bytes.
     groups.begin(6)
     const models = Object.fromEntries(curated.map((id, index) => [id, `fixture/${id}:Q4-${index}`]))
+    assert.equal(await page.evaluate(() => window.providerGate.clearFixtureKey('lm-studio')), true)
     for (const id of curated.filter(item => !keyless.has(item))) {
       if (!await page.evaluate(({ scope, value }) => window.providerGate.seed(scope, value), { scope: id, value: secrets[id] }))
         throw new Error(`Could not seed a synthetic credential for ${id}`)
@@ -446,6 +459,11 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
     groups.pass(10, 'a disposed execution port refuses further curated sends')
 
     groups.begin(11)
+    for (const [id, value] of [['openai-compatible', secrets.generic], ['lm-studio', secrets.local]]) {
+      if (!await page.evaluate(({ scope, value }) => window.providerGate.seed(scope, value), { scope: id, value }))
+        throw new Error(`Could not restore a synthetic fixture credential for ${id}`)
+    }
+    const stateBeforeDisable = JSON.parse(await readFile(join(root, 'main-state.json'), 'utf8'))
     await page.getByLabel('Serviço').selectOption('openai-compatible')
     const changed = await page.evaluate(async () => {
       const state = await window.providerGate.transports()
@@ -461,7 +479,7 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
     assert.equal((await page.evaluate(() => window.providerGate.executeStored())).code, 'configuration')
     assert.equal(report.requests.length, requestsBeforeDisable)
     const blockedState = JSON.parse(await readFile(join(root, 'main-state.json'), 'utf8'))
-    assert.deepEqual(blockedState.readScopes, operationState.readScopes)
+    assert.deepEqual(blockedState.readScopes, stateBeforeDisable.readScopes)
     const removed = await page.evaluate(async () => {
       const state = await window.providerGate.transports()
       if (!state.ok)
@@ -472,6 +490,8 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
     assert.equal(await page.evaluate(() => window.providerGate.readProtectedSecret('openai-compatible')), undefined)
     assert.equal((await page.evaluate(() => window.providerGate.executeStored())).code, 'configuration')
     assert.equal(report.requests.length, requestsBeforeDisable)
+    const removedState = JSON.parse(await readFile(join(root, 'main-state.json'), 'utf8'))
+    assert.deepEqual(removedState.readScopes, stateBeforeDisable.readScopes)
     const replay = await page.evaluate(({ record, revision }) => window.providerGate.mutate({ kind: 'migrate', expectedRevision: revision, records: [record] }), { record: firstRecord, revision: removed.snapshot.revision })
     assert.equal(replay.ok, true)
     assert.ok(!replay.snapshot.records.some(record => record.id === 'openai-compatible'))
@@ -524,6 +544,7 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
     await application.close()
     report.exitCode = applicationProcess.exitCode
     assert.equal(report.exitCode, 0)
+    await stopMonitor()
     page = await launch()
     const restored = await page.evaluate(() => window.providerGate.config())
     assert.equal(restored.preferred.modelId, 'custom/Electron:Q4')
@@ -554,7 +575,7 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
     settleProcesses()
     await application.close()
     closed = true
-    stopMonitor()
+    await stopMonitor()
     report.exitCode = applicationProcess.exitCode
     assert.equal(report.exitCode, 0)
     assert.ok(report.requests.every(entry => entry.authenticated && entry.closed))
@@ -630,6 +651,7 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
     throw error
   }
   finally {
+    await stopMonitor()
     if (application && !closed) {
       try {
         await application.close()

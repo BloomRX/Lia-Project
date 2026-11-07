@@ -1630,3 +1630,69 @@ estrutural do gate 22.
 
 Nada nesta rodada promove o gate a aprovado, e o Corte B continua **não
 validado**.
+
+## 18. PROMPT-31 — integração e validação no Windows
+
+**06/11/2026. Gate de componentes do Corte B aprovado nas duas versões do PowerShell.**
+Raiz `J:\Lia-Project`, branch `arena/01a10290-lia-project`, HEAD
+`9d7a831a18c722b247dc663486e6a856b28dbcb3`. O checkout estava limpo após o
+fast-forward. As correções desta validação ficam no working tree, índice vazio,
+sem commit ou push. O baseline funcional permanece `3ef6d11`.
+
+| Arquivos locais anteriores | Destino |
+| --- | --- |
+| `gate.test.mjs` | Monitor contínuo, grupos e registro de segredos do Arena preservados. Integrados isolamento de chaves das fixtures, modelo da fixture original e comparação de leituras do cofre antes e depois de bloquear o transporte. |
+| `renderer.ts` do harness | Recuperados os dois acréscimos do backup para limpar a chave sintética de `lm-studio` no perfil isolado. |
+| `run-gate-windows.ps1` | Recuperadas verificação do ZIP/distribuição, compatibilidade 5.1, seleção da nova pasta de artefatos e checagem positiva do TAP. Ambiente e exportação do Arena preservados. |
+| Cobertura, `CURRENT-STATE.md` e `QUANTO-FALTA.md` | Histórico publicado preservado e estado atualizado com as evidências desta rodada. Os textos locais anteriores continuam no backup. |
+
+Os seis SHA-256 das cópias correspondem ao manifesto de
+`J:\Lia-Backup-PROMPT-29-20261106-222316-441690`. O patch original permanece lá.
+
+**Falhas encontradas.** A chamada CIM direta confirmou erro de sintaxe antes de
+`ConvertTo-Json`. Corrigidos o separador de comandos e a propagação de falha
+da consulta. O primeiro gate 5.1 excedeu o limite de 180 s e sua árvore foi
+encerrada pelo PID validado. A consulta síncrona medida levou 426 ms ante um
+intervalo nominal de 150 ms. A coleta periódica passou a ser assíncrona, com
+uma consulta por vez, e é drenada no encerramento e antes do próximo launch.
+O Playwright usa `cmd.exe` como pai do Electron nesta máquina. A tabela do
+monitor inclui o wrapper, e cada launch exige a identidade do Electron Main.
+No runner, a variável local foi renomeada para evitar colisão com `$PSEdition`.
+Outra tentativa passou os 16 grupos mas saiu 1 na exportação porque o manifesto
+era gerado separadamente da lista de cópias. A checagem passou a consultar os
+arquivos no diretório final. Os transcripts das tentativas estão em `J:\lia-evidence`.
+
+| Verificação | Resultado |
+| --- | --- |
+| `node --test lib\*.test.mjs gate-integrity.test.mjs` | 142 PASS no checkout inicial. Após a regressão de coleta sem sobreposição e atualização da asserção de integração, 143 PASS, zero falhas e skips. |
+| ESLint dos arquivos do harness, typecheck do harness e `git diff --check` | PASS |
+| Preparação do runtime | Electron 43.4.1 oficial, ZIP SHA-256 `c2ef9a5f65472c34d14bd3e67b7d14e66b0c01f124aba45263d6a4232160e13a`, 75 arquivos da instalação conferidos. Node 24.22.2 e pnpm 11.24.0. |
+| Build completo do Stage | Exit 0 no primeiro 5.1 e no 7 final. As repetições no 5.1 usaram o preload desse build. |
+| PowerShell 5.1.26100.9711 | Runner e gate exit 0, 16 PASS / 0 FAIL / 0 skips, 39 requisições encerradas, 11 identidades encerradas, timeout de 30 061 ms. |
+| PowerShell 7.6.9 | Runner e gate exit 0, 16 PASS / 0 FAIL / 0 skips, 40 requisições encerradas, 11 identidades encerradas, timeout de 30 058 ms. |
+
+Os grupos 1 a 16 passaram em ambas as execuções. Os relatórios enumeram cada
+resultado, do cofre e da migração ao crash controlado. Em ambas, todas as
+requisições satisfizeram a autenticação esperada e encerraram, a checagem final
+registrou zero identidades vivas, desconhecidas ou não verificáveis, e nenhum
+poll reportou falha. A exportação foi conferida independentemente: os quatro
+arquivos de cada pacote são byte a byte iguais aos originais e conferem com
+tamanho e SHA-256 do manifesto. `logSecretsAbsent=true` e a busca independente
+não encontrou credenciais sintéticas nos arquivos exportados.
+
+O runner foi invocado da pasta do harness, com `-ElectronZip` apontando para o
+ZIP oficial já verificado e `-ExportRoot J:\lia-evidence`, pois não existe `D:`
+no host. No 5.1 foi usado `powershell.exe -NoProfile -ExecutionPolicy Bypass
+-File run-gate-windows.ps1` e, na repetição final, `-SkipBuild`. No 7 foi usado
+`pwsh -NoProfile -File run-gate-windows.ps1`, com build completo.
+
+| Shell | Pasta original em `Tests/artifacts/provider-runtime-electron/` | Pacote em `J:\lia-evidence\` |
+| --- | --- | --- |
+| 5.1 | `1794016273746` | `f3946a69-bb31-40e2-a922-797f849a5e9b` |
+| 7 | `1794016378308` | `d499d307-a11b-4fef-bbb3-78df21084b9d` |
+
+Cada pacote contém `report.json`, `electron.log`, `electron.png`,
+`environment.json` e `manifest.json`. O crash controlado ainda gera aviso de
+frame descartado. A coleta de processos é amostral e pode perder processos
+muito breves. Reinstalação de dependências/runtime, Stage completo, provedores
+externos, voz remota e instalador não foram exercitados nesta rodada.

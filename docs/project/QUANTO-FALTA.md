@@ -11,6 +11,12 @@ Fonte: [`CURRENT-STATE.md`](CURRENT-STATE.md) §0 e §5, medido em
 
 ## Onde o projeto está
 
+06/11 — **PROMPT-31 validado no Windows para o gate de componentes do Corte B**.
+143 testes do harness, build completo do Stage e 16 grupos em cada execução
+real (PowerShell 5.1 e 7). Validação de serviços externos, Stage completo, voz
+remota e instalador permanece pendente.
+[Relatório e evidências](../architecture/LIA-NATIVE-PROVIDER-COVERAGE.md#18-prompt-31--integração-e-validação-no-windows).
+
 06/11 (PROMPT-31): **o harness do gate Electron foi corrigido**, não o produto.
 Cinco defeitos medidos pelo PROMPT-30 deixaram de existir: a liveness deixou de
 usar PID cru e passou a comparar `(pid, createdAt)`; filhos efêmeros passaram a

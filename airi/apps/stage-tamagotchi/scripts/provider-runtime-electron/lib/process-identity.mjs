@@ -260,9 +260,11 @@ export function classifyAll({ root, processes, live }) {
  */
 export function processTableCommand(processName = 'electron.exe') {
   const filter = `Name='${String(processName).replaceAll('\'', '\'\'')}'`
+  const where = processName === null ? '' : ` -Filter "${filter}"`
   return [
-    `$rows = @(Get-CimInstance Win32_Process -Filter "${filter}"`,
-    `  | Select-Object ProcessId, ParentProcessId, @{ n='Created'; e={ if ($_.CreationDate) { $_.CreationDate.ToUniversalTime().ToString("o") } else { $null } } })`,
+    `$ErrorActionPreference = 'Stop';`,
+    `$rows = @(Get-CimInstance Win32_Process${where}`,
+    `  | Select-Object ProcessId, ParentProcessId, @{ n='Created'; e={ if ($_.CreationDate) { $_.CreationDate.ToUniversalTime().ToString('o') } else { $null } } });`,
     `ConvertTo-Json -InputObject $rows -Compress -Depth 3`,
   ].join(' ')
 }

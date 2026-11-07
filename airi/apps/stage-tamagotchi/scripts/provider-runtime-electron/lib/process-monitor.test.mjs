@@ -183,11 +183,42 @@ describe('createProcessMonitor — failures are recorded, never read as "nothing
     monitor.start()
     monitor.stop()
     assert.equal(monitor.stats().intervalMs, 200)
-    assert.match(monitor.stats().coverage, /shorter-lived than one interval can be missed/)
+    assert.match(monitor.stats().coverage, /short-lived processes can be missed/)
   })
 })
 
 describe('createProcessMonitor — lifecycle', () => {
+  it('does not overlap slow periodic queries and drains the last observation on stop', async () => {
+    let tick
+    let finish
+    let calls = 0
+    const monitor = createProcessMonitor({
+      rootPid: ROOT,
+      snapshot: () => [{ pid: ROOT, createdAt: 1 }],
+      asyncSnapshot: () => {
+        calls++
+        return new Promise((resolve) => {
+          finish = resolve
+        })
+      },
+      setInterval: (fn) => {
+        tick = fn
+        return 1
+      },
+      clearInterval: () => { tick = undefined },
+    })
+    monitor.start()
+    tick()
+    tick()
+    await Promise.resolve()
+    assert.equal(calls, 1)
+    monitor.stop()
+    assert.equal(tick, undefined)
+    finish([{ pid: 200, parentPid: ROOT, createdAt: 2 }])
+    await monitor.drain()
+    assert.deepEqual(monitor.identities().map(identity => identity.pid), [ROOT, 200])
+  })
+
   it('polls once at start, so the root is known before anything is launched', () => {
     const { monitor, state } = createHarness()
     state.table = [{ pid: ROOT, parentPid: 0, createdAt: 1 }]

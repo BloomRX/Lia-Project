@@ -10,6 +10,7 @@ import { legacyTransportCandidates, toTransportRecord } from '../../src/renderer
 import {
   electronLiaProviderChatConfigGet,
   electronLiaProviderChatConfigSet,
+  electronLiaSecretDelete,
   electronLiaSecretEncryptionAvailable,
   electronLiaSecretGet,
   electronLiaSecretSet,
@@ -147,6 +148,7 @@ const api = {
   // Adversarial probe only: production execution does not use this getter.
   readProtectedSecret: (scope: string) => useElectronEventaInvoke(electronLiaSecretGet)({ scope, key: 'apiKey' }),
   seed: (scope: string, value: string) => invokeSet({ scope, key: 'apiKey', value }),
+  clearFixtureKey: (scope: string) => useElectronEventaInvoke(electronLiaSecretDelete)({ scope, key: 'apiKey' }),
   encryptionAvailable: () => invokeAvailable(),
   config: () => getConfig(),
   transports: () => getTransports(),

@@ -60,6 +60,7 @@ export const DEFAULT_POLL_INTERVAL_MS = 150
 export function createProcessMonitor({
   rootPid,
   snapshot,
+  asyncSnapshot,
   intervalMs = DEFAULT_POLL_INTERVAL_MS,
   now = () => Date.now(),
   setInterval: schedule = globalThis.setInterval,
@@ -79,6 +80,7 @@ export function createProcessMonitor({
   const failures = []
   let polls = 0
   let timer
+  let pending
   let startedAt
   let stoppedAt
 
@@ -111,19 +113,7 @@ export function createProcessMonitor({
     return table.filter(entry => owned.has(entry.pid))
   }
 
-  function poll() {
-    polls++
-    const stamp = now()
-    let table
-    try {
-      table = snapshot()
-    }
-    catch (error) {
-      // A failed query is recorded, never interpreted as "nothing is running".
-      failures.push({ at: stamp, message: errorText(error) })
-      return { ok: false, observed: 0 }
-    }
-
+  function record(table, stamp) {
     const owned = collect(table)
     for (const entry of owned) {
       // Keyed by PID *and* creation time: a recycled PID is a second, distinct
@@ -135,12 +125,39 @@ export function createProcessMonitor({
     return { ok: true, observed: owned.length }
   }
 
+  function failed(error, stamp) {
+    failures.push({ at: stamp, message: errorText(error) })
+    return { ok: false, observed: 0 }
+  }
+
+  function poll() {
+    polls++
+    const stamp = now()
+    try {
+      return record(snapshot(), stamp)
+    }
+    catch (error) { return failed(error, stamp) }
+  }
+
+  function pollPeriodically() {
+    if (!asyncSnapshot)
+      return poll()
+    if (pending)
+      return
+    polls++
+    const stamp = now()
+    const read = Promise.resolve().then(asyncSnapshot)
+    pending = read.then(table => record(table, stamp)).catch(error => failed(error, stamp)).finally(() => {
+      pending = undefined
+    })
+  }
+
   return {
     /** Take the first reading. Call this before launching, so the root is known. */
     start() {
       startedAt = now()
       poll()
-      timer = schedule(poll, intervalMs)
+      timer = schedule(pollPeriodically, intervalMs)
       if (typeof timer?.unref === 'function')
         timer.unref()
       return this
@@ -152,6 +169,9 @@ export function createProcessMonitor({
         timer = undefined
       }
       stoppedAt = now()
+    },
+    async drain() {
+      await pending
     },
     /** Force one more reading at a chosen moment (used right before teardown). */
     rescan() {
@@ -180,7 +200,7 @@ export function createProcessMonitor({
         startedAt,
         stoppedAt,
         // The blind window, stated as a number rather than implied.
-        coverage: `sampled every ${intervalMs} ms; a process shorter-lived than one interval can be missed`,
+        coverage: `poll requested every ${intervalMs} ms; overlapping queries are skipped and short-lived processes can be missed`,
       }
     },
   }
