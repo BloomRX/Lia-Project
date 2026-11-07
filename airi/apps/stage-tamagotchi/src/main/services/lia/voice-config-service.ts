@@ -104,7 +104,7 @@ function normalizeTtsConfig(value: unknown): LiaVoiceTtsConfig | undefined {
  */
 export function registerLiaVoiceConfigBridge(params: {
   context: MainContext
-  liaProductConfig: { get: () => LiaProductConfig | undefined, update: (value: LiaProductConfig) => void }
+  liaProductConfig: { get: () => LiaProductConfig | undefined, updateAndSave: (mutator: (current: LiaProductConfig) => LiaProductConfig) => Promise<void> }
 }): void {
   const { context, liaProductConfig } = params
 
@@ -115,7 +115,7 @@ export function registerLiaVoiceConfigBridge(params: {
     return { tts: voice?.tts ?? {} }
   })
 
-  defineInvokeHandler(context, electronLiaVoiceConfigSet, (voice: LiaVoiceConfig) => {
+  defineInvokeHandler(context, electronLiaVoiceConfigSet, async (voice: LiaVoiceConfig) => {
     if (!voice || typeof voice !== 'object' || Array.isArray(voice))
       return
 
@@ -129,14 +129,14 @@ export function registerLiaVoiceConfigBridge(params: {
     if (tts.preferred)
       persistedTts.preferred = tts.preferred
 
-    const current = liaProductConfig.get() ?? defaultLiaProductConfig
-    liaProductConfig.update({
+    await liaProductConfig.updateAndSave(current => ({
+      ...current,
       schemaVersion: current.schemaVersion ?? defaultLiaProductConfig.schemaVersion,
       persona: current.persona ?? {},
       provider: current.provider ?? {},
       voice: { ...current.voice, tts: persistedTts },
       preferences: current.preferences ?? {},
-    })
+    }))
   })
 }
 

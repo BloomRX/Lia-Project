@@ -4,6 +4,8 @@ import { readFileSync } from 'node:fs'
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { defaultPresence } from '../../../../../../../lia/core/src/presence'
+
 /**
  * Phase 8.0D-10B-4D4C4-SHELL-B1: the READ-ONLY managed Hearing facts bridge.
  *
@@ -58,7 +60,7 @@ function mockEnv(fs: FsMocks) {
     existsSync: fs.existsSync,
     readFileSync: fs.readFileSync,
   }))
-  vi.doMock('node:fs/promises', () => ({ copyFile, mkdir, rename, writeFile }))
+  vi.doMock('node:fs/promises', () => ({ copyFile, mkdir, rename, writeFile, unlink: vi.fn(async () => {}) }))
 
   vi.doMock('@moeru/eventa', () => ({
     defineInvokeHandler: (_context: unknown, channel: unknown, handler: InvokeHandler) => {
@@ -238,7 +240,7 @@ describe('lia managed hearing config bridge (Phase 8.0D SHELL-B1)', () => {
       tts: { fallback: [], preferred: { providerId: 'lia-voice-kokoro', voiceId: 'pt-BR-joao-gamma' } },
     })
 
-    bridge.setTts({
+    await bridge.setTts({
       tts: {
         fallback: [{ providerId: 'voicevox' }],
         preferred: { modelId: 'kokoro-82M-v1.0', providerId: 'lia-voice-kokoro', voiceId: 'pt-BR-fabiana-gamma' },
@@ -255,7 +257,7 @@ describe('lia managed hearing config bridge (Phase 8.0D SHELL-B1)', () => {
   it('a tts write preserves the stt selection it has no surface for', async () => {
     const bridge = await loadBridge(existingFileMocks('/tmp/u', JSON.stringify(sttDoc())))
 
-    bridge.setTts({ tts: { preferred: { providerId: 'lia-voice-kokoro', voiceId: 'pt-BR-fabiana-gamma' } } })
+    await bridge.setTts({ tts: { preferred: { providerId: 'lia-voice-kokoro', voiceId: 'pt-BR-fabiana-gamma' } } })
 
     const written = await bridge.writtenDoc()
     expect((written.voice as Record<string, unknown>).stt).toEqual({
@@ -267,6 +269,16 @@ describe('lia managed hearing config bridge (Phase 8.0D SHELL-B1)', () => {
       modelId: 'whisper-large-v3-turbo',
       providerId: 'lia-groq-transcription',
     })
+  })
+
+  it('a tts write preserves presence, setup and routing preferences', async () => {
+    const doc = { ...sttDoc(), presence: { ...defaultPresence, mode: 'free', pinned: true }, setup: { completed: true }, brain: { mode: 'manual' } }
+    const bridge = await loadBridge(existingFileMocks('/tmp/u', JSON.stringify(doc)))
+    await bridge.setTts({ tts: { preferred: { providerId: 'local-voice', voiceId: 'chosen' } } })
+    const written = await bridge.writtenDoc()
+    expect(written.presence).toEqual(doc.presence)
+    expect(written.setup).toEqual(doc.setup)
+    expect(written.brain).toEqual(doc.brain)
   })
 
   it('the hearing bridge never writes the document', async () => {

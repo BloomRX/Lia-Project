@@ -20,7 +20,7 @@ type MainContext = ReturnType<typeof createContext>['context']
  */
 export function registerLiaProviderConfigBridge(params: {
   context: MainContext
-  liaProductConfig: { get: () => LiaProductConfig | undefined, update: (value: LiaProductConfig) => void }
+  liaProductConfig: { get: () => LiaProductConfig | undefined, updateAndSave: (mutator: (current: LiaProductConfig) => LiaProductConfig) => Promise<void> }
 }): void {
   const { context, liaProductConfig } = params
 
@@ -29,13 +29,11 @@ export function registerLiaProviderConfigBridge(params: {
     return product?.provider?.chat ?? {}
   })
 
-  defineInvokeHandler(context, electronLiaProviderChatConfigSet, (chat: LiaProviderChatConfig) => {
+  defineInvokeHandler(context, electronLiaProviderChatConfigSet, async (chat: LiaProviderChatConfig) => {
     if (!chat || typeof chat !== 'object')
       return
 
-    const current = liaProductConfig.get() ?? defaultLiaProductConfig
-    const provider = current.provider ?? {}
-    liaProductConfig.update({
+    await liaProductConfig.updateAndSave(current => ({
       ...current,
       schemaVersion: current.schemaVersion ?? defaultLiaProductConfig.schemaVersion,
       persona: current.persona ?? {},
@@ -43,7 +41,7 @@ export function registerLiaProviderConfigBridge(params: {
       // wire shape (shared eventa type: everything optional) differ by design;
       // bridge them explicitly instead of leaning on structural luck.
       provider: {
-        ...provider,
+        ...current.provider,
         chat: {
           ...(chat.strategy ? { strategy: chat.strategy } : {}),
           ...(chat.preferred ? { preferred: chat.preferred } : {}),
@@ -54,6 +52,6 @@ export function registerLiaProviderConfigBridge(params: {
       },
       voice: current.voice ?? {},
       preferences: current.preferences ?? {},
-    })
+    }))
   })
 }

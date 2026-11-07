@@ -33,7 +33,44 @@ vi.mock('@proj-airi/stage-shared/composables', () => ({
 describe('useLanguage', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
+    vi.unstubAllGlobals()
     localStorageMock.clear()
+  })
+
+  it.each(['pt-BR', 'en', 'ja'])('managed Stage restores canonical %s over stale localStorage', async (canonical) => {
+    vi.stubGlobal('location', { search: '?lia-managed=true' })
+    localStorage.setItem('settings/language', 'en')
+    const language = ref('en')
+    const setLocale = vi.fn()
+    await useLanguage(language, async () => canonical, setLocale).restore()
+    await nextTick()
+    expect(language.value).toBe(canonical)
+    expect(setLocale).not.toHaveBeenCalled()
+  })
+
+  it('managed Stage persists a deliberate language change and exposes a failed write', async () => {
+    vi.stubGlobal('location', { search: '?lia-managed=true' })
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const language = ref('en')
+    const error = new Error('write failed')
+    const setLocale = vi.fn().mockRejectedValue(error)
+    const state = useLanguage(language, async () => 'pt-BR', setLocale)
+    await state.restore()
+    language.value = 'en'
+    await nextTick()
+    expect(setLocale).toHaveBeenCalledWith('en')
+    expect(state.syncError.value).toBe(error)
+  })
+
+  it('managed read failure does not overwrite the canonical document with stale renderer state', async () => {
+    vi.stubGlobal('location', { search: '?lia-managed=true' })
+    const setLocale = vi.fn()
+    const state = useLanguage(ref('en'), async () => {
+      throw new Error('unavailable')
+    }, setLocale)
+    await expect(state.restore()).rejects.toThrow('unavailable')
+    expect(setLocale).not.toHaveBeenCalled()
+    expect(state.syncError.value).toBeInstanceOf(Error)
   })
 
   // ROOT CAUSE:

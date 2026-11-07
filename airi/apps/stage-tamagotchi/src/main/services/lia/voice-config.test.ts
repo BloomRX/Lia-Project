@@ -33,7 +33,7 @@ type InvokeHandler = (...args: never[]) => unknown
 
 interface ConfigStub {
   get: () => LiaProductConfig | undefined
-  update: (value: LiaProductConfig) => void
+  updateAndSave: (mutator: (current: LiaProductConfig) => LiaProductConfig) => Promise<void>
 }
 
 function missingFileMocks(userData: string): FsMocks {
@@ -70,7 +70,7 @@ function mockEnv(fs: FsMocks) {
     existsSync: fs.existsSync,
     readFileSync: fs.readFileSync,
   }))
-  vi.doMock('node:fs/promises', () => ({ copyFile, mkdir, rename, writeFile }))
+  vi.doMock('node:fs/promises', () => ({ copyFile, mkdir, rename, writeFile, unlink: vi.fn(async () => {}) }))
 
   vi.doMock('@moeru/eventa', () => ({
     defineInvokeHandler: (_context: unknown, channel: unknown, handler: InvokeHandler) => {
@@ -189,11 +189,15 @@ describe('lia voice (tts) config bridge', () => {
 
   it('returns { tts: {} } from Get when the config handle reports no document at all', async () => {
     const update = vi.fn()
-    const bridge = await loadBridgeWithStub(missingFileMocks('/tmp/u'), { get: () => undefined, update })
+    const { defaultLiaProductConfig } = await import('../../configs/lia')
+    const bridge = await loadBridgeWithStub(missingFileMocks('/tmp/u'), {
+      get: () => undefined,
+      updateAndSave: async mutator => update(mutator(defaultLiaProductConfig)),
+    })
     expect(bridge.get()).toEqual({ tts: {} })
 
     // A write with no existing document starts from the product defaults.
-    bridge.set({ tts: { preferred: { providerId: 'kokoro-local' } } })
+    await bridge.set({ tts: { preferred: { providerId: 'kokoro-local' } } })
     expect(update).toHaveBeenCalledTimes(1)
     expect(update.mock.calls[0][0]).toEqual({
       schemaVersion: 1,
@@ -207,7 +211,7 @@ describe('lia voice (tts) config bridge', () => {
   it('round-trips providerId / modelId / voiceId for preferred and fallback', async () => {
     const bridge = await loadBridge(missingFileMocks('/tmp/u'))
 
-    bridge.set({ tts: chosenTts })
+    await bridge.set({ tts: chosenTts })
     expect(bridge.get()).toEqual({ tts: chosenTts })
 
     // The flushed document carries the same targets…
@@ -222,7 +226,7 @@ describe('lia voice (tts) config bridge', () => {
   it('writes only the voice domain on Set, preserving persona / provider / preferences', async () => {
     const bridge = await loadBridge(existingFileMocks('/tmp/u', JSON.stringify(seededDoc)))
 
-    bridge.set({ tts: { preferred: { providerId: 'kokoro-local', voiceId: 'af_sky' } } })
+    await bridge.set({ tts: { preferred: { providerId: 'kokoro-local', voiceId: 'af_sky' } } })
 
     const current = bridge.productConfig.get()
     expect(current?.persona).toEqual({ activeCardId: 'lia' })
@@ -249,7 +253,7 @@ describe('lia voice (tts) config bridge', () => {
       preferences: {},
     })))
 
-    bridge.set({ tts: { preferred: { providerId: 'voicevox' } } })
+    await bridge.set({ tts: { preferred: { providerId: 'voicevox' } } })
 
     expect(bridge.productConfig.get()?.voice?.stt).toEqual({
       preferred: { providerId: 'groq', modelId: 'whisper-large-v3' },
@@ -261,7 +265,7 @@ describe('lia voice (tts) config bridge', () => {
     const bridge = await loadBridge(existingFileMocks('/tmp/u', JSON.stringify(seededDoc)))
     expect(bridge.productConfig.get()?.schemaVersion).toBe(1)
 
-    bridge.set({ tts: { preferred: { providerId: 'kokoro-local' } } })
+    await bridge.set({ tts: { preferred: { providerId: 'kokoro-local' } } })
     expect(bridge.productConfig.get()?.schemaVersion).toBe(1)
 
     const doc = await bridge.writtenDoc()
@@ -284,7 +288,7 @@ describe('lia voice (tts) config bridge', () => {
       voice: { tts: { preferred: { providerId: 'kokoro-local', voiceId: 'af_sky' } } },
     })))
 
-    bridge.set(payload)
+    await bridge.set(payload)
 
     // Nothing was persisted and the previous TTS choice is intact. `fallback`
     // is `optional(array(...), [])` in the product schema, so the document read
@@ -298,7 +302,7 @@ describe('lia voice (tts) config bridge', () => {
   it('drops unknown/credential-shaped fields so no secret can reach lia-product.json', async () => {
     const bridge = await loadBridge(missingFileMocks('/tmp/u'))
 
-    bridge.set({
+    await bridge.set({
       tts: {
         preferred: {
           providerId: 'openai-compatible-audio-speech',
@@ -331,7 +335,7 @@ describe('lia voice (tts) config bridge', () => {
   it('a credential-only payload is rejected outright and persists nothing', async () => {
     const bridge = await loadBridge(missingFileMocks('/tmp/u'))
 
-    bridge.set({ tts: { apiKey: 'sk-super-secret-123' } })
+    await bridge.set({ tts: { apiKey: 'sk-super-secret-123' } })
 
     expect(bridge.writtenPaths()).toEqual([])
     expect(bridge.get()).toEqual({ tts: {} })
@@ -344,7 +348,7 @@ describe('lia voice (tts) config bridge', () => {
     expect(productPath).toMatch(/lia-product\.json$/)
     expect(productPath).not.toMatch(/lia-main-window\.json$/)
 
-    bridge.set({ tts: { preferred: { providerId: 'kokoro-local' }, fallback: [{ providerId: 'voicevox' }] } })
+    await bridge.set({ tts: { preferred: { providerId: 'kokoro-local' }, fallback: [{ providerId: 'voicevox' }] } })
 
     await vi.waitFor(() => {
       expect(bridge.writtenPaths().length).toBeGreaterThan(0)
@@ -358,7 +362,7 @@ describe('lia voice (tts) config bridge', () => {
   it('exposes no secret channel and never persists a credential-shaped key', async () => {
     const bridge = await loadBridge(missingFileMocks('/tmp/u'))
 
-    bridge.set({ tts: { preferred: { providerId: 'openai', modelId: 'tts-1', voiceId: 'alloy' } } })
+    await bridge.set({ tts: { preferred: { providerId: 'openai', modelId: 'tts-1', voiceId: 'alloy' } } })
 
     const doc = await bridge.writtenDoc()
     // Secrets stay in the Phase 4C vault; this bridge registers no vault channel.

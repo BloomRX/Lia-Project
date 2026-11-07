@@ -26,6 +26,15 @@ subagentes nem descartar seus arquivos. Plano e pendências priorizadas em
 Windows disponíveis; nenhum benchmark comparativo ou migração foi aprovado.
 Baseline funcional continua `3ef6d11`.
 
+**Bloqueio ativo da retomada:** a variante autenticada Launcher → Stage não
+consegue decifrar a credencial sintética no segundo host. Os dois perfis possuem
+materiais de proteção diferentes; nenhum material foi copiado nem perfil ativo
+compartilhado como correção. A variante local explicitamente sem chave já
+produziu resposta visível. Memória opt-in/opt-out e alteração de personalidade
+chegaram às requisições no Windows nessa variante; não aprovam serviço externo.
+Transação de preferências Main: 91 testes PASS e revisão independente sem
+achados após a correção de publicação somente após `rename`.
+
 **Transcrição gravada nativa — 07/11.** Cancelamento atravessa sessão, Renderer,
 IPC e HTTP Main, com UUID, isolamento por janela, deadline distinta e descarte
 de respostas tardias. Cinco definições de gravação usam `audio-transcription`

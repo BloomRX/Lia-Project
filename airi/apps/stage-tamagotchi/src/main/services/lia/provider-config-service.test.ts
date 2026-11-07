@@ -20,7 +20,7 @@ vi.mock('../../../shared/eventa', () => ({
 vi.mock('../../configs/lia', () => import('../../configs/lia-schema'))
 
 describe('provider configuration persistence bridge', () => {
-  it('round-trips a custom model without discarding existing optional product preferences', () => {
+  it('round-trips a custom model without discarding existing optional product preferences', async () => {
     let product: LiaProductConfig = parse(liaProductConfigSchema, {
       schemaVersion: 1,
       setup: { completed: true },
@@ -34,13 +34,13 @@ describe('provider configuration persistence bridge', () => {
       context: {} as Parameters<typeof registerLiaProviderConfigBridge>[0]['context'],
       liaProductConfig: {
         get: () => product,
-        update: (value) => {
-          product = parse(liaProductConfigSchema, JSON.parse(JSON.stringify(value)))
+        updateAndSave: async (mutator) => {
+          product = parse(liaProductConfigSchema, JSON.parse(JSON.stringify(mutator(product))))
         },
       },
     })
     const chat = { preferred: { providerId: 'service', modelId: 'custom/Exact:Q4' }, fallbackEnabled: false }
-    ipc.handlers.get('set')!(chat)
+    await ipc.handlers.get('set')!(chat)
     expect(ipc.handlers.get('get')!()).toMatchObject(chat)
     expect(product.brain).toEqual(before.brain)
     expect(product.setup).toEqual(before.setup)

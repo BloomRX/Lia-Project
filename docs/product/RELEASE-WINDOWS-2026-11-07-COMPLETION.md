@@ -34,8 +34,12 @@ Defeitos encontrados e tratados nesta retomada:
 - Rodapé técnico aparecia nas telas comuns do Launcher. Agora só aparece em
   Diagnósticos; revisão visual confirmou a correção.
 
-A fila transacional das preferências Main está em validação: alterações
-rejeitadas por falha de armazenamento não devem contaminar uma gravação posterior.
+A fila transacional das preferências Main foi corrigida e revisada: alterações
+rejeitadas não contaminam gravações posteriores. Os três escritores de provider,
+voz e engine de voz usam a mesma fila. O estado em memória só é publicado após
+`rename`; o temporário próprio é removido em falha. Regressão presença rejeitada
+→ idioma salvo → reinício passou. Contraprova publicando antecipadamente falhou.
+Reexecução focada final: 91/91, exit 0 (`completion-atomic-final.log`).
 
 ## Resultados já observados
 
@@ -90,7 +94,51 @@ imagem + texto externo, multimonitor/DPI físico, jogo em primeiro plano e
 execução prolongada. O endereço anteriormente informado do serviço local não
 estava acessível na tentativa anterior; isso não autoriza usar chaves privadas.
 
-## Empacotamento
+## Bloqueio criptográfico entre Launcher e Stage
+
+O primeiro uso com chave sintética falhou após ativação correta de provider/model
+e aceite do job pelo Main. A chamada de HTTP nem chegou ao serviço local;
+o resultado era `network`. A leitura de credencial pode lançar erro de
+decifragem: agora isso é reportado como `credentials`, sem detalhes privados.
+Teste vermelho reproduziu `network`; correção e conjunto de 76 casos passaram.
+Não foi alterado ciphertext, configuração de proteção do Windows ou perfil do usuário.
+
+O Launcher não redireciona o perfil Chromium em `src/main/index.ts`, embora o
+cofre de produto use o diretório Lia. O Stage redireciona `app.userData` para
+esse diretório. Um probe separado no Electron oficial sobre o **cofre sintético**
+registrou `available:true`, uma entrada e `decrypts:false` no perfil Stage
+(`J:/lia-evidence/synthetic-vault-check.log`). A divergência de perfis e a
+impossibilidade de decifrar foram observadas; não se presume que compartilhar
+o arquivo de cofre compartilhe sua chave de proteção.
+Leitura local dos metadados `Local State` confirmou apenas três booleanos:
+ambos os perfis possuem chave protegida e os valores protegidos diferem.
+Nenhum valor dessas chaves foi impresso ou versionado.
+
+A correção arquitetural ainda exige um proprietário de credenciais e migração
+segura. Não foram copiados materiais criptográficos, compartilhado um perfil
+Chromium ativo entre hosts ou enviados segredos ao Renderer para contornar o
+problema. A documentação [oficial de safeStorage](https://www.electronjs.org/docs/latest/api/safe-storage)
+explica a proteção do sistema; ela não é evidência de interoperabilidade entre
+estes dois hosts da Lia.
+
+**FAIL Windows: primeiro uso autenticado Launcher → Stage.** Voz/STT que usem
+credenciais escritas por outro host também precisam dessa verificação; gates
+do mesmo processo não a substituem. Serviço externo permanece BLOCKED: nova
+tentativa de `http://localhost:20128/v1/models` expirou em 4 s.
+
+**PASS Windows, limitado ao serviço local explicitamente sem chave:** no perfil
+`completion-resume-runtime-1794086283857`, a UI escolheu a opção sem chave,
+descobriu o modelo, verificou a ferramenta e abriu Stage. O texto enviado pelo
+chat produziu uma requisição SSE Main com o modelo selecionado e uma resposta
+visível. A variante keyless não aprova a variante autenticada. O roteiro desse
+perfil escreveu a palavra `authenticated` em um rótulo genérico; a autoridade
+é `authentication:explicit-keyless-local-service`, sem header de autorização.
+O roteiro seguinte corrigiu esse rótulo para `credentialPolicyPassed`.
+
+O restante desse roteiro falhou ao localizar o botão Settings por capitalização
+do nome acessível; conversa já observada não aprova memória/personalidade.
+
+## Empacotamento privado (estado em andamento)
 
 Pipeline privado criado, com Stage oficial incluído no Launcher e seleção por
 `resources/stage/LiaStage.exe`. Não depende de Node/pnpm no caminho instalado.

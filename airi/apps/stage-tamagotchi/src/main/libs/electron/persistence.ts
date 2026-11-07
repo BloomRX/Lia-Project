@@ -2,7 +2,7 @@ import type { BaseIssue, BaseSchema, InferIssue, InferOutput } from 'valibot'
 
 import { randomUUID } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
-import { copyFile, mkdir, rename, writeFile } from 'node:fs/promises'
+import { copyFile, mkdir, rename, unlink, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 
 import { safeDestr } from 'destr'
@@ -66,7 +66,7 @@ export function createConfig<TSchema extends PersistedSchema>(
   filename: string,
   schema: TSchema,
   options?: CreateConfigOptions<InferOutput<TSchema>>,
-): Config<TSchema> {
+): Config<TSchema> & { flush: () => Promise<void>, commit: (value: InferOutput<TSchema>) => Promise<void> } {
   const key = `${namespace}:${filename}`
   const autoHeal = options?.autoHeal ?? Boolean(options?.default)
 
@@ -77,33 +77,75 @@ export function createConfig<TSchema extends PersistedSchema>(
     return diagnostics
   }
 
-  const save = throttle(async () => {
-    try {
-      const path = configPath()
+  let revision = 0
+  let scheduledRevision = 0
+  let writes: Promise<void> = Promise.resolve()
+  let legacyWrites: Promise<void> = Promise.resolve()
+
+  const enqueueSnapshot = (snapshot: string, publish?: () => void) => {
+    const path = configPath()
+    const write = async () => {
       await ensureConfigDirectory(path)
       const tmpPath = `${path}.${randomUUID()}.tmp`
-      await writeFile(tmpPath, JSON.stringify(persistenceMap.get(key)))
-      await rename(tmpPath, path)
+      try {
+        await writeFile(tmpPath, snapshot)
+        await rename(tmpPath, path)
+        publish?.()
+      }
+      finally {
+        await unlink(tmpPath).catch(() => {})
+      }
     }
-    catch (error) {
-      console.error('Failed to save config', error)
-    }
-  }, 250)
+    const next = writes.then(write, write)
+    writes = next
+    // Observing rejection does not change the promise returned to the caller.
+    void next.catch(() => {})
+    return next
+  }
 
-  const writeHealingConfig = async (value: InferOutput<TSchema>) => {
-    try {
-      const path = configPath()
+  const scheduleSave = () => {
+    if (scheduledRevision >= revision)
+      return legacyWrites
+    const savingRevision = revision
+    scheduledRevision = savingRevision
+    const next = enqueueSnapshot(JSON.stringify(persistenceMap.get(key)))
+    legacyWrites = next
+    // Legacy update() remains fire-and-forget. flush() receives the original
+    // rejecting promise, while this observer prevents unhandled rejections.
+    void next.catch((error) => {
+      if (scheduledRevision === savingRevision)
+        scheduledRevision = savingRevision - 1
+      console.error('Failed to save config', error)
+    })
+    return next
+  }
+  const save = throttle(() => {
+    void scheduleSave()
+  }, 250)
+  const flush = () => scheduleSave()
+  const commit = (value: InferOutput<TSchema>) => {
+    const committed = structuredClone(value)
+    return enqueueSnapshot(JSON.stringify(committed), () => persistenceMap.set(key, committed))
+  }
+
+  const writeHealingConfig = (value: InferOutput<TSchema>) => {
+    const path = configPath()
+    const snapshot = JSON.stringify(value)
+    const heal = async () => {
       await ensureConfigDirectory(path)
       if (existsSync(path)) {
         await copyFile(path, `${path}.bak`).catch(err => console.warn('Failed to create backup for config:', path, err))
       }
-      await writeFile(path, JSON.stringify(value))
-      return true
+      await writeFile(path, snapshot)
     }
-    catch (error) {
+    // Healing is a disk write too: the first user update must follow it.
+    const next = writes.then(heal, heal)
+    writes = next
+    legacyWrites = next
+    return next.then(() => true, (error) => {
       console.error('Failed to heal config', error)
       return false
-    }
+    })
   }
 
   const setup = () => {
@@ -167,6 +209,7 @@ export function createConfig<TSchema extends PersistedSchema>(
 
   const update = (newData: InferOutput<TSchema>) => {
     persistenceMap.set(key, newData)
+    revision += 1
     save()
   }
 
@@ -178,6 +221,8 @@ export function createConfig<TSchema extends PersistedSchema>(
     setup,
     get,
     update,
+    flush,
+    commit,
     getDiagnostics,
   }
 }
