@@ -13,6 +13,19 @@ commit. Registra **estado**, não narrativa: relatório de rodada vai para
 
 ## 0. Estado agora
 
+**Finalização retomada — 07/11, integração em andamento.** Trabalho da execução
+interrompida preservado: configuração IA no Launcher, personalidade, memória,
+presença e pipeline privado Windows. Inventário, revisão independente e testes
+encontraram corridas reais; ainda não há aprovação do app completo. Correções
+de startup/cancelamento estão em validação; transação Main revisada e 91 testes
+focados PASS, sem publicação de alteração cuja gravação falhou. Próximo: testar
+primeiro uso em perfil vazio até resposta visível, depois build completo e
+empacotamento sem desenvolvimento concorrente. Não repetir a investigação dos
+subagentes nem descartar seus arquivos. Plano e pendências priorizadas em
+[Conclusão funcional](LIA-APP-COMPLETION-PLAN.md). Estudo de engines e coletor
+Windows disponíveis; nenhum benchmark comparativo ou migração foi aprovado.
+Baseline funcional continua `3ef6d11`.
+
 **Transcrição gravada nativa — 07/11.** Cancelamento atravessa sessão, Renderer,
 IPC e HTTP Main, com UUID, isolamento por janela, deadline distinta e descarte
 de respostas tardias. Cinco definições de gravação usam `audio-transcription`

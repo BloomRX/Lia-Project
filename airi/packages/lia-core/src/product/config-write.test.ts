@@ -4,6 +4,7 @@ import { join } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
 
+import { defaultPresence } from '../../../../../lia/core/src/presence'
 import { readLiaProductConfig, readSetupCompletedConfig, updateLiaProductConfig } from './config'
 
 /**
@@ -59,6 +60,20 @@ describe('7.9F selected-engine roundtrip (write -> read survives, neighbors unto
 })
 
 describe('updateLiaProductConfig', () => {
+  it('persists validated presence while preserving other product preferences', async () => {
+    const file = await freshConfig({ preferences: { language: 'pt-BR' }, schemaVersion: 1 })
+    const presence = { ...defaultPresence, mode: 'free' as const, pinned: true }
+    expect((await updateLiaProductConfig(file, { presence })).status).toBe('ok')
+    const result = await readLiaProductConfig(file)
+    expect(result.status).toBe('ok')
+    if (result.status !== 'ok')
+      throw new Error('Expected persisted configuration')
+    expect(result.value.presence).toEqual(presence)
+    expect(result.value.preferences?.language).toBe('pt-BR')
+    const before = await readFile(file, 'utf8')
+    expect((await updateLiaProductConfig(file, { presence: { ...presence, scale: 0 } })).status).toBe('invalid-source')
+    expect(await readFile(file, 'utf8')).toBe(before)
+  })
   it('g. an IA change persists beside everything that was already there', async () => {
     const file = await freshConfig({
       persona: { activeCardId: 'lia-default' },

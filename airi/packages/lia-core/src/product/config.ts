@@ -5,6 +5,8 @@ import { dirname } from 'node:path'
 
 import { safeDestr } from 'destr'
 
+import { isPresenceConfig } from '../../../../../lia/core/src/presence'
+
 /**
  * Tolerant reader for the canonical Lia product document
  * (`<lia-user-data>/lia-product.json`, Phase 7).
@@ -138,6 +140,7 @@ export interface LiaProductBrainSelection {
 }
 
 export interface LiaProductConfigSnapshot {
+  presence?: import('../../../../../lia/core/src/presence').PresenceConfig
   schemaVersion?: number
   persona?: { activeCardId?: string }
   provider?: { chat?: LiaProductChatConfig }
@@ -209,6 +212,8 @@ export async function readLiaProductConfig(
 
 function extract(doc: Record<string, unknown>): LiaProductConfigSnapshot {
   const snapshot: LiaProductConfigSnapshot = {}
+  if (isPresenceConfig(doc.presence))
+    snapshot.presence = structuredClone(doc.presence)
   if (typeof doc.schemaVersion === 'number')
     snapshot.schemaVersion = doc.schemaVersion
 
@@ -367,6 +372,7 @@ function asTtsTarget(value: unknown): LiaProductTtsTarget | undefined {
 export const SECRET_FIELD_NAMES = ['apikey', 'apisecret', 'bearer', 'secret', 'token'] as const
 
 export interface LiaProductConfigUpdate {
+  presence?: import('../../../../../lia/core/src/presence').PresenceConfig
   persona?: { activeCardId?: string }
   provider?: { chat?: Partial<LiaProductChatConfig> }
   preferences?: { language?: string }
@@ -525,6 +531,8 @@ export async function updateLiaProductConfig(
 
   if (containsSecretField(update))
     return { error: new Error('API keys and tokens belong to the secret vault, never to lia-product.json.'), filePath, status: 'secret-forbidden' }
+  if (update.presence !== undefined && !isPresenceConfig(update.presence))
+    return { error: new Error('Invalid presence configuration.'), filePath, status: 'invalid-source' }
 
   // Start from the raw document when it exists and parses; create a fresh
   // one when the user simply never ran any host before.
@@ -564,6 +572,8 @@ export async function updateLiaProductConfig(
 
 function mergeProductUpdate(raw: Record<string, unknown>, update: LiaProductConfigUpdate): Record<string, unknown> {
   const next: Record<string, unknown> = { ...raw }
+  if (update.presence !== undefined)
+    next.presence = structuredClone(update.presence)
   if (update.persona) {
     next.persona = { ...asRecord(raw.persona), ...definedOnly(update.persona) }
   }
