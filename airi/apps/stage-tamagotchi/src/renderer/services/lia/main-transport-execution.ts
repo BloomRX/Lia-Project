@@ -1,5 +1,5 @@
 import type { ChatRequest, ProviderConfig } from '../../../../../../../lia/core/src/providers/index'
-import type { TransportStartRequest } from '../../../shared/eventa/lia-transport-execution'
+import type { LiaSpeechInput, TransportStartRequest } from '../../../shared/eventa/lia-transport-execution'
 
 import { useElectronEventaInvoke } from '@proj-airi/electron-vueuse'
 
@@ -118,6 +118,13 @@ export function createMainTransportExecution() {
   })
   return {
     dispatch: (config: ProviderConfig, body: ChatRequest, signal?: AbortSignal) => execute({ providerId: config.providerId, expectedBaseUrl: config.baseUrl, operation: 'chat', body }, signal),
+    async synthesize(providerId: string, baseUrl: string, speech: LiaSpeechInput, signal: AbortSignal) {
+      const response = await execute({ providerId, expectedBaseUrl: baseUrl, operation: 'speech', speech }, signal)
+      const audio = await response.arrayBuffer()
+      if (!audio.byteLength)
+        throw new ProviderError('empty')
+      return audio
+    },
     async discover(providerId: string, value: Record<string, unknown>) {
       try {
         const response = await execute({ providerId, operation: 'models', draft: draft(value) })

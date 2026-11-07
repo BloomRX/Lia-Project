@@ -16,6 +16,7 @@ import { ProviderRegistry } from '../../../../../../../lia/core/src/providers/re
 import { ProviderRuntime } from '../../../../../../../lia/core/src/providers/runtime'
 import { electronLiaTransportCancel, electronLiaTransportPull, electronLiaTransportStart } from '../../../shared/eventa/lia-transport-execution'
 import { isCuratedChatProvider } from '../../../shared/lia/provider-catalog'
+import { supportsMainSpeech } from '../../../shared/lia/speech-transport'
 import { withLiaProviderHeaders } from './provider-request-headers'
 
 interface Owner {
@@ -33,6 +34,7 @@ interface Owner {
 type Repository = Pick<ReturnType<typeof createTransportRepository>, 'read'>
 const MAX_BODY = 16 * 1024 * 1024
 const MAX_CHUNK = 64 * 1024
+const MAX_SPEECH_BYTES = 8 * 1024 * 1024
 /**
  * Which provider ids may be exercised by a *draft* (a request carrying its own
  * endpoint and key) before any record exists.
@@ -104,14 +106,25 @@ function validBody(value: unknown): value is ChatRequest {
 }
 
 function validateStart(value: unknown): LiaTransportStartRequest {
-  if (!object(value) || !keys(value, ['providerId', 'expectedBaseUrl', 'operation', 'body', 'draft'])
-    || !identifier(value.providerId) || !['chat', 'models'].includes(String(value.operation))) {
+  if (!object(value) || !keys(value, ['providerId', 'expectedBaseUrl', 'operation', 'body', 'draft', 'speech'])
+    || !identifier(value.providerId) || !['chat', 'models', 'speech'].includes(String(value.operation))) {
     throw new ProviderError('configuration')
   }
   if (value.expectedBaseUrl !== undefined)
     endpoint(value.expectedBaseUrl)
   if (value.operation === 'chat' ? !validBody(value.body) : value.body !== undefined)
     throw new ProviderError('configuration')
+  if (value.operation === 'speech') {
+    const speech = value.speech
+    if (!supportsMainSpeech(value.providerId) || value.draft !== undefined || !object(speech) || !keys(speech, ['model', 'voice', 'input'])
+      || !identifier(speech.model) || !identifier(speech.voice)
+      || typeof speech.input !== 'string' || !speech.input.trim() || speech.input.length > 4096) {
+      throw new ProviderError('configuration')
+    }
+  }
+  else if (value.speech !== undefined) {
+    throw new ProviderError('configuration')
+  }
   if (value.draft !== undefined) {
     // `baseUrl` only. A payload that still carries `apiKey` is REJECTED rather
     // than silently ignored: an old renderer sending one is a client that still
@@ -142,6 +155,7 @@ interface Job {
   reader?: ReadableStreamDefaultReader<Uint8Array>
   remainder?: Uint8Array
   reading: boolean
+  speechBytes?: number
   head: Promise<LiaTransportPullResult>
   resolveHead: (result: LiaTransportPullResult) => void
   error?: LiaTransportExecutionFailure
@@ -261,6 +275,36 @@ export function createLiaTransportExecutionService(params: { repository: Reposit
       const mayUseVault = !request.draft || (candidates.length === 1 && draftUrl === savedUrl)
       if (!request.draft && request.expectedBaseUrl !== undefined && endpoint(request.expectedBaseUrl) !== savedUrl)
         throw new ProviderError('configuration')
+      if (request.operation === 'speech') {
+        if (record.protocol !== 'audio-speech' || record.definitionId !== record.providerId)
+          throw new ProviderError('unsupported')
+        const url = new URL('audio/speech', savedUrl)
+        if (url.protocol !== 'https:' && !['localhost', '127.0.0.1', '[::1]'].includes(url.hostname))
+          throw new ProviderError('configuration')
+        const credential = await race(Promise.resolve(params.vault.getSecret(record.credentialRef.scope, record.credentialRef.key)), job)
+        if (!credential)
+          throw new ProviderError('credentials')
+        const audio = await race(fetch(url, {
+          method: 'POST',
+          redirect: 'error',
+          headers: { 'Authorization': `Bearer ${credential}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify(request.speech),
+          signal: job.controller.signal,
+        }), job)
+        const contentType = audio.headers.get('content-type')?.split(';')[0].trim().toLowerCase()
+        if (!audio.ok || !audio.body || !contentType?.startsWith('audio/')) {
+          void audio.body?.cancel().catch(() => {})
+          if (!audio.ok)
+            throw new ProviderError(audio.status === 401 || audio.status === 403 ? 'credentials' : 'http', audio.status)
+          throw new ProviderError('protocol')
+        }
+        job.speechBytes = 0
+        job.reader = audio.body.getReader()
+        job.resolveHead({ ok: true, status: 200, contentType })
+        return
+      }
+      if (record.protocol !== 'chat-completions' || supportsMainSpeech(record.providerId))
+        throw new ProviderError('unsupported')
       const registry = new ProviderRegistry()
       registry.register({ id: record.providerId, protocol: record.protocol })
       const runtime = new ProviderRuntime(registry, {
@@ -368,6 +412,11 @@ export function createLiaTransportExecutionService(params: { repository: Reposit
         return { ok: true, done: true }
       }
       const chunk = result.value!
+      if (!job.remainder && job.speechBytes !== undefined) {
+        job.speechBytes += chunk.byteLength
+        if (job.speechBytes > MAX_SPEECH_BYTES)
+          throw new ProviderError('protocol')
+      }
       job.remainder = chunk.byteLength > MAX_CHUNK ? chunk.subarray(MAX_CHUNK) : undefined
       return { ok: true, done: false, bytes: Array.from(chunk.subarray(0, MAX_CHUNK)) }
     }

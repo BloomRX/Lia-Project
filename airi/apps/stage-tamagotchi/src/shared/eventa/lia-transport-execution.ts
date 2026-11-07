@@ -2,11 +2,18 @@ import type { ChatRequest, ProviderErrorCode } from '../../../../../../lia/core/
 
 import { defineInvokeEventa } from '@moeru/eventa'
 
+export interface LiaSpeechInput {
+  model: string
+  voice: string
+  input: string
+}
+
 export interface LiaTransportStartRequest {
   providerId: string
   expectedBaseUrl?: string
-  operation: 'chat' | 'models'
+  operation: 'chat' | 'models' | 'speech'
   body?: ChatRequest
+  speech?: LiaSpeechInput
   /**
    * An endpoint that is not persisted yet — the "test this address" path.
    *

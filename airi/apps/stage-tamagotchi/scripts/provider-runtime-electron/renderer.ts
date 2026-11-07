@@ -145,6 +145,16 @@ document.querySelector('#cancel')!.addEventListener('click', () => controller?.a
 window.addEventListener('beforeunload', () => native.dispose())
 
 const api = {
+  synthesizeFixtureSpeech: async (providerId: string, baseUrl: string) => {
+    const port = createMainTransportExecution()
+    try {
+      const bytes = await port.synthesize(providerId, baseUrl, { model: 'fixture-speech', voice: 'fixture-voice', input: 'Olá' }, new AbortController().signal)
+      return Array.from(new Uint8Array(bytes))
+    }
+    finally {
+      port.dispose()
+    }
+  },
   // Adversarial probe only: production execution does not use this getter.
   readProtectedSecret: (scope: string) => useElectronEventaInvoke(electronLiaSecretGet)({ scope, key: 'apiKey' }),
   seed: (scope: string, value: string) => invokeSet({ scope, key: 'apiKey', value }),

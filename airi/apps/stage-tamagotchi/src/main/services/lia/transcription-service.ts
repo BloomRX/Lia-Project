@@ -144,7 +144,7 @@ export function createLiaTranscriptionService(options: LiaTranscriptionServiceOp
       // application. A tombstoned or disabled provider must not silently fall
       // back to a default endpoint: that would send a stored credential to an
       // address the user removed.
-      if (candidates.length !== 1 || !candidates[0].enabled)
+      if (candidates.length !== 1 || !candidates[0].enabled || candidates[0].protocol !== 'chat-completions')
         throw new ProviderError('configuration')
       const record = candidates[0]
       const credential = options.vault.getSecret(record.credentialRef.scope, record.credentialRef.key)

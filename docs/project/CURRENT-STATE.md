@@ -13,6 +13,14 @@ commit. Registra **estado**, não narrativa: relatório de rodada vai para
 
 ## 0. Estado agora
 
+**Pós-Corte B — prévia de voz compatível pelo Main.** Corte B consolidado em
+`13cbb52`. A prévia para os dois adaptadores `audio/speech` usa o transporte
+Lia, chave já no cofre e endpoint salvo. Main protege os escopos, limita bytes
+e reaproveita cancelamento e isolamento por janela. 118 testes focados, 77 Core,
+143 harness, lint, typecheck, build Stage e 16/16 grupos no Electron Windows
+em PowerShell 5.1/7. Próximo: configuração avançada de voz e fala automática.
+[Mapa, auditoria e evidências](../architecture/LIA-NATIVE-SPEECH-PREVIEW.md).
+
 **PROMPT-31 no Windows (06/11/2026) — gate de componentes do Corte B PASS.**
 No working tree sobre `9d7a831`, o build completo do Stage passou, os 142 testes
 originais do harness passaram e a suíte final tem 143 PASS. PowerShell 5.1 e 7

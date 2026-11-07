@@ -57,7 +57,7 @@ export function isTransportRecord(value: unknown): value is TransportRecord {
   if (!object(value) || !Object.keys(value).every(key => recordKeys.has(key)))
     return false
   return identifier(value.id) && identifier(value.providerId) && identifier(value.definitionId)
-    && value.type === 'http' && value.protocol === 'chat-completions' && endpoint(value.baseUrl)
+    && value.type === 'http' && (value.protocol === 'chat-completions' || value.protocol === 'audio-speech') && endpoint(value.baseUrl)
     && typeof value.enabled === 'boolean' && object(value.adapterOptions) && safeJson(value.adapterOptions)
     && JSON.stringify(value.adapterOptions).length <= 65536
     && Array.isArray(value.modelIds) && value.modelIds.length <= 1000 && value.modelIds.every(identifier)

@@ -135,7 +135,8 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
   // as the product treats them.
   const curated = ['openai', 'groq', 'cerebras-ai', 'anthropic', 'xai', 'mistral-ai', 'openrouter-ai', 'openai-compatible', 'lm-studio', 'ollama']
   const keyless = new Set(['lm-studio', 'ollama'])
-  const secrets = { generic: `synthetic-A-${randomUUID()}`, local: `synthetic-B-${randomUUID()}` }
+  const speechProvider = 'openai-audio-speech'
+  const secrets = { generic: `synthetic-A-${randomUUID()}`, local: `synthetic-B-${randomUUID()}`, [speechProvider]: `synthetic-speech-${randomUUID()}` }
   for (const id of curated) {
     if (!keyless.has(id))
       secrets[id] = `synthetic-${id}-${randomUUID()}`
@@ -208,6 +209,11 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
     })
     if (!entry.authenticated) {
       response.writeHead(401, { 'content-type': 'application/json' }).end('{}')
+      return
+    }
+    if (path === `/${speechProvider}/v1/audio/speech`) {
+      const valid = data.model === 'fixture-speech' && data.voice === 'fixture-voice' && data.input === 'Olá'
+      response.writeHead(valid ? 200 : 400, { 'content-type': 'audio/mpeg' }).end(Uint8Array.of(1, 2, 3))
       return
     }
     if (path.includes('/http-error/')) {
@@ -344,7 +350,33 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
     assert.ok(report.requests.filter(entry => entry.model).every(entry => entry.model === 'custom/Electron:Q4'))
     const operationState = JSON.parse(await readFile(join(root, 'main-state.json'), 'utf8'))
     assert.deepEqual(operationState.readScopes, ['openai-compatible', 'openai-compatible', 'openai-compatible', 'lm-studio'])
-    groups.pass(4, 'JSON, SSE, discovery, custom model and separate provider credentials')
+    if (!await page.evaluate(({ scope, value }) => window.providerGate.seed(scope, value), { scope: speechProvider, value: secrets[speechProvider] }))
+      throw new Error('Could not seed a synthetic speech credential')
+    assert.equal(await page.evaluate(scope => window.providerGate.readProtectedSecret(scope), speechProvider), undefined)
+    const speechBaseUrl = `${base}/${speechProvider}/v1/`
+    const speechStored = await page.evaluate(async ({ providerId, baseUrl }) => {
+      const current = await window.providerGate.transports()
+      if (!current.ok)
+        return false
+      const record = {
+        id: providerId,
+        providerId,
+        definitionId: providerId,
+        type: 'http',
+        protocol: 'audio-speech',
+        baseUrl,
+        enabled: true,
+        adapterOptions: {},
+        modelIds: [],
+        metadata: {},
+        credentialRef: { scope: providerId, key: 'apiKey' },
+      }
+      return (await window.providerGate.mutate({ kind: 'put', expectedRevision: current.snapshot.revision, record })).ok
+    }, { providerId: speechProvider, baseUrl: speechBaseUrl })
+    assert.equal(speechStored, true)
+    assert.deepEqual(await page.evaluate(({ providerId, baseUrl }) => window.providerGate.synthesizeFixtureSpeech(providerId, baseUrl), { providerId: speechProvider, baseUrl: speechBaseUrl }), [1, 2, 3])
+    assert.equal(report.requests.at(-1).authenticated, true)
+    groups.pass(4, 'JSON, SSE, discovery, custom model, separate credentials and Main-native speech bytes')
 
     groups.begin(5)
     const secondWindowId = await application.evaluate(async ({ BrowserWindow }, preloadPath) => {

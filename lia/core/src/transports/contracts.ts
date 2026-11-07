@@ -6,7 +6,7 @@ export interface TransportRecord {
   providerId: string
   definitionId: string
   type: 'http'
-  protocol: 'chat-completions'
+  protocol: 'chat-completions' | 'audio-speech'
   baseUrl: string
   adapterOptions: Record<string, JSONValue>
   modelIds: string[]

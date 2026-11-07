@@ -130,13 +130,13 @@ describe('voice preview — the renderer never holds a voice credential', () => 
 
   it('surfaces that failure to the preview as an explicit reason, not a raw TypeError (B6)', async () => {
     installRuntime()
-    useProviderConfigStore().ensureProvider(REMOTE_VOICE, REMOTE_VOICE, { baseUrl: 'https://api.openai.com/v1/', model: 'tts-1' })
+    useProviderConfigStore().ensureProvider(OTHER_VOICE, OTHER_VOICE, { baseUrl: 'https://fixture.invalid/v1/' })
 
     const { createVoicePreviewDriver } = await import('./voice-preview')
     const driver = createVoicePreviewDriver()
 
     await expect(driver(
-      { providerId: REMOTE_VOICE, modelId: 'tts-1', voiceId: 'alloy' },
+      { providerId: OTHER_VOICE, modelId: 'fixture-model', voiceId: 'fixture-voice' },
       'texto de amostra',
       new AbortController().signal,
       () => {},
@@ -144,6 +144,37 @@ describe('voice preview — the renderer never holds a voice credential', () => 
 
     // Still nothing read, and no key anywhere in what the caller can see.
     expect(ipc.secretGet).not.toHaveBeenCalled()
+  })
+
+  it('imports only the saved endpoint and plays remote preview bytes without reading a key in the renderer', async () => {
+    installRuntime()
+    const baseUrl = 'https://fixture.invalid/v1/'
+    useProviderConfigStore().ensureProvider(REMOTE_VOICE, REMOTE_VOICE, { baseUrl })
+    const fetch = vi.fn(async (_url: URL, _init: RequestInit) => new Response(new Uint8Array([1, 2, 3]), { headers: { 'content-type': 'audio/mpeg' } }))
+    vi.stubGlobal('fetch', fetch)
+    const decodeAudioData = vi.fn(async () => ({}))
+    const close = vi.fn(async () => {})
+    const source = {
+      onended: () => {},
+      connect: vi.fn(),
+      start() { this.onended() },
+      stop: vi.fn(),
+    }
+    vi.stubGlobal('AudioContext', class {
+      decodeAudioData = decodeAudioData
+      close = close
+      createBufferSource = () => source
+    })
+    const { createVoicePreviewDriver } = await import('./voice-preview')
+    const started = vi.fn()
+    await createVoicePreviewDriver()({ providerId: REMOTE_VOICE, modelId: 'fixture-model', voiceId: 'fixture-voice' }, 'Olá', new AbortController().signal, started)
+    expect(ipc.secretGet).not.toHaveBeenCalled()
+    expect(ipc.vaultRead).toHaveBeenCalledExactlyOnceWith({ scope: REMOTE_VOICE, key: 'apiKey' })
+    expect(String(fetch.mock.calls[0][0])).toBe(`${baseUrl}audio/speech`)
+    expect(new Headers(fetch.mock.calls[0][1].headers).get('Authorization')).toBe(`Bearer ${SECRET}`)
+    expect(decodeAudioData).toHaveBeenCalledWith(Uint8Array.of(1, 2, 3).buffer)
+    expect(started).toHaveBeenCalledTimes(1)
+    expect(close).toHaveBeenCalledTimes(1)
   })
 
   it('refuses credentials for every text-to-speech definition, not one id', async () => {

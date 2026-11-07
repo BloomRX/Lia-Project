@@ -11,6 +11,7 @@ import { app } from 'electron'
 import { createTransportRepository } from '../../../../../../../lia/core/src/transports/repository'
 import { electronLiaTransportsGet, electronLiaTransportsMutate } from '../../../shared/eventa/lia-transports'
 import { isCuratedChatProvider } from '../../../shared/lia/provider-catalog'
+import { supportsMainSpeech } from '../../../shared/lia/speech-transport'
 import { registerLiaTransportExecutionBridge } from './transport-execution-service'
 
 let applicationRepository: ReturnType<typeof createTransportRepository> | undefined
@@ -46,7 +47,7 @@ export async function canRendererReadLegacySecret(
   scope: string,
   repository: { read: () => Promise<TransportSnapshot> } = getApplicationRepository(),
 ): Promise<boolean> {
-  if (isCuratedChatProvider(scope))
+  if (isCuratedChatProvider(scope) || supportsMainSpeech(scope))
     return false
   try {
     const snapshot = await repository.read()

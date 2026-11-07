@@ -73,6 +73,60 @@ afterEach(() => {
 })
 
 describe('main transport execution', () => {
+  it('runs only saved audio transports, rejects injected credentials and closes on invalid media', async () => {
+    const providerId = 'openai-compatible-audio-speech'
+    const audioRecord: TransportRecord = { ...record(providerId), definitionId: providerId, protocol: 'audio-speech' }
+    const fetch = vi.fn(async () => new Response('diagnostic with credential', { headers: { 'content-type': 'application/json' } }))
+    const { service, getSecret } = fixture(fetch, [audioRecord])
+    const sender = owner()
+    const speech = { model: 'model', voice: 'voice', input: 'Olá' }
+    const request = { providerId, operation: 'speech', speech }
+    expect(service.start(sender, { ...request, speech: { ...speech, apiKey: 'synthetic' } })).toEqual({ ok: false, code: 'configuration' })
+    expect(service.start(sender, { ...request, draft: { baseUrl: 'https://other.invalid' } })).toEqual({ ok: false, code: 'configuration' })
+    expect(service.start(sender, { ...request, providerId: 'service-a' })).toEqual({ ok: false, code: 'configuration' })
+    const chatJob = id(service.start(sender, startInput(providerId)))
+    expect(await service.pull(sender, { id: chatJob, action: 'head' })).toEqual({ ok: false, code: 'unsupported' })
+    const wrongProtocol = fixture(fetch, [{ ...audioRecord, protocol: 'chat-completions' }])
+    const wrongJob = id(wrongProtocol.service.start(sender, startInput(providerId)))
+    expect(await wrongProtocol.service.pull(sender, { id: wrongJob, action: 'head' })).toEqual({ ok: false, code: 'unsupported' })
+    expect(wrongProtocol.getSecret).not.toHaveBeenCalled()
+    const stale = id(service.start(sender, { ...request, expectedBaseUrl: 'https://other.invalid/' }))
+    expect(await service.pull(sender, { id: stale, action: 'head' })).toEqual({ ok: false, code: 'configuration' })
+    expect(getSecret).not.toHaveBeenCalled()
+    expect(fetch).not.toHaveBeenCalled()
+    const audio = id(service.start(sender, request))
+    expect(await service.pull(sender, { id: audio, action: 'head' })).toEqual({ ok: false, code: 'protocol' })
+    expect(getSecret).toHaveBeenCalledExactlyOnceWith(providerId, 'apiKey')
+  })
+
+  it('cancels an in-flight speech request only for its owning window', async () => {
+    const providerId = 'openai-audio-speech'
+    const audioRecord: TransportRecord = { ...record(providerId), definitionId: providerId, protocol: 'audio-speech' }
+    const fetch = vi.fn((_url: RequestInfo | URL, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(new Error('synthetic')), { once: true })
+    }))
+    const { service } = fixture(fetch, [audioRecord])
+    const sender = owner()
+    const job = id(service.start(sender, { providerId, operation: 'speech', speech: { model: 'model', voice: 'voice', input: 'Olá' } }))
+    const head = service.pull(sender, { id: job, action: 'head' })
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1))
+    expect(service.cancel(owner(2), { id: job })).toBe(false)
+    expect(service.cancel(sender, { id: job })).toBe(true)
+    await expect(head).resolves.toEqual({ ok: false, code: 'cancelled' })
+    expect(fetch.mock.calls[0][1]?.signal?.aborted).toBe(true)
+  })
+
+  it('refuses an audio body exceeding the Main byte limit', async () => {
+    const providerId = 'openai-audio-speech'
+    const audioRecord: TransportRecord = { ...record(providerId), definitionId: providerId, protocol: 'audio-speech' }
+    const fetch = vi.fn(async () => new Response(new Uint8Array(8 * 1024 * 1024 + 1), { headers: { 'content-type': 'audio/mpeg' } }))
+    const { service } = fixture(fetch, [audioRecord])
+    const sender = owner()
+    const job = id(service.start(sender, { providerId, operation: 'speech', speech: { model: 'model', voice: 'voice', input: 'Olá' } }))
+    expect(await service.pull(sender, { id: job, action: 'head' })).toMatchObject({ ok: true, contentType: 'audio/mpeg' })
+    expect(await service.pull(sender, { id: job, action: 'read' })).toEqual({ ok: false, code: 'protocol' })
+  })
+
   it('authenticates real loopback HTTP using the exact record scope, with safe IPC metadata', async () => {
     const received: { path?: string, authorization?: string, body?: string } = {}
     const server = createServer((request, response) => {
