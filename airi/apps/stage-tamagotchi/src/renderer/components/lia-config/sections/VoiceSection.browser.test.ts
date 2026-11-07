@@ -27,6 +27,8 @@ import 'virtual:uno.css'
  */
 
 const ipc = vi.hoisted(() => ({
+  getSpeech: vi.fn(async () => ({ ok: true, config: { baseUrl: '', hasKey: false, revision: 0 } })),
+  saveSpeech: vi.fn(async (value: { baseUrl: string }) => ({ ok: true, config: { baseUrl: value.baseUrl, hasKey: true, revision: 1 } })),
   getVoiceConfig: vi.fn(async (): Promise<unknown> => ({ tts: {} })),
   saveVoiceConfig: vi.fn(async (_config: unknown) => {
     structuredClone(_config)
@@ -55,6 +57,10 @@ const preview = vi.hoisted(() => ({
 vi.mock('@proj-airi/electron-vueuse', () => ({
   useElectronEventaInvoke: (invoke: { receiveEvent?: { id?: string } }) => {
     const id = invoke?.receiveEvent?.id
+    if (id === 'eventa:invoke:lia:speech-config:get-receive')
+      return ipc.getSpeech
+    if (id === 'eventa:invoke:lia:speech-config:save-receive')
+      return ipc.saveSpeech
     if (id === 'eventa:invoke:lia:voice:config:get-receive')
       return ipc.getVoiceConfig
     if (id === 'eventa:invoke:lia:voice:config:set-receive')
@@ -70,14 +76,21 @@ vi.mock('@proj-airi/electron-vueuse', () => ({
   },
 }))
 
-vi.mock('vue-i18n', () => ({
-  useI18n: () => ({
+const copy = vi.hoisted(() => ({ localized: false }))
+vi.mock('vue-i18n', async () => {
+  const { default: locales } = await import('@proj-airi/i18n/locales')
+  return { useI18n: () => ({
     locale: { value: 'pt-BR' },
     // Rendering keys keeps assertions exact; `lia-config.test.ts` is what proves
     // those keys exist in both locales.
-    t: (key: string, fallback?: string) => fallback ?? key,
-  }),
-}))
+    t: (key: string, fallback?: string) => {
+      const value = copy.localized
+        ? key.split('.').reduce<unknown>((node, part) => (node as Record<string, unknown> | undefined)?.[part], locales['pt-BR'])
+        : undefined
+      return typeof value === 'string' ? value : fallback ?? key
+    },
+  }) }
+})
 
 vi.mock('@proj-airi/stage-ui/stores/modules/airi-card', () => ({
   useAiriCardStore: () => card,
@@ -89,8 +102,11 @@ vi.mock('../../../stores/lia/voice-preview', () => ({
   createVoicePreviewDriver: () => async (
     target: { providerId: string, voiceId?: string },
     text: string,
+    _signal: AbortSignal,
+    onPlaybackStart: () => void,
   ) => {
     preview.calls.push({ providerId: target.providerId, voiceId: target.voiceId, text })
+    onPlaybackStart()
   },
 }))
 
@@ -159,6 +175,7 @@ function lastSent(): LiaVoiceConfig | undefined {
 
 describe('voice section mounting (4E-2 voice UI)', () => {
   beforeEach(() => {
+    copy.localized = false
     ipc.getVoiceConfig.mockReset()
     ipc.getVoiceConfig.mockResolvedValue({ tts: {} })
     ipc.saveVoiceConfig.mockReset()
@@ -176,6 +193,27 @@ describe('voice section mounting (4E-2 voice UI)', () => {
     card.persistActiveCardModuleSelections.mockResolvedValue(undefined)
 
     preview.calls.length = 0
+  })
+
+  it('saves a compatible connection, clears the password and tests only the saved settings', async () => {
+    copy.localized = true
+    const providerId = 'openai-compatible-audio-speech'
+    const { screen } = await mountSection({ tts: { preferred: { providerId, modelId: 'model', voiceId: 'voice' } } })
+    await screen.getByText('Configurações avançadas').click()
+    const endpoint = screen.getByTestId('voice-connection-endpoint')
+    const password = screen.getByTestId('voice-connection-key')
+    const test = screen.getByRole('button', { name: 'Testar e ouvir' })
+    await expect.element(test).toBeDisabled()
+    await endpoint.fill('https://fixture.invalid/v1/')
+    await password.fill('synthetic-key')
+    await screen.getByRole('button', { name: 'Salvar conexão' }).click()
+    await expect.element(password).toHaveValue('')
+    await expect.element(screen.getByText('Conexão salva. Escolha modelo e voz para testar.')).toBeVisible()
+    expect(ipc.saveSpeech).toHaveBeenCalledExactlyOnceWith({ providerId, baseUrl: 'https://fixture.invalid/v1/', revision: 0, apiKey: 'synthetic-key' })
+    await test.click()
+    await expect.element(screen.getByText('O serviço gerou áudio e a prévia terminou.')).toBeVisible()
+    expect(preview.calls).toEqual([{ providerId, voiceId: 'voice', text: 'Olá! Eu sou a Lia.' }])
+    await screen.getByTestId('voice-connection').screenshot({ path: '../../../../../Tests/artifacts/voice-connection-pt-BR.png' })
   })
 
   it('loads the persisted configuration on mount, with no explicit load call', async () => {

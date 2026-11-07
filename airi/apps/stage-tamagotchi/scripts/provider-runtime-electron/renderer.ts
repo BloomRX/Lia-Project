@@ -1,4 +1,5 @@
 import type { TransportMutation, TransportRecord, TransportSnapshot } from '../../../../../lia/core/src/transports/contracts'
+import type { LiaSpeechConfigSaveInput } from '../../src/shared/eventa/lia-speech-config'
 
 import { useElectronEventaInvoke } from '@proj-airi/electron-vueuse'
 import { generateText } from '@xsai/generate-text'
@@ -15,6 +16,7 @@ import {
   electronLiaSecretGet,
   electronLiaSecretSet,
 } from '../../src/shared/eventa'
+import { electronLiaSpeechConfigGet, electronLiaSpeechConfigSave } from '../../src/shared/eventa/lia-speech-config'
 import { electronLiaTransportsGet, electronLiaTransportsMutate } from '../../src/shared/eventa/lia-transports'
 
 const invokeSet = useElectronEventaInvoke(electronLiaSecretSet)
@@ -145,6 +147,9 @@ document.querySelector('#cancel')!.addEventListener('click', () => controller?.a
 window.addEventListener('beforeunload', () => native.dispose())
 
 const api = {
+  speechConfig: (providerId: string) => useElectronEventaInvoke(electronLiaSpeechConfigGet)({ providerId }),
+  saveSpeechConfig: (input: LiaSpeechConfigSaveInput) =>
+    useElectronEventaInvoke(electronLiaSpeechConfigSave)(input),
   synthesizeFixtureSpeech: async (providerId: string, baseUrl: string) => {
     const port = createMainTransportExecution()
     try {

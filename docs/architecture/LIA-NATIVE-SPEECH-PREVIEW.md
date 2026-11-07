@@ -87,3 +87,36 @@ com um `AudioContext` simulado. Escuta em hardware, serviços externos, criaçã
 de configuração de voz do zero, descoberta de catálogo de voz remoto e fala
 automática não foram aprovadas. O próximo corte de UI deve manter endereço e
 chave na seção avançada de Voz, com seleção e prévia no fluxo documentado.
+
+## Configuração no painel Voz
+
+O painel reutiliza seu seletor de provedor e opções avançadas. Para os dois
+adaptadores nativos, exibe endereço, campo de senha, status de configuração,
+salvamento e **Testar e ouvir**. O catálogo existente continua disponível
+quando o adapter o fornece. Onde o catálogo não existe, o usuário informa
+modelo e voz. A prévia principal usa a seleção persistida e fica indisponível
+enquanto faltarem os dados. Teste e prévia têm cancelamento e não sobrepõem
+reprodução entre si.
+
+Main valida o destino e escopo, serializa a escrita com o cofre existente e usa
+a revisão do repositório para impedir atualização desatualizada. Falha no
+transporte tenta restaurar a chave anterior. O endpoint só é ativado após
+validar os dados e guardar a credencial quando fornecida. O executor consulta
+chave e registro sob a mesma fila para evitar combinar chave nova com endereço
+antigo durante o salvamento. Chave em branco mantém a anterior. A resposta
+expõe somente endpoint, revisão e presença. O formulário limpa a senha após
+enviar. Salvar verifica formato e persistência. Testar faz a requisição e toca
+a amostra, com feedback de erro, cancelamento e timeout.
+
+Validação: 91 testes Node do Stage, 8 Chromium, typecheck Stage/harness, lint,
+build i18n e Stage. Gate Electron com as chamadas reais de salvar, consultar e
+sintetizar no grupo 4, 16/16 grupos nas duas versões. Pacotes em
+`J:/lia-evidence/ebe6937e-61ff-4354-8d28-e3ac5ec2f01f` (5.1) e
+`J:/lia-evidence/639596bd-cc10-4c18-9ea6-0f1f308f3588` (7).
+Captura do formulário pt-BR revisada em
+`J:/lia-evidence/voice-ui/captures/voice-connection-pt-BR.png`.
+
+Validação manual Windows ainda necessária: configurar um serviço autorizado,
+salvar, reabrir e verificar senha vazia, selecionar modelo e voz, ouvir uma
+prévia, interromper, trocar de provedor e observar falha de autenticação e
+timeout. A reprodução física e um serviço externo ficaram fora do gate local.

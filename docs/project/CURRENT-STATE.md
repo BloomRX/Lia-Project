@@ -13,6 +13,12 @@ commit. Registra **estado**, não narrativa: relatório de rodada vai para
 
 ## 0. Estado agora
 
+**Voz — configuração avançada nativa.** As duas definições compatíveis com
+`audio/speech` têm endereço e chave configuráveis no painel Voz. A leitura
+devolve apenas presença da chave. O teste toca a prévia real da configuração
+salva. 91 testes focados, 8 Chromium, build Stage e 16/16 grupos no Electron
+Windows em PowerShell 5.1 e 7. [Evidências](../architecture/LIA-NATIVE-SPEECH-PREVIEW.md#configuração-no-painel-voz).
+
 **Pós-Corte B — prévia de voz compatível pelo Main.** Corte B consolidado em
 `13cbb52`. A prévia para os dois adaptadores `audio/speech` usa o transporte
 Lia, chave já no cofre e endpoint salvo. Main protege os escopos, limita bytes

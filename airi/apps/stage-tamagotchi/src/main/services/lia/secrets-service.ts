@@ -19,7 +19,7 @@ import { createLiaSecretVault } from './secrets'
 const log = useLogg('lia:secrets').useGlobalConfig()
 const writes = new WeakMap<LiaSecretVault, Promise<unknown>>()
 
-function serializeWrite<T>(vault: LiaSecretVault, action: () => Promise<T>): Promise<T> {
+export function serializeWrite<T>(vault: LiaSecretVault, action: () => Promise<T>): Promise<T> {
   const result = (writes.get(vault) ?? Promise.resolve()).then(action)
   writes.set(vault, result.catch(() => {}))
   return result

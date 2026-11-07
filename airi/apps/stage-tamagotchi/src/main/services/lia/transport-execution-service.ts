@@ -18,6 +18,7 @@ import { electronLiaTransportCancel, electronLiaTransportPull, electronLiaTransp
 import { isCuratedChatProvider } from '../../../shared/lia/provider-catalog'
 import { supportsMainSpeech } from '../../../shared/lia/speech-transport'
 import { withLiaProviderHeaders } from './provider-request-headers'
+import { serializeWrite } from './secrets-service'
 
 interface Owner {
   id: number
@@ -281,7 +282,14 @@ export function createLiaTransportExecutionService(params: { repository: Reposit
         const url = new URL('audio/speech', savedUrl)
         if (url.protocol !== 'https:' && !['localhost', '127.0.0.1', '[::1]'].includes(url.hostname))
           throw new ProviderError('configuration')
-        const credential = await race(Promise.resolve(params.vault.getSecret(record.credentialRef.scope, record.credentialRef.key)), job)
+        const credential = await race(serializeWrite(params.vault, async () => {
+          if (job.controller.signal.aborted)
+            throw new ProviderError('cancelled')
+          const current = (await params.repository.read()).records.filter(candidate => candidate.providerId === record.providerId)
+          if (current.length !== 1 || JSON.stringify(current[0]) !== JSON.stringify(record))
+            throw new ProviderError('configuration')
+          return params.vault.getSecret(record.credentialRef.scope, record.credentialRef.key)
+        }), job)
         if (!credential)
           throw new ProviderError('credentials')
         const audio = await race(fetch(url, {

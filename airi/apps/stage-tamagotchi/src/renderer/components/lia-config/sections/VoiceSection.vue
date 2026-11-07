@@ -28,12 +28,14 @@
  *   is *derived* from the persisted selection, never from local component state,
  *   so reopening the tab always shows what is actually in effect.
  */
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, onScopeDispose, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import CustomVoicePanel from './CustomVoicePanel.vue'
+import SpeechConnection from './SpeechConnection.vue'
 
 import { CUSTOM_VOICE_PROVIDER_ID } from '../../../../shared/lia-voice'
+import { supportsMainSpeech } from '../../../../shared/lia/speech-transport'
 import { useLiaVoiceStore } from '../../../stores/lia/voice'
 import { useVoiceEditor } from '../../../stores/lia/voice-editor'
 import { createVoicePreviewDriver } from '../../../stores/lia/voice-preview'
@@ -42,7 +44,18 @@ const { t } = useI18n()
 const tt = (key: string) => t(`tamagotchi.home.config.sections.voice.${key}`)
 
 const voiceStore = useLiaVoiceStore()
-const editor = useVoiceEditor({ preview: createVoicePreviewDriver() })
+const preview = createVoicePreviewDriver()
+const editor = useVoiceEditor({ preview })
+const nativeSpeech = computed(() => supportsMainSpeech(editor.selectedProviderId.value))
+const connectionTesting = ref(false)
+const connectionConfigured = ref(false)
+const previewBusy = computed(() => editor.previewState.value === 'loading' || editor.previewState.value === 'playing')
+watch([editor.selectedProviderId, editor.selectedModelId, editor.selectedVoiceId], editor.cancelPreview)
+watch(editor.selectedProviderId, () => {
+  connectionTesting.value = false
+  connectionConfigured.value = false
+})
+onScopeDispose(editor.cancelPreview)
 
 /**
  * Which of the two modes is in effect, derived from the persisted target.
@@ -98,7 +111,8 @@ function onReserveModelChange(event: Event): void {
 }
 
 function onPreview(): void {
-  void editor.playPreview()
+  if (!connectionTesting.value)
+    void editor.playPreview()
 }
 </script>
 
@@ -188,6 +202,11 @@ function onPreview(): void {
         A provider with no voice catalogue of its own. Nothing is invented here:
         the message says where that provider's voice is chosen instead.
       -->
+      <label v-else-if="nativeSpeech" class="flex flex-col gap-1 text-sm">
+        {{ tt('fields.voice') }}
+        <input :value="editor.selectedVoiceId.value" class="w-full border border-neutral-200 rounded bg-transparent px-2 py-1 dark:border-neutral-700" @change="onVoiceChange">
+      </label>
+
       <p
         v-else-if="editor.voiceCatalogState.value === 'needsConfiguration'"
         class="text-xs text-amber-600 dark:text-amber-400"
@@ -227,7 +246,7 @@ function onPreview(): void {
         <button
           type="button"
           class="border border-neutral-200 rounded px-3 py-1 text-sm dark:border-neutral-700"
-          :disabled="editor.previewState.value === 'loading' || editor.previewState.value === 'playing'"
+          :disabled="previewBusy || connectionTesting || (nativeSpeech && (!connectionConfigured || !editor.selectedModelId.value || !editor.selectedVoiceId.value))"
           data-testid="lia-config-voice-preview"
           @click="onPreview"
         >
@@ -263,6 +282,9 @@ function onPreview(): void {
           data-testid="lia-config-voice-preview-state"
         >{{ tt('preview.error') }}</span>
       </div>
+      <p v-if="nativeSpeech && !connectionConfigured" class="text-xs text-neutral-600 dark:text-neutral-300">
+        {{ tt('connection.incomplete') }}
+      </p>
     </section>
 
     <!--
@@ -318,7 +340,19 @@ function onPreview(): void {
         </select>
       </label>
 
-      <!-- Model, only when the selected provider actually has a catalogue -->
+      <SpeechConnection
+        v-if="nativeSpeech"
+        :key="editor.selectedProviderId.value"
+        :provider-id="editor.selectedProviderId.value"
+        :model-id="editor.selectedModelId.value"
+        :voice-id="editor.selectedVoiceId.value"
+        :preview="preview"
+        :preview-busy="previewBusy"
+        @testing="connectionTesting = $event"
+        @configured="connectionConfigured = $event"
+      />
+
+      <!-- Use the catalogue when available, or a user-entered model for compatible services. -->
       <label v-if="editor.showModelSelector.value" class="flex flex-col gap-1">
         <span class="text-sm text-neutral-600 dark:text-neutral-300">{{ tt('fields.model') }}</span>
         <select
@@ -335,6 +369,10 @@ function onPreview(): void {
             {{ option.label }}
           </option>
         </select>
+      </label>
+      <label v-else-if="nativeSpeech" class="flex flex-col gap-1 text-sm">
+        {{ tt('fields.model') }}
+        <input :value="editor.selectedModelId.value" class="w-full border border-neutral-200 rounded bg-transparent px-2 py-1 dark:border-neutral-700" @change="onModelChange">
       </label>
 
       <!--

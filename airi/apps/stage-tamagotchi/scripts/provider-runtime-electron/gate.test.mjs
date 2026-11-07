@@ -350,30 +350,19 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
     assert.ok(report.requests.filter(entry => entry.model).every(entry => entry.model === 'custom/Electron:Q4'))
     const operationState = JSON.parse(await readFile(join(root, 'main-state.json'), 'utf8'))
     assert.deepEqual(operationState.readScopes, ['openai-compatible', 'openai-compatible', 'openai-compatible', 'lm-studio'])
-    if (!await page.evaluate(({ scope, value }) => window.providerGate.seed(scope, value), { scope: speechProvider, value: secrets[speechProvider] }))
-      throw new Error('Could not seed a synthetic speech credential')
-    assert.equal(await page.evaluate(scope => window.providerGate.readProtectedSecret(scope), speechProvider), undefined)
     const speechBaseUrl = `${base}/${speechProvider}/v1/`
-    const speechStored = await page.evaluate(async ({ providerId, baseUrl }) => {
-      const current = await window.providerGate.transports()
-      if (!current.ok)
-        return false
-      const record = {
-        id: providerId,
-        providerId,
-        definitionId: providerId,
-        type: 'http',
-        protocol: 'audio-speech',
-        baseUrl,
-        enabled: true,
-        adapterOptions: {},
-        modelIds: [],
-        metadata: {},
-        credentialRef: { scope: providerId, key: 'apiKey' },
-      }
-      return (await window.providerGate.mutate({ kind: 'put', expectedRevision: current.snapshot.revision, record })).ok
-    }, { providerId: speechProvider, baseUrl: speechBaseUrl })
-    assert.equal(speechStored, true)
+    const speechBefore = await page.evaluate(id => window.providerGate.speechConfig(id), speechProvider)
+    assert.equal(speechBefore.ok, true)
+    assert.equal(speechBefore.config.hasKey, false)
+    const speechSaved = await page.evaluate(input => window.providerGate.saveSpeechConfig(input), {
+      providerId: speechProvider,
+      baseUrl: speechBaseUrl,
+      apiKey: secrets[speechProvider],
+      revision: speechBefore.config.revision,
+    })
+    assert.deepEqual(speechSaved, { ok: true, config: { baseUrl: speechBaseUrl, hasKey: true, revision: speechBefore.config.revision + 1 } })
+    assert.deepEqual(await page.evaluate(id => window.providerGate.speechConfig(id), speechProvider), speechSaved)
+    assert.equal(await page.evaluate(id => window.providerGate.readProtectedSecret(id), speechProvider), undefined)
     assert.deepEqual(await page.evaluate(({ providerId, baseUrl }) => window.providerGate.synthesizeFixtureSpeech(providerId, baseUrl), { providerId: speechProvider, baseUrl: speechBaseUrl }), [1, 2, 3])
     assert.equal(report.requests.at(-1).authenticated, true)
     groups.pass(4, 'JSON, SSE, discovery, custom model, separate credentials and Main-native speech bytes')

@@ -9,9 +9,11 @@ import { defineInvokeHandler } from '@moeru/eventa'
 import { app } from 'electron'
 
 import { createTransportRepository } from '../../../../../../../lia/core/src/transports/repository'
+import { electronLiaSpeechConfigGet, electronLiaSpeechConfigSave } from '../../../shared/eventa/lia-speech-config'
 import { electronLiaTransportsGet, electronLiaTransportsMutate } from '../../../shared/eventa/lia-transports'
 import { isCuratedChatProvider } from '../../../shared/lia/provider-catalog'
 import { supportsMainSpeech } from '../../../shared/lia/speech-transport'
+import { createSpeechConfigService } from './speech-config-service'
 import { registerLiaTransportExecutionBridge } from './transport-execution-service'
 
 let applicationRepository: ReturnType<typeof createTransportRepository> | undefined
@@ -69,6 +71,9 @@ export function registerLiaTransportConfigBridge(params: {
 }) {
   const repository = params.repository ?? getApplicationRepository()
   const execution = registerLiaTransportExecutionBridge({ context: params.context, repository, vault: params.vault })
+  const speech = createSpeechConfigService(repository, params.vault, execution.invalidate)
+  defineInvokeHandler(params.context, electronLiaSpeechConfigGet, speech.read)
+  defineInvokeHandler(params.context, electronLiaSpeechConfigSave, speech.save)
   defineInvokeHandler(params.context, electronLiaTransportsGet, async () => {
     try {
       return { ok: true as const, snapshot: await repository.read() }

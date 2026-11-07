@@ -105,7 +105,7 @@ export function createVoicePreviewDriver(): VoicePreviewDriver {
         return
       if (!record?.enabled || record.protocol !== 'audio-speech')
         throw new Error('Configure o serviço de voz antes de ouvir a prévia.')
-      if (savedLegacyEndpoint && savedLegacyEndpoint.replace(/\/+$/, '') !== record.baseUrl.replace(/\/+$/, ''))
+      if (!record.adapterOptions.managedSpeechConfig && savedLegacyEndpoint && savedLegacyEndpoint.replace(/\/+$/, '') !== record.baseUrl.replace(/\/+$/, ''))
         throw new Error('O endereço salvo do serviço de voz mudou. A prévia foi interrompida.')
       const audio = await execution.synthesize(providerId, record.baseUrl, { model: modelId, voice: voiceId, input: text }, signal)
       if (!signal.aborted)
