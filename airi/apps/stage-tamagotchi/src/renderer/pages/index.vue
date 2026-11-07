@@ -44,9 +44,11 @@ import { electronOpenOnboarding } from '../../shared/eventa'
 import { modelSettingsRuntimeSnapshotChannelName } from '../../shared/model-settings-runtime'
 import { chatTurnFactsFromSend, chatTurnImageInputCount } from '../services/lia/brain-shadow'
 import { resolveLiaAuthoritativeSendRoute } from '../services/lia/lia-authoritative-route-resolver'
+import { createNativeSpeechSynthesis } from '../services/lia/main-speech'
 import { createOrderedVoiceSendSequence } from '../services/lia/voice-send-sequence'
 import { useControlsIslandStore } from '../stores/controls-island'
 import { shouldAutoOpenAiriWelcome } from '../stores/lia/airi-onboarding-policy'
+import { useLiaVoiceStore } from '../stores/lia/voice'
 import { useStageWindowLifecycleStore } from '../stores/stage-window-lifecycle'
 import { artistryToolReferences } from '../stores/tools'
 import { resolveFadeOnHoverInteraction } from '../utils/fade-on-hover'
@@ -62,6 +64,9 @@ const controlsIslandRef = ref<InstanceType<typeof ControlsIsland>>()
 const controlsIslandInteractionActive = shallowRef(false)
 const controlsIslandElement = toRef(() => controlsIslandRef.value?.element)
 const widgetStageRef = ref<InstanceType<typeof WidgetStage>>()
+const synthesizeSpeech = createNativeSpeechSynthesis()
+const liaVoice = useLiaVoiceStore()
+const speechSelectionKey = computed(() => JSON.stringify(liaVoice.preferred ?? null))
 const stageCanvas = toRef(() => widgetStageRef.value?.canvasElement())
 const componentStateStage = ref<'pending' | 'loading' | 'mounted'>('pending')
 const stageMounted = computed(() => componentStateStage.value === 'mounted')
@@ -912,6 +917,8 @@ const cursorPosition = computed(() => ({
           flex-1
           :cursor-position="cursorPosition"
           :paused="stagePaused"
+          :synthesize-speech="synthesizeSpeech"
+          :speech-selection-key="speechSelectionKey"
         />
         <HoloCoupon />
         <ControlsIslandRoot :frozen="controlsIslandInteractionActive">

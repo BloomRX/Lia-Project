@@ -66,6 +66,8 @@ const props = withDefaults(defineProps<{
   cursorPosition?: { x: number, y: number }
   enableOrbitControls?: boolean
   paused?: boolean
+  speechSelectionKey?: string
+  synthesizeSpeech?: (target: { providerId: string, modelId?: string, voiceId?: string }, text: string, signal: AbortSignal) => Promise<ArrayBuffer> | undefined
 }>(), {
   enableOrbitControls: true,
   paused: false,
@@ -532,6 +534,25 @@ async function stageSynthesizeSegment(request: TtsRequest, signal: AbortSignal):
     return null
   }
 
+  if (props.synthesizeSpeech) {
+    const input = normalizeTextForSpeech(request.text)
+    const providerId = activeSpeechProvider.value
+    const synthesis = props.synthesizeSpeech({
+      providerId,
+      modelId: activeSpeechModel.value ?? undefined,
+      voiceId: activeSpeechVoiceId.value ?? undefined,
+    }, isSpeechChunkSpeakable(input.text) ? input.text : '', signal)
+    if (synthesis) {
+      speechInputDiagnosticsLog(input.diagnostics)
+      const bytes = await synthesis
+      if (signal.aborted || !bytes.byteLength)
+        return null
+      await logSpeechBytesHash(bytes, providerId)
+      const buffer = await audioContext.decodeAudioData(bytes)
+      return signal.aborted ? null : buffer
+    }
+  }
+
   const provider = await providersStore.getProviderInstance(activeSpeechProvider.value) as SpeechProviderWithExtraOptions<string, UnElevenLabsOptions>
   if (!provider) {
     console.error('Failed to initialize speech provider')
@@ -986,6 +1007,11 @@ watch(speechMuted, (muted) => {
   if (muted)
     stopSpeechOutput('muted')
 }, { immediate: true })
+
+watch(() => props.speechSelectionKey, () => {
+  if (props.synthesizeSpeech)
+    stopSpeechOutput('voice-selection-changed')
+})
 
 chatHookCleanups.push(onBeforeMessageComposed(async (_message, context) => {
   // Phase 7.7, Part 11: refresh the persona's capability truth AT THIS turn

@@ -363,7 +363,7 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
     assert.deepEqual(speechSaved, { ok: true, config: { baseUrl: speechBaseUrl, hasKey: true, revision: speechBefore.config.revision + 1 } })
     assert.deepEqual(await page.evaluate(id => window.providerGate.speechConfig(id), speechProvider), speechSaved)
     assert.equal(await page.evaluate(id => window.providerGate.readProtectedSecret(id), speechProvider), undefined)
-    assert.deepEqual(await page.evaluate(({ providerId, baseUrl }) => window.providerGate.synthesizeFixtureSpeech(providerId, baseUrl), { providerId: speechProvider, baseUrl: speechBaseUrl }), [1, 2, 3])
+    assert.deepEqual(await page.evaluate(id => window.providerGate.synthesizeFixtureSpeech(id), speechProvider), [1, 2, 3])
     assert.equal(report.requests.at(-1).authenticated, true)
     groups.pass(4, 'JSON, SSE, discovery, custom model, separate credentials and Main-native speech bytes')
 

@@ -2,9 +2,7 @@ import type { LiaVoiceTtsTarget } from '../../../shared/eventa'
 
 import { useSpeechStore } from '@proj-airi/stage-ui/stores/modules/speech'
 
-import { supportsMainSpeech } from '../../../shared/lia/speech-transport'
-import { createMainTransportExecution } from '../../services/lia/main-transport-execution'
-import { createLiaTransportClient, toTransportRecord } from '../../services/lia/transport-config'
+import { createNativeSpeechSynthesis } from '../../services/lia/main-speech'
 import { useLiaProviderConfigFacade } from './provider-config-facade'
 import { useLiaProviderRuntime } from './provider-runtime'
 
@@ -75,39 +73,13 @@ async function playAudio(audio: ArrayBuffer, signal: AbortSignal, onPlaybackStar
 
 /** The default driver: real provider, real synthesis, real output. */
 export function createVoicePreviewDriver(): VoicePreviewDriver {
-  const execution = createMainTransportExecution()
-  const transports = createLiaTransportClient()
+  const synthesize = createNativeSpeechSynthesis(id => useLiaProviderConfigFacade().getConfig(id)?.baseUrl)
   return async (target, text, signal, onPlaybackStart) => {
     if (signal.aborted)
       return
-    if (supportsMainSpeech(target.providerId)) {
-      const { providerId, modelId, voiceId } = target
-      if (!modelId || !voiceId)
-        throw new Error('Selecione o modelo e a voz para ouvir a prévia.')
-      await transports.refresh()
-      if (signal.aborted)
-        return
-      let record = transports.get(providerId)
-      const legacyBaseUrl = useLiaProviderConfigFacade().getConfig(providerId)?.baseUrl
-      const savedLegacyEndpoint = typeof legacyBaseUrl === 'string' ? legacyBaseUrl.trim() : ''
-      if (!record && !transports.hasRemoved(providerId)) {
-        // Import only the saved endpoint. Existing keys must already be in
-        // the vault for this exact provider. A tombstone cannot be revived.
-        if (savedLegacyEndpoint) {
-          await transports.migrate([{
-            ...toTransportRecord(providerId, providerId, { baseUrl: savedLegacyEndpoint }),
-            protocol: 'audio-speech',
-          }])
-          record = transports.get(providerId)
-        }
-      }
-      if (signal.aborted)
-        return
-      if (!record?.enabled || record.protocol !== 'audio-speech')
-        throw new Error('Configure o serviço de voz antes de ouvir a prévia.')
-      if (!record.adapterOptions.managedSpeechConfig && savedLegacyEndpoint && savedLegacyEndpoint.replace(/\/+$/, '') !== record.baseUrl.replace(/\/+$/, ''))
-        throw new Error('O endereço salvo do serviço de voz mudou. A prévia foi interrompida.')
-      const audio = await execution.synthesize(providerId, record.baseUrl, { model: modelId, voice: voiceId, input: text }, signal)
+    const native = synthesize(target, text, signal)
+    if (native) {
+      const audio = await native
       if (!signal.aborted)
         await playAudio(audio, signal, onPlaybackStart)
       return

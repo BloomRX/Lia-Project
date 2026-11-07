@@ -120,3 +120,53 @@ Validação manual Windows ainda necessária: configurar um serviço autorizado,
 salvar, reabrir e verificar senha vazia, selecionar modelo e voz, ouvir uma
 prévia, interromper, trocar de provedor e observar falha de autenticação e
 timeout. A reprodução física e um serviço externo ficaram fora do gate local.
+
+## Fala automática no Stage
+
+O texto da resposta chega à sessão de fala criada em `onBeforeMessageComposed`.
+Para adapters HTTP, o segmentador produz pedidos para `stageSynthesizeSegment`
+e a fila aplica a política de fallback por turno. O Stage normaliza o texto,
+usa provedor, modelo e ID de voz projetados pela seleção `voice.tts`, decodifica
+o áudio e entrega o buffer ao gerenciador de reprodução e sincronização labial.
+O cancelamento da sessão anterior e o sinal da fila continuam controlando cada
+pedido. Mudanças da seleção persistida também encerram a sessão e a reprodução.
+A comparação usa a seleção da Lia para não confundir fallback temporário com
+uma troca feita pelo usuário.
+
+O Stage agora recebe uma função opcional do host. A página desktop Lia injeta
+`createNativeSpeechSynthesis`, também usada na prévia. Para as duas definições
+compatíveis, o branch nativo roda antes da criação do cliente AIRI e passa o
+sinal do turno ao executor Main. Segmentos vazios terminam sem IPC. O Main
+continua resolvendo endpoint e chave. Seleção de modelo e voz chega ao Main
+como campos validados do pedido. Os motores locais, adapters de streaming,
+fila, decodificação, playback e fallback continuam nos componentes existentes.
+Web e pocket não recebem a função do host desktop. Nenhuma dependência de
+pacote foi removida.
+
+Resultados: 97 testes focados do Stage, 20 testes das suítes de pipeline e
+sessão TTS do Stage UI, 143 do harness, lint, typechecks e build completo.
+Electron 43.4.1: 16/16 grupos em cada versão, 40 requisições e 11 identidades
+encerradas em cada execução. O gate exercita a função usada pelo Stage com
+IPC, cofre e HTTP local. O teste não abre a cena completa do personagem.
+Exportações verificadas por SHA-256 em
+`J:/lia-evidence/51ec21e7-7409-4fb0-bc65-9a632bb83432` (7) e
+`J:/lia-evidence/c26c6867-7d94-412b-bd07-b82fdd3d5258` (5.1, inclui o ajuste
+final para segmentos vazios).
+
+### Transcrição e credenciais restantes
+
+A rota de gravação padrão derivada de Groq já vai ao Main. O adaptador
+`RecordingTranscriptionExecution` de gravações ainda não recebe o sinal do
+ciclo da captura. O timeout existe no Main, mas fechar ou trocar a captura
+não cancela esse trabalho por IPC. Adaptadores de transcrição que usam
+streaming e os motores locais têm ciclos separados no store de audição.
+O próximo corte precisa propagar cancelamento do chamador até o transporte e
+definir o registro de endpoint dos adapters HTTP adicionais antes de negar
+suas leituras legadas. Chat fora do catálogo e STT legado continuam no inventário
+acima, junto das cópias históricas. Esta rodada não ampliou o catálogo migrado.
+
+Para a validação manual, use um serviço autorizado e siga o roteiro da seção
+anterior. Depois envie uma mensagem que provoque fala, envie outra durante a
+reprodução e confirme que a anterior para. Repita ao trocar de voz e ao usar
+um motor local. Teste autenticação inválida e timeout separadamente. Registre
+o resultado ouvido e o dispositivo, sem incluir a chave ou o texto privado.

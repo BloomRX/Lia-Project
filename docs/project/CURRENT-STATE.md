@@ -13,6 +13,15 @@ commit. Registra **estado**, não narrativa: relatório de rodada vai para
 
 ## 0. Estado agora
 
+**Fala automática nativa.** O Stage da Lia usa a mesma síntese da prévia para
+as duas definições compatíveis com `audio/speech`. O host injeta a síntese,
+preservando a fila, normalização, reprodução e interrupção do Stage. O painel
+Voz foi publicado em `0411025`. Build Stage, 97 testes focados, 20 de pipeline
+compartilhado, 143 do harness e gate Electron 16/16 em PowerShell 5.1/7.
+Validação física de áudio pendente. Próximo: cancelamento da transcrição de
+gravações e migração de adaptadores adicionais.
+[Mapa, evidências e roteiro manual](../architecture/LIA-NATIVE-SPEECH-PREVIEW.md#fala-automática-no-stage).
+
 **Voz — configuração avançada nativa.** As duas definições compatíveis com
 `audio/speech` têm endereço e chave configuráveis no painel Voz. A leitura
 devolve apenas presença da chave. O teste toca a prévia real da configuração

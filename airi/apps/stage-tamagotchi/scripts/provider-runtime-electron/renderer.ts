@@ -5,6 +5,7 @@ import { useElectronEventaInvoke } from '@proj-airi/electron-vueuse'
 import { generateText } from '@xsai/generate-text'
 import { streamText } from '@xsai/stream-text'
 
+import { createNativeSpeechSynthesis } from '../../src/renderer/services/lia/main-speech'
 import { createMainTransportExecution } from '../../src/renderer/services/lia/main-transport-execution'
 import { createNativeProviderRuntime } from '../../src/renderer/services/lia/native-provider-runtime'
 import { legacyTransportCandidates, toTransportRecord } from '../../src/renderer/services/lia/transport-config'
@@ -150,15 +151,12 @@ const api = {
   speechConfig: (providerId: string) => useElectronEventaInvoke(electronLiaSpeechConfigGet)({ providerId }),
   saveSpeechConfig: (input: LiaSpeechConfigSaveInput) =>
     useElectronEventaInvoke(electronLiaSpeechConfigSave)(input),
-  synthesizeFixtureSpeech: async (providerId: string, baseUrl: string) => {
-    const port = createMainTransportExecution()
-    try {
-      const bytes = await port.synthesize(providerId, baseUrl, { model: 'fixture-speech', voice: 'fixture-voice', input: 'Olá' }, new AbortController().signal)
-      return Array.from(new Uint8Array(bytes))
-    }
-    finally {
-      port.dispose()
-    }
+  synthesizeFixtureSpeech: async (providerId: string) => {
+    const synthesize = createNativeSpeechSynthesis()
+    const bytes = await synthesize({ providerId, modelId: 'fixture-speech', voiceId: 'fixture-voice' }, 'Olá', new AbortController().signal)
+    if (!bytes)
+      throw new Error('Fixture speech adapter was not selected')
+    return Array.from(new Uint8Array(bytes))
   },
   // Adversarial probe only: production execution does not use this getter.
   readProtectedSecret: (scope: string) => useElectronEventaInvoke(electronLiaSecretGet)({ scope, key: 'apiKey' }),

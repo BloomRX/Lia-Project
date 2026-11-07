@@ -11,10 +11,11 @@ Fonte: [`CURRENT-STATE.md`](CURRENT-STATE.md) §0 e §5, medido em
 
 ## Onde o projeto está
 
-A prévia compatível com `audio/speech` já executa no Main quando o serviço
-tem endereço salvo e chave no cofre. Gate Electron local aprovado em 5.1 e 7.
-Configuração inicial pelo painel Voz, fala automática e protocolos de voz
-adicionais continuam abertos. [Evidências](../architecture/LIA-NATIVE-SPEECH-PREVIEW.md).
+A configuração pelo painel Voz, a prévia e a fala automática das duas
+definições `audio/speech` usam o transporte Main. Gate Electron local
+aprovado em 5.1 e 7. Escuta real, protocolos adicionais, cancelamento de
+transcrição de gravações e leitores legados continuam abertos.
+[Evidências](../architecture/LIA-NATIVE-SPEECH-PREVIEW.md).
 
 06/11 — **PROMPT-31 validado no Windows para o gate de componentes do Corte B**.
 143 testes do harness, build completo do Stage e 16 grupos em cada execução
