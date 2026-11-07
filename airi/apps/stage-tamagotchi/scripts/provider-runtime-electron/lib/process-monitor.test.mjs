@@ -140,6 +140,88 @@ describe('createProcessMonitor — descendants', () => {
     assert.deepEqual(entries.map(entry => entry.createdAt).sort(), [2, 7])
   })
 
+  it('rejects impossible parent ages before root and cached-owner shortcuts in either table order', () => {
+    for (const reverse of [false, true]) {
+      const { monitor, state } = createHarness()
+      const root = { pid: ROOT, parentPid: 0, createdAt: 100 }
+      monitor.start()
+      const table = [
+        root,
+        { pid: 200, parentPid: ROOT, createdAt: 110 },
+        { pid: 300, parentPid: 200, createdAt: 90 },
+        { pid: 400, parentPid: 300, createdAt: 95 },
+        { pid: 500, parentPid: ROOT, createdAt: 80 },
+        { pid: 600, parentPid: 200, createdAt: 120 },
+      ]
+      state.table = reverse ? table.toReversed() : table
+      monitor.rescan()
+      monitor.stop()
+      assert.deepEqual(monitor.identities().map(entry => entry.pid).sort((a, b) => a - b), [100, 200, 600])
+    }
+  })
+
+  it('pins the root incarnation and does not adopt a recycled root or its new children', () => {
+    const { monitor, state } = createHarness()
+    state.table = [{ pid: ROOT, parentPid: 0, createdAt: 10 }, { pid: 200, parentPid: ROOT, createdAt: 20 }]
+    monitor.start()
+    state.table = [
+      { pid: ROOT, parentPid: 0, createdAt: 100 },
+      { pid: 300, parentPid: ROOT, createdAt: 110 },
+      { pid: 400, parentPid: 300, createdAt: 120 },
+    ]
+    monitor.rescan()
+    monitor.stop()
+    assert.deepEqual(monitor.identities().map(entry => [entry.pid, entry.createdAt]), [[100, 10], [200, 20]])
+  })
+
+  it('preserves previously unseen children of the original root after its PID is reused', () => {
+    const { monitor, state } = createHarness()
+    state.table = [{ pid: ROOT, parentPid: 0, createdAt: 10 }]
+    monitor.start()
+    state.table = [
+      { pid: ROOT, parentPid: 0, createdAt: 100 },
+      { pid: 200, parentPid: ROOT, createdAt: 20 },
+      { pid: 300, parentPid: ROOT, createdAt: undefined },
+      { pid: 400, parentPid: ROOT, createdAt: 110 },
+      { pid: 500, parentPid: ROOT, createdAt: 5 },
+    ]
+    monitor.rescan()
+    monitor.stop()
+    assert.deepEqual(monitor.identities().map(entry => [entry.pid, entry.createdAt]), [[100, 10], [200, 20], [300, undefined]])
+  })
+
+  it('retains old and unknown children of an already observed intermediate parent after reuse', () => {
+    const { monitor, state } = createHarness()
+    state.table = [{ pid: ROOT, parentPid: 0, createdAt: 10 }, { pid: 200, parentPid: ROOT, createdAt: 20 }]
+    monitor.start()
+    state.table = [
+      { pid: ROOT, parentPid: 0, createdAt: 10 },
+      { pid: 200, parentPid: 999, createdAt: 100 },
+      { pid: 300, parentPid: 200, createdAt: 30 },
+      { pid: 400, parentPid: 200, createdAt: undefined },
+      { pid: 500, parentPid: 200, createdAt: 110 },
+      { pid: 600, parentPid: 200, createdAt: 15 },
+    ]
+    monitor.rescan()
+    monitor.stop()
+    assert.deepEqual(monitor.identities().map(entry => [entry.pid, entry.createdAt]), [[100, 10], [200, 20], [300, 30], [400, undefined]])
+  })
+
+  it('retains unknown timestamps as evidence instead of treating uncertain ancestry as gone', () => {
+    const { monitor, state } = createHarness()
+    state.table = [
+      { pid: ROOT, parentPid: 0, createdAt: 10 },
+      { pid: 200, parentPid: ROOT, createdAt: undefined },
+      { pid: 300, parentPid: 200, createdAt: 5 },
+      { pid: 400, parentPid: ROOT, createdAt: undefined },
+    ]
+    monitor.start()
+    monitor.stop()
+    assert.deepEqual(monitor.identities().map(entry => entry.pid), [100, 200, 300, 400])
+    assert.equal(monitor.identities().find(entry => entry.pid === 200).createdAt, undefined)
+    assert.equal(monitor.identities().find(entry => entry.pid === 400).createdAt, undefined)
+  })
+
   it('records the poll that first saw each process, for diagnosis', () => {
     const { monitor, state } = createHarness()
     state.clock = 5_000

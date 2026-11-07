@@ -83,6 +83,9 @@ export function createProcessMonitor({
   let pending
   let startedAt
   let stoppedAt
+  // Bind the root PID to its first known incarnation for this monitor lifetime.
+  // An unknown first observation remains in `observed` for fail-closed teardown.
+  let rootIdentity
 
   /**
    * Walk the parent links up to the root. Iterative with a visited set: a
@@ -91,10 +94,16 @@ export function createProcessMonitor({
    */
   function collect(table) {
     const byPid = new Map(table.map(entry => [entry.pid, entry]))
+    const currentRoot = byPid.get(rootPid)
+    if (currentRoot && (!rootIdentity || (!Number.isFinite(rootIdentity.createdAt) && Number.isFinite(currentRoot.createdAt))))
+      rootIdentity = { ...currentRoot }
+    const sameRoot = entry => !rootIdentity || !Number.isFinite(entry?.createdAt)
+      || !Number.isFinite(rootIdentity.createdAt) || entry.createdAt === rootIdentity.createdAt
     const owned = new Set()
     for (const entry of table) {
       if (entry.pid === rootPid) {
-        owned.add(entry.pid)
+        if (sameRoot(entry))
+          owned.add(entry.pid)
         continue
       }
       const visited = new Set()
@@ -103,6 +112,31 @@ export function createProcessMonitor({
         if (visited.has(cursor.pid))
           break
         visited.add(cursor.pid)
+        const parent = cursor.parentPid === undefined
+          ? undefined
+          : byPid.get(cursor.parentPid)
+            ?? (cursor.parentPid === rootPid ? rootIdentity : undefined)
+        // A newer occupant of the parent's PID does not erase children of an
+        // owned incarnation already seen by this monitor. A known child must
+        // predate the new occupant and cannot predate its historical parent;
+        // unknown child times remain evidence for fail-closed teardown.
+        const historicalParents = cursor.parentPid === rootPid && rootIdentity
+          ? [rootIdentity]
+          : [...observed.values()].filter(identity => identity.pid === cursor.parentPid)
+        if (Number.isFinite(parent?.createdAt) && historicalParents.some(identity =>
+          (!Number.isFinite(identity.createdAt) || identity.createdAt < parent.createdAt)
+          && (!Number.isFinite(cursor.createdAt) || (cursor.createdAt < parent.createdAt
+            && (!Number.isFinite(identity.createdAt) || cursor.createdAt >= identity.createdAt))))) {
+          owned.add(entry.pid)
+          break
+        }
+        // Windows retains an exited parent's numeric PID on its children. A
+        // recycled PID can therefore point to a newer, unrelated process. Check
+        // every edge BEFORE either shortcut or following another ancestor.
+        if (Number.isFinite(cursor.createdAt) && Number.isFinite(parent?.createdAt) && cursor.createdAt < parent.createdAt)
+          break
+        if (cursor.parentPid === rootPid && !sameRoot(parent))
+          break
         if (cursor.parentPid === rootPid || owned.has(cursor.parentPid)) {
           owned.add(entry.pid)
           break
