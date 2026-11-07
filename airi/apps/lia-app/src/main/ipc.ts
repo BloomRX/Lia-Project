@@ -91,6 +91,17 @@ export function registerLiaIpc(host: LiaHost, timer: LiaBootTimer, extras: LiaIp
     return host.vault.hasSecret(providerId, 'apiKey')
   })
   ipcMain.handle('lia:stage:state', () => host.stage.state())
+  ipcMain.handle('lia:ai:connection:get', async () => {
+    try {
+      return await host.aiConnection.read()
+    }
+    catch { return { ok: false, code: 'storage' } }
+  })
+  // The host owns the shared save/start interlock and checks Stage ownership
+  // after acquiring it, including callers outside this IPC handler.
+  ipcMain.handle('lia:ai:connection:save', (_event, input: unknown) => host.aiConnection.save(input))
+  ipcMain.handle('lia:ai:connection:models', () => host.aiConnection.discover())
+  ipcMain.handle('lia:ai:connection:test', () => host.aiConnection.probe())
   ipcMain.handle('lia:stage:start', async () => await host.conversar())
   ipcMain.handle('lia:stage:stop', async () => {
     await host.stage.stop()

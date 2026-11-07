@@ -10,7 +10,7 @@ import type { ShutdownReport } from './shutdown-coordinator'
 import process from 'node:process'
 
 import { access, stat } from 'node:fs/promises'
-import { dirname, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import {
@@ -27,6 +27,8 @@ import { brainRoutingModeUpdate, readBrainRoutingMode, readLiaProductConfig, upd
 import { createLiaSecretVault } from '@lia/core/secrets/vault'
 import { createLiaVoiceProfileStore, findMissingFiles } from '@lia/core/voices/profiles'
 
+import { createTransportRepository } from '../../../../../lia/core/src/transports/repository'
+import { createAiConnectionService } from './ai-connection-service'
 import { AiriStageManager } from './airi-stage-manager'
 import { ShutdownCoordinator } from './shutdown-coordinator'
 
@@ -143,6 +145,7 @@ export type LiaConfigUpdateResult
     | { message: string, status: 'invalid-source' | 'secret-forbidden' | 'secret-vault-failed' | 'write-failed' }
 
 export interface LiaHostDeps {
+  packagedStage?: ConstructorParameters<typeof AiriStageManager>[0]['packagedStage']
   /**
    * The OS cipher for the secret vault (injected by the Electron entry from
    * `safeStorage`; tests inject an identity cipher).
@@ -197,6 +200,7 @@ export type LiaRuntimeLocationPickResult
     | { message: string, reason: string, status: 'rejected' }
 
 export interface LiaHost {
+  aiConnection: ReturnType<typeof createAiConnectionService>
 
   /** The resolved bridge contract for THIS launch (built fresh from disk). */
   bridgeConfig: () => Promise<LiaBridgeConfig>
@@ -268,6 +272,18 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
     cipher: deps.cipher,
     filePath: paths.vaultFile,
   })
+  const transportRepository = createTransportRepository(join(paths.userDataDir, 'lia-transports.json'))
+  async function hasChatAuthentication(providerId: string): Promise<boolean> {
+    try {
+      const rows = (await transportRepository.read()).records.filter(row => row.providerId === providerId)
+      if (rows.length > 0 && (rows.length !== 1 || !rows[0].enabled))
+        return false
+      if (vault.hasSecret(providerId, 'apiKey'))
+        return true
+      return rows.length === 1 && rows[0].enabled && rows[0].protocol === 'chat-completions' && rows[0].adapterOptions.allowUnauthenticated === true
+    }
+    catch { return false }
+  }
   const voices = createLiaVoiceProfileStore({ rootDir: paths.voicesRoot })
   const emit = deps.onEvent ?? (() => {})
 
@@ -277,9 +293,21 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
   const workspaceRoot = deps.workspaceRoot ?? defaultWorkspaceRoot()
 
   const stage = (deps.stageManagerFactory ?? ((d: ConstructorParameters<typeof AiriStageManager>[0]) => new AiriStageManager(d)))({
+    packagedStage: deps.packagedStage,
     onLog: line => emit('lia-app.stage-log', line),
     workspaceRoot,
   })
+
+  // Serialize the ENTIRE save (including rollback) with launch preparation.
+  // Ownership must be checked inside this section: an IPC-only check races
+  // against asynchronous vault writes and a concurrent Stage start.
+  let stageConfigurationQueue: Promise<unknown> = Promise.resolve()
+  function withStageConfigurationLock<T>(operation: () => Promise<T>): Promise<T> {
+    const result = stageConfigurationQueue.then(operation)
+    stageConfigurationQueue = result.catch(() => {})
+    return result
+  }
+  const startStage = stage.start.bind(stage)
 
   /**
    * The supervisor shutdown officer (Phase 7.1, items 1/2/3). Registration
@@ -597,7 +625,7 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
     let aiReady = false
     try {
       const preferredAi = snapshot?.provider?.chat?.preferred
-      aiReady = preferredAi !== undefined && vault.hasSecret(preferredAi.providerId, 'apiKey')
+      aiReady = preferredAi !== undefined && Boolean(preferredAi.modelId) && await hasChatAuthentication(preferredAi.providerId)
     }
     catch { /* a vault read failure is degraded status, not a crash */ }
 
@@ -738,7 +766,31 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
     return { status: 'ok', value: written.value }
   }
 
+  const aiConnection = createAiConnectionService({
+    repository: transportRepository,
+    vault,
+    saveExclusively: save => withStageConfigurationLock(async () => {
+      if (stage.holdsOwnedStage())
+        return { ok: false as const, code: 'stage-running' as const }
+      return save()
+    }),
+    readSelection: async () => (await readSnapshot()).snapshot?.provider?.chat?.preferred,
+    saveSelection: async (preferred) => {
+      const result = await updateLiaProductConfig(paths.productConfigFile, { provider: { chat: { preferred, strategy: 'manual', onboarded: true } } })
+      if (result.status !== 'ok')
+        throw new Error('Configuration could not be saved')
+    },
+  })
+  async function requireSafeAiConfiguration(): Promise<void> {
+    if (!await aiConnection.isSafeToStart())
+      throw new Error('Salve novamente a configuração do serviço de IA antes de iniciar a conversa. / Save the AI service settings again before starting a conversation.')
+  }
+  stage.start = options => withStageConfigurationLock(async () => {
+    await requireSafeAiConfiguration()
+    return startStage(options)
+  })
   return {
+    aiConnection,
     bridgeConfig: bridgeFactory,
     coordinator,
     /**
@@ -751,7 +803,8 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
      * message plus a machine-readable diagnostic event - never a silent
      * broken speech pipeline.
      */
-    conversar: async () => {
+    conversar: () => withStageConfigurationLock(async () => {
+      await requireSafeAiConfiguration()
       // Supervisor rule (item 1): once Lia is closing, NOTHING new starts.
       if (coordinator.isShuttingDown()) {
         emit('lia-app.conversar-blocked', 'reason=lia-closing')
@@ -759,7 +812,7 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
       }
       const { snapshot } = await readSnapshot()
       const preferredAi = snapshot?.provider?.chat?.preferred
-      if (!preferredAi || !vault.hasSecret(preferredAi.providerId, 'apiKey')) {
+      if (!preferredAi?.modelId || !await hasChatAuthentication(preferredAi.providerId)) {
         emit('lia-app.conversar-blocked', 'reason=ai-not-ready')
         throw new Error('Lia is not fully configured yet. Finish the AI setup first.')
       }
@@ -772,8 +825,8 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
       // the child launches, so the managed Stage's Brain can select a route at
       // all. A degraded Brain default never blocks conversation.
       await ensureBrainReadyForConversar(snapshot)
-      return await stage.start({ env: await hostStageEnv() })
-    },
+      return await startStage({ env: await hostStageEnv() })
+    }),
     homeStatus,
     importVoice: async (request, allowedSourcePaths) => {
       const result = await voices.importProfile(request, allowedSourcePaths)

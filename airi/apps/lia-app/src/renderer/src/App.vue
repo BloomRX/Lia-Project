@@ -18,6 +18,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 
 import LiaStatusChip from './components/lia/LiaStatusChip.vue'
+import AiResourcesView from './views/AiResourcesView.vue'
 import ConfigView from './views/ConfigView.vue'
 import DiagnosticsView from './views/DiagnosticsView.vue'
 import HomeView from './views/HomeView.vue'
@@ -25,7 +26,7 @@ import VoiceView from './views/VoiceView.vue'
 
 import { LIA_VOICE_READINESS_EVENT, voiceStatusChipVariant, voiceStatusChipVm } from './components/voice-engine-card.vm'
 
-type Page = 'config' | 'diagnostics' | 'home' | 'voice'
+type Page = 'config' | 'diagnostics' | 'home' | 'voice' | 'ai'
 
 const page = ref<Page>('home')
 const status = ref<any>(undefined)
@@ -81,12 +82,14 @@ const voiceVariant = computed(() => voiceStatusChipVariant(voiceChip.value.tone)
  */
 const nav: { icon: string, id: Page, label: string }[] = [
   { icon: '●', id: 'home', label: 'Início' },
+  { icon: '✦', id: 'ai', label: 'IA & Recursos' },
   { icon: '🎙', id: 'voice', label: 'Voz' },
   { icon: '◧', id: 'diagnostics', label: 'Diagnósticos' },
 ]
 
 const current = computed(() => {
   switch (page.value) {
+    case 'ai': return AiResourcesView
     case 'config': return ConfigView
     case 'diagnostics': return DiagnosticsView
     case 'voice': return VoiceView
@@ -171,12 +174,13 @@ onMounted(async () => {
           :is="current"
           :status="status"
           :api="api"
+          :language="language"
           v-bind="page === 'home' ? { language, readiness, setup } : {}"
           @refresh="refresh"
         />
       </main>
 
-      <footer class="logbar">
+      <footer v-if="page === 'diagnostics'" class="logbar">
         <div class="log-title">
           Log
         </div>

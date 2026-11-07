@@ -6,6 +6,10 @@ import { contextBridge, ipcRenderer } from 'electron'
  * itself, and it never gets secret values.
  */
 const api = {
+  aiConnectionGet: () => ipcRenderer.invoke('lia:ai:connection:get'),
+  aiConnectionSave: (input: unknown) => ipcRenderer.invoke('lia:ai:connection:save', input),
+  aiConnectionModels: () => ipcRenderer.invoke('lia:ai:connection:models'),
+  aiConnectionTest: () => ipcRenderer.invoke('lia:ai:connection:test'),
   bridge: () => ipcRenderer.invoke('lia:bridge'),
   conversar: () => ipcRenderer.invoke('lia:stage:start'),
   homeStatus: () => ipcRenderer.invoke('lia:home-status'),

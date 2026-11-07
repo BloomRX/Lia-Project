@@ -54,6 +54,7 @@ export interface AiriStageState {
 }
 
 export interface AiriStageManagerDeps {
+  packagedStage?: () => { command: string, args: string[], cwd: string }
   /**
    * Extra env for the child (LIA_* launch facts + shared user data),
    * resolved per launch by the host - also overrideable per start() call.
@@ -143,6 +144,8 @@ export class AiriStageManager {
 
   /** The child spawn command, as one inspectable string for diagnostics. */
   command(): string {
+    if (this.deps.packagedStage)
+      return 'LiaStage.exe'
     return `node ${stageDevEntrypointFor(this.stageDir(), this.deps)} dev`
   }
 
@@ -151,6 +154,12 @@ export class AiriStageManager {
   }
 
   isAvailable(): boolean {
+    if (this.deps.packagedStage) {
+      try {
+        return Boolean(this.deps.packagedStage())
+      }
+      catch { return false }
+    }
     return existsSync(join(this.deps.workspaceRoot, 'apps', 'stage-tamagotchi'))
   }
 
@@ -283,7 +292,7 @@ export class AiriStageManager {
     // semantics the tests pin are byte-for-byte unchanged.
     const prerequisite = this.deps.prerequisite
       ?? createCoreAgentBuildPrerequisite({ workspaceRoot: this.deps.workspaceRoot })
-    if (prerequisite.applies()) {
+    if (!this.deps.packagedStage && prerequisite.applies()) {
       this.deps.onLog?.(`stage-prerequisite name=${prerequisite.name} state=starting`)
       let outcome: StagePrerequisiteOutcome
       try {
@@ -338,14 +347,17 @@ export class AiriStageManager {
     // to Electron-as-Node, and we fail closed instead of spawning an Electron
     // app that would parent nothing. Ownership is unchanged: the build stays an
     // awaited prerequisite, never the owned Stage process.
-    const runtime = resolveNodeInvocation({
-      childLaunchesElectron: true,
-      env: this.deps.runtimeEnv,
-      existsImpl: this.deps.existsImpl,
-      fuseImpl: this.deps.fuseImpl,
-      platform: this.deps.platform ?? nodePlatform,
-      versions: this.deps.runtimeVersions,
-    })
+    const packaged = this.deps.packagedStage?.()
+    const runtime = packaged
+      ? { kind: 'packaged' as const, command: packaged.command }
+      : resolveNodeInvocation({
+          childLaunchesElectron: true,
+          env: this.deps.runtimeEnv,
+          existsImpl: this.deps.existsImpl,
+          fuseImpl: this.deps.fuseImpl,
+          platform: this.deps.platform ?? nodePlatform,
+          versions: this.deps.runtimeVersions,
+        })
     if (runtime.kind === 'unavailable') {
       // The reason is a static string from node-runtime.ts: no PATH entries,
       // no environment values, no secrets.
@@ -360,8 +372,8 @@ export class AiriStageManager {
     const stageEnv = { ...nodeEnv, ...this.deps.childEnv, ...passEnv }
     delete stageEnv.ELECTRON_RUN_AS_NODE
 
-    const child = spawnImpl(runtime.command, [entrypoint, 'dev'], {
-      cwd: stageDir,
+    const child = spawnImpl(runtime.command, packaged?.args ?? [entrypoint, 'dev'], {
+      cwd: packaged?.cwd ?? stageDir,
       env: stageEnv,
     })
     this.child = child
@@ -370,7 +382,9 @@ export class AiriStageManager {
     // evidence of what was actually spawned, and printing a word that is only
     // sometimes true is how an Electron executable stayed invisible in the
     // Windows logs.
-    this.deps.onLog?.(`spawn: ${basename(runtime.command)} ${entrypoint} dev (pid ${String(child.pid)})`)
+    this.deps.onLog?.(packaged
+      ? `spawn: ${basename(runtime.command)} (pid ${String(child.pid)})`
+      : `spawn: ${basename(runtime.command)} ${entrypoint} dev (pid ${String(child.pid)})`)
 
     return await new Promise<AiriStageState>((resolve) => {
       const grace = this.deps.startGraceMs ?? 180_000
@@ -400,7 +414,7 @@ export class AiriStageManager {
           if (line.trim())
             this.deps.onLog?.(line)
         }
-        if (READY_SIGNAL.test(text) && !readySeen) {
+        if ((packaged ? text.includes('[lia-stage] window-ready') : READY_SIGNAL.test(text)) && !readySeen) {
           readySeen = true
           this.setState({ phase: 'running', pid: child.pid })
           this.deps.onLog?.(`ready (pid ${String(child.pid)})`)

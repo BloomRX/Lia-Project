@@ -45,6 +45,27 @@ async function makeStageWorkspace(): Promise<string> {
 }
 
 describe('phase 7.2: ownership retained, spawn without shell (tests C/D/G)', () => {
+  it('starts the packaged Stage without Node or package tools and waits for its visible renderer', async () => {
+    const child = fakeChild()
+    const spawnImpl = vi.fn(() => child as never)
+    const prerequisite = { name: 'unused', applies: vi.fn(() => true), run: vi.fn() }
+    const manager = new AiriStageManager({
+      workspaceRoot: '/no-development-checkout',
+      packagedStage: () => ({ command: 'C:\\Lia\\resources\\stage\\LiaStage.exe', args: [], cwd: 'C:\\Lia\\resources\\stage' }),
+      spawnImpl: spawnImpl as never,
+      prerequisite,
+      runtimeEnv: { PATH: '' },
+    })
+    const started = manager.start()
+    expect(spawnImpl).toHaveBeenCalledWith('C:\\Lia\\resources\\stage\\LiaStage.exe', [], expect.objectContaining({ cwd: 'C:\\Lia\\resources\\stage' }))
+    expect(prerequisite.run).not.toHaveBeenCalled()
+    child.stdout.emit('data', 'ready in 1ms')
+    expect(manager.state().phase).toBe('starting')
+    child.stdout.emit('data', '[lia-stage] window-ready')
+    expect((await started).phase).toBe('running')
+    child.exitCode = 0
+    child.emit('exit', 0)
+  })
   it('g: the Windows spawn path carries NO shell option - the DEP0190 route is eliminated', async () => {
     const root = await makeStageWorkspace()
     const child = fakeChild()

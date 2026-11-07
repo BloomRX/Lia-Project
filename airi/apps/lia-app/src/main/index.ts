@@ -10,6 +10,7 @@ import { createLiaDevflowAutorun } from './devflow-autorun'
 import { createLiaEventPublisher } from './event-publisher'
 import { registerLiaIpc } from './ipc'
 import { createLiaHost } from './lia-host'
+import { resolvePackagedStage } from './packaged-stage'
 import { createSupervisorQuitFlow } from './shutdown-coordinator'
 import { enforceSingleInstance } from './single-instance'
 import { createLiaBootTimer } from './timing'
@@ -75,6 +76,7 @@ async function bootstrap(): Promise<void> {
   // finishes its first paint - but WITHOUT starting the voice runtime
   // (contract item 12) and without touching AIRI (contract item 11).
   const host = createLiaHost({
+    packagedStage: app.isPackaged ? () => resolvePackagedStage(process.resourcesPath) : undefined,
     cipher: {
       available: () => safeStorage.isEncryptionAvailable(),
       decrypt: payload => safeStorage.decryptString(payload),

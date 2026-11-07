@@ -13,6 +13,7 @@ import type { FirstRunChoice } from './home-vm'
  */
 import { computed, ref } from 'vue'
 
+import liaHero from '../../../../../../../lia/assets/character/LiaHeroImage.png'
 import LiaButton from '../components/lia/LiaButton.vue'
 import LiaPanel from '../components/lia/LiaPanel.vue'
 import LiaStatusChip from '../components/lia/LiaStatusChip.vue'
@@ -76,12 +77,19 @@ const firstRunVisible = computed(() => !firstRunDone.value && firstRunPanelVisib
  */
 async function chooseFirstRun(choice: FirstRunChoice) {
   firstRunBusy.value = true
+  error.value = undefined
   try {
     const result = await props.api?.updateConfig(firstRunChoicePayload(choice))
     if (result?.status === 'ok') {
       firstRunDone.value = true
       emit('refresh')
     }
+    else {
+      error.value = props.language?.startsWith('en') ? 'Could not save your choice. Please try again.' : 'Não foi possível salvar sua escolha. Tente novamente.'
+    }
+  }
+  catch {
+    error.value = props.language?.startsWith('en') ? 'Could not save your choice. Please try again.' : 'Não foi possível salvar sua escolha. Tente novamente.'
   }
   finally {
     firstRunBusy.value = false
@@ -97,11 +105,8 @@ async function conversar() {
   try {
     await props.api.conversar()
   }
-  catch (err) {
-    if (err instanceof Error)
-      error.value = err.message
-    else
-      error.value = String(err)
+  catch {
+    error.value = props.language?.startsWith('en') ? 'Could not start the conversation. Try again or open Diagnostics.' : 'Não foi possível iniciar a conversa. Tente novamente ou abra Diagnósticos.'
   }
   finally {
     busy.value = false
@@ -142,9 +147,7 @@ async function encerrarConversa() {
          it - nothing is generated or faked. -->
     <LiaPanel class="home-hero">
       <div class="home-hero-visual" aria-label="Lia" role="img">
-        <div class="home-hero-ring">
-          <span class="home-hero-letter">L</span>
-        </div>
+        <img :src="liaHero" alt="" class="home-hero-image">
       </div>
       <h1 class="home-title">
         Lia
@@ -236,40 +239,34 @@ async function encerrarConversa() {
 
 /* A. Hero ------------------------------------------------------------ */
 .home-hero {
+  border-color: var(--lia-border-accent);
+  position: relative;
+  overflow: hidden;
   align-items: center;
   display: flex;
   flex-direction: column;
-  padding: var(--lia-space-8) var(--lia-space-6);
+  padding: 340px var(--lia-space-6) var(--lia-space-8);
   text-align: center;
 }
 
 /* The hero visual SLOT: sized for the canonical Lia image (a later
    production asset); the wired brand mark occupies it until then. */
 .home-hero-visual {
-  align-items: center;
-  display: flex;
-  justify-content: center;
-  min-height: 140px;
+  position: absolute;
+  inset: 0 0 auto;
+  height: 340px;
+  overflow: hidden;
+  mask-image: linear-gradient(var(--lia-text-primary) 76%, transparent);
 }
-.home-hero-ring {
-  align-items: center;
-  border: 2px solid var(--lia-border-accent);
-  border-radius: 50%;
-  display: flex;
-  height: 120px;
-  justify-content: center;
-  width: 120px;
-}
-.home-hero-letter {
-  background: linear-gradient(135deg, var(--lia-accent), var(--lia-accent-soft));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  font-size: 56px;
-  font-weight: var(--lia-font-bold);
+.home-hero-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 28%;
 }
 
 .home-title {
+  text-shadow: 0 0 28px var(--lia-accent);
   font-size: var(--lia-text-2xl);
   font-weight: var(--lia-font-bold);
   letter-spacing: 0.5px;
