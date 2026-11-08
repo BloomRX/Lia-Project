@@ -11,6 +11,7 @@ import { defineInvokeHandler } from '@moeru/eventa'
 import { ProviderError } from '../../../../../../../lia/core/src/providers/contracts'
 import { electronLiaTranscriptionCancel, electronLiaTranscriptionRun } from '../../../shared/eventa/lia-transcription'
 import { isCuratedChatProvider } from '../../../shared/lia/provider-catalog'
+import { resolveMainCredential } from './credential-owner-access'
 import { withLiaProviderHeaders } from './provider-request-headers'
 import { isNativeRecordingTranscriptionProvider, parseTranscriptionResponse, prepareTranscriptionRequest } from './transcription-adapters'
 
@@ -211,7 +212,7 @@ export function createLiaTranscriptionService(options: LiaTranscriptionServiceOp
       const native = isNativeRecordingTranscriptionProvider(record.definitionId)
       if (native ? record.protocol !== 'audio-transcription' : (!isCuratedChatProvider(record.definitionId) || record.protocol !== 'chat-completions'))
         throw new ProviderError('configuration')
-      const credential = options.vault.getSecret(record.credentialRef.scope, record.credentialRef.key)
+      const credential = await abortable(resolveMainCredential(options.vault, record.credentialRef.scope, record.credentialRef.key, controller.signal), controller.signal)
       const { url, init } = prepareTranscriptionRequest(record, request, credential)
       // Node's multipart Blob producer may enqueue after fetch abort closes its
       // stream. Finish bounded encoding before attaching the HTTP abort signal.

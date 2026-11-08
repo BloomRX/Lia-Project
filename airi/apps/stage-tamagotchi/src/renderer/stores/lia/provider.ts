@@ -530,6 +530,9 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
 
   /** Whether a given provider requires an API key credential (defaults true). */
   function providerNeedsKey(providerId: string): boolean {
+    const native = transports.get(providerId)
+    if (native?.enabled && native.protocol === 'chat-completions' && native.adapterOptions.allowUnauthenticated === true)
+      return false
     return optionFor(providerId)?.needsApiKey !== false
   }
 
@@ -776,7 +779,7 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
       return
     // Drop any cached provider instance so the next build re-resolves the vault
     // key (in case the user updated it since the last build).
-    nativeRuntime.dispose(target.providerId)
+    nativeRuntime.invalidate(target.providerId)
     await providerRuntime.dispose(target.providerId)
     await ensureProviderRecord(target.providerId, baseUrl)
     // Watcher flushes synchronously on provider change and clears the model, so

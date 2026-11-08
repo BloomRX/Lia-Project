@@ -1,6 +1,6 @@
 # Lia — retomada da finalização no Windows
 
-Rodada em andamento, 07/11/2026. **Release NÃO APROVADA.** Baseline funcional
+Rodada de 07/11, continuada em 08/11/2026. **Release NÃO APROVADA.** Baseline funcional
 continua `3ef6d11`. Branch `arena/01a10290-lia-project`; preflight local e remoto
 em `40326d7`, sem divergência. Nenhum reset, clean, stash, troca de branch,
 rebase ou descarte foi realizado. `Lia.bat` e `DevKit.bat` preservados.
@@ -51,9 +51,9 @@ credenciais do usuário não foram usadas.
 | --- | --- | --- |
 | Baseline Python | `python -m unittest discover -s . -p "test_*.py" -t .`, `tools/` | PASS automatizado: 498, 10 skips, exit 0; entradas Python não alteradas nesta retomada |
 | Harness Node | `node --test "Tests/tools/*.test.mjs"`, raiz | PASS automatizado: 267, exit 0; repetido na retomada |
-| Core independente | `node --experimental-strip-types --test "lia/core/test/*.test.ts"`, raiz | PASS automatizado: 82, exit 0 |
+| Core independente | `node --experimental-strip-types --test "lia/core/test/*.test.ts"`, raiz | PASS automatizado final: 92, exit 0, inclui canal Main |
 | Produto/presença canônica | `vitest run src/product/config.test.ts src/product/config-write.test.ts`, `airi/packages/lia-core/` | PASS automatizado: 60, exit 0 |
-| Launcher | `corepack pnpm run test`, `airi/apps/lia-app/` | PASS automatizado: 269, 2 skips preexistentes, exit 0; mudanças posteriores precisam verificação focada |
+| Launcher | `corepack pnpm run test`, `airi/apps/lia-app/` | PASS automatizado final: 279, 2 skips preexistentes, 28 arquivos, exit 0 |
 | Stage ampliado, primeira tentativa | `vitest run --project node src/main/services/lia src/renderer/services/lia src/renderer/stores/lia`, Stage | FAIL: 1655 PASS/3 FAIL; duas guardas estruturais antigas e um scanner excedeu seus 5 s |
 | Guardas corrigidas | `vitest run --config vitest.node.config.ts src/main/services/lia/brain-correlation-observer.test.ts src/main/services/lia/brain-send-terminal-report-listener.test.ts`, Stage | PASS automatizado: 74, exit 0, sem aumentar timeout ou alterar allowlist do scanner |
 | Memória/personalidade Chromium | `vitest run --project browser src/renderer/components/lia-config/sections/MemorySection.browser.test.ts src/renderer/components/lia-config/sections/PersonalitySection.browser.test.ts`, Stage | PASS automatizado: 10, exit 0 |
@@ -114,14 +114,14 @@ Leitura local dos metadados `Local State` confirmou apenas três booleanos:
 ambos os perfis possuem chave protegida e os valores protegidos diferem.
 Nenhum valor dessas chaves foi impresso ou versionado.
 
-A correção arquitetural ainda exige um proprietário de credenciais e migração
-segura. Não foram copiados materiais criptográficos, compartilhado um perfil
+A correção inicial ainda precisava de um proprietário de credenciais; ele foi
+implementado em 08/11, com contrato e limites na seção seguinte. Não foram copiados materiais criptográficos, compartilhado um perfil
 Chromium ativo entre hosts ou enviados segredos ao Renderer para contornar o
 problema. A documentação [oficial de safeStorage](https://www.electronjs.org/docs/latest/api/safe-storage)
 explica a proteção do sistema; ela não é evidência de interoperabilidade entre
 estes dois hosts da Lia.
 
-**FAIL Windows: primeiro uso autenticado Launcher → Stage.** Voz/STT que usem
+**FAIL Windows inicial: primeiro uso autenticado Launcher → Stage.** Voz/STT que usem
 credenciais escritas por outro host também precisam dessa verificação; gates
 do mesmo processo não a substituem. Serviço externo permanece BLOCKED: nova
 tentativa de `http://localhost:20128/v1/models` expirou em 4 s.
@@ -138,7 +138,174 @@ O roteiro seguinte corrigiu esse rótulo para `credentialPolicyPassed`.
 O restante desse roteiro falhou ao localizar o botão Settings por capitalização
 do nome acessível; conversa já observada não aprova memória/personalidade.
 
+Rodada posterior `completion-resume-runtime-1794086536193` usou foco e Enter no
+botão de configurações. A variante de clique por ponteiro encontrou o controle
+em animação e depois removido do DOM; não foi usado `force:true` para aprová-la.
+Com serviço local sem chave:
+
+- PASS Windows: salvar lembrança, ativar seu uso, enviar conversa e verificar
+  a lembrança na requisição real Main. Opt-out seguido de novo envio não levou
+  a lembrança. Histórico e opt-in continuam contratos separados.
+- PASS Windows: editar Energia pela UI, salvar e enviar outra mensagem mudou
+  a assinatura do contexto de sistema recebido pelo fixture. Não mede a
+  personalidade subjetiva de um modelo de IA.
+- O primeiro roteiro de presença encontrou método CDP de janela indisponível;
+  essa falha era de instrumentação, não gate do produto. A rodada
+  `completion-resume-runtime-1794086695215` usou leitura de dimensões reais do
+  Renderer e encontrou erro ao salvar Livre; **presença real ficou FAIL nessa rodada**.
+  Tamagotchi foi preservado; o teste não confirmou multimonitor nem jogos.
+
+Revisão visual independente da captura
+`completion-resume-runtime-1794085702958/captures/03-stage.png`: contornos ciano
+removidos, sem deformação aparente. A Lia pede sombra neutra suave por uma
+propriedade opcional do renderer, preservando a preferência de ligar/desligar
+e o visual padrão dos demais consumidores. Isso não substitui avatar oficial,
+animação prolongada ou teste gráfico em outras GPUs.
+
+Idioma: Main/Renderer usam o contrato canônico gerenciado, mas a tradução
+pt-BR do Stage ainda era parcial. Foram adicionados os controles da personagem
+e removido o atalho de login externo da superfície gerenciada. Verificação
+integral de todas as páginas/janelas continua NÃO EXECUTADA.
+
+## Continuação de 08/11 — resultados que substituem as falhas iniciais
+
+### Credenciais entre os processos Main
+
+[Contrato implementado](../architecture/LIA-CREDENTIAL-OWNER.md): proprietário
+Launcher, pipe local aleatório/capability por execução, validação e limites,
+cancelamento e revogação; bootstrap removido do ambiente antes dos renderers.
+Novas gravações gerenciadas de `apiKey` vão ao dono; leitura de entrada antiga
+do Stage só usa seu cipher original quando o dono reporta ciphertext ilegível.
+Não há cache, cópia de material criptográfico ou exportação ao Renderer.
+Leitores legados permanecem dívida explícita; não há declaração de segurança global.
+
+Revisão independente encontrou e corrigiu duas corridas de integração: escrita
+enfileirada após revogação e leitura de chave sem referência no primeiro cadastro
+de voz. A escrita revalida o sinal dentro da fila. Credencial órfã ganha uma
+referência CAS desabilitada antes de ser lida e só é habilitada ao concluir o
+save; falha preserva a chave e deixa a referência inerte. Contraprovas e testes
+ficam em `completion-owner-revoke-red.log`, `completion-owner-speech-first-red.log`
+e `completion-owner-orphan-red.log`; não se aumentou timeout.
+
+**PASS Windows com HTTP local autenticado por chave sintética:**
+`completion-resume-runtime-1794114829064`, saída 0, sem erros. UI salvou a chave,
+descobriu o modelo, completou ferramenta/resultado/resposta e abriu o Stage.
+Chat SSE Main chegou ao fixture com autenticação e modelo corretos; resposta
+visível. Memória opt-in/opt-out e alteração de personalidade chegaram às
+requisições. Isso **não é um provedor de IA externo autenticado aprovado**.
+
+**PASS Windows com HTTP local explicitamente sem chave:**
+`completion-resume-runtime-1794114964249`, saída 0. Mesmo fluxo integrado,
+acrescido de colocação dentro do segundo monitor conectado (1920×1080 e
+1360×768 observados), movimento após despausar, pausa e gravação explícita de
+Home. Livre ficou 240×360 e retornou ao tamanho Tamagotchi. O Launcher observou
+parada; o filho de desenvolvimento retornou exit 1 ao ser encerrado, portanto
+não se declara saída natural exit 0 de aplicativo instalado.
+
+Comando reproduzível na raiz, depois de build Launcher e com aplicativos fechados:
+
+```powershell
+$env:LIA_EVIDENCE_ROOT = 'J:/lia-evidence'
+node Tests/windows/completion-runtime.mjs
+node Tests/windows/completion-runtime.mjs --without-key --presence-more
+```
+
+[Roteiro e limites de isolamento](../../Tests/windows/README-completion.md).
+[Evidência resumida versionada e hashes das capturas](evidence/2026-11-08-completion-runtime.json).
+Os perfis de produto e do Stage são novos; as rodadas citadas preservaram o
+perfil Chromium original do Launcher. Agora esse perfil é selecionado
+explicitamente quando existente; instalações novas usam `Lia/launcher-profile`.
+O nome empacotado não pode trocar o cipher nem compartilhar a pasta ativa do
+Stage. Testes cobrem seleção e recusa de colisão; nunca se afirmou isolamento
+integral de todos os perfis do roteiro.
+
+### Voz, enquadramento e persistência
+
+A regressão agregada interrompida terminou em **FAIL: 2336 PASS, 7 FAIL, 4 skip,
+192 arquivos** (`completion-freeze-stage-tests.log`). Não foi convertida em PASS.
+As sete falhas eram guardas antigas: quatro abas em vez de seis, projeção de
+personalidade agora feita por helper, seleção nativa explícita de voz/modelo,
+catálogo pelo runtime e novo callback de prontidão. Foram atualizadas mantendo
+as proibições de catálogo inventado, edição direta da prosa e prontidão falsa.
+Também faltavam títulos/resumos de memória/presença em pt-BR/en: adicionados.
+Os testes dirigidos passaram; o agregado final é registrado ao concluir a rodada.
+
+A falha do catálogo de voz não provou regressão de TTS: o teste esperava a
+mensagem legada `needsConfiguration` numa definição que agora usa configuração
+Main-native e ID explícito. A asserção foi corrigida para esse contrato real;
+testes do editor mantêm a cobertura de credenciais ausentes do caminho legado.
+Voz física continua NÃO EXECUTADA.
+
+Presença tinha outro defeito: o Home retornado virava Proxy reativo e o próximo
+IPC falhava no structured clone. Teste RED confirmou, cópia plain-data corrigiu;
+sete testes focados passaram. O enquadramento antigo mostrava metade do corpo.
+Agora Livre pede corpo inteiro com margem e ignora temporariamente o zoom/offset
+de retrato, sem alterar os valores salvos. Teste de dimensões/reatividade e
+contraprova RED passaram. Revisão visual independente aprovou a captura
+`completion-resume-runtime-1794089122206/captures/08-free-stage.png`: cabelo e
+sapatos visíveis, proporções preservadas e sem ciano. O fundo preto não aprova
+transparência ou qualidade de sombra escura.
+
+O EPERM na substituição do documento ocorreu em J: e C:. O Restart Manager
+identificou o Launcher mantendo o arquivo aberto. Cada linha de log causava
+uma releitura completa; logs agora só atualizam Diagnósticos e mudanças de
+estado têm evento próprio. Nas rodadas seguintes a falha não se repetiu.
+Isso reduz uma amplificação comprovada; não demonstra a causa de kernel de
+todos os possíveis EPERM. O destino nunca é apagado para contornar rename.
+
+Serviço externo informado: nova consulta a `http://localhost:20128/v1/models`
+em 08/11 expirou em quatro segundos, `TaskCanceledException`: **BLOCKED**.
+Não foram usadas chaves privadas. Monitor desconectado, DPI alterado, jogos,
+hover/click-through, voz física e ensaio prolongado continuam NÃO EXECUTADOS.
+
 ## Empacotamento privado (estado em andamento)
+
+### Verificações finais antes da cópia
+
+| Verificação | Comando | Resultado |
+| --- | --- | --- |
+| Stage agregado sequencial | `vitest run --project node`, Stage | PASS automatizado: 2350, 4 skips, 193 arquivos, exit 0 |
+| Stage após API aditiva de rollback Core | `vitest run --project node src/main/services/lia/credential-owner-access.test.ts src/main/services/lia/secrets.test.ts src/main/services/lia/transport-execution-service.test.ts src/main/services/lia/transcription-service.test.ts src/main/services/lia/speech-config-service.test.ts`, Stage | PASS automatizado: 92, exit 0 |
+| Core produto/cofre | `vitest run src/product/config.test.ts src/product/config-write.test.ts src/secrets/vault-backup.test.ts`, pacote lia-core | PASS automatizado: 64, exit 0 |
+| Chromium Stage | `vitest run --project browser`, Stage | PASS automatizado: 54, 9 arquivos, exit 0; console emitiu `ResizeObserver loop` preservado no log |
+| Chromium editor compartilhado | `vitest run --config vitest.credential-editor.config.ts`, Stage | PASS automatizado: 6, exit 0 |
+| Draft compartilhado | `vitest run --project node src/stores/providers/generic-credential-draft.test.ts`, stage-ui | PASS automatizado: 5, exit 0 |
+| Typechecks | `corepack pnpm run typecheck` em Launcher, Stage e stage-pages | PASS, exit 0; Launcher declara `tsc`, Stage/páginas declaram `vue-tsc` |
+| Lint dos arquivos tocados | `moeru-lint --fix <arquivos>`, airi | PASS, exit 0; avisos de oxlint preservados, sem suprimir regra global |
+| Builds estáveis | `corepack pnpm run build` em Launcher, i18n e Stage, sequencialmente | PASS, exit 0; build Launcher também executa build do Core |
+| Componentes Electron PS 5.1 | `powershell.exe -NoProfile -File ./scripts/provider-runtime-electron/run-gate-windows.ps1 -SkipBuild -ExportRoot J:/lia-evidence -ElectronZip C:/Users/lucas/AppData/Local/Temp/lia-electron-official-670c18ee-5d18-4b64-893c-ccfdbfa2c3d4.zip`, Stage | PASS Windows, exit 0; pacote `26120a57-5c10-48fa-a46f-376148bad581` |
+| Componentes Electron PS 7 | mesmo comando com `pwsh.exe` | PASS Windows, exit 0; pacote `f909f0dc-5b99-45b5-8b2d-9d87915c2391` |
+
+Os dois pacotes de componentes estão em `J:/lia-evidence/<id>/`, cada um com
+`report.json` e `electron.log`. Runtime oficial 43.4.1 e ZIP SHA-256
+`c2ef9a5f65472c34d14bd3e67b7d14e66b0c01f124aba45263d6a4232160e13a`.
+O gate não foi substituído; usa seus grupos reais sobre HTTP local e verifica
+ausência de sentinelas nos logs. Não aprova voz física ou serviço de IA externo.
+
+A primeira repetição do Stage junto de typecheck terminou com um timeout de
+15 s no import dinâmico de `image-journal.test.ts`: 2349 PASS/1 FAIL/4 skip.
+Isolado, esse teste passou (2/2); depois o agregado sequencial passou inteiro.
+Não se mudou o teste, seu timeout ou a implementação de imagem para aprová-lo.
+Há correlação com concorrência de carga, sem causa de sistema confirmada.
+
+Compatibilidade adicional corrigida antes de congelar: substituição explícita
+de chave indecifrável agora usa backup opaco de uma entrada, sem decifrar o valor
+antigo. Restore relê o container estritamente, preserva outras entradas e recusa
+sobrescrever container corrompido. Se o CAS final falhar, seleção de serviço/modelo,
+estratégia e estado anterior também são restaurados antes de reabilitar a rota;
+falha da recuperação mantém a rota desabilitada. As contraprovas RED e testes
+host/Core estão em `completion-opaque-*` e `completion-selection-*`.
+
+O teste de interlock antigo injetava erro em `setSecret(oldPlaintext)`; foi
+adaptado para a nova operação de restore opaco, mantendo os asserts de bloqueio,
+reinício e reparo explícito. Não se retirou cobertura da falha.
+
+Revisão do editor encontrou perda de campos não salvos quando a migração de
+chave substituía o registro. Novo teste com registry reativo falhou antes da
+correção; watcher compara configuração não secreta e identidade no caminho
+nativo, preservando rascunho e comportamento legado. Seis testes Chromium PASS.
+O PNG Livre possui alpha 0–255 e canto transparente; composição/input nativos
+com hover continuam sem gate completo.
 
 Pipeline privado criado, com Stage oficial incluído no Launcher e seleção por
 `resources/stage/LiaStage.exe`. Não depende de Node/pnpm no caminho instalado.

@@ -14,6 +14,7 @@ import {
   electronLiaSecretHas,
   electronLiaSecretSet,
 } from '../../../shared/eventa'
+import { resolveMainCredential } from './credential-owner-access'
 import { createLiaSecretVault } from './secrets'
 
 const log = useLogg('lia:secrets').useGlobalConfig()
@@ -100,7 +101,7 @@ export function registerLiaSecretsBridge(params: {
     return serializeWrite(vault, async () => {
       if (vault.hasSecret(payload.scope, payload.key)) {
         // Compared inside main. Only the verdict leaves.
-        if (vault.getSecret(payload.scope, payload.key) === payload.value)
+        if (await resolveMainCredential(vault, payload.scope, payload.key) === payload.value)
           return 'matching' as const
         return 'conflict' as const
       }

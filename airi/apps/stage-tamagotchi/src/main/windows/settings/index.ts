@@ -19,6 +19,7 @@ import icon from '../../../../resources/icon.png?asset'
 import { electronSettingsNavigate } from '../../../shared/eventa'
 import { baseUrl, getElectronMainDirname, load, withHashRoute } from '../../libs/electron/location'
 import { createReusableWindow } from '../../libs/electron/window-manager'
+import { isLauncherManaged } from '../../services/lia/lia-managed'
 import { protectPrivilegedWindowNavigation, toggleWindowShow } from '../shared'
 import { setupSettingsWindowInvokes } from './rpc/index.electron'
 
@@ -82,7 +83,10 @@ export function setupSettingsWindowReusableFunc(params: {
     })
 
     await load(window, withHashRoute(rendererBase, currentRoute, {
-      query: { 'synced-leader': 'false' },
+      query: {
+        'synced-leader': 'false',
+        ...(isLauncherManaged() ? { 'lia-managed': 'true' } : {}),
+      },
     }))
 
     window.on('closed', () => {

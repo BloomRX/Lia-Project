@@ -55,8 +55,9 @@ export function createMainTransportExecution() {
       const result = await Promise.race([useElectronEventaInvoke(electronLiaTransportPull)({ id, action }), aborted])
       if (controller.signal.aborted)
         throw new ProviderError('cancelled')
-      if (!result.ok)
+      if (!result.ok) {
         throw new ProviderError(result.code, result.status)
+      }
       return result
     }
     try {
@@ -148,6 +149,13 @@ export function createMainTransportExecution() {
       catch (error) {
         const code = error instanceof ProviderError ? error.code : undefined
         return { ok: false, scope: 'text' as const, failure: code === 'configuration' ? 'configuration' : code === 'empty' ? 'empty' : code === 'network' ? 'endpoint' : 'request' }
+      }
+    },
+    /** Cancel the current generation while allowing subsequent executions. */
+    invalidate(providerId: string) {
+      for (const entry of active) {
+        if (entry.providerId === providerId)
+          entry.cancel()
       }
     },
     dispose(providerId?: string) {

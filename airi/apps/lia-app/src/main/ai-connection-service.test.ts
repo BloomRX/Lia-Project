@@ -34,6 +34,41 @@ async function fixture() {
   return { ...deps, deps, file, service: createAiConnectionService(deps) }
 }
 
+describe('explicit replacement of a credential from another profile', () => {
+  it('restores the previous model when the final transport CAS fails', async () => {
+    const f = await fixture()
+    await f.service.save({ baseUrl: 'https://old.invalid/v1', apiKey: 'old-synthetic', modelId: 'old-model', revision: 0 })
+    const mutate = f.repository.mutate.bind(f.repository)
+    vi.spyOn(f.repository, 'mutate').mockImplementationOnce(mutate).mockResolvedValueOnce({ ok: false, code: 'storage' })
+    expect(await f.service.save({ baseUrl: 'https://new.invalid/v1', apiKey: 'new-synthetic', modelId: 'new-model', revision: 2 })).toEqual({ ok: false, code: 'storage' })
+    expect(await f.readSelection()).toEqual({ providerId: 'openai-compatible', modelId: 'old-model' })
+    expect(await f.service.isSafeToStart()).toBe(true)
+  })
+  it('does not decrypt the old key before accepting an explicit replacement', async () => {
+    const f = await fixture()
+    await f.vault.setSecret('openai-compatible', 'apiKey', 'old-synthetic')
+    const read = vi.spyOn(f.vault, 'getSecret').mockImplementation(() => {
+      throw new Error('different profile')
+    })
+    expect(await f.service.save({ baseUrl: 'https://fixture.invalid/v1', apiKey: 'new-synthetic', revision: 0 })).toMatchObject({ ok: true })
+    expect(read).not.toHaveBeenCalled()
+    read.mockRestore()
+    expect(f.vault.getSecret('openai-compatible', 'apiKey')).toBe('new-synthetic')
+  })
+  it('restores the opaque old entry if saving the selection fails', async () => {
+    const f = await fixture()
+    await f.vault.setSecret('openai-compatible', 'apiKey', 'old-synthetic')
+    const read = vi.spyOn(f.vault, 'getSecret').mockImplementation(() => {
+      throw new Error('different profile')
+    })
+    f.saveSelection.mockRejectedValueOnce(new Error('storage'))
+    expect(await f.service.save({ baseUrl: 'https://fixture.invalid/v1', apiKey: 'new-synthetic', revision: 0 })).toEqual({ ok: false, code: 'storage' })
+    expect(read).not.toHaveBeenCalled()
+    read.mockRestore()
+    expect(f.vault.getSecret('openai-compatible', 'apiKey')).toBe('old-synthetic')
+  })
+})
+
 async function httpFixture(handler: (path: string, body: any, authorization?: string) => unknown) {
   const server = createServer(async (request, response) => {
     let text = ''

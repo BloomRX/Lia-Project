@@ -175,7 +175,7 @@ describe('the markers are wired to the facts they claim', () => {
     const visibleAt = source.indexOf('liaDevflowMark(\'window=visible\')')
     expect(shownAt).toBeGreaterThan(-1)
     expect(visibleAt, 'window=visible must follow show()').toBeGreaterThan(shownAt)
-    expect(source).toContain('window.webContents.on(\'did-finish-load\', () => {\n    liaDevflowMark(\'renderer=ready\')')
+    expect(source).toContain('window.webContents.on(\'did-finish-load\', () => {\n    rendererLoaded = true\n    publishWindowReady()\n    liaDevflowMark(\'renderer=ready\')')
   })
 
   it('a CRLF checkout cannot break a newline-bearing source assertion', () => {
@@ -186,7 +186,7 @@ describe('the markers are wired to the facts they claim', () => {
     // normalises; this proves that normalisation is load-bearing rather than
     // incidental, so removing it fails here instead of on the owner's machine.
     const crlf = readHere('windows', 'main', 'index.ts').replace(/\n/g, '\r\n')
-    const needle = 'window.webContents.on(\'did-finish-load\', () => {\n    liaDevflowMark(\'renderer=ready\')'
+    const needle = 'window.webContents.on(\'did-finish-load\', () => {\n    rendererLoaded = true\n    publishWindowReady()\n    liaDevflowMark(\'renderer=ready\')'
     expect(crlf).toContain('\r\n')
     expect(crlf).not.toContain(needle)
     expect(normalizeLineEndings(crlf)).toContain(needle)

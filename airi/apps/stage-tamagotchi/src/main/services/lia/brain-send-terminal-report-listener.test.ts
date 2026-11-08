@@ -769,7 +769,16 @@ describe('lia send terminal wiring invariants (Phase 8.0D-10B-4D4C4-B3B2)', () =
     expect(entry.match(/registerLiaBrainExecutionReportHandler\(/g)).toHaveLength(1)
     expect(entry.match(/registerLiaBrainDecisionBridge\(/g)).toHaveLength(1)
     expect(entry.match(/createLiaBrainExecutionTerminalReportService\(/g)).toHaveLength(1)
-    expect(entry.match(/createContext\(ipcMain\)/g)).toHaveLength(9)
+    // Presence owns one additional context; the nine preexisting composition
+    // contexts and Brain registrations remain unchanged.
+    const presence = entry.slice(entry.indexOf('onPresenceReady:'), entry.indexOf('onSizeSettingsReady:'))
+    expect(presence.match(/createContext\(ipcMain\)/g)).toHaveLength(1)
+    expect(presence.match(/defineInvokeHandler\(context, electronLiaPresence\w+/g)).toEqual([
+      'defineInvokeHandler(context, electronLiaPresenceGet',
+      'defineInvokeHandler(context, electronLiaPresenceSet',
+      'defineInvokeHandler(context, electronLiaPresenceAction',
+    ])
+    expect(entry.replace(presence, '').match(/createContext\(ipcMain\)/g)).toHaveLength(9)
     // The send-terminal imports are the only new lia imports.
     expect(entry.match(/from '\.\/services\/lia\/brain-send-terminal-/g)).toHaveLength(2)
   })

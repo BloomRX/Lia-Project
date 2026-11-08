@@ -122,6 +122,12 @@ config:
   navigation:
     label: 'Seções da configuração da Lia'
   sections:
+    presence:
+      title: 'Presença no desktop'
+      summary: 'Como a Lia ocupa sua área de trabalho.'
+    memory:
+      title: 'Memória'
+      summary: 'O que a Lia pode lembrar, sob seu controle.'
     ai:
       title: 'IA'
       summary: 'O cérebro da Lia: provider, modelo e reserva.'

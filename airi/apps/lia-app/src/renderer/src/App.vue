@@ -110,11 +110,12 @@ onMounted(async () => {
   }
   api.value?.onLiaEvent?.((payload: { detail?: string, event: string }) => {
     push(`${payload.event}${payload.detail ? ` ${payload.detail}` : ''}`)
-    // Readiness transitions refresh the chip from the source of truth;
-    // everything else keeps the legacy whole-status refresh.
+    // A log line changes the diagnostic feed, not product state. Avoid a
+    // product-document read for every chunk of Stage stdout.
     if (payload.event === LIA_VOICE_READINESS_EVENT)
       void refreshVoiceReadiness()
-    void refresh()
+    if (payload.event !== 'lia-app.stage-log')
+      void refresh()
   })
 })
 </script>

@@ -40,6 +40,52 @@ beforeEach(() => {
 })
 
 describe('main transport execution disposal regression', () => {
+  it('invalidates a pending generation, cancels its late ID once and allows the next request', async () => {
+    const start = deferred<TransportStartResult>()
+    ipc.start.mockReturnValueOnce(start.promise)
+    const port = createMainTransportExecution()
+    const pending = port.dispatch(config, body)
+    const outcome = expect(pending).rejects.toMatchObject({ code: 'cancelled' })
+    port.invalidate(config.providerId)
+    await outcome
+    expect(await (await port.dispatch(config, body)).text()).toBe('OK')
+    start.resolve({ ok: true, id: 'invalidated-job' })
+    await vi.waitFor(() => expect(ipc.cancel).toHaveBeenCalledExactlyOnceWith({ id: 'invalidated-job' }))
+    port.invalidate(config.providerId)
+    expect(ipc.cancel).toHaveBeenCalledTimes(1)
+    expect(ipc.pull).not.toHaveBeenCalledWith({ id: 'invalidated-job', action: 'head' })
+    expect(await (await port.dispatch({ ...config, providerId: 'service-b' }, body)).text()).toBe('OK')
+  })
+
+  it('does not revive a provider or port after terminal disposal', async () => {
+    const removed = createMainTransportExecution()
+    removed.dispose(config.providerId)
+    removed.invalidate(config.providerId)
+    await expect(removed.dispatch(config, body)).rejects.toMatchObject({ code: 'cancelled' })
+    const disposed = createMainTransportExecution()
+    disposed.dispose()
+    disposed.invalidate(config.providerId)
+    await expect(disposed.dispatch(config, body)).rejects.toMatchObject({ code: 'cancelled' })
+    expect(ipc.start).not.toHaveBeenCalled()
+  })
+
+  it('leaves another provider pending and usable while invalidating one provider', async () => {
+    const first = deferred<TransportStartResult>()
+    const second = deferred<TransportStartResult>()
+    ipc.start.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise)
+    const port = createMainTransportExecution()
+    const pendingFirst = port.dispatch(config, body)
+    const firstOutcome = expect(pendingFirst).rejects.toMatchObject({ code: 'cancelled' })
+    const pendingSecond = port.dispatch({ ...config, providerId: 'service-b' }, body)
+    port.invalidate(config.providerId)
+    await firstOutcome
+    first.resolve({ ok: true, id: 'invalidated-job' })
+    second.resolve({ ok: true, id: 'unaffected-job' })
+    expect(await (await pendingSecond).text()).toBe('OK')
+    expect(ipc.cancel).toHaveBeenCalledExactlyOnceWith({ id: 'invalidated-job' })
+    expect(ipc.pull).toHaveBeenCalledWith({ id: 'unaffected-job', action: 'head' })
+  })
+
   it('handles start IPC rejection after dispose without continuation or unhandled rejection', async () => {
     const start = deferred<TransportStartResult>()
     ipc.start.mockReturnValue(start.promise)

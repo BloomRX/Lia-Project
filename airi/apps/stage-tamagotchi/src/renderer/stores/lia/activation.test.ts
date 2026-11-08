@@ -1,9 +1,12 @@
 import { getProviderCredentialResolver, resetChatProviderRuntimeExtensionsForTesting } from '@proj-airi/stage-ui/stores/chat/chat-provider-runtime'
 import { useConsciousnessStore } from '@proj-airi/stage-ui/stores/modules/consciousness'
-import { createPinia, setActivePinia } from 'pinia'
+import { createPinia, getActivePinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { initializeManagedChat } from '../../services/lia/managed-chat-startup'
 import { createSecretAdoptHandler } from '../../services/lia/secret-adopt.fixture'
+import { createLiaTransportClient, toTransportRecord } from '../../services/lia/transport-config'
+import { setTransportTestVaultResolver } from '../../services/lia/transport-config.fixture'
 
 /**
  * Config → runtime activation (M1 blocker fix).
@@ -104,6 +107,61 @@ describe('lia chat provider activation (M1)', () => {
     resetChatProviderRuntimeExtensionsForTesting()
     ipc.fixture({})
     vi.clearAllMocks()
+  })
+
+  it('hydrates explicit keyless transport consent before checking first-use readiness', async () => {
+    const providerId = 'openai-compatible'
+    ipc.fixture(validConfig(providerId, 'local-dynamic-model'))
+    const transports = createLiaTransportClient()
+    const record = toTransportRecord(providerId, providerId, { baseUrl: 'http://127.0.0.1:12345/v1/' }, ['local-dynamic-model'])
+    record.adapterOptions.allowUnauthenticated = true
+    await transports.put(record)
+    const store = useLiaProviderStore()
+    expect(await store.activateConfiguredProvider()).toBe(true)
+    expect(useConsciousnessStore().activeModel).toBe('local-dynamic-model')
+    expect(ipc.secretGet).not.toHaveBeenCalled()
+  })
+
+  it('boots managed chat from a persisted dynamic endpoint and model with no renderer selection', async () => {
+    const providerId = 'openai-compatible'
+    const modelId = 'configured-by-user/first-install-model'
+    const baseUrl = 'https://user-selected.example.test/inference/v1/'
+    ipc.fixture(validConfig(providerId, modelId), { [providerId]: 'stored-in-main-only' })
+    const transports = createLiaTransportClient()
+    await transports.put(toTransportRecord(providerId, providerId, { baseUrl }, [modelId]))
+    const store = useLiaProviderStore()
+    const consciousness = useConsciousnessStore()
+    expect(consciousness.activeProvider).toBe('')
+    expect(consciousness.activeModel).toBe('')
+    store.registerRuntimeExtensions()
+
+    expect(await initializeManagedChat({ liaManaged: true, leadership: 'leader-only', stageRuntime: 'full' }, store, consciousness)).toBe('ready')
+    expect(consciousness.activeProvider).toBe(providerId)
+    expect(consciousness.activeModel).toBe(modelId)
+    expect((await transports.refresh()).records[0].baseUrl).toBe(baseUrl)
+    expect(ipc.saveChatConfig).not.toHaveBeenCalled()
+    expect(ipc.secretGet).not.toHaveBeenCalled()
+
+    // Exercise the actual Main execution fixture with the activated pair. Only
+    // the HTTP edge is stubbed; the endpoint comes exclusively from persistence.
+    setTransportTestVaultResolver(getActivePinia()!, async () => 'stored-in-main-only')
+    const fetch = vi.fn<typeof globalThis.fetch>(async () => new Response('data: [DONE]\n\n', { headers: { 'content-type': 'text/event-stream' } }))
+    vi.stubGlobal('fetch', fetch)
+    try {
+      const instance = await consciousness.getChatProviderInstance(consciousness.activeProvider)
+      const response = await instance!.chat(consciousness.activeModel).fetch!(new URL('https://ignored.example.test/'), {
+        method: 'POST',
+        body: JSON.stringify({ model: consciousness.activeModel, messages: [{ role: 'user', content: 'hello' }] }),
+      })
+      await response.text()
+      expect(fetch).toHaveBeenCalledTimes(1)
+      expect(String(fetch.mock.calls[0][0])).toBe(`${baseUrl}chat/completions`)
+      expect(JSON.parse(fetch.mock.calls[0][1]!.body as string).model).toBe(modelId)
+      expect(ipc.secretGet).not.toHaveBeenCalled()
+    }
+    finally {
+      vi.unstubAllGlobals()
+    }
   })
 
   it('leaves the runtime unconfigured when nothing applied the config (the bug)', async () => {

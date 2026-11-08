@@ -27,9 +27,11 @@ import { brainRoutingModeUpdate, readBrainRoutingMode, readLiaProductConfig, upd
 import { createLiaSecretVault } from '@lia/core/secrets/vault'
 import { createLiaVoiceProfileStore, findMissingFiles } from '@lia/core/voices/profiles'
 
+import { CredentialOwnerError, startCredentialOwner } from '../../../../../lia/core/src/credentials/owner-channel'
 import { createTransportRepository } from '../../../../../lia/core/src/transports/repository'
 import { createAiConnectionService } from './ai-connection-service'
 import { AiriStageManager } from './airi-stage-manager'
+import { sameProfileDirectory } from './launcher-profile'
 import { ShutdownCoordinator } from './shutdown-coordinator'
 
 /**
@@ -145,6 +147,10 @@ export type LiaConfigUpdateResult
     | { message: string, status: 'invalid-source' | 'secret-forbidden' | 'secret-vault-failed' | 'write-failed' }
 
 export interface LiaHostDeps {
+  /** Only the production Main starts the private, per-Stage credential lease. */
+  enableCredentialOwner?: boolean
+  credentialOwnerFactory?: typeof startCredentialOwner
+  launcherChromiumProfile?: string
   packagedStage?: ConstructorParameters<typeof AiriStageManager>[0]['packagedStage']
   /**
    * The OS cipher for the secret vault (injected by the Electron entry from
@@ -268,10 +274,27 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
     }))
   }
   const platform = deps.platform ?? process.platform
-  const vault = createLiaSecretVault({
+  const localVault = createLiaSecretVault({
     cipher: deps.cipher,
     filePath: paths.vaultFile,
   })
+  let credentialWrites: Promise<unknown> = Promise.resolve()
+  function serializeCredentialWrite<T>(write: () => Promise<T>): Promise<T> {
+    const next = credentialWrites.then(write, write)
+    credentialWrites = next.catch(() => {})
+    return next
+  }
+  const vault: LiaSecretVault = {
+    ...localVault,
+    ...(localVault.backupSecret
+      ? { backupSecret: async (scope: string, key: string) => {
+          const restore = await serializeCredentialWrite(() => localVault.backupSecret!(scope, key))
+          return () => serializeCredentialWrite(restore)
+        } }
+      : {}),
+    setSecret: (scope, key, value) => serializeCredentialWrite(() => localVault.setSecret(scope, key, value)),
+    deleteSecret: (scope, key) => serializeCredentialWrite(() => localVault.deleteSecret(scope, key)),
+  }
   const transportRepository = createTransportRepository(join(paths.userDataDir, 'lia-transports.json'))
   async function hasChatAuthentication(providerId: string): Promise<boolean> {
     try {
@@ -291,10 +314,24 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
   // launcher's boot NEVER starts a voice runtime (contract item 12).
 
   const workspaceRoot = deps.workspaceRoot ?? defaultWorkspaceRoot()
+  let credentialOwner: Awaited<ReturnType<typeof startCredentialOwner>> | undefined
+  let credentialOwnerClosing: Promise<void> = Promise.resolve()
+  async function revokeCredentialOwner() {
+    const previous = credentialOwner
+    credentialOwner = undefined
+    if (previous)
+      credentialOwnerClosing = previous.close()
+    await credentialOwnerClosing
+  }
 
   const stage = (deps.stageManagerFactory ?? ((d: ConstructorParameters<typeof AiriStageManager>[0]) => new AiriStageManager(d)))({
     packagedStage: deps.packagedStage,
     onLog: line => emit('lia-app.stage-log', line),
+    onState: (state) => {
+      emit('lia-app.stage-state', state.phase)
+      if (state.phase === 'stopped' || state.phase === 'error')
+        void revokeCredentialOwner().catch(() => {})
+    },
     workspaceRoot,
   })
 
@@ -308,6 +345,60 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
     return result
   }
   const startStage = stage.start.bind(stage)
+  const stopStage = stage.stop.bind(stage)
+  stage.stop = async () => {
+    try {
+      await stopStage()
+    }
+    finally { await revokeCredentialOwner() }
+  }
+  async function startManagedStage(options: { env?: Record<string, string | undefined> } = {}) {
+    if (deps.launcherChromiumProfile && sameProfileDirectory(deps.launcherChromiumProfile, paths.userDataDir))
+      throw new Error('A pasta de dados precisa ser diferente do perfil do Launcher. Altere a pasta nas configurações avançadas. / Select a data folder separate from the Launcher profile.')
+    if (!deps.enableCredentialOwner || stage.holdsOwnedStage())
+      return startStage(options)
+    await revokeCredentialOwner()
+    credentialOwner = await (deps.credentialOwnerFactory ?? startCredentialOwner)({
+      async handle(request, signal) {
+        if (signal.aborted)
+          throw new CredentialOwnerError('cancelled')
+        if (request.operation === 'get') {
+          // Only an existing transport reference may resolve a key. The peer
+          // cannot request files, raw ciphertext, exports or arbitrary secrets.
+          const records = (await transportRepository.read()).records
+          if (!records.some(record => record.credentialRef.scope === request.scope && record.credentialRef.key === request.key))
+            throw new CredentialOwnerError('denied')
+          await credentialWrites
+          if (signal.aborted)
+            throw new CredentialOwnerError('cancelled')
+          try {
+            return vault.getSecret(request.scope, request.key)
+          }
+          catch { throw new CredentialOwnerError('unreadable') }
+        }
+        // Explicit set/delete has the same API-key scope as the existing Main
+        // secret writer; a new entry is inert until a transport references it.
+        return serializeCredentialWrite(async () => {
+          // Revocation/deadline can occur while this write is still queued.
+          if (signal.aborted)
+            throw new CredentialOwnerError('cancelled')
+          return request.operation === 'set'
+            ? localVault.setSecret(request.scope, request.key, request.value!)
+            : localVault.deleteSecret(request.scope, request.key)
+        })
+      },
+    })
+    try {
+      const result = await startStage({ env: { ...options.env, ...credentialOwner.environment } })
+      if (result.phase === 'error' || result.phase === 'stopped')
+        await revokeCredentialOwner()
+      return result
+    }
+    catch (error) {
+      await revokeCredentialOwner()
+      throw error
+    }
+  }
 
   /**
    * The supervisor shutdown officer (Phase 7.1, items 1/2/3). Registration
@@ -775,6 +866,18 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
       return save()
     }),
     readSelection: async () => (await readSnapshot()).snapshot?.provider?.chat?.preferred,
+    backupSelection: async () => {
+      const previous = (await readSnapshot()).snapshot?.provider?.chat
+      return async () => {
+        const restored = await updateLiaProductConfig(paths.productConfigFile, { provider: { chat: {
+          preferred: previous?.preferred ?? null,
+          strategy: previous?.strategy ?? null,
+          onboarded: previous?.onboarded ?? null,
+        } } })
+        if (restored.status !== 'ok')
+          throw new Error('Configuration could not be restored')
+      }
+    },
     saveSelection: async (preferred) => {
       const result = await updateLiaProductConfig(paths.productConfigFile, { provider: { chat: { preferred, strategy: 'manual', onboarded: true } } })
       if (result.status !== 'ok')
@@ -787,7 +890,7 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
   }
   stage.start = options => withStageConfigurationLock(async () => {
     await requireSafeAiConfiguration()
-    return startStage(options)
+    return startManagedStage(options)
   })
   return {
     aiConnection,
@@ -825,7 +928,7 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
       // the child launches, so the managed Stage's Brain can select a route at
       // all. A degraded Brain default never blocks conversation.
       await ensureBrainReadyForConversar(snapshot)
-      return await startStage({ env: await hostStageEnv() })
+      return await startManagedStage({ env: await hostStageEnv() })
     }),
     homeStatus,
     importVoice: async (request, allowedSourcePaths) => {

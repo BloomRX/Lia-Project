@@ -31,7 +31,7 @@ import { useConsciousnessSettingsStore } from '@proj-airi/stage-ui/stores/module
 import { useHearingSpeechInputPipeline, useHearingStore } from '@proj-airi/stage-ui/stores/modules/hearing'
 import { useOnboardingStore } from '@proj-airi/stage-ui/stores/onboarding'
 import { useSettings, useSettingsAudioDevice } from '@proj-airi/stage-ui/stores/settings'
-import { refDebounced, useBroadcastChannel } from '@vueuse/core'
+import { refDebounced, useBroadcastChannel, useEventListener } from '@vueuse/core'
 import { storeToRefs } from 'pinia'
 import { computed, onMounted, onUnmounted, ref, shallowRef, toRef, watch } from 'vue'
 import { toast } from 'vue-sonner'
@@ -48,6 +48,7 @@ import { createNativeSpeechSynthesis } from '../services/lia/main-speech'
 import { createOrderedVoiceSendSequence } from '../services/lia/voice-send-sequence'
 import { useControlsIslandStore } from '../stores/controls-island'
 import { shouldAutoOpenAiriWelcome } from '../stores/lia/airi-onboarding-policy'
+import { useLiaPresenceStore } from '../stores/lia/presence'
 import { useLiaVoiceStore } from '../stores/lia/voice'
 import { useStageWindowLifecycleStore } from '../stores/stage-window-lifecycle'
 import { artistryToolReferences } from '../stores/tools'
@@ -66,6 +67,15 @@ const controlsIslandElement = toRef(() => controlsIslandRef.value?.element)
 const widgetStageRef = ref<InstanceType<typeof WidgetStage>>()
 const synthesizeSpeech = createNativeSpeechSynthesis()
 const liaVoice = useLiaVoiceStore()
+const liaPresence = useLiaPresenceStore()
+onMounted(() => {
+  void liaPresence.refresh()
+})
+// A mode/scale change resizes the native window. Read its canonical presence
+// snapshot; never change the saved appearance zoom/position to fit Free mode.
+useEventListener(window, 'resize', () => {
+  void liaPresence.refresh()
+})
 const speechSelectionKey = computed(() => JSON.stringify(liaVoice.preferred ?? null))
 const stageCanvas = toRef(() => widgetStageRef.value?.canvasElement())
 const componentStateStage = ref<'pending' | 'loading' | 'mounted'>('pending')
@@ -921,6 +931,8 @@ const cursorPosition = computed(() => ({
           flex-1
           :cursor-position="cursorPosition"
           :paused="stagePaused"
+          :neutral-live2d-shadow="true"
+          :fit-live2d-full-body="liaPresence.state?.config.mode === 'free'"
           :synthesize-speech="synthesizeSpeech"
           :speech-selection-key="speechSelectionKey"
         />

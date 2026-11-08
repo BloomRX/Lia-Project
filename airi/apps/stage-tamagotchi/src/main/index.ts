@@ -12,15 +12,17 @@ import messages from '@proj-airi/i18n/locales'
 
 import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { Format, LogLevel, setGlobalFormat, setGlobalHookPostLog, setGlobalLogLevel, useLogg } from '@guiiai/logg'
+import { defineInvokeHandler } from '@moeru/eventa'
 import { createContext } from '@moeru/eventa/adapters/electron/main'
 import { hasSelectedScreenCaptureSource, initScreenCaptureForMain } from '@proj-airi/electron-screen-capture/main'
-import { app, ipcMain, session } from 'electron'
+import { app, ipcMain, screen, session } from 'electron'
 import { noop } from 'es-toolkit'
 import { createLoggLogger, injeca, lifecycle } from 'injeca'
 import { isLinux } from 'std-env'
 
 import icon from '../../resources/icon.png?asset'
 
+import { electronLiaPresenceAction, electronLiaPresenceGet, electronLiaPresenceSet } from '../shared/eventa/lia-presence'
 import { openDebugger, setupDebugger } from './app/debugger'
 import { nullFileLoggerHandle, setupFileLogger } from './app/file-logger'
 import { ingestMainProcessLog } from './app/main-process-log-bus'
@@ -53,12 +55,15 @@ import { registerLiaBrainExecutionTerminalReportListener } from './services/lia/
 import { createLiaBrainExecutionTerminalReportService } from './services/lia/brain-execution-terminal-report-service'
 import { registerLiaBrainSendTerminalReportListener } from './services/lia/brain-send-terminal-report-listener'
 import { createLiaBrainSendTerminalReportService } from './services/lia/brain-send-terminal-report-service'
+import { initializeCredentialOwner } from './services/lia/credential-owner-access'
 import { createLiaBrainService } from './services/lia/lia-brain-service'
 import { startLiaMainWindowVoiceRuntime } from './services/lia/main-window-voice-runtime'
+import { registerLiaMemoryBridge } from './services/lia/memory-service'
+import { createPresenceService } from './services/lia/presence-service'
 import { registerLiaProviderConfigBridge } from './services/lia/provider-config-service'
 import { createLiaSecretVault, registerLiaSecretsBridge } from './services/lia/secrets-service'
-import { canRendererReadLegacySecret, getApplicationRepository, registerLiaTransportConfigBridge } from './services/lia/transport-config-service'
 import { registerLiaTranscriptionBridge } from './services/lia/transcription-service'
+import { canRendererReadLegacySecret, getApplicationRepository, registerLiaTransportConfigBridge } from './services/lia/transport-config-service'
 import { registerLiaVoiceConfigBridge } from './services/lia/voice-config-service'
 import { createLiaVoiceProfileStore } from './services/lia/voice-profiles'
 import { registerLiaVoiceProfilesBridge } from './services/lia/voice-profiles-service'
@@ -90,6 +95,7 @@ setupDebugger()
 const log = useLogg('main').useGlobalConfig()
 
 const appUserDataPath = env.APP_USER_DATA_PATH?.trim()
+initializeCredentialOwner(process.env)
 if (appUserDataPath) {
   app.setPath('userData', appUserDataPath)
 }
@@ -256,7 +262,7 @@ app.whenReady().then(async () => {
   const autoUpdater = injeca.provide('services:auto-updater', {
     dependsOn: { appConfig },
     build: ({ dependsOn }) => setupAutoUpdater({
-      enabled: import.meta.env.VITE_DISTRIBUTION !== 'steam',
+      enabled: import.meta.env.VITE_DISTRIBUTION !== 'steam' && process.env.LIA_MANAGED !== '1' && app.getName() !== 'lia-stage',
       getStoredUpdateLane: () => dependsOn.appConfig.get()?.updateChannel,
       setStoredUpdateLane: (lane) => {
         const currentConfig = dependsOn.appConfig.get()
@@ -376,6 +382,33 @@ app.whenReady().then(async () => {
             window,
           })
         },
+        onPresenceReady: (window) => {
+          const service = createPresenceService({ window, screen: {
+            getAllDisplays: () => screen.getAllDisplays(),
+            getCursorScreenPoint: () => screen.getCursorScreenPoint(),
+            on(event, listener) {
+              if (event === 'display-added')
+                return screen.on('display-added', listener)
+              if (event === 'display-removed')
+                return screen.on('display-removed', listener)
+              return screen.on('display-metrics-changed', listener)
+            },
+            removeListener(event, listener) {
+              if (event === 'display-added')
+                return screen.removeListener('display-added', listener)
+              if (event === 'display-removed')
+                return screen.removeListener('display-removed', listener)
+              return screen.removeListener('display-metrics-changed', listener)
+            },
+          }, initial: liaProductCfg.get()?.presence, save: async (presence) => {
+            await liaProductCfg.updateAndSave(current => ({ ...current, presence }))
+          } })
+          const { context } = createContext(ipcMain)
+          defineInvokeHandler(context, electronLiaPresenceGet, () => service.get())
+          defineInvokeHandler(context, electronLiaPresenceSet, input => service.set(input))
+          defineInvokeHandler(context, electronLiaPresenceAction, input => service.action(input))
+          return service
+        },
         onSizeSettingsReady: (controller) => {
           userFacingMainWindowSizeSettings = controller
         },
@@ -430,6 +463,7 @@ app.whenReady().then(async () => {
       // the transport repository above, so a removed provider stops transcribing
       // exactly as it stops chatting.
       registerLiaTranscriptionBridge({ context, repository: getApplicationRepository(), vault: deps.liaSecrets })
+      registerLiaMemoryBridge({ context })
     },
   })
 

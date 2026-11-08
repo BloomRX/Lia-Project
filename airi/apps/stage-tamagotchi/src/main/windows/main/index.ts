@@ -3,6 +3,7 @@ import type { ServerChannel } from '../../services/airi/channel-server'
 import type { GodotStageManager } from '../../services/airi/godot-stage'
 import type { McpStdioManager } from '../../services/airi/mcp-servers'
 import type { AutoUpdater } from '../../services/electron/auto-updater'
+import type { createPresenceService } from '../../services/lia/presence-service'
 import type { EditorWindowManager } from '../editor'
 import type { NoticeWindowManager } from '../notice'
 import type { OnboardingWindowManager } from '../onboarding'
@@ -58,6 +59,7 @@ export async function setupMainWindow(params: {
   i18n: I18n
   onboardingWindowManager: OnboardingWindowManager
   onSizeSettingsReady?: (controller: MainWindowSizeSettingsController) => void
+  onPresenceReady?: (window: BrowserWindow) => ReturnType<typeof createPresenceService>
 }) {
   const windowStateConfig = createConfig('lia', 'main-window.json', liaMainWindowStateSchema, {
     default: {},
@@ -72,7 +74,7 @@ export async function setupMainWindow(params: {
   // oversized window never leaks into the new Lia launcher-first experience.
 
   const window = new BrowserWindow({
-    title: 'AIRI',
+    title: 'Lia',
     width: HOME_WINDOW_PRESET.width,
     height: HOME_WINDOW_PRESET.height,
     minWidth: MAIN_WINDOW_MIN_SIZE.width,
@@ -113,13 +115,22 @@ export async function setupMainWindow(params: {
   // opens at the stage preset - never at the small launcher size).
   const initialContext = initialMainWindowContext()
   sizing.setContext(initialContext, { recenter: true })
+  const presence = params.onPresenceReady?.(window)
+  presence?.setActive(initialContext === 'stage')
+  window.once('closed', () => presence?.dispose())
 
   // Persist the *active* mode's size on user resize (not the legacy global
   // bounds), so Home and Stage never overwrite each other silently.
-  window.on('resize', () => sizing.captureUserBounds())
+  window.on('resize', () => {
+    const state = presence?.get()
+    if (!state?.ok || state.state.config.mode !== 'free' || !state.state.active)
+      sizing.captureUserBounds()
+  })
 
   function setMainWindowContext(mode: MainWindowContext): void {
+    presence?.setActive(false)
     sizing.setContext(mode)
+    presence?.setActive(mode === 'stage')
   }
 
   let allowClose = false
@@ -178,7 +189,18 @@ export async function setupMainWindow(params: {
 
   // DEVFLOW-ONLY: proof the renderer document actually finished loading, which
   // is a different fact from the window being shown.
+  let rendererLoaded = false
+  let readyPublished = false
+  function publishWindowReady() {
+    if (rendererLoaded && window.isVisible() && !readyPublished) {
+      readyPublished = true
+      console.info('[lia-stage] window-ready')
+    }
+  }
+  window.on('show', publishWindowReady)
   window.webContents.on('did-finish-load', () => {
+    rendererLoaded = true
+    publishWindowReady()
     liaDevflowMark('renderer=ready')
   })
   protectPrivilegedWindowNavigation(window)

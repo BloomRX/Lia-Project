@@ -39,6 +39,28 @@ function fixture() {
 }
 
 describe('speech connection configuration', () => {
+  it('establishes a disabled reference before reading an existing orphan credential', async () => {
+    const { service, vault, repository } = fixture()
+    await vault.setSecret(providerId, 'apiKey', apiKey)
+    vi.spyOn(vault, 'getSecret').mockImplementation(() => {
+      expect(repository.mutate).toHaveBeenCalledTimes(1)
+      expect(repository.mutate.mock.calls[0][0]).toMatchObject({ kind: 'put', record: { enabled: false } })
+      return apiKey
+    })
+    const put = repository.mutate
+    expect(await service.save({ providerId, baseUrl, revision: 0 })).toMatchObject({ ok: true, config: { revision: 2 } })
+    expect(put.mock.calls[0][0]).toMatchObject({ kind: 'put', record: { enabled: false } })
+    expect(put.mock.calls[1][0]).toMatchObject({ kind: 'put', record: { enabled: true } })
+    expect(vault.setSecret).toHaveBeenCalledTimes(1)
+  })
+  it('does not request a nonexistent previous credential during first configuration', async () => {
+    const { service, vault } = fixture()
+    const read = vi.spyOn(vault, 'getSecret').mockImplementation(() => {
+      throw new Error('no transport reference yet')
+    })
+    expect(await service.save({ providerId, baseUrl, revision: 0, apiKey })).toMatchObject({ ok: true })
+    expect(read).not.toHaveBeenCalled()
+  })
   it('saves only the endpoint as metadata and keeps the key on endpoint-only updates', async () => {
     const { service, vault, repository, invalidate } = fixture()
     expect(await service.save({ providerId, baseUrl, revision: 0, apiKey })).toEqual({

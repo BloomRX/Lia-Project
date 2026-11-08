@@ -16,9 +16,9 @@ foram tratados como prova de entrega: seus arquivos e testes foram examinados.
 | Frente recuperada | Estado da implementação | Validação e limite |
 | --- | --- | --- |
 | Configuração IA no Launcher | Integrada ao host/Main, cofre e transporte; descoberta e teste completo de ferramenta | Testes HTTP locais e concorrência; serviço externo pendente |
-| Personalidade | Edição dos dez atributos e contexto, preservando identidade, regras e preset | Testes de projeção, persistência e Chromium; conversa real pendente |
-| Memória | CRUD Main persistido, opt-in, consulta por turno e contexto só na requisição | Testes de armazenamento/privacidade/Chromium; gate integrado pendente |
-| Presença | Contrato Core, serviço de janela Main, preferência canônica e painel | Limites e recuperação simulados; multimonitor físico/jogos pendentes |
+| Personalidade | Edição dos dez atributos e contexto, preservando identidade, regras e preset | Testes de projeção/Chromium e mudança de contexto na requisição Windows local; qualidade de modelo externo pendente |
+| Memória | CRUD Main persistido, opt-in, consulta por turno e contexto só na requisição | Testes e fluxo Windows local opt-in/opt-out; política global e serviço externo pendentes |
+| Presença | Contrato Core, serviço Main, preferência canônica e painel | Corpo inteiro aprovado; movimento, pausa, Home e segundo monitor conectado PASS Windows; desconexão/DPI/jogos pendentes |
 | Editor genérico de credenciais | Usa porta segura nos provedores já migrados, preserva legado/web | Testes de draft e Chromium; não fecha credenciais de todos os protocolos |
 | Distribuição Windows | Pipeline privado Launcher + Stage, resolução sem Node/pnpm no destino | Testes de contrato; instalação limpa ainda precisa gate real |
 | Home | Asset oficial da Lia e feedback de falha | Build e testes; comparação completa com sete concepts pendente |

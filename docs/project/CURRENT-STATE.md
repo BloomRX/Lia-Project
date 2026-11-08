@@ -13,25 +13,32 @@ commit. Registra **estado**, não narrativa: relatório de rodada vai para
 
 ## 0. Estado agora
 
-**Finalização retomada — 07/11, integração em andamento.** Trabalho da execução
+**Finalização retomada — 08/11, integração em andamento.** Trabalho da execução
 interrompida preservado: configuração IA no Launcher, personalidade, memória,
 presença e pipeline privado Windows. Inventário, revisão independente e testes
 encontraram corridas reais; ainda não há aprovação do app completo. Correções
-de startup/cancelamento estão em validação; transação Main revisada e 91 testes
-focados PASS, sem publicação de alteração cuja gravação falhou. Próximo: testar
-primeiro uso em perfil vazio até resposta visível, depois build completo e
-empacotamento sem desenvolvimento concorrente. Não repetir a investigação dos
+de startup/cancelamento passaram no fluxo Windows com HTTP sintético; transação
+Main revisada e 91 testes focados PASS, sem publicação de alteração cuja gravação
+falhou. Regressão Stage: 2350 PASS/4 skips; Launcher: 279 PASS/2 skips;
+Chromium: 54 + 6 PASS; builds e typechecks pertinentes PASS. Gate de componentes
+Electron aprovado em PowerShell 5.1 e 7, sem aprovar serviço externo ou áudio
+físico. Próximo: empacotamento privado e gate do pacote, sem desenvolvimento
+concorrente. Não repetir a investigação dos
 subagentes nem descartar seus arquivos. Plano e pendências priorizadas em
 [Conclusão funcional](LIA-APP-COMPLETION-PLAN.md). Estudo de engines e coletor
 Windows disponíveis; nenhum benchmark comparativo ou migração foi aprovado.
 Baseline funcional continua `3ef6d11`.
 
-**Bloqueio ativo da retomada:** a variante autenticada Launcher → Stage não
-consegue decifrar a credencial sintética no segundo host. Os dois perfis possuem
-materiais de proteção diferentes; nenhum material foi copiado nem perfil ativo
-compartilhado como correção. A variante local explicitamente sem chave já
-produziu resposta visível. Memória opt-in/opt-out e alteração de personalidade
-chegaram às requisições no Windows nessa variante; não aprovam serviço externo.
+**Credenciais Main-native:** a falha entre perfis foi corrigida com proprietário
+Main e lease privada por execução; nenhum material criptográfico foi copiado nem
+perfil ativo compartilhado. O fluxo Windows com credencial sintética passou,
+incluindo resposta visível, memória e personalidade. A variante local sem chave
+também passou. [Contrato e limites](../architecture/LIA-CREDENTIAL-OWNER.md).
+Serviço externo informado continua inacessível; migração de leitores legados,
+voz física, imagem externa e distribuição pública ainda não estão aprovados.
+Presença Livre: corpo inteiro e sombra neutra aprovados em revisão visual;
+movimento, pausa, retorno Tamagotchi e colocação no segundo monitor conectado
+passaram. Desconexão/DPI, hover/input e jogos continuam pendentes.
 Transação de preferências Main: 91 testes PASS e revisão independente sem
 achados após a correção de publicação somente após `rename`.
 

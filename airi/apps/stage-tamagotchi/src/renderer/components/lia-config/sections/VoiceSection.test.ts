@@ -239,18 +239,16 @@ describe('voice section rendering (4E-2 voice UI)', () => {
     expect(primary).not.toMatch(/<input/)
   })
 
-  it('explains instead of inventing voices for a provider with no catalogue', async () => {
+  it('offers an explicit voice ID for native speech without inventing a catalogue', async () => {
     const html = await renderSection({
       tts: { preferred: { providerId: 'openai-compatible-audio-speech' }, fallback: [] },
     })
 
     expect(contains(html, 'lia-config-voice-voice')).toBe(false)
-    // This provider needs a credential, so the tab says so rather than reporting
-    // an empty voice list - the two used to be the same message.
-    expect(contains(html, 'lia-config-voice-needs-config')).toBe(true)
+    // The native protocol has no voice-discovery contract. Credential entry is
+    // owned by SpeechConnection; the voice ID remains an explicit user choice.
+    expect(contains(html, 'lia-config-native-voice-id')).toBe(true)
     expect(contains(html, 'lia-config-voice-no-catalog')).toBe(false)
-    const note = strip(html.slice(html.indexOf('data-testid="lia-config-voice-needs-config"')))
-    expect(note).toContain(`${TT}.catalog.needsConfiguration`)
   })
 
   it('defaults the reserve voice to "Nenhuma"', async () => {

@@ -118,7 +118,9 @@ describe('shared AI configuration and Stage interlock', () => {
         await original(...args)
         throw new Error('synthetic private storage failure')
       })
-      .mockResolvedValueOnce(false)
+    // The production vault now restores opaque ciphertext, without calling
+    // setSecret(oldPlaintext). Inject failure at that actual rollback seam.
+    vi.spyOn(f.host.vault, 'backupSecret').mockResolvedValueOnce(async () => false)
     expect(await f.host.aiConnection.save({ baseUrl: 'https://new.invalid/v1', apiKey: 'new-private', revision: 2 })).toEqual({ ok: false, code: 'storage' })
     await expect(f.host.conversar()).rejects.toThrow(/Save the AI service settings again/)
     await expect(f.host.stage.start()).rejects.toThrow(/Save the AI service settings again/)

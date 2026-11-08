@@ -1184,7 +1184,12 @@ describe('correlation observer - structured diagnostic log seam (Phase 8.0D-10B-
     // The entry never names the adapter's logger, never formats a line and
     // never inspects facts: it hands over the gate decision and nothing else.
     expect(entry).not.toMatch(/useLogg\('lia:brain'|\[LIA-BRAIN-DIAG\]|formatLiaBrainDiagnosticEntry|LiaBrainDiagnosticEntry/)
-    expect(entry).not.toMatch(/\bfacts\b|\bstatus\b|\battempts\b|\bproviderId\b|\bmodelId\b|\bengineId\b/)
+    expect(entry).not.toMatch(/\bfacts\b|\battempts\b|\bproviderId\b|\bmodelId\b|\bengineId\b/)
+    // Presence persistence legitimately inspects a storage status elsewhere in
+    // the composition root; the diagnostic observer still receives no status.
+    const observerComposition = entry.slice(entry.indexOf('const liaBrainCorrelationObserver ='), entry.indexOf('const liaBrainCorrelationObserver =') + entry.slice(entry.indexOf('const liaBrainCorrelationObserver =')).indexOf('\n  })') + 5)
+    expect(observerComposition).toContain('createLiaBrainCorrelationObserver(')
+    expect(observerComposition).not.toMatch(/\bstatus\b/)
     // Exactly ONE factory call site in production, and it is the entry's.
     expect(productionMatching(/(?<!function )createLiaBrainCorrelationObserver\(/)).toEqual([
       'apps/stage-tamagotchi/src/main/index.ts',

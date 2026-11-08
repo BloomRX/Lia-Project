@@ -204,7 +204,7 @@ function onPreview(): void {
       -->
       <label v-else-if="nativeSpeech" class="flex flex-col gap-1 text-sm">
         {{ tt('fields.voice') }}
-        <input :value="editor.selectedVoiceId.value" class="w-full border border-neutral-200 rounded bg-transparent px-2 py-1 dark:border-neutral-700" @change="onVoiceChange">
+        <input data-testid="lia-config-native-voice-id" :value="editor.selectedVoiceId.value" class="w-full border border-neutral-200 rounded bg-transparent px-2 py-1 dark:border-neutral-700" @change="onVoiceChange">
       </label>
 
       <p
@@ -372,7 +372,7 @@ function onPreview(): void {
       </label>
       <label v-else-if="nativeSpeech" class="flex flex-col gap-1 text-sm">
         {{ tt('fields.model') }}
-        <input :value="editor.selectedModelId.value" class="w-full border border-neutral-200 rounded bg-transparent px-2 py-1 dark:border-neutral-700" @change="onModelChange">
+        <input data-testid="lia-config-native-model-id" :value="editor.selectedModelId.value" class="w-full border border-neutral-200 rounded bg-transparent px-2 py-1 dark:border-neutral-700" @change="onModelChange">
       </label>
 
       <!--

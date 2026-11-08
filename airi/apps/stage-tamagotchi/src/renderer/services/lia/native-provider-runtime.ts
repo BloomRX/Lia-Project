@@ -130,7 +130,10 @@ export function createNativeProviderRuntime(options: {
     }
   }
 
-  return { owns, getChatProvider, discover, probe, dispose: (providerId?: string) => {
+  return { owns, getChatProvider, discover, probe, invalidate: (providerId: string) => {
+    runtime.dispose(providerId)
+    options.execution?.invalidate(providerId)
+  }, dispose: (providerId?: string) => {
     runtime.dispose(providerId)
     options.execution?.dispose(providerId)
   } }

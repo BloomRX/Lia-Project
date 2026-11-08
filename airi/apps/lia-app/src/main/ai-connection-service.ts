@@ -15,6 +15,8 @@ export interface AiConnectionServiceDeps {
   vault: LiaSecretVault
   readSelection: () => Promise<{ providerId: string, modelId?: string } | undefined>
   saveSelection: (target: { providerId: string, modelId?: string }) => Promise<void>
+  /** Exact rollback, including an originally absent selection. Main-only. */
+  backupSelection?: () => Promise<() => Promise<void>>
   /** The host shares this critical section with every managed Stage start. */
   saveExclusively?: (save: () => Promise<AiConnectionResult>) => Promise<AiConnectionResult>
   fetch?: typeof globalThis.fetch
@@ -74,6 +76,9 @@ export function createAiConnectionService(deps: AiConnectionServiceDeps) {
     }
     let changedKey = false
     let oldKey: string | undefined
+    let restoreOpaqueKey: (() => Promise<boolean>) | undefined
+    let restoreSelection: (() => Promise<void>) | undefined
+    let changedSelection = false
     let disabledRevision: number | undefined
     let previous: TransportRecord | undefined
     const previouslySafe = configurationSafe
@@ -81,6 +86,8 @@ export function createAiConnectionService(deps: AiConnectionServiceDeps) {
       if (!changedKey)
         return true
       try {
+        if (restoreOpaqueKey)
+          return await restoreOpaqueKey()
         return oldKey !== undefined ? await deps.vault.setSecret(PROVIDER_ID, 'apiKey', oldKey) : await deps.vault.deleteSecret(PROVIDER_ID, 'apiKey')
       }
       catch { return false }
@@ -88,6 +95,14 @@ export function createAiConnectionService(deps: AiConnectionServiceDeps) {
     async function recover(): Promise<boolean> {
       if (!await restoreKey())
         return false
+      if (changedSelection) {
+        if (!restoreSelection)
+          return false
+        try {
+          await restoreSelection()
+        }
+        catch { return false }
+      }
       if (disabledRevision === undefined)
         return previouslySafe
       try {
@@ -103,6 +118,10 @@ export function createAiConnectionService(deps: AiConnectionServiceDeps) {
       if (snapshot.revision !== input.revision)
         return { ok: false, code: 'conflict' }
       previous = recordFrom(snapshot)
+      const originalSelection = await deps.readSelection()
+      restoreSelection = deps.backupSelection
+        ? await deps.backupSelection()
+        : originalSelection ? () => deps.saveSelection(originalSelection) : undefined
       // Never silently forward a saved credential to a newly supplied host.
       if (previous?.baseUrl !== input.baseUrl && input.apiKey === undefined && deps.vault.hasSecret(PROVIDER_ID, 'apiKey'))
         return { ok: false, code: 'credentials' }
@@ -119,7 +138,10 @@ export function createAiConnectionService(deps: AiConnectionServiceDeps) {
       disabledRevision = disabled.snapshot.revision
       configurationSafe = false
       if (input.apiKey !== undefined) {
-        oldKey = deps.vault.getSecret(PROVIDER_ID, 'apiKey')
+        if (deps.vault.backupSecret)
+          restoreOpaqueKey = await deps.vault.backupSecret(PROVIDER_ID, 'apiKey')
+        else
+          oldKey = deps.vault.getSecret(PROVIDER_ID, 'apiKey')
         changedKey = true
         const stored = input.apiKey ? await deps.vault.setSecret(PROVIDER_ID, 'apiKey', input.apiKey) : await deps.vault.deleteSecret(PROVIDER_ID, 'apiKey')
         if (!stored) {
@@ -127,6 +149,7 @@ export function createAiConnectionService(deps: AiConnectionServiceDeps) {
           return { ok: false, code: configurationSafe ? 'credentials' : 'storage' }
         }
       }
+      changedSelection = true
       await deps.saveSelection({ providerId: PROVIDER_ID, ...(input.modelId ? { modelId: input.modelId } : {}) })
       const saved = await deps.repository.mutate({ kind: 'put', expectedRevision: disabledRevision, record })
       if (!saved.ok) {

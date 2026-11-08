@@ -11,6 +11,15 @@ Fonte: [`CURRENT-STATE.md`](CURRENT-STATE.md) §0 e §5, medido em
 
 ## Onde o projeto está
 
+08/11 — **Retomada integrada:** Launcher → Stage → conversa passou com HTTP
+local sintético, tanto sem chave quanto com credencial sintética entre perfis.
+Memória opt-in/opt-out e contexto de personalidade chegaram à requisição Main.
+Presença Livre mostrou corpo inteiro sem ciano; movimento, pausa e segundo
+monitor conectado passaram. Não aprova serviço externo, áudio físico,
+desconexão/DPI/jogos, leitores legados ou instalador. Contrato de credenciais em
+[LIA-CREDENTIAL-OWNER](../architecture/LIA-CREDENTIAL-OWNER.md), testes e
+pendências no [relatório da retomada](../product/RELEASE-WINDOWS-2026-11-07-COMPLETION.md).
+
 07/11 — **Gravações de transcrição pelo Main e cancelamento ponta a ponta**:
 cinco definições de gravação, playgrounds, filtro de confiança e edição explícita
 de chave no cofre. Respostas antigas não substituem a nova gravação. O monitor

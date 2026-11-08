@@ -17,6 +17,7 @@ import { ProviderRuntime } from '../../../../../../../lia/core/src/providers/run
 import { electronLiaTransportCancel, electronLiaTransportPull, electronLiaTransportStart } from '../../../shared/eventa/lia-transport-execution'
 import { isCuratedChatProvider } from '../../../shared/lia/provider-catalog'
 import { supportsMainSpeech } from '../../../shared/lia/speech-transport'
+import { resolveMainCredential } from './credential-owner-access'
 import { withLiaProviderHeaders } from './provider-request-headers'
 import { serializeWrite } from './secrets-service'
 
@@ -288,7 +289,7 @@ export function createLiaTransportExecutionService(params: { repository: Reposit
           const current = (await params.repository.read()).records.filter(candidate => candidate.providerId === record.providerId)
           if (current.length !== 1 || JSON.stringify(current[0]) !== JSON.stringify(record))
             throw new ProviderError('configuration')
-          return params.vault.getSecret(record.credentialRef.scope, record.credentialRef.key)
+          return resolveMainCredential(params.vault, record.credentialRef.scope, record.credentialRef.key, job.controller.signal)
         }), job)
         if (!credential)
           throw new ProviderError('credentials')
@@ -319,12 +320,17 @@ export function createLiaTransportExecutionService(params: { repository: Reposit
         // Lia-owned headers (attribution and nothing else) are added here, in
         // the process that can see the provider id and the endpoint together.
         fetch: withLiaProviderHeaders(fetch, record.providerId),
-        resolveCredential: () => {
+        resolveCredential: async () => {
           if (job.controller.signal.aborted)
             throw new ProviderError('cancelled')
           // The vault is the only source. A draft can point somewhere new, but it
           // can no longer carry a secret to that address.
-          return mayUseVault ? params.vault.getSecret(record.credentialRef.scope, record.credentialRef.key) : undefined
+          try {
+            return mayUseVault ? await resolveMainCredential(params.vault, record.credentialRef.scope, record.credentialRef.key, job.controller.signal) : undefined
+          }
+          catch {
+            throw new ProviderError('credentials')
+          }
         },
       })
       job.runtime = runtime

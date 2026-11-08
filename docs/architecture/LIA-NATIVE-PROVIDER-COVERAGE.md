@@ -1,7 +1,15 @@
 # Lia — cobertura nativa dos provedores de chat (Corte B)
 
-**Estado:** implementado em código na branch `arena/01a10290-lia-project`, sem commit
+**Registro original do Corte B:** implementado em código na branch `arena/01a10290-lia-project`, então sem commit
 nem push. Base de trabalho: `c3d2186517fd44946a413de06f79e3bb3a13c4fd`.
+
+**Continuação de 08/11:** os transportes Main-native obtêm credenciais do
+proprietário Launcher por lease privada, preservando ciphers de perfis separados.
+Fluxos Windows locais autenticado sintético e explicitamente sem chave passaram;
+serviço externo continua bloqueado. [Contrato](LIA-CREDENTIAL-OWNER.md) e
+[resultados/limites](../product/RELEASE-WINDOWS-2026-11-07-COMPLETION.md).
+Leitores legados e STT de sessão continuam pendentes; não há fechamento global
+de credenciais nem aprovação da beta por este registro.
 **Escopo:** os dez provedores de chat curados da Lia executam no processo main do
 Electron; o renderer deixa de receber credencial para eles.
 **Referências:** [`LIA-NEXT-DECOUPLING-PLAN.md`](LIA-NEXT-DECOUPLING-PLAN.md) (plano do

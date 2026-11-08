@@ -122,6 +122,12 @@ config:
   navigation:
     label: 'Lia configuration sections'
   sections:
+    presence:
+      title: 'Desktop presence'
+      summary: 'How Lia uses your desktop.'
+    memory:
+      title: 'Memory'
+      summary: 'What Lia may remember, under your control.'
     ai:
       title: 'AI'
       summary: "Lia's brain: provider, model and fallback."

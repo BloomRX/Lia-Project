@@ -7,6 +7,8 @@ import { join } from 'node:path'
 import { createLiaSecretVault as createCoreVault } from '@lia/core/secrets/vault'
 import { app, safeStorage } from 'electron'
 
+import { withCredentialOwner } from './credential-owner-access'
+
 /**
  * Migration shim (Phase 7): the vault implementation moved to Lia Core at
  * `@lia/core/secrets/vault`, which hosts no Electron import. This AIRI host
@@ -34,7 +36,7 @@ interface SecretsDeps {
 }
 
 export function createLiaSecretVault(deps: SecretsDeps = {}): LiaSecretVault {
-  return createCoreVault({
+  return withCredentialOwner(createCoreVault({
     cipher: {
       available: deps.encryptionAvailable ?? (() => safeStorage.isEncryptionAvailable()),
       decrypt: deps.decrypt ?? ((payload: Buffer) => safeStorage.decryptString(payload)),
@@ -43,7 +45,7 @@ export function createLiaSecretVault(deps: SecretsDeps = {}): LiaSecretVault {
     filePath: deps.filePath ?? join(app.getPath('userData'), 'lia-secrets.json'),
     read: deps.read,
     write: deps.write,
-  })
+  }))
 }
 
 export type { LiaSecretVault } from '@lia/core/secrets/vault'

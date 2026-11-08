@@ -2,6 +2,7 @@ import type { SupervisorQuitFlow } from './shutdown-coordinator'
 
 import process from 'node:process'
 
+import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { app, BrowserWindow, dialog, safeStorage } from 'electron'
@@ -9,6 +10,7 @@ import { app, BrowserWindow, dialog, safeStorage } from 'electron'
 import { createLiaDevflowAutorun } from './devflow-autorun'
 import { createLiaEventPublisher } from './event-publisher'
 import { registerLiaIpc } from './ipc'
+import { launcherProfilePath } from './launcher-profile'
 import { createLiaHost } from './lia-host'
 import { resolvePackagedStage } from './packaged-stage'
 import { createSupervisorQuitFlow } from './shutdown-coordinator'
@@ -35,6 +37,11 @@ const timer = createLiaBootTimer()
 timer.mark('lia-app.start')
 
 let mainWindow: BrowserWindow | undefined
+// The packaged name must not select the Stage's active Chromium profile or
+// abandon an existing safeStorage cipher profile.
+const chromiumProfile = launcherProfilePath(app.getPath('appData'))
+mkdirSync(chromiumProfile, { recursive: true })
+app.setPath('userData', chromiumProfile)
 /**
  * The ONE quit path (Phase 7.1, item 3). Exists only after the host does;
  * an exit signal before that means nothing was spawned and the process may
@@ -76,6 +83,8 @@ async function bootstrap(): Promise<void> {
   // finishes its first paint - but WITHOUT starting the voice runtime
   // (contract item 12) and without touching AIRI (contract item 11).
   const host = createLiaHost({
+    enableCredentialOwner: true,
+    launcherChromiumProfile: chromiumProfile,
     packagedStage: app.isPackaged ? () => resolvePackagedStage(process.resourcesPath) : undefined,
     cipher: {
       available: () => safeStorage.isEncryptionAvailable(),

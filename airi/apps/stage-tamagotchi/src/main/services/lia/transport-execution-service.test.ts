@@ -73,6 +73,18 @@ afterEach(() => {
 })
 
 describe('main transport execution', () => {
+  it('reports an unreadable saved credential without dispatching HTTP or exposing the decryption error', async () => {
+    const f = fixture()
+    f.getSecret.mockImplementation(() => {
+      throw new Error('private decryption details')
+    })
+    const sender = owner()
+    const jobId = id(f.service.start(sender, startInput()))
+    const result = await f.service.pull(sender, { id: jobId, action: 'head' })
+    expect(result).toEqual({ ok: false, code: 'credentials' })
+    expect(f.fetch).not.toHaveBeenCalled()
+    expect(JSON.stringify(result)).not.toContain('private decryption details')
+  })
   it('runs only saved audio transports, rejects injected credentials and closes on invalid media', async () => {
     const providerId = 'openai-compatible-audio-speech'
     const audioRecord: TransportRecord = { ...record(providerId), definitionId: providerId, protocol: 'audio-speech' }
@@ -491,7 +503,7 @@ describe('main transport execution', () => {
       }
       const sender = owner()
       const jobId = id(service.start(sender, startInput()))
-      expect(await service.pull(sender, { id: jobId, action: 'head' })).toEqual({ ok: false, code: 'network' })
+      expect(await service.pull(sender, { id: jobId, action: 'head' })).toEqual({ ok: false, code: cause === 'vault' ? 'credentials' : 'network' })
     }
   })
 

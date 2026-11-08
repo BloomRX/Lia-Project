@@ -5,6 +5,7 @@ import type { LiaSpeechConfigResult, LiaSpeechConfigSaveInput } from '../../../s
 
 import { isTransportRecord } from '../../../../../../../lia/core/src/transports/validation'
 import { supportsMainSpeech } from '../../../shared/lia/speech-transport'
+import { resolveMainCredential } from './credential-owner-access'
 import { serializeWrite } from './secrets-service'
 
 export function createSpeechConfigService(
@@ -76,14 +77,23 @@ export function createSpeechConfigService(
         } as const
         if (!isTransportRecord(record))
           return invalid
-        const previous = vault.getSecret(providerId, 'apiKey')
+        let writeRevision = revision
+        if (!existing && vault.hasSecret(providerId, 'apiKey')) {
+          // An orphan key is preserved. Establish an inert, CAS-protected
+          // reference before asking its Main owner to read it for this save.
+          const provisional = await repository.mutate({ kind: 'put', expectedRevision: revision, record: { ...record, enabled: false } })
+          if (!provisional.ok)
+            return provisional
+          writeRevision = provisional.snapshot.revision
+        }
+        const previous = vault.hasSecret(providerId, 'apiKey') ? await resolveMainCredential(vault, providerId, 'apiKey') : undefined
         if (!apiKey && !previous)
           return credentials
         if (apiKey && !await vault.setSecret(providerId, 'apiKey', apiKey))
           return credentials
         let result
         try {
-          result = await repository.mutate({ kind: 'put', expectedRevision: revision, record })
+          result = await repository.mutate({ kind: 'put', expectedRevision: writeRevision, record })
         }
         catch {
           result = storage
