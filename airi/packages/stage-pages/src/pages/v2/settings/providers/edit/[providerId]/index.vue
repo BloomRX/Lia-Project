@@ -20,6 +20,8 @@ import {
 } from '@proj-airi/stage-ui/components'
 import { getDefinedProvider, getSchemaDefault, getValidatorsOfProvider, validateProvider } from '@proj-airi/stage-ui/libs'
 import { useProviderConfigStore } from '@proj-airi/stage-ui/stores/providers/config'
+import { getProviderCredentialConfigPort } from '@proj-airi/stage-ui/stores/providers/credential-config-port'
+import { genericProviderConfigForSave, genericProviderDraft } from '@proj-airi/stage-ui/stores/providers/generic-credential-draft'
 import { Button, Callout, FieldCombobox, FieldInput, FieldKeyValues, GhostButton } from '@proj-airi/ui'
 import { computedAsync, useCloned, useDebounceFn } from '@vueuse/core'
 import { DropdownMenuContent, DropdownMenuItem, DropdownMenuPortal, DropdownMenuRoot, DropdownMenuTrigger } from 'reka-ui'
@@ -27,7 +29,7 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const router = useRouter()
 const route = useRoute('v2/settings/providers/edit/[providerId]')
 
@@ -38,10 +40,19 @@ const emptyProviderConfigValues = Object.freeze({})
 const providerId = computed(() => route.params.providerId as string)
 const providerConfig = computed(() => providerStore.getProvider(providerId.value) ?? emptyProviderConfig)
 const providerDefinition = computed(() => getDefinedProvider(providerConfig.value.definitionId))
+const hostOwnsCredential = computed(() => !!getProviderCredentialConfigPort(providerId.value))
+const credentialConfigured = ref(false)
+watch(providerId, () => {
+  credentialConfigured.value = false
+})
+const providerConfigForEditing = computed(() => ({
+  ...providerConfig.value,
+  config: genericProviderDraft(providerConfig.value?.config ?? {}, hostOwnsCredential.value),
+}))
 
 // NOTICE: useCloned handles deep cloning and state isolation for the draft.
 // It provides a 'cloned' ref that we use for editing without affecting the original store state.
-const { cloned: providerConfigEdit, sync: syncProviderConfigEdit } = useCloned(providerConfig, { manual: true })
+const { cloned: providerConfigEdit, sync: syncProviderConfigEdit } = useCloned(providerConfigForEditing, { manual: true })
 
 const isProviderSchemaLoading = ref(false)
 const providerSchemaError = ref<string | undefined>()
@@ -83,8 +94,15 @@ const providerSchemaDefault = computed(() => getSchemaDefault(providerSchema.val
 
 watch(providerConfig, (newVal, oldVal) => {
   if (newVal && Object.keys(newVal).length > 0) {
-    // Only sync the draft if the underlying data in the store has actually changed from an external source.
-    if (JSON.stringify(newVal) !== JSON.stringify(oldVal)) {
+    // Credential migration may replace the record and its status. Compare only
+    // editor-owned, non-secret configuration before discarding unsaved fields.
+    const current = hostOwnsCredential.value
+      ? { id: newVal.id, definitionId: newVal.definitionId, config: genericProviderDraft(newVal.config ?? {}, true) }
+      : newVal
+    const previous = hostOwnsCredential.value
+      ? { id: oldVal?.id, definitionId: oldVal?.definitionId, config: genericProviderDraft(oldVal?.config ?? {}, true) }
+      : oldVal
+    if (JSON.stringify(current) !== JSON.stringify(previous)) {
       syncProviderConfigEdit()
     }
   }
@@ -92,7 +110,7 @@ watch(providerConfig, (newVal, oldVal) => {
 
 const isEdited = computed(() => {
   const currentConfig = providerConfigEdit.value?.config ?? emptyProviderConfigValues
-  const savedConfig = providerConfig.value?.config ?? emptyProviderConfigValues
+  const savedConfig = genericProviderDraft(providerConfig.value?.config ?? emptyProviderConfigValues, hostOwnsCredential.value)
   return JSON.stringify(currentConfig) !== JSON.stringify(savedConfig)
 })
 
@@ -188,9 +206,24 @@ const schemaFields = computed(() => {
 
 const basicFields = computed(() => schemaFields.value.filter(field => field.section === 'basic'))
 const advancedFields = computed(() => schemaFields.value.filter(field => field.section === 'advanced'))
+const nativeCredentialReady = computed(() => credentialConfigured.value || !schemaFields.value.some(field => field.key === 'apiKey' && field.required))
+const nativeCopy = computed(() => locale.value.toLowerCase().startsWith('pt')
+  ? {
+      save: 'Salvar configuração',
+      ready: 'A chave é salva separadamente. Salvar a configuração não testa a conexão; use o teste no painel do serviço de IA.',
+      missing: 'Salve a chave antes de salvar esta configuração. A chave e a configuração são salvas separadamente.',
+    }
+  : {
+      save: 'Save configuration',
+      ready: 'The key is saved separately. Saving configuration does not test the connection; use the test in the AI service panel.',
+      missing: 'Save the key before saving this configuration. The key and configuration are saved separately.',
+    })
 
 function setFieldValue(key: string, value: unknown) {
   if (!providerConfigEdit.value)
+    return
+
+  if (hostOwnsCredential.value && key === 'apiKey')
     return
 
   // NOTICE: Update local draft only. useCloned makes it safe to mutate 'cloned.value'.
@@ -258,6 +291,8 @@ function removeHeaderRow(index: number) {
 }
 
 async function runValidation() {
+  if (hostOwnsCredential.value)
+    return
   if (!providerDefinition.value)
     return
 
@@ -310,6 +345,7 @@ async function runValidation() {
 
 const debouncedValidation = useDebounceFn(runValidation, 1500)
 let didInitValidation = false
+let validationPlanRequestId = 0
 
 watch([providerConfigEdit, providerDefinition, providerSchema], async () => {
   if (!providerConfig.value || !providerConfigEdit.value) {
@@ -337,12 +373,17 @@ watch([providerId, providerSchema], ([nextProviderId, schema]) => {
 
   initializedSchemaProviderId = nextProviderId
   if (providerConfig.value.status !== 'configured')
-    providerConfigEdit.value.config = merge(providerSchemaDefault.value, providerConfigEdit.value.config)
+    providerConfigEdit.value.config = genericProviderDraft(merge(providerSchemaDefault.value, providerConfigEdit.value.config), hostOwnsCredential.value)
 }, { immediate: true })
 
-let validationPlanRequestId = 0
 async function getValidationPlan() {
   const requestId = ++validationPlanRequestId
+  // Host credentials cannot be used by renderer HTTP validators. Presence is
+  // readiness only; a successful connection test belongs to the native host.
+  if (hostOwnsCredential.value) {
+    validationSteps.value = []
+    return undefined
+  }
   const definition = providerDefinition.value
   if (!definition || !providerSchema.value || isProviderSchemaLoading.value)
     return undefined
@@ -372,7 +413,11 @@ function commitEditedConfig(status: 'configured' | 'bypassed') {
   if (!providerConfigEdit.value)
     return
 
-  providerStore.updateProviderConfig(providerId.value, { ...providerConfigEdit.value.config }, status)
+  if (hostOwnsCredential.value && !nativeCredentialReady.value)
+    return
+
+  const config = genericProviderConfigForSave(providerConfigEdit.value.config, providerConfig.value?.config ?? {}, hostOwnsCredential.value)
+  providerStore.updateProviderConfig(providerId.value, config, status)
 }
 
 function handleSaveAnyway() {
@@ -500,6 +545,7 @@ function handleDeleteProvider() {
               <div v-for="field in basicFields" :key="field.key">
                 <ProviderApiKeyInput
                   v-if="field.key === 'apiKey'"
+                  :provider-id="providerId"
                   :model-value="getStringField(field.key)"
                   :provider-name="providerDefinition?.nameLocalize({ t }) || providerDefinition?.name || ''"
                   :label="field.label"
@@ -507,6 +553,7 @@ function handleDeleteProvider() {
                   :placeholder="field.placeholder"
                   :required="field.required"
                   @update:model-value="setFieldValue(field.key, $event)"
+                  @configured="credentialConfigured = $event"
                 />
                 <ProviderBaseUrlInput
                   v-else-if="field.key === 'baseUrl'"
@@ -554,8 +601,20 @@ function handleDeleteProvider() {
           >
             <div :class="['flex', 'flex-col', 'gap-4']">
               <div v-for="field in advancedFields" :key="field.key">
+                <ProviderApiKeyInput
+                  v-if="field.key === 'apiKey'"
+                  :provider-id="providerId"
+                  :model-value="getStringField(field.key)"
+                  :provider-name="providerDefinition?.nameLocalize({ t }) || providerDefinition?.name || ''"
+                  :label="field.label"
+                  :description="field.description"
+                  :placeholder="field.placeholder"
+                  :required="field.required"
+                  @update:model-value="setFieldValue(field.key, $event)"
+                  @configured="credentialConfigured = $event"
+                />
                 <FieldKeyValues
-                  v-if="field.type === 'key-values'"
+                  v-else-if="field.type === 'key-values'"
                   v-model="headerRows"
                   :label="field.label"
                   :description="field.description"
@@ -597,87 +656,97 @@ function handleDeleteProvider() {
           </ProviderAdvancedSettings>
 
           <div :class="['flex', 'flex-col', 'gap-3']">
-            <Callout
-              v-if="shouldShowTroubleshootingOllamaConnectivity && providerDefinition.business?.({ t }).troubleshooting?.validators?.openaiCompatibleCheckConnectivity"
-              :label="providerDefinition.business?.({ t }).troubleshooting?.validators?.openaiCompatibleCheckConnectivity?.label"
-            >
-              <div v-html="safeOllamaConnectivityTroubleshootingHtml" />
-            </Callout>
-
-            <div :class="['flex', 'items-center', 'justify-between']">
-              <div :class="['text-xs', 'text-neutral-400']">
-                {{ t('settings.pages.providers.catalog.edit.validators.title') }}
-              </div>
-              <Button size="sm" :loading="isValidating" :disabled="isValidating" @click="runValidation">
-                {{ t('settings.pages.providers.catalog.edit.validators.actions.validate') }}
+            <template v-if="hostOwnsCredential">
+              <p role="status" class="text-sm text-neutral-500">
+                {{ nativeCredentialReady ? nativeCopy.ready : nativeCopy.missing }}
+              </p>
+              <Button size="sm" :disabled="!isEdited || !nativeCredentialReady" @click="handleSaveAnyway">
+                {{ nativeCopy.save }}
               </Button>
-            </div>
+            </template>
+            <template v-else>
+              <Callout
+                v-if="shouldShowTroubleshootingOllamaConnectivity && providerDefinition.business?.({ t }).troubleshooting?.validators?.openaiCompatibleCheckConnectivity"
+                :label="providerDefinition.business?.({ t }).troubleshooting?.validators?.openaiCompatibleCheckConnectivity?.label"
+              >
+                <div v-html="safeOllamaConnectivityTroubleshootingHtml" />
+              </Callout>
 
-            <ProviderValidationDetailsDialog v-model="showValidationDetails" :steps="validationSteps" :step-id="activeValidationStepId" />
+              <div :class="['flex', 'items-center', 'justify-between']">
+                <div :class="['text-xs', 'text-neutral-400']">
+                  {{ t('settings.pages.providers.catalog.edit.validators.title') }}
+                </div>
+                <Button size="sm" :loading="isValidating" :disabled="isValidating" @click="runValidation">
+                  {{ t('settings.pages.providers.catalog.edit.validators.actions.validate') }}
+                </Button>
+              </div>
 
-            <div v-if="validationSteps.length > 0" :class="['grid', 'gap-3', 'grid-cols-1', 'sm:grid-cols-2', 'xl:grid-cols-3']">
-              <div v-for="step in validationSteps" :key="step.id" class="h-full">
-                <div
-                  :class="[
-                    'p-3', 'h-full',
-                    'flex', 'flex-col', 'gap-2',
-                    'bg-white', 'dark:bg-neutral-900',
-                    'rounded-lg',
-                  ]"
-                >
-                  <div :class="['flex', 'items-start', 'justify-between', 'gap-2']">
-                    <div :class="['text-sm', 'text-neutral-700', 'dark:text-neutral-200']">
-                      {{ step.label }}
-                    </div>
-                    <div :class="['flex', 'flex-col', 'items-end', 'gap-2']">
-                      <GhostButton
-                        size="sm"
+              <ProviderValidationDetailsDialog v-model="showValidationDetails" :steps="validationSteps" :step-id="activeValidationStepId" />
 
-                        :title="
-                          step.status === 'valid' ? t('settings.pages.providers.catalog.edit.validators.status.valid')
-                          : step.status === 'invalid' ? t('settings.pages.providers.catalog.edit.validators.status.invalid')
-                            : step.status === 'validating' ? t('settings.pages.providers.catalog.edit.validators.status.validating')
-                              : ''
-                        "
-                        @click="() => { activeValidationStepId = step.id; showValidationDetails = true }"
-                      >
-                        <div
-                          :class="[
-                            'text-lg', 'min-w-8',
-                            step.status === 'valid' ? 'i-solar:check-circle-line-duotone text-emerald-600 dark:text-emerald-500' : '',
-                            step.status === 'invalid' ? 'i-solar:close-circle-line-duotone text-red-600 dark:text-red-500' : '',
-                            step.status === 'validating' ? 'i-solar:clock-circle-line-duotone text-amber-600 dark:text-amber-400' : '',
-                            step.status === 'idle' ? 'i-solar:minus-circle-line-duotone text-neutral-300 dark:text-neutral-600' : '',
-                          ]"
-                        />
-                      </GhostButton>
+              <div v-if="validationSteps.length > 0" :class="['grid', 'gap-3', 'grid-cols-1', 'sm:grid-cols-2', 'xl:grid-cols-3']">
+                <div v-for="step in validationSteps" :key="step.id" class="h-full">
+                  <div
+                    :class="[
+                      'p-3', 'h-full',
+                      'flex', 'flex-col', 'gap-2',
+                      'bg-white', 'dark:bg-neutral-900',
+                      'rounded-lg',
+                    ]"
+                  >
+                    <div :class="['flex', 'items-start', 'justify-between', 'gap-2']">
+                      <div :class="['text-sm', 'text-neutral-700', 'dark:text-neutral-200']">
+                        {{ step.label }}
+                      </div>
+                      <div :class="['flex', 'flex-col', 'items-end', 'gap-2']">
+                        <GhostButton
+                          size="sm"
+
+                          :title="
+                            step.status === 'valid' ? t('settings.pages.providers.catalog.edit.validators.status.valid')
+                            : step.status === 'invalid' ? t('settings.pages.providers.catalog.edit.validators.status.invalid')
+                              : step.status === 'validating' ? t('settings.pages.providers.catalog.edit.validators.status.validating')
+                                : ''
+                          "
+                          @click="() => { activeValidationStepId = step.id; showValidationDetails = true }"
+                        >
+                          <div
+                            :class="[
+                              'text-lg', 'min-w-8',
+                              step.status === 'valid' ? 'i-solar:check-circle-line-duotone text-emerald-600 dark:text-emerald-500' : '',
+                              step.status === 'invalid' ? 'i-solar:close-circle-line-duotone text-red-600 dark:text-red-500' : '',
+                              step.status === 'validating' ? 'i-solar:clock-circle-line-duotone text-amber-600 dark:text-amber-400' : '',
+                              step.status === 'idle' ? 'i-solar:minus-circle-line-duotone text-neutral-300 dark:text-neutral-600' : '',
+                            ]"
+                          />
+                        </GhostButton>
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
-            </div>
 
-            <div v-else :class="['text-sm', 'text-neutral-500']">
-              {{ t('settings.pages.providers.catalog.edit.validators.empty') }}
-            </div>
+              <div v-else :class="['text-sm', 'text-neutral-500']">
+                {{ t('settings.pages.providers.catalog.edit.validators.empty') }}
+              </div>
 
-            <div :class="['flex', 'flex-col', 'gap-3']">
-              <Alert v-if="hasValidationFailures" type="warning">
-                <template #title>
-                  {{ t('settings.pages.providers.catalog.edit.validation.failed.title') }}
-                </template>
-                <template #content>
-                  <div :class="['flex', 'flex-col', 'gap-2', 'sm:flex-row', 'sm:items-center', 'sm:justify-between']">
-                    <span :class="['text-xs', 'text-neutral-600', 'dark:text-neutral-300']">
-                      {{ t('settings.pages.providers.catalog.edit.validation.failed.description') }}
-                    </span>
-                    <Button size="sm" color="orange" variant="primary" @click="handleSaveAnyway">
-                      {{ t('settings.pages.providers.catalog.edit.validation.failed.action') }}
-                    </Button>
-                  </div>
-                </template>
-              </Alert>
-            </div>
+              <div :class="['flex', 'flex-col', 'gap-3']">
+                <Alert v-if="hasValidationFailures" type="warning">
+                  <template #title>
+                    {{ t('settings.pages.providers.catalog.edit.validation.failed.title') }}
+                  </template>
+                  <template #content>
+                    <div :class="['flex', 'flex-col', 'gap-2', 'sm:flex-row', 'sm:items-center', 'sm:justify-between']">
+                      <span :class="['text-xs', 'text-neutral-600', 'dark:text-neutral-300']">
+                        {{ t('settings.pages.providers.catalog.edit.validation.failed.description') }}
+                      </span>
+                      <Button size="sm" color="orange" variant="primary" @click="handleSaveAnyway">
+                        {{ t('settings.pages.providers.catalog.edit.validation.failed.action') }}
+                      </Button>
+                    </div>
+                  </template>
+                </Alert>
+              </div>
+            </template>
           </div>
         </template>
       </ProviderSettingsContainer>
