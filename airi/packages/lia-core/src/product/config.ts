@@ -374,7 +374,12 @@ export const SECRET_FIELD_NAMES = ['apikey', 'apisecret', 'bearer', 'secret', 't
 export interface LiaProductConfigUpdate {
   presence?: import('../../../../../lia/core/src/presence').PresenceConfig
   persona?: { activeCardId?: string }
-  provider?: { chat?: Partial<LiaProductChatConfig> }
+  provider?: { chat?: Omit<Partial<LiaProductChatConfig>, 'preferred' | 'strategy' | 'onboarded'> & {
+    /** Explicit null clears an editor-owned field; omission preserves it. */
+    preferred?: LiaProductProviderTarget | null
+    strategy?: LiaProductChatConfig['strategy'] | null
+    onboarded?: boolean | null
+  } }
   preferences?: { language?: string }
   /** Phase 7.9H-B3: first-run setup completion (`true` = setup done). */
   setup?: { completed?: boolean }
@@ -624,7 +629,12 @@ function mergeProductUpdate(raw: Record<string, unknown>, update: LiaProductConf
   }
   if (update.provider?.chat) {
     const provider = { ...asRecord(raw.provider) }
-    provider.chat = { ...asRecord(provider.chat), ...definedOnly(update.provider.chat) }
+    const chat = { ...asRecord(provider.chat), ...definedOnly(update.provider.chat) }
+    for (const field of ['preferred', 'strategy', 'onboarded'] as const) {
+      if (update.provider.chat[field] === null)
+        delete chat[field]
+    }
+    provider.chat = chat
     next.provider = provider
   }
   if (update.voice) {

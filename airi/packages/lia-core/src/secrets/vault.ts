@@ -31,6 +31,8 @@ type VaultFile = Record<string, string> // `scope\0key` -> base64 ciphertext
 const encodeKey = (scope: string, key: string): string => `${scope}\u0000${key}`
 
 export interface LiaSecretVault {
+  /** Main-only opaque rollback of one ciphertext entry; never expose through IPC. */
+  backupSecret?: (scope: string, key: string) => Promise<() => Promise<boolean>>
   isEncryptionAvailable: () => boolean
   setSecret: (scope: string, key: string, value: string) => Promise<boolean>
   getSecret: (scope: string, key: string) => string | undefined
@@ -133,7 +135,36 @@ export function createLiaSecretVault(deps: SecretsDeps): LiaSecretVault {
     }
   }
 
+  const loadForRollback = (): VaultFile => {
+    try {
+      const raw = read(path)
+      if (!raw)
+        return {}
+      const parsed = safeDestr<unknown>(raw)
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || Object.values(parsed).some(value => typeof value !== 'string'))
+        throw new Error('invalid vault')
+      return parsed as VaultFile
+    }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException)?.code === 'ENOENT')
+        return {}
+      throw new Error('Credential storage unavailable')
+    }
+  }
+
   return {
+    backupSecret: async (scope, key) => {
+      const reference = encodeKey(scope, key)
+      const ciphertext = loadForRollback()[reference]
+      return async () => {
+        const current = loadForRollback()
+        if (ciphertext === undefined)
+          delete current[reference]
+        else
+          current[reference] = ciphertext
+        return save(current)
+      }
+    },
     isEncryptionAvailable: () => isAvailable(),
     setSecret: async (scope, key, value) => {
       if (!isAvailable() || value.length === 0)

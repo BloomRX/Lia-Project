@@ -21,6 +21,12 @@ async function freshConfig(contents?: Record<string, unknown>): Promise<string> 
   return file
 }
 
+it('clears only explicitly selected chat fields during rollback, preserving sibling domains', async () => {
+  const file = await freshConfig({ schemaVersion: 1, provider: { chat: { preferred: { providerId: 'new-service', modelId: 'new-model' }, strategy: 'manual', onboarded: true, fallbackEnabled: true } }, preferences: { language: 'pt-BR' } })
+  expect((await updateLiaProductConfig(file, { provider: { chat: { preferred: null, strategy: null, onboarded: null } } })).status).toBe('ok')
+  expect(JSON.parse(await readFile(file, 'utf8'))).toEqual({ schemaVersion: 1, provider: { chat: { fallbackEnabled: true } }, preferences: { language: 'pt-BR' } })
+})
+
 describe('7.9F selected-engine roundtrip (write -> read survives, neighbors untouched)', () => {
   it('voice.engine.preferred persists through the canonical merge; schemaVersion and legacy voice keys intact', async () => {
     const file = await freshConfig({
