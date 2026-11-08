@@ -3,6 +3,14 @@
 **Status:** Draft baseline  
 **Purpose:** Keep product UI work aligned with the runtime architecture while implementation proceeds in small phases.
 
+**Retomada, 08/11:** o Launcher tem configuração de serviço de IA com descoberta
+e ferramenta real no fixture HTTP; logs ficam em Diagnósticos. Memória,
+personalidade e presença estão acessíveis na rota gerenciada de configurações.
+Livre usa enquadramento integral sem alterar o zoom salvo do Tamagotchi; sombra
+neutra opcional remove o contorno ciano. Revisão visual aprovou essas capturas,
+sem aprovar toda a matriz de concepts, avatar oficial, jogos ou tradução completa.
+Evidências e limitações: [release da retomada](RELEASE-WINDOWS-2026-11-07-COMPLETION.md).
+
 **Chat presentation, 2026-10-23:** managed secondary windows now hide internal
 reasoning by default without requiring capability bootstrap. Stored content,
 the reactive developer preference and standalone behavior are preserved. A

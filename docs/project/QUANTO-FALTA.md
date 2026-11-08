@@ -15,8 +15,10 @@ Fonte: [`CURRENT-STATE.md`](CURRENT-STATE.md) §0 e §5, medido em
 local sintético, tanto sem chave quanto com credencial sintética entre perfis.
 Memória opt-in/opt-out e contexto de personalidade chegaram à requisição Main.
 Presença Livre mostrou corpo inteiro sem ciano; movimento, pausa e segundo
-monitor conectado passaram. Não aprova serviço externo, áudio físico,
-desconexão/DPI/jogos, leitores legados ou instalador. Contrato de credenciais em
+monitor conectado passaram. Esses fluxos também passaram nos executáveis
+empacotados, com instalador privado gerado. Instalação limpa NÃO EXECUTADA;
+assinatura ausente. Não aprova serviço externo, áudio físico,
+desconexão/DPI/jogos ou leitores legados. Contrato de credenciais em
 [LIA-CREDENTIAL-OWNER](../architecture/LIA-CREDENTIAL-OWNER.md), testes e
 pendências no [relatório da retomada](../product/RELEASE-WINDOWS-2026-11-07-COMPLETION.md).
 

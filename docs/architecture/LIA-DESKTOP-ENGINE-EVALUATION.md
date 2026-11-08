@@ -1,6 +1,6 @@
 # Lia Desktop — avaliação de engines e presença
 
-Data da pesquisa: 07/11/2026. Estado: estudo técnico; nenhuma migração aprovada ou executada. Escopo: Windows desktop, personagem 2D/3D e convivência com jogos. Nenhuma engine, ferramenta ou dependência foi instalada; nenhum build ou benchmark foi executado.
+Data da pesquisa: 07/11/2026. Estado: estudo técnico; nenhuma migração aprovada ou executada. Escopo: Windows desktop, personagem 2D/3D e convivência com jogos. Na pesquisa inicial não houve instalação, build ou benchmark. A coleta exploratória posterior está no §10; não constitui comparação entre engines.
 
 ## 1. Conclusão para decisão
 
@@ -180,4 +180,65 @@ Comparar custo de manutenção por entregáveis, sem estimativas de prazo invent
 5. Se os critérios passarem, disponibilizar seleção controlada de renderer com retorno ao atual e dados no mesmo formato; a escolha de implementação não precisa aparecer no fluxo Beginner.
 6. Só remover o renderer anterior depois de paridade, installer/atualização, recuperação e matriz de hardware/jogos aprovados. Uma prova visual isolada não fecha esses gates.
 
-Esta pesquisa não alterou configuração, código de runtime, Stage, dependências ou documentos de estado operacional. Benchmarks, protótipos, instaladores e QA físico permanecem **NOT RUN**. A entrega verificável é este documento e suas fontes primárias.
+O estudo inicial de `83b99f2` permanece preservado. Nenhuma engine foi substituída.
+
+## 10. Primeira coleta exploratória no Windows — 07/11
+
+Depois do gate local de conversa, com múltiplas janelas e CDP/DevTools ativos,
+foi executado o coletor por 15 segundos sobre o PID supervisionado do Stage e
+seus descendentes observados. Saída:
+`J:/lia-evidence/20261107T215502232Z-stage-dev-ui-fixture-idle-1fd2e793fc6e4987aadca9ee3e990645/`.
+São 15 amostras, não um benchmark comparativo de engines ou uma medição do
+renderer isolado. A coorte inclui ferramentas de desenvolvimento e serviços
+filhos; a etiqueta `idle` não implica avatar congelado ou ausência de serviços.
+Os instantes de criação registrados foram conferidos: nenhum PID da coorte
+é anterior à raiz observada. O parentesco foi inferido do snapshot, não medido
+continuamente; os números não são custo exclusivo do renderer do avatar.
+
+| Métrica agregada dos PIDs disponíveis | Média | Pico |
+| --- | ---: | ---: |
+| Working set somado | 4848,6 MiB | 5276,6 MiB |
+| Private bytes somados | 5058,8 MiB | 5740,8 MiB |
+| CPU, percentual da máquina | 10,31% | 16,32% |
+
+A média de CPU exclui a primeira amostra, sem delta anterior. Working sets
+podem contar páginas compartilhadas mais de uma vez. GPU, FPS, frame time,
+energia e impacto em jogos **NÃO FORAM MEDIDOS** nesta coleta. Também não houve
+ensaio prolongado ou controle de carga repetido. Os números indicam custo
+relevante no cenário observado, mas não o atribuem ao Electron, avatar ou voz.
+
+Próximo experimento: controles C0–C4 do §7, com versão empacotada estável e
+mesmos assets, antes de um protótipo comparável. Godot, Bevy, Tauri, Unity e
+Win32/DirectX continuam **NÃO EXECUTADOS** como protótipos; não há vencedor.
+
+## 11. Coleta do pacote privado — 08/11
+
+Comando: `node Tests/windows/completion-runtime.mjs --packaged --without-key
+--presence-more --benchmark`, com `LIA_EVIDENCE_ROOT=J:/lia-evidence`.
+Depois do fluxo UI, mediu 15 amostras/15 segundos do Stage empacotado e seus
+descendentes observados, com chat/configurações abertos e CDP ativo. A seleção
+recusa descendente com criação anterior ao suposto pai; o coletor também
+confere identidade PID/instante por amostra. A árvore não é acompanhada
+continuamente: novos processos posteriores ao snapshot não entram na coorte.
+
+Saída: `J:/lia-evidence/20261108T211903069Z-stage-packaged-ui-fixture-idle-93ddb0cc74b64d97b1f7d3470675de21/`.
+São 12 processos, incluindo serviços Python. Launcher e ferramentas externas
+de QA não integram a soma; isso não é medição de avatar isolado.
+
+| Métrica agregada | Média | Pico |
+| --- | ---: | ---: |
+| Working set somado | 1997,5 MiB | 2031,9 MiB |
+| Private bytes somados | 2172,7 MiB | 2456,2 MiB |
+| CPU, percentual da máquina | 8,49% | 11,56% |
+
+CPU exclui a primeira amostra, sem delta anterior. Working sets podem repetir
+páginas compartilhadas. Os 12 PIDs já não existiam após encerramento pelo
+Launcher. A comparação numérica com o §10 não isola uma variável: há build,
+serviços, conjunto de janelas e condições diferentes, sem repetições controladas.
+Não prova ganho causal do empacotamento nem economia específica de engine.
+
+O custo observado merece investigação; **baixo consumo não está aprovado**.
+GPU/FPS/frame time/energia/jogos, execução prolongada e protótipos comparáveis
+das outras engines continuam NÃO EXECUTADOS. Próximo experimento: controles
+C0–C4 com avatar, janelas e serviços fixados, distinguindo o custo dos serviços
+do custo de render, antes de propor migração.

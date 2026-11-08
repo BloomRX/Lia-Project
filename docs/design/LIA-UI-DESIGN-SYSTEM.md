@@ -1264,3 +1264,12 @@ When a generated concept, implementation shortcut, existing AIRI UI, or previous
 Update this document when a deliberate visual/product decision changes.
 
 Do not rely on chat history as the only design specification.
+
+### Verificação de presença — 08/11/2026
+
+No modo Livre, o personagem deve caber integralmente com margem, sem reutilizar
+o zoom/offset de retrato. A mudança de modo não deve sobrescrever esses valores
+salvos do Tamagotchi. A sombra neutra é opcional no componente compartilhado e
+não deve introduzir contorno ciano. A captura Live2D foi aprovada em revisão
+visual; VRM Livre, composição/input, DPI e jogos permanecem pendentes no
+[relatório Windows](../product/RELEASE-WINDOWS-2026-11-07-COMPLETION.md).

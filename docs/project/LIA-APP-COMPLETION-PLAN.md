@@ -20,7 +20,7 @@ foram tratados como prova de entrega: seus arquivos e testes foram examinados.
 | Memória | CRUD Main persistido, opt-in, consulta por turno e contexto só na requisição | Testes e fluxo Windows local opt-in/opt-out; política global e serviço externo pendentes |
 | Presença | Contrato Core, serviço Main, preferência canônica e painel | Corpo inteiro aprovado; movimento, pausa, Home e segundo monitor conectado PASS Windows; desconexão/DPI/jogos pendentes |
 | Editor genérico de credenciais | Usa porta segura nos provedores já migrados, preserva legado/web | Testes de draft e Chromium; não fecha credenciais de todos os protocolos |
-| Distribuição Windows | Pipeline privado Launcher + Stage, resolução sem Node/pnpm no destino | Testes de contrato; instalação limpa ainda precisa gate real |
+| Distribuição Windows | Pipeline privado Launcher + Stage, resolução sem Node/pnpm no destino | NSIS gerado; dois gates dos executáveis empacotados PASS Windows com HTTP sintético; instalação limpa e assinatura pendentes |
 | Home | Asset oficial da Lia e feedback de falha | Build e testes; comparação completa com sete concepts pendente |
 
 O agente da configuração IA foi interrompido por quota antes da revisão final.
@@ -31,11 +31,13 @@ usada como substituto de teste ou runtime.
 
 ## Pendências por dependência e impacto
 
-1. Validar configuração → descoberta → ferramenta → abrir Stage → personagem
-   visível → conversa → encerramento, em perfil isolado Windows. Serviço HTTP
-   sintético prova integração local; não aprova um serviço de IA real.
-2. Executar build, pacote privado, abertura instalada e ciclo de vida sem
-   ferramentas de desenvolvimento no caminho de execução.
+1. Validar o fluxo contra serviço de IA real autorizado. Configuração → descoberta
+   → ferramenta → abrir Stage → conversa → encerramento já passou com HTTP
+   sintético no Windows, em desenvolvimento e nos executáveis empacotados.
+   Produto e Stage usam dados novos; perfil Chromium Launcher é preservado.
+2. Validar instalação limpa, atualização e desinstalação. Build, geração de NSIS
+   privado e ciclo de vida dos executáveis incluídos passaram; não equivalem à
+   execução do instalador em Windows limpo.
 3. Completar migração de chat fora do catálogo e STT de sessão por protocolo;
    revisar consumidores remanescentes de credenciais. Não declarar cofre global
    fechado enquanto esses caminhos existirem.
