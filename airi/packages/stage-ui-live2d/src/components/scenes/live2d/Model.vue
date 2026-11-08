@@ -54,6 +54,8 @@ const props = withDefaults(defineProps<{
   live2dForceAutoBlinkEnabled?: boolean
   live2dExpressionEnabled?: boolean
   live2dShadowEnabled?: boolean
+  neutralShadow?: boolean
+  fitFullBody?: boolean
 }>(), {
   mouthOpenSize: 0,
   nowSpeaking: false,
@@ -96,9 +98,10 @@ const modelLoadMutex = new Mutex()
 const manualMotionSpring = createLive2DMotionSpring()
 const manualControlOffset = computed(() => getLive2DMotionControlModelOffset(manualMotionSpring.output.value))
 const offset = computed(() => ({
-  x: (position.value.x / 100) * props.width + manualControlOffset.value.x,
-  y: -(position.value.y / 100) * props.height + manualControlOffset.value.y,
+  x: props.fitFullBody ? 0 : (position.value.x / 100) * props.width + manualControlOffset.value.x,
+  y: props.fitFullBody ? 0 : -(position.value.y / 100) * props.height + manualControlOffset.value.y,
 }))
+const viewScale = computed(() => props.fitFullBody ? 1 : scale.value)
 
 const pixiApp = toRef(() => props.app)
 const paused = toRef(() => props.paused)
@@ -123,9 +126,10 @@ let resizeAnimation: ReturnType<typeof animate> | undefined
 const modelNormalizeParams = useFitModel(
   () => ({ width: props.width, height: props.height }),
   () => ({ width: initialModelWidth.value, height: initialModelHeight.value }),
+  () => Boolean(props.fitFullBody),
 )
 
-watch([offset, scale, modelNormalizeParams], () => {
+watch([offset, viewScale, modelNormalizeParams], () => {
   setScaleAndPosition()
 })
 
@@ -136,7 +140,7 @@ function setScaleAndPosition(animated = false) {
   const normalized = modelNormalizeParams.value
 
   if (!animated) {
-    model.value.scale.set(normalized.scale * scale.value, normalized.scale * scale.value)
+    model.value.scale.set(normalized.scale * viewScale.value, normalized.scale * viewScale.value)
     model.value.x = normalized.x + offset.value.x
     model.value.y = normalized.y + offset.value.y
     return
@@ -151,7 +155,7 @@ function setScaleAndPosition(animated = false) {
   }
 
   resizeAnimation = animate(current, {
-    scale: normalized.scale * scale.value,
+    scale: normalized.scale * viewScale.value,
     x: normalized.x + offset.value.x,
     y: normalized.y + offset.value.y,
     duration: 200,
@@ -538,13 +542,16 @@ function updateDropShadowFilter() {
     return
 
   const color = getComputedStyle(dropShadowColorComputer.value).backgroundColor
-  dropShadowFilter.value.color = Number(formatHex(color)!.replace('#', '0x'))
+  dropShadowFilter.value.color = props.neutralShadow ? 0x000000 : Number(formatHex(color)!.replace('#', '0x'))
+  dropShadowFilter.value.blur = props.neutralShadow ? 4 : 0
+  dropShadowFilter.value.distance = props.neutralShadow ? 3 : 20
   model.value.filters = [dropShadowFilter.value]
 }
 
 watch(modelSrcRef, async () => await loadModel(), { immediate: true })
 watch(dark, updateDropShadowFilter, { immediate: true })
 watch([model, themeColorsHue], updateDropShadowFilter)
+watch(() => props.neutralShadow, updateDropShadowFilter)
 watch(live2dShadowEnabled, updateDropShadowFilter)
 
 // TODO: This is hacky!

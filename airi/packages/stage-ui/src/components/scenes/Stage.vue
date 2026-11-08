@@ -66,6 +66,8 @@ const props = withDefaults(defineProps<{
   cursorPosition?: { x: number, y: number }
   enableOrbitControls?: boolean
   paused?: boolean
+  neutralLive2dShadow?: boolean
+  fitLive2dFullBody?: boolean
   speechSelectionKey?: string
   synthesizeSpeech?: (target: { providerId: string, modelId?: string, voiceId?: string }, text: string, signal: AbortSignal) => Promise<ArrayBuffer> | undefined
 }>(), {
@@ -1274,6 +1276,7 @@ defineExpose({
         v-if="stageModelRenderer === 'live2d' && showStage"
         ref="live2dSceneRef"
         v-model:state="componentState"
+        :fit-full-body="props.fitLive2dFullBody"
         min-w="50% <lg:full" min-h="100 sm:100"
         h-full w-full flex-1
         :model-src="stageModelSelectedUrl"
@@ -1285,6 +1288,7 @@ defineExpose({
         :theme-colors-hue="themeColorsHue"
         :theme-colors-hue-dynamic="themeColorsHueDynamic"
         :live2d-shadow-enabled="live2dShadowEnabled"
+        :neutral-shadow="props.neutralLive2dShadow"
         :live2d-max-fps="live2dMaxFps"
         :live2d-render-scale="live2dRenderScale"
         @error="handleStageRenderError"
