@@ -26,7 +26,7 @@ import { defineConfig } from 'electron-vite'
  *   dev/packaged boundary stays a single, inspectable file.
  */
 
-const ELECTRON_EXTERNALS = ['electron', /^electron\/.+/]
+const ELECTRON_EXTERNALS = ['electron', /^electron\/.+/, 'original-fs']
 
 export default defineConfig({
   main: {

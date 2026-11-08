@@ -22,11 +22,18 @@ Main revisada e 91 testes focados PASS, sem publicação de alteração cuja gra
 falhou. Regressão Stage: 2350 PASS/4 skips; Launcher: 279 PASS/2 skips;
 Chromium: 54 + 6 PASS; builds e typechecks pertinentes PASS. Gate de componentes
 Electron aprovado em PowerShell 5.1 e 7, sem aprovar serviço externo ou áudio
-físico. Próximo: empacotamento privado e gate do pacote, sem desenvolvimento
-concorrente. Não repetir a investigação dos
+físico. Empacotamento privado gerou NSIS; o fluxo dos executáveis empacotados
+passou no Windows com HTTP sintético autenticado e sem chave. Corrigidos o
+nome do aviso Electron e a inspeção física do ASAR (24 testes focados PASS).
+Instalador sem assinatura e instalação limpa NÃO EXECUTADA. Próximo: migração
+dos consumidores legados de credenciais e tradução completa; gates externos,
+áudio físico e instalação limpa continuam bloqueando beta. Não repetir a investigação dos
 subagentes nem descartar seus arquivos. Plano e pendências priorizadas em
 [Conclusão funcional](LIA-APP-COMPLETION-PLAN.md). Estudo de engines e coletor
 Windows disponíveis; nenhum benchmark comparativo ou migração foi aprovado.
+Coleta exploratória do pacote por 15 s, com múltiplas janelas/CDP: cerca de
+1997 MiB de working set e 8,49% de CPU da máquina em média na coorte observada;
+não aprova baixo consumo, GPU/FPS, jogos nem comparação com outras engines.
 Baseline funcional continua `3ef6d11`.
 
 **Credenciais Main-native:** a falha entre perfis foi corrigida com proprietário

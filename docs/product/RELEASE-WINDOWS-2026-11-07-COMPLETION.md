@@ -258,7 +258,7 @@ em 08/11 expirou em quatro segundos, `TaskCanceledException`: **BLOCKED**.
 Não foram usadas chaves privadas. Monitor desconectado, DPI alterado, jogos,
 hover/click-through, voz física e ensaio prolongado continuam NÃO EXECUTADOS.
 
-## Empacotamento privado (estado em andamento)
+## Empacotamento privado
 
 ### Verificações finais antes da cópia
 
@@ -319,6 +319,81 @@ da sessão, por identidade e parentesco conferidos, foi encerrado. Outputs
 provisórios preservados; não são instalador validado. Próxima execução exige
 Stage encerrado e novo build completo, sem dev concorrente.
 
+Na repetição estável o Stage foi gerado, mas o wrapper terminou em **FAIL**:
+exigia `LICENSE`, que o electron-builder renomeia para `LICENSE.electron.txt`.
+O verificador foi corrigido para o nome real e compara SHA-256 dos dois avisos
+com os originais do runtime; também confere `version` 43.4.1. Não se dispensou
+a verificação de integridade. `node --test
+airi/apps/lia-app/scripts/package-windows.test.mjs`: **2 PASS, exit 0**;
+lint dos dois scripts: exit 0. Revisão independente sem achados.
+
+Antes de continuar pela fase Launcher, os 1335 arquivos de `out/` do Stage
+(353440549 bytes) foram comparados por SHA-256 ao ASAR: todos iguais.
+Avisos e versão também conferidos, em
+`J:/lia-evidence/completion-stage-asar-build-match.json`. O Launcher foi
+empacotado com o mesmo comando documentado da segunda fase, sem refazer ou
+alterar o Stage já validado; primeira geração NSIS terminou em exit 0.
+
+O primeiro gate `node Tests/windows/completion-runtime.mjs --packaged`
+foi **FAIL**: conexão completa PASS, mas Stage recusado como ausente.
+Relatório `J:/lia-evidence/completion-resume-runtime-1794172112570/report.json`.
+A reprodução no Main do Electron confirmou que `fs.statSync(app.asar)`
+retorna um diretório virtual. O Main agora fornece o `statSync` do builtin
+`original-fs` ao resolver; mantém exigência de arquivo físico para os três
+componentes. O builtin fica externo no bundle, sem dependência baixada.
+Provas RED/GREEN reais em `completion-packaged-resolver-{red,green}.json`.
+Testes focados de resolução/ciclo de vida: **24 PASS**, typecheck, lint e build
+Launcher: **exit 0**. Uma primeira versão da tipagem do mock falhou no typecheck;
+a assinatura foi reduzida ao contrato realmente consumido e a repetição passou.
+Revisão independente sem achados. O pacote anterior foi preservado em
+`dist/windows-before-physical-fs-20261108/`, sem ser apresentado como aprovado.
+
+### Resultado final do pacote — 08/11, 18:19 -03
+
+**PASS geração privada por fases**, saída 0 da fase Launcher repetida após o
+build corrigido. Comando em `airi/apps/lia-app`:
+
+```powershell
+node ../stage-tamagotchi/node_modules/electron-builder/cli.js --config electron-builder.config.ts --config.electronDist=J:/Lia-Project/airi/apps/stage-tamagotchi/node_modules/electron/dist --win --x64 --publish never
+```
+
+Não se afirma uma execução única posterior do wrapper completo: o Stage da
+repetição estável foi preservado, validado e reutilizado. Logs e saída:
+`J:/lia-evidence/completion-private-launcher-package-fixed.{log,exit}`.
+Artefato `airi/apps/lia-app/dist/windows/LiaSetup-0.0.1-x64.exe`, 787752487 bytes,
+SHA-256 `22428a3d232f4002041ec482835eaeaf9761968d4d18d4414a01fbc2bb9fce57`.
+Authenticode: **NotSigned**. As mensagens do builder sobre signtool não são
+prova de assinatura. Ícone padrão ainda presente. Não publicar esse pacote.
+
+**PASS Windows dos executáveis empacotados**, sem Node/pnpm no caminho de
+inicialização do produto (o harness de QA usa Node/Playwright):
+
+```powershell
+node Tests/windows/completion-runtime.mjs --packaged
+node Tests/windows/completion-runtime.mjs --packaged --without-key --presence-more --benchmark
+```
+
+- Com credencial sintética: saída 0, `completion-resume-runtime-1794172658361`.
+- Sem chave e com segundo monitor/movimento/Home: saída 0,
+  `completion-resume-runtime-1794172733262`.
+
+Ambos os `report.json` estão em `J:/lia-evidence/<id>/`. Conexão completa,
+Stage visível, chat SSE visível, memória opt-in/opt-out na requisição,
+personalidade, Livre e restauração Tamagotchi passaram. Revisão visual do pacote
+aprovou Home/retrato e corpo inteiro Livre sem ciano, sem aprovar input nativo.
+Parada foi observada no supervisor; `lastExitCode: 1` corresponde ao término
+forçado da árvore pelo contrato Windows atual, **não** a saída natural/graciosa
+exit 0. Os 12 PIDs da coorte medida não existiam mais na verificação posterior.
+O host de QA tem ferramentas de desenvolvimento e Python instalados; a coorte
+incluiu serviços Python. A abertura dos executáveis não prova funcionamento
+num Windows sem essas dependências, que exige o gate de máquina limpa.
+
+**NÃO EXECUTADO:** instalação limpa, atualização, desinstalação e abertura de
+uma instalação feita pelo NSIS. Não há Windows Sandbox disponível via PATH;
+não foi alterada a instalação/perfil do usuário para simular uma máquina limpa.
+**BLOCKED:** nova consulta ao serviço informado em 08/11 às 18:16 -03 expirou
+em quatro segundos (`TaskCanceledException`); nenhuma chave privada foi usada.
+
 Distribuição pública bloqueada por licenças de produto/assets e gates de
 instalação/atualização. A flag interna não aprova distribuição pública.
 
@@ -331,9 +406,19 @@ auto-observação de cinco segundos em PowerShell 5.1 e 7. **Nenhum benchmark
 comparativo da Lia foi produzido; nenhuma engine foi migrada.** GPU CIM
 indisponível foi registrada como tal, nunca como consumo zero.
 
+Duas coletas exploratórias de 15 s foram preservadas, uma de desenvolvimento e
+outra do pacote. O pacote apresentou working set somado médio de 1997,5 MiB e
+CPU média de 8,49% da máquina na coorte observada, com múltiplas janelas/CDP e
+serviços filhos. Isso **não aprova baixo consumo** nem permite atribuir a carga
+ao Electron ou comparar engines. Métricas, método e limitações no §10–11 do
+estudo; GPU/FPS/frame time/impacto em jogos continuam NÃO EXECUTADOS.
+
 ## Preservação
 
-Core anteriormente rastreado intacto na retomada; presença é adição separada.
+Arquivos Core da retomada preservados; contratos de presença e canal de
+credenciais foram adicionados. No pacote legado, cofre e escrita de produto
+receberam APIs aditivas de rollback/clear com testes; não se afirma ausência
+de toda alteração nesse pacote.
 Relatórios locais de auditoria preservados (ignorados neste checkout):
 
 - `LIA-AGENT-CONSUMPTION-AUDIT.md` SHA-256
@@ -349,3 +434,13 @@ O aviso LF→CRLF é de política do checkout; não foi feita normalização em 
 Checklist vinculante ainda aberto no plano de conclusão. Esta rodada só poderá
 marcar os gates efetivamente executados; testes unitários, canvas criado,
 sinal ready e geração de pacote não equivalem a release funcional.
+
+- [x] Persistência transacional revisada, 91 testes focados e falhas de gravação.
+- [x] Configuração, ferramenta, conversa e memória/personalidade no Windows com fixture local.
+- [x] Gate de componentes Electron original em PowerShell 5.1 e 7.
+- [x] Pacote privado gerado e executáveis incluídos testados no Windows.
+- [x] Live2D Livre sem ciano, segundo monitor conectado, movimento, pausa e Home.
+- [ ] Serviço de IA externo autenticado, imagem + texto e voz física.
+- [ ] Tradução completa, credenciais legadas, privacidade/ferramentas/aparência completas.
+- [ ] Desconexão/DPI, hover/input, jogos e medições prolongadas/baixo consumo.
+- [ ] Licenças/assets, assinatura e instalação/atualização/desinstalação limpas.

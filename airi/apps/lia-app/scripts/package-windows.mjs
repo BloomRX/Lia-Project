@@ -1,6 +1,7 @@
 import process from 'node:process'
 
 import { spawnSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
@@ -70,9 +71,21 @@ export function stageConfiguration(inputs) {
   }
 }
 
-export function validatePackagedStage(stageOutput) {
-  for (const file of ['LiaStage.exe', 'resources/app.asar', 'icudtl.dat', 'LICENSE', 'LICENSES.chromium.html'])
+export function validatePackagedStage(stageOutput, electronDirectory) {
+  // electron-builder renames the official runtime notice while branding the exe.
+  for (const file of ['LiaStage.exe', 'resources/app.asar', 'icudtl.dat', 'LICENSE.electron.txt', 'LICENSES.chromium.html', 'version'])
     requireFile(join(stageOutput, file), 'Stage empacotado')
+  if (!electronDirectory)
+    throw new Error('Origem oficial do runtime obrigatória para validar o Stage.')
+  for (const [packaged, original] of [['LICENSE.electron.txt', 'LICENSE'], ['LICENSES.chromium.html', 'LICENSES.chromium.html']]) {
+    const source = join(electronDirectory, original)
+    requireFile(source, 'Licença oficial do runtime')
+    const digest = path => createHash('sha256').update(readFileSync(path)).digest('hex')
+    if (digest(join(stageOutput, packaged)) !== digest(source))
+      throw new Error(`Licença do runtime divergente: ${packaged}`)
+  }
+  if (readFileSync(join(stageOutput, 'version'), 'utf8').trim() !== ELECTRON_VERSION)
+    throw new Error('Versão do runtime empacotado divergente.')
   if (existsSync(join(stageOutput, 'resources/app-update.yml')))
     throw new Error('Stage contém um canal de atualização não autorizado. Revise a configuração antes de distribuir.')
 }
@@ -104,7 +117,7 @@ export function packageWindows({ checkOnly = false, unpacked = false, internalTe
     const config = join(temporary, 'stage.json')
     writeFileSync(config, JSON.stringify(stageConfiguration(inputs), null, 2))
     builder(inputs, inputs.stage, ['--config', config, '--win', '--x64', '--dir'])
-    validatePackagedStage(inputs.stageOutput)
+    validatePackagedStage(inputs.stageOutput, inputs.electron)
     builder(inputs, inputs.launcher, [
       '--config',
       join(inputs.launcher, 'electron-builder.config.ts'),

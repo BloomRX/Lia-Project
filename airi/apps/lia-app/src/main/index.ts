@@ -6,6 +6,7 @@ import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { app, BrowserWindow, dialog, safeStorage } from 'electron'
+import { statSync as physicalStatSync } from 'original-fs'
 
 import { createLiaDevflowAutorun } from './devflow-autorun'
 import { createLiaEventPublisher } from './event-publisher'
@@ -85,7 +86,8 @@ async function bootstrap(): Promise<void> {
   const host = createLiaHost({
     enableCredentialOwner: true,
     launcherChromiumProfile: chromiumProfile,
-    packagedStage: app.isPackaged ? () => resolvePackagedStage(process.resourcesPath) : undefined,
+    // Electron's patched fs presents an app.asar archive as a directory.
+    packagedStage: app.isPackaged ? () => resolvePackagedStage(process.resourcesPath, physicalStatSync) : undefined,
     cipher: {
       available: () => safeStorage.isEncryptionAvailable(),
       decrypt: payload => safeStorage.decryptString(payload),

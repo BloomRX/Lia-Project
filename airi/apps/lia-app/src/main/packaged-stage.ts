@@ -10,7 +10,10 @@ export interface PackagedStageInvocation {
 }
 
 /** Fixed installation resource, never an executable supplied by the renderer. */
-export function resolvePackagedStage(resourcesPath: string): PackagedStageInvocation {
+export function resolvePackagedStage(
+  resourcesPath: string,
+  physicalStat: (path: string) => { isFile: () => boolean } = statSync,
+): PackagedStageInvocation {
   if (!isAbsolute(resourcesPath))
     throw new Error('Não foi possível localizar a instalação da Lia. Reinstale o aplicativo.')
 
@@ -18,7 +21,7 @@ export function resolvePackagedStage(resourcesPath: string): PackagedStageInvoca
   const command = join(cwd, PACKAGED_STAGE_EXECUTABLE)
   for (const file of [command, join(cwd, 'resources', 'app.asar'), join(cwd, 'icudtl.dat')]) {
     try {
-      if (!statSync(file).isFile())
+      if (!physicalStat(file).isFile())
         throw new Error('not a file')
     }
     catch {

@@ -1,8 +1,8 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { resolvePackagedStage } from './packaged-stage'
 
@@ -24,6 +24,14 @@ function installation() {
 }
 
 describe('packaged Stage installation contract', () => {
+  it('uses the physical filesystem supplied by Electron Main to inspect the ASAR archive', () => {
+    const { resources, stage } = installation()
+    const physicalStat = vi.fn((path: string) => statSync(path))
+    expect(resolvePackagedStage(resources, physicalStat).command).toBe(join(stage, 'LiaStage.exe'))
+    expect(physicalStat).toHaveBeenCalledWith(join(stage, 'resources', 'app.asar'))
+    expect(physicalStat).toHaveBeenCalledTimes(3)
+  })
+
   it('resolves a real installation outside the repository without Node, pnpm or a shell', () => {
     const { resources, stage } = installation()
     expect(resolvePackagedStage(resources)).toEqual({
