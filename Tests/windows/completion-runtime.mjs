@@ -17,8 +17,22 @@ await mkdir(`${root}/captures`, { recursive: true })
 const secret = randomUUID()
 const keyless = process.argv.includes('--without-key')
 const packaged = process.argv.includes('--packaged')
+const performance = process.argv.includes('--performance')
+const soakArgument = process.argv.find(value => value.startsWith('--soak-seconds='))
+const soakSeconds = soakArgument ? Number(soakArgument.split('=')[1]) : 0
+if (!Number.isInteger(soakSeconds) || soakSeconds < 0 || soakSeconds > 86400)
+  throw new Error('Invalid soak duration')
 const facts = { root, execution: packaged ? 'packaged-private' : 'development', authentication: keyless ? 'explicit-keyless-local-service' : 'synthetic-bearer-key', steps: [], requests: [], errors: [] }
 let app, browser
+async function collectPerformance(label, duration = 15, stagePid) {
+  const roots = [app.process().pid, stagePid].filter(value => value !== undefined)
+  if (roots.some(pid => !Number.isSafeInteger(pid) || pid < 1)) throw new Error('Invalid owned PID')
+  const command = `$snapshot=@(Get-CimInstance Win32_Process); $roots=@(${roots.join(',')}); $owned=@($snapshot | Where-Object { $roots -contains $_.ProcessId }); do { $new=@($snapshot | Where-Object { $child=$_; $owned.ProcessId -notcontains $child.ProcessId -and @($owned | Where-Object { $_.ProcessId -eq $child.ParentProcessId -and $_.CreationDate -le $child.CreationDate }).Count -gt 0 }); $owned+= $new } while($new.Count); $ids=@($owned.ProcessId); & ${quotePowerShell(resolve(repositoryRoot, 'tools/desktop-benchmark/collect-windows.ps1'))} -ProcessId $ids -DurationSeconds ${duration} -IntervalSeconds 5 -IncludePrivateWorkingSet -IncludeGpu -ScenarioLabel ${label} -OutputRoot ${quotePowerShell(evidenceRoot)}`
+  const result = await promisify(execFile)('powershell.exe', ['-NoProfile', '-Command', command], { windowsHide: true, maxBuffer: 1024 * 1024 })
+  facts.performance ??= []
+  facts.performance.push({ label, durationSeconds: duration, output: result.stdout.trim(), roots })
+  await writeFile(`${root}/progress.json`, JSON.stringify({ execution: facts.execution, performance: facts.performance, steps: facts.steps }, null, 2))
+}
 const service = createServer(async (req, res) => {
   try {
     let raw = ''; for await (const chunk of req) raw += chunk
@@ -48,6 +62,7 @@ try {
   const page = await app.firstWindow()
   await page.getByRole('heading', { name: 'Lia', exact: true }).waitFor()
   await page.screenshot({ path: `${root}/captures/01-home.png` })
+  if (performance) await collectPerformance('beta-launcher-stage-closed')
   await page.getByRole('button', { name: 'Somente texto', exact: true }).click()
   await page.getByRole('button', { name: /IA & Recursos/ }).click()
   await page.getByLabel('Endereço do serviço', { exact: true }).fill(`http://127.0.0.1:${service.address().port}/v1`)
@@ -106,6 +121,7 @@ try {
   })
   facts.steps.push('PASS real Stage renderer canvas and loading finished; visual review required')
   facts.stagePid = facts.stageState.pid
+  if (performance) await collectPerformance('beta-stage-stationary-animated', 15, facts.stagePid)
   // Only observable UI and public read-only status; no store mutation.
   facts.buttons = await stage.getByRole('button').evaluateAll(nodes => nodes.map(n => ({ text: n.textContent, label: n.getAttribute('aria-label'), title: n.title })))
   await stage.getByLabel(/^(Open Chat|Abrir conversa|Abrir chat)$/).click()
@@ -227,6 +243,8 @@ try {
     const result = await promisify(execFile)('powershell.exe', ['-NoProfile', '-Command', command], { windowsHide: true, maxBuffer: 1024 * 1024 })
     facts.benchmark = { output: result.stdout.trim(), scope: `Stage ${packaged ? 'packaged' : 'development'} process and currently observed descendants, parent creation time checked; CDP active; no engine comparison or FPS measurement` }
   }
+  if (performance) await collectPerformance('beta-text-after-presence-and-chat', 15, facts.stagePid)
+  if (soakSeconds) await collectPerformance('beta-continuous-ui-local-fixture', soakSeconds, facts.stagePid)
   await page.getByRole('button', { name: /Encerrar conversa/ }).click()
   await page.getByText('Conversa encerrada', { exact: false }).waitFor({ timeout: 30000 })
   facts.stopped = await page.evaluate(async () => { const { phase, pid, lastExitCode } = await window.liaApi.stageState(); return { phase, pid, lastExitCode } })

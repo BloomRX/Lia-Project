@@ -4,6 +4,11 @@ Retomada em 07/11/2026 sobre `40326d7`, branch `arena/01a10290-lia-project`.
 Baseline funcional preservado: `3ef6d11`. Este documento organiza a missão;
 não aprova release, segurança global nem serviço externo.
 
+Continuação beta de 08/11: [gates, correções e dependências atuais](../product/LIA-BETA-READINESS-2026-11-08.md).
+A auditoria classificou famílias legadas alcançáveis de credenciais, ainda não
+migradas integralmente; são P0 antes de beta. Baseline de uma hora disponível,
+sem aprovar baixo consumo. Instalação limpa e direitos de assets continuam abertos.
+
 ## Inventário da execução interrompida
 
 O preflight encontrou 19 arquivos rastreados modificados, mais novos arquivos

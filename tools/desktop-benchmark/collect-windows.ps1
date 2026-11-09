@@ -12,7 +12,8 @@ param(
     [ValidatePattern('\A[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}\z')]
     [string] $ScenarioLabel,
     [string] $OutputRoot = 'J:\lia-evidence',
-    [switch] $IncludeGpu
+    [switch] $IncludeGpu,
+    [switch] $IncludePrivateWorkingSet
 )
 
 Set-StrictMode -Version Latest
@@ -68,6 +69,7 @@ function Read-Target([int] $TargetId) {
             name = $process.ProcessName; startTimeUtc = $started.ToString('o')
             startTicks = $identity; cpuSeconds = $process.TotalProcessorTime.TotalSeconds
             workingSetBytes = $process.WorkingSet64; privateBytes = $process.PrivateMemorySize64
+            threadCount = $process.Threads.Count
         }
         $process.Refresh()
         if ($process.HasExited -or $process.StartTime.ToUniversalTime().Ticks -ne $identity) {
@@ -112,6 +114,16 @@ $null = New-Item -ItemType Directory -Path $runDirectory
 $baselines = @{}
 $previous = @{}
 $initial = @()
+$processRoles = @{}
+try {
+    foreach ($item in @(Get-CimInstance Win32_Process -OperationTimeoutSec 2 -ErrorAction Stop)) {
+        if ($targetIds -notcontains [int] $item.ProcessId) { continue }
+        $role = 'main_or_auxiliary'
+        if ($item.CommandLine -match '(?:^|\s)--type=([a-zA-Z0-9_-]+)(?:\s|$)') { $role = $Matches[1] }
+        $processRoles[[string] $item.ProcessId] = @{ role = $role; parentPid = [int] $item.ParentProcessId }
+    }
+}
+catch { } # Role metadata is optional; never capture raw command lines.
 foreach ($targetId in $targetIds) {
     $reading = Read-Target $targetId
     $baselines[$targetId] = $reading
@@ -124,7 +136,9 @@ Write-NewJson (Join-Path $runDirectory 'metadata.json') ([ordered]@{
     durationSeconds = $DurationSeconds; intervalSeconds = $IntervalSeconds
     logicalProcessors = $logicalProcessors; collectorPid = $PID
     powershellVersion = $PSVersionTable.PSVersion.ToString(); osVersion = [Environment]::OSVersion.VersionString
-    gpuRequested = [bool] $IncludeGpu; initialProcesses = $initial
+    gpuRequested = [bool] $IncludeGpu; privateWorkingSetRequested = [bool] $IncludePrivateWorkingSet; initialProcesses = $initial
+    processRoles = $processRoles
+    privateWorkingSetIdentityLimit = 'PID counters are sampled before the live identity check; counter caching can still lag a process lifetime.'
     gpuIdentityLimit = 'Counters encode PID only; live identity is rechecked, but stale driver counters cannot be assigned to a process lifetime with certainty.'
     fps = $unmeasured; frameTime = $unmeasured; gameImpact = $unmeasured; systemPower = $unmeasured
 })
@@ -138,6 +152,18 @@ try {
         $sampleStarted = $clock.Elapsed.TotalSeconds
         $processRows = @()
         $validIds = @()
+        $privateWorkingSets = @{}
+        $privateWorkingSetReason = 'not_requested'
+        if ($IncludePrivateWorkingSet) {
+            try {
+                $filter = @($targetIds | ForEach-Object { "IDProcess = $_" }) -join ' OR '
+                foreach ($counter in @(Get-CimInstance Win32_PerfFormattedData_PerfProc_Process -Filter $filter -OperationTimeoutSec 2 -ErrorAction Stop)) {
+                    $privateWorkingSets[[int] $counter.IDProcess] = [long] $counter.WorkingSetPrivate
+                }
+                $privateWorkingSetReason = 'no_matching_counter'
+            }
+            catch { $privateWorkingSetReason = 'counter_query_failed:' + $_.Exception.GetType().Name }
+        }
         foreach ($targetId in $targetIds) {
             $current = Read-Target $targetId
             $observedAt = $clock.Elapsed.TotalSeconds
@@ -165,6 +191,10 @@ try {
                     pid = $targetId; startTimeUtc = $current.startTimeUtc; status = 'available'; reason = $null
                     observedAtSeconds = $observedAt; workingSetBytes = $current.workingSetBytes
                     privateBytes = $current.privateBytes; cpu = $cpu
+                    threadCount = $current.threadCount
+                    privateWorkingSet = $(if ($privateWorkingSets.ContainsKey($targetId)) {
+                        @{ status = 'available'; bytes = $privateWorkingSets[$targetId]; reason = $null }
+                    } else { @{ status = 'unavailable'; bytes = $null; reason = $privateWorkingSetReason } })
                 }
             }
             else {

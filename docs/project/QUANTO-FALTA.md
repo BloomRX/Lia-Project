@@ -11,6 +11,15 @@ Fonte: [`CURRENT-STATE.md`](CURRENT-STATE.md) §0 e §5, medido em
 
 ## Onde o projeto está
 
+08/11 à noite — **Beta ainda bloqueada.** Cofre e logs corrigidos, editor chat
+nativo/aliases sem retornar chave e suporte sem chave preservado, shell/config
+pt/en e lifetime da sombra revisados. Uma hora do pacote anterior foi medida;
+GPU/PWS disponíveis, desempenho do pacote novo ainda pendente. Credenciais
+legadas continuam classificadas e abertas, sem alegação de fechamento global.
+[Relatório beta](../product/LIA-BETA-READINESS-2026-11-08.md),
+[consumidores](../architecture/LIA-BETA-CREDENTIAL-AUDIT-2026-11-08.md) e
+[medições](../architecture/LIA-BETA-PERFORMANCE-2026-11-08.md).
+
 08/11 — **Retomada integrada:** Launcher → Stage → conversa passou com HTTP
 local sintético, tanto sem chave quanto com credencial sintética entre perfis.
 Memória opt-in/opt-out e contexto de personalidade chegaram à requisição Main.

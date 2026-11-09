@@ -24,6 +24,22 @@ Não alterar política de execução do sistema para usar o coletor. Rodar no Po
 
 ## Arquivos e unidades
 
+Atualização beta de 08/11: `-IncludePrivateWorkingSet` consulta o contador
+Windows `WorkingSetPrivate` por PID; resultado ausente tem status/motivo e não
+vira zero. `threadCount` registra threads observadas. `processRoles` identifica
+o tipo Chromium e pai pelo snapshot inicial; não guarda linhas de comando.
+`main_or_auxiliary` é ambíguo, não confirmação de Main. Identidade/StartTime
+continua sendo conferida nas amostras; contadores por PID podem ter cache.
+O parâmetro é independente de `-IncludeGpu`; nenhum deles fornece FPS.
+
+O roteiro `Tests/windows/completion-runtime.mjs --packaged --without-key
+--performance --soak-seconds=3600` mede Launcher sem Stage, Stage parado
+animado, após chat/presença e uma hora contínua. Esse wrapper inclui as raízes
+Launcher e Stage e descendentes observados com criação compatível, mas a
+coorte fica fixa. Não modifica stores para criar estados fictícios. As
+[métricas da baseline](../../docs/architecture/LIA-BETA-PERFORMANCE-2026-11-08.md)
+distinguem contaminação por testes, ausência de métricas e encerramento.
+
 - `metadata.json`: versão do esquema, PowerShell/Windows, PIDs solicitados, identidades iniciais, intervalo, duração e número de processadores lógicos reportado pelo runtime. Sem `CommandLine`, argumentos do processo, ambiente, títulos de janelas ou credenciais.
 - `samples.jsonl`: uma linha JSON por amostra, com tempos de início/fim, CPU e memória por PID, mais contadores GPU opcionais. É gravado e descarregado durante a execução.
 - `summary.json`: estado da coleta, quantidade de amostras e duração realmente decorrida. Criado no encerramento normal ou no `finally` de falha tratável. Encerramento forçado do host pode deixar a pasta parcial sem resumo.

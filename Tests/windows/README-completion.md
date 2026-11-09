@@ -47,6 +47,15 @@ recuperação por desconexão.
 desenvolvimento ou pacote, conferindo criação do pai e com CDP ativo; não mede FPS/GPU/impacto em jogos nem compara
 engines. O relatório indica falha com código de saída diferente de zero.
 
+`--performance` coleta cenários de 15 s com Launcher+Stage e contadores de
+Private Working Set/GPU/threads por PID. `--soak-seconds=3600` acrescenta uma
+hora contínua depois do fluxo; grava `progress.json` fora do Git durante a
+execução e `report.json` ao concluir. Não executar testes/builds no host durante
+medição controlada; a baseline inicial registrou essa contaminação explicitamente.
+Personagem parada/animada não é personagem estática sem animação. Oculto,
+pausado, voz e jogo não são aprovados por esses rótulos. FPS/frame time não
+estão instrumentados por esse coletor.
+
 Não copie perfis, logs brutos ou credenciais para o Git. A evidência resumida
 e as limitações da rodada estão em
 `docs/product/RELEASE-WINDOWS-2026-11-07-COMPLETION.md`.
