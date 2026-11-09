@@ -16,9 +16,13 @@ async function handleLogin() {
 }
 
 async function handleLogout() {
-  await signOut()
-  await logout()
-  router.push('/settings')
+  try {
+    await logout()
+  }
+  finally {
+    await signOut()
+    await router.push('/settings')
+  }
 }
 </script>
 

@@ -13,6 +13,7 @@ import { shell } from 'electron'
 import {
   electronAuthCallback,
   electronAuthCallbackError,
+  electronAuthCancelled,
   electronAuthLogout,
   electronAuthStartLogin,
 } from '../../../shared/eventa'
@@ -30,9 +31,32 @@ const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'https://api.airi.build'
 const OIDC_AUTHORIZE_PATH = '/api/auth/oauth2/authorize'
 const OIDC_TOKEN_PATH = '/api/auth/oauth2/token'
 
-// Active loopback server cleanup handle
-let closeLoopback: (() => void) | null = null
-let signingInFlight = false
+interface LoginAttempt {
+  windowId: number
+  controller: AbortController
+  notifyCancelled: () => void
+  closeLoopback?: () => void
+}
+
+let activeLogin: LoginAttempt | undefined
+
+function cancelLogin(notify = false) {
+  const attempt = activeLogin
+  if (!attempt)
+    return
+
+  activeLogin = undefined
+  attempt.controller.abort()
+  attempt.closeLoopback?.()
+  if (notify)
+    attempt.notifyCancelled()
+}
+
+class TokenExchangeRejected extends Error {
+  constructor(readonly status: number) {
+    super(signInFailure)
+  }
+}
 
 /**
  * Create the auth service IPC handlers for a given window context.
@@ -41,31 +65,69 @@ export function createAuthService(params: {
   context: MainContext
   window: BrowserWindow
 }): void {
+  const windowId = params.window.webContents.id
+
+  async function publish(phase: string, emit: () => unknown) {
+    try {
+      if (!params.window.isDestroyed())
+        await emit()
+    }
+    catch {
+      log.withFields({ phase }).error('OIDC event delivery failed')
+    }
+  }
+
+  params.window.once('closed', () => {
+    if (activeLogin?.windowId === windowId)
+      cancelLogin()
+  })
+
   defineInvokeHandler(params.context, electronAuthStartLogin, async (_, options) => {
-    if (params.window.webContents.id !== options?.raw.ipcMainEvent.sender.id) {
+    if (windowId !== options?.raw.ipcMainEvent.sender.id) {
       return
     }
 
-    if (signingInFlight) {
-      log.withFields({ windowId: params.window.webContents.id }).warn('Replacing in-flight OIDC login attempt with a new request')
-      closeLoopback?.()
-      closeLoopback = null
-      signingInFlight = false
+    cancelLogin(activeLogin?.windowId !== windowId)
+    const attempt: LoginAttempt = {
+      windowId,
+      controller: new AbortController(),
+      notifyCancelled: () => { void publish('cancelled', () => params.context.emit(electronAuthCancelled, undefined)) },
+    }
+    activeLogin = attempt
+    const { signal } = attempt.controller
+
+    function finish() {
+      if (activeLogin === attempt) {
+        activeLogin = undefined
+        attempt.closeLoopback?.()
+      }
     }
 
-    signingInFlight = true
+    async function reportFailure(phase: string, error: unknown) {
+      if (signal.aborted)
+        return
 
+      const status = error instanceof TokenExchangeRejected ? error.status : undefined
+      log.withFields({ phase, status }).error(signInFailure)
+      await publish('failure', () => params.context.emit(electronAuthCallbackError, { error: signInFailure }))
+    }
+
+    let phase = 'pkce'
     try {
-      // Clean up any previous in-flight login
-      closeLoopback?.()
-
       const codeVerifier = generateCodeVerifier()
       const codeChallenge = await generateCodeChallenge(codeVerifier)
+      signal.throwIfAborted()
       const state = generateState()
 
-      // Start loopback server to receive the callback
+      phase = 'loopback'
       const loopback = await startLoopbackServer(state)
-      closeLoopback = loopback.close
+      // Cancellation or callback rejection can occur while openExternal is pending.
+      void loopback.result.catch(() => {})
+      attempt.closeLoopback = loopback.close
+      if (signal.aborted) {
+        loopback.close()
+        return
+      }
 
       // Use the server-side relay as redirect_uri. The relay page serves HTML
       // that forwards the authorization code to the loopback via JS fetch().
@@ -88,41 +150,34 @@ export function createAuthService(params: {
       url.searchParams.set('prompt', 'login')
       url.searchParams.set('resource', SERVER_URL)
 
-      // Open system browser
+      phase = 'browser'
       await shell.openExternal(url.toString())
+      signal.throwIfAborted()
 
-      // Wait for the callback in the background
-      loopback.result
+      phase = 'callback'
+      void loopback.result
         .then(async ({ code }) => {
-          const tokens = await exchangeCode(code, codeVerifier, redirectUri)
-          params.context.emit(electronAuthCallback, tokens)
-          log.log('OIDC token exchange successful')
+          signal.throwIfAborted()
+          phase = 'exchange'
+          const tokens = await exchangeCode(code, codeVerifier, redirectUri, signal)
+          signal.throwIfAborted()
+          await publish('success', () => params.context.emit(electronAuthCallback, tokens))
         })
-        .catch(() => {
-          log.error(signInFailure)
-          params.context.emit(electronAuthCallbackError, { error: signInFailure })
-        })
-        .finally(() => {
-          closeLoopback = null
-          signingInFlight = false
-        })
+        .catch(error => reportFailure(phase, error))
+        .finally(finish)
     }
-    catch {
-      closeLoopback = null
-      signingInFlight = false
-      log.error('Failed to start OIDC signing in flow')
-      params.context.emit(electronAuthCallbackError, { error: signInFailure })
+    catch (error) {
+      finish()
+      await reportFailure(phase, error)
     }
   })
 
   defineInvokeHandler(params.context, electronAuthLogout, async (_, options) => {
-    if (params.window.webContents.id !== options?.raw.ipcMainEvent.sender.id) {
+    if (windowId !== options?.raw.ipcMainEvent.sender.id) {
       return
     }
 
-    closeLoopback?.()
-    closeLoopback = null
-    signingInFlight = false
+    cancelLogin(true)
   })
 }
 
@@ -135,7 +190,7 @@ interface TokenExchangeResult {
   expiresIn: number
 }
 
-async function exchangeCode(code: string, codeVerifier: string, redirectUri: string): Promise<TokenExchangeResult> {
+async function exchangeCode(code: string, codeVerifier: string, redirectUri: string, signal: AbortSignal): Promise<TokenExchangeResult> {
   const body = new URLSearchParams({
     grant_type: 'authorization_code',
     code,
@@ -149,11 +204,14 @@ async function exchangeCode(code: string, codeVerifier: string, redirectUri: str
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body,
+    redirect: 'error',
+    signal,
   })
 
-  if (!response.ok) {
+  if (signal.aborted || !response.ok) {
     void response.body?.cancel().catch(() => {})
-    throw new Error(signInFailure)
+    signal.throwIfAborted()
+    throw new TokenExchangeRejected(response.status)
   }
 
   const data = await response.json() as Record<string, unknown>

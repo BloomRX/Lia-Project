@@ -9,6 +9,7 @@ import { useI18n } from 'vue-i18n'
 import {
   electronAuthCallback,
   electronAuthCallbackError,
+  electronAuthCancelled,
   electronAuthStartLogin,
   electronOpenSettings,
 } from '../../../../shared/eventa'
@@ -51,6 +52,9 @@ context.value.on(electronAuthCallback, () => {
   signingIn.value = false
 })
 context.value.on(electronAuthCallbackError, () => {
+  signingIn.value = false
+})
+context.value.on(electronAuthCancelled, () => {
   signingIn.value = false
 })
 
