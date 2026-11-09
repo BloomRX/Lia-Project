@@ -19,6 +19,24 @@ Fontes locais consultadas: `airi/LICENSE`; `airi/packages/stage-ui-spine/LICENSE
 
 Este documento **não substitui os textos integrais de copyright/licença** que devem acompanhar a distribuição. O empacotamento de notices, runtime Electron/Chromium, arquivos unpacked e instalador precisa de gate separado. Modelos VRM, Hero PNG e animações continuam pendentes. Não houve remoção de assets/dependências nem aprovação da licença do produto Lia.
 
+## Conferência do pacote medido na rodada beta
+
+O Launcher declara dois nomes de dependências diretas ou opcionais no
+manifesto empacotado e ambos têm correspondência física. O Stage declara 112,
+com 110 correspondências físicas e 665 outros nomes em manifestos do ASAR.
+Esses números descrevem presença física, não o grafo de execução. Os nomes
+restantes incluem dependências indiretas, cópias vendadas e materiais de
+desenvolvimento. O inventário por manifesto preserva os 1039 registros Stage
+com versão, expressão declarada e aviso adjacente quando localizado.
+
+O runtime Electron 43.4.1 e os avisos Chromium do Stage passaram na validação
+do wrapper por versão e hash. Classificação do material coberto pelo aviso
+Electron MIT é **permitido com atribuição**. A lista física de executáveis e
+DLLs externos está no inventário. Obrigações de bibliotecas Chromium, binários
+unpacked, WASM, runtimes de instalação e redistribuição completa continuam
+**não verificadas** no nível de cada componente.
+[Inventário do pacote medido](PACKAGED-INVENTORY-BETA-2026-11-08.json).
+
 ## Histórico M0-A — 07/09/2026
 
 O registro original descrevia somente documentação e prometia ampliar a lista quando componentes entrassem. Esse estado foi superado pelo inventário físico de 08/11/2026; a antiga descrição “Runtime/base do produto Lia” também não representa a decisão arquitetural atual. Preservado aqui como histórico. Não registrar segredos ou informações privadas neste documento.

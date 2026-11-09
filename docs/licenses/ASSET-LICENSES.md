@@ -19,6 +19,25 @@ O aviso local `CubismSdkForWeb-5-r.3/Core/LICENSE.md` aponta licença proprietá
 
 Reproduzir: `node tools/release/inventory-packaged-licenses.mjs`. [Resumo versionado](PACKAGED-INVENTORY-2026-11-08.json) contém hashes e contagens; a evidência detalhada fica fora do Git. O inventário lê apenas manifestos; esta revisão adicional leu avisos locais indicados. Conteúdo de modelos não foi analisado. Runtime, arquivos externos aos ASAR e instalador exigem revisão separada.
 
+## Pacote da comparação beta
+
+O inventário do layout `win-unpacked` medido registra hashes dos arquivos,
+formatos e manifestos. O hash do NSIS associado identifica o instalador, que
+fica fora desta inspeção de conteúdo. No Stage há quatro entradas VRM que correspondem a dois modelos
+em caminhos duplicados, duas amostras GLB de `stats-gl`, dois pesos ONNX de
+VAD, 50 imagens por extensão, 3412 fontes e 42 binários ou WASM por extensão.
+No Launcher foi encontrado o Hero PNG. A busca por extensões de áudio e
+animação não localizou arquivos soltos nessas categorias. Conteúdo incorporado
+em bundles, modelos ou downloads externos fica fora dessa contagem.
+[Inventário do pacote medido](PACKAGED-INVENTORY-BETA-2026-11-08.json).
+
+| Item | Classificação e evidência |
+| --- | --- |
+| AvatarSample A/B | **Permitido com condições específicas**, por correspondência de nome, autor e metadados embutidos com os modelos de exemplo publicados pela pixiv. As condições vedam repassar os arquivos por cobrança, aplicar CC0 ou insinuar endosso. A situação comercial do pacote final precisa ser conferida antes de publicar. [Condições oficiais dos modelos](https://vroid.pixiv.help/hc/en-us/articles/4402394424089-VRoidPreset-A-Z) |
+| `silero_vad_legacy.onnx` e `silero_vad_v5.onnx` | **Não verificado** para os bytes exatos. SHA-256 e caminhos registrados. O projeto upstream declara MIT e o mantenedor confirma MIT para outro peso identificado por revisão. Falta vincular cada binário empacotado à sua revisão e ao aviso correspondente. [Licença upstream](https://github.com/snakers4/silero-vad/blob/master/LICENSE) · [Resposta do mantenedor](https://github.com/snakers4/silero-vad/discussions/817) |
+| `Flamingo.glb` e `LittlestTokyo.glb` | **Não verificado**. Presentes na dependência física e identificados por hash. Falta licença e origem de cada modelo e textura. |
+| Texturas, ícones, animações, áudio e Hero | **Não verificado** ou **autorização necessária** quando identificada na tabela anterior. A contagem por extensão não resolve direitos de dados incorporados, assets gerados e elementos de terceiros. |
+
 ## Histórico M0-A — 07/09/2026
 
 O registro original dizia “nenhum asset/modelo [...] foi adicionado/embutido ainda”. Preservado como histórico; **não descreve o pacote privado de 08/11/2026**. Não registrar segredos ou informações privadas neste documento.
