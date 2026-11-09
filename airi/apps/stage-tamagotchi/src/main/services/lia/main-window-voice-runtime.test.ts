@@ -26,6 +26,7 @@ const h = vi.hoisted(() => {
     latchArgs: [] as Array<{ managedLaunch: boolean }>,
     kokoroFactoryCalls: 0,
     preferred: undefined as string | undefined,
+    voiceEnabled: undefined as boolean | undefined,
     prewarmArgs: [] as Array<{ engineIds: string[], managedLaunch: boolean }>,
     seamLogs: [] as string[],
   }
@@ -92,7 +93,7 @@ vi.mock('./lia-managed', () => ({
 
 const fakeWindow = { webContents: { send: () => undefined } } as never
 const fakeProductConfig = {
-  get: () => ({ voice: { ...(h.preferred ? { engine: { preferred: h.preferred } } : {}), runtime: {} } }),
+  get: () => ({ voice: { ...(h.preferred ? { engine: { preferred: h.preferred } } : {}), ...(h.voiceEnabled === undefined ? {} : { enabled: h.voiceEnabled }), runtime: {} } }),
   update: () => undefined,
 } as never
 const fakeStore = {} as never
@@ -105,6 +106,7 @@ describe('7.9E.4 - voice runtime registers at the window-creation seam (order, e
     h.kokoroFactoryCalls = 0
     h.isManaged = true
     h.preferred = undefined
+    h.voiceEnabled = undefined
     h.seamLogs.length = 0
   })
 
@@ -119,6 +121,14 @@ describe('7.9E.4 - voice runtime registers at the window-creation seam (order, e
     expect(h.kokoroFactoryCalls).toBe(1)
     expect(h.prewarmArgs).toEqual([{ engineIds: ['kokoro'], managedLaunch: true }])
     expect(h.latchArgs).toEqual([{ managedLaunch: true }])
+  })
+
+  it('does not warm a voice worker for an explicit text-only launch, while keeping bridges and the lazy engine registered', () => {
+    h.voiceEnabled = false
+    startLiaMainWindowVoiceRuntime({ liaProductConfig: fakeProductConfig, liaVoiceProfiles: fakeStore, window: fakeWindow })
+    expect(h.prewarmArgs).toEqual([{ engineIds: [], managedLaunch: true }])
+    expect(h.kokoroFactoryCalls).toBe(1)
+    expect(h.calls).toEqual(['context', 'kokoro-engine', 'voice-bridge', 'capabilities-bridge', 'prewarm', 'greeting-latch'])
   })
 
   it('standalone launch: handlers still register (renderer contract unchanged), prewarm stays OFF', () => {

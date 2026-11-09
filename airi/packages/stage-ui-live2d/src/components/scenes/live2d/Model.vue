@@ -527,7 +527,6 @@ async function setMotion(motionName: string, index?: number) {
 }
 
 const dropShadowColorComputer = ref<HTMLDivElement>()
-const dropShadowAnimationId = ref(0)
 
 function updateDropShadowFilter() {
   if (!model.value)
@@ -554,26 +553,28 @@ watch([model, themeColorsHue], updateDropShadowFilter)
 watch(() => props.neutralShadow, updateDropShadowFilter)
 watch(live2dShadowEnabled, updateDropShadowFilter)
 
-// TODO: This is hacky!
-function updateDropShadowFilterLoop() {
-  updateDropShadowFilter()
-  if (!live2dShadowEnabled.value) {
-    dropShadowAnimationId.value = 0
+watch([themeColorsHueDynamic, live2dShadowEnabled, paused], ([dynamic, shadowEnabled, isPaused], _, onCleanup) => {
+  if (!dynamic || !shadowEnabled || isPaused)
     return
+
+  let active = true
+  let animationId: number
+
+  function updateDropShadowFilterLoop() {
+    // A cancelled callback from a previous run must never restart its loop.
+    if (!active)
+      return
+    updateDropShadowFilter()
+    animationId = requestAnimationFrame(updateDropShadowFilterLoop)
   }
 
-  dropShadowAnimationId.value = requestAnimationFrame(updateDropShadowFilterLoop)
-}
-
-watch([themeColorsHueDynamic, live2dShadowEnabled], ([dynamic, shadowEnabled]) => {
-  if (dynamic && shadowEnabled) {
-    dropShadowAnimationId.value = requestAnimationFrame(updateDropShadowFilterLoop)
-  }
-  else {
-    cancelAnimationFrame(dropShadowAnimationId.value)
-    dropShadowAnimationId.value = 0
-  }
-}, { immediate: true })
+  animationId = requestAnimationFrame(updateDropShadowFilterLoop)
+  // Vue also runs this cleanup when the component unmounts.
+  onCleanup(() => {
+    active = false
+    cancelAnimationFrame(animationId)
+  })
+}, { immediate: true, flush: 'sync' })
 
 watch(currentMotion, value => setMotion(value.group, value.index))
 watch(paused, value => value ? pixiApp.value?.stop() : pixiApp.value?.start())

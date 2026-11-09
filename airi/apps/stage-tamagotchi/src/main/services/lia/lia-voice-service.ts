@@ -107,8 +107,8 @@ export function registerLiaVoiceBridge(params: LiaVoiceServiceParams) {
   // Phase 7.9H-B1: the ONE central speech-output gate. Absent/true means
   // enabled (the product default); only an explicit `voice.enabled: false`
   // opts the user out. Opting out silences spoken output WITHOUT touching
-  // runtime management: engines stay installed/registered (prewarm keeps
-  // running), text stays fully available, Stage launch never fails, and a
+  // runtime installation: engines stay installed/registered, explicit text-only
+  // startup skips prewarm, text stays fully available, Stage launch never fails, and a
   // later re-enable resumes the existing engine path with zero reinstall.
   const voiceEnabled = () => readVoiceEnabledConfig(liaProductConfig.get()?.voice)
 
