@@ -24,6 +24,13 @@ Não alterar política de execução do sistema para usar o coletor. Rodar no Po
 
 ## Arquivos e unidades
 
+Para agregar uma coleta encerrada, execute `node
+tools/desktop-benchmark/summarize.mjs <diretório-do-artefato>`. O resumo separa
+o último instante observado da duração efetiva em `summary.json`. Coletas
+parciais ficam sem status de conclusão. As médias excluem valores ausentes
+por campo e preservam zero válido. Cada total exige observações válidas de
+toda a coorte. GPU é registrada por instância e memória por PID.
+
 Atualização beta de 08/11: `-IncludePrivateWorkingSet` consulta o contador
 Windows `WorkingSetPrivate` por PID; resultado ausente tem status/motivo e não
 vira zero. `threadCount` registra threads observadas. `processRoles` identifica

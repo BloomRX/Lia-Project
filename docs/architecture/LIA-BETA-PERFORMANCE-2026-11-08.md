@@ -1,6 +1,6 @@
 # Baseline exploratório de desempenho — 08/11/2026
 
-**INCOMPLETO — medição do pacote atual pendente do agente principal.** Este documento descreve somente o ASAR anterior às alterações da rodada, identificado pelo commit `dcd0b058483912b2047a82973e39edb1d076a344`. Não aprova beta, baixo consumo, fluidez ou uma engine.
+As duas coletas de uma hora foram concluídas. A seção de baseline descreve o ASAR anterior às alterações da rodada, identificado por `dcd0b05`. A comparação abaixo usa o pacote privado com SHA-256 `c8d949a4b67057d74410551b41c544e57faa3d3290c6e5cbedbdfa94ebaf8754`.
 
 ## Origem e método
 
@@ -115,6 +115,55 @@ Após os primeiros 20 minutos, a CPU da coorte apresenta média **6,78%** e pico
 - `summary.json` da coleta longa registra `completed` e 3600,01 s. Separadamente, `report.json.stopped` registra Stage PID 17824 com `lastExitCode: 1`; sucesso do coletor não aprova encerramento Stage limpo.
 - Nenhuma conclusão causal sobre o consumo total ou o RAF de sombra pode ser obtida deste baseline.
 
-**Assinatura de estado:** análise documental do baseline anterior concluída; **medição do pacote atual pendente do agente principal**. Nenhum app, build, teste novo ou comparação de engines executado nesta análise.
+## Comparação com o pacote privado atualizado
+
+O segundo ensaio durou **3600,77 s**, com **720 amostras**, de 21:45:06 a
+22:45:06 BRT. Usou o mesmo comando, `node Tests/windows/completion-runtime.mjs
+--packaged --without-key --performance --soak-seconds=3600`, com HTTP sintético
+e CDP. Não houve build ou suíte concorrente nesta passagem. A baseline
+teve carga concorrente no início. Janelas, cache e atividade do sistema não
+foram experimentalmente isolados. A diferença é observacional.
+
+| Métrica da coorte | Anterior, média / pico | Atual, média / pico |
+| --- | ---: | ---: |
+| Working Set somado, MiB | 2243,39 / 2368,88 | 3368,05 / 4150,86 |
+| Private Working Set, MiB | 1068,01 / 1324,69 | 870,87 / 1190,10 |
+| Private Bytes, MiB | 2485,18 / 2528,01 | 1839,65 / 2587,62 |
+| CPU da máquina, % | 7,55 / 14,92 | 8,95 / 17,11 |
+| Threads | 342,75 / 385 | 322,89 / 362 |
+| PIDs observados | 17 | 14 |
+| Stage GPU 3D, % da instância | 37,69 / 46 | 33,01 / 48 |
+| Stage GPU dedicada, MiB | 487,48 / 516,82 | 353,36 / 870,10 |
+| Stage GPU compartilhada, MiB | 1,76 / 11,63 | 2,25 / 18,57 |
+
+O PWS médio caiu 18,46% e o compromisso privado médio caiu 25,98%. A soma
+de WS subiu 50,13% e pode repetir páginas compartilhadas. A CPU média aumentou
+1,40 ponto percentual. Os dois processos Python e o conhost do primeiro
+ensaio ficaram ausentes da coorte atual, consistente com o boot sem pré-aquecer
+voz quando desativada. O ensaio inclui outras alterações e não isola o ganho
+causal de cada uma.
+
+Entre os primeiros e últimos cinco minutos, Private Bytes cresceu 82,45 MiB
+no pacote atual, ante 175,91 MiB no anterior. O GPU Stage atual acrescentou
+47,77 MiB privados e o renderer mais ativo acrescentou 36,25 MiB. A dedicação
+GPU desse processo subiu 40,20 MiB entre as janelas, com pico intermediário
+de 870,10 MiB. Ainda é necessário distinguir caches, recursos e vazamento.
+A instância GPU 3D e o PWS da coorte tiveram 716 amostras válidas de 720 no
+atual. A memória GPU teve 720. Nenhum dos 14 PIDs teve observação indisponível.
+Ausências de contador ficaram fora das médias.
+
+O relatório do fluxo atual registrou exit 0 e `errors: []`. O supervisor
+observou Stage parado com `lastExitCode: 1` e a checagem posterior não encontrou
+Lia.exe ou LiaStage.exe. O código do filho é compatível com o contrato atual
+de término forçado da árvore. FPS, frame time, jogo, ocultação, pausa de render
+e voz física permanecem sem medição comparável.
+
+Dados por processo, pico, janela de tempo, identidade e instância GPU estão na
+[comparação estruturada](../product/evidence/2026-11-08-beta-performance-comparison.json).
+Os brutos ficam em `J:/lia-evidence/` nos diretórios de cada ensaio. O analisador
+`node tools/desktop-benchmark/summarize.mjs <diretório>` produziu ambos os
+resumos e passou em cinco testes. A melhoria privada é mensurável neste
+cenário. A meta de baixo consumo continua aberta por CPU, picos GPU e cenários
+ausentes.
 
 Validação: JSON reaberto por parser, contagens e arredondamentos confrontados com as amostras de origem; comandos de cálculo somente leitura e geração documental com exit 0.
