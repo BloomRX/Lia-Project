@@ -143,6 +143,43 @@ sem presumir disponibilidade de todo contador numa janela de apenas três segund
 
 ## Próximas dependências para beta
 
+### Pacote atual — integridade e fluxo
+
+Wrapper completo `node airi/apps/lia-app/scripts/package-windows.mjs
+--internal-test`: exit 0, `beta-package-full.{log,exit}`. Os outputs anteriores
+foram renomeados para `dist/windows-before-beta-20261108-2130` e
+`dist/lia-windows-before-beta-20261108-2130` nos respectivos apps, sem descarte.
+Instalador atual: 787751357 bytes, SHA-256
+`c8d949a4b67057d74410551b41c544e57faa3d3290c6e5cbedbdfa94ebaf8754`, NotSigned.
+Baseline anterior: 787752487 bytes, SHA-256
+`22428a3d232f4002041ec482835eaeaf9761968d4d18d4414a01fbc2bb9fce57`.
+Comparar tamanho/hash não prova correção nem equivalência das funcionalidades.
+
+1335 arquivos de `out/` Stage, 353441607 bytes, conferidos por SHA-256 contra
+o ASAR incluído: todos iguais (`beta-stage-asar-build-match.json`). O inventário
+novo (`beta-packaged-license-inventory-current.json`) encontrou 627 arquivos no
+ASAR Launcher e 45397 no Stage, ainda 39/1039 manifestos e 27/789 notices.
+Hashes ASAR Launcher `42346f5ade1489ebb0d881484139d8045afa0eb9456c9ebf48430ab3ed7983cd`
+e Stage `1f83ecd330bf8d948df4f8b48e8bfd5bc91db4b36d59289607fe6e1d64a221f6`.
+Resumo de licenças anterior permanece baseline, não foi sobrescrito.
+
+`node Tests/windows/completion-runtime.mjs --packaged`: PASS Windows com
+credencial sintética, exit 0, relatório
+`J:/lia-evidence/completion-resume-runtime-1794184979920/report.json`.
+Chat, memória opt-in/out, contexto de personalidade, Livre e parada passaram.
+Parada observada com `lastExitCode:1`, conforme encerramento forçado atual;
+não se declara exit 0 gracioso. Nenhum processo Lia/Stage permanecia depois.
+
+Coleta atual em curso com as mesmas opções da baseline, `--packaged
+--without-key --performance --soak-seconds=3600`, sem testes/builds concorrentes.
+Root `completion-resume-runtime-1794185046337`; coleta longa
+`20261109T004505610Z-beta-continuous-ui-local-fixture-c992f9e696054a268a1a627d87311336`.
+Isso ainda **não é PASS de uma hora**. No snapshot inicial há 14 PIDs e nenhum
+Python; o pacote anterior tinha 17, incluindo dois Python e um conhost. Atribuir
+economia de memória/CPU exige concluir as amostras, não apenas contar processos.
+
+### Dependências abertas
+
 1. Concluir execução Main dos consumidores legados e eliminar plaintext de
    configurações, broadcast, logs e retornos IPC, com migração não destrutiva.
 2. Fechar comparação de desempenho do pacote atual sem carga concorrente;
