@@ -3,7 +3,6 @@ import type { BrowserWindow } from 'electron'
 
 import { useLogg } from '@guiiai/logg'
 import { defineInvokeHandler } from '@moeru/eventa'
-import { errorMessageFrom } from '@moeru/std'
 import {
   generateCodeChallenge,
   generateCodeVerifier,
@@ -20,6 +19,7 @@ import {
 import { startLoopbackServer } from './http-server/http/auth'
 
 const log = useLogg('auth-service').useGlobalConfig()
+const signInFailure = 'OIDC signing in failed'
 
 type MainContext = ReturnType<typeof createContext>['context']
 
@@ -98,20 +98,20 @@ export function createAuthService(params: {
           params.context.emit(electronAuthCallback, tokens)
           log.log('OIDC token exchange successful')
         })
-        .catch((err) => {
-          log.withError(err).error('OIDC signing in failed')
-          params.context.emit(electronAuthCallbackError, { error: errorMessageFrom(err) ?? 'OIDC signing in failed' })
+        .catch(() => {
+          log.error(signInFailure)
+          params.context.emit(electronAuthCallbackError, { error: signInFailure })
         })
         .finally(() => {
           closeLoopback = null
           signingInFlight = false
         })
     }
-    catch (err) {
+    catch {
       closeLoopback = null
       signingInFlight = false
-      log.withError(err).error('Failed to start OIDC signing in flow')
-      params.context.emit(electronAuthCallbackError, { error: errorMessageFrom(err) ?? 'OIDC signing in failed' })
+      log.error('Failed to start OIDC signing in flow')
+      params.context.emit(electronAuthCallbackError, { error: signInFailure })
     }
   })
 
@@ -152,8 +152,8 @@ async function exchangeCode(code: string, codeVerifier: string, redirectUri: str
   })
 
   if (!response.ok) {
-    const text = await response.text()
-    throw new Error(`Token exchange failed (${response.status}): ${text}`)
+    void response.body?.cancel().catch(() => {})
+    throw new Error(signInFailure)
   }
 
   const data = await response.json() as Record<string, unknown>

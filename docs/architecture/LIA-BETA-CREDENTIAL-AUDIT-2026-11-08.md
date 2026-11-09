@@ -45,7 +45,7 @@ Nas linhas abreviadas, `.../main` e `.../renderer` referem-se a
 | `airi/packages/stage-ui/src/stores/modules/web-search.ts` e `tools/web-search.ts`; Stage tool-resolver | Configuração e ferramenta de busca | Chave em localStorage e cliente Renderer | **Legado exposto**; erro incorpora parte do corpo externo, sem comprovar que contenha chave. Mover execução/segredo, limitar erro e revisar contexto de ferramenta |
 | `airi/packages/stage-ui/src/stores/modules/discord.ts`, twitter.ts | Configuração das integrações legadas, rotas presentes | Tokens/chaves em localStorage e sincronização | **Legado exposto**; migrar integrações a adaptadores Main com permissões, sem apagar configurações existentes |
 | `airi/packages/stage-ui/src/stores/auth.ts`, createLocalStorageForAuth/refresh; Stage electron-auth-callback | Login legado/callback Main→Renderer; fluxo comum Lia oculta conta | Tokens de sessão no Renderer/localStorage | **Legado exposto**; ocultar entrada não remove rota/IPC. Fluxo OIDC tem state/loopback, sem bypass de state demonstrado; ownership de sessão precisa decisão própria |
-| `.../main/services/airi/auth.ts`, token exchange | Login externo explicitamente iniciado | Sucesso envia tokens; erro externo pode atravessar IPC/log | **Legado exposto**; não usar sanitizador por regex como substituto de mensagens fixas e sessão Main |
+| `.../main/services/airi/auth.ts`, token exchange | Login externo explicitamente iniciado | Sucesso envia tokens; rejeição usa mensagem fixa para IPC e log | **Legado exposto no sucesso**; sessão Main ainda necessária |
 | `.../main/services/airi/channel-server/index.ts`, config/QR/get | Main e página de conexão/servidor | Token retornado, copiável, QR e localStorage | **Legado exposto por contrato**; não é apiKey de provider. Exige credencial de sessão com escopo/revogação próprios |
 | `airi/packages/stage-ui/src/stores/modules/artistry.ts`; Stage renderer App.vue, artistrySyncConfig | Rotas/ferramentas de imagem; provider=none desativa, configuração explícita ativa | Chaves em localStorage/broadcast/IPC | **Legado exposto**; nenhum guard managed remove esse caminho |
 | `.../main/services/airi/widgets/artistry-bridge.ts`; `main/configs/artistry.ts` | Main de widgets, configuração e execução | Recebe credenciais dos globals; persiste JSON sem cifra | **Legado exposto** fora do Owner. Erros/status voltam ao Renderer e ferramentas; migrar storage/execução antes de aprovar imagem autenticada |
@@ -77,6 +77,13 @@ Nas linhas abreviadas, `.../main` e `.../renderer` referem-se a
   adicionais a integrar ao Main antes de declarar o editor completo.
 
 ## Ordem segura de fechamento
+
+Na retomada, o login legado passou a descartar o corpo da rejeição HTTP no
+Main e usar mensagens fixas no log e no evento de erro. O teste do handler
+reproduziu o envio de uma sentinela antes da correção e passou depois, junto
+ao teste do callback Renderer. A revisão independente não apontou defeitos
+no delta. A sessão bem-sucedida e seus tokens no Renderer permanecem uma
+frente de migração, assim como concorrência entre tentativas de login.
 
 1. Terminar contrato Main de configuração/listagem/probe para chat avançado e
    TTS, reaproveitando transportes existentes sem passar plaintext ao SDK Renderer.
