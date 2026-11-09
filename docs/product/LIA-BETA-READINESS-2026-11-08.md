@@ -94,6 +94,67 @@ Login OIDC externo ficou NÃO EXECUTADO. O critério de propriedade exclusiva
 segue aberto. O código e o teste de sucesso confirmam que o callback legado
 ainda transporta os tokens.
 
+### Fatia de sessão e REST OIDC — 09/11
+
+Preflight em `417c4b658bea3dae856bc52f35bd1765d3c1094e`, branch
+`arena/01a10290-lia-project`. O tip remoto coincidia. Índice e working tree
+estavam limpos, inclusive untracked.
+
+O usuário escolheu preparar as fatias e ativar em conjunto. Esta rodada
+reservou `lia:main:oidc` no bridge de segredos e implementou o owner Main e
+o serviço REST de conta, sem expor novos invokes ou mudar o login ativo.
+O teste de composição chama o serviço sem tokens de entrada, comprova o
+Bearer montado internamente e recusa credencial refletida em campo do DTO.
+O cofre usa a mesma entrada e suporta cancelamento no ponto de commit.
+
+**Ativação bloqueada.** A revisão independente encontrou dois escritores
+para o mesmo arquivo do cofre em execução gerenciada. A reprodução usou
+dois cofres com persistência sintética, pausa controlada entre leitura e
+gravação e uma exclusão de sessão antes da escrita atrasada. O log
+`J:/lia-evidence/oidc-prepared-shared-writer-repro.log` confirmou que a sessão
+foi reintroduzida. A guarda de cancelamento local não resolve essa corrida.
+O login, as credenciais legadas, os adaptadores streaming e o Launcher
+continuam em produção com o contrato anterior.
+[Mapa, riscos e ordem do corte](../architecture/LIA-BETA-CREDENTIAL-AUDIT-2026-11-08.md#sessão-e-rest-de-conta-preparados-para-ativação-conjunta--0911).
+
+Antes do corte, o contrato IPC precisa validar janela, operação e cancelamento.
+O vínculo social precisa retornar pelo navegador sem expor state ao Renderer.
+Um 401 antes da expiração local precisa de tratamento sem repetir mutações.
+O emissor real precisa confirmar o comportamento de logout após rotação.
+
+O Core agregado teve 368 PASS e um timeout de 5 s em
+`src/brain/chat-requirement.test.ts`, exit 1. O arquivo e a suíte do cofre
+passaram juntos na repetição focada (26 PASS, exit 0). A causa do timeout
+não foi confirmada. A rodada agregada continua FAIL e nenhum limite foi
+alterado. Logs `oidc-prepared-core-tests` e `oidc-prepared-core-focused`.
+A repetição agregada teve 368 PASS e um timeout diferente, em
+`src/brain/adapters/groq.test.ts`, exit 1 (`oidc-prepared-core-repeat`).
+Esse arquivo passou isoladamente com 16 PASS, exit 0
+(`oidc-prepared-core-groq-isolated`).
+
+Build e typecheck do Core (`corepack pnpm --filter @lia/core run build`
+e `corepack pnpm --filter @lia/core run typecheck`) e typecheck do Stage
+(`corepack pnpm run typecheck`) concluíram com exit 0. Logs da rodada em
+`J:/lia-evidence/oidc-prepared-*`.
+
+O Stage Node completo (`vitest run --project node`) teve 2396 PASS, 4 skips
+e um timeout de 15 s em `image-journal.test.ts`, exit 1. A mesma assinatura
+consta na rodada anterior. O arquivo passou os dois casos isolados, exit 0
+em `oidc-prepared-image-journal`. A causa não foi confirmada. O build do Stage
+(`corepack pnpm run build`) concluiu com exit 0. O build valida o Stage e
+a guarda ativa do cofre. O owner e o REST preparados foram exercitados em
+Vitest, pois ainda não estão conectados ao processo de inicialização.
+O foco final do Stage (`vitest run --project node` com os seis arquivos
+de OIDC, loopback e cofre) teve 58 PASS, exit 0. O `moeru-lint` nos dez
+arquivos tocados do workspace passou após correções de estilo, exit 0.
+Logs `oidc-prepared-stage-focused-final` e `oidc-prepared-lint-final`.
+
+Gate Electron 43.4.1 no PowerShell 7 com `run-gate-windows.ps1 -SkipBuild`
+aprovou 16 grupos com HTTP sintético, exit 0 e sentinelas ausentes. Evidência
+`J:/lia-evidence/75c37fc5-5be7-4d18-abb8-8f097b7eba59/`, com `report.json`
+e `electron.log`. O gate não executa o OIDC preparado. Login, revogação e
+IPC do novo fluxo ficaram NÃO EXECUTADOS em runtime.
+
 ## Desempenho
 
 [Baseline detalhado e métricas por processo](../architecture/LIA-BETA-PERFORMANCE-2026-11-08.md).

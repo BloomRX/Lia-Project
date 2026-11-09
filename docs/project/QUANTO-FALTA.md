@@ -16,10 +16,11 @@ nativo/aliases sem retornar chave e suporte sem chave preservado, shell/config
 pt/en e lifetime da sombra revisados. As duas coletas de uma hora terminaram.
 Memória privada média caiu; CPU média e pico de memória dedicada GPU subiram.
 O Main usa erro fixo para rejeição do login OIDC e invalida tentativas após
-cancelamento, substituição ou fechamento da janela. A sessão OIDC continua
-legada. O corte depende de cofre, REST de conta e adaptadores de chat/voz
-streaming. Depois de OIDC, priorizar configuração de provedores com
-credenciais em PATCH/broadcast.
+cancelamento, substituição ou fechamento da janela. A sessão Main e o REST
+de conta estão preparados para ativação conjunta. O callback segue legado.
+Para ativar, coordenar os escritores do cofre gerenciado, concluir vínculo
+de conta no navegador e adaptar chat/voz streaming. Depois de OIDC, priorizar
+configuração de provedores com credenciais em PATCH/broadcast.
 [Relatório beta](../product/LIA-BETA-READINESS-2026-11-08.md),
 [consumidores](../architecture/LIA-BETA-CREDENTIAL-AUDIT-2026-11-08.md) e
 [medições](../architecture/LIA-BETA-PERFORMANCE-2026-11-08.md).

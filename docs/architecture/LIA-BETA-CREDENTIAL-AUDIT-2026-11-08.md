@@ -124,6 +124,68 @@ OIDC é o PATCH/broadcast de configuração de provedores, usado pelo cliente
 Hono e pelo store compartilhado. Depende da separação entre configuração
 pública e referência do cofre, com migração dos valores antigos no Main.
 
+### Sessão e REST de conta preparados para ativação conjunta — 09/11
+
+O usuário escolheu preparar por fatias e ativá-las juntas. A origem do
+bloqueio foi confirmada em revisão independente. O WS de chat precisa de
+`chat:authenticate` com token no primeiro frame autenticado. A prévia e o
+pipeline WS de TTS passam o token na query. STT oficial usa Bearer e áudio
+duplex. As portas atuais de transporte Main cobrem respostas em streaming
+e transcrição de bytes completos. Elas não cobrem esses sockets nem upload
+vivo. Retirar o token antes dos adaptadores quebraria consumidores existentes.
+
+- O escopo `lia:main:oidc` está protegido no bridge genérico de segredos.
+  Get, Has, Set, Adopt e Delete recusam o escopo antes de consultar o cofre
+  ou a exceção de leitura legada. Portas de transporte aceitam somente
+  referências `apiKey`, distintas da entrada `session-v1`.
+- `oidc-session.ts` prepara a propriedade exclusiva em Main. Usa o cofre
+  existente do Stage, com `safeStorage` no host e serialização de escrita
+  compartilhada no processo. O cofre aceita um sinal opcional e verifica
+  cancelamento antes da troca atômica de arquivo. A troca é o ponto de
+  commit, sem reversão posterior. Uma entrada vincula tokens, expiração,
+  origem e client ID. A renovação por expiração é single-flight. Logout
+  invalida a geração antes de apagar a entrada e pedir revogação ao emissor.
+  A aceitação HTTP do pedido de revogação não confirma a invalidação de
+  toda a sessão remota nem o encerramento do cookie no navegador. Uma
+  rotação que já ocorreu no emissor antes do abort pode deixar um refresh
+  sucessor fora da revogação. Falha em excluir uma credencial rejeitada
+  pode fazer o próximo início tentar renovar novamente. [RFC 7009 §2.2](https://www.rfc-editor.org/rfc/rfc7009.html#section-2.2)
+  Se o emissor rotacionar o refresh e a gravação do sucessor falhar, o
+  owner invalida a sessão em memória e tenta remover a entrada antiga.
+  A próxima chamada neste processo exige novo login.
+- `oidc-account.ts` prepara operações REST de perfil, listagem de vínculos,
+  nome, senha, reset, exclusão por confirmação e desvinculação.
+  O destino vem da configuração Main e os métodos e caminhos são fechados.
+  A resposta usa DTOs e códigos fixos, sem headers nem objetos de sessão brutos.
+  A listagem de sessões ficou fora da nova porta. O endpoint Desktop atual
+  só devolve a sessão correspondente à credencial e não tem consumidor de
+  interface identificado. O perfil é projetado sem o objeto de sessão.
+  O fluxo de iniciar vínculo GitHub, Google ou Steam exige definir o retorno
+  do navegador ao Desktop. Continua legado.
+
+**Bloqueio de persistência no modo gerenciado.** O Launcher e o Stage usam
+o mesmo `lia-secrets.json`. O Launcher passa `APP_USER_DATA_PATH` ao Stage.
+O canal de proprietário atual encaminha apenas `apiKey`. `session-v1`
+seguiria ao escritor local do Stage. Cada processo serializa apenas sua
+própria fila, enquanto o cofre substitui o JSON inteiro. Em uma reprodução
+determinística com dois cofres e gravação sintética, o Stage apagou a sessão
+e uma gravação concorrente do Launcher restaurou o snapshot anterior
+(`oidc-prepared-shared-writer-repro.log`). A reprodução confirma a janela
+de read-modify-write do cofre. Não executou dois processos Electron reais.
+Ativar em modo gerenciado exige um único escritor ou exclusão mútua entre
+processos no cofre já existente. Esta fatia não altera o Launcher.
+
+O owner e o REST preparado ainda não têm registro IPC nem chamadores no
+login em produção. O evento de sucesso ainda entrega access, refresh e ID
+tokens ao Renderer. O Pinia e o `localStorage` legados também permanecem.
+Antes da ativação conjunta, conectar os adaptadores restantes, definir a
+transição das sessões antigas e validar logout no emissor real, revogação,
+renovação antecipada após rejeição do servidor e isolamento de janelas no
+IPC real. A troca de senha com `revokeOtherSessions` pode exigir novo login:
+o Better Auth remove sessões e retorna uma credencial de navegador, que a
+porta de conta descarta. Validar a transição da UI nesse caso. Manter a
+migração de credenciais de provedores fora deste corte.
+
 1. Terminar contrato Main de configuração/listagem/probe para chat avançado e
    TTS, reaproveitando transportes existentes sem passar plaintext ao SDK Renderer.
 2. Migrar STT de sessão/assinatura e campos compostos por protocolo, incluindo
