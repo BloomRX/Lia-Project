@@ -1,0 +1,76 @@
+{
+  "date": "2026-11-08",
+  "redistributionApproved": false,
+  "classification": "unverified",
+  "archives": [
+    {
+      "archive": "Launcher/resources/app.asar",
+      "sha256": "aac0c548aad9b84ae77b4143615c3a3c2ad13f6fc9094bfb9f3bc602237b736c",
+      "counts": {
+        "files": 626,
+        "packages": 39,
+        "packagesWithNotices": 27,
+        "notices": 27
+      },
+      "assets": {
+        "fonts": 0,
+        "vrm": 0,
+        "cubism": 0,
+        "spine": 0
+      },
+      "declaredLicenseExpressionFrequency": {
+        "MIT": 24,
+        "(missing)": 12,
+        "BSD-2-Clause": 1,
+        "ISC": 1,
+        "BSD-3-Clause": 1
+      }
+    },
+    {
+      "archive": "Stage/resources/app.asar",
+      "sha256": "aaf7062452fa375e9936ab503c598b6eed4e4a615ee1488c89310207f4f02736",
+      "counts": {
+        "files": 45393,
+        "packages": 1039,
+        "packagesWithNotices": 780,
+        "notices": 789
+      },
+      "assets": {
+        "fonts": 3412,
+        "vrm": 4,
+        "cubism": 133,
+        "spine": 248
+      },
+      "declaredLicenseExpressionFrequency": {
+        "MIT": 714,
+        "Apache-2.0": 25,
+        "LicenseRef-LICENSE": 6,
+        "(missing)": 173,
+        "OFL-1.1": 11,
+        "Apache-2.0 AND LGPL-3.0-or-later": 1,
+        "ISC": 58,
+        "SEE LICENSE IN LICENSE": 3,
+        "SIL Open Font License": 3,
+        "BSD-3-Clause": 19,
+        "Python-2.0": 1,
+        "BSD-2-Clause": 6,
+        "BlueOak-1.0.0": 5,
+        "(MPL-2.0 OR Apache-2.0)": 1,
+        "0BSD": 4,
+        "[{\"type\":\"MIT\",\"url\":\"https://github.com/datalanche/json-bignum/raw/master/LICENSE\"}]": 1,
+        "(MIT OR GPL-3.0-or-later)": 1,
+        "MPL-2.0": 3,
+        "(MIT AND Zlib)": 1,
+        "Zlib": 1,
+        "Unlicense": 1,
+        "(MIT OR CC0-1.0)": 1
+      }
+    }
+  ],
+  "limits": [
+    "Package metadata is a declaration, not legal approval; all entries remain unverified.",
+    "Notice presence is checked at package root only; notice contents are not read.",
+    "Assets are counted by path only; categories may overlap and bundled code may hide dependencies.",
+    "Only the two ASAR archives are covered; unpacked files, runtime and installer require separate review."
+  ]
+}
