@@ -2,6 +2,7 @@
 export interface ProviderCredentialConfigPort {
   owns: (providerId: string) => boolean
   has: (providerId: string) => Promise<boolean>
+  requiresCredential?: (providerId: string) => boolean
   save: (providerId: string, value: string) => Promise<boolean>
 }
 

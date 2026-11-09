@@ -1,6 +1,7 @@
 import { PiniaColada } from '@pinia/colada'
 import { resetChatProviderRuntimeExtensionsForTesting } from '@proj-airi/stage-ui/stores/chat/chat-provider-runtime'
 import { useProviderConfigStore } from '@proj-airi/stage-ui/stores/providers/config'
+import { getProviderCredentialConfigPort } from '@proj-airi/stage-ui/stores/providers/credential-config-port'
 import { useProviderStore } from '@proj-airi/stage-ui/stores/providers/provider'
 import { createPinia, getActivePinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -93,6 +94,46 @@ function install(configs: Record<string, Record<string, unknown>>) {
 }
 
 describe('additional compatible transport migration', () => {
+  it('keeps explicit keyless local providers configurable without a saved credential', () => {
+    install({ [localId]: { baseUrl: address } })
+    const port = getProviderCredentialConfigPort(localId)
+    expect(port).toBeDefined()
+    expect(port!.requiresCredential?.(localId)).toBe(false)
+  })
+
+  it('keeps a newly created local alias keyless before its first transport record', () => {
+    const { config } = install({})
+    config.ensureProvider('local-alias', localId, { baseUrl: address })
+    const port = getProviderCredentialConfigPort('local-alias')
+    expect(port).toBeDefined()
+    expect(port!.requiresCredential?.('local-alias')).toBe(false)
+    expect(ipc.secretSet).not.toHaveBeenCalled()
+  })
+  it('saves a native chat editor key through Main without provider configuration or SDK reads', async () => {
+    const { config } = install({ [genericId]: { baseUrl: address } })
+    const port = getProviderCredentialConfigPort(genericId)
+    expect(port).toBeDefined()
+    expect(await port!.save(genericId, KEY)).toBe(true)
+    expect(ipc.secretSet).toHaveBeenCalledWith({ scope: genericId, key: 'apiKey', value: KEY })
+    expect(config.getProviderConfig(genericId)).not.toHaveProperty('apiKey')
+    const repository = await createLiaTransportClient().refresh()
+    expect(repository.records.find(record => record.providerId === genericId)?.protocol).toBe('chat-completions')
+    expect(JSON.stringify(repository)).not.toContain(KEY)
+  })
+
+  it('keeps an alias of a native chat definition in the same Main execution contract', async () => {
+    const { lia, config } = install({})
+    const alias = 'native-custom-instance'
+    config.ensureProvider(alias, genericId, { baseUrl: address })
+    const port = getProviderCredentialConfigPort(alias)
+    expect(port).toBeDefined()
+    expect(await port!.save(alias, KEY)).toBe(true)
+    const repository = await createLiaTransportClient().refresh()
+    expect(repository.records.find(record => record.providerId === alias)).toMatchObject({ definitionId: genericId, protocol: 'chat-completions' })
+    expect(config.getProviderConfig(alias)).not.toHaveProperty('apiKey')
+    await expect(lia.resolveApiKey(alias)).resolves.toBeUndefined()
+  })
+
   it('owns the persisted local-compatible ID only with an explicit endpoint', async () => {
     const native = createNativeProviderRuntime({ readConfig: () => undefined, resolveCredential: async () => undefined })
     expect(native.owns(localId)).toBe(false)

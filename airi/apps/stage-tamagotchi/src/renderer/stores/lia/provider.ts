@@ -517,14 +517,14 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
    * one — never with someone else's.
    */
   async function resolveApiKey(providerId: string): Promise<string | undefined> {
-    if (isNativeTransportDefinition(providerId) || supportsMainTranscription(providerConfig.get(providerId)?.definitionId ?? providerId) || !rendererMayHoldCredential(providerId))
+    if (isNativeTransportDefinition(providerConfig.get(providerId)?.definitionId ?? providerId) || supportsMainTranscription(providerConfig.get(providerId)?.definitionId ?? providerId) || !rendererMayHoldCredential(providerId))
       return undefined
     // Derived targets resolve through their alias; everything else is identity.
     return secretGet({ scope: secretScopeFor(providerId), key: API_KEY_NAME })
   }
 
   function optionFor(providerId: string) {
-    const definitionId = transports.get(providerId)?.definitionId ?? providerId
+    const definitionId = transports.get(providerId)?.definitionId ?? providerConfig.get(providerId)?.definitionId ?? providerId
     return LIA_CHAT_PROVIDER_OPTIONS.find(option => option.id === definitionId)
   }
 
@@ -548,7 +548,7 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
    */
   async function ensureProviderRecord(providerId: string, baseUrl?: string) {
     const definitionId = providerConfig.get(providerId)?.definitionId ?? providerId
-    if (isNativeTransportDefinition(providerId) || supportsMainTranscription(definitionId) || transports.get(providerId)) {
+    if (isNativeTransportDefinition(definitionId) || supportsMainTranscription(definitionId) || transports.get(providerId)) {
       await initializeTransports()
       await transports.refresh()
       const previous = transports.get(providerId)
@@ -1047,11 +1047,17 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
    * Idempotent.
    */
   function installCredentialConfig() {
+    const owns = (id: string) => {
+      const definition = providerConfig.get(id)?.definitionId ?? id
+      return isNativeTransportDefinition(definition)
+        || (supportsMainTranscription(definition) && definition !== 'app-local-audio-transcription')
+    }
     uninstallCredentialConfig ??= registerProviderCredentialConfigPort({
-      owns: id => supportsMainTranscription(providerConfig.get(id)?.definitionId ?? id) && (providerConfig.get(id)?.definitionId ?? id) !== 'app-local-audio-transcription',
+      owns,
       has: hasApiKey,
+      requiresCredential: providerNeedsKey,
       async save(id, value) {
-        if (!supportsMainTranscription(providerConfig.get(id)?.definitionId ?? id) || !/^[\x21-\x7E]{1,16384}$/.test(value))
+        if (!owns(id) || !/^[\x21-\x7E]{1,16384}$/.test(value))
           return false
         const endpoint = providerConfig.getConfig(id)?.baseUrl
         await ensureProviderRecord(id, typeof endpoint === 'string' && endpoint.trim() ? endpoint : undefined)
@@ -1089,7 +1095,7 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
        * stays where it already was. It also covers `lia-groq-transcription`,
        * which is a derived transcription target rather than a catalog id.
        */
-      if (isNativeTransportDefinition(providerId) || supportsMainTranscription(providerConfig.get(providerId)?.definitionId ?? providerId) || providerId === LIA_GROQ_TRANSCRIPTION_PROVIDER_ID)
+      if (isNativeTransportDefinition(providerConfig.get(providerId)?.definitionId ?? providerId) || supportsMainTranscription(providerConfig.get(providerId)?.definitionId ?? providerId) || providerId === LIA_GROQ_TRANSCRIPTION_PROVIDER_ID)
         return undefined
       /**
        * The same refusal, by capability, for everything else.

@@ -128,19 +128,19 @@ export function useProviderValidation(providerId: string) {
     try {
       const host = getProviderCredentialConfigPort(providerId)
       if (host) {
-        // Configuration readiness only. The file playground performs the real
-        // transcription; never build an authenticated validator in Renderer.
+        // Configuration readiness only. The native service panel performs the
+        // connection test; never build an authenticated validator in Renderer.
         const endpoint = credentials.value.baseUrl || providersStore.getDefaultProviderConfig(providerId)?.baseUrl
         const url = new URL(typeof endpoint === 'string' ? endpoint : '')
         const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)
         const safe = (url.protocol === 'https:' || (url.protocol === 'http:' && loopback)) && !url.username && !url.password && !url.search && !url.hash
-        isValid.value = safe && await host.has(providerId)
+        isValid.value = safe && (host.requiresCredential?.(providerId) === false || await host.has(providerId))
         providerStore.setProviderStatus(providerId, isValid.value ? 'configured' : 'unconfigured')
         if (isValid.value)
           providerStore.markProviderAdded(providerId)
         finalValidationMessage = locale.value.startsWith('pt')
-          ? (isValid.value ? 'Configuração salva. Transcreva um áudio para testar a conexão.' : 'Confira o endereço e salve uma chave para transcrever.')
-          : (isValid.value ? 'Configuration saved. Transcribe audio to test the connection.' : 'Check the address and save a key to transcribe.')
+          ? (isValid.value ? 'Configuração salva. Use o teste no painel do serviço de IA para verificar a conexão.' : 'Confira o endereço e salve uma chave para continuar.')
+          : (isValid.value ? 'Configuration saved. Use the test in the AI service panel to verify the connection.' : 'Check the address and save a key to continue.')
         return
       }
       // Settings pages always skip chat ping check during automatic validation
