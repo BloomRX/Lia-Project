@@ -7,7 +7,7 @@ export default defineConfig({
   root: import.meta.dirname,
   plugins: [vue()],
   test: {
-    include: ['src/renderer/src/views/home.browser.case.ts'],
+    include: ['src/renderer/src/views/home.browser.case.ts', 'src/renderer/src/shell-language.browser.case.ts'],
     browser: {
       enabled: true,
       headless: true,

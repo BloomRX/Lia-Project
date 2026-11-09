@@ -48,9 +48,9 @@ describe('app shell structure (8.0A-2)', () => {
     expect(source).toContain('case \'voice\': return VoiceView')
     expect(source).toContain('default: return HomeView')
     // The middle nav keeps the icon + label treatment.
-    expect(source).toContain('{ icon: \'●\', id: \'home\', label: \'Início\' }')
-    expect(source).toContain('{ icon: \'🎙\', id: \'voice\', label: \'Voz\' }')
-    expect(source).toContain('{ icon: \'◧\', id: \'diagnostics\', label: \'Diagnósticos\' }')
+    expect(source).toContain('{ icon: \'●\', id: \'home\', label: text.value.home }')
+    expect(source).toContain('{ icon: \'🎙\', id: \'voice\', label: text.value.voice }')
+    expect(source).toContain('{ icon: \'◧\', id: \'diagnostics\', label: text.value.diagnostics }')
   })
 
   it('c: the settings action lives in the sidebar footer area (never the top status area)', () => {
@@ -59,7 +59,7 @@ describe('app shell structure (8.0A-2)', () => {
     // The footer gear opens the SAME config page - destination preserved.
     const footerAt = source.indexOf('sidebar-footer')
     expect(source.slice(footerAt)).toContain('@click="page = \'config\'"')
-    expect(source.slice(footerAt)).toContain('aria-label="Configuração"')
+    expect(source.slice(footerAt)).toContain(':aria-label="text.settings"')
     // And settings never sits inside the context bar.
     const contextBar = source.slice(source.indexOf('class="contextbar"'), source.indexOf('class="stage"'))
     expect(contextBar).not.toContain('Configuração')
@@ -82,7 +82,7 @@ describe('app shell structure (8.0A-2)', () => {
     expect(source).toContain('voiceStatusChipVm(readiness.value, language.value)')
     // Rendered through the LiaStatusChip primitive with the shared mapping.
     expect(source).toContain('<LiaStatusChip :variant="voiceVariant">')
-    expect(source).toMatch(/voz: \{\{ voiceChip\.label \}\}/)
+    expect(source).toContain('{{ text.voicePrefix }}: {{ voiceChip.label }}')
   })
 
   it('f: the shell consumes the 8.0A-1 tokens and primitives (no hand-rolled palette)', () => {
@@ -144,7 +144,7 @@ describe('app shell structure (8.0A-2)', () => {
     // CSS-only tolerance (not a mobile nav system): labels hide, buttons
     // keep their aria-labels, and overflow stays bounded.
     expect(source).toContain('@media (max-width: 640px)')
-    expect(source).toContain('aria-label="Configuração"')
+    expect(source).toContain(':aria-label="text.settings"')
     expect(source).toMatch(/aria-label="item\.label"|:aria-label="item\.label"/)
     expect(source).toContain('min-width: 0')
     expect(source).toContain('overflow-y: auto')

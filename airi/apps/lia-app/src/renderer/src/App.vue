@@ -15,7 +15,7 @@
  * rendered with LiaStatusChip from the SAME provisioning source of truth
  * the Voice page uses (§8 contextual priority, no technical-chip rows).
  */
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 
 import LiaStatusChip from './components/lia/LiaStatusChip.vue'
 import AiResourcesView from './views/AiResourcesView.vue'
@@ -25,6 +25,7 @@ import HomeView from './views/HomeView.vue'
 import VoiceView from './views/VoiceView.vue'
 
 import { LIA_VOICE_READINESS_EVENT, voiceStatusChipVariant, voiceStatusChipVm } from './components/voice-engine-card.vm'
+import { pickVoiceEngineLocale } from './voice-engine-strings'
 
 type Page = 'config' | 'diagnostics' | 'home' | 'voice' | 'ai'
 
@@ -41,6 +42,25 @@ const setup = ref<{ completed?: boolean } | undefined>(undefined)
 const logLines = reactive<string[]>([])
 
 const api = computed(() => (window as any).liaApi)
+const text = computed(() => pickVoiceEngineLocale(language.value) === 'en-US'
+  ? { home: 'Home', ai: 'AI & Resources', voice: 'Voice', diagnostics: 'Diagnostics', settings: 'Settings', voicePrefix: 'voice', log: 'Log', emptyLog: 'quiet here', statusFailed: 'Could not refresh the status.' }
+  : { home: 'Início', ai: 'IA & Recursos', voice: 'Voz', diagnostics: 'Diagnósticos', settings: 'Configuração', voicePrefix: 'voz', log: 'Log', emptyLog: 'silêncio por aqui', statusFailed: 'Não foi possível atualizar o estado.' })
+let unsubscribe: (() => void) | undefined
+let configRequest = 0
+
+async function refreshConfig() {
+  const request = ++configRequest
+  try {
+    const config = await api.value?.productConfig?.()
+    if (request !== configRequest || config?.status !== 'ok')
+      return
+    language.value = config?.snapshot?.preferences?.language
+    setup.value = config?.snapshot?.setup
+  }
+  catch {
+    // Preserve the last saved locale if the document cannot be read.
+  }
+}
 
 async function refresh() {
   if (!api.value)
@@ -48,8 +68,8 @@ async function refresh() {
   try {
     status.value = await api.value.homeStatus()
   }
-  catch (error) {
-    push(`home status failed: ${String(error)}`)
+  catch {
+    push(text.value.statusFailed)
   }
 }
 
@@ -66,7 +86,7 @@ async function refreshVoiceReadiness() {
 }
 
 function push(line: string) {
-  logLines.push(`[${new Date().toLocaleTimeString()}] ${line}`)
+  logLines.push(`[${new Date().toLocaleTimeString(pickVoiceEngineLocale(language.value))}] ${line}`)
   if (logLines.length > 200)
     logLines.splice(0, logLines.length - 200)
 }
@@ -80,12 +100,12 @@ const voiceVariant = computed(() => voiceStatusChipVariant(voiceChip.value.tone)
  * The persistent middle navigation. Global settings intentionally live in
  * the sidebar FOOTER gear (§7) - every destination stays reachable.
  */
-const nav: { icon: string, id: Page, label: string }[] = [
-  { icon: '●', id: 'home', label: 'Início' },
-  { icon: '✦', id: 'ai', label: 'IA & Recursos' },
-  { icon: '🎙', id: 'voice', label: 'Voz' },
-  { icon: '◧', id: 'diagnostics', label: 'Diagnósticos' },
-]
+const nav = computed<{ icon: string, id: Page, label: string }[]>(() => [
+  { icon: '●', id: 'home', label: text.value.home },
+  { icon: '✦', id: 'ai', label: text.value.ai },
+  { icon: '🎙', id: 'voice', label: text.value.voice },
+  { icon: '◧', id: 'diagnostics', label: text.value.diagnostics },
+])
 
 const current = computed(() => {
   switch (page.value) {
@@ -97,27 +117,24 @@ const current = computed(() => {
   }
 })
 
-onMounted(async () => {
+onMounted(() => {
   void refresh()
   void refreshVoiceReadiness()
-  try {
-    const config = await api.value?.productConfig?.()
-    language.value = config?.snapshot?.preferences?.language
-    setup.value = config?.snapshot?.setup
-  }
-  catch {
-    // Language stays the pt-BR product default - never fatal.
-  }
-  api.value?.onLiaEvent?.((payload: { detail?: string, event: string }) => {
+  unsubscribe = api.value?.onLiaEvent?.((payload: { detail?: string, event: string }) => {
     push(`${payload.event}${payload.detail ? ` ${payload.detail}` : ''}`)
     // A log line changes the diagnostic feed, not product state. Avoid a
     // product-document read for every chunk of Stage stdout.
     if (payload.event === LIA_VOICE_READINESS_EVENT)
       void refreshVoiceReadiness()
+    if (payload.event === 'lia-app.config-updated')
+      void refreshConfig()
     if (payload.event !== 'lia-app.stage-log')
       void refresh()
   })
+  void refreshConfig()
 })
+
+onUnmounted(() => unsubscribe?.())
 </script>
 
 <template>
@@ -149,11 +166,11 @@ onMounted(async () => {
         <button
           class="nav-item settings"
           :class="{ active: page === 'config' }"
-          aria-label="Configuração"
+          :aria-label="text.settings"
           @click="page = 'config'"
         >
           <span class="nav-icon" aria-hidden="true">⚙</span>
-          <span class="nav-label">Configuração</span>
+          <span class="nav-label">{{ text.settings }}</span>
         </button>
       </div>
     </aside>
@@ -163,7 +180,7 @@ onMounted(async () => {
            from the provisioning source of truth). No technical-chip rows. -->
       <header class="contextbar">
         <LiaStatusChip :variant="voiceVariant">
-          voz: {{ voiceChip.label }}
+          {{ text.voicePrefix }}: {{ voiceChip.label }}
         </LiaStatusChip>
       </header>
 
@@ -183,14 +200,14 @@ onMounted(async () => {
 
       <footer v-if="page === 'diagnostics'" class="logbar">
         <div class="log-title">
-          Log
+          {{ text.log }}
         </div>
         <div class="log-lines">
           <div v-for="(line, i) in logLines.slice(-6)" :key="i">
             {{ line }}
           </div>
           <div v-if="!logLines.length" class="log-empty">
-            silêncio por aqui
+            {{ text.emptyLog }}
           </div>
         </div>
       </footer>
