@@ -14,6 +14,11 @@ descartado. Remoto atualizado sem divergência. Os agentes de auditoria,
 idioma, lifetime da sombra e inventário concluíram seus arquivos; declarações
 foram conferidas por diff e testes. O ensaio antigo terminou em exit 0.
 
+Na retomada seguinte, `f111200` coincidia com o tip remoto. O índice e os
+arquivos rastreados estavam limpos. Restavam três arquivos novos da comparação
+de desempenho, preservados e revisados. Os 20 arquivos pertenciam ao snapshot
+anterior, já integrado. O agente visual revisou capturas existentes em leitura.
+
 | Frente | Resultado comprovado | Limite |
 | --- | --- | --- |
 | Cofre | Recusa mutação de arquivo vazio, inválido, truncado ou sem permissão; criação real ENOENT preservada; falhas de cifra não exportadas; temporário removido em falha de rename | Não resolve sozinho escritores legados concorrentes de processos diferentes |
@@ -48,9 +53,9 @@ CPU foi contaminada por testes no host nos primeiros ~20 minutos.
 Separação dos cenários: Launcher fechado/Stage fechado, Stage parado **animado**,
 após chat/presença e contínuo foram medidos. Avatar estático sem animação,
 ocultação, pausa, fala física e jogo ainda exigem passagens próprias. FPS,
-frame time, impacto em jogos e energia não foram medidos. Não há vencedor de
-engine nem meta arbitrária de memória. Pacote atual e comparação controlada
-serão registrados somente após execução.
+frame time, impacto em jogos e energia não foram medidos. A comparação com o
+pacote atual usa os artefatos das duas coletas, com as diferenças de carga
+registradas. Não há vencedor de engine nem meta arbitrária de memória.
 
 ## Matriz Windows de distribuição e hardware
 
@@ -87,7 +92,7 @@ de titular/serviço/certificado e suas credenciais depende do responsável pelo 
 ## Licenças
 
 [Assets](../licenses/ASSET-LICENSES.md), [terceiros](../licenses/THIRD-PARTY-NOTICES.md)
-e [inventário físico](../licenses/PACKAGED-INVENTORY-2026-11-08.json) substituem
+e [inventário físico atual](../licenses/PACKAGED-INVENTORY-BETA-2026-11-08.json) substituem
 o registro desatualizado de nenhum asset. Tooling lê manifestos de ASAR sem
 executar o código empacotado. Avisos adjacentes não autorizam todo o pacote:
 modelos, Hero PNG, Cubism e Spine ainda exigem comprovação de direitos/contratos.
@@ -110,18 +115,28 @@ Stage, lint, types, builds e componentes foram registrados abaixo.
 | --- | --- |
 | `vitest run`, lia-app | 280 PASS/2 skips, exit 0; `beta-final2-launcher-tests` |
 | `vitest run --config vitest.home.browser.config.ts`, lia-app | 16 PASS, exit 0; `beta-final2-launcher-browser` |
-| `vitest run --project node`, Stage | 2356 PASS/4 skips, exit 0; `beta-final2-stage-tests`. Guarda aditiva posterior para alias local: 23 PASS em `beta-native-editor-alias-final`, sem alegar agregado posterior |
+| `vitest run --project node`, Stage | 2356 PASS/4 skips, exit 0; `beta-final2-stage-tests`. Após a guarda de alias, 23 PASS focados em `beta-native-editor-alias-final`; agregado `beta-final3-stage-tests` com 2355 PASS/2 FAIL/4 skips e os mesmos dois timeouts, durante execução do harness da raiz. Causa da falha permanece sem confirmação |
+| `vitest run --project node`, Stage, execução sequencial com delta OIDC | 2358 PASS/4 skips, 195 arquivos, exit 0; `beta-resume-stage-node` |
+| Testes focados de erro OIDC e callback Renderer, Stage | Contraprova FAIL, exit 1 em `beta-auth-error-red`; 2 PASS, exit 0 em `beta-auth-error-green` |
 | `vitest run --project browser`, Stage | 54 PASS, exit 0; `beta-final2-stage-browser`; avisos ResizeObserver preservados |
 | `vitest run --config vitest.credential-editor.config.ts`, Stage | 6 PASS, exit 0; `beta-final2-credential-editor-browser` |
 | `vitest run --maxWorkers 1 --no-file-parallelism`, lia-core legado | 368 PASS, exit 0; `beta-core-full-sequential` |
 | `pnpm run test:shadow`, stage-ui-live2d | 5 PASS; contraprova SFC anterior 4 FAIL/1 PASS; typecheck do pacote exit 0 |
 | Composable keyless + registro de porta, stage-ui | 5 PASS, exit 0; `beta-keyless-final-tests`. Transformação de teste do ramo anterior: 2 FAIL/2 PASS, sem alterar fonte em disco; `beta-keyless-counterproof` |
-| `node --test "Tests/tools/*.test.mjs"`, raiz | 270 PASS, exit 0; `beta-root-harness-tests` |
+| `node --test "Tests/tools/*.test.mjs"`, raiz | 275 PASS, exit 0; `beta-final-root-tests`, incluindo 5 testes do comparador |
 | `python -m unittest discover -s . -p "test_*.py" -t .`, tools | 498 descobertos: 488 executados PASS/10 skips, exit 0; `beta-python-tests`. Mensagens de contraprovas de spawn permanecem no log, não são resultado final da suíte |
 | `moeru-lint <arquivos tocados>`, airi | exit 0; `beta-touched-lint-final`; erros iniciais de formatação corrigidos sem desativar regras |
+| `moeru-lint` em `auth.ts` e `auth.test.ts`, airi | exit 0 em `beta-auth-lint-final` após corrigir dois avisos de estilo |
 | `pnpm run typecheck`, Launcher/Stage/stage-pages | exit 0, três logs `beta-final2-*-types` |
 | `pnpm run build`, Launcher/Stage, sequencial | exit 0, `beta-final2-*-build`; Launcher recompila Core |
+| `corepack pnpm run typecheck` e `corepack pnpm run build`, Stage, após delta OIDC | exit 0 em ambos; `beta-resume-stage-types` e `beta-resume-stage-build` |
 | Gate original Electron, PS5.1 / PS7, `-SkipBuild` após build atual | PASS Windows, exit 0 em ambos; `beta-electron-gate-ps51`/`ps7` |
+| Mesmo gate, PS5.1 / PS7, após o novo build com delta OIDC | PASS Windows sintético, exit 0 em ambos; `beta-resume-gate-ps51` e `beta-resume-gate-ps7` |
+
+Skips preservados. O Launcher pula a parte dos testes que precisa forçar
+falha de escrita real no Windows. No Stage há guards para symlinks e um teste
+externo de widgets que exige credencial. O Python contém casos condicionais
+de plataforma, links, FIFO e sinais. Os skips não contam como PASS.
 
 Gates de componentes: `J:/lia-evidence/6de84dd5-9406-4f7a-97dc-5cfa8cfa6db4/`
 e `J:/lia-evidence/1f69ffbc-b890-47a6-a2c2-82b7bca6ae2b/`, com `report.json`
@@ -131,7 +146,12 @@ e `electron.log`, 16 grupos por rodada, sentinelas ausentes. Comando Stage:
 C:/Users/lucas/AppData/Local/Temp/lia-electron-official-670c18ee-5d18-4b64-893c-ccfdbfa2c3d4.zip`,
 depois equivalente com `pwsh.exe`. Runtime oficial 43.4.1, ZIP SHA-256
 `c2ef9a5f65472c34d14bd3e67b7d14e66b0c01f124aba45263d6a4232160e13a`.
-Não cobre serviço externo, audição física ou instalador.
+A repetição com o delta OIDC preservou `report.json` e `electron.log` em
+`J:/lia-evidence/5990954c-d418-450a-9c7a-ad57a826ee41/` (PS5.1) e
+`J:/lia-evidence/f033d116-d013-4012-afcd-4b33b1904c2a/` (PS7).
+Cada rodada aprovou 16 grupos e confirmou ausência das sentinelas no log.
+O gate usa HTTP local sintético. Login OIDC externo, audição física e
+instalador ficam fora do seu escopo.
 
 `node --check` dos dois módulos novos do inventário e do roteiro Windows PASS;
 testes do inventário: 3 PASS. Tentativa de moeru-lint nos arquivos fora de
@@ -170,22 +190,46 @@ Chat, memória opt-in/out, contexto de personalidade, Livre e parada passaram.
 Parada observada com `lastExitCode:1`, conforme encerramento forçado atual;
 não se declara exit 0 gracioso. Nenhum processo Lia/Stage permanecia depois.
 
-Coleta atual em curso com as mesmas opções da baseline, `--packaged
+Coleta atual concluída com as mesmas opções da baseline, `--packaged
 --without-key --performance --soak-seconds=3600`, sem testes/builds concorrentes.
 Root `completion-resume-runtime-1794185046337`; coleta longa
 `20261109T004505610Z-beta-continuous-ui-local-fixture-c992f9e696054a268a1a627d87311336`.
-Isso ainda **não é PASS de uma hora**. No snapshot inicial há 14 PIDs e nenhum
-Python; o pacote anterior tinha 17, incluindo dois Python e um conhost. Atribuir
-economia de memória/CPU exige concluir as amostras, não apenas contar processos.
+O roteiro terminou em **PASS Windows com HTTP sintético sem chave**, exit 0.
+Foram 720 amostras em 3600,77 s e 14 PIDs observados. Private Working Set médio
+caiu de 1068,01 para 870,87 MiB e Private Bytes de 2485,18 para 1839,65 MiB.
+CPU média subiu de 7,55% para 8,95%, a soma de WS aumentou e houve pico maior
+de memória dedicada GPU. A comparação por processo e os limites metodológicos
+estão no [relatório de desempenho](../architecture/LIA-BETA-PERFORMANCE-2026-11-08.md).
+
+As capturas `01-home.png`, `03-stage.png` e `08-free-stage.png` estão em
+`J:/lia-evidence/completion-resume-runtime-1794184979920/captures/`. Conferência
+direta e revisão independente: Home com ação legível, Tamagotchi enquadrado
+em retrato e Livre com cabelo e sapatos completos. Nas capturas, não se viu
+contorno ciano ou sobreposição dos controles. Transparência nativa, foco,
+input e DPI exigem outros ensaios. O agente visual atuou em leitura e não
+produziu mudanças no checkout.
+
+O pacote medido antecede a correção de erros do login OIDC desta retomada.
+O novo delta no Main tem teste RED→GREEN, dois testes focados PASS e revisão
+independente. A sessão legada que entrega tokens em sucesso continua aberta.
 
 ### Dependências abertas
 
 1. Concluir execução Main dos consumidores legados e eliminar plaintext de
    configurações, broadcast, logs e retornos IPC, com migração não destrutiva.
-2. Fechar comparação de desempenho do pacote atual sem carga concorrente;
-   instrumentar frames, ocultação/pausa e cenário de jogo antes de prometer leveza.
+2. Instrumentar frames, ocultação, pausa de render e jogo. Investigar picos de
+   GPU e crescimento por processo antes de aprovar baixo consumo.
 3. Gates externos/voz física e máquina limpa; tradução completa e presença.
 4. Licenças/assets, assinatura e ciclo de distribuição testado.
 
-Nenhum resultado unitário ou sintético desta rodada transforma a Lia em
-**Candidata a beta** ou **Pronta para beta**.
+| Critério de prontidão | Estado |
+| --- | --- |
+| Cofre preserva arquivos ilegíveis e recusa sobrescrita | PASS automatizado no caminho testado; concorrência com escritores legados entre processos em aberto |
+| Credenciais fora dos consumidores Renderer alcançáveis | BLOCKED por rotas legadas da auditoria; correção pontual do erro OIDC verificada |
+| Launcher → conversa → memória/personalidade → presença, pacote privado | PASS Windows com fixture sintética; capturas e relatório preservados |
+| Coletas de uma hora e comparação por processo | PASS Windows para coleta; aprovação de baixo consumo em aberto por CPU, GPU e cenários ausentes |
+| Direitos de redistribuição demonstrados para o pacote | BLOCKED por modelos, assets, notices e runtimes pendentes |
+| Serviço externo autenticado | BLOCKED no ambiente verificado |
+| Instalação limpa, atualização, desinstalação e voz física | NÃO EXECUTADO |
+
+Classificação final da rodada: **Ainda bloqueada para beta**.

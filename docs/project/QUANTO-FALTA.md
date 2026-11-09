@@ -13,9 +13,10 @@ Fonte: [`CURRENT-STATE.md`](CURRENT-STATE.md) §0 e §5, medido em
 
 08/11 à noite — **Beta ainda bloqueada.** Cofre e logs corrigidos, editor chat
 nativo/aliases sem retornar chave e suporte sem chave preservado, shell/config
-pt/en e lifetime da sombra revisados. Uma hora do pacote anterior foi medida;
-GPU/PWS disponíveis, desempenho do pacote novo ainda pendente. Credenciais
-legadas continuam classificadas e abertas, sem alegação de fechamento global.
+pt/en e lifetime da sombra revisados. As duas coletas de uma hora terminaram.
+Memória privada média caiu; CPU média e pico de memória dedicada GPU subiram.
+O Main usa erro fixo para rejeição do login OIDC. Sessão OIDC e demais
+consumidores de credenciais legadas continuam abertos.
 [Relatório beta](../product/LIA-BETA-READINESS-2026-11-08.md),
 [consumidores](../architecture/LIA-BETA-CREDENTIAL-AUDIT-2026-11-08.md) e
 [medições](../architecture/LIA-BETA-PERFORMANCE-2026-11-08.md).

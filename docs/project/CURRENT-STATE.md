@@ -20,23 +20,26 @@ Editor de chat nativo/aliases usa porta Main, preservando serviços sem chave;
 23 testes focados PASS após revisão. Credenciais legadas alcançáveis continuam
 abertas e classificadas na [auditoria beta](../architecture/LIA-BETA-CREDENTIAL-AUDIT-2026-11-08.md).
 Shell/Config pt-BR/en e RAF da sombra corrigidos; demais traduções parciais.
-Regressão: Launcher 280 PASS/2 skips, Stage 2356 PASS/4 skips antes da guarda
-aditiva do alias local (delta: 23 PASS), Chromium Launcher 16/Stage 54/editor 6,
-Core legado 368 PASS, lint/types/builds PASS. Gates Electron PS5.1/7 PASS em
-`6de84dd5-9406-4f7a-97dc-5cfa8cfa6db4` e `1f69ffbc-b890-47a6-a2c2-82b7bca6ae2b`.
+Regressão: Launcher 280 PASS/2 skips, Stage 2358 PASS/4 skips na rodada
+sequencial com guarda de alias e delta OIDC, Chromium Launcher 16/Stage 54/editor 6,
+Core legado 368 PASS, types/builds PASS. Gates Electron PS5.1/7 PASS no build
+com delta OIDC em `5990954c-d418-450a-9c7a-ad57a826ee41` e
+`f033d116-d013-4012-afcd-4b33b1904c2a`, 16 grupos em cada, fixture HTTP local.
 Baseline antigo: uma hora concluída, métricas por processo/GPU disponíveis,
 sem prova de baixo consumo ou vazamento. Licenças físicas inventariadas;
 direitos de assets e runtimes proprietários pendentes. Pacote privado atualizado
 gerado pelo wrapper completo, exit 0; fluxo autenticado sintético PASS em
 `J:/lia-evidence/completion-resume-runtime-1794184979920/report.json`.
 1335 arquivos Stage iguais ao ASAR; NSIS sem assinatura, não publicado.
-**Em curso: uma hora do pacote atual**, iniciada às 21:45 BRT em
-`J:/lia-evidence/20261109T004505610Z-beta-continuous-ui-local-fixture-c992f9e696054a268a1a627d87311336/`;
-roteiro `completion-resume-runtime-1794185046337`. Conferir
-`J:/lia-evidence/beta-current-performance-soak.exit` e o `report.json` ao retomar,
-sem iniciar outro Launcher/build/teste durante a coleta. **Próximo: concluir
-essa coleta, analisar e comparar por processo com a baseline antiga, registrar
-limites e fechar os commits de evidência.** Não publicar instalador; baseline continua `3ef6d11`.
+**As duas coletas de uma hora terminaram.** Private Working Set médio de
+1068,01 para 870,87 MiB; CPU média de 7,55% para 8,95%, com interferência
+no host antigo. [Comparação](../architecture/LIA-BETA-PERFORMANCE-2026-11-08.md)
+registra o aumento do pico de memória dedicada GPU e as lacunas de FPS e jogos.
+Capturas do pacote autenticado revisadas, com corpo inteiro no modo Livre.
+Erros OIDC do Main já retornam mensagem fixa, com contraprova e teste focado.
+O pacote medido antecede essa correção. **Próximo: migrar a sessão OIDC legada
+para o Main, preservando a autenticação, e avançar por protocolo nos demais
+consumidores alcançáveis.** Distribuição P1 aguarda os P0. Baseline `3ef6d11`.
 [Relatório beta e pendências](../product/LIA-BETA-READINESS-2026-11-08.md).
 
 **Finalização retomada — 08/11, integração em andamento.** Trabalho da execução
