@@ -36,10 +36,17 @@ gerado pelo wrapper completo, exit 0; fluxo autenticado sintético PASS em
 no host antigo. [Comparação](../architecture/LIA-BETA-PERFORMANCE-2026-11-08.md)
 registra o aumento do pico de memória dedicada GPU e as lacunas de FPS e jogos.
 Capturas do pacote autenticado revisadas, com corpo inteiro no modo Livre.
-Erros OIDC do Main já retornam mensagem fixa, com contraprova e teste focado.
-O pacote medido antecede essa correção. **Próximo: migrar a sessão OIDC legada
-para o Main, preservando a autenticação, e avançar por protocolo nos demais
-consumidores alcançáveis.** Distribuição P1 aguarda os P0. Baseline `3ef6d11`.
+OIDC Desktop cancela a tentativa no Main antes do logout legado, ao substituir
+o login ou fechar a janela. Contraprova mostrou publicação tardia de tokens em
+dois casos. A correção protege o cancelamento e as falhas de entrega do IPC.
+Delta com 15 testes focados, 54 Chromium, typecheck e build PASS. Agregado
+Stage Node: 2365 PASS, 4 skips e um timeout de `image-journal` (2 PASS isolados).
+Gates Electron de componentes PS5.1/7 PASS com 16 grupos em cada rodada.
+**Migração da sessão OIDC ainda aberta.** O sucesso ainda alimenta conta,
+sincronização, chat e voz pelo Renderer. **Próximo: preparar cofre e REST de
+conta no Main, depois os adaptadores streaming antes de ativar o novo caminho.**
+O pacote medido antecede essas correções. Distribuição P1 aguarda os P0.
+Baseline `3ef6d11`.
 [Relatório beta e pendências](../product/LIA-BETA-READINESS-2026-11-08.md).
 
 **Finalização retomada — 08/11, integração em andamento.** Trabalho da execução

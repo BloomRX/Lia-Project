@@ -40,6 +40,60 @@ Revisão independente corrigiu duas regressões do trabalho novo: falha resolvid
 de leitura de configuração e serviço local sem chave. Aprovação global continua
 negada até a migração e os gates por protocolo.
 
+### Retomada OIDC Desktop
+
+Preflight em `2a9eca5d4b4d3283adbf137ef2e503bbe9607e3e`, branch
+`arena/01a10290-lia-project`. O tip remoto era idêntico. `git status
+--porcelain=v2 --branch --untracked-files=all`, `git diff --stat` e
+`git diff --cached --stat` mostraram checkout e índice limpos. O Git local
+não reproduziu os dez arquivos da visualização posterior. Sem a origem
+daquela contagem, sua causa segue não confirmada. Os commits `40c6c03`,
+`bf8407e`, `e504f7f` e `2a9eca5` foram preservados.
+
+A contraprova `oidc-cancel-red.log` falhou nos dois casos de cancelamento
+durante a troca de código. O handler emitiu o callback legado mesmo após
+logout ou fechamento. Agora a tentativa cancelada aborta o HTTP, fecha o
+loopback e descarta o resultado tardio. Na substituição entre janelas, a
+janela anterior recebe um evento sem dados para sair do carregamento. O
+logout de Settings cancela primeiro no Main e só então executa o logout
+legado. Falhas de transporte e de entrega IPC registram fase e, quando
+aplicável, status numérico. Sem corpos HTTP ou exceções externas nos logs.
+
+A revisão independente apontou o carregamento da janela anterior, a promessa
+de entrega do Eventa e a ordem de logout. Os três foram tratados e o delta
+foi revisto novamente. O achado de propriedade da sessão continua aberto.
+O teste de sucesso mantém o contrato atual, em que tokens chegam ao Renderer.
+Renovação concorrente, revogação e restauração no Main seguem sem implementação
+e sem validação. [Mapa de consumidores e ordem do corte](../architecture/LIA-BETA-CREDENTIAL-AUDIT-2026-11-08.md#oidc-desktop--fronteira-e-ordem-de-corte).
+
+No agregado Node do Stage, `vitest run --project node` retornou **FAIL**,
+exit 1. Houve 2365 PASS, 4 skips e um timeout de 15 s em `image-journal.test.ts`
+(`oidc-final-stage-node.log`). A mesma assinatura aparece em
+`beta-final3-stage-tests.log`, anterior a este delta. A causa ainda não foi
+confirmada. O teste e seu limite foram preservados.
+Em `vitest run --project node src/renderer/stores/tools/builtin/image-journal.test.ts`,
+o arquivo isolado passou os dois casos, exit 0 (`oidc-final-image-journal-isolated.log`).
+Isso mantém o agregado classificado como FAIL.
+
+Logs e códigos de saída da retomada em `J:/lia-evidence/`. Verificações
+executadas no Windows em 08–09/11/2026, no Stage salvo indicação.
+
+| Comando | Resultado |
+| --- | --- |
+| `vitest run --project node` com handler OIDC, loopback, callback Renderer, botão e conta | PASS automatizado, 15 testes, exit 0 em `oidc-final-focus-confirmed`. O loopback validou um callback HTTP real e rejeitou estado incorreto. A troca de código usa fixture no teste do handler. |
+| `vitest run --project browser` | PASS automatizado, 54 testes, exit 0 em `oidc-final-chromium`. Avisos de ResizeObserver preservados. |
+| `corepack pnpm run typecheck` e `corepack pnpm run build` | PASS automatizado, exit 0 em `oidc-final-typecheck` e `oidc-final-build`. |
+| `moeru-lint` nos sete arquivos tocados do Stage, a partir de `airi/` | PASS automatizado, exit 0 em `oidc-final-lint-last` após ajuste de imports no teste do botão. |
+| `run-gate-windows.ps1 -SkipBuild` em PowerShell 5.1 e 7 com o ZIP oficial 43.4.1 | PASS Windows de componentes com HTTP sintético, 16 grupos e exit 0 por execução. Sentinelas ausentes nos respectivos logs. |
+| Core e Launcher | NÃO EXECUTADO nesta rodada. Nenhum código desses pacotes nem o contrato de inicialização do Stage mudou. |
+
+O gate de componentes gerou `report.json` e `electron.log` em
+`J:/lia-evidence/af08f27d-5f27-4d30-8db5-c8fac9689512/` (PS5.1) e
+`J:/lia-evidence/a2ee3aea-064b-45e2-b234-ab98f4e0a6d7/` (PS7).
+Login OIDC externo ficou NÃO EXECUTADO. O critério de propriedade exclusiva
+segue aberto. O código e o teste de sucesso confirmam que o callback legado
+ainda transporta os tokens.
+
 ## Desempenho
 
 [Baseline detalhado e métricas por processo](../architecture/LIA-BETA-PERFORMANCE-2026-11-08.md).

@@ -83,7 +83,46 @@ Main e usar mensagens fixas no log e no evento de erro. O teste do handler
 reproduziu o envio de uma sentinela antes da correção e passou depois, junto
 ao teste do callback Renderer. A revisão independente não apontou defeitos
 no delta. A sessão bem-sucedida e seus tokens no Renderer permanecem uma
-frente de migração, assim como concorrência entre tentativas de login.
+frente de migração. A rodada seguinte corrigiu o ciclo de vida de tentativas
+de login descrito abaixo.
+
+### OIDC Desktop — fronteira e ordem de corte
+
+| Entrada ou consumidor | Contrato atual e alcance no Desktop | Fronteira de destino |
+| --- | --- | --- |
+| `main/services/airi/auth.ts`, RPC da janela principal, Settings e Onboarding | Main abre o navegador com PKCE, recebe o código por loopback e confere o `state`. A troca no Main publica access, refresh e ID token no evento de sucesso. | Main conserva a sessão. A janela recebe somente estado da operação e DTO de perfil. |
+| `renderer/bridges/electron-auth-callback.ts` → `stage-ui/stores/auth.ts` | O callback grava os tokens e dados de expiração no `localStorage` da origem e em Pinia sincronizado. `fetchSession` guarda também a sessão Better Auth, que tem campo `token`. A inicialização no Stage relê os dados e arma a renovação. | Adapter desktop instalado antes dos stores. Usar apenas estado autenticado e `id`, `name`, `email`, `image` do perfil. Nunca enviar o objeto `Session` bruto. |
+| `stage-ui/libs/auth-fetch.ts`, `auth-client.ts`, cliente Hono e Settings de conta | REST lê token do store ou direto de `auth/v1/token`. Inclui sessões, edição de conta, senha e vínculos, além de créditos, personagens, configurações de provedores e chat. A conta pode ser aberta por rota direta. | Operações Main com origem, método e caminho limitados. Projetar respostas de conta e filtrar headers e erros. Manter suporte aos fluxos públicos de conta. |
+| `stage-ui/stores/chat/session-store.ts` e `libs/chat-sync/ws-client.ts` | REST sincroniza sessões. O WS `/ws/v2/chat` envia o token no frame de autenticação após a conexão. O chat oficial também consome HTTP SSE. | Autenticar WS e SSE no Main e entregar apenas mensagens de domínio ou frames de dados. Manter reconexão e cancelamento. |
+| `stage-ui/libs/providers/providers/official/`, `libs/speech/streaming-session.ts`, `streaming-pipeline.ts` | Chat e TTS REST usam Bearer. Preview e fala contínua usam WS `/api/v1/audio/speech/ws` com o token na query. STT `/api/v1/audio/transcriptions/stream` recebe stream HTTP duplex. | Adaptadores Main específicos por transporte, preservando streaming binário, upload, backpressure e cancelamento. Uma resposta IPC em buffer não preserva o contrato duplex. |
+| `stage-ui/stores/auth.ts`, `libs/auth-oidc.ts` | Renovação proativa a 80% do TTL e retry em 401. Logout no Renderer usa ID token em `end-session` ou Bearer em `sign-out`. IPC Desktop só cancela o login pendente. | Renovação single-flight e revogação no Main. Serializar persistência e invalidar a geração antiga em logout. Não interpretar `end-session` como prova de revogação de todos os tokens. |
+
+O Main já tem o cofre do Stage injetado em `main/index.ts`. O corte deve
+reutilizar essa instância e reservar um escopo de sessão inacessível a todas
+as operações do bridge genérico, inclusive leitura legada, adoção e escrita.
+Validar restauração, falha de descriptografia, descarte, geração de sessão e
+renovação com rotação antes de habilitar a nova propriedade. Para dados já
+gravados no Renderer, definir adoção única com limpeza somente após confirmação
+do Main, ou reautenticação explícita. Evitar leitura dos valores em logs.
+
+**Fatia implementada nesta rodada.** Uma tentativa possui identidade, janela e
+sinal de cancelamento no Main. Logout, fechamento da janela proprietária e
+substituição invalidam a tentativa antiga, inclusive quando o loopback ou o
+HTTP respondem mais tarde. O Main registra a etapa da falha e o status HTTP
+quando conhecido, com mensagem fixa para a UI. O fetch da troca recusa redirects.
+O formato de sucesso legado foi preservado até haver adaptadores para seus
+consumidores. A migração de propriedade, revogação e recuperação após reinício
+continuam abertas. Nenhuma validação deste delta demonstra sigilo dos tokens
+de um login bem-sucedido.
+
+**Ordem do próximo corte.** Implementar o proprietário do cofre e o adapter
+de conta/REST. Em seguida, cobrir WS de chat e HTTP SSE, WS de áudio e STT
+duplex em fatias próprias, com gates de reconexão e cancelamento. Ativar o
+Desktop sem token no Renderer somente quando esses caminhos estiverem cobertos.
+Web e Pocket podem continuar no adapter atual. O próximo consumidor fora de
+OIDC é o PATCH/broadcast de configuração de provedores, usado pelo cliente
+Hono e pelo store compartilhado. Depende da separação entre configuração
+pública e referência do cofre, com migração dos valores antigos no Main.
 
 1. Terminar contrato Main de configuração/listagem/probe para chat avançado e
    TTS, reaproveitando transportes existentes sem passar plaintext ao SDK Renderer.
