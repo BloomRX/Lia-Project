@@ -2,6 +2,8 @@
 
 Retomada de 08/11/2026. Escopo: transportes Main-native de chat, síntese e
 transcrição gravada. Não é aprovação de todos os consumidores legados.
+Auditoria posterior e correções de integridade/editores:
+[prontidão beta](LIA-BETA-CREDENTIAL-AUDIT-2026-11-08.md).
 
 ## Problema observado
 

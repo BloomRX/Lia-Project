@@ -1,7 +1,7 @@
 import { Buffer } from 'node:buffer'
 import { randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
-import { mkdir, rename, writeFile } from 'node:fs/promises'
+import { mkdir, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
 import { safeDestr } from 'destr'
@@ -93,8 +93,13 @@ export function createLiaSecretVault(deps: SecretsDeps): LiaSecretVault {
   const write = deps.write ?? (async (p: string, data: string) => {
     await mkdir(dirname(p), { recursive: true })
     const tmp = `${p}.${randomUUID()}.tmp`
-    await writeFile(tmp, data)
-    await rename(tmp, p)
+    try {
+      await writeFile(tmp, data)
+      await rename(tmp, p)
+    }
+    finally {
+      await rm(tmp, { force: true })
+    }
   })
 
   // Encryption capabilities are exactly what the host injected - there is no
@@ -118,9 +123,8 @@ export function createLiaSecretVault(deps: SecretsDeps): LiaSecretVault {
       return parsed && typeof parsed === 'object' ? parsed : {}
     }
     catch {
-      // A missing or corrupted/legacy file must not brick the app. Treat as
-      // empty; the next successful write recreates it. No secret material is
-      // lost that we can read anyway, and we never log file contents.
+      // Reads stay tolerant, but mutations below must never replace unreadable
+      // bytes. A temporary read failure does not establish that the vault is empty.
       return {}
     }
   }
@@ -138,9 +142,7 @@ export function createLiaSecretVault(deps: SecretsDeps): LiaSecretVault {
   const loadForRollback = (): VaultFile => {
     try {
       const raw = read(path)
-      if (!raw)
-        return {}
-      const parsed = safeDestr<unknown>(raw)
+      const parsed: unknown = JSON.parse(raw)
       if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || Object.values(parsed).some(value => typeof value !== 'string'))
         throw new Error('invalid vault')
       return parsed as VaultFile
@@ -167,11 +169,17 @@ export function createLiaSecretVault(deps: SecretsDeps): LiaSecretVault {
     },
     isEncryptionAvailable: () => isAvailable(),
     setSecret: async (scope, key, value) => {
-      if (!isAvailable() || value.length === 0)
+      try {
+        if (!isAvailable() || value.length === 0)
+          return false
+        const file = loadForRollback()
+        file[encodeKey(scope, key)] = ciphertextToBase64(encrypt(value))
+        return await save(file)
+      }
+      catch {
+        // Cipher and storage exceptions can carry private data; never export them.
         return false
-      const file = load()
-      file[encodeKey(scope, key)] = ciphertextToBase64(encrypt(value))
-      return save(file)
+      }
     },
     getSecret: (scope, key) => {
       const file = load()
@@ -184,11 +192,16 @@ export function createLiaSecretVault(deps: SecretsDeps): LiaSecretVault {
     },
     hasSecret: (scope, key) => load()[encodeKey(scope, key)] !== undefined,
     deleteSecret: async (scope, key) => {
-      const file = load()
-      if (!(encodeKey(scope, key) in file))
-        return true
-      delete file[encodeKey(scope, key)]
-      return save(file)
+      try {
+        const file = loadForRollback()
+        if (!(encodeKey(scope, key) in file))
+          return true
+        delete file[encodeKey(scope, key)]
+        return await save(file)
+      }
+      catch {
+        return false
+      }
     },
   }
 }

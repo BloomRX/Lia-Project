@@ -28,6 +28,8 @@ import { join } from 'node:path'
 import { errorMessageFromValue } from '@proj-airi/stage-shared'
 import { app } from 'electron'
 
+import { maskSecrets } from './main-process-log-bus'
+
 // ============================================================================
 // Constants
 // ============================================================================
@@ -155,7 +157,8 @@ export async function setupFileLogger(): Promise<FileLoggerHandle> {
         return
       }
 
-      const normalizedContent = content.endsWith('\n') ? content : `${content}\n`
+      const redacted = maskSecrets(content)
+      const normalizedContent = redacted.endsWith('\n') ? redacted : `${redacted}\n`
 
       try {
         await fileHandle.appendFile(normalizedContent)

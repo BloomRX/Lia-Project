@@ -21,7 +21,9 @@ async function fixture() {
   cleanup.push(() => rm(directory, { recursive: true, force: true }))
   const file = join(directory, 'transports.json')
   const repository = createTransportRepository(file)
-  let vaultData = ''
+  // The fixture starts with an existing valid empty container. Empty bytes
+  // now represent a truncated vault and must remain unwritable.
+  let vaultData = '{}'
   const vault = createLiaSecretVault({ filePath: join(directory, 'vault'), cipher: { available: () => true, encrypt: value => Buffer.from(value).reverse(), decrypt: value => Buffer.from(value).reverse().toString() }, read: () => vaultData, write: async (_, value) => {
     vaultData = value
   } })

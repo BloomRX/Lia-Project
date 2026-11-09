@@ -1,5 +1,11 @@
 # Lia — retomada da finalização no Windows
 
+**Continuação beta, 08/11 à noite:** [resultados e limitações da rodada](LIA-BETA-READINESS-2026-11-08.md),
+[auditoria por consumidor](../architecture/LIA-BETA-CREDENTIAL-AUDIT-2026-11-08.md)
+e [baseline de uma hora](../architecture/LIA-BETA-PERFORMANCE-2026-11-08.md).
+O pacote deste relatório é o anterior às correções beta, preservado como
+baseline; não se usa sua aprovação para o código alterado depois.
+
 Rodada de 07/11, continuada em 08/11/2026. **Release NÃO APROVADA.** Baseline funcional
 continua `3ef6d11`. Branch `arena/01a10290-lia-project`; preflight local e remoto
 em `40326d7`, sem divergência. Nenhum reset, clean, stash, troca de branch,

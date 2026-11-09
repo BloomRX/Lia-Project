@@ -13,6 +13,24 @@ commit. Registra **estado**, não narrativa: relatório de rodada vai para
 
 ## 0. Estado agora
 
+**Prontidão beta — 08/11, Ainda bloqueada.** Retomada de `dcd0b05` preservada.
+Cofre recusa mutações de container vazio/corrompido/ilegível; 13 testes focados
+e 22 Stage PASS. Logs Main mascaram formatos conhecidos também no arquivo.
+Editor de chat nativo/aliases usa porta Main, preservando serviços sem chave;
+23 testes focados PASS após revisão. Credenciais legadas alcançáveis continuam
+abertas e classificadas na [auditoria beta](../architecture/LIA-BETA-CREDENTIAL-AUDIT-2026-11-08.md).
+Shell/Config pt-BR/en e RAF da sombra corrigidos; demais traduções parciais.
+Regressão: Launcher 280 PASS/2 skips, Stage 2356 PASS/4 skips antes da guarda
+aditiva do alias local (delta: 23 PASS), Chromium Launcher 16/Stage 54/editor 6,
+Core legado 368 PASS, lint/types/builds PASS. Gates Electron PS5.1/7 PASS em
+`6de84dd5-9406-4f7a-97dc-5cfa8cfa6db4` e `1f69ffbc-b890-47a6-a2c2-82b7bca6ae2b`.
+Baseline antigo: uma hora concluída, métricas por processo/GPU disponíveis,
+sem prova de baixo consumo ou vazamento. Licenças físicas inventariadas;
+direitos de assets e runtimes proprietários pendentes. **Próximo: gerar pacote
+privado atualizado, executar o fluxo e medir esse pacote separadamente, sem
+builds/testes concorrentes.** Não publicar instalador nem promover `3ef6d11`.
+[Relatório beta e pendências](../product/LIA-BETA-READINESS-2026-11-08.md).
+
 **Finalização retomada — 08/11, integração em andamento.** Trabalho da execução
 interrompida preservado: configuração IA no Launcher, personalidade, memória,
 presença e pipeline privado Windows. Inventário, revisão independente e testes

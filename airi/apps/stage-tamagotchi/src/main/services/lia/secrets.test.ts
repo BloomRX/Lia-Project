@@ -40,7 +40,12 @@ async function loadVault(fs: { disk: string }, { encryptionAvailable = true }: {
   const write = async (_path: string, data: string) => {
     fs.disk = data
   }
-  const read = () => fs.disk
+  const read = () => {
+    // This fixture's empty sentinel models an absent file, not a truncated one.
+    if (fs.disk === '')
+      throw Object.assign(new Error('missing fixture vault'), { code: 'ENOENT' })
+    return fs.disk
+  }
 
   const { createLiaSecretVault } = await import('./secrets')
   const vault = createLiaSecretVault({
