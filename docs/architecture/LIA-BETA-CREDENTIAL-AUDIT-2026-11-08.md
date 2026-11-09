@@ -22,6 +22,9 @@ plugins arbitrários, serviços externos ou todos os possíveis campos futuros.
 
 ## Inventário correlacionado
 
+Nas linhas abreviadas, `.../main` e `.../renderer` referem-se a
+`airi/apps/stage-tamagotchi/src/main` e `airi/apps/stage-tamagotchi/src/renderer`.
+
 | Arquivo / função | Quem chama e alcance em produção | Segredo no Renderer? | Owner / classificação e próximo trabalho |
 | --- | --- | --- | --- |
 | `airi/apps/lia-app/src/main/ai-connection-service.ts`, save/discover/test | IPC do Launcher, IA & Recursos | Entrada explícita; devolve presença, configuração e resultados limitados | Main proprietário; backup opaco e rollback de seleção já testados. HTTP real externo pendente |
@@ -64,6 +67,14 @@ plugins arbitrários, serviços externos ou todos os possíveis campos futuros.
   política de credenciais 21 PASS. Não transforma teste de presença/configuração
   em teste de conexão. A página avançada de ping legado continua pendente de
   teste completo Main; fluxo normal do Launcher já tem ferramenta/resultado.
+  Revisão posterior encontrou prontidão exigindo chave em serviço local e em
+  alias novo: exigência agora é declarada pela porta, e definição do alias é
+  consultada antes de existir transporte. Delta final: 23 PASS; composable real
+  e registro da porta: 5 PASS. Contraprova de compilação com o ramo antigo deu
+  2 FAIL/2 PASS, sem modificar a fonte produtiva durante o build.
+  Persistência de endpoint/opções pelo editor genérico e o ping legado não
+  estão aprovados por essa troca de propriedade da chave: são contratos
+  adicionais a integrar ao Main antes de declarar o editor completo.
 
 ## Ordem segura de fechamento
 

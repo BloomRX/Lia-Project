@@ -28,7 +28,7 @@ Baseline antigo: uma hora concluída, métricas por processo/GPU disponíveis,
 sem prova de baixo consumo ou vazamento. Licenças físicas inventariadas;
 direitos de assets e runtimes proprietários pendentes. **Próximo: gerar pacote
 privado atualizado, executar o fluxo e medir esse pacote separadamente, sem
-builds/testes concorrentes.** Não publicar instalador nem promover `3ef6d11`.
+builds/testes concorrentes.** Não publicar instalador; baseline continua `3ef6d11`.
 [Relatório beta e pendências](../product/LIA-BETA-READINESS-2026-11-08.md).
 
 **Finalização retomada — 08/11, integração em andamento.** Trabalho da execução

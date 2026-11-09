@@ -117,6 +117,7 @@ Stage, lint, types, builds e componentes foram registrados abaixo.
 | `pnpm run test:shadow`, stage-ui-live2d | 5 PASS; contraprova SFC anterior 4 FAIL/1 PASS; typecheck do pacote exit 0 |
 | Composable keyless + registro de porta, stage-ui | 5 PASS, exit 0; `beta-keyless-final-tests`. Transformação de teste do ramo anterior: 2 FAIL/2 PASS, sem alterar fonte em disco; `beta-keyless-counterproof` |
 | `node --test "Tests/tools/*.test.mjs"`, raiz | 270 PASS, exit 0; `beta-root-harness-tests` |
+| `python -m unittest discover -s . -p "test_*.py" -t .`, tools | 498 descobertos: 488 executados PASS/10 skips, exit 0; `beta-python-tests`. Mensagens de contraprovas de spawn permanecem no log, não são resultado final da suíte |
 | `moeru-lint <arquivos tocados>`, airi | exit 0; `beta-touched-lint-final`; erros iniciais de formatação corrigidos sem desativar regras |
 | `pnpm run typecheck`, Launcher/Stage/stage-pages | exit 0, três logs `beta-final2-*-types` |
 | `pnpm run build`, Launcher/Stage, sequencial | exit 0, `beta-final2-*-build`; Launcher recompila Core |
@@ -131,6 +132,14 @@ C:/Users/lucas/AppData/Local/Temp/lia-electron-official-670c18ee-5d18-4b64-893c-
 depois equivalente com `pwsh.exe`. Runtime oficial 43.4.1, ZIP SHA-256
 `c2ef9a5f65472c34d14bd3e67b7d14e66b0c01f124aba45263d6a4232160e13a`.
 Não cobre serviço externo, audição física ou instalador.
+
+`node --check` dos dois módulos novos do inventário e do roteiro Windows PASS;
+testes do inventário: 3 PASS. Tentativa de moeru-lint nos arquivos fora de
+`airi/` terminou em exit 2 por ausência de config ESLint na raiz. Não se criou
+config global nem se declarou lint completo desses módulos. O lint dos
+arquivos da aplicação tocados passou; warning de estilo no teste Node foi
+corrigido. Coletor com PWS/GPU/roles repetido em PowerShell 5.1 e 7: exit 0,
+sem presumir disponibilidade de todo contador numa janela de apenas três segundos.
 
 ## Próximas dependências para beta
 
