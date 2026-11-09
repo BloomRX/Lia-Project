@@ -21,10 +21,13 @@ export function withCredentialOwner(vault: LiaSecretVault): LiaSecretVault {
     ...vault,
     // Opaque rollback belongs to the cipher owner, never to this host facade.
     backupSecret: undefined,
-    async setSecret(scope, key, value) {
+    async setSecret(scope, key, value, signal) {
       if (key !== 'apiKey')
-        return vault.setSecret(scope, key, value)
+        return signal ? vault.setSecret(scope, key, value, signal) : vault.setSecret(scope, key, value)
       try {
+        // The remote owner protocol has no guarded commit acknowledgement.
+        if (signal)
+          return false
         return await client.request({ operation: 'set', scope, key, value }) === true
       }
       catch { return false }

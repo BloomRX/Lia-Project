@@ -1,6 +1,6 @@
 import { Buffer } from 'node:buffer'
 import { randomUUID } from 'node:crypto'
-import { readFileSync } from 'node:fs'
+import { readFileSync, renameSync } from 'node:fs'
 import { mkdir, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
@@ -34,7 +34,7 @@ export interface LiaSecretVault {
   /** Main-only opaque rollback of one ciphertext entry; never expose through IPC. */
   backupSecret?: (scope: string, key: string) => Promise<() => Promise<boolean>>
   isEncryptionAvailable: () => boolean
-  setSecret: (scope: string, key: string, value: string) => Promise<boolean>
+  setSecret: (scope: string, key: string, value: string, signal?: AbortSignal) => Promise<boolean>
   getSecret: (scope: string, key: string) => string | undefined
   hasSecret: (scope: string, key: string) => boolean
   deleteSecret: (scope: string, key: string) => Promise<boolean>
@@ -69,8 +69,8 @@ export interface SecretsDeps {
   cipher: LiaSecretCipher
   /** Overridable disk reader for deterministic tests. */
   read?: (path: string) => string
-  /** Overridable disk writer for deterministic tests. */
-  write?: (path: string, data: string) => Promise<void>
+  /** Injected writers must check the signal before publishing the new bytes. */
+  write?: (path: string, data: string, signal?: AbortSignal) => Promise<void>
 }
 
 /**
@@ -90,15 +90,24 @@ export function ciphertextToBase64(encrypted: Buffer | Uint8Array | string): str
 export function createLiaSecretVault(deps: SecretsDeps): LiaSecretVault {
   const path = deps.filePath
   const read = deps.read ?? ((p: string) => readFileSync(p, 'utf8'))
-  const write = deps.write ?? (async (p: string, data: string) => {
+  const write = deps.write ?? (async (p: string, data: string, signal?: AbortSignal) => {
+    signal?.throwIfAborted()
     await mkdir(dirname(p), { recursive: true })
     const tmp = `${p}.${randomUUID()}.tmp`
     try {
       await writeFile(tmp, data)
-      await rename(tmp, p)
+      if (signal) {
+        // No JS callback can abort between admission and atomic replacement.
+        signal.throwIfAborted()
+        renameSync(tmp, p)
+      }
+      else {
+        await rename(tmp, p)
+      }
     }
-    finally {
+    catch (error) {
       await rm(tmp, { force: true })
+      throw error
     }
   })
 
@@ -129,9 +138,13 @@ export function createLiaSecretVault(deps: SecretsDeps): LiaSecretVault {
     }
   }
 
-  const save = async (file: VaultFile): Promise<boolean> => {
+  const save = async (file: VaultFile, signal?: AbortSignal): Promise<boolean> => {
     try {
-      await write(path, JSON.stringify(file))
+      signal?.throwIfAborted()
+      if (signal)
+        await write(path, JSON.stringify(file), signal)
+      else
+        await write(path, JSON.stringify(file))
       return true
     }
     catch {
@@ -168,13 +181,13 @@ export function createLiaSecretVault(deps: SecretsDeps): LiaSecretVault {
       }
     },
     isEncryptionAvailable: () => isAvailable(),
-    setSecret: async (scope, key, value) => {
+    setSecret: async (scope, key, value, signal) => {
       try {
-        if (!isAvailable() || value.length === 0)
+        if (signal?.aborted || !isAvailable() || value.length === 0)
           return false
         const file = loadForRollback()
         file[encodeKey(scope, key)] = ciphertextToBase64(encrypt(value))
-        return await save(file)
+        return await save(file, signal)
       }
       catch {
         // Cipher and storage exceptions can carry private data; never export them.

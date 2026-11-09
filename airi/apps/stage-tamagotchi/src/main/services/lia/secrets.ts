@@ -23,7 +23,7 @@ interface SecretsDeps {
   /** Overridable disk reader for deterministic tests. */
   read?: (path: string) => string
   /** Overridable disk writer for deterministic tests. */
-  write?: (path: string, data: string) => Promise<void>
+  write?: (path: string, data: string, signal?: AbortSignal) => Promise<void>
   /**
    * Whether OS encryption is usable. Defaults to Electron `safeStorage`, but is
    * injectable so the vault honours exactly the capability it was given.

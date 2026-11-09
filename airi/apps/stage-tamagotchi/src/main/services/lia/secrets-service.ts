@@ -20,6 +20,10 @@ import { createLiaSecretVault } from './secrets'
 const log = useLogg('lia:secrets').useGlobalConfig()
 const writes = new WeakMap<LiaSecretVault, Promise<unknown>>()
 
+// This namespace belongs to the desktop session owner. Renderer-facing
+// presence, adoption and mutations are forbidden as well as reads.
+export const oidcSessionScope = 'lia:main:oidc'
+
 export function serializeWrite<T>(vault: LiaSecretVault, action: () => Promise<T>): Promise<T> {
   const result = (writes.get(vault) ?? Promise.resolve()).then(action)
   writes.set(vault, result.catch(() => {}))
@@ -47,6 +51,7 @@ export function registerLiaSecretsBridge(params: {
   const { context, vault } = params
   const validReference = (payload: { scope?: string, key?: string } | undefined) =>
     typeof payload?.scope === 'string' && payload.scope.length > 0 && payload.scope.length <= 256
+    && payload.scope !== oidcSessionScope
     && typeof payload.key === 'string' && payload.key.length > 0 && payload.key.length <= 64
     && ![...payload.scope + payload.key].some(character => character.codePointAt(0)! < 32 || character.codePointAt(0) === 127)
 

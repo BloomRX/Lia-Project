@@ -1,5 +1,5 @@
 import { Buffer } from 'node:buffer'
-import { mkdirSync, mkdtempSync, readdirSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -21,6 +21,26 @@ function fixture(disk = '{}') {
 }
 
 describe('credential writes preserve the existing container', () => {
+  it('cancels an in-flight guarded write before replacing the live file', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'lia-vault-cancel-'))
+    try {
+      const filePath = join(directory, 'vault.json')
+      const vault = createLiaSecretVault({ filePath, cipher: { available: () => true, encrypt: text => Buffer.from(text), decrypt: bytes => bytes.toString() } })
+      expect(await vault.setSecret('internal', 'session', 'previous')).toBe(true)
+      const previous = readFileSync(filePath, 'utf8')
+      const cancellation = new AbortController()
+      const pending = vault.setSecret('internal', 'session', 'cancelled', cancellation.signal)
+      cancellation.abort()
+      expect(await pending).toBe(false)
+      expect(readFileSync(filePath, 'utf8')).toBe(previous)
+      expect(readdirSync(directory)).toEqual(['vault.json'])
+      expect(await vault.setSecret('internal', 'session', 'current', new AbortController().signal)).toBe(true)
+      expect(vault.getSecret('internal', 'session')).toBe('current')
+    }
+    finally {
+      rmSync(directory, { recursive: true, force: true })
+    }
+  })
   it('cleans its encrypted temporary file when the atomic rename fails', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'lia-vault-atomic-'))
     try {

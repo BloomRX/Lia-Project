@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { registerLiaSecretsBridge } from './secrets-service'
+import { oidcSessionScope, registerLiaSecretsBridge } from './secrets-service'
 
 const handlers = vi.hoisted(() => new Map<string, (value: any) => any>())
 vi.mock('@moeru/eventa', async original => ({
@@ -18,7 +18,7 @@ function setup(allowRendererRead = async () => false) {
   const values = new Map<string, string>()
   const vault = {
     isEncryptionAvailable: () => true,
-    hasSecret: (scope: string, key: string) => values.has(`${scope}:${key}`),
+    hasSecret: vi.fn((scope: string, key: string) => values.has(`${scope}:${key}`)),
     getSecret: vi.fn((scope: string, key: string) => values.get(`${scope}:${key}`)),
     setSecret: vi.fn(async (scope: string, key: string, value: string) => {
       values.set(`${scope}:${key}`, value)
@@ -32,6 +32,25 @@ function setup(allowRendererRead = async () => false) {
 beforeEach(() => handlers.clear())
 
 describe('secret bridge ownership and migration', () => {
+  it.each(['session-v1', 'apiKey'])('blocks every Renderer vault operation for the OIDC scope (%s)', async (key) => {
+    const allow = vi.fn(async () => true)
+    const { vault, values } = setup(allow)
+    const reference = { scope: oidcSessionScope, key }
+    const slot = `${oidcSessionScope}:${key}`
+    values.set(slot, 'SYNTHETIC_MAIN_ONLY')
+
+    expect(await handler('get')(reference)).toBeUndefined()
+    expect(await handler('has')(reference)).toBe(false)
+    expect(await handler('set')({ ...reference, value: 'SYNTHETIC_REPLACEMENT' })).toBe(false)
+    expect(await handler('adopt')({ ...reference, value: 'SYNTHETIC_MAIN_ONLY' })).toBe('unavailable')
+    expect(await handler('delete')(reference)).toBe(false)
+    expect(values.get(slot)).toBe('SYNTHETIC_MAIN_ONLY')
+    expect(allow).not.toHaveBeenCalled()
+    expect(vault.getSecret).not.toHaveBeenCalled()
+    expect(vault.hasSecret).not.toHaveBeenCalled()
+    expect(vault.setSecret).not.toHaveBeenCalled()
+    expect(vault.deleteSecret).not.toHaveBeenCalled()
+  })
   it('does not read or export a protected credential, even when present', async () => {
     const { vault, values } = setup()
     values.set('protected:apiKey', 'SYNTHETIC_PRIVATE_VALUE')
