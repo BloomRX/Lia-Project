@@ -51,7 +51,7 @@ function setup() {
 describe('main-only OIDC session owner', () => {
   it('accepts trusted login data, stores only ciphertext and restores for the same issuer', async () => {
     const { owner, restore, disk } = setup()
-    expect(await owner.establish(exchange, signal())).toBe(true)
+    expect(await owner.establish(exchange, signal(), owner.beginLogin()!)).toBe(true)
     expect(disk()).toContain('session-v1')
     for (const secret of [exchange.access_token, exchange.refresh_token, exchange.id_token])
       expect(disk()).not.toContain(secret)
@@ -64,15 +64,15 @@ describe('main-only OIDC session owner', () => {
 
   it('rejects malformed token responses and HTTP origins outside loopback', async () => {
     const { owner, vault } = setup()
-    expect(await owner.establish({ ...exchange, access_token: 'bad\r\nheader' }, signal())).toBe(false)
-    expect(await owner.establish({ ...exchange, expires_in: 0 }, signal())).toBe(false)
+    expect(await owner.establish({ ...exchange, access_token: 'bad\r\nheader' }, signal(), owner.beginLogin()!)).toBe(false)
+    expect(await owner.establish({ ...exchange, expires_in: 0 }, signal(), owner.beginLogin()!)).toBe(false)
     expect(vault.hasSecret(oidcSessionScope, 'session-v1')).toBe(false)
     expect(() => createOidcSessionOwner({ origin: new URL('http://issuer.example'), clientId: 'desktop', vault })).toThrow('Invalid desktop OIDC origin')
   })
 
   it('shares one refresh across windows and persists rotated credentials', async () => {
     const { owner, fetch, expire, restore } = setup()
-    await owner.establish(exchange, signal())
+    await owner.establish(exchange, signal(), owner.beginLogin()!)
     expire()
     const response = Promise.withResolvers<Response>()
     fetch.mockReturnValue(response.promise)
@@ -89,7 +89,7 @@ describe('main-only OIDC session owner', () => {
 
   it('does not reuse an expired token after a failed refresh and clears invalid grants', async () => {
     const { owner, vault, fetch, expire } = setup()
-    await owner.establish(exchange, signal())
+    await owner.establish(exchange, signal(), owner.beginLogin()!)
     expire()
     const call = vi.fn()
     fetch.mockResolvedValueOnce(Response.json({ error: 'SYNTHETIC_PRIVATE_ERROR' }, { status: 503 }))
@@ -103,9 +103,9 @@ describe('main-only OIDC session owner', () => {
 
   it('requires sign-in after persistence fails for a rotated refresh token', async () => {
     const { owner, vault, fetch, expire } = setup()
-    await owner.establish(exchange, signal())
+    await owner.establish(exchange, signal(), owner.beginLogin()!)
     expire()
-    vi.spyOn(vault, 'setSecret').mockResolvedValueOnce(false)
+    vi.spyOn(vault, 'changeSecret').mockResolvedValueOnce(undefined)
     fetch.mockResolvedValueOnce(Response.json(rotated))
     const call = vi.fn()
     expect(await owner.withAccess(signal(), call)).toBeUndefined()
@@ -117,7 +117,7 @@ describe('main-only OIDC session owner', () => {
 
   it('revokes in the Main, clears persistence and rejects a late refresh after logout', async () => {
     const { owner, fetch, expire, restore, vault } = setup()
-    await owner.establish(exchange, signal())
+    await owner.establish(exchange, signal(), owner.beginLogin()!)
     expire()
     const response = Promise.withResolvers<Response>()
     fetch.mockReturnValueOnce(response.promise).mockResolvedValueOnce(new Response(null, { status: 200 }))
@@ -141,7 +141,7 @@ describe('main-only OIDC session owner', () => {
 
   it('discards a closed window result without aborting another window request', async () => {
     const { owner } = setup()
-    await owner.establish(exchange, signal())
+    await owner.establish(exchange, signal(), owner.beginLogin()!)
     const first = new AbortController()
     const response = Promise.withResolvers<string>()
     const read = owner.withAccess(first.signal, () => response.promise)
@@ -153,10 +153,10 @@ describe('main-only OIDC session owner', () => {
 
   it('keeps the previous session when a login is cancelled before vault commit', async () => {
     const { owner, beforeWrite, restore } = setup()
-    await owner.establish(exchange, signal())
+    await owner.establish(exchange, signal(), owner.beginLogin()!)
     const candidate = new AbortController()
     beforeWrite(() => candidate.abort())
-    expect(await owner.establish(rotated, candidate.signal)).toBe(false)
+    expect(await owner.establish(rotated, candidate.signal, owner.beginLogin()!)).toBe(false)
     const call = vi.fn(async () => true)
     expect(await restore().withAccess(signal(), call)).toBe(true)
     expect(call).toHaveBeenCalledExactlyOnceWith(exchange.access_token, expect.any(AbortSignal), privateCheck)
@@ -164,7 +164,7 @@ describe('main-only OIDC session owner', () => {
 
   it('supplies the bearer internally and projects an account DTO without session credentials', async () => {
     const { owner, fetch } = setup()
-    await owner.establish(exchange, signal())
+    await owner.establish(exchange, signal(), owner.beginLogin()!)
     const account = createOidcAccountService({ origin, fetch, withAccess: owner.withAccess })
     const profile = { id: 'user-1', name: 'Lia', email: 'lia@example.test', image: null }
     fetch.mockResolvedValueOnce(Response.json({ user: profile, session: { token: exchange.access_token, refreshToken: exchange.refresh_token } }))
@@ -179,12 +179,43 @@ describe('main-only OIDC session owner', () => {
 
   it('suppresses a response from an authenticated operation after a different login succeeds', async () => {
     const { owner } = setup()
-    await owner.establish(exchange, signal())
+    await owner.establish(exchange, signal(), owner.beginLogin()!)
     const previous = Promise.withResolvers<string>()
     const pending = owner.withAccess(signal(), () => previous.promise)
-    expect(await owner.establish(rotated, signal())).toBe(true)
+    expect(await owner.establish(rotated, signal(), owner.beginLogin()!)).toBe(true)
     expect(await pending).toBeUndefined()
     previous.resolve('late')
     expect(await owner.withAccess(signal(), async token => token === rotated.access_token)).toBe(true)
+  })
+
+  it('rejects a pending login when another owner logs out while no session exists', async () => {
+    const { owner, restore } = setup()
+    const revision = owner.beginLogin()!
+    expect(await restore().logout()).toEqual({ cleared: true, revocation: 'absent' })
+    expect(await owner.establish(exchange, signal(), revision)).toBe(false)
+    expect(await restore().withAccess(signal(), async () => true)).toBeUndefined()
+  })
+
+  it.each(['logout', 'replacement', 'invalid-grant'] as const)('fences a refresh against another owner’s %s', async (operation) => {
+    const { owner, restore, fetch, expire } = setup()
+    await owner.establish(exchange, signal(), owner.beginLogin()!)
+    const other = restore()
+    expire()
+    const pendingResponse = Promise.withResolvers<Response>()
+    fetch.mockReturnValueOnce(pendingResponse.promise).mockResolvedValue(new Response(null, { status: 200 }))
+    const call = vi.fn(async () => true)
+    const pending = owner.withAccess(signal(), call)
+    const logout = operation === 'logout'
+    if (logout)
+      expect((await other.logout()).cleared).toBe(true)
+    else
+      expect(await other.establish(rotated, signal(), other.beginLogin()!)).toBe(true)
+
+    pendingResponse.resolve(operation === 'invalid-grant'
+      ? Response.json({ error: 'invalid_grant' }, { status: 400 })
+      : Response.json({ ...rotated, access_token: 'STALE_ROTATION' }))
+    expect(await pending).toBeUndefined()
+    expect(call).not.toHaveBeenCalled()
+    expect(await restore().withAccess(signal(), async token => token === rotated.access_token)).toBe(logout ? undefined : true)
   })
 })

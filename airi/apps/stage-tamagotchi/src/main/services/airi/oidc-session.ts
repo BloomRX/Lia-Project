@@ -114,16 +114,22 @@ export function createOidcSessionOwner(options: {
     throw new Error('Invalid desktop OIDC origin')
   }
 
-  function restore(): Tokens | undefined {
+  function restore(): { tokens: Tokens, revision: string } | undefined {
     try {
-      const value = record(JSON.parse(vault.getSecret(oidcSessionScope, sessionKey) ?? 'null'))
+      const snapshot = vault.readSecretSnapshot?.(oidcSessionScope, sessionKey)
+      if (!snapshot)
+        return undefined
+      const value = record(JSON.parse(snapshot.value ?? 'null'))
       if (value?.origin !== origin || value.clientId !== clientId || !validToken(value.accessToken)
         || typeof value.expiresAt !== 'number' || !Number.isSafeInteger(value.expiresAt)
         || (value.refreshToken !== undefined && !validToken(value.refreshToken))
         || (value.idToken !== undefined && !validToken(value.idToken))) {
         return undefined
       }
-      return { accessToken: value.accessToken, refreshToken: value.refreshToken, idToken: value.idToken, expiresAt: value.expiresAt }
+      return {
+        tokens: { accessToken: value.accessToken, refreshToken: value.refreshToken, idToken: value.idToken, expiresAt: value.expiresAt },
+        revision: snapshot.revision,
+      }
     }
     catch {
       // Leave unreadable storage alone. A new explicit login may replace it.
@@ -131,7 +137,9 @@ export function createOidcSessionOwner(options: {
     }
   }
 
-  let tokens = restore()
+  const initial = restore()
+  let tokens = initial?.tokens
+  let sessionRevision = initial?.revision
   let generation = new AbortController()
   let pendingLogin = new AbortController()
   let logoutRevision = 0
@@ -142,36 +150,53 @@ export function createOidcSessionOwner(options: {
     generation = new AbortController()
     refreshing = undefined
     tokens = undefined
+    sessionRevision = undefined
   }
 
-  const save = (value: Tokens, signal: AbortSignal) => vault.setSecret(oidcSessionScope, sessionKey, JSON.stringify({ ...value, origin, clientId }), signal)
+  function beginLogin(): string | undefined {
+    try {
+      return vault.secretRevision?.(oidcSessionScope, sessionKey)
+    }
+    catch { return undefined }
+  }
 
-  async function store(value: Tokens, signal: AbortSignal): Promise<boolean> {
+  const save = (value: Tokens, signal: AbortSignal, expectedRevision: string) => vault.changeSecret?.(
+    oidcSessionScope,
+    sessionKey,
+    JSON.stringify({ ...value, origin, clientId }),
+    { signal, expectedRevision },
+  )
+  const clearIfCurrent = (expectedRevision: string) => vault.changeSecret?.(oidcSessionScope, sessionKey, undefined, { expectedRevision })
+
+  async function store(value: Tokens, signal: AbortSignal, expectedRevision: string): Promise<boolean> {
     return serializeWrite(vault, async () => {
-      const saved = await save(value, signal)
+      const saved = await save(value, signal, expectedRevision)
       if (signal.aborted)
         return false
       if (!saved) {
         // The issuer may have consumed the old refresh token already.
         invalidate()
-        await vault.deleteSecret(oidcSessionScope, sessionKey)
+        await clearIfCurrent(expectedRevision)
         return false
       }
       tokens = value
+      sessionRevision = saved.revision
       return true
     })
   }
 
-  async function establish(exchange: unknown, caller: AbortSignal): Promise<boolean> {
+  // Capture expectedRevision through beginLogin before opening the browser.
+  async function establish(exchange: unknown, caller: AbortSignal, expectedRevision: string): Promise<boolean> {
     const value = fromExchange(exchange, now())
-    if (!value || caller.aborted)
+    if (!value || caller.aborted || typeof expectedRevision !== 'string' || !expectedRevision)
       return false
     pendingLogin.abort()
     pendingLogin = new AbortController()
     const signal = AbortSignal.any([pendingLogin.signal, caller])
     const revision = logoutRevision
     return serializeWrite(vault, async () => {
-      if (!await save(value, signal))
+      const saved = await save(value, signal, expectedRevision)
+      if (!saved)
         return false
       // A completed atomic replacement is the login commit point. Logout
       // invalidates first and removes the stored entry in this same write lane.
@@ -179,6 +204,7 @@ export function createOidcSessionOwner(options: {
         return false
       invalidate()
       tokens = value
+      sessionRevision = saved.revision
       return true
     })
   }
@@ -193,7 +219,7 @@ export function createOidcSessionOwner(options: {
     })
   }
 
-  async function renew(previous: Tokens, generationSignal: AbortSignal): Promise<Tokens | undefined> {
+  async function renew(previous: Tokens, generationSignal: AbortSignal, expectedRevision: string): Promise<Tokens | undefined> {
     if (!previous.refreshToken)
       return undefined
     const signal = AbortSignal.any([generationSignal, AbortSignal.timeout(15_000)])
@@ -215,14 +241,14 @@ export function createOidcSessionOwner(options: {
           await serializeWrite(vault, async () => {
             if (!generationSignal.aborted) {
               invalidate()
-              await vault.deleteSecret(oidcSessionScope, sessionKey)
+              await clearIfCurrent(expectedRevision)
             }
           })
         }
         return undefined
       }
       const next = fromExchange(body, now(), previous)
-      return next && await store(next, generationSignal) ? next : undefined
+      return next && await store(next, generationSignal, expectedRevision) ? next : undefined
     }
     catch {
       // HTTP failures, invalid bodies and aborts never carry upstream details out.
@@ -232,13 +258,17 @@ export function createOidcSessionOwner(options: {
 
   async function withAccess<T>(caller: AbortSignal, action: (accessToken: string, signal: AbortSignal, containsPrivateValue: (text: string) => boolean) => Promise<T>): Promise<T | undefined> {
     const signal = AbortSignal.any([generation.signal, caller])
-    if (!tokens || signal.aborted)
+    if (!tokens || !sessionRevision || signal.aborted)
       return undefined
+    if (sessionRevision !== beginLogin()) {
+      invalidate()
+      return undefined
+    }
 
     let current: Tokens | undefined = tokens
     if (current.expiresAt <= now()) {
       if (!refreshing) {
-        const pending = renew(current, generation.signal).finally(() => {
+        const pending = renew(current, generation.signal, sessionRevision).finally(() => {
           if (refreshing === pending)
             refreshing = undefined
         })
@@ -248,8 +278,12 @@ export function createOidcSessionOwner(options: {
     }
     if (!current || signal.aborted || current.expiresAt <= now())
       return undefined
+    const revision = sessionRevision
+    if (!revision || revision !== beginLogin())
+      return undefined
     const secrets = [current.accessToken, current.refreshToken, current.idToken]
-    return whileActive(action(current.accessToken, signal, text => secrets.some(secret => secret !== undefined && text.includes(secret))), signal)
+    const result = await whileActive(action(current.accessToken, signal, text => secrets.some(secret => secret !== undefined && text.includes(secret))), signal)
+    return revision === beginLogin() ? result : undefined
   }
 
   async function logout(): Promise<{ cleared: boolean, revocation: 'accepted' | 'failed' | 'absent' }> {
@@ -273,5 +307,5 @@ export function createOidcSessionOwner(options: {
     }
   }
 
-  return { establish, withAccess, logout }
+  return { beginLogin, establish, withAccess, logout }
 }
