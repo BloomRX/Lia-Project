@@ -142,7 +142,15 @@ describe('lia secret vault', () => {
     const raw = readDisk()
     expect(raw).not.toContain('bearer-AAAA')
     expect(raw).not.toContain('sk-second')
-    for (const value of Object.values(decodedDisk() ?? {})) {
+    const entries = Object.entries(decodedDisk() ?? {}).filter(([reference]) => reference.includes('\0'))
+    expect(entries).toHaveLength(2)
+    const metadata = JSON.parse(JSON.parse(raw)['@lia:vault-revisions-v1'])
+    expect(Object.keys(metadata).sort()).toEqual(['absent', 'live'])
+    expect(Object.keys(metadata.live).sort()).toEqual(['cerebras\0apiKey', 'openai\0apiKey'])
+    expect(metadata.absent).toBe('legacy')
+    for (const revision of Object.values(metadata.live))
+      expect(revision).toMatch(/^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/)
+    for (const [, value] of entries) {
       expect(value).not.toContain('bearer-AAAA')
       expect(value).not.toContain('sk-second')
       expect(value.startsWith(CIPHER_MARK)).toBe(true)

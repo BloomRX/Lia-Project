@@ -67,6 +67,30 @@ it('owner keeps cryptographic material in its profile; remote reads and rotation
   assert.equal(await client.request(get), undefined)
 })
 
+it('validates guarded changes and rejects reserved or ambiguous references before dispatch', async (t) => {
+  let calls = 0
+  const owner = await startCredentialOwner({ handle: async (request) => {
+    calls++
+    assert.equal(request.expectedRevision, 'legacy')
+    return 'new-revision'
+  } })
+  t.after(owner.close)
+  const client = createCredentialOwnerClient(owner.environment)
+  assert.equal(await client.request({ ...get, operation: 'change', expectedRevision: 'legacy', value: 'synthetic' }), 'new-revision')
+  assert.equal(await client.request({ ...get, operation: 'change', expectedRevision: 'legacy' }), 'new-revision')
+  for (const request of [
+    { ...get, scope: 'lia:main:oidc' },
+    { ...get, scope: 'alias\0hidden' },
+    { ...get, operation: 'change' },
+    { ...get, operation: 'change', expectedRevision: '' },
+    { ...get, operation: 'change', expectedRevision: 'legacy', value: '' },
+    { ...get, expectedRevision: 'legacy' },
+  ]) {
+    await assert.rejects(client.request(request as CredentialOwnerRequest), code('denied'))
+  }
+  assert.equal(calls, 2)
+})
+
 it('authentication rejects wrong capability without invoking vault', async (t) => {
   let calls = 0
   const owner = await startCredentialOwner({ handle: async () => {

@@ -67,15 +67,14 @@ export function createAiConnectionService(deps: AiConnectionServiceDeps) {
     return readInternal()
   }
 
-  async function apply(input: AiConnectionSaveInput): Promise<AiConnectionResult> {
+  async function apply(input: AiConnectionSaveInput, expectedKeyRevision: string | undefined): Promise<AiConnectionResult> {
     if (!input || typeof input !== 'object' || !Object.keys(input).every(key => ['baseUrl', 'apiKey', 'modelId', 'revision'].includes(key))
       || !validAddress(input.baseUrl) || !Number.isSafeInteger(input.revision) || input.revision < 0
       || (input.modelId !== undefined && !validId(input.modelId))
       || (input.apiKey !== undefined && (typeof input.apiKey !== 'string' || input.apiKey.length > 16384 || /[\r\n\0]/.test(input.apiKey)))) {
       return { ok: false, code: 'invalid' }
     }
-    let changedKey = false
-    let oldKey: string | undefined
+    let keyWriteUncertain = false
     let restoreOpaqueKey: (() => Promise<boolean>) | undefined
     let restoreSelection: (() => Promise<void>) | undefined
     let changedSelection = false
@@ -83,12 +82,8 @@ export function createAiConnectionService(deps: AiConnectionServiceDeps) {
     let previous: TransportRecord | undefined
     const previouslySafe = configurationSafe
     async function restoreKey(): Promise<boolean> {
-      if (!changedKey)
-        return true
       try {
-        if (restoreOpaqueKey)
-          return await restoreOpaqueKey()
-        return oldKey !== undefined ? await deps.vault.setSecret(PROVIDER_ID, 'apiKey', oldKey) : await deps.vault.deleteSecret(PROVIDER_ID, 'apiKey')
+        return restoreOpaqueKey ? await restoreOpaqueKey() : !keyWriteUncertain
       }
       catch { return false }
     }
@@ -138,16 +133,14 @@ export function createAiConnectionService(deps: AiConnectionServiceDeps) {
       disabledRevision = disabled.snapshot.revision
       configurationSafe = false
       if (input.apiKey !== undefined) {
-        if (deps.vault.backupSecret)
-          restoreOpaqueKey = await deps.vault.backupSecret(PROVIDER_ID, 'apiKey')
-        else
-          oldKey = deps.vault.getSecret(PROVIDER_ID, 'apiKey')
-        changedKey = true
-        const stored = input.apiKey ? await deps.vault.setSecret(PROVIDER_ID, 'apiKey', input.apiKey) : await deps.vault.deleteSecret(PROVIDER_ID, 'apiKey')
-        if (!stored) {
+        keyWriteUncertain = true
+        const change = expectedKeyRevision === undefined ? undefined : await deps.vault.changeSecret?.(PROVIDER_ID, 'apiKey', input.apiKey || undefined, { expectedRevision: expectedKeyRevision })
+        keyWriteUncertain = false
+        if (!change) {
           configurationSafe = await recover()
           return { ok: false, code: configurationSafe ? 'credentials' : 'storage' }
         }
+        restoreOpaqueKey = change.rollback
       }
       changedSelection = true
       await deps.saveSelection({ providerId: PROVIDER_ID, ...(input.modelId ? { modelId: input.modelId } : {}) })
@@ -171,8 +164,13 @@ export function createAiConnectionService(deps: AiConnectionServiceDeps) {
       copy = structuredClone(input) as AiConnectionSaveInput
     }
     catch { return Promise.resolve({ ok: false, code: 'invalid' }) }
+    let expectedKeyRevision: string | undefined
+    try {
+      expectedKeyRevision = deps.vault.secretRevision?.(PROVIDER_ID, 'apiKey')
+    }
+    catch { return Promise.resolve({ ok: false, code: 'storage' }) }
     const previousQueue = queue
-    const saveAfterQueue = () => previousQueue.then(() => apply(copy))
+    const saveAfterQueue = () => previousQueue.then(() => apply(copy, expectedKeyRevision))
     const result = deps.saveExclusively ? deps.saveExclusively(saveAfterQueue) : saveAfterQueue()
     queue = result.catch(() => {})
     return result

@@ -10,7 +10,7 @@ import { createTransportRepository } from '../../../../../lia/core/src/transport
 import { createLiaHost } from './lia-host'
 import { fixtureEnv, identityCipher, makeLiaHome } from './test-helpers'
 
-const disk = vi.hoisted(() => ({ values: new Map<string, string>(), pending: undefined as Promise<void> | undefined, failPublish: false }))
+const disk = vi.hoisted(() => ({ values: new Map<string, string>(), revisions: new Map<string, number>(), pending: undefined as Promise<void> | undefined, failPublish: false }))
 vi.mock('../../../../../lia/core/src/transports/repository', async (original) => {
   const actual = await original<typeof import('../../../../../lia/core/src/transports/repository')>()
   return { ...actual, createTransportRepository: (path: string) => {
@@ -28,21 +28,49 @@ vi.mock('@lia/core/secrets/vault', () => ({
   createLiaSecretVault: () => ({
     isEncryptionAvailable: () => true,
     hasSecret: (scope: string) => disk.values.has(scope),
+    secretRevision: (scope: string) => String(disk.revisions.get(scope) ?? 0),
     getSecret: (scope: string) => disk.values.get(scope),
     setSecret: async (scope: string, _key: string, value: string) => {
       if (scope === 'holding-write')
         await disk.pending
       disk.values.set(scope, value)
+      disk.revisions.set(scope, (disk.revisions.get(scope) ?? 0) + 1)
       return true
     },
     deleteSecret: async (scope: string) => {
       disk.values.delete(scope)
+      disk.revisions.set(scope, (disk.revisions.get(scope) ?? 0) + 1)
       return true
+    },
+    changeSecret: async (scope: string, _key: string, value: string | undefined, options: { expectedRevision?: string, signal?: AbortSignal } = {}) => {
+      if (scope === 'holding-write')
+        await disk.pending
+      const before = String(disk.revisions.get(scope) ?? 0)
+      if (options.signal?.aborted || (options.expectedRevision !== undefined && options.expectedRevision !== before))
+        return undefined
+      const previous = disk.values.get(scope)
+      if (value === undefined)
+        disk.values.delete(scope)
+      else
+        disk.values.set(scope, value)
+      const revision = Number(before) + 1
+      disk.revisions.set(scope, revision)
+      return { revision: String(revision), rollback: async () => {
+        if (disk.revisions.get(scope) !== revision)
+          return false
+        if (previous === undefined)
+          disk.values.delete(scope)
+        else
+          disk.values.set(scope, previous)
+        disk.revisions.set(scope, revision + 1)
+        return true
+      } }
     },
   }),
 }))
 beforeEach(() => {
   disk.values.clear()
+  disk.revisions.clear()
   disk.pending = undefined
   disk.failPublish = false
 })
@@ -79,6 +107,22 @@ async function fixture(onRequest?: () => void, collideProfiles = false) {
   return { host, home, environment: () => environment }
 }
 describe('launcher Main credential lease', () => {
+  it('rejects an already queued wrapper write after another writer deletes the entry', async () => {
+    const f = await fixture()
+    let release!: () => void
+    disk.pending = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const holding = f.host.vault.setSecret('holding-write', 'apiKey', 'synthetic-hold')
+    const stale = f.host.vault.setSecret('stale-write', 'apiKey', 'synthetic-stale')
+    // The fixture models a committed deletion by the other vault process.
+    disk.values.delete('stale-write')
+    disk.revisions.set('stale-write', 1)
+    release()
+    expect(await holding).toBe(true)
+    expect(await stale).toBe(false)
+    expect(disk.values.has('stale-write')).toBe(false)
+  })
   it.each([true, false])('restores the exact original selection fields when publish fails (previous=%s)', async (selected) => {
     const f = await fixture()
     const file = join(f.home.userData, 'lia-product.json')

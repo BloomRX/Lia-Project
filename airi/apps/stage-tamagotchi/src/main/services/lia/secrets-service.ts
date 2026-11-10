@@ -71,10 +71,19 @@ export function registerLiaSecretsBridge(params: {
       log.warn('Rejected secret store request with missing/invalid fields')
       return false
     }
+    let expectedRevision: string | undefined
+    try {
+      expectedRevision = vault.secretRevision?.(payload.scope, payload.key)
+    }
+    catch { return false }
+    if (expectedRevision === undefined)
+      return false
     const stored = await serializeWrite(vault, async () => {
+      if (vault.secretRevision?.(payload.scope, payload.key) !== expectedRevision)
+        return false
       if (payload.onlyIfMissing === true && vault.hasSecret(payload.scope, payload.key))
         return true
-      return vault.setSecret(payload.scope, payload.key, payload.value)
+      return await vault.setSecret(payload.scope, payload.key, payload.value, undefined, expectedRevision)
     })
     if (!stored) {
       // Never echo the value. Only report outcome + whether it was a platform
@@ -103,14 +112,25 @@ export function registerLiaSecretsBridge(params: {
       log.warn('Rejected secret adopt request with missing/invalid fields')
       return 'unavailable'
     }
+    let expectedRevision: string | undefined
+    try {
+      expectedRevision = vault.secretRevision?.(payload.scope, payload.key)
+    }
+    catch { return 'unavailable' }
+    if (expectedRevision === undefined)
+      return 'unavailable'
     return serializeWrite(vault, async () => {
+      if (vault.secretRevision?.(payload.scope, payload.key) !== expectedRevision)
+        return 'conflict'
       if (vault.hasSecret(payload.scope, payload.key)) {
         // Compared inside main. Only the verdict leaves.
-        if (await resolveMainCredential(vault, payload.scope, payload.key) === payload.value)
+        if (await resolveMainCredential(vault, payload.scope, payload.key) === payload.value
+          && vault.secretRevision?.(payload.scope, payload.key) === expectedRevision) {
           return 'matching' as const
+        }
         return 'conflict' as const
       }
-      return await vault.setSecret(payload.scope, payload.key, payload.value) ? 'stored' as const : 'unavailable' as const
+      return await vault.setSecret(payload.scope, payload.key, payload.value, undefined, expectedRevision) ? 'stored' as const : 'unavailable' as const
     })
   })
 

@@ -69,6 +69,18 @@ describe('explicit replacement of a credential from another profile', () => {
     read.mockRestore()
     expect(f.vault.getSecret('openai-compatible', 'apiKey')).toBe('old-synthetic')
   })
+
+  it('does not resurrect a key deleted while a failed save is pending', async () => {
+    const f = await fixture()
+    await f.service.save({ baseUrl: 'https://old.invalid/v1', apiKey: 'old-synthetic', modelId: 'old-model', revision: 0 })
+    f.saveSelection.mockImplementationOnce(async () => {
+      await f.vault.deleteSecret('openai-compatible', 'apiKey')
+      throw new Error('storage')
+    })
+    expect(await f.service.save({ baseUrl: 'https://new.invalid/v1', apiKey: 'new-synthetic', modelId: 'new-model', revision: 2 })).toEqual({ ok: false, code: 'storage' })
+    expect(f.vault.hasSecret('openai-compatible', 'apiKey')).toBe(false)
+    expect(await f.service.isSafeToStart()).toBe(false)
+  })
 })
 
 async function httpFixture(handler: (path: string, body: any, authorization?: string) => unknown) {

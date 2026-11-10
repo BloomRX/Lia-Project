@@ -1,6 +1,6 @@
 import type { LiaSecretVault } from '@lia/core/secrets/vault'
 
-import { createCredentialOwnerClient, CredentialOwnerError, takeCredentialOwnerEnvironment } from '../../../../../../../lia/core/src/credentials/owner-channel'
+import { createCredentialOwnerClient, CredentialOwnerError, isCredentialRevision, takeCredentialOwnerEnvironment } from '../../../../../../../lia/core/src/credentials/owner-channel'
 import { ProviderError } from '../../../../../../../lia/core/src/providers/contracts'
 
 let owner: ReturnType<typeof createCredentialOwnerClient> | undefined
@@ -19,16 +19,41 @@ export function withCredentialOwner(vault: LiaSecretVault): LiaSecretVault {
   const client = owner
   const managed: LiaSecretVault = {
     ...vault,
-    // Opaque rollback belongs to the cipher owner, never to this host facade.
-    backupSecret: undefined,
-    async setSecret(scope, key, value, signal) {
+    async changeSecret(scope, key, value, options = {}) {
       if (key !== 'apiKey')
-        return signal ? vault.setSecret(scope, key, value, signal) : vault.setSecret(scope, key, value)
+        return vault.changeSecret?.(scope, key, value, options)
       try {
-        // The remote owner protocol has no guarded commit acknowledgement.
-        if (signal)
+        const expectedRevision = options.expectedRevision ?? vault.secretRevision?.(scope, key)
+        if (!expectedRevision)
+          return undefined
+        const previous = vault.hasSecret(scope, key) ? await resolveMainCredential(managed, scope, key, options.signal) : undefined
+        const revision = await client.request({ operation: 'change', scope, key, expectedRevision, ...(value === undefined ? {} : { value }) }, options.signal)
+        if (!isCredentialRevision(revision))
+          return undefined
+        let used = false
+        return {
+          revision,
+          async rollback() {
+            if (used)
+              return false
+            used = true
+            try {
+              return isCredentialRevision(await client.request({ operation: 'change', scope, key, expectedRevision: revision, ...(previous === undefined ? {} : { value: previous }) }))
+            }
+            catch { return false }
+          },
+        }
+      }
+      catch { return undefined }
+    },
+    async setSecret(scope, key, value, signal, revision) {
+      if (key !== 'apiKey')
+        return vault.setSecret(scope, key, value, signal, revision)
+      try {
+        const expectedRevision = revision ?? vault.secretRevision?.(scope, key)
+        if (expectedRevision === undefined)
           return false
-        return await client.request({ operation: 'set', scope, key, value }) === true
+        return isCredentialRevision(await client.request({ operation: 'change', scope, key, value, expectedRevision }, signal))
       }
       catch { return false }
     },

@@ -27,7 +27,7 @@ import { brainRoutingModeUpdate, readBrainRoutingMode, readLiaProductConfig, upd
 import { createLiaSecretVault } from '@lia/core/secrets/vault'
 import { createLiaVoiceProfileStore, findMissingFiles } from '@lia/core/voices/profiles'
 
-import { CredentialOwnerError, startCredentialOwner } from '../../../../../lia/core/src/credentials/owner-channel'
+import { CredentialOwnerError, isPublicCredentialReference, startCredentialOwner } from '../../../../../lia/core/src/credentials/owner-channel'
 import { createTransportRepository } from '../../../../../lia/core/src/transports/repository'
 import { createAiConnectionService } from './ai-connection-service'
 import { AiriStageManager } from './airi-stage-manager'
@@ -286,13 +286,22 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
   }
   const vault: LiaSecretVault = {
     ...localVault,
-    ...(localVault.backupSecret
-      ? { backupSecret: async (scope: string, key: string) => {
-          const restore = await serializeCredentialWrite(() => localVault.backupSecret!(scope, key))
-          return () => serializeCredentialWrite(restore)
+    ...(localVault.changeSecret
+      ? { changeSecret: async (scope: string, key: string, value: string | undefined, options?: Parameters<NonNullable<LiaSecretVault['changeSecret']>>[3]) => {
+          const change = await serializeCredentialWrite(() => localVault.changeSecret!(scope, key, value, options))
+          return change && { revision: change.revision, rollback: () => serializeCredentialWrite(change.rollback) }
         } }
       : {}),
-    setSecret: (scope, key, value) => serializeCredentialWrite(() => localVault.setSecret(scope, key, value)),
+    setSecret: (scope, key, value, signal, revision) => {
+      let expectedRevision: string | undefined
+      try {
+        expectedRevision = revision ?? localVault.secretRevision?.(scope, key)
+      }
+      catch { return Promise.resolve(false) }
+      if (expectedRevision === undefined)
+        return Promise.resolve(false)
+      return serializeCredentialWrite(async () => await localVault.changeSecret?.(scope, key, value, { signal, expectedRevision }) !== undefined)
+    },
     deleteSecret: (scope, key) => serializeCredentialWrite(() => localVault.deleteSecret(scope, key)),
   }
   const transportRepository = createTransportRepository(join(paths.userDataDir, 'lia-transports.json'))
@@ -376,15 +385,19 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
           }
           catch { throw new CredentialOwnerError('unreadable') }
         }
+        const expectedRevision = request.operation === 'set'
+          ? localVault.secretRevision?.(request.scope, request.key)
+          : request.expectedRevision
         // Explicit set/delete has the same API-key scope as the existing Main
         // secret writer; a new entry is inert until a transport references it.
         return serializeCredentialWrite(async () => {
           // Revocation/deadline can occur while this write is still queued.
           if (signal.aborted)
             throw new CredentialOwnerError('cancelled')
-          return request.operation === 'set'
-            ? localVault.setSecret(request.scope, request.key, request.value!)
-            : localVault.deleteSecret(request.scope, request.key)
+          if (request.operation === 'set' && expectedRevision === undefined)
+            return false
+          const change = await localVault.changeSecret?.(request.scope, request.key, request.value, { signal, expectedRevision })
+          return request.operation === 'change' ? change?.revision : change !== undefined
         })
       },
     })
@@ -838,11 +851,33 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
   }
 
   async function updateConfig(payload: LiaConfigUpdatePayload): Promise<LiaConfigUpdateResult> {
+    // Reject the whole batch before touching unrelated entries or product preferences.
+    if (payload.secrets?.some(secret => !secret || !isPublicCredentialReference(secret.scope, secret.key))) {
+      emit('lia-app.config-blocked', 'reason=secret-reference-denied')
+      return { message: 'The requested credential cannot be edited here.', status: 'secret-vault-failed' }
+    }
+    let secrets: { scope: string, key: string, value: string, revision: string }[]
+    try {
+      const unique = new Set<string>()
+      secrets = (payload.secrets ?? []).map((secret) => {
+        const reference = `${secret.scope}\0${secret.key}`
+        if (unique.has(reference))
+          throw new Error('Duplicate credential reference')
+        unique.add(reference)
+        const revision = vault.secretRevision?.(secret.scope, secret.key)
+        if (revision === undefined)
+          throw new Error('Credential storage unavailable')
+        return { ...secret, revision }
+      })
+    }
+    catch {
+      return { message: 'The key could not be stored securely on this device.', status: 'secret-vault-failed' }
+    }
     // Secrets first, into the vault and ONLY the vault. If the later
     // document write fails, a stray vault entry is inert - the reverse
     // order would risk a preferred-provider pointing at a missing key.
-    for (const secret of payload.secrets ?? []) {
-      const stored = await vault.setSecret(secret.scope, secret.key, secret.value)
+    for (const secret of secrets) {
+      const stored = await vault.changeSecret?.(secret.scope, secret.key, secret.value, { expectedRevision: secret.revision })
       if (!stored) {
         emit('lia-app.config-blocked', 'reason=secret-vault-failed')
         return { message: 'The key could not be stored securely on this device.', status: 'secret-vault-failed' }

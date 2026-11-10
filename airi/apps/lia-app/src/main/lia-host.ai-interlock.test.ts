@@ -54,14 +54,25 @@ async function fixture() {
 }
 
 describe('shared AI configuration and Stage interlock', () => {
+  it.each([
+    { scope: 'lia:main:oidc', key: 'session-v1' },
+    { scope: 'provider\0alias', key: 'apiKey' },
+    { scope: 'provider', key: 'alias\0apiKey' },
+  ])('rejects reserved or ambiguous credential references before writing the batch', async (reference) => {
+    const f = await fixture()
+    const write = vi.spyOn(f.host.vault, 'changeSecret')
+    expect(await f.host.updateConfig({ secrets: [{ scope: 'unrelated', key: 'apiKey', value: 'synthetic' }, { ...reference, value: 'synthetic' }], update: {} })).toMatchObject({ status: 'secret-vault-failed' })
+    expect(write).not.toHaveBeenCalled()
+    expect(f.host.vault.hasSecret('unrelated', 'apiKey')).toBe(false)
+  })
   it.each(['conversar', 'start'] as const)('holds %s until a pending save commits or fails and releases the lock', async (entry) => {
     for (const success of [true, false]) {
       const f = await fixture()
       const entered = deferred()
       const release = deferred()
-      const original = f.host.vault.setSecret.bind(f.host.vault)
-      vi.spyOn(f.host.vault, 'setSecret').mockImplementationOnce(async (...args) => {
-        const stored = success ? await original(...args) : false
+      const original = f.host.vault.changeSecret!.bind(f.host.vault)
+      vi.spyOn(f.host.vault, 'changeSecret').mockImplementationOnce(async (...args) => {
+        const stored = success ? await original(...args) : undefined
         entered.resolve()
         await release.promise
         return stored
@@ -112,15 +123,14 @@ describe('shared AI configuration and Stage interlock', () => {
 
   it('blocks every start after a failed key rollback until an explicit save repairs it', async () => {
     const f = await fixture()
-    const original = f.host.vault.setSecret.bind(f.host.vault)
-    vi.spyOn(f.host.vault, 'setSecret')
+    const original = f.host.vault.changeSecret!.bind(f.host.vault)
+    vi.spyOn(f.host.vault, 'changeSecret')
       .mockImplementationOnce(async (...args) => {
         await original(...args)
         throw new Error('synthetic private storage failure')
       })
-    // The production vault now restores opaque ciphertext, without calling
-    // setSecret(oldPlaintext). Inject failure at that actual rollback seam.
-    vi.spyOn(f.host.vault, 'backupSecret').mockResolvedValueOnce(async () => false)
+    // No mutation receipt reached this service after the write, so recovery
+    // must stay fail-closed instead of restoring an unguarded old value.
     expect(await f.host.aiConnection.save({ baseUrl: 'https://new.invalid/v1', apiKey: 'new-private', revision: 2 })).toEqual({ ok: false, code: 'storage' })
     await expect(f.host.conversar()).rejects.toThrow(/Save the AI service settings again/)
     await expect(f.host.stage.start()).rejects.toThrow(/Save the AI service settings again/)

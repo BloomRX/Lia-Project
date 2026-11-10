@@ -13,6 +13,7 @@ const apiKey = 'synthetic-fixture-key'
 function fixture() {
   let snapshot: TransportSnapshot = { schemaVersion: 1, revision: 0, records: [], tombstones: [], migration: { version: 1, imported: [] } }
   let secret: string | undefined
+  let keyRevision = 0
   const repository = {
     read: vi.fn(async () => structuredClone(snapshot)),
     mutate: vi.fn(async (mutation: TransportMutation): Promise<TransportResult> => {
@@ -23,16 +24,38 @@ function fixture() {
     }),
   }
   const vault = {
+    secretRevision: () => String(keyRevision),
     hasSecret: () => secret !== undefined,
     getSecret: () => secret,
     setSecret: vi.fn(async (_scope: string, _key: string, value: string) => {
       secret = value
+      keyRevision++
       return true
     }),
     deleteSecret: vi.fn(async () => {
       secret = undefined
+      keyRevision++
       return true
     }),
+    async changeSecret(scope: string, key: string, value: string | undefined, options: { expectedRevision?: string } = {}) {
+      if (options.expectedRevision !== undefined && options.expectedRevision !== String(keyRevision))
+        return undefined
+      const previous = secret
+      if (value === undefined)
+        await vault.deleteSecret()
+      else
+        await vault.setSecret(scope, key, value)
+      const revision = String(keyRevision)
+      return { revision, rollback: async () => {
+        if (revision !== String(keyRevision))
+          return false
+        if (previous === undefined)
+          await vault.deleteSecret()
+        else
+          await vault.setSecret(scope, key, previous)
+        return true
+      } }
+    },
   }
   const invalidate = vi.fn()
   return { repository, vault, invalidate, service: createSpeechConfigService(repository, vault as unknown as LiaSecretVault, invalidate) }
@@ -92,5 +115,16 @@ describe('speech connection configuration', () => {
     expect(await service.save({ providerId, baseUrl: `${baseUrl}/new`, revision: 1, apiKey: 'replacement' })).toEqual({ ok: false, code: 'conflict' })
     expect(vault.getSecret()).toBe(apiKey)
     expect(await service.read({ providerId })).toMatchObject({ config: { baseUrl: `${baseUrl}/`, revision: 1 } })
+  })
+
+  it('does not restore a key deleted while the endpoint update is pending', async () => {
+    const { service, vault, repository } = fixture()
+    await service.save({ providerId, baseUrl, revision: 0, apiKey })
+    repository.mutate.mockImplementationOnce(async () => {
+      await vault.deleteSecret()
+      return { ok: false, code: 'conflict' }
+    })
+    expect(await service.save({ providerId, baseUrl: `${baseUrl}/new`, revision: 1, apiKey: 'replacement' })).toEqual({ ok: false, code: 'storage' })
+    expect(vault.getSecret()).toBeUndefined()
   })
 })

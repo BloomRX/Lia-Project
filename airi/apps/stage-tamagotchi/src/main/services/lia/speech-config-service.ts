@@ -46,6 +46,7 @@ export function createSpeechConfigService(
         || (apiKey !== undefined && (typeof apiKey !== 'string' || !apiKey.trim() || apiKey.length > 16384 || /[^\x21-\x7E]/.test(apiKey)))) {
         return invalid
       }
+      const expectedKeyRevision = vault.secretRevision?.(providerId, 'apiKey')
       let url: URL
       try {
         url = new URL(baseUrl)
@@ -89,7 +90,10 @@ export function createSpeechConfigService(
         const previous = vault.hasSecret(providerId, 'apiKey') ? await resolveMainCredential(vault, providerId, 'apiKey') : undefined
         if (!apiKey && !previous)
           return credentials
-        if (apiKey && !await vault.setSecret(providerId, 'apiKey', apiKey))
+        const change = apiKey && expectedKeyRevision !== undefined
+          ? await vault.changeSecret?.(providerId, 'apiKey', apiKey, { expectedRevision: expectedKeyRevision })
+          : undefined
+        if (apiKey && !change)
           return credentials
         let result
         try {
@@ -99,13 +103,8 @@ export function createSpeechConfigService(
           result = storage
         }
         if (!result.ok) {
-          if (apiKey) {
-            const restored = previous
-              ? await vault.setSecret(providerId, 'apiKey', previous)
-              : await vault.deleteSecret(providerId, 'apiKey')
-            if (!restored)
-              return storage
-          }
+          if (change && !await change.rollback())
+            return storage
           return result
         }
         invalidate(result.snapshot)

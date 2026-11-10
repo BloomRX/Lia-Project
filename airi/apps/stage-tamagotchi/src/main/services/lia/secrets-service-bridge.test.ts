@@ -16,15 +16,25 @@ function handler(name: string) {
 }
 function setup(allowRendererRead = async () => false) {
   const values = new Map<string, string>()
+  const revisions = new Map<string, number>()
+  const reference = (scope: string, key: string) => `${scope}:${key}`
   const vault = {
     isEncryptionAvailable: () => true,
     hasSecret: vi.fn((scope: string, key: string) => values.has(`${scope}:${key}`)),
     getSecret: vi.fn((scope: string, key: string) => values.get(`${scope}:${key}`)),
-    setSecret: vi.fn(async (scope: string, key: string, value: string) => {
+    setSecret: vi.fn(async (scope: string, key: string, value: string, _signal?: AbortSignal, expectedRevision?: string) => {
+      if (expectedRevision !== undefined && expectedRevision !== String(revisions.get(reference(scope, key)) ?? 0))
+        return false
       values.set(`${scope}:${key}`, value)
+      revisions.set(reference(scope, key), (revisions.get(reference(scope, key)) ?? 0) + 1)
       return true
     }),
-    deleteSecret: vi.fn(async (scope: string, key: string) => values.delete(`${scope}:${key}`)),
+    deleteSecret: vi.fn(async (scope: string, key: string) => {
+      values.delete(reference(scope, key))
+      revisions.set(reference(scope, key), (revisions.get(reference(scope, key)) ?? 0) + 1)
+      return true
+    }),
+    secretRevision: (scope: string, key: string) => String(revisions.get(reference(scope, key)) ?? 0),
   }
   registerLiaSecretsBridge({ context: {} as never, vault, allowRendererRead })
   return { vault, values }
@@ -71,8 +81,35 @@ describe('secret bridge ownership and migration', () => {
     const update = handler('set')({ ...reference, value: 'SYNTHETIC_NEW' })
     const staleImport = handler('set')({ ...reference, value: 'SYNTHETIC_OLD', onlyIfMissing: true })
     expect(await update).toBe(true)
-    expect(await staleImport).toBe(true)
+    expect(await staleImport).toBe(false)
     expect(values.get('protected:apiKey')).toBe('SYNTHETIC_NEW')
+  })
+
+  it.each(['set', 'adopt'])('does not publish an enqueued %s after a different writer deletes its slot', async (operation) => {
+    const { vault, values } = setup()
+    let release!: () => void
+    const hold = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const firstWrite = vault.setSecret.getMockImplementation()!
+    let entered!: () => void
+    const pendingWrite = new Promise<void>((resolve) => {
+      entered = resolve
+    })
+    vault.setSecret.mockImplementationOnce(async (...args) => {
+      entered()
+      await hold
+      return firstWrite(...args)
+    })
+    const holder = handler('set')({ scope: 'other', key: 'apiKey', value: 'unrelated' })
+    await pendingWrite
+    const stale = handler(operation)({ scope: 'protected', key: 'apiKey', value: 'SYNTHETIC_STALE' })
+    await vault.deleteSecret('protected', 'apiKey')
+    release()
+    expect(await holder).toBe(true)
+    expect(await stale).toBe(operation === 'set' ? false : 'conflict')
+    expect(values.has('protected:apiKey')).toBe(false)
+    expect(values.get('other:apiKey')).toBe('unrelated')
   })
   it('rejects oversized values, control characters and invalid references before vault access', async () => {
     const { vault } = setup()

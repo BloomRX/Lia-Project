@@ -3,6 +3,8 @@ import type { LiaBootTimer } from './timing'
 
 import { ipcMain } from 'electron'
 
+import { isPublicCredentialReference } from '../../../../../lia/core/src/credentials/owner-channel'
+
 /**
  * The launcher's IPC surface (Phase 7 + 7.1). Plain `ipcMain.handle`
  * channels, `lia:`-prefixed: no AIRI eventa, no shared framework - the
@@ -86,7 +88,7 @@ export function registerLiaIpc(host: LiaHost, timer: LiaBootTimer, extras: LiaIp
     return safe
   })
   ipcMain.handle('lia:secrets:presence', async (_event, providerId: string) => {
-    if (typeof providerId !== 'string' || providerId.length === 0 || providerId.length > 64)
+    if (typeof providerId !== 'string' || providerId.length === 0 || providerId.length > 64 || !isPublicCredentialReference(providerId, 'apiKey'))
       return false
     return host.vault.hasSecret(providerId, 'apiKey')
   })

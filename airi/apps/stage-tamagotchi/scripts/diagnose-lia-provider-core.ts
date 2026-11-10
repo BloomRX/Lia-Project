@@ -131,7 +131,8 @@ export function summarizeVaultFile(
 
   const ciphertextLengths: Record<string, number> = {}
   const scopes = new Set<string>()
-  for (const [compositeKey, value] of Object.entries(parsed as Record<string, unknown>)) {
+  const entries = Object.entries(parsed as Record<string, unknown>).filter(([key]) => key.includes('\u0000'))
+  for (const [compositeKey, value] of entries) {
     const scope = compositeKey.split('\u0000')[0] ?? compositeKey
     scopes.add(scope)
     ciphertextLengths[scope] = typeof value === 'string' ? value.length : 0
@@ -141,7 +142,7 @@ export function summarizeVaultFile(
     found: true,
     path,
     parseError: null,
-    entryCount: Object.keys(parsed as Record<string, unknown>).length,
+    entryCount: entries.length,
     scopes: [...scopes].sort(),
     primarySecretExists: primaryProviderId !== null && scopes.has(primaryProviderId),
     fallbackSecretExists: fallbackProviderId !== null && scopes.has(fallbackProviderId),

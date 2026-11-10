@@ -19,10 +19,11 @@ export class CredentialOwnerError extends Error {
 }
 
 export interface CredentialOwnerRequest {
-  operation: 'get' | 'set' | 'delete'
+  operation: 'get' | 'set' | 'delete' | 'change'
   scope: string
   key: 'apiKey'
   value?: string
+  expectedRevision?: string
 }
 type Result = string | boolean | undefined
 const PIPE = 'LIA_CREDENTIAL_OWNER_PIPE'
@@ -32,18 +33,32 @@ const MAX_BYTES = 128 * 1024
 const noncePattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 const codes = new Set(['unavailable', 'unreadable', 'denied', 'cancelled'])
 const object = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
+
+export function isPublicCredentialReference(scope: string, key: string): boolean {
+  return typeof scope === 'string' && typeof key === 'string'
+    && scope !== 'lia:main:oidc' && !scope.includes('\0') && !key.includes('\0')
+}
+
+export function isCredentialRevision(value: unknown): value is string {
+  return typeof value === 'string' && value.length <= 128 && /^[\x21-\x7E]+$/.test(value)
+}
+
 function validRequest(value: unknown): value is CredentialOwnerRequest {
-  if (!object(value) || Object.keys(value).some(key => !['operation', 'scope', 'key', 'value'].includes(key)))
+  if (!object(value) || Object.keys(value).some(key => !['operation', 'scope', 'key', 'value', 'expectedRevision'].includes(key)))
     return false
-  if (typeof value.operation !== 'string' || !['get', 'set', 'delete'].includes(value.operation) || value.key !== 'apiKey')
+  if (typeof value.operation !== 'string' || !['get', 'set', 'delete', 'change'].includes(value.operation) || value.key !== 'apiKey')
     return false
   if (typeof value.scope !== 'string' || value.scope.length < 1 || value.scope.length > 256
+    || !isPublicCredentialReference(value.scope, value.key)
     || Array.from(value.scope).some(character => character.charCodeAt(0) < 32 || (character.charCodeAt(0) >= 127 && character.charCodeAt(0) <= 159))) {
     return false
   }
-  return value.operation === 'set'
-    ? typeof value.value === 'string' && value.value.length > 0 && value.value.length <= 16_384
-    : !Object.hasOwn(value, 'value')
+  const validValue = typeof value.value === 'string' && value.value.length > 0 && value.value.length <= 16_384
+  if (value.operation === 'change')
+    return isCredentialRevision(value.expectedRevision) && (validValue || !Object.hasOwn(value, 'value'))
+  if (Object.hasOwn(value, 'expectedRevision'))
+    return false
+  return value.operation === 'set' ? validValue : !Object.hasOwn(value, 'value')
 }
 function validResult(value: unknown): value is Result {
   return value === undefined || typeof value === 'boolean' || (typeof value === 'string' && value.length <= 16_384)
