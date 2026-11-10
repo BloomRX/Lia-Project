@@ -33,7 +33,7 @@ Nas linhas abreviadas, `.../main` e `.../renderer` referem-se a
 | `.../main/services/lia/transport-execution-service.ts`, execute/start/pull | IPC por janela, HTTP/modelos/chat/SSE/fala | Não recebe chave no pedido de execução | Main; validação, cancelamento, limite e descarte existentes. Respostas externas continuam dados não confiáveis |
 | `.../main/services/lia/transcription-service.ts`, registerLiaTranscriptionBridge | Gravações nos adaptadores migrados | Não | Main; não confundir com STT de sessão/WebSocket |
 | `.../main/services/lia/secrets-service.ts`, registerLiaSecretsBridge | Todas as janelas autorizadas ao bridge | `get` legado pode devolver chave quando política permite | `set/adopt/delete apiKey` no Owner; `canRendererReadLegacySecret` nega escopos protegidos. Leitura legada continua exposta por decisão histórica, bloqueia fechamento global |
-| `airi/packages/lia-core/src/secrets/vault.ts`, set/delete/backup | Hosts Main; não é API Renderer | Não por si só | Corrigido nesta rodada: mutações não substituem container ilegível; erros de cifra não saem; temporário removido em falha. Serialização do dono não resolve escritores legados de outro processo |
+| `airi/packages/lia-core/src/secrets/vault.ts`, set/delete/change | Hosts Main; não é API Renderer | Não por si só | Mutações sob lock do SO comum aos hosts; revisão por entrada e recibo de reversão impedem escrita obsoleta. Container ilegível preservado e temporário removido em falha. Evidência multiprocesso abaixo |
 | `.../renderer/stores/lia/provider.ts`, resolveApiKey/registerRuntimeExtensions | Líder do Stage, SDK legado de chat/STT | Sim, fora das definições migradas | **Legado exposto**; protocolos não migrados precisam execução Main, não exceções ao Owner. Aliases de definições nativas agora recusam resolução no Renderer |
 | `.../renderer/stores/lia/provider.ts`, installCredentialConfig | Editor genérico e input compartilhado, inclusive follower | Rascunho transitório, sem emitir chave ao config nos IDs reivindicados | Ampliado para chat Main-native e aliases; STT gravado já coberto. Não reivindica TTS e outros protocolos sem contrato equivalente |
 | `airi/packages/stage-pages/src/pages/settings/providers/chat/[providerId].vue` | Rota legada incluída no Stage | Input nativo passa a usar porta Main quando disponível; demais mantêm legado | Corrigida ligação `provider-id`. Revisão das páginas específicas com autenticação adicional continua aberta |
@@ -163,7 +163,7 @@ vivo. Retirar o token antes dos adaptadores quebraria consumidores existentes.
   O fluxo de iniciar vínculo GitHub, Google ou Steam exige definir o retorno
   do navegador ao Desktop. Continua legado.
 
-**Bloqueio de persistência no modo gerenciado.** O Launcher e o Stage usam
+**Bloqueio identificado na preparação anterior.** O Launcher e o Stage usam
 o mesmo `lia-secrets.json`. O Launcher passa `APP_USER_DATA_PATH` ao Stage.
 O canal de proprietário atual encaminha apenas `apiKey`. `session-v1`
 seguiria ao escritor local do Stage. Cada processo serializa apenas sua
@@ -173,7 +173,65 @@ e uma gravação concorrente do Launcher restaurou o snapshot anterior
 (`oidc-prepared-shared-writer-repro.log`). A reprodução confirma a janela
 de read-modify-write do cofre. Não executou dois processos Electron reais.
 Ativar em modo gerenciado exige um único escritor ou exclusão mútua entre
-processos no cofre já existente. Esta fatia não altera o Launcher.
+processos no cofre já existente. A correção e suas evidências estão abaixo.
+
+### Coordenação multiprocesso do cofre — 09/11
+
+O Core passa a controlar o ciclo de leitura, alteração e troca de cada
+mutação sob exclusão mútua do sistema operacional. No Windows, os dois hosts disputam o
+named pipe `lia-vault-writer-v1`. O namespace global também cobre aliases
+de caminho e perfis distintos, ao custo de serializar seus pequenos writes.
+O pipe só funciona como trava e não recebe credenciais. O kernel libera o
+handle ao encerrar o processo. A implementação libuv usa a primeira instância
+exclusiva do pipe e reporta contenção como `EADDRINUSE`.
+[Implementação libuv](https://github.com/libuv/libuv/blob/v1.x/src/win/pipe.c).
+
+O Launcher, o Stage independente e os pedidos do canal de credenciais
+usam o mesmo Core. As filas locais continuam ordenando cada serviço, mas a
+trava compartilhada protege a releitura mais recente e o rename em disco.
+O JSON mantém o formato de mapa de strings e ganha uma entrada reservada de
+metadados, sem delimitador NUL. Os segredos continuam cifrados pelo host.
+Arquivos antigos são lidos com revisão inicial `legacy`.
+
+Cada entrada presente tem revisão própria. A exclusão avança uma revisão
+de ausência mesmo quando o slot já não existe. Atualizações capturam a
+revisão antes de aguardar fila, rede ou lock, e a comparam dentro da trava.
+Assim, uma exclusão confirmada impede que a operação anterior recrie a
+entrada. A revisão de ausência é compartilhada entre entradas ausentes,
+podendo recusar conservadoramente uma criação concorrente com outra exclusão.
+O chamador precisa reler e repetir uma nova ação explícita nesse conflito.
+
+`changeSecret` devolve o recibo de sua própria escrita e uma reversão
+condicional àquela revisão. Isso substitui o backup sem vínculo com a
+mutação. A reversão não pode repor uma versão sobre exclusão ou substituição
+posterior. O OIDC lê tokens e revisão no mesmo snapshot, renova com CAS e
+limpa falhas de modo condicional. O login preparado exige a revisão capturada
+antes de abrir o navegador. O IPC genérico do Launcher também recusa o escopo
+OIDC e delimitadores que poderiam fabricar uma referência reservada.
+
+Set e Adopt passam a revisão já capturada ao escritor sem solicitar o valor
+anterior. Isso mantém a substituição de uma chave órfã no Stage gerenciado,
+que ainda não tem registro de transporte para autorizar uma leitura no
+Launcher. A leitura anterior fica limitada às operações que precisam de
+reversão. O diagnóstico conta apenas referências compostas de segredos e
+ignora o slot público de revisões.
+
+O arquivo temporário fica no mesmo diretório e é publicado por rename.
+Falhas conhecidas removem o temporário. Encerramento forçado antes do rename
+pode deixar um temporário cifrado órfão, que nunca é carregado como sessão.
+Não há lease de arquivo, roubo de lock por idade nem restauração de snapshot
+antigo na inicialização. A garantia cobre processos usando esta versão do
+Core no mesmo Windows. Misturar um executável antigo que ignore a trava
+não é um cenário validado. Queda de energia e filesystem remoto exigem
+ensaios próprios. Linux usa socket abstrato e o fallback de outros sistemas
+usa um listener loopback; esses hosts ainda não receberam gate nesta rodada.
+
+Em 10/11, o gate real de componentes em Electron 43.4.1 no Windows passou
+os 16 grupos com credenciais sintéticas e fixture HTTP local. A varredura
+dos logs não encontrou as sentinelas. A coordenação entre processos foi
+exercitada separadamente pelos 12 casos com processos Node reais. O
+[relatório beta](../product/LIA-BETA-READINESS-2026-11-08.md#coordenação-compartilhada-do-cofre--retomada-de-539d2dd)
+registra os resultados e o caminho das evidências.
 
 O owner e o REST preparado ainda não têm registro IPC nem chamadores no
 login em produção. O evento de sucesso ainda entrega access, refresh e ID

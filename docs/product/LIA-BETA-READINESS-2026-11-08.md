@@ -21,7 +21,7 @@ anterior, já integrado. O agente visual revisou capturas existentes em leitura.
 
 | Frente | Resultado comprovado | Limite |
 | --- | --- | --- |
-| Cofre | Recusa mutação de arquivo vazio, inválido, truncado ou sem permissão; criação real ENOENT preservada; falhas de cifra não exportadas; temporário removido em falha de rename | Não resolve sozinho escritores legados concorrentes de processos diferentes |
+| Cofre | Recusa mutação de arquivo vazio, inválido, truncado ou sem permissão; criação real ENOENT preservada; lock compartilhado e revisões impedem ressurreição por escritores desta versão | Morte de processo testada; energia, filesystem remoto e executável antigo sem lock continuam fora do gate |
 | Logs Main | Query credentials e campos JSON conhecidos mascarados no Viewer e no arquivo; teste lê arquivo real | Não protege segredo arbitrário sem formato nem limpa logs históricos |
 | Editor chat nativo | Porta Main para definições migradas/aliases; input legado passa provider-id; resolução Renderer recusada para aliases | Outros protocolos, páginas específicas, validação/ping legado e integrações continuam pendentes |
 | Serviço sem chave | Exigência de credencial declarada pela porta; serviço local não é rebaixado a não configurado por não ter chave | Presença de configuração não prova conexão com ferramenta |
@@ -154,6 +154,90 @@ aprovou 16 grupos com HTTP sintético, exit 0 e sentinelas ausentes. Evidência
 `J:/lia-evidence/75c37fc5-5be7-4d18-abb8-8f097b7eba59/`, com `report.json`
 e `electron.log`. O gate não executa o OIDC preparado. Login, revogação e
 IPC do novo fluxo ficaram NÃO EXECUTADOS em runtime.
+
+### Coordenação compartilhada do cofre — retomada de 539d2dd
+
+Preflight confirmou branch e HEAD esperados, com tip remoto igual. Havia
+seis arquivos rastreados alterados e três novos arquivos locais da execução
+interrompida. Foram lidos e preservados. Os agentes anteriores deixaram
+incompletos os chamadores e os testes; a retomada concluiu essa integração.
+
+Todos os escritores produtivos passam pela trava do Core durante a mutação.
+O named pipe global do Windows é adquirido antes de reler o JSON mais
+recente e liberado depois do rename. Revisões ficam no próprio cofre.
+Exclusões avançam a revisão de ausência, inclusive quando a sessão não está
+presente. Set, renovação e reversão capturam a revisão original e são
+recusados se a entrada foi apagada ou substituída nesse intervalo.
+
+A revisão independente encontrou Set/Adopt do bridge Stage ainda sem
+captura de revisão no ingresso. A correção acrescentou o CAS e regressões
+de exclusão durante a espera na fila. O wrapper de escrita do Launcher
+recebeu a mesma proteção. Nova revisão do diff ficou sem achados acionáveis.
+O canal Main usa revisão esperada e devolve o recibo, preservando o segredo
+nos processos autorizados. O Launcher também bloqueia escopo OIDC e NUL
+no contrato genérico de configuração.
+
+A retomada seguinte, em 10/11, encontrou o mesmo HEAD local e remoto, índice
+vazio e 26 arquivos locais da execução. Os nove arquivos eram o recorte inicial.
+O agregado Stage anterior já havia terminado, com 2403 PASS, 4 skips e 2 FAIL.
+Um FAIL era a asserção que esperava cifra também no campo público de revisões.
+O outro era o timeout de 15 s de `image-journal`. O teste de cifra agora
+confere os dois slots cifrados, o formato das revisões e a ausência das
+sentinelas no JSON inteiro. A primeira confirmação isolada deu 1 PASS.
+
+A revisão independente da retomada identificou mais dois problemas. A gravação
+simples do Stage gerenciado tentava ler uma chave órfã, operação que o Launcher
+recusa quando falta registro de transporte. A gravação simples agora passa a
+revisão ao canal sem ler a chave anterior. O teste usa um canal real e verifica
+que somente a mutação foi enviada. O diagnóstico do cofre agora conta apenas
+referências compostas de segredos. A execução agregada iniciada antes dessas
+correções foi interrompida para validar a versão corrigida em sequência.
+
+| Verificação | Resultado e evidência local em `J:/lia-evidence/` |
+| --- | --- |
+| Contraprova multiprocesso contra build anterior | 3 FAIL por ressurreição nos dois sentidos e perda de segredo independente; `vault-process-red` |
+| Processos Node reais no Windows, mesmo arquivo e bind real | 12 PASS, exit 0; `vault-process-final2` |
+| Execução intermediária do harness multiprocesso | 11 PASS/1 FAIL por barreira do teste que aguardava o escritor errado. Corrigido o harness para observar contenção, mantendo os limites. `vault-process-final` |
+| Cofre focado, leitura, escrita e reversão cifrada | 14 PASS, exit 0; `vault-final-core-unit` |
+| OIDC e REST de conta preparados | 33 PASS, exit 0; `vault-final-oidc` |
+| Launcher focado após os fences finais | 29 PASS, exit 0; `vault-regression-launcher-focus` |
+| Launcher completo | 285 PASS/2 skips, exit 0; `vault-regression-launcher-all` |
+| Core completo, `vitest run --maxWorkers 1 --no-file-parallelism` | 381 PASS, exit 0; `vault-regression-core-all`. Inclui os 12 casos multiprocesso |
+| Launcher typecheck e build | exit 0; `vault-regression-launcher-typecheck` e `vault-regression-launcher-build` |
+| Retomada final, cifra e revisões públicas | 1 PASS e 7 filtrados, exit 0; `vault-publish-metadata` |
+| Retomada final, Stage focado | 88 PASS, exit 0; `vault-publish-stage-focus`. Inclui RPC gerenciado, cofre, OIDC, conta e diagnóstico |
+| Retomada final, processos reais no Windows | 12 PASS, exit 0; `vault-publish-multiprocess` |
+| Retomada final, Launcher focado | 29 PASS, exit 0; `vault-publish-launcher-focus` |
+| Retomada final, Core e Launcher typecheck e build | exit 0; `vault-publish-core-*` e `vault-publish-launcher-*` |
+| Lint dos arquivos tocados do workspace e `git diff --check` | exit 0; `vault-publish-lint`. Aviso de regex do Launcher já existente |
+| Stage Node completo após as correções finais | 2406 PASS, 4 skips, exit 0, 198 arquivos em `vault-publish-stage-all` |
+| Retomada final, Stage typecheck e build | exit 0 em `vault-publish-stage-typecheck` e `vault-publish-stage-build` |
+| Gate Windows real de componentes, Electron oficial 43.4.1 | 16/16 grupos PASS, exit 0, ZIP conferido por SHA-256. Fixture HTTP local e credenciais sintéticas. `logSecretsAbsent=true`. Evidências exportadas em `J:/lia-evidence/4533fba0-f147-415e-baaa-52fbc37388f0/` (`report.json`, `electron.log`, `manifest.json`) |
+
+O timeout de `image-journal` de 15 s consta no agregado anterior
+`vault-regression-stage-all`, exit 1. A segunda falha desse agregado era a
+asserção que tratava os metadados como slot cifrado. A repetição sequencial
+com a asserção corrigida passou todos os testes executados. Não se atribui
+causa ao timeout anterior. As duas falhas de 5 s no Core da fatia OIDC
+anterior continuam registradas acima. O Core completo desta coordenação
+passou os 381 casos, com os mesmos limites de timeout.
+
+Os 12 casos multiprocesso cobrem escrita antiga nos dois sentidos, merge
+de slots diferentes, CAS após logout de sessão existente ou ausente,
+reversão após exclusão/substituição, atualização de sessão com logout
+concorrente, falha de escrita, repetição, morte antes do rename e reinício.
+A fixture usa o Core compilado e temporários físicos com barreiras IPC.
+O teste de morte pode deixar temporário cifrado, que a restauração ignora.
+Os processos filhos criados pelos testes foram encerrados no cleanup.
+
+Os processos Node validam o mecanismo comum no Windows. O gate Electron
+complementa essa evidência com o runtime, o cofre, a persistência após
+reinício e o IPC de componentes com HTTP local. O login OIDC
+preparado continua sem registro IPC. Ativação conjunta, serviço externo,
+cookie de navegador e adaptadores streaming permanecem pendentes. Sistemas
+fora do Windows, versões antigas que ignorem a trava, filesystem remoto e
+queda de energia não estão validados por esses cenários.
+[Estratégia e limites](../architecture/LIA-BETA-CREDENTIAL-AUDIT-2026-11-08.md#coordenação-multiprocesso-do-cofre--0911).
 
 ## Desempenho
 
@@ -339,7 +423,7 @@ independente. A sessão legada que entrega tokens em sucesso continua aberta.
 
 | Critério de prontidão | Estado |
 | --- | --- |
-| Cofre preserva arquivos ilegíveis e recusa sobrescrita | PASS automatizado no caminho testado; concorrência com escritores legados entre processos em aberto |
+| Cofre preserva arquivos ilegíveis e recusa sobrescrita | PASS automatizado e 12 cenários com processos Node reais no Windows para coordenação desta versão |
 | Credenciais fora dos consumidores Renderer alcançáveis | BLOCKED por rotas legadas da auditoria; correção pontual do erro OIDC verificada |
 | Launcher → conversa → memória/personalidade → presença, pacote privado | PASS Windows com fixture sintética; capturas e relatório preservados |
 | Coletas de uma hora e comparação por processo | PASS Windows para coleta; aprovação de baixo consumo em aberto por CPU, GPU e cenários ausentes |

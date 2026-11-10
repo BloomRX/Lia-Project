@@ -44,14 +44,19 @@ Stage Node: 2365 PASS, 4 skips e um timeout de `image-journal` (2 PASS isolados)
 Gates Electron de componentes PS5.1/7 PASS com 16 grupos em cada rodada.
 **Sessão OIDC e REST de conta preparados, com ativação pendente.** Escopo
 `lia:main:oidc` fechado no IPC genérico. O owner Main e o serviço REST têm
-testes separados e ainda não foram ligados ao login. A corrida de escritores
-do mesmo cofre entre Launcher e Stage foi reproduzida com fixture. **Próximo:
-coordenar o escritor do cofre gerenciado, preparar vínculo no navegador e os
-adaptadores streaming, então ativar a migração em conjunto.** O callback de
+testes separados e ainda não foram ligados ao login. A coordenação do cofre
+agora usa lock do SO compartilhado, CAS por entrada e reversão condicionada
+ao recibo da própria gravação. Set/Adopt e os ingressos Main capturam revisão
+antes de esperar. Processos Node reais no Windows provaram exclusão, escrita
+obsoleta recusada, segredos distintos preservados e recuperação após morte
+do escritor. **Próximo: preparar vínculo no navegador e os adaptadores
+streaming, então ativar a migração em conjunto.** O callback de
 sucesso ainda alimenta conta, sincronização, chat e voz no Renderer.
-Foco Stage 58 PASS, lint/types/builds PASS e gate de componentes Windows
-16 PASS. Agregado Stage 2396 PASS/4 skips/timeout de `image-journal` (2 PASS
-isolados). Core agregado 368 PASS e um timeout em cada uma de duas execuções.
+Rodada de coordenação: Core 381 PASS, Launcher 285 PASS/2 skips, foco Launcher
+29 PASS, Stage Node final 2406 PASS/4 skips, foco Stage final 88 PASS.
+Gate Windows de componentes no Electron 43.4.1: 16/16 PASS com HTTP local
+sintético, evidência `4533fba0-f147-415e-baaa-52fbc37388f0`.
+Os timeouts anteriores continuam registrados no relatório beta.
 O pacote medido antecede essas correções. Distribuição P1 aguarda os P0.
 Baseline `3ef6d11`.
 [Relatório beta e pendências](../product/LIA-BETA-READINESS-2026-11-08.md).
