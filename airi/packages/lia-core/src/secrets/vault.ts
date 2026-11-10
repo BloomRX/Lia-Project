@@ -6,6 +6,8 @@ import { dirname } from 'node:path'
 
 import { safeDestr } from 'destr'
 
+import { withVaultWriteLock } from './vault-lock'
+
 /**
  * Lia secret vault (M1 Phase 4C, extracted to Lia Core in Phase 7).
  *
@@ -27,14 +29,27 @@ import { safeDestr } from 'destr'
  */
 
 type VaultFile = Record<string, string> // `scope\0key` -> base64 ciphertext
+const metadataKey = '@lia:vault-revisions-v1' // has no NUL, so cannot name a secret
+const legacyRevision = 'legacy'
+const isRevision = (value: unknown): value is string => typeof value === 'string' && /^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/.test(value)
 
-const encodeKey = (scope: string, key: string): string => `${scope}\u0000${key}`
+function encodeKey(scope: string, key: string): string {
+  if (scope.includes('\0') || key.includes('\0'))
+    throw new Error('Invalid credential reference')
+  return `${scope}\u0000${key}`
+}
+
+interface SecretChangeOptions { signal?: AbortSignal, expectedRevision?: string }
+
+interface SecretChange { revision: string, rollback: () => Promise<boolean> }
 
 export interface LiaSecretVault {
-  /** Main-only opaque rollback of one ciphertext entry; never expose through IPC. */
-  backupSecret?: (scope: string, key: string) => Promise<() => Promise<boolean>>
+  /** Main-only guarded mutation and opaque, single-use rollback. */
+  changeSecret?: (scope: string, key: string, value: string | undefined, options?: SecretChangeOptions) => Promise<SecretChange | undefined>
+  secretRevision?: (scope: string, key: string) => string
+  readSecretSnapshot?: (scope: string, key: string) => { revision: string, value: string | undefined }
   isEncryptionAvailable: () => boolean
-  setSecret: (scope: string, key: string, value: string, signal?: AbortSignal) => Promise<boolean>
+  setSecret: (scope: string, key: string, value: string, signal?: AbortSignal, revision?: string) => Promise<boolean>
   getSecret: (scope: string, key: string) => string | undefined
   hasSecret: (scope: string, key: string) => boolean
   deleteSecret: (scope: string, key: string) => Promise<boolean>
@@ -152,7 +167,7 @@ export function createLiaSecretVault(deps: SecretsDeps): LiaSecretVault {
     }
   }
 
-  const loadForRollback = (): VaultFile => {
+  const loadForWrite = (): VaultFile => {
     try {
       const raw = read(path)
       const parsed: unknown = JSON.parse(raw)
@@ -167,54 +182,104 @@ export function createLiaSecretVault(deps: SecretsDeps): LiaSecretVault {
     }
   }
 
-  return {
-    backupSecret: async (scope, key) => {
-      const reference = encodeKey(scope, key)
-      const ciphertext = loadForRollback()[reference]
-      return async () => {
-        const current = loadForRollback()
-        if (ciphertext === undefined)
-          delete current[reference]
-        else
-          current[reference] = ciphertext
-        return save(current)
+  function state() {
+    const file = loadForWrite()
+    const raw = file[metadataKey]
+    let absent = legacyRevision
+    const revisions = new Map<string, string>()
+    if (raw !== undefined) {
+      const metadata = JSON.parse(raw)
+      if (!metadata || typeof metadata !== 'object' || (metadata.absent !== legacyRevision && !isRevision(metadata.absent))
+        || !metadata.live || typeof metadata.live !== 'object' || Array.isArray(metadata.live)) {
+        throw new Error('Credential storage unavailable')
       }
-    },
-    isEncryptionAvailable: () => isAvailable(),
-    setSecret: async (scope, key, value, signal) => {
-      try {
-        if (signal?.aborted || !isAvailable() || value.length === 0)
-          return false
-        const file = loadForRollback()
-        file[encodeKey(scope, key)] = ciphertextToBase64(encrypt(value))
-        return await save(file, signal)
+      absent = metadata.absent
+      for (const [key, revision] of Object.entries(metadata.live)) {
+        if (!key.includes('\0') || !Object.hasOwn(file, key) || !isRevision(revision))
+          throw new Error('Credential storage unavailable')
+        revisions.set(key, revision)
       }
-      catch {
-        // Cipher and storage exceptions can carry private data; never export them.
-        return false
-      }
-    },
-    getSecret: (scope, key) => {
-      const file = load()
-      const cipher = file[encodeKey(scope, key)]
-      if (!cipher)
+    }
+    return { file, absent, revisions }
+  }
+
+  function revisionOf(current: ReturnType<typeof state>, reference: string) {
+    return current.file[reference] === undefined ? current.absent : current.revisions.get(reference) ?? legacyRevision
+  }
+
+  async function commit(reference: string, ciphertext: () => string | undefined, options?: SecretChangeOptions) {
+    try {
+      return await withVaultWriteLock(async () => {
+        const current = state()
+        if (options?.expectedRevision !== undefined && revisionOf(current, reference) !== options.expectedRevision)
+          return undefined
+        const previous = current.file[reference]
+        const next = ciphertext()
+        const revision = randomUUID()
+        if (next === undefined) {
+          delete current.file[reference]
+          current.revisions.delete(reference)
+          current.absent = revision
+        }
+        else {
+          current.file[reference] = next
+          current.revisions.set(reference, revision)
+        }
+        current.file[metadataKey] = JSON.stringify({
+          absent: current.absent,
+          live: Object.fromEntries(current.revisions),
+        })
+        return await save(current.file, options?.signal) ? { previous, revision } : undefined
+      }, options?.signal)
+    }
+    catch {
+      // Errors from disk, the cipher or an abort may carry private data.
+      return undefined
+    }
+  }
+
+  function change(scope: string, key: string, value: string | undefined, options?: SecretChangeOptions) {
+    if (scope.includes('\0') || key.includes('\0') || value === '')
+      return Promise.resolve(undefined)
+    return commit(encodeKey(scope, key), () => {
+      if (value === undefined)
         return undefined
       if (!isAvailable())
+        throw new Error('Credential storage unavailable')
+      return ciphertextToBase64(encrypt(value))
+    }, options)
+  }
+
+  function reveal(cipher: string | undefined) {
+    return cipher && isAvailable() ? decrypt(Buffer.from(cipher, 'base64')) : undefined
+  }
+
+  return {
+    changeSecret: async (scope, key, value, options) => {
+      const result = await change(scope, key, value, options)
+      if (!result)
         return undefined
-      return decrypt(Buffer.from(cipher, 'base64'))
+      return {
+        revision: result.revision,
+        rollback: async () => Boolean(await commit(encodeKey(scope, key), () => result.previous, { expectedRevision: result.revision })),
+      }
     },
-    hasSecret: (scope, key) => load()[encodeKey(scope, key)] !== undefined,
-    deleteSecret: async (scope, key) => {
+    secretRevision: (scope, key) => revisionOf(state(), encodeKey(scope, key)),
+    readSecretSnapshot: (scope, key) => {
+      const current = state()
+      const reference = encodeKey(scope, key)
+      return { revision: revisionOf(current, reference), value: reveal(current.file[reference]) }
+    },
+    isEncryptionAvailable: () => isAvailable(),
+    setSecret: async (scope, key, value, signal, revision) => {
       try {
-        const file = loadForRollback()
-        if (!(encodeKey(scope, key) in file))
-          return true
-        delete file[encodeKey(scope, key)]
-        return await save(file)
+        const expectedRevision = revision ?? revisionOf(state(), encodeKey(scope, key))
+        return Boolean(await change(scope, key, value, { signal, expectedRevision }))
       }
-      catch {
-        return false
-      }
+      catch { return false }
     },
+    getSecret: (scope, key) => reveal(load()[encodeKey(scope, key)]),
+    hasSecret: (scope, key) => load()[encodeKey(scope, key)] !== undefined,
+    deleteSecret: async (scope, key) => Boolean(await change(scope, key, undefined)),
   }
 }

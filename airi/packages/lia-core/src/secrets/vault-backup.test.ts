@@ -7,12 +7,16 @@ import { createLiaSecretVault } from './vault'
 describe('main opaque credential rollback', () => {
   it('never replaces a corrupt container while capturing or restoring an entry', async () => {
     let disk = '{}'
-    const write = vi.fn(async () => {})
+    const write = vi.fn(async (_path: string, value: string) => {
+      disk = value
+    })
     const vault = createLiaSecretVault({ filePath: 'injected-storage', cipher: { available: () => true, encrypt: text => Buffer.from(text), decrypt: value => value.toString() }, read: () => disk, write })
-    const restore = await vault.backupSecret!('service', 'apiKey')
+    const change = await vault.changeSecret!('service', 'apiKey', 'replacement')
+    expect(change).toBeDefined()
+    write.mockClear()
     disk = '{broken'
-    await expect(vault.backupSecret!('service', 'apiKey')).rejects.toThrow('Credential storage unavailable')
-    await expect(restore()).rejects.toThrow('Credential storage unavailable')
+    expect(await vault.changeSecret!('service', 'apiKey', 'another')).toBeUndefined()
+    expect(await change!.rollback()).toBe(false)
     expect(write).not.toHaveBeenCalled()
   })
   it('restores unreadable ciphertext exactly and preserves another updated scope', async () => {
@@ -27,10 +31,10 @@ describe('main opaque credential rollback', () => {
       read: () => disk,
       write: async (_, value) => { disk = value },
     })
-    const restore = await vault.backupSecret!('service', 'apiKey')
-    expect(await vault.setSecret('service', 'apiKey', 'explicit-replacement')).toBe(true)
+    const change = await vault.changeSecret!('service', 'apiKey', 'explicit-replacement')
+    expect(change).toBeDefined()
     expect(await vault.setSecret('other-service', 'apiKey', 'other-value')).toBe(true)
-    expect(await restore()).toBe(true)
+    expect(await change!.rollback()).toBe(true)
     expect(JSON.parse(disk)['service\0apiKey']).toBe(original)
     expect(JSON.parse(disk)['other-service\0apiKey']).toBeDefined()
     expect(decrypt).not.toHaveBeenCalled()
@@ -48,14 +52,14 @@ describe('main opaque credential rollback', () => {
         disk = value
       },
     })
-    const restore = await vault.backupSecret!('service', 'apiKey')
-    await vault.setSecret('service', 'apiKey', 'replacement')
+    const change = await vault.changeSecret!('service', 'apiKey', 'replacement')
+    expect(change).toBeDefined()
     await vault.setSecret('other-service', 'apiKey', 'sibling')
     fail = true
-    expect(await restore()).toBe(false)
+    expect(await change!.rollback()).toBe(false)
     expect(vault.hasSecret('service', 'apiKey')).toBe(true)
     fail = false
-    expect(await restore()).toBe(true)
+    expect(await change!.rollback()).toBe(true)
     expect(vault.hasSecret('service', 'apiKey')).toBe(false)
     expect(vault.getSecret('other-service', 'apiKey')).toBe('sibling')
   })
