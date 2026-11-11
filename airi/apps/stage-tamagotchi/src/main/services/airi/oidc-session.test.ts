@@ -49,6 +49,36 @@ function setup() {
 }
 
 describe('main-only OIDC session owner', () => {
+  it('single-flights early rotation after rejection and preserves caller cancellation', async () => {
+    const { owner, fetch } = setup()
+    await owner.establish(exchange, signal(), owner.beginLogin()!)
+    const response = Promise.withResolvers<Response>()
+    fetch.mockReturnValue(response.promise)
+    const caller = new AbortController()
+    const first = owner.refreshAccess(caller.signal)
+    const second = owner.refreshAccess(signal())
+    caller.abort()
+    expect(await first).toBe(false)
+    response.resolve(Response.json(rotated))
+    expect(await second).toBe(true)
+    expect(fetch).toHaveBeenCalledOnce()
+    const action = vi.fn(async () => true)
+    expect(await owner.withAccess(signal(), action)).toBe(true)
+    expect(action).toHaveBeenCalledWith(rotated.access_token, expect.any(AbortSignal), privateCheck)
+  })
+
+  it('rejects a late forced rotation after logout', async () => {
+    const { owner, fetch, vault } = setup()
+    await owner.establish(exchange, signal(), owner.beginLogin()!)
+    const response = Promise.withResolvers<Response>()
+    fetch.mockReturnValueOnce(response.promise).mockResolvedValueOnce(new Response(null))
+    const refresh = owner.refreshAccess(signal())
+    await owner.logout()
+    expect(await refresh).toBe(false)
+    response.resolve(Response.json(rotated))
+    await Promise.resolve()
+    expect(vault.hasSecret(oidcSessionScope, 'session-v1')).toBe(false)
+  })
   it('accepts trusted login data, stores only ciphertext and restores for the same issuer', async () => {
     const { owner, restore, disk } = setup()
     expect(await owner.establish(exchange, signal(), owner.beginLogin()!)).toBe(true)

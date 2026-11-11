@@ -6,6 +6,8 @@ const sessionKey = 'session-v1'
 const maxTokenLength = 16_384
 const maxResponseBytes = 96 * 1024
 
+export type OidcPrivateValueCheck = (text: string, includePartialSuffix?: boolean) => boolean
+
 interface Tokens {
   accessToken: string
   refreshToken?: string
@@ -256,7 +258,7 @@ export function createOidcSessionOwner(options: {
     }
   }
 
-  async function withAccess<T>(caller: AbortSignal, action: (accessToken: string, signal: AbortSignal, containsPrivateValue: (text: string) => boolean) => Promise<T>): Promise<T | undefined> {
+  async function withAccess<T>(caller: AbortSignal, action: (accessToken: string, signal: AbortSignal, containsPrivateValue: OidcPrivateValueCheck) => Promise<T>): Promise<T | undefined> {
     const signal = AbortSignal.any([generation.signal, caller])
     if (!tokens || !sessionRevision || signal.aborted)
       return undefined
@@ -282,8 +284,36 @@ export function createOidcSessionOwner(options: {
     if (!revision || revision !== beginLogin())
       return undefined
     const secrets = [current.accessToken, current.refreshToken, current.idToken]
-    const result = await whileActive(action(current.accessToken, signal, text => secrets.some(secret => secret !== undefined && text.includes(secret))), signal)
+    const containsPrivateValue: OidcPrivateValueCheck = (text, includePartialSuffix = false) => secrets.some((secret) => {
+      if (!secret)
+        return false
+      if (text.includes(secret))
+        return true
+      if (includePartialSuffix) {
+        for (let length = Math.min(secret.length - 1, text.length); length > 0; length--) {
+          if (text.endsWith(secret.slice(0, length)))
+            return true
+        }
+      }
+      return false
+    })
+    const result = await whileActive(action(current.accessToken, signal, containsPrivateValue), signal)
     return revision === beginLogin() ? result : undefined
+  }
+
+  /** A rejected connection may require rotation before the local expiry. */
+  async function refreshAccess(caller: AbortSignal): Promise<boolean> {
+    const signal = AbortSignal.any([generation.signal, caller])
+    if (!tokens || !sessionRevision || signal.aborted || sessionRevision !== beginLogin())
+      return false
+    if (!refreshing) {
+      const pending = renew(tokens, generation.signal, sessionRevision).finally(() => {
+        if (refreshing === pending)
+          refreshing = undefined
+      })
+      refreshing = pending
+    }
+    return !!await whileActive(refreshing, signal) && !signal.aborted
   }
 
   async function logout(): Promise<{ cleared: boolean, revocation: 'accepted' | 'failed' | 'absent' }> {
@@ -307,5 +337,5 @@ export function createOidcSessionOwner(options: {
     }
   }
 
-  return { beginLogin, establish, withAccess, logout }
+  return { beginLogin, establish, withAccess, refreshAccess, logout }
 }
