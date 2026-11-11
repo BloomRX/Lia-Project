@@ -13,15 +13,26 @@ Este diretório executa o que o documento 08 da série
 
 ## Primeira execução — comandos copiáveis
 
-Pré-requisito: **Python 3.12 x64** instalado com "Add python.exe to PATH".
+Pré-requisito: **Python 3.12 x64**. Com o Python Install Manager do Windows
+(`py.exe`), o comando é:
+
+```powershell
+py install 3.12
+py -3.12 --version
+```
+
+Sem o install manager, instale de python.org marcando "Add python.exe to PATH".
 
 ```powershell
 cd <raiz-do-repo>\tools\stt-bench
 
-py -3.12 --version
 .\run-stt-bench.bat -Setup
 .\run-stt-bench.bat -Doctor
 ```
+
+O launcher **testa cada candidato** (`py -3.12`, `py -3`, `python.exe`, `.venv`)
+e usa o primeiro que executa e informa 3.12+. Se nenhum servir, ele diz o que
+fazer em vez de falhar com mensagem genérica.
 
 Grave **uma** amostra de 10–20 s em `samples\first-run-01.wav` (fala clara, sem
 música). Se preferir `.m4a` do Gravador de Voz do Windows, troque o campo
@@ -185,7 +196,9 @@ promover: pedir `windows-reference-machine` sem os fatos aborta com erro.
 
 | Sintoma | Causa provável | O que fazer |
 |---|---|---|
-| `Python X e anterior ao exigido (3.12)` | Python < 3.12 | instale 3.12 x64 e apague `.venv` |
+| `No runtime installed that matches 3.12` | `py.exe` existe, mas o 3.12 não | `py install 3.12` e repita `-Setup` |
+| `Python X e anterior ao exigido (3.12)` | Python < 3.12 escolhido | `py install 3.12`; se houver `.venv` antigo, apague a pasta |
+| `.venv existente foi criado com outro Python` | venv de 3.11 | apague `tools\stt-bench\.venv` e repita `-Setup` |
 | `pip install falhou` | idem | idem |
 | `pesos ausentes ou divergentes` | cache vazio ou hash errado | `-AllowModelDownload`; se persistir, apague `models--Systran--faster-whisper-small` do cache |
 | `sha256 do model.bin diverge` | download corrompido ou cache adulterado | apague a pasta do modelo e baixe de novo |

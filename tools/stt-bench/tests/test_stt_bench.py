@@ -412,6 +412,50 @@ class ManifestTests(unittest.TestCase):
             stt_bench.load_manifest(manifest, self.tmp)
 
 
+class PowerShellStaticTests(unittest.TestCase):
+    """Regressões do primeiro contato real com Windows (11/11/2026).
+
+    Não substituem execução: pegam a classe de erro que já apareceu.
+    """
+
+    def setUp(self):
+        with open(os.path.join(TOOL_DIR, "run-stt-bench.ps1"), encoding="utf-8") as fh:
+            self.src = fh.read()
+
+    def test_ascii_puro(self):
+        for ch in self.src:
+            self.assertLess(ord(ch), 128, "caractere nao-ASCII no .ps1")
+
+    def test_delimitadores_balanceados(self):
+        for opening, closing, name in (("{", "}", "chaves"),
+                                       ("(", ")", "parenteses"),
+                                       ("[", "]", "colchetes")):
+            self.assertEqual(self.src.count(opening), self.src.count(closing),
+                             "%s desbalanceados" % name)
+
+    def test_sem_operadores_de_ps7(self):
+        for token in ("?.", "??", "ForEach-Object -Parallel"):
+            self.assertNotIn(token, self.src)
+
+    def test_sem_splatting_inline(self):
+        # & $exe @(...) passaria o array como UM argumento.
+        import re
+        self.assertIsNone(re.search(r"&\s+\$\w+(\.\w+)?\s+@\(", self.src))
+
+    def test_argumento_nativo_nao_tem_aspas_duplas(self):
+        # Regressão exata do bug: PowerShell 5.1 remove aspas duplas de
+        # argumentos passados a executáveis nativos, e o -c chegou como
+        # print(%d.%d % (...)) -> SyntaxError.
+        import re
+        probe_lines = [l for l in self.src.splitlines() if "'-c'" in l]
+        self.assertTrue(probe_lines, "nenhuma sonda -c encontrada")
+        for line in probe_lines:
+            self.assertNotIn('"', line, "aspas duplas em argumento nativo: " + line.strip())
+
+    def test_mensagem_aponta_py_install(self):
+        self.assertIn("py install 3.12", self.src)
+
+
 class EndToEndStubTests(unittest.TestCase):
     """Ponta a ponta com faster-whisper falso e cache declarado pequeno."""
 

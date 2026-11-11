@@ -115,25 +115,78 @@ if (-not (Test-Path -LiteralPath $benchPy)) {
 # --------------------------------------------------------------------------
 # 1. Interpretador Python
 # --------------------------------------------------------------------------
+function Get-PythonProbe {
+    # Sonda um candidato executando -c. O codigo Python NAO pode ter aspas
+    # duplas: o PowerShell 5.1 as remove ao passar argumento para executavel
+    # nativo, e o codigo chega quebrado (foi o erro do primeiro teste real).
+    param([hashtable] $Candidate)
+    $probeArgs = @()
+    $probeArgs += $Candidate.Args
+    $probeArgs += @('-c', 'import sys; print(sys.version_info[0], sys.version_info[1])')
+    $out = & $Candidate.Exe @probeArgs 2>&1
+    if ($LASTEXITCODE -ne 0) { return $null }
+    if ($null -eq $out) { return $null }
+    $major = -1
+    $minor = -1
+    foreach ($line in @($out)) {
+        $text = ([string]$line).Trim()
+        if ($text -match '^(\d+)\s+(\d+)$') {
+            $major = [int]$Matches[1]
+            $minor = [int]$Matches[2]
+        }
+    }
+    if ($major -lt 0) { return $null }
+    return @{ Major = $major; Minor = $minor; Text = "$major.$minor" }
+}
+
 function Resolve-Python {
+    # Tenta candidatos em ordem e escolhe o primeiro que executa E tem 3.12+.
+    # Antes, "py.exe existe" era tratado como "py -3.12 existe", e o erro
+    # aparecia como falha generica.
+    $candidates = @()
     if ($PythonExe -ne '') {
         if (-not (Test-Path -LiteralPath $PythonExe)) {
             Fail "PythonExe nao existe: $PythonExe"
         }
-        return @{ Exe = $PythonExe; Args = @() }
+        $candidates += ,@{ Exe = $PythonExe; Args = @(); Label = $PythonExe }
     }
     if (Test-Path -LiteralPath $venvPython) {
-        return @{ Exe = $venvPython; Args = @() }
+        $candidates += ,@{ Exe = $venvPython; Args = @(); Label = '.venv' }
     }
     $launcher = Get-Command 'py.exe' -ErrorAction SilentlyContinue
     if ($null -ne $launcher) {
-        return @{ Exe = $launcher.Source; Args = @('-3.12') }
+        $candidates += ,@{ Exe = $launcher.Source; Args = @('-3.12'); Label = 'py -3.12' }
+        $candidates += ,@{ Exe = $launcher.Source; Args = @('-3'); Label = 'py -3' }
     }
     $python = Get-Command 'python.exe' -ErrorAction SilentlyContinue
     if ($null -ne $python) {
-        return @{ Exe = $python.Source; Args = @() }
+        $candidates += ,@{ Exe = $python.Source; Args = @(); Label = 'python.exe' }
     }
-    Fail 'Python nao encontrado. Instale Python 3.12 x64 e marque "Add to PATH".'
+    if ($candidates.Count -eq 0) {
+        Fail 'Python nao encontrado. Instale Python 3.12 x64 ou rode: py install 3.12'
+    }
+    $fallback = $null
+    foreach ($candidate in $candidates) {
+        $probe = Get-PythonProbe -Candidate $candidate
+        if ($null -eq $probe) {
+            Write-Note ("descartado: " + $candidate.Label + " (nao executa)")
+            continue
+        }
+        if (($probe.Major -gt 3) -or (($probe.Major -eq 3) -and ($probe.Minor -ge 12))) {
+            $candidate['Version'] = $probe.Text
+            return $candidate
+        }
+        Write-Note ("descartado: " + $candidate.Label + " (Python " + $probe.Text + ", precisa 3.12+)")
+        if ($null -eq $fallback) {
+            $candidate['Version'] = $probe.Text
+            $fallback = $candidate
+        }
+    }
+    if ($null -ne $fallback) {
+        Write-Warning ("Nenhum Python 3.12+ utilizavel. Usando " + $fallback.Label + " (Python " + $fallback.Version + ") apenas para -Doctor e -DryRun.")
+        return $fallback
+    }
+    Fail 'Nenhum Python executavel encontrado. Instale Python 3.12 x64 ou rode: py install 3.12'
 }
 
 function Invoke-Python {
@@ -152,31 +205,22 @@ function Invoke-Python {
 
 $py = Resolve-Python
 Write-Step 'Interpretador'
-Write-Note "python: $($py.Exe) $($py.Args -join ' ')"
+Write-Note ("comando: " + $py.Exe + " " + ($py.Args -join ' '))
+Write-Note ("versao: " + $py.Version)
 
-$versionArgs = @()
-$versionArgs += $py.Args
-$versionArgs += @('-c', 'import sys; print("%d.%d" % (sys.version_info[0], sys.version_info[1]))')
-$versionOut = & $py.Exe @versionArgs
-if ($LASTEXITCODE -ne 0) {
-    Fail 'Nao foi possivel executar o Python selecionado.'
-}
-$pyVersion = ''
-if ($null -ne $versionOut) {
-    $lastLine = @($versionOut) | Select-Object -Last 1
-    if ($null -ne $lastLine) { $pyVersion = ([string]$lastLine).Trim() }
-}
-if ($pyVersion -eq '') { Fail 'Nao foi possivel ler a versao do Python.' }
-Write-Note "versao: $pyVersion"
+$versionParts = ([string]$py.Version).Split('.')
+$pyMajor = [int]$versionParts[0]
+$pyMinor = [int]$versionParts[1]
+$pythonIsNewEnough = ($pyMajor -gt 3) -or (($pyMajor -eq 3) -and ($pyMinor -ge 12))
 
 # av==19 e numpy==2.5 pedem 3.12. Para diagnosticar (-Doctor) ou so validar
 # entrada (-DryRun) uma versao antiga serve; para instalar ou medir, nao.
 $needRuntime = $Setup -or $SelfTest -or (($Manifest -ne '') -and (-not $DryRun) -and (-not $Doctor))
-if ($pyVersion -notmatch '^3\.(1[2-9]|[2-9][0-9])$') {
+if (-not $pythonIsNewEnough) {
     if ($needRuntime) {
-        Fail "Python $pyVersion e anterior ao exigido (3.12). Instale Python 3.12 x64, marque Add to PATH, apague .venv e repita."
+        Fail ("Python " + $py.Version + " e anterior ao exigido (3.12). Rode: py install 3.12")
     }
-    Write-Warning "Python $pyVersion fora do alvo (3.12). -Doctor e -DryRun funcionam; instalar e medir nao."
+    Write-Warning ("Python " + $py.Version + " fora do alvo (3.12). -Doctor e -DryRun funcionam; instalar e medir nao.")
 }
 
 $validMachineIds = @('arena-linux', 'windows-reference-machine', 'windows-other', 'macos-other', 'linux-other')
@@ -189,13 +233,17 @@ if ($MachineId -ne '' -and $validMachineIds -notcontains $MachineId) {
 # --------------------------------------------------------------------------
 if ($Setup) {
     Write-Step 'Criando ambiente virtual'
+    $venvExists = Test-Path -LiteralPath $venvPython
+    if ($venvExists -and ($py.Exe -ne $venvPython) -and ($PythonExe -eq '')) {
+        Fail ("O .venv existente foi criado com outro Python (menor que 3.12) e nao serve. Apague a pasta " + $venvDir + " e repita.")
+    }
     if (-not (Test-Path -LiteralPath $venvDir)) {
         $rc = Invoke-Python -Py $py -PyArgs @('-m', 'venv', $venvDir)
         if ($rc -ne 0) { Fail "falha ao criar venv (exit $rc)" }
     } else {
         Write-Note "venv ja existe: $venvDir"
     }
-    $venvPy = @{ Exe = $venvPython; Args = @() }
+    $venvPy = @{ Exe = $venvPython; Args = @(); Label = '.venv'; Version = $py.Version }
     Write-Step 'Instalando dependencias fixadas'
     $rc = Invoke-Python -Py $venvPy -PyArgs @('-m', 'pip', 'install', '--disable-pip-version-check', '--no-input', '-r', $requirements)
     if ($rc -ne 0) { Fail "pip install falhou (exit $rc). Nada foi executado." }
