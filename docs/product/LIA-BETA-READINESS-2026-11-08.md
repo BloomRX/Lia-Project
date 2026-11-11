@@ -239,6 +239,57 @@ fora do Windows, versões antigas que ignorem a trava, filesystem remoto e
 queda de energia não estão validados por esses cenários.
 [Estratégia e limites](../architecture/LIA-BETA-CREDENTIAL-AUDIT-2026-11-08.md#coordenação-multiprocesso-do-cofre--0911).
 
+### Preparação OIDC — retomada de 10/11 e 11/11
+
+HEAD inicial local e remoto `569a983207b89bce663028b7fc25df82de246e4e` em
+`arena/01a10290-lia-project`. O índice estava vazio. O checkout tinha dois
+arquivos rastreados modificados e nove novos, incluindo a documentação.
+Os workers anteriores tinham terminado. O delta foi preservado e a revisão
+independente da retomada incluiu os arquivos não rastreados.
+
+O `oidc-next-typecheck2` e o `oidc-next-final-typecheck` registraram exit 0.
+O foco `oidc-next-final-focused` teve 113 PASS. O agregado anterior terminou
+com 2475 PASS, 4 skips e timeout de 15 s em `image-journal.test.ts`, exit 1
+em `oidc-next-final-stage-all`. O encadeamento anterior parou nesse ponto.
+O timeout coincide com rodadas antigas. A execução isolada da retomada
+reproduziu o timeout com 1 PASS e 1 FAIL, exit 1, em
+`oidc-resume-final-image-isolated`. O arquivo e seu limite foram preservados.
+A causa do timeout segue sem confirmação.
+
+As portas Main para vínculo, chat, sincronização e voz usam o owner e cofre
+existentes. Os serviços continuam sem registro IPC e sem consumidores de
+produção. O callback legado ainda entrega tokens ao Renderer. A revisão
+da retomada apontou diferenças de concatenação em chat e STT, terminadores
+SSE, DELETE fora da rota esperada, interpretação da URL externa e renovação
+obsoleta em HTTP e WS. A contraprova dirigida registrou duas falhas para
+STT e DELETE antes das correções (`oidc-resume-boundaries-red`, exit 1).
+A revisão independente final verificou a concatenação conforme
+os consumidores, os limites de rota e URL e a identidade das tentativas
+de renovação. A rodada terminou sem achados acionáveis no delta preparado.
+
+| Verificação no Windows | Resultado |
+| --- | --- |
+| `corepack pnpm run typecheck` no Stage | PASS, exit 0 em `oidc-resume-final-typecheck` |
+| `vitest run --project node` com HTTP, owner, link, sockets, conta, auth e loopback | 123 PASS em sete arquivos, exit 0 em `oidc-resume-final-focused` |
+| `vitest run --project node src/renderer/stores/tools/builtin/image-journal.test.ts` | 1 PASS e 1 FAIL por timeout de 15 s, exit 1 |
+| `vitest run --project node` completo e sequencial | 2486 PASS, 4 skips em 201 arquivos, exit 0 em `oidc-resume-final-stage-all` |
+| `vitest run --project browser` no Chromium | 54 PASS em nove arquivos, exit 0 em `oidc-resume-final-chromium`. Mensagens `ResizeObserver` preservadas no log |
+| `corepack pnpm run build` no Stage | PASS, exit 0 em `oidc-resume-final-build` |
+| `moeru-lint` nos dez arquivos TypeScript da rodada | PASS, exit 0 em `oidc-resume-final-lint` |
+| `git diff --check` | PASS, exit 0 em `oidc-resume-final-diff` |
+
+`image-journal` passou no agregado final depois do timeout isolado. Uma
+repetição do mesmo comando isolado após os demais checks teve 2 PASS, exit 0
+em `oidc-resume-image-isolated-repeat`. O comportamento intermitente continua
+registrado, com a mesma configuração de teste e causa ainda indeterminada.
+Execução em Windows com Node 24.22.2 e PowerShell 7.6.9. A busca pelas
+sentinelas usadas nas fixtures HTTP, vínculo e WS ficou vazia nos logs
+focados. Os logs das contraprovas foram preservados separadamente.
+
+O gate integrado de IPC OIDC, o emissor externo e o áudio físico ficam
+NÃO EXECUTADOS. As suítes de Core e Launcher são evidência da etapa anterior.
+[Contratos e matriz](../architecture/LIA-OIDC-STREAMING-PREPARATION-2026-11-10.md).
+
 ## Desempenho
 
 [Baseline detalhado e métricas por processo](../architecture/LIA-BETA-PERFORMANCE-2026-11-08.md).

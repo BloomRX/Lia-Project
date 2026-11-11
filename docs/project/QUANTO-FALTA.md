@@ -21,9 +21,12 @@ de conta estão preparados para ativação conjunta. O callback segue legado.
 O cofre recebeu lock compartilhado entre processos e revisão por entrada
 para recusar escritas e reversões antigas após exclusão. No Windows passaram
 12 casos multiprocesso e os 16 grupos do gate Electron com HTTP local.
-Para ativar OIDC, concluir vínculo de conta no navegador e adaptar chat/voz
-streaming. Depois de OIDC, priorizar
-configuração de provedores com credenciais em PATCH/broadcast.
+O vínculo no navegador e os adaptadores de chat, sincronização e voz têm
+portas Main preparadas. Para ativar OIDC, concluir catálogos de voz e os
+demais REST autenticados, ligar as portas ao Renderer em conjunto e validar
+o IPC Electron e o emissor real. Depois de OIDC, priorizar configuração de
+provedores com credenciais em PATCH/broadcast.
+[Matriz de ativação OIDC](../architecture/LIA-OIDC-STREAMING-PREPARATION-2026-11-10.md).
 [Relatório beta](../product/LIA-BETA-READINESS-2026-11-08.md),
 [consumidores](../architecture/LIA-BETA-CREDENTIAL-AUDIT-2026-11-08.md) e
 [medições](../architecture/LIA-BETA-PERFORMANCE-2026-11-08.md).

@@ -49,9 +49,8 @@ agora usa lock do SO compartilhado, CAS por entrada e reversão condicionada
 ao recibo da própria gravação. Set/Adopt e os ingressos Main capturam revisão
 antes de esperar. Processos Node reais no Windows provaram exclusão, escrita
 obsoleta recusada, segredos distintos preservados e recuperação após morte
-do escritor. **Próximo: preparar vínculo no navegador e os adaptadores
-streaming, então ativar a migração em conjunto.** O callback de
-sucesso ainda alimenta conta, sincronização, chat e voz no Renderer.
+do escritor. O callback de sucesso ainda alimenta conta, sincronização,
+chat e voz no Renderer.
 Rodada de coordenação: Core 381 PASS, Launcher 285 PASS/2 skips, foco Launcher
 29 PASS, Stage Node final 2406 PASS/4 skips, foco Stage final 88 PASS.
 Gate Windows de componentes no Electron 43.4.1: 16/16 PASS com HTTP local
@@ -60,6 +59,17 @@ Os timeouts anteriores continuam registrados no relatório beta.
 O pacote medido antecede essas correções. Distribuição P1 aguarda os P0.
 Baseline `3ef6d11`.
 [Relatório beta e pendências](../product/LIA-BETA-READINESS-2026-11-08.md).
+
+**Preparação OIDC retomada em 11/11.** Portas Main inativas para vínculo no
+navegador, chat SSE, sincronização REST/WS, TTS HTTP/WS e STT duplex. A
+revisão incluiu a composição de deltas nos consumidores, renovação e
+isolamento por janela. Foco final 123 PASS, Stage 2486 PASS/4 skips,
+Chromium 54 PASS, typecheck, build e lint PASS. O timeout histórico de
+`image-journal` reapareceu isolado e está registrado no relatório beta.
+O callback legado continua ativo. **Próximo: preparar
+catálogos de voz e demais REST autenticados, depois integrar as portas em
+conjunto e testar o IPC Electron e o emissor real.** Beta bloqueada.
+[Contratos, matriz e evidências](../architecture/LIA-OIDC-STREAMING-PREPARATION-2026-11-10.md).
 
 **Finalização retomada — 08/11, integração em andamento.** Trabalho da execução
 interrompida preservado: configuração IA no Launcher, personalidade, memória,

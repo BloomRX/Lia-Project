@@ -234,8 +234,13 @@ exercitada separadamente pelos 12 casos com processos Node reais. O
 registra os resultados e o caminho das evidências.
 
 O owner e o REST preparado ainda não têm registro IPC nem chamadores no
-login em produção. O evento de sucesso ainda entrega access, refresh e ID
-tokens ao Renderer. O Pinia e o `localStorage` legados também permanecem.
+login em produção. A rodada de 10–11/11 preparou vínculo social, chat SSE,
+sincronização REST/WS, TTS HTTP/WS e STT duplex com autenticação Main.
+A revisão reproduziu e corrigiu reflexões fragmentadas e corridas de
+renovação. As portas novas têm testes em Node com HTTP e WS locais. O
+evento de sucesso ainda entrega access, refresh e ID tokens ao Renderer.
+O Pinia e o `localStorage` legados também permanecem.
+[Contratos, revisão e pendências](LIA-OIDC-STREAMING-PREPARATION-2026-11-10.md).
 Antes da ativação conjunta, conectar os adaptadores restantes, definir a
 transição das sessões antigas e validar logout no emissor real, revogação,
 renovação antecipada após rejeição do servidor e isolamento de janelas no
