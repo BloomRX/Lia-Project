@@ -455,6 +455,17 @@ class PowerShellStaticTests(unittest.TestCase):
     def test_mensagem_aponta_py_install(self):
         self.assertIn("py install 3.12", self.src)
 
+    def test_gitattributes_fixa_fim_de_linha(self):
+        # Sem isto, abrir o .ps1 no Notepad no Windows pode marcar o arquivo
+        # como modificado e bloquear o git pull (aconteceu em 11/11/2026).
+        path = os.path.join(TOOL_DIR, ".gitattributes")
+        self.assertTrue(os.path.isfile(path), ".gitattributes ausente")
+        with open(path, encoding="utf-8") as fh:
+            attrs = fh.read()
+        self.assertIn("*.ps1 text eol=crlf", attrs)
+        self.assertIn("*.bat text eol=crlf", attrs)
+        self.assertIn("*.py  text eol=lf", attrs)
+
 
 class EndToEndStubTests(unittest.TestCase):
     """Ponta a ponta com faster-whisper falso e cache declarado pequeno."""

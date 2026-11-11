@@ -107,6 +107,39 @@ O `.bat` existe só para não depender da política de execução: ele chama o
 PowerShell com `-ExecutionPolicy Bypass` **naquela invocação**, sem alterar nada
 na máquina.
 
+## Se o `git pull` for bloqueado
+
+Se você abriu `run-stt-bench.ps1` ou o `.bat` no Notepad e salvou, o Git pode
+considerar o arquivo modificado (fim de linha ou BOM) e recusar o `pull`. Não
+use `git stash` nem `git reset`. Faça nesta ordem:
+
+```powershell
+cd J:\Lia-Project\tools\stt-bench
+
+# 1. guarda uma copia do que esta no disco, antes de qualquer coisa
+Copy-Item .\run-stt-bench.ps1 .\run-stt-bench.local.bak
+
+# 2. mostra a diferenca real
+git diff -- .\run-stt-bench.ps1
+
+# 3. mostra a diferenca ignorando espaco e fim de linha
+git diff --ignore-all-space --ignore-blank-lines --stat -- .\run-stt-bench.ps1
+```
+
+- Se o passo 3 **não mostrar nada**, a diferença é só formatação: restaure e
+  siga.
+
+  ```powershell
+  git checkout -- .\run-stt-bench.ps1
+  git pull
+  ```
+
+- Se o passo 3 **mostrar diferença**, você editou o arquivo. Compare com
+  `.\run-stt-bench.local.bak`, decida o que manter e só então restaure.
+
+O `.gitattributes` desta pasta fixa `*.ps1`/`*.bat` em CRLF no Windows, o que
+evita que abrir e salvar no Notepad marque o arquivo como modificado.
+
 ## Pesos: revisão fixada, hash e arquivos auxiliares
 
 | Arquivo | Bytes | SHA-256 |

@@ -1,0 +1,10 @@
+# Fim de linha destes arquivos e controlado, nao a mercê de core.autocrlf.
+# No repositorio ficam LF; no Windows o checkout entrega CRLF, que e o que
+# PowerShell e cmd esperam. Abrir e salvar no Notepad deixa de marcar o
+# arquivo como modificado so por causa de CRLF.
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.py  text eol=lf
+*.json text eol=lf
+*.md  text eol=lf
+*.txt text eol=lf
