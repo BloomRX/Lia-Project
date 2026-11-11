@@ -77,3 +77,7 @@ ponto foi conferido na **fonte primária** e corrigido onde divergia. O que mudo
 
 **Estado do catálogo:** 44 catalogados · ~131 descobertos · **0 validados**.
 Nada aqui autoriza implementação.
+
+**Primeira bancada executável:** [`tools/stt-bench/`](../../../tools/stt-bench/README.md)
+— faster-whisper small em CPU/int8/pt, até 10 amostras, com JSON validado por
+schema e regra explícita de que medição em Linux não promove nada no catálogo.

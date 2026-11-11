@@ -18,3 +18,16 @@ Tests/artifacts/
 # Workspace tooling may create a root cache; dependencies are never source.
 /node_modules/
 /airi/apps/stage-tamagotchi/Tests/artifacts/
+
+# Bancada STT (tools/stt-bench). Ambiente, saida e audio nunca entram no Git.
+# O manifesto samples.json e pessoal; o exemplo versionado e samples.example.json.
+tools/stt-bench/.venv/
+tools/stt-bench/out/
+tools/stt-bench/samples.json
+tools/stt-bench/samples/*.wav
+tools/stt-bench/samples/*.mp3
+tools/stt-bench/samples/*.flac
+tools/stt-bench/samples/*.m4a
+tools/stt-bench/samples/*.ogg
+tools/stt-bench/samples/*.opus
+tools/stt-bench/samples/*.webm

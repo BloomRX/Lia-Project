@@ -161,14 +161,27 @@ Registrados para que o teste não gaste uma semana redescobrindo:
 **Regra:** um resultado de Vulkan sem a versão do llama.cpp e do driver não é
 comparável com nada.
 
-## 8.6 Script mínimo (a construir na próxima fase)
+## 8.6 Script mínimo
 
-Não implementado — apenas especificado.
+**O primeiro já existe:** [`tools/stt-bench/`](../../../tools/stt-bench/README.md)
+— faster-whisper small, CPU, int8, `pt`, até 10 amostras e 100 MB, com JSON de
+resultado validado por schema. Ele implementa o nível 1 desta bancada (STT) e
+serve de molde para os demais:
+
+```
+tools/stt-bench/
+  stt_bench.py                # mede, calcula WER/CER, decide o veredito
+  run-stt-bench.ps1 / .bat    # entrada Windows, sem baixar pesos sem permissão
+  requirements-stt-bench.txt  # versões fixadas
+  samples.example.json        # manifesto de amostras (áudio fica fora do Git)
+  results.schema.json         # contrato do JSON de saída
+  tests/                      # 36 testes sem rede e sem pesos
+```
+
+Os demais ainda são especificação:
 
 ```
 tools/bench/
-  ficha.mjs        # gera a ficha YAML a partir do ambiente real
-  stt.mjs          # roda o conjunto, calcula WER
   tts.mjs          # mede RTF e salva amostras para escuta
   llm.mjs          # mede tok/s e valida JSON/tool call
   memory.mjs       # precisão@k e taxa de invenção
@@ -195,10 +208,25 @@ Regras do script, para não repetir erros conhecidos do projeto:
 
 ## 8.8 Próximo passo concreto
 
-1. Criar `docs/research/lia-capability-catalog/evidence/` vazio e o `ficha.yaml`
-   modelo.
-2. Escolher **um** candidato de STT e rodar em CPU na máquina de referência.
-3. Registrar o primeiro `validation.evidence` real do catálogo.
+1. ~~Criar `evidence/` e a ficha modelo.~~ Feito: a bancada de STT gera o JSON
+   no formato de evidência em `tools/stt-bench/`.
+2. **Rodar na máquina de referência**, seguindo
+   [`tools/stt-bench/README.md`](../../../tools/stt-bench/README.md): `-Setup`,
+   `-Doctor`, `-DryRun`, depois `-AllowModelDownload`.
+3. Salvar o JSON em `docs/research/lia-capability-catalog/evidence/` **somente
+   se** `catalogPromotion.eligible` for `true`.
 4. Só então repetir para TTS.
 
 O primeiro resultado honesto vale mais que os 175 registros.
+
+## 8.9 O que a primeira bancada ainda não prova
+
+| Afirmação | Estado |
+|---|---|
+| "faster-whisper small roda em Windows" | **não verificado** — escrito para Windows, executado só em Linux |
+| "as versões fixadas instalam" | **parcial** — as wheels existem para cp312/win_amd64; a instalação não foi feita aqui |
+| "WER em PT-BR é X" | **não medido** — nenhuma amostra de áudio foi usada |
+| "cabe em 16 GB de RAM" | **não medido** — a bancada mede; a expectativa não é evidência |
+| "a RX 580 ajuda" | **não se aplica** — este teste é CPU pura, de propósito |
+
+Nenhum desses vira `validated` por ausência de falha.
