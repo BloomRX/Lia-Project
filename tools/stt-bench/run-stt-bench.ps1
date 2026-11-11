@@ -325,6 +325,6 @@ switch ($rc) {
     3 { Write-Host 'saida 3: pesos ausentes. Repita com -AllowModelDownload.' -ForegroundColor Yellow }
     4 { Write-Host 'saida 4: veredito rejected pelos criterios.' -ForegroundColor Red }
     5 { Write-Host 'saida 5: ambiente incompleto. Rode -Setup.' -ForegroundColor Yellow }
-    default { Write-Host "saida $rc: falha inesperada." -ForegroundColor Red }
+    default { Write-Host "saida ${rc}: falha inesperada." -ForegroundColor Red }
 }
 exit $rc

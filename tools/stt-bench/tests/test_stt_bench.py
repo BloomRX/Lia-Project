@@ -455,6 +455,22 @@ class PowerShellStaticTests(unittest.TestCase):
     def test_mensagem_aponta_py_install(self):
         self.assertIn("py install 3.12", self.src)
 
+    def test_variavel_seguida_de_dois_pontos_usa_chaves(self):
+        # Regressão exata do segundo contato com Windows:
+        # "saida $rc: ..." fazia o parser ler $rc: como variavel com escopo
+        # (drive-qualified) e falhar com InvalidVariableReferenceWithDrive.
+        # $env:, $script:, $global:, $local: e $using: são legítimos.
+        import re
+        allowed = ("env", "script", "global", "local", "using")
+        problems = []
+        for i, line in enumerate(self.src.splitlines(), 1):
+            if line.strip().startswith("#"):
+                continue
+            for m in re.finditer(r"\$([A-Za-z_][A-Za-z0-9_]*):", line):
+                if m.group(1).lower() not in allowed:
+                    problems.append((i, m.group(0)))
+        self.assertEqual([], problems, "use ${var} antes de ':' -> %r" % (problems,))
+
     def test_gitattributes_fixa_fim_de_linha(self):
         # Sem isto, abrir o .ps1 no Notepad no Windows pode marcar o arquivo
         # como modificado e bloquear o git pull (aconteceu em 11/11/2026).
