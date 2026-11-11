@@ -31,6 +31,16 @@ o documento da área que você vai tocar.
 | [`1-PARA-Lia-Project/PADRAO-DA-MARCA.md`](1-PARA-Lia-Project/PADRAO-DA-MARCA.md) | Identidade visual da Lia |
 | [`product/HANDOFF-PROMPT.md`](product/HANDOFF-PROMPT.md) | Prompt de handoff copiável + armadilhas históricas |
 
+## Pesquisa de capacidades e modelos
+
+| Documento | Papel |
+|---|---|
+| [`research/lia-capability-catalog/README.md`](research/lia-capability-catalog/README.md) | **Índice da pesquisa.** Catálogo de modelos, pesos, runtimes e provedores por capacidade (voz, visão, tela, memória, agentes, imagem, vídeo, segurança) — pesquisa, sem implementação |
+| [`research/lia-capability-catalog/01-ESTADO-DA-ARQUITETURA.md`](research/lia-capability-catalog/01-ESTADO-DA-ARQUITETURA.md) | O que a Lia já tem, classificado de 1 (funcional) a 5 (não projetado) |
+| [`research/lia-capability-catalog/03-ESQUEMA-E-DADOS.md`](research/lia-capability-catalog/03-ESQUEMA-E-DADOS.md) | Schema do catálogo selecionável e estados de ciclo de vida |
+| [`research/lia-capability-catalog/04-MATRIZES-E-PRIORIDADES.md`](research/lia-capability-catalog/04-MATRIZES-E-PRIORIDADES.md) | Compatibilidade modelo × runtime × SO × hardware; melhores candidatos |
+| [`research/lia-capability-catalog/05-PLANO-DE-TESTES-E-RISCOS.md`](research/lia-capability-catalog/05-PLANO-DE-TESTES-E-RISCOS.md) | Plano de testes, licenças pendentes, lacunas e riscos |
+
 ## Skills de agentes
 
 | Documento | Papel |
