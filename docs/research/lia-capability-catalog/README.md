@@ -57,3 +57,23 @@ medição nossa.
 - Não é um ranking único. Modelos que fazem coisas diferentes não são comparados
   entre si.
 - Não é um compromisso de implementação. Ver `05-PLANO-DE-TESTES-E-RISCOS.md` §7.
+
+---
+
+## Revisão 2 — 11/11/2026 (commit seguinte a `cf1d9ce`)
+
+O Dev revisou `cf1d9ce` e apontou lacunas. A revisão não refez a pesquisa: cada
+ponto foi conferido na **fonte primária** e corrigido onde divergia. O que mudou:
+
+| Documento | O que mudou |
+|---|---|
+| [`06-ERRATA-E-REVISAO.md`](06-ERRATA-E-REVISAO.md) | **novo** — resposta ponto a ponto às 7 observações, com veredito e fonte de cada uma |
+| [`07-CATALOGO-ESTRUTURADO.md`](07-CATALOGO-ESTRUTURADO.md) | **novo** — rastreabilidade: catalogados / descobertos / validados, e como um sobe de nível |
+| [`08-BANCADA-DE-MEDICAO.md`](08-BANCADA-DE-MEDICAO.md) | **novo** — ficha de execução, ordem de testes, conjuntos PT-BR, RX 580 explícita |
+| [`02-CATALOGO-MESTRE.md`](02-CATALOGO-MESTRE.md) | Fish Audio em 3 camadas; F5-TTS confirmado; Qwen3.5-4B *instruct* vs `-Base`; tamanhos reais do Qwen3.8-27B; vozes PT do Kokoro; AGPL do VoiceStudio |
+| [`03-ESQUEMA-E-DADOS.md`](03-ESQUEMA-E-DADOS.md) | §3.8 com os 11 campos pedidos; §3.9 capacidades visuais decompostas; §3.10 orquestração em 9 componentes |
+| [`04-MATRIZES-E-PRIORIDADES.md`](04-MATRIZES-E-PRIORIDADES.md) | `p*` para híbridos em Vulkan; §4.1.3b RX 580; AGPL e NC com nuance |
+| [`catalog.data.json`](catalog.data.json) | `schemaVersion: 2` — `licenseScope`, `variant`, `revision`, `validation`, `hardwareConstraints`; **44 entradas** (39 + 5 separadas pela revisão) |
+
+**Estado do catálogo:** 44 catalogados · ~131 descobertos · **0 validados**.
+Nada aqui autoriza implementação.

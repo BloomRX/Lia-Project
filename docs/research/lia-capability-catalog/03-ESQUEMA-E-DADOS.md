@@ -78,6 +78,12 @@ Estados de bloqueio (podem coexistir com `catalogued`):
 
 ## 3.4 Registro — JSON Schema (resumo)
 
+> **Revisão 2 (11/11/2026).** A revisão do Dev pediu onze campos que faltavam.
+> Eles estão especificados em **§3.8**, que complementa e prevalece sobre o
+> resumo abaixo. O schema em §3.4 permanece como visão geral; §3.8 é normativo
+> para a implementação.
+
+
 ```json
 {
   "$id": "lia.catalog.entry/v1",
@@ -330,3 +336,175 @@ Regras que a política **não** pode quebrar:
 
 **Conclusão do encaixe:** cinco das oito camadas já têm casa. As três novas
 (pesos, runtime, catálogo por capacidade) são **dados**, não arquitetura.
+
+
+---
+
+# Revisão 2 — campos exigidos pela revisão do Dev
+
+## 3.8 Os onze campos obrigatórios
+
+A revisão de 11/11/2026 apontou campos sem os quais o catálogo não sustenta uma
+interface selecionável. Todos foram incorporados. A coluna "já existia" mostra
+onde o schema anterior dava uma resposta **parcial** — que é pior que ausência,
+porque parece resolvida.
+
+| Campo | Já existia? | O que resolve | Obrigatório em |
+|---|---|---|---|
+| `model_id` | parcial (`model.modelId`) | identidade estável, independente do nome de exibição | `kind: model` |
+| `revision` | **não** | saber **qual** versão exata foi pesquisada/testada | `kind: model` |
+| `weights_id` | **não** | distinguir pesos diferentes do mesmo modelo | `kind: weights` |
+| `weights_hash` | parcial (`weights[].sha256`) | garantir que o arquivo testado é o instalado | `installable`+ |
+| `quantization` | parcial | diferenciar Q4/Q5/Q8/FP16 | por variante |
+| `runtime_version` | **não** | reproduzir o teste | `validated` |
+| `backend` | parcial (`runtime.backends[]`) | CUDA/Vulkan/ROCm/CPU **da execução**, não da promessa | `validated` |
+| `hardware_constraints` | parcial (`hardware`) | impedir seleção incompatível | `installable`+ |
+| `license_scope` | parcial (`license.code`/`weights`) | separar código, pesos e uso comercial | sempre |
+| `validation_evidence` | **não** | apontar para o teste real | `validated` |
+| `last_verified_at` | sim (`lastVerifiedAt`) | quando a informação foi confirmada | sempre |
+
+### 3.8.1 Estruturas
+
+```json
+{
+  "model": {
+    "modelId": "Qwen/Qwen3.5-4B",
+    "revision": "<sha-do-commit-no-hub>",
+    "variant": "instruct",
+    "family": "Qwen3.5",
+    "parameters": "4B",
+    "architecture": "Qwen3_5ForConditionalGeneration",
+    "releaseDate": "2026-02-27"
+  },
+
+  "weights": [{
+    "weightsId": "qwen3.5-4b-gguf-q4km",
+    "modelId": "Qwen/Qwen3.5-4B",
+    "revision": "<sha-do-commit-no-hub>",
+    "file": "Qwen3.5-4B-Q4_K_M.gguf",
+    "format": "gguf",
+    "quantization": "Q4_K_M",
+    "sizeBytes": null,
+    "sha256": null,
+    "license": { "name": "Apache-2.0", "commercialUse": "allowed" },
+    "sourceUrl": "https://huggingface.co/unsloth/Qwen3.5-4B-GGUF"
+  }],
+
+  "runtime": [{
+    "id": "llama.cpp",
+    "version": "b6000",
+    "backend": "vulkan",
+    "backendVerifiedOn": ["gfx803", "gfx1010"],
+    "os": ["windows", "linux"],
+    "streaming": true
+  }],
+
+  "hardwareConstraints": {
+    "requiresVramGb": 3.0,
+    "fitsCpuOnly": true,
+    "unsupportedArch": [],
+    "notes": "estimativa Q4 em contexto 8k; nao medido"
+  },
+
+  "licenseScope": {
+    "code": { "name": "Apache-2.0", "commercialUse": "allowed", "copyleft": "none" },
+    "weights": { "name": "Apache-2.0", "commercialUse": "allowed", "copyleft": "none" },
+    "integrationDependency": false,
+    "obligation": "none"
+  },
+
+  "validation": {
+    "state": "validated",
+    "evidence": [{
+      "ficha": "evidence/qwen3.5-4b-vulkan-gfx803.yaml",
+      "date": "2026-11-11",
+      "machine": "ref-rx580",
+      "runtimeVersion": "b6000",
+      "backend": "vulkan",
+      "result": "pass",
+      "notes": "batch 512 corrompido; usar 256"
+    }]
+  }
+}
+```
+
+> **Os valores acima são ilustrativos.** `<sha-do-commit-no-hub>`, `null` e
+> `"…"` são marcadores: nenhum hash, tamanho ou data neste bloco foi medido. A
+> regra vale ao contrário também — campo preenchido com valor não verificado é
+> pior que campo `null`.
+
+### 3.8.2 Regras que os campos novos impõem
+
+1. **`revision` vazio ⇒ não pode ser `validated`.** Sem saber o commit, o teste
+   não vale como evidência.
+2. **`weightsHash` ausente ⇒ não pode ser `installable`.** Baixar "o Q4_K_M" de
+   um repositório que muda não é instalar o que foi testado.
+3. **`runtimeVersion` vazio ⇒ `validation` não conta.** Vulkan muda entre
+   commits; o resultado é daquele binário.
+4. **`backend` é da execução, não do modelo.** Um modelo pode ter CUDA `S` e
+   Vulkan `p`; o registro precisa dos dois estados, não de um só.
+5. **`licenseScope` com `code` e `weights` divergentes ⇒ `commercialUse` é o
+   mais restritivo dos dois.** Nunca o mais permissivo.
+6. **`validation.state` tem cinco valores:** `none` (nunca rodou), `in-use` (em
+   uso no produto, ainda sem teste formal), `validated`, `rejected` e
+   `inconclusive`. `in-use` **não** é `validated`.
+7. **`integrationDependency: true`** marca os casos em que a licença só é
+   problema dependendo de **como** a Lia integra (AGPL). O veredito deixa de ser
+   binário.
+
+## 3.9 Compatibilidade por capacidade — multimodal não é tela
+
+A revisão está certa: **aceitar imagem não significa perceber tela continuamente**.
+São capacidades distintas e o catálogo passa a tratá-las como tal.
+
+| Capacidade | O que exige | Por que não se deduz do VLM |
+|---|---|---|
+| `vision.understand` | 1 imagem → texto | é o que todo VLM faz |
+| `vision.ocr` | texto exato na imagem | VLM alucina caractere; OCR dedicado não |
+| `vision.grounding` | caixa (x,y,w,h) de um elemento | exige treino específico de UI |
+| `vision.screen-parse` | árvore de elementos + estado | exige parser de UI, não só imagem |
+| `vision.screen-track` | **comparar quadros ao longo do tempo** | exige diff temporal, não 1 frame |
+| `vision.multi-monitor` | N telas, coordenadas por monitor | exige gestão de espaço de tela |
+| `computer.control` | planejar + executar + verificar | exige executor e política, não só visão |
+
+**Regra de dedução proibida:** `vision.understand` **não** habilita
+`vision.screen-track` nem `computer.control`. Cada uma exige entrada própria no
+catálogo, com sua própria evidência.
+
+### 3.9.1 Matriz de capacidades visuais por candidato
+
+| Candidato | understand | ocr | grounding | screen-parse | screen-track | control |
+|---|---|---|---|---|---|---|
+| Qwen3-VL-8B | sim | parcial | **sim** | não | não | não |
+| Florence-2-large | sim | parcial | sim (leve) | não | não | não |
+| PaddleOCR | não | **sim** | não | não | não | não |
+| OmniParser | não | parcial | sim | **sim** | não | não |
+| MediaPipe | não | não | não | não | parcial (movimento) | não |
+| Playwright | não | não | não | não | não | **sim** (navegador) |
+
+Nenhum candidato cobre a linha inteira. É por isso que `vision.screen-understanding`
+é um **pipeline**, não um modelo.
+
+## 3.10 Orquestração decomposta (nove campos, não um)
+
+```json
+{
+  "kind": "pipeline",
+  "capability": "agents.orchestrate",
+  "agent": {
+    "orchestratorId": "lia-native",
+    "modelPlannerId": "chat.reasoning.qwen3.8-27b",
+    "modelWorkerIds": ["chat.conversation.qwen3.5-4b"],
+    "runtimeId": "lia-main-process",
+    "toolIds": [],
+    "memoryId": "memory.store.sqlite-vec",
+    "budget": { "maxTokens": 0, "maxCalls": 0, "maxCostUsd": 0 },
+    "approvalPolicy": "every-destructive-action",
+    "reviewPolicy": "none"
+  }
+}
+```
+
+Um framework externo (LangGraph, PydanticAI, Temporal) entra como
+`agent.orchestratorId` alternativo — **substituível sem tocar no Core**. O modelo
+planejador e os trabalhadores são escolhas separadas, como a revisão pediu.

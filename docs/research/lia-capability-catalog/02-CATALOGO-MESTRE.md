@@ -2,6 +2,11 @@
 
 **Data da pesquisa:** 11/11/2026 · **Base:** `29999aff`
 
+> **Revisão 2 (11/11/2026).** Correções verificadas em `06-ERRATA-E-REVISAO.md`:
+> Fish Audio em três camadas, F5-TTS confirmado, Qwen3.5-4B *instruct* vs `-Base`,
+> tamanhos reais dos GGUF do Qwen3.8-27B, vozes PT do Kokoro e o enquadramento da
+> AGPL do VoiceStudio.
+>
 > **Como ler as tabelas.** `licença` é sempre a **do repositório/pesos indicado**,
 > não "do projeto em geral". Onde a licença do código e a dos pesos divergem, as
 > duas aparecem. `?` significa **não confirmado nesta pesquisa** — não é "sim".
@@ -19,11 +24,19 @@
 
 | Modelo | Lançamento | Params | Contexto | Licença (pesos) | Runtime | Link |
 |---|---|---|---|---|---|---|
-| **Qwen3.5-0.8B / 2B / 4B / 9B** | fev/2026 | 0,8–9 B dense | ver model card | Apache-2.0 | llama.cpp, ORT, MLX | [HF](https://huggingface.co/Qwen/Qwen3.5-9B) |
+| **Qwen3.5-0.8B / 2B / 4B / 9B** *instruct* | fev/2026 | 0,8–9 B dense | ver model card | Apache-2.0 | llama.cpp, ORT, MLX | [HF](https://huggingface.co/Qwen/Qwen3.5-9B) |
+| **Qwen3.5-4B-Base** *pré-treinado* | fev/2026 | 4 B dense | ver model card | Apache-2.0 | llama.cpp | [HF](https://huggingface.co/Qwen/Qwen3.5-4B-Base) |
 | **Qwen3.5-27B** | fev/2026 | 27 B dense | ver model card | Apache-2.0 | llama.cpp, vLLM | [HF](https://huggingface.co/Qwen/Qwen3.5-27B) |
 | **Qwen3.5-35B-A3B** | fev/2026 | 35 B / 3 B ativos | ver model card | Apache-2.0 | llama.cpp, vLLM | [HF](https://huggingface.co/Qwen/Qwen3.5-35B-A3B) |
 | **Qwen3.5-122B-A10B / 397B-A17B** | fev/2026 | MoE | ver model card | Apache-2.0 | vLLM, SGLang | [HF](https://huggingface.co/Qwen/Qwen3.5-397B-A17B) |
 | **Qwen3.8-27B** | ago/2026 | 27 B dense | ver model card | Apache-2.0 | llama.cpp (GGUF oficial) | [HF](https://huggingface.co/Qwen/Qwen3.8-27B) |
+
+> **Pesos reais do Qwen3.8-27B** (`unsloth/Qwen3.8-27B-GGUF`, tamanho de arquivo,
+> 11/11/2026): `UD-Q4_K_S` **15,36 GB** · `Q4_0` **16,06 GB** · `UD-Q4_K_M`
+> **16,56 GB** · `Q8_0` **29,05 GB** · `UD-IQ2_XXS` **7,21 GB**. Nada disso cabe
+> em 8 GB de VRAM: Q4 exige *offload* parcial, com perda forte de velocidade.
+
+
 | **Qwen3-0.6B / 1.7B / 4B / 8B / 14B / 32B** | abr/2025 | dense | 32K nativo (128K com YaRN, 8B+) | Apache-2.0 | tudo | [HF](https://huggingface.co/Qwen/Qwen3-8B) |
 | **Qwen3-30B-A3B / 235B-A22B** | abr/2025 | MoE | 128K+ | Apache-2.0 | vLLM, llama.cpp | — |
 | **Gemma 3 270M / 1B** | mar/2025 | 0,27–1 B | 32K | Gemma License (gated) | llama.cpp, ORT | [HF](https://huggingface.co/google/gemma-3-27b-it) |
@@ -97,24 +110,37 @@ adapter, não confiar no modelo.
 | Modelo | Params/tam. | Clonagem | Streaming | Licença | Runtime | Link |
 |---|---|---|---|---|---|---|
 | **Kokoro-82M** | 82 M, ~330 MB | não | sim (chunk) | **Apache-2.0** | ONNX, PyTorch, `kokoro` | [HF](https://huggingface.co/hexgrad/Kokoro-82M) |
+
+> **Kokoro em português:** o repositório tem `voices/pf_dora.pt`, `pm_alex.pt` e
+> `pm_santa.pt`, mas o model card declara `language: ["en"]`. Existem vozes PT;
+> **a qualidade em PT-BR não foi validada**. `portugueseBr` = `unverified`.
+
+
 | **Piper** | ~5–60 M por voz | não | sim | MIT | ONNX (C++) | [GitHub](https://github.com/rhasspy/piper) — **arquivado ago/2025** |
 | **XTTS-v2** (Coqui) | ~1,8 GB | **sim** (zero-shot) | não nativo | **CPML — não comercial** | PyTorch | [HF](https://huggingface.co/coqui/XTTS-v2) |
-| **F5-TTS** | ~1,2 GB | sim | parcial | código MIT / **pesos CC-BY-NC (verificar)** | PyTorch | [GitHub](https://github.com/SWivid/F5-TTS) |
+| **F5-TTS** | ~1,2 GB | sim | parcial | **código MIT / pesos CC-BY-NC-4.0 (confirmado)** | PyTorch | [GitHub](https://github.com/SWivid/F5-TTS) |
 | **CosyVoice 2/3** | 0,5–1,5 B | sim | **sim** | Apache-2.0 | PyTorch, vLLM | [GitHub](https://github.com/FunAudioLLM/CosyVoice) |
 | **ChatTTS** | ~1 GB | não | sim | **AGPL-3.0** | PyTorch | [GitHub](https://github.com/2noise/ChatTTS) |
 | **GPT-SoVITS** | ~1–2 GB | sim (few-shot) | não | MIT | PyTorch | [GitHub](https://github.com/RVC-Boss/GPT-SoVITS) |
 | **VoxCPM** | 0,5 B | sim | sim | Apache-2.0 | PyTorch | [GitHub](https://github.com/OpenBMB/VoxCPM) |
 | **MOSS-TTS** | ~1–2 B | sim | ? | Apache-2.0 | PyTorch | [GitHub](https://github.com/OpenMOSS/MOSS-TTS) |
-| **Fish Speech / OpenAudio** | ~1 B | sim | sim | código Apache / **pesos CC-BY-NC-SA (verificar)** | PyTorch | [GitHub](https://github.com/fishaudio/fish-speech) |
+| **Fish Speech (código)** | — | — | — | **Fish Audio Community License v1.0** (13/out/2026) | — | [GitHub](https://github.com/fishaudio/fish-speech) |
+| **fish-speech 1.4/1.5, s1-mini** (pesos) | ~1 B | sim | sim | **CC-BY-NC-SA-4.0** | PyTorch | [HF](https://huggingface.co/fishaudio/fish-speech-1.5) |
+| **s2-pro / drama-3** (pesos) | — | sim | sim | **Fish Audio Research License — NC, gate com checkbox** | PyTorch | [HF](https://huggingface.co/fishaudio/s2-pro) |
 | **VibeVoice** (MS) | 1,5 B / 7 B | multi-falante | sim | MIT | PyTorch | [GitHub](https://github.com/microsoft/VibeVoice) |
 | **Dia** (Nari) | 1,6 B | — | — | Apache-2.0 | PyTorch | [GitHub](https://github.com/nari-labs/dia) |
 
 **VoiceStudio** (`debpalash/VoiceStudio`, **AGPL-3.0**, 108 k estrelas,
 atualizado 11/11/2026): estúdio local completo — clonagem, *voice design* por
 descrição, dublagem de vídeo, transcrição e narração; declara **646 idiomas** e
-roda em desktop/mobile/servidor. É **aplicação**, não biblioteca: a AGPL é o
-fator decisivo para a Lia. Serve como **referência de UX e de arquitetura de
-modelos gerenciados**, não como dependência a embarcar.
+roda em desktop/mobile/servidor.
+
+> **AGPL não proíbe uso comercial.** Permite cobrar pelo software; a obrigação
+> nasce da **distribuição** ou da **modificação**, e a cláusula Affero acrescenta
+> a oferta por rede. A decisão depende da forma de integração:
+> Lia falando HTTP com um VoiceStudio instalado pelo usuário ≠ Lia embarcando ou
+> modificando o código. Classificação: **`integration-dependent`**, não
+> "não recomendado".
 
 ### B.2 TTS — serviços hospedados
 
@@ -181,9 +207,12 @@ Mesma leitura: referência, não dependência.
 | VoxCPM / MOSS-TTS | **Promissor** | Apache-2.0, recentes, precisam teste PT-BR |
 | GPT-SoVITS | **Promissor** | MIT, clonagem few-shot; pesado para tempo real |
 | XTTS-v2 | **Não recomendado** | **CPML proíbe uso comercial** |
-| F5-TTS / Fish Speech | **Licença pendente** | pesos provavelmente NC |
-| ChatTTS | **Não recomendado** | AGPL-3.0 contaminaria o produto |
-| VoiceStudio | **Referência** | AGPL-3.0; copiar código exige abrir o produto |
+| F5-TTS | **Não recomendado (pesos)** | pesos CC-BY-NC-4.0 confirmados; código MIT |
+| Fish Speech `s2-pro`/`drama-3` | **Não recomendado (pesos)** | Research License, gate "non-commercial use ONLY" |
+| Fish Speech 1.5 / s1-mini | **Não recomendado (pesos)** | CC-BY-NC-SA-4.0 |
+| Fish Speech (código) | **Licença dependente** | Community License: comercial sob US$ 500k de receita |
+| ChatTTS | **Integration-dependent (AGPL)** | permite uso comercial; obrigação ao distribuir/modificar/oferecer por rede |
+| VoiceStudio | **Integration-dependent** | AGPL permite uso comercial; obrigação só ao distribuir/modificar/oferecer por rede |
 | faster-whisper | **Recomendado (STT)** | MIT, rápido, PT-BR bom |
 | sherpa-onnx | **Recomendado (streaming)** | Apache-2.0, C++, roda em Windows/CPU |
 | Parakeet / Moonshine | **Compatibilidade não confirmada** | sem PT-BR confirmado |

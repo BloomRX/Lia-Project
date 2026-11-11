@@ -169,3 +169,35 @@ observacoes: ""
 
 **Método:** onde blog e fonte primária divergiram, a fonte primária venceu. Onde
 só havia blog, o item foi marcado `unverified`.
+
+
+---
+
+## 5.9 Revisão 2 — riscos adicionais identificados na revisão do Dev
+
+Acrescentados em 11/11/2026. Não substituem R1–R10; somam-se a eles.
+
+| ID | Risco | Evidência | Mitigação |
+|---|---|---|---|
+| **R11** | Tratar "aceita imagem" como "enxerga a tela" | capacidades decompostas em `03` §3.9 | cada linha da matriz §3.9.1 exige evidência própria |
+| **R12** | Confundir `Base` com `Instruct` e colocar um pré-treinado como assistente | `Qwen/Qwen3.5-4B-Base` existe separado | `variant` obrigatório; validador rejeita `base` em capacidade conversacional |
+| **R13** | Licença de **código** aplicada aos **pesos** (ou o contrário) | Fish Audio: código Community License, pesos NC; F5-TTS: MIT vs CC-BY-NC | `licenseScope` com dois campos + regra do mais restritivo |
+| **R14** | Ler AGPL como "proibido comercial" e descartar candidato bom | texto da AGPL-3.0 | `integrationDependency`; decisão pela forma de integração |
+| **R15** | Rodar híbrido DeltaNet em Vulkan com `-ub 512` e concluir "modelo ruim" | llama.cpp #27237 | ficha registra `-b`/`-ub`; testar 256/512/1024 |
+| **R16** | Medir 27B em 8 GB e chamar de "desempenho do modelo" | Q4_K_M = 16,56 GB | acima do hardware não entra na bancada; é `not-applicable` |
+| **R17** | Promover descoberto a instalável por entusiasmo | ~131 descobertos | regra de 9 etapas em `07` §7.5, sem atalho |
+| **R18** | Driver AMD não registrado → resultado de Vulkan irreproduzível | histórico de issues | `driver` é campo obrigatório da ficha |
+| **R19** | Voz PT do Kokoro declarada sem teste | card declara `en`; vozes `.pt` existem | `portugueseBr: unverified`; uma linha de teste por voz |
+| **R20** | Orçamento/aprovação tratados como "do modelo" | revisão do Dev | nove componentes separados em `03` §3.10 |
+
+### Critério de parada da bancada
+
+A bancada para e reporta **inconclusivo** quando:
+
+- o runtime não expõe a versão;
+- o arquivo de pesos não tem hash verificável;
+- o backend caiu para CPU sem registro (silent fallback);
+- o resultado varia mais de 30 % entre execuções iguais;
+- o teste exigiria credencial paga.
+
+Nenhum desses casos vira "aprovado por ausência de falha".

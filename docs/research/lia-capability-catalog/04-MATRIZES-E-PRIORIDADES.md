@@ -12,12 +12,22 @@ Legenda de célula: **S** suportado e documentado · **p** parcial / depende de 
 | Modelo | llama.cpp (CPU) | llama.cpp (Vulkan) | llama.cpp (ROCm) | Ollama | vLLM | ORT GenAI | Windows | AMD |
 |---|---|---|---|---|---|---|---|---|
 | Qwen3.5-0.8B/2B/4B/9B | **S** | **S** | **S** | **S** | **S** | **S** | **S** | **S** (GGUF) |
-| Qwen3.5-27B | **S** (lento) | **p** | **p** | **S** | **S** | ? | **S** | **p** |
-| Qwen3.5-35B-A3B | **p** | **p** | **p** | **S** | **S** | ? | **p** | **p** |
+| Qwen3.5-27B | **S** (lento) | **p\*** | **p** | **S** | **S** | ? | **S** | **p\*** |
+| Qwen3.5-35B-A3B | **p** | **p\*** | **p** | **S** | **S** | ? | **p** | **p\*** |
+| Qwen3.8-27B | **p** | **p\*** | **?** | **p** (import GGUF) | **?** | **?** | **p** | **p\*** |
 | Qwen3.5-122B+ | **—** | **—** | **—** | **p** | **S** | **—** | **p** | **—** |
 | Gemma 3 4B/12B/27B | **S** | **S** | **S** | **S** | **S** | ? | **S** | **S** |
 | Llama 4 Scout | **p** | **?** | **?** | **S** | **S** | **—** | **p** | **?** |
 | DeepSeek-V3 | **—** | **—** | **—** | **p** | **S** | **—** | **—** | **—** |
+
+> **`p\*` = híbrido DeltaNet/SSM no Vulkan.** Funciona em commits recentes, mas
+> com histórico de defeito: kernels `ggml_ssm_*` ausentes ([#19957](https://github.com/ggml-org/llama.cpp/issues/19957)),
+> saída corrompida em batch 512 ([#27237](https://github.com/ggml-org/llama.cpp/issues/27237)),
+> travamento em gfx10/Navi 10 ([#28807](https://github.com/ggml-org/llama.cpp/issues/28807)),
+> crash ao offloadar camadas repetidas ([#26945](https://github.com/ggml-org/llama.cpp/issues/26945))
+> e saída corrompida no **CPU** em [#30906](https://github.com/ggml-org/llama.cpp/issues/30906)
+> (aberta). Não é "não funciona": é **sensível a commit e a `-b`/`-ub`**. Nenhum
+> modelo híbrido vira padrão sem medição registrada.
 
 **Leitura para o parque Windows/AMD:** `llama.cpp` + Vulkan é o caminho que
 existe em qualquer GPU AMD; `ROCm` oficial cobre um subconjunto de placas (não
@@ -45,6 +55,31 @@ assumir por modelo); `Ollama` empacota ambos e é o menor atrito de instalação
 | Florence-2-large | **—** | **p** | **S** | **S** | **S** | ~1,5 GB |
 | PaddleOCR | **—** | **—** | **S** | **S** | **S** | ~0,5 GB |
 | MediaPipe | **—** | **—** | **S** | **S** | **S** | ~0,1 GB |
+
+### 4.1.3b RX 580: o que é possível e o que não é
+
+A máquina de referência do projeto é **Ryzen 5 5500 · RX 580 8 GB · 16 GB RAM**
+(`LIA-ARCHITECTURE.md` §249). E ela tem uma restrição que muda o plano:
+
+> **gfx803 (GCN4) está abaixo do piso do ROCm moderno** — registrado em
+> `docs/product/M1-PERSONAL-VOICE-ARCHITECTURE.md` §113.
+
+| Backend na RX 580 | Situação | O que isso exclui |
+|---|---|---|
+| CUDA | impossível | — |
+| ROCm / HIP | **fora** | vLLM, SGLang, TensorRT-LLM, TTS PyTorch em GPU |
+| Vulkan | viável (llama.cpp) | sujeito a `p*` |
+| DirectML | viável (ONNX Runtime) | depende do modelo ter ONNX |
+| CPU | sempre | o piso real; 16 GB de RAM limita a ~9B Q4 |
+
+**Consequências diretas:**
+- O perfil `local-private` na máquina de referência é **CPU + Vulkan**, não GPU.
+- TTS com clonagem (CosyVoice, F5-TTS, GPT-SoVITS) **não roda em GPU** nela.
+- Qwen3.8-27B Q4_K_M (**16,56 GB**) não cabe — nem com offload confortável.
+- Kokoro (ONNX, 82 M) e sherpa-onnx (C++) são os únicos confortáveis.
+
+Uma RTX 3060/4090 continua `S` em CUDA. O catálogo precisa das duas colunas; a
+**bancada** mede a RX 580.
 
 ### 4.1.4 Regras de hardware (estimativa, não medição)
 
@@ -98,8 +133,10 @@ porque a máquina do usuário pode estar rodando um jogo.
 | Apache-2.0 / MIT / BSD | **livre** para distribuir | Qwen, Kokoro, llama.cpp, BGE-M3 |
 | Gemma / Llama Community | uso comercial com termos e restrições | Gemma 3, Llama 4 |
 | GPL-3.0 | contamina se embarcado | ComfyUI |
-| AGPL-3.0 | contamina inclusive via rede | ChatTTS, VoiceStudio, Skyvern, Ultralytics |
-| CC-BY-NC | **proíbe uso comercial** | F5-TTS (pesos), Jina v3, MusicGen (pesos) |
+| AGPL-3.0 | **permite uso comercial**; obrigação nasce de distribuir, modificar ou oferecer versão modificada por rede | ChatTTS, VoiceStudio, Skyvern, Ultralytics |
+| CC-BY-NC | **proíbe uso comercial** | F5-TTS (pesos), fish-speech 1.5/s1-mini, Jina v3, MusicGen (pesos) |
+| Community License com teto de receita | comercial permitido sob condição | Fish Audio (código), < US$ 500k/ano |
+| Research License com gate | **NC explícito, aceito em checkbox** | fishaudio `s2-pro`, `drama-3` |
 | CPML | **proíbe uso comercial** | XTTS-v2 |
 | Sem licença declarada | **não usar** | Wav2Lip |
 | Licença própria restritiva | revisar caso a caso | HunyuanVideo, LivePortrait, MuseTalk, Llama 4 |
