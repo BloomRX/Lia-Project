@@ -175,7 +175,7 @@ tools/stt-bench/
   requirements-stt-bench.txt  # versões fixadas
   samples.example.json        # manifesto de amostras (áudio fica fora do Git)
   results.schema.json         # contrato do JSON de saída
-  tests/                      # 36 testes sem rede e sem pesos
+  tests/                      # 62 testes sem rede e sem pesos
 ```
 
 Os demais ainda são especificação:
@@ -224,6 +224,8 @@ O primeiro resultado honesto vale mais que os 175 registros.
 | Afirmação | Estado |
 |---|---|
 | "faster-whisper small roda em Windows" | **não verificado** — escrito para Windows, executado só em Linux |
+| "a revisão dos pesos é a fixada" | **verificado no código** — `revision` passada ao `WhisperModel` e snapshot exigido exato |
+| "o hash do model.bin confere" | **verificado por desenho** — sha256 recalculado; o primeiro valor real é da máquina do usuário |
 | "as versões fixadas instalam" | **parcial** — as wheels existem para cp312/win_amd64; a instalação não foi feita aqui |
 | "WER em PT-BR é X" | **não medido** — nenhuma amostra de áudio foi usada |
 | "cabe em 16 GB de RAM" | **não medido** — a bancada mede; a expectativa não é evidência |

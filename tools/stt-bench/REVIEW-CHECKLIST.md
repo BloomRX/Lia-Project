@@ -1,5 +1,9 @@
 # Checklist de revisão independente
 
+> **Preenchido em 11/11/2026:** resultado item a item, defeitos encontrados
+> e evidências em [`REVIEW-2026-11-11.md`](REVIEW-2026-11-11.md). Este
+> arquivo continua como roteiro para uma segunda revisão.
+
 Antes da primeira execução no Windows real, um revisor que **não escreveu** estes
 arquivos deve confirmar os pontos abaixo. Cada item é verificável por leitura ou
 por comando; nenhum depende de confiar no autor.

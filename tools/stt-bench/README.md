@@ -1,242 +1,226 @@
-# Bancada STT — primeiro experimento executável
+# Bancada STT — primeira execução real
 
 Transcreve **no máximo 10 amostras locais** com **faster-whisper small**, em
 **CPU**, **int8**, **português (`pt`)**, e grava um JSON que pode virar evidência
-do catálogo de capacidades (`docs/research/lia-capability-catalog/`).
+do catálogo de capacidades.
 
-Este diretório é a **execução** do que o documento 08 daquela série especificou.
-Ele é pequeno de propósito: um script Python, um launcher PowerShell, um
-manifesto de amostras e um schema.
+Este diretório executa o que o documento 08 da série
+`docs/research/lia-capability-catalog/` especificou. É pequeno de propósito.
 
-## O que esta bancada mede
+> **Nada aqui foi executado em Windows, PowerShell 5.1 ou na RX 580.** O que
+> existe é código revisado, testes em Linux e instruções verificáveis. O primeiro
+> resultado real é o que o usuário produz.
 
-| Medida | Como | Campo no JSON |
+## Primeira execução — comandos copiáveis
+
+Pré-requisito: **Python 3.12 x64** instalado com "Add python.exe to PATH".
+
+```powershell
+cd <raiz-do-repo>\tools\stt-bench
+
+py -3.12 --version
+.\run-stt-bench.bat -Setup
+.\run-stt-bench.bat -Doctor
+```
+
+Grave **uma** amostra de 10–20 s em `samples\first-run-01.wav` (fala clara, sem
+música). Se preferir `.m4a` do Gravador de Voz do Windows, troque o campo
+`audio` do manifesto para o nome do arquivo — o PyAV decodifica.
+
+```powershell
+# 1. valida o manifesto SEM executar modelo
+.\run-stt-bench.bat -Manifest .\samples.first-run.json -SamplesDir .\samples -DryRun
+
+# 2. baixa os pesos UMA vez (etapa explícita: ~486 MB)
+.\run-stt-bench.bat -Manifest .\samples.first-run.json -SamplesDir .\samples -AllowModelDownload
+```
+
+O JSON sai em `out\stt-bench-<UTC>-windows-reference-machine.json`.
+
+**Resultado esperado da primeira execução:** `status: completed`,
+`verdict: inconclusive`, com o motivo `amostras insuficientes: 1 < 5`. Isso é
+**correto**: uma amostra prova o fluxo e produz os primeiros números, mas não
+valida o modelo. Nenhum modelo é promovido por ela.
+
+Para a execução completa (5–10 amostras), use `samples.example.json` como molde.
+
+## O que mede
+
+| Medida | Como | Campo |
 |---|---|---|
-| tempo de carga do modelo | `perf_counter` em volta de `WhisperModel(...)` | `summary.modelLoadMs` |
-| tempo por amostra | `perf_counter` em volta do consumo dos segmentos | `samples[].transcribeMs` |
-| RTF (tempo / duração do áudio) | por amostra e mediana | `samples[].rtf`, `summary.rtfMedian` |
-| RAM de pico do processo | `VmHWM` (Linux) ou `PeakWorkingSetSize` (Windows) | `summary.peakRssMb` |
+| download dos pesos | cronômetro só em volta do `download_model` | `summary.downloadMs` |
+| carga do modelo | cronômetro em volta de `WhisperModel(...)` | `summary.modelLoadMs` |
+| tempo por amostra | cronômetro em volta do consumo dos segmentos | `samples[].transcribeMs` |
+| RTF | tempo ÷ duração do áudio | `samples[].rtf`, `summary.rtfMedian` |
+| RAM antes / após carga / final / pico | `VmHWM` (Linux) ou `PeakWorkingSetSize` (Windows) | `summary.memory*`, `summary.peakRssMib` |
 | qualidade | WER e CER contra transcrição de referência | `summary.corpusWer`, `summary.corpusCer` |
 
+**Unidades:** `peakRssMib` e `totalRamGib` são **binários** (1024², 1024³).
+`dataset.totalMb` é decimal (10⁶). A distinção está no nome de propósito: antes,
+`peakRssMb` usava 10⁶ e `totalRamGb` usava 1024³ sob nomes que pareciam iguais.
+
 WER é **de corpus** (total de edições ÷ total de palavras de referência), não
-média de WERs. Média de razões superestima amostras curtas.
+média de WERs. WER e CER usam a **mesma normalização**: minúsculas, pontuação
+removida, hífen como separador, acentos preservados. `strip_accents` só existe
+na métrica secundária.
 
-## O que esta bancada **não** mede
+## O que não mede
 
-- GPU. É CPU pura, `compute_type=int8`. A RX 580 não entra aqui — ela é tema da
-  bancada de LLM, não de STT.
-- Qualidade percebida por humano. WER não mede inteligibilidade nem pontuação.
+- GPU. É CPU pura, `int8`. A RX 580 não entra aqui — ela é tema da bancada de LLM.
+- Qualidade percebida por humano.
 - Desempenho da Lia em produção (Electron, IPC, microfone, VAD do app).
-- Qualquer coisa em Windows: **nada neste diretório foi executado em Windows**.
-  O que existe é instrução verificável, não resultado.
+- Windows: **nada foi executado lá**.
 
 ## Requisitos
 
 - Windows 10/11 x64.
-- Python **3.12 x64** com "Add to PATH" (3.10+ deve funcionar; 3.12 é o alvo
-  para o qual existem as wheels fixadas).
-- ~600 MB livres em disco para o ambiente virtual + pesos.
+- Python **3.12 x64** (as versões fixadas exigem 3.12; o launcher aborta antes
+  de o `pip` falhar no meio).
+- ~600 MB livres: venv (~200 MB) + pesos (~486 MB) + áudio.
 - Nenhum ffmpeg: o PyAV traz o FFmpeg embutido.
-- **Sem GPU.** Não instale CUDA nem ROCm para este teste.
+- **Sem GPU.** Não instale CUDA nem ROCm.
 
-## Passo a passo
+## Comandos, um por um
 
-### 1. Entrar na pasta
-
-```powershell
-cd <raiz-do-repo>\tools\stt-bench
-```
-
-### 2. Criar o ambiente e instalar dependências fixadas
-
-```powershell
-.\run-stt-bench.bat -Setup
-```
+| Passo | Comando | O que acontece |
+|---|---|---|
+| 1 | `cd <raiz>\tools\stt-bench` | entra na ferramenta |
+| 2 | `.\run-stt-bench.bat -Setup` | cria `.venv` e instala as 7 versões fixadas; **não baixa pesos** |
+| 3 | `.\run-stt-bench.bat -Doctor` | JSON com máquina, dependências, cache, hash e disco; não executa modelo |
+| 4 | gravar `samples\first-run-01.wav` | áudio próprio, 10–20 s |
+| 5 | `.\run-stt-bench.bat -Manifest .\samples.first-run.json -SamplesDir .\samples -DryRun` | valida arquivos e limites; não baixa nada |
+| 6 | `.\run-stt-bench.bat -Manifest .\samples.first-run.json -SamplesDir .\samples -AllowModelDownload` | baixa ~486 MB, confere o sha256 e roda |
+| 7 | abrir `out\*.json` | resultado |
 
 O `.bat` existe só para não depender da política de execução: ele chama o
-PowerShell com `-ExecutionPolicy Bypass` **naquela invocação**, sem alterar
-nada na máquina. Se preferir, chame o `.ps1` direto.
+PowerShell com `-ExecutionPolicy Bypass` **naquela invocação**, sem alterar nada
+na máquina.
 
-Isso cria `.venv\` e instala `requirements-stt-bench.txt`. **Não baixa pesos.**
+## Pesos: revisão fixada, hash e arquivos auxiliares
 
-### 3. Conferir o ambiente
-
-```powershell
-.\run-stt-bench.bat -Doctor
-```
-
-Saída esperada: JSON com `"ready": false` enquanto faltar o modelo, e os fatos
-da máquina (`machine`), as dependências instaladas (`runtime.dependencies`) e o
-estado do cache (`weights`). O campo `environment` será:
-
-- `windows-reference-machine` **somente** se o CPU declarar "Ryzen 5 5500" **e**
-  houver ~16 GB de RAM;
-- `windows-other` em qualquer outro Windows.
-
-O rótulo é detectado, não escolhido. `-MachineId` só troca o rótulo, nunca os
-fatos. Em Linux o padrão é `arena-linux`; se você rodar na sua própria máquina
-Linux, use `-MachineId linux-other` para não confundir os registros.
-
-### 4. Preparar as amostras
-
-Copie `samples.example.json` para `samples.json` e coloque os áudios em
-`samples\`. O exemplo cita arquivos que **não existem** — ele é um molde, e o
-`-DryRun` vai acusar isso de propósito até você fornecer os áudios.
-
-Requisitos de cada amostra:
-
-| Requisito | Valor |
-|---|---|
-| formato | `.wav`, `.mp3`, `.flac`, `.m4a`, `.ogg`, `.opus`, `.webm` |
-| quantidade | 5 a 10 (menos que 5 nunca valida) |
-| tamanho total | até 100 MB (o script recusa acima) |
-| referência | transcrição literal do que foi falado |
-| licença | própria (gravada por você) ou domínio público/CC0 |
-
-**Não use áudio de terceiros sem licença clara.** Se a gravação tiver outras
-pessoas, registre o consentimento. O campo `license` do manifesto é gravado no
-resultado e não é verificado pelo script — ele é uma declaração do operador.
-
-### 5. Validar sem executar
-
-```powershell
-.\run-stt-bench.bat -Manifest .\samples.json -SamplesDir .\samples -DryRun
-```
-
-Isso confere arquivos, limites e ambiente, imprime o plano e **não importa o
-modelo nem baixa nada**. Se houver erro, corrija antes de seguir.
-
-### 6. Baixar os pesos (etapa explícita)
-
-O download é **um só** e é seu:
-
-| Arquivo | Bytes | Tamanho |
+| Arquivo | Bytes | SHA-256 |
 |---|---|---|
-| `model.bin` | 483.546.902 | ~483,5 MB |
-| `tokenizer.json` | 2.203.239 | ~2,2 MB |
-| `vocabulary.txt` | 459.861 | ~0,46 MB |
-| `config.json` | 2.370 | ~2,4 KB |
-| **total** | **~486,2 MB** | |
+| `model.bin` | 483.546.902 | `3e305921506d8872816023e4c273e75d2419fb89b24da97b4fe7bce14170d671` |
+| `tokenizer.json` | 2.203.239 | — |
+| `vocabulary.txt` | 459.861 | — |
+| `config.json` | 2.370 | — |
+| **total** | **486.212.372** | |
 
 - Modelo: `Systran/faster-whisper-small`
-- Revisão fixada: `536b0662742c02347bc0e980a01041f333bce120`
+- Revisão: `536b0662742c02347bc0e980a01041f333bce120` — passada ao
+  `WhisperModel(revision=...)` e usada para localizar o snapshot
 - Licença: **MIT**
-- SHA-256 do `model.bin` (LFS): `3e305921506d8872816023e4c273e75d2419fb89b24da97b4fe7bce14170d671`
 
-Sem `-AllowModelDownload`, o script **para** e explica. Com a chave, o Hugging
-Face é o único destino de rede:
+O inspetor **não aceita outro snapshot** quando a revisão não está presente:
+antes, ele caía para "qualquer snapshot" e podia declarar presente um peso que
+não era o fixado. O sha256 do `model.bin` é recalculado a cada execução
+(`--no-hash` desliga). Os quatro arquivos são exigidos; `model.bin` sozinho não
+carrega.
 
-```powershell
-.\run-stt-bench.bat -Manifest .\samples.json -SamplesDir .\samples `
-    -AllowModelDownload -OutputDir "$env:USERPROFILE\lia-evidence\stt"
-```
+Se o download for interrompido, o Hugging Face retoma pelo cache
+(`blobs/*.incomplete`). O campo `weights.incompleteDownloads` mostra se sobrou
+arquivo pela metade.
 
-Nada de áudio é enviado a lugar algum: o `faster-whisper` roda local e o único
-tráfego é o download dos pesos.
-
-### 7. Ler o resultado
-
-O JSON é gravado em `out\` (ou no `-OutputDir`). Os campos que importam:
+## Resultado
 
 ```json
 {
+  "status": "completed",
   "environment": "windows-reference-machine",
-  "verdict": "validated",
+  "verdict": "inconclusive",
   "summary": {
+    "downloadMs": null,
     "modelLoadMs": 0.0,
     "transcribeMsMedian": 0.0,
     "rtfMedian": 0.0,
-    "peakRssMb": 0.0,
+    "memoryBeforeLoad": { "currentRssBytes": 0, "peakRssBytes": 0, "method": "windows-peak-working-set" },
+    "memoryAfterLoad": { "currentRssBytes": 0, "peakRssBytes": 0, "method": "windows-peak-working-set" },
+    "memoryAfterLastSample": { "currentRssBytes": 0, "peakRssBytes": 0, "method": "windows-peak-working-set" },
+    "peakRssMib": 0.0,
     "corpusWer": 0.0,
     "corpusCer": 0.0
   },
-  "catalogPromotion": { "eligible": true, "reason": "..." }
+  "catalogPromotion": { "eligible": false, "reason": "veredito 'inconclusive' nao promove" }
 }
 ```
 
-Os zeros acima são **placeholder do exemplo**: não há número medido nesta
-entrega. O primeiro resultado real é o que o usuário produz.
+Os zeros são **placeholder**: nenhum número foi medido nesta entrega.
 
-### 8. Repetir
+### JSON em caso de erro
 
-Rodar de novo **sobrescreve**? Não: `--output` é explícito e o nome padrão
-inclui data/hora UTC, então execuções coexistem. Para comparar, rode duas vezes
-e compare `summary.*` — a variância entre execuções é parte do resultado.
+Toda falha depois que o caminho de saída é resolvido gera um JSON com
+`status: "error"`, `error.stage` (`manifest`, `python`, `weights`, `download`,
+`runtime`) e `catalogPromotion.eligible: false`. Um resultado de erro **nunca**
+é evidência — o schema força `samples: []` e `eligible: false`.
 
-## Critérios objetivos do veredito
+## Critérios do veredito
 
 | Condição | Efeito |
 |---|---|
-| < 5 amostras | `inconclusive` |
-| < 30 s de áudio total | `inconclusive` |
-| sem referência | `inconclusive` |
-| WER de corpus ≤ 0,15 **e** RTF ≤ 1,0 | `validated` |
+| < 5 amostras, < 30 s, sem referência ou sem RTF | `inconclusive` — evidência insuficiente vem antes de qualquer decisão |
+| WER ≤ 0,15 **e** RTF ≤ 1,0, com evidência suficiente | `validated` |
 | WER entre 0,15 e 0,30, ou RTF > 1,0 | `inconclusive` |
-| WER > 0,30 ou pico de RAM > 4096 MB | `rejected` |
+| WER > 0,30 ou pico de RAM > 4096 MiB | `rejected` |
 
-**Promoção ao catálogo** (`catalogPromotion.eligible`) só é `true` quando:
+**Promoção** (`catalogPromotion.eligible`) só é `true` com
+`environment == "windows-reference-machine"` **e** `verdict == "validated"`.
 
-1. `environment == "windows-reference-machine"`, **e**
-2. `verdict == "validated"`.
-
-Resultado em `arena-linux` pode ser `validated` para Linux e **nunca** promove.
-Isso é o que impede confundir medição de sandbox com a RX 580 do usuário.
+O ambiente é **detectado** por três sinais (Windows, CPU contendo "Ryzen 5
+5500", RAM entre 14 e 18 GiB). `--machine-id` pode **rebaixar** o rótulo, nunca
+promover: pedir `windows-reference-machine` sem os fatos aborta com erro.
 
 ## Códigos de saída
 
 | Código | Significado |
 |---|---|
 | 0 | executou; veja o JSON |
-| 1 | entrada inválida; nada executado |
-| 2 | argumento inválido (uso do script) |
-| 3 | pesos ausentes; repita com `-AllowModelDownload` |
+| 1 | entrada inválida; JSON de erro `manifest` |
+| 2 | argumento inválido, Python < 3.12 ou ambiente forjado |
+| 3 | pesos ausentes/divergentes; repita com `-AllowModelDownload` |
 | 4 | veredito `rejected` |
-| 5 | ambiente incompleto (rode `-Setup`) |
+| 5 | `-Doctor`: ambiente ainda não está pronto |
+| 6 | falha de download, integridade ou runtime; JSON de erro |
 
 ## Se algo der errado
 
 | Sintoma | Causa provável | O que fazer |
 |---|---|---|
-| `python nao encontrado` | Python fora do PATH | instale 3.12 x64 marcando "Add to PATH" |
-| `pip install falhou` / `requires-python` | Python < 3.12: `av==19` e `numpy==2.5` não instalam | instale Python 3.12 x64 e apague `.venv` |
-| `python X e anterior ao exigido` | o launcher detectou < 3.12 | idem |
-| `no module named faster_whisper` | rodou fora do venv | use `run-stt-bench.bat`, que prefere `.venv\Scripts\python.exe` |
-| `pesos ausentes` | cache vazio | repita com `-AllowModelDownload` |
-| WER altíssimo com áudio bom | referência com pontuação/números escritos de forma diferente do falado | compare `hypothesis` e `reference` da amostra no JSON |
+| `Python X e anterior ao exigido (3.12)` | Python < 3.12 | instale 3.12 x64 e apague `.venv` |
+| `pip install falhou` | idem | idem |
+| `pesos ausentes ou divergentes` | cache vazio ou hash errado | `-AllowModelDownload`; se persistir, apague `models--Systran--faster-whisper-small` do cache |
+| `sha256 do model.bin diverge` | download corrompido ou cache adulterado | apague a pasta do modelo e baixe de novo |
+| WER altíssimo com áudio bom | referência com números/pontuação escritos diferentes do falado | compare `hypothesis` e `reference` no JSON |
 | RTF > 1 | CPU limitada ou `--beam-size` alto | registre como está; não "corrija" aumentando timeout |
 
 ## Arquivos
 
 | Arquivo | Papel |
 |---|---|
-| `stt_bench.py` | medição, WER/CER, detecção de ambiente, JSON |
+| `stt_bench.py` | medição, WER/CER, integridade, ambiente, JSON |
 | `run-stt-bench.ps1` | entrada Windows (PowerShell 5.1, ASCII) |
-| `run-stt-bench.bat` | launcher que evita bloqueio de política de execução |
+| `run-stt-bench.bat` | launcher que evita bloqueio de política |
 | `requirements-stt-bench.txt` | dependências fixadas |
-| `samples.example.json` | modelo de manifesto |
-| `results.schema.json` | schema do JSON de saída |
-| `tests/` | 33 testes sem rede, sem pesos, com stub do faster-whisper |
+| `samples.first-run.json` | manifesto de **1 amostra** para a primeira execução |
+| `samples.example.json` | manifesto completo (5 amostras) |
+| `results.schema.json` | contrato do JSON, incluindo erro |
+| `tests/` | 62 testes sem rede e sem pesos, com stub do faster-whisper |
+| `REVIEW-2026-11-11.md` | revisão independente e defeitos corrigidos |
 
-## Rodar os testes da própria bancada
+## Testes da própria bancada
 
 ```powershell
 python -m unittest discover -s tests -v
 ```
 
-Não requer o modelo, não acessa a rede. Verifica normalização, WER/CER,
-detecção de ambiente, limites de 10 amostras/100 MB, veredito e o caminho de
-ponta a ponta com um `faster_whisper` falso.
+Não requer modelo nem rede. Com `jsonschema` instalado, valida também os JSONs
+de sucesso e de erro contra `results.schema.json`.
 
-## Limites declarados
+## Limitações ainda não verificadas
 
-- Nada aqui foi executado em Windows. O script foi escrito para PowerShell 5.1
-  (sem `?.`, `??`, ternário; ASCII puro), mas **a primeira execução real é do
-  usuário**.
-- O PowerShell não pôde ser executado no ambiente de preparação (Linux, sem
-  `pwsh`). Revisão foi manual e por leitura, não por parser.
-- As versões fixadas foram verificadas como **existentes** na PyPI para
-  cp312/win_amd64. A instalação **não foi feita aqui**: o ambiente de preparação
-  tem Python 3.11 e as versões fixadas exigem 3.12. O que foi verificado é a
-  existência das wheels e a resolução declarada pelo próprio faster-whisper
-  (`snapshot_download`, estável entre versões do hub).
-- O resultado vale para a máquina medida. Não é transferível.
+- **PowerShell 5.1** nunca executou este script. Revisão manual e léxica.
+- **`pip install` em Windows** não foi executado; as wheels foram verificadas
+  como existentes na PyPI para cp312/win_amd64.
+- **Nenhum número de WER, RTF ou RAM** foi medido.
+- WER penaliza números escritos por extenso vs. dígitos ("4237" ≠ "quatro mil
+  duzentos e trinta e sete"). É limitação conhecida do conjunto, não bug.
+- O resultado vale para a máquina medida; não é transferível.

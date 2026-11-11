@@ -32,6 +32,14 @@
 .PARAMETER AllowModelDownload
     Unico jeito de baixar pesos. Sem esta chave, o script para e explica.
 
+.PARAMETER MachineId
+    Rebaixa o rotulo do ambiente (ex.: linux-other). Nao promove: pedir
+    windows-reference-machine sem os fatos detectados aborta.
+
+.PARAMETER NoHash
+    Nao recalcula o sha256 do model.bin. Mais rapido; o resultado registra
+    hashChecked=false.
+
 .PARAMETER Doctor
     Inspeciona ambiente, dependencias, cache de pesos e disco.
 
@@ -63,10 +71,10 @@ param(
     [string] $Model = '',
     [string] $CpuName = '',
     [string] $GpuName = '',
-    [ValidateSet('', 'arena-linux', 'windows-reference-machine', 'windows-other', 'macos-other', 'linux-other')]
     [string] $MachineId = '',
     [switch] $Setup,
     [switch] $AllowModelDownload,
+    [switch] $NoHash,
     [switch] $Doctor,
     [switch] $DryRun,
     [switch] $SelfTest
@@ -171,6 +179,11 @@ if ($pyVersion -notmatch '^3\.(1[2-9]|[2-9][0-9])$') {
     Write-Warning "Python $pyVersion fora do alvo (3.12). -Doctor e -DryRun funcionam; instalar e medir nao."
 }
 
+$validMachineIds = @('arena-linux', 'windows-reference-machine', 'windows-other', 'macos-other', 'linux-other')
+if ($MachineId -ne '' -and $validMachineIds -notcontains $MachineId) {
+    Fail "MachineId invalido: $MachineId. Use um de: $($validMachineIds -join ', ')"
+}
+
 # --------------------------------------------------------------------------
 # 2. Setup opcional (nao baixa pesos)
 # --------------------------------------------------------------------------
@@ -234,6 +247,7 @@ if ($Model -ne '') { $benchArgs += @('--model', $Model) }
 if ($CpuName -ne '') { $benchArgs += @('--cpu-name', $CpuName) }
 if ($GpuName -ne '') { $benchArgs += @('--gpu-name', $GpuName) }
 if ($MachineId -ne '') { $benchArgs += @('--machine-id', $MachineId) }
+if ($NoHash) { $benchArgs += @('--no-hash') }
 if ($AllowModelDownload) { $benchArgs += @('--allow-download') }
 if ($Doctor) { $benchArgs += @('--doctor') }
 if ($DryRun) { $benchArgs += @('--dry-run') }

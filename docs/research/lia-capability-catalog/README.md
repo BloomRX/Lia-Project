@@ -81,3 +81,5 @@ Nada aqui autoriza implementação.
 **Primeira bancada executável:** [`tools/stt-bench/`](../../../tools/stt-bench/README.md)
 — faster-whisper small em CPU/int8/pt, até 10 amostras, com JSON validado por
 schema e regra explícita de que medição em Linux não promove nada no catálogo.
+Revisão independente em [`REVIEW-2026-11-11.md`](../../../tools/stt-bench/REVIEW-2026-11-11.md):
+16 defeitos comprovados corrigidos, 62 testes sem rede.
