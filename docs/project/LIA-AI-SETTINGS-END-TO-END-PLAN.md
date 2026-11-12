@@ -8,9 +8,9 @@ da interface nem ampliar providers.
 Documentos de referência:
 
 - [Proposta e decisões aprovadas](../product/LIA-LAUNCHER-AI-SETTINGS-PROPOSAL-2026-11-12.md)
-- [Relatório de implementação PROMPT-39](PROMPT-39-LAUNCHER-AI-SETTINGS.md)
-- [Validação Windows PROMPT-40](PROMPT-40-WINDOWS-AI-SETTINGS-VALIDATION.md)
-- [Decisão de arquitetura de runtime](LIA-DESKTOP-RUNTIME-ARCHITECTURE-DECISION.md)
+- [Relatório de implementação PROMPT-39](../reports/PROMPT-39-LAUNCHER-AI-SETTINGS.md)
+- [Validação Windows PROMPT-40](../reports/PROMPT-40-WINDOWS-AI-SETTINGS-VALIDATION.md)
+- [Decisão de arquitetura de runtime](../reports/LIA-DESKTOP-RUNTIME-ARCHITECTURE-DECISION.md)
 
 ---
 
