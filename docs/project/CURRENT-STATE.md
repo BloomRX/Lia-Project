@@ -13,6 +13,18 @@ commit. Registra **estado**, não narrativa: relatório de rodada vai para
 
 ## 0. Estado agora
 
+**PROMPT-39, AI Settings MVP (12/11).** O Launcher passou a ter a central de
+configuração de IA baseada em catálogo: Groq `ready` e OpenAI-compatível listado como
+indisponível; uma conexão por provedor; chave no vault; descoberta de modelos; `modelId`
+manual; teste de conexão; seleção em `provider.chat.preferred` e recuperação após
+reinício. O Main é a autoridade (catálogo, política de endpoint, vault, gravação com
+rollback); o Renderer só recebe estado não secreto. Testes: `@lia/contracts` 98/98;
+`@lia/lia-app` 301 PASS/2 skips; typecheck e build do Launcher PASS.
+**O gate Windows de 9 passos NÃO foi executado** — nenhum PASS de runtime é declarado.
+O tool calling do PROMPT-38 segue como gate independente. Proposta e evidências em
+[proposta](../product/LIA-LAUNCHER-AI-SETTINGS-PROPOSAL-2026-11-12.md) e
+[relatório](../reports/PROMPT-39-LAUNCHER-AI-SETTINGS.md).
+
 **PROMPT-38, runtime do Launcher e Groq (12/11).** O Renderer abriu no
 runtime real do Launcher com `lia-app.window-created` e `lia-app.renderer-ready`
 sem reload manual. A validação do fluxo real do Groq permanece bloqueada pela
@@ -977,6 +989,18 @@ Armadilhas de tooling que continuam valendo:
 - nunca `eslint --fix`;
 - o ambiente **reverte sozinho**: conferir `git status`/HEAD no início de toda rodada e
   re-clonar da URL do GitHub na branch correta quando necessário.
+
+### Validação automatizada do PROMPT-39 (12/11/2026)
+
+| Verificação | Resultado |
+| --- | --- |
+| `@lia/contracts` (`node --test test/*.test.ts`) | **98 passed**, 0 fail |
+| `@lia/lia-app` (`vitest run`) | 29 arquivos, **301 passed**, 2 skipped |
+| `@lia/lia-app` typecheck (`tsc --noEmit`) | **0 erros** |
+| build do Launcher (`main`/`preload`/`renderer`) | **PASS** |
+
+Não há gate de runtime novo: o roteiro Windows de 9 passos do AI Settings não foi
+executado. Ver o relatório da rodada para o detalhamento.
 
 ---
 
