@@ -93,17 +93,21 @@ export function registerLiaIpc(host: LiaHost, timer: LiaBootTimer, extras: LiaIp
     return host.vault.hasSecret(providerId, 'apiKey')
   })
   ipcMain.handle('lia:stage:state', () => host.stage.state())
-  ipcMain.handle('lia:ai:connection:get', async () => {
+  // PROMPT-39: the AI Settings surface. The catalog is non-secret product
+  // metadata; each operation is bound to ONE catalog definition explicitly,
+  // so the renderer can never silently imply a provider.
+  ipcMain.handle('lia:ai:providers', () => host.aiConnection.catalog())
+  ipcMain.handle('lia:ai:connection:get', async (_event, providerId?: unknown) => {
     try {
-      return await host.aiConnection.read()
+      return await host.aiConnection.read(typeof providerId === 'string' ? providerId : undefined)
     }
     catch { return { ok: false, code: 'storage' } }
   })
   // The host owns the shared save/start interlock and checks Stage ownership
   // after acquiring it, including callers outside this IPC handler.
   ipcMain.handle('lia:ai:connection:save', (_event, input: unknown) => host.aiConnection.save(input))
-  ipcMain.handle('lia:ai:connection:models', () => host.aiConnection.discover())
-  ipcMain.handle('lia:ai:connection:test', () => host.aiConnection.probe())
+  ipcMain.handle('lia:ai:connection:models', (_event, providerId: unknown) => host.aiConnection.discover(providerId))
+  ipcMain.handle('lia:ai:connection:test', (_event, providerId: unknown) => host.aiConnection.probe(providerId))
   ipcMain.handle('lia:stage:start', async () => await host.conversar())
   ipcMain.handle('lia:stage:stop', async () => {
     await host.stage.stop()

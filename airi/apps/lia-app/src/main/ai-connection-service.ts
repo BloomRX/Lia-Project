@@ -1,31 +1,121 @@
 import type { LiaSecretVault } from '@lia/core/secrets/vault'
 
+import type { LiaAiProviderDefinition } from '../../../../../lia/core/src/providers/catalog'
 import type { TransportMutation, TransportRecord, TransportResult, TransportSnapshot } from '../../../../../lia/core/src/transports/contracts'
 
 import { Buffer } from 'node:buffer'
 
-const PROVIDER_ID = 'openai-compatible'
-const TRANSPORT_ID = 'launcher-ai-chat'
-type FailureCode = 'invalid' | 'conflict' | 'storage' | 'credentials' | 'unconfigured' | 'network' | 'http' | 'protocol' | 'timeout' | 'stage-running'
+import { LIA_AI_PROVIDER_CATALOG } from '../../../../../lia/core/src/providers/catalog'
+
+/**
+ * The Launcher AI Settings service (PROMPT-39).
+ *
+ * Main is the ONLY authority for every piece of this feature:
+ *   - it owns the provider catalog it exposes to the renderer;
+ *   - it validates the endpoint and the host-change confirmation;
+ *   - it writes the credential to the existing vault and never returns it;
+ *   - it writes the transport record (connection) and the canonical selection
+ *     (`provider.chat.preferred`) with the existing revision/rollback rules.
+ *
+ * The renderer receives non-secret state and typed results only. The IDs are
+ * deliberately separate:
+ *
+ *   definitionId    product identity of the catalog entry (`groq`);
+ *   connectionId    the transport record id (`groq` - one connection/provider);
+ *   stageProviderId the Stage execution provider id persisted in the product
+ *                   document and recognized by the Brain mapping (`groq`);
+ *   engineId        the Brain engine id declared by the catalog (`groq`);
+ *   credentialRef   the vault scope/key pair, equal to the record's providerId
+ *                   because `isTransportRecord` enforces that invariant;
+ *   modelId         the selected model, stored in the record and in the
+ *                   canonical selection.
+ *
+ * Endpoint policy (approved decision 3), enforced HERE and not in the UI:
+ *   - HTTPS anywhere; HTTP only for loopback (`localhost`, `127.0.0.1`, `::1`);
+ *   - no username, password, query or fragment in the URL;
+ *   - every request uses `redirect: 'error'` (no silent redirects);
+ *   - changing the host requires an explicit confirmation flag AND a newly
+ *     supplied credential - a saved key is never forwarded to a new host;
+ *   - a failed save leaves the record disabled (fail-closed) and restores the
+ *     previous credential/selection when possible.
+ */
+
+type FailureCode
+  = | 'invalid'
+    | 'conflict'
+    | 'storage'
+    | 'credentials'
+    | 'unconfigured'
+    | 'network'
+    | 'http'
+    | 'protocol'
+    | 'timeout'
+    | 'stage-running'
+    | 'unconfirmed-host'
+    | 'provider-unavailable'
+
 interface Failure { ok: false, code: FailureCode }
-export interface AiConnectionState { providerId: string, baseUrl: string, modelId?: string, hasKey: boolean, revision: number }
-export interface AiConnectionSaveInput { baseUrl: string, apiKey?: string, modelId?: string, revision: number }
+
+export interface AiConnectionSelection {
+  providerId: string
+  modelId?: string
+}
+
+export interface AiConnectionState {
+  /** Catalog identity of the provider this state describes. */
+  definitionId: string
+  /** Transport record id. Empty while no connection exists yet. */
+  connectionId: string
+  /** Stage execution provider id, when the definition has one. */
+  stageProviderId?: string
+  /** Brain engine id declared by the catalog, when one exists. */
+  engineId?: string
+  availability: 'ready' | 'unavailable'
+  label: string
+  baseUrl: string
+  modelId?: string
+  hasKey: boolean
+  revision: number
+  /** True when the canonical selection points at this provider. */
+  selected: boolean
+  /** The canonical selection, verbatim; non-secret metadata only. */
+  selection?: AiConnectionSelection
+}
+
+export interface AiConnectionSaveInput {
+  /** Catalog definition id. Required: the renderer never implies a provider. */
+  providerId: string
+  baseUrl: string
+  apiKey?: string
+  modelId?: string
+  revision: number
+  /** Explicit user confirmation for a host that is not the canonical one. */
+  confirmHostChange?: boolean
+}
+
 export interface AiConnectionServiceDeps {
   repository: { read: () => Promise<TransportSnapshot>, mutate: (input: TransportMutation) => Promise<TransportResult> }
   vault: LiaSecretVault
-  readSelection: () => Promise<{ providerId: string, modelId?: string } | undefined>
-  saveSelection: (target: { providerId: string, modelId?: string }) => Promise<void>
+  readSelection: () => Promise<AiConnectionSelection | undefined>
+  saveSelection: (target: AiConnectionSelection) => Promise<void>
   /** Exact rollback, including an originally absent selection. Main-only. */
   backupSelection?: () => Promise<() => Promise<void>>
   /** The host shares this critical section with every managed Stage start. */
   saveExclusively?: (save: () => Promise<AiConnectionResult>) => Promise<AiConnectionResult>
   fetch?: typeof globalThis.fetch
+  /** Injectable for tests; defaults to the shipped catalog. */
+  definitions?: readonly LiaAiProviderDefinition[]
 }
 export type AiConnectionResult = { ok: true, state: AiConnectionState } | Failure
 
 function validId(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0 && value.length <= 256 && value.trim() === value && !/[\u0000-\u001F\u007F]/.test(value)
 }
+
+/**
+ * HTTPS anywhere; HTTP only for loopback. No credential, query or fragment may
+ * ride the URL - the user could otherwise smuggle a secret past the vault.
+ */
 function validAddress(value: unknown): value is string {
   if (typeof value !== 'string' || value.length > 4096 || value.trim() !== value)
     return false
@@ -36,44 +126,119 @@ function validAddress(value: unknown): value is string {
   catch { return false }
 }
 
-/** Main-only owner. Raw transport errors and remote bodies never cross IPC. */
+function hostOf(value: string): string | undefined {
+  try {
+    return new URL(value).hostname
+  }
+  catch { return undefined }
+}
+
+function manageable(definition: LiaAiProviderDefinition): boolean {
+  return definition.availability === 'ready' && typeof definition.stageProviderId === 'string' && definition.stageProviderId.length > 0
+}
+
+/** Main-only owner. Raw transport errors, remote bodies and secrets never cross IPC. */
 export function createAiConnectionService(deps: AiConnectionServiceDeps) {
+  const catalog = deps.definitions ?? LIA_AI_PROVIDER_CATALOG
   let queue: Promise<unknown> = Promise.resolve()
   let configurationSafe = true
   const fetchImpl = deps.fetch ?? globalThis.fetch
-  const recordFrom = (snapshot: TransportSnapshot) => {
-    const records = snapshot.records.filter(row => row.providerId === PROVIDER_ID)
+
+  const definitionById = (definitionId: string) => catalog.find(definition => definition.definitionId === definitionId)
+  const definitionByStageProvider = (providerId: string) => catalog.find(definition => definition.stageProviderId === providerId)
+
+  function recordFrom(snapshot: TransportSnapshot, definition: LiaAiProviderDefinition): TransportRecord | undefined {
+    if (!definition.stageProviderId)
+      return undefined
+    const records = snapshot.records.filter(row => row.providerId === definition.stageProviderId)
     if (records.length > 1 || (records[0] && records[0].protocol !== 'chat-completions'))
       throw new Error('storage')
     return records[0]
   }
+
+  /** Fail-closed guard shared with `Stage.start` and `conversar`. */
   async function isSafeToStart(): Promise<boolean> {
     if (!configurationSafe)
       return false
     try {
-      return recordFrom(await deps.repository.read())?.enabled !== false
+      const snapshot = await deps.repository.read()
+      const selection = await deps.readSelection()
+      const definition = selection ? definitionByStageProvider(selection.providerId) : undefined
+      // A legacy selection the catalog does not manage keeps its previous
+      // behaviour: this service never claimed authority over that row.
+      if (!definition)
+        return true
+      const record = recordFrom(snapshot, definition)
+      return record?.enabled !== false
     }
     catch { return false }
   }
-  async function readInternal(): Promise<AiConnectionState> {
-    const snapshot = await deps.repository.read()
-    const record = recordFrom(snapshot)
-    const selected = await deps.readSelection()
-    return { providerId: PROVIDER_ID, baseUrl: validAddress(record?.baseUrl) ? record!.baseUrl : '', modelId: selected?.providerId === PROVIDER_ID ? selected.modelId : undefined, hasKey: deps.vault.hasSecret(PROVIDER_ID, 'apiKey'), revision: snapshot.revision }
+
+  /** The catalog exactly as the renderer may see it: metadata only, no secrets. */
+  function listDefinitions() {
+    return catalog.map(definition => ({
+      availability: definition.availability,
+      baseUrl: definition.baseUrl,
+      definitionId: definition.definitionId,
+      description: definition.description,
+      engineId: definition.engineId,
+      label: definition.label,
+      models: definition.models.map(model => ({ ...model })),
+      requiresApiKey: definition.requiresApiKey,
+      stageProviderId: definition.stageProviderId,
+      ...(definition.unavailableReason ? { unavailableReason: definition.unavailableReason } : {}),
+    }))
   }
 
-  async function read(): Promise<AiConnectionState> {
+  async function readInternal(definitionId?: string): Promise<AiConnectionState> {
+    const snapshot = await deps.repository.read()
+    const selection = await deps.readSelection()
+    const definition = definitionId === undefined
+      ? (selection ? definitionByStageProvider(selection.providerId) : undefined) ?? catalog.find(item => item.availability === 'ready')
+      : definitionById(definitionId)
+    if (!definition)
+      throw new Error('invalid')
+    const record = recordFrom(snapshot, definition)
+    const selected = definition.stageProviderId !== undefined && selection?.providerId === definition.stageProviderId
+    return {
+      availability: definition.availability,
+      baseUrl: record?.baseUrl ?? definition.baseUrl,
+      connectionId: record?.id ?? '',
+      definitionId: definition.definitionId,
+      ...(definition.engineId ? { engineId: definition.engineId } : {}),
+      hasKey: definition.stageProviderId ? deps.vault.hasSecret(definition.stageProviderId, 'apiKey') : false,
+      label: definition.label,
+      modelId: selected ? selection?.modelId : record?.modelIds[0],
+      revision: snapshot.revision,
+      selected,
+      ...(selection ? { selection: { ...selection } } : {}),
+      ...(definition.stageProviderId ? { stageProviderId: definition.stageProviderId } : {}),
+    }
+  }
+
+  async function read(definitionId?: string): Promise<AiConnectionState> {
     await queue
-    return readInternal()
+    return readInternal(definitionId)
   }
 
   async function apply(input: AiConnectionSaveInput, expectedKeyRevision: string | undefined): Promise<AiConnectionResult> {
-    if (!input || typeof input !== 'object' || !Object.keys(input).every(key => ['baseUrl', 'apiKey', 'modelId', 'revision'].includes(key))
-      || !validAddress(input.baseUrl) || !Number.isSafeInteger(input.revision) || input.revision < 0
+    if (!input || typeof input !== 'object' || !Object.keys(input).every(key => ['providerId', 'baseUrl', 'apiKey', 'modelId', 'revision', 'confirmHostChange'].includes(key))
+      || !validId(input.providerId) || !validAddress(input.baseUrl) || !Number.isSafeInteger(input.revision) || input.revision < 0
       || (input.modelId !== undefined && !validId(input.modelId))
+      || (input.confirmHostChange !== undefined && typeof input.confirmHostChange !== 'boolean')
       || (input.apiKey !== undefined && (typeof input.apiKey !== 'string' || input.apiKey.length > 16384 || /[\r\n\0]/.test(input.apiKey)))) {
       return { ok: false, code: 'invalid' }
     }
+    const definition = definitionById(input.providerId)
+    if (!definition)
+      return { ok: false, code: 'invalid' }
+    // The catalog gate is enforced here, not only by a disabled button.
+    if (!manageable(definition) || !definition.stageProviderId)
+      return { ok: false, code: 'provider-unavailable' }
+    // Alias keeps the resolved catalog entry available inside the rollback
+    // closures below without re-reading the catalog or trusting the input.
+    const providerDefinition = definition
+
     let keyWriteUncertain = false
     let restoreOpaqueKey: (() => Promise<boolean>) | undefined
     let restoreSelection: (() => Promise<void>) | undefined
@@ -103,7 +268,7 @@ export function createAiConnectionService(deps: AiConnectionServiceDeps) {
       try {
         const restored = await deps.repository.mutate(previous
           ? { kind: 'put', expectedRevision: disabledRevision, record: previous }
-          : { kind: 'remove', expectedRevision: disabledRevision, id: TRANSPORT_ID })
+          : { kind: 'remove', expectedRevision: disabledRevision, id: providerDefinition.definitionId })
         return restored.ok && previouslySafe
       }
       catch { return false }
@@ -112,19 +277,52 @@ export function createAiConnectionService(deps: AiConnectionServiceDeps) {
       const snapshot = await deps.repository.read()
       if (snapshot.revision !== input.revision)
         return { ok: false, code: 'conflict' }
-      previous = recordFrom(snapshot)
+      previous = recordFrom(snapshot, definition)
       const originalSelection = await deps.readSelection()
+
+      // Approved decision 3: a host that is not the canonical one, or that
+      // differs from the saved one, needs an explicit confirmation AND a
+      // credential supplied in THIS save. A stored key is never forwarded.
+      const requestedHost = hostOf(input.baseUrl)
+      const canonicalHost = definition.baseUrl ? hostOf(definition.baseUrl) : undefined
+      const previousHost = previous ? hostOf(previous.baseUrl) : undefined
+      const hostChanged = (canonicalHost !== undefined && requestedHost !== canonicalHost)
+        || (previousHost !== undefined && requestedHost !== previousHost)
+      if (hostChanged && input.confirmHostChange !== true)
+        return { ok: false, code: 'unconfirmed-host' }
+
       restoreSelection = deps.backupSelection
         ? await deps.backupSelection()
         : originalSelection ? () => deps.saveSelection(originalSelection) : undefined
+
       // Never silently forward a saved credential to a newly supplied host.
-      if (previous?.baseUrl !== input.baseUrl && input.apiKey === undefined && deps.vault.hasSecret(PROVIDER_ID, 'apiKey'))
+      // Any URL change - even same host, different path - requires the key.
+      if (previous?.baseUrl !== input.baseUrl && input.apiKey === undefined && deps.vault.hasSecret(definition.stageProviderId, 'apiKey'))
         return { ok: false, code: 'credentials' }
       // A failed recovery must never re-enable a row without an explicit key.
       if ((!configurationSafe || previous?.enabled === false) && input.apiKey === undefined)
         return { ok: false, code: 'credentials' }
+
+      // Preserve an existing model when the caller is only rotating the key;
+      // never invent one. The canonical selection is written only when this
+      // provider either already holds it or the user chose a model now.
+      const selectionModel = input.modelId ?? (originalSelection?.providerId === definition.stageProviderId ? originalSelection.modelId : undefined)
+      const shouldSaveSelection = input.modelId !== undefined || originalSelection?.providerId === definition.stageProviderId
+
       const adapterOptions = { ...previous?.adapterOptions, allowUnauthenticated: input.apiKey === '' || (input.apiKey === undefined && previous?.adapterOptions.allowUnauthenticated === true) }
-      const record: TransportRecord = { id: previous?.id ?? TRANSPORT_ID, providerId: PROVIDER_ID, definitionId: previous?.definitionId ?? PROVIDER_ID, type: 'http', protocol: 'chat-completions', baseUrl: input.baseUrl, enabled: true, adapterOptions, modelIds: input.modelId ? [input.modelId] : [], metadata: previous?.metadata ?? {}, credentialRef: { scope: PROVIDER_ID, key: 'apiKey' } }
+      const record: TransportRecord = {
+        id: previous?.id ?? definition.definitionId,
+        providerId: definition.stageProviderId,
+        definitionId: definition.definitionId,
+        type: 'http',
+        protocol: 'chat-completions',
+        baseUrl: input.baseUrl,
+        enabled: true,
+        adapterOptions,
+        modelIds: input.modelId ? [input.modelId] : (previous?.modelIds ?? []),
+        metadata: { ...previous?.metadata, label: definition.label },
+        credentialRef: { scope: definition.stageProviderId, key: 'apiKey' },
+      }
       // Durable fail-closed boundary BEFORE changing credentials. If the
       // launcher exits or rollback fails, every later reader sees disabled.
       const disabled = await deps.repository.mutate({ kind: 'put', expectedRevision: snapshot.revision, record: { ...(previous ?? record), enabled: false } })
@@ -134,7 +332,7 @@ export function createAiConnectionService(deps: AiConnectionServiceDeps) {
       configurationSafe = false
       if (input.apiKey !== undefined) {
         keyWriteUncertain = true
-        const change = expectedKeyRevision === undefined ? undefined : await deps.vault.changeSecret?.(PROVIDER_ID, 'apiKey', input.apiKey || undefined, { expectedRevision: expectedKeyRevision })
+        const change = expectedKeyRevision === undefined ? undefined : await deps.vault.changeSecret?.(definition.stageProviderId, 'apiKey', input.apiKey || undefined, { expectedRevision: expectedKeyRevision })
         keyWriteUncertain = false
         if (!change) {
           configurationSafe = await recover()
@@ -142,21 +340,25 @@ export function createAiConnectionService(deps: AiConnectionServiceDeps) {
         }
         restoreOpaqueKey = change.rollback
       }
-      changedSelection = true
-      await deps.saveSelection({ providerId: PROVIDER_ID, ...(input.modelId ? { modelId: input.modelId } : {}) })
+      if (shouldSaveSelection) {
+        changedSelection = true
+        await deps.saveSelection({ providerId: definition.stageProviderId, ...(selectionModel ? { modelId: selectionModel } : {}) })
+      }
       const saved = await deps.repository.mutate({ kind: 'put', expectedRevision: disabledRevision, record })
       if (!saved.ok) {
         configurationSafe = await recover()
         return { ok: false, code: configurationSafe ? saved.code : 'storage' }
       }
       configurationSafe = true
-      return { ok: true, state: { providerId: PROVIDER_ID, baseUrl: record.baseUrl, modelId: input.modelId, hasKey: deps.vault.hasSecret(PROVIDER_ID, 'apiKey'), revision: saved.snapshot.revision } }
+      const state = await readInternal(definition.definitionId)
+      return { ok: true, state }
     }
     catch {
       configurationSafe = await recover()
       return { ok: false, code: 'storage' }
     }
   }
+
   function save(input: unknown): Promise<AiConnectionResult> {
     // Capture the IPC envelope before queueing; it contains a transient secret.
     let copy: AiConnectionSaveInput
@@ -165,10 +367,13 @@ export function createAiConnectionService(deps: AiConnectionServiceDeps) {
     }
     catch { return Promise.resolve({ ok: false, code: 'invalid' }) }
     let expectedKeyRevision: string | undefined
-    try {
-      expectedKeyRevision = deps.vault.secretRevision?.(PROVIDER_ID, 'apiKey')
+    const definition = copy && typeof copy === 'object' ? definitionById(copy.providerId) : undefined
+    if (definition && definition.stageProviderId) {
+      try {
+        expectedKeyRevision = deps.vault.secretRevision?.(definition.stageProviderId, 'apiKey')
+      }
+      catch { return Promise.resolve({ ok: false, code: 'storage' }) }
     }
-    catch { return Promise.resolve({ ok: false, code: 'storage' }) }
     const previousQueue = queue
     const saveAfterQueue = () => previousQueue.then(() => apply(copy, expectedKeyRevision))
     const result = deps.saveExclusively ? deps.saveExclusively(saveAfterQueue) : saveAfterQueue()
@@ -176,7 +381,17 @@ export function createAiConnectionService(deps: AiConnectionServiceDeps) {
     return result
   }
 
-  function execute<T>(operation: (request: (path: string, body?: unknown) => Promise<any>, state: AiConnectionState) => Promise<T>): Promise<{ ok: true } & T | Failure> {
+  function definitionForOperation(providerId: unknown): LiaAiProviderDefinition | undefined {
+    if (!validId(providerId))
+      return undefined
+    const definition = definitionById(providerId)
+    return definition && manageable(definition) ? definition : undefined
+  }
+
+  function execute<T>(providerId: unknown, operation: (request: (path: string, body?: unknown) => Promise<any>, state: AiConnectionState) => Promise<T>): Promise<{ ok: true } & T | Failure> {
+    const definition = definitionForOperation(providerId)
+    if (!definition)
+      return Promise.resolve({ ok: false, code: 'invalid' })
     const previousQueue = queue
     const resultPromise = (async () => {
       const controller = new AbortController()
@@ -186,14 +401,22 @@ export function createAiConnectionService(deps: AiConnectionServiceDeps) {
           await previousQueue
           if (!await isSafeToStart())
             throw new Error('unconfigured')
-          const state = await readInternal()
-          if (!state.baseUrl || !recordFrom(await deps.repository.read())?.enabled)
+          const snapshot = await deps.repository.read()
+          // A corrupted or duplicated managed row is not a usable connection.
+          // Report it with the same safe code the rest of the launcher uses.
+          let record: TransportRecord | undefined
+          try {
+            record = recordFrom(snapshot, definition)
+          }
+          catch { throw new Error('unconfigured') }
+          if (!record?.enabled || !validAddress(record.baseUrl))
             throw new Error('unconfigured')
+          const state = await readInternal(definition.definitionId)
           if (controller.signal.aborted)
             throw new Error('timeout')
-          const key = deps.vault.getSecret(PROVIDER_ID, 'apiKey')
+          const key = deps.vault.getSecret(definition.stageProviderId!, 'apiKey')
           const request = async (path: string, body?: unknown) => {
-            const response = await fetchImpl(`${state.baseUrl.replace(/\/+$/, '')}/${path}`, { method: body ? 'POST' : 'GET', redirect: 'error', signal: controller.signal, headers: { ...(key ? { Authorization: `Bearer ${key}` } : {}), ...(body ? { 'Content-Type': 'application/json' } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) })
+            const response = await fetchImpl(`${record.baseUrl.replace(/\/+$/, '')}/${path}`, { method: body ? 'POST' : 'GET', redirect: 'error', signal: controller.signal, headers: { ...(key ? { Authorization: `Bearer ${key}` } : {}), ...(body ? { 'Content-Type': 'application/json' } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) })
             if (!response.ok)
               throw new Error('http')
             const reader = response.body?.getReader()
@@ -234,8 +457,8 @@ export function createAiConnectionService(deps: AiConnectionServiceDeps) {
     return resultPromise
   }
 
-  function discover() {
-    return execute(async (request) => {
+  function discover(providerId: unknown) {
+    return execute(providerId, async (request) => {
       const body = await request('models')
       if (!Array.isArray(body?.data) || body.data.length > 1000 || !body.data.every((row: any) => validId(row?.id)))
         throw new Error('protocol')
@@ -244,8 +467,8 @@ export function createAiConnectionService(deps: AiConnectionServiceDeps) {
     })
   }
 
-  function probe() {
-    return execute(async (request, state) => {
+  function probe(providerId: unknown) {
+    return execute(providerId, async (request, state) => {
       if (!state.modelId)
         throw new Error('unconfigured')
       const tools = [{ type: 'function', function: { name: 'lia_connection_check', description: 'Return the connection check result.', parameters: { type: 'object', properties: {}, additionalProperties: false } } }]
@@ -269,5 +492,5 @@ export function createAiConnectionService(deps: AiConnectionServiceDeps) {
       return {}
     })
   }
-  return { read, save, discover, probe, isSafeToStart }
+  return { catalog: listDefinitions, discover, isSafeToStart, probe, read, save }
 }

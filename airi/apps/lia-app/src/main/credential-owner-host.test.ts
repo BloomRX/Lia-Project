@@ -130,7 +130,7 @@ describe('launcher Main credential lease', () => {
     original.provider.chat = { fallbackEnabled: true, ...(selected ? { preferred: { providerId: 'previous-service', modelId: 'previous-model' }, strategy: 'auto' } : {}) }
     await writeFile(file, JSON.stringify(original))
     disk.failPublish = true
-    expect(await f.host.aiConnection.save({ baseUrl: 'https://fixture.invalid/v1', apiKey: 'synthetic-key', modelId: 'new-model', revision: 0 })).toEqual({ ok: false, code: 'storage' })
+    expect(await f.host.aiConnection.save({ providerId: 'groq', baseUrl: 'https://fixture.invalid/v1', apiKey: 'synthetic-key', modelId: 'new-model', revision: 0, confirmHostChange: true })).toEqual({ ok: false, code: 'storage' })
     expect(JSON.parse(await readFile(file, 'utf8'))).toEqual(original)
     expect(await f.host.aiConnection.isSafeToStart()).toBe(true)
   })

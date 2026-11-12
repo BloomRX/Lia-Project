@@ -48,8 +48,8 @@ async function fixture() {
     }) as never,
     workspaceRoot: '/missing',
   })
-  readKey = () => host.vault.getSecret('openai-compatible', 'apiKey')
-  expect(await host.aiConnection.save({ baseUrl: 'https://old.invalid/v1', apiKey: 'old-private', modelId: 'model', revision: 0 })).toMatchObject({ ok: true })
+  readKey = () => host.vault.getSecret('groq', 'apiKey')
+  expect(await host.aiConnection.save({ providerId: 'groq', baseUrl: 'https://old.invalid/v1', apiKey: 'old-private', modelId: 'model', revision: 0, confirmHostChange: true })).toMatchObject({ ok: true })
   return { host, start, pairs, events, home }
 }
 
@@ -77,7 +77,7 @@ describe('shared AI configuration and Stage interlock', () => {
         await release.promise
         return stored
       })
-      const saving = f.host.aiConnection.save({ baseUrl: 'https://new.invalid/v1', apiKey: 'new-private', modelId: 'model', revision: 2 })
+      const saving = f.host.aiConnection.save({ providerId: 'groq', baseUrl: 'https://new.invalid/v1', apiKey: 'new-private', modelId: 'model', revision: 2, confirmHostChange: true })
       await entered.promise
       const starting = entry === 'conversar' ? f.host.conversar() : f.host.stage.start()
       await Promise.resolve()
@@ -103,22 +103,22 @@ describe('shared AI configuration and Stage interlock', () => {
     })
     const starting = f.host.conversar()
     await entered.promise
-    const saving = f.host.aiConnection.save({ baseUrl: 'https://new.invalid/v1', apiKey: 'new-private', revision: 2 })
+    const saving = f.host.aiConnection.save({ providerId: 'groq', baseUrl: 'https://new.invalid/v1', apiKey: 'new-private', revision: 2, confirmHostChange: true })
     release.resolve()
     await starting
     expect(await saving).toEqual({ ok: false, code: 'stage-running' })
     expect(await f.host.aiConnection.read()).toMatchObject({ baseUrl: 'https://old.invalid/v1', revision: 2 })
-    expect(f.host.vault.getSecret('openai-compatible', 'apiKey')).toBe('old-private')
-    expect(await f.host.aiConnection.save({ baseUrl: 'https://new.invalid/v1', apiKey: 'new-private', revision: 2 })).toEqual({ ok: false, code: 'stage-running' })
+    expect(f.host.vault.getSecret('groq', 'apiKey')).toBe('old-private')
+    expect(await f.host.aiConnection.save({ providerId: 'groq', baseUrl: 'https://new.invalid/v1', apiKey: 'new-private', revision: 2, confirmHostChange: true })).toEqual({ ok: false, code: 'stage-running' })
     await f.host.stage.stop()
-    expect(await f.host.aiConnection.save({ baseUrl: 'https://new.invalid/v1', apiKey: 'new-private', revision: 2 })).toMatchObject({ ok: true })
+    expect(await f.host.aiConnection.save({ providerId: 'groq', baseUrl: 'https://new.invalid/v1', apiKey: 'new-private', revision: 2, confirmHostChange: true })).toMatchObject({ ok: true })
   })
 
   it('releases the lock after a failed start', async () => {
     const f = await fixture()
     f.start.mockRejectedValueOnce(new Error('fixture start failure'))
     await expect(f.host.conversar()).rejects.toThrow('fixture start failure')
-    expect(await f.host.aiConnection.save({ baseUrl: 'https://new.invalid/v1', apiKey: 'new-private', revision: 2 })).toMatchObject({ ok: true })
+    expect(await f.host.aiConnection.save({ providerId: 'groq', baseUrl: 'https://new.invalid/v1', apiKey: 'new-private', revision: 2, confirmHostChange: true })).toMatchObject({ ok: true })
   })
 
   it('blocks every start after a failed key rollback until an explicit save repairs it', async () => {
@@ -131,18 +131,18 @@ describe('shared AI configuration and Stage interlock', () => {
       })
     // No mutation receipt reached this service after the write, so recovery
     // must stay fail-closed instead of restoring an unguarded old value.
-    expect(await f.host.aiConnection.save({ baseUrl: 'https://new.invalid/v1', apiKey: 'new-private', revision: 2 })).toEqual({ ok: false, code: 'storage' })
+    expect(await f.host.aiConnection.save({ providerId: 'groq', baseUrl: 'https://new.invalid/v1', apiKey: 'new-private', revision: 2, confirmHostChange: true })).toEqual({ ok: false, code: 'storage' })
     await expect(f.host.conversar()).rejects.toThrow(/Save the AI service settings again/)
     await expect(f.host.stage.start()).rejects.toThrow(/Save the AI service settings again/)
     expect(f.start).not.toHaveBeenCalled()
-    expect(await f.host.aiConnection.discover()).toEqual({ ok: false, code: 'unconfigured' })
+    expect(await f.host.aiConnection.discover('groq')).toEqual({ ok: false, code: 'unconfigured' })
     // A fresh host must honor the durable disabled row after a restart too.
     const reopened = createLiaHost({ cipher: identityCipher, env: fixtureEnv(f.home), workspaceRoot: '/missing' })
     await expect(reopened.conversar()).rejects.toThrow(/Save the AI service settings again/)
     await expect(reopened.stage.start()).rejects.toThrow(/Save the AI service settings again/)
     expect((await reopened.homeStatus()).ai.ready).toBe(false)
-    expect(await reopened.aiConnection.save({ baseUrl: 'https://old.invalid/v1', revision: 3 })).toEqual({ ok: false, code: 'credentials' })
-    expect(await f.host.aiConnection.save({ baseUrl: 'https://new.invalid/v1', apiKey: 'new-private', modelId: 'model', revision: 3 })).toMatchObject({ ok: true })
+    expect(await reopened.aiConnection.save({ providerId: 'groq', baseUrl: 'https://old.invalid/v1', revision: 3, confirmHostChange: true })).toEqual({ ok: false, code: 'credentials' })
+    expect(await f.host.aiConnection.save({ providerId: 'groq', baseUrl: 'https://new.invalid/v1', apiKey: 'new-private', modelId: 'model', revision: 3, confirmHostChange: true })).toMatchObject({ ok: true })
     await f.host.conversar()
     expect(f.pairs).toEqual([{ address: 'https://new.invalid/v1', key: 'new-private' }])
     expect(JSON.stringify(f.events)).not.toContain('private')
