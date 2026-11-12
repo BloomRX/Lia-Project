@@ -77,11 +77,40 @@ Também foi executada a rota real do Launcher via `createAiConnectionService()` 
    - retorno do resultado ao modelo;
    - entrega visível no chat.
 
+## Diagnóstico operacional atual (sem expor segredos)
+
+A investigação real do Launcher confirmou que o bloqueio não é de renderização nem de arquitetura do tool call em si: o ambiente *possui* uma variável `GROQ_API_KEY` ativa, mas a chave em uso falha em autenticação real do provedor (`401 invalid_api_key`). O mesmo padrão foi observado na rota negociada pelo Launcher e no endpoint público do Groq (`GET /v1/models`).
+
+Também foi verificado que o diretório de dados do produto esperado pelo Launcher (`C:\Users\lucas\AppData\Roaming\Lia`) não contém `lia-product.json` nem `lia-secrets.json`. O código do Launcher resolve o home canônico via `LIA_USER_DATA` / `APP_USER_DATA_PATH` / `%APPDATA%\Lia` (`lia-product-paths.ts`), então o runtime atual está em um estado em que a chave ativa é inválida e a configuração persistida do produto não foi materializada no diretório canônico.
+
+### Intervenção humana necessária
+
+1. Substituir a chave Groq inválida pela chave válida do cliente na mesma sessão/ambiente em que o Launcher é executado.
+2. Certificar que a chave seja carregada pelo processo principal do Launcher e que o user-data do produto fique no diretório correto (`LIA_USER_DATA` ou `%APPDATA%\Lia` quando não houver override explícito).
+3. Reabrir o Launcher para reaproveitar a configuração e o cofre secreto do processo principal.
+4. Reexecutar o fluxo com o provedor Groq configurado e validar o ciclo completo sem expor a chave:
+   - descoberta do catálogo do provedor;
+   - teste de conexão com a tool `lia_connection_check`;
+   - execução local da ferramenta;
+   - retorno do resultado ao modelo;
+   - resposta final visível no chat;
+   - registro no histórico.
+
+### Verificação segura sem segredo
+
+A validação correta é:
+
+- `status` do endpoint real em `https://api.groq.com/openai/v1/models` deve ser `200` e a resposta deve conter um array `data` de modelos;
+- o Launcher deve emitir `probe: { ok: true }` no fluxo de conexão;
+- o histórico do chat deve incluir a ferramenta executada e a resposta final do modelo.
+
+Não existe sinal de bypass de autenticação nem de chave inventada: o código e o runtime corretamente rejeitaram a chave inválida e exigem um segredo válido do cliente para fechar a prova real do tool call.
+
 ## Resultado final
 
 | Critério | Status | Observação |
 | --- | --- | --- |
 | Renderer abre sem reload manual | PASS | `lia-app.window-created` e `lia-app.renderer-ready` ocorreram no runtime real sem reset manual. |
-| Groq real com ferramenta iniciada pelo Launcher | BLOCKED | A chave configurada no ambiente atual retornou `401 invalid_api_key`; a prova real do tool-call exige chave válida e configuração operacional correta. |
+| Groq real com ferramenta iniciada pelo Launcher | BLOCKED | A chave ativa no ambiente atual falhou em `401 invalid_api_key`, e o user-data canônico do produto não foi encontrado no diretório esperado. A prova real do tool-call exige uma chave Groq válida e a configuração persistida no mesmo runtime do Launcher. |
 
-O trabalho preservado de OIDC e chat segue intacto; o que resta é apenas a configuração de um provedor Groq válido para fechar a validação do segundo gate.
+O trabalho preservado de OIDC e chat segue intacto; o que resta é apenas a substituição da chave Groq inválida e a reexecução do fluxo real do Launcher para fechar o segundo gate.

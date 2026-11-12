@@ -16,9 +16,13 @@ commit. Registra **estado**, não narrativa: relatório de rodada vai para
 **PROMPT-38, runtime do Launcher e Groq (12/11).** O Renderer abriu no
 runtime real do Launcher com `lia-app.window-created` e `lia-app.renderer-ready`
 sem reload manual. A validação do fluxo real do Groq permanece bloqueada pela
-configuração: a chave ativa no ambiente respondeu `401 invalid_api_key` em
-`api.groq.com`, então o tool-call do Launcher não pode ser validado sem uma
-chave Groq válida. Evidências e exigências em [PROMPT-38](../reports/PROMPT-38-LAUNCHER-RENDERER-GROQ.md).
+configuração: a chave ativa no ambiente foi confirmada como inválida
+(`401 invalid_api_key` em `api.groq.com`), e o diretório canônico de dados do
+produto (`%APPDATA%\Lia`) está ausente de `lia-product.json` e
+`lia-secrets.json` no runtime atual. Sem uma chave Groq válida e a selva de
+configuração do Launcher materializada no mesmo ambiente de execução, não há
+prova funcional do tool-call real. Evidências e exigências em
+[PROMPT-38](../reports/PROMPT-38-LAUNCHER-RENDERER-GROQ.md).
 
 **PROMPT-37, chat real no Windows (12/11).** Groq `openai/gpt-oss-120b`
 respondeu ao primeiro envio e a cinco turnos consecutivos espaçados. O
