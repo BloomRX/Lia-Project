@@ -56,6 +56,10 @@ usada como substituto de teste ou runtime.
    de instalação limpa/atualização/desinstalação antes da distribuição pública.
 8. Medir custo do produto atual; só abrir protótipo de engine por hipótese
    mensurável. A frente de engines não substitui a conclusão funcional.
+   A decisão de runtime de 12/11 ([relatório](../reports/LIA-DESKTOP-RUNTIME-ARCHITECTURE-DECISION.md))
+   manteve Electron no Cenário C (híbrido), com gatilhos objetivos e um
+   experimento de runtime único antes de qualquer migração. O plano funcional
+   do AI Settings está em [LIA-AI-SETTINGS-END-TO-END-PLAN](LIA-AI-SETTINGS-END-TO-END-PLAN.md).
 
 ## Definition of Done
 

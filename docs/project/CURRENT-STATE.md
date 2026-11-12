@@ -13,6 +13,16 @@ commit. Registra **estado**, não narrativa: relatório de rodada vai para
 
 ## 0. Estado agora
 
+**Etapa 0 do plano mestre, decisão de runtime (12/11).** Auditoria da arquitetura e
+comparação de Electron, Tauri 2, Qt 6, Flutter, WinUI 3 e híbrido registradas em
+[decisão de runtime](../reports/LIA-DESKTOP-RUNTIME-ARCHITECTURE-DECISION.md). Decisão:
+**Cenário C — híbrido com Electron retido**, sem migração; Core e contratos já são
+agnósticos de runtime e o maior custo medido é o **segundo runtime Electron**
+(`LiaStage.exe`) empacotado junto ao Launcher. Medições novas, protótipos e C0–C4 no
+Windows: **NOT RUN** neste ambiente. Nenhuma credencial foi cadastrada e nenhum provider
+foi ampliado, conforme a regra de continuidade. Plano end-to-end do AI Settings em
+[LIA-AI-SETTINGS-END-TO-END-PLAN](LIA-AI-SETTINGS-END-TO-END-PLAN.md).
+
 **PROMPT-40, validação Windows do AI Settings (12/11).** `git pull --ff-only`
 foi concluído após preservar o rascunho local conflitante; branch em
 `224655291b59ee4eb99aa87eda73693d434a0b74`. `Lia.bat` iniciou o Launcher
@@ -1015,6 +1025,17 @@ Armadilhas de tooling que continuam valendo:
 
 Não há gate de runtime novo: o roteiro Windows de 9 passos do AI Settings não foi
 executado. Ver o relatório da rodada para o detalhamento.
+
+### Decisão de runtime e fronteiras (12/11/2026)
+
+| Verificação | Resultado |
+| --- | --- |
+| Decisão arquitetural registrada | **PASS** (Cenário C — híbrido, Electron retido) |
+| Core/contratos sem Electron | **PASS** (teste `runtime-boundary`) |
+| Renderer sem Node/Electron e Main com superfície limitada | **PASS** (mesmo teste) |
+| Medição C0–C4 e protótipo de runtime único no Windows | **NOT RUN** |
+| Migração | **NÃO AUTORIZADA** nesta rodada |
+
 
 ---
 
