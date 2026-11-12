@@ -13,6 +13,20 @@ commit. Registra **estado**, não narrativa: relatório de rodada vai para
 
 ## 0. Estado agora
 
+**PROMPT-40, validação Windows do AI Settings (12/11).** `git pull --ff-only`
+foi concluído após preservar o rascunho local conflitante; branch em
+`224655291b59ee4eb99aa87eda73693d434a0b74`. `Lia.bat` iniciou o Launcher
+Electron real: build de Core/Main/preload/Renderer concluído, janela `Lia`
+criada e `lia-app.renderer-ready` em +1311 ms. **Validação funcional BLOCKED
+na abertura de AI Settings**: Computer Use não pôde ser habilitado nesta sessão
+desassistida, `agent-browser` não está instalado e o Launcher não foi iniciado
+com CDP. Nenhuma chave foi obtida/usada; catálogo, conexão, seleção,
+conversa/persistência e screenshot não foram testados. Janela fechada e
+processos da sessão encerrados; nenhum órfão detectado. Para continuar, habilitar
+`/computer on` e inserir uma chave Groq válida somente no campo do Launcher,
+nunca no chat. Sem PASS funcional ou aprovação de PROMPT-39; PROMPT-38 continua
+independente. [Relatório PROMPT-40](../reports/PROMPT-40-WINDOWS-AI-SETTINGS-VALIDATION.md).
+
 **PROMPT-39, AI Settings MVP (12/11).** O Launcher passou a ter a central de
 configuração de IA baseada em catálogo: Groq `ready` e OpenAI-compatível listado como
 indisponível; uma conexão por provedor; chave no vault; descoberta de modelos; `modelId`
