@@ -13,6 +13,20 @@ commit. Registra **estado**, não narrativa: relatório de rodada vai para
 
 ## 0. Estado agora
 
+**PROMPT-38, runtime do Launcher e Groq (12/11).** O Renderer abriu no
+runtime real do Launcher com `lia-app.window-created` e `lia-app.renderer-ready`
+sem reload manual. A validação do fluxo real do Groq permanece bloqueada pela
+configuração: a chave ativa no ambiente respondeu `401 invalid_api_key` em
+`api.groq.com`, então o tool-call do Launcher não pode ser validado sem uma
+chave Groq válida. Evidências e exigências em [PROMPT-38](../reports/PROMPT-38-LAUNCHER-RENDERER-GROQ.md).
+
+**PROMPT-37, chat real no Windows (12/11).** Groq `openai/gpt-oss-120b`
+respondeu ao primeiro envio e a cinco turnos consecutivos espaçados. O
+histórico foi reaberto com as cinco respostas. O Main confirmou HTTP 429 em
+envios rápidos e a correção local passou a mostrar limite de uso no chat.
+Catálogo e sonda de texto passaram pelo runtime real do Stage. Evidências e
+limites em [PROMPT-37](../reports/PROMPT-37-CHAT-REAL-PROVIDER-FIX.md).
+
 **Prontidão beta — 08/11, Ainda bloqueada.** Retomada de `dcd0b05` preservada.
 Cofre recusa mutações de container vazio/corrompido/ilegível; 13 testes focados
 e 22 Stage PASS. Logs Main mascaram formatos conhecidos também no arquivo.
@@ -70,6 +84,14 @@ O callback legado continua ativo. **Próximo: preparar
 catálogos de voz e demais REST autenticados, depois integrar as portas em
 conjunto e testar o IPC Electron e o emissor real.** Beta bloqueada.
 [Contratos, matriz e evidências](../architecture/LIA-OIDC-STREAMING-PREPARATION-2026-11-10.md).
+
+**Retomada REST e IPC OIDC.** Catálogos e pacotes de voz, créditos e pacotes
+de compra têm REST Main preparado. Canais dedicados para recursos, conta,
+vínculo, logout e transporte HTTP passaram no Electron 43.4.1 com HTTP local.
+Foco 121 PASS. Stage agregado com 2493 PASS, 4 skips e timeout de
+`image-journal`. Trabalho local ainda parcial. **Próximo: contratos de checkout,
+sessões, personagens e provedores, IPC de WebSocket e integração conjunta.**
+Callback e consumidores legados ativos. Beta bloqueada.
 
 **Finalização retomada — 08/11, integração em andamento.** Trabalho da execução
 interrompida preservado: configuração IA no Launcher, personalidade, memória,
