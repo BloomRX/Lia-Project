@@ -47,4 +47,33 @@ describe('provider configuration persistence bridge', () => {
     expect(product.preferences).toEqual(before.preferences)
     expect(product.schemaVersion).toBe(before.schemaVersion)
   })
+
+  it('rejects malformed or secret-bearing selection targets without writing', async () => {
+    let product: LiaProductConfig = parse(liaProductConfigSchema, {
+      schemaVersion: 1,
+      provider: { chat: { preferred: { providerId: 'custom-local', modelId: 'model-a' } } },
+    })
+    const updateAndSave = vi.fn(async (mutator: (current: LiaProductConfig) => LiaProductConfig) => {
+      product = parse(liaProductConfigSchema, JSON.parse(JSON.stringify(mutator(product))))
+    })
+    registerLiaProviderConfigBridge({
+      context: {} as Parameters<typeof registerLiaProviderConfigBridge>[0]['context'],
+      liaProductConfig: { get: () => product, updateAndSave },
+    })
+    const handler = ipc.handlers.get('set')!
+    const secretBearingPreferred = {
+      preferred: { providerId: 'custom-local', modelId: 'model-a', apiKey: 'private' },
+    }
+    const secretBearingExpected = {
+      preferred: { providerId: 'custom-local', modelId: 'model-b' },
+      expectedPreferred: { providerId: 'custom-local', modelId: 'model-a', apiKey: 'private' },
+    }
+
+    expect(await handler(secretBearingPreferred))
+      .toEqual({ ok: false, code: 'invalid' })
+    expect(await handler(secretBearingExpected))
+      .toEqual({ ok: false, code: 'invalid' })
+    expect(updateAndSave).not.toHaveBeenCalled()
+    expect(product.provider?.chat?.preferred).toEqual({ providerId: 'custom-local', modelId: 'model-a' })
+  })
 })

@@ -9,7 +9,7 @@ import {
   electronLiaProviderChatConfigGet,
   electronLiaProviderChatConfigSet,
 } from '../../../shared/eventa'
-import { decideSelectionWrite } from '../../../shared/lia/selection-write-policy'
+import { decideSelectionWrite, isLiaSelectionTarget } from '../../../shared/lia/selection-write-policy'
 import { defaultLiaProductConfig } from '../../configs/lia'
 
 type MainContext = ReturnType<typeof createContext>['context']
@@ -41,7 +41,11 @@ export function registerLiaProviderConfigBridge(params: {
   })
 
   defineInvokeHandler(context, electronLiaProviderChatConfigSet, async (chat: LiaProviderChatWrite): Promise<LiaProviderChatWriteResult> => {
-    if (!chat || typeof chat !== 'object')
+    if (!chat || typeof chat !== 'object' || Array.isArray(chat))
+      return { ok: false, code: 'invalid' }
+    if (chat.preferred !== undefined && !isLiaSelectionTarget(chat.preferred))
+      return { ok: false, code: 'invalid' }
+    if (chat.expectedPreferred !== undefined && chat.expectedPreferred !== null && !isLiaSelectionTarget(chat.expectedPreferred))
       return { ok: false, code: 'invalid' }
 
     const persisted = liaProductConfig.get()?.provider?.chat?.preferred
