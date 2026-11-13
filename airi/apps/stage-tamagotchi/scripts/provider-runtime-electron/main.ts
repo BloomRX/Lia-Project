@@ -11,6 +11,7 @@ import { registerLiaProviderConfigBridge } from '../../src/main/services/lia/pro
 import { createLiaSecretVault, registerLiaSecretsBridge } from '../../src/main/services/lia/secrets-service'
 import { registerLiaTranscriptionBridge } from '../../src/main/services/lia/transcription-service'
 import { canRendererReadLegacySecret, getApplicationRepository, registerLiaTransportConfigBridge } from '../../src/main/services/lia/transport-config-service'
+import { createStageWebPreferences } from '../../src/main/windows/secure-web-preferences'
 
 const root = process.env.LIA_PROVIDER_GATE_DIR
 const preload = process.env.LIA_PROVIDER_GATE_PRELOAD
@@ -47,7 +48,7 @@ void app.whenReady().then(async () => {
     title: 'Lia — Gate Electron local',
     width: 800,
     height: 620,
-    webPreferences: { preload, contextIsolation: true, nodeIntegration: false, sandbox: false },
+    webPreferences: createStageWebPreferences(preload),
   })
   window.webContents.on('did-finish-load', () => {
     metrics.rendererPid = window.webContents.getOSProcessId()

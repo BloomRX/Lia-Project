@@ -18,6 +18,14 @@ describe('config update sanitizer', () => {
     expect(result.update).toEqual({ preferences: { language: 'pt-BR' } })
   })
 
+  it('preserves the expected canonical selection for stale-write checks', () => {
+    const result = sanitizeConfigUpdate({
+      expectedPreferred: { providerId: 'ollama', modelId: 'llama3' },
+      update: { provider: { chat: { preferred: { providerId: 'ollama', modelId: 'llama3.1' } } } },
+    })
+    expect(result.expectedPreferred).toEqual({ providerId: 'ollama', modelId: 'llama3' })
+  })
+
   it('keeps an empty value as an explicit deletion', () => {
     const result = sanitizeConfigUpdate({ secrets: [{ key: 'apiKey', scope: 'groq', value: '' }] })
     expect(result.secrets).toEqual([{ key: 'apiKey', scope: 'groq', value: '' }])

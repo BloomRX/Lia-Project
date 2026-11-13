@@ -62,7 +62,7 @@ function groqDoc(brain?: Record<string, unknown>) {
 }
 
 /** A host whose stage manager records the launch env and the doc at launch. */
-function hostFor(home: { userData: string }, events: Array<{ detail?: string, event: string }>) {
+async function hostFor(home: { userData: string }, events: Array<{ detail?: string, event: string }>, seedManaged = true) {
   const startedWith: Array<Record<string, string | undefined> | undefined> = []
   let docAtStart: string | undefined
   const host = createLiaHost({
@@ -70,6 +70,7 @@ function hostFor(home: { userData: string }, events: Array<{ detail?: string, ev
     env: fixtureEnv(home as never),
     onEvent: (event, detail) => events.push({ detail, event }),
     stageManagerFactory: () => ({
+      holdsOwnedStage: () => false,
       isAvailable: () => true,
       start: async (options?: { env?: Record<string, string | undefined> }) => {
         startedWith.push(options?.env)
@@ -81,6 +82,14 @@ function hostFor(home: { userData: string }, events: Array<{ detail?: string, ev
     }) as never,
     workspaceRoot: '/missing',
   })
+  if (seedManaged) {
+    expect(await host.aiConnection.save({
+      providerId: 'groq',
+      baseUrl: 'https://api.groq.com/openai/v1',
+      modelId: GROQ_TEXT_MODEL_ID,
+      revision: 0,
+    })).toMatchObject({ ok: true })
+  }
   return { docAtStart: () => docAtStart, host, startedWith }
 }
 
@@ -96,7 +105,7 @@ describe('conversar() - managed Brain routing default (Phase 8.0D-M2)', () => {
   it('1: an absent brain.mode on an eligible managed Groq install is defaulted to automatic BEFORE the stage starts', async () => {
     const home = await makeLiaHome({ productConfig: groqDoc() })
     const events: Array<{ detail?: string, event: string }> = []
-    const { docAtStart, host, startedWith } = hostFor(home, events)
+    const { docAtStart, host, startedWith } = await hostFor(home, events)
     await host.vault.setSecret('groq', 'apiKey', SECRET)
 
     // The document this install really has: no routing mode at all.
@@ -132,7 +141,7 @@ describe('conversar() - managed Brain routing default (Phase 8.0D-M2)', () => {
   it('2: an explicit disabled mode is absolute - never overridden, never re-written', async () => {
     const home = await makeLiaHome({ productConfig: groqDoc({ mode: 'disabled' }) })
     const events: Array<{ detail?: string, event: string }> = []
-    const { host, startedWith } = hostFor(home, events)
+    const { host, startedWith } = await hostFor(home, events)
     await host.vault.setSecret('groq', 'apiKey', SECRET)
 
     const before = await readFile(join(home.userData, 'lia-product.json'), 'utf8')
@@ -152,7 +161,7 @@ describe('conversar() - managed Brain routing default (Phase 8.0D-M2)', () => {
       productConfig: groqDoc({ engine: { preferred: 'groq' }, mode: 'manual', model: { preferred: GROQ_TEXT_MODEL_ID } }),
     })
     const events: Array<{ detail?: string, event: string }> = []
-    const { host, startedWith } = hostFor(home, events)
+    const { host, startedWith } = await hostFor(home, events)
     await host.vault.setSecret('groq', 'apiKey', SECRET)
 
     const before = await readFile(join(home.userData, 'lia-product.json'), 'utf8')
@@ -172,7 +181,7 @@ describe('conversar() - managed Brain routing default (Phase 8.0D-M2)', () => {
   it('4: an existing automatic mode is preserved idempotently, with no second write', async () => {
     const home = await makeLiaHome({ productConfig: groqDoc({ mode: 'automatic' }) })
     const events: Array<{ detail?: string, event: string }> = []
-    const { host, startedWith } = hostFor(home, events)
+    const { host, startedWith } = await hostFor(home, events)
     await host.vault.setSecret('groq', 'apiKey', SECRET)
 
     const before = await readFile(join(home.userData, 'lia-product.json'), 'utf8')
@@ -188,7 +197,7 @@ describe('conversar() - managed Brain routing default (Phase 8.0D-M2)', () => {
   it('4b: the default is idempotent across launches and never duplicates a credential', async () => {
     const home = await makeLiaHome({ productConfig: groqDoc() })
     const events: Array<{ detail?: string, event: string }> = []
-    const { host, startedWith } = hostFor(home, events)
+    const { host, startedWith } = await hostFor(home, events)
     await host.vault.setSecret('groq', 'apiKey', SECRET)
 
     await host.conversar()
@@ -214,7 +223,7 @@ describe('conversar() - managed Brain routing default (Phase 8.0D-M2)', () => {
       },
     })
     const events: Array<{ detail?: string, event: string }> = []
-    const { host, startedWith } = hostFor(home, events)
+    const { host, startedWith } = await hostFor(home, events, false)
     await host.vault.setSecret('openrouter', 'apiKey', SECRET)
 
     const before = await readFile(join(home.userData, 'lia-product.json'), 'utf8')
@@ -236,7 +245,7 @@ describe('conversar() - managed Brain routing default (Phase 8.0D-M2)', () => {
   it('6: a failed canonical write degrades honestly - no mutation, no blocked conversation', async (ctx) => {
     const home = await makeLiaHome({ productConfig: groqDoc() })
     const events: Array<{ detail?: string, event: string }> = []
-    const { host, startedWith } = hostFor(home, events)
+    const { host, startedWith } = await hostFor(home, events)
     await host.vault.setSecret('groq', 'apiKey', SECRET)
 
     const before = await readFile(join(home.userData, 'lia-product.json'), 'utf8')
@@ -285,7 +294,7 @@ describe('conversar() - managed Brain routing default (Phase 8.0D-M2)', () => {
   it('7/8: after the managed bootstrap the SAME canonical snapshot routes an image turn to the vision model and a text turn to the text brain', async () => {
     const home = await makeLiaHome({ productConfig: groqDoc() })
     const events: Array<{ detail?: string, event: string }> = []
-    const { host } = hostFor(home, events)
+    const { host } = await hostFor(home, events)
     await host.vault.setSecret('groq', 'apiKey', SECRET)
 
     await host.conversar()
@@ -339,7 +348,7 @@ describe('conversar() - managed Brain routing default (Phase 8.0D-M2)', () => {
   it('integration: normal Conversar bootstrap -> canonical snapshot -> Brain decision -> image routeOverride', async () => {
     const home = await makeLiaHome({ productConfig: groqDoc() })
     const events: Array<{ detail?: string, event: string }> = []
-    const { host, startedWith } = hostFor(home, events)
+    const { host, startedWith } = await hostFor(home, events)
     await host.vault.setSecret('groq', 'apiKey', SECRET)
 
     // 1. The normal product flow, end to end, with nothing pre-declared.

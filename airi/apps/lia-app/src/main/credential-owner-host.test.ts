@@ -132,7 +132,7 @@ describe('launcher Main credential lease', () => {
     disk.failPublish = true
     expect(await f.host.aiConnection.save({ providerId: 'groq', baseUrl: 'https://fixture.invalid/v1', apiKey: 'synthetic-key', modelId: 'new-model', revision: 0, confirmHostChange: true })).toEqual({ ok: false, code: 'storage' })
     expect(JSON.parse(await readFile(file, 'utf8'))).toEqual(original)
-    expect(await f.host.aiConnection.isSafeToStart()).toBe(true)
+    expect(await f.host.aiConnection.isSafeToStart()).toBe(selected)
   })
   it('refuses to launch a Stage sharing the active Launcher profile', async () => {
     const f = await fixture(undefined, true)

@@ -26,8 +26,8 @@ describe('selection write policy', () => {
     expect(isLauncherManagedProvider('')).toBe(false)
   })
 
-  it('lets a first selection through (nothing to protect)', () => {
-    expect(decideSelectionWrite({ incoming: groq })).toEqual({ ok: true })
+  it('reserves first selections of managed providers for the Launcher', () => {
+    expect(decideSelectionWrite({ incoming: groq })).toEqual({ ok: false, code: 'selection-owned-by-launcher' })
     expect(decideSelectionWrite({ persisted: undefined, incoming: ollama })).toEqual({ ok: true })
   })
 

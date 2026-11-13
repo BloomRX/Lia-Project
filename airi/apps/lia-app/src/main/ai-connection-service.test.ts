@@ -127,6 +127,90 @@ describe('explicit replacement of a credential from another profile', () => {
 })
 
 describe('launcher real AI connection', () => {
+  it('does not authorize an absent canonical selection', async () => {
+    const f = await fixture()
+
+    expect(await f.service.getStartReadiness()).toEqual({ ok: false, code: 'selection-missing' })
+    expect(await f.service.isSafeToStart()).toBe(false)
+  })
+
+  it('does not authorize a managed selection when its transport record is absent', async () => {
+    const f = await fixture()
+    await f.saveSelection({ providerId: 'groq', modelId: 'openai/gpt-oss-120b' })
+    await f.vault.setSecret('groq', 'apiKey', 'synthetic-private-key')
+
+    expect(await f.service.getStartReadiness()).toEqual({ ok: false, code: 'connection-missing' })
+  })
+
+  it('distinguishes a missing managed credential from a valid connection', async () => {
+    const f = await fixture()
+    await f.service.save({ providerId: 'groq', baseUrl: GROQ_URL, apiKey: 'synthetic-private-key', modelId: 'openai/gpt-oss-120b', revision: 0 })
+    expect(await f.service.getStartReadiness()).toEqual({
+      ok: true,
+      managed: true,
+      modelId: 'openai/gpt-oss-120b',
+      providerId: 'groq',
+    })
+
+    await f.vault.deleteSecret('groq', 'apiKey')
+    expect(await f.service.getStartReadiness()).toEqual({ ok: false, code: 'credential-missing' })
+  })
+
+  it('treats an empty managed credential as missing without returning credential data', async () => {
+    const f = await fixture()
+    await f.service.save({ providerId: 'groq', baseUrl: GROQ_URL, apiKey: 'synthetic-private-key', modelId: 'openai/gpt-oss-120b', revision: 0 })
+    vi.spyOn(f.vault, 'getSecret').mockReturnValue('')
+
+    expect(await f.service.getStartReadiness()).toEqual({ ok: false, code: 'credential-missing' })
+  })
+
+  it('reports selection and transport read failures without converting them into permission', async () => {
+    const f = await fixture()
+    const selectionFailure = createAiConnectionService({ ...f.deps, readSelection: async () => { throw new Error('private read failure') } })
+    expect(await selectionFailure.getStartReadiness()).toEqual({ ok: false, code: 'selection-read-failed' })
+
+    await f.service.save({ providerId: 'groq', baseUrl: GROQ_URL, apiKey: 'synthetic-private-key', modelId: 'openai/gpt-oss-120b', revision: 0 })
+    vi.spyOn(f.repository, 'read').mockRejectedValueOnce(new Error('private transport failure'))
+    expect(await f.service.getStartReadiness()).toEqual({ ok: false, code: 'transport-read-failed' })
+  })
+
+  it('blocks inconsistent and disabled managed connection records', async () => {
+    const f = await fixture()
+    await f.service.save({ providerId: 'groq', baseUrl: GROQ_URL, apiKey: 'synthetic-private-key', modelId: 'openai/gpt-oss-120b', revision: 0 })
+    const snapshot = await f.repository.read()
+    snapshot.records[0].definitionId = 'different-definition'
+    vi.spyOn(f.repository, 'read').mockResolvedValueOnce(snapshot)
+    expect(await f.service.getStartReadiness()).toEqual({ ok: false, code: 'connection-inconsistent' })
+
+    const current = await f.repository.read()
+    const disabled = await f.repository.mutate({
+      kind: 'put',
+      expectedRevision: current.revision,
+      record: { ...current.records[0], definitionId: 'groq', enabled: false },
+    })
+    expect(disabled.ok).toBe(true)
+    expect(await f.service.getStartReadiness()).toEqual({ ok: false, code: 'connection-disabled' })
+  })
+
+  it('blocks a stale canonical model that no longer exists in the managed connection', async () => {
+    const f = await fixture()
+    await f.service.save({ providerId: 'groq', baseUrl: GROQ_URL, apiKey: 'synthetic-private-key', modelId: 'current-model', revision: 0 })
+    await f.saveSelection({ providerId: 'groq', modelId: 'stale-model' })
+
+    expect(await f.service.getStartReadiness()).toEqual({ ok: false, code: 'connection-inconsistent' })
+  })
+
+  it('keeps valid unmanaged selections outside the managed transport gate', async () => {
+    const f = await fixture()
+    await f.saveSelection({ providerId: 'ollama', modelId: 'llama3' })
+    expect(await f.service.getStartReadiness()).toEqual({
+      ok: true,
+      managed: false,
+      modelId: 'llama3',
+      providerId: 'ollama',
+    })
+  })
+
   it('saves address separately from secrets, discovers live models and proves tool result reaches final answer', async () => {
     const f = await fixture()
     const bodies: any[] = []
@@ -160,7 +244,7 @@ describe('launcher real AI connection', () => {
         return { choices: [{ message: { tool_calls: [{ id: 'call', type: 'function', function: { name: 'lia_connection_check', arguments: '{}' } }] } }] }
       return { choices: [{ message: { content: mode === 'empty' ? '' : 'unrelated answer' } }] }
     })
-    await f.service.save({ providerId: 'groq', baseUrl: endpoint, modelId: 'discovered', revision: 0, confirmHostChange: true })
+    await f.service.save({ providerId: 'groq', baseUrl: endpoint, apiKey: 'synthetic-private-key', modelId: 'discovered', revision: 0, confirmHostChange: true })
     for (const next of ['text', 'empty', 'wrong']) {
       mode = next
       expect(await f.service.probe('groq')).toEqual({ ok: false, code: 'protocol' })
@@ -224,7 +308,7 @@ describe('launcher real AI connection', () => {
 
   it('sanitizes network failures and bounds transports and repository reads at 30 seconds', async () => {
     const f = await fixture()
-    await f.service.save({ providerId: 'groq', baseUrl: 'https://service.invalid/v1', revision: 0, confirmHostChange: true })
+    await f.service.save({ providerId: 'groq', baseUrl: 'https://service.invalid/v1', apiKey: 'synthetic-private-key', revision: 0, confirmHostChange: true })
     const failed = createAiConnectionService({ ...f.deps, fetch: async () => {
       throw new Error('private key and address')
     } })

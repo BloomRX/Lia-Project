@@ -13,15 +13,35 @@ commit. Registra **estado**, não narrativa: relatório de rodada vai para
 
 ## 0. Estado agora
 
-**Validação integrada Windows (13/11):** ver [relatório](../reports/LIA-WINDOWS-INTEGRATED-VALIDATION.md).
+**Correção de sandbox do Stage e AF-1b (PROMPT-43, 13/11):** a prontidão agora falha
+fechado quando falta seleção canônica, registro gerenciado, credencial ou consistência entre
+seleção e registro. A tela legada `ConfigView.vue` continua disponível, mas sua gravação
+passa pela política do host, envia a seleção esperada e recebe erros tipados para seleção
+gerenciada ou obsoleta. Providers não gerenciados válidos continuam fora do gate de
+transporte gerenciado. As janelas Electron do Stage e o desktop overlay usam preferências
+centralizadas com `sandbox: true`, `contextIsolation: true` e `nodeIntegration: false`; o
+preload é um único `index.cjs` e expõe somente a fachada IPC permitida. Core e Launcher,
+regressões direcionadas do Stage (13 testes), typechecks/builds e gates Electron locais
+passaram. A suíte Stage completa teve 1 falha em `oidc-link.test.ts` (trabalho OIDC
+preexistente, callback HTTP 200 inesperado após logout), reproduzida isoladamente e não
+alterada nesta rodada. O gate Electron comprovou as preferências efetivas e a ausência de
+`process`/`require` num renderer de teste que usa o helper de produção e o preload compilado.
+**A aplicação Stage real não foi aberta pelo fluxo oficial `Lia.bat`**; renderização real, AI Settings, conversa,
+tool calling, voz e C0–C4 continuam sem prova. O dispositivo gráfico detectado foi um
+adaptador virtual Parsec, não evidência da RX 580. A Lia continua **não aprovada ponta a
+ponta**. Detalhes: [relatório da correção](../reports/LIA-STAGE-SANDBOX-AF1B-FIX.md).
+
+**Validação integrada Windows anterior (PROMPT-40/42, 13/11):**
+ver [relatório](../reports/LIA-WINDOWS-INTEGRATED-VALIDATION.md).
 Testes e builds automatizados de Core, Launcher e Stage passaram no worktree, mas a
 validação foi sobre HEAD `08183053d0c0ffbfe3bc0cfe3e613e1aa21f8dab` **mais alterações locais
 preexistentes**, incluindo o caminho de conversa/transporte do Stage; portanto não equivale
 ao commit publicado isoladamente. O boot oficial do Launcher abriu janela e encerrou sem
 órfãos, mas AI Settings, Stage, conversa real, tool calling, voz e C0–C4 não foram provados
-na UI. A auditoria AF-1b também encontrou que `isSafeToStart()` aceita seleção gerenciada
+na UI. A auditoria AF-1b dessa rodada encontrou que `isSafeToStart()` aceitava seleção gerenciada
 sem registro de transporte; o transporte no worktree testado recusa registro ausente ao
-enviar, mas a recusa na interface não foi validada. A Lia **não está aprovada como ponta a ponta**.
+enviar, mas a recusa na interface não foi validada. Essa causa foi corrigida no PROMPT-43;
+a Lia **não está aprovada como ponta a ponta**.
 
 **PROMPT-42 (12/11, sem gate Windows) — AF-1, SEC-1 e auditoria de runtime.** A seleção de
 provider passou a ter **autoridade única efetiva**: o Stage consulta

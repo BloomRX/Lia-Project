@@ -132,14 +132,14 @@ describe('shared AI configuration and Stage interlock', () => {
     // No mutation receipt reached this service after the write, so recovery
     // must stay fail-closed instead of restoring an unguarded old value.
     expect(await f.host.aiConnection.save({ providerId: 'groq', baseUrl: 'https://new.invalid/v1', apiKey: 'new-private', revision: 2, confirmHostChange: true })).toEqual({ ok: false, code: 'storage' })
-    await expect(f.host.conversar()).rejects.toThrow(/Save the AI service settings again/)
-    await expect(f.host.stage.start()).rejects.toThrow(/Save the AI service settings again/)
+    await expect(f.host.conversar()).rejects.toMatchObject({ name: 'AiStartBlockedError', code: 'configuration-unsafe' })
+    await expect(f.host.stage.start()).rejects.toMatchObject({ name: 'AiStartBlockedError', code: 'configuration-unsafe' })
     expect(f.start).not.toHaveBeenCalled()
     expect(await f.host.aiConnection.discover('groq')).toEqual({ ok: false, code: 'unconfigured' })
     // A fresh host must honor the durable disabled row after a restart too.
     const reopened = createLiaHost({ cipher: identityCipher, env: fixtureEnv(f.home), workspaceRoot: '/missing' })
-    await expect(reopened.conversar()).rejects.toThrow(/Save the AI service settings again/)
-    await expect(reopened.stage.start()).rejects.toThrow(/Save the AI service settings again/)
+    await expect(reopened.conversar()).rejects.toMatchObject({ name: 'AiStartBlockedError', code: 'connection-disabled' })
+    await expect(reopened.stage.start()).rejects.toMatchObject({ name: 'AiStartBlockedError', code: 'connection-disabled' })
     expect((await reopened.homeStatus()).ai.ready).toBe(false)
     expect(await reopened.aiConnection.save({ providerId: 'groq', baseUrl: 'https://old.invalid/v1', revision: 3, confirmHostChange: true })).toEqual({ ok: false, code: 'credentials' })
     expect(await f.host.aiConnection.save({ providerId: 'groq', baseUrl: 'https://new.invalid/v1', apiKey: 'new-private', modelId: 'model', revision: 3, confirmHostChange: true })).toMatchObject({ ok: true })

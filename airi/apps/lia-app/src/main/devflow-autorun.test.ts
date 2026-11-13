@@ -100,7 +100,9 @@ describe('the autorun uses the canonical path, wired once', () => {
     const source = readFileSync(new URL('./index.ts', import.meta.url), 'utf-8')
     // The IPC handler that the renderer's button reaches.
     const ipcSource = readFileSync(new URL('./ipc.ts', import.meta.url), 'utf-8')
-    expect(ipcSource).toContain(`ipcMain.handle('lia:stage:start', async () => await host.conversar())`)
+    expect(ipcSource).toContain(`ipcMain.handle('lia:stage:start', async () => {`)
+    expect(ipcSource).toContain(`return { ok: true as const, state: await host.conversar() }`)
+    expect(ipcSource).toContain(`return { ok: false as const, code: error.code }`)
     // The autorun must delegate to that very same host method, not a parallel
     // stage path, and must be gated on applies().
     expect(source).toContain('conversar: () => host.conversar()')

@@ -17,14 +17,14 @@
         1. install the Electron runtime from the OFFICIAL package installer
            (downloads the asset matching the locked version and verifies it
            against the package's own checksums.json);
-        2. build the Stage, which produces out/preload/index.mjs - the gate
+        2. build the Stage, which produces out/preload/index.cjs - the gate
            reads that file before doing anything else;
         3. run `node --test` on the gate.
 
     Before that it checks, and refuses to continue when wrong: git branch, HEAD
     and working tree, Node and pnpm versions, whether the Electron runtime is
     already installed, whether playwright and vite resolve from the app, and
-    whether out/preload/index.mjs exists after the build.
+    whether out/preload/index.cjs exists after the build.
 
     It records one console transcript plus the gate's own artifacts under
     Tests/artifacts/provider-runtime-electron/<timestamp>/, with the exit code
@@ -36,7 +36,7 @@
     `git status` is printed at the end only so the operator can confirm that.
 
 .PARAMETER SkipBuild
-    Reuse an existing `out/preload/index.mjs` instead of rebuilding the Stage.
+    Reuse an existing `out/preload/index.cjs` instead of rebuilding the Stage.
     Only valid when the preload was built from the current working tree.
 
 .PARAMETER ElectronZip
@@ -376,7 +376,7 @@ if ($runtimeVersion -ne $ExpectedElectron) {
 Add-Result 'versao do runtime' 'PASS' $runtimeVersion
 
 # ---------------------------------------------------------------------------
-# 6. Stage build (produces out/preload/index.mjs, read first by the gate)
+# 6. Stage build (produces out/preload/index.cjs, read first by the gate)
 # ---------------------------------------------------------------------------
 Write-Step '6. Build do Stage (electron-vite build)'
 

@@ -51,12 +51,14 @@ um provider fora do catálogo, (b) a mensagem específica ao tentar trocar `groq
 (c) a seleção do Launcher preservada depois dessa tentativa. Sem isso, AF-1 é PASS offline,
 não PASS de runtime.
 
-**AF-1b (residual, registrado):** a tela legada `ConfigView.vue` do Launcher ainda grava
-`provider.chat.preferred` por `lia-host.updateConfig`, sem catálogo nem revisão. É a mesma
-autoridade (Launcher), mas um caminho distinto do AI Settings; uma seleção gerenciada
-gravada por ali falha fechada no início (`isSafeToStart`), não conversa. Aposentar ou
-redirecionar essa tela é decisão de produto a validar no Windows — não foi alterado nesta
-rodada.
+**AF-1b (corrigido no PROMPT-43, validação UI pendente):** `ConfigView.vue` permanece como
+tela legada, mas envia `expectedPreferred` e a gravação passa pela política de autoridade
+central do host, dentro do mesmo lock que serializa configuração e início do Stage. Troca
+gerenciada ou gravação obsoleta é recusada com erro tipado e mensagem específica; não há
+atalho para alterar a seleção canônica fora do AI Settings. `isSafeToStart()` agora recusa
+seleção ausente/inválida e seleção gerenciada sem registro, credencial ou modelo consistente.
+Providers não gerenciados compatíveis permanecem elegíveis. Testes automatizados passaram;
+confirmar a mensagem e a recusa na janela real continua pendente no roteiro Windows.
 
 ## 2. O que falta provar (gate real)
 

@@ -8,6 +8,10 @@ offline**; auditoria de runtime completada com as sete evidências; tool calling
 prova real, ainda **NOT RUN** no Windows (ver §3.2, §4.3, §5 e o relatório de decisão).
 **Natureza:** código executável no sandbox + auditoria estática. Nenhum gate Windows foi
 executado, nenhuma credencial foi cadastrada, nenhum provider foi ampliado.
+**Revisão 3 (PROMPT-43, 13/11/2026):** corrige o achado AF-1b e endurece as janelas do
+Stage. Os parágrafos da Revisão 2 sobre registro ausente e `sandbox: false` descrevem o
+estado anterior; o estado atual e as evidências estão na §9 e em
+`LIA-STAGE-SANDBOX-AF1B-FIX.md`.
 
 ---
 
@@ -106,20 +110,12 @@ O wiring do IPC do Stage e a janela real continuam **dependendo de Windows** (NO
 |---|---|---|---|
 | 1 | `ai-connection-service.save/saveSelection` (AI Settings, Launcher) | catálogo + vault + revisão/rollback; única autoridade para provider gerenciado | canônico |
 | 2 | bridge do Stage (`provider-config-service` → `decideSelectionWrite`) | recusa troca envolvendo gerenciado e escrita obsoleta; preserva legado | **corrigido** |
-| 3 | `lia-host.updateConfig` chamado pela tela legada `ConfigView.vue` | merge direto em `updateLiaProductConfig`, **sem** catálogo/revisão | **AF-1b residual** |
+| 3 | `lia-host.updateConfig` chamado pela tela legada `ConfigView.vue` | lock de início/gravação + política canônica, `expectedPreferred` e erros tipados | **protegido; UI real pendente** |
 
-**AF-1b — por que não foi alterado agora:** a tela legada é o caminho pelo qual o produto
-ainda aceita provider fora do catálogo com modelo livre; restringi-la sem validação Windows
-repetiria o erro que o PROMPT-37 corrigiu. O risco é limitado e **falha fechada**: uma
-seleção `groq` gravada por esse caminho sem registro de transporte **não** faz
-`isSafeToStart()` recusar o início: a expressão `record?.enabled !== false` resulta em
-`true` quando o registro está ausente. A validação integrada de 13/11 confirmou essa leitura
-estática; o serviço de transporte tem cobertura para rejeitar registro ausente ao enviar,
-mas a interface real não foi exercitada. Portanto, não afirmar que esse caso falha fechado
-no início nem que a mensagem chega à pessoa usuária. O que falta é uma decisão de produto
-(aposentar ou redirecionar a tela legada) e a validação na janela real. Nenhuma escrita do
-Stage consegue sobrescrever esse caminho: a policy lê o mesmo documento e recusa
-stale/gerenciado.
+**AF-1b na Revisão 2 (histórico, corrigido na Revisão 3):** a tela legada permanecia como
+escritora e `isSafeToStart()` não tratava registro ausente como bloqueio. A implementação
+posterior preserva a tela e providers não gerenciados, mas não permite que ela troque uma
+seleção gerenciada ou sobrescreva estado obsoleto; ver §9.
 
 ### 3.3 Achado AF-2 — `brainSelectionUpdate` é código dormente
 
@@ -179,8 +175,9 @@ e passou a impor:
   ganhar um builtin do Node/import dinâmico, ou se `index.ts` voltar a inlinar `sandbox:`.
 - **Limite honesto:** o sandbox só é comprovado abrindo a janela. Boot real do Launcher com
   `sandbox: true` é **NOT RUN** e entra nos 16 passos do Windows; reversão é uma linha.
-- O Stage mantém `sandbox: false` nas próprias janelas: os 70 arquivos de main e os addons
-  nativos não foram auditados para sandbox nesta rodada — dívida registrada, não fingida.
+- **Estado da Revisão 2:** o Stage ainda mantinha `sandbox: false`; o achado foi corrigido
+  na Revisão 3 para todas as janelas inventariadas. A §9 distingue o gate Electron real do
+  harness da inicialização completa do Stage pelo Launcher.
 
 ## 5. Tool calling (Etapa 3) — inventário, sem criação
 
@@ -245,3 +242,66 @@ exige chave válida e runtime Windows. Continua **NOT RUN**.
    aparece no caso gerenciado.
 4. Executar a prova read-only de `get_weather` (§5) e só então declarar Tool Calling.
 5. Medir C0–C4 / runtime único para fechar o gate de Arquitetura.
+
+## 9. Revisão 3 — correção AF-1b e sandbox do Stage (PROMPT-43)
+
+Esta seção substitui o estado AF-1b/Stage das Revisões 1 e 2; não altera a conclusão de que
+a Lia não foi validada ponta a ponta.
+
+### 9.1 AF-1b — prontidão fail-closed e autoridade da seleção
+
+`ai-connection-service.getStartReadiness()` é agora a fonte única de prontidão para
+`isSafeToStart()` e o início do Stage. Estados sem seleção, seleção inválida, erro ao ler a
+seleção, provider indisponível, erro ao ler transportes, registro gerenciado ausente/
+duplicado/inconsistente/desabilitado, endereço inválido, modelo que não pertence ao registro
+e credencial ausente/ilegível têm resultados tipados distintos. Seleções válidas fora do
+catálogo gerenciado continuam compatíveis e não são forçadas para um provider gerenciado.
+
+O Launcher serializa a escrita de configuração com a preparação/inicialização do Stage.
+`ConfigView.vue` envia a seleção observada como `expectedPreferred`; o host aplica a política
+compartilhada antes da gravação, e o IPC devolve recusas tipadas. A interface mostra
+mensagens pt-BR/en-US para seleção gerenciada, estado obsoleto e erro de leitura. O Stage
+também usa a política compartilhada e valida `preferred`/`expectedPreferred` contra valores
+malformados ou campos secretos, preservando a compatibilidade de seus providers não
+gerenciados. Nenhuma regra de prontidão depende de um ping de transporte para decidir se a
+seleção é segura.
+
+### 9.2 Stage — janelas e preload
+
+As configurações de todas as janelas conhecidas, incluindo desktop overlay e onboarding,
+usam `createStageWebPreferences`: `sandbox: true`, `contextIsolation: true`,
+`nodeIntegration: false` e o preload local. A fachada do preload oferece somente `invoke`,
+`on`, `removeListener` e `send`; valida canal/operação, encaminha os canais Eventa usados
+pela aplicação, mantém canais OIDC explicitamente enumerados e não devolve o objeto de
+evento Electron original ao Renderer. O Main continua dono da validação/execução dos
+handlers. O build gera apenas `out/preload/index.cjs`, sem chunks relativos que falhariam no
+preload sandboxed.
+
+### 9.3 Evidências Windows e limites
+
+| Verificação | Estado | Evidência / limite |
+|---|---|---|
+| Testes completos Launcher | **PASS** | 36 arquivos; 353 passaram, 2 skips |
+| Typecheck/build Launcher | **PASS** | `pnpm run typecheck`; `pnpm run build` |
+| Testes Core | **PASS** | `@lia/core`: 381; `@lia/contracts`: 105; `@proj-airi/core-agent`: 156 |
+| Typecheck/build Core | **PASS** | `@lia/core` e `@proj-airi/core-agent`; `@lia/contracts` não declara scripts de typecheck/build |
+| Testes completos Stage | **FAIL** | 214 arquivos; 2.556 passaram, 1 falhou, 4 skips; `oidc-link.test.ts` (OIDC preexistente) esperou callback fechado após logout e recebeu HTTP 200; reproduzido isoladamente |
+| Regressões direcionadas Stage | **PASS** | 5 arquivos; 13 testes de sandbox/preload e provider config |
+| Typecheck/build Stage | **PASS** | `vue-tsc --noEmit`; `electron-vite build` |
+| Sandbox/preload em Electron real | **PASS (harness)** | Electron 43.4.1; flags efetivas `true/true/false/true`; `process` e `require` ausentes; fachada limitada |
+| Janela da aplicação Stage pelo fluxo `Lia.bat` | **NOT RUN** | Não houve boot da aplicação Stage; renderer visual e inicialização de produto continuam pendentes |
+| Conversa, AI Settings, tool calling, voz, C0–C4 | **NOT RUN/BLOCKED** | Não testados por esta correção; nenhuma credencial real foi usada |
+
+O gate Electron foi executado no Windows contra um harness que usa o helper de
+`webPreferences` de produção e o preload compilado. Isso comprova o comportamento do sandbox
+e IPC desse renderer de teste, **não** a inicialização, renderização ou funcionamento da
+janela principal da aplicação Stage. O adaptador de vídeo detectado foi Parsec Virtual
+Display Adapter; não houve medição de GPU/performance nem comprovação da RX 580.
+
+O comando `pnpm run typecheck` em `lia/core` retornou `ERR_PNPM_NO_SCRIPT`: esse pacote é
+`@lia/contracts` e declara somente `test`. Os tipos do helper compartilhado são verificados
+pelos typechecks do Launcher e do Stage.
+
+**Conclusão:** AF-1b e as preferências de sandbox estão corrigidos e cobertos por testes;
+o gate Electron de sandbox/preload passou. A validação de janela real via fluxo oficial e os
+fluxos de produto permanecem pendentes. Não declarar a Lia aprovada ponta a ponta.

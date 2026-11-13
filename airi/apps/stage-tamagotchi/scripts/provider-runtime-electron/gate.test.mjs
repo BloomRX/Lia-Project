@@ -128,7 +128,7 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
   const root = await mkdtemp(join(tmpdir(), 'lia-provider-electron-'))
   const artifacts = join(repo, 'Tests/artifacts/provider-runtime-electron', `${Date.now()}`)
   await mkdir(artifacts, { recursive: true })
-  const preload = join(stage, 'out/preload/index.mjs')
+  const preload = join(stage, 'out/preload/index.cjs')
   await readFile(preload)
   // One synthetic credential per curated provider, plus the two historical
   // scopes the earlier checks already use. Local providers are keyless, exactly
@@ -298,9 +298,32 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
         logs += `${message.type()}: ${message.text()}\n`
       })
       await page.getByRole('status').filter({ hasText: 'Pronto' }).waitFor()
-      const security = await application.evaluate(({ app, BrowserWindow }) => ({ userData: app.getPath('userData'), windows: BrowserWindow.getAllWindows().map(window => ({ contextIsolation: window.webContents.getLastWebPreferences().contextIsolation, nodeIntegration: window.webContents.getLastWebPreferences().nodeIntegration, webSecurity: window.webContents.getLastWebPreferences().webSecurity })), pids: app.getAppMetrics().map(metric => metric.pid) }))
+      const security = await application.evaluate(({ app, BrowserWindow }) => ({
+        userData: app.getPath('userData'),
+        windows: BrowserWindow.getAllWindows().map(window => {
+          const preferences = window.webContents.getLastWebPreferences()
+          return {
+            contextIsolation: preferences.contextIsolation,
+            nodeIntegration: preferences.nodeIntegration,
+            sandbox: preferences.sandbox,
+            webSecurity: preferences.webSecurity,
+          }
+        }),
+        pids: app.getAppMetrics().map(metric => metric.pid),
+      }))
+      security.bridge = await page.evaluate(() => ({
+        electronKeys: Object.keys(window.electron ?? {}),
+        ipcKeys: Object.keys(window.electron?.ipcRenderer ?? {}).sort(),
+        process: typeof window.process,
+        require: typeof window.require,
+      }))
       assert.equal(security.userData, join(root, 'profile'))
-      assert.ok(security.windows.every(window => window.contextIsolation && !window.nodeIntegration && window.webSecurity !== false))
+      assert.ok(security.windows.every(window => window.contextIsolation && !window.nodeIntegration && window.sandbox && window.webSecurity !== false))
+      assert.deepEqual(security.bridge.electronKeys, ['ipcRenderer'])
+      assert.deepEqual(security.bridge.ipcKeys, ['invoke', 'on', 'removeListener', 'send'])
+      assert.equal(security.bridge.process, 'undefined')
+      assert.equal(security.bridge.require, 'undefined')
+      report.windowSecurity = security
       report.versions = await application.evaluate(() => ({ electron: process.versions.electron, node: process.versions.node, chrome: process.versions.chrome }))
       report.environment.electron = report.versions.electron
       report.environment.chrome = report.versions.chrome
@@ -420,7 +443,7 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
     groups.begin(5)
     const secondWindowId = await application.evaluate(async ({ BrowserWindow }, preloadPath) => {
       const first = BrowserWindow.getAllWindows()[0]
-      const second = new BrowserWindow({ show: true, webPreferences: { preload: preloadPath, contextIsolation: true, nodeIntegration: false, sandbox: false } })
+      const second = new BrowserWindow({ show: true, webPreferences: { preload: preloadPath, contextIsolation: true, nodeIntegration: false, sandbox: true } })
       await second.loadURL(first.webContents.getURL())
       return second.id
     }, preload)

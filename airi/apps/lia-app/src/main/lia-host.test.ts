@@ -446,7 +446,7 @@ describe('conversar() - managed STT default (Phase 8.0D SHELL-B1)', () => {
   }
 
   /** A host whose stage manager records the launch env and the doc at launch. */
-  function hostFor(home: { userData: string }, events: Array<{ detail?: string, event: string }>) {
+  async function hostFor(home: { userData: string }, events: Array<{ detail?: string, event: string }>, seedManaged = true) {
     const startedWith: Array<Record<string, string | undefined> | undefined> = []
     let docAtStart: string | undefined
     const host = createLiaHost({
@@ -454,6 +454,7 @@ describe('conversar() - managed STT default (Phase 8.0D SHELL-B1)', () => {
       env: fixtureEnv(home as never),
       onEvent: (event, detail) => events.push({ detail, event }),
       stageManagerFactory: () => ({
+        holdsOwnedStage: () => false,
         isAvailable: () => true,
         start: async (options?: { env?: Record<string, string | undefined> }) => {
           startedWith.push(options?.env)
@@ -467,6 +468,14 @@ describe('conversar() - managed STT default (Phase 8.0D SHELL-B1)', () => {
       }) as never,
       workspaceRoot: '/missing',
     })
+    if (seedManaged) {
+      expect(await host.aiConnection.save({
+        providerId: 'groq',
+        baseUrl: 'https://api.groq.com/openai/v1',
+        modelId: 'llama-3.3-70b-versatile',
+        revision: 0,
+      })).toMatchObject({ ok: true })
+    }
     return {
       docAtStart: () => docAtStart,
       host,
@@ -480,7 +489,7 @@ describe('conversar() - managed STT default (Phase 8.0D SHELL-B1)', () => {
   it('case 1: an eligible launch writes the canonical default BEFORE the stage starts', async () => {
     const home = await makeLiaHome({ productConfig: groqDoc() })
     const events: Array<{ detail?: string, event: string }> = []
-    const { docAtStart, host, startedWith } = hostFor(home, events)
+    const { docAtStart, host, startedWith } = await hostFor(home, events)
     await host.vault.setSecret('groq', 'apiKey', SECRET)
 
     const state = await host.conversar()
@@ -511,7 +520,7 @@ describe('conversar() - managed STT default (Phase 8.0D SHELL-B1)', () => {
     const chosen = { providerId: 'browser-web-speech-api' }
     const home = await makeLiaHome({ productConfig: groqDoc({ stt: { preferred: chosen } }) })
     const events: Array<{ detail?: string, event: string }> = []
-    const { host, startedWith } = hostFor(home, events)
+    const { host, startedWith } = await hostFor(home, events)
     await host.vault.setSecret('groq', 'apiKey', SECRET)
 
     await host.conversar()
@@ -525,7 +534,7 @@ describe('conversar() - managed STT default (Phase 8.0D SHELL-B1)', () => {
   it('case 3: voice.enabled=false writes no STT default at all', async () => {
     const home = await makeLiaHome({ productConfig: groqDoc({ enabled: false }) })
     const events: Array<{ detail?: string, event: string }> = []
-    const { host, startedWith } = hostFor(home, events)
+    const { host, startedWith } = await hostFor(home, events)
     await host.vault.setSecret('groq', 'apiKey', SECRET)
 
     await host.conversar()
@@ -541,7 +550,7 @@ describe('conversar() - managed STT default (Phase 8.0D SHELL-B1)', () => {
   it('case 4: a non-Groq chat provider gets no guessed STT target', async () => {
     const home = await makeLiaHome() // fixture default: preferred = openrouter
     const events: Array<{ detail?: string, event: string }> = []
-    const { host, startedWith } = hostFor(home, events)
+    const { host, startedWith } = await hostFor(home, events, false)
     await host.vault.setSecret('openrouter', 'apiKey', SECRET)
 
     await host.conversar()
@@ -555,11 +564,11 @@ describe('conversar() - managed STT default (Phase 8.0D SHELL-B1)', () => {
   it('case 5: a missing Groq key yields no false-ready STT target', async () => {
     const home = await makeLiaHome({ productConfig: groqDoc() })
     const events: Array<{ detail?: string, event: string }> = []
-    const { host, startedWith } = hostFor(home, events)
+    const { host, startedWith } = await hostFor(home, events)
     // Deliberately NO vault secret for groq.
 
     // The conversation itself is gated earlier by the existing readiness check.
-    await expect(host.conversar()).rejects.toThrow(/not fully configured/)
+    await expect(host.conversar()).rejects.toMatchObject({ name: 'AiStartBlockedError', code: 'credential-missing' })
     expect(startedWith).toHaveLength(0)
 
     // Advertising a target with no credential behind it would be a lie.
@@ -570,7 +579,7 @@ describe('conversar() - managed STT default (Phase 8.0D SHELL-B1)', () => {
   it('case 6: a failed canonical write degrades STT without corrupting config or blocking chat', async (ctx) => {
     const home = await makeLiaHome({ productConfig: groqDoc() })
     const events: Array<{ detail?: string, event: string }> = []
-    const { host, startedWith } = hostFor(home, events)
+    const { host, startedWith } = await hostFor(home, events)
     await host.vault.setSecret('groq', 'apiKey', SECRET)
 
     const before = await readFile(join(home.userData, 'lia-product.json'), 'utf8')
@@ -629,7 +638,7 @@ describe('conversar() - managed STT default (Phase 8.0D SHELL-B1)', () => {
   it('the STT default is idempotent across launches and never duplicates a credential', async () => {
     const home = await makeLiaHome({ productConfig: groqDoc() })
     const events: Array<{ detail?: string, event: string }> = []
-    const { host, startedWith } = hostFor(home, events)
+    const { host, startedWith } = await hostFor(home, events)
     await host.vault.setSecret('groq', 'apiKey', SECRET)
 
     await host.conversar()

@@ -218,3 +218,43 @@ validação. O HEAD remoto do código testado no baseline era
 `08183053d0c0ffbfe3bc0cfe3e613e1aa21f8dab`; o hash do commit documental publicado e o estado
 final do worktree serão informados no fechamento da execução. As alterações preexistentes
 listadas na §A permanecem fora desse commit.
+
+---
+
+## Adendo — correção de sandbox Stage e AF-1b (PROMPT-43, 13/11/2026)
+
+Este adendo atualiza somente os achados de segurança/configuração acima; os resultados
+anteriores de AI Settings, conversa real, histórico, tool calling, voz, desempenho e ciclo
+de vida do Stage continuam válidos como **NOT RUN/BLOCKED**.
+
+| Achado anterior | Estado após correção | Evidência atual |
+|---|---|---|
+| Stage `sandbox: false` | **Corrigido; PASS no harness Electron** | Todas as janelas inventariadas usam o helper seguro; Electron 43.4.1 confirmou `sandbox: true`, `contextIsolation: true`, `nodeIntegration: false`, `webSecurity: true`; `process` e `require` indisponíveis |
+| Preload Stage amplo | **Endurecido; PASS automatizado/runtime de harness** | Fachada limitada a `invoke/on/removeListener/send`, allowlist por canal/operação e evento IPC sem `sender`; output de produção contém somente `out/preload/index.cjs` |
+| AF-1b: registro de transporte ausente permitia passar `isSafeToStart()` | **Corrigido; PASS automatizado** | Prontidão tipada fail-closed para seleção ausente, registro ausente, credencial ausente/vazia, config inválida/inconsistente e modelo obsoleto |
+| Writers de seleção Launcher/Stage | **Protegidos; PASS automatizado, UI NOT RUN** | `expectedPreferred`, política no host/Stage, validação de payload e lock do Launcher com início; recusas tipadas e mensagens pt-BR/en-US |
+| Provedores não gerenciados | **Compatibilidade preservada em testes** | Seleção unmanaged válida segue fora do gate de transporte gerenciado |
+
+### Validação desta correção
+
+- Launcher: `pnpm run test` — 36 arquivos, 353 passed, 2 skipped; typecheck e build
+  de produção **PASS**.
+- Core: `@lia/core` 381 testes, typecheck e build **PASS**; `@lia/contracts` 105 testes
+  **PASS**; `@proj-airi/core-agent` 156 testes, typecheck e build **PASS**.
+- Stage: Node + browser 214 arquivos, 2.556 passed, 1 failed, 4 skipped; falha reproduzida
+  em `oidc-link.test.ts`, trabalho OIDC preexistente fora desta correção (callback resolveu
+  HTTP 200 após logout quando o teste esperava rejeição). Regressões direcionadas desta
+  correção: 5 arquivos, 13 testes **PASS**; `vue-tsc --noEmit` e build **PASS**.
+- Electron runtime: `scripts/provider-runtime-electron/gate.test.mjs` **PASS**; a evidência
+  `Tests/artifacts/provider-runtime-electron/1794543360647/report.json` confirma os valores
+  efetivos no renderer do harness. Gate OIDC local sob o mesmo preload sandboxed **PASS**.
+- Limite: o harness usa o helper de produção e o preload de produção, mas não abre o Stage
+  real pelo fluxo oficial `Lia.bat`; a janela principal do produto, UI visual, áudio,
+  conversa, tool calling e encerramento do produto continuam **NOT RUN**.
+- Ambiente: Windows 11 Home build 26200, Node 26.8.1, pnpm 11.24.0, Electron 43.4.1.
+  CPU reportada: AMD Ryzen 5 5500; vídeo detectado: Parsec Virtual Display Adapter, que não
+  comprova a RX 580. Não houve medição C0–C4.
+
+**Conclusão atualizada:** a correção de autorização AF-1b e o sandbox/preload passam pelas
+suítes e pelo gate Electron do harness. O gate completo de Stage via `Lia.bat` e todos os
+fluxos de produto listados acima seguem pendentes; esta rodada não aprova a Lia ponta a ponta.
