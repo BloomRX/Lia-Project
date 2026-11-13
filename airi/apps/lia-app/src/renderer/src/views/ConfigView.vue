@@ -23,7 +23,7 @@ const form = reactive({
   voiceProviderId: '',
 })
 const saving = ref(false)
-const feedback = ref<'saved' | 'failed' | 'loadFailed' | ''>('')
+const feedback = ref<'saved' | 'failed' | 'loadFailed' | 'managedSelection' | 'staleSelection' | 'selectionReadFailed' | ''>('')
 const loading = ref(true)
 const readable = computed(() => config.value?.status === 'missing' || (config.value?.status === 'ok' && !!config.value.snapshot && typeof config.value.snapshot === 'object' && !Array.isArray(config.value.snapshot)))
 const text = computed(() => pickVoiceEngineLocale(props.language ?? config.value?.snapshot?.preferences?.language) === 'en-US'
@@ -55,6 +55,9 @@ const text = computed(() => pickVoiceEngineLocale(props.language ?? config.value
       saving: 'Saving…',
       saved: 'Configuration saved. New conversations will use these settings.',
       failed: 'Could not save the configuration. Try again.',
+      managedSelection: 'This AI service is managed by AI Settings. Open AI Settings to change it.',
+      staleSelection: 'The AI selection changed while this screen was open. Reload before saving.',
+      selectionReadFailed: 'The saved AI selection could not be checked. Reload and try again.',
       loadFailed: 'Could not load the configuration. Try again.',
       loading: 'Loading configuration…',
       retry: 'Try again',
@@ -87,6 +90,9 @@ const text = computed(() => pickVoiceEngineLocale(props.language ?? config.value
       saving: 'Salvando…',
       saved: 'Configuração salva. Novas conversas usarão estes valores.',
       failed: 'Não foi possível salvar a configuração. Tente novamente.',
+      managedSelection: 'Este serviço de IA é gerenciado pelas Configurações de IA. Abra essa tela para alterá-lo.',
+      staleSelection: 'A seleção de IA mudou enquanto esta tela estava aberta. Recarregue antes de salvar.',
+      selectionReadFailed: 'Não foi possível verificar a seleção de IA salva. Recarregue e tente novamente.',
       loadFailed: 'Não foi possível carregar a configuração. Tente novamente.',
       loading: 'Carregando configuração…',
       retry: 'Tentar novamente',
@@ -140,7 +146,15 @@ async function save() {
     const secrets = form.apiKey && form.providerId
       ? [{ key: 'apiKey', scope: form.providerId, value: form.apiKey }]
       : []
+    const currentPreferred = config.value?.snapshot?.provider?.chat?.preferred
+    const expectedPreferred = currentPreferred?.providerId
+      ? {
+          providerId: currentPreferred.providerId,
+          ...(typeof currentPreferred.modelId === 'string' ? { modelId: currentPreferred.modelId } : {}),
+        }
+      : null
     const result = await props.api.updateConfig({
+      expectedPreferred,
       secrets,
       update: {
         persona: form.activeCardId ? { activeCardId: form.activeCardId } : undefined,
@@ -158,6 +172,15 @@ async function save() {
       feedback.value = 'saved'
       // The key field empties after saving: it lives in the vault now.
       form.apiKey = ''
+    }
+    else if (result?.status === 'selection-owned-by-launcher' || result?.status === 'managed-credential-owned-by-ai-settings') {
+      feedback.value = 'managedSelection'
+    }
+    else if (result?.status === 'stale-selection') {
+      feedback.value = 'staleSelection'
+    }
+    else if (result?.status === 'selection-read-failed') {
+      feedback.value = 'selectionReadFailed'
     }
     else {
       feedback.value = 'failed'

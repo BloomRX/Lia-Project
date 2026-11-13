@@ -63,6 +63,63 @@ const stopMessages = computed(() => homeConversationStopMessagesVm(props.languag
 const voiceChip = computed(() => voiceStatusChipVm(props.readiness, props.language))
 const voiceVariant = computed(() => voiceStatusChipVariant(voiceChip.value.tone))
 
+function startBlockedMessage(code: unknown): string {
+  const messages: Record<string, { en: string, pt: string }> = {
+    'configuration-unsafe': {
+      en: 'The AI service is not ready. Check AI Settings and try again.',
+      pt: 'O serviço de IA não está pronto. Confira as Configurações de IA e tente novamente.',
+    },
+    'connection-disabled': {
+      en: 'The AI service is disabled. Review AI Settings before starting a conversation.',
+      pt: 'O serviço de IA está desativado. Confira as Configurações de IA antes de conversar.',
+    },
+    'connection-inconsistent': {
+      en: 'The AI connection could not be verified. Reload AI Settings and review the connection.',
+      pt: 'Não foi possível verificar a conexão de IA. Recarregue as Configurações de IA e confira a conexão.',
+    },
+    'connection-missing': {
+      en: 'Finish setting up the AI service in AI Settings before starting a conversation.',
+      pt: 'Finalize a configuração do serviço de IA nas Configurações de IA antes de conversar.',
+    },
+    'credential-missing': {
+      en: 'The AI service needs a credential. Add it in AI Settings and try again.',
+      pt: 'Falta uma credencial do serviço de IA. Adicione-a nas Configurações de IA e tente novamente.',
+    },
+    'credential-read-failed': {
+      en: 'The AI credential could not be checked. Review AI Settings and try again.',
+      pt: 'Não foi possível verificar a credencial de IA. Confira as Configurações de IA e tente novamente.',
+    },
+    'model-missing': {
+      en: 'Choose a model in AI Settings before starting a conversation.',
+      pt: 'Escolha um modelo nas Configurações de IA antes de conversar.',
+    },
+    'provider-unavailable': {
+      en: 'The selected AI service is unavailable. Choose another service in AI Settings.',
+      pt: 'O serviço de IA selecionado está indisponível. Escolha outro nas Configurações de IA.',
+    },
+    'selection-invalid': {
+      en: 'The saved AI selection is invalid. Review AI Settings and try again.',
+      pt: 'A seleção de IA salva é inválida. Confira as Configurações de IA e tente novamente.',
+    },
+    'selection-missing': {
+      en: 'Choose an AI service and model in AI Settings to start a conversation.',
+      pt: 'Escolha um serviço de IA e um modelo nas Configurações de IA para conversar.',
+    },
+    'selection-read-failed': {
+      en: 'The saved AI selection could not be checked. Reload AI Settings and try again.',
+      pt: 'Não foi possível verificar a seleção de IA salva. Recarregue as Configurações de IA e tente novamente.',
+    },
+    'transport-read-failed': {
+      en: 'The AI connection could not be checked. Reload AI Settings and try again.',
+      pt: 'Não foi possível verificar a conexão de IA. Recarregue as Configurações de IA e tente novamente.',
+    },
+  }
+  const message = messages[String(code)]
+  if (!message)
+    return props.language?.startsWith('en') ? 'The AI service is not ready. Open AI Settings and try again.' : 'O serviço de IA não está pronto. Abra as Configurações de IA e tente novamente.'
+  return props.language?.startsWith('en') ? message.en : message.pt
+}
+
 /**
  * Phase 8.0A-5: the minimal first-run choice shows until the canonical
  * marker says done. NON-BLOCKING: nothing else on Home depends on it.
@@ -103,7 +160,9 @@ async function conversar() {
   error.value = undefined
   stopFeedback.value = undefined
   try {
-    await props.api.conversar()
+    const result = await props.api.conversar()
+    if (result?.ok === false)
+      error.value = startBlockedMessage(result.code)
   }
   catch {
     error.value = props.language?.startsWith('en') ? 'Could not start the conversation. Try again or open Diagnostics.' : 'Não foi possível iniciar a conversa. Tente novamente ou abra Diagnósticos.'

@@ -28,8 +28,9 @@ import { createLiaSecretVault } from '@lia/core/secrets/vault'
 import { createLiaVoiceProfileStore, findMissingFiles } from '@lia/core/voices/profiles'
 
 import { CredentialOwnerError, isPublicCredentialReference, startCredentialOwner } from '../../../../../lia/core/src/credentials/owner-channel'
+import { decideSelectionWrite, isLauncherManagedProvider, isLiaSelectionTarget, type LiaSelectionTarget } from '../../../../../lia/core/src/providers/selection-write-policy'
 import { createTransportRepository } from '../../../../../lia/core/src/transports/repository'
-import { createAiConnectionService } from './ai-connection-service'
+import { createAiConnectionService, type AiConnectionStartCode, type AiConnectionStartReadiness } from './ai-connection-service'
 import { AiriStageManager } from './airi-stage-manager'
 import { sameProfileDirectory } from './launcher-profile'
 import { ShutdownCoordinator } from './shutdown-coordinator'
@@ -140,11 +141,19 @@ export interface LiaHomeStatus {
 export interface LiaConfigUpdatePayload {
   secrets?: { key: string, scope: string, value: string }[]
   update: LiaProductConfigUpdate
+  expectedPreferred?: unknown
 }
 
 export type LiaConfigUpdateResult
   = | { status: 'ok', value: LiaProductConfigSnapshot }
-    | { message: string, status: 'invalid-source' | 'secret-forbidden' | 'secret-vault-failed' | 'write-failed' }
+    | { message: string, status: 'invalid-source' | 'secret-forbidden' | 'secret-vault-failed' | 'write-failed' | 'selection-owned-by-launcher' | 'stale-selection' | 'selection-read-failed' | 'managed-credential-owned-by-ai-settings' }
+
+export class AiStartBlockedError extends Error {
+  constructor(readonly code: AiConnectionStartCode) {
+    super('The AI service is not ready.')
+    this.name = 'AiStartBlockedError'
+  }
+}
 
 export interface LiaHostDeps {
   /** Only the production Main starts the private, per-Stage credential lease. */
@@ -305,7 +314,12 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
     deleteSecret: (scope, key) => serializeCredentialWrite(() => localVault.deleteSecret(scope, key)),
   }
   const transportRepository = createTransportRepository(join(paths.userDataDir, 'lia-transports.json'))
+  let readManagedAiReadiness: (() => Promise<AiConnectionStartReadiness>) | undefined
   async function hasChatAuthentication(providerId: string): Promise<boolean> {
+    if (isLauncherManagedProvider(providerId)) {
+      const readiness = await readManagedAiReadiness?.()
+      return readiness?.ok === true && readiness.managed && readiness.providerId === providerId
+    }
     try {
       const rows = (await transportRepository.read()).records.filter(row => row.providerId === providerId)
       if (rows.length > 0 && (rows.length !== 1 || !rows[0].enabled))
@@ -851,11 +865,67 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
   }
 
   async function updateConfig(payload: LiaConfigUpdatePayload): Promise<LiaConfigUpdateResult> {
+    return await withStageConfigurationLock(async () => await updateConfigExclusively(payload))
+  }
+
+  async function updateConfigExclusively(payload: LiaConfigUpdatePayload): Promise<LiaConfigUpdateResult> {
     // Reject the whole batch before touching unrelated entries or product preferences.
     if (payload.secrets?.some(secret => !secret || !isPublicCredentialReference(secret.scope, secret.key))) {
       emit('lia-app.config-blocked', 'reason=secret-reference-denied')
       return { message: 'The requested credential cannot be edited here.', status: 'secret-vault-failed' }
     }
+    if (payload.secrets?.some(secret => secret.key === 'apiKey' && isLauncherManagedProvider(secret.scope))) {
+      emit('lia-app.config-blocked', 'reason=managed-credential-owned-by-ai-settings')
+      return { message: 'Use AI Settings to change this managed AI service credential.', status: 'managed-credential-owned-by-ai-settings' }
+    }
+
+    const chatUpdate = payload.update?.provider?.chat
+    let hasPreferred = false
+    let incomingPreferred: LiaSelectionTarget | null | undefined
+    if (chatUpdate !== null && typeof chatUpdate === 'object' && !Array.isArray(chatUpdate) && Object.hasOwn(chatUpdate, 'preferred')) {
+      incomingPreferred = chatUpdate.preferred
+      hasPreferred = incomingPreferred !== undefined
+    }
+    if (incomingPreferred !== null && typeof incomingPreferred === 'object' && Object.hasOwn(incomingPreferred, 'apiKey')) {
+      emit('lia-app.config-blocked', 'reason=secret-in-provider-selection')
+      return { message: 'Secrets cannot be stored in the provider selection.', status: 'secret-forbidden' }
+    }
+    if (incomingPreferred !== undefined && incomingPreferred !== null && !isLiaSelectionTarget(incomingPreferred)) {
+      emit('lia-app.config-blocked', 'reason=invalid-provider-selection')
+      return { message: 'The provider selection is invalid.', status: 'invalid-source' }
+    }
+    const hasExpectedPreferred = Object.hasOwn(payload, 'expectedPreferred')
+    if (hasExpectedPreferred && payload.expectedPreferred !== null && !isLiaSelectionTarget(payload.expectedPreferred)) {
+      emit('lia-app.config-blocked', 'reason=invalid-expected-selection')
+      return { message: 'The provider selection is invalid.', status: 'invalid-source' }
+    }
+    const expectedPreferred: LiaSelectionTarget | null | undefined = !hasExpectedPreferred
+      ? undefined
+      : payload.expectedPreferred === null
+        ? null
+        : isLiaSelectionTarget(payload.expectedPreferred) ? payload.expectedPreferred : undefined
+    if (hasPreferred) {
+      const current = await readSnapshot()
+      if (current.status === 'invalid' || current.status === 'read-error') {
+        emit('lia-app.config-blocked', `reason=selection-read-${current.status}`)
+        return { message: 'The saved AI selection could not be checked. Reload configuration and try again.', status: 'selection-read-failed' }
+      }
+      const decision = decideSelectionWrite({
+        persisted: current.snapshot?.provider?.chat?.preferred,
+        incoming: incomingPreferred === null ? undefined : incomingPreferred,
+        ...(hasExpectedPreferred ? { expected: expectedPreferred ?? null } : {}),
+      })
+      if (!decision.ok) {
+        emit('lia-app.config-blocked', `reason=${decision.code}`)
+        return {
+          message: decision.code === 'selection-owned-by-launcher'
+            ? 'Use AI Settings to change the managed AI service.'
+            : 'The AI selection changed while this screen was open. Reload configuration and try again.',
+          status: decision.code,
+        }
+      }
+    }
+
     let secrets: { scope: string, key: string, value: string, revision: string }[]
     try {
       const unique = new Set<string>()
@@ -900,7 +970,14 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
         return { ok: false as const, code: 'stage-running' as const }
       return save()
     }),
-    readSelection: async () => (await readSnapshot()).snapshot?.provider?.chat?.preferred,
+    readSelection: async () => {
+      const read = await readSnapshot()
+      if (read.status === 'ok')
+        return read.snapshot?.provider?.chat?.preferred
+      if (read.status === 'missing')
+        return undefined
+      throw new Error('Canonical AI selection is unavailable')
+    },
     backupSelection: async () => {
       const previous = (await readSnapshot()).snapshot?.provider?.chat
       return async () => {
@@ -919,9 +996,12 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
         throw new Error('Configuration could not be saved')
     },
   })
-  async function requireSafeAiConfiguration(): Promise<void> {
-    if (!await aiConnection.isSafeToStart())
-      throw new Error('Salve novamente a configuração do serviço de IA antes de iniciar a conversa. / Save the AI service settings again before starting a conversation.')
+  readManagedAiReadiness = () => aiConnection.getStartReadiness()
+  async function requireSafeAiConfiguration(): Promise<AiConnectionStartReadiness & { ok: true }> {
+    const readiness = await aiConnection.getStartReadiness()
+    if (!readiness.ok)
+      throw new AiStartBlockedError(readiness.code)
+    return readiness
   }
   stage.start = options => withStageConfigurationLock(async () => {
     await requireSafeAiConfiguration()
@@ -942,7 +1022,7 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
      * broken speech pipeline.
      */
     conversar: () => withStageConfigurationLock(async () => {
-      await requireSafeAiConfiguration()
+      const readiness = await requireSafeAiConfiguration()
       // Supervisor rule (item 1): once Lia is closing, NOTHING new starts.
       if (coordinator.isShuttingDown()) {
         emit('lia-app.conversar-blocked', 'reason=lia-closing')
@@ -950,7 +1030,10 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
       }
       const { snapshot } = await readSnapshot()
       const preferredAi = snapshot?.provider?.chat?.preferred
-      if (!preferredAi?.modelId || !await hasChatAuthentication(preferredAi.providerId)) {
+      if (!preferredAi?.modelId
+        || preferredAi.providerId !== readiness.providerId
+        || preferredAi.modelId !== readiness.modelId
+        || (!readiness.managed && !await hasChatAuthentication(preferredAi.providerId))) {
         emit('lia-app.conversar-blocked', 'reason=ai-not-ready')
         throw new Error('Lia is not fully configured yet. Finish the AI setup first.')
       }

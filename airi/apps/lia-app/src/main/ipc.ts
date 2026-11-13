@@ -5,6 +5,7 @@ import { ipcMain } from 'electron'
 
 import { isPublicCredentialReference } from '../../../../../lia/core/src/credentials/owner-channel'
 import { sanitizeConfigUpdate } from './config-update-sanitizer'
+import { AiStartBlockedError } from './lia-host'
 
 /**
  * The launcher's IPC surface (Phase 7 + 7.1). Plain `ipcMain.handle`
@@ -109,7 +110,16 @@ export function registerLiaIpc(host: LiaHost, timer: LiaBootTimer, extras: LiaIp
   ipcMain.handle('lia:ai:connection:save', (_event, input: unknown) => host.aiConnection.save(input))
   ipcMain.handle('lia:ai:connection:models', (_event, providerId: unknown) => host.aiConnection.discover(providerId))
   ipcMain.handle('lia:ai:connection:test', (_event, providerId: unknown) => host.aiConnection.probe(providerId))
-  ipcMain.handle('lia:stage:start', async () => await host.conversar())
+  ipcMain.handle('lia:stage:start', async () => {
+    try {
+      return { ok: true as const, state: await host.conversar() }
+    }
+    catch (error) {
+      if (error instanceof AiStartBlockedError)
+        return { ok: false as const, code: error.code }
+      throw error
+    }
+  })
   ipcMain.handle('lia:stage:stop', async () => {
     await host.stage.stop()
     return host.stage.state()

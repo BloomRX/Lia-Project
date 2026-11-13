@@ -56,6 +56,24 @@ type FailureCode
 
 interface Failure { ok: false, code: FailureCode }
 
+export type AiConnectionStartCode
+  = | 'configuration-unsafe'
+    | 'selection-read-failed'
+    | 'selection-missing'
+    | 'selection-invalid'
+    | 'model-missing'
+    | 'provider-unavailable'
+    | 'transport-read-failed'
+    | 'connection-missing'
+    | 'connection-disabled'
+    | 'connection-inconsistent'
+    | 'credential-missing'
+    | 'credential-read-failed'
+
+export type AiConnectionStartReadiness
+  = | { ok: true, managed: boolean, modelId: string, providerId: string }
+    | { ok: false, code: AiConnectionStartCode }
+
 export interface AiConnectionSelection {
   providerId: string
   modelId?: string
@@ -151,27 +169,83 @@ export function createAiConnectionService(deps: AiConnectionServiceDeps) {
     if (!definition.stageProviderId)
       return undefined
     const records = snapshot.records.filter(row => row.providerId === definition.stageProviderId)
-    if (records.length > 1 || (records[0] && records[0].protocol !== 'chat-completions'))
+    const record = records[0]
+    if (records.length > 1 || (record && (
+      record.definitionId !== definition.definitionId
+      || record.type !== 'http'
+      || record.protocol !== 'chat-completions'
+      || record.credentialRef.scope !== definition.stageProviderId
+      || record.credentialRef.key !== 'apiKey'
+    )))
       throw new Error('storage')
-    return records[0]
+    return record
   }
 
-  /** Fail-closed guard shared with `Stage.start` and `conversar`. */
-  async function isSafeToStart(): Promise<boolean> {
+  /** Explicit readiness shared with `Stage.start` and `conversar`. */
+  async function getStartReadiness(): Promise<AiConnectionStartReadiness> {
     if (!configurationSafe)
-      return false
+      return { ok: false, code: 'configuration-unsafe' }
+    let selection: AiConnectionSelection | undefined
     try {
-      const snapshot = await deps.repository.read()
-      const selection = await deps.readSelection()
-      const definition = selection ? definitionByStageProvider(selection.providerId) : undefined
-      // A legacy selection the catalog does not manage keeps its previous
-      // behaviour: this service never claimed authority over that row.
-      if (!definition)
-        return true
-      const record = recordFrom(snapshot, definition)
-      return record?.enabled !== false
+      selection = await deps.readSelection()
     }
-    catch { return false }
+    catch {
+      return { ok: false, code: 'selection-read-failed' }
+    }
+    if (selection === undefined)
+      return { ok: false, code: 'selection-missing' }
+    if (!validId(selection.providerId) || (selection.modelId !== undefined && !validId(selection.modelId)))
+      return { ok: false, code: 'selection-invalid' }
+    if (!selection.modelId)
+      return { ok: false, code: 'model-missing' }
+
+    const definition = definitionByStageProvider(selection.providerId)
+    if (!definition) {
+      const unavailable = catalog.find(item => item.definitionId === selection!.providerId && item.availability !== 'ready')
+      if (unavailable)
+        return { ok: false, code: 'provider-unavailable' }
+      return { ok: true, managed: false, modelId: selection.modelId, providerId: selection.providerId }
+    }
+    if (!manageable(definition) || !definition.stageProviderId)
+      return { ok: false, code: 'provider-unavailable' }
+
+    let snapshot: TransportSnapshot
+    try {
+      snapshot = await deps.repository.read()
+    }
+    catch {
+      return { ok: false, code: 'transport-read-failed' }
+    }
+
+    let record: TransportRecord | undefined
+    try {
+      record = recordFrom(snapshot, definition)
+    }
+    catch {
+      return { ok: false, code: 'connection-inconsistent' }
+    }
+    if (!record)
+      return { ok: false, code: 'connection-missing' }
+    if (!record.enabled)
+      return { ok: false, code: 'connection-disabled' }
+    if (!validAddress(record.baseUrl))
+      return { ok: false, code: 'connection-inconsistent' }
+    if (!record.modelIds.includes(selection.modelId))
+      return { ok: false, code: 'connection-inconsistent' }
+    if (definition.requiresApiKey) {
+      try {
+        if (!deps.vault.getSecret(definition.stageProviderId, 'apiKey'))
+          return { ok: false, code: 'credential-missing' }
+      }
+      catch {
+        return { ok: false, code: 'credential-read-failed' }
+      }
+    }
+    return { ok: true, managed: true, modelId: selection.modelId, providerId: selection.providerId }
+  }
+
+  async function isSafeToStart(): Promise<boolean> {
+    return (await getStartReadiness()).ok
   }
 
   /** The catalog exactly as the renderer may see it: metadata only, no secrets. */
@@ -399,8 +473,6 @@ export function createAiConnectionService(deps: AiConnectionServiceDeps) {
       try {
         const work = async () => {
           await previousQueue
-          if (!await isSafeToStart())
-            throw new Error('unconfigured')
           const snapshot = await deps.repository.read()
           // A corrupted or duplicated managed row is not a usable connection.
           // Report it with the same safe code the rest of the launcher uses.
@@ -411,10 +483,29 @@ export function createAiConnectionService(deps: AiConnectionServiceDeps) {
           catch { throw new Error('unconfigured') }
           if (!record?.enabled || !validAddress(record.baseUrl))
             throw new Error('unconfigured')
+          if (definition.requiresApiKey) {
+            try {
+              if (!deps.vault.hasSecret(definition.stageProviderId!, 'apiKey'))
+                throw new Error('credentials')
+            }
+            catch (error) {
+              if (error instanceof Error && error.message === 'credentials')
+                throw error
+              throw new Error('storage')
+            }
+          }
           const state = await readInternal(definition.definitionId)
           if (controller.signal.aborted)
             throw new Error('timeout')
-          const key = deps.vault.getSecret(definition.stageProviderId!, 'apiKey')
+          let key: string | undefined
+          try {
+            key = deps.vault.getSecret(definition.stageProviderId!, 'apiKey')
+          }
+          catch {
+            throw new Error('storage')
+          }
+          if (definition.requiresApiKey && !key)
+            throw new Error('credentials')
           const request = async (path: string, body?: unknown) => {
             const response = await fetchImpl(`${record.baseUrl.replace(/\/+$/, '')}/${path}`, { method: body ? 'POST' : 'GET', redirect: 'error', signal: controller.signal, headers: { ...(key ? { Authorization: `Bearer ${key}` } : {}), ...(body ? { 'Content-Type': 'application/json' } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) })
             if (!response.ok)
@@ -448,7 +539,7 @@ export function createAiConnectionService(deps: AiConnectionServiceDeps) {
         return { ok: true as const, ...result }
       }
       catch (error) {
-        const code = controller.signal.aborted ? 'timeout' : error instanceof Error && ['http', 'protocol', 'unconfigured'].includes(error.message) ? error.message as FailureCode : 'network'
+        const code = controller.signal.aborted ? 'timeout' : error instanceof Error && ['credentials', 'http', 'protocol', 'storage', 'unconfigured'].includes(error.message) ? error.message as FailureCode : 'network'
         return { ok: false as const, code }
       }
       finally { clearTimeout(timer) }
@@ -492,5 +583,5 @@ export function createAiConnectionService(deps: AiConnectionServiceDeps) {
       return {}
     })
   }
-  return { catalog: listDefinitions, discover, isSafeToStart, probe, read, save }
+  return { catalog: listDefinitions, discover, getStartReadiness, isSafeToStart, probe, read, save }
 }

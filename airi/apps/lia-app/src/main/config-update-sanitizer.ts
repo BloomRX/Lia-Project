@@ -37,6 +37,10 @@ export function sanitizeConfigUpdate(payload: unknown): LiaConfigUpdatePayload {
     }
   }
   const update = (source.update !== null && typeof source.update === 'object' ? source.update : {}) as LiaConfigUpdatePayload['update']
-  return { secrets, update }
+  return {
+    secrets,
+    update,
+    ...(Object.hasOwn(source, 'expectedPreferred') ? { expectedPreferred: source.expectedPreferred } : {}),
+  }
 }
 
