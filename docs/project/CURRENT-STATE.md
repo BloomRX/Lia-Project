@@ -22,14 +22,18 @@ transporte gerenciado. As janelas Electron do Stage e o desktop overlay usam pre
 centralizadas com `sandbox: true`, `contextIsolation: true` e `nodeIntegration: false`; o
 preload é um único `index.cjs` e expõe somente a fachada IPC permitida. Core e Launcher,
 regressões direcionadas do Stage (13 testes), typechecks/builds e gates Electron locais
-passaram. A suíte Stage completa teve 1 falha em `oidc-link.test.ts` (trabalho OIDC
-preexistente, callback HTTP 200 inesperado após logout), reproduzida isoladamente e não
-alterada nesta rodada. O gate Electron comprovou as preferências efetivas e a ausência de
-`process`/`require` num renderer de teste que usa o helper de produção e o preload compilado.
-**A aplicação Stage real não foi aberta pelo fluxo oficial `Lia.bat`**; renderização real, AI Settings, conversa,
-tool calling, voz e C0–C4 continuam sem prova. O dispositivo gráfico detectado foi um
-adaptador virtual Parsec, não evidência da RX 580. A Lia continua **não aprovada ponta a
-ponta**. Detalhes: [relatório da correção](../reports/LIA-STAGE-SANDBOX-AF1B-FIX.md).
+passaram. No reteste PROMPT-44, a suíte Stage passou: 214 arquivos, 2.557 testes e 4 skips;
+`oidc-link.test.ts` também passou isolado (30 testes), sem reproduzir a falha anterior de
+callback HTTP 200 após logout. Esse reteste ocorreu com alterações OIDC/chat preexistentes
+no worktree; não prova causalidade nem substitui uma execução limpa. O gate Electron anterior
+comprovou as preferências efetivas e a ausência de `process`/`require` num renderer de teste
+que usa o helper de produção e o preload compilado.
+**A aplicação Stage real continua sem prova pelo fluxo oficial `Lia.bat`**: nesta sessão
+desassistida não foi possível habilitar controle de desktop, e o launcher não foi iniciado.
+Renderização real, AI Settings, conversa, tool calling, voz e C0–C4 continuam sem prova. O
+dispositivo gráfico detectado anteriormente foi um adaptador virtual Parsec, não evidência
+da RX 580. A Lia continua **não aprovada ponta a ponta**. Detalhes: [relatório da correção](../reports/LIA-STAGE-SANDBOX-AF1B-FIX.md) e
+[retomada PROMPT-44](../reports/LIA-WINDOWS-POST-SANDBOX-AF1B-VALIDATION.md).
 
 **Validação integrada Windows anterior (PROMPT-40/42, 13/11):**
 ver [relatório](../reports/LIA-WINDOWS-INTEGRATED-VALIDATION.md).
