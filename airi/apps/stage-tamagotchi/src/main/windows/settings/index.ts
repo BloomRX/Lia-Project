@@ -1,3 +1,5 @@
+import { createStageWebPreferences } from '../secure-web-preferences'
+
 import type { I18n } from '../../libs/i18n'
 import type { ServerChannel } from '../../services/airi/channel-server'
 import type { GodotStageManager } from '../../services/airi/godot-stage'
@@ -54,10 +56,7 @@ export function setupSettingsWindowReusableFunc(params: {
       height: 800.0,
       show: false,
       icon,
-      webPreferences: {
-        preload: join(getElectronMainDirname(), '../preload/index.mjs'),
-        sandbox: false,
-      },
+      webPreferences: createStageWebPreferences(join(getElectronMainDirname(), '../preload/index.cjs')),
     })
 
     if (params.onWindowCreated) {

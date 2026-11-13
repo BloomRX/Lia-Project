@@ -1,5 +1,7 @@
 import type { BrowserWindow, BrowserWindowConstructorOptions, Rectangle } from 'electron'
 
+import { createStageWebPreferences } from '../secure-web-preferences'
+
 /**
  * Build BrowserWindow options for the desktop grounding overlay.
  *
@@ -33,8 +35,7 @@ export function createDesktopOverlayWindowOptions(params: {
     roundedCorners: false,
     focusable: false,
     webPreferences: {
-      preload: params.preloadPath,
-      sandbox: false,
+      ...createStageWebPreferences(params.preloadPath),
       backgroundThrottling: false,
     },
   }

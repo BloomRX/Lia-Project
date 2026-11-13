@@ -1,3 +1,5 @@
+import { createStageWebPreferences } from '../secure-web-preferences'
+
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -11,10 +13,7 @@ import { protectPrivilegedWindowNavigation } from '../shared/window'
 export async function setupBeatSync() {
   const window = new BrowserWindow({
     show: false,
-    webPreferences: {
-      preload: join(dirname(fileURLToPath(import.meta.url)), '../preload/beat-sync.mjs'),
-      sandbox: false,
-    },
+    webPreferences: createStageWebPreferences(join(dirname(fileURLToPath(import.meta.url)), '../preload/index.cjs')),
   })
 
   protectPrivilegedWindowNavigation(window)

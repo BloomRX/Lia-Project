@@ -1,3 +1,5 @@
+import { createStageWebPreferences } from '../secure-web-preferences'
+
 import type { I18n } from '../../libs/i18n'
 import type { ServerChannel } from '../../services/airi/channel-server'
 import type { GodotStageManager } from '../../services/airi/godot-stage'
@@ -81,10 +83,7 @@ export async function setupMainWindow(params: {
     minHeight: MAIN_WINDOW_MIN_SIZE.height,
     show: false,
     icon,
-    webPreferences: {
-      preload: join(dirname(fileURLToPath(import.meta.url)), '../preload/index.mjs'),
-      sandbox: false,
-    },
+    webPreferences: createStageWebPreferences(join(dirname(fileURLToPath(import.meta.url)), '../preload/index.cjs')),
     // Thanks to [@HeartArmy](https://github.com/HeartArmy) for the tip implementation.
     //
     // https://github.com/electron/electron/issues/10078#issuecomment-3410164802

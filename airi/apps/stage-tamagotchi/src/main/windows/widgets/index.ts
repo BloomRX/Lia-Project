@@ -1,3 +1,5 @@
+import { createStageWebPreferences } from '../secure-web-preferences'
+
 import type { BrowserWindow, Rectangle } from 'electron'
 import type { InferOutput } from 'valibot'
 
@@ -226,10 +228,7 @@ function createWidgetsWindow() {
     height: 760,
     show: false,
     icon,
-    webPreferences: {
-      preload: join(getElectronMainDirname(), '../preload/index.mjs'),
-      sandbox: false,
-    },
+    webPreferences: createStageWebPreferences(join(getElectronMainDirname(), '../preload/index.cjs')),
     // Top-level overlay style like other overlay windows
     type: isMacOS ? 'panel' : undefined,
     ...transparentWindowConfig(),

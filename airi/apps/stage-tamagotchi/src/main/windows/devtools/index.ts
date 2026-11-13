@@ -1,3 +1,5 @@
+import { createStageWebPreferences } from '../secure-web-preferences'
+
 import { join, resolve } from 'node:path'
 
 import { initScreenCaptureForWindow } from '@proj-airi/electron-screen-capture/main'
@@ -37,11 +39,7 @@ export function setupDevtoolsWindow(): DevtoolsWindowManager {
         minHeight: 480,
         show: false,
         icon,
-        webPreferences: {
-          preload: join(getElectronMainDirname(), '../preload/index.mjs'),
-          // Preload exposes Electron APIs and needs Node access.
-          sandbox: false,
-        },
+        webPreferences: createStageWebPreferences(join(getElectronMainDirname(), '../preload/index.cjs')),
       })
 
       window.on('ready-to-show', () => window.show())

@@ -81,10 +81,13 @@ export default defineConfig({
 
   preload: {
     build: {
+      rolldownOptions: {
+        external: ['electron'],
+        output: { entryFileNames: '[name].cjs', format: 'cjs' },
+      },
       lib: {
         entry: {
           'index': resolve(join(import.meta.dirname, 'src', 'preload', 'index.ts')),
-          'beat-sync': resolve(join(import.meta.dirname, 'src', 'preload', 'beat-sync.ts')),
         },
       },
     },

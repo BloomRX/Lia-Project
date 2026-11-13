@@ -1,3 +1,5 @@
+import { createStageWebPreferences } from '../secure-web-preferences'
+
 import type { I18n } from '../../libs/i18n'
 import type { ServerChannel } from '../../services/airi/channel-server'
 
@@ -51,10 +53,7 @@ export function setupOnboardingWindowManager(params: {
       titleBarStyle: isMacOS ? 'hidden' : undefined,
       transparent: false,
       backgroundColor: '#0f0f0f',
-      webPreferences: {
-        preload: join(getElectronMainDirname(), '../preload/index.mjs'),
-        sandbox: false,
-      },
+      webPreferences: createStageWebPreferences(join(getElectronMainDirname(), '../preload/index.cjs')),
     })
 
     newWindow.on('ready-to-show', () => newWindow.show())

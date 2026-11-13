@@ -1,3 +1,5 @@
+import { createStageWebPreferences } from '../secure-web-preferences'
+
 import type { I18n } from '../../libs/i18n'
 import type { ServerChannel } from '../../services/airi/channel-server'
 
@@ -23,10 +25,7 @@ export async function setupInlayWindow(params: {
     height: 150,
     show: false,
     icon,
-    webPreferences: {
-      preload: join(getElectronMainDirname(), '../preload/index.mjs'),
-      sandbox: false,
-    },
+    webPreferences: createStageWebPreferences(join(getElectronMainDirname(), '../preload/index.cjs')),
     ...spotlightLikeWindowConfig(),
   })
 
