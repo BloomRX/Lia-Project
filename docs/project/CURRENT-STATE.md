@@ -1092,6 +1092,7 @@ executado. Ver o relatório da rodada para o detalhamento.
 | Superfície IPC revisada (26 canais) | **PASS** — `ipc-surface` (7) |
 | Sanitizador de credenciais do renderer | **PASS** — 5 casos |
 | AF-1: política de escrita única no Stage | **PASS offline** — 17 testes; janela real NOT RUN |
+| AF-1b: tela legada do Launcher ainda escreve a seleção sem catálogo | **RESIDUAL** — falha fechada no start; decisão de produto + Windows |
 | AF-3/SEC-1: `sandbox: true` no Launcher | **PASS offline** — 3 testes; boot real NOT RUN |
 | Gate Windows / runtime | **NOT RUN** |
 
