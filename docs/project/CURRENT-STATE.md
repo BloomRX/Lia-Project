@@ -1076,7 +1076,7 @@ executado. Ver o relatório da rodada para o detalhamento.
 | Decisão arquitetural registrada | **PASS** (Cenário C — híbrido, Electron retido) — decisão, não gate |
 | Core/contratos sem Electron | **PASS** (teste `runtime-boundary`) |
 | Renderer sem Node/Electron e Main com superfície limitada | **PASS** (mesmo teste) |
-| Sete evidências do PROMPT-42 | 6 offline/documentais + baseline parcial; protótipo **NOT RUN** |
+| Sete evidências do PROMPT-42 | 4 providas + 2 parciais (sem medição comparável); protótipo **NOT RUN** |
 | Medição C0–C4 e protótipo de runtime único no Windows | **NOT RUN** |
 | Gate de Arquitetura | **ABERTO** — contrato de host não substitui medição |
 | Migração | **NÃO AUTORIZADA** nesta rodada |

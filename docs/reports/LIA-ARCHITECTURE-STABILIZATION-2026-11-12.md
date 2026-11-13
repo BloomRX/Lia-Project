@@ -203,7 +203,7 @@ exige chave válida e runtime Windows. Continua **NOT RUN**.
 
 | Gate | Estado |
 |---|---|
-| Arquitetura | **ABERTO** — decisão registrada + 6/7 evidências offline; medição comparável e protótipo NOT RUN. Contrato de host **não** é prova de runtime |
+| Arquitetura | **ABERTO** — decisão registrada + 4 evidências providas e 2 parciais; medição comparável e protótipo NOT RUN. Contrato de host **não** é prova de runtime |
 | Migração | **N/A** — não autorizada |
 | Launcher | **PASS** apenas para init/shutdown (PROMPT-40); resto NOT RUN |
 | AI Settings | **BLOCKED** (interação humana + chave na UI) |

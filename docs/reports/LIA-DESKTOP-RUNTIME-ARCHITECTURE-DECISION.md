@@ -5,7 +5,7 @@
 **HEAD na abertura da rodada:** `ee0172e` (sincronizado com o remoto)
 **Status:** **decisão registrada — Cenário C (híbrido), Electron retido**, com as sete
 evidências do PROMPT-42 inventariadas em §6.4. **O gate de arquitetura permanece ABERTO:**
-seis evidências têm prova offline/documental; a sétima (protótipo comparável) é **NOT RUN**
+quatro evidências estão providas offline/documentalmente, duas são parciais (falta medição comparável) e a sétima (protótipo comparável) é **NOT RUN**
 e depende de Windows. O contrato de host existir **não** conta como prova de que Electron é
 o melhor runtime. Nenhuma migração aprovada. Nenhuma credencial foi cadastrada, nenhum
 provider foi ampliado.
