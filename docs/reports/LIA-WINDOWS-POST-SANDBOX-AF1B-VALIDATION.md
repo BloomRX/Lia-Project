@@ -28,13 +28,17 @@ Alterações preexistentes não foram stageadas, editadas ou incluídas neste re
 - Modificados: `airi/apps/stage-tamagotchi/src/main/services/airi/oidc-account.test.ts`,
   `oidc-account.ts`, `airi/apps/stage-tamagotchi/src/main/services/lia/transport-execution-service.ts`,
   `airi/packages/stage-ui/src/stores/chat.ts`, `chat/send-error.ts`,
-  `chat/send-error.test.ts`, três documentos de OIDC/readiness e
-  `docs/project/QUANTO-FALTA.md`.
+  `chat/send-error.test.ts`, `docs/architecture/LIA-BETA-CREDENTIAL-AUDIT-2026-11-08.md`,
+  `docs/architecture/LIA-OIDC-STREAMING-PREPARATION-2026-11-10.md`,
+  `docs/product/LIA-BETA-READINESS-2026-11-08.md` e `docs/project/QUANTO-FALTA.md`.
 - Não rastreados: `airi/apps/stage-tamagotchi/scripts/oidc-electron/`,
-  `oidc-ipc.ts`, `oidc-resources.ts`, `oidc-resources.test.ts`,
+  `airi/apps/stage-tamagotchi/src/main/services/airi/oidc-ipc.ts`,
+  `airi/apps/stage-tamagotchi/src/main/services/airi/oidc-resources.ts`,
+  `airi/apps/stage-tamagotchi/src/main/services/airi/oidc-resources.test.ts`,
   `airi/apps/stage-tamagotchi/src/renderer/services/lia/oidc-ipc.ts`,
   `airi/apps/stage-tamagotchi/src/shared/eventa/lia-oidc-ipc.ts`,
-  `lia-oidc-resources.ts` e `docs/reports/PROMPT-37-CHAT-REAL-PROVIDER-FIX.md`.
+  `airi/apps/stage-tamagotchi/src/shared/eventa/lia-oidc-resources.ts` e
+  `docs/reports/PROMPT-37-CHAT-REAL-PROVIDER-FIX.md`.
 
 `RX580-GPU-FEASIBILITY.md` não foi modificado. No início não havia processos Electron
 ou Node preexistentes. `%APPDATA%\Lia` não existia; nenhum arquivo de segredo foi aberto,
