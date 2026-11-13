@@ -4,6 +4,7 @@ import type { LiaBootTimer } from './timing'
 import { ipcMain } from 'electron'
 
 import { isPublicCredentialReference } from '../../../../../lia/core/src/credentials/owner-channel'
+import { sanitizeConfigUpdate } from './config-update-sanitizer'
 
 /**
  * The launcher's IPC surface (Phase 7 + 7.1). Plain `ipcMain.handle`
@@ -197,25 +198,6 @@ export function registerLiaIpc(host: LiaHost, timer: LiaBootTimer, extras: LiaIp
  * objects, and the secrets array on its own rail. Oversized or mistyped
  * fields are DROPPED - the core writer below stays the final validator.
  */
-function sanitizeConfigUpdate(payload: unknown): LiaConfigUpdatePayload {
-  const source = (payload !== null && typeof payload === 'object' ? payload : {}) as Record<string, unknown>
-  const secrets: LiaConfigUpdatePayload['secrets'] = []
-  if (Array.isArray(source.secrets)) {
-    for (const entry of source.secrets) {
-      if (entry === null || typeof entry !== 'object')
-        continue
-      const { key, scope, value } = entry as Record<string, unknown>
-      if (typeof scope !== 'string' || typeof key !== 'string' || typeof value !== 'string')
-        continue
-      if (scope.length === 0 || scope.length > 64 || key.length === 0 || key.length > 64 || value.length > 4096)
-        continue
-      secrets.push({ key, scope, value })
-    }
-  }
-  const update = (source.update !== null && typeof source.update === 'object' ? source.update : {}) as LiaConfigUpdatePayload['update']
-  return { secrets, update }
-}
-
 /** The voice import request, whittled to name + engine + picked sources. */
 function sanitizeVoiceImport(request: unknown): {
   engine?: string
