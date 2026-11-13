@@ -13,6 +13,18 @@ commit. Registra **estado**, não narrativa: relatório de rodada vai para
 
 ## 0. Estado agora
 
+**Estabilização da arquitetura (12/11, sem gate Windows).** Contrato de host versionado no
+Core (`lia/core/src/host/contracts.ts`): o Core pergunta por capacidade (`windows`, `audio`,
+`screen`, `tools`…), não por runtime, com recusa tipada e sem lançar em payload inválido.
+Fronteiras congeladas em teste (Core sem Electron; renderer sem Node; Electron do Launcher
+só em `index.ts`/`ipc.ts`). Auditoria de identidade confirmou que o AI Settings escreve
+apenas `provider.chat.preferred`; o achado **AF-1** registra que o renderer do Stage ainda
+grava o mesmo campo por `electronLiaProviderChatConfigSet` (dois escritores — correção
+pendente de validação Windows). IPC endurecido: lote de credenciais limitado a 8,
+referências `[\w.:-]{1,64}`, sem caractere de controle. `lia/core` 105 PASS; Launcher 323
+PASS/2 skips; typecheck 0. Nenhuma credencial cadastrada. Relatório:
+[estabilização](../reports/LIA-ARCHITECTURE-STABILIZATION-2026-11-12.md).
+
 **Etapa 0 do plano mestre, decisão de runtime (12/11).** Auditoria da arquitetura e
 comparação de Electron, Tauri 2, Qt 6, Flutter, WinUI 3 e híbrido registradas em
 [decisão de runtime](../reports/LIA-DESKTOP-RUNTIME-ARCHITECTURE-DECISION.md). Decisão:
@@ -1035,6 +1047,20 @@ executado. Ver o relatório da rodada para o detalhamento.
 | Renderer sem Node/Electron e Main com superfície limitada | **PASS** (mesmo teste) |
 | Medição C0–C4 e protótipo de runtime único no Windows | **NOT RUN** |
 | Migração | **NÃO AUTORIZADA** nesta rodada |
+
+
+### Contrato de host e segurança do IPC (12/11/2026)
+
+| Verificação | Resultado |
+| --- | --- |
+| Contrato de host versionado (`@lia/contracts`) | **PASS** — 7 testes |
+| Fronteiras Core/renderer/Main | **PASS** — `runtime-boundary` (5) |
+| Autoridade única da seleção (Launcher) | **PASS** — `ai-selection-authority` (5) |
+| Superfície IPC revisada (26 canais) | **PASS** — `ipc-surface` (7) |
+| Sanitizador de credenciais do renderer | **PASS** — 5 casos |
+| AF-1: Stage ainda escreve `provider.chat.preferred` | **ABERTO** (dois escritores) |
+| AF-3: `sandbox: false` no Launcher | **ABERTO** (SEC-1) |
+| Gate Windows / runtime | **NOT RUN** |
 
 
 ---
