@@ -13,6 +13,16 @@ commit. Registra **estado**, não narrativa: relatório de rodada vai para
 
 ## 0. Estado agora
 
+**Validação integrada Windows (13/11):** ver [relatório](../reports/LIA-WINDOWS-INTEGRATED-VALIDATION.md).
+Testes e builds automatizados de Core, Launcher e Stage passaram no worktree, mas a
+validação foi sobre HEAD `08183053d0c0ffbfe3bc0cfe3e613e1aa21f8dab` **mais alterações locais
+preexistentes**, incluindo o caminho de conversa/transporte do Stage; portanto não equivale
+ao commit publicado isoladamente. O boot oficial do Launcher abriu janela e encerrou sem
+órfãos, mas AI Settings, Stage, conversa real, tool calling, voz e C0–C4 não foram provados
+na UI. A auditoria AF-1b também encontrou que `isSafeToStart()` aceita seleção gerenciada
+sem registro de transporte; o transporte no worktree testado recusa registro ausente ao
+enviar, mas a recusa na interface não foi validada. A Lia **não está aprovada como ponta a ponta**.
+
 **PROMPT-42 (12/11, sem gate Windows) — AF-1, SEC-1 e auditoria de runtime.** A seleção de
 provider passou a ter **autoridade única efetiva**: o Stage consulta
 `decideSelectionWrite` antes de gravar `provider.chat.preferred` e recusa trocar um provedor

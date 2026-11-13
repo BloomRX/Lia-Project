@@ -111,11 +111,15 @@ O wiring do IPC do Stage e a janela real continuam **dependendo de Windows** (NO
 **AF-1b — por que não foi alterado agora:** a tela legada é o caminho pelo qual o produto
 ainda aceita provider fora do catálogo com modelo livre; restringi-la sem validação Windows
 repetiria o erro que o PROMPT-37 corrigiu. O risco é limitado e **falha fechada**: uma
-seleção `groq` gravada por esse caminho sem conexão válida faz `isSafeToStart()` recusar o
-início da conversa, em vez de conversar com configuração inconsistente. O que falta é uma
-decisão de produto (aposentar ou redirecionar a tela legada) e a validação na janela real.
-Nenhuma escrita do Stage consegue sobrescrever esse caminho: a policy lê o mesmo documento
-e recusa stale/gerenciado.
+seleção `groq` gravada por esse caminho sem registro de transporte **não** faz
+`isSafeToStart()` recusar o início: a expressão `record?.enabled !== false` resulta em
+`true` quando o registro está ausente. A validação integrada de 13/11 confirmou essa leitura
+estática; o serviço de transporte tem cobertura para rejeitar registro ausente ao enviar,
+mas a interface real não foi exercitada. Portanto, não afirmar que esse caso falha fechado
+no início nem que a mensagem chega à pessoa usuária. O que falta é uma decisão de produto
+(aposentar ou redirecionar a tela legada) e a validação na janela real. Nenhuma escrita do
+Stage consegue sobrescrever esse caminho: a policy lê o mesmo documento e recusa
+stale/gerenciado.
 
 ### 3.3 Achado AF-2 — `brainSelectionUpdate` é código dormente
 
