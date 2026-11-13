@@ -13,16 +13,33 @@ commit. Registra **estado**, não narrativa: relatório de rodada vai para
 
 ## 0. Estado agora
 
+**PROMPT-42 (12/11, sem gate Windows) — AF-1, SEC-1 e auditoria de runtime.** A seleção de
+provider passou a ter **autoridade única efetiva**: o Stage consulta
+`decideSelectionWrite` antes de gravar `provider.chat.preferred` e recusa trocar um provedor
+gerenciado pelo Launcher (`selection-owned-by-launcher`) ou sobrescrever uma seleção que
+mudou desde a leitura (`stale-selection`); provedores fora do catálogo continuam editáveis,
+nada é convertido em Groq e limpar segue permitido. O bridge devolve resultado tipado; a
+tela mostra a mensagem específica. SEC-1: o Launcher agora roda com **`sandbox: true`**
+(flags em `web-preferences.ts`), viável porque o preload só usa `electron` e nenhum módulo
+`node:`; teste anti-regressão de 3 casos. Auditoria de runtime completada com as sete
+evidências: inventário real (§2.3) e matriz (§6.4) no
+[relatório de decisão](../reports/LIA-DESKTOP-RUNTIME-ARCHITECTURE-DECISION.md) — protótipo
+comparável e C0–C4 seguem **NOT RUN**, portanto **o gate de Arquitetura continua ABERTO**.
+Testes desta rodada: `@lia/lia-app` **345 passed** (36 arquivos), `lia/core` **105**,
+typecheck **0**; Stage `provider-config-service` **1**. Boot real com sandbox e recusa AF-1
+na janela: **NOT RUN** (Windows). Tool calling: prova read-only preparada com
+`get_weather`, **NOT RUN**.
+
 **Estabilização da arquitetura (12/11, sem gate Windows).** Contrato de host versionado no
 Core (`lia/core/src/host/contracts.ts`): o Core pergunta por capacidade (`windows`, `audio`,
 `screen`, `tools`…), não por runtime, com recusa tipada e sem lançar em payload inválido.
 Fronteiras congeladas em teste (Core sem Electron; renderer sem Node; Electron do Launcher
 só em `index.ts`/`ipc.ts`). Auditoria de identidade confirmou que o AI Settings escreve
-apenas `provider.chat.preferred`; o achado **AF-1** registra que o renderer do Stage ainda
-grava o mesmo campo por `electronLiaProviderChatConfigSet` (dois escritores — correção
-pendente de validação Windows). IPC endurecido: lote de credenciais limitado a 8,
+apenas `provider.chat.preferred`; o achado **AF-1** registrava que o renderer do Stage ainda
+gravava o mesmo campo por `electronLiaProviderChatConfigSet` (dois escritores). **Corrigido
+no PROMPT-42** com política + testes; validação na janela real ainda pendente. IPC endurecido: lote de credenciais limitado a 8,
 referências `[\w.:-]{1,64}`, sem caractere de controle. `lia/core` 105 PASS; Launcher 323
-PASS/2 skips; typecheck 0. Nenhuma credencial cadastrada. Relatório:
+PASS/2 skips na rodada anterior (345 PASS após o PROMPT-42); typecheck 0. Nenhuma credencial cadastrada. Relatório:
 [estabilização](../reports/LIA-ARCHITECTURE-STABILIZATION-2026-11-12.md).
 
 **Etapa 0 do plano mestre, decisão de runtime (12/11).** Auditoria da arquitetura e
@@ -1026,6 +1043,20 @@ Armadilhas de tooling que continuam valendo:
 - o ambiente **reverte sozinho**: conferir `git status`/HEAD no início de toda rodada e
   re-clonar da URL do GitHub na branch correta quando necessário.
 
+### Validação automatizada do PROMPT-42 (12/11/2026)
+
+| Verificação | Resultado |
+| --- | --- |
+| `lia/core` (`node --experimental-strip-types --test test/*.test.ts`) | **105 passed**, 0 fail |
+| `@lia/lia-app` (`vitest run`) | 36 arquivos, **345 passed**, 0 skipped |
+| `@lia/lia-app` typecheck (`tsc --noEmit`) | **0 erros** |
+| Novos: política de escrita da seleção | **10 passed** |
+| Novos: integração de autoridade única Launcher×Stage | **7 passed** |
+| Novos: baseline de segurança / preload puro | **3 passed** |
+| Stage `provider-config-service` (arquivo existente) | **1 passed** |
+| Stage `vue-tsc` | **NOT RUN** — binário ausente no install filtrado desta sessão |
+| Windows (sandbox, AF-1 na tela, tool calling) | **NOT RUN** |
+
 ### Validação automatizada do PROMPT-39 (12/11/2026)
 
 | Verificação | Resultado |
@@ -1042,10 +1073,12 @@ executado. Ver o relatório da rodada para o detalhamento.
 
 | Verificação | Resultado |
 | --- | --- |
-| Decisão arquitetural registrada | **PASS** (Cenário C — híbrido, Electron retido) |
+| Decisão arquitetural registrada | **PASS** (Cenário C — híbrido, Electron retido) — decisão, não gate |
 | Core/contratos sem Electron | **PASS** (teste `runtime-boundary`) |
 | Renderer sem Node/Electron e Main com superfície limitada | **PASS** (mesmo teste) |
+| Sete evidências do PROMPT-42 | 6 offline/documentais + baseline parcial; protótipo **NOT RUN** |
 | Medição C0–C4 e protótipo de runtime único no Windows | **NOT RUN** |
+| Gate de Arquitetura | **ABERTO** — contrato de host não substitui medição |
 | Migração | **NÃO AUTORIZADA** nesta rodada |
 
 
@@ -1058,8 +1091,8 @@ executado. Ver o relatório da rodada para o detalhamento.
 | Autoridade única da seleção (Launcher) | **PASS** — `ai-selection-authority` (5) |
 | Superfície IPC revisada (26 canais) | **PASS** — `ipc-surface` (7) |
 | Sanitizador de credenciais do renderer | **PASS** — 5 casos |
-| AF-1: Stage ainda escreve `provider.chat.preferred` | **ABERTO** (dois escritores) |
-| AF-3: `sandbox: false` no Launcher | **ABERTO** (SEC-1) |
+| AF-1: política de escrita única no Stage | **PASS offline** — 17 testes; janela real NOT RUN |
+| AF-3/SEC-1: `sandbox: true` no Launcher | **PASS offline** — 3 testes; boot real NOT RUN |
 | Gate Windows / runtime | **NOT RUN** |
 
 

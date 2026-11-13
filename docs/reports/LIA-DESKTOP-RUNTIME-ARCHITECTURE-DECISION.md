@@ -3,9 +3,17 @@
 **Data:** 12/11/2026
 **Branch:** `arena/01a10290-lia-project`
 **HEAD na abertura da rodada:** `ee0172e` (sincronizado com o remoto)
-**Status:** **decisão registrada — Cenário C (híbrido), Electron retido**. Nenhuma migração
-aprovada nesta rodada. Protótipos comparativos e medições C0–C4: **NOT RUN** neste
-ambiente (ver §6). Nenhum credencial foi cadastrada, nenhum provider foi ampliado.
+**Status:** **decisão registrada — Cenário C (híbrido), Electron retido**, com as sete
+evidências do PROMPT-42 inventariadas em §6.4. **O gate de arquitetura permanece ABERTO:**
+seis evidências têm prova offline/documental; a sétima (protótipo comparável) é **NOT RUN**
+e depende de Windows. O contrato de host existir **não** conta como prova de que Electron é
+o melhor runtime. Nenhuma migração aprovada. Nenhuma credencial foi cadastrada, nenhum
+provider foi ampliado.
+
+**Revisão 12/11/2026 (PROMPT-42):** HEAD `3509984`; inventário de dependências e separação
+de processos adicionados em §2.3; matriz das 7 evidências em §6.4. A decisão não mudou de
+cenário; o que mudou é que agora está explícito o que falta para ela deixar de ser
+provisória.
 
 Este documento cumpre a Etapa 0 do plano mestre. Ele **não** aprova release, não muda o
 baseline funcional e não substitui o estudo de engines de 07/11
@@ -92,6 +100,61 @@ Contagens de acoplamento (grep, não-teste):
    executa `LiaStage.exe`, validando `resources/app.asar` e `icudtl.dat` — arquivos de um app
    Electron completo. Isso é o custo arquitetural mensurável mais concreto de hoje, e **não
    é intrínseco ao Electron**: é uma escolha de empacotamento.
+
+### 2.3 Inventário real de dependências do runtime (fato local, 12/11/2026)
+
+**Pacotes Electron declarados no workspace** (catálogo `pnpm-workspace.yaml`):
+
+| Pacote | Versão | Onde é usado |
+|---|---|---|
+| `electron` | `^43.4.1` (catalog) | Launcher e Stage (runtime, binário) |
+| `electron-vite` | `^5.0.0` | Build dos dois apps |
+| `electron-builder` | `^26.15.3` | Empacotamento |
+| `electron-updater` | `^6.8.9` | Dependência do ecossistema do Stage |
+| `@electron-toolkit/preload`, `utils`, `tsconfig` | `^3.0.2`, `^4.0.0`, `^2.0.0` | Stage |
+| `@electron/notarize` | `^3.1.1` | Build (macOS) |
+| `electron-click-drag-plugin` | `^2.0.2` | Workaround de arrasto no Stage |
+
+**Launcher (o host do produto):**
+
+- Dependências de runtime: **apenas `@lia/core` e `vue`**; não há addon nativo.
+- `files: ['out/**', 'package.json', '!**/node_modules/electron']`, `npmRebuild: false` —
+  o app não leva `node_modules` nem binário Electron adicional; só o Electron que executa.
+- `from 'electron'` no main: **2 arquivos** (`index.ts`: `app`, `BrowserWindow`, `dialog`,
+  `safeStorage`; `ipc.ts`: `ipcMain`) **+ 1 import type** (`web-preferences.ts`) e o preload
+  (`contextBridge`, `ipcRenderer`). Também `original-fs` no main (leitura de fuses).
+- `preload` compilado: 2.425 B, **única dependência `require("electron")`, zero `node:`** —
+  requisito para `sandbox: true` (SEC-1).
+
+**Stage (a presença):**
+
+- **70 arquivos não-teste** importam `from 'electron'` (contagem desta rodada; o valor 74 de
+  rodadas anteriores incluía testes). Famílias de API: `ipcMain`, `BrowserWindow`, `screen`,
+  `session`, `shell`, `globalShortcut`, `powerMonitor`, `Tray`, `Notification`, `Menu`,
+  `nativeImage`, `safeStorage`, `systemPreferences`, `dialog`, `app`.
+- 16 famílias de janelas em `src/main/windows` (chat, configurações, legenda, overlay,
+  spotlight, widgets, about, beat-sync…).
+- **Addons nativos de verdade**: `uiohook-napi` (ganchos globais de teclado/mouse),
+  `electron-click-drag-plugin` (arrasto de janela sem moldura) e
+  `@xsai-apple-speech/transcription-native` (macOS, import dinâmico). `onnxruntime-web`,
+  `drizzle-duckdb-wasm` e `node-vibrant` são WASM/JS — não trazem `.node`.
+- O binário `LiaStage.exe` carrega um **segundo Electron completo** (o pacote do Launcher
+  copia `stage-tamagotchi/dist/lia-windows/win-unpacked` para `resources/stage`).
+
+**Separação por camada (o que realmente roda onde):**
+
+| Camada | Quem executa | Dependências | Consequência |
+|---|---|---|---|
+| Chromium | Renderer do Launcher (Vue) e do Stage (Vue + Three/VRM + Live2D/Pixi + Web Audio) | WebGL/WebGPU, WASM | É o que entrega avatar, transparência e áudio; Tauri **não remove** esta camada |
+| Node | Main do Launcher, Main do Stage, Core (`fs`, `crypto`, `net`, `path`) | Builtins Node + `@lia/core` | Pode virar módulo de outro host, mas os 70 arquivos do Stage usam APIs Electron, não só Node |
+| Electron | Janelas, `screen`, `session`, `Tray`, `globalShortcut`, `powerMonitor`, `protocol`, atalhos, `safeStorage` | API nativa do Electron | É o acoplamento real: não há equivalente em Node puro |
+| Nativo (SO) | `uiohook-napi`, `electron-click-drag-plugin`, Apple Speech, processo Kokoro | ABI/plataforma | Qualquer host (Tauri/Qt) reimplementa estes ganchos ou carrega os mesmos addons |
+| Serviços | Runtime de voz (Kokoro), providers HTTP | Processo próprio | Já fora do runtime; o host só supervisiona |
+
+**Leitura honesta do inventário:** o Launcher é barato de portar (3 arquivos de main + 1
+preload); o Stage **não é** — ele é um app Electron de 70 arquivos, com transparência por
+pixel, ganchos globais nativos e 16 famílias de janela. Qualquer troca de host que não seja
+incremental (renderer do Stage no processo do Launcher, §9) recria esse custo.
 
 ---
 
@@ -264,6 +327,24 @@ depois do experimento de runtime único (§8).
 
 ---
 
+### 6.4 As sete evidências obrigatórias do PROMPT-42
+
+| # | Evidência exigida | Status | Onde está / por que falta |
+|---|---|---|---|
+| 1 | Inventário real de dependências Electron | **PROVIDO (offline)** | §2.3: versões, pacotes, 2+1 arquivos no Launcher, 70 no Stage, addons nativos |
+| 2 | Separação Electron / Node / Chromium / nativo | **PROVIDO (offline)** | §2.3: tabela por camada; renderer sem Node, Core sem Electron |
+| 3 | Baseline RAM/CPU/início/shutdown | **PARCIAL / NOT RUN** | §6.1: RAM 1997,5 MiB (pacote 08/11), CPU 8,49% (idle), init +483/+1311 ms, shutdown PASS. RAM/CPU por runtime (Launcher sem Stage, C0–C4), GPU/FPS/energia: **NOT RUN** |
+| 4 | Compatibilidade Vue/Stage/áudio/voz/GPU/janelas/ferramentas locais | **PARCIAL** | §5: Electron atende e está validado no Windows (transparência, multimonitor, WebGL/D3D11); FPS não medido; tool calling ainda **não provado**; alternativas **não medidas** |
+| 5 | Custo de migração | **PROVIDO (estimativa fundamentada)** | §7: por entregável, com reuso e risco; sem prazo inventado |
+| 6 | Licenças/manutenção/distribuição | **PROVIDO (documental)** | §4 e §5: MIT/Apache Tauri, LGPL Qt, impeller Flutter, Windows-only WinUI; Electron 3 majors/8 semanas; NSIS pronto |
+| 7 | Protótipo da finalista, se a pesquisa for insuficiente | **NOT RUN** | Nenhum runtime alternativo pode ser construído/medido neste sandbox (Linux, sem display, sem toolchains). Dependência declarada: Windows + mesma máquina/avatar/áudio para C0–C4 e para o protótipo de §9 |
+
+**Conclusão das sete:** a pesquisa é suficiente para **descartar** Qt/Flutter/WinUI como
+runtime principal (reescrita total, sem caminho de reuso) e para **não autorizar** Tauri
+(ganho de shell, não de renderer, e custo de reescrever o Stage). Ela **não** é suficiente
+para declarar Electron "o melhor": falta a medição comparável (3 e 4) e o protótipo (7).
+Por isso a decisão de §8 é **provisória**, e o gate de arquitetura continua **ABERTO**.
+
 ## 7. Custo de migração (estimativa por entregável, sem prazo inventado)
 
 | Migração | Trabalho concreto | Reuso | Risco |
@@ -423,8 +504,12 @@ Windows e caminho de recuperação. Não declarar vitória porque uma janela abr
 3. Renderer comprovadamente sem Node/Electron — teste automatizado. ✔
 4. Superfície Electron do Launcher limitada aos arquivos de host — teste automatizado. ✔
 5. Nenhuma funcionalidade nova, nenhum credencial, nenhum provider alterado nesta rodada. ✔
-6. Medição C0–C4 no Windows com metodologia fixada — **NOT RUN** (bloqueio de ambiente).
-7. Experimento de runtime único — **NOT RUN** (depende de 6).
+6. Sete evidências do PROMPT-42 inventariadas com status honesto — §6.4: **6 providas
+   (offline/documental) + baseline parcial; protótipo NOT RUN**.
+7. Medição C0–C4 no Windows com metodologia fixada — **NOT RUN** (bloqueio de ambiente).
+8. Experimento de runtime único — **NOT RUN** (depende de 6 e do Windows).
+9. **Gate de arquitetura:** **ABERTO**. Nenhum item deste documento declara PASS de runtime;
+   o contrato de host (Etapa 1) é infraestrutura, não prova comparativa.
 
 ---
 

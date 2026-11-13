@@ -26,6 +26,31 @@ Documentos de referência:
 
 Não repetir PROMPT-39 nem reabrir a proposta sem uma divergência reproduzida.
 
+### 1.1 Autoridade de escrita de `provider.chat.preferred` (AF-1, PROMPT-42)
+
+O campo tem **um dono por provider**, não um dono global:
+
+| Provider | Quem pode trocar a seleção | Quem pode limpar |
+|---|---|---|
+| Gerenciado pelo Launcher (catálogo `ready`; hoje `groq`) | **Somente o serviço do Launcher** | Launcher (e o Stage, como válvula de saída) |
+| Fora do catálogo (`ollama`, `service`, desconhecidos…) | **Stage** (tela de provider / onboarding) | Stage |
+
+Regras aplicadas por `decideSelectionWrite` no bridge do Stage
+(`selection-write-policy.ts`), antes de qualquer escrita:
+
+- troca envolvendo provider gerenciado → `{ ok: false, code: 'selection-owned-by-launcher' }`;
+- `expectedPreferred` diferente do persistido → `{ ok: false, code: 'stale-selection' }`
+  (protege contra duas janelas abertas);
+- limpar (`preferred` ausente) e reescrever o mesmo alvo são sempre permitidos;
+- provider desconhecido **nunca** é convertido em Groq nem descartado;
+- `expectedPreferred` é protocolo, jamais persistido; chamador antigo (campo ausente)
+  mantém o comportamento anterior.
+
+Consequência para o gate Windows: além dos 16 passos, validar (a) a tela do Stage salvando
+um provider fora do catálogo, (b) a mensagem específica ao tentar trocar `groq` pelo Stage,
+(c) a seleção do Launcher preservada depois dessa tentativa. Sem isso, AF-1 é PASS offline,
+não PASS de runtime.
+
 ## 2. O que falta provar (gate real)
 
 | # | Passo | Estado (12/11) | Evidência exigida |

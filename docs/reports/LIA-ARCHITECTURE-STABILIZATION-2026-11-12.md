@@ -3,6 +3,9 @@
 **Data:** 12/11/2026
 **Branch:** `arena/01a10290-lia-project`
 **Base:** `140ff09` (decisão de runtime publicada)
+**Revisão 2 (PROMPT-42):** 12/11/2026, a partir de `3509984`. AF-1 e SEC-1 **resolvidos
+offline**; auditoria de runtime completada com as sete evidências; tool calling com plano de
+prova real, ainda **NOT RUN** no Windows (ver §3.2, §4.3, §5 e o relatório de decisão).
 **Natureza:** código executável no sandbox + auditoria estática. Nenhum gate Windows foi
 executado, nenhuma credencial foi cadastrada, nenhum provider foi ampliado.
 
@@ -13,10 +16,10 @@ executado, nenhuma credencial foi cadastrada, nenhum provider foi ampliado.
 | Etapa do plano mestre | O que foi feito | Estado |
 |---|---|---|
 | 1 — estabilizar a arquitetura escolhida | contrato de host versionado no Core; fronteiras já congeladas em teste | **PASS** (offline) |
-| 2.1 — identidade do provider | invariante de seleção única; auditoria dos escritores | **PASS** com achado AF-1 |
+| 2.1 — identidade do provider | invariante de seleção única; AF-1 fechado com política + testes | **PASS (offline)**; validação Windows pendente |
 | 3 — tool calling | inventário do mecanismo existente | **auditado**; gate real NOT RUN |
 | 4 — revisão visual | — | **NOT RUN** (sem display) |
-| 5 — segurança e regressão | endurecimento do IPC + auditoria da superfície | **PASS** (offline) |
+| 5 — segurança e regressão | endurecimento do IPC + SEC-1 (`sandbox: true`) | **PASS (offline)**; janela real NOT RUN |
 | 6 — documentação | este relatório + `CURRENT-STATE` | **PASS** |
 
 ---
@@ -74,11 +77,28 @@ modelId })`, que o host liga a `provider.chat.preferred`. O novo teste estático
 aprovada) e o Stage (legado, ainda alcançável). Não é uma segunda seleção em `brain.*`,
 mas é uma segunda *fonte de escrita* em `provider.chat.preferred`.
 
-**Por que não foi corrigido nesta rodada:** o `LiaProviderConfig.vue` é o único caminho
-para provedores fora do catálogo do Launcher; removê-lo sem validação Windows regrediria
-funcionalidade conquistada (PROMPT-37). A correção exige uma regra de produto — "para
-provider gerenciado pelo Launcher, o Stage não altera `preferred`" — e um teste de runtime
-na máquina real. Fica registrado como item aberto, **não** como resolvido.
+**Resolução (PROMPT-42, 12/11/2026) — autoridade única sem remover o caminho legado:**
+
+- `shared/lia/selection-write-policy.ts` concentra a regra pura `decideSelectionWrite`:
+  limpar é sempre permitido; sem seleção persistida é permitido; reescrever o mesmo alvo é
+  permitido; **trocar** a seleção quando qualquer lado é um provider gerenciado pelo
+  Launcher (hoje só `groq`, catálogo `ready`) é recusado com `selection-owned-by-launcher`;
+  e uma escrita cujo `expectedPreferred` difere do persistido é recusada com
+  `stale-selection` (outra janela mudou primeiro).
+- O bridge `provider-config-service.ts` consulta a política antes de gravar, devolve
+  `LiaProviderChatWriteResult` tipado e **nunca persiste `expectedPreferred`**.
+- O store do Stage envia `expectedPreferred` (o valor que a tela leu) e lança
+  `ProviderConfigWriteError` com o código; `LiaProviderConfig.vue` mostra uma mensagem
+  específica dizendo onde corrigir, em vez de "não foi possível salvar".
+- Providers fora do catálogo continuam editáveis no Stage e **não são convertidos**: um id
+  desconhecido nunca vira `groq`. A válvula de saída (limpar) mantém o caminho do PROMPT-37.
+- `expectedPreferred` ausente = chamador antigo: a checagem de staleness é pulada, não
+  reprovada. Compatibilidade preservada por construção.
+
+**Testes:** policy 10 casos (unitários) + integração Launcher×Stage 7 casos sobre o mesmo
+`lia-product.json` real: gerenciado recusado nos dois sentidos, provider legado preservado,
+stale recusado, limpar libera, campo de protocolo não persistido, chamador antigo aceito.
+O wiring do IPC do Stage e a janela real continuam **dependendo de Windows** (NOT RUN).
 
 ### 3.3 Achado AF-2 — `brainSelectionUpdate` é código dormente
 
@@ -122,11 +142,24 @@ e passou a impor:
 
 ### 4.3 Achado AF-3 — `sandbox: false`
 
-`airi/apps/lia-app/src/main/index.ts:208` cria a janela com `contextIsolation: true`,
+`airi/apps/lia-app/src/main/index.ts` criava a janela com `contextIsolation: true`,
 `nodeIntegration: false` e `sandbox: false`. O preload importa apenas
-`contextBridge`/`ipcRenderer`, o que é compatível com sandbox. **Não foi alterado** nesta
-rodada: ligar sandbox sem validação no Windows pode impedir o boot da janela. Fica como
-SEC-1, com o teste de fronteira já garantindo que o preload permanece sandbox-compatível.
+`contextBridge`/`ipcRenderer`.
+
+**Resolução (PROMPT-42): `sandbox: true` ativado de forma localizada.**
+
+- Evidência de compatibilidade: o preload compilado (`out/preload/index.cjs`, 2.425 B) tem
+  **uma única dependência, `require("electron")`, e zero módulos `node:`**; o renderer só
+  consome `window.liaApi` exposto por `contextBridge`.
+- As flags foram extraídas para `src/main/web-preferences.ts`
+  (`LIA_MAIN_WEB_PREFERENCES`), usadas por `index.ts` via spread, para que a regressão seja
+  um teste e não uma descoberta em produção.
+- `security-baseline.test.ts` (3 casos) falha se `sandbox` voltar a `false`, se o preload
+  ganhar um builtin do Node/import dinâmico, ou se `index.ts` voltar a inlinar `sandbox:`.
+- **Limite honesto:** o sandbox só é comprovado abrindo a janela. Boot real do Launcher com
+  `sandbox: true` é **NOT RUN** e entra nos 16 passos do Windows; reversão é uma linha.
+- O Stage mantém `sandbox: false` nas próprias janelas: os 70 arquivos de main e os addons
+  nativos não foram auditados para sandbox nesta rodada — dívida registrada, não fingida.
 
 ## 5. Tool calling (Etapa 3) — inventário, sem criação
 
@@ -143,21 +176,34 @@ O mecanismo exigido já existe; o que falta é a prova real, não a ferramenta:
 (requisição → tool call → execução local → retorno ao modelo → resposta → histórico), que
 exige chave válida e runtime Windows. Continua **NOT RUN**.
 
+**Prova real preparada nesta rodada (read-only, sem criar ferramenta):**
+
+| Item | Definição |
+|---|---|
+| Ferramenta | `get_weather` (`builtin/weather.ts`), já existente, prefixo `tamagotchi:` |
+| Por que é segura | não escreve arquivo, não executa comando, não altera configuração; faz uma consulta HTTP de previsão e mostra um widget efêmero (`ttlSeconds: 60`) |
+| Autorização | ativada **uma vez**, por ferramenta, no store de tools (`defaultActive: false`); desligada ao fim do teste |
+| Pré-condição | provider já configurado com chave válida **pelo usuário na UI** (não nesta rodada) e janela do Stage em execução no Windows |
+| Passos | 1) ativar `tamagotchi:get_weather`; 2) pedir "qual a previsão do tempo em São Paulo?"; 3) capturar `tool-call`, `tool-result` e a mensagem final; 4) confirmar o widget e o histórico; 5) desativar a ferramenta |
+| Critério de PASS | round-trip completo com resultado do modelo baseado no retorno da ferramenta, sem executar nada além dela; qualquer mock/fixture invalida a prova |
+| Estado | **NOT RUN** — depende do Windows e de chave válida (PROMPT-40) |
+
 ## 6. Testes executados nesta rodada
 
 | Verificação | Resultado |
 |---|---|
 | `lia/core` (`node --experimental-strip-types --test test/*.test.ts`) | **105 passed**, 0 fail |
-| `@lia/lia-app` (`vitest run`) | 33 arquivos, **323 passed**, 2 skipped |
+| `@lia/lia-app` (`vitest run`) | 36 arquivos, **345 passed**, 0 skipped (eram 323/2 antes do PROMPT-42) |
 | `@lia/lia-app` typecheck (`tsc --noEmit`) | **0 erros** |
 | Novos testes | host contract 7, sanitizer 5, IPC surface 7, seleção única 5 |
+| Novos testes PROMPT-42 | policy 10, integração de autoridade única 7, baseline de segurança 3 |
 | Windows / runtime real | **NÃO EXECUTADO** |
 
 ## 7. Gates
 
 | Gate | Estado |
 |---|---|
-| Arquitetura | **PASS** (decisão + contrato de host + fronteiras testadas) |
+| Arquitetura | **ABERTO** — decisão registrada + 6/7 evidências offline; medição comparável e protótipo NOT RUN. Contrato de host **não** é prova de runtime |
 | Migração | **N/A** — não autorizada |
 | Launcher | **PASS** apenas para init/shutdown (PROMPT-40); resto NOT RUN |
 | AI Settings | **BLOCKED** (interação humana + chave na UI) |
@@ -165,7 +211,7 @@ exige chave válida e runtime Windows. Continua **NOT RUN**.
 | Tool Calling | **NOT RUN** |
 | Histórico | **NOT RUN** |
 | Visual | **NOT RUN** |
-| Segurança | **PASS offline**; SEC-1 (`sandbox`) e AF-1 abertos |
+| Segurança | **PASS offline** — SEC-1 (`sandbox: true`) e AF-1 resolvidos com testes; janela real NOT RUN |
 | Distribuição | **NOT RUN** |
 
 ## 8. Próximos passos
@@ -173,5 +219,8 @@ exige chave válida e runtime Windows. Continua **NOT RUN**.
 1. Windows: habilitar interação, digitar a chave na UI e executar os 16 passos do
    `LIA-AI-SETTINGS-END-TO-END-PLAN.md`.
 2. Medir C0–C4 e o experimento de runtime único (decisão de arquitetura, §9).
-3. Decidir AF-1 com regra de produto e teste real; só então alterar o Stage.
-4. Avaliar SEC-1 (`sandbox: true`) junto da mesma rodada Windows, com plano de reversão.
+3. Windows: abrir o Launcher com `sandbox: true` e o Stage com a política AF-1 ativa;
+   validar que a tela de provider legado continua salvando e que a mensagem de recusa
+   aparece no caso gerenciado.
+4. Executar a prova read-only de `get_weather` (§5) e só então declarar Tool Calling.
+5. Medir C0–C4 / runtime único para fechar o gate de Arquitetura.
