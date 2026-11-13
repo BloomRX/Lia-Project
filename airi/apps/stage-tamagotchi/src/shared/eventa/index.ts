@@ -594,8 +594,32 @@ export interface LiaProviderChatConfig {
   onboarded?: boolean
 }
 
+/**
+ * Wire-only extension of the chat config (AF-1, 12/11/2026).
+ *
+ * `expectedPreferred` carries what the caller READ when it built the payload,
+ * so main can refuse a write whose world has already moved (`stale-selection`).
+ * It is never persisted: the main-side mapper copies known fields only.
+ *
+ * `null` means "I read that there was no selection". Absent means "a caller
+ * that predates the field" and skips the staleness check.
+ */
+export interface LiaProviderChatWrite extends LiaProviderChatConfig {
+  expectedPreferred?: LiaProviderChatTarget | null
+}
+
+/**
+ * Typed outcome of a selection write. `selection-owned-by-launcher` means the
+ * provider is managed by the Launcher catalog and can only be changed there;
+ * `stale-selection` means the persisted selection changed after the caller
+ * read it. Both leave the document untouched.
+ */
+export type LiaProviderChatWriteResult
+  = | { ok: true }
+    | { ok: false, code: 'invalid' | 'selection-owned-by-launcher' | 'stale-selection' | 'storage' }
+
 export const electronLiaProviderChatConfigGet = defineInvokeEventa<LiaProviderChatConfig>('eventa:invoke:lia:provider:chat:config:get')
-export const electronLiaProviderChatConfigSet = defineInvokeEventa<void, LiaProviderChatConfig>('eventa:invoke:lia:provider:chat:config:set')
+export const electronLiaProviderChatConfigSet = defineInvokeEventa<LiaProviderChatWriteResult, LiaProviderChatWrite>('eventa:invoke:lia:provider:chat:config:set')
 
 // Lia voice configuration (M1 Phase 4D).
 //

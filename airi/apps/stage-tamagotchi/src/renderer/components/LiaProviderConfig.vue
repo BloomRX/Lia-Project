@@ -231,8 +231,13 @@ async function save() {
     toast.success(tt('saved'))
     return true
   }
-  catch {
-    toast.error(tt('errors.save'))
+  catch (error) {
+    // AF-1: a refused selection write is not a generic save failure. The
+    // document was left untouched and the user needs to know WHERE to fix it.
+    const code = (error as { code?: string } | undefined)?.code
+    toast.error(tt(code === 'selection-owned-by-launcher'
+      ? 'errors.selectionOwned'
+      : code === 'stale-selection' ? 'errors.staleSelection' : 'errors.save'))
     return false
   }
   finally {
@@ -345,8 +350,11 @@ async function removeProvider() {
     lastTestOk.value = false
     toast.success(tt('removed'))
   }
-  catch {
-    toast.error(tt('errors.remove'))
+  catch (error) {
+    const code = (error as { code?: string } | undefined)?.code
+    toast.error(tt(code === 'selection-owned-by-launcher'
+      ? 'errors.selectionOwned'
+      : code === 'stale-selection' ? 'errors.staleSelection' : 'errors.remove'))
   }
   finally {
     busy.value = false

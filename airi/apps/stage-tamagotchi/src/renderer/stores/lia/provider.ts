@@ -221,6 +221,21 @@ function toSerializableChatConfig(config: LiaProviderChatConfig): LiaProviderCha
   }
 }
 
+/**
+ * A refused selection write, carrying the code main returned.
+ *
+ * `code` is the contract: callers switch on it for the user-facing message.
+ * It is deliberately NOT a ProviderError — ProviderError describes a failed
+ * provider request and would be caught by recovery paths that must not swallow
+ * an authority refusal.
+ */
+export class ProviderConfigWriteError extends Error {
+  constructor(readonly code: 'invalid' | 'selection-owned-by-launcher' | 'stale-selection' | 'storage') {
+    super(`provider config write refused: ${code}`)
+    this.name = 'ProviderConfigWriteError'
+  }
+}
+
 /** Shallow recoverability heuristic for the technical log / fallback decision. */
 function isRecoverableChatError(error: unknown): boolean {
   const text = errorMessageFrom(error) ?? ''
@@ -438,9 +453,24 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
     return loadedConfig.value ?? {}
   }
 
+  /**
+   * Persists the chat config through the Stage bridge.
+   *
+   * AF-1: the payload carries `expectedPreferred` — the selection this store
+   * last READ. Main refuses a write whose persisted value no longer matches
+   * (`stale-selection`) and refuses to change a provider the Launcher manages
+   * (`selection-owned-by-launcher`). Both refusals leave the document intact,
+   * so this throws instead of pretending the save succeeded; the caller shows
+   * a specific message and the user refreshes.
+   */
   async function persistConfig(config: LiaProviderChatConfig) {
     const payload = toSerializableChatConfig(config)
-    await saveChatConfig(payload)
+    const result = await saveChatConfig({
+      ...payload,
+      expectedPreferred: toSerializableTarget(loadedConfig.value?.preferred) ?? null,
+    })
+    if (result && result.ok === false)
+      throw new ProviderConfigWriteError(result.code)
     loadedConfig.value = payload
   }
 
