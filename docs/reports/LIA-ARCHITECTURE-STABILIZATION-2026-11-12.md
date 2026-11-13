@@ -100,6 +100,23 @@ mas é uma segunda *fonte de escrita* em `provider.chat.preferred`.
 stale recusado, limpar libera, campo de protocolo não persistido, chamador antigo aceito.
 O wiring do IPC do Stage e a janela real continuam **dependendo de Windows** (NOT RUN).
 
+**Inventário final dos escritores de `provider.chat.preferred` (auditado nesta rodada):**
+
+| # | Caminho | Regra aplicada | Estado |
+|---|---|---|---|
+| 1 | `ai-connection-service.save/saveSelection` (AI Settings, Launcher) | catálogo + vault + revisão/rollback; única autoridade para provider gerenciado | canônico |
+| 2 | bridge do Stage (`provider-config-service` → `decideSelectionWrite`) | recusa troca envolvendo gerenciado e escrita obsoleta; preserva legado | **corrigido** |
+| 3 | `lia-host.updateConfig` chamado pela tela legada `ConfigView.vue` | merge direto em `updateLiaProductConfig`, **sem** catálogo/revisão | **AF-1b residual** |
+
+**AF-1b — por que não foi alterado agora:** a tela legada é o caminho pelo qual o produto
+ainda aceita provider fora do catálogo com modelo livre; restringi-la sem validação Windows
+repetiria o erro que o PROMPT-37 corrigiu. O risco é limitado e **falha fechada**: uma
+seleção `groq` gravada por esse caminho sem conexão válida faz `isSafeToStart()` recusar o
+início da conversa, em vez de conversar com configuração inconsistente. O que falta é uma
+decisão de produto (aposentar ou redirecionar a tela legada) e a validação na janela real.
+Nenhuma escrita do Stage consegue sobrescrever esse caminho: a policy lê o mesmo documento
+e recusa stale/gerenciado.
+
 ### 3.3 Achado AF-2 — `brainSelectionUpdate` é código dormente
 
 `airi/packages/lia-core/src/product/config.ts:464` define escritores de

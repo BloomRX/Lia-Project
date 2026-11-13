@@ -51,6 +51,13 @@ um provider fora do catálogo, (b) a mensagem específica ao tentar trocar `groq
 (c) a seleção do Launcher preservada depois dessa tentativa. Sem isso, AF-1 é PASS offline,
 não PASS de runtime.
 
+**AF-1b (residual, registrado):** a tela legada `ConfigView.vue` do Launcher ainda grava
+`provider.chat.preferred` por `lia-host.updateConfig`, sem catálogo nem revisão. É a mesma
+autoridade (Launcher), mas um caminho distinto do AI Settings; uma seleção gerenciada
+gravada por ali falha fechada no início (`isSafeToStart`), não conversa. Aposentar ou
+redirecionar essa tela é decisão de produto a validar no Windows — não foi alterado nesta
+rodada.
+
 ## 2. O que falta provar (gate real)
 
 | # | Passo | Estado (12/11) | Evidência exigida |
