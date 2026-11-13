@@ -20,6 +20,7 @@ import { createLiaBootTimer } from './timing'
 import { createLiaVoiceEngineService } from './voice-engine-service'
 import { createLiaVoiceInstallInspector } from './voice-install-inspector'
 import { createLiaVoiceProvisioning } from './voice-provisioning'
+import { LIA_MAIN_WEB_PREFERENCES } from './web-preferences'
 
 /**
  * The Lia launcher entry (Phase 7, architecture items 1/11/15).
@@ -206,10 +207,8 @@ async function bootstrap(): Promise<void> {
     height: 860,
     title: 'Lia',
     webPreferences: {
-      contextIsolation: true,
-      nodeIntegration: false,
+      ...LIA_MAIN_WEB_PREFERENCES,
       preload: join(import.meta.dirname, '../preload/index.cjs'),
-      sandbox: false,
     },
     width: 1320,
   })
