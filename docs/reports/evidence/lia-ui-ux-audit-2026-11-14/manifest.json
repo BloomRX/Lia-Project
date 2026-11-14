@@ -1,22 +1,42 @@
 {
   "schema": "lia-ui-ux-audit-manifest/v1",
   "date": "2026-11-14",
-  "generated_at_utc": "2026-11-14T07:49:39.553091+00:00",
+  "generated_at_utc": "2026-11-14T08:16:44.459177+00:00",
   "repository": "BloomRX/Lia-Project",
   "branch": "arena/250b337a-lia-project",
   "base_sha": "7cb81720552a822a03f36ac6ce5f2e20b009f84c",
-  "reference_sha": "5ec464edf410008e390e2da4aff32d32537eb69d",
-  "checkout_sha": "7cb81720552a822a03f36ac6ce5f2e20b009f84c",
+  "reference_sha": "ae46c495d7da7cd33f4b4da8f4e8cc95b0a867b6",
+  "checkout_sha": "1d802cc8229cb133710cb79601e8d58870b3fde8",
   "sha_equivalence": {
-    "full_delta": [
+    "initial_full_delta": [
       "docs/project/CURRENT-STATE.md",
       "docs/reports/LIA-BRANCH-AUDIT-2026-11-14.md"
     ],
-    "ui_delta": [],
-    "conclusion": "UI/code findings valid for reference_sha"
+    "initial_ui_delta": [],
+    "revision_full_delta": [
+      "airi/packages/stage-ui/src/stores/ai/chat-llm/tool-name.ts",
+      "airi/packages/stage-ui/src/stores/ai/chat-llm/tool-resolver.test.ts",
+      "airi/packages/stage-ui/src/stores/ai/chat-llm/tool-resolver.ts",
+      "airi/packages/stage-ui/src/stores/ai/chat-llm/tools.test.ts",
+      "airi/packages/stage-ui/src/stores/ai/chat-llm/tools.ts",
+      "airi/packages/stage-ui/src/stores/tool-call-rerun.ts",
+      "docs/project/CURRENT-STATE.md",
+      "docs/reports/LIA-A1-TOOL-ENABLEMENT-2026-11-14.md",
+      "docs/reports/LIA-ARCHITECTURE-STABILIZATION-2026-11-12.md"
+    ],
+    "revision_ui_delta": [],
+    "revision_stage_ui_delta": [
+      "airi/packages/stage-ui/src/stores/ai/chat-llm/tool-name.ts",
+      "airi/packages/stage-ui/src/stores/ai/chat-llm/tool-resolver.test.ts",
+      "airi/packages/stage-ui/src/stores/ai/chat-llm/tool-resolver.ts",
+      "airi/packages/stage-ui/src/stores/ai/chat-llm/tools.test.ts",
+      "airi/packages/stage-ui/src/stores/ai/chat-llm/tools.ts",
+      "airi/packages/stage-ui/src/stores/tool-call-rerun.ts"
+    ],
+    "conclusion": "Launcher/Stage UI findings remain valid; A-1/X-03 corrected in stage-ui; X-04 records deferred UI/persistence and out-of-store coverage."
   },
   "implementation_changed": false,
-  "scope": "audit-and-proposal-only",
+  "scope": "audit-and-proposal-only; revision after Principal A-1 correction",
   "awaiting": "Agente Principal review before implementation",
   "deliverables": [
     {
@@ -89,48 +109,62 @@
   "artifacts": [
     {
       "path": "docs/reports/LIA-UI-UX-AUDIT-2026-11-14.md",
-      "sha256": "f6a77186a0283c81fa0c5c619e571853a8895479f2ccfb056297f502328dfee7",
-      "bytes": 40110,
+      "sha256": "bed79982aed26325ff9b60de3ac6c8b89369dea85c6fdf1bc2b1b40cbcceb642",
+      "bytes": 50886,
       "role": "deliverable"
     },
     {
       "path": "docs/reports/evidence/lia-ui-ux-audit-2026-11-14/WIREFRAMES-LIA.html",
       "sha256": "2f35353cfec750b0fe94b64c3e1e92c2484a4c992fd244f26c5240d7296f92ad",
       "bytes": 32051,
-      "role": "deliverable"
+      "role": "deliverable-preserved"
     },
     {
       "path": "docs/reports/evidence/lia-ui-ux-audit-2026-11-14/static-checks.json",
       "sha256": "549bd632aefed637d19737fbf8426554bfb8739c85cff9f12b6b0e3a3c1baef5",
       "bytes": 3973,
-      "role": "evidence"
+      "role": "evidence-preserved-initial-round"
+    },
+    {
+      "path": "docs/reports/evidence/lia-ui-ux-audit-2026-11-14/static-checks-revision-2.json",
+      "sha256": "37e8a41845e512b80c2068e3c2d4575d306d234c670a02771475381fb9ad5e9f",
+      "bytes": 13179,
+      "role": "evidence-revision-2"
+    },
+    {
+      "path": "docs/reports/evidence/lia-ui-ux-audit-2026-11-14/check-revision-2.py",
+      "sha256": "d68f980edb0928d6aa6c302a0ae6cc7320ac69e5c9e165cccddf2adbfb382e95",
+      "bytes": 18041,
+      "role": "documentary-check-generator"
     },
     {
       "path": "docs/reports/evidence/lia-ui-ux-audit-2026-11-14/README.md",
-      "sha256": "1835936b07600ec2d7a2465ffeb4f36740fbd0481d770c1310f2bcf7908904f5",
-      "bytes": 1707,
-      "role": "evidence"
+      "sha256": "0ccc3afd347cf29184ca8bd64fa9a288df1f1afa4dde84c877e9f0d6d506dcaf",
+      "bytes": 3303,
+      "role": "evidence-index"
     }
   ],
   "static_checks_summary": {
-    "sha-ui-equivalence": "PASS",
-    "report-11-deliverables": "PASS",
-    "report-reference-sha": "PASS",
-    "report-cjk-contamination": "PASS",
-    "html-internal-anchors": "PASS",
-    "html-no-external-resources": "PASS",
-    "html-no-script": "PASS",
-    "html-w1-w8": "PASS",
-    "html-cjk-contamination": "PASS",
-    "html-lang-pt-br": "PASS",
-    "contrast-static": "PASS",
+    "git-sync": "PASS",
+    "principal-delta-scope": "PASS",
+    "preserved-first-round-artifacts": "PASS",
+    "a1-gate-source": "PASS",
+    "a1-decision-recorded": "PASS",
+    "report-revision-structure": "PASS",
+    "document-local-links": "PASS",
+    "preserved-html-structure": "PASS",
+    "contrast-static-expectations": "PASS",
     "home-vm-pure": "PASS",
-    "runtime-browser-a11y-performance": "BLOCKED"
+    "principal-a1-tests": "HISTORICAL-PASS",
+    "runtime-browser-a11y-performance": "BLOCKED",
+    "document-only-authored-scope": "PASS"
   },
   "gates": {
     "static": "PASS",
     "pure_vm": "PASS",
     "contrast_static": "PASS",
+    "a1_source": "STATIC-PASS",
+    "a1_principal_tests": "HISTORICAL-PASS",
     "runtime_windows": "BLOCKED",
     "browser_a11y": "BLOCKED",
     "performance_c0_c4": "BLOCKED",
@@ -155,13 +189,79 @@
       "airi/packages/scenarios-stage-tamagotchi-browser/artifacts/raw/08-system-general.avif"
     ],
     "new_runtime_screenshots": false,
-    "external_references_consulted": "2026-11-14",
-    "secrets_accessed": false
+    "external_references_consulted": "2026-11-14 (initial round; not repeated in revision 2)",
+    "secrets_accessed": false,
+    "revision_2_code_inspected": [
+      "airi/packages/stage-ui/src/stores/ai/chat-llm/tools.ts",
+      "airi/packages/stage-ui/src/stores/ai/chat-llm/tool-name.ts",
+      "airi/packages/stage-ui/src/stores/ai/chat-llm/tool-resolver.ts",
+      "airi/packages/stage-ui/src/stores/tool-call-rerun.ts",
+      "airi/packages/stage-ui/src/stores/chat.ts",
+      "airi/apps/stage-tamagotchi/src/renderer/stores/tools/built-in.ts",
+      "docs/reports/LIA-A1-TOOL-ENABLEMENT-2026-11-14.md"
+    ]
   },
   "notes": [
     "Wireframes são proposta estática com dados sintéticos; não provam runtime/a11y/performance.",
+    "WIREFRAMES-LIA.html e static-checks.json foram preservados byte a byte desde e183cba; o cabeçalho do HTML mantém o SHA histórico da proposta original.",
+    "static-checks-revision-2.json é a nova rodada; check-revision-2.py é seu gerador documental e não altera o produto.",
     "Nenhuma dependência nova foi introduzida.",
-    "CURRENT-STATE.md não foi alterado: commit apenas documental, sem mudança de baseline/decisão/gate.",
-    "Achado X-03 alinha-se ao A-1 da auditoria de branch no SHA de referência; decisão de produto pendente."
+    "CURRENT-STATE.md não foi alterado por esta revisão; o merge trouxe a versão do Principal.",
+    "X-03/A-1 foi corrigido em f3facdf e decidido em ae46c49; não descrever o defeito antigo como presente no HEAD atual.",
+    "UI de ativação e persistência entre reinícios não implementadas; mcp(), debug(), spark e web-search permanecem fora do store.",
+    "Os 31 testes A-1 são HISTORICAL-PASS reportados pelo Principal em f3facdf, não reexecutados nesta revisão."
+  ],
+  "revision": 2,
+  "principal_branch": "arena/01a10290-lia-project",
+  "historical_reference_sha": "5ec464edf410008e390e2da4aff32d32537eb69d",
+  "initial_delivery_sha": "e183cba5c9882dbfc4e297c3550c6ebdc2f90b9a",
+  "correction_sha": "f3facdf8f4ec8873221fe70b67e34934e2631496",
+  "merge_sha": "1d802cc8229cb133710cb79601e8d58870b3fde8",
+  "merge_parents": [
+    "e183cba5c9882dbfc4e297c3550c6ebdc2f90b9a",
+    "ae46c495d7da7cd33f4b4da8f4e8cc95b0a867b6"
+  ],
+  "integration": {
+    "method": "normal merge (--no-ff) of principal into isolated audit branch",
+    "conflicts": false,
+    "reset_rebase_force_push_used": false,
+    "isolated_branch_integrated_into_principal": false,
+    "remote_principal_sha_observed": "ae46c495d7da7cd33f4b4da8f4e8cc95b0a867b6",
+    "remote_isolated_sha_before_revision_push": "e183cba5c9882dbfc4e297c3550c6ebdc2f90b9a"
+  },
+  "implementation_note": "No product implementation authored by this revision. The authorized normal merge imports Principal code already published at ae46c49.",
+  "static_checks_counts": {
+    "PASS": 11,
+    "FAIL": 0,
+    "HISTORICAL-PASS": 1,
+    "BLOCKED": 1
+  },
+  "findings_revision": {
+    "X-03": "historical/corrected; not an open P1 at ae46c49",
+    "X-04": "P2 structural planning item; execution deferred by product decision; UI/persistence not implemented",
+    "still_valid": [
+      "L-01",
+      "L-02",
+      "L-03",
+      "L-04",
+      "S-01",
+      "S-02",
+      "S-03",
+      "A-01",
+      "A-02",
+      "X-01",
+      "X-02",
+      "F-01",
+      "G-00"
+    ]
+  },
+  "pending_principal_decisions": [
+    "Authorize Phase 0/1 and official Windows gate",
+    "Confirm AI Settings ownership and managed Stage summary/return",
+    "Confirm voice ready vs personalized truth at candidate SHA",
+    "Approve AA action palette and concept-does-not-enable-control rule",
+    "Approve C0-C4 thresholds",
+    "Approve official Lia asset/license",
+    "When tool UI is authorized: persistence owner and coverage of mcp/debug/spark/web-search before claiming total control"
   ]
 }
