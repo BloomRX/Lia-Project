@@ -36,7 +36,9 @@ import SpeechConnection from './SpeechConnection.vue'
 
 import { CUSTOM_VOICE_PROVIDER_ID } from '../../../../shared/lia-voice'
 import { supportsMainSpeech } from '../../../../shared/lia/speech-transport'
+import { useLiaCapabilitiesStore } from '../../../stores/lia/capabilities'
 import { useLiaVoiceStore } from '../../../stores/lia/voice'
+import { voiceCapabilityState } from '../../../stores/lia/voice-capability-vm'
 import { useVoiceEditor } from '../../../stores/lia/voice-editor'
 import { createVoicePreviewDriver } from '../../../stores/lia/voice-preview'
 
@@ -44,6 +46,8 @@ const { t } = useI18n()
 const tt = (key: string) => t(`tamagotchi.home.config.sections.voice.${key}`)
 
 const voiceStore = useLiaVoiceStore()
+const capabilitiesStore = useLiaCapabilitiesStore()
+const voiceReadiness = computed(() => tt(`readiness.${voiceCapabilityState(capabilitiesStore.snapshot)}`))
 const preview = createVoicePreviewDriver()
 const editor = useVoiceEditor({ preview })
 const nativeSpeech = computed(() => supportsMainSpeech(editor.selectedProviderId.value))
@@ -75,6 +79,7 @@ const isCustomVoice = computed(
  */
 onMounted(() => {
   void editor.hydrate()
+  void capabilitiesStore.refresh()
 })
 function onChooseReady(): void {
   // Choosing "ready-made voice" means leaving the custom provider. The provider
@@ -118,6 +123,14 @@ function onPreview(): void {
 
 <template>
   <div class="flex flex-col gap-5">
+    <p
+      :class="['rounded-lg border px-3 py-2 text-sm', capabilitiesStore.snapshot?.voice.available ? 'border-green-700 text-green-800 dark:text-green-300' : 'border-neutral-300 text-neutral-700 dark:border-neutral-600 dark:text-neutral-200']"
+      role="status"
+      aria-live="polite"
+      data-testid="lia-config-voice-readiness"
+    >
+      {{ voiceReadiness }}
+    </p>
     <!-- The one question. No provider, model or engine vocabulary at this level. -->
     <section class="flex flex-col gap-3" data-testid="lia-config-voice-choose">
       <h3 class="text-sm text-neutral-900 font-semibold dark:text-neutral-50">
@@ -130,10 +143,11 @@ function onPreview(): void {
       <div class="flex flex-col gap-2">
         <button
           type="button"
-          class="flex flex-col gap-0.5 border rounded-lg p-3 text-left transition-colors"
-          :class="isCustomVoice
-            ? 'border-neutral-200 dark:border-neutral-700'
-            : 'border-neutral-900 bg-neutral-50 dark:border-neutral-100 dark:bg-neutral-800'"
+          :class="[
+            'flex flex-col gap-0.5 border rounded-lg p-3 text-left transition-colors',
+            'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 dark:focus-visible:outline-primary-300',
+            isCustomVoice ? 'border-neutral-200 dark:border-neutral-700' : 'border-neutral-900 bg-neutral-50 dark:border-neutral-100 dark:bg-neutral-800',
+          ]"
           data-testid="lia-config-voice-mode-ready"
           @click="onChooseReady"
         >
@@ -147,10 +161,11 @@ function onPreview(): void {
 
         <button
           type="button"
-          class="flex flex-col gap-0.5 border rounded-lg p-3 text-left transition-colors"
-          :class="isCustomVoice
-            ? 'border-neutral-900 bg-neutral-50 dark:border-neutral-100 dark:bg-neutral-800'
-            : 'border-neutral-200 dark:border-neutral-700'"
+          :class="[
+            'flex flex-col gap-0.5 border rounded-lg p-3 text-left transition-colors',
+            'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 dark:focus-visible:outline-primary-300',
+            isCustomVoice ? 'border-neutral-900 bg-neutral-50 dark:border-neutral-100 dark:bg-neutral-800' : 'border-neutral-200 dark:border-neutral-700',
+          ]"
           data-testid="lia-config-voice-mode-custom"
           @click="onChooseCustom"
         >

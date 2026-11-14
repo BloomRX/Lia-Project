@@ -245,6 +245,7 @@ describe('8.0A-4 Voice page: design-system migration', () => {
       expect(view, action).toContain(action)
 
     // The shell still feeds the same props to the page.
-    expect(view).toContain('defineProps<{ api: any, status: any }>()')
+    expect(view).toContain('defineProps<{ api: any, status: any, language?: string, readiness?: any }>()')
+    expect(view).toContain('voiceStatusChipVm(props.readiness, props.language)')
   })
 })

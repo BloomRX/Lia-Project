@@ -5,6 +5,8 @@
   --lia-border: #32244a;
   --lia-magenta: #e545c8;
   --lia-magenta-soft: #b0359a;
+  --lia-magenta-action: #a62b90;
+  --lia-magenta-action-hover: #8f247c;
   --lia-text: #f2ecf7;
   --lia-text-dim: #9b8db0;
   --lia-ok: #4ade80;
@@ -36,10 +38,15 @@ button {
 }
 
 button:hover { border-color: var(--lia-magenta); }
+button.primary:hover:not(:disabled) { background: var(--lia-magenta-action-hover); }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 2px solid var(--lia-magenta);
+  outline-offset: 3px;
+}
 button:disabled { cursor: not-allowed; opacity: 0.45; }
 
 button.primary {
-  background: linear-gradient(135deg, var(--lia-magenta), var(--lia-magenta-soft));
+  background: var(--lia-magenta-action);
   border: none;
   color: #fff;
   font-weight: 700;
@@ -66,4 +73,13 @@ button.primary {
   border: 1px solid var(--lia-border);
   border-radius: 14px;
   padding: 18px 20px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
 }

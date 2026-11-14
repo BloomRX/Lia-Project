@@ -59,20 +59,49 @@ beforeEach(() => {
   fixture.config = { preferred: { providerId: 'openai-compatible', modelId: 'custom/Meu-modelo:Q4' }, fallbackEnabled: false }
 })
 
-async function mount(locale = 'pt-BR') {
+async function mount(locale = 'pt-BR', props: Record<string, unknown> = {}) {
   const i18n = createI18n({ legacy: false, locale, messages: {
     'pt-BR': locales['pt-BR'],
     'en': locales.en,
   } })
-  return render(LiaProviderConfig, { props: { mode: 'manage' }, global: { plugins: [i18n] } })
+  return render(LiaProviderConfig, { props: { mode: 'manage', ...props }, global: { plugins: [i18n] } })
 }
 
 describe('editable model selection', () => {
+  it('shows a managed Launcher selection as a read-only summary in the Stage', async () => {
+    const screen = await mount('en', { managed: true })
+    await expect.element(screen.getByRole('status')).toHaveTextContent('AI managed by the Launcher')
+    await expect.element(screen.getByRole('status')).toHaveTextContent('OpenAI-compatible')
+    expect(screen.container.querySelector('input')).toBeNull()
+    expect(screen.container.querySelector('select')).toBeNull()
+    expect(screen.container.querySelector('button')).toBeNull()
+    expect(fixture.persistConfig).not.toHaveBeenCalled()
+    expect(fixture.removeTransport).not.toHaveBeenCalled()
+    expect(fixture.ensureProviderRecord).not.toHaveBeenCalled()
+    expect(fixture.discoverModels).not.toHaveBeenCalled()
+  })
+
+  it('keeps the complete provider setup when removal is cancelled', async () => {
+    const screen = await mount()
+    await vi.waitFor(() => expect(input(screen.container, 'lia-model').value).toBe('custom/Meu-modelo:Q4'))
+    await screen.getByRole('button', { name: 'Remover', exact: true }).click()
+    await screen.getByRole('button', { name: 'Cancelar', exact: true }).click()
+    expect(fixture.removeTransport).not.toHaveBeenCalled()
+    expect(fixture.deleteApiKey).not.toHaveBeenCalled()
+    expect(fixture.persistConfig).not.toHaveBeenCalled()
+    expect(fixture.config.preferred?.modelId).toBe('custom/Meu-modelo:Q4')
+    await expect.element(screen.getByRole('button', { name: 'Remover', exact: true })).toBeVisible()
+  })
+
   it('removes the own transport before explicitly deleting the saved key', async () => {
     const screen = await mount()
     await vi.waitFor(() => expect(input(screen.container, 'lia-model').value).toBe('custom/Meu-modelo:Q4'))
     await page.screenshot({ path: '../../../Tests/artifacts/transport-review-20261030/provider-config-ui.png' })
     await screen.getByRole('button', { name: 'Remover', exact: true }).click()
+    expect(fixture.removeTransport).not.toHaveBeenCalled()
+    expect(fixture.deleteApiKey).not.toHaveBeenCalled()
+    await expect.element(screen.getByText('Esta ação remove o serviço, o modelo, os fallbacks e as chaves salvas desta configuração. Não pode ser desfeita.', { exact: true })).toBeVisible()
+    await screen.getByRole('button', { name: 'Confirmar remoção', exact: true }).click()
     await vi.waitFor(() => expect(fixture.deleteApiKey).toHaveBeenCalledWith('openai-compatible'))
     expect(fixture.removeTransport.mock.invocationCallOrder[0]).toBeLessThan(fixture.deleteApiKey.mock.invocationCallOrder[0])
     expect(fixture.config.preferred).toBeUndefined()
@@ -82,6 +111,7 @@ describe('editable model selection', () => {
     const screen = await mount(locale)
     await vi.waitFor(() => expect(input(screen.container, 'lia-model').value).toBe('custom/Meu-modelo:Q4'))
     await screen.getByRole('button', { name: locale === 'en' ? 'Remove' : 'Remover', exact: true }).click()
+    await screen.getByRole('button', { name: locale === 'en' ? 'Confirm removal' : 'Confirmar remoção', exact: true }).click()
     await vi.waitFor(() => expect(fixture.error).toHaveBeenCalledWith(message))
     expect(fixture.deleteApiKey).not.toHaveBeenCalled()
     expect(fixture.config.preferred?.providerId).toBe('openai-compatible')

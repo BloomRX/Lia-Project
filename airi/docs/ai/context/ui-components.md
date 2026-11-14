@@ -237,7 +237,7 @@ Catches synchronous render/setup errors in descendants via `onErrorCaptured` and
 
 ### DoubleCheckButton
 
-Two-stage confirmation button — click once to reveal confirm/cancel.
+Two-stage confirmation button. The first click opens Cancel and Confirm; it never emits `confirm`. Cancel receives focus first. Cancel or Escape closes the choice and returns focus to the initial action. Disabling or loading the action closes a pending choice. Use for scoped destructive actions, not as a general dialog.
 
 | Prop | Type | Default | Description |
 |------|------|---------|-------------|
@@ -246,10 +246,17 @@ Two-stage confirmation button — click once to reveal confirm/cancel.
 | `size` | `'sm' \| 'md' \| 'lg'` | `'md'` | Size |
 | `block` | `boolean?` | `false` | Full width |
 | `disabled` | `boolean?` | `false` | Disabled |
-| `loading` | `boolean?` | `false` | Loading |
+| `loading` | `boolean?` | `false` | Loading; closes a pending choice |
+| `label` | `string?` | — | Accessible name for an icon-only initial action |
+| `confirmLabel` | `string?` | — | Accessible name for the confirmation action |
+| `cancelLabel` | `string?` | `'Cancel'` | Localized cancel text; override with the cancel slot when needed |
+| `description` | `string?` | — | Visible scope/consequence, associated with both actions via `aria-describedby` |
 
-**Emits**: `confirm()`, `cancel()`
-**Slots**: `default` (initial text), `confirm` (confirm text), `cancel` (cancel text)
+**Emits**: `confirm()` once on the second explicit action; `cancel()` on Cancel/Escape.
+**Accessibility**: initial action exposes `aria-expanded`; pending actions reference the description. Motion respects `prefers-reduced-motion`. Supply localized labels and a specific consequence (for example, “only this conversation”).
+**Slots**: `default` (initial text), `confirm` (confirm text), `cancel` (cancel text), `cancel-botton-icon` (existing icon slot name).
+
+Chat message deletion uses `stage-ui/.../action-menu/delete-confirmation.vue`, a separate Reka AlertDialog. The menu only requests deletion; Cancel/Escape emit no delete, and Confirm emits once. Its title and description identify the single-message scope. Keep this dialog outside the menu root so menu closure cannot cancel the pending confirmation.
 
 ### Progress
 

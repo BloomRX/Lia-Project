@@ -34,6 +34,7 @@ import { useSettings, useSettingsAudioDevice } from '@proj-airi/stage-ui/stores/
 import { refDebounced, useBroadcastChannel, useEventListener } from '@vueuse/core'
 import { storeToRefs } from 'pinia'
 import { computed, onMounted, onUnmounted, ref, shallowRef, toRef, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { toast } from 'vue-sonner'
 
 import ControlsIslandRoot from '../components/stage-islands/controls-island/controls-island-root.vue'
@@ -61,6 +62,7 @@ import {
   shouldSuppressVoiceInput,
 } from '../utils/voice-input-suppression'
 
+const { t } = useI18n()
 const controlsIslandRef = ref<InstanceType<typeof ControlsIsland>>()
 const controlsIslandInteractionActive = shallowRef(false)
 const controlsIslandElement = toRef(() => controlsIslandRef.value?.element)
@@ -946,7 +948,7 @@ const cursorPosition = computed(() => ({
       </div>
     </div>
     <!-- Loading overlay sits on top, does not hide the stage -->
-    <div v-show="isLoading" class="absolute left-0 top-0 z-99 h-full w-full flex cursor-grab items-center justify-center overflow-hidden">
+    <div v-show="isLoading" role="status" aria-live="polite" class="absolute left-0 top-0 z-99 h-full w-full flex cursor-grab items-center justify-center overflow-hidden">
       <div
         :class="[
           'absolute h-24 w-full overflow-hidden rounded-xl',
@@ -962,10 +964,9 @@ const cursorPosition = computed(() => ({
             'h-full w-full flex items-center justify-center',
             'text-1.5rem text-primary-600 dark:text-primary-400 font-normal',
             'select-none',
-            'animate-flash animate-duration-5s animate-count-infinite',
           ]"
         >
-          Loading...
+          {{ t('tamagotchi.stage.loading') }}
         </div>
       </div>
     </div>

@@ -16,7 +16,7 @@ import { useJournalPreviewStore } from '@proj-airi/stage-ui/stores/journal-previ
 import { useAiriCardStore } from '@proj-airi/stage-ui/stores/modules/airi-card'
 import { useConsciousnessSettingsStore } from '@proj-airi/stage-ui/stores/modules/consciousness-settings'
 import { useSettingsDeveloper } from '@proj-airi/stage-ui/stores/settings/developer'
-import { BasicTextarea } from '@proj-airi/ui'
+import { BasicTextarea, DoubleCheckButton } from '@proj-airi/ui'
 import { useLocalStorage } from '@vueuse/core'
 import { storeToRefs } from 'pinia'
 import { DropdownMenuContent, DropdownMenuItem, DropdownMenuPortal, DropdownMenuRoot, DropdownMenuTrigger } from 'reka-ui'
@@ -379,7 +379,7 @@ async function handleCleanupMessages() {
     </template>
 
     <template #composer>
-      <p v-if="imageLimitMessage" role="alert" :class="['px-2 text-sm text-red-600 dark:text-red-300']">
+      <p v-if="imageLimitMessage" id="lia-chat-input-error" role="alert" :class="['px-2 text-sm text-red-600 dark:text-red-300']">
         {{ imageLimitMessage }}
       </p>
       <div
@@ -387,6 +387,7 @@ async function handleCleanupMessages() {
           'min-h-0 max-h-full flex flex-col gap-1 overflow-hidden',
         ]"
       >
+        <span id="lia-chat-send-help" class="sr-only">{{ t('stage.chat.send-help', { mode: sendModeLabels[sendMode] }) }}</span>
         <div
           data-testid="chat-composer-previews"
           :class="[
@@ -416,7 +417,8 @@ async function handleCleanupMessages() {
                   'absolute right-1 top-1 z-10 p-1 rounded-md bg-black/40 text-white backdrop-blur-sm',
                   'opacity-0 transition-opacity group-hover:opacity-100 hover:bg-black/60',
                 ]"
-                title="Save to computer"
+                :title="t('stage.chat.actions.save-image')"
+                :aria-label="`${t('stage.chat.actions.save-image')}: ${entry.title}`"
                 @click.stop="journalPreviewStore.downloadImage(entry.url || '', entry.title)"
               >
                 <div class="i-solar:download-minimalistic-bold-duotone text-[10px]" />
@@ -436,6 +438,7 @@ async function handleCleanupMessages() {
                   'absolute right-1 top-1 h-5 w-5 flex items-center justify-center rounded-full',
                   'bg-red-500 text-xs text-white',
                 ]"
+                :aria-label="t('stage.chat.actions.remove-attachment', { index: index + 1 })"
                 @click="removeAttachment(index)"
               >
                 &times;
@@ -443,17 +446,18 @@ async function handleCleanupMessages() {
             </div>
           </div>
         </div>
-        <div :class="['flex shrink-0 items-center justify-end gap-2 py-1']">
+        <div :class="['flex shrink-0 flex-wrap items-center justify-end gap-2 py-1']">
           <DropdownMenuRoot>
             <DropdownMenuTrigger as-child>
               <button
                 :class="[
-                  'max-h-[10lh] min-h-[1lh] flex items-center justify-center rounded-md p-2 outline-none',
+                  'max-h-[10lh] min-h-[1lh] flex items-center justify-center rounded-md p-2 outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 dark:focus-visible:outline-primary-300',
                   'transition-colors transition-transform active:scale-95',
                 ]"
                 bg="neutral-100 dark:neutral-800"
                 text="lg neutral-500 dark:neutral-400"
                 :title="t('stage.send-mode.title')"
+                :aria-label="t('stage.send-mode.title')"
               >
                 <div class="i-solar:keyboard-bold-duotone" />
               </button>
@@ -501,28 +505,30 @@ async function handleCleanupMessages() {
             bg="neutral-100 dark:neutral-800"
             text="lg neutral-500 dark:neutral-400"
             hover:text="primary-500 dark:primary-400"
-            flex items-center justify-center rounded-md p-2 outline-none
-            transition-colors transition-transform active:scale-95
-            title="Stop speaking"
-            aria-label="Stop speaking"
+
+            flex items-center justify-center rounded-md p-2 outline-none transition-colors transition-transform active:scale-95 focus-visible:outline-2 focus-visible:outline-primary-600 focus-visible:outline-offset-2 dark:focus-visible:outline-primary-300
+            :title="t('stage.chat.actions.stop-speaking')"
+            :aria-label="t('stage.chat.actions.stop-speaking')"
             @click="stopSpeakingFromChat"
           >
             <div class="i-solar:stop-circle-bold-duotone" />
           </button>
 
-          <button
-            :class="[
-              'max-h-[10lh] min-h-[1lh]',
-            ]"
-            bg="neutral-100 dark:neutral-800"
-            text="lg neutral-500 dark:neutral-400"
-            hover:text="red-500 dark:red-400"
-            flex items-center justify-center rounded-md p-2 outline-none
-            transition-colors transition-transform active:scale-95
-            @click="handleCleanupMessages"
+          <DoubleCheckButton
+            size="sm"
+            color="red"
+            variant="secondary"
+            :label="t('stage.chat.actions.clear')"
+            :confirm-label="t('stage.chat.actions.clear-confirm')"
+            :cancel-label="t('stage.chat.actions.cancel')"
+            :description="t('stage.chat.actions.clear-description')"
+            @confirm="handleCleanupMessages"
           >
-            <div class="i-solar:trash-bin-2-bold-duotone" />
-          </button>
+            <div class="i-solar:trash-bin-2-bold-duotone" aria-hidden="true" />
+            <template #confirm>
+              {{ t('stage.chat.actions.clear-confirm') }}
+            </template>
+          </DoubleCheckButton>
 
           <!-- Image Journal Deep Link -->
           <button
@@ -530,9 +536,10 @@ async function handleCleanupMessages() {
             bg="neutral-100 dark:neutral-800"
             text="lg neutral-500 dark:neutral-400"
             hover:text="primary-500 dark:primary-400"
-            flex items-center justify-center rounded-md p-2 outline-none
-            transition-colors transition-transform active:scale-95
-            title="Image Journal"
+
+            flex items-center justify-center rounded-md p-2 outline-none transition-colors transition-transform active:scale-95 focus-visible:outline-2 focus-visible:outline-primary-600 focus-visible:outline-offset-2 dark:focus-visible:outline-primary-300
+            :title="t('stage.chat.actions.image-journal')"
+            :aria-label="t('stage.chat.actions.image-journal')"
             @click="navigateToImageJournal"
           >
             <div class="i-solar:gallery-bold-duotone" />
@@ -544,9 +551,10 @@ async function handleCleanupMessages() {
             bg="neutral-100 dark:neutral-800"
             text="lg neutral-500 dark:neutral-400"
             hover:text="primary-500 dark:primary-400"
-            flex items-center justify-center rounded-md p-2 outline-none
-            transition-colors transition-transform active:scale-95
-            title="Attach Image"
+
+            flex items-center justify-center rounded-md p-2 outline-none transition-colors transition-transform active:scale-95 focus-visible:outline-2 focus-visible:outline-primary-600 focus-visible:outline-offset-2 dark:focus-visible:outline-primary-300
+            :title="t('stage.chat.actions.attach-image')"
+            :aria-label="t('stage.chat.actions.attach-image')"
             @click="handleManualAttach"
           >
             <div class="i-solar:camera-add-bold-duotone" />
@@ -564,12 +572,15 @@ async function handleCleanupMessages() {
           v-model="messageInput"
           :submit-on-enter="false"
           :placeholder="t('stage.message')"
+          :aria-label="t('stage.chat.message-label')"
+          :aria-describedby="imageLimitMessage ? 'lia-chat-input-error' : 'lia-chat-send-help'"
+          :aria-invalid="imageLimitMessage ? true : undefined"
           class="ph-no-capture [scrollbar-gutter:stable]"
           text="primary-600 dark:primary-100  placeholder:primary-500 dark:placeholder:primary-200"
           border="solid 2 primary-200/20 dark:primary-400/20"
           bg="primary-100/50 dark:primary-900/70"
           max-h="[10lh]" min-h="[1lh]"
-          w-full shrink-0 resize-none overflow-y-auto rounded-xl p-2 font-medium outline-none
+          w-full shrink-0 resize-none overflow-y-auto rounded-xl p-2 font-medium outline-none focus-visible:outline-2 focus-visible:outline-primary-600 focus-visible:outline-offset-2 dark:focus-visible:outline-primary-300
           transition="all duration-250 ease-in-out placeholder:all placeholder:duration-250 placeholder:ease-in-out"
           @compositionstart="isComposing = true"
           @compositionend="isComposing = false"
@@ -583,3 +594,13 @@ async function handleCleanupMessages() {
   <!-- Shared Preview Modal -->
   <JournalPreviewModal />
 </template>
+
+<style scoped>
+@media (prefers-reduced-motion: reduce) {
+  :deep(*) {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+</style>

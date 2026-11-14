@@ -1,5 +1,25 @@
 chat:
   actions:
+    clear: Clear this conversation
+    clear-confirm: Confirm clear
+    clear-description: This removes the messages in this conversation and stops pending replies. Other conversations stay unchanged. This cannot be undone.
+    background: Choose background
+    light-theme: Use light theme
+    dark-theme: Use dark theme
+    menu: Message actions
+    copy: Copy
+    delete: Delete message
+    delete-confirm: Confirm deletion
+    delete-description: This removes only this message from this conversation. It cannot be undone.
+    hearing: Hearing settings
+    settings: Settings
+    view: View controls
+    cancel: Cancel
+    stop-speaking: Stop speaking
+    image-journal: Open image journal
+    attach-image: Attach image
+    save-image: Save image to computer
+    remove-attachment: 'Remove attachment {index}'
     retry: Retry
   errors:
     auth-failure: The AI service could not verify access. Check your connection settings and try again.
@@ -10,6 +30,8 @@ chat:
     service-unavailable: The AI service is temporarily unavailable. Wait a moment and try again.
     empty-response: The AI service finished without sending a response. Try again.
     other: Could not send your message. Try again. If the problem continues, check your connection settings.
+  message-label: Message to Lia
+  send-help: 'Send with {mode}. Shift+Enter inserts a new line.'
   message:
     character-name:
       airi: AIRI
@@ -23,6 +45,9 @@ chat:
     cloud-badge: Synced to cloud
     new-chat-fallback: New chat
     delete: Delete conversation
+    delete-confirm: Confirm deletion
+    delete-description: Delete this conversation and its messages? This cannot be undone.
+    cancel: Cancel
 render-error:
   title: '{renderer} could not render this model'
   description: The model is selected, but the Stage could not display it.

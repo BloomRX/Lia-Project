@@ -48,6 +48,8 @@ const card = vi.hoisted(() => ({
 vi.mock('@proj-airi/electron-vueuse', () => ({
   useElectronEventaInvoke: (invoke: { receiveEvent?: { id?: string } }) => {
     const id = invoke?.receiveEvent?.id
+    if (id === 'eventa:invoke:lia:capabilities:get-receive')
+      return async () => ({ voice: { configured: false, available: false }, avatar: { available: false } })
     if (id === 'eventa:invoke:lia:voice:config:get-receive')
       return async () => ipc.voiceConfig.current
     if (id === 'eventa:invoke:lia:voice:config:set-receive')

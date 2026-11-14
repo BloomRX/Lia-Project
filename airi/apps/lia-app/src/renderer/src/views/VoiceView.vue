@@ -1,9 +1,13 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 
 import LiaButton from '../components/lia/LiaButton.vue'
 import LiaPanel from '../components/lia/LiaPanel.vue'
+import LiaStatusChip from '../components/lia/LiaStatusChip.vue'
 import VoiceEngineCard from '../components/VoiceEngineCard.vue'
+
+import { voiceStatusChipVariant, voiceStatusChipVm } from '../components/voice-engine-card.vm'
+import { pickVoiceEngineLocale, voiceEngineText } from '../voice-engine-strings'
 
 /**
  * Voice page (migrated to the Lia design system in 8.0A-4, over the Phase
@@ -23,9 +27,10 @@ import VoiceEngineCard from '../components/VoiceEngineCard.vue'
  * leftover (library location) remains collapsed behind the Advanced
  * disclosure, exactly as before.
  */
-const props = defineProps<{ api: any, status: any }>()
+const props = defineProps<{ api: any, status: any, language?: string, readiness?: any }>()
 const emit = defineEmits<{ (e: 'refresh'): void }>()
-
+const voiceChip = computed(() => voiceStatusChipVm(props.readiness, props.language))
+const voiceLocale = computed(() => pickVoiceEngineLocale(props.language))
 const profiles = ref<any[]>([])
 const advanced = ref(false)
 const kind = ref<'custom' | 'ready'>('ready')
@@ -160,6 +165,9 @@ async function importVoice() {
       <p class="voice-intro">
         Escolha como a Lia fala com você.
       </p>
+      <LiaStatusChip :variant="voiceStatusChipVariant(voiceChip.tone)">
+        {{ voiceChip.label }}
+      </LiaStatusChip>
     </header>
 
     <!--
@@ -173,13 +181,13 @@ async function importVoice() {
     <div class="choices">
       <label class="choice" :class="{ active: kind === 'ready' }" @click="kind = 'ready'">
         <input v-model="kind" type="radio" value="ready">
-        <strong>Voz pronta</strong>
-        <span class="dim">rápida para começar, roda em provedor de nuvem configurado</span>
+        <strong>{{ voiceEngineText(voiceLocale, 'lia.voice.kind.ready') }}</strong>
+        <span class="dim">{{ voiceEngineText(voiceLocale, 'lia.voice.kind.readyHint') }}</span>
       </label>
       <label class="choice" :class="{ active: kind === 'custom' }" @click="kind = 'custom'">
         <input v-model="kind" type="radio" value="custom">
-        <strong>Minha própria voz</strong>
-        <span class="dim">roda no sistema de voz local da Lia</span>
+        <strong>{{ voiceEngineText(voiceLocale, 'lia.voice.kind.custom') }}</strong>
+        <span class="dim">{{ voiceEngineText(voiceLocale, 'lia.voice.kind.customHint') }}</span>
       </label>
     </div>
 
@@ -273,6 +281,7 @@ async function importVoice() {
 }
 
 .voice-header h2 { margin: 0; }
+.voice-header .lia-status-chip { margin-top: var(--lia-space-2); }
 .voice-intro {
   color: var(--lia-text-secondary);
   margin: var(--lia-space-2) 0 0;

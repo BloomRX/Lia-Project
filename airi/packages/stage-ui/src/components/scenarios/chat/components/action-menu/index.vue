@@ -5,7 +5,7 @@ import type { ComponentPublicInstance } from 'vue'
 import type { ChatActionMenuAction } from '.'
 
 import { errorMessageFromValue, isStageCapacitor, isStageWeb } from '@proj-airi/stage-shared'
-import { useElementVisibility, useIntervalFn } from '@vueuse/core'
+import { useElementVisibility, useIntervalFn, usePreferredReducedMotion } from '@vueuse/core'
 import { animate } from 'animejs'
 import { clamp } from 'es-toolkit'
 import {
@@ -24,6 +24,8 @@ import { computed, onUnmounted, reactive, ref, shallowRef, toRef, useTemplateRef
 import { useI18n } from 'vue-i18n'
 import { useWebHaptics } from 'web-haptics/vue'
 
+import ChatDeleteConfirmation from './delete-confirmation.vue'
+
 import { createChatActionMenuItems, createChatActionMenuTriggerState } from '.'
 import { useBreakpoints } from '../../../../../composables/use-breakpoints'
 import { useElementScroll } from '../../composables/use-element-scroll'
@@ -41,7 +43,6 @@ const props = withDefaults(defineProps<{
   canRetry: false,
   canDelete: true,
   copyText: '',
-  menuLabel: 'Message actions',
   placement: 'right',
   scrollContainer: null,
 })
@@ -84,7 +85,10 @@ const bottomSentinelVisible = useElementVisibility(bottomSentinelRef, {
 
 const { trigger } = useWebHaptics()
 const { isMobile } = useBreakpoints()
+const reducedMotion = usePreferredReducedMotion()
 const { t } = useI18n()
+const accessibleMenuLabel = computed(() => props.menuLabel ?? t('stage.chat.actions.menu'))
+const deleteRequested = ref(false)
 const shouldDisableDropdownMenu = computed(() => (isStageWeb() || isStageCapacitor()) && isMobile.value)
 const copyFeedbackActive = shallowRef(false)
 
@@ -93,6 +97,8 @@ const menuItems = computed(() => createChatActionMenuItems({
   canRetry: props.canRetry,
   canDelete: props.canDelete,
   retryLabel: t('stage.chat.actions.retry'),
+  copyLabel: t('stage.chat.actions.copy'),
+  deleteLabel: t('stage.chat.actions.delete'),
 }))
 const triggerState = computed(() => createChatActionMenuTriggerState({
   copyFeedbackActive: copyFeedbackActive.value,
@@ -109,6 +115,7 @@ const contentClasses = [
 const itemClasses = [
   'relative flex cursor-pointer select-none items-center gap-2 rounded-lg px-3 py-2 text-sm leading-none outline-none',
   'data-[disabled]:pointer-events-none data-[highlighted]:bg-primary-50/80 dark:data-[highlighted]:bg-primary-900/40',
+  'focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary-600 dark:focus-visible:outline-primary-300',
   'transition-colors duration-150 ease-in-out',
 ]
 
@@ -135,6 +142,7 @@ const triggerStyle = computed(() => (
 
 function handleContextMenuOpenChange(open: boolean) {
   contextMenuOpen.value = open
+  // Keep deleteRequested until the separate alert dialog resolves it.
 
   if (open)
     animateReleasedState()
@@ -142,6 +150,7 @@ function handleContextMenuOpenChange(open: boolean) {
 
 function handleDropdownMenuOpenChange(open: boolean) {
   dropdownMenuOpen.value = open
+  // Menu close is not cancellation of the already requested confirmation.
 }
 
 function setMeasuredElement(element: Element | ComponentPublicInstance | null) {
@@ -275,7 +284,7 @@ async function handleAction(action: ChatActionMenuAction) {
     return
   }
 
-  emit('delete')
+  deleteRequested.value = true
 }
 
 const pressedAnimatable = reactive({ scale: 100 })
@@ -284,6 +293,8 @@ let scaleAnimation: ReturnType<typeof animate> | undefined
 let gestureReleased = true
 
 function animatePressedState() {
+  if (reducedMotion.value === 'reduce')
+    return
   gestureReleased = false
   scaleAnimation?.cancel()
   scaleAnimation = animate(pressedAnimatable, {
@@ -368,9 +379,10 @@ onUnmounted(() => scaleAnimation?.cancel())
                 'h-8 w-8 flex items-center justify-center rounded-lg',
                 'bg-white/85 text-neutral-500 backdrop-blur-sm',
                 'dark:bg-neutral-900/85 dark:text-neutral-300',
-                'transition-colors hover:text-primary-500 dark:hover:text-primary-300',
+                'transition-colors hover:text-primary-600 dark:hover:text-primary-300',
+                'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 dark:focus-visible:outline-primary-300',
               ]"
-              :aria-label="menuLabel"
+              :aria-label="accessibleMenuLabel"
             >
               <div
                 :class="[
@@ -397,7 +409,7 @@ onUnmounted(() => scaleAnimation?.cancel())
                 :class="[
                   ...itemClasses,
                   item.danger
-                    ? 'text-red-500 data-[highlighted]:bg-red-50/80 dark:data-[highlighted]:bg-red-950/40'
+                    ? 'text-red-700 dark:text-red-300 data-[highlighted]:bg-red-50/80 dark:data-[highlighted]:bg-red-950/40'
                     : '',
                 ]"
                 @select="() => void handleAction(item.action)"
@@ -423,7 +435,7 @@ onUnmounted(() => scaleAnimation?.cancel())
           :class="[
             ...itemClasses,
             item.danger
-              ? 'text-red-500 data-[highlighted]:bg-red-50/80 dark:data-[highlighted]:bg-red-950/40'
+              ? 'text-red-700 dark:text-red-300 data-[highlighted]:bg-red-50/80 dark:data-[highlighted]:bg-red-950/40'
               : '',
           ]"
           @select="() => void handleAction(item.action)"
@@ -440,6 +452,10 @@ onUnmounted(() => scaleAnimation?.cancel())
       </ContextMenuContent>
     </ContextMenuPortal>
   </ContextMenuRoot>
+  <ChatDeleteConfirmation
+    v-model:open="deleteRequested"
+    @confirm="emit('delete')"
+  />
 </template>
 
 <style>

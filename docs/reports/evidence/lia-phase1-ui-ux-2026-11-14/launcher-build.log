@@ -1,0 +1,78 @@
+$ pnpm -F @lia/core build && electron-vite build
+$ tsdown
+ℹ tsdown v0.22.14 powered by rolldown v1.2.5
+ℹ config file: /home/user/Lia-Project/airi/packages/lia-core/tsdown.config.ts
+ℹ entry: ./src/index.ts, ./src/bootstrap/runtime-root.ts, ./src/bridge/lia-config.ts, ./src/voice/config.ts, ./src/voice/engines/kokoro/index.ts, ./src/voice/engines/registry.ts, ./src/voice/engines/types.ts, ./src/voice/voice-service.ts, ./src/paths/product-paths.ts, ./src/paths/install-location.ts, ./src/product/config.ts, ./src/secrets/vault.ts, ./src/voice/shared.ts, ./src/voices/profiles.ts, ./src/voices/types.ts
+ℹ tsconfig: tsconfig.json
+ℹ Build start
+ℹ Cleaning 43 files
+ℹ dist/voice/engines/kokoro/index.mjs    44.49 kB │ gzip: 13.34 kB
+ℹ dist/index.mjs                         27.19 kB │ gzip:  8.86 kB
+ℹ dist/voices/profiles.mjs               10.53 kB │ gzip:  4.02 kB
+ℹ dist/bootstrap/runtime-root.mjs        10.06 kB │ gzip:  3.89 kB
+ℹ dist/voice/voice-service.mjs            6.26 kB │ gzip:  1.99 kB
+ℹ dist/paths/product-paths.mjs            3.41 kB │ gzip:  1.42 kB
+ℹ dist/voice/engines/registry.mjs         3.23 kB │ gzip:  1.24 kB
+ℹ dist/paths/install-location.mjs         3.09 kB │ gzip:  1.22 kB
+ℹ dist/voice/config.mjs                   2.59 kB │ gzip:  0.84 kB
+ℹ dist/bridge/lia-config.mjs              1.96 kB │ gzip:  0.83 kB
+ℹ dist/voice/shared.mjs                   1.01 kB │ gzip:  0.56 kB
+ℹ dist/product/config.mjs                 0.72 kB │ gzip:  0.29 kB
+ℹ dist/voice/engines/types.mjs            0.29 kB │ gzip:  0.19 kB
+ℹ dist/secrets/vault.mjs                  0.14 kB │ gzip:  0.12 kB
+ℹ dist/voices/types.mjs                   0.01 kB │ gzip:  0.03 kB
+ℹ dist/config-Cgayvgdp.mjs               16.32 kB │ gzip:  4.72 kB
+ℹ dist/vault-BjA9hbw6.mjs                 7.66 kB │ gzip:  2.52 kB
+ℹ dist/index.d.mts                       34.49 kB │ gzip: 10.76 kB
+ℹ dist/voice/engines/kokoro/index.d.mts  10.76 kB │ gzip:  3.76 kB
+ℹ dist/bootstrap/runtime-root.d.mts       8.46 kB │ gzip:  3.51 kB
+ℹ dist/voices/profiles.d.mts              5.40 kB │ gzip:  2.29 kB
+ℹ dist/voice/engines/registry.d.mts       5.09 kB │ gzip:  1.98 kB
+ℹ dist/bridge/lia-config.d.mts            4.66 kB │ gzip:  1.79 kB
+ℹ dist/voice/engines/types.d.mts          3.52 kB │ gzip:  1.47 kB
+ℹ dist/voice/voice-service.d.mts          3.40 kB │ gzip:  1.50 kB
+ℹ dist/secrets/vault.d.mts                3.01 kB │ gzip:  1.20 kB
+ℹ dist/paths/product-paths.d.mts          2.80 kB │ gzip:  1.21 kB
+ℹ dist/voice/config.d.mts                 2.58 kB │ gzip:  1.08 kB
+ℹ dist/paths/install-location.d.mts       2.55 kB │ gzip:  1.19 kB
+ℹ dist/product/config.d.mts               1.57 kB │ gzip:  0.47 kB
+ℹ dist/voice/shared.d.mts                 1.04 kB │ gzip:  0.57 kB
+ℹ dist/voices/types.d.mts                 0.37 kB │ gzip:  0.17 kB
+ℹ dist/config-nWuU7y4v.d.mts             12.18 kB │ gzip:  4.02 kB
+ℹ dist/types-CaWGtYud.d.mts               3.17 kB │ gzip:  1.47 kB
+ℹ 34 files, total: 244.03 kB
+[PLUGIN_TIMINGS] Your build spent 99% of 6.0s inside plugin hooks (5.9s).
+Measured inside the callback, so queue time is excluded and time the callback itself awaited is not:
+  - rolldown-plugin-dts:generate load (87%, 5.2s, 34 calls)
+Those rows are 87% of the build; the rest of the 99% is below.
+Not measurable — 3 hooks whose calls overlap, so elapsed time covers work other calls were doing. Profile with `node --cpu-prof`:
+  - rolldown-plugin-dts:resolver resolveId (204 calls)
+  - tsdown:deps resolveId (99 calls)
+  - rolldown-plugin-dts:fake-js transform (34 calls)
+See https://rolldown.rs/reference/InputOptions.checks#plugintimings for more details.
+
+✔ Build complete in 6316ms
+vite v8.2.2 building ssr environment for production...
+transforming...
+✓ 50 modules transformed.
+rendering chunks...
+out/main/index.js  220.00 kB
+
+✓ built in 198ms
+vite v8.2.2 building ssr environment for production...
+transforming...
+✓ 2 modules transformed.
+rendering chunks...
+out/preload/index.cjs  2.42 kB
+
+✓ built in 27ms
+vite v8.2.2 building client environment for production...
+transforming...
+✓ 45 modules transformed.
+rendering chunks...
+out/renderer/index.html                            0.52 kB
+out/renderer/assets/LiaHeroImage-BLKXUVQa.png  1,771.35 kB
+out/renderer/assets/index-DzlDwcao.css            24.57 kB
+out/renderer/assets/index-DhL64PB8.js            266.97 kB
+
+✓ built in 568ms

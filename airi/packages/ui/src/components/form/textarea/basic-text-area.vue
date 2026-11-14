@@ -24,7 +24,7 @@ function onKeyDown(e: KeyboardEvent) {
   if (!props.submitOnEnter)
     return
 
-  if (e.code === 'Enter' && !e.shiftKey) { // just block Enter is enough, Shift+Enter by default generates a newline
+  if (e.code === 'Enter' && !e.shiftKey && !e.isComposing && e.keyCode !== 229) { // just block Enter is enough, Shift+Enter by default generates a newline
     e.preventDefault()
     events('submit', input.value)
   }

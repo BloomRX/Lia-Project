@@ -49,6 +49,12 @@ provider:
   onboarding:
     title: 'Configure your Lia'
     subtitle: 'One step to get Lia ready to talk. Your key is stored securely on this device.'
+  managed:
+    title: AI managed by the Launcher
+    hint: Change the service and model in AI & Resources in the Lia Launcher. This screen shows the saved selection.
+    unset: Not configured
+    customService: Custom service
+    customModel: Custom model
   key:
     saved: 'Key stored'
     missing: 'No key'
@@ -82,6 +88,9 @@ provider:
     save: 'Save'
     test: 'Test connection'
     remove: 'Remove'
+    removeConfirm: 'Confirm removal'
+    cancel: 'Cancel'
+    removeDescription: 'This removes the service, model, fallbacks and saved keys in this setup. It cannot be undone.'
     back: 'Back'
     conclude: 'Finish setup'
     getKey: 'Get API key'
@@ -145,6 +154,11 @@ config:
       missing: 'No personality loaded on this card.'
       readOnlyNote: "These values come from Lia's personality. Full editing arrives in a later step."
     voice:
+      readiness:
+        unknown: Checking voice readiness…
+        ready: Voice ready
+        unavailable: Voice configured, but unavailable now
+        unconfigured: Voice needs setup
       title: 'Voice'
       summary: 'How Lia speaks: voice provider, model and timbre.'
       fields:

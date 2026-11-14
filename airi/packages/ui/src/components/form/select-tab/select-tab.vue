@@ -57,7 +57,7 @@ const rootStyle = computed(() => ({
       'relative', 'flex', 'items-stretch', 'rounded-lg',
       'overflow-hidden',
       'bg-neutral-400/6 dark:bg-neutral-950/70',
-      'transition-[border-color,box-shadow,opacity] duration-200 ease-out',
+      'transition-[border-color,box-shadow,opacity] duration-200 ease-out motion-reduce:transition-none',
       isDisabled
         ? ['cursor-not-allowed', 'opacity-60']
         : ['shadow-[0_14px_50px_-32px_rgba(0,0,0,0.55)]', 'backdrop-blur-sm'],
@@ -65,7 +65,7 @@ const rootStyle = computed(() => ({
       'before:bg-primary-300/50', 'dark:before:bg-primary-400/50',
       'before:rounded-md', 'sm:before:rounded-lg',
       'before:absolute', 'before:z-0', 'before:content-empty',
-      'before:transition-[left,width,opacity,background-color]', 'before:duration-200', 'before:ease',
+      'before:transition-[left,width,opacity,background-color]', 'before:duration-200', 'before:ease', 'motion-reduce:before:transition-none',
       'before:pointer-events-none',
       'before:opacity-$select-tab-indicator-opacity',
       'before:top-$select-tab-padding',
@@ -86,8 +86,8 @@ const rootStyle = computed(() => ({
         'relative', 'z-1',
         'flex', 'flex-1', 'items-center', 'justify-center', 'gap-2',
         'text-center', 'text-neutral-700', 'dark:text-neutral-200', 'font-medium',
-        'transition-[color,background-color,border-color,transform]', 'duration-200', 'ease-out',
-        'focus-visible:border-none', 'focus-visible:outline-none',
+        'transition-[color,background-color,border-color,transform]', 'duration-200', 'ease-out', 'motion-reduce:transition-none',
+        'focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary-600 dark:focus-visible:outline-primary-300',
         sizeClasses,
         isDisabled
           ? 'pointer-events-none'

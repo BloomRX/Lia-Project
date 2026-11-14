@@ -1,5 +1,25 @@
 chat:
   actions:
+    clear: Limpar esta conversa
+    clear-confirm: Confirmar limpeza
+    clear-description: Esta ação remove as mensagens desta conversa e interrompe respostas pendentes. As outras conversas não mudam. Não pode ser desfeita.
+    background: Escolher fundo
+    light-theme: Usar tema claro
+    dark-theme: Usar tema escuro
+    menu: Ações da mensagem
+    copy: Copiar
+    delete: Excluir mensagem
+    delete-confirm: Confirmar exclusão
+    delete-description: Esta ação remove apenas esta mensagem desta conversa. Não pode ser desfeita.
+    hearing: Configurações de escuta
+    settings: Configurações
+    view: Controles de visualização
+    cancel: Cancelar
+    stop-speaking: Parar de falar
+    image-journal: Abrir diário de imagens
+    attach-image: Anexar imagem
+    save-image: Salvar imagem no computador
+    remove-attachment: 'Remover anexo {index}'
     retry: Tentar novamente
   errors:
     auth-failure: O serviço de IA não conseguiu verificar o acesso. Confira a conexão nas configurações e tente novamente.
@@ -10,6 +30,8 @@ chat:
     service-unavailable: O serviço de IA está temporariamente indisponível. Aguarde um pouco e tente novamente.
     empty-response: O serviço de IA terminou sem enviar uma resposta. Tente novamente.
     other: Não foi possível enviar sua mensagem. Tente novamente. Se o problema continuar, confira a conexão nas configurações.
+  message-label: Mensagem para Lia
+  send-help: 'Envie com {mode}. Shift+Enter insere uma nova linha.'
   message:
     character-name:
       airi: Lia
@@ -23,6 +45,9 @@ chat:
     cloud-badge: Sincronizada na nuvem
     new-chat-fallback: Nova conversa
     delete: Excluir conversa
+    delete-confirm: Confirmar exclusão
+    delete-description: Excluir esta conversa e suas mensagens? Não pode ser desfeita.
+    cancel: Cancelar
 message: Escreva uma mensagem...
 send-mode:
   title: Tecla para enviar

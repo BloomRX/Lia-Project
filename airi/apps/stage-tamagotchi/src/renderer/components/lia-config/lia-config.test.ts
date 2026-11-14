@@ -73,9 +73,33 @@ describe('lia config panel contract', () => {
     const ai = readSource('components/lia-config/sections/AiSection.vue')
     expect(ai).toContain('LiaProviderConfig')
     expect(ai).toContain('mode="manage"')
+    expect(ai).toContain(':managed="managed"')
+    expect(ai).toContain('resolveRendererWindowContext().liaManaged')
     // No second provider store and no free-text model id.
     expect(ai).not.toContain('useLiaProviderStore')
     expect(ai).not.toMatch(/<input/)
+  })
+
+  it('projects the authoritative voice capability instead of a hardcoded off state', () => {
+    const voice = readSource('components/lia-config/sections/VoiceSection.vue')
+    const home = readSource('pages/home.vue')
+    const store = readSource('stores/lia/capabilities.ts')
+    expect(voice).toContain('voiceCapabilityState(capabilitiesStore.snapshot)')
+    expect(home).toContain('voiceCapabilityLedState(capabilities.value)')
+    expect(home).not.toContain('state: \'off\',\n      title: t(\'tamagotchi.home.leds.off\')')
+    expect(store).toContain('setLiaCapabilitySnapshot(next)')
+    expect(store).toContain('currentSnapshot.value = next')
+    expect(store).toContain('const snapshot = computed(() => currentSnapshot.value)')
+    expect(voice).not.toContain('electronLiaVoiceSynthesize')
+  })
+
+  it('guards both individual and bulk memory deletion with the shared confirmation primitive', () => {
+    const memory = readSource('components/lia-config/sections/MemorySection.vue')
+    expect(memory.match(/@confirm=/g)?.length).toBe(2)
+    expect(memory).toContain('@confirm="remove(entry.id)"')
+    expect(memory).toContain('@confirm="clear"')
+    expect(memory).not.toContain('@click="remove(entry.id)"')
+    expect(memory).toContain('memory.clear(true)')
   })
 
   it('edits the persona source of truth and never the projected prose', () => {
@@ -157,6 +181,49 @@ describe('lia config panel contract', () => {
       expect(text, source).not.toMatch(/apiKey/i)
       expect(text, source).not.toMatch(/authorization/i)
     }
+  })
+})
+
+// Internal report: docs/reports/LIA-UI-UX-AUDIT-2026-11-14.md (UI-A02).
+describe('phase 1 accessibility wiring', () => {
+  it('uses manual tabs with a named panel and roving focus', () => {
+    const panel = readSource('components/lia-config/LiaConfigPanel.vue')
+    for (const contract of ['role="tabpanel"', ':aria-labelledby=', ':aria-controls=', ':tabindex=', '@keydown=', 'ArrowRight', 'ArrowLeft', 'Home', 'End'])
+      expect(panel, contract).toContain(contract)
+    expect(panel).toContain('tab.focus()')
+    expect(panel).not.toContain('focus-visible:outline-none')
+  })
+
+  it('requires confirmation before either destructive Lia action', () => {
+    const chat = readSource('components/InteractiveArea.vue')
+    const provider = readSource('components/LiaProviderConfig.vue')
+    for (const source of [chat, provider]) {
+      expect(source).toContain('DoubleCheckButton')
+      expect(source).toContain(':description=')
+      expect(source).toContain('@confirm=')
+    }
+    expect(chat).not.toContain('@click="handleCleanupMessages"')
+    expect(provider).not.toContain('@click="removeProvider"')
+  })
+
+  it('names the composer and icon controls and associates draft errors', () => {
+    const chat = readSource('components/InteractiveArea.vue')
+    for (const contract of [':aria-label="t(', ':aria-describedby=', 'id="lia-chat-input-error"', 'id="lia-chat-send-help"', 'focus-visible:outline-2'])
+      expect(chat, contract).toContain(contract)
+    expect(chat).not.toContain('aria-label="Stop speaking"')
+    expect(chat).not.toContain('title="Attach Image"')
+  })
+
+  it('does not collapse the controls island while keyboard focus is inside', () => {
+    const island = readSource('components/stage-islands/controls-island/index.vue')
+    expect(island).toContain('@focusin=')
+    expect(island).toContain('@focusout=')
+    expect(island).toContain('hasKeyboardFocus')
+    expect(island).toContain(':aria-expanded="expanded"')
+    expect(island).toContain(':aria-controls=')
+    expect(island).toContain('trigger.focus()')
+    expect(island).toContain('usePreferredReducedMotion()')
+    expect(island).toContain(':aria-label="t(\'tamagotchi.stage.controls-island.open-hearing-controls\')"')
   })
 })
 

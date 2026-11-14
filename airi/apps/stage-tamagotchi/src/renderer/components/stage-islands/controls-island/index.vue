@@ -4,9 +4,9 @@ import { useElectronEventaContext, useElectronEventaInvoke, useElectronMouseInEl
 import { IS_DEV } from '@proj-airi/stage-shared'
 import { useSettings, useSettingsAudioDevice } from '@proj-airi/stage-ui/stores/settings'
 import { useTheme } from '@proj-airi/ui'
-import { refDebounced, useIntervalFn } from '@vueuse/core'
+import { refDebounced, useIntervalFn, usePreferredReducedMotion } from '@vueuse/core'
 import { storeToRefs } from 'pinia'
-import { computed, reactive, ref, useTemplateRef, watch } from 'vue'
+import { computed, reactive, ref, useId, useTemplateRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 
@@ -62,10 +62,23 @@ const setMainWindowContext = useElectronEventaInvoke(electronSetMainWindowContex
 
 const expanded = ref(false)
 const islandElement = useTemplateRef<HTMLElement>('island')
+const controlsPanelId = useId()
+const hasKeyboardFocus = ref(false)
+const reducedMotion = usePreferredReducedMotion()
+
+function onFocusIn() {
+  hasKeyboardFocus.value = true
+}
+
+function onFocusOut(event: FocusEvent) {
+  const root = event.currentTarget as HTMLElement
+  const next = event.relatedTarget as Node | null
+  hasKeyboardFocus.value = next !== null && root.contains(next)
+}
 
 // Tracks open overlays/dialogs that should prevent auto-collapse (e.g. 'hearing', 'profile-picker')
 const blockingOverlays = reactive(new Set<string>())
-const isBlocked = computed(() => blockingOverlays.size > 0)
+const isBlocked = computed(() => blockingOverlays.size > 0 || hasKeyboardFocus.value)
 
 function setOverlay(key: string, active: boolean) {
   if (active) {
@@ -117,7 +130,12 @@ function toggleAlwaysOnTop() {
   alwaysOnTop.value = !alwaysOnTop.value
 }
 
-function toggleControls() {
+function toggleControls(event: MouseEvent) {
+  if (expanded.value) {
+    // A deliberate collapse keeps keyboard focus on the visible trigger.
+    const trigger = event.currentTarget as HTMLElement
+    trigger.focus()
+  }
   expanded.value = !expanded.value
 }
 
@@ -155,15 +173,16 @@ const islandMotionClasses = computed(() => {
   const isHidden = motionPhase.value === 'leaving' || motionPhase.value === 'entering'
 
   return [
-    motionPhase.value === 'entering'
+    reducedMotion.value === 'reduce' || motionPhase.value === 'entering'
       ? 'transition-none'
       : 'transition-[opacity,transform] duration-200 ease-out',
     motionPhase.value === 'idle' ? '' : 'will-change-[opacity,transform] pointer-events-none',
-    isHidden ? 'opacity-0 scale-95' : 'opacity-100 scale-100',
-    isHidden && isLeft.value ? '-translate-x-3' : '',
-    isHidden && !isLeft.value ? 'translate-x-3' : '',
-    isHidden && isTop.value ? '-translate-y-2' : '',
-    isHidden && !isTop.value ? 'translate-y-2' : '',
+    isHidden ? 'opacity-0' : 'opacity-100',
+    reducedMotion.value === 'reduce' ? 'scale-100 translate-x-0 translate-y-0' : isHidden ? 'scale-95' : 'scale-100',
+    reducedMotion.value !== 'reduce' && isHidden && isLeft.value ? '-translate-x-3' : '',
+    reducedMotion.value !== 'reduce' && isHidden && !isLeft.value ? 'translate-x-3' : '',
+    reducedMotion.value !== 'reduce' && isHidden && isTop.value ? '-translate-y-2' : '',
+    reducedMotion.value !== 'reduce' && isHidden && !isTop.value ? 'translate-y-2' : '',
   ]
 })
 const islandLayoutClasses = computed(() => [
@@ -231,6 +250,8 @@ async function goHome() {
       islandPositionClasses,
       islandMotionClasses,
     ]"
+    @focusin="onFocusIn"
+    @focusout="onFocusOut"
   >
     <div
       :class="[
@@ -240,13 +261,16 @@ async function goHome() {
     >
       <!-- iOS Style Drawer Panel -->
       <Transition
-        enter-active-class="transition-all duration-500 cubic-bezier(0.32, 0.72, 0, 1)"
-        leave-active-class="transition-all duration-400 cubic-bezier(0.32, 0.72, 0, 1)"
-        :enter-from-class="`opacity-0 ${panelHiddenTransformClass} scale-90 blur-sm`"
-        :leave-to-class="`opacity-0 ${panelHiddenTransformClass} scale-90 blur-sm`"
+        :enter-active-class="reducedMotion === 'reduce' ? '' : 'transition-all duration-500 cubic-bezier(0.32, 0.72, 0, 1)'"
+        :leave-active-class="reducedMotion === 'reduce' ? '' : 'transition-all duration-400 cubic-bezier(0.32, 0.72, 0, 1)'"
+        :enter-from-class="reducedMotion === 'reduce' ? 'opacity-0' : `opacity-0 ${panelHiddenTransformClass} scale-90 blur-sm`"
+        :leave-to-class="reducedMotion === 'reduce' ? 'opacity-0' : `opacity-0 ${panelHiddenTransformClass} scale-90 blur-sm`"
       >
         <div
           v-if="expanded"
+          :id="controlsPanelId"
+          role="group"
+          :aria-label="t('tamagotchi.stage.controls-island.label')"
           :class="[
             'flex flex-col gap-1 rounded-2xl border border-neutral-200 p-2 dark:border-neutral-800',
             'bg-neutral-100/80 shadow-2xl shadow-black/20 backdrop-blur-xl dark:bg-neutral-900/80',
@@ -276,11 +300,12 @@ async function goHome() {
 
             <ControlButtonTooltip disable-hoverable-content>
               <ControlsIslandProfilePicker :open="blockingOverlays.has('profile-picker')" @update:open="setOverlay('profile-picker', $event)">
-                <template #default="{ toggle }">
+                <template #default="{ toggle, open: popoverOpen }">
                   <ControlButton
                     v-track-button="{ name: 'controls_island_action', action: 'toggle_profile_picker' }"
                     :button-style="adjustStyleClasses.button"
                     :aria-label="t('tamagotchi.stage.controls-island.switch-profile')"
+                    :aria-expanded="popoverOpen"
                     @click="toggle"
                   >
                     <div i-solar:emoji-funny-square-broken :class="adjustStyleClasses.icon" text="neutral-800 dark:neutral-300" />
@@ -402,11 +427,13 @@ async function goHome() {
             }"
             :button-style="adjustStyleClasses.button"
             :aria-label="expanded ? t('tamagotchi.stage.controls-island.collapse') : t('tamagotchi.stage.controls-island.expand')"
-            @click="toggleControls"
+            :aria-expanded="expanded"
+            :aria-controls="controlsPanelId"
+            @click="toggleControls($event)"
           >
             <div
               :class="[adjustStyleClasses.icon, isTop !== expanded ? 'rotate-180' : 'rotate-0']"
-              i-solar:alt-arrow-up-line-duotone scale-110 transition-all duration-300
+              i-solar:alt-arrow-up-line-duotone scale-110 transition-all duration-300 motion-reduce:transition-none
               text="neutral-800 dark:neutral-300"
             />
           </ControlButton>
@@ -438,7 +465,11 @@ async function goHome() {
         <ControlButtonTooltip side="inward">
           <ControlsIslandHearingConfig :show="blockingOverlays.has('hearing')" @update:show="setOverlay('hearing', $event)">
             <div class="relative">
-              <ControlButton :button-style="adjustStyleClasses.button">
+              <ControlButton
+                :button-style="adjustStyleClasses.button"
+                :aria-label="t('tamagotchi.stage.controls-island.open-hearing-controls')"
+                :aria-expanded="blockingOverlays.has('hearing')"
+              >
                 <Transition name="fade" mode="out-in">
                   <IndicatorMicVolume v-if="enabled" :class="adjustStyleClasses.icon" />
                   <div v-else i-ph:microphone-slash :class="adjustStyleClasses.icon" text="neutral-800 dark:neutral-300" />
@@ -457,7 +488,7 @@ async function goHome() {
         />
 
         <ControlButtonTooltip side="inward">
-          <ControlButton :button-style="adjustStyleClasses.button" cursor-move :class="{ 'drag-region': isLinux }" @mousedown="startDraggingWindow?.()">
+          <ControlButton :button-style="adjustStyleClasses.button" :aria-label="t('tamagotchi.stage.controls-island.drag-to-move-window')" cursor-move :class="{ 'drag-region': isLinux }" @mousedown="startDraggingWindow?.()">
             <div i-ph:arrows-out-cardinal :class="adjustStyleClasses.icon" text="neutral-800 dark:neutral-300" />
           </ControlButton>
           <template #tooltip>

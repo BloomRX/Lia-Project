@@ -172,15 +172,18 @@ watch(sendMode, () => {
         'bg-primary-200/20 dark:bg-primary-400/20',
       ]"
     >
+      <span :id="`lia-chat-send-help-${$.uid}`" class="sr-only">{{ t('stage.chat.send-help', { mode: sendModeLabels[sendMode] }) }}</span>
       <BasicTextarea
         v-model="messageInput"
         :submit-on-enter="false"
         :placeholder="t('stage.message')"
+        :aria-label="t('stage.chat.message-label')"
+        :aria-describedby="`lia-chat-send-help-${$.uid}`"
         text="primary-600 dark:primary-100  placeholder:primary-500 dark:placeholder:primary-200"
         bg="transparent"
-        min-h="[100px]" max-h="[300px]" w-full
-        rounded-t-xl p-4 font-medium pb="[60px]"
-        outline-none transition="all duration-250 ease-in-out placeholder:all placeholder:duration-250 placeholder:ease-in-out"
+        min-h="[100px]" max-h="[300px]"
+        pb="[60px]"
+        w-full rounded-t-xl p-4 font-medium outline-none focus-visible:outline-2 focus-visible:outline-primary-600 focus-visible:outline-offset-2 dark:focus-visible:outline-primary-300 transition="all duration-250 ease-in-out placeholder:all placeholder:duration-250 placeholder:ease-in-out"
         :class="{
           'transition-colors-none placeholder:transition-colors-none': themeColorsHueDynamic,
         }"
@@ -197,10 +200,11 @@ watch(sendMode, () => {
           <DropdownMenuTrigger as-child>
             <button
               :class="[
-                'h-8 w-8 flex items-center justify-center rounded-md outline-none transition-all duration-200 active:scale-95',
+                'h-8 w-8 flex items-center justify-center rounded-md outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 dark:focus-visible:outline-primary-300 transition-all duration-200 active:scale-95',
                 'text-lg text-neutral-500 dark:text-neutral-400',
               ]"
               :title="t('stage.send-mode.title')"
+              :aria-label="t('stage.send-mode.title')"
             >
               <div class="i-solar:keyboard-bold-duotone h-5 w-5" />
             </button>
@@ -220,7 +224,7 @@ watch(sendMode, () => {
                 v-for="mode in SEND_MODES"
                 :key="mode"
                 :class="[
-                  'w-full flex cursor-pointer items-center rounded-lg px-3 py-2 text-xs outline-none transition-colors',
+                  'w-full flex cursor-pointer items-center rounded-lg px-3 py-2 text-xs outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 dark:focus-visible:outline-primary-300 transition-colors',
                   'hover:bg-primary-100/60 dark:hover:bg-primary-900/40',
                   sendMode === mode ? 'bg-primary-100/60 text-primary-600 font-medium dark:bg-primary-900/40 dark:text-primary-300' : 'text-neutral-600 dark:text-neutral-300',
                 ]"
@@ -240,11 +244,12 @@ watch(sendMode, () => {
           <PopoverTrigger as-child>
             <button
               :class="[
-                'h-8 w-8 flex items-center justify-center rounded-md outline-none',
+                'h-8 w-8 flex items-center justify-center rounded-md outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 dark:focus-visible:outline-primary-300',
                 'transition-all duration-200 active:scale-95',
               ]"
               text="lg neutral-500 dark:neutral-400"
-              :title="t('settings.hearing.title')"
+              :title="t('stage.chat.actions.hearing')"
+              :aria-label="t('stage.chat.actions.hearing')"
             >
               <Transition name="fade" mode="out-in">
                 <IndicatorMicVolume v-if="enabled" class="h-5 w-5" :color-class="isListening ? undefined : 'text-neutral-500 dark:text-neutral-400'" />
@@ -278,12 +283,12 @@ watch(sendMode, () => {
           v-if="showStopSpeakingButton"
           data-testid="stop-speaking-button"
           :class="[
-            'h-8 w-8 flex items-center justify-center rounded-md outline-none',
+            'h-8 w-8 flex items-center justify-center rounded-md outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 dark:focus-visible:outline-primary-300',
             'text-lg text-neutral-500 transition-all duration-200 active:scale-95 dark:text-neutral-400',
             'hover:bg-primary-100/60 hover:text-primary-600 dark:hover:bg-primary-900/40 dark:hover:text-primary-300',
           ]"
-          title="Stop speaking"
-          aria-label="Stop speaking"
+          :title="t('stage.chat.actions.stop-speaking')"
+          :aria-label="t('stage.chat.actions.stop-speaking')"
           @click="stopSpeakingFromChat"
         >
           <div class="i-solar:stop-circle-bold-duotone h-5 w-5" />
@@ -292,3 +297,13 @@ watch(sendMode, () => {
     </div>
   </div>
 </template>
+
+<style scoped>
+@media (prefers-reduced-motion: reduce) {
+  :deep(*) {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+</style>

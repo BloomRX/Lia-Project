@@ -13,6 +13,22 @@ commit. Registra **estado**, não narrativa: relatório de rodada vai para
 
 ## 0. Estado agora
 
+**Fase 1 UI/UX implementada (14/11/2026, código + testes direcionados).** Home agora
+exige prontidão real para conversar e direciona configuração para IA & Recursos;
+chat/sessões/provedor/memória/voz importada exigem confirmação destrutiva de escopo;
+exclusão de mensagem usa diálogo separado do menu. Configurações legadas de IA/voz
+ficam colapsadas, o Stage gerenciado projeta a seleção do Launcher somente leitura,
+e a voz usa o snapshot de capacidade do Main (desconhecido/não-configurado/indisponível/
+pronto). Contraste, foco, teclado, nomes, en/pt-BR e reduced-motion foram melhorados
+nas superfícies tocadas. Launcher 360/360; Stage node alvo 72/72; stage-ui alvo 56/56
+(inclui A-1 31/31); layouts 41/41; typechecks e build Launcher/i18n PASS; lint da tarefa
+sem erros. **Browser BLOCKED** (Chromium ausente), **build Stage BLOCKED**
+(`dist.ayaka.moe` ECONNRESET), lint global FAIL (78 erros em arquivos não tocados).
+Windows/runtime, leitor de tela, pixels e C0–C4 **NÃO EXECUTADOS**. Beta segue **não
+aprovada**, baseline Windows não promovido; X-04 continua adiado. Nenhum runtime TTS,
+fallback de chat, discovery, segredo, Persona, IPC novo, dependência ou DevKit.bat alterado.
+Relatório e evidência: [Fase 1 UI/UX](../product/LIA-PHASE1-UI-UX-2026-11-14.md).
+
 **A-1 corrigido (14/11/2026, código + testes).** O achado da auditoria foi confirmado
 na causa: `defaultActive: false` **nunca foi** interruptor de desligar — é inclusão
 ambiente — e o caminho de envio por seleção explícita (`chat.ts` → `getToolsByNames` →

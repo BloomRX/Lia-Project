@@ -3,6 +3,8 @@ operations:
   load-models-status:
     loading: Loading
     ready: Ready
+stage:
+  loading: Preparing Lia…
 docs:
   theme:
     navbar:

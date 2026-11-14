@@ -15,7 +15,7 @@ const props = withDefaults(defineProps<BasicButtonProps>(), {
 const disabled = computed(() => props.disabled || props.loading)
 
 const sizeClasses: Record<ButtonSize, string> = {
-  sm: 'px-3 py-1.5 text-xs',
+  sm: 'min-h-8 px-3 py-1.5 text-xs',
   md: 'px-4 py-2 text-sm',
   lg: 'px-5 py-3 text-base',
   unset: '',
@@ -27,8 +27,9 @@ const sizeClasses: Record<ButtonSize, string> = {
     :disabled="disabled"
     :class="[
       'inline-flex items-center justify-center whitespace-nowrap font-medium',
-      'transition-all duration-200 ease-in-out active:scale-95',
+      'transition-all duration-200 ease-in-out active:scale-95 motion-reduce:transition-none motion-reduce:active:scale-100',
       'disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100',
+      'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 dark:focus-visible:outline-primary-300',
       sizeClasses[size],
       block && 'w-full',
     ]"
@@ -39,7 +40,7 @@ const sizeClasses: Record<ButtonSize, string> = {
         active-class="transition-[width,margin] ease-in-out overflow-hidden transition-100"
       >
         <span v-if="loading || icon" class="h-4 w-4 shrink-0">
-          <span v-if="loading" class="i-svg-spinners:ring-resize block h-4 w-4" />
+          <span v-if="loading" class="i-svg-spinners:ring-resize block h-4 w-4 motion-reduce:animate-none" />
           <span v-else-if="icon" :class="[icon, 'block', props.size !== 'unset' ? 'h-4 w-4' : '']" />
         </span>
       </TransitionBidirectional>

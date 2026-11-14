@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { LiaConfigSectionId } from './sections-contract'
 
-import { computed, ref } from 'vue'
+import { computed, ref, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import LiaConfigAiSection from './sections/AiSection.vue'
@@ -44,6 +44,34 @@ function tt(key: string) {
 const SECTIONS = LIA_CONFIG_SECTIONS
 
 const activeSection = ref<LiaConfigSectionId>(LIA_CONFIG_DEFAULT_SECTION)
+const panelId = useId()
+const tabId = (section: LiaConfigSectionId) => `${panelId}-tab-${section}`
+
+// Manual activation: arrows move focus only; Enter/Space selects a tab.
+// This preserves a user's place while they explore a long configuration list.
+function onTabKeydown(event: KeyboardEvent, section: LiaConfigSectionId) {
+  const index = SECTIONS.findIndex(item => item.id === section)
+  let next: number
+  switch (event.key) {
+    case 'ArrowRight':
+      next = (index + 1) % SECTIONS.length
+      break
+    case 'ArrowLeft':
+      next = (index - 1 + SECTIONS.length) % SECTIONS.length
+      break
+    case 'Home':
+      next = 0
+      break
+    case 'End':
+      next = SECTIONS.length - 1
+      break
+    default: return
+  }
+  event.preventDefault()
+  const tab = document.getElementById(tabId(SECTIONS[next].id))
+  if (tab)
+    tab.focus()
+}
 
 const sectionLabels = computed(() => SECTIONS.map(section => ({
   id: section.id,
@@ -58,7 +86,7 @@ const sectionLabels = computed(() => SECTIONS.map(section => ({
       <div class="flex items-center gap-3">
         <button
           type="button"
-          class="border border-neutral-300 rounded-lg px-3 py-1.5 text-sm text-neutral-700 font-medium transition dark:border-neutral-600 hover:bg-neutral-100 dark:text-neutral-200 dark:hover:bg-neutral-700"
+          class="border border-neutral-300 rounded-lg px-3 py-1.5 text-sm text-neutral-700 font-medium transition dark:border-neutral-600 hover:bg-neutral-100 dark:text-neutral-200 focus-visible:outline-2 focus-visible:outline-primary-600 focus-visible:outline-offset-2 dark:hover:bg-neutral-700 dark:focus-visible:outline-primary-300"
           data-testid="lia-config-back"
           @click="emit('back')"
         >
@@ -73,29 +101,39 @@ const sectionLabels = computed(() => SECTIONS.map(section => ({
       </p>
     </header>
 
-    <nav
+    <div
       class="flex flex-wrap gap-2"
       role="tablist"
       :aria-label="tt('navigation.label')"
     >
       <button
         v-for="section in sectionLabels"
+        :id="tabId(section.id)"
         :key="section.id"
         type="button"
         role="tab"
         :aria-selected="activeSection === section.id"
+        :aria-controls="panelId"
+        :tabindex="activeSection === section.id ? 0 : -1"
         :data-testid="`lia-config-tab-${section.id}`"
-        class="border rounded-lg px-3.5 py-2 text-sm font-medium transition"
+        class="border rounded-lg px-3.5 py-2 text-sm font-medium transition focus-visible:outline-2 focus-visible:outline-primary-600 focus-visible:outline-offset-2 dark:focus-visible:outline-primary-300"
         :class="activeSection === section.id
           ? 'border-neutral-900 bg-neutral-900 text-white dark:border-neutral-100 dark:bg-neutral-100 dark:text-neutral-900'
           : 'border-neutral-300 text-neutral-700 hover:bg-neutral-100 dark:border-neutral-600 dark:text-neutral-200 dark:hover:bg-neutral-700'"
         @click="activeSection = section.id"
+        @keydown="onTabKeydown($event, section.id)"
       >
         {{ section.label }}
       </button>
-    </nav>
+    </div>
 
-    <section class="border border-neutral-200 rounded-xl p-5 dark:border-neutral-700">
+    <section
+      :id="panelId"
+      role="tabpanel"
+      :aria-labelledby="tabId(activeSection)"
+      :tabindex="0"
+      class="border border-neutral-200 rounded-xl p-5 dark:border-neutral-700 focus-visible:outline-2 focus-visible:outline-primary-600 focus-visible:outline-offset-2 dark:focus-visible:outline-primary-300"
+    >
       <h2 class="text-base text-neutral-900 font-semibold dark:text-neutral-50">
         {{ tt(`sections.${activeSection}.title`) }}
       </h2>

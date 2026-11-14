@@ -5,7 +5,9 @@ import { useSettingsStageModel } from '@proj-airi/stage-ui/stores/settings/stage
 import { Button } from '@proj-airi/ui'
 import { storeToRefs } from 'pinia'
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 
+const { t } = useI18n()
 const { stageModelRenderer } = storeToRefs(useSettingsStageModel())
 const { viewControlsEnabled: l2dViewCtrlEnabled, viewControlMode: l2dCtrlMode, set: l2dSet } = useL2dViewControl()
 const { viewControlsEnabled: threeSliderCtrlEnabled, viewControlMode: threeCtrlMode, set: threeSet } = useThreeViewControl()
@@ -47,8 +49,8 @@ function handleViewControlsToggle(targetMode: string) {
     </Transition>
     <button
       w-fit flex items-center self-end justify-center justify-self-end rounded-xl p-2 backdrop-blur-md
-      border="2 solid neutral-100/60 dark:neutral-800/30" bg="neutral-50/70 dark:neutral-800/70" title="View"
-      text="neutral-500 dark:neutral-400"
+      border="2 solid neutral-100/60 dark:neutral-800/30" bg="neutral-50/70 dark:neutral-800/70" :title="t('stage.chat.actions.view')" :aria-label="t('stage.chat.actions.view')" :aria-expanded="Boolean(controlEnabled?.enabled.value)"
+      text="neutral-500 dark:neutral-400" class="focus-visible:outline-2 focus-visible:outline-primary-600 focus-visible:outline-offset-2 dark:focus-visible:outline-primary-300"
       @click="controlEnabled && (controlEnabled.enabled.value = !controlEnabled.enabled.value)"
     >
       <Transition name="fade" mode="out-in">
@@ -60,18 +62,20 @@ function handleViewControlsToggle(targetMode: string) {
 </template>
 
 <style scoped>
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.2s ease-in-out;
-}
+@media (prefers-reduced-motion: no-preference) {
+  .fade-enter-active,
+  .fade-leave-active {
+    transition: opacity 0.2s ease-in-out;
+  }
 
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
-}
+  .fade-enter-from,
+  .fade-leave-to {
+    opacity: 0;
+  }
 
-.fade-enter-to,
-.fade-leave-from {
-  opacity: 1;
+  .fade-enter-to,
+  .fade-leave-from {
+    opacity: 1;
+  }
 }
 </style>

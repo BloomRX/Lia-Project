@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 
+import LiaButton from '../components/lia/LiaButton.vue'
+
 import { pickVoiceEngineLocale } from '../voice-engine-strings'
 
 /**
@@ -11,6 +13,7 @@ import { pickVoiceEngineLocale } from '../voice-engine-strings'
  * the JSON (item L), and no AIRI-private file is ever touched.
  */
 const props = defineProps<{ api: any, status: any, language?: string }>()
+const emit = defineEmits<{ navigate: [page: 'ai'] }>()
 
 const config = ref<{ filePath: string, snapshot: any, status: string } | undefined>(undefined)
 const form = reactive({
@@ -29,6 +32,9 @@ const readable = computed(() => config.value?.status === 'missing' || (config.va
 const text = computed(() => pickVoiceEngineLocale(props.language ?? config.value?.snapshot?.preferences?.language) === 'en-US'
   ? {
       title: 'Settings',
+      openAi: 'Open AI & Resources',
+      advancedLegacy: 'Advanced legacy settings',
+      legacyHint: 'These technical fields are kept for compatibility. Use AI & Resources for the normal AI setup.',
       document: 'Configuration file',
       ai: 'AI',
       service: 'AI service',
@@ -64,6 +70,9 @@ const text = computed(() => pickVoiceEngineLocale(props.language ?? config.value
     }
   : {
       title: 'Configuração',
+      openAi: 'Abrir IA & Recursos',
+      advancedLegacy: 'Configurações legadas avançadas',
+      legacyHint: 'Estes campos técnicos foram mantidos por compatibilidade. Use IA & Recursos para configurar a IA normalmente.',
       document: 'Arquivo de configuração',
       ai: 'IA',
       service: 'Serviço de IA',
@@ -206,47 +215,15 @@ async function save() {
         {{ text.retry }}
       </button>
     </p>
-    <p v-if="readable" class="dim">
-      {{ text.document }}: <code>{{ config?.filePath }}</code>
-    </p>
-
     <form v-if="!loading && readable" class="cards" @submit.prevent="save">
-      <div class="card">
-        <h3>{{ text.ai }}</h3>
-        <label class="field">
-          {{ text.service }}
-          <input v-model="form.providerId" :placeholder="text.servicePlaceholder" spellcheck="false">
-        </label>
-        <label class="field">
-          {{ text.model }}
-          <input v-model="form.modelId" :placeholder="text.modelPlaceholder" spellcheck="false">
-        </label>
-        <label class="field">
-          {{ text.key }} <span class="dim">({{ status?.ai?.ready ? text.keyStored : text.keyMissing }})</span>
-          <input v-model="form.apiKey" autocomplete="off" :placeholder="text.keyPlaceholder" type="password">
-        </label>
-        <p class="dim field-note">
-          {{ text.keyNote }}
-        </p>
-      </div>
-
+      <LiaButton type="button" variant="primary" @click="emit('navigate', 'ai')">
+        {{ text.openAi }}
+      </LiaButton>
       <div class="card">
         <h3>{{ text.personality }}</h3>
         <label class="field">
           {{ text.activeCard }}
           <input v-model="form.activeCardId" placeholder="lia-default" spellcheck="false">
-        </label>
-      </div>
-
-      <div class="card">
-        <h3>{{ text.voice }}</h3>
-        <label class="field">
-          {{ text.voiceService }}
-          <input v-model="form.voiceProviderId" :placeholder="text.voiceServicePlaceholder" spellcheck="false">
-        </label>
-        <label class="field">
-          {{ text.voiceId }}
-          <input v-model="form.voiceId" :placeholder="text.voicePlaceholder" spellcheck="false">
         </label>
       </div>
 
@@ -273,6 +250,46 @@ async function save() {
           {{ text.languageNote }}
         </p>
       </div>
+
+      <details class="card legacy-settings">
+        <summary>{{ text.advancedLegacy }}</summary>
+        <p class="dim field-note">
+          {{ text.legacyHint }}
+        </p>
+        <p class="dim">
+          {{ text.document }}: <code>{{ config?.filePath }}</code>
+        </p>
+        <div class="card">
+          <h3>{{ text.ai }}</h3>
+          <label class="field">
+            {{ text.service }}
+            <input v-model="form.providerId" :placeholder="text.servicePlaceholder" spellcheck="false">
+          </label>
+          <label class="field">
+            {{ text.model }}
+            <input v-model="form.modelId" :placeholder="text.modelPlaceholder" spellcheck="false">
+          </label>
+          <label class="field">
+            {{ text.key }} <span class="dim">({{ status?.ai?.ready ? text.keyStored : text.keyMissing }})</span>
+            <input v-model="form.apiKey" autocomplete="off" :placeholder="text.keyPlaceholder" type="password">
+          </label>
+          <p class="dim field-note">
+            {{ text.keyNote }}
+          </p>
+        </div>
+
+        <div class="card">
+          <h3>{{ text.voice }}</h3>
+          <label class="field">
+            {{ text.voiceService }}
+            <input v-model="form.voiceProviderId" :placeholder="text.voiceServicePlaceholder" spellcheck="false">
+          </label>
+          <label class="field">
+            {{ text.voiceId }}
+            <input v-model="form.voiceId" :placeholder="text.voicePlaceholder" spellcheck="false">
+          </label>
+        </div>
+      </details>
 
       <div class="actions">
         <button :disabled="saving" type="submit">
@@ -303,4 +320,7 @@ code { color: var(--lia-magenta); font-size: 12px; word-break: break-all; }
 .field-note { font-size: 12px; margin: 0; }
 .actions { align-items: center; display: flex; gap: 12px; }
 .feedback { font-size: 13px; }
+.legacy-settings > summary { cursor: pointer; font-weight: 600; min-height: 32px; }
+.legacy-settings > summary:focus-visible { outline: 2px solid var(--lia-accent); outline-offset: 3px; }
+.legacy-settings .card { margin-top: 12px; }
 </style>

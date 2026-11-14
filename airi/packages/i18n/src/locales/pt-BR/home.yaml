@@ -49,6 +49,12 @@ provider:
   onboarding:
     title: 'Configure sua Lia'
     subtitle: 'Um passo para deixar a Lia pronta para conversar. Sua chave fica armazenada com segurança neste dispositivo.'
+  managed:
+    title: IA gerenciada pelo Launcher
+    hint: Altere o serviço e o modelo em IA & Recursos no Lia Launcher. Esta tela mostra a seleção salva.
+    unset: Não configurado
+    customService: Serviço personalizado
+    customModel: Modelo personalizado
   key:
     saved: 'Chave salva'
     missing: 'Sem chave'
@@ -82,6 +88,9 @@ provider:
     save: 'Salvar'
     test: 'Testar conexão'
     remove: 'Remover'
+    removeConfirm: 'Confirmar remoção'
+    cancel: 'Cancelar'
+    removeDescription: 'Esta ação remove o serviço, o modelo, os fallbacks e as chaves salvas desta configuração. Não pode ser desfeita.'
     back: 'Voltar'
     conclude: 'Concluir configuração'
     getKey: 'Obter chave da API'
@@ -145,6 +154,11 @@ config:
       missing: 'Nenhuma personalidade carregada neste cartão.'
       readOnlyNote: 'Estes valores vêm da personalidade da Lia. A edição completa chega em uma próxima etapa.'
     voice:
+      readiness:
+        unknown: Verificando a prontidão da voz…
+        ready: Voz pronta
+        unavailable: Voz configurada, mas indisponível agora
+        unconfigured: Voz a configurar
       title: 'Voz'
       summary: 'Como a Lia fala: provider de voz, modelo e timbre.'
       fields:

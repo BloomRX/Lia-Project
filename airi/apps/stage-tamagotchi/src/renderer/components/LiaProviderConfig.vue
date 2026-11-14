@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { LiaProviderChatConfig, LiaProviderChatTarget } from '../../shared/eventa'
 
+import { DoubleCheckButton } from '@proj-airi/ui'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { toast } from 'vue-sonner'
@@ -16,9 +17,12 @@ const props = withDefaults(defineProps<{
    * Suppresses this component's own back button so there is a single way back.
    */
   embedded?: boolean
+  /** Launcher-owned setup is a read-only summary in the Stage. */
+  managed?: boolean
 }>(), {
   mode: 'onboarding',
   embedded: false,
+  managed: false,
 })
 
 const emit = defineEmits<{
@@ -54,6 +58,16 @@ const lastTestOk = ref(false)
 const isOnboarding = () => props.mode === 'onboarding'
 
 const primaryOption = () => LIA_CHAT_PROVIDER_OPTIONS.find(option => option.id === providerId.value)
+const managedSummary = computed(() => {
+  const preferred = store.loadedConfig?.preferred
+  const service = LIA_CHAT_PROVIDER_OPTIONS.find(option => option.id === preferred?.providerId)?.label
+  const model = curatedModelsFor(preferred?.providerId ?? '').find(option => option.id === preferred?.modelId)?.label
+  return {
+    configured: Boolean(preferred?.providerId && preferred?.modelId),
+    service: service ?? tt('managed.customService'),
+    model: model ?? tt('managed.customModel'),
+  }
+})
 const needsBaseUrl = () => primaryOption()?.requiresBaseUrl === true
 
 const primaryDiscovery = useLiaModelDiscovery(computed(() => ({
@@ -379,275 +393,309 @@ watch([fallbackEnabled, fallbackProviderId], () => {
 
 watch([modelId, fallbackModelId, apiKey, fallbackApiKey, baseUrl], invalidateTest)
 
-onMounted(() => {
-  void loadExisting()
+onMounted(async () => {
+  if (props.managed) {
+    // The Launcher owns this selection. The Stage reads its public summary only;
+    // it does not query the vault or discover models for hidden edit controls.
+    await store.refreshConfig()
+    return
+  }
+  await loadExisting()
 })
 </script>
 
 <template>
   <div class="max-w-md w-full flex flex-col gap-4 border border-neutral-200/70 rounded-2xl bg-white/70 p-5 text-left shadow-lg backdrop-blur dark:border-neutral-700/70 dark:bg-black/25">
-    <div>
+    <section v-if="managed" :class="['flex flex-col gap-3']" data-testid="lia-provider-managed-summary" role="status" aria-live="polite">
       <h2 class="text-lg text-neutral-900 font-semibold dark:text-white">
-        {{ isOnboarding() ? tt('onboarding.title') : tt('title') }}
+        {{ tt('managed.title') }}
       </h2>
-      <p class="mt-0.5 text-xs text-neutral-500 leading-relaxed dark:text-neutral-400">
-        {{ isOnboarding() ? tt('onboarding.subtitle') : tt('subtitle') }}
+      <p class="text-sm text-neutral-600 dark:text-neutral-300">
+        {{ tt('managed.hint') }}
       </p>
-    </div>
-
-    <div class="flex flex-col gap-3">
-      <div class="flex flex-col gap-1">
-        <label class="text-xs text-neutral-600 font-medium dark:text-neutral-300">
+      <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
+        <dt class="text-neutral-600 dark:text-neutral-300">
           {{ tt('fields.provider.label') }}
-        </label>
-        <select
-          v-model="providerId"
-          :disabled="busy"
-          class="w-full border border-neutral-300 rounded-lg bg-white px-2.5 py-2 text-sm text-neutral-800 outline-none dark:border-neutral-600 focus:border-primary-400 dark:bg-neutral-800 dark:text-neutral-100"
-        >
-          <option value="" disabled>
-            {{ tt('fields.provider.placeholder') }}
-          </option>
-          <option v-for="option in LIA_CHAT_PROVIDER_OPTIONS" :key="option.id" :value="option.id">
-            {{ option.label }}
-          </option>
-        </select>
-      </div>
-
-      <div class="flex flex-col gap-1">
-        <label class="text-xs text-neutral-600 font-medium dark:text-neutral-300">
+        </dt>
+        <dd>{{ managedSummary.configured ? managedSummary.service : tt('managed.unset') }}</dd>
+        <dt class="text-neutral-600 dark:text-neutral-300">
           {{ tt('fields.model.label') }}
-        </label>
-        <input
-          id="lia-model"
-          v-model="modelId"
-          list="lia-model-suggestions"
-          :disabled="!providerId || busy"
-          :placeholder="tt('fields.model.placeholder')"
-          :aria-label="tt('fields.model.label')"
-          aria-describedby="lia-model-help"
-          class="w-full border border-neutral-300 rounded-lg bg-white px-2.5 py-2 text-sm text-neutral-800 outline-none dark:border-neutral-600 focus:border-primary-400 dark:bg-neutral-800 dark:text-neutral-100 disabled:opacity-60"
-        >
-        <datalist id="lia-model-suggestions">
-          <option v-for="option in primaryModelOptions" :key="option.id" :value="option.id">
-            {{ option.label }}
-          </option>
-        </datalist>
-        <p id="lia-model-help" class="text-xs text-neutral-500 dark:text-neutral-400">
-          {{ tt('discovery.manual') }}
+        </dt>
+        <dd>{{ managedSummary.configured ? managedSummary.model : tt('managed.unset') }}</dd>
+      </dl>
+    </section>
+    <template v-else>
+      <div>
+        <h2 class="text-lg text-neutral-900 font-semibold dark:text-white">
+          {{ isOnboarding() ? tt('onboarding.title') : tt('title') }}
+        </h2>
+        <p class="mt-0.5 text-xs text-neutral-500 leading-relaxed dark:text-neutral-400">
+          {{ isOnboarding() ? tt('onboarding.subtitle') : tt('subtitle') }}
         </p>
-        <p role="status" class="text-xs text-neutral-500 dark:text-neutral-400">
-          {{ tt(`discovery.${primaryDiscovery.state.value === 'ready' && primaryDiscovery.models.value.length === 0 ? 'empty' : primaryDiscovery.state.value}`) }}
-        </p>
-        <button type="button" class="self-start text-xs text-primary-600 dark:text-primary-400" :disabled="!providerId || primaryDiscovery.state.value === 'loading' || busy" @click="primaryDiscovery.refresh">
-          {{ tt('discovery.refresh') }}
-        </button>
       </div>
 
-      <div v-if="needsBaseUrl()" class="flex flex-col gap-1">
-        <label class="text-xs text-neutral-600 font-medium dark:text-neutral-300">
-          {{ tt('fields.endpoint.label') }}
-        </label>
-        <input
-          v-model="baseUrl"
-          :disabled="busy"
-          type="text"
-          :placeholder="tt('fields.endpoint.placeholder')"
-          class="w-full border border-neutral-300 rounded-lg bg-white px-2.5 py-2 text-sm text-neutral-800 outline-none dark:border-neutral-600 focus:border-primary-400 dark:bg-neutral-800 dark:text-neutral-100"
-        >
-      </div>
-
-      <div v-if="primaryNeedsKey() || keySaved" class="flex flex-col gap-1">
-        <label class="text-xs text-neutral-600 font-medium dark:text-neutral-300">
-          {{ tt('fields.key.label') }}
-        </label>
-        <div class="relative">
-          <input
-            v-model="apiKey"
+      <div class="flex flex-col gap-3">
+        <div class="flex flex-col gap-1">
+          <label class="text-xs text-neutral-600 font-medium dark:text-neutral-300">
+            {{ tt('fields.provider.label') }}
+          </label>
+          <select
+            v-model="providerId"
             :disabled="busy"
-            type="password"
-            autocomplete="off"
-            :placeholder="keySaved ? tt('fields.key.replace') : tt('fields.key.placeholder')"
-            class="w-full border border-neutral-300 rounded-lg bg-white px-2.5 py-2 pr-8 text-sm text-neutral-800 outline-none dark:border-neutral-600 focus:border-primary-400 dark:bg-neutral-800 dark:text-neutral-100"
+            class="w-full border border-neutral-300 rounded-lg bg-white px-2.5 py-2 text-sm text-neutral-800 outline-none dark:border-neutral-600 focus:border-primary-400 dark:bg-neutral-800 dark:text-neutral-100"
           >
-          <span
-            :title="keySaved ? tt('key.saved') : tt('key.missing')"
-            class="absolute right-2.5 top-1/2 -translate-y-1/2"
-          >
-            <span :class="keySaved ? 'bg-green-500' : 'bg-neutral-300 dark:bg-neutral-600'" class="block size-2 rounded-full" />
-          </span>
+            <option value="" disabled>
+              {{ tt('fields.provider.placeholder') }}
+            </option>
+            <option v-for="option in LIA_CHAT_PROVIDER_OPTIONS" :key="option.id" :value="option.id">
+              {{ option.label }}
+            </option>
+          </select>
         </div>
-        <a
-          v-if="getKeyUrl"
-          :href="getKeyUrl"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="self-start text-[11px] text-primary-600 font-medium transition dark:text-primary-400 hover:text-primary-700 hover:underline"
-        >
-          {{ tt('actions.getKey') }} ↗
-        </a>
-      </div>
 
-      <div class="flex items-center justify-between gap-2 rounded-lg bg-neutral-100/60 px-3 py-2 dark:bg-white/5">
-        <label class="flex items-center gap-2 text-sm text-neutral-700 dark:text-neutral-200">
-          <input v-model="fallbackEnabled" :disabled="busy" type="checkbox" class="size-4 accent-primary-500">
-          {{ tt('fallback.label') }}
-        </label>
-        <span class="text-[10px] text-neutral-400 dark:text-neutral-500">{{ tt('fallback.hint') }}</span>
-      </div>
+        <div class="flex flex-col gap-1">
+          <label class="text-xs text-neutral-600 font-medium dark:text-neutral-300">
+            {{ tt('fields.model.label') }}
+          </label>
+          <input
+            id="lia-model"
+            v-model="modelId"
+            list="lia-model-suggestions"
+            :disabled="!providerId || busy"
+            :placeholder="tt('fields.model.placeholder')"
+            :aria-label="tt('fields.model.label')"
+            aria-describedby="lia-model-help"
+            class="w-full border border-neutral-300 rounded-lg bg-white px-2.5 py-2 text-sm text-neutral-800 outline-none dark:border-neutral-600 focus:border-primary-400 dark:bg-neutral-800 dark:text-neutral-100 disabled:opacity-60"
+          >
+          <datalist id="lia-model-suggestions">
+            <option v-for="option in primaryModelOptions" :key="option.id" :value="option.id">
+              {{ option.label }}
+            </option>
+          </datalist>
+          <p id="lia-model-help" class="text-xs text-neutral-500 dark:text-neutral-400">
+            {{ tt('discovery.manual') }}
+          </p>
+          <p role="status" class="text-xs text-neutral-500 dark:text-neutral-400">
+            {{ tt(`discovery.${primaryDiscovery.state.value === 'ready' && primaryDiscovery.models.value.length === 0 ? 'empty' : primaryDiscovery.state.value}`) }}
+          </p>
+          <button type="button" class="self-start text-xs text-primary-600 dark:text-primary-400" :disabled="!providerId || primaryDiscovery.state.value === 'loading' || busy" @click="primaryDiscovery.refresh">
+            {{ tt('discovery.refresh') }}
+          </button>
+        </div>
 
-      <div v-if="fallbackEnabled" class="flex flex-col gap-1">
-        <label class="text-xs text-neutral-600 font-medium dark:text-neutral-300">
-          {{ tt('fields.fallbackProvider.label') }}
-        </label>
-        <select
-          v-model="fallbackProviderId"
-          :disabled="busy"
-          class="w-full border border-neutral-300 rounded-lg bg-white px-2.5 py-2 text-sm text-neutral-800 outline-none dark:border-neutral-600 focus:border-primary-400 dark:bg-neutral-800 dark:text-neutral-100"
-        >
-          <option value="" disabled>
-            {{ tt('fields.fallbackProvider.placeholder') }}
-          </option>
-          <option v-for="option in FALLBACK_PROVIDER_OPTIONS" :key="option.id" :value="option.id">
-            {{ option.label }}
-          </option>
-        </select>
-      </div>
+        <div v-if="needsBaseUrl()" class="flex flex-col gap-1">
+          <label class="text-xs text-neutral-600 font-medium dark:text-neutral-300">
+            {{ tt('fields.endpoint.label') }}
+          </label>
+          <input
+            v-model="baseUrl"
+            :disabled="busy"
+            type="text"
+            :placeholder="tt('fields.endpoint.placeholder')"
+            class="w-full border border-neutral-300 rounded-lg bg-white px-2.5 py-2 text-sm text-neutral-800 outline-none dark:border-neutral-600 focus:border-primary-400 dark:bg-neutral-800 dark:text-neutral-100"
+          >
+        </div>
 
-      <div v-if="fallbackEnabled && fallbackProviderId" class="flex flex-col gap-1">
-        <label class="text-xs text-neutral-600 font-medium dark:text-neutral-300">
-          {{ tt('fields.fallbackModel.label') }}
-        </label>
-        <input
-          id="lia-fallback-model"
-          v-model="fallbackModelId"
-          list="lia-fallback-model-suggestions"
-          :disabled="busy"
-          :aria-label="tt('fields.fallbackModel.label')"
-          :placeholder="tt('fields.model.placeholder')"
-          class="w-full border border-neutral-300 rounded-lg bg-white px-2.5 py-2 text-sm text-neutral-800 outline-none dark:border-neutral-600 focus:border-primary-400 dark:bg-neutral-800 dark:text-neutral-100 disabled:opacity-60"
-        >
-        <datalist id="lia-fallback-model-suggestions">
-          <option v-for="option in fallbackModelOptions" :key="option.id" :value="option.id">
-            {{ option.label }}
-          </option>
-        </datalist>
-        <p role="status" class="text-xs text-neutral-500 dark:text-neutral-400">
-          {{ tt(`discovery.${fallbackDiscovery.state.value === 'ready' && fallbackDiscovery.models.value.length === 0 ? 'empty' : fallbackDiscovery.state.value}`) }}
+        <div v-if="primaryNeedsKey() || keySaved" class="flex flex-col gap-1">
+          <label class="text-xs text-neutral-600 font-medium dark:text-neutral-300">
+            {{ tt('fields.key.label') }}
+          </label>
+          <div class="relative">
+            <input
+              v-model="apiKey"
+              :disabled="busy"
+              type="password"
+              autocomplete="off"
+              :placeholder="keySaved ? tt('fields.key.replace') : tt('fields.key.placeholder')"
+              class="w-full border border-neutral-300 rounded-lg bg-white px-2.5 py-2 pr-8 text-sm text-neutral-800 outline-none dark:border-neutral-600 focus:border-primary-400 dark:bg-neutral-800 dark:text-neutral-100"
+            >
+            <span
+              :title="keySaved ? tt('key.saved') : tt('key.missing')"
+              class="absolute right-2.5 top-1/2 -translate-y-1/2"
+            >
+              <span :class="keySaved ? 'bg-green-500' : 'bg-neutral-300 dark:bg-neutral-600'" class="block size-2 rounded-full" />
+            </span>
+          </div>
+          <a
+            v-if="getKeyUrl"
+            :href="getKeyUrl"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="self-start text-[11px] text-primary-600 font-medium transition dark:text-primary-400 hover:text-primary-700 hover:underline"
+          >
+            {{ tt('actions.getKey') }} ↗
+          </a>
+        </div>
+
+        <div class="flex items-center justify-between gap-2 rounded-lg bg-neutral-100/60 px-3 py-2 dark:bg-white/5">
+          <label class="flex items-center gap-2 text-sm text-neutral-700 dark:text-neutral-200">
+            <input v-model="fallbackEnabled" :disabled="busy" type="checkbox" class="size-4 accent-primary-500">
+            {{ tt('fallback.label') }}
+          </label>
+          <span class="text-[10px] text-neutral-400 dark:text-neutral-500">{{ tt('fallback.hint') }}</span>
+        </div>
+
+        <div v-if="fallbackEnabled" class="flex flex-col gap-1">
+          <label class="text-xs text-neutral-600 font-medium dark:text-neutral-300">
+            {{ tt('fields.fallbackProvider.label') }}
+          </label>
+          <select
+            v-model="fallbackProviderId"
+            :disabled="busy"
+            class="w-full border border-neutral-300 rounded-lg bg-white px-2.5 py-2 text-sm text-neutral-800 outline-none dark:border-neutral-600 focus:border-primary-400 dark:bg-neutral-800 dark:text-neutral-100"
+          >
+            <option value="" disabled>
+              {{ tt('fields.fallbackProvider.placeholder') }}
+            </option>
+            <option v-for="option in FALLBACK_PROVIDER_OPTIONS" :key="option.id" :value="option.id">
+              {{ option.label }}
+            </option>
+          </select>
+        </div>
+
+        <div v-if="fallbackEnabled && fallbackProviderId" class="flex flex-col gap-1">
+          <label class="text-xs text-neutral-600 font-medium dark:text-neutral-300">
+            {{ tt('fields.fallbackModel.label') }}
+          </label>
+          <input
+            id="lia-fallback-model"
+            v-model="fallbackModelId"
+            list="lia-fallback-model-suggestions"
+            :disabled="busy"
+            :aria-label="tt('fields.fallbackModel.label')"
+            :placeholder="tt('fields.model.placeholder')"
+            class="w-full border border-neutral-300 rounded-lg bg-white px-2.5 py-2 text-sm text-neutral-800 outline-none dark:border-neutral-600 focus:border-primary-400 dark:bg-neutral-800 dark:text-neutral-100 disabled:opacity-60"
+          >
+          <datalist id="lia-fallback-model-suggestions">
+            <option v-for="option in fallbackModelOptions" :key="option.id" :value="option.id">
+              {{ option.label }}
+            </option>
+          </datalist>
+          <p role="status" class="text-xs text-neutral-500 dark:text-neutral-400">
+            {{ tt(`discovery.${fallbackDiscovery.state.value === 'ready' && fallbackDiscovery.models.value.length === 0 ? 'empty' : fallbackDiscovery.state.value}`) }}
+          </p>
+        </div>
+
+        <!-- Separate key field ONLY when the fallback is a DIFFERENT key-requiring provider. -->
+        <div v-if="fallbackNeedsOwnKey()" class="flex flex-col gap-1">
+          <label class="text-xs text-neutral-600 font-medium dark:text-neutral-300">
+            {{ tt('fields.fallbackKey.label') }}
+          </label>
+          <div class="relative">
+            <input
+              v-model="fallbackApiKey"
+              :disabled="busy"
+              type="password"
+              autocomplete="off"
+              :placeholder="fallbackKeySaved ? tt('fields.key.replace') : tt('fields.key.placeholder')"
+              class="w-full border border-neutral-300 rounded-lg bg-white px-2.5 py-2 pr-8 text-sm text-neutral-800 outline-none dark:border-neutral-600 focus:border-primary-400 dark:bg-neutral-800 dark:text-neutral-100"
+            >
+            <span
+              :title="fallbackKeySaved ? tt('key.saved') : tt('key.missing')"
+              class="absolute right-2.5 top-1/2 -translate-y-1/2"
+            >
+              <span :class="fallbackKeySaved ? 'bg-green-500' : 'bg-neutral-300 dark:bg-neutral-600'" class="block size-2 rounded-full" />
+            </span>
+          </div>
+          <a
+            v-if="getFallbackKeyUrl"
+            :href="getFallbackKeyUrl"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="self-start text-[11px] text-primary-600 font-medium transition dark:text-primary-400 hover:text-primary-700 hover:underline"
+          >
+            {{ tt('actions.getKey') }} ↗
+          </a>
+        </div>
+
+        <p class="text-[10px] text-neutral-500 leading-relaxed dark:text-neutral-400">
+          {{ tt('securityNote') }}
         </p>
       </div>
 
-      <!-- Separate key field ONLY when the fallback is a DIFFERENT key-requiring provider. -->
-      <div v-if="fallbackNeedsOwnKey()" class="flex flex-col gap-1">
-        <label class="text-xs text-neutral-600 font-medium dark:text-neutral-300">
-          {{ tt('fields.fallbackKey.label') }}
-        </label>
-        <div class="relative">
-          <input
-            v-model="fallbackApiKey"
-            :disabled="busy"
-            type="password"
-            autocomplete="off"
-            :placeholder="fallbackKeySaved ? tt('fields.key.replace') : tt('fields.key.placeholder')"
-            class="w-full border border-neutral-300 rounded-lg bg-white px-2.5 py-2 pr-8 text-sm text-neutral-800 outline-none dark:border-neutral-600 focus:border-primary-400 dark:bg-neutral-800 dark:text-neutral-100"
+      <div class="flex flex-wrap items-center gap-2 border-t border-neutral-200/70 pt-3 dark:border-neutral-700/70">
+        <p v-if="testFailure" role="alert" class="w-full text-xs text-red-600 dark:text-red-400">
+          {{ testFailure }}
+        </p>
+        <p v-if="lastTestOk && !isOnboarding()" role="status" class="w-full text-xs text-green-600 dark:text-green-400">
+          {{ tt('connection.ok') }}
+        </p>
+        <template v-if="isOnboarding()">
+          <button
+            type="button"
+            class="border border-neutral-300 rounded-lg px-3.5 py-2 text-sm text-neutral-700 font-medium transition dark:border-neutral-600 hover:bg-neutral-100 dark:text-neutral-200 disabled:opacity-50 dark:hover:bg-neutral-700"
+            :disabled="busy || !canTest()"
+            @click="testConnection"
           >
-          <span
-            :title="fallbackKeySaved ? tt('key.saved') : tt('key.missing')"
-            class="absolute right-2.5 top-1/2 -translate-y-1/2"
+            {{ tt('actions.test') }}
+          </button>
+          <button
+            type="button"
+            class="rounded-lg bg-primary-600 px-4 py-2 text-sm text-white font-semibold transition hover:bg-primary-700 disabled:opacity-50"
+            :disabled="busy || !canConclude()"
+            @click="conclude"
           >
-            <span :class="fallbackKeySaved ? 'bg-green-500' : 'bg-neutral-300 dark:bg-neutral-600'" class="block size-2 rounded-full" />
-          </span>
-        </div>
-        <a
-          v-if="getFallbackKeyUrl"
-          :href="getFallbackKeyUrl"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="self-start text-[11px] text-primary-600 font-medium transition dark:text-primary-400 hover:text-primary-700 hover:underline"
-        >
-          {{ tt('actions.getKey') }} ↗
-        </a>
-      </div>
-
-      <p class="text-[10px] text-neutral-500 leading-relaxed dark:text-neutral-400">
-        {{ tt('securityNote') }}
-      </p>
-    </div>
-
-    <div class="flex flex-wrap items-center gap-2 border-t border-neutral-200/70 pt-3 dark:border-neutral-700/70">
-      <p v-if="testFailure" role="alert" class="w-full text-xs text-red-600 dark:text-red-400">
-        {{ testFailure }}
-      </p>
-      <p v-if="lastTestOk && !isOnboarding()" role="status" class="w-full text-xs text-green-600 dark:text-green-400">
-        {{ tt('connection.ok') }}
-      </p>
-      <template v-if="isOnboarding()">
-        <button
-          type="button"
-          class="border border-neutral-300 rounded-lg px-3.5 py-2 text-sm text-neutral-700 font-medium transition dark:border-neutral-600 hover:bg-neutral-100 dark:text-neutral-200 disabled:opacity-50 dark:hover:bg-neutral-700"
-          :disabled="busy || !canTest()"
-          @click="testConnection"
-        >
-          {{ tt('actions.test') }}
-        </button>
-        <button
-          type="button"
-          class="rounded-lg bg-primary-600 px-4 py-2 text-sm text-white font-semibold transition hover:bg-primary-700 disabled:opacity-50"
-          :disabled="busy || !canConclude()"
-          @click="conclude"
-        >
-          {{ tt('actions.conclude') }}
-        </button>
-        <!-- Persistent test result: success stays visible (and Concluir stays
+            {{ tt('actions.conclude') }}
+          </button>
+          <!-- Persistent test result: success stays visible (and Concluir stays
              enabled) until the user edits the provider/model/key or clicks
              Concluir. Testing never clears the chosen provider/model/key. -->
-        <span
-          v-if="lastTestOk"
-          class="inline-flex items-center gap-1 text-[11px] text-green-600 font-medium dark:text-green-400"
-        >
-          <span class="i-solar:check-circle-bold-duotone size-3.5" />
-          {{ tt('connection.ok') }}
-        </span>
-        <span v-else class="text-[10px] text-neutral-400 dark:text-neutral-500">
-          {{ tt('errors.testFirst') }}
-        </span>
-      </template>
+          <span
+            v-if="lastTestOk"
+            class="inline-flex items-center gap-1 text-[11px] text-green-600 font-medium dark:text-green-400"
+          >
+            <span class="i-solar:check-circle-bold-duotone size-3.5" />
+            {{ tt('connection.ok') }}
+          </span>
+          <span v-else class="text-[10px] text-neutral-400 dark:text-neutral-500">
+            {{ tt('errors.testFirst') }}
+          </span>
+        </template>
 
-      <template v-else>
-        <button
-          type="button"
-          class="rounded-lg bg-primary-600 px-3.5 py-2 text-sm text-white font-semibold transition hover:bg-primary-700 disabled:opacity-50"
-          :disabled="busy"
-          @click="save"
-        >
-          {{ tt('actions.save') }}
-        </button>
-        <button
-          type="button"
-          class="border border-neutral-300 rounded-lg px-3.5 py-2 text-sm text-neutral-700 font-medium transition dark:border-neutral-600 hover:bg-neutral-100 dark:text-neutral-200 disabled:opacity-50 dark:hover:bg-neutral-700"
-          :disabled="busy || !canTest()"
-          @click="testConnection"
-        >
-          {{ tt('actions.test') }}
-        </button>
-        <button
-          type="button"
-          class="rounded-lg px-3.5 py-2 text-sm text-neutral-400 font-medium transition dark:text-neutral-500 hover:text-red-600 disabled:opacity-50"
-          :disabled="busy || !providerId"
-          @click="removeProvider"
-        >
-          {{ tt('actions.remove') }}
-        </button>
-        <button
-          v-if="!props.embedded"
-          type="button"
-          class="ml-auto border border-neutral-300 rounded-lg px-3.5 py-2 text-sm text-neutral-700 font-medium transition dark:border-neutral-600 hover:bg-neutral-100 dark:text-neutral-200 disabled:opacity-50 dark:hover:bg-neutral-700"
-          :disabled="busy"
-          @click="emit('back')"
-        >
-          {{ tt('actions.back') }}
-        </button>
-      </template>
-    </div>
+        <template v-else>
+          <button
+            type="button"
+            class="rounded-lg bg-primary-600 px-3.5 py-2 text-sm text-white font-semibold transition hover:bg-primary-700 disabled:opacity-50"
+            :disabled="busy"
+            @click="save"
+          >
+            {{ tt('actions.save') }}
+          </button>
+          <button
+            type="button"
+            class="border border-neutral-300 rounded-lg px-3.5 py-2 text-sm text-neutral-700 font-medium transition dark:border-neutral-600 hover:bg-neutral-100 dark:text-neutral-200 disabled:opacity-50 dark:hover:bg-neutral-700"
+            :disabled="busy || !canTest()"
+            @click="testConnection"
+          >
+            {{ tt('actions.test') }}
+          </button>
+          <DoubleCheckButton
+            size="sm"
+            color="red"
+            variant="secondary"
+            :confirm-label="tt('actions.removeConfirm')"
+            :cancel-label="tt('actions.cancel')"
+            :description="tt('actions.removeDescription')"
+            :disabled="busy || !providerId"
+            :loading="busy"
+            @confirm="removeProvider"
+          >
+            {{ tt('actions.remove') }}
+            <template #confirm>
+              {{ tt('actions.removeConfirm') }}
+            </template>
+          </DoubleCheckButton>
+          <button
+            v-if="!props.embedded"
+            type="button"
+            class="ml-auto border border-neutral-300 rounded-lg px-3.5 py-2 text-sm text-neutral-700 font-medium transition dark:border-neutral-600 hover:bg-neutral-100 dark:text-neutral-200 disabled:opacity-50 dark:hover:bg-neutral-700"
+            :disabled="busy"
+            @click="emit('back')"
+          >
+            {{ tt('actions.back') }}
+          </button>
+        </template>
+      </div>
+    </template>
   </div>
 </template>

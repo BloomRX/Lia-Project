@@ -29,6 +29,7 @@ import {
   homeConversationStopMessagesVm,
   homeConversationStoppingVm,
   homeConversationStopVisibleVm,
+  homeStageChipVm,
 } from './home-vm'
 
 const props = defineProps<{
@@ -41,7 +42,7 @@ const props = defineProps<{
   /** Shell-provided first-run marker (canonical product config). */
   setup?: { completed?: boolean }
 }>()
-const emit = defineEmits<{ (e: 'refresh'): void }>()
+const emit = defineEmits<{ (e: 'refresh'): void, (e: 'navigate', page: 'ai'): void }>()
 
 const busy = ref(false)
 const error = ref<string | undefined>(undefined)
@@ -52,9 +53,11 @@ const stopFeedback = ref<string | undefined>(undefined)
 const firstRunBusy = ref(false)
 const firstRunDone = ref(false)
 
-const aiChip = computed(() => homeAiChipVm(props.status))
-const blockerHint = computed(() => homeBlockerHintVm(props.status))
-const conversationLabel = computed(() => homeConversationLabelVm(props.status))
+const aiChip = computed(() => homeAiChipVm(props.status, props.language))
+const blockerHint = computed(() => homeBlockerHintVm(props.status, props.language))
+const conversationLabel = computed(() => homeConversationLabelVm(props.status, props.language))
+const conversationUnknown = computed(() => props.status == null)
+const stageChip = computed(() => homeStageChipVm(props.status, props.language))
 const conversationStarting = computed(() => homeConversationStartingVm(props.status))
 const conversationStopping = computed(() => homeConversationStoppingVm(props.status))
 const stopVisible = computed(() => homeConversationStopVisibleVm(props.status))
@@ -62,6 +65,21 @@ const stopMessages = computed(() => homeConversationStopMessagesVm(props.languag
 
 const voiceChip = computed(() => voiceStatusChipVm(props.readiness, props.language))
 const voiceVariant = computed(() => voiceStatusChipVariant(voiceChip.value.tone))
+const firstRunText = computed(() => props.language?.toLowerCase().startsWith('en')
+  ? {
+      title: 'How do you want to start?',
+      complete: 'Conversation and voice',
+      completeNote: 'Prefer conversation and voice. AI readiness appears below.',
+      textOnly: 'Text only',
+      textNote: 'Prefer conversation without voice. AI still needs to be ready.',
+    }
+  : {
+      title: 'Como você quer começar?',
+      complete: 'Conversa e voz',
+      completeNote: 'Prefere conversa e voz. A prontidão da IA aparece abaixo.',
+      textOnly: 'Somente texto',
+      textNote: 'Prefere conversa sem voz. A IA ainda precisa estar pronta.',
+    })
 
 function startBlockedMessage(code: unknown): string {
   const messages: Record<string, { en: string, pt: string }> = {
@@ -154,8 +172,12 @@ async function chooseFirstRun(choice: FirstRunChoice) {
 }
 
 async function conversar() {
-  if (busy.value || conversationStarting.value || conversationStopping.value)
+  if (busy.value || conversationUnknown.value || conversationStarting.value || conversationStopping.value)
     return
+  if (!props.status?.ai?.ready && props.status?.stage?.state?.phase !== 'running') {
+    emit('navigate', 'ai')
+    return
+  }
   busy.value = true
   error.value = undefined
   stopFeedback.value = undefined
@@ -219,11 +241,16 @@ async function encerrarConversa() {
       <LiaButton
         class="home-action"
         variant="primary"
-        :disabled="busy || conversationStarting || conversationStopping"
+        :disabled="busy || conversationUnknown || conversationStarting || conversationStopping"
+        :aria-describedby="blockerHint ? 'home-readiness-hint' : undefined"
+        :aria-busy="busy || conversationStarting"
         @click="conversar"
       >
         {{ conversationLabel }}
       </LiaButton>
+      <LiaStatusChip class="home-operation" :variant="stageChip.variant">
+        {{ stageChip.label }}
+      </LiaStatusChip>
       <LiaButton
         v-if="stopVisible || stopBusy"
         class="home-stop-action"
@@ -245,23 +272,23 @@ async function encerrarConversa() {
          hero or the status surfaces, and choosing never leaves Home. -->
     <LiaPanel v-if="firstRunVisible" class="home-first-run">
       <h2 class="home-first-run-title">
-        Como você quer começar?
+        {{ firstRunText.title }}
       </h2>
       <div class="home-first-run-choices">
         <div class="home-first-run-choice">
           <LiaButton variant="primary" :disabled="firstRunBusy" @click="chooseFirstRun('complete')">
-            Completa
+            {{ firstRunText.complete }}
           </LiaButton>
           <p class="home-first-run-note">
-            Conversa e voz. A Lia prepara a voz automaticamente.
+            {{ firstRunText.completeNote }}
           </p>
         </div>
         <div class="home-first-run-choice">
           <LiaButton :disabled="firstRunBusy" @click="chooseFirstRun('textOnly')">
-            Somente texto
+            {{ firstRunText.textOnly }}
           </LiaButton>
           <p class="home-first-run-note">
-            Conversa sem voz. Você pode ativá-la depois.
+            {{ firstRunText.textNote }}
           </p>
         </div>
       </div>
@@ -270,7 +297,7 @@ async function encerrarConversa() {
     <!-- C. Status summary: concise product-level readiness only - never
          paths or infrastructure internals (§12: no dashboard). -->
     <LiaPanel class="home-status">
-      <div class="home-status-row">
+      <div class="home-status-row" role="status" aria-live="polite" aria-atomic="true">
         <LiaStatusChip :variant="aiChip.variant">
           {{ aiChip.label }}
         </LiaStatusChip>
@@ -278,7 +305,7 @@ async function encerrarConversa() {
           voz: {{ voiceChip.label }}
         </LiaStatusChip>
       </div>
-      <p v-if="blockerHint" class="home-hint">
+      <p v-if="blockerHint" id="home-readiness-hint" class="home-hint">
         {{ blockerHint }}
       </p>
     </LiaPanel>
@@ -342,6 +369,9 @@ async function encerrarConversa() {
   font-size: var(--lia-text-lg);
   margin-top: var(--lia-space-6);
   padding: var(--lia-space-3) var(--lia-space-8);
+}
+.home-operation {
+  margin-top: var(--lia-space-3);
 }
 .home-error {
   color: var(--lia-status-error);

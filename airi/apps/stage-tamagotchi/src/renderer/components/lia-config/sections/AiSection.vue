@@ -8,8 +8,12 @@
  * own back button, because the panel owns navigation.
  */
 import LiaProviderConfig from '../../LiaProviderConfig.vue'
+
+import { resolveRendererWindowContext } from '../../../window-context'
+
+const managed = resolveRendererWindowContext().liaManaged
 </script>
 
 <template>
-  <LiaProviderConfig mode="manage" :embedded="true" data-testid="lia-config-ai-provider" />
+  <LiaProviderConfig mode="manage" :embedded="true" :managed="managed" data-testid="lia-config-ai-provider" />
 </template>

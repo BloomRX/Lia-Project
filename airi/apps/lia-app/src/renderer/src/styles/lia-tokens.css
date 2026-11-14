@@ -28,6 +28,10 @@
   --lia-accent: var(--lia-magenta);
   --lia-accent-soft: var(--lia-magenta-soft);
   --lia-accent-contrast: #fff;
+  /* Action surfaces use a darker member of the same identity family.
+     The neon accent stays available for focus and selected borders. */
+  --lia-accent-action: var(--lia-magenta-action);
+  --lia-accent-action-hover: var(--lia-magenta-action-hover);
 
   /* Status semantics (§27: state must be readable, never color-only). */
   --lia-status-ready: var(--lia-ok);

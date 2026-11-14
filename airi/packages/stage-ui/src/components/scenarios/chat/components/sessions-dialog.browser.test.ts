@@ -20,6 +20,9 @@ function createTestI18n() {
               'new': 'New chat',
               'empty': 'No chats',
               'delete': 'Delete',
+              'delete-confirm': 'Confirm deletion',
+              'delete-description': 'Delete this conversation and its messages? This cannot be undone.',
+              'cancel': 'Cancel',
               'cloud-badge': 'Cloud synced',
             },
           },
@@ -121,6 +124,11 @@ describe('sessions dialog actions', () => {
     await expect.element(screen.getByLabelText('created-session-count')).toHaveTextContent('1')
 
     await screen.getByRole('button', { name: 'Delete: Second chat' }).click()
+    await expect.element(screen.getByLabelText('deleted-session-id')).toHaveTextContent('none')
+    await screen.getByRole('button', { name: 'Cancel', exact: true }).click()
+    await expect.element(screen.getByLabelText('deleted-session-id')).toHaveTextContent('none')
+    await screen.getByRole('button', { name: 'Delete: Second chat' }).click()
+    await screen.getByRole('button', { name: 'Confirm deletion', exact: true }).click()
     await expect.element(screen.getByLabelText('deleted-session-id')).toHaveTextContent('session-two')
     await expect.element(screen.getByLabelText('selected-session-id')).toHaveTextContent('none')
 

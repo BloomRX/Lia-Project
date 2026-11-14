@@ -1,0 +1,286 @@
+$ moeru-lint .
+
+  ! unicorn(no-new-array): Do not use `new Array(singleArgument)`.
+    ,-[apps/stage-tamagotchi/src/renderer/services/lia/memory-context.test.ts:31:56]
+ 30 |     expect(context).toContain('\\nIgnore')
+ 31 |     expect(selectRelevantMemories({ ...state, entries: new Array(10).fill(state.entries[0]) }, 'jogos')).toHaveLength(4)
+    :                                                        ^^^^^^^^^^^^^
+ 32 |   })
+    `----
+  help: It's not clear whether the argument is meant to be the length of the array or the only element. If the argument is the array's length, consider using `Array.from({ length: n })`. If the argument is the only element, use `[element]`.
+
+  ! eslint(no-control-regex): Unexpected control characters
+    ,-[apps/stage-tamagotchi/src/main/services/lia/transport-execution-service.ts:67:37]
+ 66 |   return typeof value === 'string' && value.length > 0 && value.length <= 256
+ 67 |     && value.trim() === value && !/[\u0000-\u001F\u007F]/.test(value)
+    :                                     ^^^|^^ ^^^|^^
+    :                                        |      `-- 'U+001F' is a control character.
+    :                                        `-- 'U+0000' is a control character.
+ 68 | }
+    `----
+  help: Avoid matching control characters in regular expressions. If intentional, consider using a Unicode escape instead.
+
+  ! unicorn(no-useless-spread): Using a spread operator here creates a new array unnecessarily.
+     ,-[apps/stage-tamagotchi/src/main/services/lia/transport-execution-service.ts:380:34]
+ 379 |         const cleanup = () => {
+ 380 |           for (const current of [...jobs.values()]) {
+     :                                  ^^^
+ 381 |             if (current.owner === owner)
+     `----
+  help: `for…of` can iterate over iterable, it's unnecessary to convert to an array.
+
+  ! unicorn(no-useless-spread): Using a spread operator here creates a new array unnecessarily.
+     ,-[apps/stage-tamagotchi/src/main/services/lia/transport-execution-service.ts:458:24]
+ 457 |   function invalidate(snapshot: TransportSnapshot) {
+ 458 |     for (const job of [...jobs.values()]) {
+     :                        ^^^
+ 459 |       const records = snapshot.records.filter(record => record.providerId === job.providerId)
+     `----
+  help: `for…of` can iterate over iterable, it's unnecessary to convert to an array.
+
+  ! unicorn(no-useless-spread): Using a spread operator here creates a new array unnecessarily.
+     ,-[apps/stage-tamagotchi/src/main/services/lia/transport-execution-service.ts:466:24]
+ 465 |   function dispose() {
+ 466 |     for (const job of [...jobs.values()])
+     :                        ^^^
+ 467 |       finish(job, { ok: false, code: 'cancelled' })
+     `----
+  help: `for…of` can iterate over iterable, it's unnecessary to convert to an array.
+
+  ! eslint(no-control-regex): Unexpected control characters
+    ,-[apps/stage-tamagotchi/src/main/services/lia/memory-service.ts:22:111]
+ 21 | function validText(value: unknown): value is string {
+ 22 |   return typeof value === 'string' && value.trim().length > 0 && value.length <= LIA_MEMORY_LIMITS.text && !/[\u0000-\u0008\v\f\u000E-\u001F]/u.test(value)
+    :                                                                                                               ^^^|^^ ^^^|^^    ^^^|^^ ^^^|^^
+    :                                                                                                                  |      |         |      `-- 'U+001F' is a control character.
+    :                                                                                                                  |      |         `-- 'U+000E' is a control character.
+    :                                                                                                                  |      `-- 'U+0008' is a control character.
+    :                                                                                                                  `-- 'U+0000' is a control character.
+ 23 | }
+    `----
+  help: Avoid matching control characters in regular expressions. If intentional, consider using a Unicode escape instead.
+
+  ! eslint(no-control-regex): Unexpected control characters
+    ,-[apps/lia-app/src/main/config-update-sanitizer.ts:34:36]
+ 33 |       // control characters is refused instead of being repaired.
+ 34 |       if (value.length > 4096 || /[\u0000-\u0008\v\f\u000E-\u001F\u007F]/.test(value))
+    :                                    ^^^|^^ ^^^|^^    ^^^|^^ ^^^|^^
+    :                                       |      |         |      `-- 'U+001F' is a control character.
+    :                                       |      |         `-- 'U+000E' is a control character.
+    :                                       |      `-- 'U+0008' is a control character.
+    :                                       `-- 'U+0000' is a control character.
+ 35 |         continue
+    `----
+  help: Avoid matching control characters in regular expressions. If intentional, consider using a Unicode escape instead.
+
+  ! eslint(no-control-regex): Unexpected control characters
+     ,-[apps/lia-app/src/main/ai-connection-service.ts:130:111]
+ 129 | function validId(value: unknown): value is string {
+ 130 |   return typeof value === 'string' && value.length > 0 && value.length <= 256 && value.trim() === value && !/[\u0000-\u001F\u007F]/.test(value)
+     :                                                                                                               ^^^|^^ ^^^|^^
+     :                                                                                                                  |      `-- 'U+001F' is a control character.
+     :                                                                                                                  `-- 'U+0000' is a control character.
+ 131 | }
+     `----
+  help: Avoid matching control characters in regular expressions. If intentional, consider using a Unicode escape instead.
+
+  ! eslint(no-unused-vars): Type 'LiaConfigUpdatePayload' is imported but never used.
+   ,-[apps/lia-app/src/main/ipc.ts:1:15]
+ 1 | import type { LiaConfigUpdatePayload, LiaHost } from './lia-host'
+   :               ^^^^^^^^^^^|^^^^^^^^^^
+   :                          `-- 'LiaConfigUpdatePayload' is imported here
+ 2 | import type { LiaBootTimer } from './timing'
+   `----
+  help: Consider removing this import.
+
+  ! eslint(no-unused-vars): Parameter 'firstSeen' is declared but never used. Unused parameters should start with a '_'.
+     ,-[apps/stage-tamagotchi/scripts/provider-runtime-electron/lib/process-monitor.mjs:223:17]
+ 222 |       return [...observed.values()]
+ 223 |         .map(({ firstSeen, ...identity }) => identity)
+     :                 ^^^^|^^^^
+     :                     `-- 'firstSeen' is declared here
+ 224 |     },
+     `----
+  help: Consider removing this parameter.
+
+Found 10 warnings and 0 errors.
+Finished in 1.2s on 3496 files with 96 rules using 2 threads.
+
+/home/user/Lia-Project/airi/apps/lia-app/src/main/ai-connection-service.test.ts
+   18:1   error  Expected "../../../../../lia/core/src/providers/catalog" to come before "../../../stage-tamagotchi/src/shared/lia/brain-engine-provider-mapping"  perfectionist/sort-imports
+  169:98  error  This line has 2 statements. Maximum allowed is 1                                                                                                  style/max-statements-per-line
+  370:10  error  `describe`s should begin with lowercase                                                                                                           test/prefer-lowercase-title
+
+/home/user/Lia-Project/airi/apps/lia-app/src/main/ai-connection-service.ts
+  180:7  error  Expect curly brackets  antfu/curly
+
+/home/user/Lia-Project/airi/apps/lia-app/src/main/ai-selection-authority.test.ts
+  31:10  error  `describe`s should begin with lowercase  test/prefer-lowercase-title
+  66:31  error  Strings must use singlequote             style/quotes
+
+/home/user/Lia-Project/airi/apps/lia-app/src/main/ai-selection-integration.test.ts
+  11:1  error  Expected "../../../../../lia/core/src/transports/repository" to come before "../../../stage-tamagotchi/src/shared/lia/selection-write-policy"  perfectionist/sort-imports
+
+/home/user/Lia-Project/airi/apps/lia-app/src/main/config-update-sanitizer.ts
+  46:1  error  Too many blank lines at the end of file. Max of 0 allowed  style/no-multiple-empty-lines
+
+/home/user/Lia-Project/airi/apps/lia-app/src/main/ipc-surface.test.ts
+  70:49  error  Strings must use singlequote  style/quotes
+  79:30  error  Strings must use singlequote  style/quotes
+  80:30  error  Strings must use singlequote  style/quotes
+  81:30  error  Strings must use singlequote  style/quotes
+  83:30  error  Strings must use singlequote  style/quotes
+  89:30  error  Strings must use singlequote  style/quotes
+  93:49  error  Strings must use singlequote  style/quotes
+
+/home/user/Lia-Project/airi/apps/lia-app/src/main/ipc.ts
+  1:15  error  'LiaConfigUpdatePayload' is defined but never used  unused-imports/no-unused-imports
+
+/home/user/Lia-Project/airi/apps/lia-app/src/main/lia-host.ts
+  31:81  error  Prefer using a top-level type-only import instead of inline type specifiers  import/consistent-type-specifier-style
+  33:37  error  Prefer using a top-level type-only import instead of inline type specifiers  import/consistent-type-specifier-style
+  33:37  error  Expected "AiConnectionStartCode" to come before "createAiConnectionService"  perfectionist/sort-named-imports
+  33:65  error  Prefer using a top-level type-only import instead of inline type specifiers  import/consistent-type-specifier-style
+
+/home/user/Lia-Project/airi/apps/lia-app/src/main/runtime-boundary.test.ts
+  40:13  error  Capturing group number 1 is defined but never used  regexp/no-unused-capturing-group
+  43:12  error  Capturing group number 1 is defined but never used  regexp/no-unused-capturing-group
+  43:28  error  Capturing group number 2 is defined but never used  regexp/no-unused-capturing-group
+
+/home/user/Lia-Project/airi/apps/lia-app/src/renderer/src/ai-resources-view.test.ts
+  19:10  error  `describe`s should begin with lowercase  test/prefer-lowercase-title
+
+/home/user/Lia-Project/airi/apps/lia-app/src/renderer/src/views/AiResourcesView.vue
+  144:7   error  Top-level functions should be declared with function keyword  antfu/top-level-function
+  145:9   error  This line has 2 statements. Maximum allowed is 1              style/max-statements-per-line
+  480:13  error  Unexpected `v-bind` with a string literal value               vue/no-useless-v-bind
+
+/home/user/Lia-Project/airi/apps/lia-app/tsconfig.json
+  10:5  error  Expected object keys to be in specified order. 'allowImportingTsExtensions' should be after 'types'  jsonc/sort-keys
+
+/home/user/Lia-Project/airi/apps/stage-tamagotchi/electron.vite.config.ts
+  90:11  error  Properties shouldn't be quoted as all quotes are redundant  style/quote-props
+
+/home/user/Lia-Project/airi/apps/stage-tamagotchi/scripts/provider-runtime-electron/eslint.config.mjs
+  9:1  error  Omit TypeScript and JavaScript source extensions from relative imports, dynamic imports, and re-exports  no-restricted-syntax
+
+/home/user/Lia-Project/airi/apps/stage-tamagotchi/scripts/provider-runtime-electron/gate-integrity.test.mjs
+  5:1  error  Import from `vitest` instead of `node:test`                                                              test/no-import-node-test
+  8:1  error  Omit TypeScript and JavaScript source extensions from relative imports, dynamic imports, and re-exports  no-restricted-syntax
+
+/home/user/Lia-Project/airi/apps/stage-tamagotchi/scripts/provider-runtime-electron/gate.test.mjs
+   10:1   error  Import from `vitest` instead of `node:test`                                                              test/no-import-node-test
+   17:1   error  Omit TypeScript and JavaScript source extensions from relative imports, dynamic imports, and re-exports  no-restricted-syntax
+   18:1   error  Omit TypeScript and JavaScript source extensions from relative imports, dynamic imports, and re-exports  no-restricted-syntax
+   19:1   error  Omit TypeScript and JavaScript source extensions from relative imports, dynamic imports, and re-exports  no-restricted-syntax
+   20:1   error  Omit TypeScript and JavaScript source extensions from relative imports, dynamic imports, and re-exports  no-restricted-syntax
+   21:1   error  Omit TypeScript and JavaScript source extensions from relative imports, dynamic imports, and re-exports  no-restricted-syntax
+  303:52  error  Expected parentheses around arrow function argument having a body with curly braces                      style/arrow-parens
+
+/home/user/Lia-Project/airi/apps/stage-tamagotchi/scripts/provider-runtime-electron/lib/artifact-export.test.mjs
+  4:1  error  Import from `vitest` instead of `node:test`                                                              test/no-import-node-test
+  6:1  error  Omit TypeScript and JavaScript source extensions from relative imports, dynamic imports, and re-exports  no-restricted-syntax
+
+/home/user/Lia-Project/airi/apps/stage-tamagotchi/scripts/provider-runtime-electron/lib/artifact-leak.test.mjs
+  7:1  error  Import from `vitest` instead of `node:test`                                                              test/no-import-node-test
+  9:1  error  Omit TypeScript and JavaScript source extensions from relative imports, dynamic imports, and re-exports  no-restricted-syntax
+
+/home/user/Lia-Project/airi/apps/stage-tamagotchi/scripts/provider-runtime-electron/lib/process-identity.mjs
+  59:1  error  Omit TypeScript and JavaScript source extensions from relative imports, dynamic imports, and re-exports  no-restricted-syntax
+
+/home/user/Lia-Project/airi/apps/stage-tamagotchi/scripts/provider-runtime-electron/lib/process-identity.test.mjs
+  3:1  error  Import from `vitest` instead of `node:test`                                                              test/no-import-node-test
+  5:1  error  Omit TypeScript and JavaScript source extensions from relative imports, dynamic imports, and re-exports  no-restricted-syntax
+
+/home/user/Lia-Project/airi/apps/stage-tamagotchi/scripts/provider-runtime-electron/lib/process-monitor.mjs
+  44:1  error  Omit TypeScript and JavaScript source extensions from relative imports, dynamic imports, and re-exports  no-restricted-syntax
+  45:1  error  Omit TypeScript and JavaScript source extensions from relative imports, dynamic imports, and re-exports  no-restricted-syntax
+
+/home/user/Lia-Project/airi/apps/stage-tamagotchi/scripts/provider-runtime-electron/lib/process-monitor.test.mjs
+  3:1  error  Import from `vitest` instead of `node:test`                                                              test/no-import-node-test
+  5:1  error  Omit TypeScript and JavaScript source extensions from relative imports, dynamic imports, and re-exports  no-restricted-syntax
+
+/home/user/Lia-Project/airi/apps/stage-tamagotchi/scripts/provider-runtime-electron/lib/run-groups.test.mjs
+  3:1  error  Import from `vitest` instead of `node:test`                                                              test/no-import-node-test
+  5:1  error  Omit TypeScript and JavaScript source extensions from relative imports, dynamic imports, and re-exports  no-restricted-syntax
+
+/home/user/Lia-Project/airi/apps/stage-tamagotchi/scripts/provider-runtime-electron/lib/secret-redaction.test.mjs
+  3:1  error  Import from `vitest` instead of `node:test`                                                              test/no-import-node-test
+  5:1  error  Omit TypeScript and JavaScript source extensions from relative imports, dynamic imports, and re-exports  no-restricted-syntax
+
+/home/user/Lia-Project/airi/apps/stage-tamagotchi/src/main/windows/about/index.ts
+  3:1  error  Expected "../../libs/i18n" (type-parent) to come before "../secure-web-preferences" (named-value-parent)  perfectionist/sort-imports
+
+/home/user/Lia-Project/airi/apps/stage-tamagotchi/src/main/windows/beat-sync/index.ts
+  3:1  error  Expected "node:path" (named-value-builtin) to come before "../secure-web-preferences" (named-value-parent)  perfectionist/sort-imports
+
+/home/user/Lia-Project/airi/apps/stage-tamagotchi/src/main/windows/caption/index.ts
+  3:1  error  Expected "electron" (type-import) to come before "../secure-web-preferences" (named-value-parent)  perfectionist/sort-imports
+
+/home/user/Lia-Project/airi/apps/stage-tamagotchi/src/main/windows/chat/index.ts
+  3:1  error  Expected "../../libs/i18n" (type-parent) to come before "../secure-web-preferences" (named-value-parent)  perfectionist/sort-imports
+
+/home/user/Lia-Project/airi/apps/stage-tamagotchi/src/main/windows/dashboard/index.ts
+  3:1  error  Expected "electron" (type-import) to come before "../secure-web-preferences" (named-value-parent)  perfectionist/sort-imports
+
+/home/user/Lia-Project/airi/apps/stage-tamagotchi/src/main/windows/devtools/index.ts
+  3:1  error  Expected "node:path" (named-value-builtin) to come before "../secure-web-preferences" (named-value-parent)  perfectionist/sort-imports
+
+/home/user/Lia-Project/airi/apps/stage-tamagotchi/src/main/windows/editor/index.ts
+  3:1  error  Expected "electron" (type-import) to come before "../secure-web-preferences" (named-value-parent)  perfectionist/sort-imports
+
+/home/user/Lia-Project/airi/apps/stage-tamagotchi/src/main/windows/inlay/index.ts
+  3:1  error  Expected "../../libs/i18n" (type-parent) to come before "../secure-web-preferences" (named-value-parent)  perfectionist/sort-imports
+
+/home/user/Lia-Project/airi/apps/stage-tamagotchi/src/main/windows/main/index.ts
+  3:1  error  Expected "../../libs/i18n" (type-parent) to come before "../secure-web-preferences" (named-value-parent)  perfectionist/sort-imports
+
+/home/user/Lia-Project/airi/apps/stage-tamagotchi/src/main/windows/notice/index.ts
+  3:1  error  Expected "electron" (type-import) to come before "../secure-web-preferences" (named-value-parent)  perfectionist/sort-imports
+
+/home/user/Lia-Project/airi/apps/stage-tamagotchi/src/main/windows/onboarding/index.ts
+  3:1  error  Expected "../../libs/i18n" (type-parent) to come before "../secure-web-preferences" (named-value-parent)  perfectionist/sort-imports
+
+/home/user/Lia-Project/airi/apps/stage-tamagotchi/src/main/windows/secure-web-preferences.test.ts
+  8:10  error  `describe`s should begin with lowercase  test/prefer-lowercase-title
+
+/home/user/Lia-Project/airi/apps/stage-tamagotchi/src/main/windows/settings/index.ts
+  3:1  error  Expected "../../libs/i18n" (type-parent) to come before "../secure-web-preferences" (named-value-parent)  perfectionist/sort-imports
+
+/home/user/Lia-Project/airi/apps/stage-tamagotchi/src/main/windows/spotlight/index.ts
+  3:1  error  Expected "@proj-airi/stage-shared/global-shortcut" (type-import) to come before "../secure-web-preferences" (named-value-parent)  perfectionist/sort-imports
+
+/home/user/Lia-Project/airi/apps/stage-tamagotchi/src/main/windows/widgets/index.ts
+  3:1  error  Expected "electron" (type-import) to come before "../secure-web-preferences" (named-value-parent)  perfectionist/sort-imports
+
+/home/user/Lia-Project/airi/apps/stage-tamagotchi/src/preload/ipc-channel-policy.test.ts
+  5:10  error  `describe`s should begin with lowercase  test/prefer-lowercase-title
+
+/home/user/Lia-Project/airi/apps/stage-tamagotchi/src/preload/shared.test.ts
+  21:1  error  Import in body of module; reorder to top  import/first
+
+/home/user/Lia-Project/airi/apps/stage-tamagotchi/src/preload/shared.ts
+  53:47  error  Unexpected use of the global variable 'process'. Use 'require("process")' instead  node/prefer-global/process
+
+/home/user/Lia-Project/airi/apps/stage-tamagotchi/src/renderer/components/lia-config/SttCredential.browser.test.ts
+  4:1  error  Expected "vitest-browser-vue" to come before "vitest/browser"  perfectionist/sort-imports
+
+/home/user/Lia-Project/airi/apps/stage-tamagotchi/src/renderer/stores/lia/native-provider-execution.test.ts
+  12:1  error  Expected "../../services/lia/secret-adopt.fixture" to come before "../../services/lia/transport-config.fixture"  perfectionist/sort-imports
+
+/home/user/Lia-Project/airi/apps/stage-tamagotchi/src/renderer/stores/lia/onboarding.test.ts
+  3:1  error  Missed spacing between "vitest" and "../../services/lia/secret-adopt.fixture"  perfectionist/sort-imports
+
+/home/user/Lia-Project/airi/apps/stage-tamagotchi/src/renderer/stores/lia/provider-auth-policy.test.ts
+  3:1  error  Missed spacing between "vitest" and "../../services/lia/secret-adopt.fixture"  perfectionist/sort-imports
+
+/home/user/Lia-Project/airi/apps/stage-tamagotchi/src/renderer/stores/lia/provider-config-hearing-write-path.test.ts
+  6:1  error  Missed spacing between "vue" and "../../services/lia/secret-adopt.fixture"  perfectionist/sort-imports
+
+/home/user/Lia-Project/airi/apps/stage-tamagotchi/src/renderer/stores/lia/provider-config-write-paths.test.ts
+  6:1  error  Missed spacing between "vue" and "../../services/lia/secret-adopt.fixture"  perfectionist/sort-imports
+
+✖ 78 problems (78 errors, 0 warnings)
+  56 errors and 0 warnings potentially fixable with the `--fix` option.
+
+[ELIFECYCLE] Command failed with exit code 1.

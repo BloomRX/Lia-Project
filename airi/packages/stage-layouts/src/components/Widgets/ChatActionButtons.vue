@@ -3,7 +3,7 @@ import { ChatSessionsDrawer } from '@proj-airi/stage-ui/components/scenarios/cha
 import { useAnalytics } from '@proj-airi/stage-ui/composables/use-analytics'
 import { useChatMaintenanceStore } from '@proj-airi/stage-ui/stores/chat/maintenance'
 import { useChatSessionStore } from '@proj-airi/stage-ui/stores/chat/session-store'
-import { useTheme } from '@proj-airi/ui'
+import { DoubleCheckButton, useTheme } from '@proj-airi/ui'
 import { storeToRefs } from 'pinia'
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -36,12 +36,12 @@ function handleCleanupMessages() {
 <template>
   <BackgroundDialogPicker v-model="backgroundDialogOpen" />
   <ChatSessionsDrawer v-model="sessionsDrawerOpen" />
-  <div absolute bottom--8 right-0 flex gap-2>
+  <div :class="['absolute bottom--8 right-0 flex flex-wrap items-start justify-end gap-2']">
     <div flex gap-1>
       <button
         data-testid="conversation-selector-button"
         :class="[
-          'max-h-[10lh] min-h-[1lh] flex items-center justify-center rounded-md p-2 outline-none',
+          'max-h-[10lh] min-h-[1lh] flex items-center justify-center rounded-md p-2 outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 dark:focus-visible:outline-primary-300',
           'bg-neutral-100 text-lg text-neutral-500 transition-colors transition-transform active:scale-95',
           'hover:text-primary-500 dark:bg-neutral-800 dark:text-neutral-400 dark:hover:text-primary-400',
         ]"
@@ -54,7 +54,7 @@ function handleCleanupMessages() {
       <button
         data-testid="speech-mute-button"
         :class="[
-          'max-h-[10lh] min-h-[1lh] flex items-center justify-center rounded-md p-2 outline-none',
+          'max-h-[10lh] min-h-[1lh] flex items-center justify-center rounded-md p-2 outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 dark:focus-visible:outline-primary-300',
           'text-lg transition-colors transition-transform active:scale-95',
           speechMuted
             ? 'bg-primary-100 text-primary-600 dark:bg-primary-900/40 dark:text-primary-300'
@@ -70,24 +70,30 @@ function handleCleanupMessages() {
       </button>
     </div>
     <ViewControls />
-    <button
-      class="max-h-[10lh] min-h-[1lh]"
-      bg="neutral-100 dark:neutral-800"
-      text="lg neutral-500 dark:neutral-400"
-      hover:text="red-500 dark:red-400"
-      flex items-center justify-center rounded-md p-2 outline-none
-      transition-colors transition-transform active:scale-95
-      @click="handleCleanupMessages"
+    <DoubleCheckButton
+      size="sm"
+      color="red"
+      variant="secondary"
+      :label="t('stage.chat.actions.clear')"
+      :confirm-label="t('stage.chat.actions.clear-confirm')"
+      :cancel-label="t('stage.chat.actions.cancel')"
+      :description="t('stage.chat.actions.clear-description')"
+      @confirm="handleCleanupMessages"
     >
-      <div class="i-solar:trash-bin-2-bold-duotone" />
-    </button>
+      <div class="i-solar:trash-bin-2-bold-duotone" aria-hidden="true" />
+      <template #confirm>
+        {{ t('stage.chat.actions.clear-confirm') }}
+      </template>
+    </DoubleCheckButton>
 
     <button
       class="max-h-[10lh] min-h-[1lh]"
       bg="neutral-100 dark:neutral-800"
       text="lg neutral-500 dark:neutral-400"
-      flex items-center justify-center rounded-md p-2 outline-none
-      transition-colors transition-transform active:scale-95
+
+      flex items-center justify-center rounded-md p-2 outline-none transition-colors transition-transform active:scale-95 focus-visible:outline-2 focus-visible:outline-primary-600 focus-visible:outline-offset-2 dark:focus-visible:outline-primary-300
+      :title="isDark ? t('stage.chat.actions.light-theme') : t('stage.chat.actions.dark-theme')"
+      :aria-label="isDark ? t('stage.chat.actions.light-theme') : t('stage.chat.actions.dark-theme')"
       @click="() => toggleDark()"
     >
       <Transition name="fade" mode="out-in">
@@ -99,12 +105,23 @@ function handleCleanupMessages() {
       class="max-h-[10lh] min-h-[1lh]"
       bg="neutral-100 dark:neutral-800"
       text="lg neutral-500 dark:neutral-400"
-      flex items-center justify-center rounded-md p-2 outline-none
-      transition-colors transition-transform active:scale-95
-      title="Background"
+
+      flex items-center justify-center rounded-md p-2 outline-none transition-colors transition-transform active:scale-95 focus-visible:outline-2 focus-visible:outline-primary-600 focus-visible:outline-offset-2 dark:focus-visible:outline-primary-300
+      :title="t('stage.chat.actions.background')"
+      :aria-label="t('stage.chat.actions.background')"
       @click="backgroundDialogOpen = true"
     >
       <div i-solar:gallery-wide-bold-duotone />
     </button>
   </div>
 </template>
+
+<style scoped>
+@media (prefers-reduced-motion: reduce) {
+  :deep(*) {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+</style>

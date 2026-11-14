@@ -1,0 +1,160 @@
+{
+  "date": "2026-11-14",
+  "branch": "arena/250b337a-lia-project",
+  "base_head": "1d2bbc500233bde5e9b8609d43a6ba4ce0267ec0",
+  "cwd": "airi/",
+  "runtime_validated": false,
+  "windows_validated": false,
+  "checks": [
+    {
+      "name": "launcher-tests",
+      "command": "pnpm -F @lia/lia-app test",
+      "exit_code": 0,
+      "result": "36 files, 360 tests PASS",
+      "log": "launcher-tests.log",
+      "sha256": "216ffa40fce6524df7a39478cd2601f2e7a5ca3cb7c101991b68040eab13d6d2",
+      "normalization": "ANSI removed; trailing whitespace and final blank lines normalized; message text preserved."
+    },
+    {
+      "name": "launcher-typecheck",
+      "command": "pnpm -F @lia/lia-app typecheck",
+      "exit_code": 0,
+      "result": "PASS",
+      "log": "launcher-typecheck.log",
+      "sha256": "8366207267355d3e3d5bf3bf6e8c94c5f93f6078c34f08973fa2b38cdda6cc92",
+      "normalization": "ANSI removed; trailing whitespace and final blank lines normalized; message text preserved."
+    },
+    {
+      "name": "launcher-build",
+      "command": "pnpm -F @lia/lia-app build",
+      "exit_code": 0,
+      "result": "PASS",
+      "log": "launcher-build.log",
+      "sha256": "8cb995dcb1e39ea5f759790188cb72566dc694f46c6152e6a9e21ef86e8a4123",
+      "normalization": "ANSI removed; trailing whitespace and final blank lines normalized; message text preserved."
+    },
+    {
+      "name": "stage-node-targeted",
+      "command": "pnpm exec vitest run --config apps/stage-tamagotchi/vitest.config.ts --project node <8 targeted files>",
+      "exit_code": 0,
+      "result": "8 files, 72 tests PASS; DOM-emulated seam, not browser/runtime proof",
+      "log": "stage-node-targeted.log",
+      "sha256": "3dda945271e7a46e96d32996dabe51f2fa62c902ce65800c2e1af58b1984f0a9",
+      "normalization": "ANSI removed; trailing whitespace and final blank lines normalized; message text preserved."
+    },
+    {
+      "name": "stage-ui-targeted",
+      "command": "pnpm exec vitest run --config packages/stage-ui/vitest.config.ts --project node <5 targeted files>",
+      "exit_code": 0,
+      "result": "5 files, 56 tests PASS; includes A-1 13+11+7",
+      "log": "stage-ui-targeted.log",
+      "sha256": "ee032706637587da00b8c9be043922b260d326ec7bde8f2a6c53fb828e0ce890",
+      "normalization": "ANSI removed; trailing whitespace and final blank lines normalized; message text preserved."
+    },
+    {
+      "name": "stage-layouts-tests",
+      "command": "pnpm -F @proj-airi/stage-layouts exec vitest run",
+      "exit_code": 0,
+      "result": "4 files, 41 tests PASS",
+      "log": "stage-layouts-tests.log",
+      "sha256": "4d26329bd6dfdcfeb4d8e31d68f859a96fbe05a69ad77d263512c84b9ce8a160",
+      "normalization": "ANSI removed; trailing whitespace and final blank lines normalized; message text preserved."
+    },
+    {
+      "name": "ui-typecheck",
+      "command": "pnpm -F @proj-airi/ui typecheck",
+      "exit_code": 0,
+      "result": "PASS",
+      "log": "ui-typecheck.log",
+      "sha256": "aacdfedc485449151e8f0cedfb8264a7d15047256a7b3c3a4a9e848e28e7b178",
+      "normalization": "ANSI removed; trailing whitespace and final blank lines normalized; message text preserved."
+    },
+    {
+      "name": "stage-layouts-typecheck",
+      "command": "NODE_OPTIONS=--max-old-space-size=3072 pnpm -F @proj-airi/stage-layouts typecheck",
+      "exit_code": 0,
+      "result": "PASS",
+      "log": "stage-layouts-typecheck.log",
+      "sha256": "aacdfedc485449151e8f0cedfb8264a7d15047256a7b3c3a4a9e848e28e7b178",
+      "normalization": "ANSI removed; trailing whitespace and final blank lines normalized; message text preserved."
+    },
+    {
+      "name": "stage-typecheck-3g",
+      "command": "NODE_OPTIONS=--max-old-space-size=3072 pnpm -F @proj-airi/stage-tamagotchi typecheck",
+      "exit_code": 0,
+      "result": "PASS; sequential run",
+      "log": "stage-typecheck-3g.log",
+      "sha256": "aacdfedc485449151e8f0cedfb8264a7d15047256a7b3c3a4a9e848e28e7b178",
+      "normalization": "ANSI removed; trailing whitespace and final blank lines normalized; message text preserved."
+    },
+    {
+      "name": "stage-ui-typecheck",
+      "command": "NODE_OPTIONS=--max-old-space-size=3072 pnpm -F @proj-airi/stage-ui typecheck",
+      "exit_code": 0,
+      "result": "PASS; sequential run",
+      "log": "stage-ui-typecheck.log",
+      "sha256": "aacdfedc485449151e8f0cedfb8264a7d15047256a7b3c3a4a9e848e28e7b178",
+      "normalization": "ANSI removed; trailing whitespace and final blank lines normalized; message text preserved."
+    },
+    {
+      "name": "i18n-build",
+      "command": "pnpm -F @proj-airi/i18n build",
+      "exit_code": 0,
+      "result": "PASS",
+      "log": "i18n-build.log",
+      "sha256": "261a2a1f5ec2ce966b52e6ccf8a38139d3d732bb3835270ef6ae31f5ba489302",
+      "normalization": "ANSI removed; trailing whitespace and final blank lines normalized; message text preserved."
+    },
+    {
+      "name": "phase1-eslint",
+      "command": "pnpm exec eslint <changed supported files>",
+      "exit_code": 0,
+      "result": "0 errors; 2 CSS files ignored by ESLint configuration",
+      "log": "phase1-eslint.log",
+      "sha256": "3932c2d6ffa3d23198593e42eb55fbe1dbbcea63fc47d08d6b45c24c41c91b3a",
+      "normalization": "ANSI removed; trailing whitespace and final blank lines normalized; message text preserved."
+    },
+    {
+      "name": "lint-full",
+      "command": "pnpm lint",
+      "exit_code": 1,
+      "result": "FAIL: 78 errors in 48 untouched files; no intersection with task paths",
+      "log": "lint-full.log",
+      "sha256": "83a01817779c00513099f8090a9e3390aabb7118981e93cdaf6143f85509d045",
+      "normalization": "ANSI removed; trailing whitespace and final blank lines normalized; message text preserved."
+    },
+    {
+      "name": "stage-build",
+      "command": "pnpm -F @proj-airi/stage-tamagotchi build",
+      "exit_code": 1,
+      "result": "BLOCKED: ECONNRESET fetching dist.ayaka.moe/live2d-models/hiyori_free_zh.zip",
+      "log": "stage-build.log",
+      "sha256": "823609d6e816e9378a3258f4e695fbced63410bfad7db638de1fdb5fbf9a60e2",
+      "normalization": "ANSI removed; trailing whitespace and final blank lines normalized; message text preserved."
+    },
+    {
+      "name": "browser-delete-blocked",
+      "command": "pnpm exec vitest run --config packages/stage-ui/vitest.config.ts --project browser src/components/scenarios/chat/components/action-menu/delete-confirmation.browser.test.ts",
+      "exit_code": 1,
+      "result": "BLOCKED: chromium_headless_shell-1234 absent; no browser assertions executed",
+      "log": "browser-delete-blocked.log",
+      "sha256": "4bdb7221d43c586948f23613ead56c83ae21be8e2a9168ad9bfdd57a74cd1cb9",
+      "normalization": "ANSI removed; trailing whitespace and final blank lines normalized; message text preserved."
+    },
+    {
+      "name": "diff-check",
+      "command": "git diff --check",
+      "exit_code": 0,
+      "result": "PASS",
+      "log": "diff-check.log",
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+      "normalization": "ANSI removed; trailing whitespace and final blank lines normalized; message text preserved."
+    }
+  ],
+  "limitations": [
+    "Browser tests for sessions, memory, managed AI summary and message deletion were not executed: Chromium is absent.",
+    "No Electron/Windows runtime, screen reader, pixel sampling, user study or performance gate was run.",
+    "Automated PASS does not promote the functional baseline or approve beta.",
+    "Full stage-ui node suite was not rerun; prior QA-02 remains historical."
+  ]
+}

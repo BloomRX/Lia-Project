@@ -1,9 +1,11 @@
 stage:
+  loading: Preparando a Lia…
   load-models: Carregar personagens
   load-models-status:
     loading: Carregando
     ready: Pronto
 controls-island:
+  label: Controles da Lia
   fade-on-hover:
     enable: Ocultar ao passar o mouse
     disable: Manter visível

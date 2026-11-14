@@ -9,6 +9,7 @@ const props = defineProps<{ buttonStyle?: string }>()
     size="sm"
     :class="[
       'p-2!',
+      'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 dark:focus-visible:outline-primary-300',
       props.buttonStyle,
     ]"
   >

@@ -1133,3 +1133,27 @@ describe('chat-session-store · phase 8.0D-M3 provider-exclusion persistence', (
     expect(isProviderContextMessage(hydrated.find(message => message.id === 'system')!)).toBe(true)
   })
 })
+
+// Internal report: docs/reports/LIA-UI-UX-AUDIT-2026-11-14.md (UI-S01).
+describe('chat-session-store · confirmed clear scope', () => {
+  it('clears only the named conversation and persists that conversation, not its sibling', async () => {
+    const store = useChatSessionStore()
+    await store.initialize()
+    const active = store.activeSessionId
+    const other = await store.createSession('default', { setActive: false })
+    store.setSessionMessages(active, [
+      { id: 'system', role: 'system', content: 'prompt' },
+      { id: 'active-message', role: 'user', content: 'Clear only after confirmation' },
+    ])
+    store.setSessionMessages(other, [{ id: 'other-message', role: 'user', content: 'Keep this conversation' }])
+    await flushMicrotasks()
+    saveSessionMock.mockClear()
+
+    store.cleanupMessages(active)
+    await flushMicrotasks()
+
+    expect(store.getSessionMessages(active).map(message => message.role)).toEqual(['system'])
+    expect(store.getSessionMessages(other).map(message => message.content)).toEqual(['Keep this conversation'])
+    expect(saveSessionMock.mock.calls.map(([sessionId]) => sessionId)).toEqual([active])
+  })
+})

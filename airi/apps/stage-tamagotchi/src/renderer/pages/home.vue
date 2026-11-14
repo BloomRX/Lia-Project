@@ -20,8 +20,10 @@ import {
   electronOpenSettings,
   electronSetMainWindowContext,
 } from '../../shared/eventa'
+import { useLiaCapabilitiesStore } from '../stores/lia/capabilities'
 import { useLiaProviderStore } from '../stores/lia/provider'
 import { useLiaVoiceStore } from '../stores/lia/voice'
+import { voiceCapabilityLedState, voiceCapabilityState } from '../stores/lia/voice-capability-vm'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -37,6 +39,8 @@ const openSettings = useElectronEventaInvoke(electronOpenSettings)
 
 const liaProviderStore = useLiaProviderStore()
 const liaVoiceStore = useLiaVoiceStore()
+const liaCapabilities = useLiaCapabilitiesStore()
+const { snapshot: capabilities } = storeToRefs(liaCapabilities)
 
 type HomeView = 'loading' | 'onboarding' | 'launcher' | 'settings'
 
@@ -105,8 +109,8 @@ async function computeSummary() {
     {
       key: 'voice',
       label: t('tamagotchi.home.leds.voice'),
-      state: 'off',
-      title: t('tamagotchi.home.leds.off'),
+      state: voiceCapabilityLedState(capabilities.value),
+      title: t(`tamagotchi.home.capability.voice.${voiceCapabilityState(capabilities.value)}`),
     },
     {
       key: 'avatar',
@@ -199,6 +203,7 @@ async function openCharacterSettings() {
  */
 async function syncHomeView(options: { force?: boolean } = {}) {
   const ready = await liaProviderStore.isReadyToChat()
+  await liaCapabilities.refresh()
   await computeSummary()
   // A config that just became ready is applied to the shared runtime right away,
   // so finishing onboarding leaves the chat usable without another click and
@@ -234,6 +239,8 @@ const liaConfigSignature = computed(() => {
   const fb = c.fallback?.[0]
   return [p?.providerId, p?.modelId, c.onboarded, c.fallbackEnabled, fb?.providerId, fb?.modelId].join('|')
 })
+
+watch(capabilities, () => void computeSummary())
 
 watch(liaConfigSignature, async () => {
   if (view.value !== 'onboarding')
@@ -329,6 +336,8 @@ onUnmounted(() => {
               :key="led.key"
               class="inline-flex items-center gap-1.5"
               :title="led.title"
+              role="status"
+              :aria-label="`${led.label}: ${led.title}`"
             >
               <span :class="ledClass(led.state)" class="size-2 rounded-full" />
               {{ led.label }}

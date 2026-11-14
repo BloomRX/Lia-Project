@@ -19,7 +19,12 @@ const { stopAllSpeaking } = useStopSpeakingButton()
 
 <template>
   <ControlButtonTooltip side="inward">
-    <ControlButton :button-style @click="stopAllSpeaking()">
+    <ControlButton
+      :button-style
+      :aria-label="t('tamagotchi.stage.controls-island.stop-speaking')"
+      :disabled="!nowSpeaking"
+      @click="stopAllSpeaking()"
+    >
       <Transition name="fade" mode="out-in">
         <div
           v-if="nowSpeaking"

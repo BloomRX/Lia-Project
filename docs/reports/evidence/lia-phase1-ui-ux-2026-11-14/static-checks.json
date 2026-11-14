@@ -1,0 +1,9 @@
+{
+  "changed_files": 76,
+  "a1_gate_production_delta": [],
+  "dependency_manifest_delta": [],
+  "forbidden_launcher_delta": [],
+  "note": "Empty arrays verify patch scope only. A-1 behavior was separately exercised by 31 targeted tests.",
+  "tracked_modified": 53,
+  "new_files": 23
+}

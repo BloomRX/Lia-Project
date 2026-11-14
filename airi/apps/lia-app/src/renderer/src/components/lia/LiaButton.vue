@@ -29,13 +29,15 @@ withDefaults(defineProps<{
   font-size: var(--lia-text-md);
   font-weight: var(--lia-font-medium);
   padding: var(--lia-space-2) var(--lia-space-4);
-  transition: border-color var(--lia-transition-fast) ease, background var(--lia-transition-fast) ease, filter var(--lia-transition-fast) ease;
+  min-height: 40px;
+  transition: border-color var(--lia-transition-fast) ease, background var(--lia-transition-fast) ease;
 }
 
 /* Visible keyboard focus via the shared ring token; pointer stays clean. */
 .lia-button:focus-visible {
   box-shadow: var(--lia-focus-ring);
-  outline: none;
+  outline: 2px solid transparent;
+  outline-offset: 3px;
 }
 
 /* The REAL disabled state (native attribute fall-through). */
@@ -54,12 +56,20 @@ withDefaults(defineProps<{
 }
 
 .lia-button--primary {
-  background: linear-gradient(135deg, var(--lia-accent), var(--lia-accent-soft));
-  border: none;
+  background: var(--lia-accent-action);
+  border: 1px solid var(--lia-accent-action);
   color: var(--lia-accent-contrast);
   font-weight: var(--lia-font-bold);
 }
 .lia-button--primary:hover:not(:disabled) {
-  filter: brightness(1.08);
+  background: var(--lia-accent-action-hover);
+  border-color: var(--lia-accent-action-hover);
+}
+
+/* Native focus remains visible in Windows forced-color mode. */
+@media (forced-colors: active) {
+  .lia-button:focus-visible {
+    outline-color: Highlight;
+  }
 }
 </style>

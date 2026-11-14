@@ -27,6 +27,9 @@ function createTestI18n() {
               'new': 'New chat',
               'empty': 'No chats',
               'delete': 'Delete',
+              'delete-confirm': 'Confirm deletion',
+              'delete-description': 'Delete this conversation and its messages? This cannot be undone.',
+              'cancel': 'Cancel',
               'cloud-badge': 'Cloud synced',
             },
           },
@@ -98,6 +101,8 @@ describe('sessions drawer orchestration', () => {
     await screen.rerender({ modelValue: true })
 
     await screen.getByRole('button', { name: 'Delete: Chat B' }).click()
+    expect(chat.deleteSession).not.toHaveBeenCalled()
+    await screen.getByRole('button', { name: 'Confirm deletion', exact: true }).click()
     await vi.waitFor(() => expect(chat.deleteSession).toHaveBeenCalledWith('session-b'))
 
     await screen.getByRole('button', { name: /^Chat C / }).click()

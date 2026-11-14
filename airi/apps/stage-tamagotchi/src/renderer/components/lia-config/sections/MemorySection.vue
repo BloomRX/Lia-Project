@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { DoubleCheckButton } from '@proj-airi/ui'
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
@@ -24,6 +25,8 @@ const { t } = useI18n({
       cancel: 'Cancelar',
       edit: 'Editar',
       remove: 'Apagar',
+      removeConfirm: 'Confirmar exclusão',
+      removeDescription: 'Esta ação apaga apenas esta lembrança deste computador. Não pode ser desfeita.',
       empty: 'Nenhuma lembrança guardada. Você decide o que adicionar.',
       clear: 'Apagar todas',
       confirm: 'Apagar todas as lembranças deste computador? Essa ação não pode ser desfeita.',
@@ -47,6 +50,8 @@ const { t } = useI18n({
       cancel: 'Cancel',
       edit: 'Edit',
       remove: 'Delete',
+      removeConfirm: 'Confirm deletion',
+      removeDescription: 'This deletes only this memory from this computer. It cannot be undone.',
       empty: 'No saved memories. You decide what to add.',
       clear: 'Delete all',
       confirm: 'Delete all memories from this computer? This cannot be undone.',
@@ -59,7 +64,6 @@ const { t } = useI18n({
 const memory = useLiaMemoryStore()
 const draft = ref('')
 const editing = ref<string>()
-const confirming = ref(false)
 const success = ref(false)
 const disabled = computed(() => memory.loading || memory.busy || !memory.loaded)
 onMounted(() => memory.load())
@@ -87,7 +91,6 @@ async function remove(id: string) {
 async function clear() {
   success.value = await memory.clear(true)
   if (success.value) {
-    confirming.value = false
     draft.value = ''
     editing.value = undefined
   }
@@ -117,12 +120,12 @@ async function clear() {
     </label>
     <form class="flex flex-col gap-2" @submit.prevent="submit">
       <label for="lia-memory-draft" class="text-sm font-medium">{{ t('label') }}</label>
-      <textarea id="lia-memory-draft" v-model="draft" :maxlength="LIA_MEMORY_LIMITS.text" :disabled="disabled" :placeholder="t('placeholder')" rows="3" class="w-full border border-neutral-300 rounded-lg bg-transparent p-3 text-sm dark:border-neutral-600" />
+      <textarea id="lia-memory-draft" v-model="draft" :maxlength="LIA_MEMORY_LIMITS.text" :disabled="disabled" :placeholder="t('placeholder')" rows="3" class="w-full border border-neutral-300 rounded-lg bg-transparent p-3 text-sm outline-none dark:border-neutral-600 focus-visible:outline-2 focus-visible:outline-primary-600 focus-visible:outline-offset-2 dark:focus-visible:outline-primary-300" />
       <div class="flex items-center gap-3">
         <button type="submit" :disabled="disabled || !draft.trim() || (!editing && memory.state.entries.length >= LIA_MEMORY_LIMITS.entries)" class="rounded-lg bg-primary-500 px-3 py-2 text-sm text-white disabled:opacity-50">
           {{ t(memory.busy ? 'saving' : editing ? 'save' : 'add') }}
         </button>
-        <button v-if="editing" type="button" class="text-sm underline" :disabled="memory.busy" @click="editing = undefined; draft = ''">
+        <button v-if="editing" type="button" class="text-sm underline focus-visible:outline-2 focus-visible:outline-primary-600 focus-visible:outline-offset-2 dark:focus-visible:outline-primary-300" :disabled="memory.busy" @click="editing = undefined; draft = ''">
           {{ t('cancel') }}
         </button>
       </div>
@@ -141,31 +144,45 @@ async function clear() {
         <p class="whitespace-pre-wrap break-words text-sm">
           {{ entry.text }}
         </p>
-        <div class="mt-2 flex gap-3 text-xs">
-          <button type="button" :disabled="disabled" class="underline" @click="editing = entry.id; draft = entry.text; success = false">
+        <div class="mt-2 flex flex-wrap items-center gap-3 text-xs">
+          <button type="button" :disabled="disabled" class="underline focus-visible:outline-2 focus-visible:outline-primary-600 focus-visible:outline-offset-2 dark:focus-visible:outline-primary-300" @click="editing = entry.id; draft = entry.text; success = false">
             {{ t('edit') }}
           </button>
-          <button type="button" :disabled="disabled" class="text-red-600 underline dark:text-red-300" @click="remove(entry.id)">
+          <DoubleCheckButton
+            size="sm"
+            color="red"
+            variant="secondary"
+            :confirm-label="t('removeConfirm')"
+            :cancel-label="t('cancel')"
+            :description="t('removeDescription')"
+            :disabled="disabled"
+            :loading="memory.busy"
+            @confirm="remove(entry.id)"
+          >
             {{ t('remove') }}
-          </button>
+            <template #confirm>
+              {{ t('removeConfirm') }}
+            </template>
+          </DoubleCheckButton>
         </div>
       </li>
     </ul>
-    <button v-if="memory.state.entries.length && !confirming" type="button" class="self-start text-sm text-red-600 underline dark:text-red-300" :disabled="disabled" @click="confirming = true">
+    <DoubleCheckButton
+      v-if="memory.state.entries.length"
+      size="sm"
+      color="red"
+      variant="secondary"
+      :confirm-label="t('yes')"
+      :cancel-label="t('cancel')"
+      :description="t('confirm')"
+      :disabled="disabled"
+      :loading="memory.busy"
+      @confirm="clear"
+    >
       {{ t('clear') }}
-    </button>
-    <div v-if="confirming" role="group" :aria-label="t('confirm')" class="border border-red-300 rounded-lg p-3">
-      <p class="mb-3 text-sm">
-        {{ t('confirm') }}
-      </p>
-      <div class="flex gap-3 text-sm">
-        <button type="button" class="text-red-600 underline dark:text-red-300" :disabled="disabled" @click="clear">
-          {{ t('yes') }}
-        </button>
-        <button type="button" class="underline" :disabled="memory.busy" @click="confirming = false">
-          {{ t('cancel') }}
-        </button>
-      </div>
-    </div>
+      <template #confirm>
+        {{ t('yes') }}
+      </template>
+    </DoubleCheckButton>
   </div>
 </template>

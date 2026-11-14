@@ -62,14 +62,15 @@ describe('the primary action keeps the existing launch path (B, F)', () => {
     expect(source).toContain('service is not ready')
     expect(source).toContain('serviço de IA não está pronto')
     expect(source).toContain('emit(\'refresh\')')
-    expect(source).toContain(':disabled="busy || conversationStarting || conversationStopping"')
+    expect(source).toContain(':disabled="busy || conversationUnknown || conversationStarting || conversationStopping"')
     expect(source).toContain('{{ conversationLabel }}')
   })
 
   it('f: the pure VM keeps the EXISTING status-source semantics (labels, phases, blocker)', () => {
     // Label follows the Stage phase contract, verbatim.
-    expect(homeConversationLabelVm(undefined)).toBe('Conversar com Lia')
-    expect(homeConversationLabelVm({})).toBe('Conversar com Lia')
+    expect(homeConversationLabelVm(undefined)).toBe('Verificando prontidão…')
+    expect(homeConversationLabelVm({})).toBe('Configurar IA para conversar')
+    expect(homeConversationLabelVm({ ai: { ready: true } })).toBe('Conversar com Lia')
     expect(homeConversationLabelVm({ stage: { state: { phase: 'starting' } } })).toBe('Abrindo o palco…')
     expect(homeConversationLabelVm({ stage: { state: { phase: 'running' } } })).toBe('Conversando…')
     expect(homeConversationStartingVm({ stage: { state: { phase: 'starting' } } })).toBe(true)
@@ -78,12 +79,12 @@ describe('the primary action keeps the existing launch path (B, F)', () => {
     // IA readiness derives from the SAME home-status fact.
     expect(homeAiChipVm({ ai: { ready: true } })).toEqual({ label: 'IA pronta', variant: 'ready' })
     expect(homeAiChipVm({ ai: { ready: false } })).toEqual({ label: 'IA a configurar', variant: 'warning' })
-    expect(homeAiChipVm(undefined)).toEqual({ label: 'IA a configurar', variant: 'warning' })
+    expect(homeAiChipVm(undefined)).toEqual({ label: 'Verificando IA', variant: 'neutral' })
 
     // The honest blocker appears only while IA is unconfigured.
-    expect(homeBlockerHintVm({ ai: { ready: false } })).toContain('configuração de IA')
+    expect(homeBlockerHintVm({ ai: { ready: false } })).toContain('IA & Recursos')
     expect(homeBlockerHintVm({ ai: { ready: true } })).toBeUndefined()
-    expect(homeBlockerHintVm(undefined)).toBeUndefined()
+    expect(homeBlockerHintVm(undefined)).toBe('Verificando se a IA está pronta para conversar.')
   })
 
   it('f2: voice readiness arrives as a shell prop - Home never opens its own state source', () => {
@@ -119,9 +120,9 @@ describe('legacy ConfigView selection errors remain actionable', () => {
   it('sends the expected selection and presents managed/stale errors as accessible localized feedback', () => {
     const source = readSource('./ConfigView.vue')
     expect(source).toContain('expectedPreferred,')
-    expect(source).toContain("result?.status === 'selection-owned-by-launcher'")
-    expect(source).toContain("result?.status === 'stale-selection'")
-    expect(source).toContain("result?.status === 'selection-read-failed'")
+    expect(source).toContain('result?.status === \'selection-owned-by-launcher\'')
+    expect(source).toContain('result?.status === \'stale-selection\'')
+    expect(source).toContain('result?.status === \'selection-read-failed\'')
     expect(source).toContain('This AI service is managed by AI Settings.')
     expect(source).toContain('Este serviço de IA é gerenciado pelas Configurações de IA.')
     expect(source).toContain('<span v-if="feedback" class="feedback" role="status">')
@@ -214,7 +215,7 @@ describe('8.0A-5 minimal first-run choice', () => {
   it('g: the first-run marker never blocks Conversar (no modal, no gate)', () => {
     const source = HOME_VUE()
     // Conversar follows only conversation lifecycle, never the setup marker...
-    expect(source).toContain(':disabled="busy || conversationStarting || conversationStopping"')
+    expect(source).toContain(':disabled="busy || conversationUnknown || conversationStarting || conversationStopping"')
     // ...the first-run flag gates the panel and NOTHING else...
     expect((source.match(/v-if="firstRunVisible"/g) ?? []).length).toBe(1)
     expect(source).not.toMatch(/firstRun(Visible|Done|Busy).*conversar|conversar.*firstRun/i)
@@ -225,8 +226,8 @@ describe('8.0A-5 minimal first-run choice', () => {
   it('h: the first-run surface is jargon-free product copy', () => {
     const source = HOME_VUE()
     expect(source).toContain('Como você quer começar?')
-    expect(source).toContain('Conversa e voz. A Lia prepara a voz automaticamente.')
-    expect(source).toContain('Conversa sem voz. Você pode ativá-la depois.')
+    expect(source).toContain('Prefere conversa e voz. A prontidão da IA aparece abaixo.')
+    expect(source).toContain('Prefere conversa sem voz. A IA ainda precisa estar pronta.')
     // Same sweep as the normal Home surface: no implementation words.
     const forbidden = /python|onnx|\bpip\b|venv|directml|alltalk|xtts|backend|huggingface|installdir|install dir|runtimehome|runtime home|\bhash\b/i
     expect(source.slice(source.indexOf('<template>'), source.indexOf('</template>'))).not.toMatch(forbidden)
@@ -238,5 +239,44 @@ describe('8.0A-5 minimal first-run choice', () => {
     expect(styleBlock).not.toMatch(/rgba?\(/i)
     for (const variable of [...styleBlock.matchAll(/var\(([^)]+)\)/g)].map(match => match[1].trim()))
       expect(variable).toMatch(/^--lia-/)
+  })
+})
+
+// Internal report: docs/reports/LIA-UI-UX-AUDIT-2026-11-14.md (UI-L01).
+describe('uI-L01 readiness is separate from first-run preference', () => {
+  it('offers the existing AI Settings destination when IA is not ready', () => {
+    expect(homeConversationLabelVm({ ai: { ready: false } })).toBe('Configurar IA para conversar')
+    expect(homeBlockerHintVm({ ai: { ready: false } })).toContain('IA & Recursos')
+    expect(HOME_VUE()).toContain('emit(\'navigate\', \'ai\')')
+    expect(readSource('../App.vue')).toContain('@navigate="page = $event"')
+  })
+
+  it('does not treat an unknown status as a configured service', () => {
+    expect(homeConversationStartingVm(undefined)).toBe(false)
+    expect(HOME_VUE()).toContain('const conversationUnknown = computed(() => props.status == null)')
+    expect(HOME_VUE()).toContain('conversationUnknown')
+  })
+
+  it('keeps operational state visible and localizes the readiness action', () => {
+    expect(homeConversationLabelVm({ ai: { ready: false } }, 'en-US')).toBe('Set up AI to chat')
+    expect(homeAiChipVm({ ai: { ready: true } }, 'en-US').label).toBe('AI ready')
+    expect(HOME_VUE()).toContain('homeStageChipVm(props.status, props.language)')
+    expect(HOME_VUE()).toContain('role="status"')
+  })
+})
+
+// Internal report: docs/reports/LIA-UI-UX-AUDIT-2026-11-14.md (UI-L02).
+describe('phase 1 normal AI entry', () => {
+  it('keeps legacy technical fields and the file path inside a closed advanced disclosure', () => {
+    const source = readSource('./ConfigView.vue')
+    const disclosure = source.indexOf('<details class="card legacy-settings">')
+    expect(disclosure).toBeGreaterThan(-1)
+    expect(source).not.toContain('<details open')
+    expect(source.indexOf('v-model="form.providerId"')).toBeGreaterThan(disclosure)
+    expect(source.indexOf('v-model="form.apiKey"')).toBeGreaterThan(disclosure)
+    expect(source.indexOf('v-model="form.voiceProviderId"')).toBeGreaterThan(disclosure)
+    expect(source.indexOf('config?.filePath')).toBeGreaterThan(disclosure)
+    expect(source.indexOf('emit(\'navigate\', \'ai\')')).toBeLessThan(disclosure)
+    expect(source).toContain('expectedPreferred,')
   })
 })

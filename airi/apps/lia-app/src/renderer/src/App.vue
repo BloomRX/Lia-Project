@@ -146,13 +146,14 @@ onUnmounted(() => unsubscribe?.())
         <span class="brand-name">Lia</span>
       </div>
 
-      <nav class="sidebar-nav">
+      <nav class="sidebar-nav" :aria-label="text.home">
         <button
           v-for="item in nav"
           :key="item.id"
           class="nav-item"
           :class="{ active: page === item.id }"
           :aria-label="item.label"
+          :aria-current="page === item.id ? 'page' : undefined"
           @click="page = item.id"
         >
           <span class="nav-icon" aria-hidden="true">{{ item.icon }}</span>
@@ -167,6 +168,7 @@ onUnmounted(() => unsubscribe?.())
           class="nav-item settings"
           :class="{ active: page === 'config' }"
           :aria-label="text.settings"
+          :aria-current="page === 'config' ? 'page' : undefined"
           @click="page = 'config'"
         >
           <span class="nav-icon" aria-hidden="true">⚙</span>
@@ -178,7 +180,7 @@ onUnmounted(() => unsubscribe?.())
     <div class="main">
       <!-- Minimal context bar: ONE useful global status (voice readiness,
            from the provisioning source of truth). No technical-chip rows. -->
-      <header class="contextbar">
+      <header class="contextbar" role="status" aria-live="polite" aria-atomic="true">
         <LiaStatusChip :variant="voiceVariant">
           {{ text.voicePrefix }}: {{ voiceChip.label }}
         </LiaStatusChip>
@@ -193,8 +195,9 @@ onUnmounted(() => unsubscribe?.())
           :status="status"
           :api="api"
           :language="language"
-          v-bind="page === 'home' ? { language, readiness, setup } : {}"
+          v-bind="page === 'home' ? { language, readiness, setup } : page === 'voice' ? { language, readiness } : {}"
           @refresh="refresh"
+          @navigate="page = $event"
         />
       </main>
 

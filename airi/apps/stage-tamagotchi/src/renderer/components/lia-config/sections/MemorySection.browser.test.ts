@@ -60,6 +60,8 @@ describe('memory controls', () => {
     const reopened = mount()
     await expect.element(reopened.getByText('Gosto de jogos espaciais.', { exact: true })).toBeVisible()
     await reopened.getByRole('button', { name: 'Apagar', exact: true }).click()
+    await expect.element(reopened.getByText('Gosto de jogos espaciais.', { exact: true })).toBeVisible()
+    await reopened.getByRole('button', { name: 'Confirmar exclusão', exact: true }).click()
     await expect.element(reopened.getByText('Nenhuma lembrança guardada. Você decide o que adicionar.')).toBeVisible()
   })
   it('requires explicit confirmation for delete all, and supports English', async () => {

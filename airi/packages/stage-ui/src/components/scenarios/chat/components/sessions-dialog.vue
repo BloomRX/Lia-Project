@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { ChatSessionMeta } from '../../../../types/chat-session'
 
-import { ScrollableArea } from '@proj-airi/ui'
+import { DoubleCheckButton, ScrollableArea } from '@proj-airi/ui'
 import { DialogContent, DialogOverlay, DialogPortal, DialogRoot, DialogTitle } from 'reka-ui'
 import { useI18n } from 'vue-i18n'
 
@@ -39,7 +39,7 @@ const { t } = useI18n()
       <DialogOverlay
         :class="[
           'fixed inset-0 z-[9999] bg-black/50 backdrop-blur-sm',
-          'data-[state=closed]:animate-fadeOut data-[state=open]:animate-fadeIn',
+          'data-[state=closed]:animate-fadeOut data-[state=open]:animate-fadeIn motion-reduce:animate-none',
         ]"
       />
       <DialogContent
@@ -47,7 +47,7 @@ const { t } = useI18n()
         :class="[
           'fixed z-[9999] flex flex-col overflow-hidden bg-white/95 shadow-xl outline-none backdrop-blur-md dark:bg-neutral-900/95',
           isDesktop
-            ? 'left-1/2 top-1/2 max-h-[80dvh] max-w-md w-[92dvw] rounded-2xl -translate-x-1/2 -translate-y-1/2 data-[state=closed]:animate-contentHide data-[state=open]:animate-contentShow'
+            ? 'left-1/2 top-1/2 max-h-[80dvh] max-w-md w-[92dvw] rounded-2xl -translate-x-1/2 -translate-y-1/2 data-[state=closed]:animate-contentHide data-[state=open]:animate-contentShow motion-reduce:animate-none'
             : 'bottom-0 left-0 right-0 max-h-[85dvh] rounded-t-[32px]',
         ]"
         :style="isDesktop ? undefined : { paddingBottom: mobilePaddingBottom }"
@@ -68,6 +68,7 @@ const { t } = useI18n()
                 'rounded-lg px-3 py-1.5 text-xs font-medium',
                 'bg-primary-100/60 text-primary-700 dark:bg-primary-900/40 dark:text-primary-200',
                 'hover:bg-primary-200/70 dark:hover:bg-primary-800/50',
+                'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 dark:focus-visible:outline-primary-300',
                 'transition-colors',
               ]"
               :disabled="isCreatingSession"
@@ -92,7 +93,7 @@ const { t } = useI18n()
               v-for="row in rows"
               :key="row.meta.sessionId"
               :class="[
-                'group relative mb-1 w-full rounded-xl transition-colors',
+                'group relative mb-1 w-full rounded-xl pb-1 transition-colors md:pb-0',
                 row.isActive
                   ? 'bg-primary-100/70 dark:bg-primary-900/40'
                   : 'hover:bg-neutral-100/80 dark:hover:bg-neutral-800/60',
@@ -100,7 +101,7 @@ const { t } = useI18n()
             >
               <button
                 type="button"
-                :class="['w-full flex flex-col gap-1 px-3 py-3 text-left outline-none']"
+                :class="['w-full flex flex-col gap-1 px-3 py-3 text-left outline-none focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary-600 dark:focus-visible:outline-primary-300']"
                 @click="emit('selectSession', row.meta.sessionId)"
               >
                 <div :class="['flex items-center gap-2 text-sm font-medium text-neutral-700 dark:text-neutral-200']">
@@ -118,20 +119,23 @@ const { t } = useI18n()
                   {{ row.updatedAtLabel }}
                 </div>
               </button>
-              <button
-                type="button"
-                :class="[
-                  'absolute right-2 top-2 z-10 h-7 w-7 flex items-center justify-center rounded-md',
-                  'opacity-100 md:opacity-0 md:group-hover:opacity-100 focus:opacity-100',
-                  'text-neutral-400 hover:bg-red-500/10 hover:text-red-500',
-                  'transition-opacity duration-150',
-                ]"
-                :aria-label="`${t('stage.chat.sessions.delete')}: ${row.preview}`"
-                :title="t('stage.chat.sessions.delete')"
-                @click.stop="emit('deleteSession', row.meta.sessionId)"
-              >
-                <div class="i-solar:trash-bin-trash-bold-duotone h-4 w-4" />
-              </button>
+              <div :class="['relative z-10 mx-2 mb-2', 'md:absolute md:right-2 md:top-2 md:mx-0 md:mb-0']">
+                <DoubleCheckButton
+                  size="sm"
+                  color="red"
+                  variant="secondary"
+                  :label="`${t('stage.chat.sessions.delete')}: ${row.preview}`"
+                  :confirm-label="t('stage.chat.sessions.delete-confirm')"
+                  :cancel-label="t('stage.chat.sessions.cancel')"
+                  :description="t('stage.chat.sessions.delete-description')"
+                  @confirm="emit('deleteSession', row.meta.sessionId)"
+                >
+                  <div class="i-solar:trash-bin-trash-bold-duotone h-4 w-4" aria-hidden="true" />
+                  <template #confirm>
+                    {{ t('stage.chat.sessions.delete-confirm') }}
+                  </template>
+                </DoubleCheckButton>
+              </div>
             </div>
           </ScrollableArea>
         </div>

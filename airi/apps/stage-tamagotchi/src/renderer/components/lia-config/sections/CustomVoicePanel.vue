@@ -12,7 +12,8 @@
  * directly - selecting a profile still goes through
  * `saveTtsConfiguration()`, the single writer the whole Voz tab uses.
  */
-import { computed, onMounted, ref } from 'vue'
+import { DoubleCheckButton } from '@proj-airi/ui'
+import { computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { useLiaVoiceStore } from '../../../stores/lia/voice'
@@ -33,8 +34,6 @@ const activeProfileId = computed(() => {
   return isCustomVoiceTarget(preferred) ? preferred?.voiceId : undefined
 })
 
-const confirmingRemoveId = ref<string | null>(null)
-
 /**
  * Loads the library when the panel mounts. Reading never configures anything -
  * this is the same read-only rule the whole tab keeps.
@@ -52,16 +51,6 @@ async function onSelect(profileId: string): Promise<void> {
     preferred: targetForProfile({ id: profileId }),
     fallback,
   })
-}
-
-/** Asks in the row instead of a modal, so the question is visibly about *this* voice. */
-function onAskRemove(profileId: string): void {
-  confirmingRemoveId.value = confirmingRemoveId.value === profileId ? null : profileId
-}
-
-async function onConfirmRemove(profileId: string): Promise<void> {
-  confirmingRemoveId.value = null
-  await profilesStore.removeProfile(profileId)
 }
 
 /** Only two truths per row: selected (= in use) or saved-but-idle. */
@@ -128,48 +117,29 @@ function profileStatusKey(profileId: string): string {
         <div class="flex gap-2">
           <button
             type="button"
-            class="rounded bg-neutral-900 px-2 py-1 text-xs text-white dark:bg-neutral-100 dark:text-neutral-900"
+            class="min-h-8 rounded bg-neutral-900 px-2 py-1 text-xs text-white dark:bg-neutral-100 dark:text-neutral-900 focus-visible:outline-2 focus-visible:outline-primary-600 focus-visible:outline-offset-2 dark:focus-visible:outline-primary-300"
             :disabled="profilesStore.isBusy"
             :data-testid="`lia-custom-voice-use-${profile.id}`"
             @click="onSelect(profile.id)"
           >
             {{ tt('profiles.use') }}
           </button>
-          <button
-            type="button"
-            class="rounded px-2 py-1 text-xs text-red-600 dark:text-red-400"
+          <DoubleCheckButton
+            size="sm"
+            color="red"
+            variant="secondary"
+            :confirm-label="tt('profiles.removeYes')"
+            :cancel-label="tt('profiles.cancel')"
+            :description="tt('profiles.removeConfirm')"
             :disabled="profilesStore.isBusy"
             :data-testid="`lia-custom-voice-remove-${profile.id}`"
-            @click="onAskRemove(profile.id)"
+            @confirm="profilesStore.removeProfile(profile.id)"
           >
             {{ tt('profiles.remove') }}
-          </button>
-        </div>
-        <div
-          v-if="confirmingRemoveId === profile.id"
-          class="flex flex-col gap-1"
-          :data-testid="`lia-custom-voice-confirm-remove-${profile.id}`"
-        >
-          <p class="text-xs text-neutral-500 dark:text-neutral-400">
-            {{ tt('profiles.removeConfirm') }}
-          </p>
-          <div class="flex gap-2">
-            <button
-              type="button"
-              class="rounded bg-red-600 px-2 py-1 text-xs text-white"
-              :disabled="profilesStore.isBusy"
-              @click="onConfirmRemove(profile.id)"
-            >
+            <template #confirm>
               {{ tt('profiles.removeYes') }}
-            </button>
-            <button
-              type="button"
-              class="rounded px-2 py-1 text-xs text-neutral-500 dark:text-neutral-400"
-              @click="confirmingRemoveId = null"
-            >
-              {{ tt('profiles.cancel') }}
-            </button>
-          </div>
+            </template>
+          </DoubleCheckButton>
         </div>
       </li>
     </ul>

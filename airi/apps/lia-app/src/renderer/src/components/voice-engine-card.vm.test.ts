@@ -43,7 +43,7 @@ describe('voiceEngineCardVm (7.9G product rows)', () => {
       stateKey: 'lia.voice.engines.state.ready',
       userFacingName: 'Kokoro',
     })
-    expect(voiceEngineStateLabel(vm.rows[0], vm.locale)).toBe('Pronto')
+    expect(voiceEngineStateLabel(vm.rows[0], vm.locale)).toBe('Instalado')
   })
 
   it('missing Kokoro renders the install action with a friendly hint', () => {
@@ -83,7 +83,7 @@ describe('voiceEngineCardVm (7.9G product rows)', () => {
     const vm = voiceEngineCardVm({ engines: [KOKORO_ROW], phase: 'idle', selectedId: 'kokoro' }, 'en-US')
     expect(vm.title).toBe('Lia voice')
     expect(vm.rows[0].userFacingName).toBe('Kokoro')
-    expect(voiceEngineStateLabel(vm.rows[0], vm.locale)).toBe('Ready')
+    expect(voiceEngineStateLabel(vm.rows[0], vm.locale)).toBe('Installed')
   })
 
   it('the selection payload is EXACTLY the canonical field, nothing else', () => {

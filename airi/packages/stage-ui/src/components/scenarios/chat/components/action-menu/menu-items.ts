@@ -57,12 +57,14 @@ export function createChatActionMenuItems(options: {
   canRetry: boolean
   canDelete: boolean
   retryLabel?: string
+  copyLabel?: string
+  deleteLabel?: string
 }): ChatActionMenuItem[] {
   return [
     options.canCopy
       ? {
           action: 'copy',
-          label: 'Copy',
+          label: options.copyLabel ?? 'Copy',
           icon: 'i-solar:copy-bold',
         }
       : null,
@@ -76,7 +78,7 @@ export function createChatActionMenuItems(options: {
     options.canDelete
       ? {
           action: 'delete',
-          label: 'Delete',
+          label: options.deleteLabel ?? 'Delete message',
           icon: 'i-solar:trash-bin-minimalistic-bold',
           danger: true,
         }

@@ -9,38 +9,62 @@
 
 export interface HomeAiChipVm {
   label: string
-  variant: 'ready' | 'warning'
+  variant: 'neutral' | 'ready' | 'warning'
 }
 
-/** IA/conversation readiness, in product words (never infrastructure detail). */
-export function homeAiChipVm(status: unknown): HomeAiChipVm {
-  const ready = Boolean((status as Record<string, any> | undefined)?.ai?.ready)
+/** IA readiness comes only from the existing home-status snapshot. */
+export function homeAiChipVm(status: unknown, language?: string): HomeAiChipVm {
+  const english = language?.toLowerCase().startsWith('en') === true
+  if (status == null)
+    return { label: english ? 'Checking AI' : 'Verificando IA', variant: 'neutral' }
+  const ready = Boolean((status as Record<string, any>).ai?.ready)
   return ready
-    ? { label: 'IA pronta', variant: 'ready' }
-    : { label: 'IA a configurar', variant: 'warning' }
+    ? { label: english ? 'AI ready' : 'IA pronta', variant: 'ready' }
+    : { label: english ? 'AI needs setup' : 'IA a configurar', variant: 'warning' }
 }
 
-/**
- * The honest blocker shown when conversation cannot start (existing
- * behavior, same words) - undefined once IA is configured.
- */
-export function homeBlockerHintVm(status: unknown): string | undefined {
-  const s = status as Record<string, any> | undefined
-  if (!s)
-    return undefined
-  return s.ai?.ready
+/** Explain the next step without exposing a transport or credential detail. */
+export function homeBlockerHintVm(status: unknown, language?: string): string | undefined {
+  const english = language?.toLowerCase().startsWith('en') === true
+  if (status == null)
+    return english ? 'Checking whether AI is ready for conversation.' : 'Verificando se a IA está pronta para conversar.'
+  return (status as Record<string, any>).ai?.ready
     ? undefined
-    : 'A Lia ainda precisa da configuração de IA para conversar — veja a aba Configuração.'
+    : english
+      ? 'Set up an AI service and model in AI & Resources before you chat.'
+      : 'Configure um serviço e um modelo de IA em IA & Recursos antes de conversar.'
 }
 
-/** The primary action label follows the Stage phase (existing contract). */
-export function homeConversationLabelVm(status: unknown): string {
-  const phase = (status as Record<string, any> | undefined)?.stage?.state?.phase
+/** The primary action follows lifecycle first, then actual AI readiness. */
+export function homeConversationLabelVm(status: unknown, language?: string): string {
+  const english = language?.toLowerCase().startsWith('en') === true
+  if (status == null)
+    return english ? 'Checking readiness…' : 'Verificando prontidão…'
+  const snapshot = status as Record<string, any>
+  const phase = snapshot.stage?.state?.phase
   if (phase === 'running')
-    return 'Conversando…'
+    return english ? 'Conversation open' : 'Conversando…'
   if (phase === 'starting')
-    return 'Abrindo o palco…'
-  return 'Conversar com Lia'
+    return english ? 'Opening conversation…' : 'Abrindo o palco…'
+  if (phase === 'stopping')
+    return english ? 'Ending conversation…' : 'Encerrando conversa…'
+  if (!snapshot.ai?.ready)
+    return english ? 'Set up AI to chat' : 'Configurar IA para conversar'
+  return english ? 'Chat with Lia' : 'Conversar com Lia'
+}
+
+/** Operational state is separate from configuration readiness. */
+export function homeStageChipVm(status: unknown, language?: string): HomeAiChipVm {
+  const english = language?.toLowerCase().startsWith('en') === true
+  const phase = (status as Record<string, any> | undefined)?.stage?.state?.phase
+  const states: Record<string, HomeAiChipVm> = {
+    stopped: { label: english ? 'Conversation stopped' : 'Conversa parada', variant: 'neutral' },
+    starting: { label: english ? 'Starting conversation' : 'Iniciando conversa', variant: 'warning' },
+    running: { label: english ? 'Conversation active' : 'Conversa ativa', variant: 'ready' },
+    stopping: { label: english ? 'Ending conversation' : 'Encerrando conversa', variant: 'warning' },
+    error: { label: english ? 'Conversation error' : 'Erro na conversa', variant: 'warning' },
+  }
+  return states[String(phase)] ?? { label: english ? 'Checking conversation' : 'Verificando conversa', variant: 'neutral' }
 }
 
 /** The action blocks while the Stage is starting (existing contract). */

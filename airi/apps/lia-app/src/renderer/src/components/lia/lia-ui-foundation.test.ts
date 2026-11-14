@@ -90,6 +90,31 @@ describe('8.0A-1 design tokens (foundation only, no migration)', () => {
   })
 })
 
+// Internal report: docs/reports/LIA-UI-UX-AUDIT-2026-11-14.md (UI-A01).
+describe('uI-A01 action contrast', () => {
+  function luminance(hex: string): number {
+    const channels = [1, 3, 5].map(offset => Number.parseInt(hex.slice(offset, offset + 2), 16) / 255).map(channel => channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4)
+    return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722
+  }
+
+  it('keeps normal action text above 4.5:1 without rounding the ratio', () => {
+    const palette = readSource('../../styles.css')
+    const action = /--lia-magenta-action: (#[0-9a-f]{6})/i.exec(palette)?.[1]
+    const hover = /--lia-magenta-action-hover: (#[0-9a-f]{6})/i.exec(palette)?.[1]
+    expect(action).toBeDefined()
+    expect(hover).toBeDefined()
+    const text = luminance('#ffffff')
+    for (const background of [action!, hover!]) {
+      const ratio = (text + 0.05) / (luminance(background) + 0.05)
+      expect(ratio).toBeGreaterThanOrEqual(4.5)
+    }
+    expect(TOKENS_CSS()).toContain('--lia-accent-action: var(--lia-magenta-action)')
+    expect(BUTTON()).toContain('background: var(--lia-accent-action)')
+    expect(BUTTON()).toContain('background: var(--lia-accent-action-hover)')
+    expect(BUTTON()).not.toContain('filter: brightness')
+  })
+})
+
 describe('8.0A-1 LiaPanel (standard surface)', () => {
   it('c: renders slot content inside a token-styled surface (border, radius, padding)', () => {
     const source = PANEL()
@@ -176,15 +201,15 @@ describe('8.0A-1 primitives stay pure (H)', () => {
     }
   })
 
-  it('migration stays phased: the Voice surface (8.0A-4) is ON the primitives; every other page stays un-migrated', () => {
-    // 8.0A-2 adopted LiaStatusChip in the shell, 8.0A-3 migrated Home and
-    // 8.0A-4 migrates the Voice page + card. Everything else stays raw
-    // until its own migration phase.
+  it('migration stays phased: Home, Voice and the Phase 1 Config entry use primitives; Diagnostics waits', () => {
+    // Phase 1 UI-L02 adds the Config entry without redesigning its legacy
+    // editor. Diagnostics remains outside this phase.
     const voiceCard = readSource('../VoiceEngineCard.vue')
     expect(voiceCard).toContain('LiaPanel')
     expect(voiceCard).toContain('LiaButton')
     expect(voiceCard).toContain('LiaStatusChip')
-    for (const page of ['ConfigView.vue', 'DiagnosticsView.vue']) {
+    expect(readSource('../../views/ConfigView.vue')).toContain('LiaButton')
+    for (const page of ['DiagnosticsView.vue']) {
       const source = readSource(`../../views/${page}`)
       expect(source, page).not.toContain('LiaPanel')
       expect(source, page).not.toContain('LiaButton')

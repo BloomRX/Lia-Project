@@ -1,0 +1,292 @@
+
+ RUN  v4.1.11 /home/user/Lia-Project/airi/packages/stage-layouts
+
+stderr | src/composables/use-transcriptions.test.ts > useTranscriptions > initialization > should initialize with isListening false
+[Vue warn]: useId() is called when there is no active component instance to be associated with.
+[Vue warn] onScopeDispose() is called when there is no active effect scope to be associated with.
+
+stderr | src/composables/use-transcriptions.test.ts > useTranscriptions > initialization > should expose startListening and stopListening
+[Vue warn]: useId() is called when there is no active component instance to be associated with.
+[Vue warn] onScopeDispose() is called when there is no active effect scope to be associated with.
+
+stdout | src/composables/use-transcriptions.test.ts > useTranscriptions > auto-Configuration (Web Speech API) > should auto-configure Web Speech API if no provider is set
+Starting streaming transcription {
+  enabled: true,
+  hasStream: false,
+  supportsStreamInput: true,
+  hearingConfigured: false
+} { source: 'useTranscriptions' }
+No transcription provider configured. Auto-configuring Web Speech API as default { source: 'useTranscriptions' }
+
+stderr | src/composables/use-transcriptions.test.ts > useTranscriptions > auto-Configuration (Web Speech API) > should auto-configure Web Speech API if no provider is set
+[Vue warn]: useId() is called when there is no active component instance to be associated with.
+[Vue warn] onScopeDispose() is called when there is no active effect scope to be associated with.
+
+stdout | src/composables/use-transcriptions.test.ts > useTranscriptions > auto-Configuration (Web Speech API) > should auto-configure Web Speech API if no provider is set
+Web Speech API configured as default provider { source: 'useTranscriptions' }
+Requesting microphone permission { source: 'useTranscriptions' }
+
+stdout | src/composables/use-transcriptions.test.ts > useTranscriptions > auto-Configuration (Web Speech API) > should auto-configure Web Speech API if no provider is set
+Attempting to start stream manually { source: 'useTranscriptions' }
+
+stderr | src/composables/use-transcriptions.test.ts > useTranscriptions > auto-Configuration (Web Speech API) > should auto-configure Web Speech API if no provider is set
+Failed to get audio stream for transcription. Please check microphone permissions and ensure a device is selected. { source: 'useTranscriptions' }
+
+stdout | src/composables/use-transcriptions.test.ts > useTranscriptions > auto-Configuration (Web Speech API) > should fail gracefully if Web Speech API is not available
+Starting streaming transcription {
+  enabled: true,
+  hasStream: true,
+  supportsStreamInput: true,
+  hearingConfigured: false
+} { source: 'useTranscriptions' }
+No transcription provider configured. Auto-configuring Web Speech API as default { source: 'useTranscriptions' }
+
+stderr | src/composables/use-transcriptions.test.ts > useTranscriptions > auto-Configuration (Web Speech API) > should fail gracefully if Web Speech API is not available
+[Vue warn]: useId() is called when there is no active component instance to be associated with.
+[Vue warn] onScopeDispose() is called when there is no active effect scope to be associated with.
+Web Speech API is not available and no transcription provider is configured. Please go to Settings > Modules > Hearing to configure a transcription provider.  Browser support: {
+  hasWindow: true,
+  hasWebkitSpeechRecognition: false,
+  hasSpeechRecognition: false
+} { source: 'useTranscriptions' }
+
+stderr | src/composables/use-transcriptions.test.ts > useTranscriptions > auto-Configuration (Web Speech API) > should handle tamagotchi
+[Vue warn]: useId() is called when there is no active component instance to be associated with.
+[Vue warn] onScopeDispose() is called when there is no active effect scope to be associated with.
+
+stdout | src/composables/use-transcriptions.test.ts > useTranscriptions > streaming Logic > should start streaming if stream exists and provider supports it
+Starting streaming transcription {
+  enabled: true,
+  hasStream: true,
+  supportsStreamInput: true,
+  hearingConfigured: true
+} { source: 'useTranscriptions' }
+Starting streaming transcription with stream: stream-1 { source: 'useTranscriptions' }
+Received final transcription: test content { source: 'useTranscriptions' }
+
+stderr | src/composables/use-transcriptions.test.ts > useTranscriptions > streaming Logic > should start streaming if stream exists and provider supports it
+[Vue warn]: useId() is called when there is no active component instance to be associated with.
+[Vue warn] onScopeDispose() is called when there is no active effect scope to be associated with.
+
+stdout | src/composables/use-transcriptions.test.ts > useTranscriptions > streaming Logic > should start streaming if stream exists and provider supports it
+Streaming transcription initiated successfully { source: 'useTranscriptions' }
+
+stdout | src/composables/use-transcriptions.test.ts > useTranscriptions > streaming Logic > should request permission if stream is missing
+Starting streaming transcription {
+  enabled: true,
+  hasStream: false,
+  supportsStreamInput: true,
+  hearingConfigured: true
+} { source: 'useTranscriptions' }
+Requesting microphone permission { source: 'useTranscriptions' }
+
+stderr | src/composables/use-transcriptions.test.ts > useTranscriptions > streaming Logic > should request permission if stream is missing
+[Vue warn]: useId() is called when there is no active component instance to be associated with.
+[Vue warn] onScopeDispose() is called when there is no active effect scope to be associated with.
+
+stdout | src/composables/use-transcriptions.test.ts > useTranscriptions > streaming Logic > should request permission if stream is missing
+Attempting to start stream manually { source: 'useTranscriptions' }
+
+stderr | src/composables/use-transcriptions.test.ts > useTranscriptions > streaming Logic > should request permission if stream is missing
+Failed to get audio stream for transcription. Please check microphone permissions and ensure a device is selected. { source: 'useTranscriptions' }
+
+stdout | src/composables/use-transcriptions.test.ts > useTranscriptions > streaming Logic > should stop streaming if stream is missing after permission
+Starting streaming transcription {
+  enabled: true,
+  hasStream: false,
+  supportsStreamInput: true,
+  hearingConfigured: true
+} { source: 'useTranscriptions' }
+Requesting microphone permission { source: 'useTranscriptions' }
+
+stderr | src/composables/use-transcriptions.test.ts > useTranscriptions > streaming Logic > should stop streaming if stream is missing after permission
+[Vue warn]: useId() is called when there is no active component instance to be associated with.
+[Vue warn] onScopeDispose() is called when there is no active effect scope to be associated with.
+
+stdout | src/composables/use-transcriptions.test.ts > useTranscriptions > streaming Logic > should stop streaming if stream is missing after permission
+Attempting to start stream manually { source: 'useTranscriptions' }
+
+stderr | src/composables/use-transcriptions.test.ts > useTranscriptions > streaming Logic > should stop streaming if stream is missing after permission
+Timed out waiting for audio stream. Stopping transcription. { source: 'useTranscriptions' }
+
+stdout | src/composables/use-transcriptions.test.ts > useTranscriptions > transcription & Input > should append transcribed text to messageInputRef
+Starting streaming transcription {
+  enabled: true,
+  hasStream: true,
+  supportsStreamInput: true,
+  hearingConfigured: true
+} { source: 'useTranscriptions' }
+Starting streaming transcription with stream: stream-1 { source: 'useTranscriptions' }
+Received final transcription: test content { source: 'useTranscriptions' }
+
+stderr | src/composables/use-transcriptions.test.ts > useTranscriptions > transcription & Input > should append transcribed text to messageInputRef
+[Vue warn]: useId() is called when there is no active component instance to be associated with.
+[Vue warn] onScopeDispose() is called when there is no active effect scope to be associated with.
+
+stdout | src/composables/use-transcriptions.test.ts > useTranscriptions > transcription & Input > should append transcribed text to messageInputRef
+Streaming transcription initiated successfully { source: 'useTranscriptions' }
+
+stdout | src/composables/use-transcriptions.test.ts > useTranscriptions > transcription & Input > should append transcribed text with a space when input contains value
+Starting streaming transcription {
+  enabled: true,
+  hasStream: true,
+  supportsStreamInput: true,
+  hearingConfigured: true
+} { source: 'useTranscriptions' }
+Starting streaming transcription with stream: stream-1 { source: 'useTranscriptions' }
+Received final transcription: test content { source: 'useTranscriptions' }
+
+stderr | src/composables/use-transcriptions.test.ts > useTranscriptions > transcription & Input > should append transcribed text with a space when input contains value
+[Vue warn]: useId() is called when there is no active component instance to be associated with.
+[Vue warn] onScopeDispose() is called when there is no active effect scope to be associated with.
+
+stdout | src/composables/use-transcriptions.test.ts > useTranscriptions > transcription & Input > should append transcribed text with a space when input contains value
+Streaming transcription initiated successfully { source: 'useTranscriptions' }
+
+stdout | src/composables/use-transcriptions.test.ts > useTranscriptions > transcription & Input > replaces volatile snapshots when the provider corrects text
+Starting streaming transcription {
+  enabled: true,
+  hasStream: true,
+  supportsStreamInput: true,
+  hearingConfigured: true
+} { source: 'useTranscriptions' }
+Starting streaming transcription with stream: stream-1 { source: 'useTranscriptions' }
+Received final transcription: 今天天气很好 { source: 'useTranscriptions' }
+
+stderr | src/composables/use-transcriptions.test.ts > useTranscriptions > transcription & Input > replaces volatile snapshots when the provider corrects text
+[Vue warn]: useId() is called when there is no active component instance to be associated with.
+[Vue warn] onScopeDispose() is called when there is no active effect scope to be associated with.
+
+stdout | src/composables/use-transcriptions.test.ts > useTranscriptions > transcription & Input > replaces volatile snapshots when the provider corrects text
+Streaming transcription initiated successfully { source: 'useTranscriptions' }
+
+stdout | src/composables/use-transcriptions.test.ts > useTranscriptions > transcription & Input > preserves manual input changes during a volatile transcription
+Starting streaming transcription {
+  enabled: true,
+  hasStream: true,
+  supportsStreamInput: true,
+  hearingConfigured: true
+} { source: 'useTranscriptions' }
+Starting streaming transcription with stream: stream-1 { source: 'useTranscriptions' }
+
+stderr | src/composables/use-transcriptions.test.ts > useTranscriptions > transcription & Input > preserves manual input changes during a volatile transcription
+[Vue warn]: useId() is called when there is no active component instance to be associated with.
+[Vue warn] onScopeDispose() is called when there is no active effect scope to be associated with.
+
+stdout | src/composables/use-transcriptions.test.ts > useTranscriptions > transcription & Input > preserves manual input changes during a volatile transcription
+Streaming transcription initiated successfully { source: 'useTranscriptions' }
+
+stdout | src/composables/use-transcriptions.test.ts > useTranscriptions > transcription & Input > should trigger auto-send after delay
+Starting streaming transcription {
+  enabled: true,
+  hasStream: true,
+  supportsStreamInput: true,
+  hearingConfigured: true
+} { source: 'useTranscriptions' }
+Starting streaming transcription with stream: stream-1 { source: 'useTranscriptions' }
+Received final transcription: test content { source: 'useTranscriptions' }
+
+stderr | src/composables/use-transcriptions.test.ts > useTranscriptions > transcription & Input > should trigger auto-send after delay
+[Vue warn]: useId() is called when there is no active component instance to be associated with.
+[Vue warn] onScopeDispose() is called when there is no active effect scope to be associated with.
+
+stdout | src/composables/use-transcriptions.test.ts > useTranscriptions > transcription & Input > should trigger auto-send after delay
+Streaming transcription initiated successfully { source: 'useTranscriptions' }
+
+stdout | src/composables/use-transcriptions.test.ts > useTranscriptions > transcription & Input > should clear pending auto-send if disabled
+Starting streaming transcription {
+  enabled: true,
+  hasStream: true,
+  supportsStreamInput: true,
+  hearingConfigured: true
+} { source: 'useTranscriptions' }
+Starting streaming transcription with stream: stream-1 { source: 'useTranscriptions' }
+Received final transcription: test content { source: 'useTranscriptions' }
+
+stderr | src/composables/use-transcriptions.test.ts > useTranscriptions > transcription & Input > should clear pending auto-send if disabled
+[Vue warn]: useId() is called when there is no active component instance to be associated with.
+[Vue warn] onScopeDispose() is called when there is no active effect scope to be associated with.
+
+stdout | src/composables/use-transcriptions.test.ts > useTranscriptions > transcription & Input > should clear pending auto-send if disabled
+Streaming transcription initiated successfully { source: 'useTranscriptions' }
+
+stdout | src/composables/use-transcriptions.test.ts > useTranscriptions > transcription & Input > should clear pending auto-send if disabled
+Auto-send disabled { source: 'useTranscriptions' }
+
+stdout | src/composables/use-transcriptions.test.ts > useTranscriptions > cleanup > should stop streaming and clear timeout
+Starting streaming transcription {
+  enabled: true,
+  hasStream: true,
+  supportsStreamInput: true,
+  hearingConfigured: true
+} { source: 'useTranscriptions' }
+Starting streaming transcription with stream: stream-1 { source: 'useTranscriptions' }
+Received final transcription: test content { source: 'useTranscriptions' }
+
+stderr | src/composables/use-transcriptions.test.ts > useTranscriptions > cleanup > should stop streaming and clear timeout
+[Vue warn]: useId() is called when there is no active component instance to be associated with.
+[Vue warn] onScopeDispose() is called when there is no active effect scope to be associated with.
+
+stdout | src/composables/use-transcriptions.test.ts > useTranscriptions > cleanup > should stop streaming and clear timeout
+Streaming transcription initiated successfully { source: 'useTranscriptions' }
+
+stdout | src/composables/use-transcriptions.test.ts > useTranscriptions > cleanup > should stop streaming and clear timeout
+Stopping transcription... { source: 'useTranscriptions' }
+
+stdout | src/composables/use-transcriptions.test.ts > useTranscriptions > cleanup > should stop streaming and clear timeout
+Transcription stopped { source: 'useTranscriptions' }
+
+stdout | src/composables/use-transcriptions.test.ts > useTranscriptions > cleanup > should stop streaming on unmount
+Starting streaming transcription {
+  enabled: true,
+  hasStream: true,
+  supportsStreamInput: true,
+  hearingConfigured: true
+} { source: 'useTranscriptions' }
+Starting streaming transcription with stream: stream-1 { source: 'useTranscriptions' }
+Received final transcription: test content { source: 'useTranscriptions' }
+
+stdout | src/composables/use-transcriptions.test.ts > useTranscriptions > cleanup > should stop streaming on unmount
+Streaming transcription initiated successfully { source: 'useTranscriptions' }
+
+stdout | src/composables/use-transcriptions.test.ts > useTranscriptions > cleanup > should stop streaming on unmount
+Stopping transcription... { source: 'useTranscriptions' }
+
+stdout | src/composables/use-transcriptions.test.ts > useTranscriptions > cleanup > should stop streaming on unmount
+Transcription stopped { source: 'useTranscriptions' }
+
+stdout | src/composables/use-transcriptions.test.ts > useTranscriptions > reactive watchers > should stop listening if microphone is disabled
+Starting streaming transcription {
+  enabled: true,
+  hasStream: true,
+  supportsStreamInput: true,
+  hearingConfigured: true
+} { source: 'useTranscriptions' }
+Starting streaming transcription with stream: stream-1 { source: 'useTranscriptions' }
+Received final transcription: test content { source: 'useTranscriptions' }
+
+stderr | src/composables/use-transcriptions.test.ts > useTranscriptions > reactive watchers > should stop listening if microphone is disabled
+[Vue warn]: useId() is called when there is no active component instance to be associated with.
+[Vue warn] onScopeDispose() is called when there is no active effect scope to be associated with.
+
+stdout | src/composables/use-transcriptions.test.ts > useTranscriptions > reactive watchers > should stop listening if microphone is disabled
+Streaming transcription initiated successfully { source: 'useTranscriptions' }
+
+stdout | src/composables/use-transcriptions.test.ts > useTranscriptions > reactive watchers > should stop listening if microphone is disabled
+Stopping transcription... { source: 'useTranscriptions' }
+
+stdout | src/composables/use-transcriptions.test.ts > useTranscriptions > reactive watchers > should stop listening if microphone is disabled
+Transcription stopped { source: 'useTranscriptions' }
+
+stdout | src/composables/use-transcriptions.test.ts > useTranscriptions > reactive watchers > should stop listening if microphone is disabled
+Stopping streaming transcription because hearing is disabled. { source: 'useTranscriptions' }
+
+ ✓ src/composables/use-transcriptions.test.ts (17 tests) 55ms
+ ✓ src/browser/adaptive-input.test.ts (2 tests) 46ms
+ ✓ src/composables/useStopSpeakingButton.test.ts (6 tests) 14ms
+ ✓ src/browser/adaptive-input-geometry.test.ts (16 tests) 20ms
+
+ Test Files  4 passed (4)
+      Tests  41 passed (41)
+   Start at  20:22:47
+   Duration  8.06s (transform 223ms, setup 0ms, import 604ms, tests 135ms, environment 6.15s)

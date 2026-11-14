@@ -15,8 +15,8 @@ import { useChatStreamStore } from '@proj-airi/stage-ui/stores/chat/stream-store
 import { useL2dViewControl } from '@proj-airi/stage-ui/stores/live2d'
 import { useContextBridgeStore } from '@proj-airi/stage-ui/stores/mods/api/context-bridge'
 import { useSettings, useSettingsAudioDevice } from '@proj-airi/stage-ui/stores/settings'
-import { BasicTextarea, useTheme } from '@proj-airi/ui'
-import { onLongPress, useEventListener, usePointerSwipe } from '@vueuse/core'
+import { BasicTextarea, DoubleCheckButton, useTheme } from '@proj-airi/ui'
+import { onLongPress, useEventListener, usePointerSwipe, usePreferredReducedMotion } from '@vueuse/core'
 import { animate, spring } from 'animejs'
 import { storeToRefs } from 'pinia'
 import { computed, nextTick, onMounted, onUnmounted, shallowRef, useTemplateRef, watch } from 'vue'
@@ -51,6 +51,7 @@ const emit = defineEmits<{
 }>()
 
 const { isDark, toggleDark } = useTheme()
+const reducedMotion = usePreferredReducedMotion()
 const chatOrchestrator = useChatStore()
 const chatSession = useChatSessionStore()
 const chatStream = useChatStreamStore()
@@ -174,7 +175,8 @@ let suppressNextInputBubbleClick = false
 async function resetInputBubblePosition() {
   await animate(inputBubble.value!, {
     transform: 'translate3d(0px, 0px, 0px) scale(1)',
-    ease: spring({ bounce: 0.3, duration: 320 }),
+    ease: reducedMotion.value === 'reduce' ? 'linear' : spring({ bounce: 0.3, duration: 320 }),
+    ...(reducedMotion.value === 'reduce' ? { duration: 0 } : {}),
   })
 }
 
@@ -211,16 +213,17 @@ async function setInputBubbleDocked(docked: boolean) {
         `translate3d(${startX}px, ${startY}px, 0)`,
         `translate3d(${endX}px, ${endY}px, 0)`,
       ],
-      ease: spring({ bounce: docked ? 0.35 : 0.25, duration: 400 }),
+      ease: reducedMotion.value === 'reduce' ? 'linear' : spring({ bounce: docked ? 0.35 : 0.25, duration: 400 }),
+      ...(reducedMotion.value === 'reduce' ? { duration: 0 } : {}),
     }),
     animate(messageInput, {
       opacity: docked ? 0 : 1,
-      duration: 120,
+      duration: reducedMotion.value === 'reduce' ? 0 : 120,
       ease: 'out(2)',
     }),
     animate(inputBubbleIcon.value!, {
       opacity: docked ? 1 : 0,
-      duration: 120,
+      duration: reducedMotion.value === 'reduce' ? 0 : 120,
       ease: 'out(2)',
     }),
   ])
@@ -483,7 +486,7 @@ onUnmounted(() => {
               border="2 solid neutral-100/60 dark:neutral-800/30"
               bg="neutral-50/70 dark:neutral-800/70"
               w-fit flex items-center self-end justify-center rounded-xl p-2 backdrop-blur-md
-              title="Hearing"
+              :title="t('stage.chat.actions.hearing')" :aria-label="t('stage.chat.actions.hearing')"
             >
               <Transition name="fade" mode="out-in">
                 <IndicatorMicVolume v-if="enabled" size-5 :color-class="isListening ? undefined : 'text-neutral-500 dark:text-neutral-400'" />
@@ -491,33 +494,39 @@ onUnmounted(() => {
               </Transition>
             </button>
           </HearingConfigDialog>
-          <button border="2 solid neutral-100/60 dark:neutral-800/30" bg="neutral-50/70 dark:neutral-800/70" w-fit flex items-center self-end justify-center rounded-xl p-2 backdrop-blur-md title="Theme" @click="toggleDark()">
+          <button border="2 solid neutral-100/60 dark:neutral-800/30" bg="neutral-50/70 dark:neutral-800/70" w-fit flex items-center self-end justify-center rounded-xl p-2 backdrop-blur-md :title="isDark ? t('stage.chat.actions.light-theme') : t('stage.chat.actions.dark-theme')" :aria-label="isDark ? t('stage.chat.actions.light-theme') : t('stage.chat.actions.dark-theme')" @click="toggleDark()">
             <Transition name="fade" mode="out-in">
               <div v-if="isDark" i-solar:moon-outline size-5 text="neutral-500 dark:neutral-400" />
               <div v-else i-solar:sun-2-outline size-5 text="neutral-500 dark:neutral-400" />
             </Transition>
           </button>
-          <button border="2 solid neutral-100/60 dark:neutral-800/30" bg="neutral-50/70 dark:neutral-800/70" w-fit flex items-center self-end justify-center rounded-xl p-2 backdrop-blur-md title="Background" @click="backgroundDialogOpen = true">
+          <button border="2 solid neutral-100/60 dark:neutral-800/30" bg="neutral-50/70 dark:neutral-800/70" w-fit flex items-center self-end justify-center rounded-xl p-2 backdrop-blur-md :title="t('stage.chat.actions.background')" :aria-label="t('stage.chat.actions.background')" @click="backgroundDialogOpen = true">
             <div i-solar:gallery-wide-bold-duotone size-5 text="neutral-500 dark:neutral-400" />
           </button>
           <!-- <button border="2 solid neutral-100/60 dark:neutral-800/30" bg="neutral-50/70 dark:neutral-800/70" w-fit flex items-center self-end justify-center rounded-xl p-2 backdrop-blur-md title="Language">
             <div i-solar:earth-outline size-5 text="neutral-500 dark:neutral-400" />
           </button> -->
-          <RouterLink to="/settings" border="2 solid neutral-100/60 dark:neutral-800/30" bg="neutral-50/70 dark:neutral-800/70" w-fit flex items-center self-end justify-center rounded-xl p-2 backdrop-blur-md title="Settings">
+          <RouterLink to="/settings" border="2 solid neutral-100/60 dark:neutral-800/30" bg="neutral-50/70 dark:neutral-800/70" w-fit flex items-center self-end justify-center rounded-xl p-2 backdrop-blur-md :title="t('stage.chat.actions.settings')" :aria-label="t('stage.chat.actions.settings')">
             <div i-solar:settings-outline size-5 text="neutral-500 dark:neutral-400" />
           </RouterLink>
           <!-- <button border="2 solid neutral-100/60 dark:neutral-800/30" bg="neutral-50/70 dark:neutral-800/70" w-fit flex items-center self-end justify-center rounded-xl p-2 backdrop-blur-md title="Model">
             <div i-solar:face-scan-circle-outline size-5 text="neutral-500 dark:neutral-400" />
           </button> -->
-          <button
-            border="2 solid neutral-100/60 dark:neutral-800/30"
-            bg="neutral-50/70 dark:neutral-800/70"
-            w-fit flex items-center self-end justify-center rounded-xl p-2 backdrop-blur-md
-            title="Cleanup Messages"
-            @click="handleCleanupMessages"
+          <DoubleCheckButton
+            size="sm"
+            color="red"
+            variant="secondary"
+            :label="t('stage.chat.actions.clear')"
+            :confirm-label="t('stage.chat.actions.clear-confirm')"
+            :cancel-label="t('stage.chat.actions.cancel')"
+            :description="t('stage.chat.actions.clear-description')"
+            @confirm="handleCleanupMessages"
           >
-            <div class="i-solar:trash-bin-2-bold-duotone" />
-          </button>
+            <div class="i-solar:trash-bin-2-bold-duotone" aria-hidden="true" />
+            <template #confirm>
+              {{ t('stage.chat.actions.clear-confirm') }}
+            </template>
+          </DoubleCheckButton>
           <ViewControls />
         </div>
       </div>
@@ -530,6 +539,7 @@ onUnmounted(() => {
         ]"
         :style="messageComposerStyle"
       >
+        <span :id="`lia-mobile-send-help-${$.uid}`" class="sr-only">{{ t('stage.chat.send-help', { mode: t('stage.send-mode.enter') }) }}</span>
         <div
           ref="inputBubble"
           data-testid="mobile-input-bubble"
@@ -553,10 +563,12 @@ onUnmounted(() => {
           <BasicTextarea
             v-model="messageInput"
             :placeholder="t('stage.message')"
+            :aria-label="t('stage.chat.message-label')"
+            :aria-describedby="`lia-mobile-send-help-${$.uid}`"
             :class="[
               'font-cute',
               'max-h-[10lh] min-h-[calc(1lh+4px+4px)] w-full resize-none overflow-y-scroll scrollbar-none',
-              'border-2 border-solid px-4 py-0.5 outline-none backdrop-blur-md',
+              'border-2 border-solid px-4 py-0.5 outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 dark:focus-visible:outline-primary-300 backdrop-blur-md',
               'text-neutral-500 dark:text-neutral-100',
               'rounded-[1lh] border-neutral-200/60 bg-neutral-100/80 dark:border-neutral-700/60 dark:bg-neutral-950/80',
               'transition-colors duration-250 ease-in-out hover:text-neutral-600 dark:hover:text-neutral-200',
@@ -582,19 +594,19 @@ onUnmounted(() => {
           v-if="showStopSpeakingButton"
           data-testid="stop-speaking-button"
           :class="[
-            'h-[calc(1lh+4px+4px)] w-[calc(1lh+4px+4px)] flex items-center justify-center self-end rounded-md outline-none',
+            'h-[calc(1lh+4px+4px)] w-[calc(1lh+4px+4px)] flex items-center justify-center self-end rounded-md outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 dark:focus-visible:outline-primary-300',
             'text-lg text-neutral-500 transition-all duration-200 active:scale-95 dark:text-neutral-400',
             'hover:bg-primary-100/60 hover:text-primary-600 dark:hover:bg-primary-900/40 dark:hover:text-primary-300',
           ]"
-          title="Stop speaking"
-          aria-label="Stop speaking"
+          :title="t('stage.chat.actions.stop-speaking')"
+          :aria-label="t('stage.chat.actions.stop-speaking')"
           @click="stopSpeakingFromChat"
         >
           <div class="i-solar:stop-circle-bold-duotone h-5 w-5" />
         </button>
         <button
           v-if="messageInput.trim() || isComposing"
-          w="[calc(1lh+4px+4px)]" h="[calc(1lh+4px+4px)]" aspect-square flex items-center self-end justify-center rounded-full outline-none backdrop-blur-md
+          w="[calc(1lh+4px+4px)]" h="[calc(1lh+4px+4px)]" aspect-square flex items-center self-end justify-center rounded-full outline-none backdrop-blur-md focus-visible:outline-2 focus-visible:outline-primary-600 focus-visible:outline-offset-2 dark:focus-visible:outline-primary-300
           text="neutral-500 hover:neutral-600 dark:neutral-900 dark:hover:neutral-800"
           bg="primary-50/80 dark:neutral-100/80 hover:neutral-50"
           transition="all duration-250 ease-in-out"
@@ -606,3 +618,13 @@ onUnmounted(() => {
     </div>
   </div>
 </template>
+
+<style scoped>
+@media (prefers-reduced-motion: reduce) {
+  :deep(*) {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+</style>
