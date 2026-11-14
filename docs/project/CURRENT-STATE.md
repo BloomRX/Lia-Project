@@ -35,7 +35,24 @@ relatório). Regressões:
 `built-in.test.ts` 1/1, tsc sem erros nos arquivos alterados, eslint limpo.
 Relatório: [A-1 — ativação de ferramentas](../reports/LIA-A1-TOOL-ENABLEMENT-2026-11-14.md).
 
-**Auditoria de branch (14/11/2026, read-only).** O tip `7cb8172` está sincronizado com o
+**Consolidação pós-A-1 (14/11/2026).** As três entregas dos especialistas foram lidas e
+confrontadas com o código em `ae46c49`: QA (matriz de `ae46c49`), Arquitetura/Segurança e
+UI/UX. **Beta segue não aprovada.** O núcleo offline está verde (5.664 PASS / 18 skipped no
+total consolidado, com carry-forward rotulado), mas não há prova de runtime no SHA
+candidato: AI Settings **0/16**, conversa, histórico, tool calling ponta a ponta, órfãos,
+sandbox na janela real, voz, GPU, NSIS e C0–C4 estão **NOT RUN/BLOCKED**. Bloqueadores
+comprovados: ausência de runtime Windows, tool calling sem round-trip, build do renderer
+dependente de `dist.ayaka.moe`, distribuição não executada/sem assinatura, OIDC com tokens
+no Renderer/`localStorage` e corrida de refresh pós-logout (SEC-01/02, se OIDC estiver no
+escopo) e CI vermelho (lint 81; stage-ui exit 1). Riscos condicionais (SEC-03…09,
+TOOL-01/02, DIST-01/02) exigem investigação, não são incidentes comprovados. Decisões
+pendentes do produto: OIDC entra/sai, voz entra/sai, beta interno/externo e assinatura,
+C0–C4 como gate, autorização da Fase 1 de UI e licença/mirror dos assets. Plano completo,
+matriz única e critérios de saída:
+[plano de prontidão para beta](../reports/LIA-BETA-READINESS-PLAN-2026-11-14.md).
+Nenhum código de produto foi alterado nesta rodada.
+
+**Auditoria de branch (14/11/2026, read-only — estado histórico, anterior ao A-1).** O tip `7cb8172` está sincronizado com o
 remoto e o worktree está limpo (exceto o material não rastreável da RX 580). Verificado
 nesta rodada: `lia/core` **105/105**; `@lia/lia-app` **353 passed / 2 skips** em 36
 arquivos; typecheck **0**; build do Launcher **PASS**; testes direcionados do Stage
