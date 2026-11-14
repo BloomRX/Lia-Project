@@ -1,0 +1,26 @@
+NOTA DE INTEGRIDADE — primeira tentativa de execução (registrada, não apagada)
+
+Comando (worktree ae46c49..407300b destacada, ANTES de `pnpm run build:packages`):
+  pnpm exec vitest run --config vitest.config.ts --project node \
+    src/main/services/lia src/renderer/stores/lia src/renderer/composables \
+    src/renderer/utils src/renderer/pages/index.voice-authority.test.ts \
+    src/renderer/components/lia-config/sections src/shared
+
+Resultado observado na primeira tentativa:
+  Test Files  70 failed | 34 passed (104)
+      Tests  15 failed | 586 passed (601)
+
+Causa: dependências de workspace ainda não buildadas — imports como
+  Error: Cannot find package '@lia/core/voice/shared' imported from .../src/shared/lia-voice.ts
+  Error: Failed to resolve import "@proj-airi/pipelines-audio" from .../index.voice-authority.test.ts
+  Error: Failed to resolve entry for package "@proj-airi/electron-eventa". The package may have incorrect main/module/exports specified in its package.json.
+  Error: Failed to resolve entry for package "@lia/core". The package may have incorrect main/module/exports specified in its package.json.
+
+Correção aplicada: `pnpm run build:packages` (EXIT=0, 33/33 tasks) e re-execução:
+  Test Files  104 passed (104)
+      Tests  1592 passed (1592)
+
+Falha inicial era de ambiente (build ausente), não de produto.
+Nota adicional: `pnpm run build:packages` falhou na 1ª tentativa (EXIT=1,
+"Unable to find package manager binary") porque o sandbox perdeu /tmp/pnpm-shim
+entre turnos; o shim foi recriado e a execução seguinte passou (33/33).

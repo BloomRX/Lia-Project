@@ -1,0 +1,16 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.11 [39m[90m/home/user/407300b-validation/airi/packages/lia-core[39m
+
+ [32m✓[39m src/voice/voice-service.test.ts [2m([22m[2m19 tests[22m[2m)[22m[32m 79[2mms[22m[39m
+ [32m✓[39m src/voice/engines/kokoro/engine.test.ts [2m([22m[2m17 tests[22m[2m)[22m[32m 106[2mms[22m[39m
+ [32m✓[39m src/voice/engines/kokoro/install.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 19[2mms[22m[39m
+ [32m✓[39m src/voice/engines/kokoro/smoke.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 11[2mms[22m[39m
+ [32m✓[39m src/voice/engines/registry.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+ [32m✓[39m src/voice/config.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m src/voice/engines/kokoro/layout.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m7 passed[39m[22m[90m (7)[39m
+[2m      Tests [22m [1m[32m74 passed[39m[22m[90m (74)[39m
+[2m   Start at [22m 19:04:07
+[2m   Duration [22m 1.89s[2m (transform 263ms, setup 0ms, import 423ms, tests 239ms, environment 1ms)[22m
+
