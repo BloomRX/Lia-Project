@@ -4,8 +4,10 @@ import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { executeToolCallRerun } from '../../tool-call-rerun'
-import { resolveLlmTools, toolNameFrom } from './tool-resolver'
+import { isResolvedToolAllowed, resolveLlmTools, toolNameFrom } from './tool-resolver'
 import { useLlmToolsStore } from './tools'
+
+beforeEach(() => setActivePinia(createPinia()))
 
 // The default (non-injected) web-search branch reads the module store and the
 // tools barrel; mock both so the configured-gate + key-trim logic can be
@@ -61,7 +63,7 @@ describe('resolveLlmTools', () => {
     })
 
     expect(tools).toHaveLength(1)
-    expect(tools[0]).toBe(runtimeTool)
+    expect(tools[0]?.function).toEqual(runtimeTool.function)
   })
 
   it('places custom tools before active runtime tools so runtime tools can win by name', async () => {
@@ -78,7 +80,7 @@ describe('resolveLlmTools', () => {
       activeTools: [runtimeTool],
     })
 
-    expect(tools).toEqual([builtInTool, runtimeTool])
+    expect(tools.map(tool => tool.function)).toEqual([builtInTool.function, runtimeTool.function])
   })
 
   it('includes injected web-search tools in the resolved list', async () => {
@@ -93,7 +95,7 @@ describe('resolveLlmTools', () => {
       activeTools: [],
     })
 
-    expect(tools).toEqual([builtInTool, webSearchTool])
+    expect(tools.map(tool => tool.function)).toEqual([builtInTool.function, webSearchTool.function])
   })
 
   describe('default web-search branch (module store gate)', () => {
@@ -115,7 +117,7 @@ describe('resolveLlmTools', () => {
         activeTools: [],
       })
 
-      expect(tools).toEqual([builtInTool])
+      expect(tools.map(tool => tool.function)).toEqual([builtInTool.function])
       expect(createWebSearchToolsMock).not.toHaveBeenCalled()
     })
 
@@ -135,7 +137,7 @@ describe('resolveLlmTools', () => {
       })
 
       expect(createWebSearchToolsMock).toHaveBeenCalledWith({ apiKey: 'tvly-key' })
-      expect(tools).toEqual([builtInTool, webSearchTool])
+      expect(tools.map(tool => tool.function)).toEqual([builtInTool.function, webSearchTool.function])
     })
   })
 })
@@ -310,5 +312,57 @@ describe('resolveLlmTools + enablement', () => {
     expect((await resolveFor('get_weather')).map(toolNameFrom)).toEqual(['get_weather'])
   })
 
-  void toolOptions
+  it('rechecks enablement after an asynchronous source resolves', async () => {
+    const store = useLlmToolsStore()
+    store.addTools({ ...registeredTool('plugin:sample', 'sample'), defaultActive: true })
+    let release!: () => void
+    const pending = new Promise<void>(resolve => { release = resolve })
+    const resolving = resolveLlmTools({
+      builtInTools: [], debugTools: [], sparkCommandTools: [], webSearchTools: [],
+      customTools: async () => { await pending; return [] },
+    })
+    await Promise.resolve()
+    store.setToolEnabled('plugin:sample', false)
+    release()
+    expect(await resolving).toEqual([])
+  })
+
+  it('does not expose or execute a colliding fallback for a disabled registration', async () => {
+    const store = useLlmToolsStore()
+    const fallback = createTool('builtIn_mcpCallTool')
+    store.addTools({ ...registeredTool('mcp:builtIn_mcpCallTool', 'builtIn_mcpCallTool'), defaultActive: true })
+    store.setToolEnabled('mcp:builtIn_mcpCallTool', false)
+    const tools = await resolveLlmTools({
+      builtInTools: [fallback], debugTools: [], sparkCommandTools: [], webSearchTools: [],
+      customTools: store.getToolsByNames('builtIn_mcpCallTool'),
+    })
+    expect(tools).toEqual([])
+    expect(fallback.execute).not.toHaveBeenCalled()
+  })
+
+  it('blocks same-name registered tools in explicit reruns when any is disabled', async () => {
+    const store = useLlmToolsStore()
+    const first = registeredTool('plugin:first', 'shared')
+    const second = registeredTool('plugin:second', 'shared')
+    store.addTools(first, second)
+    const captured = store.getToolsByNames('shared')[0]!
+    store.setToolEnabled(first.id, false)
+    expect(store.getToolsByNames('shared')).toEqual([])
+    expect(() => captured.execute({}, toolOptions)).toThrow()
+    expect(second.execute).not.toHaveBeenCalled()
+  })
+
+  it('revokes a previously resolved fallback at dispatch and execution', async () => {
+    const store = useLlmToolsStore()
+    const fallback = createTool('duplicate')
+    store.addTools(registeredTool('plugin:duplicate', 'duplicate'))
+    const [captured] = await resolveLlmTools({
+      builtInTools: [fallback], debugTools: [], sparkCommandTools: [], webSearchTools: [],
+    })
+    expect(isResolvedToolAllowed(captured!)).toBe(true)
+    store.setToolEnabled('plugin:duplicate', false)
+    expect(isResolvedToolAllowed(captured!)).toBe(false)
+    expect(() => captured!.execute({}, toolOptions)).toThrow('disabled or unavailable')
+    expect(fallback.execute).not.toHaveBeenCalled()
+  })
 })

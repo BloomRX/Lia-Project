@@ -260,6 +260,30 @@ describe('isToolRelatedError', () => {
     ]))
   })
 
+  it('omits a tool disabled while custom tools resolve and rejects captured execution', async () => {
+    const store = useLLM()
+    const tools = useLlmToolsStore()
+    const registered = {
+      id: 'plugin:barrier', type: 'function' as const,
+      function: { name: 'barrier', description: 'test', parameters: { type: 'object' } },
+      execute: vi.fn(async () => ({ ok: true })),
+    } satisfies ExecutableTool
+    tools.addTools(registered)
+    const entered = Promise.withResolvers<void>()
+    const release = Promise.withResolvers<void>()
+    streamTextMock.mockImplementationOnce(() => createMockStreamResult())
+    const pending = store.stream('model-a', provider, [{ role: 'user', content: 'hello' }] as Message[], {
+      tools: async () => { entered.resolve(); await release.promise; return [] },
+    })
+    await entered.promise
+    tools.setToolEnabled(registered.id, false)
+    release.resolve()
+    await pending
+    const sent = streamTextMock.mock.calls[0]?.[0]?.tools ?? []
+    expect(sent.map(toolNameFrom)).not.toContain('barrier')
+    expect(registered.execute).not.toHaveBeenCalled()
+  })
+
   it('prefers runtime-registered tools when duplicate tool names collide with builtin tools', async () => {
     const store = useLLM()
     const llmToolsStore = useLlmToolsStore()

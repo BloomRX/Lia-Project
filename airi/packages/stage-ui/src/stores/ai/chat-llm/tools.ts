@@ -4,6 +4,8 @@ import type {} from 'pinia-plugin-synced'
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 
+import { toolNameFrom } from './tool-name'
+
 /** A serializable tool definition shared between application contexts. */
 export interface ToolDefinition extends Omit<Tool, 'execute'> {
   /** A stable application id. This id does not need to match the model-facing name. */
@@ -81,6 +83,8 @@ export const useLlmToolsStore = defineStore('llm-tools', () => {
    */
   const enabledById = ref<Record<string, boolean>>({})
   const executors = new Map<string, Tool['execute']>()
+  // Local provenance for already-resolved objects; never serialized to Pinia.
+  const resolvedIds = new WeakMap<Tool, string>()
 
   /** Whether a registered tool may be shown to the model and executed. */
   function isToolEnabled(id: string): boolean {
@@ -95,12 +99,16 @@ export const useLlmToolsStore = defineStore('llm-tools', () => {
     enabledById.value = { ...enabledById.value, [id]: enabled }
   }
 
+  function isNameBlocked(name: string): boolean {
+    return tools.value.some(definition => definition.function.name === name && !isToolEnabled(definition.id))
+  }
+
   function executableToolFrom(definition: ToolDefinition): Tool {
     const execute = (input: Parameters<Tool['execute']>[0], options: Parameters<Tool['execute']>[1]) => {
       // Defense in depth: presentation already filters disabled tools, but a
       // tool object captured before the change (queued send, stored rerun,
       // plugin reference) must not run either.
-      if (!isToolEnabled(definition.id))
+      if (!isToolEnabled(definition.id) || isNameBlocked(definition.function.name))
         throw new ToolDisabledError(definition.id, definition.function.name)
 
       const executor = executors.get(definition.id)
@@ -110,15 +118,32 @@ export const useLlmToolsStore = defineStore('llm-tools', () => {
       return executor(input, options)
     }
 
-    return {
+    const result: Tool = {
       type: definition.type,
       function: definition.function,
       execute,
     }
+    resolvedIds.set(result, definition.id)
+    return result
+  }
+
+  /** Fail closed on name collisions with disabled registrations, including
+   * other sources. A captured store object also needs its original ID to
+   * remain registered and enabled at the last presentation/execution check.
+   */
+  function isToolAllowed(tool: Tool): boolean {
+    const name = toolNameFrom(tool)
+    if (name && isNameBlocked(name))
+      return false
+
+    const id = resolvedIds.get(tool)
+    if (id === undefined)
+      return true
+    return isToolEnabled(id) && tools.value.some(definition => definition.id === id && definition.function.name === name)
   }
 
   const activeTools = computed<Tool[]>(() => tools.value
-    .filter(tool => tool.defaultActive !== false && isToolEnabled(tool.id))
+    .filter(tool => tool.defaultActive !== false && isToolEnabled(tool.id) && !isNameBlocked(tool.function.name))
     .map(executableToolFrom))
 
   /**
@@ -132,7 +157,7 @@ export const useLlmToolsStore = defineStore('llm-tools', () => {
   function getToolsByNames(...names: string[]): Tool[] {
     return names.flatMap((name) => {
       const definition = tools.value.findLast(tool => tool.function.name === name)
-      return definition && isToolEnabled(definition.id) ? [executableToolFrom(definition)] : []
+      return definition && isToolEnabled(definition.id) && !isNameBlocked(name) ? [executableToolFrom(definition)] : []
     })
   }
 
@@ -183,6 +208,7 @@ export const useLlmToolsStore = defineStore('llm-tools', () => {
     addTools,
     enabledById,
     getToolsByNames,
+    isToolAllowed,
     isToolEnabled,
     removeToolById,
     removeToolsByIds,

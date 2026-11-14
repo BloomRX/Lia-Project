@@ -85,6 +85,19 @@ describe('streamFrom tool-calling seam (Phase 8.0D-M1)', () => {
     expect(stepCountAtLeastMock).toHaveBeenCalledWith(10)
   })
 
+  it('rechecks the owner policy after all asynchronous sources and before dispatch', async () => {
+    streamTextMock.mockReturnValueOnce(createMockStreamResult())
+    let allowed = true
+    const tool = { type: 'function', function: { name: 'sample', parameters: {} }, execute: vi.fn() } as unknown as Tool
+    await streamFrom({
+      model: 'test', chatProvider: provider, messages: [],
+      builtinToolsResolver: async () => [tool],
+      options: { tools: async () => { allowed = false; return [] } },
+      isToolAllowed: () => allowed,
+    })
+    expect((streamTextMock.mock.calls[0]![0] as { tools: unknown }).tools).toBeUndefined()
+  })
+
   it('omits tools entirely once a model key is known to be incompatible', async () => {
     streamTextMock.mockReturnValueOnce(createMockStreamResult())
 

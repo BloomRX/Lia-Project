@@ -67,4 +67,6 @@ export interface StreamFromOptions {
   messages: Message[]
   options?: StreamOptions
   builtinToolsResolver?: BuiltinToolsResolver
+  /** Optional owner policy, rechecked synchronously immediately before dispatch. */
+  isToolAllowed?: (tool: Tool) => boolean
 }

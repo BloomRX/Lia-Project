@@ -63,6 +63,27 @@ export interface ResolveLlmToolsOptions {
 
 export { toolNameFrom } from './tool-name'
 
+// Resolver guards keep the original object so the store can recheck captured
+// IDs, even after an asynchronous source resolves or an ID is removed.
+const guardedSources = new WeakMap<Tool, Tool>()
+
+export function isResolvedToolAllowed(tool: Tool): boolean {
+  return useLlmToolsStore().isToolAllowed(guardedSources.get(tool) ?? tool)
+}
+
+function guardResolvedTool(tool: Tool): Tool {
+  const guarded: Tool = {
+    ...tool,
+    execute(input, options) {
+      if (!isResolvedToolAllowed(guarded))
+        throw new Error(`Tool "${toolNameFrom(tool) ?? ''}" is disabled or unavailable.`)
+      return tool.execute(input, options)
+    },
+  }
+  guardedSources.set(guarded, tool)
+  return guarded
+}
+
 async function resolveToolSource(source: ToolSource): Promise<Tool[]> {
   return typeof source === 'function' ? await source() : source
 }
@@ -149,7 +170,7 @@ export async function resolveLlmTools(options: ResolveLlmToolsOptions = {}): Pro
       ...webSearchTools,
       ...customTools,
       ...activeTools,
-    ].toReversed(),
+    ].filter(tool => useLlmToolsStore().isToolAllowed(tool)).toReversed(),
     tool => toolNameFrom(tool) ?? tool,
-  ).toReversed()
+  ).toReversed().map(guardResolvedTool)
 }
