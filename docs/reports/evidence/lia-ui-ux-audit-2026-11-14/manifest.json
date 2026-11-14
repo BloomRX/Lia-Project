@@ -1,0 +1,167 @@
+{
+  "schema": "lia-ui-ux-audit-manifest/v1",
+  "date": "2026-11-14",
+  "generated_at_utc": "2026-11-14T07:49:39.553091+00:00",
+  "repository": "BloomRX/Lia-Project",
+  "branch": "arena/250b337a-lia-project",
+  "base_sha": "7cb81720552a822a03f36ac6ce5f2e20b009f84c",
+  "reference_sha": "5ec464edf410008e390e2da4aff32d32537eb69d",
+  "checkout_sha": "7cb81720552a822a03f36ac6ce5f2e20b009f84c",
+  "sha_equivalence": {
+    "full_delta": [
+      "docs/project/CURRENT-STATE.md",
+      "docs/reports/LIA-BRANCH-AUDIT-2026-11-14.md"
+    ],
+    "ui_delta": [],
+    "conclusion": "UI/code findings valid for reference_sha"
+  },
+  "implementation_changed": false,
+  "scope": "audit-and-proposal-only",
+  "awaiting": "Agente Principal review before implementation",
+  "deliverables": [
+    {
+      "n": 1,
+      "title": "Diagnóstico geral",
+      "report_section": "1"
+    },
+    {
+      "n": 2,
+      "title": "Avaliação separada Launcher/Stage",
+      "report_section": "2"
+    },
+    {
+      "n": 3,
+      "title": "Problemas priorizados por impacto",
+      "report_section": "3"
+    },
+    {
+      "n": 4,
+      "title": "Proposta de identidade visual",
+      "report_section": "4"
+    },
+    {
+      "n": 5,
+      "title": "Proposta de design system",
+      "report_section": "5"
+    },
+    {
+      "n": 6,
+      "title": "Fluxos de navegação",
+      "report_section": "6"
+    },
+    {
+      "n": 7,
+      "title": "Wireframes dos principais fluxos",
+      "report_section": "7",
+      "artifact": "docs/reports/evidence/lia-ui-ux-audit-2026-11-14/WIREFRAMES-LIA.html",
+      "screens": [
+        "W1",
+        "W2",
+        "W3",
+        "W4",
+        "W5",
+        "W6",
+        "W7",
+        "W8"
+      ]
+    },
+    {
+      "n": 8,
+      "title": "Referências e justificativas",
+      "report_section": "8"
+    },
+    {
+      "n": 9,
+      "title": "Melhorias rápidas e estruturais",
+      "report_section": "9"
+    },
+    {
+      "n": 10,
+      "title": "Plano de evolução por etapas",
+      "report_section": "10"
+    },
+    {
+      "n": 11,
+      "title": "Critérios objetivos de aceitação",
+      "report_section": "11"
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "docs/reports/LIA-UI-UX-AUDIT-2026-11-14.md",
+      "sha256": "f6a77186a0283c81fa0c5c619e571853a8895479f2ccfb056297f502328dfee7",
+      "bytes": 40110,
+      "role": "deliverable"
+    },
+    {
+      "path": "docs/reports/evidence/lia-ui-ux-audit-2026-11-14/WIREFRAMES-LIA.html",
+      "sha256": "2f35353cfec750b0fe94b64c3e1e92c2484a4c992fd244f26c5240d7296f92ad",
+      "bytes": 32051,
+      "role": "deliverable"
+    },
+    {
+      "path": "docs/reports/evidence/lia-ui-ux-audit-2026-11-14/static-checks.json",
+      "sha256": "549bd632aefed637d19737fbf8426554bfb8739c85cff9f12b6b0e3a3c1baef5",
+      "bytes": 3973,
+      "role": "evidence"
+    },
+    {
+      "path": "docs/reports/evidence/lia-ui-ux-audit-2026-11-14/README.md",
+      "sha256": "1835936b07600ec2d7a2465ffeb4f36740fbd0481d770c1310f2bcf7908904f5",
+      "bytes": 1707,
+      "role": "evidence"
+    }
+  ],
+  "static_checks_summary": {
+    "sha-ui-equivalence": "PASS",
+    "report-11-deliverables": "PASS",
+    "report-reference-sha": "PASS",
+    "report-cjk-contamination": "PASS",
+    "html-internal-anchors": "PASS",
+    "html-no-external-resources": "PASS",
+    "html-no-script": "PASS",
+    "html-w1-w8": "PASS",
+    "html-cjk-contamination": "PASS",
+    "html-lang-pt-br": "PASS",
+    "contrast-static": "PASS",
+    "home-vm-pure": "PASS",
+    "runtime-browser-a11y-performance": "BLOCKED"
+  },
+  "gates": {
+    "static": "PASS",
+    "pure_vm": "PASS",
+    "contrast_static": "PASS",
+    "runtime_windows": "BLOCKED",
+    "browser_a11y": "BLOCKED",
+    "performance_c0_c4": "BLOCKED",
+    "release": "NOT_APPROVED"
+  },
+  "blocked_reason": "Sandbox sem agent-browser/Chromium/xvfb/pnpm/node_modules dos apps; sem Windows/display. Skills não autorizam instalar ferramentas.",
+  "provenance": {
+    "code_inspected": true,
+    "normative_docs_inspected": true,
+    "concepts_inspected": [
+      "docs/design/concepts/01-Home.png",
+      "docs/design/concepts/02-ai-resources.png",
+      "docs/design/concepts/03-voice.png",
+      "docs/design/concepts/04-personality.png",
+      "docs/design/concepts/05-appearance.png",
+      "docs/design/concepts/06-presence.png",
+      "docs/design/concepts/07-tools.png"
+    ],
+    "scenario_captures_inspected": [
+      "airi/packages/scenarios-stage-tamagotchi-browser/artifacts/raw/00-stage-tamagotchi.avif",
+      "airi/packages/scenarios-stage-tamagotchi-browser/artifacts/raw/04-chat-window.avif",
+      "airi/packages/scenarios-stage-tamagotchi-browser/artifacts/raw/08-system-general.avif"
+    ],
+    "new_runtime_screenshots": false,
+    "external_references_consulted": "2026-11-14",
+    "secrets_accessed": false
+  },
+  "notes": [
+    "Wireframes são proposta estática com dados sintéticos; não provam runtime/a11y/performance.",
+    "Nenhuma dependência nova foi introduzida.",
+    "CURRENT-STATE.md não foi alterado: commit apenas documental, sem mudança de baseline/decisão/gate.",
+    "Achado X-03 alinha-se ao A-1 da auditoria de branch no SHA de referência; decisão de produto pendente."
+  ]
+}

@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<title>Lia — wireframes de proposta UI/UX (14/11/2026)</title>
+<style>
+  :root {
+    --bg:#0d0a12; --surface:#17111f; --raised:#1f1629; --line:#4a395e;
+    --text:#f2ecf7; --muted:#baadca; --action:#a62b90; --accent:#f58bdf;
+    --ok:#4ade80; --warn:#facc15; --err:#f87171; --info:#7dd3fc;
+    --light-bg:#f7f4fa; --light-surface:#ffffff; --light-raised:#f2edf6;
+    --light-text:#211726; --light-muted:#5e526b;
+    --space:8px; --radius:14px;
+  }
+  * { box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.5 "Segoe UI",system-ui,sans-serif; }
+  a { color:var(--accent); }
+  a:focus-visible, button:focus-visible, summary:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
+  .wrap { max-width:1240px; margin:0 auto; padding:32px 20px 80px; }
+  header.page { border-bottom:1px solid var(--line); padding-bottom:24px; margin-bottom:24px; }
+  h1 { font-size:30px; line-height:1.2; margin:0 0 8px; }
+  h2 { font-size:22px; margin:0; }
+  h3 { font-size:16px; margin:0 0 8px; }
+  p { margin:8px 0; }
+  .muted { color:var(--muted); }
+  .small { font-size:13px; }
+  .meta { display:flex; flex-wrap:wrap; gap:8px; margin:12px 0; }
+  .tag { border:1px solid var(--line); border-radius:999px; padding:4px 10px; font-size:12px; color:var(--muted); }
+  nav.toc { display:flex; flex-wrap:wrap; gap:8px; margin:16px 0; }
+  nav.toc a { display:inline-block; padding:8px 12px; border:1px solid var(--line); border-radius:10px; text-decoration:none; color:var(--text); background:var(--surface); }
+  nav.toc a:hover { border-color:var(--accent); }
+  .notice { border-left:4px solid var(--warn); background:var(--surface); padding:12px 16px; border-radius:0 12px 12px 0; }
+  section.wire { margin:40px 0; scroll-margin-top:16px; }
+  .wire-head { display:flex; flex-wrap:wrap; align-items:baseline; gap:12px; margin-bottom:8px; }
+  .wire-id { color:var(--accent); font-weight:700; }
+  .frame { border:1px solid var(--line); border-radius:18px; background:var(--surface); overflow:hidden; margin-top:16px; }
+  .titlebar { display:flex; justify-content:space-between; gap:12px; padding:10px 16px; background:var(--raised); border-bottom:1px solid var(--line); font-size:13px; color:var(--muted); }
+  .app { display:grid; grid-template-columns:190px 1fr; min-height:560px; }
+  .side { background:#120d19; border-right:1px solid var(--line); padding:20px 12px; display:flex; flex-direction:column; gap:6px; }
+  .brand { font-size:22px; font-weight:700; padding:0 12px 16px; }
+  .nav-item { padding:10px 12px; border-radius:10px; color:var(--muted); }
+  .nav-item.active { background:var(--raised); color:var(--text); box-shadow:inset 3px 0 0 var(--accent); }
+  .side .bottom { margin-top:auto; }
+  .content { padding:24px; min-width:0; }
+  .grid { display:grid; gap:16px; }
+  .cols-2 { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .cols-3 { grid-template-columns:repeat(3,minmax(0,1fr)); }
+  .card { background:var(--raised); border:1px solid var(--line); border-radius:var(--radius); padding:16px; min-width:0; }
+  .hero { display:grid; grid-template-columns:220px 1fr; gap:24px; align-items:center; }
+  .avatar { width:200px; height:260px; border:1px dashed var(--line); border-radius:18px; display:grid; place-items:center; background:#120d19; color:var(--muted); text-align:center; padding:12px; }
+  .avatar svg { width:120px; height:160px; opacity:.8; }
+  .btn { display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:40px; padding:8px 16px; border-radius:10px; border:1px solid var(--line); background:var(--surface); color:var(--text); font-weight:600; text-decoration:none; }
+  .btn.primary { background:var(--action); border-color:var(--action); color:#fff; }
+  .btn.danger { background:#7f1d1d; border-color:#b91c1c; color:#fff; }
+  .btn.disabled { opacity:.55; }
+  .btn.small { min-height:32px; padding:4px 10px; font-size:13px; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  .spread { display:flex; justify-content:space-between; gap:12px; align-items:center; flex-wrap:wrap; }
+  .status { display:inline-flex; align-items:center; gap:6px; border-radius:999px; padding:4px 10px; font-size:12px; border:1px solid var(--line); }
+  .status.ok { color:var(--ok); } .status.warn { color:var(--warn); } .status.err { color:var(--err); } .status.info { color:var(--info); }
+  .field { display:grid; gap:6px; margin:12px 0; }
+  .field label, .field .field-label { font-weight:600; font-size:13px; }
+  .input { border:1px solid var(--line); background:var(--bg); border-radius:10px; padding:10px 12px; min-height:42px; color:var(--text); }
+  .input.focus { outline:3px solid var(--accent); outline-offset:2px; }
+  .help { font-size:12px; color:var(--muted); }
+  .error { color:var(--err); font-size:13px; }
+  .divider { border-top:1px solid var(--line); margin:16px 0; }
+  .chat { display:grid; grid-template-columns:1fr 360px; min-height:620px; }
+  .stage-area { position:relative; display:grid; place-items:center; background:radial-gradient(circle at 50% 40%, #241733, #0d0a12 70%); padding:24px; }
+  .island { position:absolute; bottom:20px; left:50%; transform:translateX(-50%); display:flex; gap:6px; background:var(--surface); border:1px solid var(--line); border-radius:999px; padding:8px; max-width:95%; flex-wrap:wrap; justify-content:center; }
+  .icon-btn { width:40px; height:40px; border-radius:999px; border:1px solid var(--line); background:var(--raised); color:var(--text); display:grid; place-items:center; font-size:16px; }
+  .chat-panel { border-left:1px solid var(--line); display:flex; flex-direction:column; background:var(--surface); }
+  .chat-head { padding:14px 16px; border-bottom:1px solid var(--line); }
+  .messages { padding:16px; display:grid; gap:12px; align-content:start; flex:1; }
+  .bubble { border-radius:14px; padding:10px 12px; max-width:92%; }
+  .bubble.user { background:#2a1f38; justify-self:end; }
+  .bubble.lia { background:var(--raised); border:1px solid var(--line); }
+  .bubble.err { border:1px solid #7f1d1d; background:#2a1216; }
+  .composer { border-top:1px solid var(--line); padding:12px; }
+  .tabs { display:flex; flex-wrap:wrap; gap:6px; border-bottom:1px solid var(--line); padding-bottom:10px; margin-bottom:16px; }
+  .tab { padding:8px 12px; border-radius:10px; border:1px solid transparent; color:var(--muted); }
+  .tab[data-selected="true"] { color:var(--text); border-color:var(--accent); background:var(--raised); }
+  .slider { height:6px; border-radius:999px; background:var(--line); position:relative; margin:14px 0; }
+  .slider::after { content:""; position:absolute; left:62%; top:-6px; width:18px; height:18px; border-radius:50%; background:var(--accent); }
+  .dialog-backdrop { background:rgba(0,0,0,.55); padding:32px; display:grid; place-items:center; }
+  .dialog { max-width:520px; width:100%; background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:24px; }
+  .monitor { border:2px solid var(--line); border-radius:12px; background:var(--bg); min-height:160px; position:relative; padding:12px; }
+  .monitor .char { position:absolute; bottom:12px; right:18px; width:44px; height:64px; border-radius:12px; background:var(--action); opacity:.8; }
+  .swatches { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:12px; }
+  .swatch { border-radius:12px; border:1px solid var(--line); overflow:hidden; }
+  .swatch .chip { height:64px; }
+  .swatch .label { padding:8px 10px; font-size:12px; background:var(--raised); }
+  .light-demo { background:var(--light-bg); color:var(--light-text); border-radius:14px; padding:16px; }
+  .light-demo .card { background:var(--light-surface); border-color:#d8cfe2; color:var(--light-text); }
+  .light-demo .muted { color:var(--light-muted); }
+  .light-demo .input { background:#fff; color:var(--light-text); border-color:#8a7a99; }
+  .annotation { margin-top:12px; padding:12px 16px; border:1px dashed var(--line); border-radius:12px; color:var(--muted); font-size:13px; }
+  .annotation strong { color:var(--text); }
+  details { margin:12px 0; }
+  summary { cursor:pointer; font-weight:600; }
+  .progress { height:8px; background:var(--line); border-radius:999px; overflow:hidden; }
+  .progress > span { display:block; height:100%; width:60%; background:var(--accent); }
+  footer.page { margin-top:48px; border-top:1px solid var(--line); padding-top:16px; color:var(--muted); font-size:13px; }
+  @media (max-width:900px) { .app{grid-template-columns:1fr} .side{flex-direction:row;flex-wrap:wrap;border-right:0;border-bottom:1px solid var(--line)} .side .bottom{margin-top:0} .chat{grid-template-columns:1fr} .chat-panel{border-left:0;border-top:1px solid var(--line)} .cols-2,.cols-3,.hero{grid-template-columns:1fr} }
+  @media (prefers-reduced-motion:reduce) { html{scroll-behavior:auto} *{animation:none!important;transition:none!important} }
+  @media print { body{background:#fff;color:#000} .frame,.card,.dialog{break-inside:avoid} nav.toc{display:none} }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="page">
+  <h1>Lia — wireframes de proposta</h1>
+  <p class="muted">Auditoria UI/UX · 14/11/2026 · SHA de referência <code>5ec464edf410008e390e2da4aff32d32537eb69d</code> · branch isolada <code>arena/250b337a-lia-project</code></p>
+  <div class="meta">
+    <span class="tag">Proposta estática</span><span class="tag">Dados sintéticos</span><span class="tag">Sem runtime</span><span class="tag">Sem CDN/script</span><span class="tag">Não implementado</span>
+  </div>
+  <p class="notice"><strong>Como ler:</strong> estes quadros demonstram fluxos, hierarquia e estados desejados. Não são capturas do produto, não provam acessibilidade/desempenho e não autorizam implementação. A silhueta é marcador de posição; o asset final depende de licença/aprovação. Controles desenhados não são interativos.</p>
+  <nav class="toc" aria-label="Índice dos wireframes">
+    <a href="#w1">W1 Primeiro uso</a><a href="#w2">W2 IA &amp; Recursos</a><a href="#w3">W3 Voz</a><a href="#w4">W4 Stage + chat</a><a href="#w5">W5 Configurar Lia</a><a href="#w6">W6 Confiança</a><a href="#w7">W7 Futuro</a><a href="#w8">W8 Design system</a>
+  </nav>
+</header>
+
+<section class="wire" id="w1" aria-labelledby="w1-title">
+  <div class="wire-head"><span class="wire-id">W1</span><h2 id="w1-title">Primeiro uso — preferência não é prontidão</h2></div>
+  <p class="muted">Launcher · perfil vazio · IA não configurada · voz opcional. Corrige L-01/L-04: o CTA leva ao próximo passo real, não promete conversa pronta.</p>
+  <div class="frame">
+    <div class="titlebar"><span>Lia — Launcher</span><span>1320×860 solicitado · escala 100%</span></div>
+    <div class="app">
+      <aside class="side" aria-label="Navegação do launcher (desenho)">
+        <div class="brand">Lia</div>
+        <div class="nav-item active">Início</div><div class="nav-item">IA &amp; Recursos</div><div class="nav-item">Voz</div><div class="nav-item">Diagnósticos</div>
+        <div class="nav-item bottom">Configurações</div>
+      </aside>
+      <main class="content">
+        <div class="card hero">
+          <div class="avatar" role="img" aria-label="Marcador de posição da personagem Lia">
+            <svg viewBox="0 0 120 160" aria-hidden="true"><circle cx="60" cy="42" r="26" fill="#a62b90"/><path d="M24 150c4-44 18-66 36-66s32 22 36 66" fill="#a62b90"/><circle cx="50" cy="40" r="4" fill="#fff"/><circle cx="70" cy="40" r="4" fill="#fff"/></svg>
+            <span class="small">asset oficial pendente</span>
+          </div>
+          <div>
+            <h3>Oi, eu sou a Lia.</h3>
+            <p class="muted">Para conversar, preciso de um serviço de IA configurado. A voz é opcional e pode ser preparada depois.</p>
+            <div class="row"><span class="status warn">● IA: precisa de configuração</span><span class="status">○ Voz: desativada</span></div>
+            <p style="margin-top:16px"><span class="btn primary">Configurar IA para conversar</span> <span class="btn">Escolher só texto por enquanto</span></p>
+            <p class="help">“Só texto” salva sua preferência, mas não marca a conversa como pronta.</p>
+          </div>
+        </div>
+        <div class="grid cols-3" style="margin-top:16px">
+          <div class="card"><h3>1. Conectar IA</h3><p class="small muted">Escolher serviço disponível, informar chave se exigida e testar.</p></div>
+          <div class="card"><h3>2. Voz opcional</h3><p class="small muted">Preparação em paralelo; texto não espera a voz.</p></div>
+          <div class="card"><h3>3. Conversar</h3><p class="small muted">CTA muda para “Conversar com Lia” somente quando a IA está pronta.</p></div>
+        </div>
+      </main>
+    </div>
+  </div>
+  <div class="annotation"><strong>Aceite:</strong> AC-01, AC-08, AC-17. <strong>Não fazer:</strong> desabilitar o CTA sem explicar o motivo; iniciar provider/voz por conveniência; criar novo IPC.</div>
+</section>
+
+<section class="wire" id="w2" aria-labelledby="w2-title">
+  <div class="wire-head"><span class="wire-id">W2</span><h2 id="w2-title">IA &amp; Recursos — uma porta normal</h2></div>
+  <p class="muted">Launcher · Groq disponível no catálogo · OpenAI-compatível indisponível · custo/hospedagem explícitos. Corrige L-02 e a lacuna de custo.</p>
+  <div class="frame">
+    <div class="titlebar"><span>Lia — IA &amp; Recursos</span><span>Chave nunca aparece em texto claro</span></div>
+    <div class="app">
+      <aside class="side" aria-label="Navegação do launcher (desenho)"><div class="brand">Lia</div><div class="nav-item">Início</div><div class="nav-item active">IA &amp; Recursos</div><div class="nav-item">Voz</div><div class="nav-item">Diagnósticos</div><div class="nav-item bottom">Configurações</div></aside>
+      <main class="content">
+        <div class="spread"><h3>Serviço de IA</h3><span class="status ok">● Conexão salva e testada</span></div>
+        <div class="grid cols-2">
+          <div class="card" style="border-color:var(--accent)">
+            <div class="spread"><h3>Groq</h3><span class="status ok">Disponível</span></div>
+            <p class="small muted">Na nuvem · exige chave · custo conforme plano/cota do serviço. A Lia não prometer “grátis ilimitado”.</p>
+            <p class="small"><strong>Modelo:</strong> GPT-OSS 120B (recomendado para conversa)</p>
+          </div>
+          <div class="card">
+            <div class="spread"><h3>OpenAI-compatível</h3><span class="status">Indisponível nesta versão</span></div>
+            <p class="small muted">Listado por transparência; não selecionável até a cadeia completa ser provada.</p>
+          </div>
+        </div>
+        <div class="card" style="margin-top:16px">
+          <div class="field"><span class="field-label">Chave de acesso</span><div class="input" id="w2-key">•••••••••••••••• (já armazenada no cofre)</div><span class="help">Ao trocar, a chave anterior é preservada até a nova gravação suceder.</span></div>
+          <div class="field"><span class="field-label">Modelo</span><div class="input" id="w2-model">GPT-OSS 120B</div><span class="help">Avançado: inserir ID manual ou descobrir modelos pelo serviço.</span></div>
+          <div class="row"><span class="btn primary">Testar conexão</span><span class="btn">Salvar seleção</span><span class="btn danger">Remover conexão…</span></div>
+          <p class="help">Remover abre confirmação de escopo: transporte + chave deste serviço. Cancelar não altera dados.</p>
+          <details><summary>Avançado</summary><p class="small muted">Endpoint, IDs e detalhes técnicos ficam aqui, não na Home. Diagnósticos mostram estado humano primeiro.</p></details>
+        </div>
+      </main>
+    </div>
+  </div>
+  <div class="annotation"><strong>Aceite:</strong> AC-02, AC-07, AC-08, AC-15. <strong>Fonte de verdade:</strong> catálogo canônico + Main/cofre. Stage gerenciado mostra resumo e retorno ao Launcher, não um segundo editor concorrente.</div>
+</section>
+
+<section class="wire" id="w3" aria-labelledby="w3-title">
+  <div class="wire-head"><span class="wire-id">W3</span><h2 id="w3-title">Voz — pronta, preparando, erro, indisponível</h2></div>
+  <p class="muted">Launcher e Stage leem a mesma projeção de capacidade. Corrige L-03; não confunde “voz pronta” com “voz personalizada”.</p>
+  <div class="frame">
+    <div class="titlebar"><span>Lia — Voz</span><span>Texto continua disponível se a voz falhar</span></div>
+    <div class="app">
+      <aside class="side" aria-label="Navegação do launcher (desenho)"><div class="brand">Lia</div><div class="nav-item">Início</div><div class="nav-item">IA &amp; Recursos</div><div class="nav-item active">Voz</div><div class="nav-item">Diagnósticos</div><div class="nav-item bottom">Configurações</div></aside>
+      <main class="content">
+        <div class="grid cols-2">
+          <div class="card"><h3>Voz pronta</h3><p class="small muted">Escolha uma voz e ouça uma amostra. Sem nome de engine na tela normal.</p><div class="row"><span class="status ok">● Pronta</span><span class="btn small">Ouvir amostra</span></div></div>
+          <div class="card"><h3>Minha própria voz</h3><p class="small muted">Importar gravação com consentimento e licença. Estado separado da voz pronta.</p><div class="row"><span class="status warn">● Preparando</span><span class="btn small disabled">Ouvir amostra</span></div><div class="progress" role="progressbar" aria-valuenow="60" aria-valuemin="0" aria-valuemax="100" aria-valuetext="Preparando voz personalizada, etapa 2 de 3"><span></span></div><p class="help" role="status">Preparando sua voz. Você pode continuar por texto.</p></div>
+        </div>
+        <div class="grid cols-2" style="margin-top:16px">
+          <div class="card"><h3>Erro recuperável</h3><p class="error" role="alert">Não foi possível preparar a voz. Sua configuração anterior foi mantida.</p><div class="row"><span class="btn primary">Tentar novamente</span><span class="btn">Continuar por texto</span><span class="btn">Ver detalhes</span></div></div>
+          <div class="card"><h3>Indisponível nesta versão</h3><p class="small muted">Quando a capacidade não existe, o controle não fica selecionável e o motivo é explicado. Nenhum toggle falso.</p><span class="status">○ Indisponível</span></div>
+        </div>
+      </main>
+    </div>
+  </div>
+  <div class="annotation"><strong>Aceite:</strong> AC-08, AC-10, AC-11, AC-15. <strong>Guardrail:</strong> não alterar TTS runtime/fallback nesta proposta; apenas projeção de estado, cópia e feedback.</div>
+</section>
+
+<section class="wire" id="w4" aria-labelledby="w4-title">
+  <div class="wire-head"><span class="wire-id">W4</span><h2 id="w4-title">Stage + conversa — personagem protagonista</h2></div>
+  <p class="muted">Stage gerenciado · chat lateral · ilha nomeada · erro preserva rascunho. Corrige S-01/S-03/A-02 e identidade herdada.</p>
+  <div class="frame">
+    <div class="titlebar"><span>Lia — Stage</span><span>800×1000 solicitado · mínimo 360×480 · chat 600×800</span></div>
+    <div class="chat">
+      <div class="stage-area">
+        <div class="avatar" role="img" aria-label="Marcador de posição da personagem Lia no Stage"><svg viewBox="0 0 120 160" aria-hidden="true"><circle cx="60" cy="42" r="26" fill="#f58bdf"/><path d="M24 150c4-44 18-66 36-66s32 22 36 66" fill="#f58bdf"/></svg><span class="small">personagem real no produto</span></div>
+        <div class="island" role="group" aria-label="Controles da Lia (desenho)">
+          <span class="btn small">Conversar</span><span class="btn small">Ouvir</span><span class="btn small">Parar</span><span class="btn small">Home</span><span class="btn small">Fixar</span><span class="btn small">Ajustes</span>
+        </div>
+      </div>
+      <div class="chat-panel">
+        <div class="chat-head spread"><strong>Conversa com Lia</strong><span class="status ok">● IA pronta</span></div>
+        <div class="messages">
+          <div class="bubble user">Podemos revisar meu dia?</div>
+          <div class="bubble lia">Claro. Por onde você quer começar?</div>
+          <div class="bubble err"><strong>Não foi possível enviar.</strong><p class="small">Seu rascunho e anexos foram mantidos.</p><div class="row"><span class="btn small primary">Tentar novamente</span><span class="btn small">Conferir IA</span></div></div>
+        </div>
+        <div class="composer">
+          <div class="field"><span class="field-label">Mensagem</span><div class="input focus" id="w4-input">Rascunho preservado após a falha…</div><span class="help">Enter envia somente quando configurado · Shift+Enter quebra linha · modo visível.</span></div>
+          <div class="spread"><div class="row"><span class="btn small">Anexar</span><span class="btn small">Limpar conversa</span></div><span class="btn primary small">Enviar</span></div>
+          <p class="help">Limpar conversa abre confirmação: “Apagar mensagens desta conversa? Outras conversas e lembranças não serão afetadas.”</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="annotation"><strong>Aceite:</strong> AC-02, AC-04, AC-05, AC-06, AC-15. <strong>Não fazer:</strong> cobrir rosto/corpo; auto-collapse com foco; duplicar chat/store; mudar IPC por conveniência.</div>
+</section>
+
+<section class="wire" id="w5" aria-labelledby="w5-title">
+  <div class="wire-head"><span class="wire-id">W5</span><h2 id="w5-title">Configurar Lia — seções reais, aparência honesta</h2></div>
+  <p class="muted">Stage · tabs acessíveis · personalidade/memória/presença existentes · aparência como contrato futuro. Corrige A-02/X-02.</p>
+  <div class="frame">
+    <div class="titlebar"><span>Lia — Configurar Lia</span><span>600×800 · voltar preservado</span></div>
+    <div class="content">
+      <div class="row" style="margin-bottom:16px"><span class="btn small">← Voltar</span><h3>Configurar Lia</h3></div>
+      <div class="tabs" aria-label="Seções de configuração (desenho)">
+        <span class="tab" data-selected="false">IA</span><span class="tab" data-selected="true">Personalidade</span><span class="tab" data-selected="false">Voz</span><span class="tab" data-selected="false">Aparência</span><span class="tab" data-selected="false">Presença</span><span class="tab" data-selected="false">Memória</span>
+      </div>
+      <div aria-label="Personalidade (desenho)">
+        <div class="card"><h3>Identidade preservada</h3><p class="small muted">Ajuste o tom. Identidade, limites e regras personalizadas não são sobrescritos por sliders.</p>
+          <div class="field"><label>Confiança · 62%</label><div class="slider" aria-hidden="true"></div></div>
+          <div class="field"><label>Carinho · 70%</label><div class="slider" aria-hidden="true"></div></div>
+          <div class="row"><span class="btn primary">Salvar personalidade</span><span class="btn">Descartar alterações</span></div>
+          <p class="help">Conflito: “A personalidade mudou em outra janela. Descarte para carregar os valores atuais.”</p>
+        </div>
+        <div class="grid cols-3" style="margin-top:16px">
+          <div class="card"><h3>Memória</h3><p class="small muted">Opt-in, manual, neste computador. Aviso: lembranças podem ir ao serviço de IA. Apagar todas exige confirmação.</p></div>
+          <div class="card"><h3>Presença</h3><p class="small muted">Estático/Livre, escala, monitores, pausar, Home. “Tela cheia de outros apps/jogos ainda não é detectada.”</p></div>
+          <div class="card"><h3>Aparência</h3><p class="small muted">Avatar/roupa/acessório: “Em breve”. Sem seletor falso até existir capacidade e asset licenciado.</p></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="annotation"><strong>Aceite:</strong> AC-05, AC-09, AC-10, AC-14, AC-18. <strong>Teclado:</strong> setas/Home/End movem foco; Enter/Espaço ativam; Tab entra no painel; foco visível separado da seleção.</div>
+</section>
+
+<section class="wire" id="w6" aria-labelledby="w6-title">
+  <div class="wire-head"><span class="wire-id">W6</span><h2 id="w6-title">Confiança — confirmação, conflito, diagnóstico</h2></div>
+  <p class="muted">Padrões transversais para ações destrutivas e recuperação. Reutiliza DoubleCheckButton/inline alert; não cria modal excessivo.</p>
+  <div class="frame">
+    <div class="dialog-backdrop">
+      <div class="dialog" aria-labelledby="w6-dialog-title">
+        <h3 id="w6-dialog-title">Remover conexão Groq?</h3>
+        <p>Isso remove o transporte e a chave armazenada deste serviço. Outras conexões e lembranças não serão afetadas.</p>
+        <p class="help">Você precisará configurar novamente para conversar com este serviço.</p>
+        <div class="row" style="margin-top:16px"><span class="btn">Cancelar</span><span class="btn danger">Remover conexão</span></div>
+        <p class="help">Foco inicial em Cancelar · Esc cancela · foco retorna ao acionador · confirmação nomeia o escopo.</p>
+      </div>
+    </div>
+    <div class="content grid cols-2">
+      <div class="card"><h3>Conflito de edição</h3><p class="error" role="alert">Outra janela alterou esta configuração. Seus rascunhos foram mantidos.</p><div class="row"><span class="btn primary">Recarregar estado</span><span class="btn">Manter rascunho</span></div></div>
+      <div class="card"><h3>Diagnósticos</h3><p class="small muted"><strong>Resumo:</strong> IA pronta · voz em preparação · Stage fechado.</p><details><summary>Detalhes técnicos</summary><p class="small muted">Contrato, tempos e caminhos canônicos. Sem chave, token ou conteúdo de conversa. Copiar diagnóstico sanitizado.</p></details></div>
+    </div>
+  </div>
+  <div class="annotation"><strong>Aceite:</strong> AC-02, AC-07, AC-15, AC-16. <strong>Regra:</strong> erro diz o que aconteceu, o que foi preservado e o próximo passo.</div>
+</section>
+
+<section class="wire" id="w7" aria-labelledby="w7-title">
+  <div class="wire-head"><span class="wire-id">W7</span><h2 id="w7-title">Futuro — direção, não capacidade disponível</h2></div>
+  <p class="muted">Multi-monitor contínuo, jogos, extensões e roupas sãodireção de pesquisa de produto. Nenhum toggle disponível nesta versão.</p>
+  <div class="frame">
+    <div class="titlebar"><span>Lia — laboratório de presença (conceito)</span><span class="status warn">● Não implementado</span></div>
+    <div class="content">
+      <div class="grid cols-3">
+        <div class="monitor"><strong>Monitor 1</strong><p class="small muted">Trabalho</p><div class="char" aria-hidden="true"></div></div>
+        <div class="monitor"><strong>Monitor 2</strong><p class="small muted">Jogo</p><p class="small muted">Lia pausa/oculta quando jogo em tela cheia for detectado de verdade.</p></div>
+        <div class="monitor"><strong>Extensões</strong><p class="small muted">Permissão explícita, escopo, rollback e auditoria antes de habilitar.</p></div>
+      </div>
+      <div class="card" style="margin-top:16px"><h3>Princípios para o futuro</h3><ul class="small muted"><li>Caminhada entre monitores só com orçamento de CPU/GPU e teste físico; hoje a troca é posicionamento atômico.</li><li>Modos de presença não atrapalham jogos: detecção real, pausa/ocultação e atalho de emergência.</li><li>Capacidades refletem o conjunto efetivamente enviado/executável; nenhuma ferramenta com efeito real aparece como desativada se ainda é enviada.</li><li>Personalização/roupas dependem de asset licenciado e capacidade do renderer.</li></ul></div>
+    </div>
+  </div>
+  <div class="annotation"><strong>Aceite:</strong> AC-18, AC-19, AC-20, AC-21. <strong>Gate:</strong> spec por capability + permissões + métricas + Windows multi-monitor/DPI/jogo. Não entra como backlog aprovado por estar desenhado.</div>
+</section>
+
+<section class="wire" id="w8" aria-labelledby="w8-title">
+  <div class="wire-head"><span class="wire-id">W8</span><h2 id="w8-title">Design system — tokens, temas, estados, foco</h2></div>
+  <p class="muted">Proposta estática. Valores calculados em sRGB/WCAG; não é auditoria de pixels renderizados.</p>
+  <div class="frame">
+    <div class="content">
+      <h3>Paleta proposta</h3>
+      <div class="swatches">
+        <div class="swatch"><div class="chip" style="background:#0d0a12"></div><div class="label">bg app · #0d0a12</div></div>
+        <div class="swatch"><div class="chip" style="background:#17111f"></div><div class="label">surface · #17111f</div></div>
+        <div class="swatch"><div class="chip" style="background:#1f1629"></div><div class="label">raised · #1f1629</div></div>
+        <div class="swatch"><div class="chip" style="background:#a62b90"></div><div class="label">ação · #a62b90 · branco 6,23:1</div></div>
+        <div class="swatch"><div class="chip" style="background:#f58bdf"></div><div class="label">acento/foco · #f58bdf</div></div>
+        <div class="swatch"><div class="chip" style="background:#f2ecf7"></div><div class="label">texto · #f2ecf7</div></div>
+        <div class="swatch"><div class="chip" style="background:#baadca"></div><div class="label">secundário · #baadca</div></div>
+      </div>
+      <div class="grid cols-2" style="margin-top:20px">
+        <div class="card"><h3>Escuro</h3><div class="row"><span class="btn primary">Ação primária</span><span class="btn">Secundária</span><span class="btn danger">Destrutiva</span><span class="btn disabled">Desabilitada</span></div><div class="field"><label>Campo com foco</label><div class="input focus">Valor</div><span class="help">Anel duplo com gap; não glow.</span></div><div class="row"><span class="status ok">● Pronto</span><span class="status warn">● Atenção</span><span class="status err">● Erro</span><span class="status">○ Desativado</span></div></div>
+        <div class="light-demo"><h3>Claro</h3><div class="card"><div class="row"><span class="btn primary">Ação primária</span><span class="btn" style="background:#fff;color:#211726;border-color:#8a7a99">Secundária</span></div><div class="field"><label>Campo</label><div class="input">Valor</div><span class="help muted">Texto #211726 sobre branco: 17,28:1.</span></div><p class="small muted">Tema de primeira classe, não inversão automática que quebra estados.</p></div></div>
+      </div>
+      <div class="grid cols-3" style="margin-top:20px">
+        <div class="card"><h3>Espaçamento</h3><p class="small muted">4 · 8 · 12 · 16 · 24 · 32 · 48</p><h3>Raio</h3><p class="small muted">8 · 10 · 14 · 18 · pill</p></div>
+        <div class="card"><h3>Tipografia</h3><p class="small muted">Segoe UI/system-ui · 12 meta · 13 ajuda · 14 corpo · 16 card · 20 seção · 24–32 página.</p></div>
+        <div class="card"><h3>Alvos e movimento</h3><p class="small muted">Mínimo AA 24×24 com exceções; meta Lia ≥32 frequente, ≥40 CTA/ilha. Reduced-motion remove movimento não essencial.</p></div>
+      </div>
+    </div>
+  </div>
+  <div class="annotation"><strong>Aceite:</strong> AC-03, AC-04, AC-05, AC-06, AC-09, AC-11, AC-12. <strong>Regra:</strong> hex só na camada de tema; componentes consomem tokens semânticos; sem dependência nova por estética.</div>
+</section>
+
+<footer class="page">
+  <p>Artefato de proposta gerado na auditoria UI/UX de 14/11/2026. Relatório: <code>docs/reports/LIA-UI-UX-AUDIT-2026-11-14.md</code>. Manifesto: <code>docs/reports/evidence/lia-ui-ux-audit-2026-11-14/manifest.json</code>.</p>
+  <p>Runtime/browser/a11y/desempenho: BLOCKED neste sandbox. Nenhuma implementação foi alterada. Aguardando revisão do Agente Principal.</p>
+</footer>
+</div>
+</body>
+</html>
