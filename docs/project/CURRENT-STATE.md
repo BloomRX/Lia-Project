@@ -13,6 +13,13 @@ commit. Registra **estado**, não narrativa: relatório de rodada vai para
 
 ## 0. Estado agora
 
+**Voz no beta interno (14/11/2026).** O gate exige um TTS e um STT
+selecionáveis e configuráveis de forma independente, integrados à conversa
+real no Stage. Kokoro CPU e o STT remoto existente no Main são candidatos
+iniciais. Em `407300b`, a síntese Kokoro CPU passou isoladamente e o
+DirectML falhou durante inferência. A reprodução na conversa e o STT físico
+seguem pendentes. [Arquitetura e sequência](../reports/LIA-MULTI-PROVIDER-VOICE-ARCHITECTURE.md).
+
 **Decisões do beta interno (14/11/2026, revisão 2 do plano).** O produto definiu:
 beta **interno**; **voz e STT obrigatórios** para aprovação; **Fase 1 de UI autorizada**
 (prontidão, confirmações destrutivas, contraste e acessibilidade; sem redesenho);
