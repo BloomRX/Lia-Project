@@ -1,5 +1,7 @@
 # Lia-Project — Matriz de validação do SHA `ae46c495d7da7cd33f4b4da8f4e8cc95b0a867b6`
 
+> **Nota de supersessão (2026-11-14, SHA `407300b8baa56b0ed8d14b7b2c0628222754e51f`):** o tip do desenvolvimento avançou para `407300b` (delta **docs-only** em relação a `ae46c49` — verificado em `docs/reports/evidence/LIA-QA-VALIDATION-407300b-2026-11-14/06-delta-ae46c49-407300b.log`). A matriz vigente passou a ser [`LIA-VALIDATION-MATRIX-407300B-2026-11-14.md`](LIA-VALIDATION-MATRIX-407300B-2026-11-14.md). **Os resultados abaixo continuam válidos apenas para `ae46c49`** e são preservados como evidência histórica; não se transferem para a beta. As evidências deste SHA permanecem em `docs/reports/evidence/LIA-QA-VALIDATION-ae46c49-2026-11-14/`.
+
 **Data:** 2026-11-14 · **Autor:** Arena (Linux/WSL, sem display, sem credenciais) · **Branch:** `arena/18f50ae7-lia-project`
 **SHA de referência:** `ae46c495d7da7cd33f4b4da8f4e8cc95b0a867b6` (`ae46c49` — “docs: record the A-1 enablement decision”), tip de `arena/01a10290-lia-project` no momento desta tarefa.
 **Delta `5ec464e → ae46c49`:** 2 commits — `f3facdf` **fix(stage-ui): make tool enablement a real gate (A-1)** (código + testes) e `ae46c49` **docs: record the A-1 enablement decision**. Nenhum outro arquivo do produto mudou.
