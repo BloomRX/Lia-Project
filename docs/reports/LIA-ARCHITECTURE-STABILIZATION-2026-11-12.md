@@ -190,6 +190,13 @@ O mecanismo exigido já existe; o que falta é a prova real, não a ferramenta:
 | Execução e streaming | `@proj-airi/core-agent` streaming com `tool-call`/`tool-result`/`tool-error`; auto-degrade só para providers sem suporte |
 | Autorização | ativação por ferramenta no store; nenhuma execução arbitrária de comando |
 
+> **Correção de 14/11/2026 (A-1).** As duas linhas acima estavam erradas quando foram
+> escritas: `defaultActive: false` é inclusão **ambiente**, não ativação/desativação; e
+> o caminho de envio por seleção explícita (`getToolsByNames`) não consultava filtro
+> nenhum. Um interruptor explícito (`enabledById`) foi criado em
+> `packages/stage-ui/src/stores/ai/chat-llm/tools.ts`; ver
+> [LIA-A1-TOOL-ENABLEMENT-2026-11-14.md](LIA-A1-TOOL-ENABLEMENT-2026-11-14.md).
+
 **Conclusão:** criar uma nova ferramenta não é o gargalo. O que falta é o round-trip real
 (requisição → tool call → execução local → retorno ao modelo → resposta → histórico), que
 exige chave válida e runtime Windows. Continua **NOT RUN**.
@@ -200,7 +207,7 @@ exige chave válida e runtime Windows. Continua **NOT RUN**.
 |---|---|
 | Ferramenta | `get_weather` (`builtin/weather.ts`), já existente, prefixo `tamagotchi:` |
 | Por que é segura | não escreve arquivo, não executa comando, não altera configuração; faz uma consulta HTTP de previsão e mostra um widget efêmero (`ttlSeconds: 60`) |
-| Autorização | ativada **uma vez**, por ferramenta, no store de tools (`defaultActive: false`); desligada ao fim do teste |
+| Autorização | ativada **uma vez**, por ferramenta, no store de tools (`setToolEnabled(id, true)`); desligada ao fim do teste (`setToolEnabled(id, false)`). Nota A-1: `defaultActive: false` não desliga nada — é inclusão ambiente |
 | Pré-condição | provider já configurado com chave válida **pelo usuário na UI** (não nesta rodada) e janela do Stage em execução no Windows |
 | Passos | 1) ativar `tamagotchi:get_weather`; 2) pedir "qual a previsão do tempo em São Paulo?"; 3) capturar `tool-call`, `tool-result` e a mensagem final; 4) confirmar o widget e o histórico; 5) desativar a ferramenta |
 | Critério de PASS | round-trip completo com resultado do modelo baseado no retorno da ferramenta, sem executar nada além dela; qualquer mock/fixture invalida a prova |
