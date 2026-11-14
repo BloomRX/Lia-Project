@@ -1,0 +1,421 @@
+{
+  "schema": "lia-ui-ux-static-checks-revision/v1",
+  "revision": 2,
+  "date": "2026-11-14",
+  "generated_at_utc": "2026-11-14T08:16:44.403671+00:00",
+  "branch": "arena/250b337a-lia-project",
+  "checkout_sha": "1d802cc8229cb133710cb79601e8d58870b3fde8",
+  "reference_sha": "ae46c495d7da7cd33f4b4da8f4e8cc95b0a867b6",
+  "historical_reference_sha": "5ec464edf410008e390e2da4aff32d32537eb69d",
+  "initial_delivery_sha": "e183cba5c9882dbfc4e297c3550c6ebdc2f90b9a",
+  "merge_sha": "1d802cc8229cb133710cb79601e8d58870b3fde8",
+  "environment": {
+    "platform": "Linux-6.1.158+-x86_64-with-glibc2.36",
+    "python": "3.11.2",
+    "node": "v22.22.3"
+  },
+  "summary": {
+    "PASS": 11,
+    "FAIL": 0,
+    "HISTORICAL-PASS": 1,
+    "BLOCKED": 1
+  },
+  "checks": [
+    {
+      "name": "git-sync",
+      "status": "PASS",
+      "detail": {
+        "branch": "arena/250b337a-lia-project",
+        "head": "1d802cc8229cb133710cb79601e8d58870b3fde8",
+        "merge": "1d802cc8229cb133710cb79601e8d58870b3fde8",
+        "merge_parents": [
+          "e183cba5c9882dbfc4e297c3550c6ebdc2f90b9a",
+          "ae46c495d7da7cd33f4b4da8f4e8cc95b0a867b6"
+        ],
+        "ancestor_exit_codes": {
+          "initial_delivery": 0,
+          "current_principal": 0,
+          "merge": 0
+        },
+        "post_merge_delta": []
+      },
+      "command": "git rev-parse HEAD; git show -s --format=%P <merge>; git merge-base --is-ancestor <sha> HEAD"
+    },
+    {
+      "name": "principal-delta-scope",
+      "status": "PASS",
+      "detail": {
+        "initial_delta": [
+          "docs/project/CURRENT-STATE.md",
+          "docs/reports/LIA-BRANCH-AUDIT-2026-11-14.md"
+        ],
+        "revision_delta": [
+          "airi/packages/stage-ui/src/stores/ai/chat-llm/tool-name.ts",
+          "airi/packages/stage-ui/src/stores/ai/chat-llm/tool-resolver.test.ts",
+          "airi/packages/stage-ui/src/stores/ai/chat-llm/tool-resolver.ts",
+          "airi/packages/stage-ui/src/stores/ai/chat-llm/tools.test.ts",
+          "airi/packages/stage-ui/src/stores/ai/chat-llm/tools.ts",
+          "airi/packages/stage-ui/src/stores/tool-call-rerun.ts",
+          "docs/project/CURRENT-STATE.md",
+          "docs/reports/LIA-A1-TOOL-ENABLEMENT-2026-11-14.md",
+          "docs/reports/LIA-ARCHITECTURE-STABILIZATION-2026-11-12.md"
+        ],
+        "ui_delta": [],
+        "stage_ui_delta": [
+          "airi/packages/stage-ui/src/stores/ai/chat-llm/tool-name.ts",
+          "airi/packages/stage-ui/src/stores/ai/chat-llm/tool-resolver.test.ts",
+          "airi/packages/stage-ui/src/stores/ai/chat-llm/tool-resolver.ts",
+          "airi/packages/stage-ui/src/stores/ai/chat-llm/tools.test.ts",
+          "airi/packages/stage-ui/src/stores/ai/chat-llm/tools.ts",
+          "airi/packages/stage-ui/src/stores/tool-call-rerun.ts"
+        ]
+      },
+      "command": "git diff --name-only <base>..<reference> -- <paths>"
+    },
+    {
+      "name": "preserved-first-round-artifacts",
+      "status": "PASS",
+      "detail": {
+        "WIREFRAMES-LIA.html": {
+          "identical_to_initial_delivery": true,
+          "sha256": "2f35353cfec750b0fe94b64c3e1e92c2484a4c992fd244f26c5240d7296f92ad",
+          "bytes": 32051
+        },
+        "static-checks.json": {
+          "identical_to_initial_delivery": true,
+          "sha256": "549bd632aefed637d19737fbf8426554bfb8739c85cff9f12b6b0e3a3c1baef5",
+          "bytes": 3973
+        }
+      },
+      "command": "git show e183cba:<artifact>; byte comparison"
+    },
+    {
+      "name": "a1-gate-source",
+      "status": "PASS",
+      "detail": {
+        "sources": [
+          {
+            "path": "airi/packages/stage-ui/src/stores/ai/chat-llm/tools.ts",
+            "sha256": "d422b7dae52d416c3d511d1c6a98f32c9955d8b8fb67e4fb1c9b5b78762019ac",
+            "anchors": {
+              "enabled_map": 82,
+              "default_enabled": 87,
+              "mutator": 94,
+              "execution_gate": 104,
+              "ambient_filter": 121,
+              "explicit_filter": 135,
+              "synced_state": 193
+            },
+            "missing": []
+          },
+          {
+            "path": "airi/packages/stage-ui/src/stores/chat.ts",
+            "sha256": "22b2858aaadc03e1c5aae751c709f6ed6b0e57723f956eb0956065448a1f3796",
+            "anchors": {
+              "send": 559,
+              "rerun": 855
+            },
+            "missing": []
+          },
+          {
+            "path": "airi/apps/stage-tamagotchi/src/renderer/stores/tools/built-in.ts",
+            "sha256": "5c4d13dcedd39e04f336043408e18752ee9bf1bb2be395e7d0729b01a90d0841",
+            "anchors": {
+              "widget_refs": 11,
+              "artistry_refs": 16,
+              "ambient_off": 41,
+              "weather": 13,
+              "widgets": 12,
+              "journal": 17
+            },
+            "missing": []
+          },
+          {
+            "path": "airi/packages/stage-ui/src/stores/ai/chat-llm/tool-resolver.ts",
+            "sha256": "16b95c36875aeef63e637c3d1ae6d7809d46f54265bb550d360ae165a733f5a4",
+            "anchors": {
+              "outside_store": 7,
+              "leaf_import": 10
+            },
+            "missing": []
+          },
+          {
+            "path": "airi/packages/stage-ui/src/stores/tool-call-rerun.ts",
+            "sha256": "d590ad84f65f096ddd5b2f6aa42a715698d0ca17896bbf76ca52634f1544e6ad",
+            "anchors": {
+              "leaf_import": 7,
+              "injected_resolver": 97
+            },
+            "missing": []
+          }
+        ],
+        "production_setToolEnabled_matches": [
+          "airi/packages/stage-ui/src/stores/ai/chat-llm/tools.ts:94:  function setToolEnabled(id: string, enabled: boolean): void {",
+          "airi/packages/stage-ui/src/stores/ai/chat-llm/tools.ts:189:    setToolEnabled,"
+        ],
+        "interpretation": "Gate present in source; no production caller outside store definition/export found. Persistence absence is also recorded by the Principal decision, not proven by grep alone.",
+        "runtime_executed": false
+      },
+      "command": "git grep -n setToolEnabled -- airi lia ':!**/*.test.*' ':!**/*.spec.*'"
+    },
+    {
+      "name": "a1-decision-recorded",
+      "status": "PASS",
+      "detail": {
+        "path": "docs/reports/LIA-A1-TOOL-ENABLEMENT-2026-11-14.md",
+        "markers": [
+          "opção (a)",
+          "manter sob demanda",
+          "UI de ativação",
+          "persistência",
+          "mcp()",
+          "debug()"
+        ],
+        "missing": []
+      }
+    },
+    {
+      "name": "report-revision-structure",
+      "status": "PASS",
+      "detail": {
+        "sections": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8",
+          "9",
+          "10",
+          "11"
+        ],
+        "deliverable_sections": [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8",
+          "9",
+          "10",
+          "11"
+        ],
+        "required_markers": [
+          "ae46c495d7da7cd33f4b4da8f4e8cc95b0a867b6",
+          "5ec464edf410008e390e2da4aff32d32537eb69d",
+          "f3facdf8f4ec8873221fe70b67e34934e2631496",
+          "1d802cc8229cb133710cb79601e8d58870b3fde8",
+          "X-03",
+          "X-04",
+          "Corrigido",
+          "HISTORICAL-PASS",
+          "BLOCKED"
+        ],
+        "missing_markers": [],
+        "cjk_count": 0,
+        "trailing_whitespace_lines": [],
+        "lines": 545
+      }
+    },
+    {
+      "name": "document-local-links",
+      "status": "PASS",
+      "detail": {
+        "checked": 6,
+        "broken": []
+      }
+    },
+    {
+      "name": "preserved-html-structure",
+      "status": "PASS",
+      "detail": {
+        "wireframes": [
+          "W1",
+          "W2",
+          "W3",
+          "W4",
+          "W5",
+          "W6",
+          "W7",
+          "W8"
+        ],
+        "missing_wires": [],
+        "missing_anchors": [],
+        "external_resources": [],
+        "scripts": 0,
+        "lang": "pt-BR",
+        "cjk_count": 0
+      }
+    },
+    {
+      "name": "contrast-static-expectations",
+      "status": "PASS",
+      "detail": {
+        "pairs": [
+          {
+            "name": "current_primary_light",
+            "fg": "#ffffff",
+            "bg": "#e545c8",
+            "ratio": 3.4901,
+            "threshold": 4.5,
+            "expected_meets": false,
+            "meets": false
+          },
+          {
+            "name": "current_primary_darker",
+            "fg": "#ffffff",
+            "bg": "#b0359a",
+            "ratio": 5.4946,
+            "threshold": 4.5,
+            "expected_meets": true,
+            "meets": true
+          },
+          {
+            "name": "proposed_action",
+            "fg": "#ffffff",
+            "bg": "#a62b90",
+            "ratio": 6.232,
+            "threshold": 4.5,
+            "expected_meets": true,
+            "meets": true
+          },
+          {
+            "name": "dark_text",
+            "fg": "#f2ecf7",
+            "bg": "#17111f",
+            "ratio": 15.9422,
+            "threshold": 4.5,
+            "expected_meets": true,
+            "meets": true
+          },
+          {
+            "name": "dark_secondary_current",
+            "fg": "#9b8db0",
+            "bg": "#17111f",
+            "ratio": 6.0107,
+            "threshold": 4.5,
+            "expected_meets": true,
+            "meets": true
+          },
+          {
+            "name": "dark_secondary_proposed",
+            "fg": "#baadca",
+            "bg": "#1f1629",
+            "ratio": 8.2304,
+            "threshold": 4.5,
+            "expected_meets": true,
+            "meets": true
+          },
+          {
+            "name": "light_text",
+            "fg": "#211726",
+            "bg": "#ffffff",
+            "ratio": 17.2809,
+            "threshold": 4.5,
+            "expected_meets": true,
+            "meets": true
+          },
+          {
+            "name": "light_secondary_proposed",
+            "fg": "#5e526b",
+            "bg": "#f2edf6",
+            "ratio": 6.2932,
+            "threshold": 4.5,
+            "expected_meets": true,
+            "meets": true
+          },
+          {
+            "name": "decorative_border",
+            "fg": "#32244a",
+            "bg": "#17111f",
+            "ratio": 1.3083,
+            "threshold": 3.0,
+            "expected_meets": false,
+            "meets": false
+          }
+        ],
+        "note": "sRGB hex; not rendered pixels; four-decimal truncation, no rounding up"
+      }
+    },
+    {
+      "name": "home-vm-pure",
+      "status": "PASS",
+      "detail": {
+        "exit": 0,
+        "stdout": "PASS 6",
+        "stderr": "",
+        "assertions": 6
+      },
+      "command": "node --experimental-strip-types --input-type=module <embedded pure assertions>"
+    },
+    {
+      "name": "principal-a1-tests",
+      "status": "HISTORICAL-PASS",
+      "detail": {
+        "source": "docs/reports/LIA-A1-TOOL-ENABLEMENT-2026-11-14.md",
+        "reported_total": 31,
+        "reported_at": "f3facdf8f4ec8873221fe70b67e34934e2631496",
+        "executed_in_this_revision": false,
+        "llm_test": "NOT RUN/BLOCKED in the Principal report: stream-kit build missing"
+      }
+    },
+    {
+      "name": "runtime-browser-a11y-performance",
+      "status": "BLOCKED",
+      "detail": {
+        "reason": "No Windows/display or authorized browser/runtime gate in this sandbox; no tools installed by this revision.",
+        "tool_paths": {
+          "pnpm": null,
+          "chromium": null,
+          "chromium-browser": null,
+          "google-chrome": null,
+          "xvfb-run": null,
+          "agent-browser": null
+        },
+        "absent_node_modules": [
+          "node_modules",
+          "airi/node_modules",
+          "airi/packages/stage-ui/node_modules",
+          "airi/apps/stage-tamagotchi/node_modules"
+        ],
+        "not_tested": [
+          "runtime",
+          "screen-reader",
+          "keyboard",
+          "DPI",
+          "multi-monitor",
+          "C0-C4",
+          "Vitest"
+        ]
+      }
+    },
+    {
+      "name": "document-only-authored-scope",
+      "status": "PASS",
+      "detail": {
+        "working_changed": [
+          "docs/reports/LIA-UI-UX-AUDIT-2026-11-14.md",
+          "docs/reports/evidence/lia-ui-ux-audit-2026-11-14/README.md",
+          "docs/reports/evidence/lia-ui-ux-audit-2026-11-14/manifest.json"
+        ],
+        "untracked": [
+          "docs/reports/evidence/lia-ui-ux-audit-2026-11-14/check-revision-2.py",
+          "docs/reports/evidence/lia-ui-ux-audit-2026-11-14/static-checks-revision-2.json"
+        ],
+        "principal_to_head": [
+          "docs/reports/LIA-UI-UX-AUDIT-2026-11-14.md",
+          "docs/reports/evidence/lia-ui-ux-audit-2026-11-14/README.md",
+          "docs/reports/evidence/lia-ui-ux-audit-2026-11-14/WIREFRAMES-LIA.html",
+          "docs/reports/evidence/lia-ui-ux-audit-2026-11-14/manifest.json",
+          "docs/reports/evidence/lia-ui-ux-audit-2026-11-14/static-checks.json"
+        ],
+        "note": "The authorized merge imports Principal code; this revision authors only docs/reports changes."
+      }
+    }
+  ]
+}

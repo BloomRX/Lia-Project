@@ -1,0 +1,171 @@
+{
+  "date": "2026-11-14",
+  "branch": "arena/250b337a-lia-project",
+  "checkout_sha": "7cb81720552a822a03f36ac6ce5f2e20b009f84c",
+  "reference_sha": "5ec464edf410008e390e2da4aff32d32537eb69d",
+  "checks": [
+    {
+      "name": "sha-ui-equivalence",
+      "status": "PASS",
+      "detail": {
+        "base": "7cb81720552a822a03f36ac6ce5f2e20b009f84c",
+        "reference": "5ec464edf410008e390e2da4aff32d32537eb69d",
+        "full_delta": [
+          "docs/project/CURRENT-STATE.md",
+          "docs/reports/LIA-BRANCH-AUDIT-2026-11-14.md"
+        ],
+        "ui_delta": []
+      }
+    },
+    {
+      "name": "report-11-deliverables",
+      "status": "PASS",
+      "detail": {
+        "missing": [],
+        "lines": 482
+      }
+    },
+    {
+      "name": "report-reference-sha",
+      "status": "PASS",
+      "detail": {
+        "reference": "5ec464edf410008e390e2da4aff32d32537eb69d"
+      }
+    },
+    {
+      "name": "report-cjk-contamination",
+      "status": "PASS",
+      "detail": {
+        "count": 0
+      }
+    },
+    {
+      "name": "html-internal-anchors",
+      "status": "PASS",
+      "detail": {
+        "missing": [],
+        "anchors": 8
+      }
+    },
+    {
+      "name": "html-no-external-resources",
+      "status": "PASS",
+      "detail": {
+        "external": []
+      }
+    },
+    {
+      "name": "html-no-script",
+      "status": "PASS",
+      "detail": {
+        "scripts": 0
+      }
+    },
+    {
+      "name": "html-w1-w8",
+      "status": "PASS",
+      "detail": {
+        "missing": []
+      }
+    },
+    {
+      "name": "html-cjk-contamination",
+      "status": "PASS",
+      "detail": {
+        "count": 0
+      }
+    },
+    {
+      "name": "html-lang-pt-br",
+      "status": "PASS",
+      "detail": {}
+    },
+    {
+      "name": "contrast-static",
+      "status": "PASS",
+      "detail": {
+        "pairs": [
+          {
+            "name": "current_primary_light",
+            "fg": "#ffffff",
+            "bg": "#e545c8",
+            "ratio": 3.4902,
+            "threshold": 4.5,
+            "expected_meets": false,
+            "meets": false
+          },
+          {
+            "name": "proposed_action",
+            "fg": "#ffffff",
+            "bg": "#a62b90",
+            "ratio": 6.2321,
+            "threshold": 4.5,
+            "expected_meets": true,
+            "meets": true
+          },
+          {
+            "name": "dark_text",
+            "fg": "#f2ecf7",
+            "bg": "#17111f",
+            "ratio": 15.9422,
+            "threshold": 4.5,
+            "expected_meets": true,
+            "meets": true
+          },
+          {
+            "name": "dark_secondary_proposed",
+            "fg": "#baadca",
+            "bg": "#1f1629",
+            "ratio": 8.2305,
+            "threshold": 4.5,
+            "expected_meets": true,
+            "meets": true
+          },
+          {
+            "name": "light_text",
+            "fg": "#211726",
+            "bg": "#ffffff",
+            "ratio": 17.2809,
+            "threshold": 4.5,
+            "expected_meets": true,
+            "meets": true
+          },
+          {
+            "name": "light_secondary_proposed",
+            "fg": "#5e526b",
+            "bg": "#f2edf6",
+            "ratio": 6.2932,
+            "threshold": 4.5,
+            "expected_meets": true,
+            "meets": true
+          }
+        ],
+        "note": "sRGB hex; not rendered pixels; no rounding up"
+      }
+    },
+    {
+      "name": "home-vm-pure",
+      "status": "PASS",
+      "detail": {
+        "exit": 0,
+        "stdout": "PASS 6",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "runtime-browser-a11y-performance",
+      "status": "BLOCKED",
+      "detail": {
+        "reason": "sem agent-browser/Chromium/xvfb/pnpm/node_modules; skill não autoriza instalar; sem Windows/display",
+        "not_tested": [
+          "runtime",
+          "screen-reader",
+          "keyboard",
+          "DPI",
+          "multi-monitor",
+          "C0-C4"
+        ]
+      }
+    }
+  ]
+}

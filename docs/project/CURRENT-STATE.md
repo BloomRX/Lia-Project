@@ -13,6 +13,43 @@ commit. Registra **estado**, não narrativa: relatório de rodada vai para
 
 ## 0. Estado agora
 
+**A-1 corrigido (14/11/2026, código + testes).** O achado da auditoria foi confirmado
+na causa: `defaultActive: false` **nunca foi** interruptor de desligar — é inclusão
+ambiente — e o caminho de envio por seleção explícita (`chat.ts` → `getToolsByNames` →
+`resolveLlmTools`) não consultava filtro nenhum; o rerun usava o mesmo caminho. A
+correção separa as três camadas (registrada / ambiente / habilitada) e cria o
+interruptor que faltava: `enabledById` + `setToolEnabled()` no store de ferramentas.
+Desabilitada = ausente de `activeTools` **e** não resolvida por `getToolsByNames`
+(envio e rerun) **e** execução recusada (`ToolDisabledError`) mesmo em objeto
+capturado antes da mudança. O padrão é habilitada — só um `false` explícito desliga —
+e re-registro/refresh não reverte a escolha. **Decisão de produto registrada (14/11/2026):** `get_weather`, `image_journal` e widgets
+continuam **habilitados** e disponíveis quando solicitados explicitamente; nada foi
+desligado, nenhuma configuração existente mudou e a UI de ativação **não** será feita
+agora. Fica estabelecido o contrato: `defaultActive` = inclusão automática no contexto;
+`enabledById` = habilitação; habilitada continua disponível sob pedido explícito;
+desabilitada não é apresentada nem executada, inclusive por referência capturada
+anteriormente. A infraestrutura para a futura tela (leitura, mutação e superfície de
+estado) já está exposta no store; persistência e UI ficam para a tarefa seguinte (§7 do
+relatório). Regressões:
+`tools.test.ts` 13/13, `tool-resolver.test.ts` 11/11, `tool-call-rerun.test.ts` 7/7,
+`built-in.test.ts` 1/1, tsc sem erros nos arquivos alterados, eslint limpo.
+Relatório: [A-1 — ativação de ferramentas](../reports/LIA-A1-TOOL-ENABLEMENT-2026-11-14.md).
+
+**Auditoria de branch (14/11/2026, read-only).** O tip `7cb8172` está sincronizado com o
+remoto e o worktree está limpo (exceto o material não rastreável da RX 580). Verificado
+nesta rodada: `lia/core` **105/105**; `@lia/lia-app` **353 passed / 2 skips** em 36
+arquivos; typecheck **0**; build do Launcher **PASS**; testes direcionados do Stage
+**10/10**. A suíte completa do Stage não roda neste ambiente (pacotes de workspace não
+buildados) — a evidência Windows anterior é de **2.557 passed / 4 skips** em worktree sujo.
+O ponto central: o último commit validado ponta a ponta continua `3ef6d11`, enquanto a
+branch já tem **153 commits de código** e 418 arquivos alterados depois dele. Além disso,
+o relatório PROMPT-37 e os arquivos de IPC/recursos OIDC existem apenas no worktree da
+máquina Windows. Achado novo: `defaultActive: false` **não** impede o envio de
+`get_weather`/widgets/image_journal ao modelo — o caminho de chat ignora esse filtro.
+Beta continua bloqueada por prova de runtime no tip, AI Settings, tool calling,
+distribuição e gate de arquitetura. Relatório completo:
+[auditoria da branch](../reports/LIA-BRANCH-AUDIT-2026-11-14.md).
+
 **Correção de sandbox do Stage e AF-1b (PROMPT-43, 13/11):** a prontidão agora falha
 fechado quando falta seleção canônica, registro gerenciado, credencial ou consistência entre
 seleção e registro. A tela legada `ConfigView.vue` continua disponível, mas sua gravação
@@ -902,7 +939,7 @@ Push normal somente na branch acordada, seguindo a regra permanente de AGENTS.md
 | Repositório | `BloomRX/Lia-Project` |
 | Branch de trabalho | `arena/01a10290-lia-project` |
 | **Último commit funcional validado em Windows** | `3ef6d11618f787dae6d197645d440a5775a60ad6` |
-| `main` | `db99c709059a6d074b18361bfb32c9f144620632` — **não recebeu merge** |
+| `main` | `9c7ac18` — **não recebeu merge**; 1 commit documental à frente de `db99c70` |
 | Prefixo de código | tudo sob `airi/` |
 | Máquina de desenvolvimento/teste | Ryzen 5 5500 · AMD RX 580 8 GB · 16 GB RAM — perfil de compatibilidade importante; **nunca** otimizar a arquitetura exclusivamente para ela (migrado da §88 do `AGENTS.md`) |
 

@@ -1,8 +1,11 @@
 import type { Tool } from '@xsai/shared-chat'
 
+import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { executeToolCallRerun } from '../../tool-call-rerun'
 import { resolveLlmTools, toolNameFrom } from './tool-resolver'
+import { useLlmToolsStore } from './tools'
 
 // The default (non-injected) web-search branch reads the module store and the
 // tools barrel; mock both so the configured-gate + key-trim logic can be
@@ -135,4 +138,177 @@ describe('resolveLlmTools', () => {
       expect(tools).toEqual([builtInTool, webSearchTool])
     })
   })
+})
+
+/**
+ * LIA A-1 (14/11/2026) — the production composition, not just the store.
+ *
+ * Both the chat send and the tool-call rerun build their tool list as
+ * `resolveLlmTools({ customTools: store.getToolsByNames(...) })`. These cases
+ * run that exact expression so a future refactor cannot reintroduce a path
+ * that ignores enablement.
+ */
+describe('resolveLlmTools + enablement', () => {
+  const toolOptions = {} as Parameters<Tool['execute']>[1]
+
+  function registeredTool(id: string, name: string, execute: () => Promise<unknown> = vi.fn(async () => ({ ok: true }))) {
+    return {
+      type: 'function' as const,
+      id,
+      defaultActive: false,
+      function: {
+        name,
+        description: `${name} description`,
+        parameters: { type: 'object', properties: {} },
+      },
+      execute,
+    }
+  }
+
+  function resolveFor(name: string) {
+    const store = useLlmToolsStore()
+    return resolveLlmTools({
+      builtInTools: [],
+      debugTools: [],
+      sparkCommandTools: [],
+      webSearchTools: [],
+      customTools: store.getToolsByNames(name),
+      activeTools: [], // ambient is asserted separately; isolate explicit selection
+    })
+  }
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+  })
+
+  it('sends an enabled tool the request selects explicitly', async () => {
+    const store = useLlmToolsStore()
+    store.addTools(registeredTool('tamagotchi:get_weather', 'get_weather'))
+
+    const tools = await resolveFor('get_weather')
+
+    expect(tools.map(toolNameFrom)).toEqual(['get_weather'])
+  })
+
+  it('does not send a disabled tool the request selects explicitly', async () => {
+    const store = useLlmToolsStore()
+    store.addTools(registeredTool('tamagotchi:get_weather', 'get_weather'))
+    store.setToolEnabled('tamagotchi:get_weather', false)
+
+    const tools = await resolveFor('get_weather')
+
+    expect(tools).toEqual([])
+  })
+
+  it('does not execute a disabled tool through the rerun composition', async () => {
+    const store = useLlmToolsStore()
+    const execute = vi.fn(async () => ({ weather: 'sunny' }))
+    store.addTools(registeredTool('tamagotchi:get_weather', 'get_weather', execute))
+    store.setToolEnabled('tamagotchi:get_weather', false)
+
+    const messages = [{
+      id: 'assistant-1',
+      role: 'assistant' as const,
+      content: '',
+      slices: [{
+        type: 'tool-call' as const,
+        toolCall: {
+          toolCallId: 'call-weather',
+          toolCallType: 'function' as const,
+          toolName: 'get_weather',
+          args: '{"location":"Tokyo"}',
+        },
+      }],
+      tool_results: [],
+    }]
+
+    const next = await executeToolCallRerun({
+      messages,
+      payload: {
+        messageId: 'assistant-1',
+        toolCallId: 'call-weather',
+        toolName: 'get_weather',
+        args: '{"location":"Tokyo"}',
+      },
+      resolveTools: () => resolveFor('get_weather'),
+    })
+
+    expect(execute).not.toHaveBeenCalled()
+    expect(next[0]).toMatchObject({
+      tool_results: [{
+        id: 'call-weather',
+        isError: true,
+        result: 'Tool "get_weather" is not available for rerun in this runtime.',
+      }],
+    })
+  })
+
+  it('still executes an enabled tool through the rerun composition', async () => {
+    const store = useLlmToolsStore()
+    const execute = vi.fn(async () => ({ weather: 'sunny' }))
+    store.addTools(registeredTool('tamagotchi:get_weather', 'get_weather', execute))
+
+    const messages = [{
+      id: 'assistant-1',
+      role: 'assistant' as const,
+      content: '',
+      slices: [{
+        type: 'tool-call' as const,
+        toolCall: {
+          toolCallId: 'call-weather',
+          toolCallType: 'function' as const,
+          toolName: 'get_weather',
+          args: '{"location":"Tokyo"}',
+        },
+      }],
+      tool_results: [],
+    }]
+
+    const next = await executeToolCallRerun({
+      messages,
+      payload: {
+        messageId: 'assistant-1',
+        toolCallId: 'call-weather',
+        toolName: 'get_weather',
+        args: '{"location":"Tokyo"}',
+      },
+      resolveTools: () => resolveFor('get_weather'),
+    })
+
+    expect(execute).toHaveBeenCalledTimes(1)
+    expect(next[0]).toMatchObject({
+      tool_results: [{
+        id: 'call-weather',
+        result: '{"weather":"sunny"}',
+      }],
+    })
+  })
+
+  it('keeps ambient inclusion and enablement independent', async () => {
+    const store = useLlmToolsStore()
+    store.addTools(
+      registeredTool('tamagotchi:get_weather', 'get_weather'),
+      { ...registeredTool('plugin:chess:play', 'play_chess'), defaultActive: true },
+    )
+
+    const ambient = () => resolveLlmTools({
+      builtInTools: [],
+      debugTools: [],
+      sparkCommandTools: [],
+      webSearchTools: [],
+      customTools: [],
+      activeTools: store.activeTools,
+    })
+
+    expect((await ambient()).map(toolNameFrom)).toEqual(['play_chess'])
+
+    store.setToolEnabled('plugin:chess:play', false)
+    expect((await ambient()).map(toolNameFrom)).toEqual([])
+
+    // The on-demand tool was never ambient and is untouched.
+    expect(store.isToolEnabled('tamagotchi:get_weather')).toBe(true)
+    expect((await resolveFor('get_weather')).map(toolNameFrom)).toEqual(['get_weather'])
+  })
+
+  void toolOptions
 })
