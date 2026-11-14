@@ -120,6 +120,14 @@ Comandos e resultados (Linux, sandbox; nenhuma alegação de Windows):
 | Lint | `corepack pnpm exec eslint` nos 6 arquivos | **limpo** |
 | `llm.test.ts` | — | **NOT RUN / BLOCKED**: `@proj-airi/stream-kit` sem build neste ambiente (falha preexistente, não relacionada) |
 
+Os 31 testes acima foram **re-executados na árvore commitada `f3facdf`** depois de o
+workspace ser restaurado (o sandbox recriou o checkout em `db99c70` no meio da rodada;
+o estado foi preservado em `/home/user/lia-preserve/round9/` e restaurado por
+`fetch` → `read-tree` → `checkout-index` → `update-ref`, sem `checkout`/`switch`).
+`node_modules` e `dist` não persistem entre turnos: dependências do `stage-ui` e do
+`stage-tamagotchi`, e builds de `plugin-protocol`, `core-agent`, `server-shared`,
+`better-ws` e `server-sdk` foram refeitos antes dessa re-execução.
+
 Casos de regressão cobertos (todos com prova de execução, não mock de tool calling):
 
 - ferramenta habilitada é apresentada e executa (envio explícito e rerun);
@@ -131,28 +139,54 @@ Casos de regressão cobertos (todos com prova de execução, não mock de tool c
 - `enabledById` permanece vazio quando ninguém desabilita (sem auto-habilitação
   silenciosa de nada).
 
-## 6. Decisão de produto pendente (não tomada nesta entrega)
+## 6. Decisão de produto — registrada em 14/11/2026
 
-A correção é **neutra**: cria o interruptor, não decide quem está desligado. A questão
-que resta é se `get_weather`, `image_journal` e `stage_widgets` devem passar a ser
-registrados como **desabilitados** até existir UI de escolha.
+**Decisão do usuário: opção (a) — manter sob demanda.** `get_weather`,
+`image_journal` e `stage_widgets` continuam **habilitadas** e disponíveis quando
+solicitadas explicitamente; nada é desligado, nenhuma configuração existente muda e
+a UI de ativação **não** é implementada agora.
 
-- **(a) Manter como estão** (recomendado nesta rodada): continuam sob demanda,
-  nada quebra, e o interruptor fica disponível para a UI futura.
-- **(b) Desligar os três por padrão**: cumpre a leitura literal de “desabilitada não
-  é apresentada”, mas remove funcionalidade até existir a tela de ativação — mudança
-  visível que exige decisão explícita.
-- **(c) Implementar a UI de ativação agora**: maior escopo, fora da correção mínima.
+A distinção fica estabelecida como contrato:
 
-Enquanto a decisão não vier, vale (a): é a única opção que não altera comportamento
-existente nem configuração do usuário.
+| Conceito | Campo | Significado | Efeito |
+| --- | --- | --- | --- |
+| Inclusão automática | `defaultActive` | Entra no contexto da conversa quando o pedido **não** nomeia a ferramenta | Não é interruptor; `false` ≠ desabilitada |
+| Habilitação | `enabledById` / `setToolEnabled` | A ferramenta está habilitada ou desabilitada | Desabilitada = não é apresentada ao modelo **e** não é executada |
+| Disponibilidade | registro no store | A ferramenta existe no inventário do runtime | Sem registro, não há o que resolver |
 
-## 7. Pendências estruturais registradas
+- Habilitada continua disponível quando solicitada explicitamente, mesmo com
+  `defaultActive: false`.
+- Desabilitada não pode ser apresentada ao modelo nem executada, **inclusive por
+  referências capturadas anteriormente** (envio em fila, rerun armazenado, objeto de
+  plugin já resolvido).
 
-1. UI de ativação de ferramentas (hoje `setToolEnabled` não tem chamador de produção).
-2. Persistência de `enabledById` (o store é em memória; reinício volta ao padrão
-   “habilitada”, igual ao registro de ferramentas).
+## 7. Infraestrutura preparada para a futura tela de gerenciamento
+
+A decisão foi **não** construir a UI agora, mas o gate já é o ponto de extensão
+correto e nenhuma mudança de contrato será necessária depois:
+
+| Peça | Estado | O que a UI futura fará |
+| --- | --- | --- |
+| `tools` | lista de definições com `id` estável | renderiza a lista (id, nome, descrição, `defaultActive`) |
+| `isToolEnabled(id)` | `enabledById[id] ?? true` | lê o estado do interruptor |
+| `setToolEnabled(id, enabled)` | único caminho de mutação | liga/desliga por ferramenta |
+| `enabledById` | `ref` exposto no store | superfície de leitura/observação |
+| `synced: { state: true }` | já existente no store | propaga a escolha entre janelas do Stage |
+
+O que falta, e fica explicitamente para a tarefa da UI:
+
+1. tela/chave de ativação chamando `setToolEnabled` (hoje sem chamador de produção);
+2. **persistência** de `enabledById` entre reinícios — o store é em memória, então
+   hoje reiniciar volta ao padrão “habilitada”, igual ao registro de ferramentas;
+   a UI deve gravar a escolha pelo mesmo caminho de configuração já usado pelo app,
+   sem introduzir um segundo dono da preferência;
 3. `mcp()`, `debug()`, spark e web-search não passam pelo store; uma política única
-   de “desligar” precisa alcançá-los.
-4. `docs/reports/LIA-ARCHITECTURE-STABILIZATION-2026-11-12.md` afirmava “ativação por
+   de “desligar” precisa alcançá-los antes de a tela prometer controle total.
+
+## 8. Pendências estruturais registradas
+
+1. UI de ativação + persistência (ver §7) — **adiado por decisão de produto**.
+2. Ferramentas built-in fora do store (`mcp()`, `debug()`, spark, web-search) ainda
+   não são alcançadas por `enabledById`.
+3. `docs/reports/LIA-ARCHITECTURE-STABILIZATION-2026-11-12.md` afirmava “ativação por
    ferramenta no store” antes de ela existir — nota de correção adicionada.

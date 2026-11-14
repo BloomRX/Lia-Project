@@ -22,9 +22,15 @@ interruptor que faltava: `enabledById` + `setToolEnabled()` no store de ferramen
 Desabilitada = ausente de `activeTools` **e** não resolvida por `getToolsByNames`
 (envio e rerun) **e** execução recusada (`ToolDisabledError`) mesmo em objeto
 capturado antes da mudança. O padrão é habilitada — só um `false` explícito desliga —
-e re-registro/refresh não reverte a escolha. **Nada foi desligado nesta entrega:**
-`get_weather`, `image_journal` e widgets continuam funcionando sob demanda; desligá-los
-por padrão é decisão de produto pendente (opções a/b/c no relatório). Regressões:
+e re-registro/refresh não reverte a escolha. **Decisão de produto registrada (14/11/2026):** `get_weather`, `image_journal` e widgets
+continuam **habilitados** e disponíveis quando solicitados explicitamente; nada foi
+desligado, nenhuma configuração existente mudou e a UI de ativação **não** será feita
+agora. Fica estabelecido o contrato: `defaultActive` = inclusão automática no contexto;
+`enabledById` = habilitação; habilitada continua disponível sob pedido explícito;
+desabilitada não é apresentada nem executada, inclusive por referência capturada
+anteriormente. A infraestrutura para a futura tela (leitura, mutação e superfície de
+estado) já está exposta no store; persistência e UI ficam para a tarefa seguinte (§7 do
+relatório). Regressões:
 `tools.test.ts` 13/13, `tool-resolver.test.ts` 11/11, `tool-call-rerun.test.ts` 7/7,
 `built-in.test.ts` 1/1, tsc sem erros nos arquivos alterados, eslint limpo.
 Relatório: [A-1 — ativação de ferramentas](../reports/LIA-A1-TOOL-ENABLEMENT-2026-11-14.md).
