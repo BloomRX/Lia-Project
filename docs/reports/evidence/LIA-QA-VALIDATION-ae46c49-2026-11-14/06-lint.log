@@ -1,0 +1,291 @@
+$ moeru-lint .
+
+  [38;2;244;191;117;1m⚠[0m [38;2;244;191;117;1municorn(no-new-array): Do not use `new Array(singleArgument)`.[0m
+    ╭─[[38;2;92;157;255;1mapps/stage-tamagotchi/src/renderer/services/lia/memory-context.test.ts[0m:31:56]
+ [2m30[0m │     expect(context).toContain('\\nIgnore')
+ [2m31[0m │     expect(selectRelevantMemories({ ...state, entries: new Array(10).fill(state.entries[0]) }, 'jogos')).toHaveLength(4)
+    · [38;2;246;87;248m                                                       ─────────────[0m
+ [2m32[0m │   })
+    ╰────
+[38;2;106;159;181m  help: [0mIt's not clear whether the argument is meant to be the length of the array or the only element. If the argument is the array's length, consider using `Array.from({ length: n })`. If the argument is the only element, use `[element]`.
+
+  [38;2;244;191;117;1m⚠[0m [38;2;244;191;117;1meslint(no-control-regex): Unexpected control characters[0m
+    ╭─[[38;2;92;157;255;1mapps/stage-tamagotchi/src/main/services/lia/transport-execution-service.ts[0m:67:37]
+ [2m66[0m │   return typeof value === 'string' && value.length > 0 && value.length <= 256
+ [2m67[0m │     && value.trim() === value && !/[\u0000-\u001F\u007F]/.test(value)
+    · [38;2;246;87;248m                                    ───┬──[0m[38;2;30;201;212m ───┬──[0m
+    ·                                        [38;2;246;87;248m│[0m      [38;2;30;201;212m╰── [38;2;30;201;212m'U+001F' is a control character.[0m[0m
+    ·                                        [38;2;246;87;248m╰── [38;2;246;87;248m'U+0000' is a control character.[0m[0m
+ [2m68[0m │ }
+    ╰────
+[38;2;106;159;181m  help: [0mAvoid matching control characters in regular expressions. If intentional, consider using a Unicode escape instead.
+
+  [38;2;244;191;117;1m⚠[0m [38;2;244;191;117;1municorn(no-useless-spread): Using a spread operator here creates a new array unnecessarily.[0m
+     ╭─[[38;2;92;157;255;1mapps/stage-tamagotchi/src/main/services/lia/transport-execution-service.ts[0m:380:34]
+ [2m379[0m │         const cleanup = () => {
+ [2m380[0m │           for (const current of [...jobs.values()]) {
+     · [38;2;246;87;248m                                 ───[0m
+ [2m381[0m │             if (current.owner === owner)
+     ╰────
+[38;2;106;159;181m  help: [0m`for…of` can iterate over iterable, it's unnecessary to convert to an array.
+
+  [38;2;244;191;117;1m⚠[0m [38;2;244;191;117;1municorn(no-useless-spread): Using a spread operator here creates a new array unnecessarily.[0m
+     ╭─[[38;2;92;157;255;1mapps/stage-tamagotchi/src/main/services/lia/transport-execution-service.ts[0m:458:24]
+ [2m457[0m │   function invalidate(snapshot: TransportSnapshot) {
+ [2m458[0m │     for (const job of [...jobs.values()]) {
+     · [38;2;246;87;248m                       ───[0m
+ [2m459[0m │       const records = snapshot.records.filter(record => record.providerId === job.providerId)
+     ╰────
+[38;2;106;159;181m  help: [0m`for…of` can iterate over iterable, it's unnecessary to convert to an array.
+
+  [38;2;244;191;117;1m⚠[0m [38;2;244;191;117;1municorn(no-useless-spread): Using a spread operator here creates a new array unnecessarily.[0m
+     ╭─[[38;2;92;157;255;1mapps/stage-tamagotchi/src/main/services/lia/transport-execution-service.ts[0m:466:24]
+ [2m465[0m │   function dispose() {
+ [2m466[0m │     for (const job of [...jobs.values()])
+     · [38;2;246;87;248m                       ───[0m
+ [2m467[0m │       finish(job, { ok: false, code: 'cancelled' })
+     ╰────
+[38;2;106;159;181m  help: [0m`for…of` can iterate over iterable, it's unnecessary to convert to an array.
+
+  [38;2;244;191;117;1m⚠[0m [38;2;244;191;117;1meslint(no-unused-vars): Parameter 'firstSeen' is declared but never used. Unused parameters should start with a '_'.[0m
+     ╭─[[38;2;92;157;255;1mapps/stage-tamagotchi/scripts/provider-runtime-electron/lib/process-monitor.mjs[0m:223:17]
+ [2m222[0m │       return [...observed.values()]
+ [2m223[0m │         .map(({ firstSeen, ...identity }) => identity)
+     · [38;2;246;87;248m                ────┬────[0m
+     ·                     [38;2;246;87;248m╰── [38;2;246;87;248m'firstSeen' is declared here[0m[0m
+ [2m224[0m │     },
+     ╰────
+[38;2;106;159;181m  help: [0mConsider removing this parameter.
+
+  [38;2;244;191;117;1m⚠[0m [38;2;244;191;117;1meslint(no-control-regex): Unexpected control characters[0m
+    ╭─[[38;2;92;157;255;1mapps/stage-tamagotchi/src/main/services/lia/memory-service.ts[0m:22:111]
+ [2m21[0m │ function validText(value: unknown): value is string {
+ [2m22[0m │   return typeof value === 'string' && value.trim().length > 0 && value.length <= LIA_MEMORY_LIMITS.text && !/[\u0000-\u0008\v\f\u000E-\u001F]/u.test(value)
+    · [38;2;246;87;248m                                                                                                              ───┬──[0m[38;2;30;201;212m ───┬──[0m[38;2;145;246;111m    ───┬──[0m[38;2;246;87;248m ───┬──[0m
+    ·                                                                                                                  [38;2;246;87;248m│[0m      [38;2;30;201;212m│[0m         [38;2;145;246;111m│[0m      [38;2;246;87;248m╰── [38;2;246;87;248m'U+001F' is a control character.[0m[0m
+    ·                                                                                                                  [38;2;246;87;248m│[0m      [38;2;30;201;212m│[0m         [38;2;145;246;111m╰── [38;2;145;246;111m'U+000E' is a control character.[0m[0m
+    ·                                                                                                                  [38;2;246;87;248m│[0m      [38;2;30;201;212m╰── [38;2;30;201;212m'U+0008' is a control character.[0m[0m
+    ·                                                                                                                  [38;2;246;87;248m╰── [38;2;246;87;248m'U+0000' is a control character.[0m[0m
+ [2m23[0m │ }
+    ╰────
+[38;2;106;159;181m  help: [0mAvoid matching control characters in regular expressions. If intentional, consider using a Unicode escape instead.
+
+  [38;2;244;191;117;1m⚠[0m [38;2;244;191;117;1meslint(no-control-regex): Unexpected control characters[0m
+    ╭─[[38;2;92;157;255;1mapps/lia-app/src/main/config-update-sanitizer.ts[0m:34:36]
+ [2m33[0m │       // control characters is refused instead of being repaired.
+ [2m34[0m │       if (value.length > 4096 || /[\u0000-\u0008\v\f\u000E-\u001F\u007F]/.test(value))
+    · [38;2;246;87;248m                                   ───┬──[0m[38;2;30;201;212m ───┬──[0m[38;2;145;246;111m    ───┬──[0m[38;2;246;87;248m ───┬──[0m
+    ·                                       [38;2;246;87;248m│[0m      [38;2;30;201;212m│[0m         [38;2;145;246;111m│[0m      [38;2;246;87;248m╰── [38;2;246;87;248m'U+001F' is a control character.[0m[0m
+    ·                                       [38;2;246;87;248m│[0m      [38;2;30;201;212m│[0m         [38;2;145;246;111m╰── [38;2;145;246;111m'U+000E' is a control character.[0m[0m
+    ·                                       [38;2;246;87;248m│[0m      [38;2;30;201;212m╰── [38;2;30;201;212m'U+0008' is a control character.[0m[0m
+    ·                                       [38;2;246;87;248m╰── [38;2;246;87;248m'U+0000' is a control character.[0m[0m
+ [2m35[0m │         continue
+    ╰────
+[38;2;106;159;181m  help: [0mAvoid matching control characters in regular expressions. If intentional, consider using a Unicode escape instead.
+
+  [38;2;244;191;117;1m⚠[0m [38;2;244;191;117;1meslint(no-control-regex): Unexpected control characters[0m
+     ╭─[[38;2;92;157;255;1mapps/lia-app/src/main/ai-connection-service.ts[0m:130:111]
+ [2m129[0m │ function validId(value: unknown): value is string {
+ [2m130[0m │   return typeof value === 'string' && value.length > 0 && value.length <= 256 && value.trim() === value && !/[\u0000-\u001F\u007F]/.test(value)
+     · [38;2;246;87;248m                                                                                                              ───┬──[0m[38;2;30;201;212m ───┬──[0m
+     ·                                                                                                                  [38;2;246;87;248m│[0m      [38;2;30;201;212m╰── [38;2;30;201;212m'U+001F' is a control character.[0m[0m
+     ·                                                                                                                  [38;2;246;87;248m╰── [38;2;246;87;248m'U+0000' is a control character.[0m[0m
+ [2m131[0m │ }
+     ╰────
+[38;2;106;159;181m  help: [0mAvoid matching control characters in regular expressions. If intentional, consider using a Unicode escape instead.
+
+  [38;2;244;191;117;1m⚠[0m [38;2;244;191;117;1meslint(no-unused-vars): Type 'LiaConfigUpdatePayload' is imported but never used.[0m
+   ╭─[[38;2;92;157;255;1mapps/lia-app/src/main/ipc.ts[0m:1:15]
+ [2m1[0m │ import type { LiaConfigUpdatePayload, LiaHost } from './lia-host'
+   · [38;2;246;87;248m              ───────────┬──────────[0m
+   ·                          [38;2;246;87;248m╰── [38;2;246;87;248m'LiaConfigUpdatePayload' is imported here[0m[0m
+ [2m2[0m │ import type { LiaBootTimer } from './timing'
+   ╰────
+[38;2;106;159;181m  help: [0mConsider removing this import.
+
+Found 10 warnings and 0 errors.
+Finished in 655ms on 3491 files with 96 rules using 2 threads.
+
+/home/user/ae46c49-validation/airi/apps/lia-app/src/main/ai-connection-service.test.ts
+   18:1   error  Expected "../../../../../lia/core/src/providers/catalog" to come before "../../../stage-tamagotchi/src/shared/lia/brain-engine-provider-mapping"  perfectionist/sort-imports
+  169:98  error  This line has 2 statements. Maximum allowed is 1                                                                                                  style/max-statements-per-line
+  370:10  error  `describe`s should begin with lowercase                                                                                                           test/prefer-lowercase-title
+
+/home/user/ae46c49-validation/airi/apps/lia-app/src/main/ai-connection-service.ts
+  180:7  error  Expect curly brackets  antfu/curly
+
+/home/user/ae46c49-validation/airi/apps/lia-app/src/main/ai-selection-authority.test.ts
+  31:10  error  `describe`s should begin with lowercase  test/prefer-lowercase-title
+  66:31  error  Strings must use singlequote             style/quotes
+
+/home/user/ae46c49-validation/airi/apps/lia-app/src/main/ai-selection-integration.test.ts
+  11:1  error  Expected "../../../../../lia/core/src/transports/repository" to come before "../../../stage-tamagotchi/src/shared/lia/selection-write-policy"  perfectionist/sort-imports
+
+/home/user/ae46c49-validation/airi/apps/lia-app/src/main/config-update-sanitizer.ts
+  46:1  error  Too many blank lines at the end of file. Max of 0 allowed  style/no-multiple-empty-lines
+
+/home/user/ae46c49-validation/airi/apps/lia-app/src/main/ipc-surface.test.ts
+  70:49  error  Strings must use singlequote  style/quotes
+  79:30  error  Strings must use singlequote  style/quotes
+  80:30  error  Strings must use singlequote  style/quotes
+  81:30  error  Strings must use singlequote  style/quotes
+  83:30  error  Strings must use singlequote  style/quotes
+  89:30  error  Strings must use singlequote  style/quotes
+  93:49  error  Strings must use singlequote  style/quotes
+
+/home/user/ae46c49-validation/airi/apps/lia-app/src/main/ipc.ts
+  1:15  error  'LiaConfigUpdatePayload' is defined but never used  unused-imports/no-unused-imports
+
+/home/user/ae46c49-validation/airi/apps/lia-app/src/main/lia-host.ts
+  31:81  error  Prefer using a top-level type-only import instead of inline type specifiers  import/consistent-type-specifier-style
+  33:37  error  Prefer using a top-level type-only import instead of inline type specifiers  import/consistent-type-specifier-style
+  33:37  error  Expected "AiConnectionStartCode" to come before "createAiConnectionService"  perfectionist/sort-named-imports
+  33:65  error  Prefer using a top-level type-only import instead of inline type specifiers  import/consistent-type-specifier-style
+
+/home/user/ae46c49-validation/airi/apps/lia-app/src/main/runtime-boundary.test.ts
+  40:13  error  Capturing group number 1 is defined but never used  regexp/no-unused-capturing-group
+  43:12  error  Capturing group number 1 is defined but never used  regexp/no-unused-capturing-group
+  43:28  error  Capturing group number 2 is defined but never used  regexp/no-unused-capturing-group
+
+/home/user/ae46c49-validation/airi/apps/lia-app/src/renderer/src/ai-resources-view.test.ts
+  19:10  error  `describe`s should begin with lowercase  test/prefer-lowercase-title
+
+/home/user/ae46c49-validation/airi/apps/lia-app/src/renderer/src/views/AiResourcesView.vue
+  144:7   error  Top-level functions should be declared with function keyword  antfu/top-level-function
+  145:9   error  This line has 2 statements. Maximum allowed is 1              style/max-statements-per-line
+  480:13  error  Unexpected `v-bind` with a string literal value               vue/no-useless-v-bind
+
+/home/user/ae46c49-validation/airi/apps/lia-app/src/renderer/src/views/home.test.ts
+  122:30  error  Strings must use singlequote  style/quotes
+  123:30  error  Strings must use singlequote  style/quotes
+  124:30  error  Strings must use singlequote  style/quotes
+
+/home/user/ae46c49-validation/airi/apps/lia-app/tsconfig.json
+  10:5  error  Expected object keys to be in specified order. 'allowImportingTsExtensions' should be after 'types'  jsonc/sort-keys
+
+/home/user/ae46c49-validation/airi/apps/stage-tamagotchi/electron.vite.config.ts
+  90:11  error  Properties shouldn't be quoted as all quotes are redundant  style/quote-props
+
+/home/user/ae46c49-validation/airi/apps/stage-tamagotchi/scripts/provider-runtime-electron/eslint.config.mjs
+  9:1  error  Omit TypeScript and JavaScript source extensions from relative imports, dynamic imports, and re-exports  no-restricted-syntax
+
+/home/user/ae46c49-validation/airi/apps/stage-tamagotchi/scripts/provider-runtime-electron/gate-integrity.test.mjs
+  5:1  error  Import from `vitest` instead of `node:test`                                                              test/no-import-node-test
+  8:1  error  Omit TypeScript and JavaScript source extensions from relative imports, dynamic imports, and re-exports  no-restricted-syntax
+
+/home/user/ae46c49-validation/airi/apps/stage-tamagotchi/scripts/provider-runtime-electron/gate.test.mjs
+   10:1   error  Import from `vitest` instead of `node:test`                                                              test/no-import-node-test
+   17:1   error  Omit TypeScript and JavaScript source extensions from relative imports, dynamic imports, and re-exports  no-restricted-syntax
+   18:1   error  Omit TypeScript and JavaScript source extensions from relative imports, dynamic imports, and re-exports  no-restricted-syntax
+   19:1   error  Omit TypeScript and JavaScript source extensions from relative imports, dynamic imports, and re-exports  no-restricted-syntax
+   20:1   error  Omit TypeScript and JavaScript source extensions from relative imports, dynamic imports, and re-exports  no-restricted-syntax
+   21:1   error  Omit TypeScript and JavaScript source extensions from relative imports, dynamic imports, and re-exports  no-restricted-syntax
+  303:52  error  Expected parentheses around arrow function argument having a body with curly braces                      style/arrow-parens
+
+/home/user/ae46c49-validation/airi/apps/stage-tamagotchi/scripts/provider-runtime-electron/lib/artifact-export.test.mjs
+  4:1  error  Import from `vitest` instead of `node:test`                                                              test/no-import-node-test
+  6:1  error  Omit TypeScript and JavaScript source extensions from relative imports, dynamic imports, and re-exports  no-restricted-syntax
+
+/home/user/ae46c49-validation/airi/apps/stage-tamagotchi/scripts/provider-runtime-electron/lib/artifact-leak.test.mjs
+  7:1  error  Import from `vitest` instead of `node:test`                                                              test/no-import-node-test
+  9:1  error  Omit TypeScript and JavaScript source extensions from relative imports, dynamic imports, and re-exports  no-restricted-syntax
+
+/home/user/ae46c49-validation/airi/apps/stage-tamagotchi/scripts/provider-runtime-electron/lib/process-identity.mjs
+  59:1  error  Omit TypeScript and JavaScript source extensions from relative imports, dynamic imports, and re-exports  no-restricted-syntax
+
+/home/user/ae46c49-validation/airi/apps/stage-tamagotchi/scripts/provider-runtime-electron/lib/process-identity.test.mjs
+  3:1  error  Import from `vitest` instead of `node:test`                                                              test/no-import-node-test
+  5:1  error  Omit TypeScript and JavaScript source extensions from relative imports, dynamic imports, and re-exports  no-restricted-syntax
+
+/home/user/ae46c49-validation/airi/apps/stage-tamagotchi/scripts/provider-runtime-electron/lib/process-monitor.mjs
+  44:1  error  Omit TypeScript and JavaScript source extensions from relative imports, dynamic imports, and re-exports  no-restricted-syntax
+  45:1  error  Omit TypeScript and JavaScript source extensions from relative imports, dynamic imports, and re-exports  no-restricted-syntax
+
+/home/user/ae46c49-validation/airi/apps/stage-tamagotchi/scripts/provider-runtime-electron/lib/process-monitor.test.mjs
+  3:1  error  Import from `vitest` instead of `node:test`                                                              test/no-import-node-test
+  5:1  error  Omit TypeScript and JavaScript source extensions from relative imports, dynamic imports, and re-exports  no-restricted-syntax
+
+/home/user/ae46c49-validation/airi/apps/stage-tamagotchi/scripts/provider-runtime-electron/lib/run-groups.test.mjs
+  3:1  error  Import from `vitest` instead of `node:test`                                                              test/no-import-node-test
+  5:1  error  Omit TypeScript and JavaScript source extensions from relative imports, dynamic imports, and re-exports  no-restricted-syntax
+
+/home/user/ae46c49-validation/airi/apps/stage-tamagotchi/scripts/provider-runtime-electron/lib/secret-redaction.test.mjs
+  3:1  error  Import from `vitest` instead of `node:test`                                                              test/no-import-node-test
+  5:1  error  Omit TypeScript and JavaScript source extensions from relative imports, dynamic imports, and re-exports  no-restricted-syntax
+
+/home/user/ae46c49-validation/airi/apps/stage-tamagotchi/src/main/windows/about/index.ts
+  3:1  error  Expected "../../libs/i18n" (type-parent) to come before "../secure-web-preferences" (named-value-parent)  perfectionist/sort-imports
+
+/home/user/ae46c49-validation/airi/apps/stage-tamagotchi/src/main/windows/beat-sync/index.ts
+  3:1  error  Expected "node:path" (named-value-builtin) to come before "../secure-web-preferences" (named-value-parent)  perfectionist/sort-imports
+
+/home/user/ae46c49-validation/airi/apps/stage-tamagotchi/src/main/windows/caption/index.ts
+  3:1  error  Expected "electron" (type-import) to come before "../secure-web-preferences" (named-value-parent)  perfectionist/sort-imports
+
+/home/user/ae46c49-validation/airi/apps/stage-tamagotchi/src/main/windows/chat/index.ts
+  3:1  error  Expected "../../libs/i18n" (type-parent) to come before "../secure-web-preferences" (named-value-parent)  perfectionist/sort-imports
+
+/home/user/ae46c49-validation/airi/apps/stage-tamagotchi/src/main/windows/dashboard/index.ts
+  3:1  error  Expected "electron" (type-import) to come before "../secure-web-preferences" (named-value-parent)  perfectionist/sort-imports
+
+/home/user/ae46c49-validation/airi/apps/stage-tamagotchi/src/main/windows/devtools/index.ts
+  3:1  error  Expected "node:path" (named-value-builtin) to come before "../secure-web-preferences" (named-value-parent)  perfectionist/sort-imports
+
+/home/user/ae46c49-validation/airi/apps/stage-tamagotchi/src/main/windows/editor/index.ts
+  3:1  error  Expected "electron" (type-import) to come before "../secure-web-preferences" (named-value-parent)  perfectionist/sort-imports
+
+/home/user/ae46c49-validation/airi/apps/stage-tamagotchi/src/main/windows/inlay/index.ts
+  3:1  error  Expected "../../libs/i18n" (type-parent) to come before "../secure-web-preferences" (named-value-parent)  perfectionist/sort-imports
+
+/home/user/ae46c49-validation/airi/apps/stage-tamagotchi/src/main/windows/main/index.ts
+  3:1  error  Expected "../../libs/i18n" (type-parent) to come before "../secure-web-preferences" (named-value-parent)  perfectionist/sort-imports
+
+/home/user/ae46c49-validation/airi/apps/stage-tamagotchi/src/main/windows/notice/index.ts
+  3:1  error  Expected "electron" (type-import) to come before "../secure-web-preferences" (named-value-parent)  perfectionist/sort-imports
+
+/home/user/ae46c49-validation/airi/apps/stage-tamagotchi/src/main/windows/onboarding/index.ts
+  3:1  error  Expected "../../libs/i18n" (type-parent) to come before "../secure-web-preferences" (named-value-parent)  perfectionist/sort-imports
+
+/home/user/ae46c49-validation/airi/apps/stage-tamagotchi/src/main/windows/secure-web-preferences.test.ts
+  8:10  error  `describe`s should begin with lowercase  test/prefer-lowercase-title
+
+/home/user/ae46c49-validation/airi/apps/stage-tamagotchi/src/main/windows/settings/index.ts
+  3:1  error  Expected "../../libs/i18n" (type-parent) to come before "../secure-web-preferences" (named-value-parent)  perfectionist/sort-imports
+
+/home/user/ae46c49-validation/airi/apps/stage-tamagotchi/src/main/windows/spotlight/index.ts
+  3:1  error  Expected "@proj-airi/stage-shared/global-shortcut" (type-import) to come before "../secure-web-preferences" (named-value-parent)  perfectionist/sort-imports
+
+/home/user/ae46c49-validation/airi/apps/stage-tamagotchi/src/main/windows/widgets/index.ts
+  3:1  error  Expected "electron" (type-import) to come before "../secure-web-preferences" (named-value-parent)  perfectionist/sort-imports
+
+/home/user/ae46c49-validation/airi/apps/stage-tamagotchi/src/preload/ipc-channel-policy.test.ts
+  5:10  error  `describe`s should begin with lowercase  test/prefer-lowercase-title
+
+/home/user/ae46c49-validation/airi/apps/stage-tamagotchi/src/preload/shared.test.ts
+  21:1  error  Import in body of module; reorder to top  import/first
+
+/home/user/ae46c49-validation/airi/apps/stage-tamagotchi/src/preload/shared.ts
+  53:47  error  Unexpected use of the global variable 'process'. Use 'require("process")' instead  node/prefer-global/process
+
+/home/user/ae46c49-validation/airi/apps/stage-tamagotchi/src/renderer/components/lia-config/SttCredential.browser.test.ts
+  4:1  error  Expected "vitest-browser-vue" to come before "vitest/browser"  perfectionist/sort-imports
+
+/home/user/ae46c49-validation/airi/apps/stage-tamagotchi/src/renderer/stores/lia/native-provider-execution.test.ts
+  12:1  error  Expected "../../services/lia/secret-adopt.fixture" to come before "../../services/lia/transport-config.fixture"  perfectionist/sort-imports
+
+/home/user/ae46c49-validation/airi/apps/stage-tamagotchi/src/renderer/stores/lia/onboarding.test.ts
+  3:1  error  Missed spacing between "vitest" and "../../services/lia/secret-adopt.fixture"  perfectionist/sort-imports
+
+/home/user/ae46c49-validation/airi/apps/stage-tamagotchi/src/renderer/stores/lia/provider-auth-policy.test.ts
+  3:1  error  Missed spacing between "vitest" and "../../services/lia/secret-adopt.fixture"  perfectionist/sort-imports
+
+/home/user/ae46c49-validation/airi/apps/stage-tamagotchi/src/renderer/stores/lia/provider-config-hearing-write-path.test.ts
+  6:1  error  Missed spacing between "vue" and "../../services/lia/secret-adopt.fixture"  perfectionist/sort-imports
+
+/home/user/ae46c49-validation/airi/apps/stage-tamagotchi/src/renderer/stores/lia/provider-config-write-paths.test.ts
+  6:1  error  Missed spacing between "vue" and "../../services/lia/secret-adopt.fixture"  perfectionist/sort-imports
+
+✖ 81 problems (81 errors, 0 warnings)
+  59 errors and 0 warnings potentially fixable with the `--fix` option.
+
+[ELIFECYCLE] Command failed with exit code 1.

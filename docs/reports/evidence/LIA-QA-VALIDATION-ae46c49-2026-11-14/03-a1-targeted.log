@@ -1,0 +1,12 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.11 [39m[90m/home/user/ae46c49-validation/airi/packages/stage-ui[39m
+
+ [32m✓[39m [30m[43m node [49m[39m src/stores/ai/chat-llm/tool-resolver.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 17[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/stores/ai/chat-llm/tools.test.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 22[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/stores/tool-call-rerun.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 11[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m3 passed[39m[22m[90m (3)[39m
+[2m      Tests [22m [1m[32m31 passed[39m[22m[90m (31)[39m
+[2m   Start at [22m 08:01:52
+[2m   Duration [22m 1.35s[2m (transform 369ms, setup 0ms, import 849ms, tests 50ms, environment 1ms)[22m
+

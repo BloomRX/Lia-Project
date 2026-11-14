@@ -1,0 +1,68 @@
+$ electron-vite build
+[36mvite v8.2.2 [32mbuilding ssr environment for production...[36m[39m
+transforming...
+✓ 559 modules transformed.
+rendering chunks...
+out/main/rolldown-runtime-Dr7-SnC6.js             2.09 kB
+out/main/global-shortcut-uiohook-onAMpt-j.js      5.95 kB
+out/main/vendor-debug-C98Fcl7A.js                23.22 kB
+out/main/vendor-h3-me2Q0P0t.js                   92.88 kB
+out/main/index.js                             2,490.84 kB
+
+[32m✓ built in 1.42s[39m
+[36mvite v8.2.2 [32mbuilding ssr environment for production...[36m[39m
+transforming...
+✓ 4 modules transformed.
+rendering chunks...
+out/preload/index.cjs  2.49 kB
+
+[32m✓ built in 18ms[39m
+Downloading Cubism SDK...
+Downloading hiyori_free_zh.zip...
+Downloading hiyori_pro_zh.zip...
+Downloading AvatarSample_A.vrm...
+Downloading AvatarSample_B.vrm...
+FetchError: [GET] "https://dist.ayaka.moe/live2d-models/hiyori_pro_zh.zip": <no response> fetch failed
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async $fetchRaw2 (file:///home/user/ae46c49-validation/airi/node_modules/.pnpm/ofetch@1.5.1/node_modules/ofetch/dist/shared/ofetch.CWycOUEr.mjs:286:14)
+    ... 7 lines matching cause stack trace ...
+    at async CAC.<anonymous> (file:///home/user/ae46c49-validation/airi/node_modules/.pnpm/electron-vite@5.0.0_supports-color@10.2.2_vite@8.2.2_@types+node@26.2.0_esbuild@0.28.2__fb877ddd1bc3b154a5006900734ff361/node_modules/electron-vite/dist/cli.js:83:9) {
+  [cause]: TypeError: fetch failed
+      at node:internal/deps/undici/undici:14976:13
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async $fetchRaw2 (file:///home/user/ae46c49-validation/airi/node_modules/.pnpm/ofetch@1.5.1/node_modules/ofetch/dist/shared/ofetch.CWycOUEr.mjs:274:26)
+      at async $fetchRaw2 (file:///home/user/ae46c49-validation/airi/node_modules/.pnpm/ofetch@1.5.1/node_modules/ofetch/dist/shared/ofetch.CWycOUEr.mjs:286:14)
+      at async $fetch2 (file:///home/user/ae46c49-validation/airi/node_modules/.pnpm/ofetch@1.5.1/node_modules/ofetch/dist/shared/ofetch.CWycOUEr.mjs:332:15)
+      at async BasicMinimalPluginContext.configResolved (file:///home/user/ae46c49-validation/airi/node_modules/.pnpm/@proj-airi+unplugin-fetch@0.2.3_vite@8.2.2_@types+node@26.2.0_esbuild@0.28.2_jiti@2.7.0_6f3dde2585367c126b65f6bc5407cccb/node_modules/@proj-airi/unplugin-fetch/dist/vite/index.mjs:37:21)
+      at async Promise.all (index 13)
+      at async resolveConfig (file:///home/user/ae46c49-validation/airi/node_modules/.pnpm/vite@8.2.2_@types+node@26.2.0_esbuild@0.28.2_jiti@2.7.0_less@4.9.0_supports-color@10.2._fa721383ea52d790fb7bcba5783e78d6/node_modules/vite/dist/node/chunks/node.js:36883:2)
+      at async createBuilder (file:///home/user/ae46c49-validation/airi/node_modules/.pnpm/vite@8.2.2_@types+node@26.2.0_esbuild@0.28.2_jiti@2.7.0_less@4.9.0_supports-color@10.2._fa721383ea52d790fb7bcba5783e78d6/node_modules/vite/dist/node/chunks/node.js:34217:17)
+      at async build (file:///home/user/ae46c49-validation/airi/node_modules/.pnpm/vite@8.2.2_@types+node@26.2.0_esbuild@0.28.2_jiti@2.7.0_less@4.9.0_supports-color@10.2._fa721383ea52d790fb7bcba5783e78d6/node_modules/vite/dist/node/chunks/node.js:33679:18)
+      at async build (file:///home/user/ae46c49-validation/airi/node_modules/.pnpm/electron-vite@5.0.0_supports-color@10.2.2_vite@8.2.2_@types+node@26.2.0_esbuild@0.28.2__fb877ddd1bc3b154a5006900734ff361/node_modules/electron-vite/dist/chunks/lib-BkLsMF4i.js:33:13)
+      at async CAC.<anonymous> (file:///home/user/ae46c49-validation/airi/node_modules/.pnpm/electron-vite@5.0.0_supports-color@10.2.2_vite@8.2.2_@types+node@26.2.0_esbuild@0.28.2__fb877ddd1bc3b154a5006900734ff361/node_modules/electron-vite/dist/cli.js:83:9) {
+    [cause]: Error: Client network socket disconnected before secure TLS connection was established
+        at TLSSocket.onConnectEnd (node:internal/tls/wrap:1754:19)
+        at TLSSocket.emit (node:events:531:35)
+        at endReadableNT (node:internal/streams/readable:1698:12)
+        at process.processTicksAndRejections (node:internal/process/task_queues:89:21) {
+      code: 'ECONNRESET',
+      path: undefined,
+      host: 'dist.ayaka.moe',
+      port: 443,
+      localAddress: null
+    }
+  }
+}
+[31merror during build:
+FetchError: [GET] "https://dist.ayaka.moe/live2d-models/hiyori_pro_zh.zip": <no response> fetch failed
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async $fetchRaw2 (file:///home/user/ae46c49-validation/airi/node_modules/.pnpm/ofetch@1.5.1/node_modules/ofetch/dist/shared/ofetch.CWycOUEr.mjs:286:14)
+    at async $fetch2 (file:///home/user/ae46c49-validation/airi/node_modules/.pnpm/ofetch@1.5.1/node_modules/ofetch/dist/shared/ofetch.CWycOUEr.mjs:332:15)
+    at async BasicMinimalPluginContext.configResolved (file:///home/user/ae46c49-validation/airi/node_modules/.pnpm/@proj-airi+unplugin-fetch@0.2.3_vite@8.2.2_@types+node@26.2.0_esbuild@0.28.2_jiti@2.7.0_6f3dde2585367c126b65f6bc5407cccb/node_modules/@proj-airi/unplugin-fetch/dist/vite/index.mjs:37:21)
+    at async Promise.all (index 13)
+    at async resolveConfig (file:///home/user/ae46c49-validation/airi/node_modules/.pnpm/vite@8.2.2_@types+node@26.2.0_esbuild@0.28.2_jiti@2.7.0_less@4.9.0_supports-color@10.2._fa721383ea52d790fb7bcba5783e78d6/node_modules/vite/dist/node/chunks/node.js:36883:2)
+    at async createBuilder (file:///home/user/ae46c49-validation/airi/node_modules/.pnpm/vite@8.2.2_@types+node@26.2.0_esbuild@0.28.2_jiti@2.7.0_less@4.9.0_supports-color@10.2._fa721383ea52d790fb7bcba5783e78d6/node_modules/vite/dist/node/chunks/node.js:34217:17)
+    at async build (file:///home/user/ae46c49-validation/airi/node_modules/.pnpm/vite@8.2.2_@types+node@26.2.0_esbuild@0.28.2_jiti@2.7.0_less@4.9.0_supports-color@10.2._fa721383ea52d790fb7bcba5783e78d6/node_modules/vite/dist/node/chunks/node.js:33679:18)
+    at async build (file:///home/user/ae46c49-validation/airi/node_modules/.pnpm/electron-vite@5.0.0_supports-color@10.2.2_vite@8.2.2_@types+node@26.2.0_esbuild@0.28.2__fb877ddd1bc3b154a5006900734ff361/node_modules/electron-vite/dist/chunks/lib-BkLsMF4i.js:33:13)
+    at async CAC.<anonymous> (file:///home/user/ae46c49-validation/airi/node_modules/.pnpm/electron-vite@5.0.0_supports-color@10.2.2_vite@8.2.2_@types+node@26.2.0_esbuild@0.28.2__fb877ddd1bc3b154a5006900734ff361/node_modules/electron-vite/dist/cli.js:83:9)[39m
+[ELIFECYCLE] Command failed with exit code 1.

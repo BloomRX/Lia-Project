@@ -1,0 +1,75 @@
+Scope: all 74 workspace projects
+✓ Lockfile passes supply-chain policies (verified 27m ago)
+Lockfile is up to date, resolution step is skipped
+Progress: resolved 1, reused 0, downloaded 0, added 0
+Packages: +2648
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Progress: resolved 2648, reused 209, downloaded 0, added 0
+Progress: resolved 2648, reused 936, downloaded 0, added 0
+Progress: resolved 2648, reused 2643, downloaded 0, added 0
+Packages are hard linked from the content-addressable store to the virtual store.
+  Content-addressable store is at: /home/user/.local/share/pnpm/store/v11
+  Virtual store is at:             node_modules/.pnpm
+Progress: resolved 2648, reused 2643, downloaded 0, added 264
+Progress: resolved 2648, reused 2643, downloaded 0, added 379
+Progress: resolved 2648, reused 2643, downloaded 0, added 380
+Progress: resolved 2648, reused 2643, downloaded 0, added 649
+Progress: resolved 2648, reused 2643, downloaded 0, added 959
+Progress: resolved 2648, reused 2643, downloaded 0, added 1910
+Progress: resolved 2648, reused 2643, downloaded 0, added 2648, done
+[WARN] Failed to create bin at /home/user/ae46c49-validation/airi/node_modules/.pnpm/@duckdb+duckdb-wasm@1.29.1-dev68.0/node_modules/@duckdb/duckdb-wasm/node_modules/.bin/arrow2csv. ENOENT: no such file or directory, open '/home/user/ae46c49-validation/airi/node_modules/.pnpm/apache-arrow@17.0.0/node_modules/apache-arrow/bin/arrow2csv.cjs'
+[WARN] Failed to create bin at /home/user/ae46c49-validation/airi/apps/stage-pocket/node_modules/.bin/cap-vite. ENOENT: no such file or directory, open '/home/user/ae46c49-validation/airi/packages/cap-vite/dist/bin/run.mjs'
+[WARN] Failed to create bin at /home/user/ae46c49-validation/airi/apps/stage-tamagotchi/node_modules/.bin/server-runtime. ENOENT: no such file or directory, open '/home/user/ae46c49-validation/airi/packages/server-runtime/dist/bin/run.mjs'
+
+devDependencies:
++ @alint-js/cli 0.6.0
++ @alint-js/plugin-js 0.6.0
++ @antfu/eslint-config 8.2.0
++ @arethetypeswrong/core 0.18.5
++ @electron-toolkit/eslint-config-ts 3.1.0
++ @iconify/utils 3.1.4
++ @moeru/eslint-config 0.1.0-beta.19
++ @proj-airi/unocss-preset-chromatic 1.1.4
++ @types/node 26.2.0
++ @unocss/eslint-config 66.7.5
++ @unocss/eslint-plugin 66.7.5
++ @unocss/preset-mini 66.7.5
++ @unocss/preset-web-fonts 66.7.5
++ @vishot/cli 0.2.0
++ @vitest/browser-playwright 4.1.11
++ @vitest/coverage-v8 4.1.11
++ bumpp 12.2.1
++ eslint 10.9.0
++ eslint-plugin-format 2.0.1
++ eslint-plugin-oxlint 1.79.0
++ eslint-plugin-perfectionist 5.10.1
++ knip 6.32.2
++ nano-staged 1.0.2
++ oxc-minify 0.146.0
++ oxlint 1.79.0
++ playwright 1.62.1
++ posthog-js 1.306.1
++ publint 0.3.24
++ rollup 4.62.5
++ simple-git-hooks 2.13.1
++ sponsorkit 17.1.0
++ sponsors-svg 0.3.0
++ taze 21.1.0
++ tinyexec 1.3.0
++ tsdown 0.22.14
++ tsx 4.23.12
++ turbo 2.10.11
++ typescript 6.0.3
++ uncrypto 0.1.3
++ unocss 66.7.5
++ unocss-preset-scrollbar 4.0.0
++ unplugin-lightningcss 0.5.0
++ unplugin-raw 0.7.0
++ unplugin-unused 0.6.0
++ vite 8.2.2
++ vite-plugin-inspect 12.0.0-beta.1
++ vitest 4.1.11
++ vitest-browser-vue 2.1.0
++ yaml 2.9.0
+
+Done in 13.2s using pnpm v11.24.0
