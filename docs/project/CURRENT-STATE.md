@@ -13,6 +13,20 @@ commit. Registra **estado**, não narrativa: relatório de rodada vai para
 
 ## 0. Estado agora
 
+**Decisões do beta interno (14/11/2026, revisão 2 do plano).** O produto definiu:
+beta **interno**; **voz e STT obrigatórios** para aprovação; **Fase 1 de UI autorizada**
+(prontidão, confirmações destrutivas, contraste e acessibilidade; sem redesenho);
+**OIDC sem decisão** — permanece fora do caminho funcional até decisão, sem remoção
+definitiva; instalador **unsigned aceitável** com aviso e hash; **asset sem licença ou
+proveniência confirmada não é redistribuído**. Consequências: áudio virou bloqueador
+comprovado (B-07) com critérios AV-01…AV-15; Live2D/Cubism e Hero PNG saem do pacote do
+beta (VRM AvatarSample fica); Authenticode deixa de bloquear; o beta não pode ser
+declarado com OIDC acessível. O plano executável, com gates, ondas, donos de arquivo e
+regras anti-conflito, está em
+[plano do beta interno](../reports/LIA-BETA-READINESS-PLAN-2026-11-14.md) (§3–§11).
+Nenhum código de produto foi alterado nesta rodada; o SHA de código auditado continua
+`ae46c49`.
+
 **A-1 corrigido (14/11/2026, código + testes).** O achado da auditoria foi confirmado
 na causa: `defaultActive: false` **nunca foi** interruptor de desligar — é inclusão
 ambiente — e o caminho de envio por seleção explícita (`chat.ts` → `getToolsByNames` →
