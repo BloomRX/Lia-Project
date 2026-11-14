@@ -80,6 +80,28 @@ describe('Lia provider definitions and instances', () => {
 })
 
 describe('Lia native chat transport', () => {
+  it('never sends credentials to cleartext non-loopback endpoints', async () => {
+    let calls = 0
+    const { runtime } = setup(async () => { calls++; return json() })
+    for (const baseUrl of ['http://service.invalid/v1', 'http://192.168.1.5/v1', 'http://localhost.evil.invalid/v1'])
+      await errorCode(runtime.chat({ ...config, baseUrl }, request), 'configuration')
+    assert.equal(calls, 0)
+    for (const baseUrl of ['http://localhost/v1', 'http://127.0.0.1/v1', 'http://[::1]/v1'])
+      await runtime.chat({ ...config, baseUrl }, request)
+    assert.equal(calls, 3)
+  })
+
+  it('still permits keyless HTTP services', async () => {
+    let calls = 0
+    const { runtime } = setup(async (_input, init) => {
+      calls++
+      assert.equal(new Headers(init?.headers).has('authorization'), false)
+      return json()
+    }, () => undefined)
+    await runtime.chat({ ...config, credentialRequired: false, baseUrl: 'http://service.invalid/v1' }, request)
+    assert.equal(calls, 1)
+  })
+
   it('executes a custom model at the custom endpoint with transient authentication and preserves extra wire fields', async () => {
     let called = 0
     const { runtime } = setup(async (input, init) => {

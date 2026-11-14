@@ -222,6 +222,11 @@ export class ProviderRuntime {
         throw abortError(operation)
       if (instance.config.credentialRequired && !credential)
         throw new ProviderError('credentials')
+      // Never attach a stored credential to cleartext traffic outside the
+      // loopback fixture/local-provider boundary. Keyless LAN use is unchanged.
+      const destination = new URL(instance.config.baseUrl)
+      if (credential && destination.protocol !== 'https:' && !['localhost', '127.0.0.1', '[::1]'].includes(destination.hostname))
+        throw new ProviderError('configuration')
       const headers = new Headers({ accept: request?.stream ? 'text/event-stream' : 'application/json' })
       if (credential)
         headers.set('authorization', `Bearer ${credential}`)
