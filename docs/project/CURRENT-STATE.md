@@ -13,6 +13,22 @@ commit. Registra **estado**, não narrativa: relatório de rodada vai para
 
 ## 0. Estado agora
 
+**A-1 corrigido (14/11/2026, código + testes).** O achado da auditoria foi confirmado
+na causa: `defaultActive: false` **nunca foi** interruptor de desligar — é inclusão
+ambiente — e o caminho de envio por seleção explícita (`chat.ts` → `getToolsByNames` →
+`resolveLlmTools`) não consultava filtro nenhum; o rerun usava o mesmo caminho. A
+correção separa as três camadas (registrada / ambiente / habilitada) e cria o
+interruptor que faltava: `enabledById` + `setToolEnabled()` no store de ferramentas.
+Desabilitada = ausente de `activeTools` **e** não resolvida por `getToolsByNames`
+(envio e rerun) **e** execução recusada (`ToolDisabledError`) mesmo em objeto
+capturado antes da mudança. O padrão é habilitada — só um `false` explícito desliga —
+e re-registro/refresh não reverte a escolha. **Nada foi desligado nesta entrega:**
+`get_weather`, `image_journal` e widgets continuam funcionando sob demanda; desligá-los
+por padrão é decisão de produto pendente (opções a/b/c no relatório). Regressões:
+`tools.test.ts` 13/13, `tool-resolver.test.ts` 11/11, `tool-call-rerun.test.ts` 7/7,
+`built-in.test.ts` 1/1, tsc sem erros nos arquivos alterados, eslint limpo.
+Relatório: [A-1 — ativação de ferramentas](../reports/LIA-A1-TOOL-ENABLEMENT-2026-11-14.md).
+
 **Auditoria de branch (14/11/2026, read-only).** O tip `7cb8172` está sincronizado com o
 remoto e o worktree está limpo (exceto o material não rastreável da RX 580). Verificado
 nesta rodada: `lia/core` **105/105**; `@lia/lia-app` **353 passed / 2 skips** em 36
