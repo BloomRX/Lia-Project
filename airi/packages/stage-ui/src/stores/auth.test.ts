@@ -6,6 +6,7 @@ import { nextTick } from 'vue'
 
 import { triggerSignIn } from '../libs/auth'
 import { requestAuthSession } from '../libs/auth-client'
+import { refreshAccessToken } from '../libs/auth-oidc'
 import { useAuthStore } from './auth'
 
 vi.mock('../libs/auth', () => ({
@@ -80,6 +81,7 @@ describe('auth store sign-in requests', () => {
     vi.mocked(triggerSignIn).mockResolvedValue()
     vi.mocked(requestAuthSession).mockReset()
     vi.mocked(requestAuthSession).mockResolvedValue({ user, session })
+    vi.mocked(refreshAccessToken).mockReset()
   })
 
   afterEach(() => {
@@ -153,6 +155,41 @@ describe('auth store sign-in requests', () => {
 
     expect(requestAuthSession).toHaveBeenCalledWith('persisted-access-token')
     expect(authStore.token).toBe('persisted-access-token')
+  })
+
+  it('clears immediately and discards refresh that completes after logout', async () => {
+    const refresh = Promise.withResolvers<Awaited<ReturnType<typeof refreshAccessToken>>>()
+    const logout = Promise.withResolvers<Response>()
+    vi.mocked(refreshAccessToken).mockReturnValue(refresh.promise)
+    vi.stubGlobal('fetch', vi.fn(() => logout.promise))
+    const authStore = useAuthStore()
+    await authStore.completeSignIn({ accessToken: 'old-access', refreshToken: 'old-refresh', idToken: 'old-id', expiresIn: 3600, clientId: 'client' })
+    const pending = authStore.refreshTokenNow()
+    const signingOut = authStore.signOut()
+    expect(storage.values.size).toBe(0)
+    expect(authStore.isAuthenticated).toBe(false)
+    refresh.resolve({ access_token: 'late-access', refresh_token: 'late-refresh', expires_in: 3600, token_type: 'Bearer' })
+    expect(await pending).toBeNull()
+    expect(storage.values.size).toBe(0)
+    expect(authStore.token).toBeNull()
+    logout.resolve(new Response(null, { status: 204 }))
+    await signingOut
+  })
+
+  it('does not let a stale session response undo a replacement login', async () => {
+    const sessionResponse = Promise.withResolvers<Awaited<ReturnType<typeof requestAuthSession>>>()
+    const authStore = useAuthStore()
+    await authStore.completeSignIn({ accessToken: 'old-access', expiresIn: 3600, clientId: 'client' })
+    vi.mocked(requestAuthSession).mockReturnValueOnce(sessionResponse.promise)
+    const oldSession = authStore.fetchSession()
+    await authStore.clearAllAuthState()
+    await authStore.completeSignIn({ accessToken: 'new-access', expiresIn: 3600, clientId: 'client' })
+    sessionResponse.resolve(null)
+    expect(await oldSession).toBe(false)
+    expect(authStore.token).toBe('new-access')
+    expect(authStore.isAuthenticated).toBe(true)
+    expect(storage.getItem('auth/v1/token')).toBe('new-access')
+    await authStore.clearAllAuthState()
   })
 
   it('does not persist state patches received from another window', async () => {

@@ -1,7 +1,6 @@
 import type { Session, User } from 'better-auth'
 import type {} from 'pinia-plugin-synced'
 
-import { errorMessageFrom } from '@moeru/std'
 import { isStageTamagotchi } from '@proj-airi/stage-shared'
 import { useTimeoutFn, whenever } from '@vueuse/core'
 import { defineStore } from 'pinia'
@@ -151,6 +150,8 @@ export const useAuthStore = defineStore('auth', () => {
   // Single-flight refresh: multiple concurrent callers (timer + 401 retry + restore)
   // must not trigger multiple token exchanges. All share one in-flight promise.
   let inflightRefresh: Promise<string | null> | null = null
+  // Invalidate pending refresh/session responses on logout or replacement login.
+  let authGeneration = 0
 
   async function refreshTokenNow(): Promise<string | null> {
     if (inflightRefresh)
@@ -159,9 +160,12 @@ export const useAuthStore = defineStore('auth', () => {
     if (!refreshToken.value || !oidcClientId.value)
       return null
 
-    inflightRefresh = (async () => {
+    const generation = authGeneration
+    const attempt = (async () => {
       try {
         const tokens = await refreshAccessToken(oidcClientId.value!, refreshToken.value!)
+        if (generation !== authGeneration)
+          return null
         token.value = tokens.access_token
         storage.setAccessToken(tokens.access_token)
         if (tokens.refresh_token) {
@@ -174,20 +178,25 @@ export const useAuthStore = defineStore('auth', () => {
           scheduleTokenRefresh(tokens.expires_in)
         }
 
-        await fetchSession(tokens.access_token)
-        return tokens.access_token
+        const authenticated = await fetchSession(tokens.access_token)
+        return generation === authGeneration && authenticated ? tokens.access_token : null
       }
-      catch (error) {
-        console.error('OIDC token refresh failed', errorMessageFrom(error))
-        clearAuthState()
+      catch {
+        if (generation === authGeneration) {
+          console.error('OIDC token refresh failed')
+          clearAuthState()
+        }
         return null
       }
-      finally {
-        inflightRefresh = null
-      }
     })()
-
-    return inflightRefresh
+    inflightRefresh = attempt
+    try {
+      return await attempt
+    }
+    finally {
+      if (inflightRefresh === attempt)
+        inflightRefresh = null
+    }
   }
 
   const { start: startRefreshTimer, stop: stopRefreshTimer } = useTimeoutFn(
@@ -255,6 +264,8 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function completeSignIn(tokens: AuthTokenSet): Promise<boolean> {
+    authGeneration++
+    inflightRefresh = null
     token.value = tokens.accessToken
     refreshToken.value = tokens.refreshToken ?? null
     idToken.value = tokens.idToken ?? null
@@ -273,7 +284,10 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function fetchSession(accessToken: string | null = token.value): Promise<boolean> {
+    const generation = authGeneration
     const data = await requestAuthSession(accessToken)
+    if (generation !== authGeneration)
+      return false
     if (data) {
       user.value = data.user
       session.value = data.session
@@ -300,8 +314,9 @@ export const useAuthStore = defineStore('auth', () => {
     const clientId = oidcClientId.value
     const bearerToken = token.value
 
-    // Delete the server session before local state. A new authorization request
-    // can otherwise reuse the server cookie and restore the previous identity.
+    // Invalidate pending local work immediately; remote logout may hang or fail.
+    // The captured values are used only for the best-effort remote request.
+    clearAuthState()
     try {
       if (idTokenHint && clientId) {
         const url = new URL('/api/auth/oauth2/end-session', SERVER_URL)
@@ -317,13 +332,10 @@ export const useAuthStore = defineStore('auth', () => {
         })
       }
     }
-    catch (error) {
-      // A network error cannot preserve local credentials. The server session
-      // expires by its TTL after the local credentials are removed.
-      console.error('Server sign-out failed', errorMessageFrom(error))
+    catch {
+      // Do not log URLs or exception text: either may contain token hints.
+      console.error('Server sign-out failed')
     }
-
-    clearAuthState()
   }
 
   /**
@@ -338,6 +350,8 @@ export const useAuthStore = defineStore('auth', () => {
    * loop silently until the user lands on a page that calls fetchSession.
    */
   function clearAuthState(): void {
+    authGeneration++
+    inflightRefresh = null
     stopRefreshTimer()
     user.value = null
     session.value = null
