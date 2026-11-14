@@ -64,7 +64,16 @@ function keys(value: Record<string, unknown>, allowed: string[]): boolean {
 
 function identifier(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0 && value.length <= 256
-    && value.trim() === value && !/[\u0000-\u001F\u007F]/.test(value)
+    && value.trim() === value && !containsControlCharacter(value)
+}
+
+function containsControlCharacter(value: string): boolean {
+  for (let i = 0; i < value.length; i++) {
+    const code = value.codePointAt(i)!
+    if (code < 0x20 || code === 0x7F)
+      return true
+  }
+  return false
 }
 
 function endpoint(value: unknown): string {
@@ -377,7 +386,7 @@ export function createLiaTransportExecutionService(params: { repository: Reposit
       jobs.set(job.id, job)
       if (!owners.has(owner)) {
         const cleanup = () => {
-          for (const current of [...jobs.values()]) {
+          for (const current of jobs.values()) {
             if (current.owner === owner)
               finish(current, { ok: false, code: 'cancelled' })
           }
@@ -455,7 +464,7 @@ export function createLiaTransportExecutionService(params: { repository: Reposit
   }
 
   function invalidate(snapshot: TransportSnapshot) {
-    for (const job of [...jobs.values()]) {
+    for (const job of jobs.values()) {
       const records = snapshot.records.filter(record => record.providerId === job.providerId)
       if (!job.record || records.length !== 1 || !records[0].enabled || JSON.stringify(records[0]) !== JSON.stringify(job.record))
         finish(job, { ok: false, code: 'cancelled' })
@@ -463,7 +472,7 @@ export function createLiaTransportExecutionService(params: { repository: Reposit
   }
 
   function dispose() {
-    for (const job of [...jobs.values()])
+    for (const job of jobs.values())
       finish(job, { ok: false, code: 'cancelled' })
     terminals.clear()
   }

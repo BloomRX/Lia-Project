@@ -19,8 +19,19 @@ function object(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
 }
 function validText(value: unknown): value is string {
-  return typeof value === 'string' && value.trim().length > 0 && value.length <= LIA_MEMORY_LIMITS.text && !/[\u0000-\u0008\v\f\u000E-\u001F]/u.test(value)
+  return typeof value === 'string' && value.trim().length > 0 && value.length <= LIA_MEMORY_LIMITS.text && !containsDisallowedControlCharacter(value)
 }
+
+function containsDisallowedControlCharacter(value: string): boolean {
+  // Mesma intencao de [\u0000-\u0008\v\f\u000E-\u001F]: recusa caracteres de controle sem usar escapes \\u00XX na regex.
+  for (let i = 0; i < value.length; i++) {
+    const code = value.codePointAt(i)!
+    if (code <= 0x08 || code === 0x0B || code === 0x0C || (code >= 0x0E && code <= 0x1F))
+      return true
+  }
+  return false
+}
+
 function validId(value: unknown): value is string {
   return typeof value === 'string' && /^[\da-f]{8}-(?:[\da-f]{4}-){3}[\da-f]{12}$/i.test(value)
 }

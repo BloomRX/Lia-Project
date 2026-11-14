@@ -1,4 +1,4 @@
-import type { LiaConfigUpdatePayload, LiaHost } from './lia-host'
+import type { LiaHost } from './lia-host'
 import type { LiaBootTimer } from './timing'
 
 import { ipcMain } from 'electron'
