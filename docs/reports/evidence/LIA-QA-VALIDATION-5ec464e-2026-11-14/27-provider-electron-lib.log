@@ -1,0 +1,1122 @@
+TAP version 13
+# Subtest: gate.test.mjs — the 16 groups are all still wired
+    # Subtest: begins and passes every declared group exactly once
+    ok 1 - begins and passes every declared group exactly once
+      ---
+      duration_ms: 1.510401
+      type: 'test'
+      ...
+    # Subtest: begins each group before it passes it
+    ok 2 - begins each group before it passes it
+      ---
+      duration_ms: 0.346691
+      type: 'test'
+      ...
+    # Subtest: keeps the groups in ascending order
+    ok 3 - keeps the groups in ascending order
+      ---
+      duration_ms: 0.926925
+      type: 'test'
+      ...
+    # Subtest: has no leftover report.checks.push, which would bypass the accounting
+    ok 4 - has no leftover report.checks.push, which would bypass the accounting
+      ---
+      duration_ms: 1.025503
+      type: 'test'
+      ...
+    1..4
+ok 1 - gate.test.mjs — the 16 groups are all still wired
+  ---
+  duration_ms: 4.961624
+  type: 'suite'
+  ...
+# Subtest: gate.test.mjs — the ten curated providers are still exercised
+    # Subtest: lists all ten curated ids
+    ok 1 - lists all ten curated ids
+      ---
+      duration_ms: 0.214089
+      type: 'test'
+      ...
+    # Subtest: treats lm-studio and ollama as keyless, which is what the product does
+    ok 2 - treats lm-studio and ollama as keyless, which is what the product does
+      ---
+      duration_ms: 0.24567
+      type: 'test'
+      ...
+    # Subtest: still executes the whole matrix in both json and stream mode
+    ok 3 - still executes the whole matrix in both json and stream mode
+      ---
+      duration_ms: 0.236758
+      type: 'test'
+      ...
+    1..3
+ok 2 - gate.test.mjs — the ten curated providers are still exercised
+  ---
+  duration_ms: 1.076203
+  type: 'suite'
+  ...
+# Subtest: gate.test.mjs — secrets are protected by the registry, not by a list
+    # Subtest: builds one registry from every minted secret
+    ok 1 - builds one registry from every minted secret
+      ---
+      duration_ms: 0.232908
+      type: 'test'
+      ...
+    # Subtest: no longer hardcodes a two-value substitution
+    ok 2 - no longer hardcodes a two-value substitution
+      ---
+      duration_ms: 0.285139
+      type: 'test'
+      ...
+    # Subtest: writes both artifacts through the redacting writer
+    ok 3 - writes both artifacts through the redacting writer
+      ---
+      duration_ms: 0.359926
+      type: 'test'
+      ...
+    # Subtest: keeps the direct write only for the withheld marker
+    ok 4 - keeps the direct write only for the withheld marker
+      ---
+      duration_ms: 0.149945
+      type: 'test'
+      ...
+    1..4
+ok 3 - gate.test.mjs — secrets are protected by the registry, not by a list
+  ---
+  duration_ms: 1.263511
+  type: 'suite'
+  ...
+# Subtest: gate.test.mjs — process teardown is identity-based
+    # Subtest: no longer decides liveness with a bare PID probe
+    ok 1 - no longer decides liveness with a bare PID probe
+      ---
+      duration_ms: 0.180482
+      type: 'test'
+      ...
+    # Subtest: classifies the tracked processes against a live table
+    ok 2 - classifies the tracked processes against a live table
+      ---
+      duration_ms: 0.098596
+      type: 'test'
+      ...
+    # Subtest: starts a monitor for every Electron lifetime
+    ok 3 - starts a monitor for every Electron lifetime
+      ---
+      duration_ms: 0.200816
+      type: 'test'
+      ...
+    # Subtest: stops the monitor before closing, so the last lifetime is observed
+    ok 4 - stops the monitor before closing, so the last lifetime is observed
+      ---
+      duration_ms: 0.121273
+      type: 'test'
+      ...
+    # Subtest: does not treat an unverifiable shutdown as success
+    ok 5 - does not treat an unverifiable shutdown as success
+      ---
+      duration_ms: 0.149642
+      type: 'test'
+      ...
+    # Subtest: assigns the report before any helper that reads it runs
+    ok 6 - assigns the report before any helper that reads it runs
+      ---
+      duration_ms: 0.098101
+      type: 'test'
+      ...
+    # Subtest: declares the monitor and the tracked set before they are used
+    ok 7 - declares the monitor and the tracked set before they are used
+      ---
+      duration_ms: 0.11127
+      type: 'test'
+      ...
+    1..7
+ok 4 - gate.test.mjs — process teardown is identity-based
+  ---
+  duration_ms: 1.162559
+  type: 'suite'
+  ...
+# Subtest: run-gate-windows.ps1 — environment and export
+    # Subtest: records the PowerShell version in the run artifacts
+    ok 1 - records the PowerShell version in the run artifacts
+      ---
+      duration_ms: 0.124331
+      type: 'test'
+      ...
+    # Subtest: writes an environment file next to the report
+    ok 2 - writes an environment file next to the report
+      ---
+      duration_ms: 0.125673
+      type: 'test'
+      ...
+    # Subtest: exports a manifest with hashes
+    ok 3 - exports a manifest with hashes
+      ---
+      duration_ms: 0.138459
+      type: 'test'
+      ...
+    # Subtest: still refuses to call a failed run approved
+    ok 4 - still refuses to call a failed run approved
+      ---
+      duration_ms: 0.090376
+      type: 'test'
+      ...
+    1..4
+ok 5 - run-gate-windows.ps1 — environment and export
+  ---
+  duration_ms: 0.618599
+  type: 'suite'
+  ...
+# Subtest: sha256 — the value the manifest publishes
+    # Subtest: matches a digest produced by an independent implementation
+    ok 1 - matches a digest produced by an independent implementation
+      ---
+      duration_ms: 0.842462
+      type: 'test'
+      ...
+    # Subtest: produces 64 lowercase hex characters
+    ok 2 - produces 64 lowercase hex characters
+      ---
+      duration_ms: 0.368844
+      type: 'test'
+      ...
+    # Subtest: changes when a single byte changes
+    ok 3 - changes when a single byte changes
+      ---
+      duration_ms: 0.219287
+      type: 'test'
+      ...
+    1..3
+ok 6 - sha256 — the value the manifest publishes
+  ---
+  duration_ms: 2.430462
+  type: 'suite'
+  ...
+# Subtest: buildManifest — identity a reader can check
+    # Subtest: carries the run identity, the commit and the timestamps
+    ok 1 - carries the run identity, the commit and the timestamps
+      ---
+      duration_ms: 0.19064
+      type: 'test'
+      ...
+    # Subtest: records a size and a hash for every file
+    ok 2 - records a size and a hash for every file
+      ---
+      duration_ms: 0.190091
+      type: 'test'
+      ...
+    # Subtest: sorts the file list, so two manifests diff cleanly
+    ok 3 - sorts the file list, so two manifests diff cleanly
+      ---
+      duration_ms: 1.995312
+      type: 'test'
+      ...
+    # Subtest: states how to verify it, in the artifact itself
+    ok 4 - states how to verify it, in the artifact itself
+      ---
+      duration_ms: 0.261854
+      type: 'test'
+      ...
+    # Subtest: holds no credential-shaped value
+    ok 5 - holds no credential-shaped value
+      ---
+      duration_ms: 0.358837
+      type: 'test'
+      ...
+    1..5
+ok 7 - buildManifest — identity a reader can check
+  ---
+  duration_ms: 3.420597
+  type: 'suite'
+  ...
+# Subtest: verifyManifest — a tampered package must not verify
+    # Subtest: accepts an intact copy
+    ok 1 - accepts an intact copy
+      ---
+      duration_ms: 0.464795
+      type: 'test'
+      ...
+    # Subtest: reports a modified file of the same size as a hash mismatch
+    ok 2 - reports a modified file of the same size as a hash mismatch
+      ---
+      duration_ms: 0.331918
+      type: 'test'
+      ...
+    # Subtest: reports a missing file
+    ok 3 - reports a missing file
+      ---
+      duration_ms: 0.141891
+      type: 'test'
+      ...
+    # Subtest: reports a size mismatch before hashing
+    ok 4 - reports a size mismatch before hashing
+      ---
+      duration_ms: 0.165782
+      type: 'test'
+      ...
+    1..4
+ok 8 - verifyManifest — a tampered package must not verify
+  ---
+  duration_ms: 1.35145
+  type: 'suite'
+  ...
+# Subtest: describeEnvironment — unknown is a value, an empty string is not
+    # Subtest: records the PowerShell version and edition that answer "5.1 or 7?"
+    ok 1 - records the PowerShell version and edition that answer "5.1 or 7?"
+      ---
+      duration_ms: 0.138368
+      type: 'test'
+      ...
+    # Subtest: writes unknown when a value could not be read, instead of inventing one
+    ok 2 - writes unknown when a value could not be read, instead of inventing one
+      ---
+      duration_ms: 0.084977
+      type: 'test'
+      ...
+    # Subtest: treats whitespace as absent
+    ok 3 - treats whitespace as absent
+      ---
+      duration_ms: 0.077248
+      type: 'test'
+      ...
+    1..3
+ok 9 - describeEnvironment — unknown is a value, an empty string is not
+  ---
+  duration_ms: 0.401414
+  type: 'suite'
+  ...
+# Subtest: isEnvironmentConclusive — the check that refuses a nameless run
+    # Subtest: accepts a real PowerShell version
+    ok 1 - accepts a real PowerShell version
+      ---
+      duration_ms: 0.221972
+      type: 'test'
+      ...
+    # Subtest: rejects a missing or unknown version
+    ok 2 - rejects a missing or unknown version
+      ---
+      duration_ms: 0.12022
+      type: 'test'
+      ...
+    1..2
+ok 10 - isEnvironmentConclusive — the check that refuses a nameless run
+  ---
+  duration_ms: 0.518477
+  type: 'suite'
+  ...
+# Subtest: selectRunFolder — this run, not last week’s
+    # Subtest: ignores a folder from a previous run
+    ok 1 - ignores a folder from a previous run
+      ---
+      duration_ms: 0.217489
+      type: 'test'
+      ...
+    # Subtest: accepts a folder created just before the clock stamp
+    ok 2 - accepts a folder created just before the clock stamp
+      ---
+      duration_ms: 0.086433
+      type: 'test'
+      ...
+    # Subtest: prefers the newest when several qualify
+    ok 3 - prefers the newest when several qualify
+      ---
+      duration_ms: 0.102571
+      type: 'test'
+      ...
+    # Subtest: rejects a folder older than the tolerance even if it is the newest
+    ok 4 - rejects a folder older than the tolerance even if it is the newest
+      ---
+      duration_ms: 0.101999
+      type: 'test'
+      ...
+    # Subtest: explains itself when nothing qualifies
+    ok 5 - explains itself when nothing qualifies
+      ---
+      duration_ms: 0.087017
+      type: 'test'
+      ...
+    # Subtest: ignores an entry with no usable timestamp rather than guessing
+    ok 6 - ignores an entry with no usable timestamp rather than guessing
+      ---
+      duration_ms: 0.080803
+      type: 'test'
+      ...
+    1..6
+ok 11 - selectRunFolder — this run, not last week’s
+  ---
+  duration_ms: 0.850806
+  type: 'suite'
+  ...
+# Subtest: artifact leak — a failing run must not leave a credential behind
+    # Subtest: leaks nothing when the failure is an assertion after every key was minted
+    ok 1 - leaks nothing when the failure is an assertion after every key was minted
+      ---
+      duration_ms: 10.482715
+      type: 'test'
+      ...
+    # Subtest: leaks nothing when the failure happens during teardown, after both files exist
+    ok 2 - leaks nothing when the failure happens during teardown, after both files exist
+      ---
+      duration_ms: 3.759833
+      type: 'test'
+      ...
+    # Subtest: covers every one of the ten providers, not just the two old substitutions
+    ok 3 - covers every one of the ten providers, not just the two old substitutions
+      ---
+      duration_ms: 4.289947
+      type: 'test'
+      ...
+    # Subtest: keeps the diagnostic value of the log while removing the secret
+    ok 4 - keeps the diagnostic value of the log while removing the secret
+      ---
+      duration_ms: 2.914813
+      type: 'test'
+      ...
+    # Subtest: leaks nothing into a report that embeds a whole request list
+    ok 5 - leaks nothing into a report that embeds a whole request list
+      ---
+      duration_ms: 2.714352
+      type: 'test'
+      ...
+    # Subtest: refuses to write at all when redaction leaves a value intact
+    ok 6 - refuses to write at all when redaction leaves a value intact
+      ---
+      duration_ms: 2.414746
+      type: 'test'
+      ...
+    1..6
+ok 12 - artifact leak — a failing run must not leave a credential behind
+  ---
+  duration_ms: 27.975253
+  type: 'suite'
+  ...
+# Subtest: parseCimDate — the two shapes PowerShell produces
+    # Subtest: reads the Windows PowerShell 5.1 legacy DateTime form
+    ok 1 - reads the Windows PowerShell 5.1 legacy DateTime form
+      ---
+      duration_ms: 0.95409
+      type: 'test'
+      ...
+    # Subtest: reads the 5.1 form with escaped delimiters
+    ok 2 - reads the 5.1 form with escaped delimiters
+      ---
+      duration_ms: 0.191392
+      type: 'test'
+      ...
+    # Subtest: reads the 5.1 form with a zone suffix
+    ok 3 - reads the 5.1 form with a zone suffix
+      ---
+      duration_ms: 0.123542
+      type: 'test'
+      ...
+    # Subtest: reads ISO 8601 with a Z zone and seven fractional digits
+    ok 4 - reads ISO 8601 with a Z zone and seven fractional digits
+      ---
+      duration_ms: 0.271591
+      type: 'test'
+      ...
+    # Subtest: reads ISO 8601 with a local offset and folds it to the same instant
+    ok 5 - reads ISO 8601 with a local offset and folds it to the same instant
+      ---
+      duration_ms: 0.229449
+      type: 'test'
+      ...
+    # Subtest: normalizes a number that a caller already parsed
+    ok 6 - normalizes a number that a caller already parsed
+      ---
+      duration_ms: 0.108492
+      type: 'test'
+      ...
+    # Subtest: answers undefined for a missing or empty value instead of inventing an instant
+    ok 7 - answers undefined for a missing or empty value instead of inventing an instant
+      ---
+      duration_ms: 0.224081
+      type: 'test'
+      ...
+    # Subtest: refuses a date without a zone rather than resolving it in local time
+    ok 8 - refuses a date without a zone rather than resolving it in local time
+      ---
+      duration_ms: 0.207855
+      type: 'test'
+      ...
+    # Subtest: refuses a date without a time
+    ok 9 - refuses a date without a time
+      ---
+      duration_ms: 0.216927
+      type: 'test'
+      ...
+    # Subtest: refuses nonsense and negative epochs
+    ok 10 - refuses nonsense and negative epochs
+      ---
+      duration_ms: 0.374665
+      type: 'test'
+      ...
+    1..10
+ok 13 - parseCimDate — the two shapes PowerShell produces
+  ---
+  duration_ms: 4.349047
+  type: 'suite'
+  ...
+# Subtest: toIdentity — building an identity from a CIM row
+    # Subtest: reads the projection the gate produces
+    ok 1 - reads the projection the gate produces
+      ---
+      duration_ms: 0.869375
+      type: 'test'
+      ...
+    # Subtest: reads the raw CIM names and string numbers
+    ok 2 - reads the raw CIM names and string numbers
+      ---
+      duration_ms: 0.126467
+      type: 'test'
+      ...
+    # Subtest: keeps the identity when the creation time is unreadable
+    ok 3 - keeps the identity when the creation time is unreadable
+      ---
+      duration_ms: 0.109224
+      type: 'test'
+      ...
+    # Subtest: rejects a row with no usable PID
+    ok 4 - rejects a row with no usable PID
+      ---
+      duration_ms: 0.08321
+      type: 'test'
+      ...
+    # Subtest: drops a parent that cannot be a PID instead of guessing one
+    ok 5 - drops a parent that cannot be a PID instead of guessing one
+      ---
+      duration_ms: 0.111249
+      type: 'test'
+      ...
+    1..5
+ok 14 - toIdentity — building an identity from a CIM row
+  ---
+  duration_ms: 1.50338
+  type: 'suite'
+  ...
+# Subtest: isSameProcess — strict, never approximate
+    # Subtest: accepts the same PID and the same instant
+    ok 1 - accepts the same PID and the same instant
+      ---
+      duration_ms: 0.143264
+      type: 'test'
+      ...
+    # Subtest: rejects the same PID one millisecond apart
+    ok 2 - rejects the same PID one millisecond apart
+      ---
+      duration_ms: 0.082529
+      type: 'test'
+      ...
+    # Subtest: rejects a different PID
+    ok 3 - rejects a different PID
+      ---
+      duration_ms: 0.070459
+      type: 'test'
+      ...
+    # Subtest: rejects when either side has no creation time
+    ok 4 - rejects when either side has no creation time
+      ---
+      duration_ms: 0.07228
+      type: 'test'
+      ...
+    1..4
+ok 15 - isSameProcess — strict, never approximate
+  ---
+  duration_ms: 0.490323
+  type: 'suite'
+  ...
+# Subtest: classifyIdentity — alive, gone, and the state that is neither
+    # Subtest: reports the original process as alive while it is still there
+    ok 1 - reports the original process as alive while it is still there
+      ---
+      duration_ms: 0.193344
+      type: 'test'
+      ...
+    # Subtest: reports the original process as gone once it finished
+    ok 2 - reports the original process as gone once it finished
+      ---
+      duration_ms: 0.071924
+      type: 'test'
+      ...
+    # Subtest: reports a reused PID as gone, and says why
+    ok 3 - reports a reused PID as gone, and says why
+      ---
+      duration_ms: 0.205963
+      type: 'test'
+      ...
+    # Subtest: reports unknown when the creation time was never captured
+    ok 4 - reports unknown when the creation time was never captured
+      ---
+      duration_ms: 0.099808
+      type: 'test'
+      ...
+    # Subtest: reports unknown when the process table could not be read
+    ok 5 - reports unknown when the process table could not be read
+      ---
+      duration_ms: 0.079862
+      type: 'test'
+      ...
+    # Subtest: reports unknown for an absent identity instead of throwing
+    ok 6 - reports unknown for an absent identity instead of throwing
+      ---
+      duration_ms: 0.079526
+      type: 'test'
+      ...
+    1..6
+ok 16 - classifyIdentity — alive, gone, and the state that is neither
+  ---
+  duration_ms: 0.891848
+  type: 'suite'
+  ...
+# Subtest: classifyAll — the four states the report must separate
+    # Subtest: separates main, descendants, alive and unconfirmed
+    ok 1 - separates main, descendants, alive and unconfirmed
+      ---
+      duration_ms: 0.408639
+      type: 'test'
+      ...
+    # Subtest: does not double-count the main process as its own descendant
+    ok 2 - does not double-count the main process as its own descendant
+      ---
+      duration_ms: 0.128835
+      type: 'test'
+      ...
+    # Subtest: keeps both incarnations of a recycled PID and classifies each on its own
+    ok 3 - keeps both incarnations of a recycled PID and classifies each on its own
+      ---
+      duration_ms: 0.171043
+      type: 'test'
+      ...
+    # Subtest: marks everything unknown when the table read failed
+    ok 4 - marks everything unknown when the table read failed
+      ---
+      duration_ms: 0.103777
+      type: 'test'
+      ...
+    1..4
+ok 17 - classifyAll — the four states the report must separate
+  ---
+  duration_ms: 1.024953
+  type: 'suite'
+  ...
+# Subtest: parseProcessTable — what PowerShell actually returns
+    # Subtest: reads an array
+    ok 1 - reads an array
+      ---
+      duration_ms: 0.345243
+      type: 'test'
+      ...
+    # Subtest: reads a single object, which is what a one-row ConvertTo-Json returns
+    ok 2 - reads a single object, which is what a one-row ConvertTo-Json returns
+      ---
+      duration_ms: 0.111599
+      type: 'test'
+      ...
+    # Subtest: reads the empty string PowerShell emits for an empty array
+    ok 3 - reads the empty string PowerShell emits for an empty array
+      ---
+      duration_ms: 0.084385
+      type: 'test'
+      ...
+    # Subtest: throws on malformed JSON rather than pretending nothing is running
+    ok 4 - throws on malformed JSON rather than pretending nothing is running
+      ---
+      duration_ms: 0.391613
+      type: 'test'
+      ...
+    # Subtest: drops rows that carry no PID
+    ok 5 - drops rows that carry no PID
+      ---
+      duration_ms: 0.106958
+      type: 'test'
+      ...
+    1..5
+ok 18 - parseProcessTable — what PowerShell actually returns
+  ---
+  duration_ms: 1.227399
+  type: 'suite'
+  ...
+# Subtest: processTableCommand — the query must carry the fields the parser needs
+    # Subtest: selects the PID, the parent and a canonical creation stamp
+    ok 1 - selects the PID, the parent and a canonical creation stamp
+      ---
+      duration_ms: 0.237372
+      type: 'test'
+      ...
+    # Subtest: escapes a quote in the process name instead of breaking the filter
+    ok 2 - escapes a quote in the process name instead of breaking the filter
+      ---
+      duration_ms: 0.152493
+      type: 'test'
+      ...
+    1..2
+ok 19 - processTableCommand — the query must carry the fields the parser needs
+  ---
+  duration_ms: 0.477761
+  type: 'suite'
+  ...
+# Subtest: createProcessMonitor — what it refuses to be constructed without
+    # Subtest: requires a positive integer root PID
+    ok 1 - requires a positive integer root PID
+      ---
+      duration_ms: 0.941088
+      type: 'test'
+      ...
+    # Subtest: requires a snapshot function
+    ok 2 - requires a snapshot function
+      ---
+      duration_ms: 0.224804
+      type: 'test'
+      ...
+    1..2
+ok 20 - createProcessMonitor — what it refuses to be constructed without
+  ---
+  duration_ms: 2.074374
+  type: 'suite'
+  ...
+# Subtest: createProcessMonitor — descendants
+    # Subtest: captures a child that starts and exits between two of the old snapshots
+    ok 1 - captures a child that starts and exits between two of the old snapshots
+      ---
+      duration_ms: 1.474774
+      type: 'test'
+      ...
+    # Subtest: follows a chain of grandchildren, not only direct children
+    ok 2 - follows a chain of grandchildren, not only direct children
+      ---
+      duration_ms: 0.330527
+      type: 'test'
+      ...
+    # Subtest: ignores a process that does not descend from the root
+    ok 3 - ignores a process that does not descend from the root
+      ---
+      duration_ms: 0.263342
+      type: 'test'
+      ...
+    # Subtest: does not hang on a table that reports a parent cycle
+    ok 4 - does not hang on a table that reports a parent cycle
+      ---
+      duration_ms: 0.233548
+      type: 'test'
+      ...
+    # Subtest: keeps both incarnations when a PID is reused by a later child
+    ok 5 - keeps both incarnations when a PID is reused by a later child
+      ---
+      duration_ms: 0.337067
+      type: 'test'
+      ...
+    # Subtest: rejects impossible parent ages before root and cached-owner shortcuts in either table order
+    ok 6 - rejects impossible parent ages before root and cached-owner shortcuts in either table order
+      ---
+      duration_ms: 0.436583
+      type: 'test'
+      ...
+    # Subtest: pins the root incarnation and does not adopt a recycled root or its new children
+    ok 7 - pins the root incarnation and does not adopt a recycled root or its new children
+      ---
+      duration_ms: 1.297013
+      type: 'test'
+      ...
+    # Subtest: preserves previously unseen children of the original root after its PID is reused
+    ok 8 - preserves previously unseen children of the original root after its PID is reused
+      ---
+      duration_ms: 0.470953
+      type: 'test'
+      ...
+    # Subtest: retains old and unknown children of an already observed intermediate parent after reuse
+    ok 9 - retains old and unknown children of an already observed intermediate parent after reuse
+      ---
+      duration_ms: 0.275286
+      type: 'test'
+      ...
+    # Subtest: retains unknown timestamps as evidence instead of treating uncertain ancestry as gone
+    ok 10 - retains unknown timestamps as evidence instead of treating uncertain ancestry as gone
+      ---
+      duration_ms: 0.184359
+      type: 'test'
+      ...
+    # Subtest: records the poll that first saw each process, for diagnosis
+    ok 11 - records the poll that first saw each process, for diagnosis
+      ---
+      duration_ms: 0.20496
+      type: 'test'
+      ...
+    1..11
+ok 21 - createProcessMonitor — descendants
+  ---
+  duration_ms: 6.135424
+  type: 'suite'
+  ...
+# Subtest: createProcessMonitor — failures are recorded, never read as "nothing ran"
+    # Subtest: records a throwing snapshot and keeps the processes already observed
+    ok 1 - records a throwing snapshot and keeps the processes already observed
+      ---
+      duration_ms: 0.556008
+      type: 'test'
+      ...
+    # Subtest: does not throw out of the monitor when the snapshot fails
+    ok 2 - does not throw out of the monitor when the snapshot fails
+      ---
+      duration_ms: 0.264205
+      type: 'test'
+      ...
+    # Subtest: reports the sampling interval and states the blind window
+    ok 3 - reports the sampling interval and states the blind window
+      ---
+      duration_ms: 0.158868
+      type: 'test'
+      ...
+    1..3
+ok 22 - createProcessMonitor — failures are recorded, never read as "nothing ran"
+  ---
+  duration_ms: 1.20779
+  type: 'suite'
+  ...
+# Subtest: createProcessMonitor — lifecycle
+    # Subtest: does not overlap slow periodic queries and drains the last observation on stop
+    ok 1 - does not overlap slow periodic queries and drains the last observation on stop
+      ---
+      duration_ms: 0.623406
+      type: 'test'
+      ...
+    # Subtest: polls once at start, so the root is known before anything is launched
+    ok 2 - polls once at start, so the root is known before anything is launched
+      ---
+      duration_ms: 0.191959
+      type: 'test'
+      ...
+    # Subtest: schedules on the requested interval and clears it on stop
+    ok 3 - schedules on the requested interval and clears it on stop
+      ---
+      duration_ms: 0.197685
+      type: 'test'
+      ...
+    # Subtest: tolerates stop() twice, so a finally block cannot throw
+    ok 4 - tolerates stop() twice, so a finally block cannot throw
+      ---
+      duration_ms: 0.141184
+      type: 'test'
+      ...
+    # Subtest: counts its polls
+    ok 5 - counts its polls
+      ---
+      duration_ms: 0.197677
+      type: 'test'
+      ...
+    1..5
+ok 23 - createProcessMonitor — lifecycle
+  ---
+  duration_ms: 1.595102
+  type: 'suite'
+  ...
+# Subtest: GATE_GROUPS — the 16 groups the mission fixes
+    # Subtest: has exactly 16, with contiguous ids from 1
+    ok 1 - has exactly 16, with contiguous ids from 1
+      ---
+      duration_ms: 1.243961
+      type: 'test'
+      ...
+    # Subtest: gives every group a non-empty title
+    ok 2 - gives every group a non-empty title
+      ---
+      duration_ms: 0.262725
+      type: 'test'
+      ...
+    # Subtest: has no duplicate id or title
+    ok 3 - has no duplicate id or title
+      ---
+      duration_ms: 0.213821
+      type: 'test'
+      ...
+    1..3
+ok 24 - GATE_GROUPS — the 16 groups the mission fixes
+  ---
+  duration_ms: 2.683013
+  type: 'suite'
+  ...
+# Subtest: createGroupRecorder — executed means begun, passed means reached
+    # Subtest: records a full run as complete
+    ok 1 - records a full run as complete
+      ---
+      duration_ms: 0.721388
+      type: 'test'
+      ...
+    # Subtest: does not count a group as executed merely because a later one ran
+    ok 2 - does not count a group as executed merely because a later one ran
+      ---
+      duration_ms: 0.232209
+      type: 'test'
+      ...
+    # Subtest: marks the interrupted group as still running, not as failed, until it is told
+    ok 3 - marks the interrupted group as still running, not as failed, until it is told
+      ---
+      duration_ms: 0.156177
+      type: 'test'
+      ...
+    # Subtest: records a failure with its diagnostic
+    ok 4 - records a failure with its diagnostic
+      ---
+      duration_ms: 0.333726
+      type: 'test'
+      ...
+    # Subtest: ignores a failure reported for a group that already passed
+    ok 5 - ignores a failure reported for a group that already passed
+      ---
+      duration_ms: 0.322898
+      type: 'test'
+      ...
+    # Subtest: records begin and end times for a passed group
+    ok 6 - records begin and end times for a passed group
+      ---
+      duration_ms: 0.255085
+      type: 'test'
+      ...
+    1..6
+ok 25 - createGroupRecorder — executed means begun, passed means reached
+  ---
+  duration_ms: 2.543376
+  type: 'suite'
+  ...
+# Subtest: createGroupRecorder — a typo must not silently drop a group
+    # Subtest: refuses an id outside the declared set
+    ok 1 - refuses an id outside the declared set
+      ---
+      duration_ms: 0.574812
+      type: 'test'
+      ...
+    # Subtest: refuses to begin the same group twice
+    ok 2 - refuses to begin the same group twice
+      ---
+      duration_ms: 0.152015
+      type: 'test'
+      ...
+    # Subtest: refuses to pass a group that never began
+    ok 3 - refuses to pass a group that never began
+      ---
+      duration_ms: 0.12648
+      type: 'test'
+      ...
+    # Subtest: refuses to pass the same group twice
+    ok 4 - refuses to pass the same group twice
+      ---
+      duration_ms: 0.119111
+      type: 'test'
+      ...
+    1..4
+ok 26 - createGroupRecorder — a typo must not silently drop a group
+  ---
+  duration_ms: 1.149965
+  type: 'suite'
+  ...
+# Subtest: describeGroups — the sentence a reader cannot misread
+    # Subtest: claims all 16 only when all 16 passed
+    ok 1 - claims all 16 only when all 16 passed
+      ---
+      duration_ms: 0.262743
+      type: 'test'
+      ...
+    # Subtest: names the group where execution stopped
+    ok 2 - names the group where execution stopped
+      ---
+      duration_ms: 0.237387
+      type: 'test'
+      ...
+    # Subtest: distinguishes a recorded failure from an interruption
+    ok 3 - distinguishes a recorded failure from an interruption
+      ---
+      duration_ms: 0.129865
+      type: 'test'
+      ...
+    # Subtest: does not say PASS for an empty run
+    ok 4 - does not say PASS for an empty run
+      ---
+      duration_ms: 0.101587
+      type: 'test'
+      ...
+    1..4
+ok 27 - describeGroups — the sentence a reader cannot misread
+  ---
+  duration_ms: 0.886911
+  type: 'suite'
+  ...
+# Subtest: createSecretRegistry — one collection, no exceptions
+    # Subtest: registers every value, not a hand-picked two
+    ok 1 - registers every value, not a hand-picked two
+      ---
+      duration_ms: 0.870355
+      type: 'test'
+      ...
+    # Subtest: accepts an object, which is how the gate stores them
+    ok 2 - accepts an object, which is how the gate stores them
+      ---
+      duration_ms: 0.227233
+      type: 'test'
+      ...
+    # Subtest: ignores empty and non-string entries instead of registering a landmine
+    ok 3 - ignores empty and non-string entries instead of registering a landmine
+      ---
+      duration_ms: 0.14927
+      type: 'test'
+      ...
+    # Subtest: refuses a shape it cannot enumerate
+    ok 4 - refuses a shape it cannot enumerate
+      ---
+      duration_ms: 0.514235
+      type: 'test'
+      ...
+    # Subtest: orders longest first, so a prefix value cannot shred a longer one
+    ok 5 - orders longest first, so a prefix value cannot shred a longer one
+      ---
+      duration_ms: 0.146611
+      type: 'test'
+      ...
+    1..5
+ok 28 - createSecretRegistry — one collection, no exceptions
+  ---
+  duration_ms: 2.97522
+  type: 'suite'
+  ...
+# Subtest: redact — every registered value, every path
+    # Subtest: replaces the generic and the local value
+    ok 1 - replaces the generic and the local value
+      ---
+      duration_ms: 0.371931
+      type: 'test'
+      ...
+    # Subtest: replaces each per-provider value, which the old two-substitution code left in clear text
+    ok 2 - replaces each per-provider value, which the old two-substitution code left in clear text
+      ---
+      duration_ms: 0.357504
+      type: 'test'
+      ...
+    # Subtest: redacts inside a JSON document without breaking it
+    ok 3 - redacts inside a JSON document without breaking it
+      ---
+      duration_ms: 0.43054
+      type: 'test'
+      ...
+    # Subtest: redacts inside an Error message, which is where a fixture echoes a key
+    ok 4 - redacts inside an Error message, which is where a fixture echoes a key
+      ---
+      duration_ms: 0.283382
+      type: 'test'
+      ...
+    # Subtest: collapses a synthetic-shaped value that was never registered
+    ok 5 - collapses a synthetic-shaped value that was never registered
+      ---
+      duration_ms: 0.305409
+      type: 'test'
+      ...
+    # Subtest: leaves ordinary text untouched
+    ok 6 - leaves ordinary text untouched
+      ---
+      duration_ms: 0.142435
+      type: 'test'
+      ...
+    # Subtest: passes undefined and null through, so an optional field needs no branch
+    ok 7 - passes undefined and null through, so an optional field needs no branch
+      ---
+      duration_ms: 0.098986
+      type: 'test'
+      ...
+    # Subtest: handles an object by serializing it first
+    ok 8 - handles an object by serializing it first
+      ---
+      duration_ms: 0.971057
+      type: 'test'
+      ...
+    1..8
+ok 29 - redact — every registered value, every path
+  ---
+  duration_ms: 3.424469
+  type: 'suite'
+  ...
+# Subtest: findLeaks and assertNoSecrets — the check that fails the gate
+    # Subtest: finds a value anywhere in a payload
+    ok 1 - finds a value anywhere in a payload
+      ---
+      duration_ms: 0.768652
+      type: 'test'
+      ...
+    # Subtest: finds every value when several are present
+    ok 2 - finds every value when several are present
+      ---
+      duration_ms: 0.099899
+      type: 'test'
+      ...
+    # Subtest: names leaks by index, never by value
+    ok 3 - names leaks by index, never by value
+      ---
+      duration_ms: 0.193294
+      type: 'test'
+      ...
+    # Subtest: throws with an index-only message
+    ok 4 - throws with an index-only message
+      ---
+      duration_ms: 0.173684
+      type: 'test'
+      ...
+    # Subtest: does not throw for a clean payload
+    ok 5 - does not throw for a clean payload
+      ---
+      duration_ms: 0.131465
+      type: 'test'
+      ...
+    1..5
+ok 30 - findLeaks and assertNoSecrets — the check that fails the gate
+  ---
+  duration_ms: 1.542018
+  type: 'suite'
+  ...
+# Subtest: writeArtifact — the only door to the disk
+    # Subtest: redacts before writing
+    ok 1 - redacts before writing
+      ---
+      duration_ms: 0.277652
+      type: 'test'
+      ...
+    # Subtest: reports whether it changed anything
+    ok 2 - reports whether it changed anything
+      ---
+      duration_ms: 0.143862
+      type: 'test'
+      ...
+    # Subtest: refuses to write when redaction did not actually remove the value
+    ok 3 - refuses to write when redaction did not actually remove the value
+      ---
+      duration_ms: 0.26566
+      type: 'test'
+      ...
+    # Subtest: accepts a structured payload and writes it as JSON
+    ok 4 - accepts a structured payload and writes it as JSON
+      ---
+      duration_ms: 0.187515
+      type: 'test'
+      ...
+    1..4
+ok 31 - writeArtifact — the only door to the disk
+  ---
+  duration_ms: 1.023603
+  type: 'suite'
+  ...
+# Subtest: redactionSummary — what the report is allowed to say
+    # Subtest: reports a count and never a value
+    ok 1 - reports a count and never a value
+      ---
+      duration_ms: 0.147247
+      type: 'test'
+      ...
+    1..1
+ok 32 - redactionSummary — what the report is allowed to say
+  ---
+  duration_ms: 0.289271
+  type: 'suite'
+  ...
+1..32
+# tests 148
+# suites 32
+# pass 148
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 660.190762

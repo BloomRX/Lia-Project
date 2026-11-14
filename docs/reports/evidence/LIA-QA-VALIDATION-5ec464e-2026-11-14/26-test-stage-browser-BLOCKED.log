@@ -1,0 +1,165 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.11 [39m[90m/home/user/Lia-Project/airi/apps/stage-tamagotchi[39m
+
+[31m⎯⎯⎯⎯⎯⎯[39m[1m[41m Unhandled Errors [49m[22m[31m⎯⎯⎯⎯⎯⎯[39m
+[31m[1m
+Vitest caught 1 unhandled error during the test run.
+This might cause false positive tests. Resolve unhandled errors to make sure your tests are not affected.[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯[39m[1m[41m Unhandled Error [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+[31m[1mError[22m: browserType.launch: Executable doesn't exist at /home/user/.cache/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-linux64/chrome-headless-shell
+╔════════════════════════════════════════════════════════════╗
+║ Looks like Playwright was just installed or updated.       ║
+║ Please run the following command to download new browsers: ║
+║                                                            ║
+║     pnpm exec playwright install                           ║
+║                                                            ║
+║ <3 Playwright Team                                         ║
+╚════════════════════════════════════════════════════════════╝[39m
+[90m [2m❯[22m ../../node_modules/.pnpm/@vitest+browser-playwright@4.1.11_bufferutil@4.1.0_playwright@1.62.1_utf-8-validate@5.0_cdb4982ec35d95bd39367cb35c73658a/node_modules/@vitest/browser-playwright/dist/index.js:[2m941:55[22m[39m
+[90m [2m❯[22m PlaywrightBrowserProvider.createContext ../../node_modules/.pnpm/@vitest+browser-playwright@4.1.11_bufferutil@4.1.0_playwright@1.62.1_utf-8-validate@5.0_cdb4982ec35d95bd39367cb35c73658a/node_modules/@vitest/browser-playwright/dist/index.js:[2m1077:19[22m[39m
+[90m [2m❯[22m PlaywrightBrowserProvider.openBrowserPage ../../node_modules/.pnpm/@vitest+browser-playwright@4.1.11_bufferutil@4.1.0_playwright@1.62.1_utf-8-validate@5.0_cdb4982ec35d95bd39367cb35c73658a/node_modules/@vitest/browser-playwright/dist/index.js:[2m1147:19[22m[39m
+[90m [2m❯[22m PlaywrightBrowserProvider.openPage ../../node_modules/.pnpm/@vitest+browser-playwright@4.1.11_bufferutil@4.1.0_playwright@1.62.1_utf-8-validate@5.0_cdb4982ec35d95bd39367cb35c73658a/node_modules/@vitest/browser-playwright/dist/index.js:[2m1161:23[22m[39m
+[90m [2m❯[22m TestProject._openBrowserPage ../../node_modules/.pnpm/vitest@4.1.11_@opentelemetry+api@1.9.1_@types+node@26.2.0_@vitest+browser-playwright@4._06df85f8ef07c15c48c5f50e45856ad3/node_modules/vitest/dist/chunks/cli-api.CnMVyzaz.js:[2m11040:3[22m[39m
+[90m [2m❯[22m BrowserPool.openPage ../../node_modules/.pnpm/vitest@4.1.11_@opentelemetry+api@1.9.1_@types+node@26.2.0_@vitest+browser-playwright@4._06df85f8ef07c15c48c5f50e45856ad3/node_modules/vitest/dist/chunks/cli-api.CnMVyzaz.js:[2m2578:3[22m[39m
+[90m [2m❯[22m BrowserPool.runTests ../../node_modules/.pnpm/vitest@4.1.11_@opentelemetry+api@1.9.1_@types+node@26.2.0_@vitest+browser-playwright@4._06df85f8ef07c15c48c5f50e45856ad3/node_modules/vitest/dist/chunks/cli-api.CnMVyzaz.js:[2m2573:3[22m[39m
+[90m [2m❯[22m runWorkspaceTests ../../node_modules/.pnpm/vitest@4.1.11_@opentelemetry+api@1.9.1_@types+node@26.2.0_@vitest+browser-playwright@4._06df85f8ef07c15c48c5f50e45856ad3/node_modules/vitest/dist/chunks/cli-api.CnMVyzaz.js:[2m2473:3[22m[39m
+[90m [2m❯[22m executeTests ../../node_modules/.pnpm/vitest@4.1.11_@opentelemetry+api@1.9.1_@types+node@26.2.0_@vitest+browser-playwright@4._06df85f8ef07c15c48c5f50e45856ad3/node_modules/vitest/dist/chunks/cli-api.CnMVyzaz.js:[2m3779:25[22m[39m
+[90m [2m❯[22m ../../node_modules/.pnpm/vitest@4.1.11_@opentelemetry+api@1.9.1_@types+node@26.2.0_@vitest+browser-playwright@4._06df85f8ef07c15c48c5f50e45856ad3/node_modules/vitest/dist/chunks/cli-api.CnMVyzaz.js:[2m13657:7[22m[39m
+[90m [2m❯[22m ../../node_modules/.pnpm/vitest@4.1.11_@opentelemetry+api@1.9.1_@types+node@26.2.0_@vitest+browser-playwright@4._06df85f8ef07c15c48c5f50e45856ad3/node_modules/vitest/dist/chunks/cli-api.CnMVyzaz.js:[2m13684:11[22m[39m
+[90m [2m❯[22m ../../node_modules/.pnpm/vitest@4.1.11_@opentelemetry+api@1.9.1_@types+node@26.2.0_@vitest+browser-playwright@4._06df85f8ef07c15c48c5f50e45856ad3/node_modules/vitest/dist/chunks/cli-api.CnMVyzaz.js:[2m13546:19[22m[39m
+[90m [2m❯[22m startVitest ../../node_modules/.pnpm/vitest@4.1.11_@opentelemetry+api@1.9.1_@types+node@26.2.0_@vitest+browser-playwright@4._06df85f8ef07c15c48c5f50e45856ad3/node_modules/vitest/dist/chunks/cli-api.CnMVyzaz.js:[2m14621:8[22m[39m
+[90m [2m❯[22m start ../../node_modules/.pnpm/vitest@4.1.11_@opentelemetry+api@1.9.1_@types+node@26.2.0_@vitest+browser-playwright@4._06df85f8ef07c15c48c5f50e45856ad3/node_modules/vitest/dist/chunks/cac.uFydS1Z4.js:[2m2340:15[22m[39m
+[90m [2m❯[22m CAC.run ../../node_modules/.pnpm/vitest@4.1.11_@opentelemetry+api@1.9.1_@types+node@26.2.0_@vitest+browser-playwright@4._06df85f8ef07c15c48c5f50e45856ad3/node_modules/vitest/dist/chunks/cac.uFydS1Z4.js:[2m2318:2[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22m[39m
+[31m[1mSerialized Error:[22m[39m [90m{ log: [] }[39m
+[31m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[39m
+
+
+[2m Test Files [22m [90m (9)[39m
+[2m      Tests [22m [2mno tests[22m
+[2m     Errors [22m [1m[31m1 error[39m[22m
+[2m   Start at [22m 07:41:01
+[2m   Duration [22m 1.08s[2m (transform 0ms, setup 0ms, import 0ms, tests 0ms, environment 0ms)[22m
+
+error during close browserType.launch: Executable doesn't exist at /home/user/.cache/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-linux64/chrome-headless-shell
+╔════════════════════════════════════════════════════════════╗
+║ Looks like Playwright was just installed or updated.       ║
+║ Please run the following command to download new browsers: ║
+║                                                            ║
+║     pnpm exec playwright install                           ║
+║                                                            ║
+║ <3 Playwright Team                                         ║
+╚════════════════════════════════════════════════════════════╝
+    at /home/user/Lia-Project/airi/node_modules/.pnpm/@vitest+browser-playwright@4.1.11_bufferutil@4.1.0_playwright@1.62.1_utf-8-validate@5.0_cdb4982ec35d95bd39367cb35c73658a/node_modules/@vitest/browser-playwright/dist/index.js:941:55
+    at PlaywrightBrowserProvider.createContext (/home/user/Lia-Project/airi/node_modules/.pnpm/@vitest+browser-playwright@4.1.11_bufferutil@4.1.0_playwright@1.62.1_utf-8-validate@5.0_cdb4982ec35d95bd39367cb35c73658a/node_modules/@vitest/browser-playwright/dist/index.js:1077:19)
+    at PlaywrightBrowserProvider.openBrowserPage (/home/user/Lia-Project/airi/node_modules/.pnpm/@vitest+browser-playwright@4.1.11_bufferutil@4.1.0_playwright@1.62.1_utf-8-validate@5.0_cdb4982ec35d95bd39367cb35c73658a/node_modules/@vitest/browser-playwright/dist/index.js:1147:19)
+    at PlaywrightBrowserProvider.openPage (/home/user/Lia-Project/airi/node_modules/.pnpm/@vitest+browser-playwright@4.1.11_bufferutil@4.1.0_playwright@1.62.1_utf-8-validate@5.0_cdb4982ec35d95bd39367cb35c73658a/node_modules/@vitest/browser-playwright/dist/index.js:1161:23)
+    at TestProject._openBrowserPage (/home/user/Lia-Project/airi/node_modules/.pnpm/vitest@4.1.11_@opentelemetry+api@1.9.1_@types+node@26.2.0_@vitest+browser-playwright@4._06df85f8ef07c15c48c5f50e45856ad3/node_modules/vitest/dist/chunks/cli-api.CnMVyzaz.js:11040:3)
+    at BrowserPool.openPage (/home/user/Lia-Project/airi/node_modules/.pnpm/vitest@4.1.11_@opentelemetry+api@1.9.1_@types+node@26.2.0_@vitest+browser-playwright@4._06df85f8ef07c15c48c5f50e45856ad3/node_modules/vitest/dist/chunks/cli-api.CnMVyzaz.js:2578:3)
+    at BrowserPool.runTests (/home/user/Lia-Project/airi/node_modules/.pnpm/vitest@4.1.11_@opentelemetry+api@1.9.1_@types+node@26.2.0_@vitest+browser-playwright@4._06df85f8ef07c15c48c5f50e45856ad3/node_modules/vitest/dist/chunks/cli-api.CnMVyzaz.js:2573:3)
+    at runWorkspaceTests (/home/user/Lia-Project/airi/node_modules/.pnpm/vitest@4.1.11_@opentelemetry+api@1.9.1_@types+node@26.2.0_@vitest+browser-playwright@4._06df85f8ef07c15c48c5f50e45856ad3/node_modules/vitest/dist/chunks/cli-api.CnMVyzaz.js:2473:3)
+    at executeTests (/home/user/Lia-Project/airi/node_modules/.pnpm/vitest@4.1.11_@opentelemetry+api@1.9.1_@types+node@26.2.0_@vitest+browser-playwright@4._06df85f8ef07c15c48c5f50e45856ad3/node_modules/vitest/dist/chunks/cli-api.CnMVyzaz.js:3779:25)
+    at /home/user/Lia-Project/airi/node_modules/.pnpm/vitest@4.1.11_@opentelemetry+api@1.9.1_@types+node@26.2.0_@vitest+browser-playwright@4._06df85f8ef07c15c48c5f50e45856ad3/node_modules/vitest/dist/chunks/cli-api.CnMVyzaz.js:13657:7
+    at /home/user/Lia-Project/airi/node_modules/.pnpm/vitest@4.1.11_@opentelemetry+api@1.9.1_@types+node@26.2.0_@vitest+browser-playwright@4._06df85f8ef07c15c48c5f50e45856ad3/node_modules/vitest/dist/chunks/cli-api.CnMVyzaz.js:13684:11
+    at /home/user/Lia-Project/airi/node_modules/.pnpm/vitest@4.1.11_@opentelemetry+api@1.9.1_@types+node@26.2.0_@vitest+browser-playwright@4._06df85f8ef07c15c48c5f50e45856ad3/node_modules/vitest/dist/chunks/cli-api.CnMVyzaz.js:13546:19
+    at startVitest (/home/user/Lia-Project/airi/node_modules/.pnpm/vitest@4.1.11_@opentelemetry+api@1.9.1_@types+node@26.2.0_@vitest+browser-playwright@4._06df85f8ef07c15c48c5f50e45856ad3/node_modules/vitest/dist/chunks/cli-api.CnMVyzaz.js:14621:8)
+    at start (/home/user/Lia-Project/airi/node_modules/.pnpm/vitest@4.1.11_@opentelemetry+api@1.9.1_@types+node@26.2.0_@vitest+browser-playwright@4._06df85f8ef07c15c48c5f50e45856ad3/node_modules/vitest/dist/chunks/cac.uFydS1Z4.js:2340:15)
+    at CAC.run (/home/user/Lia-Project/airi/node_modules/.pnpm/vitest@4.1.11_@opentelemetry+api@1.9.1_@types+node@26.2.0_@vitest+browser-playwright@4._06df85f8ef07c15c48c5f50e45856ad3/node_modules/vitest/dist/chunks/cac.uFydS1Z4.js:2318:2) {
+  log: [],
+  name: 'Error',
+  type: 'Unhandled Error',
+  stacks: [
+    {
+      method: '',
+      file: '/home/user/Lia-Project/airi/node_modules/.pnpm/@vitest+browser-playwright@4.1.11_bufferutil@4.1.0_playwright@1.62.1_utf-8-validate@5.0_cdb4982ec35d95bd39367cb35c73658a/node_modules/@vitest/browser-playwright/dist/index.js',
+      line: 941,
+      column: 55
+    },
+    {
+      method: 'PlaywrightBrowserProvider.createContext',
+      file: '/home/user/Lia-Project/airi/node_modules/.pnpm/@vitest+browser-playwright@4.1.11_bufferutil@4.1.0_playwright@1.62.1_utf-8-validate@5.0_cdb4982ec35d95bd39367cb35c73658a/node_modules/@vitest/browser-playwright/dist/index.js',
+      line: 1077,
+      column: 19
+    },
+    {
+      method: 'PlaywrightBrowserProvider.openBrowserPage',
+      file: '/home/user/Lia-Project/airi/node_modules/.pnpm/@vitest+browser-playwright@4.1.11_bufferutil@4.1.0_playwright@1.62.1_utf-8-validate@5.0_cdb4982ec35d95bd39367cb35c73658a/node_modules/@vitest/browser-playwright/dist/index.js',
+      line: 1147,
+      column: 19
+    },
+    {
+      method: 'PlaywrightBrowserProvider.openPage',
+      file: '/home/user/Lia-Project/airi/node_modules/.pnpm/@vitest+browser-playwright@4.1.11_bufferutil@4.1.0_playwright@1.62.1_utf-8-validate@5.0_cdb4982ec35d95bd39367cb35c73658a/node_modules/@vitest/browser-playwright/dist/index.js',
+      line: 1161,
+      column: 23
+    },
+    {
+      method: 'TestProject._openBrowserPage',
+      file: '/home/user/Lia-Project/airi/node_modules/.pnpm/vitest@4.1.11_@opentelemetry+api@1.9.1_@types+node@26.2.0_@vitest+browser-playwright@4._06df85f8ef07c15c48c5f50e45856ad3/node_modules/vitest/dist/chunks/cli-api.CnMVyzaz.js',
+      line: 11040,
+      column: 3
+    },
+    {
+      method: 'BrowserPool.openPage',
+      file: '/home/user/Lia-Project/airi/node_modules/.pnpm/vitest@4.1.11_@opentelemetry+api@1.9.1_@types+node@26.2.0_@vitest+browser-playwright@4._06df85f8ef07c15c48c5f50e45856ad3/node_modules/vitest/dist/chunks/cli-api.CnMVyzaz.js',
+      line: 2578,
+      column: 3
+    },
+    {
+      method: 'BrowserPool.runTests',
+      file: '/home/user/Lia-Project/airi/node_modules/.pnpm/vitest@4.1.11_@opentelemetry+api@1.9.1_@types+node@26.2.0_@vitest+browser-playwright@4._06df85f8ef07c15c48c5f50e45856ad3/node_modules/vitest/dist/chunks/cli-api.CnMVyzaz.js',
+      line: 2573,
+      column: 3
+    },
+    {
+      method: 'runWorkspaceTests',
+      file: '/home/user/Lia-Project/airi/node_modules/.pnpm/vitest@4.1.11_@opentelemetry+api@1.9.1_@types+node@26.2.0_@vitest+browser-playwright@4._06df85f8ef07c15c48c5f50e45856ad3/node_modules/vitest/dist/chunks/cli-api.CnMVyzaz.js',
+      line: 2473,
+      column: 3
+    },
+    {
+      method: 'executeTests',
+      file: '/home/user/Lia-Project/airi/node_modules/.pnpm/vitest@4.1.11_@opentelemetry+api@1.9.1_@types+node@26.2.0_@vitest+browser-playwright@4._06df85f8ef07c15c48c5f50e45856ad3/node_modules/vitest/dist/chunks/cli-api.CnMVyzaz.js',
+      line: 3779,
+      column: 25
+    },
+    {
+      method: '',
+      file: '/home/user/Lia-Project/airi/node_modules/.pnpm/vitest@4.1.11_@opentelemetry+api@1.9.1_@types+node@26.2.0_@vitest+browser-playwright@4._06df85f8ef07c15c48c5f50e45856ad3/node_modules/vitest/dist/chunks/cli-api.CnMVyzaz.js',
+      line: 13657,
+      column: 7
+    },
+    {
+      method: '',
+      file: '/home/user/Lia-Project/airi/node_modules/.pnpm/vitest@4.1.11_@opentelemetry+api@1.9.1_@types+node@26.2.0_@vitest+browser-playwright@4._06df85f8ef07c15c48c5f50e45856ad3/node_modules/vitest/dist/chunks/cli-api.CnMVyzaz.js',
+      line: 13684,
+      column: 11
+    },
+    {
+      method: '',
+      file: '/home/user/Lia-Project/airi/node_modules/.pnpm/vitest@4.1.11_@opentelemetry+api@1.9.1_@types+node@26.2.0_@vitest+browser-playwright@4._06df85f8ef07c15c48c5f50e45856ad3/node_modules/vitest/dist/chunks/cli-api.CnMVyzaz.js',
+      line: 13546,
+      column: 19
+    },
+    {
+      method: 'startVitest',
+      file: '/home/user/Lia-Project/airi/node_modules/.pnpm/vitest@4.1.11_@opentelemetry+api@1.9.1_@types+node@26.2.0_@vitest+browser-playwright@4._06df85f8ef07c15c48c5f50e45856ad3/node_modules/vitest/dist/chunks/cli-api.CnMVyzaz.js',
+      line: 14621,
+      column: 8
+    },
+    {
+      method: 'start',
+      file: '/home/user/Lia-Project/airi/node_modules/.pnpm/vitest@4.1.11_@opentelemetry+api@1.9.1_@types+node@26.2.0_@vitest+browser-playwright@4._06df85f8ef07c15c48c5f50e45856ad3/node_modules/vitest/dist/chunks/cac.uFydS1Z4.js',
+      line: 2340,
+      column: 15
+    },
+    {
+      method: 'CAC.run',
+      file: '/home/user/Lia-Project/airi/node_modules/.pnpm/vitest@4.1.11_@opentelemetry+api@1.9.1_@types+node@26.2.0_@vitest+browser-playwright@4._06df85f8ef07c15c48c5f50e45856ad3/node_modules/vitest/dist/chunks/cac.uFydS1Z4.js',
+      line: 2318,
+      column: 2
+    }
+  ]
+}

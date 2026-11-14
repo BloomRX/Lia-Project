@@ -1,0 +1,1631 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.11 [39m[90m/home/user/Lia-Project/airi/packages/stage-ui[39m
+
+[90mstderr[2m | src/stores/chat.contract.test.ts[2m > [22m[2mchat store contract[2m > [22m[2mstores a retriable error when a provider stream ends without a response
+[22m[39mError sending message:
+
+[90mstderr[2m | src/stores/chat.contract.test.ts[2m > [22m[2mchat store contract[2m > [22m[2mpersists a safe error for HTTP 413 without copying transport details into its warning
+[22m[39mError sending message:
+
+[90mstderr[2m | src/stores/chat.contract.test.ts[2m > [22m[2mchat store contract[2m > [22m[2mpersists a safe error for HTTP 429 without copying transport details into its warning
+[22m[39mError sending message:
+
+[90mstderr[2m | src/stores/chat.contract.test.ts[2m > [22m[2mchat store contract[2m > [22m[2mpersists a safe error for HTTP 503 without copying transport details into its warning
+[22m[39mError sending message:
+
+[90mstderr[2m | src/stores/chat.contract.test.ts[2m > [22m[2mchat store contract[2m > [22m[2mpersists a safe error for HTTP 401 without copying transport details into its warning
+[22m[39mError sending message:
+
+[90mstderr[2m | src/stores/chat.contract.test.ts[2m > [22m[2mchat store contract[2m > [22m[2mforwards later-turn failures to the canonical round failure event
+[22m[39mError sending message:
+
+[90mstderr[2m | src/stores/chat.contract.test.ts[2m > [22m[2mchat store contract[2m > [22m[2mcarried provider identity in the send contract[2m > [22m[2mcarries the identity resolved for each fallback attempt, never a cached one
+[22m[39mError sending message:
+
+[90mstderr[2m | src/stores/chat.contract.test.ts[2m > [22m[2mchat store contract[2m > [22m[2mcarried provider identity in the send contract[2m > [22m[2mcarries the identity resolved for each fallback attempt, never a cached one
+[22m[39m[chat] provider failover { from: [32m'fallback-provider'[39m, to: [32m'fallback-provider'[39m, attempt: [33m1[39m }
+
+[90mstderr[2m | src/stores/chat.contract.test.ts[2m > [22m[2mchat store contract[2m > [22m[2mrequest-start observation[2m > [22m[2mq/r/s/t: every attempt gets its own observation, with distinct rounds
+[22m[39mError sending message:
+
+[90mstderr[2m | src/stores/chat.contract.test.ts[2m > [22m[2mchat store contract[2m > [22m[2mrequest-start observation[2m > [22m[2mq/r/s/t: every attempt gets its own observation, with distinct rounds
+[22m[39m[chat] provider failover { from: [32m'fallback-provider'[39m, to: [32m'fallback-provider'[39m, attempt: [33m1[39m }
+
+[90mstderr[2m | src/stores/chat.contract.test.ts[2m > [22m[2mchat store contract[2m > [22m[2mround-settled observation[2m > [22m[2mc: a failed round is forwarded as failed, and a throwing observer changes nothing
+[22m[39mError sending message:
+
+[90mstderr[2m | src/stores/chat.contract.test.ts[2m > [22m[2mchat store contract[2m > [22m[2mround-settled observation[2m > [22m[2mf: a terminal failure WITHOUT a request start still reaches the settled observer
+[22m[39mError sending message:
+
+[90mstderr[2m | src/stores/chat.contract.test.ts[2m > [22m[2mchat store contract[2m > [22m[2mlogical send correlation[2m > [22m[2ml/m/n/o/x: one logical send keeps the same id across fallback attempts, with distinct rounds
+[22m[39mError sending message:
+
+[90mstderr[2m | src/stores/chat.contract.test.ts[2m > [22m[2mchat store contract[2m > [22m[2mlogical send correlation[2m > [22m[2ml/m/n/o/x: one logical send keeps the same id across fallback attempts, with distinct rounds
+[22m[39m[chat] provider failover { from: [32m'fallback-provider'[39m, to: [32m'fallback-provider'[39m, attempt: [33m1[39m }
+
+[90mstderr[2m | src/stores/chat.contract.test.ts[2m > [22m[2mchat store contract[2m > [22m[2mlogical send settlement observation[2m > [22m[2md/e: a failed send settles once as failed, keeps the error identity, and absorbs a hostile observer
+[22m[39mError sending message:
+
+[90mstderr[2m | src/stores/chat.contract.test.ts[2m > [22m[2mchat store contract[2m > [22m[2mlogical send settlement observation[2m > [22m[2mf: a recovered send settles ONCE, as succeeded - per send, never per attempt
+[22m[39mError sending message:
+
+[90mstderr[2m | src/stores/chat.contract.test.ts[2m > [22m[2mchat store contract[2m > [22m[2mlogical send settlement observation[2m > [22m[2mf: a recovered send settles ONCE, as succeeded - per send, never per attempt
+[22m[39m[chat] provider failover { from: [32m'fallback-provider'[39m, to: [32m'fallback-provider'[39m, attempt: [33m1[39m }
+
+[90mstderr[2m | src/stores/chat.contract.test.ts[2m > [22m[2mchat store contract[2m > [22m[2mlogical send settlement observation[2m > [22m[2mf2: two failed attempts then a success settle once, as succeeded
+[22m[39mError sending message:
+
+[90mstderr[2m | src/stores/chat.contract.test.ts[2m > [22m[2mchat store contract[2m > [22m[2mlogical send settlement observation[2m > [22m[2mf2: two failed attempts then a success settle once, as succeeded
+[22m[39m[chat] provider failover { from: [32m'fallback-provider'[39m, to: [32m'fallback-provider'[39m, attempt: [33m1[39m }
+
+[90mstderr[2m | src/stores/chat.contract.test.ts[2m > [22m[2mchat store contract[2m > [22m[2mlogical send settlement observation[2m > [22m[2mf2: two failed attempts then a success settle once, as succeeded
+[22m[39mError sending message:
+
+[90mstderr[2m | src/stores/chat.contract.test.ts[2m > [22m[2mchat store contract[2m > [22m[2mlogical send settlement observation[2m > [22m[2mf2: two failed attempts then a success settle once, as succeeded
+[22m[39m[chat] provider failover { from: [32m'fallback-provider'[39m, to: [32m'fallback-provider'[39m, attempt: [33m2[39m }
+
+[90mstderr[2m | src/stores/chat.contract.test.ts[2m > [22m[2mchat store contract[2m > [22m[2mlogical send settlement observation[2m > [22m[2mg2: a throwing fallback resolver settles the send once, as failed
+[22m[39mError sending message:
+
+[90mstderr[2m | src/stores/chat.contract.test.ts[2m > [22m[2mchat store contract[2m > [22m[2mlogical send settlement observation[2m > [22m[2mg: exhausting every bounded attempt settles once, as failed, with one error bubble
+[22m[39mError sending message:
+
+[90mstderr[2m | src/stores/chat.contract.test.ts[2m > [22m[2mchat store contract[2m > [22m[2mlogical send settlement observation[2m > [22m[2mg: exhausting every bounded attempt settles once, as failed, with one error bubble
+[22m[39m[chat] provider failover { from: [32m'fallback-provider'[39m, to: [32m'fallback-provider'[39m, attempt: [33m1[39m }
+
+[90mstderr[2m | src/stores/chat.contract.test.ts[2m > [22m[2mchat store contract[2m > [22m[2mlogical send settlement observation[2m > [22m[2mg: exhausting every bounded attempt settles once, as failed, with one error bubble
+[22m[39mError sending message:
+
+[90mstderr[2m | src/stores/chat.contract.test.ts[2m > [22m[2mchat store contract[2m > [22m[2mlogical send settlement observation[2m > [22m[2mg: exhausting every bounded attempt settles once, as failed, with one error bubble
+[22m[39m[chat] provider failover { from: [32m'fallback-provider'[39m, to: [32m'fallback-provider'[39m, attempt: [33m2[39m }
+
+[90mstderr[2m | src/stores/chat.contract.test.ts[2m > [22m[2mchat store contract[2m > [22m[2mlogical send settlement observation[2m > [22m[2mg: exhausting every bounded attempt settles once, as failed, with one error bubble
+[22m[39mError sending message:
+
+[90mstderr[2m | src/stores/chat.contract.test.ts[2m > [22m[2mchat store contract[2m > [22m[2mlogical send settlement observation[2m > [22m[2mg: exhausting every bounded attempt settles once, as failed, with one error bubble
+[22m[39m[chat] provider failover { from: [32m'fallback-provider'[39m, to: [32m'fallback-provider'[39m, attempt: [33m3[39m }
+
+[90mstderr[2m | src/stores/chat.contract.test.ts[2m > [22m[2mchat store contract[2m > [22m[2mlogical send settlement observation[2m > [22m[2mg: exhausting every bounded attempt settles once, as failed, with one error bubble
+[22m[39mError sending message:
+
+[90mstderr[2m | src/stores/chat.contract.test.ts[2m > [22m[2mchat store contract[2m > [22m[2mlogical send settlement observation[2m > [22m[2mg: exhausting every bounded attempt settles once, as failed, with one error bubble
+[22m[39m[chat] provider failover { from: [32m'fallback-provider'[39m, to: [32m'fallback-provider'[39m, attempt: [33m4[39m }
+
+[90mstderr[2m | src/stores/chat.contract.test.ts[2m > [22m[2mchat store contract[2m > [22m[2mlogical send settlement observation[2m > [22m[2ml: a hostile observer cannot steer a send or its fallback decision
+[22m[39mError sending message:
+
+[90mstderr[2m | src/stores/chat.contract.test.ts[2m > [22m[2mchat store contract[2m > [22m[2mlogical send settlement observation[2m > [22m[2ml: a hostile observer cannot steer a send or its fallback decision
+[22m[39m[chat] provider failover { from: [32m'fallback-provider'[39m, to: [32m'fallback-provider'[39m, attempt: [33m1[39m }
+
+[90mstderr[2m | src/stores/chat.contract.test.ts[2m > [22m[2mchat store contract[2m > [22m[2mlogical send settlement observation[2m > [22m[2mm/n: a retry settles through the same wrapper, uncorrelated - success and failure alike
+[22m[39mError sending message:
+
+ [32m✓[39m [30m[43m node [49m[39m src/stores/chat.contract.test.ts [2m([22m[2m57 tests[22m[2m)[22m[33m 437[2mms[22m[39m
+[90mstdout[2m | src/stores/chat/session-store.test.ts[2m > [22m[2mchat-session-store · user swap during in-flight ensureActiveSessionForCharacter[2m > [22m[2mruns a fresh hydrate for the new user and discards the stale write from the old user
+[22m[39m[chat-sync] creating WS client → http://test
+
+[90mstdout[2m | src/stores/chat/session-store.test.ts[2m > [22m[2mchat-session-store · cloud placeholder hydration[2m > [22m[2mretries cloud hydration when the reconcile pull for an adopted placeholder fails for Issue #2085
+[22m[39m[chat-sync] creating WS client → http://test
+
+[90mstdout[2m | src/stores/chat/session-store.test.ts[2m > [22m[2mchat-session-store · cloud placeholder hydration[2m > [22m[2mretries cloud hydration when the reconcile pull for an adopted placeholder fails for Issue #2085
+[22m[39m[chat-sync] reconcile start { userId: [32m'cloud-user'[39m, serverUrl: [32m'http://test'[39m }
+
+[90mstdout[2m | src/stores/chat/session-store.test.ts[2m > [22m[2mchat-session-store · cloud placeholder hydration[2m > [22m[2mretries cloud hydration when the reconcile pull for an adopted placeholder fails for Issue #2085
+[22m[39m[chat-sync] listChats → [33m1[39m remote chats
+
+[90mstdout[2m | src/stores/chat/session-store.test.ts[2m > [22m[2mchat-session-store · active card prompt edits[2m > [22m[2madds the AIRI chat math syntax to the system message for Issue #2239
+[22m[39m[chat-sync] WS skipped: anonymous user
+
+[90mstdout[2m | src/stores/chat/session-store.test.ts[2m > [22m[2mchat-session-store · active card prompt edits[2m > [22m[2mupdates the current session system message for Issue #1995 without clearing its history
+[22m[39m[chat-sync] WS skipped: anonymous user
+
+[90mstdout[2m | src/stores/chat/session-store.test.ts[2m > [22m[2mchat-session-store · active card prompt edits[2m > [22m[2mhydrates a persisted Issue #1995 session before refreshing its system message
+[22m[39m[chat-sync] WS skipped: anonymous user
+
+[90mstdout[2m | src/stores/chat/session-store.test.ts[2m > [22m[2mchat-session-store · synchronized data actions[2m > [22m[2mkeeps synchronized session data when a follower receives authenticated user state
+[22m[39m[chat-sync] creating WS client → http://test
+
+[90mstdout[2m | src/stores/chat/session-store.test.ts[2m > [22m[2mchat-session-store · synchronized data actions[2m > [22m[2minitializes a new window selection from the synchronized index for Issue #2085
+[22m[39m[chat-sync] WS skipped: anonymous user
+
+[90mstdout[2m | src/stores/chat/session-store.test.ts[2m > [22m[2mchat-session-store · phase 8.0D-M3 provider-exclusion persistence[2m > [22m[2m3: the exclusion state survives persist → reload, stays visible, and stays withheld
+[22m[39m[chat-sync] WS skipped: anonymous user
+
+[90mstdout[2m | src/stores/chat/session-store.test.ts[2m > [22m[2mchat-session-store · phase 8.0D-M3 provider-exclusion persistence[2m > [22m[2m3: the exclusion state survives persist → reload, stays visible, and stays withheld
+[22m[39m[chat-sync] WS skipped: anonymous user
+
+ [32m✓[39m [30m[43m node [49m[39m src/stores/chat/session-store.test.ts [2m([22m[2m20 tests[22m[2m)[22m[32m 110[2mms[22m[39m
+[90mstdout[2m | src/stores/modules/airi-card.test.ts[2m > [22m[2mairi-card store persisted Lia projection migration[2m > [22m[2mmigrates a persisted Lia card without any manual localStorage reset
+[22m[39m[lia] persona projection migrated v1 -> v2
+
+[90mstdout[2m | src/stores/modules/airi-card.test.ts[2m > [22m[2mairi-card store persisted Lia projection migration[2m > [22m[2mstamps the projection version and keeps the persona as the source of truth
+[22m[39m[lia] persona projection migrated v1 -> v2
+
+[90mstdout[2m | src/stores/modules/airi-card.test.ts[2m > [22m[2mairi-card store persisted Lia projection migration[2m > [22m[2mprojects from the stored persona rather than the built-in default
+[22m[39m[lia] persona projection migrated v1 -> v2
+
+[90mstdout[2m | src/stores/modules/airi-card.test.ts[2m > [22m[2mairi-card store persisted Lia projection migration[2m > [22m[2mattaches the persona and projects when a legacy card has none
+[22m[39m[lia] persona projection migrated v1 -> v2
+
+[90mstdout[2m | src/stores/modules/airi-card.test.ts[2m > [22m[2mairi-card store persisted Lia projection migration[2m > [22m[2mkeeps the character language independent of the UI locale after migrating
+[22m[39m[lia] persona projection migrated v1 -> v2
+
+ [32m✓[39m [30m[43m node [49m[39m src/stores/modules/airi-card.test.ts [2m([22m[2m27 tests[22m[2m)[22m[32m 68[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/stores/chat/chat-provider-runtime.test.ts [2m([22m[2m34 tests[22m[2m)[22m[32m 65[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/composables/use-analytics.test.ts [2m([22m[2m21 tests[22m[2m)[22m[32m 18[2mms[22m[39m
+[90mstderr[2m | src/stores/chat.retry.test.ts[2m > [22m[2mchat retry image fidelity (Phase 8.0D-10B-4D4C4-D2B11)[2m > [22m[2m39: every fallback attempt reuses the SAME payload, so attachments survive each attempt
+[22m[39mError sending message:
+
+[90mstderr[2m | src/stores/chat.retry.test.ts[2m > [22m[2mchat retry image fidelity (Phase 8.0D-10B-4D4C4-D2B11)[2m > [22m[2m39: every fallback attempt reuses the SAME payload, so attachments survive each attempt
+[22m[39m[chat] provider failover { from: [32m'mock-provider'[39m, to: [32m'fallback-provider'[39m, attempt: [33m1[39m }
+
+ [32m✓[39m [30m[43m node [49m[39m src/stores/chat.retry.test.ts [2m([22m[2m24 tests[22m[2m)[22m[32m 84[2mms[22m[39m
+[90mstderr[2m | src/stores/chat.reasoning-per-send.test.ts[2m > [22m[2mchat store reasoning per-send foundation (phase 8.0D-10B-4D4C4-D2B2-C1)[2m > [22m[2m1 fallback preserves captured reasoning (true)
+[22m[39mError sending message:
+
+[90mstderr[2m | src/stores/chat.reasoning-per-send.test.ts[2m > [22m[2mchat store reasoning per-send foundation (phase 8.0D-10B-4D4C4-D2B2-C1)[2m > [22m[2m1 fallback preserves captured reasoning (true)
+[22m[39m[chat] provider failover { from: [32m'mock-provider'[39m, to: [32m'mock-provider'[39m, attempt: [33m1[39m }
+
+[90mstderr[2m | src/stores/chat.reasoning-per-send.test.ts[2m > [22m[2mchat store reasoning per-send foundation (phase 8.0D-10B-4D4C4-D2B2-C1)[2m > [22m[2mmulti fallback (3 attempts) preserves captured reasoning (false)
+[22m[39mError sending message:
+
+[90mstderr[2m | src/stores/chat.reasoning-per-send.test.ts[2m > [22m[2mchat store reasoning per-send foundation (phase 8.0D-10B-4D4C4-D2B2-C1)[2m > [22m[2mmulti fallback (3 attempts) preserves captured reasoning (false)
+[22m[39m[chat] provider failover { from: [32m'mock-provider'[39m, to: [32m'mock-provider'[39m, attempt: [33m1[39m }
+
+[90mstderr[2m | src/stores/chat.reasoning-per-send.test.ts[2m > [22m[2mchat store reasoning per-send foundation (phase 8.0D-10B-4D4C4-D2B2-C1)[2m > [22m[2mmulti fallback (3 attempts) preserves captured reasoning (false)
+[22m[39mError sending message:
+
+[90mstderr[2m | src/stores/chat.reasoning-per-send.test.ts[2m > [22m[2mchat store reasoning per-send foundation (phase 8.0D-10B-4D4C4-D2B2-C1)[2m > [22m[2mmulti fallback (3 attempts) preserves captured reasoning (false)
+[22m[39m[chat] provider failover { from: [32m'mock-provider'[39m, to: [32m'mock-provider'[39m, attempt: [33m2[39m }
+
+[90mstderr[2m | src/stores/chat.reasoning-per-send.test.ts[2m > [22m[2mchat store reasoning per-send foundation (phase 8.0D-10B-4D4C4-D2B2-C1)[2m > [22m[2mfallback with routeOverride preserves reasoning orthogonal (true across 2 attempts)
+[22m[39mError sending message:
+
+[90mstderr[2m | src/stores/chat.reasoning-per-send.test.ts[2m > [22m[2mchat store reasoning per-send foundation (phase 8.0D-10B-4D4C4-D2B2-C1)[2m > [22m[2mfallback with routeOverride preserves reasoning orthogonal (true across 2 attempts)
+[22m[39m[chat] provider failover { from: [32m'mock-provider'[39m, to: [32m'fallback-provider'[39m, attempt: [33m1[39m }
+
+ [32m✓[39m [30m[43m node [49m[39m src/stores/chat.reasoning-per-send.test.ts [2m([22m[2m16 tests[22m[2m)[22m[32m 95[2mms[22m[39m
+[90mstderr[2m | src/stores/chat.route-override.test.ts[2m > [22m[2mchat routeOverride (4D4C4-D2A)[2m > [22m[2mc: override failure with no fallback — throws, single attempt, global unchanged
+[22m[39mError sending message:
+
+[90mstderr[2m | src/stores/chat.route-override.test.ts[2m > [22m[2mchat routeOverride (4D4C4-D2A)[2m > [22m[2md: override with one fallback — second attempt uses P1, global unchanged, resolver sees P0
+[22m[39mError sending message:
+
+[90mstderr[2m | src/stores/chat.route-override.test.ts[2m > [22m[2mchat routeOverride (4D4C4-D2A)[2m > [22m[2md: override with one fallback — second attempt uses P1, global unchanged, resolver sees P0
+[22m[39m[chat] provider failover { from: [32m'override-provider'[39m, to: [32m'fallback-provider'[39m, attempt: [33m1[39m }
+
+[90mstderr[2m | src/stores/chat.route-override.test.ts[2m > [22m[2mchat routeOverride (4D4C4-D2A)[2m > [22m[2md2: override with multiple fallbacks — P0->P1->P2 no snap-back
+[22m[39mError sending message:
+
+[90mstderr[2m | src/stores/chat.route-override.test.ts[2m > [22m[2mchat routeOverride (4D4C4-D2A)[2m > [22m[2md2: override with multiple fallbacks — P0->P1->P2 no snap-back
+[22m[39m[chat] provider failover { from: [32m'override-provider'[39m, to: [32m'fallback-provider'[39m, attempt: [33m1[39m }
+
+[90mstderr[2m | src/stores/chat.route-override.test.ts[2m > [22m[2mchat routeOverride (4D4C4-D2A)[2m > [22m[2md2: override with multiple fallbacks — P0->P1->P2 no snap-back
+[22m[39mError sending message:
+
+[90mstderr[2m | src/stores/chat.route-override.test.ts[2m > [22m[2mchat routeOverride (4D4C4-D2A)[2m > [22m[2md2: override with multiple fallbacks — P0->P1->P2 no snap-back
+[22m[39m[chat] provider failover { from: [32m'fallback-provider'[39m, to: [32m'fallback-provider-2'[39m, attempt: [33m2[39m }
+
+[90mstderr[2m | src/stores/chat.route-override.test.ts[2m > [22m[2mchat routeOverride (4D4C4-D2A)[2m > [22m[2mglobal unchanged after failed override with fallback exhausted
+[22m[39mError sending message:
+
+[90mstderr[2m | src/stores/chat.route-override.test.ts[2m > [22m[2mchat routeOverride (4D4C4-D2A)[2m > [22m[2mglobal unchanged after failed override with fallback exhausted
+[22m[39m[chat] provider failover { from: [32m'override-provider'[39m, to: [32m'fallback-provider'[39m, attempt: [33m1[39m }
+
+[90mstderr[2m | src/stores/chat.route-override.test.ts[2m > [22m[2mchat routeOverride (4D4C4-D2A)[2m > [22m[2mglobal unchanged after failed override with fallback exhausted
+[22m[39mError sending message:
+
+[90mstderr[2m | src/stores/chat.route-override.test.ts[2m > [22m[2mchat routeOverride (4D4C4-D2A)[2m > [22m[2mglobal unchanged after failed override with fallback exhausted
+[22m[39m[chat] provider failover { from: [32m'fallback-provider'[39m, to: [32m'fallback-provider'[39m, attempt: [33m2[39m }
+
+[90mstderr[2m | src/stores/chat.route-override.test.ts[2m > [22m[2mchat routeOverride (4D4C4-D2A)[2m > [22m[2mglobal unchanged after failed override with fallback exhausted
+[22m[39mError sending message:
+
+[90mstderr[2m | src/stores/chat.route-override.test.ts[2m > [22m[2mchat routeOverride (4D4C4-D2A)[2m > [22m[2mglobal unchanged after failed override with fallback exhausted
+[22m[39m[chat] provider failover { from: [32m'fallback-provider'[39m, to: [32m'fallback-provider'[39m, attempt: [33m3[39m }
+
+[90mstderr[2m | src/stores/chat.route-override.test.ts[2m > [22m[2mchat routeOverride (4D4C4-D2A)[2m > [22m[2mglobal unchanged after failed override with fallback exhausted
+[22m[39mError sending message:
+
+[90mstderr[2m | src/stores/chat.route-override.test.ts[2m > [22m[2mchat routeOverride (4D4C4-D2A)[2m > [22m[2mglobal unchanged after failed override with fallback exhausted
+[22m[39m[chat] provider failover { from: [32m'fallback-provider'[39m, to: [32m'fallback-provider'[39m, attempt: [33m4[39m }
+
+[90mstderr[2m | src/stores/chat.route-override.test.ts[2m > [22m[2mchat routeOverride (4D4C4-D2A)[2m > [22m[2munknown provider in override with fallback — fallback receives P0, then succeeds
+[22m[39m[chat] provider failover { from: [32m'unknown-provider'[39m, to: [32m'fallback-provider'[39m, attempt: [33m1[39m }
+
+[90mstderr[2m | src/stores/chat.route-override.test.ts[2m > [22m[2mchat routeOverride (4D4C4-D2A)[2m > [22m[2mnon-override fallback still mutates and restores global (backward compat)
+[22m[39mError sending message:
+
+[90mstderr[2m | src/stores/chat.route-override.test.ts[2m > [22m[2mchat routeOverride (4D4C4-D2A)[2m > [22m[2mnon-override fallback still mutates and restores global (backward compat)
+[22m[39m[chat] provider failover { from: [32m'mock-provider'[39m, to: [32m'fallback-provider'[39m, attempt: [33m1[39m }
+
+[90mstderr[2m | src/stores/chat.route-override.test.ts[2m > [22m[2mchat routeOverride (4D4C4-D2A)[2m > [22m[2mprovider-only fallback clears model per watcher semantics
+[22m[39mError sending message:
+
+[90mstderr[2m | src/stores/chat.route-override.test.ts[2m > [22m[2mchat routeOverride (4D4C4-D2A)[2m > [22m[2mprovider-only fallback clears model per watcher semantics
+[22m[39m[chat] provider failover { from: [32m'override-provider'[39m, to: [32m'fallback-provider'[39m, attempt: [33m1[39m }
+
+[90mstderr[2m | src/stores/chat.route-override.test.ts[2m > [22m[2mchat routeOverride (4D4C4-D2A)[2m > [22m[2mprovider-only fallback clears model per watcher semantics
+[22m[39m[chat] provider failover { from: [32m'fallback-provider'[39m, to: [32m'fallback-provider-2'[39m, attempt: [33m2[39m }
+
+[90mstderr[2m | src/stores/chat.route-override.test.ts[2m > [22m[2mchat routeOverride (4D4C4-D2A)[2m > [22m[2mmodel-only fallback preserves provider
+[22m[39mError sending message:
+
+[90mstderr[2m | src/stores/chat.route-override.test.ts[2m > [22m[2mchat routeOverride (4D4C4-D2A)[2m > [22m[2mmodel-only fallback preserves provider
+[22m[39m[chat] provider failover { from: [32m'override-provider'[39m, to: [32m'override-provider'[39m, attempt: [33m1[39m }
+
+[90mstderr[2m | src/stores/chat.route-override.test.ts[2m > [22m[2mchat routeOverride (4D4C4-D2A)[2m > [22m[2mprovider+model fallback updates both
+[22m[39mError sending message:
+
+[90mstderr[2m | src/stores/chat.route-override.test.ts[2m > [22m[2mchat routeOverride (4D4C4-D2A)[2m > [22m[2mprovider+model fallback updates both
+[22m[39m[chat] provider failover { from: [32m'override-provider'[39m, to: [32m'fallback-provider'[39m, attempt: [33m1[39m }
+
+ [32m✓[39m [30m[43m node [49m[39m src/stores/chat.route-override.test.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 88[2mms[22m[39m
+[90mstderr[2m | src/stores/modules/default.test.ts[2m > [22m[2mofficial provider module defaults[2m > [22m[2mapplies each official provider once when all module selections are empty
+[22m[39m[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[PINIA_COLADA_R0001] useQueryCache() was called outside of an injection context (component setup, store, navigation guard). You will get a warning about "inject" being used incorrectly from Vue.
+├▶ fix: Make sure to use it only in allowed places. See https://vuejs.org/guide/reusability/composables.html#usage-restrictions
+╰▶ see: https://pinia-colada.esm.dev/errors/pinia_colada_r0001.md
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[PINIA_COLADA_R0001] useMutationCache() was called outside of an injection context (component setup, store, navigation guard). You will get a warning about "inject" being used incorrectly from Vue.
+├▶ fix: Make sure to use it only in allowed places. See https://vuejs.org/guide/reusability/composables.html#usage-restrictions
+╰▶ see: https://pinia-colada.esm.dev/errors/pinia_colada_r0001.md
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+[90mstderr[2m | src/stores/modules/default.test.ts[2m > [22m[2mofficial provider module defaults[2m > [22m[2mapplies defaults when only stale child selections remain
+[22m[39m[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+[90mstderr[2m | src/stores/modules/default.test.ts[2m > [22m[2mofficial provider module defaults[2m > [22m[2mrepairs a partial official configuration after authentication
+[22m[39m[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+[90mstderr[2m | src/stores/modules/default.test.ts[2m > [22m[2mofficial provider module defaults[2m > [22m[2mfills an empty model for an existing official provider
+[22m[39m[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+[90mstderr[2m | src/stores/modules/default.test.ts[2m > [22m[2mofficial provider module defaults[2m > [22m[2madds a configured official provider to the visible provider list
+[22m[39m[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+[90mstderr[2m | src/stores/modules/default.test.ts[2m > [22m[2mofficial provider module defaults[2m > [22m[2madds a configured official provider to the visible provider list
+[22m[39mError fetching voices for custom-speech: Error: Provider definition for custom-speech not found
+    at getProviderDefinition [90m(/home/user/Lia-Project/airi/packages/stage-ui/[39msrc/stores/providers/provider.ts:228:13[90m)[39m
+    at Proxy.listProviderVoices [90m(/home/user/Lia-Project/airi/packages/stage-ui/[39msrc/stores/providers/provider.ts:629:24[90m)[39m
+    at Proxy.wrappedAction (file:///home/user/Lia-Project/airi/node_modules/[4m.pnpm[24m/pinia@4.0.3_@vue+devtools-api@8.2.1_typescript@6.0.3_vue@3.5.41_typescript@6.0.3_/node_modules/[4mpinia[24m/dist/pinia.js:1124:14)
+    at loadVoicesForProvider [90m(/home/user/Lia-Project/airi/packages/stage-ui/[39msrc/stores/modules/speech.ts:130:43[90m)[39m
+    at immediate [90m(/home/user/Lia-Project/airi/packages/stage-ui/[39msrc/stores/modules/speech.ts:233:11[90m)[39m
+    at callWithErrorHandling (/home/user/Lia-Project/airi/node_modules/[4m.pnpm[24m/@vue+runtime-core@3.5.41/node_modules/[4m@vue/runtime-core[24m/dist/runtime-core.cjs.js:200:19)
+    at callWithAsyncErrorHandling (/home/user/Lia-Project/airi/node_modules/[4m.pnpm[24m/@vue+runtime-core@3.5.41/node_modules/[4m@vue/runtime-core[24m/dist/runtime-core.cjs.js:207:17)
+    at baseWatchOptions.call (/home/user/Lia-Project/airi/node_modules/[4m.pnpm[24m/@vue+runtime-core@3.5.41/node_modules/[4m@vue/runtime-core[24m/dist/runtime-core.cjs.js:890:47)
+    at job (/home/user/Lia-Project/airi/node_modules/[4m.pnpm[24m/@vue+reactivity@3.5.41/node_modules/[4m@vue/reactivity[24m/dist/reactivity.cjs.js:1928:18)
+    at callWithErrorHandling (/home/user/Lia-Project/airi/node_modules/[4m.pnpm[24m/@vue+runtime-core@3.5.41/node_modules/[4m@vue/runtime-core[24m/dist/runtime-core.cjs.js:200:33)
+
+[90mstderr[2m | src/stores/modules/default.test.ts[2m > [22m[2mofficial provider module defaults[2m > [22m[2mkeeps a custom module and configures the other empty modules
+[22m[39m[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+[90mstderr[2m | src/stores/modules/default.test.ts[2m > [22m[2mofficial provider module defaults[2m > [22m[2mconfigures official choices without replacing custom module selections
+[22m[39m[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+[90mstderr[2m | src/stores/modules/default.test.ts[2m > [22m[2mofficial provider module defaults[2m > [22m[2mconfigures official choices without replacing custom module selections
+[22m[39mError fetching voices for custom-speech: Error: Provider definition for custom-speech not found
+    at getProviderDefinition [90m(/home/user/Lia-Project/airi/packages/stage-ui/[39msrc/stores/providers/provider.ts:228:13[90m)[39m
+    at Proxy.listProviderVoices [90m(/home/user/Lia-Project/airi/packages/stage-ui/[39msrc/stores/providers/provider.ts:629:24[90m)[39m
+    at Proxy.wrappedAction (file:///home/user/Lia-Project/airi/node_modules/[4m.pnpm[24m/pinia@4.0.3_@vue+devtools-api@8.2.1_typescript@6.0.3_vue@3.5.41_typescript@6.0.3_/node_modules/[4mpinia[24m/dist/pinia.js:1124:14)
+    at loadVoicesForProvider [90m(/home/user/Lia-Project/airi/packages/stage-ui/[39msrc/stores/modules/speech.ts:130:43[90m)[39m
+    at immediate [90m(/home/user/Lia-Project/airi/packages/stage-ui/[39msrc/stores/modules/speech.ts:233:11[90m)[39m
+    at callWithErrorHandling (/home/user/Lia-Project/airi/node_modules/[4m.pnpm[24m/@vue+runtime-core@3.5.41/node_modules/[4m@vue/runtime-core[24m/dist/runtime-core.cjs.js:200:19)
+    at callWithAsyncErrorHandling (/home/user/Lia-Project/airi/node_modules/[4m.pnpm[24m/@vue+runtime-core@3.5.41/node_modules/[4m@vue/runtime-core[24m/dist/runtime-core.cjs.js:207:17)
+    at baseWatchOptions.call (/home/user/Lia-Project/airi/node_modules/[4m.pnpm[24m/@vue+runtime-core@3.5.41/node_modules/[4m@vue/runtime-core[24m/dist/runtime-core.cjs.js:890:47)
+    at job (/home/user/Lia-Project/airi/node_modules/[4m.pnpm[24m/@vue+reactivity@3.5.41/node_modules/[4m@vue/reactivity[24m/dist/reactivity.cjs.js:1928:18)
+    at callWithErrorHandling (/home/user/Lia-Project/airi/node_modules/[4m.pnpm[24m/@vue+runtime-core@3.5.41/node_modules/[4m@vue/runtime-core[24m/dist/runtime-core.cjs.js:200:33)
+
+[90mstderr[2m | src/stores/modules/default.test.ts[2m > [22m[2mofficial provider module defaults[2m > [22m[2mremoves authenticated official configuration on logout
+[22m[39m[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+[90mstderr[2m | src/stores/modules/default.test.ts[2m > [22m[2mofficial provider module defaults[2m > [22m[2mkeeps custom module selections when official providers are unconfigured
+[22m[39m[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+ [32m✓[39m [30m[43m node [49m[39m src/stores/modules/default.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 273[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/composables/audio/voice-input-session.test.ts [2m([22m[2m18 tests[22m[2m)[22m[32m 223[2mms[22m[39m
+[90mstderr[2m | src/stores/chat/failed-turn-provider-exclusion.test.ts[2m > [22m[2mphase 8.0D-M3 failed-turn provider exclusion[2m > [22m[2m1: a provider 400 after an image turn keeps the turn visible and intact, marks it excluded, and keeps it out of the next prompt
+[22m[39mError sending message:
+
+[90mstderr[2m | src/stores/chat/failed-turn-provider-exclusion.test.ts[2m > [22m[2mphase 8.0D-M3 failed-turn provider exclusion[2m > [22m[2m2: repeated failed image sends contribute zero images to the next request
+[22m[39mError sending message:
+
+[90mstderr[2m | src/stores/chat/failed-turn-provider-exclusion.test.ts[2m > [22m[2mphase 8.0D-M3 failed-turn provider exclusion[2m > [22m[2m2: repeated failed image sends contribute zero images to the next request
+[22m[39mError sending message:
+
+[90mstderr[2m | src/stores/chat/failed-turn-provider-exclusion.test.ts[2m > [22m[2mphase 8.0D-M3 failed-turn provider exclusion[2m > [22m[2m2: repeated failed image sends contribute zero images to the next request
+[22m[39mError sending message:
+
+[90mstderr[2m | src/stores/chat/failed-turn-provider-exclusion.test.ts[2m > [22m[2mphase 8.0D-M3 failed-turn provider exclusion[2m > [22m[2m3: a terminal failure with NO fallback resolver at all obeys the same invariant
+[22m[39mError sending message:
+
+[90mstderr[2m | src/stores/chat/failed-turn-provider-exclusion.test.ts[2m > [22m[2mphase 8.0D-M3 failed-turn provider exclusion[2m > [22m[2m4: retry of an excluded failed image turn resolves the same source, rebuilds the exact image, and succeeds visibly
+[22m[39mError sending message:
+
+[90mstderr[2m | src/stores/chat/failed-turn-provider-exclusion.test.ts[2m > [22m[2mphase 8.0D-M3 failed-turn provider exclusion[2m > [22m[2m6: only the failed send tail is marked - earlier history is untouched
+[22m[39mError sending message:
+
+[90mstderr[2m | src/stores/chat/failed-turn-provider-exclusion.test.ts[2m > [22m[2mphase 8.0D-M3 failed-turn provider exclusion[2m > [22m[2m7: the marked tail is written back through the persisting session seam
+[22m[39mError sending message:
+
+ [32m✓[39m [30m[43m node [49m[39m src/stores/chat/failed-turn-provider-exclusion.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 60[2mms[22m[39m
+[90mstderr[2m | src/stores/modules/speech.test.ts[2m > [22m[2mspeech store helpers[2m > [22m[2mdoes not query the model cache when only provider state changes
+[22m[39m[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[PINIA_COLADA_R0001] useQueryCache() was called outside of an injection context (component setup, store, navigation guard). You will get a warning about "inject" being used incorrectly from Vue.
+├▶ fix: Make sure to use it only in allowed places. See https://vuejs.org/guide/reusability/composables.html#usage-restrictions
+╰▶ see: https://pinia-colada.esm.dev/errors/pinia_colada_r0001.md
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[PINIA_COLADA_R0001] useMutationCache() was called outside of an injection context (component setup, store, navigation guard). You will get a warning about "inject" being used incorrectly from Vue.
+├▶ fix: Make sure to use it only in allowed places. See https://vuejs.org/guide/reusability/composables.html#usage-restrictions
+╰▶ see: https://pinia-colada.esm.dev/errors/pinia_colada_r0001.md
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+[90mstderr[2m | src/stores/modules/speech.test.ts[2m > [22m[2mspeech store helpers[2m > [22m[2mdoes not publish a second mutation for an unresolved voice
+[22m[39m[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+[90mstderr[2m | src/stores/modules/speech.test.ts[2m > [22m[2mspeech store helpers[2m > [22m[2mkeeps the selected provider while provider snapshots are incomplete
+[22m[39m[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+[90mstderr[2m | src/stores/modules/speech.test.ts[2m > [22m[2mspeech store helpers[2m > [22m[2mleaves speech input unchanged by default
+[22m[39m[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+[90mstderr[2m | src/stores/modules/speech.test.ts[2m > [22m[2mspeech store helpers[2m > [22m[2mapplies configured pitch through SSML when supported
+[22m[39m[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+[90mstderr[2m | src/stores/modules/speech.test.ts[2m > [22m[2mspeech store helpers[2m > [22m[2mkeeps official adapter-backed speech input as plain text when global SSML is enabled
+[22m[39m[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+[90mstderr[2m | src/stores/modules/speech.test.ts[2m > [22m[2mspeech store helpers[2m > [22m[2mdoes not load streaming voices before server availability is confirmed
+[22m[39m[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+[90mstderr[2m | src/stores/modules/speech.test.ts[2m > [22m[2mspeech store helpers[2m > [22m[2mkeeps a real Voice Pack TTS model selected for the regular official provider
+[22m[39m[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+[90mstderr[2m | src/stores/modules/speech.test.ts[2m > [22m[2mspeech store helpers[2m > [22m[2mresets stale streaming model to the server default when the regular official speech provider is active
+[22m[39m[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+[90mstderr[2m | src/stores/modules/speech.test.ts[2m > [22m[2mspeech store helpers[2m > [22m[2muses the server recommended voice when the persisted official voice is stale
+[22m[39m[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+[90mstderr[2m | src/stores/modules/speech.test.ts[2m > [22m[2mspeech store helpers[2m > [22m[2muses another server recommended voice when the current locale has no recommendation
+[22m[39m[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+[90mstderr[2m | src/stores/modules/speech.test.ts[2m > [22m[2msingle model speech providers[2m > [22m[2mselects the only published model, so the provider is not left unconfigured — Issue #2166
+[22m[39m[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+[90mstderr[2m | src/stores/modules/speech.test.ts[2m > [22m[2msingle model speech providers[2m > [22m[2mselects the only published model, so the provider is not left unconfigured — Issue #2166
+[22m[39mError fetching voices for voicevox: Error: The Base URL is not an absolute http:// or https:// address.
+    at request [90m(/home/user/Lia-Project/airi/packages/stage-ui/[39msrc/libs/providers/providers/voicevox/engine.ts:189:11[90m)[39m
+    at fetchSpeakers [90m(/home/user/Lia-Project/airi/packages/stage-ui/[39msrc/libs/providers/providers/voicevox/engine.ts:113:26[90m)[39m
+    at listVoices [90m(/home/user/Lia-Project/airi/packages/stage-ui/[39msrc/libs/providers/providers/voicevox/define.ts:110:32[90m)[39m
+    at [90m/home/user/Lia-Project/airi/packages/stage-ui/[39msrc/stores/providers/provider.ts:643:22
+
+[90mstderr[2m | src/stores/modules/speech.test.ts[2m > [22m[2msingle model speech providers[2m > [22m[2mkeeps the voice when it seeds the model, because voices belong to the provider
+[22m[39m[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+[90mstderr[2m | src/stores/modules/speech.test.ts[2m > [22m[2msingle model speech providers[2m > [22m[2mkeeps the voice when it seeds the model, because voices belong to the provider
+[22m[39mError fetching voices for voicevox: Error: The Base URL is not an absolute http:// or https:// address.
+    at request [90m(/home/user/Lia-Project/airi/packages/stage-ui/[39msrc/libs/providers/providers/voicevox/engine.ts:189:11[90m)[39m
+    at fetchSpeakers [90m(/home/user/Lia-Project/airi/packages/stage-ui/[39msrc/libs/providers/providers/voicevox/engine.ts:113:26[90m)[39m
+    at listVoices [90m(/home/user/Lia-Project/airi/packages/stage-ui/[39msrc/libs/providers/providers/voicevox/define.ts:110:32[90m)[39m
+    at [90m/home/user/Lia-Project/airi/packages/stage-ui/[39msrc/stores/providers/provider.ts:643:22
+
+[90mstderr[2m | src/stores/modules/speech.test.ts[2m > [22m[2msingle model speech providers[2m > [22m[2mdoes not guess when a provider publishes several models
+[22m[39m[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+[90mstderr[2m | src/stores/modules/speech.test.ts[2m > [22m[2msingle model speech providers[2m > [22m[2mdoes not guess when a provider publishes several models
+[22m[39mError fetching voices for elevenlabs: TypeError: Cannot read properties of undefined (reading 'trim')
+    at Object.createProvider [90m(/home/user/Lia-Project/airi/packages/stage-ui/[39msrc/libs/providers/providers/elevenlabs/index.ts:91:45[90m)[39m
+    at [90m/home/user/Lia-Project/airi/packages/stage-ui/[39msrc/stores/providers/provider.ts:641:41
+    at Proxy.listProviderVoices [90m(/home/user/Lia-Project/airi/packages/stage-ui/[39msrc/stores/providers/provider.ts:648:6[90m)[39m
+    at Proxy.wrappedAction (file:///home/user/Lia-Project/airi/node_modules/[4m.pnpm[24m/pinia@4.0.3_@vue+devtools-api@8.2.1_typescript@6.0.3_vue@3.5.41_typescript@6.0.3_/node_modules/[4mpinia[24m/dist/pinia.js:1124:14)
+    at loadVoicesForProvider [90m(/home/user/Lia-Project/airi/packages/stage-ui/[39msrc/stores/modules/speech.ts:130:43[90m)[39m
+    at immediate [90m(/home/user/Lia-Project/airi/packages/stage-ui/[39msrc/stores/modules/speech.ts:233:11[90m)[39m
+    at callWithErrorHandling (/home/user/Lia-Project/airi/node_modules/[4m.pnpm[24m/@vue+runtime-core@3.5.41/node_modules/[4m@vue/runtime-core[24m/dist/runtime-core.cjs.js:200:19)
+    at callWithAsyncErrorHandling (/home/user/Lia-Project/airi/node_modules/[4m.pnpm[24m/@vue+runtime-core@3.5.41/node_modules/[4m@vue/runtime-core[24m/dist/runtime-core.cjs.js:207:17)
+    at baseWatchOptions.call (/home/user/Lia-Project/airi/node_modules/[4m.pnpm[24m/@vue+runtime-core@3.5.41/node_modules/[4m@vue/runtime-core[24m/dist/runtime-core.cjs.js:890:47)
+    at job (/home/user/Lia-Project/airi/node_modules/[4m.pnpm[24m/@vue+reactivity@3.5.41/node_modules/[4m@vue/reactivity[24m/dist/reactivity.cjs.js:1928:18)
+
+[90mstderr[2m | src/stores/modules/speech.test.ts[2m > [22m[2mvOICEVOX provider defaults[2m > [22m[2mpersists the neutral volume default, so a new provider is not silent — Issue #2166
+[22m[39m[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+ [32m✓[39m [30m[43m node [49m[39m src/stores/modules/speech.test.ts [2m([22m[2m18 tests[22m[2m)[22m[33m 351[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/tools/character/orchestrator/spark-command.test.ts [2m([22m[2m16 tests[22m[2m)[22m[32m 40[2mms[22m[39m
+[90mstderr[2m | src/stores/chat.initial-route-override.test.ts[2m > [22m[2mchat initialRouteOverride snapshot (Phase 8.0D-10B-4D4C4-D2B7)[2m > [22m[2mfailed send still settles with frozen initial route
+[22m[39mError sending message:
+
+ [32m✓[39m [30m[43m node [49m[39m src/stores/chat.initial-route-override.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 56[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/libs/chat-sync/cloud-mapper.test.ts [2m([22m[2m20 tests[22m[2m)[22m[32m 86[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/stores/chat/retry-content.test.ts [2m([22m[2m27 tests[22m[2m)[22m[32m 16[2mms[22m[39m
+[90mstdout[2m | src/composables/response-categoriser.test.ts[2m > [22m[2mcreateStreamingCategorizer[2m > [22m[2mshould handle <think> tag with special tokens in between
+[22m[39m{
+  input: [32m'Hello <think>thinking <|ACT {"emotion":{"name":"curious","intensity":1}}|> about this <|DELAY:2|> and that</think> world!'[39m,
+  segmentsFound: [33m1[39m,
+  tagName: [32m'think'[39m,
+  segmentContent: [32m'thinking <|ACT {"emotion":{"name":"curious","intensity":1}}|> about this <|DELAY:2|> and that'[39m,
+  reasoning: [32m'thinking <|ACT {"emotion":{"name":"curious","intensity":1}}|> about this <|DELAY:2|> and that'[39m,
+  speech: [32m'Hello world!'[39m
+}
+
+[90mstdout[2m | src/composables/response-categoriser.test.ts[2m > [22m[2mcreateStreamingCategorizer[2m > [22m[2mshould handle <think> with special tokens like <|ACT {"emotion":{"name":"happy","intensity":1}}|> in between
+[22m[39m{
+  input: [32m'Hello <think>thinking <|ACT {"emotion":{"name":"happy","intensity":1}}|> about this <|DELAY:1|> and that</think> world!'[39m,
+  segmentsFound: [33m1[39m,
+  tagName: [32m'think'[39m,
+  segmentContent: [32m'thinking <|ACT {"emotion":{"name":"happy","intensity":1}}|> about this <|DELAY:1|> and that'[39m,
+  reasoning: [32m'thinking <|ACT {"emotion":{"name":"happy","intensity":1}}|> about this <|DELAY:1|> and that'[39m,
+  speech: [32m'Hello world!'[39m
+}
+
+ [32m✓[39m [30m[43m node [49m[39m src/composables/response-categoriser.test.ts [2m([22m[2m20 tests[22m[2m)[22m[32m 33[2mms[22m[39m
+[90mstdout[2m | src/stores/mods/api/channel-server.test.ts[2m > [22m[2mchannel-server store reconnect[2m > [22m[2mnotifies onReconnected callbacks when the websocket becomes ready again
+[22m[39mWebSocket server connection re-established
+
+[90mstdout[2m | src/stores/mods/api/channel-server.test.ts[2m > [22m[2mchannel-server store reconnect[2m > [22m[2mdoes not notify onReconnected on first authenticated->ready flow and only on subsequent ready events
+[22m[39mWebSocket server connection re-established
+
+[90mstdout[2m | src/stores/mods/api/channel-server.test.ts[2m > [22m[2mchannel-server store reconnect[2m > [22m[2mcontinues invoking remaining onReconnected callbacks when one throws
+[22m[39mWebSocket server connection re-established
+
+[90mstderr[2m | src/stores/mods/api/channel-server.test.ts[2m > [22m[2mchannel-server store reconnect[2m > [22m[2mallows initialize retry when sdk enters failed after a previous successful connection
+[22m[39mWebSocket server connection failed
+
+[90mstdout[2m | src/stores/mods/api/channel-server.test.ts[2m > [22m[2mchannel-server store reconnect[2m > [22m[2mkeeps the initialize lock on recoverable onError so auto-reconnect does not spawn a second client
+[22m[39mWebSocket server connection error: {
+  message: [32m'temporary websocket glitch'[39m,
+  error: Error: temporary websocket glitch
+      at [90m/home/user/Lia-Project/airi/packages/stage-ui/[39msrc/stores/mods/api/channel-server.test.ts:333:31
+      at file:///home/user/Lia-Project/airi/node_modules/[4m.pnpm[24m/@vitest+runner@4.1.11/node_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:302:11
+      at file:///home/user/Lia-Project/airi/node_modules/[4m.pnpm[24m/@vitest+runner@4.1.11/node_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:1903:26
+      at file:///home/user/Lia-Project/airi/node_modules/[4m.pnpm[24m/@vitest+runner@4.1.11/node_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:2326:20
+      at new Promise (<anonymous>)
+      at runWithCancel (file:///home/user/Lia-Project/airi/node_modules/[4m.pnpm[24m/@vitest+runner@4.1.11/node_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:2323:10)
+      at file:///home/user/Lia-Project/airi/node_modules/[4m.pnpm[24m/@vitest+runner@4.1.11/node_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:2305:20
+      at new Promise (<anonymous>)
+      at runWithTimeout (file:///home/user/Lia-Project/airi/node_modules/[4m.pnpm[24m/@vitest+runner@4.1.11/node_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:2272:10)
+      at file:///home/user/Lia-Project/airi/node_modules/[4m.pnpm[24m/@vitest+runner@4.1.11/node_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:2956:64
+}
+
+[90mstdout[2m | src/stores/mods/api/channel-server.test.ts[2m > [22m[2mchannel-server store reconnect[2m > [22m[2mdoes not flush queued events on reconnect authenticated before ready
+[22m[39mWebSocket server connection re-established
+
+ [32m✓[39m [30m[43m node [49m[39m src/stores/mods/api/channel-server.test.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 26[2mms[22m[39m
+[90mstderr[2m | src/stores/character/orchestrator/index.test.ts[2m > [22m[2mstore character-orchestrator[2m > [22m[2mhandles immediate spark:notify with reaction and commands
+[22m[39m[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[PINIA_COLADA_R0001] useQueryCache() was called outside of an injection context (component setup, store, navigation guard). You will get a warning about "inject" being used incorrectly from Vue.
+├▶ fix: Make sure to use it only in allowed places. See https://vuejs.org/guide/reusability/composables.html#usage-restrictions
+╰▶ see: https://pinia-colada.esm.dev/errors/pinia_colada_r0001.md
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[PINIA_COLADA_R0001] useMutationCache() was called outside of an injection context (component setup, store, navigation guard). You will get a warning about "inject" being used incorrectly from Vue.
+├▶ fix: Make sure to use it only in allowed places. See https://vuejs.org/guide/reusability/composables.html#usage-restrictions
+╰▶ see: https://pinia-colada.esm.dev/errors/pinia_colada_r0001.md
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn] Set operation on key "systemPrompt" failed: target is readonly. [36m<ref *1>[39m ComputedRefImpl {
+  fn: [36m[Function (anonymous)][39m,
+  setter: [90mundefined[39m,
+  _value: [90mundefined[39m,
+  dep: Dep {
+    computed: [36m[Circular *1][39m,
+    version: [33m0[39m,
+    activeLink: [90mundefined[39m,
+    subs: [90mundefined[39m,
+    map: [90mundefined[39m,
+    key: [90mundefined[39m,
+    sc: [33m0[39m,
+    __v_skip: [33mtrue[39m,
+    subsHead: [90mundefined[39m
+  },
+  __v_isRef: [33mtrue[39m,
+  deps: [90mundefined[39m,
+  depsTail: [90mundefined[39m,
+  flags: [33m16[39m,
+  globalVersion: [33m204[39m,
+  next: [90mundefined[39m,
+  effect: [36m[Circular *1][39m,
+  __v_isReadonly: [33mtrue[39m,
+  isSSR: [33mfalse[39m
+}
+[Vue warn] Set operation on key "activeCard" failed: target is readonly. [36m<ref *1>[39m ComputedRefImpl {
+  fn: [36m[Function (anonymous)][39m,
+  setter: [90mundefined[39m,
+  _value: [90mundefined[39m,
+  dep: Dep {
+    computed: [36m[Circular *1][39m,
+    version: [33m0[39m,
+    activeLink: [90mundefined[39m,
+    subs: [90mundefined[39m,
+    map: [90mundefined[39m,
+    key: [90mundefined[39m,
+    sc: [33m0[39m,
+    __v_skip: [33mtrue[39m,
+    subsHead: [90mundefined[39m
+  },
+  __v_isRef: [33mtrue[39m,
+  deps: [90mundefined[39m,
+  depsTail: [90mundefined[39m,
+  flags: [33m16[39m,
+  globalVersion: [33m204[39m,
+  next: [90mundefined[39m,
+  effect: [36m[Circular *1][39m,
+  __v_isReadonly: [33mtrue[39m,
+  isSSR: [33mfalse[39m
+}
+
+[90mstderr[2m | src/stores/character/orchestrator/index.test.ts[2m > [22m[2mstore character-orchestrator[2m > [22m[2msupports forcing text-only spark:notify responses
+[22m[39m[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn] Set operation on key "systemPrompt" failed: target is readonly. [36m<ref *1>[39m ComputedRefImpl {
+  fn: [36m[Function (anonymous)][39m,
+  setter: [90mundefined[39m,
+  _value: [90mundefined[39m,
+  dep: Dep {
+    computed: [36m[Circular *1][39m,
+    version: [33m0[39m,
+    activeLink: [90mundefined[39m,
+    subs: [90mundefined[39m,
+    map: [90mundefined[39m,
+    key: [90mundefined[39m,
+    sc: [33m0[39m,
+    __v_skip: [33mtrue[39m,
+    subsHead: [90mundefined[39m
+  },
+  __v_isRef: [33mtrue[39m,
+  deps: [90mundefined[39m,
+  depsTail: [90mundefined[39m,
+  flags: [33m16[39m,
+  globalVersion: [33m494[39m,
+  next: [90mundefined[39m,
+  effect: [36m[Circular *1][39m,
+  __v_isReadonly: [33mtrue[39m,
+  isSSR: [33mfalse[39m
+}
+[Vue warn] Set operation on key "activeCard" failed: target is readonly. [36m<ref *1>[39m ComputedRefImpl {
+  fn: [36m[Function (anonymous)][39m,
+  setter: [90mundefined[39m,
+  _value: [90mundefined[39m,
+  dep: Dep {
+    computed: [36m[Circular *1][39m,
+    version: [33m0[39m,
+    activeLink: [90mundefined[39m,
+    subs: [90mundefined[39m,
+    map: [90mundefined[39m,
+    key: [90mundefined[39m,
+    sc: [33m0[39m,
+    __v_skip: [33mtrue[39m,
+    subsHead: [90mundefined[39m
+  },
+  __v_isRef: [33mtrue[39m,
+  deps: [90mundefined[39m,
+  depsTail: [90mundefined[39m,
+  flags: [33m16[39m,
+  globalVersion: [33m494[39m,
+  next: [90mundefined[39m,
+  effect: [36m[Circular *1][39m,
+  __v_isReadonly: [33mtrue[39m,
+  isSSR: [33mfalse[39m
+}
+
+[90mstderr[2m | src/stores/character/orchestrator/index.test.ts[2m > [22m[2mstore character-orchestrator[2m > [22m[2msupports forcing spark-command responses
+[22m[39m[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn] Set operation on key "systemPrompt" failed: target is readonly. [36m<ref *1>[39m ComputedRefImpl {
+  fn: [36m[Function (anonymous)][39m,
+  setter: [90mundefined[39m,
+  _value: [90mundefined[39m,
+  dep: Dep {
+    computed: [36m[Circular *1][39m,
+    version: [33m0[39m,
+    activeLink: [90mundefined[39m,
+    subs: [90mundefined[39m,
+    map: [90mundefined[39m,
+    key: [90mundefined[39m,
+    sc: [33m0[39m,
+    __v_skip: [33mtrue[39m,
+    subsHead: [90mundefined[39m
+  },
+  __v_isRef: [33mtrue[39m,
+  deps: [90mundefined[39m,
+  depsTail: [90mundefined[39m,
+  flags: [33m16[39m,
+  globalVersion: [33m785[39m,
+  next: [90mundefined[39m,
+  effect: [36m[Circular *1][39m,
+  __v_isReadonly: [33mtrue[39m,
+  isSSR: [33mfalse[39m
+}
+[Vue warn] Set operation on key "activeCard" failed: target is readonly. [36m<ref *1>[39m ComputedRefImpl {
+  fn: [36m[Function (anonymous)][39m,
+  setter: [90mundefined[39m,
+  _value: [90mundefined[39m,
+  dep: Dep {
+    computed: [36m[Circular *1][39m,
+    version: [33m0[39m,
+    activeLink: [90mundefined[39m,
+    subs: [90mundefined[39m,
+    map: [90mundefined[39m,
+    key: [90mundefined[39m,
+    sc: [33m0[39m,
+    __v_skip: [33mtrue[39m,
+    subsHead: [90mundefined[39m
+  },
+  __v_isRef: [33mtrue[39m,
+  deps: [90mundefined[39m,
+  depsTail: [90mundefined[39m,
+  flags: [33m16[39m,
+  globalVersion: [33m785[39m,
+  next: [90mundefined[39m,
+  effect: [36m[Circular *1][39m,
+  __v_isReadonly: [33mtrue[39m,
+  isSSR: [33mfalse[39m
+}
+
+[90mstderr[2m | src/stores/character/orchestrator/index.test.ts[2m > [22m[2mstore character-orchestrator[2m > [22m[2mforwards runtime-only message overrides into the rendered spark prompt
+[22m[39m[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn] Set operation on key "systemPrompt" failed: target is readonly. [36m<ref *1>[39m ComputedRefImpl {
+  fn: [36m[Function (anonymous)][39m,
+  setter: [90mundefined[39m,
+  _value: [90mundefined[39m,
+  dep: Dep {
+    computed: [36m[Circular *1][39m,
+    version: [33m0[39m,
+    activeLink: [90mundefined[39m,
+    subs: [90mundefined[39m,
+    map: [90mundefined[39m,
+    key: [90mundefined[39m,
+    sc: [33m0[39m,
+    __v_skip: [33mtrue[39m,
+    subsHead: [90mundefined[39m
+  },
+  __v_isRef: [33mtrue[39m,
+  deps: [90mundefined[39m,
+  depsTail: [90mundefined[39m,
+  flags: [33m16[39m,
+  globalVersion: [33m1076[39m,
+  next: [90mundefined[39m,
+  effect: [36m[Circular *1][39m,
+  __v_isReadonly: [33mtrue[39m,
+  isSSR: [33mfalse[39m
+}
+[Vue warn] Set operation on key "activeCard" failed: target is readonly. [36m<ref *1>[39m ComputedRefImpl {
+  fn: [36m[Function (anonymous)][39m,
+  setter: [90mundefined[39m,
+  _value: [90mundefined[39m,
+  dep: Dep {
+    computed: [36m[Circular *1][39m,
+    version: [33m0[39m,
+    activeLink: [90mundefined[39m,
+    subs: [90mundefined[39m,
+    map: [90mundefined[39m,
+    key: [90mundefined[39m,
+    sc: [33m0[39m,
+    __v_skip: [33mtrue[39m,
+    subsHead: [90mundefined[39m
+  },
+  __v_isRef: [33mtrue[39m,
+  deps: [90mundefined[39m,
+  depsTail: [90mundefined[39m,
+  flags: [33m16[39m,
+  globalVersion: [33m1076[39m,
+  next: [90mundefined[39m,
+  effect: [36m[Circular *1][39m,
+  __v_isReadonly: [33mtrue[39m,
+  isSSR: [33mfalse[39m
+}
+
+ [32m✓[39m [30m[43m node [49m[39m src/stores/character/orchestrator/index.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 121[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/libs/speech/tts-fallback.pipeline.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 121[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/composables/markdown.test.ts [2m([22m[2m19 tests[22m[2m)[22m[33m 323[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/features/devtools/motion/live2d/components/keyframe-editor.test.ts [2m([22m[2m7 tests[22m[2m)[22m[33m 525[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/libs/speech/tts-session.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+[90mstderr[2m | src/stores/providers/provider.test.ts[2m > [22m[2mprovider store synchronization boundary[2m > [22m[2mkeeps replicated runtime data out of the executable provider store state
+[22m[39m[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[PINIA_COLADA_R0001] useQueryCache() was called outside of an injection context (component setup, store, navigation guard). You will get a warning about "inject" being used incorrectly from Vue.
+├▶ fix: Make sure to use it only in allowed places. See https://vuejs.org/guide/reusability/composables.html#usage-restrictions
+╰▶ see: https://pinia-colada.esm.dev/errors/pinia_colada_r0001.md
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[PINIA_COLADA_R0001] useMutationCache() was called outside of an injection context (component setup, store, navigation guard). You will get a warning about "inject" being used incorrectly from Vue.
+├▶ fix: Make sure to use it only in allowed places. See https://vuejs.org/guide/reusability/composables.html#usage-restrictions
+╰▶ see: https://pinia-colada.esm.dev/errors/pinia_colada_r0001.md
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+[90mstderr[2m | src/stores/providers/provider.test.ts[2m > [22m[2mprovider store synchronization boundary[2m > [22m[2mdoes not start background provider actions when shared configuration changes
+[22m[39m[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+[90mstderr[2m | src/stores/providers/provider.test.ts[2m > [22m[2mprovider store synchronization boundary[2m > [22m[2mdoes not dispatch config actions while projecting provider metadata
+[22m[39m[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+[90mstderr[2m | src/stores/providers/provider.test.ts[2m > [22m[2mprovider store synchronization boundary[2m > [22m[2mlists official providers only after authenticated setup configures them
+[22m[39m[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+[90mstderr[2m | src/stores/providers/provider.test.ts[2m > [22m[2mprovider store synchronization boundary[2m > [22m[2mreuses the empty model-list fallback
+[22m[39m[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+[90mstderr[2m | src/stores/providers/provider.test.ts[2m > [22m[2mprovider store synchronization boundary[2m > [22m[2mapplies provider-owned reasoning options without changing the cached provider
+[22m[39m[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+[90mstderr[2m | src/stores/providers/provider.test.ts[2m > [22m[2mprovider store synchronization boundary[2m > [22m[2mupdates the current runtime entry after a synced snapshot replaces it
+[22m[39m[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+[90mstderr[2m | src/stores/providers/provider.test.ts[2m > [22m[2mprovider store synchronization boundary[2m > [22m[2mshares concurrent voice catalog requests
+[22m[39m[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+ [32m✓[39m [30m[43m node [49m[39m src/stores/providers/provider.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 262[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/libs/speech/streaming-pipeline.test.ts [2m([22m[2m5 tests[22m[2m)[22m[33m 885[2mms[22m[39m
+     [33m[2m✓[22m[39m buffers entire session when bufferEntireSession is true [33m 804[2mms[22m[39m
+[90mstderr[2m | src/libs/speech/tts-fallback.test.ts[2m > [22m[2mnotifySpeechTtsTurnEnded[2m > [22m[2mdoes not throw when the policy rejects
+[22m[39m[Speech Pipeline] TTS fallback policy onTurnEnded failed {
+  error: Error: restore failed
+      at onTurnEnded [90m(/home/user/Lia-Project/airi/packages/stage-ui/[39msrc/libs/speech/tts-fallback.test.ts:319:15[90m)[39m
+      at notifySpeechTtsTurnEnded [90m(/home/user/Lia-Project/airi/packages/stage-ui/[39msrc/libs/speech/tts-fallback.ts:283:24[90m)[39m
+      at [90m/home/user/Lia-Project/airi/packages/stage-ui/[39msrc/libs/speech/tts-fallback.test.ts:323:18
+      at Proxy.assertThrows (file:///home/user/Lia-Project/airi/node_modules/[4m.pnpm[24m/chai@6.2.2/node_modules/[4mchai[24m/index.js:2798:5)
+      at Proxy.methodWrapper (file:///home/user/Lia-Project/airi/node_modules/[4m.pnpm[24m/chai@6.2.2/node_modules/[4mchai[24m/index.js:1700:25)
+      at Proxy.<anonymous> (file:///home/user/Lia-Project/airi/node_modules/[4m.pnpm[24m/@vitest+expect@4.1.11/node_modules/[4m@vitest/expect[24m/dist/index.js:1216:12)
+      at Proxy.overwritingMethodWrapper (file:///home/user/Lia-Project/airi/node_modules/[4m.pnpm[24m/chai@6.2.2/node_modules/[4mchai[24m/index.js:1750:33)
+      at Proxy.<anonymous> (file:///home/user/Lia-Project/airi/node_modules/[4m.pnpm[24m/@vitest+expect@4.1.11/node_modules/[4m@vitest/expect[24m/dist/index.js:1552:16)
+      at Proxy.<anonymous> (file:///home/user/Lia-Project/airi/node_modules/[4m.pnpm[24m/@vitest+expect@4.1.11/node_modules/[4m@vitest/expect[24m/dist/index.js:1156:15)
+      at Proxy.methodWrapper (file:///home/user/Lia-Project/airi/node_modules/[4m.pnpm[24m/chai@6.2.2/node_modules/[4mchai[24m/index.js:1700:25)
+}
+
+ [32m✓[39m [30m[43m node [49m[39m src/libs/speech/tts-fallback.test.ts [2m([22m[2m21 tests[22m[2m)[22m[32m 24[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/stores/ai/chat-llm/llm.test.ts [2m([22m[2m29 tests[22m[2m)[22m[32m 77[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/features/devtools/motion/live2d/components/joystick.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 137[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/tools/web-search.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 29[2mms[22m[39m
+[90mstderr[2m | src/stores/providers/provider-schema-defaults.test.ts[2m > [22m[2mprovider schema defaults are applied before creation[2m > [22m[2mgives Groq its declared baseUrl when the stored config has none
+[22m[39m[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[PINIA_COLADA_R0001] useQueryCache() was called outside of an injection context (component setup, store, navigation guard). You will get a warning about "inject" being used incorrectly from Vue.
+├▶ fix: Make sure to use it only in allowed places. See https://vuejs.org/guide/reusability/composables.html#usage-restrictions
+╰▶ see: https://pinia-colada.esm.dev/errors/pinia_colada_r0001.md
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[PINIA_COLADA_R0001] useMutationCache() was called outside of an injection context (component setup, store, navigation guard). You will get a warning about "inject" being used incorrectly from Vue.
+├▶ fix: Make sure to use it only in allowed places. See https://vuejs.org/guide/reusability/composables.html#usage-restrictions
+╰▶ see: https://pinia-colada.esm.dev/errors/pinia_colada_r0001.md
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+[90mstderr[2m | src/stores/providers/provider-schema-defaults.test.ts[2m > [22m[2mprovider schema defaults are applied before creation[2m > [22m[2mdoes not overwrite an explicitly configured baseUrl
+[22m[39m[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+[90mstderr[2m | src/stores/providers/provider-schema-defaults.test.ts[2m > [22m[2mprovider schema defaults are applied before creation[2m > [22m[2mapplies the declared default of another provider too
+[22m[39m[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+[90mstderr[2m | src/stores/providers/provider-schema-defaults.test.ts[2m > [22m[2mprovider schema defaults are applied before creation[2m > [22m[2mleaves a provider without defaults untouched
+[22m[39m[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+[90mstderr[2m | src/stores/providers/provider-schema-defaults.test.ts[2m > [22m[2mprovider schema defaults are applied before creation[2m > [22m[2mkeeps the resolver-supplied credential alongside the applied default
+[22m[39m[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+[90mstderr[2m | src/stores/providers/provider-schema-defaults.test.ts[2m > [22m[2mprovider schema defaults are applied before creation[2m > [22m[2mlists Groq models against api.groq.com and never api.openai.com
+[22m[39m[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+[90mstderr[2m | src/stores/providers/provider-schema-defaults.test.ts[2m > [22m[2mprovider schema defaults are applied before creation[2m > [22m[2mbuilds the chat instance against the Groq host as well
+[22m[39m[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+ [32m✓[39m [30m[43m node [49m[39m src/stores/providers/provider-schema-defaults.test.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 137[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/libs/chat-sync/wire-message.test.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/libs/speech/segment-merger.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 57[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/libs/providers/providers/voicevox/engine.test.ts [2m([22m[2m17 tests[22m[2m)[22m[32m 59[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/database/repos/chat-sessions.repo.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/libs/providers/providers/custom-local-voice/index.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 62[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/composables/use-linked-accounts.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 16[2mms[22m[39m
+[90mstderr[2m | src/libs/inference/adapters/kokoro.test.ts[2m > [22m[2mkokoro adapter - device loss resilience[2m > [22m[2mshould classify worker device-loss errors before restarting
+[22m[39m[KokoroAdapter] Restarting in 1000ms (attempt 1/3)
+
+ [32m✓[39m [30m[43m node [49m[39m src/libs/inference/adapters/kokoro.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 264[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/libs/chat-sync/ws-client.test.ts [2m([22m[2m17 tests[22m[2m)[22m[32m 17[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/services/airi-card-import-export.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 95[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/libs/providers/validators/openai-compatible.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 54[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/libs/providers/providers/voicevox/define.test.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 60[2mms[22m[39m
+[90mstderr[2m | src/stores/modules/consciousness.test.ts[2m > [22m[2mconsciousness store provider selection[2m > [22m[2mreports no model listing support instead of throwing when no provider is selected (Issue #1761)
+[22m[39m[PINIA_COLADA_R0001] useQueryCache() was called outside of an injection context (component setup, store, navigation guard). You will get a warning about "inject" being used incorrectly from Vue.
+├▶ fix: Make sure to use it only in allowed places. See https://vuejs.org/guide/reusability/composables.html#usage-restrictions
+╰▶ see: https://pinia-colada.esm.dev/errors/pinia_colada_r0001.md
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[PINIA_COLADA_R0001] useMutationCache() was called outside of an injection context (component setup, store, navigation guard). You will get a warning about "inject" being used incorrectly from Vue.
+├▶ fix: Make sure to use it only in allowed places. See https://vuejs.org/guide/reusability/composables.html#usage-restrictions
+╰▶ see: https://pinia-colada.esm.dev/errors/pinia_colada_r0001.md
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+[90mstderr[2m | src/stores/modules/consciousness.test.ts[2m > [22m[2mconsciousness store provider selection[2m > [22m[2mreports no model listing support for a stale provider id that no longer exists (Issue #1761)
+[22m[39m[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+[90mstderr[2m | src/stores/modules/consciousness.test.ts[2m > [22m[2mconsciousness store provider selection[2m > [22m[2mfindProviderDefinition returns known provider definitions
+[22m[39m[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+[90mstderr[2m | src/stores/modules/consciousness.test.ts[2m > [22m[2mconsciousness store provider selection[2m > [22m[2mfindProviderDefinition returns undefined for empty and unknown ids
+[22m[39m[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+[90mstderr[2m | src/stores/modules/consciousness.test.ts[2m > [22m[2mconsciousness store provider selection[2m > [22m[2mresolves definitions through a configured provider instance id
+[22m[39m[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+[90mstderr[2m | src/stores/modules/consciousness.test.ts[2m > [22m[2mconsciousness store provider selection[2m > [22m[2mresolves chat providers with the current reasoning mode
+[22m[39m[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+[90mstderr[2m | src/stores/modules/consciousness.test.ts[2m > [22m[2mconsciousness store provider selection[2m > [22m[2mclears the model selection when the provider changes (Issue #1761)
+[22m[39m[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+[90mstderr[2m | src/stores/modules/consciousness.test.ts[2m > [22m[2mconsciousness store provider selection[2m > [22m[2mclears the model synchronously so callers can set a new one right after
+[22m[39m[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+[90mstderr[2m | src/stores/modules/consciousness.test.ts[2m > [22m[2mconsciousness store provider selection[2m > [22m[2mkeeps the persisted model when the provider stays the same
+[22m[39m[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+[90mstderr[2m | src/stores/modules/consciousness.test.ts[2m > [22m[2mconsciousness store provider selection[2m > [22m[2mdoes not apply storage events as a second cross-window state channel
+[22m[39m[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+ [32m✓[39m [30m[43m node [49m[39m src/stores/modules/consciousness.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 185[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/composables/llm-marker-parser.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 24[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/stores/tool-call-rerun.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 13[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/libs/speech/streaming-session.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 193[2mms[22m[39m
+[90mstderr[2m | src/stores/chat/context-store.test.ts[2m > [22m[2museChatContextStore[2m > [22m[2mexposes readonly mirrors that do not allow external writes to pollute registry state
+[22m[39m[Vue warn] Set operation on key "external" failed: target is readonly. {
+  sensor: [
+    {
+      id: [32m'stable'[39m,
+      contextId: [32m'stable'[39m,
+      strategy: [32m'replace-self'[39m,
+      text: [32m'stable context'[39m,
+      createdAt: [33m1[39m,
+      source: [32m'sensor'[39m
+    }
+  ]
+}
+[Vue warn] Set operation on key "0" failed: target is readonly. [
+  {
+    id: [32m'stable'[39m,
+    contextId: [32m'stable'[39m,
+    strategy: [32m'replace-self'[39m,
+    text: [32m'stable context'[39m,
+    createdAt: [33m1[39m,
+    source: [32m'sensor'[39m,
+    sourceKey: [32m'sensor'[39m
+  }
+]
+
+ [32m✓[39m [30m[43m node [49m[39m src/stores/chat/context-store.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 17[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/features/devtools/motion/live2d/composables/keyframes.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/stores/mods/api/context-bridge-performance-call.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 41[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/stores/chat/retry-source.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/stores/chat/send-error.test.ts [2m([22m[2m23 tests[22m[2m)[22m[32m 11[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/stores/modules/airi-card-system-prompt.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 22[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/stores/settings/audio-device.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 25[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/libs/inference/protocol.test.ts [2m([22m[2m31 tests[22m[2m)[22m[32m 14[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/services/airi-card-editor.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/stores/characters.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 13[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/libs/inference/load-queue.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 114[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/features/devtools/motion/live2d/composables/recording.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 11[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/stores/modules/hearing.test.ts [2m([22m[2m18 tests[22m[2m)[22m[32m 13[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/libs/providers/providers/groq/index.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/stores/chat/context-providers/lia-capabilities.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 13[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/stores/auth.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 35[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/libs/providers/providers/provider-definitions.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/libs/inference/gpu-resource-coordinator.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/libs/providers/providers/ark-providers.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 96[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/libs/providers/stream-transcription/index.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 62[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/services/inference-service-providers.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 11[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/libs/diagnostics/audio-probe.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/composables/audio/audio-recorder.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 27[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/libs/speech/latency-probe.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/stores/character.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 81[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/stores/ai/chat-llm/tool-resolver.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/libs/providers/providers/apple-speech/index.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 54[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/features/devtools/motion/live2d/composables/use-gamepad-actions.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/composables/use-provider-validation.credential.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 27[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/libs/providers/providers/aliyun-nls/provider.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 120[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/stores/providers/config.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 22[2mms[22m[39m
+[90mstderr[2m | src/stores/modules/hearing.analytics.test.ts[2m > [22m[2museHearingStore analytics lifecycle[2m > [22m[2mdoes not call analytics composables when a recording is transcribed later
+[22m[39m[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[PINIA_COLADA_R0001] useQueryCache() was called outside of an injection context (component setup, store, navigation guard). You will get a warning about "inject" being used incorrectly from Vue.
+├▶ fix: Make sure to use it only in allowed places. See https://vuejs.org/guide/reusability/composables.html#usage-restrictions
+╰▶ see: https://pinia-colada.esm.dev/errors/pinia_colada_r0001.md
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[PINIA_COLADA_R0001] useMutationCache() was called outside of an injection context (component setup, store, navigation guard). You will get a warning about "inject" being used incorrectly from Vue.
+├▶ fix: Make sure to use it only in allowed places. See https://vuejs.org/guide/reusability/composables.html#usage-restrictions
+╰▶ see: https://pinia-colada.esm.dev/errors/pinia_colada_r0001.md
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+[90mstderr[2m | src/stores/modules/hearing.analytics.test.ts[2m > [22m[2museHearingStore analytics lifecycle[2m > [22m[2mnormalizes microphone permission failures for analytics
+[22m[39m[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+ [32m✓[39m [30m[43m node [49m[39m src/stores/modules/hearing.analytics.test.ts [2m([22m[2m2 tests[22m[2m)[22m[33m 1791[2mms[22m[39m
+     [33m[2m✓[22m[39m does not call analytics composables when a recording is transcribed later [33m 1775[2mms[22m[39m
+[90mstderr[2m | src/libs/inference/adapters/whisper.test.ts[2m > [22m[2mwhisper adapter worker failure handling[2m > [22m[2mrejects an in-flight model load as soon as the worker errors
+[22m[39m[WhisperAdapter] Restarting in 1000ms (attempt 1/3)
+
+[90mstderr[2m | src/libs/inference/adapters/whisper.test.ts[2m > [22m[2mwhisper adapter worker failure handling[2m > [22m[2mrejects an in-flight transcription as soon as the worker errors
+[22m[39m[WhisperAdapter] Restarting in 1000ms (attempt 1/3)
+
+ [32m✓[39m [30m[43m node [49m[39m src/libs/inference/adapters/whisper.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 210[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/workers/vad/vad.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 14[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/libs/providers/providers/kokoro-local/index.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 14[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/constants/lia-persona.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/stores/ai/chat-llm/tools.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/stores/ai/models/vad.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/libs/speech/text-for-speech.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/composables/use-optimistic.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 33[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/tools/character/orchestrator/spark-notify.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 22[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/libs/providers/providers/aliyun-nls/token.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 26[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/libs/analytics/events/chat/runtime.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/stores/ai/chat-llm/streaming-control.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 43[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/models/characters.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/libs/providers/providers/official/index.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/stores/chat/session-message-merge.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/libs/providers/providers/openrouter-ai/index.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 23[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/libs/audio/vad.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/stores/chat/context-prompt.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/libs/providers/providers/azure-openai/index.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 14[2mms[22m[39m
+[90mstderr[2m | src/stores/modules/vision/orchestrator.test.ts[2m > [22m[2mvision orchestrator[2m > [22m[2mreuses a stable context id for repeated ReplaceSelf updates from the same source
+[22m[39m[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[PINIA_COLADA_R0001] useQueryCache() was called outside of an injection context (component setup, store, navigation guard). You will get a warning about "inject" being used incorrectly from Vue.
+├▶ fix: Make sure to use it only in allowed places. See https://vuejs.org/guide/reusability/composables.html#usage-restrictions
+╰▶ see: https://pinia-colada.esm.dev/errors/pinia_colada_r0001.md
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[PINIA_COLADA_R0001] useMutationCache() was called outside of an injection context (component setup, store, navigation guard). You will get a warning about "inject" being used incorrectly from Vue.
+├▶ fix: Make sure to use it only in allowed places. See https://vuejs.org/guide/reusability/composables.html#usage-restrictions
+╰▶ see: https://pinia-colada.esm.dev/errors/pinia_colada_r0001.md
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+[90mstderr[2m | src/stores/modules/vision/orchestrator.test.ts[2m > [22m[2mvision orchestrator[2m > [22m[2mpartitions context ids by workload when no source id is available
+[22m[39m[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+[90mstderr[2m | src/stores/modules/vision/orchestrator.test.ts[2m > [22m[2mvision orchestrator[2m > [22m[2mrecords inference failures on the store before rethrowing
+[22m[39m[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+ [32m✓[39m [30m[43m node [49m[39m src/stores/modules/vision/orchestrator.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 66[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/libs/providers/providers/ollama/index.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/services/characters.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 16[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/libs/auth-fetch.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 15[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/composables/canvas-alpha.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/stores/speech-output-control.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 13[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/stores/settings/stage-model.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 11[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/stores/modules/streaming-transcription-consumers.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/features/motions/live2d/settings.test.ts [2m([22m[2m3 tests[22m[2m)[22m[33m 436[2mms[22m[39m
+     [33m[2m✓[22m[39m defaults to the bundled profile and output overrides [33m 360[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/stores/onboarding.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/composables/use-hearing-playground-segments.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/libs/providers/validators/run.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/libs/speech/playback-speaking-state.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/libs/pinia/pinia-plugin-tracing.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 51[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/composables/vision/use-vision-inference.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 24[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/components/scenarios/chat/components/action-menu/index.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/composables/audio/voice-input-transcription-chain.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/libs/providers/metadata.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 11[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/components/scenarios/chat/components/tool-call-results.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/stores/modules/consciousness-settings.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/stores/modules/artistry.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/composables/audio/audio-device.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 99[2mms[22m[39m
+[90mstderr[2m | src/stores/settings/general.test.ts[2m > [22m[2mstore settings-general[2m > [22m[2missue #1658: falls back to navigator.language when localStorage is empty
+[22m[39m[Vue warn]: onMounted is called when there is no active component instance to be associated with. Lifecycle injection APIs can only be used during execution of setup(). If you are using async setup(), make sure to register lifecycle hooks before the first await statement.
+
+[90mstderr[2m | src/stores/settings/general.test.ts[2m > [22m[2mstore settings-general[2m > [22m[2missue #1658: returns persisted language when localStorage has a value
+[22m[39m[Vue warn]: onMounted is called when there is no active component instance to be associated with. Lifecycle injection APIs can only be used during execution of setup(). If you are using async setup(), make sure to register lifecycle hooks before the first await statement.
+
+ [32m✓[39m [30m[43m node [49m[39m src/stores/settings/general.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/directives/track-button.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 37[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/stores/modules/web-search.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/libs/steam-auth-client.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 52[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/composables/use-duck-db.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/libs/providers/providers/custom-local-voice/model-semantics.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/libs/audio/vad-streaming-session.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 263[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/libs/providers/providers/amazon-bedrock/index.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/components/scenarios/dialogs/bug-report/bug-report-payload.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/libs/providers/providers/deepseek/index.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/stores/providers/generic-credential-draft.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/libs/providers/tool-schema.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/composables/use-streaming-transcription-input.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/components/scenarios/chat/utils.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/libs/analytics/client.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 111[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/stores/chat/reasoning-visibility.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/libs/analytics/posthog.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/components/scenarios/hologram/promo-banner.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/stores/chat/datetime-prefix.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/libs/speech/pipeline-tuning.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/composables/audio/voice-input-vad-startup.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/features/motions/live2d/use-live2d-motion-magic.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 19[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/stores/display-models.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/composables/canvas-alpha-use-pixel.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/stores/ai/chat-llm/toolset-prompts.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/stores/mods/api/context-channel.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 60[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/components/scenarios/chat/components/tool-call-block.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/stores/providers/credential-config-port.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/components/scenarios/chat/components/tool-call-display.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/tools/mcp.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/features/motions/live2d/view-target.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/composables/linked-account-errors.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/composables/audio/voice-input-segment.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/stores/providers/config-defaults.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/libs/analytics/utils/dsl.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/features/devtools/motion/live2d/composables/default-recording.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 4[2mms[22m[39m
+[31m⎯⎯⎯⎯⎯⎯[39m[1m[41m Unhandled Errors [49m[22m[31m⎯⎯⎯⎯⎯⎯[39m
+[31m[1m
+Vitest caught 1 unhandled error during the test run.
+This might cause false positive tests. Resolve unhandled errors to make sure your tests are not affected.[22m[39m
+
+[31m⎯⎯⎯⎯[39m[1m[41m Unhandled Rejection [49m[22m[31m⎯⎯⎯⎯⎯[39m
+[31m[1mTypeError[22m: fetch failed[39m
+[90m [2m❯[22m node:internal/deps/undici/undici:[2m14976:13[22m[39m
+[90m [2m❯[22m processTicksAndRejections node:internal/process/task_queues:[2m103:5[22m[39m
+[90m [2m❯[22m authedFetch src/libs/auth-fetch.ts:[2m39:20[22m[39m
+[90m [2m❯[22m updateCredits src/stores/auth.ts:[2m359:17[22m[39m
+
+[31mThis error originated in "[1msrc/stores/providers/provider.test.ts[22m" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.[39m
+[31mThe latest test that might've caused the error is "[1mshares concurrent voice catalog requests[22m". It might mean one of the following:
+- The error was thrown, while Vitest was running this test.
+- If the error occurred after the test had been completed, this was the last documented test before it was thrown.[39m
+[31m[1mCaused by: Error[22m: Client network socket disconnected before secure TLS connection was established[39m
+[90m [2m❯[22m TLSSocket.onConnectEnd node:internal/tls/wrap:[2m1754:19[22m[39m
+[90m [2m❯[22m TLSSocket.emit node:events:[2m531:35[22m[39m
+[90m [2m❯[22m endReadableNT node:internal/streams/readable:[2m1698:12[22m[39m
+[90m [2m❯[22m processTicksAndRejections node:internal/process/task_queues:[2m89:21[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22m[39m
+[31m[1mSerialized Error:[22m[39m [90m{ code: 'ECONNRESET', path: undefined, host: 'api.airi.build', port: 443, localAddress: null }[39m
+[31m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[39m
+
+
+[2m Test Files [22m [1m[32m154 passed[39m[22m[90m (154)[39m
+[2m      Tests [22m [1m[32m1140 passed[39m[22m[90m (1140)[39m
+[2m     Errors [22m [1m[31m1 error[39m[22m
+[2m   Start at [22m 07:41:08
+[2m   Duration [22m 103.09s[2m (transform 7.67s, setup 0ms, import 62.96s, tests 10.64s, environment 4.44s)[22m
+

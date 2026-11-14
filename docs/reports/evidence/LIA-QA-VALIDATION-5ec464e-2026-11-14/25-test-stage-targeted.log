@@ -1,0 +1,14 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.11 [39m[90m/home/user/Lia-Project/airi/apps/stage-tamagotchi[39m
+
+ [32m✓[39m [30m[43m node [49m[39m src/main/windows/desktop-overlay/window-contract.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/preload/shared.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/main/services/lia/provider-config-service.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/main/windows/secure-web-preferences.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m [30m[43m node [49m[39m src/preload/ipc-channel-policy.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m5 passed[39m[22m[90m (5)[39m
+[2m      Tests [22m [1m[32m13 passed[39m[22m[90m (13)[39m
+[2m   Start at [22m 07:40:57
+[2m   Duration [22m 1.22s[2m (transform 158ms, setup 0ms, import 252ms, tests 33ms, environment 2ms)[22m
+

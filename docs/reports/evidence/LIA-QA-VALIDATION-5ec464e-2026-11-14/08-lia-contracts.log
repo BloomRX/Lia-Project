@@ -1,0 +1,731 @@
+TAP version 13
+# Subtest: owner keeps cryptographic material in its profile; remote reads and rotation use owner vault
+ok 1 - owner keeps cryptographic material in its profile; remote reads and rotation use owner vault
+  ---
+  duration_ms: 20.068371
+  type: 'test'
+  ...
+# Subtest: validates guarded changes and rejects reserved or ambiguous references before dispatch
+ok 2 - validates guarded changes and rejects reserved or ambiguous references before dispatch
+  ---
+  duration_ms: 3.813536
+  type: 'test'
+  ...
+# Subtest: authentication rejects wrong capability without invoking vault
+ok 3 - authentication rejects wrong capability without invoking vault
+  ---
+  duration_ms: 2.532431
+  type: 'test'
+  ...
+# Subtest: decrypt failure stays explicit; arbitrary errors are sanitized
+ok 4 - decrypt failure stays explicit; arbitrary errors are sanitized
+  ---
+  duration_ms: 4.013671
+  type: 'test'
+  ...
+# Subtest: abort pending handler disconnects and discards late result
+ok 5 - abort pending handler disconnects and discards late result
+  ---
+  duration_ms: 2.029163
+  type: 'test'
+  ...
+# Subtest: close revokes capability, aborts pending handlers and tolerates late rejection
+ok 6 - close revokes capability, aborts pending handlers and tolerates late rejection
+  ---
+  duration_ms: 2.861855
+  type: 'test'
+  ...
+# Subtest: bootstrap environment is consumed; malformed or remote pipe paths never connect
+ok 7 - bootstrap environment is consumed; malformed or remote pipe paths never connect
+  ---
+  duration_ms: 1.379615
+  type: 'test'
+  ...
+# Subtest: strict request bounds and pre-abort prevent vault calls
+ok 8 - strict request bounds and pre-abort prevent vault calls
+  ---
+  duration_ms: 3.614841
+  type: 'test'
+  ...
+# Subtest: server independently rejects invalid frames and excessive bytes
+ok 9 - server independently rejects invalid frames and excessive bytes
+  ---
+  duration_ms: 5.173359
+  type: 'test'
+  ...
+# Subtest: only eight active connections are admitted and close destroys stalled peers
+ok 10 - only eight active connections are admitted and close destroys stalled peers
+  ---
+  duration_ms: 5.077338
+  type: 'test'
+  ...
+# Subtest: fixed five-second deadline cancels a stalled handler
+ok 11 - fixed five-second deadline cancels a stalled handler
+  ---
+  duration_ms: 5003.12198
+  type: 'test'
+  ...
+# Subtest: host capability contract
+    # Subtest: declares a closed, duplicate-free vocabulary
+    ok 1 - declares a closed, duplicate-free vocabulary
+      ---
+      duration_ms: 0.843128
+      type: 'test'
+      ...
+    # Subtest: answers by capability, not by runtime identity
+    ok 2 - answers by capability, not by runtime identity
+      ---
+      duration_ms: 0.867703
+      type: 'test'
+      ...
+    # Subtest: lists missing capabilities once, in requirement order
+    ok 3 - lists missing capabilities once, in requirement order
+      ---
+      duration_ms: 0.233978
+      type: 'test'
+      ...
+    # Subtest: rejects a malformed descriptor without throwing
+    ok 4 - rejects a malformed descriptor without throwing
+      ---
+      duration_ms: 0.513367
+      type: 'test'
+      ...
+    1..4
+ok 12 - host capability contract
+  ---
+  duration_ms: 3.541138
+  type: 'suite'
+  ...
+# Subtest: host command envelope
+    # Subtest: accepts a well-formed command and keeps the payload opaque
+    ok 1 - accepts a well-formed command and keeps the payload opaque
+      ---
+      duration_ms: 0.541901
+      type: 'test'
+      ...
+    # Subtest: refuses incompatible, malformed and unknown messages without throwing
+    ok 2 - refuses incompatible, malformed and unknown messages without throwing
+      ---
+      duration_ms: 0.274793
+      type: 'test'
+      ...
+    # Subtest: keeps minor and patch compatible and major absolute
+    ok 3 - keeps minor and patch compatible and major absolute
+      ---
+      duration_ms: 0.275641
+      type: 'test'
+      ...
+    1..3
+ok 13 - host command envelope
+  ---
+  duration_ms: 1.446076
+  type: 'suite'
+  ...
+# Subtest: transition — a tabela, isolada da classe
+    # Subtest: caminho feliz completo
+    ok 1 - caminho feliz completo
+      ---
+      duration_ms: 0.771001
+      type: 'test'
+      ...
+    # Subtest: "processo criado" nao e "pronto": nao existe atalho de spawn para running
+    ok 2 - "processo criado" nao e "pronto": nao existe atalho de spawn para running
+      ---
+      duration_ms: 0.1432
+      type: 'test'
+      ...
+    # Subtest: error e terminal: nenhum evento resgata a instancia
+    ok 3 - error e terminal: nenhum evento resgata a instancia
+      ---
+      duration_ms: 0.204673
+      type: 'test'
+      ...
+    # Subtest: falha pode acontecer em qualquer fase ativa
+    ok 4 - falha pode acontecer em qualquer fase ativa
+      ---
+      duration_ms: 0.208287
+      type: 'test'
+      ...
+    # Subtest: transicoes repetidas sao recusadas, nao silenciosamente aceitas
+    ok 5 - transicoes repetidas sao recusadas, nao silenciosamente aceitas
+      ---
+      duration_ms: 0.125057
+      type: 'test'
+      ...
+    1..5
+ok 14 - transition — a tabela, isolada da classe
+  ---
+  duration_ms: 2.490443
+  type: 'suite'
+  ...
+# Subtest: predicados
+    # Subtest: isServing so vale em running
+    ok 1 - isServing so vale em running
+      ---
+      duration_ms: 0.209261
+      type: 'test'
+      ...
+    # Subtest: isTerminal cobre stopped e error
+    ok 2 - isTerminal cobre stopped e error
+      ---
+      duration_ms: 0.205354
+      type: 'test'
+      ...
+    1..2
+ok 15 - predicados
+  ---
+  duration_ms: 0.703592
+  type: 'suite'
+  ...
+# Subtest: Lifecycle — estado observavel
+    # Subtest: nasce parado
+    ok 1 - nasce parado
+      ---
+      duration_ms: 0.933985
+      type: 'test'
+      ...
+    # Subtest: snapshot omite campos que nao existem
+    ok 2 - snapshot omite campos que nao existem
+      ---
+      duration_ms: 0.316599
+      type: 'test'
+      ...
+    # Subtest: registra o instante real de cada fase com relogio injetado
+    ok 3 - registra o instante real de cada fase com relogio injetado
+      ---
+      duration_ms: 0.302327
+      type: 'test'
+      ...
+    # Subtest: transicao recusada nao muda nada nem entra no historico
+    ok 4 - transicao recusada nao muda nada nem entra no historico
+      ---
+      duration_ms: 0.158353
+      type: 'test'
+      ...
+    # Subtest: historico guarda apenas transicoes aceitas, em ordem
+    ok 5 - historico guarda apenas transicoes aceitas, em ordem
+      ---
+      duration_ms: 0.240971
+      type: 'test'
+      ...
+    # Subtest: failure sem motivo informado nao vira campo vazio
+    ok 6 - failure sem motivo informado nao vira campo vazio
+      ---
+      duration_ms: 0.121994
+      type: 'test'
+      ...
+    # Subtest: a falha de uma tentativa nao vaza para a seguinte
+    ok 7 - a falha de uma tentativa nao vaza para a seguinte
+      ---
+      duration_ms: 0.110639
+      type: 'test'
+      ...
+    # Subtest: stop a partir de running exige exit para chegar a stopped
+    ok 8 - stop a partir de running exige exit para chegar a stopped
+      ---
+      duration_ms: 0.105451
+      type: 'test'
+      ...
+    1..8
+ok 16 - Lifecycle — estado observavel
+  ---
+  duration_ms: 3.627116
+  type: 'suite'
+  ...
+# Subtest: presence desktop geometry
+    # Subtest: shrinks proportionally and recovers an unplugged monitor
+    ok 1 - shrinks proportionally and recovers an unplugged monitor
+      ---
+      duration_ms: 1.243659
+      type: 'test'
+      ...
+    # Subtest: stays in the selected work area even with negative coordinates
+    ok 2 - stays in the selected work area even with negative coordinates
+      ---
+      duration_ms: 0.265117
+      type: 'test'
+      ...
+    # Subtest: crosses monitors only after opt-in and chooses a physical area
+    ok 3 - crosses monitors only after opt-in and chooses a physical area
+      ---
+      duration_ms: 0.306919
+      type: 'test'
+      ...
+    # Subtest: rejects unknown fields, invalid dimensions, malformed homes and non-finite values
+    ok 4 - rejects unknown fields, invalid dimensions, malformed homes and non-finite values
+      ---
+      duration_ms: 0.265048
+      type: 'test'
+      ...
+    1..4
+ok 17 - presence desktop geometry
+  ---
+  duration_ms: 3.187668
+  type: 'suite'
+  ...
+# Subtest: negotiate
+    # Subtest: mesmo major e compativel, ainda que minor e patch difiram
+    ok 1 - mesmo major e compativel, ainda que minor e patch difiram
+      ---
+      duration_ms: 1.283725
+      type: 'test'
+      ...
+    # Subtest: major diferente recusa e explica
+    ok 2 - major diferente recusa e explica
+      ---
+      duration_ms: 0.286878
+      type: 'test'
+      ...
+    # Subtest: versao malformada recusa em vez de lancar
+    ok 3 - versao malformada recusa em vez de lancar
+      ---
+      duration_ms: 0.328468
+      type: 'test'
+      ...
+    1..3
+ok 18 - negotiate
+  ---
+  duration_ms: 3.236021
+  type: 'suite'
+  ...
+# Subtest: parseEnvelope — nunca lanca
+    # Subtest: aceita envelope montado por makeEnvelope
+    ok 1 - aceita envelope montado por makeEnvelope
+      ---
+      duration_ms: 1.265319
+      type: 'test'
+      ...
+    # Subtest: aceita string JSON
+    ok 2 - aceita string JSON
+      ---
+      duration_ms: 0.234354
+      type: 'test'
+      ...
+    # Subtest: string que nao e JSON vira null, sem excecao
+    ok 3 - string que nao e JSON vira null, sem excecao
+      ---
+      duration_ms: 0.145009
+      type: 'test'
+      ...
+    # Subtest: entradas que nem sao objeto viram null
+    ok 4 - entradas que nem sao objeto viram null
+      ---
+      duration_ms: 0.284668
+      type: 'test'
+      ...
+    # Subtest: recusa tipo fora da lista fechada
+    ok 5 - recusa tipo fora da lista fechada
+      ---
+      duration_ms: 0.313371
+      type: 'test'
+      ...
+    # Subtest: recusa major incompativel
+    ok 6 - recusa major incompativel
+      ---
+      duration_ms: 0.438495
+      type: 'test'
+      ...
+    # Subtest: recusa id ou origem vazios
+    ok 7 - recusa id ou origem vazios
+      ---
+      duration_ms: 0.364622
+      type: 'test'
+      ...
+    # Subtest: todos os tipos declarados sao aceitos
+    ok 8 - todos os tipos declarados sao aceitos
+      ---
+      duration_ms: 0.476318
+      type: 'test'
+      ...
+    1..8
+ok 19 - parseEnvelope — nunca lanca
+  ---
+  duration_ms: 5.415382
+  type: 'suite'
+  ...
+# Subtest: AI provider catalog
+    # Subtest: keeps definition, Stage provider and Brain engine ids unique
+    ok 1 - keeps definition, Stage provider and Brain engine ids unique
+      ---
+      duration_ms: 1.020423
+      type: 'test'
+      ...
+    # Subtest: makes every ready provider resolvable end to end
+    ok 2 - makes every ready provider resolvable end to end
+      ---
+      duration_ms: 0.462339
+      type: 'test'
+      ...
+    # Subtest: describes Groq exactly as the Brain adapter and the Stage provider do
+    ok 3 - describes Groq exactly as the Brain adapter and the Stage provider do
+      ---
+      duration_ms: 1.226628
+      type: 'test'
+      ...
+    # Subtest: never makes the generic OpenAI-compatible provider selectable
+    ok 4 - never makes the generic OpenAI-compatible provider selectable
+      ---
+      duration_ms: 0.212033
+      type: 'test'
+      ...
+    # Subtest: returns undefined instead of throwing for unknown ids
+    ok 5 - returns undefined instead of throwing for unknown ids
+      ---
+      duration_ms: 0.216982
+      type: 'test'
+      ...
+    1..5
+ok 20 - AI provider catalog
+  ---
+  duration_ms: 4.715289
+  type: 'suite'
+  ...
+# Subtest: executes native discovery and streamed chat against a real local HTTP fixture without an SDK
+ok 21 - executes native discovery and streamed chat against a real local HTTP fixture without an SDK
+  ---
+  duration_ms: 57.841347
+  type: 'test'
+  ...
+# Subtest: Lia provider definitions and instances
+    # Subtest: registers definitions without a model allowlist and rejects duplicates/unknown IDs
+    ok 1 - registers definitions without a model allowlist and rejects duplicates/unknown IDs
+      ---
+      duration_ms: 1.962408
+      type: 'test'
+      ...
+    # Subtest: caches by effective config, excludes credentials, replaces configuration and disposes
+    ok 2 - caches by effective config, excludes credentials, replaces configuration and disposes
+      ---
+      duration_ms: 0.708629
+      type: 'test'
+      ...
+    # Subtest: rejects invalid addresses and timeout settings without starting a request
+    ok 3 - rejects invalid addresses and timeout settings without starting a request
+      ---
+      duration_ms: 0.518848
+      type: 'test'
+      ...
+    # Subtest: does not downgrade a definition that requires credentials
+    ok 4 - does not downgrade a definition that requires credentials
+      ---
+      duration_ms: 1.122281
+      type: 'test'
+      ...
+    1..4
+ok 22 - Lia provider definitions and instances
+  ---
+  duration_ms: 5.373214
+  type: 'suite'
+  ...
+# Subtest: Lia native chat transport
+    # Subtest: executes a custom model at the custom endpoint with transient authentication and preserves extra wire fields
+    ok 1 - executes a custom model at the custom endpoint with transient authentication and preserves extra wire fields
+      ---
+      duration_ms: 27.113107
+      type: 'test'
+      ...
+    # Subtest: uses fresh credentials on every execution despite the instance cache
+    ok 2 - uses fresh credentials on every execution despite the instance cache
+      ---
+      duration_ms: 2.187059
+      type: 'test'
+      ...
+    # Subtest: changes models without changing instance identity or normalizing custom IDs
+    ok 3 - changes models without changing instance identity or normalizing custom IDs
+      ---
+      duration_ms: 1.852782
+      type: 'test'
+      ...
+    # Subtest: permits a keyless service and optional discovery
+    ok 4 - permits a keyless service and optional discovery
+      ---
+      duration_ms: 1.278284
+      type: 'test'
+      ...
+    # Subtest: rejects missing credentials and unknown providers
+    ok 5 - rejects missing credentials and unknown providers
+      ---
+      duration_ms: 0.532733
+      type: 'test'
+      ...
+    # Subtest: rejects empty/invalid model requests before dispatching
+    ok 6 - rejects empty/invalid model requests before dispatching
+      ---
+      duration_ms: 0.534068
+      type: 'test'
+      ...
+    # Subtest: does not approve empty, invalid or malformed successful responses
+    ok 7 - does not approve empty, invalid or malformed successful responses
+      ---
+      duration_ms: 4.879903
+      type: 'test'
+      ...
+    # Subtest: sanitizes authentication errors, HTTP errors, resolver and transport exceptions
+    ok 8 - sanitizes authentication errors, HTTP errors, resolver and transport exceptions
+      ---
+      duration_ms: 2.02873
+      type: 'test'
+      ...
+    # Subtest: retains HTTP classification when cancelling the upstream error body fails
+    ok 9 - retains HTTP classification when cancelling the upstream error body fails
+      ---
+      duration_ms: 0.515881
+      type: 'test'
+      ...
+    # Subtest: bounds cleanup of an HTTP error while preserving its known status
+    ok 10 - bounds cleanup of an HTTP error while preserving its known status
+      ---
+      duration_ms: 13.316548
+      type: 'test'
+      ...
+    # Subtest: discovers models independently of the custom model being selected
+    ok 11 - discovers models independently of the custom model being selected
+      ---
+      duration_ms: 2.384653
+      type: 'test'
+      ...
+    # Subtest: rejects a malformed discovery body without exposing it
+    ok 12 - rejects a malformed discovery body without exposing it
+      ---
+      duration_ms: 0.600039
+      type: 'test'
+      ...
+    1..12
+ok 23 - Lia native chat transport
+  ---
+  duration_ms: 57.979105
+  type: 'suite'
+  ...
+# Subtest: Lia streaming, cancellation and lifetime
+    # Subtest: streams exact spaces/newlines and a terminal event across arbitrary network boundaries
+    ok 1 - streams exact spaces/newlines and a terminal event across arbitrary network boundaries
+      ---
+      duration_ms: 4.573688
+      type: 'test'
+      ...
+    # Subtest: decodes UTF-8 codepoints split between byte chunks
+    ok 2 - decodes UTF-8 codepoints split between byte chunks
+      ---
+      duration_ms: 1.76031
+      type: 'test'
+      ...
+    # Subtest: accepts CRLF event boundaries and ignores comment heartbeats
+    ok 3 - accepts CRLF event boundaries and ignores comment heartbeats
+      ---
+      duration_ms: 2.064073
+      type: 'test'
+      ...
+    # Subtest: rejects empty/malformed/truncated streaming responses instead of approving a transport 200
+    ok 4 - rejects empty/malformed/truncated streaming responses instead of approving a transport 200
+      ---
+      duration_ms: 5.94061
+      type: 'test'
+      ...
+    # Subtest: guards raw SDK consumption against secret-bearing SSE error envelopes and wrong MIME
+    ok 5 - guards raw SDK consumption against secret-bearing SSE error envelopes and wrong MIME
+      ---
+      duration_ms: 4.748096
+      type: 'test'
+      ...
+    # Subtest: preserves ordinary raw frames byte-for-byte and bounds an unterminated SSE event
+    ok 6 - preserves ordinary raw frames byte-for-byte and bounds an unterminated SSE event
+      ---
+      duration_ms: 7.610988
+      type: 'test'
+      ...
+    # Subtest: honors caller cancellation without exposing a caller-provided reason
+    ok 7 - honors caller cancellation without exposing a caller-provided reason
+      ---
+      duration_ms: 0.521015
+      type: 'test'
+      ...
+    # Subtest: does not resolve a credential or start a request when already cancelled
+    ok 8 - does not resolve a credential or start a request when already cancelled
+      ---
+      duration_ms: 0.215167
+      type: 'test'
+      ...
+    # Subtest: times out hung fetch and hung response bodies
+    ok 9 - times out hung fetch and hung response bodies
+      ---
+      duration_ms: 27.99854
+      type: 'test'
+      ...
+    # Subtest: times out a stalled credential resolution before contacting the service
+    ok 10 - times out a stalled credential resolution before contacting the service
+      ---
+      duration_ms: 11.021982
+      type: 'test'
+      ...
+    # Subtest: disposal cancels active streaming and removes the instance
+    ok 11 - disposal cancels active streaming and removes the instance
+      ---
+      duration_ms: 1.27197
+      type: 'test'
+      ...
+    # Subtest: replacing config aborts the old instance while changing model reuses it
+    ok 12 - replacing config aborts the old instance while changing model reuses it
+      ---
+      duration_ms: 1.271524
+      type: 'test'
+      ...
+    # Subtest: an early stream consumer return releases the raw response body
+    ok 13 - an early stream consumer return releases the raw response body
+      ---
+      duration_ms: 0.787295
+      type: 'test'
+      ...
+    # Subtest: keeps the operation deadline while upstream body cancellation is pending
+    ok 14 - keeps the operation deadline while upstream body cancellation is pending
+      ---
+      duration_ms: 10.609429
+      type: 'test'
+      ...
+    # Subtest: disposal settles an already pending body cancellation
+    ok 15 - disposal settles an already pending body cancellation
+      ---
+      duration_ms: 0.991089
+      type: 'test'
+      ...
+    # Subtest: bounds an early normalized stream return when the source cancellation stalls
+    ok 16 - bounds an early normalized stream return when the source cancellation stalls
+      ---
+      duration_ms: 10.740025
+      type: 'test'
+      ...
+    # Subtest: reports a safe cleanup failure and releases the upstream reader
+    ok 17 - reports a safe cleanup failure and releases the upstream reader
+      ---
+      duration_ms: 0.993352
+      type: 'test'
+      ...
+    # Subtest: releases the upstream reader after timeout even if cancelling the source stalls
+    ok 18 - releases the upstream reader after timeout even if cancelling the source stalls
+      ---
+      duration_ms: 10.53513
+      type: 'test'
+      ...
+    # Subtest: releases the upstream reader after an SSE protocol failure without leaking cancellation errors
+    ok 19 - releases the upstream reader after an SSE protocol failure without leaking cancellation errors
+      ---
+      duration_ms: 0.897888
+      type: 'test'
+      ...
+    1..19
+ok 24 - Lia streaming, cancellation and lifetime
+  ---
+  duration_ms: 105.588045
+  type: 'suite'
+  ...
+# Subtest: Lia transport repository
+    # Subtest: persists native recording transcription independently from chat and speech
+    ok 1 - persists native recording transcription independently from chat and speech
+      ---
+      duration_ms: 12.026505
+      type: 'test'
+      ...
+    # Subtest: bounds mutation envelopes and preserves unknown legacy removal protection
+    ok 2 - bounds mutation envelopes and preserves unknown legacy removal protection
+      ---
+      duration_ms: 5.310437
+      type: 'test'
+      ...
+    # Subtest: retains credential protection after removing a transport whose ID differs from its provider
+    ok 3 - retains credential protection after removing a transport whose ID differs from its provider
+      ---
+      duration_ms: 5.478799
+      type: 'test'
+      ...
+    # Subtest: creates, edits, disables, removes and reopens custom records without changing references
+    ok 4 - creates, edits, disables, removes and reopens custom records without changing references
+      ---
+      duration_ms: 7.525309
+      type: 'test'
+      ...
+    # Subtest: keeps multiple records of one type isolated and clones returned state
+    ok 5 - keeps multiple records of one type isolated and clones returned state
+      ---
+      duration_ms: 5.882556
+      type: 'test'
+      ...
+    # Subtest: serializes concurrent windows with revision conflicts and snapshots mutation input
+    ok 6 - serializes concurrent windows with revision conflicts and snapshots mutation input
+      ---
+      duration_ms: 5.973637
+      type: 'test'
+      ...
+    # Subtest: migrates atomically, is repeatable and preserves newer records and tombstones
+    ok 7 - migrates atomically, is repeatable and preserves newer records and tombstones
+      ---
+      duration_ms: 6.279512
+      type: 'test'
+      ...
+    # Subtest: rejects a partially invalid migration without writing a partial document
+    ok 8 - rejects a partially invalid migration without writing a partial document
+      ---
+      duration_ms: 2.286736
+      type: 'test'
+      ...
+    # Subtest: isolates malformed persisted rows and blocks writes until explicit repair
+    ok 9 - isolates malformed persisted rows and blocks writes until explicit repair
+      ---
+      duration_ms: 9.831737
+      type: 'test'
+      ...
+    # Subtest: keeps duplicate or tombstoned source rows unchanged and prevents silent normalization
+    ok 10 - keeps duplicate or tombstoned source rows unchanged and prevents silent normalization
+      ---
+      duration_ms: 13.713639
+      type: 'test'
+      ...
+    # Subtest: fails closed on unknown versions or corrupt documents and never heals over them
+    ok 11 - fails closed on unknown versions or corrupt documents and never heals over them
+      ---
+      duration_ms: 7.681666
+      type: 'test'
+      ...
+    # Subtest: returns safe storage failure when a parent path is not writable as a directory
+    ok 12 - returns safe storage failure when a parent path is not writable as a directory
+      ---
+      duration_ms: 2.069089
+      type: 'test'
+      ...
+    # Subtest: preserves the previous committed bytes and cleans its own temp file when syncing fails
+    ok 13 - preserves the previous committed bytes and cleans its own temp file when syncing fails
+      ---
+      duration_ms: 9.821054
+      type: 'test'
+      ...
+    # Subtest: rejects endpoints with credentials, query, fragment and unsafe schemes
+    ok 14 - rejects endpoints with credentials, query, fragment and unsafe schemes
+      ---
+      duration_ms: 1.709825
+      type: 'test'
+      ...
+    # Subtest: rejects nested secrets, headers, non-JSON values and alternate credential associations
+    ok 15 - rejects nested secrets, headers, non-JSON values and alternate credential associations
+      ---
+      duration_ms: 0.55215
+      type: 'test'
+      ...
+    # Subtest: cannot reassign stable record identity or credential ownership on edit
+    ok 16 - cannot reassign stable record identity or credential ownership on edit
+      ---
+      duration_ms: 4.75625
+      type: 'test'
+      ...
+    1..16
+ok 25 - Lia transport repository
+  ---
+  duration_ms: 103.316741
+  type: 'suite'
+  ...
+1..25
+# tests 105
+# suites 13
+# pass 105
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 6522.199924

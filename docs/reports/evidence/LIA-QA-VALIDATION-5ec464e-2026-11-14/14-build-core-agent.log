@@ -1,0 +1,14 @@
+$ tsdown
+[34mℹ[39m [34mtsdown v0.22.14[39m powered by [38;2;255;126;23mrolldown v1.2.5[39m
+[34mℹ[39m config file: [4m/home/user/Lia-Project/airi/packages/core-agent/tsdown.config.ts[24m 
+[34mℹ[39m entry: [34msrc/index.ts, src/agents/spark-notify/index.ts[39m
+[34mℹ[39m tsconfig: [34mtsconfig.json[39m
+[34mℹ[39m Build start
+[34mℹ[39m Cleaning 7 files
+[34mℹ[39m [2mdist/[22m[1mindex.mjs[22m                        [2m57.14 kB[22m [2m│ gzip: 15.14 kB[22m
+[34mℹ[39m [2mdist/[22m[1magents/spark-notify/index.mjs[22m    [2m17.57 kB[22m [2m│ gzip:  4.99 kB[22m
+[34mℹ[39m [2mdist/[22m[32m[1mindex.d.mts[22m[39m                      [2m39.05 kB[22m [2m│ gzip: 11.20 kB[22m
+[34mℹ[39m [2mdist/[22m[32m[1magents/spark-notify/index.d.mts[22m[39m  [2m18.67 kB[22m [2m│ gzip:  4.93 kB[22m
+[34mℹ[39m [2mdist/[22m[32mllm-BOt4Ly1k.d.mts[39m               [2m 3.00 kB[22m [2m│ gzip:  1.29 kB[22m
+[34mℹ[39m 5 files, total: 135.43 kB
+[32m✔[39m Build complete in [32m2499ms[39m
