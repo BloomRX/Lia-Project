@@ -1,0 +1,345 @@
+.{
+  "output": "/tmp/stt-e2e-wf2zg2ui/result.json",
+  "status": "completed",
+  "environment": "arena-linux",
+  "verdict": "inconclusive",
+  "corpusWer": null,
+  "rtfMedian": 2.7145000558448373e-06,
+  "peakRssMib": 18.7,
+  "catalogPromotion": {
+    "eligible": false,
+    "reason": "smoke test de encanamento"
+  }
+}
+.{
+  "schema": "lia.stt-bench.plan/v1",
+  "environment": "arena-linux",
+  "machine": {
+    "os": "Linux",
+    "osRelease": "6.1.158+",
+    "osVersion": "#1 SMP PREEMPT_DYNAMIC Mon May 11 18:48:24 UTC 2026",
+    "architecture": "x86_64",
+    "python": "3.11.2",
+    "cpuName": "Intel(R) Xeon(R) Processor @ 2.60GHz",
+    "cpuCount": 2,
+    "totalRamBytes": 4131278848,
+    "totalRamGib": 3.85,
+    "gpuName": "unknown",
+    "referenceSignals": {
+      "osIsWindows": false,
+      "cpuIsRyzen5500": false,
+      "ramIs16Gib": false
+    }
+  },
+  "model": {
+    "modelId": "stub/model",
+    "revision": "rev-test",
+    "computeType": "int8",
+    "language": "pt"
+  },
+  "weights": {
+    "modelId": "stub/model",
+    "revision": "rev-test",
+    "revisionMatch": false,
+    "declaredLicense": "MIT",
+    "declaredSource": "stub://model",
+    "declaredCheckedAt": "2026-11-11",
+    "cacheRoot": "~/.cache/huggingface/hub",
+    "cacheDir": null,
+    "present": false,
+    "integrityOk": false,
+    "usable": false,
+    "hashChecked": false,
+    "files": [],
+    "incompleteDownloads": 0,
+    "notes": [
+      "nenhum snapshot da revisao fixada em cache"
+    ]
+  },
+  "downloadRequired": true,
+  "downloadBytes": 54,
+  "dataset": {
+    "sampleCount": 1,
+    "totalBytes": 6444,
+    "totalMb": 0.01,
+    "withReference": 1,
+    "maxSamples": 10,
+    "maxBytes": 104857600,
+    "datasetId": "stub",
+    "license": "CC0-1.0",
+    "source": "gerado"
+  },
+  "errors": [],
+  "warnings": []
+}
+.{
+  "output": "/tmp/stt-e2e-4hptu4vp/result.json",
+  "status": "completed",
+  "environment": "arena-linux",
+  "verdict": "validated",
+  "corpusWer": 0.0,
+  "rtfMedian": 4.1224998881261854e-07,
+  "peakRssMib": 22.3,
+  "catalogPromotion": {
+    "eligible": false,
+    "reason": "ambiente 'arena-linux' nao e a maquina de referencia; resultado vale so para este ambiente"
+  }
+}
+.s{
+  "output": "/tmp/stt-e2e-cziguthl/result.json",
+  "status": "error",
+  "stage": "runtime",
+  "message": "falha simulada na inferencia"
+}
+.{
+  "output": "/tmp/stt-e2e-0hb9bshg/result.json",
+  "status": "completed",
+  "environment": "arena-linux",
+  "verdict": "inconclusive",
+  "corpusWer": null,
+  "rtfMedian": 3.3420000136175076e-06,
+  "peakRssMib": 22.3,
+  "catalogPromotion": {
+    "eligible": false,
+    "reason": "smoke test de encanamento"
+  }
+}
+
+[abortado] corrija os erros acima.
+.{
+  "schema": "lia.stt-bench.plan/v1",
+  "environment": "arena-linux",
+  "machine": {
+    "os": "Linux",
+    "osRelease": "6.1.158+",
+    "osVersion": "#1 SMP PREEMPT_DYNAMIC Mon May 11 18:48:24 UTC 2026",
+    "architecture": "x86_64",
+    "python": "3.11.2",
+    "cpuName": "Intel(R) Xeon(R) Processor @ 2.60GHz",
+    "cpuCount": 2,
+    "totalRamBytes": 4131278848,
+    "totalRamGib": 3.85,
+    "gpuName": "unknown",
+    "referenceSignals": {
+      "osIsWindows": false,
+      "cpuIsRyzen5500": false,
+      "ramIs16Gib": false
+    }
+  },
+  "model": {
+    "modelId": "stub/model",
+    "revision": "rev-test",
+    "computeType": "int8",
+    "language": "pt"
+  },
+  "weights": {
+    "modelId": "stub/model",
+    "revision": "rev-test",
+    "revisionMatch": false,
+    "declaredLicense": "MIT",
+    "declaredSource": "stub://model",
+    "declaredCheckedAt": "2026-11-11",
+    "cacheRoot": "~/.cache/huggingface/hub",
+    "cacheDir": null,
+    "present": false,
+    "integrityOk": false,
+    "usable": false,
+    "hashChecked": false,
+    "files": [],
+    "incompleteDownloads": 0,
+    "notes": [
+      "nenhum snapshot da revisao fixada em cache"
+    ]
+  },
+  "downloadRequired": true,
+  "downloadBytes": 54,
+  "dataset": {
+    "sampleCount": 1,
+    "totalBytes": 0,
+    "totalMb": 0.0,
+    "withReference": 0,
+    "maxSamples": 10,
+    "maxBytes": 104857600,
+    "datasetId": "stub",
+    "license": "CC0-1.0",
+    "source": "gerado"
+  },
+  "errors": [
+    "s0: arquivo inexistente (/tmp/stt-e2e-548gnuth/nao-existe.wav)"
+  ],
+  "warnings": []
+}
+{
+  "output": "/tmp/stt-e2e-548gnuth/result.json",
+  "status": "error",
+  "stage": "manifest",
+  "message": "s0: arquivo inexistente (/tmp/stt-e2e-548gnuth/nao-existe.wav)"
+}
+.{
+  "output": "/tmp/stt-e2e-1eq01d7w/result.json",
+  "status": "completed",
+  "environment": "arena-linux",
+  "verdict": "inconclusive",
+  "corpusWer": 0.0,
+  "rtfMedian": 2.7984999633190455e-06,
+  "peakRssMib": 22.3,
+  "catalogPromotion": {
+    "eligible": false,
+    "reason": "evidencia insuficiente para decidir"
+  }
+}
+recusado: --machine-id windows-reference-machine nao corresponde aos fatos detectados (os=False, cpu5500=False, ram16=False). A maquina de referencia nao pode ser declarada, so medida.
+.
+[abortado] Python 3.11.2 < 99.0. Instale Python 99.0 x64.
+.s{
+  "schema": "lia.stt-bench.plan/v1",
+  "environment": "arena-linux",
+  "machine": {
+    "os": "Linux",
+    "osRelease": "6.1.158+",
+    "osVersion": "#1 SMP PREEMPT_DYNAMIC Mon May 11 18:48:24 UTC 2026",
+    "architecture": "x86_64",
+    "python": "3.11.2",
+    "cpuName": "Intel(R) Xeon(R) Processor @ 2.60GHz",
+    "cpuCount": 2,
+    "totalRamBytes": 4131278848,
+    "totalRamGib": 3.85,
+    "gpuName": "unknown",
+    "referenceSignals": {
+      "osIsWindows": false,
+      "cpuIsRyzen5500": false,
+      "ramIs16Gib": false
+    }
+  },
+  "model": {
+    "modelId": "stub/model",
+    "revision": "rev-test",
+    "computeType": "int8",
+    "language": "pt"
+  },
+  "weights": {
+    "modelId": "stub/model",
+    "revision": "rev-test",
+    "revisionMatch": false,
+    "declaredLicense": "MIT",
+    "declaredSource": "stub://model",
+    "declaredCheckedAt": "2026-11-11",
+    "cacheRoot": "/tmp/stt-e2e-k2wd9ed7/hf",
+    "cacheDir": null,
+    "present": false,
+    "integrityOk": false,
+    "usable": false,
+    "hashChecked": false,
+    "files": [],
+    "incompleteDownloads": 0,
+    "notes": [
+      "nenhum snapshot da revisao fixada em cache"
+    ]
+  },
+  "downloadRequired": true,
+  "downloadBytes": 54,
+  "dataset": {
+    "datasetId": "synthetic-selftest",
+    "license": "generated",
+    "source": "tom senoidal gerado pelo script",
+    "sampleCount": 1,
+    "totalBytes": 64044,
+    "totalMb": 0.06,
+    "withReference": 0
+  },
+  "errors": [],
+  "warnings": []
+}
+{
+  "output": "/tmp/stt-e2e-k2wd9ed7/result.json",
+  "status": "error",
+  "stage": "python",
+  "message": "Python 3.11.2 < 99.0"
+}
+.{
+  "output": "/tmp/stt-e2e-jj__nt6a/result.json",
+  "status": "completed",
+  "environment": "arena-linux",
+  "verdict": "inconclusive",
+  "corpusWer": null,
+  "rtfMedian": 1.8640000689629233e-06,
+  "peakRssMib": 22.3,
+  "catalogPromotion": {
+    "eligible": false,
+    "reason": "smoke test de encanamento"
+  }
+}
+
+[abortado] pesos ausentes ou divergentes em /tmp/stt-e2e-c0jc4xto/hf
+[download] total desta bancada: 0.0 MB, um unico destino (Hugging Face), comando explicito
+[download] rode com --allow-download (ou -AllowModelDownload no .ps1)
+..........................................................
+----------------------------------------------------------------------
+Ran 70 tests in 0.240s
+
+OK (skipped=2)
+{
+  "schema": "lia.stt-bench.plan/v1",
+  "environment": "arena-linux",
+  "machine": {
+    "os": "Linux",
+    "osRelease": "6.1.158+",
+    "osVersion": "#1 SMP PREEMPT_DYNAMIC Mon May 11 18:48:24 UTC 2026",
+    "architecture": "x86_64",
+    "python": "3.11.2",
+    "cpuName": "Intel(R) Xeon(R) Processor @ 2.60GHz",
+    "cpuCount": 2,
+    "totalRamBytes": 4131278848,
+    "totalRamGib": 3.85,
+    "gpuName": "unknown",
+    "referenceSignals": {
+      "osIsWindows": false,
+      "cpuIsRyzen5500": false,
+      "ramIs16Gib": false
+    }
+  },
+  "model": {
+    "modelId": "stub/model",
+    "revision": "rev-test",
+    "computeType": "int8",
+    "language": "pt"
+  },
+  "weights": {
+    "modelId": "stub/model",
+    "revision": "rev-test",
+    "revisionMatch": false,
+    "declaredLicense": "MIT",
+    "declaredSource": "stub://model",
+    "declaredCheckedAt": "2026-11-11",
+    "cacheRoot": "/tmp/stt-e2e-c0jc4xto/hf",
+    "cacheDir": null,
+    "present": false,
+    "integrityOk": false,
+    "usable": false,
+    "hashChecked": false,
+    "files": [],
+    "incompleteDownloads": 0,
+    "notes": [
+      "nenhum snapshot da revisao fixada em cache"
+    ]
+  },
+  "downloadRequired": true,
+  "downloadBytes": 54,
+  "dataset": {
+    "datasetId": "synthetic-selftest",
+    "license": "generated",
+    "source": "tom senoidal gerado pelo script",
+    "sampleCount": 1,
+    "totalBytes": 64044,
+    "totalMb": 0.06,
+    "withReference": 0
+  },
+  "errors": [],
+  "warnings": []
+}
+{
+  "output": "/tmp/stt-e2e-c0jc4xto/result.json",
+  "status": "error",
+  "stage": "weights",
+  "message": "pesos ausentes ou divergentes"
+}

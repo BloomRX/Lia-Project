@@ -1,0 +1,30 @@
+test_http_auth_or_rate_limit_does_not_create (__main__.ApiParsingTests.test_http_auth_or_rate_limit_does_not_create) ... ok
+test_network_error_is_not_absence (__main__.ApiParsingTests.test_network_error_is_not_absence) ... ok
+test_only_explicit_404_means_absent (__main__.ApiParsingTests.test_only_explicit_404_means_absent) ... ok
+test_parse_http_200 (__main__.ApiParsingTests.test_parse_http_200) ... ok
+test_remote_url_checks_fetch_and_push_target (__main__.ApiParsingTests.test_remote_url_checks_fetch_and_push_target) ... ok
+test_repo_names_are_not_urls_or_options (__main__.ApiParsingTests.test_repo_names_are_not_urls_or_options) ... ok
+test_already_existing_name_does_not_create_an_alternative (__main__.CreationTests.test_already_existing_name_does_not_create_an_alternative) ... ok
+test_already_pushed_commit_is_recognized_without_second_push (__main__.CreationTests.test_already_pushed_commit_is_recognized_without_second_push) ... ok
+test_cancel_before_any_git_initialization_or_creation (__main__.CreationTests.test_cancel_before_any_git_initialization_or_creation) ... ok
+test_changed_account_blocks_resumption (__main__.CreationTests.test_changed_account_blocks_resumption) ... ok
+test_changed_repository_id_is_not_silently_adopted (__main__.CreationTests.test_changed_repository_id_is_not_silently_adopted) ... ok
+test_complete_record_survives_removed_origin (__main__.CreationTests.test_complete_record_survives_removed_origin) ... ok
+test_existing_different_content_on_remote_is_not_overwritten (__main__.CreationTests.test_existing_different_content_on_remote_is_not_overwritten) ... ok
+test_existing_lock_and_invalid_record_fail_closed (__main__.CreationTests.test_existing_lock_and_invalid_record_fail_closed) ... ok
+test_existing_origin_or_other_remote_hides_and_blocks_create (__main__.CreationTests.test_existing_origin_or_other_remote_hides_and_blocks_create) ... ok
+test_failed_push_does_not_allow_another_repo_and_is_resumable (__main__.CreationTests.test_failed_push_does_not_allow_another_repo_and_is_resumable) ... ok
+test_failed_request_can_only_retry_identical_owner_name (__main__.CreationTests.test_failed_request_can_only_retry_identical_owner_name) ... ok
+test_local_unborn_master_is_prepared_as_main (__main__.CreationTests.test_local_unborn_master_is_prepared_as_main) ... ok
+test_nested_project_is_not_initialized_again (__main__.CreationTests.test_nested_project_is_not_initialized_again) ... ok
+test_option_shows_in_new_folder_without_network_queries (__main__.CreationTests.test_option_shows_in_new_folder_without_network_queries) ... ok
+test_refuses_public_target_before_upload (__main__.CreationTests.test_refuses_public_target_before_upload) ... ok
+test_response_lost_resumes_same_repository_without_recreating (__main__.CreationTests.test_response_lost_resumes_same_repository_without_recreating) ... ok
+test_success_initializes_commits_pushes_main_and_hides_option (__main__.CreationTests.test_success_initializes_commits_pushes_main_and_hides_option) ... ok
+
+----------------------------------------------------------------------
+Ran 23 tests in 2.506s
+
+OK
+
+::notice title=tools/test_creation.py - resumo::Ran 23 tests in 2.506s%0AOK

@@ -1,0 +1,49 @@
+test_cleanup_tree_raises_instead_of_leaking_silently (__main__.FixtureCleanupTests.test_cleanup_tree_raises_instead_of_leaking_silently)
+Limpeza que falha tem que aparecer, nao virar vazamento mudo. ... ok
+test_cleanup_tree_removes_readonly_files_and_locked_dirs (__main__.FixtureCleanupTests.test_cleanup_tree_removes_readonly_files_and_locked_dirs) ... ok
+test_plain_rmtree_cannot_remove_the_fixture (__main__.FixtureCleanupTests.test_plain_rmtree_cannot_remove_the_fixture)
+Documenta o defeito original: sem handler a limpeza nao termina. ... ok
+test_checkout_normalizes_arena_name_and_keeps_stash (__main__.GitFlowTests.test_checkout_normalizes_arena_name_and_keeps_stash) ... ok
+test_first_push_and_skip_models_env_and_dependencies (__main__.GitFlowTests.test_first_push_and_skip_models_env_and_dependencies) ... ok
+test_fixture_is_inside_test_workspace (__main__.GitFlowTests.test_fixture_is_inside_test_workspace) ... ok
+test_main_block_before_stage_or_commit (__main__.GitFlowTests.test_main_block_before_stage_or_commit) ... ok
+test_missing_remote_branch_does_not_pull_main_instead (__main__.GitFlowTests.test_missing_remote_branch_does_not_pull_main_instead) ... ok
+test_no_push_commits_offline_without_remote (__main__.GitFlowTests.test_no_push_commits_offline_without_remote) ... ok
+test_pull_preserves_dirty_local_file_without_publishing (__main__.GitFlowTests.test_pull_preserves_dirty_local_file_without_publishing) ... ok
+test_rebase_conflict_stops_before_push (__main__.GitFlowTests.test_rebase_conflict_stops_before_push) ... ok
+test_secret_in_previous_unpublished_commit_is_blocked (__main__.GitFlowTests.test_secret_in_previous_unpublished_commit_is_blocked) ... ok
+test_secret_reads_index_not_clean_worktree (__main__.GitFlowTests.test_secret_reads_index_not_clean_worktree) ... ok
+test_staged_weight_is_not_silently_published (__main__.GitFlowTests.test_staged_weight_is_not_silently_published) ... ok
+test_tracking_main_cannot_push_accidentally (__main__.GitFlowTests.test_tracking_main_cannot_push_accidentally) ... ok
+test_validation_without_godot_never_executes_notebook (__main__.GitFlowTests.test_validation_without_godot_never_executes_notebook) ... ok
+test_dispatch_passes_node_then_script_with_repo_cwd (__main__.KokoroSmokeTests.test_dispatch_passes_node_then_script_with_repo_cwd) ... ok
+test_missing_node_fails_before_any_subprocess (__main__.KokoroSmokeTests.test_missing_node_fails_before_any_subprocess) ... ok
+test_missing_production_dist_names_the_build_command (__main__.KokoroSmokeTests.test_missing_production_dist_names_the_build_command) ... ok
+test_missing_runner_script_fails_closed (__main__.KokoroSmokeTests.test_missing_runner_script_fails_closed) ... ok
+test_qa_dir_is_gitignored (__main__.KokoroSmokeTests.test_qa_dir_is_gitignored) ... ok
+test_real_argparse_dispatch_recognizes_the_subcommand (__main__.KokoroSmokeTests.test_real_argparse_dispatch_recognizes_the_subcommand)
+`python project_cli.py kokoro-smoke` sem PATH: deve cair no caminho ... ok
+test_runner_failure_propagates_the_exit_code (__main__.KokoroSmokeTests.test_runner_failure_propagates_the_exit_code) ... ok
+test_the_runner_wires_production_modules_only (__main__.KokoroSmokeTests.test_the_runner_wires_production_modules_only)
+Guard estatico: o arquivo .mjs importa os dists de PRODUCAO e nao ... ok
+test_counters_and_environment_are_not_credentials (__main__.ScannerTests.test_counters_and_environment_are_not_credentials) ... ok
+test_literal_credential (__main__.ScannerTests.test_literal_credential) ... ok
+test_placeholder (__main__.ScannerTests.test_placeholder) ... ok
+test_provider_key (__main__.ScannerTests.test_provider_key) ... ok
+test_redaction (__main__.ScannerTests.test_redaction) ... ok
+test_devkit_json_overrides_and_fail_closed (__main__.UniversalKitTests.test_devkit_json_overrides_and_fail_closed) ... ok
+test_ensure_project_accepts_new_project_and_single_subproject (__main__.UniversalKitTests.test_ensure_project_accepts_new_project_and_single_subproject) ... ok
+test_folder_name_becomes_default_repo_name (__main__.UniversalKitTests.test_folder_name_becomes_default_repo_name) ... ok
+test_project_detection_is_universal (__main__.UniversalKitTests.test_project_detection_is_universal) ... ok
+
+----------------------------------------------------------------------
+Ran 33 tests in 3.425s
+
+OK
+== Kokoro smoke (dev-only; engine real de producao) ==
+   Runner: tools/kokoro-smoke.mjs
+== Kokoro smoke (dev-only; engine real de producao) ==
+   Runner: tools/kokoro-smoke.mjs
+Aviso: até agora só há o DevKit nesta pasta. Ele pode ser o primeiro commit de um projeto novo.
+
+::notice title=tools/test_project_cli.py - resumo::Ran 33 tests in 3.425s%0AOK

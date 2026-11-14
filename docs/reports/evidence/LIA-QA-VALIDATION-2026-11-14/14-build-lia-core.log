@@ -1,0 +1,42 @@
+$ tsdown
+[34mℹ[39m [34mtsdown v0.22.14[39m powered by [38;2;255;126;23mrolldown v1.2.5[39m
+[34mℹ[39m config file: [4m/home/user/Lia-Project/airi/packages/lia-core/tsdown.config.ts[24m 
+[34mℹ[39m entry: [34m./src/index.ts, ./src/bootstrap/runtime-root.ts, ./src/bridge/lia-config.ts, ./src/voice/config.ts, ./src/voice/engines/kokoro/index.ts, ./src/voice/engines/registry.ts, ./src/voice/engines/types.ts, ./src/voice/voice-service.ts, ./src/paths/product-paths.ts, ./src/paths/install-location.ts, ./src/product/config.ts, ./src/secrets/vault.ts, ./src/voice/shared.ts, ./src/voices/profiles.ts, ./src/voices/types.ts[39m
+[34mℹ[39m tsconfig: [34mtsconfig.json[39m
+[34mℹ[39m Build start
+[34mℹ[39m [2mdist/[22m[1mvoice/engines/kokoro/index.mjs[22m    [2m44.49 kB[22m [2m│ gzip: 13.34 kB[22m
+[34mℹ[39m [2mdist/[22m[1mindex.mjs[22m                         [2m27.19 kB[22m [2m│ gzip:  8.86 kB[22m
+[34mℹ[39m [2mdist/[22m[1mvoices/profiles.mjs[22m               [2m10.53 kB[22m [2m│ gzip:  4.02 kB[22m
+[34mℹ[39m [2mdist/[22m[1mbootstrap/runtime-root.mjs[22m        [2m10.06 kB[22m [2m│ gzip:  3.89 kB[22m
+[34mℹ[39m [2mdist/[22m[1mvoice/voice-service.mjs[22m           [2m 6.26 kB[22m [2m│ gzip:  1.99 kB[22m
+[34mℹ[39m [2mdist/[22m[1mpaths/product-paths.mjs[22m           [2m 3.41 kB[22m [2m│ gzip:  1.42 kB[22m
+[34mℹ[39m [2mdist/[22m[1mvoice/engines/registry.mjs[22m        [2m 3.23 kB[22m [2m│ gzip:  1.24 kB[22m
+[34mℹ[39m [2mdist/[22m[1mpaths/install-location.mjs[22m        [2m 3.09 kB[22m [2m│ gzip:  1.22 kB[22m
+[34mℹ[39m [2mdist/[22m[1mvoice/config.mjs[22m                  [2m 2.59 kB[22m [2m│ gzip:  0.84 kB[22m
+[34mℹ[39m [2mdist/[22m[1mbridge/lia-config.mjs[22m             [2m 1.96 kB[22m [2m│ gzip:  0.83 kB[22m
+[34mℹ[39m [2mdist/[22m[1mvoice/shared.mjs[22m                  [2m 1.01 kB[22m [2m│ gzip:  0.56 kB[22m
+[34mℹ[39m [2mdist/[22m[1mproduct/config.mjs[22m                [2m 0.72 kB[22m [2m│ gzip:  0.29 kB[22m
+[34mℹ[39m [2mdist/[22m[1mvoice/engines/types.mjs[22m           [2m 0.29 kB[22m [2m│ gzip:  0.19 kB[22m
+[34mℹ[39m [2mdist/[22m[1msecrets/vault.mjs[22m                 [2m 0.14 kB[22m [2m│ gzip:  0.12 kB[22m
+[34mℹ[39m [2mdist/[22m[1mvoices/types.mjs[22m                  [2m 0.01 kB[22m [2m│ gzip:  0.03 kB[22m
+[34mℹ[39m [2mdist/[22mconfig-Cgayvgdp.mjs               [2m16.32 kB[22m [2m│ gzip:  4.72 kB[22m
+[34mℹ[39m [2mdist/[22mvault-BjA9hbw6.mjs                [2m 7.66 kB[22m [2m│ gzip:  2.52 kB[22m
+[34mℹ[39m [2mdist/[22m[32m[1mindex.d.mts[22m[39m                       [2m34.49 kB[22m [2m│ gzip: 10.76 kB[22m
+[34mℹ[39m [2mdist/[22m[32m[1mvoice/engines/kokoro/index.d.mts[22m[39m  [2m10.76 kB[22m [2m│ gzip:  3.76 kB[22m
+[34mℹ[39m [2mdist/[22m[32m[1mbootstrap/runtime-root.d.mts[22m[39m      [2m 8.46 kB[22m [2m│ gzip:  3.51 kB[22m
+[34mℹ[39m [2mdist/[22m[32m[1mvoices/profiles.d.mts[22m[39m             [2m 5.40 kB[22m [2m│ gzip:  2.29 kB[22m
+[34mℹ[39m [2mdist/[22m[32m[1mvoice/engines/registry.d.mts[22m[39m      [2m 5.09 kB[22m [2m│ gzip:  1.98 kB[22m
+[34mℹ[39m [2mdist/[22m[32m[1mbridge/lia-config.d.mts[22m[39m           [2m 4.66 kB[22m [2m│ gzip:  1.79 kB[22m
+[34mℹ[39m [2mdist/[22m[32m[1mvoice/engines/types.d.mts[22m[39m         [2m 3.52 kB[22m [2m│ gzip:  1.47 kB[22m
+[34mℹ[39m [2mdist/[22m[32m[1mvoice/voice-service.d.mts[22m[39m         [2m 3.40 kB[22m [2m│ gzip:  1.50 kB[22m
+[34mℹ[39m [2mdist/[22m[32m[1msecrets/vault.d.mts[22m[39m               [2m 3.01 kB[22m [2m│ gzip:  1.20 kB[22m
+[34mℹ[39m [2mdist/[22m[32m[1mpaths/product-paths.d.mts[22m[39m         [2m 2.80 kB[22m [2m│ gzip:  1.21 kB[22m
+[34mℹ[39m [2mdist/[22m[32m[1mvoice/config.d.mts[22m[39m                [2m 2.58 kB[22m [2m│ gzip:  1.08 kB[22m
+[34mℹ[39m [2mdist/[22m[32m[1mpaths/install-location.d.mts[22m[39m      [2m 2.55 kB[22m [2m│ gzip:  1.19 kB[22m
+[34mℹ[39m [2mdist/[22m[32m[1mproduct/config.d.mts[22m[39m              [2m 1.57 kB[22m [2m│ gzip:  0.47 kB[22m
+[34mℹ[39m [2mdist/[22m[32m[1mvoice/shared.d.mts[22m[39m                [2m 1.04 kB[22m [2m│ gzip:  0.57 kB[22m
+[34mℹ[39m [2mdist/[22m[32m[1mvoices/types.d.mts[22m[39m                [2m 0.37 kB[22m [2m│ gzip:  0.17 kB[22m
+[34mℹ[39m [2mdist/[22m[32mconfig-nWuU7y4v.d.mts[39m             [2m12.18 kB[22m [2m│ gzip:  4.02 kB[22m
+[34mℹ[39m [2mdist/[22m[32mtypes-CaWGtYud.d.mts[39m              [2m 3.17 kB[22m [2m│ gzip:  1.47 kB[22m
+[34mℹ[39m 34 files, total: 244.03 kB
+[32m✔[39m Build complete in [32m1859ms[39m

@@ -1,0 +1,21 @@
+
+<--- Last few GCs --->
+
+[10638:0x136a7000]    43346 ms: Scavenge 1895.3 (1938.9) -> 1892.1 (1946.9) MB, pooled: 0 MB, 3.62 / 0.00 ms  (average mu = 0.374, current mu = 0.365) allocation failure; 
+[10638:0x136a7000]    44362 ms: Mark-Compact (reduce) 1900.0 (1947.4) -> 1895.3 (1935.5) MB, pooled: 0 MB, 226.96 / 0.00 ms  (+ 694.9 ms in 0 steps since start of marking, biggest step 0.0 ms, walltime since start of marking 1016 ms) (average mu = 0.366, 
+
+<--- JS stacktrace --->
+
+FATAL ERROR: Ineffective mark-compacts near heap limit Allocation failed - JavaScript heap out of memory
+----- Native stack trace -----
+
+ 1: 0xe46bbe node::OOMErrorHandler(char const*, v8::OOMDetails const&) [node]
+ 2: 0x1243640 v8::Utils::ReportOOMFailure(v8::internal::Isolate*, char const*, v8::OOMDetails const&) [node]
+ 3: 0x1243917 v8::internal::V8::FatalProcessOutOfMemory(v8::internal::Isolate*, char const*, v8::OOMDetails const&) [node]
+ 4: 0x1472825  [node]
+ 5: 0x1472853  [node]
+ 6: 0x148b92a  [node]
+ 7: 0x148eaf8  [node]
+ 8: 0x1cf7681  [node]
+undefined
+[ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL] Command was killed with SIGABRT (Aborted): vue-tsc --noEmit

@@ -1,0 +1,2542 @@
+
+[devflow-test] start 0 __main__.AutoPathStaysChoicelessOnFailureTests.test_a_failing_required_test_never_produces_a_question
+test_a_failing_required_test_never_produces_a_question (__main__.AutoPathStaysChoicelessOnFailureTests.test_a_failing_required_test_never_produces_a_question) ... 
+[devflow-test] pass 25 __main__.AutoPathStaysChoicelessOnFailureTests.test_a_failing_required_test_never_produces_a_question
+ok
+
+[devflow-test] class 25 AutoPathStaysChoicelessOnFailureTests
+
+[devflow-test] start 0 __main__.AutoPipelineTests.test_a_failed_gate_never_publishes_a_local_checkpoint
+test_a_failed_gate_never_publishes_a_local_checkpoint (__main__.AutoPipelineTests.test_a_failed_gate_never_publishes_a_local_checkpoint) ... 
+[devflow-test] pass 11 __main__.AutoPipelineTests.test_a_failed_gate_never_publishes_a_local_checkpoint
+ok
+
+[devflow-test] start 0 __main__.AutoPipelineTests.test_a_failing_required_test_stops_before_the_runtime_gate
+test_a_failing_required_test_stops_before_the_runtime_gate (__main__.AutoPipelineTests.test_a_failing_required_test_stops_before_the_runtime_gate) ... 
+[devflow-test] pass 16 __main__.AutoPipelineTests.test_a_failing_required_test_stops_before_the_runtime_gate
+ok
+
+[devflow-test] start 0 __main__.AutoPipelineTests.test_a_healthy_run_records_every_stage_and_passes
+test_a_healthy_run_records_every_stage_and_passes (__main__.AutoPipelineTests.test_a_healthy_run_records_every_stage_and_passes) ... 
+[devflow-test] pass 1017 __main__.AutoPipelineTests.test_a_healthy_run_records_every_stage_and_passes
+ok
+
+[devflow-test] start 0 __main__.AutoPipelineTests.test_sync_refusal_stops_everything
+test_sync_refusal_stops_everything (__main__.AutoPipelineTests.test_sync_refusal_stops_everything) ... 
+[devflow-test] pass 14 __main__.AutoPipelineTests.test_sync_refusal_stops_everything
+ok
+
+[devflow-test] start 0 __main__.AutoPipelineTests.test_the_round_is_resolved_after_the_sync
+test_the_round_is_resolved_after_the_sync (__main__.AutoPipelineTests.test_the_round_is_resolved_after_the_sync)
+Running the pre-sync manifest would validate code that moved. ... 
+[devflow-test] pass 1021 __main__.AutoPipelineTests.test_the_round_is_resolved_after_the_sync
+ok
+
+[devflow-test] class 2082 AutoPipelineTests
+
+[devflow-test] start 0 __main__.BatchPauseGuardTests.test_every_pause_is_behind_the_no_pause_switch
+test_every_pause_is_behind_the_no_pause_switch (__main__.BatchPauseGuardTests.test_every_pause_is_behind_the_no_pause_switch) ... 
+[devflow-test] pass 1 __main__.BatchPauseGuardTests.test_every_pause_is_behind_the_no_pause_switch
+ok
+
+[devflow-test] class 1 BatchPauseGuardTests
+
+[devflow-test] start 0 __main__.BlockingTestStopsTheRoundTests.test_a_blocking_failure_prevents_the_expensive_suite
+test_a_blocking_failure_prevents_the_expensive_suite (__main__.BlockingTestStopsTheRoundTests.test_a_blocking_failure_prevents_the_expensive_suite) ... 
+[devflow-test] pass 34 __main__.BlockingTestStopsTheRoundTests.test_a_blocking_failure_prevents_the_expensive_suite
+ok
+
+[devflow-test] start 0 __main__.BlockingTestStopsTheRoundTests.test_a_blocking_pass_continues_normally
+test_a_blocking_pass_continues_normally (__main__.BlockingTestStopsTheRoundTests.test_a_blocking_pass_continues_normally) ... 
+[devflow-test] pass 1054 __main__.BlockingTestStopsTheRoundTests.test_a_blocking_pass_continues_normally
+ok
+
+[devflow-test] start 0 __main__.BlockingTestStopsTheRoundTests.test_a_non_blocking_failure_still_runs_everything
+test_a_non_blocking_failure_still_runs_everything (__main__.BlockingTestStopsTheRoundTests.test_a_non_blocking_failure_still_runs_everything) ... 
+[devflow-test] pass 50 __main__.BlockingTestStopsTheRoundTests.test_a_non_blocking_failure_still_runs_everything
+ok
+
+[devflow-test] start 0 __main__.BlockingTestStopsTheRoundTests.test_a_non_boolean_blocking_value_is_rejected
+test_a_non_boolean_blocking_value_is_rejected (__main__.BlockingTestStopsTheRoundTests.test_a_non_boolean_blocking_value_is_rejected) ... 
+[devflow-test] pass 14 __main__.BlockingTestStopsTheRoundTests.test_a_non_boolean_blocking_value_is_rejected
+ok
+
+[devflow-test] class 1154 BlockingTestStopsTheRoundTests
+
+[devflow-test] start 0 __main__.BootstrapTests.test_bootstrap_refuses_without_touching_the_checkout_on_fetch_failure
+test_bootstrap_refuses_without_touching_the_checkout_on_fetch_failure (__main__.BootstrapTests.test_bootstrap_refuses_without_touching_the_checkout_on_fetch_failure) ... 
+[devflow-test] pass 0 __main__.BootstrapTests.test_bootstrap_refuses_without_touching_the_checkout_on_fetch_failure
+ok
+
+[devflow-test] start 0 __main__.BootstrapTests.test_bootstrap_resyncs_and_reexecutes_a_fresh_interpreter
+test_bootstrap_resyncs_and_reexecutes_a_fresh_interpreter (__main__.BootstrapTests.test_bootstrap_resyncs_and_reexecutes_a_fresh_interpreter) ... 
+[devflow-test] pass 0 __main__.BootstrapTests.test_bootstrap_resyncs_and_reexecutes_a_fresh_interpreter
+ok
+
+[devflow-test] start 0 __main__.BootstrapTests.test_the_bootstrap_imports_nothing_heavy_before_the_sync
+test_the_bootstrap_imports_nothing_heavy_before_the_sync (__main__.BootstrapTests.test_the_bootstrap_imports_nothing_heavy_before_the_sync)
+A stale in-memory module must never evaluate the gate. ... 
+[devflow-test] pass 0 __main__.BootstrapTests.test_the_bootstrap_imports_nothing_heavy_before_the_sync
+ok
+
+[devflow-test] class 1 BootstrapTests
+
+[devflow-test] start 0 __main__.CleanWorktreeTests.test_dirty_tracked_file_is_refused_before_cleanup
+test_dirty_tracked_file_is_refused_before_cleanup (__main__.CleanWorktreeTests.test_dirty_tracked_file_is_refused_before_cleanup) ... 
+[devflow-test] pass 16 __main__.CleanWorktreeTests.test_dirty_tracked_file_is_refused_before_cleanup
+ok
+
+[devflow-test] start 0 __main__.CleanWorktreeTests.test_filenames_are_not_printed_when_refusing
+test_filenames_are_not_printed_when_refusing (__main__.CleanWorktreeTests.test_filenames_are_not_printed_when_refusing) ... 
+[devflow-test] pass 19 __main__.CleanWorktreeTests.test_filenames_are_not_printed_when_refusing
+ok
+
+[devflow-test] start 0 __main__.CleanWorktreeTests.test_ignored_generated_dist_does_not_block
+test_ignored_generated_dist_does_not_block (__main__.CleanWorktreeTests.test_ignored_generated_dist_does_not_block) ... 
+[devflow-test] pass 1025 __main__.CleanWorktreeTests.test_ignored_generated_dist_does_not_block
+ok
+
+[devflow-test] start 0 __main__.CleanWorktreeTests.test_ignored_run_artifacts_do_not_block
+test_ignored_run_artifacts_do_not_block (__main__.CleanWorktreeTests.test_ignored_run_artifacts_do_not_block) ... 
+[devflow-test] pass 1022 __main__.CleanWorktreeTests.test_ignored_run_artifacts_do_not_block
+ok
+
+[devflow-test] start 0 __main__.CleanWorktreeTests.test_reported_pass_records_dirty_zero
+test_reported_pass_records_dirty_zero (__main__.CleanWorktreeTests.test_reported_pass_records_dirty_zero) ... 
+[devflow-test] pass 1019 __main__.CleanWorktreeTests.test_reported_pass_records_dirty_zero
+ok
+
+[devflow-test] start 0 __main__.CleanWorktreeTests.test_untracked_non_ignored_file_is_refused
+test_untracked_non_ignored_file_is_refused (__main__.CleanWorktreeTests.test_untracked_non_ignored_file_is_refused) ... 
+[devflow-test] pass 17 __main__.CleanWorktreeTests.test_untracked_non_ignored_file_is_refused
+ok
+
+[devflow-test] class 3122 CleanWorktreeTests
+
+[devflow-test] start 0 __main__.CleanupSafetyTests.test_absent_target_is_reported_as_nothing_to_remove
+test_absent_target_is_reported_as_nothing_to_remove (__main__.CleanupSafetyTests.test_absent_target_is_reported_as_nothing_to_remove) ... 
+[devflow-test] pass 15 __main__.CleanupSafetyTests.test_absent_target_is_reported_as_nothing_to_remove
+ok
+
+[devflow-test] start 0 __main__.CleanupSafetyTests.test_empty_allowlist_refuses_everything
+test_empty_allowlist_refuses_everything (__main__.CleanupSafetyTests.test_empty_allowlist_refuses_everything) ... 
+[devflow-test] pass 13 __main__.CleanupSafetyTests.test_empty_allowlist_refuses_everything
+ok
+
+[devflow-test] start 0 __main__.CleanupSafetyTests.test_m30b_cleanup_removes_exactly_the_generated_dist
+test_m30b_cleanup_removes_exactly_the_generated_dist (__main__.CleanupSafetyTests.test_m30b_cleanup_removes_exactly_the_generated_dist) ... 
+[devflow-test] pass 16 __main__.CleanupSafetyTests.test_m30b_cleanup_removes_exactly_the_generated_dist
+ok
+
+[devflow-test] start 0 __main__.CleanupSafetyTests.test_path_traversal_is_refused
+test_path_traversal_is_refused (__main__.CleanupSafetyTests.test_path_traversal_is_refused) ... 
+[devflow-test] pass 17 __main__.CleanupSafetyTests.test_path_traversal_is_refused
+ok
+
+[devflow-test] start 0 __main__.CleanupSafetyTests.test_repo_root_itself_is_refused
+test_repo_root_itself_is_refused (__main__.CleanupSafetyTests.test_repo_root_itself_is_refused) ... 
+[devflow-test] pass 13 __main__.CleanupSafetyTests.test_repo_root_itself_is_refused
+ok
+
+[devflow-test] start 0 __main__.CleanupSafetyTests.test_symlink_escape_is_refused
+test_symlink_escape_is_refused (__main__.CleanupSafetyTests.test_symlink_escape_is_refused) ... 
+[devflow-test] pass 13 __main__.CleanupSafetyTests.test_symlink_escape_is_refused
+ok
+
+[devflow-test] start 0 __main__.CleanupSafetyTests.test_symlinked_ancestor_is_refused
+test_symlinked_ancestor_is_refused (__main__.CleanupSafetyTests.test_symlinked_ancestor_is_refused) ... 
+[devflow-test] pass 13 __main__.CleanupSafetyTests.test_symlinked_ancestor_is_refused
+ok
+
+[devflow-test] start 0 __main__.CleanupSafetyTests.test_tracked_path_is_refused_even_when_allowlisted
+test_tracked_path_is_refused_even_when_allowlisted (__main__.CleanupSafetyTests.test_tracked_path_is_refused_even_when_allowlisted) ... 
+[devflow-test] pass 14 __main__.CleanupSafetyTests.test_tracked_path_is_refused_even_when_allowlisted
+ok
+
+[devflow-test] start 0 __main__.CleanupSafetyTests.test_unknown_cleanup_target_is_refused
+test_unknown_cleanup_target_is_refused (__main__.CleanupSafetyTests.test_unknown_cleanup_target_is_refused) ... 
+[devflow-test] pass 12 __main__.CleanupSafetyTests.test_unknown_cleanup_target_is_refused
+ok
+
+[devflow-test] class 129 CleanupSafetyTests
+
+[devflow-test] start 0 __main__.DeclaredTimeoutTests.test_a_nonsense_budget_is_rejected_not_silently_clamped
+test_a_nonsense_budget_is_rejected_not_silently_clamped (__main__.DeclaredTimeoutTests.test_a_nonsense_budget_is_rejected_not_silently_clamped) ... 
+[devflow-test] pass 0 __main__.DeclaredTimeoutTests.test_a_nonsense_budget_is_rejected_not_silently_clamped
+ok
+
+[devflow-test] start 0 __main__.DeclaredTimeoutTests.test_a_round_may_declare_the_budget_its_suite_needs
+test_a_round_may_declare_the_budget_its_suite_needs (__main__.DeclaredTimeoutTests.test_a_round_may_declare_the_budget_its_suite_needs) ... 
+[devflow-test] pass 0 __main__.DeclaredTimeoutTests.test_a_round_may_declare_the_budget_its_suite_needs
+ok
+
+[devflow-test] start 0 __main__.DeclaredTimeoutTests.test_a_test_that_finishes_inside_its_budget_is_unaffected
+test_a_test_that_finishes_inside_its_budget_is_unaffected (__main__.DeclaredTimeoutTests.test_a_test_that_finishes_inside_its_budget_is_unaffected) ... 
+[devflow-test] pass 16 __main__.DeclaredTimeoutTests.test_a_test_that_finishes_inside_its_budget_is_unaffected
+ok
+
+[devflow-test] start 0 __main__.DeclaredTimeoutTests.test_an_expired_budget_is_reported_as_a_budget_not_as_a_crash
+test_an_expired_budget_is_reported_as_a_budget_not_as_a_crash (__main__.DeclaredTimeoutTests.test_an_expired_budget_is_reported_as_a_budget_not_as_a_crash) ... 
+[devflow-test] pass 501 __main__.DeclaredTimeoutTests.test_an_expired_budget_is_reported_as_a_budget_not_as_a_crash
+ok
+
+[devflow-test] start 0 __main__.DeclaredTimeoutTests.test_the_budget_defaults_when_absent_so_old_manifests_still_load
+test_the_budget_defaults_when_absent_so_old_manifests_still_load (__main__.DeclaredTimeoutTests.test_the_budget_defaults_when_absent_so_old_manifests_still_load) ... 
+[devflow-test] pass 0 __main__.DeclaredTimeoutTests.test_the_budget_defaults_when_absent_so_old_manifests_still_load
+ok
+
+[devflow-test] start 0 __main__.DeclaredTimeoutTests.test_the_shipped_m3_0b_manifest_declares_a_windows_budget
+test_the_shipped_m3_0b_manifest_declares_a_windows_budget (__main__.DeclaredTimeoutTests.test_the_shipped_m3_0b_manifest_declares_a_windows_budget) ... 
+[devflow-test] pass 0 __main__.DeclaredTimeoutTests.test_the_shipped_m3_0b_manifest_declares_a_windows_budget
+ok
+
+[devflow-test] class 519 DeclaredTimeoutTests
+
+[devflow-test] start 0 __main__.DefaultUxTests.test_advanced_commands_still_exist_behind_arguments
+test_advanced_commands_still_exist_behind_arguments (__main__.DefaultUxTests.test_advanced_commands_still_exist_behind_arguments) ... 
+[devflow-test] pass 0 __main__.DefaultUxTests.test_advanced_commands_still_exist_behind_arguments
+ok
+
+[devflow-test] start 0 __main__.DefaultUxTests.test_auto_never_prompts_on_a_healthy_path
+test_auto_never_prompts_on_a_healthy_path (__main__.DefaultUxTests.test_auto_never_prompts_on_a_healthy_path)
+Behavioural: any input() anywhere in AUTO raises and fails this. ... == DevFlow rodada M3.0b: Pre-requisito de build gerenciado do Stage (core-agent/dist) ==
+branch=arena/01a10290-lia-project head=aaaaaaaaaaaa alteracoes_nao_commitadas=0
+preparo: remove_generated airi/packages/core-agent/dist - Reproduz o estado de um pull fresco: dist e gitignored, entao remove-lo forca o pre-requisito gerenciado a reconstruir do zero em vez de herdar um artefato ja pronto.
+  airi/packages/core-agent/dist: dir -> /tmp/devflow-auto-0cg7sslk/repo/airi/packages/core-agent/dist
+  airi/packages/core-agent/dist: 1 entr(s) dentro do alvo
+teste unit: FALHOU (exit 1)
+  detalhe: FAILED (failures=1)
+artefatos: /tmp/devflow-auto-0cg7sslk/repo/Tests/runs/devflow/20261114T034832Z-M3.0b
+== DevFlow rodada M3.0b: Pre-requisito de build gerenciado do Stage (core-agent/dist) ==
+branch=arena/01a10290-lia-project head=aaaaaaaaaaaa alteracoes_nao_commitadas=0
+preparo: remove_generated airi/packages/core-agent/dist - Reproduz o estado de um pull fresco: dist e gitignored, entao remove-lo forca o pre-requisito gerenciado a reconstruir do zero em vez de herdar um artefato ja pronto.
+  airi/packages/core-agent/dist: dir -> /tmp/devflow-auto-sapd1fsl/repo/airi/packages/core-agent/dist
+  airi/packages/core-agent/dist: 1 entr(s) dentro do alvo
+teste unit: OK
+pré-lançamento: remove_generated airi/packages/core-agent/dist - Um teste OBRIGATORIO (lia-app "rebuilds the real core-agent artifact") roda o mesmo pre-requisito contra o workspace real e reconstroi o dist que o prepare removeu. Sem re-aplicar o passo aqui, o lancamento comecaria com o artefato ja presente e os marcadores starting/succeeded nao provariam a condicao de checkout fresco que define e…[truncado]
+  airi/packages/core-agent/dist: nada a remover (ausente)
+  airi/packages/core-agent/dist AUSENTE imediatamente antes do lançamento
+lançamento gerenciado: Lia.bat
+operador: Nada a fazer. A rodada abre o Launcher, aciona Conversar sozinha e lê a propria evidencia. Nao rode nenhum build manual: a rodada precisa provar que o Launcher reconstruiu o core-agent sozinho.
+ambiente DEVFLOW do lançamento: LIA_DEVFLOW_AUTORUN, LIA_DEVFLOW_DIAGNOSTICS
+marcador autorun-invoked: OK
+marcador prerequisite-starting: OK
+marcador prerequisite-succeeded: OK
+marcador stage-spawn: OK
+gate fase B: cadeia de inicialização completa; aguardando a evidência terminal do Stage
+evidência terminal stage-renderer-ready: OK
+evidência terminal stage-window-visible: OK
+evidência terminal stage-renderer-app-mounted: OK
+evidência terminal stage-avatar-scene-mounted: OK
+gate: marcador autorun-invoked: linha 1
+gate: marcador prerequisite-starting: linha 2
+gate: marcador prerequisite-succeeded: linha 3
+gate: marcador stage-spawn: linha 4
+limpeza da árvore própria: PASS ([PASS]; fake; fake: root morto; descendentes verificados: nenhum vivo)
+gate: opcionais vistos: stage-dev-server-ready
+log sanitizado: 9 linhas mantidas, 0 retidas por não serem diagnóstico do launcher
+verdicto de runtime: PASS
+round.ready_for_publish=false: esta rodada não está marcada para publicar
+artefatos: /tmp/devflow-auto-sapd1fsl/repo/Tests/runs/devflow/20261114T034832Z-M3.0b
+== DevFlow rodada M3.0b: Pre-requisito de build gerenciado do Stage (core-agent/dist) ==
+branch=arena/01a10290-lia-project head=bbbbbbbbbbbb alteracoes_nao_commitadas=0
+preparo: remove_generated airi/packages/core-agent/dist - Reproduz o estado de um pull fresco: dist e gitignored, entao remove-lo forca o pre-requisito gerenciado a reconstruir do zero em vez de herdar um artefato ja pronto.
+  airi/packages/core-agent/dist: dir -> /tmp/devflow-auto-i2jwtrve/repo/airi/packages/core-agent/dist
+  airi/packages/core-agent/dist: 1 entr(s) dentro do alvo
+teste unit: OK
+pré-lançamento: remove_generated airi/packages/core-agent/dist - Um teste OBRIGATORIO (lia-app "rebuilds the real core-agent artifact") roda o mesmo pre-requisito contra o workspace real e reconstroi o dist que o prepare removeu. Sem re-aplicar o passo aqui, o lancamento comecaria com o artefato ja presente e os marcadores starting/succeeded nao provariam a condicao de checkout fresco que define e…[truncado]
+  airi/packages/core-agent/dist: nada a remover (ausente)
+  airi/packages/core-agent/dist AUSENTE imediatamente antes do lançamento
+lançamento gerenciado: Lia.bat
+operador: Nada a fazer. A rodada abre o Launcher, aciona Conversar sozinha e lê a propria evidencia. Nao rode nenhum build manual: a rodada precisa provar que o Launcher reconstruiu o core-agent sozinho.
+ambiente DEVFLOW do lançamento: LIA_DEVFLOW_AUTORUN, LIA_DEVFLOW_DIAGNOSTICS
+marcador autorun-invoked: OK
+marcador prerequisite-starting: OK
+marcador prerequisite-succeeded: OK
+marcador stage-spawn: OK
+gate fase B: cadeia de inicialização completa; aguardando a evidência terminal do Stage
+evidência terminal stage-renderer-ready: OK
+evidência terminal stage-window-visible: OK
+evidência terminal stage-renderer-app-mounted: OK
+evidência terminal stage-avatar-scene-mounted: OK
+gate: marcador autorun-invoked: linha 1
+gate: marcador prerequisite-starting: linha 2
+gate: marcador prerequisite-succeeded: linha 3
+gate: marcador stage-spawn: linha 4
+limpeza da árvore própria: PASS ([PASS]; fake; fake: root morto; descendentes verificados: nenhum vivo)
+gate: opcionais vistos: stage-dev-server-ready
+log sanitizado: 9 linhas mantidas, 0 retidas por não serem diagnóstico do launcher
+verdicto de runtime: PASS
+round.ready_for_publish=false: esta rodada não está marcada para publicar
+artefatos: /tmp/devflow-auto-i2jwtrve/repo/Tests/runs/devflow/20261114T034833Z-M3.0b
+== LIA DEVFLOW BOOTSTRAP ==
+branch de trabalho: arena/01a10290-lia-project (configurado, não adivinhado)
+  alterações locais: 0 (clean)
+
+========================================
+LIA DEVFLOW
+Round: (não resolvida)
+Result: FAIL
+Stage: fetch
+Reason: remote indisponível ou branch inexistente: fatal: unable to access remote
+Process cleanup: UNKNOWN
+No destructive recovery was attempted.
+========================================
+== LIA DEVFLOW BOOTSTRAP ==
+branch de trabalho: arena/01a10290-lia-project (configurado, não adivinhado)
+  alterações locais: 0 (clean)
+  atualizado aaaaaaaaaaaa -> bbbbbbbbbbbb
+checkout pronto em bbbbbbbbbbbb; executando o DevFlow atualizado
+== DevFlow rodada M3.0b: Pre-requisito de build gerenciado do Stage (core-agent/dist) ==
+branch=arena/01a10290-lia-project head=aaaaaaaaaaaa alteracoes_nao_commitadas=0
+preparo: remove_generated airi/packages/core-agent/dist - Reproduz o estado de um pull fresco: dist e gitignored, entao remove-lo forca o pre-requisito gerenciado a reconstruir do zero em vez de herdar um artefato ja pronto.
+  airi/packages/core-agent/dist: dir -> /tmp/devflow-ux-au942r2_/repo/airi/packages/core-agent/dist
+  airi/packages/core-agent/dist: 1 entr(s) dentro do alvo
+teste unit: OK
+pré-lançamento: remove_generated airi/packages/core-agent/dist - Um teste OBRIGATORIO (lia-app "rebuilds the real core-agent artifact") roda o mesmo pre-requisito contra o workspace real e reconstroi o dist que o prepare removeu. Sem re-aplicar o passo aqui, o lancamento comecaria com o artefato ja presente e os marcadores starting/succeeded nao provariam a condicao de checkout fresco que define e…[truncado]
+  airi/packages/core-agent/dist: nada a remover (ausente)
+  airi/packages/core-agent/dist AUSENTE imediatamente antes do lançamento
+lançamento gerenciado: Lia.bat
+operador: Nada a fazer. A rodada abre o Launcher, aciona Conversar sozinha e lê a propria evidencia. Nao rode nenhum build manual: a rodada precisa provar que o Launcher reconstruiu o core-agent sozinho.
+ambiente DEVFLOW do lançamento: LIA_DEVFLOW_AUTORUN, LIA_DEVFLOW_DIAGNOSTICS
+marcador autorun-invoked: OK
+marcador prerequisite-starting: OK
+marcador prerequisite-succeeded: OK
+marcador stage-spawn: OK
+gate fase B: cadeia de inicialização completa; aguardando a evidência terminal do Stage
+evidência terminal stage-renderer-ready: OK
+evidência terminal stage-window-visible: OK
+evidência terminal stage-renderer-app-mounted: OK
+evidência terminal stage-avatar-scene-mounted: OK
+gate: marcador autorun-invoked: linha 1
+gate: marcador prerequisite-starting: linha 2
+
+[devflow-test] pass 1026 __main__.DefaultUxTests.test_auto_never_prompts_on_a_healthy_path
+ok
+
+[devflow-test] start 0 __main__.DefaultUxTests.test_devkit_bat_copies_itself_before_running
+test_devkit_bat_copies_itself_before_running (__main__.DefaultUxTests.test_devkit_bat_copies_itself_before_running) ... 
+[devflow-test] pass 0 __main__.DefaultUxTests.test_devkit_bat_copies_itself_before_running
+ok
+
+[devflow-test] start 0 __main__.DefaultUxTests.test_devkit_bat_double_click_runs_the_bootstrap
+test_devkit_bat_double_click_runs_the_bootstrap (__main__.DefaultUxTests.test_devkit_bat_double_click_runs_the_bootstrap) ... 
+[devflow-test] pass 0 __main__.DefaultUxTests.test_devkit_bat_double_click_runs_the_bootstrap
+ok
+
+[devflow-test] start 0 __main__.DefaultUxTests.test_no_arguments_means_auto
+test_no_arguments_means_auto (__main__.DefaultUxTests.test_no_arguments_means_auto) ... 
+[devflow-test] pass 1 __main__.DefaultUxTests.test_no_arguments_means_auto
+ok
+
+[devflow-test] start 0 __main__.DefaultUxTests.test_no_input_call_exists_in_the_auto_path
+test_no_input_call_exists_in_the_auto_path (__main__.DefaultUxTests.test_no_input_call_exists_in_the_auto_path)
+Defence in depth behind the behavioural proof above. ... 
+[devflow-test] pass 22 __main__.DefaultUxTests.test_no_input_call_exists_in_the_auto_path
+ok
+
+[devflow-test] start 0 __main__.DefaultUxTests.test_the_cleanup_line_reads_the_real_teardown_fact
+test_the_cleanup_line_reads_the_real_teardown_fact (__main__.DefaultUxTests.test_the_cleanup_line_reads_the_real_teardown_fact)
+`"PASS" if result.stage` was not a cleanup proof - any non-empty stage ... 
+[devflow-test] pass 0 __main__.DefaultUxTests.test_the_cleanup_line_reads_the_real_teardown_fact
+ok
+
+[devflow-test] start 0 __main__.DefaultUxTests.test_the_failure_block_names_the_stage_and_promises_nothing_destructive
+test_the_failure_block_names_the_stage_and_promises_nothing_destructive (__main__.DefaultUxTests.test_the_failure_block_names_the_stage_and_promises_nothing_destructive) ... 
+[devflow-test] pass 0 __main__.DefaultUxTests.test_the_failure_block_names_the_stage_and_promises_nothing_destructive
+ok
+
+[devflow-test] start 0 __main__.DefaultUxTests.test_the_final_block_is_a_verdict_not_a_menu
+test_the_final_block_is_a_verdict_not_a_menu (__main__.DefaultUxTests.test_the_final_block_is_a_verdict_not_a_menu) ... 
+[devflow-test] pass 0 __main__.DefaultUxTests.test_the_final_block_is_a_verdict_not_a_menu
+ok
+
+[devflow-test] class 1051 DefaultUxTests
+
+[devflow-test] start 0 __main__.DelayedTerminalMarkerTests.test_a_forbidden_marker_after_spawn_still_fails
+test_a_forbidden_marker_after_spawn_still_fails (__main__.DelayedTerminalMarkerTests.test_a_forbidden_marker_after_spawn_still_fails) ... 
+[devflow-test] pass 1224 __main__.DelayedTerminalMarkerTests.test_a_forbidden_marker_after_spawn_still_fails
+ok
+
+[devflow-test] start 0 __main__.DelayedTerminalMarkerTests.test_a_terminal_pattern_cannot_double_as_an_ordered_marker
+test_a_terminal_pattern_cannot_double_as_an_ordered_marker (__main__.DelayedTerminalMarkerTests.test_a_terminal_pattern_cannot_double_as_an_ordered_marker)
+One line satisfies at most one marker, so a terminal line arriving while ... 
+[devflow-test] pass 1824 __main__.DelayedTerminalMarkerTests.test_a_terminal_pattern_cannot_double_as_an_ordered_marker
+ok
+
+[devflow-test] start 0 __main__.DelayedTerminalMarkerTests.test_missing_terminal_evidence_times_out_as_fail
+test_missing_terminal_evidence_times_out_as_fail (__main__.DelayedTerminalMarkerTests.test_missing_terminal_evidence_times_out_as_fail) ... 
+[devflow-test] pass 2024 __main__.DelayedTerminalMarkerTests.test_missing_terminal_evidence_times_out_as_fail
+ok
+
+[devflow-test] start 0 __main__.DelayedTerminalMarkerTests.test_teardown_happens_only_after_the_evidence_is_complete
+test_teardown_happens_only_after_the_evidence_is_complete (__main__.DelayedTerminalMarkerTests.test_teardown_happens_only_after_the_evidence_is_complete) ... 
+[devflow-test] pass 2528 __main__.DelayedTerminalMarkerTests.test_teardown_happens_only_after_the_evidence_is_complete
+ok
+
+[devflow-test] start 0 __main__.DelayedTerminalMarkerTests.test_the_gate_waits_for_terminal_evidence_that_arrives_late
+test_the_gate_waits_for_terminal_evidence_that_arrives_late (__main__.DelayedTerminalMarkerTests.test_the_gate_waits_for_terminal_evidence_that_arrives_late) ... 
+[devflow-test] pass 2929 __main__.DelayedTerminalMarkerTests.test_the_gate_waits_for_terminal_evidence_that_arrives_late
+ok
+
+[devflow-test] start 0 __main__.DelayedTerminalMarkerTests.test_the_process_exiting_before_terminal_evidence_fails
+test_the_process_exiting_before_terminal_evidence_fails (__main__.DelayedTerminalMarkerTests.test_the_process_exiting_before_terminal_evidence_fails) ... 
+[devflow-test] pass 1224 __main__.DelayedTerminalMarkerTests.test_the_process_exiting_before_terminal_evidence_fails
+ok
+
+[devflow-test] class 11756 DelayedTerminalMarkerTests
+
+[devflow-test] start 0 __main__.DevKitArgumentForwardingTests.test_a_line_without_the_token_passes_through
+test_a_line_without_the_token_passes_through (__main__.DevKitArgumentForwardingTests.test_a_line_without_the_token_passes_through) ... 
+[devflow-test] pass 0 __main__.DevKitArgumentForwardingTests.test_a_line_without_the_token_passes_through
+ok
+
+[devflow-test] start 0 __main__.DevKitArgumentForwardingTests.test_an_empty_line_stays_empty_so_the_usage_is_shown
+test_an_empty_line_stays_empty_so_the_usage_is_shown (__main__.DevKitArgumentForwardingTests.test_an_empty_line_stays_empty_so_the_usage_is_shown) ... 
+[devflow-test] pass 0 __main__.DevKitArgumentForwardingTests.test_an_empty_line_stays_empty_so_the_usage_is_shown
+ok
+
+[devflow-test] start 0 __main__.DevKitArgumentForwardingTests.test_the_git_verb_is_registered
+test_the_git_verb_is_registered (__main__.DevKitArgumentForwardingTests.test_the_git_verb_is_registered) ... 
+[devflow-test] pass 0 __main__.DevKitArgumentForwardingTests.test_the_git_verb_is_registered
+ok
+
+[devflow-test] start 0 __main__.DevKitArgumentForwardingTests.test_the_leading_git_token_is_dropped
+test_the_leading_git_token_is_dropped (__main__.DevKitArgumentForwardingTests.test_the_leading_git_token_is_dropped) ... 
+[devflow-test] pass 0 __main__.DevKitArgumentForwardingTests.test_the_leading_git_token_is_dropped
+ok
+
+[devflow-test] start 0 __main__.DevKitArgumentForwardingTests.test_the_rest_of_the_line_is_untouched
+test_the_rest_of_the_line_is_untouched (__main__.DevKitArgumentForwardingTests.test_the_rest_of_the_line_is_untouched) ... 
+[devflow-test] pass 0 __main__.DevKitArgumentForwardingTests.test_the_rest_of_the_line_is_untouched
+ok
+
+[devflow-test] class 0 DevKitArgumentForwardingTests
+
+[devflow-test] start 0 __main__.DevKitBatTests.test_bat_is_thin_and_routes_to_lia_dev
+test_bat_is_thin_and_routes_to_lia_dev (__main__.DevKitBatTests.test_bat_is_thin_and_routes_to_lia_dev) ... 
+[devflow-test] pass 0 __main__.DevKitBatTests.test_bat_is_thin_and_routes_to_lia_dev
+ok
+
+[devflow-test] start 0 __main__.DevKitBatTests.test_menu_offers_the_required_actions
+test_menu_offers_the_required_actions (__main__.DevKitBatTests.test_menu_offers_the_required_actions) ... 
+[devflow-test] pass 0 __main__.DevKitBatTests.test_menu_offers_the_required_actions
+ok
+
+[devflow-test] class 0 DevKitBatTests
+
+[devflow-test] start 0 __main__.DevKitExitCodeContractTests.test_errorlevel_is_never_read_inside_a_parenthesized_block
+test_errorlevel_is_never_read_inside_a_parenthesized_block (__main__.DevKitExitCodeContractTests.test_errorlevel_is_never_read_inside_a_parenthesized_block) ... 
+[devflow-test] pass 0 __main__.DevKitExitCodeContractTests.test_errorlevel_is_never_read_inside_a_parenthesized_block
+ok
+
+[devflow-test] start 0 __main__.DevKitExitCodeContractTests.test_every_dispatch_path_captures_the_exit_code_of_its_own_call
+test_every_dispatch_path_captures_the_exit_code_of_its_own_call (__main__.DevKitExitCodeContractTests.test_every_dispatch_path_captures_the_exit_code_of_its_own_call)
+Not "some line captures the code" - EVERY dispatch path must capture ... 
+[devflow-test] pass 0 __main__.DevKitExitCodeContractTests.test_every_dispatch_path_captures_the_exit_code_of_its_own_call
+ok
+
+[devflow-test] start 0 __main__.DevKitExitCodeContractTests.test_the_batch_file_still_uses_crlf
+test_the_batch_file_still_uses_crlf (__main__.DevKitExitCodeContractTests.test_the_batch_file_still_uses_crlf) ... 
+[devflow-test] pass 0 __main__.DevKitExitCodeContractTests.test_the_batch_file_still_uses_crlf
+ok
+
+[devflow-test] start 0 __main__.DevKitExitCodeContractTests.test_the_bootstrap_copy_fails_closed_when_it_cannot_be_made
+test_the_bootstrap_copy_fails_closed_when_it_cannot_be_made (__main__.DevKitExitCodeContractTests.test_the_bootstrap_copy_fails_closed_when_it_cannot_be_made) ... 
+[devflow-test] pass 0 __main__.DevKitExitCodeContractTests.test_the_bootstrap_copy_fails_closed_when_it_cannot_be_made
+ok
+
+[devflow-test] start 0 __main__.DevKitExitCodeContractTests.test_the_captured_exit_code_is_what_leaves_the_script
+test_the_captured_exit_code_is_what_leaves_the_script (__main__.DevKitExitCodeContractTests.test_the_captured_exit_code_is_what_leaves_the_script) ... 
+[devflow-test] pass 0 __main__.DevKitExitCodeContractTests.test_the_captured_exit_code_is_what_leaves_the_script
+ok
+
+[devflow-test] class 2 DevKitExitCodeContractTests
+
+[devflow-test] start 0 __main__.DevKitHandoffContractTests.test_a_failed_copy_fails_closed_instead_of_running_the_original
+test_a_failed_copy_fails_closed_instead_of_running_the_original (__main__.DevKitHandoffContractTests.test_a_failed_copy_fails_closed_instead_of_running_the_original) ... 
+[devflow-test] pass 0 __main__.DevKitHandoffContractTests.test_a_failed_copy_fails_closed_instead_of_running_the_original
+ok
+
+[devflow-test] start 0 __main__.DevKitHandoffContractTests.test_an_existing_temp_copy_is_never_reused
+test_an_existing_temp_copy_is_never_reused (__main__.DevKitHandoffContractTests.test_an_existing_temp_copy_is_never_reused) ... 
+[devflow-test] pass 0 __main__.DevKitHandoffContractTests.test_an_existing_temp_copy_is_never_reused
+ok
+
+[devflow-test] start 0 __main__.DevKitHandoffContractTests.test_no_machine_specific_path_is_hardcoded
+test_no_machine_specific_path_is_hardcoded (__main__.DevKitHandoffContractTests.test_no_machine_specific_path_is_hardcoded) ... 
+[devflow-test] pass 0 __main__.DevKitHandoffContractTests.test_no_machine_specific_path_is_hardcoded
+ok
+
+[devflow-test] start 0 __main__.DevKitHandoffContractTests.test_no_menu_or_prompt_on_the_default_path
+test_no_menu_or_prompt_on_the_default_path (__main__.DevKitHandoffContractTests.test_no_menu_or_prompt_on_the_default_path) ... 
+[devflow-test] pass 0 __main__.DevKitHandoffContractTests.test_no_menu_or_prompt_on_the_default_path
+ok
+
+[devflow-test] start 0 __main__.DevKitHandoffContractTests.test_paths_are_quoted_for_spaces
+test_paths_are_quoted_for_spaces (__main__.DevKitHandoffContractTests.test_paths_are_quoted_for_spaces) ... 
+[devflow-test] pass 0 __main__.DevKitHandoffContractTests.test_paths_are_quoted_for_spaces
+ok
+
+[devflow-test] start 0 __main__.DevKitHandoffContractTests.test_shift_is_not_used_so_the_git_token_cannot_leak
+test_shift_is_not_used_so_the_git_token_cannot_leak (__main__.DevKitHandoffContractTests.test_shift_is_not_used_so_the_git_token_cannot_leak) ... 
+[devflow-test] pass 0 __main__.DevKitHandoffContractTests.test_shift_is_not_used_so_the_git_token_cannot_leak
+ok
+
+[devflow-test] start 0 __main__.DevKitHandoffContractTests.test_temporary_artifacts_are_cleaned
+test_temporary_artifacts_are_cleaned (__main__.DevKitHandoffContractTests.test_temporary_artifacts_are_cleaned) ... 
+[devflow-test] pass 0 __main__.DevKitHandoffContractTests.test_temporary_artifacts_are_cleaned
+ok
+
+[devflow-test] start 0 __main__.DevKitHandoffContractTests.test_the_bat_uses_crlf_line_endings
+test_the_bat_uses_crlf_line_endings (__main__.DevKitHandoffContractTests.test_the_bat_uses_crlf_line_endings) ... 
+[devflow-test] pass 0 __main__.DevKitHandoffContractTests.test_the_bat_uses_crlf_line_endings
+ok
+
+[devflow-test] start 0 __main__.DevKitHandoffContractTests.test_the_child_exit_code_is_propagated
+test_the_child_exit_code_is_propagated (__main__.DevKitHandoffContractTests.test_the_child_exit_code_is_propagated) ... 
+[devflow-test] pass 0 __main__.DevKitHandoffContractTests.test_the_child_exit_code_is_propagated
+ok
+
+[devflow-test] start 0 __main__.DevKitHandoffContractTests.test_the_copy_never_deletes_itself_before_exiting
+test_the_copy_never_deletes_itself_before_exiting (__main__.DevKitHandoffContractTests.test_the_copy_never_deletes_itself_before_exiting)
+cmd.exe reads a .bat by byte offset, so a copy that deletes itself ... 
+[devflow-test] pass 0 __main__.DevKitHandoffContractTests.test_the_copy_never_deletes_itself_before_exiting
+ok
+
+[devflow-test] start 0 __main__.DevKitHandoffContractTests.test_the_copy_never_reads_its_own_directory
+test_the_copy_never_reads_its_own_directory (__main__.DevKitHandoffContractTests.test_the_copy_never_reads_its_own_directory) ... 
+[devflow-test] pass 0 __main__.DevKitHandoffContractTests.test_the_copy_never_reads_its_own_directory
+ok
+
+[devflow-test] start 0 __main__.DevKitHandoffContractTests.test_the_original_root_is_captured_before_the_copy
+test_the_original_root_is_captured_before_the_copy (__main__.DevKitHandoffContractTests.test_the_original_root_is_captured_before_the_copy) ... 
+[devflow-test] pass 0 __main__.DevKitHandoffContractTests.test_the_original_root_is_captured_before_the_copy
+ok
+
+[devflow-test] start 0 __main__.DevKitHandoffContractTests.test_the_owner_removes_the_copy_only_after_capturing_the_code
+test_the_owner_removes_the_copy_only_after_capturing_the_code (__main__.DevKitHandoffContractTests.test_the_owner_removes_the_copy_only_after_capturing_the_code)
+The cleanup must not precede the capture it would destroy. ... 
+[devflow-test] pass 0 __main__.DevKitHandoffContractTests.test_the_owner_removes_the_copy_only_after_capturing_the_code
+ok
+
+[devflow-test] start 0 __main__.DevKitHandoffContractTests.test_the_temp_copy_name_is_unique_per_run
+test_the_temp_copy_name_is_unique_per_run (__main__.DevKitHandoffContractTests.test_the_temp_copy_name_is_unique_per_run) ... 
+[devflow-test] pass 0 __main__.DevKitHandoffContractTests.test_the_temp_copy_name_is_unique_per_run
+ok
+
+[devflow-test] class 1 DevKitHandoffContractTests
+
+[devflow-test] start 0 __main__.DevKitHandoffExecutionTests.test_arguments_are_forwarded_without_a_shift
+test_arguments_are_forwarded_without_a_shift (__main__.DevKitHandoffExecutionTests.test_arguments_are_forwarded_without_a_shift) ... 
+[devflow-test] skip 0 __main__.DevKitHandoffExecutionTests.test_arguments_are_forwarded_without_a_shift
+skipped 'cmd.exe indisponível nesta plataforma'
+
+[devflow-test] start 0 __main__.DevKitHandoffExecutionTests.test_the_copy_still_finds_the_original_repository_root
+test_the_copy_still_finds_the_original_repository_root (__main__.DevKitHandoffExecutionTests.test_the_copy_still_finds_the_original_repository_root) ... 
+[devflow-test] skip 0 __main__.DevKitHandoffExecutionTests.test_the_copy_still_finds_the_original_repository_root
+skipped 'cmd.exe indisponível nesta plataforma'
+
+[devflow-test] start 0 __main__.DevKitHandoffExecutionTests.test_the_exit_code_survives_the_handoff
+test_the_exit_code_survives_the_handoff (__main__.DevKitHandoffExecutionTests.test_the_exit_code_survives_the_handoff) ... 
+[devflow-test] skip 0 __main__.DevKitHandoffExecutionTests.test_the_exit_code_survives_the_handoff
+skipped 'cmd.exe indisponível nesta plataforma'
+
+[devflow-test] start 0 __main__.DevKitHandoffExecutionTests.test_the_git_token_is_forwarded_once
+test_the_git_token_is_forwarded_once (__main__.DevKitHandoffExecutionTests.test_the_git_token_is_forwarded_once) ... 
+[devflow-test] skip 0 __main__.DevKitHandoffExecutionTests.test_the_git_token_is_forwarded_once
+skipped 'cmd.exe indisponível nesta plataforma'
+
+[devflow-test] class 0 DevKitHandoffExecutionTests
+
+[devflow-test] start 0 __main__.DiagnosticDestinationRedactionTests.test_a_credential_that_reaches_the_console_sanitizer_is_redacted
+test_a_credential_that_reaches_the_console_sanitizer_is_redacted (__main__.DiagnosticDestinationRedactionTests.test_a_credential_that_reaches_the_console_sanitizer_is_redacted)
+Closes the gap the test above cannot: the console log only keeps lines ... 
+[devflow-test] pass 13 __main__.DiagnosticDestinationRedactionTests.test_a_credential_that_reaches_the_console_sanitizer_is_redacted
+ok
+
+[devflow-test] start 0 __main__.DiagnosticDestinationRedactionTests.test_an_unquoted_credential_reaches_no_persisted_destination
+test_an_unquoted_credential_reaches_no_persisted_destination (__main__.DiagnosticDestinationRedactionTests.test_an_unquoted_credential_reaches_no_persisted_destination) ... 
+[devflow-test] pass 28 __main__.DiagnosticDestinationRedactionTests.test_an_unquoted_credential_reaches_no_persisted_destination
+ok
+
+[devflow-test] start 0 __main__.DiagnosticDestinationRedactionTests.test_long_output_cannot_push_the_credential_past_the_budget_unredacted
+test_long_output_cannot_push_the_credential_past_the_budget_unredacted (__main__.DiagnosticDestinationRedactionTests.test_long_output_cannot_push_the_credential_past_the_budget_unredacted) ... 
+[devflow-test] pass 27 __main__.DiagnosticDestinationRedactionTests.test_long_output_cannot_push_the_credential_past_the_budget_unredacted
+ok
+
+[devflow-test] start 0 __main__.DiagnosticDestinationRedactionTests.test_the_progress_stream_is_sanitized_like_every_other_destination
+test_the_progress_stream_is_sanitized_like_every_other_destination (__main__.DiagnosticDestinationRedactionTests.test_the_progress_stream_is_sanitized_like_every_other_destination)
+The console is a persistence destination. ... 
+[devflow-test] pass 13 __main__.DiagnosticDestinationRedactionTests.test_the_progress_stream_is_sanitized_like_every_other_destination
+ok
+
+[devflow-test] class 82 DiagnosticDestinationRedactionTests
+
+[devflow-test] start 0 __main__.FailureDiagnosticsTests.test_console_prints_a_sanitized_detail_on_failure
+test_console_prints_a_sanitized_detail_on_failure (__main__.FailureDiagnosticsTests.test_console_prints_a_sanitized_detail_on_failure) ... 
+[devflow-test] pass 19 __main__.FailureDiagnosticsTests.test_console_prints_a_sanitized_detail_on_failure
+ok
+
+[devflow-test] start 0 __main__.FailureDiagnosticsTests.test_detail_reaches_the_artifacts_already_sanitized
+test_detail_reaches_the_artifacts_already_sanitized (__main__.FailureDiagnosticsTests.test_detail_reaches_the_artifacts_already_sanitized) ... 
+[devflow-test] pass 19 __main__.FailureDiagnosticsTests.test_detail_reaches_the_artifacts_already_sanitized
+ok
+
+[devflow-test] start 0 __main__.FailureDiagnosticsTests.test_passing_test_stays_concise_everywhere
+test_passing_test_stays_concise_everywhere (__main__.FailureDiagnosticsTests.test_passing_test_stays_concise_everywhere) ... 
+[devflow-test] pass 1021 __main__.FailureDiagnosticsTests.test_passing_test_stays_concise_everywhere
+ok
+
+[devflow-test] start 0 __main__.FailureDiagnosticsTests.test_report_and_run_json_carry_the_failed_detail
+test_report_and_run_json_carry_the_failed_detail (__main__.FailureDiagnosticsTests.test_report_and_run_json_carry_the_failed_detail) ... 
+[devflow-test] pass 19 __main__.FailureDiagnosticsTests.test_report_and_run_json_carry_the_failed_detail
+ok
+
+[devflow-test] start 0 __main__.FailureDiagnosticsTests.test_run_test_command_sanitizes_before_returning
+test_run_test_command_sanitizes_before_returning (__main__.FailureDiagnosticsTests.test_run_test_command_sanitizes_before_returning) ... 
+[devflow-test] pass 54 __main__.FailureDiagnosticsTests.test_run_test_command_sanitizes_before_returning
+ok
+
+[devflow-test] class 1134 FailureDiagnosticsTests
+
+[devflow-test] start 0 __main__.FailureIdentityCharBudgetTests.test_a_single_oversized_identity_line_is_clipped_not_dropped
+test_a_single_oversized_identity_line_is_clipped_not_dropped (__main__.FailureIdentityCharBudgetTests.test_a_single_oversized_identity_line_is_clipped_not_dropped) ... 
+[devflow-test] pass 0 __main__.FailureIdentityCharBudgetTests.test_a_single_oversized_identity_line_is_clipped_not_dropped
+ok
+
+[devflow-test] start 0 __main__.FailureIdentityCharBudgetTests.test_identity_survives_a_char_budget_smaller_than_the_tail
+test_identity_survives_a_char_budget_smaller_than_the_tail (__main__.FailureIdentityCharBudgetTests.test_identity_survives_a_char_budget_smaller_than_the_tail) ... 
+[devflow-test] pass 0 __main__.FailureIdentityCharBudgetTests.test_identity_survives_a_char_budget_smaller_than_the_tail
+ok
+
+[devflow-test] start 0 __main__.FailureIdentityCharBudgetTests.test_redaction_survives_the_priority_reordering
+test_redaction_survives_the_priority_reordering (__main__.FailureIdentityCharBudgetTests.test_redaction_survives_the_priority_reordering) ... 
+[devflow-test] pass 0 __main__.FailureIdentityCharBudgetTests.test_redaction_survives_the_priority_reordering
+ok
+
+[devflow-test] start 0 __main__.FailureIdentityCharBudgetTests.test_the_budget_is_actually_spent_not_left_on_the_table
+test_the_budget_is_actually_spent_not_left_on_the_table (__main__.FailureIdentityCharBudgetTests.test_the_budget_is_actually_spent_not_left_on_the_table) ... 
+[devflow-test] pass 0 __main__.FailureIdentityCharBudgetTests.test_the_budget_is_actually_spent_not_left_on_the_table
+ok
+
+[devflow-test] start 0 __main__.FailureIdentityCharBudgetTests.test_truncation_is_signalled_only_when_something_was_dropped
+test_truncation_is_signalled_only_when_something_was_dropped (__main__.FailureIdentityCharBudgetTests.test_truncation_is_signalled_only_when_something_was_dropped) ... 
+[devflow-test] pass 0 __main__.FailureIdentityCharBudgetTests.test_truncation_is_signalled_only_when_something_was_dropped
+ok
+
+[devflow-test] class 2 FailureIdentityCharBudgetTests
+
+[devflow-test] start 0 __main__.FailureIdentityStreamTests.test_a_line_on_both_streams_spends_the_budget_once
+test_a_line_on_both_streams_spends_the_budget_once (__main__.FailureIdentityStreamTests.test_a_line_on_both_streams_spends_the_budget_once) ... 
+[devflow-test] pass 0 __main__.FailureIdentityStreamTests.test_a_line_on_both_streams_spends_the_budget_once
+ok
+
+[devflow-test] start 0 __main__.FailureIdentityStreamTests.test_identity_on_stderr_survives_noisy_stdout
+test_identity_on_stderr_survives_noisy_stdout (__main__.FailureIdentityStreamTests.test_identity_on_stderr_survives_noisy_stdout) ... 
+[devflow-test] pass 0 __main__.FailureIdentityStreamTests.test_identity_on_stderr_survives_noisy_stdout
+ok
+
+[devflow-test] start 0 __main__.FailureIdentityStreamTests.test_identity_on_stdout_survives_noisy_stderr
+test_identity_on_stdout_survives_noisy_stderr (__main__.FailureIdentityStreamTests.test_identity_on_stdout_survives_noisy_stderr) ... 
+[devflow-test] pass 0 __main__.FailureIdentityStreamTests.test_identity_on_stdout_survives_noisy_stderr
+ok
+
+[devflow-test] start 0 __main__.FailureIdentityStreamTests.test_identity_split_across_both_streams_is_fully_preserved
+test_identity_split_across_both_streams_is_fully_preserved (__main__.FailureIdentityStreamTests.test_identity_split_across_both_streams_is_fully_preserved) ... 
+[devflow-test] pass 0 __main__.FailureIdentityStreamTests.test_identity_split_across_both_streams_is_fully_preserved
+ok
+
+[devflow-test] start 0 __main__.FailureIdentityStreamTests.test_no_raw_output_is_concatenated_and_conversation_is_still_dropped
+test_no_raw_output_is_concatenated_and_conversation_is_still_dropped (__main__.FailureIdentityStreamTests.test_no_raw_output_is_concatenated_and_conversation_is_still_dropped) ... 
+[devflow-test] pass 0 __main__.FailureIdentityStreamTests.test_no_raw_output_is_concatenated_and_conversation_is_still_dropped
+ok
+
+[devflow-test] class 0 FailureIdentityStreamTests
+
+[devflow-test] start 0 __main__.GateInterruptionTests.test_an_exception_inside_the_gate_does_not_leak_the_process
+test_an_exception_inside_the_gate_does_not_leak_the_process (__main__.GateInterruptionTests.test_an_exception_inside_the_gate_does_not_leak_the_process) ... 
+[devflow-test] pass 1041 __main__.GateInterruptionTests.test_an_exception_inside_the_gate_does_not_leak_the_process
+ok
+
+[devflow-test] start 0 __main__.GateInterruptionTests.test_ctrl_c_during_phase_a_still_terminates_the_child
+test_ctrl_c_during_phase_a_still_terminates_the_child (__main__.GateInterruptionTests.test_ctrl_c_during_phase_a_still_terminates_the_child) ... 
+[devflow-test] pass 1065 __main__.GateInterruptionTests.test_ctrl_c_during_phase_a_still_terminates_the_child
+ok
+
+[devflow-test] start 0 __main__.GateInterruptionTests.test_ctrl_c_during_phase_b_still_terminates_the_child
+test_ctrl_c_during_phase_b_still_terminates_the_child (__main__.GateInterruptionTests.test_ctrl_c_during_phase_b_still_terminates_the_child) ... 
+[devflow-test] pass 1102 __main__.GateInterruptionTests.test_ctrl_c_during_phase_b_still_terminates_the_child
+ok
+
+[devflow-test] class 3209 GateInterruptionTests
+
+[devflow-test] start 0 __main__.GitExecutableResolutionTests.test_a_cmd_shim_is_not_reachable_by_an_extensionless_spawn
+test_a_cmd_shim_is_not_reachable_by_an_extensionless_spawn (__main__.GitExecutableResolutionTests.test_a_cmd_shim_is_not_reachable_by_an_extensionless_spawn)
+The executable probe itself: build a directory holding ONLY `git.cmd`, ... 
+[devflow-test] pass 0 __main__.GitExecutableResolutionTests.test_a_cmd_shim_is_not_reachable_by_an_extensionless_spawn
+ok
+
+[devflow-test] start 0 __main__.GitExecutableResolutionTests.test_it_falls_back_to_a_bare_name_only_when_nothing_is_configured
+test_it_falls_back_to_a_bare_name_only_when_nothing_is_configured (__main__.GitExecutableResolutionTests.test_it_falls_back_to_a_bare_name_only_when_nothing_is_configured) ... 
+[devflow-test] pass 0 __main__.GitExecutableResolutionTests.test_it_falls_back_to_a_bare_name_only_when_nothing_is_configured
+ok
+
+[devflow-test] start 0 __main__.GitExecutableResolutionTests.test_the_configured_absolute_path_wins_over_path_lookup
+test_the_configured_absolute_path_wins_over_path_lookup (__main__.GitExecutableResolutionTests.test_the_configured_absolute_path_wins_over_path_lookup) ... 
+[devflow-test] pass 0 __main__.GitExecutableResolutionTests.test_the_configured_absolute_path_wins_over_path_lookup
+ok
+
+[devflow-test] start 0 __main__.GitExecutableResolutionTests.test_the_git_runner_actually_uses_the_configured_executable
+test_the_git_runner_actually_uses_the_configured_executable (__main__.GitExecutableResolutionTests.test_the_git_runner_actually_uses_the_configured_executable)
+Not just the helper: the call site has to consume it. ... 
+[devflow-test] pass 0 __main__.GitExecutableResolutionTests.test_the_git_runner_actually_uses_the_configured_executable
+ok
+
+[devflow-test] class 0 GitExecutableResolutionTests
+
+[devflow-test] start 0 __main__.InventoryTests.test_consolidation_moved_scripts_without_deleting_them
+test_consolidation_moved_scripts_without_deleting_them (__main__.InventoryTests.test_consolidation_moved_scripts_without_deleting_them) ... 
+[devflow-test] pass 0 __main__.InventoryTests.test_consolidation_moved_scripts_without_deleting_them
+ok
+
+[devflow-test] start 0 __main__.InventoryTests.test_inventory_exists_and_classifies_every_listed_script
+test_inventory_exists_and_classifies_every_listed_script (__main__.InventoryTests.test_inventory_exists_and_classifies_every_listed_script) ... 
+[devflow-test] pass 0 __main__.InventoryTests.test_inventory_exists_and_classifies_every_listed_script
+ok
+
+[devflow-test] class 0 InventoryTests
+
+[devflow-test] start 0 __main__.JournalDoesNotCrowdOutRealFailuresTests.test_a_timeout_verdict_still_survives_a_full_journal
+test_a_timeout_verdict_still_survives_a_full_journal (__main__.JournalDoesNotCrowdOutRealFailuresTests.test_a_timeout_verdict_still_survives_a_full_journal)
+The one tier addition that IS load-bearing, proven rather than assumed. ... 
+[devflow-test] pass 2002 __main__.JournalDoesNotCrowdOutRealFailuresTests.test_a_timeout_verdict_still_survives_a_full_journal
+ok
+
+[devflow-test] start 0 __main__.JournalDoesNotCrowdOutRealFailuresTests.test_an_ordinary_failure_keeps_its_identity_and_summary
+test_an_ordinary_failure_keeps_its_identity_and_summary (__main__.JournalDoesNotCrowdOutRealFailuresTests.test_an_ordinary_failure_keeps_its_identity_and_summary) ... 
+[devflow-test] pass 1 __main__.JournalDoesNotCrowdOutRealFailuresTests.test_an_ordinary_failure_keeps_its_identity_and_summary
+ok
+
+[devflow-test] class 2003 JournalDoesNotCrowdOutRealFailuresTests
+
+[devflow-test] start 0 __main__.LiaCorePrereqTests.test_a_missing_dist_invokes_the_build_and_the_round_proceeds
+test_a_missing_dist_invokes_the_build_and_the_round_proceeds (__main__.LiaCorePrereqTests.test_a_missing_dist_invokes_the_build_and_the_round_proceeds) ... 
+[devflow-test] pass 0 __main__.LiaCorePrereqTests.test_a_missing_dist_invokes_the_build_and_the_round_proceeds
+ok
+
+[devflow-test] start 0 __main__.LiaCorePrereqTests.test_a_present_dist_is_not_rebuilt
+test_a_present_dist_is_not_rebuilt (__main__.LiaCorePrereqTests.test_a_present_dist_is_not_rebuilt) ... 
+[devflow-test] pass 0 __main__.LiaCorePrereqTests.test_a_present_dist_is_not_rebuilt
+ok
+
+[devflow-test] start 0 __main__.LiaCorePrereqTests.test_build_output_is_sanitized_before_it_is_persisted
+test_build_output_is_sanitized_before_it_is_persisted (__main__.LiaCorePrereqTests.test_build_output_is_sanitized_before_it_is_persisted) ... 
+[devflow-test] pass 0 __main__.LiaCorePrereqTests.test_build_output_is_sanitized_before_it_is_persisted
+ok
+
+[devflow-test] start 0 __main__.LiaCorePrereqTests.test_c_a_base_failure_is_blocking_so_the_long_suite_never_starts
+test_c_a_base_failure_is_blocking_so_the_long_suite_never_starts (__main__.LiaCorePrereqTests.test_c_a_base_failure_is_blocking_so_the_long_suite_never_starts) ... 
+[devflow-test] pass 92 __main__.LiaCorePrereqTests.test_c_a_base_failure_is_blocking_so_the_long_suite_never_starts
+ok
+
+[devflow-test] start 0 __main__.LiaCorePrereqTests.test_c_missing_base_dependencies_fail_fast_and_stop_the_round
+test_c_missing_base_dependencies_fail_fast_and_stop_the_round (__main__.LiaCorePrereqTests.test_c_missing_base_dependencies_fail_fast_and_stop_the_round) ... 
+[devflow-test] pass 0 __main__.LiaCorePrereqTests.test_c_missing_base_dependencies_fail_fast_and_stop_the_round
+ok
+
+[devflow-test] start 0 __main__.LiaCorePrereqTests.test_d_a_failed_build_fails_closed
+test_d_a_failed_build_fails_closed (__main__.LiaCorePrereqTests.test_d_a_failed_build_fails_closed) ... 
+[devflow-test] pass 0 __main__.LiaCorePrereqTests.test_d_a_failed_build_fails_closed
+ok
+
+[devflow-test] start 0 __main__.LiaCorePrereqTests.test_e_a_zero_exit_without_the_artifact_still_fails_closed
+test_e_a_zero_exit_without_the_artifact_still_fails_closed (__main__.LiaCorePrereqTests.test_e_a_zero_exit_without_the_artifact_still_fails_closed)
+Exit status alone is not proof: this is the eight-suite failure again. ... 
+[devflow-test] pass 0 __main__.LiaCorePrereqTests.test_e_a_zero_exit_without_the_artifact_still_fails_closed
+ok
+
+[devflow-test] start 0 __main__.LiaCorePrereqTests.test_f_a_build_timeout_is_bounded_and_nonzero
+test_f_a_build_timeout_is_bounded_and_nonzero (__main__.LiaCorePrereqTests.test_f_a_build_timeout_is_bounded_and_nonzero) ... 
+[devflow-test] pass 0 __main__.LiaCorePrereqTests.test_f_a_build_timeout_is_bounded_and_nonzero
+ok
+
+[devflow-test] start 0 __main__.LiaCorePrereqTests.test_g_no_tracked_product_source_is_touched
+test_g_no_tracked_product_source_is_touched (__main__.LiaCorePrereqTests.test_g_no_tracked_product_source_is_touched) ... 
+[devflow-test] pass 1 __main__.LiaCorePrereqTests.test_g_no_tracked_product_source_is_touched
+ok
+
+[devflow-test] start 0 __main__.LiaCorePrereqTests.test_no_shell_is_used_and_the_platform_seam_is_applied
+test_no_shell_is_used_and_the_platform_seam_is_applied (__main__.LiaCorePrereqTests.test_no_shell_is_used_and_the_platform_seam_is_applied) ... 
+[devflow-test] pass 3 __main__.LiaCorePrereqTests.test_no_shell_is_used_and_the_platform_seam_is_applied
+ok
+
+[devflow-test] start 0 __main__.LiaCorePrereqTests.test_the_build_never_mentions_core_agent
+test_the_build_never_mentions_core_agent (__main__.LiaCorePrereqTests.test_the_build_never_mentions_core_agent) ... 
+[devflow-test] pass 0 __main__.LiaCorePrereqTests.test_the_build_never_mentions_core_agent
+ok
+
+[devflow-test] start 0 __main__.LiaCorePrereqTests.test_the_declared_prerequisite_is_first_blocking_and_bounded
+test_the_declared_prerequisite_is_first_blocking_and_bounded (__main__.LiaCorePrereqTests.test_the_declared_prerequisite_is_first_blocking_and_bounded) ... 
+[devflow-test] pass 0 __main__.LiaCorePrereqTests.test_the_declared_prerequisite_is_first_blocking_and_bounded
+ok
+
+[devflow-test] start 0 __main__.LiaCorePrereqTests.test_the_round_still_clears_core_agent_dist_at_prelaunch
+test_the_round_still_clears_core_agent_dist_at_prelaunch (__main__.LiaCorePrereqTests.test_the_round_still_clears_core_agent_dist_at_prelaunch) ... 
+[devflow-test] pass 0 __main__.LiaCorePrereqTests.test_the_round_still_clears_core_agent_dist_at_prelaunch
+ok
+
+[devflow-test] class 102 LiaCorePrereqTests
+
+[devflow-test] start 0 __main__.LocalChangePolicyTests.test_forbidden_path_blocks_the_checkpoint
+test_forbidden_path_blocks_the_checkpoint (__main__.LocalChangePolicyTests.test_forbidden_path_blocks_the_checkpoint) ... 
+[devflow-test] pass 16 __main__.LocalChangePolicyTests.test_forbidden_path_blocks_the_checkpoint
+ok
+
+[devflow-test] start 0 __main__.LocalChangePolicyTests.test_huge_binary_blocks_the_checkpoint
+test_huge_binary_blocks_the_checkpoint (__main__.LocalChangePolicyTests.test_huge_binary_blocks_the_checkpoint) ... 
+[devflow-test] pass 18 __main__.LocalChangePolicyTests.test_huge_binary_blocks_the_checkpoint
+ok
+
+[devflow-test] start 0 __main__.LocalChangePolicyTests.test_nothing_is_discarded_when_refusing
+test_nothing_is_discarded_when_refusing (__main__.LocalChangePolicyTests.test_nothing_is_discarded_when_refusing) ... 
+[devflow-test] pass 13 __main__.LocalChangePolicyTests.test_nothing_is_discarded_when_refusing
+ok
+
+[devflow-test] start 0 __main__.LocalChangePolicyTests.test_safe_source_diff_becomes_a_local_checkpoint
+test_safe_source_diff_becomes_a_local_checkpoint (__main__.LocalChangePolicyTests.test_safe_source_diff_becomes_a_local_checkpoint)
+Driven against a REAL git repository: the checkpoint path has to survive ... 
+[devflow-test] pass 69 __main__.LocalChangePolicyTests.test_safe_source_diff_becomes_a_local_checkpoint
+ok
+
+[devflow-test] start 0 __main__.LocalChangePolicyTests.test_secret_blocks_the_checkpoint
+test_secret_blocks_the_checkpoint (__main__.LocalChangePolicyTests.test_secret_blocks_the_checkpoint) ... 
+[devflow-test] pass 13 __main__.LocalChangePolicyTests.test_secret_blocks_the_checkpoint
+ok
+
+[devflow-test] start 0 __main__.LocalChangePolicyTests.test_unknown_classification_blocks_the_checkpoint
+test_unknown_classification_blocks_the_checkpoint (__main__.LocalChangePolicyTests.test_unknown_classification_blocks_the_checkpoint) ... 
+[devflow-test] pass 12 __main__.LocalChangePolicyTests.test_unknown_classification_blocks_the_checkpoint
+ok
+
+[devflow-test] class 144 LocalChangePolicyTests
+
+[devflow-test] start 0 __main__.ManualOrderingTests.test_all_markers_asks_exactly_once
+test_all_markers_asks_exactly_once (__main__.ManualOrderingTests.test_all_markers_asks_exactly_once) ... 
+[devflow-test] pass 1021 __main__.ManualOrderingTests.test_all_markers_asks_exactly_once
+ok
+
+[devflow-test] start 0 __main__.ManualOrderingTests.test_marker_failure_asks_nothing
+test_marker_failure_asks_nothing (__main__.ManualOrderingTests.test_marker_failure_asks_nothing) ... 
+[devflow-test] pass 1021 __main__.ManualOrderingTests.test_marker_failure_asks_nothing
+ok
+
+[devflow-test] start 0 __main__.ManualOrderingTests.test_out_of_order_markers_ask_nothing
+test_out_of_order_markers_ask_nothing (__main__.ManualOrderingTests.test_out_of_order_markers_ask_nothing) ... 
+[devflow-test] pass 1022 __main__.ManualOrderingTests.test_out_of_order_markers_ask_nothing
+ok
+
+[devflow-test] start 0 __main__.ManualOrderingTests.test_process_exit_before_markers_asks_nothing
+test_process_exit_before_markers_asks_nothing (__main__.ManualOrderingTests.test_process_exit_before_markers_asks_nothing) ... 
+[devflow-test] pass 1022 __main__.ManualOrderingTests.test_process_exit_before_markers_asks_nothing
+ok
+
+[devflow-test] start 0 __main__.ManualOrderingTests.test_timeout_asks_nothing_and_still_cleans_up
+test_timeout_asks_nothing_and_still_cleans_up (__main__.ManualOrderingTests.test_timeout_asks_nothing_and_still_cleans_up) ... 
+[devflow-test] pass 2027 __main__.ManualOrderingTests.test_timeout_asks_nothing_and_still_cleans_up
+ok
+
+[devflow-test] class 6116 ManualOrderingTests
+
+[devflow-test] start 0 __main__.MarkerGateTests.test_markers_in_order_pass
+test_markers_in_order_pass (__main__.MarkerGateTests.test_markers_in_order_pass) ... 
+[devflow-test] pass 0 __main__.MarkerGateTests.test_markers_in_order_pass
+ok
+
+[devflow-test] start 0 __main__.MarkerGateTests.test_missing_marker_fails
+test_missing_marker_fails (__main__.MarkerGateTests.test_missing_marker_fails) ... 
+[devflow-test] pass 0 __main__.MarkerGateTests.test_missing_marker_fails
+ok
+
+[devflow-test] start 0 __main__.MarkerGateTests.test_optional_marker_never_gates
+test_optional_marker_never_gates (__main__.MarkerGateTests.test_optional_marker_never_gates) ... 
+[devflow-test] pass 0 __main__.MarkerGateTests.test_optional_marker_never_gates
+ok
+
+[devflow-test] start 0 __main__.MarkerGateTests.test_out_of_order_marker_fails
+test_out_of_order_marker_fails (__main__.MarkerGateTests.test_out_of_order_marker_fails) ... 
+[devflow-test] pass 0 __main__.MarkerGateTests.test_out_of_order_marker_fails
+ok
+
+[devflow-test] start 0 __main__.MarkerGateTests.test_reason_must_match_too
+test_reason_must_match_too (__main__.MarkerGateTests.test_reason_must_match_too) ... 
+[devflow-test] pass 0 __main__.MarkerGateTests.test_reason_must_match_too
+ok
+
+[devflow-test] class 1 MarkerGateTests
+
+[devflow-test] start 0 __main__.OneTimeUpgradeBootstrapTests.test_no_file_inside_the_checkout_pretends_to_bootstrap_itself
+test_no_file_inside_the_checkout_pretends_to_bootstrap_itself (__main__.OneTimeUpgradeBootstrapTests.test_no_file_inside_the_checkout_pretends_to_bootstrap_itself) ... 
+[devflow-test] pass 2 __main__.OneTimeUpgradeBootstrapTests.test_no_file_inside_the_checkout_pretends_to_bootstrap_itself
+ok
+
+[devflow-test] start 0 __main__.OneTimeUpgradeBootstrapTests.test_the_upgrade_bootstrap_exists_and_needs_no_new_file
+test_the_upgrade_bootstrap_exists_and_needs_no_new_file (__main__.OneTimeUpgradeBootstrapTests.test_the_upgrade_bootstrap_exists_and_needs_no_new_file) ... 
+[devflow-test] pass 0 __main__.OneTimeUpgradeBootstrapTests.test_the_upgrade_bootstrap_exists_and_needs_no_new_file
+ok
+
+[devflow-test] start 0 __main__.OneTimeUpgradeBootstrapTests.test_the_upgrade_bootstrap_is_fail_closed_and_never_destructive
+test_the_upgrade_bootstrap_is_fail_closed_and_never_destructive (__main__.OneTimeUpgradeBootstrapTests.test_the_upgrade_bootstrap_is_fail_closed_and_never_destructive) ... 
+[devflow-test] pass 0 __main__.OneTimeUpgradeBootstrapTests.test_the_upgrade_bootstrap_is_fail_closed_and_never_destructive
+ok
+
+[devflow-test] start 0 __main__.OneTimeUpgradeBootstrapTests.test_the_upgrade_bootstrap_is_shipped_outside_the_checkout
+test_the_upgrade_bootstrap_is_shipped_outside_the_checkout (__main__.OneTimeUpgradeBootstrapTests.test_the_upgrade_bootstrap_is_shipped_outside_the_checkout) ... 
+[devflow-test] pass 0 __main__.OneTimeUpgradeBootstrapTests.test_the_upgrade_bootstrap_is_shipped_outside_the_checkout
+ok
+
+[devflow-test] start 0 __main__.OneTimeUpgradeBootstrapTests.test_the_upgrade_bootstrap_pins_an_exact_reviewed_commit
+test_the_upgrade_bootstrap_pins_an_exact_reviewed_commit (__main__.OneTimeUpgradeBootstrapTests.test_the_upgrade_bootstrap_pins_an_exact_reviewed_commit) ... 
+[devflow-test] pass 0 __main__.OneTimeUpgradeBootstrapTests.test_the_upgrade_bootstrap_pins_an_exact_reviewed_commit
+ok
+
+[devflow-test] class 3 OneTimeUpgradeBootstrapTests
+
+[devflow-test] start 0 __main__.OwnedProcessTests.test_launch_argv_falls_back_to_cmd_exe_without_comspec
+test_launch_argv_falls_back_to_cmd_exe_without_comspec (__main__.OwnedProcessTests.test_launch_argv_falls_back_to_cmd_exe_without_comspec) ... 
+[devflow-test] pass 0 __main__.OwnedProcessTests.test_launch_argv_falls_back_to_cmd_exe_without_comspec
+ok
+
+[devflow-test] start 0 __main__.OwnedProcessTests.test_launch_argv_passes_non_batch_commands_untouched
+test_launch_argv_passes_non_batch_commands_untouched (__main__.OwnedProcessTests.test_launch_argv_passes_non_batch_commands_untouched) ... 
+[devflow-test] pass 0 __main__.OwnedProcessTests.test_launch_argv_passes_non_batch_commands_untouched
+ok
+
+[devflow-test] start 0 __main__.OwnedProcessTests.test_launch_argv_rejects_empty
+test_launch_argv_rejects_empty (__main__.OwnedProcessTests.test_launch_argv_rejects_empty) ... 
+[devflow-test] pass 0 __main__.OwnedProcessTests.test_launch_argv_rejects_empty
+ok
+
+[devflow-test] start 0 __main__.OwnedProcessTests.test_launch_argv_runs_a_bat_through_comspec_on_windows
+test_launch_argv_runs_a_bat_through_comspec_on_windows (__main__.OwnedProcessTests.test_launch_argv_runs_a_bat_through_comspec_on_windows) ... 
+[devflow-test] pass 0 __main__.OwnedProcessTests.test_launch_argv_runs_a_bat_through_comspec_on_windows
+ok
+
+[devflow-test] start 0 __main__.OwnedProcessTests.test_posix_popens_a_new_session
+test_posix_popens_a_new_session (__main__.OwnedProcessTests.test_posix_popens_a_new_session) ... 
+[devflow-test] pass 0 __main__.OwnedProcessTests.test_posix_popens_a_new_session
+ok
+
+[devflow-test] start 0 __main__.OwnedProcessTests.test_teardown_kills_the_owned_tree_and_nothing_else
+test_teardown_kills_the_owned_tree_and_nothing_else (__main__.OwnedProcessTests.test_teardown_kills_the_owned_tree_and_nothing_else)
+Cross-platform proof of process-tree ownership (A-H). ... 
+[devflow-test] pass 26 __main__.OwnedProcessTests.test_teardown_kills_the_owned_tree_and_nothing_else
+ok
+
+[devflow-test] start 0 __main__.OwnedProcessTests.test_windows_popens_a_new_process_group
+test_windows_popens_a_new_process_group (__main__.OwnedProcessTests.test_windows_popens_a_new_process_group) ... 
+[devflow-test] pass 0 __main__.OwnedProcessTests.test_windows_popens_a_new_process_group
+ok
+
+[devflow-test] class 27 OwnedProcessTests
+
+[devflow-test] start 0 __main__.PersistedRootCauseConsistencyTests.test_report_and_run_json_carry_the_same_sanitized_root_cause
+test_report_and_run_json_carry_the_same_sanitized_root_cause (__main__.PersistedRootCauseConsistencyTests.test_report_and_run_json_carry_the_same_sanitized_root_cause) ... 
+[devflow-test] pass 34 __main__.PersistedRootCauseConsistencyTests.test_report_and_run_json_carry_the_same_sanitized_root_cause
+ok
+
+[devflow-test] class 34 PersistedRootCauseConsistencyTests
+
+[devflow-test] start 0 __main__.PidTriStateTests.test_a_failed_getexitcodeprocess_is_unknown_not_dead
+test_a_failed_getexitcodeprocess_is_unknown_not_dead (__main__.PidTriStateTests.test_a_failed_getexitcodeprocess_is_unknown_not_dead) ... 
+[devflow-test] pass 0 __main__.PidTriStateTests.test_a_failed_getexitcodeprocess_is_unknown_not_dead
+ok
+
+[devflow-test] start 0 __main__.PidTriStateTests.test_a_live_pid_is_alive_and_an_absent_one_is_dead
+test_a_live_pid_is_alive_and_an_absent_one_is_dead (__main__.PidTriStateTests.test_a_live_pid_is_alive_and_an_absent_one_is_dead)
+Liveness, through the dispatching entry point, on the platform running. ... 
+[devflow-test] pass 0 __main__.PidTriStateTests.test_a_live_pid_is_alive_and_an_absent_one_is_dead
+ok
+
+[devflow-test] start 0 __main__.PidTriStateTests.test_a_mixed_tree_reports_alive_and_unverified_separately
+test_a_mixed_tree_reports_alive_and_unverified_separately (__main__.PidTriStateTests.test_a_mixed_tree_reports_alive_and_unverified_separately) ... 
+[devflow-test] pass 0 __main__.PidTriStateTests.test_a_mixed_tree_reports_alive_and_unverified_separately
+ok
+
+[devflow-test] start 0 __main__.PidTriStateTests.test_an_unexpected_oserror_is_unknown_not_dead
+test_an_unexpected_oserror_is_unknown_not_dead (__main__.PidTriStateTests.test_an_unexpected_oserror_is_unknown_not_dead) ... 
+[devflow-test] pass 0 __main__.PidTriStateTests.test_an_unexpected_oserror_is_unknown_not_dead
+ok
+
+[devflow-test] start 0 __main__.PidTriStateTests.test_an_unverifiable_descendant_is_counted_as_unverified
+test_an_unverifiable_descendant_is_counted_as_unverified (__main__.PidTriStateTests.test_an_unverifiable_descendant_is_counted_as_unverified) ... 
+[devflow-test] pass 0 __main__.PidTriStateTests.test_an_unverifiable_descendant_is_counted_as_unverified
+ok
+
+[devflow-test] start 0 __main__.PidTriStateTests.test_only_the_documented_absent_pid_error_counts_as_dead
+test_only_the_documented_absent_pid_error_counts_as_dead (__main__.PidTriStateTests.test_only_the_documented_absent_pid_error_counts_as_dead) ... 
+[devflow-test] pass 0 __main__.PidTriStateTests.test_only_the_documented_absent_pid_error_counts_as_dead
+ok
+
+[devflow-test] start 0 __main__.PidTriStateTests.test_openprocess_access_denied_is_unknown_not_dead
+test_openprocess_access_denied_is_unknown_not_dead (__main__.PidTriStateTests.test_openprocess_access_denied_is_unknown_not_dead) ... 
+[devflow-test] pass 0 __main__.PidTriStateTests.test_openprocess_access_denied_is_unknown_not_dead
+ok
+
+[devflow-test] start 0 __main__.PidTriStateTests.test_openprocess_failing_for_an_unknown_reason_is_unknown
+test_openprocess_failing_for_an_unknown_reason_is_unknown (__main__.PidTriStateTests.test_openprocess_failing_for_an_unknown_reason_is_unknown) ... 
+[devflow-test] pass 0 __main__.PidTriStateTests.test_openprocess_failing_for_an_unknown_reason_is_unknown
+ok
+
+[devflow-test] start 0 __main__.PidTriStateTests.test_permission_denied_proves_existence_not_absence
+test_permission_denied_proves_existence_not_absence (__main__.PidTriStateTests.test_permission_denied_proves_existence_not_absence) ... 
+[devflow-test] pass 0 __main__.PidTriStateTests.test_permission_denied_proves_existence_not_absence
+ok
+
+[devflow-test] start 0 __main__.PidTriStateTests.test_still_active_is_alive_and_any_other_exit_code_is_dead
+test_still_active_is_alive_and_any_other_exit_code_is_dead (__main__.PidTriStateTests.test_still_active_is_alive_and_any_other_exit_code_is_dead) ... 
+[devflow-test] pass 0 __main__.PidTriStateTests.test_still_active_is_alive_and_any_other_exit_code_is_dead
+ok
+
+[devflow-test] start 0 __main__.PidTriStateTests.test_the_posix_probe_never_reaches_os_kill_on_windows
+test_the_posix_probe_never_reaches_os_kill_on_windows (__main__.PidTriStateTests.test_the_posix_probe_never_reaches_os_kill_on_windows)
+REGRESSION for the Ctrl+C above, asserted directly: on Windows the ... 
+[devflow-test] pass 0 __main__.PidTriStateTests.test_the_posix_probe_never_reaches_os_kill_on_windows
+ok
+
+[devflow-test] start 0 __main__.PidTriStateTests.test_unverified_descendants_make_the_teardown_unknown_not_pass
+test_unverified_descendants_make_the_teardown_unknown_not_pass (__main__.PidTriStateTests.test_unverified_descendants_make_the_teardown_unknown_not_pass) ... 
+[devflow-test] pass 0 __main__.PidTriStateTests.test_unverified_descendants_make_the_teardown_unknown_not_pass
+ok
+
+[devflow-test] class 4 PidTriStateTests
+
+[devflow-test] start 0 __main__.PortabilityContractTests.test_no_forbidden_executable_has_been_spawned_so_far
+test_no_forbidden_executable_has_been_spawned_so_far (__main__.PortabilityContractTests.test_no_forbidden_executable_has_been_spawned_so_far) ... 
+[devflow-test] pass 0 __main__.PortabilityContractTests.test_no_forbidden_executable_has_been_spawned_so_far
+ok
+
+[devflow-test] start 0 __main__.PortabilityContractTests.test_no_forbidden_executable_is_ever_spawned
+test_no_forbidden_executable_is_ever_spawned (__main__.PortabilityContractTests.test_no_forbidden_executable_is_ever_spawned)
+AST contract: defence in depth behind the behavioural proof below. ... 
+[devflow-test] pass 85 __main__.PortabilityContractTests.test_no_forbidden_executable_is_ever_spawned
+ok
+
+[devflow-test] start 0 __main__.PortabilityContractTests.test_no_forbidden_executable_name_appears_as_a_literal
+test_no_forbidden_executable_name_appears_as_a_literal (__main__.PortabilityContractTests.test_no_forbidden_executable_name_appears_as_a_literal) ... 
+[devflow-test] pass 98 __main__.PortabilityContractTests.test_no_forbidden_executable_name_appears_as_a_literal
+ok
+
+[devflow-test] start 0 __main__.PortabilityContractTests.test_suite_passes_with_a_path_that_has_no_posix_tools
+test_suite_passes_with_a_path_that_has_no_posix_tools (__main__.PortabilityContractTests.test_suite_passes_with_a_path_that_has_no_posix_tools)
+Behavioural proof: re-run the process-spawning classes in a child whose ... 
+[devflow-test] pass 8265 __main__.PortabilityContractTests.test_suite_passes_with_a_path_that_has_no_posix_tools
+ok
+
+[devflow-test] start 0 __main__.PortabilityContractTests.test_the_guard_is_installed_and_records_a_real_spawn
+test_the_guard_is_installed_and_records_a_real_spawn (__main__.PortabilityContractTests.test_the_guard_is_installed_and_records_a_real_spawn) ... 
+[devflow-test] pass 9 __main__.PortabilityContractTests.test_the_guard_is_installed_and_records_a_real_spawn
+ok
+
+[devflow-test] start 0 __main__.PortabilityContractTests.test_the_guard_would_reject_a_forbidden_head
+test_the_guard_would_reject_a_forbidden_head (__main__.PortabilityContractTests.test_the_guard_would_reject_a_forbidden_head)
+Proves the guard is not a no-op decoration. ... 
+GUARDA DE SPAWN: esta suíte lançou executável(is) proibido(s) ou não classificáveis: bash
+A portabilidade do DevFlow não pode depender de ferramentas POSIX.
+
+[devflow-test] pass 0 __main__.PortabilityContractTests.test_the_guard_would_reject_a_forbidden_head
+ok
+
+[devflow-test] start 0 __main__.PortabilityContractTests.test_the_probe_targets_are_real_and_were_selected_deliberately
+test_the_probe_targets_are_real_and_were_selected_deliberately (__main__.PortabilityContractTests.test_the_probe_targets_are_real_and_were_selected_deliberately)
+The subset must exist, and must be the process-spawning classes. ... 
+[devflow-test] pass 1 __main__.PortabilityContractTests.test_the_probe_targets_are_real_and_were_selected_deliberately
+ok
+
+[devflow-test] start 0 __main__.PortabilityContractTests.test_windows_branches_are_the_only_unguarded_platform_code
+test_windows_branches_are_the_only_unguarded_platform_code (__main__.PortabilityContractTests.test_windows_branches_are_the_only_unguarded_platform_code)
+Any test whose NAME says posix must guard itself on Windows. ... 
+[devflow-test] pass 283 __main__.PortabilityContractTests.test_windows_branches_are_the_only_unguarded_platform_code
+ok
+
+[devflow-test] class 8744 PortabilityContractTests
+
+[devflow-test] start 0 __main__.PrelaunchPreparationTests.test_a_failed_mandatory_test_still_prevents_both_the_preclean_and_the_launch
+test_a_failed_mandatory_test_still_prevents_both_the_preclean_and_the_launch (__main__.PrelaunchPreparationTests.test_a_failed_mandatory_test_still_prevents_both_the_preclean_and_the_launch) ... 
+[devflow-test] pass 19 __main__.PrelaunchPreparationTests.test_a_failed_mandatory_test_still_prevents_both_the_preclean_and_the_launch
+ok
+
+[devflow-test] start 0 __main__.PrelaunchPreparationTests.test_a_prelaunch_path_outside_the_allowlist_is_rejected_by_the_schema
+test_a_prelaunch_path_outside_the_allowlist_is_rejected_by_the_schema (__main__.PrelaunchPreparationTests.test_a_prelaunch_path_outside_the_allowlist_is_rejected_by_the_schema) ... 
+[devflow-test] pass 14 __main__.PrelaunchPreparationTests.test_a_prelaunch_path_outside_the_allowlist_is_rejected_by_the_schema
+ok
+
+[devflow-test] start 0 __main__.PrelaunchPreparationTests.test_a_refused_re_clean_prevents_the_launch
+test_a_refused_re_clean_prevents_the_launch (__main__.PrelaunchPreparationTests.test_a_refused_re_clean_prevents_the_launch) ... 
+[devflow-test] pass 14 __main__.PrelaunchPreparationTests.test_a_refused_re_clean_prevents_the_launch
+ok
+
+[devflow-test] start 0 __main__.PrelaunchPreparationTests.test_a_round_that_declares_nothing_launches_unchanged
+test_a_round_that_declares_nothing_launches_unchanged (__main__.PrelaunchPreparationTests.test_a_round_that_declares_nothing_launches_unchanged) ... 
+[devflow-test] pass 1019 __main__.PrelaunchPreparationTests.test_a_round_that_declares_nothing_launches_unchanged
+ok
+
+[devflow-test] start 0 __main__.PrelaunchPreparationTests.test_an_artifact_rebuilt_by_a_mandatory_test_is_absent_at_spawn
+test_an_artifact_rebuilt_by_a_mandatory_test_is_absent_at_spawn (__main__.PrelaunchPreparationTests.test_an_artifact_rebuilt_by_a_mandatory_test_is_absent_at_spawn) ... 
+[devflow-test] pass 1022 __main__.PrelaunchPreparationTests.test_an_artifact_rebuilt_by_a_mandatory_test_is_absent_at_spawn
+ok
+
+[devflow-test] start 0 __main__.PrelaunchPreparationTests.test_no_directory_contents_are_persisted_only_the_safe_fact
+test_no_directory_contents_are_persisted_only_the_safe_fact (__main__.PrelaunchPreparationTests.test_no_directory_contents_are_persisted_only_the_safe_fact) ... 
+[devflow-test] pass 1023 __main__.PrelaunchPreparationTests.test_no_directory_contents_are_persisted_only_the_safe_fact
+ok
+
+[devflow-test] start 0 __main__.PrelaunchPreparationTests.test_only_remove_generated_is_accepted_before_launch_too
+test_only_remove_generated_is_accepted_before_launch_too (__main__.PrelaunchPreparationTests.test_only_remove_generated_is_accepted_before_launch_too) ... 
+[devflow-test] pass 16 __main__.PrelaunchPreparationTests.test_only_remove_generated_is_accepted_before_launch_too
+ok
+
+[devflow-test] start 0 __main__.PrelaunchPreparationTests.test_the_fact_is_recorded_in_the_persisted_artifacts
+test_the_fact_is_recorded_in_the_persisted_artifacts (__main__.PrelaunchPreparationTests.test_the_fact_is_recorded_in_the_persisted_artifacts) ... 
+[devflow-test] pass 1024 __main__.PrelaunchPreparationTests.test_the_fact_is_recorded_in_the_persisted_artifacts
+ok
+
+[devflow-test] start 0 __main__.PrelaunchPreparationTests.test_the_shipped_round_declares_the_fresh_checkout_at_launch
+test_the_shipped_round_declares_the_fresh_checkout_at_launch (__main__.PrelaunchPreparationTests.test_the_shipped_round_declares_the_fresh_checkout_at_launch) ... 
+[devflow-test] pass 16 __main__.PrelaunchPreparationTests.test_the_shipped_round_declares_the_fresh_checkout_at_launch
+ok
+
+[devflow-test] class 4170 PrelaunchPreparationTests
+
+[devflow-test] start 0 __main__.PublishPolicyTests.test_a_local_commit_ahead_of_the_remote_is_a_valid_fast_forward
+test_a_local_commit_ahead_of_the_remote_is_a_valid_fast_forward (__main__.PublishPolicyTests.test_a_local_commit_ahead_of_the_remote_is_a_valid_fast_forward)
+The old `remote_head != current` test refused THIS, which is the one ... 
+[devflow-test] pass 0 __main__.PublishPolicyTests.test_a_local_commit_ahead_of_the_remote_is_a_valid_fast_forward
+ok
+
+[devflow-test] start 0 __main__.PublishPolicyTests.test_dirty_checkout_may_not_push
+test_dirty_checkout_may_not_push (__main__.PublishPolicyTests.test_dirty_checkout_may_not_push) ... 
+[devflow-test] pass 0 __main__.PublishPolicyTests.test_dirty_checkout_may_not_push
+ok
+
+[devflow-test] start 0 __main__.PublishPolicyTests.test_head_changing_after_the_gate_invalidates_the_push
+test_head_changing_after_the_gate_invalidates_the_push (__main__.PublishPolicyTests.test_head_changing_after_the_gate_invalidates_the_push) ... 
+[devflow-test] pass 0 __main__.PublishPolicyTests.test_head_changing_after_the_gate_invalidates_the_push
+ok
+
+[devflow-test] start 0 __main__.PublishPolicyTests.test_main_can_never_be_published
+test_main_can_never_be_published (__main__.PublishPolicyTests.test_main_can_never_be_published) ... 
+[devflow-test] pass 0 __main__.PublishPolicyTests.test_main_can_never_be_published
+ok
+
+[devflow-test] start 0 __main__.PublishPolicyTests.test_only_the_exact_tested_head_may_push
+test_only_the_exact_tested_head_may_push (__main__.PublishPolicyTests.test_only_the_exact_tested_head_may_push) ... 
+[devflow-test] pass 0 __main__.PublishPolicyTests.test_only_the_exact_tested_head_may_push
+ok
+
+[devflow-test] start 0 __main__.PublishPolicyTests.test_publish_fetches_again_immediately_before_pushing
+test_publish_fetches_again_immediately_before_pushing (__main__.PublishPolicyTests.test_publish_fetches_again_immediately_before_pushing) ... 
+[devflow-test] pass 0 __main__.PublishPolicyTests.test_publish_fetches_again_immediately_before_pushing
+ok
+
+[devflow-test] start 0 __main__.PublishPolicyTests.test_publish_never_rebases_after_the_gate
+test_publish_never_rebases_after_the_gate (__main__.PublishPolicyTests.test_publish_never_rebases_after_the_gate)
+Rebasing after the gate would put a different SHA under a PASS that was ... 
+[devflow-test] pass 0 __main__.PublishPolicyTests.test_publish_never_rebases_after_the_gate
+ok
+
+[devflow-test] start 0 __main__.PublishPolicyTests.test_remote_already_at_the_tested_head_pushes_nothing
+test_remote_already_at_the_tested_head_pushes_nothing (__main__.PublishPolicyTests.test_remote_already_at_the_tested_head_pushes_nothing) ... 
+[devflow-test] pass 0 __main__.PublishPolicyTests.test_remote_already_at_the_tested_head_pushes_nothing
+ok
+
+[devflow-test] start 0 __main__.PublishPolicyTests.test_remote_moving_between_gate_and_publish_forces_revalidation
+test_remote_moving_between_gate_and_publish_forces_revalidation (__main__.PublishPolicyTests.test_remote_moving_between_gate_and_publish_forces_revalidation)
+A remote tip that is NOT an ancestor means divergence, never a push. ... 
+[devflow-test] pass 0 __main__.PublishPolicyTests.test_remote_moving_between_gate_and_publish_forces_revalidation
+ok
+
+[devflow-test] class 1 PublishPolicyTests
+
+[devflow-test] start 0 __main__.RealProgressWiringTests.test_a_slow_required_test_emits_progress_naming_its_own_id
+test_a_slow_required_test_emits_progress_naming_its_own_id (__main__.RealProgressWiringTests.test_a_slow_required_test_emits_progress_naming_its_own_id) ... 
+[devflow-test] pass 2233 __main__.RealProgressWiringTests.test_a_slow_required_test_emits_progress_naming_its_own_id
+ok
+
+[devflow-test] start 0 __main__.RealProgressWiringTests.test_an_injected_two_argument_invoker_still_works_unchanged
+test_an_injected_two_argument_invoker_still_works_unchanged (__main__.RealProgressWiringTests.test_an_injected_two_argument_invoker_still_works_unchanged) ... 
+[devflow-test] pass 1023 __main__.RealProgressWiringTests.test_an_injected_two_argument_invoker_still_works_unchanged
+ok
+
+[devflow-test] start 0 __main__.RealProgressWiringTests.test_no_input_or_menu_is_requested_while_a_test_runs
+test_no_input_or_menu_is_requested_while_a_test_runs (__main__.RealProgressWiringTests.test_no_input_or_menu_is_requested_while_a_test_runs) ... 
+[devflow-test] pass 2040 __main__.RealProgressWiringTests.test_no_input_or_menu_is_requested_while_a_test_runs
+ok
+
+[devflow-test] start 0 __main__.RealProgressWiringTests.test_progress_is_bounded
+test_progress_is_bounded (__main__.RealProgressWiringTests.test_progress_is_bounded) ... 
+[devflow-test] pass 3034 __main__.RealProgressWiringTests.test_progress_is_bounded
+ok
+
+[devflow-test] start 0 __main__.RealProgressWiringTests.test_progress_never_carries_the_childs_raw_output
+test_progress_never_carries_the_childs_raw_output (__main__.RealProgressWiringTests.test_progress_never_carries_the_childs_raw_output) ... 
+[devflow-test] pass 2241 __main__.RealProgressWiringTests.test_progress_never_carries_the_childs_raw_output
+ok
+
+[devflow-test] start 0 __main__.RealProgressWiringTests.test_the_same_real_executor_still_enforces_the_declared_timeout
+test_the_same_real_executor_still_enforces_the_declared_timeout (__main__.RealProgressWiringTests.test_the_same_real_executor_still_enforces_the_declared_timeout) ... 
+[devflow-test] pass 1023 __main__.RealProgressWiringTests.test_the_same_real_executor_still_enforces_the_declared_timeout
+ok
+
+[devflow-test] class 11597 RealProgressWiringTests
+
+[devflow-test] start 0 __main__.ReparseSafetyTests.test_attribute_table_matches_win32_semantics
+test_attribute_table_matches_win32_semantics (__main__.ReparseSafetyTests.test_attribute_table_matches_win32_semantics) ... 
+[devflow-test] pass 16 __main__.ReparseSafetyTests.test_attribute_table_matches_win32_semantics
+ok
+
+[devflow-test] start 0 __main__.ReparseSafetyTests.test_fixture_repo_is_a_temporary_directory_and_never_the_real_repo
+test_fixture_repo_is_a_temporary_directory_and_never_the_real_repo (__main__.ReparseSafetyTests.test_fixture_repo_is_a_temporary_directory_and_never_the_real_repo)
+The junction test must not be able to touch a real checkout. ... 
+[devflow-test] pass 19 __main__.ReparseSafetyTests.test_fixture_repo_is_a_temporary_directory_and_never_the_real_repo
+ok
+
+[devflow-test] start 0 __main__.ReparseSafetyTests.test_plain_directory_is_allowed
+test_plain_directory_is_allowed (__main__.ReparseSafetyTests.test_plain_directory_is_allowed) ... 
+[devflow-test] pass 19 __main__.ReparseSafetyTests.test_plain_directory_is_allowed
+ok
+
+[devflow-test] start 0 __main__.ReparseSafetyTests.test_posix_symlink_target_refused
+test_posix_symlink_target_refused (__main__.ReparseSafetyTests.test_posix_symlink_target_refused) ... 
+[devflow-test] pass 14 __main__.ReparseSafetyTests.test_posix_symlink_target_refused
+ok
+
+[devflow-test] start 0 __main__.ReparseSafetyTests.test_real_windows_junction
+test_real_windows_junction (__main__.ReparseSafetyTests.test_real_windows_junction) ... 
+[devflow-test] skip 14 __main__.ReparseSafetyTests.test_real_windows_junction
+skipped 'GATE WINDOWS PENDENTE: junction real só pode ser provada no Windows; a lógica está coberta pelo teste de atributo acima'
+
+[devflow-test] start 0 __main__.ReparseSafetyTests.test_symlink_ancestor_refused
+test_symlink_ancestor_refused (__main__.ReparseSafetyTests.test_symlink_ancestor_refused) ... 
+[devflow-test] pass 16 __main__.ReparseSafetyTests.test_symlink_ancestor_refused
+ok
+
+[devflow-test] start 0 __main__.ReparseSafetyTests.test_windows_probe_failure_fails_closed
+test_windows_probe_failure_fails_closed (__main__.ReparseSafetyTests.test_windows_probe_failure_fails_closed) ... 
+[devflow-test] pass 14 __main__.ReparseSafetyTests.test_windows_probe_failure_fails_closed
+ok
+
+[devflow-test] start 0 __main__.ReparseSafetyTests.test_windows_reparse_attribute_is_honoured_on_any_platform
+test_windows_reparse_attribute_is_honoured_on_any_platform (__main__.ReparseSafetyTests.test_windows_reparse_attribute_is_honoured_on_any_platform) ... 
+[devflow-test] pass 15 __main__.ReparseSafetyTests.test_windows_reparse_attribute_is_honoured_on_any_platform
+ok
+
+[devflow-test] class 133 ReparseSafetyTests
+
+[devflow-test] start 0 __main__.RepositoryIdentityTests.test_a_lookalike_host_is_refused
+test_a_lookalike_host_is_refused (__main__.RepositoryIdentityTests.test_a_lookalike_host_is_refused) ... 
+[devflow-test] pass 0 __main__.RepositoryIdentityTests.test_a_lookalike_host_is_refused
+ok
+
+[devflow-test] start 0 __main__.RepositoryIdentityTests.test_a_lookalike_repository_name_is_refused
+test_a_lookalike_repository_name_is_refused (__main__.RepositoryIdentityTests.test_a_lookalike_repository_name_is_refused) ... 
+[devflow-test] pass 0 __main__.RepositoryIdentityTests.test_a_lookalike_repository_name_is_refused
+ok
+
+[devflow-test] start 0 __main__.RepositoryIdentityTests.test_credentials_in_the_remote_url_are_never_printed
+test_credentials_in_the_remote_url_are_never_printed (__main__.RepositoryIdentityTests.test_credentials_in_the_remote_url_are_never_printed) ... 
+[devflow-test] pass 0 __main__.RepositoryIdentityTests.test_credentials_in_the_remote_url_are_never_printed
+ok
+
+[devflow-test] start 0 __main__.RepositoryIdentityTests.test_identity_is_not_a_substring_match
+test_identity_is_not_a_substring_match (__main__.RepositoryIdentityTests.test_identity_is_not_a_substring_match)
+The old check was `'Lia-Project' not in url`, so any URL containing that ... 
+[devflow-test] pass 0 __main__.RepositoryIdentityTests.test_identity_is_not_a_substring_match
+ok
+
+[devflow-test] start 0 __main__.RepositoryIdentityTests.test_the_canonical_ssh_and_https_spellings_are_accepted
+test_the_canonical_ssh_and_https_spellings_are_accepted (__main__.RepositoryIdentityTests.test_the_canonical_ssh_and_https_spellings_are_accepted) ... 
+[devflow-test] pass 0 __main__.RepositoryIdentityTests.test_the_canonical_ssh_and_https_spellings_are_accepted
+ok
+
+[devflow-test] start 0 __main__.RepositoryIdentityTests.test_wrong_github_owner_is_refused
+test_wrong_github_owner_is_refused (__main__.RepositoryIdentityTests.test_wrong_github_owner_is_refused) ... 
+[devflow-test] pass 0 __main__.RepositoryIdentityTests.test_wrong_github_owner_is_refused
+ok
+
+[devflow-test] class 0 RepositoryIdentityTests
+
+[devflow-test] start 0 __main__.RequiredTestsTests.test_all_skipped_tests_prevent_pass_and_prevent_launch
+test_all_skipped_tests_prevent_pass_and_prevent_launch (__main__.RequiredTestsTests.test_all_skipped_tests_prevent_pass_and_prevent_launch) ... 
+[devflow-test] pass 19 __main__.RequiredTestsTests.test_all_skipped_tests_prevent_pass_and_prevent_launch
+ok
+
+[devflow-test] start 0 __main__.RequiredTestsTests.test_all_tests_passing_lets_the_launch_happen
+test_all_tests_passing_lets_the_launch_happen (__main__.RequiredTestsTests.test_all_tests_passing_lets_the_launch_happen) ... 
+[devflow-test] pass 1024 __main__.RequiredTestsTests.test_all_tests_passing_lets_the_launch_happen
+ok
+
+[devflow-test] start 0 __main__.RequiredTestsTests.test_failed_test_prevents_launch
+test_failed_test_prevents_launch (__main__.RequiredTestsTests.test_failed_test_prevents_launch) ... 
+[devflow-test] pass 19 __main__.RequiredTestsTests.test_failed_test_prevents_launch
+ok
+
+[devflow-test] start 0 __main__.RequiredTestsTests.test_one_skipped_test_prevents_pass_and_prevents_launch
+test_one_skipped_test_prevents_pass_and_prevents_launch (__main__.RequiredTestsTests.test_one_skipped_test_prevents_pass_and_prevents_launch) ... 
+[devflow-test] pass 17 __main__.RequiredTestsTests.test_one_skipped_test_prevents_pass_and_prevents_launch
+ok
+
+[devflow-test] start 0 __main__.RequiredTestsTests.test_pass_cannot_be_reached_with_zero_executed_tests
+test_pass_cannot_be_reached_with_zero_executed_tests (__main__.RequiredTestsTests.test_pass_cannot_be_reached_with_zero_executed_tests) ... 
+[devflow-test] pass 1023 __main__.RequiredTestsTests.test_pass_cannot_be_reached_with_zero_executed_tests
+ok
+
+[devflow-test] class 2103 RequiredTestsTests
+
+[devflow-test] start 0 __main__.RetentionTests.test_retention_cannot_escape_the_run_root
+test_retention_cannot_escape_the_run_root (__main__.RetentionTests.test_retention_cannot_escape_the_run_root) ... 
+[devflow-test] pass 15 __main__.RetentionTests.test_retention_cannot_escape_the_run_root
+ok
+
+[devflow-test] start 0 __main__.RetentionTests.test_retention_refuses_a_symlinked_run_folder
+test_retention_refuses_a_symlinked_run_folder (__main__.RetentionTests.test_retention_refuses_a_symlinked_run_folder) ... 
+[devflow-test] pass 13 __main__.RetentionTests.test_retention_refuses_a_symlinked_run_folder
+ok
+
+[devflow-test] start 0 __main__.RetentionTests.test_retention_refuses_the_run_root_itself
+test_retention_refuses_the_run_root_itself (__main__.RetentionTests.test_retention_refuses_the_run_root_itself) ... 
+[devflow-test] pass 13 __main__.RetentionTests.test_retention_refuses_the_run_root_itself
+ok
+
+[devflow-test] start 0 __main__.RetentionTests.test_retention_removes_by_age
+test_retention_removes_by_age (__main__.RetentionTests.test_retention_removes_by_age) ... 
+[devflow-test] pass 14 __main__.RetentionTests.test_retention_removes_by_age
+ok
+
+[devflow-test] start 0 __main__.RetentionTests.test_retention_works_in_an_arbitrary_repo_root
+test_retention_works_in_an_arbitrary_repo_root (__main__.RetentionTests.test_retention_works_in_an_arbitrary_repo_root) ... 
+[devflow-test] pass 14 __main__.RetentionTests.test_retention_works_in_an_arbitrary_repo_root
+ok
+
+[devflow-test] class 71 RetentionTests
+
+[devflow-test] start 0 __main__.RoundExecutionTests.test_full_round_passes_and_writes_artifacts_tied_to_the_sha
+test_full_round_passes_and_writes_artifacts_tied_to_the_sha (__main__.RoundExecutionTests.test_full_round_passes_and_writes_artifacts_tied_to_the_sha) ... 
+[devflow-test] pass 1021 __main__.RoundExecutionTests.test_full_round_passes_and_writes_artifacts_tied_to_the_sha
+ok
+
+[devflow-test] start 0 __main__.RoundExecutionTests.test_interrupted_run_stays_honest
+test_interrupted_run_stays_honest (__main__.RoundExecutionTests.test_interrupted_run_stays_honest) ... 
+[devflow-test] pass 1020 __main__.RoundExecutionTests.test_interrupted_run_stays_honest
+ok
+
+[devflow-test] start 0 __main__.RoundExecutionTests.test_missing_marker_fails_the_round
+test_missing_marker_fails_the_round (__main__.RoundExecutionTests.test_missing_marker_fails_the_round) ... 
+[devflow-test] pass 1023 __main__.RoundExecutionTests.test_missing_marker_fails_the_round
+ok
+
+[devflow-test] start 0 __main__.RoundExecutionTests.test_out_of_order_marker_fails_the_round
+test_out_of_order_marker_fails_the_round (__main__.RoundExecutionTests.test_out_of_order_marker_fails_the_round) ... 
+[devflow-test] pass 1024 __main__.RoundExecutionTests.test_out_of_order_marker_fails_the_round
+ok
+
+[devflow-test] start 0 __main__.RoundExecutionTests.test_report_is_sanitized
+test_report_is_sanitized (__main__.RoundExecutionTests.test_report_is_sanitized) ... 
+[devflow-test] pass 1020 __main__.RoundExecutionTests.test_report_is_sanitized
+ok
+
+[devflow-test] start 0 __main__.RoundExecutionTests.test_round_command_never_mutates_git
+test_round_command_never_mutates_git (__main__.RoundExecutionTests.test_round_command_never_mutates_git) ... 
+[devflow-test] pass 1033 __main__.RoundExecutionTests.test_round_command_never_mutates_git
+ok
+
+[devflow-test] start 0 __main__.RoundExecutionTests.test_run_json_records_every_section
+test_run_json_records_every_section (__main__.RoundExecutionTests.test_run_json_records_every_section) ... 
+[devflow-test] pass 1023 __main__.RoundExecutionTests.test_run_json_records_every_section
+ok
+
+[devflow-test] start 0 __main__.RoundExecutionTests.test_unanswered_visual_assertion_is_not_a_pass
+test_unanswered_visual_assertion_is_not_a_pass (__main__.RoundExecutionTests.test_unanswered_visual_assertion_is_not_a_pass) ... 
+[devflow-test] pass 1021 __main__.RoundExecutionTests.test_unanswered_visual_assertion_is_not_a_pass
+ok
+
+[devflow-test] start 0 __main__.RoundExecutionTests.test_unknown_visual_answer_is_not_a_pass
+test_unknown_visual_answer_is_not_a_pass (__main__.RoundExecutionTests.test_unknown_visual_answer_is_not_a_pass) ... 
+[devflow-test] pass 1019 __main__.RoundExecutionTests.test_unknown_visual_answer_is_not_a_pass
+ok
+
+[devflow-test] start 0 __main__.RoundExecutionTests.test_unrelated_console_lines_are_withheld
+test_unrelated_console_lines_are_withheld (__main__.RoundExecutionTests.test_unrelated_console_lines_are_withheld) ... 
+[devflow-test] pass 1024 __main__.RoundExecutionTests.test_unrelated_console_lines_are_withheld
+ok
+
+[devflow-test] start 0 __main__.RoundExecutionTests.test_visual_pass_is_never_inferred_from_logs
+test_visual_pass_is_never_inferred_from_logs (__main__.RoundExecutionTests.test_visual_pass_is_never_inferred_from_logs) ... 
+[devflow-test] pass 1020 __main__.RoundExecutionTests.test_visual_pass_is_never_inferred_from_logs
+ok
+
+[devflow-test] start 0 __main__.RoundExecutionTests.test_wrong_branch_is_refused_before_anything_runs
+test_wrong_branch_is_refused_before_anything_runs (__main__.RoundExecutionTests.test_wrong_branch_is_refused_before_anything_runs) ... 
+[devflow-test] pass 14 __main__.RoundExecutionTests.test_wrong_branch_is_refused_before_anything_runs
+ok
+
+[devflow-test] class 11269 RoundExecutionTests
+
+[devflow-test] start 0 __main__.RoundTeardownTests.test_teardown_after_ctrl_c
+test_teardown_after_ctrl_c (__main__.RoundTeardownTests.test_teardown_after_ctrl_c) ... 
+[devflow-test] pass 1018 __main__.RoundTeardownTests.test_teardown_after_ctrl_c
+ok
+
+[devflow-test] start 0 __main__.RoundTeardownTests.test_teardown_after_human_says_no
+test_teardown_after_human_says_no (__main__.RoundTeardownTests.test_teardown_after_human_says_no) ... 
+[devflow-test] pass 1021 __main__.RoundTeardownTests.test_teardown_after_human_says_no
+ok
+
+[devflow-test] start 0 __main__.RoundTeardownTests.test_teardown_after_marker_failure
+test_teardown_after_marker_failure (__main__.RoundTeardownTests.test_teardown_after_marker_failure) ... 
+[devflow-test] pass 1020 __main__.RoundTeardownTests.test_teardown_after_marker_failure
+ok
+
+[devflow-test] start 0 __main__.RoundTeardownTests.test_teardown_after_pass
+test_teardown_after_pass (__main__.RoundTeardownTests.test_teardown_after_pass) ... 
+[devflow-test] pass 1022 __main__.RoundTeardownTests.test_teardown_after_pass
+ok
+
+[devflow-test] class 4082 RoundTeardownTests
+
+[devflow-test] start 0 __main__.RunBatBudgetTests.test_a_grandchild_cannot_outlive_the_declared_budget
+test_a_grandchild_cannot_outlive_the_declared_budget (__main__.RunBatBudgetTests.test_a_grandchild_cannot_outlive_the_declared_budget) ... 
+[devflow-test] pass 3007 __main__.RunBatBudgetTests.test_a_grandchild_cannot_outlive_the_declared_budget
+ok
+
+[devflow-test] start 0 __main__.RunBatBudgetTests.test_a_survivor_list_is_never_reported_as_a_verified_empty_tree
+test_a_survivor_list_is_never_reported_as_a_verified_empty_tree (__main__.RunBatBudgetTests.test_a_survivor_list_is_never_reported_as_a_verified_empty_tree)
+"Could not check" and "checked, none left" are different claims. ... 
+[devflow-test] pass 0 __main__.RunBatBudgetTests.test_a_survivor_list_is_never_reported_as_a_verified_empty_tree
+ok
+
+[devflow-test] class 3007 RunBatBudgetTests
+
+[devflow-test] start 0 __main__.RunBatEnvIsolationTests.test_another_devkit_invocation_does_not_leak_into_the_child
+test_another_devkit_invocation_does_not_leak_into_the_child (__main__.RunBatEnvIsolationTests.test_another_devkit_invocation_does_not_leak_into_the_child) ... 
+[devflow-test] pass 34 __main__.RunBatEnvIsolationTests.test_another_devkit_invocation_does_not_leak_into_the_child
+ok
+
+[devflow-test] class 34 RunBatEnvIsolationTests
+
+[devflow-test] start 0 __main__.RuntimeGateTests.test_a_dev_server_ready_line_alone_is_never_enough
+test_a_dev_server_ready_line_alone_is_never_enough (__main__.RuntimeGateTests.test_a_dev_server_ready_line_alone_is_never_enough) ... 
+[devflow-test] pass 1020 __main__.RuntimeGateTests.test_a_dev_server_ready_line_alone_is_never_enough
+ok
+
+[devflow-test] start 0 __main__.RuntimeGateTests.test_all_evidence_passes_with_no_human_question
+test_all_evidence_passes_with_no_human_question (__main__.RuntimeGateTests.test_all_evidence_passes_with_no_human_question) ... 
+[devflow-test] pass 1022 __main__.RuntimeGateTests.test_all_evidence_passes_with_no_human_question
+ok
+
+[devflow-test] start 0 __main__.RuntimeGateTests.test_forbidden_marker_fails_even_with_everything_else
+test_forbidden_marker_fails_even_with_everything_else (__main__.RuntimeGateTests.test_forbidden_marker_fails_even_with_everything_else) ... 
+[devflow-test] pass 18 __main__.RuntimeGateTests.test_forbidden_marker_fails_even_with_everything_else
+ok
+
+[devflow-test] start 0 __main__.RuntimeGateTests.test_missing_avatar_scene_fails
+test_missing_avatar_scene_fails (__main__.RuntimeGateTests.test_missing_avatar_scene_fails) ... 
+[devflow-test] pass 1019 __main__.RuntimeGateTests.test_missing_avatar_scene_fails
+ok
+
+[devflow-test] start 0 __main__.RuntimeGateTests.test_missing_renderer_ready_fails
+test_missing_renderer_ready_fails (__main__.RuntimeGateTests.test_missing_renderer_ready_fails) ... 
+[devflow-test] pass 1021 __main__.RuntimeGateTests.test_missing_renderer_ready_fails
+ok
+
+[devflow-test] start 0 __main__.RuntimeGateTests.test_missing_visible_window_fails
+test_missing_visible_window_fails (__main__.RuntimeGateTests.test_missing_visible_window_fails) ... 
+[devflow-test] pass 1020 __main__.RuntimeGateTests.test_missing_visible_window_fails
+ok
+
+[devflow-test] start 0 __main__.RuntimeGateTests.test_process_exiting_early_fails
+test_process_exiting_early_fails (__main__.RuntimeGateTests.test_process_exiting_early_fails) ... 
+[devflow-test] pass 1020 __main__.RuntimeGateTests.test_process_exiting_early_fails
+ok
+
+[devflow-test] start 0 __main__.RuntimeGateTests.test_the_failed_round_reports_its_stage_and_evidence
+test_the_failed_round_reports_its_stage_and_evidence (__main__.RuntimeGateTests.test_the_failed_round_reports_its_stage_and_evidence) ... 
+[devflow-test] pass 1020 __main__.RuntimeGateTests.test_the_failed_round_reports_its_stage_and_evidence
+ok
+
+[devflow-test] start 0 __main__.RuntimeGateTests.test_the_launcher_receives_the_devflow_environment
+test_the_launcher_receives_the_devflow_environment (__main__.RuntimeGateTests.test_the_launcher_receives_the_devflow_environment) ... 
+[devflow-test] pass 1020 __main__.RuntimeGateTests.test_the_launcher_receives_the_devflow_environment
+ok
+
+[devflow-test] class 8186 RuntimeGateTests
+
+[devflow-test] start 0 __main__.SanitizationTests.test_console_is_bounded
+test_console_is_bounded (__main__.SanitizationTests.test_console_is_bounded) ... 
+[devflow-test] pass 0 __main__.SanitizationTests.test_console_is_bounded
+ok
+
+[devflow-test] start 0 __main__.SanitizationTests.test_home_path_is_collapsed
+test_home_path_is_collapsed (__main__.SanitizationTests.test_home_path_is_collapsed) ... 
+[devflow-test] pass 0 __main__.SanitizationTests.test_home_path_is_collapsed
+ok
+
+[devflow-test] start 0 __main__.SanitizationTests.test_only_launcher_shapes_are_kept
+test_only_launcher_shapes_are_kept (__main__.SanitizationTests.test_only_launcher_shapes_are_kept) ... 
+[devflow-test] pass 0 __main__.SanitizationTests.test_only_launcher_shapes_are_kept
+ok
+
+[devflow-test] start 0 __main__.SanitizationTests.test_report_render_is_deterministic
+test_report_render_is_deterministic (__main__.SanitizationTests.test_report_render_is_deterministic) ... 
+[devflow-test] pass 0 __main__.SanitizationTests.test_report_render_is_deterministic
+ok
+
+[devflow-test] start 0 __main__.SanitizationTests.test_secret_is_redacted
+test_secret_is_redacted (__main__.SanitizationTests.test_secret_is_redacted) ... 
+[devflow-test] pass 0 __main__.SanitizationTests.test_secret_is_redacted
+ok
+
+[devflow-test] class 1 SanitizationTests
+
+[devflow-test] start 0 __main__.SchemaTests.test_a_round_needs_machine_evidence_or_a_human_never_neither
+test_a_round_needs_machine_evidence_or_a_human_never_neither (__main__.SchemaTests.test_a_round_needs_machine_evidence_or_a_human_never_neither) ... 
+[devflow-test] pass 0 __main__.SchemaTests.test_a_round_needs_machine_evidence_or_a_human_never_neither
+ok
+
+[devflow-test] start 0 __main__.SchemaTests.test_a_round_without_evidence_of_any_kind_is_refused
+test_a_round_without_evidence_of_any_kind_is_refused (__main__.SchemaTests.test_a_round_without_evidence_of_any_kind_is_refused) ... 
+[devflow-test] pass 0 __main__.SchemaTests.test_a_round_without_evidence_of_any_kind_is_refused
+ok
+
+[devflow-test] start 0 __main__.SchemaTests.test_active_round_validates_and_carries_every_required_fact
+test_active_round_validates_and_carries_every_required_fact (__main__.SchemaTests.test_active_round_validates_and_carries_every_required_fact) ... 
+[devflow-test] pass 0 __main__.SchemaTests.test_active_round_validates_and_carries_every_required_fact
+ok
+
+[devflow-test] start 0 __main__.SchemaTests.test_diagnostics_key_from_v1_is_rejected
+test_diagnostics_key_from_v1_is_rejected (__main__.SchemaTests.test_diagnostics_key_from_v1_is_rejected) ... 
+[devflow-test] pass 0 __main__.SchemaTests.test_diagnostics_key_from_v1_is_rejected
+ok
+
+[devflow-test] start 0 __main__.SchemaTests.test_launch_env_may_not_hijack_process_resolution
+test_launch_env_may_not_hijack_process_resolution (__main__.SchemaTests.test_launch_env_may_not_hijack_process_resolution) ... 
+[devflow-test] pass 0 __main__.SchemaTests.test_launch_env_may_not_hijack_process_resolution
+ok
+
+[devflow-test] start 0 __main__.SchemaTests.test_machine_evidence_alone_is_enough_but_common_logs_are_not
+test_machine_evidence_alone_is_enough_but_common_logs_are_not (__main__.SchemaTests.test_machine_evidence_alone_is_enough_but_common_logs_are_not) ... 
+[devflow-test] pass 0 __main__.SchemaTests.test_machine_evidence_alone_is_enough_but_common_logs_are_not
+ok
+
+[devflow-test] start 0 __main__.SchemaTests.test_missing_required_key_is_an_error
+test_missing_required_key_is_an_error (__main__.SchemaTests.test_missing_required_key_is_an_error) ... 
+[devflow-test] pass 0 __main__.SchemaTests.test_missing_required_key_is_an_error
+ok
+
+[devflow-test] start 0 __main__.SchemaTests.test_prepare_path_outside_cleanup_profile_is_refused
+test_prepare_path_outside_cleanup_profile_is_refused (__main__.SchemaTests.test_prepare_path_outside_cleanup_profile_is_refused) ... 
+[devflow-test] pass 0 __main__.SchemaTests.test_prepare_path_outside_cleanup_profile_is_refused
+ok
+
+[devflow-test] start 0 __main__.SchemaTests.test_ready_for_publish_must_be_boolean
+test_ready_for_publish_must_be_boolean (__main__.SchemaTests.test_ready_for_publish_must_be_boolean) ... 
+[devflow-test] pass 0 __main__.SchemaTests.test_ready_for_publish_must_be_boolean
+ok
+
+[devflow-test] start 0 __main__.SchemaTests.test_schema_version_is_enforced
+test_schema_version_is_enforced (__main__.SchemaTests.test_schema_version_is_enforced) ... 
+[devflow-test] pass 0 __main__.SchemaTests.test_schema_version_is_enforced
+ok
+
+[devflow-test] start 0 __main__.SchemaTests.test_tested_sha_must_be_a_full_sha
+test_tested_sha_must_be_a_full_sha (__main__.SchemaTests.test_tested_sha_must_be_a_full_sha) ... 
+[devflow-test] pass 0 __main__.SchemaTests.test_tested_sha_must_be_a_full_sha
+ok
+
+[devflow-test] start 0 __main__.SchemaTests.test_unimplemented_auto_action_is_refused
+test_unimplemented_auto_action_is_refused (__main__.SchemaTests.test_unimplemented_auto_action_is_refused) ... 
+[devflow-test] pass 0 __main__.SchemaTests.test_unimplemented_auto_action_is_refused
+ok
+
+[devflow-test] start 0 __main__.SchemaTests.test_unimplemented_scenario_driver_is_refused
+test_unimplemented_scenario_driver_is_refused (__main__.SchemaTests.test_unimplemented_scenario_driver_is_refused) ... 
+[devflow-test] pass 0 __main__.SchemaTests.test_unimplemented_scenario_driver_is_refused
+ok
+
+[devflow-test] start 0 __main__.SchemaTests.test_unknown_key_is_refused
+test_unknown_key_is_refused (__main__.SchemaTests.test_unknown_key_is_refused) ... 
+[devflow-test] pass 0 __main__.SchemaTests.test_unknown_key_is_refused
+ok
+
+[devflow-test] start 0 __main__.SchemaTests.test_unknown_prepare_kind_is_refused
+test_unknown_prepare_kind_is_refused (__main__.SchemaTests.test_unknown_prepare_kind_is_refused) ... 
+[devflow-test] pass 0 __main__.SchemaTests.test_unknown_prepare_kind_is_refused
+ok
+
+[devflow-test] class 5 SchemaTests
+
+[devflow-test] start 0 __main__.SpawnGuardBypassTests.test_a_clean_child_still_exits_zero
+test_a_clean_child_still_exits_zero (__main__.SpawnGuardBypassTests.test_a_clean_child_still_exits_zero) ... 
+[devflow-test] pass 114 __main__.SpawnGuardBypassTests.test_a_clean_child_still_exits_zero
+ok
+
+[devflow-test] start 0 __main__.SpawnGuardBypassTests.test_a_forbidden_spawn_makes_the_process_exit_nonzero
+test_a_forbidden_spawn_makes_the_process_exit_nonzero (__main__.SpawnGuardBypassTests.test_a_forbidden_spawn_makes_the_process_exit_nonzero)
+The guard must fail the RUN, not merely log after a green summary. ... 
+[devflow-test] pass 84 __main__.SpawnGuardBypassTests.test_a_forbidden_spawn_makes_the_process_exit_nonzero
+ok
+
+[devflow-test] start 0 __main__.SpawnGuardBypassTests.test_a_permitted_subprocess_is_never_a_violation
+test_a_permitted_subprocess_is_never_a_violation (__main__.SpawnGuardBypassTests.test_a_permitted_subprocess_is_never_a_violation) ... 
+[devflow-test] pass 0 __main__.SpawnGuardBypassTests.test_a_permitted_subprocess_is_never_a_violation
+ok
+
+[devflow-test] start 0 __main__.SpawnGuardBypassTests.test_a_shell_command_is_classified_by_its_program_name
+test_a_shell_command_is_classified_by_its_program_name (__main__.SpawnGuardBypassTests.test_a_shell_command_is_classified_by_its_program_name) ... 
+[devflow-test] pass 0 __main__.SpawnGuardBypassTests.test_a_shell_command_is_classified_by_its_program_name
+ok
+
+[devflow-test] start 0 __main__.SpawnGuardBypassTests.test_an_unclassifiable_command_fails_closed
+test_an_unclassifiable_command_fails_closed (__main__.SpawnGuardBypassTests.test_an_unclassifiable_command_fails_closed) ... 
+[devflow-test] pass 0 __main__.SpawnGuardBypassTests.test_an_unclassifiable_command_fails_closed
+ok
+
+[devflow-test] start 0 __main__.SpawnGuardBypassTests.test_argv_paths_with_spaces_are_one_program_name
+test_argv_paths_with_spaces_are_one_program_name (__main__.SpawnGuardBypassTests.test_argv_paths_with_spaces_are_one_program_name) ... 
+[devflow-test] pass 0 __main__.SpawnGuardBypassTests.test_argv_paths_with_spaces_are_one_program_name
+ok
+
+[devflow-test] start 0 __main__.SpawnGuardBypassTests.test_directories_do_not_hide_a_forbidden_name
+test_directories_do_not_hide_a_forbidden_name (__main__.SpawnGuardBypassTests.test_directories_do_not_hide_a_forbidden_name) ... 
+[devflow-test] pass 0 __main__.SpawnGuardBypassTests.test_directories_do_not_hide_a_forbidden_name
+ok
+
+[devflow-test] start 0 __main__.SpawnGuardBypassTests.test_no_devflow_production_module_patches_process_apis
+test_no_devflow_production_module_patches_process_apis (__main__.SpawnGuardBypassTests.test_no_devflow_production_module_patches_process_apis)
+The guard belongs to the test process alone. If it ever leaked into ... 
+[devflow-test] pass 34 __main__.SpawnGuardBypassTests.test_no_devflow_production_module_patches_process_apis
+ok
+
+[devflow-test] start 0 __main__.SpawnGuardBypassTests.test_the_guard_records_a_list_spawn_with_a_windows_suffix
+test_the_guard_records_a_list_spawn_with_a_windows_suffix (__main__.SpawnGuardBypassTests.test_the_guard_records_a_list_spawn_with_a_windows_suffix) ... 
+[devflow-test] pass 0 __main__.SpawnGuardBypassTests.test_the_guard_records_a_list_spawn_with_a_windows_suffix
+ok
+
+[devflow-test] start 0 __main__.SpawnGuardBypassTests.test_the_guard_records_what_a_real_os_system_call_attempts
+test_the_guard_records_what_a_real_os_system_call_attempts (__main__.SpawnGuardBypassTests.test_the_guard_records_what_a_real_os_system_call_attempts) ... sh: 1: killall: not found
+
+[devflow-test] pass 0 __main__.SpawnGuardBypassTests.test_the_guard_records_what_a_real_os_system_call_attempts
+ok
+
+[devflow-test] start 0 __main__.SpawnGuardBypassTests.test_windows_executable_suffixes_do_not_hide_a_forbidden_name
+test_windows_executable_suffixes_do_not_hide_a_forbidden_name (__main__.SpawnGuardBypassTests.test_windows_executable_suffixes_do_not_hide_a_forbidden_name) ... 
+[devflow-test] pass 0 __main__.SpawnGuardBypassTests.test_windows_executable_suffixes_do_not_hide_a_forbidden_name
+ok
+
+[devflow-test] class 236 SpawnGuardBypassTests
+
+[devflow-test] start 0 __main__.StagedPayloadTests.test_a_non_regular_file_is_refused
+test_a_non_regular_file_is_refused (__main__.StagedPayloadTests.test_a_non_regular_file_is_refused) ... 
+[devflow-test] pass 11 __main__.StagedPayloadTests.test_a_non_regular_file_is_refused
+ok
+
+[devflow-test] start 0 __main__.StagedPayloadTests.test_a_non_source_path_never_reaches_staging
+test_a_non_source_path_never_reaches_staging (__main__.StagedPayloadTests.test_a_non_source_path_never_reaches_staging) ... 
+[devflow-test] pass 16 __main__.StagedPayloadTests.test_a_non_source_path_never_reaches_staging
+ok
+
+[devflow-test] start 0 __main__.StagedPayloadTests.test_a_path_appearing_between_classification_and_staging_is_not_staged
+test_a_path_appearing_between_classification_and_staging_is_not_staged (__main__.StagedPayloadTests.test_a_path_appearing_between_classification_and_staging_is_not_staged)
+The load-bearing case for `git add -- <paths>` instead of `git add -A`. ... 
+[devflow-test] pass 61 __main__.StagedPayloadTests.test_a_path_appearing_between_classification_and_staging_is_not_staged
+ok
+
+[devflow-test] start 0 __main__.StagedPayloadTests.test_a_path_that_escapes_the_repository_is_refused
+test_a_path_that_escapes_the_repository_is_refused (__main__.StagedPayloadTests.test_a_path_that_escapes_the_repository_is_refused) ... 
+[devflow-test] pass 13 __main__.StagedPayloadTests.test_a_path_that_escapes_the_repository_is_refused
+ok
+
+[devflow-test] start 0 __main__.StagedPayloadTests.test_a_secret_is_found_in_the_staged_blob_not_just_on_disk
+test_a_secret_is_found_in_the_staged_blob_not_just_on_disk (__main__.StagedPayloadTests.test_a_secret_is_found_in_the_staged_blob_not_just_on_disk) ... 
+[devflow-test] pass 20 __main__.StagedPayloadTests.test_a_secret_is_found_in_the_staged_blob_not_just_on_disk
+ok
+
+[devflow-test] start 0 __main__.StagedPayloadTests.test_a_staged_file_outside_the_approved_set_is_refused
+test_a_staged_file_outside_the_approved_set_is_refused (__main__.StagedPayloadTests.test_a_staged_file_outside_the_approved_set_is_refused) ... 
+[devflow-test] pass 16 __main__.StagedPayloadTests.test_a_staged_file_outside_the_approved_set_is_refused
+ok
+
+[devflow-test] start 0 __main__.StagedPayloadTests.test_a_staged_rename_is_refused
+test_a_staged_rename_is_refused (__main__.StagedPayloadTests.test_a_staged_rename_is_refused) ... 
+[devflow-test] pass 25 __main__.StagedPayloadTests.test_a_staged_rename_is_refused
+ok
+
+[devflow-test] start 0 __main__.StagedPayloadTests.test_a_staged_symlink_is_refused_by_its_mode
+test_a_staged_symlink_is_refused_by_its_mode (__main__.StagedPayloadTests.test_a_staged_symlink_is_refused_by_its_mode) ... 
+[devflow-test] pass 21 __main__.StagedPayloadTests.test_a_staged_symlink_is_refused_by_its_mode
+ok
+
+[devflow-test] start 0 __main__.StagedPayloadTests.test_a_symlink_escaping_the_repository_is_refused
+test_a_symlink_escaping_the_repository_is_refused (__main__.StagedPayloadTests.test_a_symlink_escaping_the_repository_is_refused) ... 
+[devflow-test] pass 17 __main__.StagedPayloadTests.test_a_symlink_escaping_the_repository_is_refused
+ok
+
+[devflow-test] start 0 __main__.StagedPayloadTests.test_only_the_approved_paths_are_staged_never_git_add_all
+test_only_the_approved_paths_are_staged_never_git_add_all (__main__.StagedPayloadTests.test_only_the_approved_paths_are_staged_never_git_add_all) ... 
+[devflow-test] pass 61 __main__.StagedPayloadTests.test_only_the_approved_paths_are_staged_never_git_add_all
+ok
+
+[devflow-test] start 0 __main__.StagedPayloadTests.test_staged_content_differing_from_the_working_tree_is_refused
+test_staged_content_differing_from_the_working_tree_is_refused (__main__.StagedPayloadTests.test_staged_content_differing_from_the_working_tree_is_refused) ... 
+[devflow-test] pass 17 __main__.StagedPayloadTests.test_staged_content_differing_from_the_working_tree_is_refused
+ok
+
+[devflow-test] class 283 StagedPayloadTests
+
+[devflow-test] start 0 __main__.StatusCheckProbeTests.test_a_clean_clone_makes_the_status_command_succeed
+test_a_clean_clone_makes_the_status_command_succeed (__main__.StatusCheckProbeTests.test_a_clean_clone_makes_the_status_command_succeed)
+The exact command the bootstrap runs, against the exact shape of ... 
+[devflow-test] pass 37 __main__.StatusCheckProbeTests.test_a_clean_clone_makes_the_status_command_succeed
+ok
+
+[devflow-test] start 0 __main__.StatusCheckProbeTests.test_a_corrupt_index_is_a_real_status_failure_not_a_clean_checkout
+test_a_corrupt_index_is_a_real_status_failure_not_a_clean_checkout (__main__.StatusCheckProbeTests.test_a_corrupt_index_is_a_real_status_failure_not_a_clean_checkout)
+The counter-case: a status that genuinely fails, constructed by ... 
+[devflow-test] pass 38 __main__.StatusCheckProbeTests.test_a_corrupt_index_is_a_real_status_failure_not_a_clean_checkout
+ok
+
+[devflow-test] start 0 __main__.StatusCheckProbeTests.test_the_status_marker_is_emitted_without_a_trailing_space
+test_the_status_marker_is_emitted_without_a_trailing_space (__main__.StatusCheckProbeTests.test_the_status_marker_is_emitted_without_a_trailing_space)
+`echo LIA_RC_ZERO || ...` echoes "LIA_RC_ZERO " WITH the space, because ... 
+[devflow-test] pass 36 __main__.StatusCheckProbeTests.test_the_status_marker_is_emitted_without_a_trailing_space
+ok
+
+[devflow-test] class 112 StatusCheckProbeTests
+
+[devflow-test] start 0 __main__.StatusMarkerProbeTests.test_the_shipped_marker_reaches_the_for_loop
+test_the_shipped_marker_reaches_the_for_loop (__main__.StatusMarkerProbeTests.test_the_shipped_marker_reaches_the_for_loop) ... 
+[devflow-test] skip 0 __main__.StatusMarkerProbeTests.test_the_shipped_marker_reaches_the_for_loop
+skipped 'cmd.exe indisponível nesta plataforma'
+
+[devflow-test] class 0 StatusMarkerProbeTests
+
+[devflow-test] start 0 __main__.SuiteCoverageTests.test_every_windows_only_class_is_still_present
+test_every_windows_only_class_is_still_present (__main__.SuiteCoverageTests.test_every_windows_only_class_is_still_present) ... 
+[devflow-test] pass 1 __main__.SuiteCoverageTests.test_every_windows_only_class_is_still_present
+ok
+
+[devflow-test] start 0 __main__.SuiteCoverageTests.test_no_test_case_was_dropped
+test_no_test_case_was_dropped (__main__.SuiteCoverageTests.test_no_test_case_was_dropped) ... 
+[devflow-test] pass 2 __main__.SuiteCoverageTests.test_no_test_case_was_dropped
+ok
+
+[devflow-test] start 0 __main__.SuiteCoverageTests.test_the_journal_emits_one_line_per_transition_and_a_summary
+test_the_journal_emits_one_line_per_transition_and_a_summary (__main__.SuiteCoverageTests.test_the_journal_emits_one_line_per_transition_and_a_summary) ... 
+[devflow-test] pass 137 __main__.SuiteCoverageTests.test_the_journal_emits_one_line_per_transition_and_a_summary
+ok
+
+[devflow-test] start 0 __main__.SuiteCoverageTests.test_the_minimal_path_probe_still_covers_its_targets
+test_the_minimal_path_probe_still_covers_its_targets (__main__.SuiteCoverageTests.test_the_minimal_path_probe_still_covers_its_targets)
+D: the portability contract stays load-bearing. ... 
+[devflow-test] pass 0 __main__.SuiteCoverageTests.test_the_minimal_path_probe_still_covers_its_targets
+ok
+
+[devflow-test] class 140 SuiteCoverageTests
+
+[devflow-test] start 0 __main__.SyncPolicyTests.test_already_current_branch_does_nothing_destructive
+test_already_current_branch_does_nothing_destructive (__main__.SyncPolicyTests.test_already_current_branch_does_nothing_destructive) ... 
+[devflow-test] pass 0 __main__.SyncPolicyTests.test_already_current_branch_does_nothing_destructive
+ok
+
+[devflow-test] start 0 __main__.SyncPolicyTests.test_clean_checkout_updates_without_asking_anything
+test_clean_checkout_updates_without_asking_anything (__main__.SyncPolicyTests.test_clean_checkout_updates_without_asking_anything) ... 
+[devflow-test] pass 0 __main__.SyncPolicyTests.test_clean_checkout_updates_without_asking_anything
+ok
+
+[devflow-test] start 0 __main__.SyncPolicyTests.test_main_is_never_synced
+test_main_is_never_synced (__main__.SyncPolicyTests.test_main_is_never_synced) ... 
+[devflow-test] pass 0 __main__.SyncPolicyTests.test_main_is_never_synced
+ok
+
+[devflow-test] start 0 __main__.SyncPolicyTests.test_no_force_and_no_main_anywhere_in_the_argv
+test_no_force_and_no_main_anywhere_in_the_argv (__main__.SyncPolicyTests.test_no_force_and_no_main_anywhere_in_the_argv) ... 
+[devflow-test] pass 0 __main__.SyncPolicyTests.test_no_force_and_no_main_anywhere_in_the_argv
+ok
+
+[devflow-test] start 0 __main__.SyncPolicyTests.test_rebase_conflict_fails_closed_and_aborts
+test_rebase_conflict_fails_closed_and_aborts (__main__.SyncPolicyTests.test_rebase_conflict_fails_closed_and_aborts) ... 
+[devflow-test] pass 0 __main__.SyncPolicyTests.test_rebase_conflict_fails_closed_and_aborts
+ok
+
+[devflow-test] start 0 __main__.SyncPolicyTests.test_remote_unavailable_fails_closed
+test_remote_unavailable_fails_closed (__main__.SyncPolicyTests.test_remote_unavailable_fails_closed) ... 
+[devflow-test] pass 0 __main__.SyncPolicyTests.test_remote_unavailable_fails_closed
+ok
+
+[devflow-test] start 0 __main__.SyncPolicyTests.test_the_work_branch_is_configured_not_guessed
+test_the_work_branch_is_configured_not_guessed (__main__.SyncPolicyTests.test_the_work_branch_is_configured_not_guessed) ... 
+[devflow-test] pass 0 __main__.SyncPolicyTests.test_the_work_branch_is_configured_not_guessed
+ok
+
+[devflow-test] start 0 __main__.SyncPolicyTests.test_wrong_branch_fails_closed
+test_wrong_branch_fails_closed (__main__.SyncPolicyTests.test_wrong_branch_fails_closed) ... 
+[devflow-test] pass 0 __main__.SyncPolicyTests.test_wrong_branch_fails_closed
+ok
+
+[devflow-test] start 0 __main__.SyncPolicyTests.test_wrong_repository_fails_closed
+test_wrong_repository_fails_closed (__main__.SyncPolicyTests.test_wrong_repository_fails_closed) ... 
+[devflow-test] pass 0 __main__.SyncPolicyTests.test_wrong_repository_fails_closed
+ok
+
+[devflow-test] class 0 SyncPolicyTests
+
+[devflow-test] start 0 __main__.TailSalvageTests.test_a_fragment_at_the_cut_is_not_promoted_to_an_identity
+test_a_fragment_at_the_cut_is_not_promoted_to_an_identity (__main__.TailSalvageTests.test_a_fragment_at_the_cut_is_not_promoted_to_an_identity)
+The byte cap can land so that the window opens exactly on a ... 
+[devflow-test] pass 0 __main__.TailSalvageTests.test_a_fragment_at_the_cut_is_not_promoted_to_an_identity
+ok
+
+[devflow-test] start 0 __main__.TailSalvageTests.test_a_head_slice_would_have_lost_it
+test_a_head_slice_would_have_lost_it (__main__.TailSalvageTests.test_a_head_slice_would_have_lost_it)
+Proves the regression above is load-bearing, not decorative. ... 
+[devflow-test] pass 0 __main__.TailSalvageTests.test_a_head_slice_would_have_lost_it
+ok
+
+[devflow-test] start 0 __main__.TailSalvageTests.test_a_synthetic_secret_cannot_ride_along
+test_a_synthetic_secret_cannot_ride_along (__main__.TailSalvageTests.test_a_synthetic_secret_cannot_ride_along) ... 
+[devflow-test] pass 0 __main__.TailSalvageTests.test_a_synthetic_secret_cannot_ride_along
+ok
+
+[devflow-test] start 0 __main__.TailSalvageTests.test_a_truncated_leading_fragment_is_never_reported
+test_a_truncated_leading_fragment_is_never_reported (__main__.TailSalvageTests.test_a_truncated_leading_fragment_is_never_reported) ... 
+[devflow-test] pass 0 __main__.TailSalvageTests.test_a_truncated_leading_fragment_is_never_reported
+ok
+
+[devflow-test] start 0 __main__.TailSalvageTests.test_text_chunks_are_handled_as_well_as_bytes
+test_text_chunks_are_handled_as_well_as_bytes (__main__.TailSalvageTests.test_text_chunks_are_handled_as_well_as_bytes) ... 
+[devflow-test] pass 0 __main__.TailSalvageTests.test_text_chunks_are_handled_as_well_as_bytes
+ok
+
+[devflow-test] start 0 __main__.TailSalvageTests.test_the_identity_survives_more_than_a_hundred_kilobytes
+test_the_identity_survives_more_than_a_hundred_kilobytes (__main__.TailSalvageTests.test_the_identity_survives_more_than_a_hundred_kilobytes) ... 
+[devflow-test] pass 0 __main__.TailSalvageTests.test_the_identity_survives_more_than_a_hundred_kilobytes
+ok
+
+[devflow-test] class 3 TailSalvageTests
+
+[devflow-test] start 0 __main__.TaskkillLoadBearingTests.test_a_failed_taskkill_is_never_a_pass
+test_a_failed_taskkill_is_never_a_pass (__main__.TaskkillLoadBearingTests.test_a_failed_taskkill_is_never_a_pass) ... 
+[devflow-test] pass 3 __main__.TaskkillLoadBearingTests.test_a_failed_taskkill_is_never_a_pass
+ok
+
+[devflow-test] start 0 __main__.TaskkillLoadBearingTests.test_a_missing_taskkill_executable_is_not_a_cleanup
+test_a_missing_taskkill_executable_is_not_a_cleanup (__main__.TaskkillLoadBearingTests.test_a_missing_taskkill_executable_is_not_a_cleanup) ... 
+[devflow-test] pass 2 __main__.TaskkillLoadBearingTests.test_a_missing_taskkill_executable_is_not_a_cleanup
+ok
+
+[devflow-test] start 0 __main__.TaskkillLoadBearingTests.test_a_successful_kill_with_a_dead_root_can_pass
+test_a_successful_kill_with_a_dead_root_can_pass (__main__.TaskkillLoadBearingTests.test_a_successful_kill_with_a_dead_root_can_pass) ... 
+[devflow-test] pass 2 __main__.TaskkillLoadBearingTests.test_a_successful_kill_with_a_dead_root_can_pass
+ok
+
+[devflow-test] start 0 __main__.TaskkillLoadBearingTests.test_nothing_in_this_module_kills_by_image_name
+test_nothing_in_this_module_kills_by_image_name (__main__.TaskkillLoadBearingTests.test_nothing_in_this_module_kills_by_image_name)
+Scans the string constants the code can actually build a command from, ... 
+[devflow-test] pass 3 __main__.TaskkillLoadBearingTests.test_nothing_in_this_module_kills_by_image_name
+ok
+
+[devflow-test] start 0 __main__.TaskkillLoadBearingTests.test_signal_teardown_leaves_kill_ok_unset_so_it_can_pass
+test_signal_teardown_leaves_kill_ok_unset_so_it_can_pass (__main__.TaskkillLoadBearingTests.test_signal_teardown_leaves_kill_ok_unset_so_it_can_pass) ... 
+[devflow-test] pass 0 __main__.TaskkillLoadBearingTests.test_signal_teardown_leaves_kill_ok_unset_so_it_can_pass
+ok
+
+[devflow-test] start 0 __main__.TaskkillLoadBearingTests.test_state_treats_a_failed_kill_as_dominating
+test_state_treats_a_failed_kill_as_dominating (__main__.TaskkillLoadBearingTests.test_state_treats_a_failed_kill_as_dominating) ... 
+[devflow-test] pass 0 __main__.TaskkillLoadBearingTests.test_state_treats_a_failed_kill_as_dominating
+ok
+
+[devflow-test] start 0 __main__.TaskkillLoadBearingTests.test_the_pipeline_refuses_an_unknown_cleanup_too
+test_the_pipeline_refuses_an_unknown_cleanup_too (__main__.TaskkillLoadBearingTests.test_the_pipeline_refuses_an_unknown_cleanup_too)
+§4: PASS stays impossible while cleanup is FAIL *or* UNKNOWN. ... 
+[devflow-test] pass 2040 __main__.TaskkillLoadBearingTests.test_the_pipeline_refuses_an_unknown_cleanup_too
+ok
+
+[devflow-test] class 2053 TaskkillLoadBearingTests
+
+[devflow-test] start 0 __main__.TeardownEvidenceTests.test_a_cycle_in_the_process_table_terminates
+test_a_cycle_in_the_process_table_terminates (__main__.TeardownEvidenceTests.test_a_cycle_in_the_process_table_terminates) ... 
+[devflow-test] pass 0 __main__.TeardownEvidenceTests.test_a_cycle_in_the_process_table_terminates
+ok
+
+[devflow-test] start 0 __main__.TeardownEvidenceTests.test_a_dead_root_yields_no_snapshot_instead_of_an_empty_one
+test_a_dead_root_yields_no_snapshot_instead_of_an_empty_one (__main__.TeardownEvidenceTests.test_a_dead_root_yields_no_snapshot_instead_of_an_empty_one) ... 
+[devflow-test] pass 1 __main__.TeardownEvidenceTests.test_a_dead_root_yields_no_snapshot_instead_of_an_empty_one
+ok
+
+[devflow-test] start 0 __main__.TeardownEvidenceTests.test_a_surviving_grandchild_is_reported_as_unverified
+test_a_surviving_grandchild_is_reported_as_unverified (__main__.TeardownEvidenceTests.test_a_surviving_grandchild_is_reported_as_unverified)
+A real process, not a fake: fork a grandchild that outlives its parent, ... 
+[devflow-test] pass 406 __main__.TeardownEvidenceTests.test_a_surviving_grandchild_is_reported_as_unverified
+ok
+
+[devflow-test] start 0 __main__.TeardownEvidenceTests.test_descendants_are_derived_from_a_process_table_purely
+test_descendants_are_derived_from_a_process_table_purely (__main__.TeardownEvidenceTests.test_descendants_are_derived_from_a_process_table_purely) ... 
+[devflow-test] pass 0 __main__.TeardownEvidenceTests.test_descendants_are_derived_from_a_process_table_purely
+ok
+
+[devflow-test] start 0 __main__.TeardownEvidenceTests.test_state_is_tri_state_and_never_laundered_into_pass
+test_state_is_tri_state_and_never_laundered_into_pass (__main__.TeardownEvidenceTests.test_state_is_tri_state_and_never_laundered_into_pass) ... 
+[devflow-test] pass 0 __main__.TeardownEvidenceTests.test_state_is_tri_state_and_never_laundered_into_pass
+ok
+
+[devflow-test] start 0 __main__.TeardownEvidenceTests.test_summarize_descendants_separates_alive_from_unverifiable
+test_summarize_descendants_separates_alive_from_unverifiable (__main__.TeardownEvidenceTests.test_summarize_descendants_separates_alive_from_unverifiable) ... 
+[devflow-test] pass 0 __main__.TeardownEvidenceTests.test_summarize_descendants_separates_alive_from_unverifiable
+ok
+
+[devflow-test] class 408 TeardownEvidenceTests
+
+[devflow-test] start 0 __main__.TeardownHonestyTests.test_a_confirmed_dead_root_reports_pass
+test_a_confirmed_dead_root_reports_pass (__main__.TeardownHonestyTests.test_a_confirmed_dead_root_reports_pass) ... 
+[devflow-test] pass 1021 __main__.TeardownHonestyTests.test_a_confirmed_dead_root_reports_pass
+ok
+
+[devflow-test] start 0 __main__.TeardownHonestyTests.test_a_failed_taskkill_never_reports_pass
+test_a_failed_taskkill_never_reports_pass (__main__.TeardownHonestyTests.test_a_failed_taskkill_never_reports_pass) ... 
+[devflow-test] pass 1020 __main__.TeardownHonestyTests.test_a_failed_taskkill_never_reports_pass
+ok
+
+[devflow-test] start 0 __main__.TeardownHonestyTests.test_a_live_root_is_reported_as_a_failure_not_a_success
+test_a_live_root_is_reported_as_a_failure_not_a_success (__main__.TeardownHonestyTests.test_a_live_root_is_reported_as_a_failure_not_a_success) ... 
+[devflow-test] pass 1020 __main__.TeardownHonestyTests.test_a_live_root_is_reported_as_a_failure_not_a_success
+ok
+
+[devflow-test] start 0 __main__.TeardownHonestyTests.test_a_refused_round_reports_cleanup_as_not_applicable
+test_a_refused_round_reports_cleanup_as_not_applicable (__main__.TeardownHonestyTests.test_a_refused_round_reports_cleanup_as_not_applicable) ... 
+[devflow-test] pass 32 __main__.TeardownHonestyTests.test_a_refused_round_reports_cleanup_as_not_applicable
+ok
+
+[devflow-test] start 0 __main__.TeardownHonestyTests.test_an_unrelated_process_survives_teardown
+test_an_unrelated_process_survives_teardown (__main__.TeardownHonestyTests.test_an_unrelated_process_survives_teardown) ... 
+[devflow-test] pass 1321 __main__.TeardownHonestyTests.test_an_unrelated_process_survives_teardown
+ok
+
+[devflow-test] start 0 __main__.TeardownHonestyTests.test_run_auto_cannot_report_cleanup_pass_when_teardown_failed
+test_run_auto_cannot_report_cleanup_pass_when_teardown_failed (__main__.TeardownHonestyTests.test_run_auto_cannot_report_cleanup_pass_when_teardown_failed)
+End to end through the pipeline, not just through render_final_block. ... 
+[devflow-test] pass 1021 __main__.TeardownHonestyTests.test_run_auto_cannot_report_cleanup_pass_when_teardown_failed
+ok
+
+[devflow-test] start 0 __main__.TeardownHonestyTests.test_the_final_block_refuses_a_fabricated_cleanup_pass
+test_the_final_block_refuses_a_fabricated_cleanup_pass (__main__.TeardownHonestyTests.test_the_final_block_refuses_a_fabricated_cleanup_pass) ... 
+[devflow-test] pass 14 __main__.TeardownHonestyTests.test_the_final_block_refuses_a_fabricated_cleanup_pass
+ok
+
+[devflow-test] class 5451 TeardownHonestyTests
+
+[devflow-test] start 0 __main__.TestIdentityOnTimeoutTests.test_a_hung_test_is_named_in_the_timeout_detail
+test_a_hung_test_is_named_in_the_timeout_detail (__main__.TestIdentityOnTimeoutTests.test_a_hung_test_is_named_in_the_timeout_detail) ... 
+[devflow-test] pass 2002 __main__.TestIdentityOnTimeoutTests.test_a_hung_test_is_named_in_the_timeout_detail
+ok
+
+[devflow-test] start 0 __main__.TestIdentityOnTimeoutTests.test_a_timed_out_child_takes_its_descendants_with_it
+test_a_timed_out_child_takes_its_descendants_with_it (__main__.TestIdentityOnTimeoutTests.test_a_timed_out_child_takes_its_descendants_with_it) ... 
+[devflow-test] pass 2002 __main__.TestIdentityOnTimeoutTests.test_a_timed_out_child_takes_its_descendants_with_it
+ok
+
+[devflow-test] start 0 __main__.TestIdentityOnTimeoutTests.test_a_timeout_detail_never_carries_raw_child_output
+test_a_timeout_detail_never_carries_raw_child_output (__main__.TestIdentityOnTimeoutTests.test_a_timeout_detail_never_carries_raw_child_output) ... 
+[devflow-test] pass 2002 __main__.TestIdentityOnTimeoutTests.test_a_timeout_detail_never_carries_raw_child_output
+ok
+
+[devflow-test] start 0 __main__.TestIdentityOnTimeoutTests.test_a_timeout_report_leaves_the_cause_unknown
+test_a_timeout_report_leaves_the_cause_unknown (__main__.TestIdentityOnTimeoutTests.test_a_timeout_report_leaves_the_cause_unknown) ... 
+[devflow-test] pass 2002 __main__.TestIdentityOnTimeoutTests.test_a_timeout_report_leaves_the_cause_unknown
+ok
+
+[devflow-test] start 0 __main__.TestIdentityOnTimeoutTests.test_a_timeout_without_any_journal_says_so_instead_of_guessing
+test_a_timeout_without_any_journal_says_so_instead_of_guessing (__main__.TestIdentityOnTimeoutTests.test_a_timeout_without_any_journal_says_so_instead_of_guessing) ... 
+[devflow-test] pass 2001 __main__.TestIdentityOnTimeoutTests.test_a_timeout_without_any_journal_says_so_instead_of_guessing
+ok
+
+[devflow-test] start 0 __main__.TestIdentityOnTimeoutTests.test_the_timeout_tail_never_comes_from_the_exception_payload
+test_the_timeout_tail_never_comes_from_the_exception_payload (__main__.TestIdentityOnTimeoutTests.test_the_timeout_tail_never_comes_from_the_exception_payload)
+The salvage must not read `TimeoutExpired.stdout`/`.stderr`. ... 
+[devflow-test] pass 2002 __main__.TestIdentityOnTimeoutTests.test_the_timeout_tail_never_comes_from_the_exception_payload
+ok
+
+[devflow-test] start 0 __main__.TestIdentityOnTimeoutTests.test_the_watchdog_stops_a_blocked_test_and_names_it
+test_the_watchdog_stops_a_blocked_test_and_names_it (__main__.TestIdentityOnTimeoutTests.test_the_watchdog_stops_a_blocked_test_and_names_it)
+B: a blocked test is stopped in seconds, not in an hour. ... 
+[devflow-test] pass 379 __main__.TestIdentityOnTimeoutTests.test_the_watchdog_stops_a_blocked_test_and_names_it
+ok
+
+[devflow-test] class 12392 TestIdentityOnTimeoutTests
+
+[devflow-test] start 0 __main__.TestOutputSanitizerTests.test_bounds_a_very_long_traceback
+test_bounds_a_very_long_traceback (__main__.TestOutputSanitizerTests.test_bounds_a_very_long_traceback) ... 
+[devflow-test] pass 2 __main__.TestOutputSanitizerTests.test_bounds_a_very_long_traceback
+ok
+
+[devflow-test] start 0 __main__.TestOutputSanitizerTests.test_collapses_the_home_directory
+test_collapses_the_home_directory (__main__.TestOutputSanitizerTests.test_collapses_the_home_directory) ... 
+[devflow-test] pass 0 __main__.TestOutputSanitizerTests.test_collapses_the_home_directory
+ok
+
+[devflow-test] start 0 __main__.TestOutputSanitizerTests.test_drops_prompt_and_conversation_content
+test_drops_prompt_and_conversation_content (__main__.TestOutputSanitizerTests.test_drops_prompt_and_conversation_content) ... 
+[devflow-test] pass 0 __main__.TestOutputSanitizerTests.test_drops_prompt_and_conversation_content
+ok
+
+[devflow-test] start 0 __main__.TestOutputSanitizerTests.test_empty_output_stays_empty
+test_empty_output_stays_empty (__main__.TestOutputSanitizerTests.test_empty_output_stays_empty) ... 
+[devflow-test] pass 0 __main__.TestOutputSanitizerTests.test_empty_output_stays_empty
+ok
+
+[devflow-test] start 0 __main__.TestOutputSanitizerTests.test_identifies_the_failing_test_and_exception
+test_identifies_the_failing_test_and_exception (__main__.TestOutputSanitizerTests.test_identifies_the_failing_test_and_exception) ... 
+[devflow-test] pass 0 __main__.TestOutputSanitizerTests.test_identifies_the_failing_test_and_exception
+ok
+
+[devflow-test] start 0 __main__.TestOutputSanitizerTests.test_never_leaks_a_github_token
+test_never_leaks_a_github_token (__main__.TestOutputSanitizerTests.test_never_leaks_a_github_token) ... 
+[devflow-test] pass 0 __main__.TestOutputSanitizerTests.test_never_leaks_a_github_token
+ok
+
+[devflow-test] start 0 __main__.TestOutputSanitizerTests.test_never_leaks_an_api_key_assignment
+test_never_leaks_an_api_key_assignment (__main__.TestOutputSanitizerTests.test_never_leaks_an_api_key_assignment) ... 
+[devflow-test] pass 0 __main__.TestOutputSanitizerTests.test_never_leaks_an_api_key_assignment
+ok
+
+[devflow-test] start 0 __main__.TestOutputSanitizerTests.test_stderr_wins_but_stdout_is_the_fallback
+test_stderr_wins_but_stdout_is_the_fallback (__main__.TestOutputSanitizerTests.test_stderr_wins_but_stdout_is_the_fallback) ... 
+[devflow-test] pass 0 __main__.TestOutputSanitizerTests.test_stderr_wins_but_stdout_is_the_fallback
+ok
+
+[devflow-test] start 0 __main__.TestOutputSanitizerTests.test_strips_ansi_from_vitest_output
+test_strips_ansi_from_vitest_output (__main__.TestOutputSanitizerTests.test_strips_ansi_from_vitest_output) ... 
+[devflow-test] pass 0 __main__.TestOutputSanitizerTests.test_strips_ansi_from_vitest_output
+ok
+
+[devflow-test] class 3 TestOutputSanitizerTests
+
+[devflow-test] start 0 __main__.TimeoutHonestyTests.test_a_command_that_finishes_in_time_is_unaffected
+test_a_command_that_finishes_in_time_is_unaffected (__main__.TimeoutHonestyTests.test_a_command_that_finishes_in_time_is_unaffected) ... 
+[devflow-test] pass 16 __main__.TimeoutHonestyTests.test_a_command_that_finishes_in_time_is_unaffected
+ok
+
+[devflow-test] start 0 __main__.TimeoutHonestyTests.test_a_missing_executable_is_still_127_not_124
+test_a_missing_executable_is_still_127_not_124 (__main__.TimeoutHonestyTests.test_a_missing_executable_is_still_127_not_124) ... 
+[devflow-test] pass 0 __main__.TimeoutHonestyTests.test_a_missing_executable_is_still_127_not_124
+ok
+
+[devflow-test] start 0 __main__.TimeoutHonestyTests.test_a_timeout_kills_the_whole_tree_not_just_the_root
+test_a_timeout_kills_the_whole_tree_not_just_the_root (__main__.TimeoutHonestyTests.test_a_timeout_kills_the_whole_tree_not_just_the_root) ... 
+[devflow-test] pass 1502 __main__.TimeoutHonestyTests.test_a_timeout_kills_the_whole_tree_not_just_the_root
+ok
+
+[devflow-test] start 0 __main__.TimeoutHonestyTests.test_progress_is_emitted_and_bounded
+test_progress_is_emitted_and_bounded (__main__.TimeoutHonestyTests.test_progress_is_emitted_and_bounded) ... 
+[devflow-test] pass 1210 __main__.TimeoutHonestyTests.test_progress_is_emitted_and_bounded
+ok
+
+[devflow-test] start 0 __main__.TimeoutHonestyTests.test_the_detail_does_not_claim_to_know_whether_it_was_slow_or_hung
+test_the_detail_does_not_claim_to_know_whether_it_was_slow_or_hung (__main__.TimeoutHonestyTests.test_the_detail_does_not_claim_to_know_whether_it_was_slow_or_hung) ... 
+[devflow-test] pass 501 __main__.TimeoutHonestyTests.test_the_detail_does_not_claim_to_know_whether_it_was_slow_or_hung
+ok
+
+[devflow-test] start 0 __main__.TimeoutHonestyTests.test_the_detail_names_the_stage_and_the_budget
+test_the_detail_names_the_stage_and_the_budget (__main__.TimeoutHonestyTests.test_the_detail_names_the_stage_and_the_budget) ... 
+[devflow-test] pass 502 __main__.TimeoutHonestyTests.test_the_detail_names_the_stage_and_the_budget
+ok
+
+[devflow-test] start 0 __main__.TimeoutHonestyTests.test_the_timeout_detail_reports_the_cleanup_it_actually_did
+test_the_timeout_detail_reports_the_cleanup_it_actually_did (__main__.TimeoutHonestyTests.test_the_timeout_detail_reports_the_cleanup_it_actually_did) ... 
+[devflow-test] pass 501 __main__.TimeoutHonestyTests.test_the_timeout_detail_reports_the_cleanup_it_actually_did
+ok
+
+[devflow-test] class 4236 TimeoutHonestyTests
+
+[devflow-test] start 0 __main__.UnquotedCredentialRedactionTests.test_a_placeholder_is_not_treated_as_a_real_secret
+test_a_placeholder_is_not_treated_as_a_real_secret (__main__.UnquotedCredentialRedactionTests.test_a_placeholder_is_not_treated_as_a_real_secret) ... 
+[devflow-test] pass 0 __main__.UnquotedCredentialRedactionTests.test_a_placeholder_is_not_treated_as_a_real_secret
+ok
+
+[devflow-test] start 0 __main__.UnquotedCredentialRedactionTests.test_a_value_surviving_a_maximal_munch_boundary_is_redacted
+test_a_value_surviving_a_maximal_munch_boundary_is_redacted (__main__.UnquotedCredentialRedactionTests.test_a_value_surviving_a_maximal_munch_boundary_is_redacted) ... 
+[devflow-test] pass 0 __main__.UnquotedCredentialRedactionTests.test_a_value_surviving_a_maximal_munch_boundary_is_redacted
+ok
+
+[devflow-test] start 0 __main__.UnquotedCredentialRedactionTests.test_quoted_assignments_are_still_redacted
+test_quoted_assignments_are_still_redacted (__main__.UnquotedCredentialRedactionTests.test_quoted_assignments_are_still_redacted) ... 
+[devflow-test] pass 0 __main__.UnquotedCredentialRedactionTests.test_quoted_assignments_are_still_redacted
+ok
+
+[devflow-test] start 0 __main__.UnquotedCredentialRedactionTests.test_the_limitation_is_documented_not_overclaimed
+test_the_limitation_is_documented_not_overclaimed (__main__.UnquotedCredentialRedactionTests.test_the_limitation_is_documented_not_overclaimed) ... 
+[devflow-test] pass 0 __main__.UnquotedCredentialRedactionTests.test_the_limitation_is_documented_not_overclaimed
+ok
+
+[devflow-test] start 0 __main__.UnquotedCredentialRedactionTests.test_unquoted_assignments_are_redacted
+test_unquoted_assignments_are_redacted (__main__.UnquotedCredentialRedactionTests.test_unquoted_assignments_are_redacted) ... 
+[devflow-test] pass 0 __main__.UnquotedCredentialRedactionTests.test_unquoted_assignments_are_redacted
+ok
+
+[devflow-test] start 0 __main__.UnquotedCredentialRedactionTests.test_urls_code_and_assertions_are_preserved
+test_urls_code_and_assertions_are_preserved (__main__.UnquotedCredentialRedactionTests.test_urls_code_and_assertions_are_preserved) ... 
+[devflow-test] pass 0 __main__.UnquotedCredentialRedactionTests.test_urls_code_and_assertions_are_preserved
+ok
+
+[devflow-test] class 0 UnquotedCredentialRedactionTests
+
+[devflow-test] start 0 __main__.UpgradeBootstrapExecutionTests.test_a_dirty_checkout_is_refused_untouched
+test_a_dirty_checkout_is_refused_untouched (__main__.UpgradeBootstrapExecutionTests.test_a_dirty_checkout_is_refused_untouched) ... 
+[devflow-test] skip 0 __main__.UpgradeBootstrapExecutionTests.test_a_dirty_checkout_is_refused_untouched
+skipped 'cmd.exe indisponível nesta plataforma'
+
+[devflow-test] start 0 __main__.UpgradeBootstrapExecutionTests.test_a_divergent_history_is_refused_not_forced
+test_a_divergent_history_is_refused_not_forced (__main__.UpgradeBootstrapExecutionTests.test_a_divergent_history_is_refused_not_forced) ... 
+[devflow-test] skip 0 __main__.UpgradeBootstrapExecutionTests.test_a_divergent_history_is_refused_not_forced
+skipped 'cmd.exe indisponível nesta plataforma'
+
+[devflow-test] start 0 __main__.UpgradeBootstrapExecutionTests.test_a_genuine_status_failure_is_refused_and_never_read_as_clean
+test_a_genuine_status_failure_is_refused_and_never_read_as_clean (__main__.UpgradeBootstrapExecutionTests.test_a_genuine_status_failure_is_refused_and_never_read_as_clean)
+A status that FAILS is not a clean checkout. ... 
+[devflow-test] skip 0 __main__.UpgradeBootstrapExecutionTests.test_a_genuine_status_failure_is_refused_and_never_read_as_clean
+skipped 'cmd.exe indisponível nesta plataforma'
+
+[devflow-test] start 0 __main__.UpgradeBootstrapExecutionTests.test_a_stale_checkout_is_advanced_to_the_reviewed_sha
+test_a_stale_checkout_is_advanced_to_the_reviewed_sha (__main__.UpgradeBootstrapExecutionTests.test_a_stale_checkout_is_advanced_to_the_reviewed_sha) ... 
+[devflow-test] skip 0 __main__.UpgradeBootstrapExecutionTests.test_a_stale_checkout_is_advanced_to_the_reviewed_sha
+skipped 'cmd.exe indisponível nesta plataforma'
+
+[devflow-test] start 0 __main__.UpgradeBootstrapExecutionTests.test_the_devkit_exit_code_is_propagated
+test_the_devkit_exit_code_is_propagated (__main__.UpgradeBootstrapExecutionTests.test_the_devkit_exit_code_is_propagated) ... 
+[devflow-test] skip 0 __main__.UpgradeBootstrapExecutionTests.test_the_devkit_exit_code_is_propagated
+skipped 'cmd.exe indisponível nesta plataforma'
+
+[devflow-test] start 0 __main__.UpgradeBootstrapExecutionTests.test_the_wrong_branch_is_refused
+test_the_wrong_branch_is_refused (__main__.UpgradeBootstrapExecutionTests.test_the_wrong_branch_is_refused) ... 
+[devflow-test] skip 0 __main__.UpgradeBootstrapExecutionTests.test_the_wrong_branch_is_refused
+skipped 'cmd.exe indisponível nesta plataforma'
+
+[devflow-test] class 0 UpgradeBootstrapExecutionTests
+
+[devflow-test] start 0 __main__.UpgradeBootstrapSecurityTests.test_identity_is_matched_by_exact_equality_not_by_substring
+test_identity_is_matched_by_exact_equality_not_by_substring (__main__.UpgradeBootstrapSecurityTests.test_identity_is_matched_by_exact_equality_not_by_substring) ... 
+[devflow-test] pass 0 __main__.UpgradeBootstrapSecurityTests.test_identity_is_matched_by_exact_equality_not_by_substring
+ok
+
+[devflow-test] start 0 __main__.UpgradeBootstrapSecurityTests.test_lookalike_hosts_and_repos_are_not_in_the_accepted_set
+test_lookalike_hosts_and_repos_are_not_in_the_accepted_set (__main__.UpgradeBootstrapSecurityTests.test_lookalike_hosts_and_repos_are_not_in_the_accepted_set) ... 
+[devflow-test] pass 0 __main__.UpgradeBootstrapSecurityTests.test_lookalike_hosts_and_repos_are_not_in_the_accepted_set
+ok
+
+[devflow-test] start 0 __main__.UpgradeBootstrapSecurityTests.test_no_errorlevel_is_read_inside_a_parenthesized_block
+test_no_errorlevel_is_read_inside_a_parenthesized_block (__main__.UpgradeBootstrapSecurityTests.test_no_errorlevel_is_read_inside_a_parenthesized_block) ... 
+[devflow-test] pass 0 __main__.UpgradeBootstrapSecurityTests.test_no_errorlevel_is_read_inside_a_parenthesized_block
+ok
+
+[devflow-test] start 0 __main__.UpgradeBootstrapSecurityTests.test_no_temp_file_is_created_so_none_can_survive_a_failure_path
+test_no_temp_file_is_created_so_none_can_survive_a_failure_path (__main__.UpgradeBootstrapSecurityTests.test_no_temp_file_is_created_so_none_can_survive_a_failure_path) ... 
+[devflow-test] pass 0 __main__.UpgradeBootstrapSecurityTests.test_no_temp_file_is_created_so_none_can_survive_a_failure_path
+ok
+
+[devflow-test] start 0 __main__.UpgradeBootstrapSecurityTests.test_the_accepted_url_set_is_exactly_the_canonical_forms
+test_the_accepted_url_set_is_exactly_the_canonical_forms (__main__.UpgradeBootstrapSecurityTests.test_the_accepted_url_set_is_exactly_the_canonical_forms) ... 
+[devflow-test] pass 0 __main__.UpgradeBootstrapSecurityTests.test_the_accepted_url_set_is_exactly_the_canonical_forms
+ok
+
+[devflow-test] start 0 __main__.UpgradeBootstrapSecurityTests.test_the_bootstrap_still_uses_crlf
+test_the_bootstrap_still_uses_crlf (__main__.UpgradeBootstrapSecurityTests.test_the_bootstrap_still_uses_crlf) ... 
+[devflow-test] pass 0 __main__.UpgradeBootstrapSecurityTests.test_the_bootstrap_still_uses_crlf
+ok
+
+[devflow-test] start 0 __main__.UpgradeBootstrapSecurityTests.test_the_dirty_check_uses_uall_so_a_new_directory_cannot_hide
+test_the_dirty_check_uses_uall_so_a_new_directory_cannot_hide (__main__.UpgradeBootstrapSecurityTests.test_the_dirty_check_uses_uall_so_a_new_directory_cannot_hide) ... 
+[devflow-test] pass 0 __main__.UpgradeBootstrapSecurityTests.test_the_dirty_check_uses_uall_so_a_new_directory_cannot_hide
+ok
+
+[devflow-test] start 0 __main__.UpgradeBootstrapSecurityTests.test_the_new_devkit_exit_code_is_propagated
+test_the_new_devkit_exit_code_is_propagated (__main__.UpgradeBootstrapSecurityTests.test_the_new_devkit_exit_code_is_propagated) ... 
+[devflow-test] pass 0 __main__.UpgradeBootstrapSecurityTests.test_the_new_devkit_exit_code_is_propagated
+ok
+
+[devflow-test] start 0 __main__.UpgradeBootstrapSecurityTests.test_the_pinned_branch_is_the_session_branch_and_never_main
+test_the_pinned_branch_is_the_session_branch_and_never_main (__main__.UpgradeBootstrapSecurityTests.test_the_pinned_branch_is_the_session_branch_and_never_main) ... 
+[devflow-test] pass 0 __main__.UpgradeBootstrapSecurityTests.test_the_pinned_branch_is_the_session_branch_and_never_main
+ok
+
+[devflow-test] start 0 __main__.UpgradeBootstrapSecurityTests.test_the_placeholder_target_is_refused_instead_of_guessed
+test_the_placeholder_target_is_refused_instead_of_guessed (__main__.UpgradeBootstrapSecurityTests.test_the_placeholder_target_is_refused_instead_of_guessed) ... 
+[devflow-test] pass 0 __main__.UpgradeBootstrapSecurityTests.test_the_placeholder_target_is_refused_instead_of_guessed
+ok
+
+[devflow-test] start 0 __main__.UpgradeBootstrapSecurityTests.test_the_remote_url_is_never_echoed_typed_or_written_to_disk
+test_the_remote_url_is_never_echoed_typed_or_written_to_disk (__main__.UpgradeBootstrapSecurityTests.test_the_remote_url_is_never_echoed_typed_or_written_to_disk) ... 
+[devflow-test] pass 0 __main__.UpgradeBootstrapSecurityTests.test_the_remote_url_is_never_echoed_typed_or_written_to_disk
+ok
+
+[devflow-test] start 0 __main__.UpgradeBootstrapSecurityTests.test_the_resulting_sha_is_verified_not_assumed
+test_the_resulting_sha_is_verified_not_assumed (__main__.UpgradeBootstrapSecurityTests.test_the_resulting_sha_is_verified_not_assumed) ... 
+[devflow-test] pass 0 __main__.UpgradeBootstrapSecurityTests.test_the_resulting_sha_is_verified_not_assumed
+ok
+
+[devflow-test] class 1 UpgradeBootstrapSecurityTests
+
+[devflow-test] start 0 __main__.UpgradeFetchOrderTests.test_a_failed_git_status_is_refused_not_read_as_clean
+test_a_failed_git_status_is_refused_not_read_as_clean (__main__.UpgradeFetchOrderTests.test_a_failed_git_status_is_refused_not_read_as_clean)
+`git status` that fails produces NO output. Without an explicit exit ... 
+[devflow-test] pass 0 __main__.UpgradeFetchOrderTests.test_a_failed_git_status_is_refused_not_read_as_clean
+ok
+
+[devflow-test] start 0 __main__.UpgradeFetchOrderTests.test_every_required_step_appears_in_the_required_order
+test_every_required_step_appears_in_the_required_order (__main__.UpgradeFetchOrderTests.test_every_required_step_appears_in_the_required_order) ... 
+[devflow-test] pass 0 __main__.UpgradeFetchOrderTests.test_every_required_step_appears_in_the_required_order
+ok
+
+[devflow-test] start 0 __main__.UpgradeFetchOrderTests.test_the_local_head_must_be_an_ancestor_of_the_target
+test_the_local_head_must_be_an_ancestor_of_the_target (__main__.UpgradeFetchOrderTests.test_the_local_head_must_be_an_ancestor_of_the_target) ... 
+[devflow-test] pass 0 __main__.UpgradeFetchOrderTests.test_the_local_head_must_be_an_ancestor_of_the_target
+ok
+
+[devflow-test] start 0 __main__.UpgradeFetchOrderTests.test_the_shipped_template_is_still_pinned_to_the_session_repository
+test_the_shipped_template_is_still_pinned_to_the_session_repository (__main__.UpgradeFetchOrderTests.test_the_shipped_template_is_still_pinned_to_the_session_repository) ... 
+[devflow-test] pass 0 __main__.UpgradeFetchOrderTests.test_the_shipped_template_is_still_pinned_to_the_session_repository
+ok
+
+[devflow-test] start 0 __main__.UpgradeFetchOrderTests.test_the_target_is_resolved_only_after_the_fetch
+test_the_target_is_resolved_only_after_the_fetch (__main__.UpgradeFetchOrderTests.test_the_target_is_resolved_only_after_the_fetch) ... 
+[devflow-test] pass 0 __main__.UpgradeFetchOrderTests.test_the_target_is_resolved_only_after_the_fetch
+ok
+
+[devflow-test] start 0 __main__.UpgradeFetchOrderTests.test_the_target_must_belong_to_the_fetched_authorized_history
+test_the_target_must_belong_to_the_fetched_authorized_history (__main__.UpgradeFetchOrderTests.test_the_target_must_belong_to_the_fetched_authorized_history) ... 
+[devflow-test] pass 0 __main__.UpgradeFetchOrderTests.test_the_target_must_belong_to_the_fetched_authorized_history
+ok
+
+[devflow-test] class 0 UpgradeFetchOrderTests
+
+[devflow-test] start 0 __main__.UpgradeGitSemanticsTests.test_a_clean_worktree_prints_nothing_and_exits_zero
+test_a_clean_worktree_prints_nothing_and_exits_zero (__main__.UpgradeGitSemanticsTests.test_a_clean_worktree_prints_nothing_and_exits_zero) ... 
+[devflow-test] pass 64 __main__.UpgradeGitSemanticsTests.test_a_clean_worktree_prints_nothing_and_exits_zero
+ok
+
+[devflow-test] start 0 __main__.UpgradeGitSemanticsTests.test_a_dirty_worktree_prints_something_and_still_exits_zero
+test_a_dirty_worktree_prints_something_and_still_exits_zero (__main__.UpgradeGitSemanticsTests.test_a_dirty_worktree_prints_something_and_still_exits_zero) ... 
+[devflow-test] pass 67 __main__.UpgradeGitSemanticsTests.test_a_dirty_worktree_prints_something_and_still_exits_zero
+ok
+
+[devflow-test] start 0 __main__.UpgradeGitSemanticsTests.test_a_failing_status_is_distinguishable_from_a_clean_one
+test_a_failing_status_is_distinguishable_from_a_clean_one (__main__.UpgradeGitSemanticsTests.test_a_failing_status_is_distinguishable_from_a_clean_one)
+The exact confusion the bootstrap has to avoid: a status that fails ... 
+[devflow-test] pass 72 __main__.UpgradeGitSemanticsTests.test_a_failing_status_is_distinguishable_from_a_clean_one
+ok
+
+[devflow-test] start 0 __main__.UpgradeGitSemanticsTests.test_a_missing_target_stays_missing_after_the_fetch
+test_a_missing_target_stays_missing_after_the_fetch (__main__.UpgradeGitSemanticsTests.test_a_missing_target_stays_missing_after_the_fetch) ... 
+[devflow-test] pass 86 __main__.UpgradeGitSemanticsTests.test_a_missing_target_stays_missing_after_the_fetch
+ok
+
+[devflow-test] start 0 __main__.UpgradeGitSemanticsTests.test_ff_only_merge_advances_exactly_to_the_target
+test_ff_only_merge_advances_exactly_to_the_target (__main__.UpgradeGitSemanticsTests.test_ff_only_merge_advances_exactly_to_the_target) ... 
+[devflow-test] pass 95 __main__.UpgradeGitSemanticsTests.test_ff_only_merge_advances_exactly_to_the_target
+ok
+
+[devflow-test] start 0 __main__.UpgradeGitSemanticsTests.test_merge_base_accepts_a_target_inside_the_fetched_history
+test_merge_base_accepts_a_target_inside_the_fetched_history (__main__.UpgradeGitSemanticsTests.test_merge_base_accepts_a_target_inside_the_fetched_history) ... 
+[devflow-test] pass 88 __main__.UpgradeGitSemanticsTests.test_merge_base_accepts_a_target_inside_the_fetched_history
+ok
+
+[devflow-test] start 0 __main__.UpgradeGitSemanticsTests.test_merge_base_rejects_a_divergent_local_head
+test_merge_base_rejects_a_divergent_local_head (__main__.UpgradeGitSemanticsTests.test_merge_base_rejects_a_divergent_local_head) ... 
+[devflow-test] pass 90 __main__.UpgradeGitSemanticsTests.test_merge_base_rejects_a_divergent_local_head
+ok
+
+[devflow-test] start 0 __main__.UpgradeGitSemanticsTests.test_merge_base_rejects_a_target_outside_the_fetched_branch
+test_merge_base_rejects_a_target_outside_the_fetched_branch (__main__.UpgradeGitSemanticsTests.test_merge_base_rejects_a_target_outside_the_fetched_branch) ... 
+[devflow-test] pass 80 __main__.UpgradeGitSemanticsTests.test_merge_base_rejects_a_target_outside_the_fetched_branch
+ok
+
+[devflow-test] start 0 __main__.UpgradeGitSemanticsTests.test_the_target_is_absent_locally_until_the_fetch
+test_the_target_is_absent_locally_until_the_fetch (__main__.UpgradeGitSemanticsTests.test_the_target_is_absent_locally_until_the_fetch) ... 
+[devflow-test] pass 79 __main__.UpgradeGitSemanticsTests.test_the_target_is_absent_locally_until_the_fetch
+ok
+
+[devflow-test] class 724 UpgradeGitSemanticsTests
+
+[devflow-test] start 0 __main__.ValidityTests.test_head_change_invalidates_a_prior_pass
+test_head_change_invalidates_a_prior_pass (__main__.ValidityTests.test_head_change_invalidates_a_prior_pass) ... 
+[devflow-test] pass 0 __main__.ValidityTests.test_head_change_invalidates_a_prior_pass
+ok
+
+[devflow-test] start 0 __main__.ValidityTests.test_latest_run_reads_back_the_newest_artifact
+test_latest_run_reads_back_the_newest_artifact (__main__.ValidityTests.test_latest_run_reads_back_the_newest_artifact) ... 
+[devflow-test] pass 0 __main__.ValidityTests.test_latest_run_reads_back_the_newest_artifact
+ok
+
+[devflow-test] class 0 ValidityTests
+
+[devflow-test] start 0 __main__.VerdictConsistencyTests.test_a_failed_runtime_is_never_rescued_by_a_clean_teardown
+test_a_failed_runtime_is_never_rescued_by_a_clean_teardown (__main__.VerdictConsistencyTests.test_a_failed_runtime_is_never_rescued_by_a_clean_teardown) ... 
+[devflow-test] pass 0 __main__.VerdictConsistencyTests.test_a_failed_runtime_is_never_rescued_by_a_clean_teardown
+ok
+
+[devflow-test] start 0 __main__.VerdictConsistencyTests.test_a_not_applicable_cleanup_is_not_reported_as_a_problem
+test_a_not_applicable_cleanup_is_not_reported_as_a_problem (__main__.VerdictConsistencyTests.test_a_not_applicable_cleanup_is_not_reported_as_a_problem) ... 
+[devflow-test] pass 0 __main__.VerdictConsistencyTests.test_a_not_applicable_cleanup_is_not_reported_as_a_problem
+ok
+
+[devflow-test] start 0 __main__.VerdictConsistencyTests.test_a_passing_runtime_with_an_unverified_tree_is_not_a_pass
+test_a_passing_runtime_with_an_unverified_tree_is_not_a_pass (__main__.VerdictConsistencyTests.test_a_passing_runtime_with_an_unverified_tree_is_not_a_pass) ... 
+[devflow-test] pass 0 __main__.VerdictConsistencyTests.test_a_passing_runtime_with_an_unverified_tree_is_not_a_pass
+ok
+
+[devflow-test] start 0 __main__.VerdictConsistencyTests.test_run_json_persists_both_verdicts_so_the_artifact_cannot_oversell
+test_run_json_persists_both_verdicts_so_the_artifact_cannot_oversell (__main__.VerdictConsistencyTests.test_run_json_persists_both_verdicts_so_the_artifact_cannot_oversell)
+End to end: the run.json a human reads later must not be readable as a ... 
+[devflow-test] pass 1021 __main__.VerdictConsistencyTests.test_run_json_persists_both_verdicts_so_the_artifact_cannot_oversell
+ok
+
+[devflow-test] start 0 __main__.VerdictConsistencyTests.test_the_final_block_names_the_cleanup_fact_when_the_round_failed
+test_the_final_block_names_the_cleanup_fact_when_the_round_failed (__main__.VerdictConsistencyTests.test_the_final_block_names_the_cleanup_fact_when_the_round_failed) ... 
+[devflow-test] pass 0 __main__.VerdictConsistencyTests.test_the_final_block_names_the_cleanup_fact_when_the_round_failed
+ok
+
+[devflow-test] class 1022 VerdictConsistencyTests
+
+[devflow-test] start 0 __main__.VitestFailureIdentityTests.test_a_frame_is_still_available_as_tail_context_when_it_is_all_there_is
+test_a_frame_is_still_available_as_tail_context_when_it_is_all_there_is (__main__.VitestFailureIdentityTests.test_a_frame_is_still_available_as_tail_context_when_it_is_all_there_is) ... 
+[devflow-test] pass 0 __main__.VitestFailureIdentityTests.test_a_frame_is_still_available_as_tail_context_when_it_is_all_there_is
+ok
+
+[devflow-test] start 0 __main__.VitestFailureIdentityTests.test_no_conversation_content_leaks_in_through_the_new_prefixes
+test_no_conversation_content_leaks_in_through_the_new_prefixes (__main__.VitestFailureIdentityTests.test_no_conversation_content_leaks_in_through_the_new_prefixes) ... 
+[devflow-test] pass 0 __main__.VitestFailureIdentityTests.test_no_conversation_content_leaks_in_through_the_new_prefixes
+ok
+
+[devflow-test] start 0 __main__.VitestFailureIdentityTests.test_source_frames_never_crowd_out_the_identity
+test_source_frames_never_crowd_out_the_identity (__main__.VitestFailureIdentityTests.test_source_frames_never_crowd_out_the_identity) ... 
+[devflow-test] pass 0 __main__.VitestFailureIdentityTests.test_source_frames_never_crowd_out_the_identity
+ok
+
+[devflow-test] start 0 __main__.VitestFailureIdentityTests.test_the_failing_test_name_survives_the_budget
+test_the_failing_test_name_survives_the_budget (__main__.VitestFailureIdentityTests.test_the_failing_test_name_survives_the_budget) ... 
+[devflow-test] pass 0 __main__.VitestFailureIdentityTests.test_the_failing_test_name_survives_the_budget
+ok
+
+[devflow-test] class 0 VitestFailureIdentityTests
+
+[devflow-test] start 0 __main__.VitestRootCauseTests.test_a_synthetic_credential_is_never_preserved_by_the_rescue
+test_a_synthetic_credential_is_never_preserved_by_the_rescue (__main__.VitestRootCauseTests.test_a_synthetic_credential_is_never_preserved_by_the_rescue) ... 
+[devflow-test] pass 0 __main__.VitestRootCauseTests.test_a_synthetic_credential_is_never_preserved_by_the_rescue
+ok
+
+[devflow-test] start 0 __main__.VitestRootCauseTests.test_ansi_noise_and_long_stacks_do_not_hide_the_cause
+test_ansi_noise_and_long_stacks_do_not_hide_the_cause (__main__.VitestRootCauseTests.test_ansi_noise_and_long_stacks_do_not_hide_the_cause) ... 
+[devflow-test] pass 0 __main__.VitestRootCauseTests.test_ansi_noise_and_long_stacks_do_not_hide_the_cause
+ok
+
+[devflow-test] start 0 __main__.VitestRootCauseTests.test_python_unittest_failures_are_never_collapsed
+test_python_unittest_failures_are_never_collapsed (__main__.VitestRootCauseTests.test_python_unittest_failures_are_never_collapsed)
+Distinct failing TESTS are evidence; only repeated FILE lines fold. ... 
+[devflow-test] pass 0 __main__.VitestRootCauseTests.test_python_unittest_failures_are_never_collapsed
+ok
+
+[devflow-test] start 0 __main__.VitestRootCauseTests.test_the_affected_suites_are_summarised_not_repeated
+test_the_affected_suites_are_summarised_not_repeated (__main__.VitestRootCauseTests.test_the_affected_suites_are_summarised_not_repeated) ... 
+[devflow-test] pass 0 __main__.VitestRootCauseTests.test_the_affected_suites_are_summarised_not_repeated
+ok
+
+[devflow-test] start 0 __main__.VitestRootCauseTests.test_the_cause_survives_more_than_twenty_repeated_headers
+test_the_cause_survives_more_than_twenty_repeated_headers (__main__.VitestRootCauseTests.test_the_cause_survives_more_than_twenty_repeated_headers) ... 
+[devflow-test] pass 0 __main__.VitestRootCauseTests.test_the_cause_survives_more_than_twenty_repeated_headers
+ok
+
+[devflow-test] start 0 __main__.VitestRootCauseTests.test_the_root_exception_outranks_every_file_header
+test_the_root_exception_outranks_every_file_header (__main__.VitestRootCauseTests.test_the_root_exception_outranks_every_file_header) ... 
+[devflow-test] pass 0 __main__.VitestRootCauseTests.test_the_root_exception_outranks_every_file_header
+ok
+
+[devflow-test] start 0 __main__.VitestRootCauseTests.test_the_root_exception_survives_from_either_stream
+test_the_root_exception_survives_from_either_stream (__main__.VitestRootCauseTests.test_the_root_exception_survives_from_either_stream) ... 
+[devflow-test] pass 0 __main__.VitestRootCauseTests.test_the_root_exception_survives_from_either_stream
+ok
+
+[devflow-test] class 2 VitestRootCauseTests
+
+[devflow-test] start 0 __main__.WatchdogReportEndToEndTests.test_a_hang_before_the_first_test_is_named_as_startup
+test_a_hang_before_the_first_test_is_named_as_startup (__main__.WatchdogReportEndToEndTests.test_a_hang_before_the_first_test_is_named_as_startup) ... 
+[devflow-test] pass 430 __main__.WatchdogReportEndToEndTests.test_a_hang_before_the_first_test_is_named_as_startup
+ok
+
+[devflow-test] start 0 __main__.WatchdogReportEndToEndTests.test_no_launcher_is_started_after_the_failure
+test_no_launcher_is_started_after_the_failure (__main__.WatchdogReportEndToEndTests.test_no_launcher_is_started_after_the_failure) ... 
+[devflow-test] pass 534 __main__.WatchdogReportEndToEndTests.test_no_launcher_is_started_after_the_failure
+ok
+
+[devflow-test] start 0 __main__.WatchdogReportEndToEndTests.test_the_persisted_report_names_the_blocked_test
+test_the_persisted_report_names_the_blocked_test (__main__.WatchdogReportEndToEndTests.test_the_persisted_report_names_the_blocked_test) ... 
+[devflow-test] pass 536 __main__.WatchdogReportEndToEndTests.test_the_persisted_report_names_the_blocked_test
+ok
+
+[devflow-test] start 0 __main__.WatchdogReportEndToEndTests.test_the_real_suite_arms_the_startup_watchdog_before_collection
+test_the_real_suite_arms_the_startup_watchdog_before_collection (__main__.WatchdogReportEndToEndTests.test_the_real_suite_arms_the_startup_watchdog_before_collection) ... 
+[devflow-test] pass 15 __main__.WatchdogReportEndToEndTests.test_the_real_suite_arms_the_startup_watchdog_before_collection
+ok
+
+[devflow-test] class 1516 WatchdogReportEndToEndTests
+
+[devflow-test] start 0 __main__.Win32DeclarationContractTests.test_every_handle_returning_api_declares_a_pointer_sized_restype
+test_every_handle_returning_api_declares_a_pointer_sized_restype (__main__.Win32DeclarationContractTests.test_every_handle_returning_api_declares_a_pointer_sized_restype) ... 
+[devflow-test] pass 0 __main__.Win32DeclarationContractTests.test_every_handle_returning_api_declares_a_pointer_sized_restype
+ok
+
+[devflow-test] start 0 __main__.Win32DeclarationContractTests.test_invalid_handle_value_is_computed_at_the_running_width
+test_invalid_handle_value_is_computed_at_the_running_width (__main__.Win32DeclarationContractTests.test_invalid_handle_value_is_computed_at_the_running_width) ... 
+[devflow-test] pass 0 __main__.Win32DeclarationContractTests.test_invalid_handle_value_is_computed_at_the_running_width
+ok
+
+[devflow-test] start 0 __main__.Win32DeclarationContractTests.test_kernel32_is_opened_with_use_last_error_and_not_via_windll
+test_kernel32_is_opened_with_use_last_error_and_not_via_windll (__main__.Win32DeclarationContractTests.test_kernel32_is_opened_with_use_last_error_and_not_via_windll) ... 
+[devflow-test] pass 5 __main__.Win32DeclarationContractTests.test_kernel32_is_opened_with_use_last_error_and_not_via_windll
+ok
+
+[devflow-test] start 0 __main__.Win32DeclarationContractTests.test_processentry32_layout_matches_the_win32_struct
+test_processentry32_layout_matches_the_win32_struct (__main__.Win32DeclarationContractTests.test_processentry32_layout_matches_the_win32_struct) ... 
+[devflow-test] pass 0 __main__.Win32DeclarationContractTests.test_processentry32_layout_matches_the_win32_struct
+ok
+
+[devflow-test] start 0 __main__.Win32DeclarationContractTests.test_th32defaultheapid_is_pointer_sized_not_a_ulong
+test_th32defaultheapid_is_pointer_sized_not_a_ulong (__main__.Win32DeclarationContractTests.test_th32defaultheapid_is_pointer_sized_not_a_ulong) ... 
+[devflow-test] pass 0 __main__.Win32DeclarationContractTests.test_th32defaultheapid_is_pointer_sized_not_a_ulong
+ok
+
+[devflow-test] start 0 __main__.Win32DeclarationContractTests.test_the_declared_arities_match_the_documented_signatures
+test_the_declared_arities_match_the_documented_signatures (__main__.Win32DeclarationContractTests.test_the_declared_arities_match_the_documented_signatures) ... 
+[devflow-test] pass 0 __main__.Win32DeclarationContractTests.test_the_declared_arities_match_the_documented_signatures
+ok
+
+[devflow-test] start 0 __main__.Win32DeclarationContractTests.test_the_fields_this_module_reads_sit_at_the_documented_offsets
+test_the_fields_this_module_reads_sit_at_the_documented_offsets (__main__.Win32DeclarationContractTests.test_the_fields_this_module_reads_sit_at_the_documented_offsets) ... 
+[devflow-test] pass 0 __main__.Win32DeclarationContractTests.test_the_fields_this_module_reads_sit_at_the_documented_offsets
+ok
+
+[devflow-test] start 0 __main__.Win32DeclarationContractTests.test_the_last_error_slot_is_read_through_the_defensive_seam
+test_the_last_error_slot_is_read_through_the_defensive_seam (__main__.Win32DeclarationContractTests.test_the_last_error_slot_is_read_through_the_defensive_seam) ... 
+[devflow-test] pass 4 __main__.Win32DeclarationContractTests.test_the_last_error_slot_is_read_through_the_defensive_seam
+ok
+
+[devflow-test] start 0 __main__.Win32DeclarationContractTests.test_the_prototype_table_covers_every_kernel32_call_made
+test_the_prototype_table_covers_every_kernel32_call_made (__main__.Win32DeclarationContractTests.test_the_prototype_table_covers_every_kernel32_call_made) ... 
+[devflow-test] pass 4 __main__.Win32DeclarationContractTests.test_the_prototype_table_covers_every_kernel32_call_made
+ok
+
+[devflow-test] class 15 Win32DeclarationContractTests
+
+[devflow-test] start 0 __main__.WindowsSignalContractTests.test_sigkill_is_named_only_inside_the_signal_helper
+test_sigkill_is_named_only_inside_the_signal_helper (__main__.WindowsSignalContractTests.test_sigkill_is_named_only_inside_the_signal_helper) ... 
+[devflow-test] pass 5 __main__.WindowsSignalContractTests.test_sigkill_is_named_only_inside_the_signal_helper
+ok
+
+[devflow-test] start 0 __main__.WindowsSignalContractTests.test_terminate_dispatches_to_separate_platform_branches
+test_terminate_dispatches_to_separate_platform_branches (__main__.WindowsSignalContractTests.test_terminate_dispatches_to_separate_platform_branches) ... 
+[devflow-test] pass 10 __main__.WindowsSignalContractTests.test_terminate_dispatches_to_separate_platform_branches
+ok
+
+[devflow-test] start 0 __main__.WindowsSignalContractTests.test_the_posix_ladder_has_two_rungs
+test_the_posix_ladder_has_two_rungs (__main__.WindowsSignalContractTests.test_the_posix_ladder_has_two_rungs) ... 
+[devflow-test] pass 0 __main__.WindowsSignalContractTests.test_the_posix_ladder_has_two_rungs
+ok
+
+[devflow-test] start 0 __main__.WindowsSignalContractTests.test_the_windows_escalation_list_is_empty
+test_the_windows_escalation_list_is_empty (__main__.WindowsSignalContractTests.test_the_windows_escalation_list_is_empty) ... 
+[devflow-test] pass 0 __main__.WindowsSignalContractTests.test_the_windows_escalation_list_is_empty
+ok
+
+[devflow-test] start 0 __main__.WindowsSignalContractTests.test_the_windows_path_never_touches_sigkill
+test_the_windows_path_never_touches_sigkill (__main__.WindowsSignalContractTests.test_the_windows_path_never_touches_sigkill)
+Executable proof, not a grep: run the Windows arm with a signal module ... 
+[devflow-test] pass 0 __main__.WindowsSignalContractTests.test_the_windows_path_never_touches_sigkill
+ok
+
+[devflow-test] class 16 WindowsSignalContractTests
+
+[devflow-test] start 0 __main__.WorkspacePreflightTests.test_every_required_artifact_present_passes
+test_every_required_artifact_present_passes (__main__.WorkspacePreflightTests.test_every_required_artifact_present_passes) ... 
+[devflow-test] pass 0 __main__.WorkspacePreflightTests.test_every_required_artifact_present_passes
+ok
+
+[devflow-test] start 0 __main__.WorkspacePreflightTests.test_the_missing_lia_core_artifact_fails_closed_and_names_its_producer
+test_the_missing_lia_core_artifact_fails_closed_and_names_its_producer (__main__.WorkspacePreflightTests.test_the_missing_lia_core_artifact_fails_closed_and_names_its_producer) ... 
+[devflow-test] pass 0 __main__.WorkspacePreflightTests.test_the_missing_lia_core_artifact_fails_closed_and_names_its_producer
+ok
+
+[devflow-test] start 0 __main__.WorkspacePreflightTests.test_the_preflight_is_declared_and_blocking_in_the_active_round
+test_the_preflight_is_declared_and_blocking_in_the_active_round (__main__.WorkspacePreflightTests.test_the_preflight_is_declared_and_blocking_in_the_active_round) ... 
+[devflow-test] pass 0 __main__.WorkspacePreflightTests.test_the_preflight_is_declared_and_blocking_in_the_active_round
+ok
+
+[devflow-test] start 0 __main__.WorkspacePreflightTests.test_the_preflight_module_only_reads_the_workspace
+test_the_preflight_module_only_reads_the_workspace (__main__.WorkspacePreflightTests.test_the_preflight_module_only_reads_the_workspace) ... 
+[devflow-test] pass 0 __main__.WorkspacePreflightTests.test_the_preflight_module_only_reads_the_workspace
+ok
+
+----------------------------------------------------------------------
+Ran 435 tests in 114.762s
+
+OK (skipped=12)
+
+[devflow-test] summary 435 pass=423 fail=0 error=0 skip=12 classes=72 114764
+gate: marcador prerequisite-succeeded: linha 3
+gate: marcador stage-spawn: linha 4
+limpeza da árvore própria: PASS ([PASS]; fake; fake: root morto; descendentes verificados: nenhum vivo)
+gate: opcionais vistos: stage-dev-server-ready
+log sanitizado: 9 linhas mantidas, 0 retidas por não serem diagnóstico do launcher
+verdicto de runtime: PASS
+round.ready_for_publish=false: esta rodada não está marcada para publicar
+artefatos: /tmp/devflow-ux-au942r2_/repo/Tests/runs/devflow/20261114T034839Z-M3.0b
+uso: DevKit.bat git <subcomando> [args]
+subcomandos: publish, pull, validate, branches, checkout, new-branch, create-repo, resume-repo, pr, diagnose, kokoro-smoke
+== DevFlow rodada M3.0b: Pre-requisito de build gerenciado do Stage (core-agent/dist) ==
+branch=arena/01a10290-lia-project head=aaaaaaaaaaaa alteracoes_nao_commitadas=0
+preparo: remove_generated airi/packages/core-agent/dist - Reproduz o estado de um pull fresco: dist e gitignored, entao remove-lo forca o pre-requisito gerenciado a reconstruir do zero em vez de herdar um artefato ja pronto.
+  airi/packages/core-agent/dist: dir -> /tmp/devflow-teardown2-415_878a/repo/airi/packages/core-agent/dist
+  airi/packages/core-agent/dist: 1 entr(s) dentro do alvo
+teste unit: OK
+pré-lançamento: remove_generated airi/packages/core-agent/dist - Um teste OBRIGATORIO (lia-app "rebuilds the real core-agent artifact") roda o mesmo pre-requisito contra o workspace real e reconstroi o dist que o prepare removeu. Sem re-aplicar o passo aqui, o lancamento comecaria com o artefato ja presente e os marcadores starting/succeeded nao provariam a condicao de checkout fresco que define e…[truncado]
+  airi/packages/core-agent/dist: nada a remover (ausente)
+  airi/packages/core-agent/dist AUSENTE imediatamente antes do lançamento
+lançamento gerenciado: Lia.bat
+operador: Nada a fazer. A rodada abre o Launcher, aciona Conversar sozinha e lê a propria evidencia. Nao rode nenhum build manual: a rodada precisa provar que o Launcher reconstruiu o core-agent sozinho.
+ambiente DEVFLOW do lançamento: LIA_DEVFLOW_AUTORUN, LIA_DEVFLOW_DIAGNOSTICS
+marcador autorun-invoked: OK
+marcador prerequisite-starting: OK
+marcador prerequisite-succeeded: OK
+marcador stage-spawn: OK
+gate fase B: cadeia de inicialização completa; aguardando a evidência terminal do Stage
+evidência terminal stage-renderer-ready: OK
+evidência terminal stage-window-visible: OK
+evidência terminal stage-renderer-app-mounted: OK
+evidência terminal stage-avatar-scene-mounted: OK
+gate: marcador autorun-invoked: linha 1
+gate: marcador prerequisite-starting: linha 2
+gate: marcador prerequisite-succeeded: linha 3
+gate: marcador stage-spawn: linha 4
+limpeza da árvore própria: FAIL ([FAIL]; fake; taskkill retornou 128; descendentes: NÃO VERIFICADOS)
+gate: opcionais vistos: stage-dev-server-ready
+log sanitizado: 9 linhas mantidas, 0 retidas por não serem diagnóstico do launcher
+verdicto de runtime: PASS
+verdicto geral: FAIL (limpeza da árvore = FAIL; evidência de runtime não basta sozinha)
+round.ready_for_publish=false: esta rodada não está marcada para publicar
+artefatos: /tmp/devflow-teardown2-415_878a/repo/Tests/runs/devflow/20261114T035006Z-M3.0b
+[preflight] OK      airi-node-modules (airi/node_modules)
+[preflight] OK      lia-core-dist (airi/packages/lia-core/dist/index.mjs)
+[preflight] OK      vitest-bin (airi/node_modules/vitest/vitest.mjs)
+[preflight] OK: 3 requisito(s) presente(s).
+[preflight] OK      airi-node-modules (airi/node_modules)
+[preflight] AUSENTE lia-core-dist (airi/packages/lia-core/dist/index.mjs) - gerado por: pnpm -F @lia/core run build (dentro de airi/) - necessário para: lia-app (via src/main/lia-host.ts, que importa @lia/core)
+[preflight] OK      vitest-bin (airi/node_modules/vitest/vitest.mjs)
+[preflight] FALHA: 1 requisito(s) ausente(s): lia-core-dist. A rodada para aqui para não gastar o orçamento de testes em uma falha já conhecida.
+
+::notice title=tools/test_lia_dev.py - resumo::Ran 435 tests in 114.762s%0AOK (skipped=12)

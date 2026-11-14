@@ -1,0 +1,47 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.11 [39m[90m/home/user/Lia-Project/airi/apps/lia-app[39m
+
+ [32m✓[39m src/main/ai-connection-service.test.ts [2m([22m[2m32 tests[22m[2m)[22m[32m 276[2mms[22m[39m
+ [32m✓[39m src/main/lia-host.test.ts [2m([22m[2m26 tests[22m[2m)[22m[32m 133[2mms[22m[39m
+ [32m✓[39m src/main/lia-host.brain.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 95[2mms[22m[39m
+ [32m✓[39m src/main/airi-stage-manager.test.ts [2m([22m[2m18 tests[22m[2m)[22m[33m 5094[2mms[22m[39m
+     [33m[2m✓[22m[39m a child that never exits after both attempts turns error - never a lying stopped [33m 5011[2mms[22m[39m
+ [32m✓[39m src/main/lia-host.voice-activation.test.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 57[2mms[22m[39m
+ [32m✓[39m src/renderer/src/components/voice-engine-card.vm.test.ts [2m([22m[2m31 tests[22m[2m)[22m[32m 15[2mms[22m[39m
+ [32m✓[39m src/main/stage-build-prerequisite.test.ts [2m([22m[2m14 tests[22m[2m)[22m[33m 2049[2mms[22m[39m
+     [33m[2m✓[22m[39m j: against the real workspace it rebuilds the real core-agent artifact [33m 2028[2mms[22m[39m
+ [32m✓[39m src/main/stage-managed-build-prerequisite.test.ts [2m([22m[2m8 tests[22m[2m)[22m[33m 331[2mms[22m[39m
+ [32m✓[39m src/renderer/src/views/home.test.ts [2m([22m[2m19 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+ [32m✓[39m src/renderer/src/views/voice.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+ [32m✓[39m src/main/voice-provisioning.test.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+ [32m✓[39m src/main/node-runtime.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 21[2mms[22m[39m
+ [32m✓[39m src/renderer/src/components/lia/lia-ui-foundation.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+ [32m✓[39m src/main/credential-owner-host.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 51[2mms[22m[39m
+ [32m✓[39m src/main/ai-selection-integration.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 41[2mms[22m[39m
+ [32m✓[39m src/main/runtime-location.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 32[2mms[22m[39m
+ [32m✓[39m src/main/lia-host.ai-interlock.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 153[2mms[22m[39m
+ [32m✓[39m src/renderer/src/app-shell.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m src/main/voice-engine-service.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m src/main/core-build-contract.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m src/main/shutdown-coordinator.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 164[2mms[22m[39m
+ [32m✓[39m src/main/voice-install-inspector.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 16[2mms[22m[39m
+ [32m✓[39m src/main/devflow-autorun.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m src/main/entry-convention.test.ts [2m([22m[2m5 tests[22m[2m | [22m[33m2 skipped[39m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m src/main/event-publisher.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m src/main/runtime-boundary.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 24[2mms[22m[39m
+ [32m✓[39m src/main/selection-write-policy.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m src/main/boot-independence.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 18[2mms[22m[39m
+ [32m✓[39m src/main/ipc-surface.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m src/renderer/src/ai-resources-view.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m src/main/ai-selection-authority.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m src/main/config-update-sanitizer.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m src/main/packaged-stage.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m src/main/single-instance.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m src/main/security-baseline.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m src/main/launcher-profile.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m36 passed[39m[22m[90m (36)[39m
+[2m      Tests [22m [1m[32m353 passed[39m[22m[2m | [22m[33m2 skipped[39m[90m (355)[39m
+[2m   Start at [22m 03:32:25
+[2m   Duration [22m 13.58s[2m (transform 577ms, setup 0ms, import 1.28s, tests 8.70s, environment 3ms)[22m
+

@@ -1,0 +1,71 @@
+TAP version 13
+# Subtest: createStageHost
+    # Subtest: nao fica running antes do sinal de pronto
+    ok 1 - nao fica running antes do sinal de pronto
+      ---
+      duration_ms: 1.789383
+      type: 'test'
+      ...
+    # Subtest: durante a criacao da janela a fase ainda e starting, nao running
+    ok 2 - durante a criacao da janela a fase ainda e starting, nao running
+      ---
+      duration_ms: 0.445865
+      type: 'test'
+      ...
+    # Subtest: mostra a janela apenas depois de pronta
+    ok 3 - mostra a janela apenas depois de pronta
+      ---
+      duration_ms: 1.048255
+      type: 'test'
+      ...
+    # Subtest: falha ao criar a janela termina em error, nunca em running
+    ok 4 - falha ao criar a janela termina em error, nunca em running
+      ---
+      duration_ms: 0.339163
+      type: 'test'
+      ...
+    # Subtest: start concorrente nao cria uma segunda janela (single-flight)
+    ok 5 - start concorrente nao cria uma segunda janela (single-flight)
+      ---
+      duration_ms: 0.442607
+      type: 'test'
+      ...
+    # Subtest: stop fecha a janela e so entao reporta stopped
+    ok 6 - stop fecha a janela e so entao reporta stopped
+      ---
+      duration_ms: 0.523451
+      type: 'test'
+      ...
+    # Subtest: stop e idempotente: dois cliques nao encerram duas vezes
+    ok 7 - stop e idempotente: dois cliques nao encerram duas vezes
+      ---
+      duration_ms: 0.30297
+      type: 'test'
+      ...
+    # Subtest: stop num host que nunca iniciou nao mata processo nenhum
+    ok 8 - stop num host que nunca iniciou nao mata processo nenhum
+      ---
+      duration_ms: 1.695085
+      type: 'test'
+      ...
+    # Subtest: depois de error, um novo start recomeca com estado limpo
+    ok 9 - depois de error, um novo start recomeca com estado limpo
+      ---
+      duration_ms: 0.639631
+      type: 'test'
+      ...
+    1..9
+ok 1 - createStageHost
+  ---
+  duration_ms: 9.134412
+  type: 'suite'
+  ...
+1..1
+# tests 9
+# suites 1
+# pass 9
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 129.513994

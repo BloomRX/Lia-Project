@@ -1,0 +1,2510 @@
+TAP version 13
+# Subtest: excludes missing fields but retains zero CPU/GPU and input immutability
+ok 1 - excludes missing fields but retains zero CPU/GPU and input immutability
+  ---
+  duration_ms: 4.016356
+  type: 'test'
+  ...
+# Subtest: reports process loss and identity mismatch without contaminating totals or GPU
+ok 2 - reports process loss and identity mismatch without contaminating totals or GPU
+  ---
+  duration_ms: 0.73904
+  type: 'test'
+  ...
+# Subtest: keeps committed memory separate from shared working sets and compares windows
+ok 3 - keeps committed memory separate from shared working sets and compares windows
+  ---
+  duration_ms: 0.530466
+  type: 'test'
+  ...
+# Subtest: rejects invalid numeric values and excludes missing and duplicate processes
+ok 4 - rejects invalid numeric values and excludes missing and duplicate processes
+  ---
+  duration_ms: 0.648731
+  type: 'test'
+  ...
+# Subtest: uses collection elapsed time for duration/windows without inventing completion
+ok 5 - uses collection elapsed time for duration/windows without inventing completion
+  ---
+  duration_ms: 0.990591
+  type: 'test'
+  ...
+# Subtest: kokoro-smoke.mjs: output-dir seam is tooling-only and backward compatible
+    # Subtest: accepts an optional outDir argument (what Tests/LiaTests.bat passes)
+    ok 1 - accepts an optional outDir argument (what Tests/LiaTests.bat passes)
+      ---
+      duration_ms: 1.612915
+      type: 'test'
+      ...
+    # Subtest: without the argument, artifacts stay inside the Tests workspace
+    ok 2 - without the argument, artifacts stay inside the Tests workspace
+      ---
+      duration_ms: 0.223281
+      type: 'test'
+      ...
+    # Subtest: still runs ONLY against the production runtime-home resolution
+    ok 3 - still runs ONLY against the production runtime-home resolution
+      ---
+      duration_ms: 0.379471
+      type: 'test'
+      ...
+    # Subtest: still wires the production engine modules from lia-core dist
+    ok 4 - still wires the production engine modules from lia-core dist
+      ---
+      duration_ms: 0.136478
+      type: 'test'
+      ...
+    # Subtest: DevKit invocation passes no extra argument (checked over project_cli.py)
+    ok 5 - DevKit invocation passes no extra argument (checked over project_cli.py)
+      ---
+      duration_ms: 0.528615
+      type: 'test'
+      ...
+    1..5
+ok 6 - kokoro-smoke.mjs: output-dir seam is tooling-only and backward compatible
+  ---
+  duration_ms: 3.993615
+  type: 'suite'
+  ...
+# Subtest: reports package declarations and adjacent notices without approving redistribution
+ok 7 - reports package declarations and adjacent notices without approving redistribution
+  ---
+  duration_ms: 1.964467
+  type: 'test'
+  ...
+# Subtest: counts path evidence for fonts and avatar formats without reading assets
+ok 8 - counts path evidence for fonts and avatar formats without reading assets
+  ---
+  duration_ms: 0.325661
+  type: 'test'
+  ...
+# Subtest: invalid package metadata fails visibly rather than silently omitting a package
+ok 9 - invalid package metadata fails visibly rather than silently omitting a package
+  ---
+  duration_ms: 0.40142
+  type: 'test'
+  ...
+# Subtest: LiaTests.bat: Windows-oriented static validation
+    # Subtest: uses CRLF line endings (batch-safe on Windows)
+    ok 1 - uses CRLF line endings (batch-safe on Windows)
+      ---
+      duration_ms: 0.839961
+      type: 'test'
+      ...
+    # Subtest: offers the full menu: 5 top options + storage submenu
+    ok 2 - offers the full menu: 5 top options + storage submenu
+      ---
+      duration_ms: 0.333413
+      type: 'test'
+      ...
+    # Subtest: requires Node before doing anything
+    ok 3 - requires Node before doing anything
+      ---
+      duration_ms: 0.10602
+      type: 'test'
+      ...
+    # Subtest: creates run folders through qa-run (unique timestamp ids) and captures the git SHA
+    ok 4 - creates run folders through qa-run (unique timestamp ids) and captures the git SHA
+      ---
+      duration_ms: 0.137647
+      type: 'test'
+      ...
+    # Subtest: produces checklist/notes paths for the tester
+    ok 5 - produces checklist/notes paths for the tester
+      ---
+      duration_ms: 0.094442
+      type: 'test'
+      ...
+    # Subtest: launches Lia through the supported Lia.bat with console capture
+    ok 6 - launches Lia through the supported Lia.bat with console capture
+      ---
+      duration_ms: 0.08459
+      type: 'test'
+      ...
+    # Subtest: smoke option runs the existing production smoke script
+    ok 7 - smoke option runs the existing production smoke script
+      ---
+      duration_ms: 0.116604
+      type: 'test'
+      ...
+    # Subtest: smoke output is routed into the run-owned artifacts folder
+    ok 8 - smoke output is routed into the run-owned artifacts folder
+      ---
+      duration_ms: 0.185175
+      type: 'test'
+      ...
+    # Subtest: restore path goes through the saved original value (qa-config restore)
+    ok 9 - restore path goes through the saved original value (qa-config restore)
+      ---
+      duration_ms: 0.175472
+      type: 'test'
+      ...
+    # Subtest: storage actions delegate to the guarded qa-storage helper
+    ok 10 - storage actions delegate to the guarded qa-storage helper
+      ---
+      duration_ms: 0.286969
+      type: 'test'
+      ...
+    # Subtest: retention and prune confirm explicitly before applying
+    ok 11 - retention and prune confirm explicitly before applying
+      ---
+      duration_ms: 0.094982
+      type: 'test'
+      ...
+    # Subtest: contains NO destructive shell command at all (deletion lives in Node guards)
+    ok 12 - contains NO destructive shell command at all (deletion lives in Node guards)
+      ---
+      duration_ms: 0.258113
+      type: 'test'
+      ...
+    # Subtest: never targets the production runtime: no LOCALAPPDATA reference anywhere
+    ok 13 - never targets the production runtime: no LOCALAPPDATA reference anywhere
+      ---
+      duration_ms: 1.211786
+      type: 'test'
+      ...
+    # Subtest: quotes every command-line use of %RUN_DIR% (paths with spaces must work)
+    ok 14 - quotes every command-line use of %RUN_DIR% (paths with spaces must work)
+      ---
+      duration_ms: 0.29024
+      type: 'test'
+      ...
+    # Subtest: resets RUN_DIR before each capture (no stale run can leak)
+    ok 15 - resets RUN_DIR before each capture (no stale run can leak)
+      ---
+      duration_ms: 0.114438
+      type: 'test'
+      ...
+    1..15
+ok 10 - LiaTests.bat: Windows-oriented static validation
+  ---
+  duration_ms: 5.482963
+  type: 'suite'
+  ...
+# Subtest: gitignore: harness-generated folders can never enter Git
+    # Subtest: runs/runtimes/logs/inventory are ignored
+    ok 1 - runs/runtimes/logs/inventory are ignored
+      ---
+      duration_ms: 20.161594
+      type: 'test'
+      ...
+    # Subtest: run-owned artifacts are ignored because the parent run is ignored
+    ok 2 - run-owned artifacts are ignored because the parent run is ignored
+      ---
+      duration_ms: 8.072365
+      type: 'test'
+      ...
+    # Subtest: the committed harness (README + tools) is NOT ignored
+    ok 3 - the committed harness (README + tools) is NOT ignored
+      ---
+      duration_ms: 11.978035
+      type: 'test'
+      ...
+    # Subtest: the .gitignore documents the QA block
+    ok 4 - the .gitignore documents the QA block
+      ---
+      duration_ms: 0.240107
+      type: 'test'
+      ...
+    1..4
+ok 11 - gitignore: harness-generated folders can never enter Git
+  ---
+  duration_ms: 40.638545
+  type: 'suite'
+  ...
+# Subtest: LiaBenchmark.bat: Windows benchmark harness static validation
+    # Subtest: exists and uses CRLF
+    ok 1 - exists and uses CRLF
+      ---
+      duration_ms: 0.112207
+      type: 'test'
+      ...
+    # Subtest: is a thin wrapper: @echo off, chcp 65001, where node, node qa-benchmark.mjs, exit %ERRORLEVEL%
+    ok 2 - is a thin wrapper: @echo off, chcp 65001, where node, node qa-benchmark.mjs, exit %ERRORLEVEL%
+      ---
+      duration_ms: 0.115284
+      type: 'test'
+      ...
+    # Subtest: sets local and cd to script dir
+    ok 3 - sets local and cd to script dir
+      ---
+      duration_ms: 0.07958
+      type: 'test'
+      ...
+    # Subtest: forwards all args
+    ok 4 - forwards all args
+      ---
+      duration_ms: 0.085966
+      type: 'test'
+      ...
+    # Subtest: contains NO destructive git/powershell/force
+    ok 5 - contains NO destructive git/powershell/force
+      ---
+      duration_ms: 0.083164
+      type: 'test'
+      ...
+    # Subtest: never installs: no npx, no pnpm install, no pip install
+    ok 6 - never installs: no npx, no pnpm install, no pip install
+      ---
+      duration_ms: 0.075717
+      type: 'test'
+      ...
+    1..6
+ok 12 - LiaBenchmark.bat: Windows benchmark harness static validation
+  ---
+  duration_ms: 0.688509
+  type: 'suite'
+  ...
+# Subtest: qa-benchmark.mjs: static allowlist validation
+    # Subtest: uses only pnpm exec, never npx
+    ok 1 - uses only pnpm exec, never npx
+      ---
+      duration_ms: 0.192171
+      type: 'test'
+      ...
+    # Subtest: does not run pnpm install automatically
+    ok 2 - does not run pnpm install automatically
+      ---
+      duration_ms: 0.083765
+      type: 'test'
+      ...
+    # Subtest: defines allowlist benchmarks/<runId> and forbids arena
+    ok 3 - defines allowlist benchmarks/<runId> and forbids arena
+      ---
+      duration_ms: 0.111539
+      type: 'test'
+      ...
+    # Subtest: references redaction bridge not duplicated regex
+    ok 4 - references redaction bridge not duplicated regex
+      ---
+      duration_ms: 0.073211
+      type: 'test'
+      ...
+    # Subtest: uses sparse orphan worktree, no destructive git in source checkout
+    ok 5 - uses sparse orphan worktree, no destructive git in source checkout
+      ---
+      duration_ms: 0.294839
+      type: 'test'
+      ...
+    # Subtest: SHA manifest is deterministic lexical
+    ok 6 - SHA manifest is deterministic lexical
+      ---
+      duration_ms: 0.055913
+      type: 'test'
+      ...
+    1..6
+ok 13 - qa-benchmark.mjs: static allowlist validation
+  ---
+  duration_ms: 0.929723
+  type: 'suite'
+  ...
+# Subtest: classification: browser
+    # Subtest: browser missing → ENVIRONMENT-LIMITED
+    ok 1 - browser missing → ENVIRONMENT-LIMITED
+      ---
+      duration_ms: 2.169983
+      type: 'test'
+      ...
+    # Subtest: browser test fail → FAIL
+    ok 2 - browser test fail → FAIL
+      ---
+      duration_ms: 0.23767
+      type: 'test'
+      ...
+    1..2
+ok 14 - classification: browser
+  ---
+  duration_ms: 3.159819
+  type: 'suite'
+  ...
+# Subtest: classification: typecheck
+    # Subtest: typecheck OOM → ENVIRONMENT-LIMITED
+    ok 1 - typecheck OOM → ENVIRONMENT-LIMITED
+      ---
+      duration_ms: 0.299297
+      type: 'test'
+      ...
+    # Subtest: typecheck diagnostics → FAIL
+    ok 2 - typecheck diagnostics → FAIL
+      ---
+      duration_ms: 0.152009
+      type: 'test'
+      ...
+    1..2
+ok 15 - classification: typecheck
+  ---
+  duration_ms: 0.586162
+  type: 'suite'
+  ...
+# Subtest: classification: build
+    # Subtest: build fail → FAIL
+    ok 1 - build fail → FAIL
+      ---
+      duration_ms: 0.159173
+      type: 'test'
+      ...
+    # Subtest: build missing tool → ENVIRONMENT-LIMITED
+    ok 2 - build missing tool → ENVIRONMENT-LIMITED
+      ---
+      duration_ms: 0.163134
+      type: 'test'
+      ...
+    1..2
+ok 16 - classification: build
+  ---
+  duration_ms: 0.574809
+  type: 'suite'
+  ...
+# Subtest: classification: lint/stage-ui
+    # Subtest: lint fail → FAIL
+    ok 1 - lint fail → FAIL
+      ---
+      duration_ms: 0.200772
+      type: 'test'
+      ...
+    # Subtest: stage-ui fail → FAIL
+    ok 2 - stage-ui fail → FAIL
+      ---
+      duration_ms: 0.078464
+      type: 'test'
+      ...
+    1..2
+ok 17 - classification: lint/stage-ui
+  ---
+  duration_ms: 0.40374
+  type: 'suite'
+  ...
+# Subtest: classification: required evidence
+    # Subtest: PASS only when all required domains execute/pass
+    ok 1 - PASS only when all required domains execute/pass
+      ---
+      duration_ms: 0.206965
+      type: 'test'
+      ...
+    # Subtest: any executed failed forces FAIL regardless of optional
+    ok 2 - any executed failed forces FAIL regardless of optional
+      ---
+      duration_ms: 0.205616
+      type: 'test'
+      ...
+    # Subtest: skipped-optional does not affect PASS
+    ok 3 - skipped-optional does not affect PASS
+      ---
+      duration_ms: 0.086716
+      type: 'test'
+      ...
+    # Subtest: unknown nonzero → FAIL not env
+    ok 4 - unknown nonzero → FAIL not env
+      ---
+      duration_ms: 0.075234
+      type: 'test'
+      ...
+    1..4
+ok 18 - classification: required evidence
+  ---
+  duration_ms: 0.696298
+  type: 'suite'
+  ...
+# Subtest: classification: D2B9-D missing browser executable precedence
+    # Subtest: A: stage-ui node results fully passing with only the missing executable -> ENVIRONMENT-LIMITED
+    ok 1 - A: stage-ui node results fully passing with only the missing executable -> ENVIRONMENT-LIMITED
+      ---
+      duration_ms: 0.113608
+      type: 'test'
+      ...
+    # Subtest: B: Stage full with real failed Node tests stays FAILED even when the executable is missing
+    ok 2 - B: Stage full with real failed Node tests stays FAILED even when the executable is missing
+      ---
+      duration_ms: 0.105223
+      type: 'test'
+      ...
+    # Subtest: C: browser command with no tests and only the missing executable -> ENVIRONMENT-LIMITED
+    ok 3 - C: browser command with no tests and only the missing executable -> ENVIRONMENT-LIMITED
+      ---
+      duration_ms: 0.161941
+      type: 'test'
+      ...
+    # Subtest: D: no regression - TS diagnostics, lint errors and real FAIL lines stay FAILED
+    ok 4 - D: no regression - TS diagnostics, lint errors and real FAIL lines stay FAILED
+      ---
+      duration_ms: 0.342447
+      type: 'test'
+      ...
+    1..4
+ok 19 - classification: D2B9-D missing browser executable precedence
+  ---
+  duration_ms: 0.83612
+  type: 'suite'
+  ...
+# Subtest: classification: isEnvironmentFailure pure
+    # Subtest: recognizes ENOENT
+    ok 1 - recognizes ENOENT
+      ---
+      duration_ms: 0.17003
+      type: 'test'
+      ...
+    # Subtest: recognizes chromium missing
+    ok 2 - recognizes chromium missing
+      ---
+      duration_ms: 0.061258
+      type: 'test'
+      ...
+    # Subtest: recognizes OOM
+    ok 3 - recognizes OOM
+      ---
+      duration_ms: 0.053607
+      type: 'test'
+      ...
+    # Subtest: does not classify arbitrary nonzero as env
+    ok 4 - does not classify arbitrary nonzero as env
+      ---
+      duration_ms: 0.089275
+      type: 'test'
+      ...
+    1..4
+ok 20 - classification: isEnvironmentFailure pure
+  ---
+  duration_ms: 0.467137
+  type: 'suite'
+  ...
+# Subtest: D2B9-A: classifier precedence
+    # Subtest: A. typecheck with error TS2304 setTimeout → FAIL not ENV
+    ok 1 - A. typecheck with error TS2304 setTimeout → FAIL not ENV
+      ---
+      duration_ms: 1.852558
+      type: 'test'
+      ...
+    # Subtest: B. Stage Vitest 109 failed + ENOENT + Playwright missing → FAIL
+    ok 2 - B. Stage Vitest 109 failed + ENOENT + Playwright missing → FAIL
+      ---
+      duration_ms: 0.190878
+      type: 'test'
+      ...
+    # Subtest: C. browser-only no tests + executable missing → ENV
+    ok 3 - C. browser-only no tests + executable missing → ENV
+      ---
+      duration_ms: 0.451069
+      type: 'test'
+      ...
+    # Subtest: D. lint 452 errors → FAIL
+    ok 4 - D. lint 452 errors → FAIL
+      ---
+      duration_ms: 0.403011
+      type: 'test'
+      ...
+    # Subtest: E. stage-ui No projects matched → FAIL
+    ok 5 - E. stage-ui No projects matched → FAIL
+      ---
+      duration_ms: 0.179944
+      type: 'test'
+      ...
+    # Subtest: setTimeout false-env: typecheck diagnostics not confused with timeout
+    ok 6 - setTimeout false-env: typecheck diagnostics not confused with timeout
+      ---
+      duration_ms: 0.111709
+      type: 'test'
+      ...
+    1..6
+ok 21 - D2B9-A: classifier precedence
+  ---
+  duration_ms: 4.114078
+  type: 'suite'
+  ...
+# Subtest: D2B9-A: metric parsers
+    # Subtest: parses lia-core: 9 failed | 15 passed (24) and 21 failed | 288 passed (309)
+    ok 1 - parses lia-core: 9 failed | 15 passed (24) and 21 failed | 288 passed (309)
+      ---
+      duration_ms: 0.827795
+      type: 'test'
+      ...
+    # Subtest: parses Stage: 30 failed | 107 passed (141) and 109 failed | 1438 passed | 1 skipped (1548) plus 1 error
+    ok 2 - parses Stage: 30 failed | 107 passed (141) and 109 failed | 1438 passed | 1 skipped (1548) plus 1 error
+      ---
+      duration_ms: 0.330304
+      type: 'test'
+      ...
+    # Subtest: parses Browser: 4 files, no tests, 1 error
+    ok 3 - parses Browser: 4 files, no tests, 1 error
+      ---
+      duration_ms: 0.320918
+      type: 'test'
+      ...
+    # Subtest: parses Lint: 498 problems (452 errors, 46 warnings)
+    ok 4 - parses Lint: 498 problems (452 errors, 46 warnings)
+      ---
+      duration_ms: 0.302291
+      type: 'test'
+      ...
+    # Subtest: handles ANSI codes
+    ok 5 - handles ANSI codes
+      ---
+      duration_ms: 0.125352
+      type: 'test'
+      ...
+    # Subtest: parses TypeScript 156 diagnostics
+    ok 6 - parses TypeScript 156 diagnostics
+      ---
+      duration_ms: 0.154412
+      type: 'test'
+      ...
+    1..6
+ok 22 - D2B9-A: metric parsers
+  ---
+  duration_ms: 2.443172
+  type: 'suite'
+  ...
+# Subtest: D2B9-A: stage-ui canonical command
+    # Subtest: uses pnpm run test-ui:run cwd airi
+    ok 1 - uses pnpm run test-ui:run cwd airi
+      ---
+      duration_ms: 0.870412
+      type: 'test'
+      ...
+    1..1
+ok 23 - D2B9-A: stage-ui canonical command
+  ---
+  duration_ms: 0.942406
+  type: 'suite'
+  ...
+# [benchmark] HEAD e1b3fea branch arena/test-branch remote e1b3fea observed=true
+# [benchmark] Preflight failed: dirty worktree
+# [benchmark] git status:
+# ?? dirty.txt
+# [benchmark] HEAD e09c094 branch arena/missing-branch remote null observed=false
+# [benchmark] Preflight failed: source remote not observed for arena/missing-branch
+# [benchmark] git status:
+# [benchmark] HEAD b59b36e branch arena/test-branch remote e1b3fea observed=true
+# [benchmark] Preflight failed: local HEAD b59b36e != remote e1b3fea for arena/test-branch
+# [benchmark] git status:
+# [benchmark] HEAD e1b3fea branch arena/test-branch remote e1b3fea observed=true
+# [benchmark] Run ID 20260929-120000-e1b3fea
+# [benchmark] Initial QA remote qa/windows-benchmarks is absent
+# [benchmark] Running core-agent: pnpm exec vitest run --project @proj-airi/core-agent in /tmp/lia-src-VCCmjH/airi
+# [benchmark] Running lia-core: pnpm test in /tmp/lia-src-VCCmjH/airi/packages/lia-core
+# [benchmark] Running browser: pnpm exec vitest run --project browser in /tmp/lia-src-VCCmjH/airi/apps/stage-tamagotchi
+# [benchmark] Running lint: pnpm lint in /tmp/lia-src-VCCmjH/airi
+# [benchmark] Running typecheck: pnpm typecheck in /tmp/lia-src-VCCmjH/airi
+# [benchmark] Running build-packages: pnpm run build:packages in /tmp/lia-src-VCCmjH/airi
+# [benchmark] Running stage-vitest: pnpm exec vitest run in /tmp/lia-src-VCCmjH/airi/apps/stage-tamagotchi
+# [benchmark] Running stage-ui: pnpm run test-ui:run in /tmp/lia-src-VCCmjH/airi
+# [benchmark] QA remote qa/windows-benchmarks is absent (initial was absent)
+# [benchmark] Done 20260929-120000-e1b3fea status=PASS pushed=true
+# [benchmark] HEAD 5b261a0 branch arena/test-branch remote 5b261a0 observed=true
+# [benchmark] Run ID 20260930-100000-5b261a0
+# [benchmark] Initial QA remote qa/windows-benchmarks is absent
+# [benchmark] Running core-agent: pnpm exec vitest run --project @proj-airi/core-agent in /tmp/lia-src-irITJp/airi
+# [benchmark] Running lia-core: pnpm test in /tmp/lia-src-irITJp/airi/packages/lia-core
+# [benchmark] Running browser: pnpm exec vitest run --project browser in /tmp/lia-src-irITJp/airi/apps/stage-tamagotchi
+# [benchmark] Running lint: pnpm lint in /tmp/lia-src-irITJp/airi
+# [benchmark] Running typecheck: pnpm typecheck in /tmp/lia-src-irITJp/airi
+# [benchmark] Running build-packages: pnpm run build:packages in /tmp/lia-src-irITJp/airi
+# [benchmark] Running stage-vitest: pnpm exec vitest run in /tmp/lia-src-irITJp/airi/apps/stage-tamagotchi
+# [benchmark] Running stage-ui: pnpm run test-ui:run in /tmp/lia-src-irITJp/airi
+# [benchmark] QA remote qa/windows-benchmarks is absent (initial was absent)
+# [benchmark] Done 20260930-100000-5b261a0 status=PASS pushed=true
+# [benchmark] HEAD 218267a branch arena/test-branch remote 218267a observed=true
+# [benchmark] Run ID 20260929-120000-218267a
+# [benchmark] Initial QA remote qa/windows-benchmarks is absent
+# [benchmark] Running core-agent: pnpm exec vitest run --project @proj-airi/core-agent in /tmp/lia-src-BHgxkB/airi
+# [benchmark] Running lia-core: pnpm test in /tmp/lia-src-BHgxkB/airi/packages/lia-core
+# [benchmark] Running browser: pnpm exec vitest run --project browser in /tmp/lia-src-BHgxkB/airi/apps/stage-tamagotchi
+# [benchmark] Running lint: pnpm lint in /tmp/lia-src-BHgxkB/airi
+# [benchmark] Running typecheck: pnpm typecheck in /tmp/lia-src-BHgxkB/airi
+# [benchmark] Running build-packages: pnpm run build:packages in /tmp/lia-src-BHgxkB/airi
+# [benchmark] Running stage-vitest: pnpm exec vitest run in /tmp/lia-src-BHgxkB/airi/apps/stage-tamagotchi
+# [benchmark] Running stage-ui: pnpm run test-ui:run in /tmp/lia-src-BHgxkB/airi
+# [benchmark] QA remote qa/windows-benchmarks is absent (initial was absent)
+# [benchmark] Done 20260929-120000-218267a status=PASS pushed=true
+# [benchmark] HEAD 218267a branch arena/test-branch remote 218267a observed=true
+# [benchmark] Run ID 20260929-130000-218267a
+# [benchmark] Initial QA remote qa/windows-benchmarks is 895b06b
+# [benchmark] Running core-agent: pnpm exec vitest run --project @proj-airi/core-agent in /tmp/lia-src-BHgxkB/airi
+# [benchmark] Running lia-core: pnpm test in /tmp/lia-src-BHgxkB/airi/packages/lia-core
+# [benchmark] Running browser: pnpm exec vitest run --project browser in /tmp/lia-src-BHgxkB/airi/apps/stage-tamagotchi
+# [benchmark] Running lint: pnpm lint in /tmp/lia-src-BHgxkB/airi
+# [benchmark] Running typecheck: pnpm typecheck in /tmp/lia-src-BHgxkB/airi
+# [benchmark] Running build-packages: pnpm run build:packages in /tmp/lia-src-BHgxkB/airi
+# [benchmark] Running stage-vitest: pnpm exec vitest run in /tmp/lia-src-BHgxkB/airi/apps/stage-tamagotchi
+# [benchmark] Running stage-ui: pnpm run test-ui:run in /tmp/lia-src-BHgxkB/airi
+# [benchmark] QA remote qa/windows-benchmarks is 895b06b (initial was 895b06b)
+# [benchmark] Done 20260929-130000-218267a status=PASS pushed=true
+# [benchmark] HEAD 04b4e27 branch arena/test-branch remote 04b4e27 observed=true
+# [benchmark] Run ID 20260929-120000-04b4e27
+# [benchmark] Initial QA remote qa/windows-benchmarks is absent
+# [benchmark] Running core-agent: pnpm exec vitest run --project @proj-airi/core-agent in /tmp/lia-src-Q6mTkv/airi
+# [benchmark] Running lia-core: pnpm test in /tmp/lia-src-Q6mTkv/airi/packages/lia-core
+# [benchmark] Running browser: pnpm exec vitest run --project browser in /tmp/lia-src-Q6mTkv/airi/apps/stage-tamagotchi
+# [benchmark] Running lint: pnpm lint in /tmp/lia-src-Q6mTkv/airi
+# [benchmark] Running typecheck: pnpm typecheck in /tmp/lia-src-Q6mTkv/airi
+# [benchmark] Running build-packages: pnpm run build:packages in /tmp/lia-src-Q6mTkv/airi
+# [benchmark] Running stage-vitest: pnpm exec vitest run in /tmp/lia-src-Q6mTkv/airi/apps/stage-tamagotchi
+# [benchmark] Running stage-ui: pnpm run test-ui:run in /tmp/lia-src-Q6mTkv/airi
+# [benchmark] QA remote qa/windows-benchmarks is absent (initial was absent)
+# [benchmark] Done 20260929-120000-04b4e27 status=PASS pushed=true
+# [benchmark] HEAD 04b4e27 branch arena/test-branch remote 04b4e27 observed=true
+# [benchmark] Run ID 20260929-130000-04b4e27
+# [benchmark] Initial QA remote qa/windows-benchmarks is 4789793
+# [benchmark] Running core-agent: pnpm exec vitest run --project @proj-airi/core-agent in /tmp/lia-src-Q6mTkv/airi
+# [benchmark] Running lia-core: pnpm test in /tmp/lia-src-Q6mTkv/airi/packages/lia-core
+# [benchmark] Running browser: pnpm exec vitest run --project browser in /tmp/lia-src-Q6mTkv/airi/apps/stage-tamagotchi
+# [benchmark] Running lint: pnpm lint in /tmp/lia-src-Q6mTkv/airi
+# [benchmark] Running typecheck: pnpm typecheck in /tmp/lia-src-Q6mTkv/airi
+# [benchmark] Running build-packages: pnpm run build:packages in /tmp/lia-src-Q6mTkv/airi
+# [benchmark] Running stage-vitest: pnpm exec vitest run in /tmp/lia-src-Q6mTkv/airi/apps/stage-tamagotchi
+# [benchmark] Running stage-ui: pnpm run test-ui:run in /tmp/lia-src-Q6mTkv/airi
+# [benchmark] QA remote qa/windows-benchmarks is 4789793 (initial was 4789793)
+# [benchmark] Done 20260929-130000-04b4e27 status=PASS pushed=true
+# [benchmark] HEAD 504c8df branch arena/test-branch remote 504c8df observed=true
+# [benchmark] Run ID 20260929-120000-504c8df
+# [benchmark] Initial QA remote qa/windows-benchmarks is absent
+# [benchmark] Running core-agent: pnpm exec vitest run --project @proj-airi/core-agent in /tmp/lia-src-riGI9k/airi
+# [benchmark] Running lia-core: pnpm test in /tmp/lia-src-riGI9k/airi/packages/lia-core
+# [benchmark] Running browser: pnpm exec vitest run --project browser in /tmp/lia-src-riGI9k/airi/apps/stage-tamagotchi
+# [benchmark] Running lint: pnpm lint in /tmp/lia-src-riGI9k/airi
+# [benchmark] Running typecheck: pnpm typecheck in /tmp/lia-src-riGI9k/airi
+# [benchmark] Running build-packages: pnpm run build:packages in /tmp/lia-src-riGI9k/airi
+# [benchmark] Running stage-vitest: pnpm exec vitest run in /tmp/lia-src-riGI9k/airi/apps/stage-tamagotchi
+# [benchmark] Running stage-ui: pnpm run test-ui:run in /tmp/lia-src-riGI9k/airi
+# [benchmark] QA remote qa/windows-benchmarks is absent (initial was absent)
+# [benchmark] Done 20260929-120000-504c8df status=PASS pushed=true
+# [benchmark] HEAD a2de132 branch arena/test-branch remote a2de132 observed=true
+# [benchmark] Run ID 20260929-120000-a2de132
+# [benchmark] Initial QA remote qa/windows-benchmarks is absent
+# [benchmark] Running core-agent: pnpm exec vitest run --project @proj-airi/core-agent in /tmp/lia-src-wOa5V5/airi
+# [benchmark] Running lia-core: pnpm test in /tmp/lia-src-wOa5V5/airi/packages/lia-core
+# [benchmark] Running browser: pnpm exec vitest run --project browser in /tmp/lia-src-wOa5V5/airi/apps/stage-tamagotchi
+# [benchmark] Running lint: pnpm lint in /tmp/lia-src-wOa5V5/airi
+# [benchmark] Running typecheck: pnpm typecheck in /tmp/lia-src-wOa5V5/airi
+# [benchmark] Running build-packages: pnpm run build:packages in /tmp/lia-src-wOa5V5/airi
+# [benchmark] Running stage-vitest: pnpm exec vitest run in /tmp/lia-src-wOa5V5/airi/apps/stage-tamagotchi
+# [benchmark] Running stage-ui: pnpm run test-ui:run in /tmp/lia-src-wOa5V5/airi
+# [benchmark] Source remote moved during benchmark: a2de132 != 0483303 — will not publish
+# [benchmark] HEAD 8f751c1 branch arena/test-branch remote 8f751c1 observed=true
+# [benchmark] Run ID 20260929-140000-8f751c1
+# [benchmark] Initial QA remote qa/windows-benchmarks is absent
+# [benchmark] Running core-agent: pnpm exec vitest run --project @proj-airi/core-agent in /tmp/lia-src-VmKHfh/airi
+# [benchmark] Running lia-core: pnpm test in /tmp/lia-src-VmKHfh/airi/packages/lia-core
+# [benchmark] Running browser: pnpm exec vitest run --project browser in /tmp/lia-src-VmKHfh/airi/apps/stage-tamagotchi
+# [benchmark] Running lint: pnpm lint in /tmp/lia-src-VmKHfh/airi
+# [benchmark] Running typecheck: pnpm typecheck in /tmp/lia-src-VmKHfh/airi
+# [benchmark] Running build-packages: pnpm run build:packages in /tmp/lia-src-VmKHfh/airi
+# [benchmark] Running stage-vitest: pnpm exec vitest run in /tmp/lia-src-VmKHfh/airi/apps/stage-tamagotchi
+# [benchmark] Running stage-ui: pnpm run test-ui:run in /tmp/lia-src-VmKHfh/airi
+# [benchmark] QA remote qa/windows-benchmarks is 709c69e (initial was absent)
+# [benchmark] QA remote appeared concurrently (initial absent, now 709c69e) — will not publish
+# [benchmark] HEAD 7d420d4 branch arena/test-branch remote 7d420d4 observed=true
+# [benchmark] Run ID 20260929-120000-7d420d4
+# [benchmark] Initial QA remote qa/windows-benchmarks is absent
+# [benchmark] Running core-agent: pnpm exec vitest run --project @proj-airi/core-agent in /tmp/lia-src-n9o6kN/airi
+# [benchmark] Running lia-core: pnpm test in /tmp/lia-src-n9o6kN/airi/packages/lia-core
+# [benchmark] Running browser: pnpm exec vitest run --project browser in /tmp/lia-src-n9o6kN/airi/apps/stage-tamagotchi
+# [benchmark] Running lint: pnpm lint in /tmp/lia-src-n9o6kN/airi
+# [benchmark] Running typecheck: pnpm typecheck in /tmp/lia-src-n9o6kN/airi
+# [benchmark] Running build-packages: pnpm run build:packages in /tmp/lia-src-n9o6kN/airi
+# [benchmark] Running stage-vitest: pnpm exec vitest run in /tmp/lia-src-n9o6kN/airi/apps/stage-tamagotchi
+# [benchmark] Running stage-ui: pnpm run test-ui:run in /tmp/lia-src-n9o6kN/airi
+# [benchmark] QA remote qa/windows-benchmarks is absent (initial was absent)
+# [benchmark] Done 20260929-120000-7d420d4 status=PASS pushed=true
+# [benchmark] HEAD 7d420d4 branch arena/test-branch remote 7d420d4 observed=true
+# [benchmark] Run ID 20260929-130000-7d420d4
+# [benchmark] Initial QA remote qa/windows-benchmarks is 6d7dc68
+# [benchmark] Running core-agent: pnpm exec vitest run --project @proj-airi/core-agent in /tmp/lia-src-n9o6kN/airi
+# [benchmark] Running lia-core: pnpm test in /tmp/lia-src-n9o6kN/airi/packages/lia-core
+# [benchmark] Running browser: pnpm exec vitest run --project browser in /tmp/lia-src-n9o6kN/airi/apps/stage-tamagotchi
+# [benchmark] Running lint: pnpm lint in /tmp/lia-src-n9o6kN/airi
+# [benchmark] Running typecheck: pnpm typecheck in /tmp/lia-src-n9o6kN/airi
+# [benchmark] Running build-packages: pnpm run build:packages in /tmp/lia-src-n9o6kN/airi
+# [benchmark] Running stage-vitest: pnpm exec vitest run in /tmp/lia-src-n9o6kN/airi/apps/stage-tamagotchi
+# [benchmark] Running stage-ui: pnpm run test-ui:run in /tmp/lia-src-n9o6kN/airi
+# [benchmark] QA remote qa/windows-benchmarks is c18700d (initial was 6d7dc68)
+# [benchmark] QA remote moved (initial 6d7dc68 now c18700d) — will not publish
+# [benchmark] HEAD 8e1cd30 branch arena/test-branch remote 8e1cd30 observed=true
+# [benchmark] Run ID 20260929-150000-8e1cd30
+# [benchmark] Initial QA remote qa/windows-benchmarks is absent
+# [benchmark] Running core-agent: pnpm exec vitest run --project @proj-airi/core-agent in /tmp/lia-src-fTrbqp/airi
+# [benchmark] Running lia-core: pnpm test in /tmp/lia-src-fTrbqp/airi/packages/lia-core
+# [benchmark] Running browser: pnpm exec vitest run --project browser in /tmp/lia-src-fTrbqp/airi/apps/stage-tamagotchi
+# [benchmark] Running lint: pnpm lint in /tmp/lia-src-fTrbqp/airi
+# [benchmark] Running typecheck: pnpm typecheck in /tmp/lia-src-fTrbqp/airi
+# [benchmark] Running build-packages: pnpm run build:packages in /tmp/lia-src-fTrbqp/airi
+# [benchmark] Running stage-vitest: pnpm exec vitest run in /tmp/lia-src-fTrbqp/airi/apps/stage-tamagotchi
+# [benchmark] Running stage-ui: pnpm run test-ui:run in /tmp/lia-src-fTrbqp/airi
+# [benchmark] Residual secret or scan error — will not commit/publish
+# [benchmark] Security bridge missing — publication blocked
+# [benchmark] HEAD f827ccf branch arena/test-branch remote f827ccf observed=true
+# [benchmark] Run ID 20260929-160000-f827ccf
+# [benchmark] Initial QA remote qa/windows-benchmarks is absent
+# [benchmark] Running core-agent: pnpm exec vitest run --project @proj-airi/core-agent in /tmp/lia-src-jjDirI/airi
+# [benchmark] Running lia-core: pnpm test in /tmp/lia-src-jjDirI/airi/packages/lia-core
+# [benchmark] Running browser: pnpm exec vitest run --project browser in /tmp/lia-src-jjDirI/airi/apps/stage-tamagotchi
+# [benchmark] Running lint: pnpm lint in /tmp/lia-src-jjDirI/airi
+# [benchmark] Running typecheck: pnpm typecheck in /tmp/lia-src-jjDirI/airi
+# [benchmark] Running build-packages: pnpm run build:packages in /tmp/lia-src-jjDirI/airi
+# [benchmark] Running stage-vitest: pnpm exec vitest run in /tmp/lia-src-jjDirI/airi/apps/stage-tamagotchi
+# [benchmark] Running stage-ui: pnpm run test-ui:run in /tmp/lia-src-jjDirI/airi
+# [benchmark] QA remote qa/windows-benchmarks is absent (initial was absent)
+# [benchmark] Done 20260929-160000-f827ccf status=FAIL pushed=true
+# [benchmark] HEAD c408132 branch arena/test-branch remote c408132 observed=true
+# [benchmark] Run ID 20260929-163000-c408132
+# [benchmark] Initial QA remote qa/windows-benchmarks is absent
+# [benchmark] Running core-agent: pnpm exec vitest run --project @proj-airi/core-agent in /tmp/lia-src-7t2F0y/airi
+# [benchmark] Running lia-core: pnpm test in /tmp/lia-src-7t2F0y/airi/packages/lia-core
+# [benchmark] Running browser: pnpm exec vitest run --project browser in /tmp/lia-src-7t2F0y/airi/apps/stage-tamagotchi
+# [benchmark] Running lint: pnpm lint in /tmp/lia-src-7t2F0y/airi
+# [benchmark] Running typecheck: pnpm typecheck in /tmp/lia-src-7t2F0y/airi
+# [benchmark] Running build-packages: pnpm run build:packages in /tmp/lia-src-7t2F0y/airi
+# [benchmark] Running stage-vitest: pnpm exec vitest run in /tmp/lia-src-7t2F0y/airi/apps/stage-tamagotchi
+# [benchmark] Running stage-ui: pnpm run test-ui:run in /tmp/lia-src-7t2F0y/airi
+# [benchmark] QA remote qa/windows-benchmarks is absent (initial was absent)
+# [benchmark] Done 20260929-163000-c408132 status=ENVIRONMENT-LIMITED pushed=true
+# [benchmark] HEAD a58a31f branch arena/test-branch remote a58a31f observed=true
+# [benchmark] Run ID 20260929-170000-a58a31f
+# [benchmark] Initial QA remote qa/windows-benchmarks is absent
+# [benchmark] Running core-agent: pnpm exec vitest run --project @proj-airi/core-agent in /tmp/lia-src-078tYb/airi
+# [benchmark] Running lia-core: pnpm test in /tmp/lia-src-078tYb/airi/packages/lia-core
+# [benchmark] Running browser: pnpm exec vitest run --project browser in /tmp/lia-src-078tYb/airi/apps/stage-tamagotchi
+# [benchmark] Running lint: pnpm lint in /tmp/lia-src-078tYb/airi
+# [benchmark] Running typecheck: pnpm typecheck in /tmp/lia-src-078tYb/airi
+# [benchmark] Running build-packages: pnpm run build:packages in /tmp/lia-src-078tYb/airi
+# [benchmark] Running stage-vitest: pnpm exec vitest run in /tmp/lia-src-078tYb/airi/apps/stage-tamagotchi
+# [benchmark] Running stage-ui: pnpm run test-ui:run in /tmp/lia-src-078tYb/airi
+# [benchmark] Publication blocked: no-push-flag
+# [benchmark] HEAD a58a31f branch arena/test-branch remote a58a31f observed=true
+# [benchmark] Run ID 20260929-180000-a58a31f
+# [benchmark] Initial QA remote qa/windows-benchmarks is absent
+# [benchmark] Running core-agent: pnpm exec vitest run --project @proj-airi/core-agent in /tmp/lia-src-9T2Mpd/airi
+# [benchmark] Running lia-core: pnpm test in /tmp/lia-src-9T2Mpd/airi/packages/lia-core
+# [benchmark] Running browser: pnpm exec vitest run --project browser in /tmp/lia-src-9T2Mpd/airi/apps/stage-tamagotchi
+# [benchmark] Running lint: pnpm lint in /tmp/lia-src-9T2Mpd/airi
+# [benchmark] Running typecheck: pnpm typecheck in /tmp/lia-src-9T2Mpd/airi
+# [benchmark] Running build-packages: pnpm run build:packages in /tmp/lia-src-9T2Mpd/airi
+# [benchmark] Running stage-vitest: pnpm exec vitest run in /tmp/lia-src-9T2Mpd/airi/apps/stage-tamagotchi
+# [benchmark] Running stage-ui: pnpm run test-ui:run in /tmp/lia-src-9T2Mpd/airi
+# [benchmark] QA remote qa/windows-benchmarks is absent (initial was absent)
+# [benchmark] Done 20260929-180000-a58a31f status=PASS pushed=true
+# [benchmark] HEAD 3988990 branch arena/test-branch remote 3988990 observed=true
+# [benchmark] Run ID 20260929-190000-3988990
+# [benchmark] Initial QA remote qa/windows-benchmarks is absent
+# [benchmark] Running core-agent: pnpm exec vitest run --project @proj-airi/core-agent in /tmp/lia-src-l7B8Uv/airi
+# [benchmark] Running lia-core: pnpm test in /tmp/lia-src-l7B8Uv/airi/packages/lia-core
+# [benchmark] Running browser: pnpm exec vitest run --project browser in /tmp/lia-src-l7B8Uv/airi/apps/stage-tamagotchi
+# [benchmark] Running lint: pnpm lint in /tmp/lia-src-l7B8Uv/airi
+# [benchmark] Running typecheck: pnpm typecheck in /tmp/lia-src-l7B8Uv/airi
+# [benchmark] Running build-packages: pnpm run build:packages in /tmp/lia-src-l7B8Uv/airi
+# [benchmark] Running stage-vitest: pnpm exec vitest run in /tmp/lia-src-l7B8Uv/airi/apps/stage-tamagotchi
+# [benchmark] Running stage-ui: pnpm run test-ui:run in /tmp/lia-src-l7B8Uv/airi
+# [benchmark] QA remote qa/windows-benchmarks is absent (initial was absent)
+# [benchmark] Done 20260929-190000-3988990 status=PASS pushed=true
+# [benchmark] HEAD 3988990 branch arena/test-branch remote 3988990 observed=true
+# [benchmark] Run ID 20260929-190000-3988990-2
+# [benchmark] Initial QA remote qa/windows-benchmarks is ed806cf
+# [benchmark] Running core-agent: pnpm exec vitest run --project @proj-airi/core-agent in /tmp/lia-src-l7B8Uv/airi
+# [benchmark] Running lia-core: pnpm test in /tmp/lia-src-l7B8Uv/airi/packages/lia-core
+# [benchmark] Running browser: pnpm exec vitest run --project browser in /tmp/lia-src-l7B8Uv/airi/apps/stage-tamagotchi
+# [benchmark] Running lint: pnpm lint in /tmp/lia-src-l7B8Uv/airi
+# [benchmark] Running typecheck: pnpm typecheck in /tmp/lia-src-l7B8Uv/airi
+# [benchmark] Running build-packages: pnpm run build:packages in /tmp/lia-src-l7B8Uv/airi
+# [benchmark] Running stage-vitest: pnpm exec vitest run in /tmp/lia-src-l7B8Uv/airi/apps/stage-tamagotchi
+# [benchmark] Running stage-ui: pnpm run test-ui:run in /tmp/lia-src-l7B8Uv/airi
+# [benchmark] QA remote qa/windows-benchmarks is ed806cf (initial was ed806cf)
+# [benchmark] Done 20260929-190000-3988990-2 status=PASS pushed=true
+# [benchmark] HEAD 5910137 branch arena/test-branch remote 5910137 observed=true
+# [benchmark] Run ID 20260929-200000-5910137
+# [benchmark] Initial QA remote qa/windows-benchmarks is absent
+# [benchmark] Running core-agent: pnpm exec vitest run --project @proj-airi/core-agent in /tmp/lia-src-at3MWX/airi
+# [benchmark] Running lia-core: pnpm test in /tmp/lia-src-at3MWX/airi/packages/lia-core
+# [benchmark] Running browser: pnpm exec vitest run --project browser in /tmp/lia-src-at3MWX/airi/apps/stage-tamagotchi
+# [benchmark] Running lint: pnpm lint in /tmp/lia-src-at3MWX/airi
+# [benchmark] Running typecheck: pnpm typecheck in /tmp/lia-src-at3MWX/airi
+# [benchmark] Running build-packages: pnpm run build:packages in /tmp/lia-src-at3MWX/airi
+# [benchmark] Running stage-vitest: pnpm exec vitest run in /tmp/lia-src-at3MWX/airi/apps/stage-tamagotchi
+# [benchmark] Running stage-ui: pnpm run test-ui:run in /tmp/lia-src-at3MWX/airi
+# [benchmark] Total publish size 16782674 exceeds hard max 10485760
+# [benchmark] Publication blocked: publish-size-limit
+# [benchmark] HEAD a955f08 branch arena/test-branch remote a955f08 observed=true
+# [benchmark] Run ID 20260929-210000-a955f08
+# [benchmark] Initial QA remote qa/windows-benchmarks is absent
+# [benchmark] Running core-agent: pnpm exec vitest run --project @proj-airi/core-agent in /tmp/lia-src-FoJMCY/airi
+# [benchmark] HEAD a955f08 branch arena/test-branch remote a955f08 observed=true
+# [benchmark] Run ID 20260929-220000-a955f08
+# [benchmark] Initial QA remote qa/windows-benchmarks is absent
+# [benchmark] Running core-agent: pnpm exec vitest run --project @proj-airi/core-agent in /tmp/lia-src-3kp1sc/airi
+# [benchmark] Running lia-core: pnpm test in /tmp/lia-src-3kp1sc/airi/packages/lia-core
+# [benchmark] Running browser: pnpm exec vitest run --project browser in /tmp/lia-src-3kp1sc/airi/apps/stage-tamagotchi
+# [benchmark] Running lint: pnpm lint in /tmp/lia-src-3kp1sc/airi
+# [benchmark] Running typecheck: pnpm typecheck in /tmp/lia-src-3kp1sc/airi
+# [benchmark] Running build-packages: pnpm run build:packages in /tmp/lia-src-3kp1sc/airi
+# [benchmark] Running stage-vitest: pnpm exec vitest run in /tmp/lia-src-3kp1sc/airi/apps/stage-tamagotchi
+# [benchmark] Running stage-ui: pnpm run test-ui:run in /tmp/lia-src-3kp1sc/airi
+# [benchmark] Publication blocked: no-push-flag
+# [benchmark] Regenerated local report /tmp/lia-src-3kp1sc/Tests/runs/20260929-220000-a955f08/REPORT-regenerated.md (publish staging unchanged=true)
+# [benchmark] HEAD 8520006 branch arena/test-branch remote 8520006 observed=true
+# [benchmark] Run ID 20260929-190000-8520006
+# [benchmark] Initial QA remote qa/windows-benchmarks is absent
+# [benchmark] Running core-agent: pnpm exec vitest run --project @proj-airi/core-agent in /tmp/lia-src-Rjny1l/airi
+# [benchmark] Running lia-core: pnpm test in /tmp/lia-src-Rjny1l/airi/packages/lia-core
+# [benchmark] Running browser: pnpm exec vitest run --project browser in /tmp/lia-src-Rjny1l/airi/apps/stage-tamagotchi
+# [benchmark] Running lint: pnpm lint in /tmp/lia-src-Rjny1l/airi
+# [benchmark] Running typecheck: pnpm typecheck in /tmp/lia-src-Rjny1l/airi
+# [benchmark] Running build-packages: pnpm run build:packages in /tmp/lia-src-Rjny1l/airi
+# [benchmark] Running stage-vitest: pnpm exec vitest run in /tmp/lia-src-Rjny1l/airi/apps/stage-tamagotchi
+# [benchmark] Running stage-ui: pnpm run test-ui:run in /tmp/lia-src-Rjny1l/airi
+# [benchmark] QA remote qa/windows-benchmarks is absent (initial was absent)
+# [benchmark] Done 20260929-190000-8520006 status=PASS pushed=true
+# [benchmark] HEAD 8520006 branch arena/test-branch remote 8520006 observed=true
+# [benchmark] Run ID 20260929-190000-8520006
+# [benchmark] Initial QA remote qa/windows-benchmarks is absent
+# [benchmark] Running core-agent: pnpm exec vitest run --project @proj-airi/core-agent in /tmp/lia-src-jNOVg8/airi
+# [benchmark] Running lia-core: pnpm test in /tmp/lia-src-jNOVg8/airi/packages/lia-core
+# [benchmark] Running browser: pnpm exec vitest run --project browser in /tmp/lia-src-jNOVg8/airi/apps/stage-tamagotchi
+# [benchmark] Running lint: pnpm lint in /tmp/lia-src-jNOVg8/airi
+# [benchmark] Running typecheck: pnpm typecheck in /tmp/lia-src-jNOVg8/airi
+# [benchmark] Running build-packages: pnpm run build:packages in /tmp/lia-src-jNOVg8/airi
+# [benchmark] Running stage-vitest: pnpm exec vitest run in /tmp/lia-src-jNOVg8/airi/apps/stage-tamagotchi
+# [benchmark] Running stage-ui: pnpm run test-ui:run in /tmp/lia-src-jNOVg8/airi
+# [benchmark] QA remote qa/windows-benchmarks is absent (initial was absent)
+# [benchmark] Done 20260929-190000-8520006 status=PASS pushed=true
+# [benchmark] HEAD 8520006 branch arena/test-branch remote 8520006 observed=true
+# [benchmark] Run ID 20260929-200000-8520006
+# [benchmark] Initial QA remote qa/windows-benchmarks is 18f4422
+# [benchmark] Running core-agent: pnpm exec vitest run --project @proj-airi/core-agent in /tmp/lia-src-jNOVg8/airi
+# [benchmark] Running lia-core: pnpm test in /tmp/lia-src-jNOVg8/airi/packages/lia-core
+# [benchmark] Running browser: pnpm exec vitest run --project browser in /tmp/lia-src-jNOVg8/airi/apps/stage-tamagotchi
+# [benchmark] Running lint: pnpm lint in /tmp/lia-src-jNOVg8/airi
+# [benchmark] Running typecheck: pnpm typecheck in /tmp/lia-src-jNOVg8/airi
+# [benchmark] Running build-packages: pnpm run build:packages in /tmp/lia-src-jNOVg8/airi
+# [benchmark] Running stage-vitest: pnpm exec vitest run in /tmp/lia-src-jNOVg8/airi/apps/stage-tamagotchi
+# [benchmark] Running stage-ui: pnpm run test-ui:run in /tmp/lia-src-jNOVg8/airi
+# [benchmark] QA remote qa/windows-benchmarks is 18f4422 (initial was 18f4422)
+# [benchmark] Done 20260929-200000-8520006 status=PASS pushed=true
+# Subtest: integration: preflight A-D
+    # Subtest: A: clean source + matching remote passes
+    ok 1 - A: clean source + matching remote passes
+      ---
+      duration_ms: 79.942843
+      type: 'test'
+      ...
+    # Subtest: B: dirty source stops before command runner
+    ok 2 - B: dirty source stops before command runner
+      ---
+      duration_ms: 96.883186
+      type: 'test'
+      ...
+    # Subtest: C: remote ref missing stops before tests
+    ok 3 - C: remote ref missing stops before tests
+      ---
+      duration_ms: 47.534085
+      type: 'test'
+      ...
+    # Subtest: D: source remote mismatch stops before tests
+    ok 4 - D: source remote mismatch stops before tests
+      ---
+      duration_ms: 113.468185
+      type: 'test'
+      ...
+    1..4
+ok 24 - integration: preflight A-D
+  ---
+  duration_ms: 338.858709
+  type: 'suite'
+  ...
+# Subtest: integration: first QA publication E-I
+    # Subtest: E: first QA publication creates orphan evidence-only branch
+    ok 1 - E: first QA publication creates orphan evidence-only branch
+      ---
+      duration_ms: 944.359959
+      type: 'test'
+      ...
+    # Subtest: F: first QA branch contains expected layout and no source tree
+    ok 2 - F: first QA branch contains expected layout and no source tree
+      ---
+      duration_ms: 926.091801
+      type: 'test'
+      ...
+    # Subtest: G: existing QA branch appends one run
+    ok 3 - G: existing QA branch appends one run
+      ---
+      duration_ms: 1739.805213
+      type: 'test'
+      ...
+    # Subtest: H: existing prior benchmark folder unchanged
+    ok 4 - H: existing prior benchmark folder unchanged
+      ---
+      duration_ms: 1863.979379
+      type: 'test'
+      ...
+    # Subtest: I: source checkout HEAD/branch/status unchanged after publication
+    ok 5 - I: source checkout HEAD/branch/status unchanged after publication
+      ---
+      duration_ms: 999.543292
+      type: 'test'
+      ...
+    1..5
+ok 25 - integration: first QA publication E-I
+  ---
+  duration_ms: 6474.383239
+  type: 'suite'
+  ...
+# Subtest: integration: race gates J-L
+    # Subtest: J: source remote moves before first QA push → push blocked
+    ok 1 - J: source remote moves before first QA push → push blocked
+      ---
+      duration_ms: 821.906326
+      type: 'test'
+      ...
+    # Subtest: K: QA branch appears concurrently → push blocked (first publication)
+    ok 2 - K: QA branch appears concurrently → push blocked (first publication)
+      ---
+      duration_ms: 868.809707
+      type: 'test'
+      ...
+    # Subtest: L: existing QA remote moves → push blocked
+    ok 3 - L: existing QA remote moves → push blocked
+      ---
+      duration_ms: 1611.092725
+      type: 'test'
+      ...
+    1..3
+ok 26 - integration: race gates J-L
+  ---
+  duration_ms: 3302.05841
+  type: 'suite'
+  ...
+# Subtest: integration: strict allowlist M
+    # Subtest: catches foreign path
+    ok 1 - catches foreign path
+      ---
+      duration_ms: 0.377786
+      type: 'test'
+      ...
+    # Subtest: broad benchmarks/ prefix not allowed
+    ok 2 - broad benchmarks/ prefix not allowed
+      ---
+      duration_ms: 0.103804
+      type: 'test'
+      ...
+    1..2
+ok 27 - integration: strict allowlist M
+  ---
+  duration_ms: 0.576522
+  type: 'suite'
+  ...
+# Subtest: integration: security scanner N
+    # Subtest: scan error blocks publication
+    ok 1 - scan error blocks publication
+      ---
+      duration_ms: 105.514941
+      type: 'test'
+      ...
+    # Subtest: scan read error blocks publication (direct bridge)
+    ok 2 - scan read error blocks publication (direct bridge)
+      ---
+      duration_ms: 42.783295
+      type: 'test'
+      ...
+    1..2
+ok 28 - integration: security scanner N
+  ---
+  duration_ms: 148.42662
+  type: 'suite'
+  ...
+# Subtest: integration: publish O,P
+    # Subtest: O: FAIL benchmark evidence can publish
+    ok 1 - O: FAIL benchmark evidence can publish
+      ---
+      duration_ms: 925.000605
+      type: 'test'
+      ...
+    # Subtest: P: ENVIRONMENT-LIMITED evidence can publish
+    ok 2 - P: ENVIRONMENT-LIMITED evidence can publish
+      ---
+      duration_ms: 933.918723
+      type: 'test'
+      ...
+    1..2
+ok 29 - integration: publish O,P
+  ---
+  duration_ms: 1859.063557
+  type: 'suite'
+  ...
+# Subtest: integration: Q no-push
+    # Subtest: creates NO QA commit/ref
+    ok 1 - creates NO QA commit/ref
+      ---
+      duration_ms: 732.054108
+      type: 'test'
+      ...
+    1..1
+ok 30 - integration: Q no-push
+  ---
+  duration_ms: 732.189293
+  type: 'suite'
+  ...
+# Subtest: integration: R SHA manifest
+    # Subtest: verifies after publication preparation
+    ok 1 - verifies after publication preparation
+      ---
+      duration_ms: 979.57469
+      type: 'test'
+      ...
+    1..1
+ok 31 - integration: R SHA manifest
+  ---
+  duration_ms: 979.691249
+  type: 'suite'
+  ...
+# Subtest: integration: S collision
+    # Subtest: produces -2 without deleting -1
+    ok 1 - produces -2 without deleting -1
+      ---
+      duration_ms: 1746.982713
+      type: 'test'
+      ...
+    1..1
+ok 32 - integration: S collision
+  ---
+  duration_ms: 1747.099432
+  type: 'suite'
+  ...
+# Subtest: integration: T 10MiB hard limit
+    # Subtest: blocks publication when total exceeds limit
+    ok 1 - blocks publication when total exceeds limit
+      ---
+      duration_ms: 2887.978604
+      type: 'test'
+      ...
+    1..1
+ok 33 - integration: T 10MiB hard limit
+  ---
+  duration_ms: 2888.096502
+  type: 'suite'
+  ...
+# Subtest: integration: U INCOMPLETE never published
+    # Subtest: does not publish INCOMPLETE
+    ok 1 - does not publish INCOMPLETE
+      ---
+      duration_ms: 90.373145
+      type: 'test'
+      ...
+    # Subtest: report-only does not create QA ref
+    ok 2 - report-only does not create QA ref
+      ---
+      duration_ms: 755.841627
+      type: 'test'
+      ...
+    1..2
+ok 34 - integration: U INCOMPLETE never published
+  ---
+  duration_ms: 846.371581
+  type: 'suite'
+  ...
+# Subtest: integration: V staged-manifest integrity under Git EOL normalization
+    # Subtest: first publication: committed manifest verifies against committed bytes, publish logs are canonical LF
+    ok 1 - first publication: committed manifest verifies against committed bytes, publish logs are canonical LF
+      ---
+      duration_ms: 641.897639
+      type: 'test'
+      ...
+    # Subtest: existing QA branch append: second run committed manifest verifies against committed bytes
+    ok 2 - existing QA branch append: second run committed manifest verifies against committed bytes
+      ---
+      duration_ms: 1242.747708
+      type: 'test'
+      ...
+    1..2
+ok 35 - integration: V staged-manifest integrity under Git EOL normalization
+  ---
+  duration_ms: 1884.819263
+  type: 'suite'
+  ...
+# Subtest: D2B9-C labels
+    # Subtest: no hard counts
+    ok 1 - no hard counts
+      ---
+      duration_ms: 0.778367
+      type: 'test'
+      ...
+    # Subtest: parse 12/124
+    ok 2 - parse 12/124
+      ---
+      duration_ms: 0.990075
+      type: 'test'
+      ...
+    # Subtest: parse 27/336
+    ok 3 - parse 27/336
+      ---
+      duration_ms: 0.271652
+      type: 'test'
+      ...
+    # Subtest: parse ANSI-colored pass-only 27/336
+    ok 4 - parse ANSI-colored pass-only 27/336
+      ---
+      duration_ms: 0.126205
+      type: 'test'
+      ...
+    # Subtest: parse pass+skipped fail+pass
+    ok 5 - parse pass+skipped fail+pass
+      ---
+      duration_ms: 1.032479
+      type: 'test'
+      ...
+    # Subtest: browser env
+    ok 6 - browser env
+      ---
+      duration_ms: 0.778704
+      type: 'test'
+      ...
+    1..6
+ok 36 - D2B9-C labels
+  ---
+  duration_ms: 4.957398
+  type: 'suite'
+  ...
+# Subtest: publicCommandResult exact shape
+    # Subtest: allows only whitelisted fields
+    ok 1 - allows only whitelisted fields
+      ---
+      duration_ms: 1.174308
+      type: 'test'
+      ...
+    # Subtest: cwd is repo-relative, not absolute
+    ok 2 - cwd is repo-relative, not absolute
+      ---
+      duration_ms: 0.300284
+      type: 'test'
+      ...
+    # Subtest: stdout/stderr/error exclusion proof
+    ok 3 - stdout/stderr/error exclusion proof
+      ---
+      duration_ms: 0.143621
+      type: 'test'
+      ...
+    1..3
+ok 37 - publicCommandResult exact shape
+  ---
+  duration_ms: 2.434539
+  type: 'suite'
+  ...
+# Subtest: repoRoot exclusion from gitInfo
+    # Subtest: gitInfo publish should not contain repoRoot
+    ok 1 - gitInfo publish should not contain repoRoot
+      ---
+      duration_ms: 0.372209
+      type: 'test'
+      ...
+    1..1
+ok 38 - repoRoot exclusion from gitInfo
+  ---
+  duration_ms: 0.550093
+  type: 'suite'
+  ...
+# Subtest: path privacy masking
+    # Subtest: masks repoRoot → <REPO>
+    ok 1 - masks repoRoot → <REPO>
+      ---
+      duration_ms: 0.350754
+      type: 'test'
+      ...
+    # Subtest: Windows path: C:\\Users\\Alice\\Documents\\Lia-Project\\airi\\foo.ts → <REPO>\\airi\\foo.ts
+    ok 2 - Windows path: C:\\Users\\Alice\\Documents\\Lia-Project\\airi\\foo.ts → <REPO>\\airi\\foo.ts
+      ---
+      duration_ms: 0.308549
+      type: 'test'
+      ...
+    # Subtest: masks HOME and TEMP for non-overlapping roots
+    ok 3 - masks HOME and TEMP for non-overlapping roots
+      ---
+      duration_ms: 0.324266
+      type: 'test'
+      ...
+    # Subtest: nested TEMP under HOME (Windows shape) leaves no private bytes
+    ok 4 - nested TEMP under HOME (Windows shape) leaves no private bytes
+      ---
+      duration_ms: 0.209129
+      type: 'test'
+      ...
+    # Subtest: handles both slash representations
+    ok 5 - handles both slash representations
+      ---
+      duration_ms: 0.248915
+      type: 'test'
+      ...
+    1..5
+ok 39 - path privacy masking
+  ---
+  duration_ms: 1.785105
+  type: 'suite'
+  ...
+# Subtest: residual private-path gate
+    # Subtest: detects residual repoRoot
+    ok 1 - detects residual repoRoot
+      ---
+      duration_ms: 0.23241
+      type: 'test'
+      ...
+    # Subtest: detects HOME
+    ok 2 - detects HOME
+      ---
+      duration_ms: 0.091714
+      type: 'test'
+      ...
+    1..2
+ok 40 - residual private-path gate
+  ---
+  duration_ms: 0.411403
+  type: 'suite'
+  ...
+# Subtest: exit code mapping
+    # Subtest: PASS 0, FAIL 1, ENV 2, INCOMPLETE 3
+    ok 1 - PASS 0, FAIL 1, ENV 2, INCOMPLETE 3
+      ---
+      duration_ms: 0.093201
+      type: 'test'
+      ...
+    1..1
+ok 41 - exit code mapping
+  ---
+  duration_ms: 0.184452
+  type: 'suite'
+  ...
+# Subtest: browser precise classifier
+    # Subtest: realistic browser test with chromium should be FAIL not env
+    ok 1 - realistic browser test with chromium should be FAIL not env
+      ---
+      duration_ms: 0.414927
+      type: 'test'
+      ...
+    # Subtest: Chromium executable does not exist → env-limited
+    ok 2 - Chromium executable does not exist → env-limited
+      ---
+      duration_ms: 0.600713
+      type: 'test'
+      ...
+    1..2
+ok 42 - browser precise classifier
+  ---
+  duration_ms: 1.107546
+  type: 'suite'
+  ...
+# Subtest: JSON-escaped private paths
+    # Subtest: TEMP under HOME: detects the JSON-escaped bytes before masking (§9)
+    ok 1 - TEMP under HOME: detects the JSON-escaped bytes before masking (§9)
+      ---
+      duration_ms: 0.181246
+      type: 'test'
+      ...
+    # Subtest: TEMP under HOME: masking removes it and keeps the JSON parseable (§10)
+    ok 2 - TEMP under HOME: masking removes it and keeps the JSON parseable (§10)
+      ---
+      duration_ms: 0.94149
+      type: 'test'
+      ...
+    # Subtest: REPO: detects and masks the JSON-escaped repo path (§11)
+    ok 3 - REPO: detects and masks the JSON-escaped repo path (§11)
+      ---
+      duration_ms: 0.185765
+      type: 'test'
+      ...
+    # Subtest: HOME and TEMP are each covered on their own, not only via repoRoot (§12)
+    ok 4 - HOME and TEMP are each covered on their own, not only via repoRoot (§12)
+      ---
+      duration_ms: 0.181039
+      type: 'test'
+      ...
+    # Subtest: double-encoded evidence is still detected and masked (§13)
+    ok 5 - double-encoded evidence is still detected and masked (§13)
+      ---
+      duration_ms: 0.103901
+      type: 'test'
+      ...
+    # Subtest: masked ordinary text stays clean - no false positive from the new variants
+    ok 6 - masked ordinary text stays clean - no false positive from the new variants
+      ---
+      duration_ms: 0.088969
+      type: 'test'
+      ...
+    1..6
+ok 43 - JSON-escaped private paths
+  ---
+  duration_ms: 1.862964
+  type: 'suite'
+  ...
+# Subtest: qa-benchmark-lib: benchmarkRunId
+    # Subtest: formats YYYYMMDD-HHMMSS-<short>
+    ok 1 - formats YYYYMMDD-HHMMSS-<short>
+      ---
+      duration_ms: 1.081991
+      type: 'test'
+      ...
+    # Subtest: produces monotonic collision suffixes
+    ok 2 - produces monotonic collision suffixes
+      ---
+      duration_ms: 0.292563
+      type: 'test'
+      ...
+    # Subtest: reuses runTimestampId semantics (zero-padded local time)
+    ok 3 - reuses runTimestampId semantics (zero-padded local time)
+      ---
+      duration_ms: 0.145969
+      type: 'test'
+      ...
+    1..3
+ok 44 - qa-benchmark-lib: benchmarkRunId
+  ---
+  duration_ms: 2.46486
+  type: 'suite'
+  ...
+# Subtest: qa-benchmark-lib: canonicalCommands
+    # Subtest: returns pnpm exec, never npx nor install
+    ok 1 - returns pnpm exec, never npx nor install
+      ---
+      duration_ms: 0.622673
+      type: 'test'
+      ...
+    # Subtest: lia-core uses canonical pnpm test not re-invented vitest
+    ok 2 - lia-core uses canonical pnpm test not re-invented vitest
+      ---
+      duration_ms: 0.852263
+      type: 'test'
+      ...
+    # Subtest: core-agent uses vitest run --project @proj-airi/core-agent
+    ok 3 - core-agent uses vitest run --project @proj-airi/core-agent
+      ---
+      duration_ms: 0.209417
+      type: 'test'
+      ...
+    # Subtest: browser uses vitest run --project browser
+    ok 4 - browser uses vitest run --project browser
+      ---
+      duration_ms: 0.274772
+      type: 'test'
+      ...
+    # Subtest: all ids unique and at least 4 commands
+    ok 5 - all ids unique and at least 4 commands
+      ---
+      duration_ms: 0.360446
+      type: 'test'
+      ...
+    1..5
+ok 45 - qa-benchmark-lib: canonicalCommands
+  ---
+  duration_ms: 2.758737
+  type: 'suite'
+  ...
+# Subtest: qa-benchmark-lib: classifyBenchmark
+    # Subtest: PASS when all passed and no env limits
+    ok 1 - PASS when all passed and no env limits
+      ---
+      duration_ms: 0.26457
+      type: 'test'
+      ...
+    # Subtest: FAIL when any failed
+    ok 2 - FAIL when any failed
+      ---
+      duration_ms: 0.22922
+      type: 'test'
+      ...
+    # Subtest: ENVIRONMENT-LIMITED when any env-limited and none failed
+    ok 3 - ENVIRONMENT-LIMITED when any env-limited and none failed
+      ---
+      duration_ms: 0.130443
+      type: 'test'
+      ...
+    # Subtest: FAIL takes precedence over env-limited
+    ok 4 - FAIL takes precedence over env-limited
+      ---
+      duration_ms: 0.065314
+      type: 'test'
+      ...
+    1..4
+ok 46 - qa-benchmark-lib: classifyBenchmark
+  ---
+  duration_ms: 0.887399
+  type: 'suite'
+  ...
+# Subtest: qa-benchmark-lib: boundText
+    # Subtest: passes through short text
+    ok 1 - passes through short text
+      ---
+      duration_ms: 0.168441
+      type: 'test'
+      ...
+    # Subtest: head+tail with marker when over limit
+    ok 2 - head+tail with marker when over limit
+      ---
+      duration_ms: 0.131842
+      type: 'test'
+      ...
+    # Subtest: constants match spec
+    ok 3 - constants match spec
+      ---
+      duration_ms: 0.053455
+      type: 'test'
+      ...
+    1..3
+ok 47 - qa-benchmark-lib: boundText
+  ---
+  duration_ms: 0.478902
+  type: 'suite'
+  ...
+# Subtest: qa-benchmark-lib: sha256 + manifest
+    # Subtest: sha256OfText known vector
+    ok 1 - sha256OfText known vector
+      ---
+      duration_ms: 0.485188
+      type: 'test'
+      ...
+    # Subtest: buildShaManifest lexically sorted
+    ok 2 - buildShaManifest lexically sorted
+      ---
+      duration_ms: 7.349424
+      type: 'test'
+      ...
+    # Subtest: manifest lines are <hex>  <rel>
+    ok 3 - manifest lines are <hex>  <rel>
+      ---
+      duration_ms: 0.414956
+      type: 'test'
+      ...
+    1..3
+ok 48 - qa-benchmark-lib: sha256 + manifest
+  ---
+  duration_ms: 8.447664
+  type: 'suite'
+  ...
+# Subtest: qa-benchmark-lib: hardwareFromNode
+    # Subtest: returns safe fields, no user paths
+    ok 1 - returns safe fields, no user paths
+      ---
+      duration_ms: 1.367784
+      type: 'test'
+      ...
+    1..1
+ok 49 - qa-benchmark-lib: hardwareFromNode
+  ---
+  duration_ms: 1.467153
+  type: 'suite'
+  ...
+# Subtest: qa-benchmark-lib: createSummarySkeleton
+    # Subtest: has required keys and schemaVersion 1
+    ok 1 - has required keys and schemaVersion 1
+      ---
+      duration_ms: 0.329899
+      type: 'test'
+      ...
+    1..1
+ok 50 - qa-benchmark-lib: createSummarySkeleton
+  ---
+  duration_ms: 0.409605
+  type: 'suite'
+  ...
+# Subtest: qa-benchmark-lib: isPublishAllowed
+    # Subtest: allows benchmark run and index/README
+    ok 1 - allows benchmark run and index/README
+      ---
+      duration_ms: 0.15266
+      type: 'test'
+      ...
+    # Subtest: denies other benchmark, raw, devkit-qa
+    ok 2 - denies other benchmark, raw, devkit-qa
+      ---
+      duration_ms: 0.08843
+      type: 'test'
+      ...
+    1..2
+ok 51 - qa-benchmark-lib: isPublishAllowed
+  ---
+  duration_ms: 0.323529
+  type: 'suite'
+  ...
+# Subtest: qa-benchmark-lib: powershellCommands CIM
+    # Subtest: mentions Get-CimInstance Win32_*
+    ok 1 - mentions Get-CimInstance Win32_*
+      ---
+      duration_ms: 0.210933
+      type: 'test'
+      ...
+    1..1
+ok 52 - qa-benchmark-lib: powershellCommands CIM
+  ---
+  duration_ms: 0.264586
+  type: 'suite'
+  ...
+# Subtest: qa-benchmark: detectPlaywrightChromiumAvailability
+    # Subtest: A: a child probe exiting 0 reports the executable as available
+    ok 1 - A: a child probe exiting 0 reports the executable as available
+      ---
+      duration_ms: 4.55365
+      type: 'test'
+      ...
+    # Subtest: B: a child probe exiting nonzero reports it as unavailable
+    ok 2 - B: a child probe exiting nonzero reports it as unavailable
+      ---
+      duration_ms: 0.68656
+      type: 'test'
+      ...
+    # Subtest: C: a throwing spawn reports it as unavailable instead of failing the run
+    ok 3 - C: a throwing spawn reports it as unavailable instead of failing the run
+      ---
+      duration_ms: 0.246208
+      type: 'test'
+      ...
+    # Subtest: D: probes from the AIRI workspace, not the repository root
+    ok 4 - D: probes from the AIRI workspace, not the repository root
+      ---
+      duration_ms: 0.204246
+      type: 'test'
+      ...
+    # Subtest: E: asks for the Chromium executable path, never a CLI version string
+    ok 5 - E: asks for the Chromium executable path, never a CLI version string
+      ---
+      duration_ms: 0.229283
+      type: 'test'
+      ...
+    1..5
+ok 53 - qa-benchmark: detectPlaywrightChromiumAvailability
+  ---
+  duration_ms: 6.142169
+  type: 'suite'
+  ...
+# Subtest: qa-benchmark: detectPlaywrightChromiumAvailability on win32
+    # Subtest: routes the probe to native node.exe, bypassing pnpm.cmd and cmd.exe
+    ok 1 - routes the probe to native node.exe, bypassing pnpm.cmd and cmd.exe
+      ---
+      duration_ms: 0.864199
+      type: 'test'
+      ...
+    # Subtest: reports unavailable when native node.exe exits nonzero
+    ok 2 - reports unavailable when native node.exe exits nonzero
+      ---
+      duration_ms: 0.287711
+      type: 'test'
+      ...
+    1..2
+ok 54 - qa-benchmark: detectPlaywrightChromiumAvailability on win32
+  ---
+  duration_ms: 1.251952
+  type: 'suite'
+  ...
+# Subtest: qa-config: product-config resolution mirrors lia-core order
+    # Subtest: LIA_USER_DATA wins over everything
+    ok 1 - LIA_USER_DATA wins over everything
+      ---
+      duration_ms: 1.2605
+      type: 'test'
+      ...
+    # Subtest: APP_USER_DATA_PATH wins over candidates
+    ok 2 - APP_USER_DATA_PATH wins over candidates
+      ---
+      duration_ms: 0.465807
+      type: 'test'
+      ...
+    # Subtest: an existing candidate with lia-product.json wins over the default
+    ok 3 - an existing candidate with lia-product.json wins over the default
+      ---
+      duration_ms: 0.503535
+      type: 'test'
+      ...
+    # Subtest: falls back to the product default when nothing exists yet
+    ok 4 - falls back to the product default when nothing exists yet
+      ---
+      duration_ms: 1.269251
+      type: 'test'
+      ...
+    1..4
+ok 55 - qa-config: product-config resolution mirrors lia-core order
+  ---
+  duration_ms: 4.422
+  type: 'suite'
+  ...
+# Subtest: qa-config: activate backs up BEFORE mutating and touches only the runtime key
+    # Subtest: existing config: byte-identical backup, single-key mutation, marker last
+    ok 1 - existing config: byte-identical backup, single-key mutation, marker last
+      ---
+      duration_ms: 2.164709
+      type: 'test'
+      ...
+    # Subtest: no config file yet: creates one with only the runtime key
+    ok 2 - no config file yet: creates one with only the runtime key
+      ---
+      duration_ms: 1.502165
+      type: 'test'
+      ...
+    # Subtest: an existing installDir value is preserved as the restore target
+    ok 3 - an existing installDir value is preserved as the restore target
+      ---
+      duration_ms: 0.517083
+      type: 'test'
+      ...
+    1..3
+ok 56 - qa-config: activate backs up BEFORE mutating and touches only the runtime key
+  ---
+  duration_ms: 4.525708
+  type: 'suite'
+  ...
+# Subtest: qa-config: restore reverts EXACTLY the one key
+    # Subtest: restore with no active run is a no-op
+    ok 1 - restore with no active run is a no-op
+      ---
+      duration_ms: 6.670138
+      type: 'test'
+      ...
+    # Subtest: original value (with spaces) comes back exactly; other QA-time changes are preserved
+    ok 2 - original value (with spaces) comes back exactly; other QA-time changes are preserved
+      ---
+      duration_ms: 1.726702
+      type: 'test'
+      ...
+    # Subtest: key that was absent gets removed on restore
+    ok 3 - key that was absent gets removed on restore
+      ---
+      duration_ms: 1.394862
+      type: 'test'
+      ...
+    # Subtest: two stacked runs restore in order: newest first, then the true original
+    ok 4 - two stacked runs restore in order: newest first, then the true original
+      ---
+      duration_ms: 1.129738
+      type: 'test'
+      ...
+    1..4
+ok 57 - qa-config: restore reverts EXACTLY the one key
+  ---
+  duration_ms: 11.254603
+  type: 'suite'
+  ...
+# Subtest: qa-process-runner: quoting
+    # Subtest: quotes spaces
+    ok 1 - quotes spaces
+      ---
+      duration_ms: 2.077068
+      type: 'test'
+      ...
+    # Subtest: quotes parentheses
+    ok 2 - quotes parentheses
+      ---
+      duration_ms: 0.150354
+      type: 'test'
+      ...
+    # Subtest: quotes ampersand cannot become second command
+    ok 3 - quotes ampersand cannot become second command
+      ---
+      duration_ms: 0.292492
+      type: 'test'
+      ...
+    # Subtest: quotes inner quotes
+    ok 4 - quotes inner quotes
+      ---
+      duration_ms: 0.166077
+      type: 'test'
+      ...
+    # Subtest: handles trailing backslash
+    ok 5 - handles trailing backslash
+      ---
+      duration_ms: 0.140415
+      type: 'test'
+      ...
+    1..5
+ok 58 - qa-process-runner: quoting
+  ---
+  duration_ms: 4.217099
+  type: 'suite'
+  ...
+# Subtest: qa-process-runner: isWindowsCmdShim
+    # Subtest: detects .cmd/.bat
+    ok 1 - detects .cmd/.bat
+      ---
+      duration_ms: 0.247202
+      type: 'test'
+      ...
+    1..1
+ok 59 - qa-process-runner: isWindowsCmdShim
+  ---
+  duration_ms: 0.380668
+  type: 'suite'
+  ...
+# Subtest: qa-process-runner: resolveExecutable
+    # Subtest: linux returns as-is
+    ok 1 - linux returns as-is
+      ---
+      duration_ms: 0.307929
+      type: 'test'
+      ...
+    # Subtest: win32 uses where.exe
+    ok 2 - win32 uses where.exe
+      ---
+      duration_ms: 0.297483
+      type: 'test'
+      ...
+    1..2
+ok 60 - qa-process-runner: resolveExecutable
+  ---
+  duration_ms: 0.875004
+  type: 'suite'
+  ...
+# Subtest: qa-process-runner: selectWindowsExecutableCandidate
+    # Subtest: A. extensionless + pnpm.cmd → pnpm.cmd
+    ok 1 - A. extensionless + pnpm.cmd → pnpm.cmd
+      ---
+      duration_ms: 0.197863
+      type: 'test'
+      ...
+    # Subtest: B. extensionless + ps1 + cmd → cmd
+    ok 2 - B. extensionless + ps1 + cmd → cmd
+      ---
+      duration_ms: 0.345417
+      type: 'test'
+      ...
+    # Subtest: C. cmd + exe → exe (priority)
+    ok 3 - C. cmd + exe → exe (priority)
+      ---
+      duration_ms: 0.167196
+      type: 'test'
+      ...
+    # Subtest: D. only extensionless + ps1 → null
+    ok 4 - D. only extensionless + ps1 → null
+      ---
+      duration_ms: 0.132659
+      type: 'test'
+      ...
+    # Subtest: E. blank lines / CRLF handled
+    ok 5 - E. blank lines / CRLF handled
+      ---
+      duration_ms: 0.133259
+      type: 'test'
+      ...
+    # Subtest: F. duplicate candidates handled deterministically
+    ok 6 - F. duplicate candidates handled deterministically
+      ---
+      duration_ms: 0.071771
+      type: 'test'
+      ...
+    # Subtest: priority: exe > com > cmd > bat
+    ok 7 - priority: exe > com > cmd > bat
+      ---
+      duration_ms: 0.064509
+      type: 'test'
+      ...
+    # Subtest: ignores unsupported extensions
+    ok 8 - ignores unsupported extensions
+      ---
+      duration_ms: 0.055677
+      type: 'test'
+      ...
+    1..8
+ok 61 - qa-process-runner: selectWindowsExecutableCandidate
+  ---
+  duration_ms: 1.397741
+  type: 'suite'
+  ...
+# Subtest: qa-process-runner: resolveExecutable candidate integration
+    # Subtest: where.exe returns extensionless first then cmd → selects cmd
+    ok 1 - where.exe returns extensionless first then cmd → selects cmd
+      ---
+      duration_ms: 0.19816
+      type: 'test'
+      ...
+    # Subtest: where with only unsupported → null
+    ok 2 - where with only unsupported → null
+      ---
+      duration_ms: 0.147651
+      type: 'test'
+      ...
+    # Subtest: fallback where after where.exe failure
+    ok 3 - fallback where after where.exe failure
+      ---
+      duration_ms: 0.12243
+      type: 'test'
+      ...
+    1..3
+ok 62 - qa-process-runner: resolveExecutable candidate integration
+  ---
+  duration_ms: 0.632779
+  type: 'suite'
+  ...
+# Subtest: qa-process-runner: real Windows pnpm shim regression
+    # Subtest: reproduces real class: extensionless first + cmd second → cmd and ComSpec
+    ok 1 - reproduces real class: extensionless first + cmd second → cmd and ComSpec
+      ---
+      duration_ms: 1.397201
+      type: 'test'
+      ...
+    # Subtest: generic fixture reproduces same
+    ok 2 - generic fixture reproduces same
+      ---
+      duration_ms: 0.275936
+      type: 'test'
+      ...
+    # Subtest: ComSpec argv contains pnpm.cmd and --version, starts /d /s /c
+    ok 3 - ComSpec argv contains pnpm.cmd and --version, starts /d /s /c
+      ---
+      duration_ms: 0.191499
+      type: 'test'
+      ...
+    # Subtest: no extensionless spawn proof
+    ok 4 - no extensionless spawn proof
+      ---
+      duration_ms: 0.217697
+      type: 'test'
+      ...
+    # Subtest: ps1 ignored proof
+    ok 5 - ps1 ignored proof
+      ---
+      duration_ms: 0.18545
+      type: 'test'
+      ...
+    # Subtest: exe-over-cmd priority proof
+    ok 6 - exe-over-cmd priority proof
+      ---
+      duration_ms: 0.106203
+      type: 'test'
+      ...
+    # Subtest: unsupported-only → null proof
+    ok 7 - unsupported-only → null proof
+      ---
+      duration_ms: 0.293803
+      type: 'test'
+      ...
+    # Subtest: CRLF/blank-line proof
+    ok 8 - CRLF/blank-line proof
+      ---
+      duration_ms: 0.129634
+      type: 'test'
+      ...
+    # Subtest: duplicate proof
+    ok 9 - duplicate proof
+      ---
+      duration_ms: 0.239354
+      type: 'test'
+      ...
+    # Subtest: node/git/python native regression
+    ok 10 - node/git/python native regression
+      ---
+      duration_ms: 0.590449
+      type: 'test'
+      ...
+    1..10
+ok 63 - qa-process-runner: real Windows pnpm shim regression
+  ---
+  duration_ms: 4.881135
+  type: 'suite'
+  ...
+# Subtest: qa-process-runner: runWithRunner routing
+    # Subtest: A: win32 pnpm resolves pnpm.cmd → ComSpec selected
+    ok 1 - A: win32 pnpm resolves pnpm.cmd → ComSpec selected
+      ---
+      duration_ms: 0.428697
+      type: 'test'
+      ...
+    # Subtest: B: win32 native git.exe → direct spawn
+    ok 2 - B: win32 native git.exe → direct spawn
+      ---
+      duration_ms: 0.192302
+      type: 'test'
+      ...
+    # Subtest: C: win32 python.exe → direct spawn
+    ok 3 - C: win32 python.exe → direct spawn
+      ---
+      duration_ms: 0.185249
+      type: 'test'
+      ...
+    # Subtest: D: linux pnpm → direct spawn
+    ok 4 - D: linux pnpm → direct spawn
+      ---
+      duration_ms: 0.122901
+      type: 'test'
+      ...
+    # Subtest: E: path containing spaces is quoted
+    ok 5 - E: path containing spaces is quoted
+      ---
+      duration_ms: 0.180482
+      type: 'test'
+      ...
+    # Subtest: F: path containing & cannot become second command
+    ok 6 - F: path containing & cannot become second command
+      ---
+      duration_ms: 0.146897
+      type: 'test'
+      ...
+    # Subtest: G: static argv preserved exactly
+    ok 7 - G: static argv preserved exactly
+      ---
+      duration_ms: 0.119326
+      type: 'test'
+      ...
+    # Subtest: H: unresolved executable → environment-limited launch failure
+    ok 8 - H: unresolved executable → environment-limited launch failure
+      ---
+      duration_ms: 0.097326
+      type: 'test'
+      ...
+    # Subtest: I: no shell:true
+    ok 9 - I: no shell:true
+      ---
+      duration_ms: 0.105528
+      type: 'test'
+      ...
+    1..9
+ok 64 - qa-process-runner: runWithRunner routing
+  ---
+  duration_ms: 1.81853
+  type: 'suite'
+  ...
+# Subtest: qa-run: run folder lifecycle
+    # Subtest: creates the full skeleton for a clean-install run
+    ok 1 - creates the full skeleton for a clean-install run
+      ---
+      duration_ms: 41.297742
+      type: 'test'
+      ...
+    # Subtest: run ids are unique even inside the same second
+    ok 2 - run ids are unique even inside the same second
+      ---
+      duration_ms: 74.654719
+      type: 'test'
+      ...
+    # Subtest: latestRun returns the newest id (lexicographic == chronological)
+    ok 3 - latestRun returns the newest id (lexicographic == chronological)
+      ---
+      duration_ms: 86.931798
+      type: 'test'
+      ...
+    # Subtest: latestRun is undefined when no runs exist
+    ok 4 - latestRun is undefined when no runs exist
+      ---
+      duration_ms: 0.616481
+      type: 'test'
+      ...
+    # Subtest: clean-install runs own an artifacts root (centralized QA output)
+    ok 5 - clean-install runs own an artifacts root (centralized QA output)
+      ---
+      duration_ms: 38.382346
+      type: 'test'
+      ...
+    # Subtest: smoke runs own artifacts\\smoke (the smoke WAV destination)
+    ok 6 - smoke runs own artifacts\\smoke (the smoke WAV destination)
+      ---
+      duration_ms: 32.623223
+      type: 'test'
+      ...
+    1..6
+ok 65 - qa-run: run folder lifecycle
+  ---
+  duration_ms: 275.871095
+  type: 'suite'
+  ...
+# Subtest: qa-run: clean-install QA-CHECKLIST carries the exact product checklist
+    # Subtest: all 11 checklist items present, with the isolated runtime root named
+    ok 1 - all 11 checklist items present, with the isolated runtime root named
+      ---
+      duration_ms: 39.170474
+      type: 'test'
+      ...
+    # Subtest: USER-NOTES.txt offers every observation field
+    ok 2 - USER-NOTES.txt offers every observation field
+      ---
+      duration_ms: 33.840591
+      type: 'test'
+      ...
+    1..2
+ok 66 - qa-run: clean-install QA-CHECKLIST carries the exact product checklist
+  ---
+  duration_ms: 73.510293
+  type: 'suite'
+  ...
+# Subtest: qa-run: environment.txt captures the audit facts
+    # Subtest: writes branch/SHA/status, env presence and the effective QA runtime root
+    ok 1 - writes branch/SHA/status, env presence and the effective QA runtime root
+      ---
+      duration_ms: 65.435222
+      type: 'test'
+      ...
+    # Subtest: smoke runs report the production runtime home, never an isolated one
+    ok 2 - smoke runs report the production runtime home, never an isolated one
+      ---
+      duration_ms: 65.845121
+      type: 'test'
+      ...
+    1..2
+ok 67 - qa-run: environment.txt captures the audit facts
+  ---
+  duration_ms: 131.485673
+  type: 'suite'
+  ...
+# Subtest: qa-run: smoke checklist points at the run-owned artifacts
+    # Subtest: WAVs are expected under artifacts\\smoke, not .devkit-qa
+    ok 1 - WAVs are expected under artifacts\\smoke, not .devkit-qa
+      ---
+      duration_ms: 30.504358
+      type: 'test'
+      ...
+    1..1
+ok 68 - qa-run: smoke checklist points at the run-owned artifacts
+  ---
+  duration_ms: 30.62226
+  type: 'suite'
+  ...
+# Subtest: qa-run: benchmark kind
+    # Subtest: creates benchmark skeleton with raw/redacted logs
+    ok 1 - creates benchmark skeleton with raw/redacted logs
+      ---
+      duration_ms: 33.527727
+      type: 'test'
+      ...
+    # Subtest: benchmark ids collide with -2 suffix
+    ok 2 - benchmark ids collide with -2 suffix
+      ---
+      duration_ms: 65.193274
+      type: 'test'
+      ...
+    1..2
+ok 69 - qa-run: benchmark kind
+  ---
+  duration_ms: 98.910941
+  type: 'suite'
+  ...
+# Subtest: qa-security-bridge: safe import
+    # Subtest: bridge exists and imports without git side-effect
+    ok 1 - bridge exists and imports without git side-effect
+      ---
+      duration_ms: 0.492394
+      type: 'test'
+      ...
+    # Subtest: project_cli has guarded __main__ so import does not commit
+    ok 2 - project_cli has guarded __main__ so import does not commit
+      ---
+      duration_ms: 0.472458
+      type: 'test'
+      ...
+    # Subtest: does not duplicate KEY_RE regex
+    ok 3 - does not duplicate KEY_RE regex
+      ---
+      duration_ms: 0.223862
+      type: 'test'
+      ...
+    1..3
+ok 70 - qa-security-bridge: safe import
+  ---
+  duration_ms: 2.139827
+  type: 'suite'
+  ...
+# Subtest: qa-security-bridge: redact
+    # Subtest: redacts sk- token to [CREDENCIAL-OCULTA]
+    ok 1 - redacts sk- token to [CREDENCIAL-OCULTA]
+      ---
+      duration_ms: 46.840333
+      type: 'test'
+      ...
+    # Subtest: leaves clean text unchanged
+    ok 2 - leaves clean text unchanged
+      ---
+      duration_ms: 39.347976
+      type: 'test'
+      ...
+    1..2
+ok 71 - qa-security-bridge: redact
+  ---
+  duration_ms: 86.441946
+  type: 'suite'
+  ...
+# Subtest: qa-security-bridge: scan --json
+    # Subtest: hasSecret false for clean file
+    ok 1 - hasSecret false for clean file
+      ---
+      duration_ms: 43.082403
+      type: 'test'
+      ...
+    # Subtest: hasSecret true for key file
+    ok 2 - hasSecret true for key file
+      ---
+      duration_ms: 43.817348
+      type: 'test'
+      ...
+    # Subtest: exit code 1 when secret
+    ok 3 - exit code 1 when secret
+      ---
+      duration_ms: 82.543544
+      type: 'test'
+      ...
+    1..3
+ok 72 - qa-security-bridge: scan --json
+  ---
+  duration_ms: 169.81227
+  type: 'suite'
+  ...
+# Subtest: qa-storage: guarded deletion of managed runs
+    # Subtest: deletes a valid run id inside the managed root, artifacts included
+    ok 1 - deletes a valid run id inside the managed root, artifacts included
+      ---
+      duration_ms: 2.520401
+      type: 'test'
+      ...
+    # Subtest: refuses ids that are not harness run ids (no traversal possible)
+    ok 2 - refuses ids that are not harness run ids (no traversal possible)
+      ---
+      duration_ms: 0.805646
+      type: 'test'
+      ...
+    # Subtest: refuses a run that does not exist
+    ok 3 - refuses a run that does not exist
+      ---
+      duration_ms: 0.998526
+      type: 'test'
+      ...
+    # Subtest: NEVER deletes the ACTIVE run
+    ok 4 - NEVER deletes the ACTIVE run
+      ---
+      duration_ms: 0.832449
+      type: 'test'
+      ...
+    # Subtest: delete-all removes every run EXCEPT the active one
+    ok 5 - delete-all removes every run EXCEPT the active one
+      ---
+      duration_ms: 9.605913
+      type: 'test'
+      ...
+    1..5
+ok 73 - qa-storage: guarded deletion of managed runs
+  ---
+  duration_ms: 15.673579
+  type: 'suite'
+  ...
+# Subtest: qa-storage: retention policy is dry-run data, never a side effect
+    # Subtest: keep-last protects the newest runs; the active run is always kept
+    ok 1 - keep-last protects the newest runs; the active run is always kept
+      ---
+      duration_ms: 1.816371
+      type: 'test'
+      ...
+    # Subtest: older-than-days keeps fresh runs even beyond keep-last
+    ok 2 - older-than-days keeps fresh runs even beyond keep-last
+      ---
+      duration_ms: 0.97619
+      type: 'test'
+      ...
+    1..2
+ok 74 - qa-storage: retention policy is dry-run data, never a side effect
+  ---
+  duration_ms: 3.109771
+  type: 'suite'
+  ...
+# Subtest: qa-storage: log pruning keeps notes, checklist and snapshots
+    # Subtest: dry-run lists, apply removes only logs/metrics files
+    ok 1 - dry-run lists, apply removes only logs/metrics files
+      ---
+      duration_ms: 0.7681
+      type: 'test'
+      ...
+    # Subtest: refuses to prune the ACTIVE run
+    ok 2 - refuses to prune the ACTIVE run
+      ---
+      duration_ms: 0.642633
+      type: 'test'
+      ...
+    1..2
+ok 75 - qa-storage: log pruning keeps notes, checklist and snapshots
+  ---
+  duration_ms: 1.566171
+  type: 'suite'
+  ...
+# Subtest: qa-storage: legacy inventory is non-destructive and classifies honestly
+    # Subtest: production locations are production-do-not-delete; QA roots are managed-test
+    ok 1 - production locations are production-do-not-delete; QA roots are managed-test
+      ---
+      duration_ms: 0.797019
+      type: 'test'
+      ...
+    # Subtest: the report carries totals per confidence and a largest-20 section
+    ok 2 - the report carries totals per confidence and a largest-20 section
+      ---
+      duration_ms: 1.516417
+      type: 'test'
+      ...
+    # Subtest: isInsideManagedRoot: only strict children of managed roots qualify
+    ok 3 - isInsideManagedRoot: only strict children of managed roots qualify
+      ---
+      duration_ms: 0.249083
+      type: 'test'
+      ...
+    # Subtest: no production runtime deletion path exists: default managed roots never contain production data
+    ok 4 - no production runtime deletion path exists: default managed roots never contain production data
+      ---
+      duration_ms: 0.274233
+      type: 'test'
+      ...
+    1..4
+ok 76 - qa-storage: legacy inventory is non-destructive and classifies honestly
+  ---
+  duration_ms: 2.989561
+  type: 'suite'
+  ...
+# Subtest: qa-voice-metrics: parsing observed events
+    # Subtest: selected engine comes from observed records
+    ok 1 - selected engine comes from observed records
+      ---
+      duration_ms: 0.548757
+      type: 'test'
+      ...
+    # Subtest: prewarm facts: ok + ms
+    ok 2 - prewarm facts: ok + ms
+      ---
+      duration_ms: 0.112283
+      type: 'test'
+      ...
+    # Subtest: every synthesis keeps generationMs/totalMs/audioDurationMs/rtf/queueWaitMs
+    ok 3 - every synthesis keeps generationMs/totalMs/audioDurationMs/rtf/queueWaitMs
+      ---
+      duration_ms: 0.105453
+      type: 'test'
+      ...
+    # Subtest: warm RTF average excludes the first synthesis when there are >= 2
+    ok 4 - warm RTF average excludes the first synthesis when there are >= 2
+      ---
+      duration_ms: 0.130831
+      type: 'test'
+      ...
+    # Subtest: install and conversar-blocked lines are captured
+    ok 5 - install and conversar-blocked lines are captured
+      ---
+      duration_ms: 0.152596
+      type: 'test'
+      ...
+    # Subtest: clean shutdown is detected from the final quit line
+    ok 6 - clean shutdown is detected from the final quit line
+      ---
+      duration_ms: 0.073886
+      type: 'test'
+      ...
+    # Subtest: a timed-out shutdown is reported honestly as no
+    ok 7 - a timed-out shutdown is reported honestly as no
+      ---
+      duration_ms: 0.948465
+      type: 'test'
+      ...
+    1..7
+ok 77 - qa-voice-metrics: parsing observed events
+  ---
+  duration_ms: 3.166367
+  type: 'suite'
+  ...
+# Subtest: qa-voice-metrics: nothing is fabricated
+    # Subtest: empty log: every metric reads "not observed"
+    ok 1 - empty log: every metric reads "not observed"
+      ---
+      duration_ms: 0.518967
+      type: 'test'
+      ...
+    # Subtest: missing log file: summary says so
+    ok 2 - missing log file: summary says so
+      ---
+      duration_ms: 0.26061
+      type: 'test'
+      ...
+    # Subtest: one synthesis only: warm average stays "not observed (needs >= 2 syntheses)"
+    ok 3 - one synthesis only: warm average stays "not observed (needs >= 2 syntheses)"
+      ---
+      duration_ms: 0.369848
+      type: 'test'
+      ...
+    1..3
+ok 78 - qa-voice-metrics: nothing is fabricated
+  ---
+  duration_ms: 1.423518
+  type: 'suite'
+  ...
+# Subtest: qa-voice-metrics: events extraction and stage separation
+    # Subtest: voice-events.txt groups every required category
+    ok 1 - voice-events.txt groups every required category
+      ---
+      duration_ms: 0.568255
+      type: 'test'
+      ...
+    # Subtest: stage lines are separable via the lia-app.stage-log prefix
+    ok 2 - stage lines are separable via the lia-app.stage-log prefix
+      ---
+      duration_ms: 0.136952
+      type: 'test'
+      ...
+    1..2
+ok 79 - qa-voice-metrics: events extraction and stage separation
+  ---
+  duration_ms: 0.793657
+  type: 'suite'
+  ...
+# Subtest: qa-voice-metrics: finalize writes the full metric bundle
+    # Subtest: produces voice-events.txt, voice-summary.txt and stage-console.log
+    ok 1 - produces voice-events.txt, voice-summary.txt and stage-console.log
+      ---
+      duration_ms: 1.219381
+      type: 'test'
+      ...
+    # Subtest: documents the combined supervisor log when no separate stage lines exist
+    ok 2 - documents the combined supervisor log when no separate stage lines exist
+      ---
+      duration_ms: 0.652016
+      type: 'test'
+      ...
+    1..2
+ok 80 - qa-voice-metrics: finalize writes the full metric bundle
+  ---
+  duration_ms: 1.976621
+  type: 'suite'
+  ...
+# Subtest: 7.9G-QA2 A/B: log decoding is encoding-robust (Windows PowerShell capture)
+    # Subtest: decodes plain UTF-8 unchanged
+    ok 1 - decodes plain UTF-8 unchanged
+      ---
+      duration_ms: 0.151879
+      type: 'test'
+      ...
+    # Subtest: decodes UTF-8 with BOM, stripping the BOM
+    ok 2 - decodes UTF-8 with BOM, stripping the BOM
+      ---
+      duration_ms: 0.158935
+      type: 'test'
+      ...
+    # Subtest: decodes UTF-16LE with BOM (the PowerShell default that broke metrics)
+    ok 3 - decodes UTF-16LE with BOM (the PowerShell default that broke metrics)
+      ---
+      duration_ms: 0.114877
+      type: 'test'
+      ...
+    # Subtest: decodes UTF-16BE with BOM as well
+    ok 4 - decodes UTF-16BE with BOM as well
+      ---
+      duration_ms: 0.419118
+      type: 'test'
+      ...
+    # Subtest: empty buffer decodes to empty text without crashing
+    ok 5 - empty buffer decodes to empty text without crashing
+      ---
+      duration_ms: 0.071986
+      type: 'test'
+      ...
+    1..5
+ok 81 - 7.9G-QA2 A/B: log decoding is encoding-robust (Windows PowerShell capture)
+  ---
+  duration_ms: 1.061917
+  type: 'suite'
+  ...
+# Subtest: 7.9G-QA2 B: a UTF-16LE+BOM Lia log parses exactly like UTF-8
+    # Subtest: finalize on a UTF-16LE+BOM log finds prewarm, syntheses and shutdown
+    ok 1 - finalize on a UTF-16LE+BOM log finds prewarm, syntheses and shutdown
+      ---
+      duration_ms: 0.964647
+      type: 'test'
+      ...
+    # Subtest: finalize on a UTF-8+BOM log behaves identically
+    ok 2 - finalize on a UTF-8+BOM log behaves identically
+      ---
+      duration_ms: 0.766167
+      type: 'test'
+      ...
+    1..2
+ok 82 - 7.9G-QA2 B: a UTF-16LE+BOM Lia log parses exactly like UTF-8
+  ---
+  duration_ms: 1.833333
+  type: 'suite'
+  ...
+# Subtest: 7.9G-QA2 C/D/E/F: real-style Windows events are detected
+    # Subtest: C: real install events are detected with their step metadata
+    ok 1 - C: real install events are detected with their step metadata
+      ---
+      duration_ms: 0.17043
+      type: 'test'
+      ...
+    # Subtest: D: real prewarm is detected (ok + ms)
+    ok 2 - D: real prewarm is detected (ok + ms)
+      ---
+      duration_ms: 0.190633
+      type: 'test'
+      ...
+    # Subtest: E: real syntheses are counted with metrics
+    ok 3 - E: real syntheses are counted with metrics
+      ---
+      duration_ms: 0.073986
+      type: 'test'
+      ...
+    # Subtest: F: real graceful shutdown is detected
+    ok 4 - F: real graceful shutdown is detected
+      ---
+      duration_ms: 0.113996
+      type: 'test'
+      ...
+    1..4
+ok 83 - 7.9G-QA2 C/D/E/F: real-style Windows events are detected
+  ---
+  duration_ms: 1.306505
+  type: 'suite'
+  ...
+# Subtest: 7.9G-QA2 G: kokoro-smoke standalone output produces real metrics
+    # Subtest: parses a non-zero synthesis count with gen/audio/RTF
+    ok 1 - parses a non-zero synthesis count with gen/audio/RTF
+      ---
+      duration_ms: 0.26039
+      type: 'test'
+      ...
+    # Subtest: the summary reports the smoke metrics instead of zeros
+    ok 2 - the summary reports the smoke metrics instead of zeros
+      ---
+      duration_ms: 0.403194
+      type: 'test'
+      ...
+    # Subtest: install-during-run is also reported honestly
+    ok 3 - install-during-run is also reported honestly
+      ---
+      duration_ms: 0.181823
+      type: 'test'
+      ...
+    # Subtest: smoke values of -1 stay "not observed" (never fabricated)
+    ok 4 - smoke values of -1 stay "not observed" (never fabricated)
+      ---
+      duration_ms: 0.089509
+      type: 'test'
+      ...
+    1..4
+ok 84 - 7.9G-QA2 G: kokoro-smoke standalone output produces real metrics
+  ---
+  duration_ms: 1.126422
+  type: 'suite'
+  ...
+# Subtest: 7.9G-QA2 H: malformed/empty/degenerate logs fail gracefully
+    # Subtest: empty log: no crash, everything "not observed"
+    ok 1 - empty log: no crash, everything "not observed"
+      ---
+      duration_ms: 0.282074
+      type: 'test'
+      ...
+    # Subtest: binary garbage buffer: decode + parse survive without throwing
+    ok 2 - binary garbage buffer: decode + parse survive without throwing
+      ---
+      duration_ms: 0.339574
+      type: 'test'
+      ...
+    # Subtest: truncated/half-keyvalue lines: parser keeps the valid parts only
+    ok 3 - truncated/half-keyvalue lines: parser keeps the valid parts only
+      ---
+      duration_ms: 0.136204
+      type: 'test'
+      ...
+    # Subtest: finalize on a run with a garbage log still writes both metric files
+    ok 4 - finalize on a run with a garbage log still writes both metric files
+      ---
+      duration_ms: 0.865978
+      type: 'test'
+      ...
+    1..4
+ok 85 - 7.9G-QA2 H: malformed/empty/degenerate logs fail gracefully
+  ---
+  duration_ms: 1.773809
+  type: 'suite'
+  ...
+1..85
+# tests 275
+# suites 77
+# pass 275
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 23266.390555

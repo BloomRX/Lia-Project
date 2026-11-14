@@ -1,0 +1,8 @@
+# Environment recorded
+Sat Nov 14 03:48:18 UTC 2026
+Linux e2b.local 6.1.158+ #1 SMP PREEMPT_DYNAMIC Mon May 11 18:48:24 UTC 2026 x86_64 GNU/Linux
+v22.22.3
+10.9.8
+Python 3.11.2
+7cb81720552a822a03f36ac6ce5f2e20b009f84c
+1

@@ -1,0 +1,72 @@
+TAP version 13
+# Subtest: resolveStageTarget — a decisao, nao o spawn
+    # Subtest: empacotado vence a existencia de build
+    ok 1 - empacotado vence a existencia de build
+      ---
+      duration_ms: 0.680961
+      type: 'test'
+      ...
+    # Subtest: sem build do Stage nao finge estar empacotado
+    ok 2 - sem build do Stage nao finge estar empacotado
+      ---
+      duration_ms: 0.119208
+      type: 'test'
+      ...
+    # Subtest: override explicito vence a inferencia
+    ok 3 - override explicito vence a inferencia
+      ---
+      duration_ms: 0.135201
+      type: 'test'
+      ...
+    # Subtest: override invalido cai na inferencia e diz isso, em vez de lancar
+    ok 4 - override invalido cai na inferencia e diz isso, em vez de lancar
+      ---
+      duration_ms: 0.096958
+      type: 'test'
+      ...
+    # Subtest: override em branco e ignorado (set VAR= de um .bat)
+    ok 5 - override em branco e ignorado (set VAR= de um .bat)
+      ---
+      duration_ms: 0.160025
+      type: 'test'
+      ...
+    1..5
+ok 1 - resolveStageTarget — a decisao, nao o spawn
+  ---
+  duration_ms: 1.950461
+  type: 'suite'
+  ...
+# Subtest: createLauncher
+    # Subtest: devolve o estado observado do Stage, nao um estado presumido
+    ok 1 - devolve o estado observado do Stage, nao um estado presumido
+      ---
+      duration_ms: 0.710694
+      type: 'test'
+      ...
+    # Subtest: propaga falha do Stage sem transformar em sucesso
+    ok 2 - propaga falha do Stage sem transformar em sucesso
+      ---
+      duration_ms: 0.26075
+      type: 'test'
+      ...
+    # Subtest: shutdown delega ao Stage
+    ok 3 - shutdown delega ao Stage
+      ---
+      duration_ms: 0.224511
+      type: 'test'
+      ...
+    1..3
+ok 2 - createLauncher
+  ---
+  duration_ms: 1.398196
+  type: 'suite'
+  ...
+1..2
+# tests 8
+# suites 2
+# pass 8
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 97.019385
