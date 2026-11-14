@@ -1,9 +1,0 @@
-Lia - internal Windows distribution test
-
-This artifact is intended only for private installation and runtime validation.
-It does not establish or grant a license for the Lia product or its assets.
-Third-party license notices included with the Stage and Electron remain applicable.
-
-Public redistribution is blocked pending review of product licensing, dependencies,
-avatar models, Live2D runtime, fonts, icons and other bundled assets.
-No public update service is configured for this test artifact.

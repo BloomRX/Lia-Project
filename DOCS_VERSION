@@ -1,0 +1,7 @@
+source_repository: BloomRX/Lia-Project
+source_branch: arena/01a10290-lia-project
+source_commit: 7cb81720552a822a03f36ac6ce5f2e20b009f84c
+source_document: docs/project/CURRENT-STATE.md
+snapshot_date: 2026-11-14
+snapshot_type: curated-docs-only-working-tree
+warning: status is a dated snapshot; verify against current development branch before relying on implementation claims
