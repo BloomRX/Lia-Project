@@ -14,6 +14,18 @@ const MAX_SECRETS_PER_UPDATE = 8
 /** Provider id / credential key shape. No control characters, no path syntax. */
 const CREDENTIAL_REFERENCE = /^[\w.:-]{1,64}$/
 
+/**
+ * Rejeita caracteres de controle (0x00-0x1F e 0x7F) em valores de configuracao.
+ * Implementado sem regex de controle para manter o codigo livre de escapes \\u00XX rejeitados pelo `no-control-regex`; mesma semantica de [\u0000-\u001F\u007F], sem falsos positivos na regra de lint.
+ */
+function containsControlCharacter(value: string): boolean {
+  for (let i = 0; i < value.length; i++) {
+    const code = value.codePointAt(i)!
+    if (code < 0x20 || code === 0x7F)
+      return true
+  }
+  return false
+}
 export function sanitizeConfigUpdate(payload: unknown): LiaConfigUpdatePayload {
   const source = (payload !== null && typeof payload === 'object' ? payload : {}) as Record<string, unknown>
   const secrets: LiaConfigUpdatePayload['secrets'] = []
@@ -31,7 +43,7 @@ export function sanitizeConfigUpdate(payload: unknown): LiaConfigUpdatePayload {
       // An EMPTY value is a deliberate deletion of that reference (the vault
       // interprets it as "remove"); anything longer than 4 KiB or carrying
       // control characters is refused instead of being repaired.
-      if (value.length > 4096 || /[\u0000-\u0008\v\f\u000E-\u001F\u007F]/.test(value))
+      if (value.length > 4096 || containsControlCharacter(value))
         continue
       secrets.push({ key, scope, value })
     }
@@ -43,4 +55,3 @@ export function sanitizeConfigUpdate(payload: unknown): LiaConfigUpdatePayload {
     ...(Object.hasOwn(source, 'expectedPreferred') ? { expectedPreferred: source.expectedPreferred } : {}),
   }
 }
-

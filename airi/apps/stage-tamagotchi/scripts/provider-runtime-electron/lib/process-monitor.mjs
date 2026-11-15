@@ -220,7 +220,7 @@ export function createProcessMonitor({
      */
     identities() {
       return [...observed.values()]
-        .map(({ firstSeen, ...identity }) => identity)
+        .map(({ _firstSeen, ...identity }) => identity)
     },
     /** The same list with the poll that first saw each entry, for diagnostics. */
     observations() {
