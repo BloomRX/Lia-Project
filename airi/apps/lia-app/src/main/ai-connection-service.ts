@@ -127,7 +127,16 @@ export interface AiConnectionServiceDeps {
 export type AiConnectionResult = { ok: true, state: AiConnectionState } | Failure
 
 function validId(value: unknown): value is string {
-  return typeof value === 'string' && value.length > 0 && value.length <= 256 && value.trim() === value && !/[\u0000-\u001F\u007F]/.test(value)
+  return typeof value === 'string' && value.length > 0 && value.length <= 256 && value.trim() === value && !containsControlCharacter(value)
+}
+
+function containsControlCharacter(value: string): boolean {
+  for (let i = 0; i < value.length; i++) {
+    const code = value.codePointAt(i)!
+    if (code < 0x20 || code === 0x7F)
+      return true
+  }
+  return false
 }
 
 /**

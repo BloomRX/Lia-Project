@@ -27,6 +27,23 @@ regras anti-conflito, está em
 Nenhum código de produto foi alterado nesta rodada; o SHA de código auditado continua
 `ae46c49`.
 
+**Onda 1 — integração parcial (15/11/2026).** Foram integrados, de
+`arena/4ec8f22b-lia-project` (`be24b94`), sete arquivos de higiene e o relatório
+[LIA-BUILD-HYGIENE-2026-11-14](../reports/LIA-BUILD-HYGIENE-2026-11-14.md):
+`ai-connection-service.ts`, `config-update-sanitizer.ts`, `ipc.ts`,
+`transport-execution-service.ts`, `memory-service.ts`, `memory-context.test.ts` e
+`process-monitor.mjs`. Duas correções de revisão foram aplicadas durante a
+integração: `process-monitor.mjs` voltou a excluir `firstSeen` de `identities()`
+(`firstSeen: _firstSeen`) e `config-update-sanitizer.ts` preservou a semântica
+anterior (TAB/LF/CR aceitos; demais controles recusados). `auth.ts` **não foi
+integrado** e aguarda parecer de Architecture/Security, pedido em
+[LIA-ARCH-SEC-REVIEW-REQUEST-UPDATECREDITS-2026-11-15](../reports/LIA-ARCH-SEC-REVIEW-REQUEST-UPDATECREDITS-2026-11-15.md).
+Testes desta integração: lia-app 353 PASS/2 skip; memory-service 6/6;
+memory-context 3/3; process-monitor 21/21; lint dos 7 arquivos com 3 erros
+pré-existentes. `transport-execution-service.test.ts` ficou BLOCKED (binário do
+Electron indisponível no sandbox). **T-01, T-03 e T-04 NÃO estão aprovados** e o
+beta continua não declarado.
+
 **A-1 corrigido (14/11/2026, código + testes).** O achado da auditoria foi confirmado
 na causa: `defaultActive: false` **nunca foi** interruptor de desligar — é inclusão
 ambiente — e o caminho de envio por seleção explícita (`chat.ts` → `getToolsByNames` →
