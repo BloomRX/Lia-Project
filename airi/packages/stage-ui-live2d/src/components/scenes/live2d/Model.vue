@@ -54,6 +54,8 @@ const props = withDefaults(defineProps<{
   live2dForceAutoBlinkEnabled?: boolean
   live2dExpressionEnabled?: boolean
   live2dShadowEnabled?: boolean
+  neutralShadow?: boolean
+  fitFullBody?: boolean
 }>(), {
   mouthOpenSize: 0,
   nowSpeaking: false,
@@ -96,9 +98,10 @@ const modelLoadMutex = new Mutex()
 const manualMotionSpring = createLive2DMotionSpring()
 const manualControlOffset = computed(() => getLive2DMotionControlModelOffset(manualMotionSpring.output.value))
 const offset = computed(() => ({
-  x: (position.value.x / 100) * props.width + manualControlOffset.value.x,
-  y: -(position.value.y / 100) * props.height + manualControlOffset.value.y,
+  x: props.fitFullBody ? 0 : (position.value.x / 100) * props.width + manualControlOffset.value.x,
+  y: props.fitFullBody ? 0 : -(position.value.y / 100) * props.height + manualControlOffset.value.y,
 }))
+const viewScale = computed(() => props.fitFullBody ? 1 : scale.value)
 
 const pixiApp = toRef(() => props.app)
 const paused = toRef(() => props.paused)
@@ -123,9 +126,10 @@ let resizeAnimation: ReturnType<typeof animate> | undefined
 const modelNormalizeParams = useFitModel(
   () => ({ width: props.width, height: props.height }),
   () => ({ width: initialModelWidth.value, height: initialModelHeight.value }),
+  () => Boolean(props.fitFullBody),
 )
 
-watch([offset, scale, modelNormalizeParams], () => {
+watch([offset, viewScale, modelNormalizeParams], () => {
   setScaleAndPosition()
 })
 
@@ -136,7 +140,7 @@ function setScaleAndPosition(animated = false) {
   const normalized = modelNormalizeParams.value
 
   if (!animated) {
-    model.value.scale.set(normalized.scale * scale.value, normalized.scale * scale.value)
+    model.value.scale.set(normalized.scale * viewScale.value, normalized.scale * viewScale.value)
     model.value.x = normalized.x + offset.value.x
     model.value.y = normalized.y + offset.value.y
     return
@@ -151,7 +155,7 @@ function setScaleAndPosition(animated = false) {
   }
 
   resizeAnimation = animate(current, {
-    scale: normalized.scale * scale.value,
+    scale: normalized.scale * viewScale.value,
     x: normalized.x + offset.value.x,
     y: normalized.y + offset.value.y,
     duration: 200,
@@ -523,7 +527,6 @@ async function setMotion(motionName: string, index?: number) {
 }
 
 const dropShadowColorComputer = ref<HTMLDivElement>()
-const dropShadowAnimationId = ref(0)
 
 function updateDropShadowFilter() {
   if (!model.value)
@@ -538,35 +541,40 @@ function updateDropShadowFilter() {
     return
 
   const color = getComputedStyle(dropShadowColorComputer.value).backgroundColor
-  dropShadowFilter.value.color = Number(formatHex(color)!.replace('#', '0x'))
+  dropShadowFilter.value.color = props.neutralShadow ? 0x000000 : Number(formatHex(color)!.replace('#', '0x'))
+  dropShadowFilter.value.blur = props.neutralShadow ? 4 : 0
+  dropShadowFilter.value.distance = props.neutralShadow ? 3 : 20
   model.value.filters = [dropShadowFilter.value]
 }
 
 watch(modelSrcRef, async () => await loadModel(), { immediate: true })
 watch(dark, updateDropShadowFilter, { immediate: true })
 watch([model, themeColorsHue], updateDropShadowFilter)
+watch(() => props.neutralShadow, updateDropShadowFilter)
 watch(live2dShadowEnabled, updateDropShadowFilter)
 
-// TODO: This is hacky!
-function updateDropShadowFilterLoop() {
-  updateDropShadowFilter()
-  if (!live2dShadowEnabled.value) {
-    dropShadowAnimationId.value = 0
+watch([themeColorsHueDynamic, live2dShadowEnabled, paused], ([dynamic, shadowEnabled, isPaused], _, onCleanup) => {
+  if (!dynamic || !shadowEnabled || isPaused)
     return
+
+  let active = true
+  let animationId: number
+
+  function updateDropShadowFilterLoop() {
+    // A cancelled callback from a previous run must never restart its loop.
+    if (!active)
+      return
+    updateDropShadowFilter()
+    animationId = requestAnimationFrame(updateDropShadowFilterLoop)
   }
 
-  dropShadowAnimationId.value = requestAnimationFrame(updateDropShadowFilterLoop)
-}
-
-watch([themeColorsHueDynamic, live2dShadowEnabled], ([dynamic, shadowEnabled]) => {
-  if (dynamic && shadowEnabled) {
-    dropShadowAnimationId.value = requestAnimationFrame(updateDropShadowFilterLoop)
-  }
-  else {
-    cancelAnimationFrame(dropShadowAnimationId.value)
-    dropShadowAnimationId.value = 0
-  }
-}, { immediate: true })
+  animationId = requestAnimationFrame(updateDropShadowFilterLoop)
+  // Vue also runs this cleanup when the component unmounts.
+  onCleanup(() => {
+    active = false
+    cancelAnimationFrame(animationId)
+  })
+}, { immediate: true, flush: 'sync' })
 
 watch(currentMotion, value => setMotion(value.group, value.index))
 watch(paused, value => value ? pixiApp.value?.stop() : pixiApp.value?.start())

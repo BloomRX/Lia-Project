@@ -58,8 +58,11 @@ describe('the primary action keeps the existing launch path (B, F)', () => {
   it('b: "Conversar com Lia" still invokes api.conversar() exactly, with busy guard and refresh', () => {
     const source = HOME_VUE()
     expect(source).toContain('await props.api.conversar()')
+    expect(source).toContain('result?.ok === false')
+    expect(source).toContain('service is not ready')
+    expect(source).toContain('serviço de IA não está pronto')
     expect(source).toContain('emit(\'refresh\')')
-    expect(source).toContain(':disabled="busy || conversationStarting"')
+    expect(source).toContain(':disabled="busy || conversationStarting || conversationStopping"')
     expect(source).toContain('{{ conversationLabel }}')
   })
 
@@ -109,6 +112,20 @@ describe('home stays product-clean (C, D, E)', () => {
     const styleBlock = HOME_VUE().slice(HOME_VUE().indexOf('<style scoped>'))
     expect(styleBlock).not.toMatch(/#[0-9a-f]{3,8}\b/i)
     expect(styleBlock).not.toMatch(/\brgb\(|\brgba\(|\bhsl\(/i)
+  })
+})
+
+describe('legacy ConfigView selection errors remain actionable', () => {
+  it('sends the expected selection and presents managed/stale errors as accessible localized feedback', () => {
+    const source = readSource('./ConfigView.vue')
+    expect(source).toContain('expectedPreferred,')
+    expect(source).toContain("result?.status === 'selection-owned-by-launcher'")
+    expect(source).toContain("result?.status === 'stale-selection'")
+    expect(source).toContain("result?.status === 'selection-read-failed'")
+    expect(source).toContain('This AI service is managed by AI Settings.')
+    expect(source).toContain('Este serviço de IA é gerenciado pelas Configurações de IA.')
+    expect(source).toContain('<span v-if="feedback" class="feedback" role="status">')
+    expect(source).toContain('{{ text[feedback] }}')
   })
 })
 
@@ -196,8 +213,8 @@ describe('8.0A-5 minimal first-run choice', () => {
 
   it('g: the first-run marker never blocks Conversar (no modal, no gate)', () => {
     const source = HOME_VUE()
-    // Conversar stays disabled ONLY by its own launch state...
-    expect(source).toContain(':disabled="busy || conversationStarting"')
+    // Conversar follows only conversation lifecycle, never the setup marker...
+    expect(source).toContain(':disabled="busy || conversationStarting || conversationStopping"')
     // ...the first-run flag gates the panel and NOTHING else...
     expect((source.match(/v-if="firstRunVisible"/g) ?? []).length).toBe(1)
     expect(source).not.toMatch(/firstRun(Visible|Done|Busy).*conversar|conversar.*firstRun/i)

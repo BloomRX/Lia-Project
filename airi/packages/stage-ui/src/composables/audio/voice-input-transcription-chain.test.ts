@@ -56,10 +56,12 @@ describe('createVoiceInputTranscriptionChain', () => {
     let firstTicketStillCurrent = true
 
     const first = chain.enqueue(async (ticket) => {
+      expect(ticket.signal.aborted).toBe(false)
       await new Promise<void>((resolve) => {
         finishFirst = resolve
       })
       firstTicketStillCurrent = ticket.isCurrent()
+      expect(ticket.signal.aborted).toBe(true)
     })
 
     await Promise.resolve()
@@ -68,5 +70,24 @@ describe('createVoiceInputTranscriptionChain', () => {
     await first
 
     expect(firstTicketStillCurrent).toBe(false)
+  })
+
+  it('aborts running work once and supplies an independent signal to the next session', async () => {
+    const chain = createVoiceInputTranscriptionChain()
+    let count = 0
+    const first = chain.enqueue(ticket => new Promise<void>((resolve) => {
+      ticket.signal.addEventListener('abort', () => {
+        count++
+        resolve()
+      }, { once: true })
+    }))
+    await Promise.resolve()
+    chain.reset()
+    chain.reset()
+    await first
+    await chain.enqueue((ticket) => {
+      expect(ticket.signal.aborted).toBe(false)
+    })
+    expect(count).toBe(1)
   })
 })

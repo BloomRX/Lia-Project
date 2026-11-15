@@ -60,10 +60,10 @@ Do not use screenshots of partially implemented UI as replacements for the golde
 | 01 | Home | Existing | Current primary visual baseline |
 | 02 | IA & Recursos | Existing direction | Brain + perception + voice + tools overview |
 | 03 | Voz | Existing direction | Keep style; real controls remain engine-specific |
-| 04 | Personalidade | To create | Must express Lia's canonical identity without becoming prompt engineering UI |
+| 04 | Personalidade | Reference exists | `04-personality.png`; production page still pending |
 | 05 | Aparência | Existing direction / revise | Lia model + clothes; separate from desktop Presence |
-| 06 | Presença | To create | Static vs Free mode, background, hover-hide, movement behavior |
-| 07 | Ferramentas | To create | User-readable capabilities and permissions |
+| 06 | Presença | Reference exists | `06-presence.png`; persistent Tamagotchi/Free product modes still pending |
+| 07 | Ferramentas | Reference exists | `07-tools.png`; production capabilities and permissions page still pending |
 
 ---
 

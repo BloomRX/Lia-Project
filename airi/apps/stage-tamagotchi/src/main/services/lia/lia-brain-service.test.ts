@@ -150,9 +150,10 @@ describe('lia brain host service (Phase 8.0D-4)', () => {
     const automatic = { brain: { mode: 'automatic' } }
     const service = createLiaBrainService({ liaProductConfig: configOwner([disabled, automatic, automatic]) })
 
-    // The service really owns the production catalog (one engine/model today).
+    // The service really owns the production catalog: one engine, and its two
+    // models - the text brain plus the Phase 8.0D-M1 vision route.
     expect(service.catalog.engines.map(engine => engine.id)).toEqual(['groq'])
-    expect(service.catalog.models.map(model => model.id)).toEqual(['openai/gpt-oss-120b'])
+    expect(service.catalog.models.map(model => model.id)).toEqual(['openai/gpt-oss-120b', 'qwen/qwen3.8-27b'])
 
     // disabled is data, not an exception.
     expect(service.decide(TEXT_ONLY)).toEqual({ status: 'disabled' })
@@ -167,13 +168,39 @@ describe('lia brain host service (Phase 8.0D-4)', () => {
       return
     expect(selected.selection.status).toBe('selected')
 
-    // A requirement the production route cannot satisfy yields no candidate -
-    // and still no exception.
+    // A capability NO shipped model has yields no candidate at all - and still
+    // no exception.
     const unsupported = service.decide({
       automaticPolicy: { routes: [{ engineId: 'groq', modelId: 'openai/gpt-oss-120b' }] },
-      requirement: { required: ['imageInput'] },
+      requirement: { required: ['audioInput', 'textInput', 'textOutput'] },
     })
     expect(unsupported).toEqual({ selection: { status: 'noCandidates' }, status: 'automatic' })
+
+    // Phase 8.0D-M1: an image requirement is satisfiable, but a policy naming
+    // only the text brain cannot select it - reported explicitly rather than
+    // silently downgraded to the ineligible route.
+    const imageWithTextOnlyPolicy = service.decide({
+      automaticPolicy: { routes: [{ engineId: 'groq', modelId: 'openai/gpt-oss-120b' }] },
+      requirement: { required: ['imageInput', 'textInput', 'textOutput'] },
+    })
+    expect(imageWithTextOnlyPolicy).toEqual({ selection: { status: 'noPolicyMatch' }, status: 'automatic' })
+
+    // ...and the production policy, which names both routes, does select the
+    // vision route for that same requirement.
+    const imageWithProductionPolicy = service.decide({
+      automaticPolicy: {
+        routes: [
+          { engineId: 'groq', modelId: 'openai/gpt-oss-120b' },
+          { engineId: 'groq', modelId: 'qwen/qwen3.8-27b' },
+        ],
+      },
+      requirement: { required: ['imageInput', 'textInput', 'textOutput'] },
+    })
+    expect(imageWithProductionPolicy.status).toBe('automatic')
+    if (imageWithProductionPolicy.status === 'automatic' && imageWithProductionPolicy.selection.status === 'selected')
+      expect(imageWithProductionPolicy.selection.route.model.id).toBe('qwen/qwen3.8-27b')
+    else
+      expect.unreachable('the production policy must select the vision route')
   })
 
   it('j: the service never traverses snapshot.brain fields itself', () => {

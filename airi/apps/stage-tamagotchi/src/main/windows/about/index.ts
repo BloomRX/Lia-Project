@@ -1,3 +1,5 @@
+import { createStageWebPreferences } from '../secure-web-preferences'
+
 import type { I18n } from '../../libs/i18n'
 import type { ServerChannel } from '../../services/airi/channel-server'
 import type { AutoUpdater } from '../../services/electron/auto-updater'
@@ -28,10 +30,7 @@ export function setupAboutWindowReusable(params: {
       maximizable: false,
       minimizable: false,
       icon,
-      webPreferences: {
-        preload: join(getElectronMainDirname(), '../preload/index.mjs'),
-        sandbox: false,
-      },
+      webPreferences: createStageWebPreferences(join(getElectronMainDirname(), '../preload/index.cjs')),
     })
 
     window.on('ready-to-show', () => window.show())

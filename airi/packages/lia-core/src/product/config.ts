@@ -5,6 +5,8 @@ import { dirname } from 'node:path'
 
 import { safeDestr } from 'destr'
 
+import { isPresenceConfig } from '../../../../../lia/core/src/presence'
+
 /**
  * Tolerant reader for the canonical Lia product document
  * (`<lia-user-data>/lia-product.json`, Phase 7).
@@ -33,6 +35,25 @@ export interface LiaProductTtsTarget {
   providerId: string
   modelId?: string
   voiceId?: string
+}
+
+/**
+ * Phase 8.0D-10B-4D4C4-SHELL-B1: the canonical speech-to-text selection.
+ *
+ * Metadata only - an opaque provider id plus an optional model id, mirroring
+ * `LiaProductTtsTarget` minus the voice selection (a transcription target has
+ * no voice). Credentials never appear here.
+ *
+ * `voice.stt.preferred` is stored as an OPAQUE pair. This generic config layer
+ * deliberately names no vendor and derives no endpoint: which provider the Lia
+ * product ships by default, and how a derived provider id maps onto a runtime
+ * adapter and base URL, belong to the apps that own that policy (the Launcher
+ * writes the selection, the managed Stage projects it). Keeping vendor knowledge
+ * out of here is the same invariant the routing mode relies on.
+ */
+export interface LiaProductSttTarget {
+  providerId: string
+  modelId?: string
 }
 
 export interface LiaProductAllTalkRuntime {
@@ -73,7 +94,7 @@ export interface LiaProductVoiceConfig {
     fallback?: LiaProductTtsTarget[]
   }
   stt?: {
-    preferred?: { providerId: string, modelId?: string }
+    preferred?: LiaProductSttTarget
   }
   engine?: LiaProductVoiceEngine
   fallback?: LiaProductVoiceFallback
@@ -119,6 +140,7 @@ export interface LiaProductBrainSelection {
 }
 
 export interface LiaProductConfigSnapshot {
+  presence?: import('../../../../../lia/core/src/presence').PresenceConfig
   schemaVersion?: number
   persona?: { activeCardId?: string }
   provider?: { chat?: LiaProductChatConfig }
@@ -190,6 +212,8 @@ export async function readLiaProductConfig(
 
 function extract(doc: Record<string, unknown>): LiaProductConfigSnapshot {
   const snapshot: LiaProductConfigSnapshot = {}
+  if (isPresenceConfig(doc.presence))
+    snapshot.presence = structuredClone(doc.presence)
   if (typeof doc.schemaVersion === 'number')
     snapshot.schemaVersion = doc.schemaVersion
 
@@ -348,8 +372,14 @@ function asTtsTarget(value: unknown): LiaProductTtsTarget | undefined {
 export const SECRET_FIELD_NAMES = ['apikey', 'apisecret', 'bearer', 'secret', 'token'] as const
 
 export interface LiaProductConfigUpdate {
+  presence?: import('../../../../../lia/core/src/presence').PresenceConfig
   persona?: { activeCardId?: string }
-  provider?: { chat?: Partial<LiaProductChatConfig> }
+  provider?: { chat?: Omit<Partial<LiaProductChatConfig>, 'preferred' | 'strategy' | 'onboarded'> & {
+    /** Explicit null clears an editor-owned field; omission preserves it. */
+    preferred?: LiaProductProviderTarget | null
+    strategy?: LiaProductChatConfig['strategy'] | null
+    onboarded?: boolean | null
+  } }
   preferences?: { language?: string }
   /** Phase 7.9H-B3: first-run setup completion (`true` = setup done). */
   setup?: { completed?: boolean }
@@ -374,6 +404,13 @@ export interface LiaProductConfigUpdate {
       installDir?: string
     }
     tts?: { preferred?: LiaProductTtsTarget }
+    /**
+     * Phase 8.0D-10B-4D4C4-SHELL-B1: the canonical STT selection becomes
+     * writable. Metadata only - never a credential, a baseUrl or a runtime
+     * object. An explicit `null` clears the selection back to the product
+     * default rather than storing an inferred empty target.
+     */
+    stt?: { preferred?: LiaProductSttTarget | null }
   }
 }
 
@@ -499,6 +536,8 @@ export async function updateLiaProductConfig(
 
   if (containsSecretField(update))
     return { error: new Error('API keys and tokens belong to the secret vault, never to lia-product.json.'), filePath, status: 'secret-forbidden' }
+  if (update.presence !== undefined && !isPresenceConfig(update.presence))
+    return { error: new Error('Invalid presence configuration.'), filePath, status: 'invalid-source' }
 
   // Start from the raw document when it exists and parses; create a fresh
   // one when the user simply never ran any host before.
@@ -538,6 +577,8 @@ export async function updateLiaProductConfig(
 
 function mergeProductUpdate(raw: Record<string, unknown>, update: LiaProductConfigUpdate): Record<string, unknown> {
   const next: Record<string, unknown> = { ...raw }
+  if (update.presence !== undefined)
+    next.presence = structuredClone(update.presence)
   if (update.persona) {
     next.persona = { ...asRecord(raw.persona), ...definedOnly(update.persona) }
   }
@@ -588,7 +629,12 @@ function mergeProductUpdate(raw: Record<string, unknown>, update: LiaProductConf
   }
   if (update.provider?.chat) {
     const provider = { ...asRecord(raw.provider) }
-    provider.chat = { ...asRecord(provider.chat), ...definedOnly(update.provider.chat) }
+    const chat = { ...asRecord(provider.chat), ...definedOnly(update.provider.chat) }
+    for (const field of ['preferred', 'strategy', 'onboarded'] as const) {
+      if (update.provider.chat[field] === null)
+        delete chat[field]
+    }
+    provider.chat = chat
     next.provider = provider
   }
   if (update.voice) {
@@ -599,6 +645,19 @@ function mergeProductUpdate(raw: Record<string, unknown>, update: LiaProductConf
       // two different picks into one Franken-target.
       tts.preferred = definedOnly(update.voice.tts.preferred)
       voice.tts = tts
+    }
+    if (update.voice.stt?.preferred !== undefined) {
+      const stt = { ...asRecord(voice.stt) }
+      if (update.voice.stt.preferred === null) {
+        // An explicit clear returns the document to "no explicit selection"
+        // (the product default) instead of storing an inferred empty target.
+        delete stt.preferred
+      }
+      else {
+        // A selection is atomic, exactly like `voice.tts.preferred` above.
+        stt.preferred = definedOnly(update.voice.stt.preferred)
+      }
+      voice.stt = stt
     }
     if (update.voice.engine) {
       const engine = { ...asRecord(voice.engine) }

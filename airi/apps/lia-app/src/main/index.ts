@@ -2,19 +2,25 @@ import type { SupervisorQuitFlow } from './shutdown-coordinator'
 
 import process from 'node:process'
 
+import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { app, BrowserWindow, dialog, safeStorage } from 'electron'
+import { statSync as physicalStatSync } from 'original-fs'
 
+import { createLiaDevflowAutorun } from './devflow-autorun'
 import { createLiaEventPublisher } from './event-publisher'
 import { registerLiaIpc } from './ipc'
+import { launcherProfilePath } from './launcher-profile'
 import { createLiaHost } from './lia-host'
+import { resolvePackagedStage } from './packaged-stage'
 import { createSupervisorQuitFlow } from './shutdown-coordinator'
 import { enforceSingleInstance } from './single-instance'
 import { createLiaBootTimer } from './timing'
 import { createLiaVoiceEngineService } from './voice-engine-service'
 import { createLiaVoiceInstallInspector } from './voice-install-inspector'
 import { createLiaVoiceProvisioning } from './voice-provisioning'
+import { LIA_MAIN_WEB_PREFERENCES } from './web-preferences'
 
 /**
  * The Lia launcher entry (Phase 7, architecture items 1/11/15).
@@ -33,6 +39,11 @@ const timer = createLiaBootTimer()
 timer.mark('lia-app.start')
 
 let mainWindow: BrowserWindow | undefined
+// The packaged name must not select the Stage's active Chromium profile or
+// abandon an existing safeStorage cipher profile.
+const chromiumProfile = launcherProfilePath(app.getPath('appData'))
+mkdirSync(chromiumProfile, { recursive: true })
+app.setPath('userData', chromiumProfile)
 /**
  * The ONE quit path (Phase 7.1, item 3). Exists only after the host does;
  * an exit signal before that means nothing was spawned and the process may
@@ -74,6 +85,10 @@ async function bootstrap(): Promise<void> {
   // finishes its first paint - but WITHOUT starting the voice runtime
   // (contract item 12) and without touching AIRI (contract item 11).
   const host = createLiaHost({
+    enableCredentialOwner: true,
+    launcherChromiumProfile: chromiumProfile,
+    // Electron's patched fs presents an app.asar archive as a directory.
+    packagedStage: app.isPackaged ? () => resolvePackagedStage(process.resourcesPath, physicalStatSync) : undefined,
     cipher: {
       available: () => safeStorage.isEncryptionAvailable(),
       decrypt: payload => safeStorage.decryptString(payload),
@@ -152,6 +167,11 @@ async function bootstrap(): Promise<void> {
     log: line => console.info(line),
   })
 
+  const devflowAutorun = createLiaDevflowAutorun({
+    conversar: () => host.conversar(),
+    log: line => console.info(line),
+  })
+
   registerLiaIpc(host, timer, {
     pickVoiceFiles: async () => {
       if (!mainWindow)
@@ -187,10 +207,8 @@ async function bootstrap(): Promise<void> {
     height: 860,
     title: 'Lia',
     webPreferences: {
-      contextIsolation: true,
-      nodeIntegration: false,
+      ...LIA_MAIN_WEB_PREFERENCES,
       preload: join(import.meta.dirname, '../preload/index.cjs'),
-      sandbox: false,
     },
     width: 1320,
   })
@@ -205,6 +223,18 @@ async function bootstrap(): Promise<void> {
   }
   else {
     await mainWindow.loadFile(join(import.meta.dirname, '../renderer/index.html'))
+  }
+
+  // DEVFLOW-ONLY. Replaces the human "click Conversar com Lia" step by calling
+  // the SAME host.conversar() the button reaches through lia:stage:start, so
+  // the round still validates Lia.bat -> Launcher -> AiriStageManager -> Stage.
+  // Inert unless LIA_DEVFLOW_AUTORUN=conversar; a normal launch still needs the
+  // explicit click. Not awaited: boot must not block on the stage, and the
+  // stage manager's single-flight already collapses any concurrent start.
+  if (devflowAutorun.applies()) {
+    void devflowAutorun.run().catch((error: unknown) => {
+      console.info(`lia-devflow autorun=failed reason=${error instanceof Error ? error.name : 'unknown'}`)
+    })
   }
 }
 

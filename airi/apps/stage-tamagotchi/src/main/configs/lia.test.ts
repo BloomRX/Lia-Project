@@ -34,6 +34,7 @@ async function loadModules(fs: FsMocks) {
     readFileSync: fs.readFileSync,
   }))
   vi.doMock('node:fs/promises', () => ({
+    unlink: vi.fn(async () => {}),
     copyFile,
     mkdir,
     rename,

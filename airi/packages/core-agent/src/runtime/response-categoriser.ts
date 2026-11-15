@@ -84,8 +84,8 @@ function extractAllTags(response: string): ExtractedTag[] {
       })
     })
   }
-  catch (error) {
-    console.error('Failed to parse response for tag extraction:', error)
+  catch {
+    console.error('Failed to parse response for tag extraction:')
     // If parsing fails, return empty array (no tags found)
   }
 

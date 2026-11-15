@@ -3,6 +3,12 @@ import { describe, expect, it } from 'vitest'
 import { sanitizeLogText } from './main-process-log-bus'
 
 describe('sanitizeLogText', () => {
+  it('redacts query keys and quoted JSON fields including escaped values', () => {
+    const text = `request https://example.invalid/path?key=SYNTHETIC_QUERY_SECRET&x=1 ${JSON.stringify({ apiKey: 'SYNTHETIC_JSON_SECRET with "quoted" data', accessKeySecret: 'SYNTHETIC_ACCESS_SECRET', idToken: 'SYNTHETIC_ID_SECRET' })}`
+    const result = sanitizeLogText(text)
+    expect(result).not.toContain('SYNTHETIC_')
+    expect(result).toContain('?key=***&x=1')
+  })
   it('strips ANSI escape codes', () => {
     expect(sanitizeLogText('\u001B[32mgreen\u001B[0m message')).toBe('green message')
   })

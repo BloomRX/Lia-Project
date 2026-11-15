@@ -60,10 +60,10 @@ describe('phase 7.3 secret bridge (F/G/H)', () => {
 describe('phase 7.3 provider-error UX (K)', () => {
   it('k: a 401 maps to the human auth message, never the raw provider blob', () => {
     const raw = 'Remote sent 401 response: {"error":{"message":"Invalid API Key","type":"invalid_request_error","code":"invalid_api_key"}}'
-    const humanized = humanizeSendErrorMessage(raw, { authHint: 'the Lia Settings', fallback: 'Unknown chat operation failure' })
+    const humanized = humanizeSendErrorMessage(raw)
     expect(humanized.kind).toBe('auth-failure')
-    expect(humanized.humanText).toContain('authenticate')
-    expect(humanized.humanText).toContain('Lia Settings')
+    expect(humanized.humanText).toContain('verify access')
+    expect(humanized.humanText).toContain('settings')
     expect(humanized.humanText).not.toContain('Remote sent')
     expect(humanized.humanText).not.toContain('invalid_api_key')
 
@@ -73,20 +73,64 @@ describe('phase 7.3 provider-error UX (K)', () => {
     expect(isAuthSendError('model overloaded, retry later')).toBe(false)
   })
 
-  it('k: non-auth failures keep their (sanitized) message', () => {
-    const humanized = humanizeSendErrorMessage('socket timeout of 30s', {
-      authHint: 'the Lia Settings',
-      fallback: 'Unknown chat operation failure',
-    })
-    expect(humanized.kind).toBe('other')
-    expect(humanized.humanText).toBe('socket timeout of 30s')
+  it('k: network failures receive a safe connection message', () => {
+    const humanized = humanizeSendErrorMessage('socket timeout of 30s')
+    expect(humanized.kind).toBe('network')
+    expect(humanized.humanText).toBe('Could not reach the AI service. Check your connection and try again.')
   })
 
   it('j: the human mapping never echoes a literal test key', () => {
     // Even in the worst case - a provider blob embedding the key - the
     // auth mapping replaces the text wholesale.
     const raw = `Remote sent 401 response: credential ${LIA_VAULT_KEY} rejected`
-    const humanized = humanizeSendErrorMessage(raw, { authHint: 'the Lia Settings', fallback: 'x' })
+    const humanized = humanizeSendErrorMessage(raw)
     expect(humanized.humanText).not.toContain(LIA_VAULT_KEY)
+  })
+})
+
+describe('safe chat send errors', () => {
+  it.each([
+    ['Remote sent 413 response: {"error":{"message":"SENTINEL_PRIVATE https://service.invalid/account user-qa"}}', 'input-limit'],
+    ['Request failed with status code 429: SENTINEL_PRIVATE', 'quota'],
+    ['HTTP 503: SENTINEL_PRIVATE', 'service-unavailable'],
+    ['Remote sent 403 response: SENTINEL_PRIVATE', 'permission-failure'],
+    ['Failed to fetch: SENTINEL_PRIVATE', 'network'],
+    ['O serviço de IA terminou sem enviar uma resposta. Tente novamente.', 'empty-response'],
+    ['An unrecognized failure with SENTINEL_PRIVATE', 'other'],
+  ])('replaces the full transport payload for %s', (raw, kind) => {
+    const humanized = humanizeSendErrorMessage(raw)
+    expect(humanized.kind).toBe(kind)
+    expect(humanized.humanText).not.toContain('SENTINEL_PRIVATE')
+    expect(humanized.humanText).not.toContain('https://')
+    expect(humanized.humanText).not.toContain('{')
+    expect(humanizeSendErrorMessage(humanized.humanText)).toEqual(humanized)
+  })
+
+  it('does not interpret arbitrary account numbers as an HTTP status', () => {
+    expect(isAuthSendError('Account 401 had a failure')).toBe(false)
+    expect(isAuthSendError('{"error":{"message":"Request 401 for account 413"}}')).toBe(false)
+  })
+
+  it.each([
+    ['{"status":413,"error":{"message":"Account 401"}}', 'input-limit'],
+    ['{"error":{"statusCode":"429","message":"SENTINEL_PRIVATE"}}', 'quota'],
+    ['Request failed with status 401', 'auth-failure'],
+    ['HTTP/1.1 503 Service Unavailable', 'service-unavailable'],
+    ['Error: Remote sent 403 response: SENTINEL_PRIVATE', 'permission-failure'],
+    ['Failure in account 429 while processing request 413', 'other'],
+    ['{"error":{"message":"The request has HTTP 401 in an unrelated body"}}', 'other'],
+  ])('only classifies status from a known envelope: %s', (raw, kind) => {
+    expect(humanizeSendErrorMessage(raw).kind).toBe(kind)
+  })
+
+  it('uses a safe fallback when the translator is missing a key or fails', () => {
+    const canonical = humanizeSendErrorMessage('HTTP 413')
+    expect(humanizeSendErrorMessage('HTTP 413', { translate: key => key })).toEqual(canonical)
+    expect(humanizeSendErrorMessage('HTTP 413', { translate: () => '' })).toEqual(canonical)
+    expect(humanizeSendErrorMessage('HTTP 413', {
+      translate: () => {
+        throw new Error('translation failure')
+      },
+    })).toEqual(canonical)
   })
 })

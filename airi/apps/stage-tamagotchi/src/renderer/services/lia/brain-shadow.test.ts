@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { electronLiaBrainChatDecision } from '../../../shared/eventa'
 import { normalizeLineEndings } from '../../../test-helpers'
-import { chatTurnFactsFromSend, observeLiaBrainDecisionForChatTurn, requestLiaBrainDecisionForChatTurn } from './brain-shadow'
+import { chatTurnFactsFromSend, chatTurnImageInputCount, observeLiaBrainDecisionForChatTurn, requestLiaBrainDecisionForChatTurn } from './brain-shadow'
 
 /**
  * Phases 8.0D-9 / 8.0D-10B-3B2: the shadow Brain observer.
@@ -236,28 +236,28 @@ describe('shadow brain observer (Phase 8.0D-9)', () => {
 
   it('facts come from the outgoing values - attachments, tools and the reasoning flag', () => {
     // No image, no tools, no reasoning: the baseline describes exactly that.
-    expect(chatTurnFactsFromSend({ attachments: [], reasoning: false, tools: [] }))
+    expect(chatTurnFactsFromSend({ attachments: [], providerHistory: [], reasoning: false, tools: [] }))
       .toEqual({ hasImageInput: false, reasoningRequested: false, usesTools: false })
 
     // Each signal is independent and read as a boolean of the actual values.
-    expect(chatTurnFactsFromSend({ attachments: [{}], reasoning: false, tools: [] })).toEqual({
+    expect(chatTurnFactsFromSend({ attachments: [{}], providerHistory: [], reasoning: false, tools: [] })).toEqual({
       hasImageInput: true,
       reasoningRequested: false,
       usesTools: false,
     })
-    expect(chatTurnFactsFromSend({ attachments: [], reasoning: true, tools: [] })).toEqual({
+    expect(chatTurnFactsFromSend({ attachments: [], providerHistory: [], reasoning: true, tools: [] })).toEqual({
       hasImageInput: false,
       reasoningRequested: true,
       usesTools: false,
     })
-    expect(chatTurnFactsFromSend({ attachments: [], reasoning: false, tools: [{ name: 'a' }] })).toEqual({
+    expect(chatTurnFactsFromSend({ attachments: [], providerHistory: [], reasoning: false, tools: [{ name: 'a' }] })).toEqual({
       hasImageInput: false,
       reasoningRequested: false,
       usesTools: true,
     })
 
     // Combined.
-    expect(chatTurnFactsFromSend({ attachments: [{}], reasoning: true, tools: [{ name: 'a' }] })).toEqual({
+    expect(chatTurnFactsFromSend({ attachments: [{}], providerHistory: [], reasoning: true, tools: [{ name: 'a' }] })).toEqual({
       hasImageInput: true,
       reasoningRequested: true,
       usesTools: true,
@@ -265,10 +265,96 @@ describe('shadow brain observer (Phase 8.0D-9)', () => {
 
     // The input is never mutated, and the facts object carries exactly the
     // three canonical keys.
-    const input = { attachments: [{}], reasoning: true, tools: [{ name: 'a' }] }
+    const input = { attachments: [{}], providerHistory: [], reasoning: true, tools: [{ name: 'a' }] }
     const before = JSON.stringify(input)
     expect(Object.keys(chatTurnFactsFromSend(input)).sort()).toEqual(['hasImageInput', 'reasoningRequested', 'usesTools'])
     expect(JSON.stringify(input)).toBe(before)
+  })
+
+  it('counts new images and eligible history without counting failed turns', () => {
+    const input = {
+      attachments: [{}, {}],
+      providerHistory: [imageTurn(1), imageTurn(4, { excludedFromProviderContext: true })],
+    }
+    const snapshot = JSON.stringify(input)
+    expect(chatTurnImageInputCount(input)).toBe(3)
+    expect(chatTurnImageInputCount({ attachments: [], providerHistory: [] })).toBe(0)
+    expect(JSON.stringify(input)).toBe(snapshot)
+  })
+
+  /** One stored user turn carrying exactly `count` image parts. */
+  function imageTurn(count: number, extra?: Record<string, unknown>) {
+    return {
+      role: 'user' as const,
+      content: [
+        { type: 'text' as const, text: 'look at this' },
+        ...Array.from({ length: count }, (_, index) => ({
+          type: 'image_url' as const,
+          image_url: { url: `data:image/png;base64,${index}` },
+        })),
+      ],
+      ...extra,
+    }
+  }
+
+  it('effective prompt: an image still in provider-visible history makes a text-only turn an image turn', () => {
+    // This is the Windows failure: a later text-only turn was routed to a
+    // text-only model while the same request still carried the earlier image.
+    const history = [
+      { role: 'system' as const, content: 'persona' },
+      imageTurn(1),
+      { role: 'assistant' as const, content: 'I see it', slices: [], tool_results: [] },
+    ]
+
+    expect(chatTurnFactsFromSend({
+      attachments: [],
+      providerHistory: history,
+      reasoning: false,
+      tools: [],
+    }).hasImageInput).toBe(true)
+  })
+
+  it('effective prompt: a text-only history leaves a text-only turn a text-only turn', () => {
+    const history = [
+      { role: 'system' as const, content: 'persona' },
+      { role: 'user' as const, content: 'hello' },
+      { role: 'assistant' as const, content: 'hi', slices: [], tool_results: [] },
+    ]
+
+    expect(chatTurnFactsFromSend({
+      attachments: [],
+      providerHistory: history,
+      reasoning: false,
+      tools: [],
+    }).hasImageInput).toBe(false)
+  })
+
+  it('effective prompt: provider-excluded failed turns and error bubbles contribute no image', () => {
+    // A failed image send stays in the record but is withheld from the prompt,
+    // so it must not make the NEXT turn an image turn either - the two
+    // definitions have to agree.
+    const history = [
+      imageTurn(1, { excludedFromProviderContext: true }),
+      { role: 'error' as const, content: 'Something went wrong' },
+    ]
+
+    expect(chatTurnFactsFromSend({
+      attachments: [],
+      providerHistory: history,
+      reasoning: false,
+      tools: [],
+    }).hasImageInput).toBe(false)
+  })
+
+  it('effective prompt: history never invents the other two facts', () => {
+    const history = [imageTurn(2)]
+
+    expect(chatTurnFactsFromSend({
+      attachments: [],
+      providerHistory: history,
+      reasoning: false,
+      tools: [],
+    })).toEqual({ hasImageInput: true, reasoningRequested: false, usesTools: false })
   })
 })
 

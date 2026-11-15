@@ -1,6 +1,11 @@
+import { join } from 'node:path'
+
 import { describe, expect, it, vi } from 'vitest'
 
 import { createLiaVoiceEngineService } from './voice-engine-service'
+
+/** Fake runtime home. Never touched on disk: the installer is a mock. */
+const RUNTIME_ROOT_FIXTURE = '/tmp/lia-runtimes'
 
 /**
  * Phase 7.9G: the launcher's Voice Engine surface/service. Proven with a
@@ -31,7 +36,7 @@ function makeDeps(overrides: {
     ? { voice: { engine: { preferred: overrides.preferredEngine } } }
     : {}
   const deps = {
-    effectiveHome: async () => overrides.root ?? '/tmp/lia-runtimes',
+    effectiveHome: async () => overrides.root ?? RUNTIME_ROOT_FIXTURE,
     inspector: async (_home: string, _platform?: string) => installed.value,
     installImpl: installImpl as never,
     onEvent: (event: string, detail?: string) => events.push({ detail, event }),
@@ -72,7 +77,7 @@ describe('createLiaVoiceEngineService (7.9G product Voice Engine surface)', () =
   })
 
   it('install: ONE action runs the ENGINE-owned installer on the ENGINE-declared layout, then state refreshes to ready', async () => {
-    const { deps, events, installImpl, installed } = makeDeps({ root: '/tmp/lia-runtimes' })
+    const { deps, events, installImpl, installed } = makeDeps({ root: RUNTIME_ROOT_FIXTURE })
     const service = createLiaVoiceEngineService(deps)
 
     const result = await service.install()
@@ -80,7 +85,11 @@ describe('createLiaVoiceEngineService (7.9G product Voice Engine surface)', () =
     // The layout comes from the engine's own authority - the service never
     // hand-composes a path.
     expect(installImpl).toHaveBeenCalledTimes(1)
-    expect(installImpl.mock.calls[0][0]).toMatchObject({ rootDir: '/tmp/lia-runtimes/kokoro' })
+    // Built with the SAME join the engine uses: resolveKokoroLayout composes
+    // `<home>/kokoro` through node:path, so the literal POSIX string can never
+    // match on Windows. Comparing through join keeps the assertion exact on
+    // every platform instead of POSIX-only.
+    expect(installImpl.mock.calls[0][0]).toMatchObject({ rootDir: join(RUNTIME_ROOT_FIXTURE, 'kokoro') })
     expect(events).toContainEqual({ detail: 'phase=installing', event: 'lia-app.voice-install' })
     expect(events).toContainEqual({ detail: 'phase=installing step=deps', event: 'lia-app.voice-install' })
     expect(events).toContainEqual({ detail: 'result=ready', event: 'lia-app.voice-install' })

@@ -15,6 +15,7 @@ import {
 } from '.'
 import { selectProviderMetadata } from '../../../libs/providers/metadata'
 import { useProviderConfigStore } from '../../../stores/providers/config'
+import { getProviderCredentialConfigPort } from '../../../stores/providers/credential-config-port'
 import { useProviderStore } from '../../../stores/providers/provider'
 
 const props = defineProps<{
@@ -25,6 +26,8 @@ const props = defineProps<{
   additionalSettings?: Record<string, any>
   placeholder?: string
 }>()
+
+const emit = defineEmits<{ configured: [value: boolean] }>()
 
 const { t } = useI18n()
 const router = useRouter()
@@ -62,7 +65,8 @@ onMounted(async () => {
   await providersStore.initializeProvider(props.providerId)
 
   // Initialize refs with current values
-  apiKey.value = providers.value[props.providerId]?.apiKey as string | undefined || ''
+  if (!getProviderCredentialConfigPort(props.providerId))
+    apiKey.value = providers.value[props.providerId]?.apiKey as string | undefined || ''
   baseUrl.value = providers.value[props.providerId]?.baseUrl as string | undefined || providerMetadata.value?.defaultConfig.baseUrl as string | undefined || ''
 })
 
@@ -87,7 +91,7 @@ function handleResetTranscriptionSettings() {
           :description="t('settings.pages.providers.common.section.basic.description')"
           :on-reset="handleResetTranscriptionSettings"
         >
-          <ProviderApiKeyInput v-model="apiKey" :provider-name="providerMetadata?.localizedName ?? ''" :placeholder="props.placeholder || 'API Key'" />
+          <ProviderApiKeyInput v-model="apiKey" :provider-id="props.providerId" :provider-name="providerMetadata?.localizedName ?? ''" :placeholder="props.placeholder || 'API Key'" @configured="emit('configured', $event)" />
           <!-- Slot for provider-specific basic settings -->
           <slot name="basic-settings" />
         </ProviderBasicSettings>

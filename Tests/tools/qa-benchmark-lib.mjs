@@ -44,7 +44,7 @@ export function nextBenchmarkRunId(a, b, c) {
   // Collision covers both local runs and publish staging, no deletion
   while (
     existsSync(nodePath.join(runsDir, id)) ||
-    existsSync(nodePath.join(REPO_ROOT, '.devkit-qa', 'benchmark-publish', id)) ||
+    existsSync(nodePath.join(REPO_ROOT, 'Tests', 'artifacts', 'benchmark-publish', id)) ||
     existsSync(nodePath.join(REPO_ROOT, 'Tests', 'benchmarks', id)) ||
     existsSync(nodePath.join(REPO_ROOT, 'Tests', 'runs', id))
   ) {

@@ -16,11 +16,12 @@ import { useProviderValidation } from '@proj-airi/stage-ui/composables/use-provi
 import { getDefinedProvider } from '@proj-airi/stage-ui/libs'
 import { useHearingStore } from '@proj-airi/stage-ui/stores/modules/hearing'
 import { useProviderConfigStore } from '@proj-airi/stage-ui/stores/providers/config'
+import { getProviderCredentialConfigPort } from '@proj-airi/stage-ui/stores/providers/credential-config-port'
 import { useProviderStore } from '@proj-airi/stage-ui/stores/providers/provider'
 import { FieldCombobox, FieldInput } from '@proj-airi/ui'
 import { computedAsync } from '@vueuse/core'
 import { storeToRefs } from 'pinia'
-import { computed, onMounted, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 
 const providerId = 'openai-compatible-audio-transcription'
 const hearingStore = useHearingStore()
@@ -71,7 +72,10 @@ const isLoadingModels = computed(() => {
 })
 
 // Check if API key is configured
-const apiKeyConfigured = computed(() => !!providers.value[providerId]?.apiKey)
+const nativeKeyConfigured = ref(false)
+const apiKeyConfigured = computed(() => getProviderCredentialConfigPort(providerId)
+  ? nativeKeyConfigured.value
+  : !!providers.value[providerId]?.apiKey)
 
 // Generate transcription
 async function handleGenerateTranscription(file: File) {
@@ -175,15 +179,15 @@ onMounted(async () => {
     model.value = 'whisper-1'
   }
   // Load models if API key and base URL are configured
-  if (apiKey.value && baseUrl.value) {
+  if (apiKeyConfigured.value && baseUrl.value) {
     await providersStore.loadModelsForConfiguredProviders()
     await providersStore.fetchModelsForProvider(providerId)
   }
 })
 
 // Watch for API key and base URL changes to reload models
-watch([apiKey, baseUrl], async ([newApiKey, newBaseUrl]) => {
-  if (newApiKey && newBaseUrl) {
+watch([apiKeyConfigured, baseUrl], async ([hasApiKey, newBaseUrl]) => {
+  if (hasApiKey && newBaseUrl) {
     await providersStore.fetchModelsForProvider(providerId)
   }
 })
@@ -210,8 +214,10 @@ watch(model, () => {
         >
           <ProviderApiKeyInput
             v-model="apiKey"
+            :provider-id="providerId"
             :provider-name="providerMetadata?.localizedName"
             :placeholder="apiKeyPlaceholder"
+            @configured="nativeKeyConfigured = $event"
           />
           <!-- Model selection: Use dropdown if models are available, otherwise use text input -->
           <FieldCombobox

@@ -42,6 +42,7 @@
       "@proj-airi/stage-shared/electron-renderer",
       "@webgpu/types"
     ],
+    "allowImportingTsExtensions": true,
     "allowJs": true,
     "strict": true,
     "skipLibCheck": true

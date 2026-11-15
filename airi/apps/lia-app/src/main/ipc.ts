@@ -1,7 +1,11 @@
-import type { LiaConfigUpdatePayload, LiaHost } from './lia-host'
+import type { LiaHost } from './lia-host'
 import type { LiaBootTimer } from './timing'
 
 import { ipcMain } from 'electron'
+
+import { isPublicCredentialReference } from '../../../../../lia/core/src/credentials/owner-channel'
+import { sanitizeConfigUpdate } from './config-update-sanitizer'
+import { AiStartBlockedError } from './lia-host'
 
 /**
  * The launcher's IPC surface (Phase 7 + 7.1). Plain `ipcMain.handle`
@@ -86,12 +90,36 @@ export function registerLiaIpc(host: LiaHost, timer: LiaBootTimer, extras: LiaIp
     return safe
   })
   ipcMain.handle('lia:secrets:presence', async (_event, providerId: string) => {
-    if (typeof providerId !== 'string' || providerId.length === 0 || providerId.length > 64)
+    if (typeof providerId !== 'string' || providerId.length === 0 || providerId.length > 64 || !isPublicCredentialReference(providerId, 'apiKey'))
       return false
     return host.vault.hasSecret(providerId, 'apiKey')
   })
   ipcMain.handle('lia:stage:state', () => host.stage.state())
-  ipcMain.handle('lia:stage:start', async () => await host.conversar())
+  // PROMPT-39: the AI Settings surface. The catalog is non-secret product
+  // metadata; each operation is bound to ONE catalog definition explicitly,
+  // so the renderer can never silently imply a provider.
+  ipcMain.handle('lia:ai:providers', () => host.aiConnection.catalog())
+  ipcMain.handle('lia:ai:connection:get', async (_event, providerId?: unknown) => {
+    try {
+      return await host.aiConnection.read(typeof providerId === 'string' ? providerId : undefined)
+    }
+    catch { return { ok: false, code: 'storage' } }
+  })
+  // The host owns the shared save/start interlock and checks Stage ownership
+  // after acquiring it, including callers outside this IPC handler.
+  ipcMain.handle('lia:ai:connection:save', (_event, input: unknown) => host.aiConnection.save(input))
+  ipcMain.handle('lia:ai:connection:models', (_event, providerId: unknown) => host.aiConnection.discover(providerId))
+  ipcMain.handle('lia:ai:connection:test', (_event, providerId: unknown) => host.aiConnection.probe(providerId))
+  ipcMain.handle('lia:stage:start', async () => {
+    try {
+      return { ok: true as const, state: await host.conversar() }
+    }
+    catch (error) {
+      if (error instanceof AiStartBlockedError)
+        return { ok: false as const, code: error.code }
+      throw error
+    }
+  })
   ipcMain.handle('lia:stage:stop', async () => {
     await host.stage.stop()
     return host.stage.state()
@@ -180,25 +208,6 @@ export function registerLiaIpc(host: LiaHost, timer: LiaBootTimer, extras: LiaIp
  * objects, and the secrets array on its own rail. Oversized or mistyped
  * fields are DROPPED - the core writer below stays the final validator.
  */
-function sanitizeConfigUpdate(payload: unknown): LiaConfigUpdatePayload {
-  const source = (payload !== null && typeof payload === 'object' ? payload : {}) as Record<string, unknown>
-  const secrets: LiaConfigUpdatePayload['secrets'] = []
-  if (Array.isArray(source.secrets)) {
-    for (const entry of source.secrets) {
-      if (entry === null || typeof entry !== 'object')
-        continue
-      const { key, scope, value } = entry as Record<string, unknown>
-      if (typeof scope !== 'string' || typeof key !== 'string' || typeof value !== 'string')
-        continue
-      if (scope.length === 0 || scope.length > 64 || key.length === 0 || key.length > 64 || value.length > 4096)
-        continue
-      secrets.push({ key, scope, value })
-    }
-  }
-  const update = (source.update !== null && typeof source.update === 'object' ? source.update : {}) as LiaConfigUpdatePayload['update']
-  return { secrets, update }
-}
-
 /** The voice import request, whittled to name + engine + picked sources. */
 function sanitizeVoiceImport(request: unknown): {
   engine?: string

@@ -20,6 +20,9 @@ lerna-debug.log*
 
 # AI Agents
 .claude/worktrees/
+# Junction on Windows points at .agents/skills; git sees it as a real folder
+# and would commit the vendored skills twice.
+.claude/skills/
 .superpowers/
 
 # Anything .local, especially for .env.local

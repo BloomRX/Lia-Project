@@ -1,3 +1,5 @@
+import { createStageWebPreferences } from '../secure-web-preferences'
+
 import type { Rectangle } from 'electron'
 import type { InferOutput } from 'valibot'
 
@@ -70,10 +72,7 @@ export async function setupDashboardWindow(params: {
     y: windowConfig?.y,
     show: false,
     icon,
-    webPreferences: {
-      preload: join(dirname(fileURLToPath(import.meta.url)), '../preload/index.mjs'),
-      sandbox: false,
-    },
+    webPreferences: createStageWebPreferences(join(dirname(fileURLToPath(import.meta.url)), '../preload/index.cjs')),
   })
 
   if (params.onWindowCreated) {

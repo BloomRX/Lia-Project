@@ -7,6 +7,7 @@ import { uniqBy } from 'es-toolkit'
 import { createSparkCommandTool, createWebSearchTools, debug, mcp } from '../../../tools'
 import { useModsServerChannelStore } from '../../mods/api/channel-server'
 import { useWebSearchStore } from '../../modules/web-search'
+import { toolNameFrom } from './tool-name'
 import { useLlmToolsStore } from './tools'
 
 type ToolSource = Tool[] | (() => Promise<Tool[]>)
@@ -60,19 +61,7 @@ export interface ResolveLlmToolsOptions {
   activeTools?: Tool[]
 }
 
-/**
- * Reads the provider-visible name from an xsai tool.
- */
-export function toolNameFrom(tool: Tool): string | undefined {
-  const candidate = tool as Tool & {
-    name?: string
-    function?: {
-      name?: string
-    }
-  }
-
-  return candidate.function?.name ?? candidate.name
-}
+export { toolNameFrom } from './tool-name'
 
 async function resolveToolSource(source: ToolSource): Promise<Tool[]> {
   return typeof source === 'function' ? await source() : source

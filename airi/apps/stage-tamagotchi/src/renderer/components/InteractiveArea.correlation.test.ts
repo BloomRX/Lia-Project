@@ -4,7 +4,7 @@ import { useChatStore } from '@proj-airi/stage-ui/stores/chat'
 import { useConsciousnessSettingsStore } from '@proj-airi/stage-ui/stores/modules/consciousness-settings'
 import { mount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createI18n } from 'vue-i18n'
 import { createMemoryHistory, createRouter } from 'vue-router'
 
@@ -26,6 +26,7 @@ import { artistryToolReferences } from '../stores/tools'
 const electron = vi.hoisted(() => ({
   brainInvoke: vi.fn(),
 }))
+const originalLocation = window.location.href
 
 const liaProviderMock = vi.hoisted(() => ({
   hasApiKey: vi.fn().mockResolvedValue(true),
@@ -119,6 +120,11 @@ async function attachImages(wrapper: Awaited<ReturnType<typeof renderArea>>['wra
 }
 
 beforeEach(() => {
+  const location = new URL(window.location.href)
+  location.searchParams.set('synced-leader', 'false')
+  location.searchParams.set('stage-runtime', 'minimal')
+  location.searchParams.set('lia-managed', 'true')
+  window.history.replaceState(null, '', location)
   vi.clearAllMocks()
   vi.stubGlobal('localStorage', createMemoryStorage())
   electron.brainInvoke.mockResolvedValue({ status: 'modeUnspecified' })
@@ -129,6 +135,10 @@ beforeEach(() => {
   // mechanism, so counting it proves generation happens once, at the seam.
   mintedIndex = 0
   minted = vi.spyOn(crypto, 'randomUUID').mockImplementation(() => MINTED_IDS[mintedIndex++] ?? MINTED_OVERFLOW)
+})
+
+afterEach(() => {
+  window.history.replaceState(null, '', originalLocation)
 })
 
 /**

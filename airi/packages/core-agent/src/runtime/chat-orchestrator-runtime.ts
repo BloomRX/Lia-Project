@@ -3,13 +3,14 @@ import type { CommonContentPart, Message, ToolMessage } from '@xsai/shared-chat'
 
 import type { AgentContextPort } from '../contracts/context-port'
 import type { AgentForegroundStreamPort } from '../contracts/stream-port'
-import type { ChatAssistantMessage, ChatHistoryItem, ChatSlices, ChatStreamEventContext, ChatToolReference, ContextMessage, ErrorMessage, StreamingAssistantMessage } from '../types/chat'
+import type { ChatAssistantMessage, ChatHistoryItem, ChatSlices, ChatStreamEventContext, ChatToolReference, ContextMessage, StreamingAssistantMessage } from '../types/chat'
 import type { LlmUsage, StreamEvent, StreamOptions } from '../types/llm'
 
 import { createQueue } from '@proj-airi/stream-kit'
 
 import { formatContextPromptText } from '../messages/context-prompt'
 import { formatTimePrefix } from '../messages/datetime-prefix'
+import { selectProviderContextMessages } from '../messages/provider-context'
 import { createChatHooks } from './agent-hooks'
 import { useLlmmarkerParser } from './llm-marker-parser'
 import { categorizeResponse, createStreamingCategorizer } from './response-categoriser'
@@ -492,10 +493,16 @@ export function createChatOrchestratorRuntime(deps: ChatOrchestratorRuntimeDeps)
     return fallbackCreatedAt
   }
 
-  function buildProviderMessages(sessionMessagesForSend: ChatHistoryItem[]): Array<Message | ErrorMessage> {
+  function buildProviderMessages(sessionMessagesForSend: ChatHistoryItem[]): Array<Message> {
     const nowTs = now()
 
-    return sessionMessagesForSend.flatMap<Message | ErrorMessage>((msg) => {
+    // Phase 8.0D-M3: the provider prompt is built from the provider-visible
+    // subset only. A user turn whose logical send failed, and every
+    // `role: 'error'` diagnostic bubble, stay in the stored conversation for
+    // the UI and for retry but are withheld here - so a failed image send can
+    // never re-enter a later request, and an error bubble is never re-authored
+    // into the prompt as synthetic user text.
+    return selectProviderContextMessages(sessionMessagesForSend).flatMap<Message>((msg) => {
       const { context: _context, id: _id, createdAt: _createdAt, tools: _tools, ...withoutContext } = msg
       const rawMessage = unwrapMessage(withoutContext)
 
@@ -705,7 +712,9 @@ export function createChatOrchestratorRuntime(deps: ChatOrchestratorRuntimeDeps)
           const speechOnly = categorizer.filterToSpeech(literal, streamPosition)
           streamPosition += literal.length
 
-          if (speechOnly.trim()) {
+          // Whitespace is part of the response, including when it arrives as
+          // its own safe literal. Keep it in storage and synchronized streams.
+          if (speechOnly.length > 0) {
             buildingMessage.content += speechOnly
 
             await hooks.emitTokenLiteralHooks(speechOnly, streamingMessageContext)
@@ -829,6 +838,7 @@ export function createChatOrchestratorRuntime(deps: ChatOrchestratorRuntimeDeps)
       await hooks.emitBeforeSendHooks(sendingMessage, streamingMessageContext)
 
       let fullText = ''
+      let receivedResponse = false
       const headers = (options.providerConfig?.headers || {}) as Record<string, string>
 
       if (abandonIfStale())
@@ -891,6 +901,7 @@ export function createChatOrchestratorRuntime(deps: ChatOrchestratorRuntimeDeps)
 
           switch (event.type) {
             case 'tool-call':
+              receivedResponse = true
               toolCallQueue.enqueue({
                 type: 'tool-call',
                 toolCall: event,
@@ -898,6 +909,7 @@ export function createChatOrchestratorRuntime(deps: ChatOrchestratorRuntimeDeps)
 
               break
             case 'tool-result':
+              receivedResponse = true
               toolCallQueue.enqueue({
                 type: 'tool-call-result',
                 id: event.toolCallId,
@@ -906,6 +918,7 @@ export function createChatOrchestratorRuntime(deps: ChatOrchestratorRuntimeDeps)
 
               break
             case 'tool-error':
+              receivedResponse = true
               toolCallQueue.enqueue({
                 type: 'tool-call-result',
                 id: event.toolCallId,
@@ -915,6 +928,7 @@ export function createChatOrchestratorRuntime(deps: ChatOrchestratorRuntimeDeps)
 
               break
             case 'text-delta':
+              receivedResponse ||= event.text.length > 0
               if (!llmFirstTokenEmitted) {
                 llmFirstTokenEmitted = true
                 deps.onLlmFirstToken?.({
@@ -927,6 +941,7 @@ export function createChatOrchestratorRuntime(deps: ChatOrchestratorRuntimeDeps)
               await parser.consume(event.text)
               break
             case 'reasoning-delta': {
+              receivedResponse ||= event.text.length > 0
               if (shouldAbort())
                 return
 
@@ -960,6 +975,11 @@ export function createChatOrchestratorRuntime(deps: ChatOrchestratorRuntimeDeps)
       await parser.end()
       if (abandonIfStale())
         return
+
+      // A transport-level success can contain only an end-of-stream marker.
+      // Report a failed round instead of success with no assistant response.
+      if (!receivedResponse && !providerTranscript?.length)
+        throw new Error('O serviço de IA terminou sem enviar uma resposta. Tente novamente.')
 
       buildingMessage.providerTranscript = providerTranscript
       deps.onAssistantResponseRendered?.({
@@ -1047,7 +1067,9 @@ export function createChatOrchestratorRuntime(deps: ChatOrchestratorRuntimeDeps)
       // replace the escaping error, and the treatment of this round stays
       // `failed` either way.
       terminalOutcome = 'failed'
-      console.error('Error sending message:', error)
+      // External failures may contain credentials, URLs or conversation data.
+      // Keep diagnostics to a closed stage label; the original error still escapes.
+      console.error('Error sending message:')
       deps.onMessageRoundFailed?.({
         ...correlation,
         source: sendSource,

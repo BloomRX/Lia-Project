@@ -5,6 +5,10 @@ import { createApp, h, nextTick, ref } from 'vue'
 
 import ControlsIslandAuthButton from './controls-island-auth-button.vue'
 
+import { electronAuthCancelled } from '../../../../shared/eventa'
+
+const listeners = new Map<unknown, () => void>()
+
 const authState = {
   isAuthenticated: ref(true),
   user: ref<{ name: string, image?: string }>({
@@ -21,7 +25,7 @@ vi.mock('@proj-airi/stage-ui/stores/auth', () => ({
 
 vi.mock('@proj-airi/electron-vueuse', () => ({
   useElectronEventaContext: () => ref({
-    on: vi.fn(),
+    on: (event: unknown, listener: () => void) => listeners.set(event, listener),
   }),
   useElectronEventaInvoke: () => vi.fn(),
 }))
@@ -45,6 +49,8 @@ describe('controlsIslandAuthButton', () => {
       host.remove()
     }
     mountedApps.length = 0
+    listeners.clear()
+    authState.isAuthenticated.value = true
     authState.user.value.image = 'https://example.com/broken-avatar.png'
   })
 
@@ -79,5 +85,17 @@ describe('controlsIslandAuthButton', () => {
     expect(nextImage).not.toBe(previousImage)
     expect(nextImage?.getAttribute('src')).toBe('https://example.com/new-avatar.png')
     expect(nextImage?.getAttribute('alt')).toBe('')
+  })
+
+  it('restores the login button after Main cancels this window’s attempt', async () => {
+    authState.isAuthenticated.value = false
+    const host = mountComponent()
+    host.querySelector('button')!.click()
+    await nextTick()
+    expect(host.textContent).toContain('tamagotchi.stage.controls-island.logging-in')
+
+    listeners.get(electronAuthCancelled)!()
+    await nextTick()
+    expect(host.querySelector('button')?.textContent).toContain('tamagotchi.stage.controls-island.login')
   })
 })

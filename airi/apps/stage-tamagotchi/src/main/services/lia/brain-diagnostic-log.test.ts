@@ -4,6 +4,7 @@ import type { LiaBrainExecutionIdentityFacts } from './brain-execution-identity-
 import type { LiaBrainTerminalObservationFacts } from './brain-execution-terminal-facts'
 import type { LiaBrainFinalSuccessfulExecutionFacts } from './brain-final-successful-execution-facts'
 import type { LiaBrainInitialRouteObservationFacts } from './brain-initial-route-facts'
+import type { LiaBrainRouteConformanceFacts } from './brain-route-conformance-facts'
 import type { LiaBrainSendTerminalObservationFacts } from './brain-send-terminal-facts'
 
 import { readdirSync, readFileSync } from 'node:fs'
@@ -80,12 +81,27 @@ function occurrences(line: string, token: string): number {
 }
 
 /**
- * The two siblings this suite never exercises, in their neutral factual
- * states. The composition always supplies all five, so a present entry must
- * carry them; the formatter reads neither, so no emitted token changes.
+ * The siblings this suite exercises only in their neutral factual states, in
+ * those states. The composition always supplies all of them, so a present
+ * entry must carry them.
+ *
+ * Phase 8.0D-M2: the initial-route sibling is now PRINTED when it retains an
+ * observation, and this neutral not-observed value is exactly the state that
+ * emits no token at all - which is why every pre-existing exact-line
+ * assertion in this file is still literally true.
  */
 const NOT_OBSERVED_INITIAL_ROUTE: LiaBrainInitialRouteObservationFacts = { status: 'initialRouteOverrideNotObserved' }
 const NOT_OBSERVED_FINAL_EXECUTION: LiaBrainFinalSuccessfulExecutionFacts = { status: 'sendTerminalNotObserved' }
+/**
+ * Phase 8.0D-10B-4D4C4-D2B10: the sixth sibling. The formatter deliberately does
+ * NOT print it, so every fixture uses one factual unavailability value.
+ */
+const NOT_OBSERVED_ROUTE_CONFORMANCE: LiaBrainRouteConformanceFacts = {
+  finalUnavailableReason: 'sendTerminalNotObserved',
+  initialUnavailableReason: 'initialRouteOverrideNotObserved',
+  status: 'routeComparisonUnavailable',
+  unavailableSide: 'both',
+}
 
 /**
  * One structured entry for an arbitrary factual state.
@@ -103,6 +119,7 @@ function entry(
   correlationId = 'X',
   terminalFacts: LiaBrainTerminalObservationFacts = ZERO_TERMINALS,
   sendTerminalFacts: LiaBrainSendTerminalObservationFacts = {},
+  initialRouteOverrideFacts: LiaBrainInitialRouteObservationFacts = NOT_OBSERVED_INITIAL_ROUTE,
 ): LiaBrainDiagnosticEntry {
   return facts.status === 'correlationNotObserved'
     ? { correlationId, facts }
@@ -110,7 +127,8 @@ function entry(
         correlationId,
         facts,
         finalSuccessfulExecutionFacts: NOT_OBSERVED_FINAL_EXECUTION,
-        initialRouteOverrideFacts: NOT_OBSERVED_INITIAL_ROUTE,
+        initialRouteOverrideFacts,
+        routeConformanceFacts: NOT_OBSERVED_ROUTE_CONFORMANCE,
         sendTerminalFacts,
         terminalFacts,
       }
@@ -460,6 +478,7 @@ describe('lia brain diagnostic log - terminal counts (Phase 8.0D-10B-4D4C3B2-B4)
       facts,
       finalSuccessfulExecutionFacts: NOT_OBSERVED_FINAL_EXECUTION,
       initialRouteOverrideFacts: NOT_OBSERVED_INITIAL_ROUTE,
+      routeConformanceFacts: NOT_OBSERVED_ROUTE_CONFORMANCE,
       sendTerminalFacts,
       terminalFacts,
     }
@@ -1054,5 +1073,148 @@ describe('lia brain diagnostic log - source invariants (Phase 8.0D-10B-4D2B)', (
       'eventa:event:lia:brain:send-terminal-observation',
       'eventa:invoke:lia:brain:chat-decision',
     ])
+  })
+})
+
+describe('diagnostic log - the route-conformance sibling is structured-only (Phase 8.0D-10B-4D4C4-D2B10)', () => {
+  /** The present arm only - so the sixth sibling is statically guaranteed present. */
+  type PresentEntry = Extract<LiaBrainDiagnosticEntry, { terminalFacts: LiaBrainTerminalObservationFacts }>
+  const baseEntry = (routeConformanceFacts: LiaBrainRouteConformanceFacts): PresentEntry => ({
+    correlationId: 'X',
+    facts: { attempts: [attempt()], status: 'decisionNotObserved' },
+    finalSuccessfulExecutionFacts: NOT_OBSERVED_FINAL_EXECUTION,
+    initialRouteOverrideFacts: NOT_OBSERVED_INITIAL_ROUTE,
+    routeConformanceFacts,
+    sendTerminalFacts: {},
+    terminalFacts: ZERO_TERMINALS,
+  })
+
+  it('the formatted line is byte-identical for every conformance state', () => {
+    const expected = `[LIA-BRAIN-DIAG] correlationId="X" status="decisionNotObserved" attempt0.arrivalIndex=0 attempt0.roundId="A" attempt0.providerId="groq" attempt0.modelId="openai/gpt-oss-120b" ${ZERO_COUNTS}`
+    const states: LiaBrainRouteConformanceFacts[] = [
+      NOT_OBSERVED_ROUTE_CONFORMANCE,
+      { initialUnavailableReason: 'noInitialRouteOverride', status: 'routeComparisonUnavailable', unavailableSide: 'initial' },
+      { finalUnavailableReason: 'sendFailed', status: 'routeComparisonUnavailable', unavailableSide: 'final' },
+      { modelMatches: true, providerMatches: true, status: 'routeIdentityMatched' },
+      { modelMatches: false, providerMatches: true, status: 'routeIdentityDiffered' },
+      { modelMatches: true, providerMatches: false, status: 'routeIdentityDiffered' },
+      { modelMatches: false, providerMatches: false, status: 'routeIdentityDiffered' },
+    ]
+    for (const [index, state] of states.entries()) {
+      const line = formatLiaBrainDiagnosticEntry(baseEntry(state))
+      expect(line, `state ${index}`).toBe(expected)
+      expect(line.split('\n'), `state ${index}`).toHaveLength(1)
+    }
+  })
+
+  it('no conformance vocabulary or equality boolean leaks into the text', () => {
+    const line = formatLiaBrainDiagnosticEntry(baseEntry({ modelMatches: true, providerMatches: true, status: 'routeIdentityMatched' }))
+    for (const forbidden of ['routeConformance', 'routeIdentityMatched', 'routeIdentityDiffered', 'routeComparisonUnavailable', 'providerMatches', 'modelMatches', 'unavailableSide', 'initialUnavailableReason', 'finalUnavailableReason'])
+      expect(line, forbidden).not.toContain(forbidden)
+  })
+
+  it('the formatter source names no conformance concept and needed no change', () => {
+    const source = normalizeLineEndings(readFileSync(fileURLToPath(new URL('./brain-diagnostic-log.ts', import.meta.url)), 'utf-8'))
+    expect(source).not.toMatch(/routeConformanceFacts|LiaBrainRouteConformanceFacts|routeIdentityMatched|routeIdentityDiffered|routeComparisonUnavailable|providerMatches|modelMatches|unavailableSide/)
+  })
+
+  it('the structured entry the observer forwards DOES carry the sibling - only the text does not', () => {
+    const matched = baseEntry({ modelMatches: true, providerMatches: true, status: 'routeIdentityMatched' })
+    expect(matched.routeConformanceFacts).toEqual({ modelMatches: true, providerMatches: true, status: 'routeIdentityMatched' })
+    expect(JSON.stringify(matched)).toContain('routeIdentityMatched')
+    expect(formatLiaBrainDiagnosticEntry(matched)).not.toContain('routeIdentityMatched')
+  })
+})
+
+/**
+ * Phase 8.0D-M2: the authoritative initial routeOverride observation.
+ *
+ * This is the field that answers the question the first Windows gate of the
+ * multimodal route could not answer from the line alone: did the Brain hand
+ * the execution a route at all? Every value is copied verbatim from the
+ * already-derived projection - the formatter never re-derives a route, never
+ * compares it with the expectation and never turns the difference into a
+ * verdict.
+ */
+describe('lia brain diagnostic log - authoritative initial routeOverride (Phase 8.0D-M2)', () => {
+  const IDENTITY_ONLY = '[LIA-BRAIN-DIAG] correlationId="X" status="noBrainRouteSelected" attempt0.arrivalIndex=0 attempt0.roundId="A" attempt0.providerId="groq" attempt0.modelId="openai/gpt-oss-120b"'
+
+  it('m1: an observed routeOverride is appended LAST, after the counts and the settlement', () => {
+    const line = formatLiaBrainDiagnosticEntry(entry(
+      { attempts: [attempt()], status: 'noBrainRouteSelected' },
+      'X',
+      ZERO_TERMINALS,
+      { sendTerminalOutcome: 'failed' },
+      { modelId: 'qwen/qwen3.8-27b', providerId: 'groq', status: 'initialRouteOverrideObserved' },
+    ))
+
+    expect(line).toBe(
+      `${IDENTITY_ONLY} ${ZERO_COUNTS} sendTerminalOutcome="failed" initialRouteOverrideStatus="initialRouteOverrideObserved" initialRouteOverrideProviderId="groq" initialRouteOverrideModelId="qwen/qwen3.8-27b"`,
+    )
+    // Exactly once each, and after every pre-existing field.
+    for (const field of ['initialRouteOverrideStatus=', 'initialRouteOverrideProviderId=', 'initialRouteOverrideModelId='])
+      expect(occurrences(line, field), field).toBe(1)
+    expect(line.indexOf('initialRouteOverrideStatus=')).toBeGreaterThan(line.indexOf('sendTerminalOutcome='))
+    expect(line.indexOf('sendTerminalOutcome=')).toBeGreaterThan(line.indexOf('abandonedTerminalObservationCount='))
+  })
+
+  it('m2: an observed-ABSENT routeOverride is reported as a fact, with no identities invented', () => {
+    const line = formatLiaBrainDiagnosticEntry(entry(
+      { attempts: [attempt()], status: 'noBrainRouteSelected' },
+      'X',
+      ZERO_TERMINALS,
+      {},
+      { status: 'noInitialRouteOverride' },
+    ))
+
+    expect(line).toBe(`${IDENTITY_ONLY} ${ZERO_COUNTS} initialRouteOverrideStatus="noInitialRouteOverride"`)
+    expect(line).not.toMatch(/initialRouteOverrideProviderId|initialRouteOverrideModelId/)
+  })
+
+  it('m3: the not-observed state emits no token at all - absence is never printed as a value', () => {
+    const line = formatLiaBrainDiagnosticEntry(entry({ attempts: [attempt()], status: 'noBrainRouteSelected' }))
+
+    expect(line).toBe(`${IDENTITY_ONLY} ${ZERO_COUNTS}`)
+    expect(line).not.toContain('initialRouteOverride')
+    // No placeholder of any kind stands in for the absent observation.
+    expect(line).not.toMatch(/initialRouteOverride\w*=(?:""|null|undefined|pending|none|0)/)
+  })
+
+  it('m4: the absence state still carries no terminal member and prints no routeOverride field', () => {
+    const absent = entry({ status: 'correlationNotObserved' }, 'logical-send-X')
+    expect('initialRouteOverrideFacts' in absent).toBe(false)
+    expect(formatLiaBrainDiagnosticEntry(absent)).toBe('[LIA-BRAIN-DIAG] correlationId="logical-send-X" status="correlationNotObserved"')
+  })
+
+  it('m5: the two identities are JSON-quoted verbatim, so a hostile id cannot break the line', () => {
+    const hostile = 'a" b\\ c'
+    const line = formatLiaBrainDiagnosticEntry(entry(
+      { attempts: [], status: 'decisionNotObserved' },
+      'X',
+      ZERO_TERMINALS,
+      {},
+      { modelId: hostile, providerId: hostile, status: 'initialRouteOverrideObserved' },
+    ))
+
+    expect(line).toContain(`initialRouteOverrideProviderId=${JSON.stringify(hostile)}`)
+    expect(line).toContain(`initialRouteOverrideModelId=${JSON.stringify(hostile)}`)
+    // One line, always.
+    expect(line.split('\n')).toHaveLength(1)
+  })
+
+  it('m6: no verdict, comparison or recommendation vocabulary is introduced', () => {
+    const line = formatLiaBrainDiagnosticEntry(entry(
+      {
+        attempts: [{ arrivalIndex: 0, modelId: GROQ_MODEL_ID, modelIdentityEqual: true, providerId: GROQ_ENGINE_ID, providerIdentityEqual: true, roundId: 'A' }],
+        expected: { engineId: 'groq', modelId: 'openai/gpt-oss-120b', providerId: 'groq' },
+        status: 'attemptIdentityFacts',
+      },
+      'X',
+      ZERO_TERMINALS,
+      {},
+      { modelId: 'qwen/qwen3.8-27b', providerId: 'groq', status: 'initialRouteOverrideObserved' },
+    ))
+
+    expect(line).not.toMatch(/Matches|Match\b|mismatch|divergence|aligned|correct|incorrect|success|failure|verdict|score|recommendation|expectedRouteOverride/i)
   })
 })

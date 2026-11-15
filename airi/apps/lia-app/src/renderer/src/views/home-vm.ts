@@ -48,6 +48,26 @@ export function homeConversationStartingVm(status: unknown): boolean {
   return (status as Record<string, any> | undefined)?.stage?.state?.phase === 'starting'
 }
 
+export function homeConversationStoppingVm(status: unknown): boolean {
+  return (status as Record<string, any> | undefined)?.stage?.state?.phase === 'stopping'
+}
+
+export function homeConversationStopRetryVm(status: unknown): boolean {
+  const state = (status as Record<string, any> | undefined)?.stage?.state
+  return state?.phase === 'error' && typeof state.pid === 'number' && state.pid > 0
+}
+
+export function homeConversationStopVisibleVm(status: unknown): boolean {
+  const phase = (status as Record<string, any> | undefined)?.stage?.state?.phase
+  return phase === 'running' || phase === 'stopping' || homeConversationStopRetryVm(status)
+}
+
+export function homeConversationStopMessagesVm(language?: string) {
+  return language?.startsWith('en')
+    ? { label: 'End conversation', stopping: 'Ending…', success: 'Conversation ended.', error: 'Could not end the conversation. Try again.' }
+    : { label: 'Encerrar conversa', stopping: 'Encerrando…', success: 'Conversa encerrada.', error: 'Não foi possível encerrar a conversa. Tente novamente.' }
+}
+
 // ---------------------------------------------------------------------------
 // Phase 8.0A-5: the minimal first-run choice. The marker is the canonical
 // product-config `setup.completed` flag (7.9H-B3): absent or false means the

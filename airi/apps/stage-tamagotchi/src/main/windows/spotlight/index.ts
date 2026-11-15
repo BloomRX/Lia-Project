@@ -1,3 +1,5 @@
+import { createStageWebPreferences } from '../secure-web-preferences'
+
 import type { ShortcutAccelerator, ShortcutBinding } from '@proj-airi/stage-shared/global-shortcut'
 
 import type { globalAppConfigSchema } from '../../configs/global'
@@ -112,10 +114,7 @@ export function setupSpotlightWindowManager(params: {
       skipTaskbar: true,
       alwaysOnTop: true,
       icon,
-      webPreferences: {
-        preload: join(getElectronMainDirname(), '../preload/index.mjs'),
-        sandbox: false,
-      },
+      webPreferences: createStageWebPreferences(join(getElectronMainDirname(), '../preload/index.cjs')),
     })
 
     protectPrivilegedWindowNavigation(window)

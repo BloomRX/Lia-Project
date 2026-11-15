@@ -1,3 +1,5 @@
+import { createStageWebPreferences } from '../secure-web-preferences'
+
 import type { BrowserWindow } from 'electron'
 
 import type { RequestWindowPayload } from '../../../shared/eventa'
@@ -34,10 +36,7 @@ export function setupNoticeWindowManager(params: {
       height: 600,
       show: false,
       icon,
-      webPreferences: {
-        preload: join(getElectronMainDirname(), '../preload/index.mjs'),
-        sandbox: false,
-      },
+      webPreferences: createStageWebPreferences(join(getElectronMainDirname(), '../preload/index.cjs')),
     })
 
     protectPrivilegedWindowNavigation(window)

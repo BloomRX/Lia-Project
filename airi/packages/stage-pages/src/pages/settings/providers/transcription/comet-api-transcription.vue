@@ -16,11 +16,12 @@ import { useProviderValidation } from '@proj-airi/stage-ui/composables/use-provi
 import { getDefinedProvider } from '@proj-airi/stage-ui/libs'
 import { useHearingStore } from '@proj-airi/stage-ui/stores/modules/hearing'
 import { useProviderConfigStore } from '@proj-airi/stage-ui/stores/providers/config'
+import { getProviderCredentialConfigPort } from '@proj-airi/stage-ui/stores/providers/credential-config-port'
 import { useProviderStore } from '@proj-airi/stage-ui/stores/providers/provider'
 import { FieldInput } from '@proj-airi/ui'
 import { computedAsync } from '@vueuse/core'
 import { storeToRefs } from 'pinia'
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 
 const providerId = 'comet-api-transcription'
 const hearingStore = useHearingStore()
@@ -57,7 +58,10 @@ const model = computed({
 })
 
 // Check if API key is configured
-const apiKeyConfigured = computed(() => !!providers.value[providerId]?.apiKey)
+const nativeKeyConfigured = ref(false)
+const apiKeyConfigured = computed(() => getProviderCredentialConfigPort(providerId)
+  ? nativeKeyConfigured.value
+  : !!providers.value[providerId]?.apiKey)
 
 // Generate transcription
 async function handleGenerateTranscription(file: File) {
@@ -116,8 +120,10 @@ const apiKeyPlaceholder = computedAsync(async () => {
       >
         <ProviderApiKeyInput
           v-model="apiKey"
+          :provider-id="providerId"
           :provider-name="providerMetadata?.localizedName"
           :placeholder="apiKeyPlaceholder"
+          @configured="nativeKeyConfigured = $event"
         />
         <FieldInput
           v-model="model"

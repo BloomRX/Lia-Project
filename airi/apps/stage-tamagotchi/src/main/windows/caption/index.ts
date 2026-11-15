@@ -1,3 +1,5 @@
+import { createStageWebPreferences } from '../secure-web-preferences'
+
 import type { BrowserWindow, BrowserWindowConstructorOptions, Rectangle } from 'electron'
 import type { InferOutput } from 'valibot'
 
@@ -110,10 +112,7 @@ function createCaptionWindow(options?: BrowserWindowConstructorOptions) {
     height: 180,
     show: false,
     icon,
-    webPreferences: {
-      preload: join(getElectronMainDirname(), '../preload/index.mjs'),
-      sandbox: false,
-    },
+    webPreferences: createStageWebPreferences(join(getElectronMainDirname(), '../preload/index.cjs')),
     // Thanks to [@HeartArmy](https://github.com/HeartArmy) for the tip implementation.
     //
     // https://github.com/electron/electron/issues/10078#issuecomment-3410164802

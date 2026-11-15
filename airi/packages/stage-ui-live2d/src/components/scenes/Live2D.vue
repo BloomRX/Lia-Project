@@ -23,6 +23,8 @@ const props = withDefaults(defineProps<{
   nowSpeaking?: boolean
   themeColorsHue?: number
   themeColorsHueDynamic?: boolean
+  neutralShadow?: boolean
+  fitFullBody?: boolean
 }>(), {
   paused: false,
   mouthOpenSize: 0,
@@ -112,6 +114,7 @@ defineExpose({
       <Live2DModel
         ref="live2dModelRef"
         v-model:state="componentStateModel"
+        :fit-full-body="props.fitFullBody"
         :model-src="modelSrc"
         :model-id="modelId"
         :app="app"
@@ -131,6 +134,7 @@ defineExpose({
         :live2d-force-auto-blink-enabled="live2dForceAutoBlinkEnabled"
         :live2d-expression-enabled="live2dExpressionEnabled"
         :live2d-shadow-enabled="live2dShadowEnabled"
+        :neutral-shadow="neutralShadow"
         @error="emit('error', $event)"
       />
     </Live2DCanvas>

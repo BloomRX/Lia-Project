@@ -11,7 +11,7 @@ import { satisfiesBrainCapabilities } from '../capabilities'
 import { createBrainEngineRegistry, modelsForEngine } from '../engine-registry'
 import { eligibleBrainModelRoutes } from '../routes'
 import { decideBrainRouteFromProductState } from '../runtime'
-import { GROQ_BRAIN_ENGINE_ID, GROQ_BRAIN_MODEL_ID, groqBrainDescriptors } from './groq'
+import { GROQ_BRAIN_ENGINE_ID, GROQ_BRAIN_MODEL_ID, GROQ_BRAIN_VISION_MODEL_ID, groqBrainDescriptors } from './groq'
 
 /**
  * Phase 8.0D-2: the current-brain adapter - identity, association,
@@ -47,14 +47,17 @@ describe('current brain descriptor adapter (8.0D-2)', () => {
     expect(engine.availability).toBe('available')
   })
 
-  it('b: exactly the intended current model is described', () => {
+  it('b: exactly the two intended models are described, text brain first', () => {
     const { models } = groqBrainDescriptors()
-    expect(models).toHaveLength(1)
-    const [model] = models
-    expect(model.id).toBe('openai/gpt-oss-120b')
-    expect(model.name).toBe('GPT-OSS 120B')
+    expect(models.map(model => model.id)).toEqual([
+      'openai/gpt-oss-120b',
+      'qwen/qwen3.8-27b',
+    ])
+    expect(models[0].name).toBe('GPT-OSS 120B')
+    expect(models[1].name).toBe('Qwen3.8 27B')
     // No hypothetical or future models, no metadata inventing.
-    expect(model.metadata).toBeUndefined()
+    for (const model of models)
+      expect(model.metadata).toBeUndefined()
   })
 
   it('c/D: engine and model ids are stable and non-empty across calls', () => {
@@ -87,10 +90,10 @@ describe('current brain descriptor adapter (8.0D-2)', () => {
     expect(models[0].engineId).toBe(engines[0].id)
   })
 
-  it('f: the engine declares exactly this model in modelIds', () => {
+  it('f: the engine declares exactly its two models in modelIds', () => {
     const { engines, models } = groqBrainDescriptors()
-    expect(engines[0].modelIds).toEqual([models[0].id])
-    expect(engines[0].modelIds).toContain(GROQ_BRAIN_MODEL_ID)
+    expect(engines[0].modelIds).toEqual(models.map(model => model.id))
+    expect(engines[0].modelIds).toEqual([GROQ_BRAIN_MODEL_ID, GROQ_BRAIN_VISION_MODEL_ID])
   })
 
   it('g: all nine capability flags are explicitly present on both descriptors', () => {
@@ -124,8 +127,20 @@ describe('current brain descriptor adapter (8.0D-2)', () => {
       videoInput: false,
     }
     const { engines, models } = groqBrainDescriptors()
-    expect(engines[0].capabilities).toEqual(expected)
+    // The text chat brain is exactly the audited set.
     expect(models[0].capabilities).toEqual(expected)
+    // The engine declares the SUPERSET: identical except image input, which
+    // only the vision route serves. routes.ts judges engine AND model by their
+    // OWN descriptors, so the engine must not under-declare or its most
+    // capable model becomes unreachable.
+    expect(engines[0].capabilities).toEqual({ ...expected, imageInput: true })
+    // The vision route is the same set plus image input, and nothing else
+    // widens - audio, video and realtime stay false.
+    expect(models[1].capabilities).toEqual({ ...expected, imageInput: true })
+    expect(models[1].capabilities.audioInput).toBe(false)
+    expect(models[1].capabilities.videoInput).toBe(false)
+    expect(models[1].capabilities.realtime).toBe(false)
+    expect(models[1].capabilities.audioOutput).toBe(false)
 
     // Evidence for the reasoning flag: declared BY THE PROVIDER DEFINITION.
     const provider = readSource('../../../../stage-ui/src/libs/providers/providers/groq/index.ts')
@@ -161,15 +176,16 @@ describe('current brain descriptor adapter (8.0D-2)', () => {
     // Models are reached through the engine's declared ids (the canonical
     // helper), which is exactly the association this adapter must satisfy.
     const served = modelsForEngine(models, GROQ_BRAIN_ENGINE_ID)
-    expect(served.map(entry => entry.id)).toEqual([GROQ_BRAIN_MODEL_ID])
+    expect(served.map(entry => entry.id)).toEqual([GROQ_BRAIN_MODEL_ID, GROQ_BRAIN_VISION_MODEL_ID])
   })
 
   it('j: the descriptor set works with eligibleBrainModelRoutes()', () => {
     const { engines, models } = groqBrainDescriptors()
     const routes = eligibleBrainModelRoutes(engines, models, { required: ['textInput', 'textOutput'] })
-    expect(routes).toHaveLength(1)
+    // A text-only turn keeps BOTH routes eligible, in model order; which one
+    // runs is the policy's job, not the eligibility layer's.
+    expect(routes.map(route => route.model.id)).toEqual([GROQ_BRAIN_MODEL_ID, GROQ_BRAIN_VISION_MODEL_ID])
     expect(routes[0].engine.id).toBe(GROQ_BRAIN_ENGINE_ID)
-    expect(routes[0].model.id).toBe(GROQ_BRAIN_MODEL_ID)
 
     // The runtime decision layer consumes the same descriptors, observationally.
     const decision = decideBrainRouteFromProductState({
@@ -203,26 +219,40 @@ describe('current brain descriptor adapter (8.0D-2)', () => {
     expect(automatic.selection.status).toBe('selected')
   })
 
-  it('k: unsupported multimodal capabilities never become eligible accidentally', () => {
+  it('k: capabilities neither model has never become eligible accidentally', () => {
     const { engines, models } = groqBrainDescriptors()
-    const unsupported: readonly LiaBrainCapability[] = ['audioInput', 'audioOutput', 'imageInput', 'realtime', 'videoInput']
+    const unsupported: readonly LiaBrainCapability[] = ['audioInput', 'audioOutput', 'realtime', 'videoInput']
 
     for (const flag of unsupported) {
       // Eligible for nothing that needs this capability...
       expect(eligibleBrainModelRoutes(engines, models, { required: [flag] }), flag).toEqual([])
       // ...and not even alongside a capability that IS supported.
       expect(eligibleBrainModelRoutes(engines, models, { required: ['textInput', flag] }), flag).toEqual([])
-      // Directly: the canonical eligibility helper says no.
-      expect(satisfiesBrainCapabilities(models[0].capabilities, { required: [flag] }), flag).toBe(false)
+      // Directly: the canonical eligibility helper says no for either model.
+      for (const model of models)
+        expect(satisfiesBrainCapabilities(model.capabilities, { required: [flag] }), flag).toBe(false)
     }
     // The supported set still routes - the truth is selective, not blanket.
-    expect(eligibleBrainModelRoutes(engines, models, { required: ['textInput', 'reasoning', 'toolCalling'] })).toHaveLength(1)
+    expect(eligibleBrainModelRoutes(engines, models, { required: ['textInput', 'reasoning', 'toolCalling'] })).toHaveLength(2)
+  })
+
+  it('k2: image input is served by the vision route alone, never by the text brain', () => {
+    const { engines, models } = groqBrainDescriptors()
+
+    // The engine passes (superset), so the decision is made per model.
+    expect(satisfiesBrainCapabilities(engines[0].capabilities, { required: ['imageInput'] })).toBe(true)
+    expect(satisfiesBrainCapabilities(models[0].capabilities, { required: ['imageInput'] }), 'text brain').toBe(false)
+    expect(satisfiesBrainCapabilities(models[1].capabilities, { required: ['imageInput'] }), 'vision route').toBe(true)
+
+    const routes = eligibleBrainModelRoutes(engines, models, { required: ['textInput', 'imageInput', 'textOutput'] })
+    expect(routes.map(route => route.model.id)).toEqual([GROQ_BRAIN_VISION_MODEL_ID])
   })
 
   it('l: Brain audioOutput is never inferred from Lia TTS', () => {
     const { engines, models } = groqBrainDescriptors()
     expect(engines[0].capabilities.audioOutput).toBe(false)
-    expect(models[0].capabilities.audioOutput).toBe(false)
+    for (const model of models)
+      expect(model.capabilities.audioOutput).toBe(false)
     // The adapter derives nothing from the voice layer.
     const source = readSource('./groq.ts')
     expect(source).not.toMatch(/voice|tts|speech|kokoro|alltalk/i)

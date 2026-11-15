@@ -5,7 +5,7 @@ import { useChatStore } from '@proj-airi/stage-ui/stores/chat'
 import { useConsciousnessSettingsStore } from '@proj-airi/stage-ui/stores/modules/consciousness-settings'
 import { mount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createI18n } from 'vue-i18n'
 import { createMemoryHistory, createRouter } from 'vue-router'
 
@@ -26,6 +26,7 @@ import { artistryToolReferences } from '../stores/tools'
 const electron = vi.hoisted(() => ({
   brainInvoke: vi.fn(),
 }))
+const originalLocation = window.location.href
 
 const liaProviderMock = vi.hoisted(() => ({
   hasApiKey: vi.fn(),
@@ -133,12 +134,21 @@ function observedCorrelationId(): string | undefined {
 }
 
 beforeEach(() => {
+  const location = new URL(window.location.href)
+  location.searchParams.set('synced-leader', 'false')
+  location.searchParams.set('stage-runtime', 'minimal')
+  location.searchParams.set('lia-managed', 'true')
+  window.history.replaceState(null, '', location)
   vi.clearAllMocks()
   vi.stubGlobal('localStorage', createMemoryStorage())
   electron.brainInvoke.mockResolvedValue(makeAutomaticSelected())
   liaProviderMock.hasApiKey.mockResolvedValue(true)
   localStorage.clear()
   vi.spyOn(console, 'info').mockImplementation(() => {})
+})
+
+afterEach(() => {
+  window.history.replaceState(null, '', originalLocation)
 })
 
 describe('interactive area authoritative Lia route (Phase 8.0D-10B-4D4C4-D2B2-D2)', () => {

@@ -220,12 +220,22 @@ git remote -v                                # origin=Lia, upstream=airi
 
 ## 11. Histórico de mudanças
 
+Em 22/10/2026, corrigida perda de whitespace no orchestrator do core-agent
+vendado: uma guarda descartava literais compostos apenas de espaços/quebras.
+Diff de produção de quatro linhas, com RED no harness real, contraprova,
+145 testes e UI Windows com transporte sintético. Não foi possível encapsular
+na Lia: a perda ocorria antes dos hooks e da persistência. Sem alteração de
+filtro de reasoning ou implementação TTS. Detalhes e limites no
+[relatório de streaming](../product/RELEASE-WINDOWS-2026-10-22.md).
+
 | Data | Arquivo/item | Mudança |
 |---|---|---|
+| 23/10/2026 | Stage Chat query/context e stage-ui Chat presentation | Reutilizado marcador de gerenciamento do main e contrato auto/visible/hidden para ocultar reasoning na Lia, preservando standalone e dados; testes e gate Windows restrito no relatório de 23/10 |
+| 22/10/2026 | `stage-ui` Chat/send-error e locales stage | Catálogo seguro antes da persistência, tradução reativa na UI/cópia, retry preservado. RED, contraprova, testes e Windows com transporte sintético no relatório de 22/10; sem alteração de fallback/TTS |
 | 07/09/2026 | `airi/` (subtree) | Integrado AIRI v0.12.0-beta.5 (commit `2c1e223c…`) via `git subtree add --squash` |
 | 07/09/2026 | `devkit.json` | `airi/` em `ignore_dirs` (baseline vendado fora do escopo de validação/commit do DevKit) |
 | 07/09/2026 | `docs/upstream/AIRI-INTEGRATION.md` | Atualizado com método, estrutura, verificações e procedimento |
 | 07/09/2026 | `docs/upstream/AIRI-INTEGRATION.md` | Registrados resultados reais (install OK, typecheck 56/57, achado upstream `d8e62f12`) |
 | 07/09/2026 | `docs/upstream/AIRI-INTEGRATION.md` | Registrados `build:web` OK (22/22) e `dev:tamagotchi` OK (janela abriu) → **baseline AIRI validado no runtime desktop** |
 
-Nenhum código do AIRI foi modificado; nenhuma feature/UI/provider/installer da Lia foi iniciada; nenhuma dependência instalada nesta etapa.
+Na etapa inicial M0-A, nenhum código do AIRI foi modificado e nenhuma feature/UI/provider/installer da Lia foi iniciada. As adaptações posteriores estão registradas acima.

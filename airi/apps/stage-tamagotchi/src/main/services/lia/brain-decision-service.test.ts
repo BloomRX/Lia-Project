@@ -142,10 +142,17 @@ async function register(
   brain: unknown,
   correlationStore: unknown = correlationStoreDouble(),
   correlationObserver: unknown = correlationObserverDouble(),
+  decisionLog?: (decision: LiaBrainRoutingDecision) => void,
 ): Promise<Handler> {
   mocks.handlers.clear()
   const { registerLiaBrainDecisionBridge } = await import('./brain-decision-service')
-  registerLiaBrainDecisionBridge({ brain: brain as never, context: {} as never, correlationStore: correlationStore as never, correlationObserver: correlationObserver as never })
+  registerLiaBrainDecisionBridge({
+    brain: brain as never,
+    context: {} as never,
+    correlationStore: correlationStore as never,
+    correlationObserver: correlationObserver as never,
+    ...(decisionLog === undefined ? {} : { decisionLog }),
+  })
   const handler = mocks.handlers.get(channels.decision)
   expect(handler).toBeTypeOf('function')
   return handler as Handler
@@ -166,6 +173,14 @@ function realServiceBridge(snapshot: unknown): Promise<Handler> {
   return register(createLiaBrainService({ liaProductConfig: configOwner(snapshot) }))
 }
 
+/** The same real-service bridge, with a decision sink injected. */
+function realServiceBridgeWithSink(
+  snapshot: unknown,
+  decisionLog: (decision: LiaBrainRoutingDecision) => void,
+): Promise<Handler> {
+  return register(createLiaBrainService({ liaProductConfig: configOwner(snapshot) }), correlationStoreDouble(), correlationObserverDouble(), decisionLog)
+}
+
 /** Narrowing helper: fails loudly instead of silently passing. */
 function automaticSelection(decision: LiaBrainRoutingDecision) {
   if (decision.status !== 'automatic')
@@ -180,9 +195,16 @@ const SENTINEL: LiaBrainRoutingDecision = {
   status: 'manual',
 }
 
-/** The trusted production policy, as the product factory declares it. */
+/**
+ * The trusted production policy, spelled out as a literal so these assertions
+ * are an oracle rather than a restatement of the factory: text brain first,
+ * vision route second, both on the same engine.
+ */
 const TRUSTED_POLICY: LiaBrainAutomaticSelectionPolicy = {
-  routes: [{ engineId: 'groq', modelId: 'openai/gpt-oss-120b' }],
+  routes: [
+    { engineId: 'groq', modelId: 'openai/gpt-oss-120b' },
+    { engineId: 'groq', modelId: 'qwen/qwen3.8-27b' },
+  ],
 }
 
 beforeEach(() => {
@@ -493,14 +515,28 @@ describe('lia brain decision bridge (Phase 8.0D-8)', () => {
     }
   })
 
-  it('t: automatic mode + image facts reports noCandidates - no fallback to an ineligible route', async () => {
+  it('t: automatic mode + image facts resolves the vision route, and never substitutes an ineligible one', async () => {
     const handler = await realServiceBridge({ brain: { mode: 'automatic' } })
 
     const decision = handler({ facts: { hasImageInput: true } })
 
-    expect(decision).toEqual({ selection: { status: 'noCandidates' }, status: 'automatic' })
-    // The policy keeps naming the route; eligibility simply excludes it.
+    // Phase 8.0D-M1: an image turn is now served - by the vision route, because
+    // eligibility excludes the text brain and the policy names the vision route
+    // second. It is selected on capability, not substituted as a fallback.
+    expect(decision.status).toBe('automatic')
+    if (decision.status !== 'automatic')
+      return
+    expect(decision.selection.status).toBe('selected')
+    if (decision.selection.status !== 'selected')
+      return
+    expect(decision.selection.route.model.id).toBe('qwen/qwen3.8-27b')
+    expect(decision.selection.route.engine.id).toBe('groq')
     expect(mocks.automaticPolicy).toHaveBeenCalled()
+    // The bridge's own guarantee is unchanged: it applied the TRUSTED policy
+    // verbatim. The "no silent substitute" half of this gate now lives where
+    // the capability truth does - see the lia-core multimodal routing suite,
+    // which proves a capability no model has yields no route at all.
+    expect(mocks.automaticPolicy).toHaveReturnedWith(TRUSTED_POLICY)
   })
 
   it('u/v/w: manual, disabled and unspecified modes keep their canonical semantics', async () => {
@@ -848,5 +884,140 @@ describe('lia brain decision bridge - dual trigger (Phase 8.0D-10B-4C4C)', () =>
     // Synchronous, same-tick, no queue and no second memory.
     expect(source).not.toMatch(/async |await |Promise|queueMicrotask|setTimeout|setInterval|requestAnimationFrame/)
     expect(source).not.toMatch(/\bnew Map\b|\bnew Set\b|pending|dedupe|retry|triggerQueue|lastObserved/i)
+  })
+})
+
+/**
+ * Phase 8.0D-M2: the OPTIONAL metadata-only decision sink.
+ *
+ * The correlation line reports the EXECUTION identity of a send, and every
+ * decision carrying no route collapses there into one factual state. The sink
+ * publishes the decision's OWN status beside it, so the canonical routing
+ * outcome of a turn is readable directly instead of being inferred from an
+ * execution-side state.
+ */
+describe('brain decision bridge - the injected decision sink (Phase 8.0D-M2)', () => {
+  it('s1: the sink receives the very decision the service returned, once per request', async () => {
+    const received: LiaBrainRoutingDecision[] = []
+    const handler = await register({ decide: mocks.decide }, correlationStoreDouble(), correlationObserverDouble(), d => received.push(d))
+
+    mocks.decide.mockReturnValue({ status: 'modeUnspecified' })
+    const returned = handler({ correlationId: 'k1', facts: {} })
+
+    expect(received).toHaveLength(1)
+    // The SAME object, not a copy: nothing is re-derived between the service
+    // and the sink.
+    expect(received[0]).toBe(returned)
+    expect(returned).toEqual({ status: 'modeUnspecified' })
+
+    handler({ correlationId: 'k2', facts: {} })
+    expect(received).toHaveLength(2)
+  })
+
+  it('s2: the sink runs for every canonical outcome, including the selected route', async () => {
+    const received: LiaBrainRoutingDecision[] = []
+    const handler = await realServiceBridgeWithSink({ brain: { mode: 'automatic' } }, d => received.push(d))
+
+    handler({ facts: { hasImageInput: true } })
+    handler({ facts: {} })
+
+    expect(received).toHaveLength(2)
+    expect(received[0].status).toBe('automatic')
+    expect(received[1].status).toBe('automatic')
+    if (received[0].status !== 'automatic' || received[1].status !== 'automatic')
+      return
+    // The two turns of the same conversation resolve to two different routes,
+    // and the sink reports each one's own identities.
+    expect(received[0].selection.status).toBe('selected')
+    expect(received[1].selection.status).toBe('selected')
+    if (received[0].selection.status !== 'selected' || received[1].selection.status !== 'selected')
+      return
+    expect(received[0].selection.route.model.id).toBe('qwen/qwen3.8-27b')
+    expect(received[1].selection.route.model.id).toBe('openai/gpt-oss-120b')
+  })
+
+  it('s3: a THROWING sink is contained - the decision still returns and the correlation path still runs', async () => {
+    // EXECUTABLE proof, not a source scan: the injected sink really throws, and
+    // every consequence the isolation boundary promises is observed at runtime.
+    // The adapter module deliberately wraps no logger call of its own, so this
+    // containment is the bridge's duty - the same duty the block below owes the
+    // correlation store and observer.
+    const handler = await register(
+      { decide: mocks.decide },
+      correlationStoreDouble(),
+      correlationObserverDouble(),
+      () => {
+        throw new Error('diagnostic boom')
+      },
+    )
+    mocks.decide.mockReturnValue(SENTINEL)
+
+    // 1. The handler does not throw - the sink's exception never escapes.
+    let returned: LiaBrainRoutingDecision | undefined
+    expect(() => {
+      returned = handler({ correlationId: 'logical-send-X', facts: {} })
+    }).not.toThrow()
+
+    // 2. It returns the EXACT object `brain.decide` produced: not a copy, not a
+    //    replacement, not a substitute of any kind.
+    expect(returned).toBe(SENTINEL)
+    expect(returned).toBe(mocks.decide.mock.results[0].value)
+
+    // 3. The correlation write still executes, with the same key and the same
+    //    decision object.
+    expect(mocks.recordDecision).toHaveBeenCalledTimes(1)
+    expect(mocks.recordDecision).toHaveBeenCalledWith('logical-send-X', SENTINEL)
+
+    // 4. The observation still follows that successful write, and only after it.
+    expect(mocks.observe).toHaveBeenCalledTimes(1)
+    expect(mocks.observe).toHaveBeenCalledWith('logical-send-X')
+    expect(mocks.recordDecision.mock.invocationCallOrder[0])
+      .toBeLessThan(mocks.observe.mock.invocationCallOrder[0])
+
+    // 5/6. Exactly ONE routing call: no retry, no second decision, and therefore
+    //      no fallback that could have produced a different value.
+    expect(mocks.decide).toHaveBeenCalledTimes(1)
+    expect(mocks.decide.mock.results).toHaveLength(1)
+  })
+
+  it('s3b: the sink stays a bare optional call inside its own isolation block (additive source guard)', () => {
+    // Additive to s3, never a substitute for it: this pins the SHAPE the
+    // executable test depends on, so a future refactor cannot quietly move the
+    // call out of its try/catch while s3 keeps passing on a stub.
+    const source = stripComments(readSource('./brain-decision-service.ts'))
+    // Named exactly three times: the optional contract member, the destructured
+    // parameter and one bare optional call - never read, never assigned from,
+    // never awaited, never branched on.
+    expect(source.match(/decisionLog/g)).toHaveLength(3)
+    expect(source).toMatch(/^\s*decisionLog\?\.\(decision\)$/m)
+    expect(source).not.toMatch(/=\s*decisionLog|await decisionLog|decisionLog\?\.\(decision\)[ \t]*[.\w[]/)
+    // The call sits inside its own try block, and that block swallows nothing
+    // but the sink's own exception: no retry, no fallback, no second decision.
+    expect(source).toMatch(/try \{\s*decisionLog\?\.\(decision\)\s*\}\s*catch \{/)
+    expect(source.match(/\btry \{/g)).toHaveLength(2)
+    // Synchronous, same-tick: no queue, no second memory, no timer.
+    expect(source).not.toMatch(/async |await |Promise|queueMicrotask|setTimeout|setInterval/)
+  })
+
+  it('s4: with no sink injected the bridge behaves exactly as before', async () => {
+    const handler = await loadBridge()
+    mocks.decide.mockReturnValue({ status: 'disabled' })
+    expect(handler({ facts: {} })).toEqual({ status: 'disabled' })
+    // Nothing about the request shape, the decision or the correlation write
+    // depends on the sink's presence.
+    expect(mocks.recordDecision).not.toHaveBeenCalled()
+  })
+
+  it('s5: the sink is optional on the contract and the composition root owns the choice', async () => {
+    const source = stripComments(readSource('./brain-decision-service.ts'))
+    expect(source).toContain('decisionLog?: (decision: LiaBrainChatDecision) => void')
+    // The bridge never resolves a sink, a logger or a dev flag of its own.
+    expect(source).not.toMatch(/useLogg|console\.|selectLiaBrainDecisionDiagnosticLog|import\.meta\.env/)
+
+    const entry = stripComments(readSource('../../index.ts'))
+    expect(entry.match(/selectLiaBrainDecisionDiagnosticLog\(/g)).toHaveLength(1)
+    expect(entry).toContain('decisionLog: selectLiaBrainDecisionDiagnosticLog(import.meta.env.DEV)')
+    // One adapter module, imported once, by the composition root only.
+    expect(entry.match(/from '\.\/services\/lia\/brain-decision-diagnostic'/g)).toHaveLength(1)
   })
 })

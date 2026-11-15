@@ -8,12 +8,14 @@ import { ChatHistory, JournalPreviewModal } from '@proj-airi/stage-ui/components
 import { useAnalytics } from '@proj-airi/stage-ui/composables/use-analytics'
 import { useBackgroundStore } from '@proj-airi/stage-ui/stores/background'
 import { useChatStore } from '@proj-airi/stage-ui/stores/chat'
-import { retrySourceMessageIdFrom } from '@proj-airi/stage-ui/stores/chat/retry-source'
+import { retryContentFromUserMessage } from '@proj-airi/stage-ui/stores/chat/retry-content'
+import { retrySourceIndexFrom, retrySourceMessageIdFrom } from '@proj-airi/stage-ui/stores/chat/retry-source'
 import { useChatSessionStore } from '@proj-airi/stage-ui/stores/chat/session-store'
 import { useChatStreamStore } from '@proj-airi/stage-ui/stores/chat/stream-store'
 import { useJournalPreviewStore } from '@proj-airi/stage-ui/stores/journal-preview'
 import { useAiriCardStore } from '@proj-airi/stage-ui/stores/modules/airi-card'
 import { useConsciousnessSettingsStore } from '@proj-airi/stage-ui/stores/modules/consciousness-settings'
+import { useSettingsDeveloper } from '@proj-airi/stage-ui/stores/settings/developer'
 import { BasicTextarea } from '@proj-airi/ui'
 import { useLocalStorage } from '@vueuse/core'
 import { storeToRefs } from 'pinia'
@@ -26,13 +28,15 @@ import JournalToolCallBlock from './chat-tool-renderers/journal-tool-call-block.
 import ChatViewportLayout from './chat-viewport-layout.vue'
 
 import { useHearingInputChannel } from '../composables/use-hearing-input-channel'
-import { chatTurnFactsFromSend } from '../services/lia/brain-shadow'
+import { chatTurnFactsFromSend, chatTurnImageInputCount } from '../services/lia/brain-shadow'
 import { executeLiaAuthoritativeRetry } from '../services/lia/lia-authoritative-retry'
-import { resolveLiaAuthoritativeSendRoute } from '../services/lia/lia-authoritative-route-resolver'
+import { LiaImageLimitError, resolveLiaAuthoritativeSendRoute } from '../services/lia/lia-authoritative-route-resolver'
 import { artistryToolReferences, widgetToolReferences } from '../stores/tools'
+import { resolveRendererWindowContext } from '../window-context'
 
 const router = useRouter()
 const messageInput = ref('')
+const imageLimitMessage = ref('')
 useHearingInputChannel(messageInput)
 const lastEnterTime = ref(0)
 const attachments = ref<{ type: 'image', data: string, mimeType: string, url: string }[]>([])
@@ -46,6 +50,11 @@ const airiCardStore = useAiriCardStore()
 // Existing session-level reasoning request - the same value consciousness
 // chat request preparation reads (no new state is introduced for the shadow).
 const consciousnessSettings = useConsciousnessSettingsStore()
+const developer = useSettingsDeveloper()
+const windowContext = resolveRendererWindowContext()
+const reasoningVisibility = computed(() => windowContext.liaManaged
+  ? developer.showChatReasoning ? 'visible' : 'hidden'
+  : 'auto')
 
 const { activeSessionId, messages } = storeToRefs(chatSession)
 const { streamingMessage } = storeToRefs(chatStream)
@@ -97,6 +106,7 @@ async function handleSend() {
   }
 
   const textToSend = messageInput.value
+  imageLimitMessage.value = ''
   const attachmentsToSend = attachments.value.map(att => ({ ...att }))
   // The active session can change while the cross-window request is pending.
   // Keep one correlation key for both the send and its failure recovery.
@@ -118,21 +128,27 @@ async function handleSend() {
   const reasoningToSend = consciousnessSettings.reasoning
   const toolsToSend = [...artistryToolReferences]
 
-  // One fact snapshot from frozen values — Brain decides from SAME values payload will carry
+  // One fact snapshot from frozen values — Brain decides from SAME values payload will carry.
+  // Phase 8.0D-M3: the stored conversation is part of that snapshot, because the
+  // request about to be composed carries this history too. An image that is
+  // still provider-visible from an earlier turn makes THIS turn an image turn,
+  // so it cannot be routed to a model that would reject the image it is really
+  // being sent.
   const facts = chatTurnFactsFromSend({
     attachments: attachmentsToSend,
+    providerHistory: messages.value as unknown as ChatHistoryItem[],
     reasoning: reasoningToSend,
     tools: toolsToSend,
   })
 
   // Awaited authoritative INITIAL route — resolver reuses canonical requestLiaBrainDecisionForChatTurn
   // failure/non-routable/no credential → undefined → normal Stage send continues without override
-  const routeOverride = await resolveLiaAuthoritativeSendRoute({
-    correlationId,
-    facts,
-  })
-
   try {
+    const routeOverride = await resolveLiaAuthoritativeSendRoute({
+      correlationId,
+      facts,
+      imageInputCount: chatTurnImageInputCount({ attachments: attachmentsToSend, providerHistory: messages.value as unknown as ChatHistoryItem[] }),
+    })
     await chatStore.send({
       sessionId: targetSessionId,
       text: textToSend,
@@ -146,6 +162,8 @@ async function handleSend() {
     attachmentsToSend.forEach(att => URL.revokeObjectURL(att.url))
   }
   catch (error) {
+    if (error instanceof LiaImageLimitError && chatSession.activeSessionId === targetSessionId)
+      imageLimitMessage.value = error.message
     const errorMessage = errorMessageFrom(error) ?? String(error)
     const wasCancelledForDeletedSession
       = errorMessage.includes('Chat session was reset before send could start')
@@ -237,6 +255,7 @@ async function handleFilePaste(files: File[]) {
 }
 
 function removeAttachment(index: number) {
+  imageLimitMessage.value = ''
   const attachment = attachments.value[index]
   if (attachment) {
     URL.revokeObjectURL(attachment.url)
@@ -246,6 +265,10 @@ function removeAttachment(index: number) {
 
 watch(sendMode, () => {
   lastEnterTime.value = 0
+})
+
+watch(activeSessionId, () => {
+  imageLimitMessage.value = ''
 })
 
 const historyMessages = computed(() => messages.value as unknown as ChatHistoryItem[])
@@ -277,31 +300,42 @@ async function handleRetryMessage(index: number) {
   const reasoningToRetry = consciousnessSettings.reasoning
   const toolsToRetry = [...widgetToolReferences]
   // Synchronous stable source capture before any await
-  const sourceMessageId = retrySourceMessageIdFrom(messages.value as unknown as ChatHistoryItem[], index)
+  const history = messages.value as unknown as ChatHistoryItem[]
+  const sourceMessageId = retrySourceMessageIdFrom(history, index)
+  // Phase 8.0D-10B-4D4C4-D2B11: capture the source turn's image attachments
+  // with the SAME shared helper the generic retry uses — no image parsing here.
+  // Captured synchronously so the awaited Brain decision and the retry that
+  // follows describe one and the same user turn.
+  const sourceIndex = retrySourceIndexFrom(history, index)
+  const sourceContent = sourceIndex < 0 ? null : retryContentFromUserMessage(history[sourceIndex])
 
-  if (sourceMessageId === undefined) {
-    // id-less legacy: preserve legacy non-authoritative path, no Brain await
-    await chatStore.retry({
-      sessionId: targetSessionId,
-      index,
-      tools: toolsToRetry,
-    })
-    trackChatMessageRetried({ source: 'history' })
+  imageLimitMessage.value = ''
+  try {
+    await executeLiaAuthoritativeRetry(
+      {
+        sessionId: targetSessionId,
+        index,
+        sourceMessageId,
+        reasoning: reasoningToRetry,
+        tools: toolsToRetry,
+        // Phase 8.0D-M3: the retry truncates at the source turn, so the history
+        // left standing in provider context is exactly what precedes it. The
+        // source turn comes back as a fresh user message via `attachments`.
+        providerHistory: sourceIndex < 0 ? [] : history.slice(0, sourceIndex),
+        ...(sourceContent === null ? {} : { attachments: sourceContent.attachments }),
+      },
+      {
+        retry: payload => chatStore.retry(payload),
+      },
+    )
+  }
+  catch (error) {
+    if (!(error instanceof LiaImageLimitError))
+      throw error
+    if (chatSession.activeSessionId === targetSessionId)
+      imageLimitMessage.value = error.message
     return
   }
-
-  await executeLiaAuthoritativeRetry(
-    {
-      sessionId: targetSessionId,
-      index,
-      sourceMessageId,
-      reasoning: reasoningToRetry,
-      tools: toolsToRetry,
-    },
-    {
-      retry: payload => chatStore.retry(payload),
-    },
-  )
   trackChatMessageRetried({
     source: 'history',
   })
@@ -337,6 +371,7 @@ async function handleCleanupMessages() {
         :sending="isActiveSessionSending"
         :streaming-message="visibleStreamingMessage"
         :tool-call-renderers="toolCallRenderers"
+        :reasoning-visibility="reasoningVisibility"
         @delete-message="handleDeleteMessage($event.index)"
         @retry-message="handleRetryMessage($event.index)"
         @tool-call-rerun="handleToolCallRerun"
@@ -344,6 +379,9 @@ async function handleCleanupMessages() {
     </template>
 
     <template #composer>
+      <p v-if="imageLimitMessage" role="alert" :class="['px-2 text-sm text-red-600 dark:text-red-300']">
+        {{ imageLimitMessage }}
+      </p>
       <div
         :class="[
           'min-h-0 max-h-full flex flex-col gap-1 overflow-hidden',

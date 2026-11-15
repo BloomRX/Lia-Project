@@ -7,10 +7,11 @@ import {
 } from '@proj-airi/stage-ui/components'
 import { useHearingStore } from '@proj-airi/stage-ui/stores/modules/hearing'
 import { useProviderConfigStore } from '@proj-airi/stage-ui/stores/providers/config'
+import { getProviderCredentialConfigPort } from '@proj-airi/stage-ui/stores/providers/credential-config-port'
 import { useProviderStore } from '@proj-airi/stage-ui/stores/providers/provider'
 import { FieldCombobox } from '@proj-airi/ui'
 import { storeToRefs } from 'pinia'
-import { computed, onMounted, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 
 const hearingStore = useHearingStore()
 const providersStore = useProviderStore()
@@ -41,7 +42,10 @@ const isLoadingModels = computed(() => {
 })
 
 // Check if API key is configured
-const apiKeyConfigured = computed(() => !!providers.value[providerId]?.apiKey)
+const nativeKeyConfigured = ref(false)
+const apiKeyConfigured = computed(() => getProviderCredentialConfigPort(providerId)
+  ? nativeKeyConfigured.value
+  : !!providers.value[providerId]?.apiKey)
 
 // Load models on mount
 onMounted(async () => {
@@ -81,6 +85,7 @@ watch(model, async () => {
   <TranscriptionProviderSettings
     :provider-id="providerId"
     :default-model="defaultModel"
+    @configured="nativeKeyConfigured = $event"
   >
     <template #basic-settings>
       <!-- Model selection -->

@@ -4,6 +4,22 @@
 > **Base:** AIRI `v0.12.0-beta.5` (fork white-label) + camada de produto **Lia**.
 > **Marca:** `[PROPOSTA]` = decisão/desenho da Lia (não existe no AIRI); `[AIRI]` = capacidade existente do AIRI a reutilizar; `[UNKNOWN]` = a validar no código real.
 
+> **STATUS EM 28/10/2026 — SUPERADO NA DIREÇÃO ARQUITETURAL.**
+>
+> Este documento foi escrito na Fase 0, quando o AIRI era tratado como base e
+> runtime da Lia. A direção mudou: **a Lia é o produto e o AIRI é referência
+> técnica externa** — ver [`AGENTS.md`](../../AGENTS.md) §99 e
+> [`AIRI-INDEPENDENCE-2026-10-28.md`](AIRI-INDEPENDENCE-2026-10-28.md).
+>
+> **Continua válido:** a leitura técnica dos módulos do AIRI, e o princípio de
+> que a Lia não duplica conversa, voz e avatar — ela orquestra.
+>
+> **Não vale mais:** `Base: AIRI (fork white-label)`, `AIRI é o runtime/órgão`,
+> o diagrama com AIRI no centro, e a prioridade `Reutilizar > adaptar > ... >
+> implementar do zero`.
+>
+> Mantido como registro histórico. **Não é a arquitetura alvo vigente.**
+
 ---
 
 ## 1. Princípio organizador

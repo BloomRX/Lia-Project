@@ -1,3 +1,7 @@
+import type { LiaProductConfig } from './lia-schema'
+
+import { parse } from 'valibot'
+
 import { createConfig } from '../libs/electron/persistence'
 import { defaultLiaProductConfig, liaProductConfigSchema } from './lia-schema'
 
@@ -18,6 +22,23 @@ export function createLiaProductConfig() {
     autoHeal: true,
   })
   config.setup()
+  let transactions: Promise<void> = Promise.resolve()
 
-  return config
+  return {
+    ...config,
+    updateAndSave(mutator: (current: LiaProductConfig) => LiaProductConfig): Promise<void> {
+      const run = async () => {
+        await config.flush()
+        // Only committed state is visible through get(). A rejected candidate
+        // never becomes the input of a later sibling transaction.
+        const current = structuredClone(config.get() ?? defaultLiaProductConfig)
+        const candidate = parse(liaProductConfigSchema, mutator(current))
+        await config.commit(candidate)
+      }
+      const next = transactions.then(run, run)
+      transactions = next
+      void next.catch(() => {})
+      return next
+    },
+  }
 }

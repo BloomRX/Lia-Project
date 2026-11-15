@@ -1,0 +1,16 @@
+{
+  "datasetId": "ptbr-stt-first-run",
+  "license": "CC0-1.0",
+  "source": "gravação própria do operador",
+  "notes": "Primeira execução: UMA amostra de 10 a 20 segundos, fala clara. O veredito será inconclusive por desenho (menos de 5 amostras): serve para provar o fluxo e obter os primeiros números, não para validar o modelo.",
+  "samples": [
+    {
+      "id": "first-run-01",
+      "audio": "first-run-01.wav",
+      "reference": "Esta é a primeira gravação de teste da bancada de transcrição da Lia, feita no computador de referência.",
+      "condition": "clean",
+      "speaker": "operador",
+      "license": "CC0-1.0"
+    }
+  ]
+}

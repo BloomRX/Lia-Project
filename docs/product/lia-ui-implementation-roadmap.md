@@ -3,6 +3,36 @@
 **Status:** Draft baseline  
 **Purpose:** Keep product UI work aligned with the runtime architecture while implementation proceeds in small phases.
 
+**Retomada, 08/11:** o Launcher tem configuração de serviço de IA com descoberta
+e ferramenta real no fixture HTTP; logs ficam em Diagnósticos. Memória,
+personalidade e presença estão acessíveis na rota gerenciada de configurações.
+Livre usa enquadramento integral sem alterar o zoom salvo do Tamagotchi; sombra
+neutra opcional remove o contorno ciano. Revisão visual aprovou essas capturas,
+sem aprovar toda a matriz de concepts, avatar oficial, jogos ou tradução completa.
+Evidências e limitações: [release da retomada](RELEASE-WINDOWS-2026-11-07-COMPLETION.md).
+
+**Chat presentation, 2026-10-23:** managed secondary windows now hide internal
+reasoning by default without requiring capability bootstrap. Stored content,
+the reactive developer preference and standalone behavior are preserved. A
+real Windows request displayed 42 with a pt-BR composer and no reasoning
+preview. Browser regressions, typechecks, lint and Stage build passed; image
+content and installer gates remain open. See [the report](RELEASE-WINDOWS-2026-10-23.md).
+
+**Streaming verification, 2026-10-22:** character-sized deltas now preserve
+whitespace in content, history and synchronized events. Unit regressions and
+the Windows Chat with a synthetic SSE transport passed. The image-content
+gate remains open. See [the streaming report](RELEASE-WINDOWS-2026-10-22.md).
+
+**Windows verification, 2026-10-20:** the launcher opened the Stage through the
+normal button and completed managed shutdown. Chat session selection was fixed;
+an independent text conversation displayed 42. Phase 8.0D remains open: the
+Spark schema compatibility fix restored image responses with all seven tools,
+but the model described a rectangle as a square. The image-content gate fails.
+The Stage production build passed; installer and clean installation are untested.
+See [the release checklist](RELEASE-WINDOWS-2026-10-20.md). The local
+finalization plan extends the presence target to multiple monitors; the original
+8.0J experiment below remains the first implementation step.
+
 ---
 
 ## Principle
@@ -272,3 +302,12 @@ Concept PNGs should be committed under:
 Production assets should live in the application's normal asset tree.
 
 Update documentation whenever a deliberate product-level decision changes.
+
+
+### Verificação local — 20/10/2026, M3.1
+
+O Chat recusa excesso de imagens antes do serviço, com aviso em pt-BR e
+rascunho/anexos preservados. Limite no modelo e histórico elegível incluído;
+retry e captura de voz usam a mesma contagem. PASS automatizado e Windows real
+para quatro imagens. Isso fecha A2; não fecha a 8.0D nem aprova imagem com
+ferramentas. Evidência e Definition of Done: [rodada Windows](RELEASE-WINDOWS-2026-10-20.md).

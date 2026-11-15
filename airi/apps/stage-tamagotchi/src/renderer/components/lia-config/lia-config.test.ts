@@ -58,8 +58,8 @@ function yamlKeys(path: string): Set<string> {
 }
 
 describe('lia config panel contract', () => {
-  it('exposes the four sections a user reasons about', () => {
-    expect(LIA_CONFIG_SECTIONS.map(section => section.id)).toEqual(['ai', 'personality', 'voice', 'appearance'])
+  it('exposes the six implemented configuration sections', () => {
+    expect(LIA_CONFIG_SECTIONS.map(section => section.id)).toEqual(['ai', 'personality', 'voice', 'appearance', 'presence', 'memory'])
     expect(LIA_CONFIG_DEFAULT_SECTION).toBe('ai')
   })
 
@@ -81,9 +81,13 @@ describe('lia config panel contract', () => {
   it('edits the persona source of truth and never the projected prose', () => {
     const personality = readSource('components/lia-config/sections/PersonalitySection.vue')
     expect(personality).toContain('useAiriCardStore')
-    expect(personality).toContain('extensions?.airi?.persona')
-    // description/personality/scenario stay derived; the section must not write them.
-    expect(personality).not.toContain('updateCard')
+    expect(personality).toContain('preparePersonalityCard')
+    const editor = readSource('services/lia/personality-editor.ts')
+    expect(editor).toContain('persona')
+    // The prepared card projects prose from the canonical persona before save;
+    // the section never edits that prose directly.
+    expect(personality).toContain('cardStore.updateCard(id, card)')
+    expect(editor).toContain('renderLiaPersonaFields(persona)')
     expect(personality).not.toMatch(/\bdescription\s*=/)
   })
 
@@ -113,17 +117,23 @@ describe('lia config panel contract', () => {
     }
   })
 
-  it('offers no free-text field and no hardcoded catalogue in the voice UI', () => {
+  it('limits explicit model and voice IDs to native speech and never invents a catalogue', () => {
     const voice = readSource('components/lia-config/sections/VoiceSection.vue')
     const editor = readSource('stores/lia/voice-editor.ts')
 
-    // A free-text model id would let a user persist something the runtime cannot
-    // resolve, so the model field is a dropdown over the real catalogue or nothing.
-    expect(voice).not.toMatch(/<input/)
+    // Native audio/speech has no guaranteed discovery contract. Explicit IDs
+    // remain possible there; the legacy catalogue path retains its selector.
+    expect(voice).toContain('v-else-if="nativeSpeech"')
+    expect(voice).toContain('data-testid="lia-config-native-voice-id"')
+    expect(voice).toContain('data-testid="lia-config-native-model-id"')
+    expect(voice).toContain('v-if="editor.showModelSelector.value"')
+    for (const input of voice.matchAll(/<input\b[^>]*>/g))
+      expect(input[0]).toMatch(/data-testid="lia-config-native-(?:voice|model)-id"/)
 
     expect(editor).toContain('availableSpeechProvidersMetadata')
     expect(editor).toContain('getVoicesForProvider')
-    expect(editor).toContain('getModelsForProvider')
+    expect(editor).toContain('providerRuntime.canListModels(providerId)')
+    expect(editor).toContain('providerRuntime.listModels(providerId)')
     // No provider, voice or model is baked into the editor.
     for (const baked of ['alloy', 'af_heart', 'bf_emma', 'tts-1', 'kokoro-82m'])
       expect(editor, baked).not.toContain(baked)

@@ -2,6 +2,11 @@
 
 **Lia** — companheira virtual (AI companion), um produto próprio em processo de desacoplamento técnico. O [Project AIRI](https://github.com/moeru-ai/airi) é mantido como referência e fonte de estudo, não como a arquitetura final obrigatória.
 
+## Documentação
+
+Índice completo dos 63 documentos em [`docs/README.md`](docs/README.md). Estado
+operacional corrente em [`docs/project/CURRENT-STATE.md`](docs/project/CURRENT-STATE.md), §0.
+
 ## Status
 
 - ✅ **Estudo técnico completo do AIRI concluído** → [`docs/estudo-airi.md`](docs/estudo-airi.md)

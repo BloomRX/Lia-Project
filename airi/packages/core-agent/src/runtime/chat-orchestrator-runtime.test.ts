@@ -11,6 +11,7 @@ import { ContextUpdateStrategy } from '@proj-airi/server-shared/types'
 import { describe, expect, it, vi } from 'vitest'
 
 import { createChatOrchestratorRuntime } from './chat-orchestrator-runtime'
+import { sanitizeMessages } from './llm-service'
 // TEST-ONLY helper: keep source guards stable across CRLF/LF checkouts
 function normalizeLineEndings(value: string): string {
   return value.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
@@ -218,6 +219,76 @@ function createHarness(options: { getActiveProvider?: () => string | undefined }
 }
 
 describe('createChatOrchestratorRuntime', () => {
+  it.each(['stream', 'activation observer'] as const)('keeps the original %s failure and terminal state without logging external error data', async (source) => {
+    const error = Object.assign(new Error('PRIVATE_RESPONSE https://example.invalid/private?key=FAKE_KEY'), {
+      cause: new Error('PRIVATE_CAUSE'),
+      name: 'PRIVATE_NAME',
+      code: 'PRIVATE_CODE',
+      status: 'PRIVATE_STATUS',
+      requestId: 'PRIVATE_REQUEST_ID',
+      body: { content: 'PRIVATE_CONTENT' },
+    })
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const harness = createHarness()
+    if (source === 'stream')
+      harness.stream.mockRejectedValueOnce(error)
+    else
+      harness.knobs.chatActivationSucceededThrows(error)
+
+    try {
+      await expect(harness.runtime.ingest('hello', { model: 'model-a', chatProvider: provider })).rejects.toBe(error)
+      expect(harness.settled.calls).toEqual([expect.objectContaining({ outcome: 'failed' })])
+      expect(harness.telemetry.messageRoundFailed).toHaveLength(1)
+      expect(harness.telemetry.chatActivationFailed).toHaveLength(1)
+      expect(harness.sendSettledSessions).toEqual(['session-1'])
+      expect(log.mock.calls).toEqual([['Error sending message:']])
+    }
+    finally {
+      log.mockRestore()
+    }
+  })
+
+  it('keeps stale failures abandoned without adding an error log', async () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const harness = createHarness()
+    harness.stream.mockImplementationOnce(async () => {
+      harness.generation.set(2)
+      throw new Error('PRIVATE_STALE_RESPONSE https://example.invalid/?key=FAKE_KEY')
+    })
+
+    try {
+      await expect(harness.runtime.ingest('hello', { model: 'model-a', chatProvider: provider })).resolves.toBeUndefined()
+      expect(harness.settled.calls).toEqual([expect.objectContaining({ outcome: 'abandoned' })])
+      expect(harness.telemetry.messageRoundFailed).toEqual([])
+      expect(log.mock.calls).toEqual([])
+    }
+    finally {
+      log.mockRestore()
+    }
+  })
+
+  // Windows QA: HTTP 200 + finish=stop with no content was reported as success,
+  // although no assistant message could be displayed or persisted.
+  it('fails a completed provider stream that contains no response', async () => {
+    const harness = createHarness()
+    harness.stream.mockImplementationOnce(async (_model, _chatProvider, _messages, options) => {
+      await options?.onStreamEvent?.({ type: 'finish', finishReason: 'stop' })
+    })
+
+    await expect(harness.runtime.ingest('describe the image', {
+      model: 'gpt-test',
+      chatProvider: provider,
+    })).rejects.toThrow('O serviço de IA terminou sem enviar uma resposta. Tente novamente.')
+
+    expect(harness.assistantAppended).toHaveLength(0)
+    expect(harness.telemetry.assistantResponseRendered).toHaveLength(0)
+    expect(harness.telemetry.messageRound).toHaveLength(0)
+    expect(harness.telemetry.messageRoundFailed).toHaveLength(1)
+    expect(harness.settled.calls).toEqual([
+      expect.objectContaining({ outcome: 'failed' }),
+    ])
+  })
+
   // ROOT CAUSE:
   //
   // The marker parser buffered 24 literal characters plus its marker-safety tail.
@@ -243,6 +314,71 @@ describe('createChatOrchestratorRuntime', () => {
 
     expect(patchesBeforeFinish).toBeGreaterThan(1)
     expect(harness.foregroundPatches.some(message => message.content === '1234')).toBe(true)
+  })
+
+  // CONTRATO, não regressão de um defeito confirmado.
+  //
+  // Rodada de 20/10/2026: a resposta da imagem sintética veio como
+  // "círculoazul", sem o espaço. A hipótese de que o guarda `if
+  // (speechOnly.trim())` descartava um literal só de espaço foi TESTADA E
+  // REFUTADA: com este teste o código original também passa, porque o parser
+  // de marcadores funde o espaço ao literal vizinho. A causa segue aberta; o
+  // suspeito restante é filterToSpeech em response-categoriser.ts. Este teste
+  // apenas fixa o comportamento esperado na fronteira do runtime.
+  it('preserva espaço que chega como delta próprio em vez de colar as palavras', async () => {
+    const harness = createHarness()
+
+    harness.stream.mockImplementationOnce(async (_model, _chatProvider, _messages, options) => {
+      for (const text of ['Primeiro vem um círculo', ' ', 'azul.'])
+        await options?.onStreamEvent?.({ type: 'text-delta', text })
+
+      await options?.onStreamEvent?.({ type: 'finish', finishReason: 'stop' })
+    })
+
+    await harness.runtime.ingest('descreva a imagem', {
+      model: 'gpt-test',
+      chatProvider: provider,
+    })
+
+    const esperado = 'Primeiro vem um círculo azul.'
+    const final = harness.foregroundPatches.at(-1)
+
+    expect(final?.content).toBe(esperado)
+    expect(
+      final?.slices
+        .filter(slice => slice.type === 'text')
+        .map(slice => slice.text)
+        .join(''),
+    ).toBe(esperado)
+  })
+
+  // The three-chunk contract above does not cover single-character literals
+  // emitted after the marker parser's safety tail has filled.
+  it('preserves spaces and line breaks when the provider streams one character at a time', async () => {
+    const harness = createHarness()
+    const answer = 'Um círculo azul.\nOutra linha com espaços.'
+    const literalHooks: string[] = []
+    harness.runtime.hooks.onTokenLiteral(async (literal) => {
+      literalHooks.push(literal)
+    })
+    harness.stream.mockImplementationOnce(async (_model, _chatProvider, _messages, options) => {
+      for (const text of answer)
+        await options?.onStreamEvent?.({ type: 'text-delta', text })
+      await options?.onStreamEvent?.({ type: 'finish', finishReason: 'stop' })
+    })
+
+    await harness.runtime.ingest('responda em duas linhas', {
+      model: 'gpt-test',
+      chatProvider: provider,
+    })
+
+    const final = harness.foregroundPatches.at(-1)
+    expect(final?.content).toBe(answer)
+    expect(final?.slices.filter(slice => slice.type === 'text').map(slice => slice.text).join('')).toBe(answer)
+    expect(harness.sessionMessages['session-1'].at(-1)?.content).toBe(answer)
+    expect(literalHooks.length).toBeGreaterThan(0)
+    expect(literalHooks.join('')).toBe(answer)
+    expect(literalHooks.every(literal => literal.length > 0)).toBe(true)
   })
 
   it('stores tool names with the user message and omits them from provider messages', async () => {
@@ -488,6 +624,7 @@ describe('createChatOrchestratorRuntime', () => {
 
     harness.stream.mockImplementationOnce(async (_model, _chatProvider, messages, options) => {
       firstMessages.push(structuredClone(messages))
+      await options?.onStreamEvent?.({ type: 'text-delta', text: 'reply' })
       await options?.onStreamEvent?.({ type: 'finish', finishReason: 'stop' })
     })
     harness.now.set(new Date(2026, 3, 25, 18, 47).getTime())
@@ -499,6 +636,7 @@ describe('createChatOrchestratorRuntime', () => {
 
     harness.stream.mockImplementationOnce(async (_model, _chatProvider, messages, options) => {
       secondMessages.push(structuredClone(messages))
+      await options?.onStreamEvent?.({ type: 'text-delta', text: 'reply' })
       await options?.onStreamEvent?.({ type: 'finish', finishReason: 'stop' })
     })
     harness.now.set(new Date(2026, 3, 25, 19, 12).getTime())
@@ -776,10 +914,11 @@ describe('createChatOrchestratorRuntime', () => {
   it('rejects cancelled queued sends before they start', async () => {
     const harness = createHarness()
     let releaseFirstSend: (() => void) | undefined
-    harness.stream.mockImplementationOnce(async () => {
+    harness.stream.mockImplementationOnce(async (_model, _chatProvider, _messages, options) => {
       await new Promise<void>((resolve) => {
         releaseFirstSend = resolve
       })
+      await options?.onStreamEvent?.({ type: 'text-delta', text: 'first reply' })
     })
 
     const firstSend = harness.runtime.ingest('hold queue', {
@@ -858,10 +997,11 @@ describe('createChatOrchestratorRuntime', () => {
   it('rejects stale generation sends before they start', async () => {
     const harness = createHarness()
     let releaseFirstSend: (() => void) | undefined
-    harness.stream.mockImplementationOnce(async () => {
+    harness.stream.mockImplementationOnce(async (_model, _chatProvider, _messages, options) => {
       await new Promise<void>((resolve) => {
         releaseFirstSend = resolve
       })
+      await options?.onStreamEvent?.({ type: 'text-delta', text: 'first reply' })
     })
 
     const firstSend = harness.runtime.ingest('hold queue', {
@@ -965,10 +1105,11 @@ describe('createChatOrchestratorRuntime', () => {
   it('returns pending queued send snapshots with public fields', async () => {
     const harness = createHarness()
     let releaseFirstSend: (() => void) | undefined
-    harness.stream.mockImplementationOnce(async () => {
+    harness.stream.mockImplementationOnce(async (_model, _chatProvider, _messages, options) => {
       await new Promise<void>((resolve) => {
         releaseFirstSend = resolve
       })
+      await options?.onStreamEvent?.({ type: 'text-delta', text: 'first reply' })
     })
 
     const queuedMessage = 'queued-message-'.repeat(12)
@@ -1017,6 +1158,48 @@ describe('createChatOrchestratorRuntime', () => {
 
     await expect(secondSend).rejects.toThrow('Chat session was reset before send could start')
     await firstSend
+  })
+
+  /**
+   * Phase 8.0D-M1 gate 7: the image must reach the provider request boundary
+   * intact. Two layers could lose it - the composition of content parts, and
+   * `sanitizeMessages` on the way out (which flattens non-text parts once a
+   * model key is known to reject content arrays). Both are asserted here, so a
+   * regression in either is caught at the boundary rather than in production.
+   */
+  it('gate 7 (Phase 8.0D-M1): an image attachment reaches the provider request boundary intact', async () => {
+    const harness = createHarness()
+    let composedMessages: Message[] = []
+    harness.stream.mockImplementationOnce(async (_model, _chatProvider, messages, options) => {
+      composedMessages = messages
+      await options?.onStreamEvent?.({ type: 'text-delta', text: 'a cat' })
+      await options?.onStreamEvent?.({ type: 'finish', finishReason: 'stop' })
+    })
+
+    await harness.runtime.ingest('what is in this image', {
+      // The vision route's model id, verbatim: the transport is model-agnostic
+      // and must not behave differently for it.
+      model: 'qwen/qwen3.8-27b',
+      chatProvider: provider,
+      attachments: [{ type: 'image', data: 'aW1hZ2U=', mimeType: 'image/png' }],
+    })
+
+    const userContent = composedMessages.at(-1)?.content
+    const composedParts = Array.isArray(userContent) ? userContent : []
+    expect(composedParts.find(part => part?.type === 'image_url')).toEqual({
+      image_url: { url: 'data:image/png;base64,aW1hZ2U=' },
+      type: 'image_url',
+    })
+
+    // Second gate: with the default content-array compatibility the non-text
+    // part survives sanitisation, so the provider really receives the image.
+    const sanitized = sanitizeMessages(composedMessages as unknown[])
+    const sanitizedContent = sanitized.at(-1)?.content
+    const sanitizedParts = Array.isArray(sanitizedContent) ? sanitizedContent : []
+    expect(sanitizedParts.find(part => part?.type === 'image_url')).toEqual({
+      image_url: { url: 'data:image/png;base64,aW1hZ2U=' },
+      type: 'image_url',
+    })
   })
 
   it('handles attachments, reasoning deltas, tool events, and assistant finalization', async () => {
@@ -1616,10 +1799,11 @@ describe('chat round settled seam (Phase 8.0D-10B-4D4B1)', () => {
   it('41: a queued cancellation settles nothing of its own', async () => {
     const harness = createHarness()
     let releaseFirstSend: (() => void) | undefined
-    harness.stream.mockImplementationOnce(async () => {
+    harness.stream.mockImplementationOnce(async (_model, _chatProvider, _messages, options) => {
       await new Promise<void>((resolve) => {
         releaseFirstSend = resolve
       })
+      await options?.onStreamEvent?.({ type: 'text-delta', text: 'first reply' })
     })
 
     const firstSend = harness.runtime.ingest('hold queue', {
@@ -1650,10 +1834,11 @@ describe('chat round settled seam (Phase 8.0D-10B-4D4B1)', () => {
   it('42: a generation-invalidated pre-start rejection settles nothing of its own', async () => {
     const harness = createHarness()
     let releaseFirstSend: (() => void) | undefined
-    harness.stream.mockImplementationOnce(async () => {
+    harness.stream.mockImplementationOnce(async (_model, _chatProvider, _messages, options) => {
       await new Promise<void>((resolve) => {
         releaseFirstSend = resolve
       })
+      await options?.onStreamEvent?.({ type: 'text-delta', text: 'first reply' })
     })
 
     const firstSend = harness.runtime.ingest('hold queue', {
@@ -1790,5 +1975,120 @@ describe('chat round settled seam (Phase 8.0D-10B-4D4B1)', () => {
     // The existing generic finalization callback keeps its own contract.
     expect(CODE).toContain('onSendSettled?: (event: { sessionId: string }) => void')
     expect(CODE.match(/deps\.onSendSettled\?\.\(\{ sessionId \}\)/g)).toHaveLength(1)
+  })
+})
+
+describe('phase 8.0D-M3 provider projection', () => {
+  /** One stored user turn carrying `count` image parts. */
+  function imageTurn(count: number, extra?: Record<string, unknown>): ChatHistoryItem {
+    return {
+      role: 'user',
+      content: [
+        { type: 'text', text: 'look at this' },
+        ...Array.from({ length: count }, (_, index) => ({
+          type: 'image_url',
+          image_url: { url: `data:image/png;base64,${index}` },
+        })),
+      ],
+      createdAt: new Date(2026, 3, 25, 18, 1).getTime(),
+      id: `image-turn-${count}-${extra?.id ?? ''}`,
+      ...extra,
+    } as unknown as ChatHistoryItem
+  }
+
+  function imagePartsOf(messages: Message[]) {
+    return messages.flatMap((message) => {
+      const content = (message as { content?: unknown }).content
+      return Array.isArray(content)
+        ? content.filter((part: any) => part?.type === 'image_url')
+        : []
+    })
+  }
+
+  it('7: an error bubble never reaches the provider prompt, and is never re-authored as user text', async () => {
+    const harness = createHarness()
+    harness.sessionMessages['session-1'].push({
+      role: 'error',
+      content: 'Remote sent 400 response: Too many images provided. This model supports up to 3 images',
+    } as unknown as ChatHistoryItem)
+
+    await harness.runtime.ingest('next turn', { model: 'gpt-test', chatProvider: provider })
+
+    const [, , messages] = harness.stream.mock.calls[0] as [string, ChatProvider, Message[]]
+    expect(messages.filter(message => (message as { role: string }).role === 'error')).toEqual([])
+    const asText = JSON.stringify(messages)
+    expect(asText).not.toContain('Too many images')
+    expect(asText).not.toContain('User encountered error')
+    expect(asText).toContain('next turn')
+  })
+
+  it('8: a provider-visible image is projected intact - never flattened, never dropped', async () => {
+    const harness = createHarness()
+    harness.sessionMessages['session-1'].push(imageTurn(2))
+
+    await harness.runtime.ingest('and now text only', { model: 'gpt-test', chatProvider: provider })
+
+    const [, , messages] = harness.stream.mock.calls[0] as [string, ChatProvider, Message[]]
+    // Both historical images are still there, with their original data URLs.
+    expect(imagePartsOf(messages)).toEqual([
+      { type: 'image_url', image_url: { url: 'data:image/png;base64,0' } },
+      { type: 'image_url', image_url: { url: 'data:image/png;base64,1' } },
+    ])
+    // The turn is still a content ARRAY, not a text-only rendering of it.
+    const historical = messages.find(
+      message => message.role === 'user' && Array.isArray((message as { content?: unknown }).content),
+    )
+    expect(historical).toBeDefined()
+    // And the provider-border sanitizer keeps it that way for a vision model.
+    expect(imagePartsOf(sanitizeMessages(messages, true))).toHaveLength(2)
+  })
+
+  it('a provider-excluded turn contributes nothing - not its text, not its images', async () => {
+    const harness = createHarness()
+    harness.sessionMessages['session-1'].push(
+      imageTurn(1, { excludedFromProviderContext: true, id: 'failed' }),
+    )
+
+    await harness.runtime.ingest('after the failure', { model: 'gpt-test', chatProvider: provider })
+
+    const [, , messages] = harness.stream.mock.calls[0] as [string, ChatProvider, Message[]]
+    expect(imagePartsOf(messages)).toEqual([])
+    expect(JSON.stringify(messages)).not.toContain('look at this')
+    expect(JSON.stringify(messages)).toContain('after the failure')
+  })
+
+  it('a failed image send followed by a new one sends exactly one image', async () => {
+    const harness = createHarness()
+    // Three rejected attempts stay in the record, all withheld.
+    for (let i = 0; i < 3; i += 1)
+      harness.sessionMessages['session-1'].push(imageTurn(1, { excludedFromProviderContext: true, id: `stale-${i}` }))
+
+    await harness.runtime.ingest('fourth picture', {
+      model: 'gpt-test',
+      chatProvider: provider,
+      attachments: [{ type: 'image', data: 'bmV3LWltYWdl', mimeType: 'image/png' }],
+    })
+
+    const [, , messages] = harness.stream.mock.calls[0] as [string, ChatProvider, Message[]]
+    expect(imagePartsOf(messages)).toEqual([
+      { type: 'image_url', image_url: { url: 'data:image/png;base64,bmV3LWltYWdl' } },
+    ])
+  })
+
+  it('exclusion changes projection only - the stored conversation keeps every message', async () => {
+    const harness = createHarness()
+    harness.sessionMessages['session-1'].push(
+      imageTurn(1, { excludedFromProviderContext: true, id: 'kept' }),
+      { role: 'error', content: 'Something went wrong' } as unknown as ChatHistoryItem,
+    )
+    const before = harness.sessionMessages['session-1'].length
+
+    await harness.runtime.ingest('still here', { model: 'gpt-test', chatProvider: provider })
+
+    // Nothing was removed from the record: UI, history and retry still see it.
+    // The send itself appends its own user turn and the assistant reply.
+    expect(harness.sessionMessages['session-1']).toHaveLength(before + 2)
+    expect(harness.sessionMessages['session-1'].some(message => (message as { id?: string }).id === 'kept')).toBe(true)
+    expect(harness.sessionMessages['session-1'].some(message => message.role === 'error')).toBe(true)
   })
 })

@@ -19,13 +19,15 @@ const startingOffsetY = computed(() => {
 export function useFitModel(
   canvasDim: MaybeRefOrGetter<{ width: number, height: number }>,
   modelDim: MaybeRefOrGetter<{ width: number, height: number }>,
+  fullBody: MaybeRefOrGetter<boolean> = false,
 ) {
   const normalizedParam = computed(() => {
     const canvas = toValue(canvasDim)
     const model = toValue(modelDim)
 
-    const heightScale = (canvas.height / model.height * 2)
-    const widthScale = (canvas.width / model.width * 2)
+    const factor = toValue(fullBody) ? 0.9 : 2
+    const heightScale = (canvas.height / model.height * factor)
+    const widthScale = (canvas.width / model.width * factor)
     let minScale = Math.min(heightScale, widthScale)
 
     if (Number.isNaN(minScale) || minScale <= 0) {
@@ -34,7 +36,7 @@ export function useFitModel(
     return {
       scale: minScale,
       x: canvas.width / 2,
-      y: canvas.height * startingOffsetY.value,
+      y: canvas.height * (toValue(fullBody) ? 0.5 : startingOffsetY.value),
     }
   })
 

@@ -125,6 +125,33 @@ afterEach(() => {
 })
 
 describe('chat session synchronization', () => {
+  it('keeps a window-local selection when the leader publishes a new session index', async () => {
+    const namespace = `chat-session:${crypto.randomUUID()}`
+    const leaderContext = createSyncedContext(namespace, 'leader-only')
+    await vi.waitFor(() => expect(leaderContext.runtime.isLeader()).toBe(true))
+    setActivePinia(leaderContext.pinia)
+    const leader = useChatSessionStore()
+    await leader.initialize()
+    const firstSessionId = leader.activeSessionId
+
+    const followerContext = createSyncedContext(namespace, 'follower-only')
+    setActivePinia(followerContext.pinia)
+    const follower = useChatSessionStore()
+    await vi.waitFor(() => expect(followerContext.runtime.getLeaderId()).toBe(leaderContext.runtime.participantId))
+    await follower.initialize()
+
+    const localSessionId = await follower.createSession('default', { setActive: false })
+    await follower.setActiveSession(localSessionId)
+    expect(follower.activeSessionId).toBe(localSessionId)
+    expect(leader.activeSessionId).toBe(firstSessionId)
+
+    setActivePinia(leaderContext.pinia)
+    const newLeaderSessionId = await leader.createSession('default')
+    await vi.waitFor(() => expect(follower.index?.characters.default?.activeSessionId).toBe(newLeaderSessionId))
+    expect(follower.activeSessionId).toBe(localSessionId)
+    expect(leader.activeSessionId).toBe(newLeaderSessionId)
+  })
+
   it('initializes a follower through the canonical session action', async () => {
     // ROOT CAUSE:
     //

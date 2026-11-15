@@ -6,7 +6,7 @@ import { describe, it } from 'node:test'
 
 import { REPO_ROOT } from './qa-shared.mjs'
 
-const BAT_FILE = nodePath.join(REPO_ROOT, 'LiaTests.bat')
+const BAT_FILE = nodePath.join(REPO_ROOT, 'Tests', 'LiaTests.bat')
 const GITIGNORE_FILE = nodePath.join(REPO_ROOT, '.gitignore')
 const bat = readFileSync(BAT_FILE, 'utf-8')
 
@@ -131,7 +131,7 @@ describe('gitignore: harness-generated folders can never enter Git', () => {
   it('the committed harness (README + tools) is NOT ignored', () => {
     assert.ok(!ignored('Tests/README.md'))
     assert.ok(!ignored('Tests/tools/qa-shared.mjs'))
-    assert.ok(!ignored('LiaTests.bat'))
+    assert.ok(!ignored('Tests/LiaTests.bat'))
   })
 
   it('the .gitignore documents the QA block', () => {
@@ -145,10 +145,10 @@ describe('gitignore: harness-generated folders can never enter Git', () => {
 })
 
 describe('LiaBenchmark.bat: Windows benchmark harness static validation', () => {
-  const BENCH_BAT = nodePath.join(REPO_ROOT, 'LiaBenchmark.bat')
+  const BENCH_BAT = nodePath.join(REPO_ROOT, 'Tests', 'LiaBenchmark.bat')
   const bench = (()=>{ try{ return readFileSync(BENCH_BAT,'utf-8')}catch{ return ''} })()
   it('exists and uses CRLF', () => {
-    assert.ok(bench.length>0, 'LiaBenchmark.bat missing')
+    assert.ok(bench.length>0, 'Tests/LiaBenchmark.bat missing')
     assert.ok(bench.includes('\r\n'))
   })
   it('is a thin wrapper: @echo off, chcp 65001, where node, node qa-benchmark.mjs, exit %ERRORLEVEL%', () => {

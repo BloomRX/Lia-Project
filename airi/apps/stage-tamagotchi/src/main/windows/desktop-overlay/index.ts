@@ -76,7 +76,7 @@ export async function setupDesktopOverlayWindow(params: {
   // Use primary display bounds (not just size) — the origin may be non-zero
   // when multiple displays are arranged in macOS Display Preferences.
   const primaryDisplay = screen.getPrimaryDisplay()
-  const preloadPath = join(getElectronMainDirname(), '../preload/index.mjs')
+  const preloadPath = join(getElectronMainDirname(), '../preload/index.cjs')
 
   overlayWindow = new BrowserWindow(createDesktopOverlayWindowOptions({
     bounds: primaryDisplay.bounds,

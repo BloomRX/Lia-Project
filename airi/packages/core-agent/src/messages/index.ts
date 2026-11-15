@@ -8,6 +8,14 @@ export type {
   ProjectionSparkNotify,
 } from './projection'
 export { projectConversationEntries, projectProjection } from './projection'
+export type { ProviderContextMessage } from './provider-context'
+export {
+  countImagePartsInMessage,
+  countProviderContextImageParts,
+  hasProviderContextImageInput,
+  isProviderContextMessage,
+  selectProviderContextMessages,
+} from './provider-context'
 export { renderProviderChatMessages } from './render-provider-chat'
 export type {
   HistoryItem,

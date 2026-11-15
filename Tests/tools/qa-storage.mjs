@@ -179,6 +179,8 @@ export function inventoryCandidates({ env = process.env, repoRoot = REPO_ROOT })
 
   // --- harness-owned, safe to manage ---
   push(nodePath.join(repoRoot, '.devkit-qa'), 'qa-output-dir', 'managed-test', 'DevKit kokoro-smoke QA outputs (gitignored by design)')
+  push(nodePath.join(repoRoot, 'Tests', 'artifacts'), 'qa-output-dir', 'managed-test', 'QA artifacts and benchmark publication staging')
+  push(nodePath.join(repoRoot, 'Tests', 'tmp'), 'qa-output-dir', 'managed-test', 'Disposable test fixtures')
   push(nodePath.join(repoRoot, 'Tests', 'runs'), 'qa-runs', 'managed-test', 'Lia QA harness runs (this tool manages them)')
   push(nodePath.join(repoRoot, 'Tests', 'runtimes'), 'qa-runtimes', 'managed-test', 'Lia QA harness runtimes root (this tool manages it)')
   push(nodePath.join(repoRoot, 'Tests', 'logs'), 'qa-logs', 'managed-test', 'Lia QA harness logs root (this tool manages it)')

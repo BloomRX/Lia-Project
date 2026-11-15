@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events'
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, win32 } from 'node:path'
 import { execPath } from 'node:process'
 
 import { describe, expect, it, vi } from 'vitest'
@@ -45,6 +45,27 @@ async function makeStageWorkspace(): Promise<string> {
 }
 
 describe('phase 7.2: ownership retained, spawn without shell (tests C/D/G)', () => {
+  it('starts the packaged Stage without Node or package tools and waits for its visible renderer', async () => {
+    const child = fakeChild()
+    const spawnImpl = vi.fn(() => child as never)
+    const prerequisite = { name: 'unused', applies: vi.fn(() => true), run: vi.fn() }
+    const manager = new AiriStageManager({
+      workspaceRoot: '/no-development-checkout',
+      packagedStage: () => ({ command: 'C:\\Lia\\resources\\stage\\LiaStage.exe', args: [], cwd: 'C:\\Lia\\resources\\stage' }),
+      spawnImpl: spawnImpl as never,
+      prerequisite,
+      runtimeEnv: { PATH: '' },
+    })
+    const started = manager.start()
+    expect(spawnImpl).toHaveBeenCalledWith('C:\\Lia\\resources\\stage\\LiaStage.exe', [], expect.objectContaining({ cwd: 'C:\\Lia\\resources\\stage' }))
+    expect(prerequisite.run).not.toHaveBeenCalled()
+    child.stdout.emit('data', 'ready in 1ms')
+    expect(manager.state().phase).toBe('starting')
+    child.stdout.emit('data', '[lia-stage] window-ready')
+    expect((await started).phase).toBe('running')
+    child.exitCode = 0
+    child.emit('exit', 0)
+  })
   it('g: the Windows spawn path carries NO shell option - the DEP0190 route is eliminated', async () => {
     const root = await makeStageWorkspace()
     const child = fakeChild()
@@ -63,6 +84,79 @@ describe('phase 7.2: ownership retained, spawn without shell (tests C/D/G)', () 
       expect(entrypoint).toContain('electron-vite')
       expect(sub).toBe('dev')
     }
+  })
+
+  it('h: the stage child NEVER carries ELECTRON_RUN_AS_NODE - it would leak into the window', async () => {
+    const root = await makeStageWorkspace()
+    const child = fakeChild()
+    const spawnImpl = vi.fn((..._args: unknown[]) => child as never)
+    for (const platform of ['win32', 'linux'] as const) {
+      const manager = new AiriStageManager({
+        childEnv: { ELECTRON_RUN_AS_NODE: '1' },
+        platform,
+        spawnImpl: spawnImpl as never,
+        workspaceRoot: root,
+      })
+      void manager.start({ env: { ELECTRON_RUN_AS_NODE: '1' } })
+      const options = spawnImpl.mock.calls.at(-1)?.[2] as
+        | { env?: Record<string, string | undefined> }
+        | undefined
+      // The build prerequisite MAY need that variable; the stage child must
+      // never get it. `electron-vite` launches the window with
+      // `spawn(electronPath, [entry], { stdio: 'inherit' })` - no `env` option -
+      // so everything here reaches the Electron app verbatim, and a leaked
+      // ELECTRON_RUN_AS_NODE would start the WINDOW as plain Node: no window.
+      expect(
+        options?.env?.ELECTRON_RUN_AS_NODE,
+        `${platform} must not leak ELECTRON_RUN_AS_NODE into the stage child`,
+      ).toBeUndefined()
+    }
+  })
+
+  it('i: under Electron the Stage child is a REAL node from PATH, never the Electron binary', async () => {
+    const root = await makeStageWorkspace()
+    const child = fakeChild()
+    const spawnImpl = vi.fn((..._args: unknown[]) => child as never)
+    const nodeBin = win32.join('C:', 'tools', 'node.exe')
+    const logs: string[] = []
+    const manager = new AiriStageManager({
+      existsImpl: (path: string) => path === nodeBin,
+      onLog: line => logs.push(line),
+      platform: 'win32',
+      runtimeEnv: { PATH: ['C:\\nowhere', 'C:\\tools'].join(';') },
+      runtimeVersions: { electron: '43.4.1' },
+      spawnImpl: spawnImpl as never,
+      workspaceRoot: root,
+    })
+    void manager.start()
+    const command = spawnImpl.mock.calls.at(-1)?.[0] as string
+    expect(command).toBe(nodeBin)
+    expect(command).not.toBe(execPath)
+    // The chosen runtime is recorded, so a future Windows log says what ran.
+    expect(logs.includes('stage-runtime kind=node-from-path')).toBe(true)
+  })
+
+  it('j: under Electron with NO node on PATH it refuses to spawn instead of launching an app', async () => {
+    const root = await makeStageWorkspace()
+    const spawnImpl = vi.fn((..._args: unknown[]) => fakeChild() as never)
+    const logs: string[] = []
+    const manager = new AiriStageManager({
+      existsImpl: () => false,
+      // Even a provably enabled fuse must not buy this child the fallback.
+      fuseImpl: () => 'enabled',
+      onLog: line => logs.push(line),
+      platform: 'win32',
+      runtimeEnv: { PATH: 'C:\\nowhere' },
+      runtimeVersions: { electron: '43.4.1' },
+      spawnImpl: spawnImpl as never,
+      workspaceRoot: root,
+    })
+    const state = await manager.start()
+    // Fail closed. Spawning the Electron binary here would start an app that
+    // parents no window - the exact M3.0b failure mode, in a second place.
+    expect(spawnImpl).not.toHaveBeenCalled()
+    expect(state.phase).toBe('error')
+    expect(logs.some(l => l.startsWith('stage-runtime state=unavailable'))).toBe(true)
   })
 
   it('c: a session spawn retains truthful ownership while the dev-server lives', async () => {
@@ -171,6 +265,35 @@ describe('d. Conversar spawns the stage once', () => {
 })
 
 describe('e. Repeated Conversar is single-flight', () => {
+  it('a rejected prerequisite reaches a terminal error and a later start retries', async () => {
+    const root = await makeStageWorkspace()
+    const child = fakeChild()
+    const spawnImpl = vi.fn(() => child as never)
+    const run = vi.fn()
+      .mockRejectedValueOnce(new Error('private build output'))
+      .mockResolvedValueOnce({ ok: true })
+    const logs: string[] = []
+    const manager = new AiriStageManager({
+      onLog: line => logs.push(line),
+      prerequisite: { applies: () => true, name: 'core-agent-build', run },
+      spawnImpl: spawnImpl as never,
+      workspaceRoot: root,
+    })
+
+    const failed = await manager.start()
+    expect(failed.phase).toBe('error')
+    expect(manager.state().phase).toBe('error')
+    expect(spawnImpl).not.toHaveBeenCalled()
+    expect(logs).toContain('stage-prerequisite name=core-agent-build state=failed reason=unexpected-error')
+    expect(logs.join('\n')).not.toContain('private build output')
+
+    const retried = manager.start()
+    await vi.waitFor(() => expect(spawnImpl).toHaveBeenCalledTimes(1))
+    child.stdout.emit('data', 'ready in 50 ms')
+    expect((await retried).phase).toBe('running')
+    expect(run).toHaveBeenCalledTimes(2)
+  })
+
   it('concurrent starts share one spawn; starts after running do not respawn', async () => {
     const root = await makeStageWorkspace()
     const child = fakeChild()

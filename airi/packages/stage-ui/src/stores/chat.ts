@@ -32,6 +32,8 @@ import { CHAT_FALLBACK_MAX_ATTEMPTS, getChatFallbackResolver, notifyChatRequestS
 import { createMinecraftContext } from './chat/context-providers'
 import { liaCapabilityPromptSupplement } from './chat/context-providers/lia-capabilities'
 import { useChatContextStore } from './chat/context-store'
+import { selectProviderContextMessages } from './chat/provider-context'
+import { cloneRetryAttachments, retryContentFromUserMessage } from './chat/retry-content'
 import { retrySourceIndexFrom } from './chat/retry-source'
 import { humanizeSendErrorMessage } from './chat/send-error'
 import { useChatSessionStore } from './chat/session-store'
@@ -144,6 +146,20 @@ export interface ChatRetryPayload {
   routeOverride?: ChatSendRouteOverride
   /** Phase 8.0D-10B-4D4C4-D2B6 corrective: stable identity for the RETRIABLE USER source — when supplied, retry resolves CURRENT user index by message.id (role must be user). */
   sourceMessageId?: string
+  /**
+   * Phase 8.0D-10B-4D4C4-D2B11: optional AUTHORITATIVE image attachment
+   * snapshot, captured by the caller before any awaited decision.
+   *
+   * Supplied means "retry with exactly these attachments" - the authoritative
+   * path captures them so the decision and the outgoing retry describe the
+   * same user turn. Absent means the generic path reconstructs attachments
+   * from the CURRENT source USER message, preserving legacy id-less callers.
+   *
+   * Either way the source USER is still resolved and validated against
+   * current history: a captured snapshot never authorizes retrying a source
+   * that no longer exists.
+   */
+  attachments?: NonNullable<ChatSendPayload['attachments']>
 }
 
 /** Identifies one stored tool call that must run again in the leader. */
@@ -151,40 +167,21 @@ export interface ChatToolCallRerunPayload extends Omit<ToolCallRerunPayload, 'se
   sessionId: string
 }
 
-type ProviderHistoryMessage = Exclude<ChatHistoryItem, { role: 'error' }>
-
-function toProviderHistory(messages: ChatHistoryItem[]): Message[] {
-  return messages.filter((message): message is ProviderHistoryMessage => message.role !== 'error')
+/**
+ * Phase 8.0D-M3: where one logical send's appended tail starts.
+ *
+ * An attempt publishes it right after the session is hydrated and before
+ * anything is appended, so a send that later fails terminally can be
+ * attributed to exactly its own messages. `count` stays `undefined` when no
+ * attempt ever reached that point - nothing was appended, so there is nothing
+ * to withhold.
+ */
+interface SendTailBoundary {
+  count?: number
 }
 
 function isTextDelta(event: StreamEvent): event is Extract<StreamEvent, { type: 'text-delta' }> {
   return event.type === 'text-delta'
-}
-
-function retryTextFrom(message: ChatHistoryItem | undefined): string | null {
-  if (!message || message.role !== 'user')
-    return null
-
-  if (typeof message.content === 'string') {
-    const text = message.content.trim()
-    return text || null
-  }
-
-  if (!Array.isArray(message.content))
-    return null
-
-  const text = message.content.reduce<string[]>((texts, part) => {
-    if (part.type !== 'text')
-      return texts
-
-    const value = part.text?.trim()
-    if (value)
-      texts.push(value)
-
-    return texts
-  }, []).join('\n\n')
-
-  return text || null
 }
 
 export type { QueuedSendSnapshot } from '@proj-airi/core-agent'
@@ -434,12 +431,12 @@ export const useChatStore = defineStore('chat', () => {
     onUserTurnReady: ({ messageText, sessionMessages }) => {
       const autonomousTarget = cardStore.activeCard?.extensions?.airi?.modules?.artistry?.autonomousTarget || 'user'
       if (autonomousTarget === 'user')
-        void artistryAutonomousStore.runArtistTask(messageText, toProviderHistory(sessionMessages))
+        void artistryAutonomousStore.runArtistTask(messageText, selectProviderContextMessages(sessionMessages))
     },
     onAssistantTurnReady: ({ messageText, sessionMessages }) => {
       const artistry = cardStore.activeCard?.extensions?.airi?.modules?.artistry
       if (artistry?.autonomousEnabled && artistry?.autonomousTarget === 'assistant')
-        void artistryAutonomousStore.runArtistTask(messageText, toProviderHistory(sessionMessages))
+        void artistryAutonomousStore.runArtistTask(messageText, selectProviderContextMessages(sessionMessages))
     },
   })
 
@@ -465,20 +462,43 @@ export const useChatStore = defineStore('chat', () => {
     return [...names].map(name => ({ name }))
   }
 
+  /**
+   * Phase 8.0D-M3: withholds one logically failed send's appended tail from
+   * every later provider request.
+   *
+   * The messages are MARKED, never removed: the user turn stays visible in the
+   * conversation, stays persisted across restarts, and stays retriable with
+   * its original text and image attachments. Only provider projection changes,
+   * and only from the canonical seam that builds the prompt - so a failed image
+   * send can no longer donate its images to the next request, and repeated
+   * failed sends can no longer accumulate invisible effective images.
+   *
+   * Deliberately generic: nothing here knows about a provider, a model or an
+   * error string. Any terminal failure of a logical send reaches it.
+   */
+  function excludeSendTailFromProviderContext(sessionId: string, fromIndex: number | undefined) {
+    if (fromIndex === undefined)
+      return
+
+    const current = chatSession.getSessionMessagesIfLoaded(sessionId)
+    if (!current || current.length <= fromIndex)
+      return
+
+    chatSession.setSessionMessages(sessionId, current.map((message, index) => (
+      index < fromIndex || message.excludedFromProviderContext === true
+        ? message
+        : { ...message, excludedFromProviderContext: true }
+    )))
+  }
+
   function appendSendError(sessionId: string, error: unknown) {
     if (!chatSession.getSessionMessagesIfLoaded(sessionId))
       return
 
     const raw = errorMessageFrom(error) ?? 'Unknown chat operation failure'
-    // Phase 7.3 (QA item 10): the bubble gets the human mapping; the raw
-    // provider error ALWAYS stays in the diagnostic log. Raw text never
-    // contains secrets - transport errors carry status/code, not keys.
-    const humanized = humanizeSendErrorMessage(raw, {
-      authHint: 'the Lia Settings',
-      fallback: 'Unknown chat operation failure',
-    })
-    if (humanized.kind === 'auth-failure')
-      console.warn('[lia] chat send auth failure (raw provider detail follows):', raw)
+    // Persist only safe canonical text. The UI localizes it at render time;
+    // legacy transport payloads are also replaced before rendering or copying.
+    const humanized = humanizeSendErrorMessage(raw)
 
     chatSession.appendSessionMessage(sessionId, {
       role: 'error',
@@ -486,7 +506,7 @@ export const useChatStore = defineStore('chat', () => {
     })
   }
 
-  async function executeSendAttempt(payload: ChatSendPayload, effectiveRoute?: ChatSendRouteOverride): Promise<ChatSendResult> {
+  async function executeSendAttempt(payload: ChatSendPayload, effectiveRoute?: ChatSendRouteOverride, tailBoundary?: SendTailBoundary): Promise<ChatSendResult> {
     // Phase 8.0D-10B-4D4C4-D2A: per-send override takes precedence over global,
     // with explicit effectiveRoute (fallback next) taking precedence over the
     // payload's initial override. No global is mutated here.
@@ -499,6 +519,12 @@ export const useChatStore = defineStore('chat', () => {
       throw new Error('Failed to load the target chat session')
 
     const messageCount = chatSession.getSessionMessages(payload.sessionId).length
+    // Phase 8.0D-M3: the session is hydrated and nothing has been appended yet,
+    // so this is exactly where this attempt's tail will start. Published to the
+    // caller so a terminal failure can mark its own messages and nobody
+    // else's. Read-only here - the attempt itself never marks anything.
+    if (tailBoundary)
+      tailBoundary.count = messageCount
     // Phase 8.0D-10B-4D4C4-D2B2-C1: generic per-send reasoning frozen at payload
     // construction. Undefined preserves live global behavior via consciousness
     // store; defined true/false is reused verbatim for every attempt (incl.
@@ -547,6 +573,33 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   /**
+   * Phase 8.0D-M3: the failed-turn durability boundary for ONE logical send.
+   *
+   * Every way a send can end badly converges here - a provider rejection with
+   * no fallback resolver registered, a resolver that declines to offer a next
+   * route, a bounded fallback loop exhausted, or a failure before any provider
+   * was reached. In all of them the tail this send appended is withheld from
+   * future provider context BEFORE the error bubble is added (the bubble is
+   * appended by the settlement wrapper above this one, which only runs after
+   * this rethrows).
+   *
+   * The invariant is deliberately not tied to the Lia fallback branch: a
+   * terminal failure with no resolver at all obeys it identically. It also
+   * never inspects the error - the outcome alone decides, so no provider,
+   * status code or message text is matched here.
+   */
+  async function executeSend(payload: ChatSendPayload): Promise<ChatSendResult> {
+    const tailBoundary: SendTailBoundary = {}
+    try {
+      return await executeSendWithTailBoundary(payload, tailBoundary)
+    }
+    catch (error) {
+      excludeSendTailFromProviderContext(payload.sessionId, tailBoundary.count)
+      throw error
+    }
+  }
+
+  /**
    * Runs one chat send, optionally failing over to another provider/model when a
    * registered fallback policy decides a failure is recoverable.
    *
@@ -556,11 +609,11 @@ export const useChatStore = defineStore('chat', () => {
    * (so no user message is duplicated and history/persona/session are preserved)
    * and retries with the policy-chosen provider, bounded by a hard ceiling.
    */
-  async function executeSend(payload: ChatSendPayload): Promise<ChatSendResult> {
+  async function executeSendWithTailBoundary(payload: ChatSendPayload, tailBoundary: SendTailBoundary): Promise<ChatSendResult> {
     const fallbackResolver = getChatFallbackResolver()
     const hasRouteOverride = !!payload.routeOverride
     if (!fallbackResolver) {
-      return executeSendAttempt(payload, hasRouteOverride ? payload.routeOverride : undefined)
+      return executeSendAttempt(payload, hasRouteOverride ? payload.routeOverride : undefined, tailBoundary)
     }
 
     // Snapshot the conversation before the send so a failed attempt can be
@@ -577,7 +630,7 @@ export const useChatStore = defineStore('chat', () => {
       let lastError: unknown
       for (let attempt = 0; attempt < CHAT_FALLBACK_MAX_ATTEMPTS; attempt += 1) {
         try {
-          return await executeSendAttempt(payload, effectiveRoute)
+          return await executeSendAttempt(payload, effectiveRoute, tailBoundary)
         }
         catch (error) {
           lastError = error
@@ -623,7 +676,7 @@ export const useChatStore = defineStore('chat', () => {
     try {
       for (let attempt = 0; attempt < CHAT_FALLBACK_MAX_ATTEMPTS; attempt += 1) {
         try {
-          return await executeSendAttempt(payload)
+          return await executeSendAttempt(payload, undefined, tailBoundary)
         }
         catch (error) {
           lastError = error
@@ -755,9 +808,20 @@ export const useChatStore = defineStore('chat', () => {
     }
 
     const sourceMessage = currentMessages[sourceIndex]
-    const text = retryTextFrom(sourceMessage)
-    if (!text)
+    // Phase 8.0D-10B-4D4C4-D2B11: derive the FULL retry content of the resolved
+    // source USER - text and images - BEFORE truncating history, so the source
+    // is still present while it is read. An image-only turn is retryable with
+    // empty text, matching what a normal image-only send already allows.
+    const sourceContent = retryContentFromUserMessage(sourceMessage)
+    if (!sourceContent)
       throw new Error('Retry target has no retriable user message')
+
+    // Phase 8.0D-10B-4D4C4-D2B11: a supplied snapshot is authoritative and is
+    // copied, never retained by alias; otherwise the attachments come from the
+    // source USER just resolved.
+    const effectiveAttachments = payload.attachments === undefined
+      ? sourceContent.attachments
+      : cloneRetryAttachments(payload.attachments)
 
     chatSession.setSessionMessages(payload.sessionId, currentMessages.slice(0, sourceIndex))
 
@@ -767,7 +831,11 @@ export const useChatStore = defineStore('chat', () => {
     // Phase 8.0D-10B-4D4C4-D2B6: retry is a NEW logical send — correlationId, reasoning and routeOverride are forwarded only when supplied, preserving absence semantics for legacy callers.
     return executeSettledSend({
       sessionId: payload.sessionId,
-      text,
+      text: sourceContent.text,
+      // Phase 8.0D-10B-4D4C4-D2B11: the retry re-enters the SAME generic send
+      // path a normal send uses, so every fallback attempt reuses this one
+      // payload - and therefore these attachments - unchanged.
+      attachments: effectiveAttachments,
       tools: payload.tools ?? sourceMessage?.tools,
       ...(payload.correlationId === undefined ? {} : { correlationId: payload.correlationId }),
       ...(payload.reasoning === undefined ? {} : { reasoning: payload.reasoning }),

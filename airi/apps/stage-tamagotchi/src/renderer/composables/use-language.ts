@@ -1,7 +1,7 @@
 import type { Ref } from 'vue'
 
 import { useLocalStorageManualReset } from '@proj-airi/stage-shared/composables'
-import { watch } from 'vue'
+import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 /**
@@ -13,12 +13,13 @@ import { useI18n } from 'vue-i18n'
  *
  * Expects:
  * - `language` is the reactive language ref from the settings store
- * - `getMainLocale` returns the raw locale persisted in main-process config
+ * - `getMainLocale` returns the locale persisted in main-process config
  *   (`undefined` when no config exists yet, a string when user saved one)
  * - `setLocale` syncs the renderer locale back to main process
  *
  * Returns:
  * - `restore()` to be called during component onMounted
+ * - `syncError` exposes a failed persistence attempt
  */
 export function useLanguage(
   language: Ref<string>,
@@ -28,23 +29,33 @@ export function useLanguage(
   const i18n = useI18n()
   const persistedLanguage = useLocalStorageManualReset<string>('settings/language', '')
   const hasPersistedLanguage = persistedLanguage.value !== ''
+  const managed = new URLSearchParams(globalThis.location?.search ?? '').get('lia-managed') === 'true'
+  const syncError = ref<unknown>()
   let isLocaleSynced = false
 
   // Guard: do not propagate the store's navigator.language fallback back
   // to main-process config before we have verified the correct locale.
-  watch(language, () => {
+  watch(language, async () => {
     i18n.locale.value = language.value || 'en'
     if (isLocaleSynced) {
-      void setLocale(language.value || 'en')
+      try {
+        await setLocale(language.value || 'en')
+        syncError.value = undefined
+      }
+      catch (error) {
+        syncError.value = error
+        console.warn('[useLanguage] Failed to save locale')
+      }
     }
-  })
+  }, { flush: 'sync' })
 
   async function restore() {
-    // Only trust main-process locale when renderer has lost its own setting.
+    // Managed Lia always trusts the canonical product preference from Main.
+    // Standalone trusts Main only when renderer has lost its own setting.
     // When main returns undefined, no language has ever been explicitly saved
     // (true first launch), so we keep the renderer's OS-detected fallback.
     // When main returns a string, that is the user's explicit choice.
-    if (!hasPersistedLanguage) {
+    if (managed || !hasPersistedLanguage) {
       try {
         const mainLocale = await getMainLocale()
         if (typeof mainLocale === 'string' && mainLocale && mainLocale !== language.value) {
@@ -52,12 +63,18 @@ export function useLanguage(
         }
       }
       catch (error) {
+        if (managed) {
+          syncError.value = error
+          throw error
+        }
         console.warn('[useLanguage] Failed to get locale from main process, using fallback:', error)
       }
     }
     isLocaleSynced = true
-    void setLocale(language.value || 'en')
+    i18n.locale.value = language.value || 'en'
+    if (!managed)
+      await setLocale(language.value || 'en')
   }
 
-  return { restore }
+  return { restore, syncError }
 }

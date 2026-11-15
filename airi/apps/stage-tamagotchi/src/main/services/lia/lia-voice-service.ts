@@ -21,7 +21,6 @@ import {
   electronLiaVoiceStatus,
   electronLiaVoiceSynthesize,
 } from '../../../shared/eventa'
-import { defaultLiaProductConfig } from '../../configs/lia-schema'
 import { onAppBeforeQuit } from '../../libs/bootkit/lifecycle'
 
 /**
@@ -49,7 +48,7 @@ type MainContext = ReturnType<typeof createContext>['context']
 
 interface LiaVoiceServiceParams {
   context: MainContext
-  liaProductConfig: { get: () => LiaProductConfig | undefined, update: (value: LiaProductConfig) => void }
+  liaProductConfig: { get: () => LiaProductConfig | undefined, updateAndSave: (mutator: (current: LiaProductConfig) => LiaProductConfig) => Promise<void> }
   store: LiaVoiceProfileStore
   onVoiceAvailabilityChanged?: (available: boolean) => void
   /**
@@ -108,8 +107,8 @@ export function registerLiaVoiceBridge(params: LiaVoiceServiceParams) {
   // Phase 7.9H-B1: the ONE central speech-output gate. Absent/true means
   // enabled (the product default); only an explicit `voice.enabled: false`
   // opts the user out. Opting out silences spoken output WITHOUT touching
-  // runtime management: engines stay installed/registered (prewarm keeps
-  // running), text stays fully available, Stage launch never fails, and a
+  // runtime installation: engines stay installed/registered, explicit text-only
+  // startup skips prewarm, text stays fully available, Stage launch never fails, and a
   // later re-enable resumes the existing engine path with zero reinstall.
   const voiceEnabled = () => readVoiceEnabledConfig(liaProductConfig.get()?.voice)
 
@@ -245,25 +244,26 @@ export function registerLiaVoiceBridge(params: LiaVoiceServiceParams) {
   })
 
   defineInvokeHandler(context, electronLiaVoiceEngineConfigSet, async (update: LiaVoiceEngineConfig): Promise<void> => {
-    const current = liaProductConfig.get() ?? defaultLiaProductConfig
-    // A tiny, schema-validated merge: engine/fallback keys only - the legacy
-    // alltalk block is out of reach of this writer by construction.
-    const voice = { ...current.voice } as Record<string, unknown>
-    if (update.engine?.preferred !== undefined) {
-      const preferred = update.engine.preferred.trim()
-      if (preferred)
-        voice.engine = { preferred }
-      else
-        delete voice.engine
-    }
-    if (update.fallback !== undefined) {
-      voice.fallback = {
-        ...(voice.fallback as Record<string, unknown> | undefined),
-        ...(update.fallback.enabled !== undefined ? { enabled: update.fallback.enabled === true } : {}),
-        ...(update.fallback.engineId !== undefined && update.fallback.engineId.trim() ? { engineId: update.fallback.engineId.trim() } : {}),
+    await liaProductConfig.updateAndSave((current) => {
+      // A tiny, schema-validated merge: engine/fallback keys only - the legacy
+      // alltalk block is out of reach of this writer by construction.
+      const voice = { ...current.voice } as Record<string, unknown>
+      if (update.engine?.preferred !== undefined) {
+        const preferred = update.engine.preferred.trim()
+        if (preferred)
+          voice.engine = { preferred }
+        else
+          delete voice.engine
       }
-    }
-    liaProductConfig.update({ ...current, voice: voice as LiaProductConfig['voice'] })
+      if (update.fallback !== undefined) {
+        voice.fallback = {
+          ...(voice.fallback as Record<string, unknown> | undefined),
+          ...(update.fallback.enabled !== undefined ? { enabled: update.fallback.enabled === true } : {}),
+          ...(update.fallback.engineId !== undefined && update.fallback.engineId.trim() ? { engineId: update.fallback.engineId.trim() } : {}),
+        }
+      }
+      return { ...current, voice: voice as LiaProductConfig['voice'] }
+    })
     voiceChanged()
   })
 

@@ -28,11 +28,13 @@ describe('production brain catalog (8.0D-3)', () => {
     expect(catalog.engines[0].name).toBe('Groq')
   })
 
-  it('c/D: exactly one production model, and it is openai/gpt-oss-120b', () => {
+  it('c/D: exactly the two production models, text brain then vision route', () => {
     const catalog = createProductionBrainCatalog()
-    expect(catalog.models).toHaveLength(1)
-    expect(catalog.models[0].id).toBe('openai/gpt-oss-120b')
+    expect(catalog.models.map(model => model.id)).toEqual(['openai/gpt-oss-120b', 'qwen/qwen3.8-27b'])
     expect(catalog.models[0].name).toBe('GPT-OSS 120B')
+    expect(catalog.models[1].name).toBe('Qwen3.8 27B')
+    // One engine serves both - the catalog did not gain a second provider.
+    expect(catalog.engines).toHaveLength(1)
   })
 
   it('e: the engine was registered through the canonical registry', () => {
@@ -136,11 +138,11 @@ describe('production brain catalog (8.0D-3)', () => {
 
     const third = createProductionBrainCatalog()
     expect(third.engines).toHaveLength(1)
-    expect(third.engines[0].modelIds).toEqual(['openai/gpt-oss-120b'])
-    expect(third.models).toHaveLength(1)
+    expect(third.engines[0].modelIds).toEqual(['openai/gpt-oss-120b', 'qwen/qwen3.8-27b'])
+    expect(third.models).toHaveLength(2)
     expect(third.registry.resolve('intruder')).toBeUndefined()
     // The registry's own state survived the abuse of its enumeration output.
-    expect(third.registry.resolve('groq')?.modelIds).toEqual(['openai/gpt-oss-120b'])
+    expect(third.registry.resolve('groq')?.modelIds).toEqual(['openai/gpt-oss-120b', 'qwen/qwen3.8-27b'])
     expect(third.engines).toEqual(groqBrainDescriptors().engines)
   })
 
@@ -174,12 +176,24 @@ describe('production brain catalog (8.0D-3)', () => {
     expect(automatic.selection.route.engine.id).toBe('groq')
     expect(automatic.selection.route.model.id).toBe('openai/gpt-oss-120b')
 
-    // An unsupported ask yields no candidate route - the catalog describes
-    // availability, it never promises more than the descriptors support.
-    const unsupported = decideBrainRouteFromProductState({
+    // An image ask is served by the vision route alone: the text brain drops
+    // out at the eligibility layer, so a policy naming only the text brain has
+    // nothing to select - and the selector says so explicitly rather than
+    // substituting the other candidate.
+    const textOnlyPolicy = decideBrainRouteFromProductState({
       engines,
       models,
       requirement: { required: ['imageInput'] },
+      automaticPolicy: { routes: [{ engineId: 'groq', modelId: 'openai/gpt-oss-120b' }] },
+      snapshot: { brain: { mode: 'automatic' } },
+    })
+    expect(textOnlyPolicy).toEqual({ selection: { status: 'noPolicyMatch' }, status: 'automatic' })
+
+    // A capability NO model has still yields no candidate at all.
+    const unsupported = decideBrainRouteFromProductState({
+      engines,
+      models,
+      requirement: { required: ['audioInput'] },
       automaticPolicy: { routes: [{ engineId: 'groq', modelId: 'openai/gpt-oss-120b' }] },
       snapshot: { brain: { mode: 'automatic' } },
     })

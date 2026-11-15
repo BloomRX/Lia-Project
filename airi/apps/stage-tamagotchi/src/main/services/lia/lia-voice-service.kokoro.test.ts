@@ -12,6 +12,8 @@
 import type { LiaVoiceEngine, LiaVoiceSynthesisInput } from '@lia/core/voice/engines/types'
 import type { createContext } from '@moeru/eventa/adapters/electron/main'
 
+import type { LiaProductConfig } from '../../configs/lia-schema'
+
 import { LiaVoiceEngineError } from '@lia/core/voice/engines/types'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -105,6 +107,9 @@ async function loadBridge(engines: LiaVoiceEngine[]) {
     let doc: Record<string, unknown> | undefined
     return {
       get: () => doc as never,
+      updateAndSave: async (mutator: (current: LiaProductConfig) => LiaProductConfig) => {
+        doc = mutator((doc ?? { schemaVersion: 1, persona: {}, provider: {}, voice: {}, preferences: {} }) as LiaProductConfig)
+      },
       update: (value: Record<string, unknown>) => {
         doc = value
       },

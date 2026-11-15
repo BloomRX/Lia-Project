@@ -1,0 +1,30 @@
+stage:
+  load-models: Carregar personagens
+  load-models-status:
+    loading: Carregando
+    ready: Pronto
+controls-island:
+  fade-on-hover:
+    enable: Ocultar ao passar o mouse
+    disable: Manter visível
+  open-settings: Abrir configurações
+  open-chat: Abrir conversa
+  go-home: Início
+  refresh: Recarregar
+  center-main-window: Centralizar personagem
+  open-hearing-controls: Configurar microfone
+  drag-to-move-window: Arrastar personagem
+  stop-speaking: Parar de falar
+  speaker-idle: Voz
+  switch-to-light-mode: Usar tema claro
+  switch-to-dark-mode: Usar tema escuro
+  pin-on-top: Manter no topo
+  unpin-from-top: Permitir outras janelas no topo
+  switch-profile: Trocar personagem
+  close: Fechar
+  expand: Expandir
+  collapse: Recolher
+  login: Entrar
+  logging-in: Entrando…
+  account: Conta
+  logout: Sair

@@ -1,0 +1,25 @@
+{
+  "scope": "Exploratory packaged Stage cohort after UI gate, CDP active, 15 seconds, not engine comparison",
+  "root": "J:/lia-evidence/20261108T211903069Z-stage-packaged-ui-fixture-idle-93ddb0cc74b64d97b1f7d3470675de21",
+  "samples": 15,
+  "workingSetMiB": {
+    "mean": 1997.4778645833333,
+    "peak": 2031.87109375
+  },
+  "privateMiB": {
+    "mean": 2172.69609375,
+    "peak": 2456.20703125
+  },
+  "machineCPUPercent": {
+    "mean": 8.491212836037809,
+    "peak": 11.557706542594397
+  },
+  "notMeasured": [
+    "GPU",
+    "FPS",
+    "frame time",
+    "game impact",
+    "power",
+    "long running"
+  ]
+}

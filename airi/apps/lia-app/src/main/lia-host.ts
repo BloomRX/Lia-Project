@@ -1,6 +1,6 @@
 import type { LiaBridgeConfig } from '@lia/core/bridge/lia-config'
 import type { LiaProductPaths } from '@lia/core/paths/product-paths'
-import type { LiaProductConfigSnapshot, LiaProductConfigUpdate } from '@lia/core/product/config'
+import type { LiaProductConfigSnapshot, LiaProductConfigUpdate, LiaProductSttTarget } from '@lia/core/product/config'
 import type { LiaSecretCipher, LiaSecretVault } from '@lia/core/secrets/vault'
 import type { LiaCustomVoiceProfile, LiaVoiceProfileImportRequest } from '@lia/core/voices/types'
 
@@ -10,18 +10,29 @@ import type { ShutdownReport } from './shutdown-coordinator'
 import process from 'node:process'
 
 import { access, stat } from 'node:fs/promises'
-import { dirname, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import {
+  brainRequirementForChatTurn,
+  createProductionBrainAutomaticPolicy,
+  createProductionBrainCatalog,
+  decideBrainRouteFromProductState,
+} from '@lia/core'
 import { resolveVoiceRuntimeHome } from '@lia/core/bootstrap/runtime-root'
 import { buildLiaBridgeConfig, stageEnvFor } from '@lia/core/bridge/lia-config'
 import { classifyInstallLocation, inspectInstallLocationTarget } from '@lia/core/paths/install-location'
 import { liaProductPaths } from '@lia/core/paths/product-paths'
-import { readLiaProductConfig, updateLiaProductConfig } from '@lia/core/product/config'
+import { brainRoutingModeUpdate, readBrainRoutingMode, readLiaProductConfig, updateLiaProductConfig } from '@lia/core/product/config'
 import { createLiaSecretVault } from '@lia/core/secrets/vault'
 import { createLiaVoiceProfileStore, findMissingFiles } from '@lia/core/voices/profiles'
 
+import { CredentialOwnerError, isPublicCredentialReference, startCredentialOwner } from '../../../../../lia/core/src/credentials/owner-channel'
+import { decideSelectionWrite, isLauncherManagedProvider, isLiaSelectionTarget, type LiaSelectionTarget } from '../../../../../lia/core/src/providers/selection-write-policy'
+import { createTransportRepository } from '../../../../../lia/core/src/transports/repository'
+import { createAiConnectionService, type AiConnectionStartCode, type AiConnectionStartReadiness } from './ai-connection-service'
 import { AiriStageManager } from './airi-stage-manager'
+import { sameProfileDirectory } from './launcher-profile'
 import { ShutdownCoordinator } from './shutdown-coordinator'
 
 /**
@@ -38,6 +49,39 @@ import { ShutdownCoordinator } from './shutdown-coordinator'
  * no stage UI - "Conversar com Lia" delegates the entire companion
  * experience to the stage child.
  */
+
+/**
+ * The chat provider whose vault credential the derived Lia transcription target
+ * reuses.
+ */
+const GROQ_CHAT_PROVIDER_ID = 'groq'
+
+/**
+ * Phase 8.0D-10B-4D4C4-SHELL-B1: the derived Lia-managed speech-to-text target
+ * the Launcher writes when it is eligible to.
+ *
+ * `LIA_GROQ_TRANSCRIPTION_PROVIDER_ID` is a DERIVED runtime provider id, not a
+ * new protocol and not a credential holder: the managed Stage projects it onto
+ * the existing OpenAI-compatible transcription adapter and resolves its
+ * credential from the user's EXISTING Groq vault entry - one secret, one scope,
+ * zero duplication. The spelling is a product policy decision, so it lives with
+ * the Launcher rather than in the vendor-neutral generic config layer.
+ */
+const LIA_GROQ_TRANSCRIPTION_PROVIDER_ID = 'lia-groq-transcription'
+
+/**
+ * Groq Whisper is multilingual and auto-detects the spoken language, so no
+ * language hint is stored anywhere in the canonical document.
+ */
+const LIA_GROQ_TRANSCRIPTION_MODEL_ID = 'whisper-large-v3-turbo'
+
+/** The canonical default STT target, metadata only - never a credential. */
+function liaGroqTranscriptionTarget(): LiaProductSttTarget {
+  return {
+    modelId: LIA_GROQ_TRANSCRIPTION_MODEL_ID,
+    providerId: LIA_GROQ_TRANSCRIPTION_PROVIDER_ID,
+  }
+}
 
 export interface LiaHomeStatus {
   /** Chat provider onboarding: has a preferred target AND its key present. */
@@ -97,13 +141,26 @@ export interface LiaHomeStatus {
 export interface LiaConfigUpdatePayload {
   secrets?: { key: string, scope: string, value: string }[]
   update: LiaProductConfigUpdate
+  expectedPreferred?: unknown
 }
 
 export type LiaConfigUpdateResult
   = | { status: 'ok', value: LiaProductConfigSnapshot }
-    | { message: string, status: 'invalid-source' | 'secret-forbidden' | 'secret-vault-failed' | 'write-failed' }
+    | { message: string, status: 'invalid-source' | 'secret-forbidden' | 'secret-vault-failed' | 'write-failed' | 'selection-owned-by-launcher' | 'stale-selection' | 'selection-read-failed' | 'managed-credential-owned-by-ai-settings' }
+
+export class AiStartBlockedError extends Error {
+  constructor(readonly code: AiConnectionStartCode) {
+    super('The AI service is not ready.')
+    this.name = 'AiStartBlockedError'
+  }
+}
 
 export interface LiaHostDeps {
+  /** Only the production Main starts the private, per-Stage credential lease. */
+  enableCredentialOwner?: boolean
+  credentialOwnerFactory?: typeof startCredentialOwner
+  launcherChromiumProfile?: string
+  packagedStage?: ConstructorParameters<typeof AiriStageManager>[0]['packagedStage']
   /**
    * The OS cipher for the secret vault (injected by the Electron entry from
    * `safeStorage`; tests inject an identity cipher).
@@ -158,6 +215,7 @@ export type LiaRuntimeLocationPickResult
     | { message: string, reason: string, status: 'rejected' }
 
 export interface LiaHost {
+  aiConnection: ReturnType<typeof createAiConnectionService>
 
   /** The resolved bridge contract for THIS launch (built fresh from disk). */
   bridgeConfig: () => Promise<LiaBridgeConfig>
@@ -225,10 +283,53 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
     }))
   }
   const platform = deps.platform ?? process.platform
-  const vault = createLiaSecretVault({
+  const localVault = createLiaSecretVault({
     cipher: deps.cipher,
     filePath: paths.vaultFile,
   })
+  let credentialWrites: Promise<unknown> = Promise.resolve()
+  function serializeCredentialWrite<T>(write: () => Promise<T>): Promise<T> {
+    const next = credentialWrites.then(write, write)
+    credentialWrites = next.catch(() => {})
+    return next
+  }
+  const vault: LiaSecretVault = {
+    ...localVault,
+    ...(localVault.changeSecret
+      ? { changeSecret: async (scope: string, key: string, value: string | undefined, options?: Parameters<NonNullable<LiaSecretVault['changeSecret']>>[3]) => {
+          const change = await serializeCredentialWrite(() => localVault.changeSecret!(scope, key, value, options))
+          return change && { revision: change.revision, rollback: () => serializeCredentialWrite(change.rollback) }
+        } }
+      : {}),
+    setSecret: (scope, key, value, signal, revision) => {
+      let expectedRevision: string | undefined
+      try {
+        expectedRevision = revision ?? localVault.secretRevision?.(scope, key)
+      }
+      catch { return Promise.resolve(false) }
+      if (expectedRevision === undefined)
+        return Promise.resolve(false)
+      return serializeCredentialWrite(async () => await localVault.changeSecret?.(scope, key, value, { signal, expectedRevision }) !== undefined)
+    },
+    deleteSecret: (scope, key) => serializeCredentialWrite(() => localVault.deleteSecret(scope, key)),
+  }
+  const transportRepository = createTransportRepository(join(paths.userDataDir, 'lia-transports.json'))
+  let readManagedAiReadiness: (() => Promise<AiConnectionStartReadiness>) | undefined
+  async function hasChatAuthentication(providerId: string): Promise<boolean> {
+    if (isLauncherManagedProvider(providerId)) {
+      const readiness = await readManagedAiReadiness?.()
+      return readiness?.ok === true && readiness.managed && readiness.providerId === providerId
+    }
+    try {
+      const rows = (await transportRepository.read()).records.filter(row => row.providerId === providerId)
+      if (rows.length > 0 && (rows.length !== 1 || !rows[0].enabled))
+        return false
+      if (vault.hasSecret(providerId, 'apiKey'))
+        return true
+      return rows.length === 1 && rows[0].enabled && rows[0].protocol === 'chat-completions' && rows[0].adapterOptions.allowUnauthenticated === true
+    }
+    catch { return false }
+  }
   const voices = createLiaVoiceProfileStore({ rootDir: paths.voicesRoot })
   const emit = deps.onEvent ?? (() => {})
 
@@ -236,11 +337,95 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
   // launcher's boot NEVER starts a voice runtime (contract item 12).
 
   const workspaceRoot = deps.workspaceRoot ?? defaultWorkspaceRoot()
+  let credentialOwner: Awaited<ReturnType<typeof startCredentialOwner>> | undefined
+  let credentialOwnerClosing: Promise<void> = Promise.resolve()
+  async function revokeCredentialOwner() {
+    const previous = credentialOwner
+    credentialOwner = undefined
+    if (previous)
+      credentialOwnerClosing = previous.close()
+    await credentialOwnerClosing
+  }
 
   const stage = (deps.stageManagerFactory ?? ((d: ConstructorParameters<typeof AiriStageManager>[0]) => new AiriStageManager(d)))({
+    packagedStage: deps.packagedStage,
     onLog: line => emit('lia-app.stage-log', line),
+    onState: (state) => {
+      emit('lia-app.stage-state', state.phase)
+      if (state.phase === 'stopped' || state.phase === 'error')
+        void revokeCredentialOwner().catch(() => {})
+    },
     workspaceRoot,
   })
+
+  // Serialize the ENTIRE save (including rollback) with launch preparation.
+  // Ownership must be checked inside this section: an IPC-only check races
+  // against asynchronous vault writes and a concurrent Stage start.
+  let stageConfigurationQueue: Promise<unknown> = Promise.resolve()
+  function withStageConfigurationLock<T>(operation: () => Promise<T>): Promise<T> {
+    const result = stageConfigurationQueue.then(operation)
+    stageConfigurationQueue = result.catch(() => {})
+    return result
+  }
+  const startStage = stage.start.bind(stage)
+  const stopStage = stage.stop.bind(stage)
+  stage.stop = async () => {
+    try {
+      await stopStage()
+    }
+    finally { await revokeCredentialOwner() }
+  }
+  async function startManagedStage(options: { env?: Record<string, string | undefined> } = {}) {
+    if (deps.launcherChromiumProfile && sameProfileDirectory(deps.launcherChromiumProfile, paths.userDataDir))
+      throw new Error('A pasta de dados precisa ser diferente do perfil do Launcher. Altere a pasta nas configurações avançadas. / Select a data folder separate from the Launcher profile.')
+    if (!deps.enableCredentialOwner || stage.holdsOwnedStage())
+      return startStage(options)
+    await revokeCredentialOwner()
+    credentialOwner = await (deps.credentialOwnerFactory ?? startCredentialOwner)({
+      async handle(request, signal) {
+        if (signal.aborted)
+          throw new CredentialOwnerError('cancelled')
+        if (request.operation === 'get') {
+          // Only an existing transport reference may resolve a key. The peer
+          // cannot request files, raw ciphertext, exports or arbitrary secrets.
+          const records = (await transportRepository.read()).records
+          if (!records.some(record => record.credentialRef.scope === request.scope && record.credentialRef.key === request.key))
+            throw new CredentialOwnerError('denied')
+          await credentialWrites
+          if (signal.aborted)
+            throw new CredentialOwnerError('cancelled')
+          try {
+            return vault.getSecret(request.scope, request.key)
+          }
+          catch { throw new CredentialOwnerError('unreadable') }
+        }
+        const expectedRevision = request.operation === 'set'
+          ? localVault.secretRevision?.(request.scope, request.key)
+          : request.expectedRevision
+        // Explicit set/delete has the same API-key scope as the existing Main
+        // secret writer; a new entry is inert until a transport references it.
+        return serializeCredentialWrite(async () => {
+          // Revocation/deadline can occur while this write is still queued.
+          if (signal.aborted)
+            throw new CredentialOwnerError('cancelled')
+          if (request.operation === 'set' && expectedRevision === undefined)
+            return false
+          const change = await localVault.changeSecret?.(request.scope, request.key, request.value, { signal, expectedRevision })
+          return request.operation === 'change' ? change?.revision : change !== undefined
+        })
+      },
+    })
+    try {
+      const result = await startStage({ env: { ...options.env, ...credentialOwner.environment } })
+      if (result.phase === 'error' || result.phase === 'stopped')
+        await revokeCredentialOwner()
+      return result
+    }
+    catch (error) {
+      await revokeCredentialOwner()
+      throw error
+    }
+  }
 
   /**
    * The supervisor shutdown officer (Phase 7.1, items 1/2/3). Registration
@@ -283,6 +468,164 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
    * Every refusal is a human pt-BR message plus a machine-readable event
    * (safe metadata only). A non-custom provider starts NOTHING.
    */
+  /**
+   * Phase 8.0D-10B-4D4C4-SHELL-B1: materialize the canonical speech-to-text
+   * selection BEFORE the Stage child launches, so the managed Stage reads an
+   * already-resolved hearing target and the user never opens AIRI Settings.
+   *
+   * The gate is deliberately narrow. All four must hold:
+   *   1. voice is not explicitly opted out (`voice.enabled !== false`);
+   *   2. no STT selection exists yet - an explicit one is authoritative;
+   *   3. the selected chat provider is the one with a proven transcription
+   *      target that can REUSE an already-stored credential;
+   *   4. that credential actually exists in the vault.
+   *
+   * Otherwise the Launcher refuses to guess. In particular it never selects
+   * Web Speech - the Windows runtime evidence showed it starting, reporting
+   * `network`, then restarting indefinitely without producing a transcript, so
+   * being keyless is not the same as being reliable.
+   *
+   * Returns whether a usable canonical STT target exists afterwards.
+   */
+  async function ensureSttReadyForConversar(snapshot: LiaProductConfigSnapshot | undefined): Promise<'configured' | 'not-configured'> {
+    // An explicit voice opt-out is respected absolutely: text-only mode never
+    // grows a microphone preference behind the user's back.
+    if (snapshot?.voice?.enabled === false)
+      return 'not-configured'
+
+    // An existing selection is authoritative and preserved exactly. The launcher
+    // never overrides a deliberate user or operator choice.
+    if (snapshot?.voice?.stt?.preferred)
+      return 'configured'
+
+    const preferredAi = snapshot?.provider?.chat?.preferred
+    // Only the Groq chat path has a proven transcription target today, because
+    // only it can reuse an already-stored credential without duplicating it.
+    if (preferredAi?.providerId !== GROQ_CHAT_PROVIDER_ID)
+      return 'not-configured'
+
+    // Without the existing Groq secret there is nothing to reuse, and writing a
+    // target anyway would advertise a false-ready capability.
+    if (!vault.hasSecret(preferredAi.providerId, 'apiKey'))
+      return 'not-configured'
+
+    const written = await updateLiaProductConfig(paths.productConfigFile, {
+      voice: { stt: { preferred: liaGroqTranscriptionTarget() } },
+    })
+    if (written.status !== 'ok') {
+      // Degraded, never corrupting: the document is left exactly as it was, no
+      // secret is touched, and text conversation still proceeds. STT is simply
+      // reported as unconfigured for a later Launcher surface to own.
+      emit('lia-app.conversar-stt-not-ready', `reason=config-write-failed status=${written.status}`)
+      return 'not-configured'
+    }
+
+    emit('lia-app.conversar-stt-defaulted', `target=${LIA_GROQ_TRANSCRIPTION_PROVIDER_ID}`)
+    return 'configured'
+  }
+
+  /**
+   * Phase 8.0D-M2: materialize the canonical Brain ROUTING MODE BEFORE the
+   * Stage child launches, so the managed Stage's Brain can route at all.
+   *
+   * Why this belongs to the Launcher: `brain.mode` is optional in the canonical
+   * schema and its absence is preserved deliberately, so an absent mode answers
+   * `modeUnspecified` - which selects no route and leaves an image-bearing turn
+   * on the globally active chat model. Nothing else in the product writes the
+   * field, and the Launcher is already the product-configuration authority for
+   * the managed speech-to-text default above. This is the Brain analogue of it:
+   * one product-layer default, owned here, persisted through the same canonical
+   * writer. It is NOT a second routing authority - the routing decision stays
+   * owned by Lia Core's canonical router, and the Stage still makes it.
+   *
+   * The gate is deliberately narrow. An EXPLICIT mode is absolute and is never
+   * touched: `disabled` and `manual` are the user's authority, and an existing
+   * `automatic` is preserved without a redundant write. Only an ABSENT mode may
+   * be defaulted, and only when ALL of these hold:
+   *   1. a chat provider is configured at all;
+   *   2. the REAL production Brain - the same catalog, the same product policy
+   *      and the same canonical decision the Stage runs - would actually SELECT
+   *      a route for a plain text turn under automatic mode. Eligibility is
+   *      ASKED of the router, never assumed here;
+   *   3. that selected route's engine IS the configured chat provider. A Brain
+   *      engine id is the canonical chat provider id by construction, so this
+   *      is an identity check and not a second mapping table - and it is what
+   *      keeps a Brain engine this user's chat configuration does not justify
+   *      from being selected for them;
+   *   4. that provider's EXISTING vault credential is present. Only its
+   *      presence is consulted: the value is never read, copied or reported.
+   *
+   * Otherwise the Launcher refuses to guess and says why, in metadata.
+   *
+   * A degraded default never blocks conversation: the document is left exactly
+   * as it was and text chat proceeds exactly as before.
+   *
+   * Returns whether the canonical document declares automatic Brain routing
+   * afterwards.
+   */
+  async function ensureBrainReadyForConversar(snapshot: LiaProductConfigSnapshot | undefined): Promise<'automatic' | 'not-automatic'> {
+    const mode = readBrainRoutingMode(snapshot)
+    // The canonical routing intent this launch runs with, reported by the owner
+    // of the field - metadata only, so nobody has to infer it from a routing
+    // outcome downstream.
+    emit('lia-app.conversar-brain-mode', `mode=${mode ?? 'absent'}`)
+
+    // An explicit mode is absolute: never overridden, never re-written.
+    if (mode !== undefined)
+      return mode === 'automatic' ? 'automatic' : 'not-automatic'
+
+    const preferredAi = snapshot?.provider?.chat?.preferred
+    if (!preferredAi) {
+      emit('lia-app.conversar-brain-not-ready', 'reason=chat-provider-unset')
+      return 'not-automatic'
+    }
+
+    // Ask the REAL Brain, against a PROBE snapshot that exists only inside this
+    // call: the persisted document is not touched by asking the question. The
+    // requirement is a plain text turn - the baseline every conversation starts
+    // with - so the default never depends on a capability this turn may not use.
+    const catalog = createProductionBrainCatalog()
+    const probe = decideBrainRouteFromProductState({
+      automaticPolicy: createProductionBrainAutomaticPolicy(),
+      engines: catalog.engines,
+      models: catalog.models,
+      requirement: brainRequirementForChatTurn({}),
+      snapshot: { brain: { ...snapshot?.brain, mode: 'automatic' } },
+    })
+    const selected = probe.status === 'automatic' && probe.selection.status === 'selected'
+      ? probe.selection.route
+      : undefined
+    if (selected === undefined) {
+      emit('lia-app.conversar-brain-not-ready', `reason=automatic-route-unavailable status=${probe.status}`)
+      return 'not-automatic'
+    }
+
+    // No silent provider selection: the route the Brain would run has to belong
+    // to the engine this user already chats through.
+    if (selected.engine.id !== preferredAi.providerId) {
+      emit('lia-app.conversar-brain-not-ready', 'reason=chat-provider-not-eligible')
+      return 'not-automatic'
+    }
+
+    // Reuse the EXISTING credential. Presence only - never the value.
+    if (!vault.hasSecret(preferredAi.providerId, 'apiKey')) {
+      emit('lia-app.conversar-brain-not-ready', 'reason=credential-missing')
+      return 'not-automatic'
+    }
+
+    const written = await updateLiaProductConfig(paths.productConfigFile, brainRoutingModeUpdate('automatic'))
+    if (written.status !== 'ok') {
+      // Degraded, never corrupting: the document is left exactly as it was, no
+      // secret is touched, and conversation still proceeds. Brain routing is
+      // simply reported as unconfigured.
+      emit('lia-app.conversar-brain-not-ready', `reason=config-write-failed status=${written.status}`)
+      return 'not-automatic'
+    }
+
+    emit('lia-app.conversar-brain-defaulted', 'mode=automatic')
+    return 'automatic'
+  }
+
   async function ensureVoiceReadyForConversar(snapshot: LiaProductConfigSnapshot | undefined): Promise<void> {
     const preferredVoice = snapshot?.voice?.tts?.preferred
     if (preferredVoice?.providerId !== 'custom-local-voice')
@@ -400,7 +743,7 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
     let aiReady = false
     try {
       const preferredAi = snapshot?.provider?.chat?.preferred
-      aiReady = preferredAi !== undefined && vault.hasSecret(preferredAi.providerId, 'apiKey')
+      aiReady = preferredAi !== undefined && Boolean(preferredAi.modelId) && await hasChatAuthentication(preferredAi.providerId)
     }
     catch { /* a vault read failure is degraded status, not a crash */ }
 
@@ -522,11 +865,89 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
   }
 
   async function updateConfig(payload: LiaConfigUpdatePayload): Promise<LiaConfigUpdateResult> {
+    return await withStageConfigurationLock(async () => await updateConfigExclusively(payload))
+  }
+
+  async function updateConfigExclusively(payload: LiaConfigUpdatePayload): Promise<LiaConfigUpdateResult> {
+    // Reject the whole batch before touching unrelated entries or product preferences.
+    if (payload.secrets?.some(secret => !secret || !isPublicCredentialReference(secret.scope, secret.key))) {
+      emit('lia-app.config-blocked', 'reason=secret-reference-denied')
+      return { message: 'The requested credential cannot be edited here.', status: 'secret-vault-failed' }
+    }
+    if (payload.secrets?.some(secret => secret.key === 'apiKey' && isLauncherManagedProvider(secret.scope))) {
+      emit('lia-app.config-blocked', 'reason=managed-credential-owned-by-ai-settings')
+      return { message: 'Use AI Settings to change this managed AI service credential.', status: 'managed-credential-owned-by-ai-settings' }
+    }
+
+    const chatUpdate = payload.update?.provider?.chat
+    let hasPreferred = false
+    let incomingPreferred: LiaSelectionTarget | null | undefined
+    if (chatUpdate !== null && typeof chatUpdate === 'object' && !Array.isArray(chatUpdate) && Object.hasOwn(chatUpdate, 'preferred')) {
+      incomingPreferred = chatUpdate.preferred
+      hasPreferred = incomingPreferred !== undefined
+    }
+    if (incomingPreferred !== null && typeof incomingPreferred === 'object' && Object.hasOwn(incomingPreferred, 'apiKey')) {
+      emit('lia-app.config-blocked', 'reason=secret-in-provider-selection')
+      return { message: 'Secrets cannot be stored in the provider selection.', status: 'secret-forbidden' }
+    }
+    if (incomingPreferred !== undefined && incomingPreferred !== null && !isLiaSelectionTarget(incomingPreferred)) {
+      emit('lia-app.config-blocked', 'reason=invalid-provider-selection')
+      return { message: 'The provider selection is invalid.', status: 'invalid-source' }
+    }
+    const hasExpectedPreferred = Object.hasOwn(payload, 'expectedPreferred')
+    if (hasExpectedPreferred && payload.expectedPreferred !== null && !isLiaSelectionTarget(payload.expectedPreferred)) {
+      emit('lia-app.config-blocked', 'reason=invalid-expected-selection')
+      return { message: 'The provider selection is invalid.', status: 'invalid-source' }
+    }
+    const expectedPreferred: LiaSelectionTarget | null | undefined = !hasExpectedPreferred
+      ? undefined
+      : payload.expectedPreferred === null
+        ? null
+        : isLiaSelectionTarget(payload.expectedPreferred) ? payload.expectedPreferred : undefined
+    if (hasPreferred) {
+      const current = await readSnapshot()
+      if (current.status === 'invalid' || current.status === 'read-error') {
+        emit('lia-app.config-blocked', `reason=selection-read-${current.status}`)
+        return { message: 'The saved AI selection could not be checked. Reload configuration and try again.', status: 'selection-read-failed' }
+      }
+      const decision = decideSelectionWrite({
+        persisted: current.snapshot?.provider?.chat?.preferred,
+        incoming: incomingPreferred === null ? undefined : incomingPreferred,
+        ...(hasExpectedPreferred ? { expected: expectedPreferred ?? null } : {}),
+      })
+      if (!decision.ok) {
+        emit('lia-app.config-blocked', `reason=${decision.code}`)
+        return {
+          message: decision.code === 'selection-owned-by-launcher'
+            ? 'Use AI Settings to change the managed AI service.'
+            : 'The AI selection changed while this screen was open. Reload configuration and try again.',
+          status: decision.code,
+        }
+      }
+    }
+
+    let secrets: { scope: string, key: string, value: string, revision: string }[]
+    try {
+      const unique = new Set<string>()
+      secrets = (payload.secrets ?? []).map((secret) => {
+        const reference = `${secret.scope}\0${secret.key}`
+        if (unique.has(reference))
+          throw new Error('Duplicate credential reference')
+        unique.add(reference)
+        const revision = vault.secretRevision?.(secret.scope, secret.key)
+        if (revision === undefined)
+          throw new Error('Credential storage unavailable')
+        return { ...secret, revision }
+      })
+    }
+    catch {
+      return { message: 'The key could not be stored securely on this device.', status: 'secret-vault-failed' }
+    }
     // Secrets first, into the vault and ONLY the vault. If the later
     // document write fails, a stray vault entry is inert - the reverse
     // order would risk a preferred-provider pointing at a missing key.
-    for (const secret of payload.secrets ?? []) {
-      const stored = await vault.setSecret(secret.scope, secret.key, secret.value)
+    for (const secret of secrets) {
+      const stored = await vault.changeSecret?.(secret.scope, secret.key, secret.value, { expectedRevision: secret.revision })
       if (!stored) {
         emit('lia-app.config-blocked', 'reason=secret-vault-failed')
         return { message: 'The key could not be stored securely on this device.', status: 'secret-vault-failed' }
@@ -541,7 +962,53 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
     return { status: 'ok', value: written.value }
   }
 
+  const aiConnection = createAiConnectionService({
+    repository: transportRepository,
+    vault,
+    saveExclusively: save => withStageConfigurationLock(async () => {
+      if (stage.holdsOwnedStage())
+        return { ok: false as const, code: 'stage-running' as const }
+      return save()
+    }),
+    readSelection: async () => {
+      const read = await readSnapshot()
+      if (read.status === 'ok')
+        return read.snapshot?.provider?.chat?.preferred
+      if (read.status === 'missing')
+        return undefined
+      throw new Error('Canonical AI selection is unavailable')
+    },
+    backupSelection: async () => {
+      const previous = (await readSnapshot()).snapshot?.provider?.chat
+      return async () => {
+        const restored = await updateLiaProductConfig(paths.productConfigFile, { provider: { chat: {
+          preferred: previous?.preferred ?? null,
+          strategy: previous?.strategy ?? null,
+          onboarded: previous?.onboarded ?? null,
+        } } })
+        if (restored.status !== 'ok')
+          throw new Error('Configuration could not be restored')
+      }
+    },
+    saveSelection: async (preferred) => {
+      const result = await updateLiaProductConfig(paths.productConfigFile, { provider: { chat: { preferred, strategy: 'manual', onboarded: true } } })
+      if (result.status !== 'ok')
+        throw new Error('Configuration could not be saved')
+    },
+  })
+  readManagedAiReadiness = () => aiConnection.getStartReadiness()
+  async function requireSafeAiConfiguration(): Promise<AiConnectionStartReadiness & { ok: true }> {
+    const readiness = await aiConnection.getStartReadiness()
+    if (!readiness.ok)
+      throw new AiStartBlockedError(readiness.code)
+    return readiness
+  }
+  stage.start = options => withStageConfigurationLock(async () => {
+    await requireSafeAiConfiguration()
+    return startManagedStage(options)
+  })
   return {
+    aiConnection,
     bridgeConfig: bridgeFactory,
     coordinator,
     /**
@@ -554,7 +1021,8 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
      * message plus a machine-readable diagnostic event - never a silent
      * broken speech pipeline.
      */
-    conversar: async () => {
+    conversar: () => withStageConfigurationLock(async () => {
+      const readiness = await requireSafeAiConfiguration()
       // Supervisor rule (item 1): once Lia is closing, NOTHING new starts.
       if (coordinator.isShuttingDown()) {
         emit('lia-app.conversar-blocked', 'reason=lia-closing')
@@ -562,13 +1030,24 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
       }
       const { snapshot } = await readSnapshot()
       const preferredAi = snapshot?.provider?.chat?.preferred
-      if (!preferredAi || !vault.hasSecret(preferredAi.providerId, 'apiKey')) {
+      if (!preferredAi?.modelId
+        || preferredAi.providerId !== readiness.providerId
+        || preferredAi.modelId !== readiness.modelId
+        || (!readiness.managed && !await hasChatAuthentication(preferredAi.providerId))) {
         emit('lia-app.conversar-blocked', 'reason=ai-not-ready')
         throw new Error('Lia is not fully configured yet. Finish the AI setup first.')
       }
       await ensureVoiceReadyForConversar(snapshot)
-      return await stage.start({ env: await hostStageEnv() })
-    },
+      // Phase 8.0D-10B-4D4C4-SHELL-B1: the canonical STT default is materialized
+      // BEFORE the child launches, so the managed Stage reads an already-resolved
+      // hearing target. A degraded STT never blocks text conversation.
+      await ensureSttReadyForConversar(snapshot)
+      // Phase 8.0D-M2: the canonical Brain routing mode is materialized BEFORE
+      // the child launches, so the managed Stage's Brain can select a route at
+      // all. A degraded Brain default never blocks conversation.
+      await ensureBrainReadyForConversar(snapshot)
+      return await startManagedStage({ env: await hostStageEnv() })
+    }),
     homeStatus,
     importVoice: async (request, allowedSourcePaths) => {
       const result = await voices.importProfile(request, allowedSourcePaths)

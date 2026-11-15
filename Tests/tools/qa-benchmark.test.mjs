@@ -37,8 +37,8 @@ describe('qa-benchmark-lib: benchmarkRunId', () => {
     assert.equal(b, `${a}-2`)
     assert.equal(c, `${a}-3`)
   })
-  it('reuses runTimestampId semantics (zero-padded UTC)', () => {
-    const id = benchmarkRunId(new Date(Date.UTC(2026,0,2,3,4,5)), 'deadbee')
+  it('reuses runTimestampId semantics (zero-padded local time)', () => {
+    const id = benchmarkRunId(new Date(2026, 0, 2, 3, 4, 5), 'deadbee')
     assert.equal(id, '20260102-030405-deadbee')
   })
 })

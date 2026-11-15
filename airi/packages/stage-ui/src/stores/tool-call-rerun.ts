@@ -4,7 +4,7 @@ import type { ChatAssistantMessage, ChatHistoryItem, ChatSlicesToolCallResult } 
 
 import { errorMessageFrom } from '@moeru/std'
 
-import { toolNameFrom } from './ai/chat-llm/tool-resolver'
+import { toolNameFrom } from './ai/chat-llm/tool-name'
 
 export interface ToolCallRerunPayload<TToolset extends string = string> {
   sessionId?: string

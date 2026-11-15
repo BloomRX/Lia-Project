@@ -12,15 +12,17 @@ import messages from '@proj-airi/i18n/locales'
 
 import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { Format, LogLevel, setGlobalFormat, setGlobalHookPostLog, setGlobalLogLevel, useLogg } from '@guiiai/logg'
+import { defineInvokeHandler } from '@moeru/eventa'
 import { createContext } from '@moeru/eventa/adapters/electron/main'
 import { hasSelectedScreenCaptureSource, initScreenCaptureForMain } from '@proj-airi/electron-screen-capture/main'
-import { app, ipcMain, session } from 'electron'
+import { app, ipcMain, screen, session } from 'electron'
 import { noop } from 'es-toolkit'
 import { createLoggLogger, injeca, lifecycle } from 'injeca'
 import { isLinux } from 'std-env'
 
 import icon from '../../resources/icon.png?asset'
 
+import { electronLiaPresenceAction, electronLiaPresenceGet, electronLiaPresenceSet } from '../shared/eventa/lia-presence'
 import { openDebugger, setupDebugger } from './app/debugger'
 import { nullFileLoggerHandle, setupFileLogger } from './app/file-logger'
 import { ingestMainProcessLog } from './app/main-process-log-bus'
@@ -29,6 +31,7 @@ import { installSingleInstanceGuard } from './app/single-instance'
 import { createArtistryConfig } from './configs/artistry'
 import { createGlobalAppConfig } from './configs/global'
 import { createLiaProductConfig } from './configs/lia'
+import { registerLiaDevflowSceneBridge } from './devflow-diagnostics'
 import { emitAppBeforeQuit, emitAppReady, emitAppWindowAllClosed } from './libs/bootkit/lifecycle'
 import { setElectronMainDirname } from './libs/electron/location'
 import { createI18n } from './libs/i18n'
@@ -44,6 +47,7 @@ import { setupGlobalShortcutService } from './services/electron/global-shortcut'
 import { setupPermissionHandlers } from './services/electron/media-permissions'
 import { createLiaBrainCorrelationObserver } from './services/lia/brain-correlation-observer'
 import { createLiaBrainCorrelationService } from './services/lia/brain-correlation-service'
+import { selectLiaBrainDecisionDiagnosticLog } from './services/lia/brain-decision-diagnostic'
 import { registerLiaBrainDecisionBridge } from './services/lia/brain-decision-service'
 import { selectLiaBrainDiagnosticLog } from './services/lia/brain-diagnostic-log'
 import { registerLiaBrainExecutionReportHandler } from './services/lia/brain-execution-report-service'
@@ -51,10 +55,15 @@ import { registerLiaBrainExecutionTerminalReportListener } from './services/lia/
 import { createLiaBrainExecutionTerminalReportService } from './services/lia/brain-execution-terminal-report-service'
 import { registerLiaBrainSendTerminalReportListener } from './services/lia/brain-send-terminal-report-listener'
 import { createLiaBrainSendTerminalReportService } from './services/lia/brain-send-terminal-report-service'
+import { initializeCredentialOwner } from './services/lia/credential-owner-access'
 import { createLiaBrainService } from './services/lia/lia-brain-service'
 import { startLiaMainWindowVoiceRuntime } from './services/lia/main-window-voice-runtime'
+import { registerLiaMemoryBridge } from './services/lia/memory-service'
+import { createPresenceService } from './services/lia/presence-service'
 import { registerLiaProviderConfigBridge } from './services/lia/provider-config-service'
 import { createLiaSecretVault, registerLiaSecretsBridge } from './services/lia/secrets-service'
+import { registerLiaTranscriptionBridge } from './services/lia/transcription-service'
+import { canRendererReadLegacySecret, getApplicationRepository, registerLiaTransportConfigBridge } from './services/lia/transport-config-service'
 import { registerLiaVoiceConfigBridge } from './services/lia/voice-config-service'
 import { createLiaVoiceProfileStore } from './services/lia/voice-profiles'
 import { registerLiaVoiceProfilesBridge } from './services/lia/voice-profiles-service'
@@ -86,6 +95,7 @@ setupDebugger()
 const log = useLogg('main').useGlobalConfig()
 
 const appUserDataPath = env.APP_USER_DATA_PATH?.trim()
+initializeCredentialOwner(process.env)
 if (appUserDataPath) {
   app.setPath('userData', appUserDataPath)
 }
@@ -165,6 +175,10 @@ let userFacingMainWindowSizeSettings: MainWindowSizeSettingsController | undefin
 
 if (shouldStartMainProcess) {
   initScreenCaptureForMain()
+  // DEVFLOW-ONLY: listens for the renderer's scene-mounted report so the
+  // development autopilot can prove the Vue app really instantiated. Returns
+  // false - registering nothing at all - unless LIA_DEVFLOW_DIAGNOSTICS=1.
+  registerLiaDevflowSceneBridge()
 }
 
 let fileLogger: FileLoggerHandle = nullFileLoggerHandle
@@ -248,7 +262,7 @@ app.whenReady().then(async () => {
   const autoUpdater = injeca.provide('services:auto-updater', {
     dependsOn: { appConfig },
     build: ({ dependsOn }) => setupAutoUpdater({
-      enabled: import.meta.env.VITE_DISTRIBUTION !== 'steam',
+      enabled: import.meta.env.VITE_DISTRIBUTION !== 'steam' && process.env.LIA_MANAGED !== '1' && app.getName() !== 'lia-stage',
       getStoredUpdateLane: () => dependsOn.appConfig.get()?.updateChannel,
       setStoredUpdateLane: (lane) => {
         const currentConfig = dependsOn.appConfig.get()
@@ -368,6 +382,33 @@ app.whenReady().then(async () => {
             window,
           })
         },
+        onPresenceReady: (window) => {
+          const service = createPresenceService({ window, screen: {
+            getAllDisplays: () => screen.getAllDisplays(),
+            getCursorScreenPoint: () => screen.getCursorScreenPoint(),
+            on(event, listener) {
+              if (event === 'display-added')
+                return screen.on('display-added', listener)
+              if (event === 'display-removed')
+                return screen.on('display-removed', listener)
+              return screen.on('display-metrics-changed', listener)
+            },
+            removeListener(event, listener) {
+              if (event === 'display-added')
+                return screen.removeListener('display-added', listener)
+              if (event === 'display-removed')
+                return screen.removeListener('display-removed', listener)
+              return screen.removeListener('display-metrics-changed', listener)
+            },
+          }, initial: liaProductCfg.get()?.presence, save: async (presence) => {
+            await liaProductCfg.updateAndSave(current => ({ ...current, presence }))
+          } })
+          const { context } = createContext(ipcMain)
+          defineInvokeHandler(context, electronLiaPresenceGet, () => service.get())
+          defineInvokeHandler(context, electronLiaPresenceSet, input => service.set(input))
+          defineInvokeHandler(context, electronLiaPresenceAction, input => service.action(input))
+          return service
+        },
         onSizeSettingsReady: (controller) => {
           userFacingMainWindowSizeSettings = controller
         },
@@ -406,16 +447,23 @@ app.whenReady().then(async () => {
     dependsOn: { liaSecrets },
     callback: async (deps) => {
       const { context } = createContext(ipcMain)
-      registerLiaSecretsBridge({ context, vault: deps.liaSecrets })
+      registerLiaSecretsBridge({ context, vault: deps.liaSecrets, allowRendererRead: canRendererReadLegacySecret })
     },
   })
 
   // Register the Lia provider.chat config bridge (references/metadata only).
   injeca.invoke({
-    dependsOn: { liaProductConfig },
+    dependsOn: { liaProductConfig, liaSecrets },
     callback: async (deps) => {
       const { context } = createContext(ipcMain)
       registerLiaProviderConfigBridge({ context, liaProductConfig: deps.liaProductConfig })
+      registerLiaTransportConfigBridge({ context, vault: deps.liaSecrets })
+      // Speech-to-text runs here for the same reason chat does: the curated
+      // provider's credential must not be readable by the renderer. It shares
+      // the transport repository above, so a removed provider stops transcribing
+      // exactly as it stops chatting.
+      registerLiaTranscriptionBridge({ context, repository: getApplicationRepository(), vault: deps.liaSecrets })
+      registerLiaMemoryBridge({ context })
     },
   })
 
@@ -451,6 +499,11 @@ app.whenReady().then(async () => {
         brain: deps.liaBrain,
         correlationStore: deps.liaBrainCorrelation,
         correlationObserver: deps.liaBrainCorrelationObserver,
+        // Phase 8.0D-M2: a dev build gets the decision's own status as one
+        // metadata-only adapter line ("[LIA-BRAIN-DECISION] ..."); every other
+        // build gets `undefined` and the bridge publishes nothing. The
+        // composition root owns that choice - the bridge never resolves a sink.
+        decisionLog: selectLiaBrainDecisionDiagnosticLog(import.meta.env.DEV),
       })
     },
   })

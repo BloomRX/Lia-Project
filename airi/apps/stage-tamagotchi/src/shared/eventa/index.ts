@@ -535,6 +535,7 @@ export interface ElectronAuthTokens {
 export const electronAuthStartLogin = defineInvokeEventa<void>('eventa:invoke:electron:auth:start-login')
 export const electronAuthCallback = defineEventa<ElectronAuthTokens>('eventa:event:electron:auth:callback')
 export const electronAuthCallbackError = defineEventa<{ error: string }>('eventa:event:electron:auth:callback-error')
+export const electronAuthCancelled = defineEventa<void>('eventa:event:electron:auth:cancelled')
 export const electronAuthLogout = defineInvokeEventa<void>('eventa:invoke:electron:auth:logout')
 
 export const i18nSetLocale = defineInvokeEventa<void, Locale>('eventa:invoke:electron:i18n:set-locale')
@@ -555,7 +556,19 @@ export interface LiaSecretPayload {
 
 export const electronLiaSecretEncryptionAvailable = defineInvokeEventa<boolean>('eventa:invoke:lia:secret:encryption-available')
 export const electronLiaSecretHas = defineInvokeEventa<boolean, LiaSecretPayload>('eventa:invoke:lia:secret:has')
-export const electronLiaSecretSet = defineInvokeEventa<boolean, LiaSecretPayload & { value: string }>('eventa:invoke:lia:secret:set')
+export const electronLiaSecretSet = defineInvokeEventa<boolean, LiaSecretPayload & { value: string, onlyIfMissing?: boolean }>('eventa:invoke:lia:secret:set')
+/**
+ * Outcome of adopting a secret that already exists somewhere else — the legacy
+ * `localStorage` copy being folded into the vault.
+ *
+ * The caller needs to distinguish "the vault now holds this exact value" from
+ * "the vault holds a different value", because only the first one licenses
+ * deleting the old copy. It cannot answer that itself without reading the
+ * secret back into the renderer, so main compares in-process and reports one of
+ * these four words. No value is ever returned.
+ */
+export type LiaSecretAdoptResult = 'stored' | 'matching' | 'conflict' | 'unavailable'
+export const electronLiaSecretAdopt = defineInvokeEventa<LiaSecretAdoptResult, LiaSecretPayload & { value: string }>('eventa:invoke:lia:secret:adopt')
 export const electronLiaSecretGet = defineInvokeEventa<string | undefined, LiaSecretPayload>('eventa:invoke:lia:secret:get')
 export const electronLiaSecretDelete = defineInvokeEventa<boolean, LiaSecretPayload>('eventa:invoke:lia:secret:delete')
 
@@ -581,8 +594,32 @@ export interface LiaProviderChatConfig {
   onboarded?: boolean
 }
 
+/**
+ * Wire-only extension of the chat config (AF-1, 12/11/2026).
+ *
+ * `expectedPreferred` carries what the caller READ when it built the payload,
+ * so main can refuse a write whose world has already moved (`stale-selection`).
+ * It is never persisted: the main-side mapper copies known fields only.
+ *
+ * `null` means "I read that there was no selection". Absent means "a caller
+ * that predates the field" and skips the staleness check.
+ */
+export interface LiaProviderChatWrite extends LiaProviderChatConfig {
+  expectedPreferred?: LiaProviderChatTarget | null
+}
+
+/**
+ * Typed outcome of a selection write. `selection-owned-by-launcher` means the
+ * provider is managed by the Launcher catalog and can only be changed there;
+ * `stale-selection` means the persisted selection changed after the caller
+ * read it. Both leave the document untouched.
+ */
+export type LiaProviderChatWriteResult
+  = | { ok: true }
+    | { ok: false, code: 'invalid' | 'selection-owned-by-launcher' | 'stale-selection' | 'storage' }
+
 export const electronLiaProviderChatConfigGet = defineInvokeEventa<LiaProviderChatConfig>('eventa:invoke:lia:provider:chat:config:get')
-export const electronLiaProviderChatConfigSet = defineInvokeEventa<void, LiaProviderChatConfig>('eventa:invoke:lia:provider:chat:config:set')
+export const electronLiaProviderChatConfigSet = defineInvokeEventa<LiaProviderChatWriteResult, LiaProviderChatWrite>('eventa:invoke:lia:provider:chat:config:set')
 
 // Lia voice configuration (M1 Phase 4D).
 //
@@ -613,6 +650,29 @@ export interface LiaVoiceConfig {
 }
 
 /**
+ * Phase 8.0D-10B-4D4C4-SHELL-B1: the canonical speech-to-text selection, as the
+ * Lia Launcher resolved it. Reference metadata only - a provider id plus an
+ * optional model id. Never a credential, never a base URL: those are derived at
+ * runtime in the renderer and resolved from the main-process vault.
+ */
+export interface LiaHearingSttTarget {
+  providerId: string
+  modelId?: string
+}
+
+/**
+ * The READ-ONLY managed Hearing facts.
+ *
+ * `enabled` is a tri-state: absent means enabled (the product default), and only
+ * an explicit `false` opts out of voice - so the renderer must never read
+ * absence as "off".
+ */
+export interface LiaHearingConfig {
+  enabled?: boolean
+  preferred?: LiaHearingSttTarget
+}
+
+/**
  * The canonical definitions of these voice-profile shapes moved to Lia Core
  * (`@lia/core/voices/types`) when the Lia product became independent of its
  * stage host. They are re-exported here so the AIRI-side IPC contract keeps
@@ -628,6 +688,17 @@ export type LiaVoiceProfileSource = LiaCoreVoiceProfileSource
 
 export const electronLiaVoiceConfigGet = defineInvokeEventa<LiaVoiceConfig>('eventa:invoke:lia:voice:config:get')
 export const electronLiaVoiceConfigSet = defineInvokeEventa<void, LiaVoiceConfig>('eventa:invoke:lia:voice:config:set')
+
+/**
+ * Phase 8.0D-10B-4D4C4-SHELL-B1: read-only access to the managed Hearing facts,
+ * so the Stage can project the Launcher's speech-to-text decision into the
+ * existing AIRI Hearing runtime and the user never opens AIRI Settings.
+ *
+ * Deliberately there is NO `electronLiaHearingConfigSet`: the Lia Launcher and
+ * Lia Core are the only authorities for canonical product configuration, and a
+ * renderer setter would make AIRI a second writer of speech-to-text state.
+ */
+export const electronLiaHearingConfigGet = defineInvokeEventa<LiaHearingConfig>('eventa:invoke:lia:hearing:config:get')
 
 /**
  * Custom voice library. These manage the profiles themselves; selecting one for

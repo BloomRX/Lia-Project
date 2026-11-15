@@ -15,10 +15,11 @@ import {
 import { useProviderValidation } from '@proj-airi/stage-ui/composables/use-provider-validation'
 import { useHearingStore } from '@proj-airi/stage-ui/stores/modules/hearing'
 import { useProviderConfigStore } from '@proj-airi/stage-ui/stores/providers/config'
+import { getProviderCredentialConfigPort } from '@proj-airi/stage-ui/stores/providers/credential-config-port'
 import { useProviderStore } from '@proj-airi/stage-ui/stores/providers/provider'
 import { FieldCombobox } from '@proj-airi/ui'
 import { storeToRefs } from 'pinia'
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 
 const providerId = 'mimo-audio-transcription'
 const hearingStore = useHearingStore()
@@ -53,7 +54,10 @@ const model = computed({
   },
 })
 
-const apiKeyConfigured = computed(() => !!providers.value[providerId]?.apiKey)
+const nativeKeyConfigured = ref(false)
+const apiKeyConfigured = computed(() => getProviderCredentialConfigPort(providerId)
+  ? nativeKeyConfigured.value
+  : !!providers.value[providerId]?.apiKey)
 
 const providerModels = computed(() => providersStore.getModelsForProvider(providerId))
 
@@ -104,8 +108,10 @@ const {
       >
         <ProviderApiKeyInput
           v-model="apiKey"
+          :provider-id="providerId"
           :provider-name="providerMetadata?.localizedName"
           placeholder="mimo_... (MiMo API key)"
+          @configured="nativeKeyConfigured = $event"
         />
         <FieldCombobox
           v-model="model"

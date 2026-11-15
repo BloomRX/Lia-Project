@@ -37,7 +37,7 @@ import type { LiaVoiceEngine } from '@lia/core/voice/engines/types'
 import type { BrowserWindow } from 'electron'
 
 import { resolveVoiceRuntimeHome } from '@lia/core/bootstrap/runtime-root'
-import { readVoiceEngineConfig, readVoiceRuntimeSelection } from '@lia/core/voice/config'
+import { readVoiceEnabledConfig, readVoiceEngineConfig, readVoiceRuntimeSelection } from '@lia/core/voice/config'
 import { createKokoroVoiceEngine } from '@lia/core/voice/engines/kokoro'
 import { resolveVoiceEngineSelection } from '@lia/core/voice/engines/registry'
 import { createContext } from '@moeru/eventa/adapters/electron/main'
@@ -129,7 +129,9 @@ export function startLiaMainWindowVoiceRuntime(params: LiaMainWindowVoiceRuntime
   // truth so the warmed engine becomes visible without any user action.
   // Standalone launches keep the lazy start untouched.
   const prewarm = prewarmManagedVoice({
-    engines: prewarmEngines,
+    // An explicit text-only launch keeps installed engines lazy. A later
+    // re-enable starts the selected engine through its existing health/synthesis path.
+    engines: readVoiceEnabledConfig(params.liaProductConfig.get()?.voice) ? prewarmEngines : [],
     log: record => log(Object.entries(record).map(([key, value]) => `${key}=${String(value)}`).join(' ')),
     managedLaunch: isLauncherManaged(),
     onSettled: () => voiceBridge.voiceChanged(),

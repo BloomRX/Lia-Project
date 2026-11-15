@@ -131,6 +131,7 @@ describe('lia provider diagnosis core', () => {
     const raw = JSON.stringify({
       'openrouter-ai\u0000apiKey': FAKE_SECRET,
       'groq\u0000apiKey': 'b3RoZXJjaXBoZXI=',
+      '@lia:vault-revisions-v1': '{"absent":"legacy","live":{}}',
     })
     const summary = summarizeVaultFile(raw, '/tmp/lia-secrets.json', 'openrouter-ai', 'groq')
 

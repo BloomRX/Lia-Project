@@ -31,7 +31,7 @@ import { useConsciousnessSettingsStore } from '@proj-airi/stage-ui/stores/module
 import { useHearingSpeechInputPipeline, useHearingStore } from '@proj-airi/stage-ui/stores/modules/hearing'
 import { useOnboardingStore } from '@proj-airi/stage-ui/stores/onboarding'
 import { useSettings, useSettingsAudioDevice } from '@proj-airi/stage-ui/stores/settings'
-import { refDebounced, useBroadcastChannel } from '@vueuse/core'
+import { refDebounced, useBroadcastChannel, useEventListener } from '@vueuse/core'
 import { storeToRefs } from 'pinia'
 import { computed, onMounted, onUnmounted, ref, shallowRef, toRef, watch } from 'vue'
 import { toast } from 'vue-sonner'
@@ -42,12 +42,16 @@ import ResourceStatusIsland from '../components/stage-islands/resource-status-is
 
 import { electronOpenOnboarding } from '../../shared/eventa'
 import { modelSettingsRuntimeSnapshotChannelName } from '../../shared/model-settings-runtime'
-import { chatTurnFactsFromSend } from '../services/lia/brain-shadow'
+import { chatTurnFactsFromSend, chatTurnImageInputCount } from '../services/lia/brain-shadow'
 import { resolveLiaAuthoritativeSendRoute } from '../services/lia/lia-authoritative-route-resolver'
+import { createNativeSpeechSynthesis } from '../services/lia/main-speech'
 import { createOrderedVoiceSendSequence } from '../services/lia/voice-send-sequence'
 import { useControlsIslandStore } from '../stores/controls-island'
 import { shouldAutoOpenAiriWelcome } from '../stores/lia/airi-onboarding-policy'
+import { useLiaPresenceStore } from '../stores/lia/presence'
+import { useLiaVoiceStore } from '../stores/lia/voice'
 import { useStageWindowLifecycleStore } from '../stores/stage-window-lifecycle'
+import { artistryToolReferences } from '../stores/tools'
 import { resolveFadeOnHoverInteraction } from '../utils/fade-on-hover'
 import { shouldSampleStageTransparency } from '../utils/stage-three-transparency'
 import { createVoiceInputInteractionLifecycle } from '../utils/voice-input-lifecycle'
@@ -61,10 +65,39 @@ const controlsIslandRef = ref<InstanceType<typeof ControlsIsland>>()
 const controlsIslandInteractionActive = shallowRef(false)
 const controlsIslandElement = toRef(() => controlsIslandRef.value?.element)
 const widgetStageRef = ref<InstanceType<typeof WidgetStage>>()
+const synthesizeSpeech = createNativeSpeechSynthesis()
+const liaVoice = useLiaVoiceStore()
+const liaPresence = useLiaPresenceStore()
+onMounted(() => {
+  void liaPresence.refresh()
+})
+// A mode/scale change resizes the native window. Read its canonical presence
+// snapshot; never change the saved appearance zoom/position to fit Free mode.
+useEventListener(window, 'resize', () => {
+  void liaPresence.refresh()
+})
+const speechSelectionKey = computed(() => JSON.stringify(liaVoice.preferred ?? null))
 const stageCanvas = toRef(() => widgetStageRef.value?.canvasElement())
 const componentStateStage = ref<'pending' | 'loading' | 'mounted'>('pending')
 const stageMounted = computed(() => componentStateStage.value === 'mounted')
 const isLoading = computed(() => !stageMounted.value)
+
+// DEVFLOW-ONLY. `componentStateStage` is written by the Stage scene component
+// itself (`WidgetStage` -> `Stage.vue`), so this is the one place that can
+// honestly say an avatar scene was mounted - a different fact from the root Vue
+// app mounting, which is reported separately from `main.ts`.
+//
+// Fire-and-forget and inert in a normal launch: the main process registers no
+// listener unless LIA_DEVFLOW_DIAGNOSTICS=1, which only the Lia development
+// autopilot sets. Metadata only - no prompt, image, message, key or vault data.
+watch(stageMounted, (mounted) => {
+  if (!mounted)
+    return
+  try {
+    window.electron?.ipcRenderer?.send?.('lia-devflow:scene-mounted')
+  }
+  catch {}
+}, { immediate: true })
 
 const isIgnoringMouseEvents = ref(false)
 const shouldFadeOnCursorWithin = ref(false)
@@ -343,24 +376,34 @@ const voiceSendSequence = createOrderedVoiceSendSequence({
     const correlationId = crypto.randomUUID()
     const reasoningToSend = consciousnessSettings.reasoning
     const attachmentsToSend = [] as const
-    const toolsToSend = [] as const
+    // Phase 8.0D-10B-4D4C4-D2B12-B: voice turns snapshot the SAME artistry tool
+    // reference set that typed InteractiveArea sends use, so Brain's `usesTools`
+    // describes the exact frozen set the logical send below receives. Brain still
+    // receives only the derived boolean, never the tool names.
+    const toolsToSend = [...artistryToolReferences]
+    const providerHistory = chatSession.getSessionMessagesIfLoaded(targetSessionId) ?? []
     const facts = chatTurnFactsFromSend({
       attachments: attachmentsToSend,
+      // Phase 8.0D-M3: the stored conversation is part of this request too.
+      providerHistory,
       reasoning: reasoningToSend,
       tools: toolsToSend,
     })
-    return { textToSend, targetSessionId, correlationId, reasoningToSend, facts }
+    const imageInputCount = chatTurnImageInputCount({ attachments: attachmentsToSend, providerHistory })
+    return { textToSend, targetSessionId, correlationId, reasoningToSend, toolsToSend, facts, imageInputCount }
   },
   execute: async (captured) => {
     const routeOverride = await resolveLiaAuthoritativeSendRoute({
       correlationId: captured.correlationId,
       facts: captured.facts,
+      imageInputCount: captured.imageInputCount,
     })
     await chatStore.send({
       sessionId: captured.targetSessionId,
       text: captured.textToSend,
       correlationId: captured.correlationId,
       reasoning: captured.reasoningToSend,
+      tools: captured.toolsToSend,
       ...(routeOverride === undefined ? {} : { routeOverride }),
     })
   },
@@ -593,7 +636,15 @@ function sendVoiceInputTextToChat(text: string): Promise<void> {
   return voiceSendSequence.enqueue(text)
 }
 
-/** Sends completed streaming-ASR sentences to captions and chat. */
+/**
+ * Buffers completed streaming-ASR fragments into the shared spoken turn.
+ *
+ * Phase 8.0D-10B-4D4C4-D2B12-B: providers such as Web Speech API emit one final
+ * result per recognized phrase, and each one used to become its own logical chat
+ * turn. Accepted fragments now join the same transcript buffer the recorder-backed
+ * path already uses, so nearby fragments aggregate into ONE voice turn and the
+ * Brain/correlation/send sequence runs only when that aggregate flushes.
+ */
 function handleStreamingSentenceEnd(delta: string) {
   if (isVoiceInputSuppressed())
     return
@@ -607,7 +658,7 @@ function handleStreamingSentenceEnd(delta: string) {
   scheduleHearingInputClear(sourceId)
   activeHearingInputSourceId = undefined
   postSpeakerCaption(finalText, 'replace')
-  void sendVoiceInputTextToChat(finalText)
+  voiceTranscriptBuffer.push(finalText)
 }
 
 /** Replaces the caption with the provider's current volatile transcript. */
@@ -619,12 +670,24 @@ function handleStreamingTranscriptionUpdate(text: string) {
   postSpeakerCaption(text, 'replace')
 }
 
-/** Publishes the provider's final streaming-ASR text to the caption overlay. */
+/**
+ * Publishes the provider's final streaming-ASR text to the caption overlay and
+ * flushes the spoken turn.
+ *
+ * Phase 8.0D-10B-4D4C4-D2B12-B: a provider speech-end is the natural turn
+ * boundary, so pending buffered fragments flush now instead of waiting out the
+ * full delay window. Snapshot/VAD providers get an immediate single logical turn;
+ * the buffer's delayed timer remains the fallback for continuous providers such
+ * as Web Speech, where a speech-end may not follow every natural phrase. The
+ * buffer itself owns timer cancellation and empty-buffer behavior, so this cannot
+ * produce a duplicate send.
+ */
 function handleStreamingSpeechEnd(text: string) {
   if (isVoiceInputSuppressed())
     return
 
   postSpeakerCaption(text, 'replace')
+  void voiceTranscriptBuffer.flushNow()
 }
 
 /** Reads the listening generation attached to recorder-backed transcription metadata. */
@@ -667,6 +730,10 @@ const voiceInputSession = useVoiceInputSession(stream, {
     reportVoiceInputFailure('transcribe speech', error)
   },
 })
+
+watch(() => chatSession.activeSessionId, () => {
+  void voiceInputSession.cancelPendingTranscriptions()
+}, { flush: 'sync' })
 
 /** Starts the active streaming or recorder-backed voice-input consumers. */
 async function startAudioInteractionConsumers() {
@@ -864,6 +931,10 @@ const cursorPosition = computed(() => ({
           flex-1
           :cursor-position="cursorPosition"
           :paused="stagePaused"
+          :neutral-live2d-shadow="true"
+          :fit-live2d-full-body="liaPresence.state?.config.mode === 'free'"
+          :synthesize-speech="synthesizeSpeech"
+          :speech-selection-key="speechSelectionKey"
         />
         <HoloCoupon />
         <ControlsIslandRoot :frozen="controlsIslandInteractionActive">

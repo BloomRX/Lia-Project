@@ -55,22 +55,8 @@ describe('createConfig', () => {
       }
       existingTempFiles.delete(from)
     })
-    const writeCoordinator = {
-      calls: 0,
-      waitFor: Promise.resolve(),
-      release: () => {},
-    }
     const writeFileMock = vi.fn(async (path: string) => {
       existingTempFiles.add(path)
-      writeCoordinator.calls += 1
-      if (writeCoordinator.calls === 2) {
-        writeCoordinator.release()
-      }
-      await writeCoordinator.waitFor
-    })
-
-    writeCoordinator.waitFor = new Promise<void>((resolve) => {
-      writeCoordinator.release = resolve
     })
 
     vi.doMock('electron', () => ({
@@ -85,6 +71,7 @@ describe('createConfig', () => {
     }))
     vi.doMock('node:fs/promises', () => ({
       copyFile: vi.fn(async () => {}),
+      unlink: vi.fn(async () => {}),
       mkdir: mkdirMock,
       rename: renameMock,
       writeFile: writeFileMock,
@@ -98,6 +85,7 @@ describe('createConfig', () => {
     config.setup()
     config.update({ value: 1 })
     config.update({ value: 2 })
+    await config.flush()
 
     /**
      * @example

@@ -4,7 +4,7 @@ import type { VoiceInputRecordingSegment, VoiceInputSessionTrigger } from './voi
 import type { VoiceInputTranscriptionTicket } from './voice-input-transcription-chain'
 
 import { toWav } from '@proj-airi/audio/encoding'
-import { computed, ref, shallowRef, toRef } from 'vue'
+import { computed, getCurrentScope, onScopeDispose, ref, shallowRef, toRef, watch } from 'vue'
 
 import workletUrl from '../../workers/vad/process.worklet?worker&url'
 
@@ -249,6 +249,7 @@ export function useVoiceInputSession(
     }
 
     try {
+      transcriptionChain.reset()
       await options.onSegmentStart?.(event)
       await recorder.startRecord()
 
@@ -362,7 +363,7 @@ export function useVoiceInputSession(
       if (isStaleTranscriptionTicket(ticket, trigger, 'transcription-started'))
         return
 
-      text = await transcribeForRecording(recording) ?? ''
+      text = await transcribeForRecording(recording, ticket.signal) ?? ''
     }
     catch (error) {
       if (isStaleTranscriptionTicket(ticket, trigger, 'transcription-error'))
@@ -602,6 +603,26 @@ export function useVoiceInputSession(
     }
   }
 
+  watch(mediaRef, () => transcriptionChain.reset(), { flush: 'sync' })
+  function reportCleanupFailure() {
+    lastError.value = new Error('Unable to stop microphone recording')
+    log('error', 'session-cleanup-failed', 'Unable to stop microphone recording.')
+  }
+  async function cancelPendingTranscriptions() {
+    transcriptionChain.reset()
+    const segment = activeRecordingSegment.value
+    if (segment && isRecording.value) {
+      try {
+        await discardActiveRecorderSegment(segment)
+      }
+      catch {
+        reportCleanupFailure()
+      }
+    }
+  }
+  if (getCurrentScope())
+    onScopeDispose(() => { void stop().catch(reportCleanupFailure) })
+
   return {
     isRecording,
     isTranscribing,
@@ -619,5 +640,6 @@ export function useVoiceInputSession(
     stopSegment,
     startAutoSegmentation,
     stop,
+    cancelPendingTranscriptions,
   }
 }

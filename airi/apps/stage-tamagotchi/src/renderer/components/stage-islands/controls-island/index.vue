@@ -30,6 +30,7 @@ import {
   electronStartDraggingWindow,
   electronWindowSetAlwaysOnTop,
 } from '../../../../shared/eventa'
+import { resolveRendererWindowContext } from '../../../window-context'
 import { useControlsIslandPlacement } from './use-controls-island-placement'
 
 interface Emits {
@@ -50,6 +51,8 @@ const context = useElectronEventaContext()
 const { enabled } = storeToRefs(settingsAudioDeviceStore)
 const { alwaysOnTop, controlsIslandIconSize } = storeToRefs(settingsStore)
 const openSettings = useElectronEventaInvoke(electronOpenSettings)
+const liaManaged = resolveRendererWindowContext().liaManaged
+const settingsRoute = liaManaged ? '/settings/lia' : '/settings'
 const openChat = useElectronEventaInvoke(electronOpenChat)
 const isLinux = useElectronEventaInvoke(electron.app.isLinux)
 const quitApp = useElectronEventaInvoke(electronAppQuit)
@@ -251,6 +254,7 @@ async function goHome() {
           ]"
         >
           <ControlsIslandAuthButton
+            v-if="!liaManaged"
             :button-style="adjustStyleClasses.button"
             :icon-class="adjustStyleClasses.icon"
           />
@@ -261,7 +265,7 @@ async function goHome() {
                 v-track-button="{ name: 'controls_island_action', action: 'toggle_settings' }"
                 :button-style="adjustStyleClasses.button"
                 :aria-label="t('tamagotchi.stage.controls-island.open-settings')"
-                @click="openSettings({ route: '/settings' })"
+                @click="openSettings({ route: settingsRoute })"
               >
                 <div i-solar:settings-minimalistic-outline :class="adjustStyleClasses.icon" text="neutral-800 dark:neutral-300" />
               </ControlButton>
@@ -377,7 +381,7 @@ async function goHome() {
 
       <!-- Main Controls -->
       <div :class="mainControlsLayoutClasses">
-        <ControlButtonTooltip side="inward">
+        <ControlButtonTooltip v-if="!liaManaged" side="inward">
           <ControlButton
             :button-style="adjustStyleClasses.button"
             :aria-label="t('tamagotchi.stage.controls-island.go-home')"

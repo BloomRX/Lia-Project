@@ -33,6 +33,7 @@
     "./utils/opfs-loader": "./src/utils/opfs-loader.ts"
   },
   "scripts": {
+    "test:shadow": "vitest run --config src/components/scenes/live2d/vitest.shadow.config.ts",
     "typecheck": "vue-tsc --noEmit"
   },
   "dependencies": {

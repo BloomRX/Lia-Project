@@ -1,8 +1,10 @@
 import type { LiaVoiceTtsTarget } from '../../../shared/eventa'
 
 import { useSpeechStore } from '@proj-airi/stage-ui/stores/modules/speech'
-import { useProviderConfigStore } from '@proj-airi/stage-ui/stores/providers/config'
-import { useProviderStore } from '@proj-airi/stage-ui/stores/providers/provider'
+
+import { createNativeSpeechSynthesis } from '../../services/lia/main-speech'
+import { useLiaProviderConfigFacade } from './provider-config-facade'
+import { useLiaProviderRuntime } from './provider-runtime'
 
 /**
  * The audio boundary of the voice preview (M1 Phase 4E-2, commit 2).
@@ -11,11 +13,8 @@ import { useProviderStore } from '@proj-airi/stage-ui/stores/providers/provider'
  * logic and stays testable without an `AudioContext`, while everything that
  * needs a sound card lives here and is injected into the editor.
  *
- * It changes no runtime. The synthesis call is the same
- * `speechStore.speech(provider, model, input, voice, config, analytics)` the
- * stage already uses, the provider instance comes from the existing
- * `getProviderInstance`, and the credential is read from the existing
- * provider-config store only to be handed straight to the provider.
+ * The compatible remote preview uses the Lia transport port. Local and
+ * other adapters still use the Stage speech store.
  */
 
 /**
@@ -74,12 +73,42 @@ async function playAudio(audio: ArrayBuffer, signal: AbortSignal, onPlaybackStar
 
 /** The default driver: real provider, real synthesis, real output. */
 export function createVoicePreviewDriver(): VoicePreviewDriver {
+  const synthesize = createNativeSpeechSynthesis(id => useLiaProviderConfigFacade().getConfig(id)?.baseUrl)
   return async (target, text, signal, onPlaybackStart) => {
+    if (signal.aborted)
+      return
+    const native = synthesize(target, text, signal)
+    if (native) {
+      const audio = await native
+      if (!signal.aborted)
+        await playAudio(audio, signal, onPlaybackStart)
+      return
+    }
     const speechStore = useSpeechStore()
-    const providersStore = useProviderStore()
-    const configStore = useProviderConfigStore()
+    const providerRuntime = useLiaProviderRuntime()
+    const providerConfig = useLiaProviderConfigFacade()
 
-    const provider = await providersStore.getProviderInstance<PreviewSpeechProvider>(target.providerId)
+    /*
+     * A voice provider whose credential cannot live in this window fails here,
+     * at build time: the credential resolver refuses every text-to-speech
+     * definition (see `resolveApiKey`), and providers that need a key build from
+     * an empty one. That is the safe outcome, but the raw error is a TypeError
+     * from inside a provider's `createProvider`, which tells the user nothing.
+     *
+     * Re-thrown with a reason, and with `cause` kept for diagnostics. Nothing
+     * about the failure can carry a secret: the credential was never obtained.
+     * Local engines build normally and never reach this branch.
+     */
+    let provider: PreviewSpeechProvider | undefined
+    try {
+      provider = await providerRuntime.getInstance<PreviewSpeechProvider>(target.providerId)
+    }
+    catch (error) {
+      throw new Error(
+        `Voice provider "${target.providerId}" cannot be prepared in this window`,
+        { cause: error },
+      )
+    }
     if (!provider)
       throw new Error(`Speech provider "${target.providerId}" is not available`)
 
@@ -89,14 +118,14 @@ export function createVoicePreviewDriver(): VoicePreviewDriver {
     // Read at call time and passed straight through. It is never assigned to a
     // ref, never returned by the editor and never rendered, so no credential can
     // reach the UI state or the persisted payload.
-    const providerConfig = configStore.getProviderConfig(target.providerId) ?? {}
+    const targetConfig = providerConfig.getConfig(target.providerId) ?? {}
 
     const audio = await speechStore.speech(
       provider,
       target.modelId ?? '',
       text,
       target.voiceId ?? '',
-      providerConfig,
+      targetConfig,
       { trigger: 'manual', source: 'manual_preview', voice_type: 'custom_configured' },
     )
 

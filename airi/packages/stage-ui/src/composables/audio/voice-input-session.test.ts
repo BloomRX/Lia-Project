@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ref, shallowRef } from 'vue'
+import { effectScope, ref, shallowRef } from 'vue'
 
 const audioRecorderMock = vi.hoisted(() => ({
   isRecording: undefined as unknown as { value: boolean },
@@ -21,7 +21,7 @@ const vadMock = vi.hoisted(() => ({
 }))
 
 const hearingPipelineMock = vi.hoisted(() => ({
-  transcribeForRecording: vi.fn(async (_recording: Blob | null | undefined) => ''),
+  transcribeForRecording: vi.fn(async (_recording: Blob | null | undefined, _signal?: AbortSignal) => ''),
 }))
 
 vi.mock('../../workers/vad/process.worklet?worker&url', () => ({
@@ -94,6 +94,99 @@ describe('useVoiceInputSession', () => {
     hearingPipelineMock.transcribeForRecording.mockReset().mockResolvedValue('')
   })
 
+  it.each(['new segment', 'stop', 'scope disposal', 'media replacement', 'session change'] as const)('aborts pending transcription on %s and discards its late result', async (cancellation) => {
+    const { useVoiceInputSession } = await import('./voice-input-session')
+    const scope = effectScope()
+    const media = shallowRef(createMediaStream())
+    const onTranscriptionResult = vi.fn()
+    const onTranscriptionError = vi.fn()
+    let resolveTranscription!: (text: string) => void
+    let recordingWork: Promise<void> | undefined
+    hearingPipelineMock.transcribeForRecording.mockImplementationOnce(() => new Promise<string>((resolve) => {
+      resolveTranscription = resolve
+    }))
+    audioRecorderMock.startRecord.mockImplementation(async () => {
+      audioRecorderMock.isRecording.value = true
+    })
+    audioRecorderMock.stopRecord.mockImplementation(async () => {
+      audioRecorderMock.isRecording.value = false
+      // The real recorder emits its stop hook without waiting for transcription.
+      recordingWork = audioRecorderMock.onStopRecordHook?.(new Blob(['speech'], { type: 'audio/wav' }))
+    })
+    const session = scope.run(() => useVoiceInputSession(media, {
+      volumeFallback: { enabled: false },
+      onTranscriptionResult,
+      onTranscriptionError,
+    }))!
+
+    await expect(session.startSegment('manual')).resolves.toBe(true)
+    await expect(session.stopSegment('manual')).resolves.toBeUndefined()
+    await vi.waitFor(() => expect(hearingPipelineMock.transcribeForRecording).toHaveBeenCalledOnce())
+    const signal = hearingPipelineMock.transcribeForRecording.mock.calls[0]?.[1]
+    expect(signal).toBeInstanceOf(AbortSignal)
+    expect(signal?.aborted).toBe(false)
+    expect(session.isTranscribing.value).toBe(true)
+
+    if (cancellation === 'new segment')
+      await expect(session.startSegment('manual')).resolves.toBe(true)
+    else if (cancellation === 'stop')
+      await expect(session.stop()).resolves.toBeUndefined()
+    else if (cancellation === 'session change')
+      await session.cancelPendingTranscriptions()
+    else if (cancellation === 'scope disposal')
+      scope.stop()
+    else
+      media.value = createMediaStream()
+
+    expect(signal?.aborted).toBe(true)
+    resolveTranscription('late transcription')
+    await recordingWork
+
+    expect(onTranscriptionResult).not.toHaveBeenCalled()
+    expect(onTranscriptionError).not.toHaveBeenCalled()
+    expect(session.lastTranscriptionText.value).toBe('')
+    expect(session.lastError.value).toBeUndefined()
+    expect(session.isTranscribing.value).toBe(false)
+    scope.stop()
+  })
+
+  it('stops pending transcription without reporting its abort rejection as an error', async () => {
+    const { useVoiceInputSession } = await import('./voice-input-session')
+    const onTranscriptionResult = vi.fn()
+    const onTranscriptionError = vi.fn()
+    let recordingWork: Promise<void> | undefined
+    hearingPipelineMock.transcribeForRecording.mockImplementationOnce((_recording, signal) => new Promise<string>((_resolve, reject) => {
+      signal?.addEventListener('abort', () => reject(new DOMException('Cancelled', 'AbortError')), { once: true })
+    }))
+    audioRecorderMock.startRecord.mockImplementation(async () => {
+      audioRecorderMock.isRecording.value = true
+    })
+    audioRecorderMock.stopRecord.mockImplementation(async () => {
+      audioRecorderMock.isRecording.value = false
+      recordingWork = audioRecorderMock.onStopRecordHook?.(new Blob(['speech'], { type: 'audio/wav' }))
+    })
+    const session = useVoiceInputSession(shallowRef(createMediaStream()), {
+      volumeFallback: { enabled: false },
+      onTranscriptionResult,
+      onTranscriptionError,
+    })
+
+    await session.startSegment('manual')
+    await session.stopSegment('manual')
+    await vi.waitFor(() => expect(hearingPipelineMock.transcribeForRecording).toHaveBeenCalledOnce())
+    const signal = hearingPipelineMock.transcribeForRecording.mock.calls[0]?.[1]
+    expect(signal?.aborted).toBe(false)
+
+    await expect(session.stop()).resolves.toBeUndefined()
+    await recordingWork
+
+    expect(signal?.aborted).toBe(true)
+    expect(onTranscriptionResult).not.toHaveBeenCalled()
+    expect(onTranscriptionError).not.toHaveBeenCalled()
+    expect(session.lastError.value).toBeUndefined()
+    expect(session.isTranscribing.value).toBe(false)
+  })
+
   // https://github.com/moeru-ai/airi/issues/2092
   it('issue #2092 transcribes the padded VAD buffer instead of the recorder-only segment', async () => {
     const { useVoiceInputSession } = await import('./voice-input-session')
@@ -162,7 +255,7 @@ describe('useVoiceInputSession', () => {
     await expect(session.stopSegment(trigger)).resolves.toBeUndefined()
     await vi.waitFor(() => expect(hearingPipelineMock.transcribeForRecording).toHaveBeenCalledOnce())
 
-    expect(hearingPipelineMock.transcribeForRecording).toHaveBeenCalledWith(recorderRecording)
+    expect(hearingPipelineMock.transcribeForRecording).toHaveBeenCalledWith(recorderRecording, expect.any(AbortSignal))
   })
 
   it('discards a VAD recording when the detected speech is shorter than the minimum duration', async () => {

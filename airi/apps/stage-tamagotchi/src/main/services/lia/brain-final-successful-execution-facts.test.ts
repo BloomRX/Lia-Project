@@ -23,6 +23,7 @@ import { deriveLiaBrainFinalSuccessfulExecutionFacts } from './brain-final-succe
 const REPO_ROOT = new URL('../../../../../../', import.meta.url)
 const FINAL_FACTS = 'apps/stage-tamagotchi/src/main/services/lia/brain-final-successful-execution-facts.ts'
 const DIAGNOSTIC_FACTS = 'apps/stage-tamagotchi/src/main/services/lia/brain-correlation-diagnostic-facts.ts'
+const ROUTE_CONFORMANCE_FACTS = 'apps/stage-tamagotchi/src/main/services/lia/brain-route-conformance-facts.ts'
 const BRAIN_ROOTS = ['apps/stage-tamagotchi/src']
 
 /** `fileURLToPath` keeps the trailing separator of a directory URL. */
@@ -420,8 +421,11 @@ describe('final successful execution facts - source guards (Phase 8.0D-10B-4D4C4
   it('the derivation has exactly ONE production call site - the composition', () => {
     expect(productionMatching(/deriveLiaBrainFinalSuccessfulExecutionFacts/)).toEqual([FINAL_FACTS, DIAGNOSTIC_FACTS].sort())
     expect(productionMatching(/(?<!function )deriveLiaBrainFinalSuccessfulExecutionFacts\(/)).toEqual([DIAGNOSTIC_FACTS])
-    expect(productionMatching(/brain-final-successful-execution-facts|LiaBrainFinalSuccessfulExecutionFacts|LiaBrainFinalSuccessfulExecutionSnapshot/)).toEqual([FINAL_FACTS, DIAGNOSTIC_FACTS].sort())
-    expect(productionMatching(/FinalSuccessfulExecutionFacts/)).toEqual([FINAL_FACTS, DIAGNOSTIC_FACTS].sort())
+    // Phase 8.0D-10B-4D4C4-D2B10: the route-conformance module is a third TYPE-ONLY
+    // consumer of this module's fact union. It never CALLS the derivation, so the
+    // two call-site allowlists above stay exactly as they were.
+    expect(productionMatching(/brain-final-successful-execution-facts|LiaBrainFinalSuccessfulExecutionFacts|LiaBrainFinalSuccessfulExecutionSnapshot/)).toEqual([FINAL_FACTS, DIAGNOSTIC_FACTS, ROUTE_CONFORMANCE_FACTS].sort())
+    expect(productionMatching(/FinalSuccessfulExecutionFacts/)).toEqual([FINAL_FACTS, DIAGNOSTIC_FACTS, ROUTE_CONFORMANCE_FACTS].sort())
   })
 
   it('no requested-vs-winner comparison vocabulary', () => {

@@ -113,6 +113,7 @@ function goToModelSelection() {
       >
         <ProviderApiKeyInput
           v-model="apiKey"
+          :provider-id="providerId"
           :provider-name="providerMetadata?.localizedName"
           :placeholder="apiKeyPlaceholder"
         />

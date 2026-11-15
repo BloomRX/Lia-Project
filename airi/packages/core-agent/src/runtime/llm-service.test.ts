@@ -5,7 +5,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { isContentArrayRelatedError, sanitizeMessages, streamFrom } from './llm-service'
 
-const { streamTextMock } = vi.hoisted(() => ({
+const { stepCountAtLeastMock, streamTextMock } = vi.hoisted(() => ({
+  stepCountAtLeastMock: vi.fn(),
   streamTextMock: vi.fn(),
 }))
 
@@ -17,7 +18,7 @@ vi.mock('@xsai/shared-chat', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@xsai/shared-chat')>()
   return {
     ...actual,
-    stepCountAtLeast: vi.fn(),
+    stepCountAtLeast: stepCountAtLeastMock,
   }
 })
 
@@ -39,6 +40,70 @@ function createMockStreamResult(
     totalUsage,
   }
 }
+
+/**
+ * Phase 8.0D-M1: Lia's half of the tool-calling contract, at the seam it owns.
+ *
+ * The tool execution LOOP itself lives inside `@xsai/stream-text` (the model
+ * emits a tool_call, xsai runs it and feeds the result back, bounded by
+ * `stopWhen`). Proving that loop end to end needs either a live model or a
+ * rewrite of the xsai mock, so it is reported as a separate closure item
+ * rather than faked here. What IS provable at this seam, and is asserted
+ * below, is that Lia hands the resolved route's model a non-empty tool set and
+ * permits more than one step - without which no loop could ever run.
+ */
+describe('streamFrom tool-calling seam (Phase 8.0D-M1)', () => {
+  beforeEach(() => {
+    streamTextMock.mockReset()
+  })
+
+  it('hands the resolved model a non-empty tool set and permits multiple steps', async () => {
+    streamTextMock.mockReturnValueOnce(createMockStreamResult())
+    // The model identity travels through chatProvider.chat(model), so that call
+    // is where the resolved route's model is observable.
+    const chat = vi.fn(() => ({ baseURL: 'https://example.com/' }))
+    const routedProvider = { chat } as unknown as ChatProvider
+
+    await streamFrom({
+      model: 'qwen/qwen3.8-27b',
+      chatProvider: routedProvider,
+      messages: [{ role: 'user', content: 'weather please' }] as Message[],
+      builtinToolsResolver: async () => [{ weather: { description: 'weather', parameters: {} } }] as never,
+      options: {},
+    })
+
+    // The resolved route's model reaches the provider verbatim.
+    expect(chat).toHaveBeenCalledWith('qwen/qwen3.8-27b')
+
+    expect(streamTextMock).toHaveBeenCalledTimes(1)
+    const call = streamTextMock.mock.calls[0]![0] as { tools: Record<string, unknown> | undefined }
+    // Tools are actually composed - not undefined, not an empty object.
+    expect(call.tools).toBeDefined()
+    expect(Object.keys(call.tools!)).toHaveLength(1)
+    // And the multi-step stop condition is armed at 10 steps, so a tool result
+    // CAN return to the model instead of ending the turn after one step.
+    expect(stepCountAtLeastMock).toHaveBeenCalledWith(10)
+  })
+
+  it('omits tools entirely once a model key is known to be incompatible', async () => {
+    streamTextMock.mockReturnValueOnce(createMockStreamResult())
+
+    await streamFrom({
+      model: 'qwen/qwen3.8-27b',
+      chatProvider: provider,
+      messages: [{ role: 'user', content: 'weather please' }] as Message[],
+      builtinToolsResolver: async () => [{ weather: { description: 'weather', parameters: {} } }] as never,
+      options: {
+        // Keyed by `${baseURL}-${model}`, which is how the runtime identifies a
+        // model+provider pair it has already seen fail.
+        toolsCompatibility: new Map([['https://example.com/-qwen/qwen3.8-27b', false]]),
+      },
+    })
+
+    const call = streamTextMock.mock.calls[0]![0] as { tools: unknown }
+    expect(call.tools).toBeUndefined()
+  })
+})
 
 describe('streamFrom tool errors', () => {
   beforeEach(() => {
@@ -296,6 +361,154 @@ describe('streamFrom tool errors', () => {
         },
       },
     })).rejects.toThrow('finish listener failed')
+  })
+})
+
+describe('streamFrom failure log privacy', () => {
+  function externalError() {
+    return Object.assign(new Error('PRIVATE_RESPONSE https://example.invalid/private?key=FAKE_KEY'), {
+      cause: new Error('PRIVATE_CAUSE'),
+      name: 'PRIVATE_NAME',
+      code: 'PRIVATE_CODE',
+      status: 'PRIVATE_STATUS',
+      requestId: 'PRIVATE_REQUEST_ID',
+      body: { content: 'PRIVATE_CONTENT' },
+    })
+  }
+
+  beforeEach(() => {
+    streamTextMock.mockReset()
+  })
+
+  it('consumes independent rejected promises without logging their payloads or changing the rejected error', async () => {
+    const error = externalError()
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const unhandled: unknown[] = []
+    const onUnhandled = (reason: unknown) => unhandled.push(reason)
+    process.on('unhandledRejection', onUnhandled)
+    streamTextMock.mockReturnValueOnce({
+      steps: Promise.reject(error),
+      messages: Promise.reject(externalError()),
+      usage: Promise.reject(externalError()),
+      totalUsage: Promise.reject(externalError()),
+    })
+
+    try {
+      await expect(streamFrom({ model: 'model-a', chatProvider: provider, messages: [] })).rejects.toBe(error)
+      await new Promise(resolve => setImmediate(resolve))
+      expect(unhandled).toEqual([])
+      expect(log.mock.calls).toHaveLength(4)
+      expect(log.mock.calls).toEqual(expect.arrayContaining([
+        ['Stream steps error:'],
+        ['Stream messages error:'],
+        ['Stream usage error:'],
+        ['Stream totalUsage error:'],
+      ]))
+    }
+    finally {
+      process.off('unhandledRejection', onUnhandled)
+      log.mockRestore()
+    }
+  })
+
+  it('keeps a final transcript rejection intact and its rejection sink private', async () => {
+    const error = externalError()
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    streamTextMock.mockReturnValueOnce(createMockStreamResult(Promise.resolve([]), Promise.resolve(undefined), Promise.reject(error)))
+
+    try {
+      await expect(streamFrom({ model: 'model-a', chatProvider: provider, messages: [] })).rejects.toBe(error)
+      expect(log.mock.calls).toEqual([['Stream messages error:']])
+    }
+    finally {
+      log.mockRestore()
+    }
+  })
+
+  it.each(['transcript', 'finish'] as const)('keeps the original %s observer failure without logging its payload', async (stage) => {
+    const error = externalError()
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const observer = vi.fn(() => {
+      throw error
+    })
+    streamTextMock.mockReturnValueOnce(createMockStreamResult())
+
+    try {
+      await expect(streamFrom({
+        model: 'model-a',
+        chatProvider: provider,
+        messages: [],
+        options: stage === 'transcript' ? { onMessages: observer } : { onStreamEvent: observer },
+      })).rejects.toBe(error)
+      expect(observer).toHaveBeenCalledTimes(1)
+      expect(log.mock.calls).toEqual([])
+    }
+    finally {
+      log.mockRestore()
+    }
+  })
+
+  it('keeps a completed response successful when total usage rejects and emits only fixed stage logs', async () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const onUsage = vi.fn()
+    const onMessages = vi.fn()
+    const onStreamEvent = vi.fn()
+    const messages: Message[] = [{ role: 'assistant', content: 'Resposta concluída.' }]
+    streamTextMock.mockReturnValueOnce(createMockStreamResult(Promise.resolve([]), Promise.reject(externalError()), Promise.resolve(messages)))
+
+    try {
+      await expect(streamFrom({
+        model: 'model-a',
+        chatProvider: provider,
+        messages: [],
+        options: { onUsage, onMessages, onStreamEvent },
+      })).resolves.toBeUndefined()
+      expect(onMessages).toHaveBeenCalledWith(messages)
+      expect(onStreamEvent).toHaveBeenCalledWith({ type: 'finish' })
+      expect(onUsage).toHaveBeenCalledWith({ source: 'unavailable' })
+      expect(log.mock.calls).toEqual([['Stream totalUsage error:'], ['Stream totalUsage error:']])
+    }
+    finally {
+      log.mockRestore()
+    }
+  })
+
+  it('keeps a completed response successful and private when the usage observer throws', async () => {
+    const error = externalError()
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const onUsage = vi.fn(() => {
+      throw error
+    })
+    const onMessages = vi.fn()
+    streamTextMock.mockReturnValueOnce(createMockStreamResult())
+
+    try {
+      await expect(streamFrom({ model: 'model-a', chatProvider: provider, messages: [], options: { onUsage, onMessages } })).resolves.toBeUndefined()
+      expect(onMessages).toHaveBeenCalledTimes(1)
+      expect(onUsage).toHaveBeenCalledWith({ source: 'unavailable' })
+      expect(log.mock.calls).toEqual([['Stream usage callback error:']])
+    }
+    finally {
+      log.mockRestore()
+    }
+  })
+
+  it('also keeps the last observation failure private if the usage logger itself throws', async () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {}).mockImplementationOnce(() => {
+      throw externalError()
+    })
+    const onUsage = vi.fn(() => {
+      throw externalError()
+    })
+    streamTextMock.mockReturnValueOnce(createMockStreamResult())
+
+    try {
+      await expect(streamFrom({ model: 'model-a', chatProvider: provider, messages: [], options: { onUsage } })).resolves.toBeUndefined()
+      expect(log.mock.calls).toEqual([['Stream usage callback error:'], ['Stream usage observation error:']])
+    }
+    finally {
+      log.mockRestore()
+    }
   })
 })
 

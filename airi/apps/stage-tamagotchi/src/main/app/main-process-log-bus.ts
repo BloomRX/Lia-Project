@@ -12,7 +12,8 @@ import type { MainProcessLogLine } from '../../shared/eventa'
  * Security: lines are sanitized BEFORE they are buffered or forwarded (ANSI
  * stripped, common secrets/tokens masked, stack-trace bodies collapsed and each
  * line length-capped). Full/raw technical detail stays in the diagnostics
- * viewer / the on-disk log file, not in the normal Home presentation.
+ * viewer / the on-disk log file keeps technical detail, with the same known
+ * credential shapes redacted at the file sink.
  */
 
 export type MainProcessLogEmitter = (line: MainProcessLogLine) => void
@@ -88,12 +89,23 @@ function sanitizeLogLine(raw: string): string | null {
 }
 
 /**
- * Masks common secret shapes so credentials never reach the Home viewer.
+ * Masks known secret shapes. Bare values and arbitrary third-party error
+ * bodies are not proven safe by pattern matching; producers must sanitize them.
  * Deliberately conservative: it targets well-known key/token assignments and
  * `Bearer`/`Authorization` values, not arbitrary text.
  */
-function maskSecrets(text: string): string {
+export function maskSecrets(text: string): string {
   let masked = text
+
+  masked = masked.replace(
+    /([?&](?:key|api[_-]?key|access[_-]?key(?:[_-]?(?:secret|id))?|token|access[_-]?token|refresh[_-]?token|id[_-]?token|secret|password|authorization)=)[^&#\s"'<>]+/gi,
+    '$1***',
+  )
+
+  masked = masked.replace(
+    /(["'](?:api[_-]?key|access[_-]?key(?:[_-]?(?:secret|id))?|secret|client[_-]?secret|password|passwd|token|access[_-]?token|refresh[_-]?token|id[_-]?token|session[_-]?key|auth[_-]?token|authorization|proxy-authorization|cookie)["']\s*[:=]\s*)(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')/gi,
+    '$1"***"',
+  )
 
   masked = masked.replace(
     /(Bearer\s+|(?:authorization|proxy-authorization)\s*:\s*(?:bearer\s+)?)(["']?)[^"',;\s]+/gi,

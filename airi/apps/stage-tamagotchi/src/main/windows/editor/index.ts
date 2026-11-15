@@ -1,3 +1,5 @@
+import { createStageWebPreferences } from '../secure-web-preferences'
+
 import type { BrowserWindow } from 'electron'
 
 import type { I18n } from '../../libs/i18n'
@@ -41,10 +43,7 @@ export function setupEditorWindowManager(params: {
       minHeight: 600,
       show: false,
       icon,
-      webPreferences: {
-        preload: join(getElectronMainDirname(), '../preload/index.mjs'),
-        sandbox: false,
-      },
+      webPreferences: createStageWebPreferences(join(getElectronMainDirname(), '../preload/index.cjs')),
     })
 
     window.on('ready-to-show', () => window.show())

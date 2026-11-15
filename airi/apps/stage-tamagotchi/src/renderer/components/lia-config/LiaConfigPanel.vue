@@ -6,7 +6,9 @@ import { useI18n } from 'vue-i18n'
 
 import LiaConfigAiSection from './sections/AiSection.vue'
 import LiaConfigAppearanceSection from './sections/AppearanceSection.vue'
+import LiaConfigMemorySection from './sections/MemorySection.vue'
 import LiaConfigPersonalitySection from './sections/PersonalitySection.vue'
+import LiaConfigPresenceSection from './sections/PresenceSection.vue'
 import LiaConfigVoiceSection from './sections/VoiceSection.vue'
 
 /**
@@ -27,8 +29,17 @@ const emit = defineEmits<{
   back: []
 }>()
 
-const { t } = useI18n()
-const tt = (key: string) => t(`tamagotchi.home.config.${key}`)
+const { t, locale } = useI18n()
+function tt(key: string) {
+  const english = locale.value.startsWith('en')
+  const added: Record<string, string> = {
+    'sections.memory.title': english ? 'Memory' : 'Memória',
+    'sections.memory.summary': english ? 'Choose what Lia remembers and manage saved information.' : 'Escolha o que a Lia lembra e gerencie as informações salvas.',
+    'sections.presence.title': english ? 'Desktop presence' : 'Presença no desktop',
+    'sections.presence.summary': english ? 'Choose how Lia occupies your desktop.' : 'Escolha como a Lia ocupa sua área de trabalho.',
+  }
+  return added[key] ?? t(`tamagotchi.home.config.${key}`)
+}
 
 const SECTIONS = LIA_CONFIG_SECTIONS
 
@@ -96,6 +107,8 @@ const sectionLabels = computed(() => SECTIONS.map(section => ({
       <LiaConfigPersonalitySection v-else-if="activeSection === 'personality'" />
       <LiaConfigVoiceSection v-else-if="activeSection === 'voice'" />
       <LiaConfigAppearanceSection v-else-if="activeSection === 'appearance'" />
+      <LiaConfigPresenceSection v-else-if="activeSection === 'presence'" />
+      <LiaConfigMemorySection v-else-if="activeSection === 'memory'" />
     </section>
   </div>
 </template>

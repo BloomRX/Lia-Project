@@ -50,6 +50,33 @@ function findObjectSchema(schema: JsonSchema | undefined, predicate: (schema: Js
 }
 
 describe('tools/character/orchestrator/spark-command', () => {
+  // Windows reproduction: the public Spark schema alone, without Persona or
+  // history, produced HTTP 200 + stop + one EOS token with strict=true on Qwen.
+  // The identical request with strict=false returned the correct image answer.
+  it('keeps the tool available without requesting incompatible constrained decoding', async () => {
+    const [tool] = await createSparkCommandTool({ sendSparkCommand: vi.fn() })
+    expect(tool.function.name).toBe('builtIn_emitSparkCommand')
+    expect(tool.function.strict).toBe(false)
+    expect(tool.function.parameters.additionalProperties).toBe(false)
+  })
+
+  it('rejects malformed arguments locally before dispatching a command', async () => {
+    const sendSparkCommand = vi.fn()
+    const [tool] = await createSparkCommandTool({ sendSparkCommand })
+    const execution = tool.execute({
+      destinations: 'not-an-array',
+      interrupt: null,
+      priority: null,
+      intent: null,
+      ack: null,
+      parentEventId: null,
+      guidance: null,
+      contexts: null,
+    }, { messages: [], toolCallId: 'invalid-call' })
+    await expect(execution).rejects.toThrow()
+    expect(sendSparkCommand).not.toHaveBeenCalled()
+  })
+
   it('emits a strict parameter schema', async () => {
     const tools = await createSparkCommandTool({
       sendSparkCommand: () => undefined,

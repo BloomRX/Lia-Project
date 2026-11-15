@@ -405,6 +405,12 @@ Avoid normal-mode jargon such as:
 - backend implementation;
 - raw model IDs unless needed.
 
+Model configuration (29/10/2026): suggestions are optional. The model field must
+also accept an editable ID and preserve it across edits, provider changes and
+reloads. Discovery failure keeps manual entry available. Discovery does not
+confirm capabilities; a text probe must explicitly state that images and tools
+were not verified. Labels and feedback must exist in pt-BR and English.
+
 ### Perception
 
 Typical cards:
@@ -983,6 +989,19 @@ Keyboard navigation and visible focus must be maintained.
 
 Do not use glow as the only focus indicator.
 
+Chat send errors use localized human messages with a clear retry action.
+Transport JSON, service URLs and credentials never belong in the message or
+its Copy action. Preserve the user's draft and attachments when sending fails.
+The 2026-10-22 implementation covers safe error storage/display and live
+pt-BR/English translation; see the release validation report for its limits.
+
+Managed Lia Chat hides internal reasoning by default, including secondary
+windows without a capability snapshot. The existing developer preference may
+reveal it reactively. This presentation rule preserves stored content and the
+standalone AIRI default. The 2026-10-23 Windows gate confirmed a real final
+answer and a localized composer without a technical preview; this is a scoped
+check, not approval of the complete Chat layout.
+
 ---
 
 ## 32. Accessibility
@@ -1245,3 +1264,12 @@ When a generated concept, implementation shortcut, existing AIRI UI, or previous
 Update this document when a deliberate visual/product decision changes.
 
 Do not rely on chat history as the only design specification.
+
+### Verificação de presença — 08/11/2026
+
+No modo Livre, o personagem deve caber integralmente com margem, sem reutilizar
+o zoom/offset de retrato. A mudança de modo não deve sobrescrever esses valores
+salvos do Tamagotchi. A sombra neutra é opcional no componente compartilhado e
+não deve introduzir contorno ciano. A captura Live2D foi aprovada em revisão
+visual; VRM Livre, composição/input, DPI e jogos permanecem pendentes no
+[relatório Windows](../product/RELEASE-WINDOWS-2026-11-07-COMPLETION.md).

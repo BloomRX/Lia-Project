@@ -9,7 +9,7 @@
  * Phase 4E-1 fixes the structure. Sections are expected to grow their own
  * editors without changing these ids.
  */
-export type LiaConfigSectionId = 'ai' | 'personality' | 'voice' | 'appearance'
+export type LiaConfigSectionId = 'ai' | 'personality' | 'voice' | 'appearance' | 'presence' | 'memory'
 
 export interface LiaConfigSection {
   id: LiaConfigSectionId
@@ -22,6 +22,8 @@ export const LIA_CONFIG_SECTIONS: readonly LiaConfigSection[] = [
   { id: 'personality', summaryKey: 'sections.personality.summary' },
   { id: 'voice', summaryKey: 'sections.voice.summary' },
   { id: 'appearance', summaryKey: 'sections.appearance.summary' },
+  { id: 'presence', summaryKey: 'sections.presence.summary' },
+  { id: 'memory', summaryKey: 'sections.memory.summary' },
 ]
 
 /** The section shown when the panel opens. */

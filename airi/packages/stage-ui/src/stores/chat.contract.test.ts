@@ -360,10 +360,50 @@ describe('chat store contract', () => {
     expect(disposeSessionMock).toHaveBeenCalledTimes(3)
   })
 
+  it('stores a retriable error when a provider stream ends without a response', async () => {
+    llmStreamMock.mockImplementationOnce(async (_model, _chatProvider, _messages, options: StreamOptions) => {
+      await options.onStreamEvent?.({ type: 'finish', finishReason: 'stop' })
+    })
+    const store = useChatStore()
+
+    await expect(store.send({ sessionId: 'session-1', text: 'describe the image' }))
+      .rejects
+      .toThrow('O serviço de IA terminou sem enviar uma resposta. Tente novamente.')
+
+    expect(sessionMessages['session-1']?.at(-1)).toMatchObject({
+      role: 'error',
+      content: 'The AI service finished without sending a response. Try again.',
+    })
+    expect(sessionMessages['session-1']?.some(message => message.role === 'assistant')).toBe(false)
+    expect(store.sending).toBe(false)
+  })
+
+  it.each([413, 429, 503, 401])('persists a safe error for HTTP %s without copying transport details into its warning', async (status) => {
+    const raw = `Remote sent ${status} response: {"error":{"message":"SENTINEL_PRIVATE https://service.invalid/account user-qa"}}`
+    const failure = new Error(raw)
+    llmStreamMock.mockRejectedValueOnce(failure)
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      const store = useChatStore()
+      await expect(store.send({ sessionId: 'session-1', text: 'synthetic QA input' })).rejects.toBe(failure)
+      const storedError = sessionMessages['session-1']?.find(message => message.role === 'error')
+      expect(storedError).toBeDefined()
+      expect(storedError.content).not.toContain('SENTINEL_PRIVATE')
+      expect(storedError.content).not.toContain('https://')
+      expect(storedError.content).not.toContain('{')
+      expect(JSON.stringify(warning.mock.calls)).not.toContain('SENTINEL_PRIVATE')
+      expect(store.sending).toBe(false)
+    }
+    finally {
+      warning.mockRestore()
+    }
+  })
+
   it('passes the current consciousness reasoning option to the chat provider', async () => {
     const settings = useConsciousnessSettingsStore()
     await settings.setReasoning(true)
     llmStreamMock.mockImplementationOnce(async (_model: string, _chatProvider: ChatProvider, _messages: Message[], options: StreamOptions) => {
+      await options.onStreamEvent?.({ type: 'text-delta', text: 'reply' })
       await options.onStreamEvent?.({ type: 'finish', finishReason: 'stop' })
     })
 
@@ -389,6 +429,7 @@ describe('chat store contract', () => {
       return true
     })
     llmStreamMock.mockImplementationOnce(async (_model: string, _chatProvider: ChatProvider, _messages: Message[], options: any) => {
+      await options.onStreamEvent({ type: 'text-delta', text: 'reply' })
       await options.onStreamEvent({ type: 'finish', finishReason: 'stop' })
     })
 
@@ -750,10 +791,11 @@ describe('chat store contract', () => {
 
   it('does not end the owned IO turn span when external sending mirror is cleared mid-send', async () => {
     let releaseStream: (() => void) | undefined
-    llmStreamMock.mockImplementationOnce(async () => {
+    llmStreamMock.mockImplementationOnce(async (_model, _chatProvider, _messages, options: StreamOptions) => {
       await new Promise<void>((resolve) => {
         releaseStream = resolve
       })
+      await options.onStreamEvent?.({ type: 'text-delta', text: 'reply' })
     })
 
     const store = useChatStore()
@@ -828,10 +870,11 @@ describe('chat store contract', () => {
 
   it('rejects cancelled queued sends before they start', async () => {
     let releaseFirstSend: (() => void) | undefined
-    llmStreamMock.mockImplementationOnce(async () => {
+    llmStreamMock.mockImplementationOnce(async (_model, _chatProvider, _messages, options: StreamOptions) => {
       await new Promise<void>((resolve) => {
         releaseFirstSend = resolve
       })
+      await options.onStreamEvent?.({ type: 'text-delta', text: 'reply' })
     })
 
     const store = useChatStore()
@@ -913,10 +956,11 @@ describe('chat store contract', () => {
 
   it('mirrors pending queued send snapshots from the core runtime', async () => {
     let releaseFirstSend: (() => void) | undefined
-    llmStreamMock.mockImplementationOnce(async () => {
+    llmStreamMock.mockImplementationOnce(async (_model, _chatProvider, _messages, options: StreamOptions) => {
       await new Promise<void>((resolve) => {
         releaseFirstSend = resolve
       })
+      await options.onStreamEvent?.({ type: 'text-delta', text: 'reply' })
     })
 
     const queuedMessage = 'queued-message-'.repeat(12)

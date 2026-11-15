@@ -64,6 +64,10 @@ import { electronPluginToolsChanged } from '../shared/eventa/plugin/tools'
 import { initializeElectronAuthCallbackBridge } from './bridges/electron-auth-callback'
 import { initializeStageThreeRuntimeTraceBridge } from './bridges/stage-three-runtime-trace'
 import { useLanguage } from './composables/use-language'
+import { initializeManagedChat, managedChatStartupError } from './services/lia/managed-chat-startup'
+import { installMemoryChatContext } from './services/lia/memory-chat'
+import { useLiaHearingStore } from './stores/lia/hearing'
+import { useLiaMemoryStore } from './stores/lia/memory'
 import { useLiaProviderStore } from './stores/lia/provider'
 import { useLiaVoiceStore } from './stores/lia/voice'
 import { useServerChannelSettingsStore } from './stores/settings/server-channel'
@@ -86,6 +90,8 @@ const setLocale = useElectronEventaInvoke(i18nSetLocale)
 const windowContext = resolveRendererWindowContext()
 const initialRoutePath = resolveInitialRendererRoutePath(route.path)
 const chatStore = useChatStore()
+const removeMemoryContext = installMemoryChatContext(chatStore, text => useLiaMemoryStore().retrieveContext(text))
+const liaHearingStore = useLiaHearingStore()
 const liaProviderStore = useLiaProviderStore()
 const liaVoiceStore = useLiaVoiceStore()
 const builtinToolsStore = useTamagotchiBuiltinToolsStore()
@@ -260,16 +266,29 @@ function createFullStageRuntime() {
 
   return {
     async initialize() {
+      console.info('[lia-startup] phase=integrations')
       initializeAnalytics()
       await authStore.initialize()
+      console.info('[lia-startup] phase=display-models')
       await displayModelsStore.initialize()
+      console.info('[lia-startup] phase=character')
       await cardStore.initialize()
       registerAuthenticatedSetup()
       if (!authStore.isAuthenticated)
         await removeAuthenticationProviderConfiguration()
 
+      // The optional integration channel may remain disconnected. It cannot
+      // block the configured conversation; character hydration must run first.
+      if (windowContext.liaManaged && windowContext.leadership === 'leader-only') {
+        const chatStartup = await initializeManagedChat(windowContext, liaProviderStore, useConsciousnessStore())
+        console.info(`[lia-startup] phase=chat-${chatStartup}`)
+        if (chatStartup === 'unavailable')
+          toast.error(managedChatStartupError(language.value))
+      }
+
       await displayModelsStore.loadDisplayModelsFromIndexedDB()
       await settingsStore.initializeStageModel()
+      console.info('[lia-startup] phase=audio-devices')
       await settingsAudioDeviceStore.initialize()
 
       if (usesGodotStage) {
@@ -282,6 +301,7 @@ function createFullStageRuntime() {
       }
 
       const serverChannelConfig = await getServerChannelConfig()
+      console.info('[lia-startup] phase=channel')
       serverChannelSettingsStore.tlsConfig = serverChannelConfig.tlsConfig ?? null
       serverChannelSettingsStore.hostname = serverChannelConfig.hostname
       serverChannelSettingsStore.authToken = serverChannelConfig.authToken
@@ -322,7 +342,14 @@ const fullStageRuntime = windowContext.stageRuntime === 'full'
   ? createFullStageRuntime()
   : null
 
-const { restore: restoreLocale } = useLanguage(language, getMainLocale, setLocale)
+const { restore: restoreLocale, syncError: localeSyncError } = useLanguage(language, getMainLocale, setLocale)
+watch(localeSyncError, (error) => {
+  if (error && windowContext.liaManaged) {
+    toast.error(language.value.startsWith('pt')
+      ? 'Não foi possível confirmar o idioma salvo. Tente novamente nas configurações.'
+      : 'The saved language could not be confirmed. Try again in settings.')
+  }
+})
 
 const { updateThemeColor } = useThemeColor(themeColorFromValue({ light: 'rgb(255 255 255)', dark: 'rgb(18 18 18)' }))
 watch(dark, () => updateThemeColor(), { immediate: true })
@@ -341,9 +368,26 @@ onMounted(() => updateThemeColor())
  * inert-by-default.
  */
 onMounted(() => {
+  // Corte B: EVERY window that can send a chat needs the transport bridge,
+  // because a curated provider's request is executed in the main process and
+  // this renderer only forwards it. Installing it here is safe in both roles —
+  // it reads no credential. Leaving it leader-only is what made `#/chat`, a
+  // follower-only window, fall back to the legacy executor that has no
+  // credential resolver and therefore no `Authorization` header.
+  liaProviderStore.registerChatTransport()
   if (windowContext.leadership === 'leader-only') {
+    // Leader-only from here down: the vault credential resolver, the fallback
+    // chain, voice and hearing all belong to exactly one window.
     liaProviderStore.registerRuntimeExtensions()
     liaVoiceStore.registerRuntimeExtensions()
+    // Phase 8.0D-10B-4D4C4-SHELL-B1: managed Hearing projection rides the SAME
+    // leader-only mount, so exactly one window applies the canonical STT target
+    // and secondary renderers never rewrite runtime projection. It runs after
+    // registerRuntimeExtensions() on purpose: the vault credential resolver must
+    // already be installed before a transcription instance can be built.
+    // Idempotent, one-shot, and never throws - a degraded STT leaves text
+    // conversation untouched.
+    void liaHearingStore.initialize()
   }
 })
 
@@ -367,11 +411,19 @@ onMounted(async () => {
   // watch(language) and overwrites the main-process config with the OS locale.
   // We must restore the correct locale from main process before allowing sync.
   // https://github.com/moeru-ai/airi/issues/1658
-  await restoreLocale()
+  try {
+    await restoreLocale()
+  }
+  catch {
+    // The locale composable reports this failure and keeps synchronization
+    // disabled. A language read failure must not prevent chat initialization.
+  }
 
   await chatStore.initialize(syncedPinia)
+  console.info('[lia-startup] phase=chat-session-ready')
 
   await fullStageRuntime?.initialize()
+  console.info('[lia-startup] phase=integrations-ready')
 })
 
 watch(themeColorsHue, () => {
@@ -383,6 +435,7 @@ watch(themeColorsHueDynamic, () => {
 }, { immediate: true })
 
 onUnmounted(() => {
+  removeMemoryContext()
   stopLeadershipListener?.()
   chatStore.dispose()
   fullStageRuntime?.dispose()

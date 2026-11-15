@@ -169,10 +169,17 @@ describe('chat turn brain requirement (8.0D-6)', () => {
       expect(source, relative).not.toMatch(/LiaBrainService|liaBrain\b|decideBrainRoute|brainRequirementForChatTurn/)
     }
 
-    // And the helper's ONLY consumer outside lia-core is the read-only Brain
-    // decision bridge (Phase 8.0D-7), which maps chat facts in main. Nothing
-    // in a chat execution path consumes it: the helper defines the contract,
-    // the bridge exposes it, and no conversation code calls either yet.
+    // And the helper's consumers outside lia-core are exactly two, and neither
+    // is a chat execution path:
+    //   - the read-only Brain decision bridge (Phase 8.0D-7), which maps chat
+    //     facts in main;
+    //   - the Launcher's managed Brain routing default (Phase 8.0D-M2), which
+    //     asks the canonical router ONE eligibility question about a plain text
+    //     turn before it may persist a routing mode. That is product
+    //     configuration, not conversation execution: it sends nothing, selects
+    //     no provider and builds no payload.
+    // The helper defines the contract, those two consume it, and no
+    // conversation code calls either.
     const airiDir = fileURLToPath(new URL('../../../../', import.meta.url))
     const consumers: string[] = []
     for (const root of ['apps', 'packages']) {
@@ -197,6 +204,7 @@ describe('chat turn brain requirement (8.0D-6)', () => {
       }
     }
     expect(consumers.sort()).toEqual([
+      'apps/lia-app/src/main/lia-host.ts',
       'apps/stage-tamagotchi/src/main/services/lia/brain-decision-service.ts',
       'apps/stage-tamagotchi/src/shared/eventa/index.ts',
     ])

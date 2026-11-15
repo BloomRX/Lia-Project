@@ -1,0 +1,11 @@
+{
+  "name": "@lia/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Contratos do Stage e do protocolo da Lia. Zero dependencias.",
+  "main": "src/index.ts",
+  "scripts": {
+    "test": "node --experimental-strip-types --test \"test/*.test.ts\""
+  }
+}
