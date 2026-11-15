@@ -21,6 +21,13 @@ integração parcial da Onda 1 continuam presentes. A branch antiga permanece s�
 registro; **não escrever nela**. O `main` não contém o trabalho de desenvolvimento —
 qualquer branch nova precisa do mesmo merge antes de continuar.
 
+**Auditoria Git das branches (15/11/2026).** Inventário completo, mapeamento das seis
+sessões e plano de organização das refs em
+[LIA-GIT-BRANCH-ORGANIZATION-AUDIT](../reports/LIA-GIT-BRANCH-ORGANIZATION-AUDIT.md).
+Rodada somente-leitura: nenhuma branch foi criada, mergeada, rebaseada ou removida.
+Pendências registradas: evidência de áudio contraditória em `407300b`, três versões de
+`auth.ts` e duplicação da Fase 1 entre `arena/250b337a` e `codex/lia-ui-ux-fase-1`.
+
 **Decisões do beta interno (14/11/2026, revisão 2 do plano).** O produto definiu:
 beta **interno**; **voz e STT obrigatórios** para aprovação; **Fase 1 de UI autorizada**
 (prontidão, confirmações destrutivas, contraste e acessibilidade; sem redesenho);
