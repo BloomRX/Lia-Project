@@ -13,6 +13,14 @@ commit. Registra **estado**, não narrativa: relatório de rodada vai para
 
 ## 0. Estado agora
 
+**Branch de desenvolvimento: `arena/7fa837f0-lia-project` (15/11/2026).** Esta é a
+branch ativa. Ela nasceu do `main` atual (`9c7ac18`) e recebeu, por merge (`7117aa8`),
+todo o histórico da `arena/01a10290-lia-project`, cujo PR #4 foi fechado sem merge.
+Nada de código foi perdido: A-1, as correções das rodadas anteriores, o plano rev.2 e a
+integração parcial da Onda 1 continuam presentes. A branch antiga permanece só como
+registro; **não escrever nela**. O `main` não contém o trabalho de desenvolvimento —
+qualquer branch nova precisa do mesmo merge antes de continuar.
+
 **Decisões do beta interno (14/11/2026, revisão 2 do plano).** O produto definiu:
 beta **interno**; **voz e STT obrigatórios** para aprovação; **Fase 1 de UI autorizada**
 (prontidão, confirmações destrutivas, contraste e acessibilidade; sem redesenho);

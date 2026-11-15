@@ -1,9 +1,9 @@
 # Lia — Plano executável do beta interno (revisão 2)
 
 **Data:** 14/11/2026
-**Branch:** `arena/01a10290-lia-project`
+**Branch:** `arena/7fa837f0-lia-project` (branch de desenvolvimento ativa desde 15/11/2026, criada sobre o `main` `9c7ac18`). Substitui `arena/01a10290-lia-project`, cujo PR #4 foi fechado sem merge; o conteúdo daquela branch foi trazido para esta por merge.
 **Base desta revisão:** `407300b8baa56b0ed8d14b7b2c0628222754e51f` (consolidação rev. 1), sobre `ae46c49`.
-**SHA de código auditado:** `ae46c495d7da7cd33f4b4da8f4e8cc95b0a867b6` — nenhum código de produto mudou desde então.
+**SHA de código auditado:** `ae46c495d7da7cd33f4b4da8f4e8cc95b0a867b6` — nenhum código de produto mudou desde então, salvo a integração parcial da Onda 1 (7 arquivos de higiene, `abeffa4`), que não altera comportamento fora dos pontos listados na §2.
 **Natureza:** documentação e coordenação. **Nenhuma implementação de produto nesta rodada**, nenhum merge de branch de especialista, A-1 não reaberto.
 
 ---
