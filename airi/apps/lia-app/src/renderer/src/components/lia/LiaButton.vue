@@ -54,7 +54,7 @@ withDefaults(defineProps<{
 }
 
 .lia-button--primary {
-  background: linear-gradient(135deg, var(--lia-accent), var(--lia-accent-soft));
+  background: #a62b90;
   border: none;
   color: var(--lia-accent-contrast);
   font-weight: var(--lia-font-bold);

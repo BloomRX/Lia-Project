@@ -323,6 +323,8 @@ async function conclude() {
 async function removeProvider() {
   if (!providerId.value)
     return
+  if (!window.confirm('Remover a configuração deste serviço de IA, incluindo as chaves salvas e a configuração de reserva?'))
+    return
   busy.value = true
   try {
     await store.removeTransport(providerId.value)

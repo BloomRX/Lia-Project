@@ -353,8 +353,11 @@ async function handleToolCallRerun(payload: { message: ChatHistoryItem, index: n
 }
 
 async function handleCleanupMessages() {
+  const sessionId = chatSession.activeSessionId
   const messageCount = messages.value.filter(message => message.role !== 'system').length
-  await chatStore.cleanup(chatSession.activeSessionId)
+  if (!sessionId || !messageCount || !window.confirm('Limpar todas as mensagens desta conversa? Esta ação não pode ser desfeita.'))
+    return
+  await chatStore.cleanup(sessionId)
   trackChatMessagesCleared({
     source: 'chat_controls',
     message_count: messageCount,
@@ -519,6 +522,7 @@ async function handleCleanupMessages() {
             hover:text="red-500 dark:red-400"
             flex items-center justify-center rounded-md p-2 outline-none
             transition-colors transition-transform active:scale-95
+            aria-label="Limpar mensagens desta conversa"
             @click="handleCleanupMessages"
           >
             <div class="i-solar:trash-bin-2-bold-duotone" />
