@@ -1,0 +1,135 @@
+
+ RUN  v4.1.11 /home/user/Lia-Project/airi/apps/stage-tamagotchi
+
+stderr | src/renderer/components/phase1-ui.test.ts > lia chat confirmation seam > cancel preserves messages and confirmation reaches cleanup once for the active session
+[BackgroundStore] Failed to seed builtin: builtin:cozy-tea-corner TypeError: Failed to parse URL from /@fs/home/user/Lia-Project/airi/packages/stage-ui/src/assets/backgrounds/cozy-tea-corner-in-pastel-hues.avif
+    at node:internal/deps/undici/undici:14976:13
+    at processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at fetchAssetAsBlob (/home/user/Lia-Project/airi/packages/stage-ui/src/stores/background.ts:84:17)
+    at initializeStore (/home/user/Lia-Project/airi/packages/stage-ui/src/stores/background.ts:150:26) {
+  [cause]: TypeError: Invalid URL
+      at new URL (node:internal/url:818:25)
+      at new URL (file:///home/user/Lia-Project/airi/node_modules/.pnpm/vitest@4.1.11_@opentelemetry+api@1.9.1_@types+node@26.2.0_@vitest+browser-playwright@4._06df85f8ef07c15c48c5f50e45856ad3/node_modules/vitest/dist/chunks/index.DC7d2Pf8.js:557:2)
+      at new Request (node:internal/deps/undici/undici:9804:25)
+      at fetch (node:internal/deps/undici/undici:10533:25)
+      at fetch (node:internal/deps/undici/undici:14974:10)
+      at fetch (node:internal/bootstrap/web/exposed-window-or-worker:75:12)
+      at fetchAssetAsBlob (/home/user/Lia-Project/airi/packages/stage-ui/src/stores/background.ts:84:23)
+      at initializeStore (/home/user/Lia-Project/airi/packages/stage-ui/src/stores/background.ts:150:32)
+      at processTicksAndRejections (node:internal/process/task_queues:103:5) {
+    code: 'ERR_INVALID_URL',
+    input: '/@fs/home/user/Lia-Project/airi/packages/stage-ui/src/assets/backgrounds/cozy-tea-corner-in-pastel-hues.avif'
+  }
+}
+
+stderr | src/renderer/components/phase1-ui.test.ts > lia chat confirmation seam > cancel preserves messages and confirmation reaches cleanup once for the active session
+[BackgroundStore] Failed to seed builtin: builtin:cute-streaming-room TypeError: Failed to parse URL from /@fs/home/user/Lia-Project/airi/packages/stage-ui/src/assets/backgrounds/cute-streaming-room-with-pastel-decor.avif
+    at node:internal/deps/undici/undici:14976:13
+    at processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at fetchAssetAsBlob (/home/user/Lia-Project/airi/packages/stage-ui/src/stores/background.ts:84:17)
+    at initializeStore (/home/user/Lia-Project/airi/packages/stage-ui/src/stores/background.ts:150:26) {
+  [cause]: TypeError: Invalid URL
+      at new URL (node:internal/url:818:25)
+      at new URL (file:///home/user/Lia-Project/airi/node_modules/.pnpm/vitest@4.1.11_@opentelemetry+api@1.9.1_@types+node@26.2.0_@vitest+browser-playwright@4._06df85f8ef07c15c48c5f50e45856ad3/node_modules/vitest/dist/chunks/index.DC7d2Pf8.js:557:2)
+      at new Request (node:internal/deps/undici/undici:9804:25)
+      at fetch (node:internal/deps/undici/undici:10533:25)
+      at fetch (node:internal/deps/undici/undici:14974:10)
+      at fetch (node:internal/bootstrap/web/exposed-window-or-worker:75:12)
+      at fetchAssetAsBlob (/home/user/Lia-Project/airi/packages/stage-ui/src/stores/background.ts:84:23)
+      at initializeStore (/home/user/Lia-Project/airi/packages/stage-ui/src/stores/background.ts:150:32)
+      at processTicksAndRejections (node:internal/process/task_queues:103:5) {
+    code: 'ERR_INVALID_URL',
+    input: '/@fs/home/user/Lia-Project/airi/packages/stage-ui/src/assets/backgrounds/cute-streaming-room-with-pastel-decor.avif'
+  }
+}
+
+stderr | src/renderer/components/phase1-ui.test.ts > lia chat confirmation seam > does not offer a destructive confirmation for a system-only conversation
+[BackgroundStore] Failed to seed builtin: builtin:cozy-tea-corner TypeError: Failed to parse URL from /@fs/home/user/Lia-Project/airi/packages/stage-ui/src/assets/backgrounds/cozy-tea-corner-in-pastel-hues.avif
+    at node:internal/deps/undici/undici:14976:13
+    at processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at fetchAssetAsBlob (/home/user/Lia-Project/airi/packages/stage-ui/src/stores/background.ts:84:17)
+    at initializeStore (/home/user/Lia-Project/airi/packages/stage-ui/src/stores/background.ts:150:26) {
+  [cause]: TypeError: Invalid URL
+      at new URL (node:internal/url:818:25)
+      at new URL (file:///home/user/Lia-Project/airi/node_modules/.pnpm/vitest@4.1.11_@opentelemetry+api@1.9.1_@types+node@26.2.0_@vitest+browser-playwright@4._06df85f8ef07c15c48c5f50e45856ad3/node_modules/vitest/dist/chunks/index.DC7d2Pf8.js:557:2)
+      at new Request (node:internal/deps/undici/undici:9804:25)
+      at fetch (node:internal/deps/undici/undici:10533:25)
+      at fetch (node:internal/deps/undici/undici:14974:10)
+      at fetch (node:internal/bootstrap/web/exposed-window-or-worker:75:12)
+      at fetchAssetAsBlob (/home/user/Lia-Project/airi/packages/stage-ui/src/stores/background.ts:84:23)
+      at initializeStore (/home/user/Lia-Project/airi/packages/stage-ui/src/stores/background.ts:150:32)
+      at processTicksAndRejections (node:internal/process/task_queues:103:5) {
+    code: 'ERR_INVALID_URL',
+    input: '/@fs/home/user/Lia-Project/airi/packages/stage-ui/src/assets/backgrounds/cozy-tea-corner-in-pastel-hues.avif'
+  }
+}
+
+stderr | src/renderer/components/phase1-ui.test.ts > lia chat confirmation seam > does not offer a destructive confirmation for a system-only conversation
+[BackgroundStore] Failed to seed builtin: builtin:cute-streaming-room TypeError: Failed to parse URL from /@fs/home/user/Lia-Project/airi/packages/stage-ui/src/assets/backgrounds/cute-streaming-room-with-pastel-decor.avif
+    at node:internal/deps/undici/undici:14976:13
+    at processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at fetchAssetAsBlob (/home/user/Lia-Project/airi/packages/stage-ui/src/stores/background.ts:84:17)
+    at initializeStore (/home/user/Lia-Project/airi/packages/stage-ui/src/stores/background.ts:150:26) {
+  [cause]: TypeError: Invalid URL
+      at new URL (node:internal/url:818:25)
+      at new URL (file:///home/user/Lia-Project/airi/node_modules/.pnpm/vitest@4.1.11_@opentelemetry+api@1.9.1_@types+node@26.2.0_@vitest+browser-playwright@4._06df85f8ef07c15c48c5f50e45856ad3/node_modules/vitest/dist/chunks/index.DC7d2Pf8.js:557:2)
+      at new Request (node:internal/deps/undici/undici:9804:25)
+      at fetch (node:internal/deps/undici/undici:10533:25)
+      at fetch (node:internal/deps/undici/undici:14974:10)
+      at fetch (node:internal/bootstrap/web/exposed-window-or-worker:75:12)
+      at fetchAssetAsBlob (/home/user/Lia-Project/airi/packages/stage-ui/src/stores/background.ts:84:23)
+      at initializeStore (/home/user/Lia-Project/airi/packages/stage-ui/src/stores/background.ts:150:32)
+      at processTicksAndRejections (node:internal/process/task_queues:103:5) {
+    code: 'ERR_INVALID_URL',
+    input: '/@fs/home/user/Lia-Project/airi/packages/stage-ui/src/assets/backgrounds/cute-streaming-room-with-pastel-decor.avif'
+  }
+}
+
+stderr | src/renderer/components/phase1-ui.test.ts > lia chat confirmation seam > closes a pending clear when the conversation becomes empty
+[BackgroundStore] Failed to seed builtin: builtin:cozy-tea-corner TypeError: Failed to parse URL from /@fs/home/user/Lia-Project/airi/packages/stage-ui/src/assets/backgrounds/cozy-tea-corner-in-pastel-hues.avif
+    at node:internal/deps/undici/undici:14976:13
+    at processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at fetchAssetAsBlob (/home/user/Lia-Project/airi/packages/stage-ui/src/stores/background.ts:84:17)
+    at initializeStore (/home/user/Lia-Project/airi/packages/stage-ui/src/stores/background.ts:150:26) {
+  [cause]: TypeError: Invalid URL
+      at new URL (node:internal/url:818:25)
+      at new URL (file:///home/user/Lia-Project/airi/node_modules/.pnpm/vitest@4.1.11_@opentelemetry+api@1.9.1_@types+node@26.2.0_@vitest+browser-playwright@4._06df85f8ef07c15c48c5f50e45856ad3/node_modules/vitest/dist/chunks/index.DC7d2Pf8.js:557:2)
+      at new Request (node:internal/deps/undici/undici:9804:25)
+      at fetch (node:internal/deps/undici/undici:10533:25)
+      at fetch (node:internal/deps/undici/undici:14974:10)
+      at fetch (node:internal/bootstrap/web/exposed-window-or-worker:75:12)
+      at fetchAssetAsBlob (/home/user/Lia-Project/airi/packages/stage-ui/src/stores/background.ts:84:23)
+      at initializeStore (/home/user/Lia-Project/airi/packages/stage-ui/src/stores/background.ts:150:32)
+      at processTicksAndRejections (node:internal/process/task_queues:103:5) {
+    code: 'ERR_INVALID_URL',
+    input: '/@fs/home/user/Lia-Project/airi/packages/stage-ui/src/assets/backgrounds/cozy-tea-corner-in-pastel-hues.avif'
+  }
+}
+
+stderr | src/renderer/components/phase1-ui.test.ts > lia chat confirmation seam > closes a pending clear when the conversation becomes empty
+[BackgroundStore] Failed to seed builtin: builtin:cute-streaming-room TypeError: Failed to parse URL from /@fs/home/user/Lia-Project/airi/packages/stage-ui/src/assets/backgrounds/cute-streaming-room-with-pastel-decor.avif
+    at node:internal/deps/undici/undici:14976:13
+    at processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at fetchAssetAsBlob (/home/user/Lia-Project/airi/packages/stage-ui/src/stores/background.ts:84:17)
+    at initializeStore (/home/user/Lia-Project/airi/packages/stage-ui/src/stores/background.ts:150:26) {
+  [cause]: TypeError: Invalid URL
+      at new URL (node:internal/url:818:25)
+      at new URL (file:///home/user/Lia-Project/airi/node_modules/.pnpm/vitest@4.1.11_@opentelemetry+api@1.9.1_@types+node@26.2.0_@vitest+browser-playwright@4._06df85f8ef07c15c48c5f50e45856ad3/node_modules/vitest/dist/chunks/index.DC7d2Pf8.js:557:2)
+      at new Request (node:internal/deps/undici/undici:9804:25)
+      at fetch (node:internal/deps/undici/undici:10533:25)
+      at fetch (node:internal/deps/undici/undici:14974:10)
+      at fetch (node:internal/bootstrap/web/exposed-window-or-worker:75:12)
+      at fetchAssetAsBlob (/home/user/Lia-Project/airi/packages/stage-ui/src/stores/background.ts:84:23)
+      at initializeStore (/home/user/Lia-Project/airi/packages/stage-ui/src/stores/background.ts:150:32)
+      at processTicksAndRejections (node:internal/process/task_queues:103:5) {
+    code: 'ERR_INVALID_URL',
+    input: '/@fs/home/user/Lia-Project/airi/packages/stage-ui/src/assets/backgrounds/cute-streaming-room-with-pastel-decor.avif'
+  }
+}
+
+ ✓  node  src/renderer/components/phase1-ui.test.ts (7 tests) 616ms
+
+ Test Files  1 passed (1)
+      Tests  7 passed (7)
+   Start at  06:44:40
+   Duration  16.51s (transform 9.43s, setup 0ms, import 14.66s, tests 616ms, environment 1.03s)

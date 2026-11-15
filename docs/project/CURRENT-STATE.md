@@ -13,6 +13,19 @@ commit. Registra **estado**, não narrativa: relatório de rodada vai para
 
 ## 0. Estado agora
 
+**Comparação UI/UX consolidada (14/11/2026, código + testes direcionados).** A branch
+Codex `codex/lia-ui-ux-fase-1` foi comparada por componente nos 4 arquivos sobrepostos.
+Decisão: manter nossa implementação em `LiaButton`, `HomeView` e `LiaProviderConfig`;
+em `InteractiveArea`, manter `DoubleCheckButton` e portar a guarda do Codex contra
+limpeza sem sessão/mensagens, agora reativa (controle desabilitado e confirmação
+pendente fechada quando o histórico esvazia). Launcher 358 PASS + 2 skipped; Stage
+node alvo 74/74; stage-ui alvo 56/56; typechecks Launcher/Stage e lint da tarefa PASS.
+**Browser BLOCKED** (Chromium ausente). Windows/runtime, leitor de tela, pixels e
+C0–C4 **NÃO EXECUTADOS**; beta **não aprovada**, baseline não promovido, X-04 adiado.
+Nenhuma mudança em Principal/main/Codex, runtime TTS, fallback, discovery, segredo,
+Persona, IPC, dependência ou DevKit.bat. Relatório:
+[Comparação UI/UX](../reports/LIA-UIUX-IMPLEMENTATION-COMPARISON.md).
+
 **Fase 1 UI/UX implementada (14/11/2026, código + testes direcionados).** Home agora
 exige prontidão real para conversar e direciona configuração para IA & Recursos;
 chat/sessões/provedor/memória/voz importada exigem confirmação destrutiva de escopo;

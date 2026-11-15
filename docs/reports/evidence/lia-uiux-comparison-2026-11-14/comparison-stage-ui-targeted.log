@@ -1,0 +1,49 @@
+
+ RUN  v4.1.11 /home/user/Lia-Project/airi/packages/stage-ui
+
+stdout | src/stores/chat/session-store.test.ts > chat-session-store · user swap during in-flight ensureActiveSessionForCharacter > runs a fresh hydrate for the new user and discards the stale write from the old user
+[chat-sync] creating WS client → http://test
+
+stdout | src/stores/chat/session-store.test.ts > chat-session-store · cloud placeholder hydration > retries cloud hydration when the reconcile pull for an adopted placeholder fails for Issue #2085
+[chat-sync] creating WS client → http://test
+
+stdout | src/stores/chat/session-store.test.ts > chat-session-store · cloud placeholder hydration > retries cloud hydration when the reconcile pull for an adopted placeholder fails for Issue #2085
+[chat-sync] reconcile start { userId: 'cloud-user', serverUrl: 'http://test' }
+
+stdout | src/stores/chat/session-store.test.ts > chat-session-store · cloud placeholder hydration > retries cloud hydration when the reconcile pull for an adopted placeholder fails for Issue #2085
+[chat-sync] listChats → 1 remote chats
+
+stdout | src/stores/chat/session-store.test.ts > chat-session-store · active card prompt edits > adds the AIRI chat math syntax to the system message for Issue #2239
+[chat-sync] WS skipped: anonymous user
+
+stdout | src/stores/chat/session-store.test.ts > chat-session-store · active card prompt edits > updates the current session system message for Issue #1995 without clearing its history
+[chat-sync] WS skipped: anonymous user
+
+stdout | src/stores/chat/session-store.test.ts > chat-session-store · active card prompt edits > hydrates a persisted Issue #1995 session before refreshing its system message
+[chat-sync] WS skipped: anonymous user
+
+stdout | src/stores/chat/session-store.test.ts > chat-session-store · synchronized data actions > keeps synchronized session data when a follower receives authenticated user state
+[chat-sync] creating WS client → http://test
+
+stdout | src/stores/chat/session-store.test.ts > chat-session-store · synchronized data actions > initializes a new window selection from the synchronized index for Issue #2085
+[chat-sync] WS skipped: anonymous user
+
+stdout | src/stores/chat/session-store.test.ts > chat-session-store · phase 8.0D-M3 provider-exclusion persistence > 3: the exclusion state survives persist → reload, stays visible, and stays withheld
+[chat-sync] WS skipped: anonymous user
+
+stdout | src/stores/chat/session-store.test.ts > chat-session-store · phase 8.0D-M3 provider-exclusion persistence > 3: the exclusion state survives persist → reload, stays visible, and stays withheld
+[chat-sync] WS skipped: anonymous user
+
+stdout | src/stores/chat/session-store.test.ts > chat-session-store · confirmed clear scope > clears only the named conversation and persists that conversation, not its sibling
+[chat-sync] WS skipped: anonymous user
+
+ ✓  node  src/stores/chat/session-store.test.ts (21 tests) 164ms
+ ✓  node  src/stores/ai/chat-llm/tool-resolver.test.ts (11 tests) 21ms
+ ✓  node  src/stores/ai/chat-llm/tools.test.ts (13 tests) 37ms
+ ✓  node  src/stores/tool-call-rerun.test.ts (7 tests) 16ms
+ ✓  node  src/components/scenarios/chat/components/action-menu/index.test.ts (4 tests) 11ms
+
+ Test Files  5 passed (5)
+      Tests  56 passed (56)
+   Start at  06:51:41
+   Duration  4.61s (transform 1.34s, setup 0ms, import 3.05s, tests 249ms, environment 7ms)

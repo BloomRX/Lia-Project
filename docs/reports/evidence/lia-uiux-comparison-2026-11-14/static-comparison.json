@@ -1,0 +1,56 @@
+{
+  "date": "2026-11-14",
+  "branch": "arena/250b337a-lia-project",
+  "refs": {
+    "ours_published": "dd8dc0ca6d3e54d973b69749d2ee4f0e8bfc6eaa",
+    "codex": "e72574e8d743986a2eee8eeec41f80350bd470d8",
+    "common_ancestor": "407300b8baa56b0ed8d14b7b2c0628222754e51f",
+    "principal_audit": "28551805e8b0da016e947ff30de28e75a936deab"
+  },
+  "method": "read-only git show/diff of remote refs; no checkout or edit of Codex branch",
+  "overlap_files": [
+    {
+      "path": "airi/apps/lia-app/src/renderer/src/components/lia/LiaButton.vue",
+      "ours_blob": "48f3e27911325f04b037f8f7849a8d3589285a9a",
+      "codex_blob": "a64e462e86156ff25dd0481b53aca66db8d71cba"
+    },
+    {
+      "path": "airi/apps/lia-app/src/renderer/src/views/HomeView.vue",
+      "ours_blob": "b457335e1f006c9e042818504b9ffdc7247dcebd",
+      "codex_blob": "d40f3f67b5b7402924d49290face6a814bfbde9b"
+    },
+    {
+      "path": "airi/apps/stage-tamagotchi/src/renderer/components/InteractiveArea.vue",
+      "ours_blob": "99602261c18eeb85763732966d996b23eda043a3",
+      "codex_blob": "038373d67974fb5ead0755cf94ccae38e9476b8e"
+    },
+    {
+      "path": "airi/apps/stage-tamagotchi/src/renderer/components/LiaProviderConfig.vue",
+      "ours_blob": "ed370201e778b279b37a28b71d1a258d0b5be108",
+      "codex_blob": "76d94d75efa295bd1214bbe3b6186bfce6a0fd30"
+    }
+  ],
+  "codex_delta": {
+    "base": "da3a1502179daddd1a1d70f8701b0c4d5b49cdaf",
+    "files": 5,
+    "insertions": 23,
+    "deletions": 3,
+    "tests_added": 0
+  },
+  "contrast_srgb_white_text": {
+    "action_#a62b90": 6.2321,
+    "ours_hover_#8f247c": 7.7453,
+    "codex_hover_brightness_1_08": 5.5293,
+    "old_gradient_neon_#e545c8": 3.4902,
+    "old_gradient_soft_#b0359a": 5.4947,
+    "limit": "static token calculation, not rendered pixel sampling"
+  },
+  "decisions": {
+    "LiaButton.vue": "keep ours: semantic action/hover tokens, 40px target, forced-colors focus; Codex hardcodes hex and brightness hover",
+    "HomeView.vue": "keep ours: role=status already present plus aria-live/atomic, describedby hint, busy/unknown guards, localization; Codex role=status is a subset",
+    "InteractiveArea.vue": "hybrid: keep ours DoubleCheckButton/i18n/focus; port Codex empty-session guard as reactive disabled plus handler session capture",
+    "LiaProviderConfig.vue": "keep ours: DoubleCheckButton with localized consequence, disabled/loading and managed read-only summary; Codex native confirm is narrower and pt-BR hardcoded"
+  },
+  "runtime_validated": false,
+  "windows_validated": false
+}

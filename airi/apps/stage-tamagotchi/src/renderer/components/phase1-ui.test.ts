@@ -2,11 +2,12 @@ import locales from '@proj-airi/i18n/locales'
 
 // @vitest-environment jsdom
 import { PiniaColada } from '@pinia/colada'
+import { useBackgroundStore } from '@proj-airi/stage-ui/stores/background'
 import { useChatStore } from '@proj-airi/stage-ui/stores/chat'
 import { useChatSessionStore } from '@proj-airi/stage-ui/stores/chat/session-store'
 import { DoubleCheckButton } from '@proj-airi/ui'
 import { mount } from '@vue/test-utils'
-import { createPinia, disposePinia } from 'pinia'
+import { createPinia, disposePinia, setActivePinia } from 'pinia'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { nextTick } from 'vue'
 import { createI18n } from 'vue-i18n'
@@ -103,41 +104,45 @@ describe('phase 1 destructive confirmation', () => {
   })
 })
 
+async function mountChatSeam(sessionMessages: Record<string, any[]>) {
+  const url = new URL(window.location.href)
+  url.searchParams.set('synced-leader', 'false')
+  url.searchParams.set('stage-runtime', 'minimal')
+  url.searchParams.set('lia-managed', 'true')
+  window.history.replaceState(null, '', url)
+  const pinia = createPinia()
+  pinias.push(pinia)
+  setActivePinia(pinia)
+  pinia.state.value = {
+    'chat-session-selection': { activeSessionId: 'active-session' },
+    'chat-session': {
+      sessionMetas: {
+        'active-session': { sessionId: 'active-session', userId: 'local', characterId: 'default', createdAt: 1, updatedAt: 1 },
+        'other-session': { sessionId: 'other-session', userId: 'local', characterId: 'default', createdAt: 1, updatedAt: 1 },
+      },
+      sessionMessages,
+    },
+  }
+  vi.spyOn(useBackgroundStore(pinia), 'initializeStore').mockImplementation(async () => {})
+  const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<div />' } }] })
+  await router.push('/')
+  await router.isReady()
+  const i18n = createI18n({ legacy: false, locale: 'en', fallbackLocale: 'en', messages: locales })
+  const wrapper = mount(InteractiveArea, { attachTo: document.body, global: { plugins: [pinia, PiniaColada, i18n, router] } })
+  wrappers.push(wrapper)
+  const sessions = useChatSessionStore(pinia)
+  const chat = useChatStore(pinia)
+  const cleanup = vi.spyOn(chat, 'cleanup').mockImplementation(async () => {
+    // The orchestrator's cancellation/persistence contract is covered by its
+    // own tests. Here only the UI gate is under test; do not start IDB writes.
+  })
+  return { chat, cleanup, pinia, sessions, wrapper }
+}
 describe('lia chat confirmation seam', () => {
   it('cancel preserves messages and confirmation reaches cleanup once for the active session', async () => {
-    const url = new URL(window.location.href)
-    url.searchParams.set('synced-leader', 'false')
-    url.searchParams.set('stage-runtime', 'minimal')
-    url.searchParams.set('lia-managed', 'true')
-    window.history.replaceState(null, '', url)
-    const pinia = createPinia()
-    pinias.push(pinia)
-    pinia.state.value = {
-      'chat-session-selection': { activeSessionId: 'active-session' },
-      'chat-session': {
-        sessionMetas: {
-          'active-session': { sessionId: 'active-session', userId: 'local', characterId: 'default', createdAt: 1, updatedAt: 1 },
-          'other-session': { sessionId: 'other-session', userId: 'local', characterId: 'default', createdAt: 1, updatedAt: 1 },
-        },
-        sessionMessages: {
-          'active-session': [{ id: 'system', role: 'system', content: 'prompt' }, { id: 'message', role: 'user', content: 'Keep this until confirmation' }],
-          'other-session': [{ id: 'other-message', role: 'user', content: 'Other conversation' }],
-        },
-      },
-    }
-    const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<div />' } }] })
-    await router.push('/')
-    await router.isReady()
-    const i18n = createI18n({ legacy: false, locale: 'en', fallbackLocale: 'en', messages: locales })
-    const wrapper = mount(InteractiveArea, { attachTo: document.body, global: { plugins: [pinia, PiniaColada, i18n, router] } })
-    wrappers.push(wrapper)
-    const { useBackgroundStore } = await import('@proj-airi/stage-ui/stores/background')
-    vi.spyOn(useBackgroundStore(pinia), 'initializeStore').mockImplementation(async () => {})
-    const sessions = useChatSessionStore(pinia)
-    const chat = useChatStore(pinia)
-    const cleanup = vi.spyOn(chat, 'cleanup').mockImplementation(async () => {
-      // The orchestrator's cancellation/persistence contract is covered by its
-      // own tests. Here only the UI gate is under test; do not start IDB writes.
+    const { cleanup, sessions, wrapper } = await mountChatSeam({
+      'active-session': [{ id: 'system', role: 'system', content: 'prompt' }, { id: 'message', role: 'user', content: 'Keep this until confirmation' }],
+      'other-session': [{ id: 'other-message', role: 'user', content: 'Other conversation' }],
     })
     const initial = wrapper.get('button[aria-label="Clear this conversation"]')
     await initial.trigger('click')
@@ -152,5 +157,31 @@ describe('lia chat confirmation seam', () => {
     expect(cleanup).toHaveBeenCalledWith('active-session')
     expect(sessions.getSessionMessages('active-session')).toHaveLength(2)
     expect(sessions.getSessionMessages('other-session')[0].content).toBe('Other conversation')
+  })
+
+  // Comparison: docs/reports/LIA-UIUX-IMPLEMENTATION-COMPARISON.md (Codex empty-chat guard).
+  it('does not offer a destructive confirmation for a system-only conversation', async () => {
+    const { cleanup, wrapper } = await mountChatSeam({
+      'active-session': [{ id: 'system', role: 'system', content: 'prompt' }],
+    })
+    const initial = wrapper.get('button[aria-label="Clear this conversation"]')
+    expect(initial.attributes('disabled')).toBeDefined()
+    await initial.trigger('click')
+    expect(wrapper.find('button[aria-label="Confirm clear"]').exists()).toBe(false)
+    expect(cleanup).not.toHaveBeenCalled()
+  })
+
+  it('closes a pending clear when the conversation becomes empty', async () => {
+    const { cleanup, pinia, wrapper } = await mountChatSeam({
+      'active-session': [{ id: 'message', role: 'user', content: 'hello' }],
+    })
+    await wrapper.get('button[aria-label="Clear this conversation"]').trigger('click')
+    expect(wrapper.find('button[aria-label="Confirm clear"]').exists()).toBe(true)
+    // Simulate a synchronized history update without invoking browser storage.
+    pinia.state.value['chat-session'].sessionMessages['active-session'] = []
+    await nextTick()
+    expect(wrapper.find('button[aria-label="Confirm clear"]').exists()).toBe(false)
+    expect(wrapper.get('button[aria-label="Clear this conversation"]').attributes('disabled')).toBeDefined()
+    expect(cleanup).not.toHaveBeenCalled()
   })
 })

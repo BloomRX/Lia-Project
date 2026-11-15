@@ -57,6 +57,9 @@ const reasoningVisibility = computed(() => windowContext.liaManaged
   : 'auto')
 
 const { activeSessionId, messages } = storeToRefs(chatSession)
+// System prompts are retained by cleanup; they are not user-visible messages
+// that justify offering a destructive clear action.
+const clearableMessageCount = computed(() => messages.value.filter(message => message.role !== 'system').length)
 const { streamingMessage } = storeToRefs(chatStream)
 const { activeSendSessionId, activeStreamingMessage, sending } = storeToRefs(chatStore)
 const { activeCard, activeCardId } = storeToRefs(airiCardStore)
@@ -353,8 +356,11 @@ async function handleToolCallRerun(payload: { message: ChatHistoryItem, index: n
 }
 
 async function handleCleanupMessages() {
-  const messageCount = messages.value.filter(message => message.role !== 'system').length
-  await chatStore.cleanup(chatSession.activeSessionId)
+  const sessionId = chatSession.activeSessionId
+  const messageCount = clearableMessageCount.value
+  if (!sessionId || !messageCount)
+    return
+  await chatStore.cleanup(sessionId)
   trackChatMessagesCleared({
     source: 'chat_controls',
     message_count: messageCount,
@@ -522,6 +528,7 @@ async function handleCleanupMessages() {
             :confirm-label="t('stage.chat.actions.clear-confirm')"
             :cancel-label="t('stage.chat.actions.cancel')"
             :description="t('stage.chat.actions.clear-description')"
+            :disabled="!activeSessionId || clearableMessageCount === 0"
             @confirm="handleCleanupMessages"
           >
             <div class="i-solar:trash-bin-2-bold-duotone" aria-hidden="true" />

@@ -1,0 +1,1580 @@
+
+ RUN  v4.1.11 /home/user/Lia-Project/airi/apps/stage-tamagotchi
+
+stderr | src/renderer/components/InteractiveArea.correlation.test.ts
+Warning: KaTeX doesn't work in quirks mode. Make sure your website has a suitable doctype.
+
+AggregateError:
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7) {
+  code: 'ECONNREFUSED',
+  [errors]: [
+    Error: connect ECONNREFUSED ::1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '::1',
+      port: 3000
+    },
+    Error: connect ECONNREFUSED 127.0.0.1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '127.0.0.1',
+      port: 3000
+    }
+  ]
+}
+stderr | src/renderer/components/InteractiveArea.correlation.test.ts > interactive area logical send correlation (Phase 8.0D-10B-3B1) > k/l: facts and the rest of the send payload are unchanged by the key
+[BackgroundStore] Failed to seed builtin: builtin:cozy-tea-corner DOMException [NetworkError]: Failed to execute "fetch()" on "Window" with URL "http://localhost:3000/@fs/home/user/Lia-Project/airi/packages/stage-ui/src/assets/backgrounds/cozy-tea-corner-in-pastel-hues.avif":
+    at Fetch.onError (file:///home/user/Lia-Project/airi/node_modules/.pnpm/happy-dom@20.14.3_bufferutil@4.1.0_utf-8-validate@5.0.10/node_modules/happy-dom/lib/fetch/Fetch.js:540:21)
+    at ClientRequest.emit (node:events:519:28)
+    at emitErrorEvent (node:_http_client:108:11)
+    at Socket.socketErrorListener (node:_http_client:575:5)
+    at Socket.emit (node:events:519:28)
+    at emitErrorNT (node:internal/streams/destroy:170:8)
+    at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+    at processTicksAndRejections (node:internal/process/task_queues:89:21)
+
+AggregateError:
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7) {
+  code: 'ECONNREFUSED',
+  [errors]: [
+    Error: connect ECONNREFUSED ::1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '::1',
+      port: 3000
+    },
+    Error: connect ECONNREFUSED 127.0.0.1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '127.0.0.1',
+      port: 3000
+    }
+  ]
+}
+stderr | src/renderer/components/InteractiveArea.correlation.test.ts > interactive area logical send correlation (Phase 8.0D-10B-3B1) > k/l: facts and the rest of the send payload are unchanged by the key
+[BackgroundStore] Failed to seed builtin: builtin:cozy-tea-corner DOMException [NetworkError]: Failed to execute "fetch()" on "Window" with URL "http://localhost:3000/@fs/home/user/Lia-Project/airi/packages/stage-ui/src/assets/backgrounds/cozy-tea-corner-in-pastel-hues.avif":
+    at Fetch.onError (file:///home/user/Lia-Project/airi/node_modules/.pnpm/happy-dom@20.14.3_bufferutil@4.1.0_utf-8-validate@5.0.10/node_modules/happy-dom/lib/fetch/Fetch.js:540:21)
+    at ClientRequest.emit (node:events:519:28)
+    at emitErrorEvent (node:_http_client:108:11)
+    at Socket.socketErrorListener (node:_http_client:575:5)
+    at Socket.emit (node:events:519:28)
+    at emitErrorNT (node:internal/streams/destroy:170:8)
+    at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+    at processTicksAndRejections (node:internal/process/task_queues:89:21)
+
+AggregateError:
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7) {
+  code: 'ECONNREFUSED',
+  [errors]: [
+    Error: connect ECONNREFUSED ::1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '::1',
+      port: 3000
+    },
+    Error: connect ECONNREFUSED 127.0.0.1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '127.0.0.1',
+      port: 3000
+    }
+  ]
+}
+stderr | src/renderer/components/InteractiveArea.correlation.test.ts > interactive area logical send correlation (Phase 8.0D-10B-3B1) > k/l: facts and the rest of the send payload are unchanged by the key
+[BackgroundStore] Failed to seed builtin: builtin:cozy-tea-corner DOMException [NetworkError]: Failed to execute "fetch()" on "Window" with URL "http://localhost:3000/@fs/home/user/Lia-Project/airi/packages/stage-ui/src/assets/backgrounds/cozy-tea-corner-in-pastel-hues.avif":
+    at Fetch.onError (file:///home/user/Lia-Project/airi/node_modules/.pnpm/happy-dom@20.14.3_bufferutil@4.1.0_utf-8-validate@5.0.10/node_modules/happy-dom/lib/fetch/Fetch.js:540:21)
+    at ClientRequest.emit (node:events:519:28)
+    at emitErrorEvent (node:_http_client:108:11)
+    at Socket.socketErrorListener (node:_http_client:575:5)
+    at Socket.emit (node:events:519:28)
+    at emitErrorNT (node:internal/streams/destroy:170:8)
+    at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+    at processTicksAndRejections (node:internal/process/task_queues:89:21)
+
+AggregateError:
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7) {
+  code: 'ECONNREFUSED',
+  [errors]: [
+    Error: connect ECONNREFUSED ::1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '::1',
+      port: 3000
+    },
+    Error: connect ECONNREFUSED 127.0.0.1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '127.0.0.1',
+      port: 3000
+    }
+  ]
+}
+stderr | src/renderer/components/InteractiveArea.correlation.test.ts > interactive area logical send correlation (Phase 8.0D-10B-3B1) > k/l: facts and the rest of the send payload are unchanged by the key
+[BackgroundStore] Failed to seed builtin: builtin:cozy-tea-corner DOMException [NetworkError]: Failed to execute "fetch()" on "Window" with URL "http://localhost:3000/@fs/home/user/Lia-Project/airi/packages/stage-ui/src/assets/backgrounds/cozy-tea-corner-in-pastel-hues.avif":
+    at Fetch.onError (file:///home/user/Lia-Project/airi/node_modules/.pnpm/happy-dom@20.14.3_bufferutil@4.1.0_utf-8-validate@5.0.10/node_modules/happy-dom/lib/fetch/Fetch.js:540:21)
+    at ClientRequest.emit (node:events:519:28)
+    at emitErrorEvent (node:_http_client:108:11)
+    at Socket.socketErrorListener (node:_http_client:575:5)
+    at Socket.emit (node:events:519:28)
+    at emitErrorNT (node:internal/streams/destroy:170:8)
+    at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+    at processTicksAndRejections (node:internal/process/task_queues:89:21)
+
+AggregateError:
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7) {
+  code: 'ECONNREFUSED',
+  [errors]: [
+    Error: connect ECONNREFUSED ::1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '::1',
+      port: 3000
+    },
+    Error: connect ECONNREFUSED 127.0.0.1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '127.0.0.1',
+      port: 3000
+    }
+  ]
+}
+stderr | src/renderer/components/InteractiveArea.correlation.test.ts > interactive area logical send correlation (Phase 8.0D-10B-3B1) > k/l: facts and the rest of the send payload are unchanged by the key
+[BackgroundStore] Failed to seed builtin: builtin:cozy-tea-corner DOMException [NetworkError]: Failed to execute "fetch()" on "Window" with URL "http://localhost:3000/@fs/home/user/Lia-Project/airi/packages/stage-ui/src/assets/backgrounds/cozy-tea-corner-in-pastel-hues.avif":
+    at Fetch.onError (file:///home/user/Lia-Project/airi/node_modules/.pnpm/happy-dom@20.14.3_bufferutil@4.1.0_utf-8-validate@5.0.10/node_modules/happy-dom/lib/fetch/Fetch.js:540:21)
+    at ClientRequest.emit (node:events:519:28)
+    at emitErrorEvent (node:_http_client:108:11)
+    at Socket.socketErrorListener (node:_http_client:575:5)
+    at Socket.emit (node:events:519:28)
+    at emitErrorNT (node:internal/streams/destroy:170:8)
+    at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+    at processTicksAndRejections (node:internal/process/task_queues:89:21)
+
+AggregateError:
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7) {
+  code: 'ECONNREFUSED',
+  [errors]: [
+    Error: connect ECONNREFUSED ::1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '::1',
+      port: 3000
+    },
+    Error: connect ECONNREFUSED 127.0.0.1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '127.0.0.1',
+      port: 3000
+    }
+  ]
+}
+stderr | src/renderer/components/InteractiveArea.correlation.test.ts > interactive area logical send correlation (Phase 8.0D-10B-3B1) > k/l: facts and the rest of the send payload are unchanged by the key
+[BackgroundStore] Failed to seed builtin: builtin:cozy-tea-corner DOMException [NetworkError]: Failed to execute "fetch()" on "Window" with URL "http://localhost:3000/@fs/home/user/Lia-Project/airi/packages/stage-ui/src/assets/backgrounds/cozy-tea-corner-in-pastel-hues.avif":
+    at Fetch.onError (file:///home/user/Lia-Project/airi/node_modules/.pnpm/happy-dom@20.14.3_bufferutil@4.1.0_utf-8-validate@5.0.10/node_modules/happy-dom/lib/fetch/Fetch.js:540:21)
+    at ClientRequest.emit (node:events:519:28)
+    at emitErrorEvent (node:_http_client:108:11)
+    at Socket.socketErrorListener (node:_http_client:575:5)
+    at Socket.emit (node:events:519:28)
+    at emitErrorNT (node:internal/streams/destroy:170:8)
+    at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+    at processTicksAndRejections (node:internal/process/task_queues:89:21)
+
+AggregateError:
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7) {
+  code: 'ECONNREFUSED',
+  [errors]: [
+    Error: connect ECONNREFUSED ::1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '::1',
+      port: 3000
+    },
+    Error: connect ECONNREFUSED 127.0.0.1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '127.0.0.1',
+      port: 3000
+    }
+  ]
+}
+stderr | src/renderer/components/InteractiveArea.correlation.test.ts > interactive area logical send correlation (Phase 8.0D-10B-3B1) > k/l: facts and the rest of the send payload are unchanged by the key
+[BackgroundStore] Failed to seed builtin: builtin:cozy-tea-corner DOMException [NetworkError]: Failed to execute "fetch()" on "Window" with URL "http://localhost:3000/@fs/home/user/Lia-Project/airi/packages/stage-ui/src/assets/backgrounds/cozy-tea-corner-in-pastel-hues.avif":
+    at Fetch.onError (file:///home/user/Lia-Project/airi/node_modules/.pnpm/happy-dom@20.14.3_bufferutil@4.1.0_utf-8-validate@5.0.10/node_modules/happy-dom/lib/fetch/Fetch.js:540:21)
+    at ClientRequest.emit (node:events:519:28)
+    at emitErrorEvent (node:_http_client:108:11)
+    at Socket.socketErrorListener (node:_http_client:575:5)
+    at Socket.emit (node:events:519:28)
+    at emitErrorNT (node:internal/streams/destroy:170:8)
+    at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+    at processTicksAndRejections (node:internal/process/task_queues:89:21)
+
+AggregateError:
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7) {
+  code: 'ECONNREFUSED',
+  [errors]: [
+    Error: connect ECONNREFUSED ::1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '::1',
+      port: 3000
+    },
+    Error: connect ECONNREFUSED 127.0.0.1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '127.0.0.1',
+      port: 3000
+    }
+  ]
+}
+stderr | src/renderer/components/InteractiveArea.correlation.test.ts > interactive area logical send correlation (Phase 8.0D-10B-3B1) > k/l: facts and the rest of the send payload are unchanged by the key
+[BackgroundStore] Failed to seed builtin: builtin:cozy-tea-corner DOMException [NetworkError]: Failed to execute "fetch()" on "Window" with URL "http://localhost:3000/@fs/home/user/Lia-Project/airi/packages/stage-ui/src/assets/backgrounds/cozy-tea-corner-in-pastel-hues.avif":
+    at Fetch.onError (file:///home/user/Lia-Project/airi/node_modules/.pnpm/happy-dom@20.14.3_bufferutil@4.1.0_utf-8-validate@5.0.10/node_modules/happy-dom/lib/fetch/Fetch.js:540:21)
+    at ClientRequest.emit (node:events:519:28)
+    at emitErrorEvent (node:_http_client:108:11)
+    at Socket.socketErrorListener (node:_http_client:575:5)
+    at Socket.emit (node:events:519:28)
+    at emitErrorNT (node:internal/streams/destroy:170:8)
+    at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+    at processTicksAndRejections (node:internal/process/task_queues:89:21)
+
+AggregateError:
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7) {
+  code: 'ECONNREFUSED',
+  [errors]: [
+    Error: connect ECONNREFUSED ::1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '::1',
+      port: 3000
+    },
+    Error: connect ECONNREFUSED 127.0.0.1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '127.0.0.1',
+      port: 3000
+    }
+  ]
+}
+stderr | src/renderer/components/InteractiveArea.correlation.test.ts > interactive area logical send correlation (Phase 8.0D-10B-3B1) > k/l: facts and the rest of the send payload are unchanged by the key
+[BackgroundStore] Failed to seed builtin: builtin:cozy-tea-corner DOMException [NetworkError]: Failed to execute "fetch()" on "Window" with URL "http://localhost:3000/@fs/home/user/Lia-Project/airi/packages/stage-ui/src/assets/backgrounds/cozy-tea-corner-in-pastel-hues.avif":
+    at Fetch.onError (file:///home/user/Lia-Project/airi/node_modules/.pnpm/happy-dom@20.14.3_bufferutil@4.1.0_utf-8-validate@5.0.10/node_modules/happy-dom/lib/fetch/Fetch.js:540:21)
+    at ClientRequest.emit (node:events:519:28)
+    at emitErrorEvent (node:_http_client:108:11)
+    at Socket.socketErrorListener (node:_http_client:575:5)
+    at Socket.emit (node:events:519:28)
+    at emitErrorNT (node:internal/streams/destroy:170:8)
+    at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+    at processTicksAndRejections (node:internal/process/task_queues:89:21)
+
+AggregateError:
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7) {
+  code: 'ECONNREFUSED',
+  [errors]: [
+    Error: connect ECONNREFUSED ::1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '::1',
+      port: 3000
+    },
+    Error: connect ECONNREFUSED 127.0.0.1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '127.0.0.1',
+      port: 3000
+    }
+  ]
+}
+stderr | src/renderer/components/InteractiveArea.correlation.test.ts > interactive area logical send correlation (Phase 8.0D-10B-3B1) > k/l: facts and the rest of the send payload are unchanged by the key
+[BackgroundStore] Failed to seed builtin: builtin:cozy-tea-corner DOMException [NetworkError]: Failed to execute "fetch()" on "Window" with URL "http://localhost:3000/@fs/home/user/Lia-Project/airi/packages/stage-ui/src/assets/backgrounds/cozy-tea-corner-in-pastel-hues.avif":
+    at Fetch.onError (file:///home/user/Lia-Project/airi/node_modules/.pnpm/happy-dom@20.14.3_bufferutil@4.1.0_utf-8-validate@5.0.10/node_modules/happy-dom/lib/fetch/Fetch.js:540:21)
+    at ClientRequest.emit (node:events:519:28)
+    at emitErrorEvent (node:_http_client:108:11)
+    at Socket.socketErrorListener (node:_http_client:575:5)
+    at Socket.emit (node:events:519:28)
+    at emitErrorNT (node:internal/streams/destroy:170:8)
+    at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+    at processTicksAndRejections (node:internal/process/task_queues:89:21)
+
+AggregateError:
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7) {
+  code: 'ECONNREFUSED',
+  [errors]: [
+    Error: connect ECONNREFUSED ::1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '::1',
+      port: 3000
+    },
+    Error: connect ECONNREFUSED 127.0.0.1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '127.0.0.1',
+      port: 3000
+    }
+  ]
+}
+stderr | src/renderer/components/InteractiveArea.correlation.test.ts > interactive area logical send correlation (Phase 8.0D-10B-3B1) > k/l: facts and the rest of the send payload are unchanged by the key
+[BackgroundStore] Failed to seed builtin: builtin:cozy-tea-corner DOMException [NetworkError]: Failed to execute "fetch()" on "Window" with URL "http://localhost:3000/@fs/home/user/Lia-Project/airi/packages/stage-ui/src/assets/backgrounds/cozy-tea-corner-in-pastel-hues.avif":
+    at Fetch.onError (file:///home/user/Lia-Project/airi/node_modules/.pnpm/happy-dom@20.14.3_bufferutil@4.1.0_utf-8-validate@5.0.10/node_modules/happy-dom/lib/fetch/Fetch.js:540:21)
+    at ClientRequest.emit (node:events:519:28)
+    at emitErrorEvent (node:_http_client:108:11)
+    at Socket.socketErrorListener (node:_http_client:575:5)
+    at Socket.emit (node:events:519:28)
+    at emitErrorNT (node:internal/streams/destroy:170:8)
+    at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+    at processTicksAndRejections (node:internal/process/task_queues:89:21)
+
+AggregateError:
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7) {
+  code: 'ECONNREFUSED',
+  [errors]: [
+    Error: connect ECONNREFUSED ::1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '::1',
+      port: 3000
+    },
+    Error: connect ECONNREFUSED 127.0.0.1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '127.0.0.1',
+      port: 3000
+    }
+  ]
+}
+stderr | src/renderer/components/InteractiveArea.correlation.test.ts > interactive area logical send correlation (Phase 8.0D-10B-3B1) > k/l: facts and the rest of the send payload are unchanged by the key
+[BackgroundStore] Failed to seed builtin: builtin:cozy-tea-corner DOMException [NetworkError]: Failed to execute "fetch()" on "Window" with URL "http://localhost:3000/@fs/home/user/Lia-Project/airi/packages/stage-ui/src/assets/backgrounds/cozy-tea-corner-in-pastel-hues.avif":
+    at Fetch.onError (file:///home/user/Lia-Project/airi/node_modules/.pnpm/happy-dom@20.14.3_bufferutil@4.1.0_utf-8-validate@5.0.10/node_modules/happy-dom/lib/fetch/Fetch.js:540:21)
+    at ClientRequest.emit (node:events:519:28)
+    at emitErrorEvent (node:_http_client:108:11)
+    at Socket.socketErrorListener (node:_http_client:575:5)
+    at Socket.emit (node:events:519:28)
+    at emitErrorNT (node:internal/streams/destroy:170:8)
+    at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+    at processTicksAndRejections (node:internal/process/task_queues:89:21)
+
+AggregateError:
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7) {
+  code: 'ECONNREFUSED',
+  [errors]: [
+    Error: connect ECONNREFUSED ::1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '::1',
+      port: 3000
+    },
+    Error: connect ECONNREFUSED 127.0.0.1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '127.0.0.1',
+      port: 3000
+    }
+  ]
+}
+stderr | src/renderer/components/InteractiveArea.correlation.test.ts > interactive area logical send correlation (Phase 8.0D-10B-3B1) > k/l: facts and the rest of the send payload are unchanged by the key
+[BackgroundStore] Failed to seed builtin: builtin:cozy-tea-corner DOMException [NetworkError]: Failed to execute "fetch()" on "Window" with URL "http://localhost:3000/@fs/home/user/Lia-Project/airi/packages/stage-ui/src/assets/backgrounds/cozy-tea-corner-in-pastel-hues.avif":
+    at Fetch.onError (file:///home/user/Lia-Project/airi/node_modules/.pnpm/happy-dom@20.14.3_bufferutil@4.1.0_utf-8-validate@5.0.10/node_modules/happy-dom/lib/fetch/Fetch.js:540:21)
+    at ClientRequest.emit (node:events:519:28)
+    at emitErrorEvent (node:_http_client:108:11)
+    at Socket.socketErrorListener (node:_http_client:575:5)
+    at Socket.emit (node:events:519:28)
+    at emitErrorNT (node:internal/streams/destroy:170:8)
+    at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+    at processTicksAndRejections (node:internal/process/task_queues:89:21)
+
+AggregateError:
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7) {
+  code: 'ECONNREFUSED',
+  [errors]: [
+    Error: connect ECONNREFUSED ::1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '::1',
+      port: 3000
+    },
+    Error: connect ECONNREFUSED 127.0.0.1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '127.0.0.1',
+      port: 3000
+    }
+  ]
+}
+stderr | src/renderer/components/InteractiveArea.correlation.test.ts > interactive area logical send correlation (Phase 8.0D-10B-3B1) > k/l: facts and the rest of the send payload are unchanged by the key
+[BackgroundStore] Failed to seed builtin: builtin:cozy-tea-corner DOMException [NetworkError]: Failed to execute "fetch()" on "Window" with URL "http://localhost:3000/@fs/home/user/Lia-Project/airi/packages/stage-ui/src/assets/backgrounds/cozy-tea-corner-in-pastel-hues.avif":
+    at Fetch.onError (file:///home/user/Lia-Project/airi/node_modules/.pnpm/happy-dom@20.14.3_bufferutil@4.1.0_utf-8-validate@5.0.10/node_modules/happy-dom/lib/fetch/Fetch.js:540:21)
+    at ClientRequest.emit (node:events:519:28)
+    at emitErrorEvent (node:_http_client:108:11)
+    at Socket.socketErrorListener (node:_http_client:575:5)
+    at Socket.emit (node:events:519:28)
+    at emitErrorNT (node:internal/streams/destroy:170:8)
+    at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+    at processTicksAndRejections (node:internal/process/task_queues:89:21)
+
+AggregateError:
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7) {
+  code: 'ECONNREFUSED',
+  [errors]: [
+    Error: connect ECONNREFUSED ::1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '::1',
+      port: 3000
+    },
+    Error: connect ECONNREFUSED 127.0.0.1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '127.0.0.1',
+      port: 3000
+    }
+  ]
+}
+stderr | src/renderer/components/InteractiveArea.correlation.test.ts > interactive area logical send correlation (Phase 8.0D-10B-3B1) > k/l: facts and the rest of the send payload are unchanged by the key
+[BackgroundStore] Failed to seed builtin: builtin:cozy-tea-corner DOMException [NetworkError]: Failed to execute "fetch()" on "Window" with URL "http://localhost:3000/@fs/home/user/Lia-Project/airi/packages/stage-ui/src/assets/backgrounds/cozy-tea-corner-in-pastel-hues.avif":
+    at Fetch.onError (file:///home/user/Lia-Project/airi/node_modules/.pnpm/happy-dom@20.14.3_bufferutil@4.1.0_utf-8-validate@5.0.10/node_modules/happy-dom/lib/fetch/Fetch.js:540:21)
+    at ClientRequest.emit (node:events:519:28)
+    at emitErrorEvent (node:_http_client:108:11)
+    at Socket.socketErrorListener (node:_http_client:575:5)
+    at Socket.emit (node:events:519:28)
+    at emitErrorNT (node:internal/streams/destroy:170:8)
+    at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+    at processTicksAndRejections (node:internal/process/task_queues:89:21)
+
+AggregateError:
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7) {
+  code: 'ECONNREFUSED',
+  [errors]: [
+    Error: connect ECONNREFUSED ::1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '::1',
+      port: 3000
+    },
+    Error: connect ECONNREFUSED 127.0.0.1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '127.0.0.1',
+      port: 3000
+    }
+  ]
+}
+stderr | src/renderer/components/InteractiveArea.correlation.test.ts > interactive area logical send correlation (Phase 8.0D-10B-3B1) > k/l: facts and the rest of the send payload are unchanged by the key
+[BackgroundStore] Failed to seed builtin: builtin:cozy-tea-corner DOMException [NetworkError]: Failed to execute "fetch()" on "Window" with URL "http://localhost:3000/@fs/home/user/Lia-Project/airi/packages/stage-ui/src/assets/backgrounds/cozy-tea-corner-in-pastel-hues.avif":
+    at Fetch.onError (file:///home/user/Lia-Project/airi/node_modules/.pnpm/happy-dom@20.14.3_bufferutil@4.1.0_utf-8-validate@5.0.10/node_modules/happy-dom/lib/fetch/Fetch.js:540:21)
+    at ClientRequest.emit (node:events:519:28)
+    at emitErrorEvent (node:_http_client:108:11)
+    at Socket.socketErrorListener (node:_http_client:575:5)
+    at Socket.emit (node:events:519:28)
+    at emitErrorNT (node:internal/streams/destroy:170:8)
+    at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+    at processTicksAndRejections (node:internal/process/task_queues:89:21)
+
+AggregateError:
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7) {
+  code: 'ECONNREFUSED',
+  [errors]: [
+    Error: connect ECONNREFUSED ::1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '::1',
+      port: 3000
+    },
+    Error: connect ECONNREFUSED 127.0.0.1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '127.0.0.1',
+      port: 3000
+    }
+  ]
+}
+stderr | src/renderer/components/InteractiveArea.correlation.test.ts > interactive area logical send correlation (Phase 8.0D-10B-3B1) > n: a rejected Brain bridge cannot prevent the correlated send
+[BackgroundStore] Failed to seed builtin: builtin:cute-streaming-room DOMException [NetworkError]: Failed to execute "fetch()" on "Window" with URL "http://localhost:3000/@fs/home/user/Lia-Project/airi/packages/stage-ui/src/assets/backgrounds/cute-streaming-room-with-pastel-decor.avif":
+    at Fetch.onError (file:///home/user/Lia-Project/airi/node_modules/.pnpm/happy-dom@20.14.3_bufferutil@4.1.0_utf-8-validate@5.0.10/node_modules/happy-dom/lib/fetch/Fetch.js:540:21)
+    at ClientRequest.emit (node:events:519:28)
+    at emitErrorEvent (node:_http_client:108:11)
+    at Socket.socketErrorListener (node:_http_client:575:5)
+    at Socket.emit (node:events:519:28)
+    at emitErrorNT (node:internal/streams/destroy:170:8)
+    at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+    at processTicksAndRejections (node:internal/process/task_queues:89:21)
+
+AggregateError:
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7) {
+  code: 'ECONNREFUSED',
+  [errors]: [
+    Error: connect ECONNREFUSED ::1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '::1',
+      port: 3000
+    },
+    Error: connect ECONNREFUSED 127.0.0.1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '127.0.0.1',
+      port: 3000
+    }
+  ]
+}
+stderr | src/renderer/components/InteractiveArea.correlation.test.ts > interactive area logical send correlation (Phase 8.0D-10B-3B1) > n: a rejected Brain bridge cannot prevent the correlated send
+[BackgroundStore] Failed to seed builtin: builtin:cute-streaming-room DOMException [NetworkError]: Failed to execute "fetch()" on "Window" with URL "http://localhost:3000/@fs/home/user/Lia-Project/airi/packages/stage-ui/src/assets/backgrounds/cute-streaming-room-with-pastel-decor.avif":
+    at Fetch.onError (file:///home/user/Lia-Project/airi/node_modules/.pnpm/happy-dom@20.14.3_bufferutil@4.1.0_utf-8-validate@5.0.10/node_modules/happy-dom/lib/fetch/Fetch.js:540:21)
+    at ClientRequest.emit (node:events:519:28)
+    at emitErrorEvent (node:_http_client:108:11)
+    at Socket.socketErrorListener (node:_http_client:575:5)
+    at Socket.emit (node:events:519:28)
+    at emitErrorNT (node:internal/streams/destroy:170:8)
+    at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+    at processTicksAndRejections (node:internal/process/task_queues:89:21)
+
+AggregateError:
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7) {
+  code: 'ECONNREFUSED',
+  [errors]: [
+    Error: connect ECONNREFUSED ::1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '::1',
+      port: 3000
+    },
+    Error: connect ECONNREFUSED 127.0.0.1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '127.0.0.1',
+      port: 3000
+    }
+  ]
+}
+stderr | src/renderer/components/InteractiveArea.correlation.test.ts > interactive area logical send correlation (Phase 8.0D-10B-3B1) > n: a rejected Brain bridge cannot prevent the correlated send
+[BackgroundStore] Failed to seed builtin: builtin:cute-streaming-room DOMException [NetworkError]: Failed to execute "fetch()" on "Window" with URL "http://localhost:3000/@fs/home/user/Lia-Project/airi/packages/stage-ui/src/assets/backgrounds/cute-streaming-room-with-pastel-decor.avif":
+    at Fetch.onError (file:///home/user/Lia-Project/airi/node_modules/.pnpm/happy-dom@20.14.3_bufferutil@4.1.0_utf-8-validate@5.0.10/node_modules/happy-dom/lib/fetch/Fetch.js:540:21)
+    at ClientRequest.emit (node:events:519:28)
+    at emitErrorEvent (node:_http_client:108:11)
+    at Socket.socketErrorListener (node:_http_client:575:5)
+    at Socket.emit (node:events:519:28)
+    at emitErrorNT (node:internal/streams/destroy:170:8)
+    at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+    at processTicksAndRejections (node:internal/process/task_queues:89:21)
+
+AggregateError:
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7) {
+  code: 'ECONNREFUSED',
+  [errors]: [
+    Error: connect ECONNREFUSED ::1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '::1',
+      port: 3000
+    },
+    Error: connect ECONNREFUSED 127.0.0.1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '127.0.0.1',
+      port: 3000
+    }
+  ]
+}
+stderr | src/renderer/components/InteractiveArea.correlation.test.ts > interactive area logical send correlation (Phase 8.0D-10B-3B1) > n: a rejected Brain bridge cannot prevent the correlated send
+[BackgroundStore] Failed to seed builtin: builtin:cute-streaming-room DOMException [NetworkError]: Failed to execute "fetch()" on "Window" with URL "http://localhost:3000/@fs/home/user/Lia-Project/airi/packages/stage-ui/src/assets/backgrounds/cute-streaming-room-with-pastel-decor.avif":
+    at Fetch.onError (file:///home/user/Lia-Project/airi/node_modules/.pnpm/happy-dom@20.14.3_bufferutil@4.1.0_utf-8-validate@5.0.10/node_modules/happy-dom/lib/fetch/Fetch.js:540:21)
+    at ClientRequest.emit (node:events:519:28)
+    at emitErrorEvent (node:_http_client:108:11)
+    at Socket.socketErrorListener (node:_http_client:575:5)
+    at Socket.emit (node:events:519:28)
+    at emitErrorNT (node:internal/streams/destroy:170:8)
+    at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+    at processTicksAndRejections (node:internal/process/task_queues:89:21)
+
+AggregateError:
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7) {
+  code: 'ECONNREFUSED',
+  [errors]: [
+    Error: connect ECONNREFUSED ::1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '::1',
+      port: 3000
+    },
+    Error: connect ECONNREFUSED 127.0.0.1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '127.0.0.1',
+      port: 3000
+    }
+  ]
+}
+stderr | src/renderer/components/InteractiveArea.correlation.test.ts > interactive area logical send correlation (Phase 8.0D-10B-3B1) > n: a rejected Brain bridge cannot prevent the correlated send
+[BackgroundStore] Failed to seed builtin: builtin:cute-streaming-room DOMException [NetworkError]: Failed to execute "fetch()" on "Window" with URL "http://localhost:3000/@fs/home/user/Lia-Project/airi/packages/stage-ui/src/assets/backgrounds/cute-streaming-room-with-pastel-decor.avif":
+    at Fetch.onError (file:///home/user/Lia-Project/airi/node_modules/.pnpm/happy-dom@20.14.3_bufferutil@4.1.0_utf-8-validate@5.0.10/node_modules/happy-dom/lib/fetch/Fetch.js:540:21)
+    at ClientRequest.emit (node:events:519:28)
+    at emitErrorEvent (node:_http_client:108:11)
+    at Socket.socketErrorListener (node:_http_client:575:5)
+    at Socket.emit (node:events:519:28)
+    at emitErrorNT (node:internal/streams/destroy:170:8)
+    at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+    at processTicksAndRejections (node:internal/process/task_queues:89:21)
+
+AggregateError:
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7) {
+  code: 'ECONNREFUSED',
+  [errors]: [
+    Error: connect ECONNREFUSED ::1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '::1',
+      port: 3000
+    },
+    Error: connect ECONNREFUSED 127.0.0.1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '127.0.0.1',
+      port: 3000
+    }
+  ]
+}
+stderr | src/renderer/components/InteractiveArea.correlation.test.ts > interactive area logical send correlation (Phase 8.0D-10B-3B1) > n: a rejected Brain bridge cannot prevent the correlated send
+[BackgroundStore] Failed to seed builtin: builtin:cute-streaming-room DOMException [NetworkError]: Failed to execute "fetch()" on "Window" with URL "http://localhost:3000/@fs/home/user/Lia-Project/airi/packages/stage-ui/src/assets/backgrounds/cute-streaming-room-with-pastel-decor.avif":
+    at Fetch.onError (file:///home/user/Lia-Project/airi/node_modules/.pnpm/happy-dom@20.14.3_bufferutil@4.1.0_utf-8-validate@5.0.10/node_modules/happy-dom/lib/fetch/Fetch.js:540:21)
+    at ClientRequest.emit (node:events:519:28)
+    at emitErrorEvent (node:_http_client:108:11)
+    at Socket.socketErrorListener (node:_http_client:575:5)
+    at Socket.emit (node:events:519:28)
+    at emitErrorNT (node:internal/streams/destroy:170:8)
+    at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+    at processTicksAndRejections (node:internal/process/task_queues:89:21)
+
+ ✓  node  src/renderer/components/InteractiveArea.correlation.test.ts (9 tests) 1196ms
+     ✓ k/l: facts and the rest of the send payload are unchanged by the key  312ms
+AggregateError:
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7) {
+  code: 'ECONNREFUSED',
+  [errors]: [
+    Error: connect ECONNREFUSED ::1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '::1',
+      port: 3000
+    },
+    Error: connect ECONNREFUSED 127.0.0.1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '127.0.0.1',
+      port: 3000
+    }
+  ]
+}
+stderr | ../../initializeStore (/home/user/Lia-Project/airi/packages/stage-ui/src/stores/background.ts:164:21)
+[BackgroundStore] Failed to seed builtin: builtin:cute-streaming-room DOMException [NetworkError]: Failed to execute "fetch()" on "Window" with URL "http://localhost:3000/@fs/home/user/Lia-Project/airi/packages/stage-ui/src/assets/backgrounds/cute-streaming-room-with-pastel-decor.avif":
+    at Fetch.onError (file:///home/user/Lia-Project/airi/node_modules/.pnpm/happy-dom@20.14.3_bufferutil@4.1.0_utf-8-validate@5.0.10/node_modules/happy-dom/lib/fetch/Fetch.js:540:21)
+    at ClientRequest.emit (node:events:519:28)
+    at emitErrorEvent (node:_http_client:108:11)
+    at Socket.socketErrorListener (node:_http_client:575:5)
+    at Socket.emit (node:events:519:28)
+    at emitErrorNT (node:internal/streams/destroy:170:8)
+    at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+    at processTicksAndRejections (node:internal/process/task_queues:89:21)
+
+AggregateError:
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7) {
+  code: 'ECONNREFUSED',
+  [errors]: [
+    Error: connect ECONNREFUSED ::1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '::1',
+      port: 3000
+    },
+    Error: connect ECONNREFUSED 127.0.0.1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '127.0.0.1',
+      port: 3000
+    }
+  ]
+}
+stderr | ../../Proxy.initializeStore (/home/user/Lia-Project/airi/packages/stage-ui/src/stores/background.ts:164:21)
+[BackgroundStore] Failed to seed builtin: builtin:cute-streaming-room DOMException [NetworkError]: Failed to execute "fetch()" on "Window" with URL "http://localhost:3000/@fs/home/user/Lia-Project/airi/packages/stage-ui/src/assets/backgrounds/cute-streaming-room-with-pastel-decor.avif":
+    at Fetch.onError (file:///home/user/Lia-Project/airi/node_modules/.pnpm/happy-dom@20.14.3_bufferutil@4.1.0_utf-8-validate@5.0.10/node_modules/happy-dom/lib/fetch/Fetch.js:540:21)
+    at ClientRequest.emit (node:events:519:28)
+    at emitErrorEvent (node:_http_client:108:11)
+    at Socket.socketErrorListener (node:_http_client:575:5)
+    at Socket.emit (node:events:519:28)
+    at emitErrorNT (node:internal/streams/destroy:170:8)
+    at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+    at processTicksAndRejections (node:internal/process/task_queues:89:21)
+
+AggregateError:
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7) {
+  code: 'ECONNREFUSED',
+  [errors]: [
+    Error: connect ECONNREFUSED ::1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '::1',
+      port: 3000
+    },
+    Error: connect ECONNREFUSED 127.0.0.1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '127.0.0.1',
+      port: 3000
+    }
+  ]
+}
+stderr | ../../initializeStore (/home/user/Lia-Project/airi/packages/stage-ui/src/stores/background.ts:164:21)
+[BackgroundStore] Failed to seed builtin: builtin:cute-streaming-room DOMException [NetworkError]: Failed to execute "fetch()" on "Window" with URL "http://localhost:3000/@fs/home/user/Lia-Project/airi/packages/stage-ui/src/assets/backgrounds/cute-streaming-room-with-pastel-decor.avif":
+    at Fetch.onError (file:///home/user/Lia-Project/airi/node_modules/.pnpm/happy-dom@20.14.3_bufferutil@4.1.0_utf-8-validate@5.0.10/node_modules/happy-dom/lib/fetch/Fetch.js:540:21)
+    at ClientRequest.emit (node:events:519:28)
+    at emitErrorEvent (node:_http_client:108:11)
+    at Socket.socketErrorListener (node:_http_client:575:5)
+    at Socket.emit (node:events:519:28)
+    at emitErrorNT (node:internal/streams/destroy:170:8)
+    at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+    at processTicksAndRejections (node:internal/process/task_queues:89:21)
+
+AggregateError:
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7) {
+  code: 'ECONNREFUSED',
+  [errors]: [
+    Error: connect ECONNREFUSED ::1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '::1',
+      port: 3000
+    },
+    Error: connect ECONNREFUSED 127.0.0.1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '127.0.0.1',
+      port: 3000
+    }
+  ]
+}
+stderr | ../../Proxy.initializeStore (/home/user/Lia-Project/airi/packages/stage-ui/src/stores/background.ts:164:21)
+[BackgroundStore] Failed to seed builtin: builtin:cute-streaming-room DOMException [NetworkError]: Failed to execute "fetch()" on "Window" with URL "http://localhost:3000/@fs/home/user/Lia-Project/airi/packages/stage-ui/src/assets/backgrounds/cute-streaming-room-with-pastel-decor.avif":
+    at Fetch.onError (file:///home/user/Lia-Project/airi/node_modules/.pnpm/happy-dom@20.14.3_bufferutil@4.1.0_utf-8-validate@5.0.10/node_modules/happy-dom/lib/fetch/Fetch.js:540:21)
+    at ClientRequest.emit (node:events:519:28)
+    at emitErrorEvent (node:_http_client:108:11)
+    at Socket.socketErrorListener (node:_http_client:575:5)
+    at Socket.emit (node:events:519:28)
+    at emitErrorNT (node:internal/streams/destroy:170:8)
+    at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+    at processTicksAndRejections (node:internal/process/task_queues:89:21)
+
+AggregateError:
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7) {
+  code: 'ECONNREFUSED',
+  [errors]: [
+    Error: connect ECONNREFUSED ::1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '::1',
+      port: 3000
+    },
+    Error: connect ECONNREFUSED 127.0.0.1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '127.0.0.1',
+      port: 3000
+    }
+  ]
+}
+stderr | ../../initializeStore (/home/user/Lia-Project/airi/packages/stage-ui/src/stores/background.ts:164:21)
+[BackgroundStore] Failed to seed builtin: builtin:cute-streaming-room DOMException [NetworkError]: Failed to execute "fetch()" on "Window" with URL "http://localhost:3000/@fs/home/user/Lia-Project/airi/packages/stage-ui/src/assets/backgrounds/cute-streaming-room-with-pastel-decor.avif":
+    at Fetch.onError (file:///home/user/Lia-Project/airi/node_modules/.pnpm/happy-dom@20.14.3_bufferutil@4.1.0_utf-8-validate@5.0.10/node_modules/happy-dom/lib/fetch/Fetch.js:540:21)
+    at ClientRequest.emit (node:events:519:28)
+    at emitErrorEvent (node:_http_client:108:11)
+    at Socket.socketErrorListener (node:_http_client:575:5)
+    at Socket.emit (node:events:519:28)
+    at emitErrorNT (node:internal/streams/destroy:170:8)
+    at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+    at processTicksAndRejections (node:internal/process/task_queues:89:21)
+
+AggregateError:
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7) {
+  code: 'ECONNREFUSED',
+  [errors]: [
+    Error: connect ECONNREFUSED ::1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '::1',
+      port: 3000
+    },
+    Error: connect ECONNREFUSED 127.0.0.1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '127.0.0.1',
+      port: 3000
+    }
+  ]
+}
+stderr | ../../Proxy.initializeStore (/home/user/Lia-Project/airi/packages/stage-ui/src/stores/background.ts:164:21)
+[BackgroundStore] Failed to seed builtin: builtin:cute-streaming-room DOMException [NetworkError]: Failed to execute "fetch()" on "Window" with URL "http://localhost:3000/@fs/home/user/Lia-Project/airi/packages/stage-ui/src/assets/backgrounds/cute-streaming-room-with-pastel-decor.avif":
+    at Fetch.onError (file:///home/user/Lia-Project/airi/node_modules/.pnpm/happy-dom@20.14.3_bufferutil@4.1.0_utf-8-validate@5.0.10/node_modules/happy-dom/lib/fetch/Fetch.js:540:21)
+    at ClientRequest.emit (node:events:519:28)
+    at emitErrorEvent (node:_http_client:108:11)
+    at Socket.socketErrorListener (node:_http_client:575:5)
+    at Socket.emit (node:events:519:28)
+    at emitErrorNT (node:internal/streams/destroy:170:8)
+    at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+    at processTicksAndRejections (node:internal/process/task_queues:89:21)
+
+AggregateError:
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7) {
+  code: 'ECONNREFUSED',
+  [errors]: [
+    Error: connect ECONNREFUSED ::1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '::1',
+      port: 3000
+    },
+    Error: connect ECONNREFUSED 127.0.0.1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '127.0.0.1',
+      port: 3000
+    }
+  ]
+}
+stderr | ../../initializeStore (/home/user/Lia-Project/airi/packages/stage-ui/src/stores/background.ts:164:21)
+[BackgroundStore] Failed to seed builtin: builtin:cute-streaming-room DOMException [NetworkError]: Failed to execute "fetch()" on "Window" with URL "http://localhost:3000/@fs/home/user/Lia-Project/airi/packages/stage-ui/src/assets/backgrounds/cute-streaming-room-with-pastel-decor.avif":
+    at Fetch.onError (file:///home/user/Lia-Project/airi/node_modules/.pnpm/happy-dom@20.14.3_bufferutil@4.1.0_utf-8-validate@5.0.10/node_modules/happy-dom/lib/fetch/Fetch.js:540:21)
+    at ClientRequest.emit (node:events:519:28)
+    at emitErrorEvent (node:_http_client:108:11)
+    at Socket.socketErrorListener (node:_http_client:575:5)
+    at Socket.emit (node:events:519:28)
+    at emitErrorNT (node:internal/streams/destroy:170:8)
+    at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+    at processTicksAndRejections (node:internal/process/task_queues:89:21)
+
+AggregateError:
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7) {
+  code: 'ECONNREFUSED',
+  [errors]: [
+    Error: connect ECONNREFUSED ::1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '::1',
+      port: 3000
+    },
+    Error: connect ECONNREFUSED 127.0.0.1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '127.0.0.1',
+      port: 3000
+    }
+  ]
+}
+stderr | ../../Proxy.initializeStore (/home/user/Lia-Project/airi/packages/stage-ui/src/stores/background.ts:164:21)
+[BackgroundStore] Failed to seed builtin: builtin:cute-streaming-room DOMException [NetworkError]: Failed to execute "fetch()" on "Window" with URL "http://localhost:3000/@fs/home/user/Lia-Project/airi/packages/stage-ui/src/assets/backgrounds/cute-streaming-room-with-pastel-decor.avif":
+    at Fetch.onError (file:///home/user/Lia-Project/airi/node_modules/.pnpm/happy-dom@20.14.3_bufferutil@4.1.0_utf-8-validate@5.0.10/node_modules/happy-dom/lib/fetch/Fetch.js:540:21)
+    at ClientRequest.emit (node:events:519:28)
+    at emitErrorEvent (node:_http_client:108:11)
+    at Socket.socketErrorListener (node:_http_client:575:5)
+    at Socket.emit (node:events:519:28)
+    at emitErrorNT (node:internal/streams/destroy:170:8)
+    at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+    at processTicksAndRejections (node:internal/process/task_queues:89:21)
+
+AggregateError:
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7) {
+  code: 'ECONNREFUSED',
+  [errors]: [
+    Error: connect ECONNREFUSED ::1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '::1',
+      port: 3000
+    },
+    Error: connect ECONNREFUSED 127.0.0.1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '127.0.0.1',
+      port: 3000
+    }
+  ]
+}
+stderr | ../../initializeStore (/home/user/Lia-Project/airi/packages/stage-ui/src/stores/background.ts:164:21)
+[BackgroundStore] Failed to seed builtin: builtin:cute-streaming-room DOMException [NetworkError]: Failed to execute "fetch()" on "Window" with URL "http://localhost:3000/@fs/home/user/Lia-Project/airi/packages/stage-ui/src/assets/backgrounds/cute-streaming-room-with-pastel-decor.avif":
+    at Fetch.onError (file:///home/user/Lia-Project/airi/node_modules/.pnpm/happy-dom@20.14.3_bufferutil@4.1.0_utf-8-validate@5.0.10/node_modules/happy-dom/lib/fetch/Fetch.js:540:21)
+    at ClientRequest.emit (node:events:519:28)
+    at emitErrorEvent (node:_http_client:108:11)
+    at Socket.socketErrorListener (node:_http_client:575:5)
+    at Socket.emit (node:events:519:28)
+    at emitErrorNT (node:internal/streams/destroy:170:8)
+    at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+    at processTicksAndRejections (node:internal/process/task_queues:89:21)
+
+AggregateError:
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7) {
+  code: 'ECONNREFUSED',
+  [errors]: [
+    Error: connect ECONNREFUSED ::1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '::1',
+      port: 3000
+    },
+    Error: connect ECONNREFUSED 127.0.0.1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '127.0.0.1',
+      port: 3000
+    }
+  ]
+}
+stderr | ../../Proxy.initializeStore (/home/user/Lia-Project/airi/packages/stage-ui/src/stores/background.ts:164:21)
+[BackgroundStore] Failed to seed builtin: builtin:cute-streaming-room DOMException [NetworkError]: Failed to execute "fetch()" on "Window" with URL "http://localhost:3000/@fs/home/user/Lia-Project/airi/packages/stage-ui/src/assets/backgrounds/cute-streaming-room-with-pastel-decor.avif":
+    at Fetch.onError (file:///home/user/Lia-Project/airi/node_modules/.pnpm/happy-dom@20.14.3_bufferutil@4.1.0_utf-8-validate@5.0.10/node_modules/happy-dom/lib/fetch/Fetch.js:540:21)
+    at ClientRequest.emit (node:events:519:28)
+    at emitErrorEvent (node:_http_client:108:11)
+    at Socket.socketErrorListener (node:_http_client:575:5)
+    at Socket.emit (node:events:519:28)
+    at emitErrorNT (node:internal/streams/destroy:170:8)
+    at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+    at processTicksAndRejections (node:internal/process/task_queues:89:21)
+
+AggregateError:
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7) {
+  code: 'ECONNREFUSED',
+  [errors]: [
+    Error: connect ECONNREFUSED ::1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '::1',
+      port: 3000
+    },
+    Error: connect ECONNREFUSED 127.0.0.1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '127.0.0.1',
+      port: 3000
+    }
+  ]
+}
+stderr | ../../initializeStore (/home/user/Lia-Project/airi/packages/stage-ui/src/stores/background.ts:164:21)
+[BackgroundStore] Failed to seed builtin: builtin:cozy-tea-corner DOMException [NetworkError]: Failed to execute "fetch()" on "Window" with URL "http://localhost:3000/@fs/home/user/Lia-Project/airi/packages/stage-ui/src/assets/backgrounds/cozy-tea-corner-in-pastel-hues.avif":
+    at Fetch.onError (file:///home/user/Lia-Project/airi/node_modules/.pnpm/happy-dom@20.14.3_bufferutil@4.1.0_utf-8-validate@5.0.10/node_modules/happy-dom/lib/fetch/Fetch.js:540:21)
+    at ClientRequest.emit (node:events:519:28)
+    at emitErrorEvent (node:_http_client:108:11)
+    at Socket.socketErrorListener (node:_http_client:575:5)
+    at Socket.emit (node:events:519:28)
+    at emitErrorNT (node:internal/streams/destroy:170:8)
+    at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+    at processTicksAndRejections (node:internal/process/task_queues:89:21)
+
+AggregateError:
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7) {
+  code: 'ECONNREFUSED',
+  [errors]: [
+    Error: connect ECONNREFUSED ::1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '::1',
+      port: 3000
+    },
+    Error: connect ECONNREFUSED 127.0.0.1:3000
+        at createConnectionError (node:net:1678:14)
+        at afterConnectMultiple (node:net:1708:16) {
+      errno: -111,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '127.0.0.1',
+      port: 3000
+    }
+  ]
+}
+stderr | ../../Proxy.initializeStore (/home/user/Lia-Project/airi/packages/stage-ui/src/stores/background.ts:164:21)
+[BackgroundStore] Failed to seed builtin: builtin:cozy-tea-corner DOMException [NetworkError]: Failed to execute "fetch()" on "Window" with URL "http://localhost:3000/@fs/home/user/Lia-Project/airi/packages/stage-ui/src/assets/backgrounds/cozy-tea-corner-in-pastel-hues.avif":
+    at Fetch.onError (file:///home/user/Lia-Project/airi/node_modules/.pnpm/happy-dom@20.14.3_bufferutil@4.1.0_utf-8-validate@5.0.10/node_modules/happy-dom/lib/fetch/Fetch.js:540:21)
+    at ClientRequest.emit (node:events:519:28)
+    at emitErrorEvent (node:_http_client:108:11)
+    at Socket.socketErrorListener (node:_http_client:575:5)
+    at Socket.emit (node:events:519:28)
+    at emitErrorNT (node:internal/streams/destroy:170:8)
+    at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+    at processTicksAndRejections (node:internal/process/task_queues:89:21)
+
+stderr | ../../initializeStore (/home/user/Lia-Project/airi/packages/stage-ui/src/stores/background.ts:164:21)
+[BackgroundStore] Failed to seed builtin: builtin:cute-streaming-room DOMException [NetworkError]: Failed to execute "fetch()" on "Window" with URL "http://localhost:3000/@fs/home/user/Lia-Project/airi/packages/stage-ui/src/assets/backgrounds/cute-streaming-room-with-pastel-decor.avif": The operation was aborted.
+    at Fetch.onError (file:///home/user/Lia-Project/airi/node_modules/.pnpm/happy-dom@20.14.3_bufferutil@4.1.0_utf-8-validate@5.0.10/node_modules/happy-dom/lib/fetch/Fetch.js:540:21)
+    at ClientRequest.emit (node:events:519:28)
+    at emitErrorEvent (node:_http_client:108:11)
+    at Socket.socketErrorListener (node:_http_client:575:5)
+    at Socket.emit (node:events:519:28)
+    at emitErrorNT (node:internal/streams/destroy:170:8)
+    at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+    at processTicksAndRejections (node:internal/process/task_queues:89:21)
+
+stderr | ../../Proxy.initializeStore (/home/user/Lia-Project/airi/packages/stage-ui/src/stores/background.ts:164:21)
+[BackgroundStore] Failed to seed builtin: builtin:cute-streaming-room DOMException [NetworkError]: Failed to execute "fetch()" on "Window" with URL "http://localhost:3000/@fs/home/user/Lia-Project/airi/packages/stage-ui/src/assets/backgrounds/cute-streaming-room-with-pastel-decor.avif": The operation was aborted.
+    at Fetch.onError (file:///home/user/Lia-Project/airi/node_modules/.pnpm/happy-dom@20.14.3_bufferutil@4.1.0_utf-8-validate@5.0.10/node_modules/happy-dom/lib/fetch/Fetch.js:540:21)
+    at ClientRequest.emit (node:events:519:28)
+    at emitErrorEvent (node:_http_client:108:11)
+    at Socket.socketErrorListener (node:_http_client:575:5)
+    at Socket.emit (node:events:519:28)
+    at emitErrorNT (node:internal/streams/destroy:170:8)
+    at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+    at processTicksAndRejections (node:internal/process/task_queues:89:21)
+
+DOMException [AbortError]: The operation was aborted.
+    at Fetch.onAsyncTaskManagerAbort (file:///home/user/Lia-Project/airi/node_modules/.pnpm/happy-dom@20.14.3_bufferutil@4.1.0_utf-8-validate@5.0.10/node_modules/happy-dom/lib/fetch/Fetch.js:546:23)
+    at Object.<anonymous> (file:///home/user/Lia-Project/airi/node_modules/.pnpm/happy-dom@20.14.3_bufferutil@4.1.0_utf-8-validate@5.0.10/node_modules/happy-dom/lib/fetch/Fetch.js:416:101)
+    at AsyncTaskManager.abortAll (file:///home/user/Lia-Project/airi/node_modules/.pnpm/happy-dom@20.14.3_bufferutil@4.1.0_utf-8-validate@5.0.10/node_modules/happy-dom/lib/async-task-manager/AsyncTaskManager.js:292:30)
+    at AsyncTaskManager.abort (file:///home/user/Lia-Project/airi/node_modules/.pnpm/happy-dom@20.14.3_bufferutil@4.1.0_utf-8-validate@5.0.10/node_modules/happy-dom/lib/async-task-manager/AsyncTaskManager.js:52:21)
+    at DetachedBrowserFrame.abort (file:///home/user/Lia-Project/airi/node_modules/.pnpm/happy-dom@20.14.3_bufferutil@4.1.0_utf-8-validate@5.0.10/node_modules/happy-dom/lib/browser/detached-browser/DetachedBrowserFrame.js:112:58)
+    at DetachedWindowAPI.abort (file:///home/user/Lia-Project/airi/node_modules/.pnpm/happy-dom@20.14.3_bufferutil@4.1.0_utf-8-validate@5.0.10/node_modules/happy-dom/lib/window/DetachedWindowAPI.js:51:35)
+    at teardownWindow (file:///home/user/Lia-Project/airi/node_modules/.pnpm/vitest@4.1.11_@opentelemetry+api@1.9.1_@types+node@26.2.0_@vitest+browser-playwright@4._06df85f8ef07c15c48c5f50e45856ad3/node_modules/vitest/dist/chunks/index.DC7d2Pf8.js:331:22)
+    at Object.teardown (file:///home/user/Lia-Project/airi/node_modules/.pnpm/vitest@4.1.11_@opentelemetry+api@1.9.1_@types+node@26.2.0_@vitest+browser-playwright@4._06df85f8ef07c15c48c5f50e45856ad3/node_modules/vitest/dist/chunks/index.DC7d2Pf8.js:392:10)
+    at file:///home/user/Lia-Project/airi/node_modules/.pnpm/vitest@4.1.11_@opentelemetry+api@1.9.1_@types+node@26.2.0_@vitest+browser-playwright@4._06df85f8ef07c15c48c5f50e45856ad3/node_modules/vitest/dist/chunks/base.B6Opl8PE.js:168:65
+    at Traces.$ (file:///home/user/Lia-Project/airi/node_modules/.pnpm/vitest@4.1.11_@opentelemetry+api@1.9.1_@types+node@26.2.0_@vitest+browser-playwright@4._06df85f8ef07c15c48c5f50e45856ad3/node_modules/vitest/dist/chunks/traces.DT5aQ62U.js:142:27)
+DOMException [AbortError]: The operation was aborted.
+    at Fetch.onAsyncTaskManagerAbort (file:///home/user/Lia-Project/airi/node_modules/.pnpm/happy-dom@20.14.3_bufferutil@4.1.0_utf-8-validate@5.0.10/node_modules/happy-dom/lib/fetch/Fetch.js:546:23)
+    at Object.<anonymous> (file:///home/user/Lia-Project/airi/node_modules/.pnpm/happy-dom@20.14.3_bufferutil@4.1.0_utf-8-validate@5.0.10/node_modules/happy-dom/lib/fetch/Fetch.js:416:101)
+    at AsyncTaskManager.abortAll (file:///home/user/Lia-Project/airi/node_modules/.pnpm/happy-dom@20.14.3_bufferutil@4.1.0_utf-8-validate@5.0.10/node_modules/happy-dom/lib/async-task-manager/AsyncTaskManager.js:292:30)
+    at AsyncTaskManager.abort (file:///home/user/Lia-Project/airi/node_modules/.pnpm/happy-dom@20.14.3_bufferutil@4.1.0_utf-8-validate@5.0.10/node_modules/happy-dom/lib/async-task-manager/AsyncTaskManager.js:52:21)
+    at DetachedBrowserFrame.abort (file:///home/user/Lia-Project/airi/node_modules/.pnpm/happy-dom@20.14.3_bufferutil@4.1.0_utf-8-validate@5.0.10/node_modules/happy-dom/lib/browser/detached-browser/DetachedBrowserFrame.js:112:58)
+    at DetachedWindowAPI.abort (file:///home/user/Lia-Project/airi/node_modules/.pnpm/happy-dom@20.14.3_bufferutil@4.1.0_utf-8-validate@5.0.10/node_modules/happy-dom/lib/window/DetachedWindowAPI.js:51:35)
+    at teardownWindow (file:///home/user/Lia-Project/airi/node_modules/.pnpm/vitest@4.1.11_@opentelemetry+api@1.9.1_@types+node@26.2.0_@vitest+browser-playwright@4._06df85f8ef07c15c48c5f50e45856ad3/node_modules/vitest/dist/chunks/index.DC7d2Pf8.js:331:22)
+    at Object.teardown (file:///home/user/Lia-Project/airi/node_modules/.pnpm/vitest@4.1.11_@opentelemetry+api@1.9.1_@types+node@26.2.0_@vitest+browser-playwright@4._06df85f8ef07c15c48c5f50e45856ad3/node_modules/vitest/dist/chunks/index.DC7d2Pf8.js:392:10)
+    at file:///home/user/Lia-Project/airi/node_modules/.pnpm/vitest@4.1.11_@opentelemetry+api@1.9.1_@types+node@26.2.0_@vitest+browser-playwright@4._06df85f8ef07c15c48c5f50e45856ad3/node_modules/vitest/dist/chunks/base.B6Opl8PE.js:168:65
+    at Traces.$ (file:///home/user/Lia-Project/airi/node_modules/.pnpm/vitest@4.1.11_@opentelemetry+api@1.9.1_@types+node@26.2.0_@vitest+browser-playwright@4._06df85f8ef07c15c48c5f50e45856ad3/node_modules/vitest/dist/chunks/traces.DT5aQ62U.js:142:27)
+stderr | src/renderer/components/phase1-ui.test.ts > lia chat confirmation seam > cancel preserves messages and confirmation reaches cleanup once for the active session
+[BackgroundStore] Failed to seed builtin: builtin:cozy-tea-corner TypeError: Failed to parse URL from /@fs/home/user/Lia-Project/airi/packages/stage-ui/src/assets/backgrounds/cozy-tea-corner-in-pastel-hues.avif
+    at node:internal/deps/undici/undici:14976:13
+    at processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at fetchAssetAsBlob (/home/user/Lia-Project/airi/packages/stage-ui/src/stores/background.ts:84:17)
+    at initializeStore (/home/user/Lia-Project/airi/packages/stage-ui/src/stores/background.ts:150:26) {
+  [cause]: TypeError: Invalid URL
+      at new URL (node:internal/url:818:25)
+      at new URL (file:///home/user/Lia-Project/airi/node_modules/.pnpm/vitest@4.1.11_@opentelemetry+api@1.9.1_@types+node@26.2.0_@vitest+browser-playwright@4._06df85f8ef07c15c48c5f50e45856ad3/node_modules/vitest/dist/chunks/index.DC7d2Pf8.js:557:2)
+      at new Request (node:internal/deps/undici/undici:9804:25)
+      at fetch (node:internal/deps/undici/undici:10533:25)
+      at fetch (node:internal/deps/undici/undici:14974:10)
+      at fetch (node:internal/bootstrap/web/exposed-window-or-worker:75:12)
+      at fetchAssetAsBlob (/home/user/Lia-Project/airi/packages/stage-ui/src/stores/background.ts:84:23)
+      at initializeStore (/home/user/Lia-Project/airi/packages/stage-ui/src/stores/background.ts:150:32)
+      at processTicksAndRejections (node:internal/process/task_queues:103:5) {
+    code: 'ERR_INVALID_URL',
+    input: '/@fs/home/user/Lia-Project/airi/packages/stage-ui/src/assets/backgrounds/cozy-tea-corner-in-pastel-hues.avif'
+  }
+}
+
+stderr | src/renderer/components/phase1-ui.test.ts > lia chat confirmation seam > cancel preserves messages and confirmation reaches cleanup once for the active session
+[BackgroundStore] Failed to seed builtin: builtin:cute-streaming-room TypeError: Failed to parse URL from /@fs/home/user/Lia-Project/airi/packages/stage-ui/src/assets/backgrounds/cute-streaming-room-with-pastel-decor.avif
+    at node:internal/deps/undici/undici:14976:13
+    at processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at fetchAssetAsBlob (/home/user/Lia-Project/airi/packages/stage-ui/src/stores/background.ts:84:17)
+    at initializeStore (/home/user/Lia-Project/airi/packages/stage-ui/src/stores/background.ts:150:26) {
+  [cause]: TypeError: Invalid URL
+      at new URL (node:internal/url:818:25)
+      at new URL (file:///home/user/Lia-Project/airi/node_modules/.pnpm/vitest@4.1.11_@opentelemetry+api@1.9.1_@types+node@26.2.0_@vitest+browser-playwright@4._06df85f8ef07c15c48c5f50e45856ad3/node_modules/vitest/dist/chunks/index.DC7d2Pf8.js:557:2)
+      at new Request (node:internal/deps/undici/undici:9804:25)
+      at fetch (node:internal/deps/undici/undici:10533:25)
+      at fetch (node:internal/deps/undici/undici:14974:10)
+      at fetch (node:internal/bootstrap/web/exposed-window-or-worker:75:12)
+      at fetchAssetAsBlob (/home/user/Lia-Project/airi/packages/stage-ui/src/stores/background.ts:84:23)
+      at initializeStore (/home/user/Lia-Project/airi/packages/stage-ui/src/stores/background.ts:150:32)
+      at processTicksAndRejections (node:internal/process/task_queues:103:5) {
+    code: 'ERR_INVALID_URL',
+    input: '/@fs/home/user/Lia-Project/airi/packages/stage-ui/src/assets/backgrounds/cute-streaming-room-with-pastel-decor.avif'
+  }
+}
+
+stderr | src/renderer/components/phase1-ui.test.ts > lia chat confirmation seam > does not offer a destructive confirmation for a system-only conversation
+[BackgroundStore] Failed to seed builtin: builtin:cozy-tea-corner TypeError: Failed to parse URL from /@fs/home/user/Lia-Project/airi/packages/stage-ui/src/assets/backgrounds/cozy-tea-corner-in-pastel-hues.avif
+    at node:internal/deps/undici/undici:14976:13
+    at processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at fetchAssetAsBlob (/home/user/Lia-Project/airi/packages/stage-ui/src/stores/background.ts:84:17)
+    at initializeStore (/home/user/Lia-Project/airi/packages/stage-ui/src/stores/background.ts:150:26) {
+  [cause]: TypeError: Invalid URL
+      at new URL (node:internal/url:818:25)
+      at new URL (file:///home/user/Lia-Project/airi/node_modules/.pnpm/vitest@4.1.11_@opentelemetry+api@1.9.1_@types+node@26.2.0_@vitest+browser-playwright@4._06df85f8ef07c15c48c5f50e45856ad3/node_modules/vitest/dist/chunks/index.DC7d2Pf8.js:557:2)
+      at new Request (node:internal/deps/undici/undici:9804:25)
+      at fetch (node:internal/deps/undici/undici:10533:25)
+      at fetch (node:internal/deps/undici/undici:14974:10)
+      at fetch (node:internal/bootstrap/web/exposed-window-or-worker:75:12)
+      at fetchAssetAsBlob (/home/user/Lia-Project/airi/packages/stage-ui/src/stores/background.ts:84:23)
+      at initializeStore (/home/user/Lia-Project/airi/packages/stage-ui/src/stores/background.ts:150:32)
+      at processTicksAndRejections (node:internal/process/task_queues:103:5) {
+    code: 'ERR_INVALID_URL',
+    input: '/@fs/home/user/Lia-Project/airi/packages/stage-ui/src/assets/backgrounds/cozy-tea-corner-in-pastel-hues.avif'
+  }
+}
+
+stderr | src/renderer/components/phase1-ui.test.ts > lia chat confirmation seam > does not offer a destructive confirmation for a system-only conversation
+[BackgroundStore] Failed to seed builtin: builtin:cute-streaming-room TypeError: Failed to parse URL from /@fs/home/user/Lia-Project/airi/packages/stage-ui/src/assets/backgrounds/cute-streaming-room-with-pastel-decor.avif
+    at node:internal/deps/undici/undici:14976:13
+    at processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at fetchAssetAsBlob (/home/user/Lia-Project/airi/packages/stage-ui/src/stores/background.ts:84:17)
+    at initializeStore (/home/user/Lia-Project/airi/packages/stage-ui/src/stores/background.ts:150:26) {
+  [cause]: TypeError: Invalid URL
+      at new URL (node:internal/url:818:25)
+      at new URL (file:///home/user/Lia-Project/airi/node_modules/.pnpm/vitest@4.1.11_@opentelemetry+api@1.9.1_@types+node@26.2.0_@vitest+browser-playwright@4._06df85f8ef07c15c48c5f50e45856ad3/node_modules/vitest/dist/chunks/index.DC7d2Pf8.js:557:2)
+      at new Request (node:internal/deps/undici/undici:9804:25)
+      at fetch (node:internal/deps/undici/undici:10533:25)
+      at fetch (node:internal/deps/undici/undici:14974:10)
+      at fetch (node:internal/bootstrap/web/exposed-window-or-worker:75:12)
+      at fetchAssetAsBlob (/home/user/Lia-Project/airi/packages/stage-ui/src/stores/background.ts:84:23)
+      at initializeStore (/home/user/Lia-Project/airi/packages/stage-ui/src/stores/background.ts:150:32)
+      at processTicksAndRejections (node:internal/process/task_queues:103:5) {
+    code: 'ERR_INVALID_URL',
+    input: '/@fs/home/user/Lia-Project/airi/packages/stage-ui/src/assets/backgrounds/cute-streaming-room-with-pastel-decor.avif'
+  }
+}
+
+stderr | src/renderer/components/phase1-ui.test.ts > lia chat confirmation seam > closes a pending clear when the conversation becomes empty
+[BackgroundStore] Failed to seed builtin: builtin:cozy-tea-corner TypeError: Failed to parse URL from /@fs/home/user/Lia-Project/airi/packages/stage-ui/src/assets/backgrounds/cozy-tea-corner-in-pastel-hues.avif
+    at node:internal/deps/undici/undici:14976:13
+    at processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at fetchAssetAsBlob (/home/user/Lia-Project/airi/packages/stage-ui/src/stores/background.ts:84:17)
+    at initializeStore (/home/user/Lia-Project/airi/packages/stage-ui/src/stores/background.ts:150:26) {
+  [cause]: TypeError: Invalid URL
+      at new URL (node:internal/url:818:25)
+      at new URL (file:///home/user/Lia-Project/airi/node_modules/.pnpm/vitest@4.1.11_@opentelemetry+api@1.9.1_@types+node@26.2.0_@vitest+browser-playwright@4._06df85f8ef07c15c48c5f50e45856ad3/node_modules/vitest/dist/chunks/index.DC7d2Pf8.js:557:2)
+      at new Request (node:internal/deps/undici/undici:9804:25)
+      at fetch (node:internal/deps/undici/undici:10533:25)
+      at fetch (node:internal/deps/undici/undici:14974:10)
+      at fetch (node:internal/bootstrap/web/exposed-window-or-worker:75:12)
+      at fetchAssetAsBlob (/home/user/Lia-Project/airi/packages/stage-ui/src/stores/background.ts:84:23)
+      at initializeStore (/home/user/Lia-Project/airi/packages/stage-ui/src/stores/background.ts:150:32)
+      at processTicksAndRejections (node:internal/process/task_queues:103:5) {
+    code: 'ERR_INVALID_URL',
+    input: '/@fs/home/user/Lia-Project/airi/packages/stage-ui/src/assets/backgrounds/cozy-tea-corner-in-pastel-hues.avif'
+  }
+}
+
+stderr | src/renderer/components/phase1-ui.test.ts > lia chat confirmation seam > closes a pending clear when the conversation becomes empty
+[BackgroundStore] Failed to seed builtin: builtin:cute-streaming-room TypeError: Failed to parse URL from /@fs/home/user/Lia-Project/airi/packages/stage-ui/src/assets/backgrounds/cute-streaming-room-with-pastel-decor.avif
+    at node:internal/deps/undici/undici:14976:13
+    at processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at fetchAssetAsBlob (/home/user/Lia-Project/airi/packages/stage-ui/src/stores/background.ts:84:17)
+    at initializeStore (/home/user/Lia-Project/airi/packages/stage-ui/src/stores/background.ts:150:26) {
+  [cause]: TypeError: Invalid URL
+      at new URL (node:internal/url:818:25)
+      at new URL (file:///home/user/Lia-Project/airi/node_modules/.pnpm/vitest@4.1.11_@opentelemetry+api@1.9.1_@types+node@26.2.0_@vitest+browser-playwright@4._06df85f8ef07c15c48c5f50e45856ad3/node_modules/vitest/dist/chunks/index.DC7d2Pf8.js:557:2)
+      at new Request (node:internal/deps/undici/undici:9804:25)
+      at fetch (node:internal/deps/undici/undici:10533:25)
+      at fetch (node:internal/deps/undici/undici:14974:10)
+      at fetch (node:internal/bootstrap/web/exposed-window-or-worker:75:12)
+      at fetchAssetAsBlob (/home/user/Lia-Project/airi/packages/stage-ui/src/stores/background.ts:84:23)
+      at initializeStore (/home/user/Lia-Project/airi/packages/stage-ui/src/stores/background.ts:150:32)
+      at processTicksAndRejections (node:internal/process/task_queues:103:5) {
+    code: 'ERR_INVALID_URL',
+    input: '/@fs/home/user/Lia-Project/airi/packages/stage-ui/src/assets/backgrounds/cute-streaming-room-with-pastel-decor.avif'
+  }
+}
+
+ ✓  node  src/renderer/components/phase1-ui.test.ts (7 tests) 660ms
+stderr | src/renderer/components/lia-config/sections/VoiceUxInvariants.test.ts > the custom path is honest about the missing engine > names the neutral missing-engine state without a single engine word
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[PINIA_COLADA_R0001] useQueryCache() was called outside of an injection context (component setup, store, navigation guard). You will get a warning about "inject" being used incorrectly from Vue.
+├▶ fix: Make sure to use it only in allowed places. See https://vuejs.org/guide/reusability/composables.html#usage-restrictions
+╰▶ see: https://pinia-colada.esm.dev/errors/pinia_colada_r0001.md
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[PINIA_COLADA_R0001] useMutationCache() was called outside of an injection context (component setup, store, navigation guard). You will get a warning about "inject" being used incorrectly from Vue.
+├▶ fix: Make sure to use it only in allowed places. See https://vuejs.org/guide/reusability/composables.html#usage-restrictions
+╰▶ see: https://pinia-colada.esm.dev/errors/pinia_colada_r0001.md
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+stderr | src/renderer/components/lia-config/sections/VoiceUxInvariants.test.ts > the custom path is honest about the missing engine > offers no install wizard, no readiness gate and no import button while none can work
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+stderr | src/renderer/components/lia-config/sections/VoiceUxInvariants.test.ts > the custom path is honest about the missing engine > keeps already-imported voices readable - with plain "saved" statuses, never server states
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+stderr | src/renderer/components/lia-config/sections/VoiceUxInvariants.test.ts > the custom path is honest about the missing engine > still lets the selection and the removal of a profile happen from the row
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+stderr | src/renderer/components/lia-config/sections/VoiceUxInvariants.test.ts > the default view stays free of technical detail > opens on the single two-option question, with nothing technical outside advanced settings
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+stderr | src/renderer/components/lia-config/sections/VoiceUxInvariants.test.ts > the default view stays free of technical detail > keeps the ready-made voice mode free of custom-voice technicalities
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+ ✓  node  src/renderer/components/lia-config/sections/VoiceUxInvariants.test.ts (6 tests) 218ms
+stderr | src/renderer/components/lia-config/sections/CustomVoicePanel.test.ts > the neutral empty-engine state > says the voice engine is not installed yet - in neutral words, without any engine name
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[PINIA_COLADA_R0001] useQueryCache() was called outside of an injection context (component setup, store, navigation guard). You will get a warning about "inject" being used incorrectly from Vue.
+├▶ fix: Make sure to use it only in allowed places. See https://vuejs.org/guide/reusability/composables.html#usage-restrictions
+╰▶ see: https://pinia-colada.esm.dev/errors/pinia_colada_r0001.md
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[PINIA_COLADA_R0001] useMutationCache() was called outside of an injection context (component setup, store, navigation guard). You will get a warning about "inject" being used incorrectly from Vue.
+├▶ fix: Make sure to use it only in allowed places. See https://vuejs.org/guide/reusability/composables.html#usage-restrictions
+╰▶ see: https://pinia-colada.esm.dev/errors/pinia_colada_r0001.md
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+stderr | src/renderer/components/lia-config/sections/CustomVoicePanel.test.ts > the neutral empty-engine state > renders no AllTalk-era surface at all
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+stderr | src/renderer/components/lia-config/sections/CustomVoicePanel.test.ts > the already-imported library stays alive > shows each old profile with a plain saved status - never a server state
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+stderr | src/renderer/components/lia-config/sections/CustomVoicePanel.test.ts > the already-imported library stays alive > marks the profile the selection points at as in use
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+stderr | src/renderer/components/lia-config/sections/CustomVoicePanel.test.ts > the already-imported library stays alive > says "no imported voices yet" only when the library is really empty
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[PINIA_R1004] Pinia instance not found in context. This falls back to the global activePinia, which exposes you to cross-request pollution on the server.
+├▶ fix: "useStore()" is a composable and follows the same rules: call it at the top of setup() (or another composable), or pass the pinia instance explicitly when used outside of a component.
+╰▶ see: https://pinia.vuejs.org/ssr/#Using-the-store-outside-of-setup-
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+[Vue warn]: inject() can only be used inside setup() or functional components.
+
+ ✓  node  src/renderer/components/lia-config/sections/CustomVoicePanel.test.ts (5 tests) 127ms
+ ✓  node  src/renderer/components/InteractiveArea.retry.test.ts (23 tests) 36ms
+ ✓  node  src/renderer/components/lia-config/lia-config.test.ts (20 tests) 22ms
+ ✓  node  src/renderer/stores/lia/memory.test.ts (2 tests) 13ms
+ ✓  node  src/renderer/stores/lia/voice-capability-vm.test.ts (2 tests) 6ms
+
+ Test Files  8 passed (8)
+      Tests  74 passed (74)
+   Start at  06:46:26
+   Duration  35.93s (transform 12.13s, setup 0ms, import 30.68s, tests 2.28s, environment 1.62s)

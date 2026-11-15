@@ -151,6 +151,7 @@ describe('8.0A-1 LiaButton (native semantics by construction)', () => {
     // The visual disabled styling keys off the native pseudo-class only.
     expect(source).toContain('.lia-button:disabled {')
     expect(source).toContain('cursor: not-allowed')
+    expect(source).toContain('min-height: 40px')
   })
 
   it('g: keyboard focus is visibly styled through the shared focus-ring token', () => {
@@ -159,6 +160,8 @@ describe('8.0A-1 LiaButton (native semantics by construction)', () => {
     expect(source).toContain('box-shadow: var(--lia-focus-ring)')
     // Pointer clicks stay clean: focus ring is focus-VISIBLE only.
     expect(source).not.toContain('.lia-button:focus {')
+    expect(source).toContain('@media (forced-colors: active)')
+    expect(source).toContain('outline-color: Highlight')
   })
 })
 

@@ -261,7 +261,9 @@ describe('uI-L01 readiness is separate from first-run preference', () => {
     expect(homeConversationLabelVm({ ai: { ready: false } }, 'en-US')).toBe('Set up AI to chat')
     expect(homeAiChipVm({ ai: { ready: true } }, 'en-US').label).toBe('AI ready')
     expect(HOME_VUE()).toContain('homeStageChipVm(props.status, props.language)')
-    expect(HOME_VUE()).toContain('role="status"')
+    expect(HOME_VUE()).toContain('class="home-status-row" role="status" aria-live="polite" aria-atomic="true"')
+    expect(HOME_VUE()).toContain(':aria-describedby="blockerHint ? \'home-readiness-hint\' : undefined"')
+    expect(HOME_VUE()).toContain('id="home-readiness-hint"')
   })
 })
 
