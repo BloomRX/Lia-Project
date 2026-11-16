@@ -601,10 +601,13 @@ describe('managed microphone bootstrap (Phase 8.0D SHELL-B1.1)', () => {
 
   it('gate 4: a permission that stays denied never announces a ready microphone', async () => {
     ipc.fixture(managedGroqDoc())
-    media.handshakeFailure = { message: 'Permission denied by user', name: 'NotAllowedError' }
+    media.handshakeFailure = { message: 'tiny voice key', name: 'NotAllowedError' }
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {})
 
     await useLiaHearingStore().initialize()
 
+    expect(info).toHaveBeenCalledWith('[LIA-HEARING] microphone-handshake-failed name=NotAllowedError')
+    expect(JSON.stringify(info.mock.calls)).not.toContain('tiny voice key')
     const store = useLiaHearingStore()
     expect(store.microphoneReady).toBe(false)
     expect(useSettingsAudioDevice().enabled).toBe(false)

@@ -242,7 +242,7 @@ export function useVoiceInputSession(
       catch (error) {
         activeRecordingSegment.value = resolveActiveVoiceInputRecordingSegmentAfterStop(activeRecordingSegment.value, segment)
         lastError.value = error
-        log('error', 'segment-start-gate-failed', 'Recorder segment start gate failed.', { trigger, error })
+        log('error', 'segment-start-gate-failed', 'Recorder segment start gate failed.', { trigger })
         await options.onTranscriptionError?.({ trigger, error })
         return false
       }
@@ -266,7 +266,7 @@ export function useVoiceInputSession(
     catch (error) {
       activeRecordingSegment.value = resolveActiveVoiceInputRecordingSegmentAfterStop(activeRecordingSegment.value, segment)
       lastError.value = error
-      log('error', 'segment-start-failed', 'Failed to start recorder-backed voice input segment.', { trigger, error })
+      log('error', 'segment-start-failed', 'Failed to start recorder-backed voice input segment.', { trigger })
       await options.onTranscriptionError?.({ trigger, error })
       return false
     }
@@ -301,7 +301,7 @@ export function useVoiceInputSession(
     }
     catch (error) {
       lastError.value = error
-      log('error', 'segment-stop-hook-failed', 'Caller stop hook failed; finalizing recorder segment anyway.', { trigger, error })
+      log('error', 'segment-stop-hook-failed', 'Caller stop hook failed; finalizing recorder segment anyway.', { trigger })
       await options.onTranscriptionError?.({ trigger, error })
     }
 
@@ -317,7 +317,7 @@ export function useVoiceInputSession(
         stoppedRecordingSegments.splice(queuedIndex, 1)
       vadRecordings.delete(stoppedSegment.id)
       lastError.value = error
-      log('error', 'segment-stop-failed', 'Failed to stop recorder-backed voice input segment.', { trigger, error })
+      log('error', 'segment-stop-failed', 'Failed to stop recorder-backed voice input segment.', { trigger })
       await options.onTranscriptionError?.({ trigger, error })
     }
     finally {
@@ -332,7 +332,7 @@ export function useVoiceInputSession(
       return
 
     if (!recording || recording.size <= 0) {
-      log('warn', 'recording-drop-empty', 'Dropping empty recorder-backed voice input segment.', { trigger, recording })
+      log('warn', 'recording-drop-empty', 'Dropping empty recorder-backed voice input segment.', { trigger })
       await options.onRecordingSkipped?.(event)
       return
     }
@@ -347,10 +347,7 @@ export function useVoiceInputSession(
       return
 
     if (beforeGate?.skip) {
-      log('info', 'recording-drop-before-asr', 'Skipping recorder-backed segment before transcription request.', {
-        trigger,
-        gate: beforeGate,
-      })
+      log('info', 'recording-drop-before-asr', 'Skipping recorder-backed segment before transcription request.', { trigger })
       await options.onRecordingSkipped?.({ ...readyEvent, gate: beforeGate })
       return
     }
@@ -370,7 +367,7 @@ export function useVoiceInputSession(
         return
 
       lastError.value = error
-      log('error', 'recording-transcription-error', 'Transcription provider threw while processing recorder-backed segment.', { trigger, error })
+      log('error', 'recording-transcription-error', 'Transcription provider threw while processing recorder-backed segment.', { trigger })
       await options.onTranscriptionError?.({ ...readyEvent, error })
       return
     }
@@ -387,17 +384,13 @@ export function useVoiceInputSession(
       return
 
     if (afterGate?.skip) {
-      log('info', 'recording-drop-after-asr', 'Dropping stale transcription result after transcription request.', {
-        trigger,
-        gate: afterGate,
-        text,
-      })
+      log('info', 'recording-drop-after-asr', 'Dropping stale transcription result after transcription request.', { trigger })
       await options.onRecordingSkipped?.({ ...resultEvent, gate: afterGate })
       return
     }
 
     if (!text || !text.trim()) {
-      log('warn', 'recording-transcription-empty', 'Transcription provider returned empty text for recorder-backed segment.', { trigger, text })
+      log('warn', 'recording-transcription-empty', 'Transcription provider returned empty text for recorder-backed segment.', { trigger })
       await options.onTranscriptionEmpty?.(resultEvent)
       return
     }
@@ -423,7 +416,7 @@ export function useVoiceInputSession(
       .enqueue(ticket => processRecording(recordingForTranscription, trigger, ticket))
       .catch((error) => {
         lastError.value = error
-        log('error', 'recording-processing-error', 'Voice input recording processing failed.', { trigger, error })
+        log('error', 'recording-processing-error', 'Voice input recording processing failed.', { trigger })
       })
   })
 
@@ -556,7 +549,7 @@ export function useVoiceInputSession(
     catch (error) {
       stopVolumeFallback()
       lastError.value = error
-      log('error', 'volume-fallback-start-failed', 'Failed to start volume-based recorder fallback.', { error })
+      log('error', 'volume-fallback-start-failed', 'Failed to start volume-based recorder fallback.')
     }
   }
 

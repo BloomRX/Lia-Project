@@ -747,13 +747,13 @@ export const useHearingSpeechInputPipeline = defineStore('modules:hearing:speech
           try {
             result.recognition.stop()
           }
-          catch (err) {
-            console.warn('Error stopping Web Speech API recognition:', err)
+          catch {
+            console.warn('Error stopping Web Speech API recognition.')
           }
         }
       }
-      catch (err) {
-        console.error('Error stopping Web Speech API session:', err)
+      catch {
+        console.error('Error stopping Web Speech API session.')
       }
 
       if (session.idleTimer)
@@ -771,7 +771,7 @@ export const useHearingSpeechInputPipeline = defineStore('modules:hearing:speech
             return
 
           error.value = errorMessage(err)
-          console.error('Error getting transcription result:', error.value)
+          console.error('Error getting transcription result:', transcriptionAnalyticsErrorCode(err))
         }
       }
 
@@ -821,7 +821,7 @@ export const useHearingSpeechInputPipeline = defineStore('modules:hearing:speech
           return
 
         error.value = errorMessage(err)
-        console.error('Error generating transcription:', error.value)
+        console.error('Error generating transcription:', transcriptionAnalyticsErrorCode(err))
       }
     }
 
@@ -854,7 +854,7 @@ export const useHearingSpeechInputPipeline = defineStore('modules:hearing:speech
     catch (err) {
       if (!isExpectedStreamStopError(err)) {
         error.value = errorMessage(err)
-        console.error('Error finishing transcription:', error.value)
+        console.error('Error finishing transcription:', transcriptionAnalyticsErrorCode(err))
       }
     }
     finally {
@@ -937,20 +937,19 @@ export const useHearingSpeechInputPipeline = defineStore('modules:hearing:speech
 
           fullText += value.delta
           sessionCallbacks?.onTranscriptionUpdate?.(fullText)
-          sessionSpan?.addEvent(IOEvents.ASRSentenceEnd, { [IOAttributes.ASRText]: value.delta })
+          sessionSpan?.addEvent(IOEvents.ASRSentenceEnd)
           sessionCallbacks?.onSentenceEnd?.(value.delta)
         }
       }
       catch (err) {
         if (!isExpectedStreamStopError(err))
-          console.error('Error reading text stream:', err)
+          console.error('Error reading text stream:', transcriptionAnalyticsErrorCode(err))
       }
       finally {
         if (latestSnapshotIsFinal && fullText.trim()) {
-          sessionSpan?.addEvent(IOEvents.ASRSentenceEnd, { [IOAttributes.ASRText]: fullText })
+          sessionSpan?.addEvent(IOEvents.ASRSentenceEnd)
           sessionCallbacks?.onSentenceEnd?.(fullText)
         }
-        sessionSpan?.setAttribute(IOAttributes.ASRText, fullText)
         sessionSpan?.end()
         if (asrSpan === sessionSpan)
           asrSpan = undefined
@@ -1033,7 +1032,7 @@ export const useHearingSpeechInputPipeline = defineStore('modules:hearing:speech
       },
       onError: (err) => {
         error.value = errorMessage(err)
-        console.error('Error managing VAD streaming transcription:', error.value)
+        console.error('Error managing VAD streaming transcription:', transcriptionAnalyticsErrorCode(err))
       },
     })
     vadSession = {
@@ -1073,7 +1072,7 @@ export const useHearingSpeechInputPipeline = defineStore('modules:hearing:speech
       const providerError = resolveActiveTranscriptionProviderError(providerId)
       if (providerError) {
         error.value = providerError
-        console.error('[Hearing Pipeline]', providerError)
+        console.error('[Hearing Pipeline] Transcription provider unavailable.')
         return
       }
 
@@ -1119,7 +1118,7 @@ export const useHearingSpeechInputPipeline = defineStore('modules:hearing:speech
           const models = await providersStore.getModelsForProvider(providerId)
           if (models.length > 0) {
             activeTranscriptionModel.value = models[0].id
-            console.info('Auto-selected Web Speech API model:', models[0].id)
+            console.info('Auto-selected Web Speech API model.')
           }
           else {
             // Fallback to default model ID
@@ -1159,13 +1158,12 @@ export const useHearingSpeechInputPipeline = defineStore('modules:hearing:speech
           onSentenceEnd: (delta) => {
             bumpIdle() // Bump idle timer on activity (only if enabled)
             if (asrSpan)
-              asrSpan.addEvent(IOEvents.ASRSentenceEnd, { [IOAttributes.ASRText]: delta })
+              asrSpan.addEvent(IOEvents.ASRSentenceEnd)
             // Call the options callback
             streamingCallbacks.onSentenceEnd(delta)
           },
           onSpeechEnd: (text) => {
             if (asrSpan) {
-              asrSpan.setAttribute(IOAttributes.ASRText, text)
               asrSpan.end()
               asrSpan = undefined
             }
@@ -1209,7 +1207,7 @@ export const useHearingSpeechInputPipeline = defineStore('modules:hearing:speech
             }
             catch (err) {
               if (!isExpectedStreamStopError(err))
-                console.error('Error reading text stream:', err)
+                console.error('Error reading text stream:', transcriptionAnalyticsErrorCode(err))
             }
           })()
         }
@@ -1244,7 +1242,7 @@ export const useHearingSpeechInputPipeline = defineStore('modules:hearing:speech
         return
 
       error.value = errorMessage(err)
-      console.error('Error generating transcription:', error.value)
+      console.error('Error generating transcription:', transcriptionAnalyticsErrorCode(err))
     }
   }
 
@@ -1273,7 +1271,7 @@ export const useHearingSpeechInputPipeline = defineStore('modules:hearing:speech
       const providerError = resolveActiveTranscriptionProviderError(providerId)
       if (providerError) {
         error.value = providerError
-        console.error('[Hearing Pipeline]', providerError)
+        console.error('[Hearing Pipeline] Transcription provider unavailable.')
         return
       }
 
@@ -1282,10 +1280,7 @@ export const useHearingSpeechInputPipeline = defineStore('modules:hearing:speech
       const providerOptions = resolveTranscriptionProviderOptions(providerConfig)
       console.info('[Hearing Pipeline] Transcribing recording', {
         providerId,
-        language: providerOptions.language,
-        model,
         recordingSize: recording.size,
-        recordingType: recording.type,
       })
       const file = new File([recording], 'recording.wav', { type: recording.type || 'audio/wav' })
 
@@ -1343,7 +1338,7 @@ export const useHearingSpeechInputPipeline = defineStore('modules:hearing:speech
       if (signal?.aborted || (err instanceof DOMException && err.name === 'AbortError'))
         return
       error.value = errorMessage(err)
-      console.error('Error generating transcription:', error.value)
+      console.error('Error generating transcription:', transcriptionAnalyticsErrorCode(err))
     }
     finally {
       if (recordingController === controller)

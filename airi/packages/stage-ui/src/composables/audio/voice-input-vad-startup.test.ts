@@ -16,6 +16,7 @@ describe('voice input VAD startup', () => {
     })).resolves.toBe(true)
 
     expect(start).toHaveBeenCalledOnce()
+    expect(log).toHaveBeenNthCalledWith(1, 'info', 'vad-start', 'VAD initialized successfully; starting against microphone stream.')
     expect(log).toHaveBeenLastCalledWith(
       'info',
       'vad-ready',
@@ -24,7 +25,7 @@ describe('voice input VAD startup', () => {
   })
 
   it('returns false and logs when VAD initialization throws', async () => {
-    const init = vi.fn().mockRejectedValue(new Error('vad unavailable'))
+    const init = vi.fn().mockRejectedValue(new Error('vad-error-canary'))
     const start = vi.fn()
     const log = vi.fn()
 
@@ -41,9 +42,6 @@ describe('voice input VAD startup', () => {
       'error',
       'vad-init-failed',
       'VAD initialization failed.',
-      expect.objectContaining({
-        error: expect.any(Error),
-      }),
     )
   })
 })

@@ -195,7 +195,7 @@ async function setupAudioMonitoring() {
     return true
   }
   catch (cause) {
-    console.error('Error setting up audio monitoring:', cause)
+    console.error('Error setting up audio monitoring.')
     error.value = errorMessageFrom(cause) ?? t('settings.pages.modules.hearing.sections.section.playground.transcription-failed')
     return false
   }
@@ -382,7 +382,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
-  void stopAudioMonitoring().catch(cause => console.warn('[Hearing Module] Failed to stop playground monitoring:', cause))
+  void stopAudioMonitoring().catch(() => console.warn('[Hearing Module] Failed to stop playground monitoring.'))
 })
 </script>
 

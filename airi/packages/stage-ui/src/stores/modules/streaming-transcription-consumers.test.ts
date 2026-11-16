@@ -39,13 +39,14 @@ describe('streaming transcription consumers', () => {
 
   it('continues delivery when one consumer throws', () => {
     const consumers = new StreamingTranscriptionConsumers()
-    const error = new Error('consumer failed')
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
     const second = vi.fn()
 
     consumers.register({
-      consumerId: 'first',
-      onSpeechEnd: () => { throw error },
+      consumerId: 'consumer-id-canary',
+      onSpeechEnd: (text) => {
+        throw new Error(text)
+      },
     })
     consumers.register({ consumerId: 'second', onSpeechEnd: second })
 
@@ -54,8 +55,7 @@ describe('streaming transcription consumers', () => {
     expect(second).toHaveBeenCalledOnce()
     expect(second).toHaveBeenCalledWith('complete')
     expect(consoleError).toHaveBeenCalledWith(
-      '[Hearing Pipeline] Streaming consumer first onSpeechEnd failed:',
-      error,
+      '[Hearing Pipeline] Streaming consumer onSpeechEnd failed.',
     )
 
     consoleError.mockRestore()

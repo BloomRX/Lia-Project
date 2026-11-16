@@ -57,7 +57,7 @@ export function useAudioRecorder(
 
     try {
       const audioSource = new MediaStreamAudioTrackSource(track, { codec: TRANSCRIPTION_WAV_CODEC, bitrate: QUALITY_MEDIUM })
-      audioSource.errorPromise.catch(console.error)
+      void audioSource.errorPromise.catch(() => console.error('Microphone recording source failed.'))
       output.addAudioTrack(audioSource)
 
       mediaFormat.value = await output.getMimeType()
@@ -98,8 +98,8 @@ export function useAudioRecorder(
       try {
         await hook(audioBlob)
       }
-      catch (err) {
-        console.error('onStopRecord hook failed:', err)
+      catch {
+        console.error('onStopRecord hook failed.')
       }
     }
 

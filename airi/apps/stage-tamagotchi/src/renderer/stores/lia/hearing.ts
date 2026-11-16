@@ -117,22 +117,6 @@ export function projectSttTarget(preferred: LiaHearingSttSelection): LiaHearingR
   }
 }
 
-/**
- * Reduces arbitrary text to a bounded, low-cardinality, non-secret form.
- *
- * Diagnostics must be safe to read from a support log, so anything that could
- * be a URL, a credential, or a device identifier is replaced by a placeholder
- * before it is printed. Only the shape of the failure survives.
- */
-function sanitizeDiagnosticText(raw: string): string {
-  return raw
-    .replace(/[a-z][a-z0-9+.-]*:\/\/\S+/gi, '[url]')
-    .replace(/\b[\w-]{16,}\b/g, '[redacted]')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 120)
-}
-
 /** The browser failure names this bootstrap can actually produce. */
 const KNOWN_AUDIO_FAILURE_NAMES = new Set([
   'AbortError',
@@ -146,17 +130,11 @@ const KNOWN_AUDIO_FAILURE_NAMES = new Set([
 ])
 
 /**
- * Reduces an unknown failure to `name` plus a sanitized message.
- *
- * Anything outside the known DOMException set collapses to `UnknownError`, so a
- * novel error message can never be echoed verbatim into a log.
+ * Keeps failure categories from a closed list. Messages may contain voice or provider data.
  */
-function describeFailure(error: unknown): { message: string, name: string } {
-  if (!(error instanceof Error))
-    return { message: 'non-error', name: 'UnknownError' }
-
-  const name = KNOWN_AUDIO_FAILURE_NAMES.has(error.name) ? error.name : 'UnknownError'
-  return { message: sanitizeDiagnosticText(error.message), name }
+function describeFailure(error: unknown): { name: string } {
+  const name = error instanceof Error && KNOWN_AUDIO_FAILURE_NAMES.has(error.name) ? error.name : 'UnknownError'
+  return { name }
 }
 
 /**

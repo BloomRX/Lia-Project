@@ -81,8 +81,8 @@ export const useSettingsAudioDevice = defineStore('settings-audio-devices', () =
     stopAudioInputStream()
   }
 
-  function handleStartStreamError(generation: number, error: unknown, message: string) {
-    console.error(message, error)
+  function handleStartStreamError(generation: number, message: string) {
+    console.error(message)
 
     if (generation === audioInputStartGeneration)
       audioInputEnabled.value = false
@@ -95,8 +95,8 @@ export const useSettingsAudioDevice = defineStore('settings-audio-devices', () =
   watch(audioInputEnabled, (val) => {
     if (val) {
       const generation = createAudioInputStartGeneration()
-      startStreamForGeneration(generation).catch((error) => {
-        handleStartStreamError(generation, error, 'Unable to start audio input stream:')
+      void startStreamForGeneration(generation).catch(() => {
+        handleStartStreamError(generation, 'Unable to start audio input stream.')
       })
     }
     else {
@@ -107,15 +107,15 @@ export const useSettingsAudioDevice = defineStore('settings-audio-devices', () =
   // permissionGranted from vueuse does not track revocation yet.
   // implement it manually.
   try {
-    navigator?.permissions?.query({ name: 'microphone' }).then((status) => {
+    void navigator?.permissions?.query({ name: 'microphone' }).then((status) => {
       microphonePermissionStatus = status // existing one cleaned up by GC
       status.onchange = () => {
         if (status.state === 'denied' || status.state === 'prompt')
           audioInputEnabled.value = false
       }
-    })
+    }).catch(() => console.info('Unable to track microphone permission.'))
   }
-  catch (e) { console.info(`Unable to track microphone permission: ${e}`) }
+  catch { console.info('Unable to track microphone permission.') }
   void microphonePermissionStatus // suppress unused variable lint
   function initialize() {
     const hasSelectedInput = selectedAudioInputPersist.value
@@ -126,8 +126,8 @@ export const useSettingsAudioDevice = defineStore('settings-audio-devices', () =
 
     if (audioInputEnabled.value && hasSelectedInput) {
       const generation = createAudioInputStartGeneration()
-      startStreamForGeneration(generation).catch((error) => {
-        handleStartStreamError(generation, error, 'Unable to initialize audio input stream:')
+      void startStreamForGeneration(generation).catch(() => {
+        handleStartStreamError(generation, 'Unable to initialize audio input stream.')
       })
     }
     else if (selectedAudioInputPersist.value && audioInputs.value.length > 0 && !hasSelectedInput) {

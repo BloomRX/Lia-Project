@@ -51,12 +51,12 @@ export class StreamingTranscriptionConsumers {
   }
 
   private emit(callbackName: keyof StreamingTranscriptionCallbacks, text: string) {
-    for (const [consumerId, callbacks] of this.consumers) {
+    for (const callbacks of this.consumers.values()) {
       try {
         callbacks[callbackName]?.(text)
       }
-      catch (cause) {
-        console.error(`[Hearing Pipeline] Streaming consumer ${consumerId} ${callbackName} failed:`, cause)
+      catch {
+        console.error(`[Hearing Pipeline] Streaming consumer ${callbackName} failed.`)
       }
     }
   }

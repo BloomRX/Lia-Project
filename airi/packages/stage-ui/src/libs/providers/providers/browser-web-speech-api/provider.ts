@@ -219,26 +219,19 @@ export function streamWebSpeechAPITranscription(
   recognition.maxAlternatives = options?.maxAlternatives ?? 1
 
   console.info('Web Speech API configured:', {
-    lang: recognition.lang,
     continuous: recognition.continuous,
     interimResults: recognition.interimResults,
   })
 
   recognition.onresult = (event: any) => {
     let finalTranscript = ''
-    let interimTranscript = ''
 
     for (let i = event.resultIndex; i < event.results.length; i++) {
       const result = event.results[i]
       const transcript = result[0]?.transcript || ''
 
-      if (result.isFinal) {
+      if (result.isFinal)
         finalTranscript = `${finalTranscript}${transcript} ` // Add space between final results
-      }
-      else if (recognition.interimResults) {
-        // Collect interim results but don't emit them as final yet
-        interimTranscript += transcript
-      }
     }
 
     // Emit final results when we have them
@@ -252,18 +245,13 @@ export function streamWebSpeechAPITranscription(
       fullStreamCtrl?.enqueue(delta)
       textStreamCtrl?.enqueue(trimmedTranscript)
       options?.onSentenceEnd?.(trimmedTranscript)
-      console.info('Web Speech API transcribed (final):', trimmedTranscript)
-    }
-
-    // Log interim results for debugging (don't emit as final)
-    if (interimTranscript && recognition.interimResults) {
-      console.info('Web Speech API transcribed (interim):', interimTranscript)
+      console.info('Web Speech API produced a final result.')
     }
   }
 
   recognition.onerror = (event: any) => {
     const errorType = event.error || 'unknown'
-    console.warn('Web Speech API error:', errorType)
+    console.warn('Web Speech API reported a recognition error.')
 
     if (errorType === 'no-speech') {
       return
@@ -299,15 +287,15 @@ export function streamWebSpeechAPITranscription(
           currentRecognition.start()
           console.info('Web Speech API recognition restarted (continuous mode)')
         }
-        catch (err) {
-          console.warn('Web Speech API failed to restart, creating new instance:', err)
+        catch {
+          console.warn('Web Speech API failed to restart, creating new instance.')
           // If restart fails, create a new instance
           try {
             createAndStartNewRecognitionInstance(recognition)
             console.info('Web Speech API created new instance and started')
           }
           catch (newErr) {
-            console.error('Web Speech API failed to create new instance:', newErr)
+            console.error('Web Speech API failed to create new instance.')
             const error = new Error(`Failed to restart recognition: ${errorMessageFromValue(newErr)}`)
             fullStreamCtrl?.error(error)
             textStreamCtrl?.error(error)
@@ -379,7 +367,7 @@ export function streamWebSpeechAPITranscription(
       // - "not-allowed": Microphone permission denied
       // - "service-not-allowed": Service not available
       const errorMessage = error?.message || String(error)
-      console.warn('Web Speech API recognition start failed:', errorMessage, error)
+      console.warn('Web Speech API recognition start failed.')
 
       if (errorMessage.includes('already') || errorMessage.includes('started')) {
         // Recognition is already running, this is OK
@@ -411,7 +399,7 @@ export function streamWebSpeechAPITranscription(
         textStreamCtrl?.error(err)
         deferredText.reject(err)
         deferredText.isRejected = true
-        console.error('Web Speech API recognition failed to start after retry:', restartError)
+        console.error('Web Speech API recognition failed to start after retry.')
         return false
       }
     }

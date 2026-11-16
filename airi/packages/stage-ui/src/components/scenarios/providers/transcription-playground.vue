@@ -75,7 +75,7 @@ async function setupAudioMonitoring() {
     dataArray.value = new Uint8Array(bufferLength)
   }
   catch (error) {
-    console.error('Error setting up audio monitoring:', error)
+    console.error('Error setting up audio monitoring.')
     errorMessage.value = errorMessageFromValue(error)
   }
 }
@@ -120,7 +120,7 @@ onStopRecord(async (recording) => {
   }
   catch (err) {
     errorMessage.value = errorMessageFromValue(err)
-    console.error('Error generating transcription:', errorMessage.value)
+    console.error('Error generating transcription.')
   }
 })
 

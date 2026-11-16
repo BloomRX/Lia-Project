@@ -14,25 +14,17 @@ export async function startVoiceInputVadDetectionSafely(options: VoiceInputVadSt
     await options.init()
 
     if (options.loaded()) {
-      options.log?.('info', 'vad-start', 'VAD initialized successfully; starting against microphone stream.', {
-        stream: options.stream,
-      })
+      options.log?.('info', 'vad-start', 'VAD initialized successfully; starting against microphone stream.')
       await options.start(options.stream)
       options.log?.('info', 'vad-ready', 'VAD is connected to the microphone stream.')
       return true
     }
 
-    const error = options.getError?.()
-    if (error) {
-      options.log?.('error', 'vad-init-failed', 'VAD initialization failed.', {
-        error,
-      })
-    }
+    if (options.getError?.())
+      options.log?.('error', 'vad-init-failed', 'VAD initialization failed.')
   }
-  catch (error) {
-    options.log?.('error', 'vad-init-failed', 'VAD initialization failed.', {
-      error,
-    })
+  catch {
+    options.log?.('error', 'vad-init-failed', 'VAD initialization failed.')
   }
 
   return false

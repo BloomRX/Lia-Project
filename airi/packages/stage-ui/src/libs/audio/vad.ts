@@ -96,7 +96,7 @@ export function createVADStates(vad: BaseVAD, vadAudioWorkletUrl: string, option
       }
     }
     catch (error) {
-      console.error('Failed to initialize audio worklet:', error)
+      console.error('Failed to initialize audio worklet.')
       throw error
     }
   }
@@ -141,7 +141,7 @@ export function createVADStates(vad: BaseVAD, vadAudioWorkletUrl: string, option
       silentGainNode.connect(audioContext.destination)
     }
     catch (error) {
-      console.error('Failed to start microphone:', error)
+      console.error('Failed to start microphone.')
       throw error
     }
   }

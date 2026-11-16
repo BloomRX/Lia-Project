@@ -79,8 +79,6 @@ export function useWhisper(url: string, options?: Partial<UseWhisperOptions>) {
       case 'inference-result':
         transcribing.value = false
         result.value = e.output?.text?.[0] ?? ''
-        // eslint-disable-next-line no-console
-        console.debug('Whisper result:', result.value)
         opts.onComplete?.(result.value)
         break
 
@@ -103,7 +101,7 @@ export function useWhisper(url: string, options?: Partial<UseWhisperOptions>) {
         audioFloat32: input.audioFloat32,
         language: input.language,
       }).catch((err) => {
-        console.error('Whisper transcription error:', err)
+        console.error('Whisper transcription failed.')
         transcribing.value = false
         opts.onError?.(errorMessageFromValue(err))
       })

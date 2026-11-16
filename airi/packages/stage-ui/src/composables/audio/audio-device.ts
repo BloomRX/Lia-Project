@@ -112,7 +112,7 @@ export function useAudioDevice(requestPermission: boolean = false) {
           error_code: errorCode,
         })
       }
-      console.error('Error ensuring permissions:', error)
+      console.error('Error ensuring microphone permission.')
       throw error
     }
   }

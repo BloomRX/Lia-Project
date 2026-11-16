@@ -381,7 +381,7 @@ export function createAliyunNLSProvider(
                     controller.close()
                   }
                   catch (error) {
-                    console.error('error in onSessionTerminated hook:', error)
+                    console.error('Aliyun transcription session termination hook failed.')
                     controller.error(error instanceof Error ? error : new Error(String(error)))
                   }
                 },

@@ -4,7 +4,7 @@ import type { ModelSettingsRuntimeSnapshot } from '@proj-airi/stage-ui/component
 
 import type { ModelSettingsRuntimeChannelEvent } from '../../shared/model-settings-runtime'
 
-import { errorMessageFrom, tryCatch } from '@moeru/std'
+import { tryCatch } from '@moeru/std'
 import { electron } from '@proj-airi/electron-eventa'
 import {
   useElectronEventaInvoke,
@@ -449,7 +449,7 @@ function currentHearingInputSourceId() {
 function postHearingInputEvent(event: HearingInputChannelEvent) {
   const { error } = tryCatch(() => postHearingInput(event))
   if (error)
-    console.warn('[Main Page] Failed to post Hearing input text:', error)
+    console.warn('[Main Page] Failed to post Hearing input text.')
 }
 
 function replaceHearingInput(text: string) {
@@ -480,12 +480,9 @@ function scheduleHearingInputClear(sourceId: string) {
 /**
  * Reports a voice input pipeline failure to both the console and visible app UI.
  */
-function reportVoiceInputFailure(action: string, error: unknown) {
-  const reason = errorMessageFrom(error)
-  const message = reason
-    ? `Voice input failed to ${action}: ${reason}`
-    : `Voice input failed to ${action}.`
-  console.error(`[Main Page] ${message}`, error)
+function reportVoiceInputFailure(action: string, _error: unknown) {
+  const message = `Voice input failed to ${action}.`
+  console.error(`[Main Page] ${message}`)
   toast.error(message)
 }
 
@@ -617,7 +614,7 @@ async function ensureLiveAudioInputStream() {
 function postSpeakerCaption(text: string, operation: NonNullable<CaptionChannelEvent['operation']> = 'append') {
   const { error } = tryCatch(() => postCaption({ operation, type: 'caption-speaker', text }))
   if (error)
-    console.warn('[Main Page] Failed to post voice input caption:', error)
+    console.warn('[Main Page] Failed to post voice input caption.')
 }
 
 /**
@@ -769,7 +766,7 @@ async function startAudioInteractionConsumers() {
     if (transcriptionError.value) {
       streamingTranscriptionUnavailable.value = true
       await stopStreamingTranscription(true)
-      console.warn('[Main Page] Streaming transcription unavailable; using recorder-backed fallback:', transcriptionError.value)
+      console.warn('[Main Page] Streaming transcription unavailable; using recorder-backed fallback.')
     }
   }
 

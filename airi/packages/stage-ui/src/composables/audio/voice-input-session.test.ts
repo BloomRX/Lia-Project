@@ -187,6 +187,52 @@ describe('useVoiceInputSession', () => {
     expect(session.isTranscribing.value).toBe(false)
   })
 
+  it.each(['before', 'after'] as const)('keeps sensitive gate data out of the log when dropping a recording %s ASR', async (phase) => {
+    const { useVoiceInputSession } = await import('./voice-input-session')
+    const recording = new Blob(['audio-canary'], { type: 'audio/wav' })
+    const transcript = 'transcript-canary'
+    const gate = { skip: true, reason: 'reason-canary', details: { credential: 'credential-canary' } }
+    const onLog = vi.fn()
+    const onRecordingSkipped = vi.fn()
+    const onTranscriptionResult = vi.fn()
+    hearingPipelineMock.transcribeForRecording.mockResolvedValueOnce(transcript)
+    useVoiceInputSession(shallowRef(createMediaStream()), {
+      inspectBeforeTranscription: phase === 'before' ? () => gate : undefined,
+      inspectAfterTranscription: phase === 'after' ? () => gate : undefined,
+      onLog,
+      onRecordingSkipped,
+      onTranscriptionResult,
+    })
+
+    await audioRecorderMock.onStopRecordHook!(recording)
+
+    expect(hearingPipelineMock.transcribeForRecording).toHaveBeenCalledTimes(phase === 'before' ? 0 : 1)
+    expect(onRecordingSkipped).toHaveBeenCalledWith(expect.objectContaining({ gate, recording }))
+    expect(onTranscriptionResult).not.toHaveBeenCalled()
+    expect(onLog.mock.calls).toEqual([
+      ['info', `recording-drop-${phase}-asr`, expect.any(String), { trigger: 'manual' }],
+    ])
+  })
+
+  it('logs the transcription failure event without forwarding the provider error', async () => {
+    const { useVoiceInputSession } = await import('./voice-input-session')
+    const onLog = vi.fn()
+    const onTranscriptionError = vi.fn()
+    const error = Object.assign(new Error('transcript-canary'), {
+      token: 'credential-canary',
+      audio: new Blob(['audio-canary'], { type: 'audio/wav' }),
+    })
+    hearingPipelineMock.transcribeForRecording.mockRejectedValueOnce(error)
+    useVoiceInputSession(shallowRef(createMediaStream()), { onLog, onTranscriptionError })
+
+    await audioRecorderMock.onStopRecordHook!(new Blob(['speech'], { type: 'audio/wav' }))
+
+    expect(onTranscriptionError).toHaveBeenCalledWith(expect.objectContaining({ error }))
+    expect(onLog.mock.calls).toEqual([
+      ['error', 'recording-transcription-error', expect.any(String), { trigger: 'manual' }],
+    ])
+  })
+
   // https://github.com/moeru-ai/airi/issues/2092
   it('issue #2092 transcribes the padded VAD buffer instead of the recorder-only segment', async () => {
     const { useVoiceInputSession } = await import('./voice-input-session')
