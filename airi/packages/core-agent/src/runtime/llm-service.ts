@@ -149,6 +149,7 @@ export async function streamFrom({
   messages,
   options,
   builtinToolsResolver,
+  isToolAllowed,
 }: StreamFromOptions) {
   const chatConfig = chatProvider.chat(model)
   const supportsContentArray = streamOptionsContentArrayCompatibilityOk(model, chatProvider, options)
@@ -160,7 +161,6 @@ export async function streamFrom({
     : []
   const customTools = supportedTools ? await resolveTools(options) : []
   const mergedTools = supportedTools ? [...builtinTools, ...customTools] : []
-  const tools = mergedTools.length > 0 ? mergedTools : undefined
 
   return new Promise<void>((resolve, reject) => {
     let settled = false
@@ -192,6 +192,9 @@ export async function streamFrom({
     }
 
     try {
+      // No await between the owner policy and handing tools to the provider.
+      const allowedTools = isToolAllowed ? mergedTools.filter(isToolAllowed) : mergedTools
+      const tools = allowedTools.length > 0 ? allowedTools : undefined
       const streamResult = streamText({
         ...chatConfig,
         abortSignal: options?.abortSignal,

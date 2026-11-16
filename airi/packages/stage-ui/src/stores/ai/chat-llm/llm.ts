@@ -7,7 +7,7 @@ import { listModels } from '@xsai/model'
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
-import { resolveLlmTools } from './tool-resolver'
+import { isResolvedToolAllowed, resolveLlmTools } from './tool-resolver'
 
 export type { StreamEvent, StreamOptions } from '@proj-airi/core-agent'
 export { isContentArrayRelatedError, isToolRelatedError } from '@proj-airi/core-agent'
@@ -31,6 +31,7 @@ export const useLLM = defineStore('llm', () => {
         contentArrayCompatibility: contentArrayCompatibility.value,
       },
       builtinToolsResolver,
+      isToolAllowed: isResolvedToolAllowed,
     })
 
     try {
