@@ -28,6 +28,17 @@ Rodada somente-leitura: nenhuma branch foi criada, mergeada, rebaseada ou removi
 Pendências registradas: evidência de áudio contraditória em `407300b`, três versões de
 `auth.ts` e duplicação da Fase 1 entre `arena/250b337a` e `codex/lia-ui-ux-fase-1`.
 
+**Auditoria e redesenho da arquitetura desktop (16/11/2026).** Estado real dos três
+pacotes, diagrama atual e alvo, comparação A–E, veredito sobre o runtime único, protocolo
+de medição reproduzível no Windows e plano incremental com rollback em
+[LIA-DESKTOP-ARCHITECTURE-AUDIT-2026-11-16](../reports/LIA-DESKTOP-ARCHITECTURE-AUDIT-2026-11-16.md).
+Rodada somente-leitura: nenhum código de produto foi alterado. Achados que contrariam o
+estado assumido: fechar o Launcher **encerra** o Runtime (o oposto da decisão de produto),
+`holdsOwnedStage()` não descobre Runtime em execução, e o encerramento no Windows começa
+por `taskkill /T /F`. O **gate de arquitetura continua ABERTO**: nenhuma medição de
+RAM/CPU/GPU/FPS/boot foi executada nesta rodada e nenhuma troca de framework foi
+autorizada. Decisões pendentes: D-01…D-08 (§12.2 do relatório).
+
 **Decisões do beta interno (14/11/2026, revisão 2 do plano).** O produto definiu:
 beta **interno**; **voz e STT obrigatórios** para aprovação; **Fase 1 de UI autorizada**
 (prontidão, confirmações destrutivas, contraste e acessibilidade; sem redesenho);
