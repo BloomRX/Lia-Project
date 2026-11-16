@@ -17,7 +17,6 @@
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
     "skipLibCheck": true,
-    "baseUrl": ".",
     "paths": {
       "@lia/contracts": [
         "../../../lia/core/src/index.ts"

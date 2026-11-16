@@ -1,11 +1,10 @@
-import type { RuntimeControlTarget } from '@lia/contracts/runtime'
-import type { RuntimeInstanceRecord } from '@lia/contracts/runtime'
+import type { RuntimeControlTarget, RuntimeInstanceRecord } from '@lia/contracts/runtime'
 
+import { execFile } from 'node:child_process'
 import { join } from 'node:path'
+import process from 'node:process'
 
-import { pingRuntime } from '@lia/contracts/runtime'
-import { describeInstance } from '@lia/contracts/runtime'
-import { createRuntimeRegistry } from '@lia/contracts/runtime'
+import { createRuntimeRegistry, describeInstance, pingRuntime, stopRuntimeCooperatively } from '@lia/contracts/runtime'
 
 /**
  * Reencontrar o Runtime depois de fechar e reabrir o Launcher.
@@ -82,4 +81,48 @@ export function describeDiscovery(discovery: RuntimeDiscovery): string {
   if (discovery.status === 'none')
     return 'none'
   return `stale problem=${discovery.problem}${discovery.record ? ` ${describeInstance(discovery.record)}` : ''}`
+}
+
+/**
+ * Parada de um Runtime DESCOBERTO — inclusive um que este Launcher não criou.
+ *
+ * Este é o caso que o gerenciador de filho não resolve: depois de fechar e
+ * reabrir, o Launcher não tem `ChildProcess` nenhum, mas tem o registro. Sem
+ * este caminho, "Parar Runtime" numa janela reaberta não pararia nada.
+ *
+ * A força é o último recurso e re-verifica a identidade imediatamente antes de
+ * matar: o PID pode ter sido reciclado entre a descoberta e o kill, e matar o
+ * PID errado seria pior que não parar.
+ */
+export async function stopDiscoveredRuntime(
+  stateDir: string,
+  options: { timeoutMs?: number, pollMs?: number, platform?: NodeJS.Platform } = {},
+): Promise<{ acknowledged: boolean, forced: boolean, stopped: boolean, waitedMs: number }> {
+  const discovery = await discoverRuntime(stateDir)
+  if (discovery.status !== 'live')
+    return { acknowledged: false, forced: false, stopped: true, waitedMs: 0 }
+
+  const expectedInstance = discovery.record.instanceId
+  return await stopRuntimeCooperatively({
+    pollMs: options.pollMs,
+    target: discovery.target,
+    timeoutMs: options.timeoutMs,
+    forceKill: async () => {
+      const again = await discoverRuntime(stateDir)
+      if (again.status !== 'live' || again.record.instanceId !== expectedInstance)
+        return
+      const pid = again.record.pid
+      const platform = options.platform ?? process.platform
+      if (platform === 'win32') {
+        await new Promise<void>((resolve) => {
+          execFile('taskkill', ['/PID', String(pid), '/T', '/F'], { timeout: 30_000 }, () => resolve())
+        })
+        return
+      }
+      try {
+        process.kill(pid, 'SIGKILL')
+      }
+      catch { /* já morreu */ }
+    },
+  })
 }

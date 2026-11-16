@@ -28,12 +28,11 @@ import { createLiaSecretVault } from '@lia/core/secrets/vault'
 import { createLiaVoiceProfileStore, findMissingFiles } from '@lia/core/voices/profiles'
 
 import { CredentialOwnerError, isPublicCredentialReference, startCredentialOwner } from '@lia/contracts/credentials/owner-channel'
-import { stopRuntimeCooperatively } from '@lia/contracts/runtime'
 import { decideSelectionWrite, isLauncherManagedProvider, isLiaSelectionTarget, type LiaSelectionTarget } from '@lia/contracts/providers/selection-write-policy'
 import { createTransportRepository } from '@lia/contracts/transports/repository'
 import { createAiConnectionService, type AiConnectionStartCode, type AiConnectionStartReadiness } from './ai-connection-service'
 import { AiriStageManager } from './airi-stage-manager'
-import { describeDiscovery, discoverRuntime, runtimeStateDirFor } from './runtime-discovery'
+import { describeDiscovery, discoverRuntime, runtimeStateDirFor, stopDiscoveredRuntime } from './runtime-discovery'
 import { sameProfileDirectory } from './launcher-profile'
 import { ShutdownCoordinator } from './shutdown-coordinator'
 
@@ -384,10 +383,7 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
     logFile: join(runtimeStateDir, 'runtime.log'),
     probeReady: async () => (await discoverOwnRuntime()).status === 'live',
     requestStop: async () => {
-      const discovery = await discoverOwnRuntime()
-      if (discovery.status !== 'live')
-        return { acknowledged: false, forced: false, stopped: true, waitedMs: 0 }
-      const result = await stopRuntimeCooperatively({ target: discovery.target, timeoutMs: 15_000 })
+      const result = await stopDiscoveredRuntime(runtimeStateDir, { timeoutMs: 15_000 })
       emit('lia-app.runtime-stopped', `stopped=${String(result.stopped)} forced=${String(result.forced)}`)
       return result
     },
@@ -1131,12 +1127,10 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
       discover: discoverOwnRuntime,
       stateDir: runtimeStateDir,
       stop: async () => {
-        // Parada explícita: o gerenciador pede o encerramento cooperativo,
-        // espera e só então escala. "Parado" é provado pela descoberta, nunca
-        // pelo retorno de um kill.
-        await stage.stop().catch(() => {})
-        const after = await discoverOwnRuntime()
-        return { acknowledged: true, forced: false, stopped: after.status !== 'live', waitedMs: 0 }
+        // Parada explícita por DESCOBERTA, não por posse do filho: depois de
+        // reabrir, este Launcher adotou um Runtime que não spawnou e ainda
+        // assim precisa conseguir pará-lo.
+        return await stopDiscoveredRuntime(runtimeStateDir, { timeoutMs: 15_000 })
       },
     },
     stage,

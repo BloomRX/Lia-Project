@@ -1,13 +1,15 @@
-import type { RuntimeInstanceRecord } from '@lia/contracts/runtime'
-import type { RuntimeSecretStore } from '@lia/contracts/runtime'
+import type { RuntimeInstanceRecord, RuntimeSecretStore } from '@lia/contracts/runtime'
 
 import process from 'node:process'
 
-import { createRuntimeRecord, runtimeEndpointFor } from '@lia/contracts/runtime'
-import { createRuntimeRegistry } from '@lia/contracts/runtime'
-import { startRuntimeControlServer } from '@lia/contracts/runtime'
-import { createCredentialHandler } from '@lia/contracts/runtime'
-import { runCooperativeExit } from '@lia/contracts/runtime'
+import {
+  createCredentialHandler,
+  createRuntimeRecord,
+  createRuntimeRegistry,
+  runCooperativeExit,
+  runtimeEndpointFor,
+  startRuntimeControlServer,
+} from '@lia/contracts/runtime'
 
 /**
  * O Runtime como processo independente.
