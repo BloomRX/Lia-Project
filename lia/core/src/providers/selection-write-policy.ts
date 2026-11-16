@@ -1,4 +1,4 @@
-import { findLiaAiProviderByStageProviderId } from './catalog'
+import { findLiaAiProviderByStageProviderId } from './catalog.ts'
 
 export interface LiaSelectionTarget {
   providerId: string

@@ -35,7 +35,6 @@ import process from 'node:process'
 import { Buffer } from 'node:buffer'
 import {
   createHmac,
-  createPrivateKey,
   createPublicKey,
   diffieHellman,
   generateKeyPairSync,
@@ -268,7 +267,6 @@ interface ServerSession {
 export async function startRuntimeControlServer(options: RuntimeControlServerOptions): Promise<RuntimeControlServer> {
   const log = options.log ?? (() => {})
   const handshakeTimeout = options.handshakeTimeoutMs ?? HANDSHAKE_TIMEOUT_MS
-  const requestTimeout = options.requestTimeoutMs ?? REQUEST_TIMEOUT_MS
   const maxConnections = options.maxConnections ?? MAX_CONNECTIONS
   const sockets = new Set<Socket>()
   const { privateKey, publicKey } = generateKeyPairSync('x25519')

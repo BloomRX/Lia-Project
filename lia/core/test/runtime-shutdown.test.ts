@@ -1,13 +1,12 @@
-import type { RuntimeControlServer } from '../src/runtime/control.ts'
-
 import assert from 'node:assert/strict'
+
+import { Buffer } from 'node:buffer'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, before, describe, it } from 'node:test'
 
-import { startRuntimeControlServer } from '../src/runtime/control.ts'
-import { runCooperativeExit, stopRuntimeCooperatively } from '../src/runtime/shutdown.ts'
+import { runCooperativeExit, runtimeEndpointFor, startRuntimeControlServer, stopRuntimeCooperatively } from '@lia/contracts/runtime'
 
 let stateDir = ''
 
@@ -68,7 +67,7 @@ describe('encerramento cooperativo — lado do Launcher', () => {
   async function startRuntime(options: { onShutdownRequested?: () => void } = {}) {
     const instanceId = globalThis.crypto.randomUUID()
     const server = await startRuntimeControlServer({
-      endpoint: join(stateDir, `${instanceId.slice(0, 8)}.sock`),
+      endpoint: runtimeEndpointFor(process.platform, stateDir, instanceId),
       handle: async () => ({ ok: true }),
       instanceId,
       ...(options.onShutdownRequested ? { onShutdownRequested: options.onShutdownRequested } : {}),
@@ -78,7 +77,11 @@ describe('encerramento cooperativo — lado do Launcher', () => {
 
   it('pede, espera a saída e reporta parado sem forçar', async () => {
     let closed = false
-    const runtime = await startRuntime({ onShutdownRequested: () => { closed = true } })
+    const runtime = await startRuntime({
+      onShutdownRequested: () => {
+        closed = true
+      },
+    })
     try {
       const result = await stopRuntimeCooperatively({
         pollMs: 20,
@@ -98,7 +101,11 @@ describe('encerramento cooperativo — lado do Launcher', () => {
   })
 
   it('observa a saída real e reporta parado', async () => {
-    const runtime = await startRuntime({ onShutdownRequested: () => { void runtime.server.close() } })
+    const runtime = await startRuntime({
+      onShutdownRequested: () => {
+        void runtime.server.close()
+      },
+    })
     const result = await stopRuntimeCooperatively({ pollMs: 20, target: runtime.target, timeoutMs: 3_000 })
     assert.equal(result.acknowledged, true)
     assert.equal(result.stopped, true)
@@ -131,7 +138,7 @@ describe('encerramento cooperativo — lado do Launcher', () => {
     const instanceId = globalThis.crypto.randomUUID()
     const result = await stopRuntimeCooperatively({
       pollMs: 20,
-      target: { endpoint: join(stateDir, 'gone.sock'), instanceId, publicKey: Buffer.alloc(32).toString('base64') },
+      target: { endpoint: runtimeEndpointFor(process.platform, stateDir, instanceId), instanceId, publicKey: Buffer.alloc(32).toString('base64') },
       timeoutMs: 200,
     })
     assert.deepEqual(result, { acknowledged: false, forced: false, stopped: true, waitedMs: 0 })

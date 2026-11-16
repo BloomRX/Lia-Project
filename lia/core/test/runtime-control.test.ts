@@ -1,6 +1,8 @@
-import type { RuntimeControlServer } from '../src/runtime/control.ts'
+import type { RuntimeControlServer } from '@lia/contracts/runtime'
 
 import assert from 'node:assert/strict'
+
+import { Buffer } from 'node:buffer'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -11,8 +13,9 @@ import {
   ControlError,
   invokeRuntimeControl,
   pingRuntime,
+  runtimeEndpointFor,
   startRuntimeControlServer,
-} from '../src/runtime/control.ts'
+} from '@lia/contracts/runtime'
 
 let stateDir = ''
 let server: RuntimeControlServer | undefined
@@ -29,7 +32,7 @@ before(async () => {
   stateDir = await mkdtemp(join(tmpdir(), 'lia-control-'))
   instanceId = globalThis.crypto.randomUUID()
   server = await startRuntimeControlServer({
-    endpoint: join(stateDir, 'control.sock'),
+    endpoint: runtimeEndpointFor(process.platform, stateDir, instanceId),
     handle: async (request) => {
       received.push(request.command)
       if (request.command === 'runtime.ping')
@@ -39,7 +42,9 @@ before(async () => {
       return { ok: true }
     },
     instanceId,
-    onShutdownRequested: () => shutdowns.push('requested'),
+    onShutdownRequested: () => {
+      shutdowns.push('requested')
+    },
   })
 })
 
@@ -89,7 +94,11 @@ describe('canal de controle', () => {
 
   it('endpoint inexistente é "unreachable", não "denied"', async () => {
     await assert.rejects(
-      invokeRuntimeControl({ endpoint: join(stateDir, 'nope.sock'), instanceId, publicKey: server!.publicKey }, 'runtime.ping'),
+      invokeRuntimeControl({
+        endpoint: runtimeEndpointFor(process.platform, stateDir, globalThis.crypto.randomUUID()),
+        instanceId,
+        publicKey: server!.publicKey,
+      }, 'runtime.ping'),
       (error: unknown) => error instanceof ControlError && error.code === 'unreachable',
     )
   })
@@ -97,8 +106,10 @@ describe('canal de controle', () => {
   it('não deixa o cliente pendurado quando o endpoint aceita e cala', async () => {
     const { createServer } = await import('node:net')
     const accepted: import('node:net').Socket[] = []
-    const silent = createServer((socket) => { accepted.push(socket) })
-    const endpoint = join(stateDir, 'silent.sock')
+    const silent = createServer((socket) => {
+      accepted.push(socket)
+    })
+    const endpoint = runtimeEndpointFor(process.platform, stateDir, globalThis.crypto.randomUUID())
     await new Promise<void>(resolve => silent.listen(endpoint, () => resolve()))
     try {
       await assert.rejects(
