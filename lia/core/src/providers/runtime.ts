@@ -222,12 +222,19 @@ export class ProviderRuntime {
         throw abortError(operation)
       if (instance.config.credentialRequired && !credential)
         throw new ProviderError('credentials')
+      const destination = new URL(path, instance.config.baseUrl)
+      // Check the parsed destination used for the request. Only canonical
+      // loopback hosts may receive a credential over HTTP.
+      if (credential && destination.protocol !== 'https:'
+        && (destination.protocol !== 'http:' || !['localhost', '127.0.0.1', '[::1]'].includes(destination.hostname))) {
+        throw new ProviderError('configuration')
+      }
       const headers = new Headers({ accept: request?.stream ? 'text/event-stream' : 'application/json' })
       if (credential)
         headers.set('authorization', `Bearer ${credential}`)
       if (request)
         headers.set('content-type', 'application/json')
-      const response = await raceAbort(this.#fetch(new URL(path, instance.config.baseUrl), {
+      const response = await raceAbort(this.#fetch(destination, {
         method: request ? 'POST' : 'GET',
         headers,
         body: request ? JSON.stringify(request) : undefined,

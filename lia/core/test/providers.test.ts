@@ -113,6 +113,48 @@ describe('Lia native chat transport', () => {
     assert.equal(runtime.instanceCount, 1)
   })
 
+  it('refuses to dispatch a stored credential over HTTP outside canonical loopback', async () => {
+    let fetches = 0
+    const { runtime } = setup(async () => {
+      fetches += 1
+      return json()
+    })
+    for (const baseUrl of [
+      'http://service.invalid/v1',
+      'http://192.168.1.4:11434/v1',
+      'http://foo.localhost/v1',
+      'http://localhost.service.invalid/v1',
+      'http://localhost./v1',
+      'http://127.0.0.2/v1',
+      'http://0x7f000002/v1',
+      'http://[::ffff:127.0.0.1]/v1',
+      'http://user:pass@127.0.0.1/v1',
+      'http://localhost:65536/v1',
+      'ftp://localhost/v1',
+    ]) {
+      const target = { ...config, baseUrl, credentialRequired: false }
+      await errorCode(runtime.chat(target, request), 'configuration')
+      await errorCode(runtime.discover(target), 'configuration')
+    }
+    assert.equal(fetches, 0)
+    assert.equal(runtime.activeOperationCount, 0)
+  })
+
+  it('dispatches authenticated HTTP to the parsed loopback addresses only', async () => {
+    const hosts: string[] = []
+    const { runtime } = setup(async (input, init) => {
+      assert.ok(input instanceof URL)
+      hosts.push(input.hostname)
+      assert.equal(new Headers(init?.headers).get('authorization'), `Bearer ${KEY}`)
+      assert.equal(init?.redirect, 'error')
+      return json()
+    })
+    for (const host of ['localhost', '127.0.0.1', '[::1]', '127.1']) {
+      await runtime.chat({ ...config, baseUrl: `http://${host}:11434/v1` }, request)
+    }
+    assert.deepEqual(hosts, ['localhost', '127.0.0.1', '[::1]', '127.0.0.1'])
+  })
+
   it('changes models without changing instance identity or normalizing custom IDs', async () => {
     const models: string[] = []
     const { runtime } = setup(async (_input, init) => {
@@ -132,7 +174,7 @@ describe('Lia native chat transport', () => {
       return json()
     }, () => undefined)
     registry.register({ id: 'keyless', protocol: 'chat-completions', capabilities: { modelDiscovery: false } })
-    assert.deepEqual(await runtime.chat({ ...config, providerId: 'keyless', credentialRequired: false }, request), { text: 'OK' })
+    assert.deepEqual(await runtime.chat({ ...config, providerId: 'keyless', baseUrl: 'http://192.168.1.4:11434/v1', credentialRequired: false }, request), { text: 'OK' })
     await errorCode(runtime.discover({ ...config, providerId: 'keyless', credentialRequired: false }), 'unsupported')
   })
 

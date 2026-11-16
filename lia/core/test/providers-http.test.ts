@@ -4,7 +4,7 @@ import { once } from 'node:events'
 import { createServer } from 'node:http'
 import { it } from 'node:test'
 
-import { ProviderRegistry, ProviderRuntime } from '../src/providers/index.ts'
+import { ProviderError, ProviderRegistry, ProviderRuntime } from '../src/providers/index.ts'
 
 it('executes native discovery and streamed chat against a real local HTTP fixture without an SDK', async () => {
   const observed: { path?: string, authorization?: string, body: string }[] = []
@@ -49,6 +49,47 @@ it('executes native discovery and streamed chat against a real local HTTP fixtur
     if (server.listening) {
       server.close()
       await once(server, 'close')
+    }
+  }
+})
+
+it('refuses a real redirect without sending a second request with the credential', async () => {
+  const observed: { source: string | undefined, targetRequests: number } = { source: undefined, targetRequests: 0 }
+  const target = createServer((_request, response) => {
+    observed.targetRequests += 1
+    response.end()
+  })
+  const source = createServer((request, response) => {
+    observed.source = request.headers.authorization
+    const address = target.address()
+    assert.ok(address && typeof address === 'object')
+    response.writeHead(307, { location: `http://127.0.0.1:${address.port}/target` }).end()
+  })
+  const registry = new ProviderRegistry()
+  registry.register({ id: 'local-fixture', protocol: 'chat-completions', credentialRequired: true })
+  const runtime = new ProviderRuntime(registry, { resolveCredential: () => 'synthetic-local-fixture-key' })
+  try {
+    for (const server of [source, target]) {
+      server.listen(0, '127.0.0.1')
+      await once(server, 'listening')
+    }
+    const address = source.address()
+    assert.ok(address && typeof address === 'object')
+    await assert.rejects(runtime.discover({
+      providerId: 'local-fixture',
+      baseUrl: `http://127.0.0.1:${address.port}/v1/`,
+    }), (error: unknown) => error instanceof ProviderError && error.code === 'network')
+    assert.deepEqual(observed, { source: 'Bearer synthetic-local-fixture-key', targetRequests: 0 })
+    assert.equal(runtime.activeOperationCount, 0)
+  }
+  finally {
+    runtime.dispose()
+    for (const server of [source, target]) {
+      server.closeAllConnections()
+      if (server.listening) {
+        server.close()
+        await once(server, 'close')
+      }
     }
   }
 })
