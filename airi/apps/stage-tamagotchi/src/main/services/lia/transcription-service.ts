@@ -1,14 +1,14 @@
+import type { TransportRecord } from '@lia/contracts/transports'
+import type { createTransportRepository } from '@lia/contracts/transports/repository'
 import type { LiaSecretVault } from '@lia/core/secrets/vault'
 import type { createContext } from '@moeru/eventa/adapters/electron/main'
 import type { WebContents } from 'electron'
 
-import type { TransportRecord } from '@lia/contracts/transports'
-import type { createTransportRepository } from '@lia/contracts/transports/repository'
 import type { LiaTranscriptionRunOutcome, LiaTranscriptionRunRequest } from '../../../shared/eventa/lia-transcription'
 
+import { ProviderError } from '@lia/contracts/providers'
 import { defineInvokeHandler } from '@moeru/eventa'
 
-import { ProviderError } from '@lia/contracts/providers'
 import { electronLiaTranscriptionCancel, electronLiaTranscriptionRun } from '../../../shared/eventa/lia-transcription'
 import { isCuratedChatProvider } from '../../../shared/lia/provider-catalog'
 import { resolveMainCredential } from './credential-owner-access'
@@ -266,36 +266,47 @@ export function createLiaTranscriptionService(options: LiaTranscriptionServiceOp
 /** One main-process bridge; the renderer only ever receives text or a code. */
 export function registerLiaTranscriptionBridge(params: {
   context: ReturnType<typeof createContext>['context']
+  isAllowedSender: (event: Electron.IpcMainEvent) => boolean
   repository: Repository
   vault: LiaSecretVault
   fetch?: typeof globalThis.fetch
 }) {
   const service = createLiaTranscriptionService({ fetch: params.fetch, repository: params.repository, vault: params.vault })
   type Owner = WebContents
-  const pending = new Map<string, { owner: Owner, controller: AbortController, cleanup: () => void }>()
+  const pending = new Map<string, { owner: Owner, controller: AbortController, detach: () => void }>()
   let disposed = false
   defineInvokeHandler(params.context, electronLiaTranscriptionRun, async (payload, options) => {
     try {
       const request = validate(payload)
-      const owner = options?.raw?.ipcMainEvent?.sender
-      if (disposed || !owner || owner.isDestroyed() || !requestIdentifier(request.requestId))
+      const event = options?.raw?.ipcMainEvent
+      const owner = event?.sender
+      if (disposed || !owner || owner.isDestroyed() || !params.isAllowedSender(event) || !requestIdentifier(request.requestId))
         throw new ProviderError('configuration')
       if (pending.has(request.requestId) || pending.size >= 32 || [...pending.values()].filter(job => job.owner === owner).length >= 8)
         throw new ProviderError('configuration')
       const controller = new AbortController()
       const cleanup = () => controller.abort()
-      const job = { owner, controller, cleanup }
+      const cancelOnNavigation = (details: Electron.WebContentsDidStartNavigationEventParams) => {
+        if (details.isMainFrame && !details.isSameDocument)
+          cleanup()
+      }
+      const detach = () => {
+        owner.removeListener('destroyed', cleanup)
+        owner.removeListener('render-process-gone', cleanup)
+        owner.removeListener('did-start-navigation', cancelOnNavigation)
+      }
+      const job = { owner, controller, detach }
       pending.set(request.requestId, job)
       owner.once('destroyed', cleanup)
       owner.once('render-process-gone', cleanup)
+      owner.on('did-start-navigation', cancelOnNavigation)
       try {
         return await service.transcribe(request, controller.signal)
       }
       finally {
         if (pending.get(request.requestId) === job)
           pending.delete(request.requestId)
-        owner.removeListener('destroyed', cleanup)
-        owner.removeListener('render-process-gone', cleanup)
+        detach()
       }
     }
     catch (error) {
@@ -306,7 +317,8 @@ export function registerLiaTranscriptionBridge(params: {
     if (!object(payload) || Object.keys(payload).length !== 1 || !requestIdentifier(payload.requestId))
       return { ok: false }
     const job = pending.get(payload.requestId)
-    if (!job || job.owner !== options?.raw?.ipcMainEvent?.sender)
+    const event = options?.raw?.ipcMainEvent
+    if (!event || !job || job.owner !== event.sender || !params.isAllowedSender(event))
       return { ok: false }
     job.controller.abort()
     return { ok: true }
@@ -317,8 +329,7 @@ export function registerLiaTranscriptionBridge(params: {
       disposed = true
       for (const job of pending.values()) {
         job.controller.abort()
-        job.owner.removeListener('destroyed', job.cleanup)
-        job.owner.removeListener('render-process-gone', job.cleanup)
+        job.detach()
       }
       pending.clear()
       service.dispose()

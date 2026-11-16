@@ -1,6 +1,5 @@
-import type { LiaSecretVault } from '@lia/core/secrets/vault'
-
 import type { TransportRecord, TransportSnapshot } from '@lia/contracts/transports'
+import type { LiaSecretVault } from '@lia/core/secrets/vault'
 
 import { Buffer } from 'node:buffer'
 import { randomUUID } from 'node:crypto'
@@ -431,9 +430,9 @@ afterEach(() => {
     bridge.dispose()
   handlers.clear()
 })
-function bridgeFixture() {
+function bridgeFixture(isAllowedSender = vi.fn<Parameters<typeof registerLiaTranscriptionBridge>[0]['isAllowedSender']>(() => true)) {
   const fixture = cancellableFixture()
-  const bridge = registerLiaTranscriptionBridge({ ...fixture, context: {} as never })
+  const bridge = registerLiaTranscriptionBridge({ ...fixture, context: {} as never, isAllowedSender })
   bridges.push(bridge)
   const sender = Object.assign(new EventEmitter(), { isDestroyed: (): boolean => false })
   const invoke = (event: unknown, payload: unknown, owner: typeof sender | undefined) => handlers.get(event)!(payload, { raw: { ipcMainEvent: { sender: owner } } })
@@ -443,6 +442,27 @@ function bridgeFixture() {
 }
 
 describe('transcription IPC ownership', () => {
+  it('rejects a sender outside Main policy before reading configuration or credentials', async () => {
+    const allowed = vi.fn(() => false)
+    const fixture = bridgeFixture(allowed)
+    expect(await fixture.run({ ...request, requestId: randomUUID() })).toEqual({ ok: false, code: 'configuration' })
+    expect(allowed).toHaveBeenCalledWith({ sender: fixture.sender })
+    expect(fixture.repository.read).not.toHaveBeenCalled()
+    expect(fixture.vault.getSecret).not.toHaveBeenCalled()
+    expect(fixture.fetch).not.toHaveBeenCalled()
+  })
+
+  it('cancels an upload on main document replacement and removes its navigation listener', async () => {
+    const fixture = bridgeFixture()
+    const requestId = randomUUID()
+    const pending = fixture.run({ ...request, requestId })
+    await vi.waitFor(() => expect(fixture.fetch).toHaveBeenCalledOnce())
+    fixture.sender.emit('did-start-navigation', { isMainFrame: true, isSameDocument: true })
+    expect(fixture.sender.listenerCount('did-start-navigation')).toBe(1)
+    fixture.sender.emit('did-start-navigation', { isMainFrame: true, isSameDocument: false })
+    expect(await pending).toEqual({ ok: false, code: 'cancelled' })
+    expect(fixture.sender.listenerCount('did-start-navigation')).toBe(0)
+  })
   it('records ownership before repository await, isolates cancel and releases listeners', async () => {
     const fixture = bridgeFixture()
     const read = deferred<TransportSnapshot>()

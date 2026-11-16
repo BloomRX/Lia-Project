@@ -1,9 +1,10 @@
 import type { FileLoggerHandle } from './app/file-logger'
+import type { LiaRuntimeService } from './services/lia/runtime-service'
 import type { MainWindowSizeSettingsController } from './windows/main/window-size-settings'
 
-import { cpSync, existsSync, mkdirSync } from 'node:fs'
 import process, { env, platform } from 'node:process'
 
+import { cpSync, existsSync, mkdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -31,7 +32,7 @@ import { createArtistryConfig } from './configs/artistry'
 import { createGlobalAppConfig } from './configs/global'
 import { createLiaProductConfig } from './configs/lia'
 import { registerLiaDevflowSceneBridge } from './devflow-diagnostics'
-import { emitAppBeforeQuit, emitAppReady, emitAppWindowAllClosed } from './libs/bootkit/lifecycle'
+import { emitAppBeforeQuit, emitAppReady, emitAppWindowAllClosed, onAppBeforeQuit } from './libs/bootkit/lifecycle'
 import { setElectronMainDirname } from './libs/electron/location'
 import { createI18n } from './libs/i18n'
 import { setupAppleSpeechTranscriptionService } from './services/airi/apple-speech-transcription'
@@ -55,14 +56,12 @@ import { createLiaBrainExecutionTerminalReportService } from './services/lia/bra
 import { registerLiaBrainSendTerminalReportListener } from './services/lia/brain-send-terminal-report-listener'
 import { createLiaBrainSendTerminalReportService } from './services/lia/brain-send-terminal-report-service'
 import { initializeCredentialOwner } from './services/lia/credential-owner-access'
-import type { LiaRuntimeService } from './services/lia/runtime-service'
-
-import { resolveRuntimeStateDir, startLiaRuntimeService } from './services/lia/runtime-service'
 import { createLiaBrainService } from './services/lia/lia-brain-service'
 import { startLiaMainWindowVoiceRuntime } from './services/lia/main-window-voice-runtime'
 import { registerLiaMemoryBridge } from './services/lia/memory-service'
 import { createPresenceService } from './services/lia/presence-service'
 import { registerLiaProviderConfigBridge } from './services/lia/provider-config-service'
+import { resolveRuntimeStateDir, startLiaRuntimeService } from './services/lia/runtime-service'
 import { createLiaSecretVault, registerLiaSecretsBridge } from './services/lia/secrets-service'
 import { registerLiaTranscriptionBridge } from './services/lia/transcription-service'
 import { canRendererReadLegacySecret, getApplicationRepository, registerLiaTransportConfigBridge } from './services/lia/transport-config-service'
@@ -544,7 +543,17 @@ app.whenReady().then(async () => {
       // provider's credential must not be readable by the renderer. It shares
       // the transport repository above, so a removed provider stops transcribing
       // exactly as it stops chatting.
-      registerLiaTranscriptionBridge({ context, repository: getApplicationRepository(), vault: deps.liaSecrets })
+      const transcription = registerLiaTranscriptionBridge({
+        context,
+        repository: getApplicationRepository(),
+        vault: deps.liaSecrets,
+        isAllowedSender: (event) => {
+          const window = userFacingMainWindow
+          return window !== undefined && !window.isDestroyed()
+            && event.sender === window.webContents && event.senderFrame === window.webContents.mainFrame
+        },
+      })
+      onAppBeforeQuit(() => transcription.dispose())
       registerLiaMemoryBridge({ context })
     },
   })

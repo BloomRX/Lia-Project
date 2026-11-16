@@ -41,15 +41,20 @@ void app.whenReady().then(async () => {
   registerLiaSecretsBridge({ context, vault: measuredVault, allowRendererRead: canRendererReadLegacySecret })
   registerLiaProviderConfigBridge({ context, liaProductConfig: createLiaProductConfig() })
   registerLiaTransportConfigBridge({ context, vault: measuredVault })
-  const transcription = registerLiaTranscriptionBridge({ context, repository: getApplicationRepository(), vault: measuredVault })
-  app.on('before-quit', () => transcription.dispose())
-
   const window = new BrowserWindow({
     title: 'Lia — Gate Electron local',
     width: 800,
     height: 620,
     webPreferences: createStageWebPreferences(preload),
   })
+  const transcription = registerLiaTranscriptionBridge({
+    context,
+    repository: getApplicationRepository(),
+    vault: measuredVault,
+    isAllowedSender: event => !window.isDestroyed()
+      && event.sender === window.webContents && event.senderFrame === window.webContents.mainFrame,
+  })
+  app.on('before-quit', () => transcription.dispose())
   window.webContents.on('did-finish-load', () => {
     metrics.rendererPid = window.webContents.getOSProcessId()
     saveMetrics()
