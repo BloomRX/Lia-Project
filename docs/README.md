@@ -21,6 +21,17 @@ o documento da área que você vai tocar.
 | [`product/RELEASE-WINDOWS-2026-10-20.md`](product/RELEASE-WINDOWS-2026-10-20.md) | Inventário de recursos, gates executados e checklist da finalização Windows |
 | [`compatibility/MATRIX.md`](compatibility/MATRIX.md) | Compatibilidade por plataforma, com evidência e limitações |
 
+## Reconciliação de branches (16/11/2026)
+
+| Documento | Papel |
+|---|---|
+| [`reports/LIA-GLOBAL-BRANCH-RECONCILIATION-2026-11-16.md`](reports/LIA-GLOBAL-BRANCH-RECONCILIATION-2026-11-16.md) | **Inventário e reconciliação das 12 branches + 4 PRs**, achados, riscos e ordem de execução |
+| [`reports/LIA-BRANCH-INTEGRATION-MATRIX.md`](reports/LIA-BRANCH-INTEGRATION-MATRIX.md) | Matriz **por alteração**: classificação, arquivos, dependências, risco, testes e aceite |
+| [`reports/LIA-SECURITY-RECONCILIATION.md`](reports/LIA-SECURITY-RECONCILIATION.md) | Segurança: gate de ferramentas, credencial × HTTP, `auth.ts`, STT, OIDC-OFF, SEC-04/05 |
+| [`reports/LIA-AUDIO-QA-RECONCILIATION.md`](reports/LIA-AUDIO-QA-RECONCILIATION.md) | Áudio: AV-01…AV-15, nove camadas de prova, evidência por SHA/ambiente, G-AUD |
+| [`reports/LIA-UIUX-RECONCILIATION.md`](reports/LIA-UIUX-RECONCILIATION.md) | UI/UX: `250b337a` × `codex/lia-ui-ux-fase-1` × Principal; L-02 bloqueado |
+| [`reports/LIA-RESEARCH-TRANSFER-RECONCILIATION.md`](reports/LIA-RESEARCH-TRANSFER-RECONCILIATION.md) | Research: classificação (Canonical / Research reference / Pending transfer / Historical / Superseded) |
+
 ## Sessão de trabalho
 
 | Documento | Papel |

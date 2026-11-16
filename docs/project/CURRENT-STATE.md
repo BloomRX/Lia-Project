@@ -34,6 +34,31 @@ PID num registro corrompido.
 gate de arquitetura permanece **ABERTO** e os limites de 350 MiB / 6 processos continuam
 provisórios.
 
+**Rodada 19 — reconciliação geral de branches (16/11/2026, docs-only).** As 12 branches
+remotas e as 4 refs de PR foram inventariadas por blob (não por diff de árvore), e as
+diferenças foram classificadas em
+[LIA-GLOBAL-BRANCH-RECONCILIATION-2026-11-16](../reports/LIA-GLOBAL-BRANCH-RECONCILIATION-2026-11-16.md)
+e [LIA-BRANCH-INTEGRATION-MATRIX](../reports/LIA-BRANCH-INTEGRATION-MATRIX.md). Nenhuma
+branch foi mergeada, rebaseada, resetada ou removida; `main` não foi tocada; nenhum código
+de produto mudou. Os documentos de segurança, áudio, UI/UX e pesquisa das branches de
+especialistas foram **preservados** nesta branch (cópia byte-a-byte), sem promoção a
+norma. **Estado dos gates:** **G-AUD BLOCKED** (0/15 AV; ver
+[LIA-AUDIO-QA-RECONCILIATION](../reports/LIA-AUDIO-QA-RECONCILIATION.md)); **SEC-01/02/03/04/05
+abertos** e OIDC-OFF **não implementado** em nenhuma branch
+([LIA-SECURITY-RECONCILIATION](../reports/LIA-SECURITY-RECONCILIATION.md)); **L-02
+BLOQUEADO** até T-07/T-08; o **gate de arquitetura (G-ARCH)** segue **ABERTO**
+(Windows não medido nesta rodada). A
+“entrega local do Codex” **não existe** como ref: `9e94dce` não resolve em nenhuma ref
+(`gh api` → 422) e `codex/lia-audio-recovery-407300b` não foi publicada — a evidência
+Windows (4 + 6 WAVs) é externa ao repositório (`J:\lia-evidence\…`) e não vale para o
+gate. Portas seguras do delta `arena/c6b02f64` **não** foram integradas: o código é
+byte-idêntico ao HEAD, o port é limpo, e a decisão é **ADAPTAR por item** (gate de
+ferramenta e bloqueio de credencial em HTTP não-loopback: PORTAR; `auth.ts`/créditos:
+ADAPTAR). A UI da Fase 1 **não** está integrada; a Principal está na base `407300b` nesses
+arquivos ([LIA-UIUX-RECONCILIATION](../reports/LIA-UIUX-RECONCILIATION.md)). A pesquisa
+permanece *Research reference*; nenhum modelo experimental foi promovido
+([LIA-RESEARCH-TRANSFER-RECONCILIATION](../reports/LIA-RESEARCH-TRANSFER-RECONCILIATION.md)).
+
 **Branch de desenvolvimento: `arena/7fa837f0-lia-project` (15/11/2026).** Esta é a
 branch ativa. Ela nasceu do `main` atual (`9c7ac18`) e recebeu, por merge (`7117aa8`),
 todo o histórico da `arena/01a10290-lia-project`, cujo PR #4 foi fechado sem merge.
