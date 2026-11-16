@@ -9,6 +9,12 @@ import { requestAuthSession } from '../libs/auth-client'
 import { refreshAccessToken } from '../libs/auth-oidc'
 import { useAuthStore } from './auth'
 
+const { creditsRequest } = vi.hoisted(() => ({ creditsRequest: vi.fn() }))
+
+vi.mock('../composables/api', () => ({
+  client: { api: { v1: { flux: { $get: creditsRequest } } } },
+}))
+
 vi.mock('../libs/auth', () => ({
   triggerSignIn: vi.fn(),
 }))
@@ -82,6 +88,8 @@ describe('auth store sign-in requests', () => {
     vi.mocked(requestAuthSession).mockReset()
     vi.mocked(requestAuthSession).mockResolvedValue({ user, session })
     vi.mocked(refreshAccessToken).mockReset()
+    creditsRequest.mockReset()
+    creditsRequest.mockResolvedValue({ ok: true, json: async () => ({ flux: 10 }) })
   })
 
   afterEach(() => {
@@ -176,6 +184,37 @@ describe('auth store sign-in requests', () => {
     await signingOut
   })
 
+  it('fails closed when a replacement login cannot fetch its session', async () => {
+    const authStore = useAuthStore()
+    await authStore.completeSignIn({ accessToken: 'old-access', expiresIn: 3600, clientId: 'client' })
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.mocked(requestAuthSession).mockRejectedValueOnce(new Error('SYNTHETIC_PRIVATE_SESSION'))
+    expect(await authStore.completeSignIn({ accessToken: 'new-access', expiresIn: 3600, clientId: 'client' })).toBe(false)
+    expect(authStore.isAuthenticated).toBe(false)
+    expect(authStore.token).toBeNull()
+    expect(storage.values.size).toBe(0)
+    expect(JSON.stringify(log.mock.calls)).not.toContain('SYNTHETIC_PRIVATE_SESSION')
+    log.mockRestore()
+  })
+
+  it('shares a refresh in one generation and ignores a stale failure after a new login', async () => {
+    const oldRefresh = Promise.withResolvers<Awaited<ReturnType<typeof refreshAccessToken>>>()
+    vi.mocked(refreshAccessToken).mockReturnValueOnce(oldRefresh.promise)
+    const authStore = useAuthStore()
+    await authStore.completeSignIn({ accessToken: 'old-access', refreshToken: 'old-refresh', expiresIn: 3600, clientId: 'client' })
+    const first = authStore.refreshTokenNow()
+    const second = authStore.refreshTokenNow()
+    expect(refreshAccessToken).toHaveBeenCalledTimes(1)
+    await authStore.clearAllAuthState()
+    await authStore.completeSignIn({ accessToken: 'new-access', expiresIn: 3600, clientId: 'client' })
+    oldRefresh.reject(new Error('SYNTHETIC_STALE_SECRET'))
+    expect(await first).toBeNull()
+    expect(await second).toBeNull()
+    expect(authStore.token).toBe('new-access')
+    expect(authStore.isAuthenticated).toBe(true)
+    await authStore.clearAllAuthState()
+  })
+
   it('does not let a stale session response undo a replacement login', async () => {
     const sessionResponse = Promise.withResolvers<Awaited<ReturnType<typeof requestAuthSession>>>()
     const authStore = useAuthStore()
@@ -190,6 +229,83 @@ describe('auth store sign-in requests', () => {
     expect(authStore.isAuthenticated).toBe(true)
     expect(storage.getItem('auth/v1/token')).toBe('new-access')
     await authStore.clearAllAuthState()
+  })
+
+  it('does not log credentials from a failing authenticated hook', async () => {
+    const authStore = useAuthStore()
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    authStore.onAuthenticated(() => {
+      throw new Error('SYNTHETIC_HOOK_SECRET')
+    })
+    await authStore.completeSignIn({ accessToken: 'access', expiresIn: 3600, clientId: 'client' })
+    await nextTick()
+    expect(log).toHaveBeenCalledWith('auth hook error')
+    expect(JSON.stringify(log.mock.calls)).not.toContain('SYNTHETIC_HOOK_SECRET')
+    log.mockRestore()
+    await authStore.clearAllAuthState()
+  })
+
+  it('does not request credits without an authenticated session', async () => {
+    const authStore = useAuthStore()
+    await authStore.updateCredits()
+    await nextTick()
+    expect(creditsRequest).not.toHaveBeenCalled()
+    expect(authStore.creditsStatus).toBe('idle')
+  })
+
+  it('classifies authorization, server and transport failures without logging error payloads', async () => {
+    const authStore = useAuthStore()
+    await authStore.completeSignIn({ accessToken: 'access', expiresIn: 3600, clientId: 'client' })
+    await nextTick()
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    creditsRequest.mockResolvedValueOnce({ ok: false, status: 401 })
+    await authStore.updateCredits()
+    expect(authStore.creditsStatus).toBe('auth-error')
+    creditsRequest.mockResolvedValueOnce({ ok: false, status: 403 })
+    await authStore.updateCredits()
+    expect(authStore.creditsStatus).toBe('auth-error')
+    creditsRequest.mockResolvedValueOnce({ ok: false, status: 503 })
+    await authStore.updateCredits()
+    expect(authStore.creditsStatus).toBe('error')
+    creditsRequest.mockRejectedValueOnce(new Error('SYNTHETIC_SECRET'))
+    await authStore.updateCredits()
+    expect(authStore.creditsStatus).toBe('error')
+    creditsRequest.mockResolvedValueOnce({ ok: true, json: async () => ({ flux: 'invalid' }) })
+    await authStore.updateCredits()
+    expect(authStore.creditsStatus).toBe('error')
+    expect(JSON.stringify(log.mock.calls)).not.toContain('SYNTHETIC_SECRET')
+    log.mockRestore()
+    await authStore.clearAllAuthState()
+  })
+
+  it('only applies the latest credits response within one session', async () => {
+    const authStore = useAuthStore()
+    await authStore.completeSignIn({ accessToken: 'access', expiresIn: 3600, clientId: 'client' })
+    await nextTick()
+    const response = Promise.withResolvers<{ ok: boolean, json: () => Promise<{ flux: number }> }>()
+    creditsRequest.mockReturnValueOnce(response.promise)
+    creditsRequest.mockResolvedValueOnce({ ok: true, json: async () => ({ flux: 20 }) })
+    const first = authStore.updateCredits()
+    await authStore.updateCredits()
+    response.resolve({ ok: true, json: async () => ({ flux: 5 }) })
+    await first
+    expect(authStore.credits).toBe(20)
+    expect(authStore.creditsStatus).toBe('ready')
+    await authStore.clearAllAuthState()
+  })
+
+  it('does not restore credits when a request completes after logout', async () => {
+    const authStore = useAuthStore()
+    await authStore.completeSignIn({ accessToken: 'access', expiresIn: 3600, clientId: 'client' })
+    await nextTick()
+    const response = Promise.withResolvers<{ ok: boolean, json: () => Promise<{ flux: number }> }>()
+    creditsRequest.mockReturnValueOnce(response.promise)
+    const pending = authStore.updateCredits()
+    await authStore.clearAllAuthState()
+    response.resolve({ ok: true, json: async () => ({ flux: 123 }) })
+    await pending
+    expect(authStore.credits).toBe(0)
+    expect(authStore.creditsStatus).toBe('idle')
   })
 
   it('does not persist state patches received from another window', async () => {

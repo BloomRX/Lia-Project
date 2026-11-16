@@ -91,6 +91,9 @@ export const useAuthStore = defineStore('auth', () => {
   const initialized = ref(false)
 
   const credits = ref(0)
+  // Distinguish a failed/unauthorized request from a real zero balance.
+  const creditsStatus = ref<'idle' | 'loading' | 'ready' | 'auth-error' | 'error'>('idle')
+  let creditsRequest = 0
 
   // Cross-app "user must log in" flag. Setting this to true triggers an
   // immediate OIDC redirect on web (mobile + desktop). Electron skips this
@@ -264,8 +267,9 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function completeSignIn(tokens: AuthTokenSet): Promise<boolean> {
-    authGeneration++
-    inflightRefresh = null
+    // Never pair a replacement token with the previous identity while the new
+    // session is unverified, including when session lookup fails.
+    clearAuthState()
     token.value = tokens.accessToken
     refreshToken.value = tokens.refreshToken ?? null
     idToken.value = tokens.idToken ?? null
@@ -285,15 +289,22 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function fetchSession(accessToken: string | null = token.value): Promise<boolean> {
     const generation = authGeneration
-    const data = await requestAuthSession(accessToken)
-    if (generation !== authGeneration)
-      return false
-    if (data) {
-      user.value = data.user
-      session.value = data.session
-      return true
+    try {
+      const data = await requestAuthSession(accessToken)
+      if (generation !== authGeneration)
+        return false
+      if (data) {
+        user.value = data.user
+        session.value = data.session
+        return true
+      }
     }
-
+    catch {
+      if (generation !== authGeneration)
+        return false
+      // Error payloads may include credentials and must not reach logs.
+      console.error('Session request failed')
+    }
     clearAuthState()
     return false
   }
@@ -352,6 +363,9 @@ export const useAuthStore = defineStore('auth', () => {
   function clearAuthState(): void {
     authGeneration++
     inflightRefresh = null
+    creditsRequest++
+    credits.value = 0
+    creditsStatus.value = 'idle'
     stopRefreshTimer()
     user.value = null
     session.value = null
@@ -370,10 +384,39 @@ export const useAuthStore = defineStore('auth', () => {
   const updateCredits = async () => {
     if (!isAuthenticated.value)
       return
-    const res = await client.api.v1.flux.$get()
-    if (res.ok) {
+    const generation = authGeneration
+    const request = ++creditsRequest
+    const isCurrent = () => generation === authGeneration && request === creditsRequest && isAuthenticated.value
+    creditsStatus.value = 'loading'
+    try {
+      const res = await client.api.v1.flux.$get()
+      // Middleware failures can return statuses not represented by the route's
+      // success-only client type.
+      const status = Number(res.status)
+      if (!isCurrent())
+        return
+      if (!res.ok) {
+        creditsStatus.value = status === 401 || status === 403 ? 'auth-error' : 'error'
+        console.error(creditsStatus.value === 'auth-error' ? 'Credits request unauthorized' : 'Credits request failed')
+        return
+      }
       const data = await res.json()
+      if (!isCurrent())
+        return
+      if (typeof data.flux !== 'number' || !Number.isFinite(data.flux)) {
+        creditsStatus.value = 'error'
+        console.error('Credits response invalid')
+        return
+      }
       credits.value = data.flux
+      creditsStatus.value = 'ready'
+    }
+    catch {
+      if (isCurrent()) {
+        creditsStatus.value = 'error'
+        // A thrown error can include credentials, URLs or server response bodies.
+        console.error('Credits request failed')
+      }
     }
   }
 
@@ -389,7 +432,9 @@ export const useAuthStore = defineStore('auth', () => {
         await dispatchHooks(authenticatedHooks, 'auth hook error')
     }
     else {
+      creditsRequest++
       credits.value = 0
+      creditsStatus.value = 'idle'
 
       if (wasAuthenticated)
         await dispatchHooks(logoutHooks, 'logout hook error')
@@ -401,8 +446,9 @@ export const useAuthStore = defineStore('auth', () => {
       try {
         await hook()
       }
-      catch (error) {
-        console.error(errorLabel, error)
+      catch {
+        // Hooks may throw request or session objects containing credentials.
+        console.error(errorLabel)
       }
     }
   }
@@ -416,6 +462,7 @@ export const useAuthStore = defineStore('auth', () => {
     idToken,
     isAuthenticated,
     credits,
+    creditsStatus,
     updateCredits,
     needsLogin,
     onAuthenticated,
