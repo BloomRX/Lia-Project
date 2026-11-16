@@ -37,6 +37,8 @@ const languages = computed(() => {
 })
 
 function handleLogin() {
+  if (authStore.oidcEnabled === false)
+    return
   onboardingStore.showingSetup = false
   authStore.needsLogin = true
 }
@@ -129,6 +131,7 @@ function handleLocalSetup() {
     </div>
     <div :class="['flex', 'flex-col', 'gap-3', 'md:flex-row', 'm-2']">
       <Button
+        v-if="authStore.oidcEnabled !== false"
         v-motion="{
           initial: { opacity: 0 },
           enter: { opacity: 1 },

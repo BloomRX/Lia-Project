@@ -1,4 +1,5 @@
 import { getAuthToken } from '../auth'
+import { isOidcEnabled } from '../oidc-capability'
 import { SERVER_URL } from '../server'
 
 /**
@@ -111,7 +112,7 @@ export interface StreamingTtsPipelineHandle {
  *   AudioBuffers are emitted via `options.onSentence` in arrival order.
  */
 export function createStreamingTtsPipeline(options: StreamingTtsPipelineOptions): StreamingTtsPipelineHandle {
-  const token = options.token ?? getAuthToken()
+  const token = isOidcEnabled() ? options.token ?? getAuthToken() : null
   if (!token) {
     const err = new Error('streaming-pipeline: not authenticated')
     queueMicrotask(() => {

@@ -31,6 +31,7 @@ docs:
   'collapse': Collapse
   'login': Sign in
   'logging-in': Signing in...
+  'account-unavailable': Account sign-in is unavailable in this version.
   'account': Account
   'logout': Sign out
 

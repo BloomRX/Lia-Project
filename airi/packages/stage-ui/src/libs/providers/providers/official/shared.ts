@@ -3,6 +3,7 @@ import { getActivePinia } from 'pinia'
 
 import { AIRI_CHAT_SESSION_ID_HEADER } from '../../../../libs/analytics-headers'
 import { getAuthToken } from '../../../../libs/auth'
+import { isOidcEnabled, oidcDisabledResponse } from '../../../../libs/oidc-capability'
 import { SERVER_URL } from '../../../../libs/server'
 import { useChatSessionStore } from '../../../../stores/chat/session-store'
 
@@ -10,6 +11,9 @@ export const OFFICIAL_ICON = 'i-solar:star-bold-duotone'
 
 export function withCredentials() {
   return (input: RequestInfo | URL, init?: RequestInit) => {
+    if (!isOidcEnabled())
+      return Promise.resolve(oidcDisabledResponse())
+
     const headers = new Headers(init?.headers)
     const token = getAuthToken()
     if (token) {

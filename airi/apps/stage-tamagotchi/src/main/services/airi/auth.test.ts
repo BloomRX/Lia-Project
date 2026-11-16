@@ -1,4 +1,4 @@
-import { afterEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 
 import { createAuthService } from './auth'
 
@@ -32,7 +32,12 @@ vi.mock('../../../shared/eventa', () => ({
   electronAuthStartLogin: 'start',
 }))
 
+beforeEach(() => {
+  vi.stubEnv('VITE_LIA_ENABLE_OIDC', '1')
+})
+
 afterEach(() => {
+  vi.unstubAllEnvs()
   vi.unstubAllGlobals()
   vi.resetAllMocks()
   fixture.handlers.clear()
@@ -54,6 +59,19 @@ function registerWindow(emit = vi.fn(), id = 1) {
 function tokenResponse() {
   return Response.json({ access_token: 'synthetic-access', refresh_token: 'synthetic-refresh', id_token: 'synthetic-id', expires_in: 3600 })
 }
+
+it('rejects login while OIDC is off, before opening a listener or calling the issuer', async () => {
+  vi.stubEnv('VITE_LIA_ENABLE_OIDC', '')
+  const transport = vi.fn()
+  vi.stubGlobal('fetch', transport)
+  const { emit } = registerWindow()
+
+  await expect(fixture.handlers.get('start')!(undefined, ipc)).rejects.toThrow('OIDC is disabled')
+  expect(fixture.loopback).not.toHaveBeenCalled()
+  expect(fixture.openExternal).not.toHaveBeenCalled()
+  expect(transport).not.toHaveBeenCalled()
+  expect(emit).not.toHaveBeenCalled()
+})
 
 it.each(['logout', 'closed'] as const)('discards an exchange result after %s', async (cancel) => {
   const { promise, resolve } = Promise.withResolvers<Response>()

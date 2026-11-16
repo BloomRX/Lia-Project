@@ -1,8 +1,11 @@
 import type { SpeechProviderWithExtraOptions } from '@xsai-ext/providers/utils'
 
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { createStreamingTtsPipeline } from '../../../speech/streaming-pipeline'
+import { streamingSynthesize } from '../../../speech/streaming-session'
 import { OFFICIAL_TRANSCRIPTION_PROVIDER_ID, providerOfficialSpeech, providerOfficialSpeechStreaming, providerOfficialTranscription } from './index'
+import { withCredentials } from './shared'
 
 interface OfficialSpeechOptions {
   speed?: number
@@ -109,5 +112,66 @@ describe('official transcription provider', () => {
         description: 'Realtime transcription routed by AIRI',
       },
     ])
+  })
+})
+
+describe('official providers with desktop OIDC disabled', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('rejects account-dependent requests before network access', async () => {
+    vi.stubGlobal('window', { liaOidcEnabled: false })
+    const fetch = vi.fn()
+    vi.stubGlobal('fetch', fetch)
+    const request = withCredentials()
+
+    expect((await request('https://fixture.invalid/api/v1/audio/speech', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer synthetic-legacy-token' },
+    })).status).toBe(403)
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('rejects both socket speech paths before opening a socket even when passed a token', async () => {
+    vi.stubGlobal('window', { liaOidcEnabled: false })
+    const socket = vi.fn()
+    vi.stubGlobal('WebSocket', socket)
+    const credentials = { model: 'test-model', voice: 'test-voice', token: 'synthetic-legacy-token' }
+    const onError = vi.fn()
+    const onDone = vi.fn()
+
+    await expect(streamingSynthesize({ ...credentials, input: 'test' })).rejects.toThrow('not authenticated')
+    createStreamingTtsPipeline({ ...credentials, audioContext: {} as AudioContext, onError, onDone })
+    await Promise.resolve()
+
+    expect(onError).toHaveBeenCalledOnce()
+    expect(onDone).toHaveBeenCalledOnce()
+    expect(socket).not.toHaveBeenCalled()
+  })
+
+  it('keeps the public voice catalogs anonymous and rejects redirects', async () => {
+    vi.stubGlobal('window', { liaOidcEnabled: false })
+    const fetch = vi.fn(async (_url: string, _init: RequestInit) => Response.json({ models: [], voices: [] }))
+    vi.stubGlobal('fetch', fetch)
+    for (const definition of [providerOfficialSpeech, providerOfficialSpeechStreaming]) {
+      const provider = await definition.createProvider({})
+      await expect(definition.extraMethods?.listModels?.({}, provider)).resolves.toEqual([])
+      await expect(definition.extraMethods?.listVoices?.({}, provider, 'auto')).resolves.toEqual([])
+    }
+
+    expect(fetch.mock.calls.map(([url]) => new URL(url).pathname)).toEqual([
+      '/api/v1/audio/models',
+      '/api/v1/audio/voices',
+      '/api/v1/audio/models/streaming',
+      '/api/v1/audio/voices/streaming',
+    ])
+    for (const [, init] of fetch.mock.calls) {
+      expect(init).toEqual({
+        credentials: 'omit',
+        headers: { Accept: 'application/json' },
+        redirect: 'error',
+      })
+    }
   })
 })

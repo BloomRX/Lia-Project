@@ -1,5 +1,6 @@
 import { useAuthStore } from '../stores/auth'
 import { getAnalyticsIdentitySnapshot } from './analytics'
+import { isOidcEnabled, oidcDisabledResponse } from './oidc-capability'
 import { SERVER_URL } from './server'
 
 /**
@@ -22,6 +23,18 @@ export async function authedFetch(
   input: RequestInfo | URL,
   init?: RequestInit,
 ): Promise<Response> {
+  if (!isOidcEnabled()) {
+    const request = input instanceof Request ? input : undefined
+    const url = new URL(request?.url ?? String(input), SERVER_URL)
+    const method = (init?.method ?? request?.method ?? 'GET').toUpperCase()
+    if (url.origin !== new URL(SERVER_URL).origin || url.pathname !== '/api/v1/stripe/packages' || method !== 'GET')
+      return oidcDisabledResponse()
+
+    // The catalog is public. Create a fresh request so an inherited Request
+    // cannot carry an auth header, cookie policy, or redirect to another route.
+    return fetch(url, { credentials: 'omit', redirect: 'error', signal: init?.signal ?? request?.signal })
+  }
+
   const authStore = useAuthStore()
   const doFetch = (token: string | null): Promise<Response> => {
     const headers = new Headers(init?.headers)
@@ -36,8 +49,13 @@ export async function authedFetch(
     return fetch(input, { ...init, headers, credentials: 'omit' })
   }
 
-  const response = await doFetch(authStore.token)
+  const generation = authStore.getAuthGeneration()
+  const originalToken = authStore.token
+  const response = await doFetch(originalToken)
   if (response.status !== 401)
+    return response
+
+  if (generation !== authStore.getAuthGeneration() || originalToken !== authStore.token)
     return response
 
   // Don't recurse on the token endpoint itself
@@ -49,13 +67,16 @@ export async function authedFetch(
 
   const newToken = await authStore.refreshTokenNow()
   if (!newToken) {
-    await promptReLogin(authStore)
+    authStore.requestReLoginAfterAuthFailure(generation, originalToken)
     return response
   }
 
+  if (generation !== authStore.getAuthGeneration() || newToken !== authStore.token)
+    return response
+
   const retried = await doFetch(newToken)
   if (retried.status === 401)
-    await promptReLogin(authStore)
+    authStore.requestReLoginAfterAuthFailure(generation, newToken)
   return retried
 }
 
@@ -65,9 +86,4 @@ function shouldAttachPosthogIdentity(input: RequestInfo | URL): boolean {
     : input instanceof URL ? input.toString() : input.url
 
   return new URL(url, SERVER_URL).origin === new URL(SERVER_URL).origin
-}
-
-async function promptReLogin(authStore: ReturnType<typeof useAuthStore>): Promise<void> {
-  await authStore.clearAllAuthState()
-  authStore.needsLogin = true
 }

@@ -30,7 +30,7 @@ const {
   trackPasswordResetRequested,
 } = useAnalytics()
 const authStore = useAuthStore()
-const { isAuthenticated, user, credits } = storeToRefs(authStore)
+const { isAuthenticated, user, credits, creditsStatus } = storeToRefs(authStore)
 
 const userName = computed(() => user.value?.name ?? '')
 const userEmail = computed(() => user.value?.email ?? null)
@@ -54,7 +54,7 @@ const gravatarProfileUrl = computed(() => {
 // (e.g. "44965" reads as one block); Intl.NumberFormat respects user locale
 // (44,965 / 44 965 / 44.965 depending on region) without us having to ship a
 // formatter.
-const formattedCredits = computed(() => credits.value.toLocaleString())
+const formattedCredits = computed(() => creditsStatus.value === 'ready' ? credits.value.toLocaleString() : '—')
 
 // Profile form. Initialized from store and re-synced when user changes (e.g.
 // after a successful save we mutate the store).

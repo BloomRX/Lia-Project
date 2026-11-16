@@ -17,7 +17,7 @@ const router = useRouter()
 const { t } = useI18n()
 const authStore = useAuthStore()
 const providersStore = useProviderStore()
-const { isAuthenticated, credits, needsLogin } = storeToRefs(authStore)
+const { isAuthenticated, credits, creditsStatus, needsLogin } = storeToRefs(authStore)
 
 const providerId = 'vision-official-provider'
 const providerMetadata = computedAsync(() => selectProviderMetadata(providersStore.getProviderDefinition(providerId), t, { id: providerId }))
@@ -62,7 +62,7 @@ function handleLogin() {
                 {{ t('settings.dialogs.onboarding.flux') }}
               </span>
               <span text="3xl font-bold text-primary-600 dark:text-primary-400">
-                {{ credits }}
+                {{ creditsStatus === 'ready' ? credits : '—' }}
               </span>
             </div>
             <button

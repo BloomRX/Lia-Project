@@ -1,7 +1,6 @@
 import type { Session, User } from 'better-auth'
 import type {} from 'pinia-plugin-synced'
 
-import { errorMessageFrom } from '@moeru/std'
 import { isStageTamagotchi } from '@proj-airi/stage-shared'
 import { useTimeoutFn, whenever } from '@vueuse/core'
 import { defineStore } from 'pinia'
@@ -12,6 +11,7 @@ import { useBreakpoints } from '../composables/use-breakpoints'
 import { triggerSignIn } from '../libs/auth'
 import { authClient, requestAuthSession } from '../libs/auth-client'
 import { refreshAccessToken } from '../libs/auth-oidc'
+import { isOidcEnabled } from '../libs/oidc-capability'
 import { SERVER_URL } from '../libs/server'
 
 function createLocalStorageForAuth() {
@@ -70,6 +70,7 @@ export interface AuthTokenSet {
  */
 export const useAuthStore = defineStore('auth', () => {
   const storage = createLocalStorageForAuth()
+  const oidcEnabled = computed(isOidcEnabled)
 
   // Pinia owns live auth state. Persistence is command-driven so a state patch
   // received from another window cannot write back into the transport.
@@ -83,8 +84,14 @@ export const useAuthStore = defineStore('auth', () => {
   // what lets the OIDC provider locate the server-side session row to delete
   // — without this we'd be back to relying on cross-site session cookies.
   const idToken = ref<string | null>(null)
-  const isAuthenticated = computed(() => !!user.value && !!session.value)
-  const userId = computed(() => user.value?.id ?? 'local')
+  const isAuthenticated = computed(() => oidcEnabled.value && !!user.value && !!session.value)
+  const userId = computed(() => isAuthenticated.value ? user.value?.id ?? 'local' : 'local')
+  const signedOutReason = ref<'signed-out' | 'expired' | 'error'>('signed-out')
+  const authStatus = computed(() => {
+    if (!oidcEnabled.value)
+      return 'disabled'
+    return isAuthenticated.value ? 'active' : signedOutReason.value
+  })
 
   // --- OIDC token refresh state ---
   const oidcClientId = ref<string | null>(null)
@@ -92,6 +99,10 @@ export const useAuthStore = defineStore('auth', () => {
   const initialized = ref(false)
 
   const credits = ref(0)
+  const creditsStatus = ref<'idle' | 'loading' | 'ready' | 'auth-error' | 'error'>('idle')
+  let authGeneration = 0
+  let sessionRequest = 0
+  let creditsRequest = 0
 
   // Cross-app "user must log in" flag. Setting this to true triggers an
   // immediate OIDC redirect on web (mobile + desktop). Electron skips this
@@ -101,6 +112,11 @@ export const useAuthStore = defineStore('auth', () => {
   const { isMobile } = useBreakpoints()
 
   whenever(needsLogin, async () => {
+    if (!oidcEnabled.value) {
+      needsLogin.value = false
+      return
+    }
+
     if (isStageTamagotchi())
       return
 
@@ -151,43 +167,71 @@ export const useAuthStore = defineStore('auth', () => {
   // Single-flight refresh: multiple concurrent callers (timer + 401 retry + restore)
   // must not trigger multiple token exchanges. All share one in-flight promise.
   let inflightRefresh: Promise<string | null> | null = null
+  let refreshFailedGeneration: number | undefined
 
   async function refreshTokenNow(): Promise<string | null> {
+    if (!oidcEnabled.value)
+      return null
+
     if (inflightRefresh)
       return inflightRefresh
 
-    if (!refreshToken.value || !oidcClientId.value)
+    const credential = refreshToken.value
+    const clientId = oidcClientId.value
+    if (!credential || !clientId)
       return null
 
-    inflightRefresh = (async () => {
-      try {
-        const tokens = await refreshAccessToken(oidcClientId.value!, refreshToken.value!)
-        token.value = tokens.access_token
-        storage.setAccessToken(tokens.access_token)
-        if (tokens.refresh_token) {
-          refreshToken.value = tokens.refresh_token
-          storage.setRefreshToken(tokens.refresh_token)
-        }
-        if (tokens.expires_in) {
-          tokenExpiry.value = Date.now() + tokens.expires_in * 1000
-          storage.setTokenExpiry(tokenExpiry.value)
-          scheduleTokenRefresh(tokens.expires_in)
-        }
+    const generation = authGeneration
+    const accessToken = token.value
+    const identity = user.value?.id
+    const ownsRefresh = () => authGeneration === generation
+      && token.value === accessToken
+      && refreshToken.value === credential
+      && oidcClientId.value === clientId
+      && user.value?.id === identity
+    const attempt = Promise.resolve().then(async () => {
+      if (!ownsRefresh())
+        return null
 
-        await fetchSession(tokens.access_token)
-        return tokens.access_token
+      let tokens: Awaited<ReturnType<typeof refreshAccessToken>>
+      try {
+        tokens = await refreshAccessToken(clientId, credential)
       }
-      catch (error) {
-        console.error('OIDC token refresh failed', errorMessageFrom(error))
-        clearAuthState()
+      catch {
+        if (ownsRefresh()) {
+          console.error('OIDC token refresh failed')
+          clearAuthState('error')
+          refreshFailedGeneration = generation
+        }
         return null
       }
-      finally {
-        inflightRefresh = null
-      }
-    })()
 
-    return inflightRefresh
+      if (!ownsRefresh())
+        return null
+
+      token.value = tokens.access_token
+      storage.setAccessToken(tokens.access_token)
+      if (tokens.refresh_token) {
+        refreshToken.value = tokens.refresh_token
+        storage.setRefreshToken(tokens.refresh_token)
+      }
+      if (tokens.expires_in) {
+        tokenExpiry.value = Date.now() + tokens.expires_in * 1000
+        storage.setTokenExpiry(tokenExpiry.value)
+        scheduleTokenRefresh(tokens.expires_in)
+      }
+
+      const authenticated = await readSession(tokens.access_token, generation)
+      return authenticated && generation === authGeneration && token.value === tokens.access_token
+        ? tokens.access_token
+        : null
+    }).finally(() => {
+      if (inflightRefresh === attempt)
+        inflightRefresh = null
+    })
+
+    inflightRefresh = attempt
+    return attempt
   }
 
   const { start: startRefreshTimer, stop: stopRefreshTimer } = useTimeoutFn(
@@ -235,6 +279,10 @@ export const useAuthStore = defineStore('auth', () => {
       return
 
     initialized.value = true
+    if (!oidcEnabled.value) {
+      clearAuthState()
+      return
+    }
 
     token.value = storage.getAccessToken()
     refreshToken.value = storage.getRefreshToken()
@@ -245,16 +293,26 @@ export const useAuthStore = defineStore('auth', () => {
     const hasRefreshToken = !!refreshToken.value
     const hasClientId = !!oidcClientId.value
     if (hasRefreshToken !== hasClientId) {
-      clearAuthState()
+      clearAuthState('error')
+      return
+    }
+    if (!hasRefreshToken && tokenExpiry.value !== null && tokenExpiry.value <= Date.now()) {
+      clearAuthState('expired')
       return
     }
 
+    const generation = authGeneration
+    const restoredToken = token.value
     const refreshed = await restoreRefreshSchedule()
-    if (!refreshed && token.value)
+    if (!refreshed && generation === authGeneration && restoredToken && token.value === restoredToken)
       await fetchSession(token.value)
   }
 
   async function completeSignIn(tokens: AuthTokenSet): Promise<boolean> {
+    if (!oidcEnabled.value)
+      return false
+
+    clearAuthState()
     token.value = tokens.accessToken
     refreshToken.value = tokens.refreshToken ?? null
     idToken.value = tokens.idToken ?? null
@@ -273,18 +331,45 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function fetchSession(accessToken: string | null = token.value): Promise<boolean> {
-    const data = await requestAuthSession(accessToken)
+    return await readSession(accessToken)
+  }
+
+  async function readSession(accessToken: string | null, refreshGeneration?: number): Promise<boolean> {
+    if (!oidcEnabled.value || accessToken !== token.value)
+      return false
+    const generation = authGeneration
+    const request = ++sessionRequest
+    const isCurrent = () => generation === authGeneration
+      && request === sessionRequest
+      && accessToken === token.value
+
+    const data = await requestAuthSession(accessToken).catch(() => {
+      if (isCurrent())
+        console.error('OIDC session lookup failed')
+      return null
+    })
+    if (!isCurrent())
+      return false
+
     if (data) {
       user.value = data.user
       session.value = data.session
       return true
     }
 
-    clearAuthState()
+    if (tokenExpiry.value !== null && tokenExpiry.value <= Date.now())
+      clearAuthState('expired')
+    else
+      clearAuthState(accessToken ? 'error' : 'signed-out')
+    if (refreshGeneration === generation)
+      refreshFailedGeneration = generation
     return false
   }
 
   async function listSessions() {
+    if (!oidcEnabled.value)
+      return { data: null, error: { status: 403, statusText: 'Forbidden', message: 'OIDC disabled' } }
+
     return await authClient.listSessions({
       fetchOptions: {
         auth: {
@@ -299,9 +384,12 @@ export const useAuthStore = defineStore('auth', () => {
     const idTokenHint = idToken.value
     const clientId = oidcClientId.value
     const bearerToken = token.value
+    clearAuthState()
+    if (!oidcEnabled.value)
+      return
 
-    // Delete the server session before local state. A new authorization request
-    // can otherwise reuse the server cookie and restore the previous identity.
+    // Revoke the captured session after invalidating local work. The remote
+    // response has no authority over a login that has since replaced it.
     try {
       if (idTokenHint && clientId) {
         const url = new URL('/api/auth/oauth2/end-session', SERVER_URL)
@@ -317,13 +405,9 @@ export const useAuthStore = defineStore('auth', () => {
         })
       }
     }
-    catch (error) {
-      // A network error cannot preserve local credentials. The server session
-      // expires by its TTL after the local credentials are removed.
-      console.error('Server sign-out failed', errorMessageFrom(error))
+    catch {
+      console.error('Server sign-out failed')
     }
-
-    clearAuthState()
   }
 
   /**
@@ -337,7 +421,10 @@ export const useAuthStore = defineStore('auth', () => {
    * `refreshTokenNow()` early-return without attempting refresh, so 401s
    * loop silently until the user lands on a page that calls fetchSession.
    */
-  function clearAuthState(): void {
+  function clearAuthState(reason: typeof signedOutReason.value = 'signed-out'): void {
+    authGeneration++
+    inflightRefresh = null
+    refreshFailedGeneration = undefined
     stopRefreshTimer()
     user.value = null
     session.value = null
@@ -346,7 +433,28 @@ export const useAuthStore = defineStore('auth', () => {
     oidcClientId.value = null
     tokenExpiry.value = null
     idToken.value = null
+    credits.value = 0
+    creditsStatus.value = 'idle'
+    needsLogin.value = false
+    signedOutReason.value = reason
     storage.clear()
+  }
+
+  function getAuthGeneration(): number {
+    return authGeneration
+  }
+
+  function requestReLoginAfterAuthFailure(generation: number, failedToken: string | null): void {
+    if (!oidcEnabled.value)
+      return
+    if (generation === authGeneration && failedToken === token.value) {
+      clearAuthState()
+      needsLogin.value = true
+    }
+    else if (generation === refreshFailedGeneration && !token.value) {
+      refreshFailedGeneration = undefined
+      needsLogin.value = true
+    }
   }
 
   async function clearAllAuthState(): Promise<void> {
@@ -356,10 +464,36 @@ export const useAuthStore = defineStore('auth', () => {
   const updateCredits = async () => {
     if (!isAuthenticated.value)
       return
-    const res = await client.api.v1.flux.$get()
-    if (res.ok) {
+    const generation = authGeneration
+    const request = ++creditsRequest
+    const identity = user.value?.id
+    const isCurrent = () => generation === authGeneration && request === creditsRequest
+      && isAuthenticated.value && user.value?.id === identity
+    creditsStatus.value = 'loading'
+
+    try {
+      const res = await client.api.v1.flux.$get()
+      if (!isCurrent())
+        return
+      if (!res.ok) {
+        creditsStatus.value = res.status === 401 || res.status === 403 ? 'auth-error' : 'error'
+        return
+      }
       const data = await res.json()
+      if (!isCurrent())
+        return
+      if (typeof data?.flux !== 'number' || !Number.isFinite(data.flux)) {
+        creditsStatus.value = 'error'
+        return
+      }
       credits.value = data.flux
+      creditsStatus.value = 'ready'
+    }
+    catch {
+      if (isCurrent()) {
+        creditsStatus.value = 'error'
+        console.error('Credits lookup failed')
+      }
     }
   }
 
@@ -376,6 +510,7 @@ export const useAuthStore = defineStore('auth', () => {
     }
     else {
       credits.value = 0
+      creditsStatus.value = 'idle'
 
       if (wasAuthenticated)
         await dispatchHooks(logoutHooks, 'logout hook error')
@@ -387,8 +522,8 @@ export const useAuthStore = defineStore('auth', () => {
       try {
         await hook()
       }
-      catch (error) {
-        console.error(errorLabel, error)
+      catch {
+        console.error(errorLabel)
       }
     }
   }
@@ -400,8 +535,11 @@ export const useAuthStore = defineStore('auth', () => {
     token,
     refreshToken,
     idToken,
+    oidcEnabled,
+    authStatus,
     isAuthenticated,
     credits,
+    creditsStatus,
     updateCredits,
     needsLogin,
     onAuthenticated,
@@ -417,18 +555,22 @@ export const useAuthStore = defineStore('auth', () => {
     listSessions,
     signOut,
     refreshTokenNow,
+    getAuthGeneration,
+    requestReLoginAfterAuthFailure,
     clearAllAuthState,
   }
 }, {
-  synced: {
-    actions: [
-      'initialize',
-      'completeSignIn',
-      'fetchSession',
-      'signOut',
-      'refreshTokenNow',
-      'clearAllAuthState',
-    ],
-    state: true,
-  },
+  ...(isOidcEnabled() && {
+    synced: {
+      actions: [
+        'initialize',
+        'completeSignIn',
+        'fetchSession',
+        'signOut',
+        'refreshTokenNow',
+        'clearAllAuthState',
+      ],
+      state: true,
+    },
+  }),
 })

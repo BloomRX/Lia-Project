@@ -9,7 +9,7 @@ import { useI18n } from 'vue-i18n'
 import { RouterLink } from 'vue-router'
 
 const authStore = useAuthStore()
-const { isAuthenticated, user, credits } = storeToRefs(authStore)
+const { isAuthenticated, user, credits, creditsStatus } = storeToRefs(authStore)
 const { t } = useI18n()
 
 const userName = computed(() => user.value?.name)
@@ -17,7 +17,7 @@ const userAvatar = computed(() => user.value?.image)
 const showDropdown = ref(false)
 const dropdownRef = ref(null)
 
-const formattedCredits = computed(() => credits.value.toLocaleString())
+const formattedCredits = computed(() => creditsStatus.value === 'ready' ? credits.value.toLocaleString() : '—')
 
 onClickOutside(dropdownRef, () => {
   showDropdown.value = false

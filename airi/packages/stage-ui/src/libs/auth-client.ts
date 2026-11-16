@@ -1,10 +1,11 @@
 import { createAuthClient } from 'better-auth/vue'
 
+import { isOidcEnabled, oidcDisabledResponse } from './oidc-capability'
 import { SERVER_URL } from './server'
 import { steamClient } from './steam-auth-client'
 
 function getPersistedAuthToken(): string | null {
-  return localStorage.getItem('auth/v1/token')
+  return isOidcEnabled() ? localStorage.getItem('auth/v1/token') : null
 }
 
 export const authClient = createAuthClient({
@@ -14,6 +15,7 @@ export const authClient = createAuthClient({
     // NOTICE: better-auth sets `credentials: "include"` by default.
     // AIRI uses Bearer authentication and must not attach a browser session cookie.
     credentials: 'omit',
+    customFetchImpl: (input, init) => isOidcEnabled() ? fetch(input, init) : Promise.resolve(oidcDisabledResponse()),
     auth: {
       type: 'Bearer',
       token: () => getPersistedAuthToken() ?? '',

@@ -23,7 +23,7 @@ const authStore = useAuthStore()
 const providersStore = useProviderStore()
 const providerStore = useProviderConfigStore()
 const speechStore = useSpeechStore()
-const { isAuthenticated, credits, needsLogin } = storeToRefs(authStore)
+const { isAuthenticated, credits, creditsStatus, needsLogin } = storeToRefs(authStore)
 
 const providerId = 'official-provider-speech-streaming'
 const providerMetadata = computedAsync(() => selectProviderMetadata(
@@ -154,7 +154,7 @@ function handleLogin() {
                 {{ t('settings.dialogs.onboarding.flux') }}
               </span>
               <span text="3xl font-bold text-primary-600 dark:text-primary-400">
-                {{ credits }}
+                {{ creditsStatus === 'ready' ? credits : '—' }}
               </span>
             </div>
             <button

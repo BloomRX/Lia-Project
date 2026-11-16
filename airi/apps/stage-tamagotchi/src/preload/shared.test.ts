@@ -1,4 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+import { expose } from './shared'
 
 const electronMocks = vi.hoisted(() => ({
   exposeInMainWorld: vi.fn(),
@@ -18,8 +20,6 @@ vi.mock('electron', () => ({
   },
 }))
 
-import { expose } from './shared'
-
 function exposedElectron() {
   const exposure = electronMocks.exposeInMainWorld.mock.calls.find(([key]) => key === 'electron')
   expect(exposure).toBeDefined()
@@ -29,8 +29,11 @@ function exposedElectron() {
 describe('restricted Stage preload bridge', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.stubEnv('VITE_LIA_ENABLE_OIDC', '')
     expose()
   })
+
+  afterEach(() => vi.unstubAllEnvs())
 
   it('exposes only the IPC facade and its four approved methods', () => {
     expect(Object.keys(exposedElectron())).toEqual(['ipcRenderer'])
@@ -56,10 +59,17 @@ describe('restricted Stage preload bridge', () => {
   })
 
   it('keeps OIDC invoke channels explicit', async () => {
+    vi.stubEnv('VITE_LIA_ENABLE_OIDC', '1')
     const ipc = exposedElectron().ipcRenderer
     electronMocks.invoke.mockResolvedValue({ ok: true })
 
     await expect(ipc.invoke('lia:oidc:resource', { id: 'id', operation: {} })).resolves.toEqual({ ok: true })
     expect(() => ipc.invoke('lia:oidc:unknown', {})).toThrow('Renderer IPC channel is not allowed.')
+  })
+
+  it('exposes the disabled state and refuses direct OIDC invokes', () => {
+    expect(electronMocks.exposeInMainWorld).toHaveBeenCalledWith('liaOidcEnabled', false)
+    expect(() => exposedElectron().ipcRenderer.invoke('lia:oidc:resource')).toThrow('OIDC is disabled')
+    expect(electronMocks.invoke).not.toHaveBeenCalled()
   })
 })

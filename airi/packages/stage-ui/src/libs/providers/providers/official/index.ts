@@ -6,6 +6,7 @@ import { ref, watch } from 'vue'
 import { z } from 'zod'
 
 import { getAuthToken } from '../../../../libs/auth'
+import { isOidcEnabled } from '../../../../libs/oidc-capability'
 import { SERVER_URL } from '../../../../libs/server'
 import { defineProvider } from '../registry'
 import { createOfficialAudioProvider, createOfficialOpenAIProvider, OFFICIAL_ICON, withCredentials } from './shared'
@@ -62,6 +63,17 @@ function authHeaders(): Record<string, string> {
   if (token)
     headers.Authorization = `Bearer ${token}`
   return headers
+}
+
+function fetchOfficialAudioCatalog(url: string): Promise<Response> {
+  if (!isOidcEnabled()) {
+    return globalThis.fetch(url, {
+      headers: { Accept: 'application/json' },
+      credentials: 'omit',
+      redirect: 'error',
+    })
+  }
+  return globalThis.fetch(url, { headers: authHeaders() })
 }
 
 export const providerOfficialChat = defineProvider({
@@ -131,7 +143,7 @@ export const providerOfficialSpeech = defineProvider({
   extraMethods: {
     listModels: async (): Promise<ModelInfo[]> => {
       defaultSpeechModelId = null
-      const res = await globalThis.fetch(`${SERVER_URL}/api/v1/audio/models`, { headers: authHeaders() })
+      const res = await fetchOfficialAudioCatalog(`${SERVER_URL}/api/v1/audio/models`)
       if (!res.ok)
         throw new Error(`audio models upstream ${res.status}: ${await res.text().catch(() => '')}`.slice(0, 256))
 
@@ -156,7 +168,7 @@ export const providerOfficialSpeech = defineProvider({
       const target = model && model.length > 0 ? model : 'auto'
       const url = new URL(`${SERVER_URL}/api/v1/audio/voices`)
       url.searchParams.set('model', target)
-      const res = await globalThis.fetch(url.toString(), { headers: authHeaders() })
+      const res = await fetchOfficialAudioCatalog(url.toString())
       if (!res.ok)
         throw new Error(`audio voices upstream ${res.status}: ${await res.text().catch(() => '')}`.slice(0, 256))
 
@@ -269,7 +281,7 @@ export const providerOfficialSpeechStreaming = defineProvider({
       streamingTtsAvailable.value = false
       defaultStreamingModelId = null
 
-      const res = await globalThis.fetch(`${SERVER_URL}/api/v1/audio/models/streaming`, { headers: authHeaders() })
+      const res = await fetchOfficialAudioCatalog(`${SERVER_URL}/api/v1/audio/models/streaming`)
       if (!res.ok)
         throw new Error(`streaming models upstream ${res.status}: ${await res.text().catch(() => '')}`.slice(0, 256))
 
@@ -302,10 +314,7 @@ export const providerOfficialSpeechStreaming = defineProvider({
       const voicesURL = new URL(`${SERVER_URL}/api/v1/audio/voices/streaming`)
       if (apiResourceId)
         voicesURL.searchParams.set('model', apiResourceId)
-      const res = await globalThis.fetch(
-        voicesURL.toString(),
-        { headers: authHeaders() },
-      )
+      const res = await fetchOfficialAudioCatalog(voicesURL.toString())
       if (!res.ok)
         throw new Error(`streaming voices upstream ${res.status}: ${await res.text().catch(() => '')}`.slice(0, 256))
 

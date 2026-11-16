@@ -17,6 +17,7 @@ import {
   electronAuthLogout,
   electronAuthStartLogin,
 } from '../../../shared/eventa'
+import { isStageOidcEnabled } from '../../../shared/lia/oidc-policy'
 import { startLoopbackServer } from './http-server/http/auth'
 
 const log = useLogg('auth-service').useGlobalConfig()
@@ -86,6 +87,9 @@ export function createAuthService(params: {
     if (windowId !== options?.raw.ipcMainEvent.sender.id) {
       return
     }
+
+    if (!isStageOidcEnabled())
+      throw new Error('OIDC is disabled in this build')
 
     cancelLogin(activeLogin?.windowId !== windowId)
     const attempt: LoginAttempt = {

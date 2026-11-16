@@ -16,7 +16,7 @@ const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
-const { credits } = storeToRefs(authStore)
+const { credits, creditsStatus } = storeToRefs(authStore)
 const {
   trackCheckoutStarted,
   trackPaywallSeen,
@@ -290,10 +290,10 @@ onMounted(async () => {
     trackPaywallSeen({
       entry_surface: 'settings_flux',
       reason: 'manual_topup',
-      flux_balance_bucket: fluxBalanceBucket(credits.value),
+      flux_balance_bucket: fluxBalanceBucket(creditsStatus.value === 'ready' ? credits.value : undefined),
     })
     trackPricingViewed('settings_flux', 'one_time')
-    if (credits.value <= 0) {
+    if (creditsStatus.value === 'ready' && credits.value <= 0) {
       trackQuotaLimitReached({
         limit_type: 'flux',
         current_usage: credits.value,
@@ -373,6 +373,7 @@ async function handleBuy(stripePriceId: string) {
     <div relative overflow-hidden rounded-2xl bg="neutral-100 dark:neutral-800" p-6 sm:p-8>
       <!-- Background Progress -->
       <div
+        v-if="creditsStatus === 'ready'"
         class="flux-progress-bar absolute inset-y-0 left-0 bg-primary-500/20 dark:bg-primary-400/20"
       />
 
@@ -381,7 +382,7 @@ async function handleBuy(stripePriceId: string) {
         <div i-solar:battery-charge-bold-duotone size-12 shrink-0 text-primary-500 sm:mx-auto sm:size-14 />
         <div flex="~ col gap-1">
           <h2 text-3xl font-bold tracking-tight sm:text-4xl>
-            {{ formatNumber(credits) }}
+            {{ creditsStatus === 'ready' ? formatNumber(credits) : '—' }}
           </h2>
           <p text="sm neutral-500">
             {{ t(fluxPurchaseDisabled ? 'settings.pages.account.fluxBalance' : 'settings.pages.flux.description') }}

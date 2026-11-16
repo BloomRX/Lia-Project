@@ -46,7 +46,7 @@ watch([isAuthenticated, closeRequestId], ([authenticated, requestId], previous) 
 // When step-welcome sets needsLogin=true, we must invoke the IPC login from here
 // since the controls-island watcher only exists in the main window.
 watch(needsLogin, async (val) => {
-  if (val && !isAuthenticated.value) {
+  if (val && authStore.oidcEnabled !== false && !isAuthenticated.value) {
     await startLogin()
     needsLogin.value = false
     await closeOnboardingWindow()

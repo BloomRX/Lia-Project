@@ -26,5 +26,6 @@ controls-island:
   collapse: Recolher
   login: Entrar
   logging-in: Entrando…
+  account-unavailable: O acesso à conta está indisponível nesta versão.
   account: Conta
   logout: Sair

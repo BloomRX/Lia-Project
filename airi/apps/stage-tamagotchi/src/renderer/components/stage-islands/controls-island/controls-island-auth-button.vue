@@ -21,7 +21,7 @@ const props = defineProps<{
 
 const { t } = useI18n()
 const authStore = useAuthStore()
-const { isAuthenticated, user, needsLogin, credits } = storeToRefs(authStore)
+const { isAuthenticated, user, needsLogin, credits, creditsStatus } = storeToRefs(authStore)
 const context = useElectronEventaContext()
 
 const startSigningIn = useElectronEventaInvoke(electronAuthStartLogin)
@@ -42,6 +42,8 @@ function handleClick() {
 }
 
 function doSigningIn() {
+  if (authStore.oidcEnabled === false)
+    return
   signingIn.value = true
   startSigningIn()
 }
@@ -75,7 +77,10 @@ watch(isAuthenticated, (val) => {
 
 <template>
   <!-- Signing in state -->
-  <div v-if="signingIn && !isAuthenticated" flex="~ col gap-1.5" mb-1.5>
+  <p v-if="authStore.oidcEnabled === false" text="sm neutral-500 dark:neutral-400">
+    {{ t('tamagotchi.stage.controls-island.account-unavailable') }}
+  </p>
+  <div v-else-if="signingIn && !isAuthenticated" flex="~ col gap-1.5" mb-1.5>
     <div
       flex="~ items-center gap-3"
       rounded-xl px-3 py-2.5
@@ -144,7 +149,7 @@ watch(isAuthenticated, (val) => {
               'size-3 shrink-0',
             ]"
           />
-          <span class="whitespace-nowrap leading-tight">{{ credits }} Flux</span>
+          <span class="whitespace-nowrap leading-tight">{{ creditsStatus === 'ready' ? credits : '—' }} Flux</span>
         </div>
       </div>
     </button>

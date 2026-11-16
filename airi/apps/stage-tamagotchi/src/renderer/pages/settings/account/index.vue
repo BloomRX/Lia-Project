@@ -3,16 +3,21 @@ import AccountSettingsPage from '@proj-airi/stage-pages/pages/settings/account/a
 
 import { useElectronEventaInvoke } from '@proj-airi/electron-vueuse'
 import { signOut } from '@proj-airi/stage-ui/libs/auth'
+import { useAuthStore } from '@proj-airi/stage-ui/stores/auth'
+import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 
 import { electronAuthLogout, electronAuthStartLogin } from '../../../../shared/eventa'
 
 const router = useRouter()
+const auth = useAuthStore()
+const { t } = useI18n()
 const startLogin = useElectronEventaInvoke(electronAuthStartLogin)
 const logout = useElectronEventaInvoke(electronAuthLogout)
 
 async function handleLogin() {
-  await startLogin()
+  if (auth.oidcEnabled)
+    await startLogin()
 }
 
 async function handleLogout() {
@@ -27,7 +32,10 @@ async function handleLogout() {
 </script>
 
 <template>
-  <AccountSettingsPage @login="handleLogin" @logout="handleLogout" />
+  <AccountSettingsPage v-if="auth.oidcEnabled" @login="handleLogin" @logout="handleLogout" />
+  <p v-else role="status">
+    {{ t('tamagotchi.stage.controls-island.account-unavailable') }}
+  </p>
 </template>
 
 <route lang="yaml">
