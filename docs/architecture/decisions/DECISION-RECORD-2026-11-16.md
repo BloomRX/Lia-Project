@@ -342,6 +342,24 @@ D-04/D-05.
 | D-07 | Gatilhos A/B/C | APPROVED WITH CONDITIONS | **Sim** (números) | G-4 |
 | D-08 | Orçamento é funcionalidade nova | APPROVED | Não | — |
 
+### 9.1 Estado de implementação (16/11/2026)
+
+Esta seção registra o que **foi construído**, separado do que **foi decidido** e do que
+**foi validado** — três coisas diferentes.
+
+| Decisão | Implementação | Validação |
+|---|---|---|
+| D-02 | — (decisão negativa) | n/a |
+| D-04 | **Sim**: registro de instância, canal autenticado, adoção ao reabrir, parada cooperativa, `taskkill` como último recurso | Linux, processos reais: 7/7 no teste de integração. **Windows: NÃO EXECUTADO** |
+| D-05 | **Sim**: 9 subpaths, 42 arquivos migrados, guardas S1–S5 com prova de mutação | `grep lia/core/src` = 0; 146 testes PASS |
+| D06 | Não iniciado (experimento F4) | — |
+| D-01/D-03/D-07/D-08 | Não iniciados nesta rodada | — |
+
+O sign-off de D-04 continua **PENDENTE**: a implementação existe, mas a escolha do
+comportamento padrão (fechar mantém o Runtime) e o modelo de ameaça precisam da decisão
+do dono. O que está implementado é reversível por `git revert` e não altera instalação de
+produção.
+
 ---
 
 ## 10. Sign-off

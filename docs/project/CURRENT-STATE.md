@@ -13,6 +13,24 @@ commit. Registra **estado**, não narrativa: relatório de rodada vai para
 
 ## 0. Estado agora
 
+**Rodada 18 — Runtime independente implementado (16/11/2026).** O ciclo de vida
+descrito em D-04 saiu do papel e o Launcher deixou de ser dono do Runtime. O que mudou de
+fato: (1) o Stage publica um **registro de instância** e atende um **canal de controle
+autenticado** (X25519 + HKDF + HMAC por mensagem, `seq` monotônico, lista fechada de
+comandos); (2) fechar o Launcher **não encerra** mais o Runtime, e reabrir **adota** o
+processo vivo pelo registro; (3) o encerramento passou a ser cooperativo — pedido, hooks,
+logs, prazo de 15 s e só então força; (4) o **cofre é do Runtime**: o Launcher não abre
+mais o pipe de credenciais, então não há pipe para cair quando ele fecha; (5) o perfil do
+Stage saiu da pasta do produto para `<produto>/stage-profile`, com migração cópia-e-preserva;
+(6) F2 concluído — 42 arquivos migrados de `lia/core/src/...` para `@lia/contracts/...`,
+com guardas S1–S5. Diagnóstico histórico em
+[LIA-DESKTOP-LIFECYCLE-DIAGNOSIS-2026-11-16](../reports/LIA-DESKTOP-LIFECYCLE-DIAGNOSIS-2026-11-16.md).
+**Validação:** core 146 PASS, launcher 263 PASS + 2 skip, stage 873 PASS (8 arquivos não
+carregam — `@proj-airi/electron-eventa` não construído no ambiente), build do launcher PASS.
+**Não validado:** Windows. Named pipe, DPAPI e `taskkill` continuam **NÃO EXECUTADOS**; o
+gate de arquitetura permanece **ABERTO** e os limites de 350 MiB / 6 processos continuam
+provisórios.
+
 **Branch de desenvolvimento: `arena/7fa837f0-lia-project` (15/11/2026).** Esta é a
 branch ativa. Ela nasceu do `main` atual (`9c7ac18`) e recebeu, por merge (`7117aa8`),
 todo o histórico da `arena/01a10290-lia-project`, cujo PR #4 foi fechado sem merge.
