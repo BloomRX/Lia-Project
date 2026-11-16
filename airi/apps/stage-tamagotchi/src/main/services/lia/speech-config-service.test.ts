@@ -1,6 +1,6 @@
 import type { LiaSecretVault } from '@lia/core/secrets/vault'
 
-import type { TransportMutation, TransportResult, TransportSnapshot } from '../../../../../../../lia/core/src/transports/contracts'
+import type { TransportMutation, TransportResult, TransportSnapshot } from '@lia/contracts/transports'
 
 import { describe, expect, it, vi } from 'vitest'
 

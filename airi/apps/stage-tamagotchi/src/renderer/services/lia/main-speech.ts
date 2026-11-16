@@ -1,6 +1,6 @@
 import type { LiaVoiceTtsTarget } from '../../../shared/eventa'
 
-import { ProviderError } from '../../../../../../../lia/core/src/providers/index'
+import { ProviderError } from '@lia/contracts/providers'
 import { supportsMainSpeech } from '../../../shared/lia/speech-transport'
 import { createMainTransportExecution } from './main-transport-execution'
 import { createLiaTransportClient, toTransportRecord } from './transport-config'

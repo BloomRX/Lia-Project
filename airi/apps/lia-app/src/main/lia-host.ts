@@ -27,11 +27,13 @@ import { brainRoutingModeUpdate, readBrainRoutingMode, readLiaProductConfig, upd
 import { createLiaSecretVault } from '@lia/core/secrets/vault'
 import { createLiaVoiceProfileStore, findMissingFiles } from '@lia/core/voices/profiles'
 
-import { CredentialOwnerError, isPublicCredentialReference, startCredentialOwner } from '../../../../../lia/core/src/credentials/owner-channel'
-import { decideSelectionWrite, isLauncherManagedProvider, isLiaSelectionTarget, type LiaSelectionTarget } from '../../../../../lia/core/src/providers/selection-write-policy'
-import { createTransportRepository } from '../../../../../lia/core/src/transports/repository'
+import { CredentialOwnerError, isPublicCredentialReference, startCredentialOwner } from '@lia/contracts/credentials/owner-channel'
+import { stopRuntimeCooperatively } from '@lia/contracts/runtime'
+import { decideSelectionWrite, isLauncherManagedProvider, isLiaSelectionTarget, type LiaSelectionTarget } from '@lia/contracts/providers/selection-write-policy'
+import { createTransportRepository } from '@lia/contracts/transports/repository'
 import { createAiConnectionService, type AiConnectionStartCode, type AiConnectionStartReadiness } from './ai-connection-service'
 import { AiriStageManager } from './airi-stage-manager'
+import { describeDiscovery, discoverRuntime, runtimeStateDirFor } from './runtime-discovery'
 import { sameProfileDirectory } from './launcher-profile'
 import { ShutdownCoordinator } from './shutdown-coordinator'
 
@@ -183,6 +185,11 @@ export interface LiaHostDeps {
   platform?: NodeJS.Platform
   /** Where the AIRI monorepo lives (default: sibling of the app package). */
   workspaceRoot?: string
+  /**
+   * 'detached' (padrão no produto) faz o Stage sobreviver ao Launcher.
+   * 'attached' existe para testes e para o fluxo antigo de desenvolvimento.
+   */
+  stageMode?: 'attached' | 'detached'
   /** Test seam: the stage manager is replaceable without touching spawn. */
   stageManagerFactory?: (deps: ConstructorParameters<typeof AiriStageManager>[0]) => AiriStageManager
 }
@@ -235,6 +242,18 @@ export interface LiaHost {
   /** Graceful supervisor shutdown; safe to call more than once (single-flight). */
   quit: () => Promise<ShutdownReport>
   stage: AiriStageManager
+  /**
+   * O Runtime como processo independente: descobrir (sem PID), pedir parada
+   * cooperativa e saber se há um vivo. Fechar o Launcher NÃO o encerra.
+   */
+  runtimeControl: {
+    /** Registro de estado compartilhado (diagnóstico). */
+    stateDir: string
+    /** Reencontra um Runtime vivo, ou diz honestamente que não há. */
+    discover: () => ReturnType<typeof discoverRuntime>
+    /** Parada explícita: cooperativa, com força só depois do prazo. */
+    stop: () => Promise<{ acknowledged: boolean, forced: boolean, stopped: boolean, waitedMs: number }>
+  }
   /** Launch facts the stage child will receive (bridge env + shared home). */
   stageEnv: () => Promise<Record<string, string>>
   /** Persists the Config screen through the core writer; secrets to the vault only. */
@@ -347,6 +366,9 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
     await credentialOwnerClosing
   }
 
+  const runtimeStateDir = runtimeStateDirFor(paths.userDataDir)
+  const discoverOwnRuntime = async () => await discoverRuntime(runtimeStateDir, { timeoutMs: 1_500 })
+
   const stage = (deps.stageManagerFactory ?? ((d: ConstructorParameters<typeof AiriStageManager>[0]) => new AiriStageManager(d)))({
     packagedStage: deps.packagedStage,
     onLog: line => emit('lia-app.stage-log', line),
@@ -354,6 +376,20 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
       emit('lia-app.stage-state', state.phase)
       if (state.phase === 'stopped' || state.phase === 'error')
         void revokeCredentialOwner().catch(() => {})
+    },
+    // O Stage gerenciado é um RUNTIME INDEPENDENTE (D-04): nasce destacado,
+    // escreve log em arquivo e só é considerado pronto quando o canal de
+    // controle responde. O Launcher deixa de ser dono do ciclo de vida dele.
+    mode: deps.stageMode ?? 'detached',
+    logFile: join(runtimeStateDir, 'runtime.log'),
+    probeReady: async () => (await discoverOwnRuntime()).status === 'live',
+    requestStop: async () => {
+      const discovery = await discoverOwnRuntime()
+      if (discovery.status !== 'live')
+        return { acknowledged: false, forced: false, stopped: true, waitedMs: 0 }
+      const result = await stopRuntimeCooperatively({ target: discovery.target, timeoutMs: 15_000 })
+      emit('lia-app.runtime-stopped', `stopped=${String(result.stopped)} forced=${String(result.forced)}`)
+      return result
     },
     workspaceRoot,
   })
@@ -441,11 +477,20 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
   const coordinator = new ShutdownCoordinator({
     onLog: line => emit('lia-app.shutdown', line),
   })
-  coordinator.register({
-    holdsOwnedProcess: () => stage.holdsOwnedStage(),
-    name: 'stage',
-    stop: async () => await stage.stop(),
-  })
+  /**
+   * D-04 — fechar o Launcher NÃO encerra o Runtime.
+   *
+   * O Stage deixa de ser registrado como alvo de parada: ele é um processo
+   * independente, com registro e canal próprios, e sobrevive ao fechamento da
+   * janela do Launcher. A parada acontece por dois caminhos explícitos:
+   *
+   *  - `host.runtime.stop()` (IPC `lia:stage:stop` / `lia:app:quit-all`), que
+   *    pede o encerramento cooperativo pelo canal autenticado; e
+   *  - o "Sair" do próprio Runtime (bandeja ou `runtime.shutdown`).
+   *
+   * O coordenador permanece porque ainda é o ponto único para qualquer alvo
+   * futuro que o Launcher passe a possuir — hoje, nenhum.
+   */
 
   async function readSnapshot(): Promise<{ snapshot: LiaProductConfigSnapshot | undefined, status: LiaHomeStatus['config']['status'] }> {
     const read = await readLiaProductConfig(paths.productConfigFile)
@@ -770,9 +815,14 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
   async function hostStageEnv(): Promise<Record<string, string>> {
     const bridge = await bridgeFactory()
     return {
-      // The stage child inherits the SAME Lia home - never a fork of the
-      // user's data (contract item 7/J).
+      // LEGADO, só como origem de migração: o perfil do Stage deixou de ser a
+      // pasta do produto (onde vivem config canônica e cofre).
       APP_USER_DATA_PATH: paths.userDataDir,
+      // Perfil/caches do Stage em pasta própria; o dado do produto continua
+      // compartilhado e canônico (config, cofre, vozes).
+      LIA_STAGE_PROFILE_DIR: join(paths.userDataDir, 'stage-profile'),
+      LIA_RUNTIME_STATE_DIR: runtimeStateDir,
+      LIA_VOICES_DIR: paths.voicesRoot,
       ...stageEnvFor(bridge),
     }
   }
@@ -1022,6 +1072,21 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
      * broken speech pipeline.
      */
     conversar: () => withStageConfigurationLock(async () => {
+      // Se já existe um Runtime vivo, "Conversar" o ADOTA em vez de tentar
+      // abrir um segundo. Isto é o que faz reabrir o Launcher recuperar o
+      // controle em vez de duplicar a personagem.
+      // Fakes de teste podem não implementar a sonda de posse; ausência dela
+      // significa "nada nosso", nunca "assuma que está vivo".
+      const holdsOwned = typeof stage.holdsOwnedStage === 'function' ? stage.holdsOwnedStage() : false
+      if (!holdsOwned) {
+        const existing = await discoverOwnRuntime()
+        if (existing.status === 'live') {
+          emit('lia-app.runtime-adopted', describeDiscovery(existing))
+          return { logTail: [], phase: 'running' as const, pid: existing.record.pid }
+        }
+        if (existing.status === 'stale')
+          emit('lia-app.runtime-stale', describeDiscovery(existing))
+      }
       const readiness = await requireSafeAiConfiguration()
       // Supervisor rule (item 1): once Lia is closing, NOTHING new starts.
       if (coordinator.isShuttingDown()) {
@@ -1062,6 +1127,18 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
     runtimeLocationStatus,
     applyRuntimeLocation,
     clearRuntimeLocation,
+    runtimeControl: {
+      discover: discoverOwnRuntime,
+      stateDir: runtimeStateDir,
+      stop: async () => {
+        // Parada explícita: o gerenciador pede o encerramento cooperativo,
+        // espera e só então escala. "Parado" é provado pela descoberta, nunca
+        // pelo retorno de um kill.
+        await stage.stop().catch(() => {})
+        const after = await discoverOwnRuntime()
+        return { acknowledged: true, forced: false, stopped: after.status !== 'live', waitedMs: 0 }
+      },
+    },
     stage,
     stageEnv: hostStageEnv,
     updateConfig,

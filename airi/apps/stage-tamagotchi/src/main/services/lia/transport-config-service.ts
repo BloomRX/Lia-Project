@@ -1,14 +1,14 @@
 import type { LiaSecretVault } from '@lia/core/secrets/vault'
 import type { createContext } from '@moeru/eventa/adapters/electron/main'
 
-import type { TransportSnapshot } from '../../../../../../../lia/core/src/transports/contracts'
+import type { TransportSnapshot } from '@lia/contracts/transports'
 
 import { join } from 'node:path'
 
 import { defineInvokeHandler } from '@moeru/eventa'
 import { app } from 'electron'
 
-import { createTransportRepository } from '../../../../../../../lia/core/src/transports/repository'
+import { createTransportRepository } from '@lia/contracts/transports/repository'
 import { electronLiaSpeechConfigGet, electronLiaSpeechConfigSave } from '../../../shared/eventa/lia-speech-config'
 import { electronLiaTransportsGet, electronLiaTransportsMutate } from '../../../shared/eventa/lia-transports'
 import { isCuratedChatProvider } from '../../../shared/lia/provider-catalog'

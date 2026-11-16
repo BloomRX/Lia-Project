@@ -1,11 +1,11 @@
 import type { LiaSecretVault } from '@lia/core/secrets/vault'
 
-import type { LiaAiProviderDefinition } from '../../../../../lia/core/src/providers/catalog'
-import type { TransportMutation, TransportRecord, TransportResult, TransportSnapshot } from '../../../../../lia/core/src/transports/contracts'
+import type { LiaAiProviderDefinition } from '@lia/contracts/providers/catalog'
+import type { TransportMutation, TransportRecord, TransportResult, TransportSnapshot } from '@lia/contracts/transports'
 
 import { Buffer } from 'node:buffer'
 
-import { LIA_AI_PROVIDER_CATALOG } from '../../../../../lia/core/src/providers/catalog'
+import { LIA_AI_PROVIDER_CATALOG } from '@lia/contracts/providers/catalog'
 
 /**
  * The Launcher AI Settings service (PROMPT-39).

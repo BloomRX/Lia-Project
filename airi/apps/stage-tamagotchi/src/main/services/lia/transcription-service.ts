@@ -2,13 +2,13 @@ import type { LiaSecretVault } from '@lia/core/secrets/vault'
 import type { createContext } from '@moeru/eventa/adapters/electron/main'
 import type { WebContents } from 'electron'
 
-import type { TransportRecord } from '../../../../../../../lia/core/src/transports/contracts'
-import type { createTransportRepository } from '../../../../../../../lia/core/src/transports/repository'
+import type { TransportRecord } from '@lia/contracts/transports'
+import type { createTransportRepository } from '@lia/contracts/transports/repository'
 import type { LiaTranscriptionRunOutcome, LiaTranscriptionRunRequest } from '../../../shared/eventa/lia-transcription'
 
 import { defineInvokeHandler } from '@moeru/eventa'
 
-import { ProviderError } from '../../../../../../../lia/core/src/providers/contracts'
+import { ProviderError } from '@lia/contracts/providers'
 import { electronLiaTranscriptionCancel, electronLiaTranscriptionRun } from '../../../shared/eventa/lia-transcription'
 import { isCuratedChatProvider } from '../../../shared/lia/provider-catalog'
 import { resolveMainCredential } from './credential-owner-access'

@@ -1,6 +1,17 @@
+import { resolve } from 'node:path'
+
 import vue from '@vitejs/plugin-vue'
 
 import { defineConfig } from 'electron-vite'
+
+/**
+ * `@lia/contracts` é o pacote de contratos que vive FORA do workspace pnpm
+ * (`lia/core`). O workspace não consegue declarar um pacote acima da própria
+ * raiz, então a resolução é por alias para o código-fonte — o mesmo arquivo que
+ * o pacote publica em `exports`. O efeito prático é o que importa: nenhum
+ * consumidor escreve caminho relativo, e o bundler inlina o contrato.
+ */
+const liaContracts = resolve(import.meta.dirname, '..', '..', '..', 'lia', 'core', 'src')
 
 /**
  * The Electron MODULE boundary (Windows boot hotfix 2, Phase 7.1).
@@ -30,6 +41,12 @@ const ELECTRON_EXTERNALS = ['electron', /^electron\/.+/, 'original-fs']
 
 export default defineConfig({
   main: {
+    resolve: {
+      alias: [
+        { find: /^@lia\/contracts$/, replacement: resolve(liaContracts, 'index.ts') },
+        { find: '@lia/contracts', replacement: liaContracts },
+      ],
+    },
     build: {
       rolldownOptions: {
         external: ELECTRON_EXTERNALS,
@@ -38,6 +55,12 @@ export default defineConfig({
     },
   },
   preload: {
+    resolve: {
+      alias: [
+        { find: /^@lia\/contracts$/, replacement: resolve(liaContracts, 'index.ts') },
+        { find: '@lia/contracts', replacement: liaContracts },
+      ],
+    },
     build: {
       rolldownOptions: {
         external: ELECTRON_EXTERNALS,
@@ -47,5 +70,11 @@ export default defineConfig({
   },
   renderer: {
     plugins: [vue()],
+    resolve: {
+      alias: [
+        { find: /^@lia\/contracts$/, replacement: resolve(liaContracts, 'index.ts') },
+        { find: '@lia/contracts', replacement: liaContracts },
+      ],
+    },
   },
 })

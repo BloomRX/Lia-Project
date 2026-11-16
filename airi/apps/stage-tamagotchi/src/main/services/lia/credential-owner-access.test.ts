@@ -2,7 +2,7 @@ import type { LiaSecretVault } from '@lia/core/secrets/vault'
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { CredentialOwnerError, startCredentialOwner } from '../../../../../../../lia/core/src/credentials/owner-channel'
+import { CredentialOwnerError, startCredentialOwner } from '@lia/contracts/credentials/owner-channel'
 import { initializeCredentialOwner, resolveMainCredential, withCredentialOwner } from './credential-owner-access'
 
 let close: (() => Promise<void>) | undefined

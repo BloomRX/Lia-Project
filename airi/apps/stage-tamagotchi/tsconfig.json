@@ -28,6 +28,12 @@
       ],
       "@proj-airi/electron-vueuse/*": [
         "../../packages/electron-vueuse/src/*"
+      ],
+      "@lia/contracts": [
+        "../../../lia/core/src/index.ts"
+      ],
+      "@lia/contracts/*": [
+        "../../../lia/core/src/*"
       ]
     },
     "resolveJsonModule": true,
@@ -45,7 +51,8 @@
     "allowImportingTsExtensions": true,
     "allowJs": true,
     "strict": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "baseUrl": "."
   },
   "vueCompilerOptions": {
     "plugins": [
@@ -58,17 +65,14 @@
     "src/main/**/*.d.ts",
     "src/main/**/*.tsx",
     "src/main/**/*.vue",
-
     "src/preload/**/*.ts",
     "src/preload/**/*.d.ts",
     "src/preload/**/*.tsx",
     "src/preload/**/*.vue",
-
     "src/renderer/**/*.ts",
     "src/renderer/**/*.d.ts",
     "src/renderer/**/*.tsx",
     "src/renderer/**/*.vue",
-
     "src/shared/**/*.ts",
     "src/shared/**/*.d.ts",
     "src/shared/**/*.tsx",

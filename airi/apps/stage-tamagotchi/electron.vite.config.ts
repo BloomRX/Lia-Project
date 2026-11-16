@@ -72,6 +72,7 @@ export default defineConfig({
 
     resolve: {
       alias: {
+        '@lia/contracts': resolve(join(import.meta.dirname, '..', '..', '..', 'lia', 'core', 'src')),
         '@proj-airi/i18n': resolve(join(import.meta.dirname, '..', '..', 'packages', 'i18n', 'src')),
         '@proj-airi/server-runtime/server': resolve(join(import.meta.dirname, '..', '..', 'packages', 'server-runtime', 'src', 'server', 'index.ts')),
         '@proj-airi/server-runtime': resolve(join(import.meta.dirname, '..', '..', 'packages', 'server-runtime', 'src', 'index.ts')),
@@ -147,6 +148,7 @@ export default defineConfig({
 
     resolve: {
       alias: {
+        '@lia/contracts': resolve(join(import.meta.dirname, '..', '..', '..', 'lia', 'core', 'src')),
         '@proj-airi/server-sdk': resolve(join(import.meta.dirname, '..', '..', 'packages', 'server-sdk', 'src')),
         '@proj-airi/i18n': resolve(join(import.meta.dirname, '..', '..', 'packages', 'i18n', 'src')),
         // NOTICE: the @proj-airi/stage-ui alias resolves to a directory; rolldown

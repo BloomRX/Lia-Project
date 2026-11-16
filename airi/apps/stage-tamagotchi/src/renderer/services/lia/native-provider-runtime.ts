@@ -1,7 +1,7 @@
-import type { ChatRequest, ProviderConfig } from '../../../../../../../lia/core/src/providers/index'
+import type { ChatRequest, ProviderConfig } from '@lia/contracts/providers'
 import type { createMainTransportExecution } from './main-transport-execution'
 
-import { ProviderError, ProviderRegistry, ProviderRuntime } from '../../../../../../../lia/core/src/providers/index'
+import { ProviderError, ProviderRegistry, ProviderRuntime } from '@lia/contracts/providers'
 import { CURATED_CHAT_PROVIDER_IDS } from '../../../shared/lia/provider-catalog'
 
 /** Persisted compatibility ID, not a model/vendor catalogue. */

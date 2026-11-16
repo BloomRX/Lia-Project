@@ -1,7 +1,7 @@
 import type { LiaSecretVault } from '@lia/core/secrets/vault'
 import type { WebContents } from 'electron'
 
-import type { TransportRecord, TransportSnapshot } from '../../../../../../../lia/core/src/transports/contracts'
+import type { TransportRecord, TransportSnapshot } from '@lia/contracts/transports'
 import type { LiaTransportPullResult, LiaTransportStartResult } from '../../../shared/eventa/lia-transport-execution'
 
 import { EventEmitter } from 'node:events'

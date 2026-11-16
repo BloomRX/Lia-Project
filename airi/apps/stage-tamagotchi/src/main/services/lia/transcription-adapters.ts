@@ -1,9 +1,9 @@
-import type { TransportRecord } from '../../../../../../../lia/core/src/transports/contracts'
+import type { TransportRecord } from '@lia/contracts/transports'
 import type { LiaTranscriptionRunRequest } from '../../../shared/eventa/lia-transcription'
 
 import { Buffer } from 'node:buffer'
 
-import { ProviderError } from '../../../../../../../lia/core/src/providers/contracts'
+import { ProviderError } from '@lia/contracts/providers'
 import { isCuratedChatProvider } from '../../../shared/lia/provider-catalog'
 import { supportsMainTranscription } from '../../../shared/lia/transcription-transport'
 

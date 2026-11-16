@@ -1,4 +1,4 @@
-import type { TransportSnapshot } from '../../../../../../../lia/core/src/transports/contracts'
+import type { TransportSnapshot } from '@lia/contracts/transports'
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 

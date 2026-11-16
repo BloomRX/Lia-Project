@@ -3,7 +3,7 @@ import type { LiaBootTimer } from './timing'
 
 import { ipcMain } from 'electron'
 
-import { isPublicCredentialReference } from '../../../../../lia/core/src/credentials/owner-channel'
+import { isPublicCredentialReference } from '@lia/contracts/credentials/owner-channel'
 import { sanitizeConfigUpdate } from './config-update-sanitizer'
 import { AiStartBlockedError } from './lia-host'
 
@@ -120,9 +120,31 @@ export function registerLiaIpc(host: LiaHost, timer: LiaBootTimer, extras: LiaIp
       throw error
     }
   })
+  // Parada EXPLÍCITA do Runtime (D-04): cooperativa, com força só depois do
+  // prazo. Fechar a janela do Launcher NÃO passa por aqui.
   ipcMain.handle('lia:stage:stop', async () => {
-    await host.stage.stop()
-    return host.stage.state()
+    const result = await host.runtimeControl.stop()
+    return { ...host.stage.state(), runtime: result }
+  })
+  // O Runtime como processo independente: descoberta autenticada, sem PID.
+  ipcMain.handle('lia:runtime:status', async () => {
+    const discovery = await host.runtimeControl.discover()
+    if (discovery.status === 'live') {
+      return {
+        status: 'live' as const,
+        pid: discovery.record.pid,
+        since: discovery.record.createdAt,
+        startedBy: discovery.record.startedBy,
+      }
+    }
+    return { status: discovery.status }
+  })
+  // "Sair de tudo": encerra o Runtime de forma coordenada e só então o
+  // Launcher. É o único caminho que para tudo — o fechar normal não para nada.
+  ipcMain.handle('lia:app:quit-all', async () => {
+    const result = await host.runtimeControl.stop()
+    extras.requestQuit?.()
+    return result
   })
   ipcMain.handle('lia:timings', () => timer.marks())
 

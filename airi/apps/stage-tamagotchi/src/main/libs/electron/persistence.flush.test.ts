@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { defaultPresence } from '../../../../../../../lia/core/src/presence'
+import { defaultPresence } from '@lia/contracts/presence'
 
 function deferred() {
   let resolve!: () => void

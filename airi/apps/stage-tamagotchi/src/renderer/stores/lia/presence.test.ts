@@ -1,7 +1,7 @@
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { defaultPresence } from '../../../../../../../lia/core/src/presence'
+import { defaultPresence } from '@lia/contracts/presence'
 import { useLiaPresenceStore } from './presence'
 
 const ipc = vi.hoisted(() => ({ get: vi.fn(), set: vi.fn(), action: vi.fn() }))

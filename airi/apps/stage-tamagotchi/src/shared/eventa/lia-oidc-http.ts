@@ -1,4 +1,4 @@
-import type { ChatRequest } from '../../../../../../lia/core/src/providers/contracts'
+import type { ChatRequest } from '@lia/contracts/providers'
 
 export type OidcHttpRequest
   = | { kind: 'chat', body: ChatRequest, chatSessionId?: string }

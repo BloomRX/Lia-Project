@@ -1,4 +1,4 @@
-import type { TransportRecord, TransportSnapshot } from '../../../../../../../lia/core/src/transports/contracts'
+import type { TransportRecord, TransportSnapshot } from '@lia/contracts/transports'
 
 import { Buffer } from 'node:buffer'
 import { EventEmitter, once } from 'node:events'

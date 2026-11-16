@@ -1,4 +1,4 @@
-import type { TransportMutation, TransportRecord, TransportResult, TransportSnapshot } from '../../../../../../../lia/core/src/transports/contracts'
+import type { TransportMutation, TransportRecord, TransportResult, TransportSnapshot } from '@lia/contracts/transports'
 
 import { useElectronEventaInvoke } from '@proj-airi/electron-vueuse'
 

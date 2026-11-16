@@ -1,4 +1,4 @@
-import type { TransportRecord } from '../../../../../../../lia/core/src/transports/contracts'
+import type { TransportRecord } from '@lia/contracts/transports'
 import type { LiaTranscriptionRunRequest } from '../../../shared/eventa/lia-transcription'
 
 import { describe, expect, it } from 'vitest'

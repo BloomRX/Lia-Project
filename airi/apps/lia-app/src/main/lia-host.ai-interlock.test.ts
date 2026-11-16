@@ -3,7 +3,7 @@ import { dirname, join } from 'node:path'
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { createTransportRepository } from '../../../../../lia/core/src/transports/repository'
+import { createTransportRepository } from '@lia/contracts/transports/repository'
 import { createLiaHost } from './lia-host'
 import { fixtureEnv, identityCipher, makeLiaHome } from './test-helpers'
 

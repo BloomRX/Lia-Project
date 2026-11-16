@@ -2,7 +2,7 @@ import type { InferOutput } from 'valibot'
 
 import { array, boolean, custom, literal, number, object, optional, string, union } from 'valibot'
 
-import { isPresenceConfig } from '../../../../../../lia/core/src/presence'
+import { isPresenceConfig } from '@lia/contracts/presence'
 
 /**
  * Lia product configuration.
@@ -202,7 +202,7 @@ export const liaProductConfigSchema = object({
   preferences: optional(preferencesSchema, {}),
   setup: optional(setupSchema),
   brain: optional(brainConfigSchema),
-  presence: optional(custom<import('../../../../../../lia/core/src/presence').PresenceConfig>(isPresenceConfig)),
+  presence: optional(custom<import('@lia/contracts/presence').PresenceConfig>(isPresenceConfig)),
 })
 
 export type LiaProductConfig = InferOutput<typeof liaProductConfigSchema>

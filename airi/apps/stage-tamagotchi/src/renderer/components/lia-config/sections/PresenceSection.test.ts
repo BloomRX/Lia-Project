@@ -6,7 +6,7 @@ import { renderToString } from 'vue/server-renderer'
 
 import PresenceSection from './PresenceSection.vue'
 
-import { defaultPresence } from '../../../../../../../../lia/core/src/presence'
+import { defaultPresence } from '@lia/contracts/presence'
 import { useLiaPresenceStore } from '../../../stores/lia/presence'
 
 vi.mock('@proj-airi/electron-vueuse', () => ({ useElectronEventaInvoke: () => vi.fn() }))

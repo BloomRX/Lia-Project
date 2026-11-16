@@ -1,9 +1,9 @@
 import type { LiaSecretVault } from '@lia/core/secrets/vault'
 import type { createContext } from '@moeru/eventa/adapters/electron/main'
 
-import type { ChatRequest } from '../../../../../../../lia/core/src/providers/contracts'
-import type { TransportRecord, TransportSnapshot } from '../../../../../../../lia/core/src/transports/contracts'
-import type { createTransportRepository } from '../../../../../../../lia/core/src/transports/repository'
+import type { ChatRequest } from '@lia/contracts/providers'
+import type { TransportRecord, TransportSnapshot } from '@lia/contracts/transports'
+import type { createTransportRepository } from '@lia/contracts/transports/repository'
 import type { LiaTransportExecutionFailure, LiaTransportPullResult, LiaTransportStartRequest, LiaTransportStartResult } from '../../../shared/eventa/lia-transport-execution'
 
 import { Buffer } from 'node:buffer'
@@ -11,9 +11,9 @@ import { randomUUID } from 'node:crypto'
 
 import { defineInvokeHandler } from '@moeru/eventa'
 
-import { ProviderError } from '../../../../../../../lia/core/src/providers/contracts'
-import { ProviderRegistry } from '../../../../../../../lia/core/src/providers/registry'
-import { ProviderRuntime } from '../../../../../../../lia/core/src/providers/runtime'
+import { ProviderError } from '@lia/contracts/providers'
+import { ProviderRegistry } from '@lia/contracts/providers'
+import { ProviderRuntime } from '@lia/contracts/providers'
 import { electronLiaTransportCancel, electronLiaTransportPull, electronLiaTransportStart } from '../../../shared/eventa/lia-transport-execution'
 import { isCuratedChatProvider } from '../../../shared/lia/provider-catalog'
 import { supportsMainSpeech } from '../../../shared/lia/speech-transport'

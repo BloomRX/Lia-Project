@@ -8,8 +8,8 @@ import { registerProviderCredentialConfigPort } from '@proj-airi/stage-ui/stores
 import { defineStore } from 'pinia'
 import { onScopeDispose, ref } from 'vue'
 
-import { ProviderError } from '../../../../../../../lia/core/src/providers/index'
-import { isTransportRecord } from '../../../../../../../lia/core/src/transports/validation'
+import { ProviderError } from '@lia/contracts/providers'
+import { isTransportRecord } from '@lia/contracts/transports'
 import {
   electronLiaProviderChatConfigGet,
   electronLiaProviderChatConfigSet,

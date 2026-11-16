@@ -1,6 +1,6 @@
 import type { LiaSecretVault } from '@lia/core/secrets/vault'
 
-import type { TransportRecord, TransportSnapshot } from '../../../../../../../lia/core/src/transports/contracts'
+import type { TransportRecord, TransportSnapshot } from '@lia/contracts/transports'
 
 import { Buffer } from 'node:buffer'
 import { randomUUID } from 'node:crypto'

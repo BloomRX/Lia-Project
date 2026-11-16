@@ -15,9 +15,9 @@ import { createLiaSecretVault } from '@lia/core/secrets/vault'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { LIA_BRAIN_ENGINE_PROVIDER_MAPPING } from '../../../stage-tamagotchi/src/shared/lia/brain-engine-provider-mapping'
-import { LIA_AI_PROVIDER_CATALOG } from '../../../../../lia/core/src/providers/catalog'
-import { createTransportRepository } from '../../../../../lia/core/src/transports/repository'
-import { isTransportRecord } from '../../../../../lia/core/src/transports/validation'
+import { LIA_AI_PROVIDER_CATALOG } from '@lia/contracts/providers/catalog'
+import { createTransportRepository } from '@lia/contracts/transports/repository'
+import { isTransportRecord } from '@lia/contracts/transports'
 import { createAiConnectionService } from './ai-connection-service'
 
 const GROQ_URL = 'https://api.groq.com/openai/v1'

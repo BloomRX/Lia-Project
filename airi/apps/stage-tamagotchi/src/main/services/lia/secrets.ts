@@ -2,6 +2,8 @@ import type { Buffer } from 'node:buffer'
 
 import type { LiaSecretVault } from '@lia/core/secrets/vault'
 
+import process from 'node:process'
+
 import { join } from 'node:path'
 
 import { createLiaSecretVault as createCoreVault } from '@lia/core/secrets/vault'
@@ -42,7 +44,11 @@ export function createLiaSecretVault(deps: SecretsDeps = {}): LiaSecretVault {
       decrypt: deps.decrypt ?? ((payload: Buffer) => safeStorage.decryptString(payload)),
       encrypt: deps.encrypt ?? ((value: string) => safeStorage.encryptString(value)),
     },
-    filePath: deps.filePath ?? join(app.getPath('userData'), 'lia-secrets.json'),
+    // `LIA_VAULT_FILE` é o contrato do produto: um cofre só, o mesmo arquivo que
+    // o Launcher lê. Antes desta correção o Stage ignorava a variável e caía no
+    // `userData` — funcionava por coincidência de caminho e quebrava assim que o
+    // perfil do Stage fosse isolado.
+    filePath: deps.filePath ?? (process.env.LIA_VAULT_FILE?.trim() || join(app.getPath('userData'), 'lia-secrets.json')),
     read: deps.read,
     write: deps.write,
   }))

@@ -1,8 +1,7 @@
-import type { BrowserWindow } from 'electron'
-
 import type { FileLoggerHandle } from './app/file-logger'
 import type { MainWindowSizeSettingsController } from './windows/main/window-size-settings'
 
+import { cpSync, existsSync, mkdirSync } from 'node:fs'
 import process, { env, platform } from 'node:process'
 
 import { dirname, join } from 'node:path'
@@ -15,7 +14,7 @@ import { Format, LogLevel, setGlobalFormat, setGlobalHookPostLog, setGlobalLogLe
 import { defineInvokeHandler } from '@moeru/eventa'
 import { createContext } from '@moeru/eventa/adapters/electron/main'
 import { hasSelectedScreenCaptureSource, initScreenCaptureForMain } from '@proj-airi/electron-screen-capture/main'
-import { app, ipcMain, screen, session } from 'electron'
+import { app, BrowserWindow, ipcMain, screen, session } from 'electron'
 import { noop } from 'es-toolkit'
 import { createLoggLogger, injeca, lifecycle } from 'injeca'
 import { isLinux } from 'std-env'
@@ -56,6 +55,9 @@ import { createLiaBrainExecutionTerminalReportService } from './services/lia/bra
 import { registerLiaBrainSendTerminalReportListener } from './services/lia/brain-send-terminal-report-listener'
 import { createLiaBrainSendTerminalReportService } from './services/lia/brain-send-terminal-report-service'
 import { initializeCredentialOwner } from './services/lia/credential-owner-access'
+import type { LiaRuntimeService } from './services/lia/runtime-service'
+
+import { resolveRuntimeStateDir, startLiaRuntimeService } from './services/lia/runtime-service'
 import { createLiaBrainService } from './services/lia/lia-brain-service'
 import { startLiaMainWindowVoiceRuntime } from './services/lia/main-window-voice-runtime'
 import { registerLiaMemoryBridge } from './services/lia/memory-service'
@@ -94,11 +96,60 @@ setupDebugger()
 
 const log = useLogg('main').useGlobalConfig()
 
-const appUserDataPath = env.APP_USER_DATA_PATH?.trim()
-initializeCredentialOwner(process.env)
-if (appUserDataPath) {
-  app.setPath('userData', appUserDataPath)
+/**
+ * Isolamento de dados (D-04/§6): o perfil Chromium e o estado local do Stage
+ * deixam de viver na MESMA pasta do documento de produto e do cofre. O dado do
+ * produto (config canônica, cofre, vozes) continua compartilhado — ele é a
+ * fonte única —, mas cache, perfil e logs são do processo.
+ *
+ * A migração é NÃO DESTRUTIVA: copia os itens que pertencem ao Stage para o
+ * perfil novo e deixa os originais onde estão. O cofre NUNCA é copiado — uma
+ * segunda cópia de segredo em disco é exatamente o que não se quer.
+ */
+function prepareStageProfile(input: {
+  legacyUserData: string | undefined
+  profileDir: string | undefined
+  log: (line: string) => void
+}): string | undefined {
+  if (!input.profileDir || input.profileDir === input.legacyUserData)
+    return input.profileDir
+
+  const owned = ['configs', 'product.json']
+  try {
+    if (!existsSync(input.profileDir)) {
+      mkdirSync(input.profileDir, { recursive: true })
+      if (input.legacyUserData && existsSync(input.legacyUserData)) {
+        for (const name of owned) {
+          const source = join(input.legacyUserData, name)
+          if (existsSync(source)) {
+            cpSync(source, join(input.profileDir, name), { force: false, recursive: true })
+            input.log(`[lia:profile] migrado ${name} para o perfil do Stage`)
+          }
+        }
+      }
+    }
+  }
+  catch (error) {
+    // Migração que falha não pode impedir o app de abrir: o perfil novo é
+    // recriado no próximo boot e o original continua intacto.
+    input.log(`[lia:profile] migração incompleta: ${error instanceof Error ? error.name : 'unknown'}`)
+  }
+  return input.profileDir
 }
+
+const legacyUserDataPath = env.APP_USER_DATA_PATH?.trim()
+const stageProfileDir = prepareStageProfile({
+  legacyUserData: legacyUserDataPath,
+  log: line => console.info(line),
+  profileDir: env.LIA_STAGE_PROFILE_DIR?.trim() || legacyUserDataPath,
+})
+initializeCredentialOwner(process.env)
+if (stageProfileDir) {
+  app.setPath('userData', stageProfileDir)
+}
+
+/** O Runtime desta instância. `undefined` até o serviço subir (ou se falhar). */
+let runtimeService: LiaRuntimeService | undefined
 
 // Thanks to [@blurymind](https://github.com/blurymind),
 //
@@ -217,7 +268,7 @@ app.whenReady().then(async () => {
   // One voice-library instance for the whole main process: the voice bridge
   // and the profiles bridge read and write the same registry.
   const liaVoiceProfiles = injeca.provide('services:lia-voice-profiles', () =>
-    createLiaVoiceProfileStore({ rootDir: join(app.getPath('userData'), 'lia-voices') }))
+    createLiaVoiceProfileStore({ rootDir: env.LIA_VOICES_DIR?.trim() || join(app.getPath('userData'), 'lia-voices') }))
   // Phase 8.0D-5: the Lia Brain service - ONE instance per main-process
   // lifetime, created through its own factory so the production Brain catalog
   // (composed and validated during construction) has a single owner. It has
@@ -451,6 +502,37 @@ app.whenReady().then(async () => {
     },
   })
 
+  // O Stage é o RUNTIME: publica o registro de instância e atende o canal de
+  // controle autenticado. Só depois disto o Launcher pode fechar sem derrubar
+  // a conversa — e é o Runtime que é dono do cofre enquanto está de pé.
+  injeca.invoke({
+    dependsOn: { liaSecrets },
+    callback: async (deps) => {
+      const result = await startLiaRuntimeService({
+        appVersion: app.getVersion(),
+        forceExit: code => app.exit(code),
+        log: line => log.log(line),
+        requestExit: async () => await handleAppExit(),
+        startedBy: env.LIA_MANAGED === '1' ? 'launcher' : 'user',
+        stateDir: resolveRuntimeStateDir({
+          env,
+          fallback: join(app.getPath('userData'), 'runtime'),
+          productConfigFile: env.LIA_PRODUCT_CONFIG_FILE,
+        }),
+        status: () => ({ windows: BrowserWindow.getAllWindows().length }),
+        vault: deps.liaSecrets,
+      })
+      if (result.ok) {
+        runtimeService = result.service
+        return
+      }
+      // Um segundo Runtime no mesmo endpoint não nasce: quem já atende é a
+      // autoridade. O Stage continua abrindo (o usuário vê a janela), mas não
+      // disputa o controle.
+      log.warn(`[lia:runtime] não iniciado: ${result.reason}${result.detail ? ` (${result.detail})` : ''}`)
+    },
+  })
+
   // Register the Lia provider.chat config bridge (references/metadata only).
   injeca.invoke({
     dependsOn: { liaProductConfig, liaSecrets },
@@ -675,6 +757,13 @@ app.whenReady().then(async () => {
 app.on('window-all-closed', () => {
   emitAppWindowAllClosed()
 
+  // Fechar a última janela do Runtime NÃO encerra o processo quando o canal de
+  // controle está de pé (D-04: fechar ≠ encerrar). Ele continua atendendo o
+  // Launcher e a bandeja; o encerramento é explícito — "Sair" na bandeja, o
+  // comando `runtime.shutdown` ou o gerenciador de tarefas.
+  if (runtimeService?.isServing())
+    return
+
   if (platform !== 'darwin') {
     app.quit()
   }
@@ -712,6 +801,9 @@ async function handleAppExit() {
   await Promise.all([
     logIfError('execute onAppBeforeQuit hooks', () => emitAppBeforeQuit()),
     logIfError('stop injeca', () => injeca.stop()),
+    // O canal sai ANTES do processo: um registro apontando para um pipe morto
+    // faria o Launcher tentar adotar um Runtime inexistente no próximo boot.
+    logIfError('close runtime control channel', async () => await runtimeService?.stop()),
   ])
 
   // Prevent the global log hook from trying to write to the file after close() is called,

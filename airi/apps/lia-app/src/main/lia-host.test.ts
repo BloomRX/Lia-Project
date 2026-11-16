@@ -225,11 +225,15 @@ describe('supervisor shutdown through the host: the stage is the only owned chil
     return { calls, host }
   }
 
-  it('a. quitting with a spawned stage stops the stage and reports it', async () => {
+  it('a. quitting the launcher does NOT stop the runtime (D-04)', async () => {
+    // Contrato invertido de propósito na rodada 18: fechar o Launcher deixa o
+    // Runtime vivo. Quem para é o comando explícito, não o fechamento da
+    // janela. Se este teste voltar a exigir 'stage-stop' aqui, a regressão
+    // que ele protege voltou.
     const { calls, host } = await hostWithFakes({ ownedStage: true })
     const report = await host.quit()
-    expect(calls).toEqual(['stage-stop'])
-    expect(report.steps.find(s => s.name === 'stage')?.outcome).toBe('stopped')
+    expect(calls).toEqual([])
+    expect(report.steps).toEqual([])
   })
 
   it('the voice-runtime step is gone entirely - no worker exists to own, recover, or leak', async () => {
@@ -240,15 +244,16 @@ describe('supervisor shutdown through the host: the stage is the only owned chil
     const { calls, host } = await hostWithFakes({ ownedStage: false })
     const report = await host.quit()
     expect(calls).toEqual([])
-    expect(report.steps.map(s => s.name)).toEqual(['stage'])
-    expect(report.steps[0].outcome).toBe('no-owned-process')
+    // Sem registrantes: fechar o Launcher é uma saída do Launcher, não um
+    // teardown de processo alheio.
+    expect(report.steps).toEqual([])
   })
 
   it('f. two quits share one teardown (single-flight)', async () => {
     const { calls, host } = await hostWithFakes({ ownedStage: true })
     const [first, second] = await Promise.all([host.quit(), host.quit()])
-    // The owned stage is stopped EXACTLY once - no doubled kill.
-    expect(calls).toEqual(['stage-stop'])
+    // Nenhum kill duplicado porque não há kill: o fechamento é do Launcher.
+    expect(calls).toEqual([])
     expect(first).toBe(second)
   })
 

@@ -1,7 +1,7 @@
-import type { PresenceBounds, PresenceConfig, PresenceDisplay } from '../../../../../../../lia/core/src/presence'
+import type { PresenceBounds, PresenceConfig, PresenceDisplay } from '@lia/contracts/presence'
 import type { PresenceResult } from '../../../shared/eventa/lia-presence'
 
-import { defaultPresence, fitPresence, isPresenceConfig, presenceDisplay, presenceTarget } from '../../../../../../../lia/core/src/presence'
+import { defaultPresence, fitPresence, isPresenceConfig, presenceDisplay, presenceTarget } from '@lia/contracts/presence'
 
 interface PresenceWindow {
   getBounds: () => PresenceBounds

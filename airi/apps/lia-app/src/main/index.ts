@@ -85,7 +85,9 @@ async function bootstrap(): Promise<void> {
   // finishes its first paint - but WITHOUT starting the voice runtime
   // (contract item 12) and without touching AIRI (contract item 11).
   const host = createLiaHost({
-    enableCredentialOwner: true,
+    // O cofre agora pertence ao RUNTIME (D04-B2). O Launcher não abre mais o
+    // pipe de credenciais: quando ele fecha, não existe pipe para cair e o
+    // Stage continua resolvendo os próprios provedores.
     launcherChromiumProfile: chromiumProfile,
     // Electron's patched fs presents an app.asar archive as a directory.
     packagedStage: app.isPackaged ? () => resolvePackagedStage(process.resourcesPath, physicalStatSync) : undefined,

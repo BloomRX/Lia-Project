@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs'
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { defaultPresence } from '../../../../../../../lia/core/src/presence'
+import { defaultPresence } from '@lia/contracts/presence'
 
 /**
  * Phase 8.0D-10B-4D4C4-SHELL-B1: the READ-ONLY managed Hearing facts bridge.

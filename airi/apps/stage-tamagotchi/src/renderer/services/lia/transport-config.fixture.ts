@@ -1,4 +1,4 @@
-import type { TransportMutation, TransportSnapshot } from '../../../../../../../lia/core/src/transports/contracts'
+import type { TransportMutation, TransportSnapshot } from '@lia/contracts/transports'
 
 import { EventEmitter } from 'node:events'
 

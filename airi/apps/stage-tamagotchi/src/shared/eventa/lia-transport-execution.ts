@@ -1,4 +1,4 @@
-import type { ChatRequest, ProviderErrorCode } from '../../../../../../lia/core/src/providers/contracts'
+import type { ChatRequest, ProviderErrorCode } from '@lia/contracts/providers'
 
 import { defineInvokeEventa } from '@moeru/eventa'
 

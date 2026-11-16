@@ -1,4 +1,4 @@
-import type { ProviderErrorCode } from '../../../../../../lia/core/src/providers/contracts'
+import type { ProviderErrorCode } from '@lia/contracts/providers'
 
 import { defineInvokeEventa } from '@moeru/eventa'
 

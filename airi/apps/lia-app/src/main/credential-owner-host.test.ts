@@ -5,14 +5,14 @@ import { join } from 'node:path'
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { createCredentialOwnerClient, startCredentialOwner } from '../../../../../lia/core/src/credentials/owner-channel'
-import { createTransportRepository } from '../../../../../lia/core/src/transports/repository'
+import { createCredentialOwnerClient, startCredentialOwner } from '@lia/contracts/credentials/owner-channel'
+import { createTransportRepository } from '@lia/contracts/transports/repository'
 import { createLiaHost } from './lia-host'
 import { fixtureEnv, identityCipher, makeLiaHome } from './test-helpers'
 
 const disk = vi.hoisted(() => ({ values: new Map<string, string>(), revisions: new Map<string, number>(), pending: undefined as Promise<void> | undefined, failPublish: false }))
-vi.mock('../../../../../lia/core/src/transports/repository', async (original) => {
-  const actual = await original<typeof import('../../../../../lia/core/src/transports/repository')>()
+vi.mock('@lia/contracts/transports/repository', async (original) => {
+  const actual = await original<typeof import('@lia/contracts/transports/repository')>()
   return { ...actual, createTransportRepository: (path: string) => {
     const repository = actual.createTransportRepository(path)
     return { ...repository, mutate: async (mutation: Parameters<typeof repository.mutate>[0]) => {

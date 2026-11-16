@@ -1,8 +1,8 @@
-import type { PresenceConfig, PresenceDisplay } from '../../../../../../lia/core/src/presence'
+import type { PresenceConfig, PresenceDisplay } from '@lia/contracts/presence'
 
 import { defineInvokeEventa } from '@moeru/eventa'
 
-export type { PresenceConfig } from '../../../../../../lia/core/src/presence'
+export type { PresenceConfig } from '@lia/contracts/presence'
 export type PresenceAction = 'home' | 'set-home'
 export interface PresenceSnapshot {
   config: PresenceConfig

@@ -1,9 +1,9 @@
 import type { LiaSecretVault } from '@lia/core/secrets/vault'
 
-import type { createTransportRepository } from '../../../../../../../lia/core/src/transports/repository'
+import type { createTransportRepository } from '@lia/contracts/transports/repository'
 import type { LiaSpeechConfigResult, LiaSpeechConfigSaveInput } from '../../../shared/eventa/lia-speech-config'
 
-import { isTransportRecord } from '../../../../../../../lia/core/src/transports/validation'
+import { isTransportRecord } from '@lia/contracts/transports'
 import { supportsMainSpeech } from '../../../shared/lia/speech-transport'
 import { resolveMainCredential } from './credential-owner-access'
 import { serializeWrite } from './secrets-service'

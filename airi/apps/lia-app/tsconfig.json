@@ -16,7 +16,16 @@
     "forceConsistentCasingInFileNames": true,
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "@lia/contracts": [
+        "../../../lia/core/src/index.ts"
+      ],
+      "@lia/contracts/*": [
+        "../../../lia/core/src/*"
+      ]
+    }
   },
   "include": [
     "src/main/**/*.ts",

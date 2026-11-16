@@ -325,12 +325,11 @@ describe('7.8 E/F - failure semantics stay human-readable', () => {
 })
 
 describe('7.8 L - shutdown stays honest: the stage is the only child to stop', () => {
-  it('quit stops the stage exactly once; no voice-runtime step exists anymore', async () => {
+  it('quit leaves the runtime running; only an explicit stop stops it (D-04)', async () => {
     const { host, order } = await makeVoiceHost({ fixture: { customVoice: true } })
     await host.conversar()
     const report = await host.quit()
-    expect(order).toEqual(['stage-start', 'stage-stop'])
-    expect(report.steps.map(step => step.name)).toEqual(['stage'])
-    expect(report.steps[0].outcome).toBe('stopped')
+    expect(order).toEqual(['stage-start'])
+    expect(report.steps).toEqual([])
   })
 })

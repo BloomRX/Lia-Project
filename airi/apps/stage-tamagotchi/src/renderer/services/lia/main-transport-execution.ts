@@ -1,9 +1,9 @@
-import type { ChatRequest, ProviderConfig } from '../../../../../../../lia/core/src/providers/index'
+import type { ChatRequest, ProviderConfig } from '@lia/contracts/providers'
 import type { LiaSpeechInput, TransportStartRequest } from '../../../shared/eventa/lia-transport-execution'
 
 import { useElectronEventaInvoke } from '@proj-airi/electron-vueuse'
 
-import { ProviderError } from '../../../../../../../lia/core/src/providers/index'
+import { ProviderError } from '@lia/contracts/providers'
 import { electronLiaTransportCancel, electronLiaTransportPull, electronLiaTransportStart } from '../../../shared/eventa/lia-transport-execution'
 
 /** Only response bytes cross this port. Stored credentials stay in main. */

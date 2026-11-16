@@ -8,7 +8,7 @@ import { createLiaSecretVault } from '@lia/core/secrets/vault'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { decideSelectionWrite } from '../../../stage-tamagotchi/src/shared/lia/selection-write-policy'
-import { createTransportRepository } from '../../../../../lia/core/src/transports/repository'
+import { createTransportRepository } from '@lia/contracts/transports/repository'
 import { createAiConnectionService } from './ai-connection-service'
 
 /**

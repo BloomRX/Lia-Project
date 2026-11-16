@@ -2,8 +2,8 @@ import type { RunAsNodeFuseState } from './node-runtime'
 import type { StageBuildPrerequisite, StagePrerequisiteOutcome } from './stage-build-prerequisite'
 
 import { execFile, spawn } from 'node:child_process'
-import { existsSync } from 'node:fs'
-import { basename, join } from 'node:path'
+import { existsSync, mkdirSync, openSync } from 'node:fs'
+import { basename, dirname, join } from 'node:path'
 import { env as nodeEnv, platform as nodePlatform } from 'node:process'
 
 import { resolveNodeInvocation } from './node-runtime'
@@ -98,6 +98,27 @@ export interface AiriStageManagerDeps {
    * through a package-manager wrapper.
    */
   stageDevEntrypoint?: (stageDir: string) => string
+  /**
+   * 'detached' transforma o Stage em Runtime independente: o processo nasce em
+   * um grupo próprio, sem pipes de stdout (que morreriam junto com este
+   * processo e fariam o filho quebrar no primeiro log), e NÃO é encerrado
+   * quando o Launcher fecha. O padrão 'attached' preserva o comportamento de
+   * desenvolvimento e os testes existentes.
+   */
+  mode?: 'attached' | 'detached'
+  /** Arquivo de log do Runtime destacado. Obrigatório no modo 'detached'. */
+  logFile?: string
+  /**
+   * Prontidão do Runtime destacado: o stdout não existe mais, então "pronto" é
+   * o canal de controle respondendo — a mesma prova que o Launcher usa depois
+   * para reencontrar o processo.
+   */
+  probeReady?: () => Promise<boolean>
+  /**
+   * Encerramento cooperativo (canal de controle). Quando presente, roda ANTES
+   * de qualquer força — `taskkill /T /F` deixa de ser o primeiro gesto.
+   */
+  requestStop?: () => Promise<unknown>
   /** Milliseconds before a spawned stage that never says "ready" errors out. */
   startGraceMs?: number
   /**
@@ -222,6 +243,19 @@ export class AiriStageManager {
       child.once('exit', code => resolve(code))
     })
     const platform = this.deps.platform ?? nodePlatform
+
+    // Encerramento cooperativo primeiro: o Runtime fecha logs, áudio e
+    // recursos, e o Launcher só espera. A força continua existindo, mas como
+    // último recurso — nunca como primeiro gesto.
+    if (this.deps.requestStop) {
+      await Promise.resolve(this.deps.requestStop()).catch(() => {})
+      if (await waitForExit(exited, this.deps.stopGraceMs ?? 15_000)) {
+        this.child = undefined
+        this.setState({ phase: 'stopped' })
+        return
+      }
+      this.deps.onLog?.('cooperative stop timed out - escalating')
+    }
 
     if (platform === 'win32' && pid !== undefined) {
       // The launcher owns this stage: we spawned it this session, so the
@@ -372,10 +406,27 @@ export class AiriStageManager {
     const stageEnv = { ...nodeEnv, ...this.deps.childEnv, ...passEnv }
     delete stageEnv.ELECTRON_RUN_AS_NODE
 
+    const detached = this.deps.mode === 'detached'
+    let stdio: 'pipe' | Array<number | string> = 'pipe'
+    if (detached) {
+      // Sem arquivo de log não há diagnóstico e um pipe fechado mataria o
+      // filho no primeiro `console.log`. O arquivo, não o pipe, é o canal.
+      if (this.deps.logFile) {
+        mkdirSync(dirname(this.deps.logFile), { recursive: true })
+        stdio = ['ignore', openSync(this.deps.logFile, 'a'), openSync(this.deps.logFile, 'a')]
+      }
+      else {
+        stdio = 'ignore'
+      }
+    }
     const child = spawnImpl(runtime.command, packaged?.args ?? [entrypoint, 'dev'], {
       cwd: packaged?.cwd ?? stageDir,
       env: stageEnv,
+      ...(detached ? { detached: true, stdio } : {}),
     })
+    // Destacado: o Launcher não espera por ele nem o leva junto ao sair.
+    if (detached)
+      child.unref()
     this.child = child
     this.setState({ phase: 'starting', pid: child.pid })
     // The real executable, never a hardcoded "node": this line is the only
@@ -385,6 +436,65 @@ export class AiriStageManager {
     this.deps.onLog?.(packaged
       ? `spawn: ${basename(runtime.command)} (pid ${String(child.pid)})`
       : `spawn: ${basename(runtime.command)} ${entrypoint} dev (pid ${String(child.pid)})`)
+
+    if (this.deps.mode === 'detached' && this.deps.probeReady) {
+      return await new Promise<AiriStageState>((resolve) => {
+        const grace = this.deps.startGraceMs ?? 180_000
+        const startedAt = Date.now()
+        let readySeen = false
+        const timer = setInterval(() => {
+          void (async () => {
+            if (readySeen)
+              return
+            if (child.exitCode !== null) {
+              clearInterval(timer)
+              this.child = undefined
+              this.setState({ lastExitCode: child.exitCode, message: 'The stage closed while starting.', phase: 'error' })
+              resolve(this.state())
+              return
+            }
+            let ready = false
+            try {
+              ready = await this.deps.probeReady!()
+            }
+            catch { ready = false }
+            if (ready && !readySeen) {
+              readySeen = true
+              clearInterval(timer)
+              this.setState({ phase: 'running', pid: child.pid })
+              this.deps.onLog?.(`ready (pid ${String(child.pid)})`)
+              this.deps.onState?.(this.state())
+              resolve(this.state())
+            }
+            else if (Date.now() - startedAt > grace) {
+              clearInterval(timer)
+              this.setState({ message: 'The stage is taking longer than usual to start.', phase: 'error' })
+              resolve(this.state())
+            }
+          })()
+        }, 400)
+        timer.unref?.()
+
+        child.on('error', (err) => {
+          clearInterval(timer)
+          this.setState({ message: 'The stage process could not be started.', phase: 'error' })
+          appendLine(this.currentState, String(err))
+          resolve(this.state())
+        })
+        child.on('exit', (code, signal) => {
+          this.child = undefined
+          this.deps.onLog?.(`exit: code ${String(code)} signal ${String(signal)}`)
+          if (!readySeen) {
+            clearInterval(timer)
+            this.setState({ lastExitCode: code, message: 'The stage closed while starting.', phase: 'error' })
+            resolve(this.state())
+            return
+          }
+          this.setState({ lastExitCode: code, phase: 'stopped' })
+          this.deps.onState?.(this.state())
+        })
+      })
+    }
 
     return await new Promise<AiriStageState>((resolve) => {
       const grace = this.deps.startGraceMs ?? 180_000

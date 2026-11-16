@@ -18,7 +18,13 @@ const SOURCE = readFileSync(fileURLToPath(new URL('./ipc.ts', import.meta.url)),
 
 const CHANNELS = [...SOURCE.matchAll(/ipcMain\.handle\('([^']+)'/g)].map(match => match[1])
 
-/** Inventário revisado em 12/11/2026. Ordem alfabética, sem duplicatas. */
+/**
+ * Inventário revisado em 12/11/2026; rodada 18 acrescentou dois canais e o
+ * contrato de ciclo de vida (D-04):
+ *  - `lia:runtime:status` — descoberta autenticada do Runtime independente;
+ *  - `lia:app:quit-all` — o único caminho que para o Runtime e sai.
+ * Ordem alfabética, sem duplicatas.
+ */
 const EXPECTED_CHANNELS = [
   'lia:ai:connection:get',
   'lia:ai:connection:models',
@@ -26,6 +32,7 @@ const EXPECTED_CHANNELS = [
   'lia:ai:connection:test',
   'lia:ai:providers',
   'lia:app:quit',
+  'lia:app:quit-all',
   'lia:bridge',
   'lia:config:update',
   'lia:home-status',
@@ -34,6 +41,7 @@ const EXPECTED_CHANNELS = [
   'lia:runtime-location:pick',
   'lia:runtime-location:status',
   'lia:runtime:state',
+  'lia:runtime:status',
   'lia:secrets:presence',
   'lia:stage:start',
   'lia:stage:state',

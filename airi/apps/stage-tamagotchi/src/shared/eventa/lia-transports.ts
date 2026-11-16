@@ -1,4 +1,4 @@
-import type { TransportMutation, TransportResult } from '../../../../../../lia/core/src/transports/contracts'
+import type { TransportMutation, TransportResult } from '@lia/contracts/transports'
 
 import { defineInvokeEventa } from '@moeru/eventa'
 

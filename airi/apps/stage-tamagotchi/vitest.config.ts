@@ -1,3 +1,4 @@
+import { resolve } from 'node:path'
 import { cwd } from 'node:process'
 
 import vue from '@vitejs/plugin-vue'
@@ -9,8 +10,17 @@ import { playwright } from '@vitest/browser-playwright'
 import { loadEnv } from 'vite'
 import { defineConfig } from 'vitest/config'
 
+// O mesmo alias do electron.vite.config.ts: os testes leem a superfície
+// pública, não um caminho relativo que só existe no bundler.
+const liaContracts = resolve(import.meta.dirname, '..', '..', '..', 'lia', 'core', 'src')
+
 export default defineConfig({
   root: import.meta.dirname,
+  resolve: {
+    alias: {
+      '@lia/contracts': liaContracts,
+    },
+  },
   plugins: [
     Info(),
     vue(),

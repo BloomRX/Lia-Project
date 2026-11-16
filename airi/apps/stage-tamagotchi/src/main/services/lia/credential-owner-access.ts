@@ -1,7 +1,7 @@
 import type { LiaSecretVault } from '@lia/core/secrets/vault'
 
-import { createCredentialOwnerClient, CredentialOwnerError, isCredentialRevision, takeCredentialOwnerEnvironment } from '../../../../../../../lia/core/src/credentials/owner-channel'
-import { ProviderError } from '../../../../../../../lia/core/src/providers/contracts'
+import { createCredentialOwnerClient, CredentialOwnerError, isCredentialRevision, takeCredentialOwnerEnvironment } from '@lia/contracts/credentials/owner-channel'
+import { ProviderError } from '@lia/contracts/providers'
 
 let owner: ReturnType<typeof createCredentialOwnerClient> | undefined
 const originals = new WeakMap<LiaSecretVault, LiaSecretVault>()
