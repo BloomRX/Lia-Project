@@ -62,7 +62,7 @@ separação, e a que custo — não se um framework é moderno.
 > do Launcher; e juntar os dois em um processo
 > **quebra quatro invariantes** que o código hoje protege. O caminho de menor risco é: manter
 > Electron nos dois processos, **corrigir o ciclo de vida** (hoje fechar o Launcher mata o
-> Runtime — o oposto do decidido), **fechar a superfície pública do Core** (46 imports
+> Runtime — o oposto do decidido), **fechar a superfície pública do Core** (44 declarações
 > atravessam a fronteira do pacote), **separar perfil Chromium de dados de produto** e
 > **deduplicar o binário Electron** — cada um com teste e rollback — antes de qualquer troca
 > de host, que fica atrás de um gate medido no Windows (§9).
@@ -169,15 +169,20 @@ são semântica de `BrowserWindow`, não de HTML.
 | `@lia/core` não importa `electron` | `runtime-boundary.test.ts:85-95` | **Fronteira de runtime cumprida** |
 | `@lia/contracts` tem zero dependências | `lia/core/package.json` | **Fronteira cumprida** |
 | `@lia/core` expõe **16 subpaths** | `packages/lia-core/package.json` | — |
-| **Não** expõe `providers`, `transports`, `presence`, `credentials`, `brain` | mesmo arquivo | **Superfície pública incompleta** |
-| **46 imports relativos** atravessam para `airi/packages/lia-core/src/*` | 39 no Stage (21 arquivos) + 7 no Launcher (3 arquivos) | **Fronteira de pacote violada** |
+| `@lia/core` **não** expõe `providers`, `transports`, `presence`, `credentials` | mesmo arquivo | esses domínios vivem em `@lia/contracts` (ver abaixo), não em `@lia/core` |
+| **44 declarações relativas** (41 `import` + 3 `export … from`) atravessam para **`lia/core/src/*`** — o pacote `@lia/contracts` | 37 no Stage (20 arquivos) + 7 no Launcher (3 arquivos) | **Fronteira de pacote violada** |
+| `@lia/contracts` **não tem `exports`**, não é dependência de ninguém e não está no workspace | `lia/core/package.json`; `airi/pnpm-workspace.yaml` | **Não há pacote a consumir** — por isso o caminho relativo |
 | O teste de fronteira só proíbe `electron` | `runtime-boundary.test.ts:62,91,105` | **Nada impede o import relativo** |
 
 Consequência prática: o Stage compila contra o **source TypeScript** do Core, com caminhos como
 `../../../../../../../lia/core/src/transports/contracts`. Isso significa que (a) o Core não é
-consumível como pacote publicado; (b) mover diretórios quebra 24 arquivos; (c) o `dist` do Core
-não é a fonte de verdade do Stage; (d) não existe teste que impeça a proliferação. O Core é
+consumível como pacote publicado; (b) mover diretórios quebra 23 arquivos; (c) o `dist` não é a
+fonte de verdade do Stage; (d) não existe teste que impeça a proliferação. O Core é
 "independente de interfaces" por convenção, não por contrato executável.
+
+**Correção de 16/11:** a leitura de que "`@lia/core` tem superfície incompleta" estava errada.
+`@lia/core` (airi) tem 16 subpaths e nenhuma violação; o problema é `@lia/contracts` (`lia/core`),
+que **não tem superfície nenhuma**.
 
 ### 2.5 Ciclo de vida e credenciais, como estão hoje
 
@@ -319,7 +324,7 @@ Severidade = impacto no produto **hoje**, não esforço de correção.
 | **P-02** | **Runtime órfão é incontrolável.** Não há descoberta nem canal de controle; `holdsOwnedStage()` só reconhece o próprio filho. Fechar o Launcher hoje é tudo-ou-nada. | `airi-stage-manager.ts:204-206` | **Alta** |
 | **P-03** | **Encerramento não é gracioso no Windows.** O primeiro gesto é `taskkill /T /F`; o `before-quit` do Stage existe e nunca é chamado. Memória/voz em voo são perdidas; o file logger não é fechado. | `airi-stage-manager.ts:228-256`; `stage-tamagotchi/src/main/index.ts:732` | **Média-Alta** |
 | **P-04** | **Dois runtimes Electron idênticos no pacote.** 143,2 MiB × 2 de payload comprimido, duas árvores de processo, dois GPU/utility, dois crashpad. | `electron-builder.config.ts` (`extraResources`); `package-windows.mjs`; §2.7 | **Média-Alta** |
-| **P-05** | **A fronteira do Core não é executável.** 46 imports relativos em 24 arquivos atravessam `@lia/core/src`; 4 domínios (providers, transports, presence, credentials) não têm subpath público. | §2.4 | **Alta** |
+| **P-05** | **A fronteira do Core não é executável.** 44 declarações relativas em 23 arquivos atravessam `lia/core/src` (`@lia/contracts`), que não tem `exports` e não é dependência de ninguém. | §2.4 | **Alta** |
 | **P-06** | **Perfil Chromium do Stage = pasta de dados de produto.** Cache/IndexedDB/LocalStorage ao lado de `lia-secrets.json`; a proibição de mistura vale só para o Launcher. | `stage-tamagotchi/src/main/index.ts:97-101`; `lia-host.ts:378-380` | **Média** |
 | **P-07** | **Existem dois donos possíveis do vault.** Gerenciado: Stage escreve via owner (só `apiKey`); não gerenciado: Stage escreve direto no mesmo arquivo. O lock impede corrupção, mas a política de revisão é por processo. | `credential-owner-access.ts:31-78`; `vault-lock.ts` | **Média** (residual) |
 | **P-08** | **Electron 43.4.1 está na borda do suporte.** 3 majors suportadas, cadência de 8 semanas; a 46 empurra a 43 para fora. A versão está fixada em 3 lugares. | §2.7 | **Média** |
@@ -644,7 +649,7 @@ Reabrir  : Launcher lê runtime.json ──► desafio HMAC ──► adota (sta
 | Runtime Electron 43.4.1 x64 (zip oficial) | 143,2 MiB (150.154.788 B) | 16/11/2026 | `api.github.com` |
 | Launcher — LOC e canais | 4.344 main / 4.487 renderer / 27 canais | 16/11/2026 | §2.2 |
 | Stage — LOC, arquivos, janelas | 25.388 main / 52.069 renderer / 66 arq. importam Electron (55 com API em runtime) / 15 janelas | 16/11/2026 | §2.3 |
-| Imports que atravessam o Core | 46 em 24 arquivos | 16/11/2026 | §2.4 |
+| Declarações que atravessam `lia/core/src` | 44 (41 `import` + 3 `export`) em 23 arquivos | 16/11/2026 | §2.4, Anexo A |
 
 ### 9.2 O que continua **NÃO EXECUTADO**
 
@@ -835,9 +840,9 @@ executável quando aprovada. Cada fase é um commit (ou conjunto pequeno) com ro
 
 | Entrega | Teste |
 |---|---|
-| Subpaths públicos para `providers`, `transports`, `presence`, `credentials`, `brain` | `core-build-contract` estendido |
-| Migrar os 46 imports relativos para subpaths | teste novo: nenhum `lia/core/src` fora do pacote |
-| `@lia/core` com `exports` completo e `types` | build + `tsc` |
+| Subpaths públicos em `@lia/contracts` para `providers`, `transports`, `presence`, `credentials` | `core-build-contract` estendido |
+| Migrar as 44 declarações relativas para subpaths | teste novo: nenhum `lia/core/src` fora do pacote |
+| `@lia/contracts` com `exports`, `types` e build | build + `tsc` |
 
 **Rollback:** reverter o commit; nenhum comportamento de runtime muda (é reexportação).
 
@@ -940,7 +945,7 @@ descrição do estado.
 | "Stage Main 25.345 LOC" | **25.388** LOC | Anexo A |
 | "Runtime Electron 43.4.1" (sem tamanho) | zip oficial = **143,2 MiB** (150.154.788 B) | `api.github.com` |
 | "Dois runtimes = custo arquitetural" | Confirmado e **quantificado no disco**; tamanho instalado segue **NÃO MEDIDO** | §2.7 |
-| "Core é independente de runtime" | Verdadeiro para **Electron**; **falso** para fronteira de pacote (46 imports relativos) | §2.4 |
+| "Core é independente de runtime" | Verdadeiro para **Electron**; **falso** para fronteira de pacote (44 declarações relativas em 23 arquivos) | §2.4 |
 | "Plano de execução Etapa 1: contrato de transporte como alvo" | O contrato existe (`lia/launcher`, `lia/stage`) e **não tem consumidor** | §2.1 |
 | "Encerramento gracioso" (implícito em "supervised teardown") | No Windows o primeiro gesto é `taskkill /T /F`; o `before-quit` do Stage não é acionado | §2.5 |
 
@@ -962,6 +967,31 @@ descrição do estado.
    medidos no protocolo de §9.4 e com limites aprovados **antes** (D-07).
 5. **Não declarar nada concluído.** O gate de arquitetura continua **ABERTO**: esta rodada
    produziu estado real, correções e um plano; não produziu o número que decide.
+
+---
+
+## 15. Documentos derivados (16/11/2026)
+
+Esta auditoria é a base; as decisões formais, a especificação de ciclo de vida, o plano do Core, o
+experimento do binário, o protocolo de benchmark e a matriz de gates vivem em
+[`docs/architecture/decisions/`](../architecture/decisions/README.md).
+
+| Documento | Papel |
+|---|---|
+| [Registro D-01…D-08](../architecture/decisions/DECISION-RECORD-2026-11-16.md) | status, condições e sign-off de cada decisão |
+| [ADR-0001](../architecture/decisions/ADR-0001-desktop-runtime-d-plus.md) | arquitetura-alvo D+ e invariantes |
+| [SPEC de lifecycle](../architecture/decisions/SPEC-launcher-runtime-lifecycle.md) | fechar ≠ parar, descoberta, canal autenticado, credencial |
+| [Plano do Core](../architecture/decisions/PLAN-core-public-surface.md) | superfície pública de `@lia/contracts` |
+| [Experimento do binário](../architecture/decisions/PLAN-shared-electron-binary-experiment.md) | PASS/FAIL e rollback |
+| [Benchmark C0–C8](../architecture/decisions/BENCHMARK-C0-C8-windows.md) | protocolo no Windows (substitui o §9.4 desta auditoria) |
+| [Riscos e gates](../architecture/decisions/RISKS-DEPENDENCIES-GATES.md) | dependências G-0…G-5 |
+
+> **Nota de correção (16/11, rodada de decisões):** a primeira versão desta auditoria falava em
+> "46 imports em 24 arquivos" e atribuía a violação a `@lia/core`. A auditoria fina mostrou:
+> **46 linhas** mencionam `lia/core/src`, das quais **44 são declarações** (41 `import` + 3
+> `export … from`) **em 23 arquivos**; e o alvo é **`@lia/contracts`** (`lia/core`), não
+> `@lia/core` (`airi/packages/lia-core`). O §2.4, o P-05 e o Anexo A já estão corrigidos; o
+> [plano do Core](../architecture/decisions/PLAN-core-public-surface.md) detalha a migração.
 
 ---
 

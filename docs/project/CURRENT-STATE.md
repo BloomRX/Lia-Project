@@ -37,7 +37,21 @@ estado assumido: fechar o Launcher **encerra** o Runtime (o oposto da decisão d
 `holdsOwnedStage()` não descobre Runtime em execução, e o encerramento no Windows começa
 por `taskkill /T /F`. O **gate de arquitetura continua ABERTO**: nenhuma medição de
 RAM/CPU/GPU/FPS/boot foi executada nesta rodada e nenhuma troca de framework foi
-autorizada. Decisões pendentes: D-01…D-08 (§12.2 do relatório).
+autorizada. As oito decisões propostas foram formalizadas no parágrafo seguinte.
+
+**Decisões formais da arquitetura do desktop (16/11/2026).** O pacote
+[D-01…D-08](../architecture/decisions/DECISION-RECORD-2026-11-16.md) registra status,
+condições, consequências e sign-off de cada decisão; o
+[ADR-0001](../architecture/decisions/ADR-0001-desktop-runtime-d-plus.md) fixa D+ (Electron nos
+dois processos com fronteiras fechadas) e rejeita o runtime único. Completam o pacote a
+[SPEC de lifecycle](../architecture/decisions/SPEC-launcher-runtime-lifecycle.md), o
+[plano do Core](../architecture/decisions/PLAN-core-public-surface.md), o
+[experimento do binário](../architecture/decisions/PLAN-shared-electron-binary-experiment.md), o
+[benchmark C0–C8](../architecture/decisions/BENCHMARK-C0-C8-windows.md) e a
+[matriz de riscos/gates](../architecture/decisions/RISKS-DEPENDENCIES-GATES.md).
+**Nenhuma implementação foi feita.** Gates G-0…G-5 **ABERTOS**; sign-off de D-01, D-03, D-04 e
+D-07 **PENDENTE**. Correções de número: os 46 são **linhas** (41 imports) em **23 arquivos**, e o
+alvo é `@lia/contracts` (`lia/core`), não `@lia/core`.
 
 **Decisões do beta interno (14/11/2026, revisão 2 do plano).** O produto definiu:
 beta **interno**; **voz e STT obrigatórios** para aprovação; **Fase 1 de UI autorizada**
