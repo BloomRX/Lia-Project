@@ -120,7 +120,13 @@ describe('lia brain service lifecycle ownership (Phase 8.0D-5)', () => {
     // never names the logger/prefix and never inspects a factual value.
     expect(source).not.toMatch(/useLogg\('lia:brain|\[LIA-BRAIN-DIAG\]|formatLiaBrainDiagnosticEntry|LiaBrainDiagnosticEntry/)
     expect(source).not.toMatch(/\.observe\(/)
-    expect(source).not.toMatch(/\bfacts\b|\bstatus\b|\battempts\b|providerIdentityEqual|modelIdentityEqual/)
+    expect(source).not.toMatch(/\bfacts\b|\battempts\b|providerIdentityEqual|modelIdentityEqual/)
+    const observerFactory = source.slice(
+      source.indexOf('createLiaBrainCorrelationObserver({'),
+      source.indexOf('selectLiaBrainDiagnosticLog(import.meta.env.DEV)') + 'selectLiaBrainDiagnosticLog(import.meta.env.DEV)'.length,
+    )
+    // The separate Runtime control provider legitimately exposes its own status.
+    expect(observerFactory).not.toMatch(/\bstatus\b/)
     // Still provider-neutral: no engine/model/provider literal anywhere.
     expect(source).not.toMatch(/groq|gpt-oss|qwen|openai|anthropic/i)
 
