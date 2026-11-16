@@ -71,6 +71,7 @@ export type ControlErrorCode
   = | 'denied'
     | 'invalid'
     | 'timeout'
+    | 'unavailable'
     | 'unreachable'
     | 'unsupported'
 
@@ -133,7 +134,12 @@ function publicKeyFromRaw(raw: Buffer) {
   return createPublicKey({ format: 'der', key: Buffer.concat([X25519_SPKI_PREFIX, raw]), type: 'spki' })
 }
 
-function rawFromPublicKey(key: ReturnType<typeof generateKeyPairSync>['publicKey']): Buffer {
+/**
+ * Só o que usamos: exportar a SPKI em DER. Tipar assim evita a união de
+ * representações que `generateKeyPairSync` devolve e mantém a função honesta
+ * quanto ao que exige da chave.
+ */
+function rawFromPublicKey(key: { export: (options: { format: 'der', type: 'spki' }) => string | Buffer }): Buffer {
   const der = key.export({ format: 'der', type: 'spki' })
   return Buffer.from(der).subarray(-32)
 }
@@ -391,7 +397,7 @@ export async function startRuntimeControlServer(options: RuntimeControlServerOpt
     socket.on('data', (chunk) => {
       if (closed)
         return
-      buffer = Buffer.concat([buffer, chunk])
+      buffer = Buffer.concat([buffer, Buffer.from(chunk)])
       if (buffer.length > MAX_FRAME_BYTES) {
         socket.destroy()
         return
@@ -568,7 +574,7 @@ export async function invokeRuntimeControl(
     socket.on('close', () => finish(new ControlError('unreachable', 'closed-before-response')))
 
     socket.on('data', (chunk) => {
-      buffer = Buffer.concat([buffer, chunk])
+      buffer = Buffer.concat([buffer, Buffer.from(chunk)])
       if (buffer.length > MAX_FRAME_BYTES)
         return finish(new ControlError('invalid', 'frame-too-large'))
       let newline = buffer.indexOf(0x0A)

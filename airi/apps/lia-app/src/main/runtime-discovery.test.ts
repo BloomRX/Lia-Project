@@ -1,13 +1,11 @@
-import type { RuntimeControlServer } from '../../../../../lia/core/src/runtime/control'
+import type { RuntimeControlServer } from '@lia/contracts/runtime'
 
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
-import { startRuntimeControlServer } from '../../../../../lia/core/src/runtime/control'
-import { createRuntimeRecord, runtimeEndpointFor } from '../../../../../lia/core/src/runtime/instance'
-import { createRuntimeRegistry } from '../../../../../lia/core/src/runtime/registry'
+import { createRuntimeRecord, createRuntimeRegistry, runtimeEndpointFor, startRuntimeControlServer } from '@lia/contracts/runtime'
 import { discoverRuntime, stopDiscoveredRuntime } from './runtime-discovery'
 
 /**
@@ -27,7 +25,7 @@ afterAll(async () => {
   await rm(stateDir, { force: true, recursive: true })
 })
 
-async function startRuntime(options: { onShutdown?: () => void } = {}): Promise<{ server: RuntimeControlServer, instanceId: string }> {
+async function startRuntime(): Promise<{ server: RuntimeControlServer, instanceId: string }> {
   const instanceId = globalThis.crypto.randomUUID()
   const server = await startRuntimeControlServer({
     endpoint: runtimeEndpointFor(process.platform, stateDir, instanceId),
@@ -35,7 +33,12 @@ async function startRuntime(options: { onShutdown?: () => void } = {}): Promise<
       ? { instanceId, pid: process.pid, uptimeMs: 1 }
       : { ok: true },
     instanceId,
-    ...(options.onShutdown ? { onShutdownRequested: options.onShutdown } : {}),
+    // Um Runtime de verdade remove o registro e fecha o canal ao sair: é o
+    // que faz a descoberta enxergar "parado".
+    onShutdownRequested: async () => {
+      await createRuntimeRegistry(stateDir).remove(instanceId)
+      await server.close()
+    },
   })
   const registry = createRuntimeRegistry(stateDir)
   await registry.publish(createRuntimeRecord({
@@ -83,15 +86,13 @@ describe('descoberta do Runtime', () => {
   })
 
   it('para um Runtime ADOTADO (sem filho) de forma cooperativa', async () => {
-    let shutdownCalls = 0
-    const { server } = await startRuntime({ onShutdown: () => { shutdownCalls += 1 } })
-    // O runtime morre fechando o próprio canal, como faria ao sair.
+    await startRuntime()
+    // Sem `ChildProcess` nenhum: a parada é por descoberta.
     const result = await stopDiscoveredRuntime(stateDir, { pollMs: 25, timeoutMs: 3_000 })
-      .finally(async () => { await server.close().catch(() => {}) })
-    expect(shutdownCalls).toBe(1)
     expect(result.acknowledged).toBe(true)
-    // O servidor do teste só fecha no finally: aqui o que importa é o pedido.
-    expect(result.stopped).toBe(false)
+    expect(result.stopped).toBe(true)
+    expect(result.forced).toBe(false)
+    expect((await discoverRuntime(stateDir)).status).toBe('none')
   })
 
   it('não inventa parada quando não há Runtime', async () => {

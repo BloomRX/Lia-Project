@@ -1,6 +1,8 @@
 import type { RunAsNodeFuseState } from './node-runtime'
 import type { StageBuildPrerequisite, StagePrerequisiteOutcome } from './stage-build-prerequisite'
 
+import type { StdioOptions } from 'node:child_process'
+
 import { execFile, spawn } from 'node:child_process'
 import { existsSync, mkdirSync, openSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
@@ -407,23 +409,23 @@ export class AiriStageManager {
     delete stageEnv.ELECTRON_RUN_AS_NODE
 
     const detached = this.deps.mode === 'detached'
-    let stdio: 'pipe' | Array<number | string> = 'pipe'
+    const command = runtime.command
+    const args = packaged?.args ?? [entrypoint, 'dev']
+    const cwd = packaged?.cwd ?? stageDir
+    let child: ReturnType<typeof spawn>
     if (detached) {
-      // Sem arquivo de log não há diagnóstico e um pipe fechado mataria o
+      // Sem arquivo de log não há diagnóstico, e um pipe fechado mataria o
       // filho no primeiro `console.log`. O arquivo, não o pipe, é o canal.
+      let stdio: StdioOptions = 'ignore'
       if (this.deps.logFile) {
         mkdirSync(dirname(this.deps.logFile), { recursive: true })
         stdio = ['ignore', openSync(this.deps.logFile, 'a'), openSync(this.deps.logFile, 'a')]
       }
-      else {
-        stdio = 'ignore'
-      }
+      child = spawnImpl(command, args, { cwd, detached: true, env: stageEnv, stdio })
     }
-    const child = spawnImpl(runtime.command, packaged?.args ?? [entrypoint, 'dev'], {
-      cwd: packaged?.cwd ?? stageDir,
-      env: stageEnv,
-      ...(detached ? { detached: true, stdio } : {}),
-    })
+    else {
+      child = spawnImpl(command, args, { cwd, env: stageEnv })
+    }
     // Destacado: o Launcher não espera por ele nem o leva junto ao sair.
     if (detached)
       child.unref()

@@ -25,8 +25,11 @@ Stage saiu da pasta do produto para `<produto>/stage-profile`, com migração c�
 (6) F2 concluído — 42 arquivos migrados de `lia/core/src/...` para `@lia/contracts/...`,
 com guardas S1–S5. Diagnóstico histórico em
 [LIA-DESKTOP-LIFECYCLE-DIAGNOSIS-2026-11-16](../reports/LIA-DESKTOP-LIFECYCLE-DIAGNOSIS-2026-11-16.md).
-**Validação:** core 146 PASS, launcher 263 PASS + 2 skip, stage 873 PASS (8 arquivos não
-carregam — `@proj-airi/electron-eventa` não construído no ambiente), build do launcher PASS.
+**Validação:** core 153 PASS (inclui integração de dois processos reais), launcher 270 PASS
+(31/31 arquivos), stage 873 PASS (8 arquivos não carregam — `@proj-airi/electron-eventa` não
+construído no ambiente), `tsc` do launcher 0 erros, build do launcher PASS. Riscos fechados
+na revisão: parada de Runtime **adotado** (sem `ChildProcess`) e recusa de matar o próprio
+PID num registro corrompido.
 **Não validado:** Windows. Named pipe, DPAPI e `taskkill` continuam **NÃO EXECUTADOS**; o
 gate de arquitetura permanece **ABERTO** e os limites de 350 MiB / 6 processos continuam
 provisórios.

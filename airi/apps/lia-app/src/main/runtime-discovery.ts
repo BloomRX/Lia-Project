@@ -112,6 +112,10 @@ export async function stopDiscoveredRuntime(
       if (again.status !== 'live' || again.record.instanceId !== expectedInstance)
         return
       const pid = again.record.pid
+      // Nunca matar o próprio processo: um registro corrompido apontando para
+      // o Launcher não pode transformar "parar o Runtime" em "fechar à força".
+      if (pid === process.pid)
+        return
       const platform = options.platform ?? process.platform
       if (platform === 'win32') {
         await new Promise<void>((resolve) => {
