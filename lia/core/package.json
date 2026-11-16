@@ -7,5 +7,17 @@
   "main": "src/index.ts",
   "scripts": {
     "test": "node --experimental-strip-types --test \"test/*.test.ts\""
-  }
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./credentials/owner-channel": "./src/credentials/owner-channel.ts",
+    "./presence": "./src/presence/index.ts",
+    "./providers": "./src/providers/index.ts",
+    "./providers/catalog": "./src/providers/catalog.ts",
+    "./providers/selection-write-policy": "./src/providers/selection-write-policy.ts",
+    "./runtime": "./src/runtime/index.ts",
+    "./transports": "./src/transports/index.ts",
+    "./transports/repository": "./src/transports/repository.ts"
+  },
+  "types": "./src/index.ts"
 }
