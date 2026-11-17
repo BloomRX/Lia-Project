@@ -145,7 +145,7 @@ describe('editable model selection', () => {
     const screen = await mount(locale)
     await vi.waitFor(() => expect(screen.container.textContent).toContain(locale === 'en' ? 'Suggestions received.' : 'Sugestões recebidas.'))
     expect(screen.container.textContent).not.toContain('tamagotchi.home.')
-    await page.screenshot({ path: `J:/Lia-Project/airi/apps/stage-tamagotchi/node_modules/.cache/lia-models-${locale}.png` })
+    await page.screenshot({ path: `node_modules/.cache/lia-models-${locale}.png` })
   })
 
   it('invalidates a successful text probe when the endpoint changes', async () => {
