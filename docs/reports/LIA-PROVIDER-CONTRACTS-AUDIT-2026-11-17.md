@@ -52,6 +52,13 @@ Mesmo assim a entrada se apresentava como `description: 'anthropic.com'` e
 oferecia uma Base URL padrão apontando para o host nativo — configuração que
 falha na primeira mensagem.
 
+Segunda prova, independente do AIRI: `anthropic` está em
+`CURATED_CHAT_PROVIDER_IDS` (`src/shared/lia/provider-catalog.ts:47`), e todo id
+curado **executa no processo principal** pelo adapter de Lia Core, cujo contrato
+aceita somente `protocol: 'chat-completions'`
+(`lia/core/src/providers/contracts.ts:12`). Ou seja: nem o caminho novo (Main)
+nem o antigo (Renderer) fala `/v1/messages`.
+
 ### Correção aplicada
 
 Somente a declaração mudou. A entrada continua no catálogo porque **um gateway
