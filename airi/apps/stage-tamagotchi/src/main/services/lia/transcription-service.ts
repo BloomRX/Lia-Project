@@ -273,7 +273,12 @@ export function registerLiaTranscriptionBridge(params: {
 }) {
   const service = createLiaTranscriptionService({ fetch: params.fetch, repository: params.repository, vault: params.vault })
   type Owner = WebContents
-  const pending = new Map<string, { owner: Owner, controller: AbortController, detach: () => void }>()
+  const pending = new Map<string, {
+    owner: Owner
+    frame: Electron.IpcMainEvent['senderFrame']
+    controller: AbortController
+    detach: () => void
+  }>()
   let disposed = false
   defineInvokeHandler(params.context, electronLiaTranscriptionRun, async (payload, options) => {
     try {
@@ -295,7 +300,7 @@ export function registerLiaTranscriptionBridge(params: {
         owner.removeListener('render-process-gone', cleanup)
         owner.removeListener('did-start-navigation', cancelOnNavigation)
       }
-      const job = { owner, controller, detach }
+      const job = { owner, frame: event.senderFrame, controller, detach }
       pending.set(request.requestId, job)
       owner.once('destroyed', cleanup)
       owner.once('render-process-gone', cleanup)
@@ -318,7 +323,9 @@ export function registerLiaTranscriptionBridge(params: {
       return { ok: false }
     const job = pending.get(payload.requestId)
     const event = options?.raw?.ipcMainEvent
-    if (!event || !job || job.owner !== event.sender || !params.isAllowedSender(event))
+    // A preview leaving its allowed route can still cancel its own in-flight
+    // request during teardown. Starting a new one still requires route approval.
+    if (!event || !job || job.owner !== event.sender || job.frame !== event.senderFrame)
       return { ok: false }
     job.controller.abort()
     return { ok: true }

@@ -463,6 +463,20 @@ describe('transcription IPC ownership', () => {
     expect(await pending).toEqual({ ok: false, code: 'cancelled' })
     expect(fixture.sender.listenerCount('did-start-navigation')).toBe(0)
   })
+
+  it('allows the original frame to cancel a preview after a route change', async () => {
+    const allowed = vi.fn(() => true)
+    const fixture = bridgeFixture(allowed)
+    const requestId = randomUUID()
+    const pending = fixture.run({ ...request, requestId })
+    await vi.waitFor(() => expect(fixture.fetch).toHaveBeenCalledOnce())
+    allowed.mockReturnValue(false)
+    fixture.sender.emit('did-start-navigation', { isMainFrame: true, isSameDocument: true })
+
+    expect(await fixture.run({ ...request, requestId: randomUUID() })).toEqual({ ok: false, code: 'configuration' })
+    expect(fixture.cancel({ requestId })).toEqual({ ok: true })
+    expect(await pending).toEqual({ ok: false, code: 'cancelled' })
+  })
   it('records ownership before repository await, isolates cancel and releases listeners', async () => {
     const fixture = bridgeFixture()
     const read = deferred<TransportSnapshot>()

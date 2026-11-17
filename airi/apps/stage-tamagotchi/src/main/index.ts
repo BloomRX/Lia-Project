@@ -63,6 +63,7 @@ import { createPresenceService } from './services/lia/presence-service'
 import { registerLiaProviderConfigBridge } from './services/lia/provider-config-service'
 import { resolveRuntimeStateDir, startLiaRuntimeService } from './services/lia/runtime-service'
 import { createLiaSecretVault, registerLiaSecretsBridge } from './services/lia/secrets-service'
+import { isLiaTranscriptionSenderAllowed } from './services/lia/transcription-sender-policy'
 import { registerLiaTranscriptionBridge } from './services/lia/transcription-service'
 import { canRendererReadLegacySecret, getApplicationRepository, registerLiaTransportConfigBridge } from './services/lia/transport-config-service'
 import { registerLiaVoiceConfigBridge } from './services/lia/voice-config-service'
@@ -216,6 +217,7 @@ electronApp.setAppUserModelId('ai.lia.app')
 // Track the real user-facing AIRI window because the process also owns hidden utility windows.
 // The second-instance handler should restore the main UI instead of accidentally surfacing internals.
 let userFacingMainWindow: BrowserWindow | undefined
+let hearingSettingsWindow: BrowserWindow | undefined
 const shouldStartMainProcess = installSingleInstanceGuard({ app, getWindow: () => userFacingMainWindow })
 
 // Per-mode main-window size controller, lazily populated once the main window is
@@ -409,6 +411,13 @@ app.whenReady().then(async () => {
     build: async ({ dependsOn }) =>
       setupSettingsWindowReusableFunc({
         ...dependsOn,
+        onWindowCreated: (window) => {
+          hearingSettingsWindow = window
+          window.once('closed', () => {
+            if (hearingSettingsWindow === window)
+              hearingSettingsWindow = undefined
+          })
+        },
         getMainWindow: () => userFacingMainWindow,
         getMainWindowSizeSettings: () => userFacingMainWindowSizeSettings,
       }),
@@ -547,11 +556,7 @@ app.whenReady().then(async () => {
         context,
         repository: getApplicationRepository(),
         vault: deps.liaSecrets,
-        isAllowedSender: (event) => {
-          const window = userFacingMainWindow
-          return window !== undefined && !window.isDestroyed()
-            && event.sender === window.webContents && event.senderFrame === window.webContents.mainFrame
-        },
+        isAllowedSender: event => isLiaTranscriptionSenderAllowed(event, userFacingMainWindow, hearingSettingsWindow),
       })
       onAppBeforeQuit(() => transcription.dispose())
       registerLiaMemoryBridge({ context })
