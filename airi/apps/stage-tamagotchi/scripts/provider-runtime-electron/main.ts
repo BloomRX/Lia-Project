@@ -39,7 +39,7 @@ void app.whenReady().then(async () => {
     },
   }
   // Harness has a single measured window and no product windows; the sender
-// policy exists to separate product surfaces, which this script does not have.
+  // policy exists to separate product surfaces, which this script does not have.
   registerLiaSecretsBridge({
     context,
     vault: measuredVault,
