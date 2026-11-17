@@ -13,16 +13,23 @@ commit. Registra **estado**, não narrativa: relatório de rodada vai para
 
 ## 0. Estado agora
 
-**Rodada 21 — primeiro corte de SEC-04 (17/11/2026).** A Principal
-partiu de `ceb6f35` limpa e alinhada ao remoto. O IPC de leitura do
-cofre agora recusa acesso se o bridge não tiver política explícita.
-A política de compatibilidade para provedores legados instalados
-continua em uso. Próximo corte: mapear os consumidores dessa política
-e migrar a execução para o Main antes de retirar a leitura legada.
-Windows: 36 testes focados, 7 de ciclo de vida com processos Node,
-lint direcionado e gate Electron com HTTP local passaram. Evidência
-local em `Tests/artifacts/provider-runtime-electron/1794885164214/`.
-SEC-04, SEC-05, consentimento STT, G-AUD e G-ARCH seguem abertos.
+**Rodada 21 — segurança do cofre, P0 e contratos de provider (17/11/2026).**
+Quatro commits publicados (`908e35e5`, `3fc7856a`, `63a9a6e3`, `ca82ef07`).
+O bridge do cofre passou a **exigir** policy de remetente: só o frame de topo da
+janela principal e da janela de ajustes alcançam `get/has/set/adopt/delete`
+(23/23 testes, mutações derrubam a suíte). O arquivo sensível
+`LIA-AGENT-CONSUMPTION-AUDIT.local.md` saiu do estado atual, `*.local.md` foi
+ignorado e o caminho pessoal foi sanitizado — **sem segredos, sem rotação**;
+a purga histórica das 7 branches está **BLOCKED** (exige reescrever histórico).
+A entrada "Anthropic" deixou de anunciar acesso direto (o transporte é
+`chat/completions`, a API nativa é `/v1/messages`) e foi provado que não há
+caminho de embeddings. **Abertos:** SEC-04 leitura legada (BLOCKED — exige mover
+provedor não curado para o Main), SEC-05 (BLOCKED/NOT RUN), consentimento STT
+(**FAIL**, não existe), OIDC com emissor real (NOT RUN), G-AUD e G-ARCH
+(BLOCKED). O fluxo **legado** de auth ainda entrega tokens ao Renderer e os
+persiste em `localStorage` quando o OIDC está ligado — **FAIL comprovado** no
+sub-caso; a correção depende de decisão de produto.
+Relatório: [LIA-ROUND-21-IMPLEMENTATION-REPORT](../reports/LIA-ROUND-21-IMPLEMENTATION-REPORT.md).
 
 **Rodada 20 — preparação e correções defensivas no Windows (16/11/2026).**
 Inventário confirmou quatro WAVs de síntese isolada em `407300b`. G-AUD
