@@ -13,6 +13,17 @@ commit. Registra **estado**, não narrativa: relatório de rodada vai para
 
 ## 0. Estado agora
 
+**Rodada 20 — preparação e correções defensivas no Windows (16/11/2026).**
+Inventário confirmou quatro WAVs de síntese isolada em `407300b`. G-AUD
+continua BLOCKED, P-2 aguarda aprovação e G-ARCH segue aberto. A branch agora
+inclui a revalidação de ferramentas, bloqueio de credencial em HTTP externo,
+proteções de concorrência OIDC/créditos, sanitização de logs STT e a política
+OIDC desligada no build padrão do Stage. No Electron Windows, o recorte
+OIDC-OFF apagou cinco slots sintéticos e observou zero solicitações
+`/api/auth/` em dez minutos. O gate de providers com serviço local
+passou. T-07/T-08 e consentimento de STT seguem pendentes.
+Veja [resultados e evidências](../reports/LIA-ROUND-20-IMPLEMENTATION-REPORT.md).
+
 **Rodada 18 — Runtime independente implementado (16/11/2026).** O ciclo de vida
 descrito em D-04 saiu do papel e o Launcher deixou de ser dono do Runtime. O que mudou de
 fato: (1) o Stage publica um **registro de instância** e atende um **canal de controle

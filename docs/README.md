@@ -27,6 +27,7 @@ o documento da área que você vai tocar.
 |---|---|
 | [`reports/LIA-GLOBAL-BRANCH-RECONCILIATION-2026-11-16.md`](reports/LIA-GLOBAL-BRANCH-RECONCILIATION-2026-11-16.md) | **Inventário e reconciliação das 12 branches + 4 PRs**, achados, riscos e ordem de execução |
 | [`reports/LIA-BRANCH-INTEGRATION-MATRIX.md`](reports/LIA-BRANCH-INTEGRATION-MATRIX.md) | Matriz **por alteração**: classificação, arquivos, dependências, risco, testes e aceite |
+| [`reports/LIA-ROUND-20-IMPLEMENTATION-REPORT.md`](reports/LIA-ROUND-20-IMPLEMENTATION-REPORT.md) | Correções da Rodada 20, testes Windows, inventário de áudio e critérios abertos |
 | [`reports/LIA-SECURITY-RECONCILIATION.md`](reports/LIA-SECURITY-RECONCILIATION.md) | Segurança: gate de ferramentas, credencial × HTTP, `auth.ts`, STT, OIDC-OFF, SEC-04/05 |
 | [`reports/LIA-AUDIO-QA-RECONCILIATION.md`](reports/LIA-AUDIO-QA-RECONCILIATION.md) | Áudio: AV-01…AV-15, nove camadas de prova, evidência por SHA/ambiente, G-AUD |
 | [`reports/LIA-UIUX-RECONCILIATION.md`](reports/LIA-UIUX-RECONCILIATION.md) | UI/UX: `250b337a` × `codex/lia-ui-ux-fase-1` × Principal; L-02 bloqueado |

@@ -1,5 +1,12 @@
 # Auditoria de segurança — credenciais STT e ensaio de voz
 
+**Rodada 20:** canários automatizados cobrem transcrição descartada,
+erros brutos e tracing ASR. O Main restringe o IPC ao frame principal
+do Stage ou do preview nativo nas rotas autorizadas de Configurações.
+Quando o documento é substituído, o trabalho pendente é cancelado.
+Consentimento remoto, vínculo ao destino e retenção permanecem abertos.
+[Implementação e validação](LIA-ROUND-20-IMPLEMENTATION-REPORT.md).
+
 Data: 2026-11-14. Código examinado: `9f5ff4315c4ad3af9dfba8d19176da0ee26473bf` na branch `arena/c6b02f64-lia-project`. Escopo: revisão estática do fluxo desktop/Stage de captura, gravação e transcrição, com testes isolados indicados abaixo. A branch de voz do Codex estava em `fd0451d766053fb7bae0aba562830f730ee87a9c` na última consulta a `ls-remote`; **não foi examinada nem integrada**, pode ter evoluído e este relatório não é uma aprovação dela. Voz e STT permanecem obrigatórios; nenhum código de áudio foi alterado.
 
 ## Decisão

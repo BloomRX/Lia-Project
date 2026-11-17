@@ -1,5 +1,11 @@
 # Credenciais — auditoria de prontidão beta, 08/11/2026
 
+**Rodada 20:** o build padrão do Stage desativa OIDC. O opt-in de
+desenvolvimento preserva o caminho legado e continua sujeito à auditoria.
+Credenciais de provedores são separadas dos cinco slots legados de sessão
+que o OFF limpa. Veja as provas e os bloqueios T-07/T-08 no
+[relatório Windows](../reports/LIA-ROUND-20-IMPLEMENTATION-REPORT.md).
+
 Referência inicial: `dcd0b058483912b2047a82973e39edb1d076a344`.
 Revisão estática independente correlacionada com os handlers Main pelo agente
 principal. **P0 ainda aberto; não é aprovação global de segurança.** Nenhum

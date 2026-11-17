@@ -5,6 +5,23 @@
 **Escopo:** plano **por alteração**, não por branch. **Nenhuma integração foi executada nesta rodada.**
 **Regras:** PORTAR/ADAPTAR só com teste no SHA integrado; L-02 bloqueado até SEC-04/05; nenhum modelo experimental promovido; prettier/lint apenas nos arquivos alterados.
 
+**Rodada 20:** o delta executado e os critérios que continuam abertos estão
+no [relatório de implementação](LIA-ROUND-20-IMPLEMENTATION-REPORT.md). Os
+registros abaixo preservam a decisão da Rodada 19.
+
+| Registro | Execução na Rodada 20 |
+| --- | --- |
+| SEC-R-01 | PORTADO e reforçado em `2fabc39`. Regressões focadas de resolução, despacho e substituição passaram. |
+| SEC-R-02 | PORTADO em `7ff636b`. Core e integração HTTP loopback no Windows passaram. |
+| SEC-R-03/04 | ADAPTADOS em `ec5622a`. Testes de geração, concorrência, logout e saldo passaram. |
+| SEC-R-05 | IMPLEMENTADO em `e448464`. Canários de logs e tracing passaram nas suítes focadas. |
+| SEC-R-06 | IMPLEMENTADO no Stage a partir de `ec5622a`. Janela de rede e limpeza sintética exercitadas no Electron. Gate de beta ainda depende de T-07/T-08. |
+| SEC-R-07 | BLOQUEADO. T-07 requer migração dos consumidores e T-08 requer vínculo persistido de credencial a origem. |
+| SEC-R-08 | PARCIAL em `8235fdf`. Guarda de janela/frame e cancelamento com teste. Consentimento remoto segue bloqueado. |
+| AUD-R-01…04 | Régua e arquitetura preservadas. REC-01 inventariou quatro WAVs L1/L2; evidência original e G-AUD seguem bloqueados. |
+| UI-R-* | Preservados como referência nesta ordem. UI-R-04/L-02 segue bloqueado por SEC-04/05. |
+| RES-R-* e DOC-R-* | Referências mantidas nas classificações existentes, sem promoção de modelos. |
+
 **Classificações:** `PORTAR` (aplicar como está, com teste) · `ADAPTAR` (aplicar com ajuste) · `MANTER NA ORIGEM` (não trazer) · `DOCUMENTAR` (só registro) · `REJEITAR` (não usar, com justificativa) · `BLOQUEADO` (depende de gate).
 
 ---

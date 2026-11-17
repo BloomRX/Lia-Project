@@ -1,5 +1,10 @@
 # Lia — Reconciliação de segurança (Architecture/Security × Principal)
 
+**Atualização da Rodada 20:** as correções de ferramentas, HTTP,
+concorrência de sessão, créditos, logs STT e OIDC-OFF foram integradas
+com evidência no [relatório Windows](LIA-ROUND-20-IMPLEMENTATION-REPORT.md).
+SEC-04/05 e a autorização de envio de STT permanecem abertos.
+
 **Data:** 16/11/2026
 **Branch analisada (leitura):** `arena/c6b02f64-lia-project` @ `a1f5b83195` (base de código `407300b`)
 **Branch de destino:** `arena/7fa837f0-lia-project` @ `971d309074`

@@ -1,5 +1,9 @@
 # Lia — Reconciliação de QA de áudio (AV-01…AV-15)
 
+**Atualização da Rodada 20:** o [inventário local](evidence/LIA-ROUND-20-WAV-INVENTORY.csv)
+confirma quatro WAVs da nova coleta Kokoro CPU em `407300b`. São L1/L2.
+Os originais históricos continuam indisponíveis; G-AUD permanece BLOCKED.
+
 **Data:** 16/11/2026
 **Branch de origem (leitura):** `arena/18f50ae7-lia-project` @ `ccf3386120`
 **Branch de destino:** `arena/7fa837f0-lia-project` @ `971d309074`

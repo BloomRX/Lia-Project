@@ -1,0 +1,33 @@
+{
+  "platform": "Windows",
+  "electron": "43.4.1",
+  "profile": "isolated; synthetic legacy slots",
+  "monitoredPath": "/api/auth/",
+  "fullWindow": {
+    "authRequests": 0,
+    "sessionAuthRequests": 0,
+    "capability": false,
+    "deniesOidcInvoke": true,
+    "removed": 5,
+    "observedMs": 600000,
+    "retainedOff": true,
+    "exitCode": 0
+  },
+  "reviewSmoke": {
+    "authRequests": 0,
+    "capability": false,
+    "deniesOidcInvoke": true,
+    "removed": 5,
+    "observedMs": 233,
+    "exitCode": 0
+  },
+  "finalSmoke": {
+    "codeSha": "7373cbe2f7adbb024bbdf24e2d4d0f7300e7269f",
+    "authRequests": 0,
+    "capability": false,
+    "deniesOidcInvoke": true,
+    "removed": 5,
+    "observedMs": 234,
+    "exitCode": 0
+  }
+}
