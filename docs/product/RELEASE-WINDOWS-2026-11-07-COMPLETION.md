@@ -279,7 +279,7 @@ hover/click-through, voz física e ensaio prolongado continuam NÃO EXECUTADOS.
 | Typechecks | `corepack pnpm run typecheck` em Launcher, Stage e stage-pages | PASS, exit 0; Launcher declara `tsc`, Stage/páginas declaram `vue-tsc` |
 | Lint dos arquivos tocados | `moeru-lint --fix <arquivos>`, airi | PASS, exit 0; avisos de oxlint preservados, sem suprimir regra global |
 | Builds estáveis | `corepack pnpm run build` em Launcher, i18n e Stage, sequencialmente | PASS, exit 0; build Launcher também executa build do Core |
-| Componentes Electron PS 5.1 | `powershell.exe -NoProfile -File ./scripts/provider-runtime-electron/run-gate-windows.ps1 -SkipBuild -ExportRoot J:/lia-evidence -ElectronZip C:/Users/lucas/AppData/Local/Temp/lia-electron-official-670c18ee-5d18-4b64-893c-ccfdbfa2c3d4.zip`, Stage | PASS Windows, exit 0; pacote `26120a57-5c10-48fa-a46f-376148bad581` |
+| Componentes Electron PS 5.1 | `powershell.exe -NoProfile -File ./scripts/provider-runtime-electron/run-gate-windows.ps1 -SkipBuild -ExportRoot J:/lia-evidence -ElectronZip C:/Users/<usuario>/AppData/Local/Temp/lia-electron-official-670c18ee-5d18-4b64-893c-ccfdbfa2c3d4.zip`, Stage | PASS Windows, exit 0; pacote `26120a57-5c10-48fa-a46f-376148bad581` |
 | Componentes Electron PS 7 | mesmo comando com `pwsh.exe` | PASS Windows, exit 0; pacote `f909f0dc-5b99-45b5-8b2d-9d87915c2391` |
 
 Os dois pacotes de componentes estão em `J:/lia-evidence/<id>/`, cada um com
@@ -425,12 +425,17 @@ Arquivos Core da retomada preservados; contratos de presença e canal de
 credenciais foram adicionados. No pacote legado, cofre e escrita de produto
 receberam APIs aditivas de rollback/clear com testes; não se afirma ausência
 de toda alteração nesse pacote.
-Relatórios locais de auditoria preservados (ignorados neste checkout):
+Relatórios locais de auditoria: o canônico foi preservado; a variante
+`.local.md` foi retirada do repositório em 17/11/2026 (ver §Remoção abaixo).
 
 - `LIA-AGENT-CONSUMPTION-AUDIT.md` SHA-256
   `324e8d799719e14d69e7b058af80fbc129175a6be064badc78ab429f4389604a`.
 - `LIA-AGENT-CONSUMPTION-AUDIT.local.md` SHA-256
   `49e41d5237ed116ea8069ffb3a255a242112508fe0e45c0367100f0a87590462`.
+  **Removido do estado atual** por conter caminho pessoal (`C:/Users/<usuario>`),
+  IDs de rollout/sessão e contagens internas de agente. O hash permanece como
+  identificador histórico. Correção e risco residual em
+  [LIA-SENSITIVE-FILE-REMEDIATION-2026-11-17](../reports/LIA-SENSITIVE-FILE-REMEDIATION-2026-11-17.md).
 
 Não se inclui `node_modules`, perfil de teste, instalador ou log bruto em Git.
 O aviso LF→CRLF é de política do checkout; não foi feita normalização em massa.

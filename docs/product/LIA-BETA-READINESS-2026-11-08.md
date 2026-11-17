@@ -393,7 +393,7 @@ e `J:/lia-evidence/1f69ffbc-b890-47a6-a2c2-82b7bca6ae2b/`, com `report.json`
 e `electron.log`, 16 grupos por rodada, sentinelas ausentes. Comando Stage:
 `powershell.exe -NoProfile -File ./scripts/provider-runtime-electron/run-gate-windows.ps1
 -SkipBuild -ExportRoot J:/lia-evidence -ElectronZip
-C:/Users/lucas/AppData/Local/Temp/lia-electron-official-670c18ee-5d18-4b64-893c-ccfdbfa2c3d4.zip`,
+C:/Users/<usuario>/AppData/Local/Temp/lia-electron-official-670c18ee-5d18-4b64-893c-ccfdbfa2c3d4.zip`,
 depois equivalente com `pwsh.exe`. Runtime oficial 43.4.1, ZIP SHA-256
 `c2ef9a5f65472c34d14bd3e67b7d14e66b0c01f124aba45263d6a4232160e13a`.
 A repetição com o delta OIDC preservou `report.json` e `electron.log` em
