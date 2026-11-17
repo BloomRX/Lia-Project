@@ -14,7 +14,7 @@ vi.mock('./secrets', () => ({ createLiaSecretVault: vi.fn() }))
 function handler(name: string) {
   return handlers.get(`eventa:invoke:lia:secret:${name}-receive`)!
 }
-function setup(allowRendererRead = async () => false) {
+function setup(allowRendererRead?: (scope: string) => Promise<boolean>) {
   const values = new Map<string, string>()
   const revisions = new Map<string, number>()
   const reference = (scope: string, key: string) => `${scope}:${key}`
@@ -67,6 +67,12 @@ describe('secret bridge ownership and migration', () => {
     expect(await handler('get')({ scope: 'protected', key: 'apiKey' })).toBeUndefined()
     expect(vault.getSecret).not.toHaveBeenCalled()
     expect(await handler('has')({ scope: 'protected', key: 'apiKey' })).toBe(true)
+  })
+  it('reads an explicitly permitted legacy credential through the existing policy', async () => {
+    const { vault, values } = setup(async scope => scope === 'legacy')
+    values.set('legacy:apiKey', 'SYNTHETIC_LEGACY_VALUE')
+    expect(await handler('get')({ scope: 'legacy', key: 'apiKey' })).toBe('SYNTHETIC_LEGACY_VALUE')
+    expect(vault.getSecret).toHaveBeenCalledExactlyOnceWith('legacy', 'apiKey')
   })
   it('fails closed when the authority check rejects, without disclosing the error', async () => {
     const { vault } = setup(async () => {

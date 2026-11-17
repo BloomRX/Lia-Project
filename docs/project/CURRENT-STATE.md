@@ -13,6 +13,17 @@ commit. Registra **estado**, não narrativa: relatório de rodada vai para
 
 ## 0. Estado agora
 
+**Rodada 21 — primeiro corte de SEC-04 (17/11/2026).** A Principal
+partiu de `ceb6f35` limpa e alinhada ao remoto. O IPC de leitura do
+cofre agora recusa acesso se o bridge não tiver política explícita.
+A política de compatibilidade para provedores legados instalados
+continua em uso. Próximo corte: mapear os consumidores dessa política
+e migrar a execução para o Main antes de retirar a leitura legada.
+Windows: 36 testes focados, 7 de ciclo de vida com processos Node,
+lint direcionado e gate Electron com HTTP local passaram. Evidência
+local em `Tests/artifacts/provider-runtime-electron/1794885164214/`.
+SEC-04, SEC-05, consentimento STT, G-AUD e G-ARCH seguem abertos.
+
 **Rodada 20 — preparação e correções defensivas no Windows (16/11/2026).**
 Inventário confirmou quatro WAVs de síntese isolada em `407300b`. G-AUD
 continua BLOCKED, P-2 aguarda aprovação e G-ARCH segue aberto. A branch agora

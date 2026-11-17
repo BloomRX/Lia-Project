@@ -134,15 +134,17 @@ export function registerLiaSecretsBridge(params: {
     })
   })
 
-  defineInvokeHandler(context, electronLiaSecretGet, (payload) => {
-    if (!validReference(payload))
+  defineInvokeHandler(context, electronLiaSecretGet, async (payload) => {
+    if (!validReference(payload) || !params.allowRendererRead)
       return undefined
-    if (params.allowRendererRead) {
-      return params.allowRendererRead(payload.scope)
-        .then(allowed => allowed ? vault.getSecret(payload.scope, payload.key) : undefined)
-        .catch(() => undefined)
+    try {
+      if (await params.allowRendererRead(payload.scope))
+        return await vault.getSecret(payload.scope, payload.key)
     }
-    return vault.getSecret(payload.scope, payload.key)
+    catch {
+      return undefined
+    }
+    return undefined
   })
 
   defineInvokeHandler(context, electronLiaSecretDelete, async (payload) => {
