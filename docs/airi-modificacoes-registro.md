@@ -274,6 +274,19 @@ No Electron, as sete ferramentas permaneceram disponíveis e a resposta voltou,
 mas o modelo chamou retângulo de quadrado: gate de conteúdo permanece FAIL.
 Evidências e build: `docs/product/RELEASE-WINDOWS-2026-10-20.md`.
 
+## Correção de declaração de provider — 17/11/2026 (Rodada 21)
+
+**Patch novo sobre upstream, reaplicar num re-clone.** Em
+`airi/packages/stage-ui/src/libs/providers/providers/anthropic/index.ts` a
+entrada se apresentava como acesso direto a `api.anthropic.com/v1/`, mas o
+transporte do pacote é OpenAI `POST chat/completions` — rota que a Anthropic
+não expõe. A descrição passou a dizer que é necessário um gateway compatível
+com OpenAI, com comentário no arquivo explicando a razão para a mudança não
+ser revertida numa atualização. Nenhum adaptador nativo foi escrito.
+Teste de declaração em `anthropic/index.test.ts` (3 casos). Detalhes e
+evidência linha a linha em
+[`reports/LIA-PROVIDER-CONTRACTS-AUDIT-2026-11-17.md`](reports/LIA-PROVIDER-CONTRACTS-AUDIT-2026-11-17.md).
+
 ## 6. O que NÃO foi verificado na rodada histórica abaixo
 
 - **Nenhum comportamento foi observado em Electron neste ambiente.** O binário do

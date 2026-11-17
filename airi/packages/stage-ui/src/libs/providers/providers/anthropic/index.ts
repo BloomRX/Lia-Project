@@ -42,7 +42,20 @@ export const providerAnthropic = defineProvider<AnthropicConfig>({
   order: 6,
   name: 'Anthropic',
   nameLocalize: ({ t }) => t('settings.pages.providers.provider.anthropic.title'),
-  description: 'anthropic.com',
+  /**
+   * Lia correção (Rodada 21): NÃO é suporte nativo.
+   *
+   * `createChatProvider` fala OpenAI `/chat/completions`. A API nativa da
+   * Anthropic expõe `/v1/messages`, com outro corpo (system fora de messages,
+   * `max_tokens` obrigatório, blocos de conteúdo). Apontar a Base URL para
+   * `api.anthropic.com` produz 404/400 — não funciona.
+   *
+   * A entrada continua no catálogo porque um gateway que traduza OpenAI →
+   * Messages funciona com ela. A descrição diz isso em vez de anunciar um
+   * suporte que não existe. Ver
+   * docs/reports/LIA-PROVIDER-CONTRACTS-AUDIT-2026-11-17.md.
+   */
+  description: 'Requer gateway compatível com OpenAI (a API nativa usa /v1/messages)',
   descriptionLocalize: ({ t }) => t('settings.pages.providers.provider.anthropic.description'),
   tasks: ['chat'],
   icon: 'i-lobe-icons:claude',
