@@ -157,6 +157,30 @@ describe('auth store sign-in requests', () => {
     await authStore.clearAllAuthState()
   })
 
+  it('keeps recovery and logout decisions with the session owner for a stale caller', async () => {
+    const owner = useAuthStore()
+    await owner.completeSignIn(credentials)
+    const observedGeneration = owner.getAuthGeneration()
+    const observedRevision = owner.bearerRevision
+    await owner.completeSignIn({ ...credentials, accessToken: 'replacement-token' })
+
+    expect(await owner.refreshAfterUnauthorized(observedGeneration, observedRevision)).toBeNull()
+    owner.requestReLoginAfterAuthFailure(observedGeneration, observedRevision)
+    expect(refreshAccessToken).not.toHaveBeenCalled()
+    expect(owner.token).toBe('replacement-token')
+    expect(owner.needsLogin).toBe(false)
+  })
+
+  it('requests sign-in on the session owner when recovery fails', async () => {
+    const owner = useAuthStore()
+    await owner.completeSignIn(credentials)
+    vi.mocked(refreshAccessToken).mockRejectedValue(new Error('synthetic-refresh-failure'))
+    expect(await owner.refreshAfterUnauthorized(owner.getAuthGeneration(), owner.bearerRevision)).toBeNull()
+    await nextTick()
+    expect(triggerSignIn).toHaveBeenCalledOnce()
+    expect(owner.token).toBeNull()
+  })
+
   it('loads persisted credentials only when the store initializes', async () => {
     storage.values.set('auth/v1/token', 'persisted-access-token')
     storage.values.set('auth/v1/refresh-token', 'persisted-refresh-token')

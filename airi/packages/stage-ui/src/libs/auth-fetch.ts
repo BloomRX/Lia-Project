@@ -50,12 +50,13 @@ export async function authedFetch(
   }
 
   const generation = authStore.getAuthGeneration()
+  const revision = authStore.bearerRevision
   const originalToken = authStore.token
   const response = await doFetch(originalToken)
   if (response.status !== 401)
     return response
 
-  if (generation !== authStore.getAuthGeneration() || originalToken !== authStore.token)
+  if (generation !== authStore.getAuthGeneration() || revision !== authStore.bearerRevision || originalToken !== authStore.token)
     return response
 
   // Don't recurse on the token endpoint itself
@@ -65,18 +66,16 @@ export async function authedFetch(
   if (url.includes('/oauth2/token'))
     return response
 
-  const newToken = await authStore.refreshTokenNow()
-  if (!newToken) {
-    authStore.requestReLoginAfterAuthFailure(generation, originalToken)
-    return response
-  }
-
-  if (generation !== authStore.getAuthGeneration() || newToken !== authStore.token)
+  const refreshed = await authStore.refreshAfterUnauthorized(generation, revision)
+  if (!refreshed)
     return response
 
-  const retried = await doFetch(newToken)
+  if (generation !== authStore.getAuthGeneration() || authStore.bearerRevision > refreshed.revision)
+    return response
+
+  const retried = await doFetch(refreshed.token)
   if (retried.status === 401)
-    authStore.requestReLoginAfterAuthFailure(generation, newToken)
+    await authStore.requestReLoginAfterAuthFailure(generation, refreshed.revision)
   return retried
 }
 

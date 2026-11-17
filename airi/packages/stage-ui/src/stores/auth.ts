@@ -3,7 +3,7 @@ import type {} from 'pinia-plugin-synced'
 
 import { isStageTamagotchi } from '@proj-airi/stage-shared'
 import { useTimeoutFn, whenever } from '@vueuse/core'
-import { defineStore } from 'pinia'
+import { defineStore, getActivePinia } from 'pinia'
 import { computed, ref, watch } from 'vue'
 
 import { client } from '../composables/api'
@@ -69,6 +69,7 @@ export interface AuthTokenSet {
  * `providers` to safely depend on it without creating a circular import.
  */
 export const useAuthStore = defineStore('auth', () => {
+  const pinia = getActivePinia()
   const storage = createLocalStorageForAuth()
   const oidcEnabled = computed(isOidcEnabled)
 
@@ -100,7 +101,8 @@ export const useAuthStore = defineStore('auth', () => {
 
   const credits = ref(0)
   const creditsStatus = ref<'idle' | 'loading' | 'ready' | 'auth-error' | 'error'>('idle')
-  let authGeneration = 0
+  const authGeneration = ref(0)
+  const bearerRevision = ref(0)
   let sessionRequest = 0
   let creditsRequest = 0
 
@@ -181,10 +183,10 @@ export const useAuthStore = defineStore('auth', () => {
     if (!credential || !clientId)
       return null
 
-    const generation = authGeneration
+    const generation = authGeneration.value
     const accessToken = token.value
     const identity = user.value?.id
-    const ownsRefresh = () => authGeneration === generation
+    const ownsRefresh = () => authGeneration.value === generation
       && token.value === accessToken
       && refreshToken.value === credential
       && oidcClientId.value === clientId
@@ -210,6 +212,7 @@ export const useAuthStore = defineStore('auth', () => {
         return null
 
       token.value = tokens.access_token
+      bearerRevision.value++
       storage.setAccessToken(tokens.access_token)
       if (tokens.refresh_token) {
         refreshToken.value = tokens.refresh_token
@@ -222,7 +225,7 @@ export const useAuthStore = defineStore('auth', () => {
       }
 
       const authenticated = await readSession(tokens.access_token, generation)
-      return authenticated && generation === authGeneration && token.value === tokens.access_token
+      return authenticated && generation === authGeneration.value && token.value === tokens.access_token
         ? tokens.access_token
         : null
     }).finally(() => {
@@ -235,7 +238,7 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   const { start: startRefreshTimer, stop: stopRefreshTimer } = useTimeoutFn(
-    () => { void useAuthStore().refreshTokenNow() },
+    () => { void useAuthStore(pinia).refreshTokenNow() },
     refreshDelayMs,
     { immediate: false },
   )
@@ -285,6 +288,7 @@ export const useAuthStore = defineStore('auth', () => {
     }
 
     token.value = storage.getAccessToken()
+    bearerRevision.value++
     refreshToken.value = storage.getRefreshToken()
     idToken.value = storage.getIdToken()
     oidcClientId.value = storage.getOidcClientId()
@@ -301,10 +305,10 @@ export const useAuthStore = defineStore('auth', () => {
       return
     }
 
-    const generation = authGeneration
+    const generation = authGeneration.value
     const restoredToken = token.value
     const refreshed = await restoreRefreshSchedule()
-    if (!refreshed && generation === authGeneration && restoredToken && token.value === restoredToken)
+    if (!refreshed && generation === authGeneration.value && restoredToken && token.value === restoredToken)
       await fetchSession(token.value)
   }
 
@@ -314,6 +318,7 @@ export const useAuthStore = defineStore('auth', () => {
 
     clearAuthState()
     token.value = tokens.accessToken
+    bearerRevision.value++
     refreshToken.value = tokens.refreshToken ?? null
     idToken.value = tokens.idToken ?? null
     oidcClientId.value = tokens.clientId
@@ -337,9 +342,9 @@ export const useAuthStore = defineStore('auth', () => {
   async function readSession(accessToken: string | null, refreshGeneration?: number): Promise<boolean> {
     if (!oidcEnabled.value || accessToken !== token.value)
       return false
-    const generation = authGeneration
+    const generation = authGeneration.value
     const request = ++sessionRequest
-    const isCurrent = () => generation === authGeneration
+    const isCurrent = () => generation === authGeneration.value
       && request === sessionRequest
       && accessToken === token.value
 
@@ -422,13 +427,14 @@ export const useAuthStore = defineStore('auth', () => {
    * loop silently until the user lands on a page that calls fetchSession.
    */
   function clearAuthState(reason: typeof signedOutReason.value = 'signed-out'): void {
-    authGeneration++
+    authGeneration.value++
     inflightRefresh = null
     refreshFailedGeneration = undefined
     stopRefreshTimer()
     user.value = null
     session.value = null
     token.value = null
+    bearerRevision.value++
     refreshToken.value = null
     oidcClientId.value = null
     tokenExpiry.value = null
@@ -441,13 +447,13 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   function getAuthGeneration(): number {
-    return authGeneration
+    return authGeneration.value
   }
 
-  function requestReLoginAfterAuthFailure(generation: number, failedToken: string | null): void {
+  function requestReLoginAfterAuthFailure(generation: number, revision: number): void {
     if (!oidcEnabled.value)
       return
-    if (generation === authGeneration && failedToken === token.value) {
+    if (generation === authGeneration.value && revision === bearerRevision.value) {
       clearAuthState()
       needsLogin.value = true
     }
@@ -457,6 +463,19 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  async function refreshAfterUnauthorized(generation: number, revision: number): Promise<{ token: string, revision: number } | null> {
+    if (generation !== authGeneration.value || revision !== bearerRevision.value)
+      return null
+    const refreshed = await refreshTokenNow()
+    if (!refreshed) {
+      requestReLoginAfterAuthFailure(generation, revision)
+      return null
+    }
+    return generation === authGeneration.value && refreshed === token.value
+      ? { token: refreshed, revision: bearerRevision.value }
+      : null
+  }
+
   async function clearAllAuthState(): Promise<void> {
     clearAuthState()
   }
@@ -464,10 +483,10 @@ export const useAuthStore = defineStore('auth', () => {
   const updateCredits = async () => {
     if (!isAuthenticated.value)
       return
-    const generation = authGeneration
+    const generation = authGeneration.value
     const request = ++creditsRequest
     const identity = user.value?.id
-    const isCurrent = () => generation === authGeneration && request === creditsRequest
+    const isCurrent = () => generation === authGeneration.value && request === creditsRequest
       && isAuthenticated.value && user.value?.id === identity
     creditsStatus.value = 'loading'
 
@@ -502,16 +521,12 @@ export const useAuthStore = defineStore('auth', () => {
   // the auth commands above.
   watch(isAuthenticated, async (authenticated, wasAuthenticated) => {
     if (authenticated) {
-      void updateCredits()
-      needsLogin.value = false
+      void useAuthStore(pinia).updateCredits().catch(() => {})
 
       if (!wasAuthenticated)
         await dispatchHooks(authenticatedHooks, 'auth hook error')
     }
     else {
-      credits.value = 0
-      creditsStatus.value = 'idle'
-
       if (wasAuthenticated)
         await dispatchHooks(logoutHooks, 'logout hook error')
     }
@@ -555,6 +570,9 @@ export const useAuthStore = defineStore('auth', () => {
     listSessions,
     signOut,
     refreshTokenNow,
+    refreshAfterUnauthorized,
+    authGeneration,
+    bearerRevision,
     getAuthGeneration,
     requestReLoginAfterAuthFailure,
     clearAllAuthState,
@@ -568,6 +586,9 @@ export const useAuthStore = defineStore('auth', () => {
         'fetchSession',
         'signOut',
         'refreshTokenNow',
+        'refreshAfterUnauthorized',
+        'requestReLoginAfterAuthFailure',
+        'updateCredits',
         'clearAllAuthState',
       ],
       state: true,

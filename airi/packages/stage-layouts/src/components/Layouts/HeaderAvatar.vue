@@ -28,7 +28,10 @@ onClickOutside(dropdownRef, () => {
   <div flex items-center gap-2>
     <!-- Non-authenticated: Settings & Sign in -->
     <!-- NOTICE: The avatar is stored in the localstorage, it will be shown at the first time of the page load, so we do not need the skeleton loading here -->
-    <template v-if="!isAuthenticated">
+    <span v-if="!authStore.oidcEnabled" role="status" class="text-sm">
+      {{ t('tamagotchi.stage.controls-island.account-unavailable') }}
+    </span>
+    <template v-else-if="!isAuthenticated">
       <RouterLink
         border="2 solid neutral-100/60 dark:neutral-800/30"
         bg="neutral-50/70 dark:neutral-800/70"

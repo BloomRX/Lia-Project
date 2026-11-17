@@ -128,7 +128,10 @@ function handleLogin() {
     :on-back="() => router.back()"
   >
     <ProviderSettingsContainer>
-      <div v-if="!isAuthenticated" flex flex-col gap-4>
+      <p v-if="!authStore.oidcEnabled" role="status">
+        {{ t('tamagotchi.stage.controls-island.account-unavailable') }}
+      </p>
+      <div v-else-if="!isAuthenticated" flex flex-col gap-4>
         <Callout theme="primary">
           <template #label>
             {{ t('settings.pages.providers.provider.official.speech-streaming-title') }}
