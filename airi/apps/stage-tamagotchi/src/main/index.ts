@@ -64,6 +64,7 @@ import { registerLiaProviderConfigBridge } from './services/lia/provider-config-
 import { resolveRuntimeStateDir, startLiaRuntimeService } from './services/lia/runtime-service'
 import { createLiaSecretVault, registerLiaSecretsBridge } from './services/lia/secrets-service'
 import { isLiaTranscriptionSenderAllowed } from './services/lia/transcription-sender-policy'
+import { isLiaSecretSenderAllowed } from './services/lia/secrets-sender-policy'
 import { registerLiaTranscriptionBridge } from './services/lia/transcription-service'
 import { canRendererReadLegacySecret, getApplicationRepository, registerLiaTransportConfigBridge } from './services/lia/transport-config-service'
 import { registerLiaVoiceConfigBridge } from './services/lia/voice-config-service'
@@ -506,7 +507,12 @@ app.whenReady().then(async () => {
     dependsOn: { liaSecrets },
     callback: async (deps) => {
       const { context } = createContext(ipcMain)
-      registerLiaSecretsBridge({ context, vault: deps.liaSecrets, allowRendererRead: canRendererReadLegacySecret })
+      registerLiaSecretsBridge({
+        context,
+        vault: deps.liaSecrets,
+        allowRendererRead: canRendererReadLegacySecret,
+        isAllowedSender: event => isLiaSecretSenderAllowed(event, userFacingMainWindow, hearingSettingsWindow),
+      })
     },
   })
 

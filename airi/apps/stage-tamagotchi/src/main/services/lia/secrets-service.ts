@@ -47,25 +47,49 @@ export function registerLiaSecretsBridge(params: {
   vault: LiaSecretVault
   /** Migrated transports execute in main and may not export stored credentials. */
   allowRendererRead?: (scope: string) => Promise<boolean>
+  /**
+   * Which WebContents may touch the vault at all. Required on purpose: a
+   * missing policy must be a compile error, not a silent "everyone allowed".
+   * See `secrets-sender-policy.ts` for the rule.
+   */
+  isAllowedSender: (event: Electron.IpcMainEvent | undefined) => boolean
 }): void {
   const { context, vault } = params
+  /**
+   * Reads the raw IPC event so the policy can decide per sender. Every handler
+   * below fails closed (false / undefined) when the sender is not allowed; none
+   * of them touches the vault first.
+   */
+  const senderAllowed = (options: unknown): boolean => {
+    const event = (options as { raw?: { ipcMainEvent?: Electron.IpcMainEvent } } | undefined)?.raw?.ipcMainEvent
+    try {
+      return params.isAllowedSender(event)
+    }
+    catch {
+      return false
+    }
+  }
   const validReference = (payload: { scope?: string, key?: string } | undefined) =>
     typeof payload?.scope === 'string' && payload.scope.length > 0 && payload.scope.length <= 256
     && payload.scope !== oidcSessionScope
     && typeof payload.key === 'string' && payload.key.length > 0 && payload.key.length <= 64
     && ![...payload.scope + payload.key].some(character => character.codePointAt(0)! < 32 || character.codePointAt(0) === 127)
 
-  defineInvokeHandler(context, electronLiaSecretEncryptionAvailable, () => {
+  defineInvokeHandler(context, electronLiaSecretEncryptionAvailable, (_payload, options) => {
+    if (!senderAllowed(options))
+      return false
     return vault.isEncryptionAvailable()
   })
 
-  defineInvokeHandler(context, electronLiaSecretHas, (payload) => {
-    if (!validReference(payload))
+  defineInvokeHandler(context, electronLiaSecretHas, (payload, options) => {
+    if (!validReference(payload) || !senderAllowed(options))
       return false
     return vault.hasSecret(payload.scope, payload.key)
   })
 
-  defineInvokeHandler(context, electronLiaSecretSet, async (payload) => {
+  defineInvokeHandler(context, electronLiaSecretSet, async (payload, options) => {
+    if (!senderAllowed(options))
+      return false
     if (!validReference(payload) || typeof payload.value !== 'string' || payload.value.length === 0 || payload.value.length > 16384
       || (payload.onlyIfMissing !== undefined && typeof payload.onlyIfMissing !== 'boolean')) {
       log.warn('Rejected secret store request with missing/invalid fields')
@@ -107,7 +131,9 @@ export function registerLiaSecretsBridge(params: {
    * left alone: it may be newer, and the old copy is the one that can be
    * discarded later by a decision, not by this call.
    */
-  defineInvokeHandler(context, electronLiaSecretAdopt, async (payload): Promise<LiaSecretAdoptResult> => {
+  defineInvokeHandler(context, electronLiaSecretAdopt, async (payload, options): Promise<LiaSecretAdoptResult> => {
+    if (!senderAllowed(options))
+      return 'unavailable'
     if (!validReference(payload) || typeof payload.value !== 'string' || payload.value.length === 0 || payload.value.length > 16384) {
       log.warn('Rejected secret adopt request with missing/invalid fields')
       return 'unavailable'
@@ -134,8 +160,8 @@ export function registerLiaSecretsBridge(params: {
     })
   })
 
-  defineInvokeHandler(context, electronLiaSecretGet, async (payload) => {
-    if (!validReference(payload) || !params.allowRendererRead)
+  defineInvokeHandler(context, electronLiaSecretGet, async (payload, options) => {
+    if (!senderAllowed(options) || !validReference(payload) || !params.allowRendererRead)
       return undefined
     try {
       if (await params.allowRendererRead(payload.scope))
@@ -147,8 +173,8 @@ export function registerLiaSecretsBridge(params: {
     return undefined
   })
 
-  defineInvokeHandler(context, electronLiaSecretDelete, async (payload) => {
-    if (!validReference(payload))
+  defineInvokeHandler(context, electronLiaSecretDelete, async (payload, options) => {
+    if (!validReference(payload) || !senderAllowed(options))
       return false
     return serializeWrite(vault, () => vault.deleteSecret(payload.scope, payload.key))
   })

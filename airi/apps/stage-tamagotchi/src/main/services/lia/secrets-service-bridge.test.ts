@@ -14,7 +14,8 @@ vi.mock('./secrets', () => ({ createLiaSecretVault: vi.fn() }))
 function handler(name: string) {
   return handlers.get(`eventa:invoke:lia:secret:${name}-receive`)!
 }
-function setup(allowRendererRead?: (scope: string) => Promise<boolean>) {
+const trustedSender = () => true
+function setup(allowRendererRead?: (scope: string) => Promise<boolean>, isAllowedSender: (event: any) => boolean = trustedSender) {
   const values = new Map<string, string>()
   const revisions = new Map<string, number>()
   const reference = (scope: string, key: string) => `${scope}:${key}`
@@ -36,7 +37,7 @@ function setup(allowRendererRead?: (scope: string) => Promise<boolean>) {
     }),
     secretRevision: (scope: string, key: string) => String(revisions.get(reference(scope, key)) ?? 0),
   }
-  registerLiaSecretsBridge({ context: {} as never, vault, allowRendererRead })
+  registerLiaSecretsBridge({ context: {} as never, vault, allowRendererRead, isAllowedSender })
   return { vault, values }
 }
 beforeEach(() => handlers.clear())
@@ -165,5 +166,51 @@ describe('secret adoption (legacy plaintext folded into the vault)', () => {
     const outcome = await handler('adopt')({ scope: 'protected', key: 'apiKey', value: 'SYNTHETIC_LEGACY' })
     expect(typeof outcome).toBe('string')
     expect(JSON.stringify(outcome)).not.toContain('SYNTHETIC_NEWER')
+  })
+})
+
+describe('secret bridge sender policy', () => {
+  // The policy is the only thing standing between "any renderer that loaded
+  // the preload" and "the windows that legitimately own the vault". Every
+  // denial must be observable as an answer, never as a vault call: a caption
+  // window that can read `has` can map which providers the user configured,
+  // and one that can `delete` can destroy them.
+  it('denies every operation from an untrusted sender without touching the vault', async () => {
+    const allow = vi.fn(async () => true)
+    const { vault, values } = setup(allow, () => false)
+    values.set('legacy:apiKey', 'SYNTHETIC_LEGACY_VALUE')
+
+    const reference = { scope: 'legacy', key: 'apiKey' }
+    expect(await handler('get')(reference)).toBeUndefined()
+    expect(await handler('has')(reference)).toBe(false)
+    expect(await handler('set')({ ...reference, value: 'SYNTHETIC_REPLACEMENT' })).toBe(false)
+    expect(await handler('adopt')({ ...reference, value: 'SYNTHETIC_LEGACY_VALUE' })).toBe('unavailable')
+    expect(await handler('delete')(reference)).toBe(false)
+    expect(await handler('encryption-available')(undefined)).toBe(false)
+
+    expect(vault.getSecret).not.toHaveBeenCalled()
+    expect(vault.hasSecret).not.toHaveBeenCalled()
+    expect(vault.setSecret).not.toHaveBeenCalled()
+    expect(vault.deleteSecret).not.toHaveBeenCalled()
+    expect(allow).not.toHaveBeenCalled()
+    expect(values.get('legacy:apiKey')).toBe('SYNTHETIC_LEGACY_VALUE')
+  })
+
+  it('still serves the trusted sender after a denied one', async () => {
+    let trusted = false
+    const { values } = setup(async () => true, () => trusted)
+    values.set('legacy:apiKey', 'SYNTHETIC_LEGACY_VALUE')
+
+    expect(await handler('get')({ scope: 'legacy', key: 'apiKey' })).toBeUndefined()
+    trusted = true
+    expect(await handler('get')({ scope: 'legacy', key: 'apiKey' })).toBe('SYNTHETIC_LEGACY_VALUE')
+  })
+
+  it('fails closed when the policy itself throws', async () => {
+    const { values } = setup(async () => true, () => {
+      throw new Error('renderer gone')
+    })
+    values.set('legacy:apiKey', 'SYNTHETIC_LEGACY_VALUE')
+    expect(await handler('get')({ scope: 'legacy', key: 'apiKey' })).toBeUndefined()
   })
 })

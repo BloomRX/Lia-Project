@@ -38,7 +38,14 @@ void app.whenReady().then(async () => {
       return vault.getSecret(scope, key)
     },
   }
-  registerLiaSecretsBridge({ context, vault: measuredVault, allowRendererRead: canRendererReadLegacySecret })
+  // Harness has a single measured window and no product windows; the sender
+// policy exists to separate product surfaces, which this script does not have.
+  registerLiaSecretsBridge({
+    context,
+    vault: measuredVault,
+    allowRendererRead: canRendererReadLegacySecret,
+    isAllowedSender: () => true,
+  })
   registerLiaProviderConfigBridge({ context, liaProductConfig: createLiaProductConfig() })
   registerLiaTransportConfigBridge({ context, vault: measuredVault })
   const window = new BrowserWindow({
