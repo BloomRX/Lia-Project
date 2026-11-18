@@ -8,6 +8,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createApp } from 'vue'
 
+import { bindCredential } from '../../../main/services/lia/destination-credential'
 import { setTransportTestVaultResolver } from '../../services/lia/transport-config.fixture'
 
 /**
@@ -149,6 +150,7 @@ describe('voice preview — the renderer never holds a voice credential', () => 
   it('imports only the saved endpoint and plays remote preview bytes without reading a key in the renderer', async () => {
     installRuntime()
     const baseUrl = 'https://fixture.invalid/v1/'
+    ipc.vaultRead.mockResolvedValueOnce(bindCredential(REMOTE_VOICE, new URL(baseUrl), SECRET))
     useProviderConfigStore().ensureProvider(REMOTE_VOICE, REMOTE_VOICE, { baseUrl })
     const fetch = vi.fn(async (_url: URL, _init: RequestInit) => new Response(new Uint8Array([1, 2, 3]), { headers: { 'content-type': 'audio/mpeg' } }))
     vi.stubGlobal('fetch', fetch)

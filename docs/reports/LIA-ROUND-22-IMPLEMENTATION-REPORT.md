@@ -55,3 +55,48 @@ Set e Adopt genéricos recusam os slots dos dois provedores de síntese.
   script `gate.test.mjs` registrou **FAIL** por sete ocorrências já presentes
   na base, incluindo imports exigidos pelo runner Node.
 - **NOT RUN** em serviço externo. G-AUD e G-ARCH continuam abertos.
+
+### Regressão ampliada no Windows
+
+Windows 11 Home build 26200, Ryzen 5 5500 e Radeon RX 580 2048SP
+com driver 31.0.21925.1001. Build testado a partir de `ad718b3`.
+
+| Comando | Resultado |
+| --- | --- |
+| `corepack pnpm test` em `lia/core` | PASS, 156 testes. |
+| `../../node_modules/.bin/vitest run` no Launcher | PASS, 358 testes e 2 skips. |
+| `corepack pnpm run build` no Stage | PASS, build de produção. |
+| `../../node_modules/.bin/vitest run` no Stage | FAIL inicial, 2 falhas, 2.573 passaram e 4 skips. |
+| Vitest Node com `brain-correlation-observer` e `transcription-service` | PASS, 89 testes após o ajuste na composição do diálogo STT. |
+| Vitest Node com `voice-preview-credentials.probe` | PASS, 10 testes após atualizar a credencial sintética para o formato vinculado. |
+| Vitest Chromium com `VoiceSection`, `SttCredential` e `native-provider-runtime` | PASS, 11 testes em 3 arquivos. |
+| Vitest `run --project node` no Stage | PASS, 2.521 testes e 4 skips, 206 arquivos. |
+| Vitest `run --project browser` no Stage | PASS, 54 testes, 9 arquivos. |
+| `corepack pnpm run typecheck` no Stage e lint dos dois ajustes | PASS. |
+
+As duas falhas iniciais tiveram correções pontuais. O nome do parâmetro
+do diálogo STT acionava uma verificação estática sobre a composição do
+observador de diagnóstico. A fixture de prévia devolvia um slot secreto
+legado, que a síntese agora recusa. O teste continua exigindo que a chave
+seja lida apenas no Main e que o áudio chegue à prévia.
+
+Os logs registraram erros `ResizeObserver` no Chromium e recusas de
+conexão em loopback na porta 3000. A coleta desses sintomas não determina
+sua causa. Logs em `J:/lia-evidence/round22-stt/`. Os artefatos do pnpm
+gerados no diretório do Core durante o teste foram preservados nessa
+pasta de evidências, fora do checkout.
+
+O protocolo para G-ARCH permanece em
+`docs/architecture/decisions/BENCHMARK-C0-C8-windows.md`. Nenhuma medição
+C0–C8 foi coletada nesta regressão. O G-AUD ainda exige captura e
+reprodução no dispositivo físico e os critérios AV no mesmo SHA.
+
+### Próximo corte de credenciais
+
+O Stage ainda prepara credenciais de transporte nativo em duas etapas,
+gravando a chave e persistindo o registro em chamadas separadas. O
+Launcher também configura credenciais de chat pelo próprio serviço.
+O próximo corte deve coordenar a escrita do slot e do destino no Main
+antes de exigir o vínculo ao usar as chaves, contemplando os dois
+escritores e os IDs de transcrição personalizados. A compatibilidade
+com serviço local sem chave continua sendo um caso de regressão.

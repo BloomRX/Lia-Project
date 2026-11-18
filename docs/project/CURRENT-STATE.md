@@ -18,6 +18,10 @@ chave de cada provedor de síntese à origem exata e ao escopo do cofre
 cifrado. Para mudar protocolo, host ou porta, informe a chave na tela de
 conexão. Chaves legadas também exigem nova entrada. PASS Windows em
 Electron 43.4.1 com serviço HTTP local e credenciais sintéticas, 16 grupos.
+Regressão Windows: Core 156 PASS, Launcher 358 PASS e 2 skips,
+Stage Node 2.521 PASS e 4 skips, Stage Chromium 54 PASS. Build e typecheck
+do Stage passaram. O relatório da rodada registra as duas falhas iniciais
+corrigidas e os avisos observados nas suítes.
 Restam os vínculos de destino de chat e STT, SEC-04, OIDC integrado,
 G-AUD e G-ARCH. A síntese com provedor externo segue NOT RUN.
 

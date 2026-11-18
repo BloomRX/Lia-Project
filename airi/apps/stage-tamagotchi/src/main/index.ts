@@ -568,7 +568,7 @@ app.whenReady().then(async () => {
         repository: getApplicationRepository(),
         vault: deps.liaSecrets,
         isAllowedSender: event => isLiaTranscriptionSenderAllowed(event, userFacingMainWindow, hearingSettingsWindow),
-        async approveRemote(owner, providerId, destination, signal) {
+        async approveRemote(owner, provider, destination, signal) {
           const window = BrowserWindow.fromWebContents(owner)
           if (!window || window.isDestroyed() || signal.aborted || promptingForTranscription)
             return false
@@ -578,7 +578,7 @@ app.whenReady().then(async () => {
               type: 'question',
               title: 'Enviar áudio para transcrição',
               message: 'Autoriza enviar esta gravação para fora deste computador?',
-              detail: `Provedor: ${providerId}\nDestino: ${destination}\nO serviço receberá o áudio para convertê-lo em texto. Esta escolha se aplica só a esta gravação.`,
+              detail: `Provedor: ${provider}\nDestino: ${destination}\nO serviço receberá o áudio para convertê-lo em texto. Esta escolha se aplica só a esta gravação.`,
               buttons: ['Cancelar', 'Enviar áudio'],
               defaultId: 0,
               cancelId: 0,
