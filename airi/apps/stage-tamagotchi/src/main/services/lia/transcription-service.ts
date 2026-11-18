@@ -216,12 +216,16 @@ export function createLiaTranscriptionService(options: LiaTranscriptionServiceOp
       if (native ? record.protocol !== 'audio-transcription' : (!isCuratedChatProvider(record.definitionId) || record.protocol !== 'chat-completions'))
         throw new ProviderError('configuration')
       const destination = resolveTranscriptionDestination(record)
-      if (!isTranscriptionLoopback(destination)) {
-        if (!approveRemote || !await abortable(approveRemote(record.providerId, destination.href, controller.signal), controller.signal))
-          throw new ProviderError('cancelled')
+      const remote = !isTranscriptionLoopback(destination)
+      async function requireApprovedRevision() {
         const current = await abortable(options.repository.read(), controller.signal)
         if (current.revision !== snapshot.revision)
           throw new ProviderError('configuration')
+      }
+      if (remote) {
+        if (!approveRemote || !await abortable(approveRemote(record.providerId, destination.href, controller.signal), controller.signal))
+          throw new ProviderError('cancelled')
+        await requireApprovedRevision()
       }
       const stored = await abortable(resolveMainCredential(options.vault, record.credentialRef.scope, record.credentialRef.key, controller.signal), controller.signal)
       const credential = credentialForDestination(stored, record.credentialRef.scope, destination, native ? 'transcription' : 'chat')
@@ -236,6 +240,8 @@ export function createLiaTranscriptionService(options: LiaTranscriptionServiceOp
         headers.set('content-type', encoded.headers.get('content-type')!)
         init.headers = headers
       }
+      if (remote)
+        await requireApprovedRevision()
       controller.signal.throwIfAborted()
       const response = await abortable(withLiaProviderHeaders(fetch, record.providerId)(url, {
         ...init,
@@ -251,6 +257,10 @@ export function createLiaTranscriptionService(options: LiaTranscriptionServiceOp
       }
       const json = await boundedJson(response, controller.signal)
       const projected = parseTranscriptionResponse(record.definitionId, json)
+      if (credential && [projected.text, projected.language, projected.segments?.map(segment => segment.text ?? '').join('')]
+        .some(value => value?.includes(credential))) {
+        throw new ProviderError('protocol')
+      }
       if (controller.signal.aborted)
         throw controller.signal.reason
       return { ok: true, status: response.status, ...projected }

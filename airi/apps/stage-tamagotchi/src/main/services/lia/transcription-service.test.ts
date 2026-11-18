@@ -378,6 +378,28 @@ describe('remote transcription consent', () => {
     expect(fixture.fetch).not.toHaveBeenCalled()
   })
 
+  it('rechecks the approved revision immediately before sending audio', async () => {
+    const fixture = remoteFixture()
+    vi.mocked(fixture.vault.getSecret).mockImplementation(() => {
+      fixture.repository.read.mockResolvedValue({ ...snapshot(), revision: 2 })
+      return bindCredential('groq', new URL(record().baseUrl), SECRET, 'chat')
+    })
+    const service = createLiaTranscriptionService(fixture)
+    await expect(service.transcribe(request, undefined, async () => true)).resolves.toEqual({ ok: false, code: 'configuration' })
+    expect(fixture.vault.getSecret).toHaveBeenCalledOnce()
+    expect(fixture.fetch).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    { text: SECRET },
+    { text: 'regular transcript', segments: [{ text: SECRET.slice(0, 10) }, { text: SECRET.slice(10) }] },
+  ])('keeps credentials echoed by an upstream out of the transcription result', async (reply) => {
+    const fixture = remoteFixture()
+    fixture.fetch.mockResolvedValue(Response.json(reply))
+    const service = createLiaTranscriptionService(fixture)
+    await expect(service.transcribe(request, undefined, async () => true)).resolves.toEqual({ ok: false, code: 'protocol' })
+  })
+
   it('does not dispatch when the caller cancels before a late approval', async () => {
     const fixture = remoteFixture()
     const controller = new AbortController()
