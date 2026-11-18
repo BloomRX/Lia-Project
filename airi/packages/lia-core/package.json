@@ -17,6 +17,7 @@
     "./paths/install-location": "./dist/paths/install-location.mjs",
     "./product/config": "./dist/product/config.mjs",
     "./secrets/vault": "./dist/secrets/vault.mjs",
+    "./secrets/windows-user-cipher": "./dist/secrets/windows-user-cipher.mjs",
     "./voice/shared": "./dist/voice/shared.mjs",
     "./voices/profiles": "./dist/voices/profiles.mjs",
     "./voices/types": "./dist/voices/types.mjs",

@@ -5,6 +5,7 @@ import process from 'node:process'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 
+import { createWindowsUserCipher } from '@lia/core/secrets/windows-user-cipher'
 import { app, BrowserWindow, dialog, safeStorage } from 'electron'
 import { statSync as physicalStatSync } from 'original-fs'
 
@@ -91,11 +92,11 @@ async function bootstrap(): Promise<void> {
     launcherChromiumProfile: chromiumProfile,
     // Electron's patched fs presents an app.asar archive as a directory.
     packagedStage: app.isPackaged ? () => resolvePackagedStage(process.resourcesPath, physicalStatSync) : undefined,
-    cipher: {
+    cipher: createWindowsUserCipher({
       available: () => safeStorage.isEncryptionAvailable(),
       decrypt: payload => safeStorage.decryptString(payload),
       encrypt: value => safeStorage.encryptString(value),
-    },
+    }),
     // Phase 7.9E.2: the REAL install proof - without this the gate defaulted
     // to not-installed even with the validated Kokoro tree on disk.
     inspectInstallImpl: createLiaVoiceInstallInspector(),

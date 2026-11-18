@@ -14,6 +14,7 @@ export default defineConfig({
     './src/paths/install-location.ts',
     './src/product/config.ts',
     './src/secrets/vault.ts',
+    './src/secrets/windows-user-cipher.ts',
     './src/voice/shared.ts',
     './src/voices/profiles.ts',
     './src/voices/types.ts',

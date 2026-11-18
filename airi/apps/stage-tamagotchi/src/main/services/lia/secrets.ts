@@ -7,6 +7,7 @@ import process from 'node:process'
 import { join } from 'node:path'
 
 import { createLiaSecretVault as createCoreVault } from '@lia/core/secrets/vault'
+import { createWindowsUserCipher } from '@lia/core/secrets/windows-user-cipher'
 import { app, safeStorage } from 'electron'
 
 import { withCredentialOwner } from './credential-owner-access'
@@ -38,12 +39,14 @@ interface SecretsDeps {
 }
 
 export function createLiaSecretVault(deps: SecretsDeps = {}): LiaSecretVault {
+  const legacy = {
+    available: deps.encryptionAvailable ?? (() => safeStorage.isEncryptionAvailable()),
+    decrypt: deps.decrypt ?? ((payload: Buffer) => safeStorage.decryptString(payload)),
+    encrypt: deps.encrypt ?? ((value: string) => safeStorage.encryptString(value)),
+  }
+  const cipher = deps.encrypt || deps.decrypt || deps.encryptionAvailable ? legacy : createWindowsUserCipher(legacy)
   return withCredentialOwner(createCoreVault({
-    cipher: {
-      available: deps.encryptionAvailable ?? (() => safeStorage.isEncryptionAvailable()),
-      decrypt: deps.decrypt ?? ((payload: Buffer) => safeStorage.decryptString(payload)),
-      encrypt: deps.encrypt ?? ((value: string) => safeStorage.encryptString(value)),
-    },
+    cipher,
     // `LIA_VAULT_FILE` é o contrato do produto: um cofre só, o mesmo arquivo que
     // o Launcher lê. Antes desta correção o Stage ignorava a variável e caía no
     // `userData` — funcionava por coincidência de caminho e quebrava assim que o
