@@ -58,12 +58,12 @@ describe('restricted Stage preload bridge', () => {
     expect(electronMocks.removeListener).toHaveBeenCalledWith('eventa-message', registered)
   })
 
-  it('keeps OIDC invoke channels explicit', async () => {
+  it('keeps OIDC invoke channels closed even with the legacy build flag', () => {
     vi.stubEnv('VITE_LIA_ENABLE_OIDC', '1')
     const ipc = exposedElectron().ipcRenderer
-    electronMocks.invoke.mockResolvedValue({ ok: true })
-
-    await expect(ipc.invoke('lia:oidc:resource', { id: 'id', operation: {} })).resolves.toEqual({ ok: true })
+    expose()
+    expect(electronMocks.exposeInMainWorld).toHaveBeenLastCalledWith('liaOidcEnabled', false)
+    expect(() => ipc.invoke('lia:oidc:resource')).toThrow('OIDC is disabled')
     expect(() => ipc.invoke('lia:oidc:unknown', {})).toThrow('Renderer IPC channel is not allowed.')
   })
 

@@ -7,12 +7,12 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-it('requires explicit preload opt-in in the Electron renderer', () => {
+it('keeps the legacy renderer flow disabled in Electron regardless of the old preload flag', () => {
   vi.stubEnv('RUNTIME_ENVIRONMENT', 'electron')
   vi.stubGlobal('window', {})
   expect(isOidcEnabled()).toBe(false)
   vi.stubGlobal('window', { liaOidcEnabled: true })
-  expect(isOidcEnabled()).toBe(true)
+  expect(isOidcEnabled()).toBe(false)
 })
 
 it.each(['browser', 'capacitor'])('keeps the existing %s flow without the desktop preload', (runtime) => {

@@ -13,6 +13,18 @@ commit. Registra **estado**, não narrativa: relatório de rodada vai para
 
 ## 0. Estado agora
 
+**Rodada 22 — fronteira OIDC do Stage.** A troca PKCE agora exige um
+owner de sessão no Main e só emite uma notificação de sucesso sem
+payload. O Renderer do Stage deixou de consumir o callback legado.
+A flag antiga sozinha não ativa o IPC nem o armazenamento OIDC do
+Renderer desktop. No Windows passaram 30 testes focados do Stage,
+24 do Stage UI, 156 do Core, lint direcionado e typecheck do Stage.
+Próximo corte:
+ligar o owner e as operações de conta, HTTP e streaming ao ciclo de
+vida do Stage antes de anunciar OIDC disponível no preload. Emissor
+externo segue NOT RUN. Consentimento STT, SEC-04, SEC-05, G-AUD e
+G-ARCH permanecem pendentes.
+
 **Rodada 21 — segurança do cofre, P0 e contratos de provider (17/11/2026).**
 Quatro commits publicados (`908e35e5`, `3fc7856a`, `63a9a6e3`, `ca82ef07`).
 O bridge do cofre passou a **exigir** policy de remetente: só o frame de topo da

@@ -1,6 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
-import { isStageOidcEnabled } from '../shared/lia/oidc-policy'
 import { isRendererChannelAllowed } from './ipc-channel-policy'
 
 type RendererEvent = Pick<Event, 'defaultPrevented' | 'preventDefault'> & { ports: MessagePort[] }
@@ -17,11 +16,9 @@ const listeners = new WeakMap<RendererListener, Map<string, ElectronListener[]>>
 const sanitizedEvent: RendererEvent = Object.assign(new Event('message'), { ports: [] as MessagePort[] })
 
 const restrictedIpcRenderer = {
-  invoke(channel: string, ...args: any[]) {
+  invoke(channel: string) {
     assertRendererChannel(channel, 'invoke')
-    if (!isStageOidcEnabled())
-      throw new Error('OIDC is disabled in this build')
-    return ipcRenderer.invoke(channel, ...args)
+    throw new Error('OIDC is disabled in this build')
   },
   on(channel: string, listener: RendererListener) {
     assertRendererChannel(channel, 'listen')
@@ -56,5 +53,5 @@ export function expose() {
   // Sandboxed Electron preload provides process without Node's process module.
   // eslint-disable-next-line node/prefer-global/process
   contextBridge.exposeInMainWorld('platform', process.platform)
-  contextBridge.exposeInMainWorld('liaOidcEnabled', isStageOidcEnabled())
+  contextBridge.exposeInMainWorld('liaOidcEnabled', false)
 }

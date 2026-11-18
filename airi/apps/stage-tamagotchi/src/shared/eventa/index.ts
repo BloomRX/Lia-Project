@@ -526,14 +526,8 @@ export const electronOnboardingClose = defineInvokeEventa('eventa:invoke:electro
 export const electronOpenOnboarding = defineInvokeEventa('eventa:invoke:electron:windows:onboarding:open')
 
 // Auth — OIDC Authorization Code + PKCE flow via system browser
-export interface ElectronAuthTokens {
-  accessToken: string
-  refreshToken?: string
-  idToken?: string
-  expiresIn: number
-}
 export const electronAuthStartLogin = defineInvokeEventa<void>('eventa:invoke:electron:auth:start-login')
-export const electronAuthCallback = defineEventa<ElectronAuthTokens>('eventa:event:electron:auth:callback')
+export const electronAuthCallback = defineEventa<void>('eventa:event:electron:auth:callback')
 export const electronAuthCallbackError = defineEventa<{ error: string }>('eventa:event:electron:auth:callback-error')
 export const electronAuthCancelled = defineEventa<void>('eventa:event:electron:auth:cancelled')
 export const electronAuthLogout = defineInvokeEventa<void>('eventa:invoke:electron:auth:logout')

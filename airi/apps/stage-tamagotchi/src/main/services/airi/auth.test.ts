@@ -45,15 +45,20 @@ afterEach(() => {
 
 const ipc = { raw: { ipcMainEvent: { sender: { id: 1 } } } }
 
-function registerWindow(emit = vi.fn(), id = 1) {
+function registerWindow(emit = vi.fn(), id = 1, withOwner = true) {
   let closed: (() => void) | undefined
   const window = {
     webContents: { id },
     isDestroyed: () => false,
     once: (_event: string, listener: () => void) => { closed = listener },
   }
-  createAuthService({ context: { emit } as never, window: window as never })
-  return { emit, close: () => closed?.() }
+  const owner = {
+    beginLogin: vi.fn(() => 'synthetic-revision'),
+    establish: vi.fn(async () => true),
+    logout: vi.fn(async () => ({ cleared: true, revocation: 'absent' as const })),
+  }
+  createAuthService({ context: { emit } as never, window: window as never, sessionOwner: withOwner ? owner : undefined })
+  return { emit, owner, close: () => closed?.() }
 }
 
 function tokenResponse() {
@@ -71,6 +76,12 @@ it('rejects login while OIDC is off, before opening a listener or calling the is
   expect(fixture.openExternal).not.toHaveBeenCalled()
   expect(transport).not.toHaveBeenCalled()
   expect(emit).not.toHaveBeenCalled()
+})
+
+it('refuses the legacy opt-in when no Main session owner is registered', async () => {
+  registerWindow(vi.fn(), 1, false)
+  await expect(fixture.handlers.get('start')!(undefined, ipc)).rejects.toThrow('OIDC is disabled')
+  expect(fixture.loopback).not.toHaveBeenCalled()
 })
 
 it.each(['logout', 'closed'] as const)('discards an exchange result after %s', async (cancel) => {
@@ -195,7 +206,7 @@ it('completes the replacement login without republishing the old attempt', async
   fixture.loopback.mockImplementation(async () => ({ port: 12345, result: Promise.resolve({ code: 'synthetic-code' }), close: vi.fn() }))
   const delivered = Promise.withResolvers<void>()
   const emit = vi.fn(() => delivered.resolve())
-  registerWindow(emit)
+  const { owner } = registerWindow(emit)
 
   await fixture.handlers.get('start')!(undefined, ipc)
   await started.promise
@@ -206,12 +217,11 @@ it('completes the replacement login without republishing the old attempt', async
 
   expect(transport.mock.calls[0]?.[1].signal.aborted).toBe(true)
   expect(transport.mock.calls[1]?.[1].signal.aborted).toBe(false)
-  // This is a legacy compatibility check. Moving this callback to a public
-  // session DTO belongs with migration of the authenticated transports.
-  expect(emit).toHaveBeenCalledExactlyOnceWith('success', {
-    accessToken: 'synthetic-access',
-    refreshToken: 'synthetic-refresh',
-    idToken: 'synthetic-id',
-    expiresIn: 3600,
-  })
+  expect(emit).toHaveBeenCalledExactlyOnceWith('success', undefined)
+  expect(owner.establish).toHaveBeenCalledExactlyOnceWith({
+    access_token: 'synthetic-access',
+    refresh_token: 'synthetic-refresh',
+    id_token: 'synthetic-id',
+    expires_in: 3600,
+  }, expect.any(AbortSignal), 'synthetic-revision')
 })

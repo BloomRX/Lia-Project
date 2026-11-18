@@ -1,6 +1,8 @@
 import type { createContext } from '@moeru/eventa/adapters/electron/main'
 import type { BrowserWindow } from 'electron'
 
+import type { createOidcSessionOwner } from './oidc-session'
+
 import { useLogg } from '@guiiai/logg'
 import { defineInvokeHandler } from '@moeru/eventa'
 import {
@@ -65,6 +67,7 @@ class TokenExchangeRejected extends Error {
 export function createAuthService(params: {
   context: MainContext
   window: BrowserWindow
+  sessionOwner?: Pick<ReturnType<typeof createOidcSessionOwner>, 'beginLogin' | 'establish' | 'logout'>
 }): void {
   const windowId = params.window.webContents.id
 
@@ -88,10 +91,14 @@ export function createAuthService(params: {
       return
     }
 
-    if (!isStageOidcEnabled())
+    const owner = params.sessionOwner
+    if (!isStageOidcEnabled() || !owner)
       throw new Error('OIDC is disabled in this build')
 
     cancelLogin(activeLogin?.windowId !== windowId)
+    const revision = owner.beginLogin()
+    if (revision === undefined)
+      throw new Error('OIDC session storage is unavailable')
     const attempt: LoginAttempt = {
       windowId,
       controller: new AbortController(),
@@ -165,7 +172,12 @@ export function createAuthService(params: {
           phase = 'exchange'
           const tokens = await exchangeCode(code, codeVerifier, redirectUri, signal)
           signal.throwIfAborted()
-          await publish('success', () => params.context.emit(electronAuthCallback, tokens))
+          phase = 'session'
+          const established = await owner.establish(tokens, signal, revision)
+          signal.throwIfAborted()
+          if (!established)
+            throw new Error('OIDC session was not established')
+          await publish('success', () => params.context.emit(electronAuthCallback, undefined))
         })
         .catch(error => reportFailure(phase, error))
         .finally(finish)
@@ -182,19 +194,14 @@ export function createAuthService(params: {
     }
 
     cancelLogin(true)
+    if (isStageOidcEnabled())
+      await params.sessionOwner?.logout()
   })
 }
 
 // --- Internal helpers ---
 
-interface TokenExchangeResult {
-  accessToken: string
-  refreshToken?: string
-  idToken?: string
-  expiresIn: number
-}
-
-async function exchangeCode(code: string, codeVerifier: string, redirectUri: string, signal: AbortSignal): Promise<TokenExchangeResult> {
+async function exchangeCode(code: string, codeVerifier: string, redirectUri: string, signal: AbortSignal): Promise<unknown> {
   const body = new URLSearchParams({
     grant_type: 'authorization_code',
     code,
@@ -218,11 +225,5 @@ async function exchangeCode(code: string, codeVerifier: string, redirectUri: str
     throw new TokenExchangeRejected(response.status)
   }
 
-  const data = await response.json() as Record<string, unknown>
-  return {
-    accessToken: data.access_token as string,
-    refreshToken: data.refresh_token as string | undefined,
-    idToken: data.id_token as string | undefined,
-    expiresIn: data.expires_in as number,
-  }
+  return response.json()
 }
