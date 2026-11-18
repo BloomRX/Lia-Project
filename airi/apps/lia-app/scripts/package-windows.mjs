@@ -37,7 +37,7 @@ export function validateInputs(inputs, { internalTest = false } = {}) {
     requireFile(join(app, 'package.json'), 'Manifesto do aplicativo')
   }
   requireFile(join(inputs.launcher, 'out/preload/index.cjs'), 'Build Preload do Launcher')
-  requireFile(join(inputs.stage, 'out/preload/index.mjs'), 'Build Preload do Stage')
+  requireFile(join(inputs.stage, 'out/preload/index.cjs'), 'Build Preload do Stage')
   requireFile(resolve(inputs.launcher, '../../LICENSE'), 'Licença do Stage')
   requireFile(join(inputs.launcher, 'scripts/DISTRIBUTION-NOTICE.txt'), 'Aviso de distribuição interna')
   const runtimePackage = JSON.parse(readFileSync(join(inputs.electron, '../package.json'), 'utf8'))

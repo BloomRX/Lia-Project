@@ -23,7 +23,7 @@ test('packaging requires an internal test, builds, the pinned local runtime and 
       file(join(app, name))
   }
   file(join(inputs.launcher, 'out/preload/index.cjs'))
-  file(join(inputs.stage, 'out/preload/index.mjs'))
+  file(join(inputs.stage, 'out/preload/index.cjs'))
   file(join(root, 'airi/LICENSE'))
   file(join(inputs.launcher, 'scripts/DISTRIBUTION-NOTICE.txt'))
   file(join(inputs.electron, '../package.json'), JSON.stringify({ version: '43.4.1' }))

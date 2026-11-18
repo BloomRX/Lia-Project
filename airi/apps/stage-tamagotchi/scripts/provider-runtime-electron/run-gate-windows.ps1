@@ -97,7 +97,7 @@ $ExpectedPnpm = '11.24.0'
 $GateRelative = 'scripts/provider-runtime-electron/gate.test.mjs'
 $ElectronDir = Join-Path $StageDir 'node_modules\electron'
 $ElectronExe = Join-Path $ElectronDir 'dist\electron.exe'
-$PreloadFile = Join-Path $StageDir 'out\preload\index.mjs'
+$PreloadFile = Join-Path $StageDir 'out\preload\index.cjs'
 $ChecksumsFile = Join-Path $ElectronDir 'checksums.json'
 $ArtifactsRoot = Join-Path $RepoDir 'Tests\artifacts\provider-runtime-electron'
 
