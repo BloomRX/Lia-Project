@@ -1,8 +1,21 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { streamTranscription } from './index'
 
 describe('streamTranscription', () => {
+  it('blocks direct desktop streaming before reading the stream or calling fetch', () => {
+    vi.stubEnv('RUNTIME_ENVIRONMENT', 'electron')
+    try {
+      const fetch = vi.fn()
+      const inputAudioStream = new ReadableStream<ArrayBuffer>()
+      expect(() => streamTranscription({ inputAudioStream, fetch })).toThrow('indisponível no Stage')
+      expect(inputAudioStream.locked).toBe(false)
+      expect(fetch).not.toHaveBeenCalled()
+    }
+    finally {
+      vi.unstubAllEnvs()
+    }
+  })
   it('sets half-duplex transport for the browser audio upload', async () => {
     // ROOT CAUSE:
     //

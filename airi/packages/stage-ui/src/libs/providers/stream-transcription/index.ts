@@ -1,6 +1,8 @@
 import type { CommonRequestOptions } from '@xsai/shared'
 import type { StreamTranscriptionDelta, StreamTranscriptionResult } from '@xsai/stream-transcription'
 
+import { isStageTamagotchi } from '@proj-airi/stage-shared'
+
 type AudioChunk = ArrayBuffer | ArrayBufferView
 
 /** A complete transcript snapshot that replaces earlier volatile text. */
@@ -114,6 +116,8 @@ function createSSETransformer() {
  * SSE parsing, and the result streams consumed by Hearing.
  */
 export function streamTranscription(options: StreamTranscriptionOptions): AIRIStreamTranscriptionResult {
+  if (isStageTamagotchi())
+    throw new Error('A transcrição em tempo real está indisponível no Stage.')
   const audioStream = resolveAudioStream(options)
   const fetcher = options.fetch ?? globalThis.fetch
   const deferredText = createDeferred<string>()

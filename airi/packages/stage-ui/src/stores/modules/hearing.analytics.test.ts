@@ -1,7 +1,7 @@
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { useHearingSpeechInputPipeline, useHearingStore } from './hearing'
+import { registerRecordingTranscriptionExecutor, resetRecordingTranscriptionExecutorsForTesting, useHearingSpeechInputPipeline, useHearingStore } from './hearing'
 
 const analyticsMock = vi.hoisted(() => ({
   allowComposableCall: true,
@@ -70,8 +70,28 @@ describe('useHearingStore analytics lifecycle', () => {
   })
 
   afterEach(() => {
+    resetRecordingTranscriptionExecutorsForTesting()
+    vi.unstubAllEnvs()
     vi.restoreAllMocks()
     vi.unstubAllGlobals()
+  })
+
+  it('requires a Main recording executor on desktop and never falls back to a renderer client', async () => {
+    vi.stubEnv('RUNTIME_ENVIRONMENT', 'electron')
+    const hearing = useHearingStore()
+    const recording = new File(['synthetic'], 'recording.wav', { type: 'audio/wav' })
+    const transcription = vi.fn()
+    const provider = { transcription } as never
+    for (const id of ['aliyun-nls-transcription', 'official-provider-transcription', 'legacy-custom', 'app-local-audio-transcription']) {
+      await expect(hearing.transcription(id, provider, 'fixture', recording)).rejects.toThrow('indisponível no Stage')
+    }
+
+    const main = vi.fn(async () => ({ text: 'local' }))
+    registerRecordingTranscriptionExecutor('app-local-audio-transcription', main)
+    await expect(hearing.transcription('app-local-audio-transcription', provider, 'fixture', recording)).resolves.toMatchObject({ text: 'local' })
+    expect(main).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ file: recording, model: 'fixture' }))
+    expect(transcription).not.toHaveBeenCalled()
+    expect(transcriptionMock.generateTranscription).not.toHaveBeenCalled()
   })
 
   /**

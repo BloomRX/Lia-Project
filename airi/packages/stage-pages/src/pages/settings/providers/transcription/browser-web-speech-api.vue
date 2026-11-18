@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { RemovableRef } from '@vueuse/core'
 
-import { errorMessageFromValue } from '@proj-airi/stage-shared'
+import { errorMessageFromValue, isStageTamagotchi } from '@proj-airi/stage-shared'
 import {
   Alert,
   ErrorContainer,
@@ -145,6 +145,10 @@ function handleStreamStartError() {
 
 // Speech-to-Text test functions (hardcoded to use Web Speech API)
 async function startSTTTest() {
+  if (isStageTamagotchi()) {
+    testTranscriptionError.value = 'Web Speech está indisponível no Stage.'
+    return
+  }
   if (!selectedAudioInput.value) {
     testTranscriptionError.value = 'Please select an audio input device first'
     return
@@ -215,7 +219,6 @@ async function startSTTTest() {
           testStreamingText.value += `${delta} `
           testStatusMessage.value = 'Transcribing... (streaming)'
           isTranscribing.value = true
-          console.info('Web Speech API test received sentence:', delta)
         }
       },
       onSpeechEnd: (text) => {
@@ -224,7 +227,6 @@ async function startSTTTest() {
           testStreamingText.value = ''
           testStatusMessage.value = 'Transcription complete!'
           isTranscribing.value = false
-          console.info('Web Speech API test completed with text:', text)
         }
         else {
           testStatusMessage.value = 'Waiting for speech...'

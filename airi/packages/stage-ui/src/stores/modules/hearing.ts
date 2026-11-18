@@ -9,7 +9,7 @@ import type { StreamingTranscriptionCallbacks, StreamingTranscriptionConsumer } 
 
 import { errorMessageFrom, tryCatch } from '@moeru/std'
 import { toPCM16FromFloat32 } from '@proj-airi/audio/encoding'
-import { errorMessageFromValue, IOAttributes, IOEvents, IOSpanNames, IOSubsystems } from '@proj-airi/stage-shared'
+import { errorMessageFromValue, IOAttributes, IOEvents, IOSpanNames, IOSubsystems, isStageTamagotchi } from '@proj-airi/stage-shared'
 import { useLocalStorageManualReset } from '@proj-airi/stage-shared/composables'
 import { refManualReset } from '@vueuse/core'
 import { generateTranscription } from '@xsai/generate-transcription'
@@ -243,7 +243,7 @@ const STREAM_TRANSCRIPTION_EXECUTORS: Record<string, StreamTranscription> = {
 }
 
 export function resolveStreamTranscriptionExecutor(providerId: string): StreamTranscription | undefined {
-  return STREAM_TRANSCRIPTION_EXECUTORS[providerId]
+  return isStageTamagotchi() ? undefined : STREAM_TRANSCRIPTION_EXECUTORS[providerId]
 }
 
 /**
@@ -319,10 +319,11 @@ export function resetRecordingTranscriptionExecutorsForTesting(): void {
  * - A setup error when no provider is selected, otherwise `undefined`.
  */
 export function resolveActiveTranscriptionProviderError(providerId: string): string | undefined {
-  if (providerId)
-    return undefined
-
-  return 'No active transcription provider selected. Select a provider in Settings > Hearing.'
+  if (!providerId)
+    return 'No active transcription provider selected. Select a provider in Settings > Hearing.'
+  if (isStageTamagotchi() && !resolveRecordingTranscriptionExecutor(providerId))
+    return 'Este provedor de transcrição está indisponível no Stage. Escolha um provedor de gravação nas configurações de áudio.'
+  return undefined
 }
 
 /**
@@ -474,6 +475,10 @@ export const useHearingStore = defineStore('hearing-store', () => {
     format?: 'json' | 'verbose_json',
     options?: HearingTranscriptionInvokeOptions,
   ): Promise<HearingTranscriptionResult> {
+    const providerError = resolveActiveTranscriptionProviderError(providerId)
+    if (providerError)
+      throw new Error(providerError)
+    const recordingExecutor = resolveRecordingTranscriptionExecutor(providerId)
     const normalizedInput = (input instanceof File ? { file: input } : input ?? {}) as {
       file?: File
       fileName?: string
@@ -559,7 +564,6 @@ export const useHearingStore = defineStore('hearing-store', () => {
       }
 
       const useVerboseJson = !format && confidenceThreshold.value > CONFIDENCE_THRESHOLD_DISABLED
-      const recordingExecutor = resolveRecordingTranscriptionExecutor(providerId)
       const response = recordingExecutor
         ? await recordingExecutor({
             providerId,
@@ -708,7 +712,7 @@ export const useHearingSpeechInputPipeline = defineStore('modules:hearing:speech
 
   const supportsStreamInput = computed(() => {
     const providerId = activeTranscriptionProvider.value
-    if (!providerId)
+    if (!providerId || isStageTamagotchi())
       return false
 
     // Web Speech API always supports stream input when available

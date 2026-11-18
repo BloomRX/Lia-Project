@@ -1,7 +1,7 @@
 import type { TranscriptionProviderWithExtraOptions } from '@xsai-ext/providers/utils'
 import type { StreamTranscriptionDelta, StreamTranscriptionResult } from '@xsai/stream-transcription'
 
-import { errorMessageFromValue } from '@proj-airi/stage-shared'
+import { errorMessageFromValue, isStageTamagotchi } from '@proj-airi/stage-shared'
 
 // NOTICE: Copied/adapted from @xsai/stream-transcription delayed promise helper.
 // Ref: @xsai/stream-transcription@0.4.0-beta.8 (dist/index.js DelayedPromise usage).
@@ -53,6 +53,8 @@ export interface WebSpeechAPIExtraOptions {
  * - Not available in Node.js or Tauri main process
  */
 export function createWebSpeechAPIProvider(): TranscriptionProviderWithExtraOptions<string, WebSpeechAPIExtraOptions> {
+  if (isStageTamagotchi())
+    throw new Error('Web Speech está indisponível no Stage.')
   // Check if Web Speech API is available
   const isAvailable = typeof window !== 'undefined'
     && ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)
@@ -166,6 +168,8 @@ export function streamWebSpeechAPITranscription(
     onSpeechEnd?: (text: string) => void
   },
 ): StreamTranscriptionResult & { recognition?: any } {
+  if (isStageTamagotchi())
+    throw new Error('Web Speech está indisponível no Stage.')
   const deferredText = createDeferred<string>()
   let fullText = ''
   let textStreamCtrl: ReadableStreamDefaultController<string> | undefined

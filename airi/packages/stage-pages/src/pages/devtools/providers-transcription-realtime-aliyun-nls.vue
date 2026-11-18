@@ -4,7 +4,7 @@ import type { ServerEvent, ServerEvents } from '@proj-airi/stage-ui/libs/provide
 import vadWorkletUrl from '@proj-airi/stage-ui/workers/vad/process.worklet?worker&url'
 
 import { toPCM16FromFloat32 } from '@proj-airi/audio/encoding'
-import { errorMessageFromValue } from '@proj-airi/stage-shared'
+import { errorMessageFromValue, isStageTamagotchi } from '@proj-airi/stage-shared'
 import { createAliyunNLSProvider } from '@proj-airi/stage-ui/libs/providers/providers/aliyun-nls'
 import { streamTranscription } from '@proj-airi/stage-ui/libs/providers/stream-transcription'
 import { Button, FieldCombobox, FieldInput } from '@proj-airi/ui'
@@ -132,6 +132,10 @@ async function initializeAudioGraph(stream: MediaStream) {
 }
 
 async function startRecording() {
+  if (isStageTamagotchi()) {
+    appendLog('A transcrição em tempo real está indisponível no Stage.')
+    return
+  }
   if (!canStartRecording.value)
     return
 

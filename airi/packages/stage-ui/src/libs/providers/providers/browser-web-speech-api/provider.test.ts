@@ -1,11 +1,21 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { streamWebSpeechAPITranscription } from './provider'
+import { createWebSpeechAPIProvider, streamWebSpeechAPITranscription } from './provider'
 
 describe('web speech diagnostics', () => {
   afterEach(() => {
     vi.restoreAllMocks()
+    vi.unstubAllEnvs()
     vi.unstubAllGlobals()
+  })
+
+  it('blocks both desktop entry points before constructing a speech recognizer', () => {
+    vi.stubEnv('RUNTIME_ENVIRONMENT', 'electron')
+    const recognition = vi.fn()
+    vi.stubGlobal('window', { SpeechRecognition: recognition })
+    expect(() => createWebSpeechAPIProvider()).toThrow('indisponível no Stage')
+    expect(() => streamWebSpeechAPITranscription({} as MediaStream)).toThrow('indisponível no Stage')
+    expect(recognition).not.toHaveBeenCalled()
   })
 
   it('delivers recognized text without logging interim or final speech', async () => {

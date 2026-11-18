@@ -18,9 +18,11 @@ do Stage, cada envio remoto exige aceite no diálogo da janela que
 iniciou a operação, com provedor e URL efetiva. O Main não consulta a
 credencial antes do aceite. Recusa, cancelamento ou revisão de
 configuração alterada impedem a saída. Loopback continua disponível.
-Próximo corte de STT: inventariar e fechar os caminhos alternativos
-de streaming e transcrição no Renderer. O diálogo com serviço remoto
-e G-AUD ainda dependem de validação real.
+No Renderer desktop, gravações exigem executor no Main. Streaming
+legado e Web Speech estão indisponíveis, inclusive nas prévias e no
+DevTools do Aliyun. O ensaio do diálogo com serviço remoto e G-AUD
+ainda dependem de validação real. A rota nativa exclusiva de macOS
+continua fora da cobertura Windows.
 
 **Rodada 22 — fronteira OIDC do Stage.** A troca PKCE agora exige um
 owner de sessão no Main e só emite uma notificação de sucesso sem

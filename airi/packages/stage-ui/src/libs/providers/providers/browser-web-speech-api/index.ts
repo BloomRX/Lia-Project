@@ -1,3 +1,4 @@
+import { isStageTamagotchi } from '@proj-airi/stage-shared'
 import { z } from 'zod'
 
 import { defineProvider } from '../registry'
@@ -14,7 +15,7 @@ export type { WebSpeechAPIExtraOptions } from './provider'
 export { createWebSpeechAPIProvider, streamWebSpeechAPITranscription } from './provider'
 
 function isWebSpeechApiAvailable() {
-  if (typeof window === 'undefined')
+  if (isStageTamagotchi() || typeof window === 'undefined')
     return false
 
   return 'webkitSpeechRecognition' in window || 'SpeechRecognition' in window
