@@ -3,10 +3,12 @@ import { randomUUID } from 'node:crypto'
 import { readFileSync, renameSync } from 'node:fs'
 import { mkdir, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
+import { platform } from 'node:process'
 
 import { safeDestr } from 'destr'
 
 import { withVaultWriteLock } from './vault-lock'
+import { writePrivateWindowsFile } from './windows-private-file'
 
 /**
  * Lia secret vault (M1 Phase 4C, extracted to Lia Core in Phase 7).
@@ -14,7 +16,7 @@ import { withVaultWriteLock } from './vault-lock'
  * API keys / bearer tokens that the Lia product configures must NEVER live in
  * renderer localStorage nor in `lia/product.json`. This vault stores secrets in
  * the host's **main** process, encrypted with an injected cipher (Electron
- * `safeStorage` in the Electron hosts), on disk as base64 ciphertext under
+ * DPAPI-backed on Windows, `safeStorage` on the other Electron hosts), as base64 ciphertext under
  * `<lia-user-data>/lia-secrets.json`. Plaintext is never written to disk and
  * never returned to a renderer for persistence.
  *
@@ -110,7 +112,10 @@ export function createLiaSecretVault(deps: SecretsDeps): LiaSecretVault {
     await mkdir(dirname(p), { recursive: true })
     const tmp = `${p}.${randomUUID()}.tmp`
     try {
-      await writeFile(tmp, data)
+      if (platform === 'win32')
+        await writePrivateWindowsFile(tmp, data, signal)
+      else
+        await writeFile(tmp, data, { flag: 'wx', mode: 0o600, signal })
       if (signal) {
         // No JS callback can abort between admission and atomic replacement.
         signal.throwIfAborted()
