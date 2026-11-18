@@ -1,5 +1,6 @@
 import type { TransportMutation, TransportRecord, TransportSnapshot } from '../../../../../lia/core/src/transports/contracts'
 import type { LiaSpeechConfigSaveInput } from '../../src/shared/eventa/lia-speech-config'
+import type { LiaTranscriptionCredentialSave } from '../../src/shared/eventa/lia-transcription-config'
 
 import { useElectronEventaInvoke } from '@proj-airi/electron-vueuse'
 import { generateText } from '@xsai/generate-text'
@@ -19,6 +20,7 @@ import {
   electronLiaSecretSet,
 } from '../../src/shared/eventa'
 import { electronLiaSpeechConfigGet, electronLiaSpeechConfigSave } from '../../src/shared/eventa/lia-speech-config'
+import { electronLiaTranscriptionCredentialHas, electronLiaTranscriptionCredentialSave } from '../../src/shared/eventa/lia-transcription-config'
 import { electronLiaTransportsGet, electronLiaTransportsMutate } from '../../src/shared/eventa/lia-transports'
 
 const transcription = createMainTranscription()
@@ -167,6 +169,8 @@ const api = {
     }, transcriptionController.signal)
   },
   cancelFixtureTranscription: () => transcriptionController?.abort(),
+  hasTranscriptionCredential: (providerId: string) => useElectronEventaInvoke(electronLiaTranscriptionCredentialHas)({ providerId }),
+  saveTranscriptionCredential: (input: LiaTranscriptionCredentialSave) => useElectronEventaInvoke(electronLiaTranscriptionCredentialSave)(input),
   speechConfig: (providerId: string) => useElectronEventaInvoke(electronLiaSpeechConfigGet)({ providerId }),
   saveSpeechConfig: (input: LiaSpeechConfigSaveInput) =>
     useElectronEventaInvoke(electronLiaSpeechConfigSave)(input),

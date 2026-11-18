@@ -9,6 +9,7 @@ import type { LiaTransportExecutionFailure, LiaTransportPullResult, LiaTransport
 import { Buffer } from 'node:buffer'
 import { randomUUID } from 'node:crypto'
 
+import { credentialForDestination, unboundCredential } from '@lia/contracts/credentials/destination'
 import { ProviderError, ProviderRegistry, ProviderRuntime } from '@lia/contracts/providers'
 import { defineInvokeHandler } from '@moeru/eventa'
 
@@ -16,7 +17,6 @@ import { electronLiaTransportCancel, electronLiaTransportPull, electronLiaTransp
 import { isCuratedChatProvider } from '../../../shared/lia/provider-catalog'
 import { supportsMainSpeech } from '../../../shared/lia/speech-transport'
 import { resolveMainCredential } from './credential-owner-access'
-import { credentialForDestination } from './destination-credential'
 import { withLiaProviderHeaders } from './provider-request-headers'
 import { serializeWrite } from './secrets-service'
 
@@ -335,7 +335,7 @@ export function createLiaTransportExecutionService(params: { repository: Reposit
           // The vault is the only source. A draft can point somewhere new, but it
           // can no longer carry a secret to that address.
           try {
-            return mayUseVault ? await resolveMainCredential(params.vault, record.credentialRef.scope, record.credentialRef.key, job.controller.signal) : undefined
+            return mayUseVault ? unboundCredential(await resolveMainCredential(params.vault, record.credentialRef.scope, record.credentialRef.key, job.controller.signal)) : undefined
           }
           catch {
             throw new ProviderError('credentials')

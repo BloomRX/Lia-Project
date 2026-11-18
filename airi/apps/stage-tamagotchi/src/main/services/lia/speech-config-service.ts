@@ -3,11 +3,11 @@ import type { LiaSecretVault } from '@lia/core/secrets/vault'
 
 import type { LiaSpeechConfigResult, LiaSpeechConfigSaveInput } from '../../../shared/eventa/lia-speech-config'
 
+import { bindCredential, credentialForDestination } from '@lia/contracts/credentials/destination'
 import { isTransportRecord } from '@lia/contracts/transports'
 
 import { supportsMainSpeech } from '../../../shared/lia/speech-transport'
 import { resolveMainCredential } from './credential-owner-access'
-import { bindCredential, credentialForDestination } from './destination-credential'
 import { serializeWrite } from './secrets-service'
 
 export function createSpeechConfigService(

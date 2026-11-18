@@ -1,9 +1,9 @@
 import type { TransportMutation, TransportResult, TransportSnapshot } from '@lia/contracts/transports'
 import type { LiaSecretVault } from '@lia/core/secrets/vault'
 
+import { bindCredential } from '@lia/contracts/credentials/destination'
 import { describe, expect, it, vi } from 'vitest'
 
-import { bindCredential } from './destination-credential'
 import { createSpeechConfigService } from './speech-config-service'
 
 const providerId = 'openai-compatible-audio-speech'
@@ -89,6 +89,14 @@ describe('speech connection configuration', () => {
     expect(JSON.stringify(await repository.read())).not.toContain(apiKey)
     expect(await service.read({ providerId })).toEqual({ ok: true, config: { baseUrl: `${baseUrl}/custom/`, hasKey: true, revision: 2 } })
     expect(invalidate).toHaveBeenCalledTimes(2)
+  })
+
+  it('keeps the original bound speech entries that predate the purpose field', async () => {
+    const { service, vault } = fixture()
+    expect(await service.save({ providerId, baseUrl, revision: 0, apiKey })).toMatchObject({ ok: true })
+    await vault.setSecret(providerId, 'apiKey', JSON.stringify({ version: 1, scope: providerId, origin: new URL(baseUrl).origin, apiKey }))
+    expect(await service.read({ providerId })).toMatchObject({ ok: true, config: { hasKey: true } })
+    expect(await service.save({ providerId, baseUrl: `${baseUrl}/custom`, revision: 1 })).toMatchObject({ ok: true })
   })
 
   it('requires entering a key again to change origin, including the TLS port', async () => {

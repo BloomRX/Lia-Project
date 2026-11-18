@@ -1,5 +1,7 @@
 import type { LiaProviderChatConfig, LiaProviderChatTarget } from '../../../shared/eventa'
 
+import { ProviderError } from '@lia/contracts/providers'
+import { isTransportRecord } from '@lia/contracts/transports'
 import { errorMessageFrom } from '@moeru/std'
 import { useElectronEventaInvoke } from '@proj-airi/electron-vueuse'
 import { registerChatFallbackResolver, registerProviderCredentialResolver, registerProviderModelLister } from '@proj-airi/stage-ui/stores/chat/chat-provider-runtime'
@@ -8,8 +10,6 @@ import { registerProviderCredentialConfigPort } from '@proj-airi/stage-ui/stores
 import { defineStore } from 'pinia'
 import { onScopeDispose, ref } from 'vue'
 
-import { ProviderError } from '@lia/contracts/providers'
-import { isTransportRecord } from '@lia/contracts/transports'
 import {
   electronLiaProviderChatConfigGet,
   electronLiaProviderChatConfigSet,
@@ -20,6 +20,7 @@ import {
   electronLiaSecretHas,
   electronLiaSecretSet,
 } from '../../../shared/eventa'
+import { electronLiaTranscriptionCredentialHas, electronLiaTranscriptionCredentialSave } from '../../../shared/eventa/lia-transcription-config'
 import { supportsMainTranscription } from '../../../shared/lia/transcription-transport'
 import { removeLegacyApiKey, stripCredentialField } from '../../services/lia/legacy-credential-cleanup'
 import { createMainTransportExecution } from '../../services/lia/main-transport-execution'
@@ -479,10 +480,18 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
   }
 
   async function hasApiKey(providerId: string): Promise<boolean> {
+    if (supportsMainTranscription(transports.get(providerId)?.definitionId ?? providerConfig.get(providerId)?.definitionId ?? providerId))
+      return useElectronEventaInvoke(electronLiaTranscriptionCredentialHas)({ providerId })
     return secretHas({ scope: providerId, key: API_KEY_NAME })
   }
 
-  async function setApiKey(providerId: string, value: string): Promise<boolean> {
+  async function setApiKey(providerId: string, value: string, expectedBaseUrl?: string): Promise<boolean> {
+    const record = transports.get(providerId)
+    if (supportsMainTranscription(record?.definitionId ?? providerConfig.get(providerId)?.definitionId ?? providerId)) {
+      const revision = transports.revision()
+      const endpoint = expectedBaseUrl ?? record?.baseUrl
+      return revision !== undefined && !!endpoint && useElectronEventaInvoke(electronLiaTranscriptionCredentialSave)({ providerId, revision, expectedBaseUrl: endpoint, apiKey: value })
+    }
     return secretSet({ scope: providerId, key: API_KEY_NAME, value })
   }
 
@@ -1089,9 +1098,10 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
       async save(id, value) {
         if (!owns(id) || !/^[\x21-\x7E]{1,16384}$/.test(value))
           return false
-        const endpoint = providerConfig.getConfig(id)?.baseUrl
-        await ensureProviderRecord(id, typeof endpoint === 'string' && endpoint.trim() ? endpoint : undefined)
-        const saved = await setApiKey(id, value)
+        const configuredEndpoint = providerConfig.getConfig(id)?.baseUrl
+        const endpoint = typeof configuredEndpoint === 'string' && configuredEndpoint.trim() ? configuredEndpoint : undefined
+        await ensureProviderRecord(id, endpoint)
+        const saved = await setApiKey(id, value, endpoint)
         if (saved) {
           clearLegacyCredential(id)
           providerActivation.markConfigured(id)

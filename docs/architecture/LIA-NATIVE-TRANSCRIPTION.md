@@ -221,6 +221,24 @@ são somente o protocolo de transportes, seu validador e a regressão de persist
 
 ## Roteiro manual Windows — NÃO EXECUTADO
 
+Para G-AUD, usar o mesmo build em todos os casos, registrar o SHA e seguir
+os critérios AV-01 a AV-15. Para a prova de consentimento, usar três frases
+sintéticas diferentes, sem dados pessoais, e um serviço autorizado que
+informe o início e o encerramento das requisições sem guardar o áudio.
+
+- **Recusa antes do envio.** Com o microfone selecionado, gravar a primeira
+  frase. Conferir o provedor e o destino no diálogo. Escolher Cancelar.
+  Registrar a recusa, a ausência de requisição e a ausência de transcrição.
+- **Aceite por gravação.** Gravar a segunda frase e aceitar. Conferir uma
+  requisição no destino exibido e uma transcrição no Stage. A próxima
+  gravação remota deve pedir novo aceite.
+- **Interrupção durante o envio.** Gravar a terceira frase, aceitar e
+  interromper após o serviço sinalizar a requisição. Conferir o encerramento
+  da conexão e a ausência de texto tardio. Registrar que o servidor pode
+  ter recebido bytes antes da interrupção.
+- **Motor local.** Repetir em loopback com o adaptador local sem chave.
+  Conferir resultado e ausência de diálogo de envio remoto.
+
 1. Com um serviço autorizado, escolher o adaptador e endereço. Digitar a chave
    no campo nativo e acionar **Salvar chave**. Reabrir settings; campo vazio e
    presença confirmada. Selecionar modelo e idioma próprios do serviço.
@@ -231,8 +249,11 @@ são somente o protocolo de transportes, seu validador e a regressão de persist
    não aparece na sessão/gravação nova. Não basta observar a UI.
 4. Abrir duas janelas e cancelar uma operação; a outra deve concluir. Fechar a
    janela com transcrição em curso e conferir encerramento de sua conexão.
-5. Trocar endereço e salvar nova chave; revogar a anterior no serviço autorizado
-   e confirmar nova transcrição. Não registrar valores em evidência.
+5. Em adaptador dedicado, trocar protocolo, host ou porta. A chave anterior
+   deve ficar indisponível para o novo destino. Confirmar que não há envio
+   mesmo após aceitar o diálogo. Informar a chave na tela de conexão e
+   confirmar nova transcrição. O mesmo vale para chaves legadas ainda sem
+   vínculo de origem. Registrar apenas os resultados e o destino sanitizado.
 6. Testar falha de rede, credencial recusada e serviço que não responde. Timeout
    deve ser distinto de cancelamento, sem ecoar corpo do serviço.
 7. Repetir com motor local disponível e verificar microfone, VAD e texto. Conferir

@@ -1,5 +1,6 @@
 import type { SpeechProvider } from '@xsai-ext/providers/utils'
 
+import { bindCredential } from '@lia/contracts/credentials/destination'
 import { PiniaColada } from '@pinia/colada'
 import { resetChatProviderRuntimeExtensionsForTesting } from '@proj-airi/stage-ui/stores/chat/chat-provider-runtime'
 import { useProviderConfigStore } from '@proj-airi/stage-ui/stores/providers/config'
@@ -8,7 +9,6 @@ import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createApp } from 'vue'
 
-import { bindCredential } from '../../../main/services/lia/destination-credential'
 import { setTransportTestVaultResolver } from '../../services/lia/transport-config.fixture'
 
 /**

@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto'
 import { EventEmitter, once } from 'node:events'
 import { createServer } from 'node:http'
 
+import { bindCredential } from '@lia/contracts/credentials/destination'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { electronLiaTranscriptionCancel, electronLiaTranscriptionRun } from '../../../shared/eventa/lia-transcription'
@@ -102,7 +103,7 @@ describe('main-process transcription', () => {
         : { text: 'nativa' }))
     })
     const local = definitionId === 'app-local-audio-transcription'
-    const getSecret = vi.fn(() => local ? undefined : SECRET)
+    const getSecret = vi.fn(() => local ? undefined : bindCredential('custom-stt', new URL(baseUrl), SECRET, 'transcription'))
     const saved = record({ id: 'custom-stt', providerId: 'custom-stt', definitionId, protocol: 'audio-transcription', baseUrl, credentialRef: { scope: 'custom-stt', key: 'apiKey' } })
     const service = createLiaTranscriptionService({ repository: { read: async () => snapshot([saved]) }, vault: { getSecret } as never })
     expect(await service.transcribe({ ...request, providerId: 'custom-stt', model: 'user-selected', language: 'pt' })).toMatchObject({ ok: true, text: 'nativa' })
@@ -111,6 +112,21 @@ describe('main-process transcription', () => {
     expect(captured.url).toBe(definitionId === 'mimo-audio-transcription' ? '/v1/chat/completions' : '/v1/audio/transcriptions')
     if (local)
       expect(captured.authorization).toBeUndefined()
+  })
+
+  it.each(['legacy', 'other origin', 'other provider', 'speech purpose'])('refuses a %s credential before sending dedicated recording audio', async (kind) => {
+    const baseUrl = 'https://speech.invalid/v1/'
+    const providerId = 'custom-stt'
+    const saved = record({ id: providerId, providerId, definitionId: 'openai-compatible-audio-transcription', protocol: 'audio-transcription', baseUrl, credentialRef: { scope: providerId, key: 'apiKey' } })
+    const scope = kind === 'other provider' ? 'different-stt' : providerId
+    const origin = new URL(kind === 'other origin' ? 'https://different.invalid' : baseUrl)
+    const value = kind === 'legacy' ? SECRET : bindCredential(scope, origin, SECRET, kind === 'speech purpose' ? 'speech' : 'transcription')
+    const fetch = vi.fn<typeof globalThis.fetch>()
+    const approve = vi.fn(async () => true)
+    const service = createLiaTranscriptionService({ repository: { read: async () => snapshot([saved]) }, vault: { getSecret: () => value } as never, fetch })
+    expect(await service.transcribe({ ...request, providerId }, undefined, approve)).toEqual({ ok: false, code: 'credentials' })
+    expect(approve).toHaveBeenCalledOnce()
+    expect(fetch).not.toHaveBeenCalled()
   })
 
   it('signs the request with the vault key and forwards the audio unchanged', async () => {

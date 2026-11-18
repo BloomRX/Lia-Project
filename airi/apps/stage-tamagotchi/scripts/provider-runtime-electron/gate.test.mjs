@@ -136,7 +136,7 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
   const curated = ['openai', 'groq', 'cerebras-ai', 'anthropic', 'xai', 'mistral-ai', 'openrouter-ai', 'openai-compatible', 'lm-studio', 'ollama']
   const keyless = new Set(['lm-studio', 'ollama'])
   const speechProvider = 'openai-audio-speech'
-  const transcriptionProvider = 'openai-compatible-audio-transcription'
+  const transcriptionProvider = 'fixture-recording'
   const secrets = { [transcriptionProvider]: `synthetic-transcription-${randomUUID()}`, generic: `synthetic-A-${randomUUID()}`, local: `synthetic-B-${randomUUID()}`, [speechProvider]: `synthetic-speech-${randomUUID()}` }
   for (const id of curated) {
     if (!keyless.has(id))
@@ -417,16 +417,16 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
     assert.deepEqual(await page.evaluate(id => window.providerGate.synthesizeFixtureSpeech(id), speechProvider), [1, 2, 3])
     assert.equal(report.requests.at(-1).authenticated, true)
     assert.equal(await page.evaluate(({ id, value }) => window.providerGate.seed(id, value), { id: transcriptionProvider, value: secrets[transcriptionProvider] }), true)
-    const seedTranscription = async (suffix = '') => {
+    const seedTranscription = async (suffix = '', host = '127.0.0.1') => {
       const reply = await page.evaluate(() => window.providerGate.transports())
       assert.equal(reply.ok, true)
       const record = {
         id: transcriptionProvider,
         providerId: transcriptionProvider,
-        definitionId: transcriptionProvider,
+        definitionId: 'openai-compatible-audio-transcription',
         type: 'http',
         protocol: 'audio-transcription',
-        baseUrl: `${base}/${transcriptionProvider}/${suffix}v1/`,
+        baseUrl: `${base.replace('127.0.0.1', host)}/${transcriptionProvider}/${suffix}v1/`,
         adapterOptions: {},
         modelIds: ['fixture-transcription'],
         enabled: true,
@@ -435,8 +435,23 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
       }
       const saved = await page.evaluate(input => window.providerGate.mutate(input), { kind: 'put', expectedRevision: reply.snapshot.revision, record })
       assert.equal(saved.ok, true)
+      return saved.snapshot.revision
     }
-    await seedTranscription()
+    const transcriptionRevision = await seedTranscription()
+    assert.equal(await page.evaluate(id => window.providerGate.hasTranscriptionCredential(id), transcriptionProvider), false)
+    const beforeUnbound = report.requests.length
+    assert.deepEqual(await page.evaluate(id => window.providerGate.transcribeFixtureRecording(id), transcriptionProvider), { ok: false, code: 'credentials' })
+    assert.equal(report.requests.length, beforeUnbound)
+    const transcriptionCredential = {
+      providerId: transcriptionProvider,
+      revision: transcriptionRevision,
+      expectedBaseUrl: `${base}/${transcriptionProvider}/v1/`,
+      apiKey: secrets[transcriptionProvider],
+    }
+    assert.equal(await page.evaluate(input => window.providerGate.saveTranscriptionCredential(input), { ...transcriptionCredential, revision: transcriptionRevision - 1 }), false)
+    assert.equal(await page.evaluate(input => window.providerGate.saveTranscriptionCredential(input), { ...transcriptionCredential, expectedBaseUrl: 'https://different.invalid/' }), false)
+    assert.equal(await page.evaluate(input => window.providerGate.saveTranscriptionCredential(input), transcriptionCredential), true)
+    assert.equal(await page.evaluate(id => window.providerGate.hasTranscriptionCredential(id), transcriptionProvider), true)
     assert.equal(await page.evaluate(id => window.providerGate.readProtectedSecret(id), transcriptionProvider), undefined)
     const recognized = await page.evaluate(id => window.providerGate.transcribeFixtureRecording(id), transcriptionProvider)
     assert.deepEqual(recognized, { ok: true, status: 200, text: 'Transcri��o Electron Lia', language: 'pt' })
@@ -445,6 +460,12 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
     const transcriptionState = JSON.parse(await readFile(join(root, 'main-state.json'), 'utf8'))
     assert.ok(transcriptionState.readScopes.includes(transcriptionProvider), 'transcription must resolve its credential in Main')
     assert.ok(!JSON.stringify(recognized).includes(secrets[transcriptionProvider]))
+    await seedTranscription('', 'localhost')
+    assert.equal(await page.evaluate(id => window.providerGate.hasTranscriptionCredential(id), transcriptionProvider), false)
+    const beforeOtherOrigin = report.requests.length
+    assert.deepEqual(await page.evaluate(id => window.providerGate.transcribeFixtureRecording(id), transcriptionProvider), { ok: false, code: 'credentials' })
+    assert.equal(report.requests.length, beforeOtherOrigin)
+    await seedTranscription()
     groups.pass(4, 'JSON, SSE, discovery, custom model, separate credentials, Main-native speech and recording transcription')
 
     groups.begin(5)
@@ -461,9 +482,11 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
     })
     report.secondRenderer = await secondPage.evaluate(() => ({ bridge: typeof window.electron?.ipcRenderer, status: document.querySelector('#status')?.textContent }))
     assert.deepEqual(await secondPage.evaluate(id => window.providerGate.speechConfig(id), speechProvider), { ok: false, code: 'invalid' })
+    assert.equal(await secondPage.evaluate(id => window.providerGate.hasTranscriptionCredential(id), transcriptionProvider), false)
     await secondPage.getByRole('status').filter({ hasText: 'Pronto' }).waitFor()
     const prior = await page.evaluate(() => window.providerGate.transports())
     assert.equal(prior.ok, true)
+    assert.equal(await secondPage.evaluate(input => window.providerGate.saveTranscriptionCredential(input), { ...transcriptionCredential, revision: prior.snapshot.revision }), false)
     const firstRecord = prior.snapshot.records.find(record => record.id === 'openai-compatible')
     const concurrent = await Promise.all([
       page.evaluate(({ record, revision }) => window.providerGate.mutate({ kind: 'put', expectedRevision: revision, record: { ...record, metadata: { label: 'Janela A' } } }), { record: firstRecord, revision: prior.snapshot.revision }),

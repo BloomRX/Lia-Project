@@ -50,6 +50,8 @@ const ipc = vi.hoisted(() => {
       return true
     }),
     secretDelete: vi.fn(async (payload: { scope: string, key: string }) => vault.delete(key(payload))),
+    transcriptionCredentialHas: vi.fn(async (_input: { providerId: string }) => false),
+    transcriptionCredentialSave: vi.fn(async (_input: { providerId: string, revision: number, expectedBaseUrl: string, apiKey: string }) => true),
     transcriptionRun: vi.fn(async (request: unknown) => {
       ipc.transcriptions.push(structuredClone(request))
       return { ok: true as const, status: 200, text: 'transcrição sintética' }
@@ -69,6 +71,8 @@ vi.mock('@proj-airi/electron-vueuse', async () => {
         return transport
       const handlers: Record<string, unknown> = {
         'eventa:invoke:lia:transcription:run-receive': ipc.transcriptionRun,
+        'eventa:invoke:lia:transcription-credential:has-receive': ipc.transcriptionCredentialHas,
+        'eventa:invoke:lia:transcription-credential:save-receive': ipc.transcriptionCredentialSave,
         'eventa:invoke:lia:hearing:config:get-receive': ipc.hearingConfig,
         'eventa:invoke:lia:provider:chat:config:get-receive': ipc.chatConfig,
         'eventa:invoke:lia:provider:chat:config:set-receive': vi.fn(async () => {}),
@@ -125,9 +129,11 @@ describe('speech-to-text through the main process', () => {
     useLiaProviderStore()
     const { getProviderCredentialConfigPort } = await import('@proj-airi/stage-ui/stores/providers/credential-config-port')
     const port = getProviderCredentialConfigPort(id)!
-    expect(await port.has(id)).toBe(true)
+    expect(await port.has(id)).toBe(false)
+    expect(ipc.transcriptionCredentialHas).toHaveBeenCalledWith({ providerId: id })
     expect(await port.save(id, 'synthetic-rotated')).toBe(true)
-    expect(ipc.secretSet).toHaveBeenCalledWith({ scope: id, key: 'apiKey', value: 'synthetic-rotated' })
+    expect(ipc.transcriptionCredentialSave).toHaveBeenCalledWith({ providerId: id, revision: expect.any(Number), expectedBaseUrl: 'https://speech.invalid/v1/', apiKey: 'synthetic-rotated' })
+    expect(ipc.secretSet).not.toHaveBeenCalled()
     expect(useProviderConfigStore().getProviderConfig(id)).not.toHaveProperty('apiKey')
     expect(ipc.secretGet).not.toHaveBeenCalled()
   })

@@ -27,6 +27,7 @@ const appsRoot = join(repoRoot, 'airi', 'apps')
 
 /** Subpaths servidos por `exports` e sua pureza declarada. */
 const PUBLIC_SURFACE: Record<string, { nodeOnly: boolean }> = {
+  './credentials/destination': { nodeOnly: false },
   './credentials/owner-channel': { nodeOnly: true },
   './presence': { nodeOnly: false },
   './providers': { nodeOnly: false },

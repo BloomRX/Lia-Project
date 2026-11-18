@@ -50,6 +50,7 @@ export function createLiaTransportClient() {
   return {
     refresh,
     get,
+    revision: () => snapshot?.revision,
     hasRemoved: (id: string) => !snapshot?.records.some(record => record.providerId === id)
       && (snapshot?.tombstones.includes(id) === true || snapshot?.protectedCredentialScopes?.includes(id) === true),
     put: (record: TransportRecord) => mutate({ kind: 'put', record }),

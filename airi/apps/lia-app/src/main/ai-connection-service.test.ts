@@ -4,6 +4,10 @@ import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
+import { bindCredential } from '@lia/contracts/credentials/destination'
+import { LIA_AI_PROVIDER_CATALOG } from '@lia/contracts/providers/catalog'
+import { isTransportRecord } from '@lia/contracts/transports'
+import { createTransportRepository } from '@lia/contracts/transports/repository'
 import {
   brainRequirementForChatTurn,
   createProductionBrainAutomaticPolicy,
@@ -15,9 +19,6 @@ import { createLiaSecretVault } from '@lia/core/secrets/vault'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { LIA_BRAIN_ENGINE_PROVIDER_MAPPING } from '../../../stage-tamagotchi/src/shared/lia/brain-engine-provider-mapping'
-import { LIA_AI_PROVIDER_CATALOG } from '@lia/contracts/providers/catalog'
-import { createTransportRepository } from '@lia/contracts/transports/repository'
-import { isTransportRecord } from '@lia/contracts/transports'
 import { createAiConnectionService } from './ai-connection-service'
 
 const GROQ_URL = 'https://api.groq.com/openai/v1'
@@ -127,6 +128,17 @@ describe('explicit replacement of a credential from another profile', () => {
 })
 
 describe('launcher real AI connection', () => {
+  it('does not send a bound value from a previous transport at the same scope', async () => {
+    const f = await fixture()
+    expect(await f.service.save({ providerId: 'groq', baseUrl: GROQ_URL, apiKey: 'synthetic-chat-key', modelId: 'chosen', revision: 0 })).toMatchObject({ ok: true })
+    const value = bindCredential('groq', new URL('https://speech.invalid'), 'synthetic-recording-key', 'transcription')
+    expect(await f.vault.setSecret('groq', 'apiKey', value)).toBe(true)
+    const fetch = vi.fn<typeof globalThis.fetch>()
+    const service = createAiConnectionService({ ...f.deps, fetch })
+    expect(await service.getStartReadiness()).toEqual({ ok: false, code: 'credential-missing' })
+    expect(await service.discover('groq')).toEqual({ ok: false, code: 'credentials' })
+    expect(fetch).not.toHaveBeenCalled()
+  })
   it('does not authorize an absent canonical selection', async () => {
     const f = await fixture()
 
@@ -166,7 +178,12 @@ describe('launcher real AI connection', () => {
 
   it('reports selection and transport read failures without converting them into permission', async () => {
     const f = await fixture()
-    const selectionFailure = createAiConnectionService({ ...f.deps, readSelection: async () => { throw new Error('private read failure') } })
+    const selectionFailure = createAiConnectionService({
+      ...f.deps,
+      async readSelection() {
+        throw new Error('private read failure')
+      },
+    })
     expect(await selectionFailure.getStartReadiness()).toEqual({ ok: false, code: 'selection-read-failed' })
 
     await f.service.save({ providerId: 'groq', baseUrl: GROQ_URL, apiKey: 'synthetic-private-key', modelId: 'openai/gpt-oss-120b', revision: 0 })
@@ -367,7 +384,7 @@ describe('launcher real AI connection', () => {
   })
 })
 
-describe('AI Settings MVP (PROMPT-39)', () => {
+describe('launcher AI Settings MVP (PROMPT-39)', () => {
   it('exposes a non-secret provider catalog and enforces the availability gate', async () => {
     const f = await fixture()
     const catalog = f.service.catalog()

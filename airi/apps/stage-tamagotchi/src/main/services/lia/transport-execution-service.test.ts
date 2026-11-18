@@ -7,10 +7,10 @@ import type { LiaTransportPullResult, LiaTransportStartResult } from '../../../s
 import { EventEmitter } from 'node:events'
 import { createServer } from 'node:http'
 
+import { bindCredential } from '@lia/contracts/credentials/destination'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { electronLiaTransportStart } from '../../../shared/eventa/lia-transport-execution'
-import { bindCredential } from './destination-credential'
 import { createLiaTransportExecutionService, registerLiaTransportExecutionBridge } from './transport-execution-service'
 
 const handlers = vi.hoisted(() => new Map<unknown, (...args: any[]) => any>())

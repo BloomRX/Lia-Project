@@ -6,6 +6,7 @@ import type { WebContents } from 'electron'
 
 import type { LiaTranscriptionRunOutcome, LiaTranscriptionRunRequest } from '../../../shared/eventa/lia-transcription'
 
+import { credentialForDestination, unboundCredential } from '@lia/contracts/credentials/destination'
 import { ProviderError } from '@lia/contracts/providers'
 import { defineInvokeHandler } from '@moeru/eventa'
 
@@ -222,7 +223,10 @@ export function createLiaTranscriptionService(options: LiaTranscriptionServiceOp
         if (current.revision !== snapshot.revision)
           throw new ProviderError('configuration')
       }
-      const credential = await abortable(resolveMainCredential(options.vault, record.credentialRef.scope, record.credentialRef.key, controller.signal), controller.signal)
+      const stored = await abortable(resolveMainCredential(options.vault, record.credentialRef.scope, record.credentialRef.key, controller.signal), controller.signal)
+      const credential = native
+        ? credentialForDestination(stored, record.credentialRef.scope, destination, 'transcription')
+        : unboundCredential(stored)
       const { url, init } = prepareTranscriptionRequest(record, request, credential)
       // Node's multipart Blob producer may enqueue after fetch abort closes its
       // stream. Finish bounded encoding before attaching the HTTP abort signal.

@@ -13,6 +13,14 @@ commit. Registra **estado**, não narrativa: relatório de rodada vai para
 
 ## 0. Estado agora
 
+**Rodada 22 — SEC-05 nos adaptadores dedicados de STT.** O Main vincula
+a chave cifrada à origem, ao identificador do provedor e ao uso em gravação.
+A troca de origem e as chaves legadas exigem informar a chave novamente.
+STT local sem chave permanece disponível. O gate Electron no Windows passou
+com HTTP em loopback, credencial sintética e ID de provedor personalizado.
+O diálogo com rede remota e o microfone físico seguem NOT RUN. O próximo
+corte cobre as chaves de chat e o STT que compartilha essas chaves.
+
 **Rodada 22 — SEC-05 no TTS HTTP nativo do Stage.** O Main vincula a
 chave de cada provedor de síntese à origem exata e ao escopo do cofre
 cifrado. Para mudar protocolo, host ou porta, informe a chave na tela de

@@ -4,6 +4,7 @@ import type { LiaSecretAdoptResult } from '../../../shared/eventa'
 import type { LiaSecretVault } from './secrets'
 
 import { useLogg } from '@guiiai/logg'
+import { unboundCredential } from '@lia/contracts/credentials/destination'
 import { defineInvokeHandler } from '@moeru/eventa'
 
 import {
@@ -94,6 +95,7 @@ export function registerLiaSecretsBridge(params: {
     if (payload?.key === 'apiKey' && supportsMainSpeech(payload.scope))
       return false
     if (!validReference(payload) || typeof payload.value !== 'string' || payload.value.length === 0 || payload.value.length > 16384
+      || (payload.key === 'apiKey' && !unboundCredential(payload.value))
       || (payload.onlyIfMissing !== undefined && typeof payload.onlyIfMissing !== 'boolean')) {
       log.warn('Rejected secret store request with missing/invalid fields')
       return false
@@ -139,7 +141,8 @@ export function registerLiaSecretsBridge(params: {
       return 'unavailable'
     if (payload?.key === 'apiKey' && supportsMainSpeech(payload.scope))
       return 'unavailable'
-    if (!validReference(payload) || typeof payload.value !== 'string' || payload.value.length === 0 || payload.value.length > 16384) {
+    if (!validReference(payload) || typeof payload.value !== 'string' || payload.value.length === 0 || payload.value.length > 16384
+      || (payload.key === 'apiKey' && !unboundCredential(payload.value))) {
       log.warn('Rejected secret adopt request with missing/invalid fields')
       return 'unavailable'
     }
@@ -169,8 +172,10 @@ export function registerLiaSecretsBridge(params: {
     if (!senderAllowed(options) || !validReference(payload) || !params.allowRendererRead)
       return undefined
     try {
-      if (await params.allowRendererRead(payload.scope))
-        return await vault.getSecret(payload.scope, payload.key)
+      if (await params.allowRendererRead(payload.scope)) {
+        const value = await vault.getSecret(payload.scope, payload.key)
+        return payload.key === 'apiKey' ? unboundCredential(value) : value
+      }
     }
     catch {
       return undefined

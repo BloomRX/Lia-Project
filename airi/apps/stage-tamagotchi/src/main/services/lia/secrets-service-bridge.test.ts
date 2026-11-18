@@ -1,3 +1,4 @@
+import { bindCredential } from '@lia/contracts/credentials/destination'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { oidcSessionScope, registerLiaSecretsBridge } from './secrets-service'
@@ -43,6 +44,17 @@ function setup(allowRendererRead?: (scope: string) => Promise<boolean>, isAllowe
 beforeEach(() => handlers.clear())
 
 describe('secret bridge ownership and migration', () => {
+  it('keeps a destination-bound key off of generic get, set and adopt even for an unknown alias', async () => {
+    const { vault, values } = setup(async () => true)
+    const scope = 'custom-stt'
+    const key = 'apiKey'
+    const value = bindCredential(scope, new URL('https://speech.invalid'), 'synthetic-key')
+    expect(await handler('set')({ scope, key, value })).toBe(false)
+    expect(await handler('adopt')({ scope, key, value })).toBe('unavailable')
+    expect(vault.setSecret).not.toHaveBeenCalled()
+    values.set(`${scope}:${key}`, value)
+    expect(await handler('get')({ scope, key })).toBeUndefined()
+  })
   it('requires the dedicated speech configuration path to write speech credentials', async () => {
     const { vault } = setup()
     const input = { scope: 'openai-audio-speech', key: 'apiKey', value: 'synthetic-plain' }

@@ -10,6 +10,7 @@
   },
   "exports": {
     ".": "./src/index.ts",
+    "./credentials/destination": "./src/credentials/destination.ts",
     "./credentials/owner-channel": "./src/credentials/owner-channel.ts",
     "./presence": "./src/presence/index.ts",
     "./providers": "./src/providers/index.ts",

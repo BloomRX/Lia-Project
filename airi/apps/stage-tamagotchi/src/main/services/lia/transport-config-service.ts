@@ -9,11 +9,14 @@ import { defineInvokeHandler } from '@moeru/eventa'
 import { app } from 'electron'
 
 import { electronLiaSpeechConfigGet, electronLiaSpeechConfigSave } from '../../../shared/eventa/lia-speech-config'
+import { electronLiaTranscriptionCredentialHas, electronLiaTranscriptionCredentialSave } from '../../../shared/eventa/lia-transcription-config'
 import { electronLiaTransportsGet, electronLiaTransportsMutate } from '../../../shared/eventa/lia-transports'
 import { isCuratedChatProvider } from '../../../shared/lia/provider-catalog'
 import { supportsMainSpeech } from '../../../shared/lia/speech-transport'
 import { supportsMainTranscription } from '../../../shared/lia/transcription-transport'
+import { serializeWrite } from './secrets-service'
 import { createSpeechConfigService } from './speech-config-service'
+import { createTranscriptionCredentialService } from './transcription-credential-service'
 import { registerLiaTransportExecutionBridge } from './transport-execution-service'
 
 let applicationRepository: ReturnType<typeof createTransportRepository> | undefined
@@ -73,10 +76,15 @@ export function registerLiaTransportConfigBridge(params: {
   const repository = params.repository ?? getApplicationRepository()
   const execution = registerLiaTransportExecutionBridge({ context: params.context, repository, vault: params.vault })
   const speech = createSpeechConfigService(repository, params.vault, execution.invalidate)
+  const transcriptionCredential = createTranscriptionCredentialService(repository, params.vault)
   defineInvokeHandler(params.context, electronLiaSpeechConfigGet, async (input, options) =>
     params.isAllowedSpeechConfigSender(options?.raw?.ipcMainEvent) ? speech.read(input) : { ok: false, code: 'invalid' })
   defineInvokeHandler(params.context, electronLiaSpeechConfigSave, async (input, options) =>
     params.isAllowedSpeechConfigSender(options?.raw?.ipcMainEvent) ? speech.save(input) : { ok: false, code: 'invalid' })
+  defineInvokeHandler(params.context, electronLiaTranscriptionCredentialHas, async (input, options) =>
+    params.isAllowedSpeechConfigSender(options?.raw?.ipcMainEvent) && transcriptionCredential.has(input))
+  defineInvokeHandler(params.context, electronLiaTranscriptionCredentialSave, async (input, options) =>
+    params.isAllowedSpeechConfigSender(options?.raw?.ipcMainEvent) && transcriptionCredential.save(input))
   defineInvokeHandler(params.context, electronLiaTransportsGet, async () => {
     try {
       return { ok: true as const, snapshot: await repository.read() }
@@ -85,7 +93,7 @@ export function registerLiaTransportConfigBridge(params: {
       return { ok: false as const, code: 'storage' as const }
     }
   })
-  defineInvokeHandler(params.context, electronLiaTransportsMutate, async (mutation) => {
+  defineInvokeHandler(params.context, electronLiaTransportsMutate, async mutation => serializeWrite(params.vault, async () => {
     try {
       const result = await repository.mutate(mutation)
       if (result.ok)
@@ -95,5 +103,5 @@ export function registerLiaTransportConfigBridge(params: {
     catch {
       return { ok: false as const, code: 'storage' as const }
     }
-  })
+  }))
 }

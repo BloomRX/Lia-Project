@@ -1,10 +1,10 @@
-import type { LiaSecretVault } from '@lia/core/secrets/vault'
-
 import type { LiaAiProviderDefinition } from '@lia/contracts/providers/catalog'
 import type { TransportMutation, TransportRecord, TransportResult, TransportSnapshot } from '@lia/contracts/transports'
+import type { LiaSecretVault } from '@lia/core/secrets/vault'
 
 import { Buffer } from 'node:buffer'
 
+import { unboundCredential } from '@lia/contracts/credentials/destination'
 import { LIA_AI_PROVIDER_CATALOG } from '@lia/contracts/providers/catalog'
 
 /**
@@ -185,8 +185,9 @@ export function createAiConnectionService(deps: AiConnectionServiceDeps) {
       || record.protocol !== 'chat-completions'
       || record.credentialRef.scope !== definition.stageProviderId
       || record.credentialRef.key !== 'apiKey'
-    )))
+    ))) {
       throw new Error('storage')
+    }
     return record
   }
 
@@ -243,7 +244,7 @@ export function createAiConnectionService(deps: AiConnectionServiceDeps) {
       return { ok: false, code: 'connection-inconsistent' }
     if (definition.requiresApiKey) {
       try {
-        if (!deps.vault.getSecret(definition.stageProviderId, 'apiKey'))
+        if (!unboundCredential(deps.vault.getSecret(definition.stageProviderId, 'apiKey')))
           return { ok: false, code: 'credential-missing' }
       }
       catch {
@@ -309,7 +310,7 @@ export function createAiConnectionService(deps: AiConnectionServiceDeps) {
       || !validId(input.providerId) || !validAddress(input.baseUrl) || !Number.isSafeInteger(input.revision) || input.revision < 0
       || (input.modelId !== undefined && !validId(input.modelId))
       || (input.confirmHostChange !== undefined && typeof input.confirmHostChange !== 'boolean')
-      || (input.apiKey !== undefined && (typeof input.apiKey !== 'string' || input.apiKey.length > 16384 || /[\r\n\0]/.test(input.apiKey)))) {
+      || (input.apiKey !== undefined && (typeof input.apiKey !== 'string' || input.apiKey.length > 16384 || /[\r\n\0]/.test(input.apiKey) || unboundCredential(input.apiKey) === undefined))) {
       return { ok: false, code: 'invalid' }
     }
     const definition = definitionById(input.providerId)
@@ -508,7 +509,7 @@ export function createAiConnectionService(deps: AiConnectionServiceDeps) {
             throw new Error('timeout')
           let key: string | undefined
           try {
-            key = deps.vault.getSecret(definition.stageProviderId!, 'apiKey')
+            key = unboundCredential(deps.vault.getSecret(definition.stageProviderId!, 'apiKey'))
           }
           catch {
             throw new Error('storage')
