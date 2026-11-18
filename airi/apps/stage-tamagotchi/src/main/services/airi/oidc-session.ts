@@ -1,10 +1,12 @@
 import type { LiaSecretVault } from '../lia/secrets'
+import type { VerifyOidcIdToken } from './oidc-id-token'
 
 import { oidcSessionScope, serializeWrite } from '../lia/secrets-service'
+import { createOidcIdTokenVerifier } from './oidc-id-token'
+import { readOidcJson } from './oidc-json'
 
 const sessionKey = 'session-v1'
 const maxTokenLength = 16_384
-const maxResponseBytes = 96 * 1024
 
 export type OidcPrivateValueCheck = (text: string, includePartialSuffix?: boolean) => boolean
 
@@ -13,6 +15,8 @@ interface Tokens {
   refreshToken?: string
   idToken?: string
   expiresAt: number
+  subject?: string
+  nonce?: string
 }
 
 function record(value: unknown): Record<string, unknown> | undefined {
@@ -67,37 +71,6 @@ async function whileActive<T>(work: Promise<T>, signal: AbortSignal): Promise<T 
   }
 }
 
-async function readTokenResponse(response: Response, signal: AbortSignal): Promise<unknown> {
-  const reader = response.body?.getReader()
-  if (!reader)
-    return undefined
-  const decoder = new TextDecoder('utf-8', { fatal: true })
-  const cancel = () => {
-    void reader.cancel().catch(() => {})
-  }
-  signal.addEventListener('abort', cancel, { once: true })
-  let bytes = 0
-  let text = ''
-  try {
-    for (;;) {
-      signal.throwIfAborted()
-      const chunk = await reader.read()
-      signal.throwIfAborted()
-      if (chunk.done)
-        return JSON.parse(text + decoder.decode()) as unknown
-      bytes += chunk.value.byteLength
-      if (bytes > maxResponseBytes)
-        return undefined
-      text += decoder.decode(chunk.value, { stream: true })
-    }
-  }
-  finally {
-    signal.removeEventListener('abort', cancel)
-    cancel()
-    reader.releaseLock()
-  }
-}
-
 /** Main-only session owner. Instantiate once with the Stage's existing vault. */
 export function createOidcSessionOwner(options: {
   vault: LiaSecretVault
@@ -105,6 +78,7 @@ export function createOidcSessionOwner(options: {
   clientId: string
   fetch?: typeof fetch
   now?: () => number
+  verifyIdToken?: VerifyOidcIdToken
 }) {
   const { vault, clientId } = options
   const origin = options.origin.origin
@@ -115,6 +89,7 @@ export function createOidcSessionOwner(options: {
   if ((protocol !== 'https:' && (protocol !== 'http:' || !loopback)) || username || password || pathname !== '/' || search || hash) {
     throw new Error('Invalid desktop OIDC origin')
   }
+  const verifyIdToken = options.verifyIdToken ?? createOidcIdTokenVerifier(options)
 
   function restore(): { tokens: Tokens, revision: string } | undefined {
     try {
@@ -125,11 +100,12 @@ export function createOidcSessionOwner(options: {
       if (value?.origin !== origin || value.clientId !== clientId || !validToken(value.accessToken)
         || typeof value.expiresAt !== 'number' || !Number.isSafeInteger(value.expiresAt)
         || (value.refreshToken !== undefined && !validToken(value.refreshToken))
-        || (value.idToken !== undefined && !validToken(value.idToken))) {
+        || (value.idToken !== undefined && !validToken(value.idToken))
+        || typeof value.subject !== 'string' || !value.subject || (value.nonce !== undefined && !validToken(value.nonce))) {
         return undefined
       }
       return {
-        tokens: { accessToken: value.accessToken, refreshToken: value.refreshToken, idToken: value.idToken, expiresAt: value.expiresAt },
+        tokens: { accessToken: value.accessToken, refreshToken: value.refreshToken, idToken: value.idToken, expiresAt: value.expiresAt, subject: value.subject, nonce: value.nonce },
         revision: snapshot.revision,
       }
     }
@@ -188,14 +164,23 @@ export function createOidcSessionOwner(options: {
   }
 
   // Capture expectedRevision through beginLogin before opening the browser.
-  async function establish(exchange: unknown, caller: AbortSignal, expectedRevision: string): Promise<boolean> {
+  async function establish(exchange: unknown, caller: AbortSignal, expectedRevision: string, nonce?: string): Promise<boolean> {
     const value = fromExchange(exchange, now())
-    if (!value || caller.aborted || typeof expectedRevision !== 'string' || !expectedRevision)
+    if (!value || caller.aborted || typeof expectedRevision !== 'string' || !expectedRevision || (!options.verifyIdToken && !validToken(nonce)))
       return false
     pendingLogin.abort()
     pendingLogin = new AbortController()
     const signal = AbortSignal.any([pendingLogin.signal, caller])
     const revision = logoutRevision
+    try {
+      value.subject = (await verifyIdToken(value.idToken, { nonce }, signal)).subject
+      value.nonce = nonce
+    }
+    catch {
+      return false
+    }
+    if (signal.aborted || revision !== logoutRevision)
+      return false
     return serializeWrite(vault, async () => {
       const saved = await save(value, signal, expectedRevision)
       if (!saved)
@@ -235,7 +220,7 @@ export function createOidcSessionOwner(options: {
         void response.body?.cancel().catch(() => {})
         return undefined
       }
-      const body = await readTokenResponse(response, signal)
+      const body = await readOidcJson(response, signal)
       if (signal.aborted)
         return undefined
       if (!response.ok) {
@@ -250,6 +235,12 @@ export function createOidcSessionOwner(options: {
         return undefined
       }
       const next = fromExchange(body, now(), previous)
+      if (next && record(body)?.id_token !== undefined)
+        await verifyIdToken(next.idToken, { subject: previous.subject, nonce: previous.nonce, renewal: true }, signal)
+      if (next) {
+        next.subject = previous.subject
+        next.nonce = previous.nonce
+      }
       return next && await store(next, generationSignal, expectedRevision) ? next : undefined
     }
     catch {

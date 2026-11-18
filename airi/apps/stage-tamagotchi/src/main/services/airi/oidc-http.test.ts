@@ -33,7 +33,7 @@ async function setup(transport: typeof fetch, origin = new URL('https://issuer.e
     write: async (_, content) => { disk = content },
   })
   const refresh = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ ...tokens, access_token: 'ROTATED_HTTP_ACCESS' }))
-  const owner = createOidcSessionOwner({ vault, origin, clientId: 'desktop', fetch: refresh })
+  const owner = createOidcSessionOwner({ vault, origin, clientId: 'desktop', fetch: refresh, verifyIdToken: async () => ({ subject: 'fixture-subject' }) })
   await owner.establish(exchange, new AbortController().signal, owner.beginLogin()!)
   const service = createOidcHttpService({ origin, session: owner, fetch: transport })
   cleanup.push(() => service.dispose())

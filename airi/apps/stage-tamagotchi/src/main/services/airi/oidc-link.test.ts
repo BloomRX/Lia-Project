@@ -72,7 +72,7 @@ async function harness(options: { status?: number, browserUrl?: string, timeoutM
       disk = content
     },
   })
-  const owner = createOidcSessionOwner({ origin, clientId: 'desktop', vault, fetch: vi.fn(async () => new Response(null)) })
+  const owner = createOidcSessionOwner({ origin, clientId: 'desktop', vault, fetch: vi.fn(async () => new Response(null)), verifyIdToken: async () => ({ subject: 'fixture-subject' }) })
   if (options.realOwner) {
     expect(await owner.establish({ access_token: secret, refresh_token: `${secret}_REFRESH`, expires_in: 3600 }, new AbortController().signal, owner.beginLogin()!)).toBe(true)
   }

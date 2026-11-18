@@ -21,6 +21,7 @@ import {
 } from '../../../shared/eventa'
 import { isStageOidcEnabled } from '../../../shared/lia/oidc-policy'
 import { startLoopbackServer } from './http-server/http/auth'
+import { readOidcJson } from './oidc-json'
 
 const log = useLogg('auth-service').useGlobalConfig()
 const signInFailure = 'OIDC signing in failed'
@@ -70,6 +71,9 @@ export function createAuthService(params: {
   sessionOwner?: Pick<ReturnType<typeof createOidcSessionOwner>, 'beginLogin' | 'establish' | 'logout'>
 }): void {
   const windowId = params.window.webContents.id
+  const isOwnMainFrame = (event: Electron.IpcMainEvent | undefined) =>
+    event?.sender === params.window.webContents && !!event.senderFrame
+    && event.senderFrame === params.window.webContents.mainFrame
 
   async function publish(phase: string, emit: () => unknown) {
     try {
@@ -87,7 +91,7 @@ export function createAuthService(params: {
   })
 
   defineInvokeHandler(params.context, electronAuthStartLogin, async (_, options) => {
-    if (windowId !== options?.raw.ipcMainEvent.sender.id) {
+    if (!isOwnMainFrame(options?.raw?.ipcMainEvent)) {
       return
     }
 
@@ -129,6 +133,7 @@ export function createAuthService(params: {
       const codeChallenge = await generateCodeChallenge(codeVerifier)
       signal.throwIfAborted()
       const state = generateState()
+      const nonce = generateState()
 
       phase = 'loopback'
       const loopback = await startLoopbackServer(state)
@@ -156,6 +161,7 @@ export function createAuthService(params: {
       url.searchParams.set('redirect_uri', redirectUri)
       url.searchParams.set('scope', OIDC_SCOPES)
       url.searchParams.set('state', stateWithPort)
+      url.searchParams.set('nonce', nonce)
       url.searchParams.set('code_challenge', codeChallenge)
       url.searchParams.set('code_challenge_method', 'S256')
       url.searchParams.set('prompt', 'login')
@@ -173,7 +179,7 @@ export function createAuthService(params: {
           const tokens = await exchangeCode(code, codeVerifier, redirectUri, signal)
           signal.throwIfAborted()
           phase = 'session'
-          const established = await owner.establish(tokens, signal, revision)
+          const established = await owner.establish(tokens, signal, revision, nonce)
           signal.throwIfAborted()
           if (!established)
             throw new Error('OIDC session was not established')
@@ -189,7 +195,7 @@ export function createAuthService(params: {
   })
 
   defineInvokeHandler(params.context, electronAuthLogout, async (_, options) => {
-    if (windowId !== options?.raw.ipcMainEvent.sender.id) {
+    if (!isOwnMainFrame(options?.raw?.ipcMainEvent)) {
       return
     }
 
@@ -225,5 +231,5 @@ async function exchangeCode(code: string, codeVerifier: string, redirectUri: str
     throw new TokenExchangeRejected(response.status)
   }
 
-  return response.json()
+  return readOidcJson(response, signal)
 }

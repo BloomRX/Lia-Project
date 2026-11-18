@@ -43,12 +43,17 @@ afterEach(() => {
   fixture.handlers.clear()
 })
 
-const ipc = { raw: { ipcMainEvent: { sender: { id: 1 } } } }
+const frames = [1, 2].map(id => ({ id, mainFrame: {} }))
+function ipcFor(id: number) {
+  const sender = frames.find(frame => frame.id === id)!
+  return { raw: { ipcMainEvent: { sender, senderFrame: sender.mainFrame } } }
+}
+const ipc = ipcFor(1)
 
 function registerWindow(emit = vi.fn(), id = 1, withOwner = true) {
   let closed: (() => void) | undefined
   const window = {
-    webContents: { id },
+    webContents: frames.find(frame => frame.id === id)!,
     isDestroyed: () => false,
     once: (_event: string, listener: () => void) => { closed = listener },
   }
@@ -81,6 +86,18 @@ it('rejects login while OIDC is off, before opening a listener or calling the is
 it('refuses the legacy opt-in when no Main session owner is registered', async () => {
   registerWindow(vi.fn(), 1, false)
   await expect(fixture.handlers.get('start')!(undefined, ipc)).rejects.toThrow('OIDC is disabled')
+  expect(fixture.loopback).not.toHaveBeenCalled()
+})
+
+it('ignores login and logout from a subframe or another window', async () => {
+  const { owner } = registerWindow()
+  const childFrame = { raw: { ipcMainEvent: { ...ipc.raw.ipcMainEvent, senderFrame: {} } } }
+  for (const sender of [childFrame, ipcFor(2), undefined]) {
+    await fixture.handlers.get('start')!(undefined, sender)
+    await fixture.handlers.get('logout')!(undefined, sender)
+  }
+  expect(owner.beginLogin).not.toHaveBeenCalled()
+  expect(owner.logout).not.toHaveBeenCalled()
   expect(fixture.loopback).not.toHaveBeenCalled()
 })
 
@@ -169,7 +186,7 @@ it('notifies only the original window when another window replaces the login', a
   const firstWindow = registerWindow()
   await fixture.handlers.get('start')!(undefined, ipc)
   const secondWindow = registerWindow(vi.fn(), 2)
-  await fixture.handlers.get('start')!(undefined, { raw: { ipcMainEvent: { sender: { id: 2 } } } })
+  await fixture.handlers.get('start')!(undefined, ipcFor(2))
   await new Promise<void>(done => setImmediate(done))
 
   expect(firstWindow.emit).toHaveBeenCalledExactlyOnceWith('cancelled', undefined)
@@ -223,5 +240,7 @@ it('completes the replacement login without republishing the old attempt', async
     refresh_token: 'synthetic-refresh',
     id_token: 'synthetic-id',
     expires_in: 3600,
-  }, expect.any(AbortSignal), 'synthetic-revision')
+  }, expect.any(AbortSignal), 'synthetic-revision', 'synthetic-state')
+  const authorization = new URL(fixture.openExternal.mock.calls.at(-1)![0])
+  expect(authorization.searchParams.get('nonce')).toBe('synthetic-state')
 })

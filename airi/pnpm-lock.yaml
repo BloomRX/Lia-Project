@@ -2103,6 +2103,9 @@ importers:
       injeca:
         specifier: 'catalog:'
         version: 0.2.0(@guiiai/logg@1.2.11)(error-stack-parser@2.1.4)(nanoid@6.0.1)
+      jose:
+        specifier: 'catalog:'
+        version: 6.2.10
       jszip:
         specifier: 'catalog:'
         version: 3.10.1

@@ -449,7 +449,7 @@ describe('inactive Main OIDC socket adapters', () => {
     const transport = vi.fn<typeof fetch>()
     transport.mockResolvedValueOnce(Response.json({ access_token: 'REAL_OWNER_ROTATED', refresh_token: 'REAL_OWNER_REFRESH_NEXT', expires_in: 3600 }))
     transport.mockResolvedValueOnce(new Response(null, { status: 200 }))
-    const owner = createOidcSessionOwner({ vault, origin: f.origin, clientId: 'desktop-fixture', fetch: transport })
+    const owner = createOidcSessionOwner({ vault, origin: f.origin, clientId: 'desktop-fixture', fetch: transport, verifyIdToken: async () => ({ subject: 'fixture-subject' }) })
     expect(await owner.establish({ access_token: 'REAL_OWNER_INITIAL', refresh_token: 'REAL_OWNER_REFRESH', expires_in: 3600 }, new AbortController().signal, owner.beginLogin()!)).toBe(true)
     const service = createOidcSocketService({ origin: f.origin, withAccess: owner.withAccess, refreshAccess: owner.refreshAccess })
     cleanups.push(() => service.dispose())

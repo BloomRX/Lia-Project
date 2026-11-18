@@ -36,7 +36,7 @@ function setup() {
     })
   }
   const vault = makeVault()
-  const options = { origin, clientId: 'desktop', fetch, now: () => time }
+  const options = { origin, clientId: 'desktop', fetch, now: () => time, verifyIdToken: async () => ({ subject: 'fixture-subject' }) }
   return {
     vault,
     owner: createOidcSessionOwner({ ...options, vault }),
