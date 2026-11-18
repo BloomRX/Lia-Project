@@ -8,6 +8,7 @@
 | OIDC integrado aos serviços do Stage | BLOCKED | Conta, HTTP e streaming ainda precisam dos adaptadores Main ligados ao ciclo de vida do Stage. O preload continua anunciando OFF. |
 | OIDC com emissor externo | NOT RUN | Nenhum login em emissor externo executado. |
 | Consentimento STT nativo | PASS focado | Aceite por gravação antes de acesso ao cofre. Recusa, cancelamento tardio, mudança de configuração e perda da autorização da janela bloqueiam envio. |
+| Canal HTTPS de STT sujeito a consentimento | PASS Windows no gate de componentes | TLS na mesma máquina e decisão injetada no Main. Diálogo nativo e serviço em outra máquina continuam NOT RUN. |
 | STT em loopback | PASS Windows | Gate Electron de providers com IPC, cofre e serviço HTTP local. Artefatos em `Tests/artifacts/provider-runtime-electron/1794960227815/`. |
 | Alternativas de STT no Renderer desktop | PASS focado | Sem executor de gravação registrado no Main, o Stage recusa a transcrição. Web Speech e streaming legado ficam indisponíveis também nas prévias e no DevTools Aliyun. O transporte Apple Speech exclusivo de macOS ficou fora da validação Windows. |
 | SEC-04 no cofre do Stage | PASS Windows | O IPC histórico de leitura responde vazio sem abrir o cofre, inclusive com uma chave sintética em escopo legado. |
@@ -457,3 +458,21 @@ O Windows enumera o microfone fifine e as saídas EDIFIER W830NB.
 O gate G-AUD ainda requer fala controlada, confirmação da reprodução,
 serviço STT autorizado e o registro AV-01 a AV-15 no mesmo candidato.
 O inventário de hardware e as fixtures não estabelecem esses resultados.
+
+#### Consentimento de STT com transporte TLS
+
+O gate Electron 43.4.1 executou o IPC e o HTTPS real em `127.0.0.2`.
+Esse endereço permanece local e exige consentimento pela regra do produto.
+O driver respondeu pelo processo Main da fixture. O servidor registrou
+dois uploads, ambos autorizados individualmente. O primeiro retornou a
+transcrição. O segundo teve a resposta encerrada após cancelamento.
+Recusa, cancelamento antes do aceite, mudança de revisão e tentativa de
+reutilizar um aceite anterior deixaram o contador de requisições intacto.
+O pedido de consentimento identificou o provedor e o caminho completo.
+O certificado entrou na confiança apenas do Electron de teste.
+
+O gate passou nos 16 grupos e confirmou ausência das sentinelas de
+credencial nos logs. A integridade do roteiro passou com 22 testes.
+Evidência em `Tests/artifacts/provider-runtime-electron/1795045390548/report.json`.
+O diálogo nativo, falhas de rede com um servidor em outra máquina e o
+uso de microfone continuam NOT RUN.

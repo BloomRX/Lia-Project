@@ -59,12 +59,33 @@ void app.whenReady().then(async () => {
     isAllowedSpeechConfigSender: event => !window.isDestroyed() && event?.sender === window.webContents
       && event.senderFrame !== null && event.senderFrame === window.webContents.mainFrame,
   })
+  let pendingConsent: { resolve: (approved: boolean) => void } | undefined
+  if (process.env.LIA_STT_GATE_TLS_DIR) {
+    // Only the test driver in Main can deliver a decision.
+    app.on('lia-fixture-stt-consent', (approved: boolean) => pendingConsent?.resolve(approved === true))
+  }
   const transcription = registerLiaTranscriptionBridge({
     context,
     repository: getApplicationRepository(),
     vault: measuredVault,
     isAllowedSender: event => !window.isDestroyed()
       && event.sender === window.webContents && event.senderFrame === window.webContents.mainFrame,
+    async approveRemote(_owner, provider, destination, signal) {
+      if (!process.env.LIA_STT_GATE_TLS_DIR || pendingConsent || signal.aborted)
+        return false
+      const decision = Promise.withResolvers<boolean>()
+      pendingConsent = decision
+      const abort = () => decision.resolve(false)
+      signal.addEventListener('abort', abort, { once: true })
+      try {
+        writeFileSync(join(root, 'stt-consent.json'), JSON.stringify({ provider, destination }))
+        return await decision.promise
+      }
+      finally {
+        signal.removeEventListener('abort', abort)
+        pendingConsent = undefined
+      }
+    },
   })
   app.on('before-quit', () => transcription.dispose())
   window.webContents.on('did-finish-load', () => {

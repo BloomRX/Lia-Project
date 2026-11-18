@@ -3,8 +3,9 @@ import assert from 'node:assert/strict'
 import { execFile, execFileSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { once } from 'node:events'
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, unlink, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
+import { createServer as createHttpsServer } from 'node:https'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { test } from 'node:test'
@@ -175,6 +176,8 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
   let application
   let applicationProcess
   let closed = false
+  let tlsServer
+  const tlsDirectory = process.env.LIA_STT_GATE_TLS_DIR
   const sockets = new Set()
   const server = createServer(async (request, response) => {
     response.setHeader('access-control-allow-origin', '*')
@@ -275,6 +278,16 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
     await once(server, 'listening')
     const port = server.address().port
     const base = `http://127.0.0.1:${port}`
+    let tlsBase
+    if (tlsDirectory) {
+      tlsServer = createHttpsServer({
+        cert: await readFile(join(tlsDirectory, 'certificate.pem')),
+        key: await readFile(join(tlsDirectory, 'private-key.pem')),
+      }, server.listeners('request')[0])
+      tlsServer.listen(0, '127.0.0.2')
+      await once(tlsServer, 'listening')
+      tlsBase = `https://127.0.0.2:${tlsServer.address().port}`
+    }
     await build({ configFile: false, root: stage, logLevel: 'warn', ssr: { noExternal: true }, build: {
       ssr: join(here, 'main.ts'),
       outDir: root,
@@ -283,6 +296,8 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
     } })
     await build({ configFile: false, root: here, base: './', logLevel: 'warn', build: { outDir: join(root, 'renderer'), emptyOutDir: false } })
     const env = { ...process.env, LIA_PROVIDER_GATE_DIR: root, LIA_PROVIDER_GATE_PRELOAD: preload }
+    if (tlsDirectory)
+      env.NODE_EXTRA_CA_CERTS = join(tlsDirectory, 'certificate.pem')
     delete env.ELECTRON_RUN_AS_NODE
     const launch = async () => {
       application = await electron.launch({ executablePath: join(stage, 'node_modules/electron/dist/electron.exe'), args: [join(root, 'main.cjs')], cwd: stage, env })
@@ -439,7 +454,7 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
     assert.deepEqual(await page.evaluate(id => window.providerGate.synthesizeFixtureSpeech(id), speechProvider), [1, 2, 3])
     assert.equal(report.requests.at(-1).authenticated, true)
     assert.equal(await page.evaluate(({ id, value }) => window.providerGate.seed(id, value), { id: transcriptionProvider, value: secrets[transcriptionProvider] }), true)
-    const seedTranscription = async (suffix = '', host = '127.0.0.1') => {
+    const seedTranscription = async (suffix = '', host = '127.0.0.1', origin = base) => {
       const reply = await page.evaluate(() => window.providerGate.transports())
       assert.equal(reply.ok, true)
       const record = {
@@ -448,7 +463,7 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
         definitionId: 'openai-compatible-audio-transcription',
         type: 'http',
         protocol: 'audio-transcription',
-        baseUrl: `${base.replace('127.0.0.1', host)}/${transcriptionProvider}/${suffix}v1/`,
+        baseUrl: `${origin.replace('127.0.0.1', host)}/${transcriptionProvider}/${suffix}v1/`,
         adapterOptions: {},
         modelIds: ['fixture-transcription'],
         enabled: true,
@@ -482,6 +497,81 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
     const transcriptionState = JSON.parse(await readFile(join(root, 'main-state.json'), 'utf8'))
     assert.ok(transcriptionState.readScopes.includes(transcriptionProvider), 'transcription must resolve its credential in Main')
     assert.ok(!JSON.stringify(recognized).includes(secrets[transcriptionProvider]))
+    if (tlsBase) {
+      const promptFile = join(root, 'stt-consent.json')
+      const endpoint = `${tlsBase}/${transcriptionProvider}/v1/`
+      const tlsRevision = await seedTranscription('', '127.0.0.1', tlsBase)
+      const saved = { ...transcriptionCredential, revision: tlsRevision, expectedBaseUrl: endpoint }
+      assert.equal(await page.evaluate(input => window.providerGate.saveTranscriptionCredential(input), saved), true)
+      const requestCount = report.requests.length
+      const start = () => page.evaluate(id => window.providerGate.transcribeFixtureRecording(id), transcriptionProvider)
+      const awaitConsent = async (target = endpoint) => {
+        let prompt
+        await waitUntil(async () => {
+          prompt = await readFile(promptFile, 'utf8').then(JSON.parse, () => undefined)
+          return !!prompt
+        }, 'Main did not request consent on the TLS destination')
+        assert.deepEqual(prompt, { provider: transcriptionProvider, destination: `${target}audio/transcriptions` })
+        await unlink(promptFile)
+      }
+      const respond = approved => application.evaluate(({ app }, decision) => {
+        app.emit('lia-fixture-stt-consent', decision)
+      }, approved)
+      const denied = start()
+      await awaitConsent()
+      assert.equal(report.requests.length, requestCount)
+      await respond(false)
+      assert.deepEqual(await denied, { ok: false, code: 'cancelled' })
+      const cancelled = start()
+      await awaitConsent()
+      await page.evaluate(() => window.providerGate.cancelFixtureTranscription())
+      assert.deepEqual(await cancelled, { ok: false, code: 'cancelled' })
+      const stale = start()
+      await awaitConsent()
+      await seedTranscription('edited/', '127.0.0.1', tlsBase)
+      await respond(true)
+      assert.deepEqual(await stale, { ok: false, code: 'configuration' })
+      assert.equal(report.requests.length, requestCount)
+      await seedTranscription('', '127.0.0.1', tlsBase)
+      const accepted = start()
+      await awaitConsent()
+      assert.equal(report.requests.length, requestCount)
+      await respond(true)
+      assert.deepEqual(await accepted, recognized)
+      assert.equal(report.requests.length, requestCount + 1)
+      assert.equal(report.requests.at(-1).authenticated, true)
+      assert.equal(report.requests.at(-1).validTranscription, true)
+      const secondRecording = start()
+      await awaitConsent()
+      assert.equal(report.requests.length, requestCount + 1)
+      await respond(false)
+      assert.deepEqual(await secondRecording, { ok: false, code: 'cancelled' })
+      const cancelEndpoint = `${tlsBase}/${transcriptionProvider}/cancel/v1/`
+      await seedTranscription('cancel/', '127.0.0.1', tlsBase)
+      const duringUpload = start()
+      await awaitConsent(cancelEndpoint)
+      assert.equal(report.requests.length, requestCount + 1)
+      await respond(true)
+      await waitUntil(() => report.requests.length === requestCount + 2, 'TLS request did not reach the fixture after consent')
+      const upload = report.requests.at(-1)
+      assert.equal(upload.authenticated, true)
+      assert.equal(upload.validTranscription, true)
+      await page.evaluate(() => window.providerGate.cancelFixtureTranscription())
+      assert.deepEqual(await duringUpload, { ok: false, code: 'cancelled' })
+      await waitUntil(() => upload.closed, 'TLS response did not close after cancellation')
+      report.transcriptionConsentTls = {
+        scope: 'Windows Electron, same machine TLS, approval injected in test Main',
+        refused: true,
+        cancelledBeforeApproval: true,
+        cancelledAfterUpload: true,
+        stale: true,
+        accepted: true,
+        approvalWasPerRecording: true,
+        audioRequests: 2,
+      }
+      const loopbackRevision = await seedTranscription()
+      assert.equal(await page.evaluate(input => window.providerGate.saveTranscriptionCredential(input), { ...transcriptionCredential, revision: loopbackRevision }), true)
+    }
     await seedTranscription('', 'localhost')
     assert.equal(await page.evaluate(id => window.providerGate.hasTranscriptionCredential(id), transcriptionProvider), false)
     const beforeOtherOrigin = report.requests.length
@@ -837,6 +927,11 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
     if (server.listening) {
       server.close()
       await once(server, 'close')
+    }
+    if (tlsServer?.listening) {
+      tlsServer.close()
+      tlsServer.closeAllConnections()
+      await once(tlsServer, 'close')
     }
     report.finishedAt = new Date().toISOString()
     /*

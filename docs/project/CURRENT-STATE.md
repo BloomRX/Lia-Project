@@ -57,6 +57,9 @@ credencial antes do aceite. Recusa, cancelamento ou revisão de
 configuração alterada impedem a saída. Loopback continua disponível.
 O Main verifica novamente a revisão após preparar o áudio, imediatamente
 antes do envio, e recusa transcrição que ecoe a credencial usada.
+PASS Windows em HTTPS na mesma máquina, com aceite injetado no Main da
+fixture. A recusa, o cancelamento antes do envio e a mudança da configuração
+bloquearam o upload. Cada gravação exigiu aceite próprio.
 No Renderer desktop, gravações exigem executor no Main. Streaming
 legado e Web Speech estão indisponíveis, inclusive nas prévias e no
 DevTools do Aliyun. O ensaio do diálogo com serviço remoto e G-AUD

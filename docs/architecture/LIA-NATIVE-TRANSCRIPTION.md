@@ -221,6 +221,43 @@ são somente o protocolo de transportes, seu validador e a regressão de persist
 
 ## Roteiro manual Windows — NÃO EXECUTADO
 
+### Ensaio automatizado de consentimento e TLS
+
+O gate de componentes do Electron pode executar a transcrição contra uma
+fixture HTTPS em `127.0.0.2`. O endereço fica na mesma máquina e aciona o
+caminho de consentimento do Main, que dispensa o diálogo somente para
+`localhost`, `127.0.0.1` e `[::1]`. A resposta ao consentimento vem do
+driver de teste no Main. A aplicação de produção continua usando o
+diálogo nativo. O áudio é sintético.
+
+Crie um certificado de ensaio com SAN `IP:127.0.0.2` em uma pasta
+temporária, com os arquivos `certificate.pem` e `private-key.pem`.
+Informe a pasta em `LIA_STT_GATE_TLS_DIR` e execute, a partir de
+`airi/apps/stage-tamagotchi` com o preload compilado:
+
+```powershell
+$certDir = Join-Path ([IO.Path]::GetTempPath()) ("lia-stt-tls-" + [guid]::NewGuid().ToString('N'))
+[IO.Directory]::CreateDirectory($certDir) | Out-Null
+try {
+  openssl req -x509 -newkey rsa:2048 -sha256 -nodes -days 1 -subj '/CN=Lia STT test fixture' -addext 'subjectAltName=IP:127.0.0.2' -keyout (Join-Path $certDir 'private-key.pem') -out (Join-Path $certDir 'certificate.pem')
+  if ($LASTEXITCODE -ne 0) { throw 'Não foi possível preparar o certificado de teste.' }
+  $env:LIA_STT_GATE_TLS_DIR = $certDir
+  node --test scripts/provider-runtime-electron/gate.test.mjs
+  if ($LASTEXITCODE -ne 0) { throw 'O gate Electron falhou. Consulte report.json.' }
+}
+finally {
+  Remove-Item Env:LIA_STT_GATE_TLS_DIR -ErrorAction SilentlyContinue
+  Remove-Item -LiteralPath (Join-Path $certDir 'private-key.pem'), (Join-Path $certDir 'certificate.pem') -ErrorAction SilentlyContinue
+  Remove-Item -LiteralPath $certDir
+}
+```
+
+O runner só adiciona o certificado à confiança do processo Electron do
+ensaio. Proteja e descarte os arquivos temporários ao terminar. Confira
+`transcriptionConsentTls` em `report.json` para os resultados específicos
+do consentimento. A validação física e o envio para um serviço em outro
+equipamento seguem o roteiro abaixo.
+
 Para G-AUD, usar o mesmo build em todos os casos, registrar o SHA e seguir
 os critérios AV-01 a AV-15. Para a prova de consentimento, usar três frases
 sintéticas diferentes, sem dados pessoais, e um serviço autorizado que
