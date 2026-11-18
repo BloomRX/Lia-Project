@@ -395,7 +395,7 @@ describe('remote transcription consent', () => {
     { text: 'regular transcript', segments: [{ text: SECRET.slice(0, 10) }, { text: SECRET.slice(10) }] },
   ])('keeps credentials echoed by an upstream out of the transcription result', async (reply) => {
     const fixture = remoteFixture()
-    fixture.fetch.mockResolvedValue(Response.json(reply))
+    vi.mocked(fixture.fetch).mockResolvedValue(Response.json(reply))
     const service = createLiaTranscriptionService(fixture)
     await expect(service.transcribe(request, undefined, async () => true)).resolves.toEqual({ ok: false, code: 'protocol' })
   })
