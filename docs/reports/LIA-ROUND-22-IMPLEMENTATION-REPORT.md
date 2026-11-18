@@ -5,6 +5,7 @@
 | OIDC desligado no Stage | PASS automatizado | Flag antiga não habilita o bridge nem a persistência no Renderer desktop. |
 | OIDC pelo owner do Main | PASS focado | PKCE com owner simulado valida o sucesso sem payload. O owner de sessão também passou sua suíte própria. |
 | Validação criptográfica da identidade OIDC | PASS focado | JWKS obtido por HTTP em loopback e tokens assinados no ensaio. O owner recusa nonce inválido antes de gravar e aceita a identidade verificada. |
+| Ciclo OIDC com emissor assinado sob controle do teste | PASS Windows no gate de componentes | Electron com preload de produção, autorização por HTTP, callback de loopback, PKCE, renovação, perfil e revogação pelo Main. |
 | OIDC integrado aos serviços do Stage | BLOCKED | Conta, HTTP e streaming ainda precisam dos adaptadores Main ligados ao ciclo de vida do Stage. O preload continua anunciando OFF. |
 | OIDC com emissor externo | NOT RUN | Nenhum login em emissor externo executado. |
 | Consentimento STT nativo | PASS focado | Aceite por gravação antes de acesso ao cofre. Recusa, cancelamento tardio, mudança de configuração e perda da autorização da janela bloqueiam envio. |
@@ -476,3 +477,36 @@ credencial nos logs. A integridade do roteiro passou com 22 testes.
 Evidência em `Tests/artifacts/provider-runtime-electron/1795045390548/report.json`.
 O diálogo nativo, falhas de rede com um servidor em outra máquina e o
 uso de microfone continuam NOT RUN.
+
+#### Ciclo OIDC com emissor local assinado no Electron
+
+O comando `$env:LIA_RUN_OIDC_FIXTURE='1'; node --test scripts/provider-runtime-electron/gate.test.mjs`
+no Stage inicia um emissor de teste em loopback. O Main abre a autorização
+por HTTP no próprio harness. O emissor entrega o código ao callback real,
+com validação PKCE na troca e ID tokens assinados com chave efêmera ES256.
+O caminho de produção mantém OIDC desativado e o IPC de perfil do ensaio
+existe só no harness.
+
+Seis callbacks com state adulterado foram recusados. Os seis códigos
+válidos chegaram à troca PKCE, e quatro logins foram recusados pela
+identidade inválida (emissor, audiência, nonce e expiração). Os logins
+válidos comprovaram leitura de perfil pelo Main, renovação após expiração,
+revogação no logout e remoção do cofre após `invalid_grant`. O evento de
+sucesso voltou vazio e o perfil chegou como DTO público. O gate conferiu
+ausência de tokens em claro no cofre e nas superfícies observadas.
+
+Nas primeiras execuções, o ciclo OIDC passou e a tentativa imediata de
+gravar a primeira chave de outro provedor foi recusada. A revogação
+local invalida a geração antes de concluir a exclusão em disco. O ensaio
+agora verifica se a exclusão terminou antes de começar as gravações
+seguintes. A recusa por revisão obsoleta continua em vigor.
+
+Evidência inicial completa em
+`Tests/artifacts/provider-runtime-electron/1795046019068/report.json`.
+O gate final combinou o mesmo ciclo OIDC com o consentimento STT em TLS
+e passou com 16 grupos, sem sentinelas nos logs.
+`Tests/artifacts/provider-runtime-electron/1795046102726/report.json`.
+Também passaram 27 testes focados de auth e sessão, 22 de integridade do
+runner, lint direcionado e typecheck do Stage.
+O emissor externo e a integração com as telas e os clientes do Stage
+continuam NOT RUN.

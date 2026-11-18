@@ -2,7 +2,7 @@ import type { TransportMutation, TransportRecord, TransportSnapshot } from '../.
 import type { LiaSpeechConfigSaveInput } from '../../src/shared/eventa/lia-speech-config'
 import type { LiaTransportCredentialSave } from '../../src/shared/eventa/lia-transport-credentials'
 
-import { useElectronEventaInvoke } from '@proj-airi/electron-vueuse'
+import { getElectronEventaContext, useElectronEventaInvoke } from '@proj-airi/electron-vueuse'
 import { generateText } from '@xsai/generate-text'
 import { streamText } from '@xsai/stream-text'
 
@@ -12,6 +12,10 @@ import { createMainTransportExecution } from '../../src/renderer/services/lia/ma
 import { createNativeProviderRuntime } from '../../src/renderer/services/lia/native-provider-runtime'
 import { legacyTransportCandidates, toTransportRecord } from '../../src/renderer/services/lia/transport-config'
 import {
+  electronAuthCallback,
+  electronAuthCallbackError,
+  electronAuthLogout,
+  electronAuthStartLogin,
   electronLiaProviderChatConfigGet,
   electronLiaProviderChatConfigSet,
   electronLiaSecretDelete,
@@ -22,6 +26,28 @@ import {
 import { electronLiaSpeechConfigGet, electronLiaSpeechConfigSave } from '../../src/shared/eventa/lia-speech-config'
 import { electronLiaChatCredentialSave, electronLiaTranscriptionCredentialHas, electronLiaTranscriptionCredentialSave } from '../../src/shared/eventa/lia-transport-credentials'
 import { electronLiaTransportsGet, electronLiaTransportsMutate } from '../../src/shared/eventa/lia-transports'
+import { oidcFixtureProfile } from './oidc-fixture-events'
+
+let oidcResult: { ok: boolean, payloadAbsent: boolean } | undefined
+const oidcContext = getElectronEventaContext()
+oidcContext.on(electronAuthCallback, (event) => {
+  oidcResult = { ok: true, payloadAbsent: event.body === undefined }
+})
+oidcContext.on(electronAuthCallbackError, (event) => {
+  oidcResult = {
+    ok: false,
+    payloadAbsent: event.body?.error === 'OIDC signing in failed' && Object.keys(event.body).length === 1,
+  }
+})
+const oidcFixture = {
+  async start() {
+    oidcResult = undefined
+    await useElectronEventaInvoke(electronAuthStartLogin)()
+  },
+  status: () => oidcResult,
+  profile: () => useElectronEventaInvoke(oidcFixtureProfile)(),
+  logout: () => useElectronEventaInvoke(electronAuthLogout)(),
+}
 
 const transcription = createMainTranscription()
 let transcriptionController: AbortController | undefined
@@ -285,9 +311,10 @@ const api = {
   },
 }
 declare global {
-  interface Window { providerGate: typeof api }
+  interface Window { providerGate: typeof api, oidcFixture: typeof oidcFixture }
 }
 window.providerGate = api
+window.oidcFixture = oidcFixture
 void getConfig().then(async (config) => {
   await refreshTransports()
   if (config.preferred?.providerId)

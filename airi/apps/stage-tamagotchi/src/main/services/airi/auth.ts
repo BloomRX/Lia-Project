@@ -69,8 +69,14 @@ export function createAuthService(params: {
   context: MainContext
   window: BrowserWindow
   sessionOwner?: Pick<ReturnType<typeof createOidcSessionOwner>, 'beginLogin' | 'establish' | 'logout'>
+  /** An explicit Main-owned connection for isolated runtimes and gates. */
+  connection?: { origin: URL, clientId: string, openAuthorization: (url: string) => Promise<unknown> }
 }): void {
   const windowId = params.window.webContents.id
+  const origin = params.connection?.origin.origin ?? SERVER_URL
+  const clientId = params.connection?.clientId ?? OIDC_CLIENT_ID
+  const openAuthorization = params.connection?.openAuthorization ?? shell.openExternal
+  const enabled = () => params.connection !== undefined || isStageOidcEnabled()
   const isOwnMainFrame = (event: Electron.IpcMainEvent | undefined) =>
     event?.sender === params.window.webContents && !!event.senderFrame
     && event.senderFrame === params.window.webContents.mainFrame
@@ -96,7 +102,7 @@ export function createAuthService(params: {
     }
 
     const owner = params.sessionOwner
-    if (!isStageOidcEnabled() || !owner)
+    if (!enabled() || !owner)
       throw new Error('OIDC is disabled in this build')
 
     cancelLogin(activeLogin?.windowId !== windowId)
@@ -148,16 +154,16 @@ export function createAuthService(params: {
       // Use the server-side relay as redirect_uri. The relay page serves HTML
       // that forwards the authorization code to the loopback via JS fetch().
       // The loopback port is encoded in the state parameter as "{port}:{state}".
-      const redirectUri = `${SERVER_URL}/api/auth/oidc/electron-callback`
+      const redirectUri = new URL('/api/auth/oidc/electron-callback', origin).href
       const stateWithPort = `${loopback.port}:${state}`
 
       // Build authorization URL
       // NOTICE: prompt=login forces the authorization server to show the login
       // page even if the system browser has an existing session cookie. Without
       // this, the OIDC flow auto-completes silently using the stale cookie.
-      const url = new URL(OIDC_AUTHORIZE_PATH, SERVER_URL)
+      const url = new URL(OIDC_AUTHORIZE_PATH, origin)
       url.searchParams.set('response_type', 'code')
-      url.searchParams.set('client_id', OIDC_CLIENT_ID)
+      url.searchParams.set('client_id', clientId)
       url.searchParams.set('redirect_uri', redirectUri)
       url.searchParams.set('scope', OIDC_SCOPES)
       url.searchParams.set('state', stateWithPort)
@@ -165,10 +171,10 @@ export function createAuthService(params: {
       url.searchParams.set('code_challenge', codeChallenge)
       url.searchParams.set('code_challenge_method', 'S256')
       url.searchParams.set('prompt', 'login')
-      url.searchParams.set('resource', SERVER_URL)
+      url.searchParams.set('resource', origin)
 
       phase = 'browser'
-      await shell.openExternal(url.toString())
+      await openAuthorization(url.toString())
       signal.throwIfAborted()
 
       phase = 'callback'
@@ -176,7 +182,7 @@ export function createAuthService(params: {
         .then(async ({ code }) => {
           signal.throwIfAborted()
           phase = 'exchange'
-          const tokens = await exchangeCode(code, codeVerifier, redirectUri, signal)
+          const tokens = await exchangeCode({ code, codeVerifier, redirectUri, signal, origin, clientId })
           signal.throwIfAborted()
           phase = 'session'
           const established = await owner.establish(tokens, signal, revision, nonce)
@@ -200,36 +206,44 @@ export function createAuthService(params: {
     }
 
     cancelLogin(true)
-    if (isStageOidcEnabled())
+    if (enabled())
       await params.sessionOwner?.logout()
   })
 }
 
 // --- Internal helpers ---
 
-async function exchangeCode(code: string, codeVerifier: string, redirectUri: string, signal: AbortSignal): Promise<unknown> {
+async function exchangeCode({ code, codeVerifier, redirectUri, signal, origin, clientId }: {
+  code: string
+  codeVerifier: string
+  redirectUri: string
+  signal: AbortSignal
+  origin: string
+  clientId: string
+}): Promise<unknown> {
   const body = new URLSearchParams({
     grant_type: 'authorization_code',
     code,
     redirect_uri: redirectUri,
-    client_id: OIDC_CLIENT_ID,
+    client_id: clientId,
     code_verifier: codeVerifier,
-    resource: SERVER_URL,
+    resource: origin,
   })
 
-  const response = await fetch(new URL(OIDC_TOKEN_PATH, SERVER_URL), {
+  const exchangeSignal = AbortSignal.any([signal, AbortSignal.timeout(15_000)])
+  const response = await fetch(new URL(OIDC_TOKEN_PATH, origin), {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body,
     redirect: 'error',
-    signal,
+    signal: exchangeSignal,
   })
 
-  if (signal.aborted || !response.ok) {
+  if (exchangeSignal.aborted || !response.ok) {
     void response.body?.cancel().catch(() => {})
-    signal.throwIfAborted()
+    exchangeSignal.throwIfAborted()
     throw new TokenExchangeRejected(response.status)
   }
 
-  return readOidcJson(response, signal)
+  return readOidcJson(response, exchangeSignal)
 }

@@ -72,6 +72,9 @@ payload. O Renderer do Stage deixou de consumir o callback legado.
 A flag antiga sozinha não ativa o IPC nem o armazenamento OIDC do
 Renderer desktop. No Windows passaram 30 testes focados do Stage,
 24 do Stage UI, 156 do Core, lint direcionado e typecheck do Stage.
+PASS Windows no ciclo com emissor local assinado, incluindo PKCE,
+renovação, perfil e revogação pelo Main. A autenticação de produção
+permanece desativada.
 Próximo corte:
 ligar o owner e as operações de conta, HTTP e streaming ao ciclo de
 vida do Stage antes de anunciar OIDC disponível no preload. Emissor

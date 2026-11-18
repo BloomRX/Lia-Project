@@ -9,6 +9,7 @@ import { createServer as createHttpsServer } from 'node:https'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { test } from 'node:test'
+import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 
@@ -16,6 +17,7 @@ import { _electron as electron } from 'playwright'
 import { build } from 'vite'
 
 import { errorText } from './lib/errors.mjs'
+import { startOidcFixtureIssuer } from './lib/oidc-issuer.mjs'
 import { classifyAll, isSameProcess, parseProcessTable, processTableCommand } from './lib/process-identity.mjs'
 import { createPowerShellSnapshot, createProcessMonitor } from './lib/process-monitor.mjs'
 import { createGroupRecorder, describeGroups } from './lib/run-groups.mjs'
@@ -148,6 +150,7 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
    * can be the one that "forgot a secret": all of them go through it.
    */
   const secretRegistry = createSecretRegistry(secrets)
+  let issuer
   const groups = createGroupRecorder()
   report = {
     runId: randomUUID(),
@@ -296,6 +299,11 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
     } })
     await build({ configFile: false, root: here, base: './', logLevel: 'warn', build: { outDir: join(root, 'renderer'), emptyOutDir: false } })
     const env = { ...process.env, LIA_PROVIDER_GATE_DIR: root, LIA_PROVIDER_GATE_PRELOAD: preload }
+    delete env.LIA_GATE_OIDC_ORIGIN
+    if (process.env.LIA_RUN_OIDC_FIXTURE === '1') {
+      issuer = await startOidcFixtureIssuer()
+      env.LIA_GATE_OIDC_ORIGIN = issuer.origin
+    }
     if (tlsDirectory)
       env.NODE_EXTRA_CA_CERTS = join(tlsDirectory, 'certificate.pem')
     delete env.ELECTRON_RUN_AS_NODE
@@ -394,6 +402,52 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
     assert.deepEqual(initialState.readScopes, [])
     groups.pass(2, 'Windows vault ciphertext, protected current-user DACL and zero credential reads before operation')
 
+    if (issuer) {
+      const start = async (variant, expected) => {
+        issuer.select(variant)
+        await page.evaluate(() => window.oidcFixture.start())
+        await page.waitForFunction(() => window.oidcFixture.status() !== undefined)
+        assert.deepEqual(await page.evaluate(() => window.oidcFixture.status()), { ok: expected, payloadAbsent: true })
+      }
+      const expectProfile = async (expected) => {
+        const outcome = await page.evaluate(() => window.oidcFixture.profile())
+        assert.ok(!issuer.privateValues.some(value => JSON.stringify(outcome).includes(value)), 'Private OIDC value reached the renderer')
+        assert.equal(outcome.ok, expected)
+        if (expected)
+          assert.equal(outcome.profile?.id, 'fixture-account')
+        else
+          assert.equal(outcome.code, 'unauthenticated')
+      }
+      await expectProfile(false)
+      for (const variant of ['issuer', 'audience', 'nonce', 'expired']) {
+        await start(variant, false)
+        await expectProfile(false)
+      }
+      await start('valid', true)
+      await expectProfile(true)
+      const currentVault = await readFile(vaultPath, 'utf8')
+      assert.ok(!issuer.privateValues.some(value => currentVault.includes(value)), 'Private OIDC value persisted in plaintext')
+      await delay(2100)
+      await expectProfile(true)
+      assert.equal(issuer.counts.refreshed, 1)
+      await page.evaluate(() => window.oidcFixture.logout())
+      await expectProfile(false)
+      assert.equal(issuer.counts.revoked, 1)
+      await start('valid', true)
+      issuer.rejectRefresh()
+      await delay(2100)
+      await expectProfile(false)
+      // The generation aborts callers before disk cleanup. Wait for the
+      // fenced deletion before testing unrelated first writes to this vault.
+      await waitUntil(async () => {
+        const state = JSON.parse(await readFile(vaultPath, 'utf8'))
+        return !Object.hasOwn(state, 'lia:main:oidc\0session-v1')
+      }, 'The invalid session was not removed from the vault')
+      assert.equal(issuer.counts.wrongStateRejected, 6)
+      assert.equal(issuer.counts.exchanged, 6)
+      report.oidcFixture = { scope: 'local signed OIDC issuer, Windows Electron, production login remains disabled', ...issuer.counts, expiredRefreshDenied: true, rendererTokenFree: true }
+    }
+
     groups.begin(3)
     const legacyFixture = { id: 'legacy/custom-instance', providerId: 'legacy/custom-instance', definitionId: 'openai-compatible', type: 'http', protocol: 'chat-completions', baseUrl: `${base}/json/v1/`, adapterOptions: { temperature: 0.25, nested: { enabled: true } }, modelIds: ['manual/legacy:Q4'], enabled: true, metadata: {}, credentialRef: { scope: 'legacy/custom-instance', key: 'apiKey' } }
     const oldConfigured = { [legacyFixture.id]: { id: legacyFixture.id, definitionId: legacyFixture.definitionId, config: { baseUrl: legacyFixture.baseUrl, ...legacyFixture.adapterOptions }, status: 'configured', configuredBy: 'user' } }
@@ -420,7 +474,11 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
       { providerId: 'lm-studio', baseUrl: `${base}/local/v1/`, model: 'custom/Electron:Q4' },
     ])
     for (const [id, value] of [['openai-compatible', secrets.generic], ['lm-studio', secrets.local]]) {
-      assert.equal(await page.evaluate(({ id, value }) => window.providerGate.bindFixtureChat(id, value), { id, value }), true)
+      const saved = await page.evaluate(({ id, value }) => window.providerGate.bindFixtureChat(id, value), { id, value })
+      if (!saved) {
+        report.vaultFailure = { providerId: id, state: JSON.parse(await readFile(join(root, 'main-state.json'), 'utf8')).writes }
+        throw new Error(`The vault refused to bind the synthetic ${id} credential`)
+      }
       assert.equal(await page.evaluate(({ id, value }) => window.providerGate.seed(id, value), { id, value: secrets[transcriptionProvider] }), false)
     }
     assert.deepEqual(await run('json'), { phase: 'done', code: '', text: 'Electron Lia\n42' })
@@ -933,6 +991,7 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
       tlsServer.closeAllConnections()
       await once(tlsServer, 'close')
     }
+    await issuer?.close()
     report.finishedAt = new Date().toISOString()
     /*
      * Every value, not two of them. The old code substituted `generic` and
@@ -943,7 +1002,10 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
      * `writeArtifact` redacts and then refuses to write anything that still
      * carries a registered value, so a bug in redaction cannot leak by omission.
      */
-    report.logSecretsAbsent = secretRegistry.findLeaks(logs).length === 0
+    const artifactSecrets = issuer ? createSecretRegistry([...secretRegistry.values, ...issuer.privateValues]) : secretRegistry
+    report.logSecretsAbsent = artifactSecrets.findLeaks(logs).length === 0
+    if (!report.logSecretsAbsent)
+      process.exitCode = 1
     const groupSummary = groups.summary()
     report.groups = groupSummary
     report.groupsDescription = describeGroups(groupSummary)
@@ -955,8 +1017,8 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
     if (!groupSummary.complete && !report.result?.startsWith('FAIL'))
       report.result = 'FAIL groups incomplete'
     try {
-      const reportWrite = await writeArtifact({ writeFile, join }, artifacts, 'report.json', report, secretRegistry)
-      const logWrite = await writeArtifact({ writeFile, join }, artifacts, 'electron.log', logs, secretRegistry)
+      const reportWrite = await writeArtifact({ writeFile, join }, artifacts, 'report.json', report, artifactSecrets)
+      const logWrite = await writeArtifact({ writeFile, join }, artifacts, 'electron.log', logs, artifactSecrets)
       report.artifactsWritten = { report: reportWrite.redacted, log: logWrite.redacted }
     }
     catch (error) {

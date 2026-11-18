@@ -3,15 +3,20 @@ import process from 'node:process'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
+import { defineInvokeHandler } from '@moeru/eventa'
 import { createContext } from '@moeru/eventa/adapters/electron/main'
 import { app, BrowserWindow, ipcMain } from 'electron'
 
 import { createLiaProductConfig } from '../../src/main/configs/lia'
+import { createAuthService } from '../../src/main/services/airi/auth'
+import { createOidcAccountService } from '../../src/main/services/airi/oidc-account'
+import { createOidcSessionOwner } from '../../src/main/services/airi/oidc-session'
 import { registerLiaProviderConfigBridge } from '../../src/main/services/lia/provider-config-service'
 import { createLiaSecretVault, registerLiaSecretsBridge } from '../../src/main/services/lia/secrets-service'
 import { registerLiaTranscriptionBridge } from '../../src/main/services/lia/transcription-service'
 import { canRendererReadLegacySecret, getApplicationRepository, registerLiaTransportConfigBridge } from '../../src/main/services/lia/transport-config-service'
 import { createStageWebPreferences } from '../../src/main/windows/secure-web-preferences'
+import { oidcFixtureProfile } from './oidc-fixture-events'
 
 const root = process.env.LIA_PROVIDER_GATE_DIR
 const preload = process.env.LIA_PROVIDER_GATE_PRELOAD
@@ -24,7 +29,7 @@ mkdirSync(join(profile, 'crash-dumps'), { recursive: true })
 app.setPath('crashDumps', join(profile, 'crash-dumps'))
 app.setName('Lia provider integration fixture')
 
-const metrics = { mainPid: process.pid, rendererPid: 0, encryptionAvailable: false, readScopes: [] as string[], rendererGone: [] as { reason: string, exitCode: number }[] }
+const metrics = { mainPid: process.pid, rendererPid: 0, encryptionAvailable: false, readScopes: [] as string[], rendererGone: [] as { reason: string, exitCode: number }[], writes: [] as { scope: string, ok: boolean }[] }
 const saveMetrics = () => writeFileSync(join(root, 'main-state.json'), JSON.stringify(metrics))
 void app.whenReady().then(async () => {
   const vault = createLiaSecretVault()
@@ -36,6 +41,12 @@ void app.whenReady().then(async () => {
       metrics.readScopes.push(scope)
       saveMetrics()
       return vault.getSecret(scope, key)
+    },
+    async setSecret(...args: Parameters<typeof vault.setSecret>) {
+      const ok = await vault.setSecret(...args)
+      metrics.writes.push({ scope: args[0], ok })
+      saveMetrics()
+      return ok
     },
   }
   // Harness has a single measured window and no product windows; the sender
@@ -53,6 +64,40 @@ void app.whenReady().then(async () => {
     height: 620,
     webPreferences: createStageWebPreferences(preload),
   })
+  if (process.env.LIA_GATE_OIDC_ORIGIN) {
+    const origin = new URL(process.env.LIA_GATE_OIDC_ORIGIN)
+    if (origin.protocol !== 'http:' || origin.hostname !== '127.0.0.1')
+      throw new Error('The test issuer must use literal loopback')
+    const clientId = 'lia-electron-oidc-fixture'
+    const session = createOidcSessionOwner({ vault, origin, clientId })
+    const account = createOidcAccountService({ origin, withAccess: session.withAccess })
+    const lifetime = new AbortController()
+    window.once('closed', () => lifetime.abort())
+    const authContext = createContext(ipcMain, window).context
+    createAuthService({
+      context: authContext,
+      window,
+      sessionOwner: session,
+      connection: {
+        origin,
+        clientId,
+        async openAuthorization(url) {
+          if (new URL(url).origin !== origin.origin)
+            throw new Error('Unexpected test issuer')
+          const response = await fetch(url, { redirect: 'error' })
+          if (!response.ok)
+            throw new Error('Test issuer refused authorization')
+          await response.body?.cancel()
+        },
+      },
+    })
+    defineInvokeHandler(authContext, oidcFixtureProfile, async (_, options) => {
+      const event = options?.raw?.ipcMainEvent
+      if (window.isDestroyed() || !event || event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame)
+        return { ok: false, code: 'invalid-request' }
+      return await account.execute({ kind: 'get-profile' }, lifetime.signal)
+    })
+  }
   registerLiaTransportConfigBridge({
     context,
     vault: measuredVault,
