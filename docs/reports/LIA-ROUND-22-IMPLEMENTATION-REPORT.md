@@ -1,0 +1,26 @@
+# Lia — Rodada 22
+
+| Verificação | Estado | Evidência |
+| --- | --- | --- |
+| OIDC desligado no Stage | PASS automatizado | Flag antiga não habilita o bridge nem a persistência no Renderer desktop. |
+| OIDC pelo owner do Main | PASS focado | PKCE com owner simulado valida o sucesso sem payload. O owner de sessão também passou sua suíte própria. |
+| OIDC integrado aos serviços do Stage | BLOCKED | Conta, HTTP e streaming ainda precisam dos adaptadores Main ligados ao ciclo de vida do Stage. O preload continua anunciando OFF. |
+| OIDC com emissor externo | NOT RUN | Nenhum login em emissor externo executado. |
+| Consentimento STT nativo | PASS focado | Aceite por gravação antes de acesso ao cofre. Recusa, cancelamento tardio, mudança de configuração e perda da autorização da janela bloqueiam envio. |
+| STT em loopback | PASS Windows | Gate Electron de providers com IPC, cofre e serviço HTTP local. Artefatos em `Tests/artifacts/provider-runtime-electron/1794960227815/`. |
+| Consentimento STT nas alternativas do Renderer | Pendente | O transporte nativo tem o controle. O inventário do Stage inclui caminhos alternativos de streaming, Web Speech e provedores no Renderer. |
+| SEC-04 e SEC-05 | Pendentes | Migração dos consumidores legados e vínculo persistente entre credencial e origem. |
+| G-AUD | BLOCKED | O ensaio físico e a prova de consentimento para todos os caminhos ainda faltam. |
+| G-ARCH | NOT RUN | C0–C8 aguardam execução no Windows com o build integrado. |
+
+O STT nativo usa um diálogo da janela Electron para cada envio remoto. A
+tela informa o provedor, a URL efetiva e que o áudio sairá do computador.
+Cancelar é a ação padrão. Cancelar após o início do upload interrompe a
+operação local e a espera pela resposta. Bytes já recebidos pelo serviço
+permanecem sujeitos à política do destinatário. O Main resolve o destino
+com base na configuração persistida e rejeita redirecionamentos.
+
+No Windows, o corte de OIDC passou em 30 testes focados do Stage,
+24 do Stage UI, 156 do Core e 358 do Launcher com 2 skips.
+O corte STT passou em 102 testes focados e no gate Electron local.
+O ensaio do diálogo com provedor remoto é NOT RUN.

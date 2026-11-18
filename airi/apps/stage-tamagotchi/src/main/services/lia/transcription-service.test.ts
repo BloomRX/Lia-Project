@@ -314,10 +314,69 @@ function deferred<T>() {
 }
 
 function cancellableFixture(fetch: typeof globalThis.fetch = vi.fn(() => new Promise<Response>(() => {}))) {
-  const repository = { read: vi.fn(async () => snapshot()) }
+  const repository = { read: vi.fn(async () => snapshot([record({ baseUrl: 'http://127.0.0.1:1/v1/' })])) }
   const vault = { getSecret: vi.fn(() => SECRET) } as unknown as LiaSecretVault
   return { repository, vault, fetch }
 }
+
+describe('remote transcription consent', () => {
+  function remoteFixture() {
+    const fixture = cancellableFixture(vi.fn(async () => Response.json({ text: 'ok' })))
+    fixture.repository.read.mockResolvedValue(snapshot())
+    return fixture
+  }
+
+  it('denies a remote recording before vault access unless approval is provided', async () => {
+    const fixture = remoteFixture()
+    const service = createLiaTranscriptionService(fixture)
+    expect(await service.transcribe(request)).toEqual({ ok: false, code: 'cancelled' })
+    expect(await service.transcribe(request, undefined, async () => false)).toEqual({ ok: false, code: 'cancelled' })
+    expect(fixture.vault.getSecret).not.toHaveBeenCalled()
+    expect(fixture.fetch).not.toHaveBeenCalled()
+  })
+
+  it('prompts for the resolved destination before sending the approved recording', async () => {
+    const fixture = remoteFixture()
+    const approve = vi.fn(async () => {
+      expect(fixture.vault.getSecret).not.toHaveBeenCalled()
+      expect(fixture.fetch).not.toHaveBeenCalled()
+      return true
+    })
+    const service = createLiaTranscriptionService(fixture)
+    expect(await service.transcribe(request, undefined, approve)).toMatchObject({ ok: true, text: 'ok' })
+    const destination = 'https://placeholder.invalid/v1/audio/transcriptions'
+    expect(approve).toHaveBeenCalledExactlyOnceWith('groq', destination, expect.any(AbortSignal))
+    expect(fixture.fetch).toHaveBeenCalledExactlyOnceWith(new URL(destination), expect.objectContaining({ redirect: 'error' }))
+  })
+
+  it('discards consent when the configuration changes while the prompt is open', async () => {
+    const fixture = remoteFixture()
+    const approve = async () => {
+      fixture.repository.read.mockResolvedValue({ ...snapshot([record({ baseUrl: 'https://replacement.invalid/v1/' })]), revision: 2 })
+      return true
+    }
+    const service = createLiaTranscriptionService(fixture)
+    expect(await service.transcribe(request, undefined, approve)).toEqual({ ok: false, code: 'configuration' })
+    expect(fixture.vault.getSecret).not.toHaveBeenCalled()
+    expect(fixture.fetch).not.toHaveBeenCalled()
+  })
+
+  it('does not dispatch when the caller cancels before a late approval', async () => {
+    const fixture = remoteFixture()
+    const controller = new AbortController()
+    const decision = deferred<boolean>()
+    const prompt = vi.fn(() => decision.promise)
+    const service = createLiaTranscriptionService(fixture)
+    const pending = service.transcribe(request, controller.signal, prompt)
+    await vi.waitFor(() => expect(prompt).toHaveBeenCalledOnce())
+    controller.abort()
+    expect(await pending).toEqual({ ok: false, code: 'cancelled' })
+    decision.resolve(true)
+    await Promise.resolve()
+    expect(fixture.vault.getSecret).not.toHaveBeenCalled()
+    expect(fixture.fetch).not.toHaveBeenCalled()
+  })
+})
 
 describe('transcription cancellation', () => {
   it('cancels before repository access and while repository ignores cancellation', async () => {
@@ -430,9 +489,12 @@ afterEach(() => {
     bridge.dispose()
   handlers.clear()
 })
-function bridgeFixture(isAllowedSender = vi.fn<Parameters<typeof registerLiaTranscriptionBridge>[0]['isAllowedSender']>(() => true)) {
+function bridgeFixture(
+  isAllowedSender = vi.fn<Parameters<typeof registerLiaTranscriptionBridge>[0]['isAllowedSender']>(() => true),
+  approveRemote?: Parameters<typeof registerLiaTranscriptionBridge>[0]['approveRemote'],
+) {
   const fixture = cancellableFixture()
-  const bridge = registerLiaTranscriptionBridge({ ...fixture, context: {} as never, isAllowedSender })
+  const bridge = registerLiaTranscriptionBridge({ ...fixture, context: {} as never, isAllowedSender, approveRemote })
   bridges.push(bridge)
   const sender = Object.assign(new EventEmitter(), { isDestroyed: (): boolean => false })
   const invoke = (event: unknown, payload: unknown, owner: typeof sender | undefined) => handlers.get(event)!(payload, { raw: { ipcMainEvent: { sender: owner } } })
@@ -442,6 +504,19 @@ function bridgeFixture(isAllowedSender = vi.fn<Parameters<typeof registerLiaTran
 }
 
 describe('transcription IPC ownership', () => {
+  it('does not dispatch if the preview loses authorization while the native prompt is open', async () => {
+    const allowed = vi.fn(() => true)
+    const approve: NonNullable<Parameters<typeof registerLiaTranscriptionBridge>[0]['approveRemote']> = async () => {
+      allowed.mockReturnValue(false)
+      return true
+    }
+    const fixture = bridgeFixture(allowed, approve)
+    fixture.repository.read.mockResolvedValue(snapshot())
+    const outcome = await fixture.run({ ...request, requestId: randomUUID() })
+    expect(outcome).toEqual({ ok: false, code: 'cancelled' })
+    expect(fixture.vault.getSecret).not.toHaveBeenCalled()
+    expect(fixture.fetch).not.toHaveBeenCalled()
+  })
   it('rejects a sender outside Main policy before reading configuration or credentials', async () => {
     const allowed = vi.fn(() => false)
     const fixture = bridgeFixture(allowed)

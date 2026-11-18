@@ -1,9 +1,11 @@
 import type { TransportRecord } from '@lia/contracts/transports'
+
 import type { LiaTranscriptionRunRequest } from '../../../shared/eventa/lia-transcription'
 
 import { Buffer } from 'node:buffer'
 
 import { ProviderError } from '@lia/contracts/providers'
+
 import { isCuratedChatProvider } from '../../../shared/lia/provider-catalog'
 import { supportsMainTranscription } from '../../../shared/lia/transcription-transport'
 
@@ -29,6 +31,21 @@ function audioFormat(mimeType: string): string {
   return format === 'mpeg' || format === 'mp3' ? 'mp3' : 'wav'
 }
 
+export function isTranscriptionLoopback(url: URL): boolean {
+  return ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)
+}
+
+export function resolveTranscriptionDestination(record: TransportRecord): URL {
+  const base = URL.parse(record.baseUrl)
+  if (!base || (base.protocol !== 'https:' && (base.protocol !== 'http:' || !isTranscriptionLoopback(base)))
+    || base.username || base.password || base.search || base.hash) {
+    throw new ProviderError('configuration')
+  }
+  if (!base.pathname.endsWith('/'))
+    base.pathname += '/'
+  return new URL(record.definitionId === 'mimo-audio-transcription' ? 'chat/completions' : 'audio/transcriptions', base)
+}
+
 /** Endpoint and credential are resolved by Main, never taken from the audio request. */
 export function prepareTranscriptionRequest(
   record: TransportRecord,
@@ -41,25 +58,14 @@ export function prepareTranscriptionRequest(
     || (credential !== undefined && (!/^[\x21-\x7E]+$/.test(credential) || credential.length > 16384))) {
     throw new ProviderError('configuration')
   }
-  let base: URL
-  try {
-    base = new URL(record.baseUrl)
-  }
-  catch {
-    throw new ProviderError('configuration')
-  }
-  const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(base.hostname)
-  if ((base.protocol !== 'https:' && (base.protocol !== 'http:' || !loopback)) || base.username || base.password || base.search || base.hash)
-    throw new ProviderError('configuration')
-  if (!base.pathname.endsWith('/'))
-    base.pathname += '/'
-  const keylessLocal = record.definitionId === 'app-local-audio-transcription' && loopback
+  const url = resolveTranscriptionDestination(record)
+  const keylessLocal = record.definitionId === 'app-local-audio-transcription' && isTranscriptionLoopback(url)
   if (!credential && !keylessLocal)
     throw new ProviderError('credentials')
 
   if (record.definitionId === 'mimo-audio-transcription') {
     return {
-      url: new URL('chat/completions', base),
+      url,
       init: {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'api-key': credential! },
@@ -91,7 +97,7 @@ export function prepareTranscriptionRequest(
   if (request.temperature !== undefined)
     body.append('temperature', String(request.temperature))
   return {
-    url: new URL('audio/transcriptions', base),
+    url,
     init: { method: 'POST', headers: credential ? { authorization: `Bearer ${credential}` } : {}, body },
   }
 }

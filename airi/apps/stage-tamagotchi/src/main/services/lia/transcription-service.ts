@@ -13,7 +13,7 @@ import { electronLiaTranscriptionCancel, electronLiaTranscriptionRun } from '../
 import { isCuratedChatProvider } from '../../../shared/lia/provider-catalog'
 import { resolveMainCredential } from './credential-owner-access'
 import { withLiaProviderHeaders } from './provider-request-headers'
-import { isNativeRecordingTranscriptionProvider, parseTranscriptionResponse, prepareTranscriptionRequest } from './transcription-adapters'
+import { isNativeRecordingTranscriptionProvider, isTranscriptionLoopback, parseTranscriptionResponse, prepareTranscriptionRequest, resolveTranscriptionDestination } from './transcription-adapters'
 
 /**
  * Speech-to-text executed in the main process.
@@ -182,13 +182,15 @@ export interface LiaTranscriptionServiceOptions {
   fetch?: typeof globalThis.fetch
 }
 
+type RemoteTranscriptionApproval = (providerId: string, destination: string, signal: AbortSignal) => Promise<boolean>
+
 export function createLiaTranscriptionService(options: LiaTranscriptionServiceOptions) {
   const fetch = options.fetch ?? globalThis.fetch
 
   const active = new Set<AbortController>()
   let disposed = false
 
-  async function transcribe(input: LiaTranscriptionRunRequest, signal?: AbortSignal): Promise<LiaTranscriptionRunOutcome> {
+  async function transcribe(input: LiaTranscriptionRunRequest, signal?: AbortSignal, approveRemote?: RemoteTranscriptionApproval): Promise<LiaTranscriptionRunOutcome> {
     const controller = new AbortController()
     active.add(controller)
     const cancel = () => controller.abort(new ProviderError('cancelled'))
@@ -212,6 +214,14 @@ export function createLiaTranscriptionService(options: LiaTranscriptionServiceOp
       const native = isNativeRecordingTranscriptionProvider(record.definitionId)
       if (native ? record.protocol !== 'audio-transcription' : (!isCuratedChatProvider(record.definitionId) || record.protocol !== 'chat-completions'))
         throw new ProviderError('configuration')
+      const destination = resolveTranscriptionDestination(record)
+      if (!isTranscriptionLoopback(destination)) {
+        if (!approveRemote || !await abortable(approveRemote(record.providerId, destination.href, controller.signal), controller.signal))
+          throw new ProviderError('cancelled')
+        const current = await abortable(options.repository.read(), controller.signal)
+        if (current.revision !== snapshot.revision)
+          throw new ProviderError('configuration')
+      }
       const credential = await abortable(resolveMainCredential(options.vault, record.credentialRef.scope, record.credentialRef.key, controller.signal), controller.signal)
       const { url, init } = prepareTranscriptionRequest(record, request, credential)
       // Node's multipart Blob producer may enqueue after fetch abort closes its
@@ -224,6 +234,7 @@ export function createLiaTranscriptionService(options: LiaTranscriptionServiceOp
         headers.set('content-type', encoded.headers.get('content-type')!)
         init.headers = headers
       }
+      controller.signal.throwIfAborted()
       const response = await abortable(withLiaProviderHeaders(fetch, record.providerId)(url, {
         ...init,
         redirect: 'error',
@@ -267,6 +278,7 @@ export function createLiaTranscriptionService(options: LiaTranscriptionServiceOp
 export function registerLiaTranscriptionBridge(params: {
   context: ReturnType<typeof createContext>['context']
   isAllowedSender: (event: Electron.IpcMainEvent) => boolean
+  approveRemote?: (owner: WebContents, ...args: Parameters<RemoteTranscriptionApproval>) => Promise<boolean>
   repository: Repository
   vault: LiaSecretVault
   fetch?: typeof globalThis.fetch
@@ -306,7 +318,9 @@ export function registerLiaTranscriptionBridge(params: {
       owner.once('render-process-gone', cleanup)
       owner.on('did-start-navigation', cancelOnNavigation)
       try {
-        return await service.transcribe(request, controller.signal)
+        const approve = params.approveRemote
+        return await service.transcribe(request, controller.signal, approve && (async (...args) =>
+          params.isAllowedSender(event) && await approve(owner, ...args) && params.isAllowedSender(event)))
       }
       finally {
         if (pending.get(request.requestId) === job)

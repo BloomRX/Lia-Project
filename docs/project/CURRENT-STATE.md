@@ -13,6 +13,15 @@ commit. Registra **estado**, não narrativa: relatório de rodada vai para
 
 ## 0. Estado agora
 
+**Rodada 22 — consentimento para STT no Main.** No transporte nativo
+do Stage, cada envio remoto exige aceite no diálogo da janela que
+iniciou a operação, com provedor e URL efetiva. O Main não consulta a
+credencial antes do aceite. Recusa, cancelamento ou revisão de
+configuração alterada impedem a saída. Loopback continua disponível.
+Próximo corte de STT: inventariar e fechar os caminhos alternativos
+de streaming e transcrição no Renderer. O diálogo com serviço remoto
+e G-AUD ainda dependem de validação real.
+
 **Rodada 22 — fronteira OIDC do Stage.** A troca PKCE agora exige um
 owner de sessão no Main e só emite uma notificação de sucesso sem
 payload. O Renderer do Stage deixou de consumir o callback legado.

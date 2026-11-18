@@ -15,7 +15,7 @@ import { Format, LogLevel, setGlobalFormat, setGlobalHookPostLog, setGlobalLogLe
 import { defineInvokeHandler } from '@moeru/eventa'
 import { createContext } from '@moeru/eventa/adapters/electron/main'
 import { hasSelectedScreenCaptureSource, initScreenCaptureForMain } from '@proj-airi/electron-screen-capture/main'
-import { app, BrowserWindow, ipcMain, screen, session } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, screen, session } from 'electron'
 import { noop } from 'es-toolkit'
 import { createLoggLogger, injeca, lifecycle } from 'injeca'
 import { isLinux } from 'std-env'
@@ -558,11 +558,35 @@ app.whenReady().then(async () => {
       // provider's credential must not be readable by the renderer. It shares
       // the transport repository above, so a removed provider stops transcribing
       // exactly as it stops chatting.
+      let promptingForTranscription = false
       const transcription = registerLiaTranscriptionBridge({
         context,
         repository: getApplicationRepository(),
         vault: deps.liaSecrets,
         isAllowedSender: event => isLiaTranscriptionSenderAllowed(event, userFacingMainWindow, hearingSettingsWindow),
+        async approveRemote(owner, providerId, destination, signal) {
+          const window = BrowserWindow.fromWebContents(owner)
+          if (!window || window.isDestroyed() || signal.aborted || promptingForTranscription)
+            return false
+          promptingForTranscription = true
+          try {
+            const { response } = await dialog.showMessageBox(window, {
+              type: 'question',
+              title: 'Enviar áudio para transcrição',
+              message: 'Autoriza enviar esta gravação para fora deste computador?',
+              detail: `Provedor: ${providerId}\nDestino: ${destination}\nO serviço receberá o áudio para convertê-lo em texto. Esta escolha se aplica só a esta gravação.`,
+              buttons: ['Cancelar', 'Enviar áudio'],
+              defaultId: 0,
+              cancelId: 0,
+              noLink: true,
+              signal,
+            })
+            return response === 1 && !signal.aborted
+          }
+          finally {
+            promptingForTranscription = false
+          }
+        },
       })
       onAppBeforeQuit(() => transcription.dispose())
       registerLiaMemoryBridge({ context })
