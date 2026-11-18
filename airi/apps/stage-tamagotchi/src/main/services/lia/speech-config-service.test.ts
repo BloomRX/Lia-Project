@@ -1,9 +1,9 @@
-import type { LiaSecretVault } from '@lia/core/secrets/vault'
-
 import type { TransportMutation, TransportResult, TransportSnapshot } from '@lia/contracts/transports'
+import type { LiaSecretVault } from '@lia/core/secrets/vault'
 
 import { describe, expect, it, vi } from 'vitest'
 
+import { bindCredential } from './destination-credential'
 import { createSpeechConfigService } from './speech-config-service'
 
 const providerId = 'openai-compatible-audio-speech'
@@ -62,18 +62,12 @@ function fixture() {
 }
 
 describe('speech connection configuration', () => {
-  it('establishes a disabled reference before reading an existing orphan credential', async () => {
+  it('preserves an orphan key without adopting it for a newly supplied endpoint', async () => {
     const { service, vault, repository } = fixture()
     await vault.setSecret(providerId, 'apiKey', apiKey)
-    vi.spyOn(vault, 'getSecret').mockImplementation(() => {
-      expect(repository.mutate).toHaveBeenCalledTimes(1)
-      expect(repository.mutate.mock.calls[0][0]).toMatchObject({ kind: 'put', record: { enabled: false } })
-      return apiKey
-    })
-    const put = repository.mutate
-    expect(await service.save({ providerId, baseUrl, revision: 0 })).toMatchObject({ ok: true, config: { revision: 2 } })
-    expect(put.mock.calls[0][0]).toMatchObject({ kind: 'put', record: { enabled: false } })
-    expect(put.mock.calls[1][0]).toMatchObject({ kind: 'put', record: { enabled: true } })
+    expect(await service.save({ providerId, baseUrl, revision: 0 })).toEqual({ ok: false, code: 'credentials' })
+    expect(repository.mutate).not.toHaveBeenCalled()
+    expect(vault.getSecret()).toBe(apiKey)
     expect(vault.setSecret).toHaveBeenCalledTimes(1)
   })
   it('does not request a nonexistent previous credential during first configuration', async () => {
@@ -91,10 +85,19 @@ describe('speech connection configuration', () => {
       config: { baseUrl: `${baseUrl}/`, hasKey: true, revision: 1 },
     })
     expect(await service.save({ providerId, baseUrl: `${baseUrl}/custom`, revision: 1 })).toMatchObject({ ok: true })
-    expect(vault.setSecret).toHaveBeenCalledExactlyOnceWith(providerId, 'apiKey', apiKey)
+    expect(vault.setSecret).toHaveBeenCalledExactlyOnceWith(providerId, 'apiKey', bindCredential(providerId, new URL(baseUrl), apiKey))
     expect(JSON.stringify(await repository.read())).not.toContain(apiKey)
     expect(await service.read({ providerId })).toEqual({ ok: true, config: { baseUrl: `${baseUrl}/custom/`, hasKey: true, revision: 2 } })
     expect(invalidate).toHaveBeenCalledTimes(2)
+  })
+
+  it('requires entering a key again to change origin, including the TLS port', async () => {
+    const { service, repository } = fixture()
+    expect(await service.save({ providerId, baseUrl, revision: 0, apiKey })).toMatchObject({ ok: true })
+    const other = 'https://fixture.invalid:444/v1'
+    expect(await service.save({ providerId, baseUrl: other, revision: 1 })).toEqual({ ok: false, code: 'credentials' })
+    expect((await repository.read()).records[0].baseUrl).toBe(`${baseUrl}/`)
+    expect(await service.save({ providerId, baseUrl: other, revision: 1, apiKey })).toMatchObject({ ok: true, config: { hasKey: true } })
   })
 
   it('rejects unsafe destinations, other scopes, stale writes and invalid headers before touching the vault', async () => {
@@ -113,7 +116,7 @@ describe('speech connection configuration', () => {
     await service.save({ providerId, baseUrl, revision: 0, apiKey })
     repository.mutate.mockResolvedValueOnce({ ok: false, code: 'conflict' })
     expect(await service.save({ providerId, baseUrl: `${baseUrl}/new`, revision: 1, apiKey: 'replacement' })).toEqual({ ok: false, code: 'conflict' })
-    expect(vault.getSecret()).toBe(apiKey)
+    expect(vault.getSecret()).toBe(bindCredential(providerId, new URL(baseUrl), apiKey))
     expect(await service.read({ providerId })).toMatchObject({ config: { baseUrl: `${baseUrl}/`, revision: 1 } })
   })
 

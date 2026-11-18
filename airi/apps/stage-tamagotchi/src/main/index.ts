@@ -553,7 +553,11 @@ app.whenReady().then(async () => {
     callback: async (deps) => {
       const { context } = createContext(ipcMain)
       registerLiaProviderConfigBridge({ context, liaProductConfig: deps.liaProductConfig })
-      registerLiaTransportConfigBridge({ context, vault: deps.liaSecrets })
+      registerLiaTransportConfigBridge({
+        context,
+        vault: deps.liaSecrets,
+        isAllowedSpeechConfigSender: event => isLiaSecretSenderAllowed(event, userFacingMainWindow, hearingSettingsWindow),
+      })
       // Speech-to-text runs here for the same reason chat does: the curated
       // provider's credential must not be readable by the renderer. It shares
       // the transport repository above, so a removed provider stops transcribing

@@ -43,6 +43,13 @@ function setup(allowRendererRead?: (scope: string) => Promise<boolean>, isAllowe
 beforeEach(() => handlers.clear())
 
 describe('secret bridge ownership and migration', () => {
+  it('requires the dedicated speech configuration path to write speech credentials', async () => {
+    const { vault } = setup()
+    const input = { scope: 'openai-audio-speech', key: 'apiKey', value: 'synthetic-plain' }
+    expect(await handler('set')(input)).toBe(false)
+    expect(await handler('adopt')(input)).toBe('unavailable')
+    expect(vault.setSecret).not.toHaveBeenCalled()
+  })
   it.each(['session-v1', 'apiKey'])('blocks every Renderer vault operation for the OIDC scope (%s)', async (key) => {
     const allow = vi.fn(async () => true)
     const { vault, values } = setup(allow)

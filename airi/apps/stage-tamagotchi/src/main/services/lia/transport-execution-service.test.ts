@@ -1,7 +1,7 @@
+import type { TransportRecord, TransportSnapshot } from '@lia/contracts/transports'
 import type { LiaSecretVault } from '@lia/core/secrets/vault'
 import type { WebContents } from 'electron'
 
-import type { TransportRecord, TransportSnapshot } from '@lia/contracts/transports'
 import type { LiaTransportPullResult, LiaTransportStartResult } from '../../../shared/eventa/lia-transport-execution'
 
 import { EventEmitter } from 'node:events'
@@ -10,6 +10,7 @@ import { createServer } from 'node:http'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { electronLiaTransportStart } from '../../../shared/eventa/lia-transport-execution'
+import { bindCredential } from './destination-credential'
 import { createLiaTransportExecutionService, registerLiaTransportExecutionBridge } from './transport-execution-service'
 
 const handlers = vi.hoisted(() => new Map<unknown, (...args: any[]) => any>())
@@ -46,7 +47,11 @@ function id(result: LiaTransportStartResult) {
 function fixture(fetch: typeof globalThis.fetch = vi.fn(async () => new Response('ok')), records = [record()]) {
   const snapshot: TransportSnapshot = { schemaVersion: 1, revision: 0, records, tombstones: [], migration: { version: 1, imported: [] } }
   const repository = { read: vi.fn(async () => structuredClone(snapshot)) }
-  const getSecret = vi.fn((scope: string, key: string) => `${scope}-${key}-synthetic`)
+  const getSecret = vi.fn((scope: string, key: string) => {
+    const value = `${scope}-${key}-synthetic`
+    const configured = records.find(record => record.providerId === scope && record.protocol === 'audio-speech')
+    return configured ? bindCredential(scope, new URL(configured.baseUrl), value) : value
+  })
   const vault = { getSecret } as unknown as LiaSecretVault
   const service = createLiaTransportExecutionService({ repository, vault, fetch })
   services.push(service)
@@ -73,6 +78,16 @@ afterEach(() => {
 })
 
 describe('main transport execution', () => {
+  it('does not send speech to an edited destination using a key bound to the previous origin', async () => {
+    const providerId = 'openai-audio-speech'
+    const audioRecord: TransportRecord = { ...record(providerId), definitionId: providerId, protocol: 'audio-speech' }
+    const { service, getSecret, fetch } = fixture(undefined, [audioRecord])
+    getSecret.mockReturnValue(bindCredential(providerId, new URL('https://previous.invalid'), 'synthetic'))
+    const sender = owner()
+    const job = id(service.start(sender, { providerId, operation: 'speech', speech: { model: 'model', voice: 'voice', input: 'Olá' } }))
+    expect(await service.pull(sender, { id: job, action: 'head' })).toEqual({ ok: false, code: 'credentials' })
+    expect(fetch).not.toHaveBeenCalled()
+  })
   it('reports an unreadable saved credential without dispatching HTTP or exposing the decryption error', async () => {
     const f = fixture()
     f.getSecret.mockImplementation(() => {

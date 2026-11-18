@@ -405,6 +405,13 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
       revision: speechBefore.config.revision,
     })
     assert.deepEqual(speechSaved, { ok: true, config: { baseUrl: speechBaseUrl, hasKey: true, revision: speechBefore.config.revision + 1 } })
+    const otherOrigin = new URL(speechBaseUrl)
+    otherOrigin.hostname = 'localhost'
+    assert.deepEqual(await page.evaluate(input => window.providerGate.saveSpeechConfig(input), {
+      providerId: speechProvider,
+      baseUrl: otherOrigin.href,
+      revision: speechSaved.config.revision,
+    }), { ok: false, code: 'credentials' })
     assert.deepEqual(await page.evaluate(id => window.providerGate.speechConfig(id), speechProvider), speechSaved)
     assert.equal(await page.evaluate(id => window.providerGate.readProtectedSecret(id), speechProvider), undefined)
     assert.deepEqual(await page.evaluate(id => window.providerGate.synthesizeFixtureSpeech(id), speechProvider), [1, 2, 3])
@@ -453,6 +460,7 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
       report.secondRendererError = true
     })
     report.secondRenderer = await secondPage.evaluate(() => ({ bridge: typeof window.electron?.ipcRenderer, status: document.querySelector('#status')?.textContent }))
+    assert.deepEqual(await secondPage.evaluate(id => window.providerGate.speechConfig(id), speechProvider), { ok: false, code: 'invalid' })
     await secondPage.getByRole('status').filter({ hasText: 'Pronto' }).waitFor()
     const prior = await page.evaluate(() => window.providerGate.transports())
     assert.equal(prior.ok, true)

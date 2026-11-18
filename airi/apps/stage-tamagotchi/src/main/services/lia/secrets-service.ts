@@ -14,6 +14,7 @@ import {
   electronLiaSecretHas,
   electronLiaSecretSet,
 } from '../../../shared/eventa'
+import { supportsMainSpeech } from '../../../shared/lia/speech-transport'
 import { resolveMainCredential } from './credential-owner-access'
 import { createLiaSecretVault } from './secrets'
 
@@ -90,6 +91,8 @@ export function registerLiaSecretsBridge(params: {
   defineInvokeHandler(context, electronLiaSecretSet, async (payload, options) => {
     if (!senderAllowed(options))
       return false
+    if (payload?.key === 'apiKey' && supportsMainSpeech(payload.scope))
+      return false
     if (!validReference(payload) || typeof payload.value !== 'string' || payload.value.length === 0 || payload.value.length > 16384
       || (payload.onlyIfMissing !== undefined && typeof payload.onlyIfMissing !== 'boolean')) {
       log.warn('Rejected secret store request with missing/invalid fields')
@@ -133,6 +136,8 @@ export function registerLiaSecretsBridge(params: {
    */
   defineInvokeHandler(context, electronLiaSecretAdopt, async (payload, options): Promise<LiaSecretAdoptResult> => {
     if (!senderAllowed(options))
+      return 'unavailable'
+    if (payload?.key === 'apiKey' && supportsMainSpeech(payload.scope))
       return 'unavailable'
     if (!validReference(payload) || typeof payload.value !== 'string' || payload.value.length === 0 || payload.value.length > 16384) {
       log.warn('Rejected secret adopt request with missing/invalid fields')

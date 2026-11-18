@@ -1,23 +1,22 @@
-import type { LiaSecretVault } from '@lia/core/secrets/vault'
-import type { createContext } from '@moeru/eventa/adapters/electron/main'
-
 import type { ChatRequest } from '@lia/contracts/providers'
 import type { TransportRecord, TransportSnapshot } from '@lia/contracts/transports'
 import type { createTransportRepository } from '@lia/contracts/transports/repository'
+import type { LiaSecretVault } from '@lia/core/secrets/vault'
+import type { createContext } from '@moeru/eventa/adapters/electron/main'
+
 import type { LiaTransportExecutionFailure, LiaTransportPullResult, LiaTransportStartRequest, LiaTransportStartResult } from '../../../shared/eventa/lia-transport-execution'
 
 import { Buffer } from 'node:buffer'
 import { randomUUID } from 'node:crypto'
 
+import { ProviderError, ProviderRegistry, ProviderRuntime } from '@lia/contracts/providers'
 import { defineInvokeHandler } from '@moeru/eventa'
 
-import { ProviderError } from '@lia/contracts/providers'
-import { ProviderRegistry } from '@lia/contracts/providers'
-import { ProviderRuntime } from '@lia/contracts/providers'
 import { electronLiaTransportCancel, electronLiaTransportPull, electronLiaTransportStart } from '../../../shared/eventa/lia-transport-execution'
 import { isCuratedChatProvider } from '../../../shared/lia/provider-catalog'
 import { supportsMainSpeech } from '../../../shared/lia/speech-transport'
 import { resolveMainCredential } from './credential-owner-access'
+import { credentialForDestination } from './destination-credential'
 import { withLiaProviderHeaders } from './provider-request-headers'
 import { serializeWrite } from './secrets-service'
 
@@ -298,7 +297,8 @@ export function createLiaTransportExecutionService(params: { repository: Reposit
           const current = (await params.repository.read()).records.filter(candidate => candidate.providerId === record.providerId)
           if (current.length !== 1 || JSON.stringify(current[0]) !== JSON.stringify(record))
             throw new ProviderError('configuration')
-          return resolveMainCredential(params.vault, record.credentialRef.scope, record.credentialRef.key, job.controller.signal)
+          const value = await resolveMainCredential(params.vault, record.credentialRef.scope, record.credentialRef.key, job.controller.signal)
+          return credentialForDestination(value, record.credentialRef.scope, url)
         }), job)
         if (!credential)
           throw new ProviderError('credentials')

@@ -1,11 +1,13 @@
+import type { createTransportRepository } from '@lia/contracts/transports/repository'
 import type { LiaSecretVault } from '@lia/core/secrets/vault'
 
-import type { createTransportRepository } from '@lia/contracts/transports/repository'
 import type { LiaSpeechConfigResult, LiaSpeechConfigSaveInput } from '../../../shared/eventa/lia-speech-config'
 
 import { isTransportRecord } from '@lia/contracts/transports'
+
 import { supportsMainSpeech } from '../../../shared/lia/speech-transport'
 import { resolveMainCredential } from './credential-owner-access'
+import { bindCredential, credentialForDestination } from './destination-credential'
 import { serializeWrite } from './secrets-service'
 
 export function createSpeechConfigService(
@@ -29,7 +31,13 @@ export function createSpeechConfigService(
       if (matches.length > 1)
         return conflict
       const record = matches[0]
-      return { ok: true, config: { baseUrl: record?.enabled && record.protocol === 'audio-speech' ? record.baseUrl : '', hasKey: vault.hasSecret(input.providerId, 'apiKey'), revision: snapshot.revision } }
+      const baseUrl = record?.enabled && record.protocol === 'audio-speech' ? record.baseUrl : ''
+      const origin = URL.parse(baseUrl)
+      const value = origin && vault.hasSecret(input.providerId, 'apiKey')
+        ? await resolveMainCredential(vault, input.providerId, 'apiKey')
+        : undefined
+      const hasKey = !!origin && !!credentialForDestination(value, input.providerId, origin)
+      return { ok: true, config: { baseUrl, hasKey, revision: snapshot.revision } }
     }
     catch {
       return storage
@@ -78,6 +86,16 @@ export function createSpeechConfigService(
         } as const
         if (!isTransportRecord(record))
           return invalid
+        const bound = apiKey ? bindCredential(providerId, url, apiKey) : undefined
+        if (bound && bound.length > 16384)
+          return invalid
+        if (!bound) {
+          if (!existing || !vault.hasSecret(providerId, 'apiKey'))
+            return credentials
+          const previous = await resolveMainCredential(vault, providerId, 'apiKey')
+          if (!credentialForDestination(previous, providerId, url))
+            return credentials
+        }
         let writeRevision = revision
         if (!existing && vault.hasSecret(providerId, 'apiKey')) {
           // An orphan key is preserved. Establish an inert, CAS-protected
@@ -87,11 +105,8 @@ export function createSpeechConfigService(
             return provisional
           writeRevision = provisional.snapshot.revision
         }
-        const previous = vault.hasSecret(providerId, 'apiKey') ? await resolveMainCredential(vault, providerId, 'apiKey') : undefined
-        if (!apiKey && !previous)
-          return credentials
-        const change = apiKey && expectedKeyRevision !== undefined
-          ? await vault.changeSecret?.(providerId, 'apiKey', apiKey, { expectedRevision: expectedKeyRevision })
+        const change = bound && expectedKeyRevision !== undefined
+          ? await vault.changeSecret?.(providerId, 'apiKey', bound, { expectedRevision: expectedKeyRevision })
           : undefined
         if (apiKey && !change)
           return credentials

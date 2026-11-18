@@ -1,14 +1,13 @@
+import type { TransportSnapshot } from '@lia/contracts/transports'
 import type { LiaSecretVault } from '@lia/core/secrets/vault'
 import type { createContext } from '@moeru/eventa/adapters/electron/main'
 
-import type { TransportSnapshot } from '@lia/contracts/transports'
-
 import { join } from 'node:path'
 
+import { createTransportRepository } from '@lia/contracts/transports/repository'
 import { defineInvokeHandler } from '@moeru/eventa'
 import { app } from 'electron'
 
-import { createTransportRepository } from '@lia/contracts/transports/repository'
 import { electronLiaSpeechConfigGet, electronLiaSpeechConfigSave } from '../../../shared/eventa/lia-speech-config'
 import { electronLiaTransportsGet, electronLiaTransportsMutate } from '../../../shared/eventa/lia-transports'
 import { isCuratedChatProvider } from '../../../shared/lia/provider-catalog'
@@ -67,14 +66,17 @@ export async function canRendererReadLegacySecret(
 /** One main-process writer; renderers exchange only validated, secret-free records. */
 export function registerLiaTransportConfigBridge(params: {
   context: ReturnType<typeof createContext>['context']
+  isAllowedSpeechConfigSender: (event: Electron.IpcMainEvent | undefined) => boolean
   repository?: ReturnType<typeof createTransportRepository>
   vault: LiaSecretVault
 }) {
   const repository = params.repository ?? getApplicationRepository()
   const execution = registerLiaTransportExecutionBridge({ context: params.context, repository, vault: params.vault })
   const speech = createSpeechConfigService(repository, params.vault, execution.invalidate)
-  defineInvokeHandler(params.context, electronLiaSpeechConfigGet, speech.read)
-  defineInvokeHandler(params.context, electronLiaSpeechConfigSave, speech.save)
+  defineInvokeHandler(params.context, electronLiaSpeechConfigGet, async (input, options) =>
+    params.isAllowedSpeechConfigSender(options?.raw?.ipcMainEvent) ? speech.read(input) : { ok: false, code: 'invalid' })
+  defineInvokeHandler(params.context, electronLiaSpeechConfigSave, async (input, options) =>
+    params.isAllowedSpeechConfigSender(options?.raw?.ipcMainEvent) ? speech.save(input) : { ok: false, code: 'invalid' })
   defineInvokeHandler(params.context, electronLiaTransportsGet, async () => {
     try {
       return { ok: true as const, snapshot: await repository.read() }

@@ -175,7 +175,7 @@ config:
       connection:
         endpoint: 'Endereço do serviço de voz'
         key: 'Chave de API'
-        keepKey: 'Chave guardada. Deixe o campo vazio para mantê-la.'
+        keepKey: 'Chave guardada para este servidor. Ao trocar de servidor, informe a chave novamente.'
         incomplete: 'Informe o endereço e a chave para completar a configuração.'
         save: 'Salvar conexão'
         test: 'Testar e ouvir'

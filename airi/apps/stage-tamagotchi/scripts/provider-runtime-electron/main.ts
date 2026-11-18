@@ -47,12 +47,17 @@ void app.whenReady().then(async () => {
     isAllowedSender: () => true,
   })
   registerLiaProviderConfigBridge({ context, liaProductConfig: createLiaProductConfig() })
-  registerLiaTransportConfigBridge({ context, vault: measuredVault })
   const window = new BrowserWindow({
     title: 'Lia — Gate Electron local',
     width: 800,
     height: 620,
     webPreferences: createStageWebPreferences(preload),
+  })
+  registerLiaTransportConfigBridge({
+    context,
+    vault: measuredVault,
+    isAllowedSpeechConfigSender: event => !window.isDestroyed() && event?.sender === window.webContents
+      && event.senderFrame !== null && event.senderFrame === window.webContents.mainFrame,
   })
   const transcription = registerLiaTranscriptionBridge({
     context,

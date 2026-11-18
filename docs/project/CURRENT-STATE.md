@@ -13,6 +13,14 @@ commit. Registra **estado**, não narrativa: relatório de rodada vai para
 
 ## 0. Estado agora
 
+**Rodada 22 — SEC-05 no TTS HTTP nativo do Stage.** O Main vincula a
+chave de cada provedor de síntese à origem exata e ao escopo do cofre
+cifrado. Para mudar protocolo, host ou porta, informe a chave na tela de
+conexão. Chaves legadas também exigem nova entrada. PASS Windows em
+Electron 43.4.1 com serviço HTTP local e credenciais sintéticas, 16 grupos.
+Restam os vínculos de destino de chat e STT, SEC-04, OIDC integrado,
+G-AUD e G-ARCH. A síntese com provedor externo segue NOT RUN.
+
 **Rodada 22 — consentimento para STT no Main.** No transporte nativo
 do Stage, cada envio remoto exige aceite no diálogo da janela que
 iniciou a operação, com provedor e URL efetiva. O Main não consulta a

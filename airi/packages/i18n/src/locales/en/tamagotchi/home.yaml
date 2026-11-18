@@ -175,7 +175,7 @@ config:
       connection:
         endpoint: 'Voice service address'
         key: 'API key'
-        keepKey: 'Key saved. Leave this field blank to keep it.'
+        keepKey: 'Key saved for this server. Enter the key again when changing servers.'
         incomplete: 'Enter the address and key to complete setup.'
         save: 'Save connection'
         test: 'Test and listen'
