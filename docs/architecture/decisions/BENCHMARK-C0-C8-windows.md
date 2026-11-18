@@ -52,7 +52,7 @@ foi escrita não tem display, não tem GTK e não abre Electron; nenhum número 
 
 ```powershell
 # 1. Identidade do build — vai para o cabeçalho de TODO arquivo de evidência
-$env:LIA_BENCH_COMMIT   = (git -C C:\dev\Lia-Project rev-parse HEAD)
+$env:LIA_BENCH_COMMIT   = (git rev-parse HEAD) # na raiz do checkout empacotado
 $env:LIA_BENCH_BUILD    = 'win-x64'          # + data/hora do pacote
 $env:LIA_BENCH_DRIVER   = (Get-CimInstance Win32_VideoController -Filter "Name like '%Radeon%'").DriverVersion
 $env:LIA_BENCH_OS       = (Get-CimInstance Win32_OperatingSystem).Version + ' build ' + (Get-CimInstance Win32_OperatingSystem).BuildNumber
@@ -61,10 +61,11 @@ $env:LIA_BENCH_DPI      = (Get-ItemProperty 'HKCU:\Control Panel\Desktop\WindowM
 $env:LIA_BENCH_POWER    = (powercfg /getactivescheme) -join ' '
 $env:LIA_BENCH_ELECTRON = '43.4.1'
 
-# 2. Estado limpo
-powercfg /setactive SCHEME_MIN          # alto desempenho
-Get-Process Lia,LiaStage -ErrorAction SilentlyContinue | Stop-Process -Force
-Get-Process msedge,chrome,Discord,Steam -ErrorAction SilentlyContinue | Stop-Process -Force  # ruído
+# 2. Conferir o estado antes da coleta e encerrar os aplicativos pela interface
+# em uma janela dedicada. Registrar o plano de energia e mantê-lo na campanha.
+powercfg /getactivescheme
+Get-Process Lia,LiaStage,msedge,chrome,Discord,Steam -ErrorAction SilentlyContinue |
+  Select-Object ProcessName, Id
 # aguardar 60 s de estabilização e confirmar que não há Windows Update em curso
 Get-Service wuauserv | Select-Object Status
 ```
@@ -80,7 +81,8 @@ navegador aberto fora do cenário, ou temperatura ambiente/thermal throttling vi
 ### 4.1 Amostrador (vale para C0, C1, C2, C5, C6, C8)
 
 ```powershell
-# uso: .\sample-tree.ps1 -RootPid 1234 -Label C0 -Reps 5 -Warmup 60 -Window 180
+# Salvar como sample-tree.ps1 em um diretório de evidências com subpasta evidence/.
+# Uso: .\sample-tree.ps1 -RootPid 1234 -Label C0 -Reps 5 -Warmup 60 -Window 180
 param(
   [Parameter(Mandatory)][int]$RootPid,
   [Parameter(Mandatory)][string]$Label,
@@ -102,34 +104,50 @@ function Get-Tree([int]$root) {
   $all | Where-Object { $ids.Contains([int]$_.ProcessId) }
 }
 
+$rootStart = (Get-Process -Id $RootPid -ErrorAction Stop).StartTime
+$logicalProcessors = (Get-CimInstance Win32_ComputerSystem).NumberOfLogicalProcessors
 $rows = foreach ($rep in 1..$Reps) {
   Start-Sleep -Seconds $Warmup
   $t0 = Get-Date
+    $sampleClock = [Diagnostics.Stopwatch]::StartNew()
   $prevCpu = @{}
+    $previousSampleSeconds = $null
   while (((Get-Date) - $t0).TotalSeconds -lt $Window) {
+      if ((Get-Process -Id $RootPid -ErrorAction Stop).StartTime -ne $rootStart) {
+        throw 'O processo raiz mudou durante a coleta.'
+      }
     $procs = Get-Tree $RootPid
     $cpuTotal = 0.0; $priv = 0L; $ws = 0L; $thr = 0
-    $isCrashpad = $false
+      $currentCpu = @{}
+      $currentSampleSeconds = $sampleClock.Elapsed.TotalSeconds
     foreach ($p in $procs) {
       $gp = Get-Process -Id $p.ProcessId -ErrorAction SilentlyContinue
       if (-not $gp) { continue }
       $priv += $gp.PrivateMemorySize64
       $ws   += $gp.WorkingSet64
       $thr  += $gp.Threads.Count
-      if ($gp.TotalProcessorTime) {
-        if ($prevCpu.ContainsKey($p.ProcessId)) {
-          $cpuTotal += ($gp.TotalProcessorTime - $prevCpu[$p.ProcessId]).TotalSeconds
-        }
-        $prevCpu[$p.ProcessId] = $gp.TotalProcessorTime
+      $identity = "$($p.ProcessId):$($gp.StartTime.Ticks)"
+      $currentCpu[$identity] = $gp.TotalProcessorTime.TotalSeconds
+      if ($prevCpu.ContainsKey($identity)) {
+        $cpuTotal += $currentCpu[$identity] - $prevCpu[$identity]
       }
-      if ($p.Name -like 'crashpad*') { $isCrashpad = $true }
+    }
+    $cpuPctMachine = $null
+    if ($null -ne $previousSampleSeconds -and $currentCpu.Count -eq $procs.Count -and
+        $prevCpu.Count -eq $currentCpu.Count -and
+        @($currentCpu.Keys | Where-Object { -not $prevCpu.ContainsKey($_) }).Count -eq 0) {
+      $elapsed = $currentSampleSeconds - $previousSampleSeconds
+      $cpuPctMachine = [math]::Round(100.0 * $cpuTotal / $elapsed / $logicalProcessors, 2)
     }
     [pscustomobject]@{
       label = $Label; rep = $rep; t = [math]::Round(((Get-Date) - $t0).TotalSeconds,1)
       privateMB = [math]::Round($priv/1MB,1); wsMB = [math]::Round($ws/1MB,1)
-      processes = $procs.Count; processesNoCrashpad = $procs.Count - (@($procs | Where-Object Name -like 'crashpad*').Count)
-      threads = $thr; cpuPctMachine = $null
-    } | ForEach-Object { $_.cpuPctMachine = [math]::Round(100.0*$cpuTotal/5.0/ (Get-CimInstance Win32_ComputerSystem).NumberOfLogicalProcessors,2); $_ }
+      processes = $procs.Count
+      processesNoCrashpad = $procs.Count - @($procs | Where-Object { $_.Name -like 'crashpad*' -or $_.CommandLine -match '(?:^|\s)--type=crashpad-handler(?:\s|$)' }).Count
+      threads = $thr; cpuPctMachine = $cpuPctMachine
+    }
+    $prevCpu = $currentCpu
+    $previousSampleSeconds = $currentSampleSeconds
     Start-Sleep -Seconds 5
   }
 }
@@ -144,7 +162,7 @@ $rows | Export-Csv -NoTypeInformation -Append -Path ".\evidence\$Label.csv"
 | `wsMB` | soma de `WorkingSet64`; **reportada, nunca usada como gate** (conta páginas compartilhadas N vezes) |
 | `processes` | árvore completa, deduplicada por PID |
 | `processesNoCrashpad` | idem, excluindo `crashpad*` — **é o número do gate D-07** |
-| `cpuPctMachine` | Δ(CPU total) / Δ(tempo × núcleos lógicos) × 100 |
+| `cpuPctMachine` | Δ(CPU total) / Δ(tempo monotônico × CPUs lógicas) × 100. Primeira amostra ou mudança na coorte de processos deixa a célula vazia. |
 | Estatística | **mediana** e p95 das amostras por repetição; reportar as 5 repetições, não só a média |
 
 ### 4.2 Boot e reabertura (C3)
@@ -159,7 +177,11 @@ while (-not $win -and ((Get-Date)-$t0).TotalSeconds -lt 30) {
   Start-Sleep -Milliseconds 50
   $win = (Get-Process -Id $p.Id -ErrorAction SilentlyContinue | Where-Object MainWindowHandle -ne 0)
 }
-"t_window_visible_ms = $([math]::Round(((Get-Date)-$t0).TotalMilliseconds))"
+if ($win) {
+  "t_window_visible_ms = $([math]::Round(((Get-Date)-$t0).TotalMilliseconds))"
+} else {
+  't_window_visible_ms = N/A (janela não observada dentro do prazo)'
+}
 ```
 
 Marcas internas (quando o build as oferece, pela tela de diagnóstico): `lia-app.start`,
@@ -192,7 +214,8 @@ do produto.
 | Captura | PresentMon |
 
 ```powershell
-PresentMon64.exe --process_name <jogo>.exe --output_file ".\evidence\C7_<cond>.csv" `
+# Substituir pelo executável do jogo e identificar condição e repetição.
+PresentMon64.exe --process_name 'jogo.exe' --output_file '.\evidence\C7_a_rep1.csv' `
                  --terminate_after_timed 180 --no_top --stop_existing_session
 ```
 
@@ -243,7 +266,7 @@ Cada execução gera um arquivo por cenário, com cabeçalho obrigatório:
   "runtime": { "electron": "43.4.1", "chromium": "150.0.7871.224", "node": "24.18.1" },
   "machine": { "cpu": "Ryzen 5 5500", "gpu": "RX 580 8GB", "ramGB": 16, "os": "…", "driver": "…" },
   "display": { "monitors": 2, "dpi": 96, "resolution": "1920x1080" },
-  "power": "SCHEME_MIN",
+  "power": "<plano de energia registrado>",
   "protocol": { "warmupS": 60, "windowS": 180, "reps": 5, "sampleS": 5 },
   "results": { "privateMB": { "median": null, "p95": null }, "processes": null, "processesNoCrashpad": null, "cpuPctMachine": null },
   "notes": "o que fugiu do protocolo — sempre declarado"
@@ -265,6 +288,15 @@ repetições é declarado "parcial", nunca "MEDIDO".
 | 4 | Nenhum dado de Linux usado como benchmark | **PASS** |
 | 5 | Reabertura marcada N/A enquanto D-04 não existir | **PASS** (§4.2) |
 | 6 | Execução reproduzível por terceiro | **PASS** (§3–§4) |
+
+**Verificação do roteiro em 17/11.** Os quatro blocos passaram pelo parser
+do PowerShell. O trecho de amostragem foi executado no próprio PowerShell,
+com uma repetição, janela de 12 segundos e sem aquecimento. O CSV teve três
+amostras. A primeira deixou CPU em branco e as seguintes calcularam o delta.
+Artefato em `J:/lia-evidence/round22-stt/bench-snippet-de6db6b32b32486aacfa6ab0094ed3d8/evidence/protocol-smoke.csv`.
+Esse ensaio verifica o roteiro. C0–C8 seguem **NOT RUN**. A sessão de
+preparação tinha navegador, Discord e Steam ativos. O plano de energia e
+os processos da sessão foram mantidos.
 
 ---
 
