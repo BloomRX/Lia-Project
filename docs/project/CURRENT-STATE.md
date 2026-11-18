@@ -55,6 +55,8 @@ do Stage, cada envio remoto exige aceite no diálogo da janela que
 iniciou a operação, com provedor e URL efetiva. O Main não consulta a
 credencial antes do aceite. Recusa, cancelamento ou revisão de
 configuração alterada impedem a saída. Loopback continua disponível.
+O Main verifica novamente a revisão após preparar o áudio, imediatamente
+antes do envio, e recusa transcrição que ecoe a credencial usada.
 No Renderer desktop, gravações exigem executor no Main. Streaming
 legado e Web Speech estão indisponíveis, inclusive nas prévias e no
 DevTools do Aliyun. O ensaio do diálogo com serviço remoto e G-AUD

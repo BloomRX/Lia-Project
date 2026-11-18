@@ -401,3 +401,59 @@ Commits locais desta retomada. `5a4be91` ajusta o preload nos roteiros
 Windows, `141227c` versiona o amostrador, `dfe95e4` valida o ID token
 no Main, `e7ad3ac` restringe as permissões do cofre e `cdea7c4`
 integra a conversa local e os vínculos de credenciais.
+
+#### Revalidação do envio remoto de áudio
+
+O Main confere de novo a revisão aprovada depois da resolução da
+credencial e da preparação do áudio. Uma configuração alterada nessa
+janela impede o envio. A resposta de transcrição é descartada se o
+texto ou os segmentos devolverem a credencial usada no pedido.
+Os testes de transcrição e verificação OIDC passaram com 44 casos,
+incluindo a mudança de revisão após o aceite e o eco de uma sentinela
+inteira ou repartida entre segmentos.
+`J:/lia-evidence/round22-stt/r22-stt-revision-egress-final.log`.
+O teste com serviço remoto e a captura acústica seguem NOT RUN.
+O delta está em `e808574`, após o ajuste de lint OIDC `22e819c`.
+
+#### Regressão Windows e pacote privado
+
+| Comando | Resultado |
+| --- | --- |
+| `node --experimental-strip-types --test 'lia/core/test/*.test.ts'` | 157 PASS |
+| `pnpm exec vitest run --maxWorkers=1` em `airi/packages/lia-core` | 386 PASS |
+| `node --test 'Tests/tools/*.test.mjs'` | 275 PASS |
+| `python -m unittest discover -s . -p "test_*.py" -t .` em `tools` | 498 descobertos, 488 PASS e 10 SKIP |
+| `pnpm exec vitest run --project node --maxWorkers=2` no Stage | 2.537 PASS e 4 SKIP |
+| `pnpm exec vitest run --project browser` no Stage | 54 PASS |
+| `pnpm exec vitest run --maxWorkers=1` no Launcher | 366 PASS e 2 SKIP |
+| `pnpm run typecheck` no Launcher | PASS |
+| `pnpm run typecheck` no Stage após o último delta | PASS após ajustar o tipo do mock em `7b028f4` |
+| `moeru-lint` nos TypeScript e Vue alterados | PASS após ajuste de estilo |
+
+O agregado Stage registrou tentativas de conexão recusadas na porta
+3000, e Chromium emitiu aviso de ResizeObserver. Ambos saíram com
+código 0. A reprodução focada de transcrição após o último delta
+consta acima. Logs `r22-integration-*` em `J:/lia-evidence/round22-stt/`.
+O gate Electron final de componentes também passou nos 16 grupos,
+incluindo a DACL e a procura de sentinelas no log.
+`Tests/artifacts/provider-runtime-electron/1795044862256/report.json`.
+
+O empacotador `node airi/apps/lia-app/scripts/package-windows.mjs --internal-test --dir`
+gerou `Lia.exe` e `LiaStage.exe` com Electron 43.4.1. Ambos estão
+sem assinatura. O pacote usou o build anterior a `e808574`.
+O ensaio `node Tests/windows/completion-runtime.mjs --packaged --credential-handoff`
+passou nas dez etapas com serviço local e credenciais sintéticas.
+Relatório em `J:/lia-evidence/round22-stt/completion-resume-runtime-1795044584891/report.json`.
+Hashes do pacote em `J:/lia-evidence/round22-stt/r22-package-unpacked-hashes.json`.
+Instalação limpa e atualização continuam NOT RUN.
+
+O Windows 11 Home build 26200 tem Ryzen 5 5500, 12 processadores lógicos,
+15,89 GiB de RAM e Radeon RX 580 2048SP com driver 31.0.21925.1001.
+O plano Atlas Power Scheme e as aplicações em uso foram preservados.
+Chrome, Discord e Steam estavam ativos na preparação, então o ambiente
+não atende à condição de sessão dedicada do protocolo C0–C8.
+
+O Windows enumera o microfone fifine e as saídas EDIFIER W830NB.
+O gate G-AUD ainda requer fala controlada, confirmação da reprodução,
+serviço STT autorizado e o registro AV-01 a AV-15 no mesmo candidato.
+O inventário de hardware e as fixtures não estabelecem esses resultados.
