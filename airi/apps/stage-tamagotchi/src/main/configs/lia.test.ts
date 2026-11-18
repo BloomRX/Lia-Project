@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
  * The config module (and `createConfig`) imports `electron` / `es-toolkit` /
@@ -66,6 +66,32 @@ describe('lia product config', () => {
     vi.resetModules()
     vi.clearAllMocks()
     vi.restoreAllMocks()
+  })
+
+  afterEach(() => vi.unstubAllEnvs())
+
+  it('reads and updates the canonical product file outside the Chromium profile', async () => {
+    const canonical = '/fixture/product/lia-product.json'
+    vi.stubEnv('LIA_PRODUCT_CONFIG_FILE', canonical)
+    const preferred = { providerId: 'fixture-chat', modelId: 'fixture-model' }
+    const readFileSync = vi.fn(() => JSON.stringify({ schemaVersion: 1, provider: { chat: { preferred, onboarded: true } } }))
+    const { mod, fs } = await loadModules({ userData: '/fixture/stage-profile', existsSync: () => true, readFileSync })
+    const config = mod.createLiaProductConfig()
+    expect(readFileSync).toHaveBeenCalledWith(canonical, { encoding: 'utf-8' })
+    expect(config.get()?.provider?.chat?.preferred).toEqual(preferred)
+    await config.updateAndSave(current => ({ ...current, preferences: { ...current.preferences, language: 'pt-BR' } }))
+    expect(fs.rename).toHaveBeenCalledWith(expect.stringContaining(canonical), canonical)
+    expect(config.get()?.provider?.chat?.preferred).toEqual(preferred)
+  })
+
+  it('keeps an unreadable managed product file available for recovery', async () => {
+    vi.stubEnv('LIA_PRODUCT_CONFIG_FILE', '/fixture/product/lia-product.json')
+    const { mod, fs } = await loadModules(invalidFileMocks('/fixture/stage-profile', '{"schemaVersion":99}'))
+    const config = mod.createLiaProductConfig()
+    expect(config.getDiagnostics()?.status).toBe('invalid')
+    await expect(config.updateAndSave(current => current)).rejects.toThrow('Managed product configuration is unavailable')
+    expect(fs.writeFile).not.toHaveBeenCalled()
+    expect(fs.copyFile).not.toHaveBeenCalled()
   })
 
   it('exposes the supported schema version and an explicit default shape', async () => {

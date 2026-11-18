@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -16,7 +16,51 @@ import {
   SETUP_COMPLETED_DEFAULT,
   setupCompletionUpdate,
   updateLiaProductConfig,
+  withProductConfigWriteLock,
 } from './config'
+
+it('serializes Stage and Launcher updates before either writer reads the product file', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'lia-product-writers-'))
+  const path = join(dir, 'lia-product.json')
+  const entered = Promise.withResolvers<void>()
+  const release = Promise.withResolvers<void>()
+  let launcherRead = false
+  try {
+    await writeFile(path, JSON.stringify({ schemaVersion: 1 }))
+    const stage = withProductConfigWriteLock(async () => {
+      try {
+        const current = JSON.parse(await readFile(path, 'utf8'))
+        entered.resolve()
+        await release.promise
+        await writeFile(path, JSON.stringify({ ...current, persona: { activeCardId: 'fixture-stage-persona' } }))
+      }
+      catch (error) {
+        entered.reject(error)
+        throw error
+      }
+    })
+    const launcher = entered.promise.then(() => updateLiaProductConfig(path, { preferences: { language: 'pt-BR' } }, {
+      exists: () => {
+        launcherRead = true
+        return true
+      },
+    }))
+
+    await Promise.race([stage, entered.promise])
+    const readBeforeRelease = launcherRead
+    release.resolve()
+    const [, result] = await Promise.all([stage, launcher])
+    expect(readBeforeRelease).toBe(false)
+    expect(result.status).toBe('ok')
+    expect(JSON.parse(await readFile(path, 'utf8'))).toMatchObject({
+      persona: { activeCardId: 'fixture-stage-persona' },
+      preferences: { language: 'pt-BR' },
+    })
+  }
+  finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
 
 /**
  * The tolerant reader contract (Phase 7, architecture item 7): it reads the

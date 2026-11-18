@@ -25,6 +25,7 @@ export interface ConfigDiagnostics<T> {
 export interface CreateConfigOptions<T> {
   default?: T
   autoHeal?: boolean
+  filePath?: string
   onValidationFailure?: (diagnostics: ConfigDiagnostics<T>) => void
   onReadError?: (diagnostics: ConfigDiagnostics<T>) => void
 }
@@ -70,7 +71,7 @@ export function createConfig<TSchema extends PersistedSchema>(
   const key = `${namespace}:${filename}`
   const autoHeal = options?.autoHeal ?? Boolean(options?.default)
 
-  const configPath = () => createConfigPath(namespace, filename)
+  const configPath = () => options?.filePath ?? createConfigPath(namespace, filename)
 
   const recordDiagnostics = (diagnostics: ConfigDiagnostics<InferOutput<TSchema>>) => {
     diagnosticsMap.set(key, diagnostics)

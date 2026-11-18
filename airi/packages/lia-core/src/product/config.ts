@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
 import { safeDestr } from 'destr'
 
 import { isPresenceConfig } from '../../../../../lia/core/src/presence'
+import { withOsWriteLock } from '../secrets/vault-lock'
 
 /**
  * Tolerant reader for the canonical Lia product document
@@ -520,18 +521,40 @@ function containsSecretField(value: unknown): boolean {
   return false
 }
 
+export function withProductConfigWriteLock<T>(write: () => Promise<T>): Promise<T> {
+  return withOsWriteLock('product', write)
+}
+
 export async function updateLiaProductConfig(
   filePath: string,
   update: LiaProductConfigUpdate,
   deps: LiaProductConfigWriterDeps = {},
+): Promise<LiaProductConfigWrite> {
+  try {
+    return await withProductConfigWriteLock(() => writeLiaProductConfig(filePath, update, deps))
+  }
+  catch (error) {
+    return { error: error instanceof Error ? error : new Error(String(error)), filePath, status: 'write-failed' }
+  }
+}
+
+async function writeLiaProductConfig(
+  filePath: string,
+  update: LiaProductConfigUpdate,
+  deps: LiaProductConfigWriterDeps,
 ): Promise<LiaProductConfigWrite> {
   const exists = deps.exists ?? ((p: string) => existsSync(p))
   const read = deps.read ?? (async (p: string) => await readFile(p, 'utf8'))
   const write = deps.write ?? (async (p: string, data: string) => {
     await mkdir(dirname(p), { recursive: true })
     const tmp = `${p}.${randomUUID()}.tmp`
-    await writeFile(tmp, data)
-    await rename(tmp, p)
+    try {
+      await writeFile(tmp, data)
+      await rename(tmp, p)
+    }
+    finally {
+      await unlink(tmp).catch(() => {})
+    }
   })
 
   if (containsSecretField(update))
