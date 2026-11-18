@@ -80,6 +80,15 @@ navegador aberto fora do cenário, ou temperatura ambiente/thermal throttling vi
 
 ### 4.1 Amostrador (vale para C0, C1, C2, C5, C6, C8)
 
+O roteiro versionado `tools/desktop-benchmark/sample-c0-c8-windows.ps1`
+executa a amostragem a partir da raiz do repositório. Informe `-RootPid`,
+`-Label` e `-OutputRoot`. Com Launcher e Stage destacados, informe
+`-AdditionalRootPid` com o PID do outro runtime. Os padrões são cinco
+repetições, 60 segundos de aquecimento e 180 segundos por janela. Use
+`metadata.json`, `samples.csv` e `completion.json` para verificar os
+processos observados e a conclusão da coleta. O bloco a seguir descreve
+a amostragem de uma só raiz.
+
 ```powershell
 # Salvar como sample-tree.ps1 em um diretório de evidências com subpasta evidence/.
 # Uso: .\sample-tree.ps1 -RootPid 1234 -Label C0 -Reps 5 -Warmup 60 -Window 180
