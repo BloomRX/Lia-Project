@@ -13,13 +13,30 @@ commit. Registra **estado**, não narrativa: relatório de rodada vai para
 
 ## 0. Estado agora
 
+**Rodada 22 — SEC-05 no chat nativo e STT derivado.** Launcher e Stage
+gravam a chave cifrada com origem, escopo e finalidade de chat. Chaves
+antigas exigem nova entrada. Chat, descoberta e STT derivado recusam
+chave incompatível antes de autenticar. Serviço local sem chave segue
+disponível no gate de componentes. O Stage gerenciado passou a ler a
+configuração e os transportes na pasta canônica do produto. No Windows, o
+formato novo protege a chave de cifra do cofre com DPAPI `CurrentUser`.
+PASS Windows no primeiro envio do Launcher → Stage via serviço local e
+credencial sintética, com perfis Electron independentes. O Stage respondeu
+com o Launcher fechado. Ao reabrir, a Home mostrou a mesma instância e
+conseguiu encerrá-la. As escritas de `lia-product.json` agora usam um lock
+compartilhado. Set e Adopt genéricos recusam chaves nativas. O IPC legado
+de leitura devolve resposta vazia. PASS Windows no primeiro uso sem chave
+pela opção IA local, com Qwen3.5-9B e uma resposta de texto completa no Stage.
+OIDC continua desativado. Próximo corte é concluir a validação do cofre e
+avançar nos consumidores legados fora do IPC genérico. Evidências no
+relatório da Rodada 22.
+
 **Rodada 22 — SEC-05 nos adaptadores dedicados de STT.** O Main vincula
 a chave cifrada à origem, ao identificador do provedor e ao uso em gravação.
 A troca de origem e as chaves legadas exigem informar a chave novamente.
 STT local sem chave permanece disponível. O gate Electron no Windows passou
 com HTTP em loopback, credencial sintética e ID de provedor personalizado.
-O diálogo com rede remota e o microfone físico seguem NOT RUN. O próximo
-corte cobre as chaves de chat e o STT que compartilha essas chaves.
+O diálogo com rede remota e o microfone físico seguem NOT RUN.
 
 **Rodada 22 — SEC-05 no TTS HTTP nativo do Stage.** O Main vincula a
 chave de cada provedor de síntese à origem exata e ao escopo do cofre
@@ -30,8 +47,8 @@ Regressão Windows: Core 156 PASS, Launcher 358 PASS e 2 skips,
 Stage Node 2.521 PASS e 4 skips, Stage Chromium 54 PASS. Build e typecheck
 do Stage passaram. O relatório da rodada registra as duas falhas iniciais
 corrigidas e os avisos observados nas suítes.
-Restam os vínculos de destino de chat e STT, SEC-04, OIDC integrado,
-G-AUD e G-ARCH. A síntese com provedor externo segue NOT RUN.
+Restam os consumidores legados, OIDC integrado, G-AUD e G-ARCH.
+A síntese com provedor externo segue NOT RUN.
 
 **Rodada 22 — consentimento para STT no Main.** No transporte nativo
 do Stage, cada envio remoto exige aceite no diálogo da janela que

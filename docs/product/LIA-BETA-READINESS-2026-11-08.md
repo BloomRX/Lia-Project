@@ -1,5 +1,11 @@
 # Lia — prontidão para beta, 08/11/2026
 
+Atualização da Rodada 22. PASS Windows no chat nativo com credencial
+sintética e serviço em loopback, inclusive com Launcher fechado e
+reaberto. A beta segue bloqueada por consumidores legados de credenciais,
+OIDC integrado e os gates de áudio físico e arquitetura.
+[Verificações da Rodada 22](../reports/LIA-ROUND-22-IMPLEMENTATION-REPORT.md).
+
 HEAD inicial `dcd0b058483912b2047a82973e39edb1d076a344`, branch
 `arena/01a10290-lia-project`. **Classificação: Ainda bloqueada para beta.**
 O pacote privado anterior e todos os commits/evidências foram preservados.

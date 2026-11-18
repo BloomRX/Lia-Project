@@ -43,7 +43,7 @@ Os nomes abaixo são identidades persistidas existentes, não um catálogo novo.
 
 | Adaptador | Caminho e particularidades | Situação |
 | --- | --- | --- |
-| Alvo derivado padrão | Multipart, registro de chat existente, cofre Main | Main com cancelamento |
+| Alvo derivado padrão | Multipart, registro de chat existente, chave cifrada vinculada à origem e finalidade de chat | Main com cancelamento e consentimento remoto |
 | `openai-audio-transcription` | Multipart `audio/transcriptions`, Bearer | Main |
 | `openai-compatible-audio-transcription` | Mesmo protocolo, endereço/modelo escolhidos | Main |
 | `comet-api-transcription` | Mesmo protocolo multipart | Main |

@@ -11,6 +11,15 @@ Fonte: [`CURRENT-STATE.md`](CURRENT-STATE.md) §0 e §5, medido em
 
 ## Onde o projeto está
 
+18/11 — **Rodada 22, chat e credenciais.** PASS Windows no chat nativo
+com serviço local, chave sintética e perfis Electron separados. O Stage
+continuou autenticado com o Launcher fechado e pôde ser encerrado pela
+Home reaberta. PASS Windows no primeiro uso sem chave com Qwen local.
+O gate do cofre confirmou o bloqueio de leitura legada e a DACL nova.
+SEC-04 nos demais consumidores legados continua pendente, assim
+como OIDC integrado e externo, áudio físico G-AUD e C0–C8 de G-ARCH.
+[Evidências da Rodada 22](../reports/LIA-ROUND-22-IMPLEMENTATION-REPORT.md).
+
 08/11 à noite — **Beta ainda bloqueada.** Cofre e logs corrigidos, editor chat
 nativo/aliases sem retornar chave e suporte sem chave preservado, shell/config
 pt/en e lifetime da sombra revisados. As duas coletas de uma hora terminaram.

@@ -1,5 +1,12 @@
 # Credenciais — auditoria de prontidão beta, 08/11/2026
 
+**Rodada 22:** o chat Main-native e a transcrição que deriva apoio da
+conexão de chat exigem vínculo de origem, escopo e finalidade. Os dois
+processos Main abrem o mesmo cofre Windows com DPAPI `CurrentUser` e
+perfis Electron independentes. O fluxo local com chave sintética passou
+incluindo fechar e reabrir o Launcher. SEC-04 e SEC-05 nos consumidores
+legados continuam abertos. [Resultados da Rodada 22](../reports/LIA-ROUND-22-IMPLEMENTATION-REPORT.md).
+
 **Rodada 20:** o build padrão do Stage desativa OIDC. O opt-in de
 desenvolvimento preserva o caminho legado e continua sujeito à auditoria.
 Credenciais de provedores são separadas dos cinco slots legados de sessão

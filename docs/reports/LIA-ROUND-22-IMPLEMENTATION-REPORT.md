@@ -4,14 +4,20 @@
 | --- | --- | --- |
 | OIDC desligado no Stage | PASS automatizado | Flag antiga não habilita o bridge nem a persistência no Renderer desktop. |
 | OIDC pelo owner do Main | PASS focado | PKCE com owner simulado valida o sucesso sem payload. O owner de sessão também passou sua suíte própria. |
+| Validação criptográfica da identidade OIDC | PASS focado | JWKS obtido por HTTP em loopback e tokens assinados no ensaio. O owner recusa nonce inválido antes de gravar e aceita a identidade verificada. |
 | OIDC integrado aos serviços do Stage | BLOCKED | Conta, HTTP e streaming ainda precisam dos adaptadores Main ligados ao ciclo de vida do Stage. O preload continua anunciando OFF. |
 | OIDC com emissor externo | NOT RUN | Nenhum login em emissor externo executado. |
 | Consentimento STT nativo | PASS focado | Aceite por gravação antes de acesso ao cofre. Recusa, cancelamento tardio, mudança de configuração e perda da autorização da janela bloqueiam envio. |
 | STT em loopback | PASS Windows | Gate Electron de providers com IPC, cofre e serviço HTTP local. Artefatos em `Tests/artifacts/provider-runtime-electron/1794960227815/`. |
 | Alternativas de STT no Renderer desktop | PASS focado | Sem executor de gravação registrado no Main, o Stage recusa a transcrição. Web Speech e streaming legado ficam indisponíveis também nas prévias e no DevTools Aliyun. O transporte Apple Speech exclusivo de macOS ficou fora da validação Windows. |
-| SEC-04 | Pendente | Migração dos consumidores legados. |
+| SEC-04 no cofre do Stage | PASS Windows | O IPC histórico de leitura responde vazio sem abrir o cofre, inclusive com uma chave sintética em escopo legado. |
+| SEC-04 nos demais caminhos do Renderer | Pendente | Persistência e clientes legados fora do IPC do cofre ainda exigem isolamento ou migração. |
 | SEC-05 no TTS HTTP nativo do Stage | PASS Windows | Electron 43.4.1, serviço HTTP em loopback e credenciais sintéticas. |
-| SEC-05 no chat e STT com chave compartilhada | Pendente | Falta vincular as credenciais usadas por chat e pelo STT derivado da configuração de chat. |
+| SEC-05 no chat nativo e STT com chave compartilhada | PASS Windows no gate de componentes | A mesma chave de chat serve a ambos somente na origem cadastrada. |
+| Chat Launcher → Stage, perfis distintos | PASS Windows | Launcher grava no cofre cifrado e o Stage responde via SSE com serviço HTTP local e credencial sintética. |
+| Stage após fechar e reabrir o Launcher | PASS Windows | Novo envio autenticado com Launcher fechado, mesma instância reconhecida ao reabrir e parada cooperativa pela Home. |
+| Primeiro uso do Launcher sem chave | PASS Windows | Seleção explícita da IA local, descoberta, teste em texto e resposta completa no Stage com Qwen3.5-9B, sem autenticação. |
+| SEC-05 nos consumidores legados | Pendente | A validação dos transportes nativos não cobre os clientes que ainda executam no Renderer. |
 | SEC-05 nos adaptadores dedicados de gravação | PASS Windows | Electron com HTTP em loopback e chaves sintéticas. O diálogo remoto ainda é NOT RUN. |
 | G-AUD | BLOCKED | O ensaio físico e a prova de consentimento para todos os caminhos ainda faltam. |
 | G-ARCH | NOT RUN | C0–C8 aguardam execução no Windows com o build integrado. |
@@ -129,15 +135,269 @@ de consentimento está em `docs/architecture/LIA-NATIVE-TRANSCRIPTION.md`.
 | `node --test scripts/provider-runtime-electron/gate.test.mjs` no Stage | **PASS Windows**, Electron 43.4.1, 16 grupos. `Tests/artifacts/provider-runtime-electron/1794962987405/report.json` e `electron.log`. |
 
 Logs adicionais em `J:/lia-evidence/round22-stt/`, com prefixo
-`stt-binding-`. O ensaio físico G-AUD, o serviço de transcrição remoto
-e a validação de destino do STT que usa a chave de chat seguem **NOT RUN**.
+`stt-binding-`. O ensaio físico G-AUD e o serviço de transcrição remoto
+seguem **NOT RUN**.
 
-### Próximo corte de credenciais
+### Vínculo no chat nativo e no STT derivado
 
-O Stage ainda prepara credenciais de chat em duas etapas, gravando a
-chave e persistindo o registro em chamadas separadas. O
-Launcher também configura credenciais de chat pelo próprio serviço.
-O próximo corte deve coordenar a escrita do slot e do destino no Main
-antes de exigir o vínculo ao usar as chaves, contemplando os dois
-escritores e o STT derivado da configuração de chat. A compatibilidade
-com serviço local sem chave continua sendo um caso de regressão.
+Launcher e Stage gravam a chave no slot cifrado existente com origem,
+escopo e finalidade de chat. O Launcher usa a transação de configuração
+existente. No Stage, o IPC exige janela autorizada, registro persistido,
+revisão e endereço correspondentes. A revisão do cofre protege a escrita
+contra exclusão ou substituição concorrente. Os IPCs genéricos recusam
+gravar um valor vinculado enviado pelo Renderer.
+
+Chat, descoberta, teste de conexão e STT derivado verificam a origem
+antes de autenticar. O consentimento remoto de STT continua sendo
+solicitado antes da consulta à chave. Entradas antigas ficam no cofre
+e precisam ser informadas novamente. Configurações sem chave continuam
+disponíveis. A configuração de chat e o resultado de prontidão enviados
+ao Renderer contêm apenas a presença de uma credencial utilizável.
+
+#### Ensaios integrados Windows
+
+- **PASS** em 16 grupos do gate Electron 43.4.1 com HTTP em loopback.
+  Confirmou chat, STT com a mesma chave e nenhuma requisição ao
+  trocar a origem. O runner registrou as sentinelas ausentes do log.
+  Evidência em `Tests/artifacts/provider-runtime-electron/1795014326176/`.
+  Uma tentativa anterior falhou com timeout na captura de tela. A
+  repetição passou com o mesmo limite.
+- **PASS** no Launcher real, com conexão salva, descoberta de modelo e
+  round-trip de ferramenta pelo serviço HTTP sintético.
+- **FAIL** no fluxo `node Tests/windows/completion-runtime.mjs`. A
+  primeira tentativa encontrou seletores obsoletos no roteiro. Com os
+  seletores corrigidos, o Launcher abriu o Stage, mas o Stage consultava
+  configuração e transportes no perfil Chromium separado. Corrigi a
+  leitura para usar a pasta do produto no modo gerenciado. O Stage
+  preserva a recuperação de configuração do modo avulso e deixa
+  arquivos canônicos inválidos disponíveis para recuperação.
+- A repetição confirmou que o Stage passou a carregar a seleção
+  canônica. A mensagem continuou sem chegar ao serviço. A prova no
+  Electron, usando o cofre sintético do ensaio, confirmou que
+  `safeStorage` está disponível no perfil Stage e falha ao decifrar a
+  entrada gravada pelo Launcher. Evidências em
+  `J:/lia-evidence/round22-stt/completion-resume-runtime-1795015211637/`,
+  incluindo `report.json` e `stage-cipher-probe-result.json`.
+- Um ensaio isolado do DPAPI de usuário protegeu uma sentinela em
+  um processo PowerShell e abriu em outro, com recusa quando o contexto
+  de proteção divergiu. Artefato em
+  `J:/lia-evidence/round22-stt/shared-cipher-smoke-005fcdd697684ac1a9d727cac370bdf1/result.json`.
+  Esse ensaio usa somente dados sintéticos e fica fora do runtime.
+
+#### Regressão automatizada deste corte
+
+- O Core passou com 156 testes. O Launcher passou com 362 testes
+  e 2 skips. A integridade do runner Electron passou com 22 testes.
+- O Stage passou por projeto com 2.532 testes Node e 4 skips,
+  além de 54 testes Chromium. O recorte de pasta canônica passou
+  com 40 testes. O agregado inicial do
+  Stage apontou fixtures ainda gravadas no formato legado. Elas
+  passaram a declarar a origem de configuração independentemente
+  do endereço exercitado na chamada e mantiveram as asserções de
+  autenticação, isolamento, concorrência e cancelamento.
+- A repetição conjunta do Stage registrou 1 falha no Chromium e
+  ficou sem progresso após o erro. Encerrei apenas o Chromium do
+  próprio runner. O agregado terminou com 2.583 PASS, 4 skips,
+  1 FAIL e erro de canal do browser. O Chromium isolado passou
+  com o mesmo código. A causa da falha original permanece aberta.
+- O build e o typecheck de Launcher e Stage passaram. A dependência
+  `@proj-airi/core-agent` precisou de build após um FAIL de resolução
+  de pacote em uma repetição do Stage. O lint TypeScript e Vue e
+  `git diff --check` passaram. Logs em
+  `J:/lia-evidence/round22-stt/`, com prefixo `chat-binding-`.
+
+#### Leitura compartilhada no Windows
+
+O cofre continua no mesmo arquivo, com um perfil Chromium distinto para
+cada aplicativo. No Windows, novas entradas são cifradas com AES-256-GCM.
+A chave simétrica é protegida pelo DPAPI `CurrentUser` e acompanha a
+entrada cifrada. Os processos Main chamam o Windows PowerShell do sistema
+com entrada e saída binárias por pipe. Entradas antigas seguem no leitor
+`safeStorage` do perfil que as gravou. Uma entrada antiga ilegível no
+outro perfil ou sem vínculo de origem exige informar a chave novamente.
+As regras de autorização dos IPCs e o escopo de proteção do usuário do
+Windows continuam aplicáveis.
+
+- PASS Windows em dois processos independentes com DPAPI real, ausência
+  da sentinela no envelope cifrado e falha fechada com formato incompatível.
+  Evidência do ensaio compilado em `J:/lia-evidence/round22-stt/chat-shared-dpapi-runtime.json`.
+- PASS do primeiro envio na interface real, incluindo credencial sintética,
+  descoberta de modelo, conversa SSE, memória com opt-in e opt-out,
+  mudança de instrução de personalidade e retorno de Livre para Tamagotchi.
+  O primeiro relatório registrou FAIL do roteiro porque aguardava uma
+  mensagem transitória apesar de o supervisor informar `stopped`, com
+  código de saída 0. Evidência em
+  `J:/lia-evidence/round22-stt/completion-resume-runtime-1795016233081/report.json`.
+- Uma repetição apresentou a resposta SSE autenticada depois do fechamento
+  do Launcher. O runner falhou por esperar texto próprio do ensaio enquanto
+  a fixture devolvia a resposta padrão. O encerramento cooperativo do Stage
+  após a falha foi confirmado. Evidência em
+  `J:/lia-evidence/round22-stt/completion-resume-runtime-1795016803840/report.json`.
+- O gate integrado `node Tests/windows/completion-runtime.mjs
+  --credential-handoff` terminou com dez verificações aprovadas. Usou
+  o endpoint de controle autenticado para confirmar a mesma instância
+  do Stage na Home do Launcher reaberto. O botão de encerramento ficou
+  disponível e removeu o registro da instância. Evidência em
+  `J:/lia-evidence/round22-stt/completion-resume-runtime-1795017104777/report.json`.
+- Após a coordenação das escritas, o mesmo gate passou novamente nas dez
+  verificações. Evidência em
+  `J:/lia-evidence/round22-stt/completion-resume-runtime-1795017759306/report.json`.
+- `node Tests/windows/completion-runtime.mjs --without-key` terminou com
+  FAIL na descoberta de modelos, antes da primeira requisição. O arquivo
+  do ensaio registrou o provedor Groq com `allowUnauthenticated: false`,
+  coerente com a exigência de chave do catálogo. A definição OpenAI-compatível
+  está marcada como indisponível no catálogo do Launcher. O uso de serviços
+  sem chave em testes de componentes do Stage tem evidência própria.
+  `J:/lia-evidence/round22-stt/completion-resume-runtime-1795017807026/report.json`.
+- A suíte do Launcher após a correção da Home registrou 363 PASS e 2 skips.
+- O Core de `airi/packages/lia-core` teve 383 PASS e 2 timeouts em
+  verificações estáticas de chat e Groq na primeira execução. A repetição
+  sequencial passou com 385 testes. As causas iniciais permanecem abertas.
+  Os logs usam prefixo `chat-shared-dpapi-` em `J:/lia-evidence/round22-stt/`.
+
+#### Coordenação da configuração canônica e escrita de credenciais
+
+Como os dois processos passam a usar `lia-product.json`, Launcher e Stage
+adquirem o mesmo lock de produto do sistema operacional antes de ler,
+alterar e trocar o arquivo. O cofre mantém seu próprio lock. O Stage recusa
+gravar por cima de um documento inválido em modo gerenciado. Uma gravação
+de produto falha sem substituir o destino se a gravação temporária ou a
+troca falhar. A exclusão do temporário é tentada antes de sair da transação.
+
+- PASS Windows em dois processos Node. O escritor do Launcher entrou na
+  transação só depois que o outro processo liberou o lock. A alteração de
+  personalidade e a preferência de idioma permaneceram no mesmo arquivo.
+  Evidência em `J:/lia-evidence/round22-stt/product-lock-process-MeObln/report.json`.
+  O ensaio usa o produto compilado e uma fixture de escrita na outra ponta.
+- A escrita e a adoção genéricas de chaves recusam os escopos Main-native,
+  inclusive alias protegido. O rascunho para chat e STT usa IPC dedicado que
+  vincula a chave ao destino persistido. Os escopos legados continuam sujeitos
+  à política de acesso existente. O Stage passou o recorte de 149 testes e o
+  Core de `airi/packages/lia-core` passou 386 testes sequenciais.
+- Build e typecheck de Core, Launcher e Stage passaram. A suíte final do
+  Launcher passou com 363 testes e 2 skips. `git diff --check` passou.
+  Logs com prefixo `chat-shared-config-` em `J:/lia-evidence/round22-stt/`.
+- PASS Windows no gate de componentes com Electron 43.4.1, HTTP em
+  loopback e chaves sintéticas. Os 16 grupos passaram, incluindo recusa
+  de escrita genérica antes e depois de salvar pelos IPCs dedicados.
+  A integridade do roteiro passou 22 testes. O relatório e o log do
+  Electron ficaram em `Tests/artifacts/provider-runtime-electron/1795017906850/`.
+
+#### Retomada da Rodada 22
+
+O preflight encontrou a branch `arena/7fa837f0-lia-project`, HEAD
+`602b7859aec64cee7d2252c1be75bbe9b4ba22d1` e remoto
+`f2b04ca78cfc8deed47b03461fa76904b058344b`. O índice estava vazio, com
+44 caminhos alterados e dois arquivos novos. Os commits locais
+`9fa0e47` e `602b785` contêm a cifra compartilhada e a coordenação de
+configuração. O diff herdado foi preservado fora do Git em
+`J:/lia-evidence/round22-stt/goal-resume-inherited.patch`.
+
+- Dois casos sintéticos de leitura legada falharam antes da correção.
+  Depois, o conjunto de bridge e política passou com 42 testes. O gate
+  Windows de componentes passou e inclui a recusa de leitura no escopo
+  legado com registro cifrado já gravado. Relatório em
+  `Tests/artifacts/provider-runtime-electron/1795040255540/report.json`.
+- O IPC histórico responde sem segredo e sem acessar o cofre. A presença,
+  importação e remoção seguem seus próprios contratos e controles de
+  remetente. Provedores que só executam no Renderer perdem acesso à
+  chave do cofre até receberem adaptador próprio. Outros caminhos de
+  armazenamento e configuração ainda precisam ser auditados.
+- O preflight de empacotamento privado e o runner PowerShell agora
+  verificam `out/preload/index.cjs`, o artefato produzido pelo Stage.
+  Dois testes de empacotamento e o comando `--internal-test --check`
+  passaram. Empacotamento e benchmarks ainda aguardam a nova coleta.
+
+#### Permissões e limite de confiança do cofre
+
+O volume de evidências do Windows herdava permissões de edição para
+usuários autenticados. O escritor passou a criar o temporário com uma
+DACL protegida, exclusiva para o usuário que executa o Main. O conteúdo
+cifrado passa por pipe, é escrito com acesso exclusivo e recebe flush
+antes da troca atômica. Em outros sistemas, o temporário é criado com
+modo `0600` e criação exclusiva. Arquivos antigos recebem as novas
+permissões na próxima gravação bem-sucedida.
+
+DPAPI restringe a abertura da chave de cifra ao contexto da conta Windows.
+A DACL restringe o acesso normal ao arquivo novo. Processos sob a mesma
+conta, administradores com privilégios de recuperação e máquinas
+comprometidas ficam fora desse limite. A Lia preserva as ACLs dos
+diretórios escolhidos pelo usuário. Um diretório gravável por terceiros
+continua sujeito a exclusão ou substituição do cofre; para preservar
+disponibilidade e integridade, use o diretório privado da conta.
+
+A prova isolada do Windows mostrou DACL protegida com uma regra explícita
+para a conta atual. `J:/lia-evidence/round22-stt/private-acl-B64uaQ/report.json`.
+Os 30 testes focados do cofre passaram, inclusive concorrência, abortos,
+revisões e recuperação. O isolamento por uma segunda conta Windows ainda
+não foi exercitado.
+
+O gate Electron 43.4.1 confirmou a DACL do arquivo produzido pelo cofre
+e terminou com 16/16 grupos aprovados. A verificação do log também
+passou para as sentinelas sintéticas. O primeiro ensaio de ACL falhou
+ao carregar o módulo do cmdlet `Get-Acl`. A repetição verificou a DACL
+pela API do .NET. Evidência em
+`Tests/artifacts/provider-runtime-electron/1795043788307/report.json`.
+
+#### Primeiro uso com inferência local
+
+O Launcher oferece **IA local** como escolha explícita para um serviço
+OpenAI-compatível já em execução no computador. O Main limita o endereço
+a IPs literais de loopback, valida a seleção e dispensa consulta ao cofre.
+O Stage usa o registro canônico para abrir a conversa. Este caminho
+envia texto pelo Main sem ferramentas nem autenticação. A interface
+indica o que preparar quando o serviço ou modelo estiver indisponível.
+
+O primeiro ensaio com Qwen encontrou duas falhas separadas. A ativação
+tentou registrar o identificador local em um catálogo externo ao
+transporte nativo. Depois da correção, o pedido chegou ao modelo, mas
+excedeu 4.096 tokens de contexto pelo volume combinado de instruções
+e definições de ferramentas. Com 8.192 tokens, a avaliação do prompt
+chegou ao limite de tempo já vigente do transporte. A rota de texto
+passou a omitir as definições de ferramentas. O prazo do transporte
+permaneceu igual.
+
+**PASS Windows real.** Com o servidor local de ensaio `llama.cpp` e
+`Qwen3.5-9B-Q4_K_M.gguf`, contexto de 8.192 tokens e modo texto, a
+descoberta e o teste de texto passaram. O Stage exibiu a resposta
+completa e o Launcher encerrou o Stage. O runner usou um proxy HTTP
+de teste em loopback que registrou a ausência de autenticação e
+repassou o fluxo original do modelo. O proxy confirmou HTTP 200 e fim
+da transmissão. Nenhuma dependência de serviço externo foi exercitada.
+
+Comando `node Tests/windows/completion-runtime.mjs --local-endpoint=http://127.0.0.1:19081/v1`.
+Relatório local em
+`J:/lia-evidence/round22-stt/completion-resume-runtime-1795043544156/report.json`.
+A captura é evidência local e está fora do Git.
+
+#### ID token no Main
+
+O início da autenticação gera um nonce por tentativa, separado do estado
+PKCE. O owner verifica o ID token antes da primeira gravação. Na
+renovação, um novo ID token precisa identificar a mesma conta, e um
+nonce presente precisa corresponder à sessão. Carregamento, troca e
+renovação de tokens usam respostas limitadas e canceláveis. O login por
+IPC exige o frame principal da janela proprietária.
+
+As chaves públicas vêm de `/api/auth/jwks` na origem configurada no
+Main, com redirecionamentos recusados. O verificador usa `jose` e valida
+assinatura, emissor, audiência, parte autorizada, expiração e nonce.
+O ensaio HTTP local usou chaves efêmeras e tokens sintéticos assinados,
+incluindo rejeição de alterações de assinatura, emissor, público e
+conta. A suíte focada final desta etapa passou com 110 testes.
+`J:/lia-evidence/round22-stt/r22-resume-smoke-final.log`.
+O preload de produção segue desativado. O fluxo integrado e o emissor
+externo continuam pendentes.
+
+#### G-ARCH
+
+O amostrador `tools/desktop-benchmark/sample-c0-c8-windows.ps1`
+registra identidade das raízes, repetições e medições brutas. Uma prova
+curta executou uma janela de 7 s sobre o próprio PowerShell.
+`J:/lia-evidence/round22-stt/20261118T231450851Z-sampler-smoke-028294954f954f1b99fcc3936f5dbec4/`.
+Os cenários C0–C8 do produto continuam NOT RUN.
+
+Commits locais desta retomada. `5a4be91` ajusta o preload nos roteiros
+Windows, `141227c` versiona o amostrador, `dfe95e4` valida o ID token
+no Main, `e7ad3ac` restringe as permissões do cofre e `cdea7c4`
+integra a conversa local e os vínculos de credenciais.
