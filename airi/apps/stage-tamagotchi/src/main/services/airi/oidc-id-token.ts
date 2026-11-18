@@ -14,9 +14,10 @@ export type VerifyOidcIdToken = (token: string | undefined, expected: { nonce?: 
 export function createOidcIdTokenVerifier(options: { origin: URL, clientId: string, fetch?: typeof fetch, now?: () => number }): VerifyOidcIdToken {
   const { origin, clientId } = options
   const local = ['127.0.0.1', '[::1]'].includes(origin.hostname)
-  if (!(origin.protocol === 'https:' || (origin.protocol === 'http:' && local))
-    || origin.username || origin.password || origin.pathname !== '/' || origin.search || origin.hash || !clientId)
+  if ((origin.protocol !== 'https:' && (origin.protocol !== 'http:' || !local))
+    || origin.username || origin.password || origin.pathname !== '/' || origin.search || origin.hash || !clientId) {
     throw new Error('Invalid desktop OIDC issuer')
+  }
 
   const issuer = new URL('/api/auth', origin).href
   const jwksUrl = new URL('/api/auth/jwks', origin)
@@ -48,8 +49,9 @@ export function createOidcIdTokenVerifier(options: { origin: URL, clientId: stri
       || typeof payload.sub !== 'string' || !payload.sub || payload.sub.length > 1024
       || typeof payload.iat !== 'number' || !Number.isSafeInteger(payload.iat) || payload.iat > Math.floor(now() / 1000)
       || (checkNonce && payload.nonce !== expected.nonce)
-      || (expected.subject !== undefined && payload.sub !== expected.subject))
+      || (expected.subject !== undefined && payload.sub !== expected.subject)) {
       throw new Error('OIDC identity claims were invalid')
+    }
     verificationSignal.throwIfAborted()
     return { subject: payload.sub }
   }
