@@ -2,6 +2,7 @@ import { chmod, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { bindCredential } from '@lia/contracts/credentials/destination'
 import {
   brainRequirementForChatTurn,
   createProductionBrainAutomaticPolicy,
@@ -106,7 +107,7 @@ describe('conversar() - managed Brain routing default (Phase 8.0D-M2)', () => {
     const home = await makeLiaHome({ productConfig: groqDoc() })
     const events: Array<{ detail?: string, event: string }> = []
     const { docAtStart, host, startedWith } = await hostFor(home, events)
-    await host.vault.setSecret('groq', 'apiKey', SECRET)
+    await host.vault.setSecret('groq', 'apiKey', bindCredential('groq', new URL('https://api.groq.com'), SECRET, 'chat'))
 
     // The document this install really has: no routing mode at all.
     expect((await readDoc(home)).brain).toBeUndefined()
@@ -142,7 +143,7 @@ describe('conversar() - managed Brain routing default (Phase 8.0D-M2)', () => {
     const home = await makeLiaHome({ productConfig: groqDoc({ mode: 'disabled' }) })
     const events: Array<{ detail?: string, event: string }> = []
     const { host, startedWith } = await hostFor(home, events)
-    await host.vault.setSecret('groq', 'apiKey', SECRET)
+    await host.vault.setSecret('groq', 'apiKey', bindCredential('groq', new URL('https://api.groq.com'), SECRET, 'chat'))
 
     const before = await readFile(join(home.userData, 'lia-product.json'), 'utf8')
     await host.conversar()
@@ -162,7 +163,7 @@ describe('conversar() - managed Brain routing default (Phase 8.0D-M2)', () => {
     })
     const events: Array<{ detail?: string, event: string }> = []
     const { host, startedWith } = await hostFor(home, events)
-    await host.vault.setSecret('groq', 'apiKey', SECRET)
+    await host.vault.setSecret('groq', 'apiKey', bindCredential('groq', new URL('https://api.groq.com'), SECRET, 'chat'))
 
     const before = await readFile(join(home.userData, 'lia-product.json'), 'utf8')
     await host.conversar()
@@ -182,7 +183,7 @@ describe('conversar() - managed Brain routing default (Phase 8.0D-M2)', () => {
     const home = await makeLiaHome({ productConfig: groqDoc({ mode: 'automatic' }) })
     const events: Array<{ detail?: string, event: string }> = []
     const { host, startedWith } = await hostFor(home, events)
-    await host.vault.setSecret('groq', 'apiKey', SECRET)
+    await host.vault.setSecret('groq', 'apiKey', bindCredential('groq', new URL('https://api.groq.com'), SECRET, 'chat'))
 
     const before = await readFile(join(home.userData, 'lia-product.json'), 'utf8')
     await host.conversar()
@@ -198,7 +199,7 @@ describe('conversar() - managed Brain routing default (Phase 8.0D-M2)', () => {
     const home = await makeLiaHome({ productConfig: groqDoc() })
     const events: Array<{ detail?: string, event: string }> = []
     const { host, startedWith } = await hostFor(home, events)
-    await host.vault.setSecret('groq', 'apiKey', SECRET)
+    await host.vault.setSecret('groq', 'apiKey', bindCredential('groq', new URL('https://api.groq.com'), SECRET, 'chat'))
 
     await host.conversar()
     const afterFirst = await readFile(join(home.userData, 'lia-product.json'), 'utf8')
@@ -246,7 +247,7 @@ describe('conversar() - managed Brain routing default (Phase 8.0D-M2)', () => {
     const home = await makeLiaHome({ productConfig: groqDoc() })
     const events: Array<{ detail?: string, event: string }> = []
     const { host, startedWith } = await hostFor(home, events)
-    await host.vault.setSecret('groq', 'apiKey', SECRET)
+    await host.vault.setSecret('groq', 'apiKey', bindCredential('groq', new URL('https://api.groq.com'), SECRET, 'chat'))
 
     const before = await readFile(join(home.userData, 'lia-product.json'), 'utf8')
 
@@ -295,7 +296,7 @@ describe('conversar() - managed Brain routing default (Phase 8.0D-M2)', () => {
     const home = await makeLiaHome({ productConfig: groqDoc() })
     const events: Array<{ detail?: string, event: string }> = []
     const { host } = await hostFor(home, events)
-    await host.vault.setSecret('groq', 'apiKey', SECRET)
+    await host.vault.setSecret('groq', 'apiKey', bindCredential('groq', new URL('https://api.groq.com'), SECRET, 'chat'))
 
     await host.conversar()
 
@@ -349,7 +350,7 @@ describe('conversar() - managed Brain routing default (Phase 8.0D-M2)', () => {
     const home = await makeLiaHome({ productConfig: groqDoc() })
     const events: Array<{ detail?: string, event: string }> = []
     const { host, startedWith } = await hostFor(home, events)
-    await host.vault.setSecret('groq', 'apiKey', SECRET)
+    await host.vault.setSecret('groq', 'apiKey', bindCredential('groq', new URL('https://api.groq.com'), SECRET, 'chat'))
 
     // 1. The normal product flow, end to end, with nothing pre-declared.
     expect((await readDoc(home)).brain).toBeUndefined()

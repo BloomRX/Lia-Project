@@ -99,7 +99,7 @@ describe('explicit replacement of a credential from another profile', () => {
     expect(await f.service.save({ providerId: 'groq', baseUrl: GROQ_URL, apiKey: 'new-synthetic', revision: 0 })).toMatchObject({ ok: true })
     expect(read).not.toHaveBeenCalled()
     read.mockRestore()
-    expect(f.vault.getSecret('groq', 'apiKey')).toBe('new-synthetic')
+    expect(f.vault.getSecret('groq', 'apiKey')).toBe(bindCredential('groq', new URL(GROQ_URL), 'new-synthetic', 'chat'))
   })
   it('restores the opaque old entry if saving the selection fails', async () => {
     const f = await fixture()
@@ -128,10 +128,13 @@ describe('explicit replacement of a credential from another profile', () => {
 })
 
 describe('launcher real AI connection', () => {
-  it('does not send a bound value from a previous transport at the same scope', async () => {
+  it.each([
+    bindCredential('groq', new URL('https://speech.invalid'), 'synthetic-recording-key', 'transcription'),
+    bindCredential('groq', new URL('https://api.groq.com:444'), 'synthetic-other-port', 'chat'),
+    'synthetic-legacy-key',
+  ])('does not send a credential that is unbound for the connection', async (value) => {
     const f = await fixture()
     expect(await f.service.save({ providerId: 'groq', baseUrl: GROQ_URL, apiKey: 'synthetic-chat-key', modelId: 'chosen', revision: 0 })).toMatchObject({ ok: true })
-    const value = bindCredential('groq', new URL('https://speech.invalid'), 'synthetic-recording-key', 'transcription')
     expect(await f.vault.setSecret('groq', 'apiKey', value)).toBe(true)
     const fetch = vi.fn<typeof globalThis.fetch>()
     const service = createAiConnectionService({ ...f.deps, fetch })
@@ -288,7 +291,7 @@ describe('launcher real AI connection', () => {
     f.saveSelection.mockRejectedValueOnce(new Error('sensitive upstream error'))
     expect(await f.service.save({ providerId: 'groq', baseUrl: 'https://new.invalid/v1', apiKey: 'new-private', modelId: 'new-model', revision: 2, confirmHostChange: true })).toEqual({ ok: false, code: 'storage' })
     expect(await f.service.read('groq')).toMatchObject({ baseUrl: 'https://old.invalid/v1', modelId: 'old-model' })
-    expect(f.vault.getSecret('groq', 'apiKey')).toBe('old-private')
+    expect(f.vault.getSecret('groq', 'apiKey')).toBe(bindCredential('groq', new URL('https://old.invalid/v1'), 'old-private', 'chat'))
   })
 
   it('rejects credential-bearing addresses, insecure remote HTTP and unrecognized fields', async () => {
@@ -356,11 +359,11 @@ describe('launcher real AI connection', () => {
     await entered
     const save = service.save({ providerId: 'groq', baseUrl: 'https://second.invalid/v1', apiKey: 'second-private', revision: 2, confirmHostChange: true })
     await Promise.resolve()
-    expect(f.vault.getSecret('groq', 'apiKey')).toBe('first-private')
+    expect(f.vault.getSecret('groq', 'apiKey')).toBe(bindCredential('groq', new URL('https://first.invalid/v1'), 'first-private', 'chat'))
     respond(new Response(JSON.stringify({ data: [] })))
     expect(await request).toEqual({ ok: true, models: [] })
     expect(await save).toMatchObject({ ok: true })
-    expect(f.vault.getSecret('groq', 'apiKey')).toBe('second-private')
+    expect(f.vault.getSecret('groq', 'apiKey')).toBe(bindCredential('groq', new URL('https://second.invalid/v1'), 'second-private', 'chat'))
   })
 
   it('fails closed on duplicate provider rows and never changes the vault', async () => {
@@ -403,11 +406,11 @@ describe('launcher AI Settings MVP (PROMPT-39)', () => {
     const f = await fixture()
     expect(await f.service.read('groq')).toMatchObject({ hasKey: false, selected: false, definitionId: 'groq', stageProviderId: 'groq', engineId: 'groq' })
     await f.service.save({ providerId: 'groq', baseUrl: GROQ_URL, apiKey: 'first-private', revision: 0 })
-    expect(f.vault.getSecret('groq', 'apiKey')).toBe('first-private')
+    expect(f.vault.getSecret('groq', 'apiKey')).toBe(bindCredential('groq', new URL(GROQ_URL), 'first-private', 'chat'))
     expect(JSON.stringify(await f.service.read('groq'))).not.toContain('first-private')
     const state = await f.service.read('groq')
     await f.service.save({ providerId: 'groq', baseUrl: GROQ_URL, apiKey: 'second-private', revision: state.revision })
-    expect(f.vault.getSecret('groq', 'apiKey')).toBe('second-private')
+    expect(f.vault.getSecret('groq', 'apiKey')).toBe(bindCredential('groq', new URL(GROQ_URL), 'second-private', 'chat'))
     expect(JSON.stringify(await f.service.read('groq'))).not.toContain('second-private')
     // The key is in the vault, never in the transport document.
     expect(await readFile(f.file, 'utf8')).not.toContain('second-private')
@@ -479,10 +482,10 @@ describe('launcher AI Settings MVP (PROMPT-39)', () => {
     expect(await f.service.save({ providerId: 'groq', baseUrl: 'https://proxy.invalid/v1', apiKey: 'new-private', revision: 2 })).toEqual({ ok: false, code: 'unconfirmed-host' })
     // Confirmation without a fresh credential is refused too.
     expect(await f.service.save({ providerId: 'groq', baseUrl: 'https://proxy.invalid/v1', revision: 2, confirmHostChange: true })).toEqual({ ok: false, code: 'credentials' })
-    expect(f.vault.getSecret('groq', 'apiKey')).toBe('stored-private')
+    expect(f.vault.getSecret('groq', 'apiKey')).toBe(bindCredential('groq', new URL(GROQ_URL), 'stored-private', 'chat'))
     // Explicit confirmation + fresh credential moves the connection.
     expect(await f.service.save({ providerId: 'groq', baseUrl: 'https://proxy.invalid/v1', apiKey: 'new-private', revision: 2, confirmHostChange: true })).toMatchObject({ ok: true })
-    expect(f.vault.getSecret('groq', 'apiKey')).toBe('new-private')
+    expect(f.vault.getSecret('groq', 'apiKey')).toBe(bindCredential('groq', new URL('https://proxy.invalid/v1'), 'new-private', 'chat'))
     expect((await f.service.read('groq')).baseUrl).toBe('https://proxy.invalid/v1')
   })
 
@@ -548,5 +551,64 @@ describe('launcher AI Settings MVP (PROMPT-39)', () => {
     const policy = createProductionBrainAutomaticPolicy()
     expect(policy.routes.some(route => route.engineId === groq?.engineId)).toBe(true)
     expect(policy.routes.some(route => route.modelId === 'openai/gpt-oss-120b')).toBe(true)
+  })
+})
+
+describe('launcher local chat', () => {
+  const definition = LIA_AI_PROVIDER_CATALOG.find(provider => provider.localOnly)!
+  const providerId = definition.definitionId
+  const stageProviderId = definition.stageProviderId!
+
+  it('saves a local record without a key and checks discovery and text over HTTP', async () => {
+    const f = await fixture()
+    await f.vault.setSecret(stageProviderId, 'apiKey', 'unrelated-synthetic-key')
+    const changes = vi.spyOn(f.vault, 'changeSecret')
+    const reads = vi.spyOn(f.vault, 'getSecret')
+    const presenceChecks = vi.spyOn(f.vault, 'hasSecret')
+    const requests: { path: string, body: unknown, authorization?: string }[] = []
+    const baseUrl = await httpFixture((path, body, authorization) => {
+      requests.push({ path, body, authorization })
+      return path === '/v1/models'
+        ? { data: [{ id: 'local-text-model' }] }
+        : { choices: [{ message: { content: 'Olá!' } }] }
+    })
+    expect(await f.service.save({ providerId, baseUrl, revision: 0 })).toMatchObject({ ok: true, state: { selected: false, hasKey: false } })
+    expect(await f.service.discover(providerId)).toMatchObject({ ok: true, models: [{ id: 'local-text-model' }] })
+    expect(await f.service.save({ providerId, baseUrl, modelId: 'local-text-model', revision: 2 })).toMatchObject({ ok: true, state: { selected: true, hasKey: false } })
+    expect(await f.service.getStartReadiness()).toEqual({ ok: true, managed: true, providerId: stageProviderId, modelId: 'local-text-model' })
+    expect(await f.service.probe(providerId)).toEqual({ ok: true })
+    expect((await f.repository.read()).records[0]).toMatchObject({
+      providerId: stageProviderId,
+      protocol: 'chat-completions',
+      adapterOptions: { localOnly: true, allowUnauthenticated: true },
+    })
+    expect(requests).toEqual([
+      { path: '/v1/models', body: undefined, authorization: undefined },
+      { path: '/v1/chat/completions', body: { model: 'local-text-model', messages: [{ role: 'user', content: expect.any(String) }], stream: false }, authorization: undefined },
+    ])
+    expect(changes).not.toHaveBeenCalled()
+    expect(reads).not.toHaveBeenCalled()
+    expect(presenceChecks).not.toHaveBeenCalled()
+  })
+
+  it('rejects remote addresses and supplied keys before persisting a connection', async () => {
+    const f = await fixture()
+    const input = { providerId, revision: 0, confirmHostChange: true }
+    for (const baseUrl of ['https://remote.invalid/v1', 'http://localhost:1234/v1', 'https://127.0.0.1.invalid/v1'])
+      expect(await f.service.save({ ...input, baseUrl })).toEqual({ ok: false, code: 'local-endpoint' })
+    expect(await f.service.save({ ...input, baseUrl: definition.baseUrl, apiKey: 'synthetic-key' })).toEqual({ ok: false, code: 'local-credential' })
+    expect((await f.repository.read()).records).toEqual([])
+  })
+
+  it('blocks a saved destination outside loopback before readiness and probes', async () => {
+    const f = await fixture()
+    const fetch = vi.fn<typeof globalThis.fetch>()
+    const service = createAiConnectionService({ ...f.deps, fetch })
+    expect(await service.save({ providerId, baseUrl: definition.baseUrl, modelId: 'local-text-model', revision: 0 })).toMatchObject({ ok: true })
+    const { records, revision } = await f.repository.read()
+    await f.repository.mutate({ kind: 'put', expectedRevision: revision, record: { ...records[0], baseUrl: 'https://remote.invalid/v1' } })
+    expect(await service.getStartReadiness()).toEqual({ ok: false, code: 'connection-inconsistent' })
+    expect(await service.probe(providerId)).toEqual({ ok: false, code: 'unconfigured' })
+    expect(fetch).not.toHaveBeenCalled()
   })
 })

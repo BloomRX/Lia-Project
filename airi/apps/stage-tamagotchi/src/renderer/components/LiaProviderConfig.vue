@@ -159,7 +159,7 @@ function invalidateTest() {
 async function storeKeys(): Promise<boolean> {
   const pk = apiKey.value.trim()
   if (pk) {
-    const ok = await store.setApiKey(providerId.value, pk)
+    const ok = await store.setApiKey(providerId.value, pk, baseUrl.value.trim() || undefined)
     if (!ok) {
       toast.error(tt('errors.keyStoreUnavailable'))
       return false

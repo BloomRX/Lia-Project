@@ -1,7 +1,10 @@
 import type { TransportMutation, TransportSnapshot } from '@lia/contracts/transports'
 
+import type { LiaTransportCredentialSave } from '../../../shared/eventa/lia-transport-credentials'
+
 import { EventEmitter } from 'node:events'
 
+import { bindCredential, credentialForDestination } from '@lia/contracts/credentials/destination'
 import { getActivePinia } from 'pinia'
 
 import { createLiaTransportExecutionService } from '../../../main/services/lia/transport-execution-service'
@@ -10,6 +13,8 @@ import { createLiaTransportExecutionService } from '../../../main/services/lia/t
 const states = new WeakMap<object, TransportSnapshot>()
 type VaultResolver = (payload: { scope: string, key: string }) => Promise<string | undefined>
 const vaultResolvers = new WeakMap<object, VaultResolver>()
+const chatKeys = new WeakMap<object, Map<string, string>>()
+const chatWrites = new WeakMap<object, (input: LiaTransportCredentialSave) => Promise<boolean>>()
 const executions = new WeakMap<object, ReturnType<typeof createLiaTransportExecutionService>>()
 const owners = new WeakMap<object, EventEmitter & { id: number, isDestroyed: () => boolean }>()
 const emptySnapshot = (): TransportSnapshot => ({ schemaVersion: 1, revision: 0, records: [], tombstones: [], migration: { version: 1, imported: [] } })
@@ -34,6 +39,28 @@ export function setTransportTestVaultResolver(owner: object, resolver: VaultReso
   vaultResolvers.set(owner, resolver)
 }
 
+export function setTransportTestChatWriter(owner: object, writer: (input: LiaTransportCredentialSave) => Promise<boolean>) {
+  chatWrites.set(owner, writer)
+}
+
+/** A new renderer can attach to the same fake Main without re-entering credentials. */
+export function reconnectTransportTestMain(previousRenderer: object, nextRenderer: object) {
+  const snapshot = states.get(previousRenderer)
+  if (snapshot)
+    states.set(nextRenderer, structuredClone(snapshot))
+  const saved = chatKeys.get(previousRenderer)
+  if (saved)
+    chatKeys.set(nextRenderer, new Map(saved))
+}
+
+/** Simulates a key previously saved for a known address, independent of later record edits. */
+export function setTransportTestChatVaultResolver(owner: object, resolver: VaultResolver, address: string | ((scope: string) => string)) {
+  setTransportTestVaultResolver(owner, async (payload) => {
+    const value = await resolver(payload)
+    return value ? bindCredential(payload.scope, new URL(typeof address === 'string' ? address : address(payload.scope)), value, 'chat') : undefined
+  })
+}
+
 function executionFor(owner: object) {
   let service = executions.get(owner)
   if (!service) {
@@ -41,7 +68,10 @@ function executionFor(owner: object) {
     owners.set(owner, emitter)
     service = createLiaTransportExecutionService({
       repository: { read: async () => structuredClone(states.get(owner) ?? emptySnapshot()) },
-      vault: { getSecret: (scope: string, key: string) => vaultResolvers.get(owner)?.({ scope, key }) } as Parameters<typeof createLiaTransportExecutionService>[0]['vault'],
+      vault: { getSecret: async (scope: string, key: string) => {
+        const value = await vaultResolvers.get(owner)?.({ scope, key })
+        return chatKeys.get(owner)?.get(scope) ?? value
+      } } as unknown as Parameters<typeof createLiaTransportExecutionService>[0]['vault'],
       fetch: (...args) => globalThis.fetch(...args),
     })
     executions.set(owner, service)
@@ -50,6 +80,29 @@ function executionFor(owner: object) {
 }
 
 export function transportTestInvoke(id: string) {
+  if (id.startsWith('eventa:invoke:lia:chat-credential:')) {
+    return async (payload: { providerId: string, revision?: number, expectedBaseUrl?: string, apiKey?: string }) => {
+      const owner = getActivePinia()!
+      const state = states.get(owner)
+      const record = state?.records.find(record => record.providerId === payload.providerId)
+      if (!record?.enabled || record.protocol !== 'chat-completions')
+        return false
+      const base = new URL(record.baseUrl)
+      if (id.endsWith(':has-receive')) {
+        const value = chatKeys.get(owner)?.get(payload.providerId) ?? await vaultResolvers.get(owner)?.({ scope: payload.providerId, key: 'apiKey' })
+        return !!credentialForDestination(value, payload.providerId, base, 'chat')
+      }
+      if (payload.revision !== state?.revision || payload.expectedBaseUrl !== record.baseUrl || !payload.apiKey)
+        return false
+      const writer = chatWrites.get(owner)
+      if (writer && !await writer({ providerId: payload.providerId, revision: payload.revision!, expectedBaseUrl: payload.expectedBaseUrl, apiKey: payload.apiKey }))
+        return false
+      const keys = chatKeys.get(owner) ?? new Map<string, string>()
+      keys.set(payload.providerId, bindCredential(payload.providerId, base, payload.apiKey, 'chat'))
+      chatKeys.set(owner, keys)
+      return true
+    }
+  }
   if (id.startsWith('eventa:invoke:lia:transport:')) {
     return async (payload: never) => {
       const execution = executionFor(getActivePinia()!)

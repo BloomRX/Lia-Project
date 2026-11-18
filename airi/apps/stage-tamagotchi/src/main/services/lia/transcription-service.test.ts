@@ -136,7 +136,7 @@ describe('main-process transcription', () => {
     })
     const service = createLiaTranscriptionService({
       repository: { read: async () => snapshot([record({ baseUrl })]) },
-      vault: { getSecret: (scope: string, key: string) => scope === 'groq' && key === 'apiKey' ? SECRET : undefined } as never,
+      vault: { getSecret: (scope: string, key: string) => scope === 'groq' && key === 'apiKey' ? bindCredential(scope, new URL(baseUrl), SECRET, 'chat') : undefined } as never,
     })
 
     const outcome = await service.transcribe(request)
@@ -161,7 +161,7 @@ describe('main-process transcription', () => {
     })
     const service = createLiaTranscriptionService({
       repository: { read: async () => snapshot([record({ baseUrl })]) },
-      vault: { getSecret: () => SECRET } as never,
+      vault: { getSecret: () => bindCredential('groq', new URL(baseUrl), SECRET, 'chat') } as never,
     })
 
     const outcome = await service.transcribe({
@@ -225,7 +225,7 @@ describe('main-process transcription', () => {
     })
     const service = createLiaTranscriptionService({
       repository: { read: async () => snapshot([record({ baseUrl })]) },
-      vault: { getSecret: () => SECRET } as never,
+      vault: { getSecret: () => bindCredential('groq', new URL(baseUrl), SECRET, 'chat') } as never,
     })
     const outcome = await service.transcribe(request)
     expect(outcome).toEqual({ ok: false, code: 'credentials', status: 401 })
@@ -239,7 +239,7 @@ describe('main-process transcription', () => {
     })
     const service = createLiaTranscriptionService({
       repository: { read: async () => snapshot([record({ baseUrl })]) },
-      vault: { getSecret: () => SECRET } as never,
+      vault: { getSecret: () => bindCredential('groq', new URL(baseUrl), SECRET, 'chat') } as never,
     })
     expect(await service.transcribe(request)).toEqual({ ok: false, code: 'protocol' })
   })
@@ -251,7 +251,7 @@ describe('main-process transcription', () => {
     })
     const service = createLiaTranscriptionService({
       repository: { read: async () => snapshot([record({ baseUrl })]) },
-      vault: { getSecret: () => SECRET } as never,
+      vault: { getSecret: () => bindCredential('groq', new URL(baseUrl), SECRET, 'chat') } as never,
     })
     expect(await service.transcribe(request)).toEqual({ ok: false, code: 'protocol' })
   })
@@ -281,7 +281,7 @@ describe('main-process transcription', () => {
           record({ id: 'cerebras-ai', providerId: 'cerebras-ai', baseUrl, credentialRef: { scope: 'cerebras-ai', key: 'apiKey' } }),
         ]),
       },
-      vault: { getSecret: (scope: string) => scope === 'groq' ? 'SYNTHETIC_A' : 'SYNTHETIC_B' } as never,
+      vault: { getSecret: (scope: string) => bindCredential(scope, new URL(baseUrl), scope === 'groq' ? 'SYNTHETIC_A' : 'SYNTHETIC_B', 'chat') } as never,
     })
 
     const [a, b] = await Promise.all([
@@ -304,7 +304,7 @@ describe('main-process transcription', () => {
     })
     const service = createLiaTranscriptionService({
       repository: { read: async () => snapshot([record({ baseUrl })]) },
-      vault: { getSecret: () => SECRET } as never,
+      vault: { getSecret: () => bindCredential('groq', new URL(baseUrl), SECRET, 'chat') } as never,
     })
 
     vi.useFakeTimers()
@@ -331,7 +331,7 @@ function deferred<T>() {
 
 function cancellableFixture(fetch: typeof globalThis.fetch = vi.fn(() => new Promise<Response>(() => {}))) {
   const repository = { read: vi.fn(async () => snapshot([record({ baseUrl: 'http://127.0.0.1:1/v1/' })])) }
-  const vault = { getSecret: vi.fn(() => SECRET) } as unknown as LiaSecretVault
+  const vault = { getSecret: vi.fn(() => bindCredential('groq', new URL('http://127.0.0.1:1'), SECRET, 'chat')) } as unknown as LiaSecretVault
   return { repository, vault, fetch }
 }
 
@@ -339,6 +339,7 @@ describe('remote transcription consent', () => {
   function remoteFixture() {
     const fixture = cancellableFixture(vi.fn(async () => Response.json({ text: 'ok' })))
     fixture.repository.read.mockResolvedValue(snapshot())
+    vi.mocked(fixture.vault.getSecret).mockReturnValue(bindCredential('groq', new URL(record().baseUrl), SECRET, 'chat'))
     return fixture
   }
 
@@ -437,7 +438,7 @@ describe('transcription cancellation', () => {
     })
     const service = createLiaTranscriptionService({
       repository: { read: async () => snapshot([record({ baseUrl })]) },
-      vault: { getSecret: () => SECRET } as never,
+      vault: { getSecret: () => bindCredential('groq', new URL(baseUrl), SECRET, 'chat') } as never,
     })
     const controller = new AbortController()
     const pending = service.transcribe(request, controller.signal)
@@ -528,6 +529,7 @@ describe('transcription IPC ownership', () => {
     }
     const fixture = bridgeFixture(allowed, approve)
     fixture.repository.read.mockResolvedValue(snapshot())
+    vi.mocked(fixture.vault.getSecret).mockReturnValue(bindCredential('groq', new URL(record().baseUrl), SECRET, 'chat'))
     const outcome = await fixture.run({ ...request, requestId: randomUUID() })
     expect(outcome).toEqual({ ok: false, code: 'cancelled' })
     expect(fixture.vault.getSecret).not.toHaveBeenCalled()

@@ -4,7 +4,7 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { createContext } from '@moeru/eventa/adapters/electron/main'
-import { app, BrowserWindow, ipcMain, safeStorage } from 'electron'
+import { app, BrowserWindow, ipcMain } from 'electron'
 
 import { createLiaProductConfig } from '../../src/main/configs/lia'
 import { registerLiaProviderConfigBridge } from '../../src/main/services/lia/provider-config-service'
@@ -27,8 +27,8 @@ app.setName('Lia provider integration fixture')
 const metrics = { mainPid: process.pid, rendererPid: 0, encryptionAvailable: false, readScopes: [] as string[], rendererGone: [] as { reason: string, exitCode: number }[] }
 const saveMetrics = () => writeFileSync(join(root, 'main-state.json'), JSON.stringify(metrics))
 void app.whenReady().then(async () => {
-  metrics.encryptionAvailable = safeStorage.isEncryptionAvailable()
   const vault = createLiaSecretVault()
+  metrics.encryptionAvailable = vault.isEncryptionAvailable()
   const { context } = createContext(ipcMain)
   const measuredVault = {
     ...vault,

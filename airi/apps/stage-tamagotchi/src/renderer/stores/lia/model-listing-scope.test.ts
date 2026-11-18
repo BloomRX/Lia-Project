@@ -7,7 +7,7 @@ import { createApp } from 'vue'
 import { CURATED_CHAT_PROVIDER_IDS } from '../../../shared/lia/provider-catalog'
 import { createSecretAdoptHandler } from '../../services/lia/secret-adopt.fixture'
 import { createLiaTransportClient } from '../../services/lia/transport-config'
-import { setTransportTestVaultResolver } from '../../services/lia/transport-config.fixture'
+import { setTransportTestChatVaultResolver } from '../../services/lia/transport-config.fixture'
 
 /**
  * Corte B, Fase 4 — who resolves the credential for `listModels`.
@@ -88,7 +88,7 @@ beforeEach(() => {
   app.use(pinia)
   app.use(PiniaColada)
   setActivePinia(pinia)
-  setTransportTestVaultResolver(pinia, ipc.vaultGet)
+  setTransportTestChatVaultResolver(pinia, ipc.vaultGet, scope => ENDPOINTS[scope])
   // Main's vault holds the key; the renderer channel would return it only if a
   // caller asked, which is exactly what the assertions below forbid.
   ipc.vaultGet.mockResolvedValue(KEY)

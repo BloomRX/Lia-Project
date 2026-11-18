@@ -1,6 +1,8 @@
 import { chmod, readFile } from 'node:fs/promises'
 import { join, sep } from 'node:path'
 
+import { bindCredential } from '@lia/contracts/credentials/destination'
+import { createRuntimeRecord, createRuntimeRegistry, runtimeEndpointFor, startRuntimeControlServer } from '@lia/contracts/runtime'
 import { describe, expect, it } from 'vitest'
 
 import { createLiaHost } from './lia-host'
@@ -12,6 +14,43 @@ import { fixtureEnv, identityCipher, makeLiaHome } from './test-helpers'
  */
 
 describe('g. Existing Lia product config is read', () => {
+  it('shows the detached Stage on reopening and clears it after cooperative stop', async () => {
+    const home = await makeLiaHome()
+    const host = createLiaHost({ cipher: identityCipher, env: fixtureEnv(home), workspaceRoot: '/missing' })
+    const stateDir = host.runtimeControl.stateDir
+    const registry = createRuntimeRegistry(stateDir)
+    const instanceId = globalThis.crypto.randomUUID()
+    const server = await startRuntimeControlServer({
+      endpoint: runtimeEndpointFor(process.platform, stateDir, instanceId),
+      handle: async request => request.command === 'runtime.ping' ? { instanceId } : { ok: true },
+      instanceId,
+      onShutdownRequested: async () => {
+        await registry.remove(instanceId)
+        await server.close()
+      },
+    })
+
+    try {
+      await registry.publish(createRuntimeRecord({
+        appVersion: '0.0.0-test',
+        endpoint: server.endpoint,
+        instanceId,
+        pid: process.pid,
+        publicKey: server.publicKey,
+        startedBy: 'launcher',
+      }))
+      expect(host.stage.state().phase).toBe('stopped')
+      expect((await host.homeStatus()).stage.state).toMatchObject({ phase: 'running', pid: process.pid })
+      expect(await host.stageStatus()).toMatchObject({ phase: 'running', pid: process.pid })
+      expect(await host.runtimeControl.stop()).toMatchObject({ acknowledged: true, forced: false, stopped: true })
+      expect((await host.homeStatus()).stage.state.phase).toBe('stopped')
+    }
+    finally {
+      await registry.remove(instanceId)
+      await server.close()
+    }
+  })
+
   it('the snapshot surfaces persona, provider, voice, runtime and language', async () => {
     const home = await makeLiaHome()
     const host = createLiaHost({ cipher: identityCipher, env: fixtureEnv(home), workspaceRoot: '/missing' })
@@ -495,7 +534,7 @@ describe('conversar() - managed STT default (Phase 8.0D SHELL-B1)', () => {
     const home = await makeLiaHome({ productConfig: groqDoc() })
     const events: Array<{ detail?: string, event: string }> = []
     const { docAtStart, host, startedWith } = await hostFor(home, events)
-    await host.vault.setSecret('groq', 'apiKey', SECRET)
+    await host.vault.setSecret('groq', 'apiKey', bindCredential('groq', new URL('https://api.groq.com'), SECRET, 'chat'))
 
     const state = await host.conversar()
 
@@ -526,7 +565,7 @@ describe('conversar() - managed STT default (Phase 8.0D SHELL-B1)', () => {
     const home = await makeLiaHome({ productConfig: groqDoc({ stt: { preferred: chosen } }) })
     const events: Array<{ detail?: string, event: string }> = []
     const { host, startedWith } = await hostFor(home, events)
-    await host.vault.setSecret('groq', 'apiKey', SECRET)
+    await host.vault.setSecret('groq', 'apiKey', bindCredential('groq', new URL('https://api.groq.com'), SECRET, 'chat'))
 
     await host.conversar()
 
@@ -540,7 +579,7 @@ describe('conversar() - managed STT default (Phase 8.0D SHELL-B1)', () => {
     const home = await makeLiaHome({ productConfig: groqDoc({ enabled: false }) })
     const events: Array<{ detail?: string, event: string }> = []
     const { host, startedWith } = await hostFor(home, events)
-    await host.vault.setSecret('groq', 'apiKey', SECRET)
+    await host.vault.setSecret('groq', 'apiKey', bindCredential('groq', new URL('https://api.groq.com'), SECRET, 'chat'))
 
     await host.conversar()
 
@@ -585,7 +624,7 @@ describe('conversar() - managed STT default (Phase 8.0D SHELL-B1)', () => {
     const home = await makeLiaHome({ productConfig: groqDoc() })
     const events: Array<{ detail?: string, event: string }> = []
     const { host, startedWith } = await hostFor(home, events)
-    await host.vault.setSecret('groq', 'apiKey', SECRET)
+    await host.vault.setSecret('groq', 'apiKey', bindCredential('groq', new URL('https://api.groq.com'), SECRET, 'chat'))
 
     const before = await readFile(join(home.userData, 'lia-product.json'), 'utf8')
     // Make the canonical document's directory unwritable so the atomic
@@ -644,7 +683,7 @@ describe('conversar() - managed STT default (Phase 8.0D SHELL-B1)', () => {
     const home = await makeLiaHome({ productConfig: groqDoc() })
     const events: Array<{ detail?: string, event: string }> = []
     const { host, startedWith } = await hostFor(home, events)
-    await host.vault.setSecret('groq', 'apiKey', SECRET)
+    await host.vault.setSecret('groq', 'apiKey', bindCredential('groq', new URL('https://api.groq.com'), SECRET, 'chat'))
 
     await host.conversar()
     const afterFirst = await readFile(join(home.userData, 'lia-product.json'), 'utf8')

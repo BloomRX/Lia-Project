@@ -3,18 +3,29 @@ import type { LiaSecretVault } from '@lia/core/secrets/vault'
 
 import { bindCredential, credentialForDestination, unboundCredential } from '@lia/contracts/credentials/destination'
 
+import { supportsMainSpeech } from '../../../shared/lia/speech-transport'
 import { resolveMainCredential } from './credential-owner-access'
 import { serializeWrite } from './secrets-service'
 import { isNativeRecordingTranscriptionProvider, resolveTranscriptionDestination } from './transcription-adapters'
 
-export function createTranscriptionCredentialService(repository: { read: () => Promise<TransportSnapshot> }, vault: LiaSecretVault) {
+export function createTransportCredentialService(repository: { read: () => Promise<TransportSnapshot> }, vault: LiaSecretVault, purpose: 'transcription' | 'chat') {
   function recordFor(snapshot: TransportSnapshot, providerId: string) {
     const matches = snapshot.records.filter(record => record.providerId === providerId)
     const record = matches[0]
-    if (matches.length === 1 && record.enabled && record.protocol === 'audio-transcription'
-      && isNativeRecordingTranscriptionProvider(record.definitionId)) {
-      return record
-    }
+    if (matches.length !== 1 || !record.enabled)
+      return
+    const transcription = isNativeRecordingTranscriptionProvider(record.definitionId)
+    if (purpose === 'transcription')
+      return record.protocol === 'audio-transcription' && transcription ? record : undefined
+    return record.protocol === 'chat-completions' && record.adapterOptions.localOnly !== true && !transcription && !supportsMainSpeech(providerId) ? record : undefined
+  }
+
+  function destinationFor(record: NonNullable<ReturnType<typeof recordFor>>) {
+    if (purpose === 'transcription')
+      return resolveTranscriptionDestination(record)
+    const url = new URL(record.baseUrl)
+    if (url.protocol === 'https:' || (url.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)))
+      return url
   }
 
   function validInput(input: unknown, keys: string[]): input is Record<string, unknown> & { providerId: string } {
@@ -30,8 +41,8 @@ export function createTranscriptionCredentialService(repository: { read: () => P
       const record = recordFor(await repository.read(), input.providerId)
       if (!record || !vault.hasSecret(input.providerId, 'apiKey'))
         return false
-      const destination = resolveTranscriptionDestination(record)
-      return !!credentialForDestination(await resolveMainCredential(vault, input.providerId, 'apiKey'), input.providerId, destination, 'transcription')
+      const destination = destinationFor(record)
+      return !!destination && !!credentialForDestination(await resolveMainCredential(vault, input.providerId, 'apiKey'), input.providerId, destination, purpose)
     }
     catch { return false }
   }
@@ -52,8 +63,10 @@ export function createTranscriptionCredentialService(repository: { read: () => P
         const record = recordFor(snapshot, providerId)
         if (!record || snapshot.revision !== revision || record.baseUrl !== expectedBaseUrl)
           return false
-        const destination = resolveTranscriptionDestination(record)
-        const bound = bindCredential(providerId, destination, apiKey, 'transcription')
+        const destination = destinationFor(record)
+        if (!destination)
+          return false
+        const bound = bindCredential(providerId, destination, apiKey, purpose)
         if (bound.length > 16384)
           return false
         // The vault revision fences replacement or deletion from another process.

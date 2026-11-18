@@ -8,8 +8,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createApp } from 'vue'
 
 import { createNativeProviderRuntime } from '../../services/lia/native-provider-runtime'
-import { setTransportTestVaultResolver } from '../../services/lia/transport-config.fixture'
 import { createSecretAdoptHandler } from '../../services/lia/secret-adopt.fixture'
+import { setTransportTestChatVaultResolver } from '../../services/lia/transport-config.fixture'
 
 const ipc = vi.hoisted(() => ({
   chatConfig: vi.fn(async (): Promise<import('../../../shared/eventa').LiaProviderChatConfig> => ({})),
@@ -63,6 +63,7 @@ vi.mock('vue-i18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
 
 const { useLiaProviderStore } = await import('./provider')
 const KEY = 'SYNTHETIC_SECRET_NEVER_OUTPUT'
+const address = 'https://service.invalid/v1/'
 let fetchMock: ReturnType<typeof vi.fn>
 
 beforeEach(() => {
@@ -72,7 +73,7 @@ beforeEach(() => {
   app.use(pinia)
   app.use(PiniaColada)
   setActivePinia(pinia)
-  setTransportTestVaultResolver(pinia, ipc.vaultGet)
+  setTransportTestChatVaultResolver(pinia, ipc.vaultGet, address)
   ipc.vaultGet.mockResolvedValue(KEY)
   fetchMock = vi.fn(async () => new Response(JSON.stringify({ data: [{ id: 'custom/Listed:Q4' }, { id: 'custom/Listed:Q4' }] }), { status: 200 }))
   vi.stubGlobal('fetch', fetchMock)
@@ -85,7 +86,6 @@ afterEach(() => {
 })
 
 const target = { providerId: 'openai-compatible', modelId: 'custom/Native:Q4' }
-const address = 'https://service.invalid/v1/'
 
 function sse(parts: string[]) {
   const frames = parts.map(content => `data: ${JSON.stringify({ id: 'test', object: 'chat.completion.chunk', choices: [{ index: 0, delta: { content }, finish_reason: null }] })}\n\n`).join('')

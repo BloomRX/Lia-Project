@@ -9,7 +9,7 @@ import type { LiaTransportExecutionFailure, LiaTransportPullResult, LiaTransport
 import { Buffer } from 'node:buffer'
 import { randomUUID } from 'node:crypto'
 
-import { credentialForDestination, unboundCredential } from '@lia/contracts/credentials/destination'
+import { credentialForDestination } from '@lia/contracts/credentials/destination'
 import { ProviderError, ProviderRegistry, ProviderRuntime } from '@lia/contracts/providers'
 import { defineInvokeHandler } from '@moeru/eventa'
 
@@ -323,6 +323,9 @@ export function createLiaTransportExecutionService(params: { repository: Reposit
       }
       if (record.protocol !== 'chat-completions' || supportsMainSpeech(record.providerId))
         throw new ProviderError('unsupported')
+      const localOnly = record.adapterOptions.localOnly === true
+      if (localOnly && [savedUrl, draftUrl ?? savedUrl].some(address => !['127.0.0.1', '[::1]'].includes(new URL(address).hostname)))
+        throw new ProviderError('configuration')
       const registry = new ProviderRegistry()
       registry.register({ id: record.providerId, protocol: record.protocol })
       const runtime = new ProviderRuntime(registry, {
@@ -335,7 +338,13 @@ export function createLiaTransportExecutionService(params: { repository: Reposit
           // The vault is the only source. A draft can point somewhere new, but it
           // can no longer carry a secret to that address.
           try {
-            return mayUseVault ? unboundCredential(await resolveMainCredential(params.vault, record.credentialRef.scope, record.credentialRef.key, job.controller.signal)) : undefined
+            if (localOnly || !mayUseVault)
+              return undefined
+            const value = await resolveMainCredential(params.vault, record.credentialRef.scope, record.credentialRef.key, job.controller.signal)
+            const credential = credentialForDestination(value, record.credentialRef.scope, new URL(draftUrl ?? savedUrl), 'chat')
+            if (value !== undefined && !credential)
+              throw new ProviderError('credentials')
+            return credential
           }
           catch {
             throw new ProviderError('credentials')
@@ -344,8 +353,14 @@ export function createLiaTransportExecutionService(params: { repository: Reposit
       })
       job.runtime = runtime
       const config = { providerId: record.providerId, baseUrl: draftUrl ?? savedUrl, timeoutMs: request.draft ? 15000 : 30000 }
+      const body = request.body
+      if (localOnly && body) {
+        delete body.tools
+        delete body.tool_choice
+        delete body.parallel_tool_calls
+      }
       const response = request.operation === 'chat'
-        ? await race(runtime.dispatch(config, request.body!, { signal: job.controller.signal }), job)
+        ? await race(runtime.dispatch(config, body!, { signal: job.controller.signal }), job)
         : new Response(JSON.stringify({ data: await race(runtime.discover(config, { signal: job.controller.signal }), job) }), { headers: { 'content-type': 'application/json' } })
       if (job.controller.signal.aborted) {
         void response.body?.cancel().catch(() => {})

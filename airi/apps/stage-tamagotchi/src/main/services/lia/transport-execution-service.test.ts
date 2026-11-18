@@ -49,8 +49,8 @@ function fixture(fetch: typeof globalThis.fetch = vi.fn(async () => new Response
   const repository = { read: vi.fn(async () => structuredClone(snapshot)) }
   const getSecret = vi.fn((scope: string, key: string) => {
     const value = `${scope}-${key}-synthetic`
-    const configured = records.find(record => record.providerId === scope && record.protocol === 'audio-speech')
-    return configured ? bindCredential(scope, new URL(configured.baseUrl), value) : value
+    const configured = records.find(record => record.credentialRef.scope === scope)
+    return configured ? bindCredential(scope, new URL(configured.baseUrl), value, configured.protocol === 'audio-speech' ? 'speech' : 'chat') : undefined
   })
   const vault = { getSecret } as unknown as LiaSecretVault
   const service = createLiaTransportExecutionService({ repository, vault, fetch })
@@ -78,6 +78,39 @@ afterEach(() => {
 })
 
 describe('main transport execution', () => {
+  it('keeps the local-only connection off the vault and refuses a non-loopback draft', async () => {
+    const providerId = 'lm-studio'
+    const saved = { ...record(providerId, 'http://127.0.0.1:1234/v1/'), definitionId: providerId, adapterOptions: { allowUnauthenticated: true, localOnly: true } }
+    const fetch = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      expect(new Headers(init?.headers).has('authorization')).toBe(false)
+      expect(JSON.parse(String(init?.body))).toEqual(body)
+      return new Response('local-only')
+    })
+    const { service, getSecret } = fixture(fetch, [saved])
+    const sender = owner()
+    const draft = id(service.start(sender, { ...startInput(providerId), draft: { baseUrl: 'https://outside.invalid/v1/' } }))
+    expect(await service.pull(sender, { id: draft, action: 'head' })).toMatchObject({ ok: false, code: 'configuration' })
+    expect(fetch).not.toHaveBeenCalled()
+    const local = id(service.start(sender, {
+      ...startInput(providerId),
+      body: { ...body, tools: [{ type: 'function', function: { name: 'synthetic-tool' } }], tool_choice: 'auto', parallel_tool_calls: true },
+    }))
+    expect(await allBytes(service, sender, local)).toBe('local-only')
+    expect(fetch).toHaveBeenCalledOnce()
+    expect(getSecret).not.toHaveBeenCalled()
+  })
+
+  it.each(['legacy', 'other origin', 'wrong purpose'])('refuses a %s chat key before issuing HTTP', async (variant) => {
+    const { service, fetch, getSecret } = fixture()
+    const stored = variant === 'legacy'
+      ? 'legacy-synthetic'
+      : bindCredential('service-a', new URL(variant === 'other origin' ? 'https://another.invalid' : record().baseUrl), 'chat-synthetic', variant === 'wrong purpose' ? 'transcription' : 'chat')
+    getSecret.mockReturnValue(stored)
+    const sender = owner()
+    const jobId = id(service.start(sender, startInput()))
+    expect(await service.pull(sender, { id: jobId, action: 'head' })).toMatchObject({ ok: false, code: 'credentials' })
+    expect(fetch).not.toHaveBeenCalled()
+  })
   it('does not send speech to an edited destination using a key bound to the previous origin', async () => {
     const providerId = 'openai-audio-speech'
     const audioRecord: TransportRecord = { ...record(providerId), definitionId: providerId, protocol: 'audio-speech' }

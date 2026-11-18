@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { initializeManagedChat } from '../../services/lia/managed-chat-startup'
 import { createSecretAdoptHandler } from '../../services/lia/secret-adopt.fixture'
 import { createLiaTransportClient, toTransportRecord } from '../../services/lia/transport-config'
-import { setTransportTestVaultResolver } from '../../services/lia/transport-config.fixture'
+import { setTransportTestChatVaultResolver } from '../../services/lia/transport-config.fixture'
 
 /**
  * Config → runtime activation (M1 blocker fix).
@@ -129,6 +129,7 @@ describe('lia chat provider activation (M1)', () => {
     ipc.fixture(validConfig(providerId, modelId), { [providerId]: 'stored-in-main-only' })
     const transports = createLiaTransportClient()
     await transports.put(toTransportRecord(providerId, providerId, { baseUrl }, [modelId]))
+    setTransportTestChatVaultResolver(getActivePinia()!, async () => 'stored-in-main-only', baseUrl)
     const store = useLiaProviderStore()
     const consciousness = useConsciousnessStore()
     expect(consciousness.activeProvider).toBe('')
@@ -144,7 +145,6 @@ describe('lia chat provider activation (M1)', () => {
 
     // Exercise the actual Main execution fixture with the activated pair. Only
     // the HTTP edge is stubbed; the endpoint comes exclusively from persistence.
-    setTransportTestVaultResolver(getActivePinia()!, async () => 'stored-in-main-only')
     const fetch = vi.fn<typeof globalThis.fetch>(async () => new Response('data: [DONE]\n\n', { headers: { 'content-type': 'text/event-stream' } }))
     vi.stubGlobal('fetch', fetch)
     try {
@@ -166,6 +166,7 @@ describe('lia chat provider activation (M1)', () => {
 
   it('leaves the runtime unconfigured when nothing applied the config (the bug)', async () => {
     ipc.fixture(validConfig('openai', 'gpt-5.5'), { openai: 'sk-test' })
+    expect(await useLiaProviderStore().setApiKey('openai', 'sk-test', 'https://openai-fixture.invalid/v1/')).toBe(true)
     const store = useLiaProviderStore()
     const consciousness = useConsciousnessStore()
 
@@ -182,6 +183,7 @@ describe('lia chat provider activation (M1)', () => {
 
   it('activates the preferred provider and model from the persisted config', async () => {
     ipc.fixture(validConfig('openai', 'gpt-5.5'), { openai: 'sk-test' })
+    expect(await useLiaProviderStore().setApiKey('openai', 'sk-test', 'https://openai-fixture.invalid/v1/')).toBe(true)
     const store = useLiaProviderStore()
     const consciousness = useConsciousnessStore()
 
@@ -195,6 +197,7 @@ describe('lia chat provider activation (M1)', () => {
 
   it('is idempotent across repeated boots and re-activation', async () => {
     ipc.fixture(validConfig('groq', 'llama-3.3-70b-versatile'), { groq: 'gsk-test' })
+    expect(await useLiaProviderStore().setApiKey('groq', 'gsk-test', 'https://groq-fixture.invalid/v1/')).toBe(true)
     const store = useLiaProviderStore()
     const consciousness = useConsciousnessStore()
     store.registerRuntimeExtensions()
@@ -216,6 +219,25 @@ describe('lia chat provider activation (M1)', () => {
     expect(ipc.secretSet).not.toHaveBeenCalled()
     expect(consciousness.activeProvider).toBe('ollama')
     expect(consciousness.activeModel).toBe('llama3.2')
+  })
+
+  it('activates a Launcher-owned local transport without an upstream provider definition', async () => {
+    const providerId = 'local-chat'
+    const modelId = 'local-selected-model'
+    ipc.fixture(validConfig(providerId, modelId))
+    const transports = createLiaTransportClient()
+    const record = toTransportRecord(providerId, providerId, { baseUrl: 'http://127.0.0.1:19081/v1' }, [modelId])
+    record.adapterOptions = { allowUnauthenticated: true, localOnly: true }
+    await transports.put(record)
+    const store = useLiaProviderStore()
+    const selection = useConsciousnessStore()
+    store.registerRuntimeExtensions()
+
+    expect(await initializeManagedChat({ liaManaged: true, leadership: 'leader-only' } as never, store, selection)).toBe('ready')
+    expect(selection.activeProvider).toBe(providerId)
+    expect(selection.activeModel).toBe(modelId)
+    expect(ipc.secretHas).not.toHaveBeenCalled()
+    expect(ipc.secretGet).not.toHaveBeenCalled()
   })
 
   it('does not activate when a keyed provider has no stored secret', async () => {
@@ -241,6 +263,7 @@ describe('lia chat provider activation (M1)', () => {
 
   it('does not activate before onboarding is complete', async () => {
     ipc.fixture({ ...validConfig('openai', 'gpt-5.5'), onboarded: false }, { openai: 'sk-test' })
+    expect(await useLiaProviderStore().setApiKey('openai', 'sk-test', 'https://openai-fixture.invalid/v1/')).toBe(true)
     const store = useLiaProviderStore()
     const consciousness = useConsciousnessStore()
     store.registerRuntimeExtensions()
@@ -258,6 +281,7 @@ describe('lia chat provider activation (M1)', () => {
    */
   it('never resolves a curated provider key in this process, even when asked', async () => {
     ipc.fixture(validConfig('openai', 'gpt-5.5'), { openai: 'sk-from-vault' })
+    expect(await useLiaProviderStore().setApiKey('openai', 'sk-from-vault', 'https://openai-fixture.invalid/v1/')).toBe(true)
     const store = useLiaProviderStore()
     store.registerRuntimeExtensions()
 
@@ -276,6 +300,9 @@ describe('lia chat provider activation (M1)', () => {
       ...validConfig('openai', 'gpt-5.5'),
       fallback: [{ providerId: 'groq', modelId: 'llama-3.3-70b-versatile' }],
     }, { openai: 'sk-test', groq: 'gsk-test' })
+    const prepared = useLiaProviderStore()
+    expect(await prepared.setApiKey('openai', 'sk-test', 'https://openai-fixture.invalid/v1/')).toBe(true)
+    expect(await prepared.setApiKey('groq', 'gsk-test', 'https://groq-fixture.invalid/v1/')).toBe(true)
     const store = useLiaProviderStore()
     store.registerRuntimeExtensions()
 

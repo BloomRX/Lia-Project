@@ -1,5 +1,6 @@
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+
 import { createSecretAdoptHandler } from '../../services/lia/secret-adopt.fixture'
 
 /**
@@ -106,7 +107,7 @@ async function runConclude(store: ReturnType<typeof useLiaProviderStore>, args: 
   await store.refreshConfig()
 
   if (args.apiKey) {
-    expect(await store.setApiKey(args.providerId, args.apiKey)).toBe(true)
+    expect(await store.setApiKey(args.providerId, args.apiKey, 'https://openai-fixture.invalid/v1/')).toBe(true)
   }
 
   // `buildConfig()` in the component: fresh literals over the loaded config.

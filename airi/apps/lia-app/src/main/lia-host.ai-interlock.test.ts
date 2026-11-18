@@ -1,9 +1,10 @@
 import { rm } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 
+import { bindCredential, credentialForDestination } from '@lia/contracts/credentials/destination'
+import { createTransportRepository } from '@lia/contracts/transports/repository'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { createTransportRepository } from '@lia/contracts/transports/repository'
 import { createLiaHost } from './lia-host'
 import { fixtureEnv, identityCipher, makeLiaHome } from './test-helpers'
 
@@ -29,9 +30,10 @@ async function fixture() {
   const pairs: { address?: string, key?: string }[] = []
   const events: unknown[] = []
   const repository = createTransportRepository(join(home.userData, 'lia-transports.json'))
-  let readKey: () => string | undefined = () => undefined
+  let readKey: (address: string) => string | undefined = () => undefined
   const start = vi.fn(async () => {
-    pairs.push({ address: (await repository.read()).records[0]?.baseUrl, key: readKey() })
+    const address = (await repository.read()).records[0]?.baseUrl
+    pairs.push({ address, key: address ? readKey(address) : undefined })
     owned = true
     return { phase: 'running' as const, logTail: [] }
   })
@@ -48,12 +50,20 @@ async function fixture() {
     }) as never,
     workspaceRoot: '/missing',
   })
-  readKey = () => host.vault.getSecret('groq', 'apiKey')
+  readKey = address => credentialForDestination(host.vault.getSecret('groq', 'apiKey'), 'groq', new URL(address), 'chat')
   expect(await host.aiConnection.save({ providerId: 'groq', baseUrl: 'https://old.invalid/v1', apiKey: 'old-private', modelId: 'model', revision: 0, confirmHostChange: true })).toMatchObject({ ok: true })
   return { host, start, pairs, events, home }
 }
 
 describe('shared AI configuration and Stage interlock', () => {
+  it('refuses a bound credential in the generic settings batch', async () => {
+    const f = await fixture()
+    const write = vi.spyOn(f.host.vault, 'changeSecret')
+    const scope = 'custom-service'
+    const value = bindCredential(scope, new URL('https://chat.invalid'), 'synthetic-key', 'chat')
+    expect(await f.host.updateConfig({ secrets: [{ scope, key: 'apiKey', value }], update: {} })).toMatchObject({ status: 'secret-vault-failed' })
+    expect(write).not.toHaveBeenCalled()
+  })
   it.each([
     { scope: 'lia:main:oidc', key: 'session-v1' },
     { scope: 'provider\0alias', key: 'apiKey' },
@@ -108,7 +118,7 @@ describe('shared AI configuration and Stage interlock', () => {
     await starting
     expect(await saving).toEqual({ ok: false, code: 'stage-running' })
     expect(await f.host.aiConnection.read()).toMatchObject({ baseUrl: 'https://old.invalid/v1', revision: 2 })
-    expect(f.host.vault.getSecret('groq', 'apiKey')).toBe('old-private')
+    expect(credentialForDestination(f.host.vault.getSecret('groq', 'apiKey'), 'groq', new URL('https://old.invalid/v1'), 'chat')).toBe('old-private')
     expect(await f.host.aiConnection.save({ providerId: 'groq', baseUrl: 'https://new.invalid/v1', apiKey: 'new-private', revision: 2, confirmHostChange: true })).toEqual({ ok: false, code: 'stage-running' })
     await f.host.stage.stop()
     expect(await f.host.aiConnection.save({ providerId: 'groq', baseUrl: 'https://new.invalid/v1', apiKey: 'new-private', revision: 2, confirmHostChange: true })).toMatchObject({ ok: true })

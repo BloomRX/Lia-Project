@@ -1,9 +1,9 @@
 import type { LiaHost } from './lia-host'
 import type { LiaBootTimer } from './timing'
 
+import { isPublicCredentialReference } from '@lia/contracts/credentials/owner-channel'
 import { ipcMain } from 'electron'
 
-import { isPublicCredentialReference } from '@lia/contracts/credentials/owner-channel'
 import { sanitizeConfigUpdate } from './config-update-sanitizer'
 import { AiStartBlockedError } from './lia-host'
 
@@ -94,7 +94,7 @@ export function registerLiaIpc(host: LiaHost, timer: LiaBootTimer, extras: LiaIp
       return false
     return host.vault.hasSecret(providerId, 'apiKey')
   })
-  ipcMain.handle('lia:stage:state', () => host.stage.state())
+  ipcMain.handle('lia:stage:state', () => host.stageStatus())
   // PROMPT-39: the AI Settings surface. The catalog is non-secret product
   // metadata; each operation is bound to ONE catalog definition explicitly,
   // so the renderer can never silently imply a provider.
@@ -124,7 +124,7 @@ export function registerLiaIpc(host: LiaHost, timer: LiaBootTimer, extras: LiaIp
   // prazo. Fechar a janela do Launcher NÃO passa por aqui.
   ipcMain.handle('lia:stage:stop', async () => {
     const result = await host.runtimeControl.stop()
-    return { ...host.stage.state(), runtime: result }
+    return { ...await host.stageStatus(), runtime: result }
   })
   // O Runtime como processo independente: descoberta autenticada, sem PID.
   ipcMain.handle('lia:runtime:status', async () => {

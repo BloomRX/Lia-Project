@@ -12,7 +12,7 @@ import { createApp } from 'vue'
 import { CURATED_CHAT_PROVIDER_IDS } from '../../../shared/lia/provider-catalog'
 import { createSecretAdoptHandler } from '../../services/lia/secret-adopt.fixture'
 import { createLiaTransportClient } from '../../services/lia/transport-config'
-import { setTransportTestVaultResolver } from '../../services/lia/transport-config.fixture'
+import { setTransportTestChatVaultResolver } from '../../services/lia/transport-config.fixture'
 
 /**
  * PROMPT-26 — the AIRI consumers that build a chat client in the renderer.
@@ -106,7 +106,7 @@ beforeEach(() => {
   app.use(pinia)
   app.use(PiniaColada)
   setActivePinia(pinia)
-  setTransportTestVaultResolver(pinia, ipc.vaultRead)
+  setTransportTestChatVaultResolver(pinia, ipc.vaultRead, ENDPOINT)
   resetChatProviderRuntimeExtensionsForTesting()
   // Main holds the key; this renderer's channel would hand it over if asked.
   ipc.vaultRead.mockResolvedValue(SECRET)

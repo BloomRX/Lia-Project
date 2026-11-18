@@ -4,6 +4,7 @@ import { Buffer } from 'node:buffer'
 import { EventEmitter, once } from 'node:events'
 import { createServer } from 'node:http'
 
+import { bindCredential } from '@lia/contracts/credentials/destination'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { CURATED_CHAT_PROVIDER_IDS } from '../../../shared/lia/provider-catalog'
@@ -133,7 +134,10 @@ async function serve(captured: Captured[]) {
 function service(records: TransportRecord[], useDirectFetch = true) {
   // Only keyed providers have a stored secret; a local provider with one would
   // send an `Authorization` header the real application never sends.
-  const secrets = new Map(Object.entries(SECRETS).filter(([id]) => !KEYLESS.has(id)))
+  const secrets = new Map(records.filter(record => !KEYLESS.has(record.providerId)).map(record => [
+    record.providerId,
+    bindCredential(record.providerId, new URL(record.baseUrl), SECRETS[record.providerId], 'chat'),
+  ]))
   const instance = createLiaTransportExecutionService({
     repository: { read: async () => snapshot(records) },
     // Mirrors `canRendererReadLegacySecret`: every curated scope is readable BY

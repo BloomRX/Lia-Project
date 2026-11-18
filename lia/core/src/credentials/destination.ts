@@ -1,4 +1,4 @@
-type CredentialPurpose = 'speech' | 'transcription'
+type CredentialPurpose = 'speech' | 'transcription' | 'chat'
 
 /** Versioned content of an encrypted vault slot, separate from editable transport metadata. */
 export function bindCredential(scope: string, url: URL, apiKey: string, purpose: CredentialPurpose = 'speech'): string {

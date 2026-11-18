@@ -124,7 +124,7 @@ async function stopMonitor() {
  * It skips itself outside Windows because the teardown proof enumerates
  * processes with `Get-CimInstance` and launches `dist/electron.exe`.
  */
-test('Electron real: production IPC, encrypted vault and native provider runtime against local HTTP', { skip: process.platform !== 'win32' && 'Requires Windows for the real safeStorage gate', timeout: 180000 }, async (t) => {
+test('Electron real: production IPC, encrypted vault and native provider runtime against local HTTP', { skip: process.platform !== 'win32' && 'Requires the Windows credential protection backend', timeout: 180000 }, async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'lia-provider-electron-'))
   const artifacts = join(repo, 'Tests/artifacts/provider-runtime-electron', `${Date.now()}`)
   await mkdir(artifacts, { recursive: true })
@@ -213,7 +213,7 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
       response.writeHead(401, { 'content-type': 'application/json' }).end('{}')
       return
     }
-    if (segment === transcriptionProvider && path.endsWith('/audio/transcriptions')) {
+    if ((segment === transcriptionProvider || segment === 'groq') && path.endsWith('/audio/transcriptions')) {
       entry.validTranscription = multipart && data.model === 'fixture-transcription'
         && body.includes('name="file"; filename="fixture.wav"')
         && body.includes('Content-Type: audio/wav')
@@ -351,19 +351,33 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
     let page = await launch()
     groups.begin(1)
     assert.equal(await page.evaluate(() => window.providerGate.encryptionAvailable()), true)
-    await page.evaluate(async ({ generic, local }) => {
-      if (!await window.providerGate.seed('openai-compatible', generic) || !await window.providerGate.seed('lm-studio', local))
-        throw new Error('Could not seed synthetic fixture credentials')
-    }, secrets)
-    for (const id of ['openai-compatible', 'lm-studio'])
+    assert.equal(await page.evaluate(value => window.providerGate.seed('fixture-legacy-scope', value), secrets.generic), true)
+    assert.equal(await page.evaluate(() => window.providerGate.readProtectedSecret('fixture-legacy-scope')), undefined)
+    for (const id of ['openai-compatible', 'lm-studio']) {
+      assert.equal(await page.evaluate(({ id, value }) => window.providerGate.seed(id, value), { id, value: secrets.generic }), false)
       assert.equal(await page.evaluate(scope => window.providerGate.readProtectedSecret(scope), id), undefined)
-    groups.pass(1, 'raw credential reads are denied; renderer network disabled while real main performs HTTP')
+    }
+    groups.pass(1, 'raw credential reads and writes are denied for native providers; renderer network disabled')
     groups.begin(2)
-    const vault = await readFile(join(root, 'profile/lia-secrets.json'), 'utf8')
+    const vaultPath = join(root, 'profile/lia-secrets.json')
+    const vault = await readFile(vaultPath, 'utf8')
     assert.ok(!Object.values(secrets).some(value => vault.includes(value)))
+    const aclScript = [
+      "$ErrorActionPreference = 'Stop'",
+      '$acl = [IO.File]::GetAccessControl($env:LIA_GATE_VAULT_PATH)',
+      '$current = [Security.Principal.WindowsIdentity]::GetCurrent().User',
+      '$rules = @($acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier]))',
+      '$acl.AreAccessRulesProtected -and $rules.Count -eq 1 -and $rules[0].IdentityReference.Equals($current) -and !$rules[0].IsInherited',
+    ].join('; ')
+    const { stdout: vaultAcl } = await execFileAsync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', aclScript], {
+      env: { ...process.env, LIA_GATE_VAULT_PATH: vaultPath },
+      windowsHide: true,
+    })
+    assert.equal(vaultAcl.trim(), 'True')
+    report.vaultAclCurrentUserOnly = true
     const initialState = JSON.parse(await readFile(join(root, 'main-state.json'), 'utf8'))
     assert.deepEqual(initialState.readScopes, [])
-    groups.pass(2, 'real safeStorage encryption and zero credential reads before operation')
+    groups.pass(2, 'Windows vault ciphertext, protected current-user DACL and zero credential reads before operation')
 
     groups.begin(3)
     const legacyFixture = { id: 'legacy/custom-instance', providerId: 'legacy/custom-instance', definitionId: 'openai-compatible', type: 'http', protocol: 'chat-completions', baseUrl: `${base}/json/v1/`, adapterOptions: { temperature: 0.25, nested: { enabled: true } }, modelIds: ['manual/legacy:Q4'], enabled: true, metadata: {}, credentialRef: { scope: 'legacy/custom-instance', key: 'apiKey' } }
@@ -385,6 +399,14 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
       await page.getByLabel('Modelo', { exact: true }).fill('custom/Electron:Q4')
       await page.getByRole('button', { name: button, exact: true }).click()
       return page.evaluate(() => window.providerGate.wait())
+    }
+    await page.evaluate(entries => window.providerGate.seedRecords(entries), [
+      { providerId: 'openai-compatible', baseUrl: `${base}/json/v1/`, model: 'custom/Electron:Q4' },
+      { providerId: 'lm-studio', baseUrl: `${base}/local/v1/`, model: 'custom/Electron:Q4' },
+    ])
+    for (const [id, value] of [['openai-compatible', secrets.generic], ['lm-studio', secrets.local]]) {
+      assert.equal(await page.evaluate(({ id, value }) => window.providerGate.bindFixtureChat(id, value), { id, value }), true)
+      assert.equal(await page.evaluate(({ id, value }) => window.providerGate.seed(id, value), { id, value: secrets[transcriptionProvider] }), false)
     }
     assert.deepEqual(await run('json'), { phase: 'done', code: '', text: 'Electron Lia\n42' })
     assert.deepEqual(await run('stream', 'Executar streaming'), { phase: 'done', code: '', text: 'Electron Lia\n42' })
@@ -508,11 +530,11 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
     groups.begin(6)
     const models = Object.fromEntries(curated.map((id, index) => [id, `fixture/${id}:Q4-${index}`]))
     assert.equal(await page.evaluate(() => window.providerGate.clearFixtureKey('lm-studio')), true)
+    const seededIds = await page.evaluate(entries => window.providerGate.seedRecords(entries), curated.map(id => ({ providerId: id, baseUrl: `${base}/${id}/v1/`, model: models[id] })))
     for (const id of curated.filter(item => !keyless.has(item))) {
-      if (!await page.evaluate(({ scope, value }) => window.providerGate.seed(scope, value), { scope: id, value: secrets[id] }))
+      if (!await page.evaluate(({ scope, value }) => window.providerGate.bindFixtureChat(scope, value), { scope: id, value: secrets[id] }))
         throw new Error(`Could not seed a synthetic credential for ${id}`)
     }
-    const seededIds = await page.evaluate(entries => window.providerGate.seedRecords(entries), curated.map(id => ({ providerId: id, baseUrl: `${base}/${id}/v1/`, model: models[id] })))
     for (const id of curated)
       assert.ok(seededIds.includes(id), `no transport record was stored for ${id}`)
     // A raw read must stay denied for every curated scope, with a record or not.
@@ -541,6 +563,17 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
     for (const id of curated.filter(item => !keyless.has(item)))
       assert.ok(matrixState.readScopes.includes(id), `main did not read the vault for ${id}`)
     assert.ok(!curated.some(id => JSON.stringify(matrixResults).includes(secrets[id] ?? '\u0000')))
+    const sharedTranscription = await page.evaluate(() => window.providerGate.transcribeFixtureRecording('groq'))
+    assert.equal(sharedTranscription.ok, true)
+    assert.equal(report.requests.at(-1).path, '/groq/v1/audio/transcriptions')
+    const otherChatOrigin = new URL(`${base}/groq/v1/`)
+    otherChatOrigin.hostname = 'localhost'
+    await page.evaluate(entries => window.providerGate.seedRecords(entries), [{ providerId: 'groq', baseUrl: otherChatOrigin.href, model: models.groq }])
+    const priorRequests = report.requests.length
+    assert.equal((await page.evaluate(model => window.providerGate.executeProvider('groq', model, 'json'), models.groq)).code, 'credentials')
+    assert.deepEqual(await page.evaluate(() => window.providerGate.transcribeFixtureRecording('groq')), { ok: false, code: 'credentials' })
+    assert.equal(report.requests.length, priorRequests)
+    await page.evaluate(entries => window.providerGate.seedRecords(entries), [{ providerId: 'groq', baseUrl: `${base}/groq/v1/`, model: models.groq }])
     groups.pass(6, 'ten curated providers resolve their own credential in main, address their own endpoint and stream without touching renderer state')
 
     // Concurrency: five providers at once, each on its own channel.
@@ -596,7 +629,7 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
 
     groups.begin(11)
     for (const [id, value] of [['openai-compatible', secrets.generic], ['lm-studio', secrets.local]]) {
-      if (!await page.evaluate(({ scope, value }) => window.providerGate.seed(scope, value), { scope: id, value }))
+      if (!await page.evaluate(({ scope, value }) => window.providerGate.bindFixtureChat(scope, value), { scope: id, value }))
         throw new Error(`Could not restore a synthetic fixture credential for ${id}`)
     }
     const stateBeforeDisable = JSON.parse(await readFile(join(root, 'main-state.json'), 'utf8'))

@@ -22,7 +22,7 @@
 /** The 16 groups, in execution order. Ids are stable and appear in reports. */
 export const GATE_GROUPS = [
   { id: 1, title: 'Leituras cruas negadas e rede do renderer desabilitada' },
-  { id: 2, title: 'SafeStorage real e ausência de leituras antecipadas' },
+  { id: 2, title: 'Cofre cifrado pelo backend Windows e ausência de leituras antecipadas' },
   { id: 3, title: 'Decoders legados e migração idempotente' },
   { id: 4, title: 'JSON, SSE, descoberta, modelo customizado e credenciais separadas' },
   { id: 5, title: 'Duas janelas, autoridade no Main e escrita concorrente rejeitada' },

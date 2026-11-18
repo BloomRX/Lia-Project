@@ -8,7 +8,7 @@ import { createApp } from 'vue'
 
 import { createSecretAdoptHandler } from '../../services/lia/secret-adopt.fixture'
 import { createLiaTransportClient } from '../../services/lia/transport-config'
-import { setTransportTestVaultResolver } from '../../services/lia/transport-config.fixture'
+import { setTransportTestChatVaultResolver } from '../../services/lia/transport-config.fixture'
 
 /**
  * Corte B, Fase 2 — the SHARED model selector lists curated providers through
@@ -82,7 +82,7 @@ beforeEach(() => {
   app.use(pinia)
   app.use(PiniaColada)
   setActivePinia(pinia)
-  setTransportTestVaultResolver(pinia, ipc.vaultGet)
+  setTransportTestChatVaultResolver(pinia, ipc.vaultGet, ENDPOINT)
   resetChatProviderRuntimeExtensionsForTesting()
   // Main holds the key; the renderer channel would hand it over if asked.
   ipc.vaultGet.mockResolvedValue(KEY)

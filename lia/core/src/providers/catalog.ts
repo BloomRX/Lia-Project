@@ -18,9 +18,9 @@
  * the mapping from string equality.
  *
  * `availability` is the product gate. `'ready'` means the full chain exists in
- * this build (Launcher -> transport -> Stage provider -> Brain engine) and was
- * reviewed; `'unavailable'` means the provider may be listed for transparency
- * but MUST NOT be selectable. The generic OpenAI-compatible entry stays
+ * this build (Launcher -> transport -> Stage provider, with a Brain engine
+ * when one is declared) and was reviewed. `'unavailable'` means the provider
+ * may be listed for transparency but MUST NOT be selectable. The generic OpenAI-compatible entry stays
  * unavailable until a complete, tested resolution to the Stage exists.
  */
 
@@ -52,6 +52,8 @@ export interface LiaAiProviderDefinition {
   allowCustomEndpoint: boolean
   /** Whether an API key is required to use the provider. */
   requiresApiKey: boolean
+  /** An unauthenticated connection to a literal loopback address. */
+  localOnly?: true
   /** Model suggestions only - discovery and a manual id always take precedence. */
   models: readonly LiaAiProviderModelSuggestion[]
   availability: LiaAiProviderAvailability
@@ -60,7 +62,7 @@ export interface LiaAiProviderDefinition {
 }
 
 /**
- * Groq is the one provider with a complete chain in this build:
+ * Groq is the provider with a Brain adapter in this build:
  *   - Stage chat provider `groq` (curated provider catalog);
  *   - Brain engine `groq` (`GROQ_BRAIN_ENGINE_ID`);
  *   - the chat/vision model ids below are the ones Lia Core's adapter declares.
@@ -81,6 +83,19 @@ const GROQ: LiaAiProviderDefinition = Object.freeze({
     Object.freeze({ id: 'openai/gpt-oss-120b', label: 'GPT-OSS 120B', recommended: true }),
     Object.freeze({ id: 'qwen/qwen3.8-27b', label: 'Qwen 3.8 27B (visão)' }),
   ]),
+  availability: 'ready',
+})
+
+const LOCAL_CHAT: LiaAiProviderDefinition = Object.freeze({
+  definitionId: 'local-chat',
+  stageProviderId: 'local-chat',
+  label: 'IA local',
+  description: 'Converse sem chave com um serviço compatível com OpenAI neste computador.',
+  baseUrl: 'http://127.0.0.1:1234/v1',
+  allowCustomEndpoint: true,
+  requiresApiKey: false,
+  localOnly: true,
+  models: Object.freeze([]),
   availability: 'ready',
 })
 
@@ -105,6 +120,7 @@ const OPENAI_COMPATIBLE: LiaAiProviderDefinition = Object.freeze({
 /** The single canonical list. Order is presentation order, not precedence. */
 export const LIA_AI_PROVIDER_CATALOG: readonly LiaAiProviderDefinition[] = Object.freeze([
   GROQ,
+  LOCAL_CHAT,
   OPENAI_COMPATIBLE,
 ])
 

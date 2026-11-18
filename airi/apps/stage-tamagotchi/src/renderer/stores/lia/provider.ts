@@ -20,7 +20,7 @@ import {
   electronLiaSecretHas,
   electronLiaSecretSet,
 } from '../../../shared/eventa'
-import { electronLiaTranscriptionCredentialHas, electronLiaTranscriptionCredentialSave } from '../../../shared/eventa/lia-transcription-config'
+import { electronLiaChatCredentialHas, electronLiaChatCredentialSave, electronLiaTranscriptionCredentialHas, electronLiaTranscriptionCredentialSave } from '../../../shared/eventa/lia-transport-credentials'
 import { supportsMainTranscription } from '../../../shared/lia/transcription-transport'
 import { removeLegacyApiKey, stripCredentialField } from '../../services/lia/legacy-credential-cleanup'
 import { createMainTransportExecution } from '../../services/lia/main-transport-execution'
@@ -480,19 +480,27 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
   }
 
   async function hasApiKey(providerId: string): Promise<boolean> {
-    if (supportsMainTranscription(transports.get(providerId)?.definitionId ?? providerConfig.get(providerId)?.definitionId ?? providerId))
+    const record = transports.get(providerId)
+    const definition = record?.definitionId ?? providerConfig.get(providerId)?.definitionId ?? providerId
+    if (supportsMainTranscription(definition))
       return useElectronEventaInvoke(electronLiaTranscriptionCredentialHas)({ providerId })
+    if (record?.protocol === 'chat-completions' || isNativeTransportDefinition(definition))
+      return useElectronEventaInvoke(electronLiaChatCredentialHas)({ providerId })
     return secretHas({ scope: providerId, key: API_KEY_NAME })
   }
 
   async function setApiKey(providerId: string, value: string, expectedBaseUrl?: string): Promise<boolean> {
     const record = transports.get(providerId)
-    if (supportsMainTranscription(record?.definitionId ?? providerConfig.get(providerId)?.definitionId ?? providerId)) {
-      const revision = transports.revision()
-      const endpoint = expectedBaseUrl ?? record?.baseUrl
-      return revision !== undefined && !!endpoint && useElectronEventaInvoke(electronLiaTranscriptionCredentialSave)({ providerId, revision, expectedBaseUrl: endpoint, apiKey: value })
-    }
-    return secretSet({ scope: providerId, key: API_KEY_NAME, value })
+    const definition = record?.definitionId ?? providerConfig.get(providerId)?.definitionId ?? providerId
+    const transcription = supportsMainTranscription(definition)
+    if (!transcription && record?.protocol !== 'chat-completions' && !isNativeTransportDefinition(definition))
+      return secretSet({ scope: providerId, key: API_KEY_NAME, value })
+    if (!record || (expectedBaseUrl !== undefined && expectedBaseUrl !== record.baseUrl))
+      await ensureProviderRecord(providerId, expectedBaseUrl)
+    const revision = transports.revision()
+    const endpoint = expectedBaseUrl ?? transports.get(providerId)?.baseUrl
+    const save = transcription ? electronLiaTranscriptionCredentialSave : electronLiaChatCredentialSave
+    return revision !== undefined && !!endpoint && useElectronEventaInvoke(save)({ providerId, revision, expectedBaseUrl: endpoint, apiKey: value })
   }
 
   async function deleteApiKey(providerId: string): Promise<boolean> {
@@ -628,6 +636,8 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
       }
       // Metadata compatibility for consumers not migrated yet. No endpoint write/PATCH.
       const owned = transports.get(providerId)
+      if (owned?.adapterOptions.localOnly === true)
+        return undefined
       return providerConfig.get(providerId) ?? providerConfig.ensure(providerId, owned?.definitionId ?? providerId, {})
     }
     if (!providerConfig.get(providerId)) {
@@ -705,35 +715,19 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
    * Persists the credential and the endpoint a native provider needs before it
    * may be executed, and proves both landed.
    *
-   * This is the ordering Corte B requires, expressed once so no caller can skip
-   * a step: a secret reaches main only through `secrets:set`, main confirms the
-   * vault write, the transport record is persisted WITHOUT the credential, and
-   * only then is the provider executable. Before it, "test connection" shipped
-   * the typed key inside the execution payload because that was the only way to
-   * try a key that was not saved yet.
-   *
-   * Failures are hard: a key that did not store, or a record that did not
-   * persist, must surface as `configuration` rather than degrade into a request
-   * that goes out unauthenticated or to an endpoint nobody saved.
-   *
-   * Idempotent and safe to repeat: `secretSet` overwrites the same address with
-   * the same value, and `ensureProviderRecord` writes only when the record
-   * actually changed. Two concurrent preparations for the same provider converge
-   * because main serialises vault writes and the transport repository rejects a
-   * stale revision instead of duplicating the record.
+   * Main accepts the new key only for the persisted endpoint and revision.
+   * Discovery and chat requests never carry the typed key.
    */
   async function prepareNativeExecution(args: { providerId: string, apiKey?: string, baseUrl?: string }): Promise<void> {
     const record = transports.get(args.providerId)
     if (!record && !isNativeTransportDefinition(args.providerId))
       return
-    if (typeof args.apiKey === 'string' && args.apiKey) {
-      if (!await secretSet({ scope: args.providerId, key: API_KEY_NAME, value: args.apiKey }))
-        throw new ProviderError('credentials')
-    }
     await ensureProviderRecord(args.providerId, args.baseUrl)
     const persisted = transports.get(args.providerId)
     if (!persisted || persisted.enabled === false)
       throw new ProviderError('configuration')
+    if (args.apiKey && !await setApiKey(args.providerId, args.apiKey, args.baseUrl))
+      throw new ProviderError('credentials')
   }
 
   async function draftConfig(args: { providerId: string, apiKey?: string, baseUrl?: string }) {
@@ -866,6 +860,8 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
       return false
 
     await activateTarget(preferred)
+    if (transports.get(preferred.providerId)?.adapterOptions.localOnly === true)
+      return true
     // `activeProvider` / `activeModel` only say which target the chat should use;
     // the AIRI runtime tracks "is this provider configured" separately, on the
     // provider record's status. `ensureProviderRecord` creates that record as
@@ -907,7 +903,7 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
       return false
     if (!providerNeedsKey(preferred.providerId))
       return true
-    return secretHas({ scope: preferred.providerId, key: API_KEY_NAME })
+    return hasApiKey(preferred.providerId)
   }
 
   /** Marks the first-run provider setup as complete for the current config. */
@@ -942,7 +938,7 @@ export const useLiaProviderStore = defineStore('lia-provider', () => {
     const scope = primary?.providerId === fb.providerId
       ? primary!.providerId
       : fb.providerId
-    return secretHas({ scope, key: API_KEY_NAME })
+    return hasApiKey(scope)
   }
 
   /**

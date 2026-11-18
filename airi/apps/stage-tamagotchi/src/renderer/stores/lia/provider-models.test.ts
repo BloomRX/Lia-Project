@@ -9,7 +9,7 @@ import { useI18n } from 'vue-i18n'
 
 import { createSecretAdoptHandler } from '../../services/lia/secret-adopt.fixture'
 import { createLiaTransportClient } from '../../services/lia/transport-config'
-import { setTransportTestVaultResolver } from '../../services/lia/transport-config.fixture'
+import { setTransportTestChatVaultResolver } from '../../services/lia/transport-config.fixture'
 
 const ipc = vi.hoisted(() => ({
   chatConfig: vi.fn(async (): Promise<import('../../../shared/eventa').LiaProviderChatConfig> => ({})),
@@ -52,6 +52,8 @@ vi.mock('vue-i18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
 const { useLiaProviderStore } = await import('./provider')
 const { createLiaDraftProviderRuntime } = await import('./provider-runtime')
 const KEY = 'SYNTHETIC_SECRET_NEVER_OUTPUT'
+const target = { providerId: 'openai-compatible', modelId: 'custom/Meu-modelo:Q4' }
+const draft = { ...target, baseUrl: 'https://service.invalid/v1/', apiKey: KEY }
 let fetchMock: ReturnType<typeof vi.fn>
 
 beforeEach(() => {
@@ -61,7 +63,7 @@ beforeEach(() => {
   app.use(pinia)
   app.use(PiniaColada)
   setActivePinia(pinia)
-  setTransportTestVaultResolver(pinia, ipc.vaultGet)
+  setTransportTestChatVaultResolver(pinia, ipc.vaultGet, draft.baseUrl)
   ipc.vaultGet.mockResolvedValue(KEY)
   fetchMock = vi.fn(async () => new Response(JSON.stringify({ data: [{ id: 'custom/Listed:Q4' }, { id: 'custom/Listed:Q4' }] }), { status: 200 }))
   vi.stubGlobal('fetch', fetchMock)
@@ -75,9 +77,6 @@ afterEach(() => {
 function chatResponse(text = 'OK') {
   return new Response(JSON.stringify({ choices: [{ index: 0, message: { role: 'assistant', content: text }, finish_reason: 'stop' }], usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } }), { status: 200 })
 }
-
-const target = { providerId: 'openai-compatible', modelId: 'custom/Meu-modelo:Q4' }
-const draft = { ...target, baseUrl: 'https://service.invalid/v1/', apiKey: KEY }
 
 describe('draft models through the real Lia ports and provider definition', () => {
   it('discovers and deduplicates IDs using the edited endpoint and transient credential without storing it', async () => {
@@ -232,23 +231,22 @@ describe('draft models through the real Lia ports and provider definition', () =
    * unsaved draft endpoint' still pins the payload-level rule for anything that
    * bypasses this seam.
    */
-  it('persists a changed endpoint before the credential is allowed to reach it', async () => {
+  it('keeps the credential off a newly persisted origin until the user supplies a key', async () => {
     useProviderConfigStore().ensureProvider(target.providerId, target.providerId, { baseUrl: draft.baseUrl })
     const result = await useLiaProviderStore().discoverModels({ providerId: target.providerId, baseUrl: 'https://changed-draft.invalid/v1/' })
-    expect(result.status).toBe('ready')
-    expect(String(fetchMock.mock.calls[0][0])).toBe('https://changed-draft.invalid/v1/models')
-    // The address the credential is sent to is the one the record now holds —
-    // not a value that lived only in the call.
+    expect(result.status).toBe('error')
+    expect(fetchMock).not.toHaveBeenCalled()
     const record = await createLiaTransportClient().refresh()
     expect(record.records.find(entry => entry.providerId === target.providerId)?.baseUrl).toBe('https://changed-draft.invalid/v1/')
+    expect((await useLiaProviderStore().discoverModels({ providerId: target.providerId, baseUrl: 'https://changed-draft.invalid/v1/', apiKey: KEY })).status).toBe('ready')
+    expect(String(fetchMock.mock.calls[0][0])).toBe('https://changed-draft.invalid/v1/models')
     expect(new Headers(fetchMock.mock.calls[0][1].headers).get('authorization')).toBe(`Bearer ${KEY}`)
   })
 
   it('still refuses to execute a curated provider whose record is missing, so no key leaves this renderer', async () => {
     const result = await useLiaProviderStore().discoverModels({ providerId: 'openrouter-ai', baseUrl: 'https://unsaved.invalid/v1/' })
-    // The record is created by the preparation step, so discovery succeeds —
-    // and that is exactly the ordering this cut enforces: persist, then execute.
-    expect(result.status).toBe('ready')
+    expect(result.status).toBe('error')
+    expect(fetchMock).not.toHaveBeenCalled()
     const records = (await createLiaTransportClient().refresh()).records
     expect(records.some(entry => entry.providerId === 'openrouter-ai')).toBe(true)
     expect(JSON.stringify(records)).not.toContain(KEY)

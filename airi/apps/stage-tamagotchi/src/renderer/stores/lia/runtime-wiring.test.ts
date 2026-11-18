@@ -2,10 +2,11 @@ import { getProviderCredentialResolver, resetChatProviderRuntimeExtensionsForTes
 import { useConsciousnessStore } from '@proj-airi/stage-ui/stores/modules/consciousness'
 import { useProviderConfigStore } from '@proj-airi/stage-ui/stores/providers/config'
 import { useProviderStore } from '@proj-airi/stage-ui/stores/providers/provider'
-import { createPinia, setActivePinia } from 'pinia'
+import { createPinia, getActivePinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createSecretAdoptHandler } from '../../services/lia/secret-adopt.fixture'
+import { reconnectTransportTestMain } from '../../services/lia/transport-config.fixture'
 
 /**
  * Lia config → AIRI provider runtime wiring (M1 blocker fix).
@@ -169,6 +170,7 @@ describe('lia provider runtime wiring (M1)', () => {
   it('activateConfiguredProvider() makes the runtime treat the provider as configured', async () => {
     ipc.fixture(keyedConfig(), { 'openrouter-ai': SECRET })
     const store = useLiaProviderStore()
+    expect(await store.setApiKey('openrouter-ai', SECRET, 'https://openrouter.ai/api/v1/')).toBe(true)
     const consciousness = useConsciousnessStore()
     const providerConfigs = useProviderConfigStore()
     store.registerRuntimeExtensions()
@@ -195,6 +197,7 @@ describe('lia provider runtime wiring (M1)', () => {
   it('builds the chat provider instance WITHOUT resolving the vault credential in the renderer', async () => {
     ipc.fixture(keyedConfig(), { 'openrouter-ai': SECRET })
     const store = useLiaProviderStore()
+    expect(await store.setApiKey('openrouter-ai', SECRET, 'https://openrouter.ai/api/v1/')).toBe(true)
     const consciousness = useConsciousnessStore()
     store.registerRuntimeExtensions()
     await store.activateConfiguredProvider()
@@ -225,6 +228,7 @@ describe('lia provider runtime wiring (M1)', () => {
   it('lists models through main, without building a client or reading the vault here', async () => {
     ipc.fixture(keyedConfig(), { 'openrouter-ai': SECRET })
     const store = useLiaProviderStore()
+    expect(await store.setApiKey('openrouter-ai', SECRET, 'https://openrouter.ai/api/v1/')).toBe(true)
     const providers = useProviderStore()
     store.registerRuntimeExtensions()
     await store.activateConfiguredProvider()
@@ -272,12 +276,15 @@ describe('lia provider runtime wiring (M1)', () => {
 
     // First boot.
     let store = useLiaProviderStore()
+    expect(await store.setApiKey('openrouter-ai', SECRET, 'https://openrouter.ai/api/v1/')).toBe(true)
     store.registerRuntimeExtensions()
     expect(await store.activateConfiguredProvider()).toBe(true)
 
     // Restart: a brand new Pinia, so every runtime ref is back to its default,
     // while main still returns the same persisted config and vault secret.
-    setActivePinia(createPinia())
+    const nextRenderer = createPinia()
+    reconnectTransportTestMain(getActivePinia()!, nextRenderer)
+    setActivePinia(nextRenderer)
     resetChatProviderRuntimeExtensionsForTesting()
     const consciousness = useConsciousnessStore()
     expect(consciousness.activeProvider).toBe('')
@@ -320,6 +327,7 @@ describe('lia provider runtime wiring (M1)', () => {
   it('registers a resolver that refuses curated ids and never reads the vault for them', async () => {
     ipc.fixture(keyedConfig(), { 'openrouter-ai': SECRET })
     const store = useLiaProviderStore()
+    expect(await store.setApiKey('openrouter-ai', SECRET, 'https://openrouter.ai/api/v1/')).toBe(true)
     store.registerRuntimeExtensions()
 
     const resolver = getProviderCredentialResolver()

@@ -40,14 +40,13 @@ type MainContext = ReturnType<typeof createContext>['context']
  *
  * The renderer can ask whether encryption is available, test presence, and
  * store/delete a single opaque `scope:key` secret. Migrated transports deny
- * reads and execute authenticated requests in main. The optional legacy read
- * policy exists for consumers not migrated yet; it is not a privacy guarantee
- * for those legacy consumers. Values never enter logs or product configuration.
+ * reads and execute authenticated requests in main. The optional legacy
+ * mutation policy permits importing old values without returning them.
  */
 export function registerLiaSecretsBridge(params: {
   context: MainContext
   vault: LiaSecretVault
-  /** Migrated transports execute in main and may not export stored credentials. */
+  /** Only legacy scopes may accept unbound API keys for compatibility. */
   allowRendererRead?: (scope: string) => Promise<boolean>
   /**
    * Which WebContents may touch the vault at all. Required on purpose: a
@@ -76,6 +75,13 @@ export function registerLiaSecretsBridge(params: {
     && payload.scope !== oidcSessionScope
     && typeof payload.key === 'string' && payload.key.length > 0 && payload.key.length <= 64
     && ![...payload.scope + payload.key].some(character => character.codePointAt(0)! < 32 || character.codePointAt(0) === 127)
+
+  const legacyAccessAllowed = async (scope: string): Promise<boolean> => {
+    try {
+      return await params.allowRendererRead?.(scope) === true
+    }
+    catch { return false }
+  }
 
   defineInvokeHandler(context, electronLiaSecretEncryptionAvailable, (_payload, options) => {
     if (!senderAllowed(options))
@@ -108,6 +114,8 @@ export function registerLiaSecretsBridge(params: {
     if (expectedRevision === undefined)
       return false
     const stored = await serializeWrite(vault, async () => {
+      if (payload.key === 'apiKey' && !await legacyAccessAllowed(payload.scope))
+        return false
       if (vault.secretRevision?.(payload.scope, payload.key) !== expectedRevision)
         return false
       if (payload.onlyIfMissing === true && vault.hasSecret(payload.scope, payload.key))
@@ -154,6 +162,8 @@ export function registerLiaSecretsBridge(params: {
     if (expectedRevision === undefined)
       return 'unavailable'
     return serializeWrite(vault, async () => {
+      if (payload.key === 'apiKey' && !await legacyAccessAllowed(payload.scope))
+        return 'unavailable'
       if (vault.secretRevision?.(payload.scope, payload.key) !== expectedRevision)
         return 'conflict'
       if (vault.hasSecret(payload.scope, payload.key)) {
@@ -168,20 +178,8 @@ export function registerLiaSecretsBridge(params: {
     })
   })
 
-  defineInvokeHandler(context, electronLiaSecretGet, async (payload, options) => {
-    if (!senderAllowed(options) || !validReference(payload) || !params.allowRendererRead)
-      return undefined
-    try {
-      if (await params.allowRendererRead(payload.scope)) {
-        const value = await vault.getSecret(payload.scope, payload.key)
-        return payload.key === 'apiKey' ? unboundCredential(value) : value
-      }
-    }
-    catch {
-      return undefined
-    }
-    return undefined
-  })
+  // Answer old renderers with an empty result without opening the vault.
+  defineInvokeHandler(context, electronLiaSecretGet, () => undefined)
 
   defineInvokeHandler(context, electronLiaSecretDelete, async (payload, options) => {
     if (!validReference(payload) || !senderAllowed(options))

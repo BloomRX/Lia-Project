@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createApp } from 'vue'
 
 import { createLiaTransportClient, legacyTransportCandidates, toTransportRecord } from '../../services/lia/transport-config'
-import { setTransportTestVaultResolver } from '../../services/lia/transport-config.fixture'
+import { setTransportTestChatVaultResolver } from '../../services/lia/transport-config.fixture'
 
 const ipc = vi.hoisted(() => {
   /**
@@ -87,7 +87,7 @@ beforeEach(() => {
   app.use(pinia)
   app.use(PiniaColada)
   setActivePinia(pinia)
-  setTransportTestVaultResolver(pinia, ipc.vaultGet)
+  setTransportTestChatVaultResolver(pinia, ipc.vaultGet, baseUrl)
   ipc.chat.mockResolvedValue({ preferred: { providerId: 'openai-compatible', modelId: model } })
   ipc.available.mockResolvedValue(true)
   ipc.has.mockResolvedValue(false)

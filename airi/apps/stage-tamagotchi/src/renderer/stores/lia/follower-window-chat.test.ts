@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createSecretAdoptHandler } from '../../services/lia/secret-adopt.fixture'
 import { createLiaTransportClient } from '../../services/lia/transport-config'
-import { setTransportTestVaultResolver, setTransportTestWriteFailure } from '../../services/lia/transport-config.fixture'
+import { setTransportTestChatVaultResolver, setTransportTestWriteFailure } from '../../services/lia/transport-config.fixture'
 
 /**
  * The follower-only window must be able to chat.
@@ -110,7 +110,7 @@ let fetchMock: ReturnType<typeof vi.fn>
 beforeEach(() => {
   const pinia = createPinia()
   setActivePinia(pinia)
-  setTransportTestVaultResolver(pinia, ipc.vaultRead)
+  setTransportTestChatVaultResolver(pinia, ipc.vaultRead, BASE_URL)
   resetChatProviderRuntimeExtensionsForTesting()
   ipc.fixture({})
   vi.clearAllMocks()

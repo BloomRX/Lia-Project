@@ -10,7 +10,7 @@ import { createApp } from 'vue'
 
 import { createSecretAdoptHandler } from '../../services/lia/secret-adopt.fixture'
 import { createLiaTransportClient } from '../../services/lia/transport-config'
-import { setTransportTestVaultResolver, setTransportTestWriteFailure } from '../../services/lia/transport-config.fixture'
+import { setTransportTestChatWriter, setTransportTestVaultResolver, setTransportTestWriteFailure } from '../../services/lia/transport-config.fixture'
 
 /**
  * Corte B, Fase 1 — the credential never rides on an execution payload.
@@ -42,6 +42,7 @@ const ipc = vi.hoisted(() => {
   /** Every payload the execution channel was asked to send, verbatim. */
   const executions: unknown[] = []
   return {
+    chatSave: vi.fn(async (_input: unknown) => true),
     executions,
     fixture(next: Record<string, unknown> | LiaProviderChatConfig) {
       chat = next as Record<string, unknown>
@@ -129,6 +130,7 @@ beforeEach(() => {
   app.use(pinia)
   app.use(PiniaColada)
   setActivePinia(pinia)
+  setTransportTestChatWriter(pinia, ipc.chatSave)
   setTransportTestVaultResolver(pinia, ipc.vaultRead)
   resetChatProviderRuntimeExtensionsForTesting()
   ipc.fixture({})
@@ -148,7 +150,7 @@ afterEach(() => {
 })
 
 describe('first send of a provider that has no record yet', () => {
-  it('stores the key, persists the endpoint, and only then executes — with no credential on the payload', async () => {
+  it('persists the endpoint, binds the key, and only then executes — with no credential on the payload', async () => {
     ipc.fixture(keyedConfig())
     const store = useLiaProviderStore()
 
@@ -158,7 +160,7 @@ describe('first send of a provider that has no record yet', () => {
     expect(result.ok).toBe(true)
 
     // 1. The credential went up the credential channel...
-    expect(ipc.secretSet).toHaveBeenCalledWith({ scope: 'openrouter-ai', key: 'apiKey', value: SECRET })
+    expect(ipc.chatSave).toHaveBeenCalledWith({ providerId: 'openrouter-ai', expectedBaseUrl: BASE_URL, revision: expect.any(Number), apiKey: SECRET })
     // 2. ...the record was persisted...
     const records = (await snapshot()).records
     expect(records.find(record => record.providerId === 'openrouter-ai')?.baseUrl).toBe(BASE_URL)
@@ -187,15 +189,14 @@ describe('first send of a provider that has no record yet', () => {
 
   it('stops before executing when the vault refuses the write', async () => {
     ipc.fixture(keyedConfig())
-    ipc.secretSet.mockResolvedValueOnce(false)
+    ipc.chatSave.mockResolvedValueOnce(false)
     const store = useLiaProviderStore()
     const result = await store.testConnection({ providerId: 'groq', modelId: MODEL, apiKey: SECRET, baseUrl: BASE_URL })
     expect(result).toMatchObject({ ok: false, failure: 'configuration' })
-    // The endpoint record is not created either: a provider whose key did not
-    // store must not look configured.
+    // Main received metadata to identify the intended destination.
     expect(ipc.executions).toHaveLength(0)
     expect(fetchMock).not.toHaveBeenCalled()
-    expect((await snapshot()).records).toHaveLength(0)
+    expect((await snapshot()).records[0]?.baseUrl).toBe(BASE_URL)
   })
 
   it('stops before executing when the endpoint cannot be persisted', async () => {
@@ -213,8 +214,8 @@ describe('first send of a provider that has no record yet', () => {
     const store = useLiaProviderStore()
     expect((await store.testConnection({ providerId: 'groq', modelId: MODEL, apiKey: SECRET, baseUrl: BASE_URL })).ok).toBe(true)
     expect((await store.testConnection({ providerId: 'groq', modelId: MODEL, apiKey: SECRET, baseUrl: BASE_URL })).ok).toBe(true)
-    expect(ipc.secretSet).toHaveBeenCalledTimes(2)
-    expect(ipc.secretSet.mock.calls[0]).toEqual(ipc.secretSet.mock.calls[1])
+    expect(ipc.chatSave).toHaveBeenCalledTimes(2)
+    expect(ipc.chatSave.mock.calls[0]).toEqual(ipc.chatSave.mock.calls[1])
     expect((await snapshot()).records.filter(record => record.providerId === 'groq')).toHaveLength(1)
     expect(ipc.executions.every((payload: unknown) => !JSON.stringify(payload).includes(SECRET))).toBe(true)
   })

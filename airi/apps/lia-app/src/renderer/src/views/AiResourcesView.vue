@@ -22,6 +22,18 @@ const text = computed(() => english.value
       unavailable: 'Unavailable in this version',
       inUse: 'In use by Lia',
       ready: 'Ready to configure',
+      localLabel: 'Local AI',
+      localDescription: 'Text chat without an API key using an AI service on this computer. Tools are unavailable for this connection.',
+      localPreparation: 'Start an OpenAI-compatible server on this computer and load a chat model. Save its address, then look for available models.',
+      localAddressHelp: 'Use the server address with 127.0.0.1 or [::1], followed by its port and API path.',
+      localSaved: 'Local connection saved. Find and select a model to continue.',
+      localTesting: 'Checking text conversation…',
+      localVerified: 'Text conversation verified: the local model returned a text reply.',
+      localTestDetails: 'The test sends a sample message to the selected model and checks that it replies with text.',
+      localOffline: 'Could not reach the local AI service. Start the server, load a model and check the address.',
+      localProtocol: 'The local service did not return a usable response. Check the model and server settings.',
+      localHttp: 'The local server rejected the request. Check the address and the loaded model.',
+      localConfirm: 'Confirm the new local address before saving.',
       address: 'Service address',
       addressHelp: 'Use the address provided by the service, including the API path when needed.',
       advanced: 'Advanced connection options',
@@ -69,6 +81,18 @@ const text = computed(() => english.value
       unavailable: 'Indisponível nesta versão',
       inUse: 'Em uso pela Lia',
       ready: 'Pronto para configurar',
+      localLabel: 'IA local',
+      localDescription: 'Converse por texto e sem chave com um serviço de IA neste computador. Esta conexão não oferece ferramentas.',
+      localPreparation: 'Inicie um servidor compatível com OpenAI neste computador e carregue um modelo de conversa. Salve o endereço e busque os modelos disponíveis.',
+      localAddressHelp: 'Use o endereço do servidor com 127.0.0.1 ou [::1], seguido da porta e do caminho da API.',
+      localSaved: 'Conexão local salva. Busque e selecione um modelo para continuar.',
+      localTesting: 'Verificando conversa de texto…',
+      localVerified: 'Conversa de texto verificada. O modelo local retornou uma resposta.',
+      localTestDetails: 'O teste envia uma mensagem de exemplo ao modelo selecionado e verifica se ele responde com texto.',
+      localOffline: 'Não foi possível alcançar a IA local. Inicie o servidor, carregue um modelo e confira o endereço.',
+      localProtocol: 'O serviço local não retornou uma resposta válida. Confira o modelo e a configuração do servidor.',
+      localHttp: 'O servidor local recusou a solicitação. Confira o endereço e o modelo carregado.',
+      localConfirm: 'Confirme o novo endereço local antes de salvar.',
       address: 'Endereço do serviço',
       addressHelp: 'Use o endereço fornecido pelo serviço, incluindo o caminho da API quando necessário.',
       advanced: 'Opções avançadas de conexão',
@@ -115,6 +139,7 @@ interface ProviderCard {
   description: string
   engineId?: string
   label: string
+  localOnly?: true
   models: { id: string, label: string, recommended?: boolean }[]
   requiresApiKey: boolean
   stageProviderId?: string
@@ -133,6 +158,7 @@ const selected = ref(false)
 const connectionId = ref('')
 const revision = ref(0)
 const savedBaseUrl = ref('')
+const savedModelId = ref('')
 const form = reactive({ baseUrl: '', apiKey: '', modelId: '' })
 const discovered = ref<{ id: string, label: string }[]>([])
 const manual = ref(false)
@@ -141,9 +167,14 @@ let active = true
 
 const activeProvider = computed(() => providers.value.find(provider => provider.definitionId === activeId.value))
 const manageable = computed(() => activeProvider.value?.availability === 'ready')
-const hostOf = (value: string) => {
-  try { return new URL(value).hostname }
-  catch { return undefined }
+const localOnly = computed(() => activeProvider.value?.localOnly === true)
+function hostOf(value: string) {
+  try {
+    return new URL(value).hostname
+  }
+  catch {
+    return undefined
+  }
 }
 const hostChanged = computed(() => {
   const host = hostOf(form.baseUrl.trim())
@@ -162,35 +193,40 @@ const modelOptions = computed(() => {
   }
   return rows
 })
-const canTest = computed(() => selected.value && !!form.modelId && !busy.value && !loading.value)
+const canTest = computed(() => selected.value && !!savedModelId.value && form.modelId.trim() === savedModelId.value
+  && form.baseUrl.trim() === savedBaseUrl.value && !busy.value && !loading.value)
 const errors = computed<Record<string, string>>(() => english.value
   ? {
       'invalid': 'Check the address and fields before saving.',
       'conflict': 'Settings changed in another window. Reopen this page and try again.',
       'credentials': 'Enter the key again when changing the address. Check that it can be stored on this computer.',
       'timeout': 'The service took too long to respond. Please try again.',
-      'protocol': 'The service did not complete the conversation with tools. Choose another model or check the service settings.',
-      'http': 'The service refused the connection. Check the address, key and model.',
-      'network': 'Could not reach the AI service. Check your connection and try again.',
+      'protocol': localOnly.value ? text.value.localProtocol : 'The service did not complete the conversation with tools. Choose another model or check the service settings.',
+      'http': localOnly.value ? text.value.localHttp : 'The service refused the connection. Check the address, key and model.',
+      'network': localOnly.value ? text.value.localOffline : 'Could not reach the AI service. Check your connection and try again.',
       'unconfigured': 'Save the service and select a model first.',
       'storage': 'Could not save the settings safely. Reopen this page and save the service address and key again.',
       'stage-running': 'End the conversation before changing the service or key.',
-      'unconfirmed-host': 'Confirm the new address before saving. Changing the host also requires a new key.',
+      'unconfirmed-host': localOnly.value ? text.value.localConfirm : 'Confirm the new address before saving. Changing the host also requires a new key.',
       'provider-unavailable': 'This service cannot be configured in this version.',
+      'local-endpoint': 'Enter a local address using 127.0.0.1 or [::1].',
+      'local-credential': 'This local connection does not accept an API key.',
     }
   : {
       'invalid': 'Confira o endereço e os campos antes de salvar.',
       'conflict': 'A configuração mudou em outra janela. Reabra esta página e tente novamente.',
       'credentials': 'Informe a chave novamente ao trocar o endereço. Confira se ela pode ser guardada neste computador.',
       'timeout': 'O serviço demorou para responder. Tente novamente.',
-      'protocol': 'O serviço não completou a conversa com ferramentas. Escolha outro modelo ou confira as opções do serviço.',
-      'http': 'O serviço recusou a conexão. Confira o endereço, a chave e o modelo.',
-      'network': 'Não foi possível alcançar o serviço de IA. Confira a conexão e tente novamente.',
+      'protocol': localOnly.value ? text.value.localProtocol : 'O serviço não completou a conversa com ferramentas. Escolha outro modelo ou confira as opções do serviço.',
+      'http': localOnly.value ? text.value.localHttp : 'O serviço recusou a conexão. Confira o endereço, a chave e o modelo.',
+      'network': localOnly.value ? text.value.localOffline : 'Não foi possível alcançar o serviço de IA. Confira a conexão e tente novamente.',
       'unconfigured': 'Salve o serviço e selecione um modelo primeiro.',
       'storage': 'Não foi possível guardar a configuração com segurança. Reabra esta página e salve novamente o endereço e a chave do serviço.',
       'stage-running': 'Encerre a conversa antes de alterar o serviço ou a chave.',
-      'unconfirmed-host': 'Confirme o novo endereço antes de salvar. Trocar o servidor também exige uma chave nova.',
+      'unconfirmed-host': localOnly.value ? text.value.localConfirm : 'Confirme o novo endereço antes de salvar. Trocar o servidor também exige uma chave nova.',
       'provider-unavailable': 'Este serviço não pode ser configurado nesta versão.',
+      'local-endpoint': 'Informe um endereço local com 127.0.0.1 ou [::1].',
+      'local-credential': 'A conexão local funciona sem chave.',
     })
 
 function showError(code?: string) {
@@ -215,6 +251,7 @@ function applyState(state: any) {
   selected.value = state.selected === true
   connectionId.value = typeof state.connectionId === 'string' ? state.connectionId : ''
   savedBaseUrl.value = state.connectionId ? state.baseUrl : ''
+  savedModelId.value = state.modelId ?? ''
   confirmHost.value = false
   manual.value = !!state.modelId && !suggestions.value.some(model => model.id === state.modelId)
   discovered.value = state.modelId ? [{ id: state.modelId, label: state.modelId }] : []
@@ -281,7 +318,7 @@ async function save() {
     baseUrl: form.baseUrl.trim(),
     revision: revision.value,
     ...(modelId ? { modelId } : {}),
-    ...(form.apiKey ? { apiKey: form.apiKey } : {}),
+    ...(!localOnly.value && form.apiKey ? { apiKey: form.apiKey } : {}),
     ...(hostChanged.value && confirmHost.value ? { confirmHostChange: true } : {}),
   }
   form.apiKey = ''
@@ -294,7 +331,7 @@ async function save() {
       return
     }
     applyState(result.state)
-    feedback.value = text.value.saved
+    feedback.value = localOnly.value && !result.state.selected ? text.value.localSaved : text.value.saved
   }
   catch {
     if (active)
@@ -345,7 +382,7 @@ async function test() {
       showError(result?.code)
       return
     }
-    feedback.value = text.value.verified
+    feedback.value = localOnly.value ? text.value.localVerified : text.value.verified
   }
   catch {
     if (active)
@@ -414,8 +451,8 @@ onBeforeUnmount(() => {
             :disabled="provider.availability !== 'ready' || !!busy"
             @click="selectProvider(provider)"
           >
-            <span class="provider-name">{{ provider.label }}</span>
-            <span class="hint">{{ provider.description }}</span>
+            <span class="provider-name">{{ provider.localOnly ? text.localLabel : provider.label }}</span>
+            <span class="hint">{{ provider.localOnly ? text.localDescription : provider.description }}</span>
             <span v-if="provider.availability !== 'ready'" class="badge">
               {{ text.unavailable }}: {{ provider.unavailableReason }}
             </span>
@@ -429,30 +466,35 @@ onBeforeUnmount(() => {
       </LiaPanel>
 
       <LiaPanel v-if="activeProvider && manageable">
+        <p v-if="localOnly" class="hint">
+          {{ text.localPreparation }}
+        </p>
         <form class="ai-form" @submit.prevent="save">
           <p class="current">
-            <strong>{{ text.current }}:</strong> {{ activeProvider.label }}
+            <strong>{{ text.current }}:</strong> {{ localOnly ? text.localLabel : activeProvider.label }}
             <span class="hint">{{ connectionId ? connectionId : text.notConfigured }}</span>
           </p>
 
           <label for="ai-address">{{ text.address }}</label>
           <input id="ai-address" v-model="form.baseUrl" type="url" required autocomplete="url" spellcheck="false" :disabled="!!busy" aria-describedby="ai-address-help" @input="edited">
           <p id="ai-address-help" class="hint">
-            {{ text.addressHelp }}
+            {{ localOnly ? text.localAddressHelp : text.addressHelp }}
           </p>
           <label v-if="hostChanged" class="key-option">
             <input v-model="confirmHost" type="checkbox" :disabled="!!busy" @change="edited">
             {{ text.confirmHost }}
           </label>
-          <p v-if="hostChanged" class="hint warning">
+          <p v-if="hostChanged && !localOnly" class="hint warning">
             {{ text.newKeyForHost }}
           </p>
 
-          <label for="ai-key">{{ text.key }} <span class="hint">{{ hasKey ? text.keySaved : (activeProvider.requiresApiKey ? text.keyMissing : '') }}</span></label>
-          <input id="ai-key" v-model="form.apiKey" type="password" autocomplete="new-password" spellcheck="false" :disabled="!!busy" @input="edited">
-          <p class="hint">
-            {{ text.keyHelp }}
-          </p>
+          <template v-if="!localOnly">
+            <label for="ai-key">{{ text.key }} <span class="hint">{{ hasKey ? text.keySaved : (activeProvider.requiresApiKey ? text.keyMissing : '') }}</span></label>
+            <input id="ai-key" v-model="form.apiKey" type="password" autocomplete="new-password" spellcheck="false" :disabled="!!busy" @input="edited">
+            <p class="hint">
+              {{ text.keyHelp }}
+            </p>
+          </template>
 
           <div class="actions">
             <LiaButton type="submit" variant="primary" :disabled="!!busy || !form.baseUrl || (hostChanged && !confirmHost)">
@@ -475,9 +517,9 @@ onBeforeUnmount(() => {
             type="text"
             spellcheck="false"
             autocomplete="off"
-            :placeholder="suggestions.find(model => model.recommended)?.id ?? 'openai/gpt-oss-120b'"
+            :placeholder="suggestions.find(model => model.recommended)?.id"
             :disabled="!!busy"
-            :aria-describedby="'ai-model-help'"
+            aria-describedby="ai-model-help"
             @input="edited"
           >
           <select v-else id="ai-model" v-model="form.modelId" :disabled="!!busy || !modelOptions.length" @change="edited">
@@ -502,7 +544,7 @@ onBeforeUnmount(() => {
           </p>
 
           <LiaButton type="button" :disabled="!canTest" @click="test">
-            {{ busy === 'test' ? text.testing : text.test }}
+            {{ busy === 'test' ? (localOnly ? text.localTesting : text.testing) : text.test }}
           </LiaButton>
         </form>
         <p v-if="feedback" :role="failed ? 'alert' : 'status'" class="feedback">
@@ -515,7 +557,7 @@ onBeforeUnmount(() => {
           {{ text.testHelp }}
         </p>
         <details class="advanced">
-          <summary>{{ text.details }}</summary><p>{{ text.detailHelp }}</p>
+          <summary>{{ text.details }}</summary><p>{{ localOnly ? text.localTestDetails : text.detailHelp }}</p>
         </details>
       </LiaPanel>
       <p v-else-if="feedback" :role="failed ? 'alert' : 'status'" class="feedback">

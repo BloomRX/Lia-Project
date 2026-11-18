@@ -1,9 +1,11 @@
+import type { LiaSelectionTarget } from '@lia/contracts/providers/selection-write-policy'
 import type { LiaBridgeConfig } from '@lia/core/bridge/lia-config'
 import type { LiaProductPaths } from '@lia/core/paths/product-paths'
 import type { LiaProductConfigSnapshot, LiaProductConfigUpdate, LiaProductSttTarget } from '@lia/core/product/config'
 import type { LiaSecretCipher, LiaSecretVault } from '@lia/core/secrets/vault'
 import type { LiaCustomVoiceProfile, LiaVoiceProfileImportRequest } from '@lia/core/voices/types'
 
+import type { AiConnectionStartCode, AiConnectionStartReadiness } from './ai-connection-service'
 import type { AiriStageState } from './airi-stage-manager'
 import type { ShutdownReport } from './shutdown-coordinator'
 
@@ -13,6 +15,10 @@ import { access, stat } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { unboundCredential } from '@lia/contracts/credentials/destination'
+import { CredentialOwnerError, isPublicCredentialReference, startCredentialOwner } from '@lia/contracts/credentials/owner-channel'
+import { decideSelectionWrite, isLauncherManagedProvider, isLiaSelectionTarget } from '@lia/contracts/providers/selection-write-policy'
+import { createTransportRepository } from '@lia/contracts/transports/repository'
 import {
   brainRequirementForChatTurn,
   createProductionBrainAutomaticPolicy,
@@ -27,13 +33,10 @@ import { brainRoutingModeUpdate, readBrainRoutingMode, readLiaProductConfig, upd
 import { createLiaSecretVault } from '@lia/core/secrets/vault'
 import { createLiaVoiceProfileStore, findMissingFiles } from '@lia/core/voices/profiles'
 
-import { CredentialOwnerError, isPublicCredentialReference, startCredentialOwner } from '@lia/contracts/credentials/owner-channel'
-import { decideSelectionWrite, isLauncherManagedProvider, isLiaSelectionTarget, type LiaSelectionTarget } from '@lia/contracts/providers/selection-write-policy'
-import { createTransportRepository } from '@lia/contracts/transports/repository'
-import { createAiConnectionService, type AiConnectionStartCode, type AiConnectionStartReadiness } from './ai-connection-service'
+import { createAiConnectionService } from './ai-connection-service'
 import { AiriStageManager } from './airi-stage-manager'
-import { describeDiscovery, discoverRuntime, runtimeStateDirFor, stopDiscoveredRuntime } from './runtime-discovery'
 import { sameProfileDirectory } from './launcher-profile'
+import { describeDiscovery, discoverRuntime, runtimeStateDirFor, stopDiscoveredRuntime } from './runtime-discovery'
 import { ShutdownCoordinator } from './shutdown-coordinator'
 
 /**
@@ -241,6 +244,7 @@ export interface LiaHost {
   /** Graceful supervisor shutdown; safe to call more than once (single-flight). */
   quit: () => Promise<ShutdownReport>
   stage: AiriStageManager
+  stageStatus: () => Promise<AiriStageState>
   /**
    * O Runtime como processo independente: descobrir (sem PID), pedir parada
    * cooperativa e saber se há um vivo. Fechar o Launcher NÃO o encerra.
@@ -727,6 +731,17 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
    * not zero the voice list, and a detection that never ran must surface
    * "unknown" - never a fabricated `false`.
    */
+  const stageStatus = async (): Promise<AiriStageState> => {
+    const state = stage.state()
+    if (state.phase !== 'stopped')
+      return state
+    const discovered = await discoverOwnRuntime()
+    const current = stage.state()
+    if (current.phase === 'stopped' && discovered.status === 'live')
+      return { logTail: [], phase: 'running', pid: discovered.record.pid }
+    return current
+  }
+
   const homeStatus = async (): Promise<LiaHomeStatus> => {
     const reason = (thrown: unknown): string => {
       // Lint policy forbids the instanceof ternary; this is its contract.
@@ -793,7 +808,7 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
       voice,
       config: { error: config.error, filePath: paths.productConfigFile, status: config.status },
       paths,
-      stage: { available: stage.isAvailable(), state: stage.state() },
+      stage: { available: stage.isAvailable(), state: await stageStatus() },
       voices: voiceList,
     }
   }
@@ -916,7 +931,8 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
 
   async function updateConfigExclusively(payload: LiaConfigUpdatePayload): Promise<LiaConfigUpdateResult> {
     // Reject the whole batch before touching unrelated entries or product preferences.
-    if (payload.secrets?.some(secret => !secret || !isPublicCredentialReference(secret.scope, secret.key))) {
+    if (payload.secrets?.some(secret => !secret || !isPublicCredentialReference(secret.scope, secret.key)
+      || (secret.key === 'apiKey' && unboundCredential(secret.value) === undefined))) {
       emit('lia-app.config-blocked', 'reason=secret-reference-denied')
       return { message: 'The requested credential cannot be edited here.', status: 'secret-vault-failed' }
     }
@@ -1134,6 +1150,7 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
       },
     },
     stage,
+    stageStatus,
     stageEnv: hostStageEnv,
     updateConfig,
     vault,

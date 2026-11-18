@@ -4,7 +4,7 @@ import type { LiaSecretVault } from '@lia/core/secrets/vault'
 
 import { Buffer } from 'node:buffer'
 
-import { unboundCredential } from '@lia/contracts/credentials/destination'
+import { bindCredential, credentialForDestination, unboundCredential } from '@lia/contracts/credentials/destination'
 import { LIA_AI_PROVIDER_CATALOG } from '@lia/contracts/providers/catalog'
 
 /**
@@ -53,6 +53,8 @@ type FailureCode
     | 'stage-running'
     | 'unconfirmed-host'
     | 'provider-unavailable'
+    | 'local-endpoint'
+    | 'local-credential'
 
 interface Failure { ok: false, code: FailureCode }
 
@@ -160,6 +162,17 @@ function hostOf(value: string): string | undefined {
   catch { return undefined }
 }
 
+function validLocalAddress(value: string): boolean {
+  const host = hostOf(value)
+  return host === '127.0.0.1' || host === '[::1]'
+}
+
+function validConnectionAddress(definition: LiaAiProviderDefinition, record: TransportRecord): boolean {
+  return validAddress(record.baseUrl) && (!definition.localOnly || (
+    validLocalAddress(record.baseUrl) && record.adapterOptions.localOnly === true && record.adapterOptions.allowUnauthenticated === true
+  ))
+}
+
 function manageable(definition: LiaAiProviderDefinition): boolean {
   return definition.availability === 'ready' && typeof definition.stageProviderId === 'string' && definition.stageProviderId.length > 0
 }
@@ -238,13 +251,13 @@ export function createAiConnectionService(deps: AiConnectionServiceDeps) {
       return { ok: false, code: 'connection-missing' }
     if (!record.enabled)
       return { ok: false, code: 'connection-disabled' }
-    if (!validAddress(record.baseUrl))
+    if (!validConnectionAddress(definition, record))
       return { ok: false, code: 'connection-inconsistent' }
     if (!record.modelIds.includes(selection.modelId))
       return { ok: false, code: 'connection-inconsistent' }
     if (definition.requiresApiKey) {
       try {
-        if (!unboundCredential(deps.vault.getSecret(definition.stageProviderId, 'apiKey')))
+        if (!chatCredential(record))
           return { ok: false, code: 'credential-missing' }
       }
       catch {
@@ -258,6 +271,11 @@ export function createAiConnectionService(deps: AiConnectionServiceDeps) {
     return (await getStartReadiness()).ok
   }
 
+  function chatCredential(record: TransportRecord) {
+    const { scope, key } = record.credentialRef
+    return credentialForDestination(deps.vault.getSecret(scope, key), scope, new URL(record.baseUrl), 'chat')
+  }
+
   /** The catalog exactly as the renderer may see it: metadata only, no secrets. */
   function listDefinitions() {
     return catalog.map(definition => ({
@@ -267,6 +285,7 @@ export function createAiConnectionService(deps: AiConnectionServiceDeps) {
       description: definition.description,
       engineId: definition.engineId,
       label: definition.label,
+      ...(definition.localOnly ? { localOnly: true as const } : {}),
       models: definition.models.map(model => ({ ...model })),
       requiresApiKey: definition.requiresApiKey,
       stageProviderId: definition.stageProviderId,
@@ -274,7 +293,7 @@ export function createAiConnectionService(deps: AiConnectionServiceDeps) {
     }))
   }
 
-  async function readInternal(definitionId?: string): Promise<AiConnectionState> {
+  async function readInternal(definitionId?: string, savedKey?: boolean): Promise<AiConnectionState> {
     const snapshot = await deps.repository.read()
     const selection = await deps.readSelection()
     const definition = definitionId === undefined
@@ -284,13 +303,19 @@ export function createAiConnectionService(deps: AiConnectionServiceDeps) {
       throw new Error('invalid')
     const record = recordFrom(snapshot, definition)
     const selected = definition.stageProviderId !== undefined && selection?.providerId === definition.stageProviderId
+    let hasKey = savedKey ?? false
+    try {
+      if (savedKey === undefined && !definition.localOnly)
+        hasKey = !!record && !!chatCredential(record)
+    }
+    catch { /* An unreadable slot can be replaced from this screen. */ }
     return {
       availability: definition.availability,
       baseUrl: record?.baseUrl ?? definition.baseUrl,
       connectionId: record?.id ?? '',
       definitionId: definition.definitionId,
       ...(definition.engineId ? { engineId: definition.engineId } : {}),
-      hasKey: definition.stageProviderId ? deps.vault.hasSecret(definition.stageProviderId, 'apiKey') : false,
+      hasKey,
       label: definition.label,
       modelId: selected ? selection?.modelId : record?.modelIds[0],
       revision: snapshot.revision,
@@ -310,7 +335,7 @@ export function createAiConnectionService(deps: AiConnectionServiceDeps) {
       || !validId(input.providerId) || !validAddress(input.baseUrl) || !Number.isSafeInteger(input.revision) || input.revision < 0
       || (input.modelId !== undefined && !validId(input.modelId))
       || (input.confirmHostChange !== undefined && typeof input.confirmHostChange !== 'boolean')
-      || (input.apiKey !== undefined && (typeof input.apiKey !== 'string' || input.apiKey.length > 16384 || /[\r\n\0]/.test(input.apiKey) || unboundCredential(input.apiKey) === undefined))) {
+      || (input.apiKey !== undefined && (typeof input.apiKey !== 'string' || input.apiKey.length > 16384 || (input.apiKey !== '' && !/^[\x21-\x7E]+$/.test(input.apiKey)) || unboundCredential(input.apiKey) === undefined))) {
       return { ok: false, code: 'invalid' }
     }
     const definition = definitionById(input.providerId)
@@ -319,6 +344,13 @@ export function createAiConnectionService(deps: AiConnectionServiceDeps) {
     // The catalog gate is enforced here, not only by a disabled button.
     if (!manageable(definition) || !definition.stageProviderId)
       return { ok: false, code: 'provider-unavailable' }
+    if (definition.localOnly && !validLocalAddress(input.baseUrl))
+      return { ok: false, code: 'local-endpoint' }
+    if (definition.localOnly && input.apiKey)
+      return { ok: false, code: 'local-credential' }
+    const bound = input.apiKey ? bindCredential(definition.stageProviderId, new URL(input.baseUrl), input.apiKey, 'chat') : undefined
+    if (bound && bound.length > 16384)
+      return { ok: false, code: 'invalid' }
     // Alias keeps the resolved catalog entry available inside the rollback
     // closures below without re-reading the catalog or trusting the input.
     const providerDefinition = definition
@@ -381,10 +413,13 @@ export function createAiConnectionService(deps: AiConnectionServiceDeps) {
 
       // Never silently forward a saved credential to a newly supplied host.
       // Any URL change - even same host, different path - requires the key.
-      if (previous?.baseUrl !== input.baseUrl && input.apiKey === undefined && deps.vault.hasSecret(definition.stageProviderId, 'apiKey'))
+      if (!definition.localOnly && previous?.baseUrl !== input.baseUrl && input.apiKey === undefined && deps.vault.hasSecret(definition.stageProviderId, 'apiKey'))
         return { ok: false, code: 'credentials' }
-      // A failed recovery must never re-enable a row without an explicit key.
-      if ((!configurationSafe || previous?.enabled === false) && input.apiKey === undefined)
+      // A keyless save cannot clear an unresolved failure from another connection.
+      if (definition.localOnly && !configurationSafe)
+        return { ok: false, code: 'storage' }
+      // A failed recovery must never re-enable a keyed row without an explicit key.
+      if (!definition.localOnly && (!configurationSafe || previous?.enabled === false) && input.apiKey === undefined)
         return { ok: false, code: 'credentials' }
 
       // Preserve an existing model when the caller is only rotating the key;
@@ -393,7 +428,11 @@ export function createAiConnectionService(deps: AiConnectionServiceDeps) {
       const selectionModel = input.modelId ?? (originalSelection?.providerId === definition.stageProviderId ? originalSelection.modelId : undefined)
       const shouldSaveSelection = input.modelId !== undefined || originalSelection?.providerId === definition.stageProviderId
 
-      const adapterOptions = { ...previous?.adapterOptions, allowUnauthenticated: input.apiKey === '' || (input.apiKey === undefined && previous?.adapterOptions.allowUnauthenticated === true) }
+      const adapterOptions = {
+        ...previous?.adapterOptions,
+        ...(definition.localOnly ? { localOnly: true } : {}),
+        allowUnauthenticated: definition.localOnly === true || input.apiKey === '' || (input.apiKey === undefined && previous?.adapterOptions.allowUnauthenticated === true),
+      }
       const record: TransportRecord = {
         id: previous?.id ?? definition.definitionId,
         providerId: definition.stageProviderId,
@@ -414,9 +453,9 @@ export function createAiConnectionService(deps: AiConnectionServiceDeps) {
         return { ok: false, code: disabled.code }
       disabledRevision = disabled.snapshot.revision
       configurationSafe = false
-      if (input.apiKey !== undefined) {
+      if (!definition.localOnly && input.apiKey !== undefined) {
         keyWriteUncertain = true
-        const change = expectedKeyRevision === undefined ? undefined : await deps.vault.changeSecret?.(definition.stageProviderId, 'apiKey', input.apiKey || undefined, { expectedRevision: expectedKeyRevision })
+        const change = expectedKeyRevision === undefined ? undefined : await deps.vault.changeSecret?.(definition.stageProviderId, 'apiKey', bound, { expectedRevision: expectedKeyRevision })
         keyWriteUncertain = false
         if (!change) {
           configurationSafe = await recover()
@@ -434,7 +473,7 @@ export function createAiConnectionService(deps: AiConnectionServiceDeps) {
         return { ok: false, code: configurationSafe ? saved.code : 'storage' }
       }
       configurationSafe = true
-      const state = await readInternal(definition.definitionId)
+      const state = await readInternal(definition.definitionId, input.apiKey === undefined ? undefined : !!bound)
       return { ok: true, state }
     }
     catch {
@@ -452,7 +491,7 @@ export function createAiConnectionService(deps: AiConnectionServiceDeps) {
     catch { return Promise.resolve({ ok: false, code: 'invalid' }) }
     let expectedKeyRevision: string | undefined
     const definition = copy && typeof copy === 'object' ? definitionById(copy.providerId) : undefined
-    if (definition && definition.stageProviderId) {
+    if (definition?.stageProviderId && !definition.localOnly) {
       try {
         expectedKeyRevision = deps.vault.secretRevision?.(definition.stageProviderId, 'apiKey')
       }
@@ -472,7 +511,7 @@ export function createAiConnectionService(deps: AiConnectionServiceDeps) {
     return definition && manageable(definition) ? definition : undefined
   }
 
-  function execute<T>(providerId: unknown, operation: (request: (path: string, body?: unknown) => Promise<any>, state: AiConnectionState) => Promise<T>): Promise<{ ok: true } & T | Failure> {
+  function execute<T>(providerId: unknown, operation: (request: (path: string, body?: unknown) => Promise<any>, state: AiConnectionState, definition: LiaAiProviderDefinition) => Promise<T>): Promise<{ ok: true } & T | Failure> {
     const definition = definitionForOperation(providerId)
     if (!definition)
       return Promise.resolve({ ok: false, code: 'invalid' })
@@ -491,7 +530,7 @@ export function createAiConnectionService(deps: AiConnectionServiceDeps) {
             record = recordFrom(snapshot, definition)
           }
           catch { throw new Error('unconfigured') }
-          if (!record?.enabled || !validAddress(record.baseUrl))
+          if (!record?.enabled || !validConnectionAddress(definition, record))
             throw new Error('unconfigured')
           if (definition.requiresApiKey) {
             try {
@@ -508,14 +547,16 @@ export function createAiConnectionService(deps: AiConnectionServiceDeps) {
           if (controller.signal.aborted)
             throw new Error('timeout')
           let key: string | undefined
-          try {
-            key = unboundCredential(deps.vault.getSecret(definition.stageProviderId!, 'apiKey'))
+          if (!definition.localOnly) {
+            try {
+              key = chatCredential(record)
+            }
+            catch {
+              throw new Error('storage')
+            }
+            if (!key && (definition.requiresApiKey || deps.vault.hasSecret(definition.stageProviderId!, 'apiKey')))
+              throw new Error('credentials')
           }
-          catch {
-            throw new Error('storage')
-          }
-          if (definition.requiresApiKey && !key)
-            throw new Error('credentials')
           const request = async (path: string, body?: unknown) => {
             const response = await fetchImpl(`${record.baseUrl.replace(/\/+$/, '')}/${path}`, { method: body ? 'POST' : 'GET', redirect: 'error', signal: controller.signal, headers: { ...(key ? { Authorization: `Bearer ${key}` } : {}), ...(body ? { 'Content-Type': 'application/json' } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) })
             if (!response.ok)
@@ -542,7 +583,7 @@ export function createAiConnectionService(deps: AiConnectionServiceDeps) {
             }
             catch { throw new Error('protocol') }
           }
-          return operation(request, state)
+          return operation(request, state, definition)
         }
         // Includes queue, repository reads and bodies, even when a dependency ignores signal.
         const result = await Promise.race([work(), new Promise<never>((_, reject) => controller.signal.addEventListener('abort', () => reject(new Error('timeout')), { once: true }))])
@@ -569,9 +610,20 @@ export function createAiConnectionService(deps: AiConnectionServiceDeps) {
   }
 
   function probe(providerId: unknown) {
-    return execute(providerId, async (request, state) => {
+    return execute(providerId, async (request, state, definition) => {
       if (!state.modelId)
         throw new Error('unconfigured')
+      if (definition.localOnly) {
+        const response = await request('chat/completions', {
+          model: state.modelId,
+          messages: [{ role: 'user', content: 'Reply with a brief greeting.' }],
+          stream: false,
+        })
+        const content = response?.choices?.[0]?.message?.content
+        if (typeof content !== 'string' || !content.trim())
+          throw new Error('protocol')
+        return {}
+      }
       const tools = [{ type: 'function', function: { name: 'lia_connection_check', description: 'Return the connection check result.', parameters: { type: 'object', properties: {}, additionalProperties: false } } }]
       const messages: any[] = [{ role: 'user', content: 'Call lia_connection_check once, then reply with the exact result it returns.' }]
       const first = await request('chat/completions', { model: state.modelId, messages, tools, tool_choice: { type: 'function', function: { name: 'lia_connection_check' } }, stream: false })

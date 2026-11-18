@@ -10,7 +10,7 @@ import { createApp } from 'vue'
 import { createNativeProviderRuntime } from '../../services/lia/native-provider-runtime'
 import { createSecretAdoptHandler } from '../../services/lia/secret-adopt.fixture'
 import { createLiaTransportClient } from '../../services/lia/transport-config'
-import { setTransportTestVaultResolver, setTransportTestWriteFailure } from '../../services/lia/transport-config.fixture'
+import { setTransportTestChatVaultResolver, setTransportTestChatWriter, setTransportTestWriteFailure } from '../../services/lia/transport-config.fixture'
 
 const ipc = vi.hoisted(() => ({
   chatConfig: vi.fn(async (): Promise<import('../../../shared/eventa').LiaProviderChatConfig> => ({})),
@@ -21,6 +21,7 @@ const ipc = vi.hoisted(() => ({
   secretGet: vi.fn(async (_payload: { scope: string, key: string }): Promise<string | undefined> => undefined),
   secretHas: vi.fn(async () => false),
   secretSet: vi.fn(async (_payload: { scope: string, key: string, value: string }) => true),
+  chatSave: vi.fn(async (_input: unknown) => true),
 }))
 
 vi.mock('@proj-airi/electron-vueuse', async () => {
@@ -52,6 +53,9 @@ vi.mock('vue-i18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
 
 const { useLiaProviderStore } = await import('./provider')
 const KEY = 'SYNTHETIC_SECRET_NEVER_OUTPUT'
+const localId = 'lm-studio'
+const genericId = 'openai-compatible'
+const address = 'https://local-service.invalid/v1/'
 let fetchMock: ReturnType<typeof vi.fn>
 
 beforeEach(() => {
@@ -61,7 +65,8 @@ beforeEach(() => {
   app.use(pinia)
   app.use(PiniaColada)
   setActivePinia(pinia)
-  setTransportTestVaultResolver(pinia, ipc.vaultGet)
+  setTransportTestChatWriter(pinia, ipc.chatSave)
+  setTransportTestChatVaultResolver(pinia, ipc.vaultGet, scope => scope === genericId ? 'https://primary-service.invalid/v1/' : address)
   ipc.vaultGet.mockResolvedValue(undefined)
   fetchMock = vi.fn(async (input: RequestInfo | URL) => String(input).endsWith('/models')
     ? Response.json({ data: [{ id: 'custom/Local:Q4' }] })
@@ -75,9 +80,6 @@ afterEach(() => {
   resetChatProviderRuntimeExtensionsForTesting()
 })
 
-const localId = 'lm-studio'
-const genericId = 'openai-compatible'
-const address = 'https://local-service.invalid/v1/'
 const model = 'custom/Local-model:Q4'
 const wire = { model, messages: [{ role: 'user', content: 'synthetic migration test' }] }
 
@@ -114,7 +116,7 @@ describe('additional compatible transport migration', () => {
     const port = getProviderCredentialConfigPort(genericId)
     expect(port).toBeDefined()
     expect(await port!.save(genericId, KEY)).toBe(true)
-    expect(ipc.secretSet).toHaveBeenCalledWith({ scope: genericId, key: 'apiKey', value: KEY })
+    expect(ipc.chatSave).toHaveBeenCalledWith({ providerId: genericId, expectedBaseUrl: address, revision: expect.any(Number), apiKey: KEY })
     expect(config.getProviderConfig(genericId)).not.toHaveProperty('apiKey')
     const repository = await createLiaTransportClient().refresh()
     expect(repository.records.find(record => record.providerId === genericId)?.protocol).toBe('chat-completions')
@@ -202,17 +204,13 @@ describe('additional compatible transport migration', () => {
     // The fake main reads its OWN vault, so the credential channel has to feed
     // it — the same way the real `secrets:set` handler writes the value that
     // `getSecret` later returns.
-    ipc.secretSet.mockImplementationOnce(async ({ scope, value }: { scope: string, value: string }): Promise<boolean> => {
-      ipc.vaultGet.mockResolvedValue(value)
-      return scope === localId
-    })
     const args = { providerId: localId, baseUrl: address, modelId: model, apiKey: KEY }
     expect(await lia.discoverModels(args)).toEqual({ status: 'ready', models: [{ id: 'custom/Local:Q4', label: 'custom/Local:Q4' }] })
     expect(await lia.testConnection(args)).toEqual({ ok: true, scope: 'text', message: '' })
     expect(find).not.toHaveBeenCalled()
     expect(fetchMock).toHaveBeenCalledTimes(2)
     // The key reached main through the credential channel, not the execution one.
-    expect(ipc.secretSet).toHaveBeenCalledWith({ scope: localId, key: 'apiKey', value: KEY })
+    expect(ipc.chatSave).toHaveBeenCalledWith({ providerId: localId, expectedBaseUrl: address, revision: expect.any(Number), apiKey: KEY })
     expect(new Headers(fetchMock.mock.calls[0][1].headers).get('authorization')).toBe(`Bearer ${KEY}`)
     expect(JSON.parse(fetchMock.mock.calls[1][1].body).model).toBe(model)
     expect(ipc.saveChatConfig).not.toHaveBeenCalled()
@@ -224,7 +222,7 @@ describe('additional compatible transport migration', () => {
 
   it('stops before any request when the credential cannot be stored', async () => {
     const { lia } = install({})
-    ipc.secretSet.mockResolvedValueOnce(false)
+    ipc.chatSave.mockResolvedValueOnce(false)
     const result = await lia.testConnection({ providerId: localId, baseUrl: address, modelId: model, apiKey: KEY })
     expect(result).toMatchObject({ ok: false, failure: 'configuration' })
     expect(fetchMock).not.toHaveBeenCalled()

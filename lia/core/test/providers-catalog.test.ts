@@ -18,16 +18,28 @@ describe('AI provider catalog', () => {
     assert.equal(new Set(engineIds).size, engineIds.length)
   })
 
-  it('makes every ready provider resolvable end to end', () => {
+  it('makes every ready provider resolvable by its definition and transport', () => {
     for (const provider of LIA_AI_PROVIDER_CATALOG.filter(entry => entry.availability === 'ready')) {
       assert.ok(provider.stageProviderId, provider.definitionId)
-      assert.ok(provider.engineId, provider.definitionId)
-      assert.equal(new URL(provider.baseUrl).protocol, 'https:', provider.definitionId)
-      assert.ok(provider.models.length > 0, provider.definitionId)
       assert.equal(findLiaAiProviderDefinition(provider.definitionId)?.definitionId, provider.definitionId)
       assert.equal(findLiaAiProviderByStageProviderId(provider.stageProviderId!)?.definitionId, provider.definitionId)
-      assert.equal(findLiaAiProviderByEngineId(provider.engineId!)?.definitionId, provider.definitionId)
+      if (provider.engineId)
+        assert.equal(findLiaAiProviderByEngineId(provider.engineId)?.definitionId, provider.definitionId)
     }
+  })
+
+  it('offers the local Stage transport without a key or an assumed model', () => {
+    const local = LIA_AI_PROVIDER_CATALOG.find(provider => provider.localOnly)
+    assert.ok(local)
+    assert.equal(local.stageProviderId, 'local-chat')
+    assert.equal(findLiaAiProviderByStageProviderId('lm-studio'), undefined)
+    assert.equal(local.availability, 'ready')
+    assert.equal(local.label, 'IA local')
+    assert.equal(local.baseUrl, 'http://127.0.0.1:1234/v1')
+    assert.equal(local.allowCustomEndpoint, true)
+    assert.equal(local.requiresApiKey, false)
+    assert.equal(local.engineId, undefined)
+    assert.deepEqual(local.models, [])
   })
 
   it('describes Groq exactly as the Brain adapter and the Stage provider do', () => {

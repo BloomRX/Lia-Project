@@ -16,7 +16,7 @@ function handler(name: string) {
   return handlers.get(`eventa:invoke:lia:secret:${name}-receive`)!
 }
 const trustedSender = () => true
-function setup(allowRendererRead?: (scope: string) => Promise<boolean>, isAllowedSender: (event: any) => boolean = trustedSender) {
+function setup(allowRendererRead: ((scope: string) => Promise<boolean>) | null = async () => true, isAllowedSender: (event: any) => boolean = trustedSender) {
   const values = new Map<string, string>()
   const revisions = new Map<string, number>()
   const reference = (scope: string, key: string) => `${scope}:${key}`
@@ -38,7 +38,7 @@ function setup(allowRendererRead?: (scope: string) => Promise<boolean>, isAllowe
     }),
     secretRevision: (scope: string, key: string) => String(revisions.get(reference(scope, key)) ?? 0),
   }
-  registerLiaSecretsBridge({ context: {} as never, vault, allowRendererRead, isAllowedSender })
+  registerLiaSecretsBridge({ context: {} as never, vault, allowRendererRead: allowRendererRead ?? undefined, isAllowedSender })
   return { vault, values }
 }
 beforeEach(() => handlers.clear())
@@ -82,17 +82,31 @@ describe('secret bridge ownership and migration', () => {
     expect(vault.deleteSecret).not.toHaveBeenCalled()
   })
   it('does not read or export a protected credential, even when present', async () => {
-    const { vault, values } = setup()
+    const { vault, values } = setup(null)
     values.set('protected:apiKey', 'SYNTHETIC_PRIVATE_VALUE')
     expect(await handler('get')({ scope: 'protected', key: 'apiKey' })).toBeUndefined()
     expect(vault.getSecret).not.toHaveBeenCalled()
     expect(await handler('has')({ scope: 'protected', key: 'apiKey' })).toBe(true)
   })
-  it('reads an explicitly permitted legacy credential through the existing policy', async () => {
+  it('cannot replace a stored bound key or adopt one for a protected alias', async () => {
+    const scope = 'protected-custom-chat'
+    const key = 'apiKey'
+    const { vault, values } = setup(async id => id !== scope)
+    const bound = bindCredential(scope, new URL('https://chat.invalid'), 'synthetic-original', 'chat')
+    values.set(`${scope}:${key}`, bound)
+    const input = { scope, key, value: 'synthetic-replacement' }
+    expect(await handler('set')(input)).toBe(false)
+    expect(await handler('adopt')(input)).toBe('unavailable')
+    expect(values.get(`${scope}:${key}`)).toBe(bound)
+    expect(vault.setSecret).not.toHaveBeenCalled()
+    expect(vault.getSecret).not.toHaveBeenCalled()
+  })
+  it('keeps a legacy credential private even when legacy mutations are permitted', async () => {
     const { vault, values } = setup(async scope => scope === 'legacy')
     values.set('legacy:apiKey', 'SYNTHETIC_LEGACY_VALUE')
-    expect(await handler('get')({ scope: 'legacy', key: 'apiKey' })).toBe('SYNTHETIC_LEGACY_VALUE')
-    expect(vault.getSecret).toHaveBeenCalledExactlyOnceWith('legacy', 'apiKey')
+    expect(await handler('get')({ scope: 'legacy', key: 'apiKey' })).toBeUndefined()
+    expect(await handler('has')({ scope: 'legacy', key: 'apiKey' })).toBe(true)
+    expect(vault.getSecret).not.toHaveBeenCalled()
   })
   it('fails closed when the authority check rejects, without disclosing the error', async () => {
     const { vault } = setup(async () => {
@@ -220,9 +234,10 @@ describe('secret bridge sender policy', () => {
     const { values } = setup(async () => true, () => trusted)
     values.set('legacy:apiKey', 'SYNTHETIC_LEGACY_VALUE')
 
-    expect(await handler('get')({ scope: 'legacy', key: 'apiKey' })).toBeUndefined()
+    expect(await handler('has')({ scope: 'legacy', key: 'apiKey' })).toBe(false)
     trusted = true
-    expect(await handler('get')({ scope: 'legacy', key: 'apiKey' })).toBe('SYNTHETIC_LEGACY_VALUE')
+    expect(await handler('has')({ scope: 'legacy', key: 'apiKey' })).toBe(true)
+    expect(await handler('get')({ scope: 'legacy', key: 'apiKey' })).toBeUndefined()
   })
 
   it('fails closed when the policy itself throws', async () => {
