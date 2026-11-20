@@ -64,6 +64,7 @@ o documento da área que você vai tocar.
 | Documento | Papel |
 |---|---|
 | [`architecture/LIA-ARCHITECTURE.md`](architecture/LIA-ARCHITECTURE.md) | Arquitetura alvo da Lia |
+| [`architecture/LIA-COGNITIVE-ARCHITECTURE.md`](architecture/LIA-COGNITIVE-ARCHITECTURE.md) | **Visão cognitiva e arquitetura-alvo:** identidade, personalidade, memória, decisão, autonomia, Agent Hub, percepção, desktop, jogos, casa inteligente e ecossistema |
 | [`architecture/AIRI-COMPARISON.md`](architecture/AIRI-COMPARISON.md) | **AIRI limpo × AIRI da Lia**, medido contra clone em `2c1e223`: 353 criados, 95 modificados, 0 removidos |
 | [`architecture/LIA-STAGE-ARCHITECTURE.md`](architecture/LIA-STAGE-ARCHITECTURE.md) | Os três níveis do Stage (próprio / reutilizado / terceiro) e os contratos |
 | [`architecture/LIA-MIGRATION-PLAN.md`](architecture/LIA-MIGRATION-PLAN.md) | Ordem da migração para `lia/`, critério de rollback e gate honesto |
