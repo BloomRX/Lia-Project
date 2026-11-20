@@ -20,6 +20,7 @@ $names = @(
     'release-note-writer',
     'simple-english',
     'stage-tamagotchi-godot-csharp',
+    'tsdown',
     'unocss',
     'use-agent-browser-for-airi',
     'use-agent-browser-with-input-file',
@@ -32,6 +33,7 @@ $names = @(
     'vue',
     'vue-best-practices',
     'vue-testing-best-practices',
+    'vueuse-functions',
     'web-design-guidelines',
     'xsai'
 )

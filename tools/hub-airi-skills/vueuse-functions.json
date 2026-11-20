@@ -1,0 +1,11 @@
+{
+  "lockVersion": 1,
+  "skillId": "urn:lia:cap:8644468f-8b73-430e-be19-18fdc99ce6d9",
+  "revision": 1,
+  "capabilityId": "vueuse-functions-a021dd04",
+  "version": "0.1.0",
+  "packageSha256": "93d0bf69ab63846f12317d256dfcc9ef2d6bd8df6d2b6de93db2839747d67a1b",
+  "treeSha256": "46a3fdb14e05cc3362258a6777b3029981a75b33c3f1d7c81596a114c911bda6",
+  "profile": "lia-project",
+  "dependencies": []
+}

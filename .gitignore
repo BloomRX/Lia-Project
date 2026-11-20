@@ -66,3 +66,5 @@ tools/stt-bench/samples/*.webm
 /airi/.agents/skills/use-vishot-with-electron/
 /airi/.agents/skills/use-vishot-with-input-file/
 /airi/.agents/skills/use-vishot-with-web/
+/airi/.agents/skills/tsdown/
+/airi/.agents/skills/vueuse-functions/
