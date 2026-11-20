@@ -8,7 +8,10 @@ $ErrorActionPreference = 'Stop'
 $runner = (Resolve-Path -LiteralPath $HubCli).Path
 $bundle = (Resolve-Path -LiteralPath $BundleDirectory).Path
 $root = Split-Path -Parent $PSScriptRoot
-$names = @('eventa', 'simple-english', 'vue-best-practices', 'vue-testing-best-practices')
+$names = @(
+    'agent-browser', 'eventa', 'pinia', 'pnpm', 'simple-english', 'unocss',
+    'vue', 'vue-best-practices', 'vue-testing-best-practices', 'web-design-guidelines', 'xsai'
+)
 $destination = $root
 foreach ($part in @('airi', '.agents', 'skills')) {
     $destination = Join-Path $destination $part

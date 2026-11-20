@@ -1,0 +1,11 @@
+{
+  "lockVersion": 1,
+  "skillId": "urn:lia:cap:effe1f54-ae16-46f3-9f82-fd4b05da4ae2",
+  "revision": 1,
+  "capabilityId": "pnpm-f0054b98",
+  "version": "0.1.0",
+  "packageSha256": "9a9cf99cb24cc2b0563fbfe86e0f40ff7530b7e7b150436b6606010458f49dcf",
+  "treeSha256": "8105d3e3e6db93bca68400ae088a72193f44928bc9ee1c708225b56e97fdd239",
+  "profile": "lia-project",
+  "dependencies": []
+}

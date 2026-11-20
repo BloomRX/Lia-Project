@@ -45,3 +45,10 @@ tools/stt-bench/samples/*.webm
 /airi/.agents/skills/vue-best-practices/
 /airi/.agents/skills/vue-testing-best-practices/
 /airi/.agents/skills/.hub-stage-*/
+/airi/.agents/skills/agent-browser/
+/airi/.agents/skills/pinia/
+/airi/.agents/skills/pnpm/
+/airi/.agents/skills/unocss/
+/airi/.agents/skills/vue/
+/airi/.agents/skills/web-design-guidelines/
+/airi/.agents/skills/xsai/

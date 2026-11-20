@@ -1,0 +1,11 @@
+{
+  "lockVersion": 1,
+  "skillId": "urn:lia:cap:f81bc6b1-6647-4173-b9a6-e722be9f1ca2",
+  "revision": 1,
+  "capabilityId": "web-design-guidelines-02f2c681",
+  "version": "0.1.0",
+  "packageSha256": "2cd67eb3c40f91ba9d05c854e5194958d377c11ad25a2472d6f8b0b78a73f317",
+  "treeSha256": "d3e86870317fabe231fa87592070d45472b62fe15faf2e1cf5afe6aa7bdfbb8b",
+  "profile": "lia-project",
+  "dependencies": []
+}

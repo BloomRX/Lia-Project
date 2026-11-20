@@ -1,0 +1,11 @@
+{
+  "lockVersion": 1,
+  "skillId": "urn:lia:cap:912465cd-679f-42de-a063-5a44a7041dda",
+  "revision": 1,
+  "capabilityId": "pinia-8eef03db",
+  "version": "0.1.0",
+  "packageSha256": "a54c5c03335ce2668b2710db6587ff435051663937959edbd442f66854c7ed67",
+  "treeSha256": "5b9fc3c149bbd41ff65901a3e96f9d56cb162a14258a4690e229a6f19061733b",
+  "profile": "lia-project",
+  "dependencies": []
+}
