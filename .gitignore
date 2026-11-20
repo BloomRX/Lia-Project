@@ -35,3 +35,6 @@ tools/stt-bench/samples/*.webm
 # Auditorias locais (.local.md) trazem caminhos pessoais, IDs de sessão e
 # contagens internas; ficam fora do Git. Ver docs/reports/LIA-SENSITIVE-FILE-REMEDIATION-2026-11-17.md.
 *.local.md
+
+# Skill materializada do Agent Hub no piloto local.
+/.agents/skills/lia-eventa-ipc/
