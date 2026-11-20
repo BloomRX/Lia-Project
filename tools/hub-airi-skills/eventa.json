@@ -1,0 +1,11 @@
+{
+  "lockVersion": 1,
+  "skillId": "urn:lia:cap:0653eff0-e7ae-4c10-8b32-a450e650041d",
+  "revision": 1,
+  "capabilityId": "eventa-b8c1da27",
+  "version": "0.1.0",
+  "packageSha256": "f9860fe54c2118f839579ca95990eb5ae890e60d371e6a505c29135b4aa1e9b3",
+  "treeSha256": "c7959c6e35f5dec0691e2fffbbccb90eb86de324b91bcab19c6c1c3e34bd3818",
+  "profile": "lia-project",
+  "dependencies": []
+}

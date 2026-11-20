@@ -1,0 +1,11 @@
+{
+  "lockVersion": 1,
+  "skillId": "urn:lia:cap:e873f22f-3394-42d1-818e-3050dc63c71b",
+  "revision": 1,
+  "capabilityId": "vue-testing-best-practices-c543a062",
+  "version": "1.0.0",
+  "packageSha256": "73ef37310a39a15678392ae099213ba4c11b9d260aee641b4429f585e8abf822",
+  "treeSha256": "05200a1fe972cb99f27f3ef09101c975f3f53dc8da910264b96d8f489fabb999",
+  "profile": "lia-project",
+  "dependencies": []
+}
