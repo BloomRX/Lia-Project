@@ -1,0 +1,11 @@
+{
+  "lockVersion": 1,
+  "skillId": "urn:lia:cap:faaee790-99b1-434b-9ee6-879ef1f89b1c",
+  "revision": 1,
+  "capabilityId": "release-note-writer-855c3f47",
+  "version": "0.1.0",
+  "packageSha256": "fb96d61b1799c8f697a8b4f4bf7154c5747e28429978d93a1e374c30af763077",
+  "treeSha256": "77ee8b442a583cb5759ab728c83d72e21bfd1454ab6f903d34021e147775cba1",
+  "profile": "lia-project",
+  "dependencies": []
+}

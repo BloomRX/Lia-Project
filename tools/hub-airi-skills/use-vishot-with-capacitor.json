@@ -1,0 +1,11 @@
+{
+  "lockVersion": 1,
+  "skillId": "urn:lia:cap:ffe70a86-19f7-48ea-85bd-a2f9b7ca7cbd",
+  "revision": 1,
+  "capabilityId": "use-vishot-with-capacitor-9e68d143",
+  "version": "0.1.0",
+  "packageSha256": "2823c9c5b38682fb7705fb5e1ba7e473052f17c9fbbfe6c2232668a4183f81df",
+  "treeSha256": "a8cf2260b598bb208809fb426f9f2eb4af117f71fdeb2389be19e8dd7866a8af",
+  "profile": "lia-project",
+  "dependencies": []
+}

@@ -1,0 +1,11 @@
+{
+  "lockVersion": 1,
+  "skillId": "urn:lia:cap:9dc45b09-1af9-4107-9ee3-4e3db4aab259",
+  "revision": 1,
+  "capabilityId": "stage-tamagotchi-godot-csharp-1425ff9b",
+  "version": "0.1.0",
+  "packageSha256": "09a05c39e3f873e9870f0757508b5e66ef5ece08bdaed677f6a39ce467bfc8dd",
+  "treeSha256": "e56762196550d092a32e446543b0f24fca48463808f8f29c5c81a4156e309a9c",
+  "profile": "lia-project",
+  "dependencies": []
+}

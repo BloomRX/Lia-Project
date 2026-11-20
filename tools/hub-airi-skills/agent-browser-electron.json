@@ -1,0 +1,11 @@
+{
+  "lockVersion": 1,
+  "skillId": "urn:lia:cap:adf2a3e5-d3bb-4036-b2c3-57ff146919bb",
+  "revision": 1,
+  "capabilityId": "agent-browser-electron-c2c960bf",
+  "version": "0.1.0",
+  "packageSha256": "290fa85b4062973bbd02b587ab1989d7bfc9f8c5fc66e1bdec1ea3df2b06652a",
+  "treeSha256": "5ce320247b45a2f1b537ed0d17c6a1401106bbbb2cb5d7099b7e6499dd66e733",
+  "profile": "lia-project",
+  "dependencies": []
+}

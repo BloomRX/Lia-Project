@@ -52,3 +52,17 @@ tools/stt-bench/samples/*.webm
 /airi/.agents/skills/vue/
 /airi/.agents/skills/web-design-guidelines/
 /airi/.agents/skills/xsai/
+/airi/.agents/skills/agent-browser-electron/
+/airi/.agents/skills/create-pr/
+/airi/.agents/skills/enforce-rules-for-unocss/
+/airi/.agents/skills/enforce-rules-for-vitest/
+/airi/.agents/skills/release-note-writer/
+/airi/.agents/skills/stage-tamagotchi-godot-csharp/
+/airi/.agents/skills/use-agent-browser-for-airi/
+/airi/.agents/skills/use-agent-browser-with-input-file/
+/airi/.agents/skills/use-vishot/
+/airi/.agents/skills/use-vishot-for-airi/
+/airi/.agents/skills/use-vishot-with-capacitor/
+/airi/.agents/skills/use-vishot-with-electron/
+/airi/.agents/skills/use-vishot-with-input-file/
+/airi/.agents/skills/use-vishot-with-web/

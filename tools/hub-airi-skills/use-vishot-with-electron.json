@@ -1,0 +1,11 @@
+{
+  "lockVersion": 1,
+  "skillId": "urn:lia:cap:558961a0-ef83-4bf2-937f-556e42c1ee7c",
+  "revision": 1,
+  "capabilityId": "use-vishot-with-electron-47976234",
+  "version": "0.1.0",
+  "packageSha256": "f252441ba4398a1b820dffd7588c3941b4aa88730d8a5e878b0cf7323d0a9c09",
+  "treeSha256": "2f850a2806d54b4a2d1357228b24f7d665f91765f45a414d5c92795cb343283f",
+  "profile": "lia-project",
+  "dependencies": []
+}

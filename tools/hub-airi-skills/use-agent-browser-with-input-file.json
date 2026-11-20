@@ -1,0 +1,11 @@
+{
+  "lockVersion": 1,
+  "skillId": "urn:lia:cap:8ba9e7a2-26b4-4ee4-9e34-002128428074",
+  "revision": 1,
+  "capabilityId": "use-agent-browser-with-input-file-75611f2e",
+  "version": "0.1.0",
+  "packageSha256": "02db4b71fb3c16ca5a8adee2cca8ad9c56a0d5d4a4d447940a0a2611b4ddfc77",
+  "treeSha256": "b2149a6d0c3fde76909e068c856a7d941c4bf18855fe8fde79d7fd29886070e5",
+  "profile": "lia-project",
+  "dependencies": []
+}

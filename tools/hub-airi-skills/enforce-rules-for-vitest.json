@@ -1,0 +1,11 @@
+{
+  "lockVersion": 1,
+  "skillId": "urn:lia:cap:8d6bbc0b-203a-4568-aaf5-2e37da5d38fc",
+  "revision": 1,
+  "capabilityId": "enforce-rules-for-vitest-45030e70",
+  "version": "0.1.0",
+  "packageSha256": "5ce9146bc83350a3af26b67bcb36cff4b314e9b55ab771fd0ce5f5d982283401",
+  "treeSha256": "4ed28191f09f2ed2904e7ae6f9d58ad39a51be2dba1aaa9dddd507371e25688b",
+  "profile": "lia-project",
+  "dependencies": []
+}

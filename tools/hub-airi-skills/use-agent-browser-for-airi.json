@@ -1,0 +1,11 @@
+{
+  "lockVersion": 1,
+  "skillId": "urn:lia:cap:cf72c00f-b47f-4c82-8149-fb1839065dbe",
+  "revision": 1,
+  "capabilityId": "use-agent-browser-for-airi-ee0a7447",
+  "version": "0.1.0",
+  "packageSha256": "c69b2167f2253a34667996b2e1c6d8493fa56c86ccc54d32c86493180f884ea5",
+  "treeSha256": "c8ba10e43d36d04e30a90979ba73227edf9c8cf26f12a39cad292f0c61f6ac83",
+  "profile": "lia-project",
+  "dependencies": []
+}

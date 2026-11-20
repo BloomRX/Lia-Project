@@ -9,8 +9,31 @@ $runner = (Resolve-Path -LiteralPath $HubCli).Path
 $bundle = (Resolve-Path -LiteralPath $BundleDirectory).Path
 $root = Split-Path -Parent $PSScriptRoot
 $names = @(
-    'agent-browser', 'eventa', 'pinia', 'pnpm', 'simple-english', 'unocss',
-    'vue', 'vue-best-practices', 'vue-testing-best-practices', 'web-design-guidelines', 'xsai'
+    'agent-browser',
+    'agent-browser-electron',
+    'create-pr',
+    'enforce-rules-for-unocss',
+    'enforce-rules-for-vitest',
+    'eventa',
+    'pinia',
+    'pnpm',
+    'release-note-writer',
+    'simple-english',
+    'stage-tamagotchi-godot-csharp',
+    'unocss',
+    'use-agent-browser-for-airi',
+    'use-agent-browser-with-input-file',
+    'use-vishot',
+    'use-vishot-for-airi',
+    'use-vishot-with-capacitor',
+    'use-vishot-with-electron',
+    'use-vishot-with-input-file',
+    'use-vishot-with-web',
+    'vue',
+    'vue-best-practices',
+    'vue-testing-best-practices',
+    'web-design-guidelines',
+    'xsai'
 )
 $destination = $root
 foreach ($part in @('airi', '.agents', 'skills')) {

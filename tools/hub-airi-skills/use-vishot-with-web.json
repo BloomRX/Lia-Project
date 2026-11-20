@@ -1,0 +1,11 @@
+{
+  "lockVersion": 1,
+  "skillId": "urn:lia:cap:1f05d31b-1f46-481e-bee2-61cba34dce59",
+  "revision": 1,
+  "capabilityId": "use-vishot-with-web-58c71a48",
+  "version": "0.1.0",
+  "packageSha256": "c340422b05260e9b702e5a543f3c1c4c68719b46b2f44d65d3ff45b1291d9145",
+  "treeSha256": "b15d42c5e522695dab0b2757f012d6ea36b6362628a7ad3bb60892bb2de8f542",
+  "profile": "lia-project",
+  "dependencies": []
+}

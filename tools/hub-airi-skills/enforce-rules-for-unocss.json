@@ -1,0 +1,11 @@
+{
+  "lockVersion": 1,
+  "skillId": "urn:lia:cap:c754fe50-ab75-4de7-8e61-97c2cfee9abf",
+  "revision": 1,
+  "capabilityId": "enforce-rules-for-unocss-e1fb976c",
+  "version": "0.1.0",
+  "packageSha256": "f9fa2fbaa5331ccd5906a0ac9292a200bdb5ee530ba2026a5e5b1a80b821aa12",
+  "treeSha256": "6e0d550ee34cc14158e74334c723cad9d50ec633ba5de419f156e697ccfce4f6",
+  "profile": "lia-project",
+  "dependencies": []
+}

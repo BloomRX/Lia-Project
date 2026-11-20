@@ -1,0 +1,11 @@
+{
+  "lockVersion": 1,
+  "skillId": "urn:lia:cap:b84d1b01-720a-42df-870e-8b733d81032e",
+  "revision": 1,
+  "capabilityId": "use-vishot-for-airi-cb5aa60f",
+  "version": "0.1.0",
+  "packageSha256": "7fca7cad0758dd1012bf6ec334ba85768ee42b3301758ed02a3d0a9eb11d23f4",
+  "treeSha256": "9b622908ff7d5cfbe963a5a3a87e235e9e368fecc1a2fb220aba0851c27a7807",
+  "profile": "lia-project",
+  "dependencies": []
+}
