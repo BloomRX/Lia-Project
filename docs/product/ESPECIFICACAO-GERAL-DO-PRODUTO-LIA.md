@@ -231,3 +231,33 @@ Decisões devem registrar alternativas consideradas, escolha, motivo, impacto e 
 - Ao terminar trabalho: atualizar o estado da linha correspondente e registrar evidência no relatório de rodada; atualizar `CURRENT-STATE.md` se o estado operacional ou o próximo passo mudar.
 - Se dois documentos divergirem: esta especificação governa intenção e comportamento desejado; `CURRENT-STATE.md` governa o que foi realmente executado/validado; relatórios de rodada guardam evidências históricas.
 - Não apagar ideias ainda não implementadas: movê-las para P1/P2 ou para a seção de decisões pendentes.
+
+
+## 9. Visão ampliada: inteligência digital pessoal
+
+A direção de longo prazo da Lia é ser uma inteligência digital pessoal persistente, com identidade própria, personalidade coerente, memória controlável, percepção contextual, raciocínio, planejamento, decisão e ação por capacidades autorizadas. A experiência pode parecer a de uma companheira digital viva, sem afirmar consciência ou sentimentos humanos reais. Modelos e provedores são motores substituíveis; não definem a identidade da Lia.
+
+A inspiração combina atributos de JARVIS (integração e execução contextual), Samantha (continuidade e conversa natural), Cortana (análise e estratégia), TARS (humor configurável) e outras referências de presença digital. São referências criativas, não especificações para copiar personagens.
+
+A visão completa de cérebro, identidade, personalidade, memória, autonomia, Agent Hub, desktop, jogos, casa inteligente, voz, presença, segurança e roadmap está em [LIA-COGNITIVE-ARCHITECTURE.md](../architecture/LIA-COGNITIVE-ARCHITECTURE.md). Esse documento é arquitetura-alvo e não altera o estado de implementação.
+
+## 10. Requisitos de cognição, memória e autonomia
+
+- Identidade e personalidade devem ser estruturadas, versionadas e independentes do modelo selecionado. Estados afetivos são expressivos/simulados, não alegações de sentimento real.
+- Memória deve distinguir histórico, preferências e memória persistente; considerar dimensões episódica, semântica, procedural, autobiográfica factual, de projetos, temporal e multimodal. Nenhuma delas deve ser anunciada como funcional sem implementação e evidência.
+- Avaliar arquitetura híbrida de armazenamento estruturado, Markdown portável, busca lexical, índices semânticos/vetoriais e relações/temporalidade. Não escolher Obsidian/Markdown como solução exclusiva nem afirmar embeddings sem consumidor real.
+- Decisões devem considerar intenção, alternativas, risco, custo, privacidade, permissão, confiança e reversibilidade. Ações de alto impacto exigem confirmação.
+- Autonomia deve ser graduada, delimitada, auditável e interruptível; nunca irrestrita.
+- Ação só é concluída quando o resultado é observado e verificado, não quando uma ferramenta apenas aceita o pedido.
+
+## 11. Integração do ecossistema e capacidades futuras
+
+O Lia Agent Hub já é um componente existente do ecossistema e deve ser aproveitado. Lia-Project mantém identidade, personalidade, memória pessoal, objetivos, decisões, permissões e experiência. O Hub fornece capacidades de agentes, skills, ferramentas, MCP e orquestração conforme contratos efetivamente auditados. Contexto enviado deve ser mínimo e autorizado; catálogo não equivale a permissão. A Lia deve continuar funcional quando o Hub estiver indisponível.
+
+A visão inclui programação e trabalho em projetos, operação assistida do desktop, jogos (observadora, comentarista, assistente estratégica ou parceira quando permitido) e casa inteligente. Essas capacidades dependem de integrações seguras, termos de uso, anti-cheat, consentimento, limites e validação específica. Durante jogos, o desempenho do jogo tem prioridade.
+
+Lia-Project, Lia Agent Hub, Lia Research, Lia Model Lab, Lia Forge e Lia Studio permanecem projetos independentes integrados por contratos e artefatos versionados, sem acoplamento indiscriminado.
+
+## 12. Regra de rastreabilidade da visão
+
+Cada capacidade futura deve ligar requisito → decisão arquitetural → módulo/código → teste → evidência e estado. Usar estados distintos para visão, pesquisa, proposta, planejamento, implementação, validação automatizada, validação real, bloqueio e não execução. Pesquisa não é aprovação; implementação não é validação; teste automatizado não substitui prova no ambiente real.
