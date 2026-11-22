@@ -18,6 +18,9 @@ Home reaberta. PASS Windows no primeiro uso sem chave com Qwen local.
 O gate do cofre confirmou o bloqueio de leitura legada e a DACL nova.
 SEC-04 nos demais consumidores legados continua pendente, assim
 como OIDC integrado e externo, áudio físico G-AUD e C0–C8 de G-ARCH.
+O IPC de conta já passa no Electron com emissor local assinado para
+perfil e vínculos. Faltam a ligação com as telas do Stage, os demais
+consumidores autenticados e a validação com emissor externo.
 [Evidências da Rodada 22](../reports/LIA-ROUND-22-IMPLEMENTATION-REPORT.md).
 
 08/11 à noite — **Beta ainda bloqueada.** Cofre e logs corrigidos, editor chat

@@ -3,7 +3,6 @@ import process from 'node:process'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-import { defineInvokeHandler } from '@moeru/eventa'
 import { createContext } from '@moeru/eventa/adapters/electron/main'
 import { app, BrowserWindow, ipcMain } from 'electron'
 
@@ -16,7 +15,6 @@ import { createLiaSecretVault, registerLiaSecretsBridge } from '../../src/main/s
 import { registerLiaTranscriptionBridge } from '../../src/main/services/lia/transcription-service'
 import { canRendererReadLegacySecret, getApplicationRepository, registerLiaTransportConfigBridge } from '../../src/main/services/lia/transport-config-service'
 import { createStageWebPreferences } from '../../src/main/windows/secure-web-preferences'
-import { oidcFixtureProfile } from './oidc-fixture-events'
 
 const root = process.env.LIA_PROVIDER_GATE_DIR
 const preload = process.env.LIA_PROVIDER_GATE_PRELOAD
@@ -71,13 +69,12 @@ void app.whenReady().then(async () => {
     const clientId = 'lia-electron-oidc-fixture'
     const session = createOidcSessionOwner({ vault, origin, clientId })
     const account = createOidcAccountService({ origin, withAccess: session.withAccess })
-    const lifetime = new AbortController()
-    window.once('closed', () => lifetime.abort())
     const authContext = createContext(ipcMain, window).context
     createAuthService({
       context: authContext,
       window,
       sessionOwner: session,
+      account,
       connection: {
         origin,
         clientId,
@@ -90,12 +87,6 @@ void app.whenReady().then(async () => {
           await response.body?.cancel()
         },
       },
-    })
-    defineInvokeHandler(authContext, oidcFixtureProfile, async (_, options) => {
-      const event = options?.raw?.ipcMainEvent
-      if (window.isDestroyed() || !event || event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame)
-        return { ok: false, code: 'invalid-request' }
-      return await account.execute({ kind: 'get-profile' }, lifetime.signal)
     })
   }
   registerLiaTransportConfigBridge({

@@ -13,7 +13,7 @@ export async function startOidcFixtureIssuer() {
   const signing = await generateKeyPair('ES256')
   const jwk = { ...await exportJWK(signing.publicKey), kid: 'fixture-key', use: 'sig' }
   const consumed = new Map()
-  const counts = { wrongStateRejected: 0, exchanged: 0, refreshed: 0, authenticatedProfiles: 0, revoked: 0 }
+  const counts = { wrongStateRejected: 0, exchanged: 0, refreshed: 0, authenticatedProfiles: 0, authenticatedLinkedAccounts: 0, revoked: 0 }
   let origin
   let variant = 'valid'
   let refreshAllowed = true
@@ -56,6 +56,12 @@ export async function startOidcFixtureIssuer() {
           return reply(response, {}, 401)
         counts.authenticatedProfiles++
         return reply(response, { user: { id: 'fixture-account', name: 'Conta de teste', email: 'fixture@example.invalid' }, session: { token: access } })
+      }
+      if (request.method === 'GET' && url.pathname === '/api/auth/list-accounts') {
+        if (revoked || ![`Bearer ${access}`, `Bearer ${rotated}`].includes(request.headers.authorization))
+          return reply(response, {}, 401)
+        counts.authenticatedLinkedAccounts++
+        return reply(response, [{ providerId: 'github', createdAt: '2026-01-01T00:00:00.000Z', accessToken: access }])
       }
       if (request.method !== 'POST')
         return reply(response, {}, 404)

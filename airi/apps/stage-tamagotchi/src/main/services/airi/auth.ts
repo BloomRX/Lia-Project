@@ -1,6 +1,7 @@
 import type { createContext } from '@moeru/eventa/adapters/electron/main'
 import type { BrowserWindow } from 'electron'
 
+import type { createOidcAccountService } from './oidc-account'
 import type { createOidcSessionOwner } from './oidc-session'
 
 import { useLogg } from '@guiiai/logg'
@@ -19,6 +20,7 @@ import {
   electronAuthLogout,
   electronAuthStartLogin,
 } from '../../../shared/eventa'
+import { electronLiaOidcAccount } from '../../../shared/eventa/lia-oidc-account'
 import { isStageOidcEnabled } from '../../../shared/lia/oidc-policy'
 import { startLoopbackServer } from './http-server/http/auth'
 import { readOidcJson } from './oidc-json'
@@ -69,6 +71,7 @@ export function createAuthService(params: {
   context: MainContext
   window: BrowserWindow
   sessionOwner?: Pick<ReturnType<typeof createOidcSessionOwner>, 'beginLogin' | 'establish' | 'logout'>
+  account?: ReturnType<typeof createOidcAccountService>
   /** An explicit Main-owned connection for isolated runtimes and gates. */
   connection?: { origin: URL, clientId: string, openAuthorization: (url: string) => Promise<unknown> }
 }): void {
@@ -78,7 +81,7 @@ export function createAuthService(params: {
   const openAuthorization = params.connection?.openAuthorization ?? shell.openExternal
   const enabled = () => params.connection !== undefined || isStageOidcEnabled()
   const isOwnMainFrame = (event: Electron.IpcMainEvent | undefined) =>
-    event?.sender === params.window.webContents && !!event.senderFrame
+    !params.window.isDestroyed() && event?.sender === params.window.webContents && !!event.senderFrame
     && event.senderFrame === params.window.webContents.mainFrame
 
   async function publish(phase: string, emit: () => unknown) {
@@ -95,6 +98,46 @@ export function createAuthService(params: {
     if (activeLogin?.windowId === windowId)
       cancelLogin()
   })
+
+  const { account } = params
+  if (account && params.sessionOwner) {
+    const contents = params.window.webContents
+    let lifetime = new AbortController()
+    let inFlight = 0
+    const replaceDocument = () => {
+      lifetime.abort()
+      lifetime = new AbortController()
+    }
+    contents.on('did-start-navigation', (details) => {
+      if (details.isMainFrame && !details.isSameDocument)
+        replaceDocument()
+    })
+    contents.on('render-process-gone', replaceDocument)
+    contents.once('destroyed', () => lifetime.abort())
+
+    defineInvokeHandler(params.context, electronLiaOidcAccount, async (payload, options) => {
+      const event = options?.raw?.ipcMainEvent
+      if (!isOwnMainFrame(event))
+        return { ok: false, code: 'invalid-request' } as const
+      if (!enabled() || inFlight >= 8)
+        return { ok: false, code: 'unavailable' } as const
+
+      const { signal } = lifetime
+      inFlight++
+      try {
+        const result = await account.execute(payload, signal)
+        if (signal.aborted || !isOwnMainFrame(event))
+          return { ok: false, code: 'cancelled' } as const
+        return result
+      }
+      catch {
+        return { ok: false, code: signal.aborted ? 'cancelled' : 'unavailable' } as const
+      }
+      finally {
+        inFlight--
+      }
+    })
+  }
 
   defineInvokeHandler(params.context, electronAuthStartLogin, async (_, options) => {
     if (!isOwnMainFrame(options?.raw?.ipcMainEvent)) {

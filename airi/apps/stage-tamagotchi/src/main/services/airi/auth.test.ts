@@ -1,3 +1,7 @@
+import type { OidcAccountResult } from '../../../shared/eventa/lia-oidc-account'
+
+import { EventEmitter } from 'node:events'
+
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 
 import { createAuthService } from './auth'
@@ -12,6 +16,7 @@ const fixture = vi.hoisted(() => ({
 }))
 
 vi.mock('@moeru/eventa', () => ({
+  defineInvokeEventa: (event: string) => event,
   defineInvokeHandler: (_context: unknown, event: string, handler: (...args: any[]) => unknown) => fixture.handlers.set(event, handler),
 }))
 vi.mock('@guiiai/logg', () => ({
@@ -32,6 +37,8 @@ vi.mock('../../../shared/eventa', () => ({
   electronAuthStartLogin: 'start',
 }))
 
+const frames = [1, 2].map(id => Object.assign(new EventEmitter(), { id, mainFrame: {} }))
+
 beforeEach(() => {
   vi.stubEnv('VITE_LIA_ENABLE_OIDC', '1')
 })
@@ -41,16 +48,16 @@ afterEach(() => {
   vi.unstubAllGlobals()
   vi.resetAllMocks()
   fixture.handlers.clear()
+  frames.forEach(frame => frame.removeAllListeners())
 })
 
-const frames = [1, 2].map(id => ({ id, mainFrame: {} }))
 function ipcFor(id: number) {
   const sender = frames.find(frame => frame.id === id)!
   return { raw: { ipcMainEvent: { sender, senderFrame: sender.mainFrame } } }
 }
 const ipc = ipcFor(1)
 
-function registerWindow(emit = vi.fn(), id = 1, withOwner = true) {
+function registerWindow(emit = vi.fn(), id = 1, withOwner = true, account?: { execute: (input: unknown, signal: AbortSignal) => Promise<OidcAccountResult> }) {
   let closed: (() => void) | undefined
   const window = {
     webContents: frames.find(frame => frame.id === id)!,
@@ -62,9 +69,67 @@ function registerWindow(emit = vi.fn(), id = 1, withOwner = true) {
     establish: vi.fn(async () => true),
     logout: vi.fn(async () => ({ cleared: true, revocation: 'absent' as const })),
   }
-  createAuthService({ context: { emit } as never, window: window as never, sessionOwner: withOwner ? owner : undefined })
-  return { emit, owner, close: () => closed?.() }
+  createAuthService({ context: { emit } as never, window: window as never, sessionOwner: withOwner ? owner : undefined, account })
+  return { emit, owner, contents: window.webContents, close: () => closed?.() }
 }
+
+const accountChannel = 'eventa:invoke:lia:oidc:account'
+
+it('binds account IPC to a Main owner and its own top frame', async () => {
+  const execute = vi.fn(async () => ({ ok: true } as const))
+  registerWindow(vi.fn(), 1, false, { execute })
+  expect(fixture.handlers.has(accountChannel)).toBe(false)
+  registerWindow(vi.fn(), 1, true, { execute })
+  const invoke = fixture.handlers.get(accountChannel)!
+  const operation = { kind: 'get-profile' }
+  for (const sender of [ipcFor(2), { raw: { ipcMainEvent: { ...ipc.raw.ipcMainEvent, senderFrame: {} } } }, undefined]) {
+    await expect(invoke(operation, sender)).resolves.toEqual({ ok: false, code: 'invalid-request' })
+  }
+  vi.stubEnv('VITE_LIA_ENABLE_OIDC', '')
+  await expect(invoke(operation, ipc)).resolves.toEqual({ ok: false, code: 'unavailable' })
+  expect(execute).not.toHaveBeenCalled()
+  vi.stubEnv('VITE_LIA_ENABLE_OIDC', '1')
+  await expect(invoke(operation, ipc)).resolves.toEqual({ ok: true })
+  expect(execute).toHaveBeenCalledWith(operation, expect.any(AbortSignal))
+})
+
+it.each(['navigation', 'crash', 'destroyed'])('cancels account requests after %s and discards late results', async (event) => {
+  const reply = Promise.withResolvers<OidcAccountResult>()
+  const execute = vi.fn((_payload: unknown, _signal: AbortSignal) => reply.promise)
+  const { contents } = registerWindow(vi.fn(), 1, true, { execute })
+  const invoke = fixture.handlers.get(accountChannel)!
+  const pending = invoke({ kind: 'get-profile' }, ipc)
+  const signal = execute.mock.calls[0]![1]
+  contents.emit('did-start-navigation', { isMainFrame: true, isSameDocument: true })
+  expect(signal.aborted).toBe(false)
+  if (event === 'navigation')
+    contents.emit('did-start-navigation', { isMainFrame: true, isSameDocument: false })
+  else
+    contents.emit(event === 'crash' ? 'render-process-gone' : 'destroyed')
+  expect(signal.aborted).toBe(true)
+  reply.resolve({ ok: true, profile: { id: 'old-account', name: '', email: 'old@example.invalid', image: null } })
+  await expect(pending).resolves.toEqual({ ok: false, code: 'cancelled' })
+})
+
+it('bounds account requests per window and sanitizes exceptions before releasing capacity', async () => {
+  const reply = Promise.withResolvers<OidcAccountResult>()
+  const execute = vi.fn(() => reply.promise)
+  const operation = { kind: 'get-profile' }
+  registerWindow(vi.fn(), 1, true, { execute })
+  const firstWindow = fixture.handlers.get(accountChannel)!
+  registerWindow(vi.fn(), 2, true, { execute })
+  const secondWindow = fixture.handlers.get(accountChannel)!
+
+  const pending = Array.from({ length: 8 }, () => firstWindow(operation, ipc))
+  await expect(firstWindow(operation, ipc)).resolves.toEqual({ ok: false, code: 'unavailable' })
+  expect(execute).toHaveBeenCalledTimes(8)
+  pending.push(secondWindow(operation, ipcFor(2)))
+  expect(execute).toHaveBeenCalledTimes(9)
+  reply.reject(new Error('synthetic-private-credential'))
+  expect(await Promise.all(pending)).toEqual(Array.from({ length: 9 }, () => ({ ok: false, code: 'unavailable' })))
+  execute.mockResolvedValueOnce({ ok: true })
+  await expect(firstWindow(operation, ipc)).resolves.toEqual({ ok: true })
+})
 
 function tokenResponse() {
   return Response.json({ access_token: 'synthetic-access', refresh_token: 'synthetic-refresh', id_token: 'synthetic-id', expires_in: 3600 })
