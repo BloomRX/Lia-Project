@@ -92,8 +92,9 @@ Windows com Electron 43.4.1. O Launcher ainda usa o Stage legado para
 conversa. A janela do Stage próprio já permite enviar mensagem ao
 provedor local configurado no produto. No Electron foram validados
 resposta de um serviço HTTP controlado, cancelamento, preservação do
-rascunho e retorno de foco. Cada requisição envia apenas a mensagem
-atual. A janela ainda precisa de contexto entre turnos e de avatar.
+rascunho e retorno de foco. O Main mantém até seis turnos concluídos em
+memória por conversa e descarta o contexto ao mudar de modelo ou endereço.
+A janela ainda precisa de avatar e persistência de conversa.
 
 `src/main/stage-host.ts` é a lógica inteira. Electron **não** é importado ali:
 a plataforma entra por `StageHostDeps` (`createWindow`, `terminate`, relógio,
