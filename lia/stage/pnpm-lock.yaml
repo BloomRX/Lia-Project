@@ -7,6 +7,10 @@ settings:
 importers:
 
   .:
+    dependencies:
+      '@lia/core':
+        specifier: link:../runtime
+        version: link:../runtime
     devDependencies:
       electron:
         specifier: 43.4.1
