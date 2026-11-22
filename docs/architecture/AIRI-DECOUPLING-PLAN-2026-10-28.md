@@ -50,6 +50,19 @@ Trabalho mecânico, verificável por build ou por `grep`, com teste claro.
 
 ### A2 — Catálogo e workspace próprios
 
+Em 22/11, uma cópia isolada de `@lia/core` em `lia/runtime` instalou
+com lockfile congelado, compilou e passou 383 testes no Windows. O
+ensaio usou as versões diretas do lockfile existente e o contrato de
+presença de `lia/core`. As verificações que leem o Stage legado foram
+preservadas em `Tests/tools/lia-brain-consumers.test.mjs`.
+
+O ensaio também confirmou que pnpm 11.24.0 aceita um pacote irmão
+declarado no workspace do consumidor com `workspace:*`. Isso
+permite testar a movimentação física do Core sem copiar a
+implementação. A árvore principal ainda usa o caminho antigo.
+Faltam migrar os consumidores, atualizar os lockfiles e validar o
+Launcher e o Stage depois da mudança de localização.
+
 | Campo | Valor |
 | --- | --- |
 | Resultado | `@lia/core` e o Launcher constroem com um `pnpm-workspace.yaml` na raiz de `Lia-Project`, sem tocar em `airi/` |

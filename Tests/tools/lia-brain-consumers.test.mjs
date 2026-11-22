@@ -53,3 +53,21 @@ test('chat and provider execution preserve the Brain dependency boundary', () =>
   ])
   assert.deepEqual(adapterConsumers, [])
 })
+
+test('the Groq descriptor evidence matches the legacy catalog and chat path', () => {
+  const catalog = readFileSync(join(workspaceRoot, 'apps/stage-tamagotchi/src/renderer/stores/lia/provider.ts'), 'utf8')
+  assert.ok(catalog.includes("{ id: 'groq', label: 'Groq'"))
+  assert.ok(catalog.includes("{ id: 'openai/gpt-oss-120b', label: 'GPT-OSS 120B' }"))
+
+  const provider = readFileSync(join(workspaceRoot, 'packages/stage-ui/src/libs/providers/providers/groq/index.ts'), 'utf8')
+  assert.ok(provider.includes("id: 'groq'"))
+  assert.ok(provider.includes("name: 'Groq'"))
+  assert.match(provider, /reasoning/)
+  assert.match(provider, /gpt-oss accepts only/)
+  assert.match(provider, /tasks: \['chat'\]/)
+  assert.doesNotMatch(provider, /tasks: \[[^\]]*vision/)
+
+  const llm = readFileSync(join(workspaceRoot, 'packages/core-agent/src/runtime/llm-service.ts'), 'utf8')
+  assert.match(llm, /streamOptionsToolsCompatibilityOk/)
+  assert.match(llm, /mergedTools/)
+})

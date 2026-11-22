@@ -73,18 +73,6 @@ describe('current brain descriptor adapter (8.0D-2)', () => {
     expect(first.models[0].id).toBe(GROQ_BRAIN_MODEL_ID)
   })
 
-  it('c/D (evidence): the ids come from the repository catalogs, not from memory', () => {
-    // The Lia chat catalog that onboarding persists from.
-    const liaCatalog = readSource('../../../../../apps/stage-tamagotchi/src/renderer/stores/lia/provider.ts')
-    expect(liaCatalog).toContain('{ id: \'groq\', label: \'Groq\'')
-    expect(liaCatalog).toContain('{ id: \'openai/gpt-oss-120b\', label: \'GPT-OSS 120B\' }')
-
-    // The AIRI provider definition that actually builds the chat requests.
-    const provider = readSource('../../../../stage-ui/src/libs/providers/providers/groq/index.ts')
-    expect(provider).toContain('id: \'groq\'')
-    expect(provider).toContain('name: \'Groq\'')
-  })
-
   it('e: model.engineId matches engine.id', () => {
     const { engines, models } = groqBrainDescriptors()
     expect(models[0].engineId).toBe(engines[0].id)
@@ -105,7 +93,7 @@ describe('current brain descriptor adapter (8.0D-2)', () => {
     }
   })
 
-  it('h: capability values match the audited CURRENT repository behavior', () => {
+  it('h: capability values match the declared model and engine contracts', () => {
     const expected: LiaBrainCapabilities = {
       // Declared task is 'chat' - text conversation in and out.
       audioInput: false,
@@ -141,23 +129,6 @@ describe('current brain descriptor adapter (8.0D-2)', () => {
     expect(models[1].capabilities.videoInput).toBe(false)
     expect(models[1].capabilities.realtime).toBe(false)
     expect(models[1].capabilities.audioOutput).toBe(false)
-
-    // Evidence for the reasoning flag: declared BY THE PROVIDER DEFINITION.
-    const provider = readSource('../../../../stage-ui/src/libs/providers/providers/groq/index.ts')
-    expect(provider).toContain('reasoning')
-    expect(provider).toMatch(/gpt-oss accepts only/)
-
-    // Evidence that no vision task is declared for this engine (so image
-    // input cannot be claimed): tasks is the chat task alone.
-    expect(provider).toMatch(/tasks: \['chat'\]/)
-    expect(provider).not.toMatch(/tasks: \[[^\]]*vision/)
-
-    // Evidence for tool calling in the shared chat path: tools are composed
-    // into the provider request and their compatibility only ever degrades
-    // after a failure.
-    const llm = readSource('../../../../core-agent/src/runtime/llm-service.ts')
-    expect(llm).toContain('streamOptionsToolsCompatibilityOk')
-    expect(llm).toMatch(/mergedTools/)
   })
 
   it('i: the engine descriptor registers and resolves, and the model association is valid', () => {

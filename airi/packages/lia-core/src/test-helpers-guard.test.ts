@@ -8,20 +8,15 @@ import { repoRelativePosix } from './test-helpers'
 
 describe('test-helpers production import guard (D2B9-A1)', () => {
   it('no production file imports src/test-helpers', () => {
-    const airiRoot = fileURLToPath(new URL('../../..', import.meta.url))
-    const roots = ['packages/lia-core/src']
+    const sourceRoot = fileURLToPath(new URL('.', import.meta.url))
     const offenders: string[] = []
-    for (const root of roots) {
-      const base = join(airiRoot, root)
-      for (const entry of readdirSync(base, { recursive: true, withFileTypes: true })) {
-        if (!entry.isFile() || !/\.(?:ts|vue)$/.test(entry.name) || entry.name.includes('.test.') || entry.name === 'test-helpers.ts')
-          continue
-        const file = join(entry.parentPath, entry.name)
-        const content = readFileSync(file, 'utf-8')
-        if (content.includes('test-helpers')) {
-          offenders.push(repoRelativePosix(airiRoot, file))
-        }
-      }
+    for (const entry of readdirSync(sourceRoot, { recursive: true, withFileTypes: true })) {
+      if (!entry.isFile() || !/\.(?:ts|vue)$/.test(entry.name) || entry.name.includes('.test.') || entry.name === 'test-helpers.ts')
+        continue
+      const file = join(entry.parentPath, entry.name)
+      const content = readFileSync(file, 'utf-8')
+      if (content.includes('test-helpers'))
+        offenders.push(repoRelativePosix(sourceRoot, file))
     }
     expect(offenders).toEqual([])
   })
