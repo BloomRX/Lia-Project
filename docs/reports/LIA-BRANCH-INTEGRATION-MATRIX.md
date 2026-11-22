@@ -18,6 +18,11 @@ O commit `610b2d07` preserva as três verificações dos consumidores e
 permite executar 154 testes do pacote de contratos sem a árvore AIRI.
 O aplicativo desktop ainda usa o workspace AIRI. A execução agregada
 inicial do Core registrou 384 aprovações e dois timeouts.
+A reexecução reproduziu os timeouts nas duas verificações que
+varriam os consumidores do workspace. Essas verificações passaram
+em um único teste de integração, com as mesmas regras de dependência.
+Após a separação, os 384 testes restantes do Core passaram. O build
+do Launcher também passou no checkout candidato.
 
 A seção a seguir registra o destino e as classificações originais
 da auditoria de 16/11. Elas também servem de referência para revisar

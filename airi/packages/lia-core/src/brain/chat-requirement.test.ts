@@ -1,13 +1,12 @@
 import type { LiaBrainCapability } from './capabilities'
 import type { LiaChatTurnBrainFacts } from './chat-requirement'
 
-import { readdirSync, readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 import { describe, expect, it } from 'vitest'
 
-import { normalizeLineEndings, repoRelativePosix } from '../test-helpers'
+import { normalizeLineEndings } from '../test-helpers'
 import { brainRequirementForChatTurn } from './chat-requirement'
 
 /**
@@ -154,59 +153,5 @@ describe('chat turn brain requirement (8.0D-6)', () => {
     // Value imports: none. The single import is the erased requirement type.
     expect(normalizeLineEndings(source).split('\n').filter(line => line.startsWith('import ')))
       .toEqual(['import type { LiaBrainCapability, LiaBrainCapabilityRequirement } from \'./capabilities\''])
-  })
-
-  it('t: the current chat execution path neither routes through Brain nor consumes this helper yet', () => {
-    // The real chat turn path: the send store, the runtime that turns turn
-    // attachments into content parts, and the renderer send site.
-    const chatPath = [
-      '../../../../packages/stage-ui/src/stores/chat.ts',
-      '../../../../packages/core-agent/src/runtime/chat-orchestrator-runtime.ts',
-      '../../../../apps/stage-tamagotchi/src/renderer/components/InteractiveArea.vue',
-    ]
-    for (const relative of chatPath) {
-      const source = readSource(relative)
-      expect(source, relative).not.toMatch(/LiaBrainService|liaBrain\b|decideBrainRoute|brainRequirementForChatTurn/)
-    }
-
-    // And the helper's consumers outside lia-core are exactly two, and neither
-    // is a chat execution path:
-    //   - the read-only Brain decision bridge (Phase 8.0D-7), which maps chat
-    //     facts in main;
-    //   - the Launcher's managed Brain routing default (Phase 8.0D-M2), which
-    //     asks the canonical router ONE eligibility question about a plain text
-    //     turn before it may persist a routing mode. That is product
-    //     configuration, not conversation execution: it sends nothing, selects
-    //     no provider and builds no payload.
-    // The helper defines the contract, those two consume it, and no
-    // conversation code calls either.
-    const airiDir = fileURLToPath(new URL('../../../../', import.meta.url))
-    const consumers: string[] = []
-    for (const root of ['apps', 'packages']) {
-      for (const workspace of readdirSync(`${airiDir}/${root}`, { withFileTypes: true })) {
-        if (!workspace.isDirectory() || workspace.name === 'lia-core')
-          continue
-        const srcDir = `${airiDir}/${root}/${workspace.name}/src`
-        let entries
-        try {
-          entries = readdirSync(srcDir, { recursive: true, withFileTypes: true })
-        }
-        catch {
-          continue
-        }
-        for (const entry of entries) {
-          if (!entry.isFile() || !/\.(?:ts|vue)$/.test(entry.name) || entry.name.includes('.test.'))
-            continue
-          const file = join(entry.parentPath, entry.name)
-          if (/brainRequirementForChatTurn|LiaChatTurnBrainFacts/.test(normalizeLineEndings(readFileSync(file, 'utf-8'))))
-            consumers.push(repoRelativePosix(airiDir, file))
-        }
-      }
-    }
-    expect(consumers.sort()).toEqual([
-      'apps/lia-app/src/main/lia-host.ts',
-      'apps/stage-tamagotchi/src/main/services/lia/brain-decision-service.ts',
-      'apps/stage-tamagotchi/src/shared/eventa/index.ts',
-    ])
   })
 })

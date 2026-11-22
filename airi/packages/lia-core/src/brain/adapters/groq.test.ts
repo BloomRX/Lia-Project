@@ -286,36 +286,4 @@ describe('current brain descriptor adapter (8.0D-2)', () => {
     // And the adapter really lives outside them.
     expect(genericFiles).not.toContain('groq.ts')
   })
-
-  it('o: the current chat/provider execution path does not consume the adapter', () => {
-    // Nothing outside lia-core references the adapter or its descriptor set:
-    // the source trees of both apps and the other packages are scanned and
-    // no PRODUCTION consumer exists, so no existing behavior can depend on
-    // it yet. Test files are skipped - they legitimately spell these names
-    // as guard patterns in their own assertions.
-    const airiDir = fileURLToPath(new URL('../../../../../', import.meta.url))
-    const consumers: string[] = []
-    for (const root of ['apps', 'packages']) {
-      for (const workspace of readdirSync(`${airiDir}/${root}`, { withFileTypes: true })) {
-        if (!workspace.isDirectory() || workspace.name === 'lia-core')
-          continue
-        const srcDir = `${airiDir}/${root}/${workspace.name}/src`
-        let entries
-        try {
-          entries = readdirSync(srcDir, { recursive: true, withFileTypes: true })
-        }
-        catch {
-          continue
-        }
-        for (const entry of entries) {
-          if (!entry.isFile() || !/\.(?:ts|vue)$/.test(entry.name) || entry.name.includes('.test.'))
-            continue
-          const file = `${entry.parentPath}/${entry.name}`
-          if (/groqBrainDescriptors|LiaBrainDescriptorSet/.test(readFileSync(file, 'utf-8')))
-            consumers.push(file)
-        }
-      }
-    }
-    expect(consumers).toEqual([])
-  })
 })
