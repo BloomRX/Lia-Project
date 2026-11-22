@@ -19,7 +19,10 @@
     "./runtime": "./src/runtime/index.ts",
     "./transports": "./src/transports/index.ts",
     "./transports/repository": "./src/transports/repository.ts",
-    "./providers/brain-engine-provider-mapping": "./src/providers/brain-engine-provider-mapping.ts"
+    "./providers/brain-engine-provider-mapping": "./src/providers/brain-engine-provider-mapping.ts",
+    "./transcription": "./src/transcription/index.ts",
+    "./transcription/transport": "./src/transcription/transport.ts",
+    "./transcription/service": "./src/transcription/service.ts"
   },
   "types": "./src/index.ts"
 }

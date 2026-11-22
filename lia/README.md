@@ -116,6 +116,11 @@ Esse caminho passou em testes com credencial sintética e transporte
 simulado. O provedor externo ainda não foi exercitado. O fluxo padrão
 e a distribuição continuam usando o Stage legado.
 
+O serviço HTTP de transcrição e seus adaptadores agora ficam em
+`lia/core/src/transcription`. O Stage legado usa esse mesmo serviço
+com seu cofre, adaptador de rede e confirmação por gravação. A captura
+e o IPC de transcrição ainda precisam ser ligados ao Stage próprio.
+
 `src/main/stage-host.ts` é a lógica inteira. Electron **não** é importado ali:
 a plataforma entra por `StageHostDeps` (`createWindow`, `terminate`, relógio,
 pid). Esse é o mesmo idioma do `airi-stage-manager.ts` atual, onde
