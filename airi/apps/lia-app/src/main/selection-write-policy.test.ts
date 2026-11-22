@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   decideSelectionWrite,
   isLauncherManagedProvider,
-} from '../../../stage-tamagotchi/src/shared/lia/selection-write-policy'
+} from '@lia/contracts/providers/selection-write-policy'
 
 /**
  * Política de escrita da seleção (AF-1, 12/11/2026).

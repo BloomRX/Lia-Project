@@ -27,7 +27,7 @@ function productionSources(roots: string[]): string[] {
   return files
 }
 
-const BRAIN_ROOTS = ['apps/stage-tamagotchi/src', 'packages/stage-ui/src', 'packages/core-agent/src', '../lia/runtime/src']
+const BRAIN_ROOTS = ['apps/stage-tamagotchi/src', 'packages/stage-ui/src', 'packages/core-agent/src', '../lia/runtime/src', '../lia/core/src']
 
 describe('brain engine provider mapping — process safety (D2B1-F)', () => {
   it('renderer Lia adapter imports zero src/main modules', () => {
@@ -48,7 +48,7 @@ describe('brain engine provider mapping — process safety (D2B1-F)', () => {
       return s.includes(`PRODUCTION_ENGINE_PROVIDER_IDS`) || s.includes(`['groq', GROQ_STAGE_CHAT_PROVIDER_ID]`)
     })
     // Only the shared owner defines the literal table
-    expect(withLiteral).toEqual(['apps/stage-tamagotchi/src/shared/lia/brain-engine-provider-mapping.ts'])
+    expect(withLiteral).toEqual(['../lia/core/src/providers/brain-engine-provider-mapping.ts'])
   })
 
   it('shared mapping is the sole LIA_BRAIN_ENGINE_PROVIDER_MAPPING definition', () => {
@@ -58,7 +58,7 @@ describe('brain engine provider mapping — process safety (D2B1-F)', () => {
       // Definition is `export const LIA_BRAIN_ENGINE_PROVIDER_MAPPING = Object.freeze`
       return s.includes(`export const LIA_BRAIN_ENGINE_PROVIDER_MAPPING`)
     })
-    expect(defining).toEqual(['apps/stage-tamagotchi/src/shared/lia/brain-engine-provider-mapping.ts'])
+    expect(defining).toEqual(['../lia/core/src/providers/brain-engine-provider-mapping.ts'])
   })
 
   it('main expected-route re-exports the shared mapping (no duplication)', () => {

@@ -18,7 +18,8 @@
     "./providers/selection-write-policy": "./src/providers/selection-write-policy.ts",
     "./runtime": "./src/runtime/index.ts",
     "./transports": "./src/transports/index.ts",
-    "./transports/repository": "./src/transports/repository.ts"
+    "./transports/repository": "./src/transports/repository.ts",
+    "./providers/brain-engine-provider-mapping": "./src/providers/brain-engine-provider-mapping.ts"
   },
   "types": "./src/index.ts"
 }

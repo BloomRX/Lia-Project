@@ -7,7 +7,7 @@ import { readLiaProductConfig, updateLiaProductConfig } from '@lia/core/product/
 import { createLiaSecretVault } from '@lia/core/secrets/vault'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { decideSelectionWrite } from '../../../stage-tamagotchi/src/shared/lia/selection-write-policy'
+import { decideSelectionWrite } from '@lia/contracts/providers/selection-write-policy'
 import { createTransportRepository } from '@lia/contracts/transports/repository'
 import { createAiConnectionService } from './ai-connection-service'
 

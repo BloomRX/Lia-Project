@@ -18,7 +18,7 @@ import { readLiaProductConfig, updateLiaProductConfig } from '@lia/core/product/
 import { createLiaSecretVault } from '@lia/core/secrets/vault'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { LIA_BRAIN_ENGINE_PROVIDER_MAPPING } from '../../../stage-tamagotchi/src/shared/lia/brain-engine-provider-mapping'
+import { LIA_BRAIN_ENGINE_PROVIDER_MAPPING } from '@lia/contracts/providers/brain-engine-provider-mapping'
 import { createAiConnectionService } from './ai-connection-service'
 
 const GROQ_URL = 'https://api.groq.com/openai/v1'
