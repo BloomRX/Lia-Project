@@ -8,9 +8,9 @@ const status = document.querySelector('#status')
 const errors = {
   busy: 'Há uma mensagem em andamento.',
   cancelled: 'Envio cancelado.',
-  configuration: 'Selecione e configure uma IA local no Launcher.',
+  configuration: 'Selecione e confira a conexão de IA no Launcher.',
   invalid: 'Digite uma mensagem válida.',
-  unavailable: 'A IA local não respondeu. Verifique o serviço e tente novamente.',
+  unavailable: 'A IA não respondeu. Verifique o serviço e tente novamente.',
 }
 
 function appendMessage(author, text) {

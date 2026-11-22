@@ -103,11 +103,15 @@ credenciais e a remoção do registro após a saída cooperativa.
 
 Para testar com o Launcher em desenvolvimento, prepare o build do
 Stage e seu Electron (`corepack pnpm exec install-electron` em
-`lia/stage`), selecione uma **IA local** e abra o Launcher com
+`lia/stage`), configure um provedor gerenciado em **IA & Recursos** e abra o Launcher com
 `LIA_NATIVE_STAGE_PREVIEW=1`. **Conversar com Lia** e **Encerrar
 conversa** foram verificados no Windows com um registro separado.
-O modo experimental oferece conversa de texto. O fluxo padrão e a
-distribuição continuam usando o Stage legado.
+O modo experimental oferece conversa de texto com IA local e Groq.
+No caminho autenticado, o Main lê o cofre compartilhado e exige
+HTTPS e chave vinculada ao provedor, à origem e à finalidade de chat.
+Esse caminho passou em testes com credencial sintética e transporte
+simulado. O provedor externo ainda não foi exercitado. O fluxo padrão
+e a distribuição continuam usando o Stage legado.
 
 `src/main/stage-host.ts` é a lógica inteira. Electron **não** é importado ali:
 a plataforma entra por `StageHostDeps` (`createWindow`, `terminate`, relógio,

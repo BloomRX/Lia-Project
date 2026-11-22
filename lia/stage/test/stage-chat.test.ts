@@ -5,7 +5,8 @@ import { once } from 'node:events'
 import { createServer } from 'node:http'
 import { test } from 'node:test'
 
-import { createLocalChat } from '../src/main/local-chat.ts'
+import { bindCredential } from '../../core/src/credentials/destination.ts'
+import { createStageChat } from '../src/main/stage-chat.ts'
 
 const record: TransportRecord = {
   id: 'local-chat',
@@ -23,7 +24,7 @@ const record: TransportRecord = {
 
 function fixture(records: TransportRecord[], tombstones: string[] = []) {
   const snapshot: TransportSnapshot = { schemaVersion: 1, revision: 1, records, tombstones, migration: { version: 1, imported: [] } }
-  return createLocalChat({
+  return createStageChat({
     async readProduct() {
       return { filePath: '', status: 'ok', value: { provider: { chat: { preferred: { providerId: 'local-chat', modelId: 'test-model' } } } } }
     },
@@ -54,6 +55,49 @@ test('returns a public cancellation result when already aborted', async () => {
   assert.deepEqual(await fixture([])('ola', controller.signal), { ok: false, code: 'cancelled' })
 })
 
+test('uses a bound chat credential only for the configured HTTPS origin', async () => {
+  const url = new URL('https://api.groq.com/openai/v1')
+  const token = 'stage-synthetic-token'
+  const groq = {
+    ...record,
+    id: 'custom-name',
+    providerId: 'groq',
+    definitionId: 'groq',
+    baseUrl: url.href,
+    credentialRef: { scope: 'groq', key: 'apiKey' as const },
+  }
+  let secret = bindCredential('groq', url, token, 'chat')
+  let calls = 0
+  let reply = 'Resposta'
+  const send = createStageChat({
+    async fetch(target, init) {
+      calls++
+      assert.equal(String(target), 'https://api.groq.com/openai/v1/chat/completions')
+      assert.equal(new Headers(init?.headers).get('authorization'), `Bearer ${token}`)
+      assert.equal(init?.redirect, 'error')
+      return Response.json({ choices: [{ message: { content: reply } }] })
+    },
+    readCredential: () => secret,
+    async readProduct() {
+      return { filePath: '', status: 'ok', value: { provider: { chat: { preferred: { providerId: 'groq', modelId: 'test-model' } } } } }
+    },
+    async readTransports() {
+      return { schemaVersion: 1, revision: 1, records: [groq], tombstones: [], migration: { version: 1, imported: [] } }
+    },
+  })
+  const submit = () => send('oi', new AbortController().signal)
+  assert.deepEqual(await submit(), { ok: true, text: 'Resposta' })
+  reply = token
+  assert.deepEqual(await submit(), { ok: false, code: 'unavailable' })
+  secret = bindCredential('groq', url, token, 'speech')
+  assert.deepEqual(await submit(), { ok: false, code: 'configuration' })
+  secret = bindCredential('groq', new URL('https://other.invalid'), token, 'chat')
+  assert.deepEqual(await submit(), { ok: false, code: 'configuration' })
+  groq.baseUrl = 'http://127.0.0.1/v1'
+  assert.deepEqual(await submit(), { ok: false, code: 'configuration' })
+  assert.equal(calls, 2)
+})
+
 test('carries completed turns and keeps history out of a different model', async () => {
   const requests: { model: string, messages: { role: string, content: string }[] }[] = []
   const server = createServer(async (request, response) => {
@@ -70,7 +114,7 @@ test('carries completed turns and keeps history out of a different model', async
     assert.ok(address && typeof address !== 'string')
     let modelId = 'test-model'
     const local = { ...record, baseUrl: `http://127.0.0.1:${address.port}/v1`, modelIds: ['test-model', 'new-model'] }
-    const send = createLocalChat({
+    const send = createStageChat({
       async readProduct() {
         return { filePath: '', status: 'ok', value: { provider: { chat: { preferred: { providerId: 'local-chat', modelId } } } } }
       },

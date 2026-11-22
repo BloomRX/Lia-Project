@@ -6,12 +6,14 @@ import { fileURLToPath } from 'node:url'
 
 import { liaProductPaths } from '@lia/core/paths/product-paths'
 import { readLiaProductConfig } from '@lia/core/product/config'
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { createLiaSecretVault } from '@lia/core/secrets/vault'
+import { createWindowsUserCipher } from '@lia/core/secrets/windows-user-cipher'
+import { app, BrowserWindow, ipcMain, safeStorage } from 'electron'
 
 import { startLiaRuntimeService } from '../../../core/src/runtime/index.ts'
 import { createTransportRepository } from '../../../core/src/transports/repository.ts'
 import { stageChatCancel, stageChatSend } from '../shared/chat-ipc.ts'
-import { createLocalChat } from './local-chat.ts'
+import { createStageChat } from './stage-chat.ts'
 import { createStageHost } from './stage-host.ts'
 
 async function main(): Promise<void> {
@@ -27,7 +29,16 @@ async function main(): Promise<void> {
   await app.whenReady()
   const paths = liaProductPaths()
   const repository = createTransportRepository(join(paths.userDataDir, 'lia-transports.json'))
-  const send = createLocalChat({
+  const vault = createLiaSecretVault({
+    filePath: paths.vaultFile,
+    cipher: createWindowsUserCipher({
+      available: () => safeStorage.isEncryptionAvailable(),
+      decrypt: payload => safeStorage.decryptString(payload),
+      encrypt: value => safeStorage.encryptString(value),
+    }),
+  })
+  const send = createStageChat({
+    readCredential: providerId => vault.getSecret(providerId, 'apiKey'),
     readProduct: () => readLiaProductConfig(paths.productConfigFile),
     readTransports: repository.read,
   })

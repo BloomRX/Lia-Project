@@ -1073,8 +1073,8 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
     const readiness = await aiConnection.getStartReadiness()
     if (!readiness.ok)
       throw new AiStartBlockedError(readiness.code)
-    if (deps.nativeStagePreview && readiness.providerId !== 'local-chat')
-      throw new Error('O Stage próprio em teste exige uma configuração de IA local sem chave.')
+    if (deps.nativeStagePreview && !readiness.managed)
+      throw new Error('O Stage próprio exige um provedor configurado em IA & Recursos.')
     return readiness
   }
   stage.start = options => withStageConfigurationLock(async () => {
