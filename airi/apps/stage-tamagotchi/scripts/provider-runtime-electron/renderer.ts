@@ -23,10 +23,10 @@ import {
   electronLiaSecretGet,
   electronLiaSecretSet,
 } from '../../src/shared/eventa'
+import { electronLiaOidcAccount } from '../../src/shared/eventa/lia-oidc-account'
 import { electronLiaSpeechConfigGet, electronLiaSpeechConfigSave } from '../../src/shared/eventa/lia-speech-config'
 import { electronLiaChatCredentialSave, electronLiaTranscriptionCredentialHas, electronLiaTranscriptionCredentialSave } from '../../src/shared/eventa/lia-transport-credentials'
 import { electronLiaTransportsGet, electronLiaTransportsMutate } from '../../src/shared/eventa/lia-transports'
-import { oidcFixtureProfile } from './oidc-fixture-events'
 
 let oidcResult: { ok: boolean, payloadAbsent: boolean } | undefined
 const oidcContext = getElectronEventaContext()
@@ -45,7 +45,7 @@ const oidcFixture = {
     await useElectronEventaInvoke(electronAuthStartLogin)()
   },
   status: () => oidcResult,
-  profile: () => useElectronEventaInvoke(oidcFixtureProfile)(),
+  account: useElectronEventaInvoke(electronLiaOidcAccount),
   logout: () => useElectronEventaInvoke(electronAuthLogout)(),
 }
 

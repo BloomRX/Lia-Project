@@ -410,7 +410,7 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
         assert.deepEqual(await page.evaluate(() => window.oidcFixture.status()), { ok: expected, payloadAbsent: true })
       }
       const expectProfile = async (expected) => {
-        const outcome = await page.evaluate(() => window.oidcFixture.profile())
+        const outcome = await page.evaluate(() => window.oidcFixture.account({ kind: 'get-profile' }))
         assert.ok(!issuer.privateValues.some(value => JSON.stringify(outcome).includes(value)), 'Private OIDC value reached the renderer')
         assert.equal(outcome.ok, expected)
         if (expected)
@@ -425,6 +425,10 @@ test('Electron real: production IPC, encrypted vault and native provider runtime
       }
       await start('valid', true)
       await expectProfile(true)
+      const linked = await page.evaluate(() => window.oidcFixture.account({ kind: 'list-linked-accounts' }))
+      assert.deepEqual(linked, { ok: true, linkedAccounts: [{ providerId: 'github', createdAt: '2026-01-01T00:00:00.000Z' }] })
+      const refused = await page.evaluate(() => window.oidcFixture.account({ kind: 'get-profile', headers: { Authorization: 'unexpected' } }))
+      assert.deepEqual(refused, { ok: false, code: 'invalid-request' })
       const currentVault = await readFile(vaultPath, 'utf8')
       assert.ok(!issuer.privateValues.some(value => currentVault.includes(value)), 'Private OIDC value persisted in plaintext')
       await delay(2100)

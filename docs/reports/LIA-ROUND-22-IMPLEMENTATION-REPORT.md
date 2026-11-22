@@ -484,8 +484,9 @@ O comando `$env:LIA_RUN_OIDC_FIXTURE='1'; node --test scripts/provider-runtime-e
 no Stage inicia um emissor de teste em loopback. O Main abre a autorização
 por HTTP no próprio harness. O emissor entrega o código ao callback real,
 com validação PKCE na troca e ID tokens assinados com chave efêmera ES256.
-O caminho de produção mantém OIDC desativado e o IPC de perfil do ensaio
-existe só no harness.
+O caminho de produção mantém OIDC desativado. No ensaio inicial o IPC de
+perfil existia só no harness. O ensaio posterior usa o contrato de conta
+do Stage, registrado quando há um owner Main e o serviço de conta.
 
 Seis callbacks com state adulterado foram recusados. Os seis códigos
 válidos chegaram à troca PKCE, e quatro logins foram recusados pela
@@ -508,5 +509,25 @@ e passou com 16 grupos, sem sentinelas nos logs.
 `Tests/artifacts/provider-runtime-electron/1795046102726/report.json`.
 Também passaram 27 testes focados de auth e sessão, 22 de integridade do
 runner, lint direcionado e typecheck do Stage.
-O emissor externo e a integração com as telas e os clientes do Stage
-continuam NOT RUN.
+#### Contrato IPC de conta no Electron
+
+O mesmo comando aprovou os 16 grupos com Electron 43.4.1 no Windows.
+O contrato de conta retornou dois perfis e uma lista de vínculos ao
+Renderer. A lista descartou o token extra da resposta de teste e o
+IPC recusou uma operação que tentou definir cabeçalhos. Nenhuma
+sentinela apareceu nos logs. Evidência em
+`Tests/artifacts/provider-runtime-electron/1795046488328/report.json`.
+
+A suíte focada passou 54 testes em quatro arquivos. Ela cobre a
+fronteira Main incluindo frame de topo, janela de origem, limite de
+concorrência, sanitização de exceções e descarte de respostas após
+navegação, crash ou destruição do Renderer. O lint nos TypeScript e no
+emissor passou. O lint aplicado ao runner Node também apontou nove
+diagnósticos preexistentes em linhas fora do diff.
+
+Emissor externo, telas de conta do Stage e os demais clientes
+autenticados continuam NOT RUN. Esse ensaio não aprova SEC-04 ou SEC-05.
+A revisão parcial identificou que o helper de carregamento de janela
+remove todos os listeners de início de navegação. Antes de ligar o
+contrato às janelas de produção, é preciso preservar o listener que
+cancela operações de conta ao trocar de documento.

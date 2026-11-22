@@ -74,9 +74,14 @@ Renderer desktop. No Windows passaram 30 testes focados do Stage,
 PASS Windows no ciclo com emissor local assinado, incluindo PKCE,
 renovação, perfil e revogação pelo Main. A autenticação de produção
 permanece desativada.
+O contrato IPC de conta do Stage já foi exercitado no Electron com o
+owner Main e o emissor local. Perfil e vínculos retornaram somente os
+campos públicos previstos. Foram recusados cabeçalhos fornecidos pelo
+Renderer. Os testes focados também cobrem isolamento por janela e
+descarte de respostas após navegação ou saída do Renderer.
 Próximo corte:
-ligar o owner e as operações de conta, HTTP e streaming ao ciclo de
-vida do Stage antes de anunciar OIDC disponível no preload. Emissor
+ligar as telas de conta e os consumidores HTTP e de streaming às
+portas Main, com o mesmo owner, antes de anunciar OIDC disponível no preload. Emissor
 externo segue NOT RUN. Consentimento STT, SEC-04, SEC-05, G-AUD e
 G-ARCH permanecem pendentes.
 

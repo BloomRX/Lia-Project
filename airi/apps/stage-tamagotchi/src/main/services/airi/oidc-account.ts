@@ -1,33 +1,4 @@
-type SocialProvider = 'github' | 'google' | 'steam'
-
-export type OidcAccountOperation
-  = | { kind: 'get-profile' | 'list-linked-accounts' | 'request-password-reset' }
-    | { kind: 'update-name', name: string }
-    | { kind: 'change-password', currentPassword: string, newPassword: string }
-    | { kind: 'delete-account', confirmationEmail: string }
-    | { kind: 'unlink-account', provider: SocialProvider }
-
-export interface OidcAccountProfile {
-  id: string
-  name: string
-  email: string
-  image: string | null
-}
-
-interface OidcLinkedAccount {
-  providerId: string
-  createdAt: string
-}
-
-type OidcAccountError
-  = | 'invalid-request' | 'unauthenticated' | 'confirmation-required' | 'cancelled' | 'rejected' | 'unavailable'
-    | 'invalid-password' | 'password-too-short' | 'password-too-long' | 'password-unset' | 'last-sign-in-method'
-
-export type OidcAccountResult
-  = | { ok: true, profile: OidcAccountProfile }
-    | { ok: true, linkedAccounts: OidcLinkedAccount[] }
-    | { ok: true }
-    | { ok: false, code: OidcAccountError }
+import type { OidcAccountError, OidcAccountOperation, OidcAccountProfile, OidcAccountResult, OidcLinkedAccount } from '../../../shared/eventa/lia-oidc-account'
 
 interface OidcAccountOptions {
   origin: URL
