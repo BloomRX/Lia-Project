@@ -573,7 +573,7 @@ function stripComments(source: string): string {
   return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
 }
 
-const BRAIN_ROOTS = ['apps/stage-tamagotchi/src', 'packages/stage-ui/src', 'packages/core-agent/src', 'packages/lia-core/src']
+const BRAIN_ROOTS = ['apps/stage-tamagotchi/src', 'packages/stage-ui/src', 'packages/core-agent/src', '../lia/runtime/src']
 
 describe('execution identity facts - authority and isolation invariants (Phase 8.0D-10B-4C2B)', () => {
   const source = stripComments(readSource('./brain-execution-identity-facts.ts'))

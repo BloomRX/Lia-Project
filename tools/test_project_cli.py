@@ -402,7 +402,7 @@ class KokoroSmokeTests(unittest.TestCase):
             target.write_text('// stub\n', encoding='utf-8')
         if dists:
             for rel in self.DIST_RELS:
-                target = tmp / 'airi' / 'packages' / 'lia-core' / 'dist' / Path(rel)
+                target = tmp / 'lia' / 'runtime' / 'dist' / Path(rel)
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_text('// stub\n', encoding='utf-8')
         return tmp

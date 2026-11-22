@@ -1197,11 +1197,11 @@ def kokoro_smoke():
     if not script.is_file():
         raise RuntimeError(f"Runner do smoke ausente: {script.relative_to(KIT)}")
     for dist in ("voice/engines/kokoro/index.mjs", "bootstrap/runtime-root.mjs"):
-        rel = Path("airi") / "packages" / "lia-core" / "dist" / Path(dist)
+        rel = Path("lia") / "runtime" / "dist" / Path(dist)
         if not (KIT / rel).is_file():
             raise RuntimeError(
                 f"Build de producao do lia-core ausente: {rel}. Rode antes: "
-                "cd airi/packages/lia-core && pnpm run build (ou npx tsdown).")
+                "cd lia/runtime && pnpm run build (ou npx tsdown).")
     node = shutil.which("node")
     if not node:
         raise RuntimeError(

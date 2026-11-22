@@ -152,7 +152,7 @@ beforeEach(resetProbes)
 const REPO_ROOT = new URL('../../../../../../', import.meta.url)
 const COMPOSITION = 'apps/stage-tamagotchi/src/main/services/lia/brain-correlation-diagnostic-facts.ts'
 const OBSERVER = 'apps/stage-tamagotchi/src/main/services/lia/brain-correlation-observer.ts'
-const BRAIN_ROOTS = ['apps/stage-tamagotchi/src', 'packages/stage-ui/src', 'packages/core-agent/src', 'packages/lia-core/src']
+const BRAIN_ROOTS = ['apps/stage-tamagotchi/src', 'packages/stage-ui/src', 'packages/core-agent/src', '../lia/runtime/src']
 
 /** `fileURLToPath` keeps the trailing separator of a directory URL. */
 const REPO_ROOT_PATH = fileURLToPath(REPO_ROOT)

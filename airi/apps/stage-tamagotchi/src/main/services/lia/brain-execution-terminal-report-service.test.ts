@@ -59,7 +59,7 @@ function productionSourcesMatching(roots: string[], pattern: RegExp): string[] {
     .sort()
 }
 
-const BRAIN_ROOTS = ['apps/stage-tamagotchi/src', 'packages/stage-ui/src', 'packages/core-agent/src', 'packages/lia-core/src']
+const BRAIN_ROOTS = ['apps/stage-tamagotchi/src', 'packages/stage-ui/src', 'packages/core-agent/src', '../lia/runtime/src']
 
 /** The canonical correlation store double the ingress receives. */
 function correlationStoreDouble(overrides: Partial<{ recordExecutionTerminal: (report: unknown) => void }> = {}) {

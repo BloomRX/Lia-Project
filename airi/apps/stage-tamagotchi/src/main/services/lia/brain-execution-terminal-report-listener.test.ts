@@ -92,7 +92,7 @@ function productionSourcesMatching(roots: string[], pattern: RegExp): string[] {
     .sort()
 }
 
-const BRAIN_ROOTS = ['apps/stage-tamagotchi/src', 'packages/stage-ui/src', 'packages/core-agent/src', 'packages/lia-core/src']
+const BRAIN_ROOTS = ['apps/stage-tamagotchi/src', 'packages/stage-ui/src', 'packages/core-agent/src', '../lia/runtime/src']
 
 /** A context double recording the listeners the registration seams install. */
 function fakeContext() {
@@ -506,7 +506,7 @@ describe('lia terminal wiring invariants (Phase 8.0D-10B-4D4C2B2)', () => {
   it('r: production allowlists - one producer, one declaration, one main listener, one factory caller', () => {
     // The channel constant appears in production in exactly three places: the
     // shared declaration, the renderer producer, and this main listener.
-    expect(productionSourcesMatching(['apps/stage-tamagotchi/src', 'packages/stage-ui/src', 'packages/core-agent/src', 'packages/lia-core/src'], /electronLiaBrainExecutionTerminalObservation/))
+    expect(productionSourcesMatching(['apps/stage-tamagotchi/src', 'packages/stage-ui/src', 'packages/core-agent/src', '../lia/runtime/src'], /electronLiaBrainExecutionTerminalObservation/))
       .toEqual([
         'apps/stage-tamagotchi/src/main/services/lia/brain-execution-terminal-report-listener.ts',
         'apps/stage-tamagotchi/src/renderer/services/lia/execution-terminal-reporter.ts',

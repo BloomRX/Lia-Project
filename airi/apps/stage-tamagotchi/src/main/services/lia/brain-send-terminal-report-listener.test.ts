@@ -143,7 +143,7 @@ function productionSourcesMatching(roots: string[], pattern: RegExp): string[] {
     .sort()
 }
 
-const BRAIN_ROOTS = ['apps/stage-tamagotchi/src', 'packages/stage-ui/src', 'packages/core-agent/src', 'packages/lia-core/src']
+const BRAIN_ROOTS = ['apps/stage-tamagotchi/src', 'packages/stage-ui/src', 'packages/core-agent/src', '../lia/runtime/src']
 
 /** A context double recording the listeners the registration seams install. */
 function fakeContext() {

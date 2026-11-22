@@ -53,7 +53,7 @@
     "@guiiai/logg": "catalog:",
     "@huggingface/transformers": "catalog:",
     "@intlify/core": "catalog:",
-    "@lia/core": "workspace:*",
+    "@lia/core": "link:../../../lia/runtime",
     "@moeru/eventa": "catalog:",
     "@moeru/std": "catalog:",
     "@pinia/colada": "catalog:",

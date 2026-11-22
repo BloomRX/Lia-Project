@@ -65,7 +65,7 @@ __all__ = [
 PNPM_ENV = 'LIA_DEVFLOW_PNPM'
 
 #: The documented build command, as argv. Never a shell string.
-BUILD_ARGV: tuple[str, ...] = ('-F', '@lia/core', 'run', 'build')
+BUILD_ARGV: tuple[str, ...] = ('run', 'build:lia-core')
 
 #: Workspace the build runs in.
 WORKSPACE_DIR = 'airi'

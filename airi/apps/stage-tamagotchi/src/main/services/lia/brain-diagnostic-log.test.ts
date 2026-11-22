@@ -1040,7 +1040,7 @@ describe('lia brain diagnostic log - source invariants (Phase 8.0D-10B-4D2B)', (
   })
 
   it('31/57: no generic log pipeline file was touched, and the Brain IPC allowlist is exactly four', () => {
-    const roots = ['apps/stage-tamagotchi/src', 'packages/stage-ui/src', 'packages/core-agent/src', 'packages/lia-core/src']
+    const roots = ['apps/stage-tamagotchi/src', 'packages/stage-ui/src', 'packages/core-agent/src', '../lia/runtime/src']
     const REPO_ROOT_PATH = fileURLToPath(REPO_ROOT)
     const files: string[] = []
     for (const root of roots) {

@@ -70,7 +70,7 @@ function productionSourcesMatching(roots: string[], pattern: RegExp): string[] {
     .sort()
 }
 
-const BRAIN_ROOTS = ['apps/stage-tamagotchi/src', 'packages/stage-ui/src', 'packages/core-agent/src', 'packages/lia-core/src']
+const BRAIN_ROOTS = ['apps/stage-tamagotchi/src', 'packages/stage-ui/src', 'packages/core-agent/src', '../lia/runtime/src']
 
 /** A canonical decision, so the store has real content to hold. */
 function decision(engineId = 'groq'): LiaBrainRoutingDecision {

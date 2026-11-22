@@ -24,7 +24,7 @@ import { describe, expect, it } from 'vitest'
 const MAIN = import.meta.dirname
 const PRELOAD = join(MAIN, '..', 'preload')
 const RENDERER = join(MAIN, '..', 'renderer')
-const LIA_CORE = join(MAIN, '..', '..', '..', '..', 'packages', 'lia-core', 'src')
+const LIA_CORE = join(MAIN, '..', '..', '..', '..', '..', 'lia', 'runtime', 'src')
 const CONTRACTS = join(MAIN, '..', '..', '..', '..', '..', 'lia', 'core', 'src')
 
 async function sourceFiles(dir: string): Promise<string[]> {

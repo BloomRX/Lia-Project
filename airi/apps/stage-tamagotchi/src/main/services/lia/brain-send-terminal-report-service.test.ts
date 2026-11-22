@@ -70,7 +70,7 @@ function productionSourcesMatching(roots: string[], pattern: RegExp): string[] {
     .sort()
 }
 
-const BRAIN_ROOTS = ['apps/stage-tamagotchi/src', 'packages/stage-ui/src', 'packages/core-agent/src', 'packages/lia-core/src']
+const BRAIN_ROOTS = ['apps/stage-tamagotchi/src', 'packages/stage-ui/src', 'packages/core-agent/src', '../lia/runtime/src']
 
 /** The narrow recorder double the ingress receives - and nothing else. */
 function recorderDouble(recordSendTerminal: (report: unknown) => void = mocks.recordSendTerminal): LiaBrainSendTerminalRecorder {

@@ -4,7 +4,7 @@ import { join } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
 
-import { defaultPresence } from '../../../../../lia/core/src/presence'
+import { defaultPresence } from '../../../core/src/presence'
 import { readLiaProductConfig, readSetupCompletedConfig, updateLiaProductConfig } from './config'
 
 /**

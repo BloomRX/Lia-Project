@@ -6774,7 +6774,7 @@ class WorkspacePreflightTests(unittest.TestCase):
         # The report has to say WHAT is missing and WHAT produces it, or the
         # operator is back to guessing from eight collection errors.
         self.assertIn('lia-core-dist', text)
-        self.assertIn('@lia/core run build', text)
+        self.assertIn('run build:lia-core', text)
         self.assertIn('lia-host.ts', text)
         self.assertEqual(preflight.main([str(self.base)]), 1,
                          'um pré-voo com artefato ausente não pode passar')
@@ -6922,9 +6922,7 @@ class LiaCorePrereqTests(unittest.TestCase):
         self.assertEqual(outcome.exit_code, 0)
         self.assertEqual(len(self.calls), 1, 'o build deve rodar exatamente uma vez')
         argv, _kwargs, cwd, timeout_s = self.calls[0]
-        self.assertIn('-F', argv)
-        self.assertIn('@lia/core', argv)
-        self.assertIn('build', argv)
+        self.assertEqual(tuple(argv[-2:]), ('run', 'build:lia-core'))
         self.assertEqual(cwd, self.base / 'airi', 'o build roda no workspace airi')
         self.assertLessEqual(timeout_s, lia_core_prereq.BUILD_TIMEOUT_S)
         self.assertTrue((self.base / self._dist()).is_file(),
@@ -7024,7 +7022,7 @@ class LiaCorePrereqTests(unittest.TestCase):
         joined = ' '.join(argv)
         self.assertNotIn('core-agent', joined,
                          'este pré-requisito não pode tocar core-agent/dist')
-        self.assertIn('@lia/core', joined)
+        self.assertIn('build:lia-core', joined)
 
     def test_the_round_still_clears_core_agent_dist_at_prelaunch(self) -> None:
         steps = load_active_round().prelaunch_prepare

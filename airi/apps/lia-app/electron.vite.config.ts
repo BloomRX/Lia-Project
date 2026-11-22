@@ -6,8 +6,7 @@ import { defineConfig } from 'electron-vite'
 
 /**
  * `@lia/contracts` é o pacote de contratos que vive FORA do workspace pnpm
- * (`lia/core`). O workspace não consegue declarar um pacote acima da própria
- * raiz, então a resolução é por alias para o código-fonte — o mesmo arquivo que
+ * (`lia/core`). A resolução é por alias para o código-fonte — o mesmo arquivo que
  * o pacote publica em `exports`. O efeito prático é o que importa: nenhum
  * consumidor escreve caminho relativo, e o bundler inlina o contrato.
  */

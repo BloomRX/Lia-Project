@@ -112,7 +112,7 @@ export function benchmarkCommands({ repoRoot = REPO_ROOT } = {}) {
     {
       id: 'lia-core',
       label: 'lia-core suite',
-      cwd: nodePath.join(airiRoot, 'packages', 'lia-core'),
+      cwd: nodePath.join(airiRoot, '..', 'lia', 'runtime'),
       argv: ['pnpm', 'test'],
       mandatory: true,
     },
@@ -167,7 +167,7 @@ export function canonicalCommands(repoRoot = REPO_ROOT) {
     {
       id: 'lia-core',
       label: 'Lia Core',
-      cwd: nodePath.join(airi, 'packages', 'lia-core'),
+      cwd: nodePath.join(airi, '..', 'lia', 'runtime'),
       argv: ['pnpm', 'test'],
       mandatory: true,
     },

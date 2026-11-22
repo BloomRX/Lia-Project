@@ -27,7 +27,7 @@ function productionSources(roots: string[]): string[] {
   return files
 }
 
-const BRAIN_ROOTS = ['apps/stage-tamagotchi/src', 'packages/stage-ui/src', 'packages/core-agent/src', 'packages/lia-core/src']
+const BRAIN_ROOTS = ['apps/stage-tamagotchi/src', 'packages/stage-ui/src', 'packages/core-agent/src', '../lia/runtime/src']
 
 describe('brain engine provider mapping — process safety (D2B1-F)', () => {
   it('renderer Lia adapter imports zero src/main modules', () => {

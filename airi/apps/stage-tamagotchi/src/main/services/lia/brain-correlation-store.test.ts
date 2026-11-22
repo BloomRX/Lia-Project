@@ -865,7 +865,7 @@ describe('lia brain correlation store - terminal round outcomes (Phase 8.0D-10B-
     expect(source).not.toMatch(/arrivalIndex/)
     // The canonical store remains singular: no second terminal store, no cache.
     expect(productionSourcesMatching(
-      ['apps/stage-tamagotchi/src', 'packages/stage-ui/src', 'packages/core-agent/src', 'packages/lia-core/src'],
+      ['apps/stage-tamagotchi/src', 'packages/stage-ui/src', 'packages/core-agent/src', '../lia/runtime/src'],
       /createLiaBrainTerminalStore|terminalCorrelationStore|terminalCache|executionTerminalStore/,
     )).toEqual([])
   })
@@ -922,7 +922,7 @@ describe('lia brain correlation store - terminal report API shape (Phase 8.0D-10
 describe('lia brain correlation store - isolation invariants (Phase 8.0D-10B-4B1)', () => {
   it('ag/ah/al: nothing in production imports, constructs or selects through the store', () => {
     const storeReferences = productionSourcesMatching(
-      ['apps/stage-tamagotchi/src', 'packages/stage-ui/src', 'packages/core-agent/src', 'packages/lia-core/src'],
+      ['apps/stage-tamagotchi/src', 'packages/stage-ui/src', 'packages/core-agent/src', '../lia/runtime/src'],
       /brain-correlation-store|createLiaBrainCorrelationStore|LiaBrainCorrelationStore/,
     )
     // AG: no handler records into it. AL: no provider-selection module can even
@@ -935,7 +935,7 @@ describe('lia brain correlation store - isolation invariants (Phase 8.0D-10B-4B1
     ])
     // The pure store factory itself is CALLED in exactly ONE production module
     // (a doc comment naming it is not a call site, so comments are stripped).
-    const factoryCallSites = productionSources(['apps/stage-tamagotchi/src', 'packages/stage-ui/src', 'packages/core-agent/src', 'packages/lia-core/src'])
+    const factoryCallSites = productionSources(['apps/stage-tamagotchi/src', 'packages/stage-ui/src', 'packages/core-agent/src', '../lia/runtime/src'])
       .filter(relative => /(?<!function )createLiaBrainCorrelationStore\(/.test(stripComments(normalizeLineEndings(readFileSync(new URL(relative, REPO_ROOT), 'utf-8')))))
       .sort()
     expect(factoryCallSites).toEqual(['apps/stage-tamagotchi/src/main/services/lia/brain-correlation-service.ts'])
@@ -974,7 +974,7 @@ describe('lia brain correlation store - isolation invariants (Phase 8.0D-10B-4B1
     // (8.0D-10B-4D4C1 added the one-way terminal report, 8.0D-10B-4D4C4-B2 the
     // one-way logical-send terminal report).
     const tags = new Set<string>()
-    for (const relative of productionSources(['apps/stage-tamagotchi/src', 'packages/lia-core/src', 'packages/stage-ui/src', 'packages/core-agent/src'])) {
+    for (const relative of productionSources(['apps/stage-tamagotchi/src', '../lia/runtime/src', 'packages/stage-ui/src', 'packages/core-agent/src'])) {
       for (const match of normalizeLineEndings(readFileSync(new URL(relative, REPO_ROOT), 'utf-8')).matchAll(/eventa:(?:invoke|event):lia:brain[^'"]*/g))
         tags.add(match[0])
     }
@@ -1031,7 +1031,7 @@ describe('lia brain correlation store - isolation invariants (Phase 8.0D-10B-4B1
 })
 
 describe('lia brain correlation store - logical send terminal fact (Phase 8.0D-10B-4D4C4-B3A)', () => {
-  const BRAIN_ROOTS = ['apps/stage-tamagotchi/src', 'packages/stage-ui/src', 'packages/core-agent/src', 'packages/lia-core/src']
+  const BRAIN_ROOTS = ['apps/stage-tamagotchi/src', 'packages/stage-ui/src', 'packages/core-agent/src', '../lia/runtime/src']
 
   /** The retained send-level settlement of one entry, flattened for assertions. */
   function sendSettlement(store: ReturnType<typeof createLiaBrainCorrelationStore>, correlationId: string): string | undefined {

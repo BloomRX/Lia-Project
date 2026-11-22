@@ -328,7 +328,7 @@ describe('lia brain correlation wiring - diagnostics cannot affect the decision 
 })
 
 describe('lia brain correlation wiring - invariants (Phase 8.0D-10B-4B3)', () => {
-  const BRAIN_ROOTS = ['apps/stage-tamagotchi/src', 'packages/stage-ui/src', 'packages/core-agent/src', 'packages/lia-core/src']
+  const BRAIN_ROOTS = ['apps/stage-tamagotchi/src', 'packages/stage-ui/src', 'packages/core-agent/src', '../lia/runtime/src']
 
   /** Production sources whose CODE (comments stripped) matches the pattern. */
   function matching(pattern: RegExp): string[] {

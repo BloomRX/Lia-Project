@@ -6,7 +6,7 @@
  * run-specific artifacts dir; otherwise uses Tests/artifacts/kokoro-smoke).
  *
  * This file is a THIN CLI. It contains no TTS logic of its own: it wires
- * together PRODUCTION modules built from `airi/packages/lia-core` -
+ * together PRODUCTION modules built from `lia/runtime` -
  *
  *   - resolveVoiceRuntimeHome   (dist/bootstrap/runtime-root.mjs)
  *   - createKokoroVoiceEngine   (dist/voice/engines/kokoro/index.mjs)
@@ -24,7 +24,7 @@ import nodePath from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const REPO_ROOT = nodePath.resolve(nodePath.dirname(fileURLToPath(import.meta.url)), '..')
-const LIA_CORE_DIST = nodePath.join(REPO_ROOT, 'airi', 'packages', 'lia-core', 'dist')
+const LIA_CORE_DIST = nodePath.join(REPO_ROOT, 'lia', 'runtime', 'dist')
 
 const engineDist = nodePath.join(LIA_CORE_DIST, 'voice', 'engines', 'kokoro', 'index.mjs')
 const runtimeDist = nodePath.join(LIA_CORE_DIST, 'bootstrap', 'runtime-root.mjs')
@@ -32,7 +32,7 @@ const runtimeDist = nodePath.join(LIA_CORE_DIST, 'bootstrap', 'runtime-root.mjs'
 for (const dist of [engineDist, runtimeDist]) {
   if (!existsSync(dist)) {
     console.error(`[kokoro-smoke] ERROR: production dist is missing: ${dist}`)
-    console.error('[kokoro-smoke] Build lia-core first: cd airi/packages/lia-core && pnpm run build (or npx tsdown)')
+    console.error('[kokoro-smoke] Build lia-core first: cd lia/runtime && pnpm run build (or npx tsdown)')
     process.exit(1)
   }
 }

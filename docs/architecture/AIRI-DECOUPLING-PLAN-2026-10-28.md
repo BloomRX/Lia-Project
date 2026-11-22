@@ -59,9 +59,11 @@ preservadas em `Tests/tools/lia-brain-consumers.test.mjs`.
 O ensaio também confirmou que pnpm 11.24.0 aceita um pacote irmão
 declarado no workspace do consumidor com `workspace:*`. Isso
 permite testar a movimentação física do Core sem copiar a
-implementação. A árvore principal ainda usa o caminho antigo.
-Faltam migrar os consumidores, atualizar os lockfiles e validar o
-Launcher e o Stage depois da mudança de localização.
+implementação. O Turbo recusou o membro externo no grafo legado.
+Na `main` candidata, a implementação agora fica em `lia/runtime` e
+tem lockfile próprio. Launcher e Stage legados usam um vínculo
+local explícito e o Core é compilado fora do grafo do Turbo. Falta
+extrair o Launcher e substituir as dependências operacionais do Stage.
 
 | Campo | Valor |
 | --- | --- |

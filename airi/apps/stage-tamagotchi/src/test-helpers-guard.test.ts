@@ -9,7 +9,7 @@ import { authoredSourceEntry, isGeneratedRepoPath, normalizeLineEndings, repoRel
 describe('test-helpers production import guard (D2B9-A1)', () => {
   it('no production file imports src/test-helpers', () => {
     const airiRoot = fileURLToPath(new URL('../../..', import.meta.url))
-    const roots = ['apps/stage-tamagotchi/src', 'packages/lia-core/src', 'packages/stage-ui/src']
+    const roots = ['apps/stage-tamagotchi/src', '../lia/runtime/src', 'packages/stage-ui/src']
     const offenders: string[] = []
     for (const root of roots) {
       const base = join(airiRoot, root)
@@ -61,8 +61,8 @@ describe('test-helpers Windows path portability (D2B9-D)', () => {
   })
 
   it('never emits a backslash, whatever the host separators were', () => {
-    const derived = repoRelativePosix(WINDOWS_REPO_ROOT, 'C:\\repo\\airi\\packages\\lia-core\\src\\brain\\runtime.ts')
-    expect(derived).toBe('packages/lia-core/src/brain/runtime.ts')
+    const derived = repoRelativePosix(WINDOWS_REPO_ROOT, 'C:\\repo\\lia\\runtime\\src\\brain\\runtime.ts')
+    expect(derived).toBe('../lia/runtime/src/brain/runtime.ts')
     expect(derived).not.toContain('\\')
   })
 

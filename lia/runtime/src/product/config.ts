@@ -5,7 +5,7 @@ import { dirname } from 'node:path'
 
 import { safeDestr } from 'destr'
 
-import { isPresenceConfig } from '../../../../../lia/core/src/presence'
+import { isPresenceConfig } from '../../../core/src/presence'
 import { withOsWriteLock } from '../secrets/vault-lock'
 
 /**
@@ -141,7 +141,7 @@ export interface LiaProductBrainSelection {
 }
 
 export interface LiaProductConfigSnapshot {
-  presence?: import('../../../../../lia/core/src/presence').PresenceConfig
+  presence?: import('../../../core/src/presence').PresenceConfig
   schemaVersion?: number
   persona?: { activeCardId?: string }
   provider?: { chat?: LiaProductChatConfig }
@@ -373,7 +373,7 @@ function asTtsTarget(value: unknown): LiaProductTtsTarget | undefined {
 export const SECRET_FIELD_NAMES = ['apikey', 'apisecret', 'bearer', 'secret', 'token'] as const
 
 export interface LiaProductConfigUpdate {
-  presence?: import('../../../../../lia/core/src/presence').PresenceConfig
+  presence?: import('../../../core/src/presence').PresenceConfig
   persona?: { activeCardId?: string }
   provider?: { chat?: Omit<Partial<LiaProductChatConfig>, 'preferred' | 'strategy' | 'onboarded'> & {
     /** Explicit null clears an editor-owned field; omission preserves it. */

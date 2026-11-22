@@ -409,7 +409,7 @@ describe('lia execution report invariants (Phase 8.0D-10B-4A)', () => {
 
     // And the whole production tree names no other Lia Brain channel.
     const tags = new Set<string>()
-    for (const relative of productionSources(['apps/stage-tamagotchi/src', 'packages/lia-core/src', 'packages/stage-ui/src', 'packages/core-agent/src'])) {
+    for (const relative of productionSources(['apps/stage-tamagotchi/src', '../lia/runtime/src', 'packages/stage-ui/src', 'packages/core-agent/src'])) {
       for (const match of normalizeLineEndings(readFileSync(new URL(relative, REPO_ROOT), 'utf-8')).matchAll(/eventa:(?:invoke|event):lia:brain[^'"]*/g))
         tags.add(match[0])
     }
@@ -445,7 +445,7 @@ describe('lia execution report invariants (Phase 8.0D-10B-4A)', () => {
     // of this surface, so the guard names the forbidden JOIN, not the word.)
     const comparisonPattern = /executionMatches|matchesExecution|decisionVsExecution|executionVsDecision|comparisonState|pendingComparison|compareBrain|brainVsExecution|liaBrainComparison|executionObservationMatches|brainDecisionComparison/i
     expect(productionSourcesMatching(
-      ['apps/stage-tamagotchi/src', 'packages/lia-core/src', 'packages/stage-ui/src', 'packages/core-agent/src'],
+      ['apps/stage-tamagotchi/src', '../lia/runtime/src', 'packages/stage-ui/src', 'packages/core-agent/src'],
       comparisonPattern,
     )).toEqual([])
 

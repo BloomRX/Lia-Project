@@ -8,11 +8,25 @@ lia/
 ├── assets/     ícones e imagem da marca (já existiam)
 ├── core/       @lia/contracts — contratos, zero dependências
 ├── launcher/   decisão e fronteira do Launcher
+├── runtime/    @lia/core — produto, cofre, voz e roteamento
 ├── stage/      o Stage da Lia (janela + ciclo de vida)
 └── shared/     (reservado, ainda vazio)
 ```
 
 ---
+
+## `lia/runtime` — `@lia/core`
+
+Com `lia/core` também presente na árvore, execute em `lia/runtime`:
+
+```bash
+corepack pnpm install --frozen-lockfile --ignore-scripts
+corepack pnpm run build
+corepack pnpm run typecheck
+corepack pnpm run test
+```
+
+O workspace legado registra esse mesmo pacote para o Launcher e o Stage.
 
 ## Por que ao lado e não dentro
 

@@ -105,7 +105,7 @@ function productionSources(roots: string[]): string[] {
   return files
 }
 
-const BRAIN_ROOTS = ['apps/stage-tamagotchi/src', 'packages/stage-ui/src', 'packages/core-agent/src', 'packages/lia-core/src']
+const BRAIN_ROOTS = ['apps/stage-tamagotchi/src', 'packages/stage-ui/src', 'packages/core-agent/src', '../lia/runtime/src']
 
 function readProductionFile(relative: string): string {
   for (const base of [join(process.cwd(), '..', '..'), process.cwd(), join(process.cwd(), 'airi')]) {

@@ -5,7 +5,7 @@ Why this exists
 ---------------
 A real Windows run spent its whole 3600 s Python budget and then failed the
 `lia-app` suite with eight files reporting "(0 test)". The cause was one
-missing build artifact: `airi/packages/lia-core/dist/index.mjs`. Every one of
+missing build artifact: `lia/runtime/dist/index.mjs`. Every one of
 those eight files imports `@lia/core` through `src/main/lia-host.ts`, and that
 package's `exports` map points only at a built file that is gitignored, so an
 install whose postinstall did not complete leaves nothing to resolve.
@@ -61,9 +61,9 @@ REQUIREMENTS: tuple[Requirement, ...] = (
     ),
     Requirement(
         id='lia-core-dist',
-        rel_path='airi/packages/lia-core/dist/index.mjs',
+        rel_path='lia/runtime/dist/index.mjs',
         kind='file',
-        produced_by='pnpm -F @lia/core run build (dentro de airi/)',
+        produced_by='pnpm run build:lia-core (dentro de airi/)',
         consumed_by='lia-app (via src/main/lia-host.ts, que importa @lia/core)',
     ),
     Requirement(

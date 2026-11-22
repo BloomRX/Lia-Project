@@ -722,7 +722,7 @@ describe('lia brain decision bridge (Phase 8.0D-8)', () => {
 
   it('isolation ab: no additional Brain IPC channel was introduced', () => {
     const tags = new Set<string>()
-    for (const relative of productionSources(['apps/stage-tamagotchi/src', 'packages/lia-core/src', 'packages/stage-ui/src', 'packages/core-agent/src'])) {
+    for (const relative of productionSources(['apps/stage-tamagotchi/src', '../lia/runtime/src', 'packages/stage-ui/src', 'packages/core-agent/src'])) {
       for (const match of normalizeLineEndings(readFileSync(new URL(relative, REPO_ROOT), 'utf-8')).matchAll(/eventa:(?:invoke|event):lia:brain[^'"]*/g))
         tags.add(match[0])
     }
@@ -740,18 +740,18 @@ describe('lia brain decision bridge (Phase 8.0D-8)', () => {
 
   it('isolation ac: the trusted automatic policy stays Product/main-owned', () => {
     // Declared in Lia Core's product layer - never inside generic brain modules.
-    expect(readSource('../../../../../../packages/lia-core/src/product/brain-policy.ts'))
+    expect(readSource('../../../../../../../lia/runtime/src/product/brain-policy.ts'))
       .toMatch(/export function createProductionBrainAutomaticPolicy/)
 
     // Production referrers: the product declaration, its public export line and
     // the trusted Stage main bridge - and nothing else.
     expect(productionSourcesMatching(
-      ['apps/stage-tamagotchi/src', 'packages/lia-core/src', 'packages/stage-ui/src', 'packages/core-agent/src'],
+      ['apps/stage-tamagotchi/src', '../lia/runtime/src', 'packages/stage-ui/src', 'packages/core-agent/src'],
       /createProductionBrainAutomaticPolicy/,
     )).toEqual([
+      '../lia/runtime/src/index.ts',
+      '../lia/runtime/src/product/brain-policy.ts',
       'apps/stage-tamagotchi/src/main/services/lia/brain-decision-service.ts',
-      'packages/lia-core/src/index.ts',
-      'packages/lia-core/src/product/brain-policy.ts',
     ])
 
     // The composition entry does not build it; the renderer never sees it.

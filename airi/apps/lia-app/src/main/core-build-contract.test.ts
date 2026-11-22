@@ -2,7 +2,7 @@
  * Windows integration HOTFIX 4 - build/orchestration contract.
  *
  * The QA hit this file pins, in the words of its era: `[MISSING_EXPORT]
- * "inspectAllTalkInstall" is not exported by packages/lia-core/dist/...` -
+ * "inspectAllTalkInstall" is not exported by lia/runtime/dist/...` -
  * the source change was correct, the sandbox suite was green, and yet the
  * launcher consumed @lia/core through its BUILT dist, which had been compiled
  * at `pnpm install` time, BEFORE the fixes were pulled. Nothing but the
@@ -23,8 +23,8 @@ import { describe, expect, it } from 'vitest'
 
 /** Repo paths, resolved against this test file's location. */
 const LIA_APP_DIR = join(import.meta.dirname, '..', '..')
-const CORE_DIR = join(LIA_APP_DIR, '..', '..', 'packages', 'lia-core')
-const WORKSPACE_ROOT = join(CORE_DIR, '..', '..')
+const CORE_DIR = join(LIA_APP_DIR, '..', '..', '..', 'lia', 'runtime')
+const WORKSPACE_ROOT = join(LIA_APP_DIR, '..', '..')
 
 function readJson<T>(path: string): T {
   return JSON.parse(readFileSync(path, 'utf8')) as T
@@ -102,7 +102,7 @@ describe('hotfix 4: @lia/core is fresh before any Lia boot', () => {
     const pkg = readJson<{ scripts: Record<string, string> }>(join(LIA_APP_DIR, 'package.json'))
     for (const script of ['dev', 'build']) {
       const command = pkg.scripts[script] ?? ''
-      const coreBuild = command.indexOf('pnpm -F @lia/core build')
+      const coreBuild = command.indexOf('pnpm -w run build:lia-core')
       const appBuild = command.indexOf('electron-vite')
       expect(coreBuild, `"${script}" must build @lia/core first`).toBeGreaterThanOrEqual(0)
       expect(appBuild, `"${script}" must still run electron-vite`).toBeGreaterThan(coreBuild)
