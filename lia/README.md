@@ -89,11 +89,11 @@ O ponto de entrada Electron tem lockfile próprio. Em `lia/stage`,
 instale com `corepack pnpm install --frozen-lockfile --ignore-scripts` e
 execute `corepack pnpm run dev`. O build e a janela foram verificados no
 Windows com Electron 43.4.1. O Launcher ainda usa o Stage legado para
-conversa. O Stage próprio exibe a janela inicial com um placeholder.
-No Electron foi validado o transporte de chat pelo Main com o
-provedor local configurado no produto, resposta HTTP de teste,
-recusa de destino fora de loopback e cancelamento. A interface do
-Stage próprio ainda não envia mensagens.
+conversa. A janela do Stage próprio já permite enviar mensagem ao
+provedor local configurado no produto. No Electron foram validados
+resposta de um serviço HTTP controlado, cancelamento, preservação do
+rascunho e retorno de foco. Cada requisição envia apenas a mensagem
+atual. A janela ainda precisa de contexto entre turnos e de avatar.
 
 `src/main/stage-host.ts` é a lógica inteira. Electron **não** é importado ali:
 a plataforma entra por `StageHostDeps` (`createWindow`, `terminate`, relógio,

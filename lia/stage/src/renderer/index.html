@@ -2,21 +2,40 @@
 <html lang="pt-BR">
   <head>
     <meta charset="utf-8">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Lia</title>
     <style>
-      html, body { height: 100%; margin: 0; background: transparent; }
-      body { display: grid; place-items: center; font-family: system-ui, sans-serif; }
-      /* Placeholder deliberado: a personagem real (VRM/Live2D) nao esta
-         integrada neste prototipo. Ver LIA-STAGE-ARCHITECTURE.md §6. */
-      .placeholder {
-        width: 220px; height: 320px; border-radius: 110px 110px 40px 40px;
-        background: linear-gradient(160deg, #6d5efc, #b06cff);
-        box-shadow: 0 18px 60px rgba(109, 94, 252, .35);
-      }
+      :root { color-scheme: dark; font: 16px system-ui, sans-serif; background: #171421; color: #f5efff; }
+      body { margin: 0; }
+      main { display: grid; gap: 1rem; padding: 1.25rem; }
+      h1, p { margin: 0; }
+      #messages { display: grid; align-content: start; gap: .75rem; min-height: 9rem; max-height: 45vh; overflow: auto; }
+      .message { background: #292239; border-radius: .65rem; padding: .7rem .85rem; overflow-wrap: anywhere; white-space: pre-wrap; }
+      form { display: grid; gap: .65rem; }
+      textarea, button { font: inherit; border: 1px solid #786a92; border-radius: .5rem; padding: .6rem; }
+      textarea { background: #221c30; color: inherit; resize: vertical; }
+      button { min-width: 6rem; background: #36294f; color: inherit; }
+      button[type="submit"] { background: #dbc4ff; color: #211634; }
+      button:disabled { opacity: .55; }
+      :focus-visible { outline: 3px solid #e3bcff; outline-offset: 3px; }
+      #status { min-height: 1.6em; color: #d6c7e7; }
     </style>
   </head>
   <body>
-    <div class="placeholder" role="img" aria-label="Personagem da Lia (placeholder)"></div>
+    <main>
+      <h1>Conversa com Lia</h1>
+      <div id="messages" role="log" aria-label="Mensagens" tabindex="0"></div>
+      <form>
+        <label for="message">Mensagem</label>
+        <textarea id="message" rows="3" maxlength="8000" required></textarea>
+        <div>
+          <button type="submit">Enviar</button>
+          <button id="cancel" type="button" disabled>Cancelar</button>
+        </div>
+      </form>
+      <p id="status" role="status"></p>
+    </main>
+    <script type="module" src="./chat.js"></script>
   </body>
 </html>
