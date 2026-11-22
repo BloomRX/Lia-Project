@@ -4,6 +4,21 @@ const send = document.querySelector('button[type="submit"]')
 const cancel = document.querySelector('#cancel')
 const messages = document.querySelector('#messages')
 const status = document.querySelector('#status')
+const voice = document.querySelector('#voice')
+const speak = document.querySelector('#speak')
+const audio = document.querySelector('audio')
+const voiceStatus = document.querySelector('#voice-status')
+let audioUrl
+let answerVersion = 0
+
+function clearAudio() {
+  audio.pause()
+  audio.removeAttribute('src')
+  audio.hidden = true
+  if (audioUrl)
+    URL.revokeObjectURL(audioUrl)
+  audioUrl = undefined
+}
 
 const errors = {
   busy: 'Há uma mensagem em andamento.',
@@ -39,6 +54,10 @@ form.addEventListener('submit', async (event) => {
     }
     appendMessage('Você', text)
     appendMessage('Lia', result.text)
+    answerVersion++
+    clearAudio()
+    voice.hidden = false
+    voiceStatus.textContent = ''
     message.value = ''
     status.textContent = ''
   }
@@ -52,6 +71,38 @@ form.addEventListener('submit', async (event) => {
     message.focus()
   }
 })
+
+speak.addEventListener('click', async () => {
+  const version = answerVersion
+  speak.disabled = true
+  clearAudio()
+  voiceStatus.textContent = 'Preparando a resposta em áudio…'
+  try {
+    const result = await window.liaStageChat.speak()
+    if (version !== answerVersion)
+      return
+    if (!result.ok) {
+      voiceStatus.textContent = result.code === 'disabled'
+        ? 'A saída de voz está desativada.'
+        : 'A voz selecionada está indisponível.'
+      return
+    }
+    audioUrl = URL.createObjectURL(new Blob([result.audio], { type: 'audio/wav' }))
+    audio.src = audioUrl
+    audio.hidden = false
+    voiceStatus.textContent = ''
+    await audio.play().catch(() => {})
+  }
+  catch {
+    if (version === answerVersion)
+      voiceStatus.textContent = 'Não foi possível preparar a resposta em áudio.'
+  }
+  finally {
+    speak.disabled = false
+  }
+})
+
+window.addEventListener('pagehide', clearAudio)
 
 cancel.addEventListener('click', async () => {
   cancel.disabled = true

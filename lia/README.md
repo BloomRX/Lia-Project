@@ -106,7 +106,10 @@ Stage e seu Electron (`corepack pnpm exec install-electron` em
 `lia/stage`), configure um provedor gerenciado em **IA & Recursos** e abra o Launcher com
 `LIA_NATIVE_STAGE_PREVIEW=1`. **Conversar com Lia** e **Encerrar
 conversa** foram verificados no Windows com um registro separado.
-O modo experimental oferece conversa de texto com IA local e Groq.
+O modo experimental oferece conversa com IA local e Groq. O botão
+**Ouvir resposta** usa o Kokoro local quando instalado, selecionado
+e habilitado. No Electron, a síntese gerou áudio decodificável e a
+reprodução avançou. A saída física de áudio ainda não foi verificada.
 No caminho autenticado, o Main lê o cofre compartilhado e exige
 HTTPS e chave vinculada ao provedor, à origem e à finalidade de chat.
 Esse caminho passou em testes com credencial sintética e transporte

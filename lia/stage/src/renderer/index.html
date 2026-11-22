@@ -2,7 +2,7 @@
 <html lang="pt-BR">
   <head>
     <meta charset="utf-8">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; media-src blob:; base-uri 'none'; form-action 'none'">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Lia</title>
     <style>
@@ -34,6 +34,11 @@
           <button id="cancel" type="button" disabled>Cancelar</button>
         </div>
       </form>
+      <div id="voice" hidden>
+        <button id="speak" type="button">Ouvir resposta</button>
+        <audio controls hidden aria-label="Resposta da Lia"></audio>
+        <p id="voice-status" role="status"></p>
+      </div>
       <p id="status" role="status"></p>
     </main>
     <script type="module" src="./chat.js"></script>
