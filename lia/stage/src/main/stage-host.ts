@@ -88,7 +88,7 @@ export function createStageHost(deps: StageHostDeps): StageHost {
     if (stopping)
       return stopping
 
-    stopping = (async () => {
+    stopping = Promise.resolve().then(async () => {
       const pid = lifecycle.snapshot().pid
 
       if (lifecycle.phase === 'running')
@@ -108,7 +108,7 @@ export function createStageHost(deps: StageHostDeps): StageHost {
       }
 
       return lifecycle.snapshot()
-    })()
+    })
 
     try {
       return await stopping

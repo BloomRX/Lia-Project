@@ -30,6 +30,22 @@ function deps(overrides: Partial<StageHostDeps> = {}): { deps: StageHostDeps, ca
 }
 
 describe('createStageHost', () => {
+  it('coalesces a synchronous second stop emitted by window close', async () => {
+    let reentered: Promise<unknown> | undefined
+    const { deps: d, terminated } = deps({
+      createWindow: async () => ({
+        show: () => {},
+        async close() { reentered = host.stop() },
+      }),
+    })
+    const host = createStageHost(d)
+    await host.start()
+    assert.equal((await host.stop()).phase, 'stopped')
+    assert.ok(reentered)
+    await reentered
+    assert.deepEqual(terminated, [4242])
+  })
+
   it('nao fica running antes do sinal de pronto', async () => {
     const { deps: d } = deps({
       createWindow: async () => ({ show: () => {}, close: async () => {} }),

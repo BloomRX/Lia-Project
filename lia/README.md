@@ -99,8 +99,15 @@ A janela ainda precisa de avatar e persistência de conversa.
 Em modo gerenciado, o Stage próprio publica identidade e atende status
 e encerramento pelo canal de controle compartilhado com o Stage legado.
 No Windows, o ensaio confirmou o handshake, a recusa de leitura de
-credenciais e a remoção do registro após a saída cooperativa. O Launcher
-ainda não seleciona automaticamente o Stage próprio.
+credenciais e a remoção do registro após a saída cooperativa.
+
+Para testar com o Launcher em desenvolvimento, prepare o build do
+Stage e seu Electron (`corepack pnpm exec install-electron` em
+`lia/stage`), selecione uma **IA local** e abra o Launcher com
+`LIA_NATIVE_STAGE_PREVIEW=1`. **Conversar com Lia** e **Encerrar
+conversa** foram verificados no Windows com um registro separado.
+O modo experimental oferece conversa de texto. O fluxo padrão e a
+distribuição continuam usando o Stage legado.
 
 `src/main/stage-host.ts` é a lógica inteira. Electron **não** é importado ali:
 a plataforma entra por `StageHostDeps` (`createWindow`, `terminate`, relógio,

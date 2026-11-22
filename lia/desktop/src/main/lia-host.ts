@@ -160,6 +160,7 @@ export class AiStartBlockedError extends Error {
 }
 
 export interface LiaHostDeps {
+  nativeStagePreview?: boolean
   /** Only the production Main starts the private, per-Stage credential lease. */
   enableCredentialOwner?: boolean
   credentialOwnerFactory?: typeof startCredentialOwner
@@ -369,7 +370,8 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
     await credentialOwnerClosing
   }
 
-  const runtimeStateDir = runtimeStateDirFor(paths.userDataDir)
+  const productRuntimeDir = runtimeStateDirFor(paths.userDataDir)
+  const runtimeStateDir = deps.nativeStagePreview ? join(productRuntimeDir, 'native-preview') : productRuntimeDir
   const discoverOwnRuntime = async () => await discoverRuntime(runtimeStateDir, { timeoutMs: 1_500 })
 
   const stage = (deps.stageManagerFactory ?? ((d: ConstructorParameters<typeof AiriStageManager>[0]) => new AiriStageManager(d)))({
@@ -414,7 +416,7 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
   async function startManagedStage(options: { env?: Record<string, string | undefined> } = {}) {
     if (deps.launcherChromiumProfile && sameProfileDirectory(deps.launcherChromiumProfile, paths.userDataDir))
       throw new Error('A pasta de dados precisa ser diferente do perfil do Launcher. Altere a pasta nas configurações avançadas. / Select a data folder separate from the Launcher profile.')
-    if (!deps.enableCredentialOwner || stage.holdsOwnedStage())
+    if (deps.nativeStagePreview || !deps.enableCredentialOwner || stage.holdsOwnedStage())
       return startStage(options)
     await revokeCredentialOwner()
     credentialOwner = await (deps.credentialOwnerFactory ?? startCredentialOwner)({
@@ -824,6 +826,14 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
   }
 
   async function hostStageEnv(): Promise<Record<string, string>> {
+    if (deps.nativeStagePreview) {
+      return {
+        LIA_MANAGED: '1',
+        LIA_USER_DATA: paths.userDataDir,
+        LIA_RUNTIME_STATE_DIR: runtimeStateDir,
+        LIA_STAGE_PROFILE_DIR: join(paths.userDataDir, 'native-stage-profile'),
+      }
+    }
     const bridge = await bridgeFactory()
     return {
       // LEGADO, só como origem de migração: o perfil do Stage deixou de ser a
@@ -1063,11 +1073,13 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
     const readiness = await aiConnection.getStartReadiness()
     if (!readiness.ok)
       throw new AiStartBlockedError(readiness.code)
+    if (deps.nativeStagePreview && readiness.providerId !== 'local-chat')
+      throw new Error('O Stage próprio em teste exige uma configuração de IA local sem chave.')
     return readiness
   }
   stage.start = options => withStageConfigurationLock(async () => {
     await requireSafeAiConfiguration()
-    return startManagedStage(options)
+    return startManagedStage(deps.nativeStagePreview ? { env: await hostStageEnv() } : options)
   })
   return {
     aiConnection,
@@ -1114,6 +1126,8 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
         emit('lia-app.conversar-blocked', 'reason=ai-not-ready')
         throw new Error('Lia is not fully configured yet. Finish the AI setup first.')
       }
+      if (deps.nativeStagePreview)
+        return await startManagedStage({ env: await hostStageEnv() })
       await ensureVoiceReadyForConversar(snapshot)
       // Phase 8.0D-10B-4D4C4-SHELL-B1: the canonical STT default is materialized
       // BEFORE the child launches, so the managed Stage reads an already-resolved
@@ -1146,7 +1160,11 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
         // Parada explícita por DESCOBERTA, não por posse do filho: depois de
         // reabrir, este Launcher adotou um Runtime que não spawnou e ainda
         // assim precisa conseguir pará-lo.
-        return await stopDiscoveredRuntime(runtimeStateDir, { timeoutMs: 15_000 })
+        const ownsNativeStage = deps.nativeStagePreview && stage.holdsOwnedStage()
+        const stopped = await stopDiscoveredRuntime(runtimeStateDir, { timeoutMs: 15_000 })
+        if (ownsNativeStage && stopped.stopped)
+          await stage.stop()
+        return stopped
       },
     },
     stage,

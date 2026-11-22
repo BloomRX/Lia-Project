@@ -1,5 +1,6 @@
 import type { LiaRuntimeService } from '../../../core/src/runtime/index.ts'
 
+import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -14,6 +15,15 @@ import { createLocalChat } from './local-chat.ts'
 import { createStageHost } from './stage-host.ts'
 
 async function main(): Promise<void> {
+  const profile = process.env.LIA_STAGE_PROFILE_DIR?.trim()
+  if (profile) {
+    mkdirSync(profile, { recursive: true })
+    app.setPath('userData', profile)
+  }
+  if (!app.requestSingleInstanceLock()) {
+    app.exit(1)
+    return
+  }
   await app.whenReady()
   const paths = liaProductPaths()
   const repository = createTransportRepository(join(paths.userDataDir, 'lia-transports.json'))

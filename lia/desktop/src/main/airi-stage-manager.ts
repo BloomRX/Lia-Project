@@ -167,8 +167,14 @@ export class AiriStageManager {
 
   /** The child spawn command, as one inspectable string for diagnostics. */
   command(): string {
-    if (this.deps.packagedStage)
-      return 'LiaStage.exe'
+    if (this.deps.packagedStage) {
+      try {
+        return basename(this.deps.packagedStage().command)
+      }
+      catch {
+        return 'Stage indisponível'
+      }
+    }
     return `node ${stageDevEntrypointFor(this.stageDir(), this.deps)} dev`
   }
 
