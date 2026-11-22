@@ -1,5 +1,28 @@
 # Lia — Matriz de integração seletiva de branches
 
+## Retomada da consolidação — 22/11/2026
+
+A candidata local da `main` integra `138e2fd2` e `9065aa2` em
+`1e8a68bd`. Ela preserva os commits de visão cognitiva e o bootstrap
+de skills do Agent Hub. A `main` publicada ainda está em `138e2fd2`.
+
+O espelho externo contém as 12 branches remotas e passou em
+`git fsck --full`. Foram verificados os bundles locais e comparadas
+por SHA-256 as cópias dos 11 checkouts órfãos. O principal órfão
+coincide com a árvore rastreada de `da3a150`; o inventário de arquivos
+não rastreados foi separado da comparação do histórico.
+
+Na candidata passaram a instalação congelada, 33 builds de pacotes,
+o build do Stage, 54 testes focados de OIDC e 275 testes de ferramentas.
+O commit `610b2d07` preserva as três verificações dos consumidores e
+permite executar 154 testes do pacote de contratos sem a árvore AIRI.
+O aplicativo desktop ainda usa o workspace AIRI. A execução agregada
+inicial do Core registrou 384 aprovações e dois timeouts.
+
+A seção a seguir registra o destino e as classificações originais
+da auditoria de 16/11. Elas também servem de referência para revisar
+as diferenças remanescentes antes de qualquer exclusão de branch.
+
 **Data:** 16/11/2026
 **Branch de destino:** `arena/7fa837f0-lia-project` @ `971d309074`
 **Escopo:** plano **por alteração**, não por branch. **Nenhuma integração foi executada nesta rodada.**
