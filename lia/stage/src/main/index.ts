@@ -1,22 +1,11 @@
-/**
- * Entrada do Stage no Electron.
- *
- * Este arquivo e a UNICA parte que conhece Electron. Ele existe para ser fino:
- * toda a logica esta em `stage-host.ts`, testada sem display. Se este arquivo
- * ficar grande, a fronteira esta errada.
- *
- * NAO EXECUTADO neste repositorio: o binario do Electron nao esta disponivel
- * no ambiente de desenvolvimento do agente (sem display, sem download). Ver
- * docs/architecture/LIA-STAGE-ARCHITECTURE.md §6 para o gate de Windows.
- */
+import { fileURLToPath } from 'node:url'
+
+import { app, BrowserWindow } from 'electron'
 
 import { createStageHost } from './stage-host.ts'
 
-// Importado dinamicamente para que o modulo possa ser carregado em teste sem
-// Electron instalado.
-export async function main(): Promise<void> {
-  const { app, BrowserWindow } = await import('electron')
-
+async function main(): Promise<void> {
+  await app.whenReady()
   const host = createStageHost({
     createWindow: async () => {
       const window = new BrowserWindow({
@@ -24,30 +13,38 @@ export async function main(): Promise<void> {
         height: 640,
         show: false,
         title: 'Lia',
-        webPreferences: { sandbox: true, contextIsolation: true },
+        webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false },
       })
-      await window.loadFile(new URL('../renderer/index.html', import.meta.url).pathname)
+      window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+      window.webContents.on('will-navigate', event => event.preventDefault())
+      try {
+        const devUrl = import.meta.env.DEV && process.env.ELECTRON_RENDERER_URL
+        if (devUrl)
+          await window.loadURL(devUrl)
+        else
+          await window.loadFile(fileURLToPath(new URL('../renderer/index.html', import.meta.url)))
+      }
+      catch {
+        window.destroy()
+        throw new Error('Falha ao carregar a janela do Stage')
+      }
       return {
         show: () => window.show(),
-        close: async () => { window.destroy() },
+        close: async () => {
+          if (!window.isDestroyed())
+            window.destroy()
+        },
       }
     },
-    terminate: async (pid) => {
-      // No Windows, matar so o pai deixa filhos orfaos (ver airi-stage-manager).
-      // Aqui o padrao e o mesmo caminho que o Launcher ja usa.
-      if (process.platform === 'win32')
-        app.quit()
-      else
-        process.kill(pid, 'SIGTERM')
-    },
+    terminate: async () => { app.quit() },
+    nextPid: () => process.pid,
     onLog: line => console.log(`[lia-stage] ${line}`),
   })
 
-  app.whenReady().then(async () => {
-    const snapshot = await host.start()
-    if (snapshot.phase !== 'running')
-      app.exit(1)
-  })
-
   app.on('window-all-closed', () => { void host.stop().finally(() => app.quit()) })
+  const snapshot = await host.start()
+  if (snapshot.phase !== 'running')
+    app.exit(1)
 }
+
+void main().catch(() => app.exit(1))

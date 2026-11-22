@@ -1,0 +1,19 @@
+{
+  "name": "@lia/stage",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./out/main/index.js",
+  "packageManager": "pnpm@11.24.0",
+  "scripts": {
+    "build": "electron-vite build",
+    "dev": "install-electron && electron-vite dev",
+    "start": "electron .",
+    "test": "node --experimental-strip-types --test \"test/*.test.ts\""
+  },
+  "devDependencies": {
+    "electron": "43.4.1",
+    "electron-vite": "5.0.0",
+    "vite": "8.2.2"
+  }
+}

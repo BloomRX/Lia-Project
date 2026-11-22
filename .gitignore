@@ -75,3 +75,5 @@ tools/stt-bench/samples/*.webm
 /lia/desktop/dist/
 /lia/desktop/node_modules/
 /lia/desktop/out/
+/lia/stage/node_modules/
+/lia/stage/out/

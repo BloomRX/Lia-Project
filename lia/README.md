@@ -83,7 +83,13 @@ isso arrastaria o install do AIRI.
 
 ---
 
-## `lia/stage` — o Stage
+## `lia/stage` — Stage próprio em desenvolvimento
+
+O ponto de entrada Electron tem lockfile próprio. Em `lia/stage`,
+instale com `corepack pnpm install --frozen-lockfile --ignore-scripts` e
+execute `corepack pnpm run dev`. O build e a janela foram verificados no
+Windows com Electron 43.4.1. O Launcher ainda usa o Stage legado para
+conversa. O Stage próprio exibe a janela inicial com um placeholder.
 
 `src/main/stage-host.ts` é a lógica inteira. Electron **não** é importado ali:
 a plataforma entra por `StageHostDeps` (`createWindow`, `terminate`, relógio,
@@ -127,7 +133,7 @@ cd lia/launcher && node --experimental-strip-types --test "test/*.test.ts"
 | Stage (9 testes) | **PASS**, executado |
 | Launcher (8 testes) | **PASS**, executado |
 | Teste de mutação do Stage | **detecta** o bug de declarar pronto antes da hora |
-| Janela real do Stage | **NÃO EXECUTADO** — sem display, sem binário do Electron |
+| Janela inicial do Stage próprio | **PASS** no Electron 43.4.1 no Windows |
 | Encerramento sem órfão no Windows | **NÃO EXECUTADO** |
 | Typecheck (`tsc`) | **NÃO EXECUTADO** — não instalado |
 
