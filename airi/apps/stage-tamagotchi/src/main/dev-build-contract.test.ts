@@ -22,7 +22,7 @@
  * and never reads this `package.json`, which the Windows runtime log proved
  * (`lia-app.stage-log spawn: node ...\electron-vite.js dev`). An earlier
  * revision of this header claimed otherwise; that claim was wrong. The managed
- * path is pinned by `apps/lia-app/src/main/stage-managed-build-prerequisite
+ * path is pinned by `lia/desktop/src/main/stage-managed-build-prerequisite
  * .test.ts` instead.
  *
  * Release is NOT affected and must stay that way: `stage-ui` declares

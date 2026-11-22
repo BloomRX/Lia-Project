@@ -12,8 +12,8 @@ export default {
   publish: null,
   extraMetadata: { name: 'lia', main: 'out/main/index.js' },
   extraResources: [
-    { from: '../stage-tamagotchi/dist/lia-windows/win-unpacked', to: 'stage', filter: ['**/*'] },
-    { from: '../../LICENSE', to: 'licenses/Stage-LICENSE' },
+    { from: '../../airi/apps/stage-tamagotchi/dist/lia-windows/win-unpacked', to: 'stage', filter: ['**/*'] },
+    { from: '../../airi/LICENSE', to: 'licenses/Stage-LICENSE' },
     { from: 'scripts/DISTRIBUTION-NOTICE.txt', to: 'licenses/DISTRIBUTION-NOTICE.txt' },
   ],
   win: {

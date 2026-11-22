@@ -16,7 +16,7 @@ function file(path, contents = 'fixture') {
 test('packaging requires an internal test, builds, the pinned local runtime and third-party notices', (t) => {
   const root = mkdtempSync(join(tmpdir(), 'Lia packaging & spaces '))
   t.after(() => rmSync(root, { recursive: true, force: true }))
-  const inputs = packagingInputs(join(root, 'airi/apps/lia-app'))
+  const inputs = packagingInputs(join(root, 'lia/desktop'))
   file(inputs.builder)
   for (const app of [inputs.launcher, inputs.stage]) {
     for (const name of ['out/main/index.js', 'out/renderer/index.html', 'package.json'])

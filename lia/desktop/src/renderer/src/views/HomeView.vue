@@ -13,7 +13,7 @@ import type { FirstRunChoice } from './home-vm'
  */
 import { computed, ref } from 'vue'
 
-import liaHero from '../../../../../../../lia/assets/character/LiaHeroImage.png'
+import liaHero from '../../../../../assets/character/LiaHeroImage.png'
 import LiaButton from '../components/lia/LiaButton.vue'
 import LiaPanel from '../components/lia/LiaPanel.vue'
 import LiaStatusChip from '../components/lia/LiaStatusChip.vue'

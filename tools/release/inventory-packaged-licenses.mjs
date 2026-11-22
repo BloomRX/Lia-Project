@@ -6,8 +6,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 export const defaultArchives = [
-  'airi/apps/lia-app/dist/windows/win-unpacked/resources/app.asar',
-  'airi/apps/lia-app/dist/windows/win-unpacked/resources/stage/resources/app.asar',
+  'lia/desktop/dist/windows/win-unpacked/resources/app.asar',
+  'lia/desktop/dist/windows/win-unpacked/resources/stage/resources/app.asar',
 ].map(path => resolve(repoRoot, path))
 
 // Only metadata is read. Declared licenses never constitute redistribution approval.

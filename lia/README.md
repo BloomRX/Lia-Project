@@ -7,6 +7,7 @@ dentro, e **nunca** entra em `airi/pnpm-workspace.yaml`.
 lia/
 ├── assets/     ícones e imagem da marca (já existiam)
 ├── core/       @lia/contracts — contratos, zero dependências
+├── desktop/    Launcher Electron, com lockfile próprio
 ├── launcher/   decisão e fronteira do Launcher
 ├── runtime/    @lia/core — produto, cofre, voz e roteamento
 ├── stage/      o Stage da Lia (janela + ciclo de vida)
@@ -27,6 +28,22 @@ corepack pnpm run test
 ```
 
 O workspace legado registra esse mesmo pacote para o Launcher e o Stage.
+
+## `lia/desktop` — Launcher Electron
+
+Execute em `lia/desktop`:
+
+```bash
+corepack pnpm install --frozen-lockfile --ignore-scripts
+corepack pnpm run build
+corepack pnpm run typecheck
+corepack pnpm run test
+```
+
+`corepack pnpm run dev` prepara o Electron e abre o Launcher. O
+botão **Conversar com Lia** ainda abre o Stage legado, que exige o
+workspace em `airi/`. A janela do Launcher e seu build não precisam
+desse workspace.
 
 ## Por que ao lado e não dentro
 

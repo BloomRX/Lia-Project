@@ -6,7 +6,7 @@ relatório JSON. Não usa setters de stores para aprovar funcionalidades.
 Na raiz, com Launcher/Stage fechados e dependências existentes:
 
 ```powershell
-cd airi/apps/lia-app
+cd lia/desktop
 corepack pnpm run build
 cd ../../..
 node Tests/windows/completion-runtime.mjs --without-key --benchmark

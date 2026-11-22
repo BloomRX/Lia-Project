@@ -29,7 +29,7 @@ import {
   createCoreAgentBuildPrerequisite,
 } from './stage-build-prerequisite'
 
-const AIRI_ROOT = join(import.meta.dirname, '..', '..', '..', '..')
+const AIRI_ROOT = join(import.meta.dirname, '..', '..', '..', '..', 'airi')
 
 /** A workspace holding only what the parameter under test provides. */
 async function makeWorkspace(files: Record<string, string>): Promise<string> {

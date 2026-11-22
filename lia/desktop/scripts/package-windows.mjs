@@ -16,7 +16,7 @@ function requireFile(path, label) {
 }
 
 export function packagingInputs(root = launcherRoot) {
-  const stage = resolve(root, '../stage-tamagotchi')
+  const stage = resolve(root, '../../airi/apps/stage-tamagotchi')
   return {
     launcher: root,
     stage,
@@ -38,7 +38,7 @@ export function validateInputs(inputs, { internalTest = false } = {}) {
   }
   requireFile(join(inputs.launcher, 'out/preload/index.cjs'), 'Build Preload do Launcher')
   requireFile(join(inputs.stage, 'out/preload/index.cjs'), 'Build Preload do Stage')
-  requireFile(resolve(inputs.launcher, '../../LICENSE'), 'Licença do Stage')
+  requireFile(resolve(inputs.launcher, '../../airi/LICENSE'), 'Licença do Stage')
   requireFile(join(inputs.launcher, 'scripts/DISTRIBUTION-NOTICE.txt'), 'Aviso de distribuição interna')
   const runtimePackage = JSON.parse(readFileSync(join(inputs.electron, '../package.json'), 'utf8'))
   if (runtimePackage.version !== ELECTRON_VERSION)

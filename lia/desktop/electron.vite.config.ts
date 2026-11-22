@@ -10,7 +10,7 @@ import { defineConfig } from 'electron-vite'
  * o pacote publica em `exports`. O efeito prático é o que importa: nenhum
  * consumidor escreve caminho relativo, e o bundler inlina o contrato.
  */
-const liaContracts = resolve(import.meta.dirname, '..', '..', '..', 'lia', 'core', 'src')
+const liaContracts = resolve(import.meta.dirname, '..', 'core', 'src')
 
 /**
  * The Electron MODULE boundary (Windows boot hotfix 2, Phase 7.1).

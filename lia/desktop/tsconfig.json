@@ -19,10 +19,10 @@
     "skipLibCheck": true,
     "paths": {
       "@lia/contracts": [
-        "../../../lia/core/src/index.ts"
+        "../core/src/index.ts"
       ],
       "@lia/contracts/*": [
-        "../../../lia/core/src/*"
+        "../core/src/*"
       ]
     }
   },

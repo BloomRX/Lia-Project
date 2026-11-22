@@ -1159,14 +1159,13 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
 
 /**
  * The AIRI workspace the launcher manages the stage from: the app sits at
- * `<repo>/airi/apps/lia-app`, so the monorepo root is two folders up from
- * the package root. `LIA_AIRI_ROOT` overrides (QA rigs, packaged layout).
+ * `<repo>/lia/desktop`, so the AIRI workspace is at a sibling path. `LIA_AIRI_ROOT` overrides (QA rigs, packaged layout).
  */
 function defaultWorkspaceRoot(): string {
   const override = process.env.LIA_AIRI_ROOT?.trim()
   if (override)
     return resolve(override)
-  // src/main (or out/main) -> app root -> apps -> airi monorepo root
+  // src/main (or out/main) -> app root -> lia -> repository root
   const here = dirname(fileURLToPath(import.meta.url))
-  return resolve(here, '..', '..', '..', '..')
+  return resolve(here, '..', '..', '..', '..', 'airi')
 }

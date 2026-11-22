@@ -15,7 +15,7 @@ function exportKeyFor(specifier) {
 }
 
 function appFiles() {
-  const files = []
+  const files = walk(join(repoRoot, 'lia', 'desktop', 'src'))
   for (const app of readdirSync(appsRoot)) {
     const src = join(appsRoot, app, 'src')
     try {

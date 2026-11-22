@@ -66,10 +66,10 @@
     {
       "id": "lia-app",
       "label": "Lia App (manager + pre-requisito + ownership + autorun)",
-      "cwd": "airi/apps/lia-app",
+      "cwd": "lia/desktop",
       "argv": [
         "node",
-        "../../node_modules/vitest/vitest.mjs",
+        "node_modules/vitest/vitest.mjs",
         "run"
       ]
     },

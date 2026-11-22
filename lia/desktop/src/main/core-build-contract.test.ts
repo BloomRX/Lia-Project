@@ -23,8 +23,7 @@ import { describe, expect, it } from 'vitest'
 
 /** Repo paths, resolved against this test file's location. */
 const LIA_APP_DIR = join(import.meta.dirname, '..', '..')
-const CORE_DIR = join(LIA_APP_DIR, '..', '..', '..', 'lia', 'runtime')
-const WORKSPACE_ROOT = join(LIA_APP_DIR, '..', '..')
+const CORE_DIR = join(LIA_APP_DIR, '..', 'runtime')
 
 function readJson<T>(path: string): T {
   return JSON.parse(readFileSync(path, 'utf8')) as T
@@ -102,16 +101,12 @@ describe('hotfix 4: @lia/core is fresh before any Lia boot', () => {
     const pkg = readJson<{ scripts: Record<string, string> }>(join(LIA_APP_DIR, 'package.json'))
     for (const script of ['dev', 'build']) {
       const command = pkg.scripts[script] ?? ''
-      const coreBuild = command.indexOf('pnpm -w run build:lia-core')
+      const coreBuild = command.indexOf('pnpm run build:core')
       const appBuild = command.indexOf('electron-vite')
       expect(coreBuild, `"${script}" must build @lia/core first`).toBeGreaterThanOrEqual(0)
       expect(appBuild, `"${script}" must still run electron-vite`).toBeGreaterThan(coreBuild)
     }
 
-    // The user-facing entry point Lia.bat drives is the workspace dev:lia,
-    // which must delegate to this very app script (not bypass it).
-    const root = readJson<{ scripts: Record<string, string> }>(join(WORKSPACE_ROOT, 'package.json'))
-    expect(root.scripts['dev:lia']).toContain('@lia/lia-app')
-    expect(root.scripts['dev:lia']).toContain('dev')
+    expect(pkg.scripts['build:core']).toContain('pnpm --dir ../runtime run build')
   })
 })

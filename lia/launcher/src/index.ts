@@ -3,7 +3,7 @@
  *
  * Este modulo NAO importa Electron: tudo o que e plataforma entra por
  * `LauncherDeps`. A implementacao concreta continua, por enquanto, em
- * `airi/apps/lia-app/src/main/airi-stage-manager.ts` — a migracao e incremental
+ * `lia/desktop/src/main/airi-stage-manager.ts` — a migracao e incremental
  * e reversivel (ver docs/architecture/LIA-MIGRATION-PLAN.md).
  */
 

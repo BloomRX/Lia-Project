@@ -5600,7 +5600,7 @@ class PrelaunchPreparationTests(unittest.TestCase):
     def test_a_prelaunch_path_outside_the_allowlist_is_rejected_by_the_schema(self) -> None:
         data = runnable_manifest()
         data['prelaunch_prepare'] = [{
-            'kind': 'remove_generated', 'path': 'airi/apps/lia-app/src', 'why': 'x',
+            'kind': 'remove_generated', 'path': 'lia/desktop/src', 'why': 'x',
         }]
         with self.assertRaises(RoundSchemaError):
             validate_round(data)

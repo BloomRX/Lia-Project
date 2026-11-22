@@ -96,8 +96,8 @@ await new Promise(resolve => debug.listen(0, '127.0.0.1', resolve))
 const debugPort = debug.address().port
 await new Promise(resolve => debug.close(resolve))
 const launchLauncher = () => _electron.launch({
-  executablePath: resolve(repositoryRoot, packaged ? 'airi/apps/lia-app/dist/windows/win-unpacked/Lia.exe' : 'airi/apps/stage-tamagotchi/node_modules/electron/dist/electron.exe'),
-  args: packaged ? [] : [resolve(repositoryRoot, 'airi/apps/lia-app/out/main/index.js')],
+  executablePath: resolve(repositoryRoot, packaged ? 'lia/desktop/dist/windows/win-unpacked/Lia.exe' : 'airi/apps/stage-tamagotchi/node_modules/electron/dist/electron.exe'),
+  args: packaged ? [] : [resolve(repositoryRoot, 'lia/desktop/out/main/index.js')],
   env: { ...process.env, NODE_ENV: 'production', LIA_USER_DATA: `${root}/profile`, APP_USER_DATA_PATH: `${root}/profile`, APP_REMOTE_DEBUG: 'true', APP_REMOTE_DEBUG_PORT: String(debugPort), APP_REMOTE_DEBUG_NO_OPEN: 'true', LIA_DEVFLOW_DIAGNOSTICS: '1' },
 })
 async function closeLauncher(application) {

@@ -7,7 +7,7 @@ import { defineConfig } from 'vitest/config'
  * superfície pública (`@lia/contracts/...`) e não um caminho que só existe
  * dentro do bundler.
  */
-const liaContracts = resolve(import.meta.dirname, '..', '..', '..', 'lia', 'core', 'src')
+const liaContracts = resolve(import.meta.dirname, '..', 'core', 'src')
 
 export default defineConfig({
   resolve: {

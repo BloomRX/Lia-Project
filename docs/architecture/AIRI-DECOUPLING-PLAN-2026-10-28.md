@@ -62,8 +62,11 @@ permite testar a movimentação física do Core sem copiar a
 implementação. O Turbo recusou o membro externo no grafo legado.
 Na `main` candidata, a implementação agora fica em `lia/runtime` e
 tem lockfile próprio. Launcher e Stage legados usam um vínculo
-local explícito e o Core é compilado fora do grafo do Turbo. Falta
-extrair o Launcher e substituir as dependências operacionais do Stage.
+local explícito e o Core é compilado fora do grafo do Turbo.
+O Launcher foi movido para `lia/desktop`, tem lockfile próprio e
+abriu no Electron 43.4.1 no Windows. O build também passou em uma
+cópia sem código AIRI. O botão de conversa e o empacotamento conjunto
+ainda dependem do Stage legado.
 
 | Campo | Valor |
 | --- | --- |
