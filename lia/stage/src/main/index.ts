@@ -14,9 +14,10 @@ import { app, BrowserWindow, ipcMain, safeStorage } from 'electron'
 
 import { startLiaRuntimeService } from '../../../core/src/runtime/index.ts'
 import { createTransportRepository } from '../../../core/src/transports/repository.ts'
-import { stageChatCancel, stageChatSend, stageChatSpeak } from '../shared/chat-ipc.ts'
+import { stageChatCancel, stageChatSend, stageChatSpeak, stageTranscribe, stageTranscriptionCancel } from '../shared/chat-ipc.ts'
 import { createStageChat } from './stage-chat.ts'
 import { createStageHost } from './stage-host.ts'
+import { createStageTranscription } from './stage-transcription.ts'
 import { createStageVoice } from './stage-voice.ts'
 
 async function main(): Promise<void> {
@@ -55,11 +56,17 @@ async function main(): Promise<void> {
     readProduct,
     readTransports: repository.read,
   })
+  const transcribe = createStageTranscription({ readProduct, readTransports: repository.read })
   let window: BrowserWindow | undefined
   let runtimeService: LiaRuntimeService | undefined
   let active: AbortController | undefined
+  let recording: AbortController | undefined
   let lastAnswer: string | undefined
   const cancel = () => active?.abort()
+  const cancelOperations = () => {
+    cancel()
+    recording?.abort()
+  }
   const authorized = (event: Electron.IpcMainInvokeEvent) =>
     window && !window.isDestroyed() && event.sender === window.webContents
     && event.senderFrame === window.webContents.mainFrame
@@ -86,6 +93,22 @@ async function main(): Promise<void> {
       cancel()
   })
   ipcMain.handle(stageChatSpeak, event => authorized(event) ? voice.speak(lastAnswer) : { ok: false, code: 'unavailable' })
+  ipcMain.handle(stageTranscribe, async (event, bytes: unknown, mimeType: unknown) => {
+    if (!authorized(event) || recording)
+      return { ok: false, code: 'configuration' }
+    const controller = new AbortController()
+    recording = controller
+    try {
+      return await transcribe(bytes, mimeType, controller.signal)
+    }
+    finally {
+      recording = undefined
+    }
+  })
+  ipcMain.handle(stageTranscriptionCancel, (event) => {
+    if (authorized(event))
+      recording?.abort()
+  })
   const host = createStageHost({
     createWindow: async () => {
       const stageWindow = new BrowserWindow({
@@ -105,10 +128,10 @@ async function main(): Promise<void> {
       stageWindow.webContents.on('will-navigate', event => event.preventDefault())
       stageWindow.webContents.on('did-start-navigation', (details) => {
         if (details.isMainFrame && !details.isSameDocument)
-          cancel()
+          cancelOperations()
       })
-      stageWindow.webContents.on('render-process-gone', cancel)
-      stageWindow.once('closed', cancel)
+      stageWindow.webContents.on('render-process-gone', cancelOperations)
+      stageWindow.once('closed', cancelOperations)
       try {
         const devUrl = import.meta.env.DEV && process.env.ELECTRON_RENDERER_URL
         if (devUrl)
@@ -141,7 +164,7 @@ async function main(): Promise<void> {
     if (cleaned)
       return
     event.preventDefault()
-    cancel()
+    cancelOperations()
     cleanup ??= Promise.allSettled([runtimeService?.stop(), voice.stop()]).then(() => {
       cleaned = true
       app.quit()

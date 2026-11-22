@@ -118,8 +118,11 @@ e a distribuição continuam usando o Stage legado.
 
 O serviço HTTP de transcrição e seus adaptadores agora ficam em
 `lia/core/src/transcription`. O Stage legado usa esse mesmo serviço
-com seu cofre, adaptador de rede e confirmação por gravação. A captura
-e o IPC de transcrição ainda precisam ser ligados ao Stage próprio.
+com seu cofre, adaptador de rede e confirmação por gravação. O Stage
+próprio já recebe gravações pelo IPC e usa somente o adaptador STT
+local selecionado no produto. No Electron, áudio sintético foi
+transcrito, a requisição foi cancelada e um destino remoto foi
+recusado. A captura por microfone na interface segue pendente.
 
 `src/main/stage-host.ts` é a lógica inteira. Electron **não** é importado ali:
 a plataforma entra por `StageHostDeps` (`createWindow`, `terminate`, relógio,
