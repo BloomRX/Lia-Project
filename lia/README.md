@@ -38,8 +38,12 @@ Sem dependências, sem build, sem transpilador. Usa `node --test` e o
 
 ```bash
 cd lia/core && node --experimental-strip-types --test "test/*.test.ts"
-# 26 testes, 26 pass
+# 154 testes de contratos e runtime
 ```
+
+O pacote roda sozinho em uma cópia de `lia/`. Para verificar também
+os imports dos aplicativos do workspace legado, execute na raiz do
+repositório `node --test Tests/tools/lia-contract-consumers.test.mjs`.
 
 **Restrição do strip-types:** o Node recusa sintaxe que só existe em TypeScript
 — parameter properties, `enum`, `namespace`, decorators. O código usa
@@ -88,7 +92,7 @@ cd lia/launcher && node --experimental-strip-types --test "test/*.test.ts"
 
 | Item | Estado |
 | --- | --- |
-| Contratos (26 testes) | **PASS**, executado |
+| Contratos (154 testes) | **PASS**, executado em cópia sem `airi/` |
 | Stage (9 testes) | **PASS**, executado |
 | Launcher (8 testes) | **PASS**, executado |
 | Teste de mutação do Stage | **detecta** o bug de declarar pronto antes da hora |
