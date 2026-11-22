@@ -1,17 +1,16 @@
 # LIA — Estado operacional atual (living state)
 
-**Fonte de verdade operacional do projeto.** Uma sessão nova lê o **§0 — Estado agora**,
-logo abaixo; o restante é histórico consultável, aberto quando a tarefa exigir. Quando uma
-decisão de produto ou um estado de validação mudar, este arquivo é atualizado no mesmo
-commit. Registra **estado**, não narrativa: relatório de rodada vai para
-`docs/product/`.
-
----
-
-<!-- CABEÇALHO DE ESTADO: uma sessão nova lê só o §0. O resto é histórico
-     consultável. A §6 (regras permanentes) é obrigatória antes de alterar código. -->
-
 ## 0. Estado agora
+
+- **Entrada atual.** `Lia.bat` inicia o Launcher pelo workspace `airi/`. O Stage ativo é `airi/apps/stage-tamagotchi`; `lia/stage` é um protótipo.
+- **Com evidência no Windows.** Conversa local sem chave, Stage ativo com Launcher fechado, retomada ao reabrir o Launcher e teste de pacote interno. O ensaio anterior também registra memória e personalidade no chat, presença livre e colocação no segundo monitor.
+- **Em aberto.** Áudio físico ponta a ponta (G-AUD), cenários integrados C0–C8 (G-ARCH), instalação limpa, consumidores legados de credenciais e validação de serviços externos. OIDC de produção segue desativado.
+- **Baseline funcional registrado.** `3ef6d11`. Os resultados de componentes posteriores constam nos relatórios e não promovem esse baseline.
+- **Próximo corte.** Fechar a validação do cofre e dos consumidores legados, revalidar o fluxo desktop no Windows e migrar a inicialização para fora de `airi/` de acordo com o [plano de desacoplamento](../architecture/AIRI-DECOUPLING-PLAN-2026-10-28.md).
+
+[Evidências da Rodada 22](../reports/LIA-ROUND-22-IMPLEMENTATION-REPORT.md) · [Pendências por ambiente](QUANTO-FALTA.md)
+
+## Histórico de validações e decisões
 
 **Rodada 22 — SEC-05 no chat nativo e STT derivado.** Launcher e Stage
 gravam a chave cifrada com origem, escopo e finalidade de chat. Chaves

@@ -34,7 +34,7 @@ STOP AND REPORT, o baseline e o gate — sem erro e sem aviso. Abra na raiz.
 
 Antes de analisar código ou propor qualquer mudança, ler o CABEÇALHO DE ESTADO:
 
-docs/project/CURRENT-STATE.md  →  §0. Estado agora  (do início do arquivo até a §1)
+docs/project/CURRENT-STATE.md  →  §0. Estado agora  (até o título Histórico de validações e decisões)
 
 Ler SÓ esse bloco. O restante do arquivo é histórico consultável: abrir a seção
 correspondente quando a tarefa exigir, nunca por padrão.
@@ -3039,7 +3039,7 @@ END OF MASTER PROMPT
 ## Regra permanente de encerramento — commit e push (28/10/2026)
 
 Toda tarefa autorizada termina com commit e push para a branch de trabalho
-acordada, atualmente `arena/01a10290-lia-project`, remoto `origin` de
+acordada para a tarefa, remoto `origin` de
 `BloomRX/Lia-Project`. Esta é autorização permanente do usuário para esse
 encerramento; não autoriza publicação em main, release ou alteração de credenciais.
 

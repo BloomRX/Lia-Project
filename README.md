@@ -2,32 +2,35 @@
 
 **Lia** — companheira virtual (AI companion), um produto próprio em processo de desacoplamento técnico. O [Project AIRI](https://github.com/moeru-ai/airi) é mantido como referência e fonte de estudo, não como a arquitetura final obrigatória.
 
-## Documentação
+## Comece aqui
 
-Índice completo dos 63 documentos em [`docs/README.md`](docs/README.md). Estado
-operacional corrente em [`docs/project/CURRENT-STATE.md`](docs/project/CURRENT-STATE.md), §0.
+| O que você procura | Onde encontrar |
+| --- | --- |
+| Estado atual e validações pendentes | [Estado agora](docs/project/CURRENT-STATE.md#0-estado-agora) |
+| Visão, funcionalidades e critérios de aceitação | [Especificação do produto](docs/product/ESPECIFICACAO-GERAL-DO-PRODUTO-LIA.md) |
+| Plano para tornar o AIRI apenas referência | [Plano de desacoplamento](docs/architecture/AIRI-DECOUPLING-PLAN-2026-10-28.md) |
+| Guias, decisões e relatórios | [Índice da documentação](docs/README.md) |
+| Identidade e linguagem | [Padrão da marca](docs/BRAND-STANDARDS.md) |
 
-## Status
+## Como o desktop inicia hoje
 
-- ✅ **Estudo técnico completo do AIRI concluído** → [`docs/estudo-airi.md`](docs/estudo-airi.md)
-- ✅ **Fase 0 (análise + arquitetura) concluída** → [`docs/architecture/`](docs/architecture/)
-- ✅ **M0-A (bootstrap do AIRI no repositório) documentado** → [`docs/upstream/AIRI-INTEGRATION.md`](docs/upstream/AIRI-INTEGRATION.md) — status: *BOOTSTRAP DOCUMENTED — BUILD NOT VALIDATED IN SANDBOX*
-- 🎯 **Decisão:** fork da versão **`v0.12.0-beta.5`** (a mais recente disponível, mesmo sendo beta — 29/08/2026; tag confirmada upstream → commit `2c1e223c…`), licença MIT, com remote `upstream` para acompanhar evoluções durante a transição. **Nota:** esse fork é a base legada atualmente mantida no repositório; não representa a arquitetura-alvo permanente. O desacoplamento da Lia continua em andamento e deve ser acompanhado em `docs/project/CURRENT-STATE.md`.
-- 🗺️ **Roadmap:** Fase 0 (análise/arquitetura) → M0 (base/toolchain do AIRI) → Fase 1 (identidade "Lia" + pt-BR) → Fase 2 (corpo/voz: avatar Live2D + TTS/STT) → Fase 3 (habilidades: plugins, memória, integrações) → Fase 4 (distribuição).
+No Windows, para desenvolvimento, instale as dependências no workspace `airi/`
+com `pnpm install` e abra `Lia.bat` na raiz. O script inicia o Launcher da Lia.
+A ação **Conversar com Lia** abre o Stage gerenciado.
 
-## Padrão da marca
+| Componente | Caminho atual |
+| --- | --- |
+| Entrada de desenvolvimento | [Lia.bat](Lia.bat) |
+| Launcher e empacotamento Windows | [airi/apps/lia-app](airi/apps/lia-app) |
+| Stage usado para conversa, avatar e voz | [airi/apps/stage-tamagotchi](airi/apps/stage-tamagotchi) |
+| Configuração do produto, cofre e voz | [airi/packages/lia-core](airi/packages/lia-core) |
+| Contratos próprios e protótipo independente | [lia/](lia/README.md) |
 
-Consulte [`docs/BRAND-STANDARDS.md`](docs/BRAND-STANDARDS.md) para identidade, linguagem, nomenclatura e princípios comuns dos produtos Lia.
-
-## Documentação
-
-| Documento | Descrição |
-|---|---|
-| [`docs/estudo-airi.md`](docs/estudo-airi.md) | Estudo completo do Project AIRI: arquitetura, monorepo, stack, versões, providers, riscos e estratégia |
-| [`docs/architecture/AIRI-ANALYSIS.md`](docs/architecture/AIRI-ANALYSIS.md) | Análise da base atual + arquitetura do AIRI (Fase 0) |
-| [`docs/architecture/LIA-ARCHITECTURE.md`](docs/architecture/LIA-ARCHITECTURE.md) | Proposta de arquitetura futura da Lia (Fase 0) |
-| [`docs/upstream/AIRI-INTEGRATION.md`](docs/upstream/AIRI-INTEGRATION.md) | Registro do M0-A: tag/commit do AIRI, remotes, toolchain, comandos de bootstrap e limitações |
-| [`tools/README.md`](tools/README.md) | DevKit universal: uso, comandos, segurança e configuração por projeto |
+A meta é iniciar e empacotar a Lia sem precisar da árvore `airi/`. O
+Launcher atual ainda depende da toolchain desse workspace e o Stage usa
+pacotes locais do AIRI. O Stage em `lia/stage/` ainda é um protótipo.
+A troca do caminho de inicialização depende de validar conversa, voz, avatar
+e ciclo de vida no Windows pelo novo caminho.
 
 ## Credits / Third-party projects
 
