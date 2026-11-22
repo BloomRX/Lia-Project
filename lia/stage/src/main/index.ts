@@ -1,3 +1,5 @@
+import type { LiaRuntimeService } from '../../../core/src/runtime/index.ts'
+
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -5,6 +7,7 @@ import { liaProductPaths } from '@lia/core/paths/product-paths'
 import { readLiaProductConfig } from '@lia/core/product/config'
 import { app, BrowserWindow, ipcMain } from 'electron'
 
+import { startLiaRuntimeService } from '../../../core/src/runtime/index.ts'
 import { createTransportRepository } from '../../../core/src/transports/repository.ts'
 import { stageChatCancel, stageChatSend } from '../shared/chat-ipc.ts'
 import { createLocalChat } from './local-chat.ts'
@@ -19,6 +22,7 @@ async function main(): Promise<void> {
     readTransports: repository.read,
   })
   let window: BrowserWindow | undefined
+  let runtimeService: LiaRuntimeService | undefined
   let active: AbortController | undefined
   const cancel = () => active?.abort()
   const authorized = (event: Electron.IpcMainInvokeEvent) =>
@@ -92,9 +96,35 @@ async function main(): Promise<void> {
   })
 
   app.on('window-all-closed', () => { void host.stop().finally(() => app.quit()) })
+  app.on('before-quit', (event) => {
+    if (!runtimeService?.isServing())
+      return
+    event.preventDefault()
+    void runtimeService.stop().finally(() => app.quit())
+  })
   const snapshot = await host.start()
-  if (snapshot.phase !== 'running')
+  if (snapshot.phase !== 'running') {
     app.exit(1)
+    return
+  }
+
+  // Standalone development windows do not replace the Launcher's runtime record.
+  const stateDir = process.env.LIA_RUNTIME_STATE_DIR?.trim()
+  if (process.env.LIA_MANAGED === '1' && stateDir) {
+    const result = await startLiaRuntimeService({
+      stateDir,
+      appVersion: app.getVersion(),
+      startedBy: 'launcher',
+      requestExit: () => host.stop(),
+      forceExit: code => app.exit(code),
+      status: () => ({ windows: BrowserWindow.getAllWindows().length }),
+    })
+    if (!result.ok) {
+      await host.stop()
+      return
+    }
+    runtimeService = result.service
+  }
 }
 
 void main().catch(() => app.exit(1))

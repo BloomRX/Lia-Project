@@ -96,6 +96,12 @@ rascunho e retorno de foco. O Main mantém até seis turnos concluídos em
 memória por conversa e descarta o contexto ao mudar de modelo ou endereço.
 A janela ainda precisa de avatar e persistência de conversa.
 
+Em modo gerenciado, o Stage próprio publica identidade e atende status
+e encerramento pelo canal de controle compartilhado com o Stage legado.
+No Windows, o ensaio confirmou o handshake, a recusa de leitura de
+credenciais e a remoção do registro após a saída cooperativa. O Launcher
+ainda não seleciona automaticamente o Stage próprio.
+
 `src/main/stage-host.ts` é a lógica inteira. Electron **não** é importado ali:
 a plataforma entra por `StageHostDeps` (`createWindow`, `terminate`, relógio,
 pid). Esse é o mesmo idioma do `airi-stage-manager.ts` atual, onde
