@@ -10,7 +10,7 @@ import { readLiaProductConfig } from '@lia/core/product/config'
 import { createLiaSecretVault } from '@lia/core/secrets/vault'
 import { createWindowsUserCipher } from '@lia/core/secrets/windows-user-cipher'
 import { createKokoroVoiceEngine } from '@lia/core/voice/engines/kokoro'
-import { app, BrowserWindow, ipcMain, safeStorage } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, safeStorage } from 'electron'
 
 import { startLiaRuntimeService } from '../../../core/src/runtime/index.ts'
 import { createTransportRepository } from '../../../core/src/transports/repository.ts'
@@ -56,7 +56,11 @@ async function main(): Promise<void> {
     readProduct,
     readTransports: repository.read,
   })
-  const transcribe = createStageTranscription({ readProduct, readTransports: repository.read })
+  const transcribe = createStageTranscription({
+    readCredential: providerId => vault.getSecret(providerId, 'apiKey'),
+    readProduct,
+    readTransports: repository.read,
+  })
   let window: BrowserWindow | undefined
   let runtimeService: LiaRuntimeService | undefined
   let active: AbortController | undefined
@@ -96,12 +100,28 @@ async function main(): Promise<void> {
   })
   ipcMain.handle(stageChatSpeak, event => authorized(event) ? voice.speak(lastAnswer) : { ok: false, code: 'unavailable' })
   ipcMain.handle(stageTranscribe, async (event, bytes: unknown, mimeType: unknown) => {
-    if (!authorized(event) || recording)
+    const owner = window
+    if (!owner || !authorized(event) || recording)
       return { ok: false, code: 'configuration' }
     const controller = new AbortController()
     recording = controller
     try {
-      return await transcribe(bytes, mimeType, controller.signal)
+      return await transcribe(bytes, mimeType, controller.signal, async (providerId, destination, signal) => {
+        if (signal.aborted || owner.isDestroyed())
+          return false
+        const { response } = await dialog.showMessageBox(owner, {
+          type: 'question',
+          title: 'Lia',
+          message: 'Enviar esta gravação para transcrição?',
+          detail: `O áudio será enviado a ${providerId} (\n${destination}\n).`,
+          buttons: ['Cancelar', 'Enviar gravação'],
+          cancelId: 0,
+          defaultId: 0,
+          noLink: true,
+          signal,
+        })
+        return response === 1 && !signal.aborted && !owner.isDestroyed()
+      })
     }
     finally {
       recording = undefined

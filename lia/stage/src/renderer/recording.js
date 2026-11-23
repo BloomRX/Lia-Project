@@ -80,7 +80,9 @@ record.addEventListener('click', async () => {
         if (current !== job)
           return
         if (!result.ok || !result.text.trim()) {
-          finish(job, 'Não foi possível transcrever. Confira a configuração de transcrição local.')
+          finish(job, result.code === 'cancelled'
+            ? 'Transcrição cancelada.'
+            : 'Não foi possível transcrever. Confira a configuração de transcrição.')
           return
         }
         const text = [draft.value.trim(), result.text.trim()].filter(Boolean).join(' ')

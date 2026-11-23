@@ -141,10 +141,16 @@ Ele também executa a abertura e o encerramento pelo Launcher no Windows.
 O serviço HTTP de transcrição e seus adaptadores agora ficam em
 `lia/core/src/transcription`. O Stage legado usa esse mesmo serviço
 com seu cofre, adaptador de rede e confirmação por gravação. O Stage
-próprio já recebe gravações pelo IPC e usa somente o adaptador STT
-local selecionado no produto. No Electron, áudio sintético foi
-transcrito, a requisição foi cancelada e um destino remoto foi
-recusado. A interface de gravação recebe permissão temporária para o
+próprio recebe gravações pelo IPC. Ele usa a seleção do produto para
+transcrição local sem chave ou para um adaptador dedicado via HTTPS.
+No caminho remoto, o Main pede confirmação a cada gravação, mantém
+a credencial vinculada ao destino no cofre e invalida a confirmação
+se a seleção de modelo ou a revisão dos transportes mudar.
+Os testes automatizados com transporte simulado cobrem confirmação,
+recusa, cancelamento e alteração de configuração. O diálogo nativo e
+o envio HTTPS real ainda precisam de validação no Windows.
+No percurso local anterior, o Electron transcreveu áudio sintético
+e cancelou uma requisição. A interface recebe permissão temporária para o
 microfone após o clique, libera a captura antes de transcrever e
 insere o texto no rascunho para revisão. O percurso foi exercitado
 no Electron com microfone sintético. O microfone físico segue pendente.
