@@ -13,6 +13,22 @@ permissions:
   contents: read
 
 jobs:
+  private-write:
+    runs-on: windows-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.22.2'
+      - name: Isolar escrita privada no Windows
+        shell: pwsh
+        run: |
+          $fixtureTemp = Join-Path $env:RUNNER_TEMP 'lia-test-temp'
+          New-Item -ItemType Directory -Path $fixtureTemp | Out-Null
+          $env:TEMP = $fixtureTemp
+          $env:TMP = $fixtureTemp
+          node --experimental-strip-types lia/runtime/scripts/check-windows-private-file.mjs
   native:
     runs-on: windows-latest
     timeout-minutes: 25
@@ -67,11 +83,6 @@ jobs:
           corepack pnpm install --frozen-lockfile --ignore-scripts
           corepack pnpm run build
           corepack pnpm run typecheck
-      - name: Isolar escrita privada no Windows
-        if: ${{ !cancelled() && steps.build-launcher.outcome == 'success' }}
-        run: |
-          Set-Location (Join-Path $env:LIA_STANDALONE 'lia/runtime')
-          node --experimental-strip-types scripts/check-windows-private-file.mjs
       - name: Exercitar persistência e coordenação multiprocesso
         if: ${{ !cancelled() && steps.build-launcher.outcome == 'success' }}
         run: |
