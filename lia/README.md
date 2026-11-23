@@ -102,10 +102,12 @@ e encerramento pelo canal de controle compartilhado com o Stage legado.
 No Windows, o ensaio confirmou o handshake, a recusa de leitura de
 credenciais e a remoção do registro após a saída cooperativa.
 
-Para testar com o Launcher em desenvolvimento, prepare o build do
-Stage e seu Electron (`corepack pnpm exec install-electron` em
-`lia/stage`), configure um provedor gerenciado em **IA & Recursos** e abra o Launcher com
-`LIA_NATIVE_STAGE_PREVIEW=1`. **Conversar com Lia** e **Encerrar
+Para preparar e abrir a prévia no Windows, execute
+`./lia/Start-LiaPreview.ps1` na raiz da cópia. O script usa os lockfiles
+do Stage e do Launcher, prepara o Electron e abre o Launcher com o Stage
+próprio habilitado. Use `-PrepareOnly` para preparar os builds sem abrir
+a janela. No Launcher, configure um provedor em **IA & Recursos**.
+**Conversar com Lia** e **Encerrar
 conversa** foram verificados no Windows com um registro separado.
 O modo experimental oferece conversa com IA local e Groq. O botão
 **Ouvir resposta** usa o Kokoro local quando instalado, selecionado
