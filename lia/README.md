@@ -192,6 +192,13 @@ O ensaio da janela de presença confirmou movimento, fixação, retorno,
 ocultação e encerramento junto com o chat. Animações, modelos de uso
 real, hover-hide, fullscreen e monitores físicos adicionais seguem pendentes.
 
+Para repetir o ensaio em Windows, compile o Stage, instale o Electron
+com `corepack pnpm exec install-electron` em `lia/stage` e execute
+`node --experimental-strip-types scripts/check-native-presence.mjs`
+em `lia/desktop` após instalar suas dependências. O script gera seu
+próprio VRM sintético, registra o resultado e salva uma captura em um
+diretório temporário. O CI executa esse ensaio na árvore extraída sem AIRI.
+
 ```bash
 cd lia/stage
 corepack pnpm run build
