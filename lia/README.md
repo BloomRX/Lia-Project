@@ -100,9 +100,12 @@ e histórico de conversa opcional.
 O envio de imagem aceita um PNG ou JPEG de até 3 MiB com texto. O Main
 só encaminha o anexo quando a regra de visão do produto seleciona uma
 rota do provedor já configurado. Trocas com imagem ficam fora do
-histórico salvo. A seleção da rota passou com transporte simulado e
-a recusa sem rota de visão passou no Electron Windows com serviço local
-sintético. O envio autenticado a um provedor de visão continua pendente.
+histórico salvo. No Electron Windows, a recusa sem rota passou e um
+serviço HTTPS local confirmou imagem com texto, seguido de texto
+simples, com credencial sintética protegida por DPAPI. O CI inclui
+`scripts/check-native-vision.mjs` em `lia/desktop`. Esse gate recebe os
+caminhos do certificado e da chave TLS sintéticos de loopback.
+O envio a um provedor externo continua pendente.
 
 Em modo gerenciado, o Stage próprio publica identidade e atende status
 e encerramento pelo canal de controle compartilhado com o Stage legado.

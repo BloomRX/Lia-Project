@@ -2,7 +2,7 @@
 
 ## 0. Estado agora
 
-- **Imagem na prévia.** O Stage aceita um PNG ou JPEG com texto e usa a regra de visão do produto no Main. O gate Electron Windows confirmou que uma conexão sem rota recusa o anexo sem enviar a mensagem nem apagar o rascunho. O despacho para visão passou com transporte simulado. Falta validação com provedor autenticado.
+- **Imagem na prévia.** O Stage aceita um PNG ou JPEG com texto e usa a regra de visão do produto no Main. O Electron no Windows confirmou recusa sem rota e envio seguido de conversa textual com HTTPS local, credencial sintética e cofre DPAPI. Serviço externo segue pendente.
 
 - **VRM texturizado.** Dois modelos locais VRoid de referência renderizaram de corpo inteiro na janela de presença do Electron no Windows. A postura relaxada foi conferida visualmente nos dois. Os modelos não integram o pacote.
 

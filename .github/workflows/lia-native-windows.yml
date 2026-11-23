@@ -116,6 +116,17 @@ jobs:
         run: |
           Set-Location (Join-Path $env:LIA_STANDALONE 'lia/desktop')
           node scripts/check-native-history.mjs
+      - name: Validar imagem e texto por HTTPS local
+        if: ${{ !cancelled() && steps.build-launcher.outcome == 'success' }}
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          $gitFolder = Split-Path (Split-Path (Get-Command git.exe).Source)
+          $openssl = Join-Path $gitFolder 'usr/bin/openssl.exe'
+          $cert = Join-Path $env:RUNNER_TEMP 'lia-vision-certificate.pem'
+          $key = Join-Path $env:RUNNER_TEMP 'lia-vision-key.pem'
+          & $openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj '/CN=Lia fixture' -addext 'subjectAltName=IP:127.0.0.1' -keyout $key -out $cert
+          Set-Location (Join-Path $env:LIA_STANDALONE 'lia/desktop')
+          node --experimental-strip-types scripts/check-native-vision.mjs $cert $key
       - name: Preservar evidências do Stage
         if: always()
         uses: actions/upload-artifact@v7
@@ -127,4 +138,6 @@ jobs:
             ${{ runner.temp }}/lia-native-presence-*/overlay-animated.png
             ${{ runner.temp }}/lia-native-history-*/report.json
             ${{ runner.temp }}/lia-native-history-*/history.png
+            ${{ runner.temp }}/lia-native-vision-*/report.json
+            ${{ runner.temp }}/lia-native-vision-*/stage.png
           if-no-files-found: ignore
