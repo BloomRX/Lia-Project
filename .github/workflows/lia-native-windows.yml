@@ -67,6 +67,11 @@ jobs:
           corepack pnpm install --frozen-lockfile --ignore-scripts
           corepack pnpm run build
           corepack pnpm run typecheck
+      - name: Isolar escrita privada no Windows
+        if: ${{ !cancelled() && steps.build-launcher.outcome == 'success' }}
+        run: |
+          Set-Location (Join-Path $env:LIA_STANDALONE 'lia/runtime')
+          node --experimental-strip-types scripts/check-windows-private-file.mjs
       - name: Exercitar persistência e coordenação multiprocesso
         if: ${{ !cancelled() && steps.build-launcher.outcome == 'success' }}
         run: |
