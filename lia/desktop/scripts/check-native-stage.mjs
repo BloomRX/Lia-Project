@@ -129,16 +129,17 @@ async function run() {
     env,
   })
   let target
+  let nativeWindows
   try {
     const page = await app.firstWindow()
     await page.getByRole('button', { name: 'Conversar com Lia', exact: true }).click({ timeout: 10_000 })
     target = await waitForRecord(registry)
     const state = await invokeRuntimeControl(target, 'runtime.status')
     assert.equal(state.windows, 1)
+    nativeWindows = state.windows
     await page.getByRole('button', { name: 'Encerrar conversa', exact: true }).click({ timeout: 10_000 })
     await page.getByText('Conversa encerrada.', { exact: true }).waitFor({ timeout: 20_000 })
     assert.deepEqual(await registry.read(), { ok: false, problem: 'missing' })
-    console.log(JSON.stringify({ airiDirectoryAbsent, packaged, installed: Boolean(installedExecutable), nativeWindows: state.windows, registryRemoved: true }))
   }
   finally {
     try {
@@ -150,6 +151,10 @@ async function run() {
       await app.close()
     }
   }
+  const lifecycle = { airiDirectoryAbsent, packaged, installed: Boolean(installedExecutable), nativeWindows, registryRemoved: true }
+  if (!upgradeProfile)
+    await writeFile(join(root, 'report.json'), JSON.stringify(lifecycle, null, 2), { flag: 'wx' })
+  console.log(JSON.stringify(lifecycle))
   if (upgradeProfile) {
     const endpoint = new URL('https://speech-upgrade.example.invalid/v1')
     const scope = 'openai-compatible-audio-speech'

@@ -173,6 +173,7 @@ os builds e instale o Electron do Stage. Em `lia/desktop`, execute
 `node --experimental-strip-types scripts/check-native-stage.mjs`.
 Em uma cópia contendo apenas `lia/`, acrescente `--require-independent`
 para exigir a ausência de `airi/`.
+O gate grava `report.json` em `lia-native-stage-*` no diretório temporário.
 
 Para empacotar a Lia para uso privado, em `lia/desktop` execute
 `node scripts/package-windows.mjs --internal-test`.
