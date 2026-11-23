@@ -1,6 +1,7 @@
 export const stageChatSend = 'lia:stage:chat:send'
 export const stageChatCancel = 'lia:stage:chat:cancel'
 export const stageChatSpeak = 'lia:stage:chat:speak'
+export const stageChatStopSpeech = 'lia:stage:chat:stop-speech'
 export const stageHistoryGet = 'lia:stage:history:get'
 export const stageHistoryChange = 'lia:stage:history:change'
 export const stageHistoryImport = 'lia:stage:history:import'

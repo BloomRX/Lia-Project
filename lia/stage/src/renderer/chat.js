@@ -10,6 +10,7 @@ const messages = document.querySelector('#messages')
 const status = document.querySelector('#status')
 const voice = document.querySelector('#voice')
 const speak = document.querySelector('#speak')
+const speakStop = document.querySelector('#speak-stop')
 const audio = document.querySelector('audio')
 const voiceStatus = document.querySelector('#voice-status')
 const historyEnabled = document.querySelector('#history-enabled')
@@ -57,6 +58,7 @@ imageFile.addEventListener('change', () => {
 })
 
 function clearAudio() {
+  speakStop.disabled = true
   audio.pause()
   audio.removeAttribute('src')
   audio.hidden = true
@@ -332,15 +334,17 @@ speak.addEventListener('click', async () => {
   const version = answerVersion
   speak.disabled = true
   clearAudio()
+  speakStop.disabled = false
   voiceStatus.textContent = t('Preparando a resposta em áudio…')
   try {
     const result = await window.liaStageChat.speak()
     if (version !== answerVersion)
       return
     if (!result.ok) {
+      speakStop.disabled = true
       voiceStatus.textContent = result.code === 'disabled'
         ? t('A saída de voz está desativada.')
-        : t('A voz selecionada está indisponível.')
+        : result.code === 'cancelled' ? t('Áudio interrompido.') : t('A voz selecionada está indisponível.')
       return
     }
     audioUrl = URL.createObjectURL(new Blob([result.audio], { type: 'audio/wav' }))
@@ -350,12 +354,21 @@ speak.addEventListener('click', async () => {
     await audio.play().catch(() => {})
   }
   catch {
-    if (version === answerVersion)
+    if (version === answerVersion) {
+      speakStop.disabled = true
       voiceStatus.textContent = t('Não foi possível preparar a resposta em áudio.')
+    }
   }
   finally {
     speak.disabled = false
   }
+})
+
+speakStop.addEventListener('click', () => {
+  answerVersion++
+  clearAudio()
+  voiceStatus.textContent = t('Áudio interrompido.')
+  void window.liaStageChat.stopSpeech().catch(() => {})
 })
 
 window.addEventListener('pagehide', clearAudio)

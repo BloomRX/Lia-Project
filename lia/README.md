@@ -127,6 +127,10 @@ O modo experimental oferece conversa com IA local e Groq. O botão
 **Ouvir resposta** usa o Kokoro local quando instalado, selecionado
 e habilitado. No Electron, a síntese gerou áudio decodificável e a
 reprodução avançou. A saída física de áudio ainda não foi verificada.
+Use **Parar áudio** para interromper a síntese ou a reprodução. Com
+Kokoro instalado no Windows, execute
+`node scripts/check-native-history.mjs --voice` em `lia/desktop`
+para repetir a validação com o áudio silenciado.
 No caminho autenticado, o Main lê o cofre compartilhado e exige
 HTTPS e chave vinculada ao provedor, à origem e à finalidade de chat.
 Esse caminho passou em testes com credencial sintética e transporte

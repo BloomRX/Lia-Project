@@ -5,9 +5,15 @@ import { readVoiceEnabledConfig, readVoiceEngineConfig, readVoiceFallbackConfig 
 import { resolveVoiceEngineSelection } from '@lia/core/voice/engines/registry'
 import { createLiaVoiceService } from '@lia/core/voice/voice-service'
 
+interface VoiceJob {
+  cancelled: boolean
+  synthesizing: boolean
+  stopping?: Promise<void>
+}
+
 export function createStageVoice(engine: LiaVoiceEngine, readProduct: () => Promise<LiaProductConfigRead>) {
   let voice: LiaProductVoiceConfig | undefined
-  let pending = false
+  let pending: VoiceJob | undefined
   let disposed = false
   const selection = () => resolveVoiceEngineSelection({
     availableEngineIds: [engine.id],
@@ -20,33 +26,53 @@ export function createStageVoice(engine: LiaVoiceEngine, readProduct: () => Prom
     selection,
   })
 
+  async function cancel() {
+    const job = pending
+    if (!job)
+      return
+    job.cancelled = true
+    if (job.synthesizing)
+      await (job.stopping ??= engine.stop())
+  }
+
   return {
     async speak(text: string | undefined) {
       if (pending || disposed || !text?.trim())
         return { ok: false, code: 'unavailable' } as const
-      pending = true
+      const job: VoiceJob = { cancelled: false, synthesizing: false }
+      pending = job
       try {
         const config = await readProduct()
+        if (job.cancelled)
+          return { ok: false, code: 'cancelled' } as const
         if (disposed || config.status !== 'ok')
           return { ok: false, code: 'unavailable' } as const
         voice = config.value.voice
         if (!readVoiceEnabledConfig(voice))
           return { ok: false, code: 'disabled' } as const
+        job.synthesizing = true
         const { audio } = await service.synthesize({ text: text.slice(0, 8_000) })
+        if (job.cancelled)
+          return { ok: false, code: 'cancelled' } as const
         return disposed || audio.byteLength > 32 * 1024 * 1024
           ? { ok: false, code: 'unavailable' } as const
           : { ok: true, audio } as const
       }
       catch {
-        return { ok: false, code: 'unavailable' } as const
+        return { ok: false, code: job.cancelled ? 'cancelled' : 'unavailable' } as const
       }
       finally {
-        pending = false
+        await job.stopping?.catch(() => {})
+        pending = undefined
       }
     },
+    cancel,
     async stop() {
       disposed = true
-      await engine.stop()
+      if (pending?.synthesizing)
+        await cancel()
+      else
+        await engine.stop()
     },
   }
 }

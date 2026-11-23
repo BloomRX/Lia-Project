@@ -10,6 +10,7 @@ import { _electron } from 'playwright'
 
 assert.equal(process.platform, 'win32', 'Este gate usa o Electron para Windows.')
 const stage = fileURLToPath(new URL('../../stage/', import.meta.url))
+const withVoice = process.argv.includes('--voice')
 const root = await mkdtemp(join(process.env.RUNNER_TEMP ?? tmpdir(), 'lia-native-history-'))
 console.log(`Evidências em ${root}`)
 const requests = []
@@ -57,7 +58,7 @@ try {
   ])
   const launch = () => _electron.launch({
     executablePath: join(stage, 'node_modules', 'electron', 'dist', 'electron.exe'),
-    args: [join(stage, 'out', 'main', 'index.js')],
+    args: ['--mute-audio', join(stage, 'out', 'main', 'index.js')],
     env: { ...process.env, LIA_USER_DATA: root, LIA_STAGE_PROFILE_DIR: join(root, 'profile') },
   })
   const submit = async (page, text, index) => {
@@ -202,7 +203,22 @@ try {
   await submit(page, 'Retorno à Lia', 7)
   assert.match(requests[6].messages[0].content, /Preset: tsundere/)
   assert.ok(!JSON.stringify(requests[6]).includes('Conversa com cartão'))
-  const report = { service: 'synthetic local HTTP', optIn: true, reopened: true, resumed: true, legacyTextImported: true, cancellationPreservedHistory: true, cleared: true, rateLimitSanitized: true, refusedImageWithoutVision: true, conversationsIsolated: true, selectionRestored: true, deletionConfirmed: true, builtInPersonaInRequest: true, importedPersonaInRequest: true, importedPersonaRestored: true, personaContextIsolated: true }
+  if (withVoice) {
+    const speak = page.getByRole('button', { name: 'Ouvir resposta' })
+    const stop = page.getByRole('button', { name: 'Parar áudio' })
+    const audio = page.locator('audio')
+    await speak.click()
+    await stop.click()
+    await page.getByText('Áudio interrompido.', { exact: true }).waitFor()
+    assert.equal(await audio.isVisible(), false)
+    await speak.click()
+    await audio.waitFor({ state: 'visible', timeout: 90_000 })
+    await page.waitForFunction(() => document.querySelector('audio').currentTime > 0)
+    await page.screenshot({ path: join(root, 'voice.png'), fullPage: true })
+    await stop.click()
+    assert.equal(await audio.isVisible(), false)
+  }
+  const report = { service: 'synthetic local HTTP', optIn: true, reopened: true, resumed: true, legacyTextImported: true, cancellationPreservedHistory: true, cleared: true, rateLimitSanitized: true, refusedImageWithoutVision: true, conversationsIsolated: true, selectionRestored: true, deletionConfirmed: true, builtInPersonaInRequest: true, importedPersonaInRequest: true, importedPersonaRestored: true, personaContextIsolated: true, localKokoroMutedPlayback: withVoice ? 'cancelled, retried, played and stopped' : null }
   await writeFile(join(root, 'report.json'), JSON.stringify(report, null, 2))
   console.log(JSON.stringify(report))
 }

@@ -83,6 +83,8 @@ const english = new Map([
   ['Aguardando resposta da Lia…', 'Waiting for Lia’s reply…'],
   ['Resposta recebida. Não foi possível salvar o histórico.', 'Reply received. Could not save chat history.'],
   ['Preparando a resposta em áudio…', 'Preparing the audio reply…'],
+  ['Parar áudio', 'Stop audio'],
+  ['Áudio interrompido.', 'Audio stopped.'],
   ['A saída de voz está desativada.', 'Voice output is off.'],
   ['A voz selecionada está indisponível.', 'The selected voice is unavailable.'],
   ['Não foi possível preparar a resposta em áudio.', 'Could not prepare the audio reply.'],
