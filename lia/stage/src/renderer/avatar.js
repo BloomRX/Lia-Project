@@ -163,7 +163,16 @@ picker.addEventListener('change', async () => {
   pickerButton.disabled = true
   status.textContent = t('Carregando avatar…')
   try {
-    await preview(await file.arrayBuffer())
+    const bytes = await file.arrayBuffer()
+    if (/\.zip$/i.test(file.name)) {
+      const extracted = await window.liaStagePresence.readPackagedAvatar(new Uint8Array(bytes))
+      if (!extracted)
+        throw new Error('avatar-package')
+      await preview(extracted.buffer)
+    }
+    else {
+      await preview(bytes)
+    }
   }
   catch {
     status.textContent = t('Não foi possível abrir este avatar. Escolha um arquivo VRM com recursos incorporados.')

@@ -48,6 +48,7 @@ const english = new Map([
   ['Nenhuma troca nova de texto foi importada.', 'No new text exchanges were imported.'],
   ['Conversa legada importada para leitura.', 'Legacy conversation imported for reading.'],
   ['Abrir avatar VRM', 'Open VRM avatar'],
+  ['Você também pode escolher um ZIP de personagem com avatar VRM.', 'You can also choose a character ZIP containing a VRM avatar.'],
   ['Lembrar este avatar', 'Remember this avatar'],
   ['Avatar salvo neste perfil.', 'Avatar saved in this profile.'],
   ['Esquecer avatar salvo', 'Forget saved avatar'],

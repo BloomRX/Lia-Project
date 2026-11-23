@@ -19,12 +19,13 @@ import { createTransportRepository } from '../../../core/src/transports/reposito
 import { stageChatCancel, stageChatSend, stageChatSpeak, stageMemoryGet, stageMemoryMutate, stageMicrophoneArm, stagePresenceClose, stagePresenceCommand, stagePresenceOpen, stagePresenceRead, stagePresenceRendered, stageTranscribe, stageTranscriptionCancel } from '../shared/chat-ipc.ts'
 import { stageConversationChange, stageHistoryChange, stageHistoryGet, stageHistoryImport, stageLanguageGet, stagePresenceDisplays } from '../shared/chat-ipc.ts'
 import { stagePersonaChange, stagePersonaGet } from '../shared/chat-ipc.ts'
+import { stagePresenceReadPackagedAvatar } from '../shared/chat-ipc.ts'
 import { stageChatStopSpeech, stageVoiceAutoPlay } from '../shared/chat-ipc.ts'
 import { stageLocale, stageText } from '../shared/locale.ts'
 import { createStageChat } from './stage-chat.ts'
 import { createStageHistory } from './stage-history.ts'
 import { createStageHost } from './stage-host.ts'
-import { createStagePersona, defaultTraits } from './stage-persona.ts'
+import { createStagePersona, defaultTraits, readPackagedAvatar } from './stage-persona.ts'
 import { createStagePresence } from './stage-presence.ts'
 import { createStageTranscription } from './stage-transcription.ts'
 import { createStageVoice } from './stage-voice.ts'
@@ -110,6 +111,21 @@ async function main(): Promise<void> {
   const authorized = (event: Electron.IpcMainInvokeEvent) =>
     window && !window.isDestroyed() && event.sender === window.webContents
     && event.senderFrame === window.webContents.mainFrame
+  let readingPackagedAvatar = false
+  ipcMain.handle(stagePresenceReadPackagedAvatar, async (event, input: unknown) => {
+    if (!authorized(event) || readingPackagedAvatar)
+      return undefined
+    readingPackagedAvatar = true
+    try {
+      return await readPackagedAvatar(input)
+    }
+    catch {
+      return undefined
+    }
+    finally {
+      readingPackagedAvatar = false
+    }
+  })
 
   ipcMain.handle(stageMemoryGet, event => authorized(event) ? memory.get() : { ok: false, code: 'invalid' })
   ipcMain.handle(stageMemoryMutate, (event, request: LiaMemoryMutation) =>

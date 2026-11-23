@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
-import { createStagePersona, defaultTraits, maxPersonaImportBytes } from '../src/main/stage-persona.ts'
+import { createStagePersona, defaultTraits, maxPersonaImportBytes, readPackagedAvatar } from '../src/main/stage-persona.ts'
 
 test('CCv3 import keeps only the reviewed text fields and reopens by content identity', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'lia-card-'))
@@ -50,4 +50,12 @@ test('saves validated traits and renders them without personalizing the user nam
   await assert.rejects(store.customize({ ...current, contextId: 'custom' }))
   await assert.rejects(store.customize({ ...current, attributes: { ...current.attributes, energy: Infinity } }))
   assert.deepEqual(await readdir(root), [`${selected.id}.json`])
+})
+
+test('reads only the VRM declared by the character package manifest', async () => {
+  const archive = await readFile(new URL('./fixtures/personality.ccv3.zip', import.meta.url))
+  const bytes = Buffer.from(await readPackagedAvatar(archive))
+  assert.equal(bytes.subarray(0, 4).toString(), 'glTF')
+  assert.equal(bytes.readUInt32LE(8), bytes.length)
+  await assert.rejects(readPackagedAvatar('models/body-model.vrm'))
 })

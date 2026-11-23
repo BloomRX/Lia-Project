@@ -115,6 +115,9 @@ async function run() {
     await chat.getByText('Não foi possível abrir este avatar.', { exact: false }).waitFor()
     await picker.setInputFiles(fixture)
     await chat.getByText('Avatar carregado.', { exact: true }).waitFor()
+    await picker.setInputFiles(join(stage, 'test', 'fixtures', 'personality.ccv3.zip'))
+    await chat.getByText('Avatar carregado.', { exact: true }).waitFor()
+    assert.equal(JSON.parse(await readFile(join(root, 'lia-product.json'), 'utf8')).persona, undefined)
     const openButton = chat.getByRole('button', { name: 'Mostrar no desktop', exact: true })
     const [overlay] = await Promise.all([app.waitForEvent('window', { timeout: 10_000 }), openButton.click()])
     await chat.getByText('Avatar aberto no desktop.', { exact: true }).waitFor()
@@ -213,7 +216,7 @@ async function run() {
     const [reopened] = await Promise.all([app.waitForEvent('window', { timeout: 10_000 }), openButton.click()])
     await chat.getByText('Avatar aberto no desktop.', { exact: true }).waitFor()
     await Promise.all([reopened.waitForEvent('close', { timeout: 10_000 }), chat.close()])
-    const report = { syntheticVrm: true, animatedFramesDiffer: true, invalidOverlayRejected: true, externalTextureRejected: true, moved, pinned: true, home: true, syntheticHover: hover, connectedDisplays: displays.displays.length, secondDisplayPlacement: secondDisplay ? 'PASS' : 'NOT RUN', syntheticDisplayRecovery: displayRecovery, hidden: true, closedWithChat: true }
+    const report = { syntheticVrm: true, packagedAvatarOpened: true, personaUnchanged: true, animatedFramesDiffer: true, invalidOverlayRejected: true, externalTextureRejected: true, moved, pinned: true, home: true, syntheticHover: hover, connectedDisplays: displays.displays.length, secondDisplayPlacement: secondDisplay ? 'PASS' : 'NOT RUN', syntheticDisplayRecovery: displayRecovery, hidden: true, closedWithChat: true }
     await writeFile(join(root, 'report.json'), JSON.stringify(report, null, 2))
     console.log(JSON.stringify(report))
   }

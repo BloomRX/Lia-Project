@@ -10,41 +10,62 @@ import { LIA_DEFAULT_PERSONA, renderLiaPersonaDescription, renderLiaPersonaPerso
 export const maxPersonaImportBytes = 128 * 1024
 export const maxPersonaArchiveBytes = 64 * 1024 * 1024
 
-async function readCardArchive(input: Uint8Array): Promise<unknown> {
+async function readPackageEntries(input: Uint8Array, entryPath: string, entryLimit: number) {
   if (input.byteLength > maxPersonaArchiveBytes)
     throw new Error('invalid-card')
   const zip = await fromBufferPromise(Buffer.from(input.buffer, input.byteOffset, input.byteLength), {
     strictFileNames: true, validateEntrySizes: true,
   })
-  const entries = new Map<string, unknown>()
+  const entries = new Map<string, Buffer>()
   try {
     if (zip.entryCount > 32)
       throw new Error('invalid-card')
     for await (const entry of zip.eachEntry()) {
-      if (entry.fileName !== 'manifest.json' && entry.fileName !== 'card.json')
+      if (entry.fileName !== 'manifest.json' && entry.fileName !== entryPath)
         continue
-      if (entries.has(entry.fileName) || entry.uncompressedSize > maxPersonaImportBytes)
+      const limit = entry.fileName === 'manifest.json' ? maxPersonaImportBytes : entryLimit
+      if (entries.has(entry.fileName) || entry.uncompressedSize > limit)
         throw new Error('invalid-card')
       const stream = await zip.openReadStreamPromise(entry)
       const chunks: Buffer[] = []
       let length = 0
       for await (const chunk of stream) {
         length += chunk.length
-        if (length > maxPersonaImportBytes)
+        if (length > limit)
           throw new Error('invalid-card')
         chunks.push(chunk)
       }
-      entries.set(entry.fileName, JSON.parse(Buffer.concat(chunks).toString('utf8')))
+      entries.set(entry.fileName, Buffer.concat(chunks))
     }
   }
   finally {
     zip.close()
   }
-  const manifest = entries.get('manifest.json')
+  const manifestData = entries.get('manifest.json')
+  const contents = entries.get(entryPath)
+  if (!manifestData || !contents)
+    throw new Error('invalid-card')
+  const manifest: unknown = JSON.parse(manifestData.toString('utf8'))
   if (!record(manifest) || manifest.format !== 'airi-character-card' || manifest.version !== 1
     || !record(manifest.card) || manifest.card.path !== 'card.json' || manifest.card.spec !== 'chara_card_v3')
     throw new Error('invalid-card')
-  return entries.get('card.json')
+  return { manifest, contents }
+}
+
+async function readCardArchive(input: Uint8Array): Promise<unknown> {
+  const { contents } = await readPackageEntries(input, 'card.json', maxPersonaImportBytes)
+  return JSON.parse(contents.toString('utf8'))
+}
+
+export async function readPackagedAvatar(input: unknown): Promise<Uint8Array> {
+  if (!(input instanceof Uint8Array))
+    throw new Error('invalid-card')
+  const path = 'models/body-model.vrm'
+  const { contents, manifest } = await readPackageEntries(input, path, maxPersonaArchiveBytes)
+  const model = record(manifest.resources) ? manifest.resources.displayModel : undefined
+  if (!record(model) || model.format !== 'vrm' || model.path !== path)
+    throw new Error('invalid-card-avatar')
+  return new Uint8Array(contents)
 }
 
 function record(value: unknown): value is Record<string, unknown> {

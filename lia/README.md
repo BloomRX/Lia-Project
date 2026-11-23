@@ -142,8 +142,11 @@ Em **Personalidade → Importar cartão**, selecione o ZIP exportado pelo
 Stage legado ou um `card.json` em formato CCv3. O ZIP pode ter até 64 MB
 e o JSON, até 128 KB. A importação usa descrição, personalidade e cenário
 com IA local. A seleção persiste e pode ser trocada pelo botão
-**Usar personalidade padrão**. Avatar, instruções técnicas e agentes
-continuam no pacote original.
+**Usar personalidade padrão**. Para abrir o VRM do mesmo ZIP, selecione
+o pacote em **Avatar → Abrir avatar VRM**. A prévia continua sujeita à
+validação de recursos incorporados. Use **Lembrar este avatar** para
+guardar a seleção no perfil. Instruções técnicas e agentes permanecem
+no pacote original.
 Em **Editar traços da Lia**, ajuste cada traço na escala de 0 a 100 e
 selecione o contexto base. **Salvar traços** aplica uma versão separada da
 Lia padrão às conversas com IA local. Os cartões importados ficam guardados.
