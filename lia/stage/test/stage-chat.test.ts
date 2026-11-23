@@ -81,6 +81,27 @@ test('clock permission is opt-in and unknown tool calls cannot trigger a follow-
   assert.equal(requests.length, 2)
 })
 
+test('does not send a clock result after the local transport is removed', async () => {
+  const local = { ...record, baseUrl: 'http://127.0.0.1:1234/v1' }
+  let requests = 0
+  const send = createStageChat({
+    async fetch() {
+      requests++
+      return Response.json({ choices: [{ message: {
+        content: null, tool_calls: [{ id: 'clock', type: 'function', function: { name: 'lia_local_time', arguments: '{}' } }],
+      } }] })
+    },
+    async readProduct() {
+      return { filePath: '', status: 'ok', value: { provider: { chat: { preferred: { providerId: 'local-chat', modelId: 'test-model' } } } } }
+    },
+    async readTransports() {
+      return { schemaVersion: 1, revision: 1 + requests, records: [local], tombstones: requests ? [local.id] : [], migration: { version: 1, imported: [] } }
+    },
+  })
+  assert.deepEqual(await send('Que horas são?', new AbortController().signal, undefined, true), { ok: false, code: 'configuration' })
+  assert.equal(requests, 1)
+})
+
 test('rejects a selected personality card that is not available in the native Stage', async () => {
   const send = createStageChat({
     async readProduct() {
