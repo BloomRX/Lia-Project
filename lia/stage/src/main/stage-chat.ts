@@ -2,6 +2,9 @@ import type { LiaProductConfigRead } from '@lia/core/product/config'
 
 import type { TransportSnapshot } from '../../../core/src/transports/contracts.ts'
 import type { LiaMemoryResult } from '../../../core/src/memory/contracts.ts'
+import type { createStageHistory } from './stage-history.ts'
+
+import { createHash } from 'node:crypto'
 
 import { credentialForDestination } from '../../../core/src/credentials/destination.ts'
 import { LIA_MEMORY_LIMITS } from '../../../core/src/memory/contracts.ts'
@@ -9,6 +12,7 @@ import { findLiaAiProviderByStageProviderId, ProviderRegistry, ProviderRuntime }
 
 interface StageChatDependencies {
   fetch?: typeof globalThis.fetch
+  storage?: ReturnType<typeof createStageHistory>
   recallMemory?: (query: string) => Promise<LiaMemoryResult<string>>
   readCredential?: (providerId: string) => string | undefined
   readProduct: () => Promise<LiaProductConfigRead>
@@ -16,7 +20,7 @@ interface StageChatDependencies {
 }
 
 export type StageChatResult
-  = | { ok: true, text: string }
+  = | { ok: true, text: string, historyUnavailable?: true }
     | { ok: false, code: 'invalid' | 'configuration' | 'unavailable' | 'cancelled' | 'busy' }
 
 const historyTurns = 6
@@ -26,7 +30,7 @@ interface Turn {
   assistant: string
 }
 
-export function createStageChat({ fetch, recallMemory, readCredential, readProduct, readTransports }: StageChatDependencies) {
+export function createStageChat({ fetch, storage, recallMemory, readCredential, readProduct, readTransports }: StageChatDependencies) {
   let history: { destination: string, model: string, providerId: string, turns: Turn[] } | undefined
 
   function unavailableConfiguration(): StageChatResult {
@@ -34,7 +38,7 @@ export function createStageChat({ fetch, recallMemory, readCredential, readProdu
     return { ok: false, code: 'configuration' }
   }
 
-  return async function send(input: unknown, signal: AbortSignal): Promise<StageChatResult> {
+  async function send(input: unknown, signal: AbortSignal): Promise<StageChatResult> {
     if (typeof input !== 'string' || input.length > 8_000 || !input.trim())
       return { ok: false, code: 'invalid' }
     try {
@@ -71,8 +75,11 @@ export function createStageChat({ fetch, recallMemory, readCredential, readProdu
           return unavailableConfiguration()
       }
 
-      if (history?.destination !== destination.href || history.model !== modelId || history.providerId !== providerId)
-        history = { destination: destination.href, model: modelId, providerId, turns: [] }
+      const route = createHash('sha256').update(JSON.stringify([providerId, modelId, destination.href])).digest('hex')
+      if (history?.destination !== destination.href || history.model !== modelId || history.providerId !== providerId) {
+        const saved = await storage?.recall(route).catch(() => [])
+        history = { destination: destination.href, model: modelId, providerId, turns: saved?.slice(-historyTurns) ?? [] }
+      }
       const current = history
       const text = input.trim()
       const memory = definition.localOnly ? await recallMemory?.(text.slice(0, LIA_MEMORY_LIMITS.query)) : undefined
@@ -98,10 +105,20 @@ export function createStageChat({ fetch, recallMemory, readCredential, readProdu
         return { ok: false, code: 'unavailable' }
       if (!context)
         current.turns = [...current.turns, { user: text, assistant: response.text.slice(0, 8_000) }].slice(-historyTurns)
+      const turn = { route, user: text, assistant: response.text.slice(0, 8_000), reusable: !context }
+      if (storage && (!credential || !text.includes(credential))) {
+        try {
+          await storage.append(turn)
+        }
+        catch {
+          return { ok: true, text: response.text, historyUnavailable: true }
+        }
+      }
       return { ok: true, text: response.text }
     }
     catch {
       return { ok: false, code: signal.aborted ? 'cancelled' : 'unavailable' }
     }
   }
+  return Object.assign(send, { clearContext() { history = undefined } })
 }

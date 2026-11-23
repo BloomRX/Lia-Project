@@ -94,8 +94,8 @@ provedor local configurado no produto. No Electron foram validados
 resposta de um serviço HTTP controlado, cancelamento, preservação do
 rascunho e retorno de foco. O Main mantém até seis turnos concluídos em
 memória por conversa e descarta o contexto ao mudar de modelo ou endereço.
-A janela oferece prévia local de VRM. A presença de avatar no desktop
-e a persistência de conversa ainda estão pendentes.
+A janela oferece prévia local de VRM, presença de avatar no desktop
+e histórico de conversa opcional.
 
 Em modo gerenciado, o Stage próprio publica identidade e atende status
 e encerramento pelo canal de controle compartilhado com o Stage legado.
@@ -206,8 +206,17 @@ corepack pnpm run typecheck
 corepack pnpm run test
 ```
 
-Ainda faltam animações, presença em múltiplos monitores,
-persistência da conversa e paridade com os provedores do Stage legado.
+O histórico do Stage próprio começa desativado. Se habilitado, guarda
+até 24 trocas de texto no perfil local. Até seis trocas da mesma
+conexão podem compor o contexto da próxima requisição. Respostas
+geradas com notas pessoais ficam visíveis no histórico, mas ficam
+fora do contexto reutilizado. O Electron Windows, com serviço HTTP
+local sintético, confirmou recuperação, retomada e confirmação da
+limpeza. A migração do histórico legado e a seleção de múltiplas
+conversas continuam pendentes.
+
+Ainda faltam animações, presença em múltiplos monitores
+e paridade com os provedores do Stage legado.
 
 ---
 

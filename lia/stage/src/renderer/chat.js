@@ -8,6 +8,9 @@ const voice = document.querySelector('#voice')
 const speak = document.querySelector('#speak')
 const audio = document.querySelector('audio')
 const voiceStatus = document.querySelector('#voice-status')
+const historyEnabled = document.querySelector('#history-enabled')
+const historyClear = document.querySelector('#history-clear')
+const historyStatus = document.querySelector('#history-status')
 let audioUrl
 let answerVersion = 0
 
@@ -36,6 +39,63 @@ function appendMessage(author, text) {
   messages.scrollTop = messages.scrollHeight
 }
 
+async function changeHistory(action) {
+  historyEnabled.disabled = true
+  historyClear.disabled = true
+  try {
+    if (!await window.liaStageChat.changeHistory(action))
+      throw new Error('history')
+    if (action !== 'enable') {
+      messages.replaceChildren()
+      answerVersion++
+      clearAudio()
+      voice.hidden = true
+    }
+    historyStatus.textContent = action === 'enable' ? 'Histórico ativado.' : 'Conversa limpa.'
+  }
+  catch {
+    if (action !== 'clear')
+      historyEnabled.checked = action === 'disable'
+    historyStatus.textContent = 'Não foi possível alterar o histórico. Tente novamente após o envio.'
+  }
+  finally {
+    historyEnabled.disabled = false
+    historyClear.disabled = false
+  }
+}
+
+historyEnabled.addEventListener('change', () => {
+  if (!historyEnabled.checked && !window.confirm('Desativar o histórico e apagar a conversa guardada?')) {
+    historyEnabled.checked = true
+    return
+  }
+  void changeHistory(historyEnabled.checked ? 'enable' : 'disable')
+})
+historyClear.addEventListener('click', () => {
+  if (window.confirm('Apagar as mensagens desta conversa?'))
+    void changeHistory('clear')
+})
+
+send.disabled = true
+try {
+  const history = await window.liaStageChat.history()
+  if (!history)
+    throw new Error('history')
+  for (const turn of history.turns) {
+    appendMessage('Você', turn.user)
+    appendMessage('Lia', turn.assistant)
+  }
+  historyEnabled.checked = history.enabled
+  historyEnabled.disabled = false
+  historyClear.disabled = false
+}
+catch {
+  historyStatus.textContent = 'Não foi possível recuperar o histórico.'
+}
+finally {
+  send.disabled = false
+}
+
 form.addEventListener('submit', async (event) => {
   event.preventDefault()
   const text = message.value.trim()
@@ -59,7 +119,7 @@ form.addEventListener('submit', async (event) => {
     voice.hidden = false
     voiceStatus.textContent = ''
     message.value = ''
-    status.textContent = ''
+    status.textContent = result.historyUnavailable ? 'Resposta recebida. Não foi possível salvar o histórico.' : ''
   }
   catch {
     status.textContent = errors.unavailable

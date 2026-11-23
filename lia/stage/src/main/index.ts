@@ -17,7 +17,9 @@ import { createLiaMemoryStore } from '../../../core/src/memory/store.ts'
 import { startLiaRuntimeService } from '../../../core/src/runtime/index.ts'
 import { createTransportRepository } from '../../../core/src/transports/repository.ts'
 import { stageChatCancel, stageChatSend, stageChatSpeak, stageMemoryGet, stageMemoryMutate, stageMicrophoneArm, stagePresenceClose, stagePresenceCommand, stagePresenceOpen, stagePresenceRead, stagePresenceRendered, stageTranscribe, stageTranscriptionCancel } from '../shared/chat-ipc.ts'
+import { stageHistoryChange, stageHistoryGet } from '../shared/chat-ipc.ts'
 import { createStageChat } from './stage-chat.ts'
+import { createStageHistory } from './stage-history.ts'
 import { createStageHost } from './stage-host.ts'
 import { createStagePresence } from './stage-presence.ts'
 import { createStageTranscription } from './stage-transcription.ts'
@@ -69,7 +71,9 @@ async function main(): Promise<void> {
   const memoryImport = await memory.importIfMissing(join(paths.userDataDir, 'stage-profile', 'lia-memory.json'))
   if (!memoryImport.ok)
     console.warn('Lia: não foi possível migrar as notas do perfil anterior.')
+  const history = createStageHistory(join(app.getPath('userData'), 'lia-chat-history.json'))
   const send = createStageChat({
+    storage: history,
     recallMemory: memory.recall,
     readCredential: providerId => vault.getSecret(providerId, 'apiKey'),
     readProduct,
@@ -84,6 +88,7 @@ async function main(): Promise<void> {
   let runtimeService: LiaRuntimeService | undefined
   let active: AbortController | undefined
   let recording: AbortController | undefined
+  let updatingHistory = false
   let lastAnswer: string | undefined
   let microphoneUntil = 0
   const cancel = () => active?.abort()
@@ -107,11 +112,38 @@ async function main(): Promise<void> {
   ipcMain.handle(stagePresenceCommand, (event, action: unknown) => Boolean(authorized(event)) && presence.command(action))
   ipcMain.handle(stagePresenceRead, presence.takeAsset)
   ipcMain.on(stagePresenceRendered, presence.reportRender)
+  ipcMain.handle(stageHistoryGet, async event => {
+    if (!authorized(event))
+      return undefined
+    return history.get().catch(() => undefined)
+  })
+  ipcMain.handle(stageHistoryChange, async (event, action: unknown) => {
+    if (!authorized(event) || updatingHistory || active || (action !== 'enable' && action !== 'disable' && action !== 'clear'))
+      return false
+    updatingHistory = true
+    try {
+      if (action === 'clear')
+        await history.clear()
+      else
+        await history.setEnabled(action === 'enable')
+      if (action !== 'enable') {
+        lastAnswer = undefined
+        send.clearContext()
+      }
+      return true
+    }
+    catch {
+      return false
+    }
+    finally {
+      updatingHistory = false
+    }
+  })
 
   ipcMain.handle(stageChatSend, async (event, input: unknown) => {
     if (!authorized(event))
       return { ok: false, code: 'invalid' }
-    if (active)
+    if (active || updatingHistory)
       return { ok: false, code: 'busy' }
     const controller = new AbortController()
     active = controller
