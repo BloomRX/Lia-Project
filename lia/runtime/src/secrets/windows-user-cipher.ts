@@ -20,13 +20,14 @@ function windowsDpapi(command: 'Protect' | 'Unprotect', input: Buffer): Buffer {
   if (!windowsDirectory || !isAbsolute(windowsDirectory))
     throw new Error('Windows credential protection is unavailable')
   const system = join(windowsDirectory, 'System32')
+  // Keep module autoload out of the restricted PowerShell environment.
   const script = [
     '$ErrorActionPreference = \'Stop\'',
-    'Add-Type -AssemblyName System.Security',
-    '$inputBytes = New-Object IO.MemoryStream',
+    '$dpapi = [Type]::GetType("System.Security.Cryptography.ProtectedData, System.Security, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a", $true)',
+    '$inputBytes = [IO.MemoryStream]::new()',
     '[Console]::OpenStandardInput().CopyTo($inputBytes)',
     '$entropy = [Text.Encoding]::UTF8.GetBytes(\'Lia vault key v1\')',
-    `$result = [Security.Cryptography.ProtectedData]::${command}($inputBytes.ToArray(), $entropy, [Security.Cryptography.DataProtectionScope]::CurrentUser)`,
+    `$result = $dpapi::${command}($inputBytes.ToArray(), $entropy, [Security.Cryptography.DataProtectionScope]::CurrentUser)`,
     '[Console]::OpenStandardOutput().Write($result, 0, $result.Length)',
   ].join('\n')
   const encoded = Buffer.from(script, 'utf16le').toString('base64')

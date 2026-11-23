@@ -75,6 +75,13 @@ Passaram 39 testes de cofre multiprocesso e configuração, 365 do Launcher
 com três skips, 21 do Stage e três de empacotamento. Os gates Electron
 de ciclo de vida, presença e histórico passaram na árvore sem AIRI.
 
+A ampliação para a suíte integral do runtime registrou
+[382 aprovações e uma falha](https://github.com/BloomRX/Lia-Project/actions/runs/45144443198)
+na criação de uma entrada DPAPI com cofre sintético. O helper passou
+a resolver o tipo .NET diretamente, mantendo escopo `CurrentUser`,
+entropia, formato das entradas e prazo. Em Windows local, passaram
+o teste real entre processos e todos os 383 testes do runtime.
+
 No Windows local, a prévia respondeu com uma nota de teste usando
 `llama.cpp` e `Qwen3.5-9B-Q4_K_M` em CPU, sem serviço externo.
 O modelo abriu em 24.123 ms e respondeu em 7.089 ms naquele ensaio.
