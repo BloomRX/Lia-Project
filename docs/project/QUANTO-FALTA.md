@@ -9,6 +9,22 @@ Fonte: [`CURRENT-STATE.md`](CURRENT-STATE.md) §0 e §5, medido em
 
 ---
 
+## Corte da prévia própria para o fluxo padrão
+
+A `main` publicada contém uma prévia própria em `lia/` com instalação,
+build e execução sem `airi/`. Use o [guia da prévia](../../lia/README.md)
+para executá-la. A [matriz da consolidação](../reports/LIA-BRANCH-INTEGRATION-MATRIX.md)
+registra os gates e seus limites. As 12 branches remotas ainda estão presentes.
+
+| Corte | Evidência atual | Condição pendente |
+|---|---|---|
+| Entradas, build e distribuição | A entrada PowerShell da prévia e o NSIS privado foram exercitados em uma árvore sem AIRI. | `Lia.bat`, o modo padrão do Launcher e o pacote padrão ainda usam o Stage legado. Troca de versão e atualização automática ainda precisam de gate. |
+| Conversa, visão e dados | Qwen local, recuperação de notas, histórico opcional e visão com HTTPS e credencial sintética. | Importação do histórico, múltiplas conversas, personalidade e compatibilidade externa ainda exigem migração ou evidência na prévia. |
+| Voz e percepção | Kokoro local gerou áudio decodificável. A política STT recusou e autorizou gravações sintéticas em HTTPS local. | O diálogo nativo, microfone físico, saída física e matriz de mecanismos de voz ainda precisam de validação. |
+| Avatar e presença | VRMs de referência, animação incorporada, presença, posição no segundo monitor e mudança simulada de área útil. | O fluxo legado suporta Live2D. A prévia usa VRM. Tela cheia, desconexão física e equivalência de recursos precisam de evidência. |
+| Ferramentas e conta | Os gates independentes cobrem cofre, contratos, transportes e canais de controle. | Ferramentas, permissões, integração no Stage com o Hub e consumidores de conta precisam de validação própria. OIDC continua pendente. |
+| Remoção e Git | As referências originais e o backup verificado foram preservados. | Remover dependências operacionais e branches auxiliares só depois de validar os substitutos e reconfirmar a recuperação do trabalho preservado. |
+
 ## Onde o projeto está
 
 18/11 — **Rodada 22, chat e credenciais.** PASS Windows no chat nativo
