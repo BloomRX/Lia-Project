@@ -1,8 +1,47 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { lstat, mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { fromBufferPromise } from 'yauzl'
 
 export const maxPersonaImportBytes = 128 * 1024
+export const maxPersonaArchiveBytes = 64 * 1024 * 1024
+
+async function readCardArchive(input: Uint8Array): Promise<unknown> {
+  if (input.byteLength > maxPersonaArchiveBytes)
+    throw new Error('invalid-card')
+  const zip = await fromBufferPromise(Buffer.from(input.buffer, input.byteOffset, input.byteLength), {
+    strictFileNames: true, validateEntrySizes: true,
+  })
+  const entries = new Map<string, unknown>()
+  try {
+    if (zip.entryCount > 32)
+      throw new Error('invalid-card')
+    for await (const entry of zip.eachEntry()) {
+      if (entry.fileName !== 'manifest.json' && entry.fileName !== 'card.json')
+        continue
+      if (entries.has(entry.fileName) || entry.uncompressedSize > maxPersonaImportBytes)
+        throw new Error('invalid-card')
+      const stream = await zip.openReadStreamPromise(entry)
+      const chunks: Buffer[] = []
+      let length = 0
+      for await (const chunk of stream) {
+        length += chunk.length
+        if (length > maxPersonaImportBytes)
+          throw new Error('invalid-card')
+        chunks.push(chunk)
+      }
+      entries.set(entry.fileName, JSON.parse(Buffer.concat(chunks).toString('utf8')))
+    }
+  }
+  finally {
+    zip.close()
+  }
+  const manifest = entries.get('manifest.json')
+  if (!record(manifest) || manifest.format !== 'airi-character-card' || manifest.version !== 1
+    || !record(manifest.card) || manifest.card.path !== 'card.json' || manifest.card.spec !== 'chara_card_v3')
+    throw new Error('invalid-card')
+  return entries.get('card.json')
+}
 
 function record(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -28,9 +67,9 @@ function cardId(serialized: string) {
 export function createStagePersona(directory: string) {
   return {
     async import(input: unknown) {
-      if (typeof input !== 'string' || Buffer.byteLength(input) > maxPersonaImportBytes)
+      if (!(input instanceof Uint8Array) && (typeof input !== 'string' || Buffer.byteLength(input) > maxPersonaImportBytes))
         throw new Error('invalid-card')
-      const card = normalize(JSON.parse(input))
+      const card = normalize(typeof input === 'string' ? JSON.parse(input) : await readCardArchive(input))
       const serialized = JSON.stringify(card)
       const id = cardId(serialized)
       await mkdir(directory, { recursive: true })

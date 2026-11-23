@@ -27,7 +27,7 @@ contextBridge.exposeInMainWorld('liaStageMemory', {
 
 contextBridge.exposeInMainWorld('liaStageChat', {
   history: () => ipcRenderer.invoke(stageHistoryGet),
-  changePersona: (file: string | null) => ipcRenderer.invoke(stagePersonaChange, file),
+  changePersona: (file: string | Uint8Array | null) => ipcRenderer.invoke(stagePersonaChange, file),
   activePersona: () => ipcRenderer.invoke(stagePersonaGet),
   changeConversation: (action: 'create' | 'select' | 'delete', id?: string) => ipcRenderer.invoke(stageConversationChange, action, id),
   importHistory: (file: string) => ipcRenderer.invoke(stageHistoryImport, file),

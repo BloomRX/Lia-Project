@@ -16,10 +16,12 @@
   "dependencies": {
     "@lia/core": "link:../runtime",
     "@pixiv/three-vrm": "3.5.5",
-    "three": "0.185.1"
+    "three": "0.185.1",
+    "yauzl": "3.4.0"
   },
   "devDependencies": {
     "@types/node": "26.2.0",
+    "@types/yauzl": "3.4.0",
     "electron": "43.4.1",
     "electron-vite": "5.0.0",
     "typescript": "6.0.3",

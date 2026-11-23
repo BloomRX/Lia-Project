@@ -198,9 +198,11 @@ async function selectPersona(file) {
   personaImport.disabled = true
   send.disabled = true
   try {
-    if (file && file.size > 128 * 1024)
+    const archive = file && /\.zip$/i.test(file.name)
+    if (file && file.size > (archive ? 64 * 1024 * 1024 : 128 * 1024))
       throw new Error('persona')
-    const name = await window.liaStageChat.changePersona(file ? await file.text() : null)
+    const content = archive ? new Uint8Array(await file.arrayBuffer()) : file ? await file.text() : null
+    const name = await window.liaStageChat.changePersona(content)
     if (!name)
       throw new Error('persona')
     personaStatus.textContent = `${t('Personalidade ativa')}: ${name}`
@@ -209,7 +211,7 @@ async function selectPersona(file) {
     voice.hidden = true
   }
   catch {
-    personaStatus.textContent = t('Não foi possível selecionar a personalidade. Use um card.json CCv3 de até 128 KB.')
+    personaStatus.textContent = t('Não foi possível selecionar a personalidade. Use um JSON CCv3 de até 128 KB ou um pacote ZIP de até 64 MB.')
   }
   finally {
     personaDefault.disabled = false

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { once } from 'node:events'
-import { mkdtemp, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -178,16 +178,13 @@ try {
   await openPersona(page)
   const [personaChooser] = await Promise.all([
     page.waitForEvent('filechooser', { timeout: 10_000 }),
-    page.getByRole('button', { name: 'Importar card.json' }).click(),
+    page.getByRole('button', { name: 'Importar cartão' }).click(),
   ])
   page.once('dialog', dialog => dialog.accept())
   await personaChooser.setFiles({
-    name: 'card.json',
-    mimeType: 'application/json',
-    buffer: Buffer.from(JSON.stringify({
-      spec: 'chara_card_v3', spec_version: '3.0',
-      data: { name: 'Cartão de teste', personality: 'Tom da personalidade de teste', system_prompt: 'ignored-system-fixture' },
-    })),
+    name: 'personality.ccv3.zip',
+    mimeType: 'application/zip',
+    buffer: await readFile(join(stage, 'test', 'fixtures', 'personality.ccv3.zip')),
   })
   await page.getByText('Personalidade ativa: Cartão de teste', { exact: true }).waitFor()
   await submit(page, 'Conversa com cartão', 6)

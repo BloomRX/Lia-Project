@@ -138,12 +138,12 @@ HTTPS e chave vinculada ao provedor, à origem e à finalidade de chat.
 Esse caminho passou em testes com credencial sintética e transporte
 simulado. O provedor externo ainda não foi exercitado.
 
-Para usar uma personalidade de uma exportação legada no Stage próprio,
-extraia o `card.json` do pacote e selecione **Personalidade → Importar card.json**.
-O arquivo CCv3 pode ter até 128 KB. A importação usa descrição,
-personalidade e cenário com IA local. A seleção fica no produto e pode ser
-trocada pelo botão **Usar personalidade padrão**. Recursos do pacote
-como avatar, instruções técnicas e agentes ficam fora dessa importação.
+Em **Personalidade → Importar cartão**, selecione o ZIP exportado pelo
+Stage legado ou um `card.json` em formato CCv3. O ZIP pode ter até 64 MB
+e o JSON, até 128 KB. A importação usa descrição, personalidade e cenário
+com IA local. A seleção persiste e pode ser trocada pelo botão
+**Usar personalidade padrão**. Avatar, instruções técnicas e agentes
+continuam no pacote original.
 
 Para repetir o gate de abertura e encerramento no Windows, prepare
 os builds e instale o Electron do Stage. Em `lia/desktop`, execute

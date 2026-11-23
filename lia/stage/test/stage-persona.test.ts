@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
@@ -22,4 +22,15 @@ test('CCv3 import keeps only the reviewed text fields and reopens by content ide
   assert.equal(await store.read('../invalid'), undefined)
   await assert.rejects(store.import('{}'))
   await assert.rejects(store.import('a'.repeat(maxPersonaImportBytes + 1)))
+})
+
+test('imports the legacy ZIP manifest and card without extracting avatar or instructions', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'lia-card-zip-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const bytes = await readFile(new URL('./fixtures/personality.ccv3.zip', import.meta.url))
+  const store = createStagePersona(root)
+  const { id } = await store.import(bytes)
+  assert.deepEqual(await readdir(root), [`${id}.json`])
+  assert.deepEqual(await store.read(id), { name: 'Cartão de teste', prompt: 'Tom da personalidade de teste' })
+  await assert.rejects(store.import(new Uint8Array([0, 1, 2])))
 })
