@@ -144,6 +144,9 @@ e o JSON, até 128 KB. A importação usa descrição, personalidade e cenário
 com IA local. A seleção persiste e pode ser trocada pelo botão
 **Usar personalidade padrão**. Avatar, instruções técnicas e agentes
 continuam no pacote original.
+Em **Editar traços da Lia**, ajuste cada traço na escala de 0 a 100 e
+selecione o contexto base. **Salvar traços** aplica uma versão separada da
+Lia padrão às conversas com IA local. Os cartões importados ficam guardados.
 
 Para repetir o gate de abertura e encerramento no Windows, prepare
 os builds e instale o Electron do Stage. Em `lia/desktop`, execute

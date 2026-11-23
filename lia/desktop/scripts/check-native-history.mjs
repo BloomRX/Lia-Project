@@ -236,7 +236,27 @@ try {
     await submit(page, 'Sem leitura automática', 9)
     assert.equal(await page.getByRole('button', { name: 'Parar áudio' }).isDisabled(), true)
   }
-  const report = { service: 'synthetic local HTTP', optIn: true, reopened: true, resumed: true, legacyTextImported: true, cancellationPreservedHistory: true, cleared: true, rateLimitSanitized: true, refusedImageWithoutVision: true, conversationsIsolated: true, selectionRestored: true, deletionConfirmed: true, builtInPersonaInRequest: true, importedPersonaInRequest: true, importedPersonaRestored: true, personaContextIsolated: true, localKokoroMutedPlayback: withVoice ? 'cancelled, retried, played and stopped' : null, autoPlay: withVoice ? 'opt-in, persisted, played, opted out' : null }
+  const editor = page.getByText('Editar traços da Lia', { exact: true })
+  if (!await editor.isVisible())
+    await openPersona(page)
+  await editor.click()
+  await page.getByRole('spinbutton', { name: 'Energia' }).fill('20')
+  await page.getByLabel('Contexto base', { exact: true }).selectOption('serious')
+  await page.getByRole('button', { name: 'Salvar traços' }).click()
+  await page.getByText('Personalidade ativa: Lia personalizada', { exact: true }).waitFor()
+  await submit(page, 'Usar os traços', requests.length + 1)
+  assert.match(requests.at(-1).messages[0].content, /energia 0\.2/)
+  assert.match(requests.at(-1).messages[0].content, /Contexto base: Assunto sério/)
+  await app.close()
+  app = await launch()
+  page = await app.firstWindow()
+  await openPersona(page)
+  await page.getByText('Editar traços da Lia', { exact: true }).click()
+  await page.getByText('Personalidade ativa: Lia personalizada', { exact: true }).waitFor()
+  assert.equal(await page.getByRole('spinbutton', { name: 'Energia' }).inputValue(), '20')
+  assert.equal(await page.getByLabel('Contexto base', { exact: true }).inputValue(), 'serious')
+  await page.screenshot({ path: join(root, 'traits.png'), fullPage: true })
+  const report = { service: 'synthetic local HTTP', optIn: true, reopened: true, resumed: true, legacyTextImported: true, cancellationPreservedHistory: true, cleared: true, rateLimitSanitized: true, refusedImageWithoutVision: true, conversationsIsolated: true, selectionRestored: true, deletionConfirmed: true, builtInPersonaInRequest: true, importedPersonaInRequest: true, importedPersonaRestored: true, personaContextIsolated: true, localKokoroMutedPlayback: withVoice ? 'cancelled, retried, played and stopped' : null, autoPlay: withVoice ? 'opt-in, persisted, played, opted out' : null, customizedTraitsPersisted: true }
   await writeFile(join(root, 'report.json'), JSON.stringify(report, null, 2))
   console.log(JSON.stringify(report))
 }

@@ -182,6 +182,49 @@ const personaFile = document.querySelector('#persona-file')
 const personaImport = document.querySelector('#persona-import')
 const personaDefault = document.querySelector('#persona-default')
 const personaStatus = document.querySelector('#persona-status')
+const traitsFieldset = document.querySelector('#traits-fieldset')
+const traitInputs = document.querySelector('#trait-inputs')
+const traitContext = document.querySelector('#trait-context')
+const traitSave = document.querySelector('#trait-save')
+const traitLabels = {
+  confidence: 'Confiança', affection: 'Carinho', shyness: 'Timidez', teasing: 'Provocação',
+  sarcasm: 'Sarcasmo', humor: 'Humor', curiosity: 'Curiosidade', energy: 'Energia',
+  kindness: 'Gentileza', proactivity: 'Proatividade',
+}
+const contextLabels = { casual: 'Conversa normal', playful: 'Brincadeira', relaxed: 'Relaxada', praise: 'Elogio', serious: 'Assunto sério', helping: 'Usuário precisa de ajuda' }
+traitContext.replaceChildren(...Object.entries(contextLabels).map(([key, label]) => new Option(t(label), key)))
+
+function showTraits(state) {
+  traitInputs.replaceChildren()
+  for (const [key, label] of Object.entries(traitLabels)) {
+    const row = document.createElement('div')
+    const name = document.createElement('label')
+    const input = document.createElement('input')
+    input.id = `persona-${key}`
+    input.dataset.trait = key
+    input.type = 'number'
+    input.min = '0'
+    input.max = '100'
+    input.step = '1'
+    input.value = String(Math.round(state.traits.attributes[key] * 100))
+    input.required = true
+    name.htmlFor = input.id
+    name.textContent = t(label)
+    row.append(name, ' ', input)
+    traitInputs.append(row)
+  }
+  traitContext.value = state.traits.contextId
+  traitsFieldset.disabled = false
+}
+
+traitSave.addEventListener('click', () => {
+  const inputs = Array.from(traitInputs.querySelectorAll('input'))
+  if (inputs.some(input => !input.reportValidity()))
+    return
+  const attributes = Object.fromEntries(inputs.map(input => [input.dataset.trait, input.valueAsNumber / 100]))
+  void selectPersona(null, { attributes, contextId: traitContext.value })
+})
+
 personaImport.addEventListener('click', () => personaFile.click())
 personaDefault.addEventListener('click', () => void selectPersona(null))
 personaFile.addEventListener('change', () => {
@@ -191,31 +234,36 @@ personaFile.addEventListener('change', () => {
     void selectPersona(file)
 })
 
-async function selectPersona(file) {
+async function selectPersona(file, traits) {
   if (send.disabled || personaDefault.disabled)
     return
   personaDefault.disabled = true
   personaImport.disabled = true
+  traitsFieldset.disabled = true
   send.disabled = true
   try {
     const archive = file && /\.zip$/i.test(file.name)
     if (file && file.size > (archive ? 64 * 1024 * 1024 : 128 * 1024))
       throw new Error('persona')
     const content = archive ? new Uint8Array(await file.arrayBuffer()) : file ? await file.text() : null
-    const name = await window.liaStageChat.changePersona(content)
+    const name = await window.liaStageChat.changePersona(traits ?? content)
     if (!name)
       throw new Error('persona')
-    personaStatus.textContent = `${t('Personalidade ativa')}: ${name}`
+    personaStatus.textContent = `${t('Personalidade ativa')}: ${traits ? t('Lia personalizada') : name}`
+    const state = await window.liaStageChat.activePersona().catch(() => undefined)
+    if (state?.traits)
+      showTraits(state)
     answerVersion++
     clearAudio()
     voice.hidden = true
   }
   catch {
-    personaStatus.textContent = t('Não foi possível selecionar a personalidade. Use um JSON CCv3 de até 128 KB ou um pacote ZIP de até 64 MB.')
+    personaStatus.textContent = t(traits ? 'Não foi possível salvar os traços.' : 'Não foi possível selecionar a personalidade. Use um JSON CCv3 de até 128 KB ou um pacote ZIP de até 64 MB.')
   }
   finally {
     personaDefault.disabled = false
     personaImport.disabled = false
+    traitsFieldset.disabled = !traitInputs.childElementCount
     send.disabled = false
   }
 }
@@ -298,9 +346,11 @@ historyImportFile.addEventListener('change', async () => {
 
 send.disabled = true
 try {
-  const name = await window.liaStageChat.activePersona().catch(() => undefined)
-  if (name)
-    personaStatus.textContent = `${t('Personalidade ativa')}: ${name}`
+  const personality = await window.liaStageChat.activePersona().catch(() => undefined)
+  if (personality?.name)
+    personaStatus.textContent = `${t('Personalidade ativa')}: ${personality.name === 'Lia personalizada' ? t(personality.name) : personality.name}`
+  if (personality?.traits)
+    showTraits(personality)
   const history = await window.liaStageChat.history()
   if (!history)
     throw new Error('history')

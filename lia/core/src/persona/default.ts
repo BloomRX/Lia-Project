@@ -298,7 +298,7 @@ export function renderLiaPersonaDescription(persona: LiaPersona): string {
  * comportamental que guia tom, essência, relação, prioridade, intensidade,
  * fala/idioma e limites.
  */
-export function renderLiaPersonaPersonality(persona: LiaPersona, { includeUserName = true } = {}): string {
+export function renderLiaPersonaPersonality(persona: LiaPersona, { includeUserName = true, includeDefaultTraitSummary = true } = {}): string {
   const out: string[] = []
 
   // O idioma vai primeiro de propósito. Este bloco é concatenado depois de um
@@ -331,7 +331,9 @@ export function renderLiaPersonaPersonality(persona: LiaPersona, { includeUserNa
   out.push(
     [
       `Equilíbrio dos traços (0–1): confiança ${attrs.confidence}, carinho ${attrs.affection}, timidez ${attrs.shyness}, provocação ${attrs.teasing}, sarcasmo ${attrs.sarcasm}, humor ${attrs.humor}, curiosidade ${attrs.curiosity}, energia ${attrs.energy}, gentileza ${attrs.kindness}, proatividade ${attrs.proactivity}.`,
-      'Use esses valores como tom-base: provocação e sarcasmo são moderados e sempre bem-intencionados; gentileza, curiosidade e energia são altas; ela nunca parece constantemente irritada.',
+      includeDefaultTraitSummary
+        ? 'Use esses valores como tom-base: provocação e sarcasmo são moderados e sempre bem-intencionados; gentileza, curiosidade e energia são altas; ela nunca parece constantemente irritada.'
+        : 'Use os valores escolhidos como tom-base. Os limites da personagem continuam valendo.',
     ].join(' '),
   )
 

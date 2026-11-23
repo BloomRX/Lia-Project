@@ -24,7 +24,7 @@ import { stageLocale, stageText } from '../shared/locale.ts'
 import { createStageChat } from './stage-chat.ts'
 import { createStageHistory } from './stage-history.ts'
 import { createStageHost } from './stage-host.ts'
-import { createStagePersona } from './stage-persona.ts'
+import { createStagePersona, defaultTraits } from './stage-persona.ts'
 import { createStagePresence } from './stage-presence.ts'
 import { createStageTranscription } from './stage-transcription.ts'
 import { createStageVoice } from './stage-voice.ts'
@@ -135,7 +135,10 @@ async function main(): Promise<void> {
     try {
       const config = await readProduct()
       const active = config.status === 'ok' ? config.value.persona?.activeCardId : undefined
-      return !active || active === 'lia' || active === 'lia-default' ? 'Lia' : (await persona.read(active))?.name
+      if (!active || active === 'lia' || active === 'lia-default')
+        return { name: 'Lia', traits: defaultTraits }
+      const selected = await persona.read(active)
+      return { name: selected?.name, traits: selected?.traits ?? defaultTraits }
     }
     catch {
       return undefined
@@ -146,7 +149,9 @@ async function main(): Promise<void> {
       return undefined
     updatingHistory = true
     try {
-      const card = input === null ? { id: 'lia', name: 'Lia' } : await persona.import(input)
+      const card = input === null ? { id: 'lia', name: 'Lia' }
+        : typeof input === 'string' || input instanceof Uint8Array ? await persona.import(input)
+          : await persona.customize(input)
       const result = await updateLiaProductConfig(paths.productConfigFile, { persona: { activeCardId: card.id } })
       if (result.status !== 'ok')
         return undefined

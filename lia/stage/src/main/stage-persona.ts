@@ -3,6 +3,10 @@ import { lstat, mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promi
 import { join } from 'node:path'
 import { fromBufferPromise } from 'yauzl'
 
+import type { LiaIntensityContextId, LiaPersonalityAttributes } from '../../../core/src/persona/default.ts'
+
+import { LIA_DEFAULT_PERSONA, renderLiaPersonaDescription, renderLiaPersonaPersonality, renderLiaPersonaScenario } from '../../../core/src/persona/default.ts'
+
 export const maxPersonaImportBytes = 128 * 1024
 export const maxPersonaArchiveBytes = 64 * 1024 * 1024
 
@@ -64,25 +68,67 @@ function cardId(serialized: string) {
   return `card-${createHash('sha256').update(serialized).digest('hex')}`
 }
 
+const traitKeys = Object.keys(LIA_DEFAULT_PERSONA.attributes) as (keyof LiaPersonalityAttributes)[]
+export const defaultTraits = {
+  attributes: LIA_DEFAULT_PERSONA.attributes,
+  contextId: LIA_DEFAULT_PERSONA.intensity.defaultContextId,
+}
+
+function parseTraits(input: unknown) {
+  if (!record(input) || Object.keys(input).some(key => key !== 'attributes' && key !== 'contextId') || !record(input.attributes))
+    return undefined
+  const { attributes, contextId } = input
+  if (!LIA_DEFAULT_PERSONA.intensity.contexts.some(context => context.id === contextId)
+    || Object.keys(attributes).length !== traitKeys.length)
+    return undefined
+  const values = { ...LIA_DEFAULT_PERSONA.attributes }
+  for (const key of traitKeys) {
+    const value = attributes[key]
+    if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 1)
+      return undefined
+    values[key] = value
+  }
+  return { attributes: values, contextId: contextId as LiaIntensityContextId }
+}
+
 export function createStagePersona(directory: string) {
+  async function persist(card: { name: string, prompt: string, traits?: typeof defaultTraits }) {
+    const serialized = JSON.stringify(card)
+    const id = cardId(serialized)
+    await mkdir(directory, { recursive: true })
+    const path = join(directory, `${id}.json`)
+    const temp = `${path}.${randomUUID()}.tmp`
+    try {
+      await writeFile(temp, serialized, { flag: 'wx', mode: 0o600 })
+      await rename(temp, path)
+    }
+    finally {
+      await unlink(temp).catch(() => {})
+    }
+    return { id, name: card.name }
+  }
   return {
     async import(input: unknown) {
       if (!(input instanceof Uint8Array) && (typeof input !== 'string' || Buffer.byteLength(input) > maxPersonaImportBytes))
         throw new Error('invalid-card')
       const card = normalize(typeof input === 'string' ? JSON.parse(input) : await readCardArchive(input))
-      const serialized = JSON.stringify(card)
-      const id = cardId(serialized)
-      await mkdir(directory, { recursive: true })
-      const path = join(directory, `${id}.json`)
-      const temp = `${path}.${randomUUID()}.tmp`
-      try {
-        await writeFile(temp, serialized, { flag: 'wx', mode: 0o600 })
-        await rename(temp, path)
+      return persist(card)
+    },
+    async customize(input: unknown) {
+      const traits = parseTraits(input)
+      if (!traits)
+        throw new Error('invalid-personality')
+      const persona = {
+        ...LIA_DEFAULT_PERSONA,
+        attributes: traits.attributes,
+        intensity: { ...LIA_DEFAULT_PERSONA.intensity, defaultContextId: traits.contextId },
       }
-      finally {
-        await unlink(temp).catch(() => {})
-      }
-      return { id, name: card.name }
+      const prompt = [
+        renderLiaPersonaDescription(persona),
+        renderLiaPersonaPersonality(persona, { includeUserName: false, includeDefaultTraitSummary: false }),
+        renderLiaPersonaScenario(persona),
+      ].join('\n\n')
+      return persist({ name: 'Lia personalizada', prompt, traits })
     },
     async read(id: string) {
       if (!/^card-[a-f0-9]{64}$/.test(id))
@@ -95,9 +141,10 @@ export function createStagePersona(directory: string) {
       if (cardId(serialized) !== id)
         return undefined
       const card: unknown = JSON.parse(serialized)
-      return record(card) && typeof card.name === 'string' && typeof card.prompt === 'string'
-        ? { name: card.name, prompt: card.prompt }
-        : undefined
+      if (!record(card) || typeof card.name !== 'string' || typeof card.prompt !== 'string')
+        return undefined
+      const traits = parseTraits(card.traits)
+      return { name: card.name, prompt: card.prompt, ...(traits ? { traits } : {}) }
     },
   }
 }

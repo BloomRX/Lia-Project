@@ -1,4 +1,5 @@
 import type { LiaMemoryMutation } from '../../../core/src/memory/contracts.ts'
+import type { LiaIntensityContextId, LiaPersonalityAttributes } from '../../../core/src/persona/default.ts'
 
 import { contextBridge, ipcRenderer } from 'electron'
 
@@ -27,7 +28,8 @@ contextBridge.exposeInMainWorld('liaStageMemory', {
 
 contextBridge.exposeInMainWorld('liaStageChat', {
   history: () => ipcRenderer.invoke(stageHistoryGet),
-  changePersona: (file: string | Uint8Array | null) => ipcRenderer.invoke(stagePersonaChange, file),
+  changePersona: (input: string | Uint8Array | null | { attributes: LiaPersonalityAttributes, contextId: LiaIntensityContextId }) =>
+    ipcRenderer.invoke(stagePersonaChange, input),
   activePersona: () => ipcRenderer.invoke(stagePersonaGet),
   changeConversation: (action: 'create' | 'select' | 'delete', id?: string) => ipcRenderer.invoke(stageConversationChange, action, id),
   importHistory: (file: string) => ipcRenderer.invoke(stageHistoryImport, file),

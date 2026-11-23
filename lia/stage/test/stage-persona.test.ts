@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
-import { createStagePersona, maxPersonaImportBytes } from '../src/main/stage-persona.ts'
+import { createStagePersona, defaultTraits, maxPersonaImportBytes } from '../src/main/stage-persona.ts'
 
 test('CCv3 import keeps only the reviewed text fields and reopens by content identity', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'lia-card-'))
@@ -33,4 +33,21 @@ test('imports the legacy ZIP manifest and card without extracting avatar or inst
   assert.deepEqual(await readdir(root), [`${id}.json`])
   assert.deepEqual(await store.read(id), { name: 'Cartão de teste', prompt: 'Tom da personalidade de teste' })
   await assert.rejects(store.import(new Uint8Array([0, 1, 2])))
+})
+
+test('saves validated traits and renders them without personalizing the user name', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'lia-card-traits-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const store = createStagePersona(root)
+  const current = { attributes: { ...defaultTraits.attributes, energy: 0.2 }, contextId: 'serious' }
+  const selected = await store.customize(current)
+  const saved = await createStagePersona(root).read(selected.id)
+  assert.deepEqual(saved?.traits, current)
+  assert.match(saved?.prompt ?? '', /energia 0\.2/)
+  assert.match(saved?.prompt ?? '', /Contexto base: Assunto sério/)
+  assert.doesNotMatch(saved?.prompt ?? '', /gentileza, curiosidade e energia são altas/)
+  assert.doesNotMatch(saved?.prompt ?? '', /Dirija-se ao usuário pelo nome/)
+  await assert.rejects(store.customize({ ...current, contextId: 'custom' }))
+  await assert.rejects(store.customize({ ...current, attributes: { ...current.attributes, energy: Infinity } }))
+  assert.deepEqual(await readdir(root), [`${selected.id}.json`])
 })
