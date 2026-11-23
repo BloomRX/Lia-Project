@@ -43,6 +43,12 @@ jobs:
           if (Test-Path (Join-Path $standalone 'airi')) {
             throw 'O gate exige uma árvore sem airi/.'
           }
+          # Windows pode fornecer TEMP com um alias 8.3 contendo til. Os testes
+          # constroem um LocalAppData sintético a partir desse diretório.
+          $fixtureTemp = Join-Path $env:RUNNER_TEMP 'lia-test-temp'
+          New-Item -ItemType Directory -Path $fixtureTemp | Out-Null
+          "TEMP=$fixtureTemp" >> $env:GITHUB_ENV
+          "TMP=$fixtureTemp" >> $env:GITHUB_ENV
           "LIA_STANDALONE=$standalone" >> $env:GITHUB_ENV
       - name: Compilar e testar o Stage próprio
         run: |
