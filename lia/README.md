@@ -116,6 +116,12 @@ Esse caminho passou em testes com credencial sintética e transporte
 simulado. O provedor externo ainda não foi exercitado. O fluxo padrão
 e a distribuição continuam usando o Stage legado.
 
+Para repetir o gate de abertura e encerramento no Windows, prepare
+os builds e instale o Electron do Stage. Em `lia/desktop`, execute
+`node --experimental-strip-types scripts/check-native-stage.mjs`.
+Em uma cópia contendo apenas `lia/`, acrescente `--require-independent`
+para exigir a ausência de `airi/`.
+
 O serviço HTTP de transcrição e seus adaptadores agora ficam em
 `lia/core/src/transcription`. O Stage legado usa esse mesmo serviço
 com seu cofre, adaptador de rede e confirmação por gravação. O Stage
