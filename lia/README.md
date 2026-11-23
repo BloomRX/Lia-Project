@@ -94,7 +94,8 @@ provedor local configurado no produto. No Electron foram validados
 resposta de um serviço HTTP controlado, cancelamento, preservação do
 rascunho e retorno de foco. O Main mantém até seis turnos concluídos em
 memória por conversa e descarta o contexto ao mudar de modelo ou endereço.
-A janela ainda precisa de avatar e persistência de conversa.
+A janela oferece prévia local de VRM. A presença de avatar no desktop
+e a persistência de conversa ainda estão pendentes.
 
 Em modo gerenciado, o Stage próprio publica identidade e atende status
 e encerramento pelo canal de controle compartilhado com o Stage legado.
@@ -174,6 +175,18 @@ O controle de presença em `lia/core/src/presence/service.ts` recebe as
 operações de janela, tela e persistência por contrato. O Stage legado
 continua usando esse controle. A prévia própria ainda precisa ligá-lo
 à janela de avatar e às preferências.
+
+A prévia de avatar usa [Three.js](https://github.com/mrdoob/three.js)
+e [three-vrm](https://github.com/pixiv/three-vrm), ambos MIT, nas versões
+fixadas no lockfile. A renderização é carregada sob demanda, sem processo
+extra e sem loop de quadros para a imagem estática. A janela lê apenas o
+VRM escolhido pela pessoa, limita o arquivo a 64 MB e recusa recursos
+externos. O renderer permanece isolado e sem acesso à rede. Nenhum
+modelo de terceiros é distribuído junto com a prévia.
+
+No Electron no Windows, um VRM sintético abriu, renderizou e voltou a
+abrir após fechar a prévia. O mesmo teste recusou uma textura externa.
+Animações e modelos de uso real ainda precisam de validação.
 
 ```bash
 cd lia/stage
