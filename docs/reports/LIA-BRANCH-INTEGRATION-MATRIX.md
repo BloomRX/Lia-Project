@@ -69,6 +69,18 @@ O [gate hospedado de histórico](https://github.com/BloomRX/Lia-Project/actions/
 também passou com serviço HTTP local sintético, incluindo retomada após
 reinício, cancelamento da limpeza e remoção do contexto após confirmar.
 
+A [reexecução com a correção](https://github.com/BloomRX/Lia-Project/actions/runs/45100386598)
+passou nos dois jobs. O helper de produção escreveu em 1.748 ms no runner.
+Passaram 39 testes de cofre multiprocesso e configuração, 365 do Launcher
+com três skips, 21 do Stage e três de empacotamento. Os gates Electron
+de ciclo de vida, presença e histórico passaram na árvore sem AIRI.
+
+No Windows local, a prévia respondeu com uma nota de teste usando
+`llama.cpp` e `Qwen3.5-9B-Q4_K_M` em CPU, sem serviço externo.
+O modelo abriu em 24.123 ms e respondeu em 7.089 ms naquele ensaio.
+O perfil e as entradas foram sintéticos. Evidência local em
+`stage-qwen-real-iN37SD/report.json` no diretório do backup de consolidação.
+
 **Data:** 16/11/2026
 **Branch de destino:** `arena/7fa837f0-lia-project` @ `971d309074`
 **Escopo:** plano **por alteração**, não por branch. **Nenhuma integração foi executada nesta rodada.**
