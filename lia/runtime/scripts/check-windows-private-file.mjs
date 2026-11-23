@@ -26,7 +26,7 @@ async function measure(label, operation) {
   }
 }
 
-async function probePowerShell(label, childEnv, useInput) {
+async function probePowerShell(label, childEnv, useInput, directConstructor = false) {
   const start = performance.now()
   const system = join(process.env.SystemRoot, 'System32')
   const script = [
@@ -34,7 +34,9 @@ async function probePowerShell(label, childEnv, useInput) {
     '[Console]::WriteLine("started")',
     '$user = [Security.Principal.WindowsIdentity]::GetCurrent().User',
     '[Console]::WriteLine("identity")',
-    '$rules = New-Object Security.AccessControl.FileSecurity',
+    directConstructor
+      ? '$rules = [Security.AccessControl.FileSecurity]::new()'
+      : '$rules = New-Object Security.AccessControl.FileSecurity',
     '$rules.SetAccessRuleProtection($true, $false)',
     '$rules.SetOwner($user)',
     '$rules.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new($user, "FullControl", "Allow"))',
@@ -94,6 +96,7 @@ try {
   await probePowerShell('minimal-stdin', minimal, true)
   await probePowerShell('minimal-no-stdin', minimal, false)
   await probePowerShell('inherited-stdin', process.env, true)
+  await probePowerShell('minimal-direct-constructor', minimal, true, true)
   if (!control || !namedPipe || !protectedWrite)
     process.exitCode = 1
 }

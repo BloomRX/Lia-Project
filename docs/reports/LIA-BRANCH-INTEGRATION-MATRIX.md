@@ -58,7 +58,11 @@ sintéticas. Os 27 testes da configuração passaram. A origem da falha do
 cofre hospedado foi isolada na escrita privada. Escrita comum e
 criação do canal de coordenação passaram; a [escrita privada
 falhou após 5.033 ms](https://github.com/BloomRX/Lia-Project/actions/runs/45099185541).
-O motivo de a operação não terminar nesse prazo segue em investigação. Resultados por etapa na
+O [ensaio por fase](https://github.com/BloomRX/Lia-Project/actions/runs/45100009657/job/137448428832)
+parou entre a identificação do usuário e a criação das regras de acesso
+com ambiente restrito, mesmo sem stdin. Com o ambiente herdado, as mesmas
+etapas terminaram em 528 ms. A substituição pontual de `New-Object` pelo
+construtor .NET direto está em validação. Resultados anteriores por etapa na
 [execução Windows de 22/11](https://github.com/BloomRX/Lia-Project/actions/runs/45098566159).
 O [gate hospedado de histórico](https://github.com/BloomRX/Lia-Project/actions/runs/45098698966)
 também passou com serviço HTTP local sintético, incluindo retomada após
