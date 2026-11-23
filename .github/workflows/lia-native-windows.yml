@@ -3,10 +3,10 @@ name: Lia nativa no Windows
 on:
   push:
     branches: [main]
-    paths: ['lia/**', '.github/workflows/lia-native-windows.yml']
+    paths: ['lia/**', 'Lia.bat', '.github/workflows/lia-native-windows.yml']
   pull_request:
     branches: [main]
-    paths: ['lia/**', '.github/workflows/lia-native-windows.yml']
+    paths: ['lia/**', 'Lia.bat', '.github/workflows/lia-native-windows.yml']
   workflow_dispatch:
 
 permissions:
@@ -54,7 +54,7 @@ jobs:
           $standalone = Join-Path $env:RUNNER_TEMP 'lia-native'
           $archive = Join-Path $env:RUNNER_TEMP 'lia-native.tar'
           New-Item -ItemType Directory -Path $standalone | Out-Null
-          git archive --format=tar --output=$archive HEAD lia
+          git archive --format=tar --output=$archive HEAD lia Lia.bat
           tar -xf $archive -C $standalone
           if (Test-Path (Join-Path $standalone 'airi')) {
             throw 'O gate exige uma árvore sem airi/.'
@@ -66,26 +66,26 @@ jobs:
           "TEMP=$fixtureTemp" >> $env:GITHUB_ENV
           "TMP=$fixtureTemp" >> $env:GITHUB_ENV
           "LIA_STANDALONE=$standalone" >> $env:GITHUB_ENV
-      - name: Compilar e testar o Stage próprio
+      - name: Preparar pela entrada oficial
+        id: build-launcher
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          Set-Location $env:LIA_STANDALONE
+          .\Lia.bat -PrepareOnly
+      - name: Testar o Stage próprio
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
           Set-Location (Join-Path $env:LIA_STANDALONE 'lia/stage')
-          corepack pnpm install --frozen-lockfile --ignore-scripts
-          corepack pnpm run build
           corepack pnpm run typecheck
           corepack pnpm run test
-          corepack pnpm exec install-electron
       - name: Testar contratos próprios
         run: |
           Set-Location (Join-Path $env:LIA_STANDALONE 'lia/core')
           node --experimental-strip-types --test "test/*.test.ts"
-      - name: Compilar o Launcher
-        id: build-launcher
+      - name: Verificar tipos do Launcher
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
           Set-Location (Join-Path $env:LIA_STANDALONE 'lia/desktop')
-          corepack pnpm install --frozen-lockfile --ignore-scripts
-          corepack pnpm run build
           corepack pnpm run typecheck
       - name: Verificar tipos e testar o runtime
         if: ${{ !cancelled() && steps.build-launcher.outcome == 'success' }}

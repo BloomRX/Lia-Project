@@ -30,7 +30,7 @@ import { LIA_MAIN_WEB_PREFERENCES } from './web-preferences'
  * Boot contract: the window appears with ONLY Lia loaded - no AIRI spawn,
  * no stage UI, no plugin host, no chat initialization. The stage rises
  * exclusively from the user's "Conversar com Lia" (or a future explicit
- * autostart preference), through the AiriStageManager child process.
+ * autostart preference), through the managed Stage child process.
  *
  * The four boot marks (`lia-app.start`, `lia-app.window-created`,
  * `lia-app.renderer-ready`, `lia-core.ready`) are logged as evidence that
@@ -88,7 +88,7 @@ async function bootstrap(): Promise<void> {
   // (contract item 12) and without touching AIRI (contract item 11).
   const nativeStagePreview = app.isPackaged
     ? JSON.parse(readFileSync(join(app.getAppPath(), 'package.json'), 'utf8')).liaNativeStagePreview === true
-    : process.env.LIA_NATIVE_STAGE_PREVIEW === '1'
+    : true
   const host = createLiaHost({
     // O cofre agora pertence ao RUNTIME (D04-B2). O Launcher não abre mais o
     // pipe de credenciais: quando ele fecha, não existe pipe para cair e o

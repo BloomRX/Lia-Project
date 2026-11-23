@@ -14,23 +14,22 @@
 
 ## Como o desktop inicia hoje
 
-No Windows, para desenvolvimento, instale as dependências no workspace `airi/`
-com `pnpm install` e abra `Lia.bat` na raiz. O script inicia o Launcher da Lia.
-A ação **Conversar com Lia** abre o Stage gerenciado.
+No Windows, com Node.js e Corepack disponíveis, abra `Lia.bat` na raiz.
+O script prepara os pacotes com seus lockfiles e abre o Launcher próprio.
+A ação **Conversar com Lia** abre o Stage próprio. Use `Lia.bat -PrepareOnly`
+para instalar as dependências e compilar sem abrir uma janela.
 
 | Componente | Caminho atual |
 | --- | --- |
 | Entrada de desenvolvimento | [Lia.bat](Lia.bat) |
-| Launcher e empacotamento Windows | [airi/apps/lia-app](airi/apps/lia-app) |
-| Stage usado para conversa, avatar e voz | [airi/apps/stage-tamagotchi](airi/apps/stage-tamagotchi) |
-| Configuração do produto, cofre e voz | [airi/packages/lia-core](airi/packages/lia-core) |
-| Contratos próprios e protótipo independente | [lia/](lia/README.md) |
+| Launcher e empacotamento Windows | [lia/desktop](lia/desktop) |
+| Stage para conversa, avatar e voz | [lia/stage](lia/stage) |
+| Configuração do produto, cofre e voz | [lia/runtime](lia/runtime) |
+| Contratos e desenvolvimento | [lia/](lia/README.md) |
 
-A meta é iniciar e empacotar a Lia sem precisar da árvore `airi/`. O
-Launcher atual ainda depende da toolchain desse workspace e o Stage usa
-pacotes locais do AIRI. O Stage em `lia/stage/` ainda é um protótipo.
-A troca do caminho de inicialização depende de validar conversa, voz, avatar
-e ciclo de vida no Windows pelo novo caminho.
+O fluxo a partir de `Lia.bat` funciona com a árvore `lia/`. O empacotamento
+privado ainda separa a edição nativa da legada. Consulte o estado atual
+para acompanhar a validação de funcionalidades e distribuição.
 
 ## Credits / Third-party projects
 

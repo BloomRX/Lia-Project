@@ -18,11 +18,11 @@
 
 - **STT na prévia.** O Stage usa a seleção canônica de STT. O Main pede consentimento por gravação para adaptadores dedicados via HTTPS. Com resposta do diálogo injetada no teste, o Electron no Windows confirmou recusa sem envio e aceitação de áudio sintético por HTTPS local. A interação com o diálogo nativo e o provedor externo seguem pendentes.
 
-- **Entrada atual.** `Lia.bat` inicia o Launcher pelo workspace `airi/` e usa o Stage legado. A prévia tem uma entrada própria no Windows por `lia/Start-LiaPreview.ps1`, validada em uma árvore sem AIRI. O [CI Windows](../reports/LIA-BRANCH-INTEGRATION-MATRIX.md#prévia-independente-no-windows) passou em abertura, presença, histórico, encerramento e suítes do Launcher e do cofre. A prévia também respondeu com uma nota de teste pelo Qwen local em CPU.
+- **Entrada atual.** `Lia.bat` prepara e inicia o Launcher próprio, que abre o Stage próprio. Em uma árvore sem `airi/`, `Lia.bat -PrepareOnly` instalou com lockfiles e compilou no Windows. Em seguida, o gate Electron confirmou abertura e encerramento do Stage pelo Launcher, e o gate de histórico passou com HTTP local sintético. O [CI Windows](../reports/LIA-BRANCH-INTEGRATION-MATRIX.md#prévia-independente-no-windows) já tinha validado presença, histórico e cofre na prévia. A separação entre edições nativa e legada do instalador ainda existe.
 - **Com evidência no Windows.** Conversa local sem chave, Stage ativo com Launcher fechado, retomada ao reabrir o Launcher e teste de pacote interno. O ensaio anterior também registra memória e personalidade no chat, presença livre e colocação no segundo monitor.
 - **Em aberto.** Áudio físico ponta a ponta (G-AUD), cenários integrados C0–C8 (G-ARCH), instalação limpa, consumidores legados de credenciais e validação de serviços externos. OIDC de produção segue desativado.
 - **Baseline funcional registrado.** `3ef6d11`. Os resultados de componentes posteriores constam nos relatórios e não promovem esse baseline.
-- **Próximo corte.** Fechar a validação do cofre e dos consumidores legados, revalidar o fluxo desktop no Windows e migrar a inicialização para fora de `airi/` de acordo com o [plano de desacoplamento](../architecture/AIRI-DECOUPLING-PLAN-2026-10-28.md).
+- **Próximo corte.** Tornar o empacotamento Windows nativo o padrão, verificar a atualização do instalador e concluir a paridade necessária antes de remover a árvore legada. A revisão do Stage apontou uma possível corrida entre mudar a rota de chat e enviar uma solicitação preparada anteriormente. Falta reproduzir e delimitar o comportamento.
 
 [Evidências da Rodada 22](../reports/LIA-ROUND-22-IMPLEMENTATION-REPORT.md) · [Pendências por ambiente](QUANTO-FALTA.md)
 

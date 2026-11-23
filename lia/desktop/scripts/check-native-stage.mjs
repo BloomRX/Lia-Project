@@ -68,7 +68,7 @@ async function run() {
   const app = await _electron.launch({
     executablePath,
     args: packaged ? [] : [join(liaRoot, 'desktop', 'out', 'main', 'index.js')],
-    env: { ...process.env, APPDATA: profile, LIA_USER_DATA: root, LIA_NATIVE_STAGE_PREVIEW: packaged ? '0' : '1' },
+    env: { ...process.env, APPDATA: profile, LIA_USER_DATA: root },
   })
   let target
   try {

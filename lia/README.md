@@ -40,10 +40,10 @@ corepack pnpm run typecheck
 corepack pnpm run test
 ```
 
-`corepack pnpm run dev` prepara o Electron e abre o Launcher. O
-botão **Conversar com Lia** ainda abre o Stage legado, que exige o
-workspace em `airi/`. A janela do Launcher e seu build não precisam
-desse workspace.
+Use `Lia.bat` na raiz para preparar o Launcher e o Stage próprios juntos.
+O botão **Conversar com Lia** abre o Stage próprio. Para iterar com
+`corepack pnpm run dev` no Launcher, prepare primeiro o Stage com
+`Lia.bat -PrepareOnly`.
 
 ## Por que ao lado e não dentro
 
@@ -88,8 +88,8 @@ isso arrastaria o install do AIRI.
 O ponto de entrada Electron tem lockfile próprio. Em `lia/stage`,
 instale com `corepack pnpm install --frozen-lockfile --ignore-scripts` e
 execute `corepack pnpm run dev`. O build e a janela foram verificados no
-Windows com Electron 43.4.1. O Launcher ainda usa o Stage legado para
-conversa. A janela do Stage próprio já permite enviar mensagem ao
+Windows com Electron 43.4.1. O Launcher abre o Stage próprio para
+conversa. A janela do Stage próprio permite enviar mensagem ao
 provedor local configurado no produto. No Electron foram validados
 resposta de um serviço HTTP controlado, cancelamento, preservação do
 rascunho e retorno de foco. O Main mantém até seis turnos concluídos em

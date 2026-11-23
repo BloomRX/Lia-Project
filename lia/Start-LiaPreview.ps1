@@ -1,4 +1,4 @@
-param([switch]$PrepareOnly)
+﻿param([switch]$PrepareOnly)
 
 $ErrorActionPreference = 'Stop'
 
@@ -10,10 +10,10 @@ function Invoke-LiaPnpm {
 }
 
 if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
-  throw 'Esta entrada da prévia é para Windows.'
+  throw 'Esta entrada da Lia é para Windows.'
 }
 if (!(Get-Command corepack -ErrorAction SilentlyContinue)) {
-  throw 'Instale o Node.js e prepare o Corepack antes de abrir a prévia.'
+  throw 'Instale o Node.js e prepare o Corepack antes de abrir a Lia.'
 }
 
 $stage = Join-Path $PSScriptRoot 'stage'
@@ -45,11 +45,8 @@ if ($PrepareOnly) {
 
 $electron = Join-Path $stage 'node_modules\electron\dist\electron.exe'
 $entry = Join-Path $launcher 'out\main\index.js'
-$previousPreview = $env:LIA_NATIVE_STAGE_PREVIEW
-try {
-  $env:LIA_NATIVE_STAGE_PREVIEW = '1'
-  Start-Process -FilePath $electron -ArgumentList ('"{0}"' -f $entry) -WorkingDirectory $launcher
+if (!(Test-Path -LiteralPath $electron -PathType Leaf) -or !(Test-Path -LiteralPath $entry -PathType Leaf)) {
+  throw 'O Electron ou o Launcher compilado não está disponível.'
 }
-finally {
-  $env:LIA_NATIVE_STAGE_PREVIEW = $previousPreview
-}
+$process = Start-Process -FilePath $electron -ArgumentList ('"{0}"' -f $entry) -WorkingDirectory $launcher -Wait -PassThru
+exit $process.ExitCode
