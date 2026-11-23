@@ -44,15 +44,21 @@ também foi gerado nessa árvore. No Windows, a instalação silenciosa em
 uma pasta de teste, a abertura e o encerramento do Stage pelo Launcher
 instalado e a desinstalação retornaram sucesso. A verificação confirmou
 a remoção do executável e da entrada de desinstalação da prévia.
-O fluxo padrão, a atualização de uma instalação anterior e a
-paridade de recursos com o Stage legado seguem pendentes.
+O pacote posterior substituiu o Stage de uma compilação anterior de
+mesma versão 0.0.1 no teste NSIS. A troca dos arquivos foi verificada
+por SHA-256 e o ciclo Launcher–Stage e a desinstalação passaram.
+Fluxo padrão, atualização entre versões, atualização automática e
+paridade com o Stage legado seguem pendentes.
 
 Os gates hospedados do GitHub Actions também confirmaram a abertura e o
 encerramento pelo Launcher e a janela de presença com VRM sintético em uma
 árvore sem AIRI. A mesma execução registrou 43 timeouts na suíte do Launcher
 e 12 falhas no cofre multiprocesso, ainda na preparação de credenciais
 sintéticas. Os 27 testes da configuração passaram. A origem da falha do
-cofre hospedado continua em investigação. Resultados por etapa na
+cofre hospedado foi isolada na escrita privada. Escrita comum e
+criação do canal de coordenação passaram; a [escrita privada
+falhou após 5.033 ms](https://github.com/BloomRX/Lia-Project/actions/runs/45099185541).
+O motivo de a operação não terminar nesse prazo segue em investigação. Resultados por etapa na
 [execução Windows de 22/11](https://github.com/BloomRX/Lia-Project/actions/runs/45098566159).
 O [gate hospedado de histórico](https://github.com/BloomRX/Lia-Project/actions/runs/45098698966)
 também passou com serviço HTTP local sintético, incluindo retomada após

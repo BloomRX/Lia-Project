@@ -135,6 +135,14 @@ Para executar o mesmo gate sobre uma instalação da prévia, passe
 limpa, o ciclo Launcher–Stage e a desinstalação já passaram em uma
 pasta isolada de teste.
 
+O script PowerShell `scripts/check-native-install.ps1` executa o ensaio
+com `-Installer <arquivo>`. Em uma árvore sem AIRI, acrescente
+`-RequireIndependent`. Use `-PreviousInstaller <arquivo>` para instalar
+uma compilação anterior da prévia antes do pacote atual. O teste verifica
+a substituição do Stage pelos hashes e preserva um relatório JSON.
+A substituição entre duas compilações da versão 0.0.1 passou no Windows.
+Atualização automática e troca de versão ainda precisam de ensaio.
+
 O workflow `lia-native-windows.yml` usa `git archive HEAD lia` para
 instalar, compilar e testar a prévia sem acesso à árvore legada.
 Ele também executa a abertura e o encerramento pelo Launcher no Windows.
