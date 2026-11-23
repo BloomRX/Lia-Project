@@ -359,7 +359,7 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
   // The canonical runtime facts come from the product document; the
   // launcher's boot NEVER starts a voice runtime (contract item 12).
 
-  const workspaceRoot = deps.workspaceRoot ?? defaultWorkspaceRoot()
+  const workspaceRoot = deps.packagedStage ? undefined : deps.workspaceRoot ?? defaultWorkspaceRoot()
   let credentialOwner: Awaited<ReturnType<typeof startCredentialOwner>> | undefined
   let credentialOwnerClosing: Promise<void> = Promise.resolve()
   async function revokeCredentialOwner() {

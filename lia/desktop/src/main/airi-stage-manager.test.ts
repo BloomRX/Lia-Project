@@ -50,8 +50,8 @@ describe('phase 7.2: ownership retained, spawn without shell (tests C/D/G)', () 
     const spawnImpl = vi.fn(() => child as never)
     const prerequisite = { name: 'unused', applies: vi.fn(() => true), run: vi.fn() }
     const manager = new AiriStageManager({
-      workspaceRoot: '/no-development-checkout',
       packagedStage: () => ({ command: 'C:\\Lia\\resources\\stage\\LiaStage.exe', args: [], cwd: 'C:\\Lia\\resources\\stage' }),
+      stageDevEntrypoint: () => { throw new Error('Packaged launch must not resolve a legacy entrypoint') },
       spawnImpl: spawnImpl as never,
       prerequisite,
       runtimeEnv: { PATH: '' },
@@ -66,6 +66,22 @@ describe('phase 7.2: ownership retained, spawn without shell (tests C/D/G)', () 
     child.exitCode = 0
     child.emit('exit', 0)
   })
+
+  it('reports an unavailable native target even when a legacy workspace exists', async () => {
+    const spawnImpl = vi.fn()
+    const prerequisite = { name: 'legacy', applies: vi.fn(() => true), run: vi.fn() }
+    const manager = new AiriStageManager({
+      workspaceRoot: await makeStageWorkspace(),
+      packagedStage: () => { throw new Error('missing') },
+      spawnImpl: spawnImpl as never,
+      prerequisite,
+    })
+    expect(manager.isAvailable()).toBe(false)
+    expect((await manager.start()).phase).toBe('error')
+    expect(spawnImpl).not.toHaveBeenCalled()
+    expect(prerequisite.applies).not.toHaveBeenCalled()
+  })
+
   it('g: the Windows spawn path carries NO shell option - the DEP0190 route is eliminated', async () => {
     const root = await makeStageWorkspace()
     const child = fakeChild()

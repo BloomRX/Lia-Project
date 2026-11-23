@@ -135,7 +135,7 @@ export interface AiriStageManagerDeps {
    * the packaged stage root. If the folder does not exist the manager is
    * honest about being unavailable instead of spawning into the void.
    */
-  workspaceRoot: string
+  workspaceRoot?: string
 }
 
 /**
@@ -175,11 +175,12 @@ export class AiriStageManager {
         return 'Stage indisponível'
       }
     }
-    return `node ${stageDevEntrypointFor(this.stageDir(), this.deps)} dev`
+    const directory = this.stageDir()
+    return directory ? `node ${stageDevEntrypointFor(directory, this.deps)} dev` : 'Stage indisponível'
   }
 
-  private stageDir(): string {
-    return join(this.deps.workspaceRoot, 'apps', 'stage-tamagotchi')
+  private stageDir(): string | undefined {
+    return this.deps.workspaceRoot && join(this.deps.workspaceRoot, 'apps', 'stage-tamagotchi')
   }
 
   isAvailable(): boolean {
@@ -189,7 +190,8 @@ export class AiriStageManager {
       }
       catch { return false }
     }
-    return existsSync(join(this.deps.workspaceRoot, 'apps', 'stage-tamagotchi'))
+    const directory = this.stageDir()
+    return Boolean(directory && existsSync(directory))
   }
 
   async start(options: { env?: Record<string, string | undefined> } = {}): Promise<AiriStageState> {
@@ -313,7 +315,15 @@ export class AiriStageManager {
   }
 
   private async spawnStage(passEnv?: Record<string, string | undefined>): Promise<AiriStageState> {
-    if (!this.isAvailable()) {
+    let packaged: ReturnType<NonNullable<AiriStageManagerDeps['packagedStage']>> | undefined
+    try {
+      packaged = this.deps.packagedStage?.()
+    }
+    catch {
+      // A missing executable is a public availability error, not a fallback.
+    }
+    const stageDir = packaged?.cwd ?? (this.deps.packagedStage ? undefined : this.stageDir())
+    if (!stageDir || (!packaged && !existsSync(stageDir))) {
       this.setState({
         message: 'The Lia stage could not be found on this machine.',
         phase: 'error',
@@ -332,9 +342,10 @@ export class AiriStageManager {
     // no source workspace (packaged production) nothing is awaited, so the
     // spawn below still happens in the same tick and the Phase 7.2 ownership
     // semantics the tests pin are byte-for-byte unchanged.
-    const prerequisite = this.deps.prerequisite
-      ?? createCoreAgentBuildPrerequisite({ workspaceRoot: this.deps.workspaceRoot })
-    if (!this.deps.packagedStage && prerequisite.applies()) {
+    const prerequisite = !packaged && this.deps.workspaceRoot
+      ? this.deps.prerequisite ?? createCoreAgentBuildPrerequisite({ workspaceRoot: this.deps.workspaceRoot })
+      : undefined
+    if (prerequisite?.applies()) {
       this.deps.onLog?.(`stage-prerequisite name=${prerequisite.name} state=starting`)
       let outcome: StagePrerequisiteOutcome
       try {
@@ -377,8 +388,6 @@ export class AiriStageManager {
      * walks the real tree. As a bonus the Windows DEP0190 route is gone:
      * no `shell` option, no cmd intermediary, arguments stay an array.
      */
-    const stageDir = this.stageDir()
-    const entrypoint = stageDevEntrypointFor(stageDir, this.deps)
     const spawnImpl = this.deps.spawnImpl ?? spawn
     // This is the one child that must never be given `ELECTRON_RUN_AS_NODE`:
     // `electron-vite` launches the window with
@@ -389,7 +398,6 @@ export class AiriStageManager {
     // to Electron-as-Node, and we fail closed instead of spawning an Electron
     // app that would parent nothing. Ownership is unchanged: the build stays an
     // awaited prerequisite, never the owned Stage process.
-    const packaged = this.deps.packagedStage?.()
     const runtime = packaged
       ? { kind: 'packaged' as const, command: packaged.command }
       : resolveNodeInvocation({
@@ -416,8 +424,8 @@ export class AiriStageManager {
 
     const detached = this.deps.mode === 'detached'
     const command = runtime.command
-    const args = packaged?.args ?? [entrypoint, 'dev']
-    const cwd = packaged?.cwd ?? stageDir
+    const args = packaged?.args ?? [stageDevEntrypointFor(stageDir, this.deps), 'dev']
+    const cwd = stageDir
     let child: ReturnType<typeof spawn>
     if (detached) {
       // Sem arquivo de log não há diagnóstico, e um pipe fechado mataria o
@@ -443,7 +451,7 @@ export class AiriStageManager {
     // Windows logs.
     this.deps.onLog?.(packaged
       ? `spawn: ${basename(runtime.command)} (pid ${String(child.pid)})`
-      : `spawn: ${basename(runtime.command)} ${entrypoint} dev (pid ${String(child.pid)})`)
+      : `spawn: ${basename(runtime.command)} ${args[0]} dev (pid ${String(child.pid)})`)
 
     if (this.deps.mode === 'detached' && this.deps.probeReady) {
       return await new Promise<AiriStageState>((resolve) => {
