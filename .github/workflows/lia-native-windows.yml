@@ -59,20 +59,33 @@ jobs:
           corepack pnpm run typecheck
           corepack pnpm run test
           corepack pnpm exec install-electron
-      - name: Compilar e testar o Launcher
+      - name: Compilar o Launcher
+        id: build-launcher
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
           Set-Location (Join-Path $env:LIA_STANDALONE 'lia/desktop')
           corepack pnpm install --frozen-lockfile --ignore-scripts
           corepack pnpm run build
           corepack pnpm run typecheck
+      - name: Exercitar persistência e coordenação multiprocesso
+        if: ${{ !cancelled() && steps.build-launcher.outcome == 'success' }}
+        run: |
+          Set-Location (Join-Path $env:LIA_STANDALONE 'lia/runtime')
+          corepack pnpm exec vitest run src/secrets/vault-process.test.ts src/product/config-write.test.ts
+      - name: Testar o Launcher
+        if: ${{ !cancelled() && steps.build-launcher.outcome == 'success' }}
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          Set-Location (Join-Path $env:LIA_STANDALONE 'lia/desktop')
           corepack pnpm run test
           node --test scripts/package-windows.test.mjs
       - name: Abrir e encerrar o Stage pelo Launcher
+        if: ${{ !cancelled() && steps.build-launcher.outcome == 'success' }}
         run: |
           Set-Location (Join-Path $env:LIA_STANDALONE 'lia/desktop')
           node --experimental-strip-types scripts/check-native-stage.mjs --require-independent
       - name: Validar presença do avatar
+        if: ${{ !cancelled() && steps.build-launcher.outcome == 'success' }}
         run: |
           Set-Location (Join-Path $env:LIA_STANDALONE 'lia/desktop')
           node --experimental-strip-types scripts/check-native-presence.mjs
