@@ -54,6 +54,9 @@ async function main(): Promise<void> {
     }),
   })
   const memory = createLiaMemoryStore({ filePath: join(app.getPath('userData'), 'lia-memory.json') })
+  const memoryImport = await memory.importIfMissing(join(paths.userDataDir, 'stage-profile', 'lia-memory.json'))
+  if (!memoryImport.ok)
+    console.warn('Lia: não foi possível migrar as notas do perfil anterior.')
   const send = createStageChat({
     recallMemory: memory.recall,
     readCredential: providerId => vault.getSecret(providerId, 'apiKey'),

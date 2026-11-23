@@ -166,7 +166,9 @@ as notas ficam no perfil da prévia e a consulta começa desativada. A pessoa
 pode salvar ou remover notas e escolher se entram na conversa local.
 O Electron no Windows, com serviço HTTP local sintético, confirmou
 persistência após reinício e ausência do contexto após desativar a opção.
-As notas do perfil legado ainda precisam de um caminho de migração.
+Na primeira abertura sem memória própria, o Stage importa as notas e a
+preferência do perfil gerenciado legado. Se o perfil da prévia já contém
+um arquivo de memória, ambos os arquivos são preservados sem fusão.
 
 ```bash
 cd lia/stage

@@ -1,7 +1,7 @@
 import type { LiaMemoryMutation, LiaMemoryResult, LiaMemoryState } from './contracts.ts'
 
 import { randomUUID } from 'node:crypto'
-import { lstat, mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises'
+import { link, lstat, mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
 import { buildMemoryContext } from './context.ts'
@@ -43,6 +43,20 @@ function parseState(value: unknown): LiaMemoryState {
   return { schemaVersion: 1, enabled: value.enabled, entries }
 }
 
+async function readDocument(path: string): Promise<LiaMemoryState | undefined> {
+  try {
+    const stat = await lstat(path)
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 300_000)
+      throw new Error('invalid')
+    return parseState(JSON.parse(await readFile(path, 'utf8')))
+  }
+  catch (error) {
+    if (object(error) && error.code === 'ENOENT')
+      return undefined
+    throw error
+  }
+}
+
 /** One Main-owned instance, shared by every window. A failed write never replaces the old document. */
 export function createLiaMemoryStore(params: { filePath: string }) {
   const { filePath } = params
@@ -57,30 +71,42 @@ export function createLiaMemoryStore(params: { filePath: string }) {
     return next
   }
   async function read(): Promise<LiaMemoryState> {
-    try {
-      const stat = await lstat(filePath)
-      if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 300_000)
-        throw new Error('invalid')
-      return parseState(JSON.parse(await readFile(filePath, 'utf8')))
-    }
-    catch (error) {
-      if (object(error) && error.code === 'ENOENT')
-        return empty()
-      throw new Error('unavailable')
-    }
+    return await readDocument(filePath) ?? empty()
   }
-  async function write(state: LiaMemoryState): Promise<void> {
+  async function write(state: LiaMemoryState, publish = rename): Promise<void> {
     await mkdir(dirname(filePath), { recursive: true })
     const temp = `${filePath}.${randomUUID()}.tmp`
     try {
       await writeFile(temp, JSON.stringify(state), { encoding: 'utf8', flag: 'wx', mode: 0o600 })
-      await rename(temp, filePath)
+      await publish(temp, filePath)
     }
     finally {
       await unlink(temp).catch(() => {})
     }
   }
   return {
+    importIfMissing: (source: string) => serial(async (): Promise<LiaMemoryResult<boolean>> => {
+      try {
+        const target = await lstat(filePath).catch((error: unknown) => {
+          if (object(error) && error.code === 'ENOENT')
+            return undefined
+          throw error
+        })
+        if (target)
+          return { ok: true, value: false }
+        const state = await readDocument(source)
+        if (!state)
+          return { ok: true, value: false }
+        // Publish the completed document only if the destination is still absent.
+        await write(state, link)
+        return { ok: true, value: true }
+      }
+      catch (error) {
+        if (object(error) && error.code === 'EEXIST')
+          return { ok: true, value: false }
+        return fail('unavailable')
+      }
+    }),
     get: () => serial(async (): Promise<LiaMemoryResult> => {
       try {
         return { ok: true, value: await read() }

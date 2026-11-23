@@ -2,7 +2,7 @@
 
 ## 0. Estado agora
 
-- **Memória na prévia.** Notas e preferência persistem no perfil do Stage próprio. O Electron no Windows com serviço HTTP local sintético confirmou recuperação após reiniciar e envio do contexto apenas enquanto habilitado. A migração do perfil legado segue pendente.
+- **Memória na prévia.** Notas e preferência persistem no perfil do Stage próprio. O Electron no Windows com serviço HTTP local sintético confirmou recuperação após reiniciar e envio do contexto apenas enquanto habilitado. No Electron, a importação do perfil gerenciado legado preservou o arquivo original e as alterações posteriores na prévia. Quando os dois perfis já têm notas, os arquivos são preservados separadamente.
 
 - **Prévia própria.** O Stage em `lia/stage` usa a seleção canônica de STT. O Main pede consentimento por gravação para adaptadores dedicados via HTTPS. Os testes automatizados cobrem recusa, cancelamento e mudança de configuração durante a confirmação. O diálogo nativo e o envio HTTPS real ainda precisam de gate Windows.
 
