@@ -168,6 +168,12 @@ Se o perfil do Hub usa `LIA_AGENTHUB_HOME`, a Lia procura o mesmo caminho
 relativo nessa raiz. Essa consulta é local e somente leitura. A execução
 de capacidades será integrada separadamente.
 
+Em **Voz → Reconhecimento de fala compatível com OpenAI**, informe o
+endereço HTTPS da API, o modelo e a chave. **Salvar reconhecimento** seleciona
+essa rota para o Stage. A escolha de voz de saída permanece independente.
+Ao transcrever, a Lia pede autorização antes de enviar cada gravação.
+Se mudar a origem do serviço, informe a chave novamente.
+
 Para repetir o gate de abertura e encerramento no Windows, prepare
 os builds e instale o Electron do Stage. Em `lia/desktop`, execute
 `node --experimental-strip-types scripts/check-native-stage.mjs`.

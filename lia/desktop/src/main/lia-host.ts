@@ -17,6 +17,7 @@ import { join } from 'node:path'
 import { bindCredential, credentialForDestination, unboundCredential } from '@lia/contracts/credentials/destination'
 import { CredentialOwnerError, isPublicCredentialReference, startCredentialOwner } from '@lia/contracts/credentials/owner-channel'
 import { decideSelectionWrite, isLauncherManagedProvider, isLiaSelectionTarget } from '@lia/contracts/providers/selection-write-policy'
+import { isTranscriptionLoopback } from '@lia/contracts/transcription/transport'
 import { createTransportRepository } from '@lia/contracts/transports/repository'
 import {
   brainRequirementForChatTurn,
@@ -226,6 +227,8 @@ export interface LiaHost {
   aiConnection: ReturnType<typeof createAiConnectionService>
   speechConnection: () => Promise<{ baseUrl: string, modelId: string, voiceId: string, hasKey: boolean }>
   saveSpeechConnection: (input: unknown) => Promise<boolean>
+  transcriptionConnection: () => Promise<{ baseUrl: string, modelId: string, hasKey: boolean }>
+  saveTranscriptionConnection: (input: unknown) => Promise<boolean>
 
   /** The resolved bridge contract for THIS launch (built fresh from disk). */
   bridgeConfig: () => Promise<LiaBridgeConfig>
@@ -1141,6 +1144,77 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
         await transportRepository.mutate({ kind: 'put', expectedRevision: result.snapshot.revision, record: matches[0] })
       await change?.rollback()
       return false
+    }),
+    async transcriptionConnection() {
+      const providerId = 'openai-compatible-audio-transcription'
+      const target = (await readSnapshot()).snapshot?.voice?.stt?.preferred
+      const record = (await transportRepository.read()).records.find(item => item.providerId === providerId && item.protocol === 'audio-transcription')
+      const url = record && URL.parse(record.baseUrl)
+      return {
+        baseUrl: record?.baseUrl ?? '',
+        modelId: target?.providerId === providerId ? target.modelId ?? '' : record?.modelIds[0] ?? '',
+        hasKey: Boolean(url && credentialForDestination(vault.getSecret(providerId, 'apiKey'), providerId, url, 'transcription')),
+      }
+    },
+    saveTranscriptionConnection: (input: unknown) => withStageConfigurationLock(async () => {
+      if (stage.holdsOwnedStage() || !input || typeof input !== 'object'
+        || Object.keys(input).some(key => !['baseUrl', 'modelId', 'apiKey'].includes(key)))
+        return false
+      const { baseUrl, modelId, apiKey } = input as Record<string, unknown>
+      if (typeof baseUrl !== 'string' || baseUrl.length > 4096 || typeof modelId !== 'string'
+        || modelId.length > 256 || !/^[!-~]+$/.test(modelId.trim())
+        || (apiKey !== undefined && (typeof apiKey !== 'string' || !/^[!-~]{1,2048}$/.test(apiKey))))
+        return false
+      const url = URL.parse(baseUrl)
+      if (!url || url.protocol !== 'https:' || isTranscriptionLoopback(url)
+        || url.username || url.password || url.search || url.hash)
+        return false
+      const providerId = 'openai-compatible-audio-transcription'
+      const snapshot = await transportRepository.read()
+      const state = await readSnapshot()
+      if (state.status !== 'ok' && state.status !== 'missing')
+        return false
+      const matches = snapshot.records.filter(item => item.providerId === providerId)
+      if (matches.length > 1 || (matches[0] && matches[0].protocol !== 'audio-transcription'))
+        return false
+      const prior = matches[0]
+      const revision = vault.secretRevision?.(providerId, 'apiKey')
+      const change = apiKey && revision !== undefined
+        ? await vault.changeSecret?.(providerId, 'apiKey', bindCredential(providerId, url, apiKey, 'transcription'), { expectedRevision: revision })
+        : undefined
+      if (apiKey ? !change : !credentialForDestination(vault.getSecret(providerId, 'apiKey'), providerId, url, 'transcription'))
+        return false
+      const id = prior?.id ?? providerId
+      let savedRevision: number | undefined
+      let committed = false
+      try {
+        const result = await transportRepository.mutate({ kind: 'put', expectedRevision: snapshot.revision, record: {
+          id, providerId, definitionId: providerId,
+          type: 'http', protocol: 'audio-transcription', baseUrl: url.href, enabled: true,
+          modelIds: [modelId.trim()], adapterOptions: {}, metadata: prior?.metadata ?? {},
+          credentialRef: { scope: providerId, key: 'apiKey' },
+        } })
+        if (!result.ok)
+          return false
+        savedRevision = result.snapshot.revision
+        const written = await updateLiaProductConfig(paths.productConfigFile, { voice: { stt: { preferred: { providerId, modelId: modelId.trim() } } } })
+        committed = written.status === 'ok'
+        return committed
+      }
+      finally {
+        if (!committed) {
+          try {
+            if (savedRevision !== undefined) {
+              await transportRepository.mutate(prior
+                ? { kind: 'put', expectedRevision: savedRevision, record: prior }
+                : { kind: 'remove', expectedRevision: savedRevision, id })
+            }
+          }
+          finally {
+            await change?.rollback()
+          }
+        }
+      }
     }),
     bridgeConfig: bridgeFactory,
     coordinator,

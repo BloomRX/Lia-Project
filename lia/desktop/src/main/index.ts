@@ -183,6 +183,8 @@ async function bootstrap(): Promise<void> {
     && event.sender === mainWindow.webContents && event.senderFrame === mainWindow.webContents.mainFrame
   ipcMain.handle('lia:voice:speech-connection', event => ownsWindow(event) ? host.speechConnection().catch(() => undefined) : undefined)
   ipcMain.handle('lia:voice:speech-save', (event, input: unknown) => ownsWindow(event) ? host.saveSpeechConnection(input).catch(() => false) : false)
+  ipcMain.handle('lia:voice:transcription-connection', event => ownsWindow(event) ? host.transcriptionConnection().catch(() => undefined) : undefined)
+  ipcMain.handle('lia:voice:transcription-save', (event, input: unknown) => ownsWindow(event) ? host.saveTranscriptionConnection(input).catch(() => false) : false)
   ipcMain.handle('lia:voice:speech-local', async event => {
     if (!ownsWindow(event))
       return false

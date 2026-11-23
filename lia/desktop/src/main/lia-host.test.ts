@@ -89,6 +89,21 @@ describe('h. Existing voice profile list is read', () => {
     expect(await readFile(host.paths.productConfigFile, 'utf8')).not.toContain('synthetic-speech-key')
   })
 
+  it('saves STT separately and refuses to reuse a key for a different origin', async () => {
+    const home = await makeLiaHome()
+    const host = createLiaHost({ cipher: identityCipher, env: fixtureEnv(home) })
+    const draft = { baseUrl: 'https://stt.example.invalid/v1', modelId: 'fixture-model' }
+    const originalSpeech = (await host.productSnapshot())?.voice?.tts?.preferred
+    expect(await host.saveTranscriptionConnection(draft)).toBe(false)
+    expect(await host.saveTranscriptionConnection({ ...draft, apiKey: 'synthetic-stt-key' })).toBe(true)
+    expect(await host.transcriptionConnection()).toEqual({ ...draft, hasKey: true })
+    expect(await host.saveTranscriptionConnection({ ...draft, baseUrl: 'https://other.example.invalid/v1' })).toBe(false)
+    expect(await host.saveTranscriptionConnection({ ...draft, baseUrl: 'http://stt.example.invalid/v1', apiKey: 'synthetic-stt-key' })).toBe(false)
+    expect((await host.productSnapshot())?.voice?.stt?.preferred).toEqual({ providerId: 'openai-compatible-audio-transcription', modelId: draft.modelId })
+    expect((await host.productSnapshot())?.voice?.tts?.preferred).toEqual(originalSpeech)
+    expect(await readFile(host.paths.productConfigFile, 'utf8')).not.toContain('synthetic-stt-key')
+  })
+
   it('the canonical library registry lists its profiles verbatim', async () => {
     const home = await makeLiaHome({ voiceCount: 3 })
     const host = createLiaHost({ cipher: identityCipher, env: fixtureEnv(home) })

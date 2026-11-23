@@ -36,6 +36,35 @@ const runtimeLocation = ref<any>(undefined)
 const speech = ref({ baseUrl: '', modelId: '', voiceId: '', apiKey: '', hasKey: false })
 const speechBusy = ref(false)
 const speechFeedback = ref('')
+const transcription = ref({ baseUrl: '', modelId: '', apiKey: '', hasKey: false })
+const transcriptionBusy = ref(false)
+const transcriptionFeedback = ref('')
+
+async function loadTranscription() {
+  const connection = await props.api?.transcriptionConnection?.()
+  if (connection)
+    transcription.value = { ...connection, apiKey: '' }
+}
+
+async function saveTranscription() {
+  transcriptionBusy.value = true
+  transcriptionFeedback.value = ''
+  try {
+    const { baseUrl, modelId, apiKey } = transcription.value
+    const saved = await props.api?.transcriptionConnectionSave?.({ baseUrl, modelId, ...(apiKey ? { apiKey } : {}) })
+    if (!saved)
+      throw new Error('transcription-save')
+    await loadTranscription()
+    transcriptionFeedback.value = 'Reconhecimento de fala selecionado.'
+  }
+  catch {
+    transcriptionFeedback.value = 'Não foi possível salvar o reconhecimento de fala. Confira os campos e encerre a conversa antes de tentar novamente.'
+  }
+  finally {
+    transcription.value.apiKey = ''
+    transcriptionBusy.value = false
+  }
+}
 
 async function loadSpeech() {
   const connection = await props.api?.speechConnection?.()
@@ -86,7 +115,7 @@ async function reloadLocation() {
 }
 
 onMounted(async () => {
-  await loadSpeech()
+  await Promise.all([loadSpeech(), loadTranscription()])
   await reload()
   await reloadLocation()
   const preferred = (await props.api?.productConfig?.())?.snapshot?.voice?.tts?.preferred
@@ -317,6 +346,18 @@ async function importVoice() {
         </fieldset>
       </form>
       <p class="feedback" role="status">{{ speechFeedback }}</p>
+    </details>
+    <details class="speech-settings">
+      <summary>Reconhecimento de fala compatível com OpenAI</summary>
+      <form @submit.prevent="saveTranscription">
+        <fieldset :disabled="transcriptionBusy">
+          <label>Endereço da API de transcrição <input v-model.trim="transcription.baseUrl" required type="url" maxlength="4096" placeholder="https://exemplo.com/v1"></label>
+          <label>Modelo de transcrição <input v-model.trim="transcription.modelId" required maxlength="256"></label>
+          <label>Chave de transcrição <input v-model.trim="transcription.apiKey" :required="!transcription.hasKey" type="password" maxlength="2048" autocomplete="new-password"></label>
+          <button type="submit">Salvar reconhecimento</button>
+        </fieldset>
+      </form>
+      <p class="feedback" role="status">{{ transcriptionFeedback }}</p>
     </details>
   </section>
 </template>

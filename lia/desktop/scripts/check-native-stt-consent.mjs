@@ -1,17 +1,13 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { once } from 'node:events'
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:https'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { createLiaSecretVault } from '@lia/core/secrets/vault'
-import { createWindowsUserCipher } from '@lia/core/secrets/windows-user-cipher'
 import { _electron } from 'playwright'
-
-import { bindCredential } from '../../core/src/credentials/destination.ts'
 
 assert.equal(process.platform, 'win32')
 const nativeDialog = process.argv[4] === '--native-dialog'
@@ -21,9 +17,7 @@ const key = resolve(process.argv[3])
 const root = await mkdtemp(join(process.env.RUNNER_TEMP ?? tmpdir(), 'lia-native-stt-'))
 const stage = fileURLToPath(new URL('../../stage/', import.meta.url))
 const token = `fixture-${randomUUID()}`
-const providerId = 'fixture-transcription'
 const modelId = 'fixture-model'
-const definitionId = 'openai-compatible-audio-transcription'
 const transcript = 'Transcrição sintética.'
 const audio = Buffer.alloc(46)
 audio.write('RIFF', 0)
@@ -59,30 +53,31 @@ try {
   // e exercita o consentimento dos adaptadores remotos do produto.
   const destination = new URL(`https://127.0.0.2:${server.address().port}/v1`)
   console.log(`Evidências em ${root}`)
-  const unexpected = () => { throw new Error('Backend de credenciais legado inesperado') }
-  const vault = createLiaSecretVault({
-    filePath: join(root, 'lia-secrets.json'),
-    cipher: createWindowsUserCipher({ available: () => false, encrypt: unexpected, decrypt: unexpected }),
-  })
-  assert.ok(await vault.setSecret(providerId, 'apiKey', bindCredential(providerId, destination, token, 'transcription')))
-  await Promise.all([
-    writeFile(join(root, 'lia-product.json'), JSON.stringify({ voice: { stt: { preferred: { providerId, modelId } } } })),
-    writeFile(join(root, 'lia-transports.json'), JSON.stringify({
-      schemaVersion: 1,
-      revision: 1,
-      records: [{
-        id: providerId, providerId, definitionId, type: 'http', protocol: 'audio-transcription',
-        baseUrl: destination.href, modelIds: [modelId], adapterOptions: {}, enabled: true,
-        metadata: {}, credentialRef: { scope: providerId, key: 'apiKey' },
-      }],
-      tombstones: [],
-      migration: { version: 1, imported: [] },
-    })),
-  ])
+  const launcherProfile = join(root, 'appdata')
+  await mkdir(launcherProfile)
+  const executablePath = join(stage, 'node_modules', 'electron', 'dist', 'electron.exe')
+  const env = { ...process.env, APPDATA: launcherProfile, NODE_EXTRA_CA_CERTS: cert, NODE_TLS_REJECT_UNAUTHORIZED: '1', LIA_USER_DATA: root, LIA_STAGE_PROFILE_DIR: join(root, 'profile') }
+  app = await _electron.launch({ executablePath, args: [fileURLToPath(new URL('../out/main/index.js', import.meta.url))], env })
+  const launcher = await app.firstWindow()
+  launcher.setDefaultTimeout(10_000)
+  await launcher.getByRole('button', { name: 'Voz', exact: true }).click()
+  await launcher.getByText('Reconhecimento de fala compatível com OpenAI', { exact: true }).click()
+  await launcher.getByLabel('Endereço da API de transcrição').fill(destination.href)
+  await launcher.getByLabel('Modelo de transcrição').fill(modelId)
+  await launcher.getByLabel('Chave de transcrição').fill(token)
+  await launcher.getByRole('button', { name: 'Salvar reconhecimento' }).click()
+  const saved = launcher.getByText('Reconhecimento de fala selecionado.', { exact: true })
+  await saved.waitFor()
+  assert.equal(await launcher.getByLabel('Chave de transcrição').inputValue(), '')
+  assert.ok(!(await readFile(join(root, 'lia-secrets.json'), 'utf8')).includes(token))
+  await saved.scrollIntoViewIfNeeded()
+  await launcher.screenshot({ path: join(root, 'transcription-settings.png'), fullPage: true })
+  await app.close()
+  app = undefined
   app = await _electron.launch({
-    executablePath: join(stage, 'node_modules', 'electron', 'dist', 'electron.exe'),
+    executablePath,
     args: [...(nativeDialog ? [] : ['--use-fake-device-for-media-stream']), join(stage, 'out', 'main', 'index.js')],
-    env: { ...process.env, NODE_EXTRA_CA_CERTS: cert, NODE_TLS_REJECT_UNAUTHORIZED: '1', LIA_USER_DATA: root, LIA_STAGE_PROFILE_DIR: join(root, 'profile') },
+    env,
   })
   const page = await app.firstWindow()
   page.setDefaultTimeout(10000)
@@ -156,7 +151,7 @@ try {
     assert.equal(requests.length, 2)
     chromiumRecording = { deviceInventory: 'synthetic additional input', selectedDeviceConstraint: true, capturedWebm: true, audioTracksReleased: true, cancellationPreventedUpload: true, draftInserted: true, missingMicrophoneError: 'injected NotFoundError' }
   }
-  const report = { dialogResponse: nativeDialog ? 'interactive' : 'injected in test', denialPreventedUpload: true, approvalAllowedUpload: true, service: 'synthetic HTTPS loopback', syntheticAudio: true, chromiumRecording }
+  const report = { configuredByLauncher: true, dialogResponse: nativeDialog ? 'interactive' : 'injected in test', denialPreventedUpload: true, approvalAllowedUpload: true, service: 'synthetic HTTPS loopback', syntheticAudio: true, chromiumRecording }
   await writeFile(join(root, 'report.json'), JSON.stringify(report, null, 2))
   console.log(JSON.stringify(report))
 }
