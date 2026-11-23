@@ -28,6 +28,20 @@ A seção a seguir registra o destino e as classificações originais
 da auditoria de 16/11. Elas também servem de referência para revisar
 as diferenças remanescentes antes de qualquer exclusão de branch.
 
+### Prévia independente no Windows
+
+Um arquivo gerado por `git archive 6ca14790 lia` foi extraído em pasta
+separada. A conferência em execução confirmou a ausência de `airi/`.
+Launcher e Stage próprio instalaram com lockfile congelado e compilaram.
+Passaram 16 testes do Stage próprio e 365 do Launcher, com três
+skips no Launcher. Com Electron
+43.4.1 instalado em `lia/stage`, o Launcher abriu o Stage pelo botão
+**Conversar com Lia** e o encerrou pelo botão **Encerrar conversa**.
+O status autenticado encontrou uma janela e o encerramento removeu
+o registro. O ensaio usou a prévia opt-in e configuração local sintética.
+Ele cobre o ciclo de vida da prévia. O fluxo padrão, o instalador e a
+paridade de recursos com o Stage legado seguem pendentes.
+
 **Data:** 16/11/2026
 **Branch de destino:** `arena/7fa837f0-lia-project` @ `971d309074`
 **Escopo:** plano **por alteração**, não por branch. **Nenhuma integração foi executada nesta rodada.**

@@ -127,22 +127,19 @@ microfone após o clique, libera a captura antes de transcrever e
 insere o texto no rascunho para revisão. O percurso foi exercitado
 no Electron com microfone sintético. O microfone físico segue pendente.
 
-`src/main/stage-host.ts` é a lógica inteira. Electron **não** é importado ali:
-a plataforma entra por `StageHostDeps` (`createWindow`, `terminate`, relógio,
-pid). Esse é o mesmo idioma do `airi-stage-manager.ts` atual, onde
-`spawnImpl`/`fuseImpl` existem "for tests" e são o motivo de o ciclo de vida
-poder ser testado sem display.
+`src/main/stage-host.ts` concentra o ciclo de vida da janela sem importar
+Electron. A plataforma entra por `StageHostDeps`. O ponto de entrada e
+o preload são as fronteiras Electron. Chat, voz e transcrição têm
+serviços próprios no Main.
 
 ```bash
-cd lia/stage && node --experimental-strip-types --test "test/*.test.ts"
-# 9 testes, 9 pass
+cd lia/stage
+corepack pnpm run build
+corepack pnpm run test
 ```
 
-`src/main/index.ts` é o único arquivo que conhece Electron. Se ele crescer, a
-fronteira está errada.
-
-**O que este Stage não tem:** personagem real (é um placeholder declarado), voz,
-memória, animações, multi-monitor. Nada disso foi observado funcionando.
+Ainda faltam avatar, animações, presença em múltiplos monitores,
+persistência da conversa e paridade com os provedores do Stage legado.
 
 ---
 
@@ -166,12 +163,12 @@ cd lia/launcher && node --experimental-strip-types --test "test/*.test.ts"
 | Item | Estado |
 | --- | --- |
 | Contratos (154 testes) | **PASS**, executado em cópia sem `airi/` |
-| Stage (9 testes) | **PASS**, executado |
-| Launcher (8 testes) | **PASS**, executado |
+| Stage próprio (16 testes) | **PASS**, executado |
+| Seleção de alvo (`lia/launcher`, 8 testes) | **PASS**, executado |
 | Teste de mutação do Stage | **detecta** o bug de declarar pronto antes da hora |
 | Janela inicial do Stage próprio | **PASS** no Electron 43.4.1 no Windows |
-| Encerramento sem órfão no Windows | **NÃO EXECUTADO** |
-| Typecheck (`tsc`) | **NÃO EXECUTADO** — não instalado |
+| Encerramento cooperativo do Stage próprio no Windows | **PASS** para o processo principal e a remoção do registro |
+| Microfone e saída de áudio físicos | **NÃO EXECUTADO** |
 
 Este projeto exige Windows real para o gate visual. Teste unitário verde **não**
 é esse gate.
