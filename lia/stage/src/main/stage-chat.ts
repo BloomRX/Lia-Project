@@ -1,12 +1,15 @@
 import type { LiaProductConfigRead } from '@lia/core/product/config'
 
 import type { TransportSnapshot } from '../../../core/src/transports/contracts.ts'
+import type { LiaMemoryResult } from '../../../core/src/memory/contracts.ts'
 
 import { credentialForDestination } from '../../../core/src/credentials/destination.ts'
+import { LIA_MEMORY_LIMITS } from '../../../core/src/memory/contracts.ts'
 import { findLiaAiProviderByStageProviderId, ProviderRegistry, ProviderRuntime } from '../../../core/src/providers/index.ts'
 
 interface StageChatDependencies {
   fetch?: typeof globalThis.fetch
+  recallMemory?: (query: string) => Promise<LiaMemoryResult<string>>
   readCredential?: (providerId: string) => string | undefined
   readProduct: () => Promise<LiaProductConfigRead>
   readTransports: () => Promise<TransportSnapshot>
@@ -23,7 +26,7 @@ interface Turn {
   assistant: string
 }
 
-export function createStageChat({ fetch, readCredential, readProduct, readTransports }: StageChatDependencies) {
+export function createStageChat({ fetch, recallMemory, readCredential, readProduct, readTransports }: StageChatDependencies) {
   let history: { destination: string, model: string, providerId: string, turns: Turn[] } | undefined
 
   function unavailableConfiguration(): StageChatResult {
@@ -72,6 +75,9 @@ export function createStageChat({ fetch, readCredential, readProduct, readTransp
         history = { destination: destination.href, model: modelId, providerId, turns: [] }
       const current = history
       const text = input.trim()
+      const memory = definition.localOnly ? await recallMemory?.(text.slice(0, LIA_MEMORY_LIMITS.query)) : undefined
+      signal.throwIfAborted()
+      const context = memory?.ok ? memory.value : ''
 
       const registry = new ProviderRegistry()
       registry.register({ id: providerId, protocol: 'chat-completions', credentialRequired: definition.requiresApiKey })
@@ -79,6 +85,7 @@ export function createStageChat({ fetch, readCredential, readProduct, readTransp
       const response = await runtime.chat({ providerId, baseUrl: record.baseUrl }, {
         model: modelId,
         messages: [
+          ...(context ? [{ role: 'system' as const, content: context }] : []),
           ...current.turns.flatMap(turn => [
             { role: 'user', content: turn.user },
             { role: 'assistant', content: turn.assistant },
@@ -89,7 +96,8 @@ export function createStageChat({ fetch, readCredential, readProduct, readTransp
       signal.throwIfAborted()
       if (credential && response.text.includes(credential))
         return { ok: false, code: 'unavailable' }
-      current.turns = [...current.turns, { user: text, assistant: response.text.slice(0, 8_000) }].slice(-historyTurns)
+      if (!context)
+        current.turns = [...current.turns, { user: text, assistant: response.text.slice(0, 8_000) }].slice(-historyTurns)
       return { ok: true, text: response.text }
     }
     catch {

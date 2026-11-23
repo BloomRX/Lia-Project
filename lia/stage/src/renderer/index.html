@@ -45,8 +45,23 @@
         <p id="voice-status" role="status"></p>
       </div>
       <p id="status" role="status"></p>
+      <details>
+        <summary>Memória</summary>
+        <p>As notas ficam neste perfil e só entram em conversas com a IA local.</p>
+        <fieldset id="memory-controls" disabled>
+          <label><input id="memory-enabled" type="checkbox"> Usar minhas notas</label>
+          <div>
+            <label for="memory-note">Nova nota</label>
+            <textarea id="memory-note" rows="2" maxlength="500"></textarea>
+            <button id="memory-save" type="button">Salvar nota</button>
+          </div>
+          <ul id="memory-entries" aria-label="Notas salvas"></ul>
+        </fieldset>
+        <p id="memory-status" role="status"></p>
+      </details>
     </main>
     <script type="module" src="./chat.js"></script>
     <script type="module" src="./recording.js"></script>
+    <script type="module" src="./memory.js"></script>
   </body>
 </html>

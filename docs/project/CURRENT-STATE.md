@@ -2,6 +2,8 @@
 
 ## 0. Estado agora
 
+- **Memória na prévia.** Notas e preferência persistem no perfil do Stage próprio. O Electron no Windows com serviço HTTP local sintético confirmou recuperação após reiniciar e envio do contexto apenas enquanto habilitado. A migração do perfil legado segue pendente.
+
 - **Prévia própria.** O Stage em `lia/stage` usa a seleção canônica de STT. O Main pede consentimento por gravação para adaptadores dedicados via HTTPS. Os testes automatizados cobrem recusa, cancelamento e mudança de configuração durante a confirmação. O diálogo nativo e o envio HTTPS real ainda precisam de gate Windows.
 
 - **Entrada atual.** `Lia.bat` inicia o Launcher pelo workspace `airi/`. O Stage ativo é `airi/apps/stage-tamagotchi`; `lia/stage` é um protótipo.

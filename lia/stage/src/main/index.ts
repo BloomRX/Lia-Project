@@ -1,4 +1,5 @@
 import type { LiaRuntimeService } from '../../../core/src/runtime/index.ts'
+import type { LiaMemoryMutation } from '../../../core/src/memory/contracts.ts'
 
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
@@ -12,9 +13,10 @@ import { createWindowsUserCipher } from '@lia/core/secrets/windows-user-cipher'
 import { createKokoroVoiceEngine } from '@lia/core/voice/engines/kokoro'
 import { app, BrowserWindow, dialog, ipcMain, safeStorage } from 'electron'
 
+import { createLiaMemoryStore } from '../../../core/src/memory/store.ts'
 import { startLiaRuntimeService } from '../../../core/src/runtime/index.ts'
 import { createTransportRepository } from '../../../core/src/transports/repository.ts'
-import { stageChatCancel, stageChatSend, stageChatSpeak, stageMicrophoneArm, stageTranscribe, stageTranscriptionCancel } from '../shared/chat-ipc.ts'
+import { stageChatCancel, stageChatSend, stageChatSpeak, stageMemoryGet, stageMemoryMutate, stageMicrophoneArm, stageTranscribe, stageTranscriptionCancel } from '../shared/chat-ipc.ts'
 import { createStageChat } from './stage-chat.ts'
 import { createStageHost } from './stage-host.ts'
 import { createStageTranscription } from './stage-transcription.ts'
@@ -51,7 +53,9 @@ async function main(): Promise<void> {
       encrypt: value => safeStorage.encryptString(value),
     }),
   })
+  const memory = createLiaMemoryStore({ filePath: join(app.getPath('userData'), 'lia-memory.json') })
   const send = createStageChat({
+    recallMemory: memory.recall,
     readCredential: providerId => vault.getSecret(providerId, 'apiKey'),
     readProduct,
     readTransports: repository.read,
@@ -76,6 +80,10 @@ async function main(): Promise<void> {
   const authorized = (event: Electron.IpcMainInvokeEvent) =>
     window && !window.isDestroyed() && event.sender === window.webContents
     && event.senderFrame === window.webContents.mainFrame
+
+  ipcMain.handle(stageMemoryGet, event => authorized(event) ? memory.get() : { ok: false, code: 'invalid' })
+  ipcMain.handle(stageMemoryMutate, (event, request: LiaMemoryMutation) =>
+    authorized(event) && !active ? memory.mutate(request) : { ok: false, code: 'unavailable' })
 
   ipcMain.handle(stageChatSend, async (event, input: unknown) => {
     if (!authorized(event))

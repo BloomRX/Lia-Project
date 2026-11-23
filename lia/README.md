@@ -161,8 +161,12 @@ o preload são as fronteiras Electron. Chat, voz e transcrição têm
 serviços próprios no Main.
 
 O armazenamento e a busca lexical da memória ficam em `lia/core/src/memory`.
-O Stage legado usa esse módulo por meio do IPC existente. A prévia própria
-ainda precisa integrar a memória à conversa e às preferências.
+O Stage legado usa esse módulo por meio do IPC existente. Na prévia própria,
+as notas ficam no perfil da prévia e a consulta começa desativada. A pessoa
+pode salvar ou remover notas e escolher se entram na conversa local.
+O Electron no Windows, com serviço HTTP local sintético, confirmou
+persistência após reinício e ausência do contexto após desativar a opção.
+As notas do perfil legado ainda precisam de um caminho de migração.
 
 ```bash
 cd lia/stage

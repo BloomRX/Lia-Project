@@ -78,6 +78,9 @@ test('uses a bound chat credential only for the configured HTTPS origin', async 
       return Response.json({ choices: [{ message: { content: reply } }] })
     },
     readCredential: () => secret,
+    async recallMemory() {
+      assert.fail('Remote chat must never read the memory store')
+    },
     async readProduct() {
       return { filePath: '', status: 'ok', value: { provider: { chat: { preferred: { providerId: 'groq', modelId: 'test-model' } } } } }
     },
@@ -113,8 +116,12 @@ test('carries completed turns and keeps history out of a different model', async
     const address = server.address()
     assert.ok(address && typeof address !== 'string')
     let modelId = 'test-model'
+    let useMemory = false
     const local = { ...record, baseUrl: `http://127.0.0.1:${address.port}/v1`, modelIds: ['test-model', 'new-model'] }
     const send = createStageChat({
+      async recallMemory() {
+        return { ok: true, value: useMemory ? 'Contexto pessoal de teste' : '' }
+      },
       async readProduct() {
         return { filePath: '', status: 'ok', value: { provider: { chat: { preferred: { providerId: 'local-chat', modelId } } } } }
       },
@@ -134,6 +141,12 @@ test('carries completed turns and keeps history out of a different model', async
     assert.equal((await submit('Novo modelo')).ok, true)
     assert.equal(requests[2]!.model, 'new-model')
     assert.deepEqual(requests[2]!.messages, [{ role: 'user', content: 'Novo modelo' }])
+    useMemory = true
+    assert.equal((await submit('Com memória')).ok, true)
+    assert.deepEqual(requests[3]!.messages[0], { role: 'system', content: 'Contexto pessoal de teste' })
+    useMemory = false
+    assert.equal((await submit('Sem memória')).ok, true)
+    assert.deepEqual(requests[4]!.messages.map(message => message.content), ['Novo modelo', 'Resposta', 'Sem memória'])
   }
   finally {
     server.closeAllConnections()

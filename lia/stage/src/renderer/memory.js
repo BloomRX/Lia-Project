@@ -1,0 +1,69 @@
+const memory = window.liaStageMemory
+const controls = document.querySelector('#memory-controls')
+const enabled = document.querySelector('#memory-enabled')
+const note = document.querySelector('#memory-note')
+const save = document.querySelector('#memory-save')
+const entries = document.querySelector('#memory-entries')
+const status = document.querySelector('#memory-status')
+let current
+
+function render(state) {
+  current = state
+  enabled.checked = state.enabled
+  entries.replaceChildren()
+  for (const entry of state.entries) {
+    const row = document.createElement('li')
+    const text = document.createElement('span')
+    text.textContent = entry.text
+    const remove = document.createElement('button')
+    remove.type = 'button'
+    remove.textContent = 'Remover'
+    remove.addEventListener('click', async () => {
+      if (window.confirm('Remover esta nota?')) {
+        await run(() => memory.mutate({ action: 'remove', id: entry.id }), 'Nota removida.')
+        note.focus()
+      }
+    })
+    row.append(text, ' ', remove)
+    entries.append(row)
+  }
+}
+
+async function run(operation, success = '') {
+  controls.disabled = true
+  status.textContent = 'Aguarde…'
+  try {
+    const result = await operation()
+    if (!result.ok)
+      throw new Error('memory')
+    render(result.value)
+    status.textContent = success
+    return true
+  }
+  catch {
+    if (current)
+      enabled.checked = current.enabled
+    status.textContent = 'Não foi possível acessar ou alterar a memória. Tente novamente após o envio da mensagem.'
+    return false
+  }
+  finally {
+    controls.disabled = false
+  }
+}
+
+enabled.addEventListener('change', () => {
+  void run(() => memory.mutate({ action: 'enable', enabled: enabled.checked }), 'Preferência salva.')
+})
+save.addEventListener('click', async () => {
+  const text = note.value.trim()
+  if (!text) {
+    status.textContent = 'Escreva uma nota para salvar.'
+    note.focus()
+    return
+  }
+  if (await run(() => memory.mutate({ action: 'save', text }), 'Nota salva.'))
+    note.value = ''
+  note.focus()
+})
+
+void run(() => memory.get())
