@@ -6,14 +6,13 @@ import type { LiaSecretCipher, LiaSecretVault } from '@lia/core/secrets/vault'
 import type { LiaCustomVoiceProfile, LiaVoiceProfileImportRequest } from '@lia/core/voices/types'
 
 import type { AiConnectionStartCode, AiConnectionStartReadiness } from './ai-connection-service'
-import type { AiriStageState } from './airi-stage-manager'
+import type { NativeStageState } from './native-stage-manager'
 import type { ShutdownReport } from './shutdown-coordinator'
 
 import process from 'node:process'
 
 import { access, stat } from 'node:fs/promises'
-import { dirname, join, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { join } from 'node:path'
 
 import { bindCredential, credentialForDestination, unboundCredential } from '@lia/contracts/credentials/destination'
 import { CredentialOwnerError, isPublicCredentialReference, startCredentialOwner } from '@lia/contracts/credentials/owner-channel'
@@ -34,7 +33,7 @@ import { createLiaSecretVault } from '@lia/core/secrets/vault'
 import { createLiaVoiceProfileStore, findMissingFiles } from '@lia/core/voices/profiles'
 
 import { createAiConnectionService } from './ai-connection-service'
-import { AiriStageManager } from './airi-stage-manager'
+import { NativeStageManager } from './native-stage-manager'
 import { sameProfileDirectory } from './launcher-profile'
 import { describeDiscovery, discoverRuntime, runtimeStateDirFor, stopDiscoveredRuntime } from './runtime-discovery'
 import { ShutdownCoordinator } from './shutdown-coordinator'
@@ -128,7 +127,7 @@ export interface LiaHomeStatus {
   paths: LiaProductPaths
   stage: {
     available: boolean
-    state: AiriStageState
+    state: NativeStageState
   }
   voices: {
     count: number
@@ -165,7 +164,7 @@ export interface LiaHostDeps {
   enableCredentialOwner?: boolean
   credentialOwnerFactory?: typeof startCredentialOwner
   launcherChromiumProfile?: string
-  packagedStage?: ConstructorParameters<typeof AiriStageManager>[0]['packagedStage']
+  packagedStage?: ConstructorParameters<typeof NativeStageManager>[0]['packagedStage']
   /**
    * The OS cipher for the secret vault (injected by the Electron entry from
    * `safeStorage`; tests inject an identity cipher).
@@ -187,14 +186,13 @@ export interface LiaHostDeps {
   /** Never-crashes platform override for tests. */
   platform?: NodeJS.Platform
   /** Where the AIRI monorepo lives (default: sibling of the app package). */
-  workspaceRoot?: string
   /**
    * 'detached' (padrão no produto) faz o Stage sobreviver ao Launcher.
    * 'attached' existe para testes e para o fluxo antigo de desenvolvimento.
    */
   stageMode?: 'attached' | 'detached'
   /** Test seam: the stage manager is replaceable without touching spawn. */
-  stageManagerFactory?: (deps: ConstructorParameters<typeof AiriStageManager>[0]) => AiriStageManager
+  stageManagerFactory?: (deps: ConstructorParameters<typeof NativeStageManager>[0]) => NativeStageManager
 }
 
 /**
@@ -232,7 +230,7 @@ export interface LiaHost {
   /** The resolved bridge contract for THIS launch (built fresh from disk). */
   bridgeConfig: () => Promise<LiaBridgeConfig>
   /** The "Conversar com Lia" pipeline (architecture items 9/12). */
-  conversar: () => Promise<AiriStageState>
+  conversar: () => Promise<NativeStageState>
   /** The supervisor's single graceful-shutdown officer (Phase 7.1, items 1/3). */
   coordinator: ShutdownCoordinator
   homeStatus: () => Promise<LiaHomeStatus>
@@ -246,8 +244,8 @@ export interface LiaHost {
   productSnapshot: () => Promise<LiaProductConfigSnapshot | undefined>
   /** Graceful supervisor shutdown; safe to call more than once (single-flight). */
   quit: () => Promise<ShutdownReport>
-  stage: AiriStageManager
-  stageStatus: () => Promise<AiriStageState>
+  stage: NativeStageManager
+  stageStatus: () => Promise<NativeStageState>
   /**
    * O Runtime como processo independente: descobrir (sem PID), pedir parada
    * cooperativa e saber se há um vivo. Fechar o Launcher NÃO o encerra.
@@ -361,7 +359,6 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
   // The canonical runtime facts come from the product document; the
   // launcher's boot NEVER starts a voice runtime (contract item 12).
 
-  const workspaceRoot = deps.packagedStage ? undefined : deps.workspaceRoot ?? defaultWorkspaceRoot()
   let credentialOwner: Awaited<ReturnType<typeof startCredentialOwner>> | undefined
   let credentialOwnerClosing: Promise<void> = Promise.resolve()
   async function revokeCredentialOwner() {
@@ -376,7 +373,7 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
   const runtimeStateDir = deps.nativeStagePreview ? join(productRuntimeDir, 'native-preview') : productRuntimeDir
   const discoverOwnRuntime = async () => await discoverRuntime(runtimeStateDir, { timeoutMs: 1_500 })
 
-  const stage = (deps.stageManagerFactory ?? ((d: ConstructorParameters<typeof AiriStageManager>[0]) => new AiriStageManager(d)))({
+  const stage = (deps.stageManagerFactory ?? ((d: ConstructorParameters<typeof NativeStageManager>[0]) => new NativeStageManager(d)))({
     packagedStage: deps.packagedStage,
     onLog: line => emit('lia-app.stage-log', line),
     onState: (state) => {
@@ -395,7 +392,6 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
       emit('lia-app.runtime-stopped', `stopped=${String(result.stopped)} forced=${String(result.forced)}`)
       return result
     },
-    workspaceRoot,
   })
 
   // Serialize the ENTIRE save (including rollback) with launch preparation.
@@ -735,7 +731,7 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
    * not zero the voice list, and a detection that never ran must surface
    * "unknown" - never a fabricated `false`.
    */
-  const stageStatus = async (): Promise<AiriStageState> => {
+  const stageStatus = async (): Promise<NativeStageState> => {
     const state = stage.state()
     if (state.phase !== 'stopped')
       return state
@@ -1236,17 +1232,4 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
     updateConfig,
     vault,
   }
-}
-
-/**
- * The AIRI workspace the launcher manages the stage from: the app sits at
- * `<repo>/lia/desktop`, so the AIRI workspace is at a sibling path. `LIA_AIRI_ROOT` overrides (QA rigs, packaged layout).
- */
-function defaultWorkspaceRoot(): string {
-  const override = process.env.LIA_AIRI_ROOT?.trim()
-  if (override)
-    return resolve(override)
-  // src/main (or out/main) -> app root -> lia -> repository root
-  const here = dirname(fileURLToPath(import.meta.url))
-  return resolve(here, '..', '..', '..', '..', 'airi')
 }

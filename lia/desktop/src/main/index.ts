@@ -244,7 +244,7 @@ async function bootstrap(): Promise<void> {
 
   // DEVFLOW-ONLY. Replaces the human "click Conversar com Lia" step by calling
   // the SAME host.conversar() the button reaches through lia:stage:start, so
-  // the round still validates Lia.bat -> Launcher -> AiriStageManager -> Stage.
+  // the round still validates Lia.bat -> Launcher -> NativeStageManager -> Stage.
   // Inert unless LIA_DEVFLOW_AUTORUN=conversar; a normal launch still needs the
   // explicit click. Not awaited: boot must not block on the stage, and the
   // stage manager's single-flight already collapses any concurrent start.

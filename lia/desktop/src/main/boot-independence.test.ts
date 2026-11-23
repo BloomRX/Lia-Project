@@ -3,7 +3,7 @@ import { join } from 'node:path'
 
 import { describe, expect, it, vi } from 'vitest'
 
-import { AiriStageManager } from './airi-stage-manager'
+import { NativeStageManager } from './native-stage-manager'
 import { createLiaHost } from './lia-host'
 import { fixtureEnv, identityCipher, makeLiaHome } from './test-helpers'
 
@@ -73,7 +73,6 @@ describe('b. Lia App boots with the AIRI folder missing', () => {
     const host = createLiaHost({
       cipher: identityCipher,
       env: fixtureEnv(home),
-      workspaceRoot: '/definitely/missing/airi-workspace',
     })
 
     const status = await host.homeStatus()
@@ -91,7 +90,7 @@ describe('c. Opening Lia never spawns the stage', () => {
   it('no host surface besides conversar() calls stage.start', async () => {
     const home = await makeLiaHome()
     const stageStart = vi.fn(async (_options?: { env?: Record<string, string | undefined> }) => ({ logTail: [], phase: 'running' as const }))
-    const factory = vi.fn((_d: ConstructorParameters<typeof AiriStageManager>[0]) => new AiriStageManager({
+    const factory = vi.fn((_d: ConstructorParameters<typeof NativeStageManager>[0]) => new NativeStageManager({
       spawnImpl: (() => ({
         emit: () => {},
         exitCode: 0,
@@ -99,9 +98,8 @@ describe('c. Opening Lia never spawns the stage', () => {
         once: () => {},
         pid: 1,
       })) as never,
-      workspaceRoot: '/missing',
     }))
-    const factoryWithMockStart = vi.fn((d: ConstructorParameters<typeof AiriStageManager>[0]) => {
+    const factoryWithMockStart = vi.fn((d: ConstructorParameters<typeof NativeStageManager>[0]) => {
       const manager = factory(d)
       manager.start = stageStart
       return manager
@@ -111,7 +109,6 @@ describe('c. Opening Lia never spawns the stage', () => {
       cipher: identityCipher,
       env: fixtureEnv(home),
       stageManagerFactory: factoryWithMockStart,
-      workspaceRoot: '/missing',
     })
 
     // Every shot the boot window takes: status, config, voices, bridge env.

@@ -61,7 +61,6 @@ function makeVoiceHost(options: {
         state: () => ({ logTail: [], phase: 'running' as const }),
         stop: async () => { order.push('stage-stop') },
       } as never),
-      workspaceRoot: '/missing',
     })
     await host.vault.setSecret('openrouter', 'apiKey', 'sk-hidden-test')
     return { events, home, host, order }

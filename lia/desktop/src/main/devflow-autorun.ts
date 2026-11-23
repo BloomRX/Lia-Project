@@ -2,7 +2,7 @@
  * DEVFLOW-ONLY autorun: replaces the human "click Conversar com Lia" step.
  *
  * The M3.0b round exists to validate the REAL launch chain
- * `Lia.bat -> Launcher -> AiriStageManager -> Stage`. A DevFlow that bypassed
+ * `Lia.bat -> Launcher -> NativeStageManager -> Stage`. A DevFlow that bypassed
  * any link of it would be validating something the user never runs. So this
  * module does exactly one thing: when the launcher was started with
  * `LIA_DEVFLOW_AUTORUN=conversar`, it invokes the SAME `host.conversar()` that

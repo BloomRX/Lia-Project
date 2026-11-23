@@ -39,7 +39,6 @@ async function makeLocationHost() {
     cipher: identityCipher,
     env: fixtureEnv(home),
     onEvent: (event, detail) => events.push({ detail, event }),
-    workspaceRoot: '/missing',
   })
   return { events, home, host }
 }
@@ -51,7 +50,6 @@ async function makeInstalledHost(seam: (home: string) => Promise<boolean>) {
     cipher: identityCipher,
     env: fixtureEnv(home),
     inspectInstallImpl: seam,
-    workspaceRoot: '/missing',
   })
   return { home, host }
 }
@@ -94,7 +92,6 @@ describe('phase 7.4 G/H/I - the configured runtime root (generic, engine-neutral
       cipher: identityCipher,
       env: fixtureEnv(home),
       inspectInstallImpl: async () => false,
-      workspaceRoot: '/missing',
     })
     expect(await defaultSeam.runtimeLocationStatus()).toMatchObject({
       customActive: true, // the config the first host wrote persists here

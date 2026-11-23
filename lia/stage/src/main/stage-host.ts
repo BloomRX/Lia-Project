@@ -3,7 +3,7 @@
  *
  * Nao depende de Electron por import: toda a plataforma entra por
  * `StageHostDeps`. Esse e o mesmo idioma que o Launcher atual ja usa
- * (`airi-stage-manager.ts` injeta `spawnImpl`/`fuseImpl` explicitamente
+ * (`native-stage-manager.ts` injeta `spawnImpl`/`fuseImpl` explicitamente
  * "for tests"). A consequencia pratica e que o ciclo de vida inteiro roda em
  * teste headless, sem display e sem binario do Electron — que e justamente o
  * que nao existe em CI deste repositorio.

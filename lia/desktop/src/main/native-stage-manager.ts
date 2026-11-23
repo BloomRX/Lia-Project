@@ -1,61 +1,24 @@
-import type { RunAsNodeFuseState } from './node-runtime'
-import type { StageBuildPrerequisite, StagePrerequisiteOutcome } from './stage-build-prerequisite'
-
 import type { StdioOptions } from 'node:child_process'
 
 import { execFile, spawn } from 'node:child_process'
-import { existsSync, mkdirSync, openSync } from 'node:fs'
-import { basename, dirname, join } from 'node:path'
+import { mkdirSync, openSync } from 'node:fs'
+import { basename, dirname } from 'node:path'
 import { env as nodeEnv, platform as nodePlatform } from 'node:process'
 
-import { resolveNodeInvocation } from './node-runtime'
-import { createCoreAgentBuildPrerequisite } from './stage-build-prerequisite'
+/** Owns the native Stage process from launch through observed exit. */
+export type NativeStagePhase = 'error' | 'running' | 'starting' | 'stopped' | 'stopping'
 
-/**
- * AiriStageManager (Phase 7, architecture items 9-10).
- *
- * THE contract for "Conversar com Lia": the user opens the launcher, the
- * launcher starts the stage - always as a SEPARATE child process, never
- * embedded - with the launch facts the Lia/AIRI bridge defines, and owns its
- * lifecycle while Lia is open.
- *
- * Invariants:
- *  - single-flight: concurrent `start()` calls collapse into ONE spawn. A
- *    double click on "Conversar" never produces two stages;
- *  - no auto-start: nothing in the launcher boot path calls `start()`. The
- *    stage only rises from the explicit user action (contract item 11);
- *  - honest states: 'running' means the child exists AND has given its ready
- *    signal (electron-vite reports the dev server / the window is up), not
- *    merely "spawn returned";
- *  - the stop path kills the TREE on Windows (`taskkill /PID /T /F`), because
- *    the `pnpm -> electron-vite -> electron` chain orphans grandchildren
- *    of a plain SIGTERM - the same round-7 lesson the runtime manager
- *    teaches;
- *  - the stopped/error state never invents percentages and never hides the
- *    exit code.
- *
- * Deliberately NOT here (contract items 10/19): updaters, package
- * installers, health probes of the stage UI. Dev launches the stage's
- * electron-vite entrypoint DIRECTLY with `node` inside the AIRI workspace -
- * it does NOT run `pnpm dev:tamagotchi` and never reads the stage's
- * `package.json`, which is why the Phase 8.0D-M3.0b build prerequisite lives
- * here rather than in that script. Production will point at the packaged
- * executable through the same call shape.
- */
-
-export type AiriStagePhase = 'error' | 'running' | 'starting' | 'stopped' | 'stopping'
-
-export interface AiriStageState {
+export interface NativeStageState {
   /** Tail of the stage stdout/stderr, for the diagnostics tab. */
   logTail: string[]
   message?: string
-  phase: AiriStagePhase
+  phase: NativeStagePhase
   pid?: number
   /** Exit code observed when the child went away, if any. */
   lastExitCode?: null | number
 }
 
-export interface AiriStageManagerDeps {
+export interface NativeStageManagerDeps {
   packagedStage?: () => { command: string, args: string[], cwd: string }
   /**
    * Extra env for the child (LIA_* launch facts + shared user data),
@@ -66,40 +29,10 @@ export interface AiriStageManagerDeps {
   execFileImpl?: typeof execFile
   /** Lines the manager decides are interesting (state transitions only). */
   onLog?: (line: string) => void
-  onState?: (state: AiriStageState) => void
+  onState?: (state: NativeStageState) => void
   /** Platform override for tests. */
   platform?: NodeJS.Platform
-  /**
-   * Dev-only build prerequisite that must SUCCEED before the stage child is
-   * spawned (Phase 8.0D-M3.0b). Default: rebuild `@proj-airi/core-agent`,
-   * whose gitignored `dist/` the stage renderer imports and which nothing on
-   * the managed launch path used to compile. It runs INSIDE `start()`'s
-   * single-flight promise, so a double click cannot start two builds, and a
-   * failure aborts the launch instead of serving a stale renderer.
-   *
-   * It is a prerequisite, NOT the owned process: the stage child stays
-   * `node electron-vite.js dev` exactly as Phase 7.2 requires.
-   */
-  prerequisite?: StageBuildPrerequisite
   spawnImpl?: typeof spawn
-  /** For tests: resolving the Node runtime without touching the disk. */
-  existsImpl?: (path: string) => boolean
-  /** For tests: answering the runAsNode fuse read without a real binary. */
-  fuseImpl?: (execPath: string) => RunAsNodeFuseState
-  /** For tests: the environment the PATH scan reads, instead of `process.env`. */
-  runtimeEnv?: Record<string, string | undefined>
-  /**
-   * For tests: the runtime facts behind the executable decision. Under Vitest
-   * `process.versions` is plain Node, which is the blind spot that shipped the
-   * M3.0b defect, so tests inject an Electron-shaped value.
-   */
-  runtimeVersions?: { electron?: string }
-  /**
-   * The dev-server entry script the manager launches with `node`. Default:
-   * the stage package's own electron-vite bin, resolved as a FILE - never
-   * through a package-manager wrapper.
-   */
-  stageDevEntrypoint?: (stageDir: string) => string
   /**
    * 'detached' transforma o Stage em Runtime independente: o processo nasce em
    * um grupo próprio, sem pipes de stdout (que morreriam junto com este
@@ -129,39 +62,19 @@ export interface AiriStageManagerDeps {
    * only after the child's exit was observed.
    */
   stopGraceMs?: number
-  /**
-   * The AIRI monorepo root that holds `apps/stage-tamagotchi`. In dev the
-   * launcher resolves this from its own location; in production it will be
-   * the packaged stage root. If the folder does not exist the manager is
-   * honest about being unavailable instead of spawning into the void.
-   */
-  workspaceRoot?: string
 }
 
-/**
- * The dev-server entry as a concrete SCRIPT FILE (node runs it, no shell,
- * no package-manager wrapper). pnpm links the package's bin into
- * `node_modules/electron-vite/bin/`, so this path exists in any installed
- * workspace; missing files surface as an honest child 'error' event.
- */
-function stageDevEntrypointFor(stageDir: string, deps: AiriStageManagerDeps): string {
-  return deps.stageDevEntrypoint?.(stageDir)
-    ?? join(stageDir, 'node_modules', 'electron-vite', 'bin', 'electron-vite.js')
-}
-
-/** electron-vite dev speaks like Vite: "ready in N ms" when the dev server is listening. */
-const READY_SIGNAL = /ready in|Local:.*http|dev server/i
 const LOG_TAIL_MAX = 200
 
-export class AiriStageManager {
-  private currentState: AiriStageState = { logTail: [], phase: 'stopped' }
+export class NativeStageManager {
+  private currentState: NativeStageState = { logTail: [], phase: 'stopped' }
   private child: ReturnType<typeof spawn> | undefined
-  private starting: Promise<AiriStageState> | undefined
+  private starting: Promise<NativeStageState> | undefined
   private stopping: Promise<void> | undefined
 
-  constructor(private readonly deps: AiriStageManagerDeps) {}
+  constructor(private readonly deps: NativeStageManagerDeps) {}
 
-  state(): AiriStageState {
+  state(): NativeStageState {
     return { ...this.currentState, logTail: [...this.currentState.logTail] }
   }
 
@@ -175,26 +88,17 @@ export class AiriStageManager {
         return 'Stage indisponível'
       }
     }
-    const directory = this.stageDir()
-    return directory ? `node ${stageDevEntrypointFor(directory, this.deps)} dev` : 'Stage indisponível'
-  }
-
-  private stageDir(): string | undefined {
-    return this.deps.workspaceRoot && join(this.deps.workspaceRoot, 'apps', 'stage-tamagotchi')
+    return 'Stage indispon�vel'
   }
 
   isAvailable(): boolean {
-    if (this.deps.packagedStage) {
-      try {
-        return Boolean(this.deps.packagedStage())
-      }
-      catch { return false }
+    try {
+      return Boolean(this.deps.packagedStage?.())
     }
-    const directory = this.stageDir()
-    return Boolean(directory && existsSync(directory))
+    catch { return false }
   }
 
-  async start(options: { env?: Record<string, string | undefined> } = {}): Promise<AiriStageState> {
+  async start(options: { env?: Record<string, string | undefined> } = {}): Promise<NativeStageState> {
     // Single-flight: the second click joins the first launch. There is no
     // "start while starting" path, and therefore no duplicate stage.
     if (this.starting)
@@ -314,16 +218,15 @@ export class AiriStageManager {
     })
   }
 
-  private async spawnStage(passEnv?: Record<string, string | undefined>): Promise<AiriStageState> {
-    let packaged: ReturnType<NonNullable<AiriStageManagerDeps['packagedStage']>> | undefined
+  private async spawnStage(passEnv?: Record<string, string | undefined>): Promise<NativeStageState> {
+    let packaged: ReturnType<NonNullable<NativeStageManagerDeps['packagedStage']>> | undefined
     try {
       packaged = this.deps.packagedStage?.()
     }
     catch {
       // A missing executable is a public availability error, not a fallback.
     }
-    const stageDir = packaged?.cwd ?? (this.deps.packagedStage ? undefined : this.stageDir())
-    if (!stageDir || (!packaged && !existsSync(stageDir))) {
+    if (!packaged) {
       this.setState({
         message: 'The Lia stage could not be found on this machine.',
         phase: 'error',
@@ -333,99 +236,12 @@ export class AiriStageManager {
 
     this.setState({ phase: 'starting' })
 
-    // Phase 8.0D-M3.0b: the managed launch compiles the stage's workspace
-    // dependencies BEFORE the renderer is served, because the renderer imports
-    // them from their built `dist/` and a stale artifact fails at ESM link time
-    // - a transparent window with nothing in it and nothing in the log.
-    //
-    // `applies()` is checked first and is synchronous on purpose: when there is
-    // no source workspace (packaged production) nothing is awaited, so the
-    // spawn below still happens in the same tick and the Phase 7.2 ownership
-    // semantics the tests pin are byte-for-byte unchanged.
-    const prerequisite = !packaged && this.deps.workspaceRoot
-      ? this.deps.prerequisite ?? createCoreAgentBuildPrerequisite({ workspaceRoot: this.deps.workspaceRoot })
-      : undefined
-    if (prerequisite?.applies()) {
-      this.deps.onLog?.(`stage-prerequisite name=${prerequisite.name} state=starting`)
-      let outcome: StagePrerequisiteOutcome
-      try {
-        outcome = await prerequisite.run()
-      }
-      catch {
-        // A rejected build must leave starting and release the single-flight
-        // launch for retry. Exception bodies can contain private build output.
-        outcome = { ok: false, reason: 'unexpected-error' }
-      }
-      if (!outcome.ok) {
-        this.deps.onLog?.(
-          `stage-prerequisite name=${prerequisite.name} state=failed reason=${outcome.reason ?? 'unknown'}`,
-        )
-        // Honest error, no invented cause and no launch: starting the stage
-        // against a known-stale artifact is the bug this prevents.
-        this.setState({
-          message: 'The Lia stage could not be prepared: its build did not succeed.',
-          phase: 'error',
-        })
-        return this.state()
-      }
-      this.deps.onLog?.(
-        `stage-prerequisite name=${prerequisite.name} state=${outcome.skipped ? 'skipped' : 'succeeded'}`
-        + `${outcome.reason ? ` reason=${outcome.reason}` : ''}`,
-      )
-    }
-
-    /**
-     * THE ownership fix (QA items 5-7). The old chain was
-     * `pnpm -> cmd shim -> install-electron -> electron-vite -> electron`:
-     * a WRAPPER could exit while the Electron grandchild kept living, and
-     * this manager - holding only the wrapper's dead PID - reported
-     * "nothing this session started" while a window was visibly open.
-     *
-     * The fix is to spawn the dev-server executable DIRECTLY: our child is
-     * `node electron-vite.js dev`, the exact process that parents the
-     * Electron window. It lives for the whole session (its exit IS the
-     * stage's exit), `holdsOwnedStage` stays truthful, and taskkill /T
-     * walks the real tree. As a bonus the Windows DEP0190 route is gone:
-     * no `shell` option, no cmd intermediary, arguments stay an array.
-     */
-    const spawnImpl = this.deps.spawnImpl ?? spawn
-    // This is the one child that must never be given `ELECTRON_RUN_AS_NODE`:
-    // `electron-vite` launches the window with
-    // `spawn(electronPath, [entry], { stdio: 'inherit' })` - no `env` option -
-    // so the child's environment reaches the Electron app verbatim, and a
-    // leaked variable would start the WINDOW as plain Node: no window at all.
-    // `resolveNodeInvocation` therefore refuses here rather than falling back
-    // to Electron-as-Node, and we fail closed instead of spawning an Electron
-    // app that would parent nothing. Ownership is unchanged: the build stays an
-    // awaited prerequisite, never the owned Stage process.
-    const runtime = packaged
-      ? { kind: 'packaged' as const, command: packaged.command }
-      : resolveNodeInvocation({
-          childLaunchesElectron: true,
-          env: this.deps.runtimeEnv,
-          existsImpl: this.deps.existsImpl,
-          fuseImpl: this.deps.fuseImpl,
-          platform: this.deps.platform ?? nodePlatform,
-          versions: this.deps.runtimeVersions,
-        })
-    if (runtime.kind === 'unavailable') {
-      // The reason is a static string from node-runtime.ts: no PATH entries,
-      // no environment values, no secrets.
-      this.deps.onLog?.(`stage-runtime state=unavailable reason=${runtime.reason}`)
-      this.setState({
-        message: 'The Lia stage could not start: no Node runtime was available to run it.',
-        phase: 'error',
-      })
-      return this.state()
-    }
-    this.deps.onLog?.(`stage-runtime kind=${runtime.kind}`)
     const stageEnv = { ...nodeEnv, ...this.deps.childEnv, ...passEnv }
     delete stageEnv.ELECTRON_RUN_AS_NODE
 
     const detached = this.deps.mode === 'detached'
-    const command = runtime.command
-    const args = packaged?.args ?? [stageDevEntrypointFor(stageDir, this.deps), 'dev']
-    const cwd = stageDir
+    const { command, args, cwd } = packaged
+    const spawnImpl = this.deps.spawnImpl ?? spawn
     let child: ReturnType<typeof spawn>
     if (detached) {
       // Sem arquivo de log não há diagnóstico, e um pipe fechado mataria o
@@ -445,16 +261,10 @@ export class AiriStageManager {
       child.unref()
     this.child = child
     this.setState({ phase: 'starting', pid: child.pid })
-    // The real executable, never a hardcoded "node": this line is the only
-    // evidence of what was actually spawned, and printing a word that is only
-    // sometimes true is how an Electron executable stayed invisible in the
-    // Windows logs.
-    this.deps.onLog?.(packaged
-      ? `spawn: ${basename(runtime.command)} (pid ${String(child.pid)})`
-      : `spawn: ${basename(runtime.command)} ${args[0]} dev (pid ${String(child.pid)})`)
+    this.deps.onLog?.(`spawn: ${basename(command)} (pid ${String(child.pid)})`)
 
     if (this.deps.mode === 'detached' && this.deps.probeReady) {
-      return await new Promise<AiriStageState>((resolve) => {
+      return await new Promise<NativeStageState>((resolve) => {
         const grace = this.deps.startGraceMs ?? 180_000
         const startedAt = Date.now()
         let readySeen = false
@@ -512,7 +322,7 @@ export class AiriStageManager {
       })
     }
 
-    return await new Promise<AiriStageState>((resolve) => {
+    return await new Promise<NativeStageState>((resolve) => {
       const grace = this.deps.startGraceMs ?? 180_000
       let readySeen = false
 
@@ -525,7 +335,7 @@ export class AiriStageManager {
       }, grace)
       timer.unref?.()
 
-      const finish = (state: AiriStageState) => {
+      const finish = (state: NativeStageState) => {
         clearTimeout(timer)
         resolve(state)
       }
@@ -540,7 +350,7 @@ export class AiriStageManager {
           if (line.trim())
             this.deps.onLog?.(line)
         }
-        if ((packaged ? text.includes('[lia-stage] window-ready') : READY_SIGNAL.test(text)) && !readySeen) {
+        if (text.includes('[lia-stage] window-ready') && !readySeen) {
           readySeen = true
           this.setState({ phase: 'running', pid: child.pid })
           this.deps.onLog?.(`ready (pid ${String(child.pid)})`)
@@ -572,7 +382,7 @@ export class AiriStageManager {
     })
   }
 
-  private setState(partial: Partial<AiriStageState>): void {
+  private setState(partial: Partial<NativeStageState>): void {
     this.currentState = { ...this.currentState, ...partial }
     this.deps.onState?.(this.state())
   }
@@ -597,7 +407,7 @@ function waitForExit(exited: Promise<null | number>, ms: number): Promise<boolea
   })
 }
 
-function appendLine(state: AiriStageState, line: string): void {
+function appendLine(state: NativeStageState, line: string): void {
   state.logTail.push(line)
   if (state.logTail.length > LOG_TAIL_MAX)
     state.logTail.splice(0, state.logTail.length - LOG_TAIL_MAX)

@@ -3,7 +3,7 @@
   "type": "module",
   "version": "0.0.1",
   "private": true,
-  "description": "The Lia launcher: the independent product shell of Lia (Phase 7). Owns product config, managed runtimes and the AIRI stage lifecycle. Boots with zero AIRI imports.",
+  "description": "The Lia launcher. Owns product configuration, managed runtimes and the native Stage lifecycle.",
   "main": "./out/main/index.js",
   "scripts": {
     "build": "pnpm run build:core && electron-vite build",

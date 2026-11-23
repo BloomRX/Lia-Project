@@ -1,12 +1,8 @@
 import { EventEmitter } from 'node:events'
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join, win32 } from 'node:path'
-import { execPath } from 'node:process'
 
 import { describe, expect, it, vi } from 'vitest'
 
-import { AiriStageManager } from './airi-stage-manager'
+import { NativeStageManager } from './native-stage-manager'
 
 /**
  * Tests D, E and F of the Phase 7 contract: "Conversar" spawns the stage
@@ -30,35 +26,18 @@ function fakeChild(options: { pid?: number } = {}) {
   return emitter
 }
 
-// The stage workspace exists iff `<root>/apps/stage-tamagotchi` does. The
-// fake spawn ignores the cwd, so the folder fixture is about availability
-// checks only.
-let stageWorkspace = ''
-async function makeStageWorkspace(): Promise<string> {
-  if (!stageWorkspace) {
-    const root = await mkdtemp(join(tmpdir(), 'lia-stage-ws-'))
-    await mkdir(join(root, 'apps', 'stage-tamagotchi'), { recursive: true })
-    await writeFile(join(root, 'apps', 'stage-tamagotchi', 'package.json'), '{}\n')
-    stageWorkspace = root
-  }
-  return stageWorkspace
-}
+const nativeTarget = () => ({ command: 'LiaStage.exe', args: ['native-entry'], cwd: 'native-stage' })
 
 describe('phase 7.2: ownership retained, spawn without shell (tests C/D/G)', () => {
   it('starts the packaged Stage without Node or package tools and waits for its visible renderer', async () => {
     const child = fakeChild()
     const spawnImpl = vi.fn(() => child as never)
-    const prerequisite = { name: 'unused', applies: vi.fn(() => true), run: vi.fn() }
-    const manager = new AiriStageManager({
+    const manager = new NativeStageManager({
       packagedStage: () => ({ command: 'C:\\Lia\\resources\\stage\\LiaStage.exe', args: [], cwd: 'C:\\Lia\\resources\\stage' }),
-      stageDevEntrypoint: () => { throw new Error('Packaged launch must not resolve a legacy entrypoint') },
       spawnImpl: spawnImpl as never,
-      prerequisite,
-      runtimeEnv: { PATH: '' },
     })
     const started = manager.start()
     expect(spawnImpl).toHaveBeenCalledWith('C:\\Lia\\resources\\stage\\LiaStage.exe', [], expect.objectContaining({ cwd: 'C:\\Lia\\resources\\stage' }))
-    expect(prerequisite.run).not.toHaveBeenCalled()
     child.stdout.emit('data', 'ready in 1ms')
     expect(manager.state().phase).toBe('starting')
     child.stdout.emit('data', '[lia-stage] window-ready')
@@ -67,61 +46,58 @@ describe('phase 7.2: ownership retained, spawn without shell (tests C/D/G)', () 
     child.emit('exit', 0)
   })
 
-  it('reports an unavailable native target even when a legacy workspace exists', async () => {
-    const spawnImpl = vi.fn()
-    const prerequisite = { name: 'legacy', applies: vi.fn(() => true), run: vi.fn() }
-    const manager = new AiriStageManager({
-      workspaceRoot: await makeStageWorkspace(),
-      packagedStage: () => { throw new Error('missing') },
+  it('reports a missing native target and retries when it becomes available', async () => {
+    const child = fakeChild()
+    const spawnImpl = vi.fn(() => child as never)
+    const resolveTarget = vi.fn<typeof nativeTarget>(() => { throw new Error('missing') })
+    const manager = new NativeStageManager({
+      packagedStage: resolveTarget,
       spawnImpl: spawnImpl as never,
-      prerequisite,
     })
     expect(manager.isAvailable()).toBe(false)
     expect((await manager.start()).phase).toBe('error')
     expect(spawnImpl).not.toHaveBeenCalled()
-    expect(prerequisite.applies).not.toHaveBeenCalled()
+
+    resolveTarget.mockImplementation(nativeTarget)
+    const retried = manager.start()
+    child.stdout.emit('data', '[lia-stage] window-ready')
+    expect((await retried).phase).toBe('running')
+    expect(spawnImpl).toHaveBeenCalledTimes(1)
+    child.emit('exit', 0)
   })
 
   it('g: the Windows spawn path carries NO shell option - the DEP0190 route is eliminated', async () => {
-    const root = await makeStageWorkspace()
     const child = fakeChild()
     const spawnImpl = vi.fn((..._args: unknown[]) => child as never)
     for (const platform of ['win32', 'linux'] as const) {
-      const manager = new AiriStageManager({
+      const manager = new NativeStageManager({
         platform,
         spawnImpl: spawnImpl as never,
-        workspaceRoot: root,
+        packagedStage: nativeTarget,
       })
       void manager.start()
       const options = spawnImpl.mock.calls.at(-1)?.[2] as { shell?: unknown } | undefined
       expect(options?.shell, `${platform} must not request a shell`).toBeUndefined()
       // oxlint-disable-next-line no-unsafe-optional-chaining -- test mock exists
-      const [entrypoint, sub] = spawnImpl.mock.calls.at(-1)?.[1] as string[]
-      expect(entrypoint).toContain('electron-vite')
-      expect(sub).toBe('dev')
+      const [entrypoint] = spawnImpl.mock.calls.at(-1)?.[1] as string[]
+      expect(entrypoint).toBe('native-entry')
     }
   })
 
   it('h: the stage child NEVER carries ELECTRON_RUN_AS_NODE - it would leak into the window', async () => {
-    const root = await makeStageWorkspace()
     const child = fakeChild()
     const spawnImpl = vi.fn((..._args: unknown[]) => child as never)
     for (const platform of ['win32', 'linux'] as const) {
-      const manager = new AiriStageManager({
+      const manager = new NativeStageManager({
         childEnv: { ELECTRON_RUN_AS_NODE: '1' },
         platform,
         spawnImpl: spawnImpl as never,
-        workspaceRoot: root,
+        packagedStage: nativeTarget,
       })
       void manager.start({ env: { ELECTRON_RUN_AS_NODE: '1' } })
       const options = spawnImpl.mock.calls.at(-1)?.[2] as
         | { env?: Record<string, string | undefined> }
         | undefined
-      // The build prerequisite MAY need that variable; the stage child must
-      // never get it. `electron-vite` launches the window with
-      // `spawn(electronPath, [entry], { stdio: 'inherit' })` - no `env` option -
-      // so everything here reaches the Electron app verbatim, and a leaked
-      // ELECTRON_RUN_AS_NODE would start the WINDOW as plain Node: no window.
       expect(
         options?.env?.ELECTRON_RUN_AS_NODE,
         `${platform} must not leak ELECTRON_RUN_AS_NODE into the stage child`,
@@ -129,81 +105,33 @@ describe('phase 7.2: ownership retained, spawn without shell (tests C/D/G)', () 
     }
   })
 
-  it('i: under Electron the Stage child is a REAL node from PATH, never the Electron binary', async () => {
-    const root = await makeStageWorkspace()
-    const child = fakeChild()
-    const spawnImpl = vi.fn((..._args: unknown[]) => child as never)
-    const nodeBin = win32.join('C:', 'tools', 'node.exe')
-    const logs: string[] = []
-    const manager = new AiriStageManager({
-      existsImpl: (path: string) => path === nodeBin,
-      onLog: line => logs.push(line),
-      platform: 'win32',
-      runtimeEnv: { PATH: ['C:\\nowhere', 'C:\\tools'].join(';') },
-      runtimeVersions: { electron: '43.4.1' },
-      spawnImpl: spawnImpl as never,
-      workspaceRoot: root,
-    })
-    void manager.start()
-    const command = spawnImpl.mock.calls.at(-1)?.[0] as string
-    expect(command).toBe(nodeBin)
-    expect(command).not.toBe(execPath)
-    // The chosen runtime is recorded, so a future Windows log says what ran.
-    expect(logs.includes('stage-runtime kind=node-from-path')).toBe(true)
-  })
-
-  it('j: under Electron with NO node on PATH it refuses to spawn instead of launching an app', async () => {
-    const root = await makeStageWorkspace()
-    const spawnImpl = vi.fn((..._args: unknown[]) => fakeChild() as never)
-    const logs: string[] = []
-    const manager = new AiriStageManager({
-      existsImpl: () => false,
-      // Even a provably enabled fuse must not buy this child the fallback.
-      fuseImpl: () => 'enabled',
-      onLog: line => logs.push(line),
-      platform: 'win32',
-      runtimeEnv: { PATH: 'C:\\nowhere' },
-      runtimeVersions: { electron: '43.4.1' },
-      spawnImpl: spawnImpl as never,
-      workspaceRoot: root,
-    })
-    const state = await manager.start()
-    // Fail closed. Spawning the Electron binary here would start an app that
-    // parents no window - the exact M3.0b failure mode, in a second place.
-    expect(spawnImpl).not.toHaveBeenCalled()
-    expect(state.phase).toBe('error')
-    expect(logs.some(l => l.startsWith('stage-runtime state=unavailable'))).toBe(true)
-  })
-
-  it('c: a session spawn retains truthful ownership while the dev-server lives', async () => {
-    const root = await makeStageWorkspace()
+  it('c: a session spawn retains truthful ownership while the Stage lives', async () => {
     const child = fakeChild({ pid: 4242 })
-    const manager = new AiriStageManager({
+    const manager = new NativeStageManager({
       platform: 'linux',
       spawnImpl: vi.fn(() => child as never) as never,
-      workspaceRoot: root,
+      packagedStage: nativeTarget,
     })
     const started = manager.start()
-    child.stdout.emit('data', 'ready in 200 ms')
+    child.stdout.emit('data', '[lia-stage] window-ready')
     await started
 
     expect(manager.holdsOwnedStage()).toBe(true)
     expect(manager.state().pid).toBe(4242)
     expect(manager.state().phase).toBe('running')
     expect(manager.command()).not.toContain('pnpm')
-    expect(manager.command()).toContain('electron-vite')
+    expect(manager.command()).toBe('LiaStage.exe')
   })
 
   it('d: ownership is a live-process fact, not a wrapper fact - exit after running flips to stopped, stop() then stops attempting', async () => {
-    const root = await makeStageWorkspace()
     const child = fakeChild({ pid: 4243 })
-    const manager = new AiriStageManager({
+    const manager = new NativeStageManager({
       platform: 'linux',
       spawnImpl: vi.fn(() => child as never) as never,
-      workspaceRoot: root,
+      packagedStage: nativeTarget,
     })
     const started = manager.start()
-    child.stdout.emit('data', 'ready in 100 ms')
+    child.stdout.emit('data', '[lia-stage] window-ready')
     await started
     expect(manager.holdsOwnedStage()).toBe(true)
 
@@ -217,21 +145,20 @@ describe('phase 7.2: ownership retained, spawn without shell (tests C/D/G)', () 
   })
 
   it('e: shutdown after a session start ALWAYS attempts the stop - never "nothing this session started" (win32 taskkill path)', async () => {
-    const root = await makeStageWorkspace()
     const child = fakeChild({ pid: 7890 })
     const execFileImpl = vi.fn((_cmd: string, _args: string[], _opts: unknown, cb: () => void) => {
       setTimeout(() => child.emit('exit', null, 'SIGTERM'), 5)
       cb()
       return {} as never
     })
-    const manager = new AiriStageManager({
+    const manager = new NativeStageManager({
       execFileImpl: execFileImpl as never,
       platform: 'win32',
       spawnImpl: vi.fn(() => child as never) as never,
-      workspaceRoot: root,
+      packagedStage: nativeTarget,
     })
     const started = manager.start()
-    child.stdout.emit('data', 'ready in 100 ms')
+    child.stdout.emit('data', '[lia-stage] window-ready')
     await started
 
     await manager.stop()
@@ -248,32 +175,26 @@ describe('phase 7.2: ownership retained, spawn without shell (tests C/D/G)', () 
 
 describe('d. Conversar spawns the stage once', () => {
   it('start() spawns the documented command and reports running after the ready signal', async () => {
-    const root = await makeStageWorkspace()
     const child = fakeChild()
     const spawnImpl = vi.fn((...args: unknown[]) => {
       void args
       return child as never
     })
-    const manager = new AiriStageManager({
+    const manager = new NativeStageManager({
       platform: 'linux',
       spawnImpl: spawnImpl as never,
-      workspaceRoot: root,
+      packagedStage: nativeTarget,
     })
 
     const started = manager.start({ env: { LIA_MANAGED: '1' } })
     expect(manager.state().phase).toBe('starting')
     expect(spawnImpl).toHaveBeenCalledTimes(1)
-    // Phase 7.2 ownership fix: the dev-server executable DIRECTLY via node -
-    // no pnpm wrapper, no shell intermediary (the DEP0190 route is gone).
-    expect(spawnImpl.mock.calls[0][0]).toBe(execPath)
-    const [entrypoint, subcommand] = spawnImpl.mock.calls[0][1] as string[]
-    expect(entrypoint.replace(/\\/g, '/')).toContain('apps/stage-tamagotchi/node_modules/electron-vite/bin/electron-vite.js')
-    expect(subcommand).toBe('dev')
-    expect(spawnImpl.mock.calls[0][2]).toMatchObject({ cwd: join(root, 'apps', 'stage-tamagotchi') })
+    expect(spawnImpl.mock.calls[0].slice(0, 2)).toEqual(['LiaStage.exe', ['native-entry']])
+    expect(spawnImpl.mock.calls[0][2]).toMatchObject({ cwd: 'native-stage' })
     expect((spawnImpl.mock.calls[0][2] as { shell?: unknown }).shell).toBeUndefined()
     expect((spawnImpl.mock.calls[0][2] as { env: Record<string, string> }).env.LIA_MANAGED).toBe('1')
 
-    child.stdout.emit('data', '> dev server ready in 512 ms\n')
+    child.stdout.emit('data', '[lia-stage] window-ready')
     const state = await started
     expect(state.phase).toBe('running')
     expect(state.pid).toBe(child.pid)
@@ -281,51 +202,21 @@ describe('d. Conversar spawns the stage once', () => {
 })
 
 describe('e. Repeated Conversar is single-flight', () => {
-  it('a rejected prerequisite reaches a terminal error and a later start retries', async () => {
-    const root = await makeStageWorkspace()
-    const child = fakeChild()
-    const spawnImpl = vi.fn(() => child as never)
-    const run = vi.fn()
-      .mockRejectedValueOnce(new Error('private build output'))
-      .mockResolvedValueOnce({ ok: true })
-    const logs: string[] = []
-    const manager = new AiriStageManager({
-      onLog: line => logs.push(line),
-      prerequisite: { applies: () => true, name: 'core-agent-build', run },
-      spawnImpl: spawnImpl as never,
-      workspaceRoot: root,
-    })
-
-    const failed = await manager.start()
-    expect(failed.phase).toBe('error')
-    expect(manager.state().phase).toBe('error')
-    expect(spawnImpl).not.toHaveBeenCalled()
-    expect(logs).toContain('stage-prerequisite name=core-agent-build state=failed reason=unexpected-error')
-    expect(logs.join('\n')).not.toContain('private build output')
-
-    const retried = manager.start()
-    await vi.waitFor(() => expect(spawnImpl).toHaveBeenCalledTimes(1))
-    child.stdout.emit('data', 'ready in 50 ms')
-    expect((await retried).phase).toBe('running')
-    expect(run).toHaveBeenCalledTimes(2)
-  })
-
   it('concurrent starts share one spawn; starts after running do not respawn', async () => {
-    const root = await makeStageWorkspace()
     const child = fakeChild()
     const spawnImpl = vi.fn((...args: unknown[]) => {
       void args
       return child as never
     })
-    const manager = new AiriStageManager({
+    const manager = new NativeStageManager({
       platform: 'linux',
       spawnImpl: spawnImpl as never,
-      workspaceRoot: root,
+      packagedStage: nativeTarget,
     })
 
     const first = manager.start()
     const second = manager.start()
-    child.stdout.emit('data', 'ready in 100 ms')
+    child.stdout.emit('data', '[lia-stage] window-ready')
     await first
     await second
     expect(spawnImpl).toHaveBeenCalledTimes(1)
@@ -338,27 +229,26 @@ describe('e. Repeated Conversar is single-flight', () => {
     child.exitCode = 1
     const next = manager.start()
     expect(spawnImpl).toHaveBeenCalledTimes(2)
-    child.stdout.emit('data', 'ready in 90 ms')
+    child.stdout.emit('data', '[lia-stage] window-ready')
     await next
   })
 })
 
 describe('f. Stage exit updates state', () => {
   it('an unexpected exit after ready flips to stopped with the exit code', async () => {
-    const root = await makeStageWorkspace()
     const child = fakeChild()
     const spawnImpl = vi.fn((...args: unknown[]) => {
       void args
       return child as never
     })
-    const manager = new AiriStageManager({
+    const manager = new NativeStageManager({
       platform: 'linux',
       spawnImpl: spawnImpl as never,
-      workspaceRoot: root,
+      packagedStage: nativeTarget,
     })
 
     const started = manager.start()
-    child.stdout.emit('data', 'ready in 400 ms')
+    child.stdout.emit('data', '[lia-stage] window-ready')
     await started
     expect(manager.state().phase).toBe('running')
 
@@ -371,16 +261,15 @@ describe('f. Stage exit updates state', () => {
   })
 
   it('an exit DURING start is an error, not a stop', async () => {
-    const root = await makeStageWorkspace()
     const child = fakeChild()
     const spawnImpl = vi.fn((...args: unknown[]) => {
       void args
       return child as never
     })
-    const manager = new AiriStageManager({
+    const manager = new NativeStageManager({
       platform: 'linux',
       spawnImpl: spawnImpl as never,
-      workspaceRoot: root,
+      packagedStage: nativeTarget,
     })
 
     const started = manager.start()
@@ -403,18 +292,17 @@ describe('supervisor stop (Phase 7.1)', () => {
     platform?: NodeJS.Platform
     stopGraceMs?: number
   } = {}) {
-    const root = await makeStageWorkspace()
     const child = fakeChild()
     const spawnImpl = vi.fn((..._args: unknown[]) => child as never)
-    const manager = new AiriStageManager({
+    const manager = new NativeStageManager({
       execFileImpl: options.execFileImpl as never,
       platform: options.platform ?? 'linux',
       spawnImpl: spawnImpl as never,
       stopGraceMs: options.stopGraceMs,
-      workspaceRoot: root,
+      packagedStage: nativeTarget,
     })
     const started = manager.start()
-    child.stdout.emit('data', 'ready in 50 ms')
+    child.stdout.emit('data', '[lia-stage] window-ready')
     await started
     return { child, manager }
   }
@@ -441,12 +329,11 @@ describe('supervisor stop (Phase 7.1)', () => {
   })
 
   it('c. a manager that never spawned a stage stops nothing and stays honest', async () => {
-    const root = await makeStageWorkspace()
     const execFileImpl = vi.fn()
-    const manager = new AiriStageManager({
+    const manager = new NativeStageManager({
       execFileImpl: execFileImpl as never,
       platform: 'win32',
-      workspaceRoot: root,
+      packagedStage: nativeTarget,
     })
     expect(manager.holdsOwnedStage()).toBe(false)
     await manager.stop()

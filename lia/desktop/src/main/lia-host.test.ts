@@ -16,7 +16,7 @@ import { fixtureEnv, identityCipher, makeLiaHome } from './test-helpers'
 describe('g. Existing Lia product config is read', () => {
   it('shows the detached Stage on reopening and clears it after cooperative stop', async () => {
     const home = await makeLiaHome()
-    const host = createLiaHost({ cipher: identityCipher, env: fixtureEnv(home), workspaceRoot: '/missing' })
+    const host = createLiaHost({ cipher: identityCipher, env: fixtureEnv(home) })
     const stateDir = host.runtimeControl.stateDir
     const registry = createRuntimeRegistry(stateDir)
     const instanceId = globalThis.crypto.randomUUID()
@@ -53,7 +53,7 @@ describe('g. Existing Lia product config is read', () => {
 
   it('the snapshot surfaces persona, provider, voice, runtime and language', async () => {
     const home = await makeLiaHome()
-    const host = createLiaHost({ cipher: identityCipher, env: fixtureEnv(home), workspaceRoot: '/missing' })
+    const host = createLiaHost({ cipher: identityCipher, env: fixtureEnv(home) })
 
     const snapshot = await host.productSnapshot()
 
@@ -66,7 +66,7 @@ describe('g. Existing Lia product config is read', () => {
 
   it('reads the same document AIRI wrote - no second copy appears', async () => {
     const home = await makeLiaHome()
-    const host = createLiaHost({ cipher: identityCipher, env: fixtureEnv(home), workspaceRoot: '/missing' })
+    const host = createLiaHost({ cipher: identityCipher, env: fixtureEnv(home) })
 
     const status = await host.homeStatus()
     expect(status.config.filePath).toBe(join(home.userData, 'lia-product.json'))
@@ -77,7 +77,7 @@ describe('g. Existing Lia product config is read', () => {
 describe('h. Existing voice profile list is read', () => {
   it('saves speech transport and only returns non-secret configuration', async () => {
     const home = await makeLiaHome()
-    const host = createLiaHost({ cipher: identityCipher, env: fixtureEnv(home), workspaceRoot: '/missing' })
+    const host = createLiaHost({ cipher: identityCipher, env: fixtureEnv(home) })
     const draft = { baseUrl: 'https://speech.example.invalid/v1', modelId: 'fixture-model', voiceId: 'fixture-voice' }
     expect(await host.saveSpeechConnection({ ...draft, baseUrl: 'http://speech.example.invalid/v1', apiKey: 'synthetic-speech-key' })).toBe(false)
     expect(await host.saveSpeechConnection({ ...draft, apiKey: 'synthetic-speech-key' })).toBe(true)
@@ -91,7 +91,7 @@ describe('h. Existing voice profile list is read', () => {
 
   it('the canonical library registry lists its profiles verbatim', async () => {
     const home = await makeLiaHome({ voiceCount: 3 })
-    const host = createLiaHost({ cipher: identityCipher, env: fixtureEnv(home), workspaceRoot: '/missing' })
+    const host = createLiaHost({ cipher: identityCipher, env: fixtureEnv(home) })
 
     const profiles = await host.listVoices()
 
@@ -104,7 +104,7 @@ describe('h. Existing voice profile list is read', () => {
 describe('i. Voice-install detection is honest and engine-neutral (Phase 7.8E)', () => {
   it('with no engine hosted, the default answer is installed = false - directory existence is never proof', async () => {
     const home = await makeLiaHome({ customVoice: true })
-    const host = createLiaHost({ cipher: identityCipher, env: fixtureEnv(home), workspaceRoot: '/missing' })
+    const host = createLiaHost({ cipher: identityCipher, env: fixtureEnv(home) })
 
     const status = await host.homeStatus()
     expect(status.voice.installed).toBe(false)
@@ -117,7 +117,6 @@ describe('i. Voice-install detection is honest and engine-neutral (Phase 7.8E)',
       cipher: identityCipher,
       env: fixtureEnv(home),
       inspectInstallImpl: async () => true,
-      workspaceRoot: '/missing',
     })
 
     const status = await host.homeStatus()
@@ -130,7 +129,7 @@ describe('i. Voice-install detection is honest and engine-neutral (Phase 7.8E)',
 describe('j. The launcher does not duplicate canonical data', () => {
   it('config, vault and voices all resolve INSIDE the one user-data root', async () => {
     const home = await makeLiaHome()
-    const host = createLiaHost({ cipher: identityCipher, env: fixtureEnv(home), workspaceRoot: '/missing' })
+    const host = createLiaHost({ cipher: identityCipher, env: fixtureEnv(home) })
 
     const { paths } = host
     expect(paths.userDataDir.startsWith(home.appData)).toBe(true)
@@ -144,7 +143,6 @@ describe('j. The launcher does not duplicate canonical data', () => {
     const host = createLiaHost({
       cipher: identityCipher,
       env: { ...fixtureEnv(home), LIA_USER_DATA: home.userData },
-      workspaceRoot: '/missing',
     })
 
     const env = await host.stageEnv()
@@ -162,7 +160,6 @@ describe('k. Secrets are not logged and never cross to surfaces', () => {
       cipher: identityCipher,
       env: fixtureEnv(home),
       onEvent: (event, detail) => events.push({ detail, event }),
-      workspaceRoot: '/missing',
     })
 
     await host.vault.setSecret('openrouter', 'apiKey', SECRET)
@@ -184,7 +181,7 @@ describe('k. Secrets are not logged and never cross to surfaces', () => {
 describe('l. The AIRI adapter receives the expected contract', () => {
   it('bridge shape + stage env carry the launch facts (never secret values)', async () => {
     const home = await makeLiaHome({ customVoice: true })
-    const host = createLiaHost({ cipher: identityCipher, env: fixtureEnv(home), workspaceRoot: '/missing' })
+    const host = createLiaHost({ cipher: identityCipher, env: fixtureEnv(home) })
     await host.vault.setSecret('openrouter', 'apiKey', 'sk-hidden')
 
     const bridge = await host.bridgeConfig()
@@ -224,7 +221,6 @@ describe('conversar() - the pipeline the CTA gates on', () => {
         }
         return manager as never
       },
-      workspaceRoot: '/missing',
     })
 
     // Not ready: no secret for the preferred provider -> a named error, no spawn.
@@ -273,7 +269,6 @@ describe('supervisor shutdown through the host: the stage is the only owned chil
         }
         return manager as never
       },
-      workspaceRoot: '/missing',
     })
     return { calls, host }
   }
@@ -336,7 +331,7 @@ describe('updateConfig - the editable product document', () => {
         voice: { tts: { preferred: { providerId: 'cloud-voice-provider', voiceId: 'nova' } } },
       },
     })
-    const host = createLiaHost({ cipher: identityCipher, env: fixtureEnv(home), workspaceRoot: '/missing' })
+    const host = createLiaHost({ cipher: identityCipher, env: fixtureEnv(home) })
 
     const saved = await host.updateConfig({
       update: {
@@ -365,7 +360,7 @@ describe('updateConfig - the editable product document', () => {
   it('a secret in the document update is refused by the core writer (L)', async () => {
     const home = await makeLiaHome()
     const before = await hostConfigText(home)
-    const host = createLiaHost({ cipher: identityCipher, env: fixtureEnv(home), workspaceRoot: '/missing' })
+    const host = createLiaHost({ cipher: identityCipher, env: fixtureEnv(home) })
 
     const result = await host.updateConfig({
       update: { provider: { chat: { preferred: { apiKey: 'sk-should-never-persist', providerId: 'openrouter' } as never } } },
@@ -376,7 +371,7 @@ describe('updateConfig - the editable product document', () => {
 
   it('secrets ride the vault channel: stored encrypted, never in the JSON (L)', async () => {
     const home = await makeLiaHome()
-    const host = createLiaHost({ cipher: identityCipher, env: fixtureEnv(home), workspaceRoot: '/missing' })
+    const host = createLiaHost({ cipher: identityCipher, env: fixtureEnv(home) })
 
     const result = await host.updateConfig({
       secrets: [{ key: 'apiKey', scope: 'openrouter', value: 'sk-top-secret-123' }],
@@ -401,7 +396,7 @@ async function hostConfigText(home: { userData: string }): Promise<string> {
 describe('k. an edited config reaches the next stage launch', () => {
   it('bridge + stage env are rebuilt from the UPDATED document', async () => {
     const home = await makeLiaHome()
-    const host = createLiaHost({ cipher: identityCipher, env: fixtureEnv(home), workspaceRoot: '/missing' })
+    const host = createLiaHost({ cipher: identityCipher, env: fixtureEnv(home) })
 
     const bridgeBefore = await host.bridgeConfig()
     expect(bridgeBefore.llm.preferred?.providerId).toBe('openrouter')
@@ -439,7 +434,7 @@ describe('k. an edited config reaches the next stage launch', () => {
 describe('voice import through the host', () => {
   it('a dialog-picked file DEFERS cleanly - no engine is hosted to receive it (Phase 7.8D/E)', async () => {
     const home = await makeLiaHome()
-    const host = createLiaHost({ cipher: identityCipher, env: fixtureEnv(home), workspaceRoot: '/missing' })
+    const host = createLiaHost({ cipher: identityCipher, env: fixtureEnv(home) })
     const { writeFile } = await import('node:fs/promises')
     const sourceFile = join(home.userData, 'picked-voice.wav')
     await writeFile(sourceFile, 'fake-audio')
@@ -524,7 +519,6 @@ describe('conversar() - managed STT default (Phase 8.0D SHELL-B1)', () => {
         state: () => ({ logTail: [], phase: 'stopped' as const }),
         stop: async () => {},
       }) as never,
-      workspaceRoot: '/missing',
     })
     if (seedManaged) {
       expect(await host.aiConnection.save({

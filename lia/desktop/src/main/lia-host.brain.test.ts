@@ -81,7 +81,6 @@ async function hostFor(home: { userData: string }, events: Array<{ detail?: stri
       state: () => ({ logTail: [], phase: 'stopped' as const }),
       stop: async () => {},
     }) as never,
-    workspaceRoot: '/missing',
   })
   if (seedManaged) {
     expect(await host.aiConnection.save({

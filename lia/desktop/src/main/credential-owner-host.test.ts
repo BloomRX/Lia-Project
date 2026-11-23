@@ -1,4 +1,4 @@
-import type { AiriStageManager, AiriStageState } from './airi-stage-manager'
+import type { NativeStageManager, NativeStageState } from './native-stage-manager'
 
 import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -77,7 +77,7 @@ beforeEach(() => {
 async function fixture(onRequest?: () => void, collideProfiles = false) {
   const home = await makeLiaHome()
   let environment: Record<string, string | undefined> = {}
-  let state: AiriStageState = { phase: 'stopped', logTail: [] }
+  let state: NativeStageState = { phase: 'stopped', logTail: [] }
   const host = createLiaHost({
     cipher: identityCipher,
     env: fixtureEnv(home),
@@ -102,7 +102,7 @@ async function fixture(onRequest?: () => void, collideProfiles = false) {
         state = { phase: 'stopped', logTail: [] }
         deps.onState?.(state)
       },
-    }) as unknown as AiriStageManager,
+    }) as unknown as NativeStageManager,
   })
   return { host, home, environment: () => environment }
 }
