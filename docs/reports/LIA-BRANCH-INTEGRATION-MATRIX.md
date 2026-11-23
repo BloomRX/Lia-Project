@@ -8,7 +8,11 @@ de skills do Agent Hub.
 
 Em 23/11, a referência remota `arena/7fa837f0-lia-project` foi removida depois de confirmar que seu SHA `9065aa2d4c63b337dab19eb6c4719b02082fc061` era ancestral da `main` e coincidia com o espelho externo e o checkout local preservado. A `main` era a branch padrão e a consulta ao GitHub retornou zero PRs abertos.
 
-O [relatório de voz de `fd0451d7`](LIA-MULTI-PROVIDER-VOICE-ARCHITECTURE.md) já estava na `main` com o mesmo conteúdo de origem em `3c2b132f`. A exigência de um TTS e um STT funcionais, configuráveis separadamente, foi incorporada à decisão DP-2. A especificação em `b2745f71` está na `main` com seções adicionais de visão cognitiva e o padrão de marca coincide byte a byte.
+O [relatório de voz de `fd0451d7`](LIA-MULTI-PROVIDER-VOICE-ARCHITECTURE.md) já estava na `main` com o mesmo conteúdo de origem em `3c2b132f`. A exigência de um TTS e um STT funcionais, configuráveis separadamente, foi incorporada à decisão DP-2. A especificação em `b2745f71` está na `main` com seções adicionais de visão cognitiva e o padrão de marca coincide byte a byte. As duas referências remotas de documentação, `codex/lia-multi-provider-voice` e `docs/especificacao-geral-produto-lia`, foram removidas após a reconciliação.
+
+Os oito blobs acrescentados por Research entre `7913c62a` e `b345355f` coincidem com os da `main`. O snapshot `agents/docs` e as regras de sua antiga linha de desenvolvimento ficam preservados no espelho como histórico. Para pesquisa e delegação atuais, consulte o [AGENTS.md](../../AGENTS.md) e o [contrato de orquestração](../project/AGENT-ORCHESTRATION.md).
+
+Os 16 hashes de `SHA256SUMS.txt` do benchmark de outubro conferem com os blobs de `91b8995a`. A referência `qa/windows-benchmarks` permanece nesta etapa porque o publicador legado ainda tem um fluxo que a recria. Os resultados do benchmark pertencem somente ao SHA `cfd8d7f`.
 
 O espelho externo contém as 12 branches remotas e passou em
 `git fsck --full`. Foram verificados os bundles locais e comparadas

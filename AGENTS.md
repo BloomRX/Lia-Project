@@ -44,7 +44,11 @@ alterar qualquer código.
 
 O cabeçalho é a fonte de verdade sobre a branch, o baseline funcional validado em
 runtime, os gates já confirmados, o que quebrou por último e os próximos passos.
-O tip da branch não é registrado lá: verificar com `git rev-parse HEAD`.
+Consulte o tip com `git rev-parse HEAD`. A `main` é a linha oficial de
+desenvolvimento. Para pesquisa e auditoria, use a documentação na `main` e
+registre o SHA examinado. O snapshot `agents/docs` registra o estado histórico
+de 14/11/2026. Mudanças são integradas após revisão e validação, com um
+responsável por área de escrita.
 
 Este MASTER AGENT PROMPT define como trabalhar; CURRENT-STATE.md define onde o
 projeto está agora.
