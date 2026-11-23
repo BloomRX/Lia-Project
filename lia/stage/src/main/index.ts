@@ -29,6 +29,7 @@ import { createStageChat } from './stage-chat.ts'
 import { createStageHistory } from './stage-history.ts'
 import { createStageHost } from './stage-host.ts'
 import { createStagePersona, defaultTraits, readPackagedAvatar } from './stage-persona.ts'
+import { createStageRemoteSpeech } from './stage-remote-speech.ts'
 import { createStagePresence } from './stage-presence.ts'
 import { createStageTranscription } from './stage-transcription.ts'
 import { createStageVoice } from './stage-voice.ts'
@@ -52,6 +53,28 @@ async function main(): Promise<void> {
     const config = await readProduct()
     return stageLocale(config.status === 'ok' ? config.value.preferences?.language : undefined)
   }
+  let window: BrowserWindow | undefined
+  const remoteSpeech = createStageRemoteSpeech({
+    readProduct,
+    readTransports: repository.read,
+    readCredential: providerId => vault.getSecret(providerId, 'apiKey'),
+    async approve(origin, signal) {
+      const owner = window
+      if (!owner || owner.isDestroyed())
+        return false
+      const locale = await readLocale()
+      if (signal.aborted || owner.isDestroyed())
+        return false
+      const { response } = await dialog.showMessageBox(owner, {
+        type: 'question', title: 'Lia',
+        message: stageText(locale, 'Enviar a resposta da Lia para síntese de voz?'),
+        detail: `${stageText(locale, 'O texto da resposta será enviado a')} ${origin}.`,
+        buttons: [stageText(locale, 'Cancelar'), stageText(locale, 'Enviar resposta')],
+        defaultId: 0, cancelId: 0, noLink: true, signal,
+      })
+      return response === 1 && !signal.aborted && !owner.isDestroyed()
+    },
+  })
   const presence = createStagePresence({
     async loadConfig() {
       const config = await readProduct()
@@ -70,7 +93,7 @@ async function main(): Promise<void> {
     const config = await readProduct()
     voiceInstallDir = config.status === 'ok' ? config.value.voice?.runtime?.installDir : undefined
     return config
-  })
+  }, remoteSpeech)
   const vault = createLiaSecretVault({
     filePath: paths.vaultFile,
     cipher: createWindowsUserCipher({
@@ -98,18 +121,22 @@ async function main(): Promise<void> {
     readProduct,
     readTransports: repository.read,
   })
-  let window: BrowserWindow | undefined
   let runtimeService: LiaRuntimeService | undefined
   let active: AbortController | undefined
   let recording: AbortController | undefined
   let updatingHistory = false
   let lastAnswer: string | undefined
+  const updateAnswer = (answer?: string) => {
+    void voice.cancel().catch(() => {})
+    lastAnswer = answer
+  }
   let microphoneUntil = 0
   const cancel = () => active?.abort()
   const cancelOperations = () => {
     microphoneUntil = 0
     cancel()
     recording?.abort()
+    void voice.cancel().catch(() => {})
   }
   const authorized = (event: Electron.IpcMainInvokeEvent) =>
     window && !window.isDestroyed() && event.sender === window.webContents
@@ -182,7 +209,7 @@ async function main(): Promise<void> {
       const result = await updateLiaProductConfig(paths.productConfigFile, { persona: { activeCardId: card.id } })
       if (result.status !== 'ok')
         return undefined
-      lastAnswer = undefined
+      updateAnswer()
       send.clearContext()
       return card.name
     }
@@ -204,7 +231,7 @@ async function main(): Promise<void> {
     try {
       const state = await history.changeConversation(action, typeof id === 'string' ? id : undefined)
       if (state) {
-        lastAnswer = undefined
+        updateAnswer()
         send.clearContext()
       }
       return state
@@ -240,7 +267,7 @@ async function main(): Promise<void> {
       else
         await history.setEnabled(action === 'enable')
       if (action !== 'enable') {
-        lastAnswer = undefined
+        updateAnswer()
         send.clearContext()
       }
       return true
@@ -263,7 +290,7 @@ async function main(): Promise<void> {
     try {
       const result = await send(input, controller.signal, image, allowClock)
       if (result.ok)
-        lastAnswer = result.text
+        updateAnswer(result.text)
       return result
     }
     finally {
