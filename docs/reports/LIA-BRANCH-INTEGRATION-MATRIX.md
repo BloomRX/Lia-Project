@@ -33,6 +33,20 @@ questão pertencem ao fluxo legado. O Stage próprio tem ciclo e testes
 separados. Passaram o lint e 54 testes focados Windows de configuração,
 conexão, IPC e memória.
 
+A branch de segurança `arena/c6b02f64-lia-project` está preservada no espelho
+e na tag [`archive/security-beta-2026-11-14`](https://github.com/BloomRX/Lia-Project/tree/archive/security-beta-2026-11-14)
+em `a1f5b831`. Os relatórios de arquitetura, reconciliação de autenticação
+e correções de beta coincidem com os da `main`. O relatório STT da `main`
+acrescenta evidências posteriores. Os oito arquivos de ensaio legado que
+faltavam na `main` continuam na tag. O runtime próprio restringe credenciais
+por protocolo e destino e recusa redirecionamentos. O relógio recebe permissão
+por mensagem e revalida a rota antes de enviar o resultado. Os fluxos legados
+de logout, refresh e créditos AIRI ficam no histórico. Launcher e Stage
+próprios não consomem esses fluxos. No Windows, passaram 58 testes focados,
+lint e os gates de STT/TTS com HTTPS local sintético. A revisão independente
+não recomendou transplantar código dessa branch. Áudio físico e configuração
+de STT via Launcher continuam pendentes.
+
 O espelho externo contém as 12 branches remotas e passou em
 `git fsck --full`. Foram verificados os bundles locais e comparadas
 por SHA-256 as cópias dos 11 checkouts órfãos. O principal órfão
