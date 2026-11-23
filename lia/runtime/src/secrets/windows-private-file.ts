@@ -6,7 +6,7 @@ import { env } from 'node:process'
 const script = [
   '$ErrorActionPreference = \'Stop\'',
   '$user = [Security.Principal.WindowsIdentity]::GetCurrent().User',
-  '$rules = New-Object Security.AccessControl.FileSecurity',
+  '$rules = [Security.AccessControl.FileSecurity]::new()',
   '$rules.SetAccessRuleProtection($true, $false)',
   '$rules.SetOwner($user)',
   '$rules.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new($user, "FullControl", "Allow"))',
