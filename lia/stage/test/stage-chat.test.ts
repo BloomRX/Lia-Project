@@ -57,6 +57,46 @@ test('returns a public cancellation result when already aborted', async () => {
   assert.deepEqual(await fixture([])('ola', controller.signal), { ok: false, code: 'cancelled' })
 })
 
+test('a route change during preparation does not send the draft to the old or new destination', async () => {
+  const local = { ...record, baseUrl: 'http://127.0.0.1:1234/v1' }
+  for (const change of ['tombstone', 'endpoint', 'model'] as const) {
+    const entered = Promise.withResolvers<void>()
+    const resume = Promise.withResolvers<void>()
+    let changed = false
+    let requests = 0
+    const send = createStageChat({
+      async fetch() {
+        requests++
+        return Response.json({ choices: [{ message: { content: 'Resposta' } }] })
+      },
+      async readProduct() {
+        const modelId = changed && change === 'model' ? 'new-model' : 'test-model'
+        return { filePath: '', status: 'ok', value: { provider: { chat: { preferred: { providerId: 'local-chat', modelId } } } } }
+      },
+      async readTransports() {
+        const baseUrl = changed && change === 'endpoint' ? 'http://127.0.0.1:1235/v1' : local.baseUrl
+        return {
+          schemaVersion: 1, revision: changed ? 2 : 1,
+          records: [{ ...local, baseUrl, modelIds: ['test-model', 'new-model'] }],
+          tombstones: changed && change === 'tombstone' ? [local.id] : [],
+          migration: { version: 1, imported: [] },
+        }
+      },
+      async recallMemory() {
+        entered.resolve()
+        await resume.promise
+        return { ok: true, value: 'Memória pessoal' }
+      },
+    })
+    const pending = send('Rascunho', new AbortController().signal)
+    await entered.promise
+    changed = true
+    resume.resolve()
+    assert.deepEqual(await pending, { ok: false, code: 'configuration' }, change)
+    assert.equal(requests, 0, change)
+  }
+})
+
 test('uses a bound chat credential only for the configured HTTPS origin', async () => {
   const url = new URL('https://api.groq.com/openai/v1')
   const token = 'stage-synthetic-token'

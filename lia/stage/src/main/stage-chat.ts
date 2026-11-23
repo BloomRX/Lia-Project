@@ -54,6 +54,54 @@ export function createStageChat({ fetch, storage, recallMemory, readCredential, 
     return { ok: false, code: 'configuration' }
   }
 
+  async function resolveRoute(hasImage: boolean) {
+    const product = await readProduct()
+    const preferred = product.status === 'ok' ? product.value.provider?.chat?.preferred : undefined
+    if (!preferred?.modelId)
+      return 'configuration'
+    const { providerId, modelId } = preferred
+    const definition = findLiaAiProviderByStageProviderId(providerId)
+    if (!definition || definition.availability !== 'ready')
+      return 'configuration'
+    let requestModel = modelId
+    if (hasImage && product.status === 'ok') {
+      const decision = decideBrainRouteFromProductState({
+        ...brainCatalog,
+        snapshot: product.value,
+        requirement: brainRequirementForChatTurn({ hasImageInput: true }),
+        automaticPolicy,
+      })
+      const route = decision.status === 'automatic' && decision.selection.status === 'selected'
+        ? decision.selection.route
+        : decision.status === 'manual' && decision.readiness.status === 'ready' && decision.resolution.status === 'resolvedModel'
+          ? decision.resolution
+          : undefined
+      if (!route || route.engine.id !== definition.engineId)
+        return 'image-unavailable'
+      requestModel = route.model.id
+    }
+
+    const transports = await readTransports()
+    const records = transports.records.filter(record => record.providerId === providerId)
+    const [record] = records
+    if (records.length !== 1 || !record?.enabled || transports.tombstones.includes(record.id)
+      || record.definitionId !== definition.definitionId || record.credentialRef.scope !== providerId
+      || record.credentialRef.key !== 'apiKey'
+      || record.protocol !== 'chat-completions' || !record.modelIds.includes(modelId))
+      return 'configuration'
+
+    const destination = new URL(record.baseUrl)
+    if (definition.localOnly) {
+      if (!['127.0.0.1', '[::1]'].includes(destination.hostname)
+        || record.adapterOptions.localOnly !== true || record.adapterOptions.allowUnauthenticated !== true)
+        return 'configuration'
+    }
+    else if (!definition.requiresApiKey || destination.protocol !== 'https:') {
+      return 'configuration'
+    }
+    return { providerId, modelId, requestModel, definition, transportId: record.id, destination }
+  }
+
   async function send(input: unknown, signal: AbortSignal, image?: unknown): Promise<StageChatResult> {
     if (typeof input !== 'string' || input.length > 8_000 || !input.trim())
       return { ok: false, code: 'invalid' }
@@ -62,55 +110,10 @@ export function createStageChat({ fetch, storage, recallMemory, readCredential, 
       return { ok: false, code: 'image-invalid' }
     try {
       signal.throwIfAborted()
-      const product = await readProduct()
-      const preferred = product.status === 'ok' ? product.value.provider?.chat?.preferred : undefined
-      if (!preferred?.modelId)
-        return unavailableConfiguration()
-      const { providerId, modelId } = preferred
-      const definition = findLiaAiProviderByStageProviderId(providerId)
-      if (!definition || definition.availability !== 'ready')
-        return unavailableConfiguration()
-      let requestModel = modelId
-      if (attachment && product.status === 'ok') {
-        const decision = decideBrainRouteFromProductState({
-          ...brainCatalog,
-          snapshot: product.value,
-          requirement: brainRequirementForChatTurn({ hasImageInput: true }),
-          automaticPolicy,
-        })
-        const route = decision.status === 'automatic' && decision.selection.status === 'selected'
-          ? decision.selection.route
-          : decision.status === 'manual' && decision.readiness.status === 'ready' && decision.resolution.status === 'resolvedModel'
-            ? decision.resolution
-            : undefined
-        if (!route || route.engine.id !== definition.engineId)
-          return { ok: false, code: 'image-unavailable' }
-        requestModel = route.model.id
-      }
-
-      const transports = await readTransports()
-      const records = transports.records.filter(record => record.providerId === providerId)
-      const [record] = records
-      if (records.length !== 1 || !record?.enabled || transports.tombstones.includes(record.id)
-        || record.definitionId !== definition.definitionId || record.credentialRef.scope !== providerId
-        || record.protocol !== 'chat-completions' || !record.modelIds.includes(modelId))
-        return unavailableConfiguration()
-
-      const destination = new URL(record.baseUrl)
-      let credential: string | undefined
-      if (definition.localOnly) {
-        if (!['127.0.0.1', '[::1]'].includes(destination.hostname)
-          || record.adapterOptions.localOnly !== true || record.adapterOptions.allowUnauthenticated !== true)
-          return unavailableConfiguration()
-      }
-      else {
-        if (!definition.requiresApiKey || destination.protocol !== 'https:')
-          return unavailableConfiguration()
-        credential = credentialForDestination(readCredential?.(providerId), providerId, destination, 'chat')
-        if (!credential)
-          return unavailableConfiguration()
-      }
-
+      const initial = await resolveRoute(Boolean(attachment))
+      if (typeof initial === 'string')
+        return initial === 'configuration' ? unavailableConfiguration() : { ok: false, code: initial }
+      const { providerId, modelId, requestModel, definition, destination } = initial
       const route = createHash('sha256').update(JSON.stringify([providerId, modelId, destination.href])).digest('hex')
       if (history?.destination !== destination.href || history.model !== modelId || history.providerId !== providerId) {
         const saved = await storage?.recall(route).catch(() => [])
@@ -120,12 +123,23 @@ export function createStageChat({ fetch, storage, recallMemory, readCredential, 
       const text = input.trim()
       const memory = definition.localOnly ? await recallMemory?.(text.slice(0, LIA_MEMORY_LIMITS.query)) : undefined
       signal.throwIfAborted()
+      // Preparation can yield while the Launcher edits the route. Ask the user to
+      // retry a draft rather than silently sending it to another destination.
+      const currentRoute = await resolveRoute(Boolean(attachment))
+      signal.throwIfAborted()
+      if (typeof currentRoute === 'string' || currentRoute.transportId !== initial.transportId
+        || currentRoute.providerId !== providerId || currentRoute.modelId !== modelId
+        || currentRoute.requestModel !== requestModel || currentRoute.destination.href !== destination.href)
+        return unavailableConfiguration()
+      const credential = definition.localOnly ? undefined : credentialForDestination(readCredential?.(providerId), providerId, destination, 'chat')
+      if (!definition.localOnly && !credential)
+        return unavailableConfiguration()
       const context = memory?.ok ? memory.value : ''
 
       const registry = new ProviderRegistry()
       registry.register({ id: providerId, protocol: 'chat-completions', credentialRequired: definition.requiresApiKey })
       const runtime = new ProviderRuntime(registry, { fetch, resolveCredential: () => credential })
-      const response = await runtime.chat({ providerId, baseUrl: record.baseUrl }, {
+      const response = await runtime.chat({ providerId, baseUrl: destination.href }, {
         model: requestModel,
         messages: [
           ...(context ? [{ role: 'system' as const, content: context }] : []),

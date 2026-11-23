@@ -23,7 +23,8 @@
 - **Empacotamento privado.** O comando `node lia/desktop/scripts/package-windows.mjs --internal-test` empacota o Stage próprio por padrão. O NSIS sem assinatura foi gerado e executado no Windows em uma cópia sem `airi/`. Passaram instalação limpa, abertura e encerramento pelo Launcher instalado, substituição do Stage entre duas compilações 0.0.1 confirmada pelo hash e desinstalação. SHA-256 do instalador testado: `03FEDD20A5C1E99FB191C11A00606FF6B412E447CD871501CE28AE095291E460`. Preservação de dados entre versões, atualização automática e distribuição pública seguem pendentes.
 - **Em aberto.** Áudio físico ponta a ponta (G-AUD), cenários integrados C0–C8 (G-ARCH), consumidores legados de credenciais e validação de serviços externos. OIDC de produção segue desativado.
 - **Baseline funcional registrado.** `3ef6d11`. Os resultados de componentes posteriores constam nos relatórios e não promovem esse baseline.
-- **Próximo corte.** Reproduzir a possível corrida entre mudar a rota de chat e enviar uma solicitação preparada anteriormente. Concluir a paridade necessária e a validação de atualização com preservação de dados antes de remover a árvore legada.
+- **Revalidação do chat.** O Stage verifica a rota novamente após preparar histórico e memória, antes de ler a credencial e enviar. A regressão confirmou zero envios quando, durante a preparação, a rota é excluída ou muda de endereço ou modelo. A checagem cobre essa janela de preparação. Configuração e transportes continuam armazenados separadamente, e a checagem não revoga requisições já iniciadas.
+- **Próximo corte.** Validar a atualização com preservação de dados e concluir a paridade necessária antes de remover a árvore legada.
 
 [Evidências da Rodada 22](../reports/LIA-ROUND-22-IMPLEMENTATION-REPORT.md) · [Pendências por ambiente](QUANTO-FALTA.md)
 
