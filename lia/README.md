@@ -172,9 +172,13 @@ transcrição local sem chave ou para um adaptador dedicado via HTTPS.
 No caminho remoto, o Main pede confirmação a cada gravação, mantém
 a credencial vinculada ao destino no cofre e invalida a confirmação
 se a seleção de modelo ou a revisão dos transportes mudar.
-Os testes automatizados com transporte simulado cobrem confirmação,
-recusa, cancelamento e alteração de configuração. O diálogo nativo e
-o envio HTTPS real ainda precisam de validação no Windows.
+Os testes automatizados cobrem confirmação, recusa, cancelamento e
+alteração de configuração. O gate Electron Windows usa HTTPS local
+com áudio e credencial sintéticos. Execute em `lia/desktop`
+`node --experimental-strip-types scripts/check-native-stt-consent.mjs <certificado> <chave>`
+com certificado sintético que inclua o IP 127.0.0.2. O modo automatizado
+injeta a resposta do diálogo. Acrescente `--native-dialog` para
+exercitar o diálogo interativamente. Esse modo ainda precisa de validação.
 No percurso local anterior, o Electron transcreveu áudio sintético
 e cancelou uma requisição. A interface recebe permissão temporária para o
 microfone após o clique, libera a captura antes de transcrever e
