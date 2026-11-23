@@ -34,6 +34,9 @@ function createFixture(externalTexture = false) {
       nodes[names.indexOf(bones[name])].children.push(i)
   })
   const positions = Buffer.from(new Float32Array([-0.4, 0, 0, 0.4, 0, 0, 0, 1.5, 0]).buffer)
+  const times = Buffer.from(new Float32Array([0, 0.5, 1]).buffer)
+  const translations = Buffer.from(new Float32Array([0, 0, 0, 0.15, 0, 0, 0, 0, 0]).buffer)
+  const binary = Buffer.concat([positions, times, translations])
   const document = {
     asset: { version: '2.0' },
     extensionsUsed: ['VRMC_vrm'],
@@ -49,9 +52,21 @@ function createFixture(externalTexture = false) {
     nodes: [...nodes, { mesh: 0 }],
     meshes: [{ primitives: [{ attributes: { POSITION: 0 }, material: 0 }] }],
     materials: [{ doubleSided: true, pbrMetallicRoughness: { baseColorFactor: [0.2, 0.85, 0.3, 1], metallicFactor: 0 } }],
-    buffers: [{ byteLength: positions.length }],
-    bufferViews: [{ buffer: 0, byteLength: positions.length }],
-    accessors: [{ bufferView: 0, componentType: 5126, count: 3, type: 'VEC3', min: [-0.4, 0, 0], max: [0.4, 1.5, 0] }],
+    buffers: [{ byteLength: binary.length }],
+    bufferViews: [
+      { buffer: 0, byteLength: positions.length },
+      { buffer: 0, byteOffset: positions.length, byteLength: times.length },
+      { buffer: 0, byteOffset: positions.length + times.length, byteLength: translations.length },
+    ],
+    accessors: [
+      { bufferView: 0, componentType: 5126, count: 3, type: 'VEC3', min: [-0.4, 0, 0], max: [0.4, 1.5, 0] },
+      { bufferView: 1, componentType: 5126, count: 3, type: 'SCALAR', min: [0], max: [1] },
+      { bufferView: 2, componentType: 5126, count: 3, type: 'VEC3' },
+    ],
+    animations: [{
+      samplers: [{ input: 1, output: 2, interpolation: 'LINEAR' }],
+      channels: [{ sampler: 0, target: { node: nodes.length, path: 'translation' } }],
+    }],
     ...(externalTexture ? { images: [{ uri: 'https://example.invalid/texture.png' }] } : {}),
   }
   const raw = Buffer.from(JSON.stringify(document))
@@ -60,13 +75,13 @@ function createFixture(externalTexture = false) {
   const header = Buffer.alloc(20)
   header.writeUInt32LE(0x46546C67, 0)
   header.writeUInt32LE(2, 4)
-  header.writeUInt32LE(header.length + json.length + 8 + positions.length, 8)
+  header.writeUInt32LE(header.length + json.length + 8 + binary.length, 8)
   header.writeUInt32LE(json.length, 12)
   header.writeUInt32LE(0x4E4F534A, 16)
   const binaryChunk = Buffer.alloc(8)
-  binaryChunk.writeUInt32LE(positions.length, 0)
+  binaryChunk.writeUInt32LE(binary.length, 0)
   binaryChunk.writeUInt32LE(0x004E4942, 4)
-  return Buffer.concat([header, json, binaryChunk, positions])
+  return Buffer.concat([header, json, binaryChunk, binary])
 }
 
 async function run() {
@@ -104,7 +119,10 @@ async function run() {
     const [overlay] = await Promise.all([app.waitForEvent('window', { timeout: 10_000 }), openButton.click()])
     await chat.getByText('Avatar aberto no desktop.', { exact: true }).waitFor()
     await overlay.waitForFunction(() => document.querySelector('canvas')?.height > 150, undefined, { timeout: 10_000 })
-    await overlay.screenshot({ path: join(root, 'overlay.png') })
+    const firstFrame = await overlay.screenshot({ path: join(root, 'overlay.png') })
+    await delay(180)
+    const nextFrame = await overlay.screenshot({ path: join(root, 'overlay-animated.png') })
+    assert.ok(!firstFrame.equals(nextFrame), 'Os dois quadros do VRM animado são iguais.')
     const bounds = () => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()
       .find(window => window.webContents.getURL().endsWith('/presence.html')).getBounds())
     const initial = await bounds()
@@ -195,7 +213,7 @@ async function run() {
     const [reopened] = await Promise.all([app.waitForEvent('window', { timeout: 10_000 }), openButton.click()])
     await chat.getByText('Avatar aberto no desktop.', { exact: true }).waitFor()
     await Promise.all([reopened.waitForEvent('close', { timeout: 10_000 }), chat.close()])
-    const report = { syntheticVrm: true, invalidOverlayRejected: true, externalTextureRejected: true, moved, pinned: true, home: true, syntheticHover: hover, connectedDisplays: displays.displays.length, secondDisplayPlacement: secondDisplay ? 'PASS' : 'NOT RUN', syntheticDisplayRecovery: displayRecovery, hidden: true, closedWithChat: true }
+    const report = { syntheticVrm: true, animatedFramesDiffer: true, invalidOverlayRejected: true, externalTextureRejected: true, moved, pinned: true, home: true, syntheticHover: hover, connectedDisplays: displays.displays.length, secondDisplayPlacement: secondDisplay ? 'PASS' : 'NOT RUN', syntheticDisplayRecovery: displayRecovery, hidden: true, closedWithChat: true }
     await writeFile(join(root, 'report.json'), JSON.stringify(report, null, 2))
     console.log(JSON.stringify(report))
   }

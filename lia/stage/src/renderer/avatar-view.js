@@ -1,5 +1,5 @@
 import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm'
-import { Box3, Color, DirectionalLight, HemisphereLight, LoadingManager, OrthographicCamera, Scene, Vector3, WebGLRenderer } from 'three'
+import { AnimationMixer, Box3, Color, DirectionalLight, HemisphereLight, LoadingManager, OrthographicCamera, Scene, Vector3, WebGLRenderer } from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 
 import { validateLocalAvatar } from './avatar-file.js'
@@ -24,6 +24,10 @@ export function createAvatarView(canvas) {
   let model
   let bounds
   let disposed = false
+  let mixer
+  let avatar
+  let timer
+  let previousFrame
 
   function render() {
     if (!bounds || !canvas.clientWidth || !canvas.clientHeight)
@@ -44,6 +48,40 @@ export function createAvatarView(canvas) {
     renderer.setSize(canvas.clientWidth, canvas.clientHeight, false)
     renderer.render(scene, camera)
   }
+  function stopAnimation() {
+    clearInterval(timer)
+    timer = undefined
+  }
+
+  function updateAnimation() {
+    stopAnimation()
+    if (!mixer || document.hidden)
+      return
+    previousFrame = performance.now()
+    timer = setInterval(() => {
+      const now = performance.now()
+      const elapsed = Math.min((now - previousFrame) / 1000, 0.1)
+      previousFrame = now
+      mixer.update(elapsed)
+      avatar.update(elapsed)
+      renderer.render(scene, camera)
+    }, 1000 / 24)
+  }
+
+  function releaseModel() {
+    stopAnimation()
+    if (model) {
+      mixer?.stopAllAction()
+      mixer?.uncacheRoot(model)
+      scene.remove(model)
+      VRMUtils.deepDispose(model)
+      model = undefined
+      mixer = undefined
+      avatar = undefined
+    }
+  }
+
+  document.addEventListener('visibilitychange', updateAnimation)
   const resize = new ResizeObserver(render)
   resize.observe(canvas)
   return {
@@ -62,20 +100,24 @@ export function createAvatarView(canvas) {
         VRMUtils.deepDispose(vrm.scene)
         throw new Error('avatar-bounds')
       }
-      if (model) {
-        scene.remove(model)
-        VRMUtils.deepDispose(model)
-      }
+      releaseModel()
       model = vrm.scene
+      avatar = vrm
       bounds = nextBounds
       scene.add(model)
+      const clip = gltf.animations.find(animation => animation.duration > 0 && Number.isFinite(animation.duration))
+      if (clip) {
+        mixer = new AnimationMixer(model)
+        mixer.clipAction(clip).play()
+      }
       render()
+      updateAnimation()
     },
     dispose() {
       disposed = true
       resize.disconnect()
-      if (model)
-        VRMUtils.deepDispose(model)
+      document.removeEventListener('visibilitychange', updateAnimation)
+      releaseModel()
       renderer.dispose()
       renderer.forceContextLoss()
     },

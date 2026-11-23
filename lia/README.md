@@ -195,7 +195,9 @@ As preferências são gravadas na configuração canônica do produto.
 A prévia de avatar usa [Three.js](https://github.com/mrdoob/three.js)
 e [three-vrm](https://github.com/pixiv/three-vrm), ambos MIT, nas versões
 fixadas no lockfile. A renderização é carregada sob demanda, sem processo
-extra e sem loop de quadros para a imagem estática. A janela lê apenas o
+extra e sem loop de quadros para a imagem estática. Se o arquivo contiver
+uma animação glTF, a prévia toca a primeira faixa válida, com alvo de
+24 quadros por segundo enquanto o documento estiver visível. A janela lê apenas o
 VRM escolhido pela pessoa, limita o arquivo a 64 MB e recusa recursos
 externos. O renderer permanece isolado e sem acesso à rede. Nenhum
 modelo de terceiros é distribuído junto com a prévia.
@@ -209,8 +211,9 @@ Com dois monitores físicos conectados, o ensaio confirmou que a seleção
 do segundo confinou o avatar à área de trabalho escolhida e persistiu.
 Com mudança simulada da área útil, a janela reduziu e recuperou a
 escala configurada assim que voltou a dispor de espaço.
-Animações, modelos de uso real, fullscreen e recuperação após desconexão
-física de monitor seguem pendentes.
+O gate comparou dois quadros de uma animação incorporada sintética.
+Modelos de uso real, animações externas, fullscreen e recuperação após
+desconexão física de monitor seguem pendentes.
 
 Para repetir o ensaio em Windows, compile o Stage, instale o Electron
 com `corepack pnpm exec install-electron` em `lia/stage` e execute
