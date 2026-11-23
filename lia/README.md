@@ -218,7 +218,11 @@ do segundo confinou o avatar à área de trabalho escolhida e persistiu.
 Com mudança simulada da área útil, a janela reduziu e recuperou a
 escala configurada assim que voltou a dispor de espaço.
 O gate comparou dois quadros de uma animação incorporada sintética.
-Modelos de uso real, animações externas, fullscreen e recuperação após
+Dois modelos VRM texturizados de referência renderizaram de corpo
+inteiro no Windows. Modelos estáticos em pose T recebem uma postura
+relaxada. O ensaio usou arquivos locais já existentes e os modelos
+ficam fora da distribuição da prévia.
+Animações externas, fullscreen e recuperação após
 desconexão física de monitor seguem pendentes.
 
 Para repetir o ensaio em Windows, compile o Stage, instale o Electron

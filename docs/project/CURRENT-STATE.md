@@ -2,6 +2,8 @@
 
 ## 0. Estado agora
 
+- **VRM texturizado.** Dois modelos locais VRoid de referência renderizaram de corpo inteiro na janela de presença do Electron no Windows. A postura relaxada foi conferida visualmente nos dois. Os modelos não integram o pacote.
+
 - **Avatar salvo na prévia.** A pessoa pode guardar uma cópia do VRM no perfil local e removê-la mediante confirmação. O Electron no Windows recuperou um VRM sintético após reiniciar e confirmou que a exclusão persistiu. A presença no desktop ainda é aberta pelo chat.
 
 - **Idioma na prévia.** A janela de conversa e a janela de presença carregam o idioma do produto ao abrir. O Electron em Windows confirmou os dois idiomas e a interface inglesa de chat, gravação, memória, seleção de VRM e presença. A troca em janela já aberta e o diálogo nativo de autorização de STT ainda não foram validados.

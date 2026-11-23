@@ -4,6 +4,21 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 
 import { validateLocalAvatar } from './avatar-file.js'
 
+function relaxStaticArms(vrm) {
+  for (const side of ['left', 'right']) {
+    const shoulder = vrm.humanoid.getNormalizedBoneNode(`${side}UpperArm`)
+    const elbow = vrm.humanoid.getNormalizedBoneNode(`${side}LowerArm`)
+    if (!shoulder?.parent || !elbow)
+      continue
+    const elbowPosition = shoulder.parent.worldToLocal(elbow.getWorldPosition(new Vector3()))
+    const direction = elbowPosition.sub(shoulder.position)
+    if (Math.abs(direction.x) < 0.04 || Math.abs(direction.y) + Math.abs(direction.z) > Math.abs(direction.x) * 0.25)
+      continue
+    shoulder.rotateZ(-Math.sign(direction.x) * Math.PI / 3)
+  }
+  vrm.update(0)
+}
+
 export function createAvatarView(canvas) {
   const renderer = new WebGLRenderer({ canvas, alpha: true, antialias: true, powerPreference: 'low-power' })
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
@@ -94,6 +109,9 @@ export function createAvatarView(canvas) {
         throw new Error('avatar-model')
       }
       VRMUtils.rotateVRM0(vrm)
+      const clip = gltf.animations.find(animation => animation.duration > 0 && Number.isFinite(animation.duration))
+      if (!clip)
+        relaxStaticArms(vrm)
       const nextBounds = new Box3().setFromObject(vrm.scene)
       const size = nextBounds.getSize(new Vector3())
       if (nextBounds.isEmpty() || !Number.isFinite(size.length()) || size.y <= 0) {
@@ -105,7 +123,6 @@ export function createAvatarView(canvas) {
       avatar = vrm
       bounds = nextBounds
       scene.add(model)
-      const clip = gltf.animations.find(animation => animation.duration > 0 && Number.isFinite(animation.duration))
       if (clip) {
         mixer = new AnimationMixer(model)
         mixer.clipAction(clip).play()
