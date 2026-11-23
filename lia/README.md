@@ -160,6 +160,10 @@ Electron. A plataforma entra por `StageHostDeps`. O ponto de entrada e
 o preload são as fronteiras Electron. Chat, voz e transcrição têm
 serviços próprios no Main.
 
+O armazenamento e a busca lexical da memória ficam em `lia/core/src/memory`.
+O Stage legado usa esse módulo por meio do IPC existente. A prévia própria
+ainda precisa integrar a memória à conversa e às preferências.
+
 ```bash
 cd lia/stage
 corepack pnpm run build
