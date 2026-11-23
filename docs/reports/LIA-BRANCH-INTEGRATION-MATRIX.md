@@ -4,7 +4,11 @@
 
 A consolidação integra `138e2fd2` e `9065aa2` em `1e8a68bd` e foi
 publicada em `main`. Ela preserva os commits de visão cognitiva e o bootstrap
-de skills do Agent Hub. As branches de origem continuam no remoto.
+de skills do Agent Hub.
+
+Em 23/11, a referência remota `arena/7fa837f0-lia-project` foi removida depois de confirmar que seu SHA `9065aa2d4c63b337dab19eb6c4719b02082fc061` era ancestral da `main` e coincidia com o espelho externo e o checkout local preservado. A `main` era a branch padrão e a consulta ao GitHub retornou zero PRs abertos.
+
+O [relatório de voz de `fd0451d7`](LIA-MULTI-PROVIDER-VOICE-ARCHITECTURE.md) já estava na `main` com o mesmo conteúdo de origem em `3c2b132f`. A exigência de um TTS e um STT funcionais, configuráveis separadamente, foi incorporada à decisão DP-2. A especificação em `b2745f71` está na `main` com seções adicionais de visão cognitiva e o padrão de marca coincide byte a byte.
 
 O espelho externo contém as 12 branches remotas e passou em
 `git fsck --full`. Foram verificados os bundles locais e comparadas

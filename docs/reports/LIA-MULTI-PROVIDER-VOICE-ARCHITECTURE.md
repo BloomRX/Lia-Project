@@ -1,5 +1,6 @@
 # Lia — Arquitetura de voz com provedores independentes
 
+> O Stage próprio já tem síntese local com Kokoro, síntese HTTP e seleção independente de STT. Os ensaios Windows de HTTPS local usaram um serviço sintético e respostas de consentimento injetadas. Consulte o [estado atual](../project/CURRENT-STATE.md#0-estado-agora) e a [reconciliação das evidências de áudio](LIA-AUDIO-EVIDENCE-RECONCILIATION.md).
 Revisão documental de 14/11/2026. A arquitetura foi inspecionada em `0bf0629`. A evidência Windows de áudio e GPU foi coletada em `407300b8baa56b0ed8d14b7b2c0628222754e51f`. As conclusões de runtime pertencem a esse SHA e ao hardware medido. Nenhum adaptador, peso ou dependência foi adicionado nesta revisão.
 
 ## O que já existe

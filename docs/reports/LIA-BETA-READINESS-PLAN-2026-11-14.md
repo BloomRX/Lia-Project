@@ -13,7 +13,7 @@
 | ID | Decisão | Consequência direta no plano |
 |---|---|---|
 | **DP-1** | Primeiro beta é **interno** | Bloqueadores de distribuição pública (licença comercial, SmartScreen/assinatura, telemetria) deixam de ser P0; permanecem os de integridade do pacote. Tester externo não é público. |
-| **DP-2** | **Voz e STT são obrigatórios** para aprovação | Áudio deixa de ser “condicional” e vira gate bloqueante (G-AUD). Kokoro/STT reais passam de NOT RUN para P0. Toda a §4 existe por causa disso. |
+| **DP-2** | **Voz e STT são obrigatórios** para aprovação | G-AUD exige um TTS e um STT funcionais, selecionáveis e configuráveis separadamente, integrados à conversa no Stage. As escolhas iniciais podem ser substituídas. Consulte a [arquitetura de voz](LIA-MULTI-PROVIDER-VOICE-ARCHITECTURE.md). |
 | **DP-3** | **Fase 1 de UI/UX autorizada** | L-01, S-01, S-02, A-01, A-02 entram no escopo do beta; L-02 depende de segurança; L-03 entra junto com áudio. Design system completo (Fase 2) continua fora. |
 | **DP-4** | **OIDC sem decisão** — não aprovado, não seguro | OIDC sai do **caminho funcional** do beta sem remoção definitiva: entrada desabilitada, nenhuma requisição de auth, tokens legados ignorados/limpos. Ver §9. |
 | **DP-5** | **Instalador interno unsigned aceitável com aviso claro** | Authenticode deixa de bloquear; entram aviso no instalador/README, hash SHA-256 publicado e nota em `DISTRIBUTION-NOTICE`. |
@@ -193,7 +193,7 @@
 | **B-04** | **Distribuição não executada** — NSIS nunca rodou | W-08 | Pacote interno, instalação/upgrade/uninstall + aviso unsigned | Codex (S-H) | G-INST |
 | **B-05** | **OIDC no caminho funcional** — tokens no Renderer/`localStorage`; refresh pós-logout | SEC-01 (código); SEC-02 (bancada) | OIDC-OFF verificável (§9) | Arena (S-C) + Codex | G-SEC |
 | **B-06** | **CI vermelho** — lint 81 erros; stage-ui exit 1 | `06-lint.log`; `04-test-stage-ui.log` | Lint 0; exit 0; 0 unhandled rejections | Arena (S-A/S-C) | G-CI |
-| **B-07** | **Áudio não provado** — TTS/STT reais nunca executados; VAD baixa modelo em runtime; Kokoro exige Python + rede na instalação | QA H-01/H-02; §4 | AV-01…AV-15 na máquina física | Codex (S-G) + Arena (S-F) | G-AUD |
+| **B-07** | **Áudio integrado pendente** — há síntese isolada e gates sintéticos; falta testar o turno completo com as rotas escolhidas e áudio físico | QA H-01/H-02; §4 | AV-01…AV-15 na máquina física | Codex (S-G) + Arena (S-F) | G-AUD |
 
 ### 3.2 Bloqueadores condicionais
 
@@ -260,14 +260,16 @@ Regra de evidência: **mock de provider não conta**; gravação de tela + log s
 | Parada/mudo | `stage-ui/stores/speech-output-control.ts` | publica stop; cancela síntese, stream, fila e reprodução |
 | Configuração TTS | `stage-tamagotchi/renderer/stores/lia/voice.ts` | persiste `{preferred, fallback[]}` com `providerId/modelId/voiceId`; segredo descartado no bridge |
 
-### 4.3 Provedores no escopo
+### 4.3 Seleções iniciais e alternativas
 
-| Papel | Provedor | Obrigatório? | Observação |
-|---|---|---|---|
-| TTS | **Kokoro local (CPU)** | **Sim** | único adapter registrado (`VOICE_ENGINE_ADAPTERS`); `streams:false`, `runsLocally:true` |
-| STT | **Groq remoto via Main** (`lia-groq-transcription`) | **Sim** | caminho gerenciado; credencial nunca no Renderer |
-| STT local | `app-local-audio-transcription` | Não | exige servidor local (candle) em loopback; suportado, não exigido |
-| TTS remoto | providers herdados (ElevenLabs, Gemini, Comet, MiniMax… ) | Não | existem na lista AIRI, mas não foram validados; a UI não deve apresentá-los como prontos |
+| Capacidade | Rota candidata | Evidência necessária |
+|---|---|---|
+| TTS local | Kokoro em CPU, quando instalado | Reprodução audível integrada ao Stage. O smoke em `407300b` gerou WAVs em isolamento. |
+| TTS remoto | API compatível com `audio/speech` configurada no Launcher | Credencial vinculada ao destino, consentimento e reprodução audível com a rota selecionada. |
+| STT remoto | Adaptador transcrição HTTP no Main | Credencial quando exigida, consentimento de envio e transcrição de microfone real. |
+| STT local | Adaptador de transcrição em loopback | Compatibilidade com o servidor local, modelo e transcrição de microfone real. |
+
+Uma rota por capacidade deve passar AV-01–AV-15. O [catálogo de pesquisa](LIA-MULTI-PROVIDER-VOICE-ARCHITECTURE.md) separa candidatos dos adaptadores disponíveis.
 
 ### 4.4 Critérios objetivos (testáveis)
 
@@ -278,13 +280,13 @@ Regra de evidência: **mock de provider não conta**; gravação de tela + log s
 | **AV-01** | Permissão de microfone concedida para áudio e negada para vídeo; decisão sobrevive ao reinício | Testar no Stage real: pedir mic, negar vídeo, reabrir | log Main + screenshot do prompt | NOT RUN |
 | **AV-02** | Seleção de dispositivo lista ≥1 entrada, troca de dispositivo aplica na próxima captura e persiste | Trocar mic em Configurar Lia → falar → reabrir | captura + log de `deviceId` (sem PII) | NOT RUN |
 | **AV-03** | Captura+VAD: 3 s de fala geram início/fim de fala e buffer ≥ 2 s; silêncio não gera envio | Frase controlada + 10 s de silêncio | log VAD + duração | NOT RUN |
-| **AV-04** | STT remoto: transcrição chega em ≤ **1,5× duração do áudio + 2 s** **[proposto]** e ≥ 90% das palavras-chave presentes em 3 frases fixas | 3 frases pt-BR pré-definidas | texto transcrito + tempos | NOT RUN |
-| **AV-05** | STT sem vazar credencial: nenhuma chave em log/DOM/toast/URL; erro de provider é tipado | Chave sintética + derrubar rede | varredura + screenshot | NOT RUN |
+| **AV-04** | STT selecionado: transcrição chega em ≤ **1,5× duração do áudio + 2 s** **[proposto]** e ≥ 90% das palavras-chave presentes em 3 frases fixas | 3 frases pt-BR pré-definidas | texto transcrito + tempos | NOT RUN |
+| **AV-05** | STT preserva credenciais e emite erro tipado | Rota remota: credencial sintética e falha de rede. Rota local: ausência de chave e falha de serviço ou modelo | varredura + screenshot | NOT RUN |
 | **AV-06** | Texto transcrito vira **uma** mensagem de usuário e a conversa responde; ferramentas e anexos seguem o mesmo caminho do texto digitado | Ditado → resposta | histórico + log de send | NOT RUN |
-| **AV-07** | Kokoro instala, pré-aquece e sintetiza pt-BR com RTF ≤ **0,5** em CPU **[proposto]** após aquecimento | 5 frases, medir tempo/duração | tabela RTF + WAV | BLOCKED (rede/Python) |
+| **AV-07** | TTS selecionado sintetiza pt-BR. Medir RTF e latência antes de aplicar o limiar aprovado | 5 frases nas mesmas condições | tempo até o primeiro áudio, RTF e WAV | Síntese isolada PASS em `407300b`. Gate integrado NOT RUN |
 | **AV-08** | Reprodução: áudio toca no dispositivo padrão, legenda acompanha, **parar fala** corta em ≤ 1 s e não retoma | Interromper no meio | gravação + log | NOT RUN |
 | **AV-09** | Falhas tratadas: provider off-line, engine ausente e voz inexistente mostram mensagem humana, sem crash e sem repetir áudio | 3 falhas induzidas | screenshots + log | NOT RUN |
-| **AV-10** | Seleção de provedor: `voice.tts` persiste `preferred`/`fallback`, aplica na próxima resposta e não grava segredo | Trocar voz/modelo, reabrir | `lia-product.json` sanitizado | NOT RUN |
+| **AV-10** | Seleções de TTS e STT persistem separadamente, valem no turno seguinte e preservam credenciais no cofre | Trocar cada capacidade, reabrir e confirmar que a outra seleção foi preservada | `lia-product.json` sanitizado | NOT RUN |
 | **AV-11** | Cancelamento: stop durante síntese e durante reprodução libera a fila; nenhuma segunda reprodução começa | Parar 2× em momentos distintos | log + gravação | NOT RUN |
 | **AV-12** | Encerramento: sair falando não deixa processo órfão (`python`, worker, Electron) e a próxima abertura sintetiza de novo | Fechar durante fala; contar PIDs | `Get-Process` antes/depois | NOT RUN |
 | **AV-13** | Degradação: microfone ausente/negado mantém o chat de texto funcional e mostra erro tipado | Remover mic / negar permissão | screenshot + log | NOT RUN |
@@ -293,8 +295,8 @@ Regra de evidência: **mock de provider não conta**; gravação de tela + log s
 
 ### 4.5 Dependências duras de áudio
 
-1. **Rede na primeira execução**: VAD baixa `onnx-community/silero-vad`; Kokoro baixa modelo e 3 vozes (com SHA-256) e instala wheels. Sem rede, ambos falham — registrar BLOCKED, não FAIL.
-2. **Python 3.10–3.13** na máquina do tester para o Kokoro; ausência = engine indisponível (AV-14), não crash.
+1. **Rede e instalação**. Informar os downloads de cada rota e se ela funciona offline depois de preparada. O Kokoro instala wheels e baixa o modelo e as vozes com SHA-256. Uma rota remota precisa de rede e consentimento de transmissão.
+2. **Python 3.10–3.13 para Kokoro**, quando selecionado. A ausência deve aparecer como engine indisponível (AV-14).
 3. **`soundfile` sem versão/hash** no manifest — pendência de integridade (§8, DIST-01).
 4. **Pacotes de voz** (`pf_dora`, `pm_alex`, `pm_santa`) com SHA-256 fixo, mas termos de redistribuição precisam de registro.
 5. **Dispositivo físico**: sem mic/auto-falante não há como produzir a evidência — Linux sem áudio não substitui.
@@ -346,7 +348,7 @@ Todos exigem evidência no **mesmo SHA**, com comando, saída e artefato sanitiz
 
 ### 5.5 G-AUD — Áudio (DP-2)
 
-**Critério de aprovação:** AV-01…AV-15 **todos PASS** no Windows físico, com Kokoro local e STT Groq. AV-04/AV-07 usam os limiares aprovados em P-2. Qualquer BLOCKED impede o gate; “funciona no mock” não conta.
+**Critério de aprovação:** AV-01…AV-15 **todos PASS** no Windows físico, com um TTS e um STT selecionáveis e integrados à conversa. AV-04 e AV-07 usam os limiares aprovados em P-2. A aprovação requer evidência de áudio captado e reproduzido no hardware.
 
 ### 5.6 G-INST — Instalação e distribuição interna
 
@@ -469,7 +471,7 @@ Todos exigem evidência no **mesmo SHA**, com comando, saída e artefato sanitiz
 | Conversa e histórico | runtime + reinício do SO | transcrição + capturas |
 | Tool calling `get_weather` | rede + provider + execução local | `tool-call`/`tool-result` |
 | **Mic/STT** | microfone físico | gravação + transcrição |
-| **TTS Kokoro** | Python + áudio + CPU física | WAV + RTF |
+| **TTS selecionado** | Saída de áudio física e pré-requisitos do engine | Áudio audível, WAV quando aplicável e RTF |
 | Parada/mudo de áudio | saída de áudio real | gravação |
 | Órfãos/PIDs | tabela de processos Windows | `Get-Process` |
 | NSIS/instalação/upgrade/uninstall | Windows x64 | logs + screenshots |
@@ -547,7 +549,7 @@ Só declarar quando **todos** estiverem verdes no mesmo SHA taggeado:
 - [ ] G-HIST: reabrir app e SO preservam; confirmação de limpeza
 - [ ] G-TOOLS: `get_weather` real + gate A-1 verificado + TOOL-01/02 cobertos
 - [ ] G-STAGE: boot, Stage, sandbox, VRM render, zero órfãos
-- [ ] G-AUD: AV-01…AV-15 PASS (TTS local + STT remoto)
+- [ ] G-AUD: AV-01…AV-15 PASS com TTS e STT selecionáveis na conversa real
 - [ ] G-INST: NSIS limpo/upgrade/uninstall + aviso unsigned + hash + notices
 - [ ] G-SEC: OIDC-OFF comprovado; SEC-04/05/06/07 fechados ou aceitos por escrito
 - [ ] G-PROC: matriz re-executada no SHA, evidências commitadas, `CURRENT-STATE.md` atualizado
@@ -560,7 +562,7 @@ Só declarar quando **todos** estiverem verdes no mesmo SHA taggeado:
 | ID | Decisão | Por que bloqueia | Recomendação |
 |---|---|---|---|
 | **P-1** | OIDC: entra ou sai do produto? | Define se SEC-01/02/03 são corrigidos ou se o OIDC-OFF vira remoção | Manter OIDC-OFF no beta e decidir depois |
-| **P-2** | Aprovar limiares de áudio (AV-04/AV-07) e o escopo “Kokoro local + Groq remoto” | Sem limiar não há PASS/FAIL testável | Aprovar os propostos; TTS remoto fora |
+| **P-2** | Aprovar limiares de desempenho de áudio (AV-04 e AV-07) para as rotas escolhidas | Necessário para classificar desempenho | Calibrar com as medições Windows |
 | **P-3** | C0–C4 é gate do beta? Quais thresholds? | Muda o custo da Onda 4 | Adiar C0–C4 para pós-beta interno, registrar dívida |
 | **P-4** | Live2D no pacote? | Licença Cubism + build externo | VRM apenas no beta |
 | **P-5** | Hero PNG: autorização ou placeholder? | Asset sem proveniência não pode ser redistribuído | Placeholder neutro até autorização |

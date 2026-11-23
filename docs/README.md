@@ -105,6 +105,7 @@ o documento da área que você vai tocar.
 | [`product/M1-SCOPE.md`](product/M1-SCOPE.md) | Escopo M1 |
 | [`product/M1-I18N-DEBT.md`](product/M1-I18N-DEBT.md) | Dívida de i18n |
 | [`product/M1-PERSONAL-VOICE-ARCHITECTURE.md`](product/M1-PERSONAL-VOICE-ARCHITECTURE.md) | Arquitetura de voz pessoal |
+| [Arquitetura de voz com provedores independentes](reports/LIA-MULTI-PROVIDER-VOICE-ARCHITECTURE.md) | Catálogo de candidatos e contratos de TTS e STT definidos em 14/11 |
 | [`product/M1-CUSTOM-VOICE-LICENSING.md`](product/M1-CUSTOM-VOICE-LICENSING.md) | Licenciamento de voz customizada |
 | [`product/LIA-SECURITY-PERMISSIONS-WINDOWS-TRUST.md`](product/LIA-SECURITY-PERMISSIONS-WINDOWS-TRUST.md) | Permissões e confiança no Windows |
 | [`product/EXTERNAL-BENCHMARKS-NECTAR-ALFRED.md`](product/EXTERNAL-BENCHMARKS-NECTAR-ALFRED.md) | Benchmarks externos de referência |
