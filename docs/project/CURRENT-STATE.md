@@ -10,7 +10,7 @@
 
 - **Prévia própria.** O Stage em `lia/stage` usa a seleção canônica de STT. O Main pede consentimento por gravação para adaptadores dedicados via HTTPS. Os testes automatizados cobrem recusa, cancelamento e mudança de configuração durante a confirmação. O diálogo nativo e o envio HTTPS real ainda precisam de gate Windows.
 
-- **Entrada atual.** `Lia.bat` inicia o Launcher pelo workspace `airi/`. O Stage ativo é `airi/apps/stage-tamagotchi`; `lia/stage` é um protótipo.
+- **Entrada atual.** `Lia.bat` inicia o Launcher pelo workspace `airi/` e usa o Stage legado. A prévia opt-in em `lia/stage` tem build e gates de janela próprios. O [CI Windows](../reports/LIA-BRANCH-INTEGRATION-MATRIX.md#prévia-independente-no-windows) confirmou abertura, presença e encerramento na árvore sem AIRI. A suíte do Launcher e o teste do cofre ainda falham no runner hospedado.
 - **Com evidência no Windows.** Conversa local sem chave, Stage ativo com Launcher fechado, retomada ao reabrir o Launcher e teste de pacote interno. O ensaio anterior também registra memória e personalidade no chat, presença livre e colocação no segundo monitor.
 - **Em aberto.** Áudio físico ponta a ponta (G-AUD), cenários integrados C0–C8 (G-ARCH), instalação limpa, consumidores legados de credenciais e validação de serviços externos. OIDC de produção segue desativado.
 - **Baseline funcional registrado.** `3ef6d11`. Os resultados de componentes posteriores constam nos relatórios e não promovem esse baseline.

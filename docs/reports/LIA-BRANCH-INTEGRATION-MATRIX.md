@@ -2,9 +2,9 @@
 
 ## Retomada da consolidação — 22/11/2026
 
-A candidata local da `main` integra `138e2fd2` e `9065aa2` em
-`1e8a68bd`. Ela preserva os commits de visão cognitiva e o bootstrap
-de skills do Agent Hub. A `main` publicada ainda está em `138e2fd2`.
+A consolidação integra `138e2fd2` e `9065aa2` em `1e8a68bd` e foi
+publicada em `main`. Ela preserva os commits de visão cognitiva e o bootstrap
+de skills do Agent Hub. As branches de origem continuam no remoto.
 
 O espelho externo contém as 12 branches remotas e passou em
 `git fsck --full`. Foram verificados os bundles locais e comparadas
@@ -46,6 +46,17 @@ instalado e a desinstalação retornaram sucesso. A verificação confirmou
 a remoção do executável e da entrada de desinstalação da prévia.
 O fluxo padrão, a atualização de uma instalação anterior e a
 paridade de recursos com o Stage legado seguem pendentes.
+
+Os gates hospedados do GitHub Actions também confirmaram a abertura e o
+encerramento pelo Launcher e a janela de presença com VRM sintético em uma
+árvore sem AIRI. A mesma execução registrou 43 timeouts na suíte do Launcher
+e 12 falhas no cofre multiprocesso, ainda na preparação de credenciais
+sintéticas. Os 27 testes da configuração passaram. A origem da falha do
+cofre hospedado continua em investigação. Resultados por etapa na
+[execução Windows de 22/11](https://github.com/BloomRX/Lia-Project/actions/runs/45098566159).
+O [gate hospedado de histórico](https://github.com/BloomRX/Lia-Project/actions/runs/45098698966)
+também passou com serviço HTTP local sintético, incluindo retomada após
+reinício, cancelamento da limpeza e remoção do contexto após confirmar.
 
 **Data:** 16/11/2026
 **Branch de destino:** `arena/7fa837f0-lia-project` @ `971d309074`
