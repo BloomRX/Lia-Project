@@ -10,6 +10,8 @@ const english = new Map([
   ['Ouvir resposta', 'Listen to reply'],
   ['Resposta da Lia', 'Lia’s reply'],
   ['Histórico da conversa', 'Conversation history'],
+  ['Permitir consulta à data e hora deste computador nesta mensagem', 'Allow checking this computer’s date and time for this message'],
+  ['A consulta de data e hora está disponível em mensagens de texto com IA local compatível.', 'The date and time tool is available for text with compatible local AI.'],
   ['Este cartão não está disponível para esta conexão. Use IA local ou selecione a personalidade padrão.', 'This card is unavailable for this connection. Use local AI or select the default personality.'],
   ['Personalidade', 'Personality'],
   ['Personalidades importadas ou personalizadas são usadas apenas com IA local.', 'Imported or customized personalities are used only with local AI.'],

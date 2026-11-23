@@ -13,6 +13,7 @@ import { LIA_MEMORY_LIMITS } from '../../../core/src/memory/contracts.ts'
 import { LIA_DEFAULT_PERSONA, renderLiaPersonaDescription, renderLiaPersonaPersonality, renderLiaPersonaScenario } from '../../../core/src/persona/default.ts'
 import { findLiaAiProviderByStageProviderId, ProviderError, ProviderRegistry, ProviderRuntime } from '../../../core/src/providers/index.ts'
 import { maxStageImageBytes } from '../shared/chat-image.ts'
+import { chatWithLocalClock } from './stage-clock-tool.ts'
 
 interface StageChatDependencies {
   fetch?: typeof globalThis.fetch
@@ -26,7 +27,7 @@ interface StageChatDependencies {
 
 export type StageChatResult
   = | { ok: true, text: string, historyUnavailable?: true }
-    | { ok: false, code: 'invalid' | 'image-invalid' | 'image-unavailable' | 'configuration' | 'persona-unavailable' | 'unavailable' | 'cancelled' | 'busy' | 'credentials' | 'timeout' | 'rate-limit' }
+    | { ok: false, code: 'invalid' | 'image-invalid' | 'image-unavailable' | 'configuration' | 'persona-unavailable' | 'tool-unavailable' | 'unavailable' | 'cancelled' | 'busy' | 'credentials' | 'timeout' | 'rate-limit' }
 
 const historyTurns = 6
 const brainCatalog = createProductionBrainCatalog()
@@ -115,18 +116,22 @@ export function createStageChat({ fetch, storage, recallMemory, readCredential, 
     return { providerId, modelId, requestModel, definition, transportId: record.id, destination, customCard }
   }
 
-  async function send(input: unknown, signal: AbortSignal, image?: unknown): Promise<StageChatResult> {
+  async function send(input: unknown, signal: AbortSignal, image?: unknown, allowClock?: unknown): Promise<StageChatResult> {
     if (typeof input !== 'string' || input.length > 8_000 || !input.trim())
       return { ok: false, code: 'invalid' }
     const attachment = image === undefined ? undefined : imageContent(image)
     if (image !== undefined && !attachment)
       return { ok: false, code: 'image-invalid' }
+    if (allowClock !== undefined && typeof allowClock !== 'boolean')
+      return { ok: false, code: 'invalid' }
     try {
       signal.throwIfAborted()
       const initial = await resolveRoute(Boolean(attachment))
       if (typeof initial === 'string')
         return initial === 'configuration' ? unavailableConfiguration() : { ok: false, code: initial }
       const { providerId, modelId, requestModel, definition, destination, customCard } = initial
+      if (allowClock && (!definition.localOnly || attachment))
+        return { ok: false, code: 'tool-unavailable' }
       const prompt = customCard ? await readPersona?.(customCard) : defaultPersonaPrompt
       if (!prompt)
         return { ok: false, code: 'persona-unavailable' }
@@ -144,12 +149,16 @@ export function createStageChat({ fetch, storage, recallMemory, readCredential, 
       signal.throwIfAborted()
       // Preparation can yield while the Launcher edits the route. Ask the user to
       // retry a draft rather than silently sending it to another destination.
-      const currentRoute = await resolveRoute(Boolean(attachment))
+      const sameRoute = async () => {
+        const currentRoute = await resolveRoute(Boolean(attachment))
+        return typeof currentRoute !== 'string' && currentRoute.transportId === initial.transportId
+          && currentRoute.providerId === providerId && currentRoute.modelId === modelId
+          && currentRoute.requestModel === requestModel && currentRoute.destination.href === destination.href
+          && currentRoute.customCard === customCard
+      }
+      const unchanged = await sameRoute()
       signal.throwIfAborted()
-      if (typeof currentRoute === 'string' || currentRoute.transportId !== initial.transportId
-        || currentRoute.providerId !== providerId || currentRoute.modelId !== modelId
-        || currentRoute.requestModel !== requestModel || currentRoute.destination.href !== destination.href
-        || currentRoute.customCard !== customCard)
+      if (!unchanged)
         return unavailableConfiguration()
       const credential = definition.localOnly ? undefined : credentialForDestination(readCredential?.(providerId), providerId, destination, 'chat')
       if (!definition.localOnly && !credential)
@@ -159,7 +168,8 @@ export function createStageChat({ fetch, storage, recallMemory, readCredential, 
       const registry = new ProviderRegistry()
       registry.register({ id: providerId, protocol: 'chat-completions', credentialRequired: definition.requiresApiKey })
       const runtime = new ProviderRuntime(registry, { fetch, resolveCredential: () => credential })
-      const response = await runtime.chat({ providerId, baseUrl: destination.href }, {
+      const config = { providerId, baseUrl: destination.href }
+      const request: Parameters<typeof runtime.chat>[1] = {
         model: requestModel,
         messages: [
           { role: 'system', content: context ? `${prompt}\n\n${context}` : prompt },
@@ -172,13 +182,16 @@ export function createStageChat({ fetch, storage, recallMemory, readCredential, 
             { type: 'image_url', image_url: { url: attachment } },
           ] : text },
         ],
-      }, { signal })
+      }
+      const response = allowClock
+        ? await chatWithLocalClock(runtime, config, request, signal, sameRoute)
+        : await runtime.chat(config, request, { signal })
       signal.throwIfAborted()
       if (credential && response.text.includes(credential))
         return { ok: false, code: 'unavailable' }
-      if (!context && !attachment)
+      if (!context && !attachment && !allowClock)
         current.turns = [...current.turns, { user: text, assistant: response.text.slice(0, 8_000) }].slice(-historyTurns)
-      const turn = { route, user: text, assistant: response.text.slice(0, 8_000), reusable: !context }
+      const turn = { route, user: text, assistant: response.text.slice(0, 8_000), reusable: !context && !allowClock }
       if (storage && !attachment && (!credential || !text.includes(credential))) {
         try {
           await storage.append(turn)
@@ -193,6 +206,8 @@ export function createStageChat({ fetch, storage, recallMemory, readCredential, 
       if (signal.aborted)
         return { ok: false, code: 'cancelled' }
       if (error instanceof ProviderError) {
+        if (error.code === 'configuration')
+          return unavailableConfiguration()
         if (error.code === 'credentials' || error.code === 'timeout')
           return { ok: false, code: error.code }
         if (error.code === 'http' && error.status === 429)

@@ -19,7 +19,14 @@ const server = createServer(async (request, response) => {
   for await (const chunk of request)
     chunks.push(chunk)
   requests.push(JSON.parse(Buffer.concat(chunks).toString('utf8')))
+  const requestBody = requests.at(-1)
   response.setHeader('Content-Type', 'application/json')
+  if (requestBody.tools) {
+    assert.equal(requestBody.tools.length, 1)
+    assert.equal(requestBody.tools[0].function.name, 'lia_local_time')
+    response.end(JSON.stringify({ choices: [{ message: { content: null, tool_calls: [{ id: 'clock_fixture', type: 'function', function: { name: 'lia_local_time', arguments: '{}' } }] } }] }))
+    return
+  }
   if (requests.at(-1).messages.at(-1).content === 'Testar limite') {
     response.writeHead(429)
     response.end(JSON.stringify({ detail: 'fixture-private-upstream-body' }))
@@ -256,7 +263,22 @@ try {
   assert.equal(await page.getByRole('spinbutton', { name: 'Energia' }).inputValue(), '20')
   assert.equal(await page.getByLabel('Contexto base', { exact: true }).inputValue(), 'serious')
   await page.screenshot({ path: join(root, 'traits.png'), fullPage: true })
+  const clock = page.getByRole('checkbox', { name: 'Permitir consulta à data e hora deste computador nesta mensagem' })
+  assert.equal(await clock.isChecked(), false)
+  await clock.check()
+  const callIndex = requests.length
+  await submit(page, 'Que horas são?', callIndex + 2)
+  assert.equal(requests[callIndex].messages.at(-1).role, 'user')
+  assert.deepEqual(requests[callIndex + 1].messages.at(-1).tool_call_id, 'clock_fixture')
+  assert.equal(requests[callIndex + 1].messages.at(-1).role, 'tool')
+  assert.match(requests[callIndex + 1].messages.at(-1).content, /\d{2}:\d{2}:\d{2}/)
+  assert.equal(requests[callIndex + 1].tools, undefined)
+  assert.equal(await clock.isChecked(), false)
+  await submit(page, 'Mensagem sem ferramenta', requests.length + 1)
+  assert.equal(requests.at(-1).tools, undefined)
+  assert.equal(requests.at(-1).messages.some(message => message.role === 'tool'), false)
   const report = { service: 'synthetic local HTTP', optIn: true, reopened: true, resumed: true, legacyTextImported: true, cancellationPreservedHistory: true, cleared: true, rateLimitSanitized: true, refusedImageWithoutVision: true, conversationsIsolated: true, selectionRestored: true, deletionConfirmed: true, builtInPersonaInRequest: true, importedPersonaInRequest: true, importedPersonaRestored: true, personaContextIsolated: true, localKokoroMutedPlayback: withVoice ? 'cancelled, retried, played and stopped' : null, autoPlay: withVoice ? 'opt-in, persisted, played, opted out' : null, customizedTraitsPersisted: true }
+  report.localClockRoundTrip = true
   await writeFile(join(root, 'report.json'), JSON.stringify(report, null, 2))
   console.log(JSON.stringify(report))
 }

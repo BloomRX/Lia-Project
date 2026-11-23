@@ -4,6 +4,7 @@ import { t } from './locale.js'
 
 const form = document.querySelector('form')
 const message = document.querySelector('#message')
+const allowClock = document.querySelector('#allow-clock')
 const send = document.querySelector('button[type="submit"]')
 const cancel = document.querySelector('#cancel')
 const messages = document.querySelector('#messages')
@@ -110,6 +111,7 @@ const errors = {
   'image-invalid': t('Escolha uma imagem PNG ou JPEG de até 3 MB.'),
   'image-unavailable': t('A conexão selecionada não tem uma rota de visão disponível.'),
   'persona-unavailable': t('Este cartão não está disponível para esta conexão. Use IA local ou selecione a personalidade padrão.'),
+  'tool-unavailable': t('A consulta de data e hora está disponível em mensagens de texto com IA local compatível.'),
   'rate-limit': t('A conexão de IA atingiu seu limite de uso. Aguarde e tente novamente.'),
   timeout: t('A IA demorou para responder. Tente novamente.'),
   unavailable: t('A IA não respondeu. Verifique o serviço e tente novamente.'),
@@ -157,6 +159,7 @@ async function changeConversation(action, id) {
       throw new Error('conversation')
     showConversation(state)
     message.value = ''
+    allowClock.checked = false
     clearAttachment()
     answerVersion++
     clearAudio()
@@ -376,6 +379,9 @@ form.addEventListener('submit', async (event) => {
 
   send.disabled = true
   cancelRequested = false
+  const clockAllowed = allowClock.checked
+  allowClock.checked = false
+  allowClock.disabled = true
   cancel.disabled = false
   message.readOnly = true
   imagePick.disabled = true
@@ -387,7 +393,7 @@ form.addEventListener('submit', async (event) => {
       status.textContent = errors.cancelled
       return
     }
-    const result = await window.liaStageChat.send(text, bytes)
+    const result = await window.liaStageChat.send(text, bytes, clockAllowed)
     if (!result.ok) {
       status.textContent = errors[result.code] ?? errors.unavailable
       return
@@ -412,6 +418,7 @@ form.addEventListener('submit', async (event) => {
     message.readOnly = false
     send.disabled = false
     cancel.disabled = true
+    allowClock.disabled = false
     imagePick.disabled = false
     imageRemove.disabled = false
     message.focus()

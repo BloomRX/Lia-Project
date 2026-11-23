@@ -57,6 +57,30 @@ test('returns a public cancellation result when already aborted', async () => {
   assert.deepEqual(await fixture([])('ola', controller.signal), { ok: false, code: 'cancelled' })
 })
 
+test('clock permission is opt-in and unknown tool calls cannot trigger a follow-up', async () => {
+  const local = { ...record, baseUrl: 'http://127.0.0.1:1234/v1' }
+  const requests: { tools?: { function: { name: string } }[] }[] = []
+  const send = createStageChat({
+    async fetch(_url, input) {
+      requests.push(JSON.parse(String(input?.body)))
+      return Response.json({ choices: [{ message: {
+        content: null, tool_calls: [{ id: 'invalid_tool', type: 'function', function: { name: 'other', arguments: '{}' } }],
+      } }] })
+    },
+    async readProduct() {
+      return { filePath: '', status: 'ok', value: { provider: { chat: { preferred: { providerId: 'local-chat', modelId: 'test-model' } } } } }
+    },
+    async readTransports() {
+      return { schemaVersion: 1, revision: 1, records: [local], tombstones: [], migration: { version: 1, imported: [] } }
+    },
+  })
+  assert.deepEqual(await send('Oi', new AbortController().signal), { ok: false, code: 'unavailable' })
+  assert.equal(requests[0]?.tools, undefined)
+  assert.deepEqual(await send('Que horas são?', new AbortController().signal, undefined, true), { ok: false, code: 'unavailable' })
+  assert.equal(requests[1]?.tools?.[0]?.function.name, 'lia_local_time')
+  assert.equal(requests.length, 2)
+})
+
 test('rejects a selected personality card that is not available in the native Stage', async () => {
   const send = createStageChat({
     async readProduct() {

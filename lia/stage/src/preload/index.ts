@@ -36,7 +36,7 @@ contextBridge.exposeInMainWorld('liaStageChat', {
   changeConversation: (action: 'create' | 'select' | 'delete', id?: string) => ipcRenderer.invoke(stageConversationChange, action, id),
   importHistory: (file: string) => ipcRenderer.invoke(stageHistoryImport, file),
   changeHistory: (action: 'enable' | 'disable' | 'clear') => ipcRenderer.invoke(stageHistoryChange, action),
-  send: (message: string, image?: Uint8Array) => ipcRenderer.invoke(stageChatSend, message, image),
+  send: (message: string, image?: Uint8Array, allowClock?: boolean) => ipcRenderer.invoke(stageChatSend, message, image, allowClock),
   cancel: () => ipcRenderer.invoke(stageChatCancel),
   speak: () => ipcRenderer.invoke(stageChatSpeak),
   stopSpeech: () => ipcRenderer.invoke(stageChatStopSpeech),

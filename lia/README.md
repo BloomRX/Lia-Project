@@ -151,6 +151,11 @@ Em **Editar traços da Lia**, ajuste cada traço na escala de 0 a 100 e
 selecione o contexto base. **Salvar traços** aplica uma versão separada da
 Lia padrão às conversas com IA local. Os cartões importados ficam guardados.
 
+Em mensagens de texto, a caixa de consulta de data e hora autoriza essa
+ferramenta para um único envio a um modelo local compatível com chamadas
+de função. A Lia lê a data e a hora do Windows somente se o modelo
+solicitar a ferramenta.
+
 Para repetir o gate de abertura e encerramento no Windows, prepare
 os builds e instale o Electron do Stage. Em `lia/desktop`, execute
 `node --experimental-strip-types scripts/check-native-stage.mjs`.
