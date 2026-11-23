@@ -157,5 +157,6 @@ jobs:
             ${{ runner.temp }}/lia-native-vision-*/report.json
             ${{ runner.temp }}/lia-native-vision-*/stage.png
             ${{ runner.temp }}/lia-native-stt-*/report.json
+            ${{ runner.temp }}/lia-native-stt-*/microphone.png
             ${{ runner.temp }}/lia-native-install-*/report.json
           if-no-files-found: ignore

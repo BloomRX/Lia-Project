@@ -4,8 +4,45 @@ const record = document.querySelector('#record')
 const cancel = document.querySelector('#record-cancel')
 const status = document.querySelector('#record-status')
 const draft = document.querySelector('#message')
+const microphone = document.querySelector('#microphone')
+const microphoneStatus = document.querySelector('#microphone-status')
 const mimeType = 'audio/webm;codecs=opus'
 let current
+let listing = 0
+
+async function refreshMicrophones(activeTrack) {
+  const version = ++listing
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices()
+    if (version !== listing)
+      return
+    const previous = microphone.value
+    const inputs = devices.filter(device => device.kind === 'audioinput' && device.deviceId && device.deviceId !== 'default' && device.deviceId !== 'communications')
+    // Chromium may hide the device list even while the selected track is available.
+    const activeId = activeTrack?.getSettings().deviceId
+    if (activeId && !['default', 'communications'].includes(activeId) && !inputs.some(device => device.deviceId === activeId))
+      inputs.push({ deviceId: activeId, label: activeTrack.label })
+    if (!inputs.length && microphone.options.length > 1)
+      return
+    const choices = [
+      new Option(t('Microfone padrão'), ''),
+      ...inputs.map((device, index) => new Option(device.label || `${t('Microfone')} ${index + 1}`, device.deviceId)),
+    ]
+    microphone.replaceChildren(...choices)
+    microphone.value = choices.some(option => option.value === previous) ? previous : ''
+    microphoneStatus.textContent = previous && !microphone.value
+      ? t('O microfone selecionado foi desconectado. A próxima gravação usará o padrão.')
+      : ''
+  }
+  catch {
+    if (version === listing)
+      microphoneStatus.textContent = t('Não foi possível listar os microfones.')
+  }
+}
+
+void refreshMicrophones()
+navigator.mediaDevices?.addEventListener('devicechange', () => void refreshMicrophones())
+microphone.addEventListener('change', () => { microphoneStatus.textContent = '' })
 
 function release(job) {
   clearTimeout(job.timer)
@@ -20,6 +57,7 @@ function finish(job, message) {
   record.textContent = t('Gravar mensagem')
   record.disabled = false
   cancel.disabled = true
+  microphone.disabled = false
   status.textContent = message
 }
 
@@ -44,6 +82,8 @@ record.addEventListener('click', async () => {
   current = job
   record.disabled = true
   cancel.disabled = false
+  microphone.disabled = true
+  const deviceId = microphone.value
   status.textContent = t('Aguardando acesso ao microfone…')
 
   try {
@@ -51,11 +91,12 @@ record.addEventListener('click', async () => {
       throw new Error('Microphone unavailable')
     if (current !== job)
       return
-    job.stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    job.stream = await navigator.mediaDevices.getUserMedia({ audio: deviceId ? { deviceId: { exact: deviceId } } : true })
     if (current !== job) {
       release(job)
       return
     }
+    void refreshMicrophones(job.stream.getAudioTracks()[0])
     const recorder = new MediaRecorder(job.stream, { mimeType })
     job.recorder = recorder
     recorder.addEventListener('dataavailable', ({ data }) => {
@@ -109,8 +150,13 @@ record.addEventListener('click', async () => {
     record.disabled = false
     status.textContent = t('Gravando…')
   }
-  catch {
-    finish(job, t('Não foi possível acessar o microfone.'))
+  catch (error) {
+    if (current === job)
+      void window.liaStageChat.cancelTranscription().catch(() => {})
+    const key = error?.name === 'NotFoundError' || error?.name === 'OverconstrainedError'
+      ? 'O microfone solicitado não está disponível.'
+      : 'Não foi possível acessar o microfone.'
+    finish(job, t(key))
   }
 })
 
