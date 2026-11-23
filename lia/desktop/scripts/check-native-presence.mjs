@@ -166,13 +166,36 @@ async function run() {
         && placed.y + placed.height <= area.y + area.height)
       assert.equal(JSON.parse(await readFile(join(root, 'lia-product.json'), 'utf8')).presence.monitorId, secondDisplay.id)
     }
+    const displayRecovery = await app.evaluate(({ BrowserWindow, screen }) => {
+      const overlayWindow = BrowserWindow.getAllWindows()
+        .find(window => window.webContents.getURL().endsWith('/presence.html'))
+      const before = overlayWindow.getBounds()
+      const originalGetDisplays = screen.getAllDisplays
+      const primary = screen.getPrimaryDisplay()
+      let reduced
+      try {
+        screen.getAllDisplays = () => [{
+          ...primary,
+          workArea: { x: primary.workArea.x, y: primary.workArea.y, width: 360, height: 180 },
+        }]
+        screen.emit('display-metrics-changed')
+        reduced = overlayWindow.getBounds()
+      }
+      finally {
+        screen.getAllDisplays = originalGetDisplays
+        screen.emit('display-added')
+      }
+      const recovered = overlayWindow.getBounds()
+      return { shrank: reduced.height === 180, restored: recovered.width === before.width && recovered.height === before.height }
+    })
+    assert.deepEqual(displayRecovery, { shrank: true, restored: true })
     await chat.getByRole('button', { name: 'Ocultar do desktop', exact: true }).click()
     await chat.getByText('Avatar oculto.', { exact: true }).waitFor()
     assert.equal(app.windows().length, 1)
     const [reopened] = await Promise.all([app.waitForEvent('window', { timeout: 10_000 }), openButton.click()])
     await chat.getByText('Avatar aberto no desktop.', { exact: true }).waitFor()
     await Promise.all([reopened.waitForEvent('close', { timeout: 10_000 }), chat.close()])
-    const report = { syntheticVrm: true, invalidOverlayRejected: true, externalTextureRejected: true, moved, pinned: true, home: true, syntheticHover: hover, connectedDisplays: displays.displays.length, secondDisplayPlacement: secondDisplay ? 'PASS' : 'NOT RUN', hidden: true, closedWithChat: true }
+    const report = { syntheticVrm: true, invalidOverlayRejected: true, externalTextureRejected: true, moved, pinned: true, home: true, syntheticHover: hover, connectedDisplays: displays.displays.length, secondDisplayPlacement: secondDisplay ? 'PASS' : 'NOT RUN', syntheticDisplayRecovery: displayRecovery, hidden: true, closedWithChat: true }
     await writeFile(join(root, 'report.json'), JSON.stringify(report, null, 2))
     console.log(JSON.stringify(report))
   }

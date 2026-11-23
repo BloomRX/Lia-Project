@@ -42,12 +42,16 @@ export function createPresenceService(options: {
       return { ok: false, code: 'unavailable' }
     return { ok: true, state: { config: structuredClone(config), displays: displays(), active, fullscreen: win.isFullScreen() } }
   }
+  function preferredSize({ x, y }: PresenceBounds): PresenceBounds {
+    return { x, y, width: Math.round(240 * config.scale), height: Math.round(360 * config.scale) }
+  }
   function recover() {
     if (!active || disposed || win.isDestroyed() || config.mode !== 'free')
       return
-    const display = presenceDisplay(displays(), config, win.getBounds())
+    const bounds = win.getBounds()
+    const display = presenceDisplay(displays(), config, bounds)
     if (display)
-      win.setBounds(fitPresence(win.getBounds(), display.workArea))
+      win.setBounds(fitPresence(preferredSize(bounds), display.workArea))
     destination = undefined
   }
   function restore() {
@@ -72,7 +76,7 @@ export function createPresenceService(options: {
     const bounds = win.getBounds()
     const display = presenceDisplay(displays(), config, bounds)
     if (display && reposition) {
-      win.setBounds(fitPresence({ x: config.home?.x ?? bounds.x, y: config.home?.y ?? bounds.y, width: Math.round(240 * config.scale), height: Math.round(360 * config.scale) }, display.workArea))
+      win.setBounds(fitPresence({ ...preferredSize(bounds), ...config.home }, display.workArea))
     }
     win.setAlwaysOnTop(config.alwaysOnTop)
     destination = undefined
@@ -88,7 +92,7 @@ export function createPresenceService(options: {
     if (config.paused || config.pinned || fullscreen || hover)
       return
     if (!destination || ++ticks > 150) {
-      destination = presenceTarget(displays(), config, bounds, options.random)
+      destination = presenceTarget(displays(), config, preferredSize(bounds), options.random)
       ticks = 0
     }
     const dx = destination.x - bounds.x

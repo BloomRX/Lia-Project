@@ -131,4 +131,17 @@ describe('presence Main adapter', () => {
     expect(f.bounds()).toEqual(moved)
     f.service.dispose()
   })
+  it('restores the configured scale after a smaller work area and monitor recovery', async () => {
+    const f = fixture()
+    f.service.setActive(true)
+    await f.service.set({ ...defaultPresence, mode: 'free', scale: 1.5, monitorId: 1, pinned: true })
+    f.displays([{ id: 2, workArea: { x: -400, y: 0, width: 400, height: 270 } }])
+    expect(f.bounds()).toEqual({ x: -180, y: 0, width: 180, height: 270 })
+    f.displays([
+      { id: 2, workArea: { x: -400, y: 0, width: 400, height: 270 } },
+      { id: 1, workArea: { x: 0, y: 0, width: 1024, height: 768 } },
+    ])
+    expect(f.bounds()).toEqual({ x: 0, y: 0, width: 360, height: 540 })
+    f.service.dispose()
+  })
 })

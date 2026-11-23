@@ -207,6 +207,8 @@ ocultação e encerramento junto com o chat. Coordenadas sintéticas
 confirmaram a mudança de opacidade ao entrar e sair da área do avatar.
 Com dois monitores físicos conectados, o ensaio confirmou que a seleção
 do segundo confinou o avatar à área de trabalho escolhida e persistiu.
+Com mudança simulada da área útil, a janela reduziu e recuperou a
+escala configurada assim que voltou a dispor de espaço.
 Animações, modelos de uso real, fullscreen e recuperação após desconexão
 física de monitor seguem pendentes.
 
