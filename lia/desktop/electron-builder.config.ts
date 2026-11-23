@@ -2,18 +2,17 @@
 
 /** Windows product installer. Stage is packaged independently before this step. */
 export default {
-  appId: 'ai.lia.launcher',
-  productName: 'Lia',
+  appId: 'ai.lia.launcher.preview',
+  productName: 'Lia Preview',
   electronVersion: '43.4.1',
-  directories: { output: 'dist/windows' },
+  directories: { output: 'dist/windows-native-preview' },
   files: ['out/**', 'package.json', '!**/node_modules/electron{,/**}'],
   asar: true,
   npmRebuild: false,
   publish: null,
-  extraMetadata: { name: 'lia', main: 'out/main/index.js' },
+  extraMetadata: { name: 'lia', main: 'out/main/index.js', liaNativeStagePreview: true },
   extraResources: [
-    { from: '../../airi/apps/stage-tamagotchi/dist/lia-windows/win-unpacked', to: 'stage', filter: ['**/*'] },
-    { from: '../../airi/LICENSE', to: 'licenses/Stage-LICENSE' },
+    { from: '../stage/dist/lia-windows/win-unpacked', to: 'stage', filter: ['**/*'] },
     { from: 'scripts/DISTRIBUTION-NOTICE.txt', to: 'licenses/DISTRIBUTION-NOTICE.txt' },
   ],
   win: {
@@ -22,9 +21,9 @@ export default {
     publish: null,
   },
   nsis: {
-    artifactName: 'LiaSetup-${version}-${arch}.${ext}',
-    shortcutName: 'Lia',
-    uninstallDisplayName: 'Lia',
+    artifactName: 'LiaPreviewSetup-${version}-${arch}.${ext}',
+    shortcutName: 'Lia Preview',
+    uninstallDisplayName: 'Lia Preview',
     perMachine: false,
     oneClick: false,
     allowElevation: false,

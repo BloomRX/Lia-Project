@@ -148,7 +148,6 @@ Para empacotar a Lia para uso privado, em `lia/desktop` execute
 `node scripts/package-windows.mjs --internal-test`.
 O padrão é o Stage próprio. O artefato mantém a identidade NSIS
 `Lia Preview` para substituir instalações anteriores dessa edição.
-A opção `--legacy` é reservada para empacotar o Stage legado.
 Acrescente `--dir` para gerar apenas a versão descompactada e rode
 `node --experimental-strip-types scripts/check-native-stage.mjs --packaged`
 para verificar esse executável. A prévia depende dos builds de
