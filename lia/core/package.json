@@ -13,6 +13,7 @@
     "./credentials/destination": "./src/credentials/destination.ts",
     "./credentials/owner-channel": "./src/credentials/owner-channel.ts",
     "./presence": "./src/presence/index.ts",
+    "./presence/service": "./src/presence/service.ts",
     "./providers": "./src/providers/index.ts",
     "./providers/catalog": "./src/providers/catalog.ts",
     "./providers/selection-write-policy": "./src/providers/selection-write-policy.ts",

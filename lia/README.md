@@ -170,6 +170,11 @@ Na primeira abertura sem memória própria, o Stage importa as notas e a
 preferência do perfil gerenciado legado. Se o perfil da prévia já contém
 um arquivo de memória, ambos os arquivos são preservados sem fusão.
 
+O controle de presença em `lia/core/src/presence/service.ts` recebe as
+operações de janela, tela e persistência por contrato. O Stage legado
+continua usando esse controle. A prévia própria ainda precisa ligá-lo
+à janela de avatar e às preferências.
+
 ```bash
 cd lia/stage
 corepack pnpm run build

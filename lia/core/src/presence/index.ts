@@ -55,3 +55,12 @@ export function presenceTarget(displays: PresenceDisplay[], config: PresenceConf
   return { ...fitted, x: display.workArea.x + Math.floor(unit() * (display.workArea.width - fitted.width + 1)),
     y: display.workArea.y + Math.floor(unit() * (display.workArea.height - fitted.height + 1)) }
 }
+
+export type PresenceAction = 'home' | 'set-home'
+export interface PresenceSnapshot {
+  config: PresenceConfig
+  displays: PresenceDisplay[]
+  active: boolean
+  fullscreen: boolean
+}
+export type PresenceResult = { ok: true, state: PresenceSnapshot } | { ok: false, code: 'invalid' | 'storage' | 'unavailable' }
