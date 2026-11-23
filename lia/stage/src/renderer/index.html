@@ -51,6 +51,14 @@
         <label for="avatar-file">Abrir avatar VRM</label>
         <input id="avatar-file" type="file" accept=".vrm">
         <canvas id="avatar-canvas" hidden aria-label="Prévia do avatar"></canvas>
+        <div id="avatar-actions" hidden>
+          <button id="avatar-show" type="button">Mostrar no desktop</button>
+          <button id="avatar-hide" type="button" disabled>Ocultar do desktop</button>
+          <button type="button" data-presence="paused" disabled>Pausar ou retomar</button>
+          <button type="button" data-presence="pinned" disabled>Fixar ou soltar</button>
+          <button type="button" data-presence="home" disabled>Voltar ao início</button>
+          <button type="button" data-presence="set-home" disabled>Salvar posição inicial</button>
+        </div>
         <p id="avatar-status" role="status"></p>
       </details>
       <details>

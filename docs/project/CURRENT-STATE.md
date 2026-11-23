@@ -2,7 +2,7 @@
 
 ## 0. Estado agora
 
-- **Avatar na prévia.** O Stage próprio abre VRM local com recursos incorporados. Em Electron no Windows, o modelo sintético renderizou, reabriu e recusou uma textura externa. Presença no desktop, animações e modelos de uso real seguem pendentes.
+- **Avatar na prévia.** O Stage próprio abre VRM local com recursos incorporados e oferece uma janela de presença no desktop. Em Electron no Windows, um VRM sintético confirmou movimento, fixação, retorno, ocultação e encerramento junto com o chat. Animações, modelos de uso real, hover-hide, fullscreen e múltiplos monitores físicos seguem pendentes.
 
 - **Memória na prévia.** Notas e preferência persistem no perfil do Stage próprio. O Electron no Windows com serviço HTTP local sintético confirmou recuperação após reiniciar e envio do contexto apenas enquanto habilitado. No Electron, a importação do perfil gerenciado legado preservou o arquivo original e as alterações posteriores na prévia. Quando os dois perfis já têm notas, os arquivos são preservados separadamente.
 

@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url'
 
 import { resolveVoiceRuntimeHome } from '@lia/core/bootstrap/runtime-root'
 import { liaProductPaths } from '@lia/core/paths/product-paths'
-import { readLiaProductConfig } from '@lia/core/product/config'
+import { readLiaProductConfig, updateLiaProductConfig } from '@lia/core/product/config'
 import { createLiaSecretVault } from '@lia/core/secrets/vault'
 import { createWindowsUserCipher } from '@lia/core/secrets/windows-user-cipher'
 import { createKokoroVoiceEngine } from '@lia/core/voice/engines/kokoro'
@@ -16,9 +16,10 @@ import { app, BrowserWindow, dialog, ipcMain, safeStorage } from 'electron'
 import { createLiaMemoryStore } from '../../../core/src/memory/store.ts'
 import { startLiaRuntimeService } from '../../../core/src/runtime/index.ts'
 import { createTransportRepository } from '../../../core/src/transports/repository.ts'
-import { stageChatCancel, stageChatSend, stageChatSpeak, stageMemoryGet, stageMemoryMutate, stageMicrophoneArm, stageTranscribe, stageTranscriptionCancel } from '../shared/chat-ipc.ts'
+import { stageChatCancel, stageChatSend, stageChatSpeak, stageMemoryGet, stageMemoryMutate, stageMicrophoneArm, stagePresenceClose, stagePresenceCommand, stagePresenceOpen, stagePresenceRead, stageTranscribe, stageTranscriptionCancel } from '../shared/chat-ipc.ts'
 import { createStageChat } from './stage-chat.ts'
 import { createStageHost } from './stage-host.ts'
+import { createStagePresence } from './stage-presence.ts'
 import { createStageTranscription } from './stage-transcription.ts'
 import { createStageVoice } from './stage-voice.ts'
 
@@ -37,6 +38,17 @@ async function main(): Promise<void> {
   const repository = createTransportRepository(join(paths.userDataDir, 'lia-transports.json'))
   let voiceInstallDir: string | undefined
   const readProduct = () => readLiaProductConfig(paths.productConfigFile)
+  const presence = createStagePresence({
+    async loadConfig() {
+      const config = await readProduct()
+      return config.status === 'ok' ? config.value.presence : undefined
+    },
+    async saveConfig(value) {
+      const result = await updateLiaProductConfig(paths.productConfigFile, { presence: value })
+      if (result.status !== 'ok')
+        throw new Error('presence-storage')
+    },
+  })
   const voice = createStageVoice(createKokoroVoiceEngine({
     installDirOverride: () => voiceInstallDir,
     runtimeHome: () => resolveVoiceRuntimeHome({ userDataDir: paths.userDataDir }),
@@ -87,6 +99,13 @@ async function main(): Promise<void> {
   ipcMain.handle(stageMemoryGet, event => authorized(event) ? memory.get() : { ok: false, code: 'invalid' })
   ipcMain.handle(stageMemoryMutate, (event, request: LiaMemoryMutation) =>
     authorized(event) && !active ? memory.mutate(request) : { ok: false, code: 'unavailable' })
+  ipcMain.handle(stagePresenceOpen, (event, bytes: unknown) => Boolean(authorized(event)) && presence.open(bytes))
+  ipcMain.handle(stagePresenceClose, (event) => {
+    if (authorized(event))
+      presence.close()
+  })
+  ipcMain.handle(stagePresenceCommand, (event, action: unknown) => Boolean(authorized(event)) && presence.command(action))
+  ipcMain.handle(stagePresenceRead, presence.takeAsset)
 
   ipcMain.handle(stageChatSend, async (event, input: unknown) => {
     if (!authorized(event))
@@ -188,6 +207,7 @@ async function main(): Promise<void> {
       })
       stageWindow.webContents.on('render-process-gone', cancelOperations)
       stageWindow.once('closed', cancelOperations)
+      stageWindow.once('closed', presence.close)
       try {
         const devUrl = import.meta.env.DEV && process.env.ELECTRON_RENDERER_URL
         if (devUrl)

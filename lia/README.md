@@ -172,9 +172,11 @@ preferência do perfil gerenciado legado. Se o perfil da prévia já contém
 um arquivo de memória, ambos os arquivos são preservados sem fusão.
 
 O controle de presença em `lia/core/src/presence/service.ts` recebe as
-operações de janela, tela e persistência por contrato. O Stage legado
-continua usando esse controle. A prévia própria ainda precisa ligá-lo
-à janela de avatar e às preferências.
+operações de janela, tela e persistência por contrato. A prévia usa esse
+controle em uma janela transparente separada, com passagem de cliques.
+O chat abre e oculta o avatar e oferece controles de pausa, fixação e
+posição inicial. A janela de presença encerra junto com a janela de chat.
+As preferências são gravadas na configuração canônica do produto.
 
 A prévia de avatar usa [Three.js](https://github.com/mrdoob/three.js)
 e [three-vrm](https://github.com/pixiv/three-vrm), ambos MIT, nas versões
@@ -186,7 +188,9 @@ modelo de terceiros é distribuído junto com a prévia.
 
 No Electron no Windows, um VRM sintético abriu, renderizou e voltou a
 abrir após fechar a prévia. O mesmo teste recusou uma textura externa.
-Animações e modelos de uso real ainda precisam de validação.
+O ensaio da janela de presença confirmou movimento, fixação, retorno,
+ocultação e encerramento junto com o chat. Animações, modelos de uso
+real, hover-hide, fullscreen e monitores físicos adicionais seguem pendentes.
 
 ```bash
 cd lia/stage
@@ -195,7 +199,7 @@ corepack pnpm run typecheck
 corepack pnpm run test
 ```
 
-Ainda faltam avatar, animações, presença em múltiplos monitores,
+Ainda faltam animações, presença em múltiplos monitores,
 persistência da conversa e paridade com os provedores do Stage legado.
 
 ---

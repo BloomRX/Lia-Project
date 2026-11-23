@@ -1,0 +1,124 @@
+import type { PresenceConfig } from '../../../core/src/presence/index.ts'
+
+import { fileURLToPath } from 'node:url'
+
+import { BrowserWindow, screen } from 'electron'
+
+import { defaultPresence } from '../../../core/src/presence/index.ts'
+import { createPresenceService } from '../../../core/src/presence/service.ts'
+
+export function createStagePresence(options: {
+  loadConfig: () => Promise<PresenceConfig | undefined>
+  saveConfig: (value: PresenceConfig) => Promise<void>
+}) {
+  let window: BrowserWindow | undefined
+  let service: ReturnType<typeof createPresenceService> | undefined
+  let asset: Uint8Array | undefined
+  let opening = false
+  let generation = 0
+
+  function close() {
+    generation++
+    window?.destroy()
+  }
+
+  async function open(input: unknown) {
+    if (opening || window || !(input instanceof Uint8Array) || input.byteLength < 20 || input.byteLength > 64 * 1024 * 1024)
+      return false
+    opening = true
+    const request = generation
+    try {
+      const config = await options.loadConfig() ?? defaultPresence
+      if (request !== generation)
+        return false
+      const overlay = new BrowserWindow({
+        width: 240,
+        height: 360,
+        frame: false,
+        transparent: true,
+        skipTaskbar: true,
+        show: false,
+        hasShadow: false,
+        webPreferences: {
+          sandbox: true,
+          contextIsolation: true,
+          nodeIntegration: false,
+          preload: fileURLToPath(new URL('../preload/index.cjs', import.meta.url)),
+        },
+      })
+      window = overlay
+      asset = input
+      const controller = createPresenceService({
+        window: overlay,
+        screen: {
+          getAllDisplays: () => screen.getAllDisplays(),
+          getCursorScreenPoint: () => screen.getCursorScreenPoint(),
+          on: (event, listener) => {
+            if (event === 'display-added')
+              screen.on(event, listener)
+            else if (event === 'display-removed')
+              screen.on(event, listener)
+            else
+              screen.on(event, listener)
+          },
+          removeListener: (event, listener) => {
+            if (event === 'display-added')
+              screen.removeListener(event, listener)
+            else if (event === 'display-removed')
+              screen.removeListener(event, listener)
+            else
+              screen.removeListener(event, listener)
+          },
+        },
+        initial: { ...config, mode: 'free', hideOnHover: false },
+        save: value => options.saveConfig({ ...value, mode: config.mode, hideOnHover: config.hideOnHover }),
+      })
+      service = controller
+      overlay.once('closed', () => {
+        controller.dispose()
+        window = undefined
+        service = undefined
+        asset = undefined
+      })
+      overlay.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+      overlay.webContents.on('will-navigate', event => event.preventDefault())
+      await overlay.loadFile(fileURLToPath(new URL('../renderer/presence.html', import.meta.url)))
+      if (overlay.isDestroyed())
+        return false
+      controller.setActive(true)
+      overlay.setIgnoreMouseEvents(true)
+      overlay.showInactive()
+      return true
+    }
+    catch {
+      close()
+      return false
+    }
+    finally {
+      opening = false
+    }
+  }
+
+  return {
+    open,
+    close,
+    takeAsset(event: Electron.IpcMainInvokeEvent) {
+      if (!window || window.isDestroyed() || event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame)
+        return undefined
+      const bytes = asset
+      asset = undefined
+      return bytes
+    },
+    async command(action: unknown) {
+      const current = service
+      const result = current?.get()
+      if (!current || !result?.ok)
+        return false
+      if (action === 'home' || action === 'set-home')
+        return (await current.action({ action })).ok
+      if (action !== 'paused' && action !== 'pinned')
+        return false
+      return (await current.set({ ...result.state.config, [action]: !result.state.config[action] })).ok
+    },
+  }
+}

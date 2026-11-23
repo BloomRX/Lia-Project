@@ -4,7 +4,56 @@ const details = document.querySelector('#avatar')
 const picker = document.querySelector('#avatar-file')
 let canvas = document.querySelector('#avatar-canvas')
 const status = document.querySelector('#avatar-status')
+const actions = document.querySelector('#avatar-actions')
+const show = document.querySelector('#avatar-show')
+const hide = document.querySelector('#avatar-hide')
+const commands = Array.from(document.querySelectorAll('[data-presence]'))
 let view
+let selectedAvatar
+let presenceOpen = false
+let presenceBusy = false
+
+function updateActions() {
+  actions.hidden = !selectedAvatar
+  show.disabled = presenceBusy || presenceOpen
+  hide.disabled = presenceBusy || !presenceOpen
+  for (const command of commands)
+    command.disabled = presenceBusy || !presenceOpen
+}
+
+async function operate(operation) {
+  presenceBusy = true
+  updateActions()
+  try {
+    await operation()
+  }
+  catch {
+    status.textContent = 'Não foi possível alterar a presença no desktop.'
+  }
+  finally {
+    presenceBusy = false
+    updateActions()
+  }
+}
+
+show.addEventListener('click', () => void operate(async () => {
+  if (!await window.liaStagePresence.open(new Uint8Array(selectedAvatar)))
+    throw new Error('presence')
+  presenceOpen = true
+  status.textContent = 'Avatar aberto no desktop.'
+}))
+hide.addEventListener('click', () => void operate(async () => {
+  await window.liaStagePresence.close()
+  presenceOpen = false
+  status.textContent = 'Avatar oculto.'
+}))
+for (const command of commands) {
+  command.addEventListener('click', () => void operate(async () => {
+    if (!await window.liaStagePresence.command(command.dataset.presence))
+      throw new Error('presence')
+    status.textContent = 'Presença atualizada.'
+  }))
+}
 
 function releaseClosedPreview() {
   if (!details.open && !picker.disabled && view) {
@@ -32,7 +81,10 @@ picker.addEventListener('change', async () => {
   try {
     const { createAvatarView } = await import('./avatar-view.js')
     view ??= createAvatarView(canvas)
-    await view.load(await file.arrayBuffer())
+    const bytes = await file.arrayBuffer()
+    await view.load(bytes)
+    selectedAvatar = bytes
+    updateActions()
     canvas.hidden = false
     status.textContent = 'Avatar carregado.'
   }
