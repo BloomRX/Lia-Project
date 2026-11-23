@@ -112,8 +112,8 @@ e encerramento pelo canal de controle compartilhado com o Stage legado.
 No Windows, o ensaio confirmou o handshake, a recusa de leitura de
 credenciais e a remoção do registro após a saída cooperativa.
 
-Para preparar e abrir a prévia no Windows, execute
-`./lia/Start-LiaPreview.ps1` na raiz da cópia. O script usa os lockfiles
+Para preparar e abrir a Lia no Windows, execute
+`Lia.bat` na raiz da cópia. O script usa os lockfiles
 do Stage e do Launcher, prepara o Electron e abre o Launcher com o Stage
 próprio habilitado. Use `-PrepareOnly` para preparar os builds sem abrir
 a janela. No Launcher, configure um provedor em **IA & Recursos**.
@@ -129,8 +129,7 @@ reprodução avançou. A saída física de áudio ainda não foi verificada.
 No caminho autenticado, o Main lê o cofre compartilhado e exige
 HTTPS e chave vinculada ao provedor, à origem e à finalidade de chat.
 Esse caminho passou em testes com credencial sintética e transporte
-simulado. O provedor externo ainda não foi exercitado. O fluxo padrão
-e o instalador padrão continuam usando o Stage legado.
+simulado. O provedor externo ainda não foi exercitado.
 
 Para repetir o gate de abertura e encerramento no Windows, prepare
 os builds e instale o Electron do Stage. Em `lia/desktop`, execute
@@ -138,9 +137,11 @@ os builds e instale o Electron do Stage. Em `lia/desktop`, execute
 Em uma cópia contendo apenas `lia/`, acrescente `--require-independent`
 para exigir a ausência de `airi/`.
 
-Para empacotar a prévia privada, em `lia/desktop` execute
-`node scripts/package-windows.mjs --internal-test --native`.
-O artefato usa identidade e diretório separados do instalador padrão.
+Para empacotar a Lia para uso privado, em `lia/desktop` execute
+`node scripts/package-windows.mjs --internal-test`.
+O padrão é o Stage próprio. O artefato mantém a identidade NSIS
+`Lia Preview` para substituir instalações anteriores dessa edição.
+A opção `--legacy` é reservada para empacotar o Stage legado.
 Acrescente `--dir` para gerar apenas a versão descompactada e rode
 `node --experimental-strip-types scripts/check-native-stage.mjs --packaged`
 para verificar esse executável. A prévia depende dos builds de
@@ -156,10 +157,13 @@ com `-Installer <arquivo>`. Em uma árvore sem AIRI, acrescente
 uma compilação anterior da prévia antes do pacote atual. O teste verifica
 a substituição do Stage pelos hashes e preserva um relatório JSON.
 A substituição entre duas compilações da versão 0.0.1 passou no Windows.
-Atualização automática e troca de versão ainda precisam de ensaio.
+Atualização automática, troca de versão e preservação de dados durante a
+atualização ainda precisam de ensaio. Para empacotar, use um checkout com
+caminho curto. No Windows, o NSIS falhou ao abrir um include em um caminho
+de 267 caracteres e o mesmo build passou a partir de uma raiz curta.
 
-O workflow `lia-native-windows.yml` usa `git archive HEAD lia` para
-instalar, compilar e testar a prévia sem acesso à árvore legada.
+O workflow `lia-native-windows.yml` usa `git archive HEAD lia Lia.bat` para
+instalar, compilar e testar a Lia sem acesso à árvore legada.
 Ele executa a suíte completa dos contratos e do runtime, incluindo os
 testes multiprocesso do cofre, além das verificações do Launcher e do Stage.
 Ele também executa a abertura e o encerramento pelo Launcher no Windows.

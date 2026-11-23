@@ -16,7 +16,7 @@ function file(path, contents = 'fixture') {
 test('packaging requires an internal test, builds, the pinned local runtime and third-party notices', (t) => {
   const root = mkdtempSync(join(tmpdir(), 'Lia packaging & spaces '))
   t.after(() => rmSync(root, { recursive: true, force: true }))
-  const inputs = packagingInputs(join(root, 'lia/desktop'))
+  const inputs = packagingInputs(join(root, 'lia/desktop'), { native: false })
   file(inputs.builder)
   for (const app of [inputs.launcher, inputs.stage]) {
     for (const name of ['out/main/index.js', 'out/renderer/index.html', 'package.json'])
@@ -59,10 +59,10 @@ test('packaged stage rejects incomplete payloads and an inherited updater feed',
   assert.throws(() => validatePackagedStage(root, runtime), /canal de atualização não autorizado/)
 })
 
-test('native packaging requires no AIRI files and uses a separate installer identity', (t) => {
+test('default packaging requires no AIRI files and preserves the internal installer identity', (t) => {
   const root = mkdtempSync(join(tmpdir(), 'Lia native packaging '))
   t.after(() => rmSync(root, { recursive: true, force: true }))
-  const inputs = packagingInputs(join(root, 'lia/desktop'), { native: true })
+  const inputs = packagingInputs(join(root, 'lia/desktop'))
   assert.equal(inputs.stage, join(root, 'lia/stage'))
   file(inputs.builder)
   for (const app of [inputs.launcher, inputs.stage]) {

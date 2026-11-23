@@ -17,7 +17,7 @@ function requireFile(path, label) {
     throw new Error(`${label} ausente: ${path}`)
 }
 
-export function packagingInputs(root = launcherRoot, { native = false } = {}) {
+export function packagingInputs(root = launcherRoot, { native = true } = {}) {
   const stage = resolve(root, native ? '../stage' : '../../airi/apps/stage-tamagotchi')
   return {
     native,
@@ -127,7 +127,7 @@ function builder(inputs, cwd, args) {
     throw new Error(`electron-builder falhou (código ${result.status ?? 'indisponível'}).`)
 }
 
-export function packageWindows({ checkOnly = false, unpacked = false, internalTest = false, native = false } = {}) {
+export function packageWindows({ checkOnly = false, unpacked = false, internalTest = false, native = true } = {}) {
   const inputs = packagingInputs(launcherRoot, { native })
   validateInputs(inputs, { internalTest })
   if (checkOnly) {
@@ -161,10 +161,11 @@ export function packageWindows({ checkOnly = false, unpacked = false, internalTe
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   const args = process.argv.slice(2)
-  if (args.some(arg => !['--check', '--dir', '--internal-test', '--native'].includes(arg)))
-    throw new Error('Uso: node scripts/package-windows.mjs --internal-test [--native] [--check] [--dir]')
   try {
-    packageWindows({ checkOnly: args.includes('--check'), unpacked: args.includes('--dir'), internalTest: args.includes('--internal-test'), native: args.includes('--native') })
+    if (args.some(arg => !['--check', '--dir', '--internal-test', '--native', '--legacy'].includes(arg))
+      || (args.includes('--native') && args.includes('--legacy')))
+      throw new Error('Uso: node scripts/package-windows.mjs --internal-test [--check] [--dir] [--legacy]')
+    packageWindows({ checkOnly: args.includes('--check'), unpacked: args.includes('--dir'), internalTest: args.includes('--internal-test'), native: !args.includes('--legacy') })
   }
   catch (error) {
     // Standalone Node packaging must not depend on workspace TypeScript helpers.

@@ -27,9 +27,11 @@ para instalar as dependências e compilar sem abrir uma janela.
 | Configuração do produto, cofre e voz | [lia/runtime](lia/runtime) |
 | Contratos e desenvolvimento | [lia/](lia/README.md) |
 
-O fluxo a partir de `Lia.bat` funciona com a árvore `lia/`. O empacotamento
-privado ainda separa a edição nativa da legada. Consulte o estado atual
-para acompanhar a validação de funcionalidades e distribuição.
+O fluxo a partir de `Lia.bat` funciona com a árvore `lia/`. Para gerar o
+instalador privado do Stage próprio, prepare os builds e execute
+`node lia/desktop/scripts/package-windows.mjs --internal-test` na raiz.
+Consulte o estado atual para acompanhar a validação de funcionalidades
+e distribuição.
 
 ## Credits / Third-party projects
 

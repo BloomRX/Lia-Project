@@ -101,6 +101,7 @@ jobs:
           Set-Location (Join-Path $env:LIA_STANDALONE 'lia/desktop')
           corepack pnpm run test
           node --test scripts/package-windows.test.mjs
+          node scripts/package-windows.mjs --internal-test --check
       - name: Abrir e encerrar o Stage pelo Launcher
         if: ${{ !cancelled() && steps.build-launcher.outcome == 'success' }}
         run: |
@@ -128,6 +129,15 @@ jobs:
           Set-Location (Join-Path $env:LIA_STANDALONE 'lia/desktop')
           node --experimental-strip-types scripts/check-native-vision.mjs $cert $key
           node --experimental-strip-types scripts/check-native-stt-consent.mjs $cert $key
+      - name: Gerar e testar o instalador privado
+        if: ${{ !cancelled() && steps.build-launcher.outcome == 'success' }}
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          Set-Location (Join-Path $env:LIA_STANDALONE 'lia/desktop')
+          node scripts/package-windows.mjs --internal-test
+          $version = (Get-Content -LiteralPath package.json -Raw | ConvertFrom-Json).version
+          $installer = Get-Item -LiteralPath "dist/windows-native-preview/LiaPreviewSetup-$version-x64.exe"
+          .\scripts\check-native-install.ps1 -Installer $installer.FullName -EvidenceRoot $env:RUNNER_TEMP -RequireIndependent
       - name: Preservar evidências do Stage
         if: always()
         uses: actions/upload-artifact@v7
@@ -142,4 +152,5 @@ jobs:
             ${{ runner.temp }}/lia-native-vision-*/report.json
             ${{ runner.temp }}/lia-native-vision-*/stage.png
             ${{ runner.temp }}/lia-native-stt-*/report.json
+            ${{ runner.temp }}/lia-native-install-*/report.json
           if-no-files-found: ignore
