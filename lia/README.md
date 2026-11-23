@@ -129,6 +129,10 @@ Acrescente `--dir` para gerar apenas a versão descompactada e rode
 `node --experimental-strip-types scripts/check-native-stage.mjs --packaged`
 para verificar esse executável. A prévia depende dos builds de
 `lia/desktop` e `lia/stage` e do Electron oficial instalado no Stage.
+Para executar o mesmo gate sobre uma instalação da prévia, passe
+`--installed-executable=<caminho absoluto de Lia.exe>`. A instalação
+limpa, o ciclo Launcher–Stage e a desinstalação já passaram em uma
+pasta isolada de teste.
 
 O serviço HTTP de transcrição e seus adaptadores agora ficam em
 `lia/core/src/transcription`. O Stage legado usa esse mesmo serviço

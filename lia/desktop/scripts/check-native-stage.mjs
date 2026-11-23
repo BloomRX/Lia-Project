@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { existsSync } from 'node:fs'
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { isAbsolute, join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 
@@ -57,10 +57,14 @@ async function run() {
     migration: { version: 1, imported: [] },
   }))
   const registry = createRuntimeRegistry(join(root, 'runtime', 'native-preview'))
-  const packaged = process.argv.includes('--packaged')
-  const executablePath = packaged
+  const installedArgument = process.argv.find(argument => argument.startsWith('--installed-executable='))
+  const installedExecutable = installedArgument?.slice('--installed-executable='.length)
+  if (installedArgument)
+    assert.ok(installedExecutable && isAbsolute(installedExecutable), 'Informe o caminho absoluto do Launcher instalado.')
+  const packaged = process.argv.includes('--packaged') || installedExecutable !== undefined
+  const executablePath = installedExecutable ?? (packaged
     ? join(liaRoot, 'desktop', 'dist', 'windows-native-preview', 'win-unpacked', 'Lia.exe')
-    : join(liaRoot, 'stage', 'node_modules', 'electron', 'dist', 'electron.exe')
+    : join(liaRoot, 'stage', 'node_modules', 'electron', 'dist', 'electron.exe'))
   const app = await _electron.launch({
     executablePath,
     args: packaged ? [] : [join(liaRoot, 'desktop', 'out', 'main', 'index.js')],
@@ -76,7 +80,7 @@ async function run() {
     await page.getByRole('button', { name: 'Encerrar conversa', exact: true }).click({ timeout: 10_000 })
     await page.getByText('Conversa encerrada.', { exact: true }).waitFor({ timeout: 20_000 })
     assert.deepEqual(await registry.read(), { ok: false, problem: 'missing' })
-    console.log(JSON.stringify({ airiDirectoryAbsent, packaged, nativeWindows: state.windows, registryRemoved: true }))
+    console.log(JSON.stringify({ airiDirectoryAbsent, packaged, installed: Boolean(installedExecutable), nativeWindows: state.windows, registryRemoved: true }))
   }
   finally {
     try {

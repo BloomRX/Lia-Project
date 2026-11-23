@@ -39,7 +39,12 @@ skips no Launcher. Com Electron
 **Conversar com Lia** e o encerrou pelo botão **Encerrar conversa**.
 O status autenticado encontrou uma janela e o encerramento removeu
 o registro. O ensaio usou a prévia opt-in e configuração local sintética.
-Ele cobre o ciclo de vida da prévia. O fluxo padrão, o instalador e a
+Ele cobre o ciclo de vida da prévia. Depois, o NSIS da prévia privada
+também foi gerado nessa árvore. No Windows, a instalação silenciosa em
+uma pasta de teste, a abertura e o encerramento do Stage pelo Launcher
+instalado e a desinstalação retornaram sucesso. A verificação confirmou
+a remoção do executável e da entrada de desinstalação da prévia.
+O fluxo padrão, a atualização de uma instalação anterior e a
 paridade de recursos com o Stage legado seguem pendentes.
 
 **Data:** 16/11/2026
