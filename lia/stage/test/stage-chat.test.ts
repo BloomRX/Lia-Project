@@ -69,13 +69,14 @@ test('uses a bound chat credential only for the configured HTTPS origin', async 
   let secret = bindCredential('groq', url, token, 'chat')
   let calls = 0
   let reply = 'Resposta'
+  let status = 200
   const send = createStageChat({
     async fetch(target, init) {
       calls++
       assert.equal(String(target), 'https://api.groq.com/openai/v1/chat/completions')
       assert.equal(new Headers(init?.headers).get('authorization'), `Bearer ${token}`)
       assert.equal(init?.redirect, 'error')
-      return Response.json({ choices: [{ message: { content: reply } }] })
+      return Response.json({ choices: [{ message: { content: reply } }] }, { status })
     },
     readCredential: () => secret,
     async recallMemory() {
@@ -92,13 +93,17 @@ test('uses a bound chat credential only for the configured HTTPS origin', async 
   assert.deepEqual(await submit(), { ok: true, text: 'Resposta' })
   reply = token
   assert.deepEqual(await submit(), { ok: false, code: 'unavailable' })
+  status = 401
+  assert.deepEqual(await submit(), { ok: false, code: 'credentials' })
+  status = 429
+  assert.deepEqual(await submit(), { ok: false, code: 'rate-limit' })
   secret = bindCredential('groq', url, token, 'speech')
   assert.deepEqual(await submit(), { ok: false, code: 'configuration' })
   secret = bindCredential('groq', new URL('https://other.invalid'), token, 'chat')
   assert.deepEqual(await submit(), { ok: false, code: 'configuration' })
   groq.baseUrl = 'http://127.0.0.1/v1'
   assert.deepEqual(await submit(), { ok: false, code: 'configuration' })
-  assert.equal(calls, 2)
+  assert.equal(calls, 4)
 })
 
 test('carries completed turns and keeps history out of a different model', async () => {

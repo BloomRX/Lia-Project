@@ -8,7 +8,7 @@ import { createHash } from 'node:crypto'
 
 import { credentialForDestination } from '../../../core/src/credentials/destination.ts'
 import { LIA_MEMORY_LIMITS } from '../../../core/src/memory/contracts.ts'
-import { findLiaAiProviderByStageProviderId, ProviderRegistry, ProviderRuntime } from '../../../core/src/providers/index.ts'
+import { findLiaAiProviderByStageProviderId, ProviderError, ProviderRegistry, ProviderRuntime } from '../../../core/src/providers/index.ts'
 
 interface StageChatDependencies {
   fetch?: typeof globalThis.fetch
@@ -21,7 +21,7 @@ interface StageChatDependencies {
 
 export type StageChatResult
   = | { ok: true, text: string, historyUnavailable?: true }
-    | { ok: false, code: 'invalid' | 'configuration' | 'unavailable' | 'cancelled' | 'busy' }
+    | { ok: false, code: 'invalid' | 'configuration' | 'unavailable' | 'cancelled' | 'busy' | 'credentials' | 'timeout' | 'rate-limit' }
 
 const historyTurns = 6
 
@@ -116,8 +116,16 @@ export function createStageChat({ fetch, storage, recallMemory, readCredential, 
       }
       return { ok: true, text: response.text }
     }
-    catch {
-      return { ok: false, code: signal.aborted ? 'cancelled' : 'unavailable' }
+    catch (error) {
+      if (signal.aborted)
+        return { ok: false, code: 'cancelled' }
+      if (error instanceof ProviderError) {
+        if (error.code === 'credentials' || error.code === 'timeout')
+          return { ok: false, code: error.code }
+        if (error.code === 'http' && error.status === 429)
+          return { ok: false, code: 'rate-limit' }
+      }
+      return { ok: false, code: 'unavailable' }
     }
   }
   return Object.assign(send, { clearContext() { history = undefined } })

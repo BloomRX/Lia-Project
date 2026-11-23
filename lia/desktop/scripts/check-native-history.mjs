@@ -19,6 +19,11 @@ const server = createServer(async (request, response) => {
     chunks.push(chunk)
   requests.push(JSON.parse(Buffer.concat(chunks).toString('utf8')))
   response.setHeader('Content-Type', 'application/json')
+  if (requests.at(-1).messages.at(-1).content === 'Testar limite') {
+    response.writeHead(429)
+    response.end(JSON.stringify({ detail: 'fixture-private-upstream-body' }))
+    return
+  }
   response.end(JSON.stringify({ choices: [{ message: { content: `Resposta ${requests.length}` } }] }))
 })
 server.listen(0, '127.0.0.1')
@@ -94,7 +99,13 @@ try {
   assert.equal(await page.getByRole('log', { name: 'Mensagens' }).locator('.message').count(), 0)
   await submit(page, 'Terceira', 3)
   assert.deepEqual(requests[2].messages, [{ role: 'user', content: 'Terceira' }])
-  const report = { service: 'synthetic local HTTP', optIn: true, reopened: true, resumed: true, cancellationPreservedHistory: true, cleared: true }
+  const draft = page.getByLabel('Mensagem', { exact: true })
+  await draft.fill('Testar limite')
+  await page.getByRole('button', { name: 'Enviar', exact: true }).click()
+  await page.getByText('A conexão de IA atingiu seu limite de uso. Aguarde e tente novamente.', { exact: true }).waitFor()
+  assert.equal(await draft.inputValue(), 'Testar limite')
+  assert.equal(await page.getByText('fixture-private-upstream-body', { exact: false }).count(), 0)
+  const report = { service: 'synthetic local HTTP', optIn: true, reopened: true, resumed: true, cancellationPreservedHistory: true, cleared: true, rateLimitSanitized: true }
   await writeFile(join(root, 'report.json'), JSON.stringify(report, null, 2))
   console.log(JSON.stringify(report))
 }

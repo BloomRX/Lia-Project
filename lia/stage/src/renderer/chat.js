@@ -27,7 +27,10 @@ const errors = {
   busy: 'Há uma mensagem em andamento.',
   cancelled: 'Envio cancelado.',
   configuration: 'Selecione e confira a conexão de IA no Launcher.',
+  credentials: 'A conexão de IA recusou a credencial. Confira a configuração no Launcher.',
   invalid: 'Digite uma mensagem válida.',
+  'rate-limit': 'A conexão de IA atingiu seu limite de uso. Aguarde e tente novamente.',
+  timeout: 'A IA demorou para responder. Tente novamente.',
   unavailable: 'A IA não respondeu. Verifique o serviço e tente novamente.',
 }
 
