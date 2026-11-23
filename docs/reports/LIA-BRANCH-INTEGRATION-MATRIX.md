@@ -22,6 +22,17 @@ coincidem com os três arquivos no SHA `ccf33861`. Os 88 caminhos restantes,
 com as matrizes de SHAs anteriores e seus logs, são consultáveis no arquivo
 de QA da tag. Seus resultados são históricos.
 
+A branch de higiene `arena/4ec8f22b-lia-project` ficou preservada no espelho e
+na tag [`archive/build-hygiene-2026-11-14`](https://github.com/BloomRX/Lia-Project/tree/archive/build-hygiene-2026-11-14)
+em `be24b94f`. O [relatório de origem](LIA-BUILD-HYGIENE-2026-11-14.md)
+coincide com o da `main`. Uma revisão independente conferiu a validação de
+IDs no Launcher, o filtro de controles em notas no Core e a importação IPC.
+O validador de configurações da Lia mantém a política testada para TAB, LF e
+CR. A consulta de créditos, o gerenciador de jobs e o monitor do gate em
+questão pertencem ao fluxo legado. O Stage próprio tem ciclo e testes
+separados. Passaram o lint e 54 testes focados Windows de configuração,
+conexão, IPC e memória.
+
 O espelho externo contém as 12 branches remotas e passou em
 `git fsck --full`. Foram verificados os bundles locais e comparadas
 por SHA-256 as cópias dos 11 checkouts órfãos. O principal órfão
