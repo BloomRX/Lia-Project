@@ -26,9 +26,12 @@ jobs:
           node-version: '24.22.2'
       - name: Preparar Corepack
         run: |
-          npm install --global corepack@0.36.0
-          if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          corepack enable
+          $PSNativeCommandUseErrorActionPreference = $true
+          $toolchain = Join-Path $env:RUNNER_TEMP 'lia-corepack'
+          npm install --prefix $toolchain --no-audit --no-fund corepack@0.36.0
+          $bin = Join-Path $toolchain 'node_modules/.bin'
+          & (Join-Path $bin 'corepack.cmd') enable --install-directory $bin pnpm
+          $bin >> $env:GITHUB_PATH
       - name: Extrair apenas a árvore Lia
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
