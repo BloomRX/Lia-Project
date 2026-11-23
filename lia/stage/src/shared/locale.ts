@@ -19,6 +19,7 @@ const english = new Map([
   ['Ocultar do desktop', 'Hide from desktop'],
   ['Pausar ou retomar', 'Pause or resume'],
   ['Fixar ou soltar', 'Pin or unpin'],
+  ['Alternar ocultação ao passar o mouse', 'Toggle hide on hover'],
   ['Voltar ao início', 'Return to home position'],
   ['Salvar posição inicial', 'Save home position'],
   ['Lia no desktop', 'Lia on your desktop'],

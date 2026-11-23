@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
@@ -129,13 +129,35 @@ async function run() {
     await chat.getByRole('button', { name: 'Voltar ao início', exact: true }).click()
     await chat.getByText('Presença atualizada.', { exact: true }).waitFor()
     assert.deepEqual(await bounds(), initial)
+    await chat.getByRole('button', { name: 'Alternar ocultação ao passar o mouse', exact: true }).click()
+    await chat.getByText('Presença atualizada.', { exact: true }).waitFor()
+    const hover = await app.evaluate(async ({ BrowserWindow, screen }) => {
+      const overlayWindow = BrowserWindow.getAllWindows()
+        .find(window => window.webContents.getURL().endsWith('/presence.html'))
+      const { x, y } = overlayWindow.getBounds()
+      const originalCursor = screen.getCursorScreenPoint
+      const wait = () => new Promise(resolve => setTimeout(resolve, 300))
+      try {
+        screen.getCursorScreenPoint = () => ({ x: x + 1, y: y + 1 })
+        await wait()
+        const hidden = overlayWindow.getOpacity() === 0
+        screen.getCursorScreenPoint = () => ({ x: x - 1, y: y - 1 })
+        await wait()
+        return { hidden, visibleAgain: overlayWindow.getOpacity() === 1 }
+      }
+      finally {
+        screen.getCursorScreenPoint = originalCursor
+      }
+    })
+    assert.deepEqual(hover, { hidden: true, visibleAgain: true })
+    assert.equal(JSON.parse(await readFile(join(root, 'lia-product.json'), 'utf8')).presence.hideOnHover, true)
     await chat.getByRole('button', { name: 'Ocultar do desktop', exact: true }).click()
     await chat.getByText('Avatar oculto.', { exact: true }).waitFor()
     assert.equal(app.windows().length, 1)
     const [reopened] = await Promise.all([app.waitForEvent('window', { timeout: 10_000 }), openButton.click()])
     await chat.getByText('Avatar aberto no desktop.', { exact: true }).waitFor()
     await Promise.all([reopened.waitForEvent('close', { timeout: 10_000 }), chat.close()])
-    const report = { syntheticVrm: true, invalidOverlayRejected: true, externalTextureRejected: true, moved, pinned: true, home: true, hidden: true, closedWithChat: true }
+    const report = { syntheticVrm: true, invalidOverlayRejected: true, externalTextureRejected: true, moved, pinned: true, home: true, syntheticHover: hover, hidden: true, closedWithChat: true }
     await writeFile(join(root, 'report.json'), JSON.stringify(report, null, 2))
     console.log(JSON.stringify(report))
   }

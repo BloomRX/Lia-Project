@@ -72,8 +72,8 @@ export function createStagePresence(options: {
               screen.removeListener(event, listener)
           },
         },
-        initial: { ...config, mode: 'free', hideOnHover: false },
-        save: value => options.saveConfig({ ...value, mode: config.mode, hideOnHover: config.hideOnHover }),
+        initial: { ...config, mode: 'free' },
+        save: value => options.saveConfig({ ...value, mode: config.mode }),
       })
       service = controller
       overlay.once('closed', () => {
@@ -139,7 +139,7 @@ export function createStagePresence(options: {
         return false
       if (action === 'home' || action === 'set-home')
         return (await current.action({ action })).ok
-      if (action !== 'paused' && action !== 'pinned')
+      if (action !== 'paused' && action !== 'pinned' && action !== 'hideOnHover')
         return false
       return (await current.set({ ...result.state.config, [action]: !result.state.config[action] })).ok
     },

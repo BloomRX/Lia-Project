@@ -188,7 +188,8 @@ O controle de presença em `lia/core/src/presence/service.ts` recebe as
 operações de janela, tela e persistência por contrato. A prévia usa esse
 controle em uma janela transparente separada, com passagem de cliques.
 O chat abre e oculta o avatar e oferece controles de pausa, fixação e
-posição inicial. A janela de presença encerra junto com a janela de chat.
+posição inicial, além da ocultação ao passar o ponteiro. A janela de
+presença encerra junto com a janela de chat.
 As preferências são gravadas na configuração canônica do produto.
 
 A prévia de avatar usa [Three.js](https://github.com/mrdoob/three.js)
@@ -202,8 +203,10 @@ modelo de terceiros é distribuído junto com a prévia.
 No Electron no Windows, um VRM sintético abriu, renderizou e voltou a
 abrir após fechar a prévia. O mesmo teste recusou uma textura externa.
 O ensaio da janela de presença confirmou movimento, fixação, retorno,
-ocultação e encerramento junto com o chat. Animações, modelos de uso
-real, hover-hide, fullscreen e monitores físicos adicionais seguem pendentes.
+ocultação e encerramento junto com o chat. Coordenadas sintéticas
+confirmaram a mudança de opacidade ao entrar e sair da área do avatar.
+Animações, modelos de uso real, fullscreen e monitores físicos adicionais
+seguem pendentes.
 
 Para repetir o ensaio em Windows, compile o Stage, instale o Electron
 com `corepack pnpm exec install-electron` em `lia/stage` e execute
