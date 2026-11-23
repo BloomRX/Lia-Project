@@ -133,6 +133,10 @@ Kokoro instalado no Windows, execute
 para repetir a validação com o áudio silenciado.
 **Ler respostas automaticamente** é uma preferência opcional que
 persiste após reiniciar e respeita a desativação global de voz.
+Para configurar outra rota de síntese, abra **Voz → Síntese compatível
+com OpenAI** no Launcher e informe endereço, modelo, voz e chave.
+O Stage pede autorização para cada envio de texto à rota. A opção
+**Voltar ao motor local** muda a seleção e preserva a conexão salva.
 No caminho autenticado, o Main lê o cofre compartilhado e exige
 HTTPS e chave vinculada ao provedor, à origem e à finalidade de chat.
 Esse caminho passou em testes com credencial sintética e transporte

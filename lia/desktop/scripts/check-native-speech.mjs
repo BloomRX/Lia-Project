@@ -1,17 +1,13 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { once } from 'node:events'
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:https'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { createLiaSecretVault } from '@lia/core/secrets/vault'
-import { createWindowsUserCipher } from '@lia/core/secrets/windows-user-cipher'
 import { _electron } from 'playwright'
-
-import { bindCredential } from '../../core/src/credentials/destination.ts'
 
 assert.equal(process.platform, 'win32')
 assert.equal(process.argv.length, 4, 'Informe o certificado e a chave TLS sintéticos.')
@@ -19,7 +15,6 @@ const cert = resolve(process.argv[2])
 const key = resolve(process.argv[3])
 const root = await mkdtemp(join(process.env.RUNNER_TEMP ?? tmpdir(), 'lia-native-speech-'))
 const stage = fileURLToPath(new URL('../../stage/', import.meta.url))
-const providerId = 'openai-compatible-audio-speech'
 const modelId = 'fixture-speech'
 const voiceId = 'fixture-voice'
 const token = `fixture-${randomUUID()}`
@@ -51,29 +46,43 @@ try {
   await once(server, 'listening')
   const destination = new URL(`https://127.0.0.1:${server.address().port}/v1`)
   console.log(`Evidências em ${root}`)
-  const unexpected = () => { throw new Error('Unexpected legacy cipher') }
-  const vault = createLiaSecretVault({
-    filePath: join(root, 'lia-secrets.json'),
-    cipher: createWindowsUserCipher({ available: () => false, encrypt: unexpected, decrypt: unexpected }),
-  })
-  assert.ok(await vault.setSecret(providerId, 'apiKey', bindCredential(providerId, destination, token, 'speech')))
   const record = (id, protocol, models, adapterOptions) => ({
     id, providerId: id, definitionId: id, type: 'http', protocol, baseUrl: destination.href, enabled: true,
     modelIds: models, adapterOptions, metadata: {}, credentialRef: { scope: id, key: 'apiKey' },
   })
   await writeFile(join(root, 'lia-product.json'), JSON.stringify({
+    setup: { completed: true },
     provider: { chat: { preferred: { providerId: 'local-chat', modelId: 'fixture-chat' } } },
-    voice: { tts: { preferred: { providerId, modelId, voiceId } } },
   }))
   await writeFile(join(root, 'lia-transports.json'), JSON.stringify({
     schemaVersion: 1, revision: 1, tombstones: [], migration: { version: 1, imported: [] },
-    records: [record('local-chat', 'chat-completions', ['fixture-chat'], { localOnly: true, allowUnauthenticated: true }),
-      record(providerId, 'audio-speech', [modelId], {})],
+    records: [record('local-chat', 'chat-completions', ['fixture-chat'], { localOnly: true, allowUnauthenticated: true })],
   }))
+  const launcherProfile = join(root, 'appdata')
+  await mkdir(launcherProfile)
+  const executablePath = join(stage, 'node_modules', 'electron', 'dist', 'electron.exe')
+  const env = { ...process.env, APPDATA: launcherProfile, NODE_EXTRA_CA_CERTS: cert, NODE_TLS_REJECT_UNAUTHORIZED: '1', LIA_USER_DATA: root, LIA_STAGE_PROFILE_DIR: join(root, 'profile') }
+  app = await _electron.launch({ executablePath, args: [fileURLToPath(new URL('../out/main/index.js', import.meta.url))], env })
+  const launcher = await app.firstWindow()
+  launcher.setDefaultTimeout(10_000)
+  await launcher.getByRole('button', { name: 'Voz', exact: true }).click()
+  await launcher.getByText('Síntese compatível com OpenAI', { exact: true }).click()
+  await launcher.getByLabel('Endereço da API', { exact: true }).fill(destination.href)
+  await launcher.getByLabel('Modelo', { exact: true }).fill(modelId)
+  await launcher.getByRole('textbox', { name: 'Voz', exact: true }).fill(voiceId)
+  await launcher.getByLabel('Chave da API', { exact: true }).fill(token)
+  await launcher.getByRole('button', { name: 'Salvar e usar' }).click()
+  await launcher.getByText('Síntese compatível selecionada.', { exact: true }).waitFor()
+  assert.equal(await launcher.getByLabel('Chave da API', { exact: true }).inputValue(), '')
+  assert.ok(!(await readFile(join(root, 'lia-secrets.json'), 'utf8')).includes(token))
+  await launcher.getByText('Síntese compatível selecionada.', { exact: true }).scrollIntoViewIfNeeded()
+  await launcher.screenshot({ path: join(root, 'speech-settings.png'), fullPage: true })
+  await app.close()
+  app = undefined
   app = await _electron.launch({
-    executablePath: join(stage, 'node_modules', 'electron', 'dist', 'electron.exe'),
+    executablePath,
     args: ['--mute-audio', join(stage, 'out', 'main', 'index.js')],
-    env: { ...process.env, NODE_EXTRA_CA_CERTS: cert, NODE_TLS_REJECT_UNAUTHORIZED: '1', LIA_USER_DATA: root, LIA_STAGE_PROFILE_DIR: join(root, 'profile') },
+    env,
   })
   const page = await app.firstWindow()
   page.setDefaultTimeout(10_000)
@@ -99,7 +108,7 @@ try {
   assert.equal(await page.getByText(token).count(), 0)
   await page.getByRole('button', { name: 'Parar áudio' }).click()
   assert.equal(await page.locator('audio').isVisible(), false)
-  const report = { service: 'synthetic HTTPS loopback', consent: 'injected response', deniedWithoutRequest: true, authorizedSpeech: true, mutedPlayback: true, playbackStopped: true }
+  const report = { service: 'synthetic HTTPS loopback', configuredByLauncher: true, consent: 'injected response', deniedWithoutRequest: true, authorizedSpeech: true, mutedPlayback: true, playbackStopped: true }
   await writeFile(join(root, 'report.json'), JSON.stringify(report, null, 2))
   console.log(JSON.stringify(report))
 }

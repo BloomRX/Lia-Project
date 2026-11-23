@@ -15,7 +15,7 @@ import { access, stat } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { unboundCredential } from '@lia/contracts/credentials/destination'
+import { bindCredential, credentialForDestination, unboundCredential } from '@lia/contracts/credentials/destination'
 import { CredentialOwnerError, isPublicCredentialReference, startCredentialOwner } from '@lia/contracts/credentials/owner-channel'
 import { decideSelectionWrite, isLauncherManagedProvider, isLiaSelectionTarget } from '@lia/contracts/providers/selection-write-policy'
 import { createTransportRepository } from '@lia/contracts/transports/repository'
@@ -226,6 +226,8 @@ export type LiaRuntimeLocationPickResult
 
 export interface LiaHost {
   aiConnection: ReturnType<typeof createAiConnectionService>
+  speechConnection: () => Promise<{ baseUrl: string, modelId: string, voiceId: string, hasKey: boolean }>
+  saveSpeechConnection: (input: unknown) => Promise<boolean>
 
   /** The resolved bridge contract for THIS launch (built fresh from disk). */
   bridgeConfig: () => Promise<LiaBridgeConfig>
@@ -1083,6 +1085,67 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
   })
   return {
     aiConnection,
+    async speechConnection() {
+      const providerId = 'openai-compatible-audio-speech'
+      const target = (await readSnapshot()).snapshot?.voice?.tts?.preferred
+      const record = (await transportRepository.read()).records.find(item => item.providerId === providerId && item.protocol === 'audio-speech')
+      const url = record && URL.parse(record.baseUrl)
+      return {
+        baseUrl: record?.baseUrl ?? '',
+        modelId: target?.providerId === providerId ? target.modelId ?? '' : record?.modelIds[0] ?? '',
+        voiceId: target?.providerId === providerId ? target.voiceId ?? '' : typeof record?.adapterOptions.voiceId === 'string' ? record.adapterOptions.voiceId : '',
+        hasKey: Boolean(url && credentialForDestination(vault.getSecret(providerId, 'apiKey'), providerId, url, 'speech')),
+      }
+    },
+    saveSpeechConnection: (input: unknown) => withStageConfigurationLock(async () => {
+      if (stage.holdsOwnedStage())
+        return false
+      if (!input || typeof input !== 'object' || Object.keys(input).some(key => !['baseUrl', 'modelId', 'voiceId', 'apiKey'].includes(key)))
+        return false
+      const { baseUrl, modelId, voiceId, apiKey } = input as Record<string, unknown>
+      if (typeof baseUrl !== 'string' || baseUrl.length > 4096 || typeof modelId !== 'string' || !modelId.trim() || modelId.length > 256
+        || typeof voiceId !== 'string' || !voiceId.trim() || voiceId.length > 256
+        || (apiKey !== undefined && (typeof apiKey !== 'string' || !/^[!-~]{1,2048}$/.test(apiKey))))
+        return false
+      const url = URL.parse(baseUrl)
+      if (!url || url.username || url.password || url.search || url.hash
+        || (url.protocol !== 'https:' && !(url.protocol === 'http:' && ['127.0.0.1', '[::1]'].includes(url.hostname))))
+        return false
+      const providerId = 'openai-compatible-audio-speech'
+      const snapshot = await transportRepository.read()
+      const state = await readSnapshot()
+      if (state.status !== 'ok' && state.status !== 'missing')
+        return false
+      const matches = snapshot.records.filter(item => item.providerId === providerId)
+      if (matches.length > 1)
+        return false
+      const revision = vault.secretRevision?.(providerId, 'apiKey')
+      const change = apiKey && revision !== undefined
+        ? await vault.changeSecret?.(providerId, 'apiKey', bindCredential(providerId, url, apiKey, 'speech'), { expectedRevision: revision })
+        : undefined
+      if (apiKey ? !change : !credentialForDestination(vault.getSecret(providerId, 'apiKey'), providerId, url, 'speech'))
+        return false
+      const result = await transportRepository.mutate({ kind: 'put', expectedRevision: snapshot.revision, record: {
+        id: matches[0]?.id ?? providerId, providerId, definitionId: providerId,
+        type: 'http', protocol: 'audio-speech', baseUrl: url.href, enabled: true,
+        modelIds: [modelId.trim()], adapterOptions: { managedSpeechConfig: true, voiceId: voiceId.trim() },
+        metadata: matches[0]?.metadata ?? {},
+        credentialRef: { scope: providerId, key: 'apiKey' },
+      } })
+      if (!result.ok) {
+        await change?.rollback()
+        return false
+      }
+      const written = await updateLiaProductConfig(paths.productConfigFile, { voice: { tts: { preferred: {
+        providerId, modelId: modelId.trim(), voiceId: voiceId.trim(),
+      } } } })
+      if (written.status === 'ok')
+        return true
+      if (matches[0])
+        await transportRepository.mutate({ kind: 'put', expectedRevision: result.snapshot.revision, record: matches[0] })
+      await change?.rollback()
+      return false
+    }),
     bridgeConfig: bridgeFactory,
     coordinator,
     /**

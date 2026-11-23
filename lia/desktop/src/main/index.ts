@@ -6,7 +6,7 @@ import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { createWindowsUserCipher } from '@lia/core/secrets/windows-user-cipher'
-import { app, BrowserWindow, dialog, safeStorage } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, safeStorage } from 'electron'
 import { statSync as physicalStatSync } from 'original-fs'
 
 import { createLiaDevflowAutorun } from './devflow-autorun'
@@ -179,6 +179,16 @@ async function bootstrap(): Promise<void> {
     log: line => console.info(line),
   })
 
+  const ownsWindow = (event: Electron.IpcMainInvokeEvent) => mainWindow && !mainWindow.isDestroyed()
+    && event.sender === mainWindow.webContents && event.senderFrame === mainWindow.webContents.mainFrame
+  ipcMain.handle('lia:voice:speech-connection', event => ownsWindow(event) ? host.speechConnection().catch(() => undefined) : undefined)
+  ipcMain.handle('lia:voice:speech-save', (event, input: unknown) => ownsWindow(event) ? host.saveSpeechConnection(input).catch(() => false) : false)
+  ipcMain.handle('lia:voice:speech-local', async event => {
+    if (!ownsWindow(event))
+      return false
+    const result = await host.updateConfig({ update: { voice: { tts: { preferred: { providerId: 'kokoro' } } } } })
+    return result.status === 'ok'
+  })
   registerLiaIpc(host, timer, {
     pickVoiceFiles: async () => {
       if (!mainWindow)

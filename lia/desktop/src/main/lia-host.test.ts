@@ -75,6 +75,20 @@ describe('g. Existing Lia product config is read', () => {
 })
 
 describe('h. Existing voice profile list is read', () => {
+  it('saves speech transport and only returns non-secret configuration', async () => {
+    const home = await makeLiaHome()
+    const host = createLiaHost({ cipher: identityCipher, env: fixtureEnv(home), workspaceRoot: '/missing' })
+    const draft = { baseUrl: 'https://speech.example.invalid/v1', modelId: 'fixture-model', voiceId: 'fixture-voice' }
+    expect(await host.saveSpeechConnection({ ...draft, baseUrl: 'http://speech.example.invalid/v1', apiKey: 'synthetic-speech-key' })).toBe(false)
+    expect(await host.saveSpeechConnection({ ...draft, apiKey: 'synthetic-speech-key' })).toBe(true)
+    expect(await host.speechConnection()).toEqual({ ...draft, hasKey: true })
+    expect(await host.saveSpeechConnection({ ...draft, baseUrl: 'https://other.example.invalid/v1' })).toBe(false)
+    expect((await host.productSnapshot())?.voice?.tts?.preferred?.voiceId).toBe(draft.voiceId)
+    expect(await host.updateConfig({ update: { voice: { tts: { preferred: { providerId: 'kokoro' } } } } })).toMatchObject({ status: 'ok' })
+    expect(await host.speechConnection()).toEqual({ ...draft, hasKey: true })
+    expect(await readFile(host.paths.productConfigFile, 'utf8')).not.toContain('synthetic-speech-key')
+  })
+
   it('the canonical library registry lists its profiles verbatim', async () => {
     const home = await makeLiaHome({ voiceCount: 3 })
     const host = createLiaHost({ cipher: identityCipher, env: fixtureEnv(home), workspaceRoot: '/missing' })

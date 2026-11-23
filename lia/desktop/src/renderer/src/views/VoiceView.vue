@@ -33,6 +33,48 @@ const busy = ref(false)
 const feedback = ref('')
 const importName = ref('')
 const runtimeLocation = ref<any>(undefined)
+const speech = ref({ baseUrl: '', modelId: '', voiceId: '', apiKey: '', hasKey: false })
+const speechBusy = ref(false)
+const speechFeedback = ref('')
+
+async function loadSpeech() {
+  const connection = await props.api?.speechConnection?.()
+  if (connection)
+    speech.value = { ...connection, apiKey: '' }
+}
+
+async function saveSpeech() {
+  speechBusy.value = true
+  speechFeedback.value = ''
+  try {
+    const { baseUrl, modelId, voiceId, apiKey } = speech.value
+    if (!await props.api?.speechConnectionSave?.({ baseUrl, modelId, voiceId, ...(apiKey ? { apiKey } : {}) }))
+      throw new Error('speech-save')
+    await loadSpeech()
+    speechFeedback.value = 'Síntese compatível selecionada.'
+  }
+  catch {
+    speechFeedback.value = 'Não foi possível salvar a síntese. Confira os campos e encerre a conversa antes de tentar novamente.'
+  }
+  finally {
+    speech.value.apiKey = ''
+    speechBusy.value = false
+  }
+}
+
+async function useLocalSpeech() {
+  speechBusy.value = true
+  try {
+    const saved = await props.api?.useLocalSpeech?.()
+    speechFeedback.value = saved ? 'Motor local selecionado.' : 'Não foi possível selecionar o motor local.'
+  }
+  catch {
+    speechFeedback.value = 'Não foi possível selecionar o motor local.'
+  }
+  finally {
+    speechBusy.value = false
+  }
+}
 
 async function reload() {
   profiles.value = await props.api?.listVoices?.() ?? []
@@ -44,6 +86,7 @@ async function reloadLocation() {
 }
 
 onMounted(async () => {
+  await loadSpeech()
   await reload()
   await reloadLocation()
   const preferred = (await props.api?.productConfig?.())?.snapshot?.voice?.tts?.preferred
@@ -259,6 +302,22 @@ async function importVoice() {
     <p v-if="feedback" class="feedback">
       {{ feedback }}
     </p>
+    <details class="speech-settings">
+      <summary>Síntese compatível com OpenAI</summary>
+      <form @submit.prevent="saveSpeech">
+        <fieldset :disabled="speechBusy">
+          <label>Endereço da API <input v-model.trim="speech.baseUrl" required type="url" maxlength="4096" placeholder="https://exemplo.com/v1"></label>
+          <label>Modelo <input v-model.trim="speech.modelId" required maxlength="256"></label>
+          <label>Voz <input v-model.trim="speech.voiceId" required maxlength="256"></label>
+          <label>Chave da API <input v-model.trim="speech.apiKey" :required="!speech.hasKey" type="password" maxlength="2048" autocomplete="new-password"></label>
+          <div class="speech-actions">
+            <button type="submit">Salvar e usar</button>
+            <button type="button" @click="useLocalSpeech">Voltar ao motor local</button>
+          </div>
+        </fieldset>
+      </form>
+      <p class="feedback" role="status">{{ speechFeedback }}</p>
+    </details>
   </section>
 </template>
 
@@ -388,4 +447,30 @@ h3 { margin: 0 0 var(--lia-space-3); }
 
 .ready-actions { margin-top: var(--lia-space-2); }
 .feedback { font-size: var(--lia-text-sm); margin: 0; }
+.speech-settings {
+  background: var(--lia-bg-panel);
+  border: 1px solid var(--lia-border-subtle);
+  border-radius: var(--lia-radius-md);
+  padding: var(--lia-space-4);
+}
+.speech-settings summary { cursor: pointer; font-weight: var(--lia-font-medium); }
+.speech-settings fieldset {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
+  gap: var(--lia-space-3);
+  border: 0;
+  padding: 0;
+  margin: var(--lia-space-3) 0;
+}
+.speech-settings label { display: grid; gap: var(--lia-space-1); }
+.speech-settings input {
+  background: var(--lia-bg-app);
+  border: 1px solid var(--lia-border-subtle);
+  border-radius: var(--lia-radius-md);
+  color: var(--lia-text-primary);
+  font: inherit;
+  min-width: 0;
+  padding: var(--lia-space-2);
+}
+.speech-actions { display: flex; gap: var(--lia-space-2); flex-wrap: wrap; grid-column: 1 / -1; }
 </style>
