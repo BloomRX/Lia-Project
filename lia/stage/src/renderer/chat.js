@@ -1,3 +1,5 @@
+import { t } from './locale.js'
+
 const form = document.querySelector('form')
 const message = document.querySelector('#message')
 const send = document.querySelector('button[type="submit"]')
@@ -24,14 +26,14 @@ function clearAudio() {
 }
 
 const errors = {
-  busy: 'Há uma mensagem em andamento.',
-  cancelled: 'Envio cancelado.',
-  configuration: 'Selecione e confira a conexão de IA no Launcher.',
-  credentials: 'A conexão de IA recusou a credencial. Confira a configuração no Launcher.',
-  invalid: 'Digite uma mensagem válida.',
-  'rate-limit': 'A conexão de IA atingiu seu limite de uso. Aguarde e tente novamente.',
-  timeout: 'A IA demorou para responder. Tente novamente.',
-  unavailable: 'A IA não respondeu. Verifique o serviço e tente novamente.',
+  busy: t('Há uma mensagem em andamento.'),
+  cancelled: t('Envio cancelado.'),
+  configuration: t('Selecione e confira a conexão de IA no Launcher.'),
+  credentials: t('A conexão de IA recusou a credencial. Confira a configuração no Launcher.'),
+  invalid: t('Digite uma mensagem válida.'),
+  'rate-limit': t('A conexão de IA atingiu seu limite de uso. Aguarde e tente novamente.'),
+  timeout: t('A IA demorou para responder. Tente novamente.'),
+  unavailable: t('A IA não respondeu. Verifique o serviço e tente novamente.'),
 }
 
 function appendMessage(author, text) {
@@ -54,12 +56,12 @@ async function changeHistory(action) {
       clearAudio()
       voice.hidden = true
     }
-    historyStatus.textContent = action === 'enable' ? 'Histórico ativado.' : 'Conversa limpa.'
+    historyStatus.textContent = action === 'enable' ? t('Histórico ativado.') : t('Conversa limpa.')
   }
   catch {
     if (action !== 'clear')
       historyEnabled.checked = action === 'disable'
-    historyStatus.textContent = 'Não foi possível alterar o histórico. Tente novamente após o envio.'
+    historyStatus.textContent = t('Não foi possível alterar o histórico. Tente novamente após o envio.')
   }
   finally {
     historyEnabled.disabled = false
@@ -68,14 +70,14 @@ async function changeHistory(action) {
 }
 
 historyEnabled.addEventListener('change', () => {
-  if (!historyEnabled.checked && !window.confirm('Desativar o histórico e apagar a conversa guardada?')) {
+  if (!historyEnabled.checked && !window.confirm(t('Desativar o histórico e apagar a conversa guardada?'))) {
     historyEnabled.checked = true
     return
   }
   void changeHistory(historyEnabled.checked ? 'enable' : 'disable')
 })
 historyClear.addEventListener('click', () => {
-  if (window.confirm('Apagar as mensagens desta conversa?'))
+  if (window.confirm(t('Apagar as mensagens desta conversa?')))
     void changeHistory('clear')
 })
 
@@ -85,7 +87,7 @@ try {
   if (!history)
     throw new Error('history')
   for (const turn of history.turns) {
-    appendMessage('Você', turn.user)
+    appendMessage(t('Você'), turn.user)
     appendMessage('Lia', turn.assistant)
   }
   historyEnabled.checked = history.enabled
@@ -93,7 +95,7 @@ try {
   historyClear.disabled = false
 }
 catch {
-  historyStatus.textContent = 'Não foi possível recuperar o histórico.'
+  historyStatus.textContent = t('Não foi possível recuperar o histórico.')
 }
 finally {
   send.disabled = false
@@ -108,21 +110,21 @@ form.addEventListener('submit', async (event) => {
   send.disabled = true
   cancel.disabled = false
   message.readOnly = true
-  status.textContent = 'Aguardando resposta da Lia…'
+  status.textContent = t('Aguardando resposta da Lia…')
   try {
     const result = await window.liaStageChat.send(text)
     if (!result.ok) {
       status.textContent = errors[result.code] ?? errors.unavailable
       return
     }
-    appendMessage('Você', text)
+    appendMessage(t('Você'), text)
     appendMessage('Lia', result.text)
     answerVersion++
     clearAudio()
     voice.hidden = false
     voiceStatus.textContent = ''
     message.value = ''
-    status.textContent = result.historyUnavailable ? 'Resposta recebida. Não foi possível salvar o histórico.' : ''
+    status.textContent = result.historyUnavailable ? t('Resposta recebida. Não foi possível salvar o histórico.') : ''
   }
   catch {
     status.textContent = errors.unavailable
@@ -139,15 +141,15 @@ speak.addEventListener('click', async () => {
   const version = answerVersion
   speak.disabled = true
   clearAudio()
-  voiceStatus.textContent = 'Preparando a resposta em áudio…'
+  voiceStatus.textContent = t('Preparando a resposta em áudio…')
   try {
     const result = await window.liaStageChat.speak()
     if (version !== answerVersion)
       return
     if (!result.ok) {
       voiceStatus.textContent = result.code === 'disabled'
-        ? 'A saída de voz está desativada.'
-        : 'A voz selecionada está indisponível.'
+        ? t('A saída de voz está desativada.')
+        : t('A voz selecionada está indisponível.')
       return
     }
     audioUrl = URL.createObjectURL(new Blob([result.audio], { type: 'audio/wav' }))
@@ -158,7 +160,7 @@ speak.addEventListener('click', async () => {
   }
   catch {
     if (version === answerVersion)
-      voiceStatus.textContent = 'Não foi possível preparar a resposta em áudio.'
+      voiceStatus.textContent = t('Não foi possível preparar a resposta em áudio.')
   }
   finally {
     speak.disabled = false

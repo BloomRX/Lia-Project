@@ -1,3 +1,5 @@
+import './locale.js'
+
 import { createAvatarView } from './avatar-view.js'
 
 const canvas = document.querySelector('canvas')

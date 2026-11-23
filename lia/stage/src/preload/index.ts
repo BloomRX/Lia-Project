@@ -3,7 +3,11 @@ import type { LiaMemoryMutation } from '../../../core/src/memory/contracts.ts'
 import { contextBridge, ipcRenderer } from 'electron'
 
 import { stageChatCancel, stageChatSend, stageChatSpeak, stageMemoryGet, stageMemoryMutate, stageMicrophoneArm, stagePresenceClose, stagePresenceCommand, stagePresenceOpen, stagePresenceRead, stagePresenceRendered, stageTranscribe, stageTranscriptionCancel } from '../shared/chat-ipc.ts'
-import { stageHistoryChange, stageHistoryGet } from '../shared/chat-ipc.ts'
+import { stageHistoryChange, stageHistoryGet, stageLanguageGet } from '../shared/chat-ipc.ts'
+
+contextBridge.exposeInMainWorld('liaStageLanguage', {
+  get: () => ipcRenderer.invoke(stageLanguageGet),
+})
 
 contextBridge.exposeInMainWorld('liaStagePresence', {
   open: (bytes: Uint8Array) => ipcRenderer.invoke(stagePresenceOpen, bytes),

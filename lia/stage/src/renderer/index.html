@@ -25,58 +25,58 @@
   </head>
   <body>
     <main>
-      <h1>Conversa com Lia</h1>
+      <h1 data-translate>Conversa com Lia</h1>
       <div id="messages" role="log" aria-label="Mensagens" tabindex="0"></div>
       <form>
-        <label for="message">Mensagem</label>
+        <label for="message" data-translate>Mensagem</label>
         <textarea id="message" rows="3" maxlength="8000" required></textarea>
         <div>
-          <button type="submit">Enviar</button>
-          <button id="cancel" type="button" disabled>Cancelar</button>
+          <button type="submit" data-translate>Enviar</button>
+          <button id="cancel" type="button" disabled data-translate>Cancelar</button>
         </div>
       </form>
       <div>
-        <button id="record" type="button">Gravar mensagem</button>
-        <button id="record-cancel" type="button" disabled>Cancelar gravação</button>
+        <button id="record" type="button" data-translate>Gravar mensagem</button>
+        <button id="record-cancel" type="button" disabled data-translate>Cancelar gravação</button>
         <p id="record-status" role="status"></p>
       </div>
       <div id="voice" hidden>
-        <button id="speak" type="button">Ouvir resposta</button>
+        <button id="speak" type="button" data-translate>Ouvir resposta</button>
         <audio controls hidden aria-label="Resposta da Lia"></audio>
         <p id="voice-status" role="status"></p>
       </div>
       <p id="status" role="status"></p>
       <details>
-        <summary>Histórico da conversa</summary>
-        <p>Guarda até 24 trocas neste perfil. As mais recentes podem voltar à conversa quando você usar a mesma conexão de IA.</p>
-        <label><input id="history-enabled" type="checkbox" disabled> Guardar histórico</label>
-        <button id="history-clear" type="button" disabled>Limpar conversa</button>
+        <summary data-translate>Histórico da conversa</summary>
+        <p data-translate>Guarda até 24 trocas neste perfil. As mais recentes podem voltar à conversa quando você usar a mesma conexão de IA.</p>
+        <label><input id="history-enabled" type="checkbox" disabled> <span data-translate>Guardar histórico</span></label>
+        <button id="history-clear" type="button" disabled data-translate>Limpar conversa</button>
         <p id="history-status" role="status"></p>
       </details>
       <details id="avatar">
         <summary>Avatar</summary>
-        <label for="avatar-file">Abrir avatar VRM</label>
-        <input id="avatar-file" type="file" accept=".vrm">
+        <button id="avatar-picker" type="button" data-translate>Abrir avatar VRM</button>
+        <input id="avatar-file" type="file" aria-label="Abrir avatar VRM" accept=".vrm" hidden>
         <canvas id="avatar-canvas" hidden aria-label="Prévia do avatar"></canvas>
         <div id="avatar-actions" hidden>
-          <button id="avatar-show" type="button">Mostrar no desktop</button>
-          <button id="avatar-hide" type="button" disabled>Ocultar do desktop</button>
-          <button type="button" data-presence="paused" disabled>Pausar ou retomar</button>
-          <button type="button" data-presence="pinned" disabled>Fixar ou soltar</button>
-          <button type="button" data-presence="home" disabled>Voltar ao início</button>
-          <button type="button" data-presence="set-home" disabled>Salvar posição inicial</button>
+          <button id="avatar-show" type="button" data-translate>Mostrar no desktop</button>
+          <button id="avatar-hide" type="button" disabled data-translate>Ocultar do desktop</button>
+          <button type="button" data-presence="paused" disabled data-translate>Pausar ou retomar</button>
+          <button type="button" data-presence="pinned" disabled data-translate>Fixar ou soltar</button>
+          <button type="button" data-presence="home" disabled data-translate>Voltar ao início</button>
+          <button type="button" data-presence="set-home" disabled data-translate>Salvar posição inicial</button>
         </div>
         <p id="avatar-status" role="status"></p>
       </details>
       <details>
-        <summary>Memória</summary>
-        <p>As notas ficam neste perfil e só entram em conversas com a IA local.</p>
+        <summary data-translate>Memória</summary>
+        <p data-translate>As notas ficam neste perfil e só entram em conversas com a IA local.</p>
         <fieldset id="memory-controls" disabled>
-          <label><input id="memory-enabled" type="checkbox"> Usar minhas notas</label>
+          <label><input id="memory-enabled" type="checkbox"> <span data-translate>Usar minhas notas</span></label>
           <div>
-            <label for="memory-note">Nova nota</label>
+            <label for="memory-note" data-translate>Nova nota</label>
             <textarea id="memory-note" rows="2" maxlength="500"></textarea>
-            <button id="memory-save" type="button">Salvar nota</button>
+            <button id="memory-save" type="button" data-translate>Salvar nota</button>
           </div>
           <ul id="memory-entries" aria-label="Notas salvas"></ul>
         </fieldset>

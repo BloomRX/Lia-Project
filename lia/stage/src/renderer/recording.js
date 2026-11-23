@@ -1,3 +1,5 @@
+import { t } from './locale.js'
+
 const record = document.querySelector('#record')
 const cancel = document.querySelector('#record-cancel')
 const status = document.querySelector('#record-status')
@@ -15,7 +17,7 @@ function finish(job, message) {
   if (current !== job)
     return
   current = undefined
-  record.textContent = 'Gravar mensagem'
+  record.textContent = t('Gravar mensagem')
   record.disabled = false
   cancel.disabled = true
   status.textContent = message
@@ -27,7 +29,7 @@ function discard() {
     return
   if (job.recorder?.state === 'recording')
     job.recorder.stop()
-  finish(job, 'Gravação cancelada.')
+  finish(job, t('Gravação cancelada.'))
   void window.liaStageChat.cancelTranscription().catch(() => {})
 }
 
@@ -42,7 +44,7 @@ record.addEventListener('click', async () => {
   current = job
   record.disabled = true
   cancel.disabled = false
-  status.textContent = 'Aguardando acesso ao microfone…'
+  status.textContent = t('Aguardando acesso ao microfone…')
 
   try {
     if (!MediaRecorder.isTypeSupported(mimeType) || !await window.liaStageChat.armMicrophone())
@@ -65,13 +67,13 @@ record.addEventListener('click', async () => {
       else
         discard()
     })
-    recorder.addEventListener('error', () => finish(job, 'Não foi possível gravar a mensagem.'))
+    recorder.addEventListener('error', () => finish(job, t('Não foi possível gravar a mensagem.')))
     recorder.addEventListener('stop', async () => {
       release(job)
       if (current !== job)
         return
       record.disabled = true
-      status.textContent = 'Transcrevendo a gravação…'
+      status.textContent = t('Transcrevendo a gravação…')
       try {
         const bytes = new Uint8Array(await new Blob(job.chunks).arrayBuffer())
         if (current !== job)
@@ -81,21 +83,21 @@ record.addEventListener('click', async () => {
           return
         if (!result.ok || !result.text.trim()) {
           finish(job, result.code === 'cancelled'
-            ? 'Transcrição cancelada.'
-            : 'Não foi possível transcrever. Confira a configuração de transcrição.')
+            ? t('Transcrição cancelada.')
+            : t('Não foi possível transcrever. Confira a configuração de transcrição.'))
           return
         }
         const text = [draft.value.trim(), result.text.trim()].filter(Boolean).join(' ')
         if (text.length > draft.maxLength) {
-          finish(job, 'A transcrição excede o limite da mensagem.')
+          finish(job, t('A transcrição excede o limite da mensagem.'))
           return
         }
         draft.value = text
-        finish(job, 'Transcrição inserida. Revise antes de enviar.')
+        finish(job, t('Transcrição inserida. Revise antes de enviar.'))
         draft.focus()
       }
       catch {
-        finish(job, 'Não foi possível transcrever a gravação.')
+        finish(job, t('Não foi possível transcrever a gravação.'))
       }
     }, { once: true })
     recorder.start(500)
@@ -103,12 +105,12 @@ record.addEventListener('click', async () => {
       if (recorder.state === 'recording')
         recorder.stop()
     }, 60_000)
-    record.textContent = 'Parar e transcrever'
+    record.textContent = t('Parar e transcrever')
     record.disabled = false
-    status.textContent = 'Gravando…'
+    status.textContent = t('Gravando…')
   }
   catch {
-    finish(job, 'Não foi possível acessar o microfone.')
+    finish(job, t('Não foi possível acessar o microfone.'))
   }
 })
 

@@ -107,6 +107,9 @@ Para preparar e abrir a prévia no Windows, execute
 do Stage e do Launcher, prepara o Electron e abre o Launcher com o Stage
 próprio habilitado. Use `-PrepareOnly` para preparar os builds sem abrir
 a janela. No Launcher, configure um provedor em **IA & Recursos**.
+O Stage usa a preferência `preferences.language` do produto ao abrir a
+janela. A interface oferece pt-BR e en-US, com pt-BR como padrão.
+Reabra o Stage para aplicar mudanças feitas no Launcher.
 **Conversar com Lia** e **Encerrar
 conversa** foram verificados no Windows com um registro separado.
 O modo experimental oferece conversa com IA local e Groq. O botão

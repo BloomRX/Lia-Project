@@ -1,7 +1,10 @@
+import { t } from './locale.js'
+
 import { maxAvatarBytes } from './avatar-file.js'
 
 const details = document.querySelector('#avatar')
 const picker = document.querySelector('#avatar-file')
+const pickerButton = document.querySelector('#avatar-picker')
 let canvas = document.querySelector('#avatar-canvas')
 const status = document.querySelector('#avatar-status')
 const actions = document.querySelector('#avatar-actions')
@@ -28,7 +31,7 @@ async function operate(operation) {
     await operation()
   }
   catch {
-    status.textContent = 'Não foi possível alterar a presença no desktop.'
+    status.textContent = t('Não foi possível alterar a presença no desktop.')
   }
   finally {
     presenceBusy = false
@@ -40,18 +43,18 @@ show.addEventListener('click', () => void operate(async () => {
   if (!await window.liaStagePresence.open(new Uint8Array(selectedAvatar)))
     throw new Error('presence')
   presenceOpen = true
-  status.textContent = 'Avatar aberto no desktop.'
+  status.textContent = t('Avatar aberto no desktop.')
 }))
 hide.addEventListener('click', () => void operate(async () => {
   await window.liaStagePresence.close()
   presenceOpen = false
-  status.textContent = 'Avatar oculto.'
+  status.textContent = t('Avatar oculto.')
 }))
 for (const command of commands) {
   command.addEventListener('click', () => void operate(async () => {
     if (!await window.liaStagePresence.command(command.dataset.presence))
       throw new Error('presence')
-    status.textContent = 'Presença atualizada.'
+    status.textContent = t('Presença atualizada.')
   }))
 }
 
@@ -67,17 +70,19 @@ function releaseClosedPreview() {
   }
 }
 
+pickerButton.addEventListener('click', () => picker.click())
 picker.addEventListener('change', async () => {
   const file = picker.files[0]
   if (!file)
     return
   if (file.size > maxAvatarBytes) {
-    status.textContent = 'Escolha um arquivo VRM de até 64 MB.'
+    status.textContent = t('Escolha um arquivo VRM de até 64 MB.')
     picker.value = ''
     return
   }
   picker.disabled = true
-  status.textContent = 'Carregando avatar…'
+  pickerButton.disabled = true
+  status.textContent = t('Carregando avatar…')
   try {
     const { createAvatarView } = await import('./avatar-view.js')
     view ??= createAvatarView(canvas)
@@ -86,14 +91,15 @@ picker.addEventListener('change', async () => {
     selectedAvatar = bytes
     updateActions()
     canvas.hidden = false
-    status.textContent = 'Avatar carregado.'
+    status.textContent = t('Avatar carregado.')
   }
   catch {
-    status.textContent = 'Não foi possível abrir este avatar. Escolha um arquivo VRM com recursos incorporados.'
+    status.textContent = t('Não foi possível abrir este avatar. Escolha um arquivo VRM com recursos incorporados.')
   }
   finally {
     picker.value = ''
     picker.disabled = false
+    pickerButton.disabled = false
     releaseClosedPreview()
   }
 })

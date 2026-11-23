@@ -113,13 +113,14 @@ export function createStagePresence(options: {
     }
   }
 
-  function ownsOverlay(event: Electron.IpcMainInvokeEvent) {
+  function ownsOverlay(event: Electron.IpcMainInvokeEvent | Electron.IpcMainEvent) {
     return window && !window.isDestroyed() && event.sender === window.webContents && event.senderFrame === window.webContents.mainFrame
   }
 
   return {
     open,
     close,
+    ownsOverlay,
     takeAsset(event: Electron.IpcMainInvokeEvent) {
       if (!ownsOverlay(event))
         return undefined

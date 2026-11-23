@@ -17,7 +17,8 @@ import { createLiaMemoryStore } from '../../../core/src/memory/store.ts'
 import { startLiaRuntimeService } from '../../../core/src/runtime/index.ts'
 import { createTransportRepository } from '../../../core/src/transports/repository.ts'
 import { stageChatCancel, stageChatSend, stageChatSpeak, stageMemoryGet, stageMemoryMutate, stageMicrophoneArm, stagePresenceClose, stagePresenceCommand, stagePresenceOpen, stagePresenceRead, stagePresenceRendered, stageTranscribe, stageTranscriptionCancel } from '../shared/chat-ipc.ts'
-import { stageHistoryChange, stageHistoryGet } from '../shared/chat-ipc.ts'
+import { stageHistoryChange, stageHistoryGet, stageLanguageGet } from '../shared/chat-ipc.ts'
+import { stageLocale, stageText } from '../shared/locale.ts'
 import { createStageChat } from './stage-chat.ts'
 import { createStageHistory } from './stage-history.ts'
 import { createStageHost } from './stage-host.ts'
@@ -40,6 +41,10 @@ async function main(): Promise<void> {
   const repository = createTransportRepository(join(paths.userDataDir, 'lia-transports.json'))
   let voiceInstallDir: string | undefined
   const readProduct = () => readLiaProductConfig(paths.productConfigFile)
+  const readLocale = async () => {
+    const config = await readProduct()
+    return stageLocale(config.status === 'ok' ? config.value.preferences?.language : undefined)
+  }
   const presence = createStagePresence({
     async loadConfig() {
       const config = await readProduct()
@@ -112,6 +117,7 @@ async function main(): Promise<void> {
   ipcMain.handle(stagePresenceCommand, (event, action: unknown) => Boolean(authorized(event)) && presence.command(action))
   ipcMain.handle(stagePresenceRead, presence.takeAsset)
   ipcMain.on(stagePresenceRendered, presence.reportRender)
+  ipcMain.handle(stageLanguageGet, event => (authorized(event) || presence.ownsOverlay(event)) ? readLocale() : undefined)
   ipcMain.handle(stageHistoryGet, async event => {
     if (!authorized(event))
       return undefined
@@ -170,14 +176,15 @@ async function main(): Promise<void> {
     recording = controller
     try {
       return await transcribe(bytes, mimeType, controller.signal, async (providerId, destination, signal) => {
+        const locale = await readLocale()
         if (signal.aborted || owner.isDestroyed())
           return false
         const { response } = await dialog.showMessageBox(owner, {
           type: 'question',
           title: 'Lia',
-          message: 'Enviar esta gravação para transcrição?',
-          detail: `O áudio será enviado a ${providerId} (\n${destination}\n).`,
-          buttons: ['Cancelar', 'Enviar gravação'],
+          message: stageText(locale, 'Enviar esta gravação para transcrição?'),
+          detail: `${stageText(locale, 'O áudio será enviado a')} ${providerId} (\n${destination}\n).`,
+          buttons: [stageText(locale, 'Cancelar'), stageText(locale, 'Enviar gravação')],
           cancelId: 0,
           defaultId: 0,
           noLink: true,

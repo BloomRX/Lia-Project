@@ -1,3 +1,5 @@
+import { t } from './locale.js'
+
 const memory = window.liaStageMemory
 const controls = document.querySelector('#memory-controls')
 const enabled = document.querySelector('#memory-enabled')
@@ -17,10 +19,10 @@ function render(state) {
     text.textContent = entry.text
     const remove = document.createElement('button')
     remove.type = 'button'
-    remove.textContent = 'Remover'
+    remove.textContent = t('Remover')
     remove.addEventListener('click', async () => {
-      if (window.confirm('Remover esta nota?')) {
-        await run(() => memory.mutate({ action: 'remove', id: entry.id }), 'Nota removida.')
+      if (window.confirm(t('Remover esta nota?'))) {
+        await run(() => memory.mutate({ action: 'remove', id: entry.id }), t('Nota removida.'))
         note.focus()
       }
     })
@@ -31,7 +33,7 @@ function render(state) {
 
 async function run(operation, success = '') {
   controls.disabled = true
-  status.textContent = 'Aguarde…'
+  status.textContent = t('Aguarde…')
   try {
     const result = await operation()
     if (!result.ok)
@@ -43,7 +45,7 @@ async function run(operation, success = '') {
   catch {
     if (current)
       enabled.checked = current.enabled
-    status.textContent = 'Não foi possível acessar ou alterar a memória. Tente novamente após o envio da mensagem.'
+    status.textContent = t('Não foi possível acessar ou alterar a memória. Tente novamente após o envio da mensagem.')
     return false
   }
   finally {
@@ -52,16 +54,16 @@ async function run(operation, success = '') {
 }
 
 enabled.addEventListener('change', () => {
-  void run(() => memory.mutate({ action: 'enable', enabled: enabled.checked }), 'Preferência salva.')
+  void run(() => memory.mutate({ action: 'enable', enabled: enabled.checked }), t('Preferência salva.'))
 })
 save.addEventListener('click', async () => {
   const text = note.value.trim()
   if (!text) {
-    status.textContent = 'Escreva uma nota para salvar.'
+    status.textContent = t('Escreva uma nota para salvar.')
     note.focus()
     return
   }
-  if (await run(() => memory.mutate({ action: 'save', text }), 'Nota salva.'))
+  if (await run(() => memory.mutate({ action: 'save', text }), t('Nota salva.')))
     note.value = ''
   note.focus()
 })
