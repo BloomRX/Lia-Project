@@ -4,6 +4,8 @@ import { lstat, readFile, rename, unlink, writeFile } from 'node:fs/promises'
 const maxTurns = 24
 const maxText = 8_000
 const maxLegacyExport = 4 * 1024 * 1024
+const maxConversations = 12
+const initialId = 'initial'
 
 interface Turn {
   route: string
@@ -11,10 +13,15 @@ interface Turn {
   assistant: string
   reusable: boolean
 }
-interface History {
-  version: 1
+interface Conversation {
+  id: string
   enabled: boolean
   turns: Turn[]
+}
+interface History {
+  version: 2
+  activeId: string
+  conversations: Conversation[]
 }
 
 function object(value: unknown): value is Record<string, unknown> {
@@ -57,6 +64,18 @@ function validTurn(value: unknown): value is Turn {
 }
 
 export function createStageHistory(path: string) {
+  function conversation(id: string): Conversation {
+    return { id, enabled: false, turns: [] }
+  }
+
+  function validConversation(value: unknown): value is Conversation {
+    return object(value) && typeof value.id === 'string'
+      && (value.id === initialId || /^[a-f0-9-]{36}$/.test(value.id))
+      && typeof value.enabled === 'boolean' && Array.isArray(value.turns)
+      && value.turns.length <= maxTurns && value.turns.every(validTurn)
+      && (value.enabled || value.turns.length === 0)
+  }
+
   async function read(): Promise<History> {
     const stat = await lstat(path).catch((error: NodeJS.ErrnoException) => {
       if (error.code === 'ENOENT')
@@ -64,14 +83,40 @@ export function createStageHistory(path: string) {
       throw error
     })
     if (!stat)
-      return { version: 1, enabled: false, turns: [] }
-    if (!stat.isFile() || stat.size > 2_500_000)
+      return { version: 2, activeId: initialId, conversations: [conversation(initialId)] }
+    if (!stat.isFile() || stat.size > maxConversations * 2_500_000)
       throw new Error('history-storage')
-    const state = JSON.parse(await readFile(path, 'utf8'))
-    if (state?.version !== 1 || typeof state.enabled !== 'boolean' || !Array.isArray(state.turns)
-      || state.turns.length > maxTurns || !state.turns.every(validTurn) || (!state.enabled && state.turns.length))
+    const state: unknown = JSON.parse(await readFile(path, 'utf8'))
+    if (!object(state))
       throw new Error('history-storage')
-    return { version: 1, enabled: state.enabled, turns: state.turns }
+    if (state.version === 1) {
+      const previous = { id: initialId, enabled: state.enabled, turns: state.turns }
+      if (validConversation(previous))
+        return { version: 2, activeId: initialId, conversations: [previous] }
+    }
+    const conversations: unknown[] = Array.isArray(state.conversations) ? state.conversations : []
+    const { activeId } = state
+    if (state.version !== 2 || typeof activeId !== 'string'
+      || conversations.length > maxConversations || !conversations.every(validConversation)
+      || new Set(conversations.map(item => item.id)).size !== conversations.length
+      || !conversations.some(item => item.id === activeId))
+      throw new Error('history-storage')
+    return { version: 2, activeId, conversations }
+  }
+  function current(state: History): Conversation {
+    return state.conversations.find(item => item.id === state.activeId)!
+  }
+  function view(state: History) {
+    const { enabled, turns } = current(state)
+    return {
+      enabled,
+      turns: turns.map(({ user, assistant }) => ({ user, assistant })),
+      activeId: state.activeId,
+      conversations: state.conversations.map(({ id, turns }) => ({
+        id,
+        title: turns[0]?.user.trim().slice(0, 50) ?? '',
+      })),
+    }
   }
   async function write(state: History) {
     const temporary = `${path}.${randomUUID()}.tmp`
@@ -85,39 +130,70 @@ export function createStageHistory(path: string) {
   }
   return {
     async get() {
+      return view(await read())
+    },
+    async changeConversation(action: 'create' | 'select' | 'delete', id?: string) {
       const state = await read()
-      return { enabled: state.enabled, turns: state.turns.map(({ user, assistant }) => ({ user, assistant })) }
+      if (action === 'create') {
+        if (state.conversations.length >= maxConversations)
+          return undefined
+        state.activeId = randomUUID()
+        state.conversations.push(conversation(state.activeId))
+      }
+      else if (action === 'delete') {
+        state.conversations = state.conversations.filter(item => item.id !== state.activeId)
+        if (!state.conversations.length)
+          state.conversations.push(conversation(randomUUID()))
+        state.activeId = state.conversations[0]!.id
+      }
+      else {
+        if (!id || !state.conversations.some(item => item.id === id))
+          return undefined
+        state.activeId = id
+      }
+      await write(state)
+      return view(state)
     },
     async setEnabled(enabled: boolean) {
       const state = await read()
-      if (state.enabled !== enabled)
-        await write({ version: 1, enabled, turns: [] })
+      const active = current(state)
+      if (active.enabled !== enabled) {
+        active.enabled = enabled
+        active.turns = []
+        await write(state)
+      }
     },
     async clear() {
-      const { enabled } = await read()
-      await write({ version: 1, enabled, turns: [] })
+      const state = await read()
+      current(state).turns = []
+      await write(state)
     },
     async importLegacy(input: unknown) {
       const state = await read()
-      const room = maxTurns - state.turns.length
-      if (!state.enabled || room <= 0)
+      const active = current(state)
+      const room = maxTurns - active.turns.length
+      if (!active.enabled || room <= 0)
         return []
       const imported = legacyTurns(input, maxTurns).filter(turn =>
-        !state.turns.some(previous => !previous.reusable && previous.user === turn.user && previous.assistant === turn.assistant))
+        !active.turns.some(previous => !previous.reusable && previous.user === turn.user && previous.assistant === turn.assistant))
         .slice(-room)
-      if (imported.length > 0)
-        await write({ ...state, turns: [...imported, ...state.turns] })
+      if (imported.length > 0) {
+        active.turns = [...imported, ...active.turns]
+        await write(state)
+      }
       return imported.map(({ user, assistant }) => ({ user, assistant }))
     },
     async recall(route: string) {
-      const state = await read()
-      return state.turns.filter(turn => turn.route === route && turn.reusable)
+      return current(await read()).turns.filter(turn => turn.route === route && turn.reusable)
         .map(({ user, assistant }) => ({ user, assistant }))
     },
     async append(turn: Turn) {
       const state = await read()
-      if (state.enabled && validTurn(turn))
-        await write({ ...state, turns: [...state.turns, turn].slice(-maxTurns) })
+      const active = current(state)
+      if (active.enabled && validTurn(turn)) {
+        active.turns = [...active.turns, turn].slice(-maxTurns)
+        await write(state)
+      }
     },
   }
 }

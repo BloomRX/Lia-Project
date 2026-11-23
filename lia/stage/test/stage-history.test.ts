@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
@@ -14,7 +14,8 @@ test('history is opt-in, bounded, route-scoped and clearable', async (t) => {
   const turn = { route, user: 'Oi', assistant: 'Olá', reusable: true }
   const history = createStageHistory(path)
   await history.append(turn)
-  assert.deepEqual(await history.get(), { enabled: false, turns: [] })
+  assert.equal((await history.get()).enabled, false)
+  assert.deepEqual((await history.get()).turns, [])
   await history.setEnabled(true)
   await history.append(turn)
   await history.append({ ...turn, reusable: false, assistant: 'Com nota pessoal' })
@@ -27,10 +28,40 @@ test('history is opt-in, bounded, route-scoped and clearable', async (t) => {
   assert.equal((await reopened.get()).turns.length, 24)
   assert.equal((await reopened.get()).turns[0]?.user, '1')
   await reopened.clear()
-  assert.deepEqual(await reopened.get(), { enabled: true, turns: [] })
+  assert.equal((await reopened.get()).enabled, true)
+  assert.deepEqual((await reopened.get()).turns, [])
   await reopened.append(turn)
   await reopened.setEnabled(false)
-  assert.deepEqual(await history.get(), { enabled: false, turns: [] })
+  assert.equal((await history.get()).enabled, false)
+  assert.deepEqual((await history.get()).turns, [])
+})
+
+test('migrates existing history and keeps transcript, opt-in and model context separate', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'lia-stage-conversations-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const path = join(root, 'lia-chat-history.json')
+  const turn = { route: 'a'.repeat(64), user: 'Primeira conversa', assistant: 'Olá', reusable: true }
+  await writeFile(path, JSON.stringify({ version: 1, enabled: true, turns: [turn] }))
+  const history = createStageHistory(path)
+  const first = await history.get()
+  const second = await history.changeConversation('create')
+  assert.ok(second)
+  assert.equal(second.enabled, false)
+  assert.deepEqual(await history.recall(turn.route), [])
+  await history.append({ ...turn, user: 'Sem autorização para guardar' })
+  assert.deepEqual((await history.get()).turns, [])
+  assert.equal(await history.changeConversation('select', '../foreign'), undefined)
+  assert.equal((await createStageHistory(path).get()).activeId, second.activeId)
+  const restored = await history.changeConversation('select', first.activeId)
+  assert.deepEqual(restored?.turns, first.turns)
+  assert.equal(restored?.enabled, true)
+  assert.deepEqual(await history.recall(turn.route), first.turns)
+  const deleted = await history.changeConversation('delete')
+  assert.equal(deleted?.activeId, second.activeId)
+  assert.equal(await history.changeConversation('select', first.activeId), undefined)
+  for (let i = 1; i < 12; i++)
+    assert.ok(await history.changeConversation('create'))
+  assert.equal(await history.changeConversation('create'), undefined)
 })
 
 test('legacy imports preserve current turns and never become model context', async (t) => {

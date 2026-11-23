@@ -17,6 +17,11 @@ const historyClear = document.querySelector('#history-clear')
 const historyStatus = document.querySelector('#history-status')
 const historyImport = document.querySelector('#history-import')
 const historyImportFile = document.querySelector('#history-import-file')
+const conversation = document.querySelector('#conversation')
+const newConversation = document.querySelector('#conversation-add')
+const deleteConversation = document.querySelector('#conversation-delete')
+const record = document.querySelector('#record')
+const recordCancel = document.querySelector('#record-cancel')
 const imagePick = document.querySelector('#image-pick')
 const imageRemove = document.querySelector('#image-remove')
 const imageFile = document.querySelector('#image-file')
@@ -25,6 +30,8 @@ let audioUrl
 let answerVersion = 0
 let attachment
 let cancelRequested = false
+let activeConversation
+let unsavedMessages = false
 
 function clearAttachment() {
   attachment = undefined
@@ -80,6 +87,60 @@ function appendMessage(author, text, container = messages) {
     messages.scrollTop = messages.scrollHeight
 }
 
+function showConversation(state) {
+  activeConversation = state.activeId
+  conversation.replaceChildren(...state.conversations.map(({ id, title }, index) =>
+    new Option(title || `${t('Conversa')} ${index + 1}`, id)))
+  conversation.value = activeConversation
+  messages.replaceChildren()
+  for (const turn of state.turns) {
+    appendMessage(t('Você'), turn.user)
+    appendMessage('Lia', turn.assistant)
+  }
+  unsavedMessages = false
+  historyEnabled.checked = state.enabled
+  historyImport.disabled = !state.enabled
+}
+
+async function changeConversation(action, id) {
+  conversation.value = activeConversation
+  if (send.disabled || historyEnabled.disabled || !recordCancel.disabled || id === activeConversation)
+    return
+  const prompt = action === 'delete' ? 'Excluir esta conversa e todas as suas mensagens?'
+    : (message.value || attachment || unsavedMessages) ? 'Trocar de conversa? O rascunho e as mensagens não guardadas serão descartados.' : undefined
+  if (prompt && !window.confirm(t(prompt)))
+    return
+  const controls = [send, conversation, newConversation, deleteConversation, historyEnabled, historyClear, record, imagePick, imageRemove]
+  controls.forEach(control => { control.disabled = true })
+  message.readOnly = true
+  historyImport.disabled = true
+  try {
+    const state = await window.liaStageChat.changeConversation(action, id)
+    if (!state)
+      throw new Error('conversation')
+    showConversation(state)
+    message.value = ''
+    clearAttachment()
+    answerVersion++
+    clearAudio()
+    voice.hidden = true
+    status.textContent = ''
+    historyStatus.textContent = ''
+  }
+  catch {
+    historyStatus.textContent = t('Não foi possível mudar de conversa. O limite é de 12 conversas.')
+  }
+  finally {
+    controls.forEach(control => { control.disabled = false })
+    message.readOnly = false
+    historyImport.disabled = !historyEnabled.checked
+  }
+}
+
+conversation.addEventListener('change', () => void changeConversation('select', conversation.value))
+newConversation.addEventListener('click', () => void changeConversation('create'))
+deleteConversation.addEventListener('click', () => void changeConversation('delete'))
+
 async function changeHistory(action) {
   historyEnabled.disabled = true
   historyClear.disabled = true
@@ -89,6 +150,7 @@ async function changeHistory(action) {
       throw new Error('history')
     if (action !== 'enable') {
       messages.replaceChildren()
+      unsavedMessages = false
       answerVersion++
       clearAudio()
       voice.hidden = true
@@ -160,12 +222,10 @@ try {
   const history = await window.liaStageChat.history()
   if (!history)
     throw new Error('history')
-  for (const turn of history.turns) {
-    appendMessage(t('Você'), turn.user)
-    appendMessage('Lia', turn.assistant)
-  }
-  historyEnabled.checked = history.enabled
-  historyImport.disabled = !history.enabled
+  showConversation(history)
+  conversation.disabled = false
+  newConversation.disabled = false
+  deleteConversation.disabled = false
   historyEnabled.disabled = false
   historyClear.disabled = false
 }
@@ -202,6 +262,7 @@ form.addEventListener('submit', async (event) => {
     }
     appendMessage(t('Você'), text)
     appendMessage('Lia', result.text)
+    unsavedMessages ||= !historyEnabled.checked || Boolean(attachment) || Boolean(result.historyUnavailable)
     answerVersion++
     clearAudio()
     voice.hidden = false

@@ -10,7 +10,7 @@
 
 - **Idioma na prévia.** A janela de conversa e a janela de presença carregam o idioma do produto ao abrir. O Electron em Windows confirmou os dois idiomas e a interface inglesa de chat, gravação, memória, seleção de VRM e presença. A troca em janela já aberta e o diálogo nativo de autorização de STT ainda não foram validados.
 
-- **Histórico na prévia.** A pessoa pode ativar o histórico local, recuperar a conversa após reiniciar e limpar o contexto mediante confirmação. O gate Electron Windows também confirmou a importação parcial de um JSON legado sintético para leitura, sem incluir o material no contexto do provedor. Múltiplas conversas seguem pendentes.
+- **Histórico do Stage.** Até 12 conversas locais podem ser criadas, selecionadas e excluídas. Cada uma guarda até 24 trocas mediante adesão própria. O Stage lê o arquivo nativo anterior e preserva seu conteúdo na primeira conversa. O Electron no Windows confirmou a escolha após reiniciar, cancelamento e confirmação de exclusão, isolamento do contexto enviado a um serviço HTTP local sintético e importação textual legada apenas para leitura. Um Stage de versão anterior não interpreta o novo formato quando ele já foi gravado.
 
 - **Avatar na prévia.** O Stage próprio abre VRM local com recursos incorporados, toca animação embutida e oferece uma janela de presença no desktop. Em Electron no Windows, um VRM sintético confirmou quadros distintos, movimento, fixação, retorno, ocultação, seleção do segundo monitor conectado e encerramento junto com o chat. Coordenadas sintéticas confirmaram a ocultação ao passar o ponteiro. Modelos de uso real, animações externas, fullscreen e recuperação após desconectar um monitor seguem pendentes.
 
@@ -24,6 +24,7 @@
 - **Em aberto.** Áudio físico ponta a ponta (G-AUD), cenários integrados C0–C8 (G-ARCH), consumidores legados de credenciais e validação de serviços externos. OIDC de produção segue desativado.
 - **Baseline funcional registrado.** `3ef6d11`. Os resultados de componentes posteriores constam nos relatórios e não promovem esse baseline.
 - **Revalidação do chat.** O Stage verifica a rota novamente após preparar histórico e memória, antes de ler a credencial e enviar. A regressão confirmou zero envios quando, durante a preparação, a rota é excluída ou muda de endereço ou modelo. A checagem cobre essa janela de preparação. Configuração e transportes continuam armazenados separadamente, e a checagem não revoga requisições já iniciadas.
+- **CI do instalador.** O [workflow Windows em `d503a711`](https://github.com/BloomRX/Lia-Project/actions/runs/45178906422) aprovou instalação limpa, abertura e encerramento do Stage e desinstalação em um runner sem `airi/`.
 - **Próximo corte.** Validar a atualização com preservação de dados e concluir a paridade necessária antes de remover a árvore legada.
 
 [Evidências da Rodada 22](../reports/LIA-ROUND-22-IMPLEMENTATION-REPORT.md) · [Pendências por ambiente](QUANTO-FALTA.md)

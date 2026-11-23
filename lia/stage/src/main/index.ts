@@ -17,7 +17,7 @@ import { createLiaMemoryStore } from '../../../core/src/memory/store.ts'
 import { startLiaRuntimeService } from '../../../core/src/runtime/index.ts'
 import { createTransportRepository } from '../../../core/src/transports/repository.ts'
 import { stageChatCancel, stageChatSend, stageChatSpeak, stageMemoryGet, stageMemoryMutate, stageMicrophoneArm, stagePresenceClose, stagePresenceCommand, stagePresenceOpen, stagePresenceRead, stagePresenceRendered, stageTranscribe, stageTranscriptionCancel } from '../shared/chat-ipc.ts'
-import { stageHistoryChange, stageHistoryGet, stageHistoryImport, stageLanguageGet, stagePresenceDisplays } from '../shared/chat-ipc.ts'
+import { stageConversationChange, stageHistoryChange, stageHistoryGet, stageHistoryImport, stageLanguageGet, stagePresenceDisplays } from '../shared/chat-ipc.ts'
 import { stageLocale, stageText } from '../shared/locale.ts'
 import { createStageChat } from './stage-chat.ts'
 import { createStageHistory } from './stage-history.ts'
@@ -123,6 +123,29 @@ async function main(): Promise<void> {
     if (!authorized(event))
       return undefined
     return history.get().catch(() => undefined)
+  })
+  ipcMain.handle(stageConversationChange, async (event, action: unknown, id: unknown) => {
+    if (!authorized(event) || updatingHistory || active)
+      return undefined
+    if (action !== 'create' && action !== 'select' && action !== 'delete')
+      return undefined
+    if (action === 'select' ? typeof id !== 'string' || id.length > 36 : id !== undefined)
+      return undefined
+    updatingHistory = true
+    try {
+      const state = await history.changeConversation(action, typeof id === 'string' ? id : undefined)
+      if (state) {
+        lastAnswer = undefined
+        send.clearContext()
+      }
+      return state
+    }
+    catch {
+      return undefined
+    }
+    finally {
+      updatingHistory = false
+    }
   })
   ipcMain.handle(stageHistoryImport, async (event, input: unknown) => {
     if (!authorized(event) || updatingHistory || active)
