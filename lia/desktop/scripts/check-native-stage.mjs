@@ -57,10 +57,14 @@ async function run() {
     migration: { version: 1, imported: [] },
   }))
   const registry = createRuntimeRegistry(join(root, 'runtime', 'native-preview'))
+  const packaged = process.argv.includes('--packaged')
+  const executablePath = packaged
+    ? join(liaRoot, 'desktop', 'dist', 'windows-native-preview', 'win-unpacked', 'Lia.exe')
+    : join(liaRoot, 'stage', 'node_modules', 'electron', 'dist', 'electron.exe')
   const app = await _electron.launch({
-    executablePath: join(liaRoot, 'stage', 'node_modules', 'electron', 'dist', 'electron.exe'),
-    args: [join(liaRoot, 'desktop', 'out', 'main', 'index.js')],
-    env: { ...process.env, APPDATA: profile, LIA_USER_DATA: root, LIA_NATIVE_STAGE_PREVIEW: '1' },
+    executablePath,
+    args: packaged ? [] : [join(liaRoot, 'desktop', 'out', 'main', 'index.js')],
+    env: { ...process.env, APPDATA: profile, LIA_USER_DATA: root, LIA_NATIVE_STAGE_PREVIEW: packaged ? '0' : '1' },
   })
   let target
   try {
@@ -72,7 +76,7 @@ async function run() {
     await page.getByRole('button', { name: 'Encerrar conversa', exact: true }).click({ timeout: 10_000 })
     await page.getByText('Conversa encerrada.', { exact: true }).waitFor({ timeout: 20_000 })
     assert.deepEqual(await registry.read(), { ok: false, problem: 'missing' })
-    console.log(JSON.stringify({ airiDirectoryAbsent, nativeWindows: state.windows, registryRemoved: true }))
+    console.log(JSON.stringify({ airiDirectoryAbsent, packaged, nativeWindows: state.windows, registryRemoved: true }))
   }
   finally {
     try {

@@ -114,13 +114,21 @@ No caminho autenticado, o Main lê o cofre compartilhado e exige
 HTTPS e chave vinculada ao provedor, à origem e à finalidade de chat.
 Esse caminho passou em testes com credencial sintética e transporte
 simulado. O provedor externo ainda não foi exercitado. O fluxo padrão
-e a distribuição continuam usando o Stage legado.
+e o instalador padrão continuam usando o Stage legado.
 
 Para repetir o gate de abertura e encerramento no Windows, prepare
 os builds e instale o Electron do Stage. Em `lia/desktop`, execute
 `node --experimental-strip-types scripts/check-native-stage.mjs`.
 Em uma cópia contendo apenas `lia/`, acrescente `--require-independent`
 para exigir a ausência de `airi/`.
+
+Para empacotar a prévia privada, em `lia/desktop` execute
+`node scripts/package-windows.mjs --internal-test --native`.
+O artefato usa identidade e diretório separados do instalador padrão.
+Acrescente `--dir` para gerar apenas a versão descompactada e rode
+`node --experimental-strip-types scripts/check-native-stage.mjs --packaged`
+para verificar esse executável. A prévia depende dos builds de
+`lia/desktop` e `lia/stage` e do Electron oficial instalado no Stage.
 
 O serviço HTTP de transcrição e seus adaptadores agora ficam em
 `lia/core/src/transcription`. O Stage legado usa esse mesmo serviço

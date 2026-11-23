@@ -7,6 +7,8 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
+import launcherConfiguration from '../electron-builder.config.ts'
+
 const launcherRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 export const ELECTRON_VERSION = '43.4.1'
 
@@ -15,12 +17,13 @@ function requireFile(path, label) {
     throw new Error(`${label} ausente: ${path}`)
 }
 
-export function packagingInputs(root = launcherRoot) {
-  const stage = resolve(root, '../../airi/apps/stage-tamagotchi')
+export function packagingInputs(root = launcherRoot, { native = false } = {}) {
+  const stage = resolve(root, native ? '../stage' : '../../airi/apps/stage-tamagotchi')
   return {
+    native,
     launcher: root,
     stage,
-    builder: join(stage, 'node_modules/electron-builder/cli.js'),
+    builder: join(native ? root : stage, 'node_modules/electron-builder/cli.js'),
     electron: join(stage, 'node_modules/electron/dist'),
     stageOutput: join(stage, 'dist/lia-windows/win-unpacked'),
   }
@@ -38,7 +41,8 @@ export function validateInputs(inputs, { internalTest = false } = {}) {
   }
   requireFile(join(inputs.launcher, 'out/preload/index.cjs'), 'Build Preload do Launcher')
   requireFile(join(inputs.stage, 'out/preload/index.cjs'), 'Build Preload do Stage')
-  requireFile(resolve(inputs.launcher, '../../airi/LICENSE'), 'Licença do Stage')
+  if (!inputs.native)
+    requireFile(resolve(inputs.launcher, '../../airi/LICENSE'), 'Licença do Stage')
   requireFile(join(inputs.launcher, 'scripts/DISTRIBUTION-NOTICE.txt'), 'Aviso de distribuição interna')
   const runtimePackage = JSON.parse(readFileSync(join(inputs.electron, '../package.json'), 'utf8'))
   if (runtimePackage.version !== ELECTRON_VERSION)
@@ -68,6 +72,26 @@ export function stageConfiguration(inputs) {
       homepage: null,
     },
     win: { executableName: 'LiaStage', publish: null },
+  }
+}
+
+export function nativeLauncherConfiguration(inputs) {
+  return {
+    ...launcherConfiguration,
+    appId: 'ai.lia.launcher.preview',
+    productName: 'Lia Preview',
+    directories: { output: 'dist/windows-native-preview' },
+    extraMetadata: { ...launcherConfiguration.extraMetadata, liaNativeStagePreview: true },
+    extraResources: [
+      { from: inputs.stageOutput, to: 'stage', filter: ['**/*'] },
+      { from: 'scripts/DISTRIBUTION-NOTICE.txt', to: 'licenses/DISTRIBUTION-NOTICE.txt' },
+    ],
+    nsis: {
+      ...launcherConfiguration.nsis,
+      shortcutName: 'Lia Preview',
+      uninstallDisplayName: 'Lia Preview',
+      artifactName: 'LiaPreviewSetup-${version}-${arch}.${ext}',
+    },
   }
 }
 
@@ -103,8 +127,8 @@ function builder(inputs, cwd, args) {
     throw new Error(`electron-builder falhou (código ${result.status ?? 'indisponível'}).`)
 }
 
-export function packageWindows({ checkOnly = false, unpacked = false, internalTest = false } = {}) {
-  const inputs = packagingInputs()
+export function packageWindows({ checkOnly = false, unpacked = false, internalTest = false, native = false } = {}) {
+  const inputs = packagingInputs(launcherRoot, { native })
   validateInputs(inputs, { internalTest })
   if (checkOnly) {
     process.stdout.write('Pré-requisitos de empacotamento disponíveis. Instalador e licenças de assets ainda exigem validação.\n')
@@ -118,9 +142,12 @@ export function packageWindows({ checkOnly = false, unpacked = false, internalTe
     writeFileSync(config, JSON.stringify(stageConfiguration(inputs), null, 2))
     builder(inputs, inputs.stage, ['--config', config, '--win', '--x64', '--dir'])
     validatePackagedStage(inputs.stageOutput, inputs.electron)
+    const launcherConfig = native ? join(temporary, 'launcher.json') : join(inputs.launcher, 'electron-builder.config.ts')
+    if (native)
+      writeFileSync(launcherConfig, JSON.stringify(nativeLauncherConfiguration(inputs), null, 2))
     builder(inputs, inputs.launcher, [
       '--config',
-      join(inputs.launcher, 'electron-builder.config.ts'),
+      launcherConfig,
       `--config.electronDist=${inputs.electron}`,
       '--win',
       '--x64',
@@ -134,10 +161,10 @@ export function packageWindows({ checkOnly = false, unpacked = false, internalTe
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   const args = process.argv.slice(2)
-  if (args.some(arg => !['--check', '--dir', '--internal-test'].includes(arg)))
-    throw new Error('Uso: node scripts/package-windows.mjs --internal-test [--check] [--dir]')
+  if (args.some(arg => !['--check', '--dir', '--internal-test', '--native'].includes(arg)))
+    throw new Error('Uso: node scripts/package-windows.mjs --internal-test [--native] [--check] [--dir]')
   try {
-    packageWindows({ checkOnly: args.includes('--check'), unpacked: args.includes('--dir'), internalTest: args.includes('--internal-test') })
+    packageWindows({ checkOnly: args.includes('--check'), unpacked: args.includes('--dir'), internalTest: args.includes('--internal-test'), native: args.includes('--native') })
   }
   catch (error) {
     // Standalone Node packaging must not depend on workspace TypeScript helpers.

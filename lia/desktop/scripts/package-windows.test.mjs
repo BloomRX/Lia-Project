@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { test } from 'node:test'
 
-import { packagingInputs, validateInputs, validatePackagedStage } from './package-windows.mjs'
+import { nativeLauncherConfiguration, packagingInputs, validateInputs, validatePackagedStage } from './package-windows.mjs'
 
 function file(path, contents = 'fixture') {
   mkdirSync(dirname(path), { recursive: true })
@@ -57,4 +57,27 @@ test('packaged stage rejects incomplete payloads and an inherited updater feed',
   file(join(root, 'version'), '43.4.1')
   file(join(root, 'resources/app-update.yml'), 'upstream-feed')
   assert.throws(() => validatePackagedStage(root, runtime), /canal de atualização não autorizado/)
+})
+
+test('native packaging requires no AIRI files and uses a separate installer identity', (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'Lia native packaging '))
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  const inputs = packagingInputs(join(root, 'lia/desktop'), { native: true })
+  assert.equal(inputs.stage, join(root, 'lia/stage'))
+  file(inputs.builder)
+  for (const app of [inputs.launcher, inputs.stage]) {
+    for (const name of ['out/main/index.js', 'out/preload/index.cjs', 'out/renderer/index.html', 'package.json'])
+      file(join(app, name))
+  }
+  file(join(inputs.launcher, 'scripts/DISTRIBUTION-NOTICE.txt'))
+  file(join(inputs.electron, '../package.json'), JSON.stringify({ version: '43.4.1' }))
+  for (const name of ['electron.exe', 'icudtl.dat', 'LICENSE', 'LICENSES.chromium.html'])
+    file(join(inputs.electron, name))
+  assert.throws(() => validateInputs(inputs), /Distribuição pública bloqueada/)
+  assert.doesNotThrow(() => validateInputs(inputs, { internalTest: true }))
+  const config = nativeLauncherConfiguration(inputs)
+  assert.equal(config.appId, 'ai.lia.launcher.preview')
+  assert.equal(config.extraMetadata.liaNativeStagePreview, true)
+  assert.deepEqual(config.extraResources[0], { from: inputs.stageOutput, to: 'stage', filter: ['**/*'] })
+  assert.equal(config.publish, null)
 })
