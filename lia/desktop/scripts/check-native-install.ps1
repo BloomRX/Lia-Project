@@ -33,10 +33,14 @@ $destination = Join-Path $evidence 'installed'
 $launcher = Join-Path $destination 'Lia.exe'
 $stageArchive = Join-Path $destination 'resources\stage\resources\app.asar'
 $uninstaller = Join-Path $destination 'Uninstall Lia.exe'
+$upgradeProfile = Join-Path $evidence 'profile'
+$gateArguments = @("--installed-executable=$launcher")
+if ($RequireIndependent) { $gateArguments += '--require-independent' }
 $report = [ordered]@{
   install = $false
   replacement = $null
   lifecycle = $false
+  profilePreserved = $null
   uninstall = $false
 }
 
@@ -44,20 +48,25 @@ try {
   if ($PreviousInstaller) {
     $report['previousInstallerSha256'] = Invoke-Installer $PreviousInstaller $destination
     $report['previousStageSha256'] = (Get-FileHash -LiteralPath $stageArchive -Algorithm SHA256).Hash
+    $report['previousVersion'] = (Get-Item -LiteralPath $launcher).VersionInfo.ProductVersion
+    $gateArguments += "--upgrade-profile=$upgradeProfile"
+    & node --experimental-strip-types (Join-Path $PSScriptRoot 'check-native-stage.mjs') @gateArguments
+    if ($LASTEXITCODE -ne 0) { throw 'A versão anterior falhou no ensaio de perfil.' }
+    $gateArguments += '--restore-upgrade-profile'
   }
   $report['installerSha256'] = Invoke-Installer $Installer $destination
   if (!(Test-Path -LiteralPath $launcher -PathType Leaf)) { throw 'Launcher ausente após a instalação.' }
   $report['install'] = $true
+  $report['version'] = (Get-Item -LiteralPath $launcher).VersionInfo.ProductVersion
   $report['stageSha256'] = (Get-FileHash -LiteralPath $stageArchive -Algorithm SHA256).Hash
   if ($PreviousInstaller) {
     $report['replacement'] = $report.stageSha256 -ne $report.previousStageSha256
     if (!$report.replacement) { throw 'O Stage instalado não mudou. Confira se os instaladores são de builds distintos.' }
   }
-  $gateArguments = @("--installed-executable=$launcher")
-  if ($RequireIndependent) { $gateArguments += '--require-independent' }
   & node --experimental-strip-types (Join-Path $PSScriptRoot 'check-native-stage.mjs') @gateArguments
   if ($LASTEXITCODE -ne 0) { throw 'O Launcher instalado falhou no gate de ciclo de vida.' }
   $report['lifecycle'] = $true
+  if ($PreviousInstaller) { $report['profilePreserved'] = $true }
 }
 finally {
   if (Test-Path -LiteralPath $uninstaller -PathType Leaf) {

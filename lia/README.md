@@ -154,11 +154,14 @@ pasta isolada de teste.
 O script PowerShell `scripts/check-native-install.ps1` executa o ensaio
 com `-Installer <arquivo>`. Em uma árvore sem AIRI, acrescente
 `-RequireIndependent`. Use `-PreviousInstaller <arquivo>` para instalar
-uma compilação anterior da prévia antes do pacote atual. O teste verifica
-a substituição do Stage pelos hashes e preserva um relatório JSON.
-A substituição entre duas compilações da versão 0.0.1 passou no Windows.
-Atualização automática, troca de versão e preservação de dados durante a
-atualização ainda precisam de ensaio. Para empacotar, use um checkout com
+uma edição anterior antes do pacote atual. O teste verifica a substituição
+do Stage pelos hashes, compara os arquivos de configuração, transportes
+e histórico de um perfil sintético isolado e confirma que o Stage abre
+o histórico antes e depois. O ensaio passou no Windows de 0.0.1 para uma
+compilação privada 0.0.2 feita em cópia isolada. Os resultados ficam em
+`report.json` no diretório de evidências. Ainda faltam ensaios de
+atualização automática e preservação de credenciais e outros dados.
+Para empacotar, use um checkout com
 caminho curto. No Windows, o NSIS falhou ao abrir um include em um caminho
 de 267 caracteres e o mesmo build passou a partir de uma raiz curta.
 
