@@ -105,7 +105,22 @@ try {
   await page.getByText('A conexão de IA atingiu seu limite de uso. Aguarde e tente novamente.', { exact: true }).waitFor()
   assert.equal(await draft.inputValue(), 'Testar limite')
   assert.equal(await page.getByText('fixture-private-upstream-body', { exact: false }).count(), 0)
-  const report = { service: 'synthetic local HTTP', optIn: true, reopened: true, resumed: true, cancellationPreservedHistory: true, cleared: true, rateLimitSanitized: true }
+  const [chooser] = await Promise.all([
+    page.waitForEvent('filechooser', { timeout: 10_000 }),
+    page.getByRole('button', { name: 'Anexar imagem', exact: true }).click(),
+  ])
+  await chooser.setFiles({
+    name: 'fixture.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aD2sAAAAASUVORK5CYII=', 'base64'),
+  })
+  await draft.fill('Rascunho com imagem')
+  await page.getByRole('button', { name: 'Enviar', exact: true }).click()
+  await page.getByText('A conexão selecionada não tem uma rota de visão disponível.', { exact: true }).waitFor()
+  assert.equal(await draft.inputValue(), 'Rascunho com imagem')
+  assert.equal(requests.length, 4)
+  await page.getByRole('button', { name: 'Remover imagem', exact: true }).click()
+  const report = { service: 'synthetic local HTTP', optIn: true, reopened: true, resumed: true, cancellationPreservedHistory: true, cleared: true, rateLimitSanitized: true, refusedImageWithoutVision: true }
   await writeFile(join(root, 'report.json'), JSON.stringify(report, null, 2))
   console.log(JSON.stringify(report))
 }

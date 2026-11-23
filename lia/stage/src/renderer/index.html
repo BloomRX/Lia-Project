@@ -31,6 +31,12 @@
         <label for="message" data-translate>Mensagem</label>
         <textarea id="message" rows="3" maxlength="8000" required></textarea>
         <div>
+          <button id="image-pick" type="button" data-translate>Anexar imagem</button>
+          <input id="image-file" type="file" accept="image/png,image/jpeg" hidden>
+          <button id="image-remove" type="button" hidden data-translate>Remover imagem</button>
+          <p id="image-status" role="status"></p>
+        </div>
+        <div>
           <button type="submit" data-translate>Enviar</button>
           <button id="cancel" type="button" disabled data-translate>Cancelar</button>
         </div>

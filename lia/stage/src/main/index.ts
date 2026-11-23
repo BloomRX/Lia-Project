@@ -147,7 +147,7 @@ async function main(): Promise<void> {
     }
   })
 
-  ipcMain.handle(stageChatSend, async (event, input: unknown) => {
+  ipcMain.handle(stageChatSend, async (event, input: unknown, image?: unknown) => {
     if (!authorized(event))
       return { ok: false, code: 'invalid' }
     if (active || updatingHistory)
@@ -155,7 +155,7 @@ async function main(): Promise<void> {
     const controller = new AbortController()
     active = controller
     try {
-      const result = await send(input, controller.signal)
+      const result = await send(input, controller.signal, image)
       if (result.ok)
         lastAnswer = result.text
       return result

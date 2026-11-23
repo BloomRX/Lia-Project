@@ -6,9 +6,12 @@ import type { createStageHistory } from './stage-history.ts'
 
 import { createHash } from 'node:crypto'
 
+import { brainRequirementForChatTurn, createProductionBrainAutomaticPolicy, createProductionBrainCatalog, decideBrainRouteFromProductState } from '@lia/core'
+
 import { credentialForDestination } from '../../../core/src/credentials/destination.ts'
 import { LIA_MEMORY_LIMITS } from '../../../core/src/memory/contracts.ts'
 import { findLiaAiProviderByStageProviderId, ProviderError, ProviderRegistry, ProviderRuntime } from '../../../core/src/providers/index.ts'
+import { maxStageImageBytes } from '../shared/chat-image.ts'
 
 interface StageChatDependencies {
   fetch?: typeof globalThis.fetch
@@ -21,9 +24,22 @@ interface StageChatDependencies {
 
 export type StageChatResult
   = | { ok: true, text: string, historyUnavailable?: true }
-    | { ok: false, code: 'invalid' | 'configuration' | 'unavailable' | 'cancelled' | 'busy' | 'credentials' | 'timeout' | 'rate-limit' }
+    | { ok: false, code: 'invalid' | 'image-invalid' | 'image-unavailable' | 'configuration' | 'unavailable' | 'cancelled' | 'busy' | 'credentials' | 'timeout' | 'rate-limit' }
 
 const historyTurns = 6
+const brainCatalog = createProductionBrainCatalog()
+const automaticPolicy = createProductionBrainAutomaticPolicy()
+const pngSignature = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])
+
+function imageContent(input: unknown) {
+  if (!(input instanceof Uint8Array) || input.byteLength < 8 || input.byteLength > maxStageImageBytes)
+    return undefined
+  const png = pngSignature.every((byte, index) => input[index] === byte)
+  const jpeg = input[0] === 0xFF && input[1] === 0xD8 && input[2] === 0xFF
+  if (!png && !jpeg)
+    return undefined
+  return `data:image/${png ? 'png' : 'jpeg'};base64,${Buffer.from(input).toString('base64')}`
+}
 
 interface Turn {
   user: string
@@ -38,9 +54,12 @@ export function createStageChat({ fetch, storage, recallMemory, readCredential, 
     return { ok: false, code: 'configuration' }
   }
 
-  async function send(input: unknown, signal: AbortSignal): Promise<StageChatResult> {
+  async function send(input: unknown, signal: AbortSignal, image?: unknown): Promise<StageChatResult> {
     if (typeof input !== 'string' || input.length > 8_000 || !input.trim())
       return { ok: false, code: 'invalid' }
+    const attachment = image === undefined ? undefined : imageContent(image)
+    if (image !== undefined && !attachment)
+      return { ok: false, code: 'image-invalid' }
     try {
       signal.throwIfAborted()
       const product = await readProduct()
@@ -51,6 +70,23 @@ export function createStageChat({ fetch, storage, recallMemory, readCredential, 
       const definition = findLiaAiProviderByStageProviderId(providerId)
       if (!definition || definition.availability !== 'ready')
         return unavailableConfiguration()
+      let requestModel = modelId
+      if (attachment && product.status === 'ok') {
+        const decision = decideBrainRouteFromProductState({
+          ...brainCatalog,
+          snapshot: product.value,
+          requirement: brainRequirementForChatTurn({ hasImageInput: true }),
+          automaticPolicy,
+        })
+        const route = decision.status === 'automatic' && decision.selection.status === 'selected'
+          ? decision.selection.route
+          : decision.status === 'manual' && decision.readiness.status === 'ready' && decision.resolution.status === 'resolvedModel'
+            ? decision.resolution
+            : undefined
+        if (!route || route.engine.id !== definition.engineId)
+          return { ok: false, code: 'image-unavailable' }
+        requestModel = route.model.id
+      }
 
       const transports = await readTransports()
       const records = transports.records.filter(record => record.providerId === providerId)
@@ -90,23 +126,26 @@ export function createStageChat({ fetch, storage, recallMemory, readCredential, 
       registry.register({ id: providerId, protocol: 'chat-completions', credentialRequired: definition.requiresApiKey })
       const runtime = new ProviderRuntime(registry, { fetch, resolveCredential: () => credential })
       const response = await runtime.chat({ providerId, baseUrl: record.baseUrl }, {
-        model: modelId,
+        model: requestModel,
         messages: [
           ...(context ? [{ role: 'system' as const, content: context }] : []),
           ...current.turns.flatMap(turn => [
             { role: 'user', content: turn.user },
             { role: 'assistant', content: turn.assistant },
           ]),
-          { role: 'user', content: text },
+          { role: 'user', content: attachment ? [
+            { type: 'text', text },
+            { type: 'image_url', image_url: { url: attachment } },
+          ] : text },
         ],
       }, { signal })
       signal.throwIfAborted()
       if (credential && response.text.includes(credential))
         return { ok: false, code: 'unavailable' }
-      if (!context)
+      if (!context && !attachment)
         current.turns = [...current.turns, { user: text, assistant: response.text.slice(0, 8_000) }].slice(-historyTurns)
       const turn = { route, user: text, assistant: response.text.slice(0, 8_000), reusable: !context }
-      if (storage && (!credential || !text.includes(credential))) {
+      if (storage && !attachment && (!credential || !text.includes(credential))) {
         try {
           await storage.append(turn)
         }

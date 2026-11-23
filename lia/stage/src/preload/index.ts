@@ -26,7 +26,7 @@ contextBridge.exposeInMainWorld('liaStageMemory', {
 contextBridge.exposeInMainWorld('liaStageChat', {
   history: () => ipcRenderer.invoke(stageHistoryGet),
   changeHistory: (action: 'enable' | 'disable' | 'clear') => ipcRenderer.invoke(stageHistoryChange, action),
-  send: (message: string) => ipcRenderer.invoke(stageChatSend, message),
+  send: (message: string, image?: Uint8Array) => ipcRenderer.invoke(stageChatSend, message, image),
   cancel: () => ipcRenderer.invoke(stageChatCancel),
   speak: () => ipcRenderer.invoke(stageChatSpeak),
   transcribe: (bytes: Uint8Array, mimeType: string) => ipcRenderer.invoke(stageTranscribe, bytes, mimeType),

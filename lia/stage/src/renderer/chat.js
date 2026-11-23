@@ -1,3 +1,5 @@
+import { maxStageImageBytes } from '../shared/chat-image.ts'
+
 import { t } from './locale.js'
 
 const form = document.querySelector('form')
@@ -13,8 +15,37 @@ const voiceStatus = document.querySelector('#voice-status')
 const historyEnabled = document.querySelector('#history-enabled')
 const historyClear = document.querySelector('#history-clear')
 const historyStatus = document.querySelector('#history-status')
+const imagePick = document.querySelector('#image-pick')
+const imageRemove = document.querySelector('#image-remove')
+const imageFile = document.querySelector('#image-file')
+const imageStatus = document.querySelector('#image-status')
 let audioUrl
 let answerVersion = 0
+let attachment
+let cancelRequested = false
+
+function clearAttachment() {
+  attachment = undefined
+  imageFile.value = ''
+  imageRemove.hidden = true
+  imageStatus.textContent = ''
+}
+
+imagePick.addEventListener('click', () => imageFile.click())
+imageRemove.addEventListener('click', clearAttachment)
+imageFile.addEventListener('change', () => {
+  const image = imageFile.files[0]
+  if (!image)
+    return
+  clearAttachment()
+  if (!['image/png', 'image/jpeg'].includes(image.type) || !image.size || image.size > maxStageImageBytes) {
+    imageStatus.textContent = t('Escolha uma imagem PNG ou JPEG de até 3 MB.')
+    return
+  }
+  attachment = image
+  imageRemove.hidden = false
+  imageStatus.textContent = t('Imagem anexada. Será enviada com a mensagem.')
+})
 
 function clearAudio() {
   audio.pause()
@@ -31,6 +62,8 @@ const errors = {
   configuration: t('Selecione e confira a conexão de IA no Launcher.'),
   credentials: t('A conexão de IA recusou a credencial. Confira a configuração no Launcher.'),
   invalid: t('Digite uma mensagem válida.'),
+  'image-invalid': t('Escolha uma imagem PNG ou JPEG de até 3 MB.'),
+  'image-unavailable': t('A conexão selecionada não tem uma rota de visão disponível.'),
   'rate-limit': t('A conexão de IA atingiu seu limite de uso. Aguarde e tente novamente.'),
   timeout: t('A IA demorou para responder. Tente novamente.'),
   unavailable: t('A IA não respondeu. Verifique o serviço e tente novamente.'),
@@ -108,11 +141,19 @@ form.addEventListener('submit', async (event) => {
     return
 
   send.disabled = true
+  cancelRequested = false
   cancel.disabled = false
   message.readOnly = true
+  imagePick.disabled = true
+  imageRemove.disabled = true
   status.textContent = t('Aguardando resposta da Lia…')
   try {
-    const result = await window.liaStageChat.send(text)
+    const bytes = attachment && new Uint8Array(await attachment.arrayBuffer())
+    if (cancelRequested) {
+      status.textContent = errors.cancelled
+      return
+    }
+    const result = await window.liaStageChat.send(text, bytes)
     if (!result.ok) {
       status.textContent = errors[result.code] ?? errors.unavailable
       return
@@ -124,6 +165,7 @@ form.addEventListener('submit', async (event) => {
     voice.hidden = false
     voiceStatus.textContent = ''
     message.value = ''
+    clearAttachment()
     status.textContent = result.historyUnavailable ? t('Resposta recebida. Não foi possível salvar o histórico.') : ''
   }
   catch {
@@ -133,6 +175,8 @@ form.addEventListener('submit', async (event) => {
     message.readOnly = false
     send.disabled = false
     cancel.disabled = true
+    imagePick.disabled = false
+    imageRemove.disabled = false
     message.focus()
   }
 })
@@ -170,6 +214,7 @@ speak.addEventListener('click', async () => {
 window.addEventListener('pagehide', clearAudio)
 
 cancel.addEventListener('click', async () => {
+  cancelRequested = true
   cancel.disabled = true
   try {
     await window.liaStageChat.cancel()

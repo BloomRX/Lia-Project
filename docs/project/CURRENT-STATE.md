@@ -2,6 +2,8 @@
 
 ## 0. Estado agora
 
+- **Imagem na prévia.** O Stage aceita um PNG ou JPEG com texto e usa a regra de visão do produto no Main. O gate Electron Windows confirmou que uma conexão sem rota recusa o anexo sem enviar a mensagem nem apagar o rascunho. O despacho para visão passou com transporte simulado. Falta validação com provedor autenticado.
+
 - **VRM texturizado.** Dois modelos locais VRoid de referência renderizaram de corpo inteiro na janela de presença do Electron no Windows. A postura relaxada foi conferida visualmente nos dois. Os modelos não integram o pacote.
 
 - **Avatar salvo na prévia.** A pessoa pode guardar uma cópia do VRM no perfil local e removê-la mediante confirmação. O Electron no Windows recuperou um VRM sintético após reiniciar e confirmou que a exclusão persistiu. A presença no desktop ainda é aberta pelo chat.

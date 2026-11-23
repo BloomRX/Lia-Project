@@ -97,6 +97,13 @@ memória por conversa e descarta o contexto ao mudar de modelo ou endereço.
 A janela oferece prévia local de VRM, presença de avatar no desktop
 e histórico de conversa opcional.
 
+O envio de imagem aceita um PNG ou JPEG de até 3 MiB com texto. O Main
+só encaminha o anexo quando a regra de visão do produto seleciona uma
+rota do provedor já configurado. Trocas com imagem ficam fora do
+histórico salvo. A seleção da rota passou com transporte simulado e
+a recusa sem rota de visão passou no Electron Windows com serviço local
+sintético. O envio autenticado a um provedor de visão continua pendente.
+
 Em modo gerenciado, o Stage próprio publica identidade e atende status
 e encerramento pelo canal de controle compartilhado com o Stage legado.
 No Windows, o ensaio confirmou o handshake, a recusa de leitura de

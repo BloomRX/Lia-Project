@@ -5,6 +5,8 @@ import { once } from 'node:events'
 import { createServer } from 'node:http'
 import { test } from 'node:test'
 
+import { createProductionBrainCatalog } from '@lia/core'
+
 import { bindCredential } from '../../core/src/credentials/destination.ts'
 import { createStageChat } from '../src/main/stage-chat.ts'
 
@@ -70,12 +72,14 @@ test('uses a bound chat credential only for the configured HTTPS origin', async 
   let calls = 0
   let reply = 'Resposta'
   let status = 200
+  const requests: Array<{ model: string, messages: Array<{ content: unknown }> }> = []
   const send = createStageChat({
     async fetch(target, init) {
       calls++
       assert.equal(String(target), 'https://api.groq.com/openai/v1/chat/completions')
       assert.equal(new Headers(init?.headers).get('authorization'), `Bearer ${token}`)
       assert.equal(init?.redirect, 'error')
+      requests.push(JSON.parse(String(init?.body)))
       return Response.json({ choices: [{ message: { content: reply } }] }, { status })
     },
     readCredential: () => secret,
@@ -83,7 +87,7 @@ test('uses a bound chat credential only for the configured HTTPS origin', async 
       assert.fail('Remote chat must never read the memory store')
     },
     async readProduct() {
-      return { filePath: '', status: 'ok', value: { provider: { chat: { preferred: { providerId: 'groq', modelId: 'test-model' } } } } }
+      return { filePath: '', status: 'ok', value: { brain: { mode: 'automatic' }, provider: { chat: { preferred: { providerId: 'groq', modelId: 'test-model' } } } } }
     },
     async readTransports() {
       return { schemaVersion: 1, revision: 1, records: [groq], tombstones: [], migration: { version: 1, imported: [] } }
@@ -91,6 +95,16 @@ test('uses a bound chat credential only for the configured HTTPS origin', async 
   })
   const submit = () => send('oi', new AbortController().signal)
   assert.deepEqual(await submit(), { ok: true, text: 'Resposta' })
+  const png = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])
+  assert.deepEqual(await send('Imagem', new AbortController().signal, png), { ok: true, text: 'Resposta' })
+  const vision = createProductionBrainCatalog().models.find(model => model.capabilities.imageInput)
+  assert.ok(vision)
+  assert.equal(requests[1]?.model, vision.id)
+  assert.deepEqual(requests[1]?.messages.at(-1)?.content, [
+    { type: 'text', text: 'Imagem' },
+    { type: 'image_url', image_url: { url: 'data:image/png;base64,iVBORw0KGgo=' } },
+  ])
+  assert.deepEqual(await send('Inválida', new AbortController().signal, new Uint8Array(8)), { ok: false, code: 'image-invalid' })
   reply = token
   assert.deepEqual(await submit(), { ok: false, code: 'unavailable' })
   status = 401
@@ -103,7 +117,9 @@ test('uses a bound chat credential only for the configured HTTPS origin', async 
   assert.deepEqual(await submit(), { ok: false, code: 'configuration' })
   groq.baseUrl = 'http://127.0.0.1/v1'
   assert.deepEqual(await submit(), { ok: false, code: 'configuration' })
-  assert.equal(calls, 4)
+  assert.equal(requests[2]?.model, 'test-model')
+  assert.ok(!JSON.stringify(requests[2]).includes('base64'))
+  assert.equal(calls, 5)
 })
 
 test('carries completed turns and keeps history out of a different model', async () => {
