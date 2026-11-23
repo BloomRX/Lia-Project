@@ -60,7 +60,7 @@ describe('qa-benchmark-lib: canonicalCommands', () => {
     const cmds = canonicalCommands(REPO_ROOT)
     const lia = cmds.find(c=>c.id==='lia-core')
     assert.deepEqual(lia.argv, ['pnpm','test'])
-    assert.ok(lia.cwd.endsWith('lia-core'))
+    assert.equal(lia.cwd, nodePath.join(REPO_ROOT, 'lia', 'runtime'))
   })
   it('core-agent uses vitest run --project @proj-airi/core-agent', () => {
     const cmds = canonicalCommands(REPO_ROOT)

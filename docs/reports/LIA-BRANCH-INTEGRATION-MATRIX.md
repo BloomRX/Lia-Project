@@ -12,7 +12,15 @@ O [relatório de voz de `fd0451d7`](LIA-MULTI-PROVIDER-VOICE-ARCHITECTURE.md) j�
 
 Os oito blobs acrescentados por Research entre `7913c62a` e `b345355f` coincidem com os da `main`. O snapshot `agents/docs` e as regras de sua antiga linha de desenvolvimento ficam preservados no espelho como histórico. Para pesquisa e delegação atuais, consulte o [AGENTS.md](../../AGENTS.md) e o [contrato de orquestração](../project/AGENT-ORCHESTRATION.md).
 
-Os 16 hashes de `SHA256SUMS.txt` do benchmark de outubro conferem com os blobs de `91b8995a`. A referência `qa/windows-benchmarks` permanece nesta etapa porque o publicador legado ainda tem um fluxo que a recria. Os resultados do benchmark pertencem somente ao SHA `cfd8d7f`.
+Os 16 hashes de `SHA256SUMS.txt` do benchmark de outubro conferem com os blobs de `91b8995a`. O histórico está preservado no espelho e na tag `archive/qa-windows-2026-10-02`. A entrada de linha de comando do benchmark só gera evidência local. O CI Windows nativo publica seus relatórios como artefatos. Os resultados do benchmark pertencem somente ao SHA `cfd8d7f`.
+
+O QA do beta de 14/11 também está preservado no espelho e na tag
+[`archive/qa-beta-2026-11-14`](https://github.com/BloomRX/Lia-Project/tree/archive/qa-beta-2026-11-14).
+A [matriz de áudio](LIA-AUDIO-QA-MATRIX.md), a [régua AV-01–AV-15](LIA-AV-ACCEPTANCE-CRITERIA.md)
+e a [reconciliação das evidências](LIA-AUDIO-EVIDENCE-RECONCILIATION.md) da `main`
+coincidem com os três arquivos no SHA `ccf33861`. Os 88 caminhos restantes,
+com as matrizes de SHAs anteriores e seus logs, são consultáveis no arquivo
+de QA da tag. Seus resultados são históricos.
 
 O espelho externo contém as 12 branches remotas e passou em
 `git fsck --full`. Foram verificados os bundles locais e comparadas

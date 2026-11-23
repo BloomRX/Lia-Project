@@ -101,6 +101,12 @@ afterEach(() => {
 // A-D preflight
 // ---------------------------------------------------------------------------
 describe('integration: preflight A-D', () => {
+  it('allows a clean synchronized main only for local evidence', () => {
+    const bare = initBareRemote(); tmpToClean.push(bare)
+    const { src } = initSourceRepo(bare, 'main'); tmpToClean.push(src)
+    assert.deepEqual(preflightSource({ repoRoot: src, localOnly: true }).errors, [])
+    assert.match(preflightSource({ repoRoot: src }).errors.join('; '), /main\/master not supported/)
+  })
   it('A: clean source + matching remote passes', () => {
     const bare = initBareRemote(); tmpToClean.push(bare)
     const { src, branch } = initSourceRepo(bare); tmpToClean.push(src)

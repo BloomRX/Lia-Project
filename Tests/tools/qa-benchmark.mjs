@@ -93,7 +93,7 @@ function pythonArgv(extra = []) {
 // ---------------------------------------------------------------------------
 // Source preflight — strict
 // ---------------------------------------------------------------------------
-export function preflightSource({ repoRoot = REPO_ROOT, sourceBranch = null } = {}) {
+export function preflightSource({ repoRoot = REPO_ROOT, sourceBranch = null, localOnly = false } = {}) {
   const errors = []
   const toplevel = gitCapture(['rev-parse', '--show-toplevel'], repoRoot)
   if (!toplevel) errors.push('not a git repository')
@@ -112,7 +112,7 @@ export function preflightSource({ repoRoot = REPO_ROOT, sourceBranch = null } = 
   const isDirty = status !== null ? status.trim() !== '' : true
   if (isDetached) errors.push('detached HEAD')
   if (isDirty) errors.push('dirty worktree')
-  if (targetBranch === 'main' || targetBranch === 'master') errors.push('source branch main/master not supported')
+  if (!localOnly && (targetBranch === 'main' || targetBranch === 'master')) errors.push('source branch main/master not supported')
   if (head === null) { errors.push('local HEAD not resolved'); sourceRemoteObserved = false }
   if (remoteSha === null) sourceRemoteObserved = false
   else if (head !== null && remoteSha !== null && head !== remoteSha) errors.push(`local HEAD ${head?.slice(0,7)} != remote ${remoteSha?.slice(0,7)} for ${targetBranch}`)
@@ -558,7 +558,7 @@ export async function runBenchmark({ repoRoot = REPO_ROOT, args = process.argv.s
   }
 
   // Preflight
-  const pre = preflightSource({ repoRoot })
+  const pre = preflightSource({ repoRoot, localOnly: noPush })
   console.log(`[benchmark] HEAD ${pre.head?.slice(0,7) ?? 'null'} branch ${pre.branch ?? 'null'} remote ${pre.remoteSha?.slice(0,7) ?? 'null'} observed=${pre.sourceRemoteObserved}`)
   if (pre.errors.length) {
     console.error(`[benchmark] Preflight failed: ${pre.errors.join('; ')}`)
@@ -584,8 +584,8 @@ export async function runBenchmark({ repoRoot = REPO_ROOT, args = process.argv.s
   const beforeHead = pre.head
   const beforeBranch = pre.branch
   const beforeStatus = pre.status
-  const initialQaSha = gitLsRemote('qa/windows-benchmarks', repoRoot)
-  console.log(`[benchmark] Initial QA remote qa/windows-benchmarks is ${initialQaSha ? initialQaSha.slice(0,7) : 'absent'}`)
+  const initialQaSha = noPush ? null : gitLsRemote('qa/windows-benchmarks', repoRoot)
+  if (!noPush) console.log(`[benchmark] Initial QA remote qa/windows-benchmarks is ${initialQaSha ? initialQaSha.slice(0,7) : 'absent'}`)
 
   const rawRoot = createBenchmarkRawRun({ runId, repoRoot })
   const publishDir = createPublishStaging({ runId, repoRoot })
@@ -862,18 +862,15 @@ export async function runBenchmark({ repoRoot = REPO_ROOT, args = process.argv.s
     writeFileSync(nodePath.join(rawRoot,'summary.json'), JSON.stringify(summary,null,2)+'\n','utf-8')
     return summary
   }
+  if (noPush && shouldBlock === 'no-push-flag') {
+    console.log('[benchmark] Pacote local gerado sem publicação Git.')
+    return summary
+  }
   if (shouldBlock) {
     console.error(`[benchmark] Publication blocked: ${shouldBlock}`)
     writeFileSync(nodePath.join(rawRoot,'summary.json'), JSON.stringify(summary,null,2)+'\n','utf-8')
     return summary
   }
-  if (noPush) {
-    console.log('[benchmark] --no-push: local only, no commit/push')
-    summary.publication.pushSkippedReason='no-push-flag'; publishSummary.publication.pushSkippedReason='no-push-flag'
-    writeFileSync(nodePath.join(rawRoot,'summary.json'), JSON.stringify(summary,null,2)+'\n','utf-8')
-    return summary
-  }
-
   const currentRemoteSha = gitLsRemote(pre.branch, repoRoot)
   if (currentRemoteSha !== pre.head) {
     console.error(`[benchmark] Source remote moved during benchmark: ${pre.head.slice(0,7)} != ${currentRemoteSha?.slice(0,7)} — will not publish`)
@@ -1067,10 +1064,11 @@ if (isMain) {
   const args = process.argv.slice(2)
   if (args.includes('--help') || args.includes('-h')) {
     console.log(`Usage: node Tests/tools/qa-benchmark.mjs [--no-push] [--report-only <id>] [--with-smoke] [--launcher-check]`)
+    console.log('Somente local. O benchmark legado não publica branches.')
     console.log(`Exit codes: PASS 0, FAIL 1, ENVIRONMENT-LIMITED 2, INCOMPLETE/fatal 3`)
     process.exit(0)
   }
-  runBenchmark({ args }).then(s=>{
+  runBenchmark({ args: [...args, '--no-push'] }).then(s=>{
     if (!s) process.exit(3)
     const code = exitCodeForStatus(s.status)
     console.log(`[benchmark] Final status: ${s.status} exit=${code}`)

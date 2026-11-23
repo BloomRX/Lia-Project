@@ -1,7 +1,8 @@
 # Lia Windows Benchmark Harness (Phase 8.0D-10B-4D4C4-D2B8-B)
 
-Automated, forensically strict Windows benchmark harness that produces a
-**publishable, secret-free evidence bundle** on a dedicated orphan branch.
+The legacy Windows benchmark generates a local evidence bundle. Its command
+line always runs locally. Use the [native Windows workflow](../.github/workflows/lia-native-windows.yml)
+for evidence of current Launcher and Stage builds without the AIRI tree.
 
 ## Entry point
 
@@ -18,8 +19,10 @@ Tests\LiaBenchmark.bat [--no-push] [--report-only <runId>] [--with-smoke]
 - `--report-only`  regenerate REPORT.md from an existing local run only
 - `--with-smoke`   include the optional runtime-smoke (off by default)
 
-Both `--report-only` and `--no-push` are **local-only** (no commit/push, no
-remote verification).
+Normal runs verify that the source checkout matches the remote. The CLI accepts
+a synchronized `main` and writes its evidence under `Tests/runs/` and
+`Tests/artifacts/benchmark-publish/`. Report-only reads the local run and
+regenerates its report. The `--no-push` flag remains accepted for existing scripts.
 
 `Tests/LiaBenchmark.bat` does nothing but set console code page, verify Node exists,
 and delegate to `Tests/tools/qa-benchmark.mjs`. No `git reset/clean/stash`,
@@ -28,14 +31,14 @@ no `npx`, no network install, no force.
 ## Preflight (abort before work if any fails)
 
 - inside a git repository (`git rev-parse --show-toplevel`)
-- not detached HEAD, worktree clean (`status --porcelain`), branch != main/master
+- not detached HEAD, worktree clean (`status --porcelain`)
 - local HEAD equals `origin/<branch>` tip (`ls-remote` authority)
 - development branch name follows the project's branch policy (`git rev-parse
   --verify refs/heads/<branch>`)
 
-## Source freeze & race gates
+## Historical publication checks
 
-The orchestrator records `sourceSha` (HEAD at start) and `remoteSourceSha`
+The previous Git publishing route recorded `sourceSha` (HEAD at start) and `remoteSourceSha`
 (`origin/<branch>` at start). Three race checks abort publication:
 
 1. Before commit/push: `origin/<branch>` must still equal `sourceSha`.
@@ -46,12 +49,12 @@ The orchestrator records `sourceSha` (HEAD at start) and `remoteSourceSha`
 On any race: local raw is preserved, publication is skipped with reason
 `SOURCE_REMOTE_MOVED_DURING_BENCHMARK` or `QA_REMOTE_MOVED`.
 
-## What is executed (fixed canonical order)
+## Legacy benchmark commands
 
 Executed via **`pnpm exec`** (never `npx`, never `pnpm install`):
 
 1. `core-agent` `pnpm exec vitest run --project @proj-airi/core-agent` (cwd `airi`)
-2. `lia-core` `pnpm test` (cwd `airi/packages/lia-core`) — canonical script, not a rephrased variant
+2. `lia-core` `pnpm test` (cwd `lia/runtime`) — canonical script, not a rephrased variant
 3. `browser` `pnpm exec vitest run --project browser` (cwd `airi`)
 4. `lint` `pnpm lint` (cwd `airi`)
 5. `typecheck` `pnpm typecheck` (cwd `airi`)
@@ -109,10 +112,9 @@ No regex is duplicated.
 - Staged content is exactly `benchmarks/<runId>/**` plus `index.json`/`README.md`; verified via
   `git status --porcelain` and `git diff --cached --name-only`.
 
-## Publication branch `qa/windows-benchmarks`
+## Historical publication branch `qa/windows-benchmarks`
 
-- **Independent of `arena/*` development history**; never merged, never greppable
-  by `git log --all --grep arena/`.
+- Archived under tag `archive/qa-windows-2026-10-02` at `91b8995a`. The tag retains the original evidence tree and manifest.
 - First publish: `git switch --orphan qa/windows-benchmarks`, clean worktree except `.git`,
   write `README.md` + `index.json` + `benchmarks/<runId>/`, allowlist stage, commit:
   ```
