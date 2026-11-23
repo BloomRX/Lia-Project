@@ -1,17 +1,37 @@
 import assert from 'node:assert/strict'
-import { spawn } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { performance } from 'node:perf_hooks'
+import { promisify } from 'node:util'
 
 import { writePrivateWindowsFile } from '../src/secrets/windows-private-file.ts'
 
 assert.equal(process.platform, 'win32')
 const fixture = await mkdtemp(join(tmpdir(), 'lia-private-write-gate-'))
 const sample = 'lia-synthetic-file-fixture'
+const diagnostics = process.argv.includes('--diagnostics')
+const system = join(process.env.SystemRoot, 'System32')
+const powershell = join(system, 'WindowsPowerShell', 'v1.0', 'powershell.exe')
+
+async function assertPrivateAcl(path) {
+  const script = [
+    '$ErrorActionPreference = "Stop"',
+    '$sidType = [Security.Principal.SecurityIdentifier]',
+    '$user = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value',
+    '$acl = [IO.File]::GetAccessControl($env:LIA_ACL_TEST_PATH)',
+    '$rules = $acl.GetAccessRules($true, $true, $sidType)',
+    'if (!$acl.AreAccessRulesProtected -or $acl.GetOwner($sidType).Value -ne $user -or $rules.Count -ne 1) { exit 1 }',
+    '$rule = $rules[0]',
+    'if ($rule.IsInherited -or $rule.IdentityReference.Value -ne $user -or $rule.AccessControlType -ne "Allow" -or $rule.FileSystemRights -ne "FullControl") { exit 1 }',
+  ].join('\n')
+  await promisify(execFile)(powershell, [
+    '-NoLogo', '-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64'),
+  ], { cwd: system, env: { SystemRoot: process.env.SystemRoot, WINDIR: process.env.SystemRoot, LIA_ACL_TEST_PATH: path }, windowsHide: true, timeout: 5000 })
+}
 
 async function measure(label, operation) {
   const start = performance.now()
@@ -28,7 +48,6 @@ async function measure(label, operation) {
 
 async function probePowerShell(label, childEnv, useInput, directConstructor = false) {
   const start = performance.now()
-  const system = join(process.env.SystemRoot, 'System32')
   const script = [
     '$ErrorActionPreference = "Stop"',
     '[Console]::WriteLine("started")',
@@ -48,7 +67,7 @@ async function probePowerShell(label, childEnv, useInput, directConstructor = fa
       : 'try { $stream.WriteByte(42); $stream.Flush($true) } finally { $stream.Dispose() }',
     '[Console]::WriteLine("flushed")',
   ].join('\n')
-  const child = spawn(join(system, 'WindowsPowerShell', 'v1.0', 'powershell.exe'), [
+  const child = spawn(powershell, [
     '-NoLogo', '-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64'),
   ], {
     cwd: system,
@@ -87,18 +106,21 @@ try {
     })
     await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()))
   })
+  const path = join(fixture, 'protected')
   const protectedWrite = await measure('private-windows-file', async () => {
-    const path = join(fixture, 'protected')
     await writePrivateWindowsFile(path, sample)
     assert.equal(await readFile(path, 'utf8'), sample)
   })
-  const minimal = { SystemRoot: process.env.SystemRoot, WINDIR: process.env.SystemRoot }
-  await probePowerShell('minimal-stdin', minimal, true)
-  await probePowerShell('minimal-no-stdin', minimal, false)
-  await probePowerShell('inherited-stdin', process.env, true)
-  await probePowerShell('minimal-direct-constructor', minimal, true, true)
-  if (!control || !namedPipe || !protectedWrite)
+  const acl = protectedWrite && await measure('private-windows-acl', () => assertPrivateAcl(path))
+  if (!control || !namedPipe || !protectedWrite || !acl)
     process.exitCode = 1
+  if (diagnostics || !protectedWrite || !acl) {
+    const minimal = { SystemRoot: process.env.SystemRoot, WINDIR: process.env.SystemRoot }
+    await probePowerShell('production-constructor-with-phases', minimal, true, true)
+    await probePowerShell('legacy-constructor-with-stdin', minimal, true)
+    await probePowerShell('legacy-constructor-without-stdin', minimal, false)
+    await probePowerShell('legacy-constructor-inherited-env', process.env, true)
+  }
 }
 finally {
   await rm(fixture, { recursive: true, force: true })
