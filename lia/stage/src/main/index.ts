@@ -16,7 +16,7 @@ import { app, BrowserWindow, dialog, ipcMain, safeStorage } from 'electron'
 import { createLiaMemoryStore } from '../../../core/src/memory/store.ts'
 import { startLiaRuntimeService } from '../../../core/src/runtime/index.ts'
 import { createTransportRepository } from '../../../core/src/transports/repository.ts'
-import { stageChatCancel, stageChatSend, stageChatSpeak, stageMemoryGet, stageMemoryMutate, stageMicrophoneArm, stagePresenceClose, stagePresenceCommand, stagePresenceOpen, stagePresenceRead, stageTranscribe, stageTranscriptionCancel } from '../shared/chat-ipc.ts'
+import { stageChatCancel, stageChatSend, stageChatSpeak, stageMemoryGet, stageMemoryMutate, stageMicrophoneArm, stagePresenceClose, stagePresenceCommand, stagePresenceOpen, stagePresenceRead, stagePresenceRendered, stageTranscribe, stageTranscriptionCancel } from '../shared/chat-ipc.ts'
 import { createStageChat } from './stage-chat.ts'
 import { createStageHost } from './stage-host.ts'
 import { createStagePresence } from './stage-presence.ts'
@@ -106,6 +106,7 @@ async function main(): Promise<void> {
   })
   ipcMain.handle(stagePresenceCommand, (event, action: unknown) => Boolean(authorized(event)) && presence.command(action))
   ipcMain.handle(stagePresenceRead, presence.takeAsset)
+  ipcMain.on(stagePresenceRendered, presence.reportRender)
 
   ipcMain.handle(stageChatSend, async (event, input: unknown) => {
     if (!authorized(event))

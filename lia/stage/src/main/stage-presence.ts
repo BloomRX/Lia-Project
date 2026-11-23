@@ -14,6 +14,7 @@ export function createStagePresence(options: {
   let window: BrowserWindow | undefined
   let service: ReturnType<typeof createPresenceService> | undefined
   let asset: Uint8Array | undefined
+  let settleRender: ((rendered: boolean) => void) | undefined
   let opening = false
   let generation = 0
 
@@ -48,6 +49,7 @@ export function createStagePresence(options: {
       })
       window = overlay
       asset = input
+      const rendered = new Promise<boolean>((resolve) => { settleRender = resolve })
       const controller = createPresenceService({
         window: overlay,
         screen: {
@@ -75,6 +77,8 @@ export function createStagePresence(options: {
       })
       service = controller
       overlay.once('closed', () => {
+        settleRender?.(false)
+        settleRender = undefined
         controller.dispose()
         window = undefined
         service = undefined
@@ -82,9 +86,19 @@ export function createStagePresence(options: {
       })
       overlay.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
       overlay.webContents.on('will-navigate', event => event.preventDefault())
-      await overlay.loadFile(fileURLToPath(new URL('../renderer/presence.html', import.meta.url)))
-      if (overlay.isDestroyed())
-        return false
+      overlay.webContents.once('render-process-gone', close)
+      const watchdog = setTimeout(close, 15_000)
+      try {
+        await overlay.loadFile(fileURLToPath(new URL('../renderer/presence.html', import.meta.url)))
+        if (!await rendered || overlay.isDestroyed()) {
+          close()
+          return false
+        }
+      }
+      finally {
+        clearTimeout(watchdog)
+        settleRender = undefined
+      }
       controller.setActive(true)
       overlay.setIgnoreMouseEvents(true)
       overlay.showInactive()
@@ -99,15 +113,23 @@ export function createStagePresence(options: {
     }
   }
 
+  function ownsOverlay(event: Electron.IpcMainInvokeEvent) {
+    return window && !window.isDestroyed() && event.sender === window.webContents && event.senderFrame === window.webContents.mainFrame
+  }
+
   return {
     open,
     close,
     takeAsset(event: Electron.IpcMainInvokeEvent) {
-      if (!window || window.isDestroyed() || event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame)
+      if (!ownsOverlay(event))
         return undefined
       const bytes = asset
       asset = undefined
       return bytes
+    },
+    reportRender(event: Electron.IpcMainInvokeEvent, rendered: unknown) {
+      if (ownsOverlay(event) && typeof rendered === 'boolean')
+        settleRender?.(rendered)
     },
     async command(action: unknown) {
       const current = service

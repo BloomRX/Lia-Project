@@ -91,6 +91,9 @@ async function run() {
   try {
     const chat = await app.firstWindow()
     chat.setDefaultTimeout(10_000)
+    const rejectedOverlay = await chat.evaluate(() => window.liaStagePresence.open(new Uint8Array(20)))
+    assert.equal(rejectedOverlay, false)
+    assert.equal(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length), 1)
     await chat.getByText('Avatar', { exact: true }).click()
     const picker = chat.getByLabel('Abrir avatar VRM')
     await picker.setInputFiles(invalid)
@@ -132,7 +135,7 @@ async function run() {
     const [reopened] = await Promise.all([app.waitForEvent('window', { timeout: 10_000 }), openButton.click()])
     await chat.getByText('Avatar aberto no desktop.', { exact: true }).waitFor()
     await Promise.all([reopened.waitForEvent('close', { timeout: 10_000 }), chat.close()])
-    const report = { syntheticVrm: true, externalTextureRejected: true, moved, pinned: true, home: true, hidden: true, closedWithChat: true }
+    const report = { syntheticVrm: true, invalidOverlayRejected: true, externalTextureRejected: true, moved, pinned: true, home: true, hidden: true, closedWithChat: true }
     await writeFile(join(root, 'report.json'), JSON.stringify(report, null, 2))
     console.log(JSON.stringify(report))
   }
