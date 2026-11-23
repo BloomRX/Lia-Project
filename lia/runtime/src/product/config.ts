@@ -90,6 +90,7 @@ export interface LiaProductVoiceConfig {
    * opts the user out of voice - text conversation always remains.
    */
   enabled?: boolean
+  autoPlay?: boolean
   tts?: {
     preferred?: LiaProductTtsTarget
     fallback?: LiaProductTtsTarget[]
@@ -248,6 +249,8 @@ function extract(doc: Record<string, unknown>): LiaProductConfigSnapshot {
     const extracted: LiaProductVoiceConfig = {}
     if (typeof voice.enabled === 'boolean')
       extracted.enabled = voice.enabled
+    if (typeof voice.autoPlay === 'boolean')
+      extracted.autoPlay = voice.autoPlay
     const tts = asRecord(voice.tts)
     if (tts) {
       extracted.tts = {
@@ -398,6 +401,7 @@ export interface LiaProductConfigUpdate {
   voice?: {
     /** Phase 7.9H: explicit voice on/off switch (`false` = voice off). */
     enabled?: boolean
+    autoPlay?: boolean
     engine?: Partial<LiaProductVoiceEngine>
     fallback?: Partial<LiaProductVoiceFallback>
     runtime?: {
@@ -701,6 +705,8 @@ function mergeProductUpdate(raw: Record<string, unknown>, update: LiaProductConf
         runtime.installDir = update.voice.runtime.installDir
       voice.runtime = runtime
     }
+    if (typeof update.voice.autoPlay === 'boolean')
+      voice.autoPlay = update.voice.autoPlay
     if (typeof update.voice.enabled === 'boolean') {
       // An explicit switch is stored as-is; ABSENT stays absent (the
       // product default), so a first-run document is never needlessly

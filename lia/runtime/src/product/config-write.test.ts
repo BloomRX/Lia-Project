@@ -171,6 +171,14 @@ describe('updateLiaProductConfig', () => {
 })
 
 describe('7.9H voice.enabled switch (write -> read survives, default stays implicit)', () => {
+  it('persists automatic speech independently of the global voice opt-out', async () => {
+    const file = await freshConfig({ voice: { enabled: false } })
+    await updateLiaProductConfig(file, { voice: { autoPlay: true } })
+    expect(await readLiaProductConfig(file)).toMatchObject({ status: 'ok', value: { voice: { enabled: false, autoPlay: true } } })
+    await updateLiaProductConfig(file, { voice: { autoPlay: false } })
+    expect(await readLiaProductConfig(file)).toMatchObject({ status: 'ok', value: { voice: { enabled: false, autoPlay: false } } })
+  })
+
   it('disabling voice persists `voice.enabled: false` and reads back; neighbors intact', async () => {
     const file = await freshConfig({
       schemaVersion: 1,

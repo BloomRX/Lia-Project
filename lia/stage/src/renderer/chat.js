@@ -13,6 +13,8 @@ const speak = document.querySelector('#speak')
 const speakStop = document.querySelector('#speak-stop')
 const audio = document.querySelector('audio')
 const voiceStatus = document.querySelector('#voice-status')
+const voiceAutoPlay = document.querySelector('#voice-autoplay')
+const voiceAutoPlayStatus = document.querySelector('#voice-autoplay-status')
 const historyEnabled = document.querySelector('#history-enabled')
 const historyClear = document.querySelector('#history-clear')
 const historyStatus = document.querySelector('#history-status')
@@ -33,6 +35,38 @@ let attachment
 let cancelRequested = false
 let activeConversation
 let unsavedMessages = false
+
+async function loadVoiceAutoPlay() {
+  try {
+    const value = await window.liaStageChat.autoPlay()
+    if (typeof value !== 'boolean')
+      throw new Error('autoplay')
+    voiceAutoPlay.checked = value
+    voiceAutoPlay.disabled = false
+  }
+  catch {
+    voiceAutoPlayStatus.textContent = t('Não foi possível carregar a leitura automática.')
+  }
+}
+
+voiceAutoPlay.addEventListener('change', async () => {
+  const requested = voiceAutoPlay.checked
+  voiceAutoPlay.checked = !requested
+  voiceAutoPlay.disabled = true
+  try {
+    if (await window.liaStageChat.autoPlay(requested) !== requested)
+      throw new Error('autoplay')
+    voiceAutoPlay.checked = requested
+    voiceAutoPlayStatus.textContent = t('Preferência de leitura salva.')
+  }
+  catch {
+    voiceAutoPlayStatus.textContent = t('Não foi possível salvar a leitura automática.')
+  }
+  finally {
+    voiceAutoPlay.disabled = false
+  }
+})
+void loadVoiceAutoPlay()
 
 function clearAttachment() {
   attachment = undefined
@@ -316,6 +350,8 @@ form.addEventListener('submit', async (event) => {
     message.value = ''
     clearAttachment()
     status.textContent = result.historyUnavailable ? t('Resposta recebida. Não foi possível salvar o histórico.') : ''
+    if (voiceAutoPlay.checked)
+      speak.click()
   }
   catch {
     status.textContent = errors.unavailable

@@ -204,6 +204,8 @@ try {
   assert.match(requests[6].messages[0].content, /Preset: tsundere/)
   assert.ok(!JSON.stringify(requests[6]).includes('Conversa com cartão'))
   if (withVoice) {
+    const autoPlay = page.getByRole('checkbox', { name: 'Ler respostas automaticamente' })
+    assert.equal(await autoPlay.isChecked(), false)
     const speak = page.getByRole('button', { name: 'Ouvir resposta' })
     const stop = page.getByRole('button', { name: 'Parar áudio' })
     const audio = page.locator('audio')
@@ -217,8 +219,27 @@ try {
     await page.screenshot({ path: join(root, 'voice.png'), fullPage: true })
     await stop.click()
     assert.equal(await audio.isVisible(), false)
+    await autoPlay.click()
+    await page.getByText('Preferência de leitura salva.', { exact: true }).waitFor()
+    assert.equal(await autoPlay.isChecked(), true)
+    await app.close()
+    app = await launch()
+    page = await app.firstWindow()
+    const restoredAutoPlay = page.getByRole('checkbox', { name: 'Ler respostas automaticamente' })
+    await page.locator('#voice-autoplay:checked').waitFor()
+    assert.equal(await restoredAutoPlay.isChecked(), true)
+    await submit(page, 'Leitura automática', 8)
+    await page.locator('audio').waitFor({ state: 'visible', timeout: 90_000 })
+    await page.waitForFunction(() => document.querySelector('audio').currentTime > 0)
+    await page.screenshot({ path: join(root, 'autoplay.png'), fullPage: true })
+    await page.getByRole('button', { name: 'Parar áudio' }).click()
+    await restoredAutoPlay.click()
+    await page.getByText('Preferência de leitura salva.', { exact: true }).waitFor()
+    assert.equal(await restoredAutoPlay.isChecked(), false)
+    await submit(page, 'Sem leitura automática', 9)
+    assert.equal(await page.getByRole('button', { name: 'Parar áudio' }).isDisabled(), true)
   }
-  const report = { service: 'synthetic local HTTP', optIn: true, reopened: true, resumed: true, legacyTextImported: true, cancellationPreservedHistory: true, cleared: true, rateLimitSanitized: true, refusedImageWithoutVision: true, conversationsIsolated: true, selectionRestored: true, deletionConfirmed: true, builtInPersonaInRequest: true, importedPersonaInRequest: true, importedPersonaRestored: true, personaContextIsolated: true, localKokoroMutedPlayback: withVoice ? 'cancelled, retried, played and stopped' : null }
+  const report = { service: 'synthetic local HTTP', optIn: true, reopened: true, resumed: true, legacyTextImported: true, cancellationPreservedHistory: true, cleared: true, rateLimitSanitized: true, refusedImageWithoutVision: true, conversationsIsolated: true, selectionRestored: true, deletionConfirmed: true, builtInPersonaInRequest: true, importedPersonaInRequest: true, importedPersonaRestored: true, personaContextIsolated: true, localKokoroMutedPlayback: withVoice ? 'cancelled, retried, played and stopped' : null, autoPlay: withVoice ? 'opt-in, persisted, played, opted out' : null }
   await writeFile(join(root, 'report.json'), JSON.stringify(report, null, 2))
   console.log(JSON.stringify(report))
 }

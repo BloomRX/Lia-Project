@@ -19,7 +19,7 @@ import { createTransportRepository } from '../../../core/src/transports/reposito
 import { stageChatCancel, stageChatSend, stageChatSpeak, stageMemoryGet, stageMemoryMutate, stageMicrophoneArm, stagePresenceClose, stagePresenceCommand, stagePresenceOpen, stagePresenceRead, stagePresenceRendered, stageTranscribe, stageTranscriptionCancel } from '../shared/chat-ipc.ts'
 import { stageConversationChange, stageHistoryChange, stageHistoryGet, stageHistoryImport, stageLanguageGet, stagePresenceDisplays } from '../shared/chat-ipc.ts'
 import { stagePersonaChange, stagePersonaGet } from '../shared/chat-ipc.ts'
-import { stageChatStopSpeech } from '../shared/chat-ipc.ts'
+import { stageChatStopSpeech, stageVoiceAutoPlay } from '../shared/chat-ipc.ts'
 import { stageLocale, stageText } from '../shared/locale.ts'
 import { createStageChat } from './stage-chat.ts'
 import { createStageHistory } from './stage-history.ts'
@@ -246,6 +246,16 @@ async function main(): Promise<void> {
   ipcMain.handle(stageChatStopSpeech, async (event) => {
     if (authorized(event))
       await voice.cancel().catch(() => {})
+  })
+  ipcMain.handle(stageVoiceAutoPlay, async (event, enabled: unknown) => {
+    if (!authorized(event) || (enabled !== undefined && typeof enabled !== 'boolean'))
+      return undefined
+    const result = enabled === undefined
+      ? await readProduct()
+      : await updateLiaProductConfig(paths.productConfigFile, { voice: { autoPlay: enabled } })
+    if (result.status === 'missing' && enabled === undefined)
+      return false
+    return result.status === 'ok' ? result.value.voice?.autoPlay === true : undefined
   })
   ipcMain.handle(stageTranscribe, async (event, bytes: unknown, mimeType: unknown) => {
     const owner = window

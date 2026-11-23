@@ -131,6 +131,8 @@ Use **Parar áudio** para interromper a síntese ou a reprodução. Com
 Kokoro instalado no Windows, execute
 `node scripts/check-native-history.mjs --voice` em `lia/desktop`
 para repetir a validação com o áudio silenciado.
+**Ler respostas automaticamente** é uma preferência opcional que
+persiste após reiniciar e respeita a desativação global de voz.
 No caminho autenticado, o Main lê o cofre compartilhado e exige
 HTTPS e chave vinculada ao provedor, à origem e à finalidade de chat.
 Esse caminho passou em testes com credencial sintética e transporte

@@ -5,7 +5,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 import { stageChatCancel, stageChatSend, stageChatSpeak, stageMemoryGet, stageMemoryMutate, stageMicrophoneArm, stagePresenceClose, stagePresenceCommand, stagePresenceOpen, stagePresenceRead, stagePresenceRendered, stageTranscribe, stageTranscriptionCancel } from '../shared/chat-ipc.ts'
 import { stageConversationChange, stageHistoryChange, stageHistoryGet, stageHistoryImport, stageLanguageGet, stagePresenceDisplays } from '../shared/chat-ipc.ts'
 import { stagePersonaChange, stagePersonaGet } from '../shared/chat-ipc.ts'
-import { stageChatStopSpeech } from '../shared/chat-ipc.ts'
+import { stageChatStopSpeech, stageVoiceAutoPlay } from '../shared/chat-ipc.ts'
 
 contextBridge.exposeInMainWorld('liaStageLanguage', {
   get: () => ipcRenderer.invoke(stageLanguageGet),
@@ -36,6 +36,7 @@ contextBridge.exposeInMainWorld('liaStageChat', {
   cancel: () => ipcRenderer.invoke(stageChatCancel),
   speak: () => ipcRenderer.invoke(stageChatSpeak),
   stopSpeech: () => ipcRenderer.invoke(stageChatStopSpeech),
+  autoPlay: (enabled?: boolean) => ipcRenderer.invoke(stageVoiceAutoPlay, enabled),
   transcribe: (bytes: Uint8Array, mimeType: string) => ipcRenderer.invoke(stageTranscribe, bytes, mimeType),
   cancelTranscription: () => ipcRenderer.invoke(stageTranscriptionCancel),
   armMicrophone: () => ipcRenderer.invoke(stageMicrophoneArm),
