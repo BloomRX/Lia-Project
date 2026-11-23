@@ -1,10 +1,12 @@
-import { t } from './locale.js'
-
 import { maxAvatarBytes } from './avatar-file.js'
+import { readSavedAvatar, removeSavedAvatar, saveAvatar } from './avatar-storage.js'
+import { t } from './locale.js'
 
 const details = document.querySelector('#avatar')
 const picker = document.querySelector('#avatar-file')
 const pickerButton = document.querySelector('#avatar-picker')
+const save = document.querySelector('#avatar-save')
+const forget = document.querySelector('#avatar-forget')
 let canvas = document.querySelector('#avatar-canvas')
 const status = document.querySelector('#avatar-status')
 const actions = document.querySelector('#avatar-actions')
@@ -16,15 +18,59 @@ let view
 let selectedAvatar
 let presenceOpen = false
 let presenceBusy = false
+let savedAvatar = false
+let checkedStorage = false
 
 function updateActions() {
   actions.hidden = !selectedAvatar
   show.disabled = presenceBusy || presenceOpen
   hide.disabled = presenceBusy || !presenceOpen
+  save.disabled = presenceBusy || picker.disabled
+  forget.disabled = presenceBusy || picker.disabled || !savedAvatar
   monitor.disabled = presenceBusy || !presenceOpen || monitor.options.length === 0
   for (const command of commands)
     command.disabled = presenceBusy || !presenceOpen
 }
+
+async function preview(bytes) {
+  const { createAvatarView } = await import('./avatar-view.js')
+  view ??= createAvatarView(canvas)
+  await view.load(bytes)
+  selectedAvatar = bytes
+  canvas.hidden = false
+  status.textContent = t('Avatar carregado.')
+}
+
+async function changeSavedAvatar(operation, message) {
+  presenceBusy = true
+  updateActions()
+  try {
+    await operation()
+    if (message)
+      status.textContent = t(message)
+  }
+  catch {
+    status.textContent = t('Não foi possível acessar o avatar salvo.')
+  }
+  finally {
+    presenceBusy = false
+    updateActions()
+    releaseClosedPreview()
+  }
+}
+
+save.addEventListener('click', () => void changeSavedAvatar(async () => {
+  await saveAvatar(selectedAvatar)
+  savedAvatar = true
+}, 'Avatar salvo neste perfil.'))
+forget.addEventListener('click', () => {
+  if (window.confirm(t('Remover o avatar salvo deste perfil?'))) {
+    void changeSavedAvatar(async () => {
+      await removeSavedAvatar()
+      savedAvatar = false
+    }, 'Avatar removido deste perfil.')
+  }
+})
 
 async function refreshMonitors() {
   const state = await window.liaStagePresence.displays()
@@ -117,14 +163,7 @@ picker.addEventListener('change', async () => {
   pickerButton.disabled = true
   status.textContent = t('Carregando avatar…')
   try {
-    const { createAvatarView } = await import('./avatar-view.js')
-    view ??= createAvatarView(canvas)
-    const bytes = await file.arrayBuffer()
-    await view.load(bytes)
-    selectedAvatar = bytes
-    updateActions()
-    canvas.hidden = false
-    status.textContent = t('Avatar carregado.')
+    await preview(await file.arrayBuffer())
   }
   catch {
     status.textContent = t('Não foi possível abrir este avatar. Escolha um arquivo VRM com recursos incorporados.')
@@ -133,9 +172,32 @@ picker.addEventListener('change', async () => {
     picker.value = ''
     picker.disabled = false
     pickerButton.disabled = false
+    updateActions()
     releaseClosedPreview()
   }
 })
 
-details.addEventListener('toggle', releaseClosedPreview)
+details.addEventListener('toggle', () => {
+  releaseClosedPreview()
+  if (details.open && selectedAvatar && !view && !presenceBusy && !picker.disabled) {
+    void changeSavedAvatar(() => preview(selectedAvatar), '')
+    return
+  }
+  if (details.open && !checkedStorage) {
+    checkedStorage = true
+    pickerButton.disabled = true
+    void changeSavedAvatar(async () => {
+      try {
+        const bytes = await readSavedAvatar()
+        if (bytes) {
+          savedAvatar = true
+          await preview(bytes)
+        }
+      }
+      finally {
+        pickerButton.disabled = false
+      }
+    }, '')
+  }
+})
 window.addEventListener('pagehide', () => view?.dispose(), { once: true })

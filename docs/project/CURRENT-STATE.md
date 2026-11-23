@@ -2,6 +2,8 @@
 
 ## 0. Estado agora
 
+- **Avatar salvo na prévia.** A pessoa pode guardar uma cópia do VRM no perfil local e removê-la mediante confirmação. O Electron no Windows recuperou um VRM sintético após reiniciar e confirmou que a exclusão persistiu. A presença no desktop ainda é aberta pelo chat.
+
 - **Idioma na prévia.** A janela de conversa e a janela de presença carregam o idioma do produto ao abrir. O Electron em Windows confirmou os dois idiomas e a interface inglesa de chat, gravação, memória, seleção de VRM e presença. A troca em janela já aberta e o diálogo nativo de autorização de STT ainda não foram validados.
 
 - **Histórico na prévia.** A pessoa pode ativar o histórico local, recuperar a conversa após reiniciar e limpar o contexto mediante confirmação. O Electron no Windows com serviço HTTP local sintético confirmou recuperação, retomada e limpeza. Importação do histórico legado e múltiplas conversas seguem pendentes.

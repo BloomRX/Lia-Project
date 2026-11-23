@@ -201,6 +201,10 @@ uma animação glTF, a prévia toca a primeira faixa válida, com alvo de
 VRM escolhido pela pessoa, limita o arquivo a 64 MB e recusa recursos
 externos. O renderer permanece isolado e sem acesso à rede. Nenhum
 modelo de terceiros é distribuído junto com a prévia.
+**Lembrar este avatar** guarda uma cópia no perfil local da prévia.
+Abrir a seção Avatar em outra sessão recupera essa cópia. **Esquecer
+avatar salvo** remove a cópia após confirmação. A presença no desktop
+continua sendo aberta explicitamente pelo chat.
 
 No Electron no Windows, um VRM sintético abriu, renderizou e voltou a
 abrir após fechar a prévia. O mesmo teste recusou uma textura externa.
