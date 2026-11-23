@@ -195,8 +195,10 @@ do Stage pelos hashes, compara os arquivos de configuração, transportes
 e histórico de um perfil sintético isolado e confirma que o Stage abre
 o histórico antes e depois. O ensaio passou no Windows de 0.0.1 para uma
 compilação privada 0.0.2 feita em cópia isolada. Os resultados ficam em
-`report.json` no diretório de evidências. Ainda faltam ensaios de
-atualização automática e preservação de credenciais e outros dados.
+`report.json` no diretório de evidências. O ensaio também compara o hash do cofre e verifica se a mesma conta Windows
+recupera uma credencial sintética via DPAPI após a atualização. Ainda faltam
+ensaios de atualização automática, preservação dos demais dados e sessão
+externa autenticada após o upgrade.
 Para empacotar, use um checkout com
 caminho curto. No Windows, o NSIS falhou ao abrir um include em um caminho
 de 267 caracteres e o mesmo build passou a partir de uma raiz curta.

@@ -8,7 +8,10 @@ import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 
 import { _electron } from 'playwright'
+import { createLiaSecretVault } from '@lia/core/secrets/vault'
+import { createWindowsUserCipher } from '@lia/core/secrets/windows-user-cipher'
 
+import { bindCredential, credentialForDestination } from '../../core/src/credentials/destination.ts'
 import { createRuntimeRegistry, invokeRuntimeControl } from '../../core/src/runtime/index.ts'
 
 async function waitForRecord(registry) {
@@ -99,7 +102,8 @@ async function run() {
     fixtures.push(['native-stage-profile/lia-chat-history.json', historical])
   }
   const baseline = join(root, 'upgrade-baseline.json')
-  const captureHashes = () => Promise.all(fixtures.map(async ([name]) => ({
+  const upgradeFiles = [...fixtures.map(([name]) => name), 'lia-secrets.json']
+  const captureHashes = () => Promise.all(upgradeFiles.map(async name => ({
     name,
     sha256: createHash('sha256').update(await readFile(join(root, name))).digest('hex'),
   })))
@@ -147,10 +151,22 @@ async function run() {
     }
   }
   if (upgradeProfile) {
+    const endpoint = new URL('https://speech-upgrade.example.invalid/v1')
+    const scope = 'openai-compatible-audio-speech'
+    const synthetic = 'lia-upgrade-synthetic-key'
+    const filePath = join(root, 'lia-secrets.json')
+    const legacyCipher = () => { throw new Error('Unexpected legacy cipher') }
+    const vault = createLiaSecretVault({
+      filePath, cipher: createWindowsUserCipher({ available: () => false, encrypt: legacyCipher, decrypt: legacyCipher }),
+    })
+    if (!restore)
+      assert.ok(await vault.setSecret(scope, 'apiKey', bindCredential(scope, endpoint, synthetic, 'speech')))
+    assert.ok(!(await readFile(filePath, 'utf8')).includes(synthetic), 'A credencial sintética está em texto claro.')
+    assert.ok(credentialForDestination(vault.getSecret(scope, 'apiKey'), scope, endpoint, 'speech') === synthetic, 'Não foi possível recuperar a credencial vinculada.')
     await checkUpgradeProfile(executablePath, root, env)
     if (!restore)
       await writeFile(baseline, JSON.stringify(await captureHashes()), { flag: 'wx' })
-    console.log(JSON.stringify({ phase: restore ? 'after-upgrade' : 'before-upgrade', settingsPreserved: restore ? true : null, historyVisible: true }))
+    console.log(JSON.stringify({ phase: restore ? 'after-upgrade' : 'before-upgrade', settingsPreserved: restore ? true : null, historyVisible: true, credentialRecovered: true }))
   }
 }
 

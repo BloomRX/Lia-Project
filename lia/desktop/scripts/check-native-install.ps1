@@ -41,6 +41,7 @@ $report = [ordered]@{
   replacement = $null
   lifecycle = $false
   profilePreserved = $null
+  credentialPreserved = $null
   uninstall = $false
 }
 
@@ -66,7 +67,10 @@ try {
   & node --experimental-strip-types (Join-Path $PSScriptRoot 'check-native-stage.mjs') @gateArguments
   if ($LASTEXITCODE -ne 0) { throw 'O Launcher instalado falhou no gate de ciclo de vida.' }
   $report['lifecycle'] = $true
-  if ($PreviousInstaller) { $report['profilePreserved'] = $true }
+  if ($PreviousInstaller) {
+    $report['profilePreserved'] = $true
+    $report['credentialPreserved'] = $true
+  }
 }
 finally {
   if (Test-Path -LiteralPath $uninstaller -PathType Leaf) {
