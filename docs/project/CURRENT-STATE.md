@@ -6,7 +6,7 @@
 
 - **Histórico na prévia.** A pessoa pode ativar o histórico local, recuperar a conversa após reiniciar e limpar o contexto mediante confirmação. O Electron no Windows com serviço HTTP local sintético confirmou recuperação, retomada e limpeza. Importação do histórico legado e múltiplas conversas seguem pendentes.
 
-- **Avatar na prévia.** O Stage próprio abre VRM local com recursos incorporados e oferece uma janela de presença no desktop. Em Electron no Windows, um VRM sintético confirmou movimento, fixação, retorno, ocultação e encerramento junto com o chat. Coordenadas sintéticas confirmaram a ocultação ao passar o ponteiro. Animações, modelos de uso real, fullscreen e múltiplos monitores físicos seguem pendentes.
+- **Avatar na prévia.** O Stage próprio abre VRM local com recursos incorporados e oferece uma janela de presença no desktop. Em Electron no Windows, um VRM sintético confirmou movimento, fixação, retorno, ocultação, seleção do segundo monitor conectado e encerramento junto com o chat. Coordenadas sintéticas confirmaram a ocultação ao passar o ponteiro. Animações, modelos de uso real, fullscreen e recuperação após desconectar um monitor seguem pendentes.
 
 - **Memória na prévia.** Notas e preferência persistem no perfil do Stage próprio. O Electron no Windows com serviço HTTP local sintético confirmou recuperação após reiniciar e envio do contexto apenas enquanto habilitado. No Electron, a importação do perfil gerenciado legado preservou o arquivo original e as alterações posteriores na prévia. Quando os dois perfis já têm notas, os arquivos são preservados separadamente.
 

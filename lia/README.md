@@ -205,8 +205,10 @@ abrir após fechar a prévia. O mesmo teste recusou uma textura externa.
 O ensaio da janela de presença confirmou movimento, fixação, retorno,
 ocultação e encerramento junto com o chat. Coordenadas sintéticas
 confirmaram a mudança de opacidade ao entrar e sair da área do avatar.
-Animações, modelos de uso real, fullscreen e monitores físicos adicionais
-seguem pendentes.
+Com dois monitores físicos conectados, o ensaio confirmou que a seleção
+do segundo confinou o avatar à área de trabalho escolhida e persistiu.
+Animações, modelos de uso real, fullscreen e recuperação após desconexão
+física de monitor seguem pendentes.
 
 Para repetir o ensaio em Windows, compile o Stage, instale o Electron
 com `corepack pnpm exec install-electron` em `lia/stage` e execute

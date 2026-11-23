@@ -17,7 +17,7 @@ import { createLiaMemoryStore } from '../../../core/src/memory/store.ts'
 import { startLiaRuntimeService } from '../../../core/src/runtime/index.ts'
 import { createTransportRepository } from '../../../core/src/transports/repository.ts'
 import { stageChatCancel, stageChatSend, stageChatSpeak, stageMemoryGet, stageMemoryMutate, stageMicrophoneArm, stagePresenceClose, stagePresenceCommand, stagePresenceOpen, stagePresenceRead, stagePresenceRendered, stageTranscribe, stageTranscriptionCancel } from '../shared/chat-ipc.ts'
-import { stageHistoryChange, stageHistoryGet, stageLanguageGet } from '../shared/chat-ipc.ts'
+import { stageHistoryChange, stageHistoryGet, stageLanguageGet, stagePresenceDisplays } from '../shared/chat-ipc.ts'
 import { stageLocale, stageText } from '../shared/locale.ts'
 import { createStageChat } from './stage-chat.ts'
 import { createStageHistory } from './stage-history.ts'
@@ -115,6 +115,7 @@ async function main(): Promise<void> {
       presence.close()
   })
   ipcMain.handle(stagePresenceCommand, (event, action: unknown) => Boolean(authorized(event)) && presence.command(action))
+  ipcMain.handle(stagePresenceDisplays, event => authorized(event) ? presence.displays() : undefined)
   ipcMain.handle(stagePresenceRead, presence.takeAsset)
   ipcMain.on(stagePresenceRendered, presence.reportRender)
   ipcMain.handle(stageLanguageGet, event => (authorized(event) || presence.ownsOverlay(event)) ? readLocale() : undefined)

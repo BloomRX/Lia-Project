@@ -121,6 +121,13 @@ export function createStagePresence(options: {
     open,
     close,
     ownsOverlay,
+    displays() {
+      const result = service?.get()
+      if (!result?.ok)
+        return undefined
+      const { config, displays } = result.state
+      return { displays, monitorId: config.monitorId, allMonitors: config.allMonitors }
+    },
     takeAsset(event: Electron.IpcMainInvokeEvent) {
       if (!ownsOverlay(event))
         return undefined
@@ -139,6 +146,13 @@ export function createStagePresence(options: {
         return false
       if (action === 'home' || action === 'set-home')
         return (await current.action({ action })).ok
+      if (action && typeof action === 'object' && 'monitor' in action && Object.keys(action).length === 1) {
+        const monitor = action.monitor
+        if (monitor !== 'all' && monitor !== null && !result.state.displays.some(display => display.id === monitor))
+          return false
+        const monitorId = typeof monitor === 'number' ? monitor : null
+        return (await current.set({ ...result.state.config, monitorId, allMonitors: monitor === 'all' })).ok
+      }
       if (action !== 'paused' && action !== 'pinned' && action !== 'hideOnHover')
         return false
       return (await current.set({ ...result.state.config, [action]: !result.state.config[action] })).ok

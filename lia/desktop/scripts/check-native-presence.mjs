@@ -151,13 +151,28 @@ async function run() {
     })
     assert.deepEqual(hover, { hidden: true, visibleAgain: true })
     assert.equal(JSON.parse(await readFile(join(root, 'lia-product.json'), 'utf8')).presence.hideOnHover, true)
+    const displays = await chat.evaluate(() => window.liaStagePresence.displays())
+    const secondDisplay = displays.displays.find(({ workArea }) =>
+      initial.x < workArea.x || initial.x >= workArea.x + workArea.width
+      || initial.y < workArea.y || initial.y >= workArea.y + workArea.height)
+    if (secondDisplay) {
+      const picker = chat.getByRole('combobox', { name: 'Monitor do avatar' })
+      await picker.selectOption(String(secondDisplay.id))
+      await chat.getByText('Presença atualizada.', { exact: true }).waitFor()
+      const placed = await bounds()
+      const area = secondDisplay.workArea
+      assert.ok(placed.x >= area.x && placed.y >= area.y
+        && placed.x + placed.width <= area.x + area.width
+        && placed.y + placed.height <= area.y + area.height)
+      assert.equal(JSON.parse(await readFile(join(root, 'lia-product.json'), 'utf8')).presence.monitorId, secondDisplay.id)
+    }
     await chat.getByRole('button', { name: 'Ocultar do desktop', exact: true }).click()
     await chat.getByText('Avatar oculto.', { exact: true }).waitFor()
     assert.equal(app.windows().length, 1)
     const [reopened] = await Promise.all([app.waitForEvent('window', { timeout: 10_000 }), openButton.click()])
     await chat.getByText('Avatar aberto no desktop.', { exact: true }).waitFor()
     await Promise.all([reopened.waitForEvent('close', { timeout: 10_000 }), chat.close()])
-    const report = { syntheticVrm: true, invalidOverlayRejected: true, externalTextureRejected: true, moved, pinned: true, home: true, syntheticHover: hover, hidden: true, closedWithChat: true }
+    const report = { syntheticVrm: true, invalidOverlayRejected: true, externalTextureRejected: true, moved, pinned: true, home: true, syntheticHover: hover, connectedDisplays: displays.displays.length, secondDisplayPlacement: secondDisplay ? 'PASS' : 'NOT RUN', hidden: true, closedWithChat: true }
     await writeFile(join(root, 'report.json'), JSON.stringify(report, null, 2))
     console.log(JSON.stringify(report))
   }

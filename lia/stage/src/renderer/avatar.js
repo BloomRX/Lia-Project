@@ -10,6 +10,7 @@ const status = document.querySelector('#avatar-status')
 const actions = document.querySelector('#avatar-actions')
 const show = document.querySelector('#avatar-show')
 const hide = document.querySelector('#avatar-hide')
+const monitor = document.querySelector('#avatar-monitor')
 const commands = Array.from(document.querySelectorAll('[data-presence]'))
 let view
 let selectedAvatar
@@ -20,8 +21,27 @@ function updateActions() {
   actions.hidden = !selectedAvatar
   show.disabled = presenceBusy || presenceOpen
   hide.disabled = presenceBusy || !presenceOpen
+  monitor.disabled = presenceBusy || !presenceOpen || monitor.options.length === 0
   for (const command of commands)
     command.disabled = presenceBusy || !presenceOpen
+}
+
+async function refreshMonitors() {
+  const state = await window.liaStagePresence.displays()
+  if (!state)
+    throw new Error('presence-displays')
+  const options = [
+    new Option(t('Monitor atual'), 'current'),
+    new Option(t('Todos os monitores'), 'all'),
+    ...state.displays.map(({ id, workArea }, index) => new Option(
+      `${t('Monitor')} ${index + 1} · ${workArea.width} × ${workArea.height}`,
+      String(id),
+    )),
+  ]
+  monitor.replaceChildren(...options)
+  monitor.value = state.allMonitors ? 'all' : String(state.monitorId ?? 'current')
+  if (!monitor.value)
+    monitor.value = 'current'
 }
 
 async function operate(operation) {
@@ -43,6 +63,7 @@ show.addEventListener('click', () => void operate(async () => {
   if (!await window.liaStagePresence.open(new Uint8Array(selectedAvatar)))
     throw new Error('presence')
   presenceOpen = true
+  await refreshMonitors()
   status.textContent = t('Avatar aberto no desktop.')
 }))
 hide.addEventListener('click', () => void operate(async () => {
@@ -57,6 +78,18 @@ for (const command of commands) {
     status.textContent = t('Presença atualizada.')
   }))
 }
+monitor.addEventListener('change', () => void operate(async () => {
+  const selection = monitor.value === 'current' ? null : monitor.value === 'all' ? 'all' : Number(monitor.value)
+  const changed = await window.liaStagePresence.command({ monitor: selection })
+  await refreshMonitors()
+  if (!changed)
+    throw new Error('presence-displays')
+  status.textContent = t('Presença atualizada.')
+}))
+window.addEventListener('focus', () => {
+  if (presenceOpen && !presenceBusy)
+    void refreshMonitors().catch(() => {})
+})
 
 function releaseClosedPreview() {
   if (!details.open && !picker.disabled && view) {
