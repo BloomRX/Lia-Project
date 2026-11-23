@@ -57,6 +57,16 @@ test('returns a public cancellation result when already aborted', async () => {
   assert.deepEqual(await fixture([])('ola', controller.signal), { ok: false, code: 'cancelled' })
 })
 
+test('rejects a selected personality card that is not available in the native Stage', async () => {
+  const send = createStageChat({
+    async readProduct() {
+      return { filePath: '', status: 'ok', value: { persona: { activeCardId: 'custom-card' } } }
+    },
+    async readTransports() { return assert.fail('Transport must not be resolved for an unavailable card') },
+  })
+  assert.deepEqual(await send('Olá', new AbortController().signal), { ok: false, code: 'persona-unavailable' })
+})
+
 test('a route change during preparation does not send the draft to the old or new destination', async () => {
   const local = { ...record, baseUrl: 'http://127.0.0.1:1234/v1' }
   for (const change of ['tombstone', 'endpoint', 'model'] as const) {
@@ -158,6 +168,9 @@ test('uses a bound chat credential only for the configured HTTPS origin', async 
   groq.baseUrl = 'http://127.0.0.1/v1'
   assert.deepEqual(await submit(), { ok: false, code: 'configuration' })
   assert.equal(requests[2]?.model, 'test-model')
+  assert.equal(typeof requests[0]?.messages[0]?.content, 'string')
+  assert.match(String(requests[0]?.messages[0]?.content), /Preset: tsundere/)
+  assert.doesNotMatch(String(requests[0]?.messages[0]?.content), /Dirija-se ao usuário pelo nome/)
   assert.ok(!JSON.stringify(requests[2]).includes('base64'))
   assert.equal(calls, 5)
 })
@@ -193,7 +206,9 @@ test('carries completed turns and keeps history out of a different model', async
     const submit = (text: string) => send(text, new AbortController().signal)
     assert.equal((await submit('Primeira')).ok, true)
     assert.equal((await submit('Segunda')).ok, true)
-    assert.deepEqual(requests[1]!.messages, [
+    assert.equal(requests[1]!.messages[0]?.role, 'system')
+    assert.match(requests[1]!.messages[0]!.content, /Idioma: responda sempre em pt-BR/)
+    assert.deepEqual(requests[1]!.messages.slice(1), [
       { role: 'user', content: 'Primeira' },
       { role: 'assistant', content: 'Resposta' },
       { role: 'user', content: 'Segunda' },
@@ -201,13 +216,15 @@ test('carries completed turns and keeps history out of a different model', async
     modelId = 'new-model'
     assert.equal((await submit('Novo modelo')).ok, true)
     assert.equal(requests[2]!.model, 'new-model')
-    assert.deepEqual(requests[2]!.messages, [{ role: 'user', content: 'Novo modelo' }])
+    assert.deepEqual(requests[2]!.messages.slice(1), [{ role: 'user', content: 'Novo modelo' }])
     useMemory = true
     assert.equal((await submit('Com memória')).ok, true)
-    assert.deepEqual(requests[3]!.messages[0], { role: 'system', content: 'Contexto pessoal de teste' })
+    assert.match(requests[3]!.messages[0]!.content, /Contexto pessoal de teste$/)
+    assert.equal(requests[3]!.messages.filter(message => message.role === 'system').length, 1)
     useMemory = false
     assert.equal((await submit('Sem memória')).ok, true)
-    assert.deepEqual(requests[4]!.messages.map(message => message.content), ['Novo modelo', 'Resposta', 'Sem memória'])
+    assert.doesNotMatch(requests[4]!.messages[0]!.content, /Contexto pessoal de teste/)
+    assert.deepEqual(requests[4]!.messages.slice(1).map(message => message.content), ['Novo modelo', 'Resposta', 'Sem memória'])
   }
   finally {
     server.closeAllConnections()

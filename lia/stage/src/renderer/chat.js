@@ -73,6 +73,7 @@ const errors = {
   invalid: t('Digite uma mensagem válida.'),
   'image-invalid': t('Escolha uma imagem PNG ou JPEG de até 3 MB.'),
   'image-unavailable': t('A conexão selecionada não tem uma rota de visão disponível.'),
+  'persona-unavailable': t('Este cartão de personalidade ainda não está disponível no Stage próprio. Selecione lia no Launcher para usar a personalidade padrão.'),
   'rate-limit': t('A conexão de IA atingiu seu limite de uso. Aguarde e tente novamente.'),
   timeout: t('A IA demorou para responder. Tente novamente.'),
   unavailable: t('A IA não respondeu. Verifique o serviço e tente novamente.'),

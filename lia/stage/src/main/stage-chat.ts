@@ -10,6 +10,7 @@ import { brainRequirementForChatTurn, createProductionBrainAutomaticPolicy, crea
 
 import { credentialForDestination } from '../../../core/src/credentials/destination.ts'
 import { LIA_MEMORY_LIMITS } from '../../../core/src/memory/contracts.ts'
+import { LIA_DEFAULT_PERSONA, renderLiaPersonaDescription, renderLiaPersonaPersonality, renderLiaPersonaScenario } from '../../../core/src/persona/default.ts'
 import { findLiaAiProviderByStageProviderId, ProviderError, ProviderRegistry, ProviderRuntime } from '../../../core/src/providers/index.ts'
 import { maxStageImageBytes } from '../shared/chat-image.ts'
 
@@ -24,12 +25,17 @@ interface StageChatDependencies {
 
 export type StageChatResult
   = | { ok: true, text: string, historyUnavailable?: true }
-    | { ok: false, code: 'invalid' | 'image-invalid' | 'image-unavailable' | 'configuration' | 'unavailable' | 'cancelled' | 'busy' | 'credentials' | 'timeout' | 'rate-limit' }
+    | { ok: false, code: 'invalid' | 'image-invalid' | 'image-unavailable' | 'configuration' | 'persona-unavailable' | 'unavailable' | 'cancelled' | 'busy' | 'credentials' | 'timeout' | 'rate-limit' }
 
 const historyTurns = 6
 const brainCatalog = createProductionBrainCatalog()
 const automaticPolicy = createProductionBrainAutomaticPolicy()
 const pngSignature = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])
+const defaultPersonaPrompt = [
+  renderLiaPersonaDescription(LIA_DEFAULT_PERSONA),
+  renderLiaPersonaPersonality(LIA_DEFAULT_PERSONA, { includeUserName: false }),
+  renderLiaPersonaScenario(LIA_DEFAULT_PERSONA),
+].join('\n\n')
 
 function imageContent(input: unknown) {
   if (!(input instanceof Uint8Array) || input.byteLength < 8 || input.byteLength > maxStageImageBytes)
@@ -56,6 +62,9 @@ export function createStageChat({ fetch, storage, recallMemory, readCredential, 
 
   async function resolveRoute(hasImage: boolean) {
     const product = await readProduct()
+    const activeCard = product.status === 'ok' ? product.value.persona?.activeCardId : undefined
+    if (activeCard && activeCard !== 'lia' && activeCard !== 'lia-default')
+      return 'persona-unavailable'
     const preferred = product.status === 'ok' ? product.value.provider?.chat?.preferred : undefined
     if (!preferred?.modelId)
       return 'configuration'
@@ -142,7 +151,7 @@ export function createStageChat({ fetch, storage, recallMemory, readCredential, 
       const response = await runtime.chat({ providerId, baseUrl: destination.href }, {
         model: requestModel,
         messages: [
-          ...(context ? [{ role: 'system' as const, content: context }] : []),
+          { role: 'system', content: context ? `${defaultPersonaPrompt}\n\n${context}` : defaultPersonaPrompt },
           ...current.turns.flatMap(turn => [
             { role: 'user', content: turn.user },
             { role: 'assistant', content: turn.assistant },

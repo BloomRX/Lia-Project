@@ -10,6 +10,7 @@ const english = new Map([
   ['Ouvir resposta', 'Listen to reply'],
   ['Resposta da Lia', 'Lia’s reply'],
   ['Histórico da conversa', 'Conversation history'],
+  ['Este cartão de personalidade ainda não está disponível no Stage próprio. Selecione lia no Launcher para usar a personalidade padrão.', 'This personality card is not yet available in the native Stage. Select lia in the Launcher to use the default personality.'],
   ['Conversa ativa', 'Active conversation'],
   ['Nova conversa', 'New conversation'],
   ['Excluir conversa', 'Delete conversation'],

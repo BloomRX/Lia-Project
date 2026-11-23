@@ -82,7 +82,10 @@ try {
   page.setDefaultTimeout(10_000)
   await page.getByText('Lia: Resposta 1', { exact: true }).waitFor()
   await submit(page, 'Segunda', 2)
-  assert.deepEqual(requests[1].messages, [
+  assert.equal(requests[1].messages[0].role, 'system')
+  assert.match(requests[1].messages[0].content, /Preset: tsundere/)
+  assert.doesNotMatch(requests[1].messages[0].content, /Dirija-se ao usuário pelo nome/)
+  assert.deepEqual(requests[1].messages.slice(1), [
     { role: 'user', content: 'Primeira' },
     { role: 'assistant', content: 'Resposta 1' },
     { role: 'user', content: 'Segunda' },
@@ -115,7 +118,7 @@ try {
   await page.getByText('Conversa limpa.', { exact: true }).waitFor()
   assert.equal(await page.getByRole('log', { name: 'Mensagens' }).locator('.message').count(), 0)
   await submit(page, 'Terceira', 3)
-  assert.deepEqual(requests[2].messages, [{ role: 'user', content: 'Terceira' }])
+  assert.deepEqual(requests[2].messages.slice(1), [{ role: 'user', content: 'Terceira' }])
   const draft = page.getByLabel('Mensagem', { exact: true })
   await draft.fill('Testar limite')
   await page.getByRole('button', { name: 'Enviar', exact: true }).click()
@@ -150,7 +153,7 @@ try {
   assert.equal(await page.getByRole('checkbox', { name: 'Guardar histórico' }).isChecked(), false)
   assert.equal(await page.getByRole('log', { name: 'Mensagens' }).locator('.message').count(), 0)
   await submit(page, 'Outro assunto', 5)
-  assert.deepEqual(requests[4].messages, [{ role: 'user', content: 'Outro assunto' }])
+  assert.deepEqual(requests[4].messages.slice(1), [{ role: 'user', content: 'Outro assunto' }])
   page.once('dialog', dialog => dialog.accept())
   await picker.selectOption(first)
   await page.getByText('Você: Terceira', { exact: true }).waitFor()
@@ -170,7 +173,7 @@ try {
   await deleteButton.click()
   await page.getByText('Você: Terceira', { exact: true }).waitFor()
   assert.equal(await page.getByLabel('Conversa ativa', { exact: true }).locator('option').count(), 1)
-  const report = { service: 'synthetic local HTTP', optIn: true, reopened: true, resumed: true, legacyTextImported: true, cancellationPreservedHistory: true, cleared: true, rateLimitSanitized: true, refusedImageWithoutVision: true, conversationsIsolated: true, selectionRestored: true, deletionConfirmed: true }
+  const report = { service: 'synthetic local HTTP', optIn: true, reopened: true, resumed: true, legacyTextImported: true, cancellationPreservedHistory: true, cleared: true, rateLimitSanitized: true, refusedImageWithoutVision: true, conversationsIsolated: true, selectionRestored: true, deletionConfirmed: true, builtInPersonaInRequest: true }
   await writeFile(join(root, 'report.json'), JSON.stringify(report, null, 2))
   console.log(JSON.stringify(report))
 }

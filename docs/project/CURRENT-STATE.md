@@ -25,7 +25,8 @@
 - **Baseline funcional registrado.** `3ef6d11`. Os resultados de componentes posteriores constam nos relatórios e não promovem esse baseline.
 - **Revalidação do chat.** O Stage verifica a rota novamente após preparar histórico e memória, antes de ler a credencial e enviar. A regressão confirmou zero envios quando, durante a preparação, a rota é excluída ou muda de endereço ou modelo. A checagem cobre essa janela de preparação. Configuração e transportes continuam armazenados separadamente, e a checagem não revoga requisições já iniciadas.
 - **CI do instalador.** O [workflow Windows em `d503a711`](https://github.com/BloomRX/Lia-Project/actions/runs/45178906422) aprovou instalação limpa, abertura e encerramento do Stage e desinstalação em um runner sem `airi/`.
-- **Próximo corte.** Concluir a paridade necessária antes de remover a árvore legada, especialmente personalidade e ferramentas com permissões no Stage próprio.
+- **Personalidade padrão.** A definição estruturada passou para `lia/core` e a projeção do legado foi preservada. O Stage próprio inclui a personalidade padrão no chat de texto e imagem, sem o nome pessoal fixo do cartão legado. O Electron no Windows confirmou a instrução na requisição a HTTP local sintético. Cartões personalizados não foram migrados e o Stage avisa quando o cartão selecionado ainda não está disponível.
+- **Próximo corte.** Migrar cartões personalizados e ferramentas com permissões para o Stage próprio antes de remover a árvore legada.
 
 [Evidências da Rodada 22](../reports/LIA-ROUND-22-IMPLEMENTATION-REPORT.md) · [Pendências por ambiente](QUANTO-FALTA.md)
 
