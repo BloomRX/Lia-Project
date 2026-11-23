@@ -15,6 +15,8 @@ const voiceStatus = document.querySelector('#voice-status')
 const historyEnabled = document.querySelector('#history-enabled')
 const historyClear = document.querySelector('#history-clear')
 const historyStatus = document.querySelector('#history-status')
+const historyImport = document.querySelector('#history-import')
+const historyImportFile = document.querySelector('#history-import-file')
 const imagePick = document.querySelector('#image-pick')
 const imageRemove = document.querySelector('#image-remove')
 const imageFile = document.querySelector('#image-file')
@@ -69,17 +71,19 @@ const errors = {
   unavailable: t('A IA não respondeu. Verifique o serviço e tente novamente.'),
 }
 
-function appendMessage(author, text) {
+function appendMessage(author, text, container = messages) {
   const entry = document.createElement('p')
   entry.className = 'message'
   entry.textContent = `${author}: ${text}`
-  messages.append(entry)
-  messages.scrollTop = messages.scrollHeight
+  container.append(entry)
+  if (container === messages)
+    messages.scrollTop = messages.scrollHeight
 }
 
 async function changeHistory(action) {
   historyEnabled.disabled = true
   historyClear.disabled = true
+  historyImport.disabled = true
   try {
     if (!await window.liaStageChat.changeHistory(action))
       throw new Error('history')
@@ -99,6 +103,7 @@ async function changeHistory(action) {
   finally {
     historyEnabled.disabled = false
     historyClear.disabled = false
+    historyImport.disabled = !historyEnabled.checked
   }
 }
 
@@ -113,6 +118,42 @@ historyClear.addEventListener('click', () => {
   if (window.confirm(t('Apagar as mensagens desta conversa?')))
     void changeHistory('clear')
 })
+historyImport.addEventListener('click', () => historyImportFile.click())
+historyImportFile.addEventListener('change', async () => {
+  const file = historyImportFile.files[0]
+  historyImportFile.value = ''
+  if (!file)
+    return
+  if (file.size > 4 * 1024 * 1024) {
+    historyStatus.textContent = t('Escolha uma exportação JSON de até 4 MB.')
+    return
+  }
+  if (!window.confirm(t('Importar as trocas de texto mais recentes deste arquivo? Elas ficam disponíveis para leitura local.')))
+    return
+  historyImport.disabled = true
+  historyEnabled.disabled = true
+  historyClear.disabled = true
+  try {
+    const turns = await window.liaStageChat.importHistory(await file.text())
+    if (!turns)
+      throw new Error('history-import')
+    const imported = document.createDocumentFragment()
+    for (const turn of turns) {
+      appendMessage(t('Você'), turn.user, imported)
+      appendMessage('Lia', turn.assistant, imported)
+    }
+    messages.prepend(imported)
+    historyStatus.textContent = t(turns.length ? 'Conversa legada importada para leitura.' : 'Nenhuma troca nova de texto foi importada.')
+  }
+  catch {
+    historyStatus.textContent = t('Não foi possível importar a conversa.')
+  }
+  finally {
+    historyImport.disabled = !historyEnabled.checked
+    historyEnabled.disabled = false
+    historyClear.disabled = false
+  }
+})
 
 send.disabled = true
 try {
@@ -124,6 +165,7 @@ try {
     appendMessage('Lia', turn.assistant)
   }
   historyEnabled.checked = history.enabled
+  historyImport.disabled = !history.enabled
   historyEnabled.disabled = false
   historyClear.disabled = false
 }

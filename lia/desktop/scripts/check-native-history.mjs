@@ -88,6 +88,23 @@ try {
     { role: 'user', content: 'Segunda' },
   ])
   await openHistory(page)
+  const [legacyChooser] = await Promise.all([
+    page.waitForEvent('filechooser', { timeout: 10_000 }),
+    page.getByRole('button', { name: 'Importar conversa legada', exact: true }).click(),
+  ])
+  page.once('dialog', dialog => dialog.accept())
+  await legacyChooser.setFiles({
+    name: 'fixture.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify({
+      format: 'chat-sessions-index:v1',
+      sessions: {
+        fixture: { meta: { updatedAt: 1 }, messages: [{ role: 'user', content: 'Pergunta legada' }, { role: 'assistant', content: 'Resposta legada' }] },
+      },
+    })),
+  })
+  await page.getByText('Conversa legada importada para leitura.', { exact: true }).waitFor()
+  await page.getByText('Lia: Resposta legada', { exact: true }).waitFor()
   await page.screenshot({ path: join(root, 'history.png'), fullPage: true })
   const clear = page.getByRole('button', { name: 'Limpar conversa', exact: true })
   page.once('dialog', dialog => dialog.dismiss())
@@ -120,7 +137,7 @@ try {
   assert.equal(await draft.inputValue(), 'Rascunho com imagem')
   assert.equal(requests.length, 4)
   await page.getByRole('button', { name: 'Remover imagem', exact: true }).click()
-  const report = { service: 'synthetic local HTTP', optIn: true, reopened: true, resumed: true, cancellationPreservedHistory: true, cleared: true, rateLimitSanitized: true, refusedImageWithoutVision: true }
+  const report = { service: 'synthetic local HTTP', optIn: true, reopened: true, resumed: true, legacyTextImported: true, cancellationPreservedHistory: true, cleared: true, rateLimitSanitized: true, refusedImageWithoutVision: true }
   await writeFile(join(root, 'report.json'), JSON.stringify(report, null, 2))
   console.log(JSON.stringify(report))
 }

@@ -17,7 +17,7 @@ import { createLiaMemoryStore } from '../../../core/src/memory/store.ts'
 import { startLiaRuntimeService } from '../../../core/src/runtime/index.ts'
 import { createTransportRepository } from '../../../core/src/transports/repository.ts'
 import { stageChatCancel, stageChatSend, stageChatSpeak, stageMemoryGet, stageMemoryMutate, stageMicrophoneArm, stagePresenceClose, stagePresenceCommand, stagePresenceOpen, stagePresenceRead, stagePresenceRendered, stageTranscribe, stageTranscriptionCancel } from '../shared/chat-ipc.ts'
-import { stageHistoryChange, stageHistoryGet, stageLanguageGet, stagePresenceDisplays } from '../shared/chat-ipc.ts'
+import { stageHistoryChange, stageHistoryGet, stageHistoryImport, stageLanguageGet, stagePresenceDisplays } from '../shared/chat-ipc.ts'
 import { stageLocale, stageText } from '../shared/locale.ts'
 import { createStageChat } from './stage-chat.ts'
 import { createStageHistory } from './stage-history.ts'
@@ -123,6 +123,20 @@ async function main(): Promise<void> {
     if (!authorized(event))
       return undefined
     return history.get().catch(() => undefined)
+  })
+  ipcMain.handle(stageHistoryImport, async (event, input: unknown) => {
+    if (!authorized(event) || updatingHistory || active)
+      return undefined
+    updatingHistory = true
+    try {
+      return await history.importLegacy(input)
+    }
+    catch {
+      return undefined
+    }
+    finally {
+      updatingHistory = false
+    }
   })
   ipcMain.handle(stageHistoryChange, async (event, action: unknown) => {
     if (!authorized(event) || updatingHistory || active || (action !== 'enable' && action !== 'disable' && action !== 'clear'))

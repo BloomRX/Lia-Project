@@ -3,6 +3,7 @@ import { lstat, readFile, rename, unlink, writeFile } from 'node:fs/promises'
 
 const maxTurns = 24
 const maxText = 8_000
+const maxLegacyExport = 4 * 1024 * 1024
 
 interface Turn {
   route: string
@@ -14,6 +15,38 @@ interface History {
   version: 1
   enabled: boolean
   turns: Turn[]
+}
+
+function object(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function legacyTurns(input: unknown, limit: number): Turn[] {
+  if (typeof input !== 'string' || Buffer.byteLength(input) > maxLegacyExport)
+    throw new Error('history-import')
+  const payload: unknown = JSON.parse(input)
+  if (!object(payload) || payload.format !== 'chat-sessions-index:v1' || !object(payload.sessions))
+    throw new Error('history-import')
+  let latest: { updatedAt: number, messages: unknown[] } | undefined
+  for (const record of Object.values(payload.sessions)) {
+    if (!object(record) || !object(record.meta) || typeof record.meta.updatedAt !== 'number'
+      || !Number.isFinite(record.meta.updatedAt) || !Array.isArray(record.messages))
+      continue
+    if (!latest || record.meta.updatedAt > latest.updatedAt)
+      latest = { updatedAt: record.meta.updatedAt, messages: record.messages }
+  }
+  const turns: Turn[] = []
+  const messages = latest?.messages ?? []
+  for (let i = messages.length - 1; i > 0 && turns.length < limit; i--) {
+    const assistant = messages[i]
+    const user = messages[i - 1]
+    if (!object(assistant) || assistant.role !== 'assistant' || typeof assistant.content !== 'string' || !assistant.content.trim()
+      || !object(user) || user.role !== 'user' || typeof user.content !== 'string' || !user.content.trim())
+      continue
+    turns.unshift({ route: '0'.repeat(64), user: user.content.slice(0, maxText), assistant: assistant.content.slice(0, maxText), reusable: false })
+    i--
+  }
+  return turns
 }
 
 function validTurn(value: unknown): value is Turn {
@@ -63,6 +96,18 @@ export function createStageHistory(path: string) {
     async clear() {
       const { enabled } = await read()
       await write({ version: 1, enabled, turns: [] })
+    },
+    async importLegacy(input: unknown) {
+      const state = await read()
+      const room = maxTurns - state.turns.length
+      if (!state.enabled || room <= 0)
+        return []
+      const imported = legacyTurns(input, maxTurns).filter(turn =>
+        !state.turns.some(previous => !previous.reusable && previous.user === turn.user && previous.assistant === turn.assistant))
+        .slice(-room)
+      if (imported.length > 0)
+        await write({ ...state, turns: [...imported, ...state.turns] })
+      return imported.map(({ user, assistant }) => ({ user, assistant }))
     },
     async recall(route: string) {
       const state = await read()

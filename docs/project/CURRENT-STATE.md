@@ -10,7 +10,7 @@
 
 - **Idioma na prévia.** A janela de conversa e a janela de presença carregam o idioma do produto ao abrir. O Electron em Windows confirmou os dois idiomas e a interface inglesa de chat, gravação, memória, seleção de VRM e presença. A troca em janela já aberta e o diálogo nativo de autorização de STT ainda não foram validados.
 
-- **Histórico na prévia.** A pessoa pode ativar o histórico local, recuperar a conversa após reiniciar e limpar o contexto mediante confirmação. O Electron no Windows com serviço HTTP local sintético confirmou recuperação, retomada e limpeza. Importação do histórico legado e múltiplas conversas seguem pendentes.
+- **Histórico na prévia.** A pessoa pode ativar o histórico local, recuperar a conversa após reiniciar e limpar o contexto mediante confirmação. O gate Electron Windows também confirmou a importação parcial de um JSON legado sintético para leitura, sem incluir o material no contexto do provedor. Múltiplas conversas seguem pendentes.
 
 - **Avatar na prévia.** O Stage próprio abre VRM local com recursos incorporados, toca animação embutida e oferece uma janela de presença no desktop. Em Electron no Windows, um VRM sintético confirmou quadros distintos, movimento, fixação, retorno, ocultação, seleção do segundo monitor conectado e encerramento junto com o chat. Coordenadas sintéticas confirmaram a ocultação ao passar o ponteiro. Modelos de uso real, animações externas, fullscreen e recuperação após desconectar um monitor seguem pendentes.
 

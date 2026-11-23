@@ -259,8 +259,11 @@ conexão podem compor o contexto da próxima requisição. Respostas
 geradas com notas pessoais ficam visíveis no histórico, mas ficam
 fora do contexto reutilizado. O Electron Windows, com serviço HTTP
 local sintético, confirmou recuperação, retomada e confirmação da
-limpeza. A migração do histórico legado e a seleção de múltiplas
-conversas continuam pendentes.
+limpeza. Com histórico ativo, **Importar conversa legada** aceita o
+JSON exportado pelo Stage anterior. A prévia traz as trocas textuais
+mais recentes da última conversa atualizada até completar 24 trocas
+no perfil. O texto importado é exibido para leitura local. Anexos,
+metadados e outras conversas ficam no arquivo original.
 
 O ensaio de histórico usa os mesmos pré-requisitos Windows do gate de
 presença. Em `lia/desktop`, execute `node scripts/check-native-history.mjs`.
