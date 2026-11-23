@@ -18,10 +18,12 @@ import { startLiaRuntimeService } from '../../../core/src/runtime/index.ts'
 import { createTransportRepository } from '../../../core/src/transports/repository.ts'
 import { stageChatCancel, stageChatSend, stageChatSpeak, stageMemoryGet, stageMemoryMutate, stageMicrophoneArm, stagePresenceClose, stagePresenceCommand, stagePresenceOpen, stagePresenceRead, stagePresenceRendered, stageTranscribe, stageTranscriptionCancel } from '../shared/chat-ipc.ts'
 import { stageConversationChange, stageHistoryChange, stageHistoryGet, stageHistoryImport, stageLanguageGet, stagePresenceDisplays } from '../shared/chat-ipc.ts'
+import { stagePersonaChange, stagePersonaGet } from '../shared/chat-ipc.ts'
 import { stageLocale, stageText } from '../shared/locale.ts'
 import { createStageChat } from './stage-chat.ts'
 import { createStageHistory } from './stage-history.ts'
 import { createStageHost } from './stage-host.ts'
+import { createStagePersona } from './stage-persona.ts'
 import { createStagePresence } from './stage-presence.ts'
 import { createStageTranscription } from './stage-transcription.ts'
 import { createStageVoice } from './stage-voice.ts'
@@ -77,10 +79,12 @@ async function main(): Promise<void> {
   if (!memoryImport.ok)
     console.warn('Lia: não foi possível migrar as notas do perfil anterior.')
   const history = createStageHistory(join(app.getPath('userData'), 'lia-chat-history.json'))
+  const persona = createStagePersona(join(app.getPath('userData'), 'personality'))
   const send = createStageChat({
     storage: history,
     recallMemory: memory.recall,
     readCredential: providerId => vault.getSecret(providerId, 'apiKey'),
+    readPersona: async id => (await persona.read(id))?.prompt,
     readProduct,
     readTransports: repository.read,
   })
@@ -123,6 +127,38 @@ async function main(): Promise<void> {
     if (!authorized(event))
       return undefined
     return history.get().catch(() => undefined)
+  })
+  ipcMain.handle(stagePersonaGet, async (event) => {
+    if (!authorized(event))
+      return undefined
+    try {
+      const config = await readProduct()
+      const active = config.status === 'ok' ? config.value.persona?.activeCardId : undefined
+      return !active || active === 'lia' || active === 'lia-default' ? 'Lia' : (await persona.read(active))?.name
+    }
+    catch {
+      return undefined
+    }
+  })
+  ipcMain.handle(stagePersonaChange, async (event, input: unknown) => {
+    if (!authorized(event) || updatingHistory || active)
+      return undefined
+    updatingHistory = true
+    try {
+      const card = input === null ? { id: 'lia', name: 'Lia' } : await persona.import(input)
+      const result = await updateLiaProductConfig(paths.productConfigFile, { persona: { activeCardId: card.id } })
+      if (result.status !== 'ok')
+        return undefined
+      lastAnswer = undefined
+      send.clearContext()
+      return card.name
+    }
+    catch {
+      return undefined
+    }
+    finally {
+      updatingHistory = false
+    }
   })
   ipcMain.handle(stageConversationChange, async (event, action: unknown, id: unknown) => {
     if (!authorized(event) || updatingHistory || active)

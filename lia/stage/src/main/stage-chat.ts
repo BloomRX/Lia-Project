@@ -19,6 +19,7 @@ interface StageChatDependencies {
   storage?: ReturnType<typeof createStageHistory>
   recallMemory?: (query: string) => Promise<LiaMemoryResult<string>>
   readCredential?: (providerId: string) => string | undefined
+  readPersona?: (id: string) => Promise<string | undefined>
   readProduct: () => Promise<LiaProductConfigRead>
   readTransports: () => Promise<TransportSnapshot>
 }
@@ -52,8 +53,8 @@ interface Turn {
   assistant: string
 }
 
-export function createStageChat({ fetch, storage, recallMemory, readCredential, readProduct, readTransports }: StageChatDependencies) {
-  let history: { destination: string, model: string, providerId: string, turns: Turn[] } | undefined
+export function createStageChat({ fetch, storage, recallMemory, readCredential, readPersona, readProduct, readTransports }: StageChatDependencies) {
+  let history: { route: string, turns: Turn[] } | undefined
 
   function unavailableConfiguration(): StageChatResult {
     history = undefined
@@ -63,7 +64,8 @@ export function createStageChat({ fetch, storage, recallMemory, readCredential, 
   async function resolveRoute(hasImage: boolean) {
     const product = await readProduct()
     const activeCard = product.status === 'ok' ? product.value.persona?.activeCardId : undefined
-    if (activeCard && activeCard !== 'lia' && activeCard !== 'lia-default')
+    const customCard = activeCard && activeCard !== 'lia' && activeCard !== 'lia-default' ? activeCard : undefined
+    if (customCard && !/^card-[a-f0-9]{64}$/.test(customCard))
       return 'persona-unavailable'
     const preferred = product.status === 'ok' ? product.value.provider?.chat?.preferred : undefined
     if (!preferred?.modelId)
@@ -72,6 +74,8 @@ export function createStageChat({ fetch, storage, recallMemory, readCredential, 
     const definition = findLiaAiProviderByStageProviderId(providerId)
     if (!definition || definition.availability !== 'ready')
       return 'configuration'
+    if (customCard && !definition.localOnly)
+      return 'persona-unavailable'
     let requestModel = modelId
     if (hasImage && product.status === 'ok') {
       const decision = decideBrainRouteFromProductState({
@@ -108,7 +112,7 @@ export function createStageChat({ fetch, storage, recallMemory, readCredential, 
     else if (!definition.requiresApiKey || destination.protocol !== 'https:') {
       return 'configuration'
     }
-    return { providerId, modelId, requestModel, definition, transportId: record.id, destination }
+    return { providerId, modelId, requestModel, definition, transportId: record.id, destination, customCard }
   }
 
   async function send(input: unknown, signal: AbortSignal, image?: unknown): Promise<StageChatResult> {
@@ -122,11 +126,17 @@ export function createStageChat({ fetch, storage, recallMemory, readCredential, 
       const initial = await resolveRoute(Boolean(attachment))
       if (typeof initial === 'string')
         return initial === 'configuration' ? unavailableConfiguration() : { ok: false, code: initial }
-      const { providerId, modelId, requestModel, definition, destination } = initial
-      const route = createHash('sha256').update(JSON.stringify([providerId, modelId, destination.href])).digest('hex')
-      if (history?.destination !== destination.href || history.model !== modelId || history.providerId !== providerId) {
+      const { providerId, modelId, requestModel, definition, destination, customCard } = initial
+      const prompt = customCard ? await readPersona?.(customCard) : defaultPersonaPrompt
+      if (!prompt)
+        return { ok: false, code: 'persona-unavailable' }
+      const scope = [providerId, modelId, destination.href]
+      if (customCard)
+        scope.push(customCard)
+      const route = createHash('sha256').update(JSON.stringify(scope)).digest('hex')
+      if (history?.route !== route) {
         const saved = await storage?.recall(route).catch(() => [])
-        history = { destination: destination.href, model: modelId, providerId, turns: saved?.slice(-historyTurns) ?? [] }
+        history = { route, turns: saved?.slice(-historyTurns) ?? [] }
       }
       const current = history
       const text = input.trim()
@@ -138,7 +148,8 @@ export function createStageChat({ fetch, storage, recallMemory, readCredential, 
       signal.throwIfAborted()
       if (typeof currentRoute === 'string' || currentRoute.transportId !== initial.transportId
         || currentRoute.providerId !== providerId || currentRoute.modelId !== modelId
-        || currentRoute.requestModel !== requestModel || currentRoute.destination.href !== destination.href)
+        || currentRoute.requestModel !== requestModel || currentRoute.destination.href !== destination.href
+        || currentRoute.customCard !== customCard)
         return unavailableConfiguration()
       const credential = definition.localOnly ? undefined : credentialForDestination(readCredential?.(providerId), providerId, destination, 'chat')
       if (!definition.localOnly && !credential)
@@ -151,7 +162,7 @@ export function createStageChat({ fetch, storage, recallMemory, readCredential, 
       const response = await runtime.chat({ providerId, baseUrl: destination.href }, {
         model: requestModel,
         messages: [
-          { role: 'system', content: context ? `${defaultPersonaPrompt}\n\n${context}` : defaultPersonaPrompt },
+          { role: 'system', content: context ? `${prompt}\n\n${context}` : prompt },
           ...current.turns.flatMap(turn => [
             { role: 'user', content: turn.user },
             { role: 'assistant', content: turn.assistant },

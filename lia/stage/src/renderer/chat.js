@@ -73,7 +73,7 @@ const errors = {
   invalid: t('Digite uma mensagem válida.'),
   'image-invalid': t('Escolha uma imagem PNG ou JPEG de até 3 MB.'),
   'image-unavailable': t('A conexão selecionada não tem uma rota de visão disponível.'),
-  'persona-unavailable': t('Este cartão de personalidade ainda não está disponível no Stage próprio. Selecione lia no Launcher para usar a personalidade padrão.'),
+  'persona-unavailable': t('Este cartão não está disponível para esta conexão. Use IA local ou selecione a personalidade padrão.'),
   'rate-limit': t('A conexão de IA atingiu seu limite de uso. Aguarde e tente novamente.'),
   timeout: t('A IA demorou para responder. Tente novamente.'),
   unavailable: t('A IA não respondeu. Verifique o serviço e tente novamente.'),
@@ -141,6 +141,46 @@ async function changeConversation(action, id) {
 conversation.addEventListener('change', () => void changeConversation('select', conversation.value))
 newConversation.addEventListener('click', () => void changeConversation('create'))
 deleteConversation.addEventListener('click', () => void changeConversation('delete'))
+
+const personaFile = document.querySelector('#persona-file')
+const personaImport = document.querySelector('#persona-import')
+const personaDefault = document.querySelector('#persona-default')
+const personaStatus = document.querySelector('#persona-status')
+personaImport.addEventListener('click', () => personaFile.click())
+personaDefault.addEventListener('click', () => void selectPersona(null))
+personaFile.addEventListener('change', () => {
+  const file = personaFile.files[0]
+  personaFile.value = ''
+  if (file && window.confirm(t('Usar a personalidade deste cartão nas conversas com IA local?')))
+    void selectPersona(file)
+})
+
+async function selectPersona(file) {
+  if (send.disabled || personaDefault.disabled)
+    return
+  personaDefault.disabled = true
+  personaImport.disabled = true
+  send.disabled = true
+  try {
+    if (file && file.size > 128 * 1024)
+      throw new Error('persona')
+    const name = await window.liaStageChat.changePersona(file ? await file.text() : null)
+    if (!name)
+      throw new Error('persona')
+    personaStatus.textContent = `${t('Personalidade ativa')}: ${name}`
+    answerVersion++
+    clearAudio()
+    voice.hidden = true
+  }
+  catch {
+    personaStatus.textContent = t('Não foi possível selecionar a personalidade. Use um card.json CCv3 de até 128 KB.')
+  }
+  finally {
+    personaDefault.disabled = false
+    personaImport.disabled = false
+    send.disabled = false
+  }
+}
 
 async function changeHistory(action) {
   historyEnabled.disabled = true
@@ -220,6 +260,9 @@ historyImportFile.addEventListener('change', async () => {
 
 send.disabled = true
 try {
+  const name = await window.liaStageChat.activePersona().catch(() => undefined)
+  if (name)
+    personaStatus.textContent = `${t('Personalidade ativa')}: ${name}`
   const history = await window.liaStageChat.history()
   if (!history)
     throw new Error('history')

@@ -67,6 +67,17 @@ test('rejects a selected personality card that is not available in the native St
   assert.deepEqual(await send('Olá', new AbortController().signal), { ok: false, code: 'persona-unavailable' })
 })
 
+test('never reads a private imported personality when a remote provider is selected', async () => {
+  const send = createStageChat({
+    async readProduct() {
+      return { filePath: '', status: 'ok', value: { persona: { activeCardId: `card-${'a'.repeat(64)}` }, provider: { chat: { preferred: { providerId: 'groq', modelId: 'test-model' } } } } }
+    },
+    async readPersona() { return assert.fail('Private card must not be loaded for remote chat') },
+    async readTransports() { return assert.fail('Remote route must not be prepared for a private card') },
+  })
+  assert.deepEqual(await send('Olá', new AbortController().signal), { ok: false, code: 'persona-unavailable' })
+})
+
 test('a route change during preparation does not send the draft to the old or new destination', async () => {
   const local = { ...record, baseUrl: 'http://127.0.0.1:1234/v1' }
   for (const change of ['tombstone', 'endpoint', 'model'] as const) {

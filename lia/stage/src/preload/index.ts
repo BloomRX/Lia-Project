@@ -4,6 +4,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 
 import { stageChatCancel, stageChatSend, stageChatSpeak, stageMemoryGet, stageMemoryMutate, stageMicrophoneArm, stagePresenceClose, stagePresenceCommand, stagePresenceOpen, stagePresenceRead, stagePresenceRendered, stageTranscribe, stageTranscriptionCancel } from '../shared/chat-ipc.ts'
 import { stageConversationChange, stageHistoryChange, stageHistoryGet, stageHistoryImport, stageLanguageGet, stagePresenceDisplays } from '../shared/chat-ipc.ts'
+import { stagePersonaChange, stagePersonaGet } from '../shared/chat-ipc.ts'
 
 contextBridge.exposeInMainWorld('liaStageLanguage', {
   get: () => ipcRenderer.invoke(stageLanguageGet),
@@ -25,6 +26,8 @@ contextBridge.exposeInMainWorld('liaStageMemory', {
 
 contextBridge.exposeInMainWorld('liaStageChat', {
   history: () => ipcRenderer.invoke(stageHistoryGet),
+  changePersona: (file: string | null) => ipcRenderer.invoke(stagePersonaChange, file),
+  activePersona: () => ipcRenderer.invoke(stagePersonaGet),
   changeConversation: (action: 'create' | 'select' | 'delete', id?: string) => ipcRenderer.invoke(stageConversationChange, action, id),
   importHistory: (file: string) => ipcRenderer.invoke(stageHistoryImport, file),
   changeHistory: (action: 'enable' | 'disable' | 'clear') => ipcRenderer.invoke(stageHistoryChange, action),

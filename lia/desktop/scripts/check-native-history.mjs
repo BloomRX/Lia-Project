@@ -173,7 +173,36 @@ try {
   await deleteButton.click()
   await page.getByText('Você: Terceira', { exact: true }).waitFor()
   assert.equal(await page.getByLabel('Conversa ativa', { exact: true }).locator('option').count(), 1)
-  const report = { service: 'synthetic local HTTP', optIn: true, reopened: true, resumed: true, legacyTextImported: true, cancellationPreservedHistory: true, cleared: true, rateLimitSanitized: true, refusedImageWithoutVision: true, conversationsIsolated: true, selectionRestored: true, deletionConfirmed: true, builtInPersonaInRequest: true }
+  const openPersona = target => target.getByText('Personalidade', { exact: true }).click()
+  await openPersona(page)
+  const [personaChooser] = await Promise.all([
+    page.waitForEvent('filechooser', { timeout: 10_000 }),
+    page.getByRole('button', { name: 'Importar card.json' }).click(),
+  ])
+  page.once('dialog', dialog => dialog.accept())
+  await personaChooser.setFiles({
+    name: 'card.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify({
+      spec: 'chara_card_v3', spec_version: '3.0',
+      data: { name: 'Cartão de teste', personality: 'Tom da personalidade de teste', system_prompt: 'ignored-system-fixture' },
+    })),
+  })
+  await page.getByText('Personalidade ativa: Cartão de teste', { exact: true }).waitFor()
+  await submit(page, 'Conversa com cartão', 6)
+  assert.deepEqual(requests[5].messages, [{ role: 'system', content: 'Tom da personalidade de teste' }, { role: 'user', content: 'Conversa com cartão' }])
+  await page.screenshot({ path: join(root, 'personality.png'), fullPage: true })
+  await app.close()
+  app = await launch()
+  page = await app.firstWindow()
+  await openPersona(page)
+  await page.getByText('Personalidade ativa: Cartão de teste', { exact: true }).waitFor()
+  await page.getByRole('button', { name: 'Usar personalidade padrão' }).click()
+  await page.getByText('Personalidade ativa: Lia', { exact: true }).waitFor()
+  await submit(page, 'Retorno à Lia', 7)
+  assert.match(requests[6].messages[0].content, /Preset: tsundere/)
+  assert.ok(!JSON.stringify(requests[6]).includes('Conversa com cartão'))
+  const report = { service: 'synthetic local HTTP', optIn: true, reopened: true, resumed: true, legacyTextImported: true, cancellationPreservedHistory: true, cleared: true, rateLimitSanitized: true, refusedImageWithoutVision: true, conversationsIsolated: true, selectionRestored: true, deletionConfirmed: true, builtInPersonaInRequest: true, importedPersonaInRequest: true, importedPersonaRestored: true, personaContextIsolated: true }
   await writeFile(join(root, 'report.json'), JSON.stringify(report, null, 2))
   console.log(JSON.stringify(report))
 }
