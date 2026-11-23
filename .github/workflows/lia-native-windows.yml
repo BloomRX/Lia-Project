@@ -75,6 +75,10 @@ jobs:
           corepack pnpm run typecheck
           corepack pnpm run test
           corepack pnpm exec install-electron
+      - name: Testar contratos próprios
+        run: |
+          Set-Location (Join-Path $env:LIA_STANDALONE 'lia/core')
+          node --experimental-strip-types --test "test/*.test.ts"
       - name: Compilar o Launcher
         id: build-launcher
         run: |
@@ -83,11 +87,13 @@ jobs:
           corepack pnpm install --frozen-lockfile --ignore-scripts
           corepack pnpm run build
           corepack pnpm run typecheck
-      - name: Exercitar persistência e coordenação multiprocesso
+      - name: Verificar tipos e testar o runtime
         if: ${{ !cancelled() && steps.build-launcher.outcome == 'success' }}
         run: |
+          $PSNativeCommandUseErrorActionPreference = $true
           Set-Location (Join-Path $env:LIA_STANDALONE 'lia/runtime')
-          corepack pnpm exec vitest run src/secrets/vault-process.test.ts src/product/config-write.test.ts
+          corepack pnpm run typecheck
+          corepack pnpm run test
       - name: Testar o Launcher
         if: ${{ !cancelled() && steps.build-launcher.outcome == 'success' }}
         run: |

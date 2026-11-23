@@ -9,6 +9,7 @@ export const PUBLIC_SURFACE: Record<string, { nodeOnly: boolean }> = {
   './credentials/destination': { nodeOnly: false },
   './credentials/owner-channel': { nodeOnly: true },
   './presence': { nodeOnly: false },
+  './presence/service': { nodeOnly: true },
   './providers': { nodeOnly: false },
   './providers/brain-engine-provider-mapping': { nodeOnly: false },
   './providers/catalog': { nodeOnly: false },

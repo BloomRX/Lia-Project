@@ -150,6 +150,8 @@ Atualização automática e troca de versão ainda precisam de ensaio.
 
 O workflow `lia-native-windows.yml` usa `git archive HEAD lia` para
 instalar, compilar e testar a prévia sem acesso à árvore legada.
+Ele executa a suíte completa dos contratos e do runtime, incluindo os
+testes multiprocesso do cofre, além das verificações do Launcher e do Stage.
 Ele também executa a abertura e o encerramento pelo Launcher no Windows.
 
 O serviço HTTP de transcrição e seus adaptadores agora ficam em
