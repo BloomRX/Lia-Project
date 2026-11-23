@@ -99,6 +99,7 @@ jobs:
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
           Set-Location (Join-Path $env:LIA_STANDALONE 'lia/desktop')
+          corepack pnpm run lint
           corepack pnpm run test
           node --test scripts/package-windows.test.mjs
           node scripts/package-windows.mjs --internal-test --check

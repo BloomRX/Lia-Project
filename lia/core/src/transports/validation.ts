@@ -10,6 +10,7 @@ function object(value: unknown): value is Record<string, unknown> {
 
 function identifier(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0 && value.length <= 256
+    // oxlint-disable-next-line no-control-regex -- IDs may not contain ASCII controls.
     && value.trim() === value && !/[\u0000-\u001F\u007F]/.test(value)
 }
 

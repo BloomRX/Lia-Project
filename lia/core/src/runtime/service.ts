@@ -101,7 +101,7 @@ export async function startLiaRuntimeService(deps: LiaRuntimeServiceDeps): Promi
             pid: process.pid,
             startedAt,
             uptimeMs: Date.now() - startedAt,
-            ...(deps.status?.() ?? {}),
+            ...deps.status?.(),
           }
         }
         if (request.command === 'runtime.shutdown') {

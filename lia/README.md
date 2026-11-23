@@ -38,6 +38,7 @@ corepack pnpm install --frozen-lockfile --ignore-scripts
 corepack pnpm run build
 corepack pnpm run typecheck
 corepack pnpm run test
+corepack pnpm run lint
 ```
 
 Use `Lia.bat` na raiz para preparar o Launcher e o Stage próprios juntos.
