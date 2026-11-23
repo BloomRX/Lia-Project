@@ -145,7 +145,9 @@ try {
   await clear.click()
   await page.getByText('Conversa limpa.', { exact: true }).waitFor()
   assert.equal(await page.getByRole('log', { name: 'Mensagens' }).locator('.message').count(), 0)
+  assert.equal(await clear.isDisabled(), true, 'O botão Limpar fica desabilitado quando a conversa está vazia.')
   await submit(page, 'Terceira', 3)
+  assert.equal(await clear.isEnabled(), true, 'Uma nova troca torna a limpeza disponível.')
   assert.deepEqual(requests[2].messages.slice(1), [{ role: 'user', content: 'Terceira' }])
   const draft = page.getByLabel('Mensagem', { exact: true })
   await draft.fill('Testar limite')
@@ -180,6 +182,7 @@ try {
   assert.notEqual(second, first)
   assert.equal(await page.getByRole('checkbox', { name: 'Guardar histórico' }).isChecked(), false)
   assert.equal(await page.getByRole('log', { name: 'Mensagens' }).locator('.message').count(), 0)
+  assert.equal(await clear.isDisabled(), true, 'O botão Limpar fica desabilitado quando a conversa está vazia.')
   await submit(page, 'Outro assunto', 5)
   assert.deepEqual(requests[4].messages.slice(1), [{ role: 'user', content: 'Outro assunto' }])
   page.once('dialog', dialog => dialog.accept())
@@ -297,7 +300,7 @@ try {
   await submit(page, 'Mensagem sem ferramenta', requests.length + 1)
   assert.equal(requests.at(-1).tools, undefined)
   assert.equal(requests.at(-1).messages.some(message => message.role === 'tool'), false)
-  const report = { service: 'synthetic local HTTP', optIn: true, reopened: true, resumed: true, legacyTextImported: true, cancellationPreservedHistory: true, cleared: true, rateLimitSanitized: true, refusedImageWithoutVision: true, conversationsIsolated: true, selectionRestored: true, deletionConfirmed: true, builtInPersonaInRequest: true, importedPersonaInRequest: true, importedPersonaRestored: true, personaContextIsolated: true, localKokoroMutedPlayback: withVoice ? 'cancelled, retried, played and stopped' : null, autoPlay: withVoice ? 'opt-in, persisted, played, opted out' : null, customizedTraitsPersisted: true }
+  const report = { service: 'synthetic local HTTP', optIn: true, reopened: true, resumed: true, legacyTextImported: true, cancellationPreservedHistory: true, cleared: true, clearDisabledWhenEmpty: true, rateLimitSanitized: true, refusedImageWithoutVision: true, conversationsIsolated: true, selectionRestored: true, deletionConfirmed: true, builtInPersonaInRequest: true, importedPersonaInRequest: true, importedPersonaRestored: true, personaContextIsolated: true, localKokoroMutedPlayback: withVoice ? 'cancelled, retried, played and stopped' : null, autoPlay: withVoice ? 'opt-in, persisted, played, opted out' : null, customizedTraitsPersisted: true }
   report.localClockRoundTrip = true
   report.hubCatalog = { source: withPublishedHub ? 'published Hub index' : 'synthetic index', listed: listedHubCapabilities }
   assert.ok(!JSON.stringify(requests).includes('fixture-only-private-prose'))

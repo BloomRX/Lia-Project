@@ -2,6 +2,8 @@
 
 ## 0. Estado agora
 
+- **Acessibilidade na UI própria.** A Home comunica prontidão por região de status atômica. O Launcher usa cores de ação com contraste para repouso e hover e foco visível em alto contraste. O Stage desabilita Limpar conversa quando ela está vazia ou durante um envio e mantém a confirmação para conversas com mensagens. No Electron Windows com HTTP local sintético, cancelar preservou mensagens, confirmar limpou o histórico e uma nova troca reativou o controle. Aferição de foco em alto contraste e revisão das capturas passaram. Ensaio com leitor de tela físico segue pendente.
+
 - **Imagem na prévia.** O Stage aceita um PNG ou JPEG com texto e usa a regra de visão do produto no Main. O Electron no Windows confirmou recusa sem rota e envio seguido de conversa textual com HTTPS local, credencial sintética e cofre DPAPI. Serviço externo segue pendente.
 
 - **VRM texturizado.** Dois modelos locais VRoid de referência renderizaram de corpo inteiro na janela de presença do Electron no Windows. A postura relaxada foi conferida visualmente nos dois. Os modelos não integram o pacote.

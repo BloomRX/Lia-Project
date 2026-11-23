@@ -28,6 +28,8 @@
   --lia-accent: var(--lia-magenta);
   --lia-accent-soft: var(--lia-magenta-soft);
   --lia-accent-contrast: #fff;
+  --lia-accent-action: #a62b90;
+  --lia-accent-action-hover: #8f247c;
 
   /* Status semantics (§27: state must be readable, never color-only). */
   --lia-status-ready: var(--lia-ok);

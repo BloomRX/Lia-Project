@@ -270,7 +270,7 @@ async function encerrarConversa() {
     <!-- C. Status summary: concise product-level readiness only - never
          paths or infrastructure internals (§12: no dashboard). -->
     <LiaPanel class="home-status">
-      <div class="home-status-row">
+      <div class="home-status-row" role="status" aria-atomic="true">
         <LiaStatusChip :variant="aiChip.variant">
           {{ aiChip.label }}
         </LiaStatusChip>

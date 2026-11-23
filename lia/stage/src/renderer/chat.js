@@ -126,6 +126,10 @@ function appendMessage(author, text, container = messages) {
     messages.scrollTop = messages.scrollHeight
 }
 
+function updateClearAction() {
+  historyClear.disabled = !activeConversation || historyEnabled.disabled || send.disabled || !messages.childElementCount
+}
+
 function showConversation(state) {
   activeConversation = state.activeId
   conversation.replaceChildren(...state.conversations.map(({ id, title }, index) =>
@@ -174,6 +178,7 @@ async function changeConversation(action, id) {
     controls.forEach(control => { control.disabled = false })
     message.readOnly = false
     historyImport.disabled = !historyEnabled.checked
+    updateClearAction()
   }
 }
 
@@ -294,8 +299,8 @@ async function changeHistory(action) {
   }
   finally {
     historyEnabled.disabled = false
-    historyClear.disabled = false
     historyImport.disabled = !historyEnabled.checked
+    updateClearAction()
   }
 }
 
@@ -307,7 +312,7 @@ historyEnabled.addEventListener('change', () => {
   void changeHistory(historyEnabled.checked ? 'enable' : 'disable')
 })
 historyClear.addEventListener('click', () => {
-  if (window.confirm(t('Apagar as mensagens desta conversa?')))
+  if (!historyClear.disabled && window.confirm(t('Apagar as mensagens desta conversa?')))
     void changeHistory('clear')
 })
 historyImport.addEventListener('click', () => historyImportFile.click())
@@ -343,7 +348,7 @@ historyImportFile.addEventListener('change', async () => {
   finally {
     historyImport.disabled = !historyEnabled.checked
     historyEnabled.disabled = false
-    historyClear.disabled = false
+    updateClearAction()
   }
 })
 
@@ -362,13 +367,13 @@ try {
   newConversation.disabled = false
   deleteConversation.disabled = false
   historyEnabled.disabled = false
-  historyClear.disabled = false
 }
 catch {
   historyStatus.textContent = t('Não foi possível recuperar o histórico.')
 }
 finally {
   send.disabled = false
+  updateClearAction()
 }
 
 form.addEventListener('submit', async (event) => {
@@ -378,6 +383,7 @@ form.addEventListener('submit', async (event) => {
     return
 
   send.disabled = true
+  updateClearAction()
   cancelRequested = false
   const clockAllowed = allowClock.checked
   allowClock.checked = false
@@ -417,6 +423,7 @@ form.addEventListener('submit', async (event) => {
   finally {
     message.readOnly = false
     send.disabled = false
+    updateClearAction()
     cancel.disabled = true
     allowClock.disabled = false
     imagePick.disabled = false
