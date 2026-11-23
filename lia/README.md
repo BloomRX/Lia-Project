@@ -122,7 +122,10 @@ com seu cofre, adaptador de rede e confirmação por gravação. O Stage
 próprio já recebe gravações pelo IPC e usa somente o adaptador STT
 local selecionado no produto. No Electron, áudio sintético foi
 transcrito, a requisição foi cancelada e um destino remoto foi
-recusado. A captura por microfone na interface segue pendente.
+recusado. A interface de gravação recebe permissão temporária para o
+microfone após o clique, libera a captura antes de transcrever e
+insere o texto no rascunho para revisão. O percurso foi exercitado
+no Electron com microfone sintético. O microfone físico segue pendente.
 
 `src/main/stage-host.ts` é a lógica inteira. Electron **não** é importado ali:
 a plataforma entra por `StageHostDeps` (`createWindow`, `terminate`, relógio,

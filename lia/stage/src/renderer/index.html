@@ -34,6 +34,11 @@
           <button id="cancel" type="button" disabled>Cancelar</button>
         </div>
       </form>
+      <div>
+        <button id="record" type="button">Gravar mensagem</button>
+        <button id="record-cancel" type="button" disabled>Cancelar gravação</button>
+        <p id="record-status" role="status"></p>
+      </div>
       <div id="voice" hidden>
         <button id="speak" type="button">Ouvir resposta</button>
         <audio controls hidden aria-label="Resposta da Lia"></audio>
@@ -42,5 +47,6 @@
       <p id="status" role="status"></p>
     </main>
     <script type="module" src="./chat.js"></script>
+    <script type="module" src="./recording.js"></script>
   </body>
 </html>

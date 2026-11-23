@@ -14,7 +14,7 @@ import { app, BrowserWindow, ipcMain, safeStorage } from 'electron'
 
 import { startLiaRuntimeService } from '../../../core/src/runtime/index.ts'
 import { createTransportRepository } from '../../../core/src/transports/repository.ts'
-import { stageChatCancel, stageChatSend, stageChatSpeak, stageTranscribe, stageTranscriptionCancel } from '../shared/chat-ipc.ts'
+import { stageChatCancel, stageChatSend, stageChatSpeak, stageMicrophoneArm, stageTranscribe, stageTranscriptionCancel } from '../shared/chat-ipc.ts'
 import { createStageChat } from './stage-chat.ts'
 import { createStageHost } from './stage-host.ts'
 import { createStageTranscription } from './stage-transcription.ts'
@@ -62,8 +62,10 @@ async function main(): Promise<void> {
   let active: AbortController | undefined
   let recording: AbortController | undefined
   let lastAnswer: string | undefined
+  let microphoneUntil = 0
   const cancel = () => active?.abort()
   const cancelOperations = () => {
+    microphoneUntil = 0
     cancel()
     recording?.abort()
   }
@@ -106,8 +108,16 @@ async function main(): Promise<void> {
     }
   })
   ipcMain.handle(stageTranscriptionCancel, (event) => {
-    if (authorized(event))
+    if (authorized(event)) {
+      microphoneUntil = 0
       recording?.abort()
+    }
+  })
+  ipcMain.handle(stageMicrophoneArm, (event) => {
+    if (!authorized(event))
+      return false
+    microphoneUntil = Date.now() + 15_000
+    return true
   })
   const host = createStageHost({
     createWindow: async () => {
@@ -124,6 +134,20 @@ async function main(): Promise<void> {
         },
       })
       window = stageWindow
+      const ownsMicrophoneRequest = (owner: Electron.WebContents | null, isMainFrame: boolean, requestingUrl?: string) =>
+        !stageWindow.isDestroyed() && owner === stageWindow.webContents && isMainFrame
+        && requestingUrl === owner.getURL() && Date.now() < microphoneUntil
+      const stageSession = stageWindow.webContents.session
+      stageSession.setPermissionCheckHandler((owner, permission, _origin, details) =>
+        permission === 'media' && details.mediaType === 'audio'
+        && ownsMicrophoneRequest(owner, details.isMainFrame, details.requestingUrl))
+      stageSession.setPermissionRequestHandler((owner, permission, reply, details) => {
+        const allowed = permission === 'media' && details.mediaTypes?.length === 1 && details.mediaTypes[0] === 'audio'
+          && ownsMicrophoneRequest(owner, details.isMainFrame, details.requestingUrl)
+        if (allowed)
+          microphoneUntil = 0
+        reply(allowed)
+      })
       stageWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
       stageWindow.webContents.on('will-navigate', event => event.preventDefault())
       stageWindow.webContents.on('did-start-navigation', (details) => {
