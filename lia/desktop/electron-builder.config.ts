@@ -10,7 +10,7 @@ export default {
   asar: true,
   npmRebuild: false,
   publish: null,
-  extraMetadata: { name: 'lia', main: 'out/main/index.js', liaNativeStagePreview: true },
+  extraMetadata: { name: 'lia', main: 'out/main/index.js' },
   extraResources: [
     { from: '../stage/dist/lia-windows/win-unpacked', to: 'stage', filter: ['**/*'] },
     { from: 'scripts/DISTRIBUTION-NOTICE.txt', to: 'licenses/DISTRIBUTION-NOTICE.txt' },

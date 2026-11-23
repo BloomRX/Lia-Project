@@ -2,7 +2,7 @@ import type { SupervisorQuitFlow } from './shutdown-coordinator'
 
 import process from 'node:process'
 
-import { mkdirSync, readFileSync } from 'node:fs'
+import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { createWindowsUserCipher } from '@lia/core/secrets/windows-user-cipher'
@@ -86,19 +86,16 @@ async function bootstrap(): Promise<void> {
   // Lia Core comes up with the user's own cipher before the window even
   // finishes its first paint - but WITHOUT starting the voice runtime
   // (contract item 12) and without touching AIRI (contract item 11).
-  const nativeStagePreview = app.isPackaged
-    ? JSON.parse(readFileSync(join(app.getAppPath(), 'package.json'), 'utf8')).liaNativeStagePreview === true
-    : true
   const host = createLiaHost({
     // O cofre agora pertence ao RUNTIME (D04-B2). O Launcher não abre mais o
     // pipe de credenciais: quando ele fecha, não existe pipe para cair e o
     // Stage continua resolvendo os próprios provedores.
     launcherChromiumProfile: chromiumProfile,
     // Electron's patched fs presents an app.asar archive as a directory.
-    nativeStagePreview,
+    nativeStagePreview: true,
     packagedStage: app.isPackaged
       ? () => resolvePackagedStage(process.resourcesPath, physicalStatSync)
-      : nativeStagePreview ? () => resolveNativeStage(join(import.meta.dirname, '..', '..', '..', 'stage')) : undefined,
+      : () => resolveNativeStage(join(import.meta.dirname, '..', '..', '..', 'stage')),
     cipher: createWindowsUserCipher({
       available: () => safeStorage.isEncryptionAvailable(),
       decrypt: payload => safeStorage.decryptString(payload),

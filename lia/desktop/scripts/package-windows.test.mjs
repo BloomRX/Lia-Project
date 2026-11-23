@@ -77,7 +77,7 @@ test('default packaging requires no AIRI files and preserves the internal instal
   assert.doesNotThrow(() => validateInputs(inputs, { internalTest: true }))
   const config = nativeLauncherConfiguration(inputs)
   assert.equal(config.appId, 'ai.lia.launcher.preview')
-  assert.equal(config.extraMetadata.liaNativeStagePreview, true)
+  assert.equal(config.extraMetadata.main, 'out/main/index.js')
   assert.deepEqual(config.extraResources[0], { from: inputs.stageOutput, to: 'stage', filter: ['**/*'] })
   assert.equal(config.publish, null)
 })
