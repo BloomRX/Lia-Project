@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { once } from 'node:events'
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -11,6 +11,7 @@ import { _electron } from 'playwright'
 assert.equal(process.platform, 'win32', 'Este gate usa o Electron para Windows.')
 const stage = fileURLToPath(new URL('../../stage/', import.meta.url))
 const withVoice = process.argv.includes('--voice')
+const withPublishedHub = process.argv.includes('--agent-hub')
 const root = await mkdtemp(join(process.env.RUNNER_TEMP ?? tmpdir(), 'lia-native-history-'))
 console.log(`Evidências em ${root}`)
 const requests = []
@@ -63,10 +64,20 @@ try {
       migration: { version: 1, imported: [] },
     })),
   ])
+  const hubHome = withPublishedHub ? process.env.LIA_AGENTHUB_HOME : join(root, 'hub-fixture')
+  assert.ok(hubHome, 'Defina LIA_AGENTHUB_HOME para o perfil com catálogo publicado.')
+  if (!withPublishedHub) {
+    const catalog = join(hubHome, 'Comum', 'Capacidades')
+    await mkdir(catalog, { recursive: true })
+    await writeFile(join(catalog, 'index.json'), JSON.stringify({
+      schemaVersion: 1, scope: 'active',
+      capabilities: [{ id: 'catalog-fixture', name: 'Capacidade sintética do Hub', type: 'reference', lifecycle: 'active', description: 'fixture-only-private-prose' }],
+    }))
+  }
   const launch = () => _electron.launch({
     executablePath: join(stage, 'node_modules', 'electron', 'dist', 'electron.exe'),
     args: ['--mute-audio', join(stage, 'out', 'main', 'index.js')],
-    env: { ...process.env, LIA_USER_DATA: root, LIA_STAGE_PROFILE_DIR: join(root, 'profile') },
+    env: { ...process.env, LIA_USER_DATA: root, LIA_STAGE_PROFILE_DIR: join(root, 'profile'), LIA_AGENTHUB_HOME: hubHome },
   })
   const submit = async (page, text, index) => {
     await page.getByLabel('Mensagem', { exact: true }).fill(text)
@@ -77,6 +88,15 @@ try {
   app = await launch()
   let page = await app.firstWindow()
   page.setDefaultTimeout(10_000)
+  await page.getByText('Lia Agent Hub', { exact: true }).click()
+  await page.getByRole('button', { name: 'Consultar catálogo' }).click()
+  const hubItems = page.locator('#hub-capabilities li')
+  await hubItems.first().waitFor()
+  const listedHubCapabilities = await hubItems.count()
+  if (!withPublishedHub)
+    assert.deepEqual(await hubItems.allTextContents(), ['Capacidade sintética do Hub · reference'])
+  await page.screenshot({ path: join(root, 'hub-catalog.png'), fullPage: true })
+  await page.getByText('Lia Agent Hub', { exact: true }).click()
   await openHistory(page)
   const checkbox = page.getByRole('checkbox', { name: 'Guardar histórico' })
   assert.equal(await checkbox.isChecked(), false)
@@ -279,6 +299,8 @@ try {
   assert.equal(requests.at(-1).messages.some(message => message.role === 'tool'), false)
   const report = { service: 'synthetic local HTTP', optIn: true, reopened: true, resumed: true, legacyTextImported: true, cancellationPreservedHistory: true, cleared: true, rateLimitSanitized: true, refusedImageWithoutVision: true, conversationsIsolated: true, selectionRestored: true, deletionConfirmed: true, builtInPersonaInRequest: true, importedPersonaInRequest: true, importedPersonaRestored: true, personaContextIsolated: true, localKokoroMutedPlayback: withVoice ? 'cancelled, retried, played and stopped' : null, autoPlay: withVoice ? 'opt-in, persisted, played, opted out' : null, customizedTraitsPersisted: true }
   report.localClockRoundTrip = true
+  report.hubCatalog = { source: withPublishedHub ? 'published Hub index' : 'synthetic index', listed: listedHubCapabilities }
+  assert.ok(!JSON.stringify(requests).includes('fixture-only-private-prose'))
   await writeFile(join(root, 'report.json'), JSON.stringify(report, null, 2))
   console.log(JSON.stringify(report))
 }

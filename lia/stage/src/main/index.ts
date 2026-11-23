@@ -2,6 +2,7 @@ import type { LiaRuntimeService } from '../../../core/src/runtime/index.ts'
 import type { LiaMemoryMutation } from '../../../core/src/memory/contracts.ts'
 
 import { mkdirSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -14,12 +15,14 @@ import { createKokoroVoiceEngine } from '@lia/core/voice/engines/kokoro'
 import { app, BrowserWindow, dialog, ipcMain, safeStorage } from 'electron'
 
 import { createLiaMemoryStore } from '../../../core/src/memory/store.ts'
+import { readPublishedHubCatalog } from '../../../core/src/hub/published-catalog.ts'
 import { startLiaRuntimeService } from '../../../core/src/runtime/index.ts'
 import { createTransportRepository } from '../../../core/src/transports/repository.ts'
 import { stageChatCancel, stageChatSend, stageChatSpeak, stageMemoryGet, stageMemoryMutate, stageMicrophoneArm, stagePresenceClose, stagePresenceCommand, stagePresenceOpen, stagePresenceRead, stagePresenceRendered, stageTranscribe, stageTranscriptionCancel } from '../shared/chat-ipc.ts'
 import { stageConversationChange, stageHistoryChange, stageHistoryGet, stageHistoryImport, stageLanguageGet, stagePresenceDisplays } from '../shared/chat-ipc.ts'
 import { stagePersonaChange, stagePersonaGet } from '../shared/chat-ipc.ts'
 import { stagePresenceReadPackagedAvatar } from '../shared/chat-ipc.ts'
+import { stageHubCatalogGet } from '../shared/chat-ipc.ts'
 import { stageChatStopSpeech, stageVoiceAutoPlay } from '../shared/chat-ipc.ts'
 import { stageLocale, stageText } from '../shared/locale.ts'
 import { createStageChat } from './stage-chat.ts'
@@ -111,6 +114,14 @@ async function main(): Promise<void> {
   const authorized = (event: Electron.IpcMainInvokeEvent) =>
     window && !window.isDestroyed() && event.sender === window.webContents
     && event.senderFrame === window.webContents.mainFrame
+  let readingHubCatalog: ReturnType<typeof readPublishedHubCatalog> | undefined
+  const hubHome = process.env.LIA_AGENTHUB_HOME?.trim() || undefined
+  ipcMain.handle(stageHubCatalogGet, async (event) => {
+    if (!authorized(event))
+      return { status: 'unavailable' }
+    readingHubCatalog ??= readPublishedHubCatalog(homedir(), hubHome).finally(() => { readingHubCatalog = undefined })
+    return readingHubCatalog
+  })
   let readingPackagedAvatar = false
   ipcMain.handle(stagePresenceReadPackagedAvatar, async (event, input: unknown) => {
     if (!authorized(event) || readingPackagedAvatar)

@@ -153,6 +153,7 @@ jobs:
             ${{ runner.temp }}/lia-native-history-*/conversations.png
             ${{ runner.temp }}/lia-native-history-*/personality.png
             ${{ runner.temp }}/lia-native-history-*/traits.png
+            ${{ runner.temp }}/lia-native-history-*/hub-catalog.png
             ${{ runner.temp }}/lia-native-vision-*/report.json
             ${{ runner.temp }}/lia-native-vision-*/stage.png
             ${{ runner.temp }}/lia-native-stt-*/report.json

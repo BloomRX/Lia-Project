@@ -158,6 +158,12 @@ solicitar a ferramenta.
 
 O gate do modelo real é `node --experimental-strip-types lia/desktop/scripts/check-local-clock-model.mjs <porta> <id-do-modelo>`, executado da raiz com um servidor compatível em loopback. O ensaio Windows usou llama.cpp 12424 e Qwen3.5-9B-Q4_K_M com `--host 127.0.0.1 --port 18417 --alias qwen-local-clock -ngl 0 -c 4096 -n 96 --reasoning off --jinja`. O gate verifica as duas requisições e compara o horário da resposta com o valor devolvido pela ferramenta.
 
+**Lia Agent Hub → Consultar catálogo** mostra as capacidades ativas
+publicadas pelo Hub em `%USERPROFILE%\Lia\Comum\Capacidades\index.json`.
+Se o perfil do Hub usa `LIA_AGENTHUB_HOME`, a Lia procura o mesmo caminho
+relativo nessa raiz. Essa consulta é local e somente leitura. A execução
+de capacidades será integrada separadamente.
+
 Para repetir o gate de abertura e encerramento no Windows, prepare
 os builds e instale o Electron do Stage. Em `lia/desktop`, execute
 `node --experimental-strip-types scripts/check-native-stage.mjs`.
