@@ -12,6 +12,7 @@ name: DevFlow CI
 on:
   push:
     branches:
+      - main
       - 'arena/**'
   pull_request:
     branches:

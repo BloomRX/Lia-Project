@@ -11,7 +11,7 @@ test('opt-out and an unavailable selection never reach the voice engine', async 
   const voice = createStageVoice({
     id: 'kokoro',
     capabilities: () => ({ clonesVoice: false, requiresNetwork: false, runsLocally: true, streams: false }),
-    async health() { return { ok: true } },
+    async health() { return { ok: true, state: 'ready' } },
     async start() {},
     async stop() { stopped++ },
     async synthesize() {

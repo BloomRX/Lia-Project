@@ -10,14 +10,17 @@
     "dev": "pnpm run build:core && install-electron && electron-vite dev",
     "build:core": "pnpm --dir ../runtime install --frozen-lockfile --ignore-scripts && pnpm --dir ../runtime run build",
     "start": "electron .",
-    "test": "node --experimental-strip-types --test \"test/*.test.ts\""
+    "test": "node --experimental-strip-types --test \"test/*.test.ts\"",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@lia/core": "link:../runtime"
   },
   "devDependencies": {
+    "@types/node": "26.2.0",
     "electron": "43.4.1",
     "electron-vite": "5.0.0",
+    "typescript": "6.0.3",
     "vite": "8.2.2"
   }
 }

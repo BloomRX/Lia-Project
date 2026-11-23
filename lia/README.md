@@ -134,6 +134,10 @@ Para executar o mesmo gate sobre uma instalação da prévia, passe
 limpa, o ciclo Launcher–Stage e a desinstalação já passaram em uma
 pasta isolada de teste.
 
+O workflow `lia-native-windows.yml` usa `git archive HEAD lia` para
+instalar, compilar e testar a prévia sem acesso à árvore legada.
+Ele também executa a abertura e o encerramento pelo Launcher no Windows.
+
 O serviço HTTP de transcrição e seus adaptadores agora ficam em
 `lia/core/src/transcription`. O Stage legado usa esse mesmo serviço
 com seu cofre, adaptador de rede e confirmação por gravação. O Stage
@@ -153,6 +157,7 @@ serviços próprios no Main.
 ```bash
 cd lia/stage
 corepack pnpm run build
+corepack pnpm run typecheck
 corepack pnpm run test
 ```
 

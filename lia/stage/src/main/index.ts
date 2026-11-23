@@ -142,7 +142,8 @@ async function main(): Promise<void> {
         permission === 'media' && details.mediaType === 'audio'
         && ownsMicrophoneRequest(owner, details.isMainFrame, details.requestingUrl))
       stageSession.setPermissionRequestHandler((owner, permission, reply, details) => {
-        const allowed = permission === 'media' && details.mediaTypes?.length === 1 && details.mediaTypes[0] === 'audio'
+        const allowed = permission === 'media' && 'mediaTypes' in details
+          && details.mediaTypes?.length === 1 && details.mediaTypes[0] === 'audio'
           && ownsMicrophoneRequest(owner, details.isMainFrame, details.requestingUrl)
         if (allowed)
           microphoneUntil = 0

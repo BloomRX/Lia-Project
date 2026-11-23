@@ -1,0 +1,65 @@
+name: Lia nativa no Windows
+
+on:
+  push:
+    branches: [main]
+    paths: ['lia/**', '.github/workflows/lia-native-windows.yml']
+  pull_request:
+    branches: [main]
+    paths: ['lia/**', '.github/workflows/lia-native-windows.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.22.2'
+      - name: Preparar Corepack
+        run: |
+          npm install --global corepack@0.36.0
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          corepack enable
+      - name: Extrair apenas a árvore Lia
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          $standalone = Join-Path $env:RUNNER_TEMP 'lia-native'
+          $archive = Join-Path $env:RUNNER_TEMP 'lia-native.tar'
+          New-Item -ItemType Directory -Path $standalone | Out-Null
+          git archive --format=tar --output=$archive HEAD lia
+          tar -xf $archive -C $standalone
+          if (Test-Path (Join-Path $standalone 'airi')) {
+            throw 'O gate exige uma árvore sem airi/.'
+          }
+          "LIA_STANDALONE=$standalone" >> $env:GITHUB_ENV
+      - name: Compilar e testar o Stage próprio
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          Set-Location (Join-Path $env:LIA_STANDALONE 'lia/stage')
+          corepack pnpm install --frozen-lockfile --ignore-scripts
+          corepack pnpm run build
+          corepack pnpm run typecheck
+          corepack pnpm run test
+          corepack pnpm exec install-electron
+      - name: Compilar e testar o Launcher
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          Set-Location (Join-Path $env:LIA_STANDALONE 'lia/desktop')
+          corepack pnpm install --frozen-lockfile --ignore-scripts
+          corepack pnpm run build
+          corepack pnpm run typecheck
+          corepack pnpm run test
+          node --test scripts/package-windows.test.mjs
+      - name: Abrir e encerrar o Stage pelo Launcher
+        run: |
+          Set-Location (Join-Path $env:LIA_STANDALONE 'lia/desktop')
+          node --experimental-strip-types scripts/check-native-stage.mjs --require-independent
