@@ -215,6 +215,10 @@ local sintético, confirmou recuperação, retomada e confirmação da
 limpeza. A migração do histórico legado e a seleção de múltiplas
 conversas continuam pendentes.
 
+O ensaio de histórico usa os mesmos pré-requisitos Windows do gate de
+presença. Em `lia/desktop`, execute `node scripts/check-native-history.mjs`.
+O CI inclui os dois ensaios e publica os relatórios e capturas disponíveis.
+
 Ainda faltam animações, presença em múltiplos monitores
 e paridade com os provedores do Stage legado.
 

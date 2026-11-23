@@ -89,12 +89,19 @@ jobs:
         run: |
           Set-Location (Join-Path $env:LIA_STANDALONE 'lia/desktop')
           node --experimental-strip-types scripts/check-native-presence.mjs
-      - name: Preservar evidências de presença
+      - name: Validar retomada do histórico
+        if: ${{ !cancelled() && steps.build-launcher.outcome == 'success' }}
+        run: |
+          Set-Location (Join-Path $env:LIA_STANDALONE 'lia/desktop')
+          node scripts/check-native-history.mjs
+      - name: Preservar evidências do Stage
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: lia-native-presence
+          name: lia-native-stage
           path: |
             ${{ runner.temp }}/lia-native-presence-*/report.json
             ${{ runner.temp }}/lia-native-presence-*/overlay.png
+            ${{ runner.temp }}/lia-native-history-*/report.json
+            ${{ runner.temp }}/lia-native-history-*/history.png
           if-no-files-found: ignore
