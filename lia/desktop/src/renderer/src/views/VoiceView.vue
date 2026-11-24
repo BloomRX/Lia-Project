@@ -36,22 +36,35 @@ const runtimeLocation = ref<any>(undefined)
 const speech = ref({ baseUrl: '', modelId: '', voiceId: '', apiKey: '', hasKey: false })
 const speechBusy = ref(false)
 const speechFeedback = ref('')
-const transcription = ref({ baseUrl: '', modelId: '', apiKey: '', hasKey: false })
+const transcription = ref({ baseUrl: '', modelId: '', apiKey: '', hasKey: false, local: false })
 const transcriptionBusy = ref(false)
 const transcriptionFeedback = ref('')
 
-async function loadTranscription() {
-  const connection = await props.api?.transcriptionConnection?.()
+async function loadTranscription(local?: boolean) {
+  const connection = await props.api?.transcriptionConnection?.(local)
   if (connection)
     transcription.value = { ...connection, apiKey: '' }
+}
+
+async function changeTranscriptionMode() {
+  transcriptionBusy.value = true
+  transcriptionFeedback.value = ''
+  const { local } = transcription.value
+  transcription.value = { local, baseUrl: '', modelId: '', apiKey: '', hasKey: false }
+  try {
+    await loadTranscription(local)
+  }
+  finally {
+    transcriptionBusy.value = false
+  }
 }
 
 async function saveTranscription() {
   transcriptionBusy.value = true
   transcriptionFeedback.value = ''
   try {
-    const { baseUrl, modelId, apiKey } = transcription.value
-    const saved = await props.api?.transcriptionConnectionSave?.({ baseUrl, modelId, ...(apiKey ? { apiKey } : {}) })
+    const { baseUrl, modelId, apiKey, local } = transcription.value
+    const saved = await props.api?.transcriptionConnectionSave?.({ baseUrl, modelId, local, ...(!local && apiKey ? { apiKey } : {}) })
     if (!saved)
       throw new Error('transcription-save')
     await loadTranscription()
@@ -351,9 +364,16 @@ async function importVoice() {
       <summary>Reconhecimento de fala compatível com OpenAI</summary>
       <form @submit.prevent="saveTranscription">
         <fieldset :disabled="transcriptionBusy">
-          <label>Endereço da API de transcrição <input v-model.trim="transcription.baseUrl" required type="url" maxlength="4096" placeholder="https://exemplo.com/v1"></label>
+          <label>
+            Onde transcrever
+            <select v-model="transcription.local" @change="changeTranscriptionMode">
+              <option :value="false">Serviço remoto (HTTPS)</option>
+              <option :value="true">Servidor neste computador</option>
+            </select>
+          </label>
+          <label>Endereço da API de transcrição <input v-model.trim="transcription.baseUrl" required type="url" maxlength="4096" :placeholder="transcription.local ? 'http://127.0.0.1:8080/v1' : 'https://exemplo.com/v1'"></label>
           <label>Modelo de transcrição <input v-model.trim="transcription.modelId" required maxlength="256"></label>
-          <label>Chave de transcrição <input v-model.trim="transcription.apiKey" :required="!transcription.hasKey" type="password" maxlength="2048" autocomplete="new-password"></label>
+          <label v-if="!transcription.local">Chave de transcrição <input v-model.trim="transcription.apiKey" :required="!transcription.hasKey" type="password" maxlength="2048" autocomplete="new-password"></label>
           <button type="submit">Salvar reconhecimento</button>
         </fieldset>
       </form>

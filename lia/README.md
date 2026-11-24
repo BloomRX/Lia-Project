@@ -174,6 +174,11 @@ essa rota para o Stage. A escolha de voz de saída permanece independente.
 Ao transcrever, a Lia pede autorização antes de enviar cada gravação.
 Se mudar a origem do serviço, informe a chave novamente.
 
+Para usar um servidor local compatível com `/audio/transcriptions`, escolha
+**Servidor neste computador** e informe o endereço local e o modelo. A Lia
+aceita `127.0.0.1` ou `[::1]` e envia sem chave. O servidor de transcrição
+precisa estar em execução e aceitar gravações WebM.
+
 Para repetir o gate de abertura e encerramento no Windows, prepare
 os builds e instale o Electron do Stage. Em `lia/desktop`, execute
 `node --experimental-strip-types scripts/check-native-stage.mjs`.

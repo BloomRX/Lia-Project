@@ -130,6 +130,7 @@ jobs:
           Set-Location (Join-Path $env:LIA_STANDALONE 'lia/desktop')
           node --experimental-strip-types scripts/check-native-vision.mjs $cert $key
           node --experimental-strip-types scripts/check-native-stt-consent.mjs $cert $key
+          node --experimental-strip-types scripts/check-native-stt-consent.mjs --local
           node --experimental-strip-types scripts/check-native-speech.mjs $cert $key
       - name: Gerar e testar o instalador privado
         if: ${{ !cancelled() && steps.build-launcher.outcome == 'success' }}

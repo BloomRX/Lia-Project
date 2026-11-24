@@ -227,7 +227,7 @@ export interface LiaHost {
   aiConnection: ReturnType<typeof createAiConnectionService>
   speechConnection: () => Promise<{ baseUrl: string, modelId: string, voiceId: string, hasKey: boolean }>
   saveSpeechConnection: (input: unknown) => Promise<boolean>
-  transcriptionConnection: () => Promise<{ baseUrl: string, modelId: string, hasKey: boolean }>
+  transcriptionConnection: (local?: boolean) => Promise<{ baseUrl: string, modelId: string, hasKey: boolean, local: boolean }>
   saveTranscriptionConnection: (input: unknown) => Promise<boolean>
 
   /** The resolved bridge contract for THIS launch (built fresh from disk). */
@@ -1145,31 +1145,37 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
       await change?.rollback()
       return false
     }),
-    async transcriptionConnection() {
-      const providerId = 'openai-compatible-audio-transcription'
+    async transcriptionConnection(local) {
       const target = (await readSnapshot()).snapshot?.voice?.stt?.preferred
+      const localMode = local ?? target?.providerId === 'app-local-audio-transcription'
+      const providerId = localMode ? 'app-local-audio-transcription' : 'openai-compatible-audio-transcription'
       const record = (await transportRepository.read()).records.find(item => item.providerId === providerId && item.protocol === 'audio-transcription')
       const url = record && URL.parse(record.baseUrl)
       return {
         baseUrl: record?.baseUrl ?? '',
         modelId: target?.providerId === providerId ? target.modelId ?? '' : record?.modelIds[0] ?? '',
-        hasKey: Boolean(url && credentialForDestination(vault.getSecret(providerId, 'apiKey'), providerId, url, 'transcription')),
+        local: localMode,
+        hasKey: Boolean(!localMode && url && credentialForDestination(vault.getSecret(providerId, 'apiKey'), providerId, url, 'transcription')),
       }
     },
     saveTranscriptionConnection: (input: unknown) => withStageConfigurationLock(async () => {
       if (stage.holdsOwnedStage() || !input || typeof input !== 'object'
-        || Object.keys(input).some(key => !['baseUrl', 'modelId', 'apiKey'].includes(key)))
+        || Object.keys(input).some(key => !['baseUrl', 'modelId', 'apiKey', 'local'].includes(key)))
         return false
-      const { baseUrl, modelId, apiKey } = input as Record<string, unknown>
-      if (typeof baseUrl !== 'string' || baseUrl.length > 4096 || typeof modelId !== 'string'
+      const { baseUrl, modelId, apiKey, local = false } = input as Record<string, unknown>
+      if (typeof local !== 'boolean' || (local && apiKey !== undefined) || typeof baseUrl !== 'string' || baseUrl.length > 4096 || typeof modelId !== 'string'
         || modelId.length > 256 || !/^[!-~]+$/.test(modelId.trim())
         || (apiKey !== undefined && (typeof apiKey !== 'string' || !/^[!-~]{1,2048}$/.test(apiKey))))
         return false
       const url = URL.parse(baseUrl)
-      if (!url || url.protocol !== 'https:' || isTranscriptionLoopback(url)
-        || url.username || url.password || url.search || url.hash)
+      if (!url || url.username || url.password || url.search || url.hash)
         return false
-      const providerId = 'openai-compatible-audio-transcription'
+      const allowed = local
+        ? ['http:', 'https:'].includes(url.protocol) && ['127.0.0.1', '[::1]'].includes(url.hostname)
+        : url.protocol === 'https:' && !isTranscriptionLoopback(url)
+      if (!allowed)
+        return false
+      const providerId = local ? 'app-local-audio-transcription' : 'openai-compatible-audio-transcription'
       const snapshot = await transportRepository.read()
       const state = await readSnapshot()
       if (state.status !== 'ok' && state.status !== 'missing')
@@ -1178,11 +1184,11 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
       if (matches.length > 1 || (matches[0] && matches[0].protocol !== 'audio-transcription'))
         return false
       const prior = matches[0]
-      const revision = vault.secretRevision?.(providerId, 'apiKey')
+      const revision = apiKey ? vault.secretRevision?.(providerId, 'apiKey') : undefined
       const change = apiKey && revision !== undefined
         ? await vault.changeSecret?.(providerId, 'apiKey', bindCredential(providerId, url, apiKey, 'transcription'), { expectedRevision: revision })
         : undefined
-      if (apiKey ? !change : !credentialForDestination(vault.getSecret(providerId, 'apiKey'), providerId, url, 'transcription'))
+      if (!local && (apiKey ? !change : !credentialForDestination(vault.getSecret(providerId, 'apiKey'), providerId, url, 'transcription')))
         return false
       const id = prior?.id ?? providerId
       let savedRevision: number | undefined

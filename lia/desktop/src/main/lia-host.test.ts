@@ -96,12 +96,18 @@ describe('h. Existing voice profile list is read', () => {
     const originalSpeech = (await host.productSnapshot())?.voice?.tts?.preferred
     expect(await host.saveTranscriptionConnection(draft)).toBe(false)
     expect(await host.saveTranscriptionConnection({ ...draft, apiKey: 'synthetic-stt-key' })).toBe(true)
-    expect(await host.transcriptionConnection()).toEqual({ ...draft, hasKey: true })
+    expect(await host.transcriptionConnection()).toEqual({ ...draft, hasKey: true, local: false })
     expect(await host.saveTranscriptionConnection({ ...draft, baseUrl: 'https://other.example.invalid/v1' })).toBe(false)
     expect(await host.saveTranscriptionConnection({ ...draft, baseUrl: 'http://stt.example.invalid/v1', apiKey: 'synthetic-stt-key' })).toBe(false)
     expect((await host.productSnapshot())?.voice?.stt?.preferred).toEqual({ providerId: 'openai-compatible-audio-transcription', modelId: draft.modelId })
     expect((await host.productSnapshot())?.voice?.tts?.preferred).toEqual(originalSpeech)
     expect(await readFile(host.paths.productConfigFile, 'utf8')).not.toContain('synthetic-stt-key')
+    const local = { baseUrl: 'http://127.0.0.1:8080/v1', modelId: 'local-fixture', local: true }
+    expect(await host.saveTranscriptionConnection({ ...local, baseUrl: 'http://192.168.1.20:8080/v1' })).toBe(false)
+    expect(await host.saveTranscriptionConnection({ ...local, apiKey: 'unnecessary-key' })).toBe(false)
+    expect(await host.saveTranscriptionConnection(local)).toBe(true)
+    expect(await host.transcriptionConnection()).toEqual({ ...local, hasKey: false })
+    expect(await host.transcriptionConnection(false)).toEqual({ ...draft, hasKey: true, local: false })
   })
 
   it('the canonical library registry lists its profiles verbatim', async () => {

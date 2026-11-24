@@ -2,7 +2,8 @@ import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { once } from 'node:events'
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
-import { createServer } from 'node:https'
+import { createServer as createHttpServer } from 'node:http'
+import { createServer as createHttpsServer } from 'node:https'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -11,9 +12,10 @@ import { _electron } from 'playwright'
 
 assert.equal(process.platform, 'win32')
 const nativeDialog = process.argv[4] === '--native-dialog'
-assert.equal(process.argv.length, nativeDialog ? 5 : 4, 'Informe o certificado e a chave TLS sintéticos do ensaio.')
-const cert = resolve(process.argv[2])
-const key = resolve(process.argv[3])
+const local = process.argv.length === 3 && process.argv[2] === '--local'
+assert.equal(process.argv.length, local ? 3 : nativeDialog ? 5 : 4, 'Use --local ou informe o certificado e a chave TLS sintéticos do ensaio.')
+const cert = local ? undefined : resolve(process.argv[2])
+const key = local ? undefined : resolve(process.argv[3])
 const root = await mkdtemp(join(process.env.RUNNER_TEMP ?? tmpdir(), 'lia-native-stt-'))
 const stage = fileURLToPath(new URL('../../stage/', import.meta.url))
 const token = `fixture-${randomUUID()}`
@@ -34,42 +36,53 @@ audio.write('data', 36)
 audio.writeUInt32LE(2, 40)
 
 const requests = []
-const server = createServer({ cert: await readFile(cert), key: await readFile(key) }, async (request, response) => {
+const server = local ? createHttpServer() : createHttpsServer({ cert: await readFile(cert), key: await readFile(key) })
+server.on('request', async (request, response) => {
   const chunks = []
   for await (const chunk of request)
     chunks.push(chunk)
-  const authorized = request.headers.authorization === `Bearer ${token}`
+  const authorized = local ? request.headers.authorization === undefined : request.headers.authorization === `Bearer ${token}`
   const data = Buffer.concat(chunks)
   requests.push({ authorized, audioMatches: data.includes(audio), webm: data.includes(Buffer.from([0x1A, 0x45, 0xDF, 0xA3])), path: request.url })
   response.writeHead(authorized ? 200 : 401, { 'content-type': 'application/json' })
   response.end(JSON.stringify({ text: transcript, ignored: token }))
 })
-server.listen(0, '127.0.0.2')
+server.listen(0, local ? '127.0.0.1' : '127.0.0.2')
 
 let app
 try {
   await once(server, 'listening')
   // O endereço alternativo mantém o tráfego no loopback do Windows
   // e exercita o consentimento dos adaptadores remotos do produto.
-  const destination = new URL(`https://127.0.0.2:${server.address().port}/v1`)
+  const destination = new URL(`${local ? 'http://127.0.0.1' : 'https://127.0.0.2'}:${server.address().port}/v1`)
   console.log(`Evidências em ${root}`)
   const launcherProfile = join(root, 'appdata')
   await mkdir(launcherProfile)
   const executablePath = join(stage, 'node_modules', 'electron', 'dist', 'electron.exe')
-  const env = { ...process.env, APPDATA: launcherProfile, NODE_EXTRA_CA_CERTS: cert, NODE_TLS_REJECT_UNAUTHORIZED: '1', LIA_USER_DATA: root, LIA_STAGE_PROFILE_DIR: join(root, 'profile') }
+  const env = { ...process.env, APPDATA: launcherProfile, ...(cert ? { NODE_EXTRA_CA_CERTS: cert } : {}), NODE_TLS_REJECT_UNAUTHORIZED: '1', LIA_USER_DATA: root, LIA_STAGE_PROFILE_DIR: join(root, 'profile') }
   app = await _electron.launch({ executablePath, args: [fileURLToPath(new URL('../out/main/index.js', import.meta.url))], env })
   const launcher = await app.firstWindow()
   launcher.setDefaultTimeout(10_000)
   await launcher.getByRole('button', { name: 'Voz', exact: true }).click()
   await launcher.getByText('Reconhecimento de fala compatível com OpenAI', { exact: true }).click()
+  if (local) {
+    await launcher.getByLabel('Onde transcrever').selectOption({ label: 'Servidor neste computador' })
+    await launcher.getByLabel('Chave de transcrição').waitFor({ state: 'hidden' })
+  }
   await launcher.getByLabel('Endereço da API de transcrição').fill(destination.href)
   await launcher.getByLabel('Modelo de transcrição').fill(modelId)
-  await launcher.getByLabel('Chave de transcrição').fill(token)
+  if (!local)
+    await launcher.getByLabel('Chave de transcrição').fill(token)
   await launcher.getByRole('button', { name: 'Salvar reconhecimento' }).click()
   const saved = launcher.getByText('Reconhecimento de fala selecionado.', { exact: true })
   await saved.waitFor()
-  assert.equal(await launcher.getByLabel('Chave de transcrição').inputValue(), '')
-  assert.ok(!(await readFile(join(root, 'lia-secrets.json'), 'utf8')).includes(token))
+  if (local) {
+    await assert.rejects(readFile(join(root, 'lia-secrets.json')), { code: 'ENOENT' })
+  }
+  else {
+    assert.equal(await launcher.getByLabel('Chave de transcrição').inputValue(), '')
+    assert.ok(!(await readFile(join(root, 'lia-secrets.json'), 'utf8')).includes(token))
+  }
   await saved.scrollIntoViewIfNeeded()
   await launcher.screenshot({ path: join(root, 'transcription-settings.png'), fullPage: true })
   await app.close()
@@ -82,7 +95,12 @@ try {
   const page = await app.firstWindow()
   page.setDefaultTimeout(10000)
   const send = async (response) => {
-    if (nativeDialog) {
+    if (local) {
+      await app.evaluate(({ dialog }) => {
+        dialog.showMessageBox = async () => { throw new Error('Unexpected remote consent for local transcription') }
+      })
+    }
+    else if (nativeDialog) {
       console.log(response === 0 ? 'Escolha Cancelar no diálogo do Stage.' : 'Escolha Enviar gravação no diálogo do Stage.')
     }
     else {
@@ -96,8 +114,10 @@ try {
     }
     return page.evaluate(bytes => window.liaStageChat.transcribe(Uint8Array.from(bytes), 'audio/wav'), [...audio])
   }
-  assert.deepEqual(await send(0), { ok: false, code: 'cancelled' })
-  assert.deepEqual(requests, [])
+  if (!local) {
+    assert.deepEqual(await send(0), { ok: false, code: 'cancelled' })
+    assert.deepEqual(requests, [])
+  }
   assert.deepEqual(await send(1), { ok: true, text: transcript })
   assert.deepEqual(requests, [{ authorized: true, audioMatches: true, webm: false, path: '/v1/audio/transcriptions' }])
   let chromiumRecording = null
@@ -151,7 +171,7 @@ try {
     assert.equal(requests.length, 2)
     chromiumRecording = { deviceInventory: 'synthetic additional input', selectedDeviceConstraint: true, capturedWebm: true, audioTracksReleased: true, cancellationPreventedUpload: true, draftInserted: true, missingMicrophoneError: 'injected NotFoundError' }
   }
-  const report = { configuredByLauncher: true, dialogResponse: nativeDialog ? 'interactive' : 'injected in test', denialPreventedUpload: true, approvalAllowedUpload: true, service: 'synthetic HTTPS loopback', syntheticAudio: true, chromiumRecording }
+  const report = { configuredByLauncher: true, dialogResponse: local ? null : nativeDialog ? 'interactive' : 'injected in test', denialPreventedUpload: local ? null : true, approvalAllowedUpload: local ? null : true, service: local ? 'synthetic HTTP loopback without credentials' : 'synthetic HTTPS loopback', syntheticAudio: true, chromiumRecording }
   await writeFile(join(root, 'report.json'), JSON.stringify(report, null, 2))
   console.log(JSON.stringify(report))
 }
