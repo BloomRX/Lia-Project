@@ -11,6 +11,7 @@ const api = {
   aiProviders: () => ipcRenderer.invoke('lia:ai:providers'),
   aiConnectionGet: (providerId?: string) => ipcRenderer.invoke('lia:ai:connection:get', providerId),
   aiConnectionSave: (input: unknown) => ipcRenderer.invoke('lia:ai:connection:save', input),
+  aiConnectionRemove: (providerId: string, revision: number) => ipcRenderer.invoke('lia:ai:connection:remove', providerId, revision),
   speechConnection: () => ipcRenderer.invoke('lia:voice:speech-connection'),
   speechConnectionSave: (input: unknown) => ipcRenderer.invoke('lia:voice:speech-save', input),
   transcriptionConnection: (local?: boolean) => ipcRenderer.invoke('lia:voice:transcription-connection', local),

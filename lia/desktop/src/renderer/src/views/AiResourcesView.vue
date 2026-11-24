@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 
 import LiaButton from '../components/lia/LiaButton.vue'
 import LiaPanel from '../components/lia/LiaPanel.vue'
@@ -163,6 +163,7 @@ const form = reactive({ baseUrl: '', apiKey: '', modelId: '' })
 const discovered = ref<{ id: string, label: string }[]>([])
 const manual = ref(false)
 const confirmHost = ref(false)
+const addressInput = ref<HTMLInputElement>()
 let active = true
 
 const activeProvider = computed(() => providers.value.find(provider => provider.definitionId === activeId.value))
@@ -343,6 +344,41 @@ async function save() {
   }
 }
 
+async function removeConnection() {
+  if (!connectionId.value || busy.value)
+    return
+  busy.value = 'remove'
+  resetFeedback()
+  let removed = false
+  try {
+    const result = await props.api.aiConnectionRemove(activeId.value, revision.value)
+    if (!active)
+      return
+    if (result?.code === 'cancelled')
+      return
+    if (!result?.ok) {
+      showError(result?.code)
+      return
+    }
+    applyState(result.state)
+    removed = true
+    feedback.value = english.value ? 'Connection removed.' : 'Conexão removida.'
+  }
+  catch {
+    if (active)
+      showError('storage')
+  }
+  finally {
+    if (active) {
+      busy.value = ''
+      if (removed) {
+        await nextTick()
+        addressInput.value?.focus({ preventScroll: true })
+      }
+    }
+  }
+}
+
 async function discover() {
   if (!manageable.value || busy.value)
     return
@@ -476,7 +512,7 @@ onBeforeUnmount(() => {
           </p>
 
           <label for="ai-address">{{ text.address }}</label>
-          <input id="ai-address" v-model="form.baseUrl" type="url" required autocomplete="url" spellcheck="false" :disabled="!!busy" aria-describedby="ai-address-help" @input="edited">
+          <input id="ai-address" ref="addressInput" v-model="form.baseUrl" type="url" required autocomplete="url" spellcheck="false" :disabled="!!busy" aria-describedby="ai-address-help" @input="edited">
           <p id="ai-address-help" class="hint">
             {{ localOnly ? text.localAddressHelp : text.addressHelp }}
           </p>
@@ -503,8 +539,12 @@ onBeforeUnmount(() => {
             <LiaButton type="button" :disabled="!!busy || !savedBaseUrl" @click="discover">
               {{ busy === 'models' ? text.finding : text.find }}
             </LiaButton>
+            <LiaButton v-if="connectionId" type="button" :disabled="!!busy || stageRunning" @click="removeConnection">
+              {{ english ? 'Remove connection' : 'Remover conexão' }}
+            </LiaButton>
           </div>
 
+          <p v-if="feedback" :role="failed ? 'alert' : 'status'" class="feedback">{{ feedback }}</p>
           <label for="ai-model">{{ text.model }}</label>
           <label class="key-option">
             <input v-model="manual" type="checkbox" :disabled="!!busy" @change="edited">
@@ -547,9 +587,6 @@ onBeforeUnmount(() => {
             {{ busy === 'test' ? (localOnly ? text.localTesting : text.testing) : text.test }}
           </LiaButton>
         </form>
-        <p v-if="feedback" :role="failed ? 'alert' : 'status'" class="feedback">
-          {{ feedback }}
-        </p>
         <LiaButton v-if="stageRunning" type="button" :disabled="!!busy" @click="stopConversation">
           {{ busy === 'stop' ? text.stopping : text.stop }}
         </LiaButton>

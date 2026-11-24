@@ -181,6 +181,25 @@ async function bootstrap(): Promise<void> {
 
   const ownsWindow = (event: Electron.IpcMainInvokeEvent) => mainWindow && !mainWindow.isDestroyed()
     && event.sender === mainWindow.webContents && event.senderFrame === mainWindow.webContents.mainFrame
+  ipcMain.handle('lia:ai:connection:remove', async (event, providerId: unknown, revision: unknown) => {
+    if (!ownsWindow(event) || !mainWindow || typeof providerId !== 'string' || providerId.length > 256
+      || typeof revision !== 'number' || !Number.isSafeInteger(revision) || revision < 0)
+      return { ok: false, code: 'invalid' }
+    const english = (await host.productSnapshot())?.preferences?.language?.toLowerCase().startsWith('en')
+    if (!ownsWindow(event) || !mainWindow)
+      return { ok: false, code: 'cancelled' }
+    const { response } = await dialog.showMessageBox(mainWindow, {
+      type: 'warning',
+      message: english ? 'Remove this AI connection?' : 'Remover esta conexão de IA?',
+      detail: english ? 'The address, model, and key for this connection will be removed from this profile.' : 'O endereço, o modelo e a chave desta conexão serão removidos deste perfil.',
+      buttons: english ? ['Cancel', 'Remove'] : ['Cancelar', 'Remover'],
+      defaultId: 0,
+      cancelId: 0,
+    })
+    if (response !== 1 || !ownsWindow(event))
+      return { ok: false, code: 'cancelled' }
+    return host.aiConnection.remove(providerId, revision)
+  })
   ipcMain.handle('lia:voice:speech-connection', event => ownsWindow(event) ? host.speechConnection().catch(() => undefined) : undefined)
   ipcMain.handle('lia:voice:speech-save', (event, input: unknown) => ownsWindow(event) ? host.saveSpeechConnection(input).catch(() => false) : false)
   ipcMain.handle('lia:voice:transcription-connection', (event, local: unknown) => ownsWindow(event) && (local === undefined || typeof local === 'boolean') ? host.transcriptionConnection(local).catch(() => undefined) : undefined)

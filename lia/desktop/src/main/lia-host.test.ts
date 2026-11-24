@@ -74,6 +74,45 @@ describe('g. Existing Lia product config is read', () => {
   })
 })
 
+describe('AI connection removal', () => {
+  it('removes the bound key while preserving the other selected connection', async () => {
+    const home = await makeLiaHome()
+    const host = createLiaHost({ cipher: identityCipher, env: fixtureEnv(home) })
+    const start = await host.aiConnection.read('groq')
+    expect(await host.aiConnection.save({
+      providerId: 'groq', baseUrl: 'https://api.groq.com/openai/v1', modelId: 'fixture',
+      apiKey: 'synthetic-removal-key', revision: start.revision,
+    })).toMatchObject({ ok: true })
+    const before = await host.aiConnection.read('local-chat')
+    expect(await host.aiConnection.save({
+      providerId: 'local-chat', baseUrl: 'http://127.0.0.1:1234/v1', modelId: 'local',
+      revision: before.revision,
+    })).toMatchObject({ ok: true })
+    const current = await host.aiConnection.read('groq')
+    expect(host.vault.hasSecret('groq', 'apiKey')).toBe(true)
+    expect(await host.aiConnection.remove('groq', current.revision)).toMatchObject({ ok: true, state: { hasKey: false } })
+    expect(host.vault.hasSecret('groq', 'apiKey')).toBe(false)
+    expect((await host.productSnapshot())?.provider?.chat?.preferred).toMatchObject({ providerId: 'local-chat', modelId: 'local' })
+  })
+
+  it('clears only the selected connection and rejects a stale confirmation', async () => {
+    const home = await makeLiaHome()
+    const host = createLiaHost({ cipher: identityCipher, env: fixtureEnv(home) })
+    const before = await host.aiConnection.read('local-chat')
+    const saved = await host.aiConnection.save({
+      providerId: 'local-chat', baseUrl: 'http://127.0.0.1:1234/v1', modelId: 'fixture',
+      revision: before.revision,
+    })
+    expect(saved.ok).toBe(true)
+    if (!saved.ok)
+      return
+    expect(await host.aiConnection.remove('local-chat', before.revision)).toEqual({ ok: false, code: 'conflict' })
+    const removed = await host.aiConnection.remove('local-chat', saved.state.revision)
+    expect(removed).toMatchObject({ ok: true, state: { connectionId: '', selected: false, hasKey: false } })
+    expect((await host.productSnapshot())?.provider?.chat?.preferred).toBeUndefined()
+  })
+})
+
 describe('h. Existing voice profile list is read', () => {
   it('saves speech transport and only returns non-secret configuration', async () => {
     const home = await makeLiaHome()

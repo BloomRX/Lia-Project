@@ -1063,6 +1063,13 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
           throw new Error('Configuration could not be restored')
       }
     },
+    clearSelection: async (providerId) => {
+      if ((await readSnapshot()).snapshot?.provider?.chat?.preferred?.providerId !== providerId)
+        return
+      const result = await updateLiaProductConfig(paths.productConfigFile, { provider: { chat: { preferred: null } } })
+      if (result.status !== 'ok')
+        throw new Error('Configuration could not be cleared')
+    },
     saveSelection: async (preferred) => {
       const result = await updateLiaProductConfig(paths.productConfigFile, { provider: { chat: { preferred, strategy: 'manual', onboarded: true } } })
       if (result.status !== 'ok')

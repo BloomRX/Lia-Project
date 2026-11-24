@@ -118,6 +118,7 @@ export interface AiConnectionServiceDeps {
   vault: LiaSecretVault
   readSelection: () => Promise<AiConnectionSelection | undefined>
   saveSelection: (target: AiConnectionSelection) => Promise<void>
+  clearSelection?: (providerId: string) => Promise<void>
   /** Exact rollback, including an originally absent selection. Main-only. */
   backupSelection?: () => Promise<() => Promise<void>>
   /** The host shares this critical section with every managed Stage start. */
@@ -504,6 +505,45 @@ export function createAiConnectionService(deps: AiConnectionServiceDeps) {
     return result
   }
 
+  function remove(providerId: unknown, revision: unknown): Promise<AiConnectionResult> {
+    const definition = definitionForOperation(providerId)
+    if (!definition?.stageProviderId || !Number.isSafeInteger(revision) || typeof revision !== 'number' || revision < 0)
+      return Promise.resolve({ ok: false, code: 'invalid' })
+    const previousQueue = queue
+    const removeAfterQueue = () => previousQueue.then(async (): Promise<AiConnectionResult> => {
+      try {
+        const snapshot = await deps.repository.read()
+        if (snapshot.revision !== revision)
+          return { ok: false, code: 'conflict' }
+        const record = recordFrom(snapshot, definition)
+        if (!record || !deps.clearSelection)
+          return { ok: false, code: 'invalid' }
+        const { scope, key } = record.credentialRef
+        if (snapshot.records.some(row => row.id !== record.id && row.credentialRef.scope === scope && row.credentialRef.key === key))
+          return { ok: false, code: 'conflict' }
+        const keyRevision = definition.localOnly ? undefined : deps.vault.secretRevision?.(scope, key)
+        if (!definition.localOnly && keyRevision === undefined)
+          return { ok: false, code: 'storage' }
+        const disabled = await deps.repository.mutate({ kind: 'put', expectedRevision: revision, record: { ...record, enabled: false } })
+        if (!disabled.ok)
+          return disabled
+        if (keyRevision !== undefined && !await deps.vault.changeSecret?.(scope, key, undefined, { expectedRevision: keyRevision }))
+          return { ok: false, code: 'storage' }
+        await deps.clearSelection(record.providerId)
+        const removed = await deps.repository.mutate({ kind: 'remove', expectedRevision: disabled.snapshot.revision, id: record.id })
+        if (!removed.ok)
+          return removed
+        return { ok: true, state: await readInternal(definition.definitionId, false) }
+      }
+      catch {
+        return { ok: false, code: 'storage' }
+      }
+    })
+    const result = deps.saveExclusively ? deps.saveExclusively(removeAfterQueue) : removeAfterQueue()
+    queue = result.catch(() => {})
+    return result
+  }
+
   function definitionForOperation(providerId: unknown): LiaAiProviderDefinition | undefined {
     if (!validId(providerId))
       return undefined
@@ -645,5 +685,5 @@ export function createAiConnectionService(deps: AiConnectionServiceDeps) {
       return {}
     })
   }
-  return { catalog: listDefinitions, discover, getStartReadiness, isSafeToStart, probe, read, save }
+  return { catalog: listDefinitions, discover, getStartReadiness, isSafeToStart, probe, read, remove, save }
 }
