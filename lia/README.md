@@ -179,6 +179,28 @@ Para usar um servidor local compatível com `/audio/transcriptions`, escolha
 aceita `127.0.0.1` ou `[::1]` e envia sem chave. O servidor de transcrição
 precisa estar em execução e aceitar gravações WebM.
 
+O ensaio Windows de inferência usa o [whisper.cpp 1.8.4](https://github.com/ggml-org/whisper.cpp/releases/tag/v1.8.4),
+o [modelo multilíngue ggml-tiny](https://huggingface.co/ggerganov/whisper.cpp/blob/main/ggml-tiny.bin),
+a [amostra jfk.wav](https://github.com/ggml-org/whisper.cpp/tree/v1.8.4/samples)
+e FFmpeg disponível no PATH para converter WebM. SHA-256 do ZIP x64
+`74f973345cb52ef5ba3ec9e7e7af8e48cc8c71722d1528603b80588a11f82e3e`.
+SHA-256 do modelo
+`be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21`.
+SHA-256 da amostra
+`59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e`.
+
+Com Launcher e Stage compilados, execute o comando abaixo a partir da raiz.
+
+```powershell
+node lia/desktop/scripts/check-native-whisper-cpu.mjs <whisper-server.exe> <ggml-tiny.bin> <jfk.wav> 18573
+```
+
+O script inicia o servidor em loopback, configura a rota pelo Launcher,
+grava a amostra em inglês pelo microfone virtual do Chromium no Stage e
+confere o texto no rascunho. O log e o relatório ficam na pasta temporária
+impressa pelo script. O motor, o modelo e a amostra ficam fora do pacote.
+
+
 Para repetir o gate de abertura e encerramento no Windows, prepare
 os builds e instale o Electron do Stage. Em `lia/desktop`, execute
 `node --experimental-strip-types scripts/check-native-stage.mjs`.
