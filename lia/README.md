@@ -200,6 +200,15 @@ grava a amostra em inglês pelo microfone virtual do Chromium no Stage e
 confere o texto no rascunho. O log e o relatório ficam na pasta temporária
 impressa pelo script. O motor, o modelo e a amostra ficam fora do pacote.
 
+Para repetir a amostra pt-BR, gere `smoke-c.wav` pelo ensaio
+`node tools/kokoro-smoke.mjs <diretório-de-evidências>` com Kokoro instalado.
+Converta para PCM de 16 bits, mono e 16 kHz com FFmpeg
+(`-ac 1 -ar 16000 -c:a pcm_s16le`). Passe o WAV convertido no lugar de
+`jfk.wav` e acrescente `--pt-br` depois da porta. O WAV convertido do
+ensaio local tem SHA-256
+`d05cf14991a213194ec2bff33b25d4f9b9d35e7c2d3dcb470efcea5d771ec8bf`.
+
+
 
 Para repetir o gate de abertura e encerramento no Windows, prepare
 os builds e instale o Electron do Stage. Em `lia/desktop`, execute
