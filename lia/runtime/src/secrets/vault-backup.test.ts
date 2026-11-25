@@ -4,6 +4,12 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { createLiaSecretVault } from './vault'
 
+// O estado destes testes é injetado em memória. O lock do sistema é
+// exercitado com processos reais em vault-process.test.ts.
+vi.mock('./vault-lock', () => ({
+  withVaultWriteLock: async (write: () => Promise<unknown>) => write(),
+}))
+
 describe('main opaque credential rollback', () => {
   it('never replaces a corrupt container while capturing or restoring an entry', async () => {
     let disk = '{}'
