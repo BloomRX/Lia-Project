@@ -26,7 +26,7 @@ Não presuma que o caminho é o mesmo entre modo de voz, chat de texto, launcher
 - Descreva o sintoma com passos exatos e resultado esperado/observado.
 - Mude uma variável por vez: dispositivo, provedor, idioma, modo, entrada de texto/áudio ou etapa do pipeline.
 - Use o harness real do componente afetado. Um teste unitário pode isolar a lógica, mas não prova captura ou reprodução física.
-- Para trace de conversa/áudio, leia primeiro a skill de análise de traces do AIRI se ela existir no checkout atual; a cópia vendada atual pode não conter todas as skills do upstream.
+- Para correlacionar conversa e áudio, use a evidência dos gates de voz descritos em `Tests/windows/README-completion.md`.
 - Compare timestamps apenas se o sistema realmente os registra; não invente latência a partir da duração total de um teste.
 
 ## 3. Privacidade e segurança

@@ -6,8 +6,7 @@ compatibility: Exige Windows com o checkout e Node no PATH. O Stage e um process
 
 # Diagnosticar o Stage
 
-O caminho normal é: `Lia.bat` → Launcher → **Conversar com a Lia** → build do
-`@proj-airi/core-agent` → spawn do Stage → janela da personagem.
+O caminho normal é: `Lia.bat` → Launcher → **Conversar com a Lia** → processo do Stage → janela da personagem.
 
 ## A regra que não se negocia
 
@@ -29,45 +28,9 @@ Registre, nesta ordem:
 
 Sem isso, qualquer conclusão é chute.
 
-## 2. Separar as quatro falhas
+## 2. Separar resolução, início e encerramento
 
-| Sintoma | Onde olhar primeiro |
-| --- | --- |
-| Build falha antes do spawn | `stage-build-prerequisite.ts`, pré-requisito `core-agent-build` |
-| Build passa, nada é criado | `node-runtime.ts` — resolução do executável Node |
-| Processo existe, janela nunca aparece | sinal de *ready* do manager, saída do `electron-vite` |
-| Janela aparece, encerra sujo | caminho de parada e processos filhos |
-
-### Build
-
-O pré-requisito `core-agent-build` roda com timeout de `600_000` ms. Timeout
-estourado **não** se corrige aumentando o timeout; investigue por que o build
-não termina.
-
-### Executável Node
-
-Em modo dev o processo é iniciado pelo Electron, então `process.execPath` é o
-binário do Electron, **não** o Node do sistema. `node-runtime.ts` classifica a
-resolução em `electron-as-node`, `node-execpath` ou `node-from-path`, e consulta
-o estado do fuse `runAsNode` (`disabled`, `enabled`, `unknown`).
-
-Fato que engana: **se o fuse `runAsNode` estiver desabilitado,
-`ELECTRON_RUN_AS_NODE` é ignorado.** Definir a variável e continuar usando
-`process.execPath` como se fosse Node é uma aposta que já falhou neste projeto.
-Confirme o tipo resolvido, não a variável de ambiente.
-
-### Ready
-
-`airi-stage-manager.ts` reconhece `ready in`, `Local: ... http` ou `dev server`
-na saída. `'running'` significa **o filho existe e o sinal de ready foi visto** —
-não significa "spawn retornou".
-
-### Encerramento
-
-No Windows a parada mata a árvore (`taskkill /PID /T /F`) porque matar só o pai
-deixa filhos órfãos. `'stopped'` só é reportado depois de o encerramento real
-ser observado — trate essa informação como confiável, e o contrário como
-suspeita.
+Confira a resolução do executável e os eventos de processo em `lia/desktop/src/main/native-stage-manager.ts`. No pacote instalado, confira `resources/stage/LiaStage.exe`. O sinal de prontidão é `[lia-stage] window-ready`. Registre separadamente falha ao localizar o executável, saída antes do sinal de prontidão, falha após a abertura da janela e processo residual depois do fechamento. Use `Tests/windows/README-completion.md` para reproduzir pelo fluxo real.
 
 ## 3. Inspecionar processos no Windows
 
@@ -103,6 +66,5 @@ processos residuais.
 ## 6. Parar
 
 Pare e reporte se: a causa não puder ser provada; o problema só reproduz em
-máquina que você não tem; a correção exigir alterar `DevKit.bat` ou `Lia.bat`
-(eles são o alvo do gate); ou o diagnóstico depender de credencial que você não
+máquina que você não tem; ou o diagnóstico depender de credencial que você não
 tem.

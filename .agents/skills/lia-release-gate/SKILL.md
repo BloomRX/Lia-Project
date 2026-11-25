@@ -27,20 +27,7 @@ trabalhe a partir do que o `git` mostra — não do que o documento diz.
 
 ## 2. Comandos
 
-Os comandos das quatro suítes, o diretório correto e o rebuild necessário estão
-em **`lia-test-discipline`** — não os repita aqui. Um comando copiado em dois
-lugares diverge.
-
-Para lint, typecheck e build, o script declarado é a fonte:
-
-| Etapa | Comando | Estado da verificação |
-| --- | --- | --- |
-| Lint | `cd airi; pnpm exec moeru-lint <arquivos>` | executado em rodadas anteriores |
-| Typecheck | `cd airi; pnpm run typecheck` | script declarado, não executado por mim |
-| Build | `cd airi; pnpm -F @lia/lia-app run build` | script declarado, não executado por mim |
-
-"Script declarado" não é "executado". Ao registrar, use o veredito que
-corresponde ao que você realmente rodou.
+Use `lia-test-discipline` para preparar o workspace, rodar as suítes e executar lint e typecheck. Use `Tests/windows/README-completion.md` para selecionar os gates reais do Launcher, Stage e instalador de acordo com a rodada. Registre preparação, build, empacotamento e execução como etapas distintas.
 
 ## 3. Classificar cada item, sem meio-termo
 

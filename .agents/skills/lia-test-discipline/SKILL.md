@@ -1,25 +1,20 @@
 ---
 name: lia-test-discipline
-description: Localiza e executa a suíte certa da Lia entre Python tools/, Node Tests/tools, Vitest lia-app e Vitest core-agent. Use antes de testar ou ao investigar "Ran 0 tests" e "Cannot find package".
+description: Localiza e executa a suíte certa da Lia entre os pacotes próprios em lia/, Python tools/ e o harness Node Tests/tools. Use antes de testar ou ao investigar "Ran 0 tests" e "Cannot find package".
 compatibility: Exige Node, pnpm e Python. Suítes Vitest exigem dependências do workspace instaladas.
 ---
 # Testes na Lia
 
-## Concorrência com runtime Windows
+Execute `powershell -NoProfile -File .\lia\Test-Lia.ps1 -Prepare` na raiz para preparar dependências e rodar os testes, tipos, lint e checagem de empacotamento. Omita `-Prepare` quando o workspace já estiver preparado. Para verificações focadas, consulte os scripts dos pacotes.
 
-O teste `j` em `airi/apps/lia-app/src/main/stage-build-prerequisite.test.ts`
-executa build do Core no checkout real. O tsdown limpa `core-agent/dist` antes
-de reescrever os arquivos. Não execute a suíte Launcher junto do Stage aberto,
-de typechecks ou de testes consumidores desse dist. Ordem: Launcher termina,
-demais verificações/builds terminam, então gate Windows. Um 404 durante essa
-janela não prova regressão do aplicativo; registre o evento e investigue.
-## 1. Suíte, diretório e comando
 | Alvo | Diretório | Comando |
 |---|---|---|
 | Python | `tools/` | `python -m unittest discover -s . -p "test_*.py" -t .` |
 | Harness QA | raiz | `node --test "Tests/tools/*.test.mjs"` |
-| App Lia | `airi/apps/lia-app/` | `pnpm run test` |
-| core-agent | `airi/` | `pnpm exec vitest run --root packages/core-agent --project @proj-airi/core-agent` |
+| Core | `lia/core/` | `node --experimental-strip-types --test "test/*.test.ts"` |
+| Runtime, Stage ou Launcher | `lia/runtime/`, `lia/stage/` ou `lia/desktop/` | `corepack pnpm run test` |
+
+Termine builds que escrevem nos artefatos antes de abrir a instância que será validada.
 As contagens documentadas podem ficar desatualizadas. Compare a descoberta real com a referência operacional atual antes de concluir que testes sumiram.
 ## 2. Armadilhas
 - Python `discover` executado da raiz pode reportar zero testes e sair com código 0. Execute em `tools/`.

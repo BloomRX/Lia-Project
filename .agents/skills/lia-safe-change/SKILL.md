@@ -31,7 +31,7 @@ Não instale dependências, altere lockfiles, baixe runtimes, mude credenciais, 
 - Reproduza o defeito antes da correção quando aplicável.
 - Crie ou atualize um teste que observe o comportamento real, não apenas chamadas a mocks.
 - Rode a suíte correta descrita em `.agents/skills/lia-test-discipline/SKILL.md`.
-- Para mudanças no AIRI, leia também as skills relevantes em `airi/.agents/skills/`.
+- Para investigar código legado, use o histórico Git e a skill `airi-upstream-integration`.
 - Diferencie PASS, FAIL, BLOCKED e NOT RUN. Nunca apresente algo não executado como aprovado.
 - Não alegue que o app funciona apenas porque build, lint ou testes unitários passaram.
 

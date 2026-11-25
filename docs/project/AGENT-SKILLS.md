@@ -30,7 +30,7 @@ Escopo: **infraestrutura do agente**. Nenhuma funcionalidade da Lia foi alterada
 | `lia-regression-investigation` | 105 | bugs | "por que isso quebra?" |
 | `lia-agent-evaluation` | 106 | agentes/modelos | "o modelo está errado ou o caminho está errado?" |
 | `stage-runtime-debugging` | 108 | Electron/Stage | "por que o Stage não sobe?" |
-| `airi-upstream-integration` | 100 | integração | "esse patch do AIRI deve entrar?" |
+| `airi-upstream-integration` | histórico | investigação | "de onde veio este comportamento do Stage?" |
 
 Todas só com `SKILL.md` — sem `scripts/`, `references/` ou `assets/`. Não criei
 arquivo vazio nem helper sem uso real.
@@ -246,7 +246,7 @@ igualmente sem a skill, `verification-before-completion` não está sendo ativad
    Ativação por `description` não observada. É a maior incerteza deste documento.
 2. **`skills-ref` exige rede** (`npx`). O teste local é subconjunto, não substituto.
 3. **Base do AIRI desconhecida** — `docs/airi-modificacoes-registro.md` §1.
-   `airi-upstream-integration` trata como pré-condição.
+   Este item descreve a auditoria original. A skill atual consulta o histórico Git.
 4. **Nenhuma skill externa foi instalada.** Sem autorização, nada foi escrito em
    `$HOME/.agents/skills`.
 5. **Suítes Node/vitest não rodam no CI** — só Python. `airi/node_modules`

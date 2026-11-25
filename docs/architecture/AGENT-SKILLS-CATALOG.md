@@ -49,7 +49,7 @@ Auditoria por conteúdo das 28 skills encontradas em `airi/.agents/skills/` na b
 | `lia-voice-diagnostics` | Diagnóstico de voz |
 | `lia-ui-quality-review` | UX, acessibilidade e estados de interface |
 | `lia-security-review` | Segurança e permissões |
-| `airi-upstream-integration` | Integração temporária com upstream |
+| `airi-upstream-integration` | Consulta histórica ao upstream e às implementações anteriores |
 
 ## Auditoria individual das 28 skills do AIRI
 
