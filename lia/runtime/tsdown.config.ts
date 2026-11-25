@@ -13,6 +13,7 @@ export default defineConfig({
     './src/paths/product-paths.ts',
     './src/paths/install-location.ts',
     './src/product/config.ts',
+    './src/secrets/oidc-session.ts',
     './src/secrets/vault.ts',
     './src/secrets/windows-user-cipher.ts',
     './src/voice/shared.ts',
