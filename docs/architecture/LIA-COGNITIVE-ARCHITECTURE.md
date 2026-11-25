@@ -5,6 +5,24 @@
 > **Autoridade:** complementa a [Especificação Geral do Produto](../product/ESPECIFICACAO-GERAL-DO-PRODUTO-LIA.md). O estado executado continua em [CURRENT-STATE.md](../project/CURRENT-STATE.md).
 > **Regra:** pesquisa, catálogo, schema, configuração e protótipo não equivalem a capacidade operacional validada.
 
+## Estrutura publicada do desktop
+
+A execução oficial parte de `Lia.bat` e usa os pacotes em `lia/`.
+A árvore versionada da `main` está sem a cópia AIRI desde `d6eb8b81`.
+
+| Pacote | Fronteira atual |
+|---|---|
+| `lia/core` | Contratos e serviços próprios de personalidade, memória, presença, provedores e ciclo de vida. |
+| `lia/runtime` | Configuração persistente, cofre, decisão de rotas e motores de voz. |
+| `lia/desktop` | Launcher, configuração, coordenação do Stage e distribuição privada Windows. |
+| `lia/stage` | Interface de conversa e presença. O Main autoriza rede, lê credenciais e coordena áudio e ferramentas. |
+
+O Agent Hub permanece em seu próprio repositório. O Stage consome seu
+catálogo publicado em leitura. Execução supervisionada via Hub e
+planejamento autônomo permanecem metas de arquitetura. A visão adiante
+continua abrangendo percepção, desktop, jogos e integrações conforme
+permissões e critérios de validação próprios.
+
 ## 1. Visão: uma inteligência digital pessoal
 
 A Lia deve evoluir para uma inteligência digital pessoal persistente: uma presença com identidade reconhecível, personalidade consistente, memória controlável, percepção contextual e capacidade de raciocinar, planejar, decidir e agir por ferramentas autorizadas.

@@ -15,7 +15,10 @@ O produto deve combinar:
 - **Configuração compreensível:** opções em linguagem normal, explicações junto às escolhas, recomendações compatíveis com o hardware e controles claros de permissões.
 - **Identidade Lia:** interface, linguagem, personalidade, padrões e comportamento reconhecíveis como Lia, não apenas uma troca de marca do AIRI.
 
-A arquitetura e o código devem permitir que Launcher e Stage da Lia vivam sob `lia/`. Componentes do AIRI ou de terceiros podem ser reutilizados quando houver benefício técnico, compatibilidade de licença e limites claros; a interface de produto e os contratos da Lia não devem depender de copiar indiscriminadamente o Stage upstream.
+O Launcher e o Stage próprios vivem em `lia/` e são preparados pela raiz.
+A `main` retirou a cópia vendorizada do AIRI em `d6eb8b81`. As integrações
+usam contratos da Lia e dependências versionadas com licenças verificadas
+conforme o escopo de distribuição.
 
 ## 2. Como cada funcionalidade deve funcionar para a pessoa usuária
 
@@ -106,29 +109,21 @@ A arquitetura e o código devem permitir que Launcher e Stage da Lia vivam sob `
 
 ## 3. Inventário de funcionalidades e estado conhecido
 
-Os estados abaixo são conservadores e refletem os documentos de estado e o relatório de finalização disponíveis na criação desta especificação. Atualizar as evidências quando o código ou os testes mudarem.
+O quadro descreve o desktop próprio consolidado na `main`. Resultados
+históricos do Stage anterior permanecem nos relatórios que os produziram.
 
-| Área | Estado documentado | Próxima lacuna principal |
+| Área | Evidência do desktop próprio | Próxima lacuna principal |
 |---|---|---|
-| Launcher / Home | Parcial; abertura e fluxo básico validados em Windows | Consolidar UX de produto e validar visualmente todas as páginas |
-| Configuração de IA | Parcial | Página própria e opções normais sem expor IDs técnicos |
-| Conversa textual | Base implementada; teste real de resposta 42 aprovado | Continuar regressões e UX de falhas |
-| Streaming e preservação de texto | Correções testadas, incluindo whitespace | Manter cobertura real do serviço separada do transporte sintético |
-| Compreensão de imagens | **Gate de conteúdo FAIL/pendente** | Corrigir e passar o teste de conteúdo no app real |
-| Chamada de ferramentas | Parcial | Validar loop completo ponta a ponta |
-| STT / cadeia de voz gerenciada | PASS histórico no Windows | Novo teste humano de microfone e validação da experiência completa |
-| Compreensão direta de áudio | Não iniciada | Definir escopo e provider compatível |
-| TTS / escolha de engine | Infraestrutura parcial/em evolução | Validar opções, idiomas, qualidade, hardware e licença |
-| Personalidade | Parcial | Tela de traços, presets e prévia |
-| Aparência | Parcial | Seleção e assets canônicos da Lia |
-| Presença Tamagotchi | Base existente | Validar e preservar durante a migração |
-| Presença livre/multimonitor | Ideia; contrato incompleto | Especificar e implementar em `lia/stage/` |
-| Ferramentas e permissões | Infraestrutura parcial | UX de catálogo, consentimento e teste E2E |
-| Histórico | Base existente | Validar consistência e ações de usuário |
-| Memória semântica | Não prometida/não confirmada | Só especificar após decisão explícita de produto |
-| Cloud Sync | Parcial, com limitações registradas | Definir dados, anexos, conflitos e falhas |
-| Diagnósticos | Página existente | Revisar tradução, privacidade e orientação de recuperação |
-| Instalador/release Windows | **Não validado como release final** | Teste limpo de instalação e fluxo completo |
+| Launcher e IA | Entrada pela raiz e configuração de modelos no Launcher. Gate NSIS confirmou abertura do Stage. | Regressão visual e de acessibilidade de todas as telas. |
+| Conversa e histórico | Conversa local com Qwen, retomada, exclusão e múltiplas conversas. A troca sintética também passou na janela aberta pelo Launcher instalado. | Provedores externos reais e equivalência de streaming. |
+| Imagem | Anexo e resposta com provedor HTTPS sintético, incluindo rejeição sem rota de visão. | Gate de conteúdo em serviço real. |
+| Ferramentas | Relógio local autorizado para um envio e catálogo publicado do Agent Hub em leitura. | Orquestração supervisionada e integração de execução. |
+| TTS e STT | Kokoro CPU com reprodução silenciada, Whisper CPU e consentimento de fala remota com serviços sintéticos. | Áudio físico, vozes clonadas e matriz de provedores externos. |
+| Personalidade e memória | Traços editáveis, importação textual CCv3 e notas locais sob controle do usuário. | Extensões de cartões e memória semântica. |
+| Avatar e presença | VRM, animação embutida, movimento, pausa, ocultação e posicionamento no segundo monitor. | Live2D, tela cheia, desconexão física e métricas com jogos. |
+| Conta e dados | Cofre DPAPI, credenciais processadas em Main e consentimento de voz no desktop próprio. | OIDC integrado, revogação com emissor real e sincronização. |
+| Distribuição | Instalador NSIS privado e ensaio de upgrade com preservação de perfil sintético e cofre. | Atualização automática, assinatura e direitos para distribuição pública. |
+
 
 Referências de estado: [CURRENT-STATE.md](../project/CURRENT-STATE.md), [QUANTO-FALTA.md](../project/QUANTO-FALTA.md), [relatório de finalização Windows](RELEASE-WINDOWS-2026-10-20.md) e [índice de documentos](../README.md). Se houver divergência, `CURRENT-STATE.md` é a fonte de verdade operacional para o estado de execução, e esta especificação é a fonte de intenção de produto.
 
@@ -136,7 +131,7 @@ Referências de estado: [CURRENT-STATE.md](../project/CURRENT-STATE.md), [QUANTO
 
 ### 4.1 Reutilizar quando comprovado
 
-- Lógica e serviços do AIRI que já resolvem um problema real e podem ser separados por interfaces estáveis.
+- Implementações históricas avaliadas por comportamento, licença e contrato antes de portá-las para os pacotes próprios.
 - Adaptadores de provedores, streaming, STT/TTS, histórico ou ferramentas, após auditoria de dependências, comportamento, licença e testes.
 - Infraestrutura e harnesses de teste úteis, sem assumir que testes de componente validam o produto inteiro.
 
@@ -152,9 +147,9 @@ Referências de estado: [CURRENT-STATE.md](../project/CURRENT-STATE.md), [QUANTO
 
 - A implementação independente da Lia deve morar em `lia/` conforme o plano de migração, sem mover ou apagar código enquanto o agente de auditoria/migração estiver trabalhando sem antes verificar o estado do checkout.
 - Não copiar todo o Stage upstream como atalho sem entender responsabilidades, dependências e licenças.
-- Isolar integrações reutilizadas por adaptadores/contratos para permitir substituir AIRI ou engines individuais.
-- A migração deve ser incremental e reversível. O Stage atual só pode ser removido depois que o Stage Lia abrir, comunicar-se, encerrar-se e passar pelos testes equivalentes.
-- Atualizar a documentação de modificações do AIRI e a comparação com upstream para cada decisão de manter, portar ou descartar uma mudança.
+- Isolar integrações reutilizadas por adaptadores/contratos para permitir substituir engines individuais.
+- Alterações em Launcher, Stage e runtime passam por testes de compatibilidade, instalação e encerramento em Windows. As lacunas de equivalência com o legado ficam documentadas.
+- Registrar a origem e a atribuição de código ou assets portados, com evidência do comportamento atual.
 
 ## 5. Prioridade de produto e versões
 
