@@ -47,6 +47,9 @@
 
 - **Validação da árvore própria.** O [CI Windows em `e151a2d5`](https://github.com/BloomRX/Lia-Project/actions/runs/45616335673) aprovou a árvore completa extraída sem o diretório legado, incluindo instalador, conversa sintética instalada e saída dos processos do pacote. Na cópia Windows local sem o diretório legado, com metadados Git adicionados para validar ignores, passaram 284 testes Node e 429 testes DevFlow com 10 skips. O ensaio DevFlow precede a troca do pré-requisito em `03bf8bbe`, que passou separadamente.
 
+- **Candidata sem a árvore legada.** A árvore Git `eb35b62a`, derivada de `67a633b8` com a exclusão isolada dos 5.271 caminhos legados, passou em instalação e build Windows, ciclo Launcher–Stage, conversa sintética, Kokoro com reprodução silenciada e presença VRM em dois monitores. O NSIS completou em um caminho curto após falhar ao abrir uma inclusão existente de 267 caracteres no primeiro diretório. Em seguida, a instalação limpa, a conversa sintética no Stage instalado, a saída dos processos do pacote e a desinstalação passaram. A candidata foi extraída fora do checkout de desenvolvimento.
+- **Escrita privada no CI.** Em `67a633b8`, a escrita falhou em 5,1 s no runner, enquanto a sonda com fases passou. A mudança `ee42255b` drena as saídas do processo sem registrar conteúdo. A escrita e a DACL passaram localmente e o [job de escrita privada](https://github.com/BloomRX/Lia-Project/actions/runs/45620751090) passou no runner. A causa da intermitência não foi demonstrada.
+
 - **Próximo corte.** Fechar as demais lacunas antes de remover a árvore legada. O contrato de índice publicado do Hub não expõe execução supervisionada. A integração de execução depende de um contrato com permissões e cancelamento no Hub.
 
 [Evidências da Rodada 22](../reports/LIA-ROUND-22-IMPLEMENTATION-REPORT.md) · [Pendências por ambiente](QUANTO-FALTA.md)

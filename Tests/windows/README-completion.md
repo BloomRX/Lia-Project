@@ -27,6 +27,13 @@ node lia/desktop/scripts/package-windows.mjs --internal-test
 .\lia\desktop\scripts\check-native-install.ps1 -Installer '<caminho do instalador>'
 ```
 
+Se o NSIS falhar em `!include` para um arquivo existente dentro de
+`node_modules/.pnpm`, confira o comprimento do caminho completo e repita
+o build em um checkout separado próximo à raiz do volume. Na candidata
+derivada de `67a633b8`, o NSIS falhou ao abrir uma inclusão de 267
+caracteres. O mesmo arquivo-fonte foi extraído em um caminho curto e
+o empacotamento concluiu. Preserve os dois logs para comparar.
+
 O gate de instalação verifica a instalação limpa, o ciclo Launcher–Stage,
 uma troca sintética no Stage instalado, a saída dos processos do pacote e
 a desinstalação. Os cenários com voz e visão usam gates separados no
