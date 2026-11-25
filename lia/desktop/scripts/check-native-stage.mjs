@@ -1,13 +1,15 @@
 import assert from 'node:assert/strict'
+import { execFile } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { once } from 'node:events'
 import { createServer } from 'node:http'
 import { existsSync } from 'node:fs'
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { dirname, isAbsolute, join } from 'node:path'
+import { dirname, isAbsolute, join, sep } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
+import { promisify } from 'node:util'
 
 import { _electron } from 'playwright'
 import { createLiaSecretVault } from '@lia/core/secrets/vault'
@@ -41,6 +43,28 @@ async function waitForProcessExit(pid) {
     await delay(100)
   } while (Date.now() < deadline)
   throw new Error('O processo Main do Stage continuou ativo após encerrar a conversa.')
+}
+
+const execute = promisify(execFile)
+
+async function listPackagedProcesses(directory) {
+  const { stdout } = await execute('powershell.exe', [
+    '-NoProfile', '-NonInteractive', '-Command',
+    'Get-Process | Where-Object { $_.Path -and $_.Path.StartsWith($env:LIA_GATE_EXE_PREFIX, [StringComparison]::OrdinalIgnoreCase) } | Select-Object -ExpandProperty Id',
+  ], { windowsHide: true, timeout: 10_000, env: { ...process.env, LIA_GATE_EXE_PREFIX: directory + sep } })
+  return stdout.trim().split(/\s+/).filter(Boolean).map(Number)
+}
+
+async function checkPackagedProcessesExited(directory) {
+  const deadline = Date.now() + 10_000
+  let remaining
+  do {
+    remaining = await listPackagedProcesses(directory)
+    if (remaining.length === 0)
+      return
+    await delay(100)
+  } while (Date.now() < deadline)
+  throw new Error(`Processos do pacote Lia continuam ativos: ${remaining.join(', ')}.`)
 }
 
 async function checkUpgradeProfile(executablePath, root, env) {
@@ -194,6 +218,9 @@ async function run() {
   const executablePath = installedExecutable ?? (packaged
     ? join(liaRoot, 'desktop', 'dist', 'windows-native-preview', 'win-unpacked', 'Lia.exe')
     : join(liaRoot, 'stage', 'node_modules', 'electron', 'dist', 'electron.exe'))
+  const packageDirectory = dirname(executablePath)
+  if (packaged)
+    assert.deepEqual(await listPackagedProcesses(packageDirectory), [], 'Feche a instância já aberta deste pacote antes do gate.')
   const env = { ...process.env, APPDATA: profile, LIA_USER_DATA: root }
   const app = await _electron.launch({
     executablePath,
@@ -209,6 +236,11 @@ async function run() {
     const state = await invokeRuntimeControl(target, 'runtime.status')
     assert.equal(state.windows, 1)
     nativeWindows = state.windows
+    if (packaged) {
+      const stageProcesses = await listPackagedProcesses(join(packageDirectory, 'resources', 'stage'))
+      assert.ok(stageProcesses.includes(target.pid), 'O processo do Stage não pertence ao pacote sob teste.')
+      assert.ok(stageProcesses.some(pid => pid !== target.pid), 'A verificação não encontrou processos filhos do Stage empacotado.')
+    }
     await page.getByRole('button', { name: 'Encerrar conversa', exact: true }).click({ timeout: 10_000 })
     await page.getByText('Conversa encerrada.', { exact: true }).waitFor({ timeout: 20_000 })
     assert.deepEqual(await registry.read(), { ok: false, problem: 'missing' })
@@ -227,7 +259,9 @@ async function run() {
   const installedConversation = Boolean(installedExecutable && !upgradeProfile)
   if (installedConversation)
     await checkInstalledConversation(executablePath, root, env, product, transports, modelId)
-  const lifecycle = { installedConversation, airiDirectoryAbsent, packaged, installed: Boolean(installedExecutable), nativeWindows, registryRemoved: true, stageMainExited: true }
+  if (packaged)
+    await checkPackagedProcessesExited(packageDirectory)
+  const lifecycle = { packageProcessesExited: packaged ? true : null, installedConversation, airiDirectoryAbsent, packaged, installed: Boolean(installedExecutable), nativeWindows, registryRemoved: true, stageMainExited: true }
   if (!upgradeProfile)
     await writeFile(join(root, 'report.json'), JSON.stringify(lifecycle, null, 2), { flag: 'wx' })
   console.log(JSON.stringify(lifecycle))
@@ -245,6 +279,7 @@ async function run() {
     assert.ok(!(await readFile(filePath, 'utf8')).includes(synthetic), 'A credencial sintética está em texto claro.')
     assert.ok(credentialForDestination(vault.getSecret(scope, 'apiKey'), scope, endpoint, 'speech') === synthetic, 'Não foi possível recuperar a credencial vinculada.')
     await checkUpgradeProfile(executablePath, root, env)
+    await checkPackagedProcessesExited(packageDirectory)
     if (!restore)
       await writeFile(baseline, JSON.stringify(await captureHashes()), { flag: 'wx' })
     console.log(JSON.stringify({ phase: restore ? 'after-upgrade' : 'before-upgrade', settingsPreserved: restore ? true : null, historyVisible: true, credentialRecovered: true }))

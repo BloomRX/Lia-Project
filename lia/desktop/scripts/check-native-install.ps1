@@ -41,6 +41,7 @@ $report = [ordered]@{
   replacement = $null
   lifecycle = $false
   installedConversation = $null
+  packageProcessesExited = $null
   profilePreserved = $null
   credentialPreserved = $null
   uninstall = $false
@@ -68,6 +69,7 @@ try {
   & node --experimental-strip-types (Join-Path $PSScriptRoot 'check-native-stage.mjs') @gateArguments
   if ($LASTEXITCODE -ne 0) { throw 'O Launcher instalado falhou no gate de ciclo de vida.' }
   $report['lifecycle'] = $true
+  $report['packageProcessesExited'] = $true
   if (!$PreviousInstaller) { $report['installedConversation'] = $true }
   if ($PreviousInstaller) {
     $report['profilePreserved'] = $true
