@@ -77,7 +77,7 @@ def _reject_unsafe_relative(relative: str) -> PurePosixPath:
         raise PathSafetyError('caminho contém NUL')
     text = relative.strip()
     if '\\' in text:
-        raise PathSafetyError('caminho com barra invertida não é aceito; use barras: airi/x/y')
+        raise PathSafetyError('caminho com barra invertida não é aceito; use barras: lia/x/y')
     if text.startswith('/') or text.startswith('~'):
         raise PathSafetyError('caminho absoluto não é aceito; use relativo à raiz do repositório')
     # A Windows drive ("C:") or a UNC share ("//host/x") is absolute too.

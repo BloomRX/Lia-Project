@@ -63,7 +63,7 @@ FORBIDDEN_SUFFIXES = (
 )
 # Only these roots are project source for checkpoint purposes. Anything else
 # is "unknown classification" and refuses the round.
-ALLOWED_SOURCE_ROOTS = ('tools/', 'docs/', 'airi/', 'Tests/', 'qa/', '.github/')
+ALLOWED_SOURCE_ROOTS = ('tools/', 'docs/', 'lia/', 'Tests/', 'qa/', '.github/')
 ALLOWED_SOURCE_SUFFIXES = (
     '.py', '.ts', '.tsx', '.vue', '.js', '.mjs', '.cjs', '.json', '.md', '.yml',
     '.yaml', '.txt', '.html', '.css', '.scss', '.bat', '.ps1', '.sh', '.toml',

@@ -880,33 +880,27 @@ class SanitizationTests(unittest.TestCase):
 
 # ---------------------------------------------------------------------------
 class InventoryTests(unittest.TestCase):
-    """The inventory classifies every historical script; D3 moved two of them
-    out of the repository root, it did not delete them."""
+    """The current inventory lists the native entrypoints and QA wrappers."""
 
     def test_inventory_exists_and_classifies_every_listed_script(self):
         inventory = json.loads(
             (TOOLS / 'devflow' / 'script-inventory.json').read_text(encoding='utf-8'))
-        allowed = {'KEEP', 'INTERNAL', 'CANDIDATE-MERGE', 'CANDIDATE-DELETE'}
+        allowed = {'KEEP', 'INTERNAL'}
         self.assertTrue(inventory['entries'])
         for entry in inventory['entries']:
             self.assertIn(entry['classification'], allowed, entry['path'])
             self.assertTrue(entry['reason'], entry['path'])
-        # Every script the D1 brief named must be classified.
-        named = {'DevKit.bat', 'Lia.bat', 'Tests/LiaTests.bat',
-                 'Tests/LiaBenchmark.bat',
-                 'airi/DevKit.bat', 'airi/QA.bat', 'airi/QA-Miniconda.bat',
-                 'airi/DevTamagotchi.bat'}
+        # The current inventory covers exactly the native entrypoints.
+        named = {'DevKit.bat', 'Lia.bat', 'Tests/LiaTests.bat', 'Tests/LiaBenchmark.bat'}
         listed = {entry['path'] for entry in inventory['entries']}
-        self.assertTrue(named.issubset(listed), sorted(named - listed))
+        self.assertEqual(named, listed)
 
     def test_consolidation_moved_scripts_without_deleting_them(self):
         repo = TOOLS.parent
         # A raiz fica com exatamente dois BAT: DevKit.bat (AUTO) e Lia.bat
         # (abrir o app / processo do gate). Os arneses de QA moram em Tests/.
         for relative in ('DevKit.bat', 'Lia.bat',
-                         'Tests/LiaTests.bat', 'Tests/LiaBenchmark.bat',
-                         'airi/DevKit.bat', 'airi/QA.bat', 'airi/QA-Miniconda.bat',
-                         'airi/DevTamagotchi.bat'):
+                         'Tests/LiaTests.bat', 'Tests/LiaBenchmark.bat'):
             self.assertTrue((repo / relative).exists(), f'{relative} sumiu')
         for gone in ('LiaTests.bat', 'LiaBenchmark.bat'):
             self.assertFalse((repo / gone).exists(),
@@ -2175,6 +2169,11 @@ def make_sync(fake: FakeGit, **kwargs) -> 'sync.WorkBranchSync':
 
 class SyncPolicyTests(unittest.TestCase):
     """§B/§C: deterministic sync, fail closed, never touch main."""
+
+    def test_checkpoint_source_root_is_the_native_product(self):
+        self.assertTrue(sync.classify_path('lia/stage/src/main/index.ts')[0])
+        self.assertFalse(sync.classify_path('airi/apps/stage/src/index.ts')[0])
+        self.assertFalse(sync.classify_path('lia/runtime/.env')[0])
 
     def test_clean_checkout_updates_without_asking_anything(self):
         fake = FakeGit(head='a' * 40, remote_head='b' * 40)
