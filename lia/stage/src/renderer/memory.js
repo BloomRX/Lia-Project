@@ -5,6 +5,7 @@ const controls = document.querySelector('#memory-controls')
 const enabled = document.querySelector('#memory-enabled')
 const note = document.querySelector('#memory-note')
 const save = document.querySelector('#memory-save')
+const clear = document.querySelector('#memory-clear')
 const entries = document.querySelector('#memory-entries')
 const status = document.querySelector('#memory-status')
 let current
@@ -12,6 +13,7 @@ let current
 function render(state) {
   current = state
   enabled.checked = state.enabled
+  clear.disabled = state.entries.length === 0
   entries.replaceChildren()
   for (const entry of state.entries) {
     const row = document.createElement('li')
@@ -36,6 +38,10 @@ async function run(operation, success = '') {
   status.textContent = t('Aguarde…')
   try {
     const result = await operation()
+    if (result.code === 'cancelled') {
+      status.textContent = ''
+      return false
+    }
     if (!result.ok)
       throw new Error('memory')
     render(result.value)
@@ -66,6 +72,14 @@ save.addEventListener('click', async () => {
   if (await run(() => memory.mutate({ action: 'save', text }), t('Nota salva.')))
     note.value = ''
   note.focus()
+})
+
+clear.addEventListener('click', async () => {
+  const cleared = await run(() => memory.mutate({ action: 'clear', confirmed: true }), t('Notas apagadas.'))
+  if (cleared)
+    note.focus()
+  else
+    clear.focus()
 })
 
 void run(() => memory.get())

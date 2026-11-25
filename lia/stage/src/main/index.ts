@@ -166,8 +166,36 @@ async function main(): Promise<void> {
   })
 
   ipcMain.handle(stageMemoryGet, event => authorized(event) ? memory.get() : { ok: false, code: 'invalid' })
-  ipcMain.handle(stageMemoryMutate, (event, request: LiaMemoryMutation) =>
-    authorized(event) && !active ? memory.mutate(request) : { ok: false, code: 'unavailable' })
+  let confirmingMemoryClear = false
+  ipcMain.handle(stageMemoryMutate, async (event, request: LiaMemoryMutation) => {
+    const owner = window
+    if (!owner || !authorized(event) || active || confirmingMemoryClear)
+      return { ok: false, code: 'unavailable' }
+    if (request?.action !== 'clear' || request.confirmed !== true)
+      return memory.mutate(request)
+    confirmingMemoryClear = true
+    try {
+      const locale = await readLocale()
+      if (!authorized(event))
+        return { ok: false, code: 'cancelled' }
+      const { response } = await dialog.showMessageBox(owner, {
+        type: 'warning', title: 'Lia',
+        message: stageText(locale, 'Apagar todas as notas salvas?'),
+        detail: stageText(locale, 'Esta ação apaga as notas de memória deste perfil. O histórico da conversa será mantido.'),
+        buttons: [stageText(locale, 'Cancelar'), stageText(locale, 'Apagar notas')],
+        defaultId: 0, cancelId: 0, noLink: true,
+      })
+      if (response !== 1 || !authorized(event))
+        return { ok: false, code: 'cancelled' }
+      return active ? { ok: false, code: 'unavailable' } : await memory.mutate({ action: 'clear', confirmed: true })
+    }
+    catch {
+      return { ok: false, code: 'unavailable' }
+    }
+    finally {
+      confirmingMemoryClear = false
+    }
+  })
   ipcMain.handle(stagePresenceOpen, (event, bytes: unknown) => Boolean(authorized(event)) && presence.open(bytes))
   ipcMain.handle(stagePresenceClose, (event) => {
     if (authorized(event))

@@ -300,8 +300,35 @@ try {
   await submit(page, 'Mensagem sem ferramenta', requests.length + 1)
   assert.equal(requests.at(-1).tools, undefined)
   assert.equal(requests.at(-1).messages.some(message => message.role === 'tool'), false)
+  await page.getByText('Memória', { exact: true }).click()
+  const memoryNote = page.getByLabel('Nova nota', { exact: true })
+  const clearNotes = page.getByRole('button', { name: 'Apagar notas', exact: true })
+  assert.equal(await clearNotes.isDisabled(), true)
+  await memoryNote.fill('Nota sintética para exclusão.')
+  await page.getByRole('button', { name: 'Salvar nota', exact: true }).click()
+  await page.getByText('Nota salva.', { exact: true }).waitFor()
+  const answerToClear = response => app.evaluate(({ dialog }, choice) => {
+    dialog.showMessageBox = async (owner, options) => {
+      if (!owner || options.defaultId !== 0 || options.cancelId !== 0 || options.buttons[1] !== 'Apagar notas')
+        throw new Error('Unexpected memory confirmation contract')
+      return { response: choice }
+    }
+  }, response)
+  await answerToClear(0)
+  await clearNotes.click()
+  await page.waitForFunction(() => document.activeElement?.id === 'memory-clear')
+  await page.getByText('Nota sintética para exclusão.', { exact: true }).waitFor()
+  await answerToClear(1)
+  await clearNotes.click()
+  await page.getByText('Notas apagadas.', { exact: true }).waitFor()
+  assert.equal(await page.getByText('Nota sintética para exclusão.', { exact: true }).count(), 0)
+  assert.equal(await clearNotes.isDisabled(), true)
+  await page.waitForFunction(() => document.activeElement?.id === 'memory-note')
+  assert.equal(await page.getByText('Você: Mensagem sem ferramenta', { exact: true }).count(), 1)
+  await page.screenshot({ path: join(root, 'memory-cleared.png'), fullPage: true })
   const report = { service: 'synthetic local HTTP', optIn: true, reopened: true, resumed: true, legacyTextImported: true, cancellationPreservedHistory: true, cleared: true, clearDisabledWhenEmpty: true, rateLimitSanitized: true, refusedImageWithoutVision: true, conversationsIsolated: true, selectionRestored: true, deletionConfirmed: true, builtInPersonaInRequest: true, importedPersonaInRequest: true, importedPersonaRestored: true, personaContextIsolated: true, localKokoroMutedPlayback: withVoice ? 'cancelled, retried, played and stopped' : null, autoPlay: withVoice ? 'opt-in, persisted, played, opted out' : null, customizedTraitsPersisted: true }
   report.localClockRoundTrip = true
+  report.memoryClear = { dialogResponse: 'injected', cancelPreservedNote: true, clearPreservedConversation: true, focusRestored: true }
   report.hubCatalog = { source: withPublishedHub ? 'published Hub index' : 'synthetic index', listed: listedHubCapabilities }
   assert.ok(!JSON.stringify(requests).includes('fixture-only-private-prose'))
   await writeFile(join(root, 'report.json'), JSON.stringify(report, null, 2))
