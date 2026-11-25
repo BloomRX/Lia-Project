@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { test } from 'node:test'
 
-import { nativeLauncherConfiguration, packagingInputs, validateInputs, validatePackagedStage } from './package-windows.mjs'
+import { nativeLauncherConfiguration, packagingInputs, validateArchiveEntries, validateInputs, validatePackagedStage } from './package-windows.mjs'
 
 function file(path, contents = 'fixture') {
   mkdirSync(dirname(path), { recursive: true })
@@ -80,4 +80,16 @@ test('default packaging requires no AIRI files and preserves the internal instal
   assert.equal(config.extraMetadata.main, 'out/main/index.js')
   assert.deepEqual(config.extraResources[0], { from: inputs.stageOutput, to: 'stage', filter: ['**/*'] })
   assert.equal(config.publish, null)
+})
+
+test('package inventory rejects legacy runtime and restricted avatar entries', () => {
+  assert.doesNotThrow(() => validateArchiveEntries(['/out/main/index.js', '/out/renderer/assets/lia-vrm.js']))
+  for (const entry of [
+    '/node_modules/@proj-airi/core-agent/package.json',
+    '\\out\\renderer\\airi\\index.js',
+    '/out/renderer/assets/CubismSdkForWeb-5-r.3/Core/LICENSE.md',
+    '/out/renderer/assets/live2dcubismcore.min.js',
+    '/out/renderer/assets/hiyori_pro_zh.zip',
+  ])
+    assert.throws(() => validateArchiveEntries([entry]), /runtime ou assets legados/)
 })

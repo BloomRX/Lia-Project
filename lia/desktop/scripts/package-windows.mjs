@@ -2,7 +2,8 @@ import process from 'node:process'
 
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -99,6 +100,27 @@ export function validatePackagedStage(stageOutput, electronDirectory) {
     throw new Error('Stage contém um canal de atualização não autorizado. Revise a configuração antes de distribuir.')
 }
 
+export function validateArchiveEntries(entries) {
+  for (const entry of entries) {
+    const parts = entry.toLowerCase().split(/[\\/]+/)
+    if (parts.some(part => part === 'airi' || part === '@proj-airi'
+      || part.startsWith('cubismsdkforweb')
+      || /^live2dcubismcore(?:\.min)?\.js$/.test(part)
+      || /^hiyori_(?:free|pro).*\.zip$/.test(part))) {
+      throw new Error('O pacote contém runtime ou assets legados fora do escopo da distribuição privada.')
+    }
+  }
+}
+
+function validateArchive(builderPath, archive) {
+  requireFile(archive, 'Arquivo do aplicativo')
+  // Use the ASAR reader of the same pinned builder that wrote the archive.
+  const builderRequire = createRequire(realpathSync(builderPath))
+  const appBuilderRequire = createRequire(builderRequire.resolve('app-builder-lib'))
+  const { listPackage } = appBuilderRequire('@electron/asar')
+  validateArchiveEntries(listPackage(archive))
+}
+
 function builder(inputs, cwd, args) {
   const result = spawnSync(process.execPath, [inputs.builder, ...args, '--publish', 'never'], {
     cwd,
@@ -127,6 +149,7 @@ export function packageWindows({ checkOnly = false, unpacked = false, internalTe
     writeFileSync(config, JSON.stringify(stageConfiguration(inputs), null, 2))
     builder(inputs, inputs.stage, ['--config', config, '--win', '--x64', '--dir'])
     validatePackagedStage(inputs.stageOutput, inputs.electron)
+    validateArchive(inputs.builder, join(inputs.stageOutput, 'resources/app.asar'))
     const launcherConfig = join(temporary, 'launcher.json')
     writeFileSync(launcherConfig, JSON.stringify(nativeLauncherConfiguration(inputs), null, 2))
     builder(inputs, inputs.launcher, [
@@ -137,6 +160,9 @@ export function packageWindows({ checkOnly = false, unpacked = false, internalTe
       '--x64',
       ...(unpacked ? ['--dir'] : []),
     ])
+    const output = resolve(inputs.launcher, launcherConfiguration.directories.output, 'win-unpacked')
+    validateArchive(inputs.builder, join(output, 'resources/app.asar'))
+    validateArchive(inputs.builder, join(output, 'resources/stage/resources/app.asar'))
   }
   finally {
     rmSync(temporary, { recursive: true, force: true })
