@@ -22,6 +22,10 @@ Rode `powershell -NoProfile -File .\lia\Test-Lia.ps1 -Prepare`
 para preparar os builds e verificar Core, runtime, Launcher, Stage e
 empacotador. O mesmo script roda no CI Windows em uma cópia que só
 contém `lia/` e `Lia.bat`.
+No Windows, `python tools/lia_dev.py round` também executa essa suíte e
+verifica a abertura e o encerramento do Stage próprio pelo Launcher.
+A rodada M3.0b está disponível para reprodução histórica com
+`python tools/lia_dev.py legacy-m30b`.
 
 | Componente | Caminho atual |
 | --- | --- |

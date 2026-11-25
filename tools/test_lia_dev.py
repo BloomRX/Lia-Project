@@ -2470,6 +2470,19 @@ class RuntimeGateTests(unittest.TestCase):
         self.assertIn('stage-avatar-scene-mounted: AUSENTE', report_text)
 
 
+class NativeValidationRoutingTests(unittest.TestCase):
+    def test_default_and_round_commands_use_native_validation(self):
+        for argv in ([], ['bootstrap'], ['auto'], ['round']):
+            with self.subTest(argv=argv), patch.object(lia_dev, 'cmd_native_validation', return_value=7) as native:
+                self.assertEqual(lia_dev.main(argv), 7)
+                native.assert_called_once()
+
+    def test_the_historical_round_requires_an_explicit_command(self):
+        with patch.object(lia_dev, 'cmd_round', return_value=3) as legacy:
+            self.assertEqual(lia_dev.main(['legacy-m30b']), 3)
+            legacy.assert_called_once()
+
+
 class BootstrapTests(unittest.TestCase):
     """§B: the bootstrap updates first, then runs the UPDATED code."""
 

@@ -67,7 +67,7 @@ def cmd_status(_args: argparse.Namespace) -> int:
 
     branch = _git(repo, ['rev-parse', '--abbrev-ref', 'HEAD'])
     head = _git(repo, ['rev-parse', 'HEAD'])
-    print('== Rodada ativa ==')
+    print('== Rodada histórica ==')
     print(f'  id            : {manifest.id}')
     print(f'  título        : {manifest.title}')
     print(f'  fase          : {manifest.phase}')
@@ -86,7 +86,7 @@ def cmd_status(_args: argparse.Namespace) -> int:
     last = latest_run(repo)
     print('== Última execução registrada ==')
     if not last:
-        print('  nenhuma. Rode "Executar rodada atual".')
+        print('  nenhuma. Use legacy-m30b para consultar a execução histórica.')
         return 0
     recorded = last.get('git', {}).get('head_sha', '')
     validity = pass_validity(recorded, head)
@@ -195,8 +195,8 @@ def cmd_menu(_args: argparse.Namespace) -> int:
     while True:
         print('')
         print('DevKit Lia - desenvolvimento por rodada')
-        print(f'  rodada ativa: {active}')
-        print('  1) Executar rodada atual')
+        print(f'  rodada histórica: {active}')
+        print('  1) Executar validação nativa')
         print('  2) Abrir Lia normalmente')
         print('  3) Mostrar rodada / estado atual')
         print('  4) Diagnóstico do ambiente')
@@ -209,7 +209,7 @@ def cmd_menu(_args: argparse.Namespace) -> int:
             print('')
             return 0
         if choice == '1':
-            cmd_round(argparse.Namespace())
+            cmd_native_validation(argparse.Namespace())
         elif choice == '2':
             cmd_open(argparse.Namespace())
         elif choice == '3':
@@ -323,24 +323,44 @@ def cmd_auto(args: argparse.Namespace) -> int:
     return 0 if result.is_pass else 1
 
 
+def cmd_native_validation(_args: argparse.Namespace) -> int:
+    if sys.platform != 'win32':
+        return _fail('a validação nativa do desktop exige Windows')
+    root = repo_root()
+    powershell = shutil.which('powershell.exe')
+    node = shutil.which('node')
+    if not powershell or not node:
+        return _fail('PowerShell e Node.js são necessários para validar a Lia')
+    commands = (
+        [powershell, '-NoProfile', '-File', str(root / 'lia' / 'Test-Lia.ps1'), '-Prepare'],
+        [node, '--experimental-strip-types', str(root / 'lia' / 'desktop' / 'scripts' / 'check-native-stage.mjs')],
+    )
+    for command in commands:
+        result = subprocess.run(command, cwd=root)
+        if result.returncode != 0:
+            return result.returncode
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog='lia_dev', description='DevKit Lia por rodada')
     sub = parser.add_subparsers(dest='cmd')
     auto = sub.add_parser('auto', help='piloto automático sem nenhuma escolha (padrão)')
     auto.add_argument('--no-sync', action='store_true',
-                      help='não sincroniza com o remote (avançado)')
+                      help=argparse.SUPPRESS)
     auto.add_argument('--no-publish', action='store_true',
-                      help='não publica ao final (avançado)')
+                      help=argparse.SUPPRESS)
     auto.add_argument('--post-sync', action='store_true',
-                      help='uso interno: o bootstrap já sincronizou este checkout')
-    sub.add_parser('bootstrap', help='uso interno: sincroniza e reexecuta o auto')
+                      help=argparse.SUPPRESS)
+    sub.add_parser('bootstrap', help='uso interno: inicia a validação nativa')
+    sub.add_parser('legacy-m30b', help='executa o manifesto histórico M3.0b')
     universal = sub.add_parser(
         'git', help='DevKit universal (publish, pull, validate, ...)',
     )
     # REMAINDER keeps the user's own quoting intact; `git` is dropped in Python.
     universal.add_argument('rest', nargs=argparse.REMAINDER)
     sub.add_parser('menu', help='menu interativo (avançado)')
-    sub.add_parser('round', help='executa a rodada ativa')
+    sub.add_parser('round', help='executa a validação nativa do Windows')
     sub.add_parser('status', help='rodada ativa + validade do último PASS')
     sub.add_parser('open', help='abre o Lia normalmente, sem gate')
     sub.add_parser('diagnose', help='fatos do ambiente')
@@ -395,8 +415,12 @@ HANDLERS = {
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    # DOUBLE-CLICK / no arguments means AUTO. The menu is advanced-only now.
-    handler = HANDLERS.get(args.cmd or 'auto', cmd_auto)
+    if args.cmd in (None, 'bootstrap', 'auto', 'round'):
+        handler = cmd_native_validation
+    elif args.cmd == 'legacy-m30b':
+        handler = cmd_round
+    else:
+        handler = HANDLERS[args.cmd]
     try:
         return handler(args)
     except KeyboardInterrupt:
