@@ -50,6 +50,8 @@
 - **Candidata sem a árvore legada.** A árvore Git `eb35b62a`, derivada de `67a633b8` com a exclusão isolada dos 5.271 caminhos legados, passou em instalação e build Windows, ciclo Launcher–Stage, conversa sintética, Kokoro com reprodução silenciada e presença VRM em dois monitores. O NSIS completou em um caminho curto após falhar ao abrir uma inclusão existente de 267 caracteres no primeiro diretório. Em seguida, a instalação limpa, a conversa sintética no Stage instalado, a saída dos processos do pacote e a desinstalação passaram. A candidata foi extraída fora do checkout de desenvolvimento.
 - **Escrita privada no CI.** Em `67a633b8`, a escrita falhou em 5,1 s no runner, enquanto a sonda com fases passou. A mudança `ee42255b` drena as saídas do processo sem registrar conteúdo. A escrita e a DACL passaram localmente e o [job de escrita privada](https://github.com/BloomRX/Lia-Project/actions/runs/45620751090) passou no runner. A causa da intermitência não foi demonstrada.
 
+- **Retirada da árvore legada.** A `main` mantém o desktop próprio como único caminho operacional. Os 5.271 arquivos da cópia AIRI saem da árvore versionada e permanecem recuperáveis pelo Git e pelo bundle verificado. O checkout de migração preserva os arquivos locais. A renderização Live2D, a síntese clonada, o OIDC integrado e a validação externa ainda são lacunas da Lia própria.
+
 - **Próximo corte.** Fechar as demais lacunas antes de remover a árvore legada. O contrato de índice publicado do Hub não expõe execução supervisionada. A integração de execução depende de um contrato com permissões e cancelamento no Hub.
 
 [Evidências da Rodada 22](../reports/LIA-ROUND-22-IMPLEMENTATION-REPORT.md) · [Pendências por ambiente](QUANTO-FALTA.md)

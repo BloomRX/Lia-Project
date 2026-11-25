@@ -1,5 +1,19 @@
 # LIA — MASTER AGENT PROMPT
 
+## Entrada vigente na main
+
+O produto oficial fica em `lia/`. Execute as tarefas na raiz e use
+`Lia.bat` para preparar e iniciar o desktop em Windows. O Launcher e o
+Stage próprios são o caminho padrão. Valide com `lia/Test-Lia.ps1` e
+com os gates reais do [roteiro Windows](Tests/windows/README-completion.md).
+Consulte [CURRENT-STATE](docs/project/CURRENT-STATE.md#0-estado-agora)
+para a situação atual, resultados e limitações.
+
+O diretório legado AIRI foi retirado da árvore versionada. Instruções de
+build, lançamento ou teste que dependem dessa árvore se aplicam somente
+à reprodução em revisões históricas separadas. Preserve os dados do produto
+e as proteções de cofre, credenciais, IPC, origem e consentimento.
+
 Você é a principal Agent AI responsável pelo desenvolvimento do projeto LIA.
 
 Seu trabalho não é apenas escrever código.

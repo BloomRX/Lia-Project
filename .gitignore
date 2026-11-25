@@ -17,7 +17,6 @@ Tests/artifacts/
 
 # Workspace tooling may create a root cache; dependencies are never source.
 /node_modules/
-/airi/apps/stage-tamagotchi/Tests/artifacts/
 
 # Bancada STT (tools/stt-bench). Ambiente, saida e audio nunca entram no Git.
 # O manifesto samples.json e pessoal; o exemplo versionado e samples.example.json.
@@ -42,35 +41,8 @@ tools/stt-bench/samples/*.webm
 # Referencias upstream materializadas do Agent Hub, fora da descoberta de skills.
 /.agents/upstream-reference/
 
-# Skills AIRI materializadas do Agent Hub.
-/airi/.agents/skills/eventa/
-/airi/.agents/skills/simple-english/
-/airi/.agents/skills/vue-best-practices/
-/airi/.agents/skills/vue-testing-best-practices/
-/airi/.agents/skills/.hub-stage-*/
-/airi/.agents/skills/agent-browser/
-/airi/.agents/skills/pinia/
-/airi/.agents/skills/pnpm/
-/airi/.agents/skills/unocss/
-/airi/.agents/skills/vue/
-/airi/.agents/skills/web-design-guidelines/
-/airi/.agents/skills/xsai/
-/airi/.agents/skills/agent-browser-electron/
-/airi/.agents/skills/create-pr/
-/airi/.agents/skills/enforce-rules-for-unocss/
-/airi/.agents/skills/enforce-rules-for-vitest/
-/airi/.agents/skills/release-note-writer/
-/airi/.agents/skills/stage-tamagotchi-godot-csharp/
-/airi/.agents/skills/use-agent-browser-for-airi/
-/airi/.agents/skills/use-agent-browser-with-input-file/
-/airi/.agents/skills/use-vishot/
-/airi/.agents/skills/use-vishot-for-airi/
-/airi/.agents/skills/use-vishot-with-capacitor/
-/airi/.agents/skills/use-vishot-with-electron/
-/airi/.agents/skills/use-vishot-with-input-file/
-/airi/.agents/skills/use-vishot-with-web/
-/airi/.agents/skills/tsdown/
-/airi/.agents/skills/vueuse-functions/
+# Preserva cópias locais do checkout legado após a retirada do Git.
+/airi/
 
 /lia/runtime/dist/
 /lia/runtime/node_modules/

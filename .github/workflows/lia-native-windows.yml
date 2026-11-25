@@ -54,11 +54,7 @@ jobs:
           $standalone = Join-Path $env:RUNNER_TEMP 'lia-native'
           $archive = Join-Path $env:RUNNER_TEMP 'lia-native.tar'
           New-Item -ItemType Directory -Path $standalone | Out-Null
-          $entries = @(git ls-tree --name-only HEAD | Where-Object { $_ -ne 'airi' })
-          if ('lia' -notin $entries -or 'Lia.bat' -notin $entries) {
-            throw 'A árvore não contém a entrada e os pacotes próprios da Lia.'
-          }
-          git archive --format=tar --output=$archive HEAD -- @entries
+          git archive --format=tar --output=$archive HEAD
           tar -xf $archive -C $standalone
           if (Test-Path (Join-Path $standalone 'airi')) {
             throw 'O gate exige uma árvore sem airi/.'

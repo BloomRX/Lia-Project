@@ -24,7 +24,7 @@ registra os gates e seus limites.
 | Voz e percepção | Kokoro CPU, Whisper CPU e gates Windows de consentimento para serviços sintéticos. | Áudio físico, voz clonada no Stage e validação de provedores externos. |
 | Avatar e presença | VRM, movimento, pausa, posição inicial, ocultação e segundo monitor conectado. Cartões Live2D continuam permitindo importar a personalidade. | Renderização Live2D, termos aplicáveis ao Cubism e aos modelos, além de tela cheia e desconexão física de monitor. |
 | Ferramentas e conta | Relógio com opt-in e ida e volta no chat, leitura do catálogo publicado pelo Agent Hub, proteção do cofre e controle da origem de credenciais. | Execução supervisionada pelo Hub e OIDC integrado e validado. |
-| Retirada do legado | Bundle completo restaurado e verificado. O trabalho legado continua preservado. | A pasta rastreada `airi/` permanece enquanto se resolve a compatibilidade pendente. |
+| Retirada do legado | Bundle completo restaurado e verificado. O trabalho legado continua preservado. | A árvore legada está no histórico Git. As lacunas de compatibilidade acima seguem em aberto. |
 
 ## Onde o projeto está
 

@@ -1,6 +1,6 @@
 # Lia-Project
 
-**Lia** — companheira virtual (AI companion), um produto próprio em processo de desacoplamento técnico. O [Project AIRI](https://github.com/moeru-ai/airi) é mantido como referência e fonte de estudo, não como a arquitetura final obrigatória.
+**Lia** — companheira virtual (AI companion), um produto próprio em processo de desacoplamento técnico. O [Project AIRI](https://github.com/moeru-ai/airi) permanece como referência histórica no Git.
 
 ## Comece aqui
 
@@ -43,7 +43,12 @@ e distribuição.
 
 ## Credits / Third-party projects
 
-Este repositório contém código e componentes de terceiros, incluindo um fork/referência do **[Project AIRI](https://github.com/moeru-ai/airi)**. Alguns caminhos legados ainda dependem de componentes AIRI enquanto o desacoplamento avança. AIRI é referência técnica e origem de parte do código atual, não a arquitetura-alvo nem uma dependência permanente desejada. A Lia também utiliza bibliotecas, engines, modelos e assets de terceiros. Licenças e atribuições detalhadas são registradas em `docs/licenses/` (ver [`THIRD-PARTY-NOTICES.md`](docs/licenses/THIRD-PARTY-NOTICES.md) e [`ASSET-LICENSES.md`](docs/licenses/ASSET-LICENSES.md)).
+A Lia utiliza código, bibliotecas, engines, modelos e assets de terceiros.
+O [Project AIRI](https://github.com/moeru-ai/airi) é uma origem histórica de
+parte do código. A cópia legada permanece recuperável no histórico do Git.
+Consulte os [avisos de terceiros](docs/licenses/THIRD-PARTY-NOTICES.md) e as
+[licenças de assets](docs/licenses/ASSET-LICENSES.md) para atribuições e
+condições de distribuição.
 
 ## DevKit
 
