@@ -36,6 +36,21 @@ const runtimeLocation = ref<any>(undefined)
 const speech = ref({ baseUrl: '', modelId: '', voiceId: '', apiKey: '', hasKey: false })
 const speechBusy = ref(false)
 const speechFeedback = ref('')
+const localSpeech = ref<{ voices: string[], active: boolean, voiceId: string }>({ voices: [], active: false, voiceId: '' })
+const voiceLabels: Record<string, string> = { pf_dora: 'Dora', pm_alex: 'Alex', pm_santa: 'Santa' }
+
+async function loadLocalSpeech() {
+  try {
+    const options = await props.api?.localSpeechOptions?.()
+    if (!options)
+      throw new Error('local-speech-options')
+    localSpeech.value = options
+  }
+  catch {
+    feedback.value = 'Não foi possível carregar as vozes locais.'
+  }
+}
+
 const transcription = ref({ baseUrl: '', modelId: '', apiKey: '', hasKey: false, local: false })
 const transcriptionBusy = ref(false)
 const transcriptionFeedback = ref('')
@@ -92,7 +107,7 @@ async function saveSpeech() {
     const { baseUrl, modelId, voiceId, apiKey } = speech.value
     if (!await props.api?.speechConnectionSave?.({ baseUrl, modelId, voiceId, ...(apiKey ? { apiKey } : {}) }))
       throw new Error('speech-save')
-    await loadSpeech()
+    await Promise.all([loadSpeech(), loadLocalSpeech()])
     speechFeedback.value = 'Síntese compatível selecionada.'
   }
   catch {
@@ -108,7 +123,9 @@ async function useLocalSpeech(fromSettings = false) {
   const notice = fromSettings ? speechFeedback : feedback
   speechBusy.value = true
   try {
-    const saved = await props.api?.useLocalSpeech?.()
+    const saved = await props.api?.useLocalSpeech?.(localSpeech.value.voiceId || undefined)
+    if (saved)
+      await loadLocalSpeech()
     notice.value = saved ? 'Motor local selecionado.' : 'Não foi possível selecionar o motor local.'
   }
   catch {
@@ -131,6 +148,7 @@ async function reloadLocation() {
 onMounted(async () => {
   await Promise.all([loadSpeech(), loadTranscription()])
   await reload()
+  await loadLocalSpeech()
   await reloadLocation()
   const preferred = (await props.api?.productConfig?.())?.snapshot?.voice?.tts?.preferred
   kind.value = preferred?.providerId === 'custom-local-voice' ? 'custom' : 'ready'
@@ -320,8 +338,17 @@ async function importVoice() {
       <p class="dim">
         Use o motor local instalado ou configure um serviço HTTPS na seção de síntese.
       </p>
+      <div class="local-speech-field">
+        <label for="local-speech-voice">Voz local</label>
+        <select id="local-speech-voice" v-model="localSpeech.voiceId" :disabled="speechBusy || !localSpeech.voices.length">
+          <option v-for="voiceId in localSpeech.voices" :key="voiceId" :value="voiceId">
+            {{ voiceLabels[voiceId] ?? voiceId }}
+          </option>
+        </select>
+      </div>
+      <p v-if="localSpeech.active" class="dim">Síntese local ativa.</p>
       <div class="ready-actions">
-        <LiaButton variant="primary" :disabled="busy || speechBusy" @click="useLocalSpeech()">
+        <LiaButton variant="primary" :disabled="busy || speechBusy || !localSpeech.voices.includes(localSpeech.voiceId)" @click="useLocalSpeech()">
           Selecionar motor local
         </LiaButton>
       </div>
@@ -491,6 +518,7 @@ h3 { margin: 0 0 var(--lia-space-3); }
   word-break: break-all;
 }
 
+.local-speech-field { display: grid; gap: var(--lia-space-1); max-width: 18rem; }
 .ready-actions { margin-top: var(--lia-space-2); }
 .feedback { font-size: var(--lia-text-sm); margin: 0; }
 .speech-settings {
@@ -509,7 +537,8 @@ h3 { margin: 0 0 var(--lia-space-3); }
   margin: var(--lia-space-3) 0;
 }
 .speech-settings label { display: grid; gap: var(--lia-space-1); }
-.speech-settings input {
+.speech-settings input,
+.local-speech-field select {
   background: var(--lia-bg-app);
   border: 1px solid var(--lia-border-subtle);
   border-radius: var(--lia-radius-md);

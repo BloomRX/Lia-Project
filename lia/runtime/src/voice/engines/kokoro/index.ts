@@ -31,7 +31,7 @@ export type { KokoroInstallFacts, KokoroLayout, KokoroSpawn, KokoroWorkerClient,
 export { defaultKokoroInstallDeps, ensureKokoroInstalled, KokoroInstallError } from './install'
 export type { KokoroInstallDeps } from './install'
 export { inspectKokoroInstall, resolveKokoroLayout } from './layout'
-export { KOKORO_MODEL_BYTES, KOKORO_MODEL_SHA256, KOKORO_SAMPLE_RATE } from './manifest'
+export { KOKORO_DEFAULT_VOICE_ID, KOKORO_MODEL_BYTES, KOKORO_MODEL_SHA256, KOKORO_SAMPLE_RATE, KOKORO_VOICES } from './manifest'
 
 // The dev-only smoke path (Phase 7.9D) and layout inspection compose the
 // same adapter surface as the engine itself - one production module.

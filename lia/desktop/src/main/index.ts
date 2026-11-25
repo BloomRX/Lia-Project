@@ -5,6 +5,7 @@ import process from 'node:process'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 
+import { KOKORO_DEFAULT_VOICE_ID, KOKORO_VOICES } from '@lia/core/voice/engines/kokoro'
 import { createWindowsUserCipher } from '@lia/core/secrets/windows-user-cipher'
 import { app, BrowserWindow, dialog, ipcMain, safeStorage } from 'electron'
 import { statSync as physicalStatSync } from 'original-fs'
@@ -220,10 +221,21 @@ async function bootstrap(): Promise<void> {
   ipcMain.handle('lia:voice:speech-save', (event, input: unknown) => ownsWindow(event) ? host.saveSpeechConnection(input).catch(() => false) : false)
   ipcMain.handle('lia:voice:transcription-connection', (event, local: unknown) => ownsWindow(event) && (local === undefined || typeof local === 'boolean') ? host.transcriptionConnection(local).catch(() => undefined) : undefined)
   ipcMain.handle('lia:voice:transcription-save', (event, input: unknown) => ownsWindow(event) ? host.saveTranscriptionConnection(input).catch(() => false) : false)
-  ipcMain.handle('lia:voice:speech-local', async event => {
+  ipcMain.handle('lia:voice:speech-local-options', async event => {
+    if (!ownsWindow(event))
+      return undefined
+    const selected = (await host.productSnapshot())?.voice?.tts?.preferred
+    const active = selected?.providerId === 'kokoro'
+    const voices = KOKORO_VOICES.map(voice => voice.name)
+    return { voices, active, voiceId: active ? selected.voiceId ?? KOKORO_DEFAULT_VOICE_ID : KOKORO_DEFAULT_VOICE_ID }
+  })
+  ipcMain.handle('lia:voice:speech-local', async (event, input: unknown) => {
     if (!ownsWindow(event))
       return false
-    const result = await host.updateConfig({ update: { voice: { tts: { preferred: { providerId: 'kokoro' } } } } })
+    const voiceId = input === undefined ? KOKORO_DEFAULT_VOICE_ID : input
+    if (typeof voiceId !== 'string' || !KOKORO_VOICES.some(voice => voice.name === voiceId))
+      return false
+    const result = await host.updateConfig({ update: { voice: { tts: { preferred: { providerId: 'kokoro', voiceId } } } } })
     return result.status === 'ok'
   })
   registerLiaIpc(host, timer, {

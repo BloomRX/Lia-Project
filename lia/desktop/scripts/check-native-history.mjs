@@ -48,7 +48,7 @@ try {
   await Promise.all([
     writeFile(join(root, 'lia-product.json'), JSON.stringify({
       provider: { chat: { preferred: { providerId, modelId } } },
-      ...(kokoroVoice ? { voice: { tts: { preferred: { providerId: 'kokoro', voiceId: kokoroVoice } } } } : {}),
+      setup: { completed: true },
     })),
     writeFile(join(root, 'lia-transports.json'), JSON.stringify({
       schemaVersion: 1,
@@ -70,6 +70,34 @@ try {
       migration: { version: 1, imported: [] },
     })),
   ])
+  if (kokoroVoice) {
+    const appData = join(root, 'launcher-appdata')
+    await mkdir(appData)
+    const launchLauncher = () => _electron.launch({
+      executablePath: join(stage, 'node_modules', 'electron', 'dist', 'electron.exe'),
+      args: [fileURLToPath(new URL('../out/main/index.js', import.meta.url))],
+      env: { ...process.env, APPDATA: appData, LIA_USER_DATA: root },
+    })
+    app = await launchLauncher()
+    let launcher = await app.firstWindow()
+    await launcher.getByRole('button', { name: 'Voz', exact: true }).click()
+    const localVoice = launcher.getByLabel('Voz local', { exact: true })
+    await localVoice.selectOption(kokoroVoice, { timeout: 10_000 })
+    await launcher.getByRole('button', { name: 'Selecionar motor local', exact: true }).click()
+    await launcher.getByText('Motor local selecionado.', { exact: true }).waitFor({ timeout: 10_000 })
+    const invalidAccepted = await launcher.evaluate(() => window.liaApi.useLocalSpeech('invalid'))
+    assert.equal(invalidAccepted, false)
+    await app.close()
+    app = await launchLauncher()
+    launcher = await app.firstWindow()
+    await launcher.getByRole('button', { name: 'Voz', exact: true }).click()
+    await launcher.getByText('Síntese local ativa.', { exact: true }).waitFor({ timeout: 10_000 })
+    assert.equal(await launcher.getByLabel('Voz local', { exact: true }).inputValue(), kokoroVoice)
+    await launcher.getByLabel('Voz local', { exact: true }).scrollIntoViewIfNeeded()
+    await launcher.screenshot({ path: join(root, 'kokoro-selection.png'), fullPage: true })
+    await app.close()
+    app = undefined
+  }
   const hubHome = withPublishedHub ? process.env.LIA_AGENTHUB_HOME : join(root, 'hub-fixture')
   assert.ok(hubHome, 'Defina LIA_AGENTHUB_HOME para o perfil com catálogo publicado.')
   if (!withPublishedHub) {
@@ -348,7 +376,7 @@ try {
   await page.getByText('Mensagem apagada.', { exact: true }).waitFor()
   assert.equal(await page.getByText('Você: Mensagem sem ferramenta', { exact: true }).count(), 0)
   assert.equal(await page.getByText(`Lia: Resposta ${requests.length}`, { exact: true }).count(), 1)
-  const report = { service: 'synthetic local HTTP', optIn: true, reopened: true, resumed: true, legacyTextImported: true, cancellationPreservedHistory: true, cleared: true, clearDisabledWhenEmpty: true, rateLimitSanitized: true, refusedImageWithoutVision: true, conversationsIsolated: true, selectionRestored: true, deletionConfirmed: true, builtInPersonaInRequest: true, importedPersonaInRequest: true, importedPersonaRestored: true, personaContextIsolated: true, kokoroVoice: withVoice ? (kokoroVoice ?? 'default') : null, localKokoroMutedPlayback: withVoice ? 'cancelled, retried, played and stopped' : null, autoPlay: withVoice ? 'opt-in, persisted, played, opted out' : null, customizedTraitsPersisted: true }
+  const report = { service: 'synthetic local HTTP', optIn: true, reopened: true, resumed: true, legacyTextImported: true, cancellationPreservedHistory: true, cleared: true, clearDisabledWhenEmpty: true, rateLimitSanitized: true, refusedImageWithoutVision: true, conversationsIsolated: true, selectionRestored: true, deletionConfirmed: true, builtInPersonaInRequest: true, importedPersonaInRequest: true, importedPersonaRestored: true, personaContextIsolated: true, kokoroSelectedByLauncher: Boolean(kokoroVoice), kokoroVoice: withVoice ? (kokoroVoice ?? 'default') : null, localKokoroMutedPlayback: withVoice ? 'cancelled, retried, played and stopped' : null, autoPlay: withVoice ? 'opt-in, persisted, played, opted out' : null, customizedTraitsPersisted: true }
   report.localClockRoundTrip = true
   report.singleMessageRemoved = { dialogResponse: 'injected', remainingReplyVisible: true }
   report.memoryClear = { dialogResponse: 'injected', cancelPreservedNote: true, clearPreservedConversation: true, focusRestored: true }
