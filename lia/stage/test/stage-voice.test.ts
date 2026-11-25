@@ -87,3 +87,22 @@ test('opt-out and an unavailable selection never reach the voice engine', async 
   assert.equal(stopped, 1)
   assert.deepEqual(await voice.speak('Olá'), { ok: false, code: 'unavailable' })
 })
+
+test('an explicitly selected legacy or unsupported provider never plays the local default', async () => {
+  let providerId = 'custom-local-voice'
+  let calls = 0
+  const engine = engineFixture(async () => {
+    calls++
+    return { audio, engine: 'kokoro' }
+  }, async () => {})
+  const voice = createStageVoice(engine, async () => ({
+    status: 'ok', filePath: '', value: { voice: { tts: { preferred: { providerId } } } },
+  }))
+  assert.deepEqual(await voice.speak('Olá'), { ok: false, code: 'unavailable' })
+  providerId = 'unknown-speech'
+  assert.deepEqual(await voice.speak('Olá'), { ok: false, code: 'unavailable' })
+  assert.equal(calls, 0)
+  providerId = 'kokoro'
+  assert.deepEqual(await voice.speak('Olá'), { ok: true, audio })
+  assert.equal(calls, 1)
+})

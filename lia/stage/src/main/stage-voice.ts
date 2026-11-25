@@ -60,8 +60,12 @@ export function createStageVoice(
         if (!readVoiceEnabledConfig(voice))
           return { ok: false, code: 'disabled' } as const
         const target = voice?.tts?.preferred
-        if (target && supportsStageSpeech(target.providerId))
-          return await remoteSpeech?.(target, text.slice(0, 8_000), job.controller.signal) ?? { ok: false, code: 'unavailable' } as const
+        if (target) {
+          if (supportsStageSpeech(target.providerId))
+            return await remoteSpeech?.(target, text.slice(0, 8_000), job.controller.signal) ?? { ok: false, code: 'unavailable' } as const
+          if (target.providerId !== engine.id)
+            return { ok: false, code: 'unavailable' } as const
+        }
         job.synthesizing = true
         const { audio } = await service.synthesize({ text: text.slice(0, 8_000) })
         if (job.cancelled)
