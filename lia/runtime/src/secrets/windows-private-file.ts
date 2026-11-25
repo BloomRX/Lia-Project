@@ -31,10 +31,15 @@ export async function writePrivateWindowsFile(path: string, data: string, signal
       cwd: system,
       env: { SystemRoot: windowsDirectory, WINDIR: windowsDirectory, LIA_VAULT_PENDING_PATH: path },
       signal,
-      stdio: ['pipe', 'ignore', 'ignore'],
+      stdio: ['pipe', 'pipe', 'pipe'],
       timeout: 5000,
       windowsHide: true,
     })
+    // Drain the child streams without retaining diagnostic text. The hosted
+    // Windows gate observed a stall with ignored standard handles and a
+    // successful run of the same ACL constructor with piped handles.
+    child.stdout.resume()
+    child.stderr.resume()
     let failed = false
     child.on('error', () => {
       failed = true
