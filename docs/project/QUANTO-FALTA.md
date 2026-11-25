@@ -23,7 +23,7 @@ registra os gates e seus limites.
 | Conversa, visão e dados | Qwen local no Windows, histórico opt-in com múltiplas conversas, memória e personalidade. O gate HTTPS local passou para imagem e texto com credencial sintética. | Provedor externo real e equivalência das extensões legadas do cartão seguem pendentes. |
 | Voz e percepção | Kokoro CPU, Whisper CPU e gates Windows de consentimento para serviços sintéticos. | Áudio físico, voz clonada no Stage e validação de provedores externos. |
 | Avatar e presença | VRM, movimento, pausa, posição inicial, ocultação e segundo monitor conectado. Cartões Live2D continuam permitindo importar a personalidade. | Renderização Live2D, termos aplicáveis ao Cubism e aos modelos, além de tela cheia e desconexão física de monitor. |
-| Ferramentas e conta | Relógio com opt-in e ida e volta no chat, leitura do catálogo publicado pelo Agent Hub, proteção do cofre e controle da origem de credenciais. | Execução supervisionada pelo Hub e OIDC integrado e validado. |
+| Ferramentas e conta | Relógio com opt-in e ida e volta no chat, leitura do catálogo publicado pelo Agent Hub, proteção do cofre e controle da origem de credenciais. A conta OIDC do Launcher foi exercitada em Electron com emissor local sintético. | Execução supervisionada pelo Hub, ativação OIDC de produção, emissor externo, navegador do sistema e consumidores autenticados do Stage. |
 | Retirada do legado | Bundle completo restaurado e verificado. O trabalho legado continua preservado. | A árvore legada está no histórico Git. As lacunas de compatibilidade acima seguem em aberto. |
 
 ## Onde o projeto está
