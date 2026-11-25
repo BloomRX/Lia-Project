@@ -20,8 +20,6 @@ import {
   benchmarkRunId,
   boundText,
   buildShaManifest,
-  canonicalCommands,
-  canonicalCommandsWithSmoke,
   nativeBenchmarkCommands,
   classifyBenchmark,
   classifyCommandOutcome,
@@ -239,12 +237,7 @@ const CHROMIUM_EXECUTABLE_PROBE = "import { existsSync } from 'node:fs'; import 
  * Whether the Playwright Chromium EXECUTABLE exists - what the field's name
  * promises, and what the previous `playwright --version` probe could not tell.
  *
- * Two corrections at once:
- * - Playwright belongs to the AIRI workspace, not the repository root, so the
- *   probe runs from `<repo>/airi` where the dependency is actually resolvable;
- * - a CLI version string only proves the npm package is installed. This asks
- *   for `chromium.executablePath()` and checks that file, which is the only
- *   thing that means a browser can run.
+ * The probe resolves Playwright from the Launcher package and checks the browser binary.
  *
  * Any failure - missing package, throwing probe, spawn error - is honestly
  * `false`; the inventory never claims a browser it cannot prove.
@@ -253,7 +246,7 @@ export function detectPlaywrightChromiumAvailability({ platform = process.platfo
   try {
     const r = runWithRunner(
       ['node', '--input-type=module', '-e', CHROMIUM_EXECUTABLE_PROBE],
-      { cwd: nodePath.join(repoRoot, 'airi'), platform, spawn },
+      { cwd: nodePath.join(repoRoot, 'lia', 'desktop'), platform, spawn },
     )
     return r.status === 0
   } catch {
@@ -261,7 +254,7 @@ export function detectPlaywrightChromiumAvailability({ platform = process.platfo
   }
 }
 
-export function collectHardware({ platform = process.platform, spawn = spawnSync, native = false } = {}) {
+export function collectHardware({ platform = process.platform, spawn = spawnSync, repoRoot = REPO_ROOT } = {}) {
   const base = hardwareFromNode()
   try {
     const r = runWithRunner(['pnpm', '--version'], { cwd: REPO_ROOT, platform, spawn })
@@ -296,8 +289,7 @@ export function collectHardware({ platform = process.platform, spawn = spawnSync
       if (p.status === 0) base.diskFree = p.stdout
     } catch {}
   }
-  if (!native)
-    base.chromiumAvailable = detectPlaywrightChromiumAvailability({ platform, spawn })
+  base.chromiumAvailable = detectPlaywrightChromiumAvailability({ platform, spawn, repoRoot })
   delete base.freeRamBytes
   return base
 }
@@ -501,12 +493,13 @@ export function launcherCheck({ repoRoot = REPO_ROOT, platform = process.platfor
 // ---------------------------------------------------------------------------
 // Main orchestration
 // ---------------------------------------------------------------------------
-export async function runBenchmark({ repoRoot = REPO_ROOT, args = process.argv.slice(2), now = new Date(), commandRunner = null, hardwareCollector = null, platform = process.platform, native = false } = {}) {
+export async function runBenchmark({ repoRoot = REPO_ROOT, args = process.argv.slice(2), now = new Date(), commandRunner = null, hardwareCollector = null, platform = process.platform, commandInventory = null } = {}) {
+  if (commandInventory && !commandRunner) throw new Error('A matriz injetada exige um executor de teste.')
   const rawArgs = args
   const isReportOnly = rawArgs.includes('--report-only')
   const reportOnlyId = isReportOnly ? rawArgs[rawArgs.indexOf('--report-only')+1] : null
   const isLauncherCheck = rawArgs.includes('--launcher-check')
-  const noPush = rawArgs.includes('--no-push')
+  const noPush = !commandInventory || rawArgs.includes('--no-push')
   let withSmoke = rawArgs.includes('--with-smoke')
 
   if (isLauncherCheck) {
@@ -610,12 +603,10 @@ export async function runBenchmark({ repoRoot = REPO_ROOT, args = process.argv.s
   const gitInfo = { ...gitInfoFull }
   const gitInfoPublish = { sourceSha: gitInfo.sourceSha, sourceBranch: gitInfo.sourceBranch, remoteSourceSha: gitInfo.remoteSourceSha, gitVersion: gitInfo.gitVersion, nodeVersion: gitInfo.nodeVersion, pnpmVersion: gitInfo.pnpmVersion, pythonVersion: gitInfo.pythonVersion }
 
-  const hardware = (hardwareCollector || (()=>collectHardware({ platform, native })))()
+  const hardware = (hardwareCollector || (()=>collectHardware({ platform, repoRoot })))()
 
-  let commands = native
-    ? nativeBenchmarkCommands(repoRoot, withSmoke)
-    : withSmoke ? canonicalCommandsWithSmoke(repoRoot, true) : canonicalCommands(repoRoot)
-  const smokeScript = native ? 'tools/kokoro-smoke.mjs' : 'Tests/tools/kokoro-smoke.mjs'
+  let commands = (commandInventory ?? nativeBenchmarkCommands)(repoRoot, withSmoke)
+  const smokeScript = 'tools/kokoro-smoke.mjs'
   if (!withSmoke) commands = commands.filter(c=>c.id!=='runtime-smoke')
   else {
     const smokePath = nodePath.join(repoRoot, smokeScript)
@@ -633,7 +624,7 @@ export async function runBenchmark({ repoRoot = REPO_ROOT, args = process.argv.s
     if (cmd.argv[0]==='pnpm' && cmd.argv[1]==='exec') {
       const tool = cmd.argv[2]
       // Check via runner resolver — if pnpm is cmd shim, still need to check tool existence via file check
-      const localBin = existsSync(nodePath.join(cmd.cwd,'node_modules','.bin',tool)) || existsSync(nodePath.join(repoRoot,'node_modules','.bin',tool)) || existsSync(nodePath.join(repoRoot,'airi','node_modules','.bin',tool))
+      const localBin = existsSync(nodePath.join(cmd.cwd,'node_modules','.bin',tool)) || existsSync(nodePath.join(repoRoot,'node_modules','.bin',tool))
       if (!localBin) { console.warn(`[benchmark] ${tool} not found locally, marking ENVIRONMENT-LIMITED`); envLimited=true }
     }
     let res
@@ -674,7 +665,7 @@ export async function runBenchmark({ repoRoot = REPO_ROOT, args = process.argv.s
   summary.gitInfoPublish = gitInfoPublish
   summary.publication.requested = !noPush
   summary.publication.intendedPush = !noPush
-  summary.publication.branch = native ? null : 'qa/windows-benchmarks'
+  summary.publication.branch = commandInventory ? 'qa/windows-benchmarks' : null
   if (noPush) summary.publication.pushSkippedReason = 'no-push-flag'
   if (summary.status==='INCOMPLETE') throw new Error('unexpected INCOMPLETE after commands')
 
@@ -1069,11 +1060,11 @@ if (isMain) {
   const args = process.argv.slice(2)
   if (args.includes('--help') || args.includes('-h')) {
     console.log(`Usage: node Tests/tools/qa-benchmark.mjs [--no-push] [--report-only <id>] [--with-smoke] [--launcher-check]`)
-    console.log('Somente local. O benchmark legado não publica branches.')
+    console.log('Somente local. O benchmark da Lia não publica branches.')
     console.log(`Exit codes: PASS 0, FAIL 1, ENVIRONMENT-LIMITED 2, INCOMPLETE/fatal 3`)
     process.exit(0)
   }
-  runBenchmark({ args: [...args, '--no-push'], native: true }).then(s=>{
+  runBenchmark({ args }).then(s=>{
     if (!s) process.exit(3)
     const code = exitCodeForStatus(s.status)
     console.log(`[benchmark] Final status: ${s.status} exit=${code}`)

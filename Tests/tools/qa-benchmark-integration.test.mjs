@@ -1,3 +1,4 @@
+import { canonicalCommands } from './qa-benchmark-historical-fixture.mjs'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
@@ -8,7 +9,11 @@ import { describe, it, beforeEach, afterEach } from 'node:test'
 // Import harness after lib
 import { REPO_ROOT } from './qa-shared.mjs'
 import { benchmarkRunId, nextBenchmarkRunId, isBenchmarkPublishPath, validateStagedAllowlist, buildShaManifest, verifyShaManifest, PUBLISH_TOTAL_HARD_MAX, PUBLISH_FILE_HARD_MAX } from './qa-benchmark-lib.mjs'
-import { preflightSource, runBenchmark, createBenchmarkRawRun, createPublishStaging } from './qa-benchmark.mjs'
+import { preflightSource, runBenchmark as runBenchmarkHarness, createBenchmarkRawRun, createPublishStaging } from './qa-benchmark.mjs'
+
+function runBenchmark(options) {
+  return runBenchmarkHarness(options.commandRunner ? { ...options, commandInventory: canonicalCommands } : options)
+}
 
 function git(cwd, args) {
   const p = spawnSync('git', args, { cwd, encoding: 'utf-8', env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } })
@@ -101,6 +106,18 @@ afterEach(() => {
 // A-D preflight
 // ---------------------------------------------------------------------------
 describe('integration: preflight A-D', () => {
+  it('runs the native benchmark locally by default on main', async () => {
+    const bare = initBareRemote(); tmpToClean.push(bare)
+    const { src } = initSourceRepo(bare, 'main'); tmpToClean.push(src)
+    const result = await runBenchmarkHarness({
+      repoRoot: src, args: [], commandRunner: mockRunner(), hardwareCollector: mockHardware,
+    })
+    assert.equal(result.status, 'PASS')
+    assert.deepEqual(result.commands.map(command => command.id), ['lia-native-suites', 'lia-native-lifecycle'])
+    assert.equal(result.publication.branch, null)
+    assert.equal(result.publication.requested, false)
+    assert.equal(gitOk(src, ['ls-remote', '--heads', 'origin']).stdout.trim().split(/\r?\n/).length, 1)
+  })
   it('allows a clean synchronized main only for local evidence', () => {
     const bare = initBareRemote(); tmpToClean.push(bare)
     const { src } = initSourceRepo(bare, 'main'); tmpToClean.push(src)

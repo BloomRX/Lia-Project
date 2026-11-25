@@ -1,3 +1,4 @@
+import { canonicalCommands } from './qa-benchmark-historical-fixture.mjs'
 import assert from 'node:assert/strict'
 import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -9,7 +10,6 @@ import {
   benchmarkRunId,
   boundText,
   buildShaManifest,
-  canonicalCommands,
   classifyBenchmark,
   createSummarySkeleton,
   hardwareFromNode,
@@ -256,13 +256,13 @@ describe('qa-benchmark: detectPlaywrightChromiumAvailability', () => {
     assert.equal(detectPlaywrightChromiumAvailability({ platform: 'linux', spawn, repoRoot: '/fake/repo' }), false)
   })
 
-  it('D: probes from the AIRI workspace, not the repository root', async () => {
+  it('D: probes from the native Launcher package', async () => {
     const { detectPlaywrightChromiumAvailability } = await import('./qa-benchmark.mjs')
     const { calls, spawn } = recordingSpawn({ status: 0 })
     detectPlaywrightChromiumAvailability({ platform: 'linux', spawn, repoRoot: '/fake/repo' })
 
     assert.equal(calls.length, 1)
-    assert.equal(calls[0].options.cwd, nodePath.join('/fake/repo', 'airi'))
+    assert.equal(calls[0].options.cwd, nodePath.join('/fake/repo', 'lia', 'desktop'))
     assert.notEqual(calls[0].options.cwd, '/fake/repo')
   })
 
@@ -350,7 +350,7 @@ describe('qa-benchmark: detectPlaywrightChromiumAvailability on win32', () => {
     assert.ok(!calls.some(c => c.options && c.options.shell === true), 'shell:true must NEVER be used')
 
     // Still the AIRI workspace, so `import { chromium } from 'playwright'` resolves.
-    assert.equal(nodeCalls[0].options.cwd, nodePath.join('C:\\fake\\repo', 'airi'))
+    assert.equal(nodeCalls[0].options.cwd, nodePath.join('C:\\fake\\repo', 'lia', 'desktop'))
   })
 
   it('reports unavailable when native node.exe exits nonzero', async () => {

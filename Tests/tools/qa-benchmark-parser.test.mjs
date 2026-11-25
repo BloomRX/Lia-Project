@@ -1,7 +1,8 @@
+import { canonicalCommands } from './qa-benchmark-historical-fixture.mjs'
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 
-import { canonicalCommands, classifyCommandOutcome, isEnvironmentFailure, parseVitestMetrics } from './qa-benchmark-lib.mjs'
+import { classifyCommandOutcome, isEnvironmentFailure, parseVitestMetrics } from './qa-benchmark-lib.mjs'
 import { REPO_ROOT } from './qa-shared.mjs'
 
 describe('D2B9-C labels', () => {

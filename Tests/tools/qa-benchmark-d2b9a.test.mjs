@@ -101,7 +101,7 @@ describe('D2B9-A: metric parsers', () => {
 
 describe('D2B9-A: stage-ui canonical command', () => {
   it('uses pnpm run test-ui:run cwd airi', async () => {
-    const { canonicalCommands } = await import('./qa-benchmark-lib.mjs')
+    const { canonicalCommands } = await import('./qa-benchmark-historical-fixture.mjs')
     const cmds = canonicalCommands('/repo')
     const stageUi = cmds.find(c => c.id === 'stage-ui')
     assert.ok(stageUi)
