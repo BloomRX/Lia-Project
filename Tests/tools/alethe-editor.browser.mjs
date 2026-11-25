@@ -1,12 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { pathToFileURL } from 'node:url';
+import { mkdirSync, mkdtempSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { createRequire } from 'node:module';
-const require = createRequire(resolve('airi/package.json'));
-const browserRequire = createRequire(require.resolve('@vitest/browser-playwright'));
-const { chromium } = browserRequire('playwright');
+const require = createRequire(new URL('../../lia/desktop/package.json', import.meta.url));
+const { chromium } = require('playwright');
 const root='.agents/skills/alethe/';
 test('imported text stays inert in real Chromium; source links reject executable protocols', async () => {
  const browser=await chromium.launch({headless:true});
@@ -25,7 +23,11 @@ test('imported text stays inert in real Chromium; source links reject executable
    }
    return {results,injected:window.__injected,urls:['javascript:alert(1)','data:text/html,<script>alert(1)</script>','https://example.com/docs'].map(v=>typeof safeSourceUrl === "function" ? safeSourceUrl(v) : v)};
  });
- await page.screenshot({path:resolve('Tests/artifacts/alethe-editor-inert.png'),fullPage:true});
+ const artifacts = resolve('Tests/artifacts');
+ mkdirSync(artifacts, { recursive: true });
+ const run = mkdtempSync(resolve(artifacts, 'alethe-editor-'));
+ await page.screenshot({path:resolve(run, 'alethe-editor-inert.png'),fullPage:true});
+ console.log('Evidencia do Chromium:', run);
  assert.equal(result.injected,0);assert.equal(dialogs,0);
  result.results.forEach((r,i)=>{assert.equal(r.unsafe,0);assert.ok(r.text.includes(['<script>alert(1)</script>','<img src=x onerror="window.__injected++">',`'"<& broken <img onerror=alert(1)>`][i]));});
  assert.deepEqual(result.urls,[null,null,'https://example.com/docs']);
