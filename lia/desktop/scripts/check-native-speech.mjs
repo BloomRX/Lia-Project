@@ -114,7 +114,19 @@ try {
   assert.equal(await page.getByText(token).count(), 0)
   await page.getByRole('button', { name: 'Parar áudio' }).click()
   assert.equal(await page.locator('audio').isVisible(), false)
+  await page.locator('audio').evaluate((element) => {
+    element.play = () => Promise.reject(new DOMException('Fixture playback refused', 'NotAllowedError'))
+  })
+  await speak.click()
+  await page.getByText('Não foi possível reproduzir o áudio. Tente novamente.', { exact: true }).waitFor()
+  assert.equal(await page.locator('audio').isVisible(), false)
+  assert.equal(await page.locator('audio').getAttribute('src'), null)
+  await page.locator('audio').evaluate((element) => { delete element.play })
+  await speak.click()
+  await page.waitForFunction(() => document.querySelector('audio').currentTime > 0)
+  await page.getByRole('button', { name: 'Parar áudio' }).click()
   const report = { service: 'synthetic HTTPS loopback', configuredByLauncher: true, consent: 'injected response', deniedWithoutRequest: true, authorizedSpeech: true, mutedPlayback: true, playbackStopped: true }
+  report.playbackFailureRecovered = true
   await writeFile(join(root, 'report.json'), JSON.stringify(report, null, 2))
   console.log(JSON.stringify(report))
 }

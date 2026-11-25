@@ -512,7 +512,15 @@ speak.addEventListener('click', async () => {
     audio.src = audioUrl
     audio.hidden = false
     voiceStatus.textContent = ''
-    await audio.play().catch(() => {})
+    try {
+      await audio.play()
+    }
+    catch {
+      if (version === answerVersion) {
+        clearAudio()
+        voiceStatus.textContent = t('Não foi possível reproduzir o áudio. Tente novamente.')
+      }
+    }
   }
   catch {
     if (version === answerVersion) {

@@ -123,6 +123,7 @@ const english = new Map([
   ['A saída de voz está desativada.', 'Voice output is off.'],
   ['A voz selecionada está indisponível.', 'The selected voice is unavailable.'],
   ['Não foi possível preparar a resposta em áudio.', 'Could not prepare the audio reply.'],
+  ['Não foi possível reproduzir o áudio. Tente novamente.', 'Could not play the audio. Try again.'],
   ['Gravação cancelada.', 'Recording cancelled.'],
   ['Aguardando acesso ao microfone…', 'Waiting for microphone access…'],
   ['Não foi possível gravar a mensagem.', 'Could not record the message.'],
