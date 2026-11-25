@@ -42,6 +42,7 @@ export function validateInputs(inputs, { internalTest = false } = {}) {
   requireFile(join(inputs.launcher, 'out/preload/index.cjs'), 'Build Preload do Launcher')
   requireFile(join(inputs.stage, 'out/preload/index.cjs'), 'Build Preload do Stage')
   requireFile(join(inputs.launcher, 'scripts/DISTRIBUTION-NOTICE.txt'), 'Aviso de distribuição interna')
+  requireFile(join(inputs.launcher, 'scripts/AIRI-MIT.txt'), 'Atribuição MIT do código histórico')
   const runtimePackage = JSON.parse(readFileSync(join(inputs.electron, '../package.json'), 'utf8'))
   if (runtimePackage.version !== ELECTRON_VERSION)
     throw new Error(`Runtime esperado: Electron ${ELECTRON_VERSION}; encontrado: ${runtimePackage.version}`)

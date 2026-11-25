@@ -2,6 +2,14 @@
 
 Relação de **bibliotecas, frameworks, engines e projetos de terceiros** relevantes ao produto Lia (conforme AGENTS.md §97 THIRD-PARTY ATTRIBUTION).
 
+## Aviso preservado no desktop próprio
+
+A cópia vendorizada saiu da árvore da `main` em `d6eb8b81`. O texto
+integral [MIT do código AIRI](../../lia/desktop/scripts/AIRI-MIT.txt)
+foi preservado a partir da revisão anterior e acompanha o pacote privado
+em `resources/licenses/AIRI-MIT.txt`. Ele cobre somente o código sob
+aquele aviso. O inventário de 08/11 descreve a distribuição legada.
+
 ## Estado em 08/11/2026 — inventário privado, sem aprovação pública
 
 O Launcher contém **39 manifestos de pacote e 27 arquivos de aviso**; o Stage contém **1039 manifestos e 789 avisos**. Respectivamente, 27 e 780 manifestos têm aviso na raiz do pacote. Contagens incluem cópias e versões duplicadas; não representam componentes únicos. A classificação automática é sempre `unverified`: `package.json` é declaração, não aprovação legal. O [resumo físico](PACKAGED-INVENTORY-2026-11-08.json) registra SHA-256 dos ASAR e frequência das expressões declaradas.

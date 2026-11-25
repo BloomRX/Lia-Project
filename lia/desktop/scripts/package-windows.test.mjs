@@ -18,6 +18,7 @@ test('packaging requires an internal test, builds, the pinned local runtime and 
   t.after(() => rmSync(root, { recursive: true, force: true }))
   const inputs = packagingInputs(join(root, 'lia/desktop'))
   file(inputs.builder)
+  file(join(inputs.launcher, 'scripts/AIRI-MIT.txt'))
   for (const app of [inputs.launcher, inputs.stage]) {
     for (const name of ['out/main/index.js', 'out/renderer/index.html', 'package.json'])
       file(join(app, name))
@@ -65,6 +66,7 @@ test('default packaging requires no AIRI files and preserves the internal instal
   const inputs = packagingInputs(join(root, 'lia/desktop'))
   assert.equal(inputs.stage, join(root, 'lia/stage'))
   file(inputs.builder)
+  file(join(inputs.launcher, 'scripts/AIRI-MIT.txt'))
   for (const app of [inputs.launcher, inputs.stage]) {
     for (const name of ['out/main/index.js', 'out/preload/index.cjs', 'out/renderer/index.html', 'package.json'])
       file(join(app, name))
@@ -79,6 +81,7 @@ test('default packaging requires no AIRI files and preserves the internal instal
   assert.equal(config.appId, 'ai.lia.launcher.preview')
   assert.equal(config.extraMetadata.main, 'out/main/index.js')
   assert.deepEqual(config.extraResources[0], { from: inputs.stageOutput, to: 'stage', filter: ['**/*'] })
+  assert.ok(config.extraResources.some(resource => resource.from === 'scripts/AIRI-MIT.txt' && resource.to === 'licenses/AIRI-MIT.txt'))
   assert.equal(config.publish, null)
 })
 

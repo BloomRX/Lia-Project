@@ -14,6 +14,7 @@ export default {
   extraResources: [
     { from: '../stage/dist/lia-windows/win-unpacked', to: 'stage', filter: ['**/*'] },
     { from: 'scripts/DISTRIBUTION-NOTICE.txt', to: 'licenses/DISTRIBUTION-NOTICE.txt' },
+    { from: 'scripts/AIRI-MIT.txt', to: 'licenses/AIRI-MIT.txt' },
   ],
   win: {
     target: [{ target: 'nsis', arch: ['x64'] }],
