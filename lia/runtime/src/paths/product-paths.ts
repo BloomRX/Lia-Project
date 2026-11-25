@@ -10,13 +10,12 @@ import { env } from 'node:process'
  * (`<lia-user-data>`), and managed voice engines under the engine-neutral
  * runtime home (resolved by `resolveVoiceRuntimeHome` in
  * `../bootstrap/runtime-root`, `%LOCALAPPDATA%\Lia\runtimes` on Windows).
- * The Lia Launcher and the AIRI stage host MUST read the same files: the
- * launcher never forks the user's data into a second location.
+ * The Launcher and the native Stage share this product home and open their
+ * Chromium profiles separately. The finder never copies config or credentials.
  *
  * Resolution order for the user-data root:
  *   1. `LIA_USER_DATA` env (explicit override - diagnostics, QA, portable runs);
- *   2. `APP_USER_DATA_PATH` env (the existing AIRI override, so a launcher that
- *      reuses the same env contract sees exactly what AIRI sees);
+ *   2. `APP_USER_DATA_PATH` env (retained for existing installations);
  *   3. the first well-known %APPDATA% candidate that ALREADY contains a
  *      `lia-product.json` (so we attach to existing data wherever it was born);
  *   4. `%APPDATA%\Lia` - the product default for a fresh machine.

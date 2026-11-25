@@ -150,6 +150,28 @@ describe('qa-storage: legacy inventory is non-destructive and classifies honestl
       assert.ok(candidate.reason.length > 0)
   })
 
+  it('refuses deletion and pruning when a run contains an explicit product profile', () => {
+    const id = '20261125-120000'
+    const profile = nodePath.join(workRoot, id, 'profile')
+    mkdirSync(profile, { recursive: true })
+    const options = { id, runsDir: workRoot, env: { LIA_USER_DATA: profile } }
+    assert.throws(() => deleteManagedRun(options), /product profile/)
+    assert.throws(() => pruneRunLogs({ ...options, apply: true }), /product profile/)
+    assert.ok(existsSync(profile))
+  })
+
+  it('lists explicit product profiles as protected data without duplicating overrides', () => {
+    const profile = nodePath.join(workRoot, 'custom-profile')
+    mkdirSync(profile)
+    const candidates = inventoryCandidates({
+      repoRoot: workRoot,
+      env: { LIA_USER_DATA: profile, APP_USER_DATA_PATH: profile },
+    })
+    const matches = candidates.filter(candidate => candidate.path === profile)
+    assert.equal(matches.length, 1)
+    assert.equal(matches[0].confidence, 'production-do-not-delete')
+  })
+
   it('the report carries totals per confidence and a largest-20 section', () => {
     const repoRoot = nodePath.join(workRoot, 'repo2')
     mkdirSync(nodePath.join(repoRoot, '.devkit-qa'), { recursive: true })

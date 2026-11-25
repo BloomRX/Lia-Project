@@ -11,7 +11,7 @@
  *  - retention and log-prune default to dry-run.
  */
 
-import { existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import nodePath from 'node:path'
 import { pathToFileURL } from 'node:url'
 
@@ -60,8 +60,28 @@ export function listManagedRuns({ runsDir = RUNS_DIR } = {}) {
   return listRunIds(runsDir).map(id => describeRun({ activeRunId: active?.id, id, runsDir }))
 }
 
+function explicitProductProfiles(env) {
+  return [...new Set([env.LIA_USER_DATA?.trim(), env.APP_USER_DATA_PATH?.trim()].filter(Boolean))]
+}
+
+function pathContains(parent, child) {
+  const relative = nodePath.relative(parent, child)
+  return relative !== '..' && !relative.startsWith('..' + nodePath.sep) && !nodePath.isAbsolute(relative)
+}
+
+function refuseProductProfileOverlap(target, env) {
+  const destination = realpathSync(target)
+  for (const profile of explicitProductProfiles(env)) {
+    if (!existsSync(profile))
+      continue
+    const directory = realpathSync(profile)
+    if (pathContains(directory, destination) || pathContains(destination, directory))
+      throw new Error('refusing: QA cleanup overlaps an explicit Lia product profile')
+  }
+}
+
 /** Guarded deletion of ONE managed run. Throws instead of doing anything unsafe. */
-export function deleteManagedRun({ id, runsDir = RUNS_DIR }) {
+export function deleteManagedRun({ id, runsDir = RUNS_DIR, env = process.env }) {
   if (!/^\d{8}-\d{6}(-\d+)?$/.test(id))
     throw new Error(`refusing: "${id}" is not a harness run id`)
   const runDir = nodePath.resolve(runsDir, id)
@@ -72,6 +92,7 @@ export function deleteManagedRun({ id, runsDir = RUNS_DIR }) {
   const active = findActiveRun(runsDir)
   if (active?.id === id)
     throw new Error('refusing: this run is ACTIVE (Lia is configured to use it). Restore first (menu 4).')
+  refuseProductProfileOverlap(runDir, env)
   rmSync(runDir, { recursive: true, force: false })
   return runDir
 }
@@ -136,7 +157,7 @@ export function retentionPlan({ keepLast = 3, now = new Date(), olderThanDays, r
  * metrics\ folders. The run-root USER-NOTES.txt / QA-CHECKLIST.txt /
  * snapshots\ are structurally untouched. The ACTIVE run is never pruned.
  */
-export function pruneRunLogs({ apply = false, id, runsDir = RUNS_DIR }) {
+export function pruneRunLogs({ apply = false, id, runsDir = RUNS_DIR, env = process.env }) {
   const runDir = nodePath.resolve(runsDir, id)
   if (!isInsideManagedRoot(runDir, [runsDir]))
     throw new Error(`refusing: ${runDir} is not inside the managed runs root`)
@@ -144,11 +165,15 @@ export function pruneRunLogs({ apply = false, id, runsDir = RUNS_DIR }) {
   if (active?.id === id)
     throw new Error('refusing: this run is ACTIVE. Restore before pruning its logs.')
 
+  if (apply && existsSync(runDir))
+    refuseProductProfileOverlap(runDir, env)
   const affected = []
   for (const sub of ['logs', 'metrics']) {
     const dir = nodePath.join(runDir, sub)
     if (!existsSync(dir))
       continue
+    if (apply)
+      refuseProductProfileOverlap(dir, env)
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
       if (!entry.isFile())
         continue
@@ -187,12 +212,14 @@ export function inventoryCandidates({ env = process.env, repoRoot = REPO_ROOT })
 
   // --- production: never delete, listed for completeness ---
   const local = env.LOCALAPPDATA
-  const appData = env.APPDATA
+  const appData = env.APPDATA ?? env.APPDATA_LOCAL
+  for (const path of explicitProductProfiles(env))
+    push(path, 'production-user-data', 'production-do-not-delete', 'Explicit product profile override')
   push(local && nodePath.join(local, 'Lia', 'runtimes'), 'production-runtime', 'production-do-not-delete', 'PRODUCTION voice runtime home (validated Kokoro install lives here)')
   push(local && nodePath.join(local, 'Lia'), 'production-local-data', 'production-do-not-delete', 'PRODUCTION Lia local data root')
   push(appData && nodePath.join(appData, 'Lia'), 'production-user-data', 'production-do-not-delete', 'Lia product user data (config, voice profiles, secrets)')
   push(appData && nodePath.join(appData, 'lia'), 'production-user-data', 'production-do-not-delete', 'Lia product user data (lowercase candidate)')
-  push(appData && nodePath.join(appData, '@proj-airi', 'stage-tamagotchi'), 'stage-user-data', 'production-do-not-delete', 'Stage app userData (production AIRI host data)')
+  push(appData && nodePath.join(appData, '@proj-airi', 'stage-tamagotchi'), 'stage-user-data', 'production-do-not-delete', 'Legacy Stage product data')
   push(appData && nodePath.join(appData, 'stage-tamagotchi'), 'stage-user-data', 'production-do-not-delete', 'Stage app userData (unscoped candidate)')
   push(appData && nodePath.join(appData, 'Electron'), 'dev-host-data', 'production-do-not-delete', 'Electron dev userData (may hold dev product data)')
 
@@ -205,7 +232,7 @@ export function inventoryCandidates({ env = process.env, repoRoot = REPO_ROOT })
         push(nodePath.join(env.TEMP, entry), 'temp-leftover', 'likely-test', 'TEMP entry named after Lia/Kokoro QA')
     }
   }
-  // Repo-top-level venv-like folders (never scans inside airi/ source).
+  // Repo-top-level venv-like folders.
   for (const entry of safeReadDir(repoRoot)) {
     if (/venv/i.test(entry) && !/node_modules/i.test(entry))
       push(nodePath.join(repoRoot, entry), 'python-venv', 'unknown', 'Python venv-like folder at repo root - review before any manual cleanup')
