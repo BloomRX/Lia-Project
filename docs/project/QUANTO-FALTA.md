@@ -9,21 +9,22 @@ Fonte: [`CURRENT-STATE.md`](CURRENT-STATE.md) §0 e §5, medido em
 
 ---
 
-## Corte da prévia própria para o fluxo padrão
+## Consolidação da Lia própria na main
 
-A `main` publicada contém uma prévia própria em `lia/` com instalação,
-build e execução sem `airi/`. Use o [guia da prévia](../../lia/README.md)
-para executá-la. A [matriz da consolidação](../reports/LIA-BRANCH-INTEGRATION-MATRIX.md)
-registra os gates e seus limites. As 12 branches remotas ainda estão presentes.
+A `main` é a única branch remota de desenvolvimento. O histórico das
+branches consolidadas foi preservado. O [guia da Lia](../../lia/README.md)
+documenta a instalação pela raiz, e a
+[matriz da consolidação](../reports/LIA-BRANCH-INTEGRATION-MATRIX.md)
+registra os gates e seus limites.
 
-| Corte | Evidência atual | Condição pendente |
+| Área | Evidência | Pendência |
 |---|---|---|
-| Entradas, build e distribuição | A entrada PowerShell da prévia e o NSIS privado foram exercitados em uma árvore sem AIRI. | `Lia.bat`, o modo padrão do Launcher e o pacote padrão ainda usam o Stage legado. Troca de versão e atualização automática ainda precisam de gate. |
-| Conversa, visão e dados | Qwen local, recuperação de notas, histórico opcional e visão com HTTPS e credencial sintética. | Importação do histórico, múltiplas conversas, personalidade e compatibilidade externa ainda exigem migração ou evidência na prévia. |
-| Voz e percepção | Kokoro local gerou áudio decodificável. A política STT recusou e autorizou gravações sintéticas em HTTPS local. | O diálogo nativo, microfone físico, saída física e matriz de mecanismos de voz ainda precisam de validação. |
-| Avatar e presença | VRMs de referência, animação incorporada, presença, posição no segundo monitor e mudança simulada de área útil. | O fluxo legado suporta Live2D. A prévia usa VRM. Tela cheia, desconexão física e equivalência de recursos precisam de evidência. |
-| Ferramentas e conta | Os gates independentes cobrem cofre, contratos, transportes e canais de controle. | Ferramentas, permissões, integração no Stage com o Hub e consumidores de conta precisam de validação própria. OIDC continua pendente. |
-| Remoção e Git | As referências originais e o backup verificado foram preservados. | Remover dependências operacionais e branches auxiliares só depois de validar os substitutos e reconfirmar a recuperação do trabalho preservado. |
+| Entrada e distribuição | `Lia.bat`, o Launcher e o empacotador usam o Stage próprio. CI Windows em `e151a2d5` passou em árvore sem `airi/`, com instalação privada, conversa sintética no Stage instalado e encerramento dos processos. Um ensaio local anterior confirmou a atualização privada de 0.0.1 para 0.0.2. | Atualização automática e distribuição pública dependem de validação própria. |
+| Conversa, visão e dados | Qwen local no Windows, histórico opt-in com múltiplas conversas, memória e personalidade. O gate HTTPS local passou para imagem e texto com credencial sintética. | Provedor externo real e equivalência das extensões legadas do cartão seguem pendentes. |
+| Voz e percepção | Kokoro CPU, Whisper CPU e gates Windows de consentimento para serviços sintéticos. | Áudio físico, voz clonada no Stage e validação de provedores externos. |
+| Avatar e presença | VRM, movimento, pausa, posição inicial, ocultação e segundo monitor conectado. Cartões Live2D continuam permitindo importar a personalidade. | Renderização Live2D, termos aplicáveis ao Cubism e aos modelos, além de tela cheia e desconexão física de monitor. |
+| Ferramentas e conta | Relógio com opt-in e ida e volta no chat, leitura do catálogo publicado pelo Agent Hub, proteção do cofre e controle da origem de credenciais. | Execução supervisionada pelo Hub e OIDC integrado e validado. |
+| Retirada do legado | Bundle completo restaurado e verificado. O trabalho legado continua preservado. | A pasta rastreada `airi/` permanece enquanto se resolve a compatibilidade pendente. |
 
 ## Onde o projeto está
 

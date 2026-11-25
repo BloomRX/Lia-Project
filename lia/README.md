@@ -1,7 +1,8 @@
 # `lia/` — código próprio da Lia
 
-Este diretório é a Lia **fora** do AIRI. Ele fica ao lado de `airi/`, nunca
-dentro, e **nunca** entra em `airi/pnpm-workspace.yaml`.
+Este diretório contém os pacotes oficiais da Lia. A instalação, o build,
+os gates e o empacotamento usam os lockfiles próprios a partir de `Lia.bat`
+e dos comandos documentados abaixo.
 
 ```
 lia/
@@ -10,8 +11,7 @@ lia/
 ├── desktop/    Launcher Electron, com lockfile próprio
 ├── launcher/   decisão e fronteira do Launcher
 ├── runtime/    @lia/core — produto, cofre, voz e roteamento
-├── stage/      o Stage da Lia (janela + ciclo de vida)
-└── shared/     (reservado, ainda vazio)
+└── stage/      conversa, avatar, presença, voz e ciclo de vida
 ```
 
 ---
@@ -26,8 +26,6 @@ corepack pnpm run build
 corepack pnpm run typecheck
 corepack pnpm run test
 ```
-
-O workspace legado registra esse mesmo pacote para o Launcher e o Stage.
 
 ## `lia/desktop` — Launcher Electron
 
