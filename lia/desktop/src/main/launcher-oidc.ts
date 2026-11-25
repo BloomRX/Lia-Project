@@ -1,5 +1,3 @@
-import type { BrowserWindow, IpcMain } from 'electron'
-
 import type { LiaSecretVault } from '@lia/core/secrets/vault'
 
 import { createOidcAccountService } from '@lia/core/secrets/oidc-account'
@@ -17,8 +15,8 @@ export function resolveDevelopmentOidc(packaged: boolean, rawOrigin: string | un
 }
 
 export function registerLauncherOidc(options: {
-  ipc: Pick<IpcMain, 'handle' | 'removeHandler'>
-  window: BrowserWindow
+  ipc: Pick<Electron.IpcMain, 'handle' | 'removeHandler'>
+  window: Electron.BrowserWindow
   vault: LiaSecretVault
   connection?: ReturnType<typeof resolveDevelopmentOidc>
   openAuthorization: (url: string) => Promise<unknown>
