@@ -91,11 +91,11 @@ jobs:
         run: |
           Set-Location (Join-Path $env:LIA_STANDALONE 'lia/desktop')
           node --experimental-strip-types scripts/check-native-presence.mjs
-      - name: Validar retomada do histórico
+      - name: Validar histórico e persistência da voz local
         if: ${{ !cancelled() && steps.build-launcher.outcome == 'success' }}
         run: |
           Set-Location (Join-Path $env:LIA_STANDALONE 'lia/desktop')
-          node scripts/check-native-history.mjs
+          node scripts/check-native-history.mjs --kokoro-voice=pm_alex
       - name: Validar imagem e transcrição por HTTPS local
         if: ${{ !cancelled() && steps.build-launcher.outcome == 'success' }}
         run: |
@@ -131,6 +131,7 @@ jobs:
             ${{ runner.temp }}/lia-native-presence-*/overlay-animated.png
             ${{ runner.temp }}/lia-native-history-*/report.json
             ${{ runner.temp }}/lia-native-history-*/history.png
+            ${{ runner.temp }}/lia-native-history-*/kokoro-selection.png
             ${{ runner.temp }}/lia-native-history-*/memory-cleared.png
             ${{ runner.temp }}/lia-native-history-*/conversations.png
             ${{ runner.temp }}/lia-native-history-*/personality.png

@@ -12,8 +12,8 @@ assert.equal(process.platform, 'win32', 'Este gate usa o Electron para Windows.'
 const stage = fileURLToPath(new URL('../../stage/', import.meta.url))
 const withVoice = process.argv.includes('--voice')
 const kokoroVoice = process.argv.find(argument => argument.startsWith('--kokoro-voice='))?.slice('--kokoro-voice='.length)
-assert.ok(kokoroVoice === undefined || (withVoice && ['pf_dora', 'pm_alex', 'pm_santa'].includes(kokoroVoice)),
-  'Use --voice com um identificador de voz Kokoro conhecido.')
+assert.ok(kokoroVoice === undefined || ['pf_dora', 'pm_alex', 'pm_santa'].includes(kokoroVoice),
+  'Informe um identificador de voz Kokoro conhecido.')
 const withPublishedHub = process.argv.includes('--agent-hub')
 const root = await mkdtemp(join(process.env.RUNNER_TEMP ?? tmpdir(), 'lia-native-history-'))
 console.log(`Evidências em ${root}`)
@@ -376,7 +376,7 @@ try {
   await page.getByText('Mensagem apagada.', { exact: true }).waitFor()
   assert.equal(await page.getByText('Você: Mensagem sem ferramenta', { exact: true }).count(), 0)
   assert.equal(await page.getByText(`Lia: Resposta ${requests.length}`, { exact: true }).count(), 1)
-  const report = { service: 'synthetic local HTTP', optIn: true, reopened: true, resumed: true, legacyTextImported: true, cancellationPreservedHistory: true, cleared: true, clearDisabledWhenEmpty: true, rateLimitSanitized: true, refusedImageWithoutVision: true, conversationsIsolated: true, selectionRestored: true, deletionConfirmed: true, builtInPersonaInRequest: true, importedPersonaInRequest: true, importedPersonaRestored: true, personaContextIsolated: true, kokoroSelectedByLauncher: Boolean(kokoroVoice), kokoroVoice: withVoice ? (kokoroVoice ?? 'default') : null, localKokoroMutedPlayback: withVoice ? 'cancelled, retried, played and stopped' : null, autoPlay: withVoice ? 'opt-in, persisted, played, opted out' : null, customizedTraitsPersisted: true }
+  const report = { service: 'synthetic local HTTP', optIn: true, reopened: true, resumed: true, legacyTextImported: true, cancellationPreservedHistory: true, cleared: true, clearDisabledWhenEmpty: true, rateLimitSanitized: true, refusedImageWithoutVision: true, conversationsIsolated: true, selectionRestored: true, deletionConfirmed: true, builtInPersonaInRequest: true, importedPersonaInRequest: true, importedPersonaRestored: true, personaContextIsolated: true, kokoroSelectedByLauncher: Boolean(kokoroVoice), kokoroVoice: kokoroVoice ?? (withVoice ? 'default' : null), localKokoroMutedPlayback: withVoice ? 'cancelled, retried, played and stopped' : null, autoPlay: withVoice ? 'opt-in, persisted, played, opted out' : null, customizedTraitsPersisted: true }
   report.localClockRoundTrip = true
   report.singleMessageRemoved = { dialogResponse: 'injected', remainingReplyVisible: true }
   report.memoryClear = { dialogResponse: 'injected', cancelPreservedNote: true, clearPreservedConversation: true, focusRestored: true }
