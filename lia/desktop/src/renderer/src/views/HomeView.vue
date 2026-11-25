@@ -41,7 +41,7 @@ const props = defineProps<{
   /** Shell-provided first-run marker (canonical product config). */
   setup?: { completed?: boolean }
 }>()
-const emit = defineEmits<{ (e: 'refresh'): void }>()
+const emit = defineEmits<{ (e: 'refresh' | 'open-ai'): void }>()
 
 const busy = ref(false)
 const error = ref<string | undefined>(undefined)
@@ -53,8 +53,9 @@ const firstRunBusy = ref(false)
 const firstRunDone = ref(false)
 
 const aiChip = computed(() => homeAiChipVm(props.status))
-const blockerHint = computed(() => homeBlockerHintVm(props.status))
-const conversationLabel = computed(() => homeConversationLabelVm(props.status))
+const blockerHint = computed(() => homeBlockerHintVm(props.status, props.language))
+const conversationLabel = computed(() => homeConversationLabelVm(props.status, props.language))
+const readinessKnown = computed(() => typeof props.status?.ai?.ready === 'boolean')
 const conversationStarting = computed(() => homeConversationStartingVm(props.status))
 const conversationStopping = computed(() => homeConversationStoppingVm(props.status))
 const stopVisible = computed(() => homeConversationStopVisibleVm(props.status))
@@ -154,8 +155,12 @@ async function chooseFirstRun(choice: FirstRunChoice) {
 }
 
 async function conversar() {
-  if (busy.value || conversationStarting.value || conversationStopping.value)
+  if (busy.value || conversationStarting.value || conversationStopping.value || !readinessKnown.value)
     return
+  if (!stopVisible.value && props.status.ai.ready === false) {
+    emit('open-ai')
+    return
+  }
   busy.value = true
   error.value = undefined
   stopFeedback.value = undefined
@@ -219,7 +224,8 @@ async function encerrarConversa() {
       <LiaButton
         class="home-action"
         variant="primary"
-        :disabled="busy || conversationStarting || conversationStopping"
+        :disabled="busy || conversationStarting || conversationStopping || !readinessKnown"
+        :aria-busy="busy || conversationStarting || conversationStopping || !readinessKnown"
         :aria-describedby="blockerHint ? 'home-readiness-hint' : undefined"
         @click="conversar"
       >

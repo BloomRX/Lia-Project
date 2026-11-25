@@ -195,6 +195,7 @@ onUnmounted(() => unsubscribe?.())
           :language="language"
           v-bind="page === 'home' ? { language, readiness, setup } : {}"
           @refresh="refresh"
+          @open-ai="page = 'ai'"
         />
       </main>
 

@@ -24,23 +24,29 @@ export function homeAiChipVm(status: unknown): HomeAiChipVm {
  * The honest blocker shown when conversation cannot start (existing
  * behavior, same words) - undefined once IA is configured.
  */
-export function homeBlockerHintVm(status: unknown): string | undefined {
+export function homeBlockerHintVm(status: unknown, language?: string): string | undefined {
   const s = status as Record<string, any> | undefined
-  if (!s)
+  if (s?.ai?.ready !== false)
     return undefined
-  return s.ai?.ready
-    ? undefined
-    : 'A Lia ainda precisa da configuração de IA para conversar — veja a aba Configuração.'
+  return language?.startsWith('en')
+    ? 'Set up an AI connection in AI & Resources to start a conversation.'
+    : 'Configure uma conexão em IA & Recursos para conversar com a Lia.'
 }
 
 /** The primary action label follows the Stage phase (existing contract). */
-export function homeConversationLabelVm(status: unknown): string {
-  const phase = (status as Record<string, any> | undefined)?.stage?.state?.phase
+export function homeConversationLabelVm(status: unknown, language?: string): string {
+  const s = status as Record<string, any> | undefined
+  const phase = s?.stage?.state?.phase
+  const english = language?.startsWith('en')
   if (phase === 'running')
-    return 'Conversando…'
+    return english ? 'Conversation open' : 'Conversando…'
   if (phase === 'starting')
-    return 'Abrindo o palco…'
-  return 'Conversar com Lia'
+    return english ? 'Opening the Stage…' : 'Abrindo o palco…'
+  if (s?.ai?.ready === false)
+    return english ? 'Set up AI' : 'Configurar IA'
+  if (s?.ai?.ready !== true)
+    return english ? 'Checking readiness…' : 'Verificando prontidão…'
+  return english ? 'Talk to Lia' : 'Conversar com Lia'
 }
 
 /** The action blocks while the Stage is starting (existing contract). */

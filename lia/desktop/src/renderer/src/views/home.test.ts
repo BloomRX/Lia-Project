@@ -62,14 +62,16 @@ describe('the primary action keeps the existing launch path (B, F)', () => {
     expect(source).toContain('service is not ready')
     expect(source).toContain('serviço de IA não está pronto')
     expect(source).toContain('emit(\'refresh\')')
-    expect(source).toContain(':disabled="busy || conversationStarting || conversationStopping"')
+    expect(source).toContain(':disabled="busy || conversationStarting || conversationStopping || !readinessKnown"')
     expect(source).toContain('{{ conversationLabel }}')
+    expect(source).toContain("emit('open-ai')")
+    expect(homeConversationLabelVm({ ai: { ready: false } })).toBe('Configurar IA')
   })
 
   it('f: the pure VM keeps the EXISTING status-source semantics (labels, phases, blocker)', () => {
     // Label follows the Stage phase contract, verbatim.
-    expect(homeConversationLabelVm(undefined)).toBe('Conversar com Lia')
-    expect(homeConversationLabelVm({})).toBe('Conversar com Lia')
+    expect(homeConversationLabelVm(undefined)).toBe('Verificando prontidão…')
+    expect(homeConversationLabelVm({ ai: { ready: true } })).toBe('Conversar com Lia')
     expect(homeConversationLabelVm({ stage: { state: { phase: 'starting' } } })).toBe('Abrindo o palco…')
     expect(homeConversationLabelVm({ stage: { state: { phase: 'running' } } })).toBe('Conversando…')
     expect(homeConversationStartingVm({ stage: { state: { phase: 'starting' } } })).toBe(true)
@@ -81,7 +83,7 @@ describe('the primary action keeps the existing launch path (B, F)', () => {
     expect(homeAiChipVm(undefined)).toEqual({ label: 'IA a configurar', variant: 'warning' })
 
     // The honest blocker appears only while IA is unconfigured.
-    expect(homeBlockerHintVm({ ai: { ready: false } })).toContain('configuração de IA')
+    expect(homeBlockerHintVm({ ai: { ready: false } })).toContain('IA & Recursos')
     expect(homeBlockerHintVm({ ai: { ready: true } })).toBeUndefined()
     expect(homeBlockerHintVm(undefined)).toBeUndefined()
   })
@@ -214,7 +216,7 @@ describe('8.0A-5 minimal first-run choice', () => {
   it('g: the first-run marker never blocks Conversar (no modal, no gate)', () => {
     const source = HOME_VUE()
     // Conversar follows only conversation lifecycle, never the setup marker...
-    expect(source).toContain(':disabled="busy || conversationStarting || conversationStopping"')
+    expect(source).toContain(':disabled="busy || conversationStarting || conversationStopping || !readinessKnown"')
     // ...the first-run flag gates the panel and NOTHING else...
     expect((source.match(/v-if="firstRunVisible"/g) ?? []).length).toBe(1)
     expect(source).not.toMatch(/firstRun(Visible|Done|Busy).*conversar|conversar.*firstRun/i)
