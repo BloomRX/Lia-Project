@@ -63,6 +63,16 @@ exclusão de mensagem e de notas com confirmação. O Launcher apresenta as
 rotas de voz que o Stage usa e mantém a biblioteca separada. A comprovação
 com leitor de tela e diálogos físicos segue pendente em Windows.
 
+O GitHub tem somente a branch `main`. O checkout de desenvolvimento
+`consolidacao-candidata` usa novamente o GitHub como `origin`; antes do
+`fetch --prune`, as 11 referências locais obsoletas foram comparadas com
+o espelho pelo SHA integral. O espelho mantém os 12 heads originais.
+Os checkouts históricos permaneceram no lugar. `ui-phase1` tem três
+relatórios não rastreados, `audio-407300b` tem um diff e dois fontes não
+rastreados, e o checkout antigo `main` ainda aponta para metadados
+ausentes. O único checkout ativo para desenvolvimento é
+`consolidacao-candidata`.
+
 O espelho externo contém as 12 branches remotas e passou em
 `git fsck --full`. Foram verificados os bundles locais e comparadas
 por SHA-256 as cópias dos 11 checkouts órfãos. O principal órfão
