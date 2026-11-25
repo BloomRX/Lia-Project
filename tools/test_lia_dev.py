@@ -6771,28 +6771,28 @@ class WorkspacePreflightTests(unittest.TestCase):
                         else f'{req.rel_path}/sentinela')
         findings = preflight.check_workspace(str(self.base))
         self.assertTrue(all(f.present for f in findings))
-        self.assertEqual(preflight.main(['--legacy-m30b', str(self.base)]), 0)
+        self.assertEqual(preflight.main([str(self.base)]), 0)
 
     def test_the_missing_lia_core_artifact_fails_closed_and_names_its_producer(self) -> None:
         for req in preflight.REQUIREMENTS:
-            if req.id == 'lia-core-dist':
+            if req.id == 'lia-runtime':
                 continue
             self._write(req.rel_path if req.kind == 'file'
                         else f'{req.rel_path}/sentinela')
         findings = preflight.check_workspace(str(self.base))
         missing = [f for f in findings if not f.present]
-        self.assertEqual([f.requirement.id for f in missing], ['lia-core-dist'])
+        self.assertEqual([f.requirement.id for f in missing], ['lia-runtime'])
         text = preflight.render_findings(findings)
         # The report has to say WHAT is missing and WHAT produces it, or the
         # operator is back to guessing from eight collection errors.
-        self.assertIn('lia-core-dist', text)
-        self.assertIn('run build:lia-core', text)
-        self.assertIn('lia-host.ts', text)
-        self.assertEqual(preflight.main(['--legacy-m30b', str(self.base)]), 1,
+        self.assertIn('lia-runtime', text)
+        self.assertIn('run build', text)
+        self.assertIn('Launcher e Stage', text)
+        self.assertEqual(preflight.main([str(self.base)]), 1,
                          'um pré-voo com artefato ausente não pode passar')
 
     def test_native_preflight_needs_only_native_artifacts(self) -> None:
-        for req in preflight.NATIVE_REQUIREMENTS:
+        for req in preflight.REQUIREMENTS:
             self._write(req.rel_path)
         self.assertEqual(preflight.main([str(self.base)]), 0)
         (self.base / 'lia/stage/out/main/index.js').unlink()
@@ -6915,12 +6915,12 @@ class LiaCorePrereqTests(unittest.TestCase):
 
     def _base_deps(self) -> None:
         for rid in lia_core_prereq.BASE_REQUIREMENT_IDS:
-            rel = next(r.rel_path for r in preflight.REQUIREMENTS if r.id == rid)
-            kind = next(r.kind for r in preflight.REQUIREMENTS if r.id == rid)
+            rel = next(r.rel_path for r in preflight.RUNTIME_REQUIREMENTS if r.id == rid)
+            kind = next(r.kind for r in preflight.RUNTIME_REQUIREMENTS if r.id == rid)
             self._write(rel if kind == 'file' else f'{rel}/sentinela')
 
     def _dist(self) -> str:
-        return next(r.rel_path for r in preflight.REQUIREMENTS
+        return next(r.rel_path for r in preflight.RUNTIME_REQUIREMENTS
                     if r.id == lia_core_prereq.MANAGED_REQUIREMENT_ID)
 
     def _fake_build(self, *, code: int = 0, writes_artifact: bool = True,
@@ -6941,8 +6941,8 @@ class LiaCorePrereqTests(unittest.TestCase):
         self.assertEqual(outcome.exit_code, 0)
         self.assertEqual(len(self.calls), 1, 'o build deve rodar exatamente uma vez')
         argv, _kwargs, cwd, timeout_s = self.calls[0]
-        self.assertEqual(tuple(argv[-2:]), ('run', 'build:lia-core'))
-        self.assertEqual(cwd, self.base / 'airi', 'o build roda no workspace airi')
+        self.assertEqual(tuple(argv[-2:]), ('run', 'build'))
+        self.assertEqual(cwd, self.base / 'lia' / 'runtime', 'o build roda no pacote de runtime')
         self.assertLessEqual(timeout_s, lia_core_prereq.BUILD_TIMEOUT_S)
         self.assertTrue((self.base / self._dist()).is_file(),
                         'o artefato tem que existir depois')
@@ -6969,7 +6969,7 @@ class LiaCorePrereqTests(unittest.TestCase):
         self.assertNotEqual(outcome.exit_code, 0)
         self.assertEqual(self.calls, [], 'sem dependências base nada deve ser construído')
         text = '\n'.join(self.emitted)
-        self.assertIn('pnpm install', text, 'o diagnóstico deve nomear o comando')
+        self.assertIn('corepack pnpm --dir lia/runtime install --frozen-lockfile --ignore-scripts', text, 'o diagnóstico deve nomear o comando')
 
     def test_c_a_base_failure_is_blocking_so_the_long_suite_never_starts(self) -> None:
         repo = make_repo(self.base / 'repo')
@@ -7041,7 +7041,7 @@ class LiaCorePrereqTests(unittest.TestCase):
         joined = ' '.join(argv)
         self.assertNotIn('core-agent', joined,
                          'este pré-requisito não pode tocar core-agent/dist')
-        self.assertIn('build:lia-core', joined)
+        self.assertIn('run build', joined)
 
     def test_the_round_still_clears_core_agent_dist_at_prelaunch(self) -> None:
         steps = load_active_round().prelaunch_prepare

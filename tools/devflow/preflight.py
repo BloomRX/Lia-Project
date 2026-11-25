@@ -1,24 +1,4 @@
-"""
-Bounded workspace preflight for Lia rounds.
-
-Why this exists
----------------
-A real Windows run spent its whole 3600 s Python budget and then failed the
-`lia-app` suite with eight files reporting "(0 test)". The cause was one
-missing build artifact: `lia/runtime/dist/index.mjs`. Every one of
-those eight files imports `@lia/core` through `src/main/lia-host.ts`, and that
-package's `exports` map points only at a built file that is gitignored, so an
-install whose postinstall did not complete leaves nothing to resolve.
-
-Nothing in the round produced that artifact, so the failure could only surface
-as an hour of Python followed by eight useless collection errors. Checking for
-it takes milliseconds. A round that is going to fail on a missing artifact
-should say so in seconds, name the artifact, and name the command that
-produces it.
-
-This module FAILS CLOSED. A missing requirement is a failure, never a warning
-that lets the round continue to a misleading result.
-"""
+"""Read-only checks for native Lia build artifacts and runtime dependencies."""
 
 from __future__ import annotations
 
@@ -52,34 +32,18 @@ class Requirement:
     consumed_by: str
 
 
-REQUIREMENTS: tuple[Requirement, ...] = (
-    Requirement(
-        id='airi-node-modules',
-        rel_path='airi/node_modules',
-        kind='dir',
-        produced_by='pnpm install (dentro de airi/)',
-        consumed_by='lia-app, stage-m30a, stage-devflow',
-    ),
-    Requirement(
-        id='lia-core-dist',
-        rel_path='lia/runtime/dist/index.mjs',
-        kind='file',
-        produced_by='pnpm run build:lia-core (dentro de airi/)',
-        consumed_by='lia-app (via src/main/lia-host.ts, que importa @lia/core)',
-    ),
-    Requirement(
-        id='vitest-bin',
-        rel_path='airi/node_modules/vitest/vitest.mjs',
-        kind='file',
-        produced_by='pnpm install (dentro de airi/)',
-        consumed_by='lia-app, stage-m30a, stage-devflow',
-    ),
+RUNTIME_ARTIFACT = Requirement(
+    'lia-runtime', 'lia/runtime/dist/index.mjs', 'file',
+    r'corepack pnpm --dir lia/runtime run build', 'Launcher e Stage',
 )
-
-
-NATIVE_REQUIREMENTS: tuple[Requirement, ...] = (
-    Requirement('lia-runtime', 'lia/runtime/dist/index.mjs', 'file',
-                r'.\Lia.bat -PrepareOnly', 'Launcher e Stage'),
+RUNTIME_REQUIREMENTS: tuple[Requirement, ...] = (
+    Requirement('lia-runtime-tsdown', 'lia/runtime/node_modules/tsdown/package.json',
+                'file', 'corepack pnpm --dir lia/runtime install --frozen-lockfile --ignore-scripts',
+                'build do runtime'),
+    RUNTIME_ARTIFACT,
+)
+REQUIREMENTS: tuple[Requirement, ...] = (
+    RUNTIME_ARTIFACT,
     Requirement('lia-launcher', 'lia/desktop/out/main/index.js', 'file',
                 r'.\Lia.bat -PrepareOnly', 'Launcher'),
     Requirement('lia-stage', 'lia/stage/out/main/index.js', 'file',
@@ -140,9 +104,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description='Verifica os artefatos preparados da Lia.')
     parser.add_argument('repo_root', nargs='?', default=os.path.dirname(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-    parser.add_argument('--legacy-m30b', action='store_true', help='verifica a rodada histórica M3.0b')
+    parser.add_argument('--runtime-build', action='store_true', help='verifica dependências e artefato do runtime')
     args = parser.parse_args(argv)
-    requirements = REQUIREMENTS if args.legacy_m30b else NATIVE_REQUIREMENTS
+    requirements = RUNTIME_REQUIREMENTS if args.runtime_build else REQUIREMENTS
     findings = check_workspace(args.repo_root, requirements)
     print(render_findings(findings))
     # Fail closed: exit 0 only when every required artifact is present.

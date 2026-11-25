@@ -1,28 +1,4 @@
-"""
-Managed `@lia/core` build prerequisite for Lia rounds.
-
-Why this exists
----------------
-`@lia/core` declares `exports["."] = ./dist/index.mjs`. That `dist` directory
-is gitignored and is produced only by the `airi` workspace postinstall. When an
-install did not complete it, `src/main/lia-host.ts:16` cannot resolve the
-import and every suite that transitively imports it fails collection with zero
-tests - which on a real Windows run presented as eight `FAIL` files each
-reporting "(0 test)", with no exception retained in the report.
-
-The read-only preflight correctly failed closed on that, but failing closed
-still left the owner to run a command by hand, which contradicts the product
-contract: double-click `DevKit.bat` and let the round do the work. So the one
-generated artifact the round needs is now built by the round.
-
-Deliberately narrow. This module manages exactly one artifact, `lia-core/dist`,
-with one documented command. It is not a repair tool: it does not install
-dependencies, does not touch `core-agent/dist`, does not modify any tracked
-product source, and it fails closed rather than guessing.
-
-Everything it prints goes through the single bounded sanitizer at the
-persistence boundary, so no raw build output can reach REPORT.txt or run.json.
-"""
+"""Build the native Lia runtime artifact when its installed dependencies are present."""
 
 from __future__ import annotations
 
@@ -65,10 +41,10 @@ __all__ = [
 PNPM_ENV = 'LIA_DEVFLOW_PNPM'
 
 #: The documented build command, as argv. Never a shell string.
-BUILD_ARGV: tuple[str, ...] = ('run', 'build:lia-core')
+BUILD_ARGV: tuple[str, ...] = ('run', 'build')
 
 #: Workspace the build runs in.
-WORKSPACE_DIR = 'airi'
+WORKSPACE_DIR = 'lia/runtime'
 
 #: Bounded build budget. A tsdown build of one package is seconds; this leaves
 #: generous headroom on a slow machine while still being far below the
@@ -83,10 +59,10 @@ MARKER_PREFIX = '[lia] prereq-lia-core'
 
 #: Requirements that must already exist. These are NOT managed here: installing
 #: dependencies is a much larger, network-dependent action and stays manual.
-BASE_REQUIREMENT_IDS = ('airi-node-modules', 'vitest-bin')
+BASE_REQUIREMENT_IDS = ('lia-runtime-tsdown',)
 
 #: The one artifact this module manages.
-MANAGED_REQUIREMENT_ID = 'lia-core-dist'
+MANAGED_REQUIREMENT_ID = preflight.RUNTIME_ARTIFACT.id
 
 
 @dataclass(frozen=True)
@@ -102,7 +78,7 @@ class PrereqOutcome:
 
 
 def _rel(requirement_id: str) -> str:
-    for requirement in preflight.REQUIREMENTS:
+    for requirement in preflight.RUNTIME_REQUIREMENTS:
         if requirement.id == requirement_id:
             return requirement.rel_path
     raise KeyError(f'requisito desconhecido: {requirement_id}')
@@ -110,7 +86,7 @@ def _rel(requirement_id: str) -> str:
 
 def _present(repo_root: Path, requirement_id: str) -> bool:
     target = repo_root.joinpath(*_rel(requirement_id).split('/'))
-    requirement = next(r for r in preflight.REQUIREMENTS if r.id == requirement_id)
+    requirement = next(r for r in preflight.RUNTIME_REQUIREMENTS if r.id == requirement_id)
     return (target.is_dir() if requirement.kind == 'dir' else target.is_file())
 
 
@@ -172,7 +148,7 @@ def ensure_lia_core(repo_root: Path,
         detail = (f'{MARKER_PREFIX} state=failed reason=base-dependencies-missing\n'
                   + '\n'.join(
                       f'dependência base ausente: {_rel(rid)} - gere com: '
-                      f'{next(r for r in preflight.REQUIREMENTS if r.id == rid).produced_by}'
+                      f'{next(r for r in preflight.RUNTIME_REQUIREMENTS if r.id == rid).produced_by}'
                       for rid in missing_base))
         emit(detail)
         return PrereqOutcome(ok=False, action='base-missing', detail=detail, exit_code=1)
