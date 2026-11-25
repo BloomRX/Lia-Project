@@ -104,14 +104,15 @@ async function saveSpeech() {
   }
 }
 
-async function useLocalSpeech() {
+async function useLocalSpeech(fromSettings = false) {
+  const notice = fromSettings ? speechFeedback : feedback
   speechBusy.value = true
   try {
     const saved = await props.api?.useLocalSpeech?.()
-    speechFeedback.value = saved ? 'Motor local selecionado.' : 'Não foi possível selecionar o motor local.'
+    notice.value = saved ? 'Motor local selecionado.' : 'Não foi possível selecionar o motor local.'
   }
   catch {
-    speechFeedback.value = 'Não foi possível selecionar o motor local.'
+    notice.value = 'Não foi possível selecionar o motor local.'
   }
   finally {
     speechBusy.value = false
@@ -161,44 +162,6 @@ async function resetLocation() {
     await props.api.clearRuntimeLocation()
     await reloadLocation()
     feedback.value = 'Local padrão restaurado.'
-  }
-  finally {
-    busy.value = false
-  }
-}
-
-async function activateReady() {
-  busy.value = true
-  feedback.value = ''
-  try {
-    // "Voz pronta" leaves the cloud TTS configured in Config untouched;
-    // it only moves the preference OFF the local custom voice, when set.
-    const current = (await props.api?.productConfig?.())?.snapshot?.voice?.tts?.preferred
-    const preferred = current && current.providerId !== 'custom-local-voice'
-      ? current
-      : { providerId: 'cloud-voice-provider', voiceId: 'nova' }
-    const result = await props.api.updateConfig({
-      update: { voice: { tts: { preferred } } },
-    })
-    feedback.value = result?.status === 'ok'
-      ? 'Voz pronta ativada.'
-      : `Não foi possível ativar: ${result?.message ?? 'erro desconhecido'}`
-  }
-  finally {
-    busy.value = false
-  }
-}
-
-async function activateCustom(profile: any) {
-  busy.value = true
-  feedback.value = ''
-  try {
-    const result = await props.api.updateConfig({
-      update: { voice: { tts: { preferred: { providerId: 'custom-local-voice', voiceId: profile.id } } } },
-    })
-    feedback.value = result?.status === 'ok'
-      ? `"${profile.name}" agora é a voz ativa da Lia.`
-      : `Não foi possível ativar: ${result?.message ?? 'erro desconhecido'}`
   }
   finally {
     busy.value = false
@@ -281,13 +244,13 @@ async function importVoice() {
     <div class="choices">
       <label class="choice" :class="{ active: kind === 'ready' }" @click="kind = 'ready'">
         <input v-model="kind" type="radio" value="ready">
-        <strong>Voz pronta</strong>
-        <span class="dim">rápida para começar, roda em provedor de nuvem configurado</span>
+        <strong>Síntese no Stage</strong>
+        <span class="dim">motor local ou serviço HTTPS configurado</span>
       </label>
       <label class="choice" :class="{ active: kind === 'custom' }" @click="kind = 'custom'">
         <input v-model="kind" type="radio" value="custom">
         <strong>Minha própria voz</strong>
-        <span class="dim">roda no sistema de voz local da Lia</span>
+        <span class="dim">biblioteca de perfis importados</span>
       </label>
     </div>
 
@@ -323,9 +286,6 @@ async function importVoice() {
           <li v-for="p in profiles" :key="p.id" class="profile-row">
             <span class="profile-name">{{ p.name }}</span>
             <span class="dim profile-meta">({{ p.engine || 'desconhecido' }}, {{ p.files?.length ?? 0 }} arquivo(s))</span>
-            <LiaButton class="use-profile" :disabled="busy" @click="activateCustom(p)">
-              usar esta voz
-            </LiaButton>
             <LiaButton :disabled="busy" :aria-label="`Remover voz ${p.name}`" @click="removeVoice(p.id)">
               Remover voz
             </LiaButton>
@@ -339,7 +299,7 @@ async function importVoice() {
         </div>
         <p class="dim field-note">
           Os arquivos são copiados para a biblioteca canônica da Lia — nada é duplicado em outra pasta.
-          Criar a voz a partir de amostras guiadas chega numa próxima etapa.
+          O Stage atual ainda não usa perfis importados para sintetizar respostas.
         </p>
       </LiaPanel>
 
@@ -356,13 +316,13 @@ async function importVoice() {
     </template>
 
     <LiaPanel v-else>
-      <h3>Voz pronta</h3>
+      <h3>Síntese no Stage</h3>
       <p class="dim">
-        A voz pronta usa o provedor configurado na aba Configuração.
+        Use o motor local instalado ou configure um serviço HTTPS na seção de síntese.
       </p>
       <div class="ready-actions">
-        <LiaButton variant="primary" :disabled="busy" @click="activateReady">
-          Ativar voz pronta
+        <LiaButton variant="primary" :disabled="busy || speechBusy" @click="useLocalSpeech()">
+          Selecionar motor local
         </LiaButton>
       </div>
     </LiaPanel>
@@ -380,7 +340,7 @@ async function importVoice() {
           <label>Chave da API <input v-model.trim="speech.apiKey" :required="!speech.hasKey" type="password" maxlength="2048" autocomplete="new-password"></label>
           <div class="speech-actions">
             <button type="submit">Salvar e usar</button>
-            <button type="button" @click="useLocalSpeech">Voltar ao motor local</button>
+            <button type="button" @click="useLocalSpeech(true)">Voltar ao motor local</button>
           </div>
         </fieldset>
       </form>
@@ -487,7 +447,6 @@ h3 { margin: 0 0 var(--lia-space-3); }
   gap: var(--lia-space-3);
 }
 .profile-name { font-weight: var(--lia-font-medium); }
-.profile-row .use-profile { margin-left: auto; }
 
 .import-row {
   align-items: center;

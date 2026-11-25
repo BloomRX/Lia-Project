@@ -88,7 +88,13 @@ try {
   page.setDefaultTimeout(10_000)
   await page.getByLabel('Mensagem', { exact: true }).fill('Mensagem sintética.')
   await page.getByRole('button', { name: 'Enviar', exact: true }).click()
-  await page.getByText(`Lia: ${reply}`, { exact: true }).waitFor()
+  try {
+    await page.getByText(`Lia: ${reply}`, { exact: true }).waitFor()
+  }
+  catch (error) {
+    await page.screenshot({ path: join(root, 'speech-chat-failure.png'), fullPage: true })
+    throw error
+  }
   const speak = page.getByRole('button', { name: 'Ouvir resposta' })
   const setApproval = response => app.evaluate(({ dialog }, choice) => {
     dialog.showMessageBox = async (_owner, options) => {

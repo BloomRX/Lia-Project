@@ -2,7 +2,7 @@
 
 ## 0. Estado agora
 
-- **Biblioteca de voz.** O Launcher permite remover uma voz importada mediante confirmação no Main. São removidas as cópias locais e as referências da voz escolhida na seleção de síntese. O Electron Windows com resposta de diálogo injetada confirmou preservação da cópia ao cancelar e remoção sem tocar no arquivo original ao confirmar. A síntese com perfis clonados continua pendente no Stage próprio.
+- **Biblioteca de voz.** O Launcher permite remover uma voz importada mediante confirmação no Main. São removidas as cópias locais e as referências da voz escolhida na seleção de síntese. O Electron Windows com resposta de diálogo injetada confirmou preservação da cópia ao cancelar e remoção sem tocar no arquivo original ao confirmar. O Launcher distingue a biblioteca importada da síntese usada no Stage. O botão de síntese local salvou Kokoro no Electron Windows, e a regressão HTTPS passou com serviço sintético. A síntese com perfis clonados continua pendente no Stage próprio.
 
 - **Remoção de conexão de IA.** O Launcher oferece remoção com confirmação no Main e Cancelar como ação padrão. A remoção valida a revisão, desabilita primeiro o transporte, apaga somente a chave vinculada à conexão e limpa a seleção se ela apontar para esse provedor. No Electron Windows com resposta de diálogo injetada, cancelar preservou o registro e confirmar o removeu e devolveu o foco ao campo de endereço. Testes do host verificaram a exclusão da chave sintética, a preservação de outra seleção e a recusa de uma revisão obsoleta. Interação física com o diálogo e leitor de tela seguem pendentes.
 

@@ -52,7 +52,16 @@ A branch `codex/lia-ui-ux-fase-1` está preservada no espelho e na tag
 em `e72574e8`, incluindo o [relatório histórico da retomada](https://github.com/BloomRX/Lia-Project/blob/archive/ui-codex-fase-1/docs/reports/LIA-UI-UX-FASE-1-RETOMADA.md).
 A revisão independente confirmou equivalentes nativos para seus quatro deltas
 de contraste, anúncio de prontidão, limpeza de conversa e remoção de conexão.
-A branch UI da Arena segue em reconciliação.
+A branch UI da Arena está preservada no espelho e na tag
+[`archive/ui-arena-fase-1`](https://github.com/BloomRX/Lia-Project/tree/archive/ui-arena-fase-1)
+em `ad802efe`. Os relatórios de auditoria, implementação e comparação já
+coincidem com a `main`. Os wireframes, logs e código AIRI de origem
+ficam acessíveis pela tag. O Launcher próprio recebeu a ação de prontidão,
+contraste, movimento reduzido, configuração de IA e remoção confirmada
+de conexão e voz. O Stage próprio recebeu limpeza e exclusão de conversa,
+exclusão de mensagem e de notas com confirmação. O Launcher apresenta as
+rotas de voz que o Stage usa e mantém a biblioteca separada. A comprovação
+com leitor de tela e diálogos físicos segue pendente em Windows.
 
 O espelho externo contém as 12 branches remotas e passou em
 `git fsck --full`. Foram verificados os bundles locais e comparadas

@@ -241,7 +241,7 @@ describe('8.0A-4 Voice page: design-system migration', () => {
     expect(view.indexOf('<VoiceEngineCard')).toBeLessThan(view.indexOf('class="choices"'))
 
     // Every pre-existing action is still wired.
-    for (const action of ['@click="changeLocation"', '@click="resetLocation"', '@click="activateReady"', '@click="activateCustom(p)"', '@click="importVoice"'])
+    for (const action of ['@click="changeLocation"', '@click="resetLocation"', '@click="useLocalSpeech()"', '@click="removeVoice(p.id)"', '@click="importVoice"'])
       expect(view, action).toContain(action)
 
     // The shell still feeds the same props to the page.
