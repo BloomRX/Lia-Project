@@ -1,12 +1,11 @@
 import assert from 'node:assert/strict'
-import { readFileSync, readdirSync, statSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { describe, it } from 'node:test'
 
 import { packageRoot, PUBLIC_SURFACE, specifiers, walk } from '../../lia/core/test/public-surface-helpers.ts'
 
 const repoRoot = join(packageRoot, '..', '..')
-const appsRoot = join(repoRoot, 'airi', 'apps')
 
 /** `@lia/contracts/x` -> `./x`; `@lia/contracts` -> `.`. */
 function exportKeyFor(specifier) {
@@ -15,16 +14,7 @@ function exportKeyFor(specifier) {
 }
 
 function appFiles() {
-  const files = walk(join(repoRoot, 'lia', 'desktop', 'src'))
-  for (const app of readdirSync(appsRoot)) {
-    const src = join(appsRoot, app, 'src')
-    try {
-      if (statSync(src).isDirectory())
-        walk(src, files)
-    }
-    catch { /* app sem src */ }
-  }
-  return files
+  return ['desktop', 'stage'].flatMap(app => walk(join(repoRoot, 'lia', app, 'src')))
 }
 
 describe('S1 — nenhum import relativo para lia/core/src', () => {

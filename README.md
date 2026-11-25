@@ -20,8 +20,8 @@ A ação **Conversar com Lia** abre o Stage próprio. Use `Lia.bat -PrepareOnly`
 para instalar as dependências e compilar sem abrir uma janela.
 Rode `powershell -NoProfile -File .\lia\Test-Lia.ps1 -Prepare`
 para preparar os builds e verificar Core, runtime, Launcher, Stage e
-empacotador. O mesmo script roda no CI Windows em uma cópia que só
-contém `lia/` e `Lia.bat`.
+empacotador. O mesmo script roda no CI Windows em uma cópia da árvore
+do repositório sem o diretório legado.
 No Windows, `python tools/lia_dev.py round` também executa essa suíte e
 verifica a abertura e o encerramento do Stage próprio pelo Launcher.
 Para consultar ou reproduzir a rodada M3.0b, use um checkout separado do

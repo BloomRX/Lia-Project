@@ -3,10 +3,10 @@ name: Lia nativa no Windows
 on:
   push:
     branches: [main]
-    paths: ['lia/**', 'Lia.bat', '.github/workflows/lia-native-windows.yml']
+    paths: ['lia/**', 'Lia.bat', 'Tests/tools/lia-brain-consumers.test.mjs', 'Tests/tools/lia-contract-consumers.test.mjs', '.github/workflows/lia-native-windows.yml']
   pull_request:
     branches: [main]
-    paths: ['lia/**', 'Lia.bat', '.github/workflows/lia-native-windows.yml']
+    paths: ['lia/**', 'Lia.bat', 'Tests/tools/lia-brain-consumers.test.mjs', 'Tests/tools/lia-contract-consumers.test.mjs', '.github/workflows/lia-native-windows.yml']
   workflow_dispatch:
 
 permissions:
@@ -48,13 +48,17 @@ jobs:
           $bin = Join-Path $toolchain 'node_modules/.bin'
           & (Join-Path $bin 'corepack.cmd') enable --install-directory $bin pnpm
           $bin >> $env:GITHUB_PATH
-      - name: Extrair apenas a árvore Lia
+      - name: Extrair a árvore própria sem o diretório legado
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
           $standalone = Join-Path $env:RUNNER_TEMP 'lia-native'
           $archive = Join-Path $env:RUNNER_TEMP 'lia-native.tar'
           New-Item -ItemType Directory -Path $standalone | Out-Null
-          git archive --format=tar --output=$archive HEAD lia Lia.bat
+          $entries = @(git ls-tree --name-only HEAD | Where-Object { $_ -ne 'airi' })
+          if ('lia' -notin $entries -or 'Lia.bat' -notin $entries) {
+            throw 'A árvore não contém a entrada e os pacotes próprios da Lia.'
+          }
+          git archive --format=tar --output=$archive HEAD -- @entries
           tar -xf $archive -C $standalone
           if (Test-Path (Join-Path $standalone 'airi')) {
             throw 'O gate exige uma árvore sem airi/.'
@@ -66,6 +70,10 @@ jobs:
           "TEMP=$fixtureTemp" >> $env:GITHUB_ENV
           "TMP=$fixtureTemp" >> $env:GITHUB_ENV
           "LIA_STANDALONE=$standalone" >> $env:GITHUB_ENV
+      - name: Verificar a fronteira cognitiva na árvore própria
+        run: |
+          Set-Location $env:LIA_STANDALONE
+          node --test Tests/tools/lia-brain-consumers.test.mjs Tests/tools/lia-contract-consumers.test.mjs
       - name: Preparar pela entrada oficial
         id: build-launcher
         run: |
