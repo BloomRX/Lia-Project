@@ -166,6 +166,10 @@ picker.addEventListener('change', async () => {
     const bytes = await file.arrayBuffer()
     if (/\.zip$/i.test(file.name)) {
       const extracted = await window.liaStagePresence.readPackagedAvatar(new Uint8Array(bytes))
+      if (extracted === 'live2d-unavailable') {
+        status.textContent = t('Este cartão usa Live2D. O Stage atual aceita avatares VRM.')
+        return
+      }
       if (!extracted)
         throw new Error('avatar-package')
       await preview(extracted.buffer)

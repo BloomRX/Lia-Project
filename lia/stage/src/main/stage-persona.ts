@@ -43,7 +43,7 @@ async function readPackageEntries(input: Uint8Array, entryPath: string, entryLim
   }
   const manifestData = entries.get('manifest.json')
   const contents = entries.get(entryPath)
-  if (!manifestData || !contents)
+  if (!manifestData)
     throw new Error('invalid-card')
   const manifest: unknown = JSON.parse(manifestData.toString('utf8'))
   if (!record(manifest) || manifest.format !== 'airi-character-card' || manifest.version !== 1
@@ -54,16 +54,20 @@ async function readPackageEntries(input: Uint8Array, entryPath: string, entryLim
 
 async function readCardArchive(input: Uint8Array): Promise<unknown> {
   const { contents } = await readPackageEntries(input, 'card.json', maxPersonaImportBytes)
+  if (!contents)
+    throw new Error('invalid-card')
   return JSON.parse(contents.toString('utf8'))
 }
 
-export async function readPackagedAvatar(input: unknown): Promise<Uint8Array> {
+export async function readPackagedAvatar(input: unknown): Promise<Uint8Array | 'live2d-unavailable'> {
   if (!(input instanceof Uint8Array))
     throw new Error('invalid-card')
   const path = 'models/body-model.vrm'
   const { contents, manifest } = await readPackageEntries(input, path, maxPersonaArchiveBytes)
   const model = record(manifest.resources) ? manifest.resources.displayModel : undefined
-  if (!record(model) || model.format !== 'vrm' || model.path !== path)
+  if (record(model) && model.format === 'live2d-zip' && model.path === 'models/body-model.zip')
+    return 'live2d-unavailable'
+  if (!contents || !record(model) || model.format !== 'vrm' || model.path !== path)
     throw new Error('invalid-card-avatar')
   return new Uint8Array(contents)
 }

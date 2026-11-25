@@ -54,8 +54,20 @@ test('saves validated traits and renders them without personalizing the user nam
 
 test('reads only the VRM declared by the character package manifest', async () => {
   const archive = await readFile(new URL('./fixtures/personality.ccv3.zip', import.meta.url))
-  const bytes = Buffer.from(await readPackagedAvatar(archive))
+  const avatar = await readPackagedAvatar(archive)
+  assert.ok(avatar instanceof Uint8Array)
+  const bytes = Buffer.from(avatar)
   assert.equal(bytes.subarray(0, 4).toString(), 'glTF')
   assert.equal(bytes.readUInt32LE(8), bytes.length)
   await assert.rejects(readPackagedAvatar('models/body-model.vrm'))
+})
+
+test('recognizes a legacy Live2D reference without loading the resource or blocking the card text', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'lia-card-live2d-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const archive = await readFile(new URL('./fixtures/live2d-reference.ccv3.zip', import.meta.url))
+  assert.equal(await readPackagedAvatar(archive), 'live2d-unavailable')
+  const store = createStagePersona(root)
+  const { id } = await store.import(archive)
+  assert.deepEqual(await store.read(id), { name: 'Cartão Live2D sintético', prompt: 'Personalidade independente' })
 })

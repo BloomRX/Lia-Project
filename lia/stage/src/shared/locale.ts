@@ -61,6 +61,7 @@ const english = new Map([
   ['Não foi possível importar a conversa.', 'Could not import the conversation.'],
   ['Nenhuma troca nova de texto foi importada.', 'No new text exchanges were imported.'],
   ['Conversa legada importada para leitura.', 'Legacy conversation imported for reading.'],
+  ['Este cartão usa Live2D. O Stage atual aceita avatares VRM.', 'This card uses Live2D. The current Stage supports VRM avatars.'],
   ['Abrir avatar VRM', 'Open VRM avatar'],
   ['Você também pode escolher um ZIP de personagem com avatar VRM.', 'You can also choose a character ZIP containing a VRM avatar.'],
   ['Lembrar este avatar', 'Remember this avatar'],
