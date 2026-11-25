@@ -5,14 +5,34 @@ import { env } from 'node:process'
 
 const script = [
   '$ErrorActionPreference = \'Stop\'',
+  '[Console]::WriteLine("started")',
   '$user = [Security.Principal.WindowsIdentity]::GetCurrent().User',
+  '[Console]::WriteLine("identity")',
   '$rules = [Security.AccessControl.FileSecurity]::new()',
   '$rules.SetAccessRuleProtection($true, $false)',
   '$rules.SetOwner($user)',
   '$rules.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new($user, "FullControl", "Allow"))',
+  '[Console]::WriteLine("rules")',
   '$stream = [IO.FileStream]::new($env:LIA_VAULT_PENDING_PATH, "CreateNew", "Write", "None", 4096, "None", $rules)',
+  '[Console]::WriteLine("opened")',
   'try { [Console]::OpenStandardInput().CopyTo($stream); $stream.Flush($true) } finally { $stream.Dispose() }',
+  '[Console]::WriteLine("flushed")',
 ].join('\n')
+
+const phases = ['not-started', 'started', 'identity', 'rules', 'opened', 'flushed'] as const
+type PrivateWritePhase = typeof phases[number]
+type PrivateWriteReason = 'spawn' | 'pipe' | 'interrupted' | 'exit'
+
+export class PrivateWindowsWriteError extends Error {
+  readonly reason: PrivateWriteReason
+  readonly phase: PrivateWritePhase
+
+  constructor(reason: PrivateWriteReason, phase: PrivateWritePhase) {
+    super('Windows credential file could not be written privately')
+    this.reason = reason
+    this.phase = phase
+  }
+}
 
 /** Create an unpublished file with a protected DACL before copying ciphertext. */
 export async function writePrivateWindowsFile(path: string, data: string, signal?: AbortSignal): Promise<void> {
@@ -35,21 +55,27 @@ export async function writePrivateWindowsFile(path: string, data: string, signal
       timeout: 5000,
       windowsHide: true,
     })
-    // Drain the child streams without retaining diagnostic text. The hosted
-    // Windows gate observed a stall with ignored standard handles and a
-    // successful run of the same ACL constructor with piped handles.
-    child.stdout.resume()
+    // Keep only a fixed phase enum. Never retain errors or output text.
+    let phase: PrivateWritePhase = 'not-started'
+    let line = ''
+    child.stdout.setEncoding('utf8').on('data', (chunk: string) => {
+      const parts = (line + chunk).split('\n')
+      line = parts.pop()!.slice(-32)
+      for (const part of parts) {
+        const next = phases.find(candidate => candidate === part.trim())
+        if (next && phases.indexOf(next) > phases.indexOf(phase))
+          phase = next
+      }
+    })
     child.stderr.resume()
-    let failed = false
-    child.on('error', () => {
-      failed = true
-    })
-    child.stdin.on('error', () => {
-      failed = true
-    })
-    child.once('close', (code) => {
-      if (failed || code !== 0)
-        reject(new Error('Windows credential file could not be written privately'))
+    let failure: PrivateWriteReason | undefined
+    child.on('error', () => { failure ??= signal?.aborted ? 'interrupted' : 'spawn' })
+    child.stdin.on('error', () => { failure ??= 'pipe' })
+    child.stdout.on('error', () => { failure ??= 'pipe' })
+    child.stderr.on('error', () => { failure ??= 'pipe' })
+    child.once('close', (code, termination) => {
+      if (failure || code !== 0 || phase !== 'flushed')
+        reject(new PrivateWindowsWriteError(termination ? 'interrupted' : failure ?? 'exit', phase))
       else
         resolve()
     })

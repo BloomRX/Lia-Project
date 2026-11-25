@@ -8,7 +8,7 @@ import { join } from 'node:path'
 import { performance } from 'node:perf_hooks'
 import { promisify } from 'node:util'
 
-import { writePrivateWindowsFile } from '../src/secrets/windows-private-file.ts'
+import { PrivateWindowsWriteError, writePrivateWindowsFile } from '../src/secrets/windows-private-file.ts'
 
 assert.equal(process.platform, 'win32')
 const fixture = await mkdtemp(join(tmpdir(), 'lia-private-write-gate-'))
@@ -40,8 +40,9 @@ async function measure(label, operation) {
     console.log(JSON.stringify({ label, ok: true, ms: Math.round(performance.now() - start) }))
     return true
   }
-  catch {
-    console.log(JSON.stringify({ label, ok: false, ms: Math.round(performance.now() - start) }))
+  catch (error) {
+    const failure = error instanceof PrivateWindowsWriteError ? { phase: error.phase, reason: error.reason } : {}
+    console.log(JSON.stringify({ label, ok: false, ms: Math.round(performance.now() - start), ...failure }))
     return false
   }
 }
@@ -112,7 +113,12 @@ try {
     assert.equal(await readFile(path, 'utf8'), sample)
   })
   const acl = protectedWrite && await measure('private-windows-acl', () => assertPrivateAcl(path))
-  if (!control || !namedPipe || !protectedWrite || !acl)
+  const exclusive = protectedWrite && await measure('private-windows-create-new', async () => {
+    await assert.rejects(writePrivateWindowsFile(path, 'replacement'), error =>
+      error instanceof PrivateWindowsWriteError && error.phase === 'rules' && error.reason === 'exit')
+    assert.equal(await readFile(path, 'utf8'), sample)
+  })
+  if (!control || !namedPipe || !protectedWrite || !acl || !exclusive)
     process.exitCode = 1
   if (diagnostics || !protectedWrite || !acl) {
     const minimal = { SystemRoot: process.env.SystemRoot, WINDIR: process.env.SystemRoot }
