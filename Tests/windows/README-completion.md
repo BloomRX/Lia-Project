@@ -38,7 +38,13 @@ O gate de instalação verifica a instalação limpa, o ciclo Launcher–Stage,
 uma troca sintética na janela do Stage que o Launcher abriu, a saída dos processos do pacote e
 a desinstalação. Os cenários com voz e visão usam gates separados no
 [CI Windows](../../.github/workflows/lia-native-windows.yml). O serviço
-sintético não comprova disponibilidade de um provedor externo. Os testes
+sintético não comprova disponibilidade de um provedor externo. O gate
+`check-native-speech.mjs <certificado> <chave>` usa um serviço HTTPS local com
+credencial sintética e respostas de consentimento injetadas. Ele confirma que
+o botão Parar áudio fecha uma requisição de síntese pendente, libera a interface
+sem atribuir uma fonte ao player e permite uma nova reprodução silenciada.
+O caso de um adaptador devolver áudio apesar do cancelamento é coberto
+separadamente em `lia/stage/test/stage-voice.test.ts`. Os testes
 de presença não medem FPS nem impacto em jogos.
 
 A sessão Windows do CI não encontrou o campo de mensagem pelo UI Automation

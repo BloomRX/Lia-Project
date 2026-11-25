@@ -24,6 +24,7 @@ Buffer.from('524946462600000057415645666d74201000000001000100803e0000007d0000020
 wave.writeUInt32LE(wave.length - 8, 4)
 wave.writeUInt32LE(wave.length - 44, 40)
 const requests = []
+let pendingSpeech
 const server = createServer({ cert: await readFile(cert), key: await readFile(key) }, async (request, response) => {
   if (request.url === '/v1/chat/completions') {
     request.resume()
@@ -36,10 +37,30 @@ const server = createServer({ cert: await readFile(cert), key: await readFile(ke
     chunks.push(chunk)
   const authorized = request.headers.authorization === `Bearer ${token}`
   requests.push({ authorized, path: request.url, body: JSON.parse(Buffer.concat(chunks).toString('utf8')) })
+  if (authorized && pendingSpeech) {
+    const pending = pendingSpeech
+    pendingSpeech = undefined
+    response.once('close', () => pending.closed.resolve(!response.writableEnded))
+    pending.started.resolve()
+    return
+  }
   response.writeHead(authorized ? 200 : 401, { 'content-type': 'audio/wav' })
   response.end(wave)
 })
 server.listen(0, '127.0.0.1')
+
+async function withDeadline(operation, message) {
+  let timer
+  try {
+    return await Promise.race([
+      operation,
+      new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(message)), 10_000) }),
+    ])
+  }
+  finally {
+    clearTimeout(timer)
+  }
+}
 
 let app
 try {
@@ -125,8 +146,21 @@ try {
   await speak.click()
   await page.waitForFunction(() => document.querySelector('audio').currentTime > 0)
   await page.getByRole('button', { name: 'Parar áudio' }).click()
+  const delayed = { started: Promise.withResolvers(), closed: Promise.withResolvers() }
+  pendingSpeech = delayed
+  await speak.click()
+  await withDeadline(delayed.started.promise, 'A síntese pendente não chegou ao serviço.')
+  await page.getByRole('button', { name: 'Parar áudio' }).click()
+  assert.equal(await withDeadline(delayed.closed.promise, 'A conexão de síntese permaneceu aberta.'), true)
+  await page.getByText('Áudio interrompido.', { exact: true }).waitFor()
+  await page.waitForFunction(() => !document.querySelector('#speak').disabled)
+  assert.equal(await page.locator('audio').getAttribute('src'), null)
+  await speak.click()
+  await page.waitForFunction(() => document.querySelector('audio').currentTime > 0)
+  await page.getByRole('button', { name: 'Parar áudio' }).click()
   const report = { service: 'synthetic HTTPS loopback', configuredByLauncher: true, consent: 'injected response', deniedWithoutRequest: true, authorizedSpeech: true, mutedPlayback: true, playbackStopped: true }
   report.playbackFailureRecovered = true
+  report.pendingSpeechCancelledAndRetried = true
   await writeFile(join(root, 'report.json'), JSON.stringify(report, null, 2))
   console.log(JSON.stringify(report))
 }
