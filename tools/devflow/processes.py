@@ -1,7 +1,7 @@
 """
 DevFlow: launching the managed Lia path and cleaning up the tree WE started.
 
-The real Windows chain is:
+The historical Windows fixture models this process chain:
 
     DevFlow -> cmd.exe -> Lia.bat -> pnpm dev:lia -> Launcher (Electron)
             -> managed Stage (node electron-vite.js dev -> Electron)

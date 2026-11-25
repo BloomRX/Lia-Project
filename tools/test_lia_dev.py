@@ -57,7 +57,7 @@ from devflow.schema import (  # noqa: E402
     validate_round,
 )
 
-ACTIVE_ROUND = TOOLS / 'devflow' / 'rounds' / 'm3_0b.json'
+ACTIVE_ROUND = TOOLS / 'devflow' / 'fixtures' / 'm30b' / 'm3_0b.json'
 CORE_DIST = 'airi/packages/core-agent/dist'
 
 
@@ -5284,7 +5284,7 @@ class DeclaredTimeoutTests(unittest.TestCase):
     from a crash.
     """
 
-    MANIFEST = TOOLS / 'devflow' / 'rounds' / 'm3_0b.json'
+    MANIFEST = TOOLS / 'devflow' / 'fixtures' / 'm30b' / 'm3_0b.json'
 
     def _load(self, mutate) -> Round:
         data = json.loads(self.MANIFEST.read_text(encoding='utf-8'))

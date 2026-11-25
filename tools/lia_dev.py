@@ -1,18 +1,8 @@
 #!/usr/bin/env python3
-"""
-DevKit Lia - camada de orquestração por rodada (Phase DEVFLOW-D1).
+"""Entrada do DevKit para validação nativa, diagnóstico e comandos Git explícitos.
 
-Ponto de entrada humano: dê dois cliques em `DevKit.bat` na raiz e escolha
-"Executar rodada atual". Você não precisa lembrar comandos Git, pré-requisitos
-de build, comandos de teste nem o gate manual da rodada: tudo isso vem do
-manifesto machine-readable em `tools/devflow/rounds/`.
-
-Este módulo NÃO contém o gate em si - ele apenas carrega a rodada ativa e a
-entrega ao runner. A lógica vive em `tools/devflow/` para ser testável sem
-Windows, sem Electron e sem operador.
-
-Fronteiras: nada aqui muta o Git. Publicar continua no DevKit universal e é
-assunto do D2.
+O Windows executa os gates próprios da Lia. Os manifestos históricos são
+fixtures de regressão e podem ser consultados pelo diagnóstico.
 """
 from __future__ import annotations
 
@@ -152,23 +142,19 @@ def cmd_diagnose(_args: argparse.Namespace) -> int:
 
 
 def cmd_rounds(_args: argparse.Namespace) -> int:
-    """Lista as rodadas disponíveis e marca a ativa."""
-    from devflow.schema import ROUNDS_DIR
+    """Lista os manifestos históricos preservados para regressão."""
+    from devflow.schema import ACTIVE_POINTER, ROUNDS_DIR
 
-    try:
-        current = active_round_id()
-    except RoundSchemaError as exc:
-        return _fail(str(exc))
-    print('== Rodadas ==')
+    print('== Rodadas arquivadas ==')
     for path in sorted(ROUNDS_DIR.glob('*.json')):
+        if path == ACTIVE_POINTER:
+            continue
         try:
             manifest: Round = load_round_file(path)
         except RoundSchemaError as exc:
             print(f'  {path.name}: INVÁLIDA ({exc})')
             continue
-        flag = 'ATIVA ' if manifest.id == current else '      '
-        publish = 'pronta p/ publicar' if manifest.ready_for_publish else 'não publica'
-        print(f'  [{flag}] {manifest.id:<8} {manifest.title} ({publish})')
+        print(f'  {manifest.id:<8} {manifest.title}')
     return 0
 
 

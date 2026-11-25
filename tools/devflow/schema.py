@@ -18,8 +18,8 @@ from typing import Any
 SCHEMA_VERSION = 2
 
 DEVFLOW_DIR = Path(__file__).resolve().parent
-ROUNDS_DIR = DEVFLOW_DIR / 'rounds'
-ACTIVE_POINTER = DEVFLOW_DIR / 'active-round.json'
+ROUNDS_DIR = DEVFLOW_DIR / 'fixtures' / 'm30b'
+ACTIVE_POINTER = ROUNDS_DIR / 'active-round.json'
 
 
 class RoundSchemaError(RuntimeError):
