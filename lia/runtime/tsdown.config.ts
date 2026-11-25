@@ -14,6 +14,7 @@ export default defineConfig({
     './src/paths/install-location.ts',
     './src/product/config.ts',
     './src/secrets/oidc-account.ts',
+    './src/secrets/oidc-login.ts',
     './src/secrets/oidc-session.ts',
     './src/secrets/vault.ts',
     './src/secrets/windows-user-cipher.ts',
