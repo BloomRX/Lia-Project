@@ -39,6 +39,9 @@ tools/stt-bench/samples/*.webm
 # Skill materializada do Agent Hub no piloto local.
 /.agents/skills/lia-eventa-ipc/
 
+# Referencias upstream materializadas do Agent Hub, fora da descoberta de skills.
+/.agents/upstream-reference/
+
 # Skills AIRI materializadas do Agent Hub.
 /airi/.agents/skills/eventa/
 /airi/.agents/skills/simple-english/

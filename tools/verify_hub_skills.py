@@ -54,7 +54,7 @@ def main():
     airi_locks = sorted((tools / "hub-airi-skills").glob("*.json"))
     if not airi_locks:
         raise ValueError("Nenhum manifesto AIRI encontrado.")
-    entries.extend((ROOT / "airi/.agents/skills" / lock.stem, lock) for lock in airi_locks)
+    entries.extend((ROOT / ".agents/upstream-reference/skills" / lock.stem, lock) for lock in airi_locks)
     for directory, lock in entries:
         verify(directory, lock)
     print(f"{len(entries)} Skills conferidas contra os manifestos.")

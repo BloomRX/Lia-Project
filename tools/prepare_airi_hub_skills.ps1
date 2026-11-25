@@ -38,7 +38,7 @@ $names = @(
     'xsai'
 )
 $destination = $root
-foreach ($part in @('airi', '.agents', 'skills')) {
+foreach ($part in @('.agents', 'upstream-reference', 'skills')) {
     $destination = Join-Path $destination $part
     if (!(Test-Path -LiteralPath $destination)) {
         New-Item -ItemType Directory -Path $destination | Out-Null

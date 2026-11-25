@@ -2,7 +2,9 @@
 
 O Lia-Project fixa 28 Skills por revisão e hash. Depois de clonar o
 projeto, use a CLI Windows do Agent Hub e o canal local de pacotes
-para preparar as cópias que o host descobre em `.agents/skills`.
+para preparar a Skill Eventa, descoberta pelo host em `.agents/skills`,
+e as 27 referências upstream em `.agents/upstream-reference/skills`.
+As referências ficam fora da descoberta automática e da árvore do AIRI.
 Os caminhos gerados são ignorados pelo Git.
 
 Na raiz do Lia-Project, com PowerShell:
