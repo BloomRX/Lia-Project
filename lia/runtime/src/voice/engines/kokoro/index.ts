@@ -19,6 +19,7 @@ import {
   KOKORO_DEFAULT_LANGUAGE,
   KOKORO_DEFAULT_VOICE_ID,
   KOKORO_ENGINE_ID,
+  KOKORO_VOICES,
 } from './manifest'
 import { createKokoroWorkerClient, KokoroWorkerError } from './process-worker'
 
@@ -258,6 +259,10 @@ export function createKokoroVoiceEngine(options: KokoroEngineOptions): KokoroVoi
       if (!text.trim())
         throw new LiaVoiceEngineError(KOKORO_ENGINE_ID, 'input-invalid', 'empty synthesis input')
 
+      const voice = input.voiceId ?? KOKORO_DEFAULT_VOICE_ID
+      if (!KOKORO_VOICES.some(asset => asset.name === voice))
+        throw new LiaVoiceEngineError(KOKORO_ENGINE_ID, 'input-invalid', 'unknown Kokoro voice')
+
       if (state !== 'ready') {
         // start() throws engine-unavailable honestly when the tree is missing.
         await start()
@@ -275,7 +280,7 @@ export function createKokoroVoiceEngine(options: KokoroEngineOptions): KokoroVoi
           language: resolveKokoroLanguage(input.language),
           out: wavPath,
           text,
-          voice: KOKORO_DEFAULT_VOICE_ID,
+          voice,
         })
         const bytes = await fs.readFile(result.wavPath)
         await fs.remove(result.wavPath)

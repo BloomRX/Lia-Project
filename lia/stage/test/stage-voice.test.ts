@@ -106,3 +106,14 @@ test('an explicitly selected legacy or unsupported provider never plays the loca
   assert.deepEqual(await voice.speak('Olá'), { ok: true, audio })
   assert.equal(calls, 1)
 })
+
+test('passes the stock voice from the canonical TTS selection to the engine', async () => {
+  const engine = engineFixture(async (input) => {
+    assert.equal(input.voiceId, 'pm_alex')
+    return { audio, engine: 'kokoro' }
+  }, async () => {})
+  const voice = createStageVoice(engine, async () => ({
+    status: 'ok', filePath: '', value: { voice: { tts: { preferred: { providerId: 'kokoro', voiceId: 'pm_alex' } } } },
+  }))
+  assert.deepEqual(await voice.speak('Olá'), { ok: true, audio })
+})

@@ -196,7 +196,13 @@ describe('kokoro voice engine (Phase 7.9C)', () => {
     expect(init.providers).toEqual(['CPUExecutionProvider'])
   })
 
-  it('synthesizes through the worker protocol and returns the engine-native WAV facts', async () => {
+  it('rejects an unknown stock voice before starting a worker', async () => {
+    const world = makeWorld()
+    await expect(world.engine.synthesize({ text: 'Oi', voiceId: 'unknown' })).rejects.toMatchObject({ kind: 'input-invalid' })
+    expect(world.children).toHaveLength(0)
+  })
+
+  it('synthesizes with the selected stock voice and returns native WAV metadata', async () => {
     const world = makeWorld()
     const wavBytes = new Uint8Array([82, 73, 70, 70, 1, 2, 3, 4])
     const start = world.engine.start()
@@ -204,14 +210,14 @@ describe('kokoro voice engine (Phase 7.9C)', () => {
     await start
 
     const child = world.children[0]!
-    const synthPromise = world.engine.synthesize({ language: 'pt-BR', text: 'Oi, tudo bem?' })
+    const synthPromise = world.engine.synthesize({ language: 'pt-BR', text: 'Oi, tudo bem?', voiceId: 'pm_alex' })
     const request = child.frames()[1]!
     expect(request).toMatchObject({
       cmd: 'synthesize',
       id: 1,
       language: 'pt-br',
       text: 'Oi, tudo bem?',
-      voice: 'pf_dora',
+      voice: 'pm_alex',
     })
     expect(String(request.out)).toContain(world.layout.tmpDir)
 

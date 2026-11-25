@@ -43,6 +43,9 @@ export interface LiaVoiceEngineHealth {
 export interface LiaVoiceSynthesisInput {
   /** Normalized text-for-speech (the stage-ui normalizer already ran). */
   text: string
+  /** Stock voice selected from the engine catalog. */
+  voiceId?: string
+
   /** Canonical profile id, when the voice is a cloned Lia voice. */
   profileId?: string
   /** Canonical reference WAV path (profiles stay engine-independent). */

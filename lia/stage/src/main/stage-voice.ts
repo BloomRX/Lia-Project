@@ -67,7 +67,7 @@ export function createStageVoice(
             return { ok: false, code: 'unavailable' } as const
         }
         job.synthesizing = true
-        const { audio } = await service.synthesize({ text: text.slice(0, 8_000) })
+        const { audio } = await service.synthesize({ text: text.slice(0, 8_000), voiceId: target?.voiceId })
         if (job.cancelled)
           return { ok: false, code: 'cancelled' } as const
         return disposed || audio.byteLength > 32 * 1024 * 1024
