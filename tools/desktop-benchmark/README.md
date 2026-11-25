@@ -39,13 +39,13 @@ o tipo Chromium e pai pelo snapshot inicial; não guarda linhas de comando.
 continua sendo conferida nas amostras; contadores por PID podem ter cache.
 O parâmetro é independente de `-IncludeGpu`; nenhum deles fornece FPS.
 
-O roteiro `Tests/windows/completion-runtime.mjs --packaged --without-key
---performance --soak-seconds=3600` mede Launcher sem Stage, Stage parado
-animado, após chat/presença e uma hora contínua. Esse wrapper inclui as raízes
-Launcher e Stage e descendentes observados com criação compatível, mas a
-coorte fica fixa. Não modifica stores para criar estados fictícios. As
-[métricas da baseline](../../docs/architecture/LIA-BETA-PERFORMANCE-2026-11-08.md)
-distinguem contaminação por testes, ausência de métricas e encerramento.
+A [baseline de novembro](../../docs/architecture/LIA-BETA-PERFORMANCE-2026-11-08.md)
+usou um wrapper legado preservado no commit
+[5cba44cc](https://github.com/BloomRX/Lia-Project/tree/5cba44ccfb721b5301c3ed3c0796c92aba30c9ef/Tests/windows).
+Para novas medições, abra a Lia pelo fluxo próprio, informe os PIDs da
+coorte a este coletor e registre os cenários separadamente. A coleta por
+PID não substitui um ensaio automatizado de uma hora nem compara os dois
+runtimes em condições equivalentes.
 
 - `metadata.json`: versão do esquema, PowerShell/Windows, PIDs solicitados, identidades iniciais, intervalo, duração e número de processadores lógicos reportado pelo runtime. Sem `CommandLine`, argumentos do processo, ambiente, títulos de janelas ou credenciais.
 - `samples.jsonl`: uma linha JSON por amostra, com tempos de início/fim, CPU e memória por PID, mais contadores GPU opcionais. É gravado e descarregado durante a execução.

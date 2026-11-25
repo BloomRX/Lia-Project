@@ -1,61 +1,41 @@
-# Fluxo integrado Windows da retomada
+# Validação integrada da Lia no Windows
 
-Roteiro Playwright/Electron com ações na UI, serviço HTTP local sintético e
-relatório JSON. Não usa setters de stores para aprovar funcionalidades.
-
-Na raiz, com Launcher/Stage fechados e dependências existentes:
+Na raiz, com os pré-requisitos de Node.js e Corepack disponíveis, prepare o
+desktop e execute as verificações próprias em sequência.
 
 ```powershell
-cd lia/desktop
-corepack pnpm run build
-cd ../../..
-node Tests/windows/completion-runtime.mjs --without-key --benchmark
+.\Lia.bat -PrepareOnly
+node --experimental-strip-types lia/desktop/scripts/check-native-stage.mjs
+node lia/desktop/scripts/check-native-history.mjs
+node --experimental-strip-types lia/desktop/scripts/check-native-presence.mjs
 ```
 
-O Stage é iniciado pelo Launcher no modo de desenvolvimento e executa seu
-pré-requisito real de build do core-agent. Não execute builds, instalações ou
-testes que limpem `core-agent/dist` durante este roteiro. O Electron instalado
-deve ser o oficial 43.4.1, com integridade conferida pelo gate de componentes.
+Interrompa se algum comando retornar código diferente de zero. Os gates
+abrem o Electron real e usam perfis isolados. O primeiro verifica abertura
+e encerramento do Stage pelo Launcher. O segundo envia mensagens a um
+serviço HTTP local sintético e verifica histórico, memória, personalidade
+e autorização de ferramenta. O terceiro exercita o avatar e a janela de
+presença. Os scripts registram resultados em diretórios próprios de
+evidências. No histórico e na presença, esses diretórios contêm relatórios
+e capturas.
 
-Por padrão, as evidências ficam em `%TEMP%/lia-completion-evidence/`, numa
-subpasta nova por execução. `LIA_EVIDENCE_ROOT` permite escolher outra raiz.
-`--without-key` seleciona explicitamente o serviço local sem chave na UI.
-Sem essa opção, é usada uma credencial sintética efêmera. Essa variante detectou
-falha de descriptografia entre Launcher e Stage; depois da correção do canal
-Main, passou em 08/11. Não aprova uma credencial ou serviço externo real.
+Para validar o instalador privado, execute os comandos abaixo com a prévia
+desinstalada no usuário de teste. Substitua o caminho pela versão recém-gerada.
 
-Depois de gerar o pacote privado, `node Tests/windows/completion-runtime.mjs
---packaged` abre `dist/windows/win-unpacked/Lia.exe` e o Stage incluído nele.
-Não executa o instalador NSIS nem prova instalação limpa. Preserve o pacote
-testado e não o reconstrua enquanto o roteiro estiver ativo.
+```powershell
+node lia/desktop/scripts/package-windows.mjs --internal-test
+.\lia\desktop\scripts\check-native-install.ps1 -Installer '<caminho do instalador>'
+```
 
-O perfil de produto e o Chromium do Stage são novos. O Launcher preserva seu
-perfil original quando existente, ou usa o perfil separado `Lia/launcher-profile`:
-**não é isolamento completo de todos os perfis**.
-Feche qualquer Launcher do usuário antes de rodar; a trava de instância única
-continua ativa. O roteiro não apaga perfis nem migra credenciais.
+O gate de instalação verifica a instalação limpa, o ciclo Launcher–Stage,
+uma troca sintética no Stage instalado, a saída dos processos do pacote e
+a desinstalação. Os cenários com voz e visão usam gates separados no
+[CI Windows](../../.github/workflows/lia-native-windows.yml). O serviço
+sintético não comprova disponibilidade de um provedor externo. Os testes
+de presença não medem FPS nem impacto em jogos.
 
-O fixture confirma seleção de modelo, transporte SSE, resposta visível,
-memória opt-in/opt-out na requisição e mudança do contexto de personalidade.
-Não avalia inteligência de um modelo externo nem áudio físico.
-
-Presença valida dimensões, pausa e retorno ao Tamagotchi. `--presence-more`
-exercita movimento, gravação de Home e colocação no segundo monitor conectado,
-quando disponível. Não aprova jogos, hover/click-through, mudanças de DPI ou
-recuperação por desconexão.
-`--benchmark` coleta uma amostra exploratória dos PIDs observados no
-desenvolvimento ou pacote, conferindo criação do pai e com CDP ativo; não mede FPS/GPU/impacto em jogos nem compara
-engines. O relatório indica falha com código de saída diferente de zero.
-
-`--performance` coleta cenários de 15 s com Launcher+Stage e contadores de
-Private Working Set/GPU/threads por PID. `--soak-seconds=3600` acrescenta uma
-hora contínua depois do fluxo; grava `progress.json` fora do Git durante a
-execução e `report.json` ao concluir. Não executar testes/builds no host durante
-medição controlada; a baseline inicial registrou essa contaminação explicitamente.
-Personagem parada/animada não é personagem estática sem animação. Oculto,
-pausado, voz e jogo não são aprovados por esses rótulos. FPS/frame time não
-estão instrumentados por esse coletor.
-
-Não copie perfis, logs brutos ou credenciais para o Git. A evidência resumida
-e as limitações da rodada estão em
-`docs/product/RELEASE-WINDOWS-2026-11-07-COMPLETION.md`.
+O roteiro legado e sua documentação podem ser reproduzidos em um checkout
+separado no commit [5cba44cc](https://github.com/BloomRX/Lia-Project/tree/5cba44ccfb721b5301c3ed3c0796c92aba30c9ef/Tests/windows).
+Os resultados e comandos históricos em relatórios anteriores se referem
+àquele código. Para novas medições por PID, use o
+[coletor Windows](../../tools/desktop-benchmark/README.md).
