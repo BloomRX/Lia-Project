@@ -7,12 +7,13 @@ import { join } from 'node:path'
 
 import { KOKORO_DEFAULT_VOICE_ID, KOKORO_VOICES } from '@lia/core/voice/engines/kokoro'
 import { createWindowsUserCipher } from '@lia/core/secrets/windows-user-cipher'
-import { app, BrowserWindow, dialog, ipcMain, safeStorage } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, safeStorage, shell } from 'electron'
 import { statSync as physicalStatSync } from 'original-fs'
 
 import { createLiaDevflowAutorun } from './devflow-autorun'
 import { createLiaEventPublisher } from './event-publisher'
 import { registerLiaIpc } from './ipc'
+import { registerLauncherOidc, resolveDevelopmentOidc } from './launcher-oidc'
 import { launcherProfilePath } from './launcher-profile'
 import { createLiaHost } from './lia-host'
 import { resolveNativeStage } from './native-stage'
@@ -280,6 +281,13 @@ async function bootstrap(): Promise<void> {
   })
   timer.mark('lia-app.window-created')
 
+  registerLauncherOidc({
+    ipc: ipcMain,
+    window: mainWindow,
+    vault: host.vault,
+    connection: resolveDevelopmentOidc(app.isPackaged, process.env.LIA_OIDC_TEST_ORIGIN, process.env.LIA_OIDC_TEST_CLIENT_ID),
+    openAuthorization: url => shell.openExternal(url),
+  })
   mainWindow.webContents.once('did-finish-load', () => {
     timer.mark('lia-app.renderer-ready')
   })

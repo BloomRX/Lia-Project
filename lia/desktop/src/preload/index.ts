@@ -6,6 +6,11 @@ import { contextBridge, ipcRenderer } from 'electron'
  * itself, and it never gets secret values.
  */
 const api = {
+  oidcStatus: () => ipcRenderer.invoke('lia:oidc:status'),
+  oidcLogin: () => ipcRenderer.invoke('lia:oidc:login'),
+  oidcCancel: () => ipcRenderer.invoke('lia:oidc:cancel'),
+  oidcProfile: () => ipcRenderer.invoke('lia:oidc:profile'),
+  oidcLogout: () => ipcRenderer.invoke('lia:oidc:logout'),
   // PROMPT-39: AI Settings. Every operation names ONE catalog definition;
   // the renderer never receives a secret value, only typed non-secret state.
   aiProviders: () => ipcRenderer.invoke('lia:ai:providers'),
