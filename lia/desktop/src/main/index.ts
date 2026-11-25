@@ -279,6 +279,8 @@ async function bootstrap(): Promise<void> {
     },
     width: 1320,
   })
+  mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  mainWindow.webContents.on('will-navigate', event => event.preventDefault())
   timer.mark('lia-app.window-created')
 
   registerLauncherOidc({
