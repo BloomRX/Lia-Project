@@ -117,3 +117,23 @@ test('passes the stock voice from the canonical TTS selection to the engine', as
   }))
   assert.deepEqual(await voice.speak('Olá'), { ok: true, audio })
 })
+
+test('discards remote audio that arrives after cancellation or shutdown', async () => {
+  for (const action of ['cancel', 'stop'] as const) {
+    const started = Promise.withResolvers<AbortSignal>()
+    const late = Promise.withResolvers<{ ok: true, audio: ArrayBuffer }>()
+    const engine = engineFixture(async () => assert.fail('local synthesis should not run'), async () => {})
+    const voice = createStageVoice(engine, async () => ({
+      status: 'ok', filePath: '', value: { voice: { tts: { preferred: { providerId: 'openai-audio-speech' } } } },
+    }), async (_target, _text, signal) => {
+      started.resolve(signal)
+      return late.promise
+    })
+    const result = voice.speak('Olá')
+    const signal = await started.promise
+    await voice[action]()
+    assert.equal(signal.aborted, true)
+    late.resolve({ ok: true, audio })
+    assert.deepEqual(await result, { ok: false, code: 'cancelled' })
+  }
+})

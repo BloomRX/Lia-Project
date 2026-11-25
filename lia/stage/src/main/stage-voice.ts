@@ -61,8 +61,12 @@ export function createStageVoice(
           return { ok: false, code: 'disabled' } as const
         const target = voice?.tts?.preferred
         if (target) {
-          if (supportsStageSpeech(target.providerId))
-            return await remoteSpeech?.(target, text.slice(0, 8_000), job.controller.signal) ?? { ok: false, code: 'unavailable' } as const
+          if (supportsStageSpeech(target.providerId)) {
+            const response = await remoteSpeech?.(target, text.slice(0, 8_000), job.controller.signal)
+            if (job.cancelled)
+              return { ok: false, code: 'cancelled' } as const
+            return response ?? { ok: false, code: 'unavailable' } as const
+          }
           if (target.providerId !== engine.id)
             return { ok: false, code: 'unavailable' } as const
         }
