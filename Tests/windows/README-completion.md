@@ -24,7 +24,7 @@ desinstalada no usuário de teste. Substitua o caminho pela versão recém-gerad
 
 ```powershell
 node lia/desktop/scripts/package-windows.mjs --internal-test
-.\lia\desktop\scripts\check-native-install.ps1 -Installer '<caminho do instalador>'
+.\lia\desktop\scripts\check-native-install.ps1 -Installer '<caminho do instalador>' -RequireAttribution
 ```
 
 Se o NSIS falhar em `!include` para um arquivo existente dentro de

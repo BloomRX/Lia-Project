@@ -5,6 +5,7 @@ param(
   [ValidateRange(0, 65535)][int]$LocalModelPort = 0,
   [string]$LocalModel,
   [switch]$DirectStageConversation,
+  [switch]$RequireAttribution,
   [switch]$RequireIndependent
 )
 
@@ -49,6 +50,7 @@ if ($DirectStageConversation) { $gateArguments += '--direct-stage-conversation' 
 if ($LocalModelPort) { $gateArguments += @("--local-port=$LocalModelPort", "--local-model=$LocalModel") }
 $report = [ordered]@{
   install = $false
+  attributionSha256 = $null
   replacement = $null
   lifecycle = $false
   installedConversation = $null
@@ -73,6 +75,14 @@ try {
   $report['installerSha256'] = Invoke-Installer $Installer $destination
   if (!(Test-Path -LiteralPath $launcher -PathType Leaf)) { throw 'Launcher ausente após a instalação.' }
   $report['install'] = $true
+  if ($RequireAttribution) {
+    $sourceNotice = Join-Path $PSScriptRoot 'AIRI-MIT.txt'
+    $installedNotice = Join-Path $destination 'resources/licenses/AIRI-MIT.txt'
+    $expected = (Get-FileHash -LiteralPath $sourceNotice -Algorithm SHA256).Hash
+    $actual = (Get-FileHash -LiteralPath $installedNotice -Algorithm SHA256).Hash
+    if ($actual -ne $expected) { throw 'O aviso MIT instalado diverge do texto versionado.' }
+    $report['attributionSha256'] = $actual
+  }
   $report['version'] = (Get-Item -LiteralPath $launcher).VersionInfo.ProductVersion
   $report['stageSha256'] = (Get-FileHash -LiteralPath $stageArchive -Algorithm SHA256).Hash
   if ($PreviousInstaller) {
