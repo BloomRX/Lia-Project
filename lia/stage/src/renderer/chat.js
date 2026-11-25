@@ -117,17 +117,60 @@ const errors = {
   unavailable: t('A IA não respondeu. Verifique o serviço e tente novamente.'),
 }
 
-function appendMessage(author, text, container = messages) {
+function appendMessage(author, text, container = messages, saved) {
   const entry = document.createElement('p')
   entry.className = 'message'
-  entry.textContent = `${author}: ${text}`
+  const label = document.createElement('span')
+  label.textContent = `${author}: ${text}`
+  entry.append(label)
+  if (saved) {
+    const remove = document.createElement('button')
+    remove.type = 'button'
+    remove.className = 'message-remove'
+    remove.textContent = t('Apagar mensagem')
+    remove.setAttribute('aria-label', `${t('Apagar mensagem')} — ${author}: ${text.slice(0, 60)}`)
+    remove.addEventListener('click', async () => {
+      if (send.disabled || historyEnabled.disabled || unsavedMessages)
+        return
+      historyEnabled.disabled = true
+      send.disabled = true
+      updateClearAction()
+      try {
+        const result = await window.liaStageChat.removeSavedMessage(saved.id, saved.revision, saved.index, saved.side)
+        if (result?.status === 'cancelled')
+          return
+        if (result?.status !== 'removed')
+          throw new Error('history-remove')
+        showConversation(result.state)
+        answerVersion++
+        clearAudio()
+        voice.hidden = true
+        status.textContent = t('Mensagem apagada.')
+        message.focus()
+      }
+      catch {
+        status.textContent = t('Não foi possível apagar esta mensagem.')
+      }
+      finally {
+        historyEnabled.disabled = false
+        send.disabled = false
+        updateClearAction()
+        if (remove.isConnected)
+          remove.focus()
+      }
+    })
+    entry.append(' ', remove)
+  }
   container.append(entry)
   if (container === messages)
     messages.scrollTop = messages.scrollHeight
 }
 
 function updateClearAction() {
-  historyClear.disabled = !activeConversation || historyEnabled.disabled || send.disabled || !messages.childElementCount
+  const blocked = !activeConversation || historyEnabled.disabled || send.disabled
+  historyClear.disabled = blocked || !messages.childElementCount
+  for (const remove of messages.querySelectorAll('.message-remove'))
+    remove.disabled = blocked || unsavedMessages
 }
 
 function showConversation(state) {
@@ -136,9 +179,12 @@ function showConversation(state) {
     new Option(title || `${t('Conversa')} ${index + 1}`, id)))
   conversation.value = activeConversation
   messages.replaceChildren()
-  for (const turn of state.turns) {
-    appendMessage(t('Você'), turn.user)
-    appendMessage('Lia', turn.assistant)
+  for (const [index, turn] of state.turns.entries()) {
+    const saved = { id: state.activeId, revision: state.revision, index }
+    if (turn.user)
+      appendMessage(t('Você'), turn.user, messages, { ...saved, side: 'user' })
+    if (turn.assistant)
+      appendMessage('Lia', turn.assistant, messages, { ...saved, side: 'assistant' })
   }
   unsavedMessages = false
   historyEnabled.checked = state.enabled
@@ -340,6 +386,11 @@ historyImportFile.addEventListener('change', async () => {
       appendMessage('Lia', turn.assistant, imported)
     }
     messages.prepend(imported)
+    if (turns.length && !unsavedMessages) {
+      const snapshot = await window.liaStageChat.history().catch(() => undefined)
+      if (snapshot)
+        showConversation(snapshot)
+    }
     historyStatus.textContent = t(turns.length ? 'Conversa legada importada para leitura.' : 'Nenhuma troca nova de texto foi importada.')
   }
   catch {
@@ -407,6 +458,14 @@ form.addEventListener('submit', async (event) => {
     appendMessage(t('Você'), text)
     appendMessage('Lia', result.text)
     unsavedMessages ||= !historyEnabled.checked || Boolean(attachment) || Boolean(result.historyUnavailable)
+    if (!unsavedMessages) {
+      const snapshot = await window.liaStageChat.history().catch(() => undefined)
+      const latest = snapshot?.turns.at(-1)
+      if (latest?.user === text && latest.assistant === result.text)
+        showConversation(snapshot)
+      else
+        unsavedMessages = true
+    }
     answerVersion++
     clearAudio()
     voice.hidden = false

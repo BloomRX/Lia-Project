@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { lstat, readFile, rename, unlink, writeFile } from 'node:fs/promises'
 
 const maxTurns = 24
@@ -106,15 +106,19 @@ export function createStageHistory(path: string) {
   function current(state: History): Conversation {
     return state.conversations.find(item => item.id === state.activeId)!
   }
+  function revisionOf(conversation: Conversation): string {
+    return createHash('sha256').update(JSON.stringify(conversation)).digest('hex')
+  }
   function view(state: History) {
     const { enabled, turns } = current(state)
     return {
       enabled,
+      revision: revisionOf(current(state)),
       turns: turns.map(({ user, assistant }) => ({ user, assistant })),
       activeId: state.activeId,
       conversations: state.conversations.map(({ id, turns }) => ({
         id,
-        title: turns[0]?.user.trim().slice(0, 50) ?? '',
+        title: turns.find(turn => turn.user.trim())?.user.trim().slice(0, 50) ?? '',
       })),
     }
   }
@@ -167,6 +171,21 @@ export function createStageHistory(path: string) {
       const state = await read()
       current(state).turns = []
       await write(state)
+    },
+    async removeMessage(id: string, revision: string, index: number, side: 'user' | 'assistant') {
+      const state = await read()
+      const active = current(state)
+      if (active.id !== id || revisionOf(active) !== revision || !Number.isSafeInteger(index) || index < 0)
+        return undefined
+      const turn = active.turns[index]
+      if (!turn || (side !== 'user' && side !== 'assistant') || !turn[side])
+        return undefined
+      turn[side] = ''
+      turn.reusable = false
+      if (!turn.user && !turn.assistant)
+        active.turns.splice(index, 1)
+      await write(state)
+      return view(state)
     },
     async importLegacy(input: unknown) {
       const state = await read()

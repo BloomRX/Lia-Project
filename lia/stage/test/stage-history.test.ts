@@ -6,6 +6,35 @@ import { test } from 'node:test'
 
 import { createStageHistory } from '../src/main/stage-history.ts'
 
+test('removing one saved message keeps its partner visible and excludes the incomplete turn from context', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'lia-stage-history-remove-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const path = join(root, 'history.json')
+  const route = 'a'.repeat(64)
+  const history = createStageHistory(path)
+  await history.setEnabled(true)
+  await history.append({ route, user: 'Pergunta A', assistant: 'Resposta A', reusable: true })
+  const original = await history.get()
+  const other = await history.changeConversation('create')
+  assert.ok(other)
+  await history.setEnabled(true)
+  await history.append({ route, user: 'Pergunta B', assistant: 'Resposta B', reusable: true })
+  assert.equal(await history.removeMessage(original.activeId, original.revision, 0, 'user'), undefined)
+
+  const returned = await history.changeConversation('select', original.activeId)
+  assert.ok(returned)
+  const removed = await history.removeMessage(returned.activeId, returned.revision, 0, 'user')
+  assert.ok(removed)
+  assert.deepEqual(removed.turns, [{ user: '', assistant: 'Resposta A' }])
+  assert.notEqual(removed.revision, returned.revision)
+  assert.equal(await history.removeMessage(returned.activeId, returned.revision, 0, 'assistant'), undefined)
+  const reopened = createStageHistory(path)
+  assert.deepEqual(await reopened.recall(route), [])
+  assert.deepEqual((await reopened.get()).turns, removed.turns)
+  assert.deepEqual((await reopened.changeConversation('select', other.activeId))?.turns,
+    [{ user: 'Pergunta B', assistant: 'Resposta B' }])
+})
+
 test('history is opt-in, bounded, route-scoped and clearable', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'lia-stage-history-'))
   t.after(() => rm(root, { recursive: true, force: true }))

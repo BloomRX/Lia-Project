@@ -4,7 +4,7 @@ import type { LiaIntensityContextId, LiaPersonalityAttributes } from '../../../c
 import { contextBridge, ipcRenderer } from 'electron'
 
 import { stageChatCancel, stageChatSend, stageChatSpeak, stageMemoryGet, stageMemoryMutate, stageMicrophoneArm, stagePresenceClose, stagePresenceCommand, stagePresenceOpen, stagePresenceRead, stagePresenceRendered, stageTranscribe, stageTranscriptionCancel } from '../shared/chat-ipc.ts'
-import { stageConversationChange, stageHistoryChange, stageHistoryGet, stageHistoryImport, stageLanguageGet, stagePresenceDisplays } from '../shared/chat-ipc.ts'
+import { stageConversationChange, stageHistoryChange, stageHistoryGet, stageHistoryImport, stageHistoryRemoveMessage, stageLanguageGet, stagePresenceDisplays } from '../shared/chat-ipc.ts'
 import { stagePersonaChange, stagePersonaGet } from '../shared/chat-ipc.ts'
 import { stagePresenceReadPackagedAvatar } from '../shared/chat-ipc.ts'
 import { stageHubCatalogGet } from '../shared/chat-ipc.ts'
@@ -35,6 +35,8 @@ contextBridge.exposeInMainWorld('liaStageMemory', {
 
 contextBridge.exposeInMainWorld('liaStageChat', {
   history: () => ipcRenderer.invoke(stageHistoryGet),
+  removeSavedMessage: (id: string, revision: string, index: number, side: 'user' | 'assistant') =>
+    ipcRenderer.invoke(stageHistoryRemoveMessage, id, revision, index, side),
   changePersona: (input: string | Uint8Array | null | { attributes: LiaPersonalityAttributes, contextId: LiaIntensityContextId }) =>
     ipcRenderer.invoke(stagePersonaChange, input),
   activePersona: () => ipcRenderer.invoke(stagePersonaGet),

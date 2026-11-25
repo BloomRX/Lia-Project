@@ -326,8 +326,25 @@ try {
   await page.waitForFunction(() => document.activeElement?.id === 'memory-note')
   assert.equal(await page.getByText('Você: Mensagem sem ferramenta', { exact: true }).count(), 1)
   await page.screenshot({ path: join(root, 'memory-cleared.png'), fullPage: true })
+  const removeMessage = page.getByRole('button', { name: 'Apagar mensagem — Você: Mensagem sem ferramenta', exact: true })
+  const answerToDelete = response => app.evaluate(({ dialog }, choice) => {
+    dialog.showMessageBox = async (owner, options) => {
+      if (!owner || options.defaultId !== 0 || options.cancelId !== 0 || options.buttons[1] !== 'Apagar mensagem')
+        throw new Error('Unexpected message confirmation contract')
+      return { response: choice }
+    }
+  }, response)
+  await answerToDelete(0)
+  await removeMessage.click()
+  await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Apagar mensagem — Você: Mensagem sem ferramenta')
+  await answerToDelete(1)
+  await removeMessage.click()
+  await page.getByText('Mensagem apagada.', { exact: true }).waitFor()
+  assert.equal(await page.getByText('Você: Mensagem sem ferramenta', { exact: true }).count(), 0)
+  assert.equal(await page.getByText(`Lia: Resposta ${requests.length}`, { exact: true }).count(), 1)
   const report = { service: 'synthetic local HTTP', optIn: true, reopened: true, resumed: true, legacyTextImported: true, cancellationPreservedHistory: true, cleared: true, clearDisabledWhenEmpty: true, rateLimitSanitized: true, refusedImageWithoutVision: true, conversationsIsolated: true, selectionRestored: true, deletionConfirmed: true, builtInPersonaInRequest: true, importedPersonaInRequest: true, importedPersonaRestored: true, personaContextIsolated: true, localKokoroMutedPlayback: withVoice ? 'cancelled, retried, played and stopped' : null, autoPlay: withVoice ? 'opt-in, persisted, played, opted out' : null, customizedTraitsPersisted: true }
   report.localClockRoundTrip = true
+  report.singleMessageRemoved = { dialogResponse: 'injected', remainingReplyVisible: true }
   report.memoryClear = { dialogResponse: 'injected', cancelPreservedNote: true, clearPreservedConversation: true, focusRestored: true }
   report.hubCatalog = { source: withPublishedHub ? 'published Hub index' : 'synthetic index', listed: listedHubCapabilities }
   assert.ok(!JSON.stringify(requests).includes('fixture-only-private-prose'))

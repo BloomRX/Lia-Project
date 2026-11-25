@@ -19,7 +19,7 @@ import { readPublishedHubCatalog } from '../../../core/src/hub/published-catalog
 import { startLiaRuntimeService } from '../../../core/src/runtime/index.ts'
 import { createTransportRepository } from '../../../core/src/transports/repository.ts'
 import { stageChatCancel, stageChatSend, stageChatSpeak, stageMemoryGet, stageMemoryMutate, stageMicrophoneArm, stagePresenceClose, stagePresenceCommand, stagePresenceOpen, stagePresenceRead, stagePresenceRendered, stageTranscribe, stageTranscriptionCancel } from '../shared/chat-ipc.ts'
-import { stageConversationChange, stageHistoryChange, stageHistoryGet, stageHistoryImport, stageLanguageGet, stagePresenceDisplays } from '../shared/chat-ipc.ts'
+import { stageConversationChange, stageHistoryChange, stageHistoryGet, stageHistoryImport, stageHistoryRemoveMessage, stageLanguageGet, stagePresenceDisplays } from '../shared/chat-ipc.ts'
 import { stagePersonaChange, stagePersonaGet } from '../shared/chat-ipc.ts'
 import { stagePresenceReadPackagedAvatar } from '../shared/chat-ipc.ts'
 import { stageHubCatalogGet } from '../shared/chat-ipc.ts'
@@ -210,6 +210,41 @@ async function main(): Promise<void> {
     if (!authorized(event))
       return undefined
     return history.get().catch(() => undefined)
+  })
+  ipcMain.handle(stageHistoryRemoveMessage, async (event, id: unknown, revision: unknown, index: unknown, side: unknown) => {
+    const owner = window
+    if (!owner || !authorized(event) || updatingHistory || active
+      || typeof id !== 'string' || id.length > 36 || typeof revision !== 'string' || !/^[a-f0-9]{64}$/.test(revision)
+      || typeof index !== 'number' || !Number.isSafeInteger(index) || index < 0 || index >= 24
+      || (side !== 'user' && side !== 'assistant'))
+      return { status: 'unavailable' }
+    updatingHistory = true
+    try {
+      const locale = await readLocale()
+      if (!authorized(event))
+        return { status: 'cancelled' }
+      const { response } = await dialog.showMessageBox(owner, {
+        type: 'warning', title: 'Lia',
+        message: stageText(locale, 'Apagar esta mensagem?'),
+        detail: stageText(locale, 'Somente esta mensagem será apagada. O restante da conversa será preservado.'),
+        buttons: [stageText(locale, 'Cancelar'), stageText(locale, 'Apagar mensagem')],
+        defaultId: 0, cancelId: 0, noLink: true,
+      })
+      if (response !== 1 || !authorized(event))
+        return { status: 'cancelled' }
+      const state = await history.removeMessage(id, revision, index, side)
+      if (!state)
+        return { status: 'unavailable' }
+      updateAnswer()
+      send.clearContext()
+      return { status: 'removed', state }
+    }
+    catch {
+      return { status: 'unavailable' }
+    }
+    finally {
+      updatingHistory = false
+    }
   })
   ipcMain.handle(stagePersonaGet, async (event) => {
     if (!authorized(event))
