@@ -144,10 +144,19 @@ def cmd_diagnose(_args: argparse.Namespace) -> int:
     print(f'  branch        : {_git(repo, ["rev-parse", "--abbrev-ref", "HEAD"])}')
     print(f'  HEAD          : {_git(repo, ["rev-parse", "HEAD"])}')
     print(f'  não commitadas: {len([x for x in _git(repo, ["status", "--porcelain"]).splitlines() if x.strip()])}')
-    dist = repo / 'airi' / 'packages' / 'core-agent' / 'dist'
-    print(f'  core-agent/dist: {"presente (gerado)" if dist.exists() else "ausente - a rodada o reconstrói"}')
-    node_modules = repo / 'airi' / 'node_modules'
-    print(f'  airi/node_modules: {"presente" if node_modules.is_dir() else "AUSENTE - rode pnpm install em airi/"}')
+    artifacts = (
+        ('runtime', 'lia/runtime/dist/index.mjs'),
+        ('Launcher', 'lia/desktop/out/main/index.js'),
+        ('Stage', 'lia/stage/out/main/index.js'),
+        ('Electron Windows', 'lia/stage/node_modules/electron/dist/electron.exe'),
+    )
+    missing_artifacts = False
+    for label, relative_path in artifacts:
+        exists = (repo / relative_path).is_file()
+        missing_artifacts |= not exists
+        print(f'  {label:<16}: {"presente" if exists else "AUSENTE"} ({relative_path})')
+    if missing_artifacts:
+        print(r'  preparação    : execute .\Lia.bat -PrepareOnly na raiz pelo PowerShell')
     try:
         print(f'  rodada ativa  : {active_round_id()}')
     except RoundSchemaError as exc:
