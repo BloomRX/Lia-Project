@@ -220,6 +220,7 @@ async function encerrarConversa() {
         class="home-action"
         variant="primary"
         :disabled="busy || conversationStarting || conversationStopping"
+        :aria-describedby="blockerHint ? 'home-readiness-hint' : undefined"
         @click="conversar"
       >
         {{ conversationLabel }}
@@ -278,7 +279,7 @@ async function encerrarConversa() {
           voz: {{ voiceChip.label }}
         </LiaStatusChip>
       </div>
-      <p v-if="blockerHint" class="home-hint">
+      <p v-if="blockerHint" id="home-readiness-hint" class="home-hint">
         {{ blockerHint }}
       </p>
     </LiaPanel>

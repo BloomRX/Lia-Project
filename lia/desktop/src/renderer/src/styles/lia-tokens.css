@@ -72,3 +72,9 @@
   /* Motion: the one basic transition duration. */
   --lia-transition-fast: 150ms;
 }
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --lia-transition-fast: 0ms;
+  }
+}

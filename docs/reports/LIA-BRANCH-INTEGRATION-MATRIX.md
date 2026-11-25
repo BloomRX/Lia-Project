@@ -47,6 +47,13 @@ lint e os gates de STT/TTS com HTTPS local sintético. A revisão independente
 não recomendou transplantar código dessa branch. Áudio físico e configuração
 de STT via Launcher continuam pendentes.
 
+A branch `codex/lia-ui-ux-fase-1` está preservada no espelho e na tag
+[`archive/ui-codex-fase-1`](https://github.com/BloomRX/Lia-Project/tree/archive/ui-codex-fase-1)
+em `e72574e8`, incluindo o [relatório histórico da retomada](https://github.com/BloomRX/Lia-Project/blob/archive/ui-codex-fase-1/docs/reports/LIA-UI-UX-FASE-1-RETOMADA.md).
+A revisão independente confirmou equivalentes nativos para seus quatro deltas
+de contraste, anúncio de prontidão, limpeza de conversa e remoção de conexão.
+A branch UI da Arena segue em reconciliação.
+
 O espelho externo contém as 12 branches remotas e passou em
 `git fsck --full`. Foram verificados os bundles locais e comparadas
 por SHA-256 as cópias dos 11 checkouts órfãos. O principal órfão
