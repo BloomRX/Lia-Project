@@ -530,7 +530,7 @@ export async function runBenchmark({ repoRoot = REPO_ROOT, args = process.argv.s
     const hardware = rawSummary.hardwareSummary || hardwareFromNode()
     const gitInfo = rawSummary.gitInfo || { sourceSha: rawSummary.sourceSha, sourceBranch: rawSummary.sourceBranch, remoteSourceSha: rawSummary.remoteSourceSha, gitVersion: null, nodeVersion: process.version, pnpmVersion: null, pythonVersion: null }
     // Build a minimal publish-style summary for report (use public fields)
-    const tmpPublish = { ...rawSummary, publication: { requested: false, branch: 'qa/windows-benchmarks', intendedPush: false, committed: false, pushed: false, pushSkippedReason: 'report-only' } }
+    const tmpPublish = { ...rawSummary, publication: { requested: false, branch: rawSummary.publication?.branch ?? null, intendedPush: false, committed: false, pushed: false, pushSkippedReason: 'report-only' } }
     // Write report directly to raw run
     const lines = [
       `# Lia Windows Benchmark — ${tmpPublish.runId} (regenerated)`,
@@ -674,7 +674,7 @@ export async function runBenchmark({ repoRoot = REPO_ROOT, args = process.argv.s
   summary.gitInfoPublish = gitInfoPublish
   summary.publication.requested = !noPush
   summary.publication.intendedPush = !noPush
-  summary.publication.branch = 'qa/windows-benchmarks'
+  summary.publication.branch = native ? null : 'qa/windows-benchmarks'
   if (noPush) summary.publication.pushSkippedReason = 'no-push-flag'
   if (summary.status==='INCOMPLETE') throw new Error('unexpected INCOMPLETE after commands')
 

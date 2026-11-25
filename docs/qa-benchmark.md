@@ -7,6 +7,10 @@ Pass `--with-smoke` to add an isolated Kokoro synthesis check when the
 runtime is installed. The [native Windows workflow](../.github/workflows/lia-native-windows.yml)
 also runs these product checks on a tree without AIRI.
 
+The local run `20261125-010920-d1e4d1b` passed in Windows with the native
+benchmark entry point. The suites took 63.8 s and the Electron lifecycle
+gate took 2.0 s. That run used the development checkout and prepared builds.
+
 ## Entry point
 
 ```
