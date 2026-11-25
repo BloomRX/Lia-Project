@@ -232,6 +232,35 @@ export function canonicalCommandsWithSmoke(repoRoot = REPO_ROOT, withSmoke = fal
   return base
 }
 
+export function nativeBenchmarkCommands(repoRoot = REPO_ROOT, withSmoke = false) {
+  const commands = [
+    {
+      id: 'lia-native-suites',
+      label: 'Suítes e verificações da Lia',
+      cwd: repoRoot,
+      argv: ['powershell', '-NoProfile', '-File', 'lia/Test-Lia.ps1'],
+      mandatory: true,
+    },
+    {
+      id: 'lia-native-lifecycle',
+      label: 'Ciclo de vida do Stage no Electron',
+      cwd: nodePath.join(repoRoot, 'lia', 'desktop'),
+      argv: ['node', '--experimental-strip-types', 'scripts/check-native-stage.mjs'],
+      mandatory: true,
+    },
+  ]
+  if (withSmoke) {
+    commands.push({
+      id: 'runtime-smoke',
+      label: 'Síntese local com Kokoro',
+      cwd: repoRoot,
+      argv: ['node', 'tools/kokoro-smoke.mjs'],
+      mandatory: false,
+    })
+  }
+  return commands
+}
+
 // ---------------------------------------------------------------------------
 // ANSI stripping + validation evidence helpers (pure)
 // ---------------------------------------------------------------------------

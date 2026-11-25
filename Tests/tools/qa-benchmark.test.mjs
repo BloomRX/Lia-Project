@@ -14,6 +14,7 @@ import {
   createSummarySkeleton,
   hardwareFromNode,
   isPublishAllowed,
+  nativeBenchmarkCommands,
   nextBenchmarkRunId,
   PUBLISH_FILE_HARD_MAX,
   PUBLISH_PER_LOG_MAX,
@@ -47,6 +48,14 @@ describe('qa-benchmark-lib: benchmarkRunId', () => {
 // canonicalCommands
 // ---------------------------------------------------------------------------
 describe('qa-benchmark-lib: canonicalCommands', () => {
+  it('benchmarks the root suite and native Electron lifecycle with an optional separate voice smoke', () => {
+    const commands = nativeBenchmarkCommands(REPO_ROOT)
+    assert.deepEqual(commands.map(command => command.id), ['lia-native-suites', 'lia-native-lifecycle'])
+    assert.deepEqual(commands[0].argv, ['powershell', '-NoProfile', '-File', 'lia/Test-Lia.ps1'])
+    assert.equal(commands[1].cwd, nodePath.join(REPO_ROOT, 'lia', 'desktop'))
+    assert.equal(commands[1].argv.at(-1), 'scripts/check-native-stage.mjs')
+    assert.equal(nativeBenchmarkCommands(REPO_ROOT, true).at(-1).argv[1], 'tools/kokoro-smoke.mjs')
+  })
   it('returns pnpm exec, never npx nor install', () => {
     const cmds = canonicalCommands(nodePath.join(REPO_ROOT))
     for (const c of cmds) {

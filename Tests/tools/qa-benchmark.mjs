@@ -22,6 +22,7 @@ import {
   buildShaManifest,
   canonicalCommands,
   canonicalCommandsWithSmoke,
+  nativeBenchmarkCommands,
   classifyBenchmark,
   classifyCommandOutcome,
   containsPrivatePath,
@@ -260,7 +261,7 @@ export function detectPlaywrightChromiumAvailability({ platform = process.platfo
   }
 }
 
-export function collectHardware({ platform = process.platform, spawn = spawnSync } = {}) {
+export function collectHardware({ platform = process.platform, spawn = spawnSync, native = false } = {}) {
   const base = hardwareFromNode()
   try {
     const r = runWithRunner(['pnpm', '--version'], { cwd: REPO_ROOT, platform, spawn })
@@ -295,7 +296,8 @@ export function collectHardware({ platform = process.platform, spawn = spawnSync
       if (p.status === 0) base.diskFree = p.stdout
     } catch {}
   }
-  base.chromiumAvailable = detectPlaywrightChromiumAvailability({ platform, spawn })
+  if (!native)
+    base.chromiumAvailable = detectPlaywrightChromiumAvailability({ platform, spawn })
   delete base.freeRamBytes
   return base
 }
@@ -499,7 +501,7 @@ export function launcherCheck({ repoRoot = REPO_ROOT, platform = process.platfor
 // ---------------------------------------------------------------------------
 // Main orchestration
 // ---------------------------------------------------------------------------
-export async function runBenchmark({ repoRoot = REPO_ROOT, args = process.argv.slice(2), now = new Date(), commandRunner = null, hardwareCollector = null, platform = process.platform } = {}) {
+export async function runBenchmark({ repoRoot = REPO_ROOT, args = process.argv.slice(2), now = new Date(), commandRunner = null, hardwareCollector = null, platform = process.platform, native = false } = {}) {
   const rawArgs = args
   const isReportOnly = rawArgs.includes('--report-only')
   const reportOnlyId = isReportOnly ? rawArgs[rawArgs.indexOf('--report-only')+1] : null
@@ -608,12 +610,15 @@ export async function runBenchmark({ repoRoot = REPO_ROOT, args = process.argv.s
   const gitInfo = { ...gitInfoFull }
   const gitInfoPublish = { sourceSha: gitInfo.sourceSha, sourceBranch: gitInfo.sourceBranch, remoteSourceSha: gitInfo.remoteSourceSha, gitVersion: gitInfo.gitVersion, nodeVersion: gitInfo.nodeVersion, pnpmVersion: gitInfo.pnpmVersion, pythonVersion: gitInfo.pythonVersion }
 
-  const hardware = (hardwareCollector || (()=>collectHardware({ platform })))()
+  const hardware = (hardwareCollector || (()=>collectHardware({ platform, native })))()
 
-  let commands = withSmoke ? canonicalCommandsWithSmoke(repoRoot, true) : canonicalCommands(repoRoot)
+  let commands = native
+    ? nativeBenchmarkCommands(repoRoot, withSmoke)
+    : withSmoke ? canonicalCommandsWithSmoke(repoRoot, true) : canonicalCommands(repoRoot)
+  const smokeScript = native ? 'tools/kokoro-smoke.mjs' : 'Tests/tools/kokoro-smoke.mjs'
   if (!withSmoke) commands = commands.filter(c=>c.id!=='runtime-smoke')
   else {
-    const smokePath = nodePath.join(repoRoot, 'Tests','tools','kokoro-smoke.mjs')
+    const smokePath = nodePath.join(repoRoot, smokeScript)
     if (!existsSync(smokePath)) { console.warn('[benchmark] --with-smoke requested but kokoro-smoke.mjs not found, ignoring'); commands = commands.filter(c=>c.id!=='runtime-smoke'); withSmoke=false }
   }
 
@@ -638,7 +643,7 @@ export async function runBenchmark({ repoRoot = REPO_ROOT, args = process.argv.s
     } else {
       const runner = commandRunner || ((opts)=>runCommand({ ...opts, platform, spawn: spawnSync }))
       let argv = cmd.argv
-      if (cmd.id==='runtime-smoke') argv = ['node','Tests/tools/kokoro-smoke.mjs', nodePath.join('Tests','runs',runId,'artifacts','smoke')]
+      if (cmd.id==='runtime-smoke') argv = ['node', smokeScript, nodePath.join('Tests','runs',runId,'artifacts','smoke')]
       res = runner({ ...cmd, argv, logPath, repoRoot, platform })
     }
     commandResults.push(res)
@@ -1068,7 +1073,7 @@ if (isMain) {
     console.log(`Exit codes: PASS 0, FAIL 1, ENVIRONMENT-LIMITED 2, INCOMPLETE/fatal 3`)
     process.exit(0)
   }
-  runBenchmark({ args: [...args, '--no-push'] }).then(s=>{
+  runBenchmark({ args: [...args, '--no-push'], native: true }).then(s=>{
     if (!s) process.exit(3)
     const code = exitCodeForStatus(s.status)
     console.log(`[benchmark] Final status: ${s.status} exit=${code}`)

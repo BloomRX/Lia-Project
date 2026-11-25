@@ -1,8 +1,11 @@
 # Lia Windows Benchmark Harness (Phase 8.0D-10B-4D4C4-D2B8-B)
 
-The legacy Windows benchmark generates a local evidence bundle. Its command
-line always runs locally. Use the [native Windows workflow](../.github/workflows/lia-native-windows.yml)
-for evidence of current Launcher and Stage builds without the AIRI tree.
+The Windows benchmark generates a local evidence bundle for the current
+Launcher and Stage. Prepare the builds with `Lia.bat -PrepareOnly` first.
+The benchmark measures `lia/Test-Lia.ps1` and the Electron lifecycle gate.
+Pass `--with-smoke` to add an isolated Kokoro synthesis check when the
+runtime is installed. The [native Windows workflow](../.github/workflows/lia-native-windows.yml)
+also runs these product checks on a tree without AIRI.
 
 ## Entry point
 
@@ -50,6 +53,9 @@ On any race: local raw is preserved, publication is skipped with reason
 `SOURCE_REMOTE_MOVED_DURING_BENCHMARK` or `QA_REMOTE_MOVED`.
 
 ## Legacy benchmark commands
+
+This inventory records the historical evidence preceding the native command
+line. The previous command table is retained here to interpret old reports.
 
 Executed via **`pnpm exec`** (never `npx`, never `pnpm install`):
 
