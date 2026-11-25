@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
-import { join, relative } from 'node:path'
+import { readdirSync, readFileSync } from 'node:fs'
+import { dirname, join, relative, resolve, sep } from 'node:path'
 import { describe, it } from 'node:test'
 
 import { packageRoot, PUBLIC_SURFACE, specifiers, walk } from '../../lia/core/test/public-surface-helpers.ts'
@@ -65,4 +65,43 @@ describe('S3 — subpath node-only não vaza para renderer/shared', () => {
     }
     assert.deepEqual(offenders, [])
   })
+})
+
+it('the native product has no imports or package links into the archived workspace', () => {
+  const retiredRoot = resolve(repoRoot, 'airi')
+  const offenders = []
+  function check(file, specifier) {
+    const localPath = specifier.replace(/^(?:link|file):/, '')
+    const target = resolve(dirname(file), localPath)
+    if (/(?:^|:)@proj-airi(?:\/|$)/.test(specifier)
+      || target === retiredRoot || target.startsWith(retiredRoot + sep))
+      offenders.push({ file: relative(repoRoot, file), specifier })
+  }
+
+  for (const name of ['core', 'runtime', 'desktop', 'stage', 'launcher']) {
+    const root = join(repoRoot, 'lia', name)
+    for (const entry of readdirSync(join(root, 'src'), { recursive: true, withFileTypes: true })) {
+      if (!entry.isFile() || !/\.(?:[cm]?[jt]sx?|vue)$/.test(entry.name) || entry.name.includes('.test.'))
+        continue
+      const file = join(entry.parentPath, entry.name)
+      const source = readFileSync(file, 'utf8')
+      const imports = specifiers(source)
+      for (const match of source.matchAll(/\brequire\s*\(\s*['"]([^'"]+)['"]/g))
+        imports.push(match[1])
+      for (const specifier of imports)
+        check(file, specifier)
+    }
+
+    if (name === 'launcher')
+      continue
+    const manifest = join(root, 'package.json')
+    const contents = JSON.parse(readFileSync(manifest, 'utf8'))
+    for (const section of ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies']) {
+      for (const [dependency, version] of Object.entries(contents[section] ?? {})) {
+        check(manifest, dependency)
+        check(manifest, version)
+      }
+    }
+  }
+  assert.deepEqual(offenders, [])
 })
