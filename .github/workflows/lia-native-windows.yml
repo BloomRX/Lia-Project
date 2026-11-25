@@ -147,6 +147,7 @@ jobs:
             ${{ runner.temp }}/lia-native-stt-*/report.json
             ${{ runner.temp }}/lia-native-speech-*/report.json
             ${{ runner.temp }}/lia-native-oidc-*/report.json
+            ${{ runner.temp }}/lia-native-oidc-*/account-panel.png
             ${{ runner.temp }}/lia-native-speech-*/speech-settings.png
             ${{ runner.temp }}/lia-native-stt-*/microphone.png
             ${{ runner.temp }}/lia-native-stt-*/transcription-settings.png

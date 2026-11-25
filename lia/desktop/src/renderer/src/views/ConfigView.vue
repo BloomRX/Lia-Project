@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 
+import AccountPanel from '../components/AccountPanel.vue'
 import { pickVoiceEngineLocale } from '../voice-engine-strings'
 
 /**
@@ -281,6 +282,7 @@ async function save() {
         <span v-if="feedback" class="feedback" role="status">{{ text[feedback] }}</span>
       </div>
     </form>
+    <AccountPanel :api="api" :language="language" />
   </section>
 </template>
 

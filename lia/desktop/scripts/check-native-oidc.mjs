@@ -117,7 +117,10 @@ try {
   })
   let page = await app.firstWindow()
   assert.deepEqual(await page.evaluate(() => window.liaApi.oidcStatus()), { ok: true, available: true })
-  assert.deepEqual(await page.evaluate(() => window.liaApi.oidcLogin()), { ok: true })
+  await page.getByRole('button', { name: 'Configuração', exact: true }).click()
+  await page.getByRole('button', { name: 'Entrar', exact: true }).click()
+  await page.getByText(`${profile.name} · ${profile.email}`, { exact: true }).waitFor()
+  await page.getByRole('region', { name: 'Conta' }).screenshot({ path: join(root, 'account-panel.png') })
   assert.deepEqual(await page.evaluate(() => window.liaApi.oidcProfile()), { ok: true, profile })
   const stored = await readFile(join(root, 'lia-secrets.json'), 'utf8')
   assert.ok([access, refresh, idToken].every(value => !stored.includes(value)))
@@ -128,11 +131,13 @@ try {
   page = await app.firstWindow()
   assert.deepEqual(await page.evaluate(() => window.liaApi.oidcProfile()), { ok: true, profile })
   assert.equal(refreshCalls, 1)
-  assert.deepEqual(await page.evaluate(() => window.liaApi.oidcLogout()), { ok: true, revocation: 'accepted' })
+  await page.getByRole('button', { name: 'Configuração', exact: true }).click()
+  await page.getByRole('button', { name: 'Sair da conta', exact: true }).click()
+  await page.getByText('Você está desconectado.', { exact: true }).waitFor()
   assert.equal(revoked, true)
   assert.deepEqual(await page.evaluate(() => window.liaApi.oidcProfile()), { ok: false, code: 'unauthenticated' })
   assert.equal(fixtureFailure, false)
-  const report = { electron: true, issuer: 'synthetic loopback', browser: 'injected opener', pkce: true, profileProjection: true, encryptedAtRest: true, restoredAndRefreshed: true, revokedAndCleared: true }
+  const report = { electron: true, accountControls: true, issuer: 'synthetic loopback', browser: 'injected opener', pkce: true, profileProjection: true, encryptedAtRest: true, restoredAndRefreshed: true, revokedAndCleared: true }
   await writeFile(join(root, 'report.json'), JSON.stringify(report, null, 2))
   console.log(JSON.stringify(report))
 }

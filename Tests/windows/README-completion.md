@@ -72,6 +72,7 @@ Os resultados e comandos históricos em relatórios anteriores se referem
 Para testar OIDC no Launcher de desenvolvimento, rode
 `node lia/desktop/scripts/check-native-oidc.mjs` após preparar o desktop. O
 gate usa Electron real, um emissor HTTP sintético em loopback e abertura do
-navegador injetada. Verifica PKCE, perfil público pelo IPC, persistência cifrada,
+navegador injetada. Usa a interface de conta em Configuração e verifica PKCE,
+perfil público pelo IPC, persistência cifrada,
 restauração e renovação após reinício, revogação e remoção da sessão. A
 configuração de produção e o navegador do sistema ficam fora deste ensaio.
