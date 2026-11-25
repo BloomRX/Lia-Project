@@ -35,6 +35,7 @@ test('counts path evidence for fonts and avatar formats without reading assets',
   assert.deepEqual(report.packages, [])
   assert.equal(defaultArchives.length, 2)
   assert.ok(defaultArchives.every(path => path.endsWith('app.asar')))
+  assert.ok(defaultArchives.every(path => path.replaceAll('\\', '/').includes('/lia/desktop/dist/windows-native-preview/')))
 })
 
 test('invalid package metadata fails visibly rather than silently omitting a package', () => {

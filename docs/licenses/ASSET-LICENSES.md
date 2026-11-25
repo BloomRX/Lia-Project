@@ -2,7 +2,25 @@
 
 Registro de **assets e modelos distribuídos com a aplicação** Lia (conforme AGENTS.md §97 THIRD-PARTY ATTRIBUTION).
 
-## Estado em 08/11/2026 — distribuição pública não aprovada
+## Inventário Windows do pacote nativo
+
+Gere a prévia privada com
+`node lia/desktop/scripts/package-windows.mjs --internal-test --dir`.
+Na raiz, execute `node tools/release/inventory-packaged-licenses.mjs` para
+obter os hashes e os metadados dos ASAR do Launcher e do Stage.
+O inventário usa o empacotador instalado em `lia/desktop`. As licenças
+declaradas e a presença de avisos são insumos para revisão de distribuição.
+
+No pacote descompactado Windows do SHA `47dcb8ea`, gerado em árvore sem
+`airi/`, o Launcher tinha 615 arquivos e 35 manifestos, 23 com aviso
+adjacente. O Stage tinha 963 arquivos e 19 manifestos, 17 com aviso adjacente.
+Nenhum dos ASAR tinha caminhos classificados pelo inventário como fontes,
+VRM, Cubism/Live2D ou Spine. A classificação é por caminho, e o inventário
+mantém `redistributionApproved: false`. O gate de abertura e encerramento
+do Stage pelo Launcher empacotado também passou.
+
+
+## Histórico de 08/11/2026 — pacote anterior
 
 O inventário físico dos dois ASAR privados contradiz o registro M0-A. O Stage contém **3412 arquivos de fontes, 4 VRM, 133 caminhos Cubism/Live2D e 248 caminhos Spine**. As categorias são heurísticas por caminho, podem sobrepor e não equivalem a quantidades de modelos. O Launcher contém `out/renderer/assets/LiaHeroImage-BLKXUVQa.png`. Nenhum asset ou dependência foi removido nesta revisão.
 
@@ -17,7 +35,7 @@ O inventário físico dos dois ASAR privados contradiz o registro M0-A. O Stage 
 
 O aviso local `CubismSdkForWeb-5-r.3/Core/LICENSE.md` aponta licença proprietária para Cubism Core. O aviso geral do SDK distingue componentes, Core e materiais de exemplo, incluindo exigências específicas de publicação. Isso não é uma aprovação de redistribuição: os contratos completos e o enquadramento da Lia ainda precisam de revisão. Ver também [avisos de terceiros](THIRD-PARTY-NOTICES.md).
 
-Reproduzir: `node tools/release/inventory-packaged-licenses.mjs`. [Resumo versionado](PACKAGED-INVENTORY-2026-11-08.json) contém hashes e contagens; a evidência detalhada fica fora do Git. O inventário lê apenas manifestos; esta revisão adicional leu avisos locais indicados. Conteúdo de modelos não foi analisado. Runtime, arquivos externos aos ASAR e instalador exigem revisão separada.
+O [resumo versionado](PACKAGED-INVENTORY-2026-11-08.json) contém hashes e contagens do pacote anterior. A revisão adicional leu os avisos locais indicados. Conteúdo de modelos, runtime, arquivos externos aos ASAR e instalador exigem revisão separada.
 
 ## Pacote da comparação beta
 

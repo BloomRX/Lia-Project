@@ -6,8 +6,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 export const defaultArchives = [
-  'lia/desktop/dist/windows/win-unpacked/resources/app.asar',
-  'lia/desktop/dist/windows/win-unpacked/resources/stage/resources/app.asar',
+  'lia/desktop/dist/windows-native-preview/win-unpacked/resources/app.asar',
+  'lia/desktop/dist/windows-native-preview/win-unpacked/resources/stage/resources/app.asar',
 ].map(path => resolve(repoRoot, path))
 
 // Only metadata is read. Declared licenses never constitute redistribution approval.
@@ -40,7 +40,7 @@ export function inventoryEntries(entries, readManifest) {
 
 export async function inventoryArchives(archives = defaultArchives) {
   // Resolve installed tooling lazily; importing the pure inventory requires no workspace dependencies.
-  const builder = realpathSync(resolve(repoRoot, 'airi/apps/stage-tamagotchi/node_modules/electron-builder/package.json'))
+  const builder = realpathSync(resolve(repoRoot, 'lia/desktop/node_modules/electron-builder/package.json'))
   const builderLib = createRequire(builder).resolve('app-builder-lib/package.json')
   const asar = createRequire(builderLib)('@electron/asar')
   return {
