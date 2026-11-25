@@ -48,6 +48,7 @@ $report = [ordered]@{
   replacement = $null
   lifecycle = $false
   installedConversation = $null
+  conversationThroughLauncher = $null
   conversationSource = $null
   packageProcessesExited = $null
   profilePreserved = $null
@@ -80,6 +81,7 @@ try {
   $report['packageProcessesExited'] = $true
   if (!$PreviousInstaller) {
     $report['installedConversation'] = $true
+    $report['conversationThroughLauncher'] = $true
     $report['conversationSource'] = if ($LocalModelPort) { 'operator-loopback' } else { 'synthetic-loopback' }
   }
   if ($PreviousInstaller) {

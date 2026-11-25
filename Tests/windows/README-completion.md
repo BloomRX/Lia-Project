@@ -35,7 +35,7 @@ caracteres. O mesmo arquivo-fonte foi extraído em um caminho curto e
 o empacotamento concluiu. Preserve os dois logs para comparar.
 
 O gate de instalação verifica a instalação limpa, o ciclo Launcher–Stage,
-uma troca sintética no Stage instalado, a saída dos processos do pacote e
+uma troca sintética na janela do Stage que o Launcher abriu, a saída dos processos do pacote e
 a desinstalação. Os cenários com voz e visão usam gates separados no
 [CI Windows](../../.github/workflows/lia-native-windows.yml). O serviço
 sintético não comprova disponibilidade de um provedor externo. Os testes
