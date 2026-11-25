@@ -1,7 +1,7 @@
 const maxResponseBytes = 96 * 1024
 
 /** Bounded response decoding. Exceptions remain inside Main. */
-export async function readOidcJson(response: Response, signal: AbortSignal): Promise<unknown> {
+export async function readOidcJson(response: Response, signal: AbortSignal, limit = maxResponseBytes): Promise<unknown> {
   signal.throwIfAborted()
   const reader = response.body?.getReader()
   if (!reader)
@@ -27,7 +27,7 @@ export async function readOidcJson(response: Response, signal: AbortSignal): Pro
         }
       }
       bytes += chunk.value.byteLength
-      if (bytes > maxResponseBytes)
+      if (bytes > limit)
         throw new Error('OIDC response exceeded the size limit')
       text += decoder.decode(chunk.value, { stream: true })
     }

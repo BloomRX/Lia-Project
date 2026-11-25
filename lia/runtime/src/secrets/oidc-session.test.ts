@@ -2,6 +2,7 @@ import { Buffer } from 'node:buffer'
 
 import { describe, expect, it, vi } from 'vitest'
 
+import { createOidcAccountService } from './oidc-account'
 import { createOidcSessionOwner, oidcSessionScope } from './oidc-session'
 import { createLiaSecretVault } from './vault'
 
@@ -188,6 +189,21 @@ describe('main-only OIDC session owner', () => {
     const call = vi.fn(async () => true)
     expect(await restore().withAccess(signal(), call)).toBe(true)
     expect(call).toHaveBeenCalledExactlyOnceWith(exchange.access_token, expect.any(AbortSignal), privateCheck)
+  })
+
+  it('supplies the bearer internally and projects an account DTO without session credentials', async () => {
+    const { owner, fetch } = setup()
+    await owner.establish(exchange, signal(), owner.beginLogin()!)
+    const account = createOidcAccountService({ origin, fetch, withAccess: owner.withAccess })
+    const profile = { id: 'user-1', name: 'Lia', email: 'lia@example.test', image: null }
+    fetch.mockResolvedValueOnce(Response.json({ user: profile, session: { token: exchange.access_token, refreshToken: exchange.refresh_token } }))
+    expect(await account.execute({ kind: 'get-profile' }, signal())).toEqual({ ok: true, profile })
+    expect(fetch).toHaveBeenCalledExactlyOnceWith(new URL('/api/auth/get-session', origin), expect.objectContaining({
+      headers: { Authorization: `Bearer ${exchange.access_token}` },
+      redirect: 'error',
+    }))
+    fetch.mockResolvedValueOnce(Response.json({ user: { ...profile, name: exchange.id_token } }))
+    expect(await account.execute({ kind: 'get-profile' }, signal())).toEqual({ ok: false, code: 'unavailable' })
   })
 
   it('suppresses a response from an authenticated operation after a different login succeeds', async () => {

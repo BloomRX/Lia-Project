@@ -16,6 +16,7 @@
     "./paths/product-paths": "./dist/paths/product-paths.mjs",
     "./paths/install-location": "./dist/paths/install-location.mjs",
     "./product/config": "./dist/product/config.mjs",
+    "./secrets/oidc-account": "./dist/secrets/oidc-account.mjs",
     "./secrets/oidc-session": "./dist/secrets/oidc-session.mjs",
     "./secrets/vault": "./dist/secrets/vault.mjs",
     "./secrets/windows-user-cipher": "./dist/secrets/windows-user-cipher.mjs",
