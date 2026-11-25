@@ -18,6 +18,10 @@ No Windows, com Node.js e Corepack disponíveis, abra `Lia.bat` na raiz.
 O script prepara os pacotes com seus lockfiles e abre o Launcher próprio.
 A ação **Conversar com Lia** abre o Stage próprio. Use `Lia.bat -PrepareOnly`
 para instalar as dependências e compilar sem abrir uma janela.
+Rode `powershell -NoProfile -File .\lia\Test-Lia.ps1 -Prepare`
+para preparar os builds e verificar Core, runtime, Launcher, Stage e
+empacotador. O mesmo script roda no CI Windows em uma cópia que só
+contém `lia/` e `Lia.bat`.
 
 | Componente | Caminho atual |
 | --- | --- |

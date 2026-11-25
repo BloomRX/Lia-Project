@@ -72,37 +72,11 @@ jobs:
           $PSNativeCommandUseErrorActionPreference = $true
           Set-Location $env:LIA_STANDALONE
           .\Lia.bat -PrepareOnly
-      - name: Testar o Stage próprio
-        run: |
-          $PSNativeCommandUseErrorActionPreference = $true
-          Set-Location (Join-Path $env:LIA_STANDALONE 'lia/stage')
-          corepack pnpm run typecheck
-          corepack pnpm run test
-      - name: Testar contratos próprios
-        run: |
-          Set-Location (Join-Path $env:LIA_STANDALONE 'lia/core')
-          node --experimental-strip-types --test "test/*.test.ts"
-      - name: Verificar tipos do Launcher
-        run: |
-          $PSNativeCommandUseErrorActionPreference = $true
-          Set-Location (Join-Path $env:LIA_STANDALONE 'lia/desktop')
-          corepack pnpm run typecheck
-      - name: Verificar tipos e testar o runtime
+      - name: Executar as suítes e verificações próprias
         if: ${{ !cancelled() && steps.build-launcher.outcome == 'success' }}
         run: |
-          $PSNativeCommandUseErrorActionPreference = $true
-          Set-Location (Join-Path $env:LIA_STANDALONE 'lia/runtime')
-          corepack pnpm run typecheck
-          corepack pnpm run test
-      - name: Testar o Launcher
-        if: ${{ !cancelled() && steps.build-launcher.outcome == 'success' }}
-        run: |
-          $PSNativeCommandUseErrorActionPreference = $true
-          Set-Location (Join-Path $env:LIA_STANDALONE 'lia/desktop')
-          corepack pnpm run lint
-          corepack pnpm run test
-          node --test scripts/package-windows.test.mjs
-          node scripts/package-windows.mjs --internal-test --check
+          Set-Location $env:LIA_STANDALONE
+          .\lia\Test-Lia.ps1
       - name: Abrir e encerrar o Stage pelo Launcher
         if: ${{ !cancelled() && steps.build-launcher.outcome == 'success' }}
         run: |

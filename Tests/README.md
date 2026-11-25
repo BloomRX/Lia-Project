@@ -1,4 +1,11 @@
-# Lia QA Harness (Phase 7.9G-QA)
+# Testes da Lia no Windows
+
+Para verificar o produto próprio, execute da raiz
+`powershell -NoProfile -File .\lia\Test-Lia.ps1 -Prepare`.
+O mesmo conjunto roda no CI Windows. Use
+[o guia do Stage](../lia/README.md) para os gates que abrem janelas.
+
+## Menu de QA de voz
 
 Reusable Windows QA harness for manual Lia product tests: isolated workspaces,
 automatic log/metric collection, safe cleanup. Launch it from anywhere in the
@@ -8,9 +15,8 @@ checkout:
 Tests\LiaTests.bat
 ```
 
-Requires Node.js on PATH (the same Node the product dev flow uses). The harness
-never runs `pnpm install` by itself; if `airi\node_modules` is missing, install
-once the normal way (`cd airi && pnpm install`).
+O menu requer Node.js no PATH. Prepare os builds com
+`Lia.bat -PrepareOnly` antes de executar o smoke do Kokoro.
 
 ## Menu
 
