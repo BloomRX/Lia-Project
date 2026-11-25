@@ -22,6 +22,7 @@ that lets the round continue to a misleading result.
 
 from __future__ import annotations
 
+import argparse
 import os
 import sys
 from dataclasses import dataclass
@@ -76,6 +77,18 @@ REQUIREMENTS: tuple[Requirement, ...] = (
 )
 
 
+NATIVE_REQUIREMENTS: tuple[Requirement, ...] = (
+    Requirement('lia-runtime', 'lia/runtime/dist/index.mjs', 'file',
+                r'.\Lia.bat -PrepareOnly', 'Launcher e Stage'),
+    Requirement('lia-launcher', 'lia/desktop/out/main/index.js', 'file',
+                r'.\Lia.bat -PrepareOnly', 'Launcher'),
+    Requirement('lia-stage', 'lia/stage/out/main/index.js', 'file',
+                r'.\Lia.bat -PrepareOnly', 'Stage'),
+    Requirement('lia-electron-windows', 'lia/stage/node_modules/electron/dist/electron.exe', 'file',
+                r'.\Lia.bat -PrepareOnly', 'Launcher e Stage no Windows'),
+)
+
+
 @dataclass(frozen=True)
 class Finding:
     requirement: Requirement
@@ -124,10 +137,13 @@ def render_findings(findings: list[Finding]) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
-    argv = list(sys.argv[1:] if argv is None else argv)
-    repo_root = argv[0] if argv else os.path.dirname(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    findings = check_workspace(repo_root)
+    parser = argparse.ArgumentParser(description='Verifica os artefatos preparados da Lia.')
+    parser.add_argument('repo_root', nargs='?', default=os.path.dirname(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    parser.add_argument('--legacy-m30b', action='store_true', help='verifica a rodada histórica M3.0b')
+    args = parser.parse_args(argv)
+    requirements = REQUIREMENTS if args.legacy_m30b else NATIVE_REQUIREMENTS
+    findings = check_workspace(args.repo_root, requirements)
     print(render_findings(findings))
     # Fail closed: exit 0 only when every required artifact is present.
     return 0 if all(f.present for f in findings) else 1

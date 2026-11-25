@@ -6759,7 +6759,7 @@ class WorkspacePreflightTests(unittest.TestCase):
                         else f'{req.rel_path}/sentinela')
         findings = preflight.check_workspace(str(self.base))
         self.assertTrue(all(f.present for f in findings))
-        self.assertEqual(preflight.main([str(self.base)]), 0)
+        self.assertEqual(preflight.main(['--legacy-m30b', str(self.base)]), 0)
 
     def test_the_missing_lia_core_artifact_fails_closed_and_names_its_producer(self) -> None:
         for req in preflight.REQUIREMENTS:
@@ -6776,8 +6776,15 @@ class WorkspacePreflightTests(unittest.TestCase):
         self.assertIn('lia-core-dist', text)
         self.assertIn('run build:lia-core', text)
         self.assertIn('lia-host.ts', text)
-        self.assertEqual(preflight.main([str(self.base)]), 1,
+        self.assertEqual(preflight.main(['--legacy-m30b', str(self.base)]), 1,
                          'um pré-voo com artefato ausente não pode passar')
+
+    def test_native_preflight_needs_only_native_artifacts(self) -> None:
+        for req in preflight.NATIVE_REQUIREMENTS:
+            self._write(req.rel_path)
+        self.assertEqual(preflight.main([str(self.base)]), 0)
+        (self.base / 'lia/stage/out/main/index.js').unlink()
+        self.assertEqual(preflight.main([str(self.base)]), 1)
 
     def test_the_preflight_is_declared_and_blocking_in_the_active_round(self) -> None:
         tests = load_active_round().tests

@@ -48,7 +48,8 @@
       "cwd": ".",
       "argv": [
         "python",
-        "tools/devflow/preflight.py"
+        "tools/devflow/preflight.py",
+        "--legacy-m30b"
       ],
       "timeout_s": 120.0,
       "blocking": true
