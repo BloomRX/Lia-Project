@@ -4,6 +4,7 @@ param(
   [string]$EvidenceRoot = [IO.Path]::GetTempPath(),
   [ValidateRange(0, 65535)][int]$LocalModelPort = 0,
   [string]$LocalModel,
+  [switch]$DirectStageConversation,
   [switch]$RequireIndependent
 )
 
@@ -28,6 +29,8 @@ if (($LocalModelPort -gt 0) -ne [bool]$LocalModel -or ($LocalModel -and ($Previo
   throw 'Informe um modelo e uma porta locais válidos para o ensaio de instalação limpa.'
 }
 
+if ($DirectStageConversation -and $PreviousInstaller) { throw 'A conversa direta exige instalação limpa.' }
+
 if (Get-PreviewRegistration) {
   throw 'Já existe uma instalação da prévia neste usuário. Use um perfil de teste dedicado.'
 }
@@ -42,6 +45,7 @@ $uninstaller = Join-Path $destination 'Uninstall Lia.exe'
 $upgradeProfile = Join-Path $evidence 'profile'
 $gateArguments = @("--installed-executable=$launcher")
 if ($RequireIndependent) { $gateArguments += '--require-independent' }
+if ($DirectStageConversation) { $gateArguments += '--direct-stage-conversation' }
 if ($LocalModelPort) { $gateArguments += @("--local-port=$LocalModelPort", "--local-model=$LocalModel") }
 $report = [ordered]@{
   install = $false
@@ -81,7 +85,7 @@ try {
   $report['packageProcessesExited'] = $true
   if (!$PreviousInstaller) {
     $report['installedConversation'] = $true
-    $report['conversationThroughLauncher'] = $true
+    $report['conversationThroughLauncher'] = !$DirectStageConversation
     $report['conversationSource'] = if ($LocalModelPort) { 'operator-loopback' } else { 'synthetic-loopback' }
   }
   if ($PreviousInstaller) {

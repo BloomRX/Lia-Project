@@ -127,6 +127,23 @@ async function startInstalledConversation(modelId, localPort) {
           LIA_UIA_REPLY_SECONDS: localPort ? '60' : '10',
         },
       })
+    },
+    async verifyDirect(executablePath, env) {
+      const stage = await _electron.launch({
+        executablePath: join(dirname(executablePath), 'resources', 'stage', 'LiaStage.exe'),
+        env,
+      })
+      try {
+        const page = await stage.firstWindow()
+        await page.getByLabel('Mensagem', { exact: true }).fill(message, { timeout: 10_000 })
+        await page.getByRole('button', { name: 'Enviar', exact: true }).click({ timeout: 10_000 })
+        await page.getByText(`Lia: ${reply}`, { exact: true }).waitFor({ timeout: localPort ? 60_000 : 10_000 })
+      }
+      finally {
+        await stage.close()
+      }
+    },
+    confirmRequest() {
       if (server)
         assert.equal(confirmedRequests, 1)
     },
@@ -163,6 +180,8 @@ async function run() {
   assert.ok(!modelArgument || portArgument, 'Informe a porta do serviço local.')
   const modelId = localModel ?? 'local-gate'
   const installedConversation = !upgradeProfile && process.argv.some(argument => argument.startsWith('--installed-executable='))
+  const directStageConversation = process.argv.includes('--direct-stage-conversation')
+  assert.ok(!directStageConversation || installedConversation, 'A conversa direta exige uma instalação limpa.')
   const conversation = installedConversation ? await startInstalledConversation(modelId, localPort) : undefined
   const product = JSON.stringify({
     setup: { completed: true },
@@ -248,7 +267,8 @@ async function run() {
       assert.ok(stageProcesses.includes(target.pid), 'O processo do Stage não pertence ao pacote sob teste.')
       assert.ok(stageProcesses.some(pid => pid !== target.pid), 'A verificação não encontrou processos filhos do Stage empacotado.')
     }
-    await conversation?.verify(target.pid)
+    if (!directStageConversation)
+      await conversation?.verify(target.pid)
     await page.getByRole('button', { name: 'Encerrar conversa', exact: true }).click({ timeout: 10_000 })
     await page.getByText('Conversa encerrada.', { exact: true }).waitFor({ timeout: 20_000 })
     assert.deepEqual(await registry.read(), { ok: false, problem: 'missing' })
@@ -264,10 +284,16 @@ async function run() {
       await app.close()
     }
   }
+  if (directStageConversation) {
+    await conversation.verifyDirect(executablePath, {
+      ...env, LIA_STAGE_PROFILE_DIR: join(root, 'native-stage-profile'),
+    })
+  }
+  conversation?.confirmRequest()
   if (packaged)
     await checkPackagedProcessesExited(packageDirectory)
   const conversationSource = installedConversation ? (localPort ? 'operator-loopback' : 'synthetic-loopback') : null
-  const lifecycle = { conversationSource, conversationThroughLauncher: installedConversation, packageProcessesExited: packaged ? true : null, installedConversation, airiDirectoryAbsent, packaged, installed: Boolean(installedExecutable), nativeWindows, registryRemoved: true, stageMainExited: true }
+  const lifecycle = { conversationSource, conversationThroughLauncher: installedConversation && !directStageConversation, packageProcessesExited: packaged ? true : null, installedConversation, airiDirectoryAbsent, packaged, installed: Boolean(installedExecutable), nativeWindows, registryRemoved: true, stageMainExited: true }
   if (!upgradeProfile)
     await writeFile(join(root, 'report.json'), JSON.stringify(lifecycle, null, 2), { flag: 'wx' })
   console.log(JSON.stringify(lifecycle))

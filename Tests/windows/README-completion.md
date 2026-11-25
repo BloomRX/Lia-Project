@@ -41,6 +41,13 @@ a desinstalação. Os cenários com voz e visão usam gates separados no
 sintético não comprova disponibilidade de um provedor externo. Os testes
 de presença não medem FPS nem impacto em jogos.
 
+A sessão Windows do CI não encontrou o campo de mensagem pelo UI Automation
+no gate `45621582056`. O CI seleciona `-DirectStageConversation` para
+exercitar, via Playwright, a conversa no executável instalado após validar
+o Launcher. O relatório marca `conversationThroughLauncher: false` nesse
+modo. Execute o gate padrão numa sessão Windows interativa para provar a
+troca na janela aberta pelo Launcher.
+
 Para testar inferência no Stage instalado, execute o mesmo comando de
 instalação limpa com `-LocalModelPort <porta>` e `-LocalModel <id>`.
 O servidor deve escutar em `127.0.0.1` com a API de chat em `/v1`.

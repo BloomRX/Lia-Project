@@ -118,7 +118,7 @@ jobs:
           node scripts/package-windows.mjs --internal-test
           $version = (Get-Content -LiteralPath package.json -Raw | ConvertFrom-Json).version
           $installer = Get-Item -LiteralPath "dist/windows-native-preview/LiaPreviewSetup-$version-x64.exe"
-          .\scripts\check-native-install.ps1 -Installer $installer.FullName -EvidenceRoot $env:RUNNER_TEMP -RequireIndependent
+          .\scripts\check-native-install.ps1 -Installer $installer.FullName -EvidenceRoot $env:RUNNER_TEMP -RequireIndependent -DirectStageConversation
       - name: Preservar evidências do Stage
         if: always()
         uses: actions/upload-artifact@v7
