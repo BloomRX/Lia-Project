@@ -23,6 +23,7 @@ const api = {
   conversar: () => ipcRenderer.invoke('lia:stage:start'),
   homeStatus: () => ipcRenderer.invoke('lia:home-status'),
   listVoices: () => ipcRenderer.invoke('lia:voices:list'),
+  removeVoice: (id: string) => ipcRenderer.invoke('lia:voices:remove', id),
   onLiaEvent: (listener: (payload: { detail?: string, event: string }) => void) => {
     const wrapped = (_event: unknown, payload: { detail?: string, event: string }) => listener(payload)
     ipcRenderer.on('lia:event', wrapped)

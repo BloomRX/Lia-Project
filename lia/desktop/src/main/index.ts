@@ -201,6 +201,22 @@ async function bootstrap(): Promise<void> {
     return host.aiConnection.remove(providerId, revision)
   })
   ipcMain.handle('lia:voice:speech-connection', event => ownsWindow(event) ? host.speechConnection().catch(() => undefined) : undefined)
+  ipcMain.handle('lia:voices:remove', async (event, id: unknown) => {
+    if (!mainWindow || !ownsWindow(event) || typeof id !== 'string' || !/^[\da-z][\da-z_-]{0,63}$/i.test(id))
+      return 'failed'
+    const profile = (await host.listVoices()).find(item => item.id === id)
+    if (!profile || !mainWindow || !ownsWindow(event))
+      return 'failed'
+    const { response } = await dialog.showMessageBox(mainWindow, {
+      type: 'warning', title: 'Lia',
+      message: 'Remover esta voz importada?',
+      detail: 'As cópias da biblioteca da Lia serão removidas. Os arquivos originais serão preservados.',
+      buttons: ['Cancelar', 'Remover voz'], defaultId: 0, cancelId: 0, noLink: true,
+    })
+    if (response !== 1 || !ownsWindow(event))
+      return 'cancelled'
+    return await host.removeVoice(id).catch(() => false) ? 'removed' : 'failed'
+  })
   ipcMain.handle('lia:voice:speech-save', (event, input: unknown) => ownsWindow(event) ? host.saveSpeechConnection(input).catch(() => false) : false)
   ipcMain.handle('lia:voice:transcription-connection', (event, local: unknown) => ownsWindow(event) && (local === undefined || typeof local === 'boolean') ? host.transcriptionConnection(local).catch(() => undefined) : undefined)
   ipcMain.handle('lia:voice:transcription-save', (event, input: unknown) => ownsWindow(event) ? host.saveTranscriptionConnection(input).catch(() => false) : false)

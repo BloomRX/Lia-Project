@@ -243,6 +243,7 @@ export interface LiaHost {
     allowedSourcePaths: ReadonlySet<string>,
   ) => Promise<Awaited<ReturnType<ReturnType<typeof createLiaVoiceProfileStore>['importProfile']>>>
   listVoices: () => Promise<LiaCustomVoiceProfile[]>
+  removeVoice: (id: unknown) => Promise<boolean>
   paths: LiaProductPaths
   productSnapshot: () => Promise<LiaProductConfigSnapshot | undefined>
   /** Graceful supervisor shutdown; safe to call more than once (single-flight). */
@@ -1286,13 +1287,34 @@ export function createLiaHost(deps: LiaHostDeps): LiaHost {
       return await startManagedStage({ env: await hostStageEnv() })
     }),
     homeStatus,
-    importVoice: async (request, allowedSourcePaths) => {
+    importVoice: (request, allowedSourcePaths) => withStageConfigurationLock(async () => {
       const result = await voices.importProfile(request, allowedSourcePaths)
       if (result.ok)
         emit('lia-app.voice-imported', result.value.id)
       return result
-    },
+    }),
     listVoices: async () => await voices.list(),
+    removeVoice: id => withStageConfigurationLock(async () => {
+      if (stage.holdsOwnedStage() || typeof id !== 'string' || !/^[\da-z][\da-z_-]{0,63}$/i.test(id) || !await voices.get(id))
+        return false
+      const product = await readSnapshot()
+      if (product.status !== 'ok' && product.status !== 'missing')
+        return false
+      const tts = product.snapshot?.voice?.tts
+      const referencesProfile = (target: { providerId: string, voiceId?: string } | undefined) =>
+        target?.providerId === 'custom-local-voice' && target.voiceId === id
+      const clearPreferred = referencesProfile(tts?.preferred)
+      const clearFallback = tts?.fallback?.some(referencesProfile)
+      if (clearPreferred || clearFallback) {
+        const config = await updateLiaProductConfig(paths.productConfigFile, { voice: { tts: {
+          ...(clearPreferred ? { preferred: null } : {}),
+          ...(clearFallback ? { fallback: tts?.fallback?.filter(target => !referencesProfile(target)) } : {}),
+        } } })
+        if (config.status !== 'ok')
+          return false
+      }
+      return (await voices.remove(id)).ok
+    }),
     paths,
     productSnapshot: async () => (await readSnapshot()).snapshot,
     quit: async () => await coordinator.stopAll(),

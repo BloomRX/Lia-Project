@@ -205,6 +205,29 @@ async function activateCustom(profile: any) {
   }
 }
 
+async function removeVoice(id: string) {
+  if (busy.value)
+    return
+  busy.value = true
+  feedback.value = ''
+  try {
+    const result = await props.api.removeVoice(id)
+    if (result === 'removed') {
+      await reload()
+      feedback.value = 'Voz removida da biblioteca.'
+    }
+    else if (result !== 'cancelled') {
+      feedback.value = 'Não foi possível remover a voz. Encerre a conversa e tente novamente.'
+    }
+  }
+  catch {
+    feedback.value = 'Não foi possível remover a voz.'
+  }
+  finally {
+    busy.value = false
+  }
+}
+
 async function importVoice() {
   busy.value = true
   feedback.value = ''
@@ -303,6 +326,9 @@ async function importVoice() {
             <LiaButton class="use-profile" :disabled="busy" @click="activateCustom(p)">
               usar esta voz
             </LiaButton>
+            <LiaButton :disabled="busy" :aria-label="`Remover voz ${p.name}`" @click="removeVoice(p.id)">
+              Remover voz
+            </LiaButton>
           </li>
         </ul>
         <div class="import-row">
@@ -341,7 +367,7 @@ async function importVoice() {
       </div>
     </LiaPanel>
 
-    <p v-if="feedback" class="feedback">
+    <p v-if="feedback" class="feedback" role="status">
       {{ feedback }}
     </p>
     <details class="speech-settings">

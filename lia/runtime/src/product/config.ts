@@ -408,7 +408,7 @@ export interface LiaProductConfigUpdate {
       alltalk?: Partial<LiaProductAllTalkRuntime>
       installDir?: string
     }
-    tts?: { preferred?: LiaProductTtsTarget }
+    tts?: { preferred?: LiaProductTtsTarget | null, fallback?: LiaProductTtsTarget[] }
     /**
      * Phase 8.0D-10B-4D4C4-SHELL-B1: the canonical STT selection becomes
      * writable. Metadata only - never a credential, a baseUrl or a runtime
@@ -666,11 +666,14 @@ function mergeProductUpdate(raw: Record<string, unknown>, update: LiaProductConf
   }
   if (update.voice) {
     const voice = { ...asRecord(raw.voice) }
-    if (update.voice.tts?.preferred !== undefined) {
+    if (update.voice.tts?.preferred !== undefined || update.voice.tts?.fallback !== undefined) {
       const tts = { ...asRecord(voice.tts) }
-      // A selection is atomic: replace it whole, never deep-merge ids from
-      // two different picks into one Franken-target.
-      tts.preferred = definedOnly(update.voice.tts.preferred)
+      if (update.voice.tts.preferred === null)
+        delete tts.preferred
+      else if (update.voice.tts.preferred !== undefined)
+        tts.preferred = definedOnly(update.voice.tts.preferred)
+      if (update.voice.tts.fallback !== undefined)
+        tts.fallback = update.voice.tts.fallback.map(definedOnly)
       voice.tts = tts
     }
     if (update.voice.stt?.preferred !== undefined) {

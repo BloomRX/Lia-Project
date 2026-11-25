@@ -114,6 +114,20 @@ describe('AI connection removal', () => {
 })
 
 describe('h. Existing voice profile list is read', () => {
+  it('removes one imported copy and only its TTS references', async () => {
+    const home = await makeLiaHome()
+    const host = createLiaHost({ cipher: identityCipher, env: fixtureEnv(home) })
+    const selected = { providerId: 'custom-local-voice', voiceId: 'profile-1' }
+    const preserved = { providerId: 'custom-local-voice', voiceId: 'profile-2' }
+    expect(await host.updateConfig({ update: { voice: { tts: { preferred: selected, fallback: [selected, preserved] } } } })).toMatchObject({ status: 'ok' })
+    expect(await host.removeVoice('../profile-2')).toBe(false)
+    expect(await host.removeVoice('profile-1')).toBe(true)
+    expect((await host.listVoices()).map(profile => profile.id)).toEqual(['profile-2'])
+    expect((await host.productSnapshot())?.voice?.tts).toEqual({ fallback: [preserved] })
+    await expect(readFile(join(home.voicesRoot, 'profile-1', 'model.wav'))).rejects.toMatchObject({ code: 'ENOENT' })
+    expect((await readFile(join(home.voicesRoot, 'profile-2', 'model.wav'))).byteLength).toBe(1234)
+  })
+
   it('saves speech transport and only returns non-secret configuration', async () => {
     const home = await makeLiaHome()
     const host = createLiaHost({ cipher: identityCipher, env: fixtureEnv(home) })
