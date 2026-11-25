@@ -2,6 +2,8 @@ param(
   [Parameter(Mandatory = $true)][string]$Installer,
   [string]$PreviousInstaller,
   [string]$EvidenceRoot = [IO.Path]::GetTempPath(),
+  [ValidateRange(0, 65535)][int]$LocalModelPort = 0,
+  [string]$LocalModel,
   [switch]$RequireIndependent
 )
 
@@ -22,6 +24,10 @@ function Invoke-Installer([string]$Package, [string]$Destination) {
   (Get-FileHash -LiteralPath $item.FullName -Algorithm SHA256).Hash
 }
 
+if (($LocalModelPort -gt 0) -ne [bool]$LocalModel -or ($LocalModel -and ($PreviousInstaller -or $LocalModel -cnotmatch '^[a-zA-Z0-9_.:-]{1,128}$'))) {
+  throw 'Informe um modelo e uma porta locais válidos para o ensaio de instalação limpa.'
+}
+
 if (Get-PreviewRegistration) {
   throw 'Já existe uma instalação da prévia neste usuário. Use um perfil de teste dedicado.'
 }
@@ -36,11 +42,13 @@ $uninstaller = Join-Path $destination 'Uninstall Lia.exe'
 $upgradeProfile = Join-Path $evidence 'profile'
 $gateArguments = @("--installed-executable=$launcher")
 if ($RequireIndependent) { $gateArguments += '--require-independent' }
+if ($LocalModelPort) { $gateArguments += @("--local-port=$LocalModelPort", "--local-model=$LocalModel") }
 $report = [ordered]@{
   install = $false
   replacement = $null
   lifecycle = $false
   installedConversation = $null
+  conversationSource = $null
   packageProcessesExited = $null
   profilePreserved = $null
   credentialPreserved = $null
@@ -70,7 +78,10 @@ try {
   if ($LASTEXITCODE -ne 0) { throw 'O Launcher instalado falhou no gate de ciclo de vida.' }
   $report['lifecycle'] = $true
   $report['packageProcessesExited'] = $true
-  if (!$PreviousInstaller) { $report['installedConversation'] = $true }
+  if (!$PreviousInstaller) {
+    $report['installedConversation'] = $true
+    $report['conversationSource'] = if ($LocalModelPort) { 'operator-loopback' } else { 'synthetic-loopback' }
+  }
   if ($PreviousInstaller) {
     $report['profilePreserved'] = $true
     $report['credentialPreserved'] = $true

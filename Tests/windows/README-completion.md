@@ -34,6 +34,14 @@ a desinstalação. Os cenários com voz e visão usam gates separados no
 sintético não comprova disponibilidade de um provedor externo. Os testes
 de presença não medem FPS nem impacto em jogos.
 
+Para testar inferência no Stage instalado, execute o mesmo comando de
+instalação limpa com `-LocalModelPort <porta>` e `-LocalModel <id>`.
+O servidor deve escutar em `127.0.0.1` com a API de chat em `/v1`.
+O relatório identifica o serviço fornecido pelo operador separadamente da
+resposta sintética padrão. No Windows, o pacote privado de `07dd9ef9` passou
+com llama.cpp 12424 e Qwen3.5-9B-Q4_K_M em CPU, incluindo desinstalação.
+O cenário usa uma pergunta sintética e nunca lê um perfil do usuário.
+
 O roteiro legado e sua documentação podem ser reproduzidos em um checkout
 separado no commit [5cba44cc](https://github.com/BloomRX/Lia-Project/tree/5cba44ccfb721b5301c3ed3c0796c92aba30c9ef/Tests/windows).
 Os resultados e comandos históricos em relatórios anteriores se referem

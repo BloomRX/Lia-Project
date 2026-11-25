@@ -83,11 +83,11 @@ async function checkUpgradeProfile(executablePath, root, env) {
   }
 }
 
-async function checkInstalledConversation(executablePath, root, env, product, transports, modelId) {
-  const message = 'Mensagem do gate de instalação'
-  const reply = 'Resposta do serviço local'
+async function checkInstalledConversation(executablePath, root, env, product, transports, modelId, localPort) {
+  const message = localPort ? 'Quanto é 17 + 26? Responda somente com o número, sem pontuação.' : 'Mensagem do gate de instalação'
+  const reply = localPort ? '43' : 'Resposta do serviço local'
   let confirmedRequests = 0
-  const server = createServer(async (request, response) => {
+  const server = localPort ? undefined : createServer(async (request, response) => {
     try {
       const chunks = []
       for await (const chunk of request)
@@ -105,11 +105,13 @@ async function checkInstalledConversation(executablePath, root, env, product, tr
       response.writeHead(400).end()
     }
   })
-  server.listen(0, '127.0.0.1')
   try {
-    await once(server, 'listening')
+    if (server) {
+      server.listen(0, '127.0.0.1')
+      await once(server, 'listening')
+    }
     const transportConfig = JSON.parse(transports)
-    transportConfig.records[0].baseUrl = `http://127.0.0.1:${server.address().port}/v1`
+    transportConfig.records[0].baseUrl = `http://127.0.0.1:${server?.address().port ?? localPort}/v1`
     const chatRoot = join(root, 'installed-chat')
     await mkdir(chatRoot)
     await Promise.all([
@@ -125,15 +127,16 @@ async function checkInstalledConversation(executablePath, root, env, product, tr
       page.setDefaultTimeout(10_000)
       await page.getByLabel('Mensagem', { exact: true }).fill(message)
       await page.getByRole('button', { name: 'Enviar', exact: true }).click()
-      await page.getByText(`Lia: ${reply}`, { exact: true }).waitFor()
-      assert.equal(confirmedRequests, 1)
+      await page.getByText(`Lia: ${reply}`, { exact: true }).waitFor({ timeout: localPort ? 60_000 : 10_000 })
+      if (server)
+        assert.equal(confirmedRequests, 1)
     }
     finally {
       await stage.close()
     }
   }
   finally {
-    server.close()
+    server?.close()
   }
 }
 
@@ -156,7 +159,16 @@ async function run() {
   if (!restore)
     await mkdir(profile)
   const providerId = 'local-chat'
-  const modelId = 'local-gate'
+  const portArgument = process.argv.find(argument => argument.startsWith('--local-port='))
+  const modelArgument = process.argv.find(argument => argument.startsWith('--local-model='))
+  const localPort = portArgument ? Number(portArgument.slice('--local-port='.length)) : undefined
+  const localModel = modelArgument?.slice('--local-model='.length)
+  assert.ok(!portArgument || (Number.isInteger(localPort) && localPort > 0 && localPort <= 65_535
+    && localModel && /^[\w.:-]{1,128}$/.test(localModel)
+    && process.argv.some(argument => argument.startsWith('--installed-executable=')) && !upgradeProfile),
+  'Informe porta e modelo locais válidos para o ensaio de instalação limpa.')
+  assert.ok(!modelArgument || portArgument, 'Informe a porta do serviço local.')
+  const modelId = localModel ?? 'local-gate'
   const product = JSON.stringify({
     setup: { completed: true },
     provider: { chat: { preferred: { providerId, modelId } } },
@@ -258,10 +270,11 @@ async function run() {
   }
   const installedConversation = Boolean(installedExecutable && !upgradeProfile)
   if (installedConversation)
-    await checkInstalledConversation(executablePath, root, env, product, transports, modelId)
+    await checkInstalledConversation(executablePath, root, env, product, transports, modelId, localPort)
   if (packaged)
     await checkPackagedProcessesExited(packageDirectory)
-  const lifecycle = { packageProcessesExited: packaged ? true : null, installedConversation, airiDirectoryAbsent, packaged, installed: Boolean(installedExecutable), nativeWindows, registryRemoved: true, stageMainExited: true }
+  const conversationSource = installedConversation ? (localPort ? 'operator-loopback' : 'synthetic-loopback') : null
+  const lifecycle = { conversationSource, packageProcessesExited: packaged ? true : null, installedConversation, airiDirectoryAbsent, packaged, installed: Boolean(installedExecutable), nativeWindows, registryRemoved: true, stageMainExited: true }
   if (!upgradeProfile)
     await writeFile(join(root, 'report.json'), JSON.stringify(lifecycle, null, 2), { flag: 'wx' })
   console.log(JSON.stringify(lifecycle))
