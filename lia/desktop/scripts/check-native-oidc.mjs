@@ -8,7 +8,7 @@ import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 
-import { _electron } from 'playwright'
+import { _electron, chromium } from 'playwright'
 
 assert.equal(process.platform, 'win32')
 const root = await mkdtemp(join(process.env.RUNNER_TEMP ?? tmpdir(), 'lia-native-oidc-'))
@@ -55,8 +55,13 @@ async function handle(request, response) {
       authorization = params
       const callback = new URL(`http://127.0.0.1:${port}/callback`)
       callback.search = new URLSearchParams({ state, code })
-      assert.ok((await fetch(callback, { headers: { Origin: origin } })).ok)
-      response.writeHead(204).end()
+      response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' })
+      response.end(`<!doctype html><title>OIDC fixture</title><p id="result">pending</p>
+        <script>
+          fetch(${JSON.stringify(callback.href)}).then(response => {
+            document.querySelector('#result').textContent = response.ok ? 'delivered' : 'failed'
+          }).catch(() => { document.querySelector('#result').textContent = 'failed' })
+        </script>`)
       return
     }
     case '/api/auth/jwks':
@@ -107,18 +112,35 @@ const executablePath = fileURLToPath(new URL('../../stage/node_modules/electron/
 const env = { ...process.env, APPDATA: appdata, LIA_USER_DATA: root, LIA_OIDC_TEST_ORIGIN: origin, LIA_OIDC_TEST_CLIENT_ID: clientId }
 const start = () => _electron.launch({ executablePath, args: [launcher], env })
 let app
+let browser
 try {
   app = await start()
+  browser = await chromium.launch()
   await app.evaluate(({ shell }) => {
-    shell.openExternal = async (url) => {
-      if (!(await fetch(url)).ok)
-        throw new Error('Fixture authorization was rejected')
-    }
+    globalThis.fixtureAuthorization = Promise.withResolvers()
+    shell.openExternal = async url => globalThis.fixtureAuthorization.resolve(url)
   })
   let page = await app.firstWindow()
   assert.deepEqual(await page.evaluate(() => window.liaApi.oidcStatus()), { ok: true, available: true })
   await page.getByRole('button', { name: 'Configuração', exact: true }).click()
   await page.getByRole('button', { name: 'Entrar', exact: true }).click()
+  const authorizationUrl = await app.evaluate(async () => {
+    let timer
+    try {
+      return await Promise.race([
+        globalThis.fixtureAuthorization.promise,
+        new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('Missing authorization URL')), 10_000) }),
+      ])
+    }
+    finally {
+      clearTimeout(timer)
+    }
+  })
+  assert.ok(new URL(authorizationUrl).origin === origin)
+  const browserPage = await browser.newPage()
+  await browserPage.goto(authorizationUrl)
+  await browserPage.getByText('delivered', { exact: true }).waitFor({ timeout: 10_000 })
+  await browserPage.close()
   await page.getByText(`${profile.name} · ${profile.email}`, { exact: true }).waitFor()
   await page.getByRole('region', { name: 'Conta' }).screenshot({ path: join(root, 'account-panel.png') })
   assert.deepEqual(await page.evaluate(() => window.liaApi.oidcProfile()), { ok: true, profile })
@@ -137,13 +159,18 @@ try {
   assert.equal(revoked, true)
   assert.deepEqual(await page.evaluate(() => window.liaApi.oidcProfile()), { ok: false, code: 'unauthenticated' })
   assert.equal(fixtureFailure, false)
-  const report = { electron: true, accountControls: true, issuer: 'synthetic loopback', browser: 'injected opener', pkce: true, profileProjection: true, encryptedAtRest: true, restoredAndRefreshed: true, revokedAndCleared: true }
+  const report = { electron: true, accountControls: true, issuer: 'synthetic loopback', browser: 'isolated Chromium via injected opener', pkce: true, profileProjection: true, encryptedAtRest: true, restoredAndRefreshed: true, revokedAndCleared: true }
   await writeFile(join(root, 'report.json'), JSON.stringify(report, null, 2))
   console.log(JSON.stringify(report))
 }
 finally {
   try {
-    await app?.close()
+    try {
+      await app?.close()
+    }
+    finally {
+      await browser?.close()
+    }
   }
   finally {
     server.closeAllConnections()
