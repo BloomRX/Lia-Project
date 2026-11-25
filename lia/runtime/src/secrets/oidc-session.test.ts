@@ -6,6 +6,22 @@ import { createOidcAccountService } from './oidc-account'
 import { createOidcSessionOwner, oidcSessionScope } from './oidc-session'
 import { createLiaSecretVault } from './vault'
 
+// A persistência injetada vive na memória desta suíte. O lock do Windows
+// continua sob teste em vault-process.test.ts e no gate Electron.
+vi.mock('./vault-lock', () => {
+  let pending: Promise<unknown> = Promise.resolve()
+  return {
+    withVaultWriteLock<T>(write: () => Promise<T>, signal?: AbortSignal) {
+      const operation = pending.then(() => {
+        signal?.throwIfAborted()
+        return write()
+      })
+      pending = operation.catch(() => {})
+      return operation
+    },
+  }
+})
+
 const origin = new URL('https://issuer.example')
 const signal = () => new AbortController().signal
 const privateCheck = expect.any(Function)
