@@ -25,6 +25,22 @@ async function waitForRecord(registry) {
   throw new Error('O Stage próprio não publicou seu registro.')
 }
 
+async function waitForProcessExit(pid) {
+  const deadline = Date.now() + 10_000
+  do {
+    try {
+      process.kill(pid, 0)
+    }
+    catch (error) {
+      if (error.code === 'ESRCH')
+        return
+      throw error
+    }
+    await delay(100)
+  } while (Date.now() < deadline)
+  throw new Error('O processo Main do Stage continuou ativo após encerrar a conversa.')
+}
+
 async function checkUpgradeProfile(executablePath, root, env) {
   const stageProfile = join(root, 'native-stage-profile')
   const stage = await _electron.launch({
@@ -140,6 +156,7 @@ async function run() {
     await page.getByRole('button', { name: 'Encerrar conversa', exact: true }).click({ timeout: 10_000 })
     await page.getByText('Conversa encerrada.', { exact: true }).waitFor({ timeout: 20_000 })
     assert.deepEqual(await registry.read(), { ok: false, problem: 'missing' })
+    await waitForProcessExit(target.pid)
   }
   finally {
     try {
@@ -151,7 +168,7 @@ async function run() {
       await app.close()
     }
   }
-  const lifecycle = { airiDirectoryAbsent, packaged, installed: Boolean(installedExecutable), nativeWindows, registryRemoved: true }
+  const lifecycle = { airiDirectoryAbsent, packaged, installed: Boolean(installedExecutable), nativeWindows, registryRemoved: true, stageMainExited: true }
   if (!upgradeProfile)
     await writeFile(join(root, 'report.json'), JSON.stringify(lifecycle, null, 2), { flag: 'wx' })
   console.log(JSON.stringify(lifecycle))
