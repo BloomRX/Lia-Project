@@ -10,7 +10,7 @@ describe('publicCommandResult exact shape', () => {
     const raw = {
       id: 'browser',
       label: 'Browser Stage',
-      cwd: '/home/user/Lia-Project/airi/apps/stage-tamagotchi',
+      cwd: '/home/user/Lia-Project/workspace/apps/stage-tamagotchi',
       argv: ['pnpm', 'exec', 'vitest', 'run', '--project', 'browser'],
       startedAt: '2026-09-30T00:00:00Z',
       endedAt: '2026-09-30T00:00:10Z',
@@ -54,14 +54,14 @@ describe('publicCommandResult exact shape', () => {
     assert.ok('truncated' in pub)
   })
   it('cwd is repo-relative, not absolute', () => {
-    const raw = { id: 'core-agent', label: 'x', cwd: REPO_ROOT + '/airi', argv: ['pnpm','test'], startedAt: new Date().toISOString(), endedAt: new Date().toISOString(), durationMs: 1, exitCode: 0, status: 'passed', logPath: 'logs/test.log', truncated: false }
+    const raw = { id: 'core-agent', label: 'x', cwd: REPO_ROOT + '/workspace', argv: ['pnpm','test'], startedAt: new Date().toISOString(), endedAt: new Date().toISOString(), durationMs: 1, exitCode: 0, status: 'passed', logPath: 'logs/test.log', truncated: false }
     const pub = publicCommandResult(raw)
     // Should not contain absolute repoRoot
     assert.ok(!pub.cwd.includes(REPO_ROOT))
-    assert.ok(pub.cwd.includes('airi'))
+    assert.ok(pub.cwd.includes('workspace'))
   })
   it('stdout/stderr/error exclusion proof', () => {
-    const raw = { id: 'lint', label: 'Lint', cwd: 'airi', argv: ['pnpm','lint'], startedAt: new Date().toISOString(), endedAt: new Date().toISOString(), durationMs: 1, exitCode: 1, status: 'failed', stdout: 'stdout leak', stderr: 'stderr leak', error: 'error leak', logPath: 'logs/lint.log', truncated: false }
+    const raw = { id: 'lint', label: 'Lint', cwd: 'workspace', argv: ['pnpm','lint'], startedAt: new Date().toISOString(), endedAt: new Date().toISOString(), durationMs: 1, exitCode: 1, status: 'failed', stdout: 'stdout leak', stderr: 'stderr leak', error: 'error leak', logPath: 'logs/lint.log', truncated: false }
     const pub = publicCommandResult(raw)
     const json = JSON.stringify(pub)
     assert.ok(!json.includes('stdout leak'))
@@ -75,7 +75,7 @@ describe('repoRoot exclusion from gitInfo', () => {
     const { createSummarySkeleton } = await import('./qa-benchmark-lib.mjs')
     const s = createSummarySkeleton({ runId: '20260930-000000-abc1234', sourceSha: 'a'.repeat(40), sourceBranch: 'arena/x', remoteSourceSha: 'a'.repeat(40), startedAt: new Date() })
     s.gitInfo = { sourceSha: 'a'.repeat(40), sourceBranch: 'arena/x', remoteSourceSha: 'a'.repeat(40), repoRoot: REPO_ROOT, gitVersion: '2', nodeVersion: 'v22', pnpmVersion: '9', pythonVersion: '3.11' }
-    const pub = publicCommandResult({ id: 'test', label: 'test', cwd: 'airi', argv: ['pnpm','test'], startedAt: new Date().toISOString(), endedAt: new Date().toISOString(), durationMs: 1, exitCode: 0, status: 'passed', logPath: 'logs/test.log', truncated: false })
+    const pub = publicCommandResult({ id: 'test', label: 'test', cwd: 'workspace', argv: ['pnpm','test'], startedAt: new Date().toISOString(), endedAt: new Date().toISOString(), durationMs: 1, exitCode: 0, status: 'passed', logPath: 'logs/test.log', truncated: false })
     // Simulate gitInfo publish filtering
     const gitPublish = { sourceSha: s.gitInfo.sourceSha, sourceBranch: s.gitInfo.sourceBranch, remoteSourceSha: s.gitInfo.remoteSourceSha, gitVersion: s.gitInfo.gitVersion, nodeVersion: s.gitInfo.nodeVersion, pnpmVersion: s.gitInfo.pnpmVersion, pythonVersion: s.gitInfo.pythonVersion }
     assert.ok(!JSON.stringify(gitPublish).includes(REPO_ROOT))
@@ -85,16 +85,16 @@ describe('repoRoot exclusion from gitInfo', () => {
 
 describe('path privacy masking', () => {
   it('masks repoRoot → <REPO>', () => {
-    const text = `error in ${REPO_ROOT}/airi/foo.ts`
+    const text = `error in ${REPO_ROOT}/workspace/foo.ts`
     const masked = maskPrivatePaths(text, { repoRoot: REPO_ROOT, homedir: os.homedir(), tmpdir: os.tmpdir() })
-    assert.ok(masked.includes('<REPO>/airi/foo.ts'))
+    assert.ok(masked.includes('<REPO>/workspace/foo.ts'))
     assert.ok(!masked.includes(REPO_ROOT))
   })
-  it('Windows path: C:\\Users\\Alice\\Documents\\Lia-Project\\airi\\foo.ts → <REPO>\\airi\\foo.ts', () => {
+  it('Windows path: C:\\Users\\Alice\\Documents\\Lia-Project\\workspace\\foo.ts → <REPO>\\workspace\\foo.ts', () => {
     const fakeRepo = 'C:\\Users\\Alice\\Documents\\Lia-Project'
-    const text = `at ${fakeRepo}\\airi\\foo.ts:10:5`
+    const text = `at ${fakeRepo}\\workspace\\foo.ts:10:5`
     const masked = maskPrivatePaths(text, { repoRoot: fakeRepo, homedir: 'C:\\Users\\Alice', tmpdir: 'C:\\Temp' })
-    assert.ok(masked.includes('<REPO>\\airi\\foo.ts'))
+    assert.ok(masked.includes('<REPO>\\workspace\\foo.ts'))
     assert.ok(!masked.includes('C:\\Users\\Alice\\Documents'))
     assert.ok(!masked.includes(fakeRepo))
   })
@@ -145,8 +145,8 @@ describe('path privacy masking', () => {
   })
   it('handles both slash representations', () => {
     const repo = '/home/user/Lia-Project'
-    const text1 = `path ${repo}/airi/foo`
-    const text2 = `path ${repo.replace(/\//g, '\\')}\\airi\\foo`
+    const text1 = `path ${repo}/workspace/foo`
+    const text2 = `path ${repo.replace(/\//g, '\\')}\\workspace\\foo`
     const m1 = maskPrivatePaths(text1, { repoRoot: repo, homedir: os.homedir(), tmpdir: os.tmpdir() })
     const m2 = maskPrivatePaths(text2, { repoRoot: repo, homedir: os.homedir(), tmpdir: os.tmpdir() })
     assert.ok(m1.includes('<REPO>'))
@@ -246,7 +246,7 @@ describe('JSON-escaped private paths', () => {
   })
 
   it('REPO: detects and masks the JSON-escaped repo path (§11)', () => {
-    const jsonLog = JSON.stringify({ file: `${REPO}\\airi\\foo.ts` })
+    const jsonLog = JSON.stringify({ file: `${REPO}\\workspace\\foo.ts` })
 
     assert.ok(jsonLog.includes(jsonEscaped(REPO)), 'escaped repo path must be present')
     assert.equal(containsPrivatePath(jsonLog, ctx), true)

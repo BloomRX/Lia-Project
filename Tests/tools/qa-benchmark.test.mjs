@@ -71,10 +71,10 @@ describe('qa-benchmark-lib: canonicalCommands', () => {
     assert.deepEqual(lia.argv, ['pnpm','test'])
     assert.equal(lia.cwd, nodePath.join(REPO_ROOT, 'lia', 'runtime'))
   })
-  it('core-agent uses vitest run --project @proj-airi/core-agent', () => {
+  it('core-agent uses vitest run --project @fixture/core-agent', () => {
     const cmds = canonicalCommands(REPO_ROOT)
     const ca = cmds.find(c=>c.id==='core-agent')
-    assert.deepEqual(ca.argv, ['pnpm','exec','vitest','run','--project','@proj-airi/core-agent'])
+    assert.deepEqual(ca.argv, ['pnpm','exec','vitest','run','--project','@fixture/core-agent'])
   })
   it('browser uses vitest run --project browser', () => {
     const cmds = canonicalCommands(REPO_ROOT)
@@ -349,7 +349,7 @@ describe('qa-benchmark: detectPlaywrightChromiumAvailability on win32', () => {
     assert.ok(!calls.some(c => c.args.some(a => /pnpm/i.test(String(a)))), 'pnpm must NOT appear in argv')
     assert.ok(!calls.some(c => c.options && c.options.shell === true), 'shell:true must NEVER be used')
 
-    // Still the AIRI workspace, so `import { chromium } from 'playwright'` resolves.
+    // The Launcher workspace, so `import { chromium } from 'playwright'` resolves.
     assert.equal(nodeCalls[0].options.cwd, nodePath.join('C:\\fake\\repo', 'lia', 'desktop'))
   })
 

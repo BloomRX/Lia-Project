@@ -62,10 +62,10 @@ function initSourceRepo(barePath, branch = 'arena/test-branch') {
   else writeFileSync(nodePath.join(src, '.gitignore'), 'Tests/runs/\nTests/runtimes/\nTests/logs/\nTests/inventory/\n.devkit-qa/\n', 'utf-8')
   // Create dummy bins for pnpm exec checks so mocked runners are not marked env-limited
   for (const bin of ['vitest', 'playwright', 'eslint', 'tsc']) {
-    const p1 = nodePath.join(src, 'airi', 'node_modules', '.bin', bin)
+    const p1 = nodePath.join(src, 'workspace', 'node_modules', '.bin', bin)
     mkdirSync(nodePath.dirname(p1), { recursive: true })
     writeFileSync(p1, '# dummy', 'utf-8')
-    const p2 = nodePath.join(src, 'airi', 'apps', 'stage-tamagotchi', 'node_modules', '.bin', bin)
+    const p2 = nodePath.join(src, 'workspace', 'apps', 'stage-tamagotchi', 'node_modules', '.bin', bin)
     mkdirSync(nodePath.dirname(p2), { recursive: true })
     writeFileSync(p2, '# dummy', 'utf-8')
   }
@@ -196,8 +196,8 @@ describe('integration: first QA publication E-I', () => {
     assert.ok(existsSync(nodePath.join(cloneQa, 'index.json')))
     const benchDirs = readdirSync(nodePath.join(cloneQa, 'benchmarks'))
     assert.ok(benchDirs.length === 1)
-    // No source tree file like airi/package.json should be at root of QA branch
-    assert.ok(!existsSync(nodePath.join(cloneQa, 'airi', 'package.json')))
+    // No source tree file like workspace/package.json should be at root of QA branch
+    assert.ok(!existsSync(nodePath.join(cloneQa, 'workspace', 'package.json')))
     assert.ok(!existsSync(nodePath.join(cloneQa, 'Tests', 'tools', 'qa-benchmark.mjs')))
   })
   it('F: first QA branch contains expected layout and no source tree', async () => {
@@ -213,7 +213,7 @@ describe('integration: first QA publication E-I', () => {
     assert.ok(files.some(f => f.startsWith('benchmarks/') && f.includes('/REPORT.md')))
     assert.ok(files.some(f => f.includes('SHA256SUMS.txt')))
     // No source files
-    assert.ok(!files.some(f => f.startsWith('airi/')))
+    assert.ok(!files.some(f => f.startsWith('workspace/')))
     assert.ok(!files.some(f => f.startsWith('src/')))
   })
   it('G: existing QA branch appends one run', async () => {

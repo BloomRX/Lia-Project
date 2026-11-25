@@ -32,7 +32,7 @@ Test Files  30 failed | 107 passed (141)
     assert.equal(out, 'failed')
   })
   it('E. stage-ui No projects matched → FAIL', () => {
-    const out = classifyCommandOutcome({ id: 'stage-ui', exitCode: 1, stdout: '', stderr: 'No projects matched filter "@proj-airi/stage-ui"' })
+    const out = classifyCommandOutcome({ id: 'stage-ui', exitCode: 1, stdout: '', stderr: 'No projects matched filter "@fixture/stage-ui"' })
     assert.equal(out, 'failed')
   })
   it('setTimeout false-env: typecheck diagnostics not confused with timeout', () => {
@@ -100,13 +100,13 @@ describe('D2B9-A: metric parsers', () => {
 })
 
 describe('D2B9-A: stage-ui canonical command', () => {
-  it('uses pnpm run test-ui:run cwd airi', async () => {
+  it('uses pnpm run test-ui:run cwd workspace', async () => {
     const { canonicalCommands } = await import('./qa-benchmark-historical-fixture.mjs')
     const cmds = canonicalCommands('/repo')
     const stageUi = cmds.find(c => c.id === 'stage-ui')
     assert.ok(stageUi)
     assert.deepEqual(stageUi.argv, ['pnpm', 'run', 'test-ui:run'])
-    assert.ok(stageUi.cwd.endsWith('airi'))
-    assert.ok(!stageUi.argv.join(' ').includes('@proj-airi/stage-ui'))
+    assert.ok(stageUi.cwd.endsWith('workspace'))
+    assert.ok(!stageUi.argv.join(' ').includes('@fixture/stage-ui'))
   })
 })

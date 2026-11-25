@@ -307,11 +307,11 @@ describe('qa-process-runner: runWithRunner routing', () => {
     const calls = []
     const fakeSpawn = (exe, args) => { calls.push({ exe, args }); return { status: 0, stdout: '', stderr: '' } }
     const fakeResolver = () => 'C:\\My Tools\\pnpm.cmd'
-    runWithRunner(['pnpm', 'exec', 'vitest', 'run', 'C:\\My Repo\\airi\\foo.ts'], { cwd: 'C:\\My Repo', platform: 'win32', spawn: fakeSpawn, resolver: fakeResolver, comSpec: 'C:\\Windows\\System32\\cmd.exe' })
+    runWithRunner(['pnpm', 'exec', 'vitest', 'run', 'C:\\My Repo\\workspace\\foo.ts'], { cwd: 'C:\\My Repo', platform: 'win32', spawn: fakeSpawn, resolver: fakeResolver, comSpec: 'C:\\Windows\\System32\\cmd.exe' })
     const cmdCall = calls.find(c => c.exe === 'C:\\Windows\\System32\\cmd.exe')
     assert.ok(cmdCall)
     const cmdLine = cmdCall.args[3]
-    assert.ok(cmdLine.includes('"C:\\My Repo\\airi\\foo.ts"') || cmdLine.includes('"C:\\My Tools\\pnpm.cmd"'))
+    assert.ok(cmdLine.includes('"C:\\My Repo\\workspace\\foo.ts"') || cmdLine.includes('"C:\\My Tools\\pnpm.cmd"'))
   })
   it('F: path containing & cannot become second command', () => {
     const calls = []

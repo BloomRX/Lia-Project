@@ -58,7 +58,7 @@ from devflow.schema import (  # noqa: E402
 )
 
 ACTIVE_ROUND = TOOLS / 'devflow' / 'fixtures' / 'm30b' / 'm3_0b.json'
-CORE_DIST = 'airi/packages/core-agent/dist'
+CORE_DIST = 'workspace/packages/core-agent/dist'
 
 
 def _git(repo: Path, *args: str) -> str:
@@ -116,11 +116,11 @@ def with_local_origin(repo: Path) -> Path:
 def make_repo(base: Path) -> Path:
     """A throwaway repository shaped like the real one for cleanup purposes."""
     repo = base / 'repo'
-    (repo / 'airi' / 'packages' / 'core-agent' / 'dist').mkdir(parents=True)
-    (repo / 'airi' / 'packages' / 'core-agent' / 'src').mkdir(parents=True)
-    (repo / 'airi' / 'packages' / 'core-agent' / 'dist' / 'index.mjs').write_text('export {}\n')
-    (repo / 'airi' / 'packages' / 'core-agent' / 'src' / 'index.ts').write_text('export const a = 1\n')
-    (repo / 'airi' / '.gitignore').write_text('dist\n')
+    (repo / 'workspace' / 'packages' / 'core-agent' / 'dist').mkdir(parents=True)
+    (repo / 'workspace' / 'packages' / 'core-agent' / 'src').mkdir(parents=True)
+    (repo / 'workspace' / 'packages' / 'core-agent' / 'dist' / 'index.mjs').write_text('export {}\n')
+    (repo / 'workspace' / 'packages' / 'core-agent' / 'src' / 'index.ts').write_text('export const a = 1\n')
+    (repo / 'workspace' / '.gitignore').write_text('dist\n')
     # Mirror the real root .gitignore: run artifacts are generated, never tracked.
     (repo / '.gitignore').write_text('Tests/runs/\n__pycache__/\n')
     (repo / 'Tests' / 'runs' / 'devflow').mkdir(parents=True)
@@ -318,7 +318,7 @@ MARKER_LINES = [
     '[lia] 2026-10-11T00:00:00.000Z lia-devflow autorun=invoked action=conversar\n',
     '[lia] 2026-10-11T00:00:01.000Z lia-app.stage-log stage-prerequisite name=core-agent-build state=starting\n',
     '[lia] 2026-10-11T00:00:09.000Z lia-app.stage-log stage-prerequisite name=core-agent-build state=succeeded reason=build-succeeded\n',
-    '[lia] 2026-10-11T00:00:10.000Z lia-app.stage-log spawn: node C:\\repo\\airi\\apps\\stage-tamagotchi\\node_modules\\electron-vite\\bin\\electron-vite.js dev (pid 1234)\n',
+    '[lia] 2026-10-11T00:00:10.000Z lia-app.stage-log spawn: node C:\\repo\\workspace\\apps\\stage-tamagotchi\\node_modules\\electron-vite\\bin\\electron-vite.js dev (pid 1234)\n',
     '[lia] 2026-10-11T00:00:14.000Z lia-app.stage-log lia-stage renderer=ready\n',
     '[lia] 2026-10-11T00:00:15.000Z lia-app.stage-log lia-stage window=visible\n',
     '[lia] 2026-10-11T00:00:15.500Z lia-app.stage-log lia-stage renderer-app=mounted\n',
@@ -535,7 +535,7 @@ class SchemaTests(unittest.TestCase):
 
     def test_prepare_path_outside_cleanup_profile_is_refused(self):
         data = base_manifest()
-        data['prepare'][0]['path'] = 'airi/packages/stage-ui/dist'
+        data['prepare'][0]['path'] = 'workspace/packages/stage-ui/dist'
         with self.assertRaisesRegex(RoundSchemaError, 'allowlisted_generated'):
             validate_round(data)
 
@@ -577,7 +577,7 @@ class CleanupSafetyTests(unittest.TestCase):
         self.assertTrue(reports[0].removed)
         self.assertFalse(target.exists())
         # The sibling source tree is untouched - only the generated artifact went.
-        self.assertTrue((self.repo / 'airi' / 'packages' / 'core-agent' / 'src' / 'index.ts').exists())
+        self.assertTrue((self.repo / 'workspace' / 'packages' / 'core-agent' / 'src' / 'index.ts').exists())
 
     def test_absent_target_is_reported_as_nothing_to_remove(self):
         shutil.rmtree(self.repo / CORE_DIST)
@@ -589,14 +589,14 @@ class CleanupSafetyTests(unittest.TestCase):
 
     def test_unknown_cleanup_target_is_refused(self):
         with self.assertRaisesRegex(safe_paths.PathSafetyError, 'não está no perfil'):
-            safe_paths.plan_removal(self.repo, 'airi/packages/stage-ui/dist', self.allow)
+            safe_paths.plan_removal(self.repo, 'workspace/packages/stage-ui/dist', self.allow)
 
     def test_empty_allowlist_refuses_everything(self):
         with self.assertRaisesRegex(safe_paths.PathSafetyError, 'nenhum'):
             safe_paths.plan_removal(self.repo, CORE_DIST, [])
 
     def test_path_traversal_is_refused(self):
-        for bad in ('../outside', f'{CORE_DIST}/../../..', '/etc/passwd', 'C:\\Windows', 'airi//x', 'airi/.'):
+        for bad in ('../outside', f'{CORE_DIST}/../../..', '/etc/passwd', 'C:\\Windows', 'workspace//x', 'workspace/.'):
             with self.subTest(path=bad):
                 with self.assertRaises(safe_paths.PathSafetyError):
                     safe_paths.plan_removal(self.repo, bad, [*self.allow, bad])
@@ -621,10 +621,10 @@ class CleanupSafetyTests(unittest.TestCase):
         victim = outside / 'dist'
         victim.mkdir()
         (victim / 'index.mjs').write_text('x\n')
-        airi = self.repo / 'airi'
-        shutil.rmtree(airi)
+        workspace = self.repo / 'workspace'
+        shutil.rmtree(workspace)
         try:
-            airi.symlink_to(outside, target_is_directory=True)
+            workspace.symlink_to(outside, target_is_directory=True)
         except (OSError, NotImplementedError):
             self.skipTest('este sistema de arquivos não permite symlink')
         with self.assertRaisesRegex(safe_paths.PathSafetyError, 'link/junction/reparse'):
@@ -1228,10 +1228,10 @@ class ReparseSafetyTests(unittest.TestCase):
         outside = self.base / 'elsewhere'
         (outside / 'dist').mkdir(parents=True)
         (outside / 'dist' / 'index.mjs').write_text('x\n')
-        airi = self.repo / 'airi'
-        shutil.rmtree(airi)
+        workspace = self.repo / 'workspace'
+        shutil.rmtree(workspace)
         try:
-            airi.symlink_to(outside, target_is_directory=True)
+            workspace.symlink_to(outside, target_is_directory=True)
         except (OSError, NotImplementedError):
             self.skipTest('filesystem sem symlink')
         with self.assertRaises(safe_paths.PathSafetyError):
@@ -2172,7 +2172,7 @@ class SyncPolicyTests(unittest.TestCase):
 
     def test_checkpoint_source_root_is_the_native_product(self):
         self.assertTrue(sync.classify_path('lia/stage/src/main/index.ts')[0])
-        self.assertFalse(sync.classify_path('airi/apps/stage/src/index.ts')[0])
+        self.assertFalse(sync.classify_path('workspace/apps/stage/src/index.ts')[0])
         self.assertFalse(sync.classify_path('lia/runtime/.env')[0])
 
     def test_clean_checkout_updates_without_asking_anything(self):
@@ -2285,8 +2285,8 @@ class LocalChangePolicyTests(unittest.TestCase):
         self.assertEqual(fake.committed, [])
 
     def test_forbidden_path_blocks_the_checkpoint(self):
-        (self.repo / 'airi' / '.env').write_text('X=1\n', encoding='utf-8')
-        fake = FakeGit(porcelain='?? airi/.env', head='a' * 40, remote_head='a' * 40)
+        (self.repo / 'workspace' / '.env').write_text('X=1\n', encoding='utf-8')
+        fake = FakeGit(porcelain='?? workspace/.env', head='a' * 40, remote_head='a' * 40)
         outcome = sync.WorkBranchSync(self.repo, work_branch=WORK, run_git=fake).pre_sync()
         self.assertFalse(outcome.ok)
         self.assertIn('.env', outcome.reason)
@@ -2308,10 +2308,10 @@ class LocalChangePolicyTests(unittest.TestCase):
         self.assertIn('fora das raízes', outcome.reason)
 
     def test_nothing_is_discarded_when_refusing(self):
-        (self.repo / 'airi' / '.env').write_text('SEGREDO=1\n', encoding='utf-8')
-        fake = FakeGit(porcelain='?? airi/.env', head='a' * 40, remote_head='a' * 40)
+        (self.repo / 'workspace' / '.env').write_text('SEGREDO=1\n', encoding='utf-8')
+        fake = FakeGit(porcelain='?? workspace/.env', head='a' * 40, remote_head='a' * 40)
         sync.WorkBranchSync(self.repo, work_branch=WORK, run_git=fake).pre_sync()
-        self.assertTrue((self.repo / 'airi' / '.env').exists())
+        self.assertTrue((self.repo / 'workspace' / '.env').exists())
         self.assertNotIn('reset', ' '.join(fake.argvs()))
         self.assertNotIn('clean', ' '.join(fake.argvs()))
         self.assertNotIn('stash', ' '.join(fake.argvs()))
@@ -6894,7 +6894,7 @@ class LiaCorePrereqTests(unittest.TestCase):
     The one generated artifact the round needs is now built by the round.
 
     `@lia/core` exports only `./dist/index.mjs`, which is gitignored and built
-    solely by the airi postinstall. When it was missing, a real Windows run
+    solely by the workspace postinstall. When it was missing, a real Windows run
     produced eight suites failing collection with "(0 test)" and no retained
     exception. Failing closed on that was correct but still left the owner
     running a command by hand, which contradicts the zero-choice contract.
