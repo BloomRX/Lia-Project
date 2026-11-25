@@ -923,11 +923,16 @@ class DevKitBatTests(unittest.TestCase):
 
     def test_menu_offers_the_required_actions(self):
         source = (TOOLS / 'lia_dev.py').read_text(encoding='utf-8')
-        for label in ('Executar rodada atual', 'Abrir Lia normalmente',
-                      'Mostrar rodada / estado atual', 'Diagnóstico do ambiente', 'Sair'):
+        for label in ('Executar validação nativa', 'Abrir Lia normalmente',
+                      'Consultar estado e histórico', 'Diagnóstico do ambiente',
+                      'DevKit universal (Git)', 'Sair'):
             self.assertIn(label, source)
-        # Git consolidation is visibly marked as future work, not silently absent.
-        self.assertIn('D2', source)
+    def test_open_uses_the_current_launcher_without_consulting_historical_rounds(self):
+        with patch.object(lia_dev, 'load_active_round') as archived, patch.object(lia_dev, 'default_spawner') as spawn:
+            spawn.return_value.wait.return_value = 0
+            self.assertEqual(lia_dev.main(['open']), 0)
+            self.assertEqual(spawn.call_args.args[0], ['Lia.bat'])
+            archived.assert_not_called()
 
 # ---------------------------------------------------------------------------
 class RequiredTestsTests(unittest.TestCase):

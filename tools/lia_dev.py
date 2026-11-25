@@ -87,11 +87,7 @@ def cmd_status(_args: argparse.Namespace) -> int:
 def cmd_open(_args: argparse.Namespace) -> int:
     """Abre o Lia pelo caminho canônico, sem gate (uso casual)."""
     repo = repo_root()
-    try:
-        manifest = load_active_round()
-        command = list(manifest.launch.command)
-    except RoundSchemaError:
-        command = ['Lia.bat']
+    command = ['Lia.bat']
     launcher = repo / command[0]
     if not launcher.exists():
         return _fail(f'{command[0]} não encontrado na raiz do repositório')
@@ -171,10 +167,10 @@ def cmd_menu(_args: argparse.Namespace) -> int:
         print(f'  rodada histórica: {active}')
         print('  1) Executar validação nativa')
         print('  2) Abrir Lia normalmente')
-        print('  3) Mostrar rodada / estado atual')
+        print('  3) Consultar estado e histórico')
         print('  4) Diagnóstico do ambiente')
         print('  5) Listar rodadas')
-        print('  6) DevKit universal (Git)  [futuro/D2: consolidação de publish]')
+        print('  6) DevKit universal (Git)')
         print('  0) Sair')
         try:
             choice = input('Escolha: ').strip()
