@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
+import { once } from 'node:events'
+import { createServer } from 'node:http'
 import { existsSync } from 'node:fs'
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -54,6 +56,60 @@ async function checkUpgradeProfile(executablePath, root, env) {
   }
   finally {
     await stage.close()
+  }
+}
+
+async function checkInstalledConversation(executablePath, root, env, product, transports, modelId) {
+  const message = 'Mensagem do gate de instalação'
+  const reply = 'Resposta do serviço local'
+  let confirmedRequests = 0
+  const server = createServer(async (request, response) => {
+    try {
+      const chunks = []
+      for await (const chunk of request)
+        chunks.push(chunk)
+      const body = JSON.parse(Buffer.concat(chunks).toString('utf8'))
+      assert.equal(request.method, 'POST')
+      assert.equal(request.url, '/v1/chat/completions')
+      assert.equal(body.model, modelId)
+      assert.equal(body.messages.at(-1).content, message)
+      confirmedRequests++
+      response.setHeader('Content-Type', 'application/json')
+      response.end(JSON.stringify({ choices: [{ message: { content: reply } }] }))
+    }
+    catch {
+      response.writeHead(400).end()
+    }
+  })
+  server.listen(0, '127.0.0.1')
+  try {
+    await once(server, 'listening')
+    const transportConfig = JSON.parse(transports)
+    transportConfig.records[0].baseUrl = `http://127.0.0.1:${server.address().port}/v1`
+    const chatRoot = join(root, 'installed-chat')
+    await mkdir(chatRoot)
+    await Promise.all([
+      writeFile(join(chatRoot, 'lia-product.json'), product, { flag: 'wx' }),
+      writeFile(join(chatRoot, 'lia-transports.json'), JSON.stringify(transportConfig), { flag: 'wx' }),
+    ])
+    const stage = await _electron.launch({
+      executablePath: join(dirname(executablePath), 'resources', 'stage', 'LiaStage.exe'),
+      env: { ...env, LIA_USER_DATA: chatRoot, LIA_STAGE_PROFILE_DIR: join(chatRoot, 'stage-profile') },
+    })
+    try {
+      const page = await stage.firstWindow()
+      page.setDefaultTimeout(10_000)
+      await page.getByLabel('Mensagem', { exact: true }).fill(message)
+      await page.getByRole('button', { name: 'Enviar', exact: true }).click()
+      await page.getByText(`Lia: ${reply}`, { exact: true }).waitFor()
+      assert.equal(confirmedRequests, 1)
+    }
+    finally {
+      await stage.close()
+    }
+  }
+  finally {
+    server.close()
   }
 }
 
@@ -168,7 +224,10 @@ async function run() {
       await app.close()
     }
   }
-  const lifecycle = { airiDirectoryAbsent, packaged, installed: Boolean(installedExecutable), nativeWindows, registryRemoved: true, stageMainExited: true }
+  const installedConversation = Boolean(installedExecutable && !upgradeProfile)
+  if (installedConversation)
+    await checkInstalledConversation(executablePath, root, env, product, transports, modelId)
+  const lifecycle = { installedConversation, airiDirectoryAbsent, packaged, installed: Boolean(installedExecutable), nativeWindows, registryRemoved: true, stageMainExited: true }
   if (!upgradeProfile)
     await writeFile(join(root, 'report.json'), JSON.stringify(lifecycle, null, 2), { flag: 'wx' })
   console.log(JSON.stringify(lifecycle))
