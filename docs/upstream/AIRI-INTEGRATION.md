@@ -1,5 +1,9 @@
 # M0-A — AIRI Bootstrap / Baseline no repositório da Lia
 
+> **Registro histórico.** A instalação atual da Lia usa os pacotes em
+> `lia/` a partir de `Lia.bat`. Este documento descreve a adoção inicial
+> do AIRI e os resultados medidos naquela revisão.
+
 > **Milestone:** M0-A (base AIRI reproduzível no repositório Lia)
 > **Regras vigentes:** AGENTS.md completo, incl. **§97 THIRD-PARTY ATTRIBUTION** e **§98 INTERNATIONALIZATION**.
 > **Objetivo provar:** "A base AIRI escolhida está corretamente integrada ao repositório da Lia e consegue ser instalada/buildada/executada no ambiente de desenvolvimento real."

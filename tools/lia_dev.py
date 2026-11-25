@@ -24,7 +24,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from devflow.runner import RoundRunner, default_spawner, latest_run, pass_validity  # noqa: E402
+from devflow.runner import default_spawner, latest_run, pass_validity  # noqa: E402
 from devflow.schema import (  # noqa: E402
     Round,
     RoundSchemaError,
@@ -32,7 +32,7 @@ from devflow.schema import (  # noqa: E402
     load_active_round,
     load_round_file,
 )
-from devflow.safe_paths import PathSafetyError, repo_root  # noqa: E402
+from devflow.safe_paths import repo_root  # noqa: E402
 
 
 def _fail(message: str) -> int:
@@ -40,21 +40,8 @@ def _fail(message: str) -> int:
     return 1
 
 
-def cmd_round(args: argparse.Namespace) -> int:
-    """Executa a rodada ativa de ponta a ponta e grava os artefatos."""
-    try:
-        manifest = load_active_round()
-    except RoundSchemaError as exc:
-        return _fail(str(exc))
-    runner = RoundRunner(round_manifest=manifest, repo=repo_root())
-    try:
-        outcome = runner.execute()
-    except PathSafetyError as exc:
-        return _fail(f'limpeza recusada: {exc}')
-    if outcome.artifacts.get('report'):
-        print(f'relatório: {outcome.artifacts["report"]}')
-    print(f'verdicto: {outcome.verdict}')
-    return 0 if outcome.is_pass else 1
+def cmd_legacy_m30b(_args: argparse.Namespace) -> int:
+    return _fail('A rodada M3.0b foi arquivada. Consulte o README para reproduzi-la em um checkout histórico.')
 
 
 def cmd_status(_args: argparse.Namespace) -> int:
@@ -86,7 +73,7 @@ def cmd_status(_args: argparse.Namespace) -> int:
     last = latest_run(repo)
     print('== Última execução registrada ==')
     if not last:
-        print('  nenhuma. Use legacy-m30b para consultar a execução histórica.')
+        print('  nenhuma registrada neste checkout.')
         return 0
     recorded = last.get('git', {}).get('head_sha', '')
     validity = pass_validity(recorded, head)
@@ -353,7 +340,7 @@ def build_parser() -> argparse.ArgumentParser:
     auto.add_argument('--post-sync', action='store_true',
                       help=argparse.SUPPRESS)
     sub.add_parser('bootstrap', help='uso interno: inicia a validação nativa')
-    sub.add_parser('legacy-m30b', help='executa o manifesto histórico M3.0b')
+    sub.add_parser('legacy-m30b', help='informa onde encontrar a rodada arquivada M3.0b')
     universal = sub.add_parser(
         'git', help='DevKit universal (publish, pull, validate, ...)',
     )
@@ -404,7 +391,8 @@ HANDLERS = {
     'git': cmd_git,
     'bootstrap': cmd_bootstrap,
     'auto': cmd_auto,
-    'round': cmd_round,
+    'round': cmd_native_validation,
+    'legacy-m30b': cmd_legacy_m30b,
     'status': cmd_status,
     'open': cmd_open,
     'diagnose': cmd_diagnose,
@@ -417,8 +405,6 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.cmd in (None, 'bootstrap', 'auto', 'round'):
         handler = cmd_native_validation
-    elif args.cmd == 'legacy-m30b':
-        handler = cmd_round
     else:
         handler = HANDLERS[args.cmd]
     try:

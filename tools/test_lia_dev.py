@@ -2477,10 +2477,10 @@ class NativeValidationRoutingTests(unittest.TestCase):
                 self.assertEqual(lia_dev.main(argv), 7)
                 native.assert_called_once()
 
-    def test_the_historical_round_requires_an_explicit_command(self):
-        with patch.object(lia_dev, 'cmd_round', return_value=3) as legacy:
-            self.assertEqual(lia_dev.main(['legacy-m30b']), 3)
-            legacy.assert_called_once()
+    def test_the_archived_round_cannot_launch_from_the_current_checkout(self):
+        with patch.object(lia_dev.subprocess, 'run') as subprocess_run:
+            self.assertEqual(lia_dev.main(['legacy-m30b']), 1)
+            subprocess_run.assert_not_called()
 
 
 class BootstrapTests(unittest.TestCase):

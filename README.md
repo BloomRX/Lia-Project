@@ -24,8 +24,8 @@ empacotador. O mesmo script roda no CI Windows em uma cópia que só
 contém `lia/` e `Lia.bat`.
 No Windows, `python tools/lia_dev.py round` também executa essa suíte e
 verifica a abertura e o encerramento do Stage próprio pelo Launcher.
-A rodada M3.0b está disponível para reprodução histórica com
-`python tools/lia_dev.py legacy-m30b`.
+Para consultar ou reproduzir a rodada M3.0b, use um checkout separado do
+[histórico anterior à entrada nativa](https://github.com/BloomRX/Lia-Project/tree/8e295fcd696b99043a80744fd05202c8d0852463).
 
 | Componente | Caminho atual |
 | --- | --- |
