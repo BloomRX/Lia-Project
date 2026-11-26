@@ -23,6 +23,7 @@ export function packagingInputs(root = launcherRoot) {
   return {
     launcher: root,
     stage,
+    icon: resolve(root, '../assets/icons/IconAppCompact.png'),
     builder: join(root, 'node_modules/electron-builder/cli.js'),
     electron: join(stage, 'node_modules/electron/dist'),
     stageOutput: join(stage, 'dist/lia-windows/win-unpacked'),
@@ -34,6 +35,7 @@ export function validateInputs(inputs, { internalTest = false } = {}) {
   if (!internalTest)
     throw new Error('Distribuição pública bloqueada: licenças de produto e assets pendentes. Use --internal-test somente para validação privada.')
   requireFile(inputs.builder, 'electron-builder instalado')
+  requireFile(inputs.icon, 'Ícone da Lia')
   for (const app of [inputs.launcher, inputs.stage]) {
     requireFile(join(app, 'out/main/index.js'), 'Build Main')
     requireFile(join(app, 'out/renderer/index.html'), 'Build Renderer')
@@ -70,13 +72,14 @@ export function stageConfiguration(inputs) {
       repository: null,
       homepage: null,
     },
-    win: { executableName: 'LiaStage', publish: null },
+    win: { executableName: 'LiaStage', icon: inputs.icon, publish: null },
   }
 }
 
 export function nativeLauncherConfiguration(inputs) {
   return {
     ...launcherConfiguration,
+    win: { ...launcherConfiguration.win, icon: inputs.icon },
     extraResources: launcherConfiguration.extraResources.map(resource =>
       resource.to === 'stage' ? { ...resource, from: inputs.stageOutput } : resource),
   }

@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { test } from 'node:test'
 
-import { nativeLauncherConfiguration, packagingInputs, validateArchiveEntries, validateInputs, validatePackagedStage } from './package-windows.mjs'
+import { nativeLauncherConfiguration, packagingInputs, stageConfiguration, validateArchiveEntries, validateInputs, validatePackagedStage } from './package-windows.mjs'
 
 function file(path, contents = 'fixture') {
   mkdirSync(dirname(path), { recursive: true })
@@ -18,6 +18,7 @@ test('packaging requires an internal test, builds, the pinned local runtime and 
   t.after(() => rmSync(root, { recursive: true, force: true }))
   const inputs = packagingInputs(join(root, 'lia/desktop'))
   file(inputs.builder)
+  file(inputs.icon)
   file(join(inputs.launcher, 'scripts/AIRI-MIT.txt'))
   for (const app of [inputs.launcher, inputs.stage]) {
     for (const name of ['out/main/index.js', 'out/renderer/index.html', 'package.json'])
@@ -66,6 +67,7 @@ test('default packaging requires no AIRI files and preserves the internal instal
   const inputs = packagingInputs(join(root, 'lia/desktop'))
   assert.equal(inputs.stage, join(root, 'lia/stage'))
   file(inputs.builder)
+  file(inputs.icon)
   file(join(inputs.launcher, 'scripts/AIRI-MIT.txt'))
   for (const app of [inputs.launcher, inputs.stage]) {
     for (const name of ['out/main/index.js', 'out/preload/index.cjs', 'out/renderer/index.html', 'package.json'])
@@ -79,6 +81,8 @@ test('default packaging requires no AIRI files and preserves the internal instal
   assert.doesNotThrow(() => validateInputs(inputs, { internalTest: true }))
   const config = nativeLauncherConfiguration(inputs)
   assert.equal(config.appId, 'ai.lia.launcher.preview')
+  assert.equal(config.win.icon, join(root, 'lia/assets/icons/IconAppCompact.png'))
+  assert.equal(stageConfiguration(inputs).win.icon, config.win.icon)
   assert.equal(config.extraMetadata.main, 'out/main/index.js')
   assert.deepEqual(config.extraResources[0], { from: inputs.stageOutput, to: 'stage', filter: ['**/*'] })
   assert.ok(config.extraResources.some(resource => resource.from === 'scripts/AIRI-MIT.txt' && resource.to === 'licenses/AIRI-MIT.txt'))
