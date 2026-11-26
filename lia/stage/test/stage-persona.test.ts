@@ -71,3 +71,24 @@ test('recognizes a legacy Live2D reference without loading the resource or block
   const { id } = await store.import(archive)
   assert.deepEqual(await store.read(id), { name: 'Cartão Live2D sintético', prompt: 'Personalidade independente' })
 })
+
+
+test('does not identify a missing Live2D model as a supported package, while the card text remains importable', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'lia-card-live2d-missing-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const archive = await readFile(new URL('./fixtures/live2d-reference.ccv3.zip', import.meta.url))
+  const entry = Buffer.from('models/body-model.zip')
+  let renamed = 0
+  for (let offset = archive.indexOf(entry); offset >= 0; offset = archive.indexOf(entry, offset + entry.length)) {
+    const signature = offset >= 46 && archive.readUInt32LE(offset - 46) === 0x02014B50
+    if (signature) {
+      archive.write('models/absent-vrm.zip', offset)
+      renamed++
+    }
+  }
+  assert.equal(renamed, 1)
+  await assert.rejects(readPackagedAvatar(archive), /invalid-card-avatar/)
+  const store = createStagePersona(root)
+  const { id } = await store.import(archive)
+  assert.equal((await store.read(id))?.name, 'Cartão Live2D sintético')
+})

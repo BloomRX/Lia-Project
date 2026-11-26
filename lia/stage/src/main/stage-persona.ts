@@ -10,17 +10,25 @@ import { LIA_DEFAULT_PERSONA, renderLiaPersonaDescription, renderLiaPersonaPerso
 export const maxPersonaImportBytes = 128 * 1024
 export const maxPersonaArchiveBytes = 64 * 1024 * 1024
 
-async function readPackageEntries(input: Uint8Array, entryPath: string, entryLimit: number) {
+const legacyLive2dPath = 'models/body-model.zip'
+
+async function readPackageEntries(input: Uint8Array, entryPath: string, entryLimit: number, inspectLive2d = false) {
   if (input.byteLength > maxPersonaArchiveBytes)
     throw new Error('invalid-card')
   const zip = await fromBufferPromise(Buffer.from(input.buffer, input.byteOffset, input.byteLength), {
     strictFileNames: true, validateEntrySizes: true,
   })
   const entries = new Map<string, Buffer>()
+  let live2dEntries = 0
+  let live2dSize = 0
   try {
     if (zip.entryCount > 32)
       throw new Error('invalid-card')
     for await (const entry of zip.eachEntry()) {
+      if (inspectLive2d && entry.fileName === legacyLive2dPath) {
+        live2dEntries++
+        live2dSize = entry.uncompressedSize
+      }
       if (entry.fileName !== 'manifest.json' && entry.fileName !== entryPath)
         continue
       const limit = entry.fileName === 'manifest.json' ? maxPersonaImportBytes : entryLimit
@@ -49,7 +57,7 @@ async function readPackageEntries(input: Uint8Array, entryPath: string, entryLim
   if (!record(manifest) || manifest.format !== 'airi-character-card' || manifest.version !== 1
     || !record(manifest.card) || manifest.card.path !== 'card.json' || manifest.card.spec !== 'chara_card_v3')
     throw new Error('invalid-card')
-  return { manifest, contents }
+  return { manifest, contents, live2dEntries, live2dSize }
 }
 
 async function readCardArchive(input: Uint8Array): Promise<unknown> {
@@ -63,10 +71,13 @@ export async function readPackagedAvatar(input: unknown): Promise<Uint8Array | '
   if (!(input instanceof Uint8Array))
     throw new Error('invalid-card')
   const path = 'models/body-model.vrm'
-  const { contents, manifest } = await readPackageEntries(input, path, maxPersonaArchiveBytes)
+  const { contents, manifest, live2dEntries, live2dSize } = await readPackageEntries(input, path, maxPersonaArchiveBytes, true)
   const model = record(manifest.resources) ? manifest.resources.displayModel : undefined
-  if (record(model) && model.format === 'live2d-zip' && model.path === 'models/body-model.zip')
+  if (record(model) && model.format === 'live2d-zip' && model.path === legacyLive2dPath) {
+    if (live2dEntries !== 1 || live2dSize < 1 || live2dSize > maxPersonaArchiveBytes)
+      throw new Error('invalid-card-avatar')
     return 'live2d-unavailable'
+  }
   if (!contents || !record(model) || model.format !== 'vrm' || model.path !== path)
     throw new Error('invalid-card-avatar')
   return new Uint8Array(contents)
