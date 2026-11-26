@@ -100,8 +100,17 @@ export function validatePackagedStage(stageOutput, electronDirectory) {
   }
   if (readFileSync(join(stageOutput, 'version'), 'utf8').trim() !== ELECTRON_VERSION)
     throw new Error('Versão do runtime empacotado divergente.')
-  if (existsSync(join(stageOutput, 'resources/app-update.yml')))
-    throw new Error('Stage contém um canal de atualização não autorizado. Revise a configuração antes de distribuir.')
+  assertNoUpdateFeed(stageOutput)
+}
+
+function assertNoUpdateFeed(output) {
+  if (existsSync(join(output, 'resources/app-update.yml')))
+    throw new Error('O pacote contém um canal de atualização não autorizado.')
+}
+
+export function validatePackagedLauncher(output) {
+  assertNoUpdateFeed(output)
+  assertNoUpdateFeed(join(output, 'resources/stage'))
 }
 
 export function validateArchiveEntries(entries) {
@@ -165,6 +174,7 @@ export function packageWindows({ checkOnly = false, unpacked = false, internalTe
       ...(unpacked ? ['--dir'] : []),
     ])
     const output = resolve(inputs.launcher, launcherConfiguration.directories.output, 'win-unpacked')
+    validatePackagedLauncher(output)
     validateArchive(inputs.builder, join(output, 'resources/app.asar'))
     validateArchive(inputs.builder, join(output, 'resources/stage/resources/app.asar'))
   }

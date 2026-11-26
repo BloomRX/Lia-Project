@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { test } from 'node:test'
 
-import { nativeLauncherConfiguration, packagingInputs, stageConfiguration, validateArchiveEntries, validateInputs, validatePackagedStage } from './package-windows.mjs'
+import { nativeLauncherConfiguration, packagingInputs, stageConfiguration, validateArchiveEntries, validateInputs, validatePackagedLauncher, validatePackagedStage } from './package-windows.mjs'
 
 function file(path, contents = 'fixture') {
   mkdirSync(dirname(path), { recursive: true })
@@ -87,6 +87,18 @@ test('default packaging requires no AIRI files and preserves the internal instal
   assert.deepEqual(config.extraResources[0], { from: inputs.stageOutput, to: 'stage', filter: ['**/*'] })
   assert.ok(config.extraResources.some(resource => resource.from === 'scripts/AIRI-MIT.txt' && resource.to === 'licenses/AIRI-MIT.txt'))
   assert.equal(config.publish, null)
+})
+
+test('the packaged Launcher rejects updater feeds in both desktop payloads', (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'Lia updater guard '))
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  assert.doesNotThrow(() => validatePackagedLauncher(root))
+  for (const name of ['resources/app-update.yml', 'resources/stage/resources/app-update.yml']) {
+    const feed = join(root, name)
+    file(feed, 'unexpected-feed')
+    assert.throws(() => validatePackagedLauncher(root), /canal de atualização não autorizado/)
+    rmSync(feed)
+  }
 })
 
 test('package inventory rejects legacy runtime and restricted avatar entries', () => {
