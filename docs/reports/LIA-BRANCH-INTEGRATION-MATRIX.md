@@ -181,6 +181,15 @@ registros abaixo preservam a decisão da Rodada 19.
 
 ---
 
+## Evidência Windows da Lia própria — 26/11/2026
+
+| Verificação | Resultado e alcance |
+| --- | --- |
+| Preparação, testes e ciclo do Stage em `2ec11cf2` | O CI extraiu a árvore sem `airi/`, preparou por `Lia.bat` e abriu e encerrou o Stage pelo Launcher. [CI nativo](https://github.com/BloomRX/Lia-Project/actions/runs/45764124115) |
+| Instalação limpa e atualização no CI | Em `2ec11cf2`, os relatórios de instalação 0.0.1 e de atualização para 0.0.2 confirmaram o ciclo do pacote e os avisos instalados. O upgrade preservou o perfil sintético inclusive depois de desinstalar. A conversa instalada no runner usa abertura direta do Stage. [Relatórios do CI](https://github.com/BloomRX/Lia-Project/actions/runs/45764124115#artifacts) |
+| Perfil histórico em `a767574b` | O Electron Windows local reabriu um perfil sintético no AppData histórico, encontrou o Stage, preservou a configuração e encerrou a instância. Sem uso de uma conta ou perfil pessoal. |
+| Lacunas de compatibilidade | OIDC externo, renderização Live2D e voz clonada com AllTalk e XTTS reais continuam pendentes. A distribuição pública exige confirmação dos direitos dos assets e licença do produto. |
+
 ## 1. Sumário por classificação
 
 | Classificação | Qtd. | IDs |
