@@ -138,8 +138,9 @@ O Stage pede autorização para cada envio de texto à rota. A opção
 Para usar um AllTalk V2 que você administra, abra **Voz → Voz personalizada
 em servidor local**. Inicie o serviço em `127.0.0.1:7851` e coloque na
 biblioteca dele um WAV que você tem permissão de usar. **Consultar vozes
-disponíveis** recupera os nomes dos WAVs. Escolha um nome, selecione a voz e
-use **Ouvir resposta** no Stage. A síntese envia o texto da resposta apenas
+disponíveis** recupera os nomes dos WAVs. **Ouvir prévia** toca uma frase
+fixa, com opção de interromper. Selecione a voz para usá-la em **Ouvir
+resposta** no Stage. A síntese envia o texto da resposta apenas
 ao serviço local e informa quando a voz fica indisponível. A biblioteca
 importada no Launcher mantém seus arquivos no perfil da Lia. O AllTalk lê
 sua própria biblioteca.

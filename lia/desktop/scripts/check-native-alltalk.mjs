@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { once } from 'node:events'
+import { setTimeout as delay } from 'node:timers/promises'
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
@@ -26,6 +27,7 @@ Buffer.from('524946462600000057415645666d74201000000001000100803e0000007d0000020
 wave.writeUInt32LE(wave.length - 8, 4)
 wave.writeUInt32LE(wave.length - 44, 40)
 const requests = []
+let holdPreview
 
 const server = createServer(async (request, response) => {
   const path = request.url
@@ -43,6 +45,13 @@ const server = createServer(async (request, response) => {
     for await (const chunk of request)
       chunks.push(chunk)
     requests.push({ path, method: request.method, form: Object.fromEntries(new URLSearchParams(Buffer.concat(chunks).toString('utf8'))) })
+    if (holdPreview) {
+      const pending = holdPreview
+      holdPreview = undefined
+      response.once('close', () => pending.closed.resolve(!response.writableEnded))
+      pending.started.resolve()
+      return
+    }
     response.writeHead(200, { 'Content-Type': 'application/json' })
     response.end(JSON.stringify({ status: 'generate-success', output_file_url: '/audio/fixture.wav' }))
   }
@@ -99,6 +108,25 @@ try {
   await launcher.getByLabel('Nome do arquivo WAV', { exact: true }).fill(voiceId)
   await launcher.getByRole('button', { name: 'Selecionar voz personalizada' }).click()
   await launcher.getByText('Voz personalizada selecionada.', { exact: true }).waitFor()
+  if (!live) {
+    const pending = { started: Promise.withResolvers(), closed: Promise.withResolvers() }
+    holdPreview = pending
+    const deadline = new AbortController()
+    const timeout = delay(10_000, false, { signal: deadline.signal }).catch(() => false)
+    try {
+      await launcher.getByRole('button', { name: 'Ouvir prévia', exact: true }).click()
+      assert.equal(await Promise.race([pending.started.promise.then(() => true), timeout]), true)
+      await launcher.getByRole('button', { name: 'Parar prévia', exact: true }).click()
+      assert.equal(await Promise.race([pending.closed.promise, timeout]), true)
+      await launcher.getByText('Prévia interrompida.', { exact: true }).waitFor()
+      assert.equal(await launcher.locator('#custom-preview-audio').getAttribute('src'), null)
+      assert.deepEqual(requests.map(request => request.path), ['/api/tts-generate'])
+      requests.length = 0
+    }
+    finally {
+      deadline.abort()
+    }
+  }
   await launcher.getByRole('button', { name: 'Ouvir prévia', exact: true }).click()
   await launcher.waitForFunction(() => document.querySelector('#custom-preview-audio').currentTime > 0, undefined, { timeout: live ? 65_000 : 10_000 })
   await launcher.getByRole('button', { name: 'Parar prévia', exact: true }).click()
@@ -145,6 +173,7 @@ try {
     service: live ? 'operator-managed local AllTalk V2 HTTP' : 'synthetic local AllTalk V2 HTTP',
     mutedPlayback: true,
     mutedLauncherPreview: true,
+    pendingLauncherPreviewCancelled: live ? null : true,
     offlineWithoutFallback: live ? null : true,
   }
   await writeFile(join(root, 'report.json'), JSON.stringify(report, null, 2))
