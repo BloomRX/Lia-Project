@@ -23,10 +23,11 @@ import { stageChatCancel, stageChatSend, stageChatSpeak, stageMemoryGet, stageMe
 import { stageConversationChange, stageHistoryChange, stageHistoryGet, stageHistoryImport, stageHistoryRemoveMessage, stageLanguageGet, stagePresenceDisplays } from '../shared/chat-ipc.ts'
 import { stagePersonaChange, stagePersonaGet } from '../shared/chat-ipc.ts'
 import { stagePresenceReadPackagedAvatar } from '../shared/chat-ipc.ts'
-import { stageHubCatalogGet, stageMemoryExport } from '../shared/chat-ipc.ts'
+import { stageHubCatalogGet, stageImageAudit, stageImageCopy, stageImageCopyCancel, stageImageInspect, stageMemoryExport } from '../shared/chat-ipc.ts'
 import { stageChatStopSpeech, stageVoiceAutoPlay } from '../shared/chat-ipc.ts'
 import { stageLocale, stageText } from '../shared/locale.ts'
 import { createStageChat } from './stage-chat.ts'
+import { createStageImageCopy } from './stage-image-copy.ts'
 import { createStageHistory } from './stage-history.ts'
 import { createStageHost } from './stage-host.ts'
 import { createStagePersona, defaultTraits, readPackagedAvatar } from './stage-persona.ts'
@@ -125,6 +126,8 @@ async function main(): Promise<void> {
   })
   let runtimeService: LiaRuntimeService | undefined
   let active: AbortController | undefined
+  let imageCopy: AbortController | undefined
+  const imageFiles = createStageImageCopy()
   let recording: AbortController | undefined
   let updatingHistory = false
   let lastAnswer: string | undefined
@@ -138,6 +141,7 @@ async function main(): Promise<void> {
     microphoneUntil = 0
     cancel()
     recording?.abort()
+    imageCopy?.abort()
     void voice.cancel().catch(() => {})
   }
   const authorized = (event: Electron.IpcMainInvokeEvent) =>
@@ -165,6 +169,35 @@ async function main(): Promise<void> {
     finally {
       readingPackagedAvatar = false
     }
+  })
+
+  ipcMain.handle(stageImageInspect, (event, bytes: unknown) => authorized(event) ? imageFiles.inspect(bytes) : undefined)
+  ipcMain.handle(stageImageCopyCancel, event => {
+    if (authorized(event))
+      imageCopy?.abort()
+  })
+  ipcMain.handle(stageImageAudit, event => authorized(event) ? imageFiles.audit() : [])
+  ipcMain.handle(stageImageCopy, async (event, bytes: unknown) => {
+    const owner = window
+    if (!owner || !authorized(event) || imageCopy || active)
+      return { ok: false, code: 'unavailable' }
+    const controller = new AbortController()
+    imageCopy = controller
+    try {
+      return await imageFiles.save(bytes, controller.signal, async (image) => {
+        const locale = await readLocale()
+        if (controller.signal.aborted || !authorized(event))
+          return undefined
+        const extension = image.format === 'jpeg' ? 'jpg' : 'png'
+        const result = await dialog.showSaveDialog(owner, {
+          title: stageText(locale, 'Salvar cópia da imagem'),
+          defaultPath: `lia-imagem.${extension}`,
+          filters: [{ name: image.format.toUpperCase(), extensions: [extension] }],
+        })
+        return result.canceled || !authorized(event) ? undefined : result.filePath
+      })
+    }
+    finally { imageCopy = undefined }
   })
 
   ipcMain.handle(stageMemoryGet, event => authorized(event) ? memory.get() : { ok: false, code: 'invalid' })
@@ -374,7 +407,7 @@ async function main(): Promise<void> {
   ipcMain.handle(stageChatSend, async (event, input: unknown, image?: unknown, allowClock?: unknown) => {
     if (!authorized(event))
       return { ok: false, code: 'invalid' }
-    if (active || updatingHistory)
+    if (active || imageCopy || updatingHistory)
       return { ok: false, code: 'busy' }
     const controller = new AbortController()
     active = controller

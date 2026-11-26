@@ -40,7 +40,14 @@
         <div>
           <button id="image-pick" type="button" data-translate>Anexar imagem</button>
           <input id="image-file" type="file" accept="image/png,image/jpeg" hidden>
+          <button id="image-copy" type="button" hidden data-translate>Salvar cópia da imagem</button>
+          <button id="image-copy-cancel" type="button" hidden data-translate>Cancelar cópia</button>
           <button id="image-remove" type="button" hidden data-translate>Remover imagem</button>
+          <p id="image-info"></p>
+          <details>
+            <summary data-translate>Registro de cópias desta sessão</summary>
+            <ul id="image-copy-audit"></ul>
+          </details>
           <p id="image-status" role="status"></p>
         </div>
         <div>

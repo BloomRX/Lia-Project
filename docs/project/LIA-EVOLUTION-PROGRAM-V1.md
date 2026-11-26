@@ -9,8 +9,8 @@ Lia-Project. O plano de produto e a arquitetura cognitiva definem os limites.
 | 03 Agent Hub Integration | PARTIAL | Catálogo real validado. Delegação depende de um executor externo. |
 | 04 Decision & Autonomy | VALIDATED | Responder, sugerir plano de relógio e executar mediante confirmação no Stage. |
 | 05 Personality & Emotion | PARTIAL | Estado observado em chat e áudio. Avatar integrado na Meta 07. |
-| 06 Perception & Action | IN_PROGRESS | Selecionar um fluxo autorizado e verificável. |
-| 07 Avatar & Presence | NOT_STARTED | Exercitar presença e reação com o VRM existente. |
+| 06 Perception & Action | VALIDATED | Inspeção e cópia supervisionada de anexo. Demais fontes dependem de autorização específica. |
+| 07 Avatar & Presence | IN_PROGRESS | Exercitar presença e reação com o VRM existente. |
 | 08 Design Foundation | NOT_STARTED | Identificar os materiais oficiais aprovados. |
 
 ## Checkpoint
@@ -99,3 +99,22 @@ estados são apresentação simulada e o avatar ainda não os consome.
 
 Próxima ação concreta. Integrar uma ação verificável a uma entrada de
 percepção já autorizada, com resultado e cancelamento no Main.
+
+## Meta 06 com inspeção e cópia supervisionada
+
+A Meta 05 está publicada em `912709bc`. O Stage inspeciona formato e
+dimensões dos cabeçalhos PNG/JPEG selecionados. A cópia usa diálogo do Main
+para obter o destino, verifica o conteúdo preparado, publica sem sobrescrever
+e aceita cancelamento antes da publicação. O registro local da sessão conserva
+32 resultados com horário, estado e metadados da imagem protegidos do modelo.
+O registro não guarda nome, caminho, bytes ou hash.
+
+Passaram 3 testes focados, build, typecheck, lint e o gate de visão no Electron
+Windows. O relatório `lia-native-vision-siiXrc` confirma cancelamento,
+preservação do destino, igualdade dos bytes e auditoria com diálogo injetado.
+O caminho de visão e texto passou com HTTPS local e credencial sintética
+protegida pelo cofre. A inspeção valida metadados, sem demonstrar interpretação
+semântica. A revisão visual do anexo passou.
+
+Próxima ação concreta. Projetar a expressão simulada existente no VRM por
+eventos tipados e verificar a janela de presença em dois monitores.

@@ -7,7 +7,7 @@ import { stageChatCancel, stageChatSend, stageChatSpeak, stageMemoryGet, stageMe
 import { stageConversationChange, stageHistoryChange, stageHistoryGet, stageHistoryImport, stageHistoryRemoveMessage, stageLanguageGet, stagePresenceDisplays } from '../shared/chat-ipc.ts'
 import { stagePersonaChange, stagePersonaGet } from '../shared/chat-ipc.ts'
 import { stagePresenceReadPackagedAvatar, stagePresenceVisibility } from '../shared/chat-ipc.ts'
-import { stageHubCatalogGet, stageMemoryExport } from '../shared/chat-ipc.ts'
+import { stageHubCatalogGet, stageImageAudit, stageImageCopy, stageImageCopyCancel, stageImageInspect, stageMemoryExport } from '../shared/chat-ipc.ts'
 import { stageChatStopSpeech, stageVoiceAutoPlay } from '../shared/chat-ipc.ts'
 
 contextBridge.exposeInMainWorld('liaStageLanguage', {
@@ -34,6 +34,13 @@ contextBridge.exposeInMainWorld('liaStagePresence', {
     return () => ipcRenderer.removeListener(stagePresenceVisibility, receive)
   },
   reportRender: (rendered: boolean) => ipcRenderer.send(stagePresenceRendered, rendered),
+})
+
+contextBridge.exposeInMainWorld('liaStageImage', {
+  inspect: (bytes: Uint8Array) => ipcRenderer.invoke(stageImageInspect, bytes),
+  copy: (bytes: Uint8Array) => ipcRenderer.invoke(stageImageCopy, bytes),
+  cancel: () => ipcRenderer.invoke(stageImageCopyCancel),
+  audit: () => ipcRenderer.invoke(stageImageAudit),
 })
 
 contextBridge.exposeInMainWorld('liaStageMemory', {

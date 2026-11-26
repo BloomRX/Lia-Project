@@ -46,11 +46,17 @@ const deleteConversation = document.querySelector('#conversation-delete')
 const record = document.querySelector('#record')
 const recordCancel = document.querySelector('#record-cancel')
 const imagePick = document.querySelector('#image-pick')
+const imageCopy = document.querySelector('#image-copy')
+const imageCopyCancel = document.querySelector('#image-copy-cancel')
+const imageCopyAudit = document.querySelector('#image-copy-audit')
+const imageInfo = document.querySelector('#image-info')
 const imageRemove = document.querySelector('#image-remove')
 const imageFile = document.querySelector('#image-file')
 const imageStatus = document.querySelector('#image-status')
 let audioUrl
 let answerVersion = 0
+let copyingImage = false
+let imageCopyCancelled = false
 let attachment
 let cancelRequested = false
 let activeConversation
@@ -92,12 +98,14 @@ function clearAttachment() {
   attachment = undefined
   imageFile.value = ''
   imageRemove.hidden = true
+  imageCopy.hidden = true
+  imageInfo.textContent = ''
   imageStatus.textContent = ''
 }
 
 imagePick.addEventListener('click', () => imageFile.click())
 imageRemove.addEventListener('click', clearAttachment)
-imageFile.addEventListener('change', () => {
+imageFile.addEventListener('change', async () => {
   const image = imageFile.files[0]
   if (!image)
     return
@@ -109,6 +117,56 @@ imageFile.addEventListener('change', () => {
   attachment = image
   imageRemove.hidden = false
   imageStatus.textContent = t('Imagem anexada. Será enviada com a mensagem.')
+  const metadata = await image.arrayBuffer().then(bytes => window.liaStageImage.inspect(new Uint8Array(bytes))).catch(() => undefined)
+  if (attachment !== image || !metadata)
+    return
+  imageInfo.textContent = `${metadata.format.toUpperCase()} · ${metadata.width} × ${metadata.height} px`
+  imageCopy.hidden = false
+})
+
+const copyMessages = {
+  saved: 'Cópia verificada e salva.',
+  cancelled: 'Cópia cancelada.',
+  exists: 'O arquivo já existe. Escolha outro nome.',
+  invalid: 'Não foi possível salvar a cópia.',
+  unavailable: 'Não foi possível salvar a cópia.',
+}
+imageCopy.addEventListener('click', async () => {
+  const image = attachment
+  if (!image || copyingImage || send.disabled)
+    return
+  copyingImage = true
+  imageCopyCancelled = false
+  imageCopy.disabled = true
+  imagePick.disabled = true
+  imageRemove.disabled = true
+  imageCopyCancel.hidden = false
+  try {
+    const bytes = new Uint8Array(await image.arrayBuffer())
+    const result = imageCopyCancelled ? { ok: false, code: 'cancelled' } : await window.liaStageImage.copy(bytes)
+    imageStatus.textContent = t(copyMessages[result.ok ? 'saved' : result.code] ?? copyMessages.unavailable)
+    const audit = await window.liaStageImage.audit()
+    imageCopyAudit.replaceChildren(...audit.map(({ at, outcome }) => {
+      const row = document.createElement('li')
+      row.textContent = `${new Date(at).toLocaleTimeString()} · ${t(copyMessages[outcome] ?? copyMessages.unavailable)}`
+      return row
+    }))
+  }
+  catch {
+    imageStatus.textContent = t(copyMessages.unavailable)
+  }
+  finally {
+    copyingImage = false
+    imageCopy.disabled = false
+    imagePick.disabled = false
+    imageRemove.disabled = false
+    imageCopyCancel.hidden = true
+    imageCopy.focus()
+  }
+})
+imageCopyCancel.addEventListener('click', () => {
+  imageCopyCancelled = true
+  void window.liaStageImage.cancel().catch(() => {})
 })
 
 function clearAudio() {
@@ -450,7 +508,7 @@ finally {
 form.addEventListener('submit', async (event) => {
   event.preventDefault()
   const text = message.value.trim()
-  if (send.disabled || !text)
+  if (send.disabled || copyingImage || !text)
     return
 
   send.disabled = true

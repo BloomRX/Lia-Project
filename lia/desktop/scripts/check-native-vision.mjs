@@ -101,6 +101,31 @@ try {
     page.getByRole('button', { name: 'Anexar imagem', exact: true }).click(),
   ])
   await chooser.setFiles({ name: 'fixture.png', mimeType: 'image/png', buffer: png })
+  const copy = page.getByRole('button', { name: 'Salvar cópia da imagem' })
+  await page.getByText('PNG · 1 × 1 px', { exact: true }).waitFor()
+  const destinationFile = join(root, 'copia.png')
+  const selectCopy = canceled => app.evaluate(({ dialog }, args) => {
+    dialog.showSaveDialog = async (owner, options) => {
+      if (!owner || options.defaultPath !== 'lia-imagem.png')
+        throw new Error('Unexpected image copy dialog')
+      return { canceled: args.canceled, filePath: args.path }
+    }
+  }, { canceled, path: destinationFile })
+  await selectCopy(true)
+  await copy.click()
+  await page.getByText('Cópia cancelada.', { exact: true }).waitFor()
+  await assert.rejects(readFile(destinationFile), { code: 'ENOENT' })
+  await selectCopy(false)
+  await copy.click()
+  await page.getByText('Cópia verificada e salva.', { exact: true }).waitFor()
+  assert.deepEqual(await readFile(destinationFile), png)
+  await copy.click()
+  await page.getByText('O arquivo já existe. Escolha outro nome.', { exact: true }).waitFor()
+  assert.deepEqual(await readFile(destinationFile), png)
+  assert.equal(seen.length, 0)
+  await page.getByText('Registro de cópias desta sessão', { exact: true }).click()
+  assert.equal(await page.locator('#image-copy-audit li').count(), 3)
+  await page.screenshot({ path: join(root, 'image-copy.png'), fullPage: true })
   const field = page.getByLabel('Mensagem', { exact: true })
   const submit = page.getByRole('button', { name: 'Enviar', exact: true })
   await field.fill('Imagem de teste')
@@ -115,7 +140,7 @@ try {
   ])
   assert.ok(!(await page.locator('body').textContent()).includes(token))
   await page.screenshot({ path: join(root, 'stage.png'), fullPage: true })
-  const report = { provider: 'synthetic HTTPS loopback', syntheticCredential: true, encryptedVault: true, visionThenText: true }
+  const report = { provider: 'synthetic HTTPS loopback', syntheticCredential: true, encryptedVault: true, visionThenText: true, localImageCopy: { dialogResponse: 'injected', cancellationPreservedDestination: true, verifiedBytes: true, refusedOverwrite: true, sessionAudit: true } }
   await writeFile(join(root, 'report.json'), JSON.stringify(report, null, 2))
   console.log(JSON.stringify(report))
 }
