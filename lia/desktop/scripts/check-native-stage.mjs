@@ -162,7 +162,7 @@ async function run() {
   const restore = process.argv.includes('--restore-upgrade-profile')
   assert.ok(!upgradeArgument || (upgradeProfile && isAbsolute(upgradeProfile)), 'Informe um caminho absoluto para o perfil de atualização.')
   assert.ok(!restore || upgradeProfile, 'Informe o perfil criado no ensaio da versão anterior.')
-  const root = upgradeProfile ?? await mkdtemp(join(tmpdir(), 'lia-native-stage-'))
+  const root = upgradeProfile ?? await mkdtemp(join(process.env.RUNNER_TEMP ?? tmpdir(), 'lia-native-stage-'))
   const profile = join(root, 'appdata')
   if (upgradeProfile && !restore)
     await mkdir(root)
@@ -255,9 +255,13 @@ async function run() {
   })
   let target
   let nativeWindows
+  let page
+  let phase = 'launcher-window'
   try {
-    const page = await app.firstWindow()
+    page = await app.firstWindow()
+    phase = 'launcher-start-action'
     await page.getByRole('button', { name: 'Conversar com Lia', exact: true }).click({ timeout: 10_000 })
+    phase = 'stage-ready'
     target = await waitForRecord(registry)
     const state = await invokeRuntimeControl(target, 'runtime.status')
     assert.equal(state.windows, 1)
@@ -269,10 +273,23 @@ async function run() {
     }
     if (!directStageConversation)
       await conversation?.verify(target.pid)
+    phase = 'launcher-stop-action'
     await page.getByRole('button', { name: 'Encerrar conversa', exact: true }).click({ timeout: 10_000 })
     await page.getByText('Conversa encerrada.', { exact: true }).waitFor({ timeout: 20_000 })
     assert.deepEqual(await registry.read(), { ok: false, problem: 'missing' })
     await waitForProcessExit(target.pid)
+  }
+  catch (error) {
+    const controls = page && !page.isClosed() ? await page.evaluate(() => {
+      const buttons = [...document.querySelectorAll('button')]
+      const state = label => {
+        const button = buttons.find(element => element.textContent.trim() === label)
+        return button ? { disabled: button.disabled, busy: button.getAttribute('aria-busy') === 'true' } : null
+      }
+      return { bridgeLoaded: Boolean(window.liaApi), start: state('Conversar com Lia'), stop: state('Encerrar conversa') }
+    }).catch(() => null) : null
+    await writeFile(join(root, 'lifecycle-failure.json'), JSON.stringify({ phase, controls }, null, 2)).catch(() => {})
+    throw error
   }
   finally {
     try {

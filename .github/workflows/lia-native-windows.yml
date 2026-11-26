@@ -145,6 +145,7 @@ jobs:
           name: lia-native-stage
           path: |
             ${{ runner.temp }}/lia-native-stage-*/report.json
+            ${{ runner.temp }}/lia-native-stage-*/lifecycle-failure.json
             ${{ runner.temp }}/lia-native-presence-*/report.json
             ${{ runner.temp }}/lia-native-presence-*/overlay.png
             ${{ runner.temp }}/lia-native-presence-*/overlay-animated.png
