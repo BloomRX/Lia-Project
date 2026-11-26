@@ -192,7 +192,7 @@ async function run() {
       }
     })
     await overlay.waitForFunction(() => window.fixtureRenderCount > 0)
-    const stageFullscreen = await app.evaluate(async ({ BrowserWindow }) => {
+    const fullscreenResult = await app.evaluate(async ({ BrowserWindow, app }, measure) => {
       const windows = BrowserWindow.getAllWindows()
       const overlay = windows.find(window => window.webContents.getURL().endsWith('/presence.html'))
       const stage = windows.find(window => window !== overlay)
@@ -202,7 +202,26 @@ async function run() {
           await new Promise(resolve => setTimeout(resolve, 50))
         return condition()
       }
+      async function sampleRenderer() {
+        const pid = overlay.webContents.getOSProcessId()
+        const metrics = () => app.getAppMetrics().find(process => process.pid === pid)
+        const samples = []
+        for (let round = 0; round < 3; round++) {
+          const started = performance.now()
+          const before = metrics()?.cpu.cumulativeCPUUsage
+          await new Promise(resolve => setTimeout(resolve, 2_000))
+          const after = metrics()
+          const elapsedSeconds = (performance.now() - started) / 1_000
+          samples.push({
+            elapsedSeconds,
+            cpuSeconds: before === undefined || after?.cpu.cumulativeCPUUsage === undefined ? null : after.cpu.cumulativeCPUUsage - before,
+            workingSetKiB: after?.memory.workingSetSize ?? null,
+          })
+        }
+        return samples
+      }
       try {
+        const visibleSamples = measure ? await sampleRenderer() : undefined
         stage.setFullScreen(true)
         const hidden = await waitFor(() => stage.isFullScreen() && overlay.getOpacity() === 0)
         const renderCount = () => overlay.webContents.executeJavaScript('window.fixtureRenderCount')
@@ -210,16 +229,21 @@ async function run() {
         const before = await renderCount()
         await new Promise(resolve => setTimeout(resolve, 350))
         const paused = await renderCount() === before
+        const hiddenSamples = measure ? await sampleRenderer() : undefined
         stage.setFullScreen(false)
         const visibleAgain = await waitFor(() => !stage.isFullScreen() && overlay.getOpacity() === 1)
         await new Promise(resolve => setTimeout(resolve, 300))
-        return { hidden, visibleAgain, paused, resumed: await renderCount() > before }
+        return {
+          status: { hidden, visibleAgain, paused, resumed: await renderCount() > before },
+          rendererMetrics: measure ? { visible: visibleSamples, hidden: hiddenSamples } : undefined,
+        }
       }
       finally {
         if (stage.isFullScreen())
           stage.setFullScreen(false)
       }
-    })
+    }, process.argv.includes('--measure-renderer'))
+    const stageFullscreen = fullscreenResult.status
     assert.deepEqual(stageFullscreen, { hidden: true, visibleAgain: true, paused: true, resumed: true })
     const displays = await chat.evaluate(() => window.liaStagePresence.displays())
     const secondDisplay = displays.displays.find(({ workArea }) =>
@@ -265,7 +289,7 @@ async function run() {
     const [reopened] = await Promise.all([app.waitForEvent('window', { timeout: 10_000 }), openButton.click()])
     await chat.getByText('Avatar aberto no desktop.', { exact: true }).waitFor()
     await Promise.all([reopened.waitForEvent('close', { timeout: 10_000 }), chat.close()])
-    const report = { syntheticVrm: true, packagedAvatarOpened: true, live2dLimitationVisible: true, personaUnchanged: true, animatedFramesDiffer: true, invalidOverlayRejected: true, externalTextureRejected: true, moved, pinned: true, home: true, syntheticHover: hover, stageFullscreen, fullscreenPreferencePersisted: true, connectedDisplays: displays.displays.length, secondDisplayPlacement: secondDisplay ? 'PASS' : 'NOT RUN', syntheticDisplayRecovery: displayRecovery, hidden: true, closedWithChat: true }
+    const report = { syntheticVrm: true, packagedAvatarOpened: true, live2dLimitationVisible: true, personaUnchanged: true, animatedFramesDiffer: true, invalidOverlayRejected: true, externalTextureRejected: true, moved, pinned: true, home: true, syntheticHover: hover, stageFullscreen, rendererMetrics: fullscreenResult.rendererMetrics, fullscreenPreferencePersisted: true, connectedDisplays: displays.displays.length, secondDisplayPlacement: secondDisplay ? 'PASS' : 'NOT RUN', syntheticDisplayRecovery: displayRecovery, hidden: true, closedWithChat: true }
     await writeFile(join(root, 'report.json'), JSON.stringify(report, null, 2))
     console.log(JSON.stringify(report))
   }

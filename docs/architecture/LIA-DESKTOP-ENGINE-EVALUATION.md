@@ -242,3 +242,17 @@ GPU/FPS/frame time/energia/jogos, execução prolongada e protótipos comparáve
 das outras engines continuam NÃO EXECUTADOS. Próximo experimento: controles
 C0–C4 com avatar, janelas e serviços fixados, distinguindo o custo dos serviços
 do custo de render, antes de propor migração.
+
+
+## Presença visível e oculta no Electron Windows
+
+No checkout sem AIRI, prepare o Stage com `Lia.bat -PrepareOnly` e execute
+`node --experimental-strip-types lia/desktop/scripts/check-native-presence.mjs --measure-renderer`.
+O relatório registra três amostras de cerca de dois segundos por estado,
+medidas no processo Renderer da mesma janela com VRM sintético animado.
+O ensaio em `9430d505` mediu 0,441 s de CPU durante 6,007 s visível e
+0,001 s de CPU durante 6,007 s oculto pelo chat em tela cheia. O conjunto
+residente ficou entre 104 e 106 MiB. As chamadas WebGL pararam e retomaram
+conforme a visibilidade. Esta medição cobre apenas o Renderer da presença,
+em uma execução curta. O processo de GPU, o consumo total do aplicativo,
+o impacto em jogos e as outras engines ficam fora do ensaio.
