@@ -162,12 +162,18 @@ async function run() {
   const restore = process.argv.includes('--restore-upgrade-profile')
   assert.ok(!upgradeArgument || (upgradeProfile && isAbsolute(upgradeProfile)), 'Informe um caminho absoluto para o perfil de atualização.')
   assert.ok(!restore || upgradeProfile, 'Informe o perfil criado no ensaio da versão anterior.')
-  const root = upgradeProfile ?? await mkdtemp(join(process.env.RUNNER_TEMP ?? tmpdir(), 'lia-native-stage-'))
-  const profile = join(root, 'appdata')
+  const useLegacyProfile = process.argv.includes('--legacy-user-data')
+  assert.ok(!useLegacyProfile || (!upgradeProfile && !process.argv.some(arg => arg.startsWith('--installed-executable=') || arg === '--packaged')),
+    'O ensaio do perfil legado usa o Launcher de desenvolvimento.')
+  const evidence = upgradeProfile ?? await mkdtemp(join(process.env.RUNNER_TEMP ?? tmpdir(), 'lia-native-stage-'))
+  const profile = join(evidence, 'appdata')
+  const root = useLegacyProfile ? join(profile, '@proj-airi', 'stage-tamagotchi') : evidence
   if (upgradeProfile && !restore)
     await mkdir(root)
   if (!restore)
     await mkdir(profile)
+  if (useLegacyProfile)
+    await mkdir(root, { recursive: true })
   const providerId = 'local-chat'
   const portArgument = process.argv.find(argument => argument.startsWith('--local-port='))
   const modelArgument = process.argv.find(argument => argument.startsWith('--local-model='))
@@ -248,6 +254,10 @@ async function run() {
   if (packaged)
     assert.deepEqual(await listPackagedProcesses(packageDirectory), [], 'Feche a instância já aberta deste pacote antes do gate.')
   const env = { ...process.env, APPDATA: profile, LIA_USER_DATA: root }
+  if (useLegacyProfile) {
+    delete env.LIA_USER_DATA
+    delete env.APP_USER_DATA_PATH
+  }
   const app = await _electron.launch({
     executablePath,
     args: packaged ? [] : [join(liaRoot, 'desktop', 'out', 'main', 'index.js')],
@@ -288,7 +298,7 @@ async function run() {
       }
       return { bridgeLoaded: Boolean(window.liaApi), start: state('Conversar com Lia'), stop: state('Encerrar conversa') }
     }).catch(() => null) : null
-    await writeFile(join(root, 'lifecycle-failure.json'), JSON.stringify({ phase, controls }, null, 2)).catch(() => {})
+    await writeFile(join(evidence, 'lifecycle-failure.json'), JSON.stringify({ phase, controls }, null, 2)).catch(() => {})
     throw error
   }
   finally {
@@ -310,9 +320,9 @@ async function run() {
   if (packaged)
     await checkPackagedProcessesExited(packageDirectory)
   const conversationSource = installedConversation ? (localPort ? 'operator-loopback' : 'synthetic-loopback') : null
-  const lifecycle = { conversationSource, conversationThroughLauncher: installedConversation && !directStageConversation, packageProcessesExited: packaged ? true : null, installedConversation, airiDirectoryAbsent, packaged, installed: Boolean(installedExecutable), nativeWindows, registryRemoved: true, stageMainExited: true }
+  const lifecycle = { legacyProfileReopened: useLegacyProfile, conversationSource, conversationThroughLauncher: installedConversation && !directStageConversation, packageProcessesExited: packaged ? true : null, installedConversation, airiDirectoryAbsent, packaged, installed: Boolean(installedExecutable), nativeWindows, registryRemoved: true, stageMainExited: true }
   if (!upgradeProfile)
-    await writeFile(join(root, 'report.json'), JSON.stringify(lifecycle, null, 2), { flag: 'wx' })
+    await writeFile(join(evidence, 'report.json'), JSON.stringify(lifecycle, null, 2), { flag: 'wx' })
   console.log(JSON.stringify(lifecycle))
   if (upgradeProfile) {
     const endpoint = new URL('https://speech-upgrade.example.invalid/v1')

@@ -17,7 +17,9 @@ serviço HTTP local sintético e verifica histórico, memória, personalidade
 e autorização de ferramenta. O terceiro exercita o avatar e a janela de
 presença. Os scripts registram resultados em diretórios próprios de
 evidências. No histórico e na presença, esses diretórios contêm relatórios
-e capturas.
+e capturas. Com `--legacy-user-data`, o primeiro gate usa um perfil
+sintético de formato histórico em uma pasta AppData isolada. Ele confirma
+que Launcher e Stage encontram o perfil sem precisar da árvore AIRI.
 
 Para validar o instalador privado, execute os comandos abaixo com a prévia
 desinstalada no usuário de teste. Substitua o caminho pela versão recém-gerada.

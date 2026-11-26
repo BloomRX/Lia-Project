@@ -86,6 +86,11 @@ jobs:
         run: |
           Set-Location (Join-Path $env:LIA_STANDALONE 'lia/desktop')
           node --experimental-strip-types scripts/check-native-stage.mjs --require-independent
+      - name: Validar abertura a partir de um perfil histórico
+        if: ${{ !cancelled() && steps.build-launcher.outcome == 'success' }}
+        run: |
+          Set-Location (Join-Path $env:LIA_STANDALONE 'lia/desktop')
+          node --experimental-strip-types scripts/check-native-stage.mjs --require-independent --legacy-user-data
       - name: Validar presença do avatar
         if: ${{ !cancelled() && steps.build-launcher.outcome == 'success' }}
         run: |
