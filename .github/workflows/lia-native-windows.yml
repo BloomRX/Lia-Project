@@ -110,6 +110,7 @@ jobs:
           node --experimental-strip-types scripts/check-native-stt-consent.mjs $cert $key
           node --experimental-strip-types scripts/check-native-stt-consent.mjs --local
           node --experimental-strip-types scripts/check-native-speech.mjs $cert $key
+          node scripts/check-native-alltalk.mjs
       - name: Testar sessão OIDC nativa com emissor local
         if: ${{ !cancelled() && steps.build-launcher.outcome == 'success' }}
         run: |
@@ -148,6 +149,8 @@ jobs:
             ${{ runner.temp }}/lia-native-vision-*/stage.png
             ${{ runner.temp }}/lia-native-stt-*/report.json
             ${{ runner.temp }}/lia-native-speech-*/report.json
+            ${{ runner.temp }}/lia-native-alltalk-*/report.json
+            ${{ runner.temp }}/lia-native-alltalk-*/selection.png
             ${{ runner.temp }}/lia-native-oidc-*/report.json
             ${{ runner.temp }}/lia-native-oidc-*/account-panel.png
             ${{ runner.temp }}/lia-native-speech-*/speech-settings.png

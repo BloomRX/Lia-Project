@@ -79,3 +79,10 @@ por HTTP. O gate usa a interface de conta em Configuração e verifica PKCE,
 perfil público pelo IPC, persistência cifrada,
 restauração e renovação após reinício, revogação e remoção da sessão. A
 configuração de produção e o navegador do sistema ficam fora deste ensaio.
+
+
+Com a porta TCP 7851 livre, `node lia/desktop/scripts/check-native-alltalk.mjs`
+valida a seleção de um WAV no Launcher e sua utilização no Stage. O gate
+usa um serviço sintético em loopback, verifica a reprodução silenciada e
+derruba o serviço para verificar o erro e a ausência de troca de voz. AllTalk,
+XTTS e áudio físico ficam fora deste ensaio.
