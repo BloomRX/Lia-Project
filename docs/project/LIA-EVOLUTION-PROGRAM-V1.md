@@ -8,10 +8,10 @@ Lia-Project. O plano de produto e a arquitetura cognitiva definem os limites.
 | 02 Memory System | VALIDATED | Incremento local validado. Busca semântica depende de embeddings validados. |
 | 03 Agent Hub Integration | PARTIAL | Catálogo real validado. Delegação depende de um executor externo. |
 | 04 Decision & Autonomy | VALIDATED | Responder, sugerir plano de relógio e executar mediante confirmação no Stage. |
-| 05 Personality & Emotion | PARTIAL | Estado observado em chat e áudio. Avatar integrado na Meta 07. |
+| 05 Personality & Emotion | VALIDATED | Estado observado em chat, áudio e expressão VRM. |
 | 06 Perception & Action | VALIDATED | Inspeção e cópia supervisionada de anexo. Demais fontes dependem de autorização específica. |
-| 07 Avatar & Presence | IN_PROGRESS | Exercitar presença e reação com o VRM existente. |
-| 08 Design Foundation | NOT_STARTED | Identificar os materiais oficiais aprovados. |
+| 07 Avatar & Presence | VALIDATED | Reação no VRM, dois monitores e suspensão verificados. |
+| 08 Design Foundation | IN_PROGRESS | Identificar os materiais oficiais aprovados. |
 
 ## Checkpoint
 
@@ -118,3 +118,24 @@ semântica. A revisão visual do anexo passou.
 
 Próxima ação concreta. Projetar a expressão simulada existente no VRM por
 eventos tipados e verificar a janela de presença em dois monitores.
+
+## Meta 07 com reação VRM ligada à conversa
+
+A Meta 06 está publicada em `7f264bf9`. A fase expressiva chega ao overlay
+por IPC restrito à janela autorizada e a quatro fases sem texto. O VRM usa
+os presets relaxado, feliz e abertura de boca quando existem, com pesos
+limitados. A abertura de boca indica reprodução, sem sincronização fonética.
+Modelos sem presets continuam renderizando. Os eventos não reativam a
+renderização oculta e o quadro neutro é restaurado.
+
+Build, typecheck e lint passaram. O Electron Windows
+`check-native-presence.mjs --measure-renderer` confirmou mudança de pixels
+com resposta HTTP local sintética, restauração, segundo monitor conectado,
+ocultação e suspensão. Revisão visual do VRM sintético aprovada
+(`lia-native-presence-LGV7yQ`). Três amostras visíveis de cerca de 2 s
+registraram 0,043 a 0,047 s de CPU no renderer e 105 a 107 MiB de
+working set. Oculto, 0 a 0,001 s e cerca de 107 MiB. Esses valores
+descrevem o fixture e o processo medido. Jogos e GPU não foram medidos.
+
+Próxima ação concreta. Aplicar os tokens publicados da Foundation V1.1
+ao Launcher e ao Stage. Os candidatos a layouts continuam em revisão.

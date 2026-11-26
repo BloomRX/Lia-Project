@@ -4,6 +4,12 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 
 import { validateLocalAvatar } from './avatar-file.js'
 
+const phaseExpressions = new Map([
+  ['thinking', { name: 'relaxed', weight: 0.25 }],
+  ['responded', { name: 'happy', weight: 0.55 }],
+  ['speaking', { name: 'aa', weight: 0.18 }],
+])
+
 function relaxStaticArms(vrm) {
   for (const side of ['left', 'right']) {
     const shoulder = vrm.humanoid.getNormalizedBoneNode(`${side}UpperArm`)
@@ -44,9 +50,31 @@ export function createAvatarView(canvas) {
   let avatar
   let timer
   let previousFrame
+  let expressionPhase = 'idle'
+
+  function draw(elapsed = 0) {
+    const preset = phaseExpressions.get(expressionPhase)
+    const expressions = avatar.expressionManager
+    const original = preset ? expressions?.getValue(preset.name) : null
+    if (typeof original !== 'number') {
+      avatar.update(elapsed)
+      renderer.render(scene, camera)
+      return
+    }
+
+    // Blend the presentation pose over any facial weights set by the clip.
+    expressions.setValue(preset.name, Math.max(original, preset.weight))
+    try {
+      avatar.update(elapsed)
+      renderer.render(scene, camera)
+    }
+    finally {
+      expressions.setValue(preset.name, original)
+    }
+  }
 
   function render() {
-    if (!renderingEnabled || !bounds || !canvas.clientWidth || !canvas.clientHeight)
+    if (!renderingEnabled || !avatar || !bounds || !canvas.clientWidth || !canvas.clientHeight)
       return
     const center = bounds.getCenter(new Vector3())
     const size = bounds.getSize(new Vector3())
@@ -62,7 +90,7 @@ export function createAvatarView(canvas) {
     camera.lookAt(center)
     camera.updateProjectionMatrix()
     renderer.setSize(canvas.clientWidth, canvas.clientHeight, false)
-    renderer.render(scene, camera)
+    draw()
   }
   function stopAnimation() {
     clearInterval(timer)
@@ -79,8 +107,7 @@ export function createAvatarView(canvas) {
       const elapsed = Math.min((now - previousFrame) / 1000, 0.1)
       previousFrame = now
       mixer.update(elapsed)
-      avatar.update(elapsed)
-      renderer.render(scene, camera)
+      draw(elapsed)
     }, 1000 / 24)
   }
 
@@ -101,6 +128,13 @@ export function createAvatarView(canvas) {
   const resize = new ResizeObserver(render)
   resize.observe(canvas)
   return {
+    setExpressionPhase(phase) {
+      if (disposed || (phase !== 'idle' && !phaseExpressions.has(phase)) || expressionPhase === phase)
+        return
+      expressionPhase = phase
+      if (!mixer)
+        render()
+    },
     setRenderingEnabled(enabled) {
       if (disposed || renderingEnabled === enabled)
         return
@@ -140,6 +174,8 @@ export function createAvatarView(canvas) {
       updateAnimation()
     },
     dispose() {
+      if (disposed)
+        return
       disposed = true
       resize.disconnect()
       document.removeEventListener('visibilitychange', updateAnimation)

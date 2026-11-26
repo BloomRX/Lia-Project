@@ -1,3 +1,5 @@
+import type { ExpressionPhase } from '../shared/expression-phase.ts'
+
 import type { PresenceConfig } from '../../../core/src/presence/index.ts'
 
 import { fileURLToPath } from 'node:url'
@@ -6,7 +8,7 @@ import { BrowserWindow, screen } from 'electron'
 
 import { defaultPresence } from '../../../core/src/presence/index.ts'
 import { createPresenceService } from '../../../core/src/presence/service.ts'
-import { stagePresenceVisibility } from '../shared/chat-ipc.ts'
+import { stageExpressionChanged, stagePresenceVisibility } from '../shared/chat-ipc.ts'
 
 export function createStagePresence(options: {
   isHostFullscreen: () => boolean
@@ -18,6 +20,7 @@ export function createStagePresence(options: {
   let asset: Uint8Array | undefined
   let settleRender: ((rendered: boolean) => void) | undefined
   let opening = false
+  let expression: ExpressionPhase = 'idle'
   let generation = 0
 
   function close() {
@@ -128,6 +131,14 @@ export function createStagePresence(options: {
     open,
     close,
     ownsOverlay,
+    expression: () => expression,
+    setExpression(phase: ExpressionPhase) {
+      if (expression === phase)
+        return
+      expression = phase
+      if (window && !window.isDestroyed() && !window.webContents.isDestroyed())
+        window.webContents.send(stageExpressionChanged, phase)
+    },
     displays() {
       const result = service?.get()
       if (!result?.ok)

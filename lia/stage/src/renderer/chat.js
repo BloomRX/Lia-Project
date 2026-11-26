@@ -24,6 +24,7 @@ const expressionLabels = {
   speaking: 'Reproduzindo resposta',
 }
 const renderExpression = ({ phase }) => {
+  window.liaStagePresence.publishExpression(phase)
   expressionStatus.dataset.phase = phase
   expressionStatus.textContent = t(expressionLabels[phase])
 }

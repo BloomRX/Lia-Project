@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict'
+import { once } from 'node:events'
+import { createServer } from 'node:http'
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -9,7 +11,7 @@ import { _electron } from 'playwright'
 
 import { defaultPresence } from '../../core/src/presence/index.ts'
 
-function createFixture(externalTexture = false) {
+function createFixture(externalTexture = false, expressive = false) {
   const bones = {
     hips: null,
     spine: 'hips',
@@ -36,7 +38,8 @@ function createFixture(externalTexture = false) {
   const positions = Buffer.from(new Float32Array([-0.4, 0, 0, 0.4, 0, 0, 0, 1.5, 0]).buffer)
   const times = Buffer.from(new Float32Array([0, 0.5, 1]).buffer)
   const translations = Buffer.from(new Float32Array([0, 0, 0, 0.15, 0, 0, 0, 0, 0]).buffer)
-  const binary = Buffer.concat([positions, times, translations])
+  const morph = Buffer.from(new Float32Array([0, 0, 0, 0, 0, 0, 0.6, -0.35, 0]).buffer)
+  const binary = Buffer.concat([positions, times, translations, ...(expressive ? [morph] : [])])
   const document = {
     asset: { version: '2.0' },
     extensionsUsed: ['VRMC_vrm'],
@@ -45,25 +48,28 @@ function createFixture(externalTexture = false) {
         specVersion: '1.0',
         meta: { name: 'Fixture de QA', authors: ['Lia'], licenseUrl: 'https://vrm.dev/licenses/1.0/' },
         humanoid: { humanBones: Object.fromEntries(names.map((name, node) => [name, { node }])) },
+        ...(expressive ? { expressions: { preset: { happy: { morphTargetBinds: [{ node: nodes.length, index: 0, weight: 1 }] } } } } : {}),
       },
     },
     scene: 0,
     scenes: [{ nodes: [0, nodes.length] }],
     nodes: [...nodes, { mesh: 0 }],
-    meshes: [{ primitives: [{ attributes: { POSITION: 0 }, material: 0 }] }],
+    meshes: [{ primitives: [{ attributes: { POSITION: 0 }, material: 0, ...(expressive ? { targets: [{ POSITION: 3 }] } : {}) }] }],
     materials: [{ doubleSided: true, pbrMetallicRoughness: { baseColorFactor: [0.2, 0.85, 0.3, 1], metallicFactor: 0 } }],
     buffers: [{ byteLength: binary.length }],
     bufferViews: [
       { buffer: 0, byteLength: positions.length },
       { buffer: 0, byteOffset: positions.length, byteLength: times.length },
       { buffer: 0, byteOffset: positions.length + times.length, byteLength: translations.length },
+      ...(expressive ? [{ buffer: 0, byteOffset: positions.length + times.length + translations.length, byteLength: morph.length }] : []),
     ],
     accessors: [
       { bufferView: 0, componentType: 5126, count: 3, type: 'VEC3', min: [-0.4, 0, 0], max: [0.4, 1.5, 0] },
       { bufferView: 1, componentType: 5126, count: 3, type: 'SCALAR', min: [0], max: [1] },
       { bufferView: 2, componentType: 5126, count: 3, type: 'VEC3' },
+      ...(expressive ? [{ bufferView: 3, componentType: 5126, count: 3, type: 'VEC3', min: [0, -0.35, 0], max: [0.6, 0, 0] }] : []),
     ],
-    animations: [{
+    animations: expressive ? [] : [{
       samplers: [{ input: 1, output: 2, interpolation: 'LINEAR' }],
       channels: [{ sampler: 0, target: { node: nodes.length, path: 'translation' } }],
     }],
@@ -98,12 +104,35 @@ async function run() {
       presence: { ...defaultPresence, paused: true, home: { x: 5, y: 5 } },
     })),
   ])
-  const app = await _electron.launch({
-    executablePath: join(stage, 'node_modules', 'electron', 'dist', 'electron.exe'),
-    args: [join(stage, 'out', 'main', 'index.js')],
-    env: { ...process.env, LIA_USER_DATA: root, LIA_STAGE_PROFILE_DIR: join(root, 'profile') },
+  const server = createServer((request, response) => {
+    request.resume()
+    response.setHeader('content-type', 'application/json')
+    response.end(JSON.stringify({ choices: [{ message: { content: 'Resposta para expressão.' } }] }))
   })
+  let app
   try {
+    server.listen(0, '127.0.0.1')
+    await once(server, 'listening')
+    const modelId = 'expression-gate'
+    await writeFile(join(root, 'lia-product.json'), JSON.stringify({
+      presence: { ...defaultPresence, paused: true, home: { x: 5, y: 5 } },
+      provider: { chat: { preferred: { providerId: 'local-chat', modelId } } },
+    }))
+    await writeFile(join(root, 'lia-transports.json'), JSON.stringify({
+      schemaVersion: 1, revision: 1, tombstones: [], migration: { version: 1, imported: [] },
+      records: [{
+        id: 'local-chat', definitionId: 'local-chat', providerId: 'local-chat', type: 'http',
+        protocol: 'chat-completions', baseUrl: `http://127.0.0.1:${server.address().port}/v1`,
+        enabled: true, modelIds: [modelId], metadata: {},
+        adapterOptions: { localOnly: true, allowUnauthenticated: true },
+        credentialRef: { scope: 'local-chat', key: 'apiKey' },
+      }],
+    }))
+    app = await _electron.launch({
+      executablePath: join(stage, 'node_modules', 'electron', 'dist', 'electron.exe'),
+      args: [join(stage, 'out', 'main', 'index.js')],
+      env: { ...process.env, LIA_USER_DATA: root, LIA_STAGE_PROFILE_DIR: join(root, 'profile') },
+    })
     const chat = await app.firstWindow()
     chat.setDefaultTimeout(10_000)
     const rejectedOverlay = await chat.evaluate(() => window.liaStagePresence.open(new Uint8Array(20)))
@@ -293,15 +322,40 @@ async function run() {
     await chat.getByRole('button', { name: 'Ocultar do desktop', exact: true }).click()
     await chat.getByText('Avatar oculto.', { exact: true }).waitFor()
     assert.equal(app.windows().length, 1)
+    await picker.setInputFiles({ name: 'expressivo.vrm', mimeType: 'application/octet-stream', buffer: createFixture(false, true) })
+    await chat.getByText('Avatar carregado.', { exact: true }).waitFor()
     const [reopened] = await Promise.all([app.waitForEvent('window', { timeout: 10_000 }), openButton.click()])
     await chat.getByText('Avatar aberto no desktop.', { exact: true }).waitFor()
+    const neutral = await reopened.screenshot({ path: join(root, 'overlay-neutral.png') })
+    async function waitForFrame(matches, message) {
+      for (let attempt = 0; attempt < 20; attempt++) {
+        const frame = await reopened.screenshot()
+        if (matches(frame))
+          return frame
+        await delay(50)
+      }
+      assert.fail(message)
+    }
+    await chat.evaluate(() => window.liaStagePresence.publishExpression('responded'))
+    const reaction = await waitForFrame(frame => !neutral.equals(frame), 'A expressão VRM não alterou o quadro.')
+    await writeFile(join(root, 'overlay-expression.png'), reaction)
+    await chat.evaluate(() => window.liaStagePresence.publishExpression('idle'))
+    await waitForFrame(frame => neutral.equals(frame), 'O quadro VRM neutro não foi restaurado.')
+    await chat.getByLabel('Mensagem', { exact: true }).fill('Olá, Lia')
+    await chat.getByRole('button', { name: 'Enviar', exact: true }).click()
+    await chat.getByText('Lia: Resposta para expressão.', { exact: true }).waitFor()
+    await waitForFrame(frame => reaction.equals(frame), 'A resposta do Stage não projetou a expressão no VRM.')
     await Promise.all([reopened.waitForEvent('close', { timeout: 10_000 }), chat.close()])
-    const report = { syntheticVrm: true, packagedAvatarOpened: true, live2dLimitationVisible: true, incompleteLive2dRejected: true, personaUnchanged: true, animatedFramesDiffer: true, invalidOverlayRejected: true, externalTextureRejected: true, moved, pinned: true, home: true, syntheticHover: hover, stageFullscreen, rendererMetrics: fullscreenResult.rendererMetrics, fullscreenPreferencePersisted: true, connectedDisplays: displays.displays.length, secondDisplayPlacement: secondDisplay ? 'PASS' : 'NOT RUN', syntheticDisplayRecovery: displayRecovery, hidden: true, closedWithChat: true }
+    const report = { syntheticVrm: true, expressionProjection: 'typed fixture phase and synthetic chat reply changed pixels; neutral restored', packagedAvatarOpened: true, live2dLimitationVisible: true, incompleteLive2dRejected: true, personaUnchanged: true, animatedFramesDiffer: true, invalidOverlayRejected: true, externalTextureRejected: true, moved, pinned: true, home: true, syntheticHover: hover, stageFullscreen, rendererMetrics: fullscreenResult.rendererMetrics, fullscreenPreferencePersisted: true, connectedDisplays: displays.displays.length, secondDisplayPlacement: secondDisplay ? 'PASS' : 'NOT RUN', syntheticDisplayRecovery: displayRecovery, hidden: true, closedWithChat: true }
     await writeFile(join(root, 'report.json'), JSON.stringify(report, null, 2))
     console.log(JSON.stringify(report))
   }
   finally {
-    await app.close()
+    try { await app?.close() }
+    finally {
+      server.closeAllConnections()
+      await new Promise(resolve => server.close(() => resolve()))
+    }
   }
 }
 

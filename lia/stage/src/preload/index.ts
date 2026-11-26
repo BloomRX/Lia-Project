@@ -1,3 +1,5 @@
+import type { ExpressionPhase } from '../shared/expression-phase.ts'
+
 import type { LiaMemoryMutation } from '../../../core/src/memory/contracts.ts'
 import type { LiaIntensityContextId, LiaPersonalityAttributes } from '../../../core/src/persona/default.ts'
 
@@ -7,8 +9,10 @@ import { stageChatCancel, stageChatSend, stageChatSpeak, stageMemoryGet, stageMe
 import { stageConversationChange, stageHistoryChange, stageHistoryGet, stageHistoryImport, stageHistoryRemoveMessage, stageLanguageGet, stagePresenceDisplays } from '../shared/chat-ipc.ts'
 import { stagePersonaChange, stagePersonaGet } from '../shared/chat-ipc.ts'
 import { stagePresenceReadPackagedAvatar, stagePresenceVisibility } from '../shared/chat-ipc.ts'
-import { stageHubCatalogGet, stageImageAudit, stageImageCopy, stageImageCopyCancel, stageImageInspect, stageMemoryExport } from '../shared/chat-ipc.ts'
+import { stageExpressionChanged, stageExpressionGet, stageExpressionSet, stageHubCatalogGet, stageImageAudit, stageImageCopy, stageImageCopyCancel, stageImageInspect, stageMemoryExport } from '../shared/chat-ipc.ts'
 import { stageChatStopSpeech, stageVoiceAutoPlay } from '../shared/chat-ipc.ts'
+
+import { isExpressionPhase } from '../shared/expression-phase.ts'
 
 contextBridge.exposeInMainWorld('liaStageLanguage', {
   get: () => ipcRenderer.invoke(stageLanguageGet),
@@ -25,6 +29,16 @@ contextBridge.exposeInMainWorld('liaStagePresence', {
   command: (action: string | { monitor: number | null | 'all' }) => ipcRenderer.invoke(stagePresenceCommand, action),
   displays: () => ipcRenderer.invoke(stagePresenceDisplays),
   read: () => ipcRenderer.invoke(stagePresenceRead),
+  expression: () => ipcRenderer.invoke(stageExpressionGet),
+  onExpression: (listener: (phase: ExpressionPhase) => void) => {
+    const receive = (_event: unknown, phase: unknown) => {
+      if (isExpressionPhase(phase))
+        listener(phase)
+    }
+    ipcRenderer.on(stageExpressionChanged, receive)
+    return () => ipcRenderer.removeListener(stageExpressionChanged, receive)
+  },
+  publishExpression: (phase: ExpressionPhase) => ipcRenderer.send(stageExpressionSet, phase),
   onVisibility: (listener: (visible: boolean) => void) => {
     const receive = (_event: unknown, visible: unknown) => {
       if (typeof visible === 'boolean')

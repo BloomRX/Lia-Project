@@ -23,8 +23,9 @@ import { stageChatCancel, stageChatSend, stageChatSpeak, stageMemoryGet, stageMe
 import { stageConversationChange, stageHistoryChange, stageHistoryGet, stageHistoryImport, stageHistoryRemoveMessage, stageLanguageGet, stagePresenceDisplays } from '../shared/chat-ipc.ts'
 import { stagePersonaChange, stagePersonaGet } from '../shared/chat-ipc.ts'
 import { stagePresenceReadPackagedAvatar } from '../shared/chat-ipc.ts'
-import { stageHubCatalogGet, stageImageAudit, stageImageCopy, stageImageCopyCancel, stageImageInspect, stageMemoryExport } from '../shared/chat-ipc.ts'
+import { stageExpressionGet, stageExpressionSet, stageHubCatalogGet, stageImageAudit, stageImageCopy, stageImageCopyCancel, stageImageInspect, stageMemoryExport } from '../shared/chat-ipc.ts'
 import { stageChatStopSpeech, stageVoiceAutoPlay } from '../shared/chat-ipc.ts'
+import { isExpressionPhase } from '../shared/expression-phase.ts'
 import { stageLocale, stageText } from '../shared/locale.ts'
 import { createStageChat } from './stage-chat.ts'
 import { createStageImageCopy } from './stage-image-copy.ts'
@@ -142,6 +143,7 @@ async function main(): Promise<void> {
     cancel()
     recording?.abort()
     imageCopy?.abort()
+    presence.setExpression('idle')
     void voice.cancel().catch(() => {})
   }
   const authorized = (event: Electron.IpcMainInvokeEvent) =>
@@ -171,6 +173,11 @@ async function main(): Promise<void> {
     }
   })
 
+  ipcMain.handle(stageExpressionGet, event => presence.ownsOverlay(event) ? presence.expression() : undefined)
+  ipcMain.on(stageExpressionSet, (event, input: unknown) => {
+    if (authorized(event) && isExpressionPhase(input))
+      presence.setExpression(input)
+  })
   ipcMain.handle(stageImageInspect, (event, bytes: unknown) => authorized(event) ? imageFiles.inspect(bytes) : undefined)
   ipcMain.handle(stageImageCopyCancel, event => {
     if (authorized(event))

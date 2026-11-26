@@ -1,5 +1,4 @@
-export type ConversationExpression = 'idle' | 'thinking' | 'responded'
-export type ExpressionPhase = ConversationExpression | 'speaking'
+import type { ConversationExpression, ExpressionPhase } from '../shared/expression-phase.ts'
 
 export interface ExpressionSnapshot {
   readonly phase: ExpressionPhase
