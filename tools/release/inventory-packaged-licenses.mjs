@@ -27,6 +27,7 @@ export function inventoryEntries(entries, readManifest) {
   })
   const assetPaths = {
     fonts: paths.filter(path => /\.(?:woff2?|ttf|otf|eot)$/i.test(path)),
+    images: paths.filter(path => /\.(?:png|jpe?g|webp|avif|gif|bmp|ico|svg)$/i.test(path)),
     vrm: paths.filter(path => /\.vrm$/i.test(path)),
     cubism: paths.filter(path => /(?:cubism|live2d)|\.(?:moc3|model3\.json|motion3\.json|exp3\.json|physics3\.json)$/i.test(path)),
     spine: paths.filter(path => /spine|\.skel$/i.test(path)),

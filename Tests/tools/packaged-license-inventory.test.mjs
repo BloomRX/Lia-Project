@@ -25,13 +25,13 @@ test('reports package declarations and adjacent notices without approving redist
   assert.ok(report.packages.every(pkg => pkg.classification === 'unverified'))
 })
 
-test('counts path evidence for fonts and avatar formats without reading assets', () => {
+test('counts path evidence for images, fonts and avatar formats without reading assets', () => {
   const report = inventoryEntries([
     '\\assets\\font.WOFF2', '/avatar.vrm', '/live2d/model.moc3',
     '/assets/CubismCore.js', '/spine/hero.skel', '/normal.png',
   ], () => { throw new Error('Assets must not be read') })
   assert.deepEqual(Object.fromEntries(Object.entries(report.assets).map(([key, value]) => [key, value.count])),
-    { fonts: 1, vrm: 1, cubism: 2, spine: 1 })
+    { fonts: 1, images: 1, vrm: 1, cubism: 2, spine: 1 })
   assert.deepEqual(report.packages, [])
   assert.equal(defaultArchives.length, 2)
   assert.ok(defaultArchives.every(path => path.endsWith('app.asar')))

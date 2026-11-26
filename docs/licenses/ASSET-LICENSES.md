@@ -20,6 +20,25 @@ mantém `redistributionApproved: false`. O gate de abertura e encerramento
 do Stage pelo Launcher empacotado também passou.
 
 
+### Prévia de atualização 0.0.2
+
+O mesmo inventário, aplicado ao pacote Windows do ensaio de atualização da
+base `0a4cdab5`, encontrou 636 arquivos e 35 manifestos no Launcher e 984
+arquivos e 19 manifestos no Stage. Havia avisos adjacentes em 23 e 17
+manifestos, respectivamente. Os ASAR não apresentaram fontes, VRM, Cubism
+ou Spine por caminho. O único caminho de imagem encontrado foi o Hero do
+Launcher. O ícone da Lia é um recurso dos executáveis e fica fora do ASAR.
+
+| Asset da Lia | SHA-256 do arquivo-fonte | Onde entra |
+| --- | --- | --- |
+| `lia/assets/character/LiaHeroImage.png` | `A6772CB11E20BFA312253DDA69A9A8F8A4A4D55A3B42C7B03999B33D9E9126EB` | Tela inicial do Launcher |
+| `lia/assets/icons/IconAppCompact.png` | `1510B224A349AA6C09F7AF53D5D6DB3198A563547C4866E2ABF7321A6B290996` | Launcher, Stage e instalador |
+
+Os hashes delimitam os arquivos a revisar. Faltam evidências de autoria e
+direitos de distribuição pública para os dois assets e uma licença explícita
+do produto. O gate de instalação verifica a presença dos avisos do runtime e
+da atribuição MIT, conforme o escopo do pacote privado.
+
 ## Histórico de 08/11/2026 — pacote anterior
 
 O inventário físico dos dois ASAR privados contradiz o registro M0-A. O Stage contém **3412 arquivos de fontes, 4 VRM, 133 caminhos Cubism/Live2D e 248 caminhos Spine**. As categorias são heurísticas por caminho, podem sobrepor e não equivalem a quantidades de modelos. O Launcher contém `out/renderer/assets/LiaHeroImage-BLKXUVQa.png`. Nenhum asset ou dependência foi removido nesta revisão.
