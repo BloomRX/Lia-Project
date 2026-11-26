@@ -6,7 +6,8 @@ param(
   [string]$LocalModel,
   [switch]$DirectStageConversation,
   [switch]$RequireAttribution,
-  [switch]$RequireIndependent
+  [switch]$RequireIndependent,
+  [switch]$RequireBranding
 )
 
 $ErrorActionPreference = 'Stop'
@@ -14,6 +15,25 @@ $ErrorActionPreference = 'Stop'
 function Get-PreviewRegistration {
   Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue |
     Where-Object { $_.DisplayName -eq 'Lia Preview' }
+}
+
+function Get-ExecutableIconHash([string]$Path) {
+  $icon = [Drawing.Icon]::ExtractAssociatedIcon((Resolve-Path -LiteralPath $Path).Path)
+  if (!$icon) { throw "Missing executable icon: $Path" }
+  try {
+    $bitmap = $icon.ToBitmap()
+    try {
+      $stream = New-Object IO.MemoryStream
+      try {
+        $bitmap.Save($stream, [Drawing.Imaging.ImageFormat]::Png)
+        $stream.Position = 0
+        (Get-FileHash -InputStream $stream -Algorithm SHA256).Hash
+      }
+      finally { $stream.Dispose() }
+    }
+    finally { $bitmap.Dispose() }
+  }
+  finally { $icon.Dispose() }
 }
 
 function Invoke-Installer([string]$Package, [string]$Destination) {
@@ -82,6 +102,17 @@ try {
     $actual = (Get-FileHash -LiteralPath $installedNotice -Algorithm SHA256).Hash
     if ($actual -ne $expected) { throw 'O aviso MIT instalado diverge do texto versionado.' }
     $report['attributionSha256'] = $actual
+  }
+  if ($RequireBranding) {
+    Add-Type -AssemblyName System.Drawing
+    $reference = Join-Path $PSScriptRoot '../../stage/node_modules/electron/dist/electron.exe'
+    $launcherIcon = Get-ExecutableIconHash $launcher
+    $stageIcon = Get-ExecutableIconHash (Join-Path $destination 'resources/stage/LiaStage.exe')
+    $installerIcon = Get-ExecutableIconHash $Installer
+    if ($launcherIcon -eq (Get-ExecutableIconHash $reference) -or $stageIcon -ne $launcherIcon -or $installerIcon -ne $launcherIcon) {
+      throw 'Installer, Launcher and Stage must share a product icon distinct from Electron.'
+    }
+    $report['productIconSha256'] = $launcherIcon
   }
   $report['version'] = (Get-Item -LiteralPath $launcher).VersionInfo.ProductVersion
   $report['stageSha256'] = (Get-FileHash -LiteralPath $stageArchive -Algorithm SHA256).Hash

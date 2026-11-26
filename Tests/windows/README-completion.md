@@ -24,7 +24,7 @@ desinstalada no usuário de teste. Substitua o caminho pela versão recém-gerad
 
 ```powershell
 node lia/desktop/scripts/package-windows.mjs --internal-test
-.\lia\desktop\scripts\check-native-install.ps1 -Installer '<caminho do instalador>' -RequireAttribution
+.\lia\desktop\scripts\check-native-install.ps1 -Installer '<caminho do instalador>' -RequireAttribution -RequireBranding
 ```
 
 Se o NSIS falhar em `!include` para um arquivo existente dentro de
@@ -36,7 +36,7 @@ o empacotamento concluiu. Preserve os dois logs para comparar.
 
 O gate de instalação verifica a instalação limpa, o ciclo Launcher–Stage,
 uma troca sintética na janela do Stage que o Launcher abriu, a saída dos processos do pacote e
-a desinstalação. Os cenários com voz e visão usam gates separados no
+a desinstalação. A opção `-RequireBranding` compara o ícone extraído pelo Windows do instalador, do Launcher e do Stage com o ícone padrão do Electron e registra o hash do ícone da Lia. Os cenários com voz e visão usam gates separados no
 [CI Windows](../../.github/workflows/lia-native-windows.yml). O serviço
 sintético não comprova disponibilidade de um provedor externo. O gate
 `check-native-speech.mjs <certificado> <chave>` usa um serviço HTTPS local com
