@@ -11,6 +11,7 @@ import { app, BrowserWindow, dialog, ipcMain, safeStorage, shell } from 'electro
 import { statSync as physicalStatSync } from 'original-fs'
 
 import { allTalkSpeechProvider, isAllTalkVoiceFile } from '../../../core/src/providers/alltalk-speech.ts'
+import { listLocalAllTalkVoices } from '../../../core/src/providers/local-alltalk.ts'
 import { createLiaDevflowAutorun } from './devflow-autorun'
 import { createLiaEventPublisher } from './event-publisher'
 import { registerLiaIpc } from './ipc'
@@ -223,6 +224,13 @@ async function bootstrap(): Promise<void> {
   ipcMain.handle('lia:voice:speech-save', (event, input: unknown) => ownsWindow(event) ? host.saveSpeechConnection(input).catch(() => false) : false)
   ipcMain.handle('lia:voice:transcription-connection', (event, local: unknown) => ownsWindow(event) && (local === undefined || typeof local === 'boolean') ? host.transcriptionConnection(local).catch(() => undefined) : undefined)
   ipcMain.handle('lia:voice:transcription-save', (event, input: unknown) => ownsWindow(event) ? host.saveTranscriptionConnection(input).catch(() => false) : false)
+  let customVoiceCatalog: ReturnType<typeof listLocalAllTalkVoices> | undefined
+  ipcMain.handle('lia:voice:speech-custom-catalog', (event, ...args: unknown[]) => {
+    if (!ownsWindow(event) || args.length)
+      return { ok: false }
+    customVoiceCatalog ??= listLocalAllTalkVoices().finally(() => { customVoiceCatalog = undefined })
+    return customVoiceCatalog
+  })
   ipcMain.handle('lia:voice:speech-custom-options', async (event, ...args: unknown[]) => {
     if (!ownsWindow(event) || args.length)
       return undefined

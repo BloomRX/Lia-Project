@@ -34,6 +34,10 @@ const server = createServer(async (request, response) => {
     response.writeHead(200, { 'Content-Type': 'application/json' })
     response.end(JSON.stringify({ choices: [{ message: { content: reply } }] }))
   }
+  else if (!live && path === '/api/voices') {
+    response.writeHead(200, { 'Content-Type': 'application/json' })
+    response.end(JSON.stringify({ voices: [voiceId, '../private.wav'] }))
+  }
   else if (!live && path === '/api/tts-generate') {
     const chunks = []
     for await (const chunk of request)
@@ -86,6 +90,11 @@ try {
   await launcher.getByRole('button', { name: 'Voz', exact: true }).click()
   const panel = launcher.getByText('Voz personalizada em servidor local', { exact: true })
   await panel.click()
+  if (!live) {
+    await launcher.getByRole('button', { name: 'Consultar vozes disponíveis' }).click()
+    await launcher.getByText('Biblioteca local disponível.', { exact: true }).waitFor()
+    assert.deepEqual(await launcher.locator('#custom-voice-catalog option').evaluateAll(options => options.map(option => option.value)), [voiceId])
+  }
   assert.equal(await launcher.evaluate(() => window.liaApi.useCustomSpeech('../outside.wav')), false)
   await launcher.getByLabel('Nome do arquivo WAV', { exact: true }).fill(voiceId)
   await launcher.getByRole('button', { name: 'Selecionar voz personalizada' }).click()
@@ -122,6 +131,7 @@ try {
   }
   const report = {
     configuredByLauncher: true,
+    checkedCatalog: live ? null : true,
     persistedSelectionUsedByStage: true,
     service: live ? 'operator-managed local AllTalk V2 HTTP' : 'synthetic local AllTalk V2 HTTP',
     mutedPlayback: true,

@@ -3,7 +3,7 @@ import { once } from 'node:events'
 import { createServer } from 'node:http'
 import { test } from 'node:test'
 
-import { createLocalAllTalk } from '../src/main/local-alltalk.ts'
+import { createLocalAllTalk, listLocalAllTalkVoices } from '../../core/src/providers/local-alltalk.ts'
 
 const wave = Buffer.alloc(46)
 wave.write('RIFF')
@@ -62,4 +62,15 @@ test('rejects remote services, unexpected audio URLs and cancelled synthesis', a
     return Response.json({ status: 'generate-success', output_file_url: '/audio/fixture.wav' })
   })
   assert.deepEqual(await speak(input, abort.signal), { ok: false, code: 'cancelled' })
+})
+
+
+test('the local voice catalog returns only unique usable WAV names', async () => {
+  const catalog = await listLocalAllTalkVoices(async (url, options) => {
+    assert.equal(String(url), 'http://127.0.0.1:7851/api/voices')
+    assert.equal(options?.redirect, 'error')
+    return Response.json({ voices: ['Dora.wav', '../private.wav', 'Dora.wav', 'demo.mp3', 'João.wav'], private: 'fixture' })
+  })
+  assert.deepEqual(catalog, { ok: true, voices: ['Dora.wav', 'João.wav'] })
+  assert.deepEqual(await listLocalAllTalkVoices(async () => Response.json({ unexpected: true })), { ok: false })
 })

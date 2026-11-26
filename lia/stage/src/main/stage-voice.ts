@@ -6,7 +6,7 @@ import { resolveVoiceEngineSelection } from '@lia/core/voice/engines/registry'
 import { createLiaVoiceService } from '@lia/core/voice/voice-service'
 
 import { allTalkSpeechProvider } from '../../../core/src/providers/alltalk-speech.ts'
-import { createLocalAllTalk } from './local-alltalk.ts'
+import { allTalkLocalOrigin, createLocalAllTalk } from '../../../core/src/providers/local-alltalk.ts'
 import { supportsStageSpeech } from './stage-remote-speech.ts'
 import type { createStageRemoteSpeech } from './stage-remote-speech.ts'
 
@@ -21,7 +21,7 @@ export function createStageVoice(
   engine: LiaVoiceEngine,
   readProduct: () => Promise<LiaProductConfigRead>,
   remoteSpeech?: ReturnType<typeof createStageRemoteSpeech>,
-  allTalk = createLocalAllTalk(new URL('http://127.0.0.1:7851')),
+  allTalk = createLocalAllTalk(new URL(allTalkLocalOrigin)),
 ) {
   let voice: LiaProductVoiceConfig | undefined
   let pending: VoiceJob | undefined

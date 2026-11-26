@@ -21,6 +21,7 @@ const api = {
   speechConnectionSave: (input: unknown) => ipcRenderer.invoke('lia:voice:speech-save', input),
   transcriptionConnection: (local?: boolean) => ipcRenderer.invoke('lia:voice:transcription-connection', local),
   transcriptionConnectionSave: (input: unknown) => ipcRenderer.invoke('lia:voice:transcription-save', input),
+  customSpeechCatalog: () => ipcRenderer.invoke('lia:voice:speech-custom-catalog'),
   customSpeechOptions: () => ipcRenderer.invoke('lia:voice:speech-custom-options'),
   useCustomSpeech: (voiceId: string) => ipcRenderer.invoke('lia:voice:speech-custom-save', voiceId),
   localSpeechOptions: () => ipcRenderer.invoke('lia:voice:speech-local-options'),

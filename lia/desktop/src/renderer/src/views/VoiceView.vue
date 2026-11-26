@@ -45,6 +45,25 @@ async function loadCustomSpeech() {
     customSpeech.value = options
 }
 
+const customVoices = ref<string[]>([])
+async function checkCustomSpeech() {
+  speechBusy.value = true
+  customVoices.value = []
+  try {
+    const result = await props.api?.customSpeechCatalog?.()
+    if (!result?.ok)
+      throw new Error('custom-speech-catalog')
+    customVoices.value = result.voices
+    customFeedback.value = customVoices.value.length ? 'Biblioteca local disponível.' : 'O servidor respondeu, mas não informou vozes WAV.'
+  }
+  catch {
+    customFeedback.value = 'Não foi possível consultar as vozes do servidor local.'
+  }
+  finally {
+    speechBusy.value = false
+  }
+}
+
 async function saveCustomSpeech() {
   speechBusy.value = true
   try {
@@ -403,8 +422,14 @@ async function importVoice() {
       <p class="dim">Use uma voz WAV de que você tem permissão de uso. O servidor {{ customSpeechServiceName }} deve estar em execução neste computador, na porta 7851, com o arquivo na biblioteca dele.</p>
       <form @submit.prevent="saveCustomSpeech">
         <fieldset :disabled="speechBusy">
-          <label>Nome do arquivo WAV <input v-model.trim="customSpeech.voiceId" required maxlength="124" placeholder="minha-voz.wav"></label>
-          <button type="submit">Selecionar voz personalizada</button>
+          <label>Nome do arquivo WAV <input v-model.trim="customSpeech.voiceId" required list="custom-voice-catalog" maxlength="124" placeholder="minha-voz.wav"></label>
+          <datalist id="custom-voice-catalog">
+            <option v-for="name in customVoices" :key="name" :value="name"></option>
+          </datalist>
+          <div class="speech-actions">
+            <button type="button" @click="checkCustomSpeech">Consultar vozes disponíveis</button>
+            <button type="submit">Selecionar voz personalizada</button>
+          </div>
         </fieldset>
       </form>
       <p v-if="customSpeech.active" class="dim">Voz personalizada ativa.</p>
