@@ -120,6 +120,13 @@ async function run() {
     assert.equal(JSON.parse(await readFile(join(root, 'lia-product.json'), 'utf8')).persona, undefined)
     await picker.setInputFiles(join(stage, 'test', 'fixtures', 'live2d-reference.ccv3.zip'))
     await chat.getByText('Este cartão usa Live2D. O Stage atual aceita avatares VRM.', { exact: true }).waitFor()
+    const incompleteCard = await readFile(join(stage, 'test', 'fixtures', 'live2d-reference.ccv3.zip'))
+    const entryName = Buffer.from('models/body-model.zip')
+    const centralName = incompleteCard.lastIndexOf(entryName)
+    assert.ok(centralName >= 46 && incompleteCard.readUInt32LE(centralName - 46) === 0x02014B50)
+    incompleteCard.write('models/absent-vrm.zip', centralName)
+    await picker.setInputFiles({ name: 'incomplete-card.zip', mimeType: 'application/zip', buffer: incompleteCard })
+    await chat.getByText('Não foi possível abrir este avatar. Escolha um arquivo VRM com recursos incorporados.', { exact: true }).waitFor()
     const openButton = chat.getByRole('button', { name: 'Mostrar no desktop', exact: true })
     const [overlay] = await Promise.all([app.waitForEvent('window', { timeout: 10_000 }), openButton.click()])
     await chat.getByText('Avatar aberto no desktop.', { exact: true }).waitFor()
@@ -289,7 +296,7 @@ async function run() {
     const [reopened] = await Promise.all([app.waitForEvent('window', { timeout: 10_000 }), openButton.click()])
     await chat.getByText('Avatar aberto no desktop.', { exact: true }).waitFor()
     await Promise.all([reopened.waitForEvent('close', { timeout: 10_000 }), chat.close()])
-    const report = { syntheticVrm: true, packagedAvatarOpened: true, live2dLimitationVisible: true, personaUnchanged: true, animatedFramesDiffer: true, invalidOverlayRejected: true, externalTextureRejected: true, moved, pinned: true, home: true, syntheticHover: hover, stageFullscreen, rendererMetrics: fullscreenResult.rendererMetrics, fullscreenPreferencePersisted: true, connectedDisplays: displays.displays.length, secondDisplayPlacement: secondDisplay ? 'PASS' : 'NOT RUN', syntheticDisplayRecovery: displayRecovery, hidden: true, closedWithChat: true }
+    const report = { syntheticVrm: true, packagedAvatarOpened: true, live2dLimitationVisible: true, incompleteLive2dRejected: true, personaUnchanged: true, animatedFramesDiffer: true, invalidOverlayRejected: true, externalTextureRejected: true, moved, pinned: true, home: true, syntheticHover: hover, stageFullscreen, rendererMetrics: fullscreenResult.rendererMetrics, fullscreenPreferencePersisted: true, connectedDisplays: displays.displays.length, secondDisplayPlacement: secondDisplay ? 'PASS' : 'NOT RUN', syntheticDisplayRecovery: displayRecovery, hidden: true, closedWithChat: true }
     await writeFile(join(root, 'report.json'), JSON.stringify(report, null, 2))
     console.log(JSON.stringify(report))
   }
