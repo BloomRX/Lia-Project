@@ -111,12 +111,21 @@ jobs:
           node --experimental-strip-types scripts/check-native-stt-consent.mjs --local
           node --experimental-strip-types scripts/check-native-speech.mjs $cert $key
           node scripts/check-native-alltalk.mjs
-      - name: Testar sessão OIDC nativa com emissor local
+      - name: Preparar Chromium para gates do Launcher
+        id: chromium
         if: ${{ !cancelled() && steps.build-launcher.outcome == 'success' }}
         run: |
           Set-Location (Join-Path $env:LIA_STANDALONE 'lia/desktop')
           corepack pnpm exec playwright install chromium
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Testar prontidão e idioma no Chromium
+        if: ${{ !cancelled() && steps.chromium.outcome == 'success' }}
+        run: |
+          Set-Location (Join-Path $env:LIA_STANDALONE 'lia/desktop')
+          corepack pnpm exec vitest run --config vitest.home.browser.config.ts
+      - name: Testar sessão OIDC nativa com emissor local
+        if: ${{ !cancelled() && steps.chromium.outcome == 'success' }}
+        run: |
+          Set-Location (Join-Path $env:LIA_STANDALONE 'lia/desktop')
           node scripts/check-native-oidc.mjs
       - name: Gerar e testar o instalador privado
         if: ${{ !cancelled() && steps.build-launcher.outcome == 'success' }}
