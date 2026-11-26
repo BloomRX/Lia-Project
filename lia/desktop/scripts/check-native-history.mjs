@@ -273,6 +273,7 @@ try {
   await page.getByRole('button', { name: 'Usar personalidade padrão' }).click()
   await page.getByText('Personalidade ativa: Lia', { exact: true }).waitFor()
   await submit(page, 'Retorno à Lia', 7)
+  await page.locator('#expression-status[data-phase="responded"]').waitFor()
   assert.match(requests[6].messages[0].content, /Preset: tsundere/)
   assert.ok(!JSON.stringify(requests[6]).includes('Conversa com cartão'))
   if (withVoice) {
@@ -288,6 +289,7 @@ try {
     await speak.click()
     await audio.waitFor({ state: 'visible', timeout: 90_000 })
     await page.waitForFunction(() => document.querySelector('audio').currentTime > 0)
+    await page.locator('#expression-status[data-phase="speaking"]').waitFor()
     await page.screenshot({ path: join(root, 'voice.png'), fullPage: true })
     await stop.click()
     assert.equal(await audio.isVisible(), false)
@@ -458,6 +460,7 @@ try {
   await submit(page, 'Ainda há notas do Observatório?', requests.length + 1)
   assert.doesNotMatch(JSON.stringify(requests.at(-1)), /filtro violeta|versão expirada/)
   const report = { service: 'synthetic local HTTP', optIn: true, reopened: true, resumed: true, legacyTextImported: true, cancellationPreservedHistory: true, cleared: true, clearDisabledWhenEmpty: true, rateLimitSanitized: true, refusedImageWithoutVision: true, conversationsIsolated: true, selectionRestored: true, deletionConfirmed: true, builtInPersonaInRequest: true, importedPersonaInRequest: true, importedPersonaRestored: true, personaContextIsolated: true, kokoroSelectedByLauncher: Boolean(kokoroVoice), kokoroVoice: kokoroVoice ?? (withVoice ? 'default' : null), localKokoroMutedPlayback: withVoice ? 'cancelled, retried, played and stopped' : null, autoPlay: withVoice ? 'opt-in, persisted, played, opted out' : null, customizedTraitsPersisted: true }
+  report.simulatedExpression = { successfulReply: true, localMutedPlayback: withVoice ? true : null }
   report.localClockRoundTrip = true
   report.clockSuggestion = { draftPreserved: true, noModelRequest: true }
   report.clockConfirmation = { dialogResponse: 'injected', deniedWithoutRequest: true, acceptedRoundTrip: true }

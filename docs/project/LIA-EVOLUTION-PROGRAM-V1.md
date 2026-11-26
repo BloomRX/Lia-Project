@@ -8,8 +8,8 @@ Lia-Project. O plano de produto e a arquitetura cognitiva definem os limites.
 | 02 Memory System | VALIDATED | Incremento local validado. Busca semântica depende de embeddings validados. |
 | 03 Agent Hub Integration | PARTIAL | Catálogo real validado. Delegação depende de um executor externo. |
 | 04 Decision & Autonomy | VALIDATED | Responder, sugerir plano de relógio e executar mediante confirmação no Stage. |
-| 05 Personality & Emotion | IN_PROGRESS | Ligar estado simulado observável aos consumidores atuais. |
-| 06 Perception & Action | NOT_STARTED | Selecionar um fluxo autorizado e verificável. |
+| 05 Personality & Emotion | PARTIAL | Estado observado em chat e áudio. Avatar integrado na Meta 07. |
+| 06 Perception & Action | IN_PROGRESS | Selecionar um fluxo autorizado e verificável. |
 | 07 Avatar & Presence | NOT_STARTED | Exercitar presença e reação com o VRM existente. |
 | 08 Design Foundation | NOT_STARTED | Identificar os materiais oficiais aprovados. |
 
@@ -81,3 +81,21 @@ delegada permanecem indisponíveis.
 
 Próxima ação concreta. Definir estados expressivos simulados, ligados aos
 eventos reais de conversa e expostos aos consumidores de voz e presença.
+
+## Meta 05 com expressão no chat e na reprodução
+
+A Meta 04 está publicada em `a97d8f33`. O Stage exibe repouso, foco,
+resposta pronta e reprodução em função dos eventos de conversa e áudio.
+A reação à resposta dura até 1,8 segundo. A reprodução logo após a reação
+pode usar 1,03× no player. O motor TTS não depende do estado expressivo.
+O módulo `lia/stage/src/renderer/expression-state.ts` publica fase e
+intensidade. A personalidade e seus traços seguem persistidos no perfil.
+
+Passaram três testes do estado, build, typecheck e lint. No Electron
+Windows, `check-native-history.mjs --voice` confirmou a transição de
+resposta e a de reprodução com Kokoro local silenciado. Evidência
+`lia-native-history-cHOjSH`. A revisão visual da captura passou. Os
+estados são apresentação simulada e o avatar ainda não os consome.
+
+Próxima ação concreta. Integrar uma ação verificável a uma entrada de
+percepção já autorizada, com resultado e cancelamento no Main.

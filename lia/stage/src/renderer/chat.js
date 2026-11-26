@@ -1,5 +1,6 @@
 import { maxStageImageBytes } from '../shared/chat-image.ts'
 
+import { createExpressionState } from './expression-state.ts'
 import { t } from './locale.js'
 
 const form = document.querySelector('form')
@@ -15,6 +16,23 @@ const speak = document.querySelector('#speak')
 const speakStop = document.querySelector('#speak-stop')
 const audio = document.querySelector('audio')
 const voiceStatus = document.querySelector('#voice-status')
+const expressionStatus = document.querySelector('#expression-status')
+const expressionLabels = {
+  idle: 'Em repouso',
+  thinking: 'Em foco',
+  responded: 'Resposta pronta',
+  speaking: 'Reproduzindo resposta',
+}
+const renderExpression = ({ phase }) => {
+  expressionStatus.dataset.phase = phase
+  expressionStatus.textContent = t(expressionLabels[phase])
+}
+const expression = createExpressionState({ onChange: renderExpression })
+renderExpression(expression.snapshot())
+audio.addEventListener('playing', () => expression.setPlayback(!audio.paused && Boolean(audio.src)))
+for (const event of ['pause', 'ended', 'emptied'])
+  audio.addEventListener(event, () => expression.setPlayback(!audio.paused && !audio.ended && Boolean(audio.src)))
+window.addEventListener('pagehide', () => expression.dispose(), { once: true })
 const voiceAutoPlay = document.querySelector('#voice-autoplay')
 const voiceAutoPlayStatus = document.querySelector('#voice-autoplay-status')
 const historyEnabled = document.querySelector('#history-enabled')
@@ -448,6 +466,8 @@ form.addEventListener('submit', async (event) => {
   imagePick.disabled = true
   imageRemove.disabled = true
   status.textContent = t('Aguardando resposta da Lia…')
+  expression.setConversation('thinking')
+  let replied = false
   try {
     const bytes = attachment && new Uint8Array(await attachment.arrayBuffer())
     if (cancelRequested) {
@@ -460,6 +480,8 @@ form.addEventListener('submit', async (event) => {
       status.textContent = errors[result.code] ?? errors.unavailable
       return
     }
+    replied = true
+    expression.setConversation('responded')
     appendMessage(t('Você'), text)
     appendMessage('Lia', result.text)
     unsavedMessages ||= !historyEnabled.checked || Boolean(attachment) || Boolean(result.historyUnavailable)
@@ -485,6 +507,8 @@ form.addEventListener('submit', async (event) => {
     status.textContent = errors.unavailable
   }
   finally {
+    if (!replied)
+      expression.setConversation('idle')
     message.readOnly = false
     send.disabled = false
     updateClearAction()
@@ -499,6 +523,7 @@ form.addEventListener('submit', async (event) => {
 
 speak.addEventListener('click', async () => {
   const version = answerVersion
+  const expressiveRate = expression.snapshot().phase === 'responded' ? 1.03 : 1
   speak.disabled = true
   clearAudio()
   speakStop.disabled = false
@@ -516,6 +541,7 @@ speak.addEventListener('click', async () => {
     }
     audioUrl = URL.createObjectURL(new Blob([result.audio], { type: 'audio/wav' }))
     audio.src = audioUrl
+    audio.playbackRate = expressiveRate
     audio.hidden = false
     voiceStatus.textContent = ''
     try {
