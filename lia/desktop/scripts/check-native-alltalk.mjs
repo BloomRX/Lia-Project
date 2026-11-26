@@ -84,7 +84,7 @@ try {
   }))
   const executablePath = join(stage, 'node_modules', 'electron', 'dist', 'electron.exe')
   const env = { ...process.env, APPDATA: appdata, LIA_USER_DATA: root, LIA_STAGE_PROFILE_DIR: join(root, 'profile') }
-  app = await _electron.launch({ executablePath, args: [fileURLToPath(new URL('../out/main/index.js', import.meta.url))], env })
+  app = await _electron.launch({ executablePath, args: ['--mute-audio', fileURLToPath(new URL('../out/main/index.js', import.meta.url))], env })
   const launcher = await app.firstWindow()
   launcher.setDefaultTimeout(10_000)
   await launcher.getByRole('button', { name: 'Voz', exact: true }).click()
@@ -99,6 +99,15 @@ try {
   await launcher.getByLabel('Nome do arquivo WAV', { exact: true }).fill(voiceId)
   await launcher.getByRole('button', { name: 'Selecionar voz personalizada' }).click()
   await launcher.getByText('Voz personalizada selecionada.', { exact: true }).waitFor()
+  await launcher.getByRole('button', { name: 'Ouvir prévia', exact: true }).click()
+  await launcher.waitForFunction(() => document.querySelector('#custom-preview-audio').currentTime > 0, undefined, { timeout: live ? 65_000 : 10_000 })
+  await launcher.getByRole('button', { name: 'Parar prévia', exact: true }).click()
+  assert.equal(await launcher.locator('#custom-preview-audio').getAttribute('src'), null)
+  if (!live) {
+    assert.equal(requests[0].form.text_input, 'Olá. Esta é uma prévia da minha voz.')
+    assert.equal(requests[0].form.character_voice_gen, voiceId)
+    requests.length = 0
+  }
   const config = JSON.parse(await readFile(join(root, 'lia-product.json'), 'utf8'))
   assert.deepEqual(config.voice.tts.preferred, { providerId: 'alltalk-local-speech', voiceId })
   if (!live)
@@ -135,6 +144,7 @@ try {
     persistedSelectionUsedByStage: true,
     service: live ? 'operator-managed local AllTalk V2 HTTP' : 'synthetic local AllTalk V2 HTTP',
     mutedPlayback: true,
+    mutedLauncherPreview: true,
     offlineWithoutFallback: live ? null : true,
   }
   await writeFile(join(root, 'report.json'), JSON.stringify(report, null, 2))

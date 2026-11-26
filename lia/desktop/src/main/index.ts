@@ -11,7 +11,7 @@ import { app, BrowserWindow, dialog, ipcMain, safeStorage, shell } from 'electro
 import { statSync as physicalStatSync } from 'original-fs'
 
 import { allTalkSpeechProvider, isAllTalkVoiceFile } from '../../../core/src/providers/alltalk-speech.ts'
-import { listLocalAllTalkVoices } from '../../../core/src/providers/local-alltalk.ts'
+import { allTalkLocalOrigin, createLocalAllTalk, listLocalAllTalkVoices } from '../../../core/src/providers/local-alltalk.ts'
 import { createLiaDevflowAutorun } from './devflow-autorun'
 import { createLiaEventPublisher } from './event-publisher'
 import { registerLiaIpc } from './ipc'
@@ -231,6 +231,32 @@ async function bootstrap(): Promise<void> {
     customVoiceCatalog ??= listLocalAllTalkVoices().finally(() => { customVoiceCatalog = undefined })
     return customVoiceCatalog
   })
+  const synthesizePreview = createLocalAllTalk(new URL(allTalkLocalOrigin))
+  let customPreview: AbortController | undefined
+  const cancelCustomPreview = () => customPreview?.abort()
+  ipcMain.handle('lia:voice:speech-custom-preview', async (event, ...args: unknown[]) => {
+    const [voice] = args
+    if (!ownsWindow(event) || args.length !== 1 || !isAllTalkVoiceFile(voice) || customPreview)
+      return { ok: false, code: 'unavailable' }
+    const preview = new AbortController()
+    customPreview = preview
+    try {
+      const language = (await host.productSnapshot())?.preferences?.language
+      const text = language?.toLowerCase().startsWith('en') ? 'Hello. This is a preview of my voice.' : 'Olá. Esta é uma prévia da minha voz.'
+      const result = await synthesizePreview({ voice, text, language }, preview.signal)
+      return ownsWindow(event) && !preview.signal.aborted ? result : { ok: false, code: 'cancelled' }
+    }
+    catch {
+      return { ok: false, code: 'unavailable' }
+    }
+    finally {
+      customPreview = undefined
+    }
+  })
+  ipcMain.handle('lia:voice:speech-custom-preview-cancel', (event, ...args: unknown[]) => {
+    if (ownsWindow(event) && !args.length)
+      cancelCustomPreview()
+  })
   ipcMain.handle('lia:voice:speech-custom-options', async (event, ...args: unknown[]) => {
     if (!ownsWindow(event) || args.length)
       return undefined
@@ -305,6 +331,12 @@ async function bootstrap(): Promise<void> {
   })
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   mainWindow.webContents.on('will-navigate', event => event.preventDefault())
+  mainWindow.webContents.on('did-start-navigation', details => {
+    if (details.isMainFrame && !details.isSameDocument)
+      cancelCustomPreview()
+  })
+  mainWindow.webContents.on('render-process-gone', cancelCustomPreview)
+  mainWindow.once('closed', cancelCustomPreview)
   timer.mark('lia-app.window-created')
 
   registerLauncherOidc({

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 
 import LiaButton from '../components/lia/LiaButton.vue'
 import LiaPanel from '../components/lia/LiaPanel.vue'
@@ -38,6 +38,59 @@ const speechBusy = ref(false)
 const customSpeech = ref({ active: false, voiceId: '' })
 const customFeedback = ref('')
 const customSpeechServiceName = 'AllTalk V2'
+const previewAudio = ref<HTMLAudioElement>()
+const previewState = ref<'' | 'loading' | 'playing'>('')
+let previewRequest: object | undefined
+let previewUrl: string | undefined
+
+function clearPreview() {
+  previewRequest = undefined
+  previewState.value = ''
+  previewAudio.value?.pause()
+  previewAudio.value?.removeAttribute('src')
+  if (previewUrl)
+    URL.revokeObjectURL(previewUrl)
+  previewUrl = undefined
+}
+
+function cancelPreview() {
+  if (previewState.value === 'loading')
+    void props.api?.cancelCustomSpeechPreview?.().catch(() => {})
+  clearPreview()
+}
+
+async function playCustomPreview() {
+  const player = previewAudio.value
+  if (previewState.value || !player || !customSpeech.value.voiceId)
+    return
+  const active = {}
+  previewRequest = active
+  previewState.value = 'loading'
+  customFeedback.value = 'Preparando a prévia…'
+  try {
+    const result = await props.api?.customSpeechPreview?.(customSpeech.value.voiceId)
+    if (previewRequest !== active)
+      return
+    if (!result?.ok || !(result.audio instanceof ArrayBuffer))
+      throw new Error('preview-unavailable')
+    previewUrl = URL.createObjectURL(new Blob([result.audio], { type: 'audio/wav' }))
+    player.src = previewUrl
+    await player.play()
+    if (previewRequest === active) {
+      previewState.value = 'playing'
+      customFeedback.value = 'Reproduzindo a prévia.'
+    }
+  }
+  catch {
+    if (previewRequest === active) {
+      clearPreview()
+      customFeedback.value = 'Não foi possível ouvir a prévia. Confira o servidor local e o nome do WAV.'
+    }
+  }
+}
+
+onBeforeUnmount(cancelPreview)
+
 
 async function loadCustomSpeech() {
   const options = await props.api?.customSpeechOptions?.()
@@ -432,6 +485,13 @@ async function importVoice() {
           </div>
         </fieldset>
       </form>
+      <div class="speech-actions">
+        <button v-if="previewState" type="button" @click="cancelPreview(); customFeedback = 'Prévia interrompida.'">
+          Parar prévia
+        </button>
+        <button v-else type="button" :disabled="speechBusy || !customSpeech.voiceId" @click="playCustomPreview">Ouvir prévia</button>
+      </div>
+      <audio id="custom-preview-audio" ref="previewAudio" hidden @ended="clearPreview(); customFeedback = 'Prévia concluída.'"></audio>
       <p v-if="customSpeech.active" class="dim">Voz personalizada ativa.</p>
       <p class="feedback" role="status">{{ customFeedback }}</p>
     </details>
