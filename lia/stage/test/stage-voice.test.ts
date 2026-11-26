@@ -137,3 +137,22 @@ test('discards remote audio that arrives after cancellation or shutdown', async 
     assert.deepEqual(await result, { ok: false, code: 'cancelled' })
   }
 })
+
+test('uses AllTalk only for the explicitly selected local voice file', async () => {
+  let providerId = 'custom-local-voice'
+  let calls = 0
+  const engine = engineFixture(async () => assert.fail('local default should not be used'), async () => {})
+  const voice = createStageVoice(engine, async () => ({
+    status: 'ok', filePath: '',
+    value: { preferences: { language: 'pt-BR' }, voice: { tts: { preferred: { providerId, voiceId: 'fixture.wav' } } } },
+  }), undefined, async (input) => {
+    calls++
+    assert.deepEqual(input, { text: 'Olá', voice: 'fixture.wav', language: 'pt-BR' })
+    return { ok: true, audio }
+  })
+  assert.deepEqual(await voice.speak('Olá'), { ok: false, code: 'unavailable' })
+  assert.equal(calls, 0)
+  providerId = 'alltalk-local-speech'
+  assert.deepEqual(await voice.speak('Olá'), { ok: true, audio })
+  assert.equal(calls, 1)
+})

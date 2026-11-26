@@ -5,6 +5,7 @@ import { readVoiceEnabledConfig, readVoiceEngineConfig, readVoiceFallbackConfig 
 import { resolveVoiceEngineSelection } from '@lia/core/voice/engines/registry'
 import { createLiaVoiceService } from '@lia/core/voice/voice-service'
 
+import { createLocalAllTalk } from './local-alltalk.ts'
 import { supportsStageSpeech } from './stage-remote-speech.ts'
 import type { createStageRemoteSpeech } from './stage-remote-speech.ts'
 
@@ -19,6 +20,7 @@ export function createStageVoice(
   engine: LiaVoiceEngine,
   readProduct: () => Promise<LiaProductConfigRead>,
   remoteSpeech?: ReturnType<typeof createStageRemoteSpeech>,
+  allTalk = createLocalAllTalk(new URL('http://127.0.0.1:7851')),
 ) {
   let voice: LiaProductVoiceConfig | undefined
   let pending: VoiceJob | undefined
@@ -61,6 +63,14 @@ export function createStageVoice(
           return { ok: false, code: 'disabled' } as const
         const target = voice?.tts?.preferred
         if (target) {
+          if (target.providerId === 'alltalk-local-speech') {
+            if (!target.voiceId)
+              return { ok: false, code: 'unavailable' } as const
+            const response = await allTalk({
+              text: text.slice(0, 8_000), voice: target.voiceId, language: config.value.preferences?.language,
+            }, job.controller.signal)
+            return job.cancelled ? { ok: false, code: 'cancelled' } as const : response
+          }
           if (supportsStageSpeech(target.providerId)) {
             const response = await remoteSpeech?.(target, text.slice(0, 8_000), job.controller.signal)
             if (job.cancelled)
