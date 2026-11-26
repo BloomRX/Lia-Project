@@ -8,11 +8,18 @@ import { fileURLToPath } from 'node:url'
 
 import { _electron } from 'playwright'
 
+import { isAllTalkVoiceFile } from '../../core/src/providers/alltalk-speech.ts'
+
 assert.equal(process.platform, 'win32')
 const root = await mkdtemp(join(process.env.RUNNER_TEMP ?? tmpdir(), 'lia-native-alltalk-'))
 const appdata = join(root, 'appdata')
 const stage = fileURLToPath(new URL('../../stage/', import.meta.url))
-const voiceId = 'voz-sintetica.wav'
+const liveVoice = process.argv.slice(2)
+assert.ok(liveVoice.length === 0 || (liveVoice.length === 2 && liveVoice[0] === '--live'
+  && isAllTalkVoiceFile(liveVoice[1])),
+'Use --live seguido do nome de um WAV autorizado na biblioteca do AllTalk.')
+const live = liveVoice.length > 0
+const voiceId = live ? liveVoice[1] : 'voz-sintetica.wav'
 const reply = 'Resposta de teste para voz personalizada.'
 const wave = Buffer.alloc(32_044)
 Buffer.from('524946462600000057415645666d74201000000001000100803e0000007d0000020010006461746102000000', 'hex').copy(wave)
@@ -27,7 +34,7 @@ const server = createServer(async (request, response) => {
     response.writeHead(200, { 'Content-Type': 'application/json' })
     response.end(JSON.stringify({ choices: [{ message: { content: reply } }] }))
   }
-  else if (path === '/api/tts-generate') {
+  else if (!live && path === '/api/tts-generate') {
     const chunks = []
     for await (const chunk of request)
       chunks.push(chunk)
@@ -35,7 +42,7 @@ const server = createServer(async (request, response) => {
     response.writeHead(200, { 'Content-Type': 'application/json' })
     response.end(JSON.stringify({ status: 'generate-success', output_file_url: '/audio/fixture.wav' }))
   }
-  else if (path === '/audio/fixture.wav') {
+  else if (!live && path === '/audio/fixture.wav') {
     requests.push({ path, method: request.method })
     response.writeHead(200, { 'Content-Type': 'audio/wav' })
     response.end(wave)
@@ -54,7 +61,7 @@ async function closeFixture() {
 
 let app
 try {
-  server.listen(7851, '127.0.0.1')
+  server.listen(live ? 0 : 7851, '127.0.0.1')
   await once(server, 'listening')
   console.log(`Evidências em ${root}`)
   await mkdir(appdata)
@@ -67,7 +74,7 @@ try {
     schemaVersion: 1, revision: 1, tombstones: [], migration: { version: 1, imported: [] },
     records: [{
       id: 'local-chat', providerId: 'local-chat', definitionId: 'local-chat', type: 'http', protocol: 'chat-completions',
-      baseUrl: 'http://127.0.0.1:7851/v1', enabled: true, modelIds: ['fixture-chat'], metadata: {},
+      baseUrl: `http://127.0.0.1:${server.address().port}/v1`, enabled: true, modelIds: ['fixture-chat'], metadata: {},
       adapterOptions: { localOnly: true, allowUnauthenticated: true }, credentialRef: { scope: 'local-chat', key: 'apiKey' },
     }],
   }))
@@ -85,7 +92,8 @@ try {
   await launcher.getByText('Voz personalizada selecionada.', { exact: true }).waitFor()
   const config = JSON.parse(await readFile(join(root, 'lia-product.json'), 'utf8'))
   assert.deepEqual(config.voice.tts.preferred, { providerId: 'alltalk-local-speech', voiceId })
-  await panel.locator('..').screenshot({ path: join(root, 'selection.png') })
+  if (!live)
+    await panel.locator('..').screenshot({ path: join(root, 'selection.png') })
   await app.close()
   app = undefined
 
@@ -97,20 +105,28 @@ try {
   await chat.getByText(`Lia: ${reply}`, { exact: true }).waitFor()
   const speak = chat.getByRole('button', { name: 'Ouvir resposta', exact: true })
   await speak.click()
-  await chat.waitForFunction(() => document.querySelector('audio').currentTime > 0)
-  assert.deepEqual(requests.map(({ path, method }) => ({ path, method })), [
-    { path: '/api/tts-generate', method: 'POST' }, { path: '/audio/fixture.wav', method: 'GET' },
-  ])
-  assert.equal(requests[0].form.text_input, reply)
-  assert.equal(requests[0].form.character_voice_gen, voiceId)
-  assert.equal(requests[0].form.language, 'pt')
-  assert.equal(requests[0].form.autoplay, 'false')
+  await chat.waitForFunction(() => document.querySelector('audio').currentTime > 0, undefined, { timeout: live ? 65_000 : 10_000 })
   await chat.getByRole('button', { name: 'Parar áudio' }).click()
-  await closeFixture()
-  await speak.click()
-  await chat.getByText('A voz selecionada está indisponível.', { exact: true }).waitFor()
-  assert.equal(await chat.locator('audio').getAttribute('src'), null)
-  const report = { configuredByLauncher: true, persistedSelectionUsedByStage: true, service: 'synthetic local AllTalk V2 HTTP', mutedPlayback: true, offlineWithoutFallback: true }
+  if (!live) {
+    assert.deepEqual(requests.map(({ path, method }) => ({ path, method })), [
+      { path: '/api/tts-generate', method: 'POST' }, { path: '/audio/fixture.wav', method: 'GET' },
+    ])
+    assert.equal(requests[0].form.text_input, reply)
+    assert.equal(requests[0].form.character_voice_gen, voiceId)
+    assert.equal(requests[0].form.language, 'pt')
+    assert.equal(requests[0].form.autoplay, 'false')
+    await closeFixture()
+    await speak.click()
+    await chat.getByText('A voz selecionada está indisponível.', { exact: true }).waitFor()
+    assert.equal(await chat.locator('audio').getAttribute('src'), null)
+  }
+  const report = {
+    configuredByLauncher: true,
+    persistedSelectionUsedByStage: true,
+    service: live ? 'operator-managed local AllTalk V2 HTTP' : 'synthetic local AllTalk V2 HTTP',
+    mutedPlayback: true,
+    offlineWithoutFallback: live ? null : true,
+  }
   await writeFile(join(root, 'report.json'), JSON.stringify(report, null, 2))
   console.log(JSON.stringify(report))
 }

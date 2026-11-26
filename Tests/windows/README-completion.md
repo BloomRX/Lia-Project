@@ -86,3 +86,11 @@ valida a seleção de um WAV no Launcher e sua utilização no Stage. O gate
 usa um serviço sintético em loopback, verifica a reprodução silenciada e
 derruba o serviço para verificar o erro e a ausência de troca de voz. AllTalk,
 XTTS e áudio físico ficam fora deste ensaio.
+
+
+Com o AllTalk V2 já iniciado na porta 7851 e um WAV autorizado na biblioteca
+dele, use `node lia/desktop/scripts/check-native-alltalk.mjs --live "referencia.wav"`.
+O chat continua sintético. A síntese usa o serviço escolhido pelo operador e
+o gate conserva o áudio silenciado. Registre à parte qual motor está ativo
+no AllTalk e a avaliação audível da voz. O modo real não encerra o servidor
+do operador nem gera captura com o nome do WAV.
