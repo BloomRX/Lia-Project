@@ -47,6 +47,7 @@ const text = computed(() => pickVoiceEngineLocale(language.value) === 'en-US'
   : { home: 'Início', ai: 'IA & Recursos', voice: 'Voz', diagnostics: 'Diagnósticos', settings: 'Configuração', voicePrefix: 'voz', log: 'Log', emptyLog: 'silêncio por aqui', statusFailed: 'Não foi possível atualizar o estado.' })
 let unsubscribe: (() => void) | undefined
 let configRequest = 0
+let statusRequest = 0
 
 async function refreshConfig() {
   const request = ++configRequest
@@ -65,11 +66,15 @@ async function refreshConfig() {
 async function refresh() {
   if (!api.value)
     return
+  const request = ++statusRequest
   try {
-    status.value = await api.value.homeStatus()
+    const nextStatus = await api.value.homeStatus()
+    if (request === statusRequest)
+      status.value = nextStatus
   }
   catch {
-    push(text.value.statusFailed)
+    if (request === statusRequest)
+      push(text.value.statusFailed)
   }
 }
 

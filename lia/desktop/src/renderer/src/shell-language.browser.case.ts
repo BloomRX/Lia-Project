@@ -47,6 +47,19 @@ afterEach(() => {
 })
 
 describe('saved Launcher language in the real DOM', () => {
+  it('keeps the newer readiness when an older Launcher status response arrives late', async () => {
+    const { api, event } = fixture()
+    const older = Promise.withResolvers<{ ai: { ready: boolean } }>()
+    api.homeStatus.mockReturnValueOnce(older.promise).mockResolvedValue({ ai: { ready: true } })
+    const screen = await render(App)
+    await vi.waitFor(() => expect(api.onLiaEvent).toHaveBeenCalled())
+    event('lia-app.config-updated')
+    await vi.waitFor(() => button(screen.container, 'Conversar com Lia'))
+    older.resolve({ ai: { ready: false } })
+    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
+    expect(button(screen.container, 'Conversar com Lia').disabled).toBe(false)
+  })
+
   it('switches Portuguese to English and back after saving, without remounting the shell', async () => {
     const { api, event } = fixture()
     const screen = await render(App)
