@@ -128,7 +128,14 @@ try {
   await hubItems.first().waitFor()
   const listedHubCapabilities = await hubItems.count()
   if (!withPublishedHub)
-    assert.deepEqual(await hubItems.allTextContents(), ['Capacidade sintética do Hub · reference'])
+    assert.deepEqual(await hubItems.locator('summary').allTextContents(), ['Capacidade sintética do Hub · reference'])
+  const hubSearch = page.getByRole('searchbox', { name: 'Filtrar capacidades' })
+  await hubSearch.fill('sem-correspondencia-fixture-491')
+  await page.getByText('Nenhuma capacidade corresponde ao filtro.', { exact: true }).waitFor()
+  assert.equal(await hubItems.count(), 0)
+  await hubSearch.clear()
+  await hubItems.first().locator('summary').click()
+  await hubItems.first().getByText(/^Identificador da capacidade/).waitFor()
   await page.screenshot({ path: join(root, 'hub-catalog.png'), fullPage: true })
   await page.getByText('Lia Agent Hub', { exact: true }).click()
   await openHistory(page)
@@ -452,7 +459,7 @@ try {
   report.singleMessageRemoved = { dialogResponse: 'injected', remainingReplyVisible: true }
   report.memoryLifecycle = { reopened: true, lexicalRecall: true, expiredExcluded: true, edited: true, exported: true, deletionExcluded: true, dialogResponse: 'injected' }
   report.memoryClear = { dialogResponse: 'injected', cancelPreservedNote: true, clearPreservedConversation: true, focusRestored: true }
-  report.hubCatalog = { source: withPublishedHub ? 'published Hub index' : 'synthetic index', listed: listedHubCapabilities }
+  report.hubCatalog = { source: withPublishedHub ? 'published Hub index' : 'synthetic index', listed: listedHubCapabilities, filtered: true, inspected: true }
   assert.ok(!JSON.stringify(requests).includes('fixture-only-private-prose'))
   await writeFile(join(root, 'report.json'), JSON.stringify(report, null, 2))
   console.log(JSON.stringify(report))

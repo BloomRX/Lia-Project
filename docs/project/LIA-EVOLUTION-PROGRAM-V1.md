@@ -6,8 +6,8 @@ Lia-Project. O plano de produto e a arquitetura cognitiva definem os limites.
 | Meta | Estado | Próximo passo |
 | --- | --- | --- |
 | 02 Memory System | VALIDATED | Incremento local validado. Busca semântica depende de embeddings validados. |
-| 03 Agent Hub Integration | NOT_STARTED | Comparar o consumidor atual com o contrato publicado do Hub. |
-| 04 Decision & Autonomy | NOT_STARTED | Reaproveitar a política por turno e a confirmação no Main. |
+| 03 Agent Hub Integration | PARTIAL | Catálogo real validado. Delegação depende de um executor externo. |
+| 04 Decision & Autonomy | IN_PROGRESS | Reaproveitar a política por turno e a confirmação no Main. |
 | 05 Personality & Emotion | NOT_STARTED | Ligar estado simulado observável aos consumidores atuais. |
 | 06 Perception & Action | NOT_STARTED | Selecionar um fluxo autorizado e verificável. |
 | 07 Avatar & Presence | NOT_STARTED | Exercitar presença e reação com o VRM existente. |
@@ -40,3 +40,26 @@ local no diretório `lia-native-history-e3WVo7`.
 
 Próxima ação concreta. Inspecionar o publicador v1 do Hub e identificar quais
 contratos de seleção, tarefa, execução e auditabilidade já estão disponíveis.
+
+## Meta 03 com catálogo validado
+
+O checkout do Hub `fbf6351b` publica o catálogo ativo e declara que o Hub é
+um registro. A implementação inspecionada não executa capacidades nem
+fornece uma API de execução supervisionada. O lado consumidor pode descobrir,
+filtrar e inspecionar capacidades por ID sem interpretar a prosa ou conceder
+permissões com base no índice.
+
+Solicitação de integração. Para delegação real, o responsável pelo executor
+deve disponibilizar um contrato versionado com criação idempotente, identidade
+da capacidade, aprovação e escopo, entradas mínimas tipadas, consulta de estado,
+cancelamento, resultado limitado e identificador de auditoria. O índice v1
+não deve ser usado como prova de execução ou autorização.
+
+A Meta 02 está publicada em `2ca1136f`. Na Meta 03, build e typecheck do Stage
+e lint passaram. O gate Electron Windows com `--agent-hub`, evidência
+`lia-native-history-Zg5nHc`, leu uma capacidade publicada pelo Hub e conferiu
+filtro e inspeção de ID. A conversa do ensaio usou HTTP sintético.
+
+Próxima ação concreta. Integrar uma sugestão de plano com consumidor no
+Stage e reaproveitar a confirmação de relógio no Main para o primeiro passo
+supervisionado.
